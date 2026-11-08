@@ -240,6 +240,78 @@
       "file": "tests/fixtures/persistence/code-version/v1.ts",
       "name": "v1.ts",
       "reason": "已发布格式的不可变源码黄金样本，文件名表示数据格式版本"
+    },
+    {
+      "category": "migration",
+      "file": "src/core/audio/effects/mergedEffectsMigration.ts",
+      "name": "migrateAudioEffectLibraryV3",
+      "reason": "冻结数据库结构或历史字段解释，保留指定数据格式的兼容读取与逐版本迁移"
+    },
+    {
+      "category": "migration",
+      "file": "src/core/audio/effects/mergedEffectsMigration.ts",
+      "name": "migrateAudioPresetPackageV11",
+      "reason": "冻结数据库结构或历史字段解释，保留指定数据格式的兼容读取与逐版本迁移"
+    },
+    {
+      "category": "model-file",
+      "file": "packages/ai-sdk/src/catalog/fal/utils/klingV4.ts",
+      "name": "klingV4.ts",
+      "reason": "第三方产品名 Kling 4.0 的版本号，不是本项目的迭代版本"
+    },
+    {
+      "category": "model-file",
+      "file": "packages/ai-sdk/src/catalog/fal/utils/klingV4.ts",
+      "name": "KLING_V4_MODES",
+      "reason": "第三方产品名 Kling 4.0 的版本号，不是本项目的迭代版本"
+    },
+    {
+      "category": "model-file",
+      "file": "packages/ai-sdk/src/catalog/fal/utils/klingV4.ts",
+      "name": "KLING_V4_RATIOS",
+      "reason": "第三方产品名 Kling 4.0 的版本号，不是本项目的迭代版本"
+    },
+    {
+      "category": "model-file",
+      "file": "packages/ai-sdk/src/catalog/fal/utils/klingV4.ts",
+      "name": "KLING_V4_SHOT_LIMITS",
+      "reason": "第三方产品名 Kling 4.0 的版本号，不是本项目的迭代版本"
+    },
+    {
+      "category": "model-file",
+      "file": "packages/ai-sdk/src/catalog/fal/utils/klingV4.ts",
+      "name": "klingV4Duration",
+      "reason": "第三方产品名 Kling 4.0 的版本号，不是本项目的迭代版本"
+    },
+    {
+      "category": "model-file",
+      "file": "packages/ai-sdk/src/catalog/fal/utils/klingV4.ts",
+      "name": "klingV4EditSeconds",
+      "reason": "第三方产品名 Kling 4.0 的版本号，不是本项目的迭代版本"
+    },
+    {
+      "category": "model-file",
+      "file": "packages/ai-sdk/src/catalog/fal/utils/klingV4.ts",
+      "name": "klingV4Mode",
+      "reason": "第三方产品名 Kling 4.0 的版本号，不是本项目的迭代版本"
+    },
+    {
+      "category": "model-file",
+      "file": "packages/ai-sdk/src/catalog/fal/utils/klingV4.ts",
+      "name": "klingV4Prompt",
+      "reason": "第三方产品名 Kling 4.0 的版本号，不是本项目的迭代版本"
+    },
+    {
+      "category": "model-file",
+      "file": "packages/ai-sdk/src/catalog/fal/utils/klingV4.ts",
+      "name": "klingV4Ratio",
+      "reason": "第三方产品名 Kling 4.0 的版本号，不是本项目的迭代版本"
+    },
+    {
+      "category": "model-file",
+      "file": "packages/ai-sdk/src/catalog/apimart/kling-4.0.model.ts",
+      "name": "apimartKlingV4Model",
+      "reason": "第三方产品名 Kling 4.0 的版本号，不是本项目的迭代版本"
     }
   ]
 }

@@ -3,7 +3,7 @@ import type { SmartRegionMaskSetting } from './smartRegions'
 import { WHITE_HEX } from '../theme/colorTokens'
 
 /*
- * 智能区域的一键预设（任务 4.7d，效果面板“智能”文件夹）：一个内置效果，加一个作用区域或按人物轮廓工作的参数，拖到片段上一步到位，
+ * 智能区域的一键预设（效果面板“智能”文件夹）：一个内置效果，加一个作用区域或按人物轮廓工作的参数，拖到片段上一步到位，
  * 之后在效果控件里微调。预设只是创建时的模板，加到片段上就是普通的内置效果（带 mask 或轮廓来源“主体”），
  * 助手用通用实体读写得到同样结果（definition_id + parameters + mask），不需要预设专用接口。
  */

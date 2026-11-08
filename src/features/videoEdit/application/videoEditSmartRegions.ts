@@ -15,7 +15,7 @@ import { videoEditReachableSequences } from '@/core/videoEdit/sequenceGraph'
 import { videoEditTrackingRequest, videoEditTrackingStatus, videoEditTrackingStatusText } from './videoEditTracking'
 
 /*
- * 智能区域协调（任务 4.7d，渲染层）：打开着的剪辑里，凡是挂了“作用区域”的内置画面效果，以及按人物轮廓工作的效果
+ * 智能区域协调（渲染层）：打开着的剪辑里，凡是挂了“作用区域”的内置画面效果，以及按人物轮廓工作的效果
  * （主体抠像、轮廓来源为主体），就按片段用到的素材范围请求后台分析（主进程去重、缓存），记下每个请求的进度与结果，
  * 供效果控件显示、预览与导出取用、助手读取。
  * 不依赖页面是否打开：助手在后台给片段加“人脸打码”也会立刻开始分析。

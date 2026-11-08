@@ -5,7 +5,7 @@ import { registerEffects } from './effectRegistration'
 import { orderVideoEditEffects } from './effectCatalog'
 import { type LayerEffectReference } from './layerEffectGeometry'
 /**
- * 内置效果（实施方案第六节、任务 4.7）：每个效果登记一次，效果面板、效果控件与助手都读这里。
+ * 内置效果：每个效果登记一次，效果面板、效果控件与助手都读这里。
  * - 参数用“意图量纲”：0–100 的强度、角度（度）、曝光档、颜色、选项与开关；每项写清范围、默认值、单位和一份说明
  *   （`description`，人和助手读同一句，如“40（默认）背景虚化”）。范围分硬范围 min/max 与滑块用的 softMin/softMax。
  * - 空间量（模糊半径、马赛克块大小、颗粒大小、偏移）一律相对画面高度，渲染尺寸变化（预览缩放、回放分辨率）效果看起来一样。

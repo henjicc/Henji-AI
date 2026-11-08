@@ -8,7 +8,7 @@ import { workspacePanelConstraints } from '@/core/workspaceLayouts/validation'
 const logger = createLogger('features.videoEdit.layout')
 export const VIDEO_EDIT_LAYOUT_STORAGE_KEY = 'henji.videoEdit.dockLayout.v1'
 /**
- * 面板与它们的最小尺寸（重要记录 020）：右侧检查器一组标签取同一档，切标签时组宽不跳；
+ * 面板与它们的最小尺寸：右侧检查器一组标签取同一档，切标签时组宽不跳；
  * 默认布局在 960×640 窗口里同时放得下这些最小值（素材 220 + 时间线 380 + 音频仪表 40 + 检查器 320 = 960 宽，节目 + 时间线 = 400 高）。
  * 检查器 320：效果控件最宽的一行（缩放：数值 ⛓ 数值 + 单位道）连同名称后的关键帧导航放得下，名称列不被数值盖住；
  * 素材 220：底栏的项目计数（“17 项”）与右侧五个工具按钮同排放得下；“· 已选 N”放不下时先让出。

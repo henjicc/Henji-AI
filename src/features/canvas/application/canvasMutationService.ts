@@ -452,7 +452,7 @@ export async function deleteCanvasNodes(projectId: string, nodeIds: string[], op
 }
 
 /**
- * 清空画布（3.1）：整个画布一次性重置，不是"逐个删除很多节点"。走 `remove_items` 意味着助手
+ * 清空画布：整个画布一次性重置，不是"逐个删除很多节点"。走 `remove_items` 意味着助手
  * 要先枚举全部节点/连线引用再提交——为一个界面上单按钮触发的原子动作多绕一步，不如照 `undo_canvas_change`/`group_canvas_nodes` 的先例：画布级整体状态操作
  * 走专用能力，不勉强表达成集合写入。
  */

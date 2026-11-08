@@ -7,7 +7,7 @@ import {
 } from './playbackRuntime'
 
 /**
- * 当前渲染机位派生 hook（重要记录 005，3.2）：区分"编辑机位"（`activeCameraId`，用户显式选择，
+ * 当前渲染机位派生 hook：区分"编辑机位"（`activeCameraId`，用户显式选择，
  * 写 store）与"播放渲染机位"（本 hook 派生，只读，不写 store）。
  *
  * 按机位切换点 `cameraCuts` + `activeCameraId`（fallback）派生渲染机位时间表，随播放头查询当前机位；

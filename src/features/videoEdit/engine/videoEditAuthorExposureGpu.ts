@@ -119,7 +119,7 @@ export class VideoEditAuthorExposureGpu {
     return this.pipelines
   }
   /**
-   * `color` 预乘颜色；`velocity` 的 xy/a 是位移的编码（0.5 为静止，满量程 ±`range/2` 像素），a 是覆盖度。
+   * `color` 预乘颜色；`velocity` 的 xy/a 是位移的编码（静止编码为 0.5，满量程 ±`range/2` 像素），a 是覆盖度。
    * `taps`：一个像素最多取几个样本；`spacing`：样本大约隔几个像素。结果写进 `target`（rgba8unorm，同尺寸）。
    */
   async encode(encoder: ReturnType<GpuDevice['createCommandEncoder']>, color: GpuTexture, velocity: GpuTexture, target: GpuTexture, size: { width: number; height: number }, range: number, longest: number, taps: number, spacing: number): Promise<void> {

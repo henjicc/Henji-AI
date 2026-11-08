@@ -43,7 +43,7 @@ function AdjustmentRange({ target, sequence, clip, action }: { target: { project
 }
 
 /**
- * 附加效果（重要记录 019，对齐 AE）：不再有“附加效果”大标题，每个效果直接是一节——箭头折叠、fx 开关、名称，悬停出重置与删除；
+ * 附加效果（对齐 AE）：不再有“附加效果”大标题，每个效果直接是一节——箭头折叠、fx 开关、名称，悬停出重置与删除；
  * 点标题行选中（Delete 删除），拖标题行换序。添加、从其他片段复制、保存风格件与全部效果的总开关在面板右下角的底栏。
  */
 export const VideoEditEffectChainPanel = memo(function VideoEditEffectChainPanel({ instance, sequence, clip, footer, onError }: Props): React.ReactElement {

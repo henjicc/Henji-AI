@@ -9,7 +9,7 @@ const matrix = require('./videoEditFormatMatrix.cjs')
 const { adoptNewVideoEditProject, chooseVideoEditImportFiles, openVideoEditFile, readVideoEditFile, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
 
 /**
- * 专业格式矩阵（任务 3.2）在真实 Electron 中逐格验收。样本由 scripts/lib/videoEditFormatMatrix.cjs 生成（帧号条码、BT.709
+ * 专业格式矩阵在真实 Electron 中逐格验收。样本由 scripts/lib/videoEditFormatMatrix.cjs 生成（帧号条码、BT.709
  * 标注、每声道不同正弦 + 扫频），每格：
  * - 导入：经界面导入，素材宽高、声音流与 ffprobe 一致，日志记录实际后端（强制浏览器时只有原生能解的格式按格式拒绝、工程不变）；
  * - 放置：素材面板“添加到当前序列”，画面 + 每条声音流一个链接音频片段；序列改为样本自己的尺寸与帧率；

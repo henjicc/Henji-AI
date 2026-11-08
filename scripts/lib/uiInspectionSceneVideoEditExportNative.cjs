@@ -10,7 +10,7 @@ const { dialogs, presented } = require('./uiInspectionSceneVideoEditMonitor.cjs'
 const { adoptNewVideoEditProject, chooseVideoEditImportFiles, openVideoEditFile, readVideoEditFile, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
 
 /**
- * 导出接入与预览一致性（2.4）在真实 Electron 中的闭环：
+ * 导出接入与预览一致性在真实 Electron 中的闭环：
  * - 样本（场景自己生成，4K60，2.5 秒）：ProRes 422 HQ MOV（PCM 立体声）、DNxHR HQX MXF（4 条 PCM 单声道）、ProRes 4444
  *   透明叠加层（无声）、H.264 + AAC（与浏览器后端对照）。每个画面顶部 240 像素是 16 位帧号条码（FFmpeg geq 的 N），
  *   导出后逐帧解出条码，就能确认每一帧都是应有的源帧（无缺帧、重复帧、透明替代）。

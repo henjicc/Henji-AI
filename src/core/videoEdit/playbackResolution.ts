@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { VIDEO_EDIT_SEQUENCE_LIMITS } from './sequenceSize'
 
 /**
- * 节目监视器的回放分辨率（对齐 Premiere“回放分辨率”与“暂停分辨率”，任务 4.9）：只是看片时的视图偏好，
+ * 节目监视器的回放分辨率（对齐 Premiere“回放分辨率”与“暂停分辨率”）：只是看片时的视图偏好，
  * 不进剪辑文件与撤销栈；导出使用独立的输出比例，选帧与设为封面按序列完整分辨率渲染。
  */
 export const VIDEO_EDIT_PLAYBACK_RESOLUTIONS = ['full', 'half', 'quarter', 'eighth'] as const

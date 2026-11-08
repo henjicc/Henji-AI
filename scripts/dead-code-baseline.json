@@ -8661,11 +8661,6 @@
       },
       {
         "file": "scripts/lib/uiInspectionSceneVideoDecode.cjs",
-        "fingerprint": "7cf160865486e2aed3ce11f233a3aca81e19e29f9bc0d8fca95ce3ded22cbb25",
-        "count": 1
-      },
-      {
-        "file": "scripts/lib/uiInspectionSceneVideoDecode.cjs",
         "fingerprint": "e667d4509a2dbed16630db003a3a0806f3afd143a78a764f70bced50ad2f92cd",
         "count": 1
       },
@@ -8695,18 +8690,8 @@
         "count": 1
       },
       {
-        "file": "scripts/lib/uiInspectionSceneVideoEditExportNative.cjs",
-        "fingerprint": "c8b05ff536133eb116d6969703fd2ba6d89b41fb95a78f8e90b33e5e8198229f",
-        "count": 1
-      },
-      {
         "file": "scripts/lib/uiInspectionSceneVideoEditFilmstrip.cjs",
         "fingerprint": "d2e47ed211a9cf58d45e069ded64d7965401245a56e2ecc3b8f835319fd54731",
-        "count": 1
-      },
-      {
-        "file": "scripts/lib/uiInspectionSceneVideoEditFormatMatrix.cjs",
-        "fingerprint": "476655bbe7ce12836a21183cfd424778017a11560d171101d4f06306a4c7de70",
         "count": 1
       },
       {
@@ -8742,16 +8727,6 @@
       {
         "file": "scripts/lib/uiInspectionSceneVideoEditNativeAudio.cjs",
         "fingerprint": "fa8b084e43bbecfdfe55ded3c77250df1980eb530e236f08e65a2ba83e0d28ec",
-        "count": 1
-      },
-      {
-        "file": "scripts/lib/uiInspectionSceneVideoEditNativeFaults.cjs",
-        "fingerprint": "f2a8737e2372699328f880ec2c0f64884afebd2296e6f885e3e0cec5b0f6d640",
-        "count": 1
-      },
-      {
-        "file": "scripts/lib/uiInspectionSceneVideoEditNativeSoak.cjs",
-        "fingerprint": "3953e9772d35072f5d3a6c8a2d288c101e497add0a5111ad89e35d0ba8e72ce7",
         "count": 1
       },
       {
@@ -9275,16 +9250,6 @@
         "count": 1
       },
       {
-        "file": "src/components/params/panels/ResolutionPanel/AspectRatioTiles.tsx",
-        "fingerprint": "8b95c36a7e5416947d00f8b84fbf9c10cd706c4c0c76199b45bfb2318c5c3168",
-        "count": 1
-      },
-      {
-        "file": "src/components/params/panels/ResolutionPanel/aspectRatioGrouping.ts",
-        "fingerprint": "eaf329d714dfa0f7335dcc9049e8f89e24a3fcef78eb70ff69db2925faed89f2",
-        "count": 1
-      },
-      {
         "file": "src/components/params/panels/VoiceSelectorPanel.tsx",
         "fingerprint": "1ccd0ab6973467c5d5cf4a25e4e8c2ee255f62c47179ed0e3d16138cba1a8ac1",
         "count": 1
@@ -9595,11 +9560,6 @@
         "count": 1
       },
       {
-        "file": "src/components/ui/primitives.selection.test.tsx",
-        "fingerprint": "3403c9a13c0665d377f42c2d24fade4644227bb2e861ba0fd516302b228dc997",
-        "count": 1
-      },
-      {
         "file": "src/components/ui/primitives.tsx",
         "fingerprint": "048080645335b5585d216b66cb459093d902b5d0a5535d80b56a9c75f7616510",
         "count": 1
@@ -9611,17 +9571,7 @@
       },
       {
         "file": "src/components/ui/primitives.tsx",
-        "fingerprint": "16b97d82c2c67ce3d8a3f9dfb18d92f0b7654b3682eb56310b0647f7d6508d52",
-        "count": 1
-      },
-      {
-        "file": "src/components/ui/primitives.tsx",
         "fingerprint": "4c3dfcab6b6e7c288a9a4024871df21293d5d5091e246c335e80a9971d9c60bb",
-        "count": 1
-      },
-      {
-        "file": "src/components/ui/primitives.tsx",
-        "fingerprint": "504885dc9599456813aec10fc0d9e73088e3c64d831e693a17f5001b7b15328b",
         "count": 1
       },
       {
@@ -9632,11 +9582,6 @@
       {
         "file": "src/components/ui/primitives.tsx",
         "fingerprint": "94b551a650be649f1ca4cd30170048703987811a9cfc174ecec908a696fa37ae",
-        "count": 1
-      },
-      {
-        "file": "src/components/ui/primitives.tsx",
-        "fingerprint": "9e5c26dd760afb180feca267d05334fc20fa066dbf5d533d285993f782e40dbe",
         "count": 1
       },
       {
@@ -9661,22 +9606,7 @@
       },
       {
         "file": "src/components/ui/styleTokens.ts",
-        "fingerprint": "055e236ab64157cfee050e74737d6979436c2e4c59db38a7943b4c02da26e366",
-        "count": 1
-      },
-      {
-        "file": "src/components/ui/styleTokens.ts",
         "fingerprint": "28330673eb916596fc8885f41221c8e7e451c7d6d7926328d65d6bb02ee0f24f",
-        "count": 1
-      },
-      {
-        "file": "src/components/ui/styleTokens.ts",
-        "fingerprint": "2f588f373b10da4a635d7e0ba5df9b6ae1b86bb7ea89a4770c70433b27381aa4",
-        "count": 1
-      },
-      {
-        "file": "src/components/ui/styleTokens.ts",
-        "fingerprint": "3d37e1b165cfee4382616fbd5da37ffa011c9729f59c065689831add9dbe05ff",
         "count": 1
       },
       {
@@ -9835,11 +9765,6 @@
         "count": 1
       },
       {
-        "file": "src/core/audio/effects/audioEffectDefinitions.ts",
-        "fingerprint": "2b7371ddc6f4baca7e6f8289fecafd851ce226d499085d56c8aff9b481998efc",
-        "count": 1
-      },
-      {
         "file": "src/core/audioEdit/documentContent.test.ts",
         "fingerprint": "082e72f613a1d646c23e0e75383cfa44305ecea2717ef62f8556aadc7af89d5a",
         "count": 1
@@ -9947,11 +9872,6 @@
       {
         "file": "src/core/media/filmstripFrames.ts",
         "fingerprint": "7dab04c949e21c814efcbff4570f6fbccb8bdc5ec90b85e7a76d2089713f6a13",
-        "count": 1
-      },
-      {
-        "file": "src/core/media/waveformPyramid.ts",
-        "fingerprint": "850d450fa95772f2d8583132bced0699fa403243bea45ff0ac64b1b3e39b8825",
         "count": 1
       },
       {
@@ -10125,11 +10045,6 @@
         "count": 1
       },
       {
-        "file": "src/core/videoEdit/builtinEffects.ts",
-        "fingerprint": "172e34bc37f153c8d2eecb8d72d961aa958bda09358cf80abf5dd2faba97297e",
-        "count": 1
-      },
-      {
         "file": "src/core/videoEdit/clipGeometry.ts",
         "fingerprint": "82329d87d18033c8c769522a2f786ccc8d5ddec43151ef0cfb72d9364129c105",
         "count": 1
@@ -10205,16 +10120,6 @@
         "count": 1
       },
       {
-        "file": "src/core/videoEdit/motionBlur.ts",
-        "fingerprint": "cf1b93c7880960b605c17c2de72684f69e09b91f61c6046036fe2b3ac294827c",
-        "count": 1
-      },
-      {
-        "file": "src/core/videoEdit/playbackResolution.ts",
-        "fingerprint": "0818f0b3949fa79453bb73b9cf8d42f18fe9ca93bab0ef51ca0afd3cd85cbcae",
-        "count": 1
-      },
-      {
         "file": "src/core/videoEdit/reviewFixture.test.ts",
         "fingerprint": "8d1a773606313f9bc9e16d7732fb7d8755e97eb895411e67b00b1da263c0d7d8",
         "count": 1
@@ -10222,11 +10127,6 @@
       {
         "file": "src/core/videoEdit/scene/sceneResolve.test.ts",
         "fingerprint": "824846cd15fe2cb313aad96669b819eebf7870979c5beb31509e727a20e30b88",
-        "count": 1
-      },
-      {
-        "file": "src/core/videoEdit/smartRegionPresets.ts",
-        "fingerprint": "7523abe2fe2258b38d99c09783f1ce7001b36df058e8240fbf122bef9fab3175",
         "count": 1
       },
       {
@@ -10247,11 +10147,6 @@
       {
         "file": "src/core/videoEdit/tracking.ts",
         "fingerprint": "d94f982dec7e42949c3f1fc2129ba926585b5d84a3f387f4bf9443a88e6e99d7",
-        "count": 1
-      },
-      {
-        "file": "src/core/videoEdit/transitionParams.ts",
-        "fingerprint": "5f4551ab43df2ee364f9a6a32765e189598601ef1206044513c9346e229071ce",
         "count": 1
       },
       {
@@ -10525,11 +10420,6 @@
         "count": 1
       },
       {
-        "file": "src/features/cameraStage/domain/renderCameraSchedule.ts",
-        "fingerprint": "09619804b9341bd4bed8c96da78e6f2a854e390b07564b246ed2758e3514e8e4",
-        "count": 1
-      },
-      {
         "file": "src/features/cameraStage/domain/sceneTypes.ts",
         "fingerprint": "5a9f6b1f90cac1519ca2901a644318baa9c1727f1af206008845266d091ac0fd",
         "count": 1
@@ -10545,16 +10435,6 @@
         "count": 1
       },
       {
-        "file": "src/features/cameraStage/domain/stateKeyframeCompiler.ts",
-        "fingerprint": "31caf5c13f177dc36f44697a0f7ad0df89177894ab983e74f726ea6e15de1f65",
-        "count": 1
-      },
-      {
-        "file": "src/features/cameraStage/domain/stateKeyframeCompiler.ts",
-        "fingerprint": "fb2ff4396484efc37316dd4676a66429169b79261ab8d6e08817a420b4dbeb33",
-        "count": 1
-      },
-      {
         "file": "src/features/cameraStage/domain/stateKeyframeTypes.ts",
         "fingerprint": "1a8e9138a13468f78a9cb16aca177526e46cc150b7680c64e50505d77b85941e",
         "count": 1
@@ -10562,11 +10442,6 @@
       {
         "file": "src/features/cameraStage/domain/stateKeyframeTypes.ts",
         "fingerprint": "387df8a94a5765baa4a9757820c2e5e1d1a21f638652134fe497da3a270392da",
-        "count": 1
-      },
-      {
-        "file": "src/features/cameraStage/domain/stateKeyframeTypes.ts",
-        "fingerprint": "96af51420f1718fd5d68bc9a7418792a48e275779a58f8874e8b7bb42e77abdd",
         "count": 1
       },
       {
@@ -10610,18 +10485,8 @@
         "count": 1
       },
       {
-        "file": "src/features/cameraStage/scene/StageScene.tsx",
-        "fingerprint": "aab5ed3a59b510382b2e58552ca58da86b96f55f119c42a5b8ba2a340c713aab",
-        "count": 1
-      },
-      {
         "file": "src/features/cameraStage/scene/useCharacterModelUrl.ts",
         "fingerprint": "4a50fb04aea45d52f24edf40f71516d93d7d6ba43d6d750ecaf94e1efc88ee54",
-        "count": 1
-      },
-      {
-        "file": "src/features/cameraStage/scene/useRenderCameraId.ts",
-        "fingerprint": "052b85e52ff6536cf9e14d13da539394a6a346b0dd0aa12e92153f057af5a842",
         "count": 1
       },
       {
@@ -10632,11 +10497,6 @@
       {
         "file": "src/features/cameraStage/stateKeyframes/timeline/TransitionClipBlock.tsx",
         "fingerprint": "3c5bd94ae7638efe901ebb7a3ad343b7c8d52bf0cd614d23d6f977f31d66ef00",
-        "count": 1
-      },
-      {
-        "file": "src/features/cameraStage/stateKeyframes/timeline/TransitionClipBlock.tsx",
-        "fingerprint": "548cc7c79df7aeaea088063d1034131d4dba0ec457e7217d8a80dad0f6358e7b",
         "count": 1
       },
       {
@@ -10661,11 +10521,6 @@
       },
       {
         "file": "src/features/cameraStage/store/cameraStageStore.ts",
-        "fingerprint": "27c95b983ca2e99c2ecb4694d24dac4851652414f1b3f9b33040581920a196d3",
-        "count": 1
-      },
-      {
-        "file": "src/features/cameraStage/store/cameraStageStore.ts",
         "fingerprint": "a75be94bf1a9d34428e2416757f93cd77d759ceae226121212174542df7d124d",
         "count": 1
       },
@@ -10676,27 +10531,7 @@
       },
       {
         "file": "src/features/cameraStage/store/stateKeyframeSlice.ts",
-        "fingerprint": "3fe00fe48045a2354792b147533089c545ea915aca9d9c36916f770e5314b23a",
-        "count": 1
-      },
-      {
-        "file": "src/features/cameraStage/store/stateKeyframeSlice.ts",
-        "fingerprint": "5e2f3e6f2337974b4b20b2fc6d9a0e452629ab2d5e4189f6811c84e6da130ec9",
-        "count": 1
-      },
-      {
-        "file": "src/features/cameraStage/store/stateKeyframeSlice.ts",
         "fingerprint": "767489141a4088498482844eb42654d060130c845f0dbc4038355fa583a0249b",
-        "count": 1
-      },
-      {
-        "file": "src/features/cameraStage/store/stateKeyframeSlice.ts",
-        "fingerprint": "8d1e1e2d95c8a3d59077e231760706e975d09a722c4c496749e7022ed4f9e3a9",
-        "count": 1
-      },
-      {
-        "file": "src/features/cameraStage/toolbar/QuickAddGroup.tsx",
-        "fingerprint": "a1c897a84c5a9e1256e3ccbfcca830f82fc307fe1dc4b90f69f121e71b609a9e",
         "count": 1
       },
       {
@@ -10757,11 +10592,6 @@
       {
         "file": "src/features/canvas/application/canvasMutationService.ts",
         "fingerprint": "14217f4a1e424b3af36fa07b5c0ca87b4ff0db8221ee7687eb4ae49498376f58",
-        "count": 1
-      },
-      {
-        "file": "src/features/canvas/application/canvasMutationService.ts",
-        "fingerprint": "b7512be7eab74629ca6c079f99b24e80605003dd7822f05815621b8414d2f9c9",
         "count": 1
       },
       {
@@ -11506,11 +11336,6 @@
       },
       {
         "file": "src/features/videoEdit/application/videoEditFields.ts",
-        "fingerprint": "2ac6713b8e5a28ac00c9ec4c7b6d5cb58fc7b6120a440ca7d7dae1017c5fddf6",
-        "count": 1
-      },
-      {
-        "file": "src/features/videoEdit/application/videoEditFields.ts",
         "fingerprint": "cf00dfcb1c18a8164ba0645509e47b551171b7e57f21eac6222234865ccb003f",
         "count": 1
       },
@@ -11591,11 +11416,6 @@
       },
       {
         "file": "src/features/videoEdit/application/videoEditSmartRegions.ts",
-        "fingerprint": "aaac83b269b289f4e1b32b0bb3ffb36a9287f943a9b4486124d1c501950e2af3",
-        "count": 1
-      },
-      {
-        "file": "src/features/videoEdit/application/videoEditSmartRegions.ts",
         "fingerprint": "b3600736f36a042fe1a8b9c0343e8dd16621530523156bf24e41ac63a377e0c1",
         "count": 1
       },
@@ -11625,11 +11445,6 @@
         "count": 1
       },
       {
-        "file": "src/features/videoEdit/engine/videoEditBuiltinEffectShaders.ts",
-        "fingerprint": "26d633deb6fa3282399caca71ea145aa620aa7a19f7ea14ac6a680206ad18e5b",
-        "count": 1
-      },
-      {
         "file": "src/features/videoEdit/engine/videoEditBuiltinEffects.gpu.test.ts",
         "fingerprint": "0c67b9380ab88bb19c08496491a39efbcfc4f0a56d920c361020e0cc2f9874a2",
         "count": 1
@@ -11645,28 +11460,8 @@
         "count": 1
       },
       {
-        "file": "src/features/videoEdit/engine/videoEditCodeGpu.ts",
-        "fingerprint": "17f647f46e21aef81215489781369b562aa01a1d49105e26bfe179c834fb5730",
-        "count": 1
-      },
-      {
-        "file": "src/features/videoEdit/engine/videoEditCodeGpu.ts",
-        "fingerprint": "7f5436e20ba424bb7ee2e31da8d4e8962f649c2548f722ade96dbc71922dc8cb",
-        "count": 1
-      },
-      {
         "file": "src/features/videoEdit/engine/videoEditCodeSources.ts",
         "fingerprint": "00e06429ecb59f5f2e0f23a1a3ee7bde595c2477dd14b535c3e92b0ec4bdd4d5",
-        "count": 1
-      },
-      {
-        "file": "src/features/videoEdit/engine/videoEditCodeSources.ts",
-        "fingerprint": "07d07b724e15074a1f652ee694d82ee007e3af9926ae9771d5ce51f36b81da19",
-        "count": 1
-      },
-      {
-        "file": "src/features/videoEdit/engine/videoEditCodeSources.ts",
-        "fingerprint": "b61145096079545a1d237efdae0211a83a8f204b267d602e07fabd6b5eac9eef",
         "count": 1
       },
       {
@@ -11677,11 +11472,6 @@
       {
         "file": "src/features/videoEdit/engine/videoEditCompositeScene.ts",
         "fingerprint": "b4e94371451c08988bc1add7f2f1b564e66ca7e7cdaff5baeaaaa2ceb0325e37",
-        "count": 1
-      },
-      {
-        "file": "src/features/videoEdit/engine/videoEditGpuCompositor.ts",
-        "fingerprint": "b198c0b5b56db10b075f0835a8bdaabe5e87ba115d4642bde8eb76fb842abfeb",
         "count": 1
       },
       {
@@ -11766,11 +11556,6 @@
       },
       {
         "file": "src/features/videoEdit/layout/videoEditDockLayout.ts",
-        "fingerprint": "3254343ac5fa14f57c4ed92273b0f0ea04a4eaecb347d8109eb4c802667e295b",
-        "count": 1
-      },
-      {
-        "file": "src/features/videoEdit/layout/videoEditDockLayout.ts",
         "fingerprint": "48380f0188cc1dd1d684bf68136b11097c9e129c5acb534a6394f6f3b3fd684c",
         "count": 1
       },
@@ -11812,11 +11597,6 @@
       {
         "file": "src/features/videoEdit/panels/VideoEditColorGradePanel.tsx",
         "fingerprint": "93a6fad2b4920df0e3e2396e5c02f926629f37ce2a3e6b9f7cedda738252ffb6",
-        "count": 1
-      },
-      {
-        "file": "src/features/videoEdit/panels/VideoEditEffectChainPanel.tsx",
-        "fingerprint": "21c7a196ce445e13c36caf6c05079195381d1ff8687371a31dc8b268b894e547",
         "count": 1
       },
       {
@@ -11957,11 +11737,6 @@
       {
         "file": "src/features/videoEdit/timeline/VideoEditTimelineCanvas.tsx",
         "fingerprint": "c5a39ce3563ffa5dba984fa4439f1a6d428b1496f19961b65d68ea6c896780bb",
-        "count": 1
-      },
-      {
-        "file": "src/features/videoEdit/timeline/VideoEditTimelineCanvas.tsx",
-        "fingerprint": "c8f4142cb250d04acac09be0af9a3cbcfc636c38764c6055c7c43c9733825d66",
         "count": 1
       },
       {
@@ -12187,11 +11962,6 @@
       {
         "file": "src/services/database/DatabaseService.ts",
         "fingerprint": "878ff9233ae727c13522c25653c234ff2fdcd0eef66b64200f52b92943d5e8c3",
-        "count": 1
-      },
-      {
-        "file": "src/services/mediaCache/hardwareCapabilities.ts",
-        "fingerprint": "59cc7ea1ce9a55899c48954dac45a629644e28cc7be2c1ff899fa799059d3fd6",
         "count": 1
       },
       {

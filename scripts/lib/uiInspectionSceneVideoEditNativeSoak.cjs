@@ -8,11 +8,11 @@ const { videoEditResourceCycle, memoryInfraSnapshot } = require('./uiInspectionS
 const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile, takeOverVideoEdit } = require('./uiInspectionVideoEditDocuments.cjs')
 
 /**
- * 原生解码长时资源曲线（3.1）：4K60 专业格式素材（默认 ProRes 422 HQ，走原生解码）在节目监视器持续播放，总时长
+ * 原生解码长时资源曲线：4K60 专业格式素材（默认 ProRes 422 HQ，走原生解码）在节目监视器持续播放，总时长
  * `HENJI_SOAK_MINUTES`（默认 60，验收至少 30），平均分成 4 段，每段之后做一轮 5.1 资源循环（切页、节目浮窗、关闭重开）。
  * 每 30 秒采样一次：各进程类型工作集与私有内存、原生服务工作集/私有提交/句柄/显存/预算占用/会话数、帧通道计数、
  * 区间呈现次数。容差在运行前固定（与 5.1 相同的 15%），不随结果调整：
- * - 渲染与 GPU 进程私有占用：第 1 轮循环后到第 4 轮循环后的增长 ≤ 15%（重要记录 017；工作集照常记录，不作门槛）；
+ * - 渲染与 GPU 进程私有占用：第 1 轮循环后到第 4 轮循环后的增长 ≤ 15%（工作集照常记录，不作门槛）；
  * - 原生服务私有提交、句柄与显存（工作集照常记录）：第一段播放 2 分钟后的首个样本到最后一个播放样本的增长 ≤ 15%，会话数不增加；
  * - 播放不中断（每个采样区间都有新画面），关闭工程后帧流、原生会话、未归还帧、显存预约与渲染 Worker 全部归零。
  * 素材可用 `HENJI_SOAK_SOURCE` 替换（须为 4K60、7 秒）。证据：`.ui-tour/cache/video-edit-native-soak/evidence.json`。

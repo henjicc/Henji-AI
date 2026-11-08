@@ -7,7 +7,7 @@ const { videoEditFixtureProject } = require('./uiInspectionSceneVideoEditProbe.c
 const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, readVideoEditFile } = require('./uiInspectionVideoEditDocuments.cjs')
 
 /**
- * 原生解码故障回退（3.1）：在真实 Electron 中注入五类故障并核对用户看到的结果、回退与恢复、结构化日志。
+ * 原生解码故障回退：在真实 Electron 中注入五类故障并核对用户看到的结果、回退与恢复、结构化日志。
  * - 崩溃：播放中结束原生服务进程（taskkill）。浏览器能解的 H.264 层当场改由后备解码，只有原生能解的 ProRes 层在
  *   重启的服务上重新打开会话；画面逐帧时间正确、播放继续；冷却后播放中的读取与新读取都回到原生（restored）。
  * - 超时：播放中挂起原生服务进程（NtSuspendProcess）。主进程心跳判定卡死、结束并重启，之后同上。

@@ -501,7 +501,7 @@ export function createStateKeyframeSlice(set: StoreApi<CameraStageState>['setSta
     }),
     /**
      * 只切换选中的状态关键帧，不应用快照、不移动播放头（界面态，不进撤销历史）。
-     * 用于播放头 scrub 落入某静止段时的"选中跟随"（重要记录 003 前置逻辑）：
+     * 用于播放头 scrub 落入某静止段时的"选中跟随"：
      * 重复调用 selectStateKeyframe 只会多余地污染撤销历史。平滑衔接卡上的采样值可能不等于卡快照（拐角被切圆），
      * 写回时由 captureObjectsIntoStateKeyframe 按采样值区分，不会把采样值当成编辑写进去。
      */

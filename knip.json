@@ -34,6 +34,9 @@
   "ignoreDependencies": [
     "henji-author-opentype.js-2.0.0",
     "henji-author-three-0.186.1",
+    "henji-author-three-gpu-pathtracer-0.0.27",
+    "henji-author-three-gpu-pathtracer-0.0.27-henji.1",
+    "henji-author-three-mesh-bvh-0.9.17",
     "henji-author-three-types-0.186.1"
   ],
   "ignoreIssues": {

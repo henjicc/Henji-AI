@@ -37,7 +37,7 @@ async function probeEncodeCapabilities(): Promise<HardwareEncodeResult[]> {
   const results: HardwareEncodeResult[] = []
   for (const codec of ['h264', 'hevc', 'av1'] as const) {
     const strings = CODEC_STRINGS[codec]
-    // 硬件配置不传帧率：Chromium 硬件编码器按 30fps 折算码率，传入 60fps 会被判为不支持（剪辑重要记录 032）。
+    // 硬件配置不传帧率：Chromium 硬件编码器按 30fps 折算码率，传入 60fps 会被判为不支持。
     const hardware = (width: number, height: number, string: string): VideoEncoderConfig => ({ codec: string, width, height, bitrate: 20_000_000, hardwareAcceleration: 'prefer-hardware', latencyMode: 'quality' })
     let maxHardwareSize: HardwareEncodeResult['maxHardwareSize'] = null
     try {

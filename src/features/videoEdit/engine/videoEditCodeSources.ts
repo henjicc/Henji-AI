@@ -80,7 +80,7 @@ interface CachedProgram { source: string; outputIdentity: string; program: CodeM
 export interface VideoEditCodePlan { simulation?: CodeSimulationInput; clip: VideoEditClip; key: string; static: boolean; sourceTime?: ReturnType<typeof videoEditClipSourceTimeAt>; outputIdentity?: string; outputFrame?: CodeOutputFrame; program?: CodeMaterialProgram; draws?: VideoEditGraphicDraw[]; parameters: CodeParameterValues; inputParameters?: CodeParameterValues; imageKeys: ReadonlyMap<string, string>; author: Readonly<Record<string, unknown>>; context: ReturnType<typeof codeMaterialContextForFrame>; transitionHandles: boolean; motion?: CodeMotionClock; divisor?: number }
 /** `parameters`：交给作者滤镜的 params（scene 参数已换成解析结果）。 */
 export interface PreparedVideoEditCodeEffect { simulation?: CodeSimulationInput; effect: VideoEditEffect; builtin?: undefined; version: string; instanceKey: string; info: AuthorFrameInfo; program: CodeMaterialProgram; parameters: Readonly<Record<string, unknown>>; context: ReturnType<typeof codeMaterialContextForFrame>; transitionHandles: boolean }
-/** 内置效果不需要编译源码，直接交给合成器的 GPU 实现（4.7）；`mask` 是这一帧的智能区域蒙版（4.7d），`subject` 是声明 `subjectMatte` 的效果要的人物蒙版。 */
+/** 内置效果不需要编译源码，直接交给合成器的 GPU 实现；`mask` 是这一帧的智能区域蒙版，`subject` 是声明 `subjectMatte` 的效果要的人物蒙版。 */
 export interface PreparedVideoEditBuiltinEffect { effect: VideoEditEffect; builtin: VideoEditBuiltinEffectInstance & RecordingCursorRenderInput & RecordingEffectsRenderInput; mask?: VideoEditSmartRegionMask; subject?: VideoEditSmartRegionMask }
 export type PreparedVideoEditEffect = PreparedVideoEditCodeEffect | PreparedVideoEditBuiltinEffect
 /** `sceneIssues`：这一帧的片子数据或画面参数中需要用户处理的问题，由渲染器和效果错误一起呈现。 */
