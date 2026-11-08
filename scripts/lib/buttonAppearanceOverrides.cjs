@@ -108,6 +108,7 @@ const RULE_E_EXEMPT = {
   UiVirtualList: '长列表滚动容器，没有对外 className；行内控件由各自共享组件按规则 E 检查。',
   UiReadout: '只开放 size/tone 语义参数，没有对外 className。',
   UiSpinner: '只开放 size/tone/active 语义参数，没有对外 className。',
+  UiResizeHandle: '拖动调宽的分隔条，只开放 variant/grow/divider 语义参数，没有对外 className。',
   UiVirtualGrid: '长网格滚动容器，没有对外 className；格内控件由各自共享组件按规则 E 检查。',
   UiPropertyUnit: '属性行的数值单位，只开放 hanging 语义参数，没有对外 className。',
   UiPropertyMenuContext: 'React 上下文对象（属性面板的面板级右键菜单），没有自身 DOM 与 className。',
