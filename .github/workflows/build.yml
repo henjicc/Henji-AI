@@ -59,8 +59,11 @@ jobs:
 
       # better-sqlite3 / sharp 在 Linux 上装原生模块会拖慢且本步骤不需要它们，
       # 但 npm ci 仍需完整依赖树来解析 TS 类型，故正常安装。
+      # 全文件的 npm ci 都带 --force：作者库别名 henji-author-three-gpu-pathtracer-* 声明 peer three >=0.185，
+      # 它在作者库打包时配的是 henji-author-three-0.186.1，npm 却拿根上的 three 0.169 比对报 ERESOLVE；
+      # --force 按锁文件原样安装，不像 --legacy-peer-deps 那样删掉 23 个同伴依赖。
       - name: 安装依赖
-        run: npm ci
+        run: npm ci --force
 
       # progress seeds 是自动生成产物（Git 忽略），检查前必须先生成。
       - name: 生成 progress seeds
@@ -180,7 +183,7 @@ jobs:
           cache: 'npm'
 
       - name: 安装依赖
-        run: npm ci
+        run: npm ci --force
 
       - name: 生成 progress seeds
         run: npm run gen:progress-seeds
@@ -245,7 +248,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-      - run: npm ci
+      - run: npm ci --force
       - name: 安装带 SHA-256 校验的官方软件 Vulkan 渲染器
         run: npx --no-install vgpu install-software-renderer
       - name: 验证设备与真实帧渲染（不可降级或跳过）
@@ -270,7 +273,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb python3 make g++ libgtk-3-0t64 libnss3 libgbm1 libasound2t64
-      - run: npm ci
+      - run: npm ci --force
       - name: 重建隔离 job 的 SQLite 驱动
         run: npm run electron:rebuild -- --only better-sqlite3
       - name: 生成正式 Electron 巡检产物
@@ -303,7 +306,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-      - run: npm ci
+      - run: npm ci --force
       - name: 独占 worker 执行真实尺寸图层与内存预算验收
         run: npm run test:image-export
 
@@ -321,7 +324,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y python3 make g++ libgtk-3-0t64 libnss3 libgbm1 libasound2t64
-      - run: npm ci
+      - run: npm ci --force
       # 此 job 独占 node_modules；不能把 Electron ABI 驱动带回普通 Node/GPU job。
       - name: 按当前锁定 Electron 重建 SQLite
         # -w 只是额外加入模块；--only 才会排除与 SQLite 验收无关的桌面输入钩子。
@@ -360,7 +363,7 @@ jobs:
         run: node scripts/video-decoder-ffmpeg.cjs ensure
       # FFmpeg CLI 兼容层（任务 3.7）：用刚校验的随包 ffmpeg.exe 与 ffmpeg-ffprobe-static 6.1.2 核对全仓参数并实跑导出。
       - name: 安装依赖（FFmpeg CLI 兼容层）
-        run: npm ci
+        run: npm ci --force
       - name: FFmpeg CLI 兼容层（9.0 随包 + 6.1.2 非 Windows 分发）
         run: npm run test:ffmpeg-cli
       - name: 原生服务测试（cargo test）
@@ -474,7 +477,7 @@ jobs:
           fi
 
       - name: 安装依赖
-        run: npm ci
+        run: npm ci --force
 
       - name: 发布持久归档完整矩阵
         run: npm run test:persistence-release

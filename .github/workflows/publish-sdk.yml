@@ -33,9 +33,9 @@ jobs:
           cache: 'npm'
           registry-url: 'https://registry.npmjs.org'
 
-      # 与 build.yml 用同一个 npm 安装依赖。
+      # 与 build.yml 用同一个 npm、同样带 --force 安装依赖（原因见 build.yml）。
       - name: 安装依赖
-        run: npm ci
+        run: npm ci --force
 
       # 受信任发布要求 npm 11.5.1 以上，Node 22 自带的是 npm 10。
       - name: 升级 npm
