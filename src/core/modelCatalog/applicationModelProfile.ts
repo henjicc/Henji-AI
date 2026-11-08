@@ -24,7 +24,6 @@ import ppioProviderPack from '@henjicc/ai-sdk/provider-packs/ppio'
 import volcengineProviderPack from '@henjicc/ai-sdk/provider-packs/volcengine'
 import siliconflowProviderPack from '@henjicc/ai-sdk/provider-packs/siliconflow'
 import volcengineSpeechProviderPack from '@henjicc/ai-sdk/provider-packs/volcengine-speech'
-import groqProviderPack from '@henjicc/ai-sdk/provider-packs/groq'
 
 export const HENJI_GENERATION_PROVIDER_IDS = [
   'volcengine',
@@ -37,7 +36,6 @@ export const HENJI_GENERATION_PROVIDER_IDS = [
   'fal',
   'siliconflow',
   'volcengine-speech',
-  'groq',
 ] as const
 
 export const HENJI_GENERATION_PROVIDER_PACKS: readonly GenerationPack[] = [
@@ -51,7 +49,6 @@ export const HENJI_GENERATION_PROVIDER_PACKS: readonly GenerationPack[] = [
   falProviderPack,
   siliconflowProviderPack,
   volcengineSpeechProviderPack,
-  groqProviderPack,
 ]
 
 /** 运行时额外装载的受控工具模型；不进入普通模型选择器与能力发现。 */

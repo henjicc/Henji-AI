@@ -7,7 +7,7 @@
 |---|---|
 | 最后更新 | 2026-11-08 |
 | 模型数量 | 生成主清单 20（图片 11 / 视频 9）+ 主清单外存量 12 + SDK 跨项目能力模型 25（ASR 20 / 翻译 3 / LLM 2） |
-| 模型供应商文档数量 | 生成/存量 84 + SDK 跨项目能力 19（另有 Fal 工具 12） |
+| 模型供应商文档数量 | 生成/存量 83 + SDK 跨项目能力 19（另有 Fal 工具 12） |
 | 覆盖供应商 | 火山引擎（官方生成/ASR）、百炼（官方）、硅基流动（官方 ASR）、智谱（官方 LLM）、Groq（官方 LLM/ASR）、APIMart、KIE、Fal、派欧云、魔搭、Grsai |
 
 另有 12 个按能力按需分发的 Fal 图像工具，不进入默认 124 模型兼容目录：
@@ -28,6 +28,7 @@
 - **2026-11-07 生成模型第一批待定**：候选 GPT Image 2.6、Wan 3.0、Kling 4.0、Gemini Omni 1.2、火山官方 Seedance，用户未确认前不动。
   - 同日用户改为“缺的都补上”：第一批（含火山官方 Seedance、百炼万相 3.0）及 FLUX 3、Grok Imagine Video 1.5、MiniMax H3 Max、LTX-2.3、Veo 3.1（APIMart）、Seedream 5.0 Flash（APIMart）、HappyHorse 1.1（APIMart）、Eleven v4、Gemini 3.8 TTS 已接入，见下方“2026-11-07 已适配更新”。
 - **2026-11-07 能力标签两层封闭词表**：标签只说“模型能做什么事”，一件事一个标签，词表只在 `src/types/modelTags.ts`。形态按输入输出判断（图片编辑是大类，参考生视频不等于视频编辑或延长，首尾帧必同时有图生视频）；专项只给有专门参数或接口的模型（打光、多角度、扩图、放大、老照片修复、图层拆分、局部重绘、擦除、透明背景等，抠图并入透明背景）。不要“带声音”；能传几张图、分辨率、供应商这类配置事实不做标签；“仅英文提示词”是使用限制，改成 `promptLanguage`。
+- **2026-11-08 Groq Orpheus 语音合成不接**：Orpheus 只有英语与沙特阿拉伯语，不支持中文，两个模型下线；Groq 只保留大语言模型与语音识别。
 - **2026-11-07 下线模型先标“已过时”不删代码**：平台已下线或即将下线的模型、派欧云全部生成模型（派欧云只保留大语言模型）写 `meta.deprecated`（大语言模型写目录条目的 `deprecated`），用户入口一律不再列出，开发者面板照常显示并注明原因。首批：Fal LTX-2、Fal Veo 3.1、火山 Seedream 5.0 Lite、KIE Seedance 1.5 Pro、派欧云 Kling 3.0 与 MiniMax Speech、Kimi K2.6 / K2.7 Code、MiMo 2.5。
 - **发布**：0.10.0 起的改动只接入痕迹AI，用户试过并明确要求后才发 npm（见 AGENTS.md 第 7 条）。
 
@@ -47,8 +48,8 @@
 - [Grok Imagine Video 1.5](Grok-Imagine-Video-1.5/)：[Fal](Grok-Imagine-Video-1.5/Grok-Imagine-Video-1.5_Fal.md)、[KIE](Grok-Imagine-Video-1.5/Grok-Imagine-Video-1.5_KIE.md)、[APIMart](Grok-Imagine-Video-1.5/Grok-Imagine-Video-1.5_APIMart.md)。
 - [MiniMax H3 Max](MiniMax-H3-Max/)：[Fal](MiniMax-H3-Max/MiniMax-H3-Max_Fal.md)、[APIMart](MiniMax-H3-Max/MiniMax-H3-Max_APIMart.md)。
 - [LTX-2.3 · Fal](LTX-2.3/LTX-2.3_Fal.md)（取代已过时的 LTX-2；含音频生视频 `fal-ai/ltx-2.3/audio-to-video`）、[Veo 3.1 · APIMart](Veo-3.1/Veo-3.1_APIMart.md)（Fal 的 Veo 3.1 11-17 下线）、[HappyHorse 1.1 · APIMart](HappyHorse-1.1/HappyHorse-1.1_APIMart.md)。
-- 官方直连：火山方舟 Seedance [2.5](Seedance-2.5/Seedance-2.5_火山引擎.md)、[2.0](Seedance-2.0/Seedance-2.0_火山引擎.md)、[2.0 Fast](Seedance-2.0-Fast/Seedance-2.0-Fast_火山引擎.md)、[2.0 Mini](Seedance-2.0-Mini/Seedance-2.0-Mini_火山引擎.md)；[百炼万相 3.0（含 Prime 高速版）](Wan-3.0/Wan-3.0_百炼.md)。两家官方供应商新增异步任务提交与轮询。
-- 语音：[Eleven v4 · Fal](Eleven-v4/Eleven-v4_Fal.md)、[Gemini 3.8 Flash TTS · KIE](Gemini-3.8-Flash-TTS/Gemini-3.8-Flash-TTS_KIE.md)、[Gemini 3.8 Flash-Lite TTS · KIE](Gemini-3.8-Flash-Lite-TTS/Gemini-3.8-Flash-Lite-TTS_KIE.md)（按原价估，限时价到 2026-12-31）、[Qwen Audio 3.1 TTS Plus · 百炼](Qwen-Audio-3.1-TTS-Plus/Qwen-Audio-3.1-TTS-Plus_百炼.md)、[Orpheus V1 English · Groq](Orpheus-V1-English/Orpheus-V1-English_Groq.md)、[Orpheus Arabic Saudi · Groq](Orpheus-Arabic-Saudi/Orpheus-Arabic-Saudi_Groq.md)（Groq 新进生成目录）。
+- 官方直连：火山方舟 Seedance [2.5](Seedance-2.5/Seedance-2.5_火山引擎.md)、[2.0](Seedance-2.0/Seedance-2.0_火山引擎.md)、[2.0 Fast](Seedance-2.0-Fast/Seedance-2.0-Fast_火山引擎.md)、[2.0 Mini](Seedance-2.0-Mini/Seedance-2.0-Mini_火山引擎.md)；[百炼万相 3.0（含 Prime 高速版）](Wan-3.0/Wan-3.0_百炼.md)、[百炼 MiniMax H3](MiniMax-H3/MiniMax-H3_百炼.md)。两家官方供应商新增异步任务提交与轮询。
+- 语音：[Eleven v4 · Fal](Eleven-v4/Eleven-v4_Fal.md)、[Gemini 3.8 Flash TTS · KIE](Gemini-3.8-Flash-TTS/Gemini-3.8-Flash-TTS_KIE.md)、[Gemini 3.8 Flash-Lite TTS · KIE](Gemini-3.8-Flash-Lite-TTS/Gemini-3.8-Flash-Lite-TTS_KIE.md)（按原价估，限时价到 2026-12-31）、[Qwen Audio 3.1 TTS Plus · 百炼](Qwen-Audio-3.1-TTS-Plus/Qwen-Audio-3.1-TTS-Plus_百炼.md)。
 - 已过时（用户界面不再列出，文档保留）：LTX-2 · Fal、Veo 3.1 · Fal、Seedream 5.0 Lite · 火山方舟、Seedance 1.5 Pro · KIE、派欧云 Kling 3.0 与 MiniMax Speech。
 
 ## 2026-09-27 TTS 适配
@@ -170,7 +171,7 @@ docs/model-adaptation/
 | [Seedance 2.0 Fast](Seedance-2.0-Fast/) | [✅](Seedance-2.0-Fast/Seedance-2.0-Fast_APIMart.md) | [✅](Seedance-2.0-Fast/Seedance-2.0-Fast_KIE.md) | [✅](Seedance-2.0-Fast/Seedance-2.0-Fast_Fal.md) | ❌ 已下架 | ❌ 无 | [✅](Seedance-2.0-Fast/Seedance-2.0-Fast_火山引擎.md) |
 | [Seedance 2.0 Mini](Seedance-2.0-Mini/) | [✅](Seedance-2.0-Mini/Seedance-2.0-Mini_APIMart.md) | [✅](Seedance-2.0-Mini/Seedance-2.0-Mini_KIE.md) | [✅](Seedance-2.0-Mini/Seedance-2.0-Mini_Fal.md) | ❌ 已下架 | ❌ 无 | [✅](Seedance-2.0-Mini/Seedance-2.0-Mini_火山引擎.md) |
 | [Seedance 2.5](Seedance-2.5/) | [✅](Seedance-2.5/Seedance-2.5_APIMart.md) | [✅](Seedance-2.5/Seedance-2.5_KIE.md) | [✅](Seedance-2.5/Seedance-2.5_Fal.md) | ❌ 已下架 | ❌ 无 | [✅](Seedance-2.5/Seedance-2.5_火山引擎.md) |
-| [MiniMax H3](MiniMax-H3/) | [✅](MiniMax-H3/MiniMax-H3_APIMart.md) | [✅](MiniMax-H3/MiniMax-H3_KIE.md) | [✅](MiniMax-H3/MiniMax-H3_Fal.md) | ❌ 无 | ❌ 无 | ❌ 无 |
+| [MiniMax H3](MiniMax-H3/)（另有 [百炼](MiniMax-H3/MiniMax-H3_百炼.md)） | [✅](MiniMax-H3/MiniMax-H3_APIMart.md) | [✅](MiniMax-H3/MiniMax-H3_KIE.md) | [✅](MiniMax-H3/MiniMax-H3_Fal.md) | ❌ 无 | ❌ 无 | ❌ 无 |
 | [Kling 3.0](Kling-3.0/) | [✅](Kling-3.0/Kling-3.0_APIMart.md) | [✅](Kling-3.0/Kling-3.0_KIE.md) | [✅](Kling-3.0/Kling-3.0_Fal.md) | [已过时](Kling-3.0/Kling-3.0_派欧云.md) | ❌ 无 | ❌ 无 |
 | [Kling 3.0 Turbo](Kling-3.0-Turbo/) | [✅](Kling-3.0-Turbo/Kling-3.0-Turbo_APIMart.md) | [✅](Kling-3.0-Turbo/Kling-3.0-Turbo_KIE.md) | [✅](Kling-3.0-Turbo/Kling-3.0-Turbo_Fal.md) | ❌ 无 | ❌ 无 | ❌ 无 |
 | [Kling 3.0 Omni](Kling-3.0-Omni/) | [✅](Kling-3.0-Omni/Kling-3.0-Omni_APIMart.md) | [✅](Kling-3.0-Omni/Kling-3.0-Omni_KIE.md) | [✅](Kling-3.0-Omni/Kling-3.0-Omni_Fal.md) | ❌ 无 | ❌ 无 | ❌ 无 |
@@ -285,7 +286,7 @@ Grsai 暂未在此表出现：其站内「Veo API」旧版文档给出了 `veo3.
 | Seedance 2.0 Fast | `seedance-2.0-fast` | `bytedance/seedance-2-fast` | `bytedance/seedance-2.0/fast/...` |
 | Seedance 2.0 Mini | `seedance-2.0-mini` | `bytedance/seedance-2-mini` | `bytedance/seedance-2.0/mini/...` |
 | Seedance 2.5 | `seedance-2.5` | `bytedance/seedance-2-5` | `bytedance/seedance-2.5/...` |
-| MiniMax H3 | `MiniMax-H3`、`MiniMax-H3-Context-IR`、`MiniMax-H3-Regeneration` | `minimax-h3/{text-to-video,image-to-video,reference-to-video}` | `minimax/h3/{text-to-video,image-to-video,reference-to-video}` |
+| MiniMax H3 | `MiniMax-H3`、`MiniMax-H3-Context-IR`、`MiniMax-H3-Regeneration` | `minimax-h3/{text-to-video,image-to-video,reference-to-video}` | `minimax/h3/{text-to-video,image-to-video,reference-to-video}`；百炼 `MiniMax/MiniMax-H3` |
 | MiniMax Hailuo 2.3 | — | `hailuo/2-3-image-to-video-{standard,pro}` | `fal-ai/minimax/hailuo-2.3/{standard,pro}/{text-to-video,image-to-video}`、`fal-ai/minimax/hailuo-2.3-fast/{standard,pro}/image-to-video` |
 | MiniMax Hailuo 02 | — | `hailuo/02-{text,image}-to-video-{standard,pro}` | `fal-ai/minimax/hailuo-02/{standard,pro}/{text-to-video,image-to-video}`、`fal-ai/minimax/hailuo-02-fast/image-to-video` |
 | Kling 3.0 | `kling-v3` | `kling-3.0/video` | `fal-ai/kling-video/v3/{pro,standard}/...`；派欧云 `/v3/async/kling-v3.0-{std,pro,4k}-{t2v,i2v}` |

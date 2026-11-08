@@ -14,6 +14,11 @@
       "meta": {
         "name": "Wan 3.0"
       }
+    },
+    "bailian-minimax-h3": {
+      "meta": {
+        "name": "MiniMax H3"
+      }
     }
   }
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { bailianMiniMaxH3Model } from '../../src/catalog/bailian/minimax-h3.model'
 import { bailianQwenAudio31TtsPlusModel } from '../../src/catalog/bailian/qwen-audio-3.1-tts-plus.model'
 import { bailianWan30Model } from '../../src/catalog/bailian/wan-3.0.model'
 import { volcengineSeedance20FastModel } from '../../src/catalog/volcengine/seedance-2.0-fast.model'
@@ -110,6 +111,35 @@ describe('百炼万相 3.0 请求构建', () => {
   it('按版本与分辨率逐秒计价（标准版按原价）', () => {
     expect(price(bailianWan30Model, { bailianWan30Resolution: '1080P', bailianWan30Duration: 10 })).toBeCloseTo(12)
     expect(price(bailianWan30Model, { bailianWan30Variant: 'prime', bailianWan30Resolution: '480P', bailianWan30Duration: 4 })).toBeCloseTo(1.8)
+  })
+})
+
+describe('百炼 MiniMax H3 请求构建', () => {
+  const base = { prompt: '湖面泛起涟漪', bailianMiniMaxH3Resolution: '768P', bailianMiniMaxH3Duration: 5 }
+  it('文生视频必须发具体比例，智能比例落到 16:9', () => {
+    expect(build(bailianMiniMaxH3Model, { ...base, bailianMiniMaxH3AspectRatio: 'smart' })).toEqual({
+      model: 'MiniMax/MiniMax-H3', input: { prompt: '湖面泛起涟漪' },
+      parameters: { resolution: '768P', duration: 5, watermark: false, ratio: '16:9' },
+    })
+  })
+  it('图生视频按张数映射首帧 / 首尾帧，不发比例', () => {
+    const body = build(bailianMiniMaxH3Model, { ...base, bailianMiniMaxH3AspectRatio: '9:16', uploadedFilePaths: ['a.png', 'b.png'] })
+    expect(body.input).toEqual({ prompt: '湖面泛起涟漪', media: [{ type: 'first_frame', url: 'a.png' }, { type: 'last_frame', url: 'b.png' }] })
+    expect(body.parameters).not.toHaveProperty('ratio')
+  })
+  it('参考生视频：图片 / 视频 / 音频分别为 image_url / feature / driving_audio，智能比例发 adaptive', () => {
+    const body = build(bailianMiniMaxH3Model, {
+      ...base, bailianMiniMaxH3Mode: 'reference-to-video', uploadedFilePaths: ['a.png'], uploadedVideoFilePaths: ['v.mp4'], uploadedAudioFilePaths: ['s.mp3'],
+    })
+    expect(body.input).toMatchObject({ media: [{ type: 'image_url', url: 'a.png' }, { type: 'feature', url: 'v.mp4' }, { type: 'driving_audio', url: 's.mp3' }] })
+    expect(body.parameters).toMatchObject({ ratio: 'adaptive' })
+    expect(() => build(bailianMiniMaxH3Model, { ...base, bailianMiniMaxH3Mode: 'reference-to-video', uploadedAudioFilePaths: ['s.mp3'] })).toThrow('参考图或一段参考视频')
+  })
+  it('按输出秒数计价，参考视频秒数同价计入，参考图超过 5 张每张 ¥0.2', () => {
+    expect(price(bailianMiniMaxH3Model, { ...base, bailianMiniMaxH3Resolution: '2K' })).toBeCloseTo(4)
+    expect(price(bailianMiniMaxH3Model, {
+      ...base, bailianMiniMaxH3Mode: 'reference-to-video', uploadedFilePaths: ['1', '2', '3', '4', '5', '6', '7'], uploadedVideoFilePaths: ['v.mp4'], __videoDurationSeconds: [3],
+    })).toBeCloseTo(0.5 * 8 + 0.4)
   })
 })
 

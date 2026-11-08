@@ -95,6 +95,45 @@ export const bailianPresentation: Record<string, ModelPresentation> = {
     linkages: [],
   },
 
+  'bailian-minimax-h3': {
+    meta: {
+      name: { key: 'meta.name', fallback: 'MiniMax H3' },
+      i18nScope: 'models.defs.bailian-minimax-h3',
+    },
+    params: {
+      bailianMiniMaxH3Mode: {
+        name: sharedFieldText('mode'),
+        role: 'mode',
+        optionLabels: {
+          'text-image-to-video': { label: sharedModeText('textImageToVideo') },
+          'reference-to-video': { label: sharedModeText('referenceToVideo') },
+        },
+        tooltip: { zh: '文/图生视频：1 张图为首帧，2 张为首尾帧。参考生视频可放最多 9 张图、3 段视频、3 段音频（视频、音频各合计 15 秒内），音频要和图或视频一起用。', en: 'Text/Image to Video: 1 image is the first frame, 2 are first and last frames. Reference takes up to 9 images, 3 videos and 3 audio clips (15s each in total); audio must come with an image or video.' },
+      },
+      bailianMiniMaxH3AspectRatio: {
+        name: sharedFieldText('aspectRatio'),
+        optionLabels: {
+          smart: { label: sharedOptionText('smart') },
+          '21:9': { label: '21:9' },
+          '16:9': { label: '16:9' },
+          '4:3': { label: '4:3' },
+          '1:1': { label: '1:1' },
+          '3:4': { label: '3:4' },
+          '9:16': { label: '9:16' },
+        },
+      },
+      bailianMiniMaxH3Resolution: {
+        name: sharedFieldText('resolution'),
+        optionLabels: {
+          '768P': { label: '768P' },
+          '2K': { label: '2K' },
+        },
+      },
+      bailianMiniMaxH3Duration: { name: sharedFieldText('duration') },
+    },
+    linkages: [],
+  },
+
   'bailian-z-image-turbo': {
     meta: {
       name: { key: 'meta.name', fallback: 'Z-Image Turbo' },

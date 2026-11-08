@@ -6,7 +6,7 @@ import { registry } from '@/core/ModelRegistry'
 import { modelPresentations } from '@/models/presentation'
 import { catalogIndex } from '@henjicc/ai-sdk'
 
-const IDS = ['apimart-wan-2.7-image', 'apimart-flux-3-video', 'fal-flux-3-video', 'groq-orpheus-v1-english', 'groq-orpheus-arabic-saudi']
+const IDS = ['apimart-wan-2.7-image', 'apimart-flux-3-video', 'fal-flux-3-video']
 
 function compose(id: string) {
   const runtime = catalogIndex.get(id)
@@ -40,12 +40,5 @@ describe('2026-11-07 新模型展示定义', () => {
     expect(values(engine.getFilteredOptions('falFlux3VideoResolution', { falFlux3VideoMode: 'extend' }, model.params))).toEqual(['720p', '1080p'])
     const reset = engine.execute('falFlux3VideoVersion', { falFlux3VideoVersion: 'max', falFlux3VideoResolution: '2160p' }, model.params)
     expect(reset.falFlux3VideoResolution).toBe('720p')
-  })
-
-  it('Orpheus 音色走音色选择器，只列官方音色', () => {
-    const english = compose('groq-orpheus-v1-english').params.find(param => param.id === 'groqOrpheusEnglishVoice') as { panel?: string; config?: { voices: Array<{ id: string }>; allowCustomId?: boolean } }
-    expect(english.panel).toBe('voice-selector')
-    expect(english.config?.voices.map(voice => voice.id)).toEqual(['autumn', 'diana', 'hannah', 'austin', 'daniel', 'troy'])
-    expect(english.config?.allowCustomId).toBeUndefined()
   })
 })

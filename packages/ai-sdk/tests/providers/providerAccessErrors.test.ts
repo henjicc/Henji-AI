@@ -49,6 +49,13 @@ describe('官方账户与模型准入错误', () => {
     expect(error).toMatchObject({ code, details: { retryable: false } })
     expect(shouldRetry(error)).toBe(false)
   })
+  it('魔搭未完成邮箱验证的 403 给出可操作提示，不抛英文原文', async () => {
+    // 2026-11-08 真实请求返回的正文（request_id 已替换）。
+    const body = { errors: { message: 'For account security, please complete your profile via email verification. ModelScope Magicubes is only available to verified accounts. Please refer to https://modelscope.cn/my/settings/account' }, request_id: 'fixture' }
+    const error = await readJsonResponse(new Response(JSON.stringify(body), { status: 403 }), 'ModelScope').catch((error: unknown) => error)
+    expect(error).toMatchObject({ code: 'provider_product_not_activated', message: expect.stringContaining('魔搭账号需先完成邮箱验证'), details: { retryable: false, scope: 'account' } })
+    await expect(readJsonResponse(new Response(JSON.stringify({ errors: { message: 'Forbidden' } }), { status: 403 }), 'ModelScope')).rejects.toMatchObject({ code: 'provider_http_error' })
+  })
   it('不把泛化的 403 或服务器故障猜成余额或模型未开通', async () => {
     for (const body of [{ message: 'Forbidden' }, { code: 'BILLING_FAILED', message: 'billing service unavailable' }]) {
       await expect(readJsonResponse(new Response(JSON.stringify(body), { status: 403 }), 'PPIO')).rejects.toMatchObject({ code: 'provider_http_error' })

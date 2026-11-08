@@ -42,7 +42,6 @@ export const BUILTIN_PROVIDER_IDS = [
   'fal',
   'grsai',
   'siliconflow',
-  'groq',
 ] as const
 
 /** 开放 ProviderId 仍保留内置供应商字面量的编辑器补全。 */

@@ -2,6 +2,8 @@
 
 ## 0.10.0 - 未发布
 
+- 百炼新增 MiniMax H3（`bailian-minimax-h3`，平台模型 `MiniMax/MiniMax-H3`）：文生视频、首帧 / 首尾帧、参考生视频（≤ 9 图、3 段视频、3 段音频），768P ¥0.5/秒、2K ¥0.8/秒，参考视频按同价计入，参考图超过 5 张每张 ¥0.2。
+- 魔搭账号未完成邮箱验证时的 403 识别为 `provider_product_not_activated`（`scope: account`），提示到账号设置完成验证，不再抛英文原文。
 - 素材约束新增画面尺寸：`RuntimeMediaDimensionConstraints`（`minShortSidePx` / `maxLongSidePx` / `minPixels` / `maxPixels` / `minAspectRatio` / `maxAspectRatio`，宽高比 = 宽 / 高），`RuntimeVideoConstraints` 继承它，`RuntimeInputLimitRule` 新增 `imageConstraints`（`RuntimeImageConstraints`），`resolveRuntimeInputLimits` 一并解析；新增 `findMediaDimensionViolation` 供宿主提交前检查素材宽高。按官方文档补上尺寸要求：APIMart Kling 3.0 Omni 参考视频 720–2160 px（真实请求验收发现 640×360 视频付费请求失败）、KIE Kling 3.0 Omni、KIE / APIMart MiniMax H3、APIMart MiniMax H3 Max、派欧云 Kling 3.0、APIMart / Fal Kling 3.0 Turbo、Fal / KIE Kling 4.0、APIMart / KIE HappyHorse 1.1、KIE / 火山方舟 Seedance 2.0 系列与 2.5、APIMart Seedance 2.5、APIMart / 百炼万相 3.0、Fal Qwen Image 3.0、APIMart Seedream 5.0 Lite。
 - KIE 按官方 OpenAPI 修正：MiniMax H3 图生视频字段改为 first_frame_url / last_frame_url（此前图生视频不可用）；Qwen Image 3.0 Pro 文生图 model 改为 qwen3/pro-text-to-image；Kling 3.0 Omni 风格转换与参考生视频按官方分支构建；Seedance 2.5 web_search 改发布尔值；Nano Banana 2 参考图上限 10；Gemini 3.1 TTS 说话人带 accent；Gemini Omni Video 始终发 duration；Grok Imagine 图生图不发比例、Grok Imagine Video 图生视频时长为字符串。
 - APIMart Kling 3.0 Omni 编辑视频时不发时长；APIMart Seedance 2.5 任务类型只在参考模式下生效；Fal Veo 3.1 参考生视频按标准价计价；Fal Z-Image Turbo 强度下限 0.05、1MP 计价。
@@ -21,7 +23,7 @@
 - 本地媒体托管：新增 `upload/public-host-upload.ts`，按宿主“通用文件上传服务”设置（`__upload_provider` 首选、`__upload_fallback` 换用）用 KIE 或 Fal 把本地文件托管成公网地址；派欧云、魔搭改用它（此前忽略 Fal 设置、只走 KIE），火山方舟的参考视频也走它，一家都没配置时提交前报 `public_media_url_required` 并提示去设置。新增 `upload/bailian-oss-upload.ts`（百炼临时存储，语音识别与生成共用），百炼生成链路的视频、音频按请求 model 上传成 `oss://`，请求体含 `oss://` 时提交带 `X-DashScope-OssResourceResolve`。`ProviderMediaRewriteInput` 新增 `requestBody`。
 - 火山方舟 Seedance 开放参考视频（2.0 系列 ≤ 3 段、2.5 ≤ 10 段），按“输入含视频”单价并计入输入视频时长；Seedance 2.5 新增任务类型（自动 / 参考 / 视频编辑 / 视频延长）。百炼万相 3.0 开放参考视频与参考音频（各 ≤ 5），输入视频时长同价计费，读得到时长时输出时长收进“输入 + 输出 ≤ 30 秒”。
 - 新增生成模型：Wan 2.7 Image（APIMart，标准版与 Pro 为版本选项，含组图）、FLUX 3 Video（APIMart；Fal 标准版文生/图生/续写/编辑与 FLUX 3 Max 文生/图生）。草稿与草稿转正片两段式暂不接入。
-- 新增生成供应商 `groq`（`BUILTIN_PROVIDER_IDS` 与内置 provider，`@henjicc/ai-sdk/provider-packs/groq`）：Orpheus V1 English（$22/百万字符）与 Orpheus Arabic Saudi（$40/百万字符）同步语音合成，固定 wav、单次 ≤ 200 字符，与 Groq LLM / 语音识别共用 `groq` 密钥。OpenAI 兼容 `/audio/speech` 执行抽成 `providers/openai-speech.ts`，硅基流动改用它（行为不变）。
+- OpenAI 兼容 `/audio/speech` 执行抽成 `providers/openai-speech.ts`，硅基流动改用它（行为不变）。
 - Fal LTX-2.3 新增「音频生视频」模式（`fal-ai/ltx-2.3/audio-to-video`，$0.10/秒按音频时长估价，可选首帧图）；`pricing.mediaContext` 支持 `mediaType: 'audio'`（`durationSeconds`）与按模式生效的 `when`，`PricingMediaMetadataReaders` 新增可选 `audio`；mediaPresence 新增 `resolveUploadedAudioSources`、`resolveUploadedAudioDurationSeconds`；能力标签新增 `audio-to-video`。
 - Kling 4.0（Fal）接入分镜 `multi_prompt`：按镜头写提示词与秒数，成片时长为各镜之和，使用分镜时不发送时长，主提示词作为整体描述拼到每一镜提示词前（`alternativeInputParamIds` 声明分镜可单独构成输入）。Kling 4.0 / 4.0 Flash 接入元素 `elements`：Fal 参考生视频与视频编辑（`@Element1` 引用，正面图 + 1–3 张其他角度，或一段 3–8 秒视频），KIE 参考生视频（`@名称` 引用，2–4 张图或一段视频，Flash 视频元素带 `type`）；视频元素按视频输入计费。KIE Kling 4.0 / Flash 带参考视频的估价改按官方 `max(2 × 输出, 输入 + 输出)` 秒，原先只按输出时长。
 - KIE Gemini 3.8 Flash / Flash-Lite TTS 改按原价估（Google 2027 年起价格的七折：输入 $0.70，输出 $12.60 / $8.40 每百万 Token），促销期内实际扣费更低。

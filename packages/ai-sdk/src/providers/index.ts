@@ -120,7 +120,6 @@ export async function executeContinuePolling(
 import * as apimart from './apimart'
 import * as bailian from './bailian'
 import * as fal from './fal'
-import * as groq from './groq'
 import * as grsai from './grsai'
 import * as kie from './kie'
 import * as modelscope from './modelscope'
@@ -140,5 +139,4 @@ const builtinProviders: Record<BuiltinProviderId, ProviderAdapter> = {
   fal,
   grsai,
   siliconflow,
-  groq,
 }

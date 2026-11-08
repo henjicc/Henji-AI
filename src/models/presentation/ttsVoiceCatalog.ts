@@ -47,16 +47,6 @@ const siliconflowNames: Array<[string, string]> = [
   ['claire', '温柔女声 Claire'], ['diana', '欢快女声 Diana'],
 ]
 
-// Groq Orpheus 官方音色，Groq 不提供音色列表接口，也不接受自定义音色。
-const orpheusEnglishVoices: Array<[string, string, string]> = [
-  ['autumn', 'Autumn', '女'], ['diana', 'Diana', '女'], ['hannah', 'Hannah', '女'],
-  ['austin', 'Austin', '男'], ['daniel', 'Daniel', '男'], ['troy', 'Troy', '男'],
-]
-const orpheusArabicVoices: Array<[string, string, string]> = [
-  ['abdullah', 'Abdullah', '男'], ['fahad', 'Fahad', '男'], ['sultan', 'Sultan', '男'],
-  ['lulwa', 'Lulwa', '女'], ['noura', 'Noura', '女'], ['aisha', 'Aisha', '女'],
-]
-
 export const TTS_VOICE_SELECTORS: Record<string, VoiceSelectorConfig> = {
   'fal-minimax-speech-2.8': { voices: [systemVoice('Wise_Woman')], allowSearch: true, allowCustomId: true },
   'fal-eleven-v3-tts': { voices: elevenNames.map((name) => systemVoice(name)), allowSearch: true, allowCustomId: true },
@@ -114,8 +104,6 @@ export const TTS_VOICE_SELECTORS: Record<string, VoiceSelectorConfig> = {
     allowSearch: true,
     allowCustomId: true,
   },
-  'groq-orpheus-v1-english': { voices: orpheusEnglishVoices.map(([id, name, gender]) => systemVoice(id, name, gender)) },
-  'groq-orpheus-arabic-saudi': { voices: orpheusArabicVoices.map(([id, name, gender]) => systemVoice(id, name, gender)) },
   'volcengine-seed-tts-2.0': { voices: volcSystemVoices, allowSearch: true },
   'volcengine-seed-icl-2.0': {
     voices: volcSystemVoices,

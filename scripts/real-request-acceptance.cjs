@@ -166,7 +166,7 @@ function verify(c, outcome) {
 }
 
 async function main() {
-  const browser = await chromium.connectOverCDP('http://127.0.0.1:9333')
+  const browser = await chromium.connectOverCDP(`http://127.0.0.1:${process.env.HENJI_ELECTRON_REMOTE_DEBUGGING_PORT || 9333}`)
   const page = browser.contexts().flatMap(context => context.pages()).find(item => !item.url().startsWith('devtools'))
   if (!page) throw new Error('找不到开发版窗口')
   const pending = cases.filter(c => !finished.has(c.id) && (!only.size || only.has(c.id)))

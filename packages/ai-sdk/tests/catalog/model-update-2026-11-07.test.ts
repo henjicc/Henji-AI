@@ -1,9 +1,6 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { catalogIndex } from '../../src/catalog'
-import * as groq from '../../src/providers/groq'
-import type { JsonObject, ProviderExecutionInput } from '../../src/types/runtime'
-import fixture from '../fixtures/groq-tts/speech.json'
-import { fakeRuntimeContext } from '../providers/test-helpers'
+import type { JsonObject } from '../../src/types/runtime'
 
 function model(id: string) {
   const runtime = catalogIndex.get(id)
@@ -97,46 +94,5 @@ describe('Fal FLUX 3 Video', () => {
     expect(price('fal-flux-3-video', { falFlux3VideoMode: 'extend', falFlux3VideoResolution: '1080p' })).toBeCloseTo(2.65)
     expect(price('fal-flux-3-video', { falFlux3VideoVersion: 'max', falFlux3VideoResolution: '2160p' })).toBeCloseTo(0.85)
     expect(price('fal-flux-3-video', { falFlux3VideoMode: 'edit', uploadedVideoFilePaths: vid, __videoDurationSeconds: [8] })).toBeCloseTo(0.24)
-  })
-})
-
-describe('Groq Orpheus 语音合成', () => {
-  it('请求体与官方示例一致，固定 wav', async () => {
-    expect(await build('groq-orpheus-v1-english', { prompt: fixture.englishRequest.input, groqOrpheusEnglishVoice: 'austin' })).toEqual(fixture.englishRequest)
-    expect(await build('groq-orpheus-arabic-saudi', { prompt: fixture.arabicRequest.input, groqOrpheusArabicVoice: 'noura' })).toEqual(fixture.arabicRequest)
-  })
-
-  it('超过 200 字符或使用清单外音色时在发请求前拒绝', async () => {
-    await expect(build('groq-orpheus-v1-english', { prompt: 'a'.repeat(201) })).rejects.toThrow('200')
-    await expect(build('groq-orpheus-v1-english', { groqOrpheusEnglishVoice: 'noura' })).rejects.toThrow('noura')
-    await expect(build('groq-orpheus-arabic-saudi', { groqOrpheusArabicVoice: 'troy' })).rejects.toThrow('troy')
-  })
-
-  it('按字符计价：英文 $22、阿拉伯语 $40 每百万字符', () => {
-    expect(price('groq-orpheus-v1-english', { prompt: 'a'.repeat(100) })).toBeCloseTo(0.0022)
-    expect(price('groq-orpheus-arabic-saudi', { prompt: 'a'.repeat(100) })).toBeCloseTo(0.004)
-  })
-
-  function execution(fetch: ReturnType<typeof vi.fn>): ProviderExecutionInput {
-    return {
-      apiKey: 'fixture-key', route: '/v1/audio/speech', method: 'POST', body: fixture.englishRequest, requestId: 'fixture-request',
-      runtime: fakeRuntimeContext(fetch),
-    }
-  }
-
-  it('二进制 wav 变为音频 URI，请求打到 Groq OpenAI 兼容前缀', async () => {
-    const fetch = vi.fn().mockResolvedValueOnce(new Response(new Uint8Array(fixture.audioBytes), { headers: { 'content-type': 'audio/wav' } }))
-    await expect(groq.execute(execution(fetch))).resolves.toMatchObject({ status: 'completed', url: 'data:audio/wav;base64,UklGRg==' })
-    expect(fetch.mock.calls[0][0]).toBe('https://api.groq.com/openai/v1/audio/speech')
-    expect(JSON.parse(String(fetch.mock.calls[0][1].body))).toEqual(fixture.englishRequest)
-    expect(fetch.mock.calls[0][1].headers).toMatchObject({ Authorization: 'Bearer fixture-key' })
-  })
-
-  it('官方错误体与空音频都不能成为成功结果，且同步接口不轮询', async () => {
-    const failing = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(fixture.error.payload), { status: fixture.error.status }))
-    await expect(groq.execute(execution(failing))).rejects.toMatchObject({ code: 'provider_http_error', details: { status: 400 } })
-    const empty = vi.fn().mockResolvedValueOnce(new Response(new Uint8Array(), { headers: { 'content-type': 'audio/wav' } }))
-    await expect(groq.execute(execution(empty))).rejects.toMatchObject({ code: 'empty_result' })
-    await expect(groq.continuePolling({ apiKey: 'k', route: '/v1/audio/speech', taskId: 't', runtime: fakeRuntimeContext(vi.fn()) } as never)).rejects.toMatchObject({ code: 'unsupported_provider' })
   })
 })

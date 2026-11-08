@@ -21,7 +21,7 @@ const INTENDED_REJECTIONS: ReadonlyArray<[modelId: string, message: RegExp]> = [
   // 带参考视频时参考图上限从 7 张降到 4 张，数量限制按素材类型分别写，表达不了“取决于有没有视频”。
   ['kie-kling-3.0-omni', /带参考视频时最多 4 张参考图/],
   // 参考生视频要“图片、视频、音频至少一种”，数量限制只能按单一素材类型写，表达不了“任选其一”，由构建器在提交时提示。
-  ...['volcengine-seedance-2.0', 'volcengine-seedance-2.0-fast', 'volcengine-seedance-2.0-mini', 'volcengine-seedance-2.5', 'fal-ai-wan-3.0', 'apimart-wan-3.0', 'apimart-minimax-h3-max', 'apimart-kling-4.0', 'kie-kling-3.0-omni']
+  ...['volcengine-seedance-2.0', 'volcengine-seedance-2.0-fast', 'volcengine-seedance-2.0-mini', 'volcengine-seedance-2.5', 'fal-ai-wan-3.0', 'apimart-wan-3.0', 'apimart-minimax-h3-max', 'apimart-kling-4.0', 'kie-kling-3.0-omni', 'bailian-minimax-h3']
     .map((id): [string, RegExp] => [id, /参考生视频至少需要/]),
 ]
 const ANY_OF_MEDIA = /参考生视频至少需要/

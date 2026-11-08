@@ -111,14 +111,6 @@ export const ttsPresentation: Record<string, ModelPresentation> = {
     { zh: 'MOSS TTSD 0.5', en: 'MOSS TTSD 0.5' },
     { siliconflowMossVoice: voice, siliconflowMossFormat: format },
   ),
-  'groq-orpheus-v1-english': speechModel(
-    { zh: 'Orpheus English', en: 'Orpheus English' },
-    { groqOrpheusEnglishVoice: voice },
-  ),
-  'groq-orpheus-arabic-saudi': speechModel(
-    { zh: 'Orpheus 沙特阿拉伯语', en: 'Orpheus Arabic Saudi' },
-    { groqOrpheusArabicVoice: voice },
-  ),
   'volcengine-seed-tts-2.0': speechModel(
     { zh: 'Seed-TTS 2.0', en: 'Seed-TTS 2.0' },
     { volcSeedTtsSpeaker: voice },
@@ -144,14 +136,6 @@ ttsPresentation['fal-eleven-v4-tts'].params.falElevenV4Version.optionLabels = {
   standard: { label: 'v4' }, turbo: { label: 'v4 Turbo' },
 }
 ttsPresentation['fal-eleven-v4-tts'].params.falElevenV4Version.tooltip = { zh: 'Turbo 更快，价格减半。', en: 'Turbo is faster and half the price.' }
-ttsPresentation['groq-orpheus-v1-english'].params.groqOrpheusEnglishVoice.tooltip = {
-  zh: '只念英文，单次最多 200 字符。可在文本里用 [cheerful]、[whisper] 这类方括号写语气。',
-  en: 'English only, up to 200 characters per request. Add tone with bracketed directions such as [cheerful] or [whisper].',
-}
-ttsPresentation['groq-orpheus-arabic-saudi'].params.groqOrpheusArabicVoice.tooltip = {
-  zh: '沙特方言阿拉伯语，单次最多 200 字符，不支持方括号语气。',
-  en: 'Saudi-dialect Arabic, up to 200 characters per request; bracketed directions are not supported.',
-}
 
 const cloneParams = ttsPresentation['volcengine-seed-icl-2.0'].params
 ttsPresentation['volcengine-seed-icl-2.0'].submissionConfirmation = {
@@ -209,8 +193,6 @@ const ttsVoiceFields: Record<keyof typeof TTS_VOICE_SELECTORS, string> = {
   'kie-gemini-3.8-flash-lite-tts': 'kieGemini38TtsVoice',
   'siliconflow-cosyvoice2-tts': 'siliconflowCosyVoice',
   'siliconflow-moss-ttsd-0.5': 'siliconflowMossVoice',
-  'groq-orpheus-v1-english': 'groqOrpheusEnglishVoice',
-  'groq-orpheus-arabic-saudi': 'groqOrpheusArabicVoice',
   'volcengine-seed-tts-2.0': 'volcSeedTtsSpeaker',
   'volcengine-seed-icl-2.0': 'volcSeedIclSpeaker',
 }
