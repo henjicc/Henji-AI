@@ -34,6 +34,10 @@ import { videoEditSendMenuItems } from '@/features/videoEdit/panels/videoEditSen
 import { ICON_WORKSPACE_VIDEO_EDIT } from '@/core/theme/icons'
 import { VideoEditSendDialog } from '@/features/videoEdit/panels/VideoEditSendMenu'
 import { listGenerationContinuations } from '@/core/services/generationContinuations'
+
+/** 结果与生成中占位共用的行高：宽度随画面比例，竖图不会撑成整屏大图。 */
+const RESULT_ROW_HEIGHT_CLASS = 'h-48'
+
 export interface TaskCardProps {
   task: GenerationTask
   onDownload: (filePath: string, fromButton?: boolean) => Promise<void>
@@ -124,6 +128,7 @@ const TaskCard = React.memo(function TaskCard({
 
   // 视频结果的真实时长（读自已加载的元数据），用于画面右下角的时长读数
   const [videoDurationSeconds, setVideoDurationSeconds] = React.useState<number | null>(null)
+  const [videoAspectRatio, setVideoAspectRatio] = React.useState<string | null>(null)
 
   const handleImageClick = (url: string, list: string[], filePaths: string[]) => {
     if (shouldIgnoreClick()) return
@@ -185,10 +190,10 @@ const TaskCard = React.memo(function TaskCard({
     // 进行中先按成品比例占住结果的位置：光带扫过表示在出图，状态与进度写在占位里，出图后原地换成结果。
     if (isInProgress) {
       return (
-        <div className={task.type === 'image' ? 'grid max-w-4xl grid-cols-4' : 'w-96 max-w-full'}>
+        <div className="flex">
           <div
             role="status"
-            className={`relative flex items-center justify-center overflow-hidden rounded-lg ${task.type === 'audio' ? 'h-14' : ''}`}
+            className={`relative flex max-w-full shrink-0 items-center justify-center overflow-hidden rounded-lg ${task.type === 'audio' ? 'h-14 w-96' : RESULT_ROW_HEIGHT_CLASS}`}
             style={task.type === 'audio' ? undefined : { aspectRatio: resolveResultAspectRatio(task, 0) }}
           >
             <UiSkeleton shape="fill" motion="sweep" />
@@ -264,10 +269,9 @@ const TaskCard = React.memo(function TaskCard({
     if (task.result.type === "image") {
       const { urls, filePaths } = task.result
 
-      // 图片网格平铺：每格按结果比例占位（未知比例先按方形），不加卡片背景。
-      // 网格宽度封顶 896（原记录列宽）：记录列随窗口加宽后，四宫格不跟着放大成整屏大图（任务 5.3）
+      // 结果按同一行高平铺、宽度随各自比例（未知比例先按方形），放不下换行；不加卡片背景。
       return (
-        <div className="grid max-w-4xl grid-cols-4 items-start gap-1.5">
+        <div className="flex flex-wrap items-start gap-1.5">
           {urls.map((url, index) => {
             const filePath = filePaths[index]
             const imageDimensions = resolveResultImageDimensions(task, index)
@@ -275,7 +279,7 @@ const TaskCard = React.memo(function TaskCard({
               <div
                 key={`${task.id}-img-${index}`}
                 data-generation-result={task.id}
-                className="relative overflow-hidden rounded-lg bg-media"
+                className={`relative max-w-full shrink-0 overflow-hidden rounded-lg bg-media ${RESULT_ROW_HEIGHT_CLASS}`}
                 style={{ aspectRatio: resolveResultAspectRatio(task, index) }}
                 onClick={() => handleImageClick(url, urls, filePaths)}
                 onContextMenu={(e) =>
@@ -322,7 +326,7 @@ const TaskCard = React.memo(function TaskCard({
                   height={imageDimensions?.height}
                   loading="lazy"
                   decoding="async"
-                  className="block h-full w-full cursor-grab select-none object-cover active:cursor-grabbing"
+                  className="absolute inset-0 block h-full w-full cursor-grab select-none object-cover active:cursor-grabbing"
                   draggable={false}
                   onLoad={(event) => {
                     const { naturalWidth, naturalHeight } = event.currentTarget
@@ -348,7 +352,8 @@ const TaskCard = React.memo(function TaskCard({
       const durationBadge = videoDurationSeconds !== null ? formatMediaDuration(videoDurationSeconds) : ''
       return (
         <div
-          className="relative w-96 max-w-full cursor-pointer overflow-hidden rounded-lg bg-media"
+          className={`relative max-w-full shrink-0 cursor-pointer overflow-hidden rounded-lg bg-media ${RESULT_ROW_HEIGHT_CLASS}`}
+          style={{ aspectRatio: videoAspectRatio ?? resolveResultAspectRatio(task, 0) }}
           onClick={() => handleVideoClick(videoUrl, filePath)}
           onContextMenu={(e) =>
             showMenu(e, [
@@ -382,13 +387,14 @@ const TaskCard = React.memo(function TaskCard({
         >
           <video
             src={videoUrl}
-            className="block h-auto w-full"
+            className="absolute inset-0 block h-full w-full object-contain"
             draggable={false}
             muted
             preload="metadata"
             onLoadedMetadata={(event) => {
-              const seconds = event.currentTarget.duration
-              if (Number.isFinite(seconds)) setVideoDurationSeconds(seconds)
+              const { duration, videoWidth, videoHeight } = event.currentTarget
+              if (Number.isFinite(duration)) setVideoDurationSeconds(duration)
+              if (videoWidth > 0 && videoHeight > 0) setVideoAspectRatio(`${videoWidth} / ${videoHeight}`)
             }}
           />
           {/* 画面中央的播放提示与右下角时长：媒体叠层固定令牌，不随主题 */}
@@ -454,14 +460,14 @@ const TaskCard = React.memo(function TaskCard({
     //
     // 生成记录不加卡片背景：提示词标题 + 元信息 + 结果，分隔线和留白由列表项绘制；
     // 操作按钮悬停或键盘聚焦到这条记录时才出现。
-    // 参考素材与提示词是同一份输入，排成一组放在上面；模型与时间跟在提示词下面，结果另起一段。
+    // 参考素材、提示词与信息是同一份输入，排成一条放在上面，结果另起一段。
     <article
       className="group/task flex flex-col gap-3 outline-none"
       data-generation-task-id={task.id}
       tabIndex={-1}
     >
       {/* 左侧是参考素材堆，右侧是提示词与信息；素材点开后在本行铺开，盖住右侧 */}
-      <div className="relative flex items-start gap-4">
+      <div className="relative flex items-center gap-3">
         <TaskInputPreview
           taskId={task.id}
           inputImages={inputImages}
@@ -480,32 +486,30 @@ const TaskCard = React.memo(function TaskCard({
           nativeFileDragEnabled={isNativeFileDragEnabled}
           shouldIgnoreClick={shouldIgnoreClick}
         />
-        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          <div className="flex items-start gap-2">
-            <TaskPrompt prompt={task.prompt} />
-            <TaskCardToolbar
-              task={task}
-              collecting={collecting}
-              allResultsCollected={
-                resultFilePaths.length > 0 &&
-                resultFilePaths.every((filePath) => collectedPaths.has(filePath))
-              }
-              onUsePrompt={() => onUsePrompt(task.prompt)}
-              onCollectAll={async () => {
-                for (const filePath of resultFilePaths) await collectResult(filePath, task.type)
-              }}
-              onDownloadAll={async () => {
-                for (const filePath of resultFilePaths) await onDownload(filePath, true)
-              }}
-              onRegenerate={() => onRegenerate(task)}
-              onReedit={() => onReedit(task)}
-              continuations={task.status === 'success' ? listGenerationContinuations(task.model, task.options) : []}
-              onContinue={(continuationId) => onContinue(task, continuationId)}
-              onDelete={() => onDelete(task.id)}
-            />
-          </div>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <TaskPrompt prompt={task.prompt} />
           <div className="truncate text-xs text-text3" title={metaLine}>{metaLine}</div>
         </div>
+        <TaskCardToolbar
+          task={task}
+          collecting={collecting}
+          allResultsCollected={
+            resultFilePaths.length > 0 &&
+            resultFilePaths.every((filePath) => collectedPaths.has(filePath))
+          }
+          onUsePrompt={() => onUsePrompt(task.prompt)}
+          onCollectAll={async () => {
+            for (const filePath of resultFilePaths) await collectResult(filePath, task.type)
+          }}
+          onDownloadAll={async () => {
+            for (const filePath of resultFilePaths) await onDownload(filePath, true)
+          }}
+          onRegenerate={() => onRegenerate(task)}
+          onReedit={() => onReedit(task)}
+          continuations={task.status === 'success' ? listGenerationContinuations(task.model, task.options) : []}
+          onContinue={(continuationId) => onContinue(task, continuationId)}
+          onDelete={() => onDelete(task.id)}
+        />
       </div>
       {statusLabel && !isInProgress && <span className="text-xs text-text3">{statusLabel}</span>}
       {result}
