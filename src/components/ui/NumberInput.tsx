@@ -139,7 +139,10 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
     onScrubEnd,
   } = props
   // 属性面板（重要记录 019）：读数是紧凑的拖动框——静息不铺底、悬停或聚焦才显出字段表面，步进列只留给读屏与测试，不占宽度。
-  const propertyLayout = useUiFieldLayout() === 'property'
+  const fieldLayout = useUiFieldLayout()
+  const propertyLayout = fieldLayout === 'property'
+  // 一行参数条里下拉、面板触发器都换成静默皮肤，数值框同样静息无底，悬停与聚焦才出底
+  const quietSurface = propertyLayout || fieldLayout === 'toolbar'
   const fillControl = useUiFormRowLabelling()?.fillControl === true && !propertyLayout
   const widthClassNameOverride = widthClassNameProp ?? (propertyLayout ? UI_PROPERTY_NUMBER_WIDTH_CLASS : 'w-24')
   const widthClassName = fillControl ? 'w-full' : widthClassNameOverride
@@ -357,7 +360,7 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
       <div
         data-ui-field-control
         data-scrubbing={isScrubbing ? 'true' : undefined}
-        className={`inline-flex overflow-hidden ${UI_FIELD_SIZE_CLASS[size]} ${widthStrategy === 'fixed' ? widthClassName : ''} ${propertyLayout ? UI_FIELD_SURFACE_QUIET_CLASS : UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_WITHIN_CLASS}`}
+        className={`inline-flex overflow-hidden ${UI_FIELD_SIZE_CLASS[size]} ${widthStrategy === 'fixed' ? widthClassName : ''} ${quietSurface ? UI_FIELD_SURFACE_QUIET_CLASS : UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_WITHIN_CLASS}`}
         style={widthStrategy === 'content' ? { width: minContentWidth } : { minWidth: minContentWidth }}
       >
         <UiInput

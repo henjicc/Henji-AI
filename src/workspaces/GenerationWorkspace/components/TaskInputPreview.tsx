@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useI18n } from '@/hooks/useI18n'
 import { AudioLines, Play } from 'lucide-react'
 import Tooltip from '@/components/ui/Tooltip'
+import { UI_TOOLTIP_MEDIA_CLASS } from '@/components/ui/styleTokens'
 import { toDisplaySrc } from '@/platform/desktopApi'
 
 export interface TaskInputPreviewProps {
@@ -108,8 +109,8 @@ export function TaskInputPreview({
   const preview = (item: InputItem): React.ReactNode => {
     // 收起时悬停在一叠上不弹大图（看不出指的是哪张）；只有一张时就是它本身。
     if (!expanded && items.length > 1) return null
-    if (item.kind === 'image') return <img src={item.src} alt="" className="block max-h-60 max-w-full rounded-control object-contain" draggable={false} />
-    if (item.kind === 'video') return <video src={item.src} className="block max-h-60 max-w-full rounded-control" muted autoPlay loop playsInline />
+    if (item.kind === 'image') return <img src={item.src} alt="" className={UI_TOOLTIP_MEDIA_CLASS} draggable={false} />
+    if (item.kind === 'video') return <video src={item.src} className={UI_TOOLTIP_MEDIA_CLASS} muted autoPlay loop playsInline />
     return <span className="block truncate">{item.filePath?.split(/[\\/]/).pop()}</span>
   }
 
@@ -130,7 +131,7 @@ export function TaskInputPreview({
       : item.kind === 'video' ? t('ui:viewer.videoAlt') : t('ui:viewer.audioAlt')
     return (
       // 铺开时换一个 Tooltip 实例：点开那一下会让原实例在指针移出前不再弹气泡。
-      <Tooltip key={`${taskId}-${item.kind}-${index}-${expanded ? 'open' : 'stack'}`} asChild content={preview(item)}>
+      <Tooltip key={`${taskId}-${item.kind}-${index}-${expanded ? 'open' : 'stack'}`} asChild content={preview(item)} appearance={item.kind === 'audio' ? 'text' : 'media'}>
         <div
           aria-label={label}
           className={`absolute left-0.5 top-0.5 origin-bottom-left cursor-pointer overflow-hidden rounded-control bg-media ring-1 ring-window transition-[transform,opacity] duration-240 ease-out ${hidden ? 'pointer-events-none' : ''}`}

@@ -562,3 +562,6 @@ export const UI_PANEL_BODY_HEIGHT_CLASS = {
 } as const;
 
 export const UI_INPUT_PANEL_MAX_HEIGHT_CLASS = 'max-h-[min(70vh,40rem)]';
+
+/** 悬停看大图（Tooltip appearance="media"）里图片、视频的尺寸：按原比例放进 256 见方。 */
+export const UI_TOOLTIP_MEDIA_CLASS = 'block max-h-64 max-w-64 object-contain';

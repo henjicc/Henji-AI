@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useContext, useMemo, useState } from 'react'
 import { Paintbrush } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -20,6 +20,7 @@ import { importLocalMedia } from '@/services/localMediaImport'
 import { dataUrlToFile } from '@/utils/imageConversion'
 import { ParamLabel } from './ParamLabel'
 import { ParamField } from './ParamField'
+import { ParamPanelRowsContext } from './paramPanelRows'
 
 const logger = createLogger('components.params.DerivedMediaParamControl')
 
@@ -63,6 +64,8 @@ export function DerivedMediaParamControl({
   const { i18n } = useTranslation()
   // 工具条排布（生成底栏）：操作是一枚按钮，标签放左侧与其他参数同一行、按钮与行同高（32）。
   const toolbar = useUiFieldLayout() === 'toolbar'
+  // “更多参数”这类面板行的标签格按 28 高居中，按钮取同高才与标签对齐
+  const panelRow = useContext(ParamPanelRowsContext)
   const [internalEditorOpen, setInternalEditorOpen] = useState(false)
   const isEditorOpen = editorOpen ?? internalEditorOpen
   const values = normalizeMediaValue(value)
@@ -137,7 +140,7 @@ export function DerivedMediaParamControl({
       <UiButton
         type="button"
         variant="secondary"
-        size={compact ? 'sm' : toolbar ? 'md' : 'lg'}
+        size={compact || panelRow ? 'sm' : toolbar ? 'md' : 'lg'}
         disabled={disabled || !sourceImage}
         onMouseDown={compact ? (event) => event.stopPropagation() : undefined}
         onClick={() => setInternalEditorOpen(true)}

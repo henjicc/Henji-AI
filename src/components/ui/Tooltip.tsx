@@ -31,10 +31,19 @@ interface TooltipContentProps extends Omit<React.HTMLAttributes<HTMLSpanElement>
     getAnchorRect?: () => TooltipAnchorRect
     alignment?: 'center' | 'start'
     interactive?: boolean
+    appearance?: TooltipAppearance
+}
+
+/** text：文字说明气泡；media：悬停看大图，只有圆角图片与投影，不包气泡底和内边距。 */
+export type TooltipAppearance = 'text' | 'media'
+
+const TOOLTIP_APPEARANCE_CLASS: Record<TooltipAppearance, string> = {
+    text: 'whitespace-normal [overflow-wrap:anywhere] overflow-auto overscroll-contain text-left leading-5 bg-raised border border-line rounded-field text-xs text-text1 px-3 py-1.5',
+    media: 'overflow-hidden rounded-overlay bg-media',
 }
 
 /** Tooltip 的唯一浮层实现；拖动读数也复用尺寸测量、跨文档 portal 和视口定位。 */
-export function TooltipContent({ anchorRef, content, visible = true, closing = false, placement = 'top', getAnchorRect, alignment = 'center', interactive = false, className = '', ...props }: TooltipContentProps): JSX.Element {
+export function TooltipContent({ anchorRef, content, visible = true, closing = false, placement = 'top', getAnchorRect, alignment = 'center', interactive = false, appearance = 'text', className = '', ...props }: TooltipContentProps): JSX.Element {
     const tooltipRef = useRef<HTMLSpanElement>(null)
     const [position, setPosition] = useState({ top: 0, left: 0, placement })
     const updatePosition = useCallback(() => {
@@ -73,7 +82,7 @@ export function TooltipContent({ anchorRef, content, visible = true, closing = f
         <span {...props} ref={tooltipRef} role={props.role ?? 'tooltip'} aria-hidden={!visible || closing}
             {...(closing ? { inert: '' } : {})}
             data-tooltip-placement={position.placement}
-            className={`fixed z-tooltip box-border w-max whitespace-normal [overflow-wrap:anywhere] overflow-auto overscroll-contain text-left leading-5 bg-raised border border-line rounded-field shadow-panel text-xs text-text1 px-3 py-1.5 ${interactive && visible && !closing ? 'pointer-events-auto' : 'pointer-events-none'} ${visible ? closing ? 'animate-fade-out' : 'animate-fade-in' : 'hidden'} ${className}`}
+            className={`fixed z-tooltip box-border w-max shadow-panel ${TOOLTIP_APPEARANCE_CLASS[appearance]} ${interactive && visible && !closing ? 'pointer-events-auto' : 'pointer-events-none'} ${visible ? closing ? 'animate-fade-out' : 'animate-fade-in' : 'hidden'} ${className}`}
             style={{ ...props.style, top: position.top, left: position.left }}>
             {content}
         </span>, ownerDocumentOf(anchorRef.current).body,
@@ -91,9 +100,10 @@ type TooltipProps = {
     contentId?: string
     anchor?: 'trigger-center' | 'pointer-start'
     placement?: TooltipPlacement
+    appearance?: TooltipAppearance
 }
 
-export default function Tooltip({ children, content, delay = 300, className, contentId, anchor = 'trigger-center', placement = 'top', asChild = false }: TooltipProps): JSX.Element {
+export default function Tooltip({ children, content, delay = 300, className, contentId, anchor = 'trigger-center', placement = 'top', asChild = false, appearance = 'text' }: TooltipProps): JSX.Element {
     const [open, setOpen] = useState(false)
     const { shouldRender: visible, closing, onAnimationEnd } = useDialogTransition(open, UI_DURATION.slow)
     const triggerRef = useRef<HTMLElement | null>(null)
@@ -183,7 +193,7 @@ export default function Tooltip({ children, content, delay = 300, className, con
             onKeyDown={event => { if (event.key === 'Escape' && visible) { clearTimers(); setOpen(false) } }}>
             {children}
         </span>}
-        {visible && content ? <TooltipContent anchorRef={triggerRef} content={content} id={contentId} className={className}
+        {visible && content ? <TooltipContent anchorRef={triggerRef} content={content} id={contentId} className={className} appearance={appearance}
             visible={visible} closing={closing} onAnimationEnd={onAnimationEnd} placement={anchor === 'pointer-start' && pointer ? 'bottom' : placement}
             getAnchorRect={anchor === 'pointer-start' ? getPointerRect : undefined}
             alignment={anchor === 'pointer-start' && pointer ? 'start' : 'center'}

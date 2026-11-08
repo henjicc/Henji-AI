@@ -393,7 +393,7 @@ const THIRD_PARTY_CSS_VARIABLE_PREFIXES = ['--xy-', '--dv-']
  * css 里定义的类名（排除第三方前缀；共享组件类 ui-* 只在令牌文件 index.css 里算共享，
  * 写在其他样式表里的 ui-* 同样是私有类——5.4-10 的 `.ui-panel` / `.ui-field` 就是这样漏掉的）。
  */
-const THIRD_PARTY_CLASS_PREFIXES = ['react-flow', 'dv-', 'ProseMirror', 'tiptap', 'xterm', 'monaco', 'cm-']
+const THIRD_PARTY_CLASS_PREFIXES = ['react-flow', 'dv-', 'ProseMirror', 'tiptap', 'xterm', 'monaco', 'cm-', 'lucide']
 const SHARED_CLASS_PREFIX = 'ui-'
 /** 复合选择器里的状态修饰类与 Tailwind 同名类：单独出现不代表用了私有样式。 */
 const GENERIC_CLASS_NAMES = new Set(['active', 'disabled', 'selected', 'open', 'dark', 'light', 'fixed', 'absolute', 'relative',

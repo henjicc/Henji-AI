@@ -1,4 +1,4 @@
-import { UI_COVER_FRAME_CLASS, UI_COVER_GROUP_CLASS, UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
+import { UI_COVER_FRAME_CLASS, UI_COVER_GROUP_CLASS, UI_ICON_SIZE_CLASS, UI_TOOLTIP_MEDIA_CLASS } from '@/components/ui/styleTokens'
 import { createLogger } from '@/core/logging'
 import React, { forwardRef, useImperativeHandle, useRef, useState } from 'react'
 import { readFile } from '@/platform/desktopApi'
@@ -12,6 +12,7 @@ import { inferMimeFromPath, isDesktop } from '@/utils/save'
 import { UiIconButton, UiInput, UiOptionButton } from '../primitives'
 import { UI_DURATION, UI_EASE, UI_EASE_STACK } from '../motion'
 import { useReorderDrag } from './useReorderDrag'
+import Tooltip from '../Tooltip'
 
 const logger = createLogger('components.ui.fileUploader.MediaStripUploader')
 
@@ -95,8 +96,10 @@ async function dragTransferDataToFile(dragData: HenjiDragTransferData): Promise<
   return null
 }
 
-/** 相邻两张卡片左缘的距离：卡片 56（h-14 w-14）+ 间距 8（gap-2），拖动时其余卡片按它让位 */
-const CARD_STEP_PX = 64
+/** 卡片按 9:16 竖幅（h-16 w-9），与生成结果常见的竖图一致 */
+const CARD_FRAME_CLASS = 'h-16 w-9'
+/** 相邻两张卡片左缘的距离：卡片 36 + 间距 8（gap-2），拖动时其余卡片按它让位 */
+const CARD_STEP_PX = 44
 
 function matchesAccept(file: File, accept: string): boolean {
   if (accept === '*') return true
@@ -275,11 +278,15 @@ export const MediaStripUploader = forwardRef<MediaStripUploaderHandle, MediaStri
               style={reorderStyle(index)}
               onMouseDown={(event) => handleMouseDown(index, event)}>
               {/* 卡片外观画在封面框上：悬停发丝线与键盘焦点环由封面卡统一提供 */}
+              {/* 缩略图只有 36 宽，悬停看大图；拖动排序时按下即收起（Tooltip 按下后不再弹出） */}
+              {/* 视频条目的 file 是封面图，与缩略图一样用 img 显示 */}
+              <Tooltip asChild appearance="media" content={type === 'audio' ? null
+                : <img src={file} alt="" className={UI_TOOLTIP_MEDIA_CLASS} draggable={false} />}>
               <UiOptionButton type="button" variant="cover" aria-label={`${type === 'video' ? '视频' : type === 'audio' ? '音频' : '图片'} ${typeNumbers[index]}`}
                 className={`${UI_COVER_GROUP_CLASS} shrink-0`}
                 // 鼠标点击由拖动排序的钩子判定（没拖动才算点开）；键盘回车、以及提交中拖动被停用时在这里打开预览
                 onClick={(event) => { if (event.detail === 0 || disabled) onFileClick?.(file, files) }}>
-                <span className={`${UI_COVER_FRAME_CLASS} h-14 w-14 rounded-lg ${draggingThis ? 'shadow-thumb' : ''}`}>
+                <span className={`${UI_COVER_FRAME_CLASS} ${CARD_FRAME_CLASS} rounded-lg ${draggingThis ? 'shadow-thumb' : ''}`}>
                 {type === 'audio' ? (
                   <span className="absolute inset-0 flex items-center justify-center bg-raised">
                     <AudioLines aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.lg} text-text2`} />
@@ -297,6 +304,7 @@ export const MediaStripUploader = forwardRef<MediaStripUploaderHandle, MediaStri
                 </span>
                 </span>
               </UiOptionButton>
+              </Tooltip>
               <UiIconButton size="2xs" tone="media" shape="circle" type="button" label="移除" tooltip="移除"
                 className={`absolute -right-1.5 -top-1.5 opacity-0 transition-opacity duration-120 group-hover:opacity-100 focus-visible:opacity-100 ${actionsHidden}`}
                 onMouseDown={(event) => event.stopPropagation()}
@@ -323,11 +331,11 @@ export const MediaStripUploader = forwardRef<MediaStripUploaderHandle, MediaStri
           )
         })}
         {showUploadCard ? (
-          // 添加卡与缩略图同尺寸同圆角的实底方块，加号居中；封面框只负责悬停发丝线与键盘焦点环
+          // 添加卡与缩略图同尺寸同圆角的实底竖块，加号居中；封面框只负责悬停发丝线与键盘焦点环
           <UiOptionButton type="button" variant="cover" aria-label="添加素材" tooltip={hintText ?? '添加素材'}
             className={`${UI_COVER_GROUP_CLASS} shrink-0`}
             onClick={openFilePicker}>
-            <span className={`${UI_COVER_FRAME_CLASS} h-14 w-14 rounded-lg`}>
+            <span className={`${UI_COVER_FRAME_CLASS} ${CARD_FRAME_CLASS} rounded-lg`}>
               <span className="absolute inset-0 flex items-center justify-center bg-raised text-text2">
                 <Plus aria-hidden="true" className={UI_ICON_SIZE_CLASS.md} />
               </span>
@@ -335,7 +343,7 @@ export const MediaStripUploader = forwardRef<MediaStripUploaderHandle, MediaStri
           </UiOptionButton>
         ) : files.length === 0 ? (
           // 宿主不要添加卡时，没有素材的素材条只在拖入期间出现，这里给一个同形的落点
-          <span aria-hidden="true" className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-raised text-text2">
+          <span aria-hidden="true" className={`flex ${CARD_FRAME_CLASS} shrink-0 items-center justify-center rounded-lg bg-raised text-text2`}>
             <Plus className={UI_ICON_SIZE_CLASS.md} />
           </span>
         ) : null}
