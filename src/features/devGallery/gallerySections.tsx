@@ -49,6 +49,7 @@ import {
   UiPageHeader,
   UiPanel,
   UiRangeInput,
+  UiResizeHandle,
   UiAngleDial,
   UiPointPad,
   UiRangeSlider,
@@ -669,6 +670,7 @@ export function VariantSection(): JSX.Element {
     <PromptEditor value={PROMPT_TEXT} onChange={noop} frame="field" ariaLabel="有框提示词" />
     <PromptEditor value={PROMPT_TEXT} onChange={noop} frame="none" ariaLabel="原位提示词" />
     <GalleryRow label="轨道"><UiRangeInput trackTone="neutral" aria-label="中性轨道" /><UiRangeInput trackTone="hue" aria-label="色相轨道" /><UiRangeInput trackTone="lighting" aria-label="打光轨道" /></GalleryRow>
+    <GalleryRow label="调宽"><div className="flex h-12 w-64"><UiPanel variant="inset" className="flex-1 p-2">左栏</UiPanel><UiResizeHandle variant="pane" label="调整左栏宽度" value={160} min={120} max={240} onChange={noop} /><UiPanel variant="inset" className="flex-1 p-2">右栏</UiPanel></div><span className="relative w-32 text-xs text-text2">列标题<UiResizeHandle variant="column" divider label="调整列宽" value={128} min={80} max={200} onChange={noop} /></span></GalleryRow>
     <GalleryRow label="导航"><UiNavButton size="sm">紧凑</UiNavButton><UiNavButton size="lg">较大</UiNavButton><UiNavButton size="auto">两行内容<br />自动高度</UiNavButton><UiChipButton selectionAppearance="default">默认多选</UiChipButton><UiTextToken appearance="inline">行内</UiTextToken></GalleryRow>
     <GalleryRow label="双段"><UiSwitch appearance="pill" checked /><UiSwitch appearance="segmented" size="md" checked onLabel="打开" offLabel="关闭" /></GalleryRow>
     <UiToolbar variant="plain"><UiButton>普通动作组</UiButton></UiToolbar><UiPageHeader title="带分隔页头" divider />
