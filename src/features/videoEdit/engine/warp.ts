@@ -269,7 +269,8 @@ fn warpSample(p: vec2f) -> vec4f { let m = warpMap(p); return warpTap(m.xy) * m.
  let p = v.position.xy - u.layer.xy;
  let m = warpMap(p);
  // 相邻像素的取样点相距超过约 1.5 个像素（缩得很小、跨过断口）时，渐渐换成旋转网格四点平均：不闪、不出锯齿。
- let footprint = max(length(dpdxFine(m.xy)), length(dpdyFine(m.xy)));
+ // 用 dpdx/dpdy 而不是 Fine 版：WebGPU 兼容模式不支持 Fine 导数；这里只作软阈值，粗细导数的差别看不出。
+ let footprint = max(length(dpdx(m.xy)), length(dpdy(m.xy)));
  let one = warpTap(m.xy) * m.z;
  let blend = smoothstep(1.5, 2.5, footprint);
  if (blend <= 0.0) { return one; }
