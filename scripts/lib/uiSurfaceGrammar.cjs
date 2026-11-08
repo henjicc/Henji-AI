@@ -55,12 +55,18 @@ function findUiSurfaceGrammar(raw, fileName = 'surface.tsx') {
   const opening = node => !node ? undefined : ts.isJsxElement(node) ? node.openingElement : ts.isJsxSelfClosingElement(node) ? node : undefined
   const name = node => { const text = opening(node)?.tagName.getText(source); return aliases.get(text) || text }
   const attribute = (node, key) => opening(node)?.attributes.properties.find(prop => ts.isJsxAttribute(prop) && prop.name.getText(source) === key)
-  function strings(node, seen = new Set()) {
+  // 每个常量只展开一次：按引用路径重复展开时，互相引用的常量与函数会让耗时和字符串长度指数增长。
+  // 展开中的常量再被引用时视为空串，用来截断循环引用。
+  const resolved = new Map()
+  function strings(node) {
     if (!node) return ''
-    if (ts.isIdentifier(node) && constants.has(node.text) && !seen.has(node.text)) return strings(constants.get(node.text), new Set([...seen, node.text]))
+    if (ts.isIdentifier(node) && constants.has(node.text)) {
+      if (!resolved.has(node.text)) { resolved.set(node.text, ''); resolved.set(node.text, strings(constants.get(node.text))) }
+      return resolved.get(node.text)
+    }
     if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text
-    if (ts.isTemplateExpression(node)) return [node.head.text, ...node.templateSpans.flatMap(span => [strings(span.expression, seen), span.literal.text])].join(' ')
-    return node.getChildren(source).map(child => strings(child, seen)).join(' ')
+    if (ts.isTemplateExpression(node)) return [node.head.text, ...node.templateSpans.flatMap(span => [strings(span.expression), span.literal.text])].join(' ')
+    return node.getChildren(source).map(strings).join(' ')
   }
   const attrText = (node, key) => strings(attribute(node, key)?.initializer).trim()
   const classes = node => attrText(node, 'className').split(/\s+/)
