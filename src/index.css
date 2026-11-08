@@ -298,6 +298,16 @@
 }
 
 /*
+ * 界面图标线宽，与 icons.ts 的 UI_ICON_STROKE_WIDTH 同值。lucide 未指定线宽时输出属性 stroke-width="2"，
+ * 只改写这一档，窗口控件等显式登记的其他线宽保持原值。
+ */
+@layer base {
+  svg.lucide[stroke-width="2"] {
+    stroke-width: 1.75;
+  }
+}
+
+/*
  * 毛玻璃材质。业务代码写 `ui-glass` 一个类即可，不要再自己拼
  * `backdrop-blur-* + bg-black/xx + border-white/xx`——那样每处的质感都会不一样，
  * 也躲开了设置里的开关。圆角、尺寸、定位仍由调用方的 Tailwind 类决定。

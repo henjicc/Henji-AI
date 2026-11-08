@@ -170,7 +170,7 @@ function findIconSizingViolations(source, fileName) {
           if (inButton && (name === 'size' || name === 'className' && (sizes.length || /\bUI_ICON_SIZE_CLASS\b/.test(text)))) message = '按钮子图标不得覆盖尺寸；由控件 size 自动提供'
           else if (name === 'size' && numericValues(attr.initializer).some(value => !ICON_SIZE_VALUES.has(value))) message = '图标尺寸必须来自 UI_ICON_SIZE 登记档位'
           else if (name === 'className' && sizes.some(value => !ICON_SIZE_VALUES.has(Number(value) * 4))) message = '图标尺寸类必须来自 UI_ICON_SIZE_CLASS 登记档位'
-          else if (name === 'strokeWidth' && !/^\{(?:UI_ICON_STROKE_WIDTH|UI_WINDOW_ICON_STROKE_WIDTH)\}$/.test(text)) message = '图标描边沿用 lucide 默认值；仅允许登记的窗口控件例外'
+          else if (name === 'strokeWidth' && !/^\{(?:UI_ICON_STROKE_WIDTH|UI_WINDOW_ICON_STROKE_WIDTH)\}$/.test(text)) message = '图标描边沿用统一线宽（index.css 统一生效）；仅允许登记的窗口控件例外'
           if (message) findings.push({ rule: 'D', line: ast.getLineAndCharacterOfPosition(attr.getStart(ast)).line + 1, message })
         }
       }
