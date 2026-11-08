@@ -73,7 +73,7 @@ export const AssetCard: React.FC<AssetCardProps> = ({ asset, selected, eager = f
         if (asset.mediaType === 'code') writeCodeAssetDrag(event.dataTransfer, asset.id)
         else writeAssetDragPayload(event.dataTransfer, assetRecordToDragPayload(asset))
         if (isAudio) setCompactWaveformDragPreview(event.dataTransfer, waveform.data)
-        else setCompactDragPreview(event.dataTransfer, previewUrl)
+        else setCompactDragPreview(event.dataTransfer, previewUrl, event.currentTarget)
       }}
       onDragEnd={clearCompactDragPreview}
       className={`group ${UI_COVER_GROUP_CLASS} relative flex min-w-0 cursor-pointer flex-col gap-2`}

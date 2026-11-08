@@ -83,16 +83,34 @@ function isDecoded(image: HTMLImageElement | undefined): image is HTMLImageEleme
   return Boolean(image?.complete && image.naturalWidth > 0);
 }
 
+type DrawableSource = { source: CanvasImageSource; width: number; height: number };
+
+/** 被拖元素里正在显示的图或视频当前帧：一定已经解码，且就是用户看到的那一张。 */
+function findSourceMedia(element: Element | null | undefined): DrawableSource | null {
+  if (!element) return null;
+  const image = element instanceof HTMLImageElement ? element : element.querySelector('img');
+  if (image && isDecoded(image)) return { source: image, width: image.naturalWidth, height: image.naturalHeight };
+  const video = element instanceof HTMLVideoElement ? element : element.querySelector('video');
+  if (video && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0) {
+    return { source: video, width: video.videoWidth, height: video.videoHeight };
+  }
+  return null;
+}
+
 /**
  * setDragImage 只能在 dragstart 当下同步截图：临时新建的 img 还没解码，第一次拖动就是空白。
- * 所以只用已经解码好的图——页面上正显示着的同一张，或之前拖过留下的——同步画进画布；都没有时预载，下次就有。
+ * 所以只用已经解码好的画面：被拖元素里正显示的图（预览地址可能已换成另生成的缩略图文件，页面上没有它），
+ * 之前拖过留下的，或页面上显示着的同一张；都没有时预载，下次就有。
  */
-function findDecodedPreview(url: string): HTMLImageElement | null {
+function findDecodedPreview(url: string | null | undefined, sourceElement: Element | null | undefined): DrawableSource | null {
+  const fromSource = findSourceMedia(sourceElement);
+  if (fromSource) return fromSource;
+  if (!url) return null;
   const cached = decodedPreviews.get(url);
-  if (isDecoded(cached)) return cached;
+  if (isDecoded(cached)) return { source: cached, width: cached.naturalWidth, height: cached.naturalHeight };
   const href = new URL(url, document.baseURI).href;
   const onScreen = Array.from(document.images).find(image => (image.currentSrc === href || image.src === href) && isDecoded(image));
-  if (onScreen) return onScreen;
+  if (onScreen) return { source: onScreen, width: onScreen.naturalWidth, height: onScreen.naturalHeight };
   if (!cached) {
     const image = new Image();
     image.src = url;
@@ -129,20 +147,21 @@ function showDragPreview(dataTransfer: DataTransfer, canvas: HTMLCanvasElement):
   dataTransfer.setDragImage(host, 0, 0);
 }
 
-export function setCompactDragPreview(dataTransfer: DataTransfer, previewUrl?: string | null): void {
-  if (!previewUrl) return;
+/** sourceElement：被拖的元素（dragstart 的 currentTarget），优先画它里面正在显示的画面。 */
+export function setCompactDragPreview(dataTransfer: DataTransfer, previewUrl?: string | null, sourceElement?: Element | null): void {
+  if (!previewUrl && !sourceElement) return;
 
   const width = COMPACT_DRAG_PREVIEW_WIDTH;
   const height = COMPACT_DRAG_PREVIEW_SIZE;
   const { canvas, context } = createDragPreviewCanvas(width, height);
   if (!context) return;
-  const image = findDecodedPreview(previewUrl);
-  if (image) {
+  const media = findDecodedPreview(previewUrl, sourceElement);
+  if (media) {
     // 等比铺满 3:4 卡片，居中裁切
-    const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight);
-    const drawWidth = image.naturalWidth * scale;
-    const drawHeight = image.naturalHeight * scale;
-    context.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
+    const scale = Math.max(width / media.width, height / media.height);
+    const drawWidth = media.width * scale;
+    const drawHeight = media.height * scale;
+    context.drawImage(media.source, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
   } else {
     context.fillStyle = getThemeTokens().colors.raised;
     context.fillRect(0, 0, width, height);

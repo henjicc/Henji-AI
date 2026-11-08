@@ -19,7 +19,7 @@ interface DragThumbnail {
 }
 
 function setSmallBrowserDragPreview(e: ReactDragEvent, previewUrl?: string): void {
-  setCompactDragPreview(e.dataTransfer, previewUrl)
+  setCompactDragPreview(e.dataTransfer, previewUrl, e.currentTarget)
 }
 
 function clearBrowserDragPreview(): void {
