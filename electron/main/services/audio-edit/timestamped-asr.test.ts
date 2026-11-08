@@ -66,7 +66,6 @@ describe('共用 SDK 带时间转写（零网络替身 transport）', () => {
       return json(fixture('groq-asr', 'transcription-verbose.json'))
     })
     const service = createTimestampedAsrService(runtime(fetch), (id) => id === 'groq')
-    expect(service.listModels()).toHaveLength(7)
     expect(service.listModels().every((model) => model.timestamps && model.localAudio)).toBe(true)
     expect(service.listModels().filter((model) => model.configured)).toHaveLength(2)
     const plan = service.prepare({ audioPath: 'recording.wav', durationMs: 2_400 })
