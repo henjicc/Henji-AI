@@ -179,7 +179,7 @@ function findUiSurfaceGrammar(raw, fileName = 'surface.tsx') {
     if (isMap(node)) {
       for (const root of roots(node)) {
         if (segment(root)) report('S1', root)
-        if (!opening(root) || name(root) === 'UiRecordItem' || (name(root) === 'UiOptionButton' && ['grid', 'menu', 'cover'].includes(attrText(root, 'variant')))) continue
+        if (!opening(root) || name(root) === 'UiRecordItem' || (name(root) === 'UiOptionButton' && ['grid', 'menu', 'cover', 'card', 'tile'].includes(attrText(root, 'variant')))) continue
         const tokens = classes(root)
         const container = node.parent?.parent
         const titles = [], metadata = []
