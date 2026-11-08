@@ -36,7 +36,7 @@ import { VideoEditSendDialog } from '@/features/videoEdit/panels/VideoEditSendMe
 import { listGenerationContinuations } from '@/core/services/generationContinuations'
 
 /** 结果与生成中占位共用的行高：宽度随画面比例，竖图不会撑成整屏大图。 */
-const RESULT_ROW_HEIGHT_CLASS = 'h-48'
+const RESULT_ROW_HEIGHT_CLASS = 'h-64'
 
 export interface TaskCardProps {
   task: GenerationTask
@@ -462,12 +462,12 @@ const TaskCard = React.memo(function TaskCard({
     // 操作按钮悬停或键盘聚焦到这条记录时才出现。
     // 参考素材、提示词与信息是同一份输入，排成一条放在上面，结果另起一段。
     <article
-      className="group/task flex flex-col gap-3 outline-none"
+      className="group/task flex flex-col gap-4 outline-none"
       data-generation-task-id={task.id}
       tabIndex={-1}
     >
       {/* 左侧是参考素材堆，右侧是提示词与信息；素材点开后在本行铺开，盖住右侧 */}
-      <div className="relative flex items-center gap-3">
+      <div className="relative flex items-stretch gap-3">
         <TaskInputPreview
           taskId={task.id}
           inputImages={inputImages}
@@ -486,9 +486,10 @@ const TaskCard = React.memo(function TaskCard({
           nativeFileDragEnabled={isNativeFileDragEnabled}
           shouldIgnoreClick={shouldIgnoreClick}
         />
-        <div className="flex min-w-0 flex-1 flex-col">
+        {/* 提示词贴参考素材顶边、信息贴底边；行框比字形高，上下各让出一点让字形对齐卡片边缘 */}
+        <div className="-my-0.5 flex min-w-0 flex-1 flex-col justify-between">
           <TaskPrompt prompt={task.prompt} />
-          <div className="truncate text-xs text-text3" title={metaLine}>{metaLine}</div>
+          <div className="truncate text-xs leading-tight text-text3" title={metaLine}>{metaLine}</div>
         </div>
         <TaskCardToolbar
           task={task}

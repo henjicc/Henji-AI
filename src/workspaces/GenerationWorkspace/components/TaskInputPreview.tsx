@@ -31,16 +31,16 @@ interface InputItem {
 }
 
 /** 参考素材统一按 9:16 竖卡显示，卡高等于提示词与信息两行的高度；收起时最多叠 3 张。 */
-const CARD_WIDTH = 20
+const CARD_WIDTH = 28
 const CARD_HEIGHT = Math.round(CARD_WIDTH * 16 / 9)
-const CARD_GAP = 4
+const CARD_GAP = 6
 const STACKED = 3
 /** 收起时后面两张往右错开并微微转开，像一叠卡片。 */
-const STACK_OFFSET = [{ x: 0, rotate: 0 }, { x: 4, rotate: 6 }, { x: 8, rotate: 12 }]
+const STACK_OFFSET = [{ x: 0, rotate: 0 }, { x: 6, rotate: 6 }, { x: 12, rotate: 12 }]
 /** 堆叠占位：最后一张卡转开后的外沿（转角会让卡片右上角再往外伸一点）。 */
 function stackWidth(count: number): number {
   const last = Math.min(count, STACKED) - 1
-  return CARD_WIDTH + STACK_OFFSET[last].x + last * 3
+  return CARD_WIDTH + STACK_OFFSET[last].x + last * 5
 }
 
 /**
@@ -133,7 +133,7 @@ export function TaskInputPreview({
       <Tooltip key={`${taskId}-${item.kind}-${index}-${expanded ? 'open' : 'stack'}`} asChild content={preview(item)}>
         <div
           aria-label={label}
-          className={`absolute left-0.5 top-0.5 origin-bottom-left cursor-pointer overflow-hidden rounded-check bg-media ring-1 ring-window transition-[transform,opacity] duration-240 ease-out ${hidden ? 'pointer-events-none' : ''}`}
+          className={`absolute left-0.5 top-0.5 origin-bottom-left cursor-pointer overflow-hidden rounded-control bg-media ring-1 ring-window transition-[transform,opacity] duration-240 ease-out ${hidden ? 'pointer-events-none' : ''}`}
           style={style}
           onClick={(event) => { event.stopPropagation(); activate(item) }}
           onMouseDown={(event) => {
@@ -155,13 +155,13 @@ export function TaskInputPreview({
             <>
               <video src={item.src} className="h-full w-full object-cover" muted draggable={false} />
               <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-media-scrim">
-                <Play className={`${UI_ICON_SIZE_CLASS.xs} text-on-media`} />
+                <Play className={`${UI_ICON_SIZE_CLASS.sm} text-on-media`} />
               </span>
             </>
           )}
           {item.kind === 'audio' && (
             <span className="flex h-full w-full items-center justify-center bg-raised text-text2">
-              <AudioLines className={UI_ICON_SIZE_CLASS.xs} />
+              <AudioLines className={UI_ICON_SIZE_CLASS.sm} />
             </span>
           )}
         </div>
