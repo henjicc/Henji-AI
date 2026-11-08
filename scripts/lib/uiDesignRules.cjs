@@ -20,7 +20,6 @@ const SPACING_EXCEPTIONS = {
   'src/features/videoEdit/timeline/VideoEditTrackHeader.tsx': { 'gap-px': '轨道密集操作的相邻命中区边界' },
 }
 const LAYOUT_EXCEPTIONS = {
-  'src/components/ui/fileUploader/StackedMediaUploader.tsx': ['width'],
   'src/workspaces/GenerationWorkspace/components/TaskInputPreview.tsx': ['width', 'margin', 'margin-left'],
   'src/components/TabContainer.tsx': ['padding'],
   'src/components/ui/layout.tsx': ['grid-template-rows'],

@@ -98,14 +98,14 @@ style={{ transition: uiTransition(['opacity', 'transform'], UI_DURATION.slow) }}
 
 | 位置 | 属性 | 为什么改不了 |
 |---|---|---|
-| `src/components/ui/fileUploader/StackedMediaUploader.tsx` / `src/workspaces/GenerationWorkspace/components/TaskInputPreview.tsx` | `width` | 容器宽度变化要带动兄弟重排，这正是需要的效果 |
+| `src/workspaces/GenerationWorkspace/components/TaskInputPreview.tsx` | `width` | 容器宽度变化要带动兄弟重排，这正是需要的效果 |
 | `src/components/TabContainer.tsx` | `padding` | 助手停靠的 inset，工作区必须真的收缩；resize 期间已用 `--assistant-layout-transition-duration: 0ms` 关掉过渡 |
 | `src/components/ui/layout.tsx` 的 `UiDisclosurePanel` | `grid-template-rows` | `0fr → 1fr` 是 auto-height 动画的推荐做法，替代方案（max-height / JS 测高）更差 |
 | `src/workspaces/GenerationWorkspace/components/FloatingInputPanel.tsx` | `max-height` | 同上，折叠展开的高度动画 |
 | `src/workspaces/GenerationWorkspace/components/TaskInputPreview.tsx` | `margin` | 缩略图堆叠的重叠间距，margin 影响兄弟位置 |
 
-**已经改掉的**：`FloatingInputPanel` 的 `top` 与 `StackedMediaUploader` 的 `left`/`top`
-都已合并进 `transform`（绝对定位元素的位移没有理由走布局属性）。
+**已经改掉的**：`FloatingInputPanel` 的 `top` 已合并进 `transform`（绝对定位元素的位移没有理由走布局属性）。
+参考素材条（`MediaStripUploader`）增删、排序时的补位用 `useFlipTransition`：布局到位后只用 translate 从旧位置滑过来，不过渡任何布局属性。
 合并时注意 **`translate` 必须写在 `rotate`/`scale` 之前**，否则旋转缩放会一起作用到位移量上。
 
 ## 减少动效

@@ -89,7 +89,7 @@ const RULE_E_EXEMPT = {
   PromptDocumentStatic: '用户文档内容的展示布局，不是固定尺寸的界面控件。',
   UiFieldLayoutContext: 'React 上下文对象，没有自身 DOM 与 className。',
   UiMarqueeText: '文字溢出容器接受宿主排版，没有控件高度档位。',
-  StackedMediaUploader: '媒体缩略图布局随素材及宿主几何变化，不是固定高度字段。',
+  MediaStripUploader: '媒体缩略图布局随素材及宿主几何变化，不是固定高度字段。',
   UiTaskHistoryFilterBar: '筛选条组合布局没有对外 className，内部控件由规则 E 检查。',
   AlertDialog: '只开放语义参数，没有对外 className，内部控件由规则 E 检查。',
   GlobalAlertDialog: '全局确认宿主，没有对外 className，复用 AlertDialog。',

@@ -714,7 +714,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 提示词编辑 | `PromptEditor` | 自己拼 textarea |
 | 提示词只读展示 | `PromptDocumentStatic`（与 `PromptEditor` 共用文档语义） | 另造提示词文档格式或手写文本解析 |
 | 文件上传/排序 | `FileUploader` / `useReorderDrag` | 重写拖拽 |
-| 叠放媒体上传 | `StackedMediaUploader`（复用 `FileUploader` 与拖拽排序） | 另写媒体上传或排序链路 |
+| 参考素材条（生成输入区等多素材上传） | `MediaStripUploader`（横排缩略图，编号与提示词引用一致，拖动排序复用 `useReorderDrag`；增删补位配 `useFlipTransition`） | 另写媒体上传或排序链路 |
 | 费用估算 | `PriceEstimate`（已注册模型计价，遵循用户币种与费用显示偏好） | 固定价格、触发真实生成来展示价格 |
 | 文字与矢量外观编辑 | `@/components/typography/TypographyPanel`（领域组合面板，共用字体、排版、填充、描边、阴影；author-text 用于绑定图层的文字样式参数，开放字体/字号/字重/字距/行距/填充/多层描边；宿主提供布局与预设 footer） | 图片、字幕、标题、代码文字另写同义参数与外观面板 |
 | 字体选择与样式预览 | `UiFontPicker`（本机/导入字体、中英文搜索、分类与虚拟列表、真实样式、收藏/最近/工程字体；`onPreview(null)` 恢复，`onSelect` 提交） | 手动输入字体名、三种通用族固定下拉、另造字体弹层 |

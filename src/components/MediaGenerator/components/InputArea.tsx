@@ -1,11 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { showAlertDialog } from '@/stores/alertDialogStore'
-import { PromptEditor, StackedMediaUploader, UiChipButton, UiIconButton, UiLoading } from '@/components/ui'
+import { PromptEditor, MediaStripUploader, UiChipButton, UiIconButton, UiLoading } from '@/components/ui'
 import type {
   PromptEditorHandle,
   PromptReferenceItem,
-  StackedMediaUploaderHandle,
+  MediaStripUploaderHandle,
 } from '@/components/ui'
 import type { PromptDocumentV1 } from '@/core/inputs/promptDocument'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
@@ -14,6 +14,7 @@ import { PromptOptimizationPreviewText } from './PromptOptimizationPreviewText'
 import { useMixedFileOrder } from './InputArea/hooks/useMixedFileOrder'
 import { usePromptOptimizationPreviewPlayback } from '../hooks/usePromptOptimizationPreviewPlayback'
 import { ArrowUp, Plus, X } from 'lucide-react'
+import { useFlipTransition } from '@/hooks/useFlipTransition'
 import { readVideoInfo } from '@/commands/video'
 import { getPathForFile } from '@/platform/desktopApi'
 import { getPlatform } from '@/platform/runtime'
@@ -321,9 +322,12 @@ const InputArea: React.FC<InputAreaProps> = ({
   const promptHeightClass = compact
     ? 'min-h-12 max-h-44'
     : 'min-h-textarea-short max-h-[260px]'
-  const uploaderRef = useRef<StackedMediaUploaderHandle>(null)
+  const uploaderRef = useRef<MediaStripUploaderHandle>(null)
   const dragInProgress = useMediaDragInProgress()
   const showReferenceRow = mixedFiles.length > 0 || dragInProgress || importingMedia
+  // 素材增删、排序与导入中占位出现时，卡片与下方输入框滑到新位置
+  const composerRef = useRef<HTMLDivElement>(null)
+  const captureComposerLayout = useFlipTransition(composerRef, [mixedFiles.join('|'), showReferenceRow])
   const canAddReference = !shouldHideUploadButton && !isLoading && (!mixedMaxCount || mixedFiles.length < mixedMaxCount)
   useEffect(() => {
     if (!renderPromptOptimizationPreview) {
@@ -371,12 +375,23 @@ const InputArea: React.FC<InputAreaProps> = ({
   ])
 
   return (
-    <div className="relative flex flex-col gap-1.5">
-        {/* 参考素材行：始终挂载（系统拖入、替换与裁剪都走它），没有素材且不在拖拽中时不占位 */}
+    <div ref={composerRef} className="relative flex flex-col gap-1.5">
+        {/* 续接标记：这次生成会接着哪个结果做，点一下改回普通生成 */}
+        {continuationAction && onClearContinuation && (
+          <div className="px-1 pt-0.5">
+            <UiChipButton active size="sm" onClick={onClearContinuation} tooltip={t('workspace.continuation.chipClear')} data-generation-continuation-chip="">
+              {t('workspace.continuation.chip', { action: continuationAction })}
+              <X />
+            </UiChipButton>
+          </div>
+        )}
+
+        {/* 参考素材条：始终挂载（系统拖入、替换与裁剪都走它），没有素材且不在拖拽中时不占位 */}
         {shouldShowUpload && (
-          <div className={showReferenceRow ? 'pointer-events-auto px-1 pt-0.5' : 'hidden'}>
-            <StackedMediaUploader
+          <div className={showReferenceRow ? 'pointer-events-auto min-w-0' : 'hidden'}>
+            <MediaStripUploader
               ref={uploaderRef}
+              onBeforeLayoutChange={captureComposerLayout}
               files={mixedFiles}
               onUpload={(needsVideoUpload || needsAudioUpload) ? handleMixedFileUpload : onImageUpload}
               onRemove={(needsVideoUpload || needsAudioUpload) ? handleMixedFileRemove : onImageRemove}
@@ -391,9 +406,13 @@ const InputArea: React.FC<InputAreaProps> = ({
                   : (needsAudioUpload ? "image/*,audio/*" : "image/*"))}
               multiple={needsVideoOnly ? needsAudioUpload : ((needsVideoUpload || needsAudioUpload) ? true : isMultiple)}
               maxCount={mixedMaxCount}
-              hideUploadButton
+              hideUploadButton={shouldHideUploadButton}
               fileTypes={(needsVideoUpload || needsAudioUpload) && currentFileOrder.length > 0
                 ? currentFileOrder.map(item => item.type)
+                : undefined}
+              // 混合素材调换显示顺序时同类素材的序号不变，编号要跟提示词引用（按同类序号）走
+              fileNumbers={(needsVideoUpload || needsAudioUpload) && currentFileOrder.length > 0
+                ? currentFileOrder.map(item => item.index + 1)
                 : undefined}
               onDragStateChange={onDragStateChange}
               disabled={isLoading}
@@ -403,18 +422,8 @@ const InputArea: React.FC<InputAreaProps> = ({
           </div>
         )}
 
-        {/* 续接标记：这次生成会接着哪个结果做，点一下改回普通生成 */}
-        {continuationAction && onClearContinuation && (
-          <div className="px-1 pt-0.5">
-            <UiChipButton active size="sm" onClick={onClearContinuation} tooltip={t('workspace.continuation.chipClear')} data-generation-continuation-chip="">
-              {t('workspace.continuation.chip', { action: continuationAction })}
-              <X />
-            </UiChipButton>
-          </div>
-        )}
-
         {/* 文本输入框：外层输入卡片已经画了表面，编辑器本身无框 */}
-        <div data-onboarding-target="prompt" className="relative">
+        <div data-onboarding-target="prompt" data-flip-key="prompt" className="relative">
           <PromptEditor
             ref={promptEditorRef}
             value={promptDocument}
@@ -477,7 +486,7 @@ const InputArea: React.FC<InputAreaProps> = ({
 
         {/* 底栏：添加素材 · 模型 · 参数 ｜ 预计费用 · 预设 · 优化 · 生成（设计稿 Generation）。
             始终单行：参数放不下时由 footerStart 内的溢出收纳收进“更多参数”（任务 4.3），不换行 */}
-        <div className="flex flex-nowrap items-center justify-between gap-x-3">
+        <div data-flip-key="footer" className="flex flex-nowrap items-center justify-between gap-x-3">
           <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-x-3">
             {/* 添加素材始终占住行首：不用参考素材的模型（语音、部分文生模型）显示为禁用，
                 模型选择与参数不随模型左右跳动（任务 5.3） */}

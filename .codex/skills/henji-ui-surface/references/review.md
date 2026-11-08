@@ -255,7 +255,7 @@ npm run ui:tour -- --steps scripts/ui-review/ui-gallery.json --matrix review --a
 | UiNumberStepper | 复合数值字段的步进列，不当作独立数值框 |
 | PromptDocumentStatic | 提示词文档只读视图，与 PromptEditor 共用文档语义 |
 | UiDatePicker | 日期字段与选择面板，不以裸输入重做 |
-| StackedMediaUploader | 叠放媒体上传组合，复用 FileUploader 与拖拽排序 |
+| MediaStripUploader | 参考素材条：横排缩略图、按类型编号、拖动排序 |
 | TooltipContent | Tooltip 的唯一浮层实现；静态样本通过 visible + anchorRef 常驻 |
 | PriceEstimate | 注册模型计价结果的显示，沿用用户币种/费用显示偏好，不触发生成 |
 | UiRecordList / UiRecordItem / UiViewerShell | 界面模式栏目展示三档记录（含失败恢复）和两种查看器底色；查看器另有开关与 Escape 交互样本 |

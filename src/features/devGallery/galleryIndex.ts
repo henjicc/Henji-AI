@@ -109,7 +109,7 @@ export const GALLERY_INDEX: readonly GalleryEntry[] = [
     ['states', '空 / 加载 / 错误', 'UiEmpty UiLoading UiError ProgressBar'],
     ['dialogs', '弹窗与通知', 'AlertDialog UiToast 付费确认测试夹具'],
     ['media', '媒体叠层与玻璃', 'UiPanel media glass'],
-    ['content', '内容输入', 'PromptEditor PromptDocumentStatic StackedMediaUploader FileUploader UiFormRow UiSwitch UiInput UiErrorBoundary'],
+    ['content', '内容输入', 'PromptEditor PromptDocumentStatic MediaStripUploader FileUploader UiFormRow UiSwitch UiInput UiErrorBoundary'],
     ['filters', '筛选条', 'UiTaskHistoryFilterBar'],
     ['sizes', '尺寸阶梯', 'size sm md lg UiIconButton 实际枚举 基线'],
     ['variants', '补充变体', 'variant tone shape frame gridCell labelWidth gap appearance'],

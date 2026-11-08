@@ -497,8 +497,6 @@ export const UI_MODAL_SIZE_CLASS = {
 
 export type UiModalSize = keyof typeof UI_MODAL_SIZE_CLASS;
 
-export const UI_UPLOADER_CARD_BORDER_CLASS = 'border-1.5 border-text3/60';
-export const UI_UPLOADER_CARD_BORDER_OVERRIDE_CLASS = '!border-1.5 !border-text3/60';
 /** 灯光色值是所选光源的内容色，不随界面主题变色。 */
 export const UI_LIGHTING_COLORS = {
   amber: SOCKET_TYPE_COLOR_HEX.ENUM, warm: CAMERA_STAGE_COLOR_HEX.sunlightWarm,

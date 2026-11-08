@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, Play, Square } from 'lucide-react'
 import {
-  StackedMediaUploader,
+  MediaStripUploader,
   UI_TEXT_META_CLASS,
   UI_TEXT_PANEL_TITLE_CLASS,
   UiButton,
@@ -255,7 +255,7 @@ export const ModelTestBench: React.FC<{
         {kind === 'asr' ? (
           <UiGroup labelWidth={96}>
             <UiFormRow label="音频" density="compact">
-              <StackedMediaUploader files={audioPath ? [resolveImageDisplayUrl(audioPath)] : []} fileTypes={['audio']} accept="audio/*"
+              <MediaStripUploader files={audioPath ? [resolveImageDisplayUrl(audioPath)] : []} fileTypes={['audio']} accept="audio/*"
                 onUpload={(files) => setAudioPath(getPathForFile(files[0]) || '')} onRemove={() => setAudioPath('')} />
             </UiFormRow>
             <UiFormRow label="语言" density="compact">
@@ -296,7 +296,7 @@ export const ModelTestBench: React.FC<{
               {acceptedMedia.map((kind) => (
                 <div key={kind} className="flex flex-col gap-1">
                   <span className={UI_TEXT_META_CLASS}>{MEDIA_LABEL[kind]} · 收不下的模型自动不带</span>
-                  <StackedMediaUploader
+                  <MediaStripUploader
                     files={media[kind].map(resolveImageDisplayUrl)}
                     fileTypes={media[kind].map(() => kind === 'images' ? 'image' : kind === 'videos' ? 'video' : 'audio')}
                     accept={MEDIA_ACCEPT[kind]}

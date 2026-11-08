@@ -9485,11 +9485,6 @@
         "count": 1
       },
       {
-        "file": "src/components/ui/fileUploader/StackedMediaUploader.tsx",
-        "fingerprint": "58da25f82045705ea0b00f7041ad0b8e9ae7c8aaad8f7de7712a5ae073f27ca3",
-        "count": 1
-      },
-      {
         "file": "src/components/ui/formRowLabel.ts",
         "fingerprint": "359d52415699f97a837d72ff723677cdfdb4f902f3ac1d41d7e843c5a241809d",
         "count": 1

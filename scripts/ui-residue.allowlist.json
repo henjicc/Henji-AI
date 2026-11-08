@@ -101,12 +101,6 @@
       "reason": "预设面板：面板最高 500 后滚动；快速保存区的两种状态（保存按钮 / 名称输入）叠放切换，容器固定 60 高避免切换时跳动"
     },
     {
-      "file": "src/components/ui/fileUploader/StackedMediaUploader.tsx",
-      "category": "arbitraryValue",
-      "values": ["min-h-[82px]", "h-[66px]", "h-[29px]", "w-[29px]"],
-      "reason": "参考素材堆叠上传：轨道 66 高放 64 高缩略图与 1px 描边，外框 82 含内边距；收起态压在缩略图角上的圆形“+”为 29（位置由 plusCollapsedLeft/Top 常量配套计算）"
-    },
-    {
       "file": "src/components/ui/primitives.tsx",
       "category": "arbitraryValue",
       "values": ["w-[78px]", "h-[92px]", "h-[42px]", "h-[52px]", "w-[120px]", "min-h-[52px]"],

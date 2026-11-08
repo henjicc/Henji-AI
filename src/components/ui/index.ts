@@ -10,7 +10,7 @@ export * from './styleTokens';
 export * from './fieldLayout';
 export * from './UiMarqueeText';
 export * from './UiDatePicker';
-export * from './fileUploader/StackedMediaUploader';
+export * from './fileUploader/MediaStripUploader';
 export * from './TaskHistoryFilterBar';
 export { default as AlertDialog } from './AlertDialog';
 export type { AlertDialogAction } from './AlertDialog';

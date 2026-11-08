@@ -12,7 +12,7 @@ test('CSS与内联动效：档位变量、布局例外、循环与减弱动画',
   for (const css of ['.x { transition: opacity 150ms ease-in; }', '.x { transition: height var(--ui-duration-base) var(--ui-ease); }']) assert.ok(findDesignRules(css, 'src/demo.css').length)
   assert.equal(findDesignRules('.x { animation: spin var(--ui-loop-spin) linear infinite; transition: opacity var(--ui-duration-base) var(--ui-ease); }', 'src/demo.css').length, 0)
   assert.ok(findDesignRules('const style={ transition: uiTransition(["width"], UI_DURATION.base) }', 'src/demo.tsx').some(x => x.rule === 'layoutTransition'))
-  assert.equal(findDesignRules('const style={ transition: uiTransition(["width"], UI_DURATION.base) }', 'src/components/ui/fileUploader/StackedMediaUploader.tsx').length, 0)
+  assert.equal(findDesignRules('const style={ transition: uiTransition(["width"], UI_DURATION.base) }', 'src/workspaces/GenerationWorkspace/components/TaskInputPreview.tsx').length, 0)
   assert.ok(findDesignRules('<div className="transition-all duration-150"/>', 'src/demo.tsx').length)
 })
 
