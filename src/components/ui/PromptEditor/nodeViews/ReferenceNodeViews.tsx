@@ -49,6 +49,13 @@ function readVariableAttributes(attrs: Record<string, unknown>): TemplateVariabl
   }
 }
 
+/**
+ * 胶囊后面跟一个零宽字符（在不可编辑的节点视图里，不进文档）。光标停在胶囊右侧时，浏览器按光标前一个行内盒
+ * 决定光标高度和落点：前面是 inline-flex 胶囊时光标会被拉成胶囊那么高，而且点击后先落在编辑器的行尾占位图
+ * 后面、下一帧才被编辑器挪回胶囊后面，看起来像光标闪成了另一个。有了这个字符，前一个行内盒就是普通文字。
+ */
+const CARET_ANCHOR = '\u200B'
+
 function useRegistryVersion(registry: PromptEditorResourceRegistry): void {
   useSyncExternalStore(
     registry.subscribe,
@@ -69,6 +76,7 @@ export function MediaReferenceNodeView({
   const label = reference?.label ?? attrs.fallbackLabel
 
   return (
+    <>
     <NodeViewWrapper
       as="span"
       className={`${PROMPT_MEDIA_ATOM_CLASS} ${
@@ -98,6 +106,8 @@ export function MediaReferenceNodeView({
       )}
       <span className="truncate">@{label}</span>
     </NodeViewWrapper>
+    {CARET_ANCHOR}
+    </>
   )
 }
 
@@ -113,6 +123,7 @@ export function TemplateVariableNodeView({
   const label = variable?.label ?? attrs.fallbackLabel
 
   return (
+    <>
     <NodeViewWrapper
       as="span"
       className={`${PROMPT_ATOM_CLASS} ${
@@ -129,5 +140,7 @@ export function TemplateVariableNodeView({
     >
       <span className="truncate">{'{{'}{label}{'}}'}</span>
     </NodeViewWrapper>
+    {CARET_ANCHOR}
+    </>
   )
 }

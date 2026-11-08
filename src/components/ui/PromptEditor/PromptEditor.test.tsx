@@ -460,6 +460,9 @@ describe('PromptEditor', () => {
     expect(mediaReference?.textContent).toContain('@图1')
     expect(templateVariable?.textContent).toContain('{{电影感}}')
     expect(JSON.stringify(ref.current?.getDocument())).not.toContain('thumbnailSrc')
+    // 胶囊后面紧跟零宽字符：光标停在胶囊右侧时按文字定高、不跳位；它只在节点视图里，不进文档
+    expect(mediaReference?.nextSibling?.textContent).toBe('\u200B')
+    expect(templateVariable?.nextSibling?.textContent).toBe('\u200B')
 
     rendered.rerender(
       <PromptEditor
