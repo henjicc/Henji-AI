@@ -401,9 +401,11 @@ it('原生滤镜格式不匹配只写设备日志，按 target.format 修正后�
   try {
     const input = await host.target('input', W, H, 'rgba16float')
     await host.authorFilter('filter', 'filter', program, {}, input, info)
-    // 校验原文在 encoder.finish() 时报出（未捕获），提交无效命令缓冲再由台账记一条。
-    await vi.waitFor(() => expect(report.mock.calls.map(call => call[0])).toEqual(expect.arrayContaining(['video_edit.gpu.uncaptured_error', 'video_edit.gpu.submit.failed'])))
-    expect(report.mock.calls.some(call => /rgba16float/i.test(call[1]))).toBe(true)
+    // 提交无效命令缓冲由台账记一条；格式不符的校验原文在 encoder.finish() 时作为未捕获错误报出，各平台 Dawn 送达时机不同。
+    await vi.waitFor(() => {
+      expect(report.mock.calls.map(call => call[0])).toContain('video_edit.gpu.submit.failed')
+      expect(report.mock.calls.some(call => /rgba16float/i.test(call[1]))).toBe(true)
+    }, { timeout: 5000 })
     correct = true
     const calls = report.mock.calls.length
     const output = await host.authorFilter('filter', 'filter', program, {}, input, info)

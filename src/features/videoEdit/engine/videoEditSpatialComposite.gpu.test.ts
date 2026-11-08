@@ -73,7 +73,8 @@ it.each<Parameters<typeof planVideoEditBuiltinEffect>[0]>([
     device.queue.submit([encoder.finish()]); await buffer.mapAsync(1)
     const result = new Uint16Array(buffer.getMappedRange()), center = (32 * size + 32) * 4
     expect(videoEditHalfToFloat(result[center])).toBeCloseTo(1, 3)
-    expect(result[center]).toBe(result[center + 3])
+    // 预乘不越界：颜色不超过 alpha；软件渲染器的半精度取整可能让颜色低 1 个单位
+    expect(result[center]).toBeLessThanOrEqual(result[center + 3]); expect(result[center + 3] - result[center]).toBeLessThanOrEqual(1)
     buffer.unmap()
   } finally { await host.dispose(); source.destroy(); output.destroy(); buffer.destroy(); gpu.dispose() }
 }, 30_000)
