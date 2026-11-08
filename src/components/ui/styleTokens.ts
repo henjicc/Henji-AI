@@ -313,8 +313,11 @@ export const UI_FIELD_LABEL_CLASS = `block ${UI_TEXT_LABEL_CLASS} mb-1.5`;
  */
 export const UI_FIELD_LABEL_INLINE_CLASS = 'shrink-0 whitespace-nowrap text-xs text-text3';
 
-/** 工具条排布下“标签 + 控件”的行内容器。 */
-export const UI_FIELD_INLINE_ROW_CLASS = 'inline-flex min-h-control-md min-w-0 items-center gap-1.5';
+/**
+ * 工具条排布下“标签 + 控件”的行内容器。参数名也是控件的点击区；`ui-field-inline-row` 让悬停参数名时
+ * 右边的静默触发器一起亮起（index.css），看得出整段都能点。
+ */
+export const UI_FIELD_INLINE_ROW_CLASS = 'ui-field-inline-row inline-flex min-h-control-md min-w-0 items-center gap-1.5';
 
 /**
  * 字段聚焦（重要记录 019）：一道 1px 内收的强调色细边，外加一圈淡强调光（`shadow-field-focus`）。

@@ -29,7 +29,7 @@ export function ParamLabel({
   const tooltip = param.tooltip ? getI18nText(param.tooltip, language) : ''
 
   return (
-    <div id={id} className={`${toolbar ? UI_FIELD_LABEL_INLINE_CLASS : UI_FIELD_LABEL_CLASS} ${className}`}>
+    <div id={id} data-param-label className={`${toolbar ? UI_FIELD_LABEL_INLINE_CLASS : UI_FIELD_LABEL_CLASS} ${className}`}>
       <UiTooltipText tooltip={tooltip || undefined} placement={tooltipPlacement}>
         {label}
         {param.required ? <span className="ml-1 text-danger-text">*</span> : null}

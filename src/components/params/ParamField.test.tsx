@@ -90,6 +90,13 @@ describe('参数控件的工具条排布（生成输入区底栏）', () => {
     expect(screen.getByRole('switch', { name: '提示词扩展' }).textContent).toBe('')
   })
 
+  it('工具条里点参数名等同点右边的控件', () => {
+    const onChange = vi.fn()
+    const view = render(inToolbar(<SwitchInput param={extendParam} value={false} onChange={onChange} />))
+    fireEvent.click(view.getByText('提示词扩展'))
+    expect(onChange).toHaveBeenCalledWith(true)
+  })
+
   it('PanelTrigger 打开的浮层内容重置为表单排布', () => {
     vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
     let panelLayout: string | null = null

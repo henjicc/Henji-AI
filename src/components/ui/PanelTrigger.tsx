@@ -449,7 +449,8 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
       hidden={anchorOnly || undefined}
       ref={ref}
     >
-      {!anchorOnly && label ? <label className={toolbarLayout ? UI_FIELD_LABEL_INLINE_CLASS : UI_FIELD_LABEL_CLASS}>{label}</label> : null}
+      {/* 参数名关联内置触发器：点参数名等同点按钮（自定义触发器没有这个 id，关联自然不生效） */}
+      {!anchorOnly && label ? <label htmlFor={children ? undefined : triggerId} className={toolbarLayout ? UI_FIELD_LABEL_INLINE_CLASS : UI_FIELD_LABEL_CLASS}>{label}</label> : null}
       {anchorOnly ? null : children ? children({ open, openPanel, closePanel, togglePanel }) : (
         <UiFieldTrigger
           disabled={disabled}

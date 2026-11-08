@@ -1,4 +1,4 @@
-import { Children, isValidElement, useContext, type ReactNode } from 'react'
+import { Children, isValidElement, useContext, type MouseEvent, type ReactNode } from 'react'
 import { UI_FIELD_INLINE_ROW_CLASS, UiFieldLayoutContext, UiFormRow, useUiFieldLayout } from '@/components/ui'
 import { ParamLabel } from './ParamLabel'
 
@@ -37,5 +37,17 @@ export function ParamField({ children, className = 'w-auto', inline = true }: Pa
       </div>
     )
   }
-  return <div className={UI_FIELD_INLINE_ROW_CLASS}>{children}</div>
+  return <div className={UI_FIELD_INLINE_ROW_CLASS} onClick={activateControlFromLabel}>{children}</div>
+}
+
+/**
+ * 工具条参数行里点参数名，等同点它右边的控件（与原生 `<label>` 相同：按钮被点击、输入框获得焦点）。
+ * 不用 `<label>` 包住整行：控件自己可能带 `<label>`，嵌套标签无效。
+ */
+function activateControlFromLabel(event: MouseEvent<HTMLDivElement>): void {
+  if (!(event.target instanceof Element) || !event.target.closest('[data-param-label]')) return
+  const control = event.currentTarget.querySelector<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled)')
+  if (!control) return
+  if (control instanceof HTMLButtonElement) control.click()
+  else control.focus()
 }

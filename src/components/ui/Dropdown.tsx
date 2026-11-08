@@ -433,7 +433,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
 
   return (
     <div className={`relative ${fillControl ? 'block min-w-0' : toolbarLayout ? UI_FIELD_INLINE_ROW_CLASS : 'inline-block'} ${className || ''}`} style={fillControl ? { width: '100%' } : undefined} ref={ref}>
-      {label ? <label className={toolbarLayout ? UI_FIELD_LABEL_INLINE_CLASS : UI_FIELD_LABEL_CLASS}>{label}</label> : null}
+      {label ? <label htmlFor={triggerId} className={toolbarLayout ? UI_FIELD_LABEL_INLINE_CLASS : UI_FIELD_LABEL_CLASS}>{label}</label> : null}
       <UiFieldTrigger
         disabledReason={disabledReason}
         ref={triggerRef}

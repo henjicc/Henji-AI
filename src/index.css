@@ -591,6 +591,20 @@
     background-color: var(--ui-glass-press);
   }
 
+  /* 工具条参数行：参数名是控件的点击区，悬停参数名时右边的静默触发器跟着出悬停底 */
+  .ui-field-inline-row > :is(label, [data-param-label]) {
+    cursor: pointer;
+  }
+
+  .ui-field-inline-row:has(> :is(label, [data-param-label]):hover) .ui-btn-quiet:not(:disabled):not([aria-disabled='true']) {
+    background-color: rgb(var(--hover-rgb));
+    color: rgb(var(--text1-rgb));
+  }
+
+  :is(.ui-glass, :where(:root:not([data-ui-blur='off'])) .ui-overlay-surface) .ui-field-inline-row:has(> :is(label, [data-param-label]):hover) .ui-btn-quiet:not(:disabled):not([aria-disabled='true']) {
+    background-color: var(--ui-glass-hover);
+  }
+
   .ui-btn-quiet:is(:disabled, [aria-disabled='true']),
   .ui-btn-danger:is(:disabled, [aria-disabled='true']),
   .ui-btn-link:is(:disabled, [aria-disabled='true']) {
