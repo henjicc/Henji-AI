@@ -467,7 +467,7 @@ const TaskCard = React.memo(function TaskCard({
       tabIndex={-1}
     >
       {/* 左侧是参考素材堆，右侧是提示词与信息；素材点开后在本行铺开，盖住右侧 */}
-      <div className="relative flex items-stretch gap-3">
+      <div className="relative flex items-start gap-3">
         <TaskInputPreview
           taskId={task.id}
           inputImages={inputImages}
@@ -486,31 +486,34 @@ const TaskCard = React.memo(function TaskCard({
           nativeFileDragEnabled={isNativeFileDragEnabled}
           shouldIgnoreClick={shouldIgnoreClick}
         />
-        {/* 提示词贴参考素材顶边、信息贴底边；行框比字形高，上下各让出一点让字形对齐卡片边缘 */}
-        <div className="-my-0.5 flex min-w-0 flex-1 flex-col justify-between">
+        {/* 提示词与信息从参考素材顶边起紧挨着排；行框比字形高，上移一点让字形贴齐卡片顶边 */}
+        <div className="-mt-0.5 flex min-w-0 flex-1 flex-col gap-1">
           <TaskPrompt prompt={task.prompt} />
           <div className="truncate text-xs leading-tight text-text3" title={metaLine}>{metaLine}</div>
         </div>
-        <TaskCardToolbar
-          task={task}
-          collecting={collecting}
-          allResultsCollected={
-            resultFilePaths.length > 0 &&
-            resultFilePaths.every((filePath) => collectedPaths.has(filePath))
-          }
-          onUsePrompt={() => onUsePrompt(task.prompt)}
-          onCollectAll={async () => {
-            for (const filePath of resultFilePaths) await collectResult(filePath, task.type)
-          }}
-          onDownloadAll={async () => {
-            for (const filePath of resultFilePaths) await onDownload(filePath, true)
-          }}
-          onRegenerate={() => onRegenerate(task)}
-          onReedit={() => onReedit(task)}
-          continuations={task.status === 'success' ? listGenerationContinuations(task.model, task.options) : []}
-          onContinue={(continuationId) => onContinue(task, continuationId)}
-          onDelete={() => onDelete(task.id)}
-        />
+        {/* 按钮中线对齐提示词首行 */}
+        <div className="-mt-2">
+          <TaskCardToolbar
+            task={task}
+            collecting={collecting}
+            allResultsCollected={
+              resultFilePaths.length > 0 &&
+              resultFilePaths.every((filePath) => collectedPaths.has(filePath))
+            }
+            onUsePrompt={() => onUsePrompt(task.prompt)}
+            onCollectAll={async () => {
+              for (const filePath of resultFilePaths) await collectResult(filePath, task.type)
+            }}
+            onDownloadAll={async () => {
+              for (const filePath of resultFilePaths) await onDownload(filePath, true)
+            }}
+            onRegenerate={() => onRegenerate(task)}
+            onReedit={() => onReedit(task)}
+            continuations={task.status === 'success' ? listGenerationContinuations(task.model, task.options) : []}
+            onContinue={(continuationId) => onContinue(task, continuationId)}
+            onDelete={() => onDelete(task.id)}
+          />
+        </div>
       </div>
       {statusLabel && !isInProgress && <span className="text-xs text-text3">{statusLabel}</span>}
       {result}
