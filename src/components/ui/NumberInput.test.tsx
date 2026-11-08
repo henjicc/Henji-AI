@@ -130,9 +130,9 @@ describe('NumberInput', () => {
     expect(field.style.minWidth).toBe('calc(4ch + 42px)')
   })
 
-  it('在读数上按住左右拖动改值（每 2px 一步），松开后不进入编辑', () => {
+  it('在读数上按住左右拖动改值（步数多时每 2px 一步），松开后不进入编辑', () => {
     const onChange = vi.fn()
-    render(<NumberInput ariaLabel="缩放" value={10} onChange={onChange} min={0} max={100} />)
+    render(<NumberInput ariaLabel="缩放" value={10} onChange={onChange} min={0} max={1000} />)
     const input = screen.getByRole('spinbutton', { name: '缩放' })
 
     fireEvent.pointerDown(input, { pointerId: 1, button: 0, clientX: 100 })
@@ -159,11 +159,24 @@ describe('NumberInput', () => {
     const calls = onChange.mock.calls.length
     fireEvent.pointerMove(input, { pointerId: 2, clientX: 10 })
     expect(onChange).toHaveBeenCalledTimes(calls)
-    fireEvent.pointerMove(input, { pointerId: 2, clientX: -20 })
+    // 常用范围 0–100：每步 2.4px，左移 24px 走 10 步
+    fireEvent.pointerMove(input, { pointerId: 2, clientX: -24 })
     expect(onChange).toHaveBeenLastCalledWith(140)
-    fireEvent.pointerUp(input, { pointerId: 2, clientX: -20 })
+    fireEvent.pointerUp(input, { pointerId: 2, clientX: -24 })
     fireEvent.focus(input); fireEvent.change(input, { target: { value: '180' } }); fireEvent.blur(input)
     expect(onChange).toHaveBeenLastCalledWith(180)
+  })
+
+  it('范围只有几步时每步给足距离，轻轻拖也能停在中间的值', () => {
+    const onChange = vi.fn()
+    render(<NumberInput ariaLabel="数量" value={1} onChange={onChange} min={1} max={4} />)
+    const input = screen.getByRole('spinbutton', { name: '数量' })
+    fireEvent.pointerDown(input, { pointerId: 1, button: 0, clientX: 0 })
+    fireEvent.pointerMove(input, { pointerId: 1, clientX: 20 })
+    expect(onChange).toHaveBeenLastCalledWith(2)
+    fireEvent.pointerMove(input, { pointerId: 1, clientX: 36 })
+    expect(onChange).toHaveBeenLastCalledWith(3)
+    fireEvent.pointerUp(input, { pointerId: 1, clientX: 36 })
   })
 
   it('拖动时 Shift 精细、Alt 粗调，中途切换修饰键不跳变', () => {

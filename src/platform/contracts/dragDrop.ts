@@ -1,4 +1,5 @@
-export type DragDropFileHandler = (files: File[]) => void
+/** target：松手处的元素，接收方据此判断是不是落在自己身上。 */
+export type DragDropFileHandler = (files: File[], target: EventTarget | null) => void
 export type DragStateHandler = (isDragging: boolean) => void
 
 export interface DragDropPlatform {

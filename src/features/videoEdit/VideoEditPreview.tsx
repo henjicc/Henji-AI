@@ -1069,7 +1069,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         const host = event.currentTarget
         const frame = { left: host.scrollLeft, top: host.scrollTop, width: host.clientWidth, height: host.clientHeight }
         setDropZone(current => current?.mode === mode && current.replaceable === replaceable && current.frame.left === frame.left && current.frame.top === frame.top && current.frame.width === frame.width && current.frame.height === frame.height ? current : { mode, replaceable, frame })
-        if (mode === 'replace' && !replaceable) { event.dataTransfer.dropEffect = 'none'; return }
+        // 明确拒收：先接管事件再设 none，全局兜底（DragDropProvider）不会把它改成可放下
+        if (mode === 'replace' && !replaceable) { event.preventDefault(); event.dataTransfer.dropEffect = 'none'; return }
         event.preventDefault(); event.dataTransfer.dropEffect = 'copy'
       }}
       onDragLeave={event => { if (!isDomNode(event.relatedTarget) || !event.currentTarget.contains(event.relatedTarget)) setDropZone(null) }}

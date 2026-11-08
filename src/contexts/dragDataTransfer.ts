@@ -57,6 +57,8 @@ export function readHenjiDragData(dataTransfer: DataTransfer): HenjiDragTransfer
 }
 
 const COMPACT_DRAG_PREVIEW_SIZE = 64;
+/** 图片与视频的拖拽缩略图按 3:4 竖幅，与参考素材卡一致；音频波形仍是方块。 */
+const COMPACT_DRAG_PREVIEW_WIDTH = 48;
 let compactDragPreviewHost: HTMLDivElement | null = null;
 
 function getCompactDragPreviewHost(): HTMLDivElement {
@@ -66,8 +68,6 @@ function getCompactDragPreviewHost(): HTMLDivElement {
   host.style.position = 'fixed';
   host.style.left = '-9999px';
   host.style.top = '-9999px';
-  host.style.width = `${COMPACT_DRAG_PREVIEW_SIZE}px`;
-  host.style.height = `${COMPACT_DRAG_PREVIEW_SIZE}px`;
   host.style.pointerEvents = 'none';
   document.body.appendChild(host);
   compactDragPreviewHost = host;
@@ -83,12 +83,12 @@ export function setCompactDragPreview(dataTransfer: DataTransfer, previewUrl?: s
   image.src = previewUrl;
   image.draggable = false;
   image.style.display = 'block';
-  image.style.width = `${COMPACT_DRAG_PREVIEW_SIZE}px`;
+  image.style.width = `${COMPACT_DRAG_PREVIEW_WIDTH}px`;
   image.style.height = `${COMPACT_DRAG_PREVIEW_SIZE}px`;
   image.style.objectFit = 'cover';
   image.style.borderRadius = '8px';
   host.appendChild(image);
-  dataTransfer.setDragImage(host, COMPACT_DRAG_PREVIEW_SIZE / 2, COMPACT_DRAG_PREVIEW_SIZE / 2);
+  dataTransfer.setDragImage(host, COMPACT_DRAG_PREVIEW_WIDTH / 2, COMPACT_DRAG_PREVIEW_SIZE / 2);
 }
 
 /** 音频拖拽预览：同步绘制（setDragImage 不能等待），用统一波形绘制的迷你档；没有波形数据时只画零线，不伪造内容。 */

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactElement } from 'react'
 
-import { SCRUB_PIXELS_PER_STEP, SCRUB_START_THRESHOLD_PX, resolveScrubFactor } from './numberScrub'
+import { SCRUB_START_THRESHOLD_PX, resolveScrubFactor, resolveScrubPixelsPerStep } from './numberScrub'
 import { UiInput, UiNumberStepper } from './primitives'
 import { UI_MENU_ITEM_PADDING_X_PX } from './dropdownUtils'
 import { useUiFormRowLabelling } from './formRowLabel'
@@ -294,7 +294,8 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
     }
     session.travel += (event.clientX - session.lastX) * resolveScrubFactor(event)
     session.lastX = event.clientX
-    const steps = Math.round(session.travel / SCRUB_PIXELS_PER_STEP)
+    const pixelsPerStep = resolveScrubPixelsPerStep({ min: scrubMin ?? min, max: scrubMax ?? max, step })
+    const steps = Math.round(session.travel / pixelsPerStep)
     let raw = session.startValue + steps * step
     if (typeof scrubMin === 'number') raw = Math.max(Math.min(scrubMin, session.startValue), raw)
     if (typeof scrubMax === 'number') raw = Math.min(Math.max(scrubMax, session.startValue), raw)
@@ -342,7 +343,8 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
   })
 
   const alignClass = align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'
-  const contentWidthCharacterCount = Math.max(inputValue.length, placeholder?.length ?? 0, 2)
+  // 参数条里按实际位数收窄，步进箭头紧跟数字；其他排布至少留两位，避免输入时宽度跳动
+  const contentWidthCharacterCount = Math.max(inputValue.length, placeholder?.length ?? 0, fieldLayout === 'toolbar' ? 1 : 2)
   const minContentWidth = `calc(${contentWidthCharacterCount}ch + ${propertyLayout ? 12 : NUMBER_FIELD_CHROME_PX[size]}px)`
   const scrubCursorClass = disabled ? '' : isFocused ? 'cursor-text' : 'cursor-ew-resize'
 

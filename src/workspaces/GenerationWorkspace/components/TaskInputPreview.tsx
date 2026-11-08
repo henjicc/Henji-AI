@@ -31,9 +31,9 @@ interface InputItem {
   filePath?: string
 }
 
-/** 参考素材统一按 9:16 竖卡显示，卡高等于提示词与信息两行的高度；收起时最多叠 3 张。 */
-const CARD_WIDTH = 28
-const CARD_HEIGHT = Math.round(CARD_WIDTH * 16 / 9)
+/** 参考素材统一按 3:4 竖卡显示，卡高等于提示词与信息两行的高度；收起时最多叠 3 张。 */
+const CARD_HEIGHT = 50
+const CARD_WIDTH = Math.round(CARD_HEIGHT * 3 / 4)
 const CARD_GAP = 6
 const STACKED = 3
 /** 收起时后面两张往右错开并微微转开，像一叠卡片。 */

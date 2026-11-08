@@ -23,13 +23,15 @@ export function useNativeDragDrop(
 
         const platform = getPlatform().dragDrop
         const unlistenState = platform.onDragStateChange(setIsDragging)
-        const unlistenDrop = platform.onFilesDropped((files) => {
+        const unlistenDrop = platform.onFilesDropped((files, target) => {
             setIsDragging(false)
             const containerEl = elementRef.current
             if (!containerEl) {
                 logger.warn('[DragDrop] Drop ignored - target container not mounted')
                 return
             }
+            // 文档级监听会收到窗口里任何位置的松手：只收落在自己范围内的，否则每个挂着的上传器都会导入同一批文件
+            if (!(target instanceof Node) || !containerEl.contains(target)) return
             onDropRef.current(files)
         })
 

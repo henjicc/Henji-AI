@@ -21,6 +21,8 @@ type MediaType = 'image' | 'video' | 'audio'
 /** 宿主把“添加素材”入口放在别处（如生成输入区底栏的“+”）时，经此打开同一个文件选择器。 */
 export interface MediaStripUploaderHandle {
   openFilePicker: () => void
+  /** 收下一次拖放（系统文件或软件内拖来的素材），与直接拖到素材条上相同；须在 drop 事件里同步调用。 */
+  acceptDrop: (dataTransfer: DataTransfer) => Promise<void>
 }
 
 interface MediaStripUploaderProps {
@@ -147,7 +149,6 @@ export const MediaStripUploader = forwardRef<MediaStripUploaderHandle, MediaStri
     uploadInputRef.current?.click()
   }
 
-  useImperativeHandle(ref, () => ({ openFilePicker }))
 
   const { dragState, itemRefs, handleMouseDown } = useReorderDrag({
     disabled,
@@ -204,12 +205,18 @@ export const MediaStripUploader = forwardRef<MediaStripUploaderHandle, MediaStri
     event.stopPropagation()
     setIsHtmlDragging(false)
     dragCounter.current = 0
+    await acceptDrop(event.dataTransfer)
+  }
+
+  // 拖放数据只在 drop 事件当下可读：先同步取出文件与素材数据，再异步导入
+  const acceptDrop = async (dataTransfer: DataTransfer): Promise<void> => {
     if (disabled) return
-    if (event.dataTransfer.files && event.dataTransfer.files.length > 0) {
-      await handleFiles(Array.from(event.dataTransfer.files))
+    const droppedFiles = Array.from(dataTransfer.files ?? [])
+    const transferredDragData = droppedFiles.length > 0 ? null : readHenjiDragData(dataTransfer)
+    if (droppedFiles.length > 0) {
+      await handleFiles(droppedFiles)
       return
     }
-    const transferredDragData = readHenjiDragData(event.dataTransfer)
     if (!transferredDragData) return
     try {
       const file = await dragTransferDataToFile(transferredDragData)
@@ -218,6 +225,8 @@ export const MediaStripUploader = forwardRef<MediaStripUploaderHandle, MediaStri
       logger.error('MediaStripUploader convert transferred drag data failed', error)
     }
   }
+
+  useImperativeHandle(ref, () => ({ openFilePicker, acceptDrop }))
 
   const handleCustomDrop = async (): Promise<void> => {
     if (!isCustomDragging || !dragData) return

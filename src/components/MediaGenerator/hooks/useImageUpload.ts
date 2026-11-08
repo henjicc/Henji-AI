@@ -15,7 +15,6 @@ interface ImageUploadHandlers {
   handlePaste: (event: ClipboardEvent, maxImageCount: number) => Promise<void>
   removeImage: (index: number) => void
   handleImageReorder: (from: number, to: number) => void
-  handleImageFileDrop: (files: File[], maxImageCount: number) => Promise<void>
 }
 
 /**
@@ -128,11 +127,6 @@ export const useImageUpload = (
     })
   }
 
-  // 拖拽与选择文件共用导入入口。
-  const handleImageFileDrop = async (files: File[], maxImageCount: number) => {
-    await handleImageFileUpload(files.filter(file => file.type.startsWith('image/')), maxImageCount)
-  }
-
   return {
     isDraggingImage,
     setIsDraggingImage,
@@ -140,8 +134,7 @@ export const useImageUpload = (
     handleImageReplace,
     handlePaste,
     removeImage,
-    handleImageReorder,
-    handleImageFileDrop
+    handleImageReorder
   }
 }
 

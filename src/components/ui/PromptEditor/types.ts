@@ -74,6 +74,13 @@ export interface PromptEditorHandle {
     document: PromptDocumentV1,
     options?: ReplacePromptDocumentOptions,
   ) => void
+  /** 在文档位置插入素材引用（与手动输入 @ 选中素材相同）；位置超出当前文档时落在末尾。 */
+  insertMediaReferences: (position: number, references: readonly PromptReferenceItem[]) => void
+}
+
+/** 拖放落点：松手处对应的文档位置，落在文字区之外时为 null。 */
+export interface PromptEditorDropTarget {
+  position: number | null
 }
 
 export interface PromptEditorProps {
@@ -116,7 +123,7 @@ export interface PromptEditorProps {
   onFocus?: () => void
   onBlur?: () => void
   onPaste?: (event: ClipboardEvent) => void
-  onDrop?: (event: DragEvent) => void
+  onDrop?: (event: DragEvent, target: PromptEditorDropTarget) => void
   onCompositionStart?: (event: CompositionEvent) => void
   onCompositionEnd?: (event: CompositionEvent) => void
   onKeyDown?: (event: KeyboardEvent) => void

@@ -3,6 +3,7 @@ import { createLogger } from '@/core/logging'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import { detectShell, getPlatform } from '@/platform/runtime'
 import React, { createContext, useContext, useState, ReactNode, useRef, useCallback } from 'react'
+import { HENJI_DRAG_DATA_MIME } from './dragDataTransfer'
 
 const logger = createLogger('contexts.DragDropContext')
 
@@ -103,6 +104,34 @@ export const DragDropProvider: React.FC<DragDropProviderProps> = ({ children }) 
         nativeDragTriggeredRef.current = false
         void triggerNativeDrag()
     }, [triggerNativeDrag])
+
+    /*
+     * 拖素材经过不收它的地方时，系统默认显示“禁止”光标，盖住了拖拽缩略图。这里在冒泡末端兜底：
+     * 没有落点接管（preventDefault）的文件或素材拖拽一律按“复制”显示、松手什么也不做。
+     * 落点要明确拒收时先 preventDefault 再把 dropEffect 设为 none，兜底不会改它。
+     * 只管文件和软件内素材：纯文字拖进输入框仍走浏览器默认插入。
+     */
+    React.useEffect(() => {
+        const carriesMedia = (event: DragEvent): boolean => {
+            const types = event.dataTransfer?.types ?? []
+            return types.includes('Files') || types.includes(HENJI_DRAG_DATA_MIME)
+        }
+        const handleDragOver = (event: DragEvent) => {
+            if (event.defaultPrevented || !carriesMedia(event) || !event.dataTransfer) return
+            event.preventDefault()
+            event.dataTransfer.dropEffect = 'copy'
+        }
+        const handleDrop = (event: DragEvent) => {
+            if (event.defaultPrevented || !carriesMedia(event)) return
+            event.preventDefault()
+        }
+        document.addEventListener('dragover', handleDragOver)
+        document.addEventListener('drop', handleDrop)
+        return () => {
+            document.removeEventListener('dragover', handleDragOver)
+            document.removeEventListener('drop', handleDrop)
+        }
+    }, [])
 
     // Global mouse move handler with edge detection
     React.useEffect(() => {

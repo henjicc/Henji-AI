@@ -8,6 +8,7 @@ import type {
   MediaStripUploaderHandle,
 } from '@/components/ui'
 import type { PromptDocumentV1 } from '@/core/inputs/promptDocument'
+import { HENJI_DRAG_DATA_MIME } from '@/contexts/dragDataTransfer'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
 import { registry } from '@/core/ModelRegistry'
 import { PromptOptimizationPreviewText } from './PromptOptimizationPreviewText'
@@ -38,16 +39,15 @@ interface InputAreaProps {
   uploadedImages: string[]
   isLoading: boolean
   isGenerating?: boolean
-  onImageUpload: (files: File[]) => void
+  onImageUpload: (files: File[]) => void | Promise<void>
   onImageRemove: (index: number) => void
   onImageReplace: (index: number, file: File) => void
   onImageReorder: (from: number, to: number) => void
   onImageClick?: (imageUrl: string, imageList: string[]) => void
   onPaste: (event: ClipboardEvent) => void
-  onImageDrop: (files: File[]) => void
   onDragStateChange: (isDragging: boolean) => void
   uploadedVideos?: string[]
-  onVideoUpload?: (files: File[]) => void
+  onVideoUpload?: (files: File[]) => void | Promise<void>
   /** 视频正在导入（探测时长、取封面）：大文件要数秒，参考素材行显示加载态，不留一段空白（任务 5.8，G13.5） */
   importingMedia?: boolean
   onVideoRemove?: (index: number) => void
@@ -55,7 +55,7 @@ interface InputAreaProps {
   onVideoTrim?: (index: number) => void
   onVideoClick?: (videoUrl: string) => void
   uploadedAudios?: string[]
-  onAudioUpload?: (files: File[]) => void
+  onAudioUpload?: (files: File[]) => void | Promise<void>
   onAudioRemove?: (index: number) => void
   onAudioReplace?: (index: number, file: File) => void
   onAudioClick?: (audioUrl: string) => void
@@ -110,7 +110,6 @@ const InputArea: React.FC<InputAreaProps> = ({
   onImageReorder,
   onImageClick,
   onPaste,
-  onImageDrop,
   onDragStateChange,
   uploadedVideos = [],
   onVideoUpload,
@@ -256,6 +255,8 @@ const InputArea: React.FC<InputAreaProps> = ({
     const audioFiles = files.filter(f => f.type.startsWith('audio/'))
     const currentVideoCount = uploadedVideos.length
     const currentImageCount = uploadedImages.length
+    // 各类导入一起等完：拖进提示词时要等素材都进了引用列表再插入
+    const uploads: Array<void | Promise<void>> = []
     if (videoFiles.length > 0 && onVideoUpload && currentVideoCount < maxVideoCount) {
       const file = videoFiles[0]
       if (videoConstraints) {
@@ -296,7 +297,7 @@ const InputArea: React.FC<InputAreaProps> = ({
           }
         }
       }
-      onVideoUpload([file])
+      uploads.push(onVideoUpload([file]))
     } else if (videoFiles.length > 0 && currentVideoCount >= maxVideoCount) {
       showAlert(
         t('inputArea.alerts.videoCount.title'),
@@ -307,7 +308,7 @@ const InputArea: React.FC<InputAreaProps> = ({
     if (imageFiles.length > 0 && !needsVideoOnly) {
       const availableImageSlots = maxImageCount - currentImageCount
       if (availableImageSlots > 0) {
-        onImageUpload(imageFiles)
+        uploads.push(onImageUpload(imageFiles))
       } else {
         showAlert(
           t('inputArea.alerts.imageCount.title'),
@@ -317,8 +318,11 @@ const InputArea: React.FC<InputAreaProps> = ({
       }
     }
     if (audioFiles.length > 0 && onAudioUpload && uploadedAudios.length < maxAudioCount) {
-      onAudioUpload([audioFiles[0]])
+      uploads.push(onAudioUpload([audioFiles[0]]))
     }
+    // 某一类失败不打断其他类：都落定后再把第一个失败抛给调用方提示
+    const failed = (await Promise.allSettled(uploads)).find((result): result is PromiseRejectedResult => result.status === 'rejected')
+    if (failed) throw failed.reason
   }
   // 紧凑模式由生成工作区的真实可用尺寸决定，CSS 像素已包含系统缩放与应用缩放。
   // 长提示词在编辑区内部滚动。
@@ -326,6 +330,32 @@ const InputArea: React.FC<InputAreaProps> = ({
     ? 'min-h-12 max-h-44'
     : 'min-h-textarea-short max-h-[260px]'
   const uploaderRef = useRef<MediaStripUploaderHandle>(null)
+  const localPromptEditorRef = useRef<PromptEditorHandle>(null)
+  const editorRef = promptEditorRef ?? localPromptEditorRef
+  // 拖到提示词里的素材：先照常进参考素材条，导入落定后把新出现的引用插到松手的位置。
+  // 落定后用 state 记下落点：这次渲染排在导入里所有 setState 之后，effect 读到的引用列表一定已含新素材。
+  const [settledDrop, setSettledDrop] = useState<{ position: number; knownIds: Set<string> } | null>(null)
+  useEffect(() => {
+    if (!settledDrop) return
+    setSettledDrop(null)
+    editorRef.current?.insertMediaReferences(settledDrop.position, promptReferences.filter(reference => !settledDrop.knownIds.has(reference.resourceId)))
+  }, [editorRef, promptReferences, settledDrop])
+  const dropIntoPrompt = (event: DragEvent, position: number | null): void => {
+    const transfer = event.dataTransfer
+    // 只接管文件与软件内素材；提示词里拖动选中的文字仍由编辑器自己移动
+    if (!transfer || !(transfer.types.includes('Files') || transfer.types.includes(HENJI_DRAG_DATA_MIME))) return
+    const uploader = uploaderRef.current
+    if (!uploader) return
+    event.preventDefault()
+    event.stopPropagation()
+    const knownIds = new Set(promptReferences.map(reference => reference.resourceId))
+    void uploader.acceptDrop(transfer)
+      .catch((error: unknown) => {
+        showAlert(t('uploadArea.uploadFailed'), error instanceof Error ? error.message : String(error), 'error')
+      })
+      // 部分失败时已导入的素材照样插入
+      .finally(() => { if (position !== null) setSettledDrop({ position, knownIds }) })
+  }
   const dragInProgress = useMediaDragInProgress()
   const showReferenceRow = mixedFiles.length > 0 || dragInProgress || importingMedia
   // 素材增删、排序与导入中占位出现时，卡片与下方输入框滑到新位置
@@ -428,7 +458,7 @@ const InputArea: React.FC<InputAreaProps> = ({
         {/* 文本输入框：外层输入卡片已经画了表面，编辑器本身无框 */}
         <div data-onboarding-target="prompt" data-flip-key="prompt" className="relative">
           <PromptEditor
-            ref={promptEditorRef}
+            ref={editorRef}
             value={promptDocument}
             onChange={onPromptDocumentChange}
             preset="media-references"
@@ -437,13 +467,7 @@ const InputArea: React.FC<InputAreaProps> = ({
             ariaLabel={t('inputArea.placeholder.default')}
             references={promptReferences}
             onPaste={onPaste}
-            onDrop={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              const files = Array.from(event.dataTransfer?.files ?? [])
-                .filter(file => file.type.startsWith('image/'))
-              if (files.length > 0) onImageDrop(files)
-            }}
+            onDrop={(event, target) => dropIntoPrompt(event, target.position)}
             submitShortcut="enter"
             onSubmit={onGenerate}
             placeholder={

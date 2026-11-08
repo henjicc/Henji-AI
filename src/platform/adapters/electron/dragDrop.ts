@@ -27,7 +27,7 @@ export function createElectronDragDrop(): DragDropPlatform {
       const listener = (event: DragEvent): void => {
         const files = extractDroppedFiles(event)
         if (files.length > 0) {
-          handler(files)
+          handler(files, event.target)
         }
       }
       document.addEventListener('drop', listener)

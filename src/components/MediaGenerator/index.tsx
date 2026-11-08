@@ -363,10 +363,6 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
             uiState.showAlert(t('ui:uploadArea.uploadFailed'), error instanceof Error ? error.message : String(error), 'error')
           })
         }}
-        onImageDrop={(files) => imageUpload.handleImageFileDrop(
-          files,
-          maxImageCount
-        )}
         onDragStateChange={imageUpload.setIsDraggingImage}
         onVideoReplace={videoUpload.handleVideoReplace}
         onVideoTrim={videoTrimMaxClipSeconds ? (index) => void handleVideoTrim(index) : undefined}

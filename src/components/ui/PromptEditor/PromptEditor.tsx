@@ -12,6 +12,7 @@ import HardBreak from '@tiptap/extension-hard-break'
 import Paragraph from '@tiptap/extension-paragraph'
 import Text from '@tiptap/extension-text'
 import { CharacterCount } from '@tiptap/extensions/character-count'
+import { Dropcursor } from '@tiptap/extensions/drop-cursor'
 import { Placeholder } from '@tiptap/extensions/placeholder'
 import { UndoRedo } from '@tiptap/extensions/undo-redo'
 import { EditorContent, useEditor } from '@tiptap/react'
@@ -161,6 +162,7 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
       countPromptDocumentCharacters(value)
     ))
 
+    const acceptsDrop = Boolean(onDrop)
     const extensions = useMemo(() => {
       const capabilities = resolvePromptEditorPreset(preset)
       return [
@@ -174,11 +176,13 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
         ...(capabilities.mediaReferences
           ? [MediaReferenceExtension.configure({ registry: resourceRegistry })]
           : []),
+        // 宿主接管拖放（onDrop）时才显示插入竖线：只有它会把素材落到松手的位置；颜色由 ui-prompt-drop-cursor 取强调色
+        ...(acceptsDrop ? [Dropcursor.configure({ color: false, width: 2, class: 'ui-prompt-drop-cursor' })] : []),
         ...(capabilities.templateVariables
           ? [TemplateVariableExtension.configure({ registry: resourceRegistry })]
           : []),
       ]
-    }, [maxCharacters, preset, resourceRegistry])
+    }, [acceptsDrop, maxCharacters, preset, resourceRegistry])
 
     const editor = useEditor({
       extensions,
@@ -209,8 +213,9 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
           if (event.defaultPrevented) return true
           return pastePromptMediaReferences(view, event, resourceRegistry)
         },
-        handleDrop: (_view, event): boolean => {
-          callbacksRef.current.onDrop?.(event)
+        handleDrop: (view, event): boolean => {
+          const position = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos ?? null
+          callbacksRef.current.onDrop?.(event, { position })
           return event.defaultPrevented
         },
         handleDOMEvents: {
@@ -374,6 +379,19 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
             caught instanceof Error ? caught : new Error(String(caught)),
           )
         }
+      },
+      insertMediaReferences: (position, references): void => {
+        if (!editor || references.length === 0) return
+        const at = Math.max(0, Math.min(position, editor.state.doc.content.size))
+        editor.chain().focus().insertContentAt(at, references.map(reference => ({
+          type: 'mediaReference',
+          attrs: {
+            resourceId: reference.resourceId,
+            mediaType: reference.mediaType,
+            fallbackLabel: reference.label,
+            sourceNodeId: reference.sourceNodeId ?? null,
+          },
+        }))).run()
       },
     }), [editor])
 
