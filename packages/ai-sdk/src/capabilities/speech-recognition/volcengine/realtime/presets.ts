@@ -1,4 +1,5 @@
 import { defineSpeechRecognitionDescriptor } from '../..'
+import { audioDurationPrice } from '../../../../pricing/capabilityPricing'
 
 export interface VolcengineRealtimeAsrPreset {
   id: string
@@ -21,6 +22,8 @@ function definePreset(modelId: VolcengineRealtimeAsrPreset['modelId']): Volcengi
       mediaTypes: ['audio/pcm'],
       features: ['realtime', 'streaming', 'partial-results', 'timestamps', 'pcm-s16le-16khz-mono'],
       tags: ['cloud', 'multilingual', 'seedasr-2.0'],
+      // 后付费小时版 1 元/小时。
+      pricing: audioDurationPrice('CNY', 1 / 3600),
     }),
   }
 }

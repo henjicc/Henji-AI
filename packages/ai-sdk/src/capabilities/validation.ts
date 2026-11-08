@@ -1,3 +1,4 @@
+import { isValidCapabilityPricing, type CapabilityPricing } from '../pricing/capabilityPricing'
 import { AiRuntimeError } from '../runtime/AiRuntimeError'
 import type { CapabilityDescriptor } from './types'
 
@@ -28,6 +29,9 @@ export function validateCapabilityDescriptor(descriptor: CapabilityDescriptor): 
   validateUniqueStableIds(descriptor.operations, 'operation id')
   validateUniqueStableIds(descriptor.features, 'feature id')
   validateUniqueStableIds(descriptor.tags, 'tag')
+  if (descriptor.pricing !== undefined && !isValidCapabilityPricing(descriptor.pricing)) {
+    throw new AiRuntimeError('invalid_capability_pricing', `Capability module "${descriptor.id}" declares invalid pricing`)
+  }
   if (descriptor.modelId !== undefined) {
     normalizeCapabilityStableId(
       descriptor.modelId,
@@ -79,8 +83,17 @@ export function snapshotCapabilityDescriptor(descriptor: CapabilityDescriptor): 
     executionModes: descriptor.executionModes
       ? Object.freeze([...descriptor.executionModes])
       : undefined,
+    pricing: descriptor.pricing ? freezeDeep(JSON.parse(JSON.stringify(descriptor.pricing)) as CapabilityPricing) : undefined,
   }
   return Object.freeze(snapshot)
+}
+
+function freezeDeep<T>(value: T): T {
+  if (typeof value === 'object' && value !== null) {
+    for (const child of Object.values(value)) freezeDeep(child)
+    Object.freeze(value)
+  }
+  return value
 }
 
 function validateUniqueStableIds(values: readonly string[] | undefined, label: string): void {

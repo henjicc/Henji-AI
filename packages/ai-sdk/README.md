@@ -485,7 +485,7 @@ await capabilities.dispose()
 
 以下可选供应商入口只有显式 import 才进入消费方 bundle：
 
-- `capabilities/speech-recognition/bailian`：5 个百炼短音频/文件 ASR；
+- `capabilities/speech-recognition/bailian`：9 个百炼短音频/文件 ASR（Fun-ASR、Qwen3-ASR、Qwen-Audio 3.0/3.1）；
 - `capabilities/speech-recognition/bailian/realtime`：6 个百炼 Fun-ASR/Qwen/Qwen-Audio 实时 ASR；
 - `capabilities/speech-recognition/volcengine`：SeedASR 2.0 文件 submit/query；官方标准版只接受公网 URL；
 - `capabilities/speech-recognition/volcengine/realtime`：SeedASR 2.0 gzip 二进制 WebSocket 实时识别；
@@ -495,6 +495,22 @@ await capabilities.dispose()
 - `llm/groq`：Groq GPT-OSS 20B 默认配置、流式聊天和模型发现。
 - `llm/bigmodel`：智谱同一 provider family 下的中国大陆/Global 端点 profile、独立凭据槽与 GLM-5.3-Flash 能力。
 - `llm/modules`：外部包、插件与内置 LLM 共用的注册、执行、发现、取消和 namespace 卸载边界。
+
+### 能力价格
+
+每个内置语音识别、翻译、文本向量和重排序的 `descriptor.pricing` 都登记了供应商公布的按量标准价（不含免费额度、限时优惠与 Batch 折扣，百炼为北京地域），没有登记就省略，不代表免费；免费模型登记为单价 0。两种计费方式：
+
+- `{ billing: 'audio-duration', currency, perSecond, minimumSeconds? }`：按输入音频秒数，输出不计费；
+- `{ billing: 'tokens', currency, inputPerMillionTokens, outputPerMillionTokens, ... }`：按 token，与大模型预设的 `modelPricing` 同一结构。按 token 计费的音频模型另带 `audioTokenRate`（每秒音频折多少 token 及依据），用于按时长估价。
+
+```ts
+import { bailianQwen3AsrFlash, estimateAudioDurationCost } from '@henjicc/ai-sdk'
+
+bailianQwen3AsrFlash.descriptor.pricing // { billing: 'audio-duration', currency: 'CNY', perSecond: 0.00022 }
+estimateAudioDurationCost(bailianQwen3AsrFlash.descriptor.pricing!, 60_000) // { amount: 0.0132, currency: 'CNY' }
+```
+
+向量与重排序的价格也在各自预设上（如 `siliconflowEmbeddingPresets['Qwen/Qwen3-Embedding-8B'].pricing`），模块的 `descriptor.pricing` 与之相同。生成模型的价格见 `client.catalog.estimatePrice()`，大模型见 `findLlmProviderPreset(providerId)?.modelPricing?.[modelId]`。
 
 实时会话仍使用 `openSession → send → finish/close`。由 client 创建的会话额外提供 `result` Promise：
 它不主动发送 finish；在最终结果到达或后台失败、取消、超时、主动关闭，并完成资源收尾后结算。

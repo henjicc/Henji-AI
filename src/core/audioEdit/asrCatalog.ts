@@ -1,5 +1,6 @@
 import {
   bailianNonRealtimeAsrPresets,
+  estimateAudioDurationCost,
   groqWhisperLargeV3,
   groqWhisperLargeV3Turbo,
   siliconFlowSenseVoiceSmall,
@@ -67,46 +68,11 @@ export function resolveTimestampedLocalAsr(
   return selected
 }
 
-/**
- * Qwen-Audio 3.1 识别按 token 计价（元/百万 tokens），官方没写每秒音频折多少 token。
- * 2026-11-08 实调短音频（不传上下文）：4.85 秒输入 61、30.6 秒输入 383 token，即每秒 12.5、没有固定开销；传了上下文文字会另计输入。
- * 输出 18 字 10 token、125 字 62 token，约 0.5–0.56 token/字。
- * 文件转写是同一模型同价，按同样比例；流式无法用同一方式实测，按官方流式示例（2 秒 85、9 秒 365）取偏多的每秒 42.5。
- * 输出按每秒 6 个汉字（快语速）、每字 0.5 token 估。
- */
-function qwenAudioTokenPricePerSecond(inputTokensPerSecond: number, inputPerMillion: number, outputPerMillion: number): number {
-  return (inputTokensPerSecond * inputPerMillion + 3 * outputPerMillion) / 1_000_000
-}
 
-/**
- * 付费授权用的单价，出处见 packages/ai-sdk/docs/model-adaptation 各模型文档；SDK 的能力描述不带价格。
- * 百炼按 SDK 使用的北京地域计价；不计账号免费额度。没有登记的模型估价为未知，提交时照常确认。
- */
-const asrDurationPrices: Readonly<Record<string, { currency: 'CNY' | 'USD'; perSecond: number; minimumSeconds?: number }>> = {
-  'bailian.speech-recognition.fun-asr': { currency: 'CNY', perSecond: .00022 },
-  'bailian.speech-recognition.fun-asr-flash-2026-06-15': { currency: 'CNY', perSecond: .00022 },
-  'bailian.speech-recognition.qwen3-asr-flash': { currency: 'CNY', perSecond: .00022 },
-  'bailian.speech-recognition.qwen3-asr-flash-2026-02-10': { currency: 'CNY', perSecond: .00022 },
-  'bailian.speech-recognition.qwen3-asr-flash-filetrans': { currency: 'CNY', perSecond: .00022 },
-  [groqWhisperLargeV3.descriptor.id]: { currency: 'USD', perSecond: .111 / 3600, minimumSeconds: 10 },
-  [groqWhisperLargeV3Turbo.descriptor.id]: { currency: 'USD', perSecond: .04 / 3600, minimumSeconds: 10 },
-  [siliconFlowSenseVoiceSmall.descriptor.id]: { currency: 'CNY', perSecond: 0 },
-  'bailian.speech-recognition.qwen-audio-3.0-asr-flash': { currency: 'CNY', perSecond: .00022 },
-  'bailian.speech-recognition.qwen-audio-3.0-asr-flash-filetrans': { currency: 'CNY', perSecond: .00022 },
-  'bailian.speech-recognition.qwen-audio-3.0-asr-flash-streaming': { currency: 'CNY', perSecond: .00033 },
-  'bailian.speech-recognition.qwen-audio-3.1-asr-flash': { currency: 'CNY', perSecond: qwenAudioTokenPricePerSecond(12.5, .8, 2.7) },
-  'bailian.speech-recognition.qwen-audio-3.1-asr-flash-filetrans': { currency: 'CNY', perSecond: qwenAudioTokenPricePerSecond(12.5, .8, 2.7) },
-  'bailian.speech-recognition.qwen-audio-3.1-asr-flash-streaming': { currency: 'CNY', perSecond: qwenAudioTokenPricePerSecond(42.5, 6, 4.5) },
-  'bailian.speech-recognition.fun-asr-realtime': { currency: 'CNY', perSecond: .00033 },
-  'bailian.speech-recognition.fun-asr-realtime-2026-02-28': { currency: 'CNY', perSecond: .00033 },
-  'bailian.speech-recognition.qwen3-asr-flash-realtime': { currency: 'CNY', perSecond: .00033 },
-  'bailian.speech-recognition.qwen3-asr-flash-realtime-2026-02-10': { currency: 'CNY', perSecond: .00033 },
-  [volcengineSeedAsrFile.descriptor.id]: { currency: 'CNY', perSecond: .8 / 3600 },
-  'volcengine.speech-recognition.seedasr-2.0-realtime': { currency: 'CNY', perSecond: 1 / 3600 },
-}
 export type AsrCostEstimate = { status: 'estimated'; amount: number; currency: 'CNY' | 'USD' } | { status: 'unknown'; amount: null; currency: null }
+/** 付费授权用的参考价，单价取 SDK 能力描述；没有登记价格的模型估价为未知，提交时照常确认。 */
 export function estimateAsrCost(modelId: string, durationMs: number): AsrCostEstimate {
-  const price = asrDurationPrices[modelId]
-  if (!price || !Number.isFinite(durationMs) || durationMs <= 0) return { status: 'unknown', amount: null, currency: null }
-  return { status: 'estimated', amount: Math.max(durationMs / 1000, price.minimumSeconds ?? 0) * price.perSecond, currency: price.currency }
+  const pricing = ASR_CATALOG.find((entry) => entry.descriptor.id === modelId)?.descriptor.pricing
+  const estimate = pricing ? estimateAudioDurationCost(pricing, durationMs) : null
+  return estimate ? { status: 'estimated', ...estimate } : { status: 'unknown', amount: null, currency: null }
 }

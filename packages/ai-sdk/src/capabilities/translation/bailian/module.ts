@@ -55,6 +55,7 @@ export function createBailianQwenMtTranslationModule(
         streaming: true,
         features: ['terminology', 'translation-memory', 'domain-hint', 'usage'],
         tags: ['bailian', 'qwen-mt'],
+        pricing: { billing: 'tokens', ...preset.pricing },
       }),
       executionModes: ['request-response', 'event-stream'],
     },

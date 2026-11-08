@@ -11,7 +11,8 @@ interface ProviderContract {
   floatEncoding?: boolean
 }
 
-function descriptor(kind: 'embedding' | 'rerank', modelId: string, providerId: string, moduleId?: string): CapabilityDescriptor {
+function descriptor(kind: 'embedding' | 'rerank', preset: EmbeddingPreset | RerankPreset, providerId: string, moduleId?: string): CapabilityDescriptor {
+  const { modelId, pricing } = preset
   return {
     id: moduleId ?? `${providerId}.${kind}.${modelId}`,
     kind,
@@ -19,6 +20,7 @@ function descriptor(kind: 'embedding' | 'rerank', modelId: string, providerId: s
     version: '1', providerIds: [providerId], modelId,
     contract: { input: [{ kind: 'text', required: true, multiple: true }], output: [{ kind: 'structured-data', required: true }] },
     operations: [kind], executionModes: ['request-response'],
+    ...(pricing ? { pricing } : {}),
   }
 }
 
@@ -44,7 +46,7 @@ export function embeddingModule(preset: EmbeddingPreset, provider: ProviderContr
   if (!preset) invalidInput('Unknown embedding model')
   const endpoint = apiRoot(config.baseUrl ?? provider.baseUrl) + provider.path
   return {
-    descriptor: descriptor('embedding', preset.modelId, provider.providerId, config.moduleId),
+    descriptor: descriptor('embedding', preset, provider.providerId, config.moduleId),
     execute: (input, context) => traced(context, provider.providerId, preset.modelId, 'embedding', async () => {
       const rawInput = inputRecord(input, ['texts', 'dimensions'])
       const source = texts(rawInput.texts, 'texts', preset.maxBatchSize, preset.maxTextCharacters)
@@ -81,7 +83,7 @@ export function rerankModule(preset: RerankPreset, provider: ProviderContract, c
   if (!preset) invalidInput('Unknown rerank model')
   const endpoint = apiRoot(config.baseUrl ?? provider.baseUrl) + provider.path
   return {
-    descriptor: descriptor('rerank', preset.modelId, provider.providerId, config.moduleId),
+    descriptor: descriptor('rerank', preset, provider.providerId, config.moduleId),
     execute: (input, context) => traced(context, provider.providerId, preset.modelId, 'rerank', async () => {
       const rawInput = inputRecord(input, ['query', 'documents', 'topN', 'instruction'])
       const query = text(rawInput.query, 'query', preset.maxTextCharacters)

@@ -2,6 +2,7 @@ import {
   LLM_MODEL_CATALOG_ENTRIES,
   LLM_PROVIDER_PRESETS,
   buildRequest,
+  estimateAudioDurationCost,
   estimateChineseTextCost,
   findLlmProviderPreset,
   textTokenRatioFor,
@@ -21,7 +22,7 @@ import { applyLinkageFilters, findMissingRequiredParams, isParamVisible } from '
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
 import { validateGenerationRequirements } from '@/core/validation/modelRequirements'
 import { reconcileGenerationParams } from '@/features/generation'
-import { ASR_CATALOG, estimateAsrCost } from '@/core/audioEdit/asrCatalog'
+import { ASR_CATALOG } from '@/core/audioEdit/asrCatalog'
 import { resolvePriceEstimateMediaContext, type PricingMediaMetadataReaders } from '@/core/pricing/resolvePriceEstimateMediaContext'
 import { attachVideoDurations } from '@/core/services/generationVideoDurations'
 import { HENJI_GENERATION_EXECUTION_PACKS, HENJI_GENERATION_MODELS, getHenjiGenerationModel } from '@/core/modelCatalog/applicationModelProfile'
@@ -542,8 +543,9 @@ function describeTokenPricing(pricing: TokenListPricing): string {
  */
 export async function estimateSdkModelPrice(row: SdkModelRow): Promise<SdkModelPrice> {
   if (row.category === 'asr' && row.capability) {
-    const hour = estimateAsrCost(row.capability.descriptor.id, 3_600_000)
-    if (hour.status === 'unknown') return { status: 'missing', reason: '语音识别单价表里没有' }
+    const pricing = row.capability.descriptor.pricing
+    const hour = pricing ? estimateAudioDurationCost(pricing, 3_600_000) : null
+    if (!hour) return { status: 'missing', reason: pricing ? '按 token 计价且没有音频折算比例' : 'SDK 能力描述没有登记价格' }
     const display = `${CURRENCY_SYMBOL[hour.currency]}${formatAmount(hour.amount)}/小时`
     return hour.amount > 0 ? { status: 'priced', display } : { status: 'zero', display: '免费' }
   }

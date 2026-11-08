@@ -1,4 +1,5 @@
 import { defineSpeechRecognitionDescriptor } from '..'
+import { audioDurationPrice } from '../../../pricing/capabilityPricing'
 
 export interface SiliconFlowAsrPreset {
   id: string
@@ -19,6 +20,8 @@ function definePreset(modelId: SiliconFlowAsrPreset['modelId']): SiliconFlowAsrP
       mediaTypes: ['audio/*'],
       features: ['file-transcription'],
       tags: ['cloud'],
+      // 实名认证账号当前免费。
+      pricing: audioDurationPrice('CNY', 0),
     }),
   }
 }

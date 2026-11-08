@@ -1,4 +1,5 @@
 import { defineSpeechRecognitionDescriptor } from '..'
+import { audioDurationPrice } from '../../../pricing/capabilityPricing'
 
 export interface VolcengineAsrPreset {
   id: string
@@ -19,6 +20,8 @@ function definePreset(modelId: VolcengineAsrPreset['modelId']): VolcengineAsrPre
       mediaTypes: ['audio/*'],
       features: ['file-transcription', 'async-polling', 'remote-url', 'timestamps'],
       tags: ['cloud', 'multilingual', 'seedasr-2.0'],
+      // 后付费 0.8 元/小时。
+      pricing: audioDurationPrice('CNY', 0.8 / 3600),
     }),
   }
 }

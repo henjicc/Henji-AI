@@ -1,3 +1,4 @@
+import type { CapabilityPricing } from '../../pricing/capabilityPricing'
 import type { CapabilityModule } from '../types'
 
 export interface RetrievalUsage {
@@ -46,6 +47,7 @@ export interface EmbeddingPreset {
   dimensions?: readonly number[]
   maxBatchSize?: number
   maxTextCharacters?: number
+  pricing?: CapabilityPricing
 }
 
 export interface RerankPreset {
@@ -53,4 +55,5 @@ export interface RerankPreset {
   maxDocuments?: number
   maxTextCharacters?: number
   instructionField?: 'instruction' | 'instruct'
+  pricing?: CapabilityPricing
 }

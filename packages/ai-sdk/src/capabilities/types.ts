@@ -1,3 +1,4 @@
+import type { CapabilityPricing } from '../pricing/capabilityPricing'
 import type { ResolvedRuntimeContext } from '../runtime/RuntimeContext'
 
 type ExtensibleString = string & Record<never, never>
@@ -61,6 +62,8 @@ export interface CapabilityDescriptor {
   features?: readonly string[]
   tags?: readonly string[]
   executionModes?: readonly CapabilityExecutionMode[]
+  /** 供应商公布的按量标准价；未登记时省略，不代表免费。免费模型登记为单价 0。 */
+  pricing?: CapabilityPricing
 }
 
 export type CapabilityExecutionMode = 'request-response' | 'event-stream' | 'realtime'
