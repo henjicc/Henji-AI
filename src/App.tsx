@@ -207,6 +207,7 @@ const App: React.FC = () => {
     if (reloadResumeInstalled) return
     reloadResumeInstalled = true
     void import('@/features/documents/rendererReloadResume').then(({ installRendererReloadResume }) => installRendererReloadResume())
+      .catch(error => { logger.warn('重新加载后的位置恢复未能启用', error, { event: 'app.reload_resume.install.failed' }) })
   }, [])
 
   const openAssetFloating = React.useCallback((): void => {
