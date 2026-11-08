@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import type { FileOrderItem } from '../../InputArea'
 
 interface UseMixedFileOrderParams {
+  /** 素材条里会出现不止一种媒体（可传视频或音频）：此时按 fileOrder 记录每张卡片的类型与类型内序号 */
+  mixedKinds: boolean
   needsVideoUpload: boolean
   needsVideoOnly: boolean
   uploadedImages: string[]
@@ -45,7 +47,22 @@ function isSameOrder(a: FileOrderItem[], b: FileOrderItem[]): boolean {
   return true
 }
 
+/** 保留仍然存在的素材的排列，新上传的按视频、图片、音频依次接在后面 */
+function reconcileFileOrder(order: FileOrderItem[], videoCount: number, imageCount: number, audioCount: number): FileOrderItem[] {
+  const counts: Record<FileOrderItem['type'], number> = { video: videoCount, image: imageCount, audio: audioCount }
+  const kept = order.filter(item => item.index < counts[item.type])
+  const seen = new Set(kept.map(item => `${item.type}:${item.index}`))
+  const appended: FileOrderItem[] = []
+  for (const type of ['video', 'image', 'audio'] as const) {
+    for (let index = 0; index < counts[type]; index++) {
+      if (!seen.has(`${type}:${index}`)) appended.push({ type, index })
+    }
+  }
+  return appended.length === 0 && kept.length === order.length ? order : [...kept, ...appended]
+}
+
 export function useMixedFileOrder({
+  mixedKinds,
   needsVideoUpload,
   needsVideoOnly,
   uploadedImages,
@@ -70,60 +87,23 @@ export function useMixedFileOrder({
 }: UseMixedFileOrderParams): UseMixedFileOrderReturn {
   const [localFileOrder, setLocalFileOrder] = useState<FileOrderItem[]>([])
 
-  const currentFileOrder = fileOrder || localFileOrder
+  const storedFileOrder = fileOrder || localFileOrder
   const setCurrentFileOrder = onFileOrderChange || setLocalFileOrder
 
+  // 渲染时就按已上传的素材对齐顺序，不等副作用写回：否则新素材进来的那一帧没有类型，音频会被当成图片画出来
+  const currentFileOrder = useMemo(
+    () => (mixedKinds ? reconcileFileOrder(storedFileOrder, uploadedVideos.length, uploadedImages.length, uploadedAudios.length) : []),
+    [mixedKinds, storedFileOrder, uploadedAudios.length, uploadedImages.length, uploadedVideos.length]
+  )
+
   useEffect(() => {
-    if (!needsVideoUpload) {
-      if (currentFileOrder.length > 0) {
-        setCurrentFileOrder([])
-      }
-      return
+    if (!isSameOrder(storedFileOrder, currentFileOrder)) {
+      setCurrentFileOrder(currentFileOrder)
     }
-
-    const newOrder: FileOrderItem[] = []
-    const existingVideoIndices = new Set<number>()
-    const existingImageIndices = new Set<number>()
-    const existingAudioIndices = new Set<number>()
-
-    currentFileOrder.forEach(item => {
-      if (item.type === 'video' && item.index < uploadedVideos.length) {
-        newOrder.push(item)
-        existingVideoIndices.add(item.index)
-      } else if (item.type === 'image' && item.index < uploadedImages.length) {
-        newOrder.push(item)
-        existingImageIndices.add(item.index)
-      } else if (item.type === 'audio' && item.index < uploadedAudios.length) {
-        newOrder.push(item)
-        existingAudioIndices.add(item.index)
-      }
-    })
-
-    for (let i = 0; i < uploadedVideos.length; i++) {
-      if (!existingVideoIndices.has(i)) {
-        newOrder.push({ type: 'video', index: i })
-      }
-    }
-
-    for (let i = 0; i < uploadedImages.length; i++) {
-      if (!existingImageIndices.has(i)) {
-        newOrder.push({ type: 'image', index: i })
-      }
-    }
-
-    for (let i = 0; i < uploadedAudios.length; i++) {
-      if (!existingAudioIndices.has(i)) {
-        newOrder.push({ type: 'audio', index: i })
-      }
-    }
-
-    if (!isSameOrder(currentFileOrder, newOrder)) {
-      setCurrentFileOrder(newOrder)
-    }
-  }, [needsVideoUpload, uploadedAudios.length, uploadedVideos.length, uploadedImages.length, currentFileOrder, setCurrentFileOrder])
+  }, [currentFileOrder, setCurrentFileOrder, storedFileOrder])
 
   const handleMixedFileRemove = (index: number): void => {
-    if (!needsVideoUpload || currentFileOrder.length === 0) {
+    if (!mixedKinds || currentFileOrder.length === 0) {
       onImageRemove(index)
       return
     }
@@ -147,7 +127,7 @@ export function useMixedFileOrder({
   }
 
   const handleMixedFileReplace = (index: number, file: File): void => {
-    if (!needsVideoUpload || currentFileOrder.length === 0) {
+    if (!mixedKinds || currentFileOrder.length === 0) {
       onImageReplace(index, file)
       return
     }
@@ -171,7 +151,7 @@ export function useMixedFileOrder({
   }
 
   const handleMixedFileTrim = (index: number): void => {
-    if (!needsVideoUpload || currentFileOrder.length === 0) {
+    if (!mixedKinds || currentFileOrder.length === 0) {
       return
     }
 
@@ -184,7 +164,7 @@ export function useMixedFileOrder({
   }
 
   const handleMixedFileReorder = (from: number, to: number): void => {
-    if (!needsVideoUpload || currentFileOrder.length === 0) {
+    if (!mixedKinds || currentFileOrder.length === 0) {
       onImageReorder(from, to)
       return
     }
@@ -200,7 +180,7 @@ export function useMixedFileOrder({
     const index = fileList.indexOf(fileUrl)
     if (index === -1) return
 
-    if (!needsVideoUpload || currentFileOrder.length === 0) {
+    if (!mixedKinds || currentFileOrder.length === 0) {
       onImageClick?.(fileUrl, fileList)
       return
     }
@@ -227,20 +207,13 @@ export function useMixedFileOrder({
   }
 
   const mixedFiles = useMemo(() => {
-    if (needsVideoUpload && currentFileOrder.length > 0) {
-      return currentFileOrder.map(item => {
-        if (item.type === 'video') return uploadedVideos[item.index]
-        if (item.type === 'audio') return uploadedAudios[item.index]
-        return uploadedImages[item.index]
-      })
-    }
-
-    if (needsVideoUpload) {
-      return needsVideoOnly ? [...uploadedVideos, ...uploadedAudios] : [...uploadedVideos, ...uploadedImages, ...uploadedAudios]
-    }
-
-    return [...uploadedImages, ...uploadedAudios]
-  }, [currentFileOrder, needsVideoOnly, needsVideoUpload, uploadedAudios, uploadedImages, uploadedVideos])
+    if (!mixedKinds) return uploadedImages
+    return currentFileOrder.map(item => {
+      if (item.type === 'video') return uploadedVideos[item.index]
+      if (item.type === 'audio') return uploadedAudios[item.index]
+      return uploadedImages[item.index]
+    })
+  }, [currentFileOrder, mixedKinds, uploadedAudios, uploadedImages, uploadedVideos])
 
   const mixedMaxCount = needsVideoUpload
     ? (needsVideoOnly ? maxVideoCount + maxAudioCount : maxVideoCount + maxImageCount + maxAudioCount)

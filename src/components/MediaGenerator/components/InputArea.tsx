@@ -152,6 +152,8 @@ const InputArea: React.FC<InputAreaProps> = ({
   const needsVideoOnly = needsVideoUpload && maxImageCount === 0
   const isMultiple = maxImageCount > 1
   const needsAudioUpload = maxAudioCount > 0 && Boolean(onAudioUpload)
+  // 素材条里会出现不止一种媒体，删除、替换、排序要按每张卡片的类型分派
+  const mixedKinds = needsVideoUpload || needsAudioUpload
   const shouldShowUpload = currentModel?.type !== 'audio' && (maxImageCount > 0 || needsVideoUpload || needsAudioUpload)
   const isEnglishPromptOnly = registry.getModel(selectedModel)?.meta.promptLanguage === 'en'
   const formatLimitText = (min: number, max: number, unit: string) => {
@@ -189,6 +191,7 @@ const InputArea: React.FC<InputAreaProps> = ({
     handleMixedFileReorder,
     handleMixedFileClick
   } = useMixedFileOrder({
+    mixedKinds,
     needsVideoUpload,
     needsVideoOnly,
     uploadedImages,
@@ -393,25 +396,25 @@ const InputArea: React.FC<InputAreaProps> = ({
               ref={uploaderRef}
               onBeforeLayoutChange={captureComposerLayout}
               files={mixedFiles}
-              onUpload={(needsVideoUpload || needsAudioUpload) ? handleMixedFileUpload : onImageUpload}
-              onRemove={(needsVideoUpload || needsAudioUpload) ? handleMixedFileRemove : onImageRemove}
-              onReplace={(needsVideoUpload || needsAudioUpload) ? handleMixedFileReplace : onImageReplace}
+              onUpload={mixedKinds ? handleMixedFileUpload : onImageUpload}
+              onRemove={mixedKinds ? handleMixedFileRemove : onImageRemove}
+              onReplace={mixedKinds ? handleMixedFileReplace : onImageReplace}
               onTrim={needsVideoUpload && videoConstraints?.trim ? handleMixedFileTrim : undefined}
-              onReorder={(needsVideoUpload || needsAudioUpload) ? handleMixedFileReorder : onImageReorder}
-              onFileClick={(needsVideoUpload || needsAudioUpload) ? handleMixedFileClick : onImageClick}
+              onReorder={mixedKinds ? handleMixedFileReorder : onImageReorder}
+              onFileClick={mixedKinds ? handleMixedFileClick : onImageClick}
               accept={needsVideoOnly
                 ? (needsAudioUpload ? "video/*,audio/*" : "video/*")
                 : (needsVideoUpload
                   ? (needsAudioUpload ? "video/*,image/*,audio/*" : "video/*,image/*")
                   : (needsAudioUpload ? "image/*,audio/*" : "image/*"))}
-              multiple={needsVideoOnly ? needsAudioUpload : ((needsVideoUpload || needsAudioUpload) ? true : isMultiple)}
+              multiple={needsVideoOnly ? needsAudioUpload : (mixedKinds ? true : isMultiple)}
               maxCount={mixedMaxCount}
               hideUploadButton={shouldHideUploadButton}
-              fileTypes={(needsVideoUpload || needsAudioUpload) && currentFileOrder.length > 0
+              fileTypes={mixedKinds
                 ? currentFileOrder.map(item => item.type)
                 : undefined}
               // 混合素材调换显示顺序时同类素材的序号不变，编号要跟提示词引用（按同类序号）走
-              fileNumbers={(needsVideoUpload || needsAudioUpload) && currentFileOrder.length > 0
+              fileNumbers={mixedKinds
                 ? currentFileOrder.map(item => item.index + 1)
                 : undefined}
               onDragStateChange={onDragStateChange}
