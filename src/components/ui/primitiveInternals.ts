@@ -193,7 +193,7 @@ export interface UiOptionButtonProps extends UiButtonFeedbackProps {
    * - `tile`：带小样的选项格（44 高，静息有底），如主题预设；
    * - `swatch`：圆形色样（32 外框），颜色由调用点经 `style.backgroundColor`/`backgroundImage` 传入（不要用 `background` 简写，
    *   它会重置 `background-clip`），选中为外圈一环。
-   * - `grid`：二维选项网格的格子（比例、分辨率、音色、模型卡）：静息铺一层 raised 撑出格子、不描边，选中淡强调底。
+   * - `grid`：二维选项网格的格子（比例、分辨率、音色、模型卡）：静息铺一层 raised 撑出格子、不描边；选中保持静息底、加一圈强调色描边，格子里不放勾。
    * - `cover`：封面内容卡（画布项目、3D 工程）：按钮本身无底无框，纵向排列“封面 + 文字”；悬停、键盘焦点与
    *   选中（`active`）只画在子元素 `UI_COVER_FRAME_CLASS` 封面框上（悬停发丝线、焦点环、选中强调描边，界面重设计 3.3）。
    */

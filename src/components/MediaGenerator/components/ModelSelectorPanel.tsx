@@ -1,7 +1,7 @@
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import React, { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Check, LayoutGrid } from 'lucide-react'
+import { LayoutGrid } from 'lucide-react'
 import { MODEL_TAG_DEFINITIONS } from '@/core/types/ModelTags'
 import { getAvailableProviders } from '@/utils/modelHelpers'
 import { providerBrandId } from '@/core/config/providerBrands'
@@ -354,18 +354,16 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
                 >
                   <span className="min-w-0 flex-1 truncate text-left">{m.name}</span>
                   {showProvider ? <span className="shrink-0 text-2xs text-text3">{p.name}</span> : null}
-                  {isSelected ? <Check className={`${UI_ICON_SIZE_CLASS.sm} shrink-0 text-accent-text`} aria-hidden /> : (
-                    <span
-                      data-prevent-close
-                      onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
-                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleFavorite(e, p.id, m.id) }}
-                      // 没收藏时星标平时不占位，悬停或聚焦才出现：名称多出 20px，“Seedream 5.0 Pro · APIMart”放得下
-                      className={`shrink-0 cursor-pointer ${isFavorite ? 'inline-flex' : 'hidden group-hover:inline-flex group-focus-visible:inline-flex'}`}
-                      aria-label={isFavorite ? t('favorite.remove') : t('favorite.add')}
-                    >
-                      <ICON_PRESET className={`${UI_ICON_SIZE_CLASS.sm} ${isFavorite ? 'fill-warning-text text-warning-text' : 'fill-none text-text3'}`} />
-                    </span>
-                  )}
+                  <span
+                    data-prevent-close
+                    onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleFavorite(e, p.id, m.id) }}
+                    // 没收藏时星标平时不占位，悬停或聚焦才出现：名称多出 20px，“Seedream 5.0 Pro · APIMart”放得下
+                    className={`shrink-0 cursor-pointer ${isFavorite ? 'inline-flex' : 'hidden group-hover:inline-flex group-focus-visible:inline-flex'}`}
+                    aria-label={isFavorite ? t('favorite.remove') : t('favorite.add')}
+                  >
+                    <ICON_PRESET className={`${UI_ICON_SIZE_CLASS.sm} ${isFavorite ? 'fill-warning-text text-warning-text' : 'fill-none text-text3'}`} />
+                  </span>
                 </UiOptionButton>
               )
             })}

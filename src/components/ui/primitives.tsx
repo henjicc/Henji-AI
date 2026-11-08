@@ -27,7 +27,6 @@ import {
   UI_FIELD_SURFACE_CLASS,
   UI_GLASS_ADAPTIVE_NAV_CLASS,
   UI_GLASS_ADAPTIVE_OPTION_CLASS,
-  UI_GLASS_ADAPTIVE_SELECTED_CLASS,
   UI_GLASS_ADAPTIVE_TILE_CLASS,
   UI_CONTROL_HEIGHT_CLASS,
   UI_COVER_GROUP_CLASS,
@@ -387,14 +386,14 @@ UiPanel.displayName = 'UiPanel';
 
 /**
  * 分段 / 小样 / 色样三档（segment / tile / swatch）各自的尺寸与状态；颜色在玻璃内外由 `ui-glass-adaptive-*` 统一切换。
- * 来源：1.4 外观设置为主题预设与强调色新增，2.2 接管为全局分段选择；tile 按重要记录 012 使用淡强调底 + 强调文字，分段按记录 017 使用中性抬起底
+ * 来源：1.4 外观设置为主题预设与强调色新增，2.2 接管为全局分段选择；tile 与网格格同为静息底 + 强调色描边，分段按记录 017 使用中性抬起底
  * （色样仍用主要文字色外圈：强调色外圈压在强调色样上看不清）。
  */
 const UI_OPTION_NEUTRAL_VARIANT_CLASS = {
   tile: {
     layout: 'h-11 gap-3 rounded-lg px-3 text-13',
     rest: `border-transparent text-text2 hover:text-text1 ${UI_GLASS_ADAPTIVE_TILE_CLASS} ${UI_GLASS_ADAPTIVE_OPTION_CLASS}`,
-    active: `border-transparent text-accent-text ${UI_GLASS_ADAPTIVE_SELECTED_CLASS}`,
+    active: `border-accent text-text1 ${UI_GLASS_ADAPTIVE_TILE_CLASS}`,
   },
   // 色样：颜色由调用点经 style.backgroundColor / backgroundImage 传入，bg-clip-content 让它只铺内圈；
   // 外圈 2px 边框 + 2px 间隙表达选中（按钮重置类会清掉 outline/ring，所以不用它们，也不会被父级裁切）。
@@ -458,9 +457,10 @@ export const UiOptionButton = forwardRef<HTMLButtonElement, UiOptionButtonProps>
       );
     }
 
-    // 单选：菜单项标签保持主要文字（勾用强调色）；网格/卡片格用强调文字（重要记录 012，任务 4.3）
+    // 单选：菜单项标签保持主要文字（勾用强调色）。网格/卡片格本身铺着底，再提亮一级不够醒目，
+    // 所以底色保持静息、只加一圈强调色描边，文字仍是主要文字，格子里不再放勾。
     const singleActiveClass = variant === 'grid' || variant === 'card'
-      ? `border-transparent ${UI_GLASS_ADAPTIVE_SELECTED_CLASS} text-accent-text`
+      ? `border-accent text-text1 ${UI_GLASS_ADAPTIVE_TILE_CLASS}`
       : UI_OPTION_ITEM_ACTIVE_CLASS;
     const activeClass = selection === 'multiple' ? UI_MULTISELECT_ITEM_ACTIVE_CLASS : singleActiveClass;
     // 静息态的 hover 一律交给 UI_GLASS_ADAPTIVE_OPTION_CLASS：写成 `hover:bg-hover` 在玻璃里会赢，

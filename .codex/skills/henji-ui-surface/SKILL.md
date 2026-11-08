@@ -303,7 +303,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 文字工具用 `UiChipButton selectionRole="navigation"`，开关用 `UiIconButton on`（只染图标），把强调色让给那个唯一的主动作。
 
 同理，参数面板里的"当前值是什么"（形状、比例、档位）是**单选**，
-用 `UiOptionButton active`（中性选中底 + 强调文字）——详见「选中态词汇表」。
+用 `UiOptionButton active`（菜单中性选中底；格子强调色描边）——详见「选中态词汇表」。
 
 ## 分隔线：分组的第二手段，不是第一手段
 
@@ -364,7 +364,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 语义 | 表达 | 通用落点 |
 |---|---|---|
 | 导航：正在看哪里 | 中性选中底 + 主要文字，不画指示条（侧栏、横向导航、标题栏工作区同一表达） | `UiNavButton active`；横向 chip 用 `selectionRole="navigation"`；面板标签用 `selectionAppearance="subtle"`（主要文字 + 底部细线）；应用标题栏的工作区导航用 `selectionAppearance="workspace"`（28 高，静息纯文字，选中为中性选中底 + 主要文字；`aria-current` 只给当前工作区，同栏里只打开浮层的开关项用 `on`：强调文字、无底无指示条 + `aria-pressed`）；面板标签底线用强调色 |
-| 单选：当前值是什么 | 分段用中性抬起底 + 强文字；菜单项、列表行用中性选中底 + 主要文字（菜单带强调色勾）；格子、小样用中性选中底 + 强调文字；不用强调色实底，也不铺淡强调底 | 分段统一 `UiSegmented`；`UiOptionButton active`：菜单 `menu`、网格 `grid`、带小样的格 `tile`、圆形色样 `swatch`（选中为主要文字色外圈一环——强调色外圈压在强调色样上看不清）、封面内容卡 `cover`（强调描边，只画在 `UI_COVER_FRAME_CLASS` 封面框上）；双段开关 `UiSwitch appearance="segmented"` 同此 |
+| 单选：当前值是什么 | 分段用中性抬起底 + 强文字；菜单项、列表行用中性选中底 + 主要文字（菜单带强调色勾）；格子、小样（`grid` / `card` / `tile`）保持静息底 + 强调色描边 + 主要文字，格子里不放勾（2026-11-08 用户确认）；不用强调色实底，也不铺淡强调底 | 分段统一 `UiSegmented`；`UiOptionButton active`：菜单 `menu`、网格 `grid`、带小样的格 `tile`、圆形色样 `swatch`（选中为主要文字色外圈一环——强调色外圈压在强调色样上看不清）、封面内容卡 `cover`（强调描边，只画在 `UI_COVER_FRAME_CLASS` 封面框上）；双段开关 `UiSwitch appearance="segmented"` 同此 |
 | 多选/标签：集合中哪些已选 | 强调描边 + 淡强调底 + 强调文字 | `UiChipButton active`；多选的选项卡用 `UiOptionButton selection="multiple"`；逐字稿词块 `UiTextToken selected` |
 | 布尔：功能是否开启 | 两种外观按所在区域分（重要记录 022，修订 018/019“一律复选框”）：设置页、表单、浮层、画布、生成参数用**滑块开关**（开着轨道铺强调色）；剪辑那类停靠工作区的面板（属性一列一列排）用**复选框外观**（中性框 + 主要文字色勾，不铺强调色）。整行保持静息；“关 / 开”双段不用于布尔 | `UiSwitch checked`：不写 `appearance` 时随区域走，`DockviewHost` 里自动是复选框外观、`UiModal` 里重置回滑块，调用点不判断；“勾选哪几项”这类真正的复选用 `UiCheckbox`；图标开关 `UiIconButton on`（不铺底，强调色图标，写 `aria-pressed`）；标题栏导航里的浮层开关 `UiChipButton on` |
 
@@ -694,7 +694,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 右键菜单、按钮弹出的动作菜单、锚定外部元素或指针的浮层 | 动作列表用 `ContextMenu` + `useContextMenu`（`showMenu` 跟随指针，`showMenuAt` 贴按钮右缘；压在画布/媒体上传 `surface="glass"`；菜单项是 `UiOptionButton variant="menu"`，方向键与 Enter 可用，宽度按内容）；需要表单内容的锚定浮层用 `PanelTrigger` 的 `anchor`（元素或矩形）+ `open` / `onOpenChange`，自定义触发器用 children 渲染函数（任务 5.9） | 自己 `createPortal` 画菜单或面板、手算视口夹取、各写一份点外关闭与 Escape、用私有 CSS 画菜单项 |
 | 一行放不下就收进“更多” | `UiOverflowRow`（`items` 带 `priority`/`pinned`，`renderOverflow`，`alwaysShowOverflow`，`growIntoParent` 借父级空余宽度；收起项不挂载）；生成底栏由 `ParameterPanel` 在 `toolbar` 排布下接入；停靠面板底栏用 `UiToolbar variant="footer" tools`（内部就是它） | 让参数条 `flex-wrap` 换成两行；收起项留在 DOM 里只隐藏 |
 | 统一分段单选（设置页 `SettingsSegmented` 仅重导出同一实现） | `UiSegmented ariaLabel options value onChange size="sm" / "md" / "lg" fullWidth disabled onPreview`；选项支持 `disabled/title/ariaLabel`；内部复用唯一内嵌 `UiOptionButton variant="segment"`，等宽分段、radiogroup/radio、单一 Tab 停靠点、左右方向键循环切换；中性抬起底 `bg-segment-selected` 与强文字选中态由 primitive 维护；≤5 项且每项 ≤4 个汉字（英文 ≤12 字符）；含汉字的混合标签按四个 Unicode 字符计，否则转完整下拉 | 调用点手写并排选项与轨道间距；新增分段优先复用统一容器 |
-| 内容格适配 | `UiOptionButton variant="card"`（现有内容选项格，静息 raised、选中中性选中底）；新二维选项优先 `grid` | 把 card 当成面板外壳或新增卡片套卡片 |
+| 内容格适配 | `UiOptionButton variant="card"`（现有内容选项格，静息 raised、选中强调色描边）；新二维选项优先 `grid` | 把 card 当成面板外壳或新增卡片套卡片 |
 | 分段 / 网格 / 小样 / 色样选择 | `UiSegmented` / `UiOptionButton variant="grid"` / `tile` / `swatch`；网格格子要等大时用 `gridCell`（`ratio` 78×92、`tier` 78×42、`tier-detail` 78×52、`preset` 120×52） | 手写 `bg-veil-faint` 格子、强调色实底的分段；用内联 `style={{ height }}` 定格子高度 |
 | 工具栏只读数值 | `UiReadout size="sm" / "md" / "lg" tone="default" / "media"`；外框与同行控件等高，等宽数字 | 自写 h-7/h-8 读数仿控件 |
 | 开关、复选框、图标开关 | `UiSwitch`（外观随区域：`UiBooleanAppearanceContext`，`DockviewHost` 提供复选框外观、`UiModal` 重置回滑块）/ `UiCheckbox` / `UiIconButton on` | 用整行实底或强调色文字表达“已开启”；调用点按页面自己判断画滑块还是方框 |

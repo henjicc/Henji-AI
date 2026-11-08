@@ -134,14 +134,14 @@ describe('Ui primitives 选中态词汇表', () => {
     expectClasses(chip, UI_MULTISELECT_ITEM_ACTIVE_CLASS);
   });
 
-  it('网格/卡片格的单选选中用淡强调底 + 强调文字，菜单项保持主要文字（重要记录 012）', () => {
+  it('网格/卡片格的单选选中保持静息底并加强调色描边，菜单项保持主要文字', () => {
     const view = render(
       <>
         <UiOptionButton active variant="grid">选中网格</UiOptionButton>
         <UiOptionButton active variant="menu">选中菜单项</UiOptionButton>
       </>,
     );
-    expectClasses(view.getByRole('button', { name: '选中网格' }), `${UI_GLASS_ADAPTIVE_SELECTED_CLASS} text-accent-text border-transparent`);
+    expectClasses(view.getByRole('button', { name: '选中网格' }), `${UI_GLASS_ADAPTIVE_TILE_CLASS} text-text1 border-accent`);
     expectClasses(view.getByRole('button', { name: '选中菜单项' }), UI_OPTION_ITEM_ACTIVE_CLASS);
   });
 
@@ -162,7 +162,7 @@ describe('Ui primitives 选中态词汇表', () => {
     expect(compact.dataset.size).toBe('sm');
   });
 
-  it('分段中性抬起底、选项格淡强调底、色样强描边（重要记录 014）', () => {
+  it('分段中性抬起底、选项格强调色描边、色样强描边（重要记录 014）', () => {
     const view = render(
       <>
         <UiSegmented ariaLabel="分段" options={[{value: "a", label: "选中段"}, {value: "b", label: "静息段"}]} value="a" onChange={() => undefined} />
@@ -179,12 +179,11 @@ describe('Ui primitives 选中态词汇表', () => {
     const activeSwatch = view.getByRole('button', { name: '选中色样' });
     const restSwatch = view.getByRole('button', { name: '静息色样' });
 
-    // 重要记录 012（任务 4.3）：选中 = 淡强调底（ui-glass-adaptive-selected → --selected-accent）+ 强调文字，
-    // 不用强调色实底，也不描强调边
+    // 选项格选中 = 静息底 + 强调色描边 + 主要文字，不用强调色实底
     expectClasses(activeSegment, 'bg-segment-selected text-text1 border-transparent');
     for (const active of [activeTile]) {
-      expectClasses(active, `${UI_GLASS_ADAPTIVE_SELECTED_CLASS} text-accent-text border-transparent`);
-      expect(active.className).not.toMatch(/(^| )(bg-accent|border-accent|bg-brand)/);
+      expectClasses(active, `${UI_GLASS_ADAPTIVE_TILE_CLASS} text-text1 border-accent`);
+      expect(active.className).not.toMatch(/(^| )(bg-accent|bg-brand)/);
     }
     expectClasses(restSegment, 'bg-transparent text-text2 hover:bg-hover');
     expect(restSegment.classList.contains(UI_GLASS_ADAPTIVE_SELECTED_CLASS)).toBe(false);
