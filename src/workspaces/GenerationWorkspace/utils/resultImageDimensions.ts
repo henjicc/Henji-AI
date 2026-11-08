@@ -48,3 +48,19 @@ export function resolveResultImageDimensions(
   }
   return null
 }
+
+const RATIO_TEXT = /^\s*(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)\s*$/
+
+/**
+ * 结果格与生成中占位共用的画面比例，出图前后不跳：已知尺寸优先，
+ * 其次是参数里的画面比例（各模型字段名不同，按“数:数”的取值识别），都没有时按常见成品比例。
+ */
+export function resolveResultAspectRatio(task: Pick<GenerationTask, 'dimensions' | 'options' | 'type'>, imageIndex: number): string {
+  const dimensions = resolveResultImageDimensions(task, imageIndex)
+  if (dimensions) return `${dimensions.width} / ${dimensions.height}`
+  for (const value of Object.values(task.options ?? {})) {
+    const match = typeof value === 'string' ? RATIO_TEXT.exec(value) : null
+    if (match && Number(match[1]) > 0 && Number(match[2]) > 0) return `${match[1]} / ${match[2]}`
+  }
+  return task.type === 'video' ? '16 / 9' : '1 / 1'
+}

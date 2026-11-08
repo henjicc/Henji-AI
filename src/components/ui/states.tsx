@@ -19,13 +19,20 @@ import { UI_TEXT_META_CLASS, UI_TEXT_PANEL_TITLE_CLASS, UI_TEXT_SECTION_CLASS } 
 
 
 /** 骨架只承载占位；外部 className 只用于宽度、定位等布局。 */
-export function UiSkeleton({ shape = 'line', active = true, className = '' }: {
-  shape?: 'line' | 'block' | 'square';
+/**
+ * 占位骨架。`fill` 铺满定位父级，用于按成品比例先占住媒体结果的位置；
+ * `sweep` 是一道光带扫过，表示内容正在生成，`pulse` 表示在加载已有内容。
+ */
+export function UiSkeleton({ shape = 'line', motion = 'pulse', active = true, className = '' }: {
+  shape?: 'line' | 'block' | 'square' | 'fill';
+  motion?: 'pulse' | 'sweep';
   active?: boolean;
   className?: string;
 }): JSX.Element {
-  const geometry = shape === 'line' ? 'h-4 w-full' : shape === 'square' ? 'aspect-square w-full' : 'h-24 w-full';
-  return <span data-ui-skeleton aria-hidden="true" className={`block rounded-control bg-control ${geometry} ${active ? 'motion-safe:animate-pulse' : ''} ${className}`} />;
+  const geometry = shape === 'line' ? 'h-4 w-full' : shape === 'square' ? 'aspect-square w-full' : shape === 'fill' ? 'absolute inset-0 h-full w-full' : 'h-24 w-full';
+  const surface = motion === 'sweep' ? (active ? 'ui-skeleton-sweep' : 'bg-raised') : `bg-control ${active ? 'motion-safe:animate-pulse' : ''}`;
+  return <span data-ui-skeleton aria-hidden="true" {...(motion === 'sweep' && active ? { 'data-motion-essential': '' } : {})}
+    className={`block ${shape === 'fill' ? 'rounded-[inherit]' : 'rounded-control'} ${surface} ${geometry} ${className}`} />;
 }
 
 export function UiFieldMessage({ tone = 'error', className = '', children, ...props }: Omit<HTMLAttributes<HTMLSpanElement>, 'color'> & {

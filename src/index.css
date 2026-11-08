@@ -12,6 +12,7 @@
   --ui-loop-spin: 1000ms;
   --ui-loop-pulse: 2000ms;
   --ui-loop-executing: 1500ms;
+  --ui-loop-sweep: 1800ms;
   /*
    * 主题颜色由 src/core/theme/runtimeTheme.ts 按种子推导后写到根节点内联样式（只写下方“新变量”）。
    * 这里的静态值 = 默认主题（石墨）的推导结果，用于首帧与无脚本环境；
@@ -207,6 +208,12 @@
   --ui-glass-control-border: var(--ui-glass-divider);
   --ui-glass-control-hover: var(--ui-glass-hover);
   --ui-glass-surface-divider: var(--ui-glass-divider);
+  /*
+   * 全屏查看器的背景：开启毛玻璃时把身后的界面虚化成一片，压暗到看图不受干扰；
+   * 半径比面板玻璃大一档，保证认不出背后的文字与缩略图。全屏单层玻璃不影响帧率（见上方实测）。
+   */
+  --ui-viewer-tint: rgb(var(--media-rgb) / 0.7);
+  --ui-viewer-filter: blur(calc(var(--ui-blur) * 1.5)) saturate(140%);
   /* 弹窗遮罩用更浅的一档：它覆盖整个视口，半径给太大既糊又贵 */
   --ui-scrim-blur: 10px;
   /*
@@ -284,6 +291,8 @@
   --ui-glass-control-hover: var(--hover);
   --ui-scrim-blur: 0px;
   --ui-scrim-tint: var(--scrim-solid);
+  --ui-viewer-tint: var(--media);
+  --ui-viewer-filter: none;
   /* 弹窗已经退化成实底，遮罩不需要再为透光让路 */
   --ui-scrim-tint-soft: var(--scrim-solid);
 }
@@ -301,6 +310,12 @@
   /* 文本框随内容变高；最小高度仍由 height 档位给出。 */
   .ui-textarea-fit {
     field-sizing: content;
+  }
+
+  .ui-viewer-backdrop {
+    background-color: var(--ui-viewer-tint);
+    -webkit-backdrop-filter: var(--ui-viewer-filter);
+    backdrop-filter: var(--ui-viewer-filter);
   }
 
   .ui-glass {
@@ -968,6 +983,27 @@ body {
 
   to {
     opacity: 0.5;
+  }
+}
+
+/*
+ * 骨架的“生成中”动效（UiSkeleton motion="sweep"）：一道柔光从左往右扫过，表示“正在出图”。
+ * 光带取选中底色，深浅主题下都与占位底差一级，不另造颜色。
+ */
+.ui-skeleton-sweep {
+  background-color: rgb(var(--raised-rgb));
+  background-image: linear-gradient(105deg, transparent 35%, rgb(var(--selected-rgb)) 50%, transparent 65%);
+  background-size: 300% 100%;
+  animation: ui-skeleton-sweep var(--ui-loop-sweep) var(--ui-ease) infinite;
+}
+
+@keyframes ui-skeleton-sweep {
+  from {
+    background-position: 100% 0;
+  }
+
+  to {
+    background-position: -50% 0;
   }
 }
 

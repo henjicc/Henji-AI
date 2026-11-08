@@ -160,7 +160,7 @@ export function VideoViewerControls({
       className="absolute inset-x-4 bottom-3 z-sticky mx-auto max-w-xl"
       style={{
         opacity: visible ? 1 : 0,
-        transition: uiTransition(['opacity'], UI_DURATION.viewer),
+        transition: uiTransition(['opacity'], UI_DURATION.slow),
         pointerEvents: visible ? 'auto' : 'none',
       }}
     >

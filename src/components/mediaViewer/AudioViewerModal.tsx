@@ -34,7 +34,7 @@ export function AudioViewerModal({ open, audioUrl, filePath, onClose, autoPlay =
         style={{
           opacity: playerOpacity * overlayOpacity,
           transform: `scale(${0.98 + 0.02 * playerOpacity})`,
-          transition: uiTransition(['opacity', 'transform'], UI_DURATION.viewer),
+          transition: uiTransition(['opacity', 'transform'], UI_DURATION.slow),
         }}
       >
         <AudioPlayer src={playbackUrl} filePath={filePath} autoPlay={autoPlay} active={open} compact className="!w-[44rem] !max-w-[92vw]" />

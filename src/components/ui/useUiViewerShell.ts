@@ -15,7 +15,7 @@ interface ViewerOptions {
 /** 生命周期放在宿主同层，退出只卸载画面，保留宿主的音量等会话偏好。 */
 export function useUiViewerShell(open: boolean, onClose: () => void, options: ViewerOptions = {}) {
   const scope = options.scope ?? 'viewport'
-  const transition = useDialogTransition(open, UI_DURATION.viewer, true, { enterKey: options.enterKey })
+  const transition = useDialogTransition(open, UI_DURATION.slow, true, { enterKey: options.enterKey })
   const overlay = useUiOverlayLayer(open && scope === 'viewport', { modal: true })
   const closeRef = useRef(onClose)
   closeRef.current = onClose

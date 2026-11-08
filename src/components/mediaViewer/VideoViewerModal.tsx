@@ -450,7 +450,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
             preload="auto"
             playsInline
             className={`w-full h-full object-contain ${timeline && timelinePlayer.gap ? "invisible" : ""}`}
-            style={{ opacity: viewerOpacity * overlayOpacity, transition: uiTransition(['opacity'], UI_DURATION.viewer) }}
+            style={{ opacity: viewerOpacity * overlayOpacity, transition: uiTransition(['opacity'], UI_DURATION.slow) }}
             onLoadedMetadata={() => {
               autoGain.loaded()
               if (timeline) { timelinePlayer.loaded(); updateRenderedVideoRect(); return }
@@ -516,7 +516,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
               width: renderedVideoRect.width,
               height: renderedVideoRect.height,
               opacity: isOverlayControlsVisible ? 1 : 0,
-              transition: uiTransition(['opacity'], UI_DURATION.viewer),
+              transition: uiTransition(['opacity'], UI_DURATION.slow),
             }}
           >
             <UiIconButton shape="circle" size="md" tone="media"

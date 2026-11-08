@@ -106,7 +106,7 @@ it('打开期间切换视频源仍重新进场，播放器状态重置与画面�
   const { rerender } = render(<VideoViewerModal {...props} />)
   await act(async () => {})
   act(() => vi.advanceTimersByTime(32))
-  const root = document.querySelector('.z-viewer') as HTMLElement
+  const root = document.querySelector('[data-ui-viewer-layer="content"]') as HTMLElement
   expect(root.style.opacity).toBe('1')
   rerender(<VideoViewerModal {...props} videoUrl="second.mp4" />)
   expect(root.style.opacity).toBe('0')

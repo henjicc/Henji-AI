@@ -36,6 +36,9 @@ beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
   vi.clearAllMocks();
   Object.defineProperty(HTMLImageElement.prototype, 'decode', { configurable: true, writable: true, value: vi.fn(() => Promise.resolve()) });
+  // jsdom 没有 Web Animations；放大进场只需要能调用，不验证动画本身。
+  Object.defineProperty(HTMLElement.prototype, 'animate', { configurable: true, writable: true, value: vi.fn() });
+  Object.defineProperty(HTMLElement.prototype, 'getAnimations', { configurable: true, writable: true, value: vi.fn(() => []) });
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 

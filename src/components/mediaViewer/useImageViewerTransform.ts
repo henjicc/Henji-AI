@@ -8,7 +8,6 @@ export interface ImageViewerTransformHandlers {
   containerRef: RefObject<HTMLDivElement>;
   imageRef: RefObject<HTMLImageElement>;
   scaleDisplayRef: RefObject<HTMLDivElement>;
-  viewerOpacity: number;
   isDragging: boolean;
   resetView: () => void;
   handleImageMouseDown: (e: MouseEvent<HTMLImageElement>) => void;
@@ -25,7 +24,6 @@ export function useImageViewerTransform(isOpen: boolean, mode: ImageComparisonMo
   const comparisonImageRef = useRef<HTMLImageElement>(null);
   const scaleDisplayRef = useRef<HTMLDivElement>(null);
 
-  const [viewerOpacity, setViewerOpacity] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
 
   const cssScaleRef = useRef(1);
@@ -103,15 +101,10 @@ export function useImageViewerTransform(isOpen: boolean, mode: ImageComparisonMo
 
   useEffect(() => {
     if (!isOpen) return;
-    setViewerOpacity(0);
-    const opacity = createRafScheduler(() => {
-      setViewerOpacity(1);
-    }, containerRef.current?.ownerDocument.defaultView ?? window);
-    opacity.schedule();
     const timer = window.setTimeout(() => {
       updateImageTransform();
     }, 250);
-    return () => { opacity.cancel(); window.clearTimeout(timer); };
+    return () => { window.clearTimeout(timer); };
   }, [isOpen, updateImageTransform]);
 
   useEffect(() => {
@@ -251,7 +244,6 @@ export function useImageViewerTransform(isOpen: boolean, mode: ImageComparisonMo
     imageRef,
     comparisonImageRef,
     scaleDisplayRef,
-    viewerOpacity,
     isDragging,
     resetView,
     handleImageMouseDown,

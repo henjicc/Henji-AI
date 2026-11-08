@@ -13,6 +13,8 @@ import { ImageInfoPanel } from './ImageInfoPanel';
 import { createLogger } from '@/core/logging';
 import { resolveImageDisplayUrl } from '@/services/imageSource';
 import { useImageViewerTransform, type ImageComparisonMode } from './useImageViewerTransform';
+import { useViewerZoom } from './useViewerZoom';
+import { UI_DURATION, uiTransition } from '@/components/ui/motion';
 
 // 图片编辑器只在用户进入编辑模式时挂载，避免把编辑运行时压进常用的只读查看路径。
 const ViewerMarkEditor = React.lazy(() =>
@@ -94,7 +96,8 @@ export function ImageViewerModal({
   const { t } = useTranslation();
   const viewer = useUiViewerShell(open, onClose, { closeOnEscape: !isEditorMode })
   const isVisible = viewer.shouldRender
-  const overlayOpacity = viewer.opacity
+  // 画面自己放大进场；关闭按钮、底部控件等界面元素跟背景一起淡入淡出。
+  const chromeStyle = { opacity: viewer.opacity, transition: uiTransition(['opacity'], UI_DURATION.slow) }
   const [requestedMode, setRequestedMode] = useState<ImageComparisonMode>('single');
   const [swappedModes, setSwappedModes] = useState({ 'side-by-side': true, overlay: true });
   const [failedOriginal, setFailedOriginal] = useState<string | null>(null);
@@ -131,7 +134,6 @@ export function ImageViewerModal({
     imageRef,
     comparisonImageRef,
     scaleDisplayRef,
-    viewerOpacity,
     resetView,
     handleImageMouseDown,
     handleContainerMouseMove,
@@ -140,6 +142,10 @@ export function ImageViewerModal({
     handleImageLoad,
     isPointOnImageContent,
   } = useImageViewerTransform(open && isVisible && !isEditorMode, mode);
+  const displayUrl = resolveImageDisplayUrl(imageUrl);
+  const zoom = useViewerZoom(open, isVisible && !isEditorMode, imageUrl, resultPaneRef, !isEditorMode && mode === 'single',
+    () => !imageRef.current?.style.transform || imageRef.current.style.transform.startsWith('scale(1) translate(0px, 0px)'));
+  const placeholder = zoom.placeholder && zoom.placeholder !== displayUrl ? zoom.placeholder : null;
 
   useEffect(() => {
     setRequestedMode('single');
@@ -180,9 +186,9 @@ export function ImageViewerModal({
   const editorAvailable = fromUpload && Boolean(onEnterEditor && onExitEditor && onSaveEdit);
 
   return (
-    <UiViewerShell viewer={viewer} inset="content" data-image-viewer="true" data-comparison-mode={mode} aria-label={t('viewer.imageAlt', '图片')}>
+    <UiViewerShell viewer={viewer} inset="content" contentFade={isEditorMode || mode !== 'single'} data-image-viewer="true" data-comparison-mode={mode} aria-label={t('viewer.imageAlt', '图片')}>
       {editorAvailable && !isEditorMode && (
-        <div className="absolute top-12 left-1/2 z-raised -translate-x-1/2">
+        <div className="absolute top-12 left-1/2 z-raised -translate-x-1/2" style={chromeStyle}>
           <UiButton
             variant="media"
             size="lg"
@@ -235,21 +241,30 @@ export function ImageViewerModal({
               data-comparison-pane="result"
               data-layout-scroll-region
             >
+              {/* 原图还在解码时先用点开的那张缩略图顶上，放大动画不必等加载 */}
+              {placeholder && (
+                <img src={placeholder} alt="" aria-hidden className="pointer-events-none absolute inset-0 h-full w-full select-none object-contain" draggable={false} />
+              )}
               <img
                 ref={imageRef}
-                src={resolveImageDisplayUrl(imageUrl)}
+                src={displayUrl}
                 alt={comparing ? t('viewer.upscaled', '放大后') : t('viewer.imageAlt', '图片')}
-                className="h-full w-full select-none object-contain"
-                style={{ opacity: viewerOpacity * overlayOpacity, visibility: imageFailed ? 'hidden' : undefined }}
+                className="relative h-full w-full select-none object-contain"
+                style={{ visibility: imageFailed ? 'hidden' : undefined }}
                 draggable={false}
                 onError={() => {
                   logger.warn('image_viewer.load_failed', { reason: 'image_load_failed' });
                   setFailedImage(imageUrl ?? null);
+                  zoom.clearPlaceholder();
                 }}
                 onClick={(event) => {
                   if (!comparing && !isPointOnImageContent(event.clientX, event.clientY)) onClose();
                 }}
-                onLoad={handleImageLoad}
+                onLoad={(event) => {
+                  handleImageLoad(event);
+                  // 等原图真正画出来再撤掉缩略图，避免中间闪一帧空白。
+                  void event.currentTarget.decode().catch(() => undefined).then(zoom.clearPlaceholder);
+                }}
                 onMouseDown={handleImageMouseDown}
                 onMouseMove={handleImageMouseMove}
                 onContextMenu={(e) => onContextMenu?.(e, currentFilePath)}
@@ -276,7 +291,6 @@ export function ImageViewerModal({
                   alt={t('viewer.original', '原图')}
                   className="h-full w-full select-none object-contain"
                   draggable={false}
-                  style={{ opacity: viewerOpacity * overlayOpacity }}
                   onLoad={(event) => {
                     const img = event.currentTarget;
                     handleImageLoad(event);
@@ -357,6 +371,7 @@ export function ImageViewerModal({
               </UiButton>
             )}
           </div>
+          <div style={chromeStyle}>
           <UiIconButton size="xl" tone="media" shape="circle"
             onClick={onClose}
             className="absolute right-4 top-4 z-sticky"
@@ -425,6 +440,7 @@ export function ImageViewerModal({
                 <RotateCcw  />
               </UiIconButton>
             </div>
+          </div>
           </div>
         </div>
       )}

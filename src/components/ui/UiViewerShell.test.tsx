@@ -31,7 +31,7 @@ it('子层优先 Escape，退出立即 inert，冒泡过渡不卸载，重开取
   act(() => vi.advanceTimersByTime(600))
   expect(screen.getByRole('dialog').hasAttribute('inert')).toBe(false)
   view.rerender(<Viewer open={false} close={close} />)
-  fireEvent.transitionEnd(screen.getByRole('dialog', { hidden: true }))
+  fireEvent.transitionEnd(screen.getByRole('dialog', { hidden: true }).querySelector('[data-ui-viewer-layer="backdrop"]')!)
   expect(screen.queryByText('内容')).toBeNull()
 })
 it('多个查看器关闭顺序不提前恢复滚动，最后一个退出后恢复原值', () => {

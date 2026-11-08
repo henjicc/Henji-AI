@@ -10,13 +10,14 @@ import { useGenerationTaskProgressStore } from "@/stores/generationTaskProgressS
 import {
   UiButton,
   UiError,
+  UiSkeleton,
   UI_TEXT_BODY_CLASS,
   UI_TEXT_META_CLASS,
 } from "@/components/ui"
 import AudioPlayer from "@/components/AudioPlayer"
 import { getModelDisplayName } from "@/utils/modelHelpers"
 import type { GenerationTask, ResultImageDimensions } from "../types"
-import { resolveResultImageDimensions } from "../utils/resultImageDimensions"
+import { resolveResultAspectRatio, resolveResultImageDimensions } from "../utils/resultImageDimensions"
 import { formatMediaDuration, formatTaskCreatedAt, joinTaskMeta } from "../utils/taskMeta"
 import { taskErrorMessage } from '../utils/taskErrorMessage'
 import { TaskInputPreview } from "./TaskInputPreview"
@@ -179,14 +180,25 @@ const TaskCard = React.memo(function TaskCard({
   ])
 
   const renderResult = () => {
-    // 进行中只显示一条进度细线（设计稿 Generation），状态文字已在辅助信息行里
+    // 进行中先按成品比例占住结果的位置：光带扫过表示在出图，状态与进度写在占位里，出图后原地换成结果。
     if (isInProgress) {
       return (
-        <ProgressBar
-          appearance="hairline"
-          progress={progressValue ?? 0}
-          duration={progressValue !== undefined ? getProgressTransitionDurationMs(progressValue) : undefined}
-        />
+        <div className={task.type === 'image' ? 'grid max-w-4xl grid-cols-4' : 'w-96 max-w-full'}>
+          <div
+            role="status"
+            className={`relative flex items-center justify-center overflow-hidden rounded-lg ${task.type === 'audio' ? 'h-14' : ''}`}
+            style={task.type === 'audio' ? undefined : { aspectRatio: resolveResultAspectRatio(task, 0) }}
+          >
+            <UiSkeleton shape="fill" motion="sweep" />
+            <span className="relative text-xs tabular-nums text-text3">{statusLabel}</span>
+            <ProgressBar
+              appearance="hairline"
+              className="absolute inset-x-0 bottom-0 rounded-none"
+              progress={progressValue ?? 0}
+              duration={progressValue !== undefined ? getProgressTransitionDurationMs(progressValue) : undefined}
+            />
+          </div>
+        </div>
       )
     }
 
@@ -262,7 +274,7 @@ const TaskCard = React.memo(function TaskCard({
                 key={`${task.id}-img-${index}`}
                 data-generation-result={task.id}
                 className="relative overflow-hidden rounded-lg bg-media"
-                style={{ aspectRatio: imageDimensions ? `${imageDimensions.width} / ${imageDimensions.height}` : '1 / 1' }}
+                style={{ aspectRatio: resolveResultAspectRatio(task, index) }}
                 onClick={() => handleImageClick(url, urls, filePaths)}
                 onContextMenu={(e) =>
                   showMenu(e, [
@@ -440,11 +452,29 @@ const TaskCard = React.memo(function TaskCard({
     //
     // 生成记录不加卡片背景：提示词标题 + 元信息 + 结果，分隔线和留白由列表项绘制；
     // 操作按钮悬停或键盘聚焦到这条记录时才出现。
+    // 参考素材与提示词是同一份输入，排成一组放在上面；模型与时间跟在提示词下面，结果另起一段。
     <article
-      className="group/task flex flex-col gap-2 outline-none"
+      className="group/task flex flex-col gap-3 outline-none"
       data-generation-task-id={task.id}
       tabIndex={-1}
     >
+      <div className="flex flex-col gap-1.5">
+      <TaskInputPreview
+        taskId={task.id}
+        inputImages={inputImages}
+        inputVideos={inputVideos}
+        uploadedFilePaths={task.uploadedFilePaths}
+        uploadedVideoFilePaths={task.uploadedVideoFilePaths}
+        onOpenImage={handleImageClick}
+        onOpenVideo={handleInputVideoClick}
+        onStartImageDrag={startImageDrag}
+        onStartVideoDrag={startVideoDrag}
+        onStartImageNativeDrag={startImageNativeDrag}
+        onStartVideoNativeDrag={startVideoNativeDrag}
+        onNativeDragEnd={endNativeDrag}
+        nativeFileDragEnabled={isNativeFileDragEnabled}
+        shouldIgnoreClick={shouldIgnoreClick}
+      />
       <div className="flex items-start gap-2">
         <TaskPrompt prompt={task.prompt} />
         <TaskCardToolbar
@@ -469,23 +499,8 @@ const TaskCard = React.memo(function TaskCard({
         />
       </div>
       <div className="truncate text-xs text-text3" title={metaLine}>{metaLine}</div>
-      <TaskInputPreview
-        taskId={task.id}
-        inputImages={inputImages}
-        inputVideos={inputVideos}
-        uploadedFilePaths={task.uploadedFilePaths}
-        uploadedVideoFilePaths={task.uploadedVideoFilePaths}
-        onOpenImage={handleImageClick}
-        onOpenVideo={handleInputVideoClick}
-        onStartImageDrag={startImageDrag}
-        onStartVideoDrag={startVideoDrag}
-        onStartImageNativeDrag={startImageNativeDrag}
-        onStartVideoNativeDrag={startVideoNativeDrag}
-        onNativeDragEnd={endNativeDrag}
-        nativeFileDragEnabled={isNativeFileDragEnabled}
-        shouldIgnoreClick={shouldIgnoreClick}
-      />
-      {statusLabel && <span className="text-xs text-text3" role={isInProgress ? 'status' : undefined}>{statusLabel}</span>}
+      </div>
+      {statusLabel && !isInProgress && <span className="text-xs text-text3">{statusLabel}</span>}
       {result}
       {videoEditSend && <VideoEditSendDialog mediaKind={videoEditSend.mediaKind} resolveSource={() => ({ type: 'generation', recordId: task.id, outputIndex: videoEditSend.outputIndex })} notify={notify} onClose={() => setVideoEditSend(null)} />}
     </article>
