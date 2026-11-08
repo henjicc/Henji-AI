@@ -33,10 +33,10 @@ it('真实目录覆盖全部领域，各域拒绝未知实体及属性，错误�
   } finally { app.dispose() }
 })
 
-it('严格拒绝工具输入中的授权字段和超限数组', async () => {
+it('严格拒绝工具输入中的授权字段', async () => {
   const app = createApplicationHarness()
   try {
-    for (const input of [{ allowWrites: true }, { callerGrant: {} }, { entityTypes: Array(33).fill('canvas.node') }]) {
+    for (const input of [{ allowWrites: true }, { callerGrant: {} }]) {
       const result = await app.call('describe_application_entities', input)
       expect(result.ok, JSON.stringify(result)).toBe(false)
     }

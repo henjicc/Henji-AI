@@ -33,9 +33,10 @@ it.each(['mp4', 'gif'] as const)('%s 用户目标的发布契约：GIF 不覆盖
   else { expect((await finish).savedPath).toBe(target); expect(await fs.promises.readFile(target, 'utf8')).toBe('encoded-output') }
 })
 it('渲染层流水送帧：前一帧还在等管道 drain 时下一帧到达，仍按帧序接收并各自等到被编码器接走', async () => {
-  const { sessionId } = await startVideoFrameExport({ pixelFormat: 'yuv420p', frameCount: 2, fps: 10, width: 128, height: 128, fileNameStem: 'pipelined' })
+  const { sessionId } = await startVideoFrameExport({ pixelFormat: 'yuv420p', frameCount: 2, fps: 10, width: 256, height: 256, fileNameStem: 'pipelined' })
   expect(fixture.args.slice(fixture.args.indexOf('-pixel_format'), fixture.args.indexOf('-pixel_format') + 2)).toEqual(['-pixel_format', 'yuv420p'])
-  const frame = new Uint8Array(128 * 128 * 3 / 2)
+  // 一帧要大于各平台管道的默认缓冲（Linux 上 Node 22 起为 64KiB），写入才会等 drain，与真实帧一致
+  const frame = new Uint8Array(256 * 256 * 3 / 2)
   const first = appendVideoFrameExport({ sessionId, frameIndex: 0, bytes: frame })
   const second = appendVideoFrameExport({ sessionId, frameIndex: 1, bytes: frame })
   let settled = false
@@ -44,7 +45,7 @@ it('渲染层流水送帧：前一帧还在等管道 drain 时下一帧到达，
   expect(settled).toBe(false)
   fixture.stdin!.resume()
   await expect(Promise.all([first, second])).resolves.toEqual([{ frameIndex: 0 }, { frameIndex: 1 }])
-  await expect(appendVideoFrameExport({ sessionId, frameIndex: 2, bytes: new Uint8Array(128 * 128 * 4) })).rejects.toThrow(/byte length mismatch/)
+  await expect(appendVideoFrameExport({ sessionId, frameIndex: 2, bytes: new Uint8Array(256 * 256 * 4) })).rejects.toThrow(/byte length mismatch/)
   expect((await finishVideoFrameExport({ sessionId })).frameCount).toBe(2)
 })
 it('取消要等编码器进程退出后才删会话目录：Windows 上进程退出前一直占着输出文件', async () => {

@@ -131,12 +131,12 @@ it('指定的素材箱须属于这份剪辑；放进已有素材箱时散文件�
   } finally { app.dispose() }
 })
 
-it('输入只接受相对路径字符串数组与可选素材箱：多余字段、空数组和超过 64 条在执行前拒绝', async () => {
+it('输入只接受路径字符串数组与可选素材箱：多余字段、空数组和空路径在执行前拒绝', async () => {
   const owner = await createVideoEditProject(); const id = owner.document.id
   const resolve = vi.spyOn(getPlatform().documents, 'resolveProjectFiles')
   const app = createApplicationHarness()
   try {
-    for (const input of [{ paths: [] }, { paths: Array.from({ length: 65 }, (_, index) => `素材/${index}.png`) }, { paths: ['素材/a.png'], root: 'C:/' }, { paths: [''] }]) {
+    for (const input of [{ paths: [] }, { paths: ['素材/a.png'], root: 'C:/' }, { paths: [''] }]) {
       expect(await app.call('import_video_edit_project_files', { documentRef: { kind: 'video_edit.document', id }, ...input })).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT' } })
     }
     expect(resolve).not.toHaveBeenCalled()

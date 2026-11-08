@@ -261,8 +261,8 @@ it('助手同一通用事务写运动与 ColorGrade 序列、读回；越界拒�
     expect(videoEditClipValue(clip(), 'x', 15)).toBe(.25)
     const before = JSON.stringify(clip().curves)
     const nextBaseline = await app.read(ref)
-    const rejected = await app.call('change_application_entities', { summary: '非法时刻', changes: [{ kind: 'set_properties', entityType: ref.kind, target: ref, properties: { 'video_edit.clip.x.keyframes': [{ time: 0, value: .8, interpolation: 'linear' }] } }, { kind: 'set_properties', entityType: effectRef.kind, target: effectRef, properties: { 'video_edit.effect.frame_curves': { exposure: [{ time: clip().duration, value: 1, interpolation: 'linear' }] } } }] }, nextBaseline.revisions as Record<string, number>)
-    expect(rejected.ok).toBe(false); expect(JSON.stringify(rejected)).toContain(`0–${clip().duration - 1}`)
+    const rejected = await app.call('change_application_entities', { summary: '非法时刻', changes: [{ kind: 'set_properties', entityType: ref.kind, target: ref, properties: { 'video_edit.clip.x.keyframes': [{ time: 0, value: .8, interpolation: 'linear' }] } }, { kind: 'set_properties', entityType: effectRef.kind, target: effectRef, properties: { 'video_edit.effect.frame_curves': { exposure: [{ time: clip().duration + 1, value: 1, interpolation: 'linear' }] } } }] }, nextBaseline.revisions as Record<string, number>)
+    expect(rejected.ok).toBe(false); expect(JSON.stringify(rejected)).toContain(`0–${clip().duration}`)
     expect(JSON.stringify(clip().curves)).toBe(before)
     const invalidValue = await app.change(effectRef, { 'video_edit.effect.frame_curves': { exposure: [{ time: 0, value: 500, interpolation: 'ease' }] } })
     expect(invalidValue.ok).toBe(false); expect(JSON.stringify(invalidValue)).toContain('曝光')
@@ -274,8 +274,9 @@ it('助手同一通用事务写运动与 ColorGrade 序列、读回；越界拒�
     expect(clip().effects?.at(-1)?.builtin?.curves?.exposure).toEqual(points)
     const shorter = await app.change(ref, { 'video_edit.clip.duration': 20 })
     expect(shorter, JSON.stringify(shorter)).toMatchObject({ ok: true })
-    expect(clip().curves!.x!.at(-1)?.time).toBe(19)
-    expect(clip().effects?.[0].builtin?.curves?.exposure.at(-1)?.time).toBe(19)
+    // 片段与效果曲线都保留右边界控制点，末点落在新时长上
+    expect(clip().curves!.x!.at(-1)?.time).toBe(20)
+    expect(clip().effects?.[0].builtin?.curves?.exposure.at(-1)?.time).toBe(20)
   } finally { app.dispose() }
 })
 

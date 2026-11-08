@@ -15,8 +15,10 @@ it('冻结 Rapier 的 init 失败向所有调用方传播，下一次可重试�
       const instantiate = WebAssembly.instantiate;
       const failure = new Error('首次 Wasm 初始化失败');
       let attempts = 0;
-      WebAssembly.instantiate = (...args) => ++attempts === 1
-        ? Promise.reject(failure) : Reflect.apply(instantiate, WebAssembly, args);
+      // 只数 Rapier 自己的实例化：Node 内部模块也可能在同一线程调用 instantiate，且各版本、平台不同
+      WebAssembly.instantiate = (...args) => !(args[1] && './rapier_wasm3d_bg.js' in args[1])
+        ? Reflect.apply(instantiate, WebAssembly, args)
+        : ++attempts === 1 ? Promise.reject(failure) : Reflect.apply(instantiate, WebAssembly, args);
       try {
         const module = await import(${JSON.stringify(url)});
         const first = module.init(), concurrent = module.default.init();

@@ -164,7 +164,7 @@ it('连续生成保留候选，控件切换候选可以撤销，序列和参数�
   const second = await images.startCodeImageGeneration(request()); await complete(second)
   expect(images.codeImageGenerationCandidates(target(), 'photo')).toHaveLength(2)
   expect(images.codeImageGenerationCandidates({ ...target(), effectId: 'other' }, 'photo')).toEqual([])
-  const view = render(<View />); fireEvent.click(view.getByRole('button', { name: '已生成 2 张' }))
+  const view = render(<View />); const candidatesButton = view.getByRole('button', { name: '生成候选' }); expect(candidatesButton.textContent).toContain('已生成 2 张'); fireEvent.click(candidatesButton)
   const before = owner.past.length; fireEvent.click(await view.findByRole('button', { name: '使用候选候选1' }))
   await waitFor(() => expect(bound()).toEqual({ kind: 'image', mediaId: first.mediaId }))
   expect(owner.past).toHaveLength(before + 1)

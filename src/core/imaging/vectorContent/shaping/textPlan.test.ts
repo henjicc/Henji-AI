@@ -120,7 +120,8 @@ it('分栏：排满一栏接着下一栏，没给高度时各栏自动等高，�
   const lefts = [...new Set(balanced.lines.map(line => Math.round(line.x)))]
   expect(lefts).toHaveLength(3)
   const counts = lefts.map(left => balanced.lines.filter(line => Math.round(line.x) === left).length)
-  expect(Math.max(...counts) - Math.min(...counts)).toBeLessThanOrEqual(1)
+  // 栏高取放得下全文的最小整行数，前面的栏排满，最后一栏收尾；每栏差几行随字体宽度变化
+  expect(Math.max(...counts)).toBe(Math.ceil(balanced.lines.length / 3))
   expect(balanced.truncated).toBe(false)
   const small = createShapedTextPlan(shaper, fonts, text, style, { box: { width: 900, height: 80 }, columns: { count: 2, gap: 30 } })
   expect(small.truncated).toBe(true)

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
 import { createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
+import { cameraStageDocumentKind } from '@/core/documents/kinds/cameraStage'
 
 import {
   installHarnessNativeStorage,
@@ -168,7 +169,7 @@ describe('harness 内存 native 替身', () => {
     const documents = getPlatform().documents
     const created = await documents.createDocument({ kind: 'camera_stage', container: { kind: 'user' }, name: '替身镜头' })
     expect(created.meta).toMatchObject({ kind: 'camera_stage', name: '替身镜头', draft: false })
-    expect(created.content).toEqual({ objects: [], activeCameraId: null, sceneSettings: {}, stateKeyframes: [], sets: [] })
+    expect(created.content).toEqual(cameraStageDocumentKind.createEmptyContent())
     const content = { objects: [{ id: 'cam', type: 'camera', name: '摄像机01' }], activeCameraId: 'cam', sceneSettings: {}, stateKeyframes: [] }
     await documents.saveDocument({ target: { id: created.meta.id }, expectedRevision: created.meta.revision, content })
     expect((await documents.readDocument({ id: created.meta.id })).content).toEqual(content)
