@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { render } from '@testing-library/react'
 import { UiSpecialPanel } from './UiSpecialPanel'
 import { resolveSpecialPanelColumns, specialPanelGridWidth } from './specialPanelLayout'
-import { groupAspectRatioOptions, type AspectRatioTileOption } from '@/components/params/panels/ResolutionPanel/aspectRatioGrouping'
+import { pairAspectRatioColumns, type AspectRatioTileOption } from '@/components/params/panels/ResolutionPanel/aspectRatioGrouping'
 
 const ratio = (value: string): AspectRatioTileOption => {
   const [width, height] = value.split(':').map(Number)
@@ -33,21 +33,28 @@ describe('特殊面板外壳', () => {
   })
 })
 
-describe('比例格分行', () => {
-  it('不多于 6 个时排一行、保持声明顺序', () => {
-    const options = [{ value: 'smart', label: '智能', ratio: null, smart: true }, ratio('16:9'), ratio('9:16'), ratio('1:1')]
-    expect(groupAspectRatioOptions(options).map(row => row.options.map(option => option.value))).toEqual([['smart', '16:9', '9:16', '1:1']])
-  })
+describe('比例格横竖成对', () => {
+  const columnsOf = (options: AspectRatioTileOption[]) =>
+    pairAspectRatioColumns(options).map(column => [column.top?.value ?? null, column.bottom?.value ?? null])
 
-  it('多时按形状分三行，横、竖各自从接近方形排到最极端', () => {
+  it('智能与方形成首列，横比例与它的转置竖比例成一列，从接近方形排到最极端', () => {
     const options = [
       { value: 'smart', label: '智能', ratio: null, smart: true },
       ...['1:1', '1:4', '1:8', '2:3', '3:2', '3:4', '4:1', '4:3', '4:5', '5:4', '8:1', '9:16', '16:9', '21:9'].map(ratio),
     ]
-    expect(groupAspectRatioOptions(options).map(row => [row.key, row.options.map(option => option.value)])).toEqual([
-      ['lead', ['smart', '1:1']],
-      ['landscape', ['5:4', '4:3', '3:2', '16:9', '21:9', '4:1', '8:1']],
-      ['portrait', ['4:5', '3:4', '2:3', '9:16', '1:4', '1:8']],
+    expect(columnsOf(options)).toEqual([
+      ['smart', '1:1'],
+      ['5:4', '4:5'],
+      ['4:3', '3:4'],
+      ['3:2', '2:3'],
+      ['16:9', '9:16'],
+      ['21:9', null],
+      ['4:1', '1:4'],
+      ['8:1', '1:8'],
     ])
+  })
+
+  it('找不到转置的竖比例单独成列且仍在下面一行', () => {
+    expect(columnsOf([ratio('16:9'), ratio('2:3')])).toEqual([[null, '2:3'], ['16:9', null]])
   })
 })
