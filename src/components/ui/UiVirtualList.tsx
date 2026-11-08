@@ -6,7 +6,7 @@ export interface UiVirtualListProps<T> {
   getKey: (item: T) => Key
   renderItem: (item: T, index: number) => ReactNode
   emptyState?: ReactNode
-  /** 过滤语义改变时回到首屏，避免靠未挂载的 DOM 找高亮项。 */
+  /** 过滤语义改变时重新挂载列表：回到首屏，有高亮项时滚到高亮项。 */
   resetKey?: Key
   highlightedIndex?: number
   /** 条目增删时保留滚动位置（就地编辑的列表，如场景对象）；默认条数一变就回到首屏，适合搜索结果。 */
@@ -24,6 +24,8 @@ export function UiVirtualList<T>({ data, getKey, renderItem, emptyState, resetKe
   // null：还没量；true：容器高度随内容，按总高度自撑；false：容器给了确定高度，铺满
   const [autoHeight, setAutoHeight] = useState<boolean | null>(null)
   const [listHeight, setListHeight] = useState(0)
+  // 每次挂载那一刻的高亮项：等列表第一次量出高度后滚过去（挂载时视口还没量好，scrollIntoView 会落空）
+  const pendingPlacementRef = useRef<{ mountKey: string; index: number | null } | null>(null)
   useLayoutEffect(() => {
     const box = boxRef.current
     if (autoHeight !== null || !box) return
@@ -44,10 +46,26 @@ export function UiVirtualList<T>({ data, getKey, renderItem, emptyState, resetKe
       ref.current?.scrollIntoView({ index: highlightedIndex, behavior: 'auto' })
     }
   }, [highlightedIndex, data.length, resetKey])
+  // 不用 Virtuoso 的 initialTopMostItemIndex：它在定位完成前隐藏整个列表，打开浮层要空白约 260ms。
+  // 先按首屏渲染，量出高度的那一帧再滚到高亮项。
+  const mountKey = retainScroll ? String(resetKey) : `${resetKey}:${data.length}`
+  // 数据还没到（加载中）时不记，等列表真正挂载那一刻再取高亮项
+  if (data.length > 0 && pendingPlacementRef.current?.mountKey !== mountKey) {
+    const valid = highlightedIndex !== undefined && highlightedIndex > 0 && highlightedIndex < data.length
+    pendingPlacementRef.current = { mountKey, index: valid ? highlightedIndex : null }
+  }
+  const handleTotalHeight = (height: number): void => {
+    setListHeight(height)
+    const pending = pendingPlacementRef.current
+    if (height > 0 && pending?.index != null) {
+      ref.current?.scrollToIndex({ index: pending.index, align: 'center' })
+      pending.index = null
+    }
+  }
   if (!data.length) return <div className="flex h-full min-h-0 flex-col">{emptyState}</div>
   return <div ref={boxRef} className={autoHeight ? 'max-h-virtual-list min-h-0' : 'h-full min-h-0'} style={autoHeight ? { height: listHeight } : undefined}>
     <Virtuoso
-      key={retainScroll ? String(resetKey) : `${resetKey}:${data.length}`}
+      key={mountKey}
       ref={ref}
       className="h-full min-h-0 overscroll-contain"
       data={data as T[]}
@@ -55,7 +73,7 @@ export function UiVirtualList<T>({ data, getKey, renderItem, emptyState, resetKe
       overscan={120}
       computeItemKey={(_index, item) => getKey(item)}
       itemContent={(index, item) => renderItem(item, index)}
-      totalListHeightChanged={setListHeight}
+      totalListHeightChanged={handleTotalHeight}
     />
   </div>
 }

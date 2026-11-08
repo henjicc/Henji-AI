@@ -1,5 +1,5 @@
 import type { ProviderKeyInfo } from '@/core/providerKeyInfo'
-import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
+import { UI_ICON_SIZE_CLASS, UI_OPTION_CELL_ACTIVE_META_CLASS } from '@/components/ui/styleTokens'
 import { useEffect, useMemo, useState } from 'react'
 import {
   CheckCircle2,
@@ -143,7 +143,8 @@ function ProviderStep({
           >
             <div>
               <div className="flex items-center gap-2">
-                <span className={UI_TEXT_PANEL_TITLE_CLASS}>{getProviderDisplayName(providerId)}</span>
+                {/* 选中卡铺强调实底：标题跟随实底上的文字色，说明换成实底上的次要文字 */}
+                <span className={primaryProvider === providerId ? 'text-sm font-medium' : UI_TEXT_PANEL_TITLE_CLASS}>{getProviderDisplayName(providerId)}</span>
                 {providerId === 'kie' ? (
                   <span className={`text-2xs font-medium ${
                     primaryProvider === providerId ? UI_META_BADGE_CLASS : UI_META_BADGE_ACCENT_CLASS
@@ -152,7 +153,7 @@ function ProviderStep({
                   </span>
                 ) : null}
               </div>
-              <p className={`mt-1.5 leading-5 ${UI_TEXT_META_CLASS}`}>
+              <p className={`mt-1.5 leading-5 ${primaryProvider === providerId ? `text-2xs font-medium ${UI_OPTION_CELL_ACTIVE_META_CLASS}` : UI_TEXT_META_CLASS}`}>
                 {t(`provider.items.${providerId}.description`)}
               </p>
             </div>

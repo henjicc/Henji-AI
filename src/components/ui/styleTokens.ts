@@ -58,6 +58,15 @@ export const UI_NAV_ITEM_ACTIVE_SUBTLE_CLASS = 'text-text1';
 export const UI_NAV_INDICATOR_BOTTOM_SUBTLE_CLASS =
   "after:absolute after:bottom-0 after:left-2 after:right-2 after:h-[1.5px] after:bg-accent after:content-['']";
 
+/**
+ * 选项格（网格、内容格、小样格）单选选中：压低一档的强调实底 + 实底上的文字。
+ * 格子静息就铺着底，提亮一级或只描边都不够醒目；亮度取强调色悬停档，比主动作暗一档，同屏仍分得出主按钮。
+ */
+export const UI_OPTION_CELL_ACTIVE_CLASS = 'border-transparent bg-accent-hover text-on-accent';
+
+/** 选中选项格里的次要文字（供应商、说明）：原来的 text3 压在强调实底上看不清；85% 在预设强调色上仍 ≥ 4.5:1。 */
+export const UI_OPTION_CELL_ACTIVE_META_CLASS = 'text-on-accent/85';
+
 /** 多选/标签选中：强调描边 + 淡强调底 + 强调文字。 */
 export const UI_MULTISELECT_ITEM_ACTIVE_CLASS = 'border-accent bg-selected-accent text-accent-text';
 

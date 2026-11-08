@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { RefreshCw } from 'lucide-react'
 import { UiButton, UiEmpty, UiError, UiFieldLayoutContext, UiIconButton, UiLoading, UiInput, UiSearchInput, UiOptionButton, UiSpecialPanel, UiVirtualGrid, specialPanelGridWidth, useSpecialPanelColumns } from '@/components/ui'
 import Dropdown from '@/components/ui/Dropdown'
+import { UI_OPTION_CELL_ACTIVE_META_CLASS } from '@/components/ui/styleTokens'
 import AudioPlayer from '@/components/AudioPlayer'
 import { toFetchableMediaUrl, isLikelyLocalImagePath } from '@/services/imageSource'
 import { GenerationService } from '@/core/services/GenerationService'
@@ -529,9 +530,9 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
                     className="w-full flex-col items-start justify-center gap-0.5"
                   >
                     <span className="w-full truncate text-left" data-user-content>{voice.name}</span>
-                    {(training || failed || expired) && <span className="text-2xs text-text3">{failed ? '训练失败或音色已失效' : expired ? '有效期已过，请刷新确认' : '等待训练结果'}</span>}
+                    {(training || failed || expired) && <span className={`text-2xs ${active ? UI_OPTION_CELL_ACTIVE_META_CLASS : 'text-text3'}`}>{failed ? '训练失败或音色已失效' : expired ? '有效期已过，请刷新确认' : '等待训练结果'}</span>}
                     {hasDescription && (
-                      <span className="w-full truncate text-left text-2xs text-text3" data-user-content>{voice.description}</span>
+                      <span className={`w-full truncate text-left text-2xs ${active ? UI_OPTION_CELL_ACTIVE_META_CLASS : 'text-text3'}`} data-user-content>{voice.description}</span>
                     )}
                   </UiOptionButton>
                   {/* 克隆音色的操作放在卡片下面一行，不压在名称上 */}

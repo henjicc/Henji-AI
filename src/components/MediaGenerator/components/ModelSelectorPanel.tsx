@@ -1,5 +1,5 @@
-import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
-import React, { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect } from 'react'
+import { UI_ICON_SIZE_CLASS, UI_OPTION_CELL_ACTIVE_META_CLASS } from '@/components/ui/styleTokens'
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { LayoutGrid } from 'lucide-react'
 import { MODEL_TAG_DEFINITIONS } from '@/core/types/ModelTags'
@@ -15,6 +15,7 @@ import {
   UiSpecialPanel,
   UiVirtualList,
   UiEmpty,
+  UiMarqueeText,
   specialPanelGridWidth,
   useSpecialPanelColumns,
 } from '@/components/ui'
@@ -23,6 +24,73 @@ import { PROVIDER_ORDER, compareModelsBySeries, getModelTypeGroup, getModelTypeO
 import type { ModelType } from '@/core/types'
 import type { GenerationModelFilterType } from '@/features/generation/domain/generationDraft'
 import { ICON_PRESET } from '@/core/theme/icons'
+interface ModelGridCellProps {
+  providerId: string
+  modelId: string
+  modelName: string
+  /** 只看单个供应商时不显示 */
+  providerName: string | null
+  selected: boolean
+  favorite: boolean
+  highlighted: boolean
+  cellRef: React.Ref<HTMLButtonElement>
+  favoriteLabel: string
+  onSelect: () => void
+  onToggleFavorite: (e: React.MouseEvent) => void
+}
+
+/**
+ * 模型格：名字过长时悬停整格循环滚动，不弹提示。
+ * 未收藏时星标与供应商名共用右侧同一个位置，悬停时供应商名淡出、星标淡入，格内不发生位移；
+ * 已收藏的格子把实心星标常驻在供应商名前面，同名模型仍能靠供应商名区分。
+ */
+function ModelGridCell({
+  providerId, modelId, modelName, providerName, selected, favorite, highlighted, cellRef, favoriteLabel, onSelect, onToggleFavorite,
+}: ModelGridCellProps): JSX.Element {
+  const [hovered, setHovered] = useState(false)
+  const metaTone = selected ? UI_OPTION_CELL_ACTIVE_META_CLASS : 'text-text3'
+  const favoriteToggle = (placement: string): JSX.Element => (
+    <span
+      data-prevent-close
+      onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+      onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleFavorite(e) }}
+      className={`cursor-pointer transition-opacity duration-120 ${placement}`}
+      aria-label={favoriteLabel}
+    >
+      <ICON_PRESET className={`${UI_ICON_SIZE_CLASS.sm} ${favorite ? 'fill-warning-text text-warning-text' : `fill-none ${metaTone}`}`} />
+    </span>
+  )
+  return (
+    <UiOptionButton
+      type="button"
+      data-provider-id={providerId}
+      data-model-id={modelId}
+      ref={cellRef}
+      data-close-on-select
+      onClick={onSelect}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onFocus={() => setHovered(true)}
+      onBlur={() => setHovered(false)}
+      active={selected}
+      // 二维网格：grid 变体静息铺一层极淡底撑出格子形状，不描边；方向键当前项用悬停底
+      variant="grid"
+      size="md"
+      highlighted={highlighted}
+      className="group w-full gap-1.5"
+    >
+      <UiMarqueeText text={modelName} playing={hovered} className="min-w-0 flex-1 text-left" />
+      <span className="relative flex min-w-4 shrink-0 items-center justify-end gap-1">
+        {favorite ? favoriteToggle('inline-flex') : null}
+        {providerName ? (
+          <span className={`text-2xs transition-opacity duration-120 ${metaTone} ${favorite ? '' : 'group-hover:opacity-0 group-focus-visible:opacity-0'}`}>{providerName}</span>
+        ) : null}
+        {favorite ? null : favoriteToggle('absolute right-0 inline-flex opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100')}
+      </span>
+    </UiOptionButton>
+  )
+}
+
 interface ModelSelectorPanelProps {
   selectedProvider: string
   selectedModel: string
@@ -142,7 +210,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
   const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(() => getHiddenTypes())
   const [hiddenModels, setHiddenModels] = useState<Set<string>>(() => getHiddenModels())
   const [searchQuery, setSearchQuery] = useState('')
-  const [highlightedIndex, setHighlightedIndex] = useState(0)
+  const [keyboardHighlight, setKeyboardHighlight] = useState<{ resultKey: string; index: number } | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const highlightedItemRef = useRef<HTMLButtonElement>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
@@ -221,14 +289,14 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
   // 网格里的显示顺序（分段后与原排序不同），方向键与回车按它走
   const orderedModels = useMemo(() => rows.flatMap(row => (row.kind === 'cards' ? row.items : [])), [rows])
   const selectedIndex = orderedModels.findIndex(item => item.p.id === selectedProvider && item.m.id === selectedModel)
-  useLayoutEffect(() => {
-    setHighlightedIndex(selectedIndex >= 0 ? selectedIndex : 0)
-  }, [searchQuery, modelFilterProvider, modelFilterType, modelFilterFunction, selectedIndex, selectedProvider, selectedModel])
-  useEffect(() => {
-    if (highlightedIndex >= orderedModels.length && orderedModels.length > 0) {
-      setHighlightedIndex(orderedModels.length - 1)
-    }
-  }, [orderedModels.length, highlightedIndex])
+  // 方向键移到的位置只对当前这组结果有效；搜索、筛选或选中项一变就回到当前选中的模型。
+  // 高亮由渲染直接推导：列表第一次挂载就拿到正确的行，打开面板时才能停在当前模型上。
+  const resultKey = `${searchQuery}:${modelFilterProvider}:${modelFilterType}:${modelFilterFunction}:${selectedProvider}:${selectedModel}`
+  const defaultHighlight = selectedIndex >= 0 ? selectedIndex : 0
+  const highlightedIndex = Math.min(
+    keyboardHighlight?.resultKey === resultKey ? keyboardHighlight.index : defaultHighlight,
+    Math.max(orderedModels.length - 1, 0),
+  )
   const highlightedRow = rows.findIndex(row => row.kind === 'cards' && highlightedIndex >= row.start && highlightedIndex < row.start + row.items.length)
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -236,7 +304,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
     if (orderedModels.length === 0) return
     if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
       e.preventDefault()
-      setHighlightedIndex(prev => moveHighlight(rows, prev, e.key))
+      setKeyboardHighlight({ resultKey, index: moveHighlight(rows, highlightedIndex, e.key) })
       return
     }
     if (e.key === 'Enter') {
@@ -249,7 +317,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
       const highlightedItem = orderedModels[highlightedIndex]
       if (highlightedItem) onModelSelect(highlightedItem.p.id, highlightedItem.m.id)
     }
-  }, [highlightedIndex, onModelSelect, orderedModels, rows])
+  }, [highlightedIndex, onModelSelect, orderedModels, resultKey, rows])
 
   // 左栏：全部 / 收藏 / 各供应商。收藏沿用“类型 = 收藏”的筛选，选供应商时回到全部类型
   const selectRail = (provider: string, favorite = false): void => {
@@ -297,7 +365,8 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
               </UiOptionButton>
             ))}
           </div>
-          <Dropdown size="sm" label={t('filters.function')} value={modelFilterFunction} ariaLabel={t('filters.function')}
+          {/* 没按功能筛选时触发器只写“功能”，不再和类型筛选的“全部”并排出现两个“全部” */}
+          <Dropdown size="sm" value={modelFilterFunction} display={modelFilterFunction === 'all' ? t('filters.function') : undefined} ariaLabel={t('filters.function')}
             options={[{ label: t('all'), value: 'all' }, ...functionTags.map(tag => ({ label: t(`tags.${tag}`), value: tag }))]}
             onSelect={onFilterFunctionChange} />
         </UiFieldLayoutContext.Provider>
@@ -336,35 +405,20 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
               const isSelected = p.id === selectedProvider && m.id === selectedModel
               const isFavorite = favoriteModels.has(`${p.id}-${m.id}`)
               return (
-                <UiOptionButton
-                  type="button"
+                <ModelGridCell
                   key={`${p.id}-${m.id}`}
-                  data-provider-id={p.id}
-                  data-model-id={m.id}
-                  ref={isHighlighted ? highlightedItemRef : null}
-                  data-close-on-select
-                  onClick={() => onModelSelect(p.id, m.id)}
-                  active={isSelected}
-                  // 二维网格：grid 变体静息铺一层极淡底撑出格子形状，不描边；方向键当前项用悬停底
-                  variant="grid"
-                  size="md"
+                  providerId={p.id}
+                  modelId={m.id}
+                  modelName={m.name}
+                  providerName={showProvider ? p.name : null}
+                  selected={isSelected}
+                  favorite={isFavorite}
                   highlighted={isHighlighted}
-                  tooltip={`${m.name} · ${p.name}`}
-                  className="group w-full gap-1.5"
-                >
-                  <span className="min-w-0 flex-1 truncate text-left">{m.name}</span>
-                  {showProvider ? <span className="shrink-0 text-2xs text-text3">{p.name}</span> : null}
-                  <span
-                    data-prevent-close
-                    onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleFavorite(e, p.id, m.id) }}
-                    // 没收藏时星标平时不占位，悬停或聚焦才出现：名称多出 20px，“Seedream 5.0 Pro · APIMart”放得下
-                    className={`shrink-0 cursor-pointer ${isFavorite ? 'inline-flex' : 'hidden group-hover:inline-flex group-focus-visible:inline-flex'}`}
-                    aria-label={isFavorite ? t('favorite.remove') : t('favorite.add')}
-                  >
-                    <ICON_PRESET className={`${UI_ICON_SIZE_CLASS.sm} ${isFavorite ? 'fill-warning-text text-warning-text' : 'fill-none text-text3'}`} />
-                  </span>
-                </UiOptionButton>
+                  cellRef={isHighlighted ? highlightedItemRef : null}
+                  favoriteLabel={isFavorite ? t('favorite.remove') : t('favorite.add')}
+                  onSelect={() => onModelSelect(p.id, m.id)}
+                  onToggleFavorite={(e) => onToggleFavorite(e, p.id, m.id)}
+                />
               )
             })}
           </div>
