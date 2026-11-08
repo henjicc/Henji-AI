@@ -282,7 +282,7 @@ describe('packages/ai-sdk/docs/model-adaptation KIE 视频模型', () => {
 
   it('Seedance 2.5 支持 30/10/10 参考输入上限并按视频输入计价', () => {
     expect(kieSeedance25Model.inputLimits).toMatchObject({
-      rules: [{ images: { max: 30 }, videos: { max: 10 }, audios: { max: 10 } }]
+      rules: expect.arrayContaining([expect.objectContaining({ when: 'kieSeedance25Mode === "reference-to-video"', images: { max: 30 }, videos: { max: 10 }, audios: { max: 10 } })])
     })
     expect(kieSeedance25Model.pricing.calculator?.({
       kieSeedance25Mode: 'reference-to-video',

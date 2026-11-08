@@ -209,7 +209,7 @@ describe('Gemini Omni 1.2 Flash 续写自己的结果', () => {
     expect(when({ apimartGeminiOmni12Mode: 'extend' })).toBe(true)
     const rule = (model.inputLimits as RuntimeInputLimitsConfig).rules!.find(item => typeof item.when === 'function')!
     expect((rule.when as (params: JsonObject) => boolean)(params)).toBe(true)
-    expect(rule).toMatchObject({ images: { max: 0 }, videos: { exact: 0 } })
+    expect(rule).toMatchObject({ images: { exact: 0 }, videos: { exact: 0 } })
     expect(visible(model, 'apimartGeminiOmni12Channel', params)).toBe(false)
     expect(visible(model, 'apimartGeminiOmni12Mode', params)).toBe(false)
     expect(visible(model, 'apimartGeminiOmni12AspectRatio', params)).toBe(false)

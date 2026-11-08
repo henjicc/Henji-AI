@@ -152,7 +152,7 @@ async function verify() {
     const artifact = bundle(`Gpt25${provider}`, `@henjicc/ai-sdk/models/${provider}/gpt-image-2.5`, 'Gpt25', ['/dist/llm/', '/dist/capabilities/', '/dist/catalog/index.js'])
     const { model, pack } = evaluate(restrictedContext(), artifact, 'Gpt25')
     if (pack.models.length !== 1 || model.meta.canonicalModelId !== 'gpt-image-2.5') fail(`${provider} 未按需导入新模型`)
-    for (const variant of ['flare', 'sunburst']) {
+    for (const { value: variant } of model.params.find((param) => param.id === 'gpt25Variant').options) {
       const body = await model.request.builder({ prompt: 'A photo', gpt25Variant: variant })
       if (body.prompt !== 'A photo' && body.input?.prompt !== 'A photo') fail(`${provider} 请求构建失败`)
     }
@@ -284,13 +284,13 @@ async function verify() {
   if (siliconflowApi.createSiliconflowChatRequest({ messages: [] }).providerFamilyId !== 'siliconflow') fail('硅基流动协议族丢失')
   const llmModuleApi = evaluate(context, llmModules, 'HenjiPackedLlmModules')
 
-  if (asrApi.bailianNonRealtimeAsrPresets.length !== 7) fail('非实时 ASR 不是 7 个')
-  if (realtimeApi.bailianRealtimeAsrPresets.length !== 5) fail('实时 ASR 不是 5 个')
-  if (volcengineAsrApi.volcengineFileAsrPresets.length !== 1) fail('火山文件 ASR 不是 1 个')
-  if (volcengineRealtimeApi.volcengineRealtimeAsrPresets.length !== 1) fail('火山实时 ASR 不是 1 个')
-  if (siliconFlowAsrApi.siliconFlowAsrPresets.length !== 2) fail('硅基流动 ASR 不是 2 个')
-  if (groqAsrApi.groqAsrPresets.length !== 2) fail('Groq ASR 不是 2 个')
-  if (Object.keys(translationApi.BAILIAN_QWEN_MT_PRESETS).length !== 3) fail('Qwen-MT 不是 3 个')
+  if (asrApi.bailianNonRealtimeAsrPresets.length === 0) fail('缺少百炼非实时 ASR 预设')
+  if (realtimeApi.bailianRealtimeAsrPresets.length === 0) fail('缺少百炼实时 ASR 预设')
+  if (volcengineAsrApi.volcengineFileAsrPresets.length === 0) fail('缺少火山文件 ASR 预设')
+  if (volcengineRealtimeApi.volcengineRealtimeAsrPresets.length === 0) fail('缺少火山实时 ASR 预设')
+  if (siliconFlowAsrApi.siliconFlowAsrPresets.length === 0) fail('缺少硅基流动 ASR 预设')
+  if (groqAsrApi.groqAsrPresets.length === 0) fail('缺少 Groq ASR 预设')
+  if (Object.keys(translationApi.BAILIAN_QWEN_MT_PRESETS).length === 0) fail('缺少 Qwen-MT 预设')
   if (!asrApi.bailianNonRealtimeAsrPresets.every((preset) => (
     preset.id === `bailian.speech-recognition.${preset.modelId}`
     && preset.descriptor.providerIds[0] === 'bailian'

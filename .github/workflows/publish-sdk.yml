@@ -1,0 +1,55 @@
+name: Publish SDK
+
+# 由 npm 受信任发布（OIDC）发布 @henjicc/ai-sdk：npm 侧只认这个文件名，改名要同步 npm 包设置。
+# 只能手动触发（gh workflow run publish-sdk.yml），发布仍要用户明确下令。
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publish-sdk
+  cancel-in-progress: false
+
+env:
+  ONNXRUNTIME_NODE_INSTALL_CUDA: skip
+
+jobs:
+  publish:
+    name: 发布 SDK
+    # 受信任发布限制不了分支，只认 main 上的已验证源码。
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
+
+      # 与 build.yml 用同一个 npm 安装依赖。
+      - name: 安装依赖
+        run: npm ci
+
+      # 受信任发布要求 npm 11.5.1 以上，Node 22 自带的是 npm 10。
+      - name: 升级 npm
+        run: npm install -g npm@11
+
+      # 同一版本只能发一次；已存在时停下核实，不覆盖、不改版本重发。
+      - name: 确认版本未发布
+        run: |
+          version=$(node -p "require('./packages/ai-sdk/package.json').version")
+          if npm view "@henjicc/ai-sdk@$version" version --registry=https://registry.npmjs.org/ 2>/dev/null | grep -q .; then
+            echo "::error::@henjicc/ai-sdk@$version 已在 npm 上，先核实那次发布"
+            exit 1
+          fi
+
+      # prepublishOnly 会先跑 SDK 全量门禁、构建与仓外回装，任一失败都不会发布。
+      - name: 发布
+        run: npm publish -w packages/ai-sdk

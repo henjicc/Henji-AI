@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.10.0 - 未发布
+## 0.10.0 - 2026-11-08
 
 - 百炼新增 MiniMax H3（`bailian-minimax-h3`，平台模型 `MiniMax/MiniMax-H3`）：文生视频、首帧 / 首尾帧、参考生视频（≤ 9 图、3 段视频、3 段音频），768P ¥0.5/秒、2K ¥0.8/秒，参考视频按同价计入，参考图超过 5 张每张 ¥0.2。
 - 魔搭账号未完成邮箱验证时的 403 识别为 `provider_product_not_activated`（`scope: account`），提示到账号设置完成验证，不再抛英文原文。
