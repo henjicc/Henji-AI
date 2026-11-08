@@ -1,5 +1,5 @@
 import { executeApplicationWrite } from '@/core/application-control/execution/writeExecution'
-import { withPaidOperation, isPaidOperationCancelled } from '@/services/paidApproval'
+import { withPaidOperation } from '@/services/paidApproval'
 import { z } from 'zod'
 import { llmChatStream, llmCancelTask } from '@/commands/llmRuntime'
 import { createLogger } from '@/core/logging'
@@ -98,6 +98,5 @@ export async function confirmVideoEditBilingualSubtitles(projectId: string, sequ
   const owner = requireVideoEditInstance(projectId)
   signal?.throwIfAborted()
   if (requireVideoEditInstance(projectId) !== owner) throw new Error('原剪辑会话已关闭，请重新生成。')
-  try { await generateVideoEditBilingualSubtitles(projectId, sequenceId, options, signal) }
-  catch (error) { if (!isPaidOperationCancelled(error)) throw error }
+  await generateVideoEditBilingualSubtitles(projectId, sequenceId, options, signal)
 }

@@ -959,7 +959,7 @@
     "clear": "清除"
   },
   "paidApproval": {
-    "title": "AI 付费",
+    "title": "助手付费额度",
     "single": "单次上限",
     "daily": "每日上限",
     "unit": "元",

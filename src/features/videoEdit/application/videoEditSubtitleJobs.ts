@@ -1,5 +1,4 @@
 import { readVideoEditSubtitleManifest } from './videoEditSubtitleManifest'
-import { isPaidOperationCancelled } from '@/services/paidApproval'
 import { createLogger } from '@/core/logging'
 import { audioEditProjectFromDocument } from '@/core/audioEdit/documentContent'
 import { getPlatform } from '@/platform/runtime'
@@ -38,7 +37,7 @@ export async function runVideoEditSubtitleJob(owner: VideoEditInstance, sequence
     await generateVideoEditSubtitles(owner.document.id, sequenceId, job.audioDocumentId, prepared.modelId, options, signal)
     job.state = 'completed'
   } catch (error) {
-    job.state = signal.aborted || isPaidOperationCancelled(error) ? 'cancelled' : 'failed'; job.error = error instanceof Error ? error.message : String(error)
+    job.state = signal.aborted ? 'cancelled' : 'failed'; job.error = error instanceof Error ? error.message : String(error)
     if (job.state !== 'cancelled') throw error
   } finally { publish() }
 }

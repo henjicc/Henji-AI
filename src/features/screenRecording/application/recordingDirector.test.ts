@@ -60,17 +60,19 @@ it('复用重放执行设置操作，完成/失败/取消都恢复原主题', as
     expect(calls).toBe(2); expect(useSettingsStore.getState().themeSelection).toEqual(original)
   } finally { app.dispose() }
 })
-it('询问费用拒绝与执行中取消均不提交配音、不开始采集；总估价覆盖全部新句', async () => {
+it('付费准备期间取消不提交配音、不开始采集；总估价覆盖全部新句', async () => {
   const { id, app } = await prepared(), owner = await createVideoEditTestProject()
   try {
     const bridge = installPaidApprovalTestBridge({ singleLimitCny: 0 })
+    const send = bridge.complete.getMockImplementation()!
+    bridge.complete.mockImplementation(async reply => {
+      const result = await send(reply)
+      if (reply.uiPaidApproval?.action === 'prepare') { expect(recordingDirectorBusy(id)).toBe(true); cancelRecordingDirector(id) }
+      return result
+    })
     const pending = startRecordingDirector(id, owner.document.id, { signal: new AbortController().signal })
-    const assertion = expect(pending).rejects.toThrow()
-    await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
-    expect(recordingDirectorBusy(id)).toBe(true)
+    await expect(pending).rejects.toThrow()
     expect(bridge.complete.mock.calls[0][0].uiPaidApproval).toMatchObject({ request: { estimatedCny: .02 } })
-    cancelRecordingDirector(id)
-    await assertion
     expect(generateRecordingNarration).not.toHaveBeenCalled()
     expect(recordingDirectorBusy(id)).toBe(false)
     expect([...bridge.records.values()]).toMatchObject([{ state: 'not_executed' }])
@@ -78,18 +80,13 @@ it('询问费用拒绝与执行中取消均不提交配音、不开始采集；�
   } finally { app.dispose() }
 })
 
-it('明确接受一次总费用后逐句生成；采集失败保留已完成配音，重试不重付', async () => {
+it('超出额度也不弹确认，按一次总费用逐句生成；采集失败保留已完成配音，重试不重付', async () => {
   const { id, app } = await prepared(), owner = await createVideoEditTestProject()
   try {
     const bridge = installPaidApprovalTestBridge({ singleLimitCny: 0 })
     vi.mocked(generateRecordingNarration).mockImplementation(async text => ({ path: `/fixture/${text.length}.wav`, durationUs: 2e6 }))
     vi.spyOn(getPlatform().screenRecording, 'capture').mockRejectedValue(new Error('测试采集不可用'))
-    const pending = startRecordingDirector(id, owner.document.id, { signal: new AbortController().signal })
-    const assertion = expect(pending).rejects.toThrow('测试采集不可用')
-    await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
-    expect(generateRecordingNarration).not.toHaveBeenCalled()
-    useAlertDialogStore.getState().confirmCurrent()
-    await assertion
+    await expect(startRecordingDirector(id, owner.document.id, { signal: new AbortController().signal })).rejects.toThrow('测试采集不可用')
     expect(generateRecordingNarration).toHaveBeenCalledTimes(2)
     expect((await readRecordingUnderstanding(id)).content.directorRun?.takes).toHaveLength(2)
     await expect(startRecordingDirector(id, owner.document.id, { signal: new AbortController().signal })).rejects.toThrow('测试采集不可用')
@@ -110,10 +107,10 @@ it('部分旁白完成后恢复，未开始的句子复用整批预留，不重�
     vi.spyOn(getPlatform().screenRecording, 'capture').mockRejectedValue(new Error('测试采集不可用'))
     const run = () => startRecordingDirector(id, owner.document.id, { signal: new AbortController().signal })
     await expect(run()).rejects.toThrow('第二句开始前中断')
-    expect(bridge.store.generationSpendSince(0)).toBe(.02)
+    expect(bridge.reservedCny()).toBe(.02)
     await expect(run()).rejects.toThrow('测试采集不可用')
     expect(generateRecordingNarration).toHaveBeenCalledTimes(3)
-    expect(bridge.store.generationSpendSince(0)).toBe(.02)
+    expect(bridge.reservedCny()).toBe(.02)
   } finally { app.dispose() }
 })
 
@@ -137,7 +134,7 @@ it('导演提交后保存任务关联失败，重新读取会话仍使用原提�
     await expect(run()).rejects.toThrow('测试采集不可用')
     expect(submissions.size).toBe(2)
     expect(generateRecordingNarration).toHaveBeenCalledTimes(3)
-    expect(bridge.store.generationSpendSince(0)).toBe(.02)
+    expect(bridge.reservedCny()).toBe(.02)
   } finally { app.dispose() }
 })
 
@@ -156,7 +153,7 @@ it('恢复时混合已预留的句子与改写的新句，只为新句增加额�
     read.content.understanding.director!.narration[0].text = '更新后的第一句。'
     await getPlatform().documents.saveDocument({ target: { id }, expectedRevision: read.meta.revision, content: read.content })
     await expect(run()).rejects.toThrow('测试采集不可用')
-    expect(bridge.store.generationSpendSince(0)).toBeCloseTo(.03)
+    expect(bridge.reservedCny()).toBeCloseTo(.03)
     expect(generateRecordingNarration).toHaveBeenCalledTimes(4)
   } finally { app.dispose() }
 })

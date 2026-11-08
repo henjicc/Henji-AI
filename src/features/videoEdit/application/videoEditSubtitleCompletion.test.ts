@@ -162,16 +162,9 @@ it('双语取消传给现有LLM取消入口，任务期间旧字幕被改拒绝�
   expect(sequence().captions![0]).toMatchObject({ text: '手工新文字' }); expect(sequence().captions![0].translation).toBeUndefined()
 })
 
-it('手动双语先费用确认，取消不调用LLM；助手能力按R2，经公共入口保存并通用读写译文', async () => {
-  const bridge = installPaidApprovalTestBridge({ singleLimitCny: 0 })
+it('助手双语能力按R2，经公共入口保存并通用读写译文', async () => {
+  installPaidApprovalTestBridge({ unlimited: true })
   const id = createVideoEditCaption(owner.document.id, sequence().id, { start: 0, duration: 30, text: '原文' })
-  const confirmation = confirmVideoEditBilingualSubtitles(owner.document.id, sequence().id, { targetLanguage: 'en' })
-  await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
-  expect(llmChatStream).not.toHaveBeenCalled()
-  useAlertDialogStore.getState().dismissCurrent(); await confirmation
-  expect(llmChatStream).not.toHaveBeenCalled()
-  expect([...bridge.records.values()]).toMatchObject([{ state: 'not_executed' }])
-  bridge.setSettings({ unlimited: true })
   const app = createApplicationHarness()
   try {
     const result = await app.requireResult('translate_video_edit_subtitles', { documentRef: { kind: 'video_edit.document', id: owner.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${owner.document.id}:${sequence().id}` }, targetLanguage: 'en' })
@@ -185,14 +178,10 @@ it('手动双语先费用确认，取消不调用LLM；助手能力按R2，经�
   } finally { app.dispose() }
 })
 
-it('手动双语确认后才调用模型，整批共用一次费用授权', async () => {
+it('手动双语超出额度也不弹确认，整批共用一次费用授权', async () => {
   const bridge = installPaidApprovalTestBridge({ singleLimitCny: 0 })
   Array.from({ length: 13 }, (_, index) => createVideoEditCaption(owner.document.id, sequence().id, { start: index * 30, duration: 30, text: `原文${index}` }))
-  const pending = confirmVideoEditBilingualSubtitles(owner.document.id, sequence().id, { targetLanguage: 'en' })
-  await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
-  expect(llmChatStream).not.toHaveBeenCalled()
-  useAlertDialogStore.getState().confirmCurrent()
-  await pending
+  await confirmVideoEditBilingualSubtitles(owner.document.id, sequence().id, { targetLanguage: 'en' })
   expect(llmChatStream).toHaveBeenCalledTimes(2)
   expect(useAlertDialogStore.getState().queue).toHaveLength(0)
   expect([...bridge.records.values()]).toMatchObject([{ state: 'completed', paidReservations: [{ category: 'translation' }] }])

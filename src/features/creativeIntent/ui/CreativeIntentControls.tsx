@@ -1,8 +1,6 @@
 import { AudioCaptureSettingsForm } from '@/features/audioCapture'
 import { PanelTrigger, UiTooltipText } from '@/components/ui'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
-import { ExplanationSendConfirmation } from './ExplanationSendConfirmation'
-import type { ExplanationSendRequest } from '../application/explanationGeneration'
 import { useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Dropdown, UiButton, UiChipButton, UiDisclosurePanel, UiGroup, UiFormRow, UiIconButton, UiSegmented, UiOptionButton, UiRangeInput, UiError, UiLoading, UiSwitch, UI_TEXT_META_CLASS } from '@/components/ui'
@@ -48,7 +46,7 @@ interface SharedCreativeIntentControlsProps {
   referenceActive?: boolean
   /** 放在最上方的入口（如“继续上次原稿”）。 */
   leadingControls?: ReactNode;
-  contextKey?: string; prepareGeneration?: () => Promise<ExplanationSendRequest | undefined>; onError?: (error: unknown) => void
+  contextKey?: string; prepareGeneration?: () => Promise<void>; onError?: (error: unknown) => void
   onCancel: () => void
   onOptimize: () => void | Promise<void>; onApply: () => void; onPreview: (id: string) => void
   onFidelity: (value: number) => void; onPin: () => void; onUnpin: (id: string) => void
@@ -77,18 +75,17 @@ export function CreativeIntentControls(props: CreativeIntentControlsProps): Reac
   const { t } = useTranslation('ui')
   const [fidelity, setFidelity] = useState<number | null>(null); const pending = useRef<number | null>(null)
   const finishFidelity = (commit: boolean): void => { if (commit && pending.current !== null && pending.current !== props.fidelity) props.onFidelity(pending.current); pending.current = null; setFidelity(null) }
-  const [request, setRequest] = useState<{ key?: string; value: ExplanationSendRequest }>(), [generating, setGenerating] = useState(false)
+  const [generating, setGenerating] = useState(false)
   const pendingGeneration = useRef(false), currentKey = useRef(props.contextKey); currentKey.current = props.contextKey
-  const optimize = (confirmation?: ExplanationSendRequest): void => {
+  const optimize = (): void => {
     if (pendingGeneration.current) return
-    if (!props.prepareGeneration && !confirmation) { try { void Promise.resolve(props.onOptimize()).catch(error => props.onError?.(error)) } catch (error) { props.onError?.(error) } return }
+    if (!props.prepareGeneration) { try { void Promise.resolve(props.onOptimize()).catch(error => props.onError?.(error)) } catch (error) { props.onError?.(error) } return }
     pendingGeneration.current = true; setGenerating(true)
     const key = props.contextKey
     void (async () => {
-      if (confirmation) await confirmation.confirm()
-      else { const prepared = await props.prepareGeneration?.(); if (currentKey.current !== key) { await prepared?.cancel(); return } if (prepared) { setRequest({ key, value: prepared }); return } }
+      await props.prepareGeneration?.()
       if (currentKey.current !== key) return
-      setRequest(undefined); await props.onOptimize()
+      await props.onOptimize()
     })().catch(error => props.onError?.(error)).finally(() => { pendingGeneration.current = false; setGenerating(false) })
   }
   const motion = props.profile === undefined || props.profile === 'motion' ? props : undefined
@@ -186,6 +183,5 @@ export function CreativeIntentControls(props: CreativeIntentControlsProps): Reac
         <UiButton variant={demonstration && !reviewing && !props.needsSave ? 'secondary' : 'primary'} size="sm" disabled={props.status === 'idle'} disabledReason={t('creativeIntent.idleHint', { defaultValue: '先示范一次运动' })} onClick={apply || props.needsSave ? props.onApply : () => optimize()}>{props.needsSave ? t('creativeIntent.retrySave', { defaultValue: '重试保存' }) : apply ? t('creativeIntent.apply', { defaultValue: '应用' }) : t('creativeIntent.organize', { defaultValue: '整理' })}</UiButton>
       </>}
     </div>}
-    <ExplanationSendConfirmation request={request?.key === props.contextKey ? request?.value : undefined} generating={generating} onCancel={() => { if (!pendingGeneration.current) { void request?.value.cancel().catch(props.onError); setRequest(undefined) } }} onSend={() => { if (request?.key === props.contextKey) optimize(request?.value) }} />
   </div>
 }

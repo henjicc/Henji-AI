@@ -357,11 +357,8 @@ it('识别完成后片段变化保留计费事实和恢复引用，不写字幕�
     return result
   })
   installPaidApprovalTestBridge({ singleLimitCny: 0 })
-  const pending = generateClipSpeechSubtitles(owner.document.id, sequence().id, 'voice', { originalText: 'Hello' })
-  const failed = pending.catch(error => error as import('@/core/audioEdit/transcriptionFailure').TranscriptionFailure)
-  await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
-  useAlertDialogStore.getState().confirmCurrent()
-  const error = await failed
+  const error = await generateClipSpeechSubtitles(owner.document.id, sequence().id, 'voice', { originalText: 'Hello' })
+    .catch(error => error as import('@/core/audioEdit/transcriptionFailure').TranscriptionFailure)
   expect(error).toMatchObject({ transcriptionFacts: { billing: 'completed', targetMutation: 'none', audioDocumentId: expect.any(String) } })
   const audioDocumentId = (error as import('@/core/audioEdit/transcriptionFailure').TranscriptionFailure).transcriptionFacts.audioDocumentId!
   expect(sequence().captions ?? []).toHaveLength(0)
@@ -389,24 +386,23 @@ it('公共调用识别确认通过同一弹窗发布等待事实，拒绝为零�
   expect(sequence().captions ?? []).toHaveLength(0)
   unbind()
 })
-it('recognition fallback waits for billing confirmation and cancellation never starts ASR', async () => {
+it('recognition fallback cancelled before dispatch never starts ASR', async () => {
   const controller = new AbortController()
   installPaidApprovalTestBridge({ singleLimitCny: 0 })
+  let release!: () => void
+  vi.mocked(getPlatform().audioEdit.preflightTranscription).mockImplementationOnce(() => new Promise(resolve => { release = () => resolve({ modelId: 'test-asr', requiresConfirmation: true }) }))
   const pending = generateClipSpeechSubtitles(owner.document.id, sequence().id, 'voice', { originalText: '你好' }, controller.signal)
   const rejected = expect(pending).rejects.toThrow()
-  await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
+  await vi.waitFor(() => expect(getPlatform().audioEdit.preflightTranscription).toHaveBeenCalled())
+  controller.abort(); release(); await rejected
   expect(getPlatform().audioEdit.transcribe).not.toHaveBeenCalled()
-  controller.abort(); await rejected
-  expect(getPlatform().audioEdit.transcribe).not.toHaveBeenCalled()
+  expect(useAlertDialogStore.getState().queue).toHaveLength(0)
 })
-it('confirmed fallback keeps original words and reuses its saved ASR document after undo', async () => {
+it('UI recognition fallback runs without a billing dialog, keeps original words and reuses its saved ASR document after undo', async () => {
   vi.mocked(getPlatform().audioEdit.probeSource).mockResolvedValue({ mediaType: 'audio', sourcePath: 'D:/voice.wav', audioPath: 'D:/voice.wav', sampleRate: 1000, channels: 1, durationFrames: 12000 })
   const bridge = installPaidApprovalTestBridge({ singleLimitCny: 0 })
-  const pending = generateClipSpeechSubtitles(owner.document.id, sequence().id, 'voice', { originalText: 'Hello worlds.' })
-  await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
-  expect(getPlatform().audioEdit.transcribe).not.toHaveBeenCalled()
-  useAlertDialogStore.getState().confirmCurrent()
-  const result = await pending
+  const result = await generateClipSpeechSubtitles(owner.document.id, sequence().id, 'voice', { originalText: 'Hello worlds.' })
+  expect(useAlertDialogStore.getState().queue).toHaveLength(0)
   expect(result.timingSource).toBe('recognition')
   expect([...bridge.records.values()]).toMatchObject([{ origin: { actor: 'user' }, state: 'completed', paidReservations: [{ category: 'recognition' }] }])
   expect(result.subtitles.map(value => value.caption.text).join('')).toBe('Hello worlds.')
@@ -645,12 +641,14 @@ it('显式选择序列时钟时SRT保留序列时间，默认与成片一致从�
     expect(texts.get('D:/captions.srt')).toContain('00:00:00,000 --> 00:00:01,000')
   } finally { app.dispose() }
 })
-it('费用确认取消不提交识别，取消任务保存稳定声音引用可恢复', async () => {
+it('识别准备期间取消不提交识别，取消任务保存稳定声音引用可恢复', async () => {
   installPaidApprovalTestBridge({ singleLimitCny: 0 })
+  let release!: () => void
+  vi.mocked(getPlatform().audioEdit.preflightTranscription).mockImplementationOnce(() => new Promise(resolve => { release = () => resolve({ modelId: 'test-asr', requiresConfirmation: true }) }))
   const run = runVideoEditSubtitleJob(owner, sequence().id, 'sequence', undefined, {})
-  while (!useAlertDialogStore.getState().queue.length) await new Promise(resolve => setTimeout(resolve, 0))
+  await vi.waitFor(() => expect(getPlatform().audioEdit.preflightTranscription).toHaveBeenCalled())
   expect(readSubtitleJob(owner, sequence().id)?.audioDocumentId).toBeTruthy()
-  cancelSubtitleJob(owner, sequence().id); await run
+  cancelSubtitleJob(owner, sequence().id); release(); await run
   expect(readSubtitleJob(owner, sequence().id)?.state).toBe('cancelled'); expect(getPlatform().audioEdit.transcribe).not.toHaveBeenCalled()
 })
 it('共享文字渲染取消字幕行数上限，文字写入可撤销', () => {

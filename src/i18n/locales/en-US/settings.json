@@ -961,7 +961,7 @@
     "clear": "Clear"
   },
   "paidApproval": {
-    "title": "AI payments",
+    "title": "Assistant spending limits",
     "single": "Per task limit",
     "daily": "Daily limit",
     "unit": "CNY",

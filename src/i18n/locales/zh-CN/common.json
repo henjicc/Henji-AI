@@ -65,7 +65,6 @@
   },
   "paidApproval": {
     "canvasText": "画布文本处理",
-    "generateContent": "生成内容",
     "operationContent": "你发起的操作将使用已配置的模型，按模型计费。",
     "generateText": "生成文本",
     "generateReply": "生成模型回复",

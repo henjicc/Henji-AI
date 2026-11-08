@@ -1,4 +1,5 @@
 import { applicationGenerationTaskId } from '@/core/application-control/operationIdentity'
+import { transferGenerationPaidApproval } from '@/core/services/generationSubmissionConfirmation'
 import {
   generateVideoEditInPlaceCapability, getVideoEditInPlaceGenerationCapability, prepareVideoEditInPlaceGenerationCapability, switchVideoEditClipTakeCapability,
   type VideoEditInPlaceCapabilityInput,
@@ -80,7 +81,11 @@ export async function handleVideoEditInPlaceCapability(id: string, raw: unknown,
     const existing = findVideoEditInPlaceJobByTask(taskId)
     const request = toRequest(input)
     const original = !existing && input.replacesTaskRef ? requireVideoEditFailedGeneration(input.documentRef.id, input.replacesTaskRef.id) : undefined
-    const started = existing ? { job: existing, taskId } : await startVideoEditInPlaceGeneration(request, { taskId, ...(original ? { replacesJobId: original.id } : {}) })
+    // 助手调用已按付费策略批准；把收据交给这次生成，生成服务不再当作用户在界面上发起。
+    const releaseApproval = existing ? () => undefined : transferGenerationPaidApproval(taskId, context.signal)
+    let started: Awaited<ReturnType<typeof startVideoEditInPlaceGeneration>>
+    try { started = existing ? { job: existing, taskId } : await startVideoEditInPlaceGeneration(request, { taskId, ...(original ? { replacesJobId: original.id } : {}) }) }
+    catch (error) { releaseApproval(); throw error }
     const references = selectedVideoEditInPlaceReferences(started.job.plan, started.job.request, started.job.modelId,
       { ...videoEditInPlaceDefaultParams(started.job.modelId, started.job.plan), ...started.job.request.params })
       .map(reference => videoEditInPlaceReferenceLabel(reference, started.job.plan.fps))

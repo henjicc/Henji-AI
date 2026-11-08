@@ -194,8 +194,6 @@
     "musicRemixed": "Music remixed into {{segments}} segments ({{seams}} seams). Undo restores the original.",
     "sentToEdit": "Added to editing and saved. You can undo in the editing workspace.",
     "sendToEditFailed": "Could not add to editing: {{reason}}",
-    "autoApprovedEstimate": "Executed under your automatic approval rule. Estimated cost: ¥{{amount}}",
-    "autoApprovedMetered": "Executed under your automatic approval rule. Charges follow actual model usage.",
     "videoSaveFailed": "Video could not be saved. Upload it again before generating.",
     "cloneAudioSaveFailed": "Voice sample could not be saved. Upload it again and retry.",
     "exampleAudioSaveFailed": "Example audio could not be saved. Upload it again and retry.",

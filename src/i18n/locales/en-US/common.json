@@ -65,7 +65,6 @@
   },
   "paidApproval": {
     "canvasText": "Process canvas text",
-    "generateContent": "Generate content",
     "operationContent": "This operation uses your configured model and is billed at its rates.",
     "generateText": "Generate text",
     "generateReply": "Generate a model reply",

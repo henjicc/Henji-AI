@@ -1,4 +1,3 @@
-import { notificationMessage } from '@/i18n/notifications'
 import i18n from '@/i18n'
 import { convertPriceAmount, readPriceEstimateDisplaySettings } from '@/core/pricing/priceDisplay'
 import { z } from 'zod'
@@ -9,9 +8,7 @@ import type { TranscriptionPreparation } from '@/core/audioEdit/transcriptionFai
 import { getDocumentOperations } from '@/features/documents/documentOperations'
 import { bindPaidOperationReceipt, hasApplicationConfirmation, hasApplicationPaidApproval } from '@/core/application-control/userConfirmation'
 import type { PaidApprovalRequest, PaidOperationCategory, PaidFailureFacts } from '@/core/application-control/paidApproval'
-import { uiPaidApprovalDecisionSchema, paidApprovalMessage, isPaidConfirmationExpired, readPaidFailureFacts } from '@/core/application-control/paidApproval'
-import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
-import { notifyUser } from '@/contexts/NotificationContext'
+import { paidApprovalDecisionSchema, readPaidFailureFacts } from '@/core/application-control/paidApproval'
 import { getPlatform } from '@/platform/runtime'
 import { rendererEpoch } from '@/features/application-control/rendererIdentity'
 import type { LocalHostReply } from '@/core/application-control/localHostContracts'
@@ -61,17 +58,9 @@ export async function prepareUiPaidApproval(request: PaidApprovalRequest, capabi
   const send = (action: NonNullable<LocalHostReply['uiPaidApproval']>['action'], failureFacts?: PaidFailureFacts) => getPlatform().applicationControl.complete({
     requestId, rendererEpoch, result: {}, uiPaidApproval: { action, request, capabilityId, ...(failureFacts ? { failureFacts } : {}) },
   })
-  const decision = uiPaidApprovalDecisionSchema.parse(await send('prepare'))
-  return { receipt: { operationId: requestId, callerId: rendererEpoch }, decision, project: request.project, confirm: async () => {
-    try { return await send('approve') }
-    catch (error) {
-      if (isPaidConfirmationExpired(error)) throw new PaidOperationCancelledError(error)
-      throw error
-    }
-  }, start: async () => {
-    await send('start')
-    if (decision.decision === 'auto') notifyUser(decision.estimatedCny === null ? notificationMessage('autoApprovedMetered') : notificationMessage('autoApprovedEstimate', { amount: decision.estimatedCny.toFixed(2) }))
-  }, complete: () => send('complete'), reject: () => send('reject'), failed: (error?: unknown) => send('failed', readPaidFailureFacts(error)) }
+  const decision = paidApprovalDecisionSchema.parse(await send('prepare'))
+  return { receipt: { operationId: requestId, callerId: rendererEpoch }, decision, project: request.project,
+    start: () => send('start'), complete: () => send('complete'), reject: () => send('reject'), failed: (error?: unknown) => send('failed', readPaidFailureFacts(error)) }
 }
 
 export interface PaidOperationOptions {
@@ -87,27 +76,14 @@ export interface PaidOperationOptions {
 // Receipts only live for this call. They cannot be supplied by tools or carried to another UI action.
 const uiCapabilities = { generation: 'ui_generate_text', recognition: 'transcribe_audio_edit', translation: 'ui_translate_subtitles', title: 'ui_generate_title', explanation: 'interpret_video_edit_intent' } as const
 
-export class PaidOperationCancelledError extends ApplicationPreflightFailure {}
-export function isPaidOperationCancelled(error: unknown): boolean {
-  const seen = new Set<Error>()
-  while (error instanceof Error && !seen.has(error)) {
-    if (error instanceof PaidOperationCancelledError) return true
-    seen.add(error); error = error.cause
-  }
-  return false
-}
-
-/** 生成提交确认被拒（付费确认点了取消、确认过期）与中途停止：名字跨模块、跨桌面桥都可靠（src/core/nativeErrors.ts） */
+/** 生成提交确认被拒与中途停止：名字跨模块、跨桌面桥都可靠（src/core/nativeErrors.ts） */
 const USER_CANCELLATION_NAMES = new Set(['GenerationSubmissionCancelledError', 'AbortError'])
 
-/**
- * 用户主动取消（付费确认点了取消、生成提交被拒、中途停止），沿 cause 链判断。调用方据此记信息日志、
- * 不弹错误：此前取消付费确认会记 canvas.execution.failed、embedded_agent.ui.failed 两条错误日志，助手还会显示报错。
- */
+/** 用户主动取消（生成提交被拒、中途停止），沿 cause 链判断；调用方据此记信息日志，不弹错误。 */
 export function isUserCancellation(error: unknown): boolean {
   const seen = new Set<Error>()
   while (error instanceof Error && !seen.has(error)) {
-    if (error instanceof PaidOperationCancelledError || USER_CANCELLATION_NAMES.has(error.name)) return true
+    if (USER_CANCELLATION_NAMES.has(error.name)) return true
     seen.add(error); error = error.cause
   }
   return false
@@ -120,10 +96,10 @@ export async function withPaidOperation<T>(options: PaidOperationOptions, work: 
   const request = await applicationPaidRequest(options.category, options.documentId, signal, options.estimatedCny ?? null)
   if (options.generationTaskIds) request.generationTaskIds = options.generationTaskIds
   if (options.generationTaskEstimates) request.generationTaskEstimates = options.generationTaskEstimates
-  const { requestAlertConfirmation } = await import('@/stores/alertDialogStore')
-  const title = i18n.t(options.titleKey ?? `paidApproval.categories.${options.category}`, { ns: 'common' })
-  const message = i18n.t(options.messageKey ?? 'paidApproval.operationContent', { ns: 'common' })
   if (hasApplicationConfirmation(signal)) {
+    const { requestAlertConfirmation } = await import('@/stores/alertDialogStore')
+    const title = i18n.t(options.titleKey ?? `paidApproval.categories.${options.category}`, { ns: 'common' })
+    const message = i18n.t(options.messageKey ?? 'paidApproval.operationContent', { ns: 'common' })
     await requestAlertConfirmation({ title, message, confirmLabel: i18n.t('paidApproval.allowOnce', { ns: 'common' }), paid: request }, signal)
     signal!.throwIfAborted()
     return work(signal!)
@@ -137,15 +113,6 @@ export async function withPaidOperation<T>(options: PaidOperationOptions, work: 
   let started = false
   let workCompleted = false
   try {
-    controller.signal.throwIfAborted()
-    if (paid.decision.decision === 'deny') throw new ApplicationPreflightFailure(paid.decision.reason)
-    if (paid.decision.decision === 'ask') {
-      const accepted = await requestAlertConfirmation({ title, message, paidDetails: paidApprovalMessage(paid.decision, options.category), confirmLabel: i18n.t('paidApproval.allowOnce', { ns: 'common' }),
-        paidConfirmation: true }, controller.signal)
-      if (!accepted) throw new PaidOperationCancelledError('已取消，未执行本次操作，也未提交付费请求。')
-      controller.signal.throwIfAborted()
-      await paid.confirm()
-    }
     controller.signal.throwIfAborted()
     await paid.start(); started = true
     releaseReceipt = bindPaidOperationReceipt(controller.signal, paid.receipt, options.category)

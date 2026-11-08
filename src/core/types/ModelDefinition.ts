@@ -439,7 +439,7 @@ export interface ModelDefinition {
    */
   paramPresentation?: ModelParamPresentation
 
-  /** 宿主统一 AI 付费确认的补充说明；是否询问由 paidApprovalPolicy 决定。 */
+  /** 模型自带的提交前说明（如固定附加费用）；条件成立时用户每次提交都要确认。 */
   submissionConfirmation?: {
     condition: (params: DynamicValueMap) => boolean
     title: I18nText

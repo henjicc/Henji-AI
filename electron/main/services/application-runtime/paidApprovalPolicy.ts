@@ -1,18 +1,17 @@
 import type { AiGenerateRequestDto } from '@henjicc/ai-sdk'
 import { operationDigest } from '../application-control/operationDigest'
 import type { PaidOperationReceipt } from '../../../../src/core/application-control/paidApproval'
-import { UI_PAID_CAPABILITIES, PAID_OPERATION_LABELS, readPaidApprovalSettingsValue, PAID_APPROVAL_SETTING_KEY, generationReservationKey, type PaidReservation, type PaidApprovalSettings, type PaidApprovalRequest, type PaidApprovalDecision, type PaidApprovalReceipt } from '../../../../src/core/application-control/paidApproval'
+import { UI_PAID_CAPABILITIES, readPaidApprovalSettingsValue, PAID_APPROVAL_SETTING_KEY, generationReservationKey, type PaidReservation, type PaidApprovalSettings, type PaidApprovalRequest, type PaidApprovalDecision, type PaidApprovalReceipt } from '../../../../src/core/application-control/paidApproval'
 import type { ApplicationOperationStore, OperationRecord } from './operationStore'
 import { getSettingsStore } from '../settings/store'
 import { createMainLogger } from '../logging'
-import { applicationUserConfirmation } from '../../../../src/core/application-control/userConfirmation'
 import type { LocalHostReply } from '../../../../src/core/application-control/localHostContracts'
 
 const logger = createMainLogger('main.application_runtime.paid_approval')
 export function localDayStart(now: number): number {
   const date = new Date(now); date.setHours(0, 0, 0, 0); return date.getTime()
 }
-/** 所有入口共享额度，估价由正式准备服务提供。 */
+/** 助手的各个入口共享额度，估价由正式准备服务提供。 */
 export function decidePaidApproval(settings: PaidApprovalSettings, request: PaidApprovalRequest, dailySpentCny: number, estimateKind?: 'upper-bound' | 'estimate'): PaidApprovalDecision {
   const base = { estimatedCny: request.estimatedCny, dailySpentCny }
   const decision = (decision: PaidApprovalDecision['decision'], reason: string): PaidApprovalDecision => ({ ...base, decision, reason })
@@ -54,7 +53,11 @@ export function approvePaidOperation(store: Pick<ApplicationOperationStore, 'get
   }
   const incremental = fresh.some(item => item.estimatedCny === null) ? null : fresh.reduce((sum, item) => sum + (item.estimatedCny ?? 0), 0)
   const approvalRequest = { ...reservationRequest, estimatedCny: incremental }
-  const decision = decidePaidApproval(settings, approvalRequest, store.generationSpendSince(localDayStart(now)), request.category === 'generation' ? record.paidGenerationEstimateKind : undefined)
+  const dailySpentCny = store.generationSpendSince(localDayStart(now))
+  // 额度只约束助手；用户在界面上亲手点的操作本身就是确认。
+  const decision: PaidApprovalDecision = record.origin?.actor === 'user'
+    ? { decision: 'auto', reason: '用户亲自发起', estimatedCny: incremental, dailySpentCny }
+    : decidePaidApproval(settings, approvalRequest, dailySpentCny, request.category === 'generation' ? record.paidGenerationEstimateKind : undefined)
   if (decision.decision === 'deny') return decision
   if (decision.decision === 'auto' || consent) {
     const approval: PaidApprovalReceipt = { decision: consent ? 'user' : 'auto', reason: consent ? '用户确认' : decision.reason }
@@ -65,8 +68,8 @@ export function approvePaidOperation(store: Pick<ApplicationOperationStore, 'get
   return decision
 }
 
-/** All UI paid operations share the policy, reservations and operation lifecycle. */
-export function handleUiPaidApproval(store: Pick<ApplicationOperationStore, 'get' | 'save' | 'generationSpendSince' | 'generationTaskReservations' | 'prepare'>, reply: LocalHostReply): (PaidApprovalDecision & { expiresAt?: number | null }) | void {
+/** 界面付费操作由用户亲自发起，不受额度限制，但仍走同一套预留与执行账本。 */
+export function handleUiPaidApproval(store: Pick<ApplicationOperationStore, 'get' | 'save' | 'generationSpendSince' | 'generationTaskReservations' | 'prepare'>, reply: LocalHostReply): PaidApprovalDecision | void {
   const command = reply.uiPaidApproval!
   if (command.request.category !== UI_PAID_CAPABILITIES[command.capabilityId]) throw new Error('付费类别与正式操作不一致。')
   const callerId = reply.rendererEpoch
@@ -76,25 +79,15 @@ export function handleUiPaidApproval(store: Pick<ApplicationOperationStore, 'get
     const { generationTaskEstimates: _estimates, ...paid } = command.request
     record = store.prepare({ operationId: reply.requestId, callerId, capabilityId: command.capabilityId,
       input: { paid }, inputDigest: JSON.stringify(command.request), state: 'preparing', origin: { at: Date.now(), actor: 'user' } })
-    const decision = approvePaidOperation(store, record, command.request)
-    const current = store.get(record.operationId, callerId)!
-    const confirmation = decision.decision === 'ask' ? applicationUserConfirmation({ title: PAID_OPERATION_LABELS[command.request.category], message: '你发起的操作将使用已配置的模型，按模型计费。', confirmLabel: '允许本次', paid: decision }) : undefined
-    store.save({ ...current, state: confirmation ? 'awaiting_user_confirmation' : 'preparing', confirmation })
-    return { ...decision, expiresAt: confirmation?.expiresAt ?? null }
+    return approvePaidOperation(store, record, command.request)
   }
   if (!record || record.capabilityId !== command.capabilityId || record.inputDigest !== JSON.stringify(command.request)) throw new Error('付费请求与原授权不一致。')
-  if (command.action === 'approve') {
-    if (record.state !== 'awaiting_user_confirmation' || !record.confirmation || record.confirmation.expiresAt === null || record.confirmation.expiresAt <= Date.now()) throw new Error('付费确认已结束，请重新发起。')
-    const decision = approvePaidOperation(store, record, command.request, 'once')
-    store.save({ ...store.get(record.operationId, callerId)!, state: 'preparing', confirmation: undefined })
-    return decision
-  }
   if (command.action === 'start') {
     if (record.state !== 'preparing' || !record.approval) throw new Error('请先确认本次付费操作。')
     store.save({ ...record, state: 'executing' })
   } else if (command.action === 'reject') {
-    if (!['preparing', 'awaiting_user_confirmation'].includes(record.state)) throw new Error('已开始发送，无法撤回计费。')
-    store.save({ ...record, state: 'not_executed', confirmation: undefined, verificationState: 'verified' })
+    if (record.state !== 'preparing') throw new Error('已开始发送，无法撤回计费。')
+    store.save({ ...record, state: 'not_executed', verificationState: 'verified' })
   } else {
     if (record.state !== 'executing') throw new Error('付费操作尚未开始。')
     const completed = command.action === 'complete'

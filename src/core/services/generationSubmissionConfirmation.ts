@@ -2,7 +2,7 @@ import i18n from '@/i18n'
 import { getI18nText } from '@/core/types/I18nText'
 import type { ModelDefinition } from '@/core/types/ModelDefinition'
 import { applicationPaidOperationReceipt, hasApplicationPaidApproval } from '../application-control/userConfirmation'
-import { paidApprovalMessage, isPaidConfirmationExpired, type PaidOperationReceipt, type PaidApprovalDisplay } from '../application-control/paidApproval'
+import type { PaidOperationReceipt } from '../application-control/paidApproval'
 import { prepareGenerationPaidApproval } from '@/services/paidApproval'
 
 export interface GenerationSubmissionConfirmationRequest {
@@ -10,8 +10,6 @@ export interface GenerationSubmissionConfirmationRequest {
   title: string
   message: string
   confirmLabel: string
-  paidDetails?: PaidApprovalDisplay
-  paidConfirmation?: boolean
 }
 
 export type GenerationSubmissionConfirm = (
@@ -39,7 +37,7 @@ export interface GenerationPaidExecution {
   reject(): Promise<unknown>
 }
 
-/** 由渲染层装配确认交互；未装配时禁止提交需要确认的请求。 */
+/** 由渲染层装配模型自带提交说明的确认交互；未装配时禁止提交。 */
 export function configureGenerationSubmissionConfirmation(confirm: GenerationSubmissionConfirm): void {
   requestConfirmation = confirm
 }
@@ -57,23 +55,17 @@ export async function confirmGenerationSubmission(model: ModelDefinition, params
   if (!requestConfirmation) throw new Error('生成提交确认未初始化')
   const paid = await prepareGenerationPaidApproval(model.meta.id, params, projectId)
   try {
-  signal.throwIfAborted()
-  if (paid.decision.decision === 'deny') throw new GenerationSubmissionCancelledError()
-  if (paid.decision.decision === 'auto') return paid
-  const accepted = await requestConfirmation({
-    type: 'warning',
-    title: confirmation ? getI18nText(confirmation.title, i18n.language) : i18n.t('paidApproval.generateContent', { ns: 'common' }),
-    message: confirmation ? getI18nText(confirmation.message, i18n.language) : i18n.t('paidApproval.operationContent', { ns: 'common' }),
-    paidDetails: paidApprovalMessage(paid.decision, 'generation', getI18nText(model.meta.name, i18n.language)),
-    confirmLabel: i18n.t('paidApproval.allowOnce', { ns: 'common' }), paidConfirmation: true,
-  }, signal)
-  if (!accepted || signal.aborted) throw new GenerationSubmissionCancelledError()
-  try { await paid.confirm() }
-  catch (error) {
-    // IPC 往返期间刚好越过账本期限，仍属于未提交的取消。
-    if (isPaidConfirmationExpired(error)) throw new GenerationSubmissionCancelledError()
-    throw error
-  }
-  return paid
+    signal.throwIfAborted()
+    // 用户亲自发起的生成不受付费额度限制；模型自带的费用说明（如克隆音色另收的固定费用）仍须用户逐次确认。
+    if (confirmation) {
+      const accepted = await requestConfirmation({
+        type: 'warning',
+        title: getI18nText(confirmation.title, i18n.language),
+        message: getI18nText(confirmation.message, i18n.language),
+        confirmLabel: getI18nText(confirmation.confirmLabel, i18n.language),
+      }, signal)
+      if (!accepted || signal.aborted) throw new GenerationSubmissionCancelledError()
+    }
+    return paid
   } catch (error) { await paid.reject(); throw error }
 }

@@ -194,8 +194,6 @@
     "musicRemixed": "音乐已重构为 {{segments}} 段（{{seams}} 个接缝），可一步撤销。",
     "sentToEdit": "已加入剪辑并保存，可在剪辑中撤销。",
     "sendToEditFailed": "未能加入剪辑：{{reason}}",
-    "autoApprovedEstimate": "已按自动同意规则执行，预计 ¥{{amount}}",
-    "autoApprovedMetered": "已按自动同意规则执行，费用按模型实际计费",
     "videoSaveFailed": "视频保存失败，请重试上传后再生成",
     "cloneAudioSaveFailed": "复刻音频保存失败，请重新上传后再试",
     "exampleAudioSaveFailed": "示例音频保存失败，请重新上传后再试",

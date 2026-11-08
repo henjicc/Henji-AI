@@ -1,5 +1,4 @@
 import { prepareExplanationPaidApproval } from '@/services/paidApproval'
-import { paidApprovalMessage, type PaidApprovalDisplay } from '@/core/application-control/paidApproval'
 import type { ApplicationRef } from '@/core/application-control'
 import type { ExplanationSession } from '@/core/creativeIntent/schema'
 import type { MotionDraft } from '@/core/creativeIntent/contracts'
@@ -8,11 +7,6 @@ import { semanticVisualBatches } from '@/core/creativeIntent/semanticIntentInput
 import { getPlatform } from '@/platform/runtime'
 import type { EmbeddedIntentRequest } from '@/core/assistant/embeddedAgent'
 
-export interface ExplanationSendRequest {
-  modelName: string; imageCount: number; paidDetails: PaidApprovalDisplay;
-  cancel(): Promise<void>
-  confirm(): Promise<void>
-}
 export interface ExplanationGenerationHost {
   documentRef: ApplicationRef
   session(): ExplanationSession | undefined
@@ -21,7 +15,6 @@ export interface ExplanationGenerationHost {
   assertCurrent(): void
 }
 export interface PreparedExplanationGeneration {
-  request?: ExplanationSendRequest
   run(local: () => Promise<void>): Promise<void>
   cancel(): Promise<void>
 }
@@ -35,8 +28,7 @@ export async function prepareExplanationGeneration(host: ExplanationGenerationHo
   if (!model) return local
   if ((await platform.snapshot()).busy) throw new Error('请等待当前 AI 回复结束。')
   const resolutions = await semanticRecordingResolutions(session, host.read)
-  const imageCount = semanticVisualBatches(session, resolutions).flat().length
-  if (imageCount && !model.inputModalities.includes('image')) return local
+  if (semanticVisualBatches(session, resolutions).flat().length && !model.inputModalities.includes('image')) return local
   const identity = (value: ExplanationSession): string => JSON.stringify({ ...value, consent: undefined })
   const baseline = identity(session)
   const assertCurrent = (): ExplanationSession => {
@@ -47,22 +39,11 @@ export async function prepareExplanationGeneration(host: ExplanationGenerationHo
   }
   assertCurrent()
   const paid = await prepareExplanationPaidApproval(host.documentRef)
-  let authorized = paid.decision.decision === 'auto'
   let consumed = false, started = false, completed = false
   const cancel = async () => { if (!consumed) { consumed = true; await paid.reject() } }
   try { assertCurrent() } catch (error) { await cancel(); throw error }
-  const request: ExplanationSendRequest | undefined = authorized ? undefined : {
-    modelName: model.name, imageCount, paidDetails: paidApprovalMessage(paid.decision, 'explanation', model.name),
-    cancel,
-    confirm: async () => {
-      assertCurrent()
-      await paid.confirm()
-      authorized = true
-    },
-  }
-  return { request, cancel, run: async work => {
+  return { cancel, run: async work => {
     if (consumed) throw new Error('本次生成已执行，请重新整理。')
-    if (!authorized) throw new Error('请先确认发送讲解。')
     consumed = true
     try {
       assertCurrent()

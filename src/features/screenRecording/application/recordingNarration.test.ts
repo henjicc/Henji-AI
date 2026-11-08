@@ -57,16 +57,13 @@ it('任务关联保存失败后用同一操作身份恢复，只提交和记账�
   await expect(run()).resolves.toMatchObject({ taskId: operationId })
   expect(generation.submit).toHaveBeenCalledOnce()
   expect(aiGenerate).toHaveBeenCalledOnce()
-  expect(bridge.store.generationSpendSince(0)).toBe(.5)
+  expect(bridge.reservedCny()).toBe(.5)
 })
 afterEach(() => { registry.unregister(voice.modelId); vi.restoreAllMocks(); useAlertDialogStore.setState({ queue: [] }) })
 
-it('旁白把一次确认的收据交给 GenerationService，只记一次费用；恢复原任务不重复提交', async () => {
+it('旁白把一次授权的收据交给 GenerationService，只记一次费用；恢复原任务不重复提交', async () => {
   const dispatched = vi.fn(async (_id: string) => undefined)
-  const pending = generateRecordingNarration('旁白', voice, 'recording', { signal: new AbortController().signal }, { dispatched })
-  await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
-  useAlertDialogStore.getState().confirmCurrent()
-  const result = await pending
+  const result = await generateRecordingNarration('旁白', voice, 'recording', { signal: new AbortController().signal }, { dispatched })
   expect(result).toMatchObject({ durationUs: 1e6, taskId: expect.any(String) })
   expect(dispatched).toHaveBeenCalledWith(result.taskId)
   expect(aiGenerate).toHaveBeenCalledOnce()
@@ -74,7 +71,7 @@ it('旁白把一次确认的收据交给 GenerationService，只记一次费用�
   const record = [...bridge.records.values()][0]
   expect(record).toMatchObject({ state: 'completed', paidReservations: [{ generationRequests: [{ id: result.taskId }] }] })
   expect(vi.mocked(aiGenerate).mock.calls[0][0].paidReceipt).toEqual({ operationId: record.operationId, callerId: record.callerId })
-  expect(bridge.store.generationSpendSince(0)).toBe(.5)
+  expect(bridge.reservedCny()).toBe(.5)
   await generateRecordingNarration('旁白', voice, 'recording', { signal: new AbortController().signal }, { taskId: result.taskId, dispatched })
   expect(generation.wait).toHaveBeenLastCalledWith(result.taskId, expect.any(AbortSignal), true)
   expect(aiGenerate).toHaveBeenCalledOnce()
@@ -87,12 +84,10 @@ it('一项录制任务的多句旁白共用总价收据，只允许清单中的�
   const pending = withPaidOperation({ category: 'generation', estimatedCny: 1, generationTaskIds: ids }, async signal => {
     for (const [index, operationId] of ids.entries()) await generateRecordingNarration(`旁白${index}`, voice, 'recording', { signal }, { operationId, dispatched: async () => undefined })
   })
-  await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
-  useAlertDialogStore.getState().confirmCurrent()
   await pending
   expect(aiGenerate).toHaveBeenCalledTimes(2)
   expect(bridge.records.size).toBe(1)
-  expect(bridge.store.generationSpendSince(0)).toBe(1)
+  expect(bridge.reservedCny()).toBe(1)
   expect(useAlertDialogStore.getState().queue).toHaveLength(0)
   const request = vi.mocked(aiGenerate).mock.calls[0][0]
   assertGenerationPaidReceipt(bridge.store, request.paidReceipt, request)
@@ -104,10 +99,7 @@ it('停止等待排队旁白后仍移交原收据，不能另开付费请求', a
   generation.submit.mockImplementation(async (_input: GenerationPreparationInput, operationId: string) => ({ taskId: operationId }))
   generation.wait.mockRejectedValue(new DOMException('停止等待', 'AbortError'))
   const pending = generateRecordingNarration('旁白', voice, 'recording', { signal: new AbortController().signal })
-  const rejected = expect(pending).rejects.toThrow('停止等待')
-  await vi.waitFor(() => expect(useAlertDialogStore.getState().queue).toHaveLength(1))
-  useAlertDialogStore.getState().confirmCurrent()
-  await rejected
+  await expect(pending).rejects.toThrow('停止等待')
   const confirm = vi.fn(async () => false)
   configureGenerationSubmissionConfirmation(confirm)
   const taskId = generation.submit.mock.calls[0][1] as string
@@ -115,5 +107,5 @@ it('停止等待排队旁白后仍移交原收据，不能另开付费请求', a
   expect(confirm).not.toHaveBeenCalled()
   expect(bridge.records.size).toBe(1)
   expect([...bridge.records.values()][0].state).toBe('completed')
-  expect(bridge.store.generationSpendSince(0)).toBe(.5)
+  expect(bridge.reservedCny()).toBe(.5)
 })

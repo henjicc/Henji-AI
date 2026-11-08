@@ -132,6 +132,8 @@ export class ApplicationOperationStore {
     const seen = new Set<string>()
     return rows.reduce((sum, row) => {
       const record = JSON.parse(row.record_json) as OperationRecord
+      // 每日额度只约束助手，用户亲自发起的花费不占用。
+      if (record.origin?.actor === 'user') return sum
       return sum + (record.paidReservations ?? []).reduce((total, value) => {
         if (value.reservedAt < since) return total
         const key = generationReservationKey(value)

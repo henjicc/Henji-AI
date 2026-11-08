@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { applicationPaidRequest, withPaidOperation, prepareExplanationPaidApproval, prepareGenerationPaidApproval, PaidOperationCancelledError, isUserCancellation } from './paidApproval'
+import { applicationPaidRequest, withPaidOperation, prepareGenerationPaidApproval, isUserCancellation } from './paidApproval'
 import { registry } from '@/core/ModelRegistry'
 import type { ModelDefinition } from '@/core/types'
 import { readPriceEstimateDisplaySettings } from '@/core/pricing/priceDisplay'
 import { bindApplicationConfirmation } from '@/core/application-control/userConfirmation'
 import { useAlertDialogStore } from '@/stores/alertDialogStore'
+import { notifyUser } from '@/contexts/NotificationContext'
 import type { LocalHostReply } from '@/core/application-control/localHostContracts'
 import { TranscriptionFailure } from '@/core/audioEdit/transcriptionFailure'
 import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
@@ -20,48 +21,16 @@ beforeEach(() => {
   vi.resetAllMocks()
   ports.findProject.mockResolvedValue({ id: 'project', name: '测试项目' })
   ports.complete.mockImplementation(async (reply: LocalHostReply) => reply.uiPaidApproval?.action === 'prepare'
-    ? { decision: 'auto', reason: '额度内', estimatedCny: 1, dailySpentCny: 0, expiresAt: null } : undefined)
+    ? { decision: 'auto', reason: '用户亲自发起', estimatedCny: 1, dailySpentCny: 0 } : undefined)
 })
 afterEach(() => { useAlertDialogStore.setState({ queue: [] }); vi.useRealTimers() })
-it('直接使用讲解确认回执的调用方也得到过期取消错误', async () => {
-  ports.findDocument.mockResolvedValue({ container: { kind: 'user' } })
-  ports.complete.mockImplementation(async (reply: LocalHostReply) => {
-    if (reply.uiPaidApproval?.action === 'prepare') return { decision: 'ask', reason: '询问', estimatedCny: 1, dailySpentCny: 0, expiresAt: Date.now() + 1000 }
-    if (reply.uiPaidApproval?.action === 'approve') throw new Error('付费确认已结束，请重新发起。')
-  })
-  const paid = await prepareExplanationPaidApproval({ kind: 'video_edit.document', id: 'document' })
-  await expect(paid.confirm()).rejects.toBeInstanceOf(PaidOperationCancelledError)
-})
-it('共享付费操作审批在 IPC 往返中到期按取消收口，不能启动工作', async () => {
-  vi.useFakeTimers()
-  ports.complete.mockImplementation(async (reply: LocalHostReply) => {
-    if (reply.uiPaidApproval?.action === 'prepare') return { decision: 'ask', reason: '询问', estimatedCny: 1, dailySpentCny: 0, expiresAt: Date.now() + 1000 }
-    if (reply.uiPaidApproval?.action === 'approve') throw new Error('付费确认已结束，请重新发起。')
-  })
-  const work = vi.fn()
-  const run = withPaidOperation({ category: 'title' }, work)
-  const outcome = run.catch(error => error)
-  await vi.advanceTimersByTimeAsync(0)
-  expect(useAlertDialogStore.getState().queue).toHaveLength(1)
-  useAlertDialogStore.getState().confirmCurrent()
-  expect(await outcome).toBeInstanceOf(PaidOperationCancelledError)
-  expect(work).not.toHaveBeenCalled()
-  expect(ports.complete.mock.calls.map(([reply]) => reply.uiPaidApproval.action)).toEqual(['prepare', 'approve', 'reject'])
-})
-it('prepare 传输消耗的时间不会重新计入弹窗期限', async () => {
-  vi.useFakeTimers()
-  const expiresAt = Date.now() + 1000
-  ports.complete.mockImplementation(async (reply: LocalHostReply) => {
-    if (reply.uiPaidApproval?.action === 'prepare') return { decision: 'ask', reason: '询问', estimatedCny: 1, dailySpentCny: 0, expiresAt }
-  })
-  vi.setSystemTime(expiresAt - 100)
-  const work = vi.fn()
-  const run = withPaidOperation({ category: 'title' }, work)
-  const outcome = run.catch(error => error)
-  await vi.advanceTimersByTimeAsync(100)
+it('界面付费操作不弹确认也不提示自动同意，按准备、开始、完成记账后执行', async () => {
+  const work = vi.fn(async () => '完成')
+  expect(await withPaidOperation({ category: 'title' }, work)).toBe('完成')
+  expect(work).toHaveBeenCalledOnce()
   expect(useAlertDialogStore.getState().queue).toHaveLength(0)
-  expect(await outcome).toBeInstanceOf(PaidOperationCancelledError)
-  expect(work).not.toHaveBeenCalled()
+  expect(notifyUser).not.toHaveBeenCalled()
+  expect(ports.complete.mock.calls.map(([reply]) => reply.uiPaidApproval.action)).toEqual(['prepare', 'start', 'complete'])
 })
 it.each([
   [new TranscriptionFailure(new Error('预检拒绝'), { billing: 'not_charged', targetMutation: 'none' }), 'not_charged'],
@@ -78,7 +47,7 @@ it.each([
 })
 it('工作已成功后的费用回执错误不得释放实际已执行的预算', async () => {
   ports.complete.mockImplementation(async (reply: LocalHostReply) => {
-    if (reply.uiPaidApproval?.action === 'prepare') return { decision: 'auto', reason: '额度内', estimatedCny: 1, dailySpentCny: 0, expiresAt: null }
+    if (reply.uiPaidApproval?.action === 'prepare') return { decision: 'auto', reason: '用户亲自发起', estimatedCny: 1, dailySpentCny: 0 }
     if (reply.uiPaidApproval?.action === 'complete') throw new ApplicationPreflightFailure('保存回执失败')
   })
   await expect(withPaidOperation({ category: 'title' }, async () => '已完成')).rejects.toThrow('保存回执失败')
@@ -133,10 +102,9 @@ it('画布内嵌图片沿正式关联找到项目，不把图片工作副本当�
   } finally { release() }
 })
 
-it('用户取消：付费确认取消、生成提交被拒、中途停止都算，包在 cause 里也认得；普通失败不算', () => {
+it('用户取消：生成提交被拒、中途停止都算，包在 cause 里也认得；普通失败不算', () => {
   const declined = new Error('已取消提交'); declined.name = 'GenerationSubmissionCancelledError'
   const aborted = new Error('stopped'); aborted.name = 'AbortError'
-  expect(isUserCancellation(new PaidOperationCancelledError('已取消'))).toBe(true)
   expect(isUserCancellation(declined)).toBe(true)
   expect(isUserCancellation(new Error('画布节点失败', { cause: aborted }))).toBe(true)
   expect(isUserCancellation(new Error('供应商返回 500'))).toBe(false)

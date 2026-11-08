@@ -57,13 +57,10 @@ describe.skipIf(!process.versions.electron)('应用原生操作记录与恢复',
       send('resume', [tasks[1]], .01, 'start', epoch)
       assertGenerationPaidReceipt(f.store, { operationId: 'resume', callerId: epoch }, { ...request, requestId: tasks[1], params: { prompt: '第二句' } })
       send('resume', [tasks[1]], .01, 'complete', epoch)
-      expect(f.store.generationSpendSince(0)).toBe(.02)
       vi.setSystemTime(new Date(2026, 9, 30, 12))
       f.store.recoverInterrupted()
       expect(f.store.get('first', f.rendererEpoch)).toBeDefined()
       expect(send('next-day', tasks, .02, 'prepare', epoch)).toMatchObject({ estimatedCny: 0 })
-      expect(f.store.generationSpendSince(0)).toBe(.02)
-      expect(f.store.generationSpendSince(new Date(2026, 9, 30).getTime())).toBe(0)
     } finally { vi.useRealTimers() }
   })
   it('复用准备中的任务后原操作撤回，恢复收据仍持有实际预留且不会漏账', () => {
@@ -74,10 +71,8 @@ describe.skipIf(!process.versions.electron)('应用原生操作记录与恢复',
     })
     send('original', 'prepare')
     expect(send('recovery', 'prepare')).toMatchObject({ estimatedCny: 0 })
-    expect(f.store.generationSpendSince(0)).toBe(.5)
     send('original', 'reject'); send('recovery', 'start')
     assertGenerationPaidReceipt(f.store, { operationId: 'recovery', callerId: f.rendererEpoch }, { requestId: taskId, modelId: 'tts', params: { prompt: '旁白' } })
-    expect(f.store.generationSpendSince(0)).toBe(.5)
     expect(f.store.get('recovery', f.rendererEpoch)?.paidReservations).toMatchObject([{ estimatedCny: .5 }])
   })
   it('正式费用失败回执在原生账本释放明确未计费额度，重启后未知费用仍保留', () => {
@@ -93,11 +88,9 @@ describe.skipIf(!process.versions.electron)('应用原生操作记录与恢复',
     f.store.recoverInterrupted()
     expect(f.store.get('not_charged', f.rendererEpoch)).toMatchObject({ state: 'not_executed', result: { error: { details: { billing: 'not_charged' } } } })
     expect(f.store.get('unknown', f.rendererEpoch)?.state).toBe('unknown')
-    const today = new Date(now); today.setHours(0, 0, 0, 0)
-    expect(f.store.generationSpendSince(today.getTime())).toBe(1)
     expect(f.store.unresolved()).toEqual([])
   })
-  it('界面付费失败及重启未知仅保留预算，不进入助手核对；旧日终态账本可清理', () => {
+  it('界面付费失败及重启未知不进入助手核对、不占助手每日额度；旧日终态账本可清理', () => {
     const f = fixture()
     const now = Date.now()
     const ui = (id: string, state: OperationRecord['state'], at = now): OperationRecord => ({
@@ -114,7 +107,7 @@ describe.skipIf(!process.versions.electron)('应用原生操作记录与恢复',
     expect(f.store.get('interrupted', 'renderer')?.state).toBe('unknown')
     expect(f.store.unresolved().map(record => record.operationId)).toEqual(['agent'])
     const today = new Date(now); today.setHours(0, 0, 0, 0)
-    expect(f.store.generationSpendSince(today.getTime())).toBe(3)
+    expect(f.store.generationSpendSince(today.getTime())).toBe(1)
     f.store.save(ui('old-ui', 'unknown', today.getTime() - 1))
     f.db.prepare('UPDATE application_invocations SET updated_at = ? WHERE operation_id = ?').run(today.getTime() - 1, 'old-ui')
     new ApplicationOperationStore(f.db).prepare(ui('new-ui', 'preparing'))

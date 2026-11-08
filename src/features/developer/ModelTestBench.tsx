@@ -25,7 +25,7 @@ import { registry } from '@/core/ModelRegistry'
 import { transferModelParamOverridesBetweenModels } from '@/core/params/modelParamTransfer'
 import { getPathForFile } from '@/platform/desktopApi'
 import { resolveImageDisplayUrl } from '@/services/imageSource'
-import { PaidOperationCancelledError, withPaidOperation } from '@/services/paidApproval'
+import { withPaidOperation } from '@/services/paidApproval'
 import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 import { ASR_CATALOG } from '@/core/audioEdit/asrCatalog'
 import { EMPTY_TEST_MEDIA, modelAcceptsMedia, runAsrTest, runGenerationTest, runLlmTest, runTranslationTest, type TestMedia, type TestMediaKind } from './modelTestRunner'
@@ -229,7 +229,6 @@ export const ModelTestBench: React.FC<{
         if (!outcomes.includes('done')) throw new Error('这一批没有成功的调用')
       })
     } catch (error) {
-      if (error instanceof PaidOperationCancelledError) return
       if (error instanceof ApplicationPreflightFailure) setNotice(errorText(error))
       else logger.warn('测试台批量运行没有成功的调用', { event: 'developer_test.batch_failed', context: { kind, count: targets.length, message: errorText(error) } })
     }

@@ -1,6 +1,6 @@
 import { superKeyframeSessionId } from '@/core/creativeIntent/captureIntent'
 import { withPaidOperation } from '@/services/paidApproval'
-import { prepareExplanationGeneration, type PreparedExplanationGeneration, type ExplanationSendRequest } from '@/features/creativeIntent'
+import { prepareExplanationGeneration, type PreparedExplanationGeneration } from '@/features/creativeIntent'
 import { sameExplanationBinding, eraseExplanationBody, explanationBodyRef, registerExplanationBodyEditor, writeExplanationBody, type ExplanationBodyChanges } from '@/core/creativeIntent/semanticIntentEdits'
 import type { ApplicationExecutionContext } from '@/core/application-control'
 import { getPlatform } from '@/platform/runtime'
@@ -441,9 +441,9 @@ export async function readVideoExplanationReview(id: string, entry: TranscriptEn
   if (owner.playing || owner.frame !== frame || getActiveVideoEditSequence(owner) !== sequence) { plan.changes = []; plan.status = 'blocked'; plan.issues.push('当前画面状态已改变，请暂停播放后重新确认差异') }
   return { resolution, plan, image, imagePoint: visual?.frames.find(frame => chosen?.evidenceSeqs.includes(frame.seq))?.pointer ?? undefined, objects }
 }
-export async function prepareVideoExplanationGeneration(id: string): Promise<ExplanationSendRequest | undefined> {
+export async function prepareVideoExplanationGeneration(id: string): Promise<void> {
   const owner = requireVideoEditInstance(id), runtime = states.get(owner)
-  if (!runtime) return undefined
+  if (!runtime) return
   const state = runtime.state
   await runtime.generation?.cancel()
   runtime.generation = await prepareExplanationGeneration({ documentRef: { kind: 'video_edit.document', id },
@@ -452,7 +452,6 @@ export async function prepareVideoExplanationGeneration(id: string): Promise<Exp
     read: async resourceId => { const resource = head(owner).resources.find(r => r.resourceId === resourceId); if (!resource) throw new Error('讲解页已删除。'); return readMotionResource(resource) },
     assertCurrent: () => assertCurrent(owner, state),
   })
-  return runtime.generation.request
 }
 export async function runVideoExplanationGeneration(id: string, local: () => Promise<void>): Promise<void> {
   const runtime = states.get(requireVideoEditInstance(id)), generation = runtime?.generation

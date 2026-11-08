@@ -2,7 +2,7 @@
 import i18n from '@/i18n/config'
 import { GlobalAlertDialog } from '@/components/ui/GlobalAlertDialog'
 import { useAlertDialogStore } from '@/stores/alertDialogStore'
-import { act, cleanup, fireEvent, render as renderView, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render as renderView, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { CreativeIntentControls, type CreativeIntentControlsProps } from './CreativeIntentControls'
 
@@ -80,16 +80,13 @@ it('机位配置隐藏二维选项，候选预览与钉住走同源回调', () =
   fireEvent.click(screen.getByRole('button', { name: '应用' })); expect(p.onApply).toHaveBeenCalledOnce()
 })
 
-it('整理通过共享付费预检，取消不生成，发送后只生成一次', async () => {
-  const p = props(), confirm = vi.fn(async () => {}), prepareGeneration = vi.fn(async () => ({ paidDetails: { estimatedCny: null, dailySpentCny: 0, category: 'explanation' as const }, cancel: vi.fn(async () => {}), modelName: '实际模型', imageCount: 2, confirm }))
+it('整理先完成付费准备再直接生成，不弹确认，连点只生成一次', async () => {
+  const p = props(), prepareGeneration = vi.fn(async () => {})
   render(<CreativeIntentControls {...p} contextKey="session" prepareGeneration={prepareGeneration} />)
-  fireEvent.click(screen.getByRole('button', { name: '重新整理' }))
-  await screen.findByRole('alertdialog'); expect(p.onOptimize).not.toHaveBeenCalled()
-  await act(async () => { fireEvent.click(screen.getByRole('button', { name: '拒绝' })) }); expect(confirm).not.toHaveBeenCalled()
-  fireEvent.click(screen.getByRole('button', { name: '重新整理' })); await screen.findByRole('alertdialog')
-  const allow = screen.getByRole('button', { name: '允许本次' }); fireEvent.click(allow); fireEvent.click(allow)
+  const button = screen.getByRole('button', { name: '重新整理' }); fireEvent.click(button); fireEvent.click(button)
   await waitFor(() => expect(p.onOptimize).toHaveBeenCalledOnce())
-  expect(confirm).toHaveBeenCalledOnce(); expect(confirm).toHaveBeenCalledWith()
+  expect(prepareGeneration).toHaveBeenCalledOnce()
+  expect(screen.queryByRole('alertdialog')).toBeNull()
 })
 it('应用后轨迹穿模时显示穿模提示，没有提示时不占位', () => {
   const p = props(), view = render(<CreativeIntentControls {...p} />)

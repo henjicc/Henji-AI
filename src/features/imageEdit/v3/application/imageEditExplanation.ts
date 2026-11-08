@@ -1,5 +1,5 @@
 import { withPaidOperation } from '@/services/paidApproval'
-import { prepareExplanationGeneration, type PreparedExplanationGeneration, type ExplanationSendRequest } from '@/features/creativeIntent'
+import { prepareExplanationGeneration, type PreparedExplanationGeneration } from '@/features/creativeIntent'
 import { sameExplanationBinding, eraseExplanationBody, explanationBodyRef, registerExplanationBodyEditor, writeExplanationBody, type ExplanationBodyChanges } from '@/core/creativeIntent/semanticIntentEdits'
 import { semanticRecordingEvents } from '@/core/creativeIntent/semanticIntentRecording'
 import type { ApplicationExecutionContext } from '@/core/application-control'
@@ -425,7 +425,7 @@ export class ImageEditExplanation {
     const ids = review.layout.targetRefs.map(ref => { const target = splitImageEditV3LayerRef(ref); if (target.documentId !== documentId) throw new Error('图层不属于当前图片。'); return target.layerId })
     await imageEditLayoutDraft(this.bus).organize(ids, review.layout.action)
   }
-  async prepareGeneration(): Promise<ExplanationSendRequest | undefined> {
+  async prepareGeneration(): Promise<void> {
     const collector = this.require()
     await this.generation?.cancel()
     this.generation = await prepareExplanationGeneration({
@@ -435,7 +435,6 @@ export class ImageEditExplanation {
       read: async id => { const resource = this.bus.getSnapshot().document.creativeIntents?.resources.find(r => r.resourceId === id); if (!resource) throw new Error('讲解页已删除。'); return this.ports.read(resource) },
       assertCurrent: () => this.assert(collector),
     })
-    return this.generation.request
   }
   async generate(entries: readonly TranscriptEntry[]): Promise<void> {
     const generation = this.generation; this.generation = undefined

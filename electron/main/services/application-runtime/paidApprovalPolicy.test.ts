@@ -4,7 +4,6 @@ import { assertGenerationPaidReceipt, decidePaidApproval, localDayStart, approve
 import type { LocalHostReply } from '../../../../src/core/application-control/localHostContracts'
 import { DEFAULT_PAID_APPROVAL_SETTINGS, readPaidApprovalSettingsValue, type PaidApprovalRequest } from '../../../../src/core/application-control/paidApproval'
 import type { ApplicationOperationStore, OperationRecord } from './operationStore'
-import { USER_CONFIRMATION_TIMEOUT_MS } from '../../../../src/core/application-control/userConfirmation'
 
 const preferences = vi.hoisted(() => ({ value: '' }))
 vi.mock('../settings/store', () => ({ getSettingsStore: () => ({ get: () => preferences.value || null, set: (_key: string, value: string) => { preferences.value = value } }) }))
@@ -19,16 +18,29 @@ it.each([{}, { singleLimitCny: 2, dailyLimitCny: 20 }])('迁移每次询问策�
   }
   expect(decidePaidApproval(settings, { category: 'generation', estimatedCny: 0 }, settings.dailyLimitCny + 1).decision).toBe('auto')
 })
-it('确认恰好到期后拒绝 approve，不产生额度预留', () => {
-  vi.useFakeTimers()
-  preferences.value = JSON.stringify({ ...DEFAULT_PAID_APPROVAL_SETTINGS, singleLimitCny: 0 })
-  let record: OperationRecord | undefined
-  const store = { get: () => record, save: (value: OperationRecord) => { record = value }, prepare: (value: OperationRecord) => (record = value), generationSpendSince: () => 0, generationTaskReservations: () => [] }
-  const reply: LocalHostReply = { requestId: 'expired', rendererEpoch: 'renderer', result: {}, uiPaidApproval: { capabilityId: 'ui_generate_title', action: 'prepare', request: { category: 'title', estimatedCny: 1 } } }
-  expect(handleUiPaidApproval(store, reply)).toMatchObject({ expiresAt: Date.now() + USER_CONFIRMATION_TIMEOUT_MS })
-  vi.advanceTimersByTime(USER_CONFIRMATION_TIMEOUT_MS)
-  expect(() => handleUiPaidApproval(store, { ...reply, uiPaidApproval: { ...reply.uiPaidApproval!, action: 'approve' } })).toThrow('付费确认已结束')
-  expect(record?.paidReservations).toBeUndefined()
+it('用户界面发起的超额生成自动通过且不占助手每日额度，助手随后超额仍询问', () => {
+  preferences.value = JSON.stringify({ ...DEFAULT_PAID_APPROVAL_SETTINGS, singleLimitCny: 2, dailyLimitCny: 20 })
+  const records = new Map<string, OperationRecord>()
+  // 与正式账本一致：每日额度只累计助手发起的预留。
+  const store = {
+    get: (id: string) => records.get(id), save: (record: OperationRecord) => { records.set(record.operationId, record) },
+    prepare: (record: OperationRecord) => { records.set(record.operationId, record); return record },
+    generationTaskReservations: () => [],
+    generationSpendSince: () => [...records.values()].filter(record => record.state !== 'not_executed' && record.origin?.actor !== 'user')
+      .reduce((sum, record) => sum + (record.paidReservations ?? []).reduce((total, value) => total + (value.estimatedCny ?? 0), 0), 0),
+  }
+  const ui = (id: string, estimatedCny: number | null) => handleUiPaidApproval(store, { requestId: id, rendererEpoch: 'renderer', result: {},
+    uiPaidApproval: { capabilityId: 'create_visible_generation_task', action: 'prepare', request: { category: 'generation', estimatedCny } } })
+  expect(ui('large', 50)).toMatchObject({ decision: 'auto', reason: '用户亲自发起' })
+  expect(ui('unknown', null)).toMatchObject({ decision: 'auto' })
+  expect(records.get('large')).toMatchObject({ origin: { actor: 'user' }, approval: { decision: 'auto' }, paidReservations: [{ estimatedCny: 50 }] })
+  expect(store.generationSpendSince()).toBe(0)
+  const agent = (id: string): OperationRecord => store.prepare({ operationId: id, callerId: 'agent', capabilityId: 'create_visible_generation_task', input: {}, inputDigest: id, state: 'preparing', origin: { at: Date.now(), actor: 'embedded' } })
+  expect(approvePaidOperation(store, agent('within'), { category: 'generation', estimatedCny: 2 }).decision).toBe('auto')
+  expect(approvePaidOperation(store, agent('over-single'), { category: 'generation', estimatedCny: 3 }).decision).toBe('ask')
+  expect(records.get('over-single')?.paidReservations).toBeUndefined()
+  preferences.value = JSON.stringify({ ...DEFAULT_PAID_APPROVAL_SETTINGS, singleLimitCny: 2, dailyLimitCny: 3 })
+  expect(approvePaidOperation(store, agent('over-daily'), { category: 'generation', estimatedCny: 2 })).toMatchObject({ decision: 'ask', dailySpentCny: 2 })
 })
 const project = { id: 'project', name: '测试项目' }
 it.each(['not_charged', 'submitted', 'completed', 'unknown', undefined] as const)('UI 失败 billing=%s 仅明确未计费时释放预留', billing => {
@@ -77,7 +89,7 @@ it('同一操作账本同步预留，第二次请求不能穿透每日额度，�
   approvePaidOperation(store, third, request(null))
   expect(store.get('third', 'caller')?.paidReservations?.[0].estimatedCny).toBeNull()
 })
-it('讲解授权绑定原请求：拒绝不记费，确认不能重放，执行后不能撤回计费', () => {
+it('讲解授权绑定原请求：拒绝不记费，超出额度也直接通过，执行后不能撤回计费', () => {
   const records = new Map<string, OperationRecord>()
   const store = {
     get: (id: string) => records.get(id), save: (record: OperationRecord) => { records.set(record.operationId, record) },
@@ -85,25 +97,24 @@ it('讲解授权绑定原请求：拒绝不记费，确认不能重放，执行�
     generationTaskReservations: () => [],
     generationSpendSince: () => [...records.values()].filter(record => record.state !== 'not_executed').reduce((sum, record) => sum + (record.paidReservations ?? []).reduce((total, value) => total + (value.estimatedCny ?? 0), 0), 0),
   }
+  const spent = () => [...records.values()].filter(record => record.state !== 'not_executed').reduce((sum, record) => sum + (record.paidReservations ?? []).reduce((total, value) => total + (value.estimatedCny ?? 0), 0), 0)
   const send = (id: string, action: NonNullable<LocalHostReply['uiPaidApproval']>['action'], amount = 1) => handleUiPaidApproval(store, {
     requestId: id, rendererEpoch: 'renderer', result: {}, uiPaidApproval: { action, capabilityId: 'interpret_image_edit_intent', request: { category: 'explanation', estimatedCny: amount, project } },
   })
   expect(send('cancelled', 'prepare')).toMatchObject({ decision: 'auto' })
-  expect(store.generationSpendSince()).toBe(1)
+  expect(spent()).toBe(1)
   send('cancelled', 'reject')
-  expect(store.generationSpendSince()).toBe(0)
+  expect(spent()).toBe(0)
   expect(() => send('cancelled', 'start')).toThrow('先确认')
   preferences.value = JSON.stringify({ ...DEFAULT_PAID_APPROVAL_SETTINGS, singleLimitCny: 0 })
-  expect(send('confirmed', 'prepare')).toMatchObject({ decision: 'ask' })
-  expect(() => send('confirmed', 'approve', 2)).toThrow('不一致')
-  send('confirmed', 'approve')
-  expect(() => send('confirmed', 'approve')).toThrow('已结束')
+  expect(send('confirmed', 'prepare')).toMatchObject({ decision: 'auto', reason: '用户亲自发起' })
+  expect(() => send('confirmed', 'start', 2)).toThrow('不一致')
   send('confirmed', 'start')
   expect(() => send('confirmed', 'start')).toThrow('先确认')
   expect(() => send('confirmed', 'reject')).toThrow('无法撤回')
   send('confirmed', 'complete')
-  expect(records.get('confirmed')).toMatchObject({ state: 'completed', approval: { decision: 'user' } })
-  expect(store.generationSpendSince()).toBe(1)
+  expect(records.get('confirmed')).toMatchObject({ state: 'completed', approval: { decision: 'auto' } })
+  expect(spent()).toBe(1)
 })
 
 it('generation and recognition share unknown/estimated decisions and disclose upper-bound approval', () => {

@@ -1,4 +1,5 @@
 import { createDocumentGeometryCommandV3 } from '@/core/imageEdit/v3/documentGeometry';
+import { transferGenerationPaidApproval } from '@/core/services/generationSubmissionConfirmation';
 import { executeApplicationWrite } from '@/core/application-control/execution/writeExecution';
 import { rebaseImageEditSelectionForOutpaintV3 } from '@/core/imageEdit/v3/aiWorkflows/outpaint';
 import { z } from 'zod';
@@ -171,8 +172,13 @@ export async function startImageEditOutpaintV3(request: ImageEditOutpaintRequest
     signal.throwIfAborted();
     const path = materialized.raster.mediaUrl;
     const prompt = `Extend the image naturally into the transparent margins of the reference canvas. Keep the existing image at its reference position unchanged. Fill only the transparent added margins on all requested sides, matching perspective, lighting and texture. Output a complete canvas of aspect ${prepared.plan.output.width}:${prepared.plan.output.height}. ${request.prompt}`;
-    const task = await generationApplicationService.submit({ modelId: prepared.modelId, mediaType: 'image', prompt,
-      options: { ...prepared.params, images: [toFetchableMediaUrl(path)], uploadedFilePaths: [path], imageEditOutpaint: { documentId: request.documentId, margins: request.margins, original: prepared.plan.original } } }, taskId);
+    // 助手调用已按付费策略批准；把收据交给这次生成，生成服务不再当作用户在界面上发起。
+    const releaseApproval = options.signal ? transferGenerationPaidApproval(taskId, options.signal) : () => undefined;
+    let task: Awaited<ReturnType<typeof generationApplicationService.submit>>;
+    try {
+      task = await generationApplicationService.submit({ modelId: prepared.modelId, mediaType: 'image', prompt,
+        options: { ...prepared.params, images: [toFetchableMediaUrl(path)], uploadedFilePaths: [path], imageEditOutpaint: { documentId: request.documentId, margins: request.margins, original: prepared.plan.original } } }, taskId);
+    } catch (error) { releaseApproval(); throw error; }
     execution.report({ billing: 'submitted' });
     if (task.taskId !== taskId) throw new Error('生成任务身份与扩图落点不一致，请从生成记录核对');
     submitted = true;

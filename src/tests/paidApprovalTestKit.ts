@@ -13,23 +13,24 @@ vi.mock('../../electron/main/services/logging', () => ({ createMainLogger: () =>
 /** Real approval policy and state machine, with only the IPC/storage boundary replaced. */
 export function installPaidApprovalTestBridge(initial: Partial<PaidApprovalSettings> = { unlimited: true }) {
   const records = new Map<string, OperationRecord>()
+  const reserved = (since: number, counts: (record: OperationRecord) => boolean): number => {
+    const seen = new Set<string>()
+    return [...records.values()].filter(record => record.state !== 'not_executed' && counts(record))
+      .reduce((sum, record) => sum + (record.paidReservations ?? []).reduce((total, reservation) => {
+        if (reservation.reservedAt < since) return total
+        const key = generationReservationKey(reservation)
+        if (key && seen.has(key)) return total
+        if (key) seen.add(key)
+        return total + (reservation.estimatedCny ?? 0)
+      }, 0), 0)
+  }
   const store = {
     get: (id: string) => records.get(id),
     save: (record: OperationRecord) => { records.set(record.operationId, record) },
     prepare: (record: OperationRecord) => { records.set(record.operationId, record); return record },
     generationTaskReservations: () => [...records.values()].filter(record => record.state !== 'not_executed')
       .flatMap(record => (record.paidReservations ?? []).filter(item => generationReservationKey(item))),
-    generationSpendSince: (since: number) => {
-      const seen = new Set<string>()
-      return [...records.values()].filter(record => record.state !== 'not_executed')
-        .reduce((sum, record) => sum + (record.paidReservations ?? []).reduce((total, reservation) => {
-          if (reservation.reservedAt < since) return total
-          const key = generationReservationKey(reservation)
-          if (key && seen.has(key)) return total
-          if (key) seen.add(key)
-          return total + (reservation.estimatedCny ?? 0)
-        }, 0), 0)
-    },
+    generationSpendSince: (since: number) => reserved(since, record => record.origin?.actor !== 'user'),
   }
   const setSettings = (value: Partial<PaidApprovalSettings>): void => { settings.value = JSON.stringify({ ...DEFAULT_PAID_APPROVAL_SETTINGS, ...initial, ...value }) }
   setSettings({})
@@ -37,5 +38,7 @@ export function installPaidApprovalTestBridge(initial: Partial<PaidApprovalSetti
     if (!reply.uiPaidApproval) throw new Error('测试桥仅处理付费授权')
     return handleUiPaidApproval(store, reply)
   })
-  return { records, complete, store, setSettings }
+  // 界面操作不占每日额度，但预留仍要去重；验证预留复用时看全部来源。
+  const reservedCny = (): number => reserved(0, () => true)
+  return { records, complete, store, setSettings, reservedCny }
 }

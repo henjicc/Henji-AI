@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { withApplicationConfirmation, hasApplicationConfirmation, requestApplicationPaidApproval, USER_CONFIRMATION_TIMEOUT_MS } from '@/core/application-control/userConfirmation'
+import { withApplicationConfirmation, hasApplicationConfirmation, requestApplicationPaidApproval } from '@/core/application-control/userConfirmation'
 import { paidApprovalMessage, type PaidApprovalDisplay, type PaidApprovalRequest } from '@/core/application-control/paidApproval'
 import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
 
@@ -87,24 +87,12 @@ export async function requestAlertConfirmation(
       return accepted
     })
   }
-  if (request.paidConfirmation && !hasApplicationConfirmation(signal)) {
-    const controller = new AbortController()
-    const abort = (): void => controller.abort()
-    signal?.addEventListener('abort', abort, { once: true })
-    if (signal?.aborted) abort()
-    const expiresAt = request.paidDetails?.expiresAt ?? Date.now() + USER_CONFIRMATION_TIMEOUT_MS
-    if (expiresAt <= Date.now()) abort()
-    const timer = setTimeout(abort, Math.max(0, expiresAt - Date.now()))
-    try { return await showAlertConfirmation(request, controller.signal, expiresAt) }
-    finally { clearTimeout(timer); signal?.removeEventListener('abort', abort) }
-  }
   return withApplicationConfirmation(signal, { title: request.title, message: request.message, confirmLabel: request.confirmLabel }, scopedSignal => showAlertConfirmation(request, scopedSignal))
 }
 
 function showAlertConfirmation(
   request: Omit<AlertDialogRequest, 'confirmation'> & { confirmLabel: string; confirmTone?: 'default' | 'danger'; paidConfirmation?: boolean; alwaysAllowLabel?: string; onAlwaysAllow?: () => void },
   signal?: AbortSignal,
-  expiresAt?: number,
 ): Promise<boolean> {
   if (signal?.aborted) return Promise.resolve(false)
   return new Promise<boolean>(resolve => {
@@ -112,7 +100,6 @@ function showAlertConfirmation(
     const finish = (confirmed: boolean, alwaysAllow?: boolean): void => {
       if (settled) return
       settled = true
-      confirmed = confirmed && !signal?.aborted && (expiresAt === undefined || Date.now() < expiresAt)
       if (confirmed && alwaysAllow) request.onAlwaysAllow?.()
       signal?.removeEventListener('abort', abort)
       useAlertDialogStore.setState(state => ({ queue: state.queue.filter(item => item.confirmation !== entry.confirmation) }))

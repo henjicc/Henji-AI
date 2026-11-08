@@ -7,4 +7,4 @@ export { ExplanationReview, type ExplanationReviewProps, type ExplanationReviewR
 export { ExplanationPanel, type ExplanationPanelProps } from './ui/ExplanationPanel'
 export { explanationDuration, useExplanationTranscript, useExplanationHasRecorded } from './ui/explanationPresentation'
 
-export { prepareExplanationGeneration, type PreparedExplanationGeneration, type ExplanationSendRequest } from './application/explanationGeneration'
+export { prepareExplanationGeneration, type PreparedExplanationGeneration } from './application/explanationGeneration'
