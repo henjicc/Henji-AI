@@ -1,6 +1,7 @@
 import { notificationText } from '@/i18n/notifications'
 import { createLogger } from '@/core/logging'
 import type { GenerationTaskStatusSnapshot } from '@/features/generation/application/generationTaskStatusRegistry'
+import { assertGenerationMediaDimensions } from '@/features/generation/application/generationPreparationService'
 import { registry } from '@/core/ModelRegistry'
 import type { ImageEditSessionData } from '@/core/imageEdit'
 import { taskQueueManager } from '@/services/taskQueue'
@@ -292,6 +293,15 @@ export async function createVisibleGenerationTask(
   if (!hasAnyInput) {
     dependencies.notify(dependencies.messages.missingInput, 'error')
     return null
+  }
+  const modelDefinition = registry.getModel(model)
+  if (modelDefinition) {
+    try {
+      await assertGenerationMediaDimensions(modelDefinition, options as DynamicValueMap)
+    } catch (error) {
+      dependencies.notify(error instanceof Error ? error.message : String(error), 'error')
+      return null
+    }
   }
   if (shouldSkipRequest()) {
     logRequestParams({ input: prompt, model, type, options, timestamp: new Date().toISOString() })

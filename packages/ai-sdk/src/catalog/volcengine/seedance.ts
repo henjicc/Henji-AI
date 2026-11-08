@@ -128,6 +128,7 @@ export function createVolcengineSeedanceModel(config: VolcengineSeedanceConfig) 
           when: `${key('Mode')} === "reference-to-video" && (${key('TaskType')} === "edit" || ${key('TaskType')} === "extend")`,
           images: { max: maxReferenceImages }, videos: { min: 1, max: maxReferenceVideos }, audios: { max: maxReferenceAudios },
         }] : []),
+        { imageConstraints: { minShortSidePx: 300, maxLongSidePx: 6000, minAspectRatio: 0.4, maxAspectRatio: 2.5 } },
       ],
     },
     params,

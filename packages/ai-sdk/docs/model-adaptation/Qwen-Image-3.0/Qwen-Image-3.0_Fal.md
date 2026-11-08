@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-28 |
+| 最后更新 | 2026-11-08 |
 | 模态 | 图片 |
 | 供应商 | fal.ai（聚合平台） |
 | 平台模型 ID | `alibaba/qwen-image-3/text-to-image`、`alibaba/qwen-image-3/edit` |
@@ -65,6 +65,7 @@
 
 ## 6. 适配要点
 
+- 素材尺寸前置校验（2026-11-08）：`imageConstraints` 每边 384–2048 px。提交前读取素材实际宽高，不合格直接提示，不发付费请求。
 - 本项目默认**绝对不显示**：`seed`、负面提示词。Fal 本端点**两个字段都存在**，必须主动不注册、不下发。
 - `output_format`、`sync_mode` 不展示、不请求。
 - `edit` 的 `image_urls` 是**必填**（不像 Seedream 的 edit 可省），且 PNG 不允许带 alpha 通道——透明图需先合成背景。

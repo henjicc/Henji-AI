@@ -120,6 +120,7 @@
 
 ## 6. 适配要点
 
+- 素材尺寸前置校验（2026-11-08）：`imageConstraints` 宽高 ≥ 300 px、宽高比 0.4–2.5；`videoConstraints` 宽高 700–4553 px、总像素 ≤ 8,294,400、宽高比 0.4–2。提交前读取素材实际宽高，不合格直接提示，不发付费请求。
 - 本项目默认**绝对不显示**：`seed`、负面提示词。KIE 本组接口都没有这两个字段。
 - **4 个端点的 `aspect_ratio` 规则各不相同**，尤其 `image-to-video`「只有开启自定义多镜头才能选具体比例」和 `transformation`「纯视频输入只能 `auto`、视频+图片不支持 `auto`」——UI 必须按端点与输入组合联动。
 - `customize_multi_shots` 与 `prefer_multi_shots` **不能同时为 `true`**。

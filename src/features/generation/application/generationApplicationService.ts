@@ -13,6 +13,7 @@ import {
 } from '@/workspaces/GenerationWorkspace/application/visibleGenerationTaskCommand'
 
 import {
+  assertGenerationMediaDimensions,
   GenerationPreparationError,
   getGenerationModelSchema,
   prepareGenerationTask,
@@ -171,6 +172,9 @@ export const generationApplicationService = {
 
   async submit(input: GenerationPreparationInput, operationId?: string) {
     const preparation = prepareGenerationTask(input)
+    // 可见任务入口不合格时只弹提示并返回空任务；这里先校验，让助手拿到具体原因。
+    const model = registry.getModel(input.modelId)
+    if (model) await assertGenerationMediaDimensions(model, preparation.options as DynamicValueMap)
     const taskId = await runVisibleGenerationTaskCommand({
       input: input.prompt,
       model: input.modelId,

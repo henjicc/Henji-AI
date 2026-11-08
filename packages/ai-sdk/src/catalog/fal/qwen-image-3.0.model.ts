@@ -9,7 +9,7 @@ export const falQwenImage30Model = defineModel({
         tags: ['text-to-image', 'image-to-image'],
         aliases: ['qwen-image-3-fal'], polling: { interval: 3000, maxAttempts: 180, expectedAttempts: 35 }
     },
-    inputLimits: { images: { max: 3 }, videos: { max: 0 } },
+    inputLimits: { images: { max: 3 }, videos: { max: 0 }, rules: [{ imageConstraints: { minShortSidePx: 384, maxLongSidePx: 2048 } }] },
     params: [
         {
             id: 'falQwenImage30AspectRatio', type: 'dropdown', order: 1,

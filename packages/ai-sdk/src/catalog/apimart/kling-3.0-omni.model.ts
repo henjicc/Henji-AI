@@ -15,7 +15,7 @@ export const apimartKling30OmniModel = defineModel({
     images: { max: 2 }, videos: { max: 1 },
     rules: [
       { when: 'apimartKling30OmniMode === "reference-to-video"', images: { max: 7 }, videos: { max: 1 } },
-      { videoConstraints: { minDurationSec: 3, maxDurationSec: 10, maxSizeMB: 200, trim: { maxClipSeconds: 10 } } }
+      { videoConstraints: { minDurationSec: 3, maxDurationSec: 10, maxSizeMB: 200, minShortSidePx: 720, maxLongSidePx: 2160, trim: { maxClipSeconds: 10 } } }
     ]
   },
   params: [

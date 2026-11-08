@@ -1,7 +1,9 @@
 import type {
   ModelRuntimeDefinition,
   RuntimeInputCountLimit,
+  RuntimeImageConstraints,
   RuntimeInputLimitsConfig,
+  RuntimeMediaDimensionConstraints,
   RuntimeMediaFieldConstraint,
   RuntimeMediaFieldKind,
   RuntimeParamDef,
@@ -19,6 +21,7 @@ export interface ResolvedRuntimeInputLimits {
   images?: ResolvedRuntimeInputCountLimit
   videos?: ResolvedRuntimeInputCountLimit
   audios?: ResolvedRuntimeInputCountLimit
+  imageConstraints?: RuntimeImageConstraints
   videoConstraints?: RuntimeVideoConstraints
 }
 
@@ -91,10 +94,53 @@ export function resolveRuntimeInputLimits(
     resolved.images = mergeLimit(resolved.images, rule.images)
     resolved.videos = mergeLimit(resolved.videos, rule.videos)
     resolved.audios = mergeLimit(resolved.audios, rule.audios)
+    if (rule.imageConstraints) resolved.imageConstraints = { ...rule.imageConstraints }
     if (rule.videoConstraints) resolved.videoConstraints = { ...rule.videoConstraints }
   }
 
   return resolved
+}
+
+export interface MediaDimensions {
+  width: number
+  height: number
+}
+
+export interface MediaDimensionViolation {
+  rule: keyof RuntimeMediaDimensionConstraints
+  limit: number
+  actual: number
+}
+
+// 宽高比来自整数相除，边界值（如 1080×2700 = 0.4）不能因浮点舍入被误判。
+const ASPECT_RATIO_EPSILON = 1e-6
+
+/**
+ * 按模型声明的尺寸约束检查一份素材，返回第一条不满足的规则；全部满足返回 null。
+ * 宿主在提交前用它拦下注定被供应商拒绝的素材，文案由宿主按 rule 自行组织。
+ */
+export function findMediaDimensionViolation(
+  constraints: RuntimeMediaDimensionConstraints | undefined,
+  size: MediaDimensions
+): MediaDimensionViolation | null {
+  if (!constraints) return null
+  const aspectRatio = size.width / size.height
+  const measured: Record<keyof RuntimeMediaDimensionConstraints, number> = {
+    minShortSidePx: Math.min(size.width, size.height),
+    maxLongSidePx: Math.max(size.width, size.height),
+    minPixels: size.width * size.height,
+    maxPixels: size.width * size.height,
+    minAspectRatio: aspectRatio,
+    maxAspectRatio: aspectRatio,
+  }
+  for (const rule of Object.keys(measured) as Array<keyof RuntimeMediaDimensionConstraints>) {
+    const limit = constraints[rule]
+    if (limit === undefined) continue
+    const actual = measured[rule]
+    const tolerance = rule.endsWith('AspectRatio') ? ASPECT_RATIO_EPSILON : 0
+    if (rule.startsWith('min') ? actual < limit - tolerance : actual > limit + tolerance) return { rule, limit, actual }
+  }
+  return null
 }
 
 /**

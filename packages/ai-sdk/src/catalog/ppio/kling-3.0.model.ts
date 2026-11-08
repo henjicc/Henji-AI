@@ -22,10 +22,12 @@ export const kling30Model = defineModel({
     images: { max: 2 },
     videos: { max: 0 },
     rules: [
+      { imageConstraints: { minShortSidePx: 300, minAspectRatio: 0.4, maxAspectRatio: 2.5 } },
       {
         when: 'ppioKling30Mode === "motion-control"',
         images: { exact: 1 },
         videos: { exact: 1 },
+        imageConstraints: { minShortSidePx: 300 },
         videoConstraints: {
           maxSizeMB: 10,
           minDurationSec: 3,

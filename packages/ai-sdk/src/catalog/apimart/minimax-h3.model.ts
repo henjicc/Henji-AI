@@ -16,6 +16,9 @@ export const apimartMiniMaxH3Model = defineModel({
     rules: [{
       when: 'apimartMiniMaxH3Mode === "reference-to-video"',
       images: { max: 9 }, videos: { max: 3 }, audios: { max: 3 }
+    }, {
+      imageConstraints: { minShortSidePx: 256, maxLongSidePx: 5760, minAspectRatio: 0.4, maxAspectRatio: 2.5 },
+      videoConstraints: { minShortSidePx: 256, maxLongSidePx: 5760, minAspectRatio: 0.4, maxAspectRatio: 2.5 }
     }]
   },
   params: [

@@ -58,6 +58,7 @@ export type {
   InputLimitsResolver,
   InputLimitRule,
   InputCountLimit,
+  ImageConstraints,
   VideoConstraints
 } from './InputLimits'
 

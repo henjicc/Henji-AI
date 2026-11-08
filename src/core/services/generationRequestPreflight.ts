@@ -281,7 +281,8 @@ function resolveChoiceSmartAspectValues(
   }
 }
 
-async function readSourceImageInfo(imageSource: string): Promise<{ width: number; height: number } | null> {
+/** 按显示方向读取图片宽高；EXIF 旋转 90° 的图片交换宽高，读不到返回 null。 */
+export async function readSourceImageInfo(imageSource: string): Promise<{ width: number; height: number } | null> {
   try {
     const info = await readImageInfo(imageSource)
     if (Number.isFinite(info.width) && Number.isFinite(info.height) && info.width > 0 && info.height > 0) {

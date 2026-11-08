@@ -31,6 +31,10 @@ export const kieKling30OmniModel = defineModel({
                 when: 'kieKling30OmniMode === "reference-to-video"',
                 images: { max: 7 },
                 videos: { max: 1 }
+            },
+            {
+                imageConstraints: { minShortSidePx: 300, minAspectRatio: 0.4, maxAspectRatio: 2.5 },
+                videoConstraints: { minShortSidePx: 700, maxLongSidePx: 4553, maxPixels: 8_294_400, minAspectRatio: 0.4, maxAspectRatio: 2 }
             }
         ]
     },

@@ -39,7 +39,7 @@ export const apimartWan30Model = defineModel({
     images: { max: 2 }, videos: { max: 0 }, audios: { max: 0 },
     rules: [
       { when: 'apimartWan30Mode === "reference-to-video"', images: { max: 10 }, videos: { max: 5 }, audios: { max: 5 } },
-      { videoConstraints: { minDurationSec: 1, maxDurationSec: 15 } },
+      { videoConstraints: { minDurationSec: 1, maxDurationSec: 15 }, imageConstraints: { minShortSidePx: 240, maxLongSidePx: 8000 } },
     ],
   },
   params: [

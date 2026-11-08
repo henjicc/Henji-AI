@@ -8,6 +8,7 @@ import type { GenerateResult, ProgressStatus } from '@/core/providers/base';
 import type { JsonObject, StructuredGenerationOutput } from '@henjicc/ai-sdk';
 import { persistImageLocally } from '@/features/canvas/application/imageData';
 import { generateToCompletion } from '@/features/generation/application/generationCompletion';
+import { assertGenerationMediaDimensions } from '@/features/generation';
 import { clonedVoiceCompletion } from '@/services/voiceLibrary/clonedVoiceResult';
 
 const logger = createLogger('features.canvas.generation.runGeneration');
@@ -176,6 +177,10 @@ export async function runCanvasGeneration(request: CanvasGenerationRequest): Pro
     params.audios = request.upstream?.audios;
     params.uploadedAudioFilePaths = request.upstream?.audios;
   }
+
+  // 扩图、局部重绘等节点在这之前才定下实际发出的素材，所以尺寸按这里的最终参数检查。
+  const model = registry.getModel(modelId) ?? getControlledExecutionModel(modelId);
+  if (model) await assertGenerationMediaDimensions(model, params);
 
   await request.assertCurrent?.();
   request.signal?.throwIfAborted();

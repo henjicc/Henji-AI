@@ -19,7 +19,11 @@ export const apimartHappyHorse11Model = defineModel({
   },
   inputLimits: {
     images: { max: 1 }, videos: { max: 0 },
-    rules: [{ when: 'apimartHappyHorse11Mode === "reference-to-video"', images: { min: 1, max: 9 } }],
+    rules: [
+      { imageConstraints: { minShortSidePx: 300, minAspectRatio: 0.4, maxAspectRatio: 2.5 } },
+      // 参考图官方只硬性要求短边 / 长边 ≥ 0.4，短边 ≥ 720 px 只是推荐。
+      { when: 'apimartHappyHorse11Mode === "reference-to-video"', images: { min: 1, max: 9 }, imageConstraints: { minAspectRatio: 0.4, maxAspectRatio: 2.5 } },
+    ],
   },
   params: [
     {

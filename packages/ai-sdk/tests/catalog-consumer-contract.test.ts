@@ -5,6 +5,7 @@ import {
   compileRuntimeCondition,
   createAIClient,
   evaluateRuntimeCondition,
+  findMediaDimensionViolation,
   getRuntimeMediaInputContract,
   type JsonObject,
   type RuntimeConditionExpression,
@@ -160,6 +161,15 @@ describe('catalog consumer contract', () => {
     expect(() => compileRuntimeCondition('globalThis.fetch()')).toThrow(/Unsupported call/)
     expect(() => compileRuntimeCondition('true; globalThis.fetch()')).toThrow(/Unsupported token/)
     expect(() => evaluateRuntimeCondition('images.length > 0', {})).toThrow(/requires an array or string/)
+  })
+
+  it('素材尺寸约束按短边、长边、总像素与宽高比判定，边界值合格', () => {
+    const constraints = { minShortSidePx: 300, maxLongSidePx: 6000, maxPixels: 927_408, minAspectRatio: 0.4, maxAspectRatio: 2.5 }
+    expect(findMediaDimensionViolation(constraints, { width: 1080, height: 2700 })).toEqual({ rule: 'maxPixels', limit: 927_408, actual: 2_916_000 })
+    expect(findMediaDimensionViolation(constraints, { width: 400, height: 1000 })).toBeNull()
+    expect(findMediaDimensionViolation(constraints, { width: 1280, height: 299 })).toMatchObject({ rule: 'minShortSidePx', actual: 299 })
+    expect(findMediaDimensionViolation(constraints, { width: 900, height: 300 })).toMatchObject({ rule: 'maxAspectRatio', actual: 3 })
+    expect(findMediaDimensionViolation(undefined, { width: 1, height: 1 })).toBeNull()
   })
 
   it('从 inputLimits、上传参数类型和 runtime mediaFields 形成无 URL 输入框的媒体契约', () => {

@@ -2,6 +2,7 @@
 
 ## 0.10.0 - 未发布
 
+- 素材约束新增画面尺寸：`RuntimeMediaDimensionConstraints`（`minShortSidePx` / `maxLongSidePx` / `minPixels` / `maxPixels` / `minAspectRatio` / `maxAspectRatio`，宽高比 = 宽 / 高），`RuntimeVideoConstraints` 继承它，`RuntimeInputLimitRule` 新增 `imageConstraints`（`RuntimeImageConstraints`），`resolveRuntimeInputLimits` 一并解析；新增 `findMediaDimensionViolation` 供宿主提交前检查素材宽高。按官方文档补上尺寸要求：APIMart Kling 3.0 Omni 参考视频 720–2160 px（真实请求验收发现 640×360 视频付费请求失败）、KIE Kling 3.0 Omni、KIE / APIMart MiniMax H3、APIMart MiniMax H3 Max、派欧云 Kling 3.0、APIMart / Fal Kling 3.0 Turbo、Fal / KIE Kling 4.0、APIMart / KIE HappyHorse 1.1、KIE / 火山方舟 Seedance 2.0 系列与 2.5、APIMart Seedance 2.5、APIMart / 百炼万相 3.0、Fal Qwen Image 3.0、APIMart Seedream 5.0 Lite。
 - KIE 按官方 OpenAPI 修正：MiniMax H3 图生视频字段改为 first_frame_url / last_frame_url（此前图生视频不可用）；Qwen Image 3.0 Pro 文生图 model 改为 qwen3/pro-text-to-image；Kling 3.0 Omni 风格转换与参考生视频按官方分支构建；Seedance 2.5 web_search 改发布尔值；Nano Banana 2 参考图上限 10；Gemini 3.1 TTS 说话人带 accent；Gemini Omni Video 始终发 duration；Grok Imagine 图生图不发比例、Grok Imagine Video 图生视频时长为字符串。
 - APIMart Kling 3.0 Omni 编辑视频时不发时长；APIMart Seedance 2.5 任务类型只在参考模式下生效；Fal Veo 3.1 参考生视频按标准价计价；Fal Z-Image Turbo 强度下限 0.05、1MP 计价。
 - 一批视频与图片模型在“当前分支不发送”的情况下隐藏对应参数（带图时的比例、带视频时的模式与音频、编辑任务的时长等），界面与实际请求一致；Qwen3 TTS 温度改为官方的 0.1–1；KIE Seedance V1 选到该版本没有的比例时贴近所选比例；魔搭基准尺寸步长改为 16（离线“所选即所发”检查发现）。

@@ -1,6 +1,9 @@
+import { findMediaDimensionViolation, type MediaDimensions, type MediaDimensionViolation } from '@henjicc/ai-sdk'
+import { readVideoInfo } from '@/commands/video'
 import { createLogger } from '@/core/logging'
 import { readCachedVideoDurationSeconds, resolvePriceEstimateMediaContext } from '@/core/pricing/resolvePriceEstimateMediaContext'
-import { attachVideoDurations } from '@/core/services/generationVideoDurations'
+import { attachVideoDurations, resolveGenerationVideoSources } from '@/core/services/generationVideoDurations'
+import { readSourceImageInfo } from '@/core/services/generationRequestPreflight'
 import { toApplicationStableIdSegment } from '@/core/application-control'
 import { LinkageEngine } from '@/core/linkage'
 import { registry } from '@/core/ModelRegistry'
@@ -15,7 +18,7 @@ import {
   resolvePricingCurrency,
 } from '@/core/pricing/priceDisplay'
 import { validateParams, type ValidationError } from '@/core/request/paramValidator'
-import { getI18nText, type ModelDefinition, type ModelTag, type ModelType, type ParamDef } from '@/core/types'
+import { getI18nText, type ImageConstraints, type ModelDefinition, type ModelTag, type ModelType, type ParamDef, type VideoConstraints } from '@/core/types'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 
 const logger = createLogger('features.generation.preparation')
@@ -562,4 +565,100 @@ export function prepareGenerationModelInput(input: GenerationPreparationInput, m
       requestBuilderValidated: Boolean(model.request?.builder),
     },
   }
+}
+
+export interface GenerationMediaDimensionReaders {
+  image: (source: string) => Promise<MediaDimensions | null>
+  video: (source: string) => Promise<MediaDimensions | null>
+}
+
+const defaultMediaDimensionReaders: GenerationMediaDimensionReaders = {
+  image: readSourceImageInfo,
+  video: async (source) => {
+    try {
+      const info = await readVideoInfo(source)
+      return info.width > 0 && info.height > 0 ? { width: info.width, height: info.height } : null
+    } catch {
+      return null
+    }
+  },
+}
+
+// 同一组素材会以本地路径、显示地址等多种键并存，取条目最多的一组，避免同一素材被重复检查。
+function resolveMediaSources(model: ModelDefinition, values: DynamicValueMap, kind: 'image' | 'video'): string[] {
+  const generic = kind === 'image'
+    ? [values.uploadedFilePaths, values.images, values.uploadedImages]
+        .map(stringArray)
+        .reduce<string[]>((longest, sources) => sources.length > longest.length ? sources : longest, [])
+    : resolveGenerationVideoSources(values)
+  const uploadType = kind === 'image' ? 'image-upload' : 'video-upload'
+  const fromParams = model.params
+    .filter((param) => param.type === uploadType)
+    .flatMap((param) => typeof values[param.id] === 'string' ? stringArray([values[param.id]]) : stringArray(values[param.id]))
+  return [...new Set([...generic, ...fromParams])]
+}
+
+function formatAspectRatio(value: number): string {
+  return Number(value.toFixed(2)).toString()
+}
+
+function describeDimensionViolation(
+  violation: MediaDimensionViolation,
+  constraints: ImageConstraints | VideoConstraints,
+): string {
+  switch (violation.rule) {
+    case 'minShortSidePx': return `宽和高都不能小于 ${violation.limit} 像素`
+    case 'maxLongSidePx': return `宽和高都不能超过 ${violation.limit} 像素`
+    case 'minPixels': return `画面总像素（宽×高）不能少于 ${violation.limit}`
+    case 'maxPixels': return `画面总像素（宽×高）不能超过 ${violation.limit}`
+    case 'minAspectRatio':
+    case 'maxAspectRatio': {
+      const { minAspectRatio: min, maxAspectRatio: max } = constraints
+      const range = min !== undefined && max !== undefined
+        ? `${formatAspectRatio(min)}～${formatAspectRatio(max)} 之间`
+        : min !== undefined ? `不小于 ${formatAspectRatio(min)}` : `不大于 ${formatAspectRatio(max ?? violation.limit)}`
+      return `宽高比（宽÷高）需${range}，当前为 ${formatAspectRatio(violation.actual)}`
+    }
+  }
+}
+
+/**
+ * 按模型声明的素材尺寸约束读取图片、视频的实际宽高并校验，不合格时抛出可直接展示给用户的错误，
+ * 让注定被供应商拒绝的付费请求在提交前就被拦下。读不到尺寸的素材不拦，交给供应商判断。
+ */
+export async function assertGenerationMediaDimensions(
+  model: ModelDefinition,
+  values: DynamicValueMap,
+  readers: GenerationMediaDimensionReaders = defaultMediaDimensionReaders,
+): Promise<void> {
+  const imageSources = resolveMediaSources(model, values, 'image')
+  const videoSources = resolveMediaSources(model, values, 'video')
+  if (imageSources.length === 0 && videoSources.length === 0) return
+  const limits = resolveInputLimits(model.meta.id, values, { imagesCount: imageSources.length, videosCount: videoSources.length })
+  const groups = [
+    { kind: 'image' as const, label: '图片', sources: imageSources, constraints: limits.imageConstraints },
+    { kind: 'video' as const, label: '视频', sources: videoSources, constraints: limits.videoConstraints },
+  ]
+  const errors: Array<{ paramId: string; type: 'dimensions'; message: string }> = []
+  for (const { kind, label, sources, constraints } of groups) {
+    if (!constraints || sources.length === 0) continue
+    const sizes = await Promise.all(sources.map((source) => readers[kind](source)))
+    sizes.forEach((size, index) => {
+      if (!size) return
+      const violation = findMediaDimensionViolation(constraints, size)
+      if (!violation) return
+      const which = sources.length > 1 ? `第 ${index + 1} 个${label}` : label
+      errors.push({
+        paramId: kind === 'image' ? 'images' : 'videos',
+        type: 'dimensions',
+        message: `${which}（${size.width}×${size.height}）${describeDimensionViolation(violation, constraints)}`,
+      })
+    })
+  }
+  if (errors.length === 0) return
+  const modelName = getI18nText(model.meta.name, 'zh') || model.meta.id
+  logger.warn('素材尺寸不符合模型要求', { event: 'generation.media_dimensions.rejected', modelId: model.meta.id, errors })
+  throw new GenerationPreparationError('INVALID_INPUT',
+    `${modelName} 不接受当前素材：${errors.map((error) => error.message).join('；')}。请换用符合要求的素材后再生成。`,
+    { modelId: model.meta.id, errors })
 }

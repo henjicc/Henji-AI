@@ -20,7 +20,10 @@ export const kieHappyHorse11Model = defineModel({
   },
   inputLimits: {
     images: { max: 1 }, videos: { max: 0 }, audios: { max: 0 },
-    rules: [{ when: 'kieHappyHorse11Mode === "reference-to-video"', images: { min: 1, max: 9 } }],
+    rules: [
+      { imageConstraints: { minShortSidePx: 300, minAspectRatio: 0.4, maxAspectRatio: 2.5 } },
+      { when: 'kieHappyHorse11Mode === "reference-to-video"', images: { min: 1, max: 9 }, imageConstraints: { minShortSidePx: 400 } },
+    ],
   },
   params: [
     { id: 'kieHappyHorse11Mode', type: 'dropdown', order: 1, default: 'text-image-to-video',

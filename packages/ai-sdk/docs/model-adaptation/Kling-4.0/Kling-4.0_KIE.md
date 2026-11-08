@@ -43,6 +43,10 @@
 
 沿用 [KIE 供应商文档](../供应商/KIE.md) 第 2 节 Market 统一任务契约，未引入新轮询或解析分支。官方请求 schema 见 `tests/fixtures/model-requests-2026-11/kie-kling-4.0-*.json`，由 `tests/catalog/kie-grsai-2026-11.test.ts` 校验；未做付费真网验收。
 
+## 项目适配
+
+- 素材尺寸前置校验（2026-11-08）：`imageConstraints` 边长 300–65536 px、宽高比 0.4–2.5（Flash 文档未写尺寸，不声明）。提交前读取素材实际宽高，不合格直接提示，不发付费请求。
+
 ## 原始链接索引
 
 均公开，无需登录：

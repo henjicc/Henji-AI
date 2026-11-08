@@ -64,6 +64,7 @@ Turbo 没有音频开关，因此没有有声 / 无声的价差。
 
 ## 6. 适配要点
 
+- 素材尺寸前置校验（2026-11-08）：`imageConstraints` 首帧宽高 ≥ 300 px、宽高比 0.4–2.5。提交前读取素材实际宽高，不合格直接提示，不发付费请求。
 - 本项目默认**绝对不显示**：`seed`、负面提示词。Fal 的 Turbo 端点这两个字段都没有（**与非 Turbo 的 v3 不同，Turbo 没有带默认值的 `negative_prompt`**）。
 - `duration` 是**字符串枚举**。
 - 档位通过 endpoint 路径选择（turbo/pro、turbo/standard），不是参数。

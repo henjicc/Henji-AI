@@ -24,6 +24,10 @@ export const kieMiniMaxH3Model = defineModel({
                 images: { max: 9 },
                 videos: { max: 3 },
                 audios: { max: 3 }
+            },
+            {
+                imageConstraints: { minShortSidePx: 256, maxLongSidePx: 5760, minAspectRatio: 0.4, maxAspectRatio: 2.5 },
+                videoConstraints: { minShortSidePx: 256, maxLongSidePx: 5760, minAspectRatio: 0.4, maxAspectRatio: 2.5 }
             }
         ]
     },

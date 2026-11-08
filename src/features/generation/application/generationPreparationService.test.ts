@@ -4,6 +4,7 @@ import { catalog } from '@henjicc/ai-sdk'
 import { volcengineSeedIcl20Model } from '../../../../packages/ai-sdk/src/catalog/volcengine-speech/seed-icl-2.0.model'
 import { kieGemini31FlashTtsModel } from '../../../../packages/ai-sdk/src/catalog/kie/gemini-3.1-flash-tts.model'
 import { kieGrokImagineModel } from '../../../../packages/ai-sdk/src/catalog/kie/grok-imagine.model'
+import { apimartKling30OmniModel } from '../../../../packages/ai-sdk/src/catalog/apimart/kling-3.0-omni.model'
 
 import {
   applicationSchemaRefSchema,
@@ -16,6 +17,7 @@ import type { ModelDefinition } from '@/core/types'
 import { modelPresentations } from '@/models/presentation'
 
 import {
+  assertGenerationMediaDimensions,
   GenerationPreparationError,
   getGenerationModelCatalogBootstrap,
   getGenerationModelSchema,
@@ -89,6 +91,23 @@ describe('generationPreparation', () => {
     registry.clear()
     registry.register({ ...testModel, pricing: { currency: '¥', calculator: () => { throw new Error('no estimate') } } })
     expect(getGenerationModelSchema(testModel.meta.id).priceEstimate).toMatchObject({ amount: null, comparableCnyAmount: null })
+  })
+
+  it('提交前按模型尺寸约束拦下不合格素材，读不到尺寸的不拦', async () => {
+    const model = composeModelDefinition(apimartKling30OmniModel, modelPresentations[apimartKling30OmniModel.meta.id])
+    registry.register(model)
+    const values = { ...registry.getDefaultValues(model.meta.id), uploadedVideoFilePaths: ['D:/clip.mp4'], videos: ['henji-media://clip.mp4'] }
+    const readers = (size: { width: number; height: number } | null) => ({ image: async () => null, video: vi.fn(async () => size) })
+
+    const small = readers({ width: 640, height: 360 })
+    const rejected = await assertGenerationMediaDimensions(model, values, small).catch((error: unknown) => error)
+    expect(rejected).toBeInstanceOf(GenerationPreparationError)
+    expect((rejected as Error).message).toContain('视频（640×360）宽和高都不能小于 720 像素')
+    // 同一段视频的本地路径与显示地址只检查一次。
+    expect(small.video).toHaveBeenCalledTimes(1)
+
+    await expect(assertGenerationMediaDimensions(model, values, readers({ width: 1280, height: 720 }))).resolves.toBeUndefined()
+    await expect(assertGenerationMediaDimensions(model, values, readers(null))).resolves.toBeUndefined()
   })
 
   it('按配置搜索并裁剪单模型 schema', () => {

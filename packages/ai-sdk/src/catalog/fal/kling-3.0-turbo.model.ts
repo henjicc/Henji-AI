@@ -8,7 +8,7 @@ export const falKling30TurboModel = defineModel({
         tags: ['text-to-video', 'image-to-video'],
         aliases: ['kling-v3-turbo-fal'], polling: { interval: 3000, maxAttempts: 280, expectedAttempts: 65 }
     },
-    inputLimits: { images: { max: 1 }, videos: { max: 0 }, audios: { max: 0 } },
+    inputLimits: { images: { max: 1 }, videos: { max: 0 }, audios: { max: 0 }, rules: [{ imageConstraints: { minShortSidePx: 300, minAspectRatio: 0.4, maxAspectRatio: 2.5 } }] },
     params: [
         {
             id: 'falKling30TurboAspectRatio', type: 'dropdown', order: 1,

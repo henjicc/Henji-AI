@@ -44,7 +44,10 @@ export const bailianWan30Model = defineModel({
   // 参考视频、参考音频各最多 5 段（单段 1–15 秒、合计 ≤ 15 秒），本地文件经百炼临时存储上传成 oss:// 地址。
   inputLimits: {
     images: { max: 2 }, videos: { max: 0 }, audios: { max: 0 },
-    rules: [{ when: 'bailianWan30Mode === "reference-to-video"', images: { max: 10 }, videos: { max: 5 }, audios: { max: 5 } }],
+    rules: [
+      { when: 'bailianWan30Mode === "reference-to-video"', images: { max: 10 }, videos: { max: 5 }, audios: { max: 5 } },
+      { imageConstraints: { minShortSidePx: 240, maxLongSidePx: 8000, minAspectRatio: 1 / 8, maxAspectRatio: 8 } },
+    ],
   },
   params: [
     { id: 'bailianWan30Variant', type: 'dropdown', order: 1, default: 'standard', options: [{ value: 'standard' }, { value: 'prime' }] },

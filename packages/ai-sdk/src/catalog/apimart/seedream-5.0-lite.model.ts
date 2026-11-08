@@ -10,7 +10,7 @@ export const apimartSeedream50LiteModel = defineModel({
         tags: ['text-to-image', 'image-to-image'],
         aliases: ['seedream-5-lite-apimart'], polling: { interval: 3000, maxAttempts: 200, expectedAttempts: 40 }
     },
-    inputLimits: { images: { max: 14 }, videos: { max: 0 } },
+    inputLimits: { images: { max: 14 }, videos: { max: 0 }, rules: [{ imageConstraints: { minAspectRatio: 1 / 3, maxAspectRatio: 3 } }] },
     params: [
         {
             id: 'apimartSeedream50LiteAspectRatio', type: 'dropdown', order: 1,

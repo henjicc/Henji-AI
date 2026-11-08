@@ -1,5 +1,5 @@
 import type { JsonObject, JsonValue } from '../../types/runtime'
-import type { ModelRuntimeDefinition } from '../../types/model'
+import type { ModelRuntimeDefinition, RuntimeImageConstraints } from '../../types/model'
 import { hasUploadedImage, hasUploadedVideo, resolveKieImageSources, resolveKieVideoSources } from './mediaSources'
 import { resolveUploadedVideoDurationSeconds } from '../shared/mediaPresence'
 import { buildKieSubjectElements, subjectElementVideoSeconds } from '../shared/subjectElements'
@@ -17,6 +17,8 @@ export interface Kling40Variant {
   resolutions: string[]
   /** 每秒美元价：keyframe 与无视频参考同价，带参考视频另一档。 */
   rates: Record<string, { base: number; withVideo: number }>
+  /** 官方文档写明的图片尺寸要求；未写明的变体不声明，交给平台判断。 */
+  imageConstraints?: RuntimeImageConstraints
 }
 
 const RATIOS = ['16:9', '9:16', '1:1', '21:9']
@@ -52,7 +54,10 @@ export function kling40Definition(variant: Kling40Variant): Omit<ModelRuntimeDef
     inputLimits: {
       images: { max: variant.firstFrameOnly ? 1 : 10 },
       videos: { max: 0 },
-      rules: [{ when: `${p}Mode === "reference-to-video"`, images: { max: 10 }, videos: { max: 5 } }],
+      rules: [
+        { when: `${p}Mode === "reference-to-video"`, images: { max: 10 }, videos: { max: 5 } },
+        ...(variant.imageConstraints ? [{ imageConstraints: variant.imageConstraints }] : []),
+      ],
     },
     // 关键帧张数随时长变：每秒 1 张再加首帧，最多 10 张（官方按秒数限制）。写成提交前提示而不是数量上限：
     // 上限会让画布在缩短时长后把关键帧序列悄悄换成参考生视频。

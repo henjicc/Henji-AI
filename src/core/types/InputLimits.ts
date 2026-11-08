@@ -2,6 +2,7 @@
  * Input limits configuration.
  */
 
+import type { RuntimeImageConstraints, RuntimeMediaDimensionConstraints } from '@henjicc/ai-sdk'
 import type { ConditionExpression, ConditionFunction } from './ConditionTypes'
 
 export type InputCondition = ConditionExpression | ConditionFunction
@@ -12,7 +13,9 @@ export interface InputCountLimit {
   exact?: number
 }
 
-export interface VideoConstraints {
+export type ImageConstraints = RuntimeImageConstraints
+
+export interface VideoConstraints extends RuntimeMediaDimensionConstraints {
   maxSizeMB?: number
   minDurationSec?: number
   maxDurationSec?: number
@@ -30,6 +33,7 @@ export interface InputLimitRule {
   images?: InputCountLimit
   videos?: InputCountLimit
   audios?: InputCountLimit
+  imageConstraints?: ImageConstraints
   videoConstraints?: VideoConstraints
 }
 

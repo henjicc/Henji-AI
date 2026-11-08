@@ -32,7 +32,9 @@ export const falKling40Model = defineModel({
         images: { max: 10 }, videos: { max: 0 }, audios: { max: 0 },
         rules: [
             { when: 'falKling40Mode === "reference-to-video"', images: { max: 10 }, videos: { max: 5 } },
-            { when: 'falKling40Mode === "video-edit"', images: { max: 10 }, videos: { min: 1, max: 5 } }
+            { when: 'falKling40Mode === "video-edit"', images: { max: 10 }, videos: { min: 1, max: 5 } },
+            { videoConstraints: { minShortSidePx: 700, maxLongSidePx: 4553 } },
+            { when: 'falKling40Mode === "video-edit"', videoConstraints: { minShortSidePx: 700, maxLongSidePx: 4553, minAspectRatio: 0.4, maxAspectRatio: 2.5 } }
         ]
     },
     requirements: [

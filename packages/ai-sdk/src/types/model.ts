@@ -447,7 +447,22 @@ export interface RuntimeInputCountLimit {
   exact?: number
 }
 
-export interface RuntimeVideoConstraints {
+/**
+ * 供应商对输入素材画面尺寸的硬性要求。宽高按显示方向计算（已应用 EXIF 旋转），
+ * 宽高比 = 宽 / 高；“边长 a–b px”写作 minShortSidePx: a、maxLongSidePx: b。
+ */
+export interface RuntimeMediaDimensionConstraints {
+  minShortSidePx?: number
+  maxLongSidePx?: number
+  minPixels?: number
+  maxPixels?: number
+  minAspectRatio?: number
+  maxAspectRatio?: number
+}
+
+export type RuntimeImageConstraints = RuntimeMediaDimensionConstraints
+
+export interface RuntimeVideoConstraints extends RuntimeMediaDimensionConstraints {
   maxSizeMB?: number
   minDurationSec?: number
   maxDurationSec?: number
@@ -459,6 +474,7 @@ export interface RuntimeInputLimitRule {
   images?: RuntimeInputCountLimit
   videos?: RuntimeInputCountLimit
   audios?: RuntimeInputCountLimit
+  imageConstraints?: RuntimeImageConstraints
   videoConstraints?: RuntimeVideoConstraints
 }
 

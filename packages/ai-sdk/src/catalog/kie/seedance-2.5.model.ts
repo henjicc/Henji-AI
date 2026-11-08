@@ -24,6 +24,10 @@ export const kieSeedance25Model = defineModel({
                 images: { max: 30 },
                 videos: { max: 10 },
                 audios: { max: 10 }
+            },
+            {
+                imageConstraints: { minShortSidePx: 300, maxLongSidePx: 6000, minAspectRatio: 0.4, maxAspectRatio: 2.5 },
+                videoConstraints: { minShortSidePx: 300, maxLongSidePx: 6000, minPixels: 409_600, maxPixels: 927_408, minAspectRatio: 0.4, maxAspectRatio: 2.5 }
             }
         ]
     },

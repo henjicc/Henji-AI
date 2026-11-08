@@ -11,7 +11,7 @@ export const apimartKling30TurboModel = defineModel({
     tags: ['text-to-video', 'image-to-video'],
     aliases: ['kling-3-turbo-apimart'], polling: { interval: 3000, maxAttempts: 300, expectedAttempts: 70 }
   },
-  inputLimits: { images: { max: 1 }, videos: { max: 0 } },
+  inputLimits: { images: { max: 1 }, videos: { max: 0 }, rules: [{ imageConstraints: { minShortSidePx: 300, minAspectRatio: 0.4, maxAspectRatio: 2.5 } }] },
   params: [
     {
       id: 'apimartKling30TurboAspectRatio', type: 'dropdown', order: 1,

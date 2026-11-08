@@ -10,7 +10,13 @@ export const apimartSeedance25Model = defineModel({
     },
     inputLimits: {
         images: { max: 2 }, videos: { max: 0 }, audios: { max: 0 },
-        rules: [{ when: 'apimartSeedance25Mode === "reference-to-video"', images: { max: 30 }, videos: { max: 10 }, audios: { max: 10 } }]
+        rules: [
+            { when: 'apimartSeedance25Mode === "reference-to-video"', images: { max: 30 }, videos: { max: 10 }, audios: { max: 10 } },
+            {
+                imageConstraints: { minShortSidePx: 300, maxLongSidePx: 6000, minAspectRatio: 0.4, maxAspectRatio: 2.5 },
+                videoConstraints: { minShortSidePx: 300, maxLongSidePx: 6000, minPixels: 409_600, maxPixels: 8_295_044, minAspectRatio: 0.4, maxAspectRatio: 2.5 }
+            }
+        ]
     },
     // 视频编辑与延长必须有一段参考视频：写成提交前提示而不是数量下限，下限会让画布把用户选的任务悄悄换成付费的自动参考。
     requirements: [{
