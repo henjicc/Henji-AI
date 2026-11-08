@@ -3,7 +3,13 @@
 本清单是 `@henjicc/ai-sdk` 消费方的唯一维护入口，用于 SDK 发布后的跨仓升级协调。
 绝对路径仅描述当前开发机上的仓库位置，不进入 SDK 运行时代码、发布包或用户配置。
 
-最后核对日期：2026-10-06
+最后核对日期：2026-11-08
+
+`0.10.0` 已发布（2026-11-08）：首次经 GitHub 受信任发布（`publish-sdk.yml`，OIDC，无令牌、无 2FA，带 provenance），发布源码 `2cac9761f`，[运行 42481040676](https://github.com/henjicc/Henji-AI/actions/runs/42481040676) 在 CI 内通过 prepublishOnly 全量门禁（SDK 104 文件 / 1503 项测试、仓外 Vite / 严格 TS / 受限宿主）后上传。公共索引可读后，隔离配置与缓存的仓外匿名安装通过：231 个根导出可导入，`models/bailian/minimax-h3` 按需入口可用，lockfile 解析到公共 tarball、integrity 与 registry 一致。同提交的应用侧 CI（表面层级检查与 10 个应用单测）仍有失败，不涉及 SDK 包内容，另行修复。破坏性：删除 `siliconFlowTeleSpeechAsr`；外部 `say-it` 未用到本版新增能力，本次不升级，日后升级前先确认未引用该导出。Henji-AI workspace 使用 `0.10.0`。
+
+- `0.10.0` tarball：[公共 npm 包](https://registry.npmjs.org/@henjicc/ai-sdk/-/ai-sdk-0.10.0.tgz)
+- `0.10.0` shasum：`1d26c1ecc18d8c958b7a32d09f2b577422c639bf`
+- `0.10.0` integrity：`sha512-ZREAzNuvVBgTXE5Ptu1xhauJCrqQ4z4lDjbzq2III0dYE82VbYoVqqcWVz1YYsrJdDXVz0OkzKXbJQ+TByaPeQ==`
 
 `0.9.0` 已发布（2026-10-06）：在 09-28 候选（Seed-ICL 2.0 声音复刻、百炼转写恢复）基础上新增生成结果地址数组 `urls`（`url` 保留为兼容字段）。发布源码 `7ec755d9` 的必需 CI [37430089661](https://github.com/henjicc/Henji-AI/actions/runs/37430089661) 全部成功；`urls` 改动后 SDK 86 文件 / 1056 项测试、`check:sdk` 可移植性与两个 tsc 通过，Henji-AI 主进程宿主改为直接读取 `urls`。固定候选包仓外回装后由用户完成 npm 网页认证发布；公共索引可读后，隔离配置与缓存的仓外匿名安装通过，206 个公开导出可导入，lockfile integrity 与候选一致。未执行真实付费生成。Henji-AI workspace 使用 `0.9.0`；外部 `say-it` 只用 ASR／翻译／LLM，三个示例不涉及声音复刻与 `urls`，不机械升级。
 
