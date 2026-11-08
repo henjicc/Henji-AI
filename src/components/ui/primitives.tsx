@@ -32,13 +32,9 @@ import {
   UI_CONTROL_HEIGHT_CLASS,
   UI_COVER_GROUP_CLASS,
   UI_MULTISELECT_ITEM_ACTIVE_CLASS,
-  UI_NAV_INDICATOR_BOTTOM_CLASS,
-  UI_NAV_INDICATOR_BOTTOM_SHORT_CLASS,
   UI_NAV_INDICATOR_BOTTOM_SUBTLE_CLASS,
-  UI_NAV_INDICATOR_END_CLASS,
   UI_NAV_ITEM_ACTIVE_CLASS,
   UI_NAV_ITEM_ACTIVE_SUBTLE_CLASS,
-  UI_NAV_ITEM_ACTIVE_WORKSPACE_CLASS,
   UI_NAV_TOGGLE_ON_CLASS,
   UI_OPTION_ITEM_ACTIVE_CLASS,
   UI_OPTION_ITEM_CLASS,
@@ -156,7 +152,7 @@ const UI_NAV_SIZE_CLASS = {
 } as const;
 
 /**
- * 导航项（“正在看哪里”）：静息无底 text2、悬停出底；选中为中性选中底 + 主要文字（图标强调色）+ 末端指示条。
+ * 导航项（“正在看哪里”）：静息无底 text2、悬停出底；选中为中性选中底 + 主要文字。
  * 外观只由 active / size 决定，className 只放布局（check:surface 规则 E）。
  */
 export const UiNavButton = forwardRef<HTMLButtonElement, UiNavButtonProps>(
@@ -166,7 +162,7 @@ export const UiNavButton = forwardRef<HTMLButtonElement, UiNavButtonProps>(
       data-size={size}
       className={`relative inline-flex w-full items-center border-0 text-left text-13 transition-colors ${UI_RADIUS_CLASS.control} ${UI_NAV_SIZE_CLASS[size]} ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${UI_ITEM_FOCUS_RING_CLASS} ${
         active
-          ? `${UI_NAV_ITEM_ACTIVE_CLASS} ${UI_NAV_INDICATOR_END_CLASS}`
+          ? UI_NAV_ITEM_ACTIVE_CLASS
           : `${UI_GLASS_ADAPTIVE_NAV_CLASS} text-text2 hover:text-text1`
       } ${className}`}
       {...props}
@@ -214,7 +210,7 @@ const UI_CHIP_SIZE_CLASS: Record<UiControlSize, string> = {
 
 /**
  * 标签按钮：默认 `toggle` 是多选/标签（选中 = 强调描边 + 中性底 + 强调文字），`navigation` 是横向导航
- * （选中 = 中性选中底 + 底部指示条；`subtle` 是面板标签：主要文字 + 底部细线）。
+ * （选中 = 中性选中底 + 主要文字；`subtle` 是面板标签：主要文字 + 底部细线）。
  * 外观只由 active / selectionRole / selectionAppearance / size 决定，className 只放布局（check:surface 规则 E）。
  */
 export const UiChipButton = forwardRef<HTMLButtonElement, UiChipButtonProps>(
@@ -233,9 +229,7 @@ export const UiChipButton = forwardRef<HTMLButtonElement, UiChipButtonProps>(
     const toggle = workspace && on !== undefined && !active;
     const navigationActiveClass = subtle
       ? `${UI_NAV_ITEM_ACTIVE_SUBTLE_CLASS} ${UI_NAV_INDICATOR_BOTTOM_SUBTLE_CLASS}`
-      : workspace
-        ? `${UI_NAV_ITEM_ACTIVE_WORKSPACE_CLASS} ${UI_NAV_INDICATOR_BOTTOM_SHORT_CLASS}`
-        : `${UI_NAV_ITEM_ACTIVE_CLASS} ${UI_NAV_INDICATOR_BOTTOM_CLASS}`;
+      : UI_NAV_ITEM_ACTIVE_CLASS;
     const layoutClass = subtle
       ? `${UI_CHIP_SIZE_CLASS[size]} rounded-none font-medium`
       : workspace

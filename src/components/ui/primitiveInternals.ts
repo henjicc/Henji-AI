@@ -89,13 +89,13 @@ export interface UiChipButtonProps extends UiButtonFeedbackProps {
   /**
    * 只对 `selectionRole="navigation"` 生效：
    * - `subtle`：面板标签（设计稿面板头，选中只换主要文字 + 底部细线）；
-   * - `workspace`：应用标题栏的工作区导航（设计稿 TitleBar：28 高、13/500、纯文字；选中 = 中性选中底 +
-   *   主要文字 + 底部短指示条），尺寸固定，`size` 不参与。
+   * - `workspace`：应用标题栏的工作区导航（设计稿 TitleBar：28 高、13/500、静息纯文字；选中 = 中性选中底 +
+   *   主要文字），尺寸固定，`size` 不参与。
    */
   selectionAppearance?: 'default' | 'subtle' | 'workspace'
   /**
    * 只对 `selectionAppearance="workspace"` 生效：同一条工作区导航里“打开浮层而不切换工作区”的开关项
-   * （资产浮动面板）。开启 = 中性选中底 + 主要文字，不带当前页指示条，并写 `aria-pressed`；
+   * （资产浮动面板）。开启 = 强调文字、不铺底，并写 `aria-pressed`；
    * `aria-current` 仍只属于当前工作区（`active`）。
    */
   on?: boolean

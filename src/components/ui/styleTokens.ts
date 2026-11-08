@@ -31,9 +31,9 @@ export const UI_WHITE_HEX = WHITE_HEX;
 /* ---------------------------------------------------------------------------
  * 选中态词汇表（重要记录 001/012，任务 2.2 → 4.3）
  *
- * 注意力优先（重要记录 018/019，修订 012）：强调色只给唯一主动作、播放头与时间码、键盘焦点、当前标签与工作区细线；
- * 选中用中性底 + 主要文字，靠指示条、勾或强调文字区分；悬停只用中性抬升，悬停与选中不得同色。
- * 1. 导航“正在看哪里”：中性选中底 + 主要文字 + 强调色方向指示条（面板标签、工作区导航：只有文字加亮 + 强调色细线）
+ * 注意力优先（重要记录 018/019，修订 012）：强调色只给唯一主动作、播放头与时间码、键盘焦点与面板标签细线；
+ * 选中用中性底 + 主要文字，靠勾或强调文字区分；悬停只用中性抬升，悬停与选中不得同色。
+ * 1. 导航“正在看哪里”：中性选中底 + 主要文字，不画指示条（面板标签例外：底色透明，只有文字加亮 + 强调色细线）
  * 2. 单选“值是什么”：中性选中底；格子用强调文字，分段用中性抬起底 + 强文字（记录 017），菜单项保持主要文字 + 强调色勾
  * 3. 多选“集合里哪些已选”：强调描边 + 淡强调底 + 强调文字（保留：多选标签必须一眼看出集合）
  * 4. 布尔“是否开启”：复选框中性框 + 主要文字色勾（开关外观相同），不用强调色实底
@@ -42,29 +42,17 @@ export const UI_WHITE_HEX = WHITE_HEX;
  * 否则 Tailwind 产物顺序会让选中态静默失效。业务调用点只传 active / checked，不直接拼这些类。
  * ------------------------------------------------------------------------- */
 
-/** 导航选中：中性选中底 + 主要文字。强调色只在导航组件按方向补的指示条上（重要记录 019）。 */
+/**
+ * 导航选中（侧栏、横向导航、标题栏工作区）：中性选中底 + 主要文字，不加指示条。
+ * 界面整体是中性灰，导航上的强调色线条或色块会和唯一主动作抢注意力，选中只靠明暗表达。
+ */
 export const UI_NAV_ITEM_ACTIVE_CLASS = 'bg-selected text-text1';
-
-/** 标题栏工作区导航选中：只有文字加亮，底下短指示条由组件补充，不铺底（重要记录 019）。 */
-export const UI_NAV_ITEM_ACTIVE_WORKSPACE_CLASS = 'text-text1';
 
 /** 标题栏导航里的浮层开关开着（如助手面板）：不铺底，文字与图标取强调文字色。 */
 export const UI_NAV_TOGGLE_ON_CLASS = 'text-accent-text';
 
 /** 面板标签（设计稿面板头）：选中只换成主要文字 + 底部细线，背景保持透明。 */
 export const UI_NAV_ITEM_ACTIVE_SUBTLE_CLASS = 'text-text1';
-
-/** 纵向导航的末端指示条。 */
-export const UI_NAV_INDICATOR_END_CLASS =
-  "after:absolute after:right-0 after:top-1.5 after:bottom-1.5 after:w-0.5 after:rounded-full after:bg-accent after:content-['']";
-
-/** 横向导航的底部指示条。 */
-export const UI_NAV_INDICATOR_BOTTOM_CLASS =
-  "after:absolute after:bottom-0 after:left-2 after:right-2 after:h-0.5 after:bg-accent after:content-['']";
-
-/** 标题栏工作区导航的底部短指示条（居中 12px，强调色）。 */
-export const UI_NAV_INDICATOR_BOTTOM_SHORT_CLASS =
-  "after:absolute after:bottom-0.5 after:left-1/2 after:h-0.5 after:w-3 after:-translate-x-1/2 after:rounded-full after:bg-accent after:content-['']";
 
 /** 面板标签的底部细线（1.5px 强调色，重要记录 012：选中指示用强调色）。 */
 export const UI_NAV_INDICATOR_BOTTOM_SUBTLE_CLASS =

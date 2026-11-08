@@ -13,13 +13,9 @@ import {
   UI_GLASS_ADAPTIVE_SELECTED_CLASS,
   UI_GLASS_ADAPTIVE_TILE_CLASS,
   UI_MULTISELECT_ITEM_ACTIVE_CLASS,
-  UI_NAV_INDICATOR_BOTTOM_CLASS,
-  UI_NAV_INDICATOR_BOTTOM_SHORT_CLASS,
   UI_NAV_INDICATOR_BOTTOM_SUBTLE_CLASS,
-  UI_NAV_INDICATOR_END_CLASS,
   UI_NAV_ITEM_ACTIVE_CLASS,
   UI_NAV_ITEM_ACTIVE_SUBTLE_CLASS,
-  UI_NAV_ITEM_ACTIVE_WORKSPACE_CLASS,
   UI_NAV_TOGGLE_ON_CLASS,
   UI_OPTION_ITEM_ACTIVE_CLASS,
   UI_SWITCH_THUMB_CLASS,
@@ -44,7 +40,7 @@ function expectClasses(element: HTMLElement, classNames: string): void {
 }
 
 describe('Ui primitives 选中态词汇表', () => {
-  it('导航态使用中性底、强调文字与方向指示条', () => {
+  it('导航态使用中性选中底与主要文字，不画指示条', () => {
     const view = render(
       <>
         <UiNavButton active>纵向导航</UiNavButton>
@@ -56,14 +52,14 @@ describe('Ui primitives 选中态词汇表', () => {
     const horizontal = view.getByRole('button', { name: '横向导航' });
 
     expectClasses(vertical, UI_NAV_ITEM_ACTIVE_CLASS);
-    expectClasses(vertical, UI_NAV_INDICATOR_END_CLASS);
     expectClasses(horizontal, UI_NAV_ITEM_ACTIVE_CLASS);
-    expectClasses(horizontal, UI_NAV_INDICATOR_BOTTOM_CLASS);
+    expect(vertical.className).not.toMatch(/after:/);
+    expect(horizontal.className).not.toMatch(/after:/);
     expect(vertical.classList.contains('bg-raised')).toBe(false);
     expect(horizontal.classList.contains('bg-raised')).toBe(false);
   });
 
-  it('克制型横向导航只收紧自身底色与指示条', () => {
+  it('面板标签不铺底，只用主要文字与底部细线', () => {
     const view = render(
       <>
         <UiChipButton active selectionRole="navigation">默认导航</UiChipButton>
@@ -77,14 +73,13 @@ describe('Ui primitives 选中态词汇表', () => {
     const subtleNavigation = view.getByRole('button', { name: '克制导航' });
 
     expectClasses(defaultNavigation, UI_NAV_ITEM_ACTIVE_CLASS);
-    expectClasses(defaultNavigation, UI_NAV_INDICATOR_BOTTOM_CLASS);
     expect(defaultNavigation.classList.contains('bg-raised')).toBe(false);
     expectClasses(subtleNavigation, UI_NAV_ITEM_ACTIVE_SUBTLE_CLASS);
     expectClasses(subtleNavigation, UI_NAV_INDICATOR_BOTTOM_SUBTLE_CLASS);
     expect(subtleNavigation.className).not.toMatch(/(?:^|\s)bg-/);
   });
 
-  it('标题栏工作区导航：28 高 13/500，选中只有主要文字 + 短指示条，静息与选中都不铺底', () => {
+  it('标题栏工作区导航：28 高 13/500，选中为中性选中底 + 主要文字，静息不铺底', () => {
     const view = render(
       <>
         <UiChipButton active selectionRole="navigation" selectionAppearance="workspace" size="lg">生成</UiChipButton>
@@ -94,9 +89,8 @@ describe('Ui primitives 选中态词汇表', () => {
     const active = view.getByRole('button', { name: '生成' });
     const rest = view.getByRole('button', { name: '画布' });
 
-    expectClasses(active, UI_NAV_ITEM_ACTIVE_WORKSPACE_CLASS);
-    expectClasses(active, UI_NAV_INDICATOR_BOTTOM_SHORT_CLASS);
-    expect(active.className).not.toMatch(/(?:^|\s)bg-/);
+    expectClasses(active, UI_NAV_ITEM_ACTIVE_CLASS);
+    expect(active.className).not.toMatch(/after:/);
     expectClasses(active, 'h-control-sm text-13 font-medium');
     expect(active.classList.contains('h-control-lg')).toBe(false);
     expectClasses(rest, `text-text2 ${UI_GLASS_ADAPTIVE_OPTION_CLASS}`);
@@ -118,7 +112,7 @@ describe('Ui primitives 选中态词汇表', () => {
     expect(view.getByRole('button', { name: '素材' }).getAttribute('aria-pressed')).toBe('false');
     const current = view.getByRole('button', { name: '当前' });
     expect(current.getAttribute('aria-pressed')).toBeNull();
-    expectClasses(current, UI_NAV_INDICATOR_BOTTOM_SHORT_CLASS);
+    expectClasses(current, UI_NAV_ITEM_ACTIVE_CLASS);
   });
 
   it('单选项中性抬升，多选（标签与 selection="multiple" 的选项）用强调描边与强调文字', () => {
