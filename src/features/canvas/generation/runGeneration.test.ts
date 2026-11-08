@@ -8,9 +8,8 @@ const { continuePolling, generate, persistImageLocally } = vi.hoisted(() => ({
 
 vi.mock('@/core/ModelRegistry', () => ({
   registry: {
-    getModel: () => ({ meta: { id: 'test-model' }, params: [] }),
+    getModel: () => ({ meta: { id: 'test-model' } }),
     getModelsByType: () => [],
-    getDefaultValues: () => ({}),
   },
 }))
 vi.mock('@/core/modelCatalog/controlledExecutionModels', () => ({

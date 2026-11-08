@@ -10,7 +10,7 @@ import { normalizeRelightSettings, prepareRelightGenerationInput, prepareRelight
 import { CANVAS_IMAGE_CAPABILITY_IDS } from '../capabilities/types'
 import { CANVAS_NODE_TYPES, EXPORT_RESULT_NODE_DEFAULT_WIDTH, EXPORT_RESULT_NODE_LAYOUT_HEIGHT } from '../domain/canvasNodes'
 import { createDefaultGenerationOutputItems } from '../domain/generationOutputs'
-import { runCanvasGeneration } from '../generation/runGeneration'
+import { assertCanvasGenerationMedia, runCanvasGeneration } from '../generation/runGeneration'
 import { createCanvasGenerationTaskLifecycle } from '../generation/activeGenerationTasks'
 import { ensureGenerationProviderConfigured } from '../nodes/shared/generationNodeGuards'
 import type { CanvasNodeExecutionContext, CanvasNodePreflightContext, CanvasNodeExecutionResult, CanvasRegisteredExecutor } from './canvasExecutionContracts'
@@ -62,6 +62,7 @@ export function createRelightNodeExecutor(id: string, store: typeof useCanvasSto
     const target = execution.runtime
     if (!target) throw new Error('生成任务缺少画布运行实例')
     const prepared = prepareExecution()
+    await assertCanvasGenerationMedia({ modelId: prepared.route.model.meta.id, params: prepared.params, upstream: prepared.upstream })
     const estimate = await GenerationService.getInstance().getProgressEstimate(
       prepared.route.model.meta.id,
       prepared.params,

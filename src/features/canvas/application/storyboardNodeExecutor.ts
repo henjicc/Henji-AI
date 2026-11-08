@@ -4,7 +4,7 @@ import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgr
 import { GenerationService } from '@/core/services/GenerationService'
 import { CANVAS_NODE_TYPES, EXPORT_RESULT_NODE_DEFAULT_WIDTH, EXPORT_RESULT_NODE_LAYOUT_HEIGHT } from '../domain/canvasNodes'
 import { EXPORT_RESULT_DISPLAY_NAME, resolveNodeDisplayName } from '../domain/nodeDisplay'
-import { generateStoryboardImage } from './storyboardGeneration'
+import { generateStoryboardImage, prepareStoryboardReferenceImages } from './storyboardGeneration'
 import { getStoryboardExecutionSignatureExtras, resolveStoryboardExecutionInput, STORYBOARD_IMAGE_EDIT_REQUIRED_TAGS } from './storyboardExecutionInput'
 import { commitCanvasGenerationOutputsInProject } from './generationOutputApplicationService'
 import { STORYBOARD_GENERATION_RESUME_CONTEXT_FIELD } from './storyboardGenerationOutputService'
@@ -53,6 +53,14 @@ export function createStoryboardNodeExecutor(id: string, store: typeof useCanvas
         }
         : {}),
     }
+    const referenceImages = await prepareStoryboardReferenceImages({
+      modelId: runtime.modelId,
+      params: generationParams,
+      incomingImages: runtime.images,
+      frameAspectRatioValue: runtime.frameAspectRatio,
+      resumeContext: runtime.resumeContext,
+      gridImageResolution: runtime.gridResolution,
+    })
     const estimate = await GenerationService.getInstance().getProgressEstimate(
       runtime.modelId,
       estimateParams
@@ -96,10 +104,8 @@ export function createStoryboardNodeExecutor(id: string, store: typeof useCanvas
         projectId: generationProjectId,
         modelId: runtime.modelId,
         params: generationParams,
-        incomingImages: runtime.images,
-        frameAspectRatioValue: runtime.frameAspectRatio,
+        referenceImages,
         resumeContext: runtime.resumeContext,
-        gridImageResolution: runtime.gridResolution,
         onProgress: (progress) => {
           setNodeGenerationProgress(newNodeId, progress)
         },

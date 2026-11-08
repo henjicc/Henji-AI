@@ -1,5 +1,5 @@
 import { registry } from '@/core/ModelRegistry'
-import type { ImageConstraints, InputCountLimit, InputLimits, InputLimitsConfig, InputLimitRule, VideoConstraints } from '@/core/types'
+import type { ImageConstraints, InputCountLimit, InputLimits, InputLimitsConfig, InputLimitRule, ModelDefinition, VideoConstraints } from '@/core/types'
 import { evaluateCondition } from '@/core/validation/conditionEvaluator'
 
 export interface ResolvedInputLimits {
@@ -59,14 +59,19 @@ const resolveRules = (
   }))
 }
 
+/**
+ * 传入模型定义时直接按它解析，供不进注册表的受控执行模型（扩图、重打光、多角度等）使用；
+ * 传入 ID 时从注册表查找。
+ */
 export function resolveInputLimits(
-  modelId: string,
+  modelOrId: ModelDefinition | string,
   params: DynamicValueMap,
   context: InputLimitContext = {}
 ): ResolvedInputLimits {
-  const model = registry.getModel(modelId)
+  const model = typeof modelOrId === 'string' ? registry.getModel(modelOrId) : modelOrId
+  const defaults = Object.fromEntries((model?.params ?? []).map((param) => [param.id, param.default]))
   const normalizedParams = {
-    ...registry.getDefaultValues(modelId),
+    ...defaults,
     ...params
   }
   const config = resolveConfig(model?.inputLimits, normalizedParams)

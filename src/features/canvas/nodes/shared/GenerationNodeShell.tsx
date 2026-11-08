@@ -44,7 +44,7 @@ import { getAspectChoiceParams } from '@/core/params/ratioResolution';
 import { NodeInputRows } from '@/features/canvas/params/NodeInputRows';
 import { useNodeModelParams } from '@/features/canvas/params/useNodeModelParams';
 import { registry } from '@/core/ModelRegistry';
-import { runCanvasNode } from '@/features/canvas/application/canvasExecutionService';
+import { runCanvasNodeFromUser } from './runCanvasNodeFromUser';
 import PriceEstimate from '@/components/ui/PriceEstimate';
 import { GenerationPromptEditor } from './GenerationPromptEditor';
 import { useGenerationPromptDocument } from './useGenerationPromptDocument';
@@ -330,7 +330,7 @@ export const GenerationNodeShell = memo(({
       placeholder={promptInvalid ? t(promptRequiredKey) : t(promptPlaceholderKey)}
       maxCharacters={promptMaxCharacters}
       onChange={handlePromptChange}
-      onSubmit={() => void runCanvasNode(id).catch(() => undefined)}
+      onSubmit={() => runCanvasNodeFromUser(id)}
       onEditEnd={promptState.onEditEnd}
       onSelectNode={setSelectedNode}
     />

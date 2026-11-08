@@ -145,28 +145,14 @@ function createThrottledProgressHandler(
   };
 }
 
-/**
- * 画布节点统一生成入口：直连 GenerationService，处理参考图本地化、
- * 异步轮询续接与真进度回调。
- */
-export async function runCanvasGeneration(request: CanvasGenerationRequest): Promise<CanvasGenerationOutput> {
-  const mediaType = request.mediaType ?? 'image';
-  const modelId = resolveCanvasModelId(request.modelId, mediaType);
-  const handleProgress = createThrottledProgressHandler(request.onProgress);
+type CanvasGenerationMediaInput = Pick<CanvasGenerationRequest, 'modelId' | 'mediaType' | 'params' | 'referenceImages' | 'upstream'>;
 
+// 上游媒体注入：协议键与对话模式一致（images/uploadedFilePaths 等）
+function withUpstreamMedia(request: CanvasGenerationMediaInput, images: string[]): DynamicValueMap {
   const params: DynamicValueMap = { ...request.params };
-
-  // 上游媒体注入：协议键与对话模式一致（images/uploadedFilePaths 等）
-  const upstreamImages = [
-    ...(request.upstream?.images ?? []),
-    ...(request.referenceImages ?? []),
-  ];
-  if (upstreamImages.length > 0) {
-    const normalizedImages = await Promise.all(
-      upstreamImages.map(async (imageUrl) => await persistImageLocally(imageUrl))
-    );
-    params.images = normalizedImages;
-    params.uploadedFilePaths = normalizedImages;
+  if (images.length > 0) {
+    params.images = images;
+    params.uploadedFilePaths = images;
   }
   if ((request.upstream?.videos ?? []).length > 0) {
     params.videos = request.upstream?.videos;
@@ -176,10 +162,33 @@ export async function runCanvasGeneration(request: CanvasGenerationRequest): Pro
     params.audios = request.upstream?.audios;
     params.uploadedAudioFilePaths = request.upstream?.audios;
   }
+  return params;
+}
 
-  // 扩图、局部重绘等节点在这之前才定下实际发出的素材，所以尺寸按这里的最终参数检查。
+function upstreamImages(request: CanvasGenerationMediaInput): string[] {
+  return [...(request.upstream?.images ?? []), ...(request.referenceImages ?? [])];
+}
+
+/**
+ * 按模型的素材尺寸约束检查这次画布生成实际要发出的素材。
+ * 执行器在建结果节点之前调用：不合格时画布上不留下注定失败的节点。
+ */
+export async function assertCanvasGenerationMedia(request: CanvasGenerationMediaInput): Promise<void> {
+  const modelId = resolveCanvasModelId(request.modelId, request.mediaType ?? 'image');
   const model = registry.getModel(modelId) ?? getControlledExecutionModel(modelId);
-  if (model) await assertGenerationMediaDimensions(model, params);
+  if (model) await assertGenerationMediaDimensions(model, withUpstreamMedia(request, upstreamImages(request)));
+}
+
+/**
+ * 画布节点统一生成入口：直连 GenerationService，处理参考图本地化、
+ * 异步轮询续接与真进度回调。
+ */
+export async function runCanvasGeneration(request: CanvasGenerationRequest): Promise<CanvasGenerationOutput> {
+  const mediaType = request.mediaType ?? 'image';
+  const modelId = resolveCanvasModelId(request.modelId, mediaType);
+  const handleProgress = createThrottledProgressHandler(request.onProgress);
+  const images = await Promise.all(upstreamImages(request).map(async (imageUrl) => await persistImageLocally(imageUrl)));
+  const params = withUpstreamMedia(request, images);
 
   await request.assertCurrent?.();
   request.signal?.throwIfAborted();

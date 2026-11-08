@@ -128,7 +128,7 @@ export async function compressFirstVideoIfNeeded(
     return params
   }
 
-  const limits = resolveInputLimits(model.meta.id, params)
+  const limits = resolveInputLimits(model, params)
   const maxSizeMB = limits.videoConstraints?.maxSizeMB
   if (!maxSizeMB) {
     return params

@@ -15,6 +15,7 @@ import type { ImageEditSessionData } from '@/core/imageEdit'
 import type { MediaType, GenerationTask, GeneratorOptions, ToastNotification } from '../types'
 import { resolveProgressSettleDelayMs } from '../utils/progressAnimation'
 import { isRecord, isStringArray } from '../utils/typeGuards'
+import { GenerationPreparationError } from '@/features/generation/application/generationPreparationService'
 import { extractServerTaskIdFromErrorMessage, extractServerTaskIdFromMetadata } from '@/features/generation/application/taskServerId'
 import { normalizeMediaResultForDesktop } from '../utils/mediaResult'
 import { continuePollingTask } from './continuePollingTask'
@@ -453,8 +454,14 @@ export function useTaskGeneration({
     type: MediaType,
     options?: DynamicValue
   ): Promise<void> => {
-    await runCreateVisibleTask({ input, model, type, options })
-  }, [runCreateVisibleTask])
+    try {
+      await runCreateVisibleTask({ input, model, type, options })
+    } catch (error) {
+      // 素材不合格等提交前的拒绝，原因直接提示给用户。
+      if (!(error instanceof GenerationPreparationError)) throw error
+      notify(error.message, 'error')
+    }
+  }, [notify, runCreateVisibleTask])
 
   return { isGenerating, handleGenerate, handleContinuePolling }
 }

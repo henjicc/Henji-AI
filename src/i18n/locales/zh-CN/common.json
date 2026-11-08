@@ -18,6 +18,9 @@
     "detailCopied": "已复制",
     "askAssistant": "问助手"
   },
+  "generationInputRejected": {
+    "title": "素材不符合模型要求"
+  },
   "providerKeyRequired": {
     "title": "还没有配置密钥",
     "message": "你还没有配置密钥，你需要去配置一下。"

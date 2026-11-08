@@ -18,10 +18,8 @@ import {
   resolveTextProcessingModel,
   TEXT_PROCESSING_CUSTOM_TEMPLATE_ID,
 } from '@/features/canvas/application/textProcessing'
-import {
-  hasReachableNonDisplayConsumer,
-  runCanvasNode,
-} from '@/features/canvas/application/canvasExecutionService'
+import { hasReachableNonDisplayConsumer } from '@/features/canvas/application/canvasExecutionService'
+import { runCanvasNodeFromUser } from '@/features/canvas/nodes/shared/runCanvasNodeFromUser'
 import {
   areMediaOutputListsEqual,
   collectInputMedia,
@@ -281,7 +279,7 @@ export const TextProcessingNode = memo(({
             ? t('node.textProcessing.promptRequired')
             : t('node.textProcessing.promptPlaceholder')}
           onChange={promptState.handleChange}
-          onSubmit={() => void runCanvasNode(id).catch(() => undefined)}
+          onSubmit={() => runCanvasNodeFromUser(id)}
           onEditEnd={promptState.onEditEnd}
           onSelectNode={setSelectedNode}
         />
@@ -301,7 +299,7 @@ export const TextProcessingNode = memo(({
               label={t('node.textProcessing.systemPromptLabel')}
               placeholder={t('node.textProcessing.systemPromptPlaceholder')}
               onChange={systemPromptState.handleChange}
-              onSubmit={() => void runCanvasNode(id).catch(() => undefined)}
+              onSubmit={() => runCanvasNodeFromUser(id)}
               onEditEnd={systemPromptState.onEditEnd}
               onSelectNode={() => setSelectedNode(id)}
             />

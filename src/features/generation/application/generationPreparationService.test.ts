@@ -110,6 +110,14 @@ describe('generationPreparation', () => {
     await expect(assertGenerationMediaDimensions(model, values, readers(null))).resolves.toBeUndefined()
   })
 
+  it('不在注册表里的受控执行模型也按它自己的尺寸约束检查', async () => {
+    const controlled = { ...testModel, meta: { ...testModel.meta, id: 'controlled-utility' },
+      inputLimits: { images: { max: 1 }, rules: [{ imageConstraints: { minShortSidePx: 512 } }] } }
+    const reader = { image: async () => ({ width: 400, height: 900 }), video: async () => null }
+    await expect(assertGenerationMediaDimensions(controlled, { images: ['D:/source.png'] }, reader))
+      .rejects.toThrow('图片（400×900）宽和高都不能小于 512 像素')
+  })
+
   it('按配置搜索并裁剪单模型 schema', () => {
     const models = searchGenerationModels({
       mediaType: 'image', providerId: 'test-provider', tags: ['text-to-image'],

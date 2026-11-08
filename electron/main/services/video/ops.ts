@@ -139,6 +139,10 @@ async function probeVideoSource(source: string, signal?: AbortSignal): Promise<F
   return JSON.parse(stdout) as FfprobeOutput
 }
 
+function readStreamRotation(stream: FfprobeStream): number {
+  return stream.side_data_list?.find(value => value.rotation !== undefined)?.rotation ?? Number(stream.tags?.rotate ?? 0)
+}
+
 /** Motion analysis decodes without autorotation. Distances are calibrated to
  * square display pixels and the rotated display width, without clipping edges. */
 export async function readVideoAnalysisGeometry(source: string, signal?: AbortSignal): Promise<{ aspectRatio: number; rotation: number }> {
@@ -147,7 +151,7 @@ export async function readVideoAnalysisGeometry(source: string, signal?: AbortSi
   if (!stream || !Number.isFinite(stream.width) || !Number.isFinite(stream.height) || stream.width! <= 0 || stream.height! <= 0) throw new Error('无法读取原视频画幅，不能推测运动比例。')
   const ratio = stream.sample_aspect_ratio?.split(':').map(Number)
   const sar = !ratio || stream.sample_aspect_ratio === 'N/A' || ratio[0] === 0 ? 1 : ratio.length === 2 && ratio[0] > 0 && ratio[1] > 0 ? ratio[0] / ratio[1] : NaN
-  const rotation = stream.side_data_list?.find(value => value.rotation !== undefined)?.rotation ?? Number(stream.tags?.rotate ?? 0)
+  const rotation = readStreamRotation(stream)
   const aspectRatio = stream.width! * sar / stream.height!
   if (!Number.isFinite(aspectRatio) || aspectRatio <= 0 || !Number.isFinite(rotation)) throw new Error('原视频像素比例或旋转信息无效，请检查原片。')
   return { aspectRatio, rotation }
@@ -161,10 +165,15 @@ export async function readVideoInfo(source: string, signal?: AbortSignal): Promi
   if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
     throw new Error('Unable to read video duration')
   }
+  const width = videoStream?.width ?? 0
+  const height = videoStream?.height ?? 0
+  // 宽高按播放时的朝向给出：手机竖拍常以横向编码再带 90° 旋转标记，播放器、封面与供应商看到的都是旋转后的画面。
+  const rotation = videoStream ? readStreamRotation(videoStream) : 0
+  const swapsAxes = Number.isFinite(rotation) && Math.abs(Math.round(rotation / 90)) % 2 === 1
   return {
     durationSeconds,
-    width: videoStream?.width ?? 0,
-    height: videoStream?.height ?? 0,
+    width: swapsAxes ? height : width,
+    height: swapsAxes ? width : height,
     hasAudio,
   }
 }

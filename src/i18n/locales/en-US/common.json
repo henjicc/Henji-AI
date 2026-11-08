@@ -18,6 +18,9 @@
     "detailCopied": "Copied",
     "askAssistant": "Ask the assistant"
   },
+  "generationInputRejected": {
+    "title": "Media does not meet the model requirements"
+  },
   "providerKeyRequired": {
     "title": "Provider key not configured",
     "message": "You haven't configured a provider key yet. Configure one before generating."

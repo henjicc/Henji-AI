@@ -20,6 +20,11 @@ import { deleteCanvasNodes } from './canvasMutationService'
 import { listCanvasNodeContinuations } from './canvasGenerationContinuationService'
 
 // 媒体 I/O 与历史存储使用替身；任务登记、图执行、结果编排及画布保存走正式服务。
+const imageInfo = vi.hoisted(() => ({ width: 1024, height: 1024 }))
+vi.mock('@/commands/image', async (original) => ({
+  ...await original<typeof import('@/commands/image')>(),
+  readImageInfo: vi.fn(async () => ({ ...imageInfo, orientation: null })),
+}))
 vi.mock('./imageData', async (original) => ({
   ...await original<typeof import('./imageData')>(),
   persistImageLocally: vi.fn(async (url: string) => url),
@@ -140,6 +145,25 @@ it('缺少提示词仍在提交前拒绝，不创建结果节点或调用供应�
   expect(generate).not.toHaveBeenCalled()
   expect(useCanvasStore.getState().nodes).toHaveLength(before)
   expect(options.setPromptInvalid).toHaveBeenCalledWith(true)
+})
+
+it('素材尺寸不合模型要求时在建结果节点前拒绝，不调用供应商', async () => {
+  registry.unregister('executor-fixture')
+  registry.register({ meta: { id: 'executor-fixture', canonicalModelId: 'nano-banana', provider: 'fixture', type: 'image', name: { zh: '执行器测试', en: 'Executor' } },
+    params: [], endpoints: '/fixture', request: { builder: params => params },
+    inputLimits: { images: { max: 1 }, videos: { max: 0 }, audios: { max: 0 }, rules: [{ imageConstraints: { minShortSidePx: 300 } }] },
+    pricing: { currency: '$', fixed: 0.01 } })
+  Object.assign(imageInfo, { width: 200, height: 800 })
+  const before = useCanvasStore.getState().nodes.length
+  const generate = vi.spyOn(GenerationService.getInstance(), 'generate')
+  registerCanvasNodeExecutor(nodeId, createGenerationNodeExecutor(() => options))
+  try {
+    await expect(runCanvasNode(nodeId)).rejects.toThrow('图片（200×800）宽和高都不能小于 300 像素')
+  } finally {
+    Object.assign(imageInfo, { width: 1024, height: 1024 })
+  }
+  expect(generate).not.toHaveBeenCalled()
+  expect(useCanvasStore.getState().nodes).toHaveLength(before)
 })
 
 it('标准执行器由领域实例提供，页面关闭与反馈解除不会取消生成', async () => {

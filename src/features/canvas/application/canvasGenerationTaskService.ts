@@ -5,7 +5,7 @@ import { ApplicationPreflightFailure } from '@/core/application-control/executio
 import { createLogger } from '@/core/logging'
 import type { CanvasGenerationResumeInput, CanvasNodeGenerationInput, GenerationDestination } from '@/core/application-control/domains/generation/generationApplicationCapabilities'
 import type { GenerationPreparationInput } from '@/features/generation/application/generationPreparationService'
-import { estimateGenerationPrice, prepareGenerationModelInput } from '@/features/generation/application/generationPreparationService'
+import { assertGenerationMediaDimensions, estimateGenerationPrice, prepareGenerationModelInput } from '@/features/generation/application/generationPreparationService'
 import { databaseService } from '@/services/database/DatabaseService'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore'
@@ -48,6 +48,12 @@ function readNodeInputSignature(projectId: string, nodeId: string, store?: typeo
 }
 
 export async function prepareCanvasNodeGeneration(input: CanvasNodeGenerationInput) {
+  const { model, preparation, mediaPreparedAtSubmit, result } = await readCanvasNodeGeneration(input)
+  if (!mediaPreparedAtSubmit) await assertGenerationMediaDimensions(model, preparation.options as DynamicValueMap)
+  return result
+}
+
+async function readCanvasNodeGeneration(input: CanvasNodeGenerationInput) {
   const store = (await getCanvasProjectInstance(input.documentId)).store
   const signature = readNodeInputSignature(input.documentId, input.nodeId)
   if (input.inputSignature && input.inputSignature !== signature) throw new CanvasApplicationError('INVALID_INPUT', '节点输入已改变，请重新调用 prepare_canvas_node_generation 获取当前参数和费用。', true)
@@ -57,7 +63,7 @@ export async function prepareCanvasNodeGeneration(input: CanvasNodeGenerationInp
   const executor = createGenerationNodeExecutor(target => readCanvasGenerationNodeProfile(input.nodeId, target ?? store))
   const prepared = await executor.prepare({ projectId: input.documentId, runId: 'prepare', trigger: 'direct', inputSignature: signature, assertCurrent: async () => undefined })
   if (readNodeInputSignature(input.documentId, input.nodeId) !== signature) throw new CanvasApplicationError('INVALID_INPUT', '准备期间节点输入已改变，请重新准备原节点。', true)
-  const { runtime, generationParams } = prepared
+  const { runtime, generationParams, mediaPreparedAtSubmit } = prepared
   if (!runtime.model) throw new Error('原节点模型不存在。')
   const options = { ...generationParams, images: runtime.images, uploadedFilePaths: runtime.images,
     videos: runtime.videos, uploadedVideoFilePaths: runtime.videos, audios: runtime.audios, uploadedAudioFilePaths: runtime.audios }
@@ -66,12 +72,13 @@ export async function prepareCanvasNodeGeneration(input: CanvasNodeGenerationInp
   const preparation = prepareGenerationModelInput(resolved, runtime.model)
   // 节点付费授权取这里的估价，按媒体计价的模型要先补齐媒体指标。
   const priced: Record<string, unknown> = { ...preparation, priceEstimate: await estimateGenerationPrice(runtime.model, preparation.options as DynamicValueMap) }
-  return { preparation: priced,
-    submitInput: { documentId: input.documentId, nodeId: input.nodeId, inputSignature: signature } }
+  return { model: runtime.model, preparation, mediaPreparedAtSubmit, result: { preparation: priced,
+    submitInput: { documentId: input.documentId, nodeId: input.nodeId, inputSignature: signature } } }
 }
 
 export async function submitCanvasNodeGeneration(input: CanvasNodeGenerationInput & { inputSignature: string }, taskId: string, signal?: AbortSignal) {
-  const { preparation } = await prepareCanvasNodeGeneration(input).then(result => {
+  // 素材尺寸由执行器在建结果节点之前检查，这里不重复读取。
+  const { preparation } = await readCanvasNodeGeneration(input).then(({ result }) => {
     signal?.throwIfAborted()
     return result
   }).catch(error => { throw new ApplicationPreflightFailure(error) })

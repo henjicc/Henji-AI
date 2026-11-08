@@ -294,15 +294,9 @@ export async function createVisibleGenerationTask(
     dependencies.notify(dependencies.messages.missingInput, 'error')
     return null
   }
+  // 尺寸在上面的素材落盘、压缩之后检查，量到的才是真正发出的素材。不合格时抛出原因，由调用方展示或交给助手。
   const modelDefinition = registry.getModel(model)
-  if (modelDefinition) {
-    try {
-      await assertGenerationMediaDimensions(modelDefinition, options as DynamicValueMap)
-    } catch (error) {
-      dependencies.notify(error instanceof Error ? error.message : String(error), 'error')
-      return null
-    }
-  }
+  if (modelDefinition) await assertGenerationMediaDimensions(modelDefinition, options as DynamicValueMap)
   if (shouldSkipRequest()) {
     logRequestParams({ input: prompt, model, type, options, timestamp: new Date().toISOString() })
     dependencies.notify(dependencies.messages.testModeIntercepted, 'success')

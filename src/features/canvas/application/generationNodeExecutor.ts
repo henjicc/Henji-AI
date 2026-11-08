@@ -38,7 +38,7 @@ import type { RowMediaKind } from '@/features/canvas/domain/socketTypes'
 import {
   createCanvasGenerationTaskLifecycle,
 } from '@/features/canvas/generation/activeGenerationTasks'
-import { runCanvasGeneration } from '@/features/canvas/generation/runGeneration'
+import { assertCanvasGenerationMedia, runCanvasGeneration } from '@/features/canvas/generation/runGeneration'
 import { getPlatform } from '@/platform'
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore'
 import { useCanvasStore } from '@/stores/canvasStore'
@@ -214,7 +214,9 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
       ...(typeof runtime.data.videoTrimStart === 'number' ? { uploadedVideoTrimStart: runtime.data.videoTrimStart } : {}),
       ...(typeof runtime.data.videoTrimEnd === 'number' ? { uploadedVideoTrimEnd: runtime.data.videoTrimEnd } : {}),
     }
-    return { runtime, values, promptInput, capabilityPreparation, generationParams }
+    // 扩图、局部重绘要到提交时才生成实际发出的素材，准备阶段的素材不能代表最终尺寸。
+    const mediaPreparedAtSubmit = Boolean(current.prepareGenerationRequest)
+    return { runtime, values, promptInput, capabilityPreparation, generationParams, mediaPreparedAtSubmit }
   }
 
   const preflightBeforeDependencies = (execution: CanvasNodePreflightContext) => {
@@ -273,6 +275,8 @@ export function createGenerationNodeExecutor(readOptions: (store?: typeof useCan
           videos: runtime.videos,
           audios: runtime.audios,
         }
+        // 扩图、局部重绘到这里才定下实际发出的素材，所以尺寸在这之后、建结果节点之前检查。
+        await assertCanvasGenerationMedia({ modelId: runtime.modelId, mediaType: current.modelType, params: requestParams, upstream: requestInputs })
         const resultNodeData = requestPreparation?.resultNodeData ?? {}
         const resultNodeExtraData = typeof current.resultNodeExtraData === 'function'
           ? current.resultNodeExtraData(runtime.data)

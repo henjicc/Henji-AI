@@ -44,9 +44,7 @@ function generationInput() {
   return {
     modelId: 'test-image-model',
     params: { prompt: '九宫格' },
-    incomingImages: ['/source.png'],
-    frameAspectRatioValue: '1:1',
-    gridImageResolution: '2K',
+    referenceImages: ['/source.png', 'data:image/png;base64,grid'],
     resumeContext: createStoryboardGenerationResumeContext({
       gridRows: data.gridRows,
       gridCols: data.gridCols,

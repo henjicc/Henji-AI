@@ -505,7 +505,7 @@ export function prepareGenerationModelInput(input: GenerationPreparationInput, m
   const videosCount = mediaCount(supplied, 'uploadedVideoFilePaths', 'videos')
   const audiosCount = mediaCount(supplied, 'uploadedAudioFilePaths', 'audios')
   const normalized = resolveModeForMedia(model.meta.id, applyLinkages(model, values, supplied), { images: imagesCount, videos: videosCount, audios: audiosCount })
-  const limits = resolveInputLimits(model.meta.id, normalized, { imagesCount, videosCount })
+  const limits = resolveInputLimits(model, normalized, { imagesCount, videosCount })
   const mediaErrors = [
     ['images', imagesCount, limits.images],
     ['videos', videosCount, limits.videos],
@@ -634,7 +634,7 @@ export async function assertGenerationMediaDimensions(
   const imageSources = resolveMediaSources(model, values, 'image')
   const videoSources = resolveMediaSources(model, values, 'video')
   if (imageSources.length === 0 && videoSources.length === 0) return
-  const limits = resolveInputLimits(model.meta.id, values, { imagesCount: imageSources.length, videosCount: videoSources.length })
+  const limits = resolveInputLimits(model, values, { imagesCount: imageSources.length, videosCount: videoSources.length })
   const groups = [
     { kind: 'image' as const, label: '图片', sources: imageSources, constraints: limits.imageConstraints },
     { kind: 'video' as const, label: '视频', sources: videoSources, constraints: limits.videoConstraints },

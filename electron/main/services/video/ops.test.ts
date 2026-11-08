@@ -47,8 +47,14 @@ function run(mode: typeof modes[number], signal?: AbortSignal) {
     : compressVideoToFit({ source, maxSizeMB: 0.001 }, signal)
 }
 const encodes = () => state.exec.mock.calls.filter(call => call[0] === 'ffmpeg')
-it('analysis geometry shares the probe while preserving coded metadata and calibrating SAR and display rotation', async () => {
+it('video info reports display orientation while analysis geometry calibrates SAR and display rotation', async () => {
   expect(await readVideoInfo(source)).toEqual({ durationSeconds: 10, width: 640, height: 480, hasAudio: false })
+  for (const rotation of [90, -90, 270]) {
+    state.exec.mockImplementationOnce((_binary: string, _args: string[], _options: Options, callback: Callback) => callback(null, JSON.stringify({ format: { duration: '4' }, streams: [{ codec_type: 'video', width: 1920, height: 1080, side_data_list: [{ rotation }] }] }), ''))
+    expect(await readVideoInfo(source)).toMatchObject({ width: 1080, height: 1920 })
+  }
+  state.exec.mockImplementationOnce((_binary: string, _args: string[], _options: Options, callback: Callback) => callback(null, JSON.stringify({ format: { duration: '4' }, streams: [{ codec_type: 'video', width: 1920, height: 1080, tags: { rotate: '180' } }] }), ''))
+  expect(await readVideoInfo(source)).toMatchObject({ width: 1920, height: 1080 })
   state.exec.mockImplementationOnce((_binary: string, _args: string[], _options: Options, callback: Callback) => callback(null, JSON.stringify({ streams: [{ codec_type: 'video', width: 720, height: 576, sample_aspect_ratio: '16:15', side_data_list: [{ rotation: 90 }] }] }), ''))
   expect(await readVideoAnalysisGeometry(source)).toEqual({ aspectRatio: 4 / 3, rotation: 90 })
   state.exec.mockImplementationOnce((_binary: string, _args: string[], _options: Options, callback: Callback) => callback(null, JSON.stringify({ streams: [{ codec_type: 'video', width: 1080, height: 1920, sample_aspect_ratio: '0:1' }] }), ''))

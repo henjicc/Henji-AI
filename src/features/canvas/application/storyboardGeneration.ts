@@ -1,5 +1,5 @@
 import type { StoryboardGenNodeData } from '@/features/canvas/domain/canvasNodes'
-import { runCanvasGeneration } from '@/features/canvas/generation/runGeneration'
+import { assertCanvasGenerationMedia, runCanvasGeneration } from '@/features/canvas/generation/runGeneration'
 import { sanitizeStoryboardPromptText } from '@/features/canvas/application/storyboardText'
 import { isNineGridStoryboard } from '@/features/canvas/capabilities/nineGridPolicy'
 import type { CanvasGenerationOutputBatchContractV1 } from '@/features/canvas/domain/generationOutputs'
@@ -24,11 +24,9 @@ interface GenerateStoryboardImageParams {
   modelId: string
   /** schema 参数 + prompt/text 协议键（智能宽高比由 GenerationService 解析） */
   params: DynamicValueMap
-  incomingImages: string[]
-  frameAspectRatioValue: string
+  /** 上游参考图加上栅格参考图，由 prepareStoryboardReferenceImages 生成。 */
+  referenceImages: string[]
   resumeContext: StoryboardGenerationResumeContextV1
-  /** 栅格参考图绘制分辨率（如 '2K'） */
-  gridImageResolution: string
   onProgress?: (progress: number) => void
   onTaskId?: (taskId: string) => void
   assertCurrent?: () => Promise<void> | void
@@ -76,34 +74,54 @@ export function buildStoryboardPrompt({
   return parts.join('\n')
 }
 
-export async function generateStoryboardImage({
-  signal,
-  projectId,
+interface PrepareStoryboardReferenceImagesParams {
+  modelId: string
+  params: DynamicValueMap
+  incomingImages: string[]
+  frameAspectRatioValue: string
+  resumeContext: StoryboardGenerationResumeContextV1
+  /** 栅格参考图绘制分辨率（如 '2K'） */
+  gridImageResolution: string
+}
+
+/** 画出栅格参考图并按模型的素材尺寸约束检查全部参考图，执行器在建结果节点之前调用。 */
+export async function prepareStoryboardReferenceImages({
   modelId,
   params,
   incomingImages,
   frameAspectRatioValue,
   resumeContext,
   gridImageResolution,
-  onProgress,
-  onTaskId,
-  assertCurrent,
-}: GenerateStoryboardImageParams): Promise<GeneratedStoryboardImage> {
-  signal?.throwIfAborted()
+}: PrepareStoryboardReferenceImagesParams): Promise<string[]> {
   const gridImageDataUrl = generateGridImageDataUrl(
     frameAspectRatioValue,
     resumeContext.gridRows,
     resumeContext.gridCols,
     gridImageResolution
   )
-  const allReferenceImages = [...incomingImages, gridImageDataUrl]
+  const referenceImages = [...incomingImages, gridImageDataUrl]
+  await assertCanvasGenerationMedia({ modelId, params, referenceImages })
+  return referenceImages
+}
 
+export async function generateStoryboardImage({
+  signal,
+  projectId,
+  modelId,
+  params,
+  referenceImages,
+  resumeContext,
+  onProgress,
+  onTaskId,
+  assertCurrent,
+}: GenerateStoryboardImageParams): Promise<GeneratedStoryboardImage> {
+  signal?.throwIfAborted()
   const generated = await runCanvasGeneration({
     signal,
     projectId,
     modelId,
     params,
-    referenceImages: allReferenceImages,
+    referenceImages,
     onProgress,
     onTaskId,
     assertCurrent,

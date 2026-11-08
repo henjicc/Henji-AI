@@ -61,7 +61,7 @@ import { checkAssetPaths } from '@/commands/assetLibrary';
 import { VideoEditSendMenu } from '@/features/videoEdit/panels/VideoEditSendMenu';
 import { videoEditDocumentRef } from '@/features/videoEdit/application/videoEditSourceRefs';
 import { useNodeDownload } from '@/features/canvas/hooks/useNodeDownload';
-import { runCanvasNode } from '@/features/canvas/application/canvasExecutionService';
+import { runCanvasNodeFromUser } from '@/features/canvas/nodes/shared/runCanvasNodeFromUser';
 import { dissolveAssetGroup } from '@/features/canvas/application/assetGroupApplicationService';
 import { CanvasImageCapabilityActions } from './CanvasImageCapabilityActions';
 import {
@@ -293,7 +293,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
             variant="primary"
             onClick={(event) => {
               event.stopPropagation();
-              void runCanvasNode(node.id).catch(() => undefined);
+              runCanvasNodeFromUser(node.id);
             }}
           >
             <Sparkles  />
