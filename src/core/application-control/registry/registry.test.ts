@@ -229,6 +229,23 @@ describe('ApplicationReflectionRegistry', () => {
     })
   })
 
+  it('只按属性查询时只带回这些属性所属的实体，不把整个应用的实体目录一并返回', () => {
+    const registry = new ApplicationReflectionRegistry(catalogVersion)
+    registry.register(registration())
+    const other = registration()
+    const { collectionWrite: _collectionWrite, ...otherEntity } = other.entity
+    registry.register({
+      ...other,
+      entity: { ...otherEntity, id: 'sample.other', refKind: 'sample.other', schemaRef: schemaRef('entity', 'sample.other') },
+      properties: [],
+      provider: { ...provider, entityType: 'sample.other' },
+    })
+    expect(registry.describe({}, assistantContext).entities.map((item) => item.id)).toEqual(['sample.item', 'sample.other'])
+    const description = registry.describe({ propertyIds: ['sample.level'] }, assistantContext)
+    expect(description.entities.map((item) => item.id)).toEqual(['sample.item'])
+    expect(description.properties.map((item) => item.id)).toEqual(['sample.level'])
+  })
+
   it('在领域写入前拒绝未知、只读、越界、步长和枚举错误', () => {
     const registry = new ApplicationReflectionRegistry(catalogVersion)
     registry.register(registration())

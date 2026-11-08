@@ -145,9 +145,15 @@ export class ApplicationReflectionRegistry {
     const domains = new Set(query.domains ?? [])
     const entityTypes = new Set(query.entityTypes ?? [])
     const propertyIds = new Set(query.propertyIds ?? [])
+    // 只按属性查询时，实体也只给这些属性所属的类型：否则会带回整个应用的实体目录，结果过大被截断，要找的属性说明反而看不到
+    const propertyOwners = new Set([...propertyIds].flatMap((id) => {
+      const owner = this.properties.get(id)?.entityType
+      return owner ? [owner] : []
+    }))
     const entities = [...this.entities.values()].filter((entity) => (
       (domains.size === 0 || domains.has(entity.domain))
       && (entityTypes.size === 0 || entityTypes.has(entity.id))
+      && (entityTypes.size > 0 || propertyIds.size === 0 || propertyOwners.has(entity.id))
       && entity.exposures.includes(context.exposure)
       && canAccessDataClass(entity.dataClass, context)
       && (context.exposure !== 'assistant' || entity.dataClass !== 'C3')
