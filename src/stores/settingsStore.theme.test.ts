@@ -50,6 +50,21 @@ describe('settingsStore 外观选择（v14）', () => {
     expect(useSettingsStore.getState().themeSelection.accent).toBeNull()
   })
 
+  it('恢复设置：生效种子与覆盖按选择重新推导，过期的种子不压过预设，自定义底色的覆盖保留', () => {
+    const { merge } = useSettingsStore.persist.getOptions()
+    const initial = useSettingsStore.getInitialState()
+    const staleSeed = { ...THEME_PRESETS.graphite.seed, tint: 0.003, base: 0.2 }
+    expect(merge!({ themeSelection: DEFAULT_THEME_SELECTION, themeSeed: staleSeed }, initial).themeSeed).toEqual(DEFAULT_THEME_SEED)
+
+    const customSeed = { ...THEME_PRESETS.graphite.seed, hue: 300, tint: 0.02 }
+    const custom = merge!({
+      themeSelection: { preset: 'custom', accent: null, contrast: 'standard', custom: { seed: customSeed, overrides: { window: violet } } },
+      themeSeed: staleSeed,
+    }, initial)
+    expect(custom.themeSeed).toMatchObject({ hue: 300, tint: 0.02 })
+    expect(custom.themeOverrides).toEqual({ window: violet })
+  })
+
   it('没有自定义底色时不能切到“自定义”', () => {
     useSettingsStore.getState().setThemePreset('custom')
     expect(useSettingsStore.getState().themeSelection.preset).toBe('graphite')

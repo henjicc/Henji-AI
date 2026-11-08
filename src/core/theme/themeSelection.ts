@@ -119,7 +119,7 @@ function normalizeCustomBase(input: unknown): ThemeCustomBase | null {
   return { seed: normalizeThemeSeed(seed), overrides: normalizeThemeOverrides(input.overrides) ?? {} };
 }
 
-/** 持久化值规范化；结构不对返回 null（由调用方回落到迁移入口）。 */
+/** 持久化值规范化；结构不对返回 null（调用方回落到默认选择）。 */
 export function normalizeThemeSelection(input: unknown): ThemeSelection | null {
   if (!isRecord(input) || !isThemeSelectionPreset(input.preset)) return null;
   const custom = normalizeCustomBase(input.custom);

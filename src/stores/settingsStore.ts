@@ -28,6 +28,7 @@ import {
 import {
   DEFAULT_THEME_SELECTION,
   THEME_CUSTOM_PRESET,
+  normalizeThemeSelection,
   resolveThemeSelection,
   selectionFromThemeSeed,
   type ThemeSelection,
@@ -347,7 +348,10 @@ export const useSettingsStore = create<SettingsState>()(
       // 剪辑快捷键：默认键位随版本对齐 PR 时，旧改键里不认识或与新默认冲突的部分在恢复时让出，避免读设置失败。
       merge: (persistedState, currentState) => {
         const persisted = (persistedState ?? {}) as Partial<SettingsState>;
-        return { ...currentState, ...persisted, videoEditSequenceDefaults: videoEditSequenceDefaultsSchema.parse(persisted.videoEditSequenceDefaults ?? VIDEO_EDIT_SEQUENCE_DEFAULTS), videoEditShortcuts: sanitizeVideoEditShortcutOverrides(persisted.videoEditShortcuts), videoEditMonitorButtons: sanitizeVideoEditMonitorButtons(persisted.videoEditMonitorButtons), videoEditTrackHeaderButtons: sanitizeVideoEditTrackHeaderButtons(persisted.videoEditTrackHeaderButtons), videoEditDefaultTransitions: sanitizeVideoEditDefaultTransitions(persisted.videoEditDefaultTransitions) };
+        // 生效种子与覆盖只由选择推导：预设调整后，旧设置里存下的种子不能继续压过预设。
+        // 两者仍照常写出，供尚未包含此推导的旧版本读取。
+        const themeSelection = normalizeThemeSelection(persisted.themeSelection) ?? DEFAULT_THEME_SELECTION;
+        return { ...currentState, ...persisted, ...themeSelectionState(themeSelection), videoEditSequenceDefaults: videoEditSequenceDefaultsSchema.parse(persisted.videoEditSequenceDefaults ?? VIDEO_EDIT_SEQUENCE_DEFAULTS), videoEditShortcuts: sanitizeVideoEditShortcutOverrides(persisted.videoEditShortcuts), videoEditMonitorButtons: sanitizeVideoEditMonitorButtons(persisted.videoEditMonitorButtons), videoEditTrackHeaderButtons: sanitizeVideoEditTrackHeaderButtons(persisted.videoEditTrackHeaderButtons), videoEditDefaultTransitions: sanitizeVideoEditDefaultTransitions(persisted.videoEditDefaultTransitions) };
       },
       partialize: (state) => {
         const { logCaptureMode: _logCaptureMode, ...persisted } = state;
