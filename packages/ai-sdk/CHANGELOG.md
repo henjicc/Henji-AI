@@ -2,6 +2,7 @@
 
 ## 未发布
 
+- 火山 SeedASR 2.0 实时识别支持热词直传：供应商选项 `hotwords: string[]` 写入首帧 `request.corpus.context`（官方双向流式上限 100 tokens，无权重）。
 - GPT Image 2.6（APIMart 官方渠道、Fal、KIE）新增「输出类型」：图片 / 动图（GIF）/ 矢量图（SVG）。动图支持帧数与每帧时长，APIMart 与 Fal 可用参考图生成动图；矢量图只能文生图，可选矢量化模型。新增能力标签 `animated-image`、`vector-image`。
 
 ## 0.11.0 - 2026-11-09

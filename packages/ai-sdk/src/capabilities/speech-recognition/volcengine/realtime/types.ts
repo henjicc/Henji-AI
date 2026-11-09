@@ -2,6 +2,11 @@ export interface VolcengineRealtimeAsrOptions {
   enableItn?: boolean
   enableDdc?: boolean
   showUtterances?: boolean
+  /**
+   * 热词直传，写入 `request.corpus.context`，优先级高于控制台热词表。
+   * 官方写双向流式上限 100 tokens，超限行为官方未说明，SDK 不截断。
+   */
+  hotwords?: readonly string[]
 }
 
 export interface VolcengineRealtimeModuleOptions {

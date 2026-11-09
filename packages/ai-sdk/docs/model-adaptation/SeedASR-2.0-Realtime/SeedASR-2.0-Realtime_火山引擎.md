@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-09-24 |
+| 最后更新 | 2026-11-10 |
 | 能力 | 双向实时语音识别（二进制 WebSocket） |
 | SDK `modelId` | `seedasr-2.0-realtime` |
 | 火山请求模型 | `request.model_name="bigmodel"` + 2.0 资源 ID `volc.seedasr.sauc.duration` |
@@ -56,7 +56,17 @@ X-Api-Sequence: -1
 
 P0 不在 SDK 内转码：输入不符合 PCM S16LE/16 kHz/mono 时，在建立付费连接前失败。每个 PCM16 音频块的字节数必须为偶数。官方示例建议每 200 ms 一包，即 6400 字节；分块节奏由宿主负责。
 
-`bigmodel_async` 当前契约不发送 `audio.language`；传入 `language` 或热词 `hints` 会明确报不支持，避免静默丢参数。
+`bigmodel_async` 当前契约不发送 `audio.language`；传入 `language` 或语言 `hints` 会明确报不支持，避免静默丢参数。
+
+### 2.1 热词直传
+
+供应商选项 `options.hotwords: string[]` 去掉首尾空白、空串和重复后，按官方字段表写入首帧 `request.corpus.context`。该字段类型为 string，内容是序列化后的 JSON：
+
+```json
+"corpus": { "context": "{\"hotwords\":[{\"word\":\"说吧\"},{\"word\":\"豆包语音\"}]}" }
+```
+
+官方原文：热词直传优先级高于传热词表，双向流式支持 100 tokens，流式输入 nostream 支持 5000 个词。官方未写明 `bigmodel_async`（双向流式优化版）适用哪条，按双向流式推定为 100 tokens，实现前待授权实测确认。直传格式只有 `word`，官方未给权重字段；带权重的只有控制台热词表（`boosting_table_id` / `boosting_table_name`，一次请求只生效一张）。超过 100 tokens 时服务端是截断还是报错，官方未说明，SDK 不截断、不估算 token。同一字段也承载上下文（`context_type: dialog_ctx`），热词与上下文能否合写官方未说明，P0 只接热词。没有有效热词时不发送 `corpus`。
 
 ## 3. 二进制帧契约
 
@@ -133,7 +143,7 @@ SDK 对音频保留一块延迟：收到下一块时才把上一块以正 sequen
 | Fixture | 分类 | 用途 |
 |---|---|---|
 | `asr-seedasr-official.json` | `official-redacted` | 官方附件成功 `run.log` 的握手/空进度/终帧；仅 `log_id` 脱敏 |
-| `asr-seedasr-field-construction.json` | `field-construction` | 按官方当前附件构造三类客户端帧与首帧字段 |
+| `asr-seedasr-field-construction.json` | `field-construction` | 按官方当前附件构造三类客户端帧与首帧字段；`startPayloadWithHotwords` 依据官方字段表与热词直传示例构造（官方示例引号未转义，按字段类型 string 修正） |
 | `asr-seedasr-synthetic.json` | `synthetic-negative` | 未知 event、错误码、断牙/尾随字节等负例 |
 
 ## 7. 原始链接索引

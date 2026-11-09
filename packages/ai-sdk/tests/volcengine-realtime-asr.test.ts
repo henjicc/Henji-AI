@@ -35,6 +35,8 @@ interface ConstructedFixture {
     lastAudioRequestHeaderHex: string
     startPayload: unknown
     partialPayload: unknown
+    hotwordsInput: string[]
+    startPayloadWithHotwords: unknown
   }
 }
 interface SyntheticFixture {
@@ -554,6 +556,27 @@ describe('火山 SeedASR 2.0 实时会话', () => {
     expect(timeout.close).toHaveBeenCalledOnce()
   })
 
+  it('热词去空去重后按官方热词直传格式写进 request.corpus.context', async () => {
+    const official = fixture<OfficialFixture>('asr-seedasr-official.json')
+    const constructed = fixture<ConstructedFixture>('asr-seedasr-field-construction.json')
+    const connection = new ScriptedConnection((data) => {
+      if (typeof data !== 'string') connection.push(serverFrame({ payload: official.realtime.handshake, sequence: 1 }))
+    })
+    const client = createCapabilityClient({
+      runtime: runtime(connection),
+      realtimeModules: [createVolcengineRealtimeAsrModule(volcengineSeedAsrRealtime, {
+        requestIdFactory: () => constructed.taskId,
+      })],
+    })
+    const session = await open(client, {
+      mediaType: 'audio/pcm', options: { hotwords: constructed.realtime.hotwordsInput },
+    }, { requestId: 'hotwords' })
+
+    const full = connection.sent[0] as Uint8Array
+    expect(JSON.parse(strFromU8(clientPayload(full)))).toEqual(constructed.realtime.startPayloadWithHotwords)
+    await session.close()
+  })
+
   it('非法格式/采样率/声道/language/奇数字节在付费发送边界前拒绝', async () => {
     const official = fixture<OfficialFixture>('asr-seedasr-official.json')
     const constructed = fixture<ConstructedFixture>('asr-seedasr-field-construction.json')
@@ -583,6 +606,10 @@ describe('火山 SeedASR 2.0 实时会话', () => {
     await expect(open(client, {
       mediaType: 'audio/pcm', options: { enableDdc: 'yes' },
     } as unknown as SpeechRecognitionRealtimeStart, { requestId: 'bad-options' }))
+      .rejects.toMatchObject({ code: 'invalid_parameter' })
+    await expect(open(client, {
+      mediaType: 'audio/pcm', options: { hotwords: '说吧' },
+    } as unknown as SpeechRecognitionRealtimeStart, { requestId: 'bad-hotwords' }))
       .rejects.toMatchObject({ code: 'invalid_parameter' })
     expect(connect).not.toHaveBeenCalled()
 

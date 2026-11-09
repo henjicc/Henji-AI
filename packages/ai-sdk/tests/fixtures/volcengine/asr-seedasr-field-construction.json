@@ -3,7 +3,8 @@
   "classification": "field-construction",
   "source": {
     "checkedAt": "2026-08-31",
-    "contract": "由火山官方字段表与当前官方 Python 附件逐字段构造，用于锁定 SDK 发送边界；不是服务端录制。"
+    "contract": "由火山官方字段表与当前官方 Python 附件逐字段构造，用于锁定 SDK 发送边界；不是服务端录制。",
+    "hotwords": "realtime.startPayloadWithHotwords 于 2026-11-10 依据 https://docs.volcengine.com/docs/6561/1354869 的 request.corpus.context 字段表（类型 string）与热词直传示例构造；官方示例引号未转义，按字段类型序列化为 JSON 字符串。"
   },
   "taskId": "11111111-1111-4111-8111-111111111111",
   "file": {
@@ -89,6 +90,23 @@
         "show_utterances": true,
         "enable_nonstream": false,
         "result_type": "full"
+      }
+    },
+    "hotwordsInput": ["说吧", " 豆包语音 ", "说吧", ""],
+    "startPayloadWithHotwords": {
+      "user": { "uid": "11111111-1111-4111-8111-111111111111" },
+      "audio": { "format": "pcm", "codec": "raw", "rate": 16000, "bits": 16, "channel": 1 },
+      "request": {
+        "model_name": "bigmodel",
+        "enable_itn": true,
+        "enable_punc": true,
+        "enable_ddc": false,
+        "show_utterances": true,
+        "enable_nonstream": false,
+        "result_type": "full",
+        "corpus": {
+          "context": "{\"hotwords\":[{\"word\":\"说吧\"},{\"word\":\"豆包语音\"}]}"
+        }
       }
     }
   }

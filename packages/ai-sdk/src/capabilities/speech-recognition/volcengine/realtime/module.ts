@@ -73,6 +73,10 @@ function providerOptions(input: SpeechRecognitionRealtimeStart): VolcengineRealt
       throw new AiRuntimeError('invalid_parameter', `Volcengine realtime ASR options.${key} must be boolean`)
     }
   }
+  if (provider.hotwords !== undefined && (!Array.isArray(provider.hotwords)
+    || provider.hotwords.some((word) => typeof word !== 'string'))) {
+    throw new AiRuntimeError('invalid_parameter', 'Volcengine realtime ASR options.hotwords must be strings')
+  }
   return provider as VolcengineRealtimeAsrOptions
 }
 
@@ -218,6 +222,7 @@ function startPayload(
   requestId: string
 ): Record<string, unknown> {
   const provider = providerOptions(input)
+  const hotwords = [...new Set((provider.hotwords ?? []).map((word) => word.trim()).filter(Boolean))]
   return {
     user: { uid: requestId },
     audio: { format: 'pcm', codec: 'raw', rate: 16_000, bits: 16, channel: 1 },
@@ -229,6 +234,9 @@ function startPayload(
       show_utterances: provider.showUtterances ?? true,
       enable_nonstream: false,
       result_type: 'full',
+      ...(hotwords.length
+        ? { corpus: { context: JSON.stringify({ hotwords: hotwords.map((word) => ({ word })) }) } }
+        : {}),
     },
   }
 }
