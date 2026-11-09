@@ -20,6 +20,8 @@ import type { AgentAttachment } from '@/core/assistant/attachments'
 import { AssistantComposer } from '../conversation/AssistantComposer'
 import type { AssistantAttachmentDraft } from '../conversation/assistantAttachments'
 import { AudioEditAssistantAction } from '@/features/audioEdit/AudioEditAssistantAction'
+import { LLM_CONFIG_CHANGED_EVENT } from '@/core/llm/events'
+import { AssistantModelControls } from './AssistantModelControls'
 
 export function EmbeddedConversation(): JSX.Element {
   const state = useEmbeddedAgent()
@@ -37,6 +39,13 @@ export function EmbeddedConversation(): JSX.Element {
   const previousSession = useRef(state.sessionId)
   const settingsOpen = useUiStore((store) => store.isSettingsOpen)
   const selectedModel = models[0]
+  // 设置页或输入框底栏换了助手模型都会改配置，配置变了就重新取当前模型
+  const [configVersion, setConfigVersion] = useState(0)
+  useEffect(() => {
+    const bump = (): void => setConfigVersion(value => value + 1)
+    window.addEventListener(LLM_CONFIG_CHANGED_EVENT, bump)
+    return () => window.removeEventListener(LLM_CONFIG_CHANGED_EVENT, bump)
+  }, [])
   useEffect(() => {
     let disposed = false
     setModelsLoaded(false)
@@ -44,7 +53,7 @@ export function EmbeddedConversation(): JSX.Element {
       if (!disposed) { setModels([]); setModelsLoaded(true); reportEmbeddedAgentError(error) }
     })
     return () => { disposed = true }
-  }, [settingsOpen])
+  }, [settingsOpen, configVersion])
   const busy = submitting || state.busy
   // 回复中才有“停止 / 打断”；切换对话中（switching）同样算忙，但只能排队等待，切换完成后发送
   const replying = state.busy && !state.switching
@@ -56,7 +65,7 @@ export function EmbeddedConversation(): JSX.Element {
     previousSession.current = state.sessionId
   }, [state.sessionId, busy])
   const send = useCallback((text: string, submittedAttachments: AgentAttachment[], request?: AssistantGoalOptions): void => {
-    if (!text || !selectedModel || submitting) return
+    if (!text || !selectedModel || !modelsLoaded || submitting) return
     const prepared = request ?? preparedRequest
     try { prepared?.beforeSend?.(); prepared?.onTextSubmitted?.(text) } catch (error) { reportEmbeddedAgentError(error); return }
     setSubmitting(true)
@@ -77,7 +86,7 @@ export function EmbeddedConversation(): JSX.Element {
         reportEmbeddedAgentError(error)
       })
       .finally(() => { setOptimistic(null); setSubmitting(false) })
-  }, [attachments, delivery, document, preparedRequest, scroll, selectedModel, submitting, switching])
+  }, [attachments, delivery, document, modelsLoaded, preparedRequest, scroll, selectedModel, submitting, switching])
   useEffect(() => {
     if (!pendingGoal || !modelsLoaded || submitting) return
     const pending = useAssistantUiStore.getState()
@@ -132,11 +141,12 @@ export function EmbeddedConversation(): JSX.Element {
       {needsModel && !isEmpty ? <UiButton variant="secondary" onClick={openModelSettings}>设置可调用工具的模型</UiButton> : null}
     </div> : null}
     <AssistantComposer key={state.sessionId ?? 'new'} value={document} onChange={setDocument} onSubmit={send} attachments={attachments} onAttachmentsChange={setAttachments}
-      inputModalities={selectedModel?.inputModalities ?? []} attachmentsDisabled={submitting || !selectedModel} disabled={submitting || !selectedModel}
+      inputModalities={selectedModel?.inputModalities ?? []} attachmentsDisabled={submitting || !selectedModel} disabled={submitting || !selectedModel || !modelsLoaded}
       busy={busy} submitting={submitting}
       onCancel={replying ? () => { void getPlatform().embeddedAgent.cancel().catch(reportEmbeddedAgentError) } : undefined}
       sendLabel={busy ? replying && delivery === 'interrupt' ? '打断发送' : '等待发送' : '发送'}
       controls={<>
+        <AssistantModelControls disabled={submitting} onSwitching={() => setModelsLoaded(false)} />
         {replying ? <Dropdown value={delivery} options={[{ value: 'wait', label: '等待' }, { value: 'interrupt', label: '打断' }]} onSelect={setDelivery} ariaLabel="发送方式" appearance="text" size="sm" className="min-w-0" buttonClassName="w-auto max-w-full" panelWidthStrategy="options" /> : null}</>} />
   </div>
 }

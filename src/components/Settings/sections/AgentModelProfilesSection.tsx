@@ -26,9 +26,8 @@ import type {
   AgentModelRole,
   LlmConfigState,
   LlmModelConfig,
-  LlmReasoningConfig,
 } from '@henjicc/ai-sdk'
-import { resolveProviderReasoning } from './llmSettingsSectionHelpers'
+import { ASSISTANT_REASONING_MODES, readReasoningMode, withReasoningMode, type AssistantReasoningMode } from '@/core/llm/assistantModelChoice'
 
 const logger = createLogger('components.Settings.AgentModelProfilesSection')
 const REUSE_PRIMARY = '__reuse_primary__'
@@ -48,9 +47,7 @@ interface ModelOption {
 
 /** 分工模型：默认复用主模型或不配置，大多数人不用动，收进高级设置 */
 const SECONDARY_ROLES: AgentModelRole[] = ['router', 'summarizer', 'fallback', 'observer']
-/** 思考档位存在供应商上（运行时与验证都读它）；“最高”对应供应商的最高档 */
-const REASONING_MODES = ['off', 'low', 'medium', 'high', 'max'] as const
-type ReasoningMode = typeof REASONING_MODES[number]
+
 
 interface RuntimeSettingField {
   key: keyof AgentModelProfile['settings']
@@ -247,37 +244,28 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
   }
 
   const renderReasoning = (): JSX.Element | null => {
-    const model = findModel(models, profile.primary)
-    const provider = config.providers.find(item => item.providerId === profile.primary?.providerId)
-    if (!model?.capabilities.reasoning || !provider || provider.reasoningConfigurable === false) return null
-    const reasoning = resolveProviderReasoning(provider)
-    const mode: ReasoningMode = !reasoning.enabled ? 'off' : reasoning.effort === 'xhigh' ? 'max' : reasoning.effort
+    const primary = profile.primary
+    const mode = primary ? readReasoningMode(config, primary) : null
+    if (!primary || !mode) return null
     const label = t('agentModels.reasoning.label')
     return (
       <UiFormRow label={label} info={t('agentModels.reasoning.info')} inline labelColumn="auto">
-        <Dropdown<ReasoningMode> size="sm"
+        <Dropdown<AssistantReasoningMode> size="sm"
           value={mode}
           display={t(`agentModels.reasoning.modes.${mode}`)}
           ariaLabel={label}
-          options={REASONING_MODES.map(value => ({ value, label: t(`agentModels.reasoning.modes.${value}`) }))}
+          options={ASSISTANT_REASONING_MODES.map(value => ({ value, label: t(`agentModels.reasoning.modes.${value}`) }))}
           className={SETTINGS_INLINE_CONTROL_CLASS}
           buttonClassName="w-full"
-          onSelect={next => void updateReasoning(provider.providerId, next === 'off' ? { ...reasoning, enabled: false } : { enabled: true, effort: next })}
+          onSelect={next => void updateReasoning(primary.providerId, next)}
         />
       </UiFormRow>
     )
   }
 
-  const updateReasoning = async (providerId: string, reasoning: LlmReasoningConfig): Promise<void> => {
-    await saveConfig({
-      ...config,
-      providers: config.providers.map(item => item.providerId === providerId ? { ...item, reasoning } : item),
-    })
-    logger.info('智能助手思考程度已更新', {
-      event: 'agent_model_profile.reasoning.updated',
-      providerId,
-      context: { profileId: profile.id, enabled: reasoning.enabled, effort: reasoning.effort },
-    })
+  const updateReasoning = async (providerId: string, mode: AssistantReasoningMode): Promise<void> => {
+    await saveConfig(withReasoningMode(config, providerId, mode))
+    logger.info('智能助手思考程度已更新', { event: 'agent_model_profile.reasoning.updated', providerId, context: { profileId: profile.id, mode } })
   }
 
   const toggleRoleDetails = (role: AgentModelRole): void => {

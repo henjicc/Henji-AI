@@ -3,13 +3,11 @@ import { createProviderSettingsFileStorage } from '../llm/provider-settings-stor
 import { getLlmProviderApiKey } from '../keystore'
 import { embeddedInputModalities, type EmbeddedAgentModel } from '../../../../src/core/assistant/embeddedAgent'
 import type { EmbeddedModel } from './contracts'
+import { assistantModelCandidates } from '../../../../src/core/llm/assistantModelCandidates'
 
 async function configuredModels() {
   const config = await createProviderSettingsFileStorage().readConfig()
-  return (config?.models ?? []).flatMap((model) => {
-    const provider = config?.providers.find((item) => item.providerId === model.providerId && item.enabled)
-    return model.enabled && model.capabilities.text && model.capabilities.toolCall && provider ? [{ model, provider }] : []
-  })
+  return config ? assistantModelCandidates(config) : []
 }
 function resolveEmbeddedApi(config: { apiProtocol?: string }): EmbeddedModel['api'] {
   return config.apiProtocol === 'openai-responses' ? 'openai-responses' : 'openai-completions'

@@ -1,3 +1,4 @@
+import { providerReasoning } from '@/core/llm/assistantModelChoice'
 import {
   createDefaultProviderReasoning,
 } from '@/core/llm/defaults'
@@ -34,7 +35,7 @@ export function createEmptyModel(provider: LlmProviderConfig): LlmModelConfig {
 }
 
 export function resolveProviderReasoning(provider: LlmProviderConfig): LlmReasoningConfig {
-  return provider.reasoning ?? createDefaultProviderReasoning(provider.adapter)
+  return providerReasoning(provider)
 }
 
 function toProviderSlug(name: string): string {

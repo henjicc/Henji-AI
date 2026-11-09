@@ -9,7 +9,7 @@ import { toModelPromptText, type PromptDocumentV1 } from '@/core/inputs/promptDo
 import { openAssistant, useAssistantUiStore } from '../store/assistantUiStore'
 
 const mocks = vi.hoisted(() => ({ complete: vi.fn(), prompt: vi.fn(), snapshot: { value: {} }, models: vi.fn(), context: vi.fn() }))
-vi.mock('./controller', () => ({ useEmbeddedAgent: () => mocks.snapshot.value, reportEmbeddedAgentError: vi.fn() }))
+vi.mock('./controller', () => ({ useEmbeddedAgent: () => mocks.snapshot.value, reportEmbeddedAgentError: vi.fn(), isEmbeddedAgentHydrated: () => true }))
 vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => ({ applicationControl: mocks, embeddedAgent: { prompt: mocks.prompt, models: mocks.models } }) }))
 vi.mock('../../application-control/hostContext/hostContext', () => ({ captureHostSelection: () => ({ capturedAt: "sent", selectedRefs: [], selectedClipRefs: [], targetTrackRefs: [] }), createHostContextSnapshot: mocks.context }))
 vi.mock('../conversation/useConversationAutoScroll', () => ({ useConversationAutoScroll: () => ({ scrollToBottom: vi.fn(), suspendFollowing: vi.fn() }) }))

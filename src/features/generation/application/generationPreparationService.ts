@@ -105,27 +105,65 @@ function toSafeValue(value: unknown, depth = 0): unknown {
   )
 }
 
+/** 界面文案给助手时只要一份中文：翻译键、回退文案和英文版都是界面实现细节 */
+function plainText(value: unknown): string | undefined {
+  if (value === undefined || value === null || value === '') return undefined
+  if (typeof value === 'object' && 'key' in value && typeof value.key === 'string') {
+    // 翻译键按中文取，不随界面语言；取不到时用回退文案，不把键名本身交出去
+    const fallback = 'fallback' in value && typeof value.fallback === 'string' ? value.fallback : undefined
+    const text = i18n.t(value.key, { lng: 'zh-CN', defaultValue: fallback ?? '' })
+    return (text && text !== value.key ? text : fallback)?.trim() || undefined
+  }
+  const text = typeof value === 'string' || typeof value === 'object' ? getI18nText(value as Parameters<typeof getI18nText>[0], 'zh') : String(value)
+  return text.trim() || undefined
+}
+
+/** 只交出助手据此选值的字段；没有的、默认的一律不传，免得每次读参数都带一堆 null */
 function serializeParam(param: ParamDef): Record<string, unknown> {
   const options = 'options' in param && Array.isArray(param.options)
-    ? param.options.slice(0, 50).map((option) => ({
-      value: toSafeValue(option.value),
-      label: toSafeValue(option.label),
-    }))
+    ? param.options.slice(0, 50).map((option) => {
+      const label = plainText(option.label)
+      return label && label !== String(option.value) ? { value: toSafeValue(option.value), label } : { value: toSafeValue(option.value) }
+    })
     : undefined
-  return {
-    id: param.id,
-    type: param.type,
-    valueType: param.valueType ?? null,
-    name: param.name,
-    description: param.description,
-    required: param.required === true,
+  const optional = {
+    valueType: param.valueType,
+    name: plainText(param.name),
+    description: plainText(param.description),
+    required: param.required === true ? true : undefined,
     default: toSafeValue(param.default),
-    min: 'min' in param ? param.min ?? null : null,
-    max: 'max' in param ? param.max ?? null : null,
-    step: 'step' in param ? param.step ?? null : null,
-    maxCount: 'maxCount' in param ? param.maxCount ?? null : null,
+    min: 'min' in param ? param.min : undefined,
+    max: 'max' in param ? param.max : undefined,
+    step: 'step' in param ? param.step : undefined,
+    maxCount: 'maxCount' in param ? param.maxCount : undefined,
     options,
   }
+  return { id: param.id, type: param.type, ...Object.fromEntries(Object.entries(optional).filter(([, value]) => value !== undefined && value !== null)) }
+}
+
+/**
+ * 输入上限写成函数时按模式逐个求出来，和写成对象规则的模型一样给出“默认上限 + 每个模式的上限”；
+ * 只交出上限对象会让函数整个丢失，助手看不到“切到某模式就能传视频”。
+ */
+const LIMITS_DEPEND_ON_PARAMS = '上限随当前参数（含续写、所选模型）变化，以 prepare_generation_task 返回的 mediaLimits 为准'
+
+function describeInputLimits(model: ModelDefinition): unknown {
+  const limits = model.inputLimits
+  if (typeof limits !== 'function') {
+    if (!limits?.rules) return toSafeValue(limits)
+    // 条件写成函数的规则序列化后会变成无条件规则，改成文字说明，免得被读成“永远如此”
+    return toSafeValue({ ...limits, rules: limits.rules.map(rule => typeof rule.when === 'function' ? { ...rule, when: LIMITS_DEPEND_ON_PARAMS } : rule) })
+  }
+  const defaults = registry.getDefaultValues(model.meta.id)
+  const base = limits(defaults)
+  // 逐个改动一个下拉参数（模式、版本等）看上限是否变化；参数之间的组合不穷举，由 note 指向按实际参数校验
+  const rules = model.params
+    .filter((param): param is ParamDef & { options: Array<{ value: unknown }> } => param.type === 'dropdown' && 'options' in param && Array.isArray(param.options) && param.options.length <= 12)
+    .flatMap(param => param.options
+      .filter(option => option.value !== defaults[param.id])
+      .map(option => ({ when: `${param.id} === ${JSON.stringify(option.value)}`, ...limits({ ...defaults, [param.id]: option.value } as typeof defaults) }))
+      .filter(({ when: _when, ...rule }) => JSON.stringify(rule) !== JSON.stringify(base)))
+  return toSafeValue({ ...base, rules: [...(base.rules ?? []), ...rules], note: LIMITS_DEPEND_ON_PARAMS })
 }
 
 function modelSearchText(model: ModelDefinition): string {
@@ -421,17 +459,16 @@ export function describeGenerationModel(model: ModelDefinition): Record<string, 
       canonicalModelId: model.meta.canonicalModelId,
       provider: model.meta.provider,
       type: model.meta.type,
-      name: model.meta.name,
-      description: model.meta.description,
+      name: plainText(model.meta.name) ?? model.meta.id,
+      ...(plainText(model.meta.description) ? { description: plainText(model.meta.description) } : {}),
       tags: model.meta.tags ?? [],
       ...(model.meta.promptLanguage ? { promptLanguage: model.meta.promptLanguage } : {}),
       // 旧节点仍可能用到过时模型，带上原因让助手提醒用户换模型
       ...(model.meta.deprecated ? { deprecated: model.meta.deprecated } : {}),
     },
-    inputLimits: toSafeValue(model.inputLimits),
+    inputLimits: describeInputLimits(model),
     priceEstimate: createPriceEstimate(model),
     params: model.params.map(serializeParam),
-    linkageCount: model.linkages?.length ?? 0,
   }
 }
 

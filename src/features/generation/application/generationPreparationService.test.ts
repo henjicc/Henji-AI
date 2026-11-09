@@ -93,6 +93,16 @@ describe('generationPreparation', () => {
     })
   })
 
+  it('输入上限写成函数时按模式求出每个模式的上限，参数只给中文文案、不带空字段', () => {
+    registry.clear()
+    registry.register({ ...testModel,
+      params: [{ id: 'videoMode', type: 'dropdown', order: 1, default: 'generate', name: { key: 'x.y', fallback: '模式' }, options: [{ value: 'generate', label: 'generate' }, { value: 'extend', label: '延长' }] }],
+      inputLimits: (params) => params.videoMode === 'extend' ? { images: { max: 0 }, videos: { exact: 1 } } : { images: { max: 4 }, videos: { max: 0 } } })
+    const schema = getGenerationModelSchema(testModel.meta.id)
+    expect(schema.inputLimits).toEqual({ images: { max: 4 }, videos: { max: 0 }, rules: [{ when: 'videoMode === "extend"', images: { max: 0 }, videos: { exact: 1 } }], note: expect.stringContaining('mediaLimits') })
+    expect((schema.params as unknown[])[0]).toEqual({ id: 'videoMode', type: 'dropdown', name: '模式', default: 'generate', options: [{ value: 'generate' }, { value: 'extend', label: '延长' }] })
+  })
+
   it('Qwen TTS discloses its actual upper estimate and failed calculators stay unknown', () => {
     const model = composeModelDefinition(bailianQwenAudio31TtsFlashModel, modelPresentations[bailianQwenAudio31TtsFlashModel.meta.id])
     registry.register(model)
