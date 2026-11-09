@@ -12,6 +12,7 @@ import { expandVideoEditSelection, type VideoEditRelations } from './timelineSel
 import { rescaleVideoEditFrame, type VideoEditRatio, type VideoEditSourceTime } from './time'
 import { advanceVideoEditClipSource, splitVideoEditClipSource, videoEditClipSourceTimeAt, videoEditClipSpeedValue, videoEditClipWithinSource } from './clipSpeed'
 import { videoEditSyncCorrections } from './linkSync'
+import { removeVideoEditSequenceClips } from './clipRemoval'
 import { retimeVideoEditContent, type VideoEditMarker, type VideoEditCaption, type VideoEditContentOrigin } from './timedContent'
 import { remapVideoEditCaptionSpeech, createVideoEditSpeechCaptionRetimer } from './captionSpeech'
 import { expandVideoEditContentSelection, retimeVideoEditContentClips, remapVideoEditContentAnchor } from './contentAnchors'
@@ -349,7 +350,8 @@ function applyClipEdit(document: VideoEditDocument, sequenceId: string, edit: Ex
     return retimeVideoEditContent(sequence, { ...sequence, clips: next, annotations }, origins)
   }
   if (edit.kind === 'delete') {
-    let kept = sequence.clips.filter(clip => !selected.has(clip.id))
+    const base = removeVideoEditSequenceClips(sequence, ids)
+    let kept = base.clips
     if (edit.ripple) {
       const ranges = intervals(clips); const affected = synchronizedTracks(sequence, [...clips.map(clip => clip.track), ...(edit.targetTracks ?? [])])
       kept = kept.map(clip => {
@@ -362,7 +364,7 @@ function applyClipEdit(document: VideoEditDocument, sequenceId: string, edit: Ex
       for (const range of [...ranges].reverse()) mapping.clock.splice(range.from, range.to, 0)
       // Linked partners on tracks outside sync lock stay put and show as out of sync (Premiere).
     }
-    return retimeVideoEditContent(sequence, { ...sequence, clips: kept, annotations: shiftAnnotations(sequence, kept) })
+    return retimeVideoEditContent(base, { ...base, clips: kept, annotations: shiftAnnotations(base, kept) })
   }
   if (edit.kind === 'separate_audio') {
     const audioTrack = sequence.tracks.find(track => track.index === edit.audioTrack)

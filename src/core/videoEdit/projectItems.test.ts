@@ -3,6 +3,8 @@ import { expect, it } from 'vitest'
 import { type VideoEditDocument } from './document'
 import { makeVideoEditItemClip, removeVideoEditCodeMaterials, removeVideoEditItems, removeVideoEditSequences } from './projectItems'
 import type { VideoEditAnnotation } from './annotations'
+import { reconcileVideoEditTimedContent } from './timedContent'
+import { applyVideoEditTimelineEdit } from './timelineEdits'
 
 it('未声明时长的动态作者可按放置长度创建片段，不把默认放置长度当作源上限', () => {
   const document = createVideoEditDocument('宿主放置')
@@ -73,14 +75,17 @@ it('代码素材仍被引用时拒绝并列出引用它的素材项与片段', (
 it('删除多机位源序列里的机位片段会去掉该机位，选它的片段回到第一个机位；剩不到两个机位时拒绝', () => {
   const document = createVideoEditDocument('多机位')
   const [parent] = document.sequences
-  const source = { ...structuredClone(parent), id: 'cams', name: '多机位源', clips: ['a', 'b', 'c'].map((id, index) => ({ ...clipOf(id, `item-${id}`, 0), kind: 'video' as const, track: index + 1 })), multicam: { cameras: ['a', 'b', 'c'].map(id => ({ id: `cam-${id}`, name: `机位${id}`, clipId: id })), audioCameraId: 'cam-b' } }
+  const source = { ...structuredClone(parent), id: 'cams', name: '多机位源', clips: ['a', 'b', 'c'].map((id, index) => ({ ...clipOf(id, `item-${id}`, index * 30), kind: 'video' as const })), multicam: { cameras: ['a', 'b', 'c'].map(id => ({ id: `cam-${id}`, name: `机位${id}`, clipId: id })), audioCameraId: 'cam-b' } }
   document.sequences = [parent, source]
   document.items = [...['a', 'b', 'c'].map(id => ({ id: `item-${id}`, name: `原片${id}`, kind: 'video' as const })), { id: 'nest', name: '多机位', kind: 'sequence', sequenceId: 'cams' }]
   parent.clips = [{ ...clipOf('n', 'nest', 0), kind: 'sequence' as const, multicamCameraId: 'cam-b' }]
   const next = removeVideoEditItems(document, ['item-b'])
   expect(next.sequences[1].multicam).toEqual({ cameras: [{ id: 'cam-a', name: '机位a', clipId: 'a' }, { id: 'cam-c', name: '机位c', clipId: 'c' }] })
-  expect(next.sequences[0].clips[0].multicamCameraId).toBeUndefined()
+  expect(next.sequences[0].clips[0].multicamCameraId).toBe('cam-b')
+  expect(reconcileVideoEditTimedContent(document, next).sequences[0].clips[0].multicamCameraId).toBeUndefined()
   expect(() => removeVideoEditItems(next, ['item-a'])).toThrow('多机位序列“多机位源”至少需要两个机位')
+  const deleted = applyVideoEditTimelineEdit(document, 'cams', { kind: 'delete', clipIds: ['c'], linked: false, ripple: true })
+  expect(deleted.multicam?.cameras.map(camera => camera.id)).toEqual(['cam-a', 'cam-b'])
 })
 
 it('删除封面所在序列清掉封面；代码素材被模板引用时拒绝并列出模板', () => {

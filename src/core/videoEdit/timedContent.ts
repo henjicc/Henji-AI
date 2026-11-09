@@ -12,6 +12,7 @@ import { subtitleGraphic, videoEditSubtitleStyleSchema } from './subtitleStyle'
 import type { VideoEditGraphic } from './graphics'
 import { videoEditCaptionSpeechSchema, videoEditCaptionReviewSchema, createVideoEditSpeechCaptionRetimer } from './captionSpeech'
 import { retimeVideoEditContentClips } from './contentAnchors'
+import { resetVideoEditLostMulticamSelections } from './clipRemoval'
 
 const id = z.string().min(1).max(100)
 const frame = z.number().int().nonnegative().max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES)
@@ -125,7 +126,7 @@ export function reconcileVideoEditTimedContent(before: VideoEditDocument, reques
       ...(jsonEqual(previous.transitions, sequence.transitions) && mapped.transitions ? { transitions: jsonEqual(sequence.transitions, mapped.transitions) ? sequence.transitions : mapped.transitions } : {}),
     }
   })
-  return sequences.every((sequence, index) => sequence === requested.sequences[index]) ? requested : { ...requested, sequences }
+  return resetVideoEditLostMulticamSelections(before, sequences.every((sequence, index) => sequence === requested.sequences[index]) ? requested : { ...requested, sequences })
 }
 
 export function importVideoEditCaptions(source: string, rate: VideoEditRatio, options: { offset?: number; clip?: VideoEditClip } = {}): VideoEditCaption[] {

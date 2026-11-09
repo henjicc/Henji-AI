@@ -7,7 +7,7 @@ import { codeMaterialVersion, type CodeMaterialMetadataReader } from './codeMate
 import { validateCodeElementOverridesWithoutObservation } from './authorEffects'
 import { codeMaterialMediaIds } from './codeMaterialResources'
 import { codeMaterialSize } from './codeMaterialTiming'
-import { retimeVideoEditContent } from './timedContent'
+import { removeVideoEditSequenceClips } from './clipRemoval'
 
 export type VideoEditSequenceSettings = Partial<Pick<VideoEditSequence, 'name' | 'width' | 'height' | 'frameRate' | 'pixelAspectRatio' | 'sampleRate' | 'channels' | 'motionBlur' | 'spaceRender'>> & { binId?: string | null }
 export class VideoEditSequenceFrameRateRequired extends Error {
@@ -16,40 +16,10 @@ export class VideoEditSequenceFrameRateRequired extends Error {
 export function videoEditItemUsage(document: VideoEditDocument, itemId: string): Array<{ sequenceId: string; sequenceName: string; clipId: string }> {
   return document.sequences.flatMap(sequence => sequence.clips.filter(clip => clip.itemId === itemId).map(clip => ({ sequenceId: sequence.id, sequenceName: sequence.name, clipId: clip.id })))
 }
-/** 与 Premiere 一致：删片段连同挂在它上面的标注；范围标注只剩被删片段时一起删除，否则去掉这些片段的引用。 */
-export function removeVideoEditSequenceClips(sequence: VideoEditSequence, ids: readonly string[]): VideoEditSequence {
-  const removed = new Set(ids)
-  if (!sequence.clips.some(clip => removed.has(clip.id))) return sequence
-  const annotations = sequence.annotations.flatMap(mark => {
-    if (mark.clipId && removed.has(mark.clipId)) return []
-    if (mark.target.kind !== 'range' || !mark.target.clipIds?.some(id => removed.has(id))) return [mark]
-    const clipIds = mark.target.clipIds.filter(id => !removed.has(id))
-    return clipIds.length ? [{ ...mark, target: { ...mark.target, clipIds } }] : []
-  })
-  return retimeVideoEditContent(sequence, { ...sequence, clips: sequence.clips.filter(clip => !removed.has(clip.id)), annotations })
-}
-/** 跨序列删除片段。多机位源序列里的机位片段被删时一并去掉该机位，选了它的多机位片段回到第一个机位；剩不到两个机位时拒绝。 */
+/** 跨序列删除片段；选了被去掉机位的多机位片段由 reconcileVideoEditTimedContent 统一回到第一个机位。 */
 export function removeVideoEditClips(document: VideoEditDocument, ids: readonly string[]): VideoEditDocument {
   const removed = new Set(ids)
-  const lostCameras = new Map<string, Set<string>>()
-  let sequences = document.sequences.map(sequence => {
-    const next = removeVideoEditSequenceClips(sequence, sequence.clips.filter(clip => removed.has(clip.id)).map(clip => clip.id))
-    if (!sequence.multicam || next === sequence) return next
-    const lost = sequence.multicam.cameras.filter(camera => removed.has(camera.clipId))
-    if (!lost.length) return next
-    const cameras = sequence.multicam.cameras.filter(camera => !removed.has(camera.clipId))
-    if (cameras.length < 2) throw new Error(`多机位序列“${sequence.name}”至少需要两个机位，删除会去掉机位${lost.map(camera => `“${camera.name}”`).join('、')}。请先删除引用这条多机位序列的素材项，或保留这些机位片段。`)
-    lostCameras.set(sequence.id, new Set(lost.map(camera => camera.id)))
-    const audioCameraId = sequence.multicam.audioCameraId && cameras.some(camera => camera.id === sequence.multicam!.audioCameraId) ? sequence.multicam.audioCameraId : undefined
-    return { ...next, multicam: { cameras, ...(audioCameraId ? { audioCameraId } : {}) } }
-  })
-  if (lostCameras.size) {
-    const sourceOf = new Map(document.items.filter(item => item.kind === 'sequence' && item.sequenceId && lostCameras.has(item.sequenceId)).map(item => [item.id, lostCameras.get(item.sequenceId!)!]))
-    const lostCamera = (clip: VideoEditClip): boolean => Boolean(clip.multicamCameraId && sourceOf.get(clip.itemId)?.has(clip.multicamCameraId))
-    const firstCamera = (clip: VideoEditClip): VideoEditClip => { const next = { ...clip }; delete next.multicamCameraId; return next }
-    sequences = sequences.map(sequence => sequence.clips.some(lostCamera) ? { ...sequence, clips: sequence.clips.map(clip => lostCamera(clip) ? firstCamera(clip) : clip) } : sequence)
-  }
-  return { ...document, sequences }
+  return { ...document, sequences: document.sequences.map(sequence => removeVideoEditSequenceClips(sequence, sequence.clips.filter(clip => removed.has(clip.id)).map(clip => clip.id))) }
 }
 /** 与 Premiere“清除”素材一致：引用这些素材项的片段（及其标注）一并删除。 */
 export function removeVideoEditItems(document: VideoEditDocument, ids: string[]): VideoEditDocument {
