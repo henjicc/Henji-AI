@@ -413,8 +413,8 @@ export function getGenerationModelSchema(modelId: string): Record<string, unknow
 /** 已由调用领域确定可使用的模型；只序列化公开参数，不改变模型的发现或执行权限。 */
 export function describeGenerationModel(model: ModelDefinition): Record<string, unknown> {
   return {
+    // 不带 schemaRef：参数结构已在 params 里给全，带一个形似实体引用的 kind=operation 只会被当成实体去查
     schemaVersion: 'generation-model-schema/v2',
-    schemaRef: modelSchemaRef(model),
     meta: {
       id: model.meta.id,
       canonicalModelId: model.meta.canonicalModelId,
@@ -456,6 +456,16 @@ function applyLinkages(model: ModelDefinition, values: DynamicValueMap, supplied
   return triggers.reduce<DynamicValueMap>((result, key) => engine.execute(key, result, model.params), values)
 }
 
+/**
+ * 联动会把冲突的值换成可用值（旧节点里存过的档位也靠它迁移），这一步不能去掉；
+ * 但调用方明确传入的值被换掉时必须说出来，否则会出现“要矢量图、实际出普通图却报已通过校验”。
+ */
+export function adjustedParams(model: ModelDefinition, supplied: Record<string, unknown>, normalized: DynamicValueMap): Array<{ paramId: string; requested: unknown; applied: unknown }> {
+  return model.params
+    .filter((param) => param.id in supplied && JSON.stringify(supplied[param.id]) !== JSON.stringify(normalized[param.id]))
+    .map((param) => ({ paramId: param.id, requested: supplied[param.id], applied: normalized[param.id] }))
+}
+
 function validateDynamicConstraints(
   model: ModelDefinition,
   params: DynamicValueMap,
@@ -469,13 +479,13 @@ function validateDynamicConstraints(
     const value = params[param.id]
     const options = engine.getFilteredOptions(param.id, params, model.params)
     if (options.length > 0 && !options.some((option) => Object.is(option.value, value))) {
-      errors.push({ paramId: param.id, type: 'options', message: '参数值不在当前联动可选范围内' })
+      errors.push({ paramId: param.id, type: 'options', message: `${String(value)} 与当前其他参数组合冲突，可选：${options.map((option) => String(option.value)).join('、')}` })
     }
     const range = engine.getFilteredRange(param.id, params, model.params)
     if (range && typeof value === 'number' && (
       (range.min !== undefined && value < range.min) || (range.max !== undefined && value > range.max)
     )) {
-      errors.push({ paramId: param.id, type: 'range', message: '参数值不在当前联动数值范围内' })
+      errors.push({ paramId: param.id, type: 'range', message: `${value} 不在当前联动范围 ${range.min ?? '-∞'}～${range.max ?? '∞'} 内` })
     }
   }
   return errors
@@ -528,7 +538,7 @@ export function prepareGenerationModelInput(input: GenerationPreparationInput, m
     paramErrors.push({ paramId: 'prompt', type: 'required', message: '必须提供提示词或允许的媒体引用' })
   }
   if (paramErrors.length > 0) {
-    throw new GenerationPreparationError('INVALID_INPUT', '生成参数未通过模型配置校验', {
+    throw new GenerationPreparationError('INVALID_INPUT', `生成参数未通过模型配置校验：${paramErrors.slice(0, 4).map((error) => `${error.paramId} ${error.message}`).join('；')}`, {
       modelId: model.meta.id,
       errors: paramErrors.map((error) => ({ paramId: error.paramId, type: error.type, message: error.message })),
     })
@@ -545,12 +555,14 @@ export function prepareGenerationModelInput(input: GenerationPreparationInput, m
     }
   }
 
+  const adjusted = adjustedParams(model, supplied, normalized)
   return {
     prepared: true,
     modelId: model.meta.id,
     providerId: model.meta.provider,
     mediaType: model.meta.type,
     options: normalized,
+    ...(adjusted.length ? { adjustedParams: adjusted } : {}),
     mediaLimits: limits,
     priceEstimate: createPriceEstimate(model, normalized),
     selectionEvidence: {

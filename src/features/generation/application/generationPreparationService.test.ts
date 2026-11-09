@@ -4,6 +4,7 @@ import { catalog } from '@henjicc/ai-sdk'
 import { volcengineSeedIcl20Model } from '../../../../packages/ai-sdk/src/catalog/volcengine-speech/seed-icl-2.0.model'
 import { kieGemini31FlashTtsModel } from '../../../../packages/ai-sdk/src/catalog/kie/gemini-3.1-flash-tts.model'
 import { kieGrokImagineModel } from '../../../../packages/ai-sdk/src/catalog/kie/grok-imagine.model'
+import { kieGptImage26Model } from '../../../../packages/ai-sdk/src/catalog/kie/gpt-image-2.6.model'
 import { apimartKling30OmniModel } from '../../../../packages/ai-sdk/src/catalog/apimart/kling-3.0-omni.model'
 
 import {
@@ -22,6 +23,7 @@ import {
   GenerationPreparationError,
   getGenerationModelCatalogBootstrap,
   getGenerationModelSchema,
+  getGenerationModelSchemaRef,
   prepareGenerationTask,
   searchGenerationModelCatalog,
   searchGenerationModels,
@@ -135,10 +137,11 @@ describe('generationPreparation', () => {
       comparableCnyAmount: 3.385,
     })
     const schema = getGenerationModelSchema(testModel.meta.id)
+    expect(schema).not.toHaveProperty('schemaRef')
     expect(schema.schemaVersion).toBe('generation-model-schema/v2')
     // 模型 id 来自供应商，必须先过稳定 id 规范化再拼，不能直接嵌进去。parse 同时守住
     // 「这个 ref 本身合法」——注册表就是拿它去建 schema 文档的。
-    expect(applicationSchemaRefSchema.parse(schema.schemaRef).id)
+    expect(applicationSchemaRefSchema.parse(getGenerationModelSchemaRef(testModel.meta.id)).id)
       .toBe(`generation.model.${toApplicationStableIdSegment(testModel.meta.id)}.params`)
     expect(schema.params).toHaveLength(2)
     expect(schema.priceEstimate).toMatchObject({ amount: 0.5, currency: '$' })
@@ -255,6 +258,17 @@ describe('generationPreparation', () => {
       options: { images: ['https://example.com/source.png'] },
     })
     expect((prepared.options as Record<string, unknown>).kieGrokImagineMode).toBe('image-to-image')
+  })
+
+  it('明确传入的值被联动改掉时如实列出，不悄悄改成别的', () => {
+    registry.register(composeModelDefinition(kieGptImage26Model, modelPresentations[kieGptImage26Model.meta.id]))
+    const prepare = (variant: string) => () => prepareGenerationTask({
+      modelId: kieGptImage26Model.meta.id, prompt: '小猫图标', mediaType: 'image', options: { kieGpt26Variant: variant, kieGpt26Output: 'svg' },
+    })
+    expect(prepare('economy')()).toMatchObject({ options: { kieGpt26Output: 'image' }, adjustedParams: [{ paramId: 'kieGpt26Output', requested: 'svg', applied: 'image' }] })
+    const flare = prepare('flare')() as { options: Record<string, unknown> }
+    expect(flare.options.kieGpt26Output).toBe('svg')
+    expect(flare).not.toHaveProperty('adjustedParams')
   })
 
   it('合并默认值并在提交前校验媒体和参数', () => {

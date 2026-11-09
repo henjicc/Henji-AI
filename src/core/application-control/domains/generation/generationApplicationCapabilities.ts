@@ -1,7 +1,6 @@
 import { applicationGenerationTaskId } from '../../operationIdentity'
 import { z } from 'zod'
 import { APPLICATION_MEDIA_REFERENCE_GUIDANCE, APPLICATION_MEDIA_REFERENCE_KINDS } from '../../mediaReferenceKinds'
-import { applicationSchemaRefSchema } from '../..'
 import { canvasNodePlacementSchema } from '../canvas/canvasMutationApplicationCapabilities'
 
 
@@ -120,7 +119,6 @@ const getModelSchema = defineApplicationCapability({
   inputSchema: z.object({ modelId: z.string().min(1) }).strict(),
   outputSchema: capabilityOutputSchema({
     schemaVersion: z.string(),
-    schemaRef: applicationSchemaRefSchema,
     meta: z.record(z.string(), z.unknown()),
     params: z.array(z.record(z.string(), z.unknown())),
   }),

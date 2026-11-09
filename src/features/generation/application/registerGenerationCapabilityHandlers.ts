@@ -232,7 +232,7 @@ export function registerGenerationCapabilityHandlers(
     return {
       preparation: { ...preparation, providerConfigured, canSubmit: providerConfigured && !unavailable,
         ...(unavailable ? { errorCode: unavailable.code, retryAfterMs: Math.max(0, unavailable.expiresAt - Date.now()) } : {}),
-        message: unavailable?.message ?? (providerConfigured ? '参数已通过校验，供应商已配置；提交按统一付费策略执行。' : '参数已通过校验，但供应商未配置，不能提交。请先配置该供应商凭据，或选择已配置供应商的模型。') },
+        message: `${adjustmentNote(preparation.adjustedParams)}${unavailable?.message ?? (providerConfigured ? '参数已通过校验，供应商已配置；提交按统一付费策略执行。' : '参数已通过校验，但供应商未配置，不能提交。请先配置该供应商凭据，或选择已配置供应商的模型。')}` },
     }
   })
 
@@ -306,3 +306,11 @@ async function readGenerationTask(taskId: string): Promise<Record<string, unknow
 }
 import { getProviderAvailabilityFailure } from '@/core/services/providerAvailability'
 import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
+
+/** 联动换掉了调用方明确传入的值时放在提示最前面：要的东西做不到，调用方得先知道再决定换模型、换档位还是接受。 */
+function adjustmentNote(adjusted: unknown): string {
+  if (!Array.isArray(adjusted) || !adjusted.length) return ''
+  const items = (adjusted as Array<{ paramId: string; requested: unknown; applied: unknown }>)
+    .map((item) => `${item.paramId} 由 ${JSON.stringify(item.requested)} 改为 ${JSON.stringify(item.applied)}`)
+  return `注意：以下参数与当前其他参数组合冲突，已按模型规则改掉：${items.join('；')}。若必须用原值，请先调整与之冲突的参数。`
+}

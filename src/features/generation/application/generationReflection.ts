@@ -193,7 +193,7 @@ class GenerationReflectionProvider implements ApplicationEntityProvider {
   private async readValues(id: string): Promise<{ values: Record<string, JsonValue>; revision: number }> {
     if (this.entityType === GENERATION_ENTITY_TYPES.model) {
       const schema = getGenerationModelSchema(id)
-      const source: GenerationModelFieldSource = { modelId: id, meta: schema.meta as Record<string, unknown>, schemaRef: schema.schemaRef }
+      const source: GenerationModelFieldSource = { modelId: id, meta: schema.meta as Record<string, unknown>, schemaRef: getGenerationModelSchemaRef(id) }
       return { values: fieldReadValues(GENERATION_MODEL_FIELDS, source), revision: getGenerationModelsRevision() }
     }
     let task = readGenerationTaskStatusSnapshot(id)
