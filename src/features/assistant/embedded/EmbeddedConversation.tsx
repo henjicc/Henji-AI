@@ -15,7 +15,7 @@ import { useAssistantUiStore, type AssistantGoalOptions } from '../store/assista
 import { captureHostSelection, createHostContextSnapshot } from '../../application-control/hostContext/hostContext'
 import { EmbeddedTranscript, EmbeddedUserMessage } from './EmbeddedTranscript'
 import { useConversationAutoScroll } from '../conversation/useConversationAutoScroll'
-import { reportEmbeddedAgentError, useEmbeddedAgent } from './controller'
+import { isEmbeddedAgentHydrated, reportEmbeddedAgentError, useEmbeddedAgent } from './controller'
 import type { AgentAttachment } from '@/core/assistant/attachments'
 import { AssistantComposer } from '../conversation/AssistantComposer'
 import type { AssistantAttachmentDraft } from '../conversation/assistantAttachments'
@@ -106,7 +106,7 @@ export function EmbeddedConversation(): JSX.Element {
   return <div className="flex min-h-0 min-w-0 flex-1 flex-col">
     <div ref={scroll.viewportRef} onScroll={scroll.onScroll} onWheel={scroll.onWheel} onKeyDown={scroll.onKeyDown} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 py-4" role="log" aria-label="助手对话">
       <div ref={scroll.contentRef} className="space-y-5">
-      {isEmpty ? (needsModel
+      {isEmpty && !isEmbeddedAgentHydrated() ? null : isEmpty ? (needsModel
         ? <UiEmpty size="sm" icon={<Sparkles aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.lg}`} />} title="先设置助手模型"
           description="助手需要一个支持工具调用的模型，才能查看项目、调整参数和安排任务。"
           action={<UiButton variant="secondary" onClick={openModelSettings}>设置可调用工具的模型</UiButton>} />

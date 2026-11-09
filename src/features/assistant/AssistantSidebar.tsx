@@ -15,9 +15,9 @@ import { useAssistantUiStore, type AssistantDockMode } from './store/assistantUi
 
 
 /**
- * 停靠态和剪辑、音频编辑的停靠面板是同一套语言：外沿留 4px 间隙（与面板组之间的间隙同宽同色），
- * 面板本身直角、无描边、无阴影，内容区底色与工作区主区同为窗口底（命令带仍是面板底，和各工作区的命令带齐平同色）。
- * 悬浮态才是卡片语义，保留圆角 + 四边框 + 浮层阴影 + 面板底。
+ * 停靠态是窗口的一栏：直角、无阴影，内容区底色与工作区主区同为窗口底（命令带仍是面板底，和各工作区的命令带齐平同色），
+ * 和工作区之间只隔一条发丝线。生成、画布这类整页工作区旁边留一道 4px 深色间隙会读成一条沟，紧贴页面滚动条更显粗。
+ * 悬浮态才是卡片语义，保留圆角 + 四边框 + 面板底。
  */
 const SURFACE_BY_MODE = {
   floating: 'rounded-xl',
@@ -25,8 +25,8 @@ const SURFACE_BY_MODE = {
   right: '',
 } as const
 const DOCKED_SURFACE_CLASS = 'bg-window text-text1'
-/** 停靠时朝向工作区露出一道间隙，和工作区里的面板分开；顶部与工作区命令带齐平。 */
-const GAP_BY_MODE = { floating: '', left: 'ui-dock-gap-surface pr-1', right: 'ui-dock-gap-surface pl-1' } as const
+/** 停靠时朝向工作区的一侧画一条发丝线；顶部与工作区命令带齐平。 */
+const GAP_BY_MODE = { floating: '', left: 'border-r border-line', right: 'border-l border-line' } as const
 
 /** 命令带标题跟随当前内容：历史与记忆没有自己的头带，靠这里说明“正在看哪里”。 */
 const contentViewTitles = {
@@ -89,13 +89,12 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
     setMode(nextMode)
   }
 
-  const hiddenTransform = mode === 'left'
-    ? '-translate-x-3 opacity-0'
-    : mode === 'right'
-      ? 'translate-x-3 opacity-0'
-      : 'translate-y-2 scale-[0.985] opacity-0'
+  // 停靠时工作区在打开的同一帧就让出位置，面板再淡入的话让出来的那一栏会先空一下；停靠态直接出现，只有悬浮窗做进出动画
+  const docked = mode !== 'floating' && !interaction.dragging
+  const hiddenTransform = docked ? 'invisible' : 'translate-y-2 scale-[0.985] opacity-0'
 
-  if (!shouldRender) return <></>
+  // 打开过一次后一直挂着，关闭只隐藏：再打开时面板和对话当帧就在，不会先空一块、再闪一下空对话
+  const parked = !shouldRender
 
   return (
     <>
@@ -111,7 +110,8 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
       <div
         ref={interaction.panelRef}
         data-assistant-sidebar
-        className={`pointer-events-none fixed z-panel min-h-0 ${mode === 'floating' || interaction.dragging ? 'will-change-transform' : isVisible ? GAP_BY_MODE[mode] : ''}`}
+        aria-hidden={parked || undefined}
+        className={`pointer-events-none fixed z-panel min-h-0 ${parked ? 'hidden' : ''} ${mode === 'floating' || interaction.dragging ? 'will-change-transform' : isVisible ? GAP_BY_MODE[mode] : ''}`}
         style={positionStyle}
       >
       <aside
@@ -119,11 +119,11 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
         aria-label="智能助手"
         aria-hidden={!open}
         // 收起中不可点击；过渡结束即卸载，不只依赖计时器（任务 5.8）
-        {...(closing ? { inert: '' } : {})}
+        {...(closing || parked ? { inert: '' } : {})}
         onTransitionEnd={onTransitionEnd}
-        className={`relative flex h-full min-h-0 w-full flex-col overflow-hidden ${mode === 'floating' || interaction.dragging ? UI_PANEL_SURFACE_CLASS : DOCKED_SURFACE_CLASS} transition-[opacity,transform] duration-180 ease-out ${
+        className={`relative flex h-full min-h-0 w-full flex-col overflow-hidden ${mode === 'floating' || interaction.dragging ? UI_PANEL_SURFACE_CLASS : DOCKED_SURFACE_CLASS} ${docked ? '' : 'transition-[opacity,transform] duration-180 ease-out'} ${
           interaction.dragging ? SURFACE_BY_MODE.floating : SURFACE_BY_MODE[mode]
-        } ${isVisible ? 'pointer-events-auto translate-x-0 translate-y-0 scale-100 opacity-100' : `pointer-events-none ${hiddenTransform}`}`}
+        } ${isVisible || (docked && open) ? 'pointer-events-auto translate-x-0 translate-y-0 scale-100 opacity-100' : `pointer-events-none ${hiddenTransform}`}`}
       >
         {/* 唯一命令带：标题（随内容切换）+ 对话操作；历史、记忆不再各自长头带（skill 页面骨架 A 类） */}
         <UiToolbar

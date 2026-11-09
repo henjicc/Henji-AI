@@ -85,7 +85,8 @@ const UiGalleryPage = (import.meta.env.DEV || import.meta.env.MODE === 'developm
   ? lazy(() => import('@/features/devGallery/UiGalleryPage').then((m) => ({ default: m.UiGalleryPage })))
   : null
 
-const overlayPrefetchOrder = [loadSettingsModal, loadAssetLibraryFloatingPanel]
+// 助手面板首次打开时若还在加载，工作区已先让出位置，会空白一下；和其他浮层一起空闲时预取
+const overlayPrefetchOrder = [loadAssistantSidebar, loadSettingsModal, loadAssetLibraryFloatingPanel]
 
 /*
  * dev 下 Vite 是收到请求才逐个转译的，预取会往队列里压几百个模块。工作区的预取排在

@@ -6,9 +6,12 @@ import { createLogger } from '@/core/logging'
 
 const logger = createLogger('features.assistant.embedded')
 let snapshot = emptyEmbeddedAgentSnapshot()
+/** 还没收到主进程的第一份快照：这时的空列表不代表“没有对话”，界面不能显示空对话提示 */
+let hydrated = false
 const listeners = new Set<() => void>()
 let disconnect: (() => void) | undefined
-function publish(value: EmbeddedAgentSnapshot): void { snapshot = value; listeners.forEach((listener) => listener()) }
+function publish(value: EmbeddedAgentSnapshot): void { snapshot = value; hydrated = true; listeners.forEach((listener) => listener()) }
+export function isEmbeddedAgentHydrated(): boolean { return hydrated }
 export function reportEmbeddedAgentError(error: unknown): void {
   // 付费确认里点了取消：草稿已退回输入框，不是失败，不记错误、不显示报错
   if (isUserCancellation(error)) {
