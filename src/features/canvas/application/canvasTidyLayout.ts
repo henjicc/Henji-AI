@@ -1,23 +1,57 @@
+import dagre from '@dagrejs/dagre'
 import { solveAdaptiveLayout, solveStaticLayout, type LayoutItem } from '@/core/creativeIntent/layout'
 import type { CandidateIdentity, LayoutConstraint } from '@/core/creativeIntent/contracts'
-import type { CanvasNode } from '../domain/canvasNodes'
+import type { CanvasEdge, CanvasNode } from '../domain/canvasNodes'
+import { resolveCanvasNodeLayoutSize } from '../domain/nodeRegistry'
 
-export const CANVAS_TIDY_MODES = ['align', 'distribute', 'grid'] as const
+export const CANVAS_TIDY_MODES = ['flow', 'align', 'distribute', 'grid'] as const
 export type CanvasTidyMode = typeof CANVAS_TIDY_MODES[number]
 export interface CanvasTidyPlacement { nodeId: string; position: { x: number; y: number } }
 export interface CanvasTidyCandidate { mode: CanvasTidyMode; placements: CanvasTidyPlacement[]; unavailable?: string }
 
+/** 尚未测量的节点按类型估值参与整理，不因同一回合刚建的节点而失败。 */
 export function canvasTidySize(node: CanvasNode): { width: number; height: number } {
-  const width = node.measured?.width ?? node.width
-  const height = node.measured?.height ?? node.height
-  if (!width || !height || width <= 0 || height <= 0 || ![width, height].every(Number.isFinite)) throw new Error('节点尚未完成测量，请稍后重新整理')
-  return { width, height }
+  return resolveCanvasNodeLayoutSize(node)
 }
 
-/** No viewport, content or edge traversal: validity depends only on geometry and membership. */
-export function canvasTidyGeometryKey(nodes: readonly CanvasNode[]): string {
-  return JSON.stringify(nodes.map(n => [n.id, n.position.x, n.position.y, n.measured?.width ?? n.width,
-    n.measured?.height ?? n.height, n.parentId, n.draggable, n.hidden, n.selected, n.origin, n.extent]))
+/** 方案只依赖几何、成员与连线方向；视口与节点内容变化不使方案失效。 */
+export function canvasTidyGeometryKey(nodes: readonly CanvasNode[], edges: readonly CanvasEdge[] = []): string {
+  return JSON.stringify([nodes.map(n => [n.id, n.position.x, n.position.y, n.measured?.width ?? n.width,
+    n.measured?.height ?? n.height, n.parentId, n.draggable, n.hidden, n.selected, n.origin, n.extent]),
+  edges.map(e => [e.source, e.target])])
+}
+
+/** 同层节点之间留出浮动标题的高度，层与层之间留出连线可读的水平距离。 */
+const FLOW_NODE_GAP = 48
+const FLOW_RANK_GAP = 96
+
+/**
+ * 按连线方向分层：上游在左、下游在右，同层纵向排列。分层与交叉最少化交给 dagre，
+ * 结果整体平移到钉住/锁定的节点不动，没有时保持选区原来的左上角。
+ */
+function flowDeltas(items: LayoutItem[], members: CanvasNode[], edges: readonly CanvasEdge[]): [number, number][] {
+  const locked = items.filter(i => i.translationLocked)
+  if (locked.length > 1) throw new Error('多个节点被钉住或锁定，无法按连线方向整理，请解钉后重试')
+  const graph = new dagre.graphlib.Graph()
+  graph.setGraph({ rankdir: 'LR', nodesep: FLOW_NODE_GAP, ranksep: FLOW_RANK_GAP, marginx: 0, marginy: 0 })
+  graph.setDefaultEdgeLabel(() => ({}))
+  const ids = new Set(members.map(n => n.id))
+  items.forEach((item, k) => graph.setNode(members[k].id, {
+    width: item.worldCorners[1][0] - item.worldCorners[0][0], height: item.worldCorners[2][1] - item.worldCorners[0][1] }))
+  for (const edge of edges) {
+    if (edge.source !== edge.target && ids.has(edge.source) && ids.has(edge.target)) graph.setEdge(edge.source, edge.target)
+  }
+  dagre.layout(graph)
+  const tops = members.map(n => { const { x, y, width, height } = graph.node(n.id); return [x - width / 2, y - height / 2] as const })
+  let shift: [number, number]
+  const anchor = locked[0] ? items.indexOf(locked[0]) : -1
+  if (anchor >= 0) shift = [items[anchor].worldCorners[0][0] - tops[anchor][0], items[anchor].worldCorners[0][1] - tops[anchor][1]]
+  else {
+    const min = (values: number[]) => values.reduce((a, b) => Math.min(a, b), Infinity)
+    shift = [min(items.map(i => i.worldCorners[0][0])) - min(tops.map(t => t[0])),
+      min(items.map(i => i.worldCorners[0][1])) - min(tops.map(t => t[1]))]
+  }
+  return items.map((item, k) => [tops[k][0] + shift[0] - item.worldCorners[0][0], tops[k][1] + shift[1] - item.worldCorners[0][1]])
 }
 
 function itemFor(node: CanvasNode, projectId: string, locked: boolean): LayoutItem {
@@ -36,7 +70,7 @@ function align(id: string, items: LayoutItem[], axis: 'x' | 'y', reference = ite
 
 /** Host adapter: partition local coordinate spaces, compile constraints, then delegate to the static kernel. */
 export function solveCanvasTidy(nodes: readonly CanvasNode[], ids: readonly string[], pin: string | null,
-  mode: CanvasTidyMode, identity: CandidateIdentity): CanvasTidyCandidate {
+  mode: CanvasTidyMode, identity: CandidateIdentity, edges: readonly CanvasEdge[] = []): CanvasTidyCandidate {
   try {
     const byId = new Map(nodes.map(n => [n.id, n]))
     const selected = new Set(ids)
@@ -70,7 +104,9 @@ export function solveCanvasTidy(nodes: readonly CanvasNode[], ids: readonly stri
         n.draggable === false || n.id === pin || fixedAncestors.has(n.id)))
       const constraints: LayoutConstraint[] = []
       const solveItems = [...items]
-      if (items.length > 1) {
+      if (mode === 'flow') {
+        // 流向整理不经约束求解器：dagre 直接给出分层坐标，下面与其他模式共用容器校验。
+      } else if (items.length > 1) {
         if (mode === 'grid') {
           const ordered = [...items].sort((a, b) => a.worldCorners[0][1] - b.worldCorners[0][1] || a.worldCorners[0][0] - b.worldCorners[0][0])
           const columns = Math.ceil(Math.sqrt(items.length))
@@ -114,12 +150,14 @@ export function solveCanvasTidy(nodes: readonly CanvasNode[], ids: readonly stri
           }
         }
       }
-      const result = mode === 'distribute' ? solveAdaptiveLayout(solveItems, constraints, identity) : solveStaticLayout(solveItems, constraints, identity)
+      const deltas = mode === 'flow' ? flowDeltas(items, members, edges)
+        : (mode === 'distribute' ? solveAdaptiveLayout(solveItems, constraints, identity) : solveStaticLayout(solveItems, constraints, identity))
+          .changes.slice(0, members.length).map(change => [change.delta[0], change.delta[1]] as [number, number])
       const parent = parentId ? byId.get(parentId) : undefined
       if (parentId && !parent) throw new Error('找不到节点的容器，请重新打开画布')
       const container = parent ? canvasTidySize(parent) : undefined
       for (let k = 0; k < members.length; k++) {
-        const node = members[k]; const delta = result.changes[k].delta
+        const node = members[k]; const delta = deltas[k]
         const position = { x: node.position.x + delta[0], y: node.position.y + delta[1] }
         const corners = items[k].worldCorners
         if (container && (corners[0][0] + delta[0] < -1e-8 || corners[0][1] + delta[1] < -1e-8 ||

@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { CanvasNode } from '../domain/canvasNodes'
+import type { CanvasEdge, CanvasNode } from '../domain/canvasNodes'
 import { canvasTidyGeometryKey, type CanvasTidyMode } from '../application/canvasTidyLayout'
 import { applyCanvasTidyDraft, createCanvasTidyDraft, type CanvasTidyDraft } from '../application/canvasTidyService'
 import { reportCanvasOperationFailure } from '../application/canvasOperationFeedback'
 
-export function useCanvasTidy(projectId: string | null, nodes: CanvasNode[], rendered: CanvasNode[]) {
+export function useCanvasTidy(projectId: string | null, nodes: CanvasNode[], edges: CanvasEdge[], rendered: CanvasNode[]) {
   const [draft, setDraft] = useState<CanvasTidyDraft | null>(null)
   const [mode, setMode] = useState<CanvasTidyMode>('align')
   const [busy, setBusy] = useState(false)
   const generation = useRef(0)
-  const geometry = useMemo(() => draft ? canvasTidyGeometryKey(nodes) : '', [nodes, draft])
+  const geometry = useMemo(() => draft ? canvasTidyGeometryKey(nodes, edges) : '', [nodes, edges, draft])
   const valid = draft?.projectId === projectId && draft.baseline === geometry ? draft : null
   const cancel = useCallback(() => { generation.current++; setDraft(null); setBusy(false) }, [])
   useEffect(() => cancel, [cancel, projectId])
@@ -18,11 +18,19 @@ export function useCanvasTidy(projectId: string | null, nodes: CanvasNode[], ren
     const request = ++generation.current
     setBusy(true)
     try {
-      const next = await createCanvasTidyDraft(projectId, nodes, nodes.filter(n => n.selected).map(n => n.id), pin)
-      if (request === generation.current) setDraft(next)
+      const ids = nodes.filter(n => n.selected).map(n => n.id)
+      const next = await createCanvasTidyDraft(projectId, nodes, ids, pin, edges)
+      if (request === generation.current) {
+        // 选区内有连线时默认按连线方向整理；重新钉住节点时保留用户已选的方案。
+        if (!valid) {
+          const selected = new Set(ids)
+          setMode(edges.some(e => selected.has(e.source) && selected.has(e.target)) ? 'flow' : 'align')
+        }
+        setDraft(next)
+      }
     } catch (error) { if (request === generation.current) reportCanvasOperationFailure(error) }
     finally { if (request === generation.current) setBusy(false) }
-  }, [nodes, projectId])
+  }, [edges, nodes, projectId, valid])
   const candidate = valid?.candidates.find(c => c.mode === mode)
   const previewNodes = useMemo(() => {
     if (!candidate || candidate.unavailable) return rendered

@@ -20,7 +20,7 @@ describe('canvas tidy view projection', () => {
     position: { x: i * 200, y: i * 90 }, width: 100, height: 80, selected: true, data: { content: '参考' } }))
   it('projects cards without changing persisted nodes, and cancellation restores the exact render input', async () => {
     const nodes = fixture(); const before = structuredClone(nodes)
-    const hook = renderHook(() => useCanvasTidy('p', nodes, nodes))
+    const hook = renderHook(() => useCanvasTidy('p', nodes, [], nodes))
     await act(() => hook.result.current.start())
     expect(hook.result.current.previewNodes.map(n => n.position)).toEqual([{ x: 500, y: 200 }, { x: 500, y: 200 }])
     expect(nodes).toEqual(before)
@@ -31,7 +31,7 @@ describe('canvas tidy view projection', () => {
   })
   it('discards projection on geometry/selection changes or another project, without applying it', async () => {
     const nodes = fixture()
-    const hook = renderHook(({ projectId, values }) => useCanvasTidy(projectId, values, values), { initialProps: { projectId: 'p', values: nodes } })
+    const hook = renderHook(({ projectId, values }) => useCanvasTidy(projectId, values, [], values), { initialProps: { projectId: 'p', values: nodes } })
     await act(() => hook.result.current.start())
     const next = nodes.map(n => ({ ...n, selected: false }))
     hook.rerender({ projectId: 'p', values: next })

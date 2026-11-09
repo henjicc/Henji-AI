@@ -26,6 +26,7 @@ import { createHostContextSnapshot } from '@/features/application-control/hostCo
 import type { ApplicationCapabilityHandlerRegistrar } from '@/features/application-control/capabilities/handlerTypes'
 import { parseDocumentCapabilityInput, throwIfCapabilityAborted, withDocumentIdOutput } from '@/features/application-control/capabilities/handlerUtils'
 import { normalizeCanvasNodeIds } from './canvasNodeIdNormalization'
+import { tidyCanvasNodes, type CanvasAssistantTidyMode, type CanvasTidyRequest } from './canvasTidyService'
 
 /**
  * 画布能力统一从这里取参：公共契约里的 `documentId`（画布文档 ID）在这里换成领域服务使用的 `projectId`；
@@ -270,6 +271,14 @@ export function registerCanvasCapabilityHandlers(
       input
     )
     return groupCanvasNodes(parsed.projectId, parsed.nodeIds, parsed.groupKind)
+  })
+
+  registrar.registerHandler('tidy_canvas_nodes', (input, context) => {
+    throwIfCapabilityAborted(context.signal)
+    const parsed = parseCapabilityInput<ProjectInput & Omit<CanvasTidyRequest, 'mode'> & { mode: CanvasAssistantTidyMode }>(
+      'tidy_canvas_nodes', input,
+    )
+    return tidyCanvasNodes(parsed.projectId, parsed)
   })
 
   registrar.registerHandler('connect_asset_group_to_target', (input, context) => {

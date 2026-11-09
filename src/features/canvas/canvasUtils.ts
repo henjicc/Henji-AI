@@ -2,10 +2,10 @@ import type { HandleType, Viewport } from '@xyflow/react'
 import {
   type CanvasNode,
   type CanvasNodeType,
-  DEFAULT_NODE_WIDTH,
 } from '@/features/canvas/domain/canvasNodes'
 import {
   canNodeTypeStartManualConnection,
+  resolveCanvasNodeLayoutSize,
 } from '@/features/canvas/domain/nodeRegistry'
 
 export const DEFAULT_VIEWPORT: Viewport = { x: 0, y: 0, zoom: 1 }
@@ -67,12 +67,7 @@ export interface PreviewConnectionLine {
 }
 
 export function getNodeSize(node: CanvasNode): { width: number; height: number } {
-  const styleWidth = typeof node.style?.width === 'number' ? node.style.width : null
-  const styleHeight = typeof node.style?.height === 'number' ? node.style.height : null
-  return {
-    width: node.measured?.width ?? styleWidth ?? DEFAULT_NODE_WIDTH,
-    height: node.measured?.height ?? styleHeight ?? 200,
-  }
+  return resolveCanvasNodeLayoutSize(node)
 }
 
 export function hasRectCollision(

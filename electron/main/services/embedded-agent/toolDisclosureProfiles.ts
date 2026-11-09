@@ -14,16 +14,16 @@ const taskTools = ['wait_generation_task', 'cancel_generation_task', 'get_applic
 export const taskProfiles = {
   canvas_generation: {
     tools: [...modelTools, ...taskTools, 'get_canvas_node_schema', 'prepare_generation_task', 'create_visible_generation_task',
-      'prepare_canvas_node_generation', 'submit_canvas_node_generation', 'resume_canvas_generation_task'],
-    guidance: '画布新生成：未指定模型时先 resolve_generation_model 读取最新默认模型与供应商，不把搜索排序或旧草稿当用户偏好；明确指定模型时遵循用户要求。选定后读取参数，再 prepare_generation_task → create_visible_generation_task，destination 为原画布；应用创建节点与参考连线，结果落在旁侧。位置优先级：明确位置、原选中节点旁、原视口空位。已有节点用 prepare_canvas_node_generation → submit_canvas_node_generation，保留节点模型。提交后调用 wait_generation_task 等待结果，终态停止，不重复提交。',
+      'prepare_canvas_node_generation', 'submit_canvas_node_generation', 'resume_canvas_generation_task', 'tidy_canvas_nodes'],
+    guidance: '画布新生成：未指定模型时先 resolve_generation_model 读取最新默认模型与供应商，不把搜索排序或旧草稿当用户偏好；明确指定模型时遵循用户要求。选定后读取参数，再 prepare_generation_task → create_visible_generation_task，destination 为原画布；应用创建节点与参考连线，结果落在旁侧。位置优先级：明确位置、原选中节点旁、原视口空位。一条链（如三维镜头参考 → 镜头图片 → 图片生成 → 结果）建完后调用一次 tidy_canvas_nodes，connectedTo 填链上任一节点，按连线方向排好，不手算坐标。已有节点用 prepare_canvas_node_generation → submit_canvas_node_generation，保留节点模型。提交后调用 wait_generation_task 等待结果，终态停止，不重复提交。',
   },
   generation: {
     tools: [...modelTools, ...taskTools, 'prepare_generation_task', 'create_visible_generation_task'],
     guidance: '生成页新任务：未指定模型时先 resolve_generation_model 读取最新默认模型与供应商；用户明确要求沿用当前草稿时读取草稿模型。选定后读取参数，准备后提交；提交后调用 wait_generation_task 等待结果，终态停止，不重复提交。明确指定的画布目标仍优先。',
   },
   canvas_nodes: {
-    tools: ['search_canvas_node_types', 'get_canvas_node_schema', 'get_canvas_node', 'duplicate_canvas_node', 'group_canvas_nodes', 'ungroup_canvas_node'],
-    guidance: '节点编辑：只查询需要的节点类型及 schema；普通节点、连线的增删改使用通用实体事务。复制、分组使用正式语义工具。已有上下文中的画布和选择无需重复查询。',
+    tools: ['search_canvas_node_types', 'get_canvas_node_schema', 'get_canvas_node', 'duplicate_canvas_node', 'group_canvas_nodes', 'ungroup_canvas_node', 'tidy_canvas_nodes'],
+    guidance: '节点编辑：只查询需要的节点类型及 schema；普通节点、连线的增删改使用通用实体事务。复制、分组、整理使用正式语义工具；建完一条链或一批节点后调用一次 tidy_canvas_nodes 排布，不手算坐标。已有上下文中的画布和选择无需重复查询。',
   },
 } satisfies Record<string, { tools: string[]; guidance: string }>
 
@@ -42,7 +42,7 @@ export function disclosureSurface(context: string): string {
 export function surfaceProfile(surface: string): { tools: string[]; guidance: string } {
   if (surface === 'tool.screen_recording') return { tools: ['start_screen_recording', 'stop_screen_recording', 'read_screen_recording_events'], guidance: '当前为屏幕录制。先列出 screen_recording.source 与 screen_recording.device，开始后保留返回的 session 引用。通用实体读取 phase/elapsed_ms/details；暂停、继续、标记、中止、恢复和导入剪辑按名称加载对应操作。停止会等待媒体与会话保存，再分页读事件；不会自动回放操作。会话是正式文档，可通过通用文档能力列出、改名、移动和删除。' }
   if (surface === 'workspace.canvas') return { tools: ['get_canvas_document'],
-    guidance: '当前为画布。已有通用实体读写与画布读取；已有画布和选择摘要无需再查。生成加载 task=canvas_generation，节点详细操作加载 task=canvas_nodes；三维和生成页工具按需加载。' }
+    guidance: '当前为画布。已有通用实体读写与画布读取；已有画布和选择摘要无需再查。连续建节点后用 tidy_canvas_nodes（随 task=canvas_nodes 与 canvas_generation 加载，connectedTo 填链上任一节点）按连线方向整理一次。生成加载 task=canvas_generation，节点详细操作加载 task=canvas_nodes；三维和生成页工具按需加载。' }
   if (surface === 'workspace.generation') return { tools: ['search_models'], guidance: '当前为生成页。生成任务加载 task=generation；模型参数按所选模型读取。' }
   if (surface === 'tool.camera_stage') return { tools: ['observe_camera_stage_scene'], guidance: '当前为三维场景（一份镜头参考文档，id 即文档 ID）。普通属性走通用实体，场景算法与渲染按需加载 camera_stage 领域；文档的列出、新建、改名、移动、删除用通用文档能力。' }
   if (surface === 'tool.image_edit') return { tools: [], guidance: '当前为图片编辑。图层普通读写走通用实体，按本步骤用 load_application_tools 的 names 加载算法，如选区 select_image_edit_region、修补 repair_image_edit_region；不加载整个领域。' }

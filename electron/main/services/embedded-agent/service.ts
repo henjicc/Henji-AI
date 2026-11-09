@@ -72,7 +72,7 @@ export function withGenerationOrigin(name: string, input: Record<string, unknown
     if (origin?.workspace?.id !== 'nodes' || !canvasId || (input.documentId !== undefined && input.documentId !== canvasId)) return input
     const placement = selectedNodeId ? { mode: 'right_of_node', anchorNodeId: selectedNodeId }
       : position && Number.isFinite(position.x) && Number.isFinite(position.y)
-        ? { mode: 'absolute', x: position.x, y: position.y } : undefined
+        ? { mode: 'near_point', x: position.x, y: position.y } : undefined
     return { ...input, documentId: canvasId, ...(input.placement === undefined && placement ? { placement } : {}) }
   }
   if (input.destination !== undefined) return input
@@ -80,7 +80,7 @@ export function withGenerationOrigin(name: string, input: Record<string, unknown
   const placement = selectedNodeId && !sourceNodeIds.length
     ? { mode: 'right_of_node', anchorNodeId: selectedNodeId }
     : !selectedNodeId && position && Number.isFinite(position.x) && Number.isFinite(position.y)
-      ? { mode: 'absolute', x: position.x, y: position.y } : undefined
+      ? { mode: 'near_point', x: position.x, y: position.y } : undefined
   return { ...input, destination: origin?.workspace?.id === 'nodes' && canvasId
     ? { mode: 'canvas', documentId: canvasId, sourceNodeIds, ...(placement ? { placement } : {}) }
     : { mode: 'history' } }

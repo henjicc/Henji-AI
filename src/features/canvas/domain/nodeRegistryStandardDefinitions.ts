@@ -1,3 +1,4 @@
+import { GENERATION_NODE_LAYOUT_SIZE, fixedLayoutSize, mediaResultLayoutSize } from './nodeLayoutSize';
 import { DEFAULT_PPIO_MODEL_ID, DEFAULT_PPIO_PROVIDER_ID } from '@/core/llm/defaults';
 import { CANVAS_BG_HEX, CANVAS_TEXT_HEX } from '@/core/theme/colorTokens';
 import type { ModelTag } from '@/core/types';
@@ -22,6 +23,7 @@ import { duplicateCameraStageNodeSource } from './nodeSourceDuplication';
 
 export const exportImageNodeDefinition: CanvasNodeDefinition<ExportImageNodeData> = {
   type: CANVAS_NODE_TYPES.exportImage,
+  layoutSize: mediaResultLayoutSize(),
   menuLabelKey: 'node.menu.uploadImage',
   menuIcon: 'upload',
   visibleInMenu: false,
@@ -103,6 +105,7 @@ export const assetGroupNodeDefinition: CanvasNodeDefinition<AssetGroupNodeData> 
 
 export const textAnnotationNodeDefinition: CanvasNodeDefinition<TextAnnotationNodeData> = {
   type: CANVAS_NODE_TYPES.textAnnotation,
+  layoutSize: fixedLayoutSize({ width: 300, height: 180 }),
   menuLabelKey: 'node.menu.textAnnotation',
   menuIcon: 'textAnnotation',
   visibleInMenu: true,
@@ -142,6 +145,7 @@ export const textAnnotationNodeDefinition: CanvasNodeDefinition<TextAnnotationNo
 export const textProcessingNodeDefinition: CanvasNodeDefinition<TextProcessingNodeData> = {
   defaultParameterFields: ['providerId', 'modelId', 'fixedResult'],
   type: CANVAS_NODE_TYPES.textProcessing,
+  layoutSize: fixedLayoutSize(GENERATION_NODE_LAYOUT_SIZE),
   menuLabelKey: 'node.menu.textProcessing',
   menuIcon: 'textProcessing',
   visibleInMenu: true,
@@ -190,6 +194,7 @@ export const cameraStageNodeDefinition: CanvasNodeDefinition<CameraStageNodeData
   duplicateSource: duplicateCameraStageNodeSource,
   defaultParameterFields: ['outputKind'],
   type: CANVAS_NODE_TYPES.cameraStage,
+  layoutSize: mediaResultLayoutSize('16:9'),
   menuLabelKey: 'node.menu.cameraStage',
   menuIcon: 'cameraStage',
   visibleInMenu: true,
@@ -233,6 +238,7 @@ export const cameraStageNodeDefinition: CanvasNodeDefinition<CameraStageNodeData
 export const storyboardSplitDefinition: CanvasNodeDefinition<StoryboardSplitNodeData> = {
   defaultParameterFields: ['gridRows', 'gridCols', 'frameAspectRatio', 'exportOptions'],
   type: CANVAS_NODE_TYPES.storyboardSplit,
+  layoutSize: fixedLayoutSize(GENERATION_NODE_LAYOUT_SIZE),
   menuLabelKey: 'node.menu.storyboard',
   menuIcon: 'storyboard',
   visibleInMenu: false,
@@ -282,6 +288,7 @@ const STORYBOARD_GEN_MODEL_REQUIRED_TAGS: ModelTag[] = ['image-to-image'];
 export const storyboardGenNodeDefinition: CanvasNodeDefinition<StoryboardGenNodeData> = {
   defaultParameterFields: ['gridRows', 'gridCols'],
   type: CANVAS_NODE_TYPES.storyboardGen,
+  layoutSize: fixedLayoutSize(GENERATION_NODE_LAYOUT_SIZE),
   menuLabelKey: 'node.menu.storyboardGen',
   menuIcon: 'storyboard',
   visibleInMenu: true,

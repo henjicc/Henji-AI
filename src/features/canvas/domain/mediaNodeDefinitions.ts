@@ -1,3 +1,4 @@
+import { GENERATION_NODE_LAYOUT_SIZE, fixedLayoutSize, mediaResultLayoutSize } from './nodeLayoutSize';
 import {
   CANVAS_NODE_TYPES,
   DEFAULT_ASPECT_RATIO,
@@ -51,6 +52,7 @@ function createMediaGenDefaultData(
 
 export const videoGenNodeDefinition: CanvasNodeDefinition<MediaGenNodeData> = {
   type: CANVAS_NODE_TYPES.videoGen,
+  layoutSize: fixedLayoutSize(GENERATION_NODE_LAYOUT_SIZE),
   menuLabelKey: 'node.menu.videoGen',
   menuIcon: 'videoGeneration',
   visibleInMenu: true,
@@ -86,6 +88,7 @@ export const videoGenNodeDefinition: CanvasNodeDefinition<MediaGenNodeData> = {
 
 export const audioGenNodeDefinition: CanvasNodeDefinition<MediaGenNodeData> = {
   type: CANVAS_NODE_TYPES.audioGen,
+  layoutSize: fixedLayoutSize(GENERATION_NODE_LAYOUT_SIZE),
   menuLabelKey: 'node.menu.audioGen',
   menuIcon: 'audioGeneration',
   visibleInMenu: true,
@@ -121,6 +124,7 @@ export const audioGenNodeDefinition: CanvasNodeDefinition<MediaGenNodeData> = {
 
 export const exportVideoNodeDefinition: CanvasNodeDefinition<VideoMediaNodeData> = {
   type: CANVAS_NODE_TYPES.exportVideo,
+  layoutSize: mediaResultLayoutSize(),
   menuLabelKey: 'node.menu.videoGen',
   menuIcon: 'videoGeneration',
   visibleInMenu: false,
@@ -159,6 +163,7 @@ export const exportVideoNodeDefinition: CanvasNodeDefinition<VideoMediaNodeData>
 
 export const exportAudioNodeDefinition: CanvasNodeDefinition<AudioMediaNodeData> = {
   type: CANVAS_NODE_TYPES.exportAudio,
+  layoutSize: fixedLayoutSize({ width: 280, height: 96 }),
   menuLabelKey: 'node.menu.audioGen',
   menuIcon: 'audioGeneration',
   visibleInMenu: false,

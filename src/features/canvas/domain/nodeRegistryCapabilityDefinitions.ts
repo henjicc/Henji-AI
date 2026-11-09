@@ -1,3 +1,4 @@
+import { GENERATION_NODE_LAYOUT_SIZE, fixedLayoutSize, mediaResultLayoutSize } from './nodeLayoutSize';
 import { registry } from '@/core/ModelRegistry';
 import { duplicateLayerStackNodeSource } from './nodeSourceDuplication';
 
@@ -81,6 +82,7 @@ export const relightGenerationNodeDefinition: CanvasNodeDefinition<ImageEditNode
     'relightSettings.manual.rimDirection', 'relightSettings.smart.preset',
   ],
   type: CANVAS_NODE_TYPES.relightGen,
+  layoutSize: fixedLayoutSize(GENERATION_NODE_LAYOUT_SIZE),
   menuLabelKey: 'node.menu.relightGeneration',
   menuIcon: 'imageGeneration',
   visibleInMenu: false,
@@ -133,6 +135,7 @@ function createMultiAngleGenerationDefaultData(): MultiAngleGenerationNodeData {
 export const multiAngleGenerationNodeDefinition: CanvasNodeDefinition<MultiAngleGenerationNodeData> = {
   defaultParameterFields: ['multiAngleConfig'],
   type: CANVAS_NODE_TYPES.multiAngleGen,
+  layoutSize: fixedLayoutSize(GENERATION_NODE_LAYOUT_SIZE),
   menuLabelKey: 'node.menu.multiAngleGeneration',
   menuIcon: 'imageGeneration',
   visibleInMenu: false,
@@ -201,6 +204,7 @@ function createUpscaleGenerationDefaultData(): UpscaleGenerationNodeData {
 
 export const upscaleGenerationNodeDefinition: CanvasNodeDefinition<UpscaleGenerationNodeData> = {
   type: CANVAS_NODE_TYPES.upscaleGen,
+  layoutSize: fixedLayoutSize(GENERATION_NODE_LAYOUT_SIZE),
   menuLabelKey: 'node.menu.upscaleGeneration',
   menuIcon: 'imageGeneration',
   visibleInMenu: false,
@@ -264,6 +268,7 @@ function createElementEditGenerationDefaultData(): ElementEditGenerationNodeData
 export const elementEditGenerationNodeDefinition: CanvasNodeDefinition<ElementEditGenerationNodeData> = {
   defaultParameterFields: ['localRedrawSettings'],
   type: CANVAS_NODE_TYPES.elementEditGen,
+  layoutSize: fixedLayoutSize(GENERATION_NODE_LAYOUT_SIZE),
   menuLabelKey: 'node.menu.elementEditGeneration',
   menuIcon: 'imageGeneration',
   visibleInMenu: false,
@@ -319,6 +324,7 @@ function createLayerSeparationGenerationDefaultData(): LayerSeparationGeneration
 
 export const layerSeparationGenerationNodeDefinition: CanvasNodeDefinition<LayerSeparationGenerationNodeData> = {
   type: CANVAS_NODE_TYPES.layerSeparationGen,
+  layoutSize: fixedLayoutSize(GENERATION_NODE_LAYOUT_SIZE),
   menuLabelKey: 'node.menu.layerSeparationGeneration',
   menuIcon: 'imageGeneration',
   visibleInMenu: false,
@@ -340,6 +346,7 @@ export const layerSeparationGenerationNodeDefinition: CanvasNodeDefinition<Layer
 export const layerStackResultNodeDefinition: CanvasNodeDefinition<LayerStackResultNodeData> = {
   duplicateSource: duplicateLayerStackNodeSource,
   type: CANVAS_NODE_TYPES.layerStackResult,
+  layoutSize: mediaResultLayoutSize(),
   menuLabelKey: 'node.menu.layerStackResult',
   menuIcon: 'assetGroup',
   visibleInMenu: false,

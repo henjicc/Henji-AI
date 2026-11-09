@@ -4,7 +4,8 @@ import { webcrypto } from 'node:crypto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CANVAS_NODE_TYPES, type CanvasNode } from '../domain/canvasNodes'
 import { useCanvasStore } from '@/stores/canvasStore'
-import { createCanvasTidyDraft, applyCanvasTidyDraft } from './canvasTidyService'
+import { createCanvasTidyDraft, applyCanvasTidyDraft, tidyCanvasNodes } from './canvasTidyService'
+import { undoCanvasChange } from './canvasApplicationService'
 import { CanvasNodeMutationExecutor } from './canvasMutationExecutor'
 import type { ApplicationExecutionContext, ApplicationPlannedStep } from '@/core/application-control'
 
@@ -23,21 +24,22 @@ afterEach(() => { vi.unstubAllGlobals() })
 describe('canvas tidy commit', () => {
   it('preview is read-only; apply saves all positions in one undo while preserving links and dimensions', async () => {
     const before = useCanvasStore.getState()
-    const draft = await createCanvasTidyDraft(projectId, before.nodes, ['n0', 'n1', 'n2'], 'n0')
+    const draft = await createCanvasTidyDraft(projectId, before.nodes, ['n0', 'n1', 'n2'], 'n0', before.edges)
     expect(useCanvasStore.getState().nodes).toBe(before.nodes)
     expect(useCanvasStore.getState().history).toBe(before.history)
-    await applyCanvasTidyDraft(draft, draft.candidates[1])
+    const align = draft.candidates.find(c => c.mode === 'align')!
+    await applyCanvasTidyDraft(draft, align)
     const after = useCanvasStore.getState()
     expect(after.history.past).toHaveLength(1)
     expect(after.edges).toBe(before.edges)
     expect(after.nodes.map(n => [n.width, n.height, n.parentId])).toEqual(before.nodes.map(n => [n.width, n.height, n.parentId]))
-    expect(after.nodes.map(n => n.position)).toEqual(draft.candidates[1].placements.map(p => p.position))
+    expect(after.nodes.map(n => n.position)).toEqual(align.placements.map(p => p.position))
     expect(readCanvasTestProject(projectId)?.nodes.map(n => n.position)).toEqual(after.nodes.map(n => n.position))
     after.undo()
     expect(useCanvasStore.getState().nodes.map(n => n.position)).toEqual(before.nodes.map(n => n.position))
   })
   it('rejects stale preview after movement or lock changes with no partial write', async () => {
-    const draft = await createCanvasTidyDraft(projectId, useCanvasStore.getState().nodes, ['n0', 'n1', 'n2'], null)
+    const draft = await createCanvasTidyDraft(projectId, useCanvasStore.getState().nodes, ['n0', 'n1', 'n2'], null, useCanvasStore.getState().edges)
     useCanvasStore.getState().updateNodePosition('n1', { x: 99, y: 88 })
     const before = useCanvasStore.getState()
     await expect(applyCanvasTidyDraft(draft, draft.candidates[0])).rejects.toThrow('画布已变化')
@@ -46,9 +48,9 @@ describe('canvas tidy commit', () => {
   })
   it('generic assistant position writes use the same batch and can undo once', async () => {
     const before = useCanvasStore.getState().nodes
-    const draft = await createCanvasTidyDraft(projectId, before, ['n0', 'n1', 'n2'], null)
+    const draft = await createCanvasTidyDraft(projectId, before, ['n0', 'n1', 'n2'], null, useCanvasStore.getState().edges)
     const context: ApplicationExecutionContext = { requestId: 'tidy', exposure: 'assistant', acceptedDataClasses: new Set(['C0', 'C1']) }
-    const steps: Extract<ApplicationPlannedStep, { kind: 'mutation' }>[] = draft.candidates[0].placements.map(p => ({
+    const steps: Extract<ApplicationPlannedStep, { kind: 'mutation' }>[] = draft.candidates.find(c => c.mode === 'align')!.placements.map(p => ({
       kind: 'mutation', entityType: 'canvas.node', target: { kind: 'canvas.node', id: `${projectId}:${p.nodeId}` }, expectedRevisions: { canvas: 2 },
       mutations: [{ propertyId: 'canvas.node.position', operation: 'set', value: p.position }],
     }))
@@ -57,5 +59,27 @@ describe('canvas tidy commit', () => {
     expect(readCanvasTestProject(projectId)?.nodes.map(n => n.position.y)).toEqual([100, 100, 100])
     useCanvasStore.getState().undo()
     expect(useCanvasStore.getState().nodes.map(n => n.position)).toEqual(before.map(n => n.position))
+  })
+  it('assistant tidy of a connected chain moves only that chain left-to-right, reads back positions and undoes once', async () => {
+    const before = useCanvasStore.getState().nodes
+    const result = await tidyCanvasNodes(projectId, { connectedTo: 'n1', mode: 'flow' }) as {
+      positions: { nodeId: string; x: number; y: number }[]; movedCount: number; undoRef?: string; verification: { verified: boolean }
+    }
+    expect(result.positions.map(p => p.nodeId).sort()).toEqual(['n0', 'n1'])
+    expect(result.verification.verified).toBe(true)
+    const after = new Map(useCanvasStore.getState().nodes.map(n => [n.id, n.position]))
+    expect(after.get('n2')).toEqual(before[2].position)
+    expect(after.get('n1')!.x).toBeGreaterThan(after.get('n0')!.x + 100)
+    expect(result.positions.map(p => ({ x: p.x, y: p.y }))).toEqual(result.positions.map(p => after.get(p.nodeId)))
+    expect(result.undoRef).toBeTruthy()
+    await undoCanvasChange(projectId, result.undoRef!)
+    expect(useCanvasStore.getState().nodes.map(n => n.position)).toEqual(before.map(n => n.position))
+  })
+  it('assistant tidy rejects unknown nodes before writing', async () => {
+    const before = useCanvasStore.getState()
+    await expect(tidyCanvasNodes(projectId, { connectedTo: 'ghost', mode: 'flow' })).rejects.toMatchObject({
+      details: { execution: { notExecuted: true } },
+    })
+    expect(useCanvasStore.getState().history).toBe(before.history)
   })
 })

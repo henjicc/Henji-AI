@@ -24,6 +24,12 @@ export const canvasNodePlacementSchema = z.discriminatedUnion('mode', [
     mode: z.literal('right_of_node'),
     anchorNodeId: z.string().min(1),
   }).strict(),
+  // 以该点为首选、避让已有节点；宿主在消息发出时固定的视口落点用它，同一回合多次落点不会叠在一起。
+  z.object({
+    mode: z.literal('near_point'),
+    x: z.number().finite(),
+    y: z.number().finite(),
+  }).strict(),
 ])
 export type CanvasNodePlacement = z.infer<typeof canvasNodePlacementSchema>
 
@@ -644,6 +650,59 @@ const groupCanvasNodes = defineApplicationCapability({
   }] },
 })
 
+const tidyCanvasNodes = defineApplicationCapability({
+  id: 'tidy_canvas_nodes',
+  resolveOperationTargets: input => [{ kind: 'canvas.document', id: input.documentId }],
+  version: 1,
+  title: '整理画布节点',
+  description: '把节点重新排布整齐、互不重叠：flow 按连线方向排（上游在左、下游在右，同一层上下排列），grid 排成网格，align 顶边对齐成一行。用 connectedTo 指定一个节点即整理与它相连的整条链；nodeIds 指定具体节点；都不给时整理整张画布。建完一条链或一批节点后调用一次，不要手算坐标。可撤销。',
+  domain: 'canvas',
+  aliases: ['整理画布', '整理节点', '自动布局', '排列节点', '按连线排布', 'tidy canvas', 'auto layout', 'arrange nodes'],
+  readOnly: false,
+  dataClasses: ['C1'],
+  idempotent: true,
+  destructive: false,
+  timeoutMs: 8_000,
+  supportsPreview: false,
+  supportsUndo: true,
+  requiredScopes: ['canvas'],
+  acceptsRefs: ['canvas.document', 'canvas.node'],
+  producesRefs: ['canvas.node'],
+  inputSchema: z.object({
+    documentId: canvasDocumentIdSchema,
+    nodeIds: z.array(z.string().min(1)).optional().describe('要整理的节点；与 connectedTo 可同时给出，取并集。'),
+    connectedTo: z.string().min(1).optional().describe('整理与这个节点相连的整条链（沿连线不分方向）。'),
+    mode: z.enum(['flow', 'grid', 'align']).optional().default('flow'),
+    pinNodeId: z.string().min(1).optional().describe('保持不动的节点，其余节点围绕它排布。'),
+  }).strict(),
+  outputSchema: capabilityOutputSchema({
+    documentId: z.string(),
+    mode: z.enum(['flow', 'grid', 'align']),
+    movedCount: z.number().int().nonnegative(),
+    movedNodeIds: z.array(z.string()),
+    positions: z.array(z.object({ nodeId: z.string(), x: z.number(), y: z.number() })),
+    undoRef: z.string().optional(),
+    verification: z.object({ verified: z.boolean(), condition: z.string() }),
+  }),
+  concurrencyKey: 'canvas',
+  resolveConcurrencyKey: (input) => `canvas:${input.documentId}`,
+  resolveTargetIds: (input) => target(input.documentId, { mode: input.mode, connectedTo: input.connectedTo ?? '', nodeIds: (input.nodeIds ?? []).join(',') }),
+  summarize: (output) => output.movedCount ? `已整理 ${output.positions.length} 个节点，移动了 ${output.movedCount} 个。` : '节点已经整齐，没有移动。',
+  createUndo: (output) => output.undoRef ? { kind: 'canvas_history', token: output.undoRef } : undefined,
+  successEvidence: ['返回每个节点整理后的位置（从画布回读）与已保存文档的核对结果。'],
+  failureRecovery: ['节点不存在、不足两个或钉住的节点冲突时不会改动画布，按提示调整参数后重试。'],
+  verificationContract: { kind: 'effect_receipt', requireEffects: false, requireVerifiedEffects: false },
+  control: { execution: { mode: 'immediate', cancelable: false, resultState: 'completed' }, impacts: [{
+    effect: 'update', entityTypes: ['canvas.node'], propertyIds: ['canvas.node.position'], revisionScopes: ['canvas'], verificationRequired: true,
+  }] },
+  resolveObservedEffects: (input, output) => output.movedCount ? [{
+    effect: 'update', entityTypes: ['canvas.node'], propertyIds: ['canvas.node.position'],
+    targetRefs: output.movedNodeIds.map(id => ({ kind: 'canvas.node', id: `${input.documentId}:${id}` })),
+    count: output.movedNodeIds.length, verified: output.verification.verified,
+    evidence: output.positions.filter(p => output.movedNodeIds.includes(p.nodeId)).map(p => `node:${p.nodeId}@${Math.round(p.x)},${Math.round(p.y)}`),
+  }] : [],
+})
+
 const connectAssetGroupToTarget = defineApplicationCapability({
   id: 'connect_asset_group_to_target',
   resolveOperationTargets: input => [{ kind: 'canvas.node', id: `${input.documentId}:${input.groupNodeId}` }, { kind: 'canvas.node', id: `${input.documentId}:${input.targetNodeId}` }],
@@ -961,6 +1020,7 @@ export const CANVAS_MUTATION_APPLICATION_CAPABILITIES: ApplicationCapabilityDefi
   deleteCanvasNodes,
   selectCanvasNode,
   groupCanvasNodes,
+  tidyCanvasNodes,
   connectAssetGroupToTarget,
   disconnectAssetGroupFromTarget,
   ungroupCanvasNode,

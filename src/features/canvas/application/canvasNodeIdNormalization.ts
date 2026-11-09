@@ -9,7 +9,7 @@
  * 只在前缀恰好等于 `${projectId}:` 时剥离：别的画布前缀或本就含冒号的 id 一律原样透传，
  * 交给领域按原有语义判 NOT_FOUND，避免把跨画布的错误引用悄悄改成本画布的对象。
  */
-const NODE_ID_FIELDS = ['nodeId', 'sourceNodeId', 'targetNodeId', 'groupNodeId'] as const
+const NODE_ID_FIELDS = ['nodeId', 'sourceNodeId', 'targetNodeId', 'groupNodeId', 'connectedTo', 'pinNodeId'] as const
 const NODE_ID_LIST_FIELDS = ['nodeIds', 'sourceNodeIds'] as const
 
 function stripOwnProject(projectId: string, value: unknown): unknown {

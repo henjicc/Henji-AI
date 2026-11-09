@@ -4,6 +4,7 @@ import {
 } from './canvasNodes';
 import { canvasNodeDefinitions } from './nodeRegistryBuiltins';
 import type { CanvasNodeDefinition } from './nodeRegistryContracts';
+import { FALLBACK_NODE_LAYOUT_SIZE, pickCanvasNodeLayoutSize, type CanvasNodeLayoutSize } from './nodeLayoutSize';
 import {
   arePortsCompatible,
   getSourcePortMediaKind,
@@ -54,6 +55,19 @@ export function getNodeDefinition(type: CanvasNodeType): CanvasNodeDefinition {
  */
 export function registerCanvasNode(definition: CanvasNodeDefinition): void {
   (canvasNodeDefinitions as Record<string, CanvasNodeDefinition>)[definition.type] = definition;
+}
+
+/**
+ * 节点布局尺寸的唯一入口：实测 → 显式宽高 → 节点类型声明的估值。同一回合刚建、尚未
+ * 测量的节点也按类型估值占位，落点避让、整理与包围盒计算都读这里。
+ */
+export function resolveCanvasNodeLayoutSize(node: {
+  type?: string; data?: unknown; measured?: { width?: number; height?: number };
+  width?: number; height?: number; style?: { width?: unknown; height?: unknown };
+}): CanvasNodeLayoutSize {
+  const definition = node.type ? getCanvasNodeDefinition(node.type) : undefined;
+  const declared = definition?.layoutSize?.((node.data ?? {}) as CanvasNodeData) ?? FALLBACK_NODE_LAYOUT_SIZE;
+  return pickCanvasNodeLayoutSize(node, declared);
 }
 
 /** 按类型取节点定义（不存在返回 undefined，区别于 getNodeDefinition 的非空契约） */

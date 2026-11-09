@@ -10,9 +10,10 @@ import { createLogger } from '@/core/logging'
 
 import type { CanvasNodePlacement } from '@/core/application-control/domains/canvas/canvasMutationApplicationCapabilities'
 import { CanvasApplicationError } from './canvasApplicationError'
+import { FALLBACK_NODE_LAYOUT_SIZE, type CanvasNodeLayoutSize } from '../domain/nodeLayoutSize'
+import { estimateNewCanvasNodeSize, findCanvasPositionNearViewportCenter, findFreeCanvasPosition } from './canvasNodePlacement'
 import {
   CANVAS_NODE_TYPES,
-  DEFAULT_NODE_WIDTH,
   type CanvasEdge,
   type CanvasNode,
 } from '../domain/canvasNodes'
@@ -129,7 +130,11 @@ export function rememberCanvasUndo(projectId: string, operation: string): string
   return token
 }
 
-export function resolveNodePosition(placement: CanvasNodePlacement, store = useCanvasStore): { x: number; y: number } {
+export function resolveNodePosition(
+  placement: CanvasNodePlacement,
+  store = useCanvasStore,
+  size: CanvasNodeLayoutSize = FALLBACK_NODE_LAYOUT_SIZE,
+): { x: number; y: number } {
   const canvas = store.getState()
   if (placement.mode === 'absolute') return { x: placement.x, y: placement.y }
   if (placement.mode === 'right_of_node') {
@@ -138,15 +143,11 @@ export function resolveNodePosition(placement: CanvasNodePlacement, store = useC
         anchorNodeId: placement.anchorNodeId,
       })
     }
-    return canvas.findNodePosition(placement.anchorNodeId, DEFAULT_NODE_WIDTH, 240)
+    return canvas.findNodePosition(placement.anchorNodeId, size.width, size.height)
   }
-  const zoom = Math.max(0.01, canvas.currentViewport.zoom || 1)
-  const width = canvas.canvasViewportSize.width || 1_200
-  const height = canvas.canvasViewportSize.height || 800
-  return {
-    x: (width / 2 - canvas.currentViewport.x) / zoom - DEFAULT_NODE_WIDTH / 2,
-    y: (height / 2 - canvas.currentViewport.y) / zoom - 120,
-  }
+  const scene = { nodes: canvas.nodes, viewport: canvas.currentViewport, viewportSize: canvas.canvasViewportSize }
+  if (placement.mode === 'near_point') return findFreeCanvasPosition(scene, size, { x: placement.x, y: placement.y })
+  return findCanvasPositionNearViewportCenter(scene, size)
 }
 
 function resolveConnectionHandles(
@@ -191,7 +192,8 @@ export async function addCanvasNode(input: {
   requireCanvasProjectInstance(input.projectId)
   assertCanvasCommitContext(input.projectId, options)
   const parsed = parseCanvasNodeData(input.nodeType, input.data)
-  const position = resolveNodePosition(input.placement, requireCanvasProjectInstance(input.projectId).store)
+  const position = resolveNodePosition(input.placement, requireCanvasProjectInstance(input.projectId).store,
+    estimateNewCanvasNodeSize(parsed.nodeType, parsed.data))
   const nodeId = requireCanvasProjectInstance(input.projectId).store.getState().addNode(parsed.nodeType, position, parsed.data)
   const undoRef = rememberCanvasUndo(input.projectId, 'add_node')
   await confirmCanvasPersistence(input.projectId, options)
@@ -212,7 +214,8 @@ export function stageControlledCanvasNode(input: {
   requireCanvasProjectInstance(input.projectId)
   assertCanvasCommitContext(input.projectId, options)
   const parsed = parseCanvasControlledNodeData(input.nodeType, input.data)
-  const position = resolveNodePosition(input.placement, requireCanvasProjectInstance(input.projectId).store)
+  const position = resolveNodePosition(input.placement, requireCanvasProjectInstance(input.projectId).store,
+    estimateNewCanvasNodeSize(parsed.nodeType, parsed.data))
   const nodeId = runCanvasMutationStage(options, () =>
     requireCanvasProjectInstance(input.projectId).store.getState().addNode(parsed.nodeType, position, parsed.data),
   )
@@ -252,7 +255,7 @@ export async function addTrustedMediaCanvasNode(input: {
   if (!runtime) requireCanvasProjectInstance(input.projectId)
   assertCanvasCommitContext(input.projectId, options)
   const parsed = parseTrustedMediaNodeData(input.nodeType, input.data)
-  const position = resolveNodePosition(input.placement, store)
+  const position = resolveNodePosition(input.placement, store, estimateNewCanvasNodeSize(parsed.nodeType, parsed.data))
   const nodeId = runCanvasMutationStage(options, () => store.getState().addNode(parsed.nodeType, position, parsed.data))
   const undoRef = options.deferCommit ? undefined : rememberCanvasUndo(input.projectId, 'add_node')
   await confirmCanvasPersistence(input.projectId, options)

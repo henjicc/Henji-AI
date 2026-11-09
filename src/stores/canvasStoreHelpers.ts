@@ -13,7 +13,7 @@ import {
   type CanvasNodeType,
   type StoryboardExportOptions,
 } from '@/features/canvas/domain/canvasNodes';
-import { getCanvasNodeDefinition } from '@/features/canvas/domain/nodeRegistry';
+import { getCanvasNodeDefinition, resolveCanvasNodeLayoutSize } from '@/features/canvas/domain/nodeRegistry';
 import {
   ensureAtLeastOneMinEdge,
   resolveMinEdgeFittedSize,
@@ -146,20 +146,7 @@ export function collectNodeIdsWithDescendants(nodes: CanvasNode[], seedIds: stri
 }
 
 export function getNodeSize(node: CanvasNode): { width: number; height: number } {
-  return {
-    width:
-      typeof node.measured?.width === 'number'
-        ? node.measured.width
-        : typeof node.width === 'number'
-          ? node.width
-          : DEFAULT_NODE_WIDTH,
-    height:
-      typeof node.measured?.height === 'number'
-        ? node.measured.height
-        : typeof node.height === 'number'
-          ? node.height
-          : 200,
-  };
+  return resolveCanvasNodeLayoutSize(node);
 }
 
 export function isMediaAutoResizableType(type: CanvasNodeType): boolean {

@@ -1,5 +1,6 @@
 import type { CanvasNodeData, CanvasNodeType } from './canvasNodes';
 import type { CanvasNodeSourceDuplicator } from './nodeSourceDuplication';
+import type { CanvasNodeLayoutSize } from './nodeLayoutSize';
 import type {
   MediaKind,
   NodeGenerationSpec,
@@ -105,5 +106,7 @@ export interface CanvasNodeDefinition<TData extends CanvasNodeData = CanvasNodeD
   getOutputs?: (data: CanvasNodeData, sourceHandle?: string) => NodeMediaOutput[];
   /** 提取该节点对下游参数端口的标量值输出（数值/源节点专用） */
   getValueOutput?: (data: CanvasNodeData) => NodeValueOutput | null;
+  /** 尚未测量时的布局估值（落点避让与整理用）；缺省按通用小节点估算。 */
+  layoutSize?: (data: CanvasNodeData) => CanvasNodeLayoutSize;
   createDefaultData: () => TData;
 }

@@ -30,7 +30,7 @@ it('默认生成落点固定为消息原项目，明确目标优先，非画布�
 it.each(['prepare_generation_task', 'create_visible_generation_task'])('%s 未选中节点时使用发送时的位置，选中和明确目标仍优先', name => {
   const origin = { workspace: { id: 'nodes' }, canvas: { id: 'original', viewportNodePosition: { x: 90, y: -20 } } }
   expect(withGenerationOrigin(name, {}, JSON.stringify(origin))).toMatchObject({
-    destination: { documentId: 'original', sourceNodeIds: [], placement: { mode: 'absolute', x: 90, y: -20 } },
+    destination: { documentId: 'original', sourceNodeIds: [], placement: { mode: 'near_point', x: 90, y: -20 } },
   })
   expect(withGenerationOrigin(name, {}, JSON.stringify({ ...origin, canvas: { ...origin.canvas, selectedNodeId: 'anchor' } })))
     .toEqual({ destination: { mode: 'canvas', documentId: 'original', sourceNodeIds: ['anchor'] } })
@@ -57,7 +57,7 @@ it('已有生成结果导入沿用原选中对象或原视口，显式落点与�
   const name = 'add_generation_result_to_canvas'
   const input = { resultRef: { kind: 'generation.result', id: 'saved' } }
   const origin = { workspace: { id: 'nodes' }, canvas: { id: 'original', viewportNodePosition: { x: 90, y: -20 } } }
-  expect(withGenerationOrigin(name, input, JSON.stringify(origin))).toEqual({ ...input, documentId: 'original', placement: { mode: 'absolute', x: 90, y: -20 } })
+  expect(withGenerationOrigin(name, input, JSON.stringify(origin))).toEqual({ ...input, documentId: 'original', placement: { mode: 'near_point', x: 90, y: -20 } })
   expect(withGenerationOrigin(name, { ...input, documentId: 'original' }, JSON.stringify({ ...origin,
     canvas: { ...origin.canvas, selectedNodeId: 'selected', selectedNodeIsReference: true } })))
     .toMatchObject({ placement: { mode: 'right_of_node', anchorNodeId: 'selected' } })

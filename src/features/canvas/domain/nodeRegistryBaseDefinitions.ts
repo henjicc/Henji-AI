@@ -1,3 +1,4 @@
+import { GENERATION_NODE_LAYOUT_SIZE, fixedLayoutSize } from './nodeLayoutSize';
 import { createPlainTextPromptDocument } from '@/core/inputs/promptDocument';
 import { registry } from '@/core/ModelRegistry';
 
@@ -108,6 +109,7 @@ export const uploadNodeDefinition: CanvasNodeDefinition<UploadImageNodeData> = {
 
 export const imageEditNodeDefinition: CanvasNodeDefinition<ImageEditNodeData> = {
   type: CANVAS_NODE_TYPES.imageEdit,
+  layoutSize: fixedLayoutSize(GENERATION_NODE_LAYOUT_SIZE),
   menuLabelKey: 'node.menu.aiImageGeneration',
   menuIcon: 'imageGeneration',
   visibleInMenu: true,
@@ -157,6 +159,7 @@ export const imageEditNodeDefinition: CanvasNodeDefinition<ImageEditNodeData> = 
 export const panoramaViewerNodeDefinition: CanvasNodeDefinition<PanoramaViewerNodeData> = {
   defaultParameterFields: ['viewMode', 'viewportAspectRatio', 'cameraView'],
   type: CANVAS_NODE_TYPES.panoramaViewer,
+  layoutSize: fixedLayoutSize({ width: 448, height: 272 }),
   menuLabelKey: 'node.menu.panoramaViewer',
   menuIcon: 'panorama',
   visibleInMenu: true,
@@ -226,6 +229,7 @@ function createPanoramaGenerationDefaultData(): PanoramaGenerationNodeData {
 
 export const panoramaGenerationNodeDefinition: CanvasNodeDefinition<PanoramaGenerationNodeData> = {
   type: CANVAS_NODE_TYPES.panoramaGen,
+  layoutSize: fixedLayoutSize(GENERATION_NODE_LAYOUT_SIZE),
   menuLabelKey: 'node.menu.panoramaGeneration',
   menuIcon: 'imageGeneration',
   visibleInMenu: false,

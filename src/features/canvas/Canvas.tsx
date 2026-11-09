@@ -343,7 +343,7 @@ export function Canvas() {
   useCanvasNodeFocusTracking(wrapperRef);
   const focusedNodeId = useFocusedCanvasNodeId();
 
-  const tidy = useCanvasTidy(currentProjectId, nodes, renderGraph.nodes);
+  const tidy = useCanvasTidy(currentProjectId, nodes, edges, renderGraph.nodes);
   useCanvasShortcuts({
     tidy,
     wrapperRef,
