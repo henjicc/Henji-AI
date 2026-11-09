@@ -103,6 +103,10 @@ interface ModelSelectorPanelProps {
   onFilterTypeChange: (type: GenerationModelFilterType) => void
   onFilterFunctionChange: (func: string) => void
   onToggleFavorite: (e: React.MouseEvent, providerId: string, modelId: string) => void
+  /** 调用方已限定媒体类型（如画布视频节点只换视频模型）：不显示类型筛选 */
+  typeLocked?: boolean
+  /** 只列出调用方允许的模型（如画布能力节点的兼容模型） */
+  isModelAllowed?: (providerId: string, modelId: string) => boolean
 }
 /**
  * 计算搜索匹配分数
@@ -203,7 +207,9 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
   onFilterProviderChange,
   onFilterTypeChange,
   onFilterFunctionChange,
-  onToggleFavorite
+  onToggleFavorite,
+  typeLocked = false,
+  isModelAllowed,
 }) => {
   const { t } = useTranslation('models')
   const [hiddenProviders, setHiddenProviders] = useState<Set<string>>(() => getHiddenProviders())
@@ -245,7 +251,8 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
   const visibleProviders = useMemo(() => {
     return getVisibleProviders(hiddenProviders, hiddenTypes, hiddenModels, allProviders)
   }, [hiddenProviders, hiddenTypes, hiddenModels, allProviders])
-  const allEntries = useMemo<ModelEntry[]>(() => visibleProviders.flatMap(p => p.models.map(m => ({ p, m }))), [visibleProviders])
+  const allEntries = useMemo<ModelEntry[]>(() => visibleProviders.flatMap(p => p.models
+    .filter(m => !isModelAllowed || isModelAllowed(p.id, m.id)).map(m => ({ p, m }))), [isModelAllowed, visibleProviders])
 
   const matchesType = useCallback((item: ModelEntry): boolean => {
     if (modelFilterType === 'favorite') return favoriteModels.has(`${item.p.id}-${item.m.id}`)
@@ -357,14 +364,14 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
             onClear={() => setSearchQuery('')}
             className="min-w-40 flex-1"
           />
-          <div role="group" aria-label={t('filters.type')} className="flex shrink-0 items-center gap-0.5">
+          {typeLocked ? null : <div role="group" aria-label={t('filters.type')} className="flex shrink-0 items-center gap-0.5">
             {TYPE_FILTERS.map(type => (
               <UiOptionButton key={type} type="button" variant="menu" size="sm" active={modelFilterType === type} aria-pressed={modelFilterType === type}
                 onClick={() => onFilterTypeChange(type)}>
                 {type === 'all' ? t('all') : t(`types.${type}`)}
               </UiOptionButton>
             ))}
-          </div>
+          </div>}
           {/* 没按功能筛选时触发器只写“功能”，不再和类型筛选的“全部”并排出现两个“全部” */}
           <Dropdown size="sm" value={modelFilterFunction} display={modelFilterFunction === 'all' ? t('filters.function') : undefined} ariaLabel={t('filters.function')}
             options={[{ label: t('all'), value: 'all' }, ...functionTags.map(tag => ({ label: t(`tags.${tag}`), value: tag }))]}

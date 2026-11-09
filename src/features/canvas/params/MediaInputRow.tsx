@@ -341,7 +341,50 @@ export function MediaInputRow({
                 : undefined
             }
           >
-            {mediaKind === 'image' ? (
+            {mediaKind === 'video' ? (
+              // 视频与图片一样给缩略图：有首帧 poster 用 poster，没有就让浏览器取第一帧，不再只写“视频 1”
+              <span
+                className="relative block h-7 w-7 cursor-pointer"
+                aria-label={t('node.mediaRow.itemLabel', { kind: t('node.mediaRow.video'), index: index + 1 })}
+                onDoubleClick={(event) => {
+                  event.stopPropagation();
+                  setViewerVideoUrl(resolveImageDisplayUrl(url));
+                }}
+              >
+                {previewUrlByUrl.get(url)
+                  ? <CanvasNodeImage src={resolveImageDisplayUrl(previewUrlByUrl.get(url)!)} alt="" className="h-7 w-7 rounded-md border border-line object-cover" draggable={false} />
+                  : <video src={`${resolveImageDisplayUrl(url)}#t=0.1`} preload="metadata" muted playsInline className="h-7 w-7 rounded-md border border-line bg-media object-cover" />}
+                <Video aria-hidden className={`pointer-events-none absolute bottom-0.5 left-0.5 ${UI_ICON_SIZE_CLASS.xs} text-on-media`} />
+                {!isConnected && videoTrimMaxClipSeconds && (
+                  <UiIconButton size="2xs" tone="media" shape="circle"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setTrimTargetIndex(index);
+                    }}
+                    aria-label={t('node.mediaRow.videoTrim')}
+                    tooltip={t('node.mediaRow.videoTrim')}
+                    className={`absolute -bottom-1.5 -right-1.5 ${CHIP_ACTION_REVEAL_CLASS}`}
+                    type="button"
+                  >
+                    <Scissors  />
+                  </UiIconButton>
+                )}
+                {!isConnected && (
+                  <UiIconButton size="2xs" tone="media" shape="circle"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleRemove(index);
+                    }}
+                    aria-label={t('node.mediaRow.remove')}
+                    tooltip={t('node.mediaRow.remove')}
+                    className={`absolute -right-1.5 -top-1.5 ${CHIP_ACTION_REVEAL_CLASS}`}
+                    type="button"
+                  >
+                    <X  />
+                  </UiIconButton>
+                )}
+              </span>
+            ) : mediaKind === 'image' ? (
               <>
                 <CanvasNodeImage
                   src={resolveImageDisplayUrl(previewUrlByUrl.get(url) ?? url)}
@@ -371,28 +414,10 @@ export function MediaInputRow({
               // 素材小块在有描边的参数行里：只用更暗的底，不再描边（同一层纵深只画一次边框，重要记录 020）。
               // 文字小块的裁剪、移除放在名称后面、常驻占位（悬停才显现）：此前按角标叠在角上，盖住图标与“视频 1”
               <span
-                className={`flex h-7 items-center gap-1 rounded-md bg-gap/60 pl-1.5 text-2xs text-text2 ${isConnected ? 'pr-1.5' : 'pr-0.5'} ${mediaKind === 'video' ? 'cursor-pointer' : ''}`}
-                onDoubleClick={mediaKind === 'video' ? (event) => {
-                  event.stopPropagation();
-                  setViewerVideoUrl(resolveImageDisplayUrl(url));
-                } : undefined}
+                className={`flex h-7 items-center gap-1 rounded-md bg-gap/60 pl-1.5 text-2xs text-text2 ${isConnected ? 'pr-1.5' : 'pr-0.5'}`}
               >
                 <Icon className={`${UI_ICON_SIZE_CLASS.xs} shrink-0`} />
                 {t('node.mediaRow.itemLabel', { kind: t(`node.mediaRow.${mediaKind}`), index: index + 1 })}
-                {!isConnected && mediaKind === 'video' && videoTrimMaxClipSeconds && (
-                  <UiIconButton size="2xs"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setTrimTargetIndex(index);
-                    }}
-                    aria-label={t('node.mediaRow.videoTrim')}
-                    tooltip={t('node.mediaRow.videoTrim')}
-                    className={CHIP_ACTION_REVEAL_CLASS}
-                    type="button"
-                  >
-                    <Scissors  />
-                  </UiIconButton>
-                )}
                 {!isConnected && (
                   <UiIconButton size="2xs"
                     onClick={(event) => {

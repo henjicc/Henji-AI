@@ -56,7 +56,9 @@ type PanelTriggerProps = {
   /** 配合 `panelWidthLabels`：`none` 动作菜单（默认，项上没有勾，不留勾槽）/ `single` 选值菜单（预留选中勾槽）。 */
   menuSelection?: UiMenuSelection
   /** bottomLeft：下方左对齐；bottomRight：下方右缘对齐（卡片角上的“更多”按钮）；aboveCenter：上方居中。空间不足时自动翻到另一侧。 */
-  alignment?: 'bottomLeft' | 'bottomRight' | 'aboveCenter'
+  alignment?: 'bottomLeft' | 'bottomRight' | 'bottomCenter' | 'aboveCenter'
+  /** 水平居中参照的外层元素（如画布节点）：面板比触发器宽很多时按它居中，而不是贴着触发器一侧 */
+  centerOnSelector?: string
   /** aboveCenter 对齐时面板底部与触发按钮顶部的间距（默认 45；工具条排布下默认 8；与画布节点行内紧凑触发器保持一致时可调小） */
   gap?: number
   /**
@@ -142,6 +144,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
     zIndex = Z_LAYERS.popover,
     panelWidth,
     boundarySelector,
+    centerOnSelector,
     panelWidthLabels,
     menuSelection = 'none',
     alignment = 'bottomLeft',
@@ -236,15 +239,17 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
       panelRef.current?.scrollHeight ?? 0,
       panelRef.current?.getBoundingClientRect().height ?? 0,
     )
+    const centerOn = alignment === 'bottomCenter' && centerOnSelector ? ref.current?.closest(centerOnSelector)?.getBoundingClientRect() : undefined
     const position = resolveFloatingPanelPosition({
-      anchor: rect,
+      // DOMRect 的字段在原型上，展开拿不到，逐个取
+      anchor: centerOn ? { top: rect.top, bottom: rect.bottom, left: centerOn.left, width: centerOn.width } : rect,
       boundary: boundarySelector ? ref.current?.closest(boundarySelector)?.getBoundingClientRect() : undefined,
       panelWidth: resolvedPanelWidth ?? (contentWidth ? (panelRef.current?.offsetWidth ?? 0) : rect.width),
       panelHeight: measuredPanelHeight,
       viewportWidth: ownerWindowOf(ref.current).innerWidth,
       viewportHeight: ownerWindowOf(ref.current).innerHeight,
       preferredPlacement: alignment === 'aboveCenter' ? 'above' : 'below',
-      horizontalAlign: alignment === 'aboveCenter' ? 'center' : alignment === 'bottomRight' ? 'right' : 'left',
+      horizontalAlign: alignment === 'aboveCenter' || alignment === 'bottomCenter' ? 'center' : alignment === 'bottomRight' ? 'right' : 'left',
       gap: alignment === 'aboveCenter' ? gapProp : 4,
       viewportGutter: PANEL_VIEWPORT_GUTTER_PX,
       viewportTopInset: PANEL_VIEWPORT_TOP_INSET_PX,
@@ -257,7 +262,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
 
     setPos(position)
     if (reveal) setReady(true)
-  }, [alignment, boundarySelector, contentWidth, gapProp, resolvedPanelWidth, stableHeight])
+  }, [alignment, boundarySelector, centerOnSelector, contentWidth, gapProp, resolvedPanelWidth, stableHeight])
 
   const computePanelPosition = useCallback((): void => {
     const rect = readAnchorRect()

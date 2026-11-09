@@ -1,12 +1,19 @@
-import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNodeId } from '@xyflow/react';
+import { useStoreWithEqualityFn } from 'zustand/traditional';
 
 import type { ModelTag } from '@/core/types';
 import { PanelTrigger, UiChipButton } from '@/components/ui';
 import type { CanvasModelMediaType } from '@/features/canvas/domain/defaultModels';
 import type { CanvasImageCapabilityModelPolicy } from '@/features/canvas/capabilities/types';
 import { getProviderDisplayName } from '@/utils/modelHelpers';
-import { ModelPickerList } from './ModelPickerList';
+import ModelSelectorPanel from '@/components/MediaGenerator/components/ModelSelectorPanel';
+import type { GenerationModelFilterType } from '@/features/generation/domain/generationDraft';
+import { useGenerationDraftStore } from '@/features/generation/store/generationDraftStore';
+import { collectInputMediaByKind } from '@/features/canvas/application/graphMediaResolver';
+import { inferModelFunctionFilter } from '@/features/canvas/domain/modelFunctionFilter';
+import { canvasViewStore } from '@/stores/canvasStore';
 import { useModelPickerList } from './useModelPickerList';
 
 interface NodeModelParamsControlsProps {
@@ -58,22 +65,24 @@ export const NodeModelParamsControls = memo(({
   const rootRef = useRef<HTMLDivElement>(null);
   // 放不下“模型名 + 渠道”时只显示模型名，渠道进悬停说明：模型名是主要信息，不能被截成“GPT Im…”（5.8 shortTextTruncated）
   const [compactChip, setCompactChip] = useState(false);
-  const modelSearchInputRef = useRef<HTMLInputElement>(null);
-  // 模型面板走共享浮层 PanelTrigger（任务 5.9）：定位、玻璃表面、点外与 Escape 关闭、子浮层归属都由它处理
+  // 模型面板与生成页同一个（左栏供应商、搜索、功能筛选、收藏），类型锁定为本节点的媒体类型
   const [panelOpen, setPanelOpen] = useState(false);
-  const {
-    modelSearchQuery,
-    setModelSearchQuery,
-    providerFilter,
-    setProviderFilter,
-    providerOptions,
-    providerModels,
-    filteredModels,
-    selectedModelOption,
-    selectedModel,
-    selectedModelName,
-    hasCompatibleModels,
-  } = useModelPickerList({ mediaType, modelId, requiredTags, modelPolicy });
+  const { models, selectedModel, selectedModelName } = useModelPickerList({ mediaType, modelId, requiredTags, modelPolicy });
+  const allowedModelIds = useMemo(() => new Set(models.map((model) => model.meta.id)), [models]);
+  const isModelAllowed = useCallback((_providerId: string, id: string) => allowedModelIds.has(id), [allowedModelIds]);
+  const lockedType: GenerationModelFilterType = mediaType;
+  const [filterProvider, setFilterProvider] = useState('all');
+  const [filterType, setFilterType] = useState<GenerationModelFilterType>(lockedType);
+  const [filterFunction, setFilterFunction] = useState('all');
+  const favorites = useGenerationDraftStore((state) => state.draft.favoriteModels);
+  const patchDraftField = useGenerationDraftStore((state) => state.patchField);
+  const nodeId = useNodeId();
+  // 打开面板时按接进来的素材预选功能：接了视频就只看能收视频、当前模型也在用的那种功能
+  const inputCounts = useStoreWithEqualityFn(canvasViewStore, (state) => nodeId ? {
+    images: collectInputMediaByKind(nodeId, state.nodes, state.edges, 'image').length,
+    videos: collectInputMediaByKind(nodeId, state.nodes, state.edges, 'video').length,
+    audios: collectInputMediaByKind(nodeId, state.nodes, state.edges, 'audio').length,
+  } : { images: 0, videos: 0, audios: 0 }, (a, b) => a.images === b.images && a.videos === b.videos && a.audios === b.audios);
 
   useLayoutEffect(() => {
     const measureEl = modelChipMeasureRef.current;
@@ -100,18 +109,6 @@ export const NodeModelParamsControls = memo(({
     return () => observer.disconnect();
   }, [selectedModelName, selectedModel]);
 
-  useEffect(() => {
-    if (!panelOpen) {
-      return;
-    }
-    const shouldAutoFocus = localStorage.getItem('enable_auto_focus_model_search') !== 'false';
-    if (!shouldAutoFocus) {
-      return;
-    }
-    const timer = setTimeout(() => modelSearchInputRef.current?.focus(), 50);
-    return () => clearTimeout(timer);
-  }, [panelOpen]);
-
   return (
     <div ref={rootRef} className="relative flex w-full min-w-0 items-center gap-1">
       <PanelTrigger
@@ -121,30 +118,37 @@ export const NodeModelParamsControls = memo(({
         surface="glass"
         // 特殊面板（重要记录 021）：宽度量最长的模型名，在模型这一行下面展开、不盖住它
         panelSize="special"
-        alignment="bottomLeft"
+        alignment="bottomCenter"
+        centerOnSelector=".react-flow__node"
+        stableHeight
         renderPanel={() => (
-          <ModelPickerList
-              variant="floating"
-              modelSearchQuery={modelSearchQuery}
-              onSearchChange={setModelSearchQuery}
-              searchInputRef={modelSearchInputRef}
-              providerFilter={providerFilter}
-              onProviderFilterChange={setProviderFilter}
-              providerOptions={providerOptions}
-              modelsForWidthMeasurement={providerModels}
-              filteredModels={filteredModels}
-              selectedModel={selectedModelOption}
-              emptyMessage={!hasCompatibleModels && modelPolicy
-                ? t('modelParams.noCompatibleModels', {
-                  defaultValue: '当前能力没有兼容的模型，请检查供应商或模型配置',
-                })
-                : undefined}
-              revealSelectedModel={panelOpen}
-              onModelChange={(nextModelId) => {
-                onModelChange(nextModelId);
-                setPanelOpen(false);
-              }}
-            />
+          <ModelSelectorPanel
+            selectedProvider={selectedModel?.meta.provider ?? ''}
+            selectedModel={selectedModel?.meta.id ?? ''}
+            modelFilterProvider={filterProvider}
+            modelFilterType={filterType}
+            modelFilterFunction={filterFunction}
+            favoriteModels={favorites}
+            typeLocked
+            isModelAllowed={isModelAllowed}
+            onModelSelect={(_providerId, nextModelId) => {
+              onModelChange(nextModelId);
+              setPanelOpen(false);
+            }}
+            onFilterProviderChange={setFilterProvider}
+            onFilterTypeChange={(type) => setFilterType(type === 'favorite' ? 'favorite' : lockedType)}
+            onFilterFunctionChange={setFilterFunction}
+            onToggleFavorite={(event, providerId, id) => {
+              event.stopPropagation();
+              const key = `${providerId}-${id}`;
+              patchDraftField('favoriteModels', (current) => {
+                const next = new Set(current);
+                if (next.has(key)) next.delete(key);
+                else next.add(key);
+                return next;
+              });
+            }}
+          />
         )}
       >
         {() => (
@@ -164,8 +168,9 @@ export const NodeModelParamsControls = memo(({
                 setPanelOpen(false);
                 return;
               }
-              setModelSearchQuery('');
-              setProviderFilter(selectedModel?.meta.provider ?? 'all');
+              setFilterProvider('all');
+              setFilterType(lockedType);
+              setFilterFunction(inferModelFunctionFilter(mediaType, selectedModel?.meta.tags ?? [], inputCounts) ?? 'all');
               setPanelOpen(true);
             }}
           >

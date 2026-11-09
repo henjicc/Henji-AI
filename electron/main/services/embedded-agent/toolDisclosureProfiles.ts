@@ -15,7 +15,7 @@ export const taskProfiles = {
   canvas_generation: {
     tools: [...modelTools, ...taskTools, 'get_canvas_node_schema', 'prepare_generation_task', 'create_visible_generation_task',
       'prepare_canvas_node_generation', 'submit_canvas_node_generation', 'resume_canvas_generation_task', 'tidy_canvas_nodes'],
-    guidance: '画布新生成：未指定模型时先 resolve_generation_model 读取最新默认模型与供应商，不把搜索排序或旧草稿当用户偏好；明确指定模型时遵循用户要求。选定后读取参数，再 prepare_generation_task → create_visible_generation_task，destination 为原画布；应用创建节点与参考连线，结果落在旁侧。位置优先级：明确位置、原选中节点旁、原视口空位。一条链（如三维镜头参考 → 镜头图片 → 图片生成 → 结果）建完后调用一次 tidy_canvas_nodes，connectedTo 填链上任一节点、mode=flow，按连线方向排好，不手算坐标。已有节点用 prepare_canvas_node_generation → submit_canvas_node_generation，保留节点模型。提交后调用 wait_generation_task 等待结果，终态停止，不重复提交。',
+    guidance: '画布新生成：未指定模型时先 resolve_generation_model 读取最新默认模型与供应商，不把搜索排序或旧草稿当用户偏好；明确指定模型时遵循用户要求。选定后读取参数，再 prepare_generation_task → create_visible_generation_task，destination 为原画布；应用创建节点与参考连线，结果落在旁侧。位置优先级：明确位置、原选中节点旁、原视口空位。一条链（如三维镜头参考 → 镜头图片 → 图片生成 → 结果）建完后调用一次 tidy_canvas_nodes，connectedTo 填链上任一节点、mode=flow，按连线方向排好，不手算坐标。已有节点用 prepare_canvas_node_generation → submit_canvas_node_generation，保留节点模型。提示词引用连进来的素材写 @图片1、@视频1（按连线顺序编号）。提交后调用 wait_generation_task 等待结果，终态停止，不重复提交。',
   },
   generation: {
     tools: [...modelTools, ...taskTools, 'prepare_generation_task', 'create_visible_generation_task'],
