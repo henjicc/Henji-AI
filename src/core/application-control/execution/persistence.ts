@@ -90,10 +90,46 @@ export function isApplicationConflict(error: unknown): boolean {
   return error instanceof ApplicationConflictError || hasConflictMarker(error)
 }
 
+/**
+ * 执行器内部的校验失败（zod 的 message 是整段 JSON）一路被拼进错误文案：调用方要从带缩进的 JSON 里
+ * 找字段路径，也容易被整段灌满上下文。出口统一改写成「字段路径: 原因」。
+ */
+export function humanizeSchemaIssueJson(message: string): string {
+  return message.replace(/\[\s*\{[\s\S]*?\}\s*\]/g, (block) => {
+    try {
+      const issues = JSON.parse(block) as unknown
+      if (!Array.isArray(issues) || !issues.length || !issues.every(issue => issue && typeof issue === 'object' && 'message' in issue && Array.isArray((issue as { path?: unknown }).path))) return block
+      const lines = (issues as Array<{ path: unknown[]; message: string; minimum?: unknown; maximum?: unknown; inclusive?: boolean; expected?: unknown }>).slice(0, 6).map(issue => {
+        const path = issue.path.map(String).join('.') || '(根)'
+        // 只在原文没说清时补边界：zod 的通用原文是 Invalid input
+        const vague = !/\d|expected/i.test(issue.message)
+        const strict = issue.inclusive === false
+        const bound = !vague ? '' : issue.minimum !== undefined ? `（${strict ? '须大于' : '最小'} ${String(issue.minimum)}）` : issue.maximum !== undefined ? `（${strict ? '须小于' : '最大'} ${String(issue.maximum)}）` : issue.expected !== undefined ? `（应为 ${String(issue.expected)}）` : ''
+        return `${path}: ${issue.message}${bound}`
+      })
+      return `${lines.join('；')}${issues.length > lines.length ? `；另有 ${issues.length - lines.length} 处` : ''}`
+    } catch { return block }
+  })
+}
+
+/**
+ * 冲突要说出是哪个作用域变了：只说“状态已变化”时，调用方不知道该重读哪个对象，
+ * 实测会原样重试同一份过期计划直到放弃。
+ */
+export function applicationConflictReason(error: unknown): string {
+  const detail = /(?:PLAN_)?REVISION_CONFLICT:(.+)$/s.exec(errorMessage(error))?.[1]?.trim()
+  const reread = '请重新读取用到它的对象（read_application_entity 或对应查询）后按最新状态重新提交'
+  const scoped = detail ? /^([a-z][\w.:-]*?):(\d+)\/(\d+|undefined)$/.exec(detail) : null
+  if (scoped) return `应用状态已变化：作用域 ${scoped[1]} 的修订已从 ${scoped[2]} 变为 ${scoped[3]}，${reread}`
+  if (detail && /^[a-z][\w.:-]*$/.test(detail)) return `应用状态已变化：作用域 ${detail} 已改变，${reread}`
+  if (detail && !/^[A-Z_]+(:|$)/.test(detail)) return `应用状态已变化：${detail.replace(/[。.]$/, '')}`
+  return `应用状态已变化${detail ? `（${detail}）` : ''}，请重新读取受影响的对象后按最新状态重新提交`
+}
+
 /** 进度失败的文案原因：只取错误原文，不带 `Error: ` 前缀；取消与冲突的内部标记换成用户能懂的话。 */
 export function applicationFailureReason(error: unknown): string {
   if (isApplicationCancellation(error)) return '操作已取消'
-  if (hasConflictMarker(error)) return '应用状态已变化，请重新观察并规划'
+  if (hasConflictMarker(error)) return applicationConflictReason(error)
   return errorMessage(error)
 }
 

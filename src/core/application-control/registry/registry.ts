@@ -279,7 +279,7 @@ export class ApplicationReflectionRegistry {
   }
 
   /**
-   * where 的键可以是属性 ID，也可以在属性 ID 后接点分路径指向 json 属性里的字段
+   * where 与 propertyIds 的键可以是属性 ID，也可以在属性 ID 后接点分路径指向 json 属性里的字段
    * （`assistant.memory.entry.content`）：模型按读回的结构直觉就会这么写，整条 json 等值又几乎不可能命中。
    * 取能解析成属性的最长前缀，剩下的段作为字段路径。
    */
@@ -334,11 +334,12 @@ export class ApplicationReflectionRegistry {
     let result = await listPage(request)
     const whereEntries = Object.entries(projection?.where ?? {})
       .map(([key, value]) => ({ ...this.resolveWhereKey(entityType, key, context), value }))
+    // 读回与筛选同一套写法：属性 ID 后接点分路径时只读回其中的字段，结果按调用方写的键返回
     const projected = (projection?.propertyIds ?? [])
-      .map((propertyId) => this.resolvePropertyId(entityType, propertyId))
+      .map((key) => { const resolved = this.resolveWhereKey(entityType, key, context); return { ...resolved, key: resolved.path.length ? key : resolved.propertyId } })
     if (whereEntries.length === 0 && projected.length === 0) return result
 
-    const needed = [...new Set([...projected, ...whereEntries.map(({ propertyId }) => propertyId)])]
+    const needed = [...new Set([...projected, ...whereEntries].map(({ propertyId }) => propertyId))]
     const items: ApplicationEntityListItem[] = []
     for (let scanned = 0; ;) {
       for (const ref of result.refs) {
@@ -349,7 +350,7 @@ export class ApplicationReflectionRegistry {
         if (!matches) continue
         items.push({
           ref,
-          properties: Object.fromEntries(projected.map((id) => [id, snapshot.properties[id] ?? null])),
+          properties: Object.fromEntries(projected.map(({ key, propertyId, path }) => [key, valueAtPath(snapshot.properties[propertyId], path) ?? null])),
         })
       }
       scanned += result.refs.length
@@ -431,11 +432,12 @@ export class ApplicationReflectionRegistry {
         ...availability,
         readable: availability.readable && canRead,
         writable: canWrite,
-        reasons: [
+        // 提供者的动态原因常已带上 readOnlyReason，去重免得同一句话报两遍
+        reasons: [...new Set([
           ...availability.reasons,
           ...(!canRead ? ['当前调用方无权读取该属性'] : []),
           ...(canRead && !canWrite && descriptor.readOnlyReason ? [descriptor.readOnlyReason] : []),
-        ],
+        ])],
         blocks: [
           ...(availability.blocks ?? []),
           ...(!canRead || !this.canWriteProperty(descriptor, context)

@@ -16,7 +16,7 @@ import { ApplicationTransactionFailure, ApplicationPreflightFailure } from '@/co
 import { capabilityVerificationEnvelope } from '@/core/application-control/capabilityVerification'
 import { ApplicationRevokedReason } from '@/core/application-control/execution/cancelReason'
 import { transactionFailureFacts } from '@/core/application-control/applicationTransactionFailureFacts'
-import { ApplicationPersistenceFailure } from '@/core/application-control/execution/persistence'
+import { ApplicationPersistenceFailure, humanizeSchemaIssueJson } from '@/core/application-control/execution/persistence'
 import { applicationCallerAccess, assertApplicationCapabilityAllowed } from '@/core/application-control/callerContext'
 import { getApplicationReflectionRegistry, getApplicationControlExecutionEngine } from './applicationControlRegistry'
 import { beginCapabilityCapture } from './recordingCapture'
@@ -218,7 +218,8 @@ const CALLER_CORRECTABLE_ERROR_CODES = new Set<HostErrorCode>([
 ])
 
 function toFailure(error: unknown): ApplicationCapabilityFailure {
-  const failure = projectFailure(error)
+  const projected = projectFailure(error)
+  const failure = { ...projected, error: { ...projected.error, message: humanizeSchemaIssueJson(projected.error.message) } }
   const match = /^([A-Z][A-Z_]*)(?::|：)\s*/.exec(failure.error.message)
   const code = hostErrorCodeSchema.safeParse(match?.[1])
   // 只剥离与正式错误码重复的前缀；领域子码（ENTITY_NOT_FOUND、PROPERTY_NOT_WRITABLE 等）是调用方自纠的依据，保留在消息里。

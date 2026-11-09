@@ -242,7 +242,7 @@ const trashDocument = defineApplicationCapability({
 const trashProject = defineApplicationCapability({
   id: 'trash_project', version: 1, title: '把项目移到回收站',
   external: { kind: 'delegate', entityType: DOCUMENT_PROJECT_ENTITY_TYPE, operations: ['remove'], reason: '项目删除走通用集合操作，恢复使用最近删除集合。' },
-  description: '把整个项目文件夹（里面的剪辑、画布、口播等文档、生成结果和素材）移到系统回收站（用户可以从回收站找回，应用内不能撤销）。项目里有正在编辑的文档时会被拒绝。与剪辑页项目卡片的“删除”是同一操作。',
+  description: '把整个项目文件夹（里面的剪辑、画布、口播等文档、生成结果和素材）移到系统回收站（用户可以从回收站找回，应用内不能撤销）。项目里有正在编辑的文档时会被拒绝。提交前先 read_application_entity 读取该 documents.project 取得 baselineId 并随调用带上。与剪辑页项目卡片的“删除”是同一操作。',
   domain: DOCUMENTS_DOMAIN,
   aliases: ['删除项目', '删除总项目', 'trash project', 'delete project'],
   readOnly: false, dataClasses: ['C1'], idempotent: true, destructive: true,

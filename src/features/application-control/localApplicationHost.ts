@@ -116,10 +116,10 @@ export function attachLocalApplicationHost(platform: ApplicationHostPlatform, re
             .catch(() => ({ verified: false, evidence: [], unmetConditions: ['保存已确认，但原操作验证尚未完成。'], checkedAt: new Date().toISOString() }))
           result = { ...result, data: { ...result.data as Record<string, unknown>, verification } }
         }
-        logger.info(readOnly ? '应用读取结束' : '应用修改结束', { event: `mcp.${action}.completed`, context: { requestId, ok: result.ok } })
+        logger.info(readOnly ? '应用读取结束' : '应用修改结束', { event: `mcp.${action}.completed`, context: { requestId, ok: result.ok, ...(result.ok === false ? { capabilityId, ...failureLogFields(result.error) } : {}) } })
       } catch (error) {
         result = { ok: false, error: { code: 'APPLICATION_EXECUTION_FAILED', message: error instanceof Error ? error.message : '应用操作失败。', ...(!dispatched ? { details: { execution: { notExecuted: true } } } : {}) } }
-        logger.warn('应用操作未完成', { event: `mcp.${action}.failed`, context: { requestId } })
+        logger.warn('应用操作未完成', { event: `mcp.${action}.failed`, context: { requestId, capabilityId, ...failureLogFields(result.error) } })
       }
       const reply = { rendererEpoch, requestId, result }
       if (!readOnly) operationReceipts.set(requestId, { callerId, reply })
@@ -140,4 +140,11 @@ export function attachLocalApplicationHost(platform: ApplicationHostPlatform, re
     for (const grant of grants.values()) revokeApplicationCallerGrant(grant)
     void platform.registerHost({ rendererEpoch, attachmentSequence, ready: false, tools: [], domains: [] }).catch((error) => logger.error('断开应用宿主失败', error, { event: 'mcp.host.disconnect.failed' }))
   }
+}
+
+/** 失败的读写都记下错误码与摘要，读取类缺口才能从日志统计出来。 */
+function failureLogFields(error: unknown): { errorCode?: string; errorMessage?: string } {
+  if (!error || typeof error !== 'object') return {}
+  const { code, message } = error as { code?: unknown; message?: unknown }
+  return { ...(typeof code === 'string' ? { errorCode: code } : {}), ...(typeof message === 'string' ? { errorMessage: message.slice(0, 300) } : {}) }
 }

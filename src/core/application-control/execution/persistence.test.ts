@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { ApplicationExecutionProgressFailure, ApplicationPersistenceBoundaryFailure,
+import { ApplicationExecutionProgressFailure, ApplicationPersistenceBoundaryFailure, applicationConflictReason, humanizeSchemaIssueJson,
   ApplicationPersistenceFailure, withApplicationPersistenceBoundary,
   type ApplicationPersistenceParticipant, type ApplicationPersistenceReceipt } from './persistence'
 import type { ApplicationCompletedStepResult, ApplicationExecutionContext } from './types'
@@ -60,5 +60,19 @@ describe('应用事务最终持久化屏障', () => {
     expect(onReceipt).toHaveBeenCalledWith(receipt)
     await expect(withApplicationPersistenceBoundary({ participants: [{ ...participant, persistenceEffects: [] }], context,
       execute: async () => [completed], completed: (result) => result })).rejects.toThrow('UNDECLARED_PERSISTENCE_EFFECT')
+  })
+})
+
+describe('失败文案改写', () => {
+  it('把拼进文案的校验 JSON 改写成字段路径与原因', () => {
+    const raw = `操作失败：${JSON.stringify([{ origin: 'string', code: 'too_small', minimum: 1, path: ['sequences', 0, 'styleKitId'], message: 'Invalid input' }], null, 2)}。没有任何步骤被提交。`
+    expect(humanizeSchemaIssueJson(raw)).toBe('操作失败：sequences.0.styleKitId: Invalid input（最小 1）。没有任何步骤被提交。')
+    expect(humanizeSchemaIssueJson('列表 [1, 2] 不是校验错误')).toBe('列表 [1, 2] 不是校验错误')
+  })
+
+  it('冲突说出是哪个作用域、从哪个修订变成哪个', () => {
+    expect(applicationConflictReason(new Error('REVISION_CONFLICT:assistant_memory:3/4'))).toContain('作用域 assistant_memory 的修订已从 3 变为 4')
+    expect(applicationConflictReason(new Error('REVISION_CONFLICT:图片正在确认保存，请稍后重新读取并执行本次操作'))).toBe('应用状态已变化：图片正在确认保存，请稍后重新读取并执行本次操作')
+    expect(applicationConflictReason(new Error('PLAN_REVISION_CONFLICT:video_edit'))).toContain('作用域 video_edit 已改变，请重新读取')
   })
 })

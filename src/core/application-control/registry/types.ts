@@ -44,7 +44,7 @@ export interface ApplicationEntityListItem {
  * 通用查询语言的复杂度引进来。
  */
 export interface ApplicationEntityListProjection {
-  /** 要一并读回的属性；支持写全 ID，也支持只写 entityType 之后的那一段。 */
+  /** 要一并读回的属性；支持写全 ID，也支持只写 entityType 之后的那一段，结构化属性可再接点分路径只读回其中字段。 */
   propertyIds?: string[]
   /** 等值过滤条件；全部命中才保留。键的写法与 propertyIds 相同，json 属性可再接点分路径筛其中的字段。 */
   where?: Record<string, JsonValue>

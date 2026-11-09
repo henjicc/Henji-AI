@@ -526,6 +526,8 @@ describe('ApplicationReflectionRegistry', () => {
     registry.register({ ...registration(), provider: multiProvider })
     const hit = await registry.listEntities('sample.item', { limit: 10 }, assistantContext, { where: { 'sample.owner.id': 'owner-two' } })
     expect(hit.refs.map((ref) => ref.id)).toEqual(['two'])
+    const fields = await registry.listEntities('sample.item', { limit: 10 }, assistantContext, { where: { 'sample.owner.id': 'owner-two' }, propertyIds: ['sample.owner.id'] })
+    expect(fields.items?.[0]?.properties).toEqual({ 'sample.owner.id': 'owner-two' })
     await expect(registry.listEntities('sample.item', { limit: 10 }, assistantContext, { where: { 'sample.mode.value': 'safe' } }))
       .rejects.toThrow('PROPERTY_NOT_FOUND')
     await expect(registry.listEntities('sample.item', { limit: 10 }, assistantContext, { where: { 'sample.owner.idd': 'owner-two' } }))

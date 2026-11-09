@@ -430,8 +430,10 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
   async apply(step: Extract<ApplicationPlannedStep, { kind: 'collection' }>, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     const clipChild = ['video_edit.graphic_object', 'video_edit.effect', 'video_edit.tracker'].includes(this.entityType)
     const nested = ['video_edit.clip', 'video_edit.annotation', 'video_edit.marker', 'video_edit.caption', 'video_edit.transition', 'video_edit.track'].includes(this.entityType)
+    // 新源码版本属于某个代码素材，挂在代码素材下是最直觉的写法；素材定义由父实体推出
+    const versionUnderMaterial = this.entityType === 'video_edit.code_version' && step.parent.kind === 'video_edit.code_material'
     const parentKind = clipChild ? 'video_edit.clip' : nested ? 'video_edit.sequence' : 'video_edit.document'
-    if (step.parent.kind !== parentKind) throw new Error(`${this.entityType} 的父实体须为 ${parentKind}（收到 ${step.parent.kind}）；请使用目录声明的所属父实体。`)
+    if (step.parent.kind !== parentKind && !versionUnderMaterial) throw new Error(`${this.entityType} 的父实体须为 ${parentKind}（收到 ${step.parent.kind}）；请使用目录声明的所属父实体。`)
     const parsed = splitVideoEditRef(step.parent)
     const instance = requireVideoEditInstance(parsed.projectId); const before = instance.document; const contentVersion = instance.contentVersion
     const refs: ApplicationRef[] = []
@@ -440,8 +442,11 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
       if (step.operation.kind !== 'create') throw new Error('源码版本不可删除或原位改写，请创建新候选。')
       const inputs = step.operation.items.map(item => {
         const values = item.properties
-        if (Object.keys(values).some(key => !['video_edit.code_version.is_default', 'video_edit.code_version.source', 'video_edit.code_version.files', 'video_edit.code_version.entry', 'video_edit.code_version.project_commit', 'video_edit.code_version.definition_id'].includes(key)) || typeof values['video_edit.code_version.definition_id'] !== 'string') throw new Error('创建源码版本只接受作者源码、所属素材定义和 is_default。')
-        return { makeDefault: values['video_edit.code_version.is_default'] === undefined ? undefined : z.boolean().parse(values['video_edit.code_version.is_default']), source: values['video_edit.code_version.source'] as string | undefined, files: values['video_edit.code_version.files'] as Record<string, string> | undefined, entry: values['video_edit.code_version.entry'] as string | undefined, projectCommit: values['video_edit.code_version.project_commit'] as string | undefined, definitionId: values['video_edit.code_version.definition_id'] }
+        if (Object.keys(values).some(key => !['video_edit.code_version.is_default', 'video_edit.code_version.source', 'video_edit.code_version.files', 'video_edit.code_version.entry', 'video_edit.code_version.project_commit', 'video_edit.code_version.definition_id'].includes(key))) throw new Error('创建源码版本只接受作者源码、所属素材定义和 is_default。')
+        const definitionId = versionUnderMaterial ? parsed.childId : values['video_edit.code_version.definition_id']
+        if (typeof definitionId !== 'string' || !definitionId) throw new Error('创建源码版本要指明所属代码素材：parent 写该 video_edit.code_material，或在 video_edit.document 下给 definition_id。')
+        if (versionUnderMaterial && values['video_edit.code_version.definition_id'] !== undefined && values['video_edit.code_version.definition_id'] !== definitionId) throw new Error('definition_id 与父代码素材不一致；挂在代码素材下时可省略 definition_id。')
+        return { makeDefault: values['video_edit.code_version.is_default'] === undefined ? undefined : z.boolean().parse(values['video_edit.code_version.is_default']), source: values['video_edit.code_version.source'] as string | undefined, files: values['video_edit.code_version.files'] as Record<string, string> | undefined, entry: values['video_edit.code_version.entry'] as string | undefined, projectCommit: values['video_edit.code_version.project_commit'] as string | undefined, definitionId }
       })
       const typeReports: CodeTypeCheckReport[] = []
       const ids = await createVideoEditCodeVersions(before.id, inputs, context?.signal, measurements, typeReports)

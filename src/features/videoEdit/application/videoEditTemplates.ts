@@ -1,10 +1,8 @@
 import type { SpatialPropagationRequest } from '@/core/videoEdit/spatialTypes'
 import { propagateVideoEditSpatialFields } from './videoEditSpatialPropagation'
-import { resolvePreviewAuthor, pinPreviewAuthor } from '@/core/videoEdit/codeMaterial/authorVersion'
+import { pinPreviewAuthor } from '@/core/videoEdit/codeMaterial/authorVersion'
 import { importedAuthorLibraries } from '@/core/videoEdit/codeMaterial/libraryImports'
-import { authorLibraryVersion } from '@/core/videoEdit/codeMaterial/authorLibraries'
 import type { VideoEditTemplateBody } from '@/core/videoEdit/styles/templateSchemas'
-import { readContentTrustFailure } from '@/core/contentTrust'
 import { z } from 'zod'
 import { createLogger } from '@/core/logging'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
@@ -336,12 +334,7 @@ export function updateVideoEditTemplate(projectId: string, templateId: string, s
       if (library.body.kind === 'code') {
         const trialContext = { styles: withVideoEditTemplateStyle(owner.document, style).styles, templates: owner.document.templates!.map(value => value.id === template.id ? { ...value, style: template.style } : value) }
         external()
-        const [versionId] = await createVideoEditCodeVersions(projectId, [{ definitionId: (template.body as { definitionId: string }).definitionId, ...pinPreviewAuthor(library.body.code, library.body), files: library.body.code.files, entry: library.body.code.entry, trustContext: library.foreign ? [library.foreign] : [] }], signal, undefined, undefined, undefined, trialContext).catch(async (error: unknown) => {
-          if (readContentTrustFailure(error)) throw error
-          // 源码与工程里已有的某个版本完全相同：直接改用那个版本。
-          const match = await findSameVersion(requireVideoEditInstance(projectId).document, (template.body as { definitionId: string }).definitionId, library.body.kind === 'code' ? library.body : undefined)
-          if (match) return [match]; throw error
-        })
+        const [versionId] = await createVideoEditCodeVersions(projectId, [{ definitionId: (template.body as { definitionId: string }).definitionId, ...pinPreviewAuthor(library.body.code, library.body), files: library.body.code.files, entry: library.body.code.entry, trustContext: library.foreign ? [library.foreign] : [] }], signal, undefined, undefined, undefined, trialContext)
         content = { kind: 'version', versionId }
       } else template = { ...template, body: library.body }
     }
@@ -382,18 +375,6 @@ export function updateVideoEditTemplate(projectId: string, templateId: string, s
   return { template: next, instances, codeInstances, notices: lost ? [...notices, lost.fact] : notices, userNotices: lost ? [...notices, videoEditLostCodeClipReferenceUserFact(lost, after, versionId => peekVideoEditCodeProgram(owner, versionId))] : notices }
   })
 }
-async function findSameVersion(document: VideoEditDocument, definitionId: string, body: Extract<VideoEditTemplateBody, { kind: 'code' }> | undefined): Promise<string | undefined> {
-  if (!body) return undefined
-  const code = body.code, pin = resolvePreviewAuthor(body)
-  const expectedLibraries = importedAuthorLibraries({ ...code, ...pin })
-  const definition = document.codeMaterials?.find(value => value.id === definitionId)
-  for (const version of definition?.versions ?? []) {
-    const files = codeMaterialSource(document, { definitionId, versionId: version.id, parameters: {} }).contents
-    if (version.apiVersion === pin.apiVersion && Object.entries(expectedLibraries).every(([name, versionPin]) => authorLibraryVersion(name, version.libraries) === versionPin) && files.entry === code.entry && JSON.stringify(Object.entries(files.files).sort()) === JSON.stringify(Object.entries(code.files).sort())) return version.id
-  }
-  return undefined
-}
-
 /** 分离：这些片段不再跟着模板变。原生片段去掉标记；代码片段复制成独立的代码定义并保留参数与关键帧。 */
 export function detachVideoEditTemplateInstances(projectId: string, sequenceId: string, clipIds: readonly string[], signal?: AbortSignal): Promise<string[]> {
   return templateOperation(projectId, async external => {

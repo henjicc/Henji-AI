@@ -50,7 +50,13 @@ export function makeVideoEditItemClip(document: VideoEditDocument, itemId: strin
   const track = placement.track ?? sequence.tracks.find(track => track.kind === trackKind && !track.locked && track.enabled && (kind !== 'adjustment' || lowerVisualTracks(track.index).length > 0))?.index ?? -1
   if (kind === 'adjustment' && !lowerVisualTracks(track).length) throw new Error('调整图层需要位于画面上方的视频轨道，请先添加上方轨道。')
   const target = sequence.tracks.find(value => value.index === track)
-  if (!target || target.kind !== trackKind) throw new Error('请将素材放入对应的视频或音频轨道。')
+  if (!target || target.kind !== trackKind) {
+    // 只说“放进对应轨道”时，调用方只能逐个编号去猜；直接给出可用的轨道编号
+    const usable = sequence.tracks.filter(value => value.kind === trackKind && !value.locked).map(value => value.index)
+    const label = trackKind === 'audio' ? '音频' : '视频'
+    throw new Error(`「${item.name}」需要放在${label}轨道上，${target ? `轨道 ${track} 是${target.kind === 'audio' ? '音频' : '视频'}轨道` : `序列里没有轨道 ${track}`}。`
+      + (usable.length ? `可用的${label}轨道编号：${usable.join('、')}；省略 track 会自动选第一条可用轨道。` : `序列里没有未锁定的${label}轨道，请先添加${label}轨道。`))
+  }
   if (target.locked) throw new Error('目标轨道已锁定。')
   const program = item.code ? codeMetadata?.(item.code) : undefined
   if (item.kind === 'code' && (!program || !item.code)) throw new Error('代码素材尚未完成源码检查，不能添加占位片段。')

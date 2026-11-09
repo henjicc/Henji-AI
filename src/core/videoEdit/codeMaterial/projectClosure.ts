@@ -6,7 +6,11 @@ import { codeFilePathSchema } from './sources'
 export async function resolveCodeProjectClosure(entry: string, paths: readonly string[], read: (path: string) => Promise<string>): Promise<string[]> {
   codeFilePathSchema.parse(entry)
   const files = Object.fromEntries(paths.filter(file => codeFilePathSchema.safeParse(file).success).map(file => [file, '']))
-  if (!Object.hasOwn(files, entry)) throw new Error(`project_entry ${entry} 在指定提交中不存在。`)
+  if (!Object.hasOwn(files, entry)) {
+    const candidates = Object.keys(files).filter(file => /\.[cm]?[jt]sx?$/.test(file)).slice(0, 8)
+    throw new Error(`project_entry ${entry} 在指定提交中不存在：工程里新写或改过的文件要先用 commit_video_edit_code_project 提交，再引用提交后的版本。`
+      + (candidates.length ? `这次提交里的脚本文件：${candidates.join('、')}。` : '这次提交里没有脚本文件。'))
+  }
   const visited = new Set<string>()
   const visit = async (file: string): Promise<void> => {
     if (visited.has(file)) return

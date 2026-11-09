@@ -224,7 +224,7 @@ export async function createVideoEditCodeVersions(projectId: string, inputs: Vid
   const unbindConfirmation = signal ? inheritApplicationConfirmation(signal, controller.signal) : () => undefined
   signal?.addEventListener('abort', cancel, { once: true })
   const off = subscribeVideoEditDomain(() => { if (!isVideoEditContentCurrent(owner, contentVersion)) controller.abort(new Error('原剪辑已关闭或内容已改变，候选已取消。')) })
-  const definitions = new Map((baseline.codeMaterials ?? []).map(definition => [definition.id, definition])); const added: string[] = []; const trials: Candidate[] = []; const createdFiles: CodeFileReference[] = []
+  const definitions = new Map((baseline.codeMaterials ?? []).map(definition => [definition.id, definition])); const added: string[] = []; const reused = new Set<string>(); const trials: Candidate[] = []; const createdFiles: CodeFileReference[] = []
   // 同 createCheckedMaterials：类型检查与打包、试渲染并行，提交后才收结果。
   const typeAbort = new AbortController(); const typeChecks: Array<Promise<CodeTypeCheckReport>> = []
   try {
@@ -244,7 +244,15 @@ export async function createVideoEditCodeVersions(projectId: string, inputs: Vid
       if (typeCheck) typeChecks.push(typeCheck)
       const result = await withVideoEditCodeTypeContext(() => appendCodeMaterialVersion(definition, contents, source => compileVideoEditCode(source, controller.signal), documentCodeSourceResolver(), publicationState, codeMaterialTrustContext(baseline, { definitionId: definition.id })), typeCheck ? [typeCheck] : [], controller.signal)
       controller.signal.throwIfAborted()
-      if (definition.versions.some(version => version.id === result.versionId)) throw new Error('相同源码版本已存在，请直接使用原版本。')
+      // 版本按内容寻址：同一份源码再提交一次就是原版本，按幂等返回它，而不是让调用方回头去找
+      if (definition.versions.some(version => version.id === result.versionId)) {
+        if (input.makeDefault !== false) definitions.set(definition.id, { ...definition, defaultVersionId: result.versionId })
+        // 同一批里先新建、后重复提交的版本不算复用：出错回滚时仍要清掉它的元数据
+        if (baseline.codeMaterials?.some(value => value.id === definition.id && value.versions.some(version => version.id === result.versionId))) reused.add(result.versionId)
+        rememberVideoEditCodeMetadata(owner, definition.id, definition.versions.find(version => version.id === result.versionId)!, result.program)
+        added.push(result.versionId)
+        continue
+      }
       if (result.kindUnverified) logger.warn('原有代码版本都读不到，新版本未核对素材种类', { event: 'video_edit.code.version.kind_unverified', context: { projectId, definitionId: definition.id, versionId: result.versionId } })
       definitions.set(definition.id, input.makeDefault === false ? { ...result.definition, defaultVersionId: definition.defaultVersionId } : result.definition); added.push(result.versionId)
       rememberVideoEditCodeMetadata(owner, definition.id, result.definition.versions.find(version => version.id === result.versionId)!, result.program)
@@ -257,11 +265,12 @@ export async function createVideoEditCodeVersions(projectId: string, inputs: Vid
     validateCodeMaterialDocument(document, read, changedCodeMaterialVersions(baseline, document))
     // Separate candidates may append to the same definition; each isolated
     // source trial avoids duplicate definitions while retaining one queue.
-    await withVideoEditCodeTypeContext(() => trialVideoEditCodeFrames(trials.flatMap(trial => candidateFrames([trial], read, [], false, document.sequences.find(sequence => sequence.id === owner.activeSequenceId), trialContext ?? document)), controller.signal, false, undefined, measurements), typeChecks, controller.signal)
+    // 全是已有版本时它们早已通过检查，没有要试渲染的新源码
+    if (trials.length) await withVideoEditCodeTypeContext(() => trialVideoEditCodeFrames(trials.flatMap(trial => candidateFrames([trial], read, [], false, document.sequences.find(sequence => sequence.id === owner.activeSequenceId), trialContext ?? document)), controller.signal, false, undefined, measurements), typeChecks, controller.signal)
     controller.signal.throwIfAborted()
     if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('源码版本检查期间原剪辑已改变。')
     editVideoProject(projectId, current => withVideoEditCurrentMetadata(document, current))
-  } catch (error) { typeAbort.abort(); await discardVideoEditCodeFiles(createdFiles); added.forEach(version => forgetVideoEditCodeMetadata(owner, version)); throw error }
+  } catch (error) { typeAbort.abort(); await discardVideoEditCodeFiles(createdFiles); added.filter(version => !reused.has(version)).forEach(version => forgetVideoEditCodeMetadata(owner, version)); throw error }
   finally { off(); unbindConfirmation(); signal?.removeEventListener('abort', cancel) }
   if (typeReports) typeReports.push(...await settleVideoEditCodeTypeChecks(typeChecks))
   return added

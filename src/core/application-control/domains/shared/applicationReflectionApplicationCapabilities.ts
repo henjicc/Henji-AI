@@ -65,7 +65,7 @@ const listEntities = defineApplicationCapability({
   id: 'list_application_entities', version: 1, title: '列出应用实体实例',
   description: '按实体类型列出当前存在的实例及其稳定引用。'
     + 'propertyIds 可以一并读回每个实例的属性值；where 按属性等值筛选，只保留全部命中的实例；'
-    + 'json 属性可在属性 ID 后接点分路径筛其中的字段，如 {"assistant.memory.entry.content":"…"}。'
+    + 'json 属性可在属性 ID 后接点分路径筛选或读回其中的字段，如 where {"assistant.memory.entry.section":"creative"}、propertyIds ["assistant.memory.entry.content"]。'
     + '要"按名字找到那一个"就用 where，不要把列表取回来自己遍历——脚本语言不支持遍历读取结果。',
   domain: 'application',
   aliases: ['列出实例', '有哪些对象', '列出关键帧', '按名字查找', 'list entities'],

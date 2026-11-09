@@ -837,7 +837,9 @@ it('MCP只追加检查后的不可变版本，显式版本/参数/曲线事务�
     expect(owner.document.codeMaterials![0].defaultVersionId).toBe(version); expect(getActiveVideoEditSequence(owner).clips[0].code!.versionId).toBe(clip.code!.versionId)
     const curves = { amount: [{ id: 'public-curve', sourceInUs: 1001, sourceRemainder: { numerator: 1, denominator: 3 }, value: 1.5, interpolation: 'ease' }] }
     const latest = await app.read(parent)
-    const kept = await app.call('change_application_entities', { summary: '保留当前默认版本', changes: [{ kind: 'create_items', entityType: 'video_edit.code_version', parent, items: [{ properties: { 'video_edit.code_version.source': source.replace('max:1', 'max:3'), 'video_edit.code_version.definition_id': definition.id, 'video_edit.code_version.is_default': false } }] }] }, latest.revisions as Record<string, number>)
+    // 挂在代码素材下时素材定义由父实体推出，不必再传 definition_id
+    const materialParent = { kind: 'video_edit.code_material', id: `${id}:${definition.id}` }
+    const kept = await app.call('change_application_entities', { summary: '保留当前默认版本', changes: [{ kind: 'create_items', entityType: 'video_edit.code_version', parent: materialParent, items: [{ properties: { 'video_edit.code_version.source': source.replace('max:1', 'max:3'), 'video_edit.code_version.is_default': false } }] }] }, latest.revisions as Record<string, number>)
     expect(kept, JSON.stringify(kept)).toMatchObject({ ok: true })
     expect(owner.document.codeMaterials![0].defaultVersionId).toBe(version)
     forgetVideoEditCodeMetadata(owner, version); forgetVideoEditCodeMetadata(owner, clip.code!.versionId)
@@ -873,9 +875,9 @@ it('同一事务先换源码版本再改时长：时长按新版本声明的长�
     // 新建片段时同时指定版本与时长：时长上限同样按指定版本，而不是素材项停留的旧版本。
     const sequenceRef = { kind: 'video_edit.sequence', id: `${id}:${owner.activeSequenceId}` }
     const start = clip.start + longer + 10
-    const placed = await app.call('change_application_entities', { summary: '用新版本新建更长片段', changes: [{ kind: 'create_items', entityType: 'video_edit.clip', parent: sequenceRef, items: [{ properties: { 'video_edit.clip.item_id': clip.itemId, 'video_edit.clip.kind': 'code', 'video_edit.clip.name': clip.name, 'video_edit.clip.start': start, 'video_edit.clip.track': clip.track, 'video_edit.clip.duration': longer, 'video_edit.clip.code_version_id': version } }] }] }, (await app.read(sequenceRef)).revisions as Record<string, number>)
+    const placed = await app.call('change_application_entities', { summary: '用新版本新建更长片段', changes: [{ kind: 'create_items', entityType: 'video_edit.clip', parent: sequenceRef, items: [{ properties: { 'video_edit.clip.item_id': clip.itemId, 'video_edit.clip.start': start, 'video_edit.clip.track': clip.track, 'video_edit.clip.duration': longer, 'video_edit.clip.code_version_id': version } }] }] }, (await app.read(sequenceRef)).revisions as Record<string, number>)
     expect(placed, JSON.stringify(placed)).toMatchObject({ ok: true })
-    expect(getActiveVideoEditSequence(owner).clips.find(value => value.start === start)).toMatchObject({ duration: longer, code: { versionId: version } })
+    expect(getActiveVideoEditSequence(owner).clips.find(value => value.start === start)).toMatchObject({ kind: 'code', name: clip.name, duration: longer, code: { versionId: version } })
     expect(owner.document.items.find(value => value.id === clip.itemId)!.code!.versionId).toBe(clip.code!.versionId)
   } finally { app.dispose() }
 })
@@ -1010,8 +1012,10 @@ it('内置库随代码资产导入、收录导出与追加版本一路带着，�
     const exported = decodeCodeAsset(bytes.get(filePath)!).sourceVersion
     expect(exported.libraries).toEqual(libraries)
     expect(codeVersionContentKey(exported)).toBe(codeVersionContentKey(imported))
-    // 同样的源码追加时按内容键（含沿用的内置库）认出已有版本；改了源码的新版本沿用内置库。
-    await expect(createVideoEditCodeVersions(id, [{ definitionId, source: librarySource }])).rejects.toThrow('相同源码版本已存在')
+    // 同样的源码追加时按内容键（含沿用的内置库）认出已有版本并原样返回它；改了源码的新版本沿用内置库。
+    const existing = owner.document.codeMaterials!.find(definition => definition.id === definitionId)!
+    await expect(createVideoEditCodeVersions(id, [{ definitionId, source: librarySource }])).resolves.toEqual([existing.defaultVersionId])
+    expect(owner.document.codeMaterials!.find(definition => definition.id === definitionId)!.versions).toHaveLength(existing.versions.length)
     const [next] = await createVideoEditCodeVersions(id, [{ definitionId, source: librarySource.replace('default:.5', 'default:.6') }])
     expect(owner.document.codeMaterials!.find(definition => definition.id === definitionId)!.versions.find(version => version.id === next)!.libraries).toEqual(libraries)
   } finally { boundary.apiVersion = 4 }
@@ -1527,7 +1531,7 @@ it('工程入口走真实 Git、正式创建与升级，闭包完整流入资产
       expect.objectContaining({ id: `${id}:${definition.id}` }), expect.objectContaining({ id: `${shared.document.id}:${sharedDefinition}` }),
     ]))
     expect((await service.readCodeProject(target)).log).toHaveLength(1)
-    await expect(createVideoEditCodeVersions(id, [{ definitionId: definition.id }])).rejects.toThrow('相同源码版本')
+    await expect(createVideoEditCodeVersions(id, [{ definitionId: definition.id }])).resolves.toEqual([definition.defaultVersionId])
     const originalDefaults = owner.document.codeMaterials!.map(value => value.defaultVersionId)
     const items = owner.document.items.filter(item => item.code)
     const [clipId] = appendVideoEditItems(id, items.map(item => item.id), owner.activeSequenceId)
