@@ -28,8 +28,8 @@ export const CONTROL_ROW_MARGIN_BOTTOM_PX = 10
 export const FRAME_GRID_MARGIN_BOTTOM_PX = 8
 /** 与 NODE_ROW_CLASS 的 min-h-10 保持一致（逐行参数区每行高度） */
 export const STORYBOARD_PARAM_ROW_HEIGHT_PX = 40
-/** 与 NODE_ROW_GAP_CLASS 的 gap-1.5 保持一致（逐行参数区行间距） */
-export const STORYBOARD_PARAM_ROW_GAP_PX = 6
+/** 与 NODE_ROW_GAP_CLASS 的 gap-0.5 保持一致（逐行参数区行间距） */
+export const STORYBOARD_PARAM_ROW_GAP_PX = 2
 export const NODE_VERTICAL_PADDING_PX = 24
 /**
  * 分镜格子描述文字随格子尺寸自适应缩放的取值区间。

@@ -1,3 +1,4 @@
+import { UiFieldLayoutContext } from '@/components/ui/fieldLayout';
 import { UiInlineStatus } from '@/components/ui'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useNodeHandlesSync } from '../hooks/useNodeHandlesSync';
@@ -285,6 +286,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
 
       {error && <UiInlineStatus className="canvas-node-lod-detail mb-1.5 shrink-0">{error}</UiInlineStatus>}
 
+      <UiFieldLayoutContext.Provider value="toolbar">
       <div className={`canvas-node-lod-detail flex shrink-0 flex-col ${NODE_ROW_GAP_CLASS}`}>
         <ModelInputRow
           mediaType="image"
@@ -311,8 +313,10 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
           setParam={setParam}
           setParams={setParams}
           excludeParamIds={PROMPT_PARAM_IDS}
+          dividerAbove
         />
       </div>
+      </UiFieldLayoutContext.Provider>
 
       <Handle
         type="source"

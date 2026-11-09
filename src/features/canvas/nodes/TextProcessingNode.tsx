@@ -61,14 +61,13 @@ import {
   NODE_ROW_CLASS,
   NODE_ROW_CONTROL_SLOT_CLASS,
   NODE_ROW_GAP_CLASS,
-  NODE_ROW_HOVER_CLASS,
   NODE_ROW_LABEL_CLASS,
   NODE_SELECTED_BORDER_CLASS,
   NODE_SURFACE_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles'
 import { llmConfigService } from '@/services/llm/LlmConfigService'
 import { showAlertDialog } from '@/stores/alertDialogStore'
-import { UiSwitch } from '@/components/ui'
+import { UiFieldLayoutContext, UiSwitch } from '@/components/ui'
 import { canvasViewStore, useCanvasStore } from '@/stores/canvasStore'
 import type { LlmConfigState } from '@henjicc/ai-sdk'
 
@@ -284,6 +283,7 @@ export const TextProcessingNode = memo(({
           onSelectNode={setSelectedNode}
         />
 
+        <UiFieldLayoutContext.Provider value="toolbar">
         <div ref={inputRowsRef} className={`flex shrink-0 flex-col ${NODE_ROW_GAP_CLASS}`}>
           <TextProcessingModelRow
             choices={choices}
@@ -326,7 +326,7 @@ export const TextProcessingNode = memo(({
           ))}
           {hasNonDisplayConsumer && (
             <div
-              className={`${NODE_ROW_CLASS} ${NODE_ROW_HOVER_CLASS}`}
+              className={NODE_ROW_CLASS}
               title={t('node.textProcessing.fixedResultHint')}
             >
               <span className={NODE_ROW_LABEL_CLASS}>{t('node.textProcessing.fixedResultLabel')}</span>
@@ -340,6 +340,7 @@ export const TextProcessingNode = memo(({
             </div>
           )}
         </div>
+        </UiFieldLayoutContext.Provider>
       </div>
 
       <Handle

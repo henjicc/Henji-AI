@@ -45,7 +45,7 @@ type ModelSelectorNodeProps = NodeProps & {
 const MODEL_CHIP_WIDTH_CHROME = 64;
 const MODEL_SELECTOR_BASE_MIN_WIDTH = 160;
 // 独立模型选择器节点中 chip 是唯一子项，铺满整行即可，不需要像行内用法那样限制最大宽度
-const MODEL_SELECTOR_CHIP_CLASS = '!w-full !min-w-0 !justify-start';
+const MODEL_SELECTOR_CHIP_CLASS = 'w-full min-w-0';
 
 function useSetModelId(id: string): (modelId: string) => void {
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);

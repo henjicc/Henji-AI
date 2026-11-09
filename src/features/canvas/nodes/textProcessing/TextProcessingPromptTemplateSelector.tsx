@@ -1,11 +1,12 @@
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useRef, useState } from 'react'
-import { Check, ChevronDown, Settings2 } from 'lucide-react'
+import { Check, Settings2 } from 'lucide-react'
 
 import {
   PanelTrigger,
   UI_TEXT_PANEL_TITLE_CLASS,
   UiButton,
+  UiFieldTrigger,
   UiOptionButton,
 } from '@/components/ui'
 import type { TextProcessingPromptTemplate } from '@henjicc/ai-sdk'
@@ -14,7 +15,6 @@ import {
   NODE_CONTROL_MODEL_CHIP_CLASS,
   NODE_ROW_CLASS,
   NODE_ROW_CONTROL_SLOT_CLASS,
-  NODE_ROW_HOVER_CLASS,
   NODE_ROW_LABEL_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles'
 import { TextProcessingPromptTemplateManager } from './TextProcessingPromptTemplateManager'
@@ -55,7 +55,7 @@ export function TextProcessingPromptTemplateSelector({
 
   return (
     <>
-      <div className={`${NODE_ROW_CLASS} ${NODE_ROW_HOVER_CLASS}`}>
+      <div className={NODE_ROW_CLASS}>
         <span className={NODE_ROW_LABEL_CLASS}>{label}</span>
         <div className={NODE_ROW_CONTROL_SLOT_CLASS}>
           <PanelTrigger
@@ -110,9 +110,9 @@ export function TextProcessingPromptTemplateSelector({
             {({ open, togglePanel, closePanel }) => {
               closePanelRef.current = closePanel
               return (
-                <UiButton
-                  type="button"
-                  variant="secondary"
+                <UiFieldTrigger
+                  appearance="quiet"
+                  open={open}
                   size="sm"
                   onClick={(event) => {
                     event.stopPropagation()
@@ -121,11 +121,10 @@ export function TextProcessingPromptTemplateSelector({
                   data-panel-trigger-button
                   aria-label={label}
                   aria-expanded={open}
-                  className={`nodrag nowheel font-normal ${NODE_CONTROL_MODEL_CHIP_CLASS}`}
+                  className={NODE_CONTROL_MODEL_CHIP_CLASS}
                 >
-                  <span className="min-w-0 flex-1 truncate text-left">{display}</span>
-                  <ChevronDown className={`shrink-0 transition-transform duration-180 ${open ? 'rotate-180' : ''}`} />
-                </UiButton>
+                  {display}
+                </UiFieldTrigger>
               )
             }}
           </PanelTrigger>

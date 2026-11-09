@@ -1,10 +1,9 @@
 import { useMemo, useRef } from 'react'
-import { ChevronDown } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import {
   PanelTrigger,
-  UiButton,
+  UiFieldTrigger,
 } from '@/components/ui'
 import type { TextProcessingModelChoice } from '@/features/canvas/application/textProcessing'
 import { ModelPickerList } from '@/features/canvas/params/ModelPickerList'
@@ -16,7 +15,6 @@ import {
   NODE_CONTROL_MODEL_CHIP_CLASS,
   NODE_ROW_CLASS,
   NODE_ROW_CONTROL_SLOT_CLASS,
-  NODE_ROW_HOVER_CLASS,
   NODE_ROW_LABEL_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles'
 
@@ -63,7 +61,7 @@ export function TextProcessingModelRow({
   }
 
   return (
-    <div className={`${NODE_ROW_CLASS} ${NODE_ROW_HOVER_CLASS}`}>
+    <div className={NODE_ROW_CLASS}>
       <span className={NODE_ROW_LABEL_CLASS}>{t('node.modelRow.label')}</span>
       <div className={NODE_ROW_CONTROL_SLOT_CLASS}>
         <PanelTrigger
@@ -93,9 +91,9 @@ export function TextProcessingModelRow({
           {({ open, togglePanel, closePanel }) => {
             closePanelRef.current = closePanel
             return (
-              <UiButton
-                type="button"
-                variant="secondary"
+              <UiFieldTrigger
+                appearance="quiet"
+                open={open}
                 size="sm"
                 disabled={choices.length === 0}
                 onClick={(event) => {
@@ -109,18 +107,11 @@ export function TextProcessingModelRow({
                 data-panel-trigger-button
                 aria-label={t('node.modelRow.label')}
                 aria-expanded={open}
-                className={`nodrag nowheel font-normal ${NODE_CONTROL_MODEL_CHIP_CLASS}`}
+                className={NODE_CONTROL_MODEL_CHIP_CLASS}
               >
-                <span className="min-w-0 flex-1 truncate text-left">
-                  {selectedModelOption?.displayName ?? t('node.textProcessing.noModel')}
-                </span>
-                {selectedModelOption ? (
-                  <span className="shrink-0 text-xs leading-none text-text2">
-                    {selectedModelOption.providerName}
-                  </span>
-                ) : null}
-                <ChevronDown className={`shrink-0 transition-transform duration-180 ${open ? 'rotate-180' : ''}`} />
-              </UiButton>
+                <span className="text-text1">{selectedModelOption?.displayName ?? t('node.textProcessing.noModel')}</span>
+                {selectedModelOption ? <span className="ml-1.5 text-text3">{selectedModelOption.providerName}</span> : null}
+              </UiFieldTrigger>
             )
           }}
         </PanelTrigger>

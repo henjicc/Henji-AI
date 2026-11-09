@@ -14,7 +14,6 @@ import { getSocketColor, mediaPortId, type RowMediaKind } from '@/features/canva
 import {
   NODE_ROW_CLASS,
   NODE_ROW_CONTROL_SLOT_CLASS,
-  NODE_ROW_HOVER_CLASS,
   NODE_ROW_LABEL_CLASS,
   NODE_PORT_ROW_CLASS,
   NODE_PORT_VISIBLE_CLASS,
@@ -241,9 +240,7 @@ export function MediaInputRow({
 
   return (
     <div
-      className={`${NODE_ROW_CLASS} ${
-        isConnected ? '' : NODE_ROW_HOVER_CLASS
-      }`}
+      className={NODE_ROW_CLASS}
       style={isRowDragging ? { zIndex: Z_LAYERS.drag } : undefined}
       onDragOver={(event) => {
         const payload = readAssetDragPayload(event.dataTransfer);
@@ -352,7 +349,7 @@ export function MediaInputRow({
                 }}
               >
                 {previewUrlByUrl.get(url)
-                  ? <CanvasNodeImage src={resolveImageDisplayUrl(previewUrlByUrl.get(url)!)} alt="" className="h-7 w-7 rounded-md border border-line object-cover" draggable={false} />
+                  ? <CanvasNodeImage src={resolveImageDisplayUrl(previewUrlByUrl.get(url)!)} alt="" disableViewer className="h-7 w-7 rounded-md border border-line object-cover" draggable={false} />
                   : <video src={`${resolveImageDisplayUrl(url)}#t=0.1`} preload="metadata" muted playsInline className="h-7 w-7 rounded-md border border-line bg-media object-cover" />}
                 <Video aria-hidden className={`pointer-events-none absolute bottom-0.5 left-0.5 ${UI_ICON_SIZE_CLASS.xs} text-on-media`} />
                 {!isConnected && videoTrimMaxClipSeconds && (
@@ -411,7 +408,7 @@ export function MediaInputRow({
                 )}
               </>
             ) : (
-              // 素材小块在有描边的参数行里：只用更暗的底，不再描边（同一层纵深只画一次边框，重要记录 020）。
+              // 素材小块在节点卡片里：只用更暗的底、不描边（同一层纵深只画一次边框，重要记录 020）。
               // 文字小块的裁剪、移除放在名称后面、常驻占位（悬停才显现）：此前按角标叠在角上，盖住图标与“视频 1”
               <span
                 className={`flex h-7 items-center gap-1 rounded-md bg-gap/60 pl-1.5 text-2xs text-text2 ${isConnected ? 'pr-1.5' : 'pr-0.5'}`}

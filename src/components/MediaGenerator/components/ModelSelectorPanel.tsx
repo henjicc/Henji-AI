@@ -103,8 +103,8 @@ interface ModelSelectorPanelProps {
   onFilterTypeChange: (type: GenerationModelFilterType) => void
   onFilterFunctionChange: (func: string) => void
   onToggleFavorite: (e: React.MouseEvent, providerId: string, modelId: string) => void
-  /** 调用方已限定媒体类型（如画布视频节点只换视频模型）：不显示类型筛选 */
-  typeLocked?: boolean
+  /** 调用方已限定媒体类型（如画布视频节点只换视频模型）：不显示类型筛选，功能也只列这一类的 */
+  typeLocked?: GenerationModelFilterType
   /** 只列出调用方允许的模型（如画布能力节点的兼容模型） */
   isModelAllowed?: (providerId: string, modelId: string) => boolean
 }
@@ -208,7 +208,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
   onFilterTypeChange,
   onFilterFunctionChange,
   onToggleFavorite,
-  typeLocked = false,
+  typeLocked,
   isModelAllowed,
 }) => {
   const { t } = useTranslation('models')
@@ -262,7 +262,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
     || providerBrandId(item.p.id) === providerBrandId(modelFilterProvider), [modelFilterProvider])
   const matchesFunction = useCallback((item: ModelEntry): boolean => modelFilterFunction === 'all'
     || item.m.functions.includes(modelFilterFunction), [modelFilterFunction])
-  const functionTags = useMemo(() => functionTagsFor(modelFilterType, modelFilterFunction), [modelFilterType, modelFilterFunction])
+  const functionTags = useMemo(() => functionTagsFor(typeLocked ?? modelFilterType, modelFilterFunction), [modelFilterType, modelFilterFunction, typeLocked])
 
   // 左栏数量：按当前类型与功能算各供应商的模型数，收藏按功能算
   const providerCounts = useMemo(() => {
@@ -384,7 +384,8 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
           {railItem('favorite', t('favorites'), favoriteCount, modelFilterType === 'favorite', () => selectRail('all', true), <ICON_PRESET className={`${UI_ICON_SIZE_CLASS.sm} fill-warning-text text-warning-text`} />)}
           <span className="mx-2 my-1.5 h-px bg-line" aria-hidden />
           <span className="px-2 pb-0.5 text-2xs text-text3">{t('filters.provider')}</span>
-          {providerBrands.map(provider => railItem(
+          {/* 只能选部分模型时，不列出一个能选的都没有的供应商 */}
+          {providerBrands.filter(provider => !isModelAllowed || (providerCounts.get(provider.id) ?? 0) > 0 || provider.id === providerBrandId(modelFilterProvider)).map(provider => railItem(
             provider.id,
             provider.name,
             providerCounts.get(provider.id) ?? 0,

@@ -21,8 +21,8 @@ import { paramPortId } from '@/features/canvas/domain/socketTypes';
 import { useNodeHandlesSync } from '@/features/canvas/hooks/useNodeHandlesSync';
 import {
   NODE_ROW_CLASS,
+  NODE_ROW_GROUP_DIVIDER_CLASS,
   NODE_ROW_CONTROL_SLOT_CLASS,
-  NODE_ROW_HOVER_CLASS,
   NODE_ROW_LABEL_CLASS,
   NODE_PORT_ROW_CLASS,
   NODE_PORT_VISIBLE_CLASS,
@@ -46,11 +46,13 @@ interface NodeParamRowsProps {
   setParams: (changes: DynamicValueMap, options?: CanvasHistoryGroupOptions) => void;
   /** 不在逐行区渲染的参数（如 prompt，由 shell 单独渲染） */
   excludeParamIds?: string[];
+  /** 上方还有模型/素材行时，在第一行参数前画一条分组线；一行参数都没有就不画 */
+  dividerAbove?: boolean;
 }
 
 /**
  * 标准逐行参数渲染：每个普通参数一行（标签居左、紧凑控件居右），
- * 行外壳为统一卡片样式（NODE_ROW_CARD_CLASS），左侧端口圆点贴齐行容器边缘。
+ * 行不套框，左侧端口圆点贴齐行容器边缘。
  *
  * - 端口未连线：内联编辑（NodeParamControl，复用底层 primitive）
  * - 端口已连线：控件进入只读态，卡片底色换成插槽颜色提示（widget ↔ input 双态）
@@ -65,6 +67,7 @@ export const NodeParamRows = memo(({
   setParam,
   setParams,
   excludeParamIds,
+  dividerAbove = false,
 }: NodeParamRowsProps) => {
   const { i18n } = useTranslation();
   const connectedParamIds = useStoreWithEqualityFn(
@@ -114,7 +117,7 @@ export const NodeParamRows = memo(({
     return (
       <div
         key={param.id}
-        className={`${NODE_ROW_CLASS} ${isConnected ? '' : NODE_ROW_HOVER_CLASS}`}
+        className={NODE_ROW_CLASS}
       >
         <Handle
           type="target"
@@ -126,7 +129,7 @@ export const NodeParamRows = memo(({
         <ParamLabel
           param={param}
           language={i18n.language}
-          className={`${NODE_ROW_LABEL_CLASS} !mb-0`}
+          className={`${NODE_ROW_LABEL_CLASS} !mb-0 !text-text2`}
           tooltipPlacement="left"
         />
         <div className={NODE_ROW_CONTROL_SLOT_CLASS}>
@@ -147,6 +150,7 @@ export const NodeParamRows = memo(({
 
   return (
     <>
+      {dividerAbove && presentationItems.length > 0 && <div aria-hidden className={NODE_ROW_GROUP_DIVIDER_CLASS} />}
       {presentationItems.flatMap((item) => {
         if (item.kind === 'param') return [renderParamRow(item.param)];
 
@@ -154,7 +158,7 @@ export const NodeParamRows = memo(({
         const inlineParams = item.params.filter((param) => connectedParamIds.has(param.id));
         const groupName = getI18nText(item.group.name, i18n.language) || item.group.id;
         return [
-          <div key={`group:${item.group.id}`} className={`${NODE_ROW_CLASS} ${NODE_ROW_HOVER_CLASS}`}>
+          <div key={`group:${item.group.id}`} className={NODE_ROW_CLASS}>
             <span className={NODE_ROW_LABEL_CLASS}>{groupName}</span>
             <div className={NODE_ROW_CONTROL_SLOT_CLASS}>
               <ParamGroupTrigger

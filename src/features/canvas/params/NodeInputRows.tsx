@@ -7,6 +7,7 @@ import type { CanvasModelMediaType } from '@/features/canvas/domain/defaultModel
 import type { RowMediaKind } from '@/features/canvas/domain/socketTypes';
 import { useNodeHandlesSync } from '@/features/canvas/hooks/useNodeHandlesSync';
 import { NODE_ROW_GAP_CLASS } from '@/features/canvas/ui/nodeControlStyles';
+import { UiFieldLayoutContext } from '@/components/ui/fieldLayout';
 import type { VideoTrimRange } from '@/components/videoTrim/VideoTrimModal';
 import type { CanvasHistoryGroupOptions } from '@/stores/canvasStore';
 import type { CanvasImageCapabilityModelPolicy } from '@/features/canvas/capabilities/types';
@@ -124,6 +125,8 @@ export function NodeInputRows({
   useNodeHandlesSync(nodeId, `${showModelInput ? 'model' : 'fixed'}|${mediaRows.map((row) => row.kind).join('|')}|${externalMediaHandle ?? ''}`);
 
   return (
+    // 行内取值控件按工具条排布：下拉、面板、数值统一成静默触发器（值 + 下箭头，悬停出底）
+    <UiFieldLayoutContext.Provider value="toolbar">
     <div className={`flex flex-col ${NODE_ROW_GAP_CLASS} ${className}`}>
       {showModelInput && (
         <ModelInputRow
@@ -155,6 +158,7 @@ export function NodeInputRows({
       ))}
 
       <NodeParamRows
+        dividerAbove={showModelInput || mediaRows.length > 0}
         nodeId={nodeId}
         modelId={modelId}
         schema={visibleSchema}
@@ -164,5 +168,6 @@ export function NodeInputRows({
         excludeParamIds={excludeParamIds}
       />
     </div>
+    </UiFieldLayoutContext.Provider>
   );
 }

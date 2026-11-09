@@ -13,7 +13,6 @@ import {
   NODE_CONTROL_MODEL_CHIP_CLASS,
   NODE_ROW_CLASS,
   NODE_ROW_CONTROL_SLOT_CLASS,
-  NODE_ROW_HOVER_CLASS,
   NODE_ROW_LABEL_CLASS,
   NODE_PORT_ROW_CLASS,
   NODE_PORT_VISIBLE_CLASS,
@@ -53,9 +52,7 @@ export function ModelInputRow({
 
   return (
     <div
-      className={`${NODE_ROW_CLASS} ${
-        overrideModelId ? '' : NODE_ROW_HOVER_CLASS
-      }`}
+      className={NODE_ROW_CLASS}
     >
       <Handle
         type="target"

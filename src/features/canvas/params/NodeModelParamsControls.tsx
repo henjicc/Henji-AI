@@ -1,10 +1,9 @@
 import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNodeId } from '@xyflow/react';
-import { useStoreWithEqualityFn } from 'zustand/traditional';
 
 import type { ModelTag } from '@/core/types';
-import { PanelTrigger, UiChipButton } from '@/components/ui';
+import { PanelTrigger, UiFieldTrigger } from '@/components/ui';
 import type { CanvasModelMediaType } from '@/features/canvas/domain/defaultModels';
 import type { CanvasImageCapabilityModelPolicy } from '@/features/canvas/capabilities/types';
 import { getProviderDisplayName } from '@/utils/modelHelpers';
@@ -30,9 +29,8 @@ interface NodeModelParamsControlsProps {
   onModelChipContentWidthChange?: (width: number) => void;
 }
 
-// 浮层 panelPadding="content"（左右各 12）+ 边框 2
-// 芯片 sm 档左右内边距 8 + 8、边框 1 + 1，名称与渠道之间 gap 6（测量层用的是 gap 8，多出的 2 留作余量）
-const MODEL_CHIP_HORIZONTAL_CHROME = 18;
+// 静默触发器 sm 档左右内边距 8 + 8、名称后的下箭头 16 与间距 6（测量层名称与渠道之间 gap 8，余量够用）
+const MODEL_CHIP_HORIZONTAL_CHROME = 38;
 
 /**
  * 芯片所在行还能给它多宽：行内容宽减去同排其它占位（标签等）与间距。用 offsetWidth（布局尺寸），
@@ -77,12 +75,17 @@ export const NodeModelParamsControls = memo(({
   const favorites = useGenerationDraftStore((state) => state.draft.favoriteModels);
   const patchDraftField = useGenerationDraftStore((state) => state.patchField);
   const nodeId = useNodeId();
-  // 打开面板时按接进来的素材预选功能：接了视频就只看能收视频、当前模型也在用的那种功能
-  const inputCounts = useStoreWithEqualityFn(canvasViewStore, (state) => nodeId ? {
-    images: collectInputMediaByKind(nodeId, state.nodes, state.edges, 'image').length,
-    videos: collectInputMediaByKind(nodeId, state.nodes, state.edges, 'video').length,
-    audios: collectInputMediaByKind(nodeId, state.nodes, state.edges, 'audio').length,
-  } : { images: 0, videos: 0, audios: 0 }, (a, b) => a.images === b.images && a.videos === b.videos && a.audios === b.audios);
+  // 打开面板那一刻按节点的素材（连线进来的与本地上传的）预选功能；只在打开时算一次，不随画布每次变化重算
+  const readInputCounts = (): { images: number; videos: number; audios: number } => {
+    const { nodes, edges } = canvasViewStore.getState();
+    const node = nodeId ? nodes.find((candidate) => candidate.id === nodeId) : undefined;
+    const inline = (node?.data as { mediaInputs?: Partial<Record<'image' | 'video' | 'audio', unknown[]>> } | undefined)?.mediaInputs ?? {};
+    const count = (kind: 'image' | 'video' | 'audio'): number => {
+      const connected = nodeId ? collectInputMediaByKind(nodeId, nodes, edges, kind).length : 0;
+      return connected > 0 ? connected : (Array.isArray(inline[kind]) ? inline[kind]!.length : 0);
+    };
+    return { images: count('image'), videos: count('video'), audios: count('audio') };
+  };
 
   useLayoutEffect(() => {
     const measureEl = modelChipMeasureRef.current;
@@ -129,7 +132,7 @@ export const NodeModelParamsControls = memo(({
             modelFilterType={filterType}
             modelFilterFunction={filterFunction}
             favoriteModels={favorites}
-            typeLocked
+            typeLocked={lockedType}
             isModelAllowed={isModelAllowed}
             onModelSelect={(_providerId, nextModelId) => {
               onModelChange(nextModelId);
@@ -152,8 +155,10 @@ export const NodeModelParamsControls = memo(({
         )}
       >
         {() => (
-          <UiChipButton
-            active={panelOpen}
+          // 与节点里其他参数同一种静默触发器（值 + 下箭头，悬停出底）
+          <UiFieldTrigger
+            appearance="quiet"
+            open={panelOpen}
             size="sm"
             aria-expanded={panelOpen}
             data-panel-trigger-button
@@ -170,17 +175,17 @@ export const NodeModelParamsControls = memo(({
               }
               setFilterProvider('all');
               setFilterType(lockedType);
-              setFilterFunction(inferModelFunctionFilter(mediaType, selectedModel?.meta.tags ?? [], inputCounts) ?? 'all');
+              setFilterFunction(inferModelFunctionFilter(mediaType, selectedModel?.meta.tags ?? [], readInputCounts()) ?? 'all');
               setPanelOpen(true);
             }}
           >
-            <span className="min-w-0 flex-1 truncate text-xs font-normal leading-none">{selectedModelName}</span>
+            <span className="text-text1">{selectedModelName}</span>
             {selectedModel && !compactChip && (
-              <span className={`shrink-0 text-xs leading-none text-text2`}>
+              <span className="ml-1.5 text-text3">
                 {getProviderDisplayName(selectedModel.meta.provider, i18n.language)}
               </span>
             )}
-          </UiChipButton>
+          </UiFieldTrigger>
         )}
       </PanelTrigger>
       {/* 测量层：常驻，算“模型名 + 渠道”的自然宽度（节点自适应宽度与紧凑判定共用） */}

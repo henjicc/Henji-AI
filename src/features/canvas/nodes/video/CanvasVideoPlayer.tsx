@@ -14,7 +14,7 @@ interface CanvasVideoPlayerProps {
   autoPlayOnMount?: boolean;
 }
 
-function formatTime(seconds: number): string {
+export function formatVideoTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
   const wholeSeconds = Math.floor(seconds);
   const minutes = Math.floor(wholeSeconds / 60);
@@ -136,26 +136,15 @@ export function CanvasVideoPlayer({
         }}
       />
 
-      {!playing && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <UiIconButton shape="circle" size="xl" tone="media"
-            aria-label={t('node.videoPlayer.play')}
-            className="nodrag nowheel pointer-events-auto"
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={(event) => {
-              event.stopPropagation();
-              togglePlayback();
-            }}
-          >
-            <Play className="ml-0.5" />
-          </UiIconButton>
-        </div>
+      {/* 静息时右上角留时长，一眼看出这是视频 */}
+      {duration > 0 && (
+        <span className="pointer-events-none absolute right-1.5 top-1.5 rounded bg-media-scrim px-1 text-3xs leading-4 tabular-nums text-on-media transition-opacity duration-120 group-hover/player:opacity-0">
+          {formatVideoTime(duration)}
+        </span>
       )}
-
+      {/* 静息只看画面：底栏悬停才出现，控件无底，只靠底部一层压暗保证看得清 */}
       <div
-        className={`nodrag nowheel absolute inset-x-0 bottom-0 px-2 pb-1.5 pt-9 transition-opacity duration-120 ${
-          playing ? 'opacity-0 group-hover/player:opacity-100' : 'opacity-100'
-        }`}
+        className="nodrag nowheel absolute inset-x-0 bottom-0 px-2 pb-1.5 pt-9 opacity-0 transition-opacity duration-120 group-hover/player:opacity-100 focus-within:opacity-100"
         onPointerDown={(event) => event.stopPropagation()}
       >
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-media-scrim via-media-scrim to-transparent" />
@@ -172,7 +161,7 @@ export function CanvasVideoPlayer({
             onClick={(event) => event.stopPropagation()}
           />
           <div className="flex h-6 min-w-0 items-center gap-1">
-            <UiIconButton size="xs" tone="media"
+            <UiIconButton size="xs" tone="mediaBare"
               aria-label={playing ? t('node.videoPlayer.pause') : t('node.videoPlayer.play')}
               onClick={(event) => {
                 event.stopPropagation();
@@ -182,11 +171,11 @@ export function CanvasVideoPlayer({
               {playing ? <Pause /> : <Play />}
             </UiIconButton>
             <span className="shrink-0 whitespace-nowrap text-3xs leading-none tabular-nums text-on-media/90">
-              {formatTime(currentTime)} / {formatTime(duration)}
+              {formatVideoTime(currentTime)} / {formatVideoTime(duration)}
             </span>
             <span className="min-w-0 flex-1" />
             {!compactControls && hasAudio !== false && (
-              <UiIconButton size="xs" tone="media"
+              <UiIconButton size="xs" tone="mediaBare"
                 aria-label={muted ? t('node.videoPlayer.unmute') : t('node.videoPlayer.mute')}
                 onClick={(event) => {
                   event.stopPropagation();
@@ -199,7 +188,7 @@ export function CanvasVideoPlayer({
                 {muted ? <VolumeX /> : <Volume2 />}
               </UiIconButton>
             )}
-            <UiIconButton size="xs" tone="media"
+            <UiIconButton size="xs" tone="mediaBare"
               aria-label={t('node.videoPlayer.openViewer')}
               onClick={(event) => {
                 event.stopPropagation();

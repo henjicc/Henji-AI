@@ -1,3 +1,4 @@
+import { UiFieldLayoutContext } from '@/components/ui/fieldLayout'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -105,7 +106,8 @@ export function LocalRedrawSettingsRows({
   const values = useMemo<DynamicValueMap>(() => ({ ...settings }), [settings])
 
   return (
-    <>
+    // 与生成节点的参数行一致：行内控件为静默触发器
+    <UiFieldLayoutContext.Provider value="toolbar">
       {LOCAL_REDRAW_SETTINGS_SCHEMA.map((param) => (
         <div key={param.id} className={NODE_ROW_CLASS} data-local-redraw-setting={param.id}>
           <ParamLabel
@@ -133,6 +135,6 @@ export function LocalRedrawSettingsRows({
           </div>
         </div>
       ))}
-    </>
+    </UiFieldLayoutContext.Provider>
   )
 }

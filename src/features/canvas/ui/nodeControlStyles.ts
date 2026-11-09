@@ -1,4 +1,5 @@
-export const NODE_CONTROL_MODEL_CHIP_CLASS = '!w-full !min-w-0 !max-w-[260px] !justify-start';
+/** 行内模型/模板触发器的布局：靠右、按内容宽，最长 260 后截断；外观由静默触发器决定 */
+export const NODE_CONTROL_MODEL_CHIP_CLASS = 'nodrag nowheel min-w-0 max-w-[260px]';
 
 export const NODE_CONTROL_ICON_CLASS = 'h-3 w-3';
 
@@ -14,34 +15,29 @@ export const NODE_PORT_NODE_CLASS =
   `${NODE_PORT_BASE_CLASS} group-hover:!opacity-100 hover:!opacity-100`;
 
 /**
- * 节点逐行输入的统一卡片外壳（媒体/参数/模型/提示词行共用）。
- * 圆角、边框、背景固定不变，行内具体控件（下拉/开关/数值）各自保持自身样式，
- * 避免"不同控件类型各自圆角"导致的不统一感。
+ * 节点里的输入框表面（提示词、系统提示词等可以直接打字的区域）：比节点面板沉一级的底加一圈发丝线。
+ * 行底取 window（4.3）：在四个预设下都比节点面板（panel）沉一级，与框内控件仍能区分。
  */
-// 行底取 window（4.3）：原 gap/45 在纸白下与行内取值触发器（raised）只差 ΔE 0.013，触发器边界看不清；
-// window 在四个预设下与 raised 都 ≥ 0.024，且仍比节点面板（panel）沉一级。
 export const NODE_ROW_CARD_CLASS =
   'rounded-lg border border-line bg-window transition-colors';
 
+/**
+ * 参数行（模型/素材/参数）：节点本身已是卡片，行不各自套框（同一层纵深只画一次边框），
+ * 靠行高与分组分隔线区分；取值控件统一为静默触发器（值 + 下箭头，悬停出底）。
+ */
 export const NODE_ROW_CLASS =
-  `group/row relative flex min-h-10 items-center gap-3 px-3 py-1.5 ${NODE_ROW_CARD_CLASS}`;
+  'group/row relative flex min-h-10 items-center gap-3 px-2';
 
 export const NODE_ROW_LABEL_CLASS =
   'min-w-16 max-w-[45%] shrink-0 truncate whitespace-nowrap text-left text-xs font-medium text-text2';
 
 export const NODE_ROW_CONTROL_SLOT_CLASS = 'ml-auto flex min-w-0 items-center justify-end';
 
-/**
- * 未连线行的悬停提示（连线行改用插槽色底色，不叠加该 hover）。
- * 只加强描边、不换底色（任务 4.3，重要记录 012）：行底换成 hover 后与行内取值触发器（raised / 悬停同为 hover）
- * 同色，触发器边界消失。同一处的交互层级不得同色。
- * 描边取辅助文字色的低透明度（与节点外壳悬停同一做法）：原 `line-strong` 在石墨下只比 `line` 亮 9 级，
- * 1px 描边上几乎看不出悬停（5.2 转交，任务 5.4）。
- */
-export const NODE_ROW_HOVER_CLASS = 'hover:border-text3/45';
+/** 行与行之间的间隙：行不套框，靠行高本身分开，只留很小的间隙 */
+export const NODE_ROW_GAP_CLASS = 'gap-0.5';
 
-/** 行与行之间的间隙（替代旧版贴边 divide-y），让每行读成独立卡片 */
-export const NODE_ROW_GAP_CLASS = 'gap-1.5';
+/** 节点里“输入”与“参数”两组之间的分隔线 */
+export const NODE_ROW_GROUP_DIVIDER_CLASS = 'mx-2 my-1 h-px shrink-0 bg-line';
 
 /** 结果节点生成失败时的红色描边（配合 NodeGenerationError 覆盖层使用） */
 export const NODE_GENERATION_ERROR_BORDER_CLASS =

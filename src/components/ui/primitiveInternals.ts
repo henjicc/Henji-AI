@@ -61,8 +61,9 @@ export type IconButtonSize = '2xs' | 'xs' | UiControlSize | 'xl'
  * - `accent`：圆形材质主动作（如生成），一个表面最多一个；
  * - `danger`：静息静默、悬停显红（删除、移除）。
  * - `bare`：始终无底无边框，开关与悬停只改变图标颜色。
+ * - `mediaBare`：画面上的无底控件（视频底栏）：只有媒体叠层文字色图标，悬停变亮；靠底部压暗保证可读。
  */
-export type IconButtonTone = 'default' | 'media' | 'accent' | 'danger' | 'bare'
+export type IconButtonTone = 'default' | 'media' | 'accent' | 'danger' | 'bare' | 'mediaBare'
 
 export interface UiIconButtonProps extends UiButtonFeedbackProps {
   label?: string
@@ -335,6 +336,8 @@ export function resolveIconButtonClass({
   const radius = tone === 'accent' || shape === 'circle' ? 'rounded-full' : entry.radius
   const skin = tone === 'bare'
     ? `border-0 bg-transparent disabled:opacity-50 ${on ? 'text-accent-text hover:text-text1' : 'text-text2 hover:text-text1'}`
+    : tone === 'mediaBare'
+    ? 'border-0 bg-transparent text-on-media/80 hover:text-on-media disabled:opacity-50'
     : tone === 'accent'
     ? UI_BUTTON_VARIANT_CLASS.primary
     : tone === 'media'
