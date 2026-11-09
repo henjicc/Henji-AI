@@ -1,7 +1,7 @@
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import React from 'react'
 import { Settings2, Sparkles } from 'lucide-react'
-import { UI_TEXT_PANEL_TITLE_CLASS, UiButton, UiEmpty, UiOptionButton } from '@/components/ui'
+import { UI_TEXT_PANEL_TITLE_CLASS, UiEmpty, UiIconButton, UiOptionButton } from '@/components/ui'
 import type { PromptOptimizationProfile } from '@henjicc/ai-sdk'
 
 interface PromptOptimizationSelectorPanelProps {
@@ -20,22 +20,16 @@ export function PromptOptimizationSelectorPanel({
   onOpenEditor,
 }: PromptOptimizationSelectorPanelProps): JSX.Element {
   return (
-    <div className="flex max-h-[min(560px,calc(100vh-96px))] flex-col p-3">
-      <div className="mb-3 flex items-start justify-between gap-3">
+    <div className="flex max-h-[min(560px,calc(100vh-96px))] flex-col p-2">
+      <div className="mb-1 flex items-center justify-between gap-3 pl-2">
         <div className={UI_TEXT_PANEL_TITLE_CLASS}>选择提示词优化配置</div>
-        <UiButton
-          type="button"
-          variant="secondary"
-          onClick={onOpenEditor}
-          className="shrink-0"
-        >
-          <Settings2  className="mr-2" />
-          编辑配置
-        </UiButton>
+        <UiIconButton size="sm" label="编辑配置" tooltip="编辑配置" onClick={onOpenEditor} className="shrink-0">
+          <Settings2 />
+        </UiIconButton>
       </div>
 
       {profiles.length > 0 ? (
-        <div className="space-y-2 overflow-y-auto pr-1">
+        <div className="flex flex-col gap-0.5 overflow-y-auto">
           {profiles.map((profile) => (
             <UiOptionButton
               key={profile.id}
@@ -55,7 +49,7 @@ export function PromptOptimizationSelectorPanel({
         <UiEmpty
           size="sm"
           title="还没有可用的优化配置"
-          description="请点击右上角编辑配置进行创建或启用。"
+          description="点右上角的设置图标创建或启用。"
         />
       )}
     </div>
