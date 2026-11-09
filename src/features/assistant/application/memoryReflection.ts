@@ -43,8 +43,8 @@ function fields(layer: MemoryLayer): ApplicationFieldDefinition<Draft, Draft>[] 
   const entityType = types[layer]
   const id = `${entityType}.entry`
   return [{ propertyId: id, storeActions: [], descriptor: { id, entityType, version: 1, title: '记忆内容',
-    // 说明只写本层：每层的父实体和 section 规则不同，三层写在一起既超出说明长度上限，也容易照着别层的写法写错
-    description: `逐条修改先读 baselineIds；CONFLICT 重读合并。${MEMORY_RULES} content 一句话≤200字。source 由写入者决定：经助手写入一律存为 assistant，可省略，写回读到的 user 也会存为 assistant（用户在设置里亲手改的才是 user）。${layer === 'global' ? 'section=about/creative/habits。' : '禁止 section、precedence。'}新增用 create_items，parent=${parents[layer]}:${{ global: 'singleton', project: '项目ID', style: '风格ID' }[layer]}，items=[{properties:{"${id}":{content,source,...}}}]，属性名写完整；ownerId 取 parent.id，条目ID及初始修订0自动生成。value：font.zh/font.latin/font.numeric 的 fonts 优先链、style.id、voice.providerId/voiceId、aspect.width/height。`,
+    // 记忆规则写在实体说明里，这里只写本层的写法：每层的父实体和 section 规则不同，照着别层的写法容易写错
+    description: `逐条修改先读 baselineIds；CONFLICT 重读合并。content 一句话≤200字。source 由写入者决定：经助手写入一律存为 assistant，可省略，写回读到的 user 也会存为 assistant（用户在设置里亲手改的才是 user）。${layer === 'global' ? 'section=about/creative/habits。' : '禁止 section、precedence。'}新增用 create_items，parent=${parents[layer]}:${{ global: 'singleton', project: '项目ID', style: '风格ID' }[layer]}，items=[{properties:{"${id}":{content,source,...}}}]，属性名写完整；ownerId 取 parent.id，条目ID及初始修订0自动生成。value：font.zh/font.latin/font.numeric 的 fonts 优先链、style.id、voice.providerId/voiceId、aspect.width/height。`,
     value: { kind: 'json', schemaRef: schemaRef('property', `${id}.value`) }, nullable: false, requiresReadBaseline: true,
     dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['settings:read'], write: ['settings:write'] }, revisionScopes: ['assistant_memory'], schemaRef: schemaRef('property', id) },
     read: draft => draft.entry as JsonValue, writer: { write: (draft, mutation) => { draft.entry = memoryEntryWriteSchema.parse(mutation.value) } } }]

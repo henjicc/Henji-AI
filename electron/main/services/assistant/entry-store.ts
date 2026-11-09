@@ -99,7 +99,7 @@ export class MemoryEntryStore {
       if (result.change) this.publish(result.state, result.change)
       logger.info('记忆已修改', { event: 'memory.write.completed', context: { entryId: input.id } })
       return result.state
-    } catch (error) { if (error instanceof Error && error.message.startsWith('MEMORY_CAPACITY')) this.requestOrganization(); logger.error('修改记忆失败', { event: 'memory.write.failed', error }); throw error }
+    } catch (error) { logger.error('修改记忆失败', { event: 'memory.write.failed', error }); throw error }
   }
 
   revert(id: string, actor: 'user' | 'assistant'): MemorySnapshot {

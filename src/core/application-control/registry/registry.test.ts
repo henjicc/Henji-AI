@@ -167,8 +167,8 @@ const assistantContext = {
 }
 
 const multiValues: Record<string, Record<string, JsonValue>> = {
-  one: { 'sample.enabled': true, 'sample.level': 4, 'sample.mode': 'safe', 'sample.created_at': 'a' },
-  two: { 'sample.enabled': true, 'sample.level': 9, 'sample.mode': 'fast', 'sample.created_at': 'b' },
+  one: { 'sample.enabled': true, 'sample.level': 4, 'sample.mode': 'safe', 'sample.created_at': 'a', 'sample.owner': { kind: 'sample.owner', id: 'owner-one' } },
+  two: { 'sample.enabled': true, 'sample.level': 9, 'sample.mode': 'fast', 'sample.created_at': 'b', 'sample.owner': { kind: 'sample.owner', id: 'owner-two' } },
   three: { 'sample.enabled': false, 'sample.level': 4, 'sample.mode': 'safe', 'sample.created_at': 'c' },
 }
 
@@ -519,6 +519,17 @@ describe('ApplicationReflectionRegistry', () => {
     }
     expect(message).toContain('PROPERTY_NOT_FOUND')
     expect(message).toContain('sample.level')
+  })
+
+  it('过滤键可在结构化属性后接点分路径筛其中的字段，标量属性接路径照常报属性不存在', async () => {
+    const registry = new ApplicationReflectionRegistry(catalogVersion)
+    registry.register({ ...registration(), provider: multiProvider })
+    const hit = await registry.listEntities('sample.item', { limit: 10 }, assistantContext, { where: { 'sample.owner.id': 'owner-two' } })
+    expect(hit.refs.map((ref) => ref.id)).toEqual(['two'])
+    await expect(registry.listEntities('sample.item', { limit: 10 }, assistantContext, { where: { 'sample.mode.value': 'safe' } }))
+      .rejects.toThrow('PROPERTY_NOT_FOUND')
+    await expect(registry.listEntities('sample.item', { limit: 10 }, assistantContext, { where: { 'sample.owner.idd': 'owner-two' } }))
+      .rejects.toThrow('kind、id')
   })
 
   it('不请求投影时行为与过去逐字一致，不做任何额外读取', async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { globalMemoryEntriesSchema, projectMemoryEntriesSchema, resolveMemoryValue, firstAvailableMemoryFont, shouldOrganizeMemory, type MemoryEntry } from './memoryEntries'
+import { exceedsMemoryBudget, globalMemoryEntriesSchema, projectMemoryEntriesSchema, resolveMemoryValue, firstAvailableMemoryFont, shouldOrganizeMemory, type MemoryEntry } from './memoryEntries'
 import { applyMemoryWrite, memoryRevertWrite, type MemoryWrite } from './memoryOperations'
 import { buildProjectManifest, parseProjectManifest } from '../documents/projectManifest'
 
@@ -8,14 +8,16 @@ const write: MemoryWrite = { target: { layer: 'global' }, id: 'font', expectedRe
 const entry = (): MemoryEntry => applyMemoryWrite([], write, now, 'first').entries[0]
 
 describe('三层记忆契约与写入', () => {
-  it('全局必须分区，项目不允许分区或优先级，容量与重复标识校验', () => {
+  it('全局必须分区，项目不允许分区或优先级，重复标识校验；超出整理预算只请求整理不拒绝', () => {
     expect(globalMemoryEntriesSchema.safeParse([entry()]).success).toBe(true)
     expect(projectMemoryEntriesSchema.safeParse([entry()]).success).toBe(false)
     const { section: _section, ...local } = entry()
     expect(projectMemoryEntriesSchema.safeParse([local]).success).toBe(true)
     expect(projectMemoryEntriesSchema.safeParse([{ ...local, precedence: 'preference' }]).success).toBe(false)
     expect(globalMemoryEntriesSchema.safeParse([entry(), entry()]).success).toBe(false)
-    expect(globalMemoryEntriesSchema.safeParse(Array.from({ length: 20 }, (_, i) => ({ ...entry(), id: String(i), content: '字'.repeat(200) }))).success).toBe(false)
+    const large = Array.from({ length: 40 }, (_, i) => ({ ...entry(), id: String(i), content: '字'.repeat(200) }))
+    expect(globalMemoryEntriesSchema.safeParse(large).success).toBe(true)
+    expect(exceedsMemoryBudget('global', globalMemoryEntriesSchema.parse(large))).toBe(true)
   })
   it('同条目拒绝陈旧基线，不同条目不互相阻断，空改动不记历史', () => {
     const first = applyMemoryWrite([], write, now, 'first')

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { assertMemoryContentSafe } from './memoryPolicy'
 export { assertMemoryContentSafe } from './memoryPolicy'
-import { MEMORY_LIMITS, memoryEntriesSchema, memoryEntryInputSchema, memoryTargetSchema, type MemoryEntry, type MemoryHistoryEntry, type MemoryLayer } from './memoryEntries'
+import { memoryEntriesSchema, memoryEntryInputSchema, memoryTargetSchema, type MemoryEntry, type MemoryHistoryEntry, type MemoryLayer } from './memoryEntries'
 
 export const memoryWriteSchema = z.object({
   target: memoryTargetSchema.describe('global 无 ownerId；project 的 ownerId=正式项目ID；style 的 ownerId=风格ID，不能用文档ID或路径。'),
@@ -35,8 +35,6 @@ export function applyMemoryWrite(entries: readonly MemoryEntry[], input: MemoryW
   if (before && after && JSON.stringify(memoryEntryInputSchema.strip().parse(before)) === JSON.stringify(memoryEntryInputSchema.strip().parse(after))) return { entries: [...entries], change: null }
   const next = entries.filter(entry => entry.id !== write.id)
   if (after) next.push(after)
-  const capacity = MEMORY_LIMITS[write.target.layer]
-  if (next.length > capacity.entries || next.reduce((sum, entry) => sum + entry.content.length, 0) > capacity.characters) throw new Error('MEMORY_CAPACITY：记忆已满，请先整理再保存。')
   memoryEntriesSchema(write.target.layer).parse(next)
   return { entries: next, change: { id: historyId, target: write.target, entryId: write.id, actor: write.actor, before, after, reason: write.reason, createdAt: now.toISOString(), ...(write.reverts ? { reverts: write.reverts } : {}) } }
 }

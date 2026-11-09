@@ -39,6 +39,44 @@ const DATA_CLASS_RANK = { C0: 0, C1: 1, C2: 2, C3: 3 } as const
 /** 带 where 的列表单次最多扫描的实例数（逐条读取属性，受列表能力超时约束） */
 const WHERE_SCAN_LIMIT = 2000
 
+const STRUCTURED_VALUE_KINDS = new Set(['json', 'vector2', 'vector3', 'ref', 'ref_list'])
+
+const FIXED_FIELDS: Record<string, string[]> = { vector2: ['x', 'y'], vector3: ['x', 'y', 'z'], ref: ['kind', 'id'] }
+
+/** 沿 JSON Schema 的 properties 校验路径；schema 不再声明字段（数组、自由对象）的位置之后不再校验。 */
+function unknownFieldInPath(kind: string, schema: JsonValue | null, path: readonly string[]): { segment: string; fields: string[] } | null {
+  if (kind === 'ref_list') return null
+  if (FIXED_FIELDS[kind]) return path.length && !FIXED_FIELDS[kind].includes(path[0]) ? { segment: path[0], fields: FIXED_FIELDS[kind] } : null
+  let node: JsonValue | null = schema
+  for (const segment of path) {
+    const fields = schemaProperties(node)
+    if (!fields) return null
+    if (!(segment in fields)) return { segment, fields: Object.keys(fields) }
+    node = fields[segment]
+  }
+  return null
+}
+
+function schemaProperties(node: JsonValue | null): Record<string, JsonValue> | null {
+  if (!node || typeof node !== 'object' || Array.isArray(node)) return null
+  const branches = [node, ...(['anyOf', 'oneOf', 'allOf'] as const).flatMap(key => Array.isArray(node[key]) ? node[key] as JsonValue[] : [])]
+  const merged: Record<string, JsonValue> = {}
+  for (const branch of branches) {
+    const properties = branch && typeof branch === 'object' && !Array.isArray(branch) ? branch.properties : undefined
+    if (properties && typeof properties === 'object' && !Array.isArray(properties)) Object.assign(merged, properties)
+  }
+  return Object.keys(merged).length ? merged : null
+}
+
+function valueAtPath(value: JsonValue | undefined, path: readonly string[]): JsonValue | undefined {
+  let current = value
+  for (const segment of path) {
+    if (current === null || typeof current !== 'object') return undefined
+    current = Array.isArray(current) ? current[Number(segment)] : current[segment]
+  }
+  return current
+}
+
 function schemaKey(ref: ApplicationSchemaRef): string {
   return `${ref.catalogVersion}:${ref.kind}:${ref.id}@${ref.version}`
 }
@@ -241,6 +279,32 @@ export class ApplicationReflectionRegistry {
   }
 
   /**
+   * where 的键可以是属性 ID，也可以在属性 ID 后接点分路径指向 json 属性里的字段
+   * （`assistant.memory.entry.content`）：模型按读回的结构直觉就会这么写，整条 json 等值又几乎不可能命中。
+   * 取能解析成属性的最长前缀，剩下的段作为字段路径。
+   */
+  private resolveWhereKey(entityType: string, key: string, context: ApplicationControlAccessContext): { propertyId: string; path: string[] } {
+    const segments = key.split('.')
+    for (let end = segments.length; end > 0; end -= 1) {
+      const candidate = segments.slice(0, end).join('.')
+      const byEntity = this.propertiesByEntity.get(entityType)
+      const propertyId = byEntity?.has(candidate) ? candidate
+        : byEntity?.has(`${entityType}.${candidate}`) ? `${entityType}.${candidate}` : null
+      if (!propertyId) continue
+      // 标量属性没有字段可取，接了路径多半是属性名写错，交给下面报错并列出真实属性
+      const value = byEntity!.get(propertyId)!.value
+      if (end < segments.length && !STRUCTURED_VALUE_KINDS.has(value.kind)) break
+      const path = segments.slice(end)
+      // 字段名写错时报出这一层真正有哪些字段，不让它静默筛成空列表
+      const schema = value.kind === 'json' ? this.resolveSchema(value.schemaRef, context) : null
+      const unknown = unknownFieldInPath(value.kind, schema, path)
+      if (unknown) throw new Error(`PROPERTY_NOT_FOUND:${key}：${propertyId} 里没有字段「${unknown.segment}」，这一层可用的字段：${unknown.fields.join('、')}`)
+      return { propertyId, path }
+    }
+    return { propertyId: this.resolvePropertyId(entityType, key), path: [] }
+  }
+
+  /**
    * 列出实体，并可按属性投影与等值过滤。
    *
    * 不带 projection 时行为与过去逐字一致（只返回 refs），这是绝大多数调用方的路径。
@@ -269,18 +333,18 @@ export class ApplicationReflectionRegistry {
     }
     let result = await listPage(request)
     const whereEntries = Object.entries(projection?.where ?? {})
-      .map(([key, value]) => [this.resolvePropertyId(entityType, key), value] as const)
+      .map(([key, value]) => ({ ...this.resolveWhereKey(entityType, key, context), value }))
     const projected = (projection?.propertyIds ?? [])
       .map((propertyId) => this.resolvePropertyId(entityType, propertyId))
     if (whereEntries.length === 0 && projected.length === 0) return result
 
-    const needed = [...new Set([...projected, ...whereEntries.map(([id]) => id)])]
+    const needed = [...new Set([...projected, ...whereEntries.map(({ propertyId }) => propertyId)])]
     const items: ApplicationEntityListItem[] = []
     for (let scanned = 0; ;) {
       for (const ref of result.refs) {
         const snapshot = await this.readEntity(ref, needed, context)
-        const matches = whereEntries.every(([id, expected]) => (
-          JSON.stringify(snapshot.properties[id] ?? null) === JSON.stringify(expected ?? null)
+        const matches = whereEntries.every(({ propertyId, path, value }) => (
+          JSON.stringify(valueAtPath(snapshot.properties[propertyId], path) ?? null) === JSON.stringify(value ?? null)
         ))
         if (!matches) continue
         items.push({

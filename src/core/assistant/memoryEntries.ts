@@ -3,11 +3,19 @@ import { z } from 'zod'
 
 export const MEMORY_ENTRY_MAX_LENGTH = 200
 export const MEMORY_HISTORY_LIMIT = 100
-export const MEMORY_LIMITS = {
-  global: { entries: 60, characters: 3000 },
-  project: { entries: 40, characters: 2000 },
-  style: { entries: 30, characters: 1500 },
+/**
+ * 整理预算：超过后请求整理（合并重复、压缩措辞），写入照常成功。
+ * 记忆会随每个任务读进上下文，预算约束的是上下文开销；用户要记的东西不因此被拒。
+ */
+export const MEMORY_ORGANIZE_BUDGET = {
+  global: { entries: 120, characters: 6000 },
+  project: { entries: 80, characters: 4000 },
+  style: { entries: 60, characters: 3000 },
 } as const
+export function exceedsMemoryBudget(layer: MemoryLayer, entries: readonly MemoryEntry[]): boolean {
+  const budget = MEMORY_ORGANIZE_BUDGET[layer]
+  return entries.length > budget.entries || entries.reduce((sum, entry) => sum + entry.content.length, 0) > budget.characters
+}
 export const memoryLayerSchema = z.enum(['global', 'project', 'style'])
 export type MemoryLayer = z.infer<typeof memoryLayerSchema>
 const sentence = z.string().trim().min(1).max(MEMORY_ENTRY_MAX_LENGTH).refine(value => !/[\0\r\n]/.test(value), '请用一句话记录记忆。')
@@ -41,9 +49,8 @@ export type MemoryTarget = z.infer<typeof memoryTargetSchema>
 
 /** 三层共用条目结构；分区、优先级与默认值的使用范围在所属集合边界检查。 */
 export function memoryEntriesSchema(layer: MemoryLayer): z.ZodArray<typeof memoryEntrySchema> {
-  return z.array(memoryEntrySchema).max(MEMORY_LIMITS[layer].entries).superRefine((entries, context) => {
+  return z.array(memoryEntrySchema).superRefine((entries, context) => {
     if (new Set(entries.map(entry => entry.id)).size !== entries.length) context.addIssue({ code: 'custom', message: '记忆条目标识不能重复。' })
-    if (entries.reduce((total, entry) => total + entry.content.length, 0) > MEMORY_LIMITS[layer].characters) context.addIssue({ code: 'custom', message: `记忆最多 ${MEMORY_LIMITS[layer].characters} 字，请先整理。` })
     entries.forEach((entry, index) => {
       try { assertMemoryContentSafe(JSON.stringify(entry)) } catch (error) { context.addIssue({ code: 'custom', path: [index], message: error instanceof Error ? error.message : '记忆包含不能保存的信息。' }) }
       if ((layer === 'global') !== (entry.section !== undefined)) context.addIssue({ code: 'custom', path: [index, 'section'], message: '只有全局记忆需要分区。' })
