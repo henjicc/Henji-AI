@@ -602,7 +602,7 @@ it('任务精确 names 保持目录排序与基础工具稳定，避免整领域
       const session = { getActiveToolNames: () => active, setActiveToolsByName: (names: string[]) => { active = names } } as AgentSession
       const tools: ToolDefinition[] = catalog.map(tool => ({ ...tool, label: tool.name, description: tool.description ?? tool.name,
         parameters: tool.inputSchema as ToolDefinition['parameters'], execute: async () => ({ content: [], details: undefined }) }))
-      const disclosure = new PiToolDisclosure([...tools, contextReader(manager)], manager, () => session)
+      const disclosure = new PiToolDisclosure([...tools, contextReader(manager, 4000)], manager, () => session)
       disclosure.prepareContext(JSON.stringify({ surface: { id: surface } }))
       const initial = [...active]
       disclosure.activate(request)
@@ -639,7 +639,7 @@ it('发送时选区保留完整数量与分页，改变选区及冷恢复后仍�
   const entry = manager.getBranch().find(entry => entry.type === 'custom_message')!
   if (entry.type !== 'custom_message') throw new Error('missing context')
   const id = (entry.details as { selectionId: string }).selectionId
-  const reader = contextReader(manager)
+  const reader = contextReader(manager, 2000)
   const refs: string[] = []; let offset = 0; let hasMore = true
   while (hasMore) {
     const result = await reader.execute('page', { reference: `selection:${id}:selectedClipRefs`, offset }, undefined, undefined, {} as never)

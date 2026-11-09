@@ -8,7 +8,7 @@ import type { EngineCommand, EngineConfiguration, EngineEvent, EmbeddedAgentEngi
 import { executePiTool } from './toolResult'
 import { PiAttachments } from './piAttachments'
 import { PiToolDisclosure } from './toolDisclosure'
-import { budgetContext, projectText } from './contextBudget'
+import { budgetContext, contextPageTokenLimit, estimateContextTokens, projectText, PROJECTED_EXCERPT_TOKENS, singleResultTokenLimit } from './contextBudget'
 import { archiveToolResult, contextReader, selectionSummary } from './contextReader'
 import { embeddedModelLimits, embeddedThinkingLevel } from './modelOptions'
 import { deduplicateHostContexts, prepareHostContext } from './hostContext'
@@ -67,6 +67,7 @@ export class PiEngine implements EmbeddedAgentEngine {
     const { model: selected, tools, instructions } = input
     const { model } = selected
     const limits = embeddedModelLimits(model)
+    const resultLimit = singleResultTokenLimit(limits.contextWindow)
     const runtime = await this.sdk.ModelRuntime.create({
       authPath: path.join(this.directory, 'auth.json'), modelsPath: null,
       modelsStorePath: path.join(this.directory, 'model-cache.json'), allowModelNetwork: false, refreshOnCreate: false,
@@ -86,7 +87,9 @@ export class PiEngine implements EmbeddedAgentEngine {
     const resolved = runtime.getModel(provider, model.modelId)
     if (!resolved) throw new Error('所选模型无法初始化，请检查模型设置。')
     // 关掉 Pi 的安装统计，请求不再以 pi.dev 名义给 OpenRouter 等供应商带归因头。
-    const settings = this.sdk.SettingsManager.inMemory({ retry: { enabled: false }, enableInstallTelemetry: false })
+    // Pi 自动压缩要在我们为回复预留的输出空间之前动手，否则长回合会先撞上本地的超窗检查
+    const settings = this.sdk.SettingsManager.inMemory({ retry: { enabled: false }, enableInstallTelemetry: false,
+      compaction: { enabled: true, reserveTokens: limits.maxOutputTokens + 8192 } })
     const loader = new this.sdk.DefaultResourceLoader({ cwd: this.directory, agentDir: this.directory, settingsManager: settings,
       noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true, noContextFiles: true, systemPrompt: instructions })
     await loader.reload()
@@ -97,19 +100,19 @@ export class PiEngine implements EmbeddedAgentEngine {
         try {
           const result = await executePiTool({ id, name: tool.name, args, signal, vision: model.capabilities.image }, this.callTool)
           if (/^interpret_(video_edit|image_edit)_intent$/.test(tool.name) && args.draftRef && typeof args.draftRef === 'object') this.completedIntents.add(JSON.stringify(args.draftRef))
-          return archiveToolResult(this.manager, result, tool.name === 'load_assistant_skill')
+          return archiveToolResult(this.manager, result, resultLimit)
         } catch (error) {
           if (!(error instanceof Error) || signal?.aborted) throw error
           const resultId = randomUUID()
           const reference = `tool:${resultId}:0`
-          const text = projectText(error.message, reference, 4000)
+          const text = estimateContextTokens(error.message) <= resultLimit ? error.message : projectText(error.message, reference, PROJECTED_EXCERPT_TOKENS)
           if (text === error.message) throw error
           this.manager.appendCustomEntry('henji-tool-result', { resultId, fullText: { '0': error.message } })
           throw new Error(text)
         }
       },
     }))
-    this.disclosure = new PiToolDisclosure([...customTools, contextReader(this.manager)], this.manager, () => this.session!)
+    this.disclosure = new PiToolDisclosure([...customTools, contextReader(this.manager, contextPageTokenLimit(limits.contextWindow))], this.manager, () => this.session!)
     this.toolTitles = new Map(this.disclosure.tools.map(tool => [tool.name, tool.label]))
     const { session } = await this.sdk.createAgentSession({ cwd: this.directory, agentDir: this.directory,
       modelRuntime: runtime, model: resolved, thinkingLevel: embeddedThinkingLevel(selected),

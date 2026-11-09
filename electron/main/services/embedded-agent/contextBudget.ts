@@ -3,11 +3,6 @@ import type { AgentSession, ToolDefinition } from '@earendil-works/pi-coding-age
 type AgentMessage = AgentSession['messages'][number]
 export const CONTEXT_BUDGET_ERROR = '当前对话和已加载工具超出所选模型的上下文预算。请新建对话并只加载本次所需工具，或切换更大上下文的模型；已有操作不会重新执行。'
 
-export const SKILL_RESULT_TOKEN_BUDGET = 16000
-export function isSkillResult(toolName: string, details?: unknown): boolean {
-  return toolName === 'load_assistant_skill' || Boolean(details && typeof details === 'object' && 'skillContent' in details && details.skillContent === true)
-}
-
 /** 多模型预算估算，不是计费分词：ASCII 单词按三字符、标点逐个；非 ASCII BMP 码点计 1，辅助平面码点计 2。 */
 export function estimateContextTokens(text: string): number {
   let tokens = 0
@@ -72,8 +67,9 @@ export function projectText(text: string, reference: string, budget: number): st
   const minimum = minimalProjection(text, reference)
   const { facts } = minimum
   reference = minimum.reference
+  // 续读从摘录结束处接着读，不再从头重复已给出的内容
   const wrap = (excerpt: string) => JSON.stringify({ facts, hasMore: true, reference,
-    read: { name: 'read_assistant_context', reference, offset: 0 }, excerpt })
+    read: { name: 'read_assistant_context', reference, offset: excerpt.length }, excerpt })
   if (estimateContextTokens(wrap('')) > budget) {
     for (const key of ['data', 'message', 'recovery']) if (key in facts) facts[key] = { omitted: true }
     const compact = JSON.stringify(minimum)
@@ -83,36 +79,20 @@ export function projectText(text: string, reference: string, budget: number): st
   return wrap(fitText(text, excerpt => estimateContextTokens(wrap(excerpt)) <= budget))
 }
 
-/** 只投影模型上下文，原始 Pi 消息与错误事实留在会话中，不改业务回执或重放工具。 */
+/**
+ * 发给模型前只去掉过时的宿主快照：工具结果、技能原文都原样给，不按条截断。
+ * 历史真的超出窗口由 Pi 的自动压缩处理（总结较早的对话）；这里只在超出时先让出最旧的界面快照，
+ * 最新快照始终保留。单条结果超过窗口一半的，在产生时已转成摘录加可续读引用（archiveToolResult）。
+ */
 export function budgetContext(messages: AgentMessage[], input: {
   contextWindow: number; maxOutputTokens: number; instructions: string; tools: ToolDefinition[]; attachmentTokens?: (text: string) => number
 }): AgentMessage[] {
   const fixed = estimateContextTokens(input.instructions) + estimateContextTokens(JSON.stringify(input.tools.map(tool => ({
     name: tool.name, description: tool.description, parameters: tool.parameters,
   }))))
-  const remaining = input.contextWindow - fixed - input.maxOutputTokens - Math.max(1024, Math.ceil(input.contextWindow * 0.05))
-  let lastUser = -1
-  messages.forEach((message, index) => { if (message.role === 'user') lastUser = index })
-  const parts: Array<{ part: { type: 'text'; text: string }; original: string; reference: string }> = []
-  const skills: typeof parts = []
-  // 先保底所有事实。历史消息次序不变；当前轮的资料分页原样保留。
-  const projected = messages.map((message, messageIndex) => message.role !== 'toolResult' ? message : { ...message,
-    content: message.content.map((part, index) => {
-      if (part.type !== 'text' || (messageIndex > lastUser && message.toolName === 'read_assistant_context' && !isSkillResult(message.toolName, message.details))) return part
-      const reference = `tool:${resultId(message)}:${index}`
-      if (isSkillResult(message.toolName, message.details)) {
-        const next = { ...part }
-        skills.push({ part: next, original: part.text, reference })
-        return next
-      }
-      const minimum = JSON.stringify(minimalProjection(part.text, reference))
-      const next = { ...part, text: estimateContextTokens(minimum) < estimateContextTokens(part.text) ? minimum : part.text }
-      parts.push({ part: next, original: part.text, reference })
-      return next
-    }),
-  })
-  let available = remaining - projected.reduce((sum, message) => sum + messageTokens(message, input.attachmentTokens), 0)
-  // 先压缩普通结果，再淘汰最旧宿主快照；最新快照始终保留。
+  const projected = [...messages]
+  let available = input.contextWindow - fixed - input.maxOutputTokens
+    - projected.reduce((sum, message) => sum + messageTokens(message, input.attachmentTokens), 0)
   while (available < 0) {
     const contexts = projected.flatMap((message, index) => message.role === 'custom' && message.customType === 'henji-context' ? [index] : [])
     if (contexts.length < 2) break
@@ -130,29 +110,23 @@ export function budgetContext(messages: AgentMessage[], input: {
       }
     }
   }
-  // 只有其他可压缩内容都已让出预算，才从最旧技能原文回退到可续读投影。
-  for (const { part, original, reference } of skills) {
-    if (available >= 0) break
-    const cost = estimateContextTokens(part.text)
-    const minimum = JSON.stringify(minimalProjection(original, reference))
-    const budget = Math.max(estimateContextTokens(minimum), cost + available)
-    part.text = projectText(original, reference, budget)
-    available += cost - estimateContextTokens(part.text)
-  }
-  if (available < 0) throw new Error(CONTEXT_BUDGET_ERROR)
-  // 最新结果先拿正文预算；旧结果保留事实与引用，窗口不足时不再平均稀释最新写入。
-  for (const { part, original, reference } of parts.reverse()) {
-    const minimumCost = estimateContextTokens(part.text)
-    const budget = Math.min(4000, minimumCost + available)
-    if (budget <= minimumCost) continue
-    const expanded = projectText(original, reference, budget)
-    available -= estimateContextTokens(expanded) - minimumCost
-    part.text = expanded
+  // 较早的内容（含本轮较早的工具往返）超窗由 Pi 压缩；只有最后一次回复之后新进来的这一批自己就装不下时，
+  // 压缩无从下手，发出去必然失败，直接说明
+  if (available < 0) {
+    const lastAssistant = projected.map(message => message.role).lastIndexOf('assistant')
+    const pending = projected.slice(lastAssistant + 1).reduce((sum, message) => sum + messageTokens(message, input.attachmentTokens), 0)
+    if (fixed + input.maxOutputTokens + pending > input.contextWindow) throw new Error(CONTEXT_BUDGET_ERROR)
   }
   return projected
 }
 
-function resultId(message: Extract<AgentMessage, { role: 'toolResult' }>): string {
-  const details = message.details as { resultId?: unknown } | undefined
-  return typeof details?.resultId === 'string' ? details.resultId : message.toolCallId
+/** 单条工具结果（含技能原文）不超过窗口的一半就原样进上下文 */
+export function singleResultTokenLimit(contextWindow: number): number {
+  return Math.max(4000, Math.floor(contextWindow / 2))
+}
+
+/** 超出上限的结果只留事实与一小段摘录，其余按页续读；页不能大到两页就撑满窗口 */
+export const PROJECTED_EXCERPT_TOKENS = 4000
+export function contextPageTokenLimit(contextWindow: number): number {
+  return Math.max(2000, Math.min(16000, Math.floor(contextWindow / 8)))
 }
