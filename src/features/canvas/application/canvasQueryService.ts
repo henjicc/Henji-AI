@@ -37,9 +37,12 @@ function safeNodeData(node: CanvasNode, overview: boolean): Record<string, unkno
   }
 }
 
-function nodeSummary(node: CanvasNode, selectedNodeId: string | null = null, overview = false): Record<string, unknown> {
+// 通用实体读写（read_application_entity、change_application_entities）要的是带画布前缀的引用；
+// 只给 id 时模型会拿裸节点 id 去调通用能力，实测连续撞 ENTITY_NOT_FOUND
+function nodeSummary(projectId: string, node: CanvasNode, selectedNodeId: string | null = null, overview = false): Record<string, unknown> {
   return {
     id: node.id,
+    ref: { kind: 'canvas.node', id: `${projectId}:${node.id}` },
     type: node.type,
     position: { x: Math.round(node.position.x), y: Math.round(node.position.y) },
     selected: selectedNodeId === node.id,
@@ -110,7 +113,7 @@ export async function getCanvasProject(projectId: string): Promise<Record<string
       viewport: canvas?.currentViewport ?? project.viewport,
       selectedNodeId,
     },
-    nodes: nodes.slice(0, 100).map((node) => nodeSummary(node, selectedNodeId, true)),
+    nodes: nodes.slice(0, 100).map((node) => nodeSummary(projectId, node, selectedNodeId, true)),
     edges: edges.slice(0, 200).map(edgeSummary),
     truncated: nodes.length > 100 || edges.length > 200,
   }
@@ -127,7 +130,7 @@ export async function getCanvasNode(projectId: string, nodeId: string): Promise<
   const connectedEdges = edges
     .filter((edge) => edge.source === nodeId || edge.target === nodeId)
     .map(edgeSummary)
-  return { node: nodeSummary(node, canvas?.selectedNodeId ?? null), connectedEdges }
+  return { node: nodeSummary(projectId, node, canvas?.selectedNodeId ?? null), connectedEdges }
 }
 
 /**

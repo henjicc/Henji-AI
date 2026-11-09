@@ -105,7 +105,7 @@ export function registerCanvasCapabilityHandlers(
   registrar.registerHandler('get_canvas_node_schema', (input) => {
     const parsed = parseCapabilityInput<{ nodeType: string }>('get_canvas_node_schema', input)
     const schema = getCanvasNodeSchema(parsed.nodeType)
-    if (!schema) throw new Error('CANVAS_NODE_TYPE_NOT_FOUND')
+    if (!schema) throw new Error(`CANVAS_NODE_TYPE_NOT_FOUND:${parsed.nodeType} 不是画布节点类型；先用 search_canvas_node_types 查到类型名再读结构`)
     return { schema }
   })
 
