@@ -784,6 +784,7 @@
     "retry": "重试"
   },
   "agentModels": {
+    "reasoning": { "label": "思考程度", "info": "越高想得越周全，回复更慢、费用更高；关闭则不思考直接回答。按供应商生效，同一供应商的文本处理、字幕翻译等也一起改。", "modes": { "off": "关闭", "low": "低", "medium": "中", "high": "高", "max": "最高" } },
     "roles": {
       "primary": "主模型",
       "router": "分派模型",

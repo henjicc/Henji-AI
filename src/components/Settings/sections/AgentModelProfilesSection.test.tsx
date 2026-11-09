@@ -73,3 +73,20 @@ it('默认只摆主模型；分工模型收在高级设置里，复用主模型�
   // 分派、摘要复用主模型，备用、观察未配置：都没有自己的模型，只有主模型那一行有“详情”
   expect(screen.getAllByRole('button', { name: '详情' })).toHaveLength(1)
 })
+
+it('主模型支持思考时可选思考程度，写回它所在供应商；关闭保留原档位', async () => {
+  await i18n.changeLanguage('zh-CN')
+  const base = createDefaultLlmConfig()
+  const profile = base.agentProfiles.find(item => item.id === base.selectedAgentProfileId) ?? base.agentProfiles[0]
+  const config = { ...base,
+    models: base.models.map(model => model.providerId === profile.primary?.providerId && model.modelId === profile.primary?.modelId
+      ? { ...model, capabilities: { ...model.capabilities, reasoning: true } } : model),
+    providers: base.providers.map(provider => provider.providerId === profile.primary?.providerId
+      ? { ...provider, reasoningConfigurable: true, reasoning: { enabled: true, effort: 'high' as const } } : provider) }
+  const saveConfig = vi.fn()
+  render(<AgentModelProfilesSection config={config} saveConfig={saveConfig} />)
+  fireEvent.click(screen.getByRole('button', { name: '思考程度' }))
+  fireEvent.click(await screen.findByRole('option', { name: '关闭' }))
+  const saved = saveConfig.mock.calls[0][0]
+  expect(saved.providers.find((provider: { providerId: string }) => provider.providerId === profile.primary?.providerId).reasoning).toEqual({ enabled: false, effort: 'high' })
+})

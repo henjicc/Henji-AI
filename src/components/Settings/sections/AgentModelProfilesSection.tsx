@@ -26,7 +26,9 @@ import type {
   AgentModelRole,
   LlmConfigState,
   LlmModelConfig,
+  LlmReasoningConfig,
 } from '@henjicc/ai-sdk'
+import { resolveProviderReasoning } from './llmSettingsSectionHelpers'
 
 const logger = createLogger('components.Settings.AgentModelProfilesSection')
 const REUSE_PRIMARY = '__reuse_primary__'
@@ -46,6 +48,9 @@ interface ModelOption {
 
 /** 分工模型：默认复用主模型或不配置，大多数人不用动，收进高级设置 */
 const SECONDARY_ROLES: AgentModelRole[] = ['router', 'summarizer', 'fallback', 'observer']
+/** 思考档位存在供应商上（运行时与验证都读它）；“最高”对应供应商的最高档 */
+const REASONING_MODES = ['off', 'low', 'medium', 'high', 'max'] as const
+type ReasoningMode = typeof REASONING_MODES[number]
 
 interface RuntimeSettingField {
   key: keyof AgentModelProfile['settings']
@@ -241,6 +246,40 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
     })
   }
 
+  const renderReasoning = (): JSX.Element | null => {
+    const model = findModel(models, profile.primary)
+    const provider = config.providers.find(item => item.providerId === profile.primary?.providerId)
+    if (!model?.capabilities.reasoning || !provider || provider.reasoningConfigurable === false) return null
+    const reasoning = resolveProviderReasoning(provider)
+    const mode: ReasoningMode = !reasoning.enabled ? 'off' : reasoning.effort === 'xhigh' ? 'max' : reasoning.effort
+    const label = t('agentModels.reasoning.label')
+    return (
+      <UiFormRow label={label} info={t('agentModels.reasoning.info')} inline labelColumn="auto">
+        <Dropdown<ReasoningMode> size="sm"
+          value={mode}
+          display={t(`agentModels.reasoning.modes.${mode}`)}
+          ariaLabel={label}
+          options={REASONING_MODES.map(value => ({ value, label: t(`agentModels.reasoning.modes.${value}`) }))}
+          className={SETTINGS_INLINE_CONTROL_CLASS}
+          buttonClassName="w-full"
+          onSelect={next => void updateReasoning(provider.providerId, next === 'off' ? { ...reasoning, enabled: false } : { enabled: true, effort: next })}
+        />
+      </UiFormRow>
+    )
+  }
+
+  const updateReasoning = async (providerId: string, reasoning: LlmReasoningConfig): Promise<void> => {
+    await saveConfig({
+      ...config,
+      providers: config.providers.map(item => item.providerId === providerId ? { ...item, reasoning } : item),
+    })
+    logger.info('智能助手思考程度已更新', {
+      event: 'agent_model_profile.reasoning.updated',
+      providerId,
+      context: { profileId: profile.id, enabled: reasoning.enabled, effort: reasoning.effort },
+    })
+  }
+
   const toggleRoleDetails = (role: AgentModelRole): void => {
     setExpandedRoles(prev => {
       const next = new Set(prev)
@@ -333,6 +372,7 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
   return (
     <UiGroup gap="stack" labelWidth={120}>
       {renderRole('primary')}
+      {renderReasoning()}
 
       {/* 分工模型与超时、重试、长度上限对大多数人没有决策价值，收进高级设置，默认折叠 */}
       <div>

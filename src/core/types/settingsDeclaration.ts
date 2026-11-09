@@ -282,6 +282,7 @@ export const SETTINGS_DECLARATION = {
         search: [
           ...searchRows(16, [
             ['agentModels.roles.primary', ['助手', '智能体', 'assistant', 'agent', 'LLM']],
+            ['agentModels.reasoning.label', ['思考', '推理', 'reasoning', 'thinking', 'effort']],
             'agentModels.roles.router',
             'agentModels.roles.summarizer',
             'agentModels.roles.fallback',

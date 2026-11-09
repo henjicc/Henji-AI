@@ -201,6 +201,16 @@ describe('generation capability handlers（5.4：放宽提交）', () => {
     expect(mocks.submit.mock.calls[0][0].options).toEqual({ prompt: '草稿', __continuation: { id: 'finalize-draft', sourceModelId: 'continuation-canvas-source', reference: { taskId: 'provider-2' } } })
   })
 
+  it('画布节点作参考素材只能落到同一画布上（那里会连线），放生成页时直接说明怎么改', async () => {
+    const handler = registeredHandlers().get('create_visible_generation_task')!
+    await expect(handler({ modelId: testModel.meta.id, mediaType: 'image', prompt: '参考', destination: { mode: 'history' },
+      params: { uploadedImages: [{ kind: 'canvas.node', id: 'doc-1:image-1' }] } }, context)).rejects.toThrow(/画布节点只能作为画布上任务的参考素材/)
+    // 连线素材排在显式素材之后，混写会悄悄换掉顺序
+    await expect(handler({ modelId: testModel.meta.id, mediaType: 'image', prompt: '参考', destination: { mode: 'canvas', documentId: 'doc-1' },
+      params: { uploadedImages: [{ kind: 'asset', id: 'a' }, { kind: 'canvas.node', id: 'doc-1:image-1' }] } }, context)).rejects.toThrow(/不能混写画布节点/)
+    expect(mocks.submit).not.toHaveBeenCalled()
+  })
+
   it('只省略 mediaType 时从 modelId 对应的模型推断', async () => {
     const handler = registeredHandlers().get('create_visible_generation_task')
     if (!handler) throw new Error('HANDLER_NOT_FOUND')

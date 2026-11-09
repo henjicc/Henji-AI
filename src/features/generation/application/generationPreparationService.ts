@@ -93,7 +93,8 @@ function toSafeValue(value: unknown, depth = 0): unknown {
   if (typeof value === 'string') return value.slice(0, 500)
   if (typeof value === 'function' || typeof value === 'undefined') return undefined
   if (Array.isArray(value)) return value.slice(0, 50).map((item) => toSafeValue(item, depth + 1))
-  if (typeof value !== 'object' || depth >= 3) return undefined
+  // 输入上限按模式写在 rules[].images/videos 里，处于第 4 层；层数不够会把“切到参考模式可传视频”整条吞掉
+  if (typeof value !== 'object' || depth >= 6) return undefined
   return Object.fromEntries(
     Object.entries(value as Record<string, unknown>)
       .slice(0, 30)

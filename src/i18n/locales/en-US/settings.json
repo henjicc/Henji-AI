@@ -786,6 +786,7 @@
     "retry": "Retry"
   },
   "agentModels": {
+    "reasoning": { "label": "Thinking level", "info": "Higher levels reason more carefully but reply slower and cost more; Off answers without thinking. Applies to the whole provider, including text processing and subtitle translation.", "modes": { "off": "Off", "low": "Low", "medium": "Medium", "high": "High", "max": "Max" } },
     "roles": {
       "primary": "Main model",
       "router": "Dispatch model",

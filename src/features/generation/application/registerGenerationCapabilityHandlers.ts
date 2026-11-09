@@ -80,8 +80,56 @@ async function applyContinuation(parsed: GenerationInput, resolvedParams: Record
   }
 }
 
+const UPLOADED_MEDIA_FIELDS = ['uploadedImages', 'uploadedVideos', 'uploadedAudios'] as const
+
+function isCanvasNodeReference(value: unknown): value is { kind: 'canvas.node'; id: string } {
+  return typeof value === 'object' && value !== null && (value as { kind?: unknown }).kind === 'canvas.node'
+    && typeof (value as { id?: unknown }).id === 'string'
+}
+
+/**
+ * 参考素材写成画布节点时，落到同一画布的任务改为从这些节点连线取素材：画布上的参考关系要看得见，
+ * 不能只把图传给模型却不连线。其他落点拿不到画布连线，直接说明怎么改。
+ */
+function canvasNodeReferenceIds(input: GenerationInput, destination: GenerationDestination): string[] {
+  const refs = UPLOADED_MEDIA_FIELDS.flatMap(field => {
+    const values = Array.isArray(input.params?.[field]) ? input.params![field] as unknown[] : []
+    const nodes = values.filter(isCanvasNodeReference)
+    // 连线素材排在显式素材之后，混写会打乱“图1/图2”、首尾帧这类按顺序生效的输入
+    if (nodes.length && nodes.length !== values.length) {
+      throw new Error(`INVALID_INPUT:${field} 里不能混写画布节点和其他素材引用；都放到画布上用节点引用，或都改用 generation.result / asset。`)
+    }
+    return nodes
+  })
+  if (!refs.length) return []
+  if (destination.mode !== 'canvas') {
+    throw new Error('INVALID_INPUT:画布节点只能作为画布上任务的参考素材；把任务放到该画布（destination.mode="canvas"），或改用节点结果的 generation.result。')
+  }
+  const prefix = `${destination.documentId}:`
+  return refs.map(ref => {
+    if (!ref.id.startsWith(prefix)) {
+      throw new Error(`INVALID_INPUT:canvas.node 引用 ${ref.id} 不属于目标画布 ${destination.documentId}，应写成 ${prefix}<节点 id>。`)
+    }
+    return ref.id.slice(prefix.length)
+  })
+}
+
+function withoutCanvasNodeReferences(params: GenerationInput['params']): GenerationInput['params'] {
+  if (!params) return params
+  return Object.fromEntries(Object.entries(params).map(([key, value]) => [key,
+    (UPLOADED_MEDIA_FIELDS as readonly string[]).includes(key) && Array.isArray(value) ? value.filter(item => !isCanvasNodeReference(item)) : value]))
+}
+
 function generationDestination(input: GenerationInput): GenerationDestination {
-  const destination = defaultGenerationDestination(input)
+  const destination = continuationDestination(input, defaultGenerationDestination(input))
+  const referenced = canvasNodeReferenceIds(input, destination)
+  if (!referenced.length || destination.mode !== 'canvas') return destination
+  // 省略落点时默认会带上用户当前选中的节点；调用方已点名参考节点时只用点名的，不把选中项一起送给模型
+  const base = input.destination ? destination.sourceNodeIds : []
+  return { ...destination, sourceNodeIds: [...new Set([...base, ...referenced])] }
+}
+
+function continuationDestination(input: GenerationInput, destination: GenerationDestination): GenerationDestination {
   if (!input.continueFrom || destination.mode !== 'canvas') return destination
   // 续接靠平台引用，不把源结果当素材连进来；从画布结果续接时新节点放在它旁边。
   const from = input.continueFrom.kind === 'canvas.node' ? normalizeCanvasDocumentNodeIds(input.continueFrom) : input.continueFrom
@@ -98,7 +146,9 @@ function defaultGenerationDestination(input: GenerationInput): GenerationDestina
     : { mode: 'history' }
 }
 
-async function prepareInput(input: GenerationInput, destination = generationDestination(input)): Promise<ResolvedGenerationInput> {
+async function prepareInput(original: GenerationInput, destination = generationDestination(original)): Promise<ResolvedGenerationInput> {
+  // 画布节点引用已转成目标画布的来源连线，素材由连线解析，不再按上传素材解析
+  const input = { ...original, params: withoutCanvasNodeReferences(original.params) }
   // 续接时调用方参数先解析媒体引用，再叠到源结果参数上；源参数里已是解析好的本地路径。
   const ownParams = input.params !== undefined ? await resolveGenerationMediaReferences(input.params) : undefined
   const parsed = await applyContinuation(input, ownParams)
@@ -241,8 +291,10 @@ export function registerGenerationCapabilityHandlers(
   registrar.registerHandler('create_visible_generation_task', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<GenerationInput>('create_visible_generation_task', input)
-    const destination = generationDestination(parsed)
-    const resolved = await applicationWritePreflight(context, () => prepareInput(parsed, destination))
+    const { destination, resolved } = await applicationWritePreflight(context, async () => {
+      const destination = generationDestination(parsed)
+      return { destination, resolved: await prepareInput(parsed, destination) }
+    })
     const providerId = registry.getModel(resolved.modelId)?.meta.provider
     const unavailable = providerId && getProviderAvailabilityFailure(providerId, resolved.modelId)
     if (unavailable) throw new ApplicationPreflightFailure(new Error(`${unavailable.code}:${unavailable.message}`))

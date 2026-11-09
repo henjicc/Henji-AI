@@ -85,6 +85,14 @@ describe('generationPreparation', () => {
     expect(getGenerationModelSchema(kieGemini31FlashTtsModel.meta.id).priceEstimate).toMatchObject({ amount: 0.2351104, billingMode: 'estimated', basis: expect.stringContaining('上限估价') })
   })
 
+  it('按模式变化的输入上限完整交给助手：切到参考模式可传视频不能被截掉', () => {
+    registry.clear()
+    registry.register({ ...testModel, inputLimits: { images: { max: 2 }, videos: { max: 0 }, rules: [{ when: 'mode === "reference"', images: { max: 9 }, videos: { max: 3 } }] } })
+    expect(getGenerationModelSchema(testModel.meta.id).inputLimits).toMatchObject({
+      rules: [{ when: 'mode === "reference"', images: { max: 9 }, videos: { max: 3 } }],
+    })
+  })
+
   it('Qwen TTS discloses its actual upper estimate and failed calculators stay unknown', () => {
     const model = composeModelDefinition(bailianQwenAudio31TtsFlashModel, modelPresentations[bailianQwenAudio31TtsFlashModel.meta.id])
     registry.register(model)

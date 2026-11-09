@@ -108,10 +108,14 @@ export async function resolveCanvasGenerationOptions(input: GenerationPreparatio
     const outputs = getGraphNodeMediaOutputs(source, index)
     if (!outputs.length) throw new Error('参考节点还没有可用素材，请先完成原节点。')
     for (const output of outputs) {
-      const key = output.kind === 'image' ? 'images' : output.kind === 'video' ? 'videos' : output.kind === 'audio' ? 'audios' : null
-      if (!key) continue
-      const previous = Array.isArray(options[key]) ? options[key] as unknown[] : []
-      options[key] = [...new Set([...previous, output.url])]
+      const keys = output.kind === 'image' ? ['images', 'uploadedFilePaths'] : output.kind === 'video' ? ['videos', 'uploadedVideoFilePaths']
+        : output.kind === 'audio' ? ['audios', 'uploadedAudioFilePaths'] : null
+      if (!keys) continue
+      const [visible, paths] = keys
+      const previous = Array.isArray(options[visible]) ? options[visible] as unknown[] : []
+      options[visible] = [...new Set([...previous, output.url])]
+      // 数量检查优先读路径键：已有显式素材的路径时连线素材也要记进去，否则按少算的张数放行或拒绝
+      if (Array.isArray(options[paths]) && (options[paths] as unknown[]).length) options[paths] = [...new Set([...options[paths] as unknown[], output.url])]
     }
   }
   return options
