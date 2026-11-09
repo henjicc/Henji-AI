@@ -11,7 +11,7 @@ import {
 import { canvasNodeDefinitions } from '../domain/nodeRegistry';
 import { mediaPortId, paramPortId, promptPortId } from '../domain/socketTypes';
 import { collectInputMedia } from './graphMediaResolver';
-import { collectInputValues, resolveVisibleMediaInputPorts } from './graphValueResolver';
+import { collectInputValues, resolveMediaRowTargetHandles, resolveVisibleMediaInputPorts } from './graphValueResolver';
 import { planMediaConnections } from './mediaConnectionPlanner';
 
 const TEST_MODEL_ID = 'canvas-media-planner-image';
@@ -67,6 +67,33 @@ describe('mediaConnectionPlanner', () => {
     expect(plan.connections).toEqual([
       expect.objectContaining({ source: source.id, target: target.id, targetHandle: mediaPortId('image') }),
     ]);
+  });
+
+  it('参考素材行只露一个端口：视频连到这个端口时落到视频端口', () => {
+    registry.register({ ...testModel, meta: { ...testModel.meta, id: 'canvas-media-planner-video', type: 'video', tags: ['image-to-video'] },
+      inputLimits: { images: { max: 4 }, videos: { max: 2 }, audios: { max: 0 } }, params: [] });
+    const video = node(CANVAS_NODE_TYPES.videoUpload, 'video-1', { videoUrl: 'video://one' });
+    const target = node(CANVAS_NODE_TYPES.videoGen, 'target', { modelId: 'canvas-media-planner-video' });
+    const plan = planMediaConnections({
+      sourceNodeIds: [video.id],
+      targetNodeId: target.id,
+      nodes: [video, target],
+      edges: [],
+      preferredTargetHandle: mediaPortId('image'),
+    });
+
+    expect(plan.connections).toEqual([
+      expect.objectContaining({ source: video.id, target: target.id, targetHandle: mediaPortId('video') }),
+    ]);
+  });
+
+  it('从参考素材端口往外拖，候选端口包含这一行全部素材类型', () => {
+    registry.register({ ...testModel, meta: { ...testModel.meta, id: 'canvas-media-planner-video', type: 'video', tags: ['image-to-video'] },
+      inputLimits: { images: { max: 4 }, videos: { max: 2 }, audios: { max: 0 } }, params: [] });
+    const target = node(CANVAS_NODE_TYPES.videoGen, 'target', { modelId: 'canvas-media-planner-video' });
+    expect(resolveMediaRowTargetHandles(target, [target], [], mediaPortId('image')))
+      .toEqual([mediaPortId('image'), mediaPortId('video')]);
+    expect(resolveMediaRowTargetHandles(target, [target], [], promptPortId())).toEqual([promptPortId()]);
   });
 
   it('按选择顺序填充容量并过滤目标不支持的媒体', () => {

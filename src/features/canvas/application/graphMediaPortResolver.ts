@@ -211,3 +211,24 @@ function resolveTargetParams(targetNode: CanvasNode, nodes: CanvasNode[], edges:
     ...collectInputValues(targetNode.id, nodes, edges),
   };
 }
+
+/**
+ * 参考素材行把图片、视频、音频端口叠在同一处、只露出一个：从其中任一端口起拖，
+ * 等同于从这一行全部素材端口起拖。起拖端口排在最前，其余按行内顺序；非素材行端口原样返回。
+ */
+export function resolveMediaRowTargetHandles(
+  targetNode: CanvasNode,
+  nodes: CanvasNode[],
+  edges: CanvasEdge[],
+  handleId: string,
+): string[] {
+  const paramId = parseParamPortId(handleId);
+  if (!paramId || !mediaParamIdToKind(paramId)) return [handleId];
+  const rowHandles = resolveVisibleMediaInputPorts(targetNode, nodes, edges)
+    .map((port) => port.handleId)
+    .filter((candidate) => {
+      const candidateParamId = parseParamPortId(candidate);
+      return Boolean(candidateParamId && mediaParamIdToKind(candidateParamId));
+    });
+  return [handleId, ...rowHandles.filter((candidate) => candidate !== handleId)];
+}

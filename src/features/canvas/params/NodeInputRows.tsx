@@ -14,7 +14,7 @@ import type { CanvasImageCapabilityModelPolicy } from '@/features/canvas/capabil
 import {
   resolveGenerationMediaInputConstraints,
 } from '@/features/canvas/application/generationMediaInputConstraints';
-import { MediaInputRow } from './MediaInputRow';
+import { MediaInputsRow, type MediaInputSource } from './MediaInputRow';
 import { ModelInputRow } from './ModelInputRow';
 import { NodeParamRows } from './NodeParamRows';
 
@@ -41,7 +41,7 @@ interface NodeInputRowsProps {
   setParams: (changes: DynamicValueMap, options?: CanvasHistoryGroupOptions) => void;
   excludeParamIds?: string[];
   mediaInputs: Partial<Record<RowMediaKind, string[]>>;
-  onMediaInputChange: (kind: RowMediaKind, next: string[]) => void;
+  onMediaInputsChange: (changes: Partial<Record<RowMediaKind, string[]>>) => void;
   overrideModelId: string | null;
   onModelChange: (modelId: string) => void;
   incomingImages?: string[];
@@ -60,7 +60,7 @@ interface NodeInputRowsProps {
 }
 
 /**
- * 节点逐行输入编排：模型行 → 媒体行 → 标量参数行（参数顺序沿用各自 schema 的 order，
+ * 节点逐行输入编排：模型行 → 参考素材行 → 标量参数行（参数顺序沿用各自 schema 的 order，
  * "模式"一类的首要参数通常 order 较小，紧随模型行之后自然呈现）。
  * 提示词不在此渲染（由 GenerationNodeShell 的大输入框单独承载，仅暴露一个端口）。
  * 行的可见性与顺序完全由节点声明（accepts/schema）与模型 inputLimits 推导，无节点类型特判。
@@ -78,7 +78,7 @@ export function NodeInputRows({
   setParams,
   excludeParamIds,
   mediaInputs,
-  onMediaInputChange,
+  onMediaInputsChange,
   overrideModelId,
   onModelChange,
   incomingImages,
@@ -121,7 +121,20 @@ export function NodeInputRows({
     [schema, visibleParamIds],
   );
 
-  // 媒体行随模型/模式联动增减（如切到"参考生视频"多出视频行），端口位置随之下移
+  const mediaSources: MediaInputSource[] = mediaRows.map(({ kind, max, constraint }) => ({
+    kind,
+    maxCount: max,
+    inlineValue: mediaInputs[kind] ?? [],
+    onInlineChange: (next) => onMediaInputsChange({ [kind]: next }),
+    acceptedFileTypes: constraint?.accept,
+    maxFileSizeBytes: constraint?.maxSizeBytes,
+    videoTrimMaxClipSeconds: kind === 'video' ? limits.videoConstraints?.trim?.maxClipSeconds : undefined,
+    videoTrimMaxSizeMB: kind === 'video' ? limits.videoConstraints?.maxSizeMB : undefined,
+    videoTrimRange: kind === 'video' ? videoTrimRange : undefined,
+    onVideoTrimRangeChange: kind === 'video' ? onVideoTrimRangeChange : undefined,
+  }));
+
+  // 素材类型随模型/模式联动增减（如切到"参考生视频"多收视频），端口集合随之变化
   useNodeHandlesSync(nodeId, `${showModelInput ? 'model' : 'fixed'}|${mediaRows.map((row) => row.kind).join('|')}|${externalMediaHandle ?? ''}`);
 
   return (
@@ -138,24 +151,16 @@ export function NodeInputRows({
         />
       )}
 
-      {mediaRows.map(({ kind, max, constraint }) => (
-        <MediaInputRow
-          key={kind}
+      {/* 图片、视频、音频合成一行“参考素材”：一个端口、一个上传入口，进来后仍按类型分开存放与编号 */}
+      {mediaSources.length > 0 && (
+        <MediaInputsRow
           nodeId={nodeId}
-          mediaKind={kind}
-          showHandle={kind !== externalMediaHandle}
-          label={t(`node.mediaRow.${kind}`)}
-          maxCount={max}
-          inlineValue={mediaInputs[kind] ?? []}
-          onInlineChange={(next) => onMediaInputChange(kind, next)}
-          acceptedFileTypes={constraint?.accept}
-          maxFileSizeBytes={constraint?.maxSizeBytes}
-          videoTrimMaxClipSeconds={kind === 'video' ? limits.videoConstraints?.trim?.maxClipSeconds : undefined}
-          videoTrimMaxSizeMB={kind === 'video' ? limits.videoConstraints?.maxSizeMB : undefined}
-          videoTrimRange={kind === 'video' ? videoTrimRange : undefined}
-          onVideoTrimRangeChange={kind === 'video' ? onVideoTrimRangeChange : undefined}
+          label={mediaSources.length > 1 ? t('node.mediaRow.reference') : t(`node.mediaRow.${mediaSources[0].kind}`)}
+          sources={mediaSources}
+          onSourcesChange={onMediaInputsChange}
+          handleKinds={mediaSources.map((source) => source.kind).filter((kind) => kind !== externalMediaHandle)}
         />
-      ))}
+      )}
 
       <NodeParamRows
         dividerAbove={showModelInput || mediaRows.length > 0}

@@ -22,7 +22,9 @@ import { isParamPortId } from '@/features/canvas/domain/socketTypes'
 import {
   canSourceTypeConnectToTargetHandle,
   resolveCompatibleTargetHandleForSource,
+  resolveMediaRowTargetHandles,
 } from '@/features/canvas/application/graphValueResolver'
+import { useCanvasStore } from '@/stores/canvasStore'
 import {
   canNodeBeManualConnectionSource,
   canNodeTypeBeManualConnectionSource,
@@ -167,6 +169,12 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
   } = params
 
   const suppressNextPaneClickRef = useRef(false)
+
+  const targetHandlesFor = useCallback((targetNode: CanvasNode, handleId: string | null | undefined): Array<string | null> => (
+    handleId
+      ? resolveMediaRowTargetHandles(targetNode, nodes, useCanvasStore.getState().edges, handleId)
+      : [handleId ?? null]
+  ), [nodes])
   const [showNodeMenu, setShowNodeMenu] = useState(false)
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 })
   const [flowPosition, setFlowPosition] = useState({ x: 0, y: 0 })
@@ -224,11 +232,12 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
       }
     }
 
+    const targetHandles = targetHandlesFor(fromNode, pending.handleId)
     const compatibleDefinitions = Object.values(canvasNodeDefinitions)
       .filter((definition) => canNodeTypeBeManualConnectionSource(definition.type))
-      .filter((definition) => canSourceTypeConnectToTargetHandle(definition.type, fromNode, pending.handleId))
+      .filter((definition) => targetHandles.some((handle) => canSourceTypeConnectToTargetHandle(definition.type, fromNode, handle)))
     return aggregateQuickConnectMenuDefinitions(compatibleDefinitions)
-  }, [nodes])
+  }, [nodes, targetHandlesFor])
 
   const handlePaneClick = useCallback((event: ReactMouseEvent) => {
     if (suppressNextPaneClickRef.current) {
@@ -277,12 +286,15 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
           })
         }
       } else {
-        // 从某个输入端口拖出 → 新节点作为来源，对端端口沿用起拖时的具体 handle id
+        // 从某个输入端口拖出 → 新节点作为来源；参考素材行按新节点的素材类型落到对应端口
+        const targetNode = nodes.find((node) => node.id === pendingConnectStart.nodeId)
         connectNodes({
           source: newNodeId,
           target: pendingConnectStart.nodeId,
           sourceHandle: 'source',
-          targetHandle: pendingConnectStart.handleId ?? 'target',
+          targetHandle: (targetNode && targetHandlesFor(targetNode, pendingConnectStart.handleId)
+            .find((handle) => canSourceTypeConnectToTargetHandle(type, targetNode, handle)))
+            ?? pendingConnectStart.handleId ?? 'target',
         })
       }
     }
@@ -293,7 +305,7 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
     }
     scheduleCanvasPersist(0)
     clearMenu()
-  }, [addNode, clearMenu, connectNodes, flowPosition, menuUploadKinds, nodes, pendingConnectStart, scheduleCanvasPersist])
+  }, [addNode, clearMenu, connectNodes, flowPosition, menuUploadKinds, nodes, pendingConnectStart, scheduleCanvasPersist, targetHandlesFor])
 
   const handleConnectStart = useCallback(
     (event: MouseEvent | TouchEvent, params: OnConnectStartParams) => {
@@ -384,7 +396,9 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
 
         const targetHandle = sourceNode && targetNode
           ? (pendingConnectStart.handleType === 'target'
-            ? (pendingConnectStart.handleId ?? 'target')
+            ? (targetHandlesFor(targetNode, pendingConnectStart.handleId)
+              .find((handle) => canSourceTypeConnectToTargetHandle(sourceNode.type, targetNode, handle))
+              ?? pendingConnectStart.handleId ?? 'target')
             : resolveCompatibleTargetHandleForSource(
               sourceNode,
               targetNode.type,
@@ -501,7 +515,7 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
       suppressNextPaneClickRef.current = true
       setShowNodeMenu(true)
     },
-    [connectAssetGroup, connectNodes, nodes, pendingConnectStart, reactFlowInstance, resolveAllowedTypesForPending, scheduleCanvasPersist, wrapperRef]
+    [connectAssetGroup, connectNodes, nodes, pendingConnectStart, reactFlowInstance, resolveAllowedTypesForPending, scheduleCanvasPersist, targetHandlesFor, wrapperRef]
   )
 
   return {

@@ -168,7 +168,7 @@ export function useNodeModelParams({
     onParamsChange(stripMediaKeys(nextValues), options);
   }, [linkageEngine, onParamsChange, schema, values]);
 
-  // 画布媒体行走独立的 mediaInputs 通路（见 GenerationNodeShell.handleMediaInputChange），
+  // 画布媒体行走独立的 mediaInputs 通路（见 GenerationNodeShell.handleMediaInputsChange），
   // 不会像 NodeParamRows 里的标量参数那样自然调用 setParam/LinkageEngine.execute——
   // 这里在媒体内容变化时手动模拟 images/videos/audios 三个 trigger，让依赖它们的自动切换
   // （如"上传 2 张图 → 首尾帧"）也能在画布里跟对话面板一样生效。用 ref 读取最新

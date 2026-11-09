@@ -426,6 +426,7 @@
     },
     "mediaRow": {
       "itemLabel": "{{kind}} {{index}}",
+      "reference": "参考素材",
       "remove": "移除",
       "image": "图片",
       "video": "视频",

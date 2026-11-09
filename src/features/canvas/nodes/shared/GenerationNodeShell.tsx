@@ -183,7 +183,7 @@ export const GenerationNodeShell = memo(({
   const effectivePromptDocument = promptState.document;
   const promptReferences = promptState.references;
   const handlePromptChange = promptState.handleChange;
-  const handleMediaInputChange = promptState.handleMediaInputChange;
+  const handleMediaInputsChange = promptState.handleMediaInputsChange;
 
   const { videoTrimRange, handleVideoTrimRangeChange } = useNodeVideoTrimRange({
     nodeId: id,
@@ -353,7 +353,7 @@ export const GenerationNodeShell = memo(({
         setParams={setParams}
         excludeParamIds={excludedSchemaParamIds}
         mediaInputs={mediaInputs}
-        onMediaInputChange={handleMediaInputChange}
+        onMediaInputsChange={handleMediaInputsChange}
         overrideModelId={overrideModelId}
         onModelChange={handleModelChange}
         incomingImages={effectiveImages}

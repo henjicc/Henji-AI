@@ -7,7 +7,7 @@ const limits = vi.hoisted(() => ({ images: { max: 1 }, videos: { max: 0 }, audio
 vi.mock('@/core/inputs/inputLimits', () => ({ resolveInputLimits: () => limits }))
 vi.mock('@/features/canvas/hooks/useNodeHandlesSync', () => ({ useNodeHandlesSync: vi.fn() }))
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
-vi.mock('./MediaInputRow', () => ({ MediaInputRow: () => <div data-testid="media-row" /> }))
+vi.mock('./MediaInputRow', () => ({ MediaInputsRow: () => <div data-testid="media-row" /> }))
 vi.mock('./ModelInputRow', () => ({ ModelInputRow: () => null }))
 vi.mock('./NodeParamRows', () => ({ NodeParamRows: () => null }))
 afterEach(() => { cleanup(); limits.images.max = 1 })
@@ -15,7 +15,7 @@ afterEach(() => { cleanup(); limits.images.max = 1 })
 const props: Parameters<typeof NodeInputRows>[0] = {
   nodeId: 'node', modelId: 'model', mediaType: 'image', acceptedMediaKinds: ['image'],
   externalMediaHandle: 'image', schema: [], values: {}, setParam: vi.fn(), setParams: vi.fn(),
-  mediaInputs: {}, onMediaInputChange: vi.fn(), overrideModelId: null,
+  mediaInputs: {}, onMediaInputsChange: vi.fn(), overrideModelId: null,
   onModelChange: vi.fn(), incomingImages: ['source.png'],
 }
 describe('工作面单图输入不重复显示', () => {

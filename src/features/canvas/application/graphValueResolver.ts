@@ -6,6 +6,7 @@ export type {
 export {
   getDeclaredSourceMediaKind,
   resolveConnectionSourceMediaKind,
+  resolveMediaRowTargetHandles,
   resolveVisibleMediaInputPorts,
   sourceEmitsMediaKind,
 } from './graphMediaPortResolver';

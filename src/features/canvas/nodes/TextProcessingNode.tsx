@@ -42,7 +42,7 @@ import {
   type RowMediaKind,
 } from '@/features/canvas/domain/socketTypes'
 import { useNodeHandlesSync } from '@/features/canvas/hooks/useNodeHandlesSync'
-import { MediaInputRow } from '@/features/canvas/params/MediaInputRow'
+import { MediaInputsRow } from '@/features/canvas/params/MediaInputRow'
 import { TextProcessingModelRow } from '@/features/canvas/params/TextProcessingModelRow'
 import { GenerationPromptEditor } from '@/features/canvas/nodes/shared/GenerationPromptEditor'
 import { useGenerationPromptDocument } from '@/features/canvas/nodes/shared/useGenerationPromptDocument'
@@ -313,17 +313,20 @@ export const TextProcessingNode = memo(({
             onSelect={handlePromptTemplateSelect}
             onSaveTemplates={handlePromptTemplatesSave}
           />
-          {acceptedMediaKinds.map((kind) => (
-            <MediaInputRow
-              key={kind}
+          {acceptedMediaKinds.length > 0 && (
+            <MediaInputsRow
               nodeId={id}
-              mediaKind={kind}
-              label={t(`node.mediaRow.${kind}`)}
-              maxCount={MEDIA_LIMITS[kind]}
-              inlineValue={mediaInputs[kind] ?? []}
-              onInlineChange={(next) => promptState.handleMediaInputChange(kind, next)}
+              label={acceptedMediaKinds.length > 1 ? t('node.mediaRow.reference') : t(`node.mediaRow.${acceptedMediaKinds[0]}`)}
+              sources={acceptedMediaKinds.map((kind) => ({
+                kind,
+                maxCount: MEDIA_LIMITS[kind],
+                inlineValue: mediaInputs[kind] ?? [],
+                onInlineChange: (next: string[]) => promptState.handleMediaInputsChange({ [kind]: next }),
+              }))}
+              onSourcesChange={promptState.handleMediaInputsChange}
+              handleKinds={acceptedMediaKinds}
             />
-          ))}
+          )}
           {hasNonDisplayConsumer && (
             <div
               className={NODE_ROW_CLASS}

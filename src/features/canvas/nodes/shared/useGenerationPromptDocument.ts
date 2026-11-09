@@ -54,7 +54,8 @@ export interface UseGenerationPromptDocumentResult {
   references: PromptReferenceItem[]
   mediaUrls: Record<RowMediaKind, string[]>
   handleChange: (document: PromptDocumentV1) => void
-  handleMediaInputChange: (kind: RowMediaKind, values: string[]) => void
+  /** 一次提交一类或多类素材的本地值；多类一起上传时必须一次合并，否则后写的会用旧值覆盖先写的 */
+  handleMediaInputsChange: (changes: Partial<Record<RowMediaKind, string[]>>) => void
   onEditEnd: () => void
 }
 
@@ -143,8 +144,8 @@ export function useGenerationPromptDocument({
     }
   }, [editHistory.historyGroup, invalid, nodeId, onValidContent, references, updateNodeData])
 
-  const handleMediaInputChange = useCallback((kind: RowMediaKind, next: string[]): void => {
-    const nextMediaInputs = { ...mediaInputs, [kind]: next }
+  const handleMediaInputsChange = useCallback((changes: Partial<Record<RowMediaKind, string[]>>): void => {
+    const nextMediaInputs = { ...mediaInputs, ...changes }
     const nextCarrier = resolveCanvasGenerationPrompt({
       nodeId,
       document: resolvedCarrier.document,
@@ -183,7 +184,7 @@ export function useGenerationPromptDocument({
     references,
     mediaUrls: resolvedCarrier.mediaUrls,
     handleChange,
-    handleMediaInputChange,
+    handleMediaInputsChange,
     onEditEnd: editHistory.onEditEnd,
   }
 }
