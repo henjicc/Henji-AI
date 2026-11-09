@@ -1,0 +1,67 @@
+{
+  "version": 2,
+  "minReaderVersion": 1,
+  "content": {
+    "providers": [
+      {
+        "providerId": "synthetic",
+        "displayName": "合成测试供应商",
+        "adapter": "openai",
+        "enabled": false
+      }
+    ],
+    "models": [],
+    "promptProfiles": [
+      {
+        "id": "smart-prompt-optimizer",
+        "name": "智能优化",
+        "providerId": "",
+        "modelId": "",
+        "systemPrompt": "",
+        "userTemplate": "",
+        "capabilities": {
+          "text": true,
+          "image": false,
+          "video": false
+        },
+        "reasoning": {
+          "enabled": true,
+          "effort": "low"
+        },
+        "isDefault": true,
+        "enabled": true,
+        "createdAt": "2026-10-09T00:00:00.000Z",
+        "updatedAt": "2026-10-09T00:00:00.000Z"
+      }
+    ],
+    "selectedPromptProfileId": "smart-prompt-optimizer",
+    "textProcessingPromptTemplates": [],
+    "agentProfiles": [
+      {
+        "id": "golden-agent",
+        "name": "测试助手",
+        "primary": {
+          "providerId": "synthetic",
+          "modelId": "test"
+        },
+        "settings": {
+          "timeoutMs": 60000,
+          "maxRetries": 0,
+          "maxOutputTokens": 4096,
+          "contextWindowBudget": 64000
+        },
+        "verifications": [],
+        "createdAt": "2026-10-09T00:00:00.000Z",
+        "updatedAt": "2026-10-09T00:00:00.000Z"
+      }
+    ],
+    "tools": [],
+    "policy": {
+      "allowedTools": [],
+      "requireHumanConfirmation": true
+    },
+    "memory": {
+      "longTermNamespace": "golden"
+    }
+  }
+}

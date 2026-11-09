@@ -10,8 +10,10 @@ export const IMAGE_HEADER_VERSION = 1
 export const IMAGE_PACKAGE_VERSION = 14
 export const IMAGE_WORKING_VERSION = 16
 export const CANVAS_LAYER_PACKAGE_VERSION = 14
-export const LLM_CONFIG_VERSION = 1
-export const LLM_JOURNAL_VERSION = 1
+export const LLM_CONFIG_VERSION = 2
+/** 第 2 版只加入智能优化方案与可选 reasoning，第 1 版程序仍能正确打开 */
+export const LLM_CONFIG_MIN_READER_VERSION = 1
+export const LLM_JOURNAL_VERSION = 2
 export const KEYSTORE_VERSION = 1
 export const MEDIA_GRANTS_VERSION = 1
 export const THEME_STORAGE_VERSION = 1

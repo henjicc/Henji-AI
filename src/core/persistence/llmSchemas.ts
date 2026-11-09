@@ -17,7 +17,7 @@ const provider = z.looseObject({
 const promptProfile = z.looseObject({
   id: z.string(), name: z.string(), providerId: z.string(), modelId: z.string(), systemPrompt: z.string(),
   systemPromptDocument: persistedPromptDocumentSchema.optional(), userTemplate: z.string(), userTemplateDocument: persistedPromptDocumentSchema.optional(),
-  capabilities: z.looseObject({ text: z.boolean(), image: z.boolean(), video: z.boolean() }),
+  capabilities: z.looseObject({ text: z.boolean(), image: z.boolean(), video: z.boolean() }), reasoning: reasoning.optional(),
   isDefault: z.boolean(), enabled: z.boolean(), createdAt: z.string(), updatedAt: z.string(),
 })
 /** Host-owned persisted shape; SDK model/provider extensions are preserved. */

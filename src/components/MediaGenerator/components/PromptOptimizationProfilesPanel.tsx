@@ -16,7 +16,8 @@ import {
 } from '@/components/ui'
 import Dropdown from '@/components/ui/Dropdown'
 import { toLegacyPromptString, type PromptDocumentV1 } from '@/core/inputs/promptDocument'
-import { DEFAULT_DEEPSEEK_PROVIDER_ID, createDefaultLlmConfig } from '@/core/llm/defaults'
+import { DEFAULT_DEEPSEEK_PROVIDER_ID, createDefaultLlmConfig, isSmartPromptProfile } from '@/core/llm/defaults'
+import { ASSISTANT_REASONING_MODES, assistantProfile, type AssistantReasoningMode } from '@/core/llm/assistantModelChoice'
 import {
   buildPromptOptimizationCapabilities,
   listPromptOptimizationModelCandidates,
@@ -29,7 +30,7 @@ import {
   PROMPT_OPTIMIZATION_EDITOR_VARIABLES,
   readPromptOptimizationProfileDocument,
 } from '@/core/llm/promptOptimization'
-import type { LlmConfigState, LlmProviderConfig, PromptOptimizationProfile } from '@henjicc/ai-sdk'
+import type { LlmConfigState, LlmProviderConfig, LlmReasoningConfig, PromptOptimizationProfile } from '@henjicc/ai-sdk'
 import { llmConfigService } from '@/services/llm'
 
 interface PromptOptimizationProfilesPanelProps {
@@ -73,6 +74,18 @@ function describeProfileModel(config: LlmConfigState, profile: PromptOptimizatio
   return [providerName ?? profile.providerId, modelName ?? profile.modelId].join(' / ')
 }
 
+/** 跟随助手时供应商留空；面板里用这个值代表“跟随助手”选项 */
+const FOLLOW_ASSISTANT = ''
+
+function toReasoningMode(reasoning: LlmReasoningConfig | undefined): AssistantReasoningMode {
+  if (!reasoning || !reasoning.enabled) return 'off'
+  return reasoning.effort === 'xhigh' ? 'max' : reasoning.effort
+}
+
+function fromReasoningMode(mode: AssistantReasoningMode): LlmReasoningConfig {
+  return mode === 'off' ? { enabled: false, effort: 'low' } : { enabled: true, effort: mode }
+}
+
 function buildProviderOptions(config: LlmConfigState): LlmProviderConfig[] {
   const referencedProviderIds = new Set(config.promptProfiles.map(profile => profile.providerId))
   referencedProviderIds.add(DEFAULT_DEEPSEEK_PROVIDER_ID)
@@ -113,6 +126,7 @@ export function PromptOptimizationProfilesPanel({
   onConfigChange,
 }: PromptOptimizationProfilesPanelProps): JSX.Element {
   const { t } = useTranslation('ui')
+  const { t: tSettings } = useTranslation('settings')
   const profiles = useMemo(() => config?.promptProfiles ?? [], [config?.promptProfiles])
   const activeConfig = useMemo(() => config ?? createDefaultLlmConfig(), [config])
   const selectedProfile = useMemo(() => {
@@ -171,7 +185,7 @@ export function PromptOptimizationProfilesPanel({
   }
 
   const deleteSelected = (): void => {
-    if (!selectedProfile || profiles.length <= 1) return
+    if (!selectedProfile || profiles.length <= 1 || isSmartPromptProfile(selectedProfile)) return
     const nextProfiles = profiles.filter(profile => profile.id !== selectedProfile.id)
     const hasDefault = nextProfiles.some(profile => profile.isDefault)
     if (!hasDefault && nextProfiles[0]) {
@@ -204,6 +218,28 @@ export function PromptOptimizationProfilesPanel({
     models: activeConfig.models,
   }
   const modelOptions = listPromptOptimizationModelCandidates(modelSource, selectedProfile.providerId)
+  const smart = isSmartPromptProfile(selectedProfile)
+  const assistantModel = assistantProfile(activeConfig)?.primary
+  const following = smart && !selectedProfile.providerId
+  // 智能优化跟随助手时，思考程度按助手的模型判断能不能调
+  const effectiveModel = following ? assistantModel : selectedProfile
+  const effectiveModelConfig = effectiveModel
+    ? activeConfig.models.find(model => model.providerId === effectiveModel.providerId && model.modelId === effectiveModel.modelId)
+    : undefined
+  const effectiveProvider = effectiveModel
+    ? activeConfig.providers.find(provider => provider.providerId === effectiveModel.providerId)
+    : undefined
+  // 与助手的思考档位同一判断：模型能思考、供应商已启用且允许调
+  const reasoningAdjustable = Boolean(effectiveModelConfig?.capabilities.reasoning
+    && effectiveProvider?.enabled && effectiveProvider.reasoningConfigurable !== false)
+  const describeModel = (profile: PromptOptimizationProfile): string => {
+    if (isSmartPromptProfile(profile) && !profile.providerId) {
+      return assistantModel?.modelId
+        ? `${t('promptProfileFields.followAssistant')} · ${describeProfileModel(activeConfig, { ...profile, ...assistantModel })}`
+        : t('promptProfileFields.followAssistant')
+    }
+    return profile.modelId ? describeProfileModel(activeConfig, profile) : '未选择模型'
+  }
   const systemPromptDocument = readPromptOptimizationProfileDocument(selectedProfile, 'systemPrompt')
   const userTemplateDocument = readPromptOptimizationProfileDocument(selectedProfile, 'userTemplate')
 
@@ -250,7 +286,7 @@ export function PromptOptimizationProfilesPanel({
                 <span className="block truncate text-sm">{profile.name}</span>
                 <span className={`block truncate text-xs text-text3`}>
                   {/* 显示供应商与模型的名称，不显示内部 id（任务 5.3，信息准入） */}
-                  {profile.modelId ? describeProfileModel(activeConfig, profile) : '未选择模型'}
+                  {describeModel(profile)}
                 </span>
               </span>
               {profile.isDefault ? <Star size={UI_ICON_SIZE.sm} className="text-text2" /> : null}
@@ -263,25 +299,38 @@ export function PromptOptimizationProfilesPanel({
         </div>
 
         <div className="space-y-3 p-1">
-          <UiInput
-            value={selectedProfile.name}
-            onChange={(event) => patchProfile({ name: event.target.value })}
-            placeholder="配置名称"
-          />
+          {smart ? (
+            <div className={UI_TEXT_PANEL_TITLE_CLASS}>{selectedProfile.name}</div>
+          ) : (
+            <UiInput
+              value={selectedProfile.name}
+              onChange={(event) => patchProfile({ name: event.target.value })}
+              placeholder="配置名称"
+            />
+          )}
 
           <UiGroup labelWidth={96}>
             <UiFormRow label={t('promptProfileFields.provider')}>
             <Dropdown
               ariaLabel={t('promptProfileFields.provider')}
               value={selectedProfile.providerId}
-              display={providerOptions.find(provider => provider.providerId === selectedProfile.providerId)?.displayName
-                ?? (selectedProfile.providerId || '未选择供应商')}
-              options={providerOptions.map(provider => ({
-                value: provider.providerId,
-                label: provider.displayName,
-              }))}
+              display={following
+                ? t('promptProfileFields.followAssistant')
+                : providerOptions.find(provider => provider.providerId === selectedProfile.providerId)?.displayName
+                  ?? (selectedProfile.providerId || '未选择供应商')}
+              options={[
+                ...(smart ? [{ value: FOLLOW_ASSISTANT, label: t('promptProfileFields.followAssistant') }] : []),
+                ...providerOptions.map(provider => ({
+                  value: provider.providerId,
+                  label: provider.displayName,
+                })),
+              ]}
               onSelect={(providerId) => {
                 const nextProviderId = String(providerId)
+                if (smart && nextProviderId === FOLLOW_ASSISTANT) {
+                  patchProfile({ providerId: '', modelId: '', capabilities: buildPromptOptimizationCapabilities(null) })
+                  return
+                }
                 const model = selectPromptOptimizationModel(modelSource, nextProviderId)
                 patchProfile({
                   providerId: nextProviderId,
@@ -293,6 +342,7 @@ export function PromptOptimizationProfilesPanel({
             />
 
             </UiFormRow>
+            {following ? null : (
             <UiFormRow label={t('promptProfileFields.model')}>
             <Dropdown
               ariaLabel={t('promptProfileFields.model')}
@@ -314,8 +364,22 @@ export function PromptOptimizationProfilesPanel({
               className="w-full"
             />
             </UiFormRow>
+            )}
+            {smart && reasoningAdjustable ? (
+              <UiFormRow label={t('promptProfileFields.reasoning')}>
+                <Dropdown<AssistantReasoningMode>
+                  ariaLabel={t('promptProfileFields.reasoning')}
+                  value={toReasoningMode(selectedProfile.reasoning)}
+                  display={tSettings(`agentModels.reasoning.modes.${toReasoningMode(selectedProfile.reasoning)}`)}
+                  options={ASSISTANT_REASONING_MODES.map(mode => ({ value: mode, label: tSettings(`agentModels.reasoning.modes.${mode}`) }))}
+                  onSelect={(mode) => patchProfile({ reasoning: fromReasoningMode(mode) })}
+                  className="w-full"
+                />
+              </UiFormRow>
+            ) : null}
           </UiGroup>
 
+          {smart ? null : (<>
           <PromptTemplateEditor
             value={systemPromptDocument}
             onChange={(value) => patchTemplateDocument('systemPrompt', value)}
@@ -351,6 +415,7 @@ export function PromptOptimizationProfilesPanel({
               启用
             </label>
           </div>
+          </>)}
           <div className="flex flex-wrap gap-2 pt-1">
             <UiButton
               type="button"
@@ -361,15 +426,17 @@ export function PromptOptimizationProfilesPanel({
               <Save  className="mr-2" />
               设为默认
             </UiButton>
-            <UiButton
-              type="button"
-              variant="secondary"
-              onClick={deleteSelected}
-              disabled={profiles.length <= 1}
-            >
-              <Trash2  className="mr-2" />
-              删除配置
-            </UiButton>
+            {smart ? null : (
+              <UiButton
+                type="button"
+                variant="secondary"
+                onClick={deleteSelected}
+                disabled={profiles.length <= 1}
+              >
+                <Trash2  className="mr-2" />
+                删除配置
+              </UiButton>
+            )}
           </div>
         </div>
       </div>

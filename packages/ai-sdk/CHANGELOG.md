@@ -1,5 +1,9 @@
 # Changelog
 
+## 未发布
+
+- `PromptOptimizationProfile` 新增可选 `reasoning`（`LlmReasoningConfig`）：方案可以自带思考设置，省略时沿用供应商的设置。
+
 ## 0.12.0 - 2026-11-10
 
 - 火山 SeedASR 2.0 实时识别支持热词直传：供应商选项 `hotwords: string[]` 写入首帧 `request.corpus.context`（无权重；官方写双向流式 100 tokens，实测未见截断或报错，服务端实际上限未知）。

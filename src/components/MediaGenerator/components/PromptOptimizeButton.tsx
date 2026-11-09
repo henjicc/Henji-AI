@@ -34,6 +34,9 @@ import {
   resolvePromptOptimizationProfile,
 } from './promptOptimizeRequest'
 import { describeLlmProviderError } from '@/core/llm/providerErrorMessage'
+import { isSmartPromptProfile } from '@/core/llm/defaults'
+import { SMART_PROMPT_USER_TEMPLATE } from '@/core/llm/promptGuideRouting'
+import { planSmartPromptOptimization } from '@/services/llm/smartPromptOptimization'
 const logger = createLogger('components.MediaGenerator.PromptOptimizeButton')
 // 先等 PanelTrigger 的收起动画（UI_DURATION.base）走完再换内容重开，与共享浮层同档
 const PANEL_SWITCH_ANIMATION_MS = UI_DURATION.base
@@ -97,6 +100,8 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
     readPromptOptimizationButtonBehavior()
   )
   const activeRequestIdRef = useRef<string | null>(null)
+  // 智能优化选指南的那次调用不归主请求的 requestId 管，取消时单独中止
+  const routingAbortRef = useRef<AbortController | null>(null)
   const cancelledRequestIdRef = useRef<string | null>(null)
   const closePanelRef = useRef<() => void>(() => undefined)
   const openPanelRef = useRef<() => void>(() => undefined)
@@ -174,6 +179,7 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
     const requestId = activeRequestIdRef.current
     if (!requestId) return
     cancelledRequestIdRef.current = requestId
+    routingAbortRef.current?.abort()
     void llmCancelTask(requestId).catch(error => {
       logger.error('[PromptOptimize] 取消优化失败', error)
     })
@@ -254,6 +260,20 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
       item.providerId === profile.providerId && item.modelId === profile.modelId
     )) ?? null
     const uploadService = UploadService.getInstance()
+    const smart = isSmartPromptProfile(profile)
+    // 供应商不允许调思考时以供应商为准，方案里的思考设置只在可调时生效
+    const reasoning = provider?.reasoningConfigurable === false ? provider.reasoning : (profile.reasoning ?? provider?.reasoning)
+    // 智能优化的规则来自技能，用户模板固定；其余方案沿用自己的模板
+    const requestProfile = smart ? { ...profile, userTemplate: SMART_PROMPT_USER_TEMPLATE } : profile
+    const modelRequest = {
+      providerId: profile.providerId,
+      providerFamilyId: provider?.providerFamilyId,
+      endpointProfile: provider?.endpointProfile,
+      credentialId: provider?.credentialId,
+      modelId: profile.modelId,
+      adapter: provider?.adapter ?? profile.providerId,
+      baseUrl: provider?.baseUrl,
+    }
     setStreaming(true)
     setOutput('')
     const requestId = createPromptOptimizationRequestId()
@@ -272,9 +292,28 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
         videoCount: uploadedVideos.length,
         targetModel,
       }
+      const systemContent = smart
+        ? (await planSmartPromptOptimization({
+            signal: (routingAbortRef.current = new AbortController()).signal,
+            prompt: currentPrompt,
+            modelName: targetModel?.modelName,
+            modelType: targetModel?.modelType,
+            modelTags: targetModel?.modelFunctions,
+            imageCount: uploadedImages.length,
+            videoCount: uploadedVideos.length,
+            mediaSummary: renderPromptOptimizationTemplate('{{media.summary}}', templateContext),
+            routingRequest: {
+              ...modelRequest,
+              // 选指南是一道选择题：不开思考、不带素材；供应商不让调思考时按它的设置
+              reasoning: provider?.reasoningConfigurable === false ? provider.reasoning : { enabled: false, effort: 'low' },
+              capabilities: { text: true, image: false, video: false, streaming: true, reasoning: optimizerModel?.capabilities.reasoning === true },
+              metadata: { source: 'prompt-optimizer-route' },
+            },
+          })).systemPrompt
+        : renderPromptOptimizationTemplate(profile.systemPrompt, templateContext)
       const userMessage = await buildPromptOptimizationUserMessageWithAttachments(
         currentPrompt,
-        profile,
+        requestProfile,
         uploadedImages,
         uploadedFilePaths,
         uploadedVideos,
@@ -282,18 +321,14 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
         uploadedVideoFilePaths,
         targetModel,
       )
+      // 选指南、整理素材期间可能已取消或开了新一轮，只有仍是当前这一轮才发起付费请求
+      if (activeRequestIdRef.current !== requestId) return false
       await llmChatStream({
         requestId,
-        providerId: profile.providerId,
-        providerFamilyId: provider?.providerFamilyId,
-        endpointProfile: provider?.endpointProfile,
-        credentialId: provider?.credentialId,
-        modelId: profile.modelId,
-        adapter: provider?.adapter ?? profile.providerId,
-        baseUrl: provider?.baseUrl,
-        reasoning: provider?.reasoning,
+        ...modelRequest,
+        reasoning,
         messages: [
-          { role: 'system', content: renderPromptOptimizationTemplate(profile.systemPrompt, templateContext) },
+          { role: 'system', content: systemContent },
           userMessage,
         ],
         capabilities: {
@@ -343,11 +378,13 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
       })
       return true
     } catch (error) {
-      if (cancelledRequestIdRef.current === requestId) {
-        cancelledRequestIdRef.current = null
+      // 已取消或已被新一轮取代：不提示、不收尾，免得把新一轮的状态清掉
+      if (activeRequestIdRef.current !== requestId) {
+        if (cancelledRequestIdRef.current === requestId) cancelledRequestIdRef.current = null
         return false
       }
       const message = error instanceof Error ? error.message : String(error)
+      logger.error('[PromptOptimize] 优化失败', error, { event: 'prompt_optimization.failed', context: { profileId: profile.id } })
       if (!failureReported) onAlert('提示词优化失败', describeLlmProviderError(message), 'error')
       finishStreaming()
       return false

@@ -96,3 +96,24 @@ export function applyPromptOptimizationModelSelection(
     capabilities: buildPromptOptimizationCapabilities(model),
   }
 }
+
+/**
+ * 智能优化实际用哪个模型：方案里选了且可用就用它，否则跟随智能助手的主模型，助手模型也不可用时
+ * 按统一策略自动挑。结果只用于这次请求，不写回配置，方案保持“跟随助手”。
+ */
+export function resolveSmartPromptOptimizationProfile(
+  profile: PromptOptimizationProfile,
+  source: PromptOptimizationModelSource,
+  assistantModel: PromptOptimizationModelReference | undefined,
+): PromptOptimizationProfile {
+  const model = findPromptOptimizationModel(source, profile)
+    ?? (assistantModel ? findPromptOptimizationModel(source, assistantModel) : null)
+    ?? selectPromptOptimizationModel(source)
+  if (!model) return profile
+  return {
+    ...profile,
+    providerId: model.providerId,
+    modelId: model.modelId,
+    capabilities: buildPromptOptimizationCapabilities(model),
+  }
+}

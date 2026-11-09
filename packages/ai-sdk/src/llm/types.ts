@@ -187,6 +187,8 @@ export interface PromptOptimizationProfile {
   userTemplate: string
   userTemplateDocument?: unknown
   capabilities: Pick<LlmCapabilities, 'text' | 'image' | 'video'>
+  /** 这个方案自己的思考设置；省略时沿用所选模型供应商的思考设置 */
+  reasoning?: LlmReasoningConfig
   isDefault: boolean
   enabled: boolean
   createdAt: string

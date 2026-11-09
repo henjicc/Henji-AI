@@ -108,8 +108,8 @@
       "minReaderVersion": 1
     },
     "llm-config": {
-      "version": 1,
-      "fingerprint": "76559e91a6e3061e1968022aa4170007a1418ced0fa1f0541ca06dea7c902d82",
+      "version": 2,
+      "fingerprint": "419b2d11bd3a20c65cd0f8951908d113f43d4502afbe5014fd64bd3b53d1b66c",
       "supportedFrom": 1,
       "minReaderVersion": 1
     },
@@ -120,10 +120,10 @@
       "minReaderVersion": 1
     },
     "llm-config-journal": {
-      "version": 1,
-      "fingerprint": "1291e2000348078e6c5b3a0ed666bdf781eaaacf27ca555132db19eb47ecbde9",
+      "version": 2,
+      "fingerprint": "6ecf943af3031cf9ef25becc0e054722b060a664a4dcd23ad5429005b0301c23",
       "supportedFrom": 1,
-      "minReaderVersion": 1
+      "minReaderVersion": 2
     },
     "document.video_edit": {
       "version": 75,

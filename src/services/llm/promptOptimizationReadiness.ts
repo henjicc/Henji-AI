@@ -1,8 +1,11 @@
 import { llmGetProviderKeyStatus } from '@/commands/llmRuntime'
 import { createLogger } from '@/core/logging'
+import { assistantProfile } from '@/core/llm/assistantModelChoice'
+import { isSmartPromptProfile } from '@/core/llm/defaults'
 import {
   applyPromptOptimizationModelSelection,
   listPromptOptimizationModelCandidates,
+  resolveSmartPromptOptimizationProfile,
   type PromptOptimizationModelSource,
 } from '@/core/llm/promptOptimizationModelSelection'
 import type { LlmConfigState, PromptOptimizationProfile } from '@henjicc/ai-sdk'
@@ -69,6 +72,8 @@ function applySelectionToConfig(
 ): LlmConfigState | null {
   let changed = false
   const promptProfiles = config.promptProfiles.map((profile) => {
+    // 智能优化不写入自动选择的模型，保持跟随助手
+    if (isSmartPromptProfile(profile)) return profile
     const nextProfile = applyPromptOptimizationModelSelection(profile, source)
     if (nextProfile !== profile) changed = true
     return nextProfile
@@ -112,6 +117,11 @@ export async function resolvePromptOptimizationReadiness(
       : { status: 'missing-model' }
   }
   if (!profile) return { status: 'missing-model' }
+
+  if (isSmartPromptProfile(profile)) {
+    const resolved = resolveSmartPromptOptimizationProfile(profile, source, assistantProfile(config)?.primary)
+    return resolved.modelId ? { status: 'ready', config, profile: resolved } : { status: 'missing-model' }
+  }
 
   const nextProfile = applyPromptOptimizationModelSelection(profile, source)
   if (nextProfile === profile) {

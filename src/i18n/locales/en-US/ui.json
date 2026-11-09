@@ -158,7 +158,7 @@
     "start": "Start recording", "resume": "Resume recording", "pause": "Pause recording", "mark": "Add marker", "stop": "Stop recording", "microphoneLevel": "Microphone level", "microphoneInactive": "Microphone inactive",
     "readFailed": "Cannot read recording status. Stop recording from the main window.", "operationFailed": "Recording action failed. Please retry.", "shortcutConflict": "Some shortcuts are in use. Change them in Settings or use these controls.", "toggleUnavailable": "Wait for the recording state to finish changing", "markUnavailable": "Markers are available while recording", "stopUnavailable": "There is no active recording"
   },
-  "promptProfileFields": {"provider": "Provider", "model": "Model"},
+  "promptProfileFields": {"provider": "Provider", "model": "Model", "followAssistant": "Follow assistant", "reasoning": "Thinking"},
   "notifications": {
     "recordingVideoSaved": "Video saved: {{name}}",
     "recordingVideoFailed": "The video was not saved: {{error}}",

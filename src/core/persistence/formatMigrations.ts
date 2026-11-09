@@ -10,6 +10,7 @@ import { migrateEmbeddedVideoColorGradesV1 } from '../videoEdit/colorGradeMigrat
 import { migrateColorGradeParamsV1 } from '../imaging/adjustments/colorGradeMigration'
 import { migrateVideoEditExportEntries } from '../videoEdit/exportEncodingMigration'
 import { stripVideoEditClipFades } from '../videoEdit/fadeTransitionMigration'
+import { migrateLlmConfigSmartPromptProfile } from '../llm/smartPromptProfileMigration'
 
 /**
  * Add N → N+1 here for non-document formats. Document kinds own their own chain.
@@ -51,6 +52,13 @@ export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> 
   // 1 → 2：包说明里的文档条目不设数量上限。
   'project-package': { 1: value => ({ ...value as object, version: 2, minReaderVersion: 1 }) },
   'mcp-connections': { 1: migrateMcpConnectionStorageV1, 2: migrateMcpConnectionIdentity },
+  // 1 → 2：加入内置智能优化并设为默认，原有方案保留；方案新增可选 reasoning。旧程序把智能优化当普通方案读（新程序存盘时为它写入内置通用规则作兜底），最低可读版本保持 1。
+  'llm-config': { 1: migrateLlmConfigSmartPromptProfile },
+  // 1 → 2：恢复记录里的配置快照随 llm-config 做同一步迁移，恢复后与正常读取的结果一致。
+  'llm-config-journal': { 1: value => {
+    const journal = structuredClone(value) as { configBefore?: unknown }
+    return { ...journal, version: 2, configBefore: journal.configBefore ? migrateLlmConfigSmartPromptProfile(journal.configBefore) : journal.configBefore }
+  } },
   // 1 → 2：转写选择缺省为空，保留供应商及全部已有模型选择；只读迁移不改写原键。
   'model-defaults': { 1: value => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return value

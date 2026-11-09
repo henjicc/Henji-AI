@@ -421,7 +421,7 @@ describe('LlmProviderSettingsService', () => {
     const { service, state } = createHarness(current)
     state.credentials.set('slot', 'encrypted:new')
     state.journal = {
-      version: 1,
+      version: 2,
       configBefore: restored,
       credentialBefore: { storeKey: 'llm:slot', encrypted: 'encrypted:old' },
     }

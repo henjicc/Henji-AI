@@ -51,7 +51,7 @@ import { videoEditTextStyleSchema } from '../src/core/videoEdit/text'
 import { createImageEditDocumentV3, createImageEditEffectLayerV3, createImageEditRasterLayerV3, createImageEditAdjustmentLayerV3, createImageEditPathLayerV3 } from '../src/core/imageEdit/v3/documentFactory'
 import { createDefaultImageEditColorModeV3 } from '../src/core/imageEdit/v3/colorTypes'
 import { embedImageEditRasterV3 } from '../src/core/imageEdit/v3/smartContent/commands'
-import { IMAGE_WORKING_VERSION, IMAGE_PACKAGE_VERSION, CANVAS_LAYER_PACKAGE_VERSION } from '../src/core/persistence/schemaVersions'
+import { IMAGE_WORKING_VERSION, IMAGE_PACKAGE_VERSION, CANVAS_LAYER_PACKAGE_VERSION, LLM_JOURNAL_VERSION } from '../src/core/persistence/schemaVersions'
 import { createThemePayloadV2 } from '../src/core/theme/themeMigration'
 import { DEFAULT_THEME_SEED } from '../src/core/theme/themeEngine'
 import { BLACK_HEX, RECORDING_FRAME_SOLID_DEFAULT_HEX } from '../src/core/theme/colorTokens'
@@ -426,10 +426,10 @@ const values: Record<string, unknown> = {
       { kind: 'click', at: 52, target: { selector: '.ask-submit' }, button: 'left' },
     ],
   }),
-  'llm-config': llmStoredConfigSchema.parse({ providers: [{ providerId: 'synthetic', displayName: '合成测试供应商', adapter: 'openai', enabled: false }], models: [], promptProfiles: [], textProcessingPromptTemplates: [], agentProfiles: [{ id: 'golden-agent', name: '测试助手', primary: { providerId: 'synthetic', modelId: 'test' }, settings: { timeoutMs: 60000, maxRetries: 0, maxOutputTokens: 4096, contextWindowBudget: 64000 }, verifications: [], createdAt: timestamp, updatedAt: timestamp }], tools: [], policy: { allowedTools: [], requireHumanConfirmation: true }, memory: { longTermNamespace: 'golden' } }),
+  'llm-config': llmStoredConfigSchema.parse({ providers: [{ providerId: 'synthetic', displayName: '合成测试供应商', adapter: 'openai', enabled: false }], models: [], promptProfiles: [{ id: 'smart-prompt-optimizer', name: '智能优化', providerId: '', modelId: '', systemPrompt: '', userTemplate: '', capabilities: { text: true, image: false, video: false }, reasoning: { enabled: true, effort: 'low' }, isDefault: true, enabled: true, createdAt: timestamp, updatedAt: timestamp }], selectedPromptProfileId: 'smart-prompt-optimizer', textProcessingPromptTemplates: [], agentProfiles: [{ id: 'golden-agent', name: '测试助手', primary: { providerId: 'synthetic', modelId: 'test' }, settings: { timeoutMs: 60000, maxRetries: 0, maxOutputTokens: 4096, contextWindowBudget: 64000 }, verifications: [], createdAt: timestamp, updatedAt: timestamp }], tools: [], policy: { allowedTools: [], requireHumanConfirmation: true }, memory: { longTermNamespace: 'golden' } }),
   'mcp-connections': mcpConnectionStorageSchema.parse({ version: 3, connections: [{ id: '00000000-0000-4000-8000-000000000001', name: '合成测试连接', token: '0'.repeat(64) }] }),
   'document-envelope': buildDocumentEnvelope({ kind: 'canvas', kindVersion: 1, id: 'golden-envelope', name: '外壳样本', createdAt: timestamp, updatedAt: timestamp, revision: 0, draft: false, content: { nodes: [], edges: [] } }),
-  'llm-config-journal': { version: 1, configBefore: null },
+  'llm-config-journal': { version: LLM_JOURNAL_VERSION, configBefore: null },
   'node-defaults': { imageGen: { modelId: 'golden-model', params: { quality: 'high' } } },
   'screen-capture': { version: 2, minReaderVersion: 1, sessionId: '00000000-0000-4000-8000-000000000001', options: { sourceId: 'screen:0:0', backend: 'auto', width: 1920, height: 1080, fps: 60, bitrate: 18000000, codec: 'hevc', rateControl: 'quality', keyframeFrames: 30, encoder: 'nvidia' }, backend: 'gfxcapture', cursorEmbedded: false, status: 'stopped', spans: [], encoding: { codec: 'hevc', encoder: 'hevc_nvenc', softwareFallback: false } },
   'recording-setup': { rateControl: 'quality', codec: 'hevc', keyframeFrames: 30, encoder: 'auto', range: 'region', sourceId: 'screen:1:0', region: { x: .1, y: .1, width: .5, height: .5 }, mode: 'quick', saveDirectory: 'D:/录屏', microphone: true, systemAudio: true, camera: false, cameraId: '', quality: '1440p', fps: 60, insert: true, webAppBackup: { enabled: true, range: 'screen', sourceId: 'screen:1:0', microphone: true, systemAudio: false, quality: '2160p', fps: 30, rateControl: 'vbr', bitrate: 20_000_000 } },

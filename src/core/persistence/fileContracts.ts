@@ -10,7 +10,7 @@ import type { PersistenceFormat } from './formats'
 import { formatMigrations } from './formatMigrations'
 import { imageDocumentHeaderSchema, imagePackageManifestSchema, imageWorkingCopySchema } from './imageSchemas'
 import { canvasLayerHeaderSchema, encryptedKeystoreSchema, llmStoredConfigSchema, mediaGrantsSchema, providerSettingsJournalSchema } from './auxiliarySchemas'
-import { CANVAS_LAYER_PACKAGE_VERSION, IMAGE_HEADER_VERSION, IMAGE_PACKAGE_VERSION, IMAGE_WORKING_VERSION, KEYSTORE_VERSION, LLM_CONFIG_VERSION, LLM_JOURNAL_VERSION, MEDIA_GRANTS_VERSION } from './schemaVersions'
+import { CANVAS_LAYER_PACKAGE_VERSION, IMAGE_HEADER_VERSION, IMAGE_PACKAGE_VERSION, IMAGE_WORKING_VERSION, KEYSTORE_VERSION, LLM_CONFIG_MIN_READER_VERSION, LLM_CONFIG_VERSION, LLM_JOURNAL_VERSION, MEDIA_GRANTS_VERSION } from './schemaVersions'
 
 function file(id: string, name: string, version: number, versionSource: string, readEntry: string, schema: z.ZodType, extra: Readonly<Record<string, z.ZodType>> = {}): PersistenceFormat {
   const archive = id === 'canvas-layer-package' ? 'henjilayer' : ['image-package', 'image-header'].includes(id) ? 'henjiimg' : undefined
@@ -34,7 +34,7 @@ export const FILE_PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
   file('keystore', '供应商凭据文件', KEYSTORE_VERSION, 'KeystoreFile.version', 'electron/main/services/keystore.ts::readKeystoreFile', encryptedKeystoreSchema),
   // 历史目录登记只保留格式解析，不再参与启动或媒体访问判断。
   file('media-grants', '媒体目录授权', MEDIA_GRANTS_VERSION, 'mediaGrantsSchema.shape.version', 'src/core/persistence/auxiliarySchemas.ts::mediaGrantsSchema.parse', mediaGrantsSchema),
-  file('llm-config', '助手模型配置', LLM_CONFIG_VERSION, 'llm-config.json.version（内容仍为公共SDK DTO）', 'electron/main/services/llm/provider-settings-storage.ts::readConfig', llmStoredConfigSchema, { container: z.object({ version: z.literal(LLM_CONFIG_VERSION), minReaderVersion: z.number().int().positive().max(LLM_CONFIG_VERSION).optional(), content: llmStoredConfigSchema }).strict() }),
+  { ...file('llm-config', '助手模型配置', LLM_CONFIG_VERSION, 'llm-config.json.version（内容仍为公共SDK DTO）', 'electron/main/services/llm/provider-settings-storage.ts::readConfig', llmStoredConfigSchema, { container: z.object({ version: z.literal(LLM_CONFIG_VERSION), minReaderVersion: z.number().int().positive().max(LLM_CONFIG_VERSION).optional(), content: llmStoredConfigSchema }).strict() }), minReaderVersion: LLM_CONFIG_MIN_READER_VERSION },
   file('storyboard-metadata', '分镜图片描述', STORYBOARD_METADATA_VERSION, 'StoryboardCopilotMetadata.version（PNG iTXt）', 'electron/main/services/image/png-metadata.ts::readStoryboardMetadataFromPng', storyboardMetadataSchema),
   file('llm-config-journal', '助手配置事务恢复记录', LLM_JOURNAL_VERSION, 'ProviderSettingsJournal.version', 'electron/main/services/llm/provider-settings-storage.ts::readJournal', providerSettingsJournalSchema),
 ]

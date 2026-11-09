@@ -21,6 +21,7 @@ import {
   setLlmProviderApiKey,
   type EncryptedKeySnapshot,
 } from '../keystore'
+import { LLM_JOURNAL_VERSION } from '../../../../src/core/persistence/schemaVersions'
 import { createMainLogger } from '../logging'
 import {
   createProviderSettingsFileStorage,
@@ -237,7 +238,7 @@ export class LlmProviderSettingsService {
   private async recoverIfNeeded(): Promise<void> {
     const journal = await this.dependencies.storage.readJournal()
     if (!journal) return
-    if (journal.version !== 1) {
+    if (journal.version !== LLM_JOURNAL_VERSION) {
       throw new Error('[llm_provider_transaction_recovery_failed] unsupported transaction journal; update the app before retrying')
     }
     if (journal.credentialBefore) this.dependencies.credentials.restore(journal.credentialBefore)
@@ -317,7 +318,7 @@ export class LlmProviderSettingsService {
       const credentialBefore = request.credential.kind === 'unchanged'
         ? undefined
         : this.dependencies.credentials.capture(credentialId)
-      const journal: ProviderSettingsJournal = { version: 1, configBefore: persistedBefore, credentialBefore }
+      const journal: ProviderSettingsJournal = { version: LLM_JOURNAL_VERSION, configBefore: persistedBefore, credentialBefore }
       logger.info('开始提交供应商与凭据设置', {
         event: 'llm_provider_settings.commit.started',
         context: { providerId: provider.providerId, credentialId, credentialMutation: request.credential.kind },
@@ -403,7 +404,7 @@ export class LlmProviderSettingsService {
         models: current.models.filter(item => item.providerId !== providerId),
       }
       const credentialBefore = shared ? undefined : this.dependencies.credentials.capture(credentialId)
-      const journal: ProviderSettingsJournal = { version: 1, configBefore: persistedBefore, credentialBefore }
+      const journal: ProviderSettingsJournal = { version: LLM_JOURNAL_VERSION, configBefore: persistedBefore, credentialBefore }
       logger.info('开始删除自定义供应商设置', {
         event: 'llm_provider_settings.delete.started',
         context: { providerId, credentialId, sharedCredential: shared },

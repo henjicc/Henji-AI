@@ -11,6 +11,19 @@ import type { LlmConfigState } from '@henjicc/ai-sdk'
 import { normalizeLlmConfig } from './LlmConfigService'
 
 describe('normalizeLlmConfig', () => {
+  it('智能优化总在最前、规则固定，只保留用户改过的模型与思考设置', () => {
+    const now = new Date().toISOString()
+    const tampered = normalizeLlmConfig({
+      promptProfiles: [
+        { ...createDefaultPromptProfile(now), isDefault: false },
+        { id: 'smart-prompt-optimizer', name: '被改名', providerId: 'deepseek', modelId: 'deepseek-v4-flash', systemPrompt: '自己写的规则', userTemplate: '{{prompt}}', capabilities: { text: true, image: false, video: false }, reasoning: { enabled: false, effort: 'low' }, isDefault: true, enabled: false, createdAt: now, updatedAt: now },
+      ],
+    } as Partial<LlmConfigState>)
+    expect(tampered.promptProfiles[0]).toMatchObject({ id: 'smart-prompt-optimizer', name: '智能优化', systemPrompt: createDefaultPromptProfile(now).systemPrompt, enabled: true, providerId: 'deepseek', modelId: 'deepseek-v4-flash', reasoning: { enabled: false } })
+    expect(normalizeLlmConfig({ promptProfiles: [createDefaultPromptProfile(now)] } as Partial<LlmConfigState>).promptProfiles.map(profile => profile.id))
+      .toEqual(['smart-prompt-optimizer', 'default-general-optimizer'])
+  })
+
   it('迁移旧配置并补齐 Agent Profile 与扩展能力', () => {
     const legacy = {
       providers: [{ providerId: 'custom', displayName: 'Custom', adapter: 'openai', enabled: true }],
@@ -269,7 +282,7 @@ describe('normalizeLlmConfig', () => {
             : '你是视频生成提示词优化助手。保留用户原意，补足主体动作、场景变化、镜头运动、节奏、光线与时间连续性。\n只输出优化后的提示词，不要解释，不要添加标题或前后缀。',
       }))
     const legacyProfile = {
-      ...defaults.promptProfiles[0],
+      ...defaults.promptProfiles.find((profile) => profile.id === 'default-general-optimizer')!,
       systemPrompt: '你是面向图像、视频和音频生成工作流的提示词优化助手。\n保留用户原意，补足主体、场景、风格、镜头、光线、构图和质量描述。\n只输出优化后的提示词，不要解释，不要添加标题。',
       systemPromptDocument: undefined,
       userTemplate: '请优化以下提示词，使其更适合生成模型使用：\n\n{{prompt}}',
@@ -291,8 +304,9 @@ describe('normalizeLlmConfig', () => {
     ])
     expect(upgraded.textProcessingPromptTemplates[1].systemPrompt)
       .toBe(defaults.textProcessingPromptTemplates[1].systemPrompt)
-    expect(upgraded.promptProfiles[0].systemPrompt).toBe(defaults.promptProfiles[0].systemPrompt)
-    expect(upgraded.promptProfiles[0].userTemplate).toBe(defaults.promptProfiles[0].userTemplate)
+    const general = (config: typeof defaults) => config.promptProfiles.find((profile) => profile.id === 'default-general-optimizer')!
+    expect(general(upgraded).systemPrompt).toBe(general(defaults).systemPrompt)
+    expect(general(upgraded).userTemplate).toBe(general(defaults).userTemplate)
 
     const customized = normalizeLlmConfig({
       ...defaults,
@@ -308,7 +322,7 @@ describe('normalizeLlmConfig', () => {
     })
     expect(customized.textProcessingPromptTemplates.find((template) => template.id === 'text-processing-image-optimizer')?.systemPrompt)
       .toBe('我的自定义图像规则')
-    expect(customized.promptProfiles[0].systemPrompt).toBe('我的自定义优化规则')
+    expect(general(customized).systemPrompt).toBe('我的自定义优化规则')
 
     const wallpaperRemoved = normalizeLlmConfig({
       ...defaults,

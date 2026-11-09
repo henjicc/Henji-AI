@@ -1,6 +1,8 @@
 import {
   DEFAULT_PROMPT_PROFILE_ID,
+  SMART_PROMPT_PROFILE_ID,
   createDefaultPromptProfile,
+  createSmartPromptProfile,
   createDefaultTextProcessingPromptTemplates,
 } from '@/core/llm/defaults'
 import { normalizePromptOptimizationProfileDocuments } from '@/core/llm/promptOptimization'
@@ -17,6 +19,27 @@ export function normalizePromptProfile(profile: PromptOptimizationProfile): Prom
       video: profile.capabilities?.video === true,
     },
   })
+}
+
+/**
+ * 智能优化总在列表最前且不可删：规则来自助手技能，名称、模板与启用状态固定，
+ * 只保留用户能改的模型与思考设置。
+ */
+export function ensureSmartPromptProfile(profiles: PromptOptimizationProfile[]): PromptOptimizationProfile[] {
+  const existing = profiles.find(profile => profile.id === SMART_PROMPT_PROFILE_ID)
+  const fixed = createSmartPromptProfile(existing?.createdAt)
+  const smart: PromptOptimizationProfile = existing
+    ? {
+        ...fixed,
+        providerId: existing.providerId,
+        modelId: existing.modelId,
+        capabilities: existing.capabilities,
+        reasoning: existing.reasoning,
+        isDefault: existing.isDefault,
+        updatedAt: existing.updatedAt,
+      }
+    : { ...fixed, isDefault: !profiles.some(profile => profile.isDefault && profile.enabled) }
+  return [smart, ...profiles.filter(profile => profile.id !== SMART_PROMPT_PROFILE_ID)]
 }
 
 function normalizeTextProcessingPromptTemplate(

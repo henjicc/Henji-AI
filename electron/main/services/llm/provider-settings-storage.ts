@@ -1,6 +1,6 @@
 import { getDb } from '../db'
 import { RecycleStore } from '../recycle/store'
-import { LLM_CONFIG_VERSION, LLM_JOURNAL_VERSION } from '../../../../src/core/persistence/schemaVersions'
+import { LLM_CONFIG_MIN_READER_VERSION, LLM_CONFIG_VERSION, LLM_JOURNAL_VERSION } from '../../../../src/core/persistence/schemaVersions'
 import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
@@ -16,6 +16,7 @@ import { backupBeforePersistenceUpgrade } from '../persistence/file-upgrade'
 import { parsePersistenceJson, upgradeStoredFile } from '../persistence/stored-file'
 import { providerSettingsJournalSchema } from '../../../../src/core/persistence/auxiliarySchemas'
 
+const LLM_CONFIG_CONTRACT = { id: 'llm-config', name: '助手模型配置', version: LLM_CONFIG_VERSION, minReaderVersion: LLM_CONFIG_MIN_READER_VERSION, schema: llmStoredConfigSchema, migrations: formatMigrations('llm-config') }
 const CONFIG_FILE_NAME = 'llm-config.json'
 const JOURNAL_FILE_NAME = '.llm-provider-settings.transaction.json'
 
@@ -104,8 +105,8 @@ export function createProviderSettingsFileStorage(): ProviderSettingsStorage {
       const { text } = stored
       // 版本外壳引入前（t94 之前）写下的配置内容本身没有变化：读取时按 v1 包装，原文件不改写，下次保存才写成带版本的格式。
       const raw = stored.raw && typeof stored.raw === 'object' && !Array.isArray(stored.raw) && !('version' in stored.raw) && Array.isArray((stored.raw as { providers?: unknown }).providers)
-        ? { version: LLM_CONFIG_VERSION, content: stored.raw } : stored.raw
-      const contract = { id: 'llm-config', name: '助手模型配置', version: LLM_CONFIG_VERSION, schema: llmStoredConfigSchema, migrations: formatMigrations('llm-config') }
+        ? { version: 1, content: stored.raw } : stored.raw
+      const contract = LLM_CONFIG_CONTRACT
       const version = raw && typeof raw === 'object' && 'version' in raw && typeof raw.version === 'number' ? raw.version : 0
       const backupPath = version > 0 ? await backupBeforePersistenceUpgrade(paths().config, contract, version, text) : undefined
       return parseVersionedPersistenceJson(raw, contract, backupPath) as LlmConfigState
@@ -120,7 +121,7 @@ export function createProviderSettingsFileStorage(): ProviderSettingsStorage {
       const backup = (target: string, name: string, payload: string): string => (recycle ??= new RecycleStore(getDb())).snapshot('member', target, name, payload)
       for (const provider of removed) snapshots.push(backup('llm-provider', provider.displayName, JSON.stringify({ provider, models: previous?.models?.filter(model => model.providerId === provider.providerId) ?? [] })))
       for (const model of previous?.models ?? []) if (!removed.some(provider => provider.providerId === model.providerId) && !config.models.some(next => next.modelId === model.modelId && next.providerId === model.providerId)) snapshots.push(backup('llm-model', model.displayName, JSON.stringify({ models: [model], fallbackProvider: previous?.providers?.find(provider => provider.providerId === model.providerId) })))
-      try { await writeJsonAtomic(paths().config, JSON.parse(serializeVersionedPersistenceJson({ id: 'llm-config', name: '助手模型配置', version: LLM_CONFIG_VERSION, schema: llmStoredConfigSchema, migrations: formatMigrations('llm-config') }, config)) as unknown) }
+      try { await writeJsonAtomic(paths().config, JSON.parse(serializeVersionedPersistenceJson(LLM_CONFIG_CONTRACT, config)) as unknown) }
       catch (error) { for (const id of snapshots) recycle?.forget(id); throw error }
     },
     removeConfig: async () => await removeAtomicState(paths().config),

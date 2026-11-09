@@ -43,6 +43,7 @@ import {
 import type { LlmCredentialMutationDto, LlmProviderSettingsResultDto } from '@/platform/contracts/llmRuntime'
 import {
   normalizePromptProfile,
+  ensureSmartPromptProfile,
   normalizePromptProfileWithBuiltInMigration,
   normalizeTextProcessingPromptTemplates,
 } from './promptConfigurationNormalization'
@@ -279,8 +280,8 @@ export function normalizeLlmConfig(input: Partial<LlmConfigState> | null): LlmCo
    * 供应商切到 DeepSeek，自动补选的模型正好命中迁移条件，保存时又被改回派欧云，表现为供应商
    * 根本切不动。指向失效模型的存量方案改由 `promptOptimizationReadiness` 按可用性重新选择。
    */
-  const promptProfiles = (input.promptProfiles ?? defaults.promptProfiles)
-    .map(normalizePromptProfileWithBuiltInMigration)
+  const promptProfiles = ensureSmartPromptProfile((input.promptProfiles ?? defaults.promptProfiles)
+    .map(normalizePromptProfileWithBuiltInMigration))
   const textProcessingPromptTemplates = normalizeTextProcessingPromptTemplates(input.textProcessingPromptTemplates)
   if (!promptProfiles.some(profile => profile.isDefault && profile.enabled)) {
     const firstEnabled = promptProfiles.find(profile => profile.enabled)
