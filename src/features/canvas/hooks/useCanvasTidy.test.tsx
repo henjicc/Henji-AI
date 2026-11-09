@@ -8,7 +8,7 @@ import { useCanvasTidy } from './useCanvasTidy'
 vi.mock('../application/canvasTidyService', () => ({
   createCanvasTidyDraft: async (projectId: string, nodes: CanvasNode[], nodeIds: string[], pin: string | null) => ({
     projectId, baseline: canvasTidyGeometryKey(nodes), nodeIds, pin,
-    candidates: [{ mode: 'align', placements: nodeIds.map(nodeId => ({ nodeId, position: { x: 500, y: 200 } })) }],
+    candidates: [{ mode: 'nearby', placements: nodeIds.map(nodeId => ({ nodeId, position: { x: 500, y: 200 } })) }],
   }),
   applyCanvasTidyDraft: vi.fn(async () => {}),
 }))

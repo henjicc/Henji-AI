@@ -6,7 +6,7 @@ import { reportCanvasOperationFailure } from '../application/canvasOperationFeed
 
 export function useCanvasTidy(projectId: string | null, nodes: CanvasNode[], edges: CanvasEdge[], rendered: CanvasNode[]) {
   const [draft, setDraft] = useState<CanvasTidyDraft | null>(null)
-  const [mode, setMode] = useState<CanvasTidyMode>('align')
+  const [mode, setMode] = useState<CanvasTidyMode>('nearby')
   const [busy, setBusy] = useState(false)
   const generation = useRef(0)
   const geometry = useMemo(() => draft ? canvasTidyGeometryKey(nodes, edges) : '', [nodes, edges, draft])
@@ -21,11 +21,8 @@ export function useCanvasTidy(projectId: string | null, nodes: CanvasNode[], edg
       const ids = nodes.filter(n => n.selected).map(n => n.id)
       const next = await createCanvasTidyDraft(projectId, nodes, ids, pin, edges)
       if (request === generation.current) {
-        // 选区内有连线时默认按连线方向整理；重新钉住节点时保留用户已选的方案。
-        if (!valid) {
-          const selected = new Set(ids)
-          setMode(edges.some(e => selected.has(e.source) && selected.has(e.target)) ? 'flow' : 'align')
-        }
+        // 默认就近整理，只理顺不重排；重新钉住节点时保留用户已选的方案。
+        if (!valid) setMode('nearby')
         setDraft(next)
       }
     } catch (error) { if (request === generation.current) reportCanvasOperationFailure(error) }

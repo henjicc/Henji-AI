@@ -267,6 +267,7 @@
   },
   "canvasTidy": {
     "title": "Tidy",
+    "nearby": "Tidy in place",
     "flow": "Follow connections",
     "align": "Align edges",
     "distribute": "Equal spacing",

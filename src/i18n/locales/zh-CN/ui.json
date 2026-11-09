@@ -267,6 +267,7 @@
   },
   "canvasTidy": {
     "title": "整理",
+    "nearby": "就近整理",
     "flow": "按连线方向",
     "align": "按边缘对齐",
     "distribute": "等距排列",

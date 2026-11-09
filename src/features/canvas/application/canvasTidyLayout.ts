@@ -3,8 +3,10 @@ import { solveAdaptiveLayout, solveStaticLayout, type LayoutItem } from '@/core/
 import type { CandidateIdentity, LayoutConstraint } from '@/core/creativeIntent/contracts'
 import type { CanvasEdge, CanvasNode } from '../domain/canvasNodes'
 import { resolveCanvasNodeLayoutSize } from '../domain/nodeRegistry'
+import { nearbyTidyDeltas, type NearbyRect } from './canvasTidyNearby'
 
-export const CANVAS_TIDY_MODES = ['flow', 'align', 'distribute', 'grid'] as const
+/** nearby（就近整理）排第一：用户说“整理一下”时默认它，只理顺不重排 */
+export const CANVAS_TIDY_MODES = ['nearby', 'flow', 'align', 'distribute', 'grid'] as const
 export type CanvasTidyMode = typeof CANVAS_TIDY_MODES[number]
 export interface CanvasTidyPlacement { nodeId: string; position: { x: number; y: number } }
 export interface CanvasTidyCandidate { mode: CanvasTidyMode; placements: CanvasTidyPlacement[]; unavailable?: string }
@@ -104,8 +106,8 @@ export function solveCanvasTidy(nodes: readonly CanvasNode[], ids: readonly stri
         n.draggable === false || n.id === pin || fixedAncestors.has(n.id)))
       const constraints: LayoutConstraint[] = []
       const solveItems = [...items]
-      if (mode === 'flow') {
-        // 流向整理不经约束求解器：dagre 直接给出分层坐标，下面与其他模式共用容器校验。
+      if (mode === 'flow' || mode === 'nearby') {
+        // 流向整理与就近整理各有求解：dagre 给分层坐标、就近整理自带约束求解，下面与其他模式共用容器校验。
       } else if (items.length > 1) {
         if (mode === 'grid') {
           const ordered = [...items].sort((a, b) => a.worldCorners[0][1] - b.worldCorners[0][1] || a.worldCorners[0][0] - b.worldCorners[0][0])
@@ -150,7 +152,13 @@ export function solveCanvasTidy(nodes: readonly CanvasNode[], ids: readonly stri
           }
         }
       }
-      const deltas = mode === 'flow' ? flowDeltas(items, members, edges)
+      const rectOf = (item: LayoutItem): NearbyRect => ({ x: item.worldCorners[0][0], y: item.worldCorners[0][1],
+        width: item.worldCorners[1][0] - item.worldCorners[0][0], height: item.worldCorners[2][1] - item.worldCorners[0][1], locked: item.translationLocked })
+      // 选区外同一容器里的节点不挪，但整理后的节点要避开它们
+      const obstacles = nodes.filter(n => (n.parentId ?? '') === parentId && !selected.has(n.id) && !n.hidden)
+        .map(n => rectOf(itemFor(n, identity.ownerRef.id, true)))
+      const deltas = mode === 'nearby' ? nearbyTidyDeltas(items.map(rectOf), obstacles)
+        : mode === 'flow' ? flowDeltas(items, members, edges)
         : (mode === 'distribute' ? solveAdaptiveLayout(solveItems, constraints, identity) : solveStaticLayout(solveItems, constraints, identity))
           .changes.slice(0, members.length).map(change => [change.delta[0], change.delta[1]] as [number, number])
       const parent = parentId ? byId.get(parentId) : undefined

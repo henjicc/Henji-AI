@@ -20,7 +20,7 @@ export interface CanvasTidyDraft {
 }
 
 export async function createCanvasTidyDraft(projectId: string, nodes: readonly CanvasNode[], nodeIds: string[], pin: string | null,
-  edges: readonly CanvasEdge[]): Promise<CanvasTidyDraft> {
+  edges: readonly CanvasEdge[], modes: readonly CanvasTidyMode[] = CANVAS_TIDY_MODES): Promise<CanvasTidyDraft> {
   const baseline = canvasTidyGeometryKey(nodes, edges)
   const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify([baseline, nodeIds, pin])))
   const digest = `sha256:${Array.from(new Uint8Array(bytes), v => v.toString(16).padStart(2, '0')).join('')}`
@@ -28,7 +28,7 @@ export async function createCanvasTidyDraft(projectId: string, nodes: readonly C
     ownerRef: { kind: 'canvas.document', id: projectId }, targetBases: nodeIds.map(id => ({
       targetRef: { kind: 'canvas.node', id: `${projectId}:${id}` }, baseDigest: digest, geometryDigest: digest,
     })) }
-  return { projectId, baseline, nodeIds, pin, candidates: CANVAS_TIDY_MODES.map(mode => solveCanvasTidy(nodes, nodeIds, pin, mode, identity, edges)) }
+  return { projectId, baseline, nodeIds, pin, candidates: modes.map(mode => solveCanvasTidy(nodes, nodeIds, pin, mode, identity, edges)) }
 }
 
 /** The exact positions remain ordinary canvas.node.position writes, shared with Pi/MCP. */
@@ -52,7 +52,7 @@ export async function applyCanvasTidyDraft(draft: CanvasTidyDraft, candidate: Ca
   }
 }
 
-export type CanvasAssistantTidyMode = Extract<CanvasTidyMode, 'flow' | 'grid' | 'align'>
+export type CanvasAssistantTidyMode = Extract<CanvasTidyMode, 'nearby' | 'flow' | 'grid' | 'align'>
 export interface CanvasTidyRequest {
   nodeIds?: readonly string[]
   /** 与该节点连通（不分方向）的整条链。 */
@@ -99,7 +99,8 @@ export async function tidyCanvasNodes(projectId: string, request: CanvasTidyRequ
   if (request.pinNodeId && !nodeIds.includes(request.pinNodeId)) {
     throw notExecutedFailure(new CanvasApplicationError('INVALID_INPUT', '钉住的节点不在要整理的节点里', true, { pinNodeId: request.pinNodeId }))
   }
-  const draft = await createCanvasTidyDraft(projectId, nodes, nodeIds, request.pinNodeId ?? null, edges)
+  // 助手只要一种方案，不必把面板上的几种都算一遍
+  const draft = await createCanvasTidyDraft(projectId, nodes, nodeIds, request.pinNodeId ?? null, edges, [request.mode])
   const candidate = draft.candidates.find(item => item.mode === request.mode)!
   if (candidate.unavailable) throw notExecutedFailure(new CanvasApplicationError('INVALID_INPUT', candidate.unavailable, true, { mode: request.mode }))
   const before = new Map(nodes.map(node => [node.id, node.position]))
