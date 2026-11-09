@@ -114,20 +114,22 @@ describe('generationPreparation', () => {
     expect(getGenerationModelSchema(testModel.meta.id).priceEstimate).toMatchObject({ amount: null, comparableCnyAmount: null })
   })
 
-  it('提交前按模型尺寸约束拦下不合格素材，读不到尺寸的不拦', async () => {
+  it('提交前只拦等比缩放也解决不了的素材，能缩放的和读不到尺寸的放行', async () => {
     await i18n.changeLanguage('zh-CN')
     const model = composeModelDefinition(apimartKling30OmniModel, modelPresentations[apimartKling30OmniModel.meta.id])
     registry.register(model)
     const values = { ...registry.getDefaultValues(model.meta.id), uploadedVideoFilePaths: ['D:/clip.mp4'], videos: ['henji-media://clip.mp4'] }
     const readers = (size: { width: number; height: number } | null) => ({ image: async () => null, video: vi.fn(async () => size) })
 
-    const small = readers({ width: 640, height: 360 })
-    const rejected = await assertGenerationMediaDimensions(model, values, small).catch((error: unknown) => error)
+    // 短边 400 要放大到 720，长边就超过 2160，缩放两头顾不上
+    const narrow = readers({ width: 3000, height: 400 })
+    const rejected = await assertGenerationMediaDimensions(model, values, narrow).catch((error: unknown) => error)
     expect(rejected).toBeInstanceOf(GenerationPreparationError)
-    expect((rejected as Error).message).toContain('视频（640×360）宽和高都不能小于 720 像素')
+    expect((rejected as Error).message).toContain('视频（3000×400）宽和高都不能小于 720 像素')
     // 同一段视频的本地路径与显示地址只检查一次。
-    expect(small.video).toHaveBeenCalledTimes(1)
+    expect(narrow.video).toHaveBeenCalledTimes(1)
 
+    await expect(assertGenerationMediaDimensions(model, values, readers({ width: 640, height: 360 }))).resolves.toBeUndefined()
     await expect(assertGenerationMediaDimensions(model, values, readers({ width: 1280, height: 720 }))).resolves.toBeUndefined()
     await expect(assertGenerationMediaDimensions(model, values, readers(null))).resolves.toBeUndefined()
   })
@@ -137,8 +139,9 @@ describe('generationPreparation', () => {
     const controlled = { ...testModel, meta: { ...testModel.meta, id: 'controlled-utility' },
       inputLimits: { images: { max: 1 }, rules: [{ imageConstraints: { minShortSidePx: 512 } }] } }
     const reader = { image: async () => ({ width: 400, height: 900 }), video: async () => null }
-    await expect(assertGenerationMediaDimensions(controlled, { images: ['D:/source.png'] }, reader))
+    await expect(assertGenerationMediaDimensions({ ...controlled, inputLimits: { images: { max: 1 }, rules: [{ imageConstraints: { minShortSidePx: 512, maxLongSidePx: 1000 } }] } }, { images: ['D:/source.png'] }, reader))
       .rejects.toThrow('图片（400×900）宽和高都不能小于 512 像素')
+    await expect(assertGenerationMediaDimensions(controlled, { images: ['D:/source.png'] }, reader)).resolves.toBeUndefined()
   })
 
   it('按配置搜索并裁剪单模型 schema', () => {

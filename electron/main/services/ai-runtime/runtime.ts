@@ -18,6 +18,7 @@ import { createMainLogger, sanitizeJsonValue } from '../logging'
 import { releaseSavedMediaFileLease, saveMediaFromUrlTracked, type MediaDownloadContext } from './media-store'
 import { getProgressEstimate, recordProgressSample } from './progress'
 import { consumePendingResult, savePendingResult } from './pending-results'
+import { conformGenerationMedia } from './media-conform'
 import { materializeStructuredOutput } from './structured-output'
 import { toHostGenerateResponse, type HostGenerateResponse } from './host-response'
 import { sdkAIClient } from './sdk-runtime'
@@ -125,6 +126,10 @@ export async function generate(
 
   try {
     let requestInfo: AIClientGenerationRequestInfo | undefined
+    const model = sdkAIClient.catalog.get(request.modelId)
+    if (model) {
+      request = { ...request, params: await conformGenerationMedia(model, request.params, sdkAIClient.catalog.getDefaultValues(request.modelId), execution.controller.signal) }
+    }
     const sdkResult = await networkRequestContext.run({ requestId, modelId: request.modelId }, () => sdkAIClient.generate({ ...request, requestId }, {
       onRequestBuilt: (info) => {
         requestInfo = info

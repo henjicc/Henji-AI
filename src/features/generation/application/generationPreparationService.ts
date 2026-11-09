@@ -1,4 +1,5 @@
 import { findMediaDimensionViolation, type MediaDimensions, type MediaDimensionViolation } from '@henjicc/ai-sdk'
+import { fitMediaDimensions } from '@/core/media/fitMediaDimensions'
 import { readVideoInfo } from '@/commands/video'
 import { createLogger } from '@/core/logging'
 import i18n from '@/i18n'
@@ -668,7 +669,7 @@ function describeDimensionViolation(
 }
 
 /**
- * 按模型声明的素材尺寸约束读取图片、视频的实际宽高并校验，不合格时抛出可直接展示给用户的错误，
+ * 按模型声明的素材尺寸约束读取图片、视频的实际宽高并校验，等比缩放也解决不了时抛出可直接展示给用户的错误，
  * 让注定被供应商拒绝的付费请求在提交前就被拦下。读不到尺寸的素材不拦，交给供应商判断。
  */
 export async function assertGenerationMediaDimensions(
@@ -691,7 +692,8 @@ export async function assertGenerationMediaDimensions(
     sizes.forEach((size, index) => {
       if (!size) return
       const violation = findMediaDimensionViolation(constraints, size)
-      if (!violation) return
+      // 等比缩放能解决的（如总像素超限）由主进程提交前自动处理，只拦缩放解决不了的
+      if (!violation || fitMediaDimensions(constraints, size, { even: kind === 'video' })) return
       const media = i18n.t(sources.length > 1 ? `errors:mediaDimensions.${kind}Numbered` : `errors:mediaDimensions.${kind}`, { index: index + 1 })
       errors.push({
         paramId: kind === 'image' ? 'images' : 'videos',

@@ -261,6 +261,38 @@ export async function compressVideoToFit(payload: CompressVideoToFitPayloadDto, 
 }
 
 /**
+ * 把视频缩放到指定宽高（调用方已按模型尺寸约束等比算好、宽高为偶数）。码率按 1080p 约 8 Mbps 随像素数折算，
+ * 只为满足供应商的尺寸要求，不追求压缩。产物按源文件与目标尺寸缓存，同一素材重复提交不再编码。
+ */
+export async function scaleVideoToDimensions(source: string, width: number, height: number, signal?: AbortSignal): Promise<string> {
+  signal?.throwIfAborted()
+  const localPath = await resolveLocalMediaPath(source, signal)
+  const stat = await fs.promises.stat(localPath)
+  const digest = crypto.createHash('md5').update(`${localPath}:${stat.mtimeMs}:${width}x${height}`).digest('hex')
+  const outputPath = path.join(getUploadsDir(), `fit-${digest}.mp4`)
+  const ffmpegPath = await loadFfmpegPath()
+  const videoBitrateKbps = Math.max(1500, Math.round(8000 * (width * height) / (1920 * 1080)))
+  await prepareOutput(outputPath, async (temporaryPath, jobSignal) => {
+    const profile = await getPreferredEncoder()
+    const args = (encoder: VideoEncoderProfile): string[] => ['-y', '-i', localPath, '-vf', `scale=${width}:${height}:flags=lanczos`, '-pix_fmt', 'yuv420p',
+      ...encoder.buildEncodeArgs(videoBitrateKbps, Math.round(videoBitrateKbps * 1.5), videoBitrateKbps * 2),
+      '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', temporaryPath]
+    try {
+      await execFileAsync(ffmpegPath, args(profile), jobSignal)
+    } catch (error) {
+      jobSignal.throwIfAborted()
+      if (!isHardwareEncoder(profile)) throw error
+      const retried = await invalidateEncoderCache()
+      if (retried.id === profile.id) throw error
+      // media-recycle-allow: unpublished failed encoder output, retry must start with a clean file.
+      await fs.promises.rm(temporaryPath, { force: true })
+      await execFileAsync(ffmpegPath, args(retried), jobSignal)
+    }
+  }, signal)
+  return outputPath
+}
+
+/**
  * 优先用探测到的硬件编码器（NVENC/QSV/AMF/VideoToolbox）编码；若编码失败则重新探测一次
  * 硬件可用性（识别显卡被拔掉/驱动变化等场景）。重新探测后编码器选择不变，说明硬件仍正常、
  * 失败另有原因，不重试直接抛错；选择变化（含降级到 CPU）则用新选择重试一次。

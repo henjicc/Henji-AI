@@ -55,6 +55,7 @@ vi.mock('./sdk-runtime', () => ({
   sdkAIClient: {
     catalog: {
       list: vi.fn(() => []),
+      get: vi.fn(() => undefined),
       resolveParams: vi.fn(),
     },
     cancel: vi.fn(),
