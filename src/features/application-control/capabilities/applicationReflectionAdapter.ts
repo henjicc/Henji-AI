@@ -408,7 +408,7 @@ export const applicationReflectionHandlers = {
   async listEntities(
     input: {
       entityType: string; cursor?: string; limit: number
-      propertyIds?: string[]; where?: Record<string, JsonValue>
+      propertyIds?: string[]; where?: Record<string, JsonValue>; text?: string
     },
     context: CapabilityExecutionContext
   ) {
@@ -416,7 +416,7 @@ export const applicationReflectionHandlers = {
       input.entityType,
       { ...(input.cursor ? { cursor: input.cursor } : {}), limit: input.limit },
       executionContext(context),
-      { propertyIds: input.propertyIds, where: input.where },
+      { propertyIds: input.propertyIds, where: input.where, ...(input.text ? { text: input.text } : {}) },
     )
     rememberRefs(context.requestId ?? 'renderer', result.refs)
     return {

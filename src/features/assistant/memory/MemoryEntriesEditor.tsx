@@ -1,11 +1,14 @@
 import { cachedMemory, memoryErrorMessage } from '@/services/assistantMemory/memoryState'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
-import { Dropdown, UiError, UiGroup, UiIconButton, UiInput, UI_TEXT_META_CLASS } from '@/components/ui'
+import { Dropdown, UiError, UiGroup, UiIconButton, UiInput, UiSearchInput, UI_TEXT_META_CLASS } from '@/components/ui'
+import { rankByKeywords } from '@/core/search/keywordSearch'
 import { useI18n } from '@/hooks/useI18n'
 import { memoryEntryInputSchema, type MemoryEntry, type MemoryTarget } from '@/core/assistant/memoryEntries'
 import { readMemory, writeMemory, subscribeMemory } from '@/services/assistantMemory/memoryService'
 
+/** 条目多到一眼看不完时才出现搜索框；搜索与助手召回用同一套关键词检索。 */
+const SEARCH_THRESHOLD = 20
 type Section = 'about' | 'creative' | 'habits'
 type Group = Section | 'local'
 type Precedence = 'ask' | 'style' | 'preference'
@@ -20,6 +23,7 @@ export function MemoryEntriesEditor({ target, title, readOnly = false }: { targe
   const [error, setError] = useState('')
   const [draft, setDraft] = useState<Draft | null>(null)
   const [busy, setBusy] = useState(false)
+  const [query, setQuery] = useState('')
   // 回车提交后输入框随即禁用会再触发一次失焦；同一次编辑只提交一次。
   const committing = useRef(false)
   const disabled = readOnly || cachedMemory()?.settings.enabled === false
@@ -70,14 +74,19 @@ export function MemoryEntriesEditor({ target, title, readOnly = false }: { targe
     </div>
   }
   const groups: Group[] = target.layer === 'global' ? ['about', 'creative', 'habits'] : ['local']
+  const searching = query.trim().length > 0
+  const visible = searching ? rankByKeywords(entries.map(entry => entry.content), query).map(match => entries[match.index]) : entries
   const adding = (group: Group): boolean => draft?.kind === 'add' && draft.group === group
   const addButton = (group: Group): JSX.Element | undefined => disabled ? undefined
     : <UiIconButton size="sm" label={t('memory.add')} tooltip={t('memory.add')} disabled={busy || Boolean(draft)} disabledReason={t('memory.finishEditing')} onClick={() => setDraft({ kind: 'add', group, text: '' })}><Plus /></UiIconButton>
   return <div className="flex flex-col gap-4">
     {error ? <UiError message={error} size="sm" /> : null}
+    {entries.length > SEARCH_THRESHOLD || searching ? <UiSearchInput size="sm" value={query} placeholder={t('memory.search')} clearLabel={t('memory.clearSearch')} onClear={() => setQuery('')} onChange={event => setQuery(event.target.value)} /> : null}
+    {searching && !visible.length ? <p className={UI_TEXT_META_CLASS}>{t('memory.noMatch')}</p> : null}
     {!entries.length && !draft && (disabled || target.layer === 'global') ? <p className={UI_TEXT_META_CLASS}>{t(cachedMemory()?.settings.enabled === false ? 'memory.disabledHint' : 'memory.empty')}</p> : null}
     <div>{groups.map(group => {
-      const values = entries.filter(entry => group === 'local' || entry.section === group)
+      const values = visible.filter(entry => group === 'local' || entry.section === group)
+      if (searching && !values.length) return null
       // 全局分区始终可见，空分区只留标题与新增；局部记忆（项目/风格）只有一组，不再套标题。
       return <UiGroup key={group} title={group === 'local' ? title : t(`memory.${group}`)} titleTone="compact" actions={addButton(group)}>
         <div role="list" className="flex flex-col">

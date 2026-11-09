@@ -129,6 +129,5 @@ export function registerAssistantIpc(): void {
     return change
   }, assertTrustedAssistantRenderer)
   registerIpcHandler('assistant:memory:recordChange', input => memoryHistoryEntrySchema.parse(input), input => getAgentMemoryStore().recordExternal(input), assertTrustedAssistantRenderer)
-  registerIpcHandler('assistant:memory:requestOrganization', parseVoid, () => { enabled(); getAgentMemoryStore().requestOrganization() }, assertTrustedAssistantRenderer)
   registerIpcHandler('assistant:memory:organized', input => z.object({ changes: z.number().int().nonnegative() }).strict().parse(input), ({ changes }) => { enabled(); getAgentMemoryStore().markOrganized(changes) }, assertTrustedAssistantRenderer)
 }

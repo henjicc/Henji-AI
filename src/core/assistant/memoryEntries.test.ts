@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { exceedsMemoryBudget, globalMemoryEntriesSchema, projectMemoryEntriesSchema, resolveMemoryValue, firstAvailableMemoryFont, shouldOrganizeMemory, type MemoryEntry } from './memoryEntries'
+import { globalMemoryEntriesSchema, projectMemoryEntriesSchema, resolveMemoryValue, firstAvailableMemoryFont, shouldOrganizeMemory, type MemoryEntry } from './memoryEntries'
 import { applyMemoryWrite, memoryRevertWrite, type MemoryWrite } from './memoryOperations'
 import { buildProjectManifest, parseProjectManifest } from '../documents/projectManifest'
 
@@ -8,16 +8,14 @@ const write: MemoryWrite = { target: { layer: 'global' }, id: 'font', expectedRe
 const entry = (): MemoryEntry => applyMemoryWrite([], write, now, 'first').entries[0]
 
 describe('三层记忆契约与写入', () => {
-  it('全局必须分区，项目不允许分区或优先级，重复标识校验；超出整理预算只请求整理不拒绝', () => {
+  it('全局必须分区，项目不允许分区或优先级，重复标识校验；总量不设上限', () => {
     expect(globalMemoryEntriesSchema.safeParse([entry()]).success).toBe(true)
     expect(projectMemoryEntriesSchema.safeParse([entry()]).success).toBe(false)
     const { section: _section, ...local } = entry()
     expect(projectMemoryEntriesSchema.safeParse([local]).success).toBe(true)
     expect(projectMemoryEntriesSchema.safeParse([{ ...local, precedence: 'preference' }]).success).toBe(false)
     expect(globalMemoryEntriesSchema.safeParse([entry(), entry()]).success).toBe(false)
-    const large = Array.from({ length: 40 }, (_, i) => ({ ...entry(), id: String(i), content: '字'.repeat(200) }))
-    expect(globalMemoryEntriesSchema.safeParse(large).success).toBe(true)
-    expect(exceedsMemoryBudget('global', globalMemoryEntriesSchema.parse(large))).toBe(true)
+    expect(globalMemoryEntriesSchema.safeParse(Array.from({ length: 400 }, (_, i) => ({ ...entry(), id: String(i), content: '字'.repeat(200) }))).success).toBe(true)
   })
   it('同条目拒绝陈旧基线，不同条目不互相阻断，空改动不记历史', () => {
     const first = applyMemoryWrite([], write, now, 'first')
@@ -47,15 +45,14 @@ describe('三层记忆契约与写入', () => {
     expect(resolveMemoryValue('font.zh', [global], [{ ...global, value: { key: 'font.zh', fonts: ['项目字体'] } }], style).value).toEqual({ key: 'font.zh', fonts: ['项目字体'] })
     expect(firstAvailableMemoryFont(['缺失', 'source han sans'], ['Source Han Sans'])).toBe('Source Han Sans')
   })
-  it('整理只在启用且十次改动或容量触发，每日最多一次', () => {
+  it('整理只在启用且十次改动或旧数据标记待整理时触发，每日最多一次', () => {
     const state = { settings: { enabled: true, autoOrganize: true }, changesSinceOrganization: 9, lastOrganizedAt: null }
     expect(shouldOrganizeMemory(state, now)).toBe(false)
-    expect(shouldOrganizeMemory(state, now, true)).toBe(true)
     expect(shouldOrganizeMemory({ ...state, needsOrganization: true }, now)).toBe(true)
-    expect(shouldOrganizeMemory({ ...state, settings: { enabled: true, autoOrganize: false } }, now, true)).toBe(false)
+    expect(shouldOrganizeMemory({ ...state, needsOrganization: true, settings: { enabled: true, autoOrganize: false } }, now)).toBe(false)
     expect(shouldOrganizeMemory({ ...state, changesSinceOrganization: 10 }, now)).toBe(true)
     expect(shouldOrganizeMemory({ ...state, changesSinceOrganization: 10, lastOrganizedAt: now.toISOString() }, now)).toBe(false)
-    expect(shouldOrganizeMemory({ ...state, settings: { enabled: false, autoOrganize: true } }, now, true)).toBe(false)
+    expect(shouldOrganizeMemory({ ...state, needsOrganization: true, settings: { enabled: false, autoOrganize: true } }, now)).toBe(false)
   })
   it('项目格式升级保留原字段，保存和读回保留项目记忆', () => {
     const base = buildProjectManifest({ id: 'golden-project', locale: 'zh', createdAt: now.toISOString(), draft: false })

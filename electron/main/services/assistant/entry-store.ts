@@ -55,13 +55,6 @@ export class MemoryEntryStore {
     return next.state
   }
 
-  requestOrganization(): void {
-    const state = this.getState()
-    if (!state.settings.enabled || state.needsOrganization) return
-    const next = { ...state, needsOrganization: true, revision: state.revision + 1 }
-    this.save(next); this.publish(next)
-  }
-
   markOrganized(startedChanges: number, attemptOnly = false): void {
     const next = this.database.transaction(() => {
       const state = this.getState()

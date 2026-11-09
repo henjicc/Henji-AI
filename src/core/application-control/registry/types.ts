@@ -48,6 +48,8 @@ export interface ApplicationEntityListProjection {
   propertyIds?: string[]
   /** 等值过滤条件；全部命中才保留。键的写法与 propertyIds 相同，json 属性可再接点分路径筛其中的字段。 */
   where?: Record<string, JsonValue>
+  /** 关键词：按名称或正文的相关度排序查找，与 where 同时给出时先排序再筛选。 */
+  text?: string
 }
 
 export interface ApplicationEntityReadRequest {

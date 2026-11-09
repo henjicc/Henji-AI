@@ -1,4 +1,5 @@
-import { MEMORY_RULES, shouldOrganizeMemory } from '../../../../src/core/assistant/memoryEntries'
+import { MEMORY_RULES, shouldOrganizeMemory, type MemoryEntry } from '../../../../src/core/assistant/memoryEntries'
+import { renderMemoryContext } from '../../../../src/core/assistant/memoryContext'
 import { PROJECT_PROGRESS_RULES } from '../../../../src/core/documents/projectProgress'
 import { getDocumentService } from '../documents/runtime'
 import { getAgentMemoryStore } from '../assistant/memory'
@@ -311,7 +312,11 @@ export class EmbeddedAgentService {
         if (document.meta.container.kind === 'project') projectId = document.meta.container.projectId
       }
       const projectMemory = memory.settings.enabled && projectId ? await getDocumentService().readProjectMemory(projectId) : []
-      const promptContext = JSON.stringify({ ...host, memory: memory.settings.enabled ? { global: memory.entries, projectId, project: projectMemory, style: styleMemory } : { enabled: false } })
+      // 未保存的风格偏好来自界面快照，只取渲染需要的正文
+      const styleEntries = styleMemory.filter((entry): entry is MemoryEntry => typeof (entry as { content?: unknown } | null)?.content === 'string')
+      // 记忆按本次请求召回后写成紧凑文本：总量不设上限，不能整份 JSON 注入
+      const memoryText = memory.settings.enabled ? renderMemoryContext({ global: memory.entries, project: projectMemory, style: styleEntries }, input.text) : ''
+      const promptContext = JSON.stringify({ ...host, memory: memory.settings.enabled ? { projectId, text: memoryText } : { enabled: false } })
       const attachments = await prepareEmbeddedAttachments(input.attachments ?? [], model, this.preparation.signal)
       if (this.cancelled) return
       this.client = createEmbeddedApplicationClient(this.state.sessionId!)
@@ -321,8 +326,8 @@ export class EmbeddedAgentService {
           contextPart('system', '系统提示词', SYSTEM_INSTRUCTIONS),
           contextPart('userInstructions', '用户指令', instructions.content),
           contextPart('skills', '技能目录', skills.instructions, skills.names.length),
-          contextPart('memory', '记忆', memory.settings.enabled ? JSON.stringify({ global: memory.entries, project: projectMemory, style: styleMemory }) : '',
-            memory.settings.enabled ? memory.entries.length + projectMemory.length + styleMemory.length : 0),
+          contextPart('memory', '记忆', memoryText,
+            memory.settings.enabled ? memory.entries.length + projectMemory.length + styleEntries.length : 0),
           contextPart('host', '宿主上下文', input.context),
           contextPart('tools', '可加载工具', '', tools.length),
           contextPart('attachments', '附件', '', attachments.length),
@@ -340,7 +345,7 @@ export class EmbeddedAgentService {
             await this.send({ action: 'configure', input: { directory: path.join(getAppLocalDataDir(), 'assistant', 'pi'), model: organizer, tools: this.client.catalog(), instructions: SYSTEM_INSTRUCTIONS } })
             // 整理记忆另起一条链路，工具日志不能记到用户这次运行名下
             this.requestId = `${requestId}:memory`
-            await this.send({ action: 'prompt', input: { text: '后台整理记忆：读取全局、各项目与风格记忆，合并重复、压缩措辞、删掉明确过时的内容；相同偏好在至少两个项目出现才提升到全局，不提升项目事实。不推断新偏好，不改用户作品。读取每条基线后调用 organize_assistant_memory，changes 带上原 revision；无需改动时不编造修改。不要向用户发送长报告。', background: true, context: promptContext, requestId: `${requestId}:memory` } })
+            await this.send({ action: 'prompt', input: { text: '后台整理记忆：记忆可能很多，不要逐条通读；先读 assistant.memory_settings 的修改历史（最近 100 次），只处理其中新增或改过、仍然存在的条目，用 list_application_entities 的 text 关键词找出与它们相近的旧条目，合并重复、压缩措辞、删掉明确过时的内容；相同偏好在至少两个项目出现才提升到全局，不提升项目事实。不推断新偏好，不改用户作品。读取每条基线后调用 organize_assistant_memory，changes 带上原 revision；无需改动时不编造修改。不要向用户发送长报告。', background: true, context: promptContext, requestId: `${requestId}:memory` } })
           } catch (error) { logger.warn('记忆自动整理未完成，保留原记忆与修改历史', { event: 'memory.organize.failed', requestId, error }) }
         }
       }

@@ -977,6 +977,9 @@
     "unlimited": "No limits"
   },
   "memory": {
+    "search": "Search memories",
+    "clearSearch": "Clear search",
+    "noMatch": "No matching memories",
     "finishEditing": "Finish the entry you are editing first",
     "placeholder": "One sentence, e.g. use Source Han Sans for Chinese captions",
     "precedence_ask": "On conflict: ask me",

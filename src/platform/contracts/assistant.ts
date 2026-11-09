@@ -36,6 +36,5 @@ export interface AssistantPlatform {
   readProjectMemory(projectId: string): Promise<MemoryEntry[]>
   writeMemory(input: MemoryWrite): Promise<MemoryHistoryEntry | null>
   recordMemoryChange(change: MemoryHistoryEntry): Promise<MemorySnapshot>
-  requestMemoryOrganization(): Promise<void>
   markMemoryOrganized(changes: number): Promise<void>
 }

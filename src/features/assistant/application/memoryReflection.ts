@@ -10,8 +10,12 @@ import { readMemory, writeMemory, refreshMemory, revertMemory } from '@/services
 import { styleMemoryStorage } from '@/services/assistantMemory/styleMemoryStorage'
 
 import { MEMORY_RULES } from '@/core/assistant/memoryEntries'
+import { MEMORY_ENTITY_TYPES } from '@/core/assistant/memoryContext'
+import { keywordOverlap } from '@/core/search/keywordSearch'
+
+const SIMILAR_OVERLAP = 0.5
 import { rollbackStepWrites } from '@/core/application-control/execution/persistence'
-const types = { global: 'assistant.memory', project: 'document.project_memory', style: 'video_edit.style_preference' } as const
+const types = MEMORY_ENTITY_TYPES
 const parents = { global: 'assistant.memory_settings', project: 'documents.project', style: 'video_edit.style' } as const
 const schemaRef = (kind: 'entity' | 'property', id: string) => ({ catalogVersion: APPLICATION_CAPABILITY_CATALOG_VERSION, kind, id, version: 1, digest: `sha256:${'9'.repeat(64)}` })
 const rootRef = { kind: 'assistant.memory_settings', id: 'singleton' }
@@ -115,7 +119,14 @@ export class MemoryExecutor implements ApplicationMutationExecutor, ApplicationC
       } else if (step.operation.kind === 'create') {
         if (step.parent.kind !== parents[this.layer]) throw new Error(`INVALID_PARENT：请在 ${parents[this.layer]} 下新增。`)
         const target: MemoryTarget = this.layer === 'global' ? { layer: 'global' } : { layer: this.layer, ownerId: step.parent.id }
-        for (const item of step.operation.items) { const id = crypto.randomUUID(); await write(refOf(target, id), target, id, 0, memoryEntryWriteSchema.parse(item.properties[`${this.entityType}.entry`])) }
+        const existing = await readMemory(target)
+        for (const item of step.operation.items) {
+          const id = crypto.randomUUID(), entry = memoryEntryWriteSchema.parse(item.properties[`${this.entityType}.entry`])
+          await write(refOf(target, id), target, id, 0, entry)
+          // 记忆不设总量上限，重复要在写入时就发现：把几乎重复的旧条目告诉写入方，由它决定合并还是保留
+          const similar = existing.filter(value => keywordOverlap(value.content, entry.content) >= SIMILAR_OVERLAP).slice(0, 3)
+          if (similar.length) facts[facts.length - 1] += `相近的已有记忆：${similar.map(value => `「${value.content}」（${refOf(target, value.id).id}）`).join('；')}。若说的是同一件事，改旧条目并删掉这条新的。`
+        }
       } else for (const ref of step.operation.targets) {
         const current = await entryState(this.layer, ref)
         const expected = step.expectedRevisions[await scope(ref)]
@@ -146,7 +157,7 @@ export class MemoryExecutor implements ApplicationMutationExecutor, ApplicationC
 const rootFields: ApplicationFieldDefinition<MemorySnapshot, MemorySnapshot>[] = (['enabled', 'autoOrganize', 'history'] as const).map(key => {
   const writable = key !== 'history', id = `${rootRef.kind}.${key === 'autoOrganize' ? 'auto_organize' : key}`
   return { propertyId: id, storeActions: [], descriptor: { id, entityType: rootRef.kind, version: 1, title: { enabled: '使用与更新记忆', autoOrganize: '自动整理', history: '修改历史' }[key],
-    description: key === 'history' ? '最近100次修改，含谁、哪层、改前改后与原因。使用 revert_assistant_memory 撤回某次修改。' : key === 'enabled' ? '关闭后所有层记忆不读不写，包括自动整理与软件默认值。' : '任务结束后累计10次修改或达到容量时整理，每天最多一次。',
+    description: key === 'history' ? '最近100次修改，含谁、哪层、改前改后与原因。使用 revert_assistant_memory 撤回某次修改。' : key === 'enabled' ? '关闭后所有层记忆不读不写，包括自动整理与软件默认值。' : '任务结束后累计10次修改时整理，每天最多一次。',
     value: writable ? { kind: 'boolean' } : { kind: 'json', schemaRef: schemaRef('property', `${id}.value`) }, nullable: false,
     dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['settings:read'], write: writable ? ['settings:write'] : [] }, revisionScopes: ['memory_settings'], schemaRef: schemaRef('property', id),
     ...(!writable ? { readOnlyReason: '修改历史由记忆写入与撤回操作维护。' } : {}) },

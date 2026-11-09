@@ -1,7 +1,7 @@
 import { applicationWritePreflight, type ApplicationWriteExecution } from '@/core/application-control/execution/writeExecution'
 import { getPlatform } from '@/platform/runtime'
 import { applyMemoryWrite, memoryRevertWrite, duplicateMemoryWrites, type MemoryWrite } from '@/core/assistant/memoryOperations'
-import { exceedsMemoryBudget, shouldOrganizeMemory, type MemoryEntry, type MemoryTarget,  type MemoryHistoryEntry } from '@/core/assistant/memoryEntries'
+import { shouldOrganizeMemory, type MemoryEntry, type MemoryTarget,  type MemoryHistoryEntry } from '@/core/assistant/memoryEntries'
 import { styleMemoryStorage } from './styleMemoryStorage'
 
 import { refreshMemory } from './memoryState'
@@ -26,7 +26,6 @@ export async function writeMemory(input: MemoryWrite): Promise<MemoryHistoryEntr
     else change = await styleMemoryStorage().write({ ...input, target: input.target })
     await refreshMemory()
     // 写入已经落盘；请求整理失败不能把这次写入报成失败
-    if (change) await (async () => { if (exceedsMemoryBudget(input.target.layer, await readMemory(input.target))) await getPlatform().assistant.requestMemoryOrganization() })().catch(() => undefined)
     return change
   }
   const pending = (queues.get(key) ?? Promise.resolve()).then(run, run)

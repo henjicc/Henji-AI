@@ -975,6 +975,9 @@
     "unlimited": "完全放开"
   },
   "memory": {
+    "search": "搜索记忆",
+    "clearSearch": "清除搜索",
+    "noMatch": "没有相关的记忆",
     "finishEditing": "请先完成正在编辑的条目",
     "placeholder": "一句话，例如：中文字幕默认用思源黑体",
     "precedence_ask": "冲突时先问我",

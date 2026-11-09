@@ -129,7 +129,6 @@ const assistantApi: HenjiAssistantApi = {
   readProjectMemory: projectId => nativeInvoke('assistant:memory:readProject', { projectId }),
   writeMemory: input => nativeInvoke('assistant:memory:write', input),
   recordMemoryChange: change => nativeInvoke('assistant:memory:recordChange', change),
-  requestMemoryOrganization: () => nativeInvoke('assistant:memory:requestOrganization'),
   markMemoryOrganized: changes => nativeInvoke('assistant:memory:organized', { changes }),
 }
 

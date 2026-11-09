@@ -1,4 +1,5 @@
 import { objectDefaultsDescription, validateJsonValueShape } from './jsonValueShape'
+import { rankByKeywords } from '../../search/keywordSearch'
 import {
   applicationSchemaRefSchema,
   jsonValueSchema,
@@ -321,6 +322,11 @@ export class ApplicationReflectionRegistry {
     context: ApplicationControlAccessContext,
     projection?: ApplicationEntityListProjection
   ): Promise<ApplicationEntityListResult> {
+    // 实测模型会把属性 ID（assistant.memory.entry）当成实体类型写进来：认出它所属的实体，按那个实体列出
+    if (!this.propertiesByEntity.has(entityType)) {
+      const owner = [...this.propertiesByEntity.entries()].find(([, properties]) => properties.has(entityType))?.[0]
+      if (owner) entityType = owner
+    }
     const entity = this.requireVisibleEntity(entityType, context)
     const provider = this.requireProvider(entityType)
     const listPage = async (pageRequest: ApplicationEntityListRequest): Promise<ApplicationEntityListResult> => {
@@ -331,7 +337,19 @@ export class ApplicationReflectionRegistry {
       // provider 常把名称或正文直接当 label，统一收敛到契约长度，避免一条超长就拒掉整页。
       return { ...page, refs: page.refs.map(normalizeApplicationRefLabel) }
     }
-    let result = await listPage(request)
+    const text = projection?.text?.trim()
+    if (request.cursor && Boolean(text) !== request.cursor.startsWith('rank:')) {
+      throw new Error('INVALID_CURSOR：游标要与产生它的查询一起使用：rank: 开头的游标只能配同一个 text，其余游标不能配 text。')
+    }
+    // 排序要读全部实例；同一次调用里续页复用这一份排序
+    let ranked: { refs: ApplicationRef[]; revisions: Record<string, number> } | undefined
+    const rankedPage = async (pageRequest: ApplicationEntityListRequest): Promise<ApplicationEntityListResult> => {
+      ranked ??= await this.rankAll(listPage, text!)
+      const start = pageRequest.cursor ? Number(pageRequest.cursor.slice(5)) || 0 : 0
+      const end = start + pageRequest.limit
+      return { refs: ranked.refs.slice(start, end), nextCursor: end < ranked.refs.length ? `rank:${end}` : null, revisions: ranked.revisions }
+    }
+    let result = text ? await rankedPage(request) : await listPage(request)
     const whereEntries = Object.entries(projection?.where ?? {})
       .map(([key, value]) => ({ ...this.resolveWhereKey(entityType, key, context), value }))
     // 读回与筛选同一套写法：属性 ID 后接点分路径时只读回其中的字段，结果按调用方写的键返回
@@ -355,9 +373,23 @@ export class ApplicationReflectionRegistry {
       }
       scanned += result.refs.length
       if (whereEntries.length === 0 || !result.nextCursor || items.length >= request.limit || scanned >= WHERE_SCAN_LIMIT) break
-      result = await listPage({ cursor: result.nextCursor, limit: request.limit - items.length })
+      const next = { cursor: result.nextCursor, limit: request.limit - items.length }
+      result = text ? await rankedPage(next) : await listPage(next)
     }
     return { ...result, refs: items.map((item) => item.ref), items }
+  }
+
+  /** 按关键词排序：读完全部实例的名称或正文（label，没有时用 id），只保留命中的，按相关度从高到低。 */
+  private async rankAll(listPage: (request: ApplicationEntityListRequest) => Promise<ApplicationEntityListResult>, text: string): Promise<{ refs: ApplicationRef[]; revisions: Record<string, number> }> {
+    const refs: ApplicationRef[] = []
+    let revisions: Record<string, number> = {}
+    for (let cursor: string | null = null; ;) {
+      const page: ApplicationEntityListResult = await listPage({ ...(cursor ? { cursor } : {}), limit: 200 })
+      refs.push(...page.refs); revisions = page.revisions
+      if (!page.nextCursor) break
+      cursor = page.nextCursor
+    }
+    return { refs: rankByKeywords(refs.map((ref) => ref.label ?? ref.id), text).map((match) => refs[match.index]), revisions }
   }
 
   async readEntity(

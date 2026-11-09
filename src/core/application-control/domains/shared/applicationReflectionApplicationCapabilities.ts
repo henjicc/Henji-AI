@@ -66,7 +66,8 @@ const listEntities = defineApplicationCapability({
   description: '按实体类型列出当前存在的实例及其稳定引用。'
     + 'propertyIds 可以一并读回每个实例的属性值；where 按属性等值筛选，只保留全部命中的实例；'
     + 'json 属性可在属性 ID 后接点分路径筛选或读回其中的字段，如 where {"assistant.memory.entry.section":"creative"}、propertyIds ["assistant.memory.entry.content"]。'
-    + '要"按名字找到那一个"就用 where，不要把列表取回来自己遍历——脚本语言不支持遍历读取结果。',
+    + 'text 写关键词时按名称或正文的相关度排序查找（中文两字词即可命中），适合在大量记忆、素材里找相关条目。'
+    + '要"按名字找到那一个"就用 where 或 text，不要把列表取回来自己遍历——脚本语言不支持遍历读取结果。',
   domain: 'application',
   aliases: ['列出实例', '有哪些对象', '列出关键帧', '按名字查找', 'list entities'],
   readOnly: true, dataClasses: ['C1'],
@@ -86,6 +87,7 @@ const listEntities = defineApplicationCapability({
       z.string().min(1),
       z.union([z.string(), z.number(), z.boolean(), z.null()])
     ).default({}),
+    text: z.string().trim().min(1).max(200).optional(),
   }).strict(),
   outputSchema: capabilityOutputSchema({
     refs: z.array(refSchema),

@@ -3,19 +3,6 @@ import { z } from 'zod'
 
 export const MEMORY_ENTRY_MAX_LENGTH = 200
 export const MEMORY_HISTORY_LIMIT = 100
-/**
- * 整理预算：超过后请求整理（合并重复、压缩措辞），写入照常成功。
- * 记忆会随每个任务读进上下文，预算约束的是上下文开销；用户要记的东西不因此被拒。
- */
-export const MEMORY_ORGANIZE_BUDGET = {
-  global: { entries: 120, characters: 6000 },
-  project: { entries: 80, characters: 4000 },
-  style: { entries: 60, characters: 3000 },
-} as const
-export function exceedsMemoryBudget(layer: MemoryLayer, entries: readonly MemoryEntry[]): boolean {
-  const budget = MEMORY_ORGANIZE_BUDGET[layer]
-  return entries.length > budget.entries || entries.reduce((sum, entry) => sum + entry.content.length, 0) > budget.characters
-}
 export const memoryLayerSchema = z.enum(['global', 'project', 'style'])
 export type MemoryLayer = z.infer<typeof memoryLayerSchema>
 const sentence = z.string().trim().min(1).max(MEMORY_ENTRY_MAX_LENGTH).refine(value => !/[\0\r\n]/.test(value), '请用一句话记录记忆。')
@@ -99,10 +86,10 @@ export function firstAvailableMemoryFont(fonts: readonly string[], installed: re
   return fonts.map(font => available.get(font.toLocaleLowerCase())).find(font => font !== undefined)
 }
 
-export function shouldOrganizeMemory(state: Pick<MemorySnapshot, 'settings' | 'changesSinceOrganization' | 'lastOrganizedAt' | 'needsOrganization'>, now: Date, overCapacity = false): boolean {
+export function shouldOrganizeMemory(state: Pick<MemorySnapshot, 'settings' | 'changesSinceOrganization' | 'lastOrganizedAt' | 'needsOrganization'>, now: Date): boolean {
   return state.settings.enabled && state.settings.autoOrganize
-    && (state.changesSinceOrganization >= 10 || state.needsOrganization || overCapacity)
+    && (state.changesSinceOrganization >= 10 || state.needsOrganization === true)
     && (!state.lastOrganizedAt || state.lastOrganizedAt.slice(0, 10) !== now.toISOString().slice(0, 10))
 }
 
-export const MEMORY_RULES = '每个新任务先读取最新全局记忆；在项目内工作时读取项目记忆，使用风格时读取使用者偏好。当前要求 > 项目 > 风格及风格偏好 > 全局；全局创作偏好缺省听风格，但缺省不代表用户已作出冲突选择。新增普通偏好必须省略 precedence；“我一般用思源黑体，别用宋体”等表达只说明喜好，绝不表示偏好优先。只有用户回答了风格与偏好的冲突询问，或明确说“就算风格不同也按我的”等跨风格覆盖要求，才可按该明确选择写 precedence=style/preference，并在 reason 记录用户的选择依据；不得自行补写、推断或承诺以后冲突不再询问。全局偏好与风格冲突且未设 precedence 时，回答第一句必须先问用户听风格还是听偏好，再简述差异；本轮不推荐字体、不动手、不写 precedence，等明确答复后再逐条更新。已明确 precedence=preference 才压过风格。这次/这期/项目内容记项目；某风格外观记风格；我一般/以后都/所有记全局。说不清时记窄，不从一次使用推断。纠错只改对应条目，矛盾以较新为准并说明原因；关闭记忆时不读不写。'
+export const MEMORY_RULES = '每个新任务先读取最新全局记忆；在项目内工作时读取项目记忆，使用风格时读取使用者偏好。当前要求 > 项目 > 风格及风格偏好 > 全局；全局创作偏好缺省听风格，但缺省不代表用户已作出冲突选择。新增普通偏好必须省略 precedence；“我一般用思源黑体，别用宋体”等表达只说明喜好，绝不表示偏好优先。只有用户回答了风格与偏好的冲突询问，或明确说“就算风格不同也按我的”等跨风格覆盖要求，才可按该明确选择写 precedence=style/preference，并在 reason 记录用户的选择依据；不得自行补写、推断或承诺以后冲突不再询问。全局偏好与风格冲突且未设 precedence 时，回答第一句必须先问用户听风格还是听偏好，再简述差异；本轮不推荐字体、不动手、不写 precedence，等明确答复后再逐条更新。已明确 precedence=preference 才压过风格。这次/这期/项目内容记项目；某风格外观记风格；我一般/以后都/所有记全局。说不清时记窄，不从一次使用推断。纠错只改对应条目，矛盾以较新为准并说明原因；关闭记忆时不读不写。记忆不设上限，上下文只带常驻与相关条目，其余用 list_application_entities 的 text 查；提示有相近条目就合并。'

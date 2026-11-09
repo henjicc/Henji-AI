@@ -27,7 +27,6 @@ export function createElectronAssistant(): AssistantPlatform {
     readProjectMemory: projectId => getNativeAssistant().readProjectMemory(projectId),
     writeMemory: input => getNativeAssistant().writeMemory(input),
     recordMemoryChange: change => getNativeAssistant().recordMemoryChange(change),
-    requestMemoryOrganization: () => getNativeAssistant().requestMemoryOrganization(),
     markMemoryOrganized: changes => getNativeAssistant().markMemoryOrganized(changes),
   }
 }

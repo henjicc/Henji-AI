@@ -534,6 +534,23 @@ describe('ApplicationReflectionRegistry', () => {
       .rejects.toThrow('kind、id')
   })
 
+  it('text 按名称关键词排序查找并按排序结果分页，可与 where 同用', async () => {
+    const registry = new ApplicationReflectionRegistry(catalogVersion)
+    const labels: Record<string, string> = { one: '片头字体', two: '背景配色', three: '片尾字体' }
+    registry.register({ ...registration(), provider: { ...multiProvider, async listEntities(request) {
+      const ids = ['one', 'two', 'three'], start = Number(request.cursor ?? 0), end = start + request.limit
+      return { refs: ids.slice(start, end).map((id) => ({ kind: 'sample.item', id, label: labels[id] })), nextCursor: end < ids.length ? String(end) : null, revisions: { 'sample.items': 3 } }
+    } } })
+    const first = await registry.listEntities('sample.item', { limit: 1 }, assistantContext, { text: '字体' })
+    // 把属性 ID 当成实体类型时按所属实体列出
+    expect((await registry.listEntities('sample.level', { limit: 1 }, assistantContext, { text: '字体' })).refs).toEqual(first.refs)
+    expect(first.refs.map((ref) => ref.id)).toEqual(['one'])
+    const rest = await registry.listEntities('sample.item', { cursor: first.nextCursor!, limit: 5 }, assistantContext, { text: '字体' })
+    expect(rest.refs.map((ref) => ref.id)).toEqual(['three'])
+    const filtered = await registry.listEntities('sample.item', { limit: 5 }, assistantContext, { text: '字体', where: { 'sample.level': 9 } })
+    expect(filtered.refs).toEqual([])
+  })
+
   it('不请求投影时行为与过去逐字一致，不做任何额外读取', async () => {
     const registry = new ApplicationReflectionRegistry(catalogVersion)
     let reads = 0
