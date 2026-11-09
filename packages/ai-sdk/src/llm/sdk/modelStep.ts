@@ -149,10 +149,10 @@ export function buildModelStepProviderOptions(input: ModelStepInput): ProviderOp
   return Object.keys(options).length > 0 ? options : undefined
 }
 
-export function calculateModelStepKnownCostUsd(
-  usage: Omit<ModelStepUsage, 'knownCostUsd'>,
+export function calculateModelStepKnownCost(
+  usage: Omit<ModelStepUsage, 'knownCost'>,
   pricing: ModelStepInput['pricing']
-): number | null {
+): ModelStepUsage['knownCost'] {
   if (!pricing || usage.inputTokens === null || usage.outputTokens === null) return null
   const cacheRead = usage.cacheReadTokens ?? 0
   const cacheWrite = usage.cacheWriteTokens ?? 0
@@ -164,7 +164,7 @@ export function calculateModelStepKnownCostUsd(
     + cacheWrite * (pricing.cacheWritePerMillionTokens ?? pricing.inputPerMillionTokens)
     + usage.outputTokens * pricing.outputPerMillionTokens
   ) / 1_000_000
-  return Number(cost.toFixed(12))
+  return { amount: Number(cost.toFixed(12)), currency: pricing.currency }
 }
 
 function normalizeUsage(
@@ -181,7 +181,7 @@ function normalizeUsage(
     reasoningTokens: usage.outputTokenDetails.reasoningTokens ?? null,
     totalTokens: usage.totalTokens ?? null,
   }
-  return { ...normalized, knownCostUsd: calculateModelStepKnownCostUsd(normalized, pricing) }
+  return { ...normalized, knownCost: calculateModelStepKnownCost(normalized, pricing) }
 }
 
 function normalizeToolCall(call: {

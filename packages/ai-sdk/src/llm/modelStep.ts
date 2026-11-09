@@ -137,8 +137,9 @@ export const modelStepInputSchema = z.object({
     timeoutMs: z.number().int().positive().optional(),
   }).optional(),
   providerOptions: z.record(z.string(), jsonRecordSchema).optional(),
+  /** 单价币种随供应商价格表登记，费用按同一币种返回，换算由调用方按自己的汇率处理。 */
   pricing: z.object({
-    currency: z.literal('USD'),
+    currency: z.enum(['CNY', 'USD']),
     inputPerMillionTokens: z.number().nonnegative(),
     outputPerMillionTokens: z.number().nonnegative(),
     cacheReadPerMillionTokens: z.number().nonnegative().optional(),
@@ -179,7 +180,10 @@ export const modelStepUsageSchema = z.object({
   textTokens: z.number().int().nonnegative().nullable(),
   reasoningTokens: z.number().int().nonnegative().nullable(),
   totalTokens: z.number().int().nonnegative().nullable(),
-  knownCostUsd: z.number().nonnegative().nullable().optional(),
+  knownCost: z.object({
+    amount: z.number().nonnegative(),
+    currency: z.enum(['CNY', 'USD']),
+  }).nullable().optional(),
 })
 export type ModelStepUsage = z.infer<typeof modelStepUsageSchema>
 

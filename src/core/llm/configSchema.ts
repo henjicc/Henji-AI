@@ -78,7 +78,7 @@ export const llmModelConfigSchema = z.object({
   baseUrl: z.string().optional(),
   capabilities: llmCapabilitiesSchema,
   pricing: z.object({
-    currency: z.literal('USD'),
+    currency: z.enum(['CNY', 'USD']),
     inputPerMillionTokens: z.number().nonnegative(),
     outputPerMillionTokens: z.number().nonnegative(),
     cacheReadPerMillionTokens: z.number().nonnegative().optional(),

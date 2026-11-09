@@ -4,6 +4,7 @@
 
 - 能力描述新增可选 `pricing`（`CapabilityPricing`）：按音频时长（`AudioDurationPricing`）或按 token（`TokenUsagePricing`，可带 `audioTokenRate` 折算比例）。内置语音识别 20 个预设（百炼文件 / 短音频 / 实时、火山 SeedASR 文件与实时、Groq Whisper、硅基 SenseVoiceSmall）、百炼 Qwen-MT 翻译、全部文本向量与重排序预设都登记了官方按量标准价，外部消费方不再需要自己维护价格表。新增 `audioDurationPrice`、`tokenUsagePrice`、`estimateAudioDurationCost`、`isValidCapabilityPricing`；注册与建立发现索引时校验价格为有限非负数，快照时深冻结：外部模块的描述若已带有形状不符的 `pricing` 字段，现在会以 `invalid_capability_pricing` 注册失败。
 - 百炼 `gte-rerank-v2` 登记北京地域 0.8 元 / 百万输入 tokens。
+- **破坏性**：模型步 `pricing.currency` 由只接受 `USD` 改为 `CNY | USD`，用量里的 `knownCostUsd: number` 改为 `knownCost: { amount, currency }`，按单价登记的币种返回；`calculateModelStepKnownCostUsd` 更名为 `calculateModelStepKnownCost`。迁移：读 `usage.knownCost.amount`，币种不一致时按自己的汇率换算。
 
 ## 0.10.0 - 2026-11-08
 
