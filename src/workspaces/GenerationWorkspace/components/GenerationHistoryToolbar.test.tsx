@@ -28,6 +28,8 @@ function setup(overrides: Partial<GenerationHistoryToolbarProps> = {}) {
     matchedCount: 3,
     totalCount: 10,
     onOpenClearHistory: vi.fn(),
+    includeCanvas: false,
+    onIncludeCanvasChange: vi.fn(),
     ...overrides,
   }
   render(<GenerationHistoryToolbar {...props} />)

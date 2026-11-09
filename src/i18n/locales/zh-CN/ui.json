@@ -772,6 +772,7 @@
   "workspaceFilters": {
     "typeTabs": "筛选类型",
     "searchHistory": "搜索历史",
+    "includeCanvas": "显示画布里的生成",
     "moreActions": "更多操作",
     "searchPlaceholder": "搜索提示词、模型或错误信息",
     "clearSearch": "清空搜索",

@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { MoreHorizontal, Search, Trash2 } from 'lucide-react'
 import { useI18n } from '@/hooks/useI18n'
 import PanelTrigger from '@/components/ui/PanelTrigger'
-import { UI_TEXT_META_CLASS, UiButton, UiIconButton } from '@/components/ui'
+import { UI_TEXT_META_CLASS, UiButton, UiIconButton, UiOptionButton } from '@/components/ui'
 import type { GenerationHistoryMediaType } from '@/stores/generationHistoryFilterStore'
 
 export interface GenerationHistoryToolbarProps {
@@ -18,6 +18,9 @@ export interface GenerationHistoryToolbarProps {
   matchedCount: number
   totalCount: number
   onOpenClearHistory: () => void
+  /** 列表是否也显示画布节点发起的生成（默认只显示生成页自己的） */
+  includeCanvas: boolean
+  onIncludeCanvasChange: (includeCanvas: boolean) => void
   /** 命令带右端、搜索之前的状态入口（开发用的测试模式徽标，任务 5.7：原为浮在右上角的固定定位，窄窗口下压住搜索按钮）。 */
   trailingStatus?: ReactNode
 }
@@ -36,6 +39,8 @@ export function GenerationHistoryToolbar({
   matchedCount,
   totalCount,
   onOpenClearHistory,
+  includeCanvas,
+  onIncludeCanvasChange,
   trailingStatus,
 }: GenerationHistoryToolbarProps): JSX.Element {
   const { t } = useI18n()
@@ -65,6 +70,16 @@ export function GenerationHistoryToolbar({
           panelPadding="menu"
           closeOnPanelClick
           renderPanel={() => (
+            <>
+            <UiOptionButton
+              type="button"
+              variant="menu"
+              active={includeCanvas}
+              onClick={() => onIncludeCanvasChange(!includeCanvas)}
+              className="w-full justify-start"
+            >
+              {t('ui:workspaceFilters.includeCanvas')}
+            </UiOptionButton>
             <UiButton
               type="button"
               variant="danger"
@@ -75,6 +90,7 @@ export function GenerationHistoryToolbar({
               <Trash2  />
               {t('ui:actions.clearHistory')}
             </UiButton>
+            </>
           )}
         >
           {({ open, togglePanel }) => (

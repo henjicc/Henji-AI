@@ -29,6 +29,7 @@ import { useGenerationTaskProgressStore } from '@/stores/generationTaskProgressS
 import { useTestModeShortcuts } from './GenerationWorkspace/hooks/useTestModeShortcuts'
 import { useUpdateCheck } from './GenerationWorkspace/hooks/useUpdateCheck'
 import { useGenerationHistoryFiltering } from './GenerationWorkspace/hooks/useGenerationHistoryFiltering'
+import { useGenerationHistoryFilterStore } from '@/stores/generationHistoryFilterStore'
 import { useGenerationAutoScroll } from './GenerationWorkspace/hooks/useGenerationAutoScroll'
 import { useGenerationImageViewer } from './GenerationWorkspace/hooks/useGenerationImageViewer'
 import { GENERATION_COLUMN_MAX_WIDTH_CLASS, GENERATION_COLUMN_MAX_WIDTH_PX } from './GenerationWorkspace/generationColumn'
@@ -48,6 +49,8 @@ const GenerationWorkspace: React.FC = () => {
   const { tasks, setTasks, rememberResultImageDimensions, isTasksLoaded, isGenerating,
     handleGenerate, handleContinuePolling, imageEditStatesRef, setUploadedImagesRef,
     setUploadedFilePathsRef, notification, notificationVisible, notify } = useGenerationLifecycleContext()
+  const includeCanvas = useGenerationHistoryFilterStore((state) => state.includeCanvas)
+  const listedTasks = useMemo(() => includeCanvas ? tasks : tasks.filter((task) => !task.options?.__canvasGeneration), [includeCanvas, tasks])
   const {
     filterKeyword,
     filterProviderId,
@@ -70,7 +73,7 @@ const GenerationWorkspace: React.FC = () => {
     modelFilterOptions,
     mediaFilterOptions,
     handleProviderFilterChange,
-  } = useGenerationHistoryFiltering(tasks)
+  } = useGenerationHistoryFiltering(listedTasks)
   const mediaActionMessages = useMemo(() => {
     return {
       downloadSuccess: t('ui:workspace.toast.downloadSuccess'),
@@ -86,8 +89,9 @@ const GenerationWorkspace: React.FC = () => {
     messages: mediaActionMessages,
   })
 
+  // 清除只作用于列表里看得到的记录，不悄悄删掉被隐藏的画布生成记录
   const { deleteTask, clearFailedTasks, clearAllTasks } = useTaskCleanup({
-    tasks,
+    tasks: listedTasks,
     setTasks,
     clearTaskProgress: clearGenerationTaskProgress,
   })
@@ -100,7 +104,7 @@ const GenerationWorkspace: React.FC = () => {
   const [isTestPanelOpen, setIsTestPanelOpen] = useState(false)
   useTestModeShortcuts({ togglePanel: () => setIsTestPanelOpen((v) => !v) })
   const { menuVisible, menuPosition, menuItems, showMenu, hideMenu } = useContextMenu()
-  const { listContainerRef, contentRef } = useGenerationAutoScroll(isTasksLoaded, tasks.length)
+  const { listContainerRef, contentRef } = useGenerationAutoScroll(isTasksLoaded, listedTasks.length)
   const {
     inputContainerRef,
     inputPadding,
@@ -236,7 +240,7 @@ const GenerationWorkspace: React.FC = () => {
   }
   return (
     <div className="relative flex h-full flex-1 flex-col overflow-hidden bg-window text-text1">
-      <GenerationAppMenus onSearch={toggleSearch} onClear={() => setIsClearDialogOpen(true)} hasTasks={tasks.length > 0} />
+      <GenerationAppMenus onSearch={toggleSearch} onClear={() => setIsClearDialogOpen(true)} hasTasks={listedTasks.length > 0} />
       {notification && <UiToast message={notification.message} tone={notification.type} visible={notificationVisible} />}
       <main className="relative z-raised flex min-h-0 flex-1 flex-col">
         {/* 命令带：类型分段 + 搜索 + 更多；搜索展开时筛选条作为从属带紧贴其下（不另画底色与边框） */}
@@ -249,8 +253,10 @@ const GenerationWorkspace: React.FC = () => {
             onToggleSearch={toggleSearch}
             hasActiveFilters={hasActiveFilters}
             matchedCount={matchedCount}
-            totalCount={tasks.length}
+            totalCount={listedTasks.length}
             onOpenClearHistory={() => setIsClearDialogOpen(true)}
+            includeCanvas={includeCanvas}
+            onIncludeCanvasChange={useGenerationHistoryFilterStore.getState().setIncludeCanvas}
             trailingStatus={<TestModeIndicator onOpenPanel={() => setIsTestPanelOpen(true)} />}
           />
           {isSearchOpen && (
@@ -292,7 +298,7 @@ const GenerationWorkspace: React.FC = () => {
             <TaskList
               scrollContainerRef={listContainerRef}
               tasks={filteredTasks}
-              totalCount={tasks.length}
+              totalCount={listedTasks.length}
               hasActiveFilters={hasActiveFilters}
               showMenu={showMenu}
               onDownload={download}

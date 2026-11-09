@@ -33,6 +33,8 @@ export const GENERATION_HISTORY_FILTER_STORE_LEDGER: ApplicationStoreActionLedge
     setTimePreset: FILTER_CAPABILITY,
     setStartDate: FILTER_CAPABILITY,
     setEndDate: FILTER_CAPABILITY,
+    // 生成页“显示画布里的生成”对应 list_generation_history 的 origin
+    setIncludeCanvas: FILTER_CAPABILITY,
     /*
      * resetFilters 清空的是这 7 个纯界面筛选框的本地状态，不对应任何持久化的"当前查询条件"——
      * 助手每次调用 list_generation_history 都是无状态的一次性查询，没有"重置"的概念，

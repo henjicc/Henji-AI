@@ -1,37 +1,27 @@
 ---
 name: 图片生成
-description: 用户要生成、出图、画一张图、做海报/插画/头像/封面，或要求换个模型重新生成时使用。覆盖从选模型、读参数、提交任务到判断成败的完整流程。不涉及视频和音频生成。
+description: 用户要生成、出图、画一张图、做海报/插画/头像/封面，或要求换个模型重新生成时使用。覆盖在哪里做（生成页还是画布）、选模型、读参数、提交任务到判断成败的完整流程。不涉及视频和音频生成。
 ---
 
 # 图片生成
 
-应用操作只有一个入口：先调用 `discover_application_capabilities` 取得本轮 `scriptApi`，再把模型选择、参数校验、提交、等待和正式验证写进**同一段** `henji-ts/v1`，只调用一次 `run_henji_script`。不要直接逐次调用生成工具，不要填写能力版本、revision、输出绑定或 Action Plan。
+## 先定在哪里做
 
-## 生成并放入画布：优先使用 Recipe
+用户说了在哪里做（“在画布里”“就在生成页出一张”），照用户说的。没说时按任务形态选，不按用户是在哪个页面开口的：
 
-用户同时要求生成图片并放进画布时，优先使用发现结果中的 `generation.image_to_canvas`。它会使用同一解释器选择可执行模型、校验参数、提交任务，等待权威成功状态后继续创建画布并验证真实媒体节点。
+- **一次出结果的，用生成页**：一张图、几张备选、换个模型再出一次。用 `create_visible_generation_task`，`destination` 用 `{mode:"history"}` 或省略（在生成页时）。
+- **多步串联的，用画布**：先做参考图再生成（3D 镜头参考、草图、分镜）、多张图要互相参照、之后大概率还要反复改和比较。画布能看清每一步从哪来、改一处只重跑下游。
+  - 新建或打开一块画布，按流程从左到右建节点并连线（参考 → 生成 → 结果）；生成节点用 `create_visible_generation_task` 的 `destination={mode:"canvas",documentId,sourceNodeIds}`，结果自动落在生成节点旁边，不要再手动放一次。
+  - 一条链建完后调用一次画布整理能力，让节点按连线方向排开；工具名以本轮加载到的为准。
+  - 做完告诉用户结果在哪块画布、哪个节点。
 
-```ts
-const result = await app.recipe('generation.image_to_canvas', {
-  projectName: '图片生成结果',
-  prompt: '用户要求的完整提示词',
-})
-app.assert.exists(result.resultRefs)
-```
+## 只生成图片（生成页）
 
-只有本轮 `scriptApi.recipes` 真实包含该 Recipe 时才能调用；不要仿造未发现的 Recipe 或参数。
-
-## 只生成图片
-
-没有完全匹配的 Recipe 时，使用本轮 `scriptApi.actions` 披露的签名在一段 Henji Script 中完成：
-
-1. `resolve_generation_model` 按媒体类型、用户点名模型和供应商偏好解析实际可执行模型。
-2. `prepare_generation_task` 用真实模型 schema 校验并规范化参数。
-3. `create_visible_generation_task` 提交一次用户可见任务。
-4. `get_generation_task` 作为脚本内的权威等待点；宿主会保存 IR 断点并在外部任务完成后自动续接，不要让模型轮询或重新生成剩余步骤。
-5. 只有权威状态成功、结果引用可用并通过正式验证，才能声称生成完成。
-
-模型 ID、action 输入和输出字段一律以当前 `scriptApi` 为准，不从本 skill 猜测。零副作用的编译或参数预检失败可以修正同一脚本；任务已经提交后不得再次提交来“重试验证”。
+1. `resolve_generation_model`：按媒体类型、用户点名的模型和供应商偏好解析实际可执行的模型。
+2. `get_model_schema`：读模型参数与能力标签，参数名、枚举一律以它为准。
+3. `prepare_generation_task`：校验并规范化参数，拿到估价。结果里如果有 `adjustedParams`，说明有参数和其他参数冲突被模型规则改掉了（例如 Economy 不支持矢量图，输出被改回普通图片）；用户要的东西因此做不到时，先调整与之冲突的参数再校验，不要带着被改掉的参数提交。
+4. `create_visible_generation_task`：提交一次用户可见任务。
+5. `wait_generation_task` 或 `get_generation_task` 等权威状态；只有成功且结果引用可用，才能说生成完成。任务已经提交后，不要为了“重试验证”再提交一次。
 
 ## 模型选择
 
@@ -52,7 +42,7 @@ app.assert.exists(result.resultRefs)
 
 | 状态 | 怎么说 | 下一步 |
 |---|---|---|
-| `pending` / `queued` / `generating` | 说明已提交、当前状态 | 由脚本 checkpoint 等待权威事件，不要轮询或另起脚本 |
+| `pending` / `queued` / `generating` | 说明已提交、当前状态 | 用 `wait_generation_task` 等，不要重复提交 |
 | `completed` | 才可以说成功，结果可展示 | 用稳定引用交付，不要贴本地路径 |
 | `error` | 先读 `errorMessage` 和 `recovery` | 见下 |
 
@@ -60,8 +50,8 @@ app.assert.exists(result.resultRefs)
 
 `recovery.strategy` 是 `correct_same_model_parameters` 时，**必须保留 `sourceModelId`**：
 
-1. 重新发现当前 `scriptApi`，确认原模型仍可用。
-2. 按发现到的真实参数约束修正 Henji Script 输入。
+1. 用 `get_model_schema` 确认原模型仍可用、读真实参数约束。
+2. 按约束修正参数。
 3. 让 `prepare_generation_task` 在任何新提交前完成校验。
 4. 最多再提交一次同模型的修正任务。
 
@@ -69,9 +59,9 @@ app.assert.exists(result.resultRefs)
 
 ## 常见错误
 
-- 没使用 `scriptApi` 的真实 schema，凭描述或旧 skill 猜参数
+- 没读 `get_model_schema` 的真实参数，凭描述猜参数
 - 把"赛博朋克风格"这类词当成模型目录的搜索关键词
 - 任务还在 generating 就说"已经生成好了"
 - 参数错误时换一个模型重试（用户要的是那个模型）
-- 外部等待后重新生成脚本或重复提交任务，而不是从宿主 checkpoint 续接
+- 等待期间重复提交任务，而不是继续等原任务
 - 答复里出现本地绝对路径

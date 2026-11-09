@@ -226,7 +226,7 @@ const createVisibleGenerationTask = defineApplicationCapability({
   resolveOperationTargets: (input) => { if (!input.modelId || typeof input.prompt !== 'string' || !input.mediaType) throw new Error('INVALID_INPUT:外部提交必须明确指定已读取的模型、提示词和媒体类型'); return [{ kind: 'generation.model', id: input.modelId }] },
   version: 1,
   title: '创建可见生成任务',
-  description: '创建可见图片、视频或音频任务。画布用 destination={mode:"canvas",documentId,sourceNodeIds}，先创建生成节点与连线，结果自动落在旁侧，勿重复放入画布；仅存历史用 {mode:"history"}，默认当前画布优先。指定媒体类型但省略模型时读取当前默认模型；其余缺省字段用 generation.draft 补全。省略 baselineIds，宿主核对费用。接着已完成的结果生成（草稿转正片、续写、把图做成视频）时传 continueFrom，可做的动作见生成任务的 continuations 或画布结果节点；modelId 用续接列出的目标模型。' + APPLICATION_MEDIA_REFERENCE_GUIDANCE,
+  description: '创建可见图片、视频或音频任务。画布用 destination={mode:"canvas",documentId,sourceNodeIds}，先创建生成节点与连线，结果自动落在旁侧，勿重复放入画布；放生成页用 {mode:"history"}；省略时在画布上落当前画布、其他页面落生成页。一次出结果的任务在画布上也可以显式放生成页。指定媒体类型但省略模型时读取当前默认模型；其余缺省字段用 generation.draft 补全。省略 baselineIds，宿主核对费用。接着已完成的结果生成（草稿转正片、续写、把图做成视频）时传 continueFrom，可做的动作见生成任务的 continuations 或画布结果节点；modelId 用续接列出的目标模型。' + APPLICATION_MEDIA_REFERENCE_GUIDANCE,
   domain: 'generation',
   aliases: ['生成图片', '生成视频', '生成音频', 'create generation'],
   readOnly: false,

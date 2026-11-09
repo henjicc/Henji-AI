@@ -83,6 +83,12 @@ describe('generation application capabilities', () => {
     expect(JSON.stringify(result)).not.toContain('Media/generated.png')
   })
 
+  it('按来源筛选：画布节点发起的生成与生成页自己的分开', async () => {
+    database.getHistory.mockResolvedValueOnce([{ ...successfulImage, id: 'canvas-1', params: { __canvasGeneration: { documentId: 'doc' } } }, successfulImage])
+    const own = await listGenerationHistory({ origin: 'generation', limit: 10 })
+    expect(own.records.map((record) => (record.ref as { id: string }).id)).toEqual(['history-1'])
+  })
+
   it('冷读取历史失败明确返回错误，不冒充没有生成结果', async () => {
     database.getHistoryById.mockRejectedValueOnce(new Error('历史数据库不可用'))
     const provider = createGenerationReflectionRegistrations().find(item => item.entity.id === GENERATION_ENTITY_TYPES.result)!.provider!

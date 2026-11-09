@@ -28,6 +28,7 @@ function publicHistoryRecord(record: Awaited<ReturnType<typeof databaseService.g
       label: `${record.type} 生成结果`,
     } : null,
     mediaType: record.type,
+    origin: record.params.__canvasGeneration ? 'canvas' : 'generation',
     status: record.status,
     providerId: record.providerId,
     modelId: record.modelId,
@@ -59,6 +60,7 @@ export async function listGenerationHistory(input: {
   timePreset?: GenerationHistoryFilterCriteria['timePreset']
   startDate?: string
   endDate?: string
+  origin?: 'generation' | 'canvas' | 'all'
   limit: number
 }): Promise<{ records: Record<string, unknown>[] }> {
   logger.debug('generation_history.list.start', {
@@ -77,8 +79,9 @@ export async function listGenerationHistory(input: {
       startDate: input.startDate,
       endDate: input.endDate,
     }
+    const origin = input.origin ?? 'all'
     const needsPostFilter = Boolean(
-      input.status || input.keyword || input.providerId || input.modelId || input.timePreset,
+      input.status || input.keyword || input.providerId || input.modelId || input.timePreset || origin !== 'all',
     )
     const records = await databaseService.getHistory({
       type: input.mediaType,
@@ -96,6 +99,7 @@ export async function listGenerationHistory(input: {
     const selectedRecords = needsPostFilter
       ? records
         .filter((record) => (statusGroup ? statusGroup.has(record.status) : true))
+        .filter((record) => origin === 'all' || (origin === 'canvas') === Boolean(record.params.__canvasGeneration))
         .filter((record) => matchesGenerationHistoryFilter(toFilterSubject(record), criteria, now))
         .slice(0, input.limit)
       : records
