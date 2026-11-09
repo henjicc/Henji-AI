@@ -240,6 +240,8 @@ export default {
         line: {
           DEFAULT: withOpacity('--line-rgb'),
           strong: withOpacity('--line-strong-rgb'),
+          // 浮起来的表面（浮层、弹窗、提示）自己的勾边，比 line-strong 更显眼（深色更亮、浅色更深）；浮起表面不加投影，只靠它与底色分层
+          overlay: withOpacity('--line-overlay-rgb'),
         },
         edge: cssVar('--edge'),
         // 媒体底与固定媒体叠层（不随主题：压在图片/视频上的控件、文字、渐变与描边）

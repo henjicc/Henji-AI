@@ -146,6 +146,7 @@ export function UiModal({
       />
       <UiPanel
         variant={isGlass ? 'glass' : 'panel'}
+        floating
         className={`relative flex ${inContainer ? 'max-h-full' : 'max-h-[calc(100vh-2rem)]'} flex-col overflow-hidden transition-opacity duration-180 ${isVisible ? 'opacity-100' : 'opacity-0'} ${UI_MODAL_SIZE_CLASS[size]} ${panelClassName}`}
         onTransitionEnd={onTransitionEnd}
       >

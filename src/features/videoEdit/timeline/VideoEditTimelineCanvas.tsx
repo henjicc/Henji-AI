@@ -29,7 +29,7 @@ import { sequenceHasRecordingZoom } from '../application/videoEditRecordingClip'
 import { selectVideoEditSubtitle } from '../application/videoEditSubtitleSelection'
 import ContextMenu from '@/components/ContextMenu'
 import { UiButton } from '@/components/ui'
-import { UI_DIVIDER_CLASS, UI_TEXT_NUMERIC_CLASS } from '@/components/ui/styleTokens'
+import { UI_DIVIDER_CLASS, UI_FLOATING_EDGE_CLASS, UI_TEXT_NUMERIC_CLASS } from '@/components/ui/styleTokens'
 import { VideoEditSequenceFrameRateRequired, type VideoEditSequenceSettings } from '@/core/videoEdit/projectItems'
 import { videoEditClipEnabled, videoEditDuration, videoEditClipMedia, type VideoEditClip, type VideoEditSequence } from '@/core/videoEdit/document'
 import { rescaleVideoEditFrame, videoEditFps } from '@/core/videoEdit/time'
@@ -727,7 +727,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
         <VideoEditTimelinePlayhead instance={instance} pixels={pixels} />
         {/* 不能编辑的原因：浮在可见区域顶部居中，不占布局、不挡指针（4.3） */}
         <div role="status" aria-live="polite" data-video-edit-timeline-failure={failure ? '' : undefined}
-          className={`pointer-events-none absolute z-dropdown max-w-sm -translate-x-1/2 truncate rounded-full bg-raised px-3 py-1 text-xs text-text1 shadow-panel transition-opacity duration-180 ${failure ? 'opacity-100' : 'opacity-0'}`}
+          className={`pointer-events-none absolute z-dropdown max-w-sm -translate-x-1/2 truncate rounded-full bg-overlay ${UI_FLOATING_EDGE_CLASS} px-3 py-1 text-xs text-text1 transition-opacity duration-180 ${failure ? 'opacity-100' : 'opacity-0'}`}
           style={{ left: viewport.left + header + Math.max(0, viewport.width - header) / 2, top: TIMELINE_RULER_HEIGHT + 8 }}>{failure ?? failureText}</div>
       </div>
     </div>

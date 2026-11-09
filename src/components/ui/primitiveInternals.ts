@@ -260,6 +260,8 @@ export interface UiPanelProps extends HTMLAttributes<HTMLDivElement> {
    * `glass` 只用于压在图片、视频或画布上的浮层。
    */
   variant?: UiPanelVariant
+  /** 浮在界面之上（弹窗、确认框、通知）：`panel` 档加浮起表面那圈浮层描边；`glass` 档本来就带。 */
+  floating?: boolean
 }
 
 /** 轨道底色。`hue` 铺满色相光谱，供色相选择使用。 */
@@ -345,7 +347,7 @@ export function resolveIconButtonClass({
   return `${entry.box} ${radius} ${skin} ${UI_CONTROL_ICON_CLASS[size]}`
 }
 
-export function resolveUiPanelSurface(variant: UiPanelVariant): string {
+export function resolveUiPanelSurface(variant: UiPanelVariant, floating = false): string {
   if (variant === 'inset') {
     return `rounded-lg ${UI_INSET_SURFACE_CLASS}`
   }
@@ -355,7 +357,7 @@ export function resolveUiPanelSurface(variant: UiPanelVariant): string {
   if (variant === 'glass') {
     return 'ui-glass ui-glass-elevated rounded-xl'
   }
-  return `rounded-xl ${UI_PANEL_SURFACE_CLASS}`
+  return `rounded-xl ${UI_PANEL_SURFACE_CLASS}${floating ? ' ui-floating-edge' : ''}`
 }
 
 // 两种轨道底色必须互斥，避免 Tailwind 产物顺序造成静默覆盖。

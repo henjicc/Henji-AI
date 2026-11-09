@@ -11,7 +11,7 @@ import { PanelTrigger, UiButton, UiEmpty, UiFormRow, UiIconButton, UiSearchInput
 import { useSettingsStore } from '@/stores/settingsStore'
 import { matchVideoEditShortcut } from '@/core/videoEdit/commands'
 import { chooseVideoEditFolders } from '../application/videoEditFolderImport'
-import { UI_DIVIDER_CLASS } from '@/components/ui/styleTokens'
+import { UI_DIVIDER_CLASS, UI_FLOATING_EDGE_CLASS } from '@/components/ui/styleTokens'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import { useContextMenu, type MenuItem } from '@/hooks/useContextMenu'
 import { openAssetLibrary } from '@/stores/navigationStore'
@@ -313,7 +313,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     { id: 'open', label: '打开素材箱', icon: <FolderOpen size={UI_ICON_SIZE.md} />, onClick: () => selectBin(bin.id) },
     { id: 'delete', label: '移除空素材箱', icon: <Trash2 size={UI_ICON_SIZE.md} />, onClick: () => run(() => deleteVideoEditBins(projectId, [bin.id])) },
   ]
-  const followLabel = dragFollow && !dragFollow.hidden ? createPortal(<div aria-hidden="true" data-video-edit-drag-follow className="pointer-events-none fixed z-drag rounded-full bg-raised px-3 py-1 text-xs text-text1 shadow-panel" style={{ left: dragFollow.x + 14, top: dragFollow.y + 14 }}>{dragFollow.count > 1 ? `${dragFollow.count} 个素材` : '1 个素材'}</div>, document.body) : null
+  const followLabel = dragFollow && !dragFollow.hidden ? createPortal(<div aria-hidden="true" data-video-edit-drag-follow className={`pointer-events-none fixed z-drag rounded-full bg-overlay ${UI_FLOATING_EDGE_CLASS} px-3 py-1 text-xs text-text1`} style={{ left: dragFollow.x + 14, top: dragFollow.y + 14 }}>{dragFollow.count > 1 ? `${dragFollow.count} 个素材` : '1 个素材'}</div>, document.body) : null
   return <div className="relative flex h-full min-h-0 flex-col" aria-label="素材面板" tabIndex={0}
     onDragOver={event => { if (acceptsVideoEditDrop(event.dataTransfer)) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy' } }} onDrop={event => drop(event)}
     onKeyDown={event => {

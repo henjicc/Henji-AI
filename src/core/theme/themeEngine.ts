@@ -114,10 +114,14 @@ export const THEME_COLOR_TOKEN_NAMES = [
   'canvas',
   'panel',
   'raised',
-  // 浮层（菜单、下拉、弹出面板）：深色比面板高半级（压在面板上仍分得出两层，又不发灰），靠发丝边与阴影分层；
-  // 里面的格子、悬停、选中走 raised / overlayHover / selected 实色台阶（重要记录 021）
+  // 浮层（菜单、下拉、弹出面板）是界面里最高的一层：深色比抬起底再亮半级，四周一圈 lineOverlay 亮描边，
+  // 不加投影（深色底上投影要么厚重立体、要么摊成色带）。浮层里的格子、悬停、选中改用
+  // overlayRaised / overlayHover / overlaySelected，跟着浮层一起上移，层次不倒（重要记录 021）
   'overlay',
   'overlayHover',
+  'overlayRaised',
+  'overlaySelected',
+  'lineOverlay',
   'segmentSelected',
   'control',
   'controlHover',
@@ -483,8 +487,11 @@ export function deriveThemeTokens(seedInput: Partial<ThemeSeed>, overrides?: The
       window: N(L0),
       panel: N(L0 + st),
       raised: N(L0 + 2 * st),
-      overlay: N(L0 + 1.5 * st),
-      overlayHover: N(L0 + 2.8 * st),
+      overlay: N(L0 + 2.4 * st),
+      overlayHover: N(L0 + 3.5 * st),
+      overlayRaised: N(L0 + 3.1 * st),
+      overlaySelected: N(L0 + 4.4 * st),
+      lineOverlay: N(L0 + 5 * st),
       control: N(L0 + 2.8 * st),
       controlHover: N(L0 + 3.8 * st),
       controlPressed: N(L0 + 4.8 * st),
@@ -505,6 +512,9 @@ export function deriveThemeTokens(seedInput: Partial<ThemeSeed>, overrides?: The
       raised: N(L0 - 0.022 * k),
       overlay: N(Math.min(1, L0 + 0.04)),
       overlayHover: N(L0 - 0.035 * k),
+      overlayRaised: N(L0 - 0.022 * k),
+      overlaySelected: N(L0 - 0.065 * k),
+      lineOverlay: N(L0 - 0.15 * k),
       control: N(L0 - 0.032 * k),
       controlHover: N(L0 - 0.055 * k),
       controlPressed: N(L0 - 0.08 * k),
@@ -558,9 +568,9 @@ export function deriveThemeTokens(seedInput: Partial<ThemeSeed>, overrides?: The
   // 文字也会压在选中淡底上（导航/菜单选中项的主要与辅助文字、分段与格子的强调文字）：
   // 三档文字与强调文字的求解底集都加入这些合成色，四个预设下保证 ≥ 4.5（4.3：辅助文字在选中导航项上曾 4.17）
   const selectedBeds = [t.selectedAccent, t.selectedAccentHover]
-    .flatMap((tint) => [t.window, t.panel, t.raised].map((bed) => compositeOver(tint, bed)));
+    .flatMap((tint) => [t.window, t.panel, t.raised, t.overlay].map((bed) => compositeOver(tint, bed)));
   // ── 文字（010：按目标对比度求解） ──
-  const surfaceTextBeds = [t.window, t.panel, t.raised, t.hover, t.selected, t.control, t.controlHover];
+  const surfaceTextBeds = [t.window, t.panel, t.raised, t.hover, t.selected, t.control, t.controlHover, t.overlay, t.overlayRaised, t.overlayHover, t.overlaySelected];
   // 深色玻璃（黑 72%）压在中灰内容上时辅助文字也须达标（4.3 只对标准档断言；5.11 组合测试：柔和档 4.44–4.48）
   const glassTextBeds = dark ? [compositeOver(`rgba(0,0,0,${DARK_GLASS_TINT_ALPHA})`, oklchToHex(0.6, 0, 0))] : [];
   const textBeds = [...surfaceTextBeds, ...selectedBeds, ...glassTextBeds];

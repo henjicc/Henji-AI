@@ -1,4 +1,4 @@
-import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
+import { UI_ICON_SIZE_CLASS, UI_FLOATING_EDGE_CLASS } from '@/components/ui/styleTokens'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useNonPassiveWheel } from '@/hooks/useNonPassiveWheel'
 import { createPortal } from 'react-dom'
@@ -503,7 +503,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
           {videoFailed && (
             <div className="pointer-events-none absolute inset-0 z-raised flex items-center justify-center">
               {/* 查看器是固定深色媒体底，提示放进随主题的实底面板：文字色与底同源；玻璃在纸白下透出深底，危险色标题只有 4.29:1 */}
-              <div className="rounded-lg bg-panel px-6 shadow-panel">
+              <div className={`rounded-lg bg-panel ${UI_FLOATING_EDGE_CLASS} px-6`}>
                 <UiError size="sm" title={t('ui:viewer.videoUnavailableTitle')} message={t('ui:viewer.imageUnavailableMessage')} />
               </div>
             </div>

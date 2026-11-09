@@ -8,7 +8,7 @@ import {
 import type { SuggestionKeyDownProps, SuggestionProps } from '@tiptap/suggestion'
 
 import { UiOptionButton } from '@/components/ui/primitives'
-import { UI_TEXT_META_CLASS } from '@/components/ui/styleTokens'
+import { UI_TEXT_META_CLASS, UI_TRIGGER_PANEL_CLASS } from '@/components/ui/styleTokens'
 import type { PromptReferenceItem, PromptVariableItem } from '../types'
 
 export type PromptSuggestionItem =
@@ -71,7 +71,7 @@ export const PromptSuggestionList = forwardRef<
   if (items.length === 0) {
     return (
       <div
-        className={`rounded-lg border border-line bg-panel px-3 py-2 shadow-panel ${UI_TEXT_META_CLASS}`}
+        className={`${UI_TRIGGER_PANEL_CLASS} px-3 py-2 ${UI_TEXT_META_CLASS}`}
         data-ui-overlay-detached="prompt-suggestion"
       >
         没有匹配项
@@ -81,7 +81,7 @@ export const PromptSuggestionList = forwardRef<
 
   return (
     <div
-      className="inline-flex w-max max-w-[calc(100vw-32px)] flex-col gap-1 rounded-lg border border-line bg-panel p-1.5 shadow-panel"
+      className={`${UI_TRIGGER_PANEL_CLASS} inline-flex w-max max-w-[calc(100vw-32px)] flex-col gap-1 p-1.5`}
       data-ui-overlay-detached="prompt-suggestion"
       role="listbox"
       aria-label={items[0]?.kind === 'reference' ? '媒体引用候选' : '模板变量候选'}

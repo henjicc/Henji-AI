@@ -41,6 +41,8 @@ const CORRECTED_TOKENS = new Set([
   'text2', 'text3', 'accentText',
   'accent', 'accentHover', 'accentPressed', 'accentTint', 'onAccent',
   'danger', 'dangerTint',
+  // 浮层提亮后文字求解底集加入浮层各档，高对比度组合下危险文字随之微调
+  'dangerText',
 ])
 
 /** 扁平实底按钮（重要记录 016）上文字实际所在处：静息、悬停、按下三种纯色。 */

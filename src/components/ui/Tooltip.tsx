@@ -38,7 +38,7 @@ interface TooltipContentProps extends Omit<React.HTMLAttributes<HTMLSpanElement>
 export type TooltipAppearance = 'text' | 'media'
 
 const TOOLTIP_APPEARANCE_CLASS: Record<TooltipAppearance, string> = {
-    text: 'whitespace-normal [overflow-wrap:anywhere] overflow-auto overscroll-contain text-left leading-5 bg-raised border border-line rounded-field text-xs text-text1 px-3 py-1.5',
+    text: 'whitespace-normal [overflow-wrap:anywhere] overflow-auto overscroll-contain text-left leading-5 bg-overlay ui-floating-edge border border-line-overlay rounded-field text-xs text-text1 px-3 py-1.5',
     media: 'overflow-hidden rounded-overlay bg-media',
 }
 
@@ -82,7 +82,7 @@ export function TooltipContent({ anchorRef, content, visible = true, closing = f
         <span {...props} ref={tooltipRef} role={props.role ?? 'tooltip'} aria-hidden={!visible || closing}
             {...(closing ? { inert: '' } : {})}
             data-tooltip-placement={position.placement}
-            className={`fixed z-tooltip box-border w-max shadow-panel ${TOOLTIP_APPEARANCE_CLASS[appearance]} ${interactive && visible && !closing ? 'pointer-events-auto' : 'pointer-events-none'} ${visible ? closing ? 'animate-fade-out' : 'animate-fade-in' : 'hidden'} ${className}`}
+            className={`fixed z-tooltip box-border w-max ${TOOLTIP_APPEARANCE_CLASS[appearance]} ${interactive && visible && !closing ? 'pointer-events-auto' : 'pointer-events-none'} ${visible ? closing ? 'animate-fade-out' : 'animate-fade-in' : 'hidden'} ${className}`}
             style={{ ...props.style, top: position.top, left: position.left }}>
             {content}
         </span>, ownerDocumentOf(anchorRef.current).body,

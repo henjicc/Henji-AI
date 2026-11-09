@@ -1,3 +1,4 @@
+import { UI_FLOATING_EDGE_CLASS } from '@/components/ui/styleTokens'
 import { UiSegmented } from '@/components/ui'
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -365,7 +366,7 @@ export function ImageViewerModal({
                 }}
               >
                 <span className="pointer-events-none absolute inset-y-0 left-1/2 w-px bg-on-media" />
-                <span className="pointer-events-none relative flex h-10 w-7 items-center justify-center rounded-full bg-panel text-text1 shadow-panel">
+                <span className={`pointer-events-none relative flex h-10 w-7 items-center justify-center rounded-full bg-panel ${UI_FLOATING_EDGE_CLASS} text-text1`}>
                   <GripVertical  />
                 </span>
               </UiButton>
@@ -384,7 +385,7 @@ export function ImageViewerModal({
           {imageFailed && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
               {/* 查看器是固定深色媒体底，提示放进随主题的实底面板：文字色与底同源；玻璃在纸白下透出深底，危险色标题只有 4.29:1 */}
-              <div className="rounded-lg bg-panel px-6 shadow-panel">
+              <div className={`rounded-lg bg-panel ${UI_FLOATING_EDGE_CLASS} px-6`}>
                 <UiError size="sm" title={t('viewer.imageUnavailableTitle', '图片无法加载')} message={t('viewer.imageUnavailableMessage', '文件可能已被移动或删除。')} />
               </div>
             </div>

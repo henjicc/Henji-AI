@@ -353,11 +353,17 @@ export const UI_BUTTON_RESET_CLASS =
  * 圆角取输入与菜单档 8；内容裁到圆角内。
  */
 /**
- * 实底浮层（菜单、下拉、弹出面板、右键菜单、日期选择）：底色用浮层令牌 overlay，比所在面板抬一级，
- * 加强分隔描边与浮层阴影，压在任何面板上都分得出上下两层；里面的菜单项悬停改用 overlay-hover（见 index.css）。
+ * 实底浮层（菜单、下拉、弹出面板、右键菜单、日期选择、提及与自动完成）：底色用浮层令牌 overlay，是界面最高的一层，
+ * 四周一圈亮描边；里面的格子、悬停、选中自动换成浮层专用档（见 index.css .ui-overlay-surface）。
  */
 export const UI_TRIGGER_PANEL_CLASS =
-  `ui-overlay-surface bg-overlay border border-line-strong shadow-panel overflow-hidden ${UI_RADIUS_CLASS.field} text-text1`;
+  `ui-overlay-surface bg-overlay border border-line-overlay overflow-hidden ${UI_RADIUS_CLASS.field} text-text1`;
+
+/**
+ * 浮起来但不是浮层的表面（弹窗、提示条、悬停提示、拖动标签、浮在画布上的小地图）只加同一圈浮层描边，
+ * 底色与圆角各自按用途选。
+ */
+export const UI_FLOATING_EDGE_CLASS = 'ui-floating-edge border border-line-overlay'
 
 export const UI_TRIGGER_PANEL_GLASS_CLASS =
   `ui-glass ui-glass-elevated overflow-hidden ${UI_RADIUS_CLASS.field} text-text1`;

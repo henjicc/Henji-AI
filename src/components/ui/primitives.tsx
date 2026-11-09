@@ -374,10 +374,10 @@ export const UiWindowControl = forwardRef<HTMLButtonElement, UiWindowControlProp
 UiWindowControl.displayName = 'UiWindowControl';
 
 export const UiPanel = forwardRef<HTMLDivElement, UiPanelProps>(
-  ({ className = '', variant = 'panel', ...props }, ref) => (
+  ({ className = '', variant = 'panel', floating = false, ...props }, ref) => (
     <div
       ref={ref}
-      className={`${resolveUiPanelSurface(variant)} ${className}`}
+      className={`${resolveUiPanelSurface(variant, floating)} ${className}`}
       {...props}
  />
   )

@@ -7,6 +7,7 @@ import { notificationText } from '@/i18n/notifications'
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { ApplicationOperationReviewBanner } from '@/features/application-control'
 import { PanelTrigger, UiButton, UiError, UiIconButton, UiOptionButton, UiToolbar } from '@/components/ui'
+import { UI_FLOATING_EDGE_CLASS } from '@/components/ui/styleTokens'
 import { useNotification } from '@/contexts/NotificationContext'
 import { videoEditUserErrorMessage } from './application/videoEditUserError'
 import { subscribeVideoEditImportCompletion } from './application/videoEditImportTask'
@@ -213,6 +214,6 @@ export default function VideoEditApp(): React.ReactElement {
     {/* 剪辑自身的保存失败要一直提示到重试成功：浮在底部中间，不占面板空间 */}
     {audioDialog?.kind === 'gain' && <VideoEditAudioGainDialog key={audioDialog.target.sequenceId + audioDialog.target.clipIds.join(':')} target={audioDialog.target} onClose={closeVideoEditAudioDialog} />}
     {audioDialog?.kind === 'export' && <VideoEditExportDialog key={audioDialog.projectId} projectId={audioDialog.projectId} onClose={closeVideoEditAudioDialog} />}
-    {instance?.error && <div className="pointer-events-none absolute bottom-3 left-1/2 z-sticky -translate-x-1/2"><div className="pointer-events-auto max-w-xl rounded-full bg-panel px-4 py-1.5 shadow-panel"><UiError size="xs" align="start" message={instance.error} /></div></div>}
+    {instance?.error && <div className="pointer-events-none absolute bottom-3 left-1/2 z-sticky -translate-x-1/2"><div className={`pointer-events-auto max-w-xl rounded-full bg-overlay ${UI_FLOATING_EDGE_CLASS} px-4 py-1.5`}><UiError size="xs" align="start" message={instance.error} /></div></div>}
   </div>
 }

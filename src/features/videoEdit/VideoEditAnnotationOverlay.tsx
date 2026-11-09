@@ -263,7 +263,7 @@ export function VideoEditAnnotationOverlay({ instance, active, onError }: { inst
         <UiButton variant="media" size="sm" onPointerDown={event => event.stopPropagation()} onClick={() => { try { jumpToVideoEditAnnotation(instance.document.id, mark.id) } catch (error) { onError(error) } }} tooltip={mark.text}>{index + 1}{missing ? ' · 元素已不存在' : mark.status === 'open' || mark.status === 'addressed' ? ` · ${VIDEO_EDIT_ANNOTATION_STATUS_LABELS[mark.status]}` : label ? ` · ${label}` : ''}</UiButton>
       </div>]
     })}
-    {draft && inputOpen && <div role="dialog" aria-label="这里要改什么" className="pointer-events-auto absolute z-raised flex h-9 w-72 items-center gap-2 rounded-full pl-3 pr-1 shadow-panel ui-glass" style={bubblePosition(draft.anchor)} onPointerDown={event => event.stopPropagation()}>
+    {draft && inputOpen && <div role="dialog" aria-label="这里要改什么" className="pointer-events-auto absolute z-raised flex h-9 w-72 items-center gap-2 rounded-full pl-3 pr-1 ui-glass ui-glass-elevated" style={bubblePosition(draft.anchor)} onPointerDown={event => event.stopPropagation()}>
       <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: VIDEO_EDIT_ANNOTATION_COLORS[draft.color] }} />
       <UiInput frame="inner" size="sm" autoFocus aria-label="这里要改什么？" placeholder={placeholder} className="min-w-0 flex-1" value={text} onChange={event => setText(event.target.value)} onKeyDown={event => {
         if (event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); confirm() }

@@ -161,6 +161,7 @@ export default function AlertDialog({
 
       {/* 弹窗内容 */}
       <UiPanel
+        floating
         className={`relative max-h-[calc(100vh-2rem)] overflow-hidden p-4 ${UI_MODAL_SIZE_CLASS.compact}`}
         style={{
           opacity,

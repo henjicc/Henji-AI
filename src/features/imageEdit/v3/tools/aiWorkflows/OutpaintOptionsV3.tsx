@@ -1,3 +1,4 @@
+import { UI_FLOATING_EDGE_CLASS } from '@/components/ui/styleTokens'
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { UiButton, UiEmpty, UiError, UiFormRow, UiLoading, UiModal, PromptEditor } from '@/components/ui';
@@ -23,7 +24,7 @@ export function OutpaintStatusV3({ bus }: ToolOptionsProps): JSX.Element | null 
   useEffect(() => setFailure(null), [job?.taskId]);
   if (!job) return null;
   const invoke = async (action: () => Promise<unknown>) => { try { setFailure(null); await action(); } catch (error) { setFailure(error instanceof Error ? error.message : String(error)); } };
-  return <div data-outpaint-status className="pointer-events-auto absolute bottom-3 left-3 max-w-sm rounded-lg bg-panel px-4 py-2 shadow-panel">
+  return <div data-outpaint-status className={`pointer-events-auto absolute bottom-3 left-3 max-w-sm rounded-lg bg-panel ${UI_FLOATING_EDGE_CLASS} px-4 py-2`}>
     {job.status === 'failed' || failure ? <UiError size="xs" align="start" message={failure ?? job.error ?? t('imageEditor.v3.outpaint.failed')}
       actions={<><UiButton size="sm" onClick={() => void invoke(async () => (await loadOutpaint()).recoverImageEditOutpaintV3(job.documentId, job.taskId))}>{t('imageEditor.v3.outpaint.recover')}</UiButton>
         {!job.layerId && <UiButton size="sm" onClick={() => void invoke(async () => (await loadOutpaint()).cancelImageEditOutpaintV3(job.taskId))}>{t('imageEditor.v3.outpaint.cancel')}</UiButton>}</>} />
