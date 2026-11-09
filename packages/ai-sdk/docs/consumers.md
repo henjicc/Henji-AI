@@ -3,7 +3,13 @@
 本清单是 `@henjicc/ai-sdk` 消费方的唯一维护入口，用于 SDK 发布后的跨仓升级协调。
 绝对路径仅描述当前开发机上的仓库位置，不进入 SDK 运行时代码、发布包或用户配置。
 
-最后核对日期：2026-11-08
+最后核对日期：2026-11-09
+
+`0.11.0` 已发布（2026-11-09）：能力描述新增 `pricing`，语音识别、Qwen-MT 翻译、文本向量与重排序预设都带官方按量标准价，新增 `estimateAudioDurationCost` 等；破坏性：模型步 `usage.knownCostUsd` 改为按价格币种返回的 `knownCost { amount, currency }`，`pricing.currency` 接受 `CNY | USD`。本地 prepublishOnly 门禁通过（SDK 105 文件 / 1507 项测试、仓外 Node ESM / 严格 TS / 56 个 Vite 入口 / 受限宿主），发布源码 `902d2f75c` 经 [运行 42576482918](https://github.com/henjicc/Henji-AI/actions/runs/42576482918) 受信任发布。隔离配置与缓存的仓外匿名安装通过：235 个根导出可导入，按需 ASR 与向量入口的 `descriptor.pricing` 可读、按时长估价正确，lockfile 解析到公共 tarball、integrity 与 registry 一致。外部 `say-it` 未引用 `knownCostUsd`，需要读模型价格时再升级。Henji-AI workspace 使用 `0.11.0`。
+
+- `0.11.0` tarball：[公共 npm 包](https://registry.npmjs.org/@henjicc/ai-sdk/-/ai-sdk-0.11.0.tgz)
+- `0.11.0` shasum：`acaf9a16f173b37080c744e06024fb2b2384c28e`
+- `0.11.0` integrity：`sha512-o7cbOD/hrFhj4VEzrMsDq935P+kXdi1lKfP0LyzBZchcjNPcbF4why2urxB/8bjLvk0FlpZh36Sf7Mv9ZhfhUA==`
 
 `0.10.0` 已发布（2026-11-08）：首次经 GitHub 受信任发布（`publish-sdk.yml`，OIDC，无令牌、无 2FA，带 provenance），发布源码 `2cac9761f`，[运行 42481040676](https://github.com/henjicc/Henji-AI/actions/runs/42481040676) 在 CI 内通过 prepublishOnly 全量门禁（SDK 104 文件 / 1503 项测试、仓外 Vite / 严格 TS / 受限宿主）后上传。公共索引可读后，隔离配置与缓存的仓外匿名安装通过：231 个根导出可导入，`models/bailian/minimax-h3` 按需入口可用，lockfile 解析到公共 tarball、integrity 与 registry 一致。同提交的应用侧 CI（表面层级检查与 10 个应用单测）仍有失败，不涉及 SDK 包内容，另行修复。破坏性：删除 `siliconFlowTeleSpeechAsr`；外部 `say-it` 未用到本版新增能力，本次不升级，日后升级前先确认未引用该导出。Henji-AI workspace 使用 `0.10.0`。
 
