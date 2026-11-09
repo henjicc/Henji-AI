@@ -3,7 +3,13 @@
 本清单是 `@henjicc/ai-sdk` 消费方的唯一维护入口，用于 SDK 发布后的跨仓升级协调。
 绝对路径仅描述当前开发机上的仓库位置，不进入 SDK 运行时代码、发布包或用户配置。
 
-最后核对日期：2026-11-09
+最后核对日期：2026-11-10
+
+`0.12.0` 已发布（2026-11-10）：火山 SeedASR 2.0 实时识别支持热词直传（供应商选项 `hotwords`），修复真实服务握手帧不带 `result.text` 时会话在握手即报 `invalid_response`；GPT Image 2.6 新增动图 / 矢量图输出。本地 prepublishOnly 门禁通过（SDK 106 文件 / 1519 项测试、仓外 Node ESM / 严格 TS / 56 个 Vite 入口 / 受限宿主），发布源码 `341bfcc64` 经 [运行 42660262100](https://github.com/henjicc/Henji-AI/actions/runs/42660262100) 受信任发布。热词与握手修复经授权真实请求验证（`bigmodel_async`，合成语音，热词使「说把」纠正为「说吧」，5999 个填充热词后仍生效、无报错）。外部 `say-it` 从公共 npm 精确升级到 `0.12.0`（提交 `8b063d5`），lockfile resolved / integrity 与 registry 一致，manifest 与 bundle 版本、integrity 校验更新；Rust 785 项、前端 233 项测试与类型检查通过，火山 SeedASR 标为支持热词并下发全局热词。Henji-AI workspace 使用 `0.12.0`。
+
+- `0.12.0` tarball：[公共 npm 包](https://registry.npmjs.org/@henjicc/ai-sdk/-/ai-sdk-0.12.0.tgz)
+- `0.12.0` shasum：`da64351ba6c8a3fc932c1cef00b54f23e3a4446d`
+- `0.12.0` integrity：`sha512-/FBxWZM2SYmulbc9Y7vGTLaqVd1pkP00vHWTa9Fz18rjpQTHt0Q6AfTbpo49mjRzu/846Q+KM50oezV4BCmB6Q==`
 
 `0.11.0` 已发布（2026-11-09）：能力描述新增 `pricing`，语音识别、Qwen-MT 翻译、文本向量与重排序预设都带官方按量标准价，新增 `estimateAudioDurationCost` 等；破坏性：模型步 `usage.knownCostUsd` 改为按价格币种返回的 `knownCost { amount, currency }`，`pricing.currency` 接受 `CNY | USD`。本地 prepublishOnly 门禁通过（SDK 105 文件 / 1507 项测试、仓外 Node ESM / 严格 TS / 56 个 Vite 入口 / 受限宿主），发布源码 `902d2f75c` 经 [运行 42576482918](https://github.com/henjicc/Henji-AI/actions/runs/42576482918) 受信任发布。隔离配置与缓存的仓外匿名安装通过：235 个根导出可导入，按需 ASR 与向量入口的 `descriptor.pricing` 可读、按时长估价正确，lockfile 解析到公共 tarball、integrity 与 registry 一致。外部 `say-it` 未引用 `knownCostUsd`，需要读模型价格时再升级。Henji-AI workspace 使用 `0.11.0`。
 
