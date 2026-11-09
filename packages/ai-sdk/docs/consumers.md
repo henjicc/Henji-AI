@@ -5,7 +5,7 @@
 
 最后核对日期：2026-11-10
 
-`0.12.0` 已发布（2026-11-10）：火山 SeedASR 2.0 实时识别支持热词直传（供应商选项 `hotwords`），修复真实服务握手帧不带 `result.text` 时会话在握手即报 `invalid_response`；GPT Image 2.6 新增动图 / 矢量图输出。本地 prepublishOnly 门禁通过（SDK 106 文件 / 1519 项测试、仓外 Node ESM / 严格 TS / 56 个 Vite 入口 / 受限宿主），发布源码 `341bfcc64` 经 [运行 42660262100](https://github.com/henjicc/Henji-AI/actions/runs/42660262100) 受信任发布。热词与握手修复经授权真实请求验证（`bigmodel_async`，合成语音，热词使「说把」纠正为「说吧」，5999 个填充热词后仍生效、无报错）。外部 `say-it` 从公共 npm 精确升级到 `0.12.0`（提交 `8b063d5`），lockfile resolved / integrity 与 registry 一致，manifest 与 bundle 版本、integrity 校验更新；Rust 785 项、前端 233 项测试与类型检查通过，火山 SeedASR 标为支持热词并下发全局热词。Henji-AI workspace 使用 `0.12.0`。
+`0.12.0` 已发布（2026-11-10）：火山 SeedASR 2.0 实时识别支持热词直传（供应商选项 `hotwords`），修复真实服务握手帧不带 `result.text` 时会话在握手即报 `invalid_response`；GPT Image 2.6 新增动图 / 矢量图输出。本地 prepublishOnly 门禁通过（SDK 106 文件 / 1518 项测试、仓外 Node ESM / 严格 TS / 56 个 Vite 入口 / 受限宿主），发布源码 `341bfcc64` 经 [运行 42660262100](https://github.com/henjicc/Henji-AI/actions/runs/42660262100) 受信任发布。热词与握手修复经授权真实请求验证（`bigmodel_async`，合成语音，热词使「说把」纠正为「说吧」，5999 个填充热词后仍生效、无报错）。外部 `say-it` 从公共 npm 精确升级到 `0.12.0`（提交 `8b063d5`），lockfile resolved / integrity 与 registry 一致，manifest 与 bundle 版本、integrity 校验更新；Rust 785 项、前端 233 项测试与类型检查通过，火山 SeedASR 标为支持热词并下发全局热词。Henji-AI workspace 使用 `0.12.0`。
 
 - `0.12.0` tarball：[公共 npm 包](https://registry.npmjs.org/@henjicc/ai-sdk/-/ai-sdk-0.12.0.tgz)
 - `0.12.0` shasum：`da64351ba6c8a3fc932c1cef00b54f23e3a4446d`
