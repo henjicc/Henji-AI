@@ -556,6 +556,27 @@ describe('火山 SeedASR 2.0 实时会话', () => {
     expect(timeout.close).toHaveBeenCalledOnce()
   })
 
+  it('真实服务没有 result.text 的握手帧照常开始会话，不发空 partial', async () => {
+    const live = fixture<{ realtime: { handshakeWithoutText: unknown } }>('asr-seedasr-live.json')
+    const constructed = fixture<ConstructedFixture>('asr-seedasr-field-construction.json')
+    const events: SpeechRecognitionEvent[] = []
+    const connection = new ScriptedConnection((data) => {
+      if (typeof data !== 'string') connection.push(serverFrame({ payload: live.realtime.handshakeWithoutText, compression: 'none' }))
+    })
+    const client = createCapabilityClient({
+      runtime: runtime(connection),
+      realtimeModules: [createVolcengineRealtimeAsrModule(volcengineSeedAsrRealtime, {
+        requestIdFactory: () => constructed.taskId,
+      })],
+    })
+    const session = await open(client, { mediaType: 'audio/pcm' }, {
+      requestId: 'live-handshake', onEvent: (event) => { events.push(event) },
+    })
+
+    expect(events).toEqual([{ type: 'started', sessionId: constructed.taskId }])
+    await session.close()
+  })
+
   it('热词去空去重后按官方热词直传格式写进 request.corpus.context', async () => {
     const official = fixture<OfficialFixture>('asr-seedasr-official.json')
     const constructed = fixture<ConstructedFixture>('asr-seedasr-field-construction.json')

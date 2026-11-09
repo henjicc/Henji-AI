@@ -158,7 +158,8 @@ function parsePayload(payload: unknown): ParsedPayload {
   if (!root || !result) {
     throw new AiRuntimeError('invalid_response', 'Volcengine realtime response has no result object')
   }
-  const text = result.text
+  // 真实服务的握手帧只带 additions，没有 text；缺失等同于还没有识别文本。
+  const text = result.text === undefined ? '' : result.text
   if (typeof text !== 'string') {
     throw new AiRuntimeError('invalid_response', 'Volcengine realtime response result.text must be a string')
   }

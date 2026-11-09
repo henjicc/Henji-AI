@@ -1,0 +1,18 @@
+{
+  "kind": "capability",
+  "classification": "live-redacted",
+  "source": {
+    "checkedAt": "2026-11-10",
+    "endpoint": "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async",
+    "note": "真实服务握手响应（full request 之后的首个 type 9 帧，头 hex 11901000）逐字段原样；仅 log_id 替换为不可联网占位值。与官方附件 run.log 不同，没有 audio_info 与 result.text。"
+  },
+  "realtime": {
+    "handshakeWithoutText": {
+      "result": {
+        "additions": {
+          "log_id": "fixture-realtime-log-id"
+        }
+      }
+    }
+  }
+}

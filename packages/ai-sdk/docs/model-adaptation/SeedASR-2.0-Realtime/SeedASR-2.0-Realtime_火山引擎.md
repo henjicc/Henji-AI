@@ -66,7 +66,9 @@ P0 不在 SDK 内转码：输入不符合 PCM S16LE/16 kHz/mono 时，在建立�
 "corpus": { "context": "{\"hotwords\":[{\"word\":\"说吧\"},{\"word\":\"豆包语音\"}]}" }
 ```
 
-官方原文：热词直传优先级高于传热词表，双向流式支持 100 tokens，流式输入 nostream 支持 5000 个词。官方未写明 `bigmodel_async`（双向流式优化版）适用哪条，按双向流式推定为 100 tokens，实现前待授权实测确认。直传格式只有 `word`，官方未给权重字段；带权重的只有控制台热词表（`boosting_table_id` / `boosting_table_name`，一次请求只生效一张）。超过 100 tokens 时服务端是截断还是报错，官方未说明，SDK 不截断、不估算 token。同一字段也承载上下文（`context_type: dialog_ctx`），热词与上下文能否合写官方未说明，P0 只接热词。没有有效热词时不发送 `corpus`。
+官方原文：热词直传优先级高于传热词表，双向流式支持 100 tokens，流式输入 nostream 支持 5000 个词。官方未写明 `bigmodel_async`（双向流式优化版）适用哪条。直传格式只有 `word`，官方未给权重字段；带权重的只有控制台热词表（`boosting_table_id` / `boosting_table_name`，一次请求只生效一张）。超限行为官方未说明，SDK 不截断、不估算 token。
+
+2026-11-10 授权实测（`bigmodel_async`，约 8.6 秒 16 kHz 合成语音，内容含「说吧」）：不带热词识别为「说把」；热词含「说吧」时识别为「说吧」。把「说吧」放在 5、12、25、50、100、299、1000、3000、5999 个互不相同的填充热词之后（约 7 字/词，最大约 4.2 万字）都仍然生效，握手正常、无错误码、耗时无明显变化；「说吧」放在 300 个填充词之前同样生效。实测没有出现 100 tokens 截断或报错，服务端实际上限未知。同一字段也承载上下文（`context_type: dialog_ctx`），热词与上下文能否合写官方未说明，P0 只接热词。没有有效热词时不发送 `corpus`。
 
 ## 3. 二进制帧契约
 
@@ -111,7 +113,7 @@ SDK 对音频保留一块延迟：收到下一块时才把上一块以正 sequen
 
 | 服务端帧/字段 | Capability 事件 | 终态 | 行为 |
 |---|---|---|---|
-| 首个合法 type `9` full response | `started` | 否 | 官方附件该帧 `result.text=""`；SDK 不要求必须为空，也不产生空 partial |
+| 首个合法 type `9` full response | `started` | 否 | 官方附件该帧 `result.text=""`；2026-11-10 真实服务该帧头为 `11 90 10 00`（不带 sequence、不压缩），payload 只有 `result.additions.log_id`，没有 `audio_info` 与 `result.text`。缺失的 `text` 按空串处理（存在但非字符串仍拒绝）；SDK 不要求必须为空，也不产生空 partial |
 | type `9`，非空 `result.text` | `partial` | 否 | 文本变化才发，重复内容去重 |
 | `result.utterances[].definite=true` | `final` | 否 | 表示句段已确定，不等于整个连接结束；按时间范围/文本去重 |
 | flag bit `2`（last） | `completed` | 是 | 只有客户端已 `finish()` 后才合法；输出 `result.text/utterances/audio_info.duration` |
@@ -144,6 +146,7 @@ SDK 对音频保留一块延迟：收到下一块时才把上一块以正 sequen
 |---|---|---|
 | `asr-seedasr-official.json` | `official-redacted` | 官方附件成功 `run.log` 的握手/空进度/终帧；仅 `log_id` 脱敏 |
 | `asr-seedasr-field-construction.json` | `field-construction` | 按官方当前附件构造三类客户端帧与首帧字段；`startPayloadWithHotwords` 依据官方字段表与热词直传示例构造（官方示例引号未转义，按字段类型 string 修正） |
+| `asr-seedasr-live.json` | `live-redacted` | 2026-11-10 真实服务握手帧，没有 `result.text`；仅 `log_id` 脱敏 |
 | `asr-seedasr-synthetic.json` | `synthetic-negative` | 未知 event、错误码、断牙/尾随字节等负例 |
 
 ## 7. 原始链接索引
