@@ -108,14 +108,10 @@ function toSafeValue(value: unknown, depth = 0): unknown {
 /** 界面文案给助手时只要一份中文：翻译键、回退文案和英文版都是界面实现细节 */
 function plainText(value: unknown): string | undefined {
   if (value === undefined || value === null || value === '') return undefined
-  if (typeof value === 'object' && 'key' in value && typeof value.key === 'string') {
-    // 翻译键按中文取，不随界面语言；取不到时用回退文案，不把键名本身交出去
-    const fallback = 'fallback' in value && typeof value.fallback === 'string' ? value.fallback : undefined
-    const text = i18n.t(value.key, { lng: 'zh-CN', defaultValue: fallback ?? '' })
-    return (text && text !== value.key ? text : fallback)?.trim() || undefined
-  }
-  const text = typeof value === 'string' || typeof value === 'object' ? getI18nText(value as Parameters<typeof getI18nText>[0], 'zh') : String(value)
-  return text.trim() || undefined
+  // 翻译键固定按中文取，不随界面语言；取不到时 getI18nText 返回键名，这种情况不交出去
+  const text = typeof value === 'string' || typeof value === 'object' ? getI18nText(value as Parameters<typeof getI18nText>[0], 'zh', 'zh-CN') : String(value)
+  const key = typeof value === 'object' && 'key' in value ? value.key : undefined
+  return text.trim() && text !== key ? text.trim() : undefined
 }
 
 /** 只交出助手据此选值的字段；没有的、默认的一律不传，免得每次读参数都带一堆 null */

@@ -163,7 +163,7 @@ function isI18nKeyText(text: Exclude<I18nText, string>): text is I18nKeyText {
  * @param locale - 语言代码（默认 'zh'）
  * @returns 实际文本值
  */
-export function getI18nText(text: I18nText, locale: string = 'zh'): string {
+export function getI18nText(text: I18nText, locale: string = 'zh', fixedLanguage?: string): string {
   if (typeof text === 'string') {
     return text
   }
@@ -171,6 +171,8 @@ export function getI18nText(text: I18nText, locale: string = 'zh'): string {
   if (isI18nKeyText(text)) {
     const fallback = typeof text.fallback === 'string' ? text.fallback : text.key
     const key = text.key
+    // 翻译键默认随界面语言；指定 fixedLanguage 时固定取该语言（例如交给助手的文案只要中文）
+    const lng = fixedLanguage ? { lng: fixedLanguage } : {}
     if (isModelKey(key)) {
       const modelTranslation = getModelTranslation(key, locale)
       if (typeof modelTranslation === 'string') {
@@ -183,9 +185,9 @@ export function getI18nText(text: I18nText, locale: string = 'zh'): string {
         if (key.startsWith('models:')) {
           const raw = key.slice('models:'.length)
           const normalized = normalizeModelsKey(`models.${raw}`)
-          return i18n.t(`models:${normalized.slice('models.'.length)}`, { defaultValue: fallback })
+          return i18n.t(`models:${normalized.slice('models.'.length)}`, { ...lng, defaultValue: fallback })
         }
-        return i18n.t(key, { defaultValue: fallback })
+        return i18n.t(key, { ...lng, defaultValue: fallback })
       }
 
       for (const ns of KNOWN_NAMESPACES) {
@@ -193,13 +195,13 @@ export function getI18nText(text: I18nText, locale: string = 'zh'): string {
         if (key.startsWith(prefix)) {
           if (ns === 'models') {
             const normalized = normalizeModelsKey(key)
-            return i18n.t(normalized.slice(prefix.length), { ns, defaultValue: fallback })
+            return i18n.t(normalized.slice(prefix.length), { ...lng, ns, defaultValue: fallback })
           }
-          return i18n.t(key.slice(prefix.length), { ns, defaultValue: fallback })
+          return i18n.t(key.slice(prefix.length), { ...lng, ns, defaultValue: fallback })
         }
       }
 
-      return i18n.t(key, { defaultValue: fallback })
+      return i18n.t(key, { ...lng, defaultValue: fallback })
     } catch {
       return fallback
     }
