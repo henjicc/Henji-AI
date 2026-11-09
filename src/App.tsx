@@ -37,7 +37,7 @@ import {
 } from '@/stores/navigationStore'
 import { useApplicationHost } from '@/features/application-control/useApplicationHost'
 import { useAssistantUiStore } from '@/features/assistant/store/assistantUiStore'
-import { UI_DURATION, uiTransition } from '@/components/ui/motion'
+import { APP_OVERLAY_INSET_VARS, UI_DURATION, uiTransition } from '@/components/ui/motion'
 import { prefetchWhenIdle } from '@/utils/idlePrefetch'
 import { onboardingManager } from '@/features/onboarding/application/onboardingManager'
 import { OnboardingModal } from '@/features/onboarding/components/OnboardingModal'
@@ -242,6 +242,14 @@ const App: React.FC = () => {
   useEffect(() => {
     if (assistantOpen) setAssistantMounted(true)
   }, [assistantOpen])
+  const assistantInsetLeft = assistantOpen && assistantMode === 'left' ? assistantSize.width : 0
+  const assistantInsetRight = assistantOpen && assistantMode === 'right' ? assistantSize.width : 0
+  // 弹窗挂在 body 上，读不到这里的布局：停靠侧栏的宽度写到 body，弹窗与查看器据此让出侧栏
+  useEffect(() => {
+    const root = document.body.style
+    root.setProperty(APP_OVERLAY_INSET_VARS.left, `${assistantInsetLeft}px`)
+    root.setProperty(APP_OVERLAY_INSET_VARS.right, `${assistantInsetRight}px`)
+  }, [assistantInsetLeft, assistantInsetRight])
   useEffect(() => {
     if (assetView === 'floating') setAssetPanelMounted(true)
   }, [assetView])
@@ -349,8 +357,8 @@ const App: React.FC = () => {
           <TabContainer
             containerRef={assistantWorkspaceRef}
             activeTab={activeWorkspace}
-            insetLeft={assistantOpen && assistantMode === 'left' ? assistantSize.width : 0}
-            insetRight={assistantOpen && assistantMode === 'right' ? assistantSize.width : 0}
+            insetLeft={assistantInsetLeft}
+            insetRight={assistantInsetRight}
           />
         )}
         {/* 三个懒加载浮层必须各有各的 Suspense 边界。共用一个时，任意一个 chunk 首次挂起

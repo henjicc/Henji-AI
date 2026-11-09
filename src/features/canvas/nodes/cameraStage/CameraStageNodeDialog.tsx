@@ -5,6 +5,7 @@ import { useProjectStore } from '@/stores/projectStore';
 import { useTranslation } from 'react-i18next';
 
 import { UiLoading, UiModal } from '@/components/ui';
+import { isInModalIndependentRegion } from '@/components/ui/useDialogFocusTrap';
 import {
   closeCameraStageNodeEditorDialog,
   markCameraStageNodeEditorFailed,
@@ -121,7 +122,7 @@ export function CameraStageNodeDialog(): JSX.Element | null {
   useEffect(() => {
     if (!nodeId || !isActiveCameraStageNode) return;
     const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key !== 'Escape') return;
+      if (event.key !== 'Escape' || isInModalIndependentRegion(event.target)) return;
       event.preventDefault();
       event.stopPropagation();
       close();

@@ -353,6 +353,14 @@
     box-shadow: inset 0 1px 0 0 var(--ui-glass-sheen);
   }
 
+  /* 侧栏宽度由主窗口 body 写入 --app-overlay-inset-left/right（停靠时等于侧栏宽，否则为 0）；顶部让出 h-10 标题栏 */
+  .ui-content-overlay-inset {
+    top: 2.5rem;
+    bottom: 0;
+    left: var(--app-overlay-inset-left, 0px);
+    right: var(--app-overlay-inset-right, 0px);
+  }
+
   /*
    * 打开毛玻璃时，普通界面上的实底浮层（菜单、右键菜单、下拉、弹出面板）也换成同一块玻璃（2026-10-22 用户确认）；
    * 关闭毛玻璃时保持 overlay 实底（比面板高一级）。内部选项、分隔线、控件随下方 :is(...) 选择器一起切到玻璃档。

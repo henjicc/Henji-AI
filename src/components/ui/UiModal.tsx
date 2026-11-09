@@ -104,6 +104,8 @@ export function UiModal({
     active: !inContainer && isOpen && shouldRender && host !== null,
     dialogRef,
     onClose: requestClose,
+    // 可关闭的弹窗让出侧栏（见下方定位类）；必须完成的任务整窗盖住侧栏，仍接管全部按键
+    besideIndependentRegions: dismissible,
   });
 
   if (!shouldRender) {

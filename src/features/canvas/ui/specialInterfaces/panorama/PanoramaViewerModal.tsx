@@ -15,6 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { UiButton, UiError, UiErrorBoundary, UiIconButton, UiLoading } from '@/components/ui';
 import { UiViewerShell, useUiViewerShell } from '@/components/ui';
 import { createLogger } from '@/core/logging';
+import { isInModalIndependentRegion } from '@/components/ui/useDialogFocusTrap';
 import { ICON_DOWNLOAD, ICON_PANORAMA } from '@/core/theme/icons';
 import {
   resolveNodeDownloadTarget,
@@ -139,6 +140,7 @@ export function PanoramaViewerModal({
   useEffect(() => {
     if (!open) return;
     const handleKeyDown = (event: KeyboardEvent): void => {
+      if (isInModalIndependentRegion(event.target)) return;
       if (event.key === 'ArrowLeft') onNavigate('prev');
       if (event.key === 'ArrowRight') onNavigate('next');
     };

@@ -6,6 +6,7 @@ import { useState, type CSSProperties, type KeyboardEvent, type RefObject } from
 import { UI_COLOR_ACCENT_TEXT_CLASS, UI_PANEL_SURFACE_CLASS, UI_TEXT_PANEL_TITLE_CLASS, UiIconButton, UiToolbar } from '@/components/ui'
 import { useDialogTransition } from '@/components/ui/useDialogTransition'
 import { UI_DIALOG_TRANSITION_MS } from '@/components/ui/motion'
+import { UI_MODAL_INDEPENDENT_ATTRIBUTE } from '@/components/ui/useDialogFocusTrap'
 
 import { EmbeddedConversation } from './embedded/EmbeddedConversation'
 import { EmbeddedHistory } from './embedded/EmbeddedHistory'
@@ -110,8 +111,9 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
       <div
         ref={interaction.panelRef}
         data-assistant-sidebar
+        {...{ [UI_MODAL_INDEPENDENT_ATTRIBUTE]: '' }}
         aria-hidden={parked || undefined}
-        className={`pointer-events-none fixed z-panel min-h-0 ${parked ? 'hidden' : ''} ${mode === 'floating' || interaction.dragging ? 'will-change-transform' : isVisible ? GAP_BY_MODE[mode] : ''}`}
+        className={`pointer-events-none fixed z-assistant min-h-0 ${parked ? 'hidden' : ''} ${mode === 'floating' || interaction.dragging ? 'will-change-transform' : isVisible ? GAP_BY_MODE[mode] : ''}`}
         style={positionStyle}
       >
       <aside

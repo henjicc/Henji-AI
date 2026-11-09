@@ -1,3 +1,4 @@
+import { isInModalIndependentRegion } from '@/components/ui/useDialogFocusTrap'
 import { useEffect } from 'react'
 import type { StageGizmoMode } from '../domain/sceneTypes'
 import { useCameraStageStore } from '../store/cameraStageStore'
@@ -49,7 +50,8 @@ export function useCameraStageShortcuts(params: UseCameraStageShortcutsParams): 
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (isTypingTarget(event.target)) return
+      // 助手侧栏里的按键（含按钮上的空格、Delete）不是给 3D 场景的
+      if (isTypingTarget(event.target) || isInModalIndependentRegion(event.target)) return
       const key = event.key.toLowerCase()
 
       if (event.ctrlKey || event.metaKey) {

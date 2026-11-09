@@ -1,3 +1,4 @@
+import { isInModalIndependentRegion } from '@/components/ui/useDialogFocusTrap'
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Plus, Scissors } from 'lucide-react'
 import { UiIconButton } from '@/components/ui'
@@ -65,7 +66,7 @@ const StateKeyframeTimelinePanel: React.FC = () => {
   // 焦点不在输入控件时，空格播放/暂停。
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.code !== 'Space' || event.repeat) return
+      if (event.code !== 'Space' || event.repeat || isInModalIndependentRegion(event.target)) return
       const target = event.target as HTMLElement | null
       const tagName = target?.tagName
       if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT' || target?.isContentEditable) return

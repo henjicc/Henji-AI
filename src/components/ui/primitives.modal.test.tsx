@@ -73,6 +73,22 @@ describe('UiModal', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('在弹窗外的独立区域（助手侧栏）里按 Esc 不关弹窗', () => {
+    const onClose = vi.fn();
+    const sidebar = document.createElement('div');
+    sidebar.setAttribute('data-modal-independent', '');
+    const input = document.createElement('textarea');
+    sidebar.appendChild(input);
+    document.body.appendChild(sidebar);
+    render(<UiModal isOpen title="3D 编辑器" onClose={onClose}>内容</UiModal>);
+
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    sidebar.remove();
+  });
+
   it('在首尾可聚焦元素之间循环 Tab', async () => {
     const view = render(
       <UiModal isOpen title="焦点循环" onClose={vi.fn()}>

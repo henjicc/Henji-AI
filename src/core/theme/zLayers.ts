@@ -20,6 +20,7 @@ export const Z_LAYERS = {
   dropdown: 30,
   panel: 40,
   modal: 50,
+  assistant: 55,
   viewer: 60,
   toast: 70,
   popover: 75,

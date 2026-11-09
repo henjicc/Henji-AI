@@ -112,5 +112,11 @@ export const UI_TOAST_EXIT_MS = UI_DURATION.slow;
 /** 浮层（下拉、右键菜单、节点菜单）的进出场时长 */
 export const UI_POPOVER_TRANSITION_MS = UI_DURATION.base;
 
-// Keep custom overlays below the app title bar (h-10 = 40px).
-export const UI_CONTENT_OVERLAY_INSET_CLASS = 'inset-x-0 bottom-0 top-10';
+/**
+ * 弹窗、查看器占的区域：标题栏以下、停靠的助手侧栏以外（index.css 的 .ui-content-overlay-inset）。
+ * 助手和标题栏一样是全局的，打开编辑器或弹窗时仍要看得见、用得上。
+ */
+export const UI_CONTENT_OVERLAY_INSET_CLASS = 'ui-content-overlay-inset';
+
+/** 写在主窗口 body 上的侧栏让位宽度；只属于主窗口，剪辑浮窗同步 body 属性时要去掉 */
+export const APP_OVERLAY_INSET_VARS = { left: '--app-overlay-inset-left', right: '--app-overlay-inset-right' } as const;

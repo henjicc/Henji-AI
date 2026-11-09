@@ -17,6 +17,8 @@ import {
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '@/core/application-control/builtinApplicationCapabilityRegistry'
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import { useCanvasStore } from '@/stores/canvasStore'
+import { useCameraStageNodeEditor } from '@/features/canvas/application/cameraStageNodeEditor'
+import { isEditableLayerStackResultNode } from '@/features/canvas/domain/canvasNodeGuards'
 import { resolveNodePosition } from '@/features/canvas/application/canvasApplicationService'
 import { getCanvasMediaTransfers } from '@/features/canvas/application/canvasMediaTransfer'
 import { getCanvasNodeDefinition } from '@/features/canvas/domain/nodeRegistry'
@@ -131,7 +133,10 @@ function startTracking(): () => void {
       if (state.nodes !== previous.nodes || state.edges !== previous.edges) bumpScope('canvas')
       // 选中项是界面状态，不是画布数据：它不能推进 canvas 基线，否则将来任何一个用
       // scopeRevisions.canvas 做乐观并发的写入，都会被"定位一下节点"这种纯导航动作弄失效。
-      if (state.selectedNodeId !== previous.selectedNodeId) bumpScope('surface')
+      if (state.selectedNodeId !== previous.selectedNodeId || state.activeToolDialog !== previous.activeToolDialog) bumpScope('surface')
+    }),
+    useCameraStageNodeEditor.subscribe((state, previous) => {
+      if (state.nodeId !== previous.nodeId || state.documentId !== previous.documentId) bumpScope('surface')
     }),
     useAssetLibraryStore.subscribe((state, previous) => {
       // 素材库的浮层开合与选中同理，都属于呈现层。
@@ -244,6 +249,21 @@ export function captureHostSelection(summaryOnly = false): EmbeddedSelectionSnap
   }
 }
 
+function openCanvasNodeEditorContext(canvasId: string | null): { openEditor?: NonNullable<HostContextSnapshot['canvas']['openEditor']> } {
+  if (!canvasId) return {}
+  const { nodes, activeToolDialog } = useCanvasStore.getState()
+  const stage = useCameraStageNodeEditor.getState()
+  if (stage.nodeId && nodes.some(node => node.id === stage.nodeId)) {
+    return { openEditor: { kind: 'camera_stage', nodeRef: `canvas.node:${canvasId}:${stage.nodeId}`, cameraStageDocumentId: stage.documentId } }
+  }
+  if (activeToolDialog) {
+    const node = nodes.find(candidate => candidate.id === activeToolDialog.nodeId)
+    const kind = activeToolDialog.toolType === 'edit' && isEditableLayerStackResultNode(node) ? 'multi_layer_document' : 'node_tool'
+    return { openEditor: { kind, nodeRef: `canvas.node:${canvasId}:${activeToolDialog.nodeId}` } }
+  }
+  return {}
+}
+
 export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
   const navigation = useNavigationStore.getState()
   const project = useProjectStore.getState()
@@ -333,6 +353,8 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
       } : {}),
       ...(navigation.activeWorkspace === 'nodes' && project.currentProjectId && !canvas.selectedNodeId
         ? { viewportNodePosition: resolveNodePosition({ mode: 'viewport_center' }) } : {}),
+      // 节点编辑器挂在 body 上，切到别的工作区后仍盖在上面，所以不按当前工作区判断
+      ...openCanvasNodeEditorContext(project.currentProjectId),
     },
     generation: { commandReady: generationReady },
     ...(videoEdit ? { videoEdit: {

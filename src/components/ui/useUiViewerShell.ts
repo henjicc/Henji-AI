@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { isInModalIndependentRegion } from './useDialogFocusTrap'
 import { UI_DURATION } from './motion'
 import { isTopmostUiOverlay, useUiOverlayLayer } from './overlayOwnership'
 import { useDialogTransition } from './useDialogTransition'
@@ -32,7 +33,7 @@ export function useUiViewerShell(open: boolean, onClose: () => void, options: Vi
   useEffect(() => {
     if (!open || scope !== 'viewport') return
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key !== 'Escape' || event.defaultPrevented || !isTopmostUiOverlay(overlay.id)) return
+      if (event.key !== 'Escape' || event.defaultPrevented || isInModalIndependentRegion(event.target) || !isTopmostUiOverlay(overlay.id)) return
       const allowed = typeof escapeRef.current === 'function' ? escapeRef.current() : escapeRef.current
       if (allowed) { event.preventDefault(); closeRef.current() }
     }

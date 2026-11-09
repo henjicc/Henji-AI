@@ -3,7 +3,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { UiButton, UiPanel } from './primitives'
 import { useI18n } from '@/hooks/useI18n'
 import { useDialogTransition } from './useDialogTransition'
-import { UI_DIALOG_TRANSITION_MS, uiTransition } from './motion'
+import { UI_CONTENT_OVERLAY_INSET_CLASS, UI_DIALOG_TRANSITION_MS, uiTransition } from './motion'
 import { useDialogFocusTrap } from './useDialogFocusTrap'
 import { UiOverlayLayerProvider, useUiOverlayLayer } from './overlayOwnership'
 import { UI_MODAL_SIZE_CLASS, UI_TEXT_BODY_CLASS, UI_TEXT_TITLE_CLASS } from './styleTokens'
@@ -100,6 +100,7 @@ export default function AlertDialog({
     active: isOpen && !closeRequested,
     dialogRef,
     onClose: handleClose,
+    besideIndependentRegions: true,
   })
 
   if (!shouldRender || (closeImmediately && closeRequested)) return null
@@ -135,7 +136,7 @@ export default function AlertDialog({
   const { icon, color } = getIconAndColor()
   const rootClassName = scope === 'container'
     ? 'absolute inset-0 z-modal flex items-center justify-center'
-    : 'fixed inset-0 z-modal flex items-center justify-center'
+    : `fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} z-modal flex items-center justify-center`
 
   return (
     <div

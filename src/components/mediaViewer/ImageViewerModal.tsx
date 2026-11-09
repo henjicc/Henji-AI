@@ -16,6 +16,7 @@ import { resolveImageDisplayUrl } from '@/services/imageSource';
 import { useImageViewerTransform, type ImageComparisonMode } from './useImageViewerTransform';
 import { useViewerZoom } from './useViewerZoom';
 import { UI_DURATION, uiTransition } from '@/components/ui/motion';
+import { isInModalIndependentRegion } from '@/components/ui/useDialogFocusTrap';
 
 // 图片编辑器只在用户进入编辑模式时挂载，避免把编辑运行时压进常用的只读查看路径。
 const ViewerMarkEditor = React.lazy(() =>
@@ -167,7 +168,7 @@ export function ImageViewerModal({
   useEffect(() => {
     if (!open || isEditorMode) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.defaultPrevented) return;
+      if (e.defaultPrevented || isInModalIndependentRegion(e.target)) return;
       if (e.key === 'ArrowLeft') {
         onNavigate('prev');
       } else if (e.key === 'ArrowRight') {

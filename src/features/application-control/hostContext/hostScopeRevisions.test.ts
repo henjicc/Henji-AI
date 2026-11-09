@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageStore'
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
+import { closeCameraStageNodeEditorDialog, markCameraStageNodeEditorLoaded, openCameraStageNodeEditorDialog } from '@/features/canvas/application/cameraStageNodeEditor'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { useNavigationStore } from '@/stores/navigationStore'
@@ -115,10 +116,10 @@ describe('宿主作用域 revision', () => {
       useCanvasStore.setState({ selectedNodeId: null, currentViewport: { x: 100, y: 200, zoom: 2 }, canvasViewportSize: { width: 1000, height: 800 } })
       const before = getHostScopeRevisions().canvas
       const sent = createHostContextSnapshot()
-      expect(sent.canvas.viewportNodePosition).toEqual({ x: 90, y: -20 })
+      expect(sent.canvas.viewportNodePosition).toEqual({ x: 90, y: 0 })
       useCanvasStore.setState({ currentViewport: { x: 900, y: 600, zoom: 1 } })
-      expect(createHostContextSnapshot().canvas.viewportNodePosition).toEqual({ x: -510, y: -320 })
-      expect(sent.canvas.viewportNodePosition).toEqual({ x: 90, y: -20 })
+      expect(createHostContextSnapshot().canvas.viewportNodePosition).toEqual({ x: -510, y: -300 })
+      expect(sent.canvas.viewportNodePosition).toEqual({ x: 90, y: 0 })
       expect(getHostScopeRevisions().canvas).toBe(before)
       useCanvasStore.setState({ selectedNodeId: 'selected' })
       expect(createHostContextSnapshot().canvas.viewportNodePosition).toBeUndefined()
@@ -130,6 +131,14 @@ describe('宿主作用域 revision', () => {
       expect(createHostContextSnapshot().canvas.selectedNodeSummary).toEqual({ type: 'uploadNode', name: 'uploadNode', isGenerating: true })
       useCanvasStore.setState({ nodes: [{ id: 'selected', type: 'imageNode', position: { x: 0, y: 0 }, data: { prompt: '待生成' } }] })
       expect(createHostContextSnapshot().canvas.selectedNodeIsReference).toBe(false)
+      // 眼前开着的节点编辑器要让助手看到，节点不在画布里时不算开着
+      useCanvasStore.setState({ nodes: [{ id: 'stage', type: 'cameraStageNode', position: { x: 0, y: 0 }, data: {} }] })
+      openCameraStageNodeEditorDialog('stage')
+      markCameraStageNodeEditorLoaded('stage', 'stage-doc')
+      expect(createHostContextSnapshot().canvas.openEditor).toEqual({ kind: 'camera_stage', nodeRef: 'canvas.node:origin-project:stage', cameraStageDocumentId: 'stage-doc' })
+      useCanvasStore.setState({ nodes: [] })
+      expect(createHostContextSnapshot().canvas.openEditor).toBeUndefined()
+      closeCameraStageNodeEditorDialog()
       useCanvasStore.setState({ selectedNodeId: null })
       useNavigationStore.setState({ activeWorkspace: 'generation' })
       expect(createHostContextSnapshot().canvas.viewportNodePosition).toBeUndefined()

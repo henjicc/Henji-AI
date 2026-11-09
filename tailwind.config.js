@@ -198,8 +198,9 @@ export default {
         raised: '10', // 文档流内的局部层叠（渐变遮罩、节点内部覆盖层）
         sticky: '20', // 视图内工具栏、粘性头部
         dropdown: '30', // 下拉、气泡、右键菜单、建议列表
-        panel: '40', // 悬浮侧栏/面板（助手、资产库）
+        panel: '40', // 悬浮面板（资产库）
         modal: '50', // 弹窗及其遮罩
+        assistant: '55', // 助手侧栏：全局常驻，弹窗与节点编辑器让出侧栏、开着时仍可用；整窗查看器仍盖住它
         viewer: '60', // 全屏媒体查看器（需要盖住弹窗）
         toast: '70', // 通知、临时提示
         popover: '75', // 挂到 body 的下拉与面板触发器浮层（可能从弹窗、查看器里打开，必须盖住它们）
@@ -222,8 +223,8 @@ export default {
         canvas: withOpacity('--canvas-rgb'),
         panel: withOpacity('--panel-rgb'),
         raised: withOpacity('--raised-rgb'),
-        // 浮层（菜单、下拉、弹出面板）与浮层里的悬停：bg-overlay / bg-overlay-hover
-        overlay: { DEFAULT: withOpacity('--overlay-rgb'), hover: withOpacity('--overlay-hover-rgb') },
+        // 浮层（菜单、下拉、弹出面板）与浮层里的台阶：bg-overlay / -hover / -raised / -selected
+        overlay: { DEFAULT: withOpacity('--overlay-rgb'), hover: withOpacity('--overlay-hover-rgb'), raised: withOpacity('--overlay-raised-rgb'), selected: withOpacity('--overlay-selected-rgb') },
         'segment-selected': withOpacity('--segment-selected-rgb'),
         control: {
           DEFAULT: withOpacity('--control-rgb'),

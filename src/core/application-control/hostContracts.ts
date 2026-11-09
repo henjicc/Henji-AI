@@ -80,6 +80,12 @@ export const hostContextSnapshotSchema = z.object({
       type: z.string().max(120), name: z.string().max(120), isGenerating: z.boolean(),
     }).strict().optional(),
     viewportNodePosition: z.object({ x: z.number().finite(), y: z.number().finite() }).strict().optional(),
+    /** 用户眼前开着的节点全屏编辑器；没有这一项就是没开，说“已打开”前以它为准 */
+    openEditor: z.object({
+      kind: z.enum(['camera_stage', 'multi_layer_document', 'node_tool']),
+      nodeRef: z.string().min(1).max(500),
+      cameraStageDocumentId: z.string().min(1).nullable().optional(),
+    }).strict().optional(),
   }),
   generation: z.object({
     commandReady: z.boolean(),

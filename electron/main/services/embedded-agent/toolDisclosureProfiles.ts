@@ -37,7 +37,8 @@ export const domainProfiles: Record<string, { skill: string; tools: string[]; gu
     tools: ['open_canvas_node_editor'],
     guidance: '先用 load_assistant_skill 读「三维镜头构图」再动手。机位不手算坐标和角度：每个关键时刻用 compose_camera_stage_shot 加 at.time 描述想要的镜头（主体、景别、角度、镜头），应用求出机位与注视点并读回构图，没有状态关键帧会自动新建；'
       + '环绕、推拉、横移、升降用 apply_camera_stage_camera_move，几段要连成一个动作时后一段传 continuity=smooth。检查整段运镜用 observe_camera_stage_scene 的 times 一次读回各时刻的摄像机构图，不要拖动播放头逐个看。'
-      + '画布里的 3D 镜头参考节点：读节点拿到镜头参考文档 id 后不打开也能改；新建的节点还没有镜头参考（读不到 id）时先用 open_canvas_node_editor 打开一次来创建；用户要看时也用它打开。',
+      + '画布里的 3D 镜头参考节点：读节点拿到镜头参考文档 id 后不打开也能改；新建的节点还没有镜头参考（读不到 id）时先用 open_canvas_node_editor 打开一次来创建；用户要看时也用它打开。'
+      + '用户眼前开着哪个编辑器只看本轮宿主上下文的 canvas.openEditor，没有这一项就是没开；不能凭前几轮的结果说“已经打开”。',
   },
 }
 

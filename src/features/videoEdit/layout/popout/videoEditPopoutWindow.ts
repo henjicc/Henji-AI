@@ -1,3 +1,6 @@
+import { APP_OVERLAY_INSET_VARS } from '@/components/ui/motion'
+import { isHtmlElementNode } from '@/utils/crossRealmDom'
+
 /**
  * 剪辑系统浮窗的 DOM 宿主：主窗口以 `about:blank` 打开同源子窗口，把主题样式同步过去，
  * 再由主窗口 React 把面板 portal 进容器。子窗口不运行任何应用脚本、没有 preload，
@@ -66,6 +69,11 @@ const STYLE_SELECTOR = 'style, link[rel="stylesheet"]'
 function copyAttributes(from: Element, to: Element): void {
   for (const name of to.getAttributeNames()) if (!from.hasAttribute(name)) to.removeAttribute(name)
   for (const { name, value } of Array.from(from.attributes)) if (to.getAttribute(name) !== value) to.setAttribute(name, value)
+  // 浮窗里没有助手侧栏，主窗口的侧栏让位宽度不能带过来，否则浮窗里的弹窗会空出一条
+  if (isHtmlElementNode(to)) {
+    to.style.removeProperty(APP_OVERLAY_INSET_VARS.left)
+    to.style.removeProperty(APP_OVERLAY_INSET_VARS.right)
+  }
 }
 
 /**

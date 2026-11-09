@@ -13,10 +13,22 @@ const FOCUSABLE_SELECTOR = [
 
 const dialogStack: HTMLElement[] = [];
 
+/**
+ * 弹窗打开时仍可独立使用的全局区域（助手侧栏）：那里的按键不归弹窗管，
+ * 在侧栏里打字、按 Esc、Tab 不能关掉或抢走弹窗背后的编辑器。
+ */
+export const UI_MODAL_INDEPENDENT_ATTRIBUTE = 'data-modal-independent';
+
+export function isInModalIndependentRegion(target: EventTarget | null): boolean {
+  return isHtmlElementNode(target) && target.closest(`[${UI_MODAL_INDEPENDENT_ATTRIBUTE}]`) !== null;
+}
+
 interface DialogFocusTrapOptions {
   active: boolean;
   dialogRef: RefObject<HTMLElement>;
   onClose: () => void;
+  /** 弹窗让出了助手侧栏（侧栏仍看得见）：侧栏里的按键和焦点不归弹窗管。整窗盖住侧栏的弹窗不传 */
+  besideIndependentRegions?: boolean;
 }
 
 function removeFromDialogStack(dialog: HTMLElement): boolean {
@@ -44,6 +56,7 @@ export function useDialogFocusTrap({
   active,
   dialogRef,
   onClose,
+  besideIndependentRegions = false,
 }: DialogFocusTrapOptions): void {
   const onCloseRef = useRef(onClose);
   const wasActiveRef = useRef(false);
@@ -77,14 +90,15 @@ export function useDialogFocusTrap({
     const previouslyFocused = isHtmlElementNode(capturedFocus) && !dialog.contains(capturedFocus) ? capturedFocus : null;
     dialogStack.push(dialog);
 
+    // 用户正在助手侧栏里打字时由助手打开的弹窗不抢焦点，否则接下来的按键会落进编辑器的快捷键
     const focusFrame = ownerWindow.requestAnimationFrame(() => {
-      if (dialogStack[dialogStack.length - 1] === dialog) {
+      if (dialogStack[dialogStack.length - 1] === dialog && !(besideIndependentRegions && isInModalIndependentRegion(ownerDocument.activeElement))) {
         dialog.focus({ preventScroll: true });
       }
     });
 
     const handleKeyDown = (event: KeyboardEvent): void => {
-      if (dialogStack[dialogStack.length - 1] !== dialog) {
+      if (dialogStack[dialogStack.length - 1] !== dialog || (besideIndependentRegions && isInModalIndependentRegion(event.target))) {
         return;
       }
 
@@ -130,5 +144,5 @@ export function useDialogFocusTrap({
       }
       focusBeforeActivationRef.current = null;
     };
-  }, [active, dialogRef]);
+  }, [active, besideIndependentRegions, dialogRef]);
 }
