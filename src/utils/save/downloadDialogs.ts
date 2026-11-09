@@ -51,7 +51,7 @@ export async function downloadMediaFile(sourcePath: string, suggestedName?: stri
   let filterName = '媒体文件'
   const extensions = [ext]
 
-  if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'].includes(ext)) {
+  if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg'].includes(ext)) {
     filterName = '图片文件'
   } else if (['mp4', 'webm', 'avi', 'mov', 'mkv'].includes(ext)) {
     filterName = '视频文件'

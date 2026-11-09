@@ -161,7 +161,7 @@ function buildFileName(url: string, bytes: Uint8Array, contentType: string): str
 
 function inferExtension(url: string, contentType: string): string {
   const lowerUrl = url.toLowerCase()
-  for (const ext of ['png', 'jpg', 'jpeg', 'webp', 'gif', 'mp4', 'webm', 'mp3', 'wav']) {
+  for (const ext of ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg', 'mp4', 'webm', 'mp3', 'wav']) {
     if (lowerUrl.includes(`.${ext}`)) {
       return ext
     }
@@ -169,6 +169,8 @@ function inferExtension(url: string, contentType: string): string {
   if (contentType.includes('image/png')) return 'png'
   if (contentType.includes('image/jpeg')) return 'jpg'
   if (contentType.includes('image/webp')) return 'webp'
+  if (contentType.includes('image/gif')) return 'gif'
+  if (contentType.includes('image/svg+xml')) return 'svg'
   if (contentType.includes('video/mp4')) return 'mp4'
   if (contentType.includes('video/webm')) return 'webm'
   if (contentType.includes('audio/mpeg')) return 'mp3'

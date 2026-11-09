@@ -5,6 +5,7 @@ import type { I18nText } from '@/core/types/I18nText'
 import type { Linkage } from '@/core/types/Linkage'
 import type { ModelPresentation, ParamOptionPresentation } from '@/core/types/ModelPresentation'
 import { uploadedImageCount } from '../mediaPresence'
+import { gpt26OutputLinkages, gpt26OutputParams } from '../gptImage26Output'
 
 /** 首尾帧（两张图）与续写最长 10 秒，其余 15 秒；与 SDK 构建器的夹取一致。 */
 function apimartGeminiOmni12MaxSeconds(params: Record<string, unknown>): number {
@@ -74,11 +75,15 @@ export const apimartPresentationPart6: Record<string, ModelPresentation> = {
         name: { zh: '背景', en: 'Background' },
         optionLabels: labels(['auto', 'opaque', 'transparent'], { auto: sharedOptionText('auto'), opaque: { zh: '不透明', en: 'Opaque' }, transparent: { zh: '透明', en: 'Transparent' } }),
       },
+      ...gpt26OutputParams({ output: 'gpt26Output', frameCount: 'gpt26FrameCount', frameDuration: 'gpt26FrameDuration', svgModel: 'gpt26SvgModel' }, true),
     },
-    linkages: withResets([{
-      trigger: 'gpt26Channel', effect: 'filterOptions', target: 'gpt26AspectRatio',
-      filter: (value, options) => options.filter(option => value === 'official' || gpt26ExtRatios.includes(String(option.value))),
-    }]),
+    linkages: [
+      ...withResets([{
+        trigger: 'gpt26Channel', effect: 'filterOptions', target: 'gpt26AspectRatio',
+        filter: (value, options) => options.filter(option => value === 'official' || gpt26ExtRatios.includes(String(option.value))),
+      }]),
+      ...gpt26OutputLinkages('gpt26Output', (output, hasImages) => !hasImages || output !== 'svg'),
+    ],
   },
 
   'apimart-kling-4.0': {

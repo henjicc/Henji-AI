@@ -29,6 +29,8 @@ export const MODEL_TAG_DEFINITIONS = [
   { id: 'upscaling', layer: 'specialty', mediaType: 'image', criterion: '专门提高分辨率，有放大倍数或目标尺寸参数' },
   { id: 'photo-restoration', layer: 'specialty', mediaType: 'image', criterion: '专门修复老照片的划痕、褪色、模糊' },
   { id: 'layer-decomposition', layer: 'specialty', mediaType: 'image', criterion: '把一张图拆成多张分层图' },
+  { id: 'animated-image', layer: 'specialty', mediaType: 'image', criterion: '能直接输出 GIF 等动图（有输出格式或帧数参数）' },
+  { id: 'vector-image', layer: 'specialty', mediaType: 'image', criterion: '能直接输出 SVG 等矢量图（有输出格式参数）' },
   { id: 'transparent-background', layer: 'specialty', mediaType: 'image', criterion: '能输出带透明通道的图（抠图、保留透明、透明背景参数）' },
   { id: 'low-light-enhancement', layer: 'specialty', mediaType: 'image', criterion: '专门提亮暗光照片' },
   { id: 'product-photography', layer: 'specialty', mediaType: 'image', criterion: '专门给商品图生成新的背景与场景' },

@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-11-07 |
+| 最后更新 | 2026-11-09 |
 | 模态 | 图片 |
 | 供应商 | APIMart（聚合平台） |
 | 项目模型 ID | `apimart-gpt-image-2.6`（通用标识 `gpt-image-2.6`） |
@@ -38,7 +38,7 @@ Flare 速度优先，Sunburst 细节与编辑一致性优先；两者价格与�
 | `resolution` | `1k` / `2k` / `4k`（小写） | 默认 `1k` |
 | `quality` | `low` / `medium` / `high` / `xhigh` / `max` / `auto` | 默认 `auto`，按 `max` 预扣 |
 | `n` | 1–4 | |
-| `output_format` | `png` / `jpeg` / `webp` / `gif` / `svg` | 项目不显示、不请求 |
+| `output_format` | `png` / `jpeg` / `webp` / `gif` / `svg` | GIF 支持文生图与带 `image_urls` 的图生图；SVG 仅文生图。项目只在选动图 / 矢量图时发送 `gif` / `svg` |
 | `output_compression` | 0–100 | 项目不显示、不请求 |
 | `background` | `transparent` / `opaque` / `auto` | 透明只配 png / webp |
 | `moderation` | `auto` / `low` | 默认 `low`，项目不请求 |
@@ -46,8 +46,9 @@ Flare 速度优先，Sunburst 细节与编辑一致性优先；两者价格与�
 | `mask_url` | 透明 PNG | 需配 `image_urls`，不能与标注层同用 |
 | `markup_url` / `markup` | 透明 PNG 标注层 | 需配 `image_urls` |
 | `complexity` | `low` / `medium` / `high` | 规划强度，上游默认 `high`，不单独收费，仅 2.6 支持 |
-| `frame_count` / `frame_duration_ms` | GIF 专用 | 项目不请求 |
-| `svg` | `{ model, reasoning }` | SVG 专用，项目不请求 |
+| `frame_count` / `frame_duration_ms` | GIF 专用：帧数 2–16（默认 9，APIMart 上限 16）；每帧毫秒数最小 20、按 10 ms 取整（默认 200） | 选动图时发送 |
+| `size`（GIF） | 单帧像素 `WxH`，宽高为 16 的倍数，省略或 `auto` 为 512×512，不接受比例名 | 项目按比例换算后发送 |
+| `svg` | `{ model, reasoning? }`：`model` 必填，选平台有文本 token 定价的模型（文档示例 `gpt-5.4-mini`、`gpt-5.6-sol`）；`reasoning.effort` 可选 | 选矢量图时发送 `{ model }` |
 | `safety_identifier` | ≤ 128 字符 | 项目不请求 |
 
 尺寸映射与 GPT Image 2.5 相同（例 `1:1`：1k 1024×1024、2k 2048×2048、4k 2880×2880）。
@@ -79,6 +80,8 @@ Flare 速度优先，Sunburst 细节与编辑一致性优先；两者价格与�
 | 官方 | 图片输入 / 缓存图片输入 | $6.4 / $1.6 每 1M tokens |
 | 官方 | 图片输出 | $24 / 1M tokens |
 
+动图与矢量图（模型页说明）：GIF 按所有帧拼成的整张图计费，每段动图单独计费，带参考图时按每张 1536 token × 图片输入价预扣；SVG 费用 = 生成参考图费用 + 写作模型实际文本用量，结果带 `data.usage.svg_usage`。按张固定价合约账号不支持 SVG。
+
 官方渠道输出 token：模型页说明“相较 2.5，low 输出 token 消耗为 4.2 倍，medium 为 3.3 倍，high、xhigh、max 不变”。模型页预估示例 1:1 / 1k / 低质量约 824 token ≈ $0.0198，与 2.5 表 196 token × 4.2 吻合。`auto` 按 `max` 预扣、实测通常按 `low` 结算。
 
 ## 5. 项目适配
@@ -88,7 +91,11 @@ Flare 速度优先，Sunburst 细节与编辑一致性优先；两者价格与�
 - 分辨率、数量、背景只在官方渠道显示；Ext 固定发 `resolution: "1k"`、`n: 1`。
 - 质量、规划强度两个渠道都发送（Ext 不影响价格）。
 - 估价：Ext $0.0085；官方按 2.5 尺寸 token 表 × 2.6 倍率 × $24/1M 估算输出，提示词与参考图输入另计。
-- 不显示、不请求：`output_format`、`output_compression`、`moderation`、GIF / SVG 专属字段、`safety_identifier`、`seed`、负面提示词。
+- 输出类型（2026-11-09 按用户要求开放，只在官方渠道）：图片 / 动图 / 矢量图，默认图片。
+  - 动图：帧数、每帧时长显示；分辨率与背景收起、不发送。单帧尺寸按比例以 512×512 面积换算，所有帧按 2–8 帧 4×2、9 帧 3×3、10–12 帧 4×3、13–16 帧 4×4 拼图，拼图每边 ≤ 3840、总像素 ≤ 8,294,400 在该面积下都满足；按取整后的实际单帧尺寸算出的拼图宽高比 > 3:1 时提交前报错，智能比例只在当前帧数拼得出的比例里选。不与蒙版、标注层、`output_compression` 同用。
+  - 矢量图：只能文生图（有参考图时选项被裁掉），`n` 固定 1；显示「矢量化模型」，默认 `gpt-5.4-mini`；背景不发送。
+  - 估价：动图按 1:1 1K 输出 token × 拼图像素折算再乘 2.6 倍率，并加参考图输入预扣；矢量图只估参考图出图费用，矢量化模型的文本费用不在估价内。
+- 不显示、不请求：`output_compression`、`moderation`、`svg.reasoning`、`safety_identifier`、`seed`、负面提示词。
 - 暂未接入：蒙版（`mask_url`）与标注层（`markup_url`）——需要派生媒体创作闭环，沿用 2.5 APIMart 的范围。
 
 ## 6. 原始链接索引

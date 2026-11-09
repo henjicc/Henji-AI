@@ -22,6 +22,7 @@ import {
   throwIfSourceIngestAborted,
 } from './remote-timeouts'
 import { assertImageEditorV3ReleaseSource } from './release-source-capabilities'
+import { rasterizeSvgIfNeeded } from '../../image/svg-raster'
 
 const logger = createMainLogger('main.image_editor_v3.source_ingest')
 const MAX_SOURCE_URL_CHARACTERS = 8_192
@@ -324,7 +325,8 @@ export class ImageEditorV3SourceIngestor {
 
   private async ingestLocal(filePath: string, signal?: AbortSignal): Promise<PutResourceResult> {
     if (!path.isAbsolute(filePath) || filePath.includes('\0')) throw new Error('Local image path must be absolute')
-    const resolved = await fsp.realpath(filePath)
+    // 编辑器按位图解码，SVG 先渲染成 PNG 再导入。
+    const resolved = await rasterizeSvgIfNeeded(await fsp.realpath(filePath))
     const stats = await fsp.stat(resolved)
     if (!stats.isFile()) throw new Error('Local image source is not a regular file')
     if (stats.size > this.limits.localMaxBytes) {

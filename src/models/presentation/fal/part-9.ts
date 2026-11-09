@@ -6,6 +6,7 @@ import type { ModelPresentation, ParamOptionPresentation, ParamPresentationEntry
 import { falPresentationPart1 } from './part-1'
 import { kling40ElementsPresentation, kling40ShotsPresentation } from '../kling-4.0'
 import { uploadedImageCount } from '../mediaPresence'
+import { gpt26OutputLinkages, gpt26OutputParams } from '../gptImage26Output'
 
 /** 首尾帧（两张图）与延长视频最长 10 秒，其余 15 秒；与 SDK 构建器的夹取一致。 */
 function falGeminiOmni12MaxSeconds(params: Record<string, unknown>): number {
@@ -188,8 +189,9 @@ export const falPresentationPart9: Record<string, ModelPresentation> = {
       },
       // 复用已登记的遮罩创作契约，让生成面板与画布共同使用同一个编辑器。
       falGptImage26Mask: falPresentationPart1['fal-ai-gpt-image-2'].params.falGptImage2MaskUrl,
+      ...gpt26OutputParams({ output: 'falGptImage26Output', frameCount: 'falGptImage26FrameCount', frameDuration: 'falGptImage26FrameDuration', svgModel: 'falGptImage26SvgModel' }, true),
     },
-    linkages: [],
+    linkages: gpt26OutputLinkages('falGptImage26Output', (output, hasImages) => !hasImages || output !== 'svg'),
   },
   'fal-ai-gemini-omni-1.2-flash': {
     meta: meta('fal-ai-gemini-omni-1.2-flash', 'Gemini Omni 1.2 Flash'),

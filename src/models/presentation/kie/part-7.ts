@@ -5,6 +5,7 @@ import type { I18nText } from '@/core/types/I18nText'
 import type { ModelPresentation, ParamPresentationEntry } from '@/core/types/ModelPresentation'
 import { falPresentation } from '../fal'
 import { kling40ElementsPresentation } from '../kling-4.0'
+import { gpt26OutputLinkages, gpt26OutputParams } from '../gptImage26Output'
 
 const special: Record<string, I18nText> = {
   smart: sharedOptionText('smart'), auto: sharedOptionText('auto'), adaptive: sharedOptionText('adaptive'),
@@ -48,8 +49,12 @@ const gptImage26: ModelPresentation = {
     },
     // 复用已登记的遮罩创作契约，让生成面板与画布共同使用同一个编辑器。
     kieGpt26Mask: falPresentation['fal-ai-gpt-image-2'].params.falGptImage2MaskUrl,
+    ...gpt26OutputParams({ output: 'kieGpt26Output', frameCount: 'kieGpt26FrameCount', frameDuration: 'kieGpt26FrameDuration', svgModel: 'kieGpt26SvgModel' }, false),
   },
   linkages: [
+    // KIE 的动图与矢量图都只在文生图端点提供，Economy 没有矢量图。
+    ...gpt26OutputLinkages('kieGpt26Output', (output, hasImages, params) => output === 'image'
+      || (!hasImages && !(output === 'svg' && params.kieGpt26Variant === 'economy')), ['kieGpt26Variant']),
     {
       trigger: 'kieGpt26Variant', effect: 'filterOptions', target: 'kieGpt26AspectRatio',
       filter: (variant, options) => options.filter(o => variant !== 'economy' || GPT26_ECONOMY_RATIOS.includes(String(o.value))),

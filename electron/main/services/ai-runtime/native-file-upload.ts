@@ -3,8 +3,9 @@ import { access, realpath, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { normalizeMediaImportPath } from '../../../../src/core/media/localMediaImportSafety'
 import { AiRuntimeError, assertMediaSize, inferMimeFromPath, normalizeLocalSource, type Transport } from '@henjicc/ai-sdk'
+import { rasterizeSvgIfNeeded } from '../image/svg-raster'
 
-/** 在主进程解析原文件及目录链接，后续上传流直接读取真实位置。 */
+/** 在主进程解析原文件及目录链接，后续上传流直接读取真实位置；SVG 供应商不收，换成渲染好的 PNG。 */
 export async function resolveUploadFile(ref: string): Promise<string> {
   const local = normalizeLocalSource(ref.trim())
   if (!local) throw new AiRuntimeError('invalid_media_path', '素材路径无效')
@@ -12,7 +13,7 @@ export async function resolveUploadFile(ref: string): Promise<string> {
   const resolved = await realpath(local)
   await access(resolved, constants.R_OK)
   if (!(await stat(resolved)).isFile()) throw new AiRuntimeError('invalid_media', '上传素材必须是可读文件')
-  return resolved
+  return await rasterizeSvgIfNeeded(resolved)
 }
 
 /** Node's file-backed Blob checks file identity on every read; FormData supplies streaming multipart. */

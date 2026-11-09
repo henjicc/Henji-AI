@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-11-07 |
+| 最后更新 | 2026-11-09 |
 | 模态 | 图片；独立于 GPT Image 2.5 保留（参数集与计费方式不同） |
 | 项目模型 | `kie-gpt-image-2.6`，通用标识 `gpt-image-2.6` |
 | model ID | `gpt-image-2-6/{flare,sunburst,economy}-{text-to-image,image-to-image}` |
@@ -24,10 +24,19 @@
 | background | transparent/opaque/auto | 同左 | 展示 |
 | mask_url | 编辑可选，与 markup 互斥 | 无 | 复用共享遮罩编辑器，`runtimeConstraints.mediaFields` 声明 `mask_url` |
 | markup | 编辑可选透明 PNG 标注 | 无 | 不显示、不请求 |
-| output_format / output_compression / size / frame_count / frame_duration_ms / svg | GIF 与 SVG 输出相关 | output_format 仅 png/gif | 按产品约定不显示、不请求（默认 png） |
+| output_format | 文生图 png/jpeg/webp/gif/svg；编辑端点只有 png/jpeg/webp | 文生图 png/gif；编辑只有 png | 选动图 / 矢量图时发送 `gif` / `svg`；动图与矢量图都只能文生图 |
+| size / frame_count / frame_duration_ms | GIF 专用：`size` 为单帧 `WxH`（省略或 auto 为 512×512），帧数 2–16（默认 9），每帧 20–2000 ms、10 的倍数（默认 200）；GIF 不用 aspect_ratio、resolution | frame_count 为字符串枚举 auto/4/9/16/25/36/64，无 size | Flare/Sunburst 按比例换算单帧后发送；Economy 不开放帧数与时长（交给 auto） |
+| svg | `{ model }`，枚举 gpt-6-sol / gpt-5.6-luna / gpt-5.6-terra，省略时后端填 gpt-5.6-luna；与 GIF 字段互斥 | 无 | 选矢量图时发送 |
+| output_compression | 0–100 | 无 | 不显示、不请求 |
 | moderation | auto/low，默认 low | 无 | 不显示、不请求 |
 
 Flare 与 Sunburst 同价同参；Sunburst 侧重细节与多轮编辑一致性。静态图像素映射与 2.5 相同（例如 16:9 1K 1536×864、4K 3840×2160）。
+
+## 动图与矢量图（2026-11-09 按用户要求开放）
+
+- 「输出类型」图片 / 动图 / 矢量图，默认图片；有参考图时只能选图片，Economy 没有矢量图。
+- 动图拼图规则与 APIMart 相同（拼图每边 ≤ 3840、总像素 ≤ 8,294,400、宽高比 ≤ 3:1）：单帧按比例以 512×512 面积换算；按取整后的实际尺寸判断，拼图宽高比超限提交前报错（KIE 动图只能文生图，智能比例取 1:1）。文档对动图能否透明前后矛盾，动图与矢量图都不发送背景。
+- 矢量图计费 = 出图 Token + 所选写作模型的文本 Token；估价只含出图部分。动图按整张拼图折算输出 Token 估价。
 
 ## 计价说明
 

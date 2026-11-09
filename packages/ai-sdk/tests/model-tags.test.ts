@@ -48,7 +48,7 @@ function hasMaskInput(model: ModelRuntimeDefinition): boolean {
 
 // 模式、任务类型、背景这类选项的取值直接说明了能力；按模型类型对应到标签，选项里有就必须打上
 const OPTION_TAGS: Record<'image' | 'video', Record<string, string>> = {
-  image: { 'image-to-image': 'image-to-image', 'layer-decomposition': 'layer-decomposition', transparent: 'transparent-background' },
+  image: { 'image-to-image': 'image-to-image', 'layer-decomposition': 'layer-decomposition', transparent: 'transparent-background', gif: 'animated-image', svg: 'vector-image' },
   video: {
     'image-to-video': 'image-to-video', 'start-end-frame': 'start-end-frame', 'reference-to-video': 'reference-mode', reference: 'reference-mode',
     'video-extension': 'video-extension', extend: 'video-extension', 'motion-control': 'motion-control', 'retake-video': 'video-to-video', edit: 'video-to-video',
