@@ -5,7 +5,12 @@ import { useProjectStore } from '@/stores/projectStore';
 import { useTranslation } from 'react-i18next';
 
 import { UiLoading, UiModal } from '@/components/ui';
-import { canvasEventBus } from '@/features/canvas/application/canvasServices';
+import {
+  closeCameraStageNodeEditorDialog,
+  markCameraStageNodeEditorFailed,
+  markCameraStageNodeEditorLoaded,
+  useCameraStageNodeEditor,
+} from '@/features/canvas/application/cameraStageNodeEditor';
 import { isCameraStageNode } from '@/features/canvas/domain/canvasNodes';
 // 静态引入会把整个 three.js 场景（约 2.7MB）钉进画布 chunk，切到画布就要下载并编译一遍；
 // 而它只有在双击 3D 节点、打开这个全屏对话框时才用得到。
@@ -21,9 +26,21 @@ import { useCanvasStore } from '@/stores/canvasStore';
 
 const logger = createLogger('features.canvas.cameraStage');
 
+/** 节点已经不在时拿不到它的镜头参考 id，按编辑器载入时记下的文档保存 */
+function saveAndCloseCameraStageNodeEditor(): void {
+  const { nodeId, documentId } = useCameraStageNodeEditor.getState();
+  if (documentId) void saveCameraStageProjectRuntime(documentId).catch((error: unknown) => {
+    logger.error('画布里的镜头参考保存失败', error, {
+      event: 'canvas.camera_stage.save.failed',
+      context: { nodeId },
+    });
+  });
+  closeCameraStageNodeEditorDialog();
+}
+
 export function CameraStageNodeDialog(): JSX.Element | null {
   const { t } = useTranslation();
-  const [nodeId, setNodeId] = useState<string | null>(null);
+  const nodeId = useCameraStageNodeEditor((state) => state.nodeId);
   const [loading, setLoading] = useState(false);
   const node = useCanvasStore((state) => nodeId
     ? state.nodes.find((item) => item.id === nodeId) ?? null
@@ -37,9 +54,11 @@ export function CameraStageNodeDialog(): JSX.Element | null {
   const canvasProjectId = useProjectStore((state) => state.currentProjectId);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
 
-  useEffect(() => canvasEventBus.subscribe('camera-stage/open', ({ nodeId: nextNodeId }) => {
-    setNodeId(nextNodeId);
-  }), []);
+  // 开关状态在画布之外共享：节点被删、撤销或换了画布，以及画布卸载时都要关掉，否则会挡住下一次打开
+  useEffect(() => {
+    if (nodeId && !node) saveAndCloseCameraStageNodeEditor();
+  }, [node, nodeId]);
+  useEffect(() => () => saveAndCloseCameraStageNodeEditor(), []);
 
   useEffect(() => {
     if (!nodeId || !isActiveCameraStageNode) return;
@@ -56,6 +75,8 @@ export function CameraStageNodeDialog(): JSX.Element | null {
           const created = await createNamedCameraStageDocumentInEditor(nodeDisplayName || '3D 镜头参考',
             canvasId ? canvasDocumentContainer(canvasId) : undefined);
           if (!cancelled) updateNodeData(nodeId, { projectId: created.id });
+        } else if (!cancelled && nodeProjectId) {
+          markCameraStageNodeEditorLoaded(nodeId, nodeProjectId);
         }
         logger.info('画布 3D 镜头参考已打开', {
           event: 'canvas.camera_stage.opened',
@@ -66,6 +87,7 @@ export function CameraStageNodeDialog(): JSX.Element | null {
           event: 'canvas.camera_stage.open.failed',
           context: { nodeId },
         });
+        if (!cancelled) markCameraStageNodeEditorFailed(nodeId, error instanceof Error ? error.message : String(error));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -93,11 +115,11 @@ export function CameraStageNodeDialog(): JSX.Element | null {
         context: { nodeId },
       });
     });
-    setNodeId(null);
+    closeCameraStageNodeEditorDialog();
   }, [nodeId, nodeProjectId]);
 
   useEffect(() => {
-    if (!nodeId) return;
+    if (!nodeId || !isActiveCameraStageNode) return;
     const handleKeyDown = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') return;
       event.preventDefault();
@@ -106,7 +128,7 @@ export function CameraStageNodeDialog(): JSX.Element | null {
     };
     document.addEventListener('keydown', handleKeyDown, true);
     return () => document.removeEventListener('keydown', handleKeyDown, true);
-  }, [close, nodeId]);
+  }, [close, isActiveCameraStageNode, nodeId]);
 
   const syncOutputKind = useCallback((outputKind: 'image' | 'video'): void => {
     if (!nodeId) return;

@@ -3,6 +3,8 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
 import { PROTOCOL_TOOL_SPECS } from './toolCatalog'
+import { AGENT_SKILL_NAMES } from '../assistant/skills/agentSkills'
+import { domainProfiles } from '../embedded-agent/toolDisclosureProfiles'
 
 const skillsRoot = path.resolve('resources/assistant-skills')
 const TOOL_VERBS = new Set(['list', 'get', 'read', 'create', 'update', 'delete', 'remove', 'run', 'query', 'discover', 'describe', 'apply', 'generate', 'prepare', 'submit', 'load', 'set', 'search', 'open', 'close', 'focus', 'import', 'export', 'wait', 'cancel', 'retry', 'resolve', 'organize', 'revert', 'undo', 'redo', 'change', 'tidy', 'observe', 'compose', 'place', 'render', 'track', 'start', 'stop', 'pause', 'resume', 'add', 'select', 'send', 'clear', 'collect', 'commit', 'detect', 'analyze', 'process', 'interpret', 'block', 'follow', 'cover', 'check', 'verify', 'duplicate', 'insert', 'split', 'trim', 'nest', 'transcribe', 'translate', 'segment', 'match', 'normalize', 'measure', 'stabilize', 'ramp', 'ripple', 'restore', 'paint', 'repair', 'compute', 'use', 'bind', 'promote', 'detach', 'upgrade', 'migrate', 'register', 'mark', 'record', 'replay', 'understand', 'plan', 'edit', 'extract', 'auto', 'arrange', 'transition', 'stagger', 'remix', 'quick', 'format', 'compress', 'clean', 'reset', 'save', 'connect', 'disconnect', 'group', 'ungroup', 'download', 'review', 'rerecord', 'redub', 'fetch', 'move', 'switch', 'cut', 'resample', 'inspect', 'navigate', 'show', 'find', 'toggle', 'rename', 'write', 'append', 'copy', 'paste', 'play', 'seek'])
@@ -37,5 +39,16 @@ describe('全部助手技能只引用真实存在的工具', () => {
         .map((name) => `${path.relative(skillsRoot, file)}: ${name}`)
     })
     expect([...new Set(missing)]).toEqual([])
+  })
+
+  // 加载领域工具时指给模型的技能和工具改名或删掉后，提示会把它引向不存在的东西
+  it('按领域加载时指向的技能与工具都真实存在', () => {
+    const ids = new Set(BUILTIN_APPLICATION_CAPABILITY_REGISTRY.list().map((definition) => definition.id))
+    for (const [domain, profile] of Object.entries(domainProfiles)) {
+      expect(AGENT_SKILL_NAMES.has(profile.skill), domain).toBe(true)
+      expect(profile.guidance).toContain(`「${profile.skill}」`)
+      const named = [...profile.tools, ...[...profile.guidance.matchAll(/\b([a-z]+(?:_[a-z]+){2,})\b/g)].map((match) => match[1])]
+      expect(named.filter((name) => !ids.has(name) && name !== 'load_assistant_skill'), domain).toEqual([])
+    }
   })
 })

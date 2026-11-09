@@ -14,7 +14,7 @@ import {
   EXPORT_RESULT_NODE_MIN_WIDTH,
   type CameraStageNodeData,
 } from '@/features/canvas/domain/canvasNodes';
-import { canvasEventBus } from '@/features/canvas/application/canvasServices';
+import { openCameraStageNodeEditorDialog } from '@/features/canvas/application/cameraStageNodeEditor';
 import {
   areMediaOutputListsEqual,
   collectInputMediaByKind,
@@ -117,7 +117,7 @@ export const CameraStageNode = memo(({ id, data, selected, width, height }: Came
       });
       return;
     }
-    canvasEventBus.publish('camera-stage/open', { nodeId: id });
+    openCameraStageNodeEditorDialog(id);
   }, [renderProgress, id]);
 
   return (

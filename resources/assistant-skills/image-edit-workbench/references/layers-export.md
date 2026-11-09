@@ -4,7 +4,7 @@
 
 ## 原宿主与真实引用
 
-已有画布多图层图片节点用 `open_multi_layer_document_node_editor` 的 canvasRef/nodeRef 进入节点自己的编辑器，不能用独立工具箱替代。独立素材/生成结果用 `open_image_editor_with_source` 的 sourceRef。两者都有导航，只在任务需要进入编辑宿主或用户要求查看时执行。进入后从实际目录读图片工作文档、根层及选区引用；不由目录ID拼接它们。
+已有画布多图层图片节点用 `open_canvas_node_editor` 的 canvasRef/nodeRef 进入节点自己的编辑器，不能用独立工具箱替代。独立素材/生成结果用 `open_image_editor_with_source` 的 sourceRef。两者都有导航，只在任务需要进入编辑宿主或用户要求查看时执行。进入后从实际目录读图片工作文档、根层及选区引用；不由目录ID拼接它们。
 
 `image_edit.document` 是工作文档引用，`documents.document` 是项目目录文档引用（图片类型为 image_document）；两者不能互换。`list_documents`、宿主与实体返回值分别用于各能力指定的字段，不裁掉前缀、不靠同名猜目标。
 

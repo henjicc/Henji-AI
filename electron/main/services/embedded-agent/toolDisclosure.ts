@@ -1,7 +1,7 @@
 import type { AgentSession, SessionManager, ToolDefinition } from '@earendil-works/pi-coding-agent'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
 
-import { basicTools, disclosureSurface, surfaceProfile, taskProfiles } from './toolDisclosureProfiles'
+import { basicTools, disclosureSurface, domainProfiles, surfaceProfile, taskProfiles } from './toolDisclosureProfiles'
 
 const entryType = 'henji-loaded-application-tools'
 type LoadRequest = { domains?: string[]; names?: string[]; task?: keyof typeof taskProfiles }
@@ -40,8 +40,9 @@ export class PiToolDisclosure {
         const request = args as LoadRequest
         const availableTools = this.activate(request)
         const unavailableTools = request.task ? taskProfiles[request.task].tools.filter(name => !this.tools.some(tool => tool.name === name)) : []
+        const domainGuidance = (request.domains ?? []).flatMap(domain => domainProfiles[domain]?.guidance ?? [])
         return { content: [{ type: 'text', text: JSON.stringify({ availableTools, unavailableTools,
-          guidance: request.task ? taskProfiles[request.task].guidance : '工具已加载；参数以工具 schema 为准，普通读改增删继续使用通用实体。',
+          guidance: [request.task ? taskProfiles[request.task].guidance : '工具已加载；参数以工具 schema 为准，普通读改增删继续使用通用实体。', ...domainGuidance].join('\n'),
           ...(unavailableTools.length ? { limitation: '未提供的工具当前未获授权或宿主不可用，重复加载不会恢复。只调用 availableTools 中的工具。' } : {}),
         }) }], details: {} }
       },
@@ -65,7 +66,8 @@ export class PiToolDisclosure {
     const names = request.names ?? []
     const unknown = names.filter(name => !this.tools.some(tool => tool.name === name))
     if (unknown.length) throw new Error(`工具未获授权或不存在：${unknown.join('、')}；请读取当前应用契约。`)
-    const requested = new Set([...names, ...(request.task ? taskProfiles[request.task].tools : [])])
+    const requested = new Set([...names, ...(request.task ? taskProfiles[request.task].tools : []),
+      ...domains.flatMap(domain => domainProfiles[domain]?.tools ?? [])])
     const selected = this.tools.filter(tool => requested.has(tool.name) || domains.includes(domainOf(tool.name) ?? '')).map(tool => tool.name)
     if (!selected.length) return []
     const session = this.session()

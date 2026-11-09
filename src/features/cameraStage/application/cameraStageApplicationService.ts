@@ -5,7 +5,7 @@ import { createLogger } from '@/core/logging'
 import { CAMERA_STAGE_NAME_MAX_LENGTH } from '@/core/application-control/domains/cameraStage/cameraStageCapabilitySchemas'
 
 import { getAnimatablePropByPath } from '../domain/animatableProps'
-import type { StageCameraAspectRatio, StageCameraLookAt, StageCameraRig, StageObject, StageObjectPatch, StageSet, StageTransform, StageVec3 } from '../domain/sceneTypes'
+import type { StageCameraAspectRatio, StageCameraLookAt, StageCameraObject, StageCameraRig, StageObject, StageObjectPatch, StageSet, StageTransform, StageVec3 } from '../domain/sceneTypes'
 import { isStageCameraRig, STAGE_CAMERA_AIM_LAG_MAX } from '../domain/cameraRigs'
 import { cameraTargetFromRotation } from '../domain/cameraUtils'
 import { buildStageSet, countStageSetDecor, liveStageSets, type StageSetDecorCounts } from '../domain/stageSets'
@@ -15,6 +15,7 @@ import type { StageKeyframeValue, StagePlaybackState } from '../domain/animation
 import { POSE_PRESETS } from '../domain/posePresets.gen'
 import { markSpatialPathCustom } from '../domain/spatialPath'
 import { compileStateKeyframesToAnimation } from '../domain/stateKeyframeCompiler'
+import { applyAnimationAtTime, resolveCameraViewTarget } from '../store/playbackSampling'
 import { captureObjectsIntoStateKeyframe, sampledAtStateKeyframe } from '../store/stateKeyframeSlice'
 import {
   calculateStageObjectBounds,
@@ -122,6 +123,8 @@ export interface CameraStageSceneObservation {
   characters: Array<{ id: string; name: string; blocking: Array<Record<string, unknown>>; samples?: CharacterReadback[] }>
   /** 摄像机跟拍的时段 */
   follows: Array<{ cameraId: string; subjectId: string; startTime: number; endTime: number; frame: 'travel' | 'world' }>
+  /** 给了时刻时，每台摄像机在这些时刻的位置、注视点与构图：检查整段运镜不必拖动播放头逐个看 */
+  cameraSamples?: Array<{ time: number; cameraId: string; position: StageVec3; lookAtTarget: StageVec3; composition: ShotReadback }>
 }
 
 export interface CameraStageSetSummary {
@@ -264,6 +267,8 @@ function requirePlacementTarget(objects: StageObject[], targetObjectId?: string)
   )
 }
 
+const roundVec3 = (value: StageVec3): StageVec3 => ({ x: Math.round(value.x * 100) / 100, y: Math.round(value.y * 100) / 100, z: Math.round(value.z * 100) / 100 })
+
 export function summarizeStageSet(set: StageSet, objects: readonly StageObject[]): CameraStageSetSummary {
   const min = { x: Infinity, y: Infinity, z: Infinity }
   const max = { x: -Infinity, y: -Infinity, z: -Infinity }
@@ -275,12 +280,11 @@ export function summarizeStageSet(set: StageSet, objects: readonly StageObject[]
     min.x = Math.min(min.x, bounds.min.x); min.y = Math.min(min.y, bounds.min.y); min.z = Math.min(min.z, bounds.min.z)
     max.x = Math.max(max.x, bounds.max.x); max.y = Math.max(max.y, bounds.max.y); max.z = Math.max(max.z, bounds.max.z)
   }
-  const round = (value: StageVec3): StageVec3 => ({ x: Math.round(value.x * 100) / 100, y: Math.round(value.y * 100) / 100, z: Math.round(value.z * 100) / 100 })
   return {
     id: set.id,
     name: set.name,
     objectCount,
-    bounds: objectCount > 0 ? { min: round(min), max: round(max) } : { min: { x: 0, y: 0, z: 0 }, max: { x: 0, y: 0, z: 0 } },
+    bounds: objectCount > 0 ? { min: roundVec3(min), max: roundVec3(max) } : { min: { x: 0, y: 0, z: 0 }, max: { x: 0, y: 0, z: 0 } },
     params: structuredClone(set.params),
     propCounts: countStageSetDecor(set.decor),
   }
@@ -319,6 +323,20 @@ function summarizePlacementConflicts(ids: string[], objects: StageObject[]): { c
     else conflicts.push(id)
   }
   return { conflicts, setConflicts: [...counts].map(([setId, memberCount]) => ({ setId, memberCount })) }
+}
+
+function cameraSamplesAt(snapshot: CameraStageProjectSnapshot, times: readonly number[]): NonNullable<CameraStageSceneObservation['cameraSamples']> {
+  return times.flatMap((time) => {
+    const objects = applyAnimationAtTime(snapshot.objects, snapshot.animation, time)
+    const obstacles = shotObstacles(objects)
+    return objects.filter((object): object is StageCameraObject => object.type === 'camera' && !object.setId).map((camera) => ({
+      time,
+      cameraId: camera.id,
+      position: roundVec3(camera.transform.position),
+      lookAtTarget: roundVec3(resolveCameraViewTarget(camera, objects, snapshot.animation, time)),
+      composition: observeCameraComposition(camera, objects, obstacles),
+    }))
+  })
 }
 
 function sceneObservation(snapshot: CameraStageProjectSnapshot, times: readonly number[] = []): CameraStageSceneObservation {
@@ -368,6 +386,7 @@ function sceneObservation(snapshot: CameraStageProjectSnapshot, times: readonly 
     follows: snapshot.animation.cameraFollows.map((entry) => ({
       cameraId: entry.cameraId, subjectId: entry.follow.subjectId, startTime: entry.startTime, endTime: entry.endTime, frame: entry.follow.frame,
     })),
+    ...(times.length > 0 ? { cameraSamples: cameraSamplesAt(snapshot, times) } : {}),
   }
 }
 

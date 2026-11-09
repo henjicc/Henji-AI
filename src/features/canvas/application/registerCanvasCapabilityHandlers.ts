@@ -1,6 +1,6 @@
 import type { CanvasBatchOperation } from '@/core/application-control/domains/canvas/canvasBatchApplicationCapabilities'
 import type { CanvasNodePlacement } from '@/core/application-control/domains/canvas/canvasMutationApplicationCapabilities'
-import { OPEN_MULTI_LAYER_DOCUMENT_NODE_EDITOR_CAPABILITY_ID, RETRY_LAYER_STACK_RESULT_CAPABILITY_ID } from '@/core/application-control/domains/canvas/canvasEditorApplicationCapabilities'
+import { OPEN_CANVAS_NODE_EDITOR_CAPABILITY_ID, RETRY_LAYER_STACK_RESULT_CAPABILITY_ID } from '@/core/application-control/domains/canvas/canvasEditorApplicationCapabilities'
 import type { ApplicationRef } from '@/core/application-control/index'
 import { retryLayerStackResult } from '@/features/canvas/application/layerStackResultRecoveryService'
 import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
@@ -20,7 +20,7 @@ import { addAssetToCanvas } from '@/features/assets/application/assetCanvasAppli
 import { addGenerationResultToCanvas } from '@/features/canvas/application/generationResultCanvasApplicationService'
 import { downloadCanvasMedia } from '@/features/canvas/application/canvasDownloadService'
 import { executeCanvasImageCapabilityForProject } from '@/features/canvas/application/canvasImageCapabilityApplicationService'
-import { type OpenMultiLayerDocumentNodeEditorInput, openMultiLayerDocumentNodeEditor } from '@/features/canvas/application/multiLayerDocumentNodeEditorApplicationService'
+import { type OpenCanvasNodeEditorInput, openCanvasNodeEditor } from '@/features/canvas/application/canvasNodeEditorApplicationService'
 import { exportMultiLayerDocumentTargetToCanvas, type MultiLayerDocumentTargetExportInput } from '@/features/canvas/application/multiLayerDocumentNodeGenerationAdapter'
 import { createHostContextSnapshot } from '@/features/application-control/hostContext/hostContext'
 import type { ApplicationCapabilityHandlerRegistrar } from '@/features/application-control/capabilities/handlerTypes'
@@ -179,13 +179,13 @@ export function registerCanvasCapabilityHandlers(
     return { ...focused, ...surface }
   })
 
-  registrar.registerHandler(OPEN_MULTI_LAYER_DOCUMENT_NODE_EDITOR_CAPABILITY_ID, async (input, context) => {
+  registrar.registerHandler(OPEN_CANVAS_NODE_EDITOR_CAPABILITY_ID, async (input, context) => {
     throwIfCapabilityAborted(context.signal)
-    const parsed = parseCapabilityInput<Omit<OpenMultiLayerDocumentNodeEditorInput, 'signal' | 'correlation'>>(
-      OPEN_MULTI_LAYER_DOCUMENT_NODE_EDITOR_CAPABILITY_ID,
+    const parsed = parseCapabilityInput<Omit<OpenCanvasNodeEditorInput, 'signal' | 'correlation'>>(
+      OPEN_CANVAS_NODE_EDITOR_CAPABILITY_ID,
       input,
     )
-    return { ...await openMultiLayerDocumentNodeEditor({
+    return { ...await openCanvasNodeEditor({
       ...parsed,
       signal: context.signal,
       correlation: context,

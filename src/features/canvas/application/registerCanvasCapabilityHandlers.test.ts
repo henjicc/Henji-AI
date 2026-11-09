@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => ({
   disconnectAssetGroupFromTarget: vi.fn(),
   executeCanvasImageCapabilityForProject: vi.fn(),
   exportMultiLayerDocumentTargetToCanvas: vi.fn(),
-  openMultiLayerDocumentNodeEditor: vi.fn(),
+  openCanvasNodeEditor: vi.fn(),
 }))
 
 vi.mock('@/features/canvas/domain/nodeControlRegistry', () => ({
@@ -78,8 +78,8 @@ vi.mock('@/features/canvas/application/canvasImageCapabilityApplicationService',
 vi.mock('@/features/canvas/application/multiLayerDocumentNodeGenerationAdapter', () => ({
   exportMultiLayerDocumentTargetToCanvas: mocks.exportMultiLayerDocumentTargetToCanvas,
 }))
-vi.mock('@/features/canvas/application/multiLayerDocumentNodeEditorApplicationService', () => ({
-  openMultiLayerDocumentNodeEditor: mocks.openMultiLayerDocumentNodeEditor,
+vi.mock('@/features/canvas/application/canvasNodeEditorApplicationService', () => ({
+  openCanvasNodeEditor: mocks.openCanvasNodeEditor,
 }))
 vi.mock('@/features/application-control/hostContext/hostContext', () => ({
   createHostContextSnapshot: vi.fn(() => ({ scopeRevisions: { canvas: 0 } })),
@@ -186,10 +186,10 @@ describe('canvas capability handlers', () => {
     ).toBeLessThan(mocks.focusCanvasNodeFromAgent.mock.invocationCallOrder[0])
   })
 
-  it('打开多图层节点编辑器只把稳定引用和执行上下文交给正式应用服务', async () => {
+  it('打开节点编辑器只把稳定引用和执行上下文交给正式应用服务', async () => {
     const canvasRef = { kind: 'canvas.document' as const, id: 'project-2' }
     const nodeRef = { kind: 'canvas.node' as const, id: 'project-2:node-1' }
-    mocks.openMultiLayerDocumentNodeEditor.mockResolvedValue({
+    mocks.openCanvasNodeEditor.mockResolvedValue({
       canvasRef,
       nodeRef,
       surfaceId: 'workspace.canvas',
@@ -201,11 +201,11 @@ describe('canvas capability handlers', () => {
         { kind: 'application.surface', id: 'workspace.canvas' },
       ],
     })
-    const handler = registeredHandlers().get('open_multi_layer_document_node_editor')
+    const handler = registeredHandlers().get('open_canvas_node_editor')
 
     const result = await handler?.({ canvasRef, nodeRef }, context)
 
-    expect(mocks.openMultiLayerDocumentNodeEditor).toHaveBeenCalledWith({
+    expect(mocks.openCanvasNodeEditor).toHaveBeenCalledWith({
       canvasRef,
       nodeRef,
       signal: context.signal,

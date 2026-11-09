@@ -22,10 +22,24 @@ export const taskProfiles = {
     guidance: '生成页新任务：未指定模型时先 resolve_generation_model 读取最新默认模型与供应商；用户明确要求沿用当前草稿时读取草稿模型。选定后读取参数，准备后提交；提交后调用 wait_generation_task 等待结果，终态停止，不重复提交。明确指定的画布目标仍优先。',
   },
   canvas_nodes: {
-    tools: ['search_canvas_node_types', 'get_canvas_node_schema', 'get_canvas_node', 'duplicate_canvas_node', 'group_canvas_nodes', 'ungroup_canvas_node', 'tidy_canvas_nodes'],
+    tools: ['search_canvas_node_types', 'get_canvas_node_schema', 'get_canvas_node', 'duplicate_canvas_node', 'group_canvas_nodes', 'ungroup_canvas_node', 'tidy_canvas_nodes', 'open_canvas_node_editor'],
     guidance: '节点编辑：只查询需要的节点类型及 schema；普通节点、连线的增删改使用通用实体事务。复制、分组、整理使用正式语义工具；建完一条新链用 tidy_canvas_nodes 的 mode=flow 排一次；用户说整理画布时用默认的就近整理（nearby），只理顺不重排。不手算坐标。已有上下文中的画布和选择无需重复查询。',
   },
 } satisfies Record<string, { tools: string[]; guidance: string }>
+
+/**
+ * 按领域加载时随工具一起给的做法与技能：只给工具不给做法时，模型会退回通用属性手写坐标、反复试错。
+ * skill 与工具名由 skillToolReferences.test 对照技能准入名单和能力目录校验。
+ */
+export const domainProfiles: Record<string, { skill: string; tools: string[]; guidance: string }> = {
+  camera_stage: {
+    skill: '三维镜头构图',
+    tools: ['open_canvas_node_editor'],
+    guidance: '先用 load_assistant_skill 读「三维镜头构图」再动手。机位不手算坐标和角度：每个关键时刻用 compose_camera_stage_shot 加 at.time 描述想要的镜头（主体、景别、角度、镜头），应用求出机位与注视点并读回构图，没有状态关键帧会自动新建；'
+      + '环绕、推拉、横移、升降用 apply_camera_stage_camera_move，几段要连成一个动作时后一段传 continuity=smooth。检查整段运镜用 observe_camera_stage_scene 的 times 一次读回各时刻的摄像机构图，不要拖动播放头逐个看。'
+      + '画布里的 3D 镜头参考节点：读节点拿到镜头参考文档 id 后不打开也能改；新建的节点还没有镜头参考（读不到 id）时先用 open_canvas_node_editor 打开一次来创建；用户要看时也用它打开。',
+  },
+}
 
 export function disclosureSurface(context: string): string {
   try {
@@ -42,7 +56,7 @@ export function disclosureSurface(context: string): string {
 export function surfaceProfile(surface: string): { tools: string[]; guidance: string } {
   if (surface === 'tool.screen_recording') return { tools: ['start_screen_recording', 'stop_screen_recording', 'read_screen_recording_events'], guidance: '当前为屏幕录制。先列出 screen_recording.source 与 screen_recording.device，开始后保留返回的 session 引用。通用实体读取 phase/elapsed_ms/details；暂停、继续、标记、中止、恢复和导入剪辑按名称加载对应操作。停止会等待媒体与会话保存，再分页读事件；不会自动回放操作。会话是正式文档，可通过通用文档能力列出、改名、移动和删除。' }
   if (surface === 'workspace.canvas') return { tools: ['get_canvas_document'],
-    guidance: '当前为画布。已有通用实体读写与画布读取；已有画布和选择摘要无需再查。连续建节点后用 tidy_canvas_nodes（随 task=canvas_nodes 与 canvas_generation 加载，connectedTo 填链上任一节点，mode=flow）按连线方向整理一次；用户说整理画布用默认就近整理。生成加载 task=canvas_generation，节点详细操作加载 task=canvas_nodes；三维和生成页工具按需加载。' }
+    guidance: '当前为画布。已有通用实体读写与画布读取；已有画布和选择摘要无需再查。连续建节点后用 tidy_canvas_nodes（随 task=canvas_nodes 与 canvas_generation 加载，connectedTo 填链上任一节点，mode=flow）按连线方向整理一次；用户说整理画布用默认就近整理。生成加载 task=canvas_generation，节点详细操作加载 task=canvas_nodes；3D 镜头参考节点的布景、构图与运镜加载 domains=camera_stage（文档 id 取节点的镜头参考），生成页工具按需加载。' }
   if (surface === 'workspace.generation') return { tools: ['search_models'], guidance: '当前为生成页。生成任务加载 task=generation；模型参数按所选模型读取。' }
   if (surface === 'tool.camera_stage') return { tools: ['observe_camera_stage_scene'], guidance: '当前为三维场景（一份镜头参考文档，id 即文档 ID）。普通属性走通用实体，场景算法与渲染按需加载 camera_stage 领域；文档的列出、新建、改名、移动、删除用通用文档能力。' }
   if (surface === 'tool.image_edit') return { tools: [], guidance: '当前为图片编辑。图层普通读写走通用实体，按本步骤用 load_application_tools 的 names 加载算法，如选区 select_image_edit_region、修补 repair_image_edit_region；不加载整个领域。' }

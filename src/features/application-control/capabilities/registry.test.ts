@@ -63,7 +63,7 @@ describe('application capability handler coverage', () => {
     }
     for (const id of [
       'focus_canvas_node',
-      'open_multi_layer_document_node_editor',
+      'open_canvas_node_editor',
     ]) {
       const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(id)
       expect(definition?.requiredScopes).toContain('navigation')

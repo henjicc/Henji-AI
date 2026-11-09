@@ -9,7 +9,7 @@ description: 在 3D 镜头参考里快速搭城市、街道、广场、人群布
 
 ## 铁律
 
-1. 文档 ID 取自宿主上下文或 `list_documents`（kind=camera_stage）；对象、布景、摄像机 id 取自 `observe_camera_stage_scene`，不猜、不按名称定位。
+1. 文档 ID 取自宿主上下文或 `list_documents`（kind=camera_stage）；画布里的 3D 镜头参考节点读节点属性取它的镜头参考文档 id，不用打开也能改；新建的节点还没有镜头参考时先用 `open_canvas_node_editor` 打开一次来创建，用户要看时也用它打开；对象、布景、摄像机 id 取自 `observe_camera_stage_scene`，不猜、不按名称定位。
 2. **成片布景一次生成**：城市、街道、广场、人群用 `generate_camera_stage_set`，一次调用一个撤销点、一次存盘。不要用 `place_camera_stage_object` 一栋一栋地摆楼。
 3. 单个主体（主角、道具、摄像机）用 `place_camera_stage_object`；改已有对象的属性用 `change_application_entities` 的 `set_properties`。
 4. 布景成员是普通对象，可以逐个改；要整体换参数就重新生成，不要逐个改几百栋楼。
@@ -103,6 +103,8 @@ description: 在 3D 镜头参考里快速搭城市、街道、广场、人群布
 `observe_camera_stage_scene` 的 `objects` 只列逐个放置的对象；布景只在 `sets` 里给摘要（数量、范围、参数）。需要某栋楼时用 `list_application_entities` 分页列 `camera_stage.object`，或按范围判断，不要整片读回。
 
 每台摄像机带 `composition`：当前画面的角度、焦距、拍到的主体及其景别、左中右、投影框与遮挡。自检构图先看它，再按需截图看画面。
+
+检查一段动画或运镜时，把各关键时刻一次传进 `times`：结果的 `cameraSamples` 给出每台摄像机在这些时刻的位置、注视点和 `composition`。不要拖动播放头再逐个观察。
 
 相对位置依据观察到的边界盒，不要凭空猜坐标；用户要求复用当前摄像机时不要新建。空间写入后用 `verify_camera_stage_scene` 做结构化验证；没有真读画面时只说结构化结果，不描述没看到的画面。
 
