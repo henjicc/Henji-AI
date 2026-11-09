@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { setCanvasTestProjectState, readCanvasTestProject } from '@/tests/canvasProjectFixture'
+import { harnessDocumentStore } from '@/tests/harnessNativeStorage'
 import { webcrypto } from 'node:crypto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CANVAS_NODE_TYPES, type CanvasNode } from '../domain/canvasNodes'
@@ -74,6 +75,24 @@ describe('canvas tidy commit', () => {
     expect(result.undoRef).toBeTruthy()
     await undoCanvasChange(projectId, result.undoRef!)
     expect(useCanvasStore.getState().nodes.map(n => n.position)).toEqual(before.map(n => n.position))
+  })
+  it('assistant tidy verifies the saved positions of the tidied nodes, not unrelated differences elsewhere in the document', async () => {
+    const documents = harnessDocumentStore()
+    const read = documents.readDocument.bind(documents)
+    // 主进程回读时会换算其他节点里的媒体位置写法，与内存里的写法不必逐字相同。
+    const readWith = (change: (node: CanvasNode) => CanvasNode) => vi.spyOn(documents, 'readDocument').mockImplementation(async target => {
+      const result = await read(target)
+      const content = result.content as { nodes: CanvasNode[] }
+      return { ...result, content: { ...content, nodes: content.nodes.map(change) } }
+    })
+    readWith(node => node.id === 'n2' ? { ...node, data: { ...node.data, content: '同一内容的另一种写法' } } : node)
+    const tidied = await tidyCanvasNodes(projectId, { connectedTo: 'n1', mode: 'flow' }) as { verification: { verified: boolean } }
+    expect(tidied.verification.verified).toBe(true)
+    vi.restoreAllMocks()
+    useCanvasStore.getState().updateNodePosition('n1', { x: 999, y: 999 })
+    readWith(node => node.id === 'n1' ? { ...node, position: { x: 0, y: 0 } } : node)
+    const unsaved = await tidyCanvasNodes(projectId, { connectedTo: 'n1', mode: 'flow' }) as { verification: { verified: boolean } }
+    expect(unsaved.verification.verified).toBe(false)
   })
   it('assistant tidy rejects unknown nodes before writing', async () => {
     const before = useCanvasStore.getState()

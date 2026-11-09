@@ -25,7 +25,7 @@ describe('工具选择处理器复用登记与正式导航服务', () => {
   it('关闭工具保留用户当前工作区，未知工具在导航前拒绝', async () => {
     useNavigationStore.setState({ activeToolId: 'imageMark' })
     expect(await handlers.get('select_toolbox_tool')!({ toolId: null }, context))
-      .toEqual({ toolId: null, surfaceId: null })
+      .toMatchObject({ toolId: null, surfaceId: null, verification: { verified: true } })
     expect(useNavigationStore.getState()).toMatchObject({ activeWorkspace: 'generation', activeToolId: null })
     expect(() => handlers.get('select_toolbox_tool')!({ toolId: 'unregistered' }, context)).toThrow()
     expect(useNavigationStore.getState().activeWorkspace).toBe('generation')

@@ -1,9 +1,11 @@
 import { resolveStoryboardPromptDocument } from './storyboardPromptDocument'
-import { toModelPromptText } from '@/core/inputs/promptDocument'
+import { createPlainTextPromptDocument, toModelPromptText } from '@/core/inputs/promptDocument'
+import { resolveCanvasGenerationPrompt } from './generationPromptDocument'
 import { setCanvasTestProjectState } from '@/tests/canvasProjectFixture'
 // @vitest-environment jsdom
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
+import { registry } from '@/core/ModelRegistry'
 
 import type { ApplicationExecutionContext, ApplicationPlannedStep } from '@/core/application-control'
 import { CANVAS_NODE_TYPES, type StoryboardFrameItem } from '@/features/canvas/domain/canvasNodes'
@@ -255,6 +257,30 @@ describe('canvas reflection and mutation', () => {
     await executor.undo(String(result.undoToken), context)
     const restoredNode = useCanvasStore.getState().nodes.find((item) => item.id === storyboardNodeId)
     expect(restoredNode?.data.frames).toMatchObject(baselineFrames)
+  })
+
+  it('生成配置写入的提示词同时进入提示词文档，节点按文档解析后仍是新提示词', async () => {
+    const generationNodeId = useCanvasStore.getState().addNode(CANVAS_NODE_TYPES.imageEdit, { x: 0, y: 0 })
+    useCanvasStore.getState().updateNodeData(generationNodeId, { prompt: '', promptDocument: createPlainTextPromptDocument('') })
+    const prompt = '城市夜景里的低角度仰拍人像'
+    registry.register({ meta: { id: 'canvas-prompt-fixture', canonicalModelId: 'nano-banana', provider: 'fixture', type: 'image', name: { zh: '测试', en: 'Test' } }, params: [], endpoints: '/fixture',
+      inputLimits: { images: { max: 1 }, videos: { max: 0 }, audios: { max: 0 } }, pricing: { currency: '$', fixed: 0.03 }, request: { builder: params => params } })
+    onTestFinished(() => registry.unregister('canvas-prompt-fixture'))
+    await new CanvasNodeMutationExecutor().applyAtomic([{
+      kind: 'mutation', target: { kind: CANVAS_ENTITY_TYPES.node, id: `${projectId}:${generationNodeId}` },
+      entityType: CANVAS_ENTITY_TYPES.node, expectedRevisions: { canvas: 2 },
+      mutations: [{ propertyId: 'canvas.node.generation_config', operation: 'set',
+        value: { prompt, modelId: 'canvas-prompt-fixture', params: {} } }],
+    }], context)
+    const data = useCanvasStore.getState().nodes.find(item => item.id === generationNodeId)!.data
+    expect(data.prompt).toBe(prompt)
+    // 节点界面与生成执行都以提示词文档为准，用同一解析确认不会被旧文档改回空提示词。
+    expect(resolveCanvasGenerationPrompt({ nodeId: generationNodeId, document: data.promptDocument, legacyText: '',
+      bindings: data.promptMediaBindings, mediaInputs: data.mediaInputs ?? {}, incomingMedia: [], acceptedMediaKinds: ['image'] }).legacyText).toBe(prompt)
+    // 提示词不变的写入保留原文档，不把界面编辑出的结构重建成纯文本。
+    await canvasMutationService.applyCanvasNodePropertyPatches(projectId, [{ nodeId: generationNodeId,
+      generationConfig: { prompt, modelId: 'canvas-prompt-fixture', params: {} } }])
+    expect(useCanvasStore.getState().nodes.find(item => item.id === generationNodeId)!.data.promptDocument).toBe(data.promptDocument)
   })
 
   it('分镜格子 id 不存在时整批拒绝，不改动任何格子', async () => {

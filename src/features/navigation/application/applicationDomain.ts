@@ -1,4 +1,4 @@
-import { switchWorkspace } from '@/stores/navigationStore'
+import { switchWorkspace, useNavigationStore } from '@/stores/navigationStore'
 import { parseCapabilityInput, throwIfCapabilityAborted } from '@/features/application-control/capabilities/handlerUtils'
 import { APPLICATION_SURFACE_IDS } from '@/core/application-control/applicationSurfaces'
 import { listApplicationSurfaces } from './surfaceCapabilityService'
@@ -19,7 +19,9 @@ export const navigationApplicationDomain: ApplicationDomainModule = {
       workspaceId: 'generation' | 'nodes' | 'videoEdit' | 'tools' | 'assets'
     }>('switch_workspace', input)
     switchWorkspace(parsed.workspaceId)
-    return { workspace: parsed.workspaceId }
+    // 有未保存内容时导航守卫可能拦下切换，以回读的当前工作区为准。
+    const workspace = useNavigationStore.getState().activeWorkspace
+    return { workspace, verification: { verified: workspace === parsed.workspaceId, condition: '已回读当前所在工作区。' } }
   })
 
   registrar.registerHandler(getCurrentApplicationContextCapability.id, (_input, _context) => {

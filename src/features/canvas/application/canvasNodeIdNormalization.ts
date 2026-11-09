@@ -10,7 +10,7 @@
  * 交给领域按原有语义判 NOT_FOUND，避免把跨画布的错误引用悄悄改成本画布的对象。
  */
 const NODE_ID_FIELDS = ['nodeId', 'sourceNodeId', 'targetNodeId', 'groupNodeId', 'connectedTo', 'pinNodeId'] as const
-const NODE_ID_LIST_FIELDS = ['nodeIds', 'sourceNodeIds'] as const
+const NODE_ID_LIST_FIELDS = ['nodeIds', 'sourceNodeIds', 'resultNodeIds'] as const
 
 function stripOwnProject(projectId: string, value: unknown): unknown {
   if (typeof value !== 'string') return value
@@ -36,5 +36,16 @@ export function normalizeCanvasNodeIds<TInput>(input: TInput): TInput {
     const mapped = value.map((item) => stripOwnProject(projectId, item))
     if (mapped.some((item, index) => item !== value[index])) { next[field] = mapped; changed = true }
   }
+  const placement = next.placement
+  if (placement && typeof placement === 'object' && 'anchorNodeId' in placement) {
+    const anchorNodeId = stripOwnProject(projectId, placement.anchorNodeId)
+    if (anchorNodeId !== placement.anchorNodeId) { next.placement = { ...placement, anchorNodeId }; changed = true }
+  }
   return (changed ? next : input) as TInput
+}
+
+/** 生成域的入参用 `documentId` 指画布（落点、原节点生成、续接与恢复），节点引用同样按本画布剥前缀。 */
+export function normalizeCanvasDocumentNodeIds<TInput extends { documentId: string }>(input: TInput): TInput {
+  const { projectId: _projectId, ...normalized } = normalizeCanvasNodeIds({ ...input, projectId: input.documentId })
+  return normalized as unknown as TInput
 }

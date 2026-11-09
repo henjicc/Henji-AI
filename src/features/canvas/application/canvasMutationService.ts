@@ -9,6 +9,7 @@ import {
   isCameraStageNode,
   isStoryboardSplitNode,
   isTextAnnotationNode,
+  type CanvasEdge,
   type CanvasNode,
   type CanvasNodeData,
   type StoryboardFrameItem,
@@ -47,6 +48,7 @@ import {
 import {
   validateCanvasNodeDataPatch, validateCanvasNodeGenerationConfig, type CanvasNodeGenerationConfig,
 } from './canvasNodeGenerationConfig'
+import { canvasGenerationPromptTextPatch } from './canvasGenerationPromptMigration'
 const logger = createLogger('features.canvas.canvas_mutation')
 
 function cancelDeletedGenerationAfterPersistence(projectId: string, beforeNodes: CanvasNode[], options: CanvasCommitOptions): void {
@@ -87,6 +89,18 @@ function requireNode(projectId: string, nodeId: string): CanvasNode {
   return node
 }
 
+/** 只给纯文本提示词时，提示词文档按新文本重建；同时给出文档的写入（节点界面编辑）原样保留。 */
+function withPromptDocument(canvas: { nodes: CanvasNode[]; edges: CanvasEdge[] }, nodeId: string,
+  data: Partial<CanvasNodeData>): Partial<CanvasNodeData> {
+  if (typeof data.prompt !== 'string' || 'promptDocument' in data) return data
+  const node = canvas.nodes.find(item => item.id === nodeId)!
+  // 提示词没变（例如只换模型）时保留原文档，不把界面编辑出的结构重建成纯文本。
+  if (data.prompt === node.data.prompt) return data
+  const prompt = canvasGenerationPromptTextPatch({ ...node, data: { ...node.data, ...data } as CanvasNodeData },
+    data.prompt, canvas.nodes, canvas.edges)
+  return prompt ? { ...data, ...prompt } : data
+}
+
 /** 画布节点数据/位置写入的共享内核；专用能力与通用属性动词都必须委托这里。 */
 async function applyCanvasNodePatches(projectId: string, patches: CanvasNodePatch[], options: CanvasCommitOptions = {}): Promise<void> {
   if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId)
@@ -99,7 +113,7 @@ async function applyCanvasNodePatches(projectId: string, patches: CanvasNodePatc
     id: patch.nodeId, type: 'position' as const, position: patch.position!, dragging: false,
   }))
   for (const patch of patches) {
-    if (patch.data && Object.keys(patch.data).length > 0) canvas.updateNodeData(patch.nodeId, patch.data)
+    if (patch.data && Object.keys(patch.data).length > 0) canvas.updateNodeData(patch.nodeId, withPromptDocument(canvas, patch.nodeId, patch.data))
     if (!positionOnly && patch.position) canvas.updateNodePosition(patch.nodeId, patch.position)
   }
   // One node-change batch gives UI and generic entity writes the same single undo step.
@@ -504,7 +518,10 @@ export function selectCanvasNode(projectId: string, nodeId: string | null): Reco
   requireCurrentCanvasProject(projectId)
   if (nodeId) requireNode(projectId, nodeId)
   useCanvasStore.getState().setSelectedNode(nodeId)
-  return { projectId, selectedNodeId: nodeId }
+  const selectedNodeId = useCanvasStore.getState().selectedNodeId ?? null
+  return { projectId, selectedNodeId, verification: {
+    verified: selectedNodeId === nodeId, condition: '已回读当前画布的选中节点。', target: { kind: 'canvas.document', id: projectId },
+  } }
 }
 
 export async function groupCanvasNodes(

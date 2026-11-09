@@ -22,6 +22,7 @@ import { modelDefaultsManager } from '@/features/settings/modelDefaultsManager'
 
 import type { ApplicationCapabilityHandlerRegistrar } from '@/features/application-control/capabilities/handlerTypes'
 import { parseCapabilityInput, throwIfCapabilityAborted } from '@/features/application-control/capabilities/handlerUtils'
+import { normalizeCanvasDocumentNodeIds } from '@/features/canvas/application/canvasNodeIdNormalization'
 
 interface SearchModelsInput {
   query: string
@@ -50,7 +51,8 @@ async function readContinuationSource(from: GenerationContinueFrom): Promise<{ m
     return { modelId: record.modelId, options: (record.params ?? {}) as DynamicValueMap }
   }
   const { getCanvasProjectInstance } = await import('@/features/canvas')
-  const node = (await getCanvasProjectInstance(from.documentId)).store.getState().nodes.find(item => item.id === from.nodeId)
+  const nodeId = normalizeCanvasDocumentNodeIds(from).nodeId
+  const node = (await getCanvasProjectInstance(from.documentId)).store.getState().nodes.find(item => item.id === nodeId)
   const source = node?.data.generationContinuation
   if (!source) throw new Error(`INVALID_INPUT:画布节点 ${from.nodeId} 不是能续接的生成结果`)
   return { modelId: source.modelId, options: source.params }
@@ -82,13 +84,13 @@ function generationDestination(input: GenerationInput): GenerationDestination {
   const destination = defaultGenerationDestination(input)
   if (!input.continueFrom || destination.mode !== 'canvas') return destination
   // 续接靠平台引用，不把源结果当素材连进来；从画布结果续接时新节点放在它旁边。
-  const from = input.continueFrom
+  const from = input.continueFrom.kind === 'canvas.node' ? normalizeCanvasDocumentNodeIds(input.continueFrom) : input.continueFrom
   const anchor = from.kind === 'canvas.node' && from.documentId === destination.documentId ? from.nodeId : undefined
   return { ...destination, sourceNodeIds: [], ...(destination.placement || !anchor ? {} : { placement: { mode: 'right_of_node', anchorNodeId: anchor } }) }
 }
 
 function defaultGenerationDestination(input: GenerationInput): GenerationDestination {
-  if (input.destination) return input.destination
+  if (input.destination) return input.destination.mode === 'canvas' ? normalizeCanvasDocumentNodeIds(input.destination) : input.destination
   const projectId = useProjectStore.getState().currentProjectId
   const selectedNodeId = useCanvasStore.getState().selectedNodeId
   return useNavigationStore.getState().activeWorkspace === 'nodes' && projectId
@@ -279,13 +281,13 @@ export function registerGenerationCapabilityHandlers(
   })
 
   registrar.registerHandler('prepare_canvas_node_generation', async input => {
-    const parsed = parseCapabilityInput<CanvasNodeGenerationInput>('prepare_canvas_node_generation', input)
+    const parsed = normalizeCanvasDocumentNodeIds(parseCapabilityInput<CanvasNodeGenerationInput>('prepare_canvas_node_generation', input))
     const { prepareCanvasNodeGeneration } = await import('@/features/canvas/application/canvasGenerationTaskService')
     return prepareCanvasNodeGeneration(parsed)
   })
   registrar.registerHandler('submit_canvas_node_generation', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
-    const parsed = parseCapabilityInput<CanvasNodeGenerationInput & { inputSignature: string }>('submit_canvas_node_generation', input)
+    const parsed = normalizeCanvasDocumentNodeIds(parseCapabilityInput<CanvasNodeGenerationInput & { inputSignature: string }>('submit_canvas_node_generation', input))
     const { submitCanvasNodeGeneration } = await import('@/features/canvas/application/canvasGenerationTaskService')
     const taskId = applicationGenerationTaskId(context.requestId ?? crypto.randomUUID())
     const releaseApproval = transferGenerationPaidApproval(taskId, context.signal)
@@ -294,7 +296,7 @@ export function registerGenerationCapabilityHandlers(
   })
   registrar.registerHandler('resume_canvas_generation_task', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
-    const parsed = parseCapabilityInput<CanvasGenerationResumeInput>('resume_canvas_generation_task', input)
+    const parsed = normalizeCanvasDocumentNodeIds(parseCapabilityInput<CanvasGenerationResumeInput>('resume_canvas_generation_task', input))
     const { resumeCanvasGenerationTask } = await import('@/features/canvas/application/canvasGenerationTaskService')
     return resumeCanvasGenerationTask(parsed, context.signal)
   })

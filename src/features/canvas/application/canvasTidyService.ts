@@ -4,7 +4,7 @@ import type { CandidateIdentity } from '@/core/creativeIntent/contracts'
 import { findCanvasProjectInstance, getCanvasProjectInstance, requireCanvasProjectInstance } from './canvasProjectInstances'
 import { rememberCanvasUndo } from './canvasApplicationService'
 import { CanvasApplicationError } from './canvasApplicationError'
-import { verifyCanvasWrite } from './canvasQueryService'
+import { readPersistedCanvasProjectSnapshot } from './canvasQueryService'
 import { notExecutedFailure } from '@/core/application-control/execution/writeExecution'
 import { confirmCanvasPersistence, type CanvasCommitOptions } from './canvasPersistenceService'
 import { applyCanvasNodePropertyPatches } from './canvasMutationService'
@@ -110,12 +110,16 @@ export async function tidyCanvasNodes(projectId: string, request: CanvasTidyRequ
   const undoRef = movedNodeIds.length ? rememberCanvasUndo(projectId, 'tidy_nodes') : undefined
   const current = new Map(requireCanvasProjectInstance(projectId).store.getState().nodes.map(node => [node.id, node.position]))
   const positions = candidate.placements.map(p => ({ nodeId: p.nodeId, x: current.get(p.nodeId)?.x ?? p.position.x, y: current.get(p.nodeId)?.y ?? p.position.y }))
-  const applied = candidate.placements.every(p => current.get(p.nodeId)?.x === p.position.x && current.get(p.nodeId)?.y === p.position.y)
   if (movedNodeIds.length) await confirmCanvasPersistence(projectId)
-  const saved = movedNodeIds.length ? await verifyCanvasWrite(projectId) : { verified: true }
+  // 只核对这次整理负责的节点位置：整份文档比对会被同一时刻其他节点的无关差异（界面测量、生成进度等）误判。
+  const saved = movedNodeIds.length
+    ? new Map((await readPersistedCanvasProjectSnapshot(projectId)).nodes.map(node => [node.id, node.position]))
+    : current
+  const placed = (positionsById: ReadonlyMap<string, { x: number; y: number }>) => candidate.placements
+    .every(p => positionsById.get(p.nodeId)?.x === p.position.x && positionsById.get(p.nodeId)?.y === p.position.y)
   return {
     projectId, mode: request.mode, movedCount: movedNodeIds.length, movedNodeIds, positions,
     ...(undoRef ? { undoRef } : {}),
-    verification: { verified: applied && saved.verified, condition: '已回读画布节点位置并核对已保存的画布文档。' },
+    verification: { verified: placed(current) && placed(saved), condition: '已回读画布中整理后的节点位置，并核对已保存画布文档里的同一批位置。' },
   }
 }

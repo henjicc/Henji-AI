@@ -3,6 +3,9 @@ import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { canvasFromDocumentContent, canvasToDocumentContent, canvasHistoryFromSessionState, DEFAULT_CANVAS_VIEWPORT, type Project } from './canvasDocumentContent'
 import { canvasDocumentCommands } from './canvasDocumentEnvironment'
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('features.canvas.query')
 
 import { extractCanvasNodeData, parseTrustedMediaNodeData } from '../domain/nodeControlRegistry'
 import type { CanvasEdge, CanvasNode } from '../domain/canvasNodes'
@@ -62,7 +65,14 @@ export async function readCanvasProjectSnapshot(projectId: string): Promise<Proj
 export async function verifyCanvasWrite(projectId: string) {
   const expected = canvasToDocumentContent(await readCanvasProjectSnapshot(projectId))
   const saved = canvasToDocumentContent(await readPersistedCanvasProjectSnapshot(projectId))
-  return { verified: JSON.stringify(expected) === JSON.stringify(saved), condition: '已从画布文档回读并核对提交后的节点、属性及连线。', target: { kind: 'canvas.document', id: projectId } }
+  const verified = JSON.stringify(expected) === JSON.stringify(saved)
+  if (!verified) {
+    const savedNodes = new Map(saved.nodes.map(node => [node.id, JSON.stringify(node)]))
+    logger.warn('画布提交与已保存文档不一致', { event: 'canvas.write_verification.mismatch', projectId,
+      nodeIds: expected.nodes.filter(node => savedNodes.get(node.id) !== JSON.stringify(node)).map(node => node.id),
+      edgesDiffer: JSON.stringify(expected.edges) !== JSON.stringify(saved.edges) })
+  }
+  return { verified, condition: '已从画布文档回读并核对提交后的节点、属性及连线。', target: { kind: 'canvas.document', id: projectId } }
 }
 
 /** 只读取已落盘的画布文件；后台任务终态不能用尚未确认的内存投影冒充持久结果。 */

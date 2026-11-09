@@ -2,7 +2,7 @@ import { TOOL_CATALOG, type ToolboxToolId } from '@/core/toolbox/toolCatalog'
 
 
 import { getToolboxState, listToolboxTools } from '@/features/toolbox/application/toolboxApplicationService'
-import { selectToolboxTool } from '@/stores/navigationStore'
+import { selectToolboxTool, useNavigationStore } from '@/stores/navigationStore'
 
 import type { ApplicationCapabilityHandlerRegistrar } from '@/features/application-control/capabilities/handlerTypes'
 
@@ -29,7 +29,8 @@ export function registerToolboxCapabilityHandlers(registrar: ApplicationCapabili
     }
     // 关闭工具只回工具箱首页，不抢占用户当前所在工作区。
     selectToolboxTool(null)
-    return { toolId: parsed.toolId, surfaceId: null }
+    const toolId = useNavigationStore.getState().activeToolId
+    return { toolId, surfaceId: null, verification: { verified: toolId === null, condition: '已回读工具页当前没有打开的工具。' } }
   })
 
 }

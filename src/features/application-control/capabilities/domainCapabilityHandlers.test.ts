@@ -40,7 +40,7 @@ vi.mock('@/features/toolbox/application/toolboxApplicationService', () => ({
 vi.mock('@/features/cameraStage/application/cameraStageCapabilityAdapter', () => mocks.cameraAdapter)
 vi.mock('@/features/cameraStage/application/cameraStageRenderCapabilityAdapter', () => mocks.cameraRenderAdapter)
 vi.mock('@/features/cameraStage/projects/cameraStageProjectService', () => ({ openCameraStageDocument: mocks.openCameraStageDocument }))
-vi.mock('@/stores/navigationStore', () => ({ selectToolboxTool: mocks.selectToolboxTool }))
+vi.mock('@/stores/navigationStore', () => ({ selectToolboxTool: mocks.selectToolboxTool, useNavigationStore: { getState: () => ({ activeToolId: null }) } }))
 vi.mock('@/features/navigation/application/surfaceCapabilityService', () => ({ openApplicationSurface: mocks.openApplicationSurface }))
 vi.mock('@/features/imageEdit/application/imageSourceCapabilityService', () => ({
   createImageEditPreviewFromRef: mocks.createImageEditPreviewFromRef,
@@ -140,7 +140,7 @@ describe('toolbox capability handlers', () => {
 
     const closed = await handler?.({ toolId: null }, context)
     expect(mocks.selectToolboxTool).toHaveBeenCalledWith(null)
-    expect(closed).toEqual({ toolId: null, surfaceId: null })
+    expect(closed).toMatchObject({ toolId: null, surfaceId: null, verification: { verified: true } })
   })
 
   it('后台创建图片预览不会顺带打开图片编辑器', async () => {

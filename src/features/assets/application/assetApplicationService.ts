@@ -85,7 +85,8 @@ export const assetApplicationService = {
 
   async select(assetId: string | null): Promise<Record<string, unknown>> {
     useAssetLibraryStore.getState().setSelectedAsset(assetId ? await inspectAsset(assetId) : null)
-    return { assetId }
+    const selected = useAssetLibraryStore.getState().selectedAsset?.id ?? null
+    return { assetId: selected, verification: { verified: selected === assetId, condition: '已回读素材界面当前选中的素材。' } }
   },
 
   async replaceTags(assetId: string, tags: string[]): Promise<Record<string, unknown>> {

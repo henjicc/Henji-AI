@@ -59,7 +59,10 @@ describe('独立应用调用入口', () => {
       expect(saved.nodes.find(node => node.id === duplicated.nodeId)?.data.displayName).toContain('原节点')
       expect(saved.nodes).toHaveLength(2)
       await call('open_document', { documentId: projectId })
-      await call('select_canvas_node', { documentId: projectId, nodeId: null })
+      // 主进程只把带回读核对的导航结果记为已验证；没有核对就会把成功的选择报成失败。
+      expect((await call('select_canvas_node', { documentId: projectId, nodeId })).verification).toMatchObject({ verified: true })
+      expect((await call('select_canvas_node', { documentId: projectId, nodeId: null })).verification).toMatchObject({ verified: true })
+      expect((await call('switch_workspace', { workspaceId: 'nodes' })).verification).toMatchObject({ verified: true })
       await call('get_canvas_node_schema', { nodeType: 'textAnnotationNode' })
     } finally {
       useNavigationStore.getState().setActiveWorkspace(beforeWorkspace)
