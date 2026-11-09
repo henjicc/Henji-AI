@@ -124,7 +124,7 @@
     "@earendil-works/pi-coding-agent": "1.4.0",
     "@fontsource-variable/geist": "5.3.0",
     "@fontsource-variable/geist-mono": "5.3.0",
-    "@henjicc/ai-sdk": "0.10.0",
+    "@henjicc/ai-sdk": "0.11.0",
     "@huggingface/tokenizers": "0.2.0",
     "@jest/diff-sequences": "30.0.1",
     "@lume/kiwi": "0.4.4",
