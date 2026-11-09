@@ -151,7 +151,7 @@ export const CameraStageNode = memo(({ id, data, selected, width, height }: Came
             renderError={data.imageRenderError ?? data.videoRenderError ?? null}
           />
         </div>
-        <div className="shrink-0 border-t border-line px-2 py-1.5">
+        <div className="shrink-0 px-2 py-1">
           <MediaInputRow
             nodeId={id}
             mediaKind="image"

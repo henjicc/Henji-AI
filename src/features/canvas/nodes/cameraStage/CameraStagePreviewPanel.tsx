@@ -31,8 +31,9 @@ export function CameraStagePreviewPanel({
       ? 'node.cameraStage.encoding'
       : 'node.cameraStage.rendering';
 
+  // 画面贴住节点顶边，底边直接接节点里的行，卡片里不另圈一块
   return (
-    <div className="relative h-full w-full overflow-hidden rounded-[var(--node-radius)] bg-gap">
+    <div className="relative h-full w-full overflow-hidden rounded-t-[var(--node-radius)] bg-gap">
       {imageSource ? (
         <CanvasNodeImage
           src={imageSource}
