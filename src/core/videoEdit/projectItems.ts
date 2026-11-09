@@ -28,11 +28,34 @@ export function removeVideoEditSequenceClips(sequence: VideoEditSequence, ids: r
   })
   return retimeVideoEditContent(sequence, { ...sequence, clips: sequence.clips.filter(clip => !removed.has(clip.id)), annotations })
 }
+/** 跨序列删除片段。多机位源序列里的机位片段被删时一并去掉该机位，选了它的多机位片段回到第一个机位；剩不到两个机位时拒绝。 */
+export function removeVideoEditClips(document: VideoEditDocument, ids: readonly string[]): VideoEditDocument {
+  const removed = new Set(ids)
+  const lostCameras = new Map<string, Set<string>>()
+  let sequences = document.sequences.map(sequence => {
+    const next = removeVideoEditSequenceClips(sequence, sequence.clips.filter(clip => removed.has(clip.id)).map(clip => clip.id))
+    if (!sequence.multicam || next === sequence) return next
+    const lost = sequence.multicam.cameras.filter(camera => removed.has(camera.clipId))
+    if (!lost.length) return next
+    const cameras = sequence.multicam.cameras.filter(camera => !removed.has(camera.clipId))
+    if (cameras.length < 2) throw new Error(`多机位序列“${sequence.name}”至少需要两个机位，删除会去掉机位${lost.map(camera => `“${camera.name}”`).join('、')}。请先删除引用这条多机位序列的素材项，或保留这些机位片段。`)
+    lostCameras.set(sequence.id, new Set(lost.map(camera => camera.id)))
+    const audioCameraId = sequence.multicam.audioCameraId && cameras.some(camera => camera.id === sequence.multicam!.audioCameraId) ? sequence.multicam.audioCameraId : undefined
+    return { ...next, multicam: { cameras, ...(audioCameraId ? { audioCameraId } : {}) } }
+  })
+  if (lostCameras.size) {
+    const sourceOf = new Map(document.items.filter(item => item.kind === 'sequence' && item.sequenceId && lostCameras.has(item.sequenceId)).map(item => [item.id, lostCameras.get(item.sequenceId!)!]))
+    const lostCamera = (clip: VideoEditClip): boolean => Boolean(clip.multicamCameraId && sourceOf.get(clip.itemId)?.has(clip.multicamCameraId))
+    const firstCamera = (clip: VideoEditClip): VideoEditClip => { const next = { ...clip }; delete next.multicamCameraId; return next }
+    sequences = sequences.map(sequence => sequence.clips.some(lostCamera) ? { ...sequence, clips: sequence.clips.map(clip => lostCamera(clip) ? firstCamera(clip) : clip) } : sequence)
+  }
+  return { ...document, sequences }
+}
 /** 与 Premiere“清除”素材一致：引用这些素材项的片段（及其标注）一并删除。 */
 export function removeVideoEditItems(document: VideoEditDocument, ids: string[]): VideoEditDocument {
   for (const id of ids) if (!document.items.some(item => item.id === id)) throw new Error('素材项不存在。')
   const removedItems = new Set(ids)
-  const sequences = document.sequences.map(sequence => removeVideoEditSequenceClips(sequence, sequence.clips.filter(clip => clip.itemId && removedItems.has(clip.itemId)).map(clip => clip.id)))
+  const { sequences } = removeVideoEditClips(document, document.sequences.flatMap(sequence => sequence.clips.filter(clip => removedItems.has(clip.itemId)).map(clip => clip.id)))
   const items = document.items.filter(item => !removedItems.has(item.id))
   const removedMedia = new Set(document.items.filter(item => removedItems.has(item.id)).flatMap(item => [item.mediaId, ...codeMaterialMediaIds(item.code)]))
   const codeImages = new Set([...items.flatMap(item => [...codeMaterialMediaIds(item.code)]), ...sequences.flatMap(sequence => sequence.clips.flatMap(clip => [...codeMaterialMediaIds(clip.code), ...(clip.effects ?? []).flatMap(effect => [...codeMaterialMediaIds(effect.code)])]))])
@@ -47,7 +70,8 @@ export function removeVideoEditSequences(document: VideoEditDocument, ids: reado
     const users = [...new Set(nested.flatMap(item => videoEditItemUsage(document, item.id)).filter(use => !removed.has(use.sequenceId)).map(use => `“${use.sequenceName}”`))]
     throw new Error(`序列仍被嵌套序列素材项${nested.map(item => `“${item.name}”`).join('、')}引用${users.length ? `（用在序列${users.join('、')}中）` : ''}。请先删除这些素材项（会连同引用它们的片段一起删除），再删除序列。`)
   }
-  return { ...document, sequences: document.sequences.filter(sequence => !removed.has(sequence.id)) }
+  const { posterFrame, ...rest } = document
+  return { ...rest, ...(posterFrame && !removed.has(posterFrame.sequenceId) ? { posterFrame } : {}), sequences: document.sequences.filter(sequence => !removed.has(sequence.id)) }
 }
 /** 代码素材定义被引用时不级联：素材项会级联删除片段，先删素材项即可。 */
 export function removeVideoEditCodeMaterials(document: VideoEditDocument, ids: readonly string[]): VideoEditDocument {
@@ -55,8 +79,9 @@ export function removeVideoEditCodeMaterials(document: VideoEditDocument, ids: r
   const uses = (code?: { definitionId: string }): boolean => Boolean(code && removed.has(code.definitionId))
   const items = document.items.filter(item => uses(item.code)).map(item => `素材项“${item.name}”`)
   const clips = document.sequences.flatMap(sequence => sequence.clips.filter(clip => uses(clip.code) || clip.effects?.some(effect => uses(effect.code))).map(clip => `序列“${sequence.name}”的片段“${clip.name}”`))
-  const users = [...items, ...clips]
-  if (users.length) throw new Error(`代码素材仍被${users.slice(0, 10).join('、')}${users.length > 10 ? ` 等 ${users.length} 处` : ''}引用。请先删除这些素材项或片段（删除素材项会连同引用它的片段一起删除），再删除代码素材。`)
+  const templates = (document.templates ?? []).filter(template => template.body.kind === 'code' && removed.has(template.body.definitionId)).map(template => `模板“${template.name}”`)
+  const users = [...templates, ...items, ...clips]
+  if (users.length) throw new Error(`代码素材仍被${users.slice(0, 10).join('、')}${users.length > 10 ? ` 等 ${users.length} 处` : ''}引用。请先删除这些模板、素材项或片段（删除素材项会连同引用它的片段一起删除），再删除代码素材。`)
   return { ...document, codeMaterials: document.codeMaterials?.filter(definition => !removed.has(definition.id)) }
 }
 export function removeVideoEditBins(document: VideoEditDocument, ids: string[]): VideoEditDocument {

@@ -10,7 +10,7 @@ import { VideoEditSourceExecutor } from './videoEditSourceExecutor'
 import { VideoEditMutationExecutor } from './videoEditExecutors'
 import type { ApplicationExecutionContext, ApplicationPlannedStep } from '@/core/application-control'
 import { reopenVideoEdit } from './videoEditDocumentTestKit'
-import { createVideoEditGraphicItem } from './videoEditProjectItems'
+import { createVideoEditGraphicItem, deleteVideoEditItems } from './videoEditProjectItems'
 import { videoEditSourceTiming } from './videoEditSourcePreview'
 import { activateVideoEditProjectItem } from './videoEditItemActivation'
 import { ApplicationExecutionProgressFailure, applicationFailureOrigin, isApplicationConflict } from '@/core/application-control/execution/persistence'
@@ -205,6 +205,13 @@ it('同路径媒体刷新关闭旧源并取消在途确认，迟到画面不能�
   expect(incoming.aborted).toBe(true); expect(await pending).toBeInstanceOf(Error)
   finish({ timeUs: 2_000_000, presentedTimeUs: 2_000_000, playing: true, volume: 1 }); await Promise.resolve()
   expect(readVideoEditSource(id).status).toBe('closed'); off()
+})
+it('源监视器打开的无媒体素材项被删除时关闭源预览', async () => {
+  const instance = await fixture(); const id = instance.document.id
+  const graphic = createVideoEditGraphicItem(id, { kind: 'rect' })
+  const off = registerVideoEditSourcePresenter(id, async request => ({ ...request, presentedTimeUs: request.timeUs }))
+  await updateVideoEditSource(id, { itemId: graphic, timeUs: 0 }); expect(readVideoEditSource(id).status).toBe('ready')
+  deleteVideoEditItems(id, [graphic]); expect(readVideoEditSource(id).status).toBe('closed'); off()
 })
 it('源定位等待宿主真实确认，画面时刻与请求时刻分开，节目帧和剪辑历史保持', async () => {
   const instance = await fixture(); const id = instance.document.id

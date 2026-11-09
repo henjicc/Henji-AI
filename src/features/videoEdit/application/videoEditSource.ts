@@ -246,6 +246,7 @@ subscribeVideoEdit(() => {
   for (const [id, current] of sessions) {
     const instance = opened.find(instance => instance.document.id === id)
     if (!instance) { closeVideoEditSource(id); sessions.delete(id) }
-    else if (current.state.itemId && mediaIdentity(id, current.state.itemId) !== current.mediaIdentity) closeVideoEditSource(id)
+    // 素材项被删除（含没有媒体的文字、图形、序列素材项）或媒体换了，源预览都不再对应原内容。
+    else if (current.state.itemId && (!instance.document.items.some(item => item.id === current.state.itemId) || mediaIdentity(id, current.state.itemId) !== current.mediaIdentity)) closeVideoEditSource(id)
   }
 })
