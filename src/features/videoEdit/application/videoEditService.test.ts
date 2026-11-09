@@ -607,9 +607,10 @@ it('复制序列重建实例标识但复用素材项，删除和设置变更共�
   updateVideoEditSequenceSettings(id, first, { frameRate: { numerator: 60, denominator: 1 }, pixelAspectRatio: { numerator: 2, denominator: 1 } })
   expect(instance.frame).toBe(60); expect(getActiveVideoEditSequence(instance).width).toBe(3840)
   undoVideoEdit(id); expect(instance.frame).toBe(30); expect(getActiveVideoEditSequence(instance).width).toBe(1920)
-  switchVideoEditSequence(id, duplicate); expect(() => deleteVideoEditSequence(id, duplicate)).toThrow('请先移除')
-  editVideoSequence(id, duplicate, sequence => ({ ...sequence, clips: [], annotations: [] })); deleteVideoEditSequence(id, duplicate)
-  expect(instance.activeSequenceId).toBe(first); undoVideoEdit(id); expect(instance.document.sequences).toHaveLength(2)
+  switchVideoEditSequence(id, duplicate); const withClips = structuredClone(instance.document.sequences)
+  deleteVideoEditSequence(id, duplicate)
+  expect(instance.activeSequenceId).toBe(first); expect(instance.document.sequences).toHaveLength(1)
+  undoVideoEdit(id); expect(instance.document.sequences).toEqual(withClips)
 })
 it('公共事务修改后台序列设置与片段为一步撤销，前台选区和原目标不变', async () => {
   const instance = (await createLegacyTrackVideoEditProject()); const id = instance.document.id; const first = instance.activeSequenceId

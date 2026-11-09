@@ -39,7 +39,7 @@ export function VideoEditSequenceTabs({ instance, onError, placement = 'toolbar'
           { id: 'settings', label: '序列设置', icon: <Settings2 size={UI_ICON_SIZE.md} />, onClick: () => setSettings(sequence) },
           { id: 'auto_reframe', label: '自动重构序列…', icon: <Crop size={UI_ICON_SIZE.md} />, onClick: () => setReframe(sequence.id) },
           { id: 'duplicate', label: '复制序列', icon: <Copy size={UI_ICON_SIZE.md} />, onClick: () => run(() => switchVideoEditSequence(id, duplicateVideoEditSequence(id, sequence.id))) },
-          { id: 'delete', label: '移除空序列', icon: <Trash2 size={UI_ICON_SIZE.md} />, disabled: !!sequence.clips.length || !!sequence.annotations.length, onClick: () => run(() => deleteVideoEditSequence(id, sequence.id)) },
+          { id: 'delete', label: '删除序列', icon: <Trash2 size={UI_ICON_SIZE.md} />, onClick: () => run(() => deleteVideoEditSequence(id, sequence.id)) },
         ])
         // 只开了一条序列时就是面板名，不画成可切换的标签。
         if (instance.openSequenceIds.length === 1) return <span key={sequence.id} role="tab" aria-selected="true" className="max-w-56 truncate" onContextMenu={contextMenu}>{sequence.name}</span>

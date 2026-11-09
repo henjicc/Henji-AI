@@ -199,7 +199,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     if (entry.kind === 'sequence') return [
       { id: 'open', label: '打开序列', icon: <Play size={UI_ICON_SIZE.md} />, onClick: () => run(() => switchVideoEditSequence(projectId, entry.value.id)) },
       { id: 'settings', label: '序列设置与重命名', icon: <Settings2 size={UI_ICON_SIZE.md} />, onClick: () => setSequenceDialog({ kind: 'edit', id: entry.value.id, settings: entry.value }) },
-      { id: 'delete', label: '移除空序列', icon: <Trash2 size={UI_ICON_SIZE.md} />, disabled: !!entry.value.clips.length || !!entry.value.annotations.length, onClick: () => run(() => deleteVideoEditSequence(projectId, entry.value.id)) },
+      { id: 'delete', label: '删除序列', icon: <Trash2 size={UI_ICON_SIZE.md} />, onClick: () => run(() => deleteVideoEditSequence(projectId, entry.value.id)) },
       labelItem({ itemIds: [], binIds: [], sequenceIds: [entry.value.id] }, entry.value.label),
     ]
     const item = entry.value

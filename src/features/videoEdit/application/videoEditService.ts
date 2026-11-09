@@ -23,7 +23,7 @@ import { registerApplicationCloseGuard } from '@/core/applicationLifecycle/appli
 import { rebindVideoEditProjectTextIdentities } from '@/core/videoEdit/textTranscript'
 import { inspectVideoEditMediaContent } from '../videoEditMediaContent'
 import { createVideoEditSequence, changeVideoEditSequenceSettings, storedVideoEditSpaceRender, videoEditComposition, videoEditDuration, videoEditClipSchema, type VideoEditClip, type VideoEditComposition, type VideoEditDocument, type VideoEditSequence, type VideoEditMedia } from '@/core/videoEdit/document'
-import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
+import { makeVideoEditItemClip, removeVideoEditSequences } from '@/core/videoEdit/projectItems'
 import { rescaleVideoEditFrame } from '@/core/videoEdit/time'
 import { assertVideoEditLockedTracks, assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
 import { expandVideoEditSelection, videoEditPickRelations, VIDEO_EDIT_TIMELINE_TOOLS, type VideoEditTimelineTool } from '@/core/videoEdit/timelineSelection'
@@ -582,7 +582,7 @@ export function duplicateVideoEditSequence(projectId: string, sequenceId: string
   editVideoProject(projectId, document => ({ ...document, sequences: [...document.sequences, sequence] })); return sequence.id
 }
 export function deleteVideoEditSequence(projectId: string, sequenceId: string): void {
-  editVideoProject(projectId, document => { const sequence = document.sequences.find(sequence => sequence.id === sequenceId); if (!sequence) throw new Error('目标序列不存在。'); if (sequence.clips.length || sequence.annotations.length || sequence.markers?.length || sequence.captions?.length || sequence.transitions?.length) throw new Error('请先移除序列内的片段和标注，再移除序列。'); return { ...document, sequences: document.sequences.filter(sequence => sequence.id !== sequenceId) } })
+  editVideoProject(projectId, document => removeVideoEditSequences(document, [sequenceId]))
 }
 export function updateVideoEditSequenceSettings(projectId: string, sequenceId: string, settings: Parameters<typeof changeVideoEditSequenceSettings>[1] & { name?: string; binId?: string | null; motionBlur?: boolean; spaceRender?: import('@/core/videoEdit/document').VideoEditSpaceRender }): void {
   const { name, binId, motionBlur, spaceRender, ...timing } = settings

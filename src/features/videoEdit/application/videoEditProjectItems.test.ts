@@ -58,6 +58,28 @@ it('公共移除素材项与手动删除同样清除孤儿媒体，并以声明�
   expect(instance.document.media).toHaveLength(1); expect(instance.document.items).toHaveLength(1)
   expect(restored.cascadeEffects).toEqual(expect.arrayContaining([expect.objectContaining({ entityType: 'video_edit.media', effect: 'create', origin: { kind: 'cascade', declarationId: 'video_edit.item_media_create' } })]))
 })
+it('公共删除素材项与序列级联删除片段和标注，回执均已声明且一步撤销恢复', async () => {
+  const instance = (await createVideoEditProject())!; const id = instance.document.id; const sequenceId = instance.activeSequenceId
+  appendVideoEditMedia(id, { id: 'still', name: '原图', path: 'D:/media/still.png', kind: 'image', width: 10, height: 10, durationSeconds: 0 })
+  const itemId = instance.document.items.at(-1)!.id
+  appendVideoEditItems(id, [itemId], sequenceId, { frame: 0 })
+  const clipId = getActiveVideoEditSequence(instance).clips.at(-1)!.id
+  editVideoSequence(id, sequenceId, sequence => ({ ...sequence, annotations: [...sequence.annotations, { id: 'note', clipId, frame: 0, space: 'composition-normalized', target: { kind: 'point', x: 0.5, y: 0.5 }, text: '这里', status: 'open', author: { kind: 'user', name: '我' }, createdAt: '2026-11-09T00:00:00.000Z', thread: [] }] }))
+  const before = structuredClone(instance.document); const past = instance.past.length
+  const declared = (executor: VideoEditCollectionExecutor, effects: Array<{ origin: { kind: string; declarationId?: string } }> = []) => effects.every(effect => executor.effectContract.cascades.some(item => item.declarationId === effect.origin.declarationId))
+  const items = new VideoEditCollectionExecutor('video_edit.item')
+  const removed = await items.apply({ kind: 'collection', entityType: items.entityType, parent: { kind: 'video_edit.document', id }, expectedRevisions: {}, operation: { kind: 'remove', targets: [{ kind: 'video_edit.item', id: `${id}:${itemId}` }] } })
+  expect(getActiveVideoEditSequence(instance).clips.some(clip => clip.id === clipId)).toBe(false); expect(getActiveVideoEditSequence(instance).annotations).toEqual([])
+  expect(removed.cascadeEffects).toEqual(expect.arrayContaining([expect.objectContaining({ effect: 'delete', refs: [{ kind: 'video_edit.clip', id: `${id}:${clipId}` }] }), expect.objectContaining({ effect: 'delete', refs: [{ kind: 'video_edit.annotation', id: `${id}:note` }] })]))
+  expect(declared(items, removed.cascadeEffects)).toBe(true); expect(instance.past).toHaveLength(past + 1)
+  const restored = await items.undo(removed.undoToken!)
+  expect(declared(items, restored.cascadeEffects)).toBe(true)
+  expect(instance.document.sequences).toEqual(before.sequences); expect(instance.document.items).toEqual(before.items)
+  const sequences = new VideoEditCollectionExecutor('video_edit.sequence')
+  const dropped = await sequences.apply({ kind: 'collection', entityType: sequences.entityType, parent: { kind: 'video_edit.document', id }, expectedRevisions: {}, operation: { kind: 'remove', targets: [{ kind: 'video_edit.sequence', id: `${id}:${sequenceId}` }] } })
+  expect(instance.document.sequences.some(sequence => sequence.id === sequenceId)).toBe(false); expect(declared(sequences, dropped.cascadeEffects)).toBe(true)
+  await sequences.undo(dropped.undoToken!); expect(instance.document.sequences).toEqual(before.sequences)
+})
 beforeEach(() => {
   vi.stubGlobal('OffscreenCanvas', class { getContext() { return { font: '', measureText(text: string) { const width = text.length * Number.parseFloat(this.font); return { width, actualBoundingBoxLeft: 0, actualBoundingBoxRight: width } } } } })
   installHarnessNativeStorage(); files.clear()
@@ -86,7 +108,10 @@ it('同路径在不同箱内保留不同素材项及资产身份，拖入按指�
   await dropVideoEditInput(id, { kind: 'items', projectId: id, itemIds: ids }, { frame: 12, track: 1 })
   expect(getActiveVideoEditSequence(instance).clips[0]).toMatchObject({ itemId: ids[0], name: '选定素材项', start: 12 })
   expect(instance.past).toHaveLength(history + 1)
-  expect(() => deleteVideoEditItems(id, ids)).toThrow('仍被序列')
+  const placed = structuredClone(instance.document)
+  deleteVideoEditItems(id, ids)
+  expect(getActiveVideoEditSequence(instance).clips).toEqual([]); expect(instance.past).toHaveLength(history + 2)
+  undoVideoEdit(id); expect(instance.document.sequences).toEqual(placed.sequences); expect(instance.document.items).toEqual(placed.items)
   expect(() => deleteVideoEditBins(id, [bin])).toThrow('仍有内容')
   undoVideoEdit(id); deleteVideoEditItems(id, ids); deleteVideoEditBins(id, [bin])
   expect(instance.document.media[0].path).toBe('D:/media/original.mp4')

@@ -42,7 +42,7 @@ import { getVideoEditPlaybackResolution, setVideoEditPlaybackResolution } from '
 import { getVideoEditSpaceDisplay, setVideoEditSpaceDisplay } from './videoEditSpaceDisplay'
 import type { VideoEditSpaceDisplaySetting } from '@/core/videoEdit/spaceDisplay'
 import type { VideoEditPlaybackResolutionSetting } from '@/core/videoEdit/playbackResolution'
-import { removeVideoEditItems, removeVideoEditBins, makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
+import { removeVideoEditItems, removeVideoEditBins, removeVideoEditSequences, removeVideoEditSequenceClips, removeVideoEditCodeMaterials, makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { createVideoEditCodeMaterials, createVideoEditCodeVersions } from './videoEditCodeService'
 import { peekVideoEditCodeProgram, readVideoEditCodeMetadata } from './videoEditCodeState'
 import { codeMaterialAuthoringHints } from '@/core/videoEdit/codeMaterial/authoringHints'
@@ -164,6 +164,24 @@ function cascades(before: VideoEditDocument, after: VideoEditDocument, direct: r
     for (let offset = 0; offset < media.length; offset += 256) effects.push({ effect, entityType: 'video_edit.media', propertyIds: [], refs: media.slice(offset, offset + 256).map(media => ({ kind: 'video_edit.media', id: `${after.id}:${media.id}` })), origin: { kind: 'cascade', declarationId: `video_edit.item_media_${effect}` } })
   }
   if (direct.some(ref => ref.kind === 'video_edit.effect')) effects.push(...videoEditSceneRecordCascades(before, after, direct))
+  effects.push(...removalCascades(before, after, direct))
+  return effects
+}
+const REMOVAL_KINDS = ['video_edit.sequence', 'video_edit.item', 'video_edit.clip']
+const REMOVAL_CASCADES = (['create', 'delete'] as const).flatMap(effect => (['clip', 'annotation'] as const).map(kind => ({ declarationId: `video_edit.removal_${kind}s_${effect}`, effect, entityType: `video_edit.${kind}`, propertyIds: [] as string[], revisionScopes: ['video_edit'] })))
+/** 删除序列、素材项或片段时一并删掉的片段与标注（撤销时一并恢复）；有内容锚点的片段已由内容级联回执列出。 */
+function removalCascades(before: VideoEditDocument, after: VideoEditDocument, direct: readonly ApplicationRef[]): ApplicationEffectReceipt[] {
+  if (!direct.length || direct.some(ref => !REMOVAL_KINDS.includes(ref.kind))) return []
+  const present = (document: VideoEditDocument, ref: ApplicationRef): boolean => { const id = ref.id.slice(ref.id.indexOf(':') + 1); return ref.kind === 'video_edit.sequence' ? document.sequences.some(value => value.id === id) : ref.kind === 'video_edit.item' ? document.items.some(value => value.id === id) : document.sequences.some(sequence => sequence.clips.some(clip => clip.id === id)) }
+  const removed = direct.every(ref => present(before, ref) && !present(after, ref)); const restored = direct.every(ref => !present(before, ref) && present(after, ref))
+  if (!removed && !restored) return []
+  const [from, to, effect] = removed ? [before, after, 'delete' as const] : [after, before, 'create' as const]
+  const directIds = new Set(direct.map(ref => ref.id.slice(ref.id.indexOf(':') + 1)))
+  const kept = new Set(to.sequences.flatMap(sequence => [...sequence.clips.map(clip => clip.id), ...sequence.annotations.map(mark => mark.id)]))
+  const clips = from.sequences.flatMap(sequence => sequence.clips).filter(clip => !kept.has(clip.id) && !directIds.has(clip.id) && !clip.contentAnchor)
+  const marks = from.sequences.flatMap(sequence => sequence.annotations).filter(mark => !kept.has(mark.id))
+  const effects: ApplicationEffectReceipt[] = []
+  for (const [values, kind] of [[clips, 'clip'], [marks, 'annotation']] as const) for (let offset = 0; offset < values.length; offset += 256) effects.push({ effect, entityType: `video_edit.${kind}`, propertyIds: [], refs: values.slice(offset, offset + 256).map(value => ({ kind: `video_edit.${kind}`, id: `${after.id}:${value.id}` })), origin: { kind: 'cascade', declarationId: `video_edit.removal_${kind}s_${effect}` } })
   return effects
 }
 function content(document: VideoEditDocument): string { return JSON.stringify({ ...document, revision: 0 }) }
@@ -419,7 +437,7 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
   readonly effectContract: ApplicationEffectContract
   constructor(readonly entityType: 'video_edit.sequence' | 'video_edit.bin' | 'video_edit.item' | 'video_edit.clip' | 'video_edit.annotation' | 'video_edit.code_material' | 'video_edit.code_version' | 'video_edit.marker' | 'video_edit.caption' | 'video_edit.track' | VideoEditCompositeEntityType) {
     this.effectContract = { direct: [], cascades: entityType === 'video_edit.sequence' ? (['create', 'delete'] as const).map(effect => ({ declarationId: `video_edit.sequence_tracks_${effect}`, effect, entityType: 'video_edit.track', propertyIds: [], revisionScopes: ['video_edit'] })) : entityType === 'video_edit.code_material' ? (['create', 'delete'] as const).flatMap(effect => (['video_edit.item', 'video_edit.code_version'] as const).map(type => codeCascade(type, effect))) : entityType === 'video_edit.item' ? (['create', 'delete'] as const).map(effect => ({ declarationId: `video_edit.item_media_${effect}`, effect, entityType: 'video_edit.media', propertyIds: [], revisionScopes: ['video_edit'] })) : entityType === 'video_edit.clip' ? VIDEO_EDIT_CLIP_CONTENT_CASCADES : [] }
-    this.effectContract = { ...this.effectContract, cascades: [...this.effectContract.cascades, VIDEO_EDIT_SPATIAL_CAMERA_CASCADE, VIDEO_EDIT_CODE_CLIP_REFERENCE_CASCADE, ...VIDEO_EDIT_COMPOSITE_CASCADES,...(entityType === 'video_edit.code_version' ? [CODE_DEFAULT_CASCADE] : []), ...(entityType === 'video_edit.track' ? [{ declarationId: 'video_edit.track_clips_delete', effect: 'delete' as const, entityType: 'video_edit.clip', propertyIds: [], revisionScopes: ['video_edit'] }] : [])] }
+    this.effectContract = { ...this.effectContract, cascades: [...this.effectContract.cascades, VIDEO_EDIT_SPATIAL_CAMERA_CASCADE, VIDEO_EDIT_CODE_CLIP_REFERENCE_CASCADE, ...VIDEO_EDIT_COMPOSITE_CASCADES,...(entityType === 'video_edit.code_version' ? [CODE_DEFAULT_CASCADE] : []), ...(entityType === 'video_edit.track' ? [{ declarationId: 'video_edit.track_clips_delete', effect: 'delete' as const, entityType: 'video_edit.clip', propertyIds: [], revisionScopes: ['video_edit'] }] : []), ...(REMOVAL_KINDS.includes(entityType) ? REMOVAL_CASCADES : []), ...(entityType === 'video_edit.sequence' || entityType === 'video_edit.item' ? VIDEO_EDIT_CLIP_CONTENT_CASCADES : [])] }
     if (entityType === 'video_edit.effect') this.effectContract = { ...this.effectContract, cascades: [...this.effectContract.cascades, ...(['create', 'delete'] as const).flatMap(effect => [
       { declarationId: `video_edit.style_piece_code_${effect}`, effect, entityType: 'video_edit.code_material', propertyIds: [], revisionScopes: ['video_edit'] },
       codeCascade('video_edit.code_version', effect),
@@ -547,17 +565,14 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
         if (VIDEO_EDIT_COMPOSITE_TYPES.some(type => type === this.entityType)) { removeVideoEditCompositeEntities(document, this.entityType as VideoEditCompositeEntityType, parsed.childId, ids); refs.push(...step.operation.targets); return document }
         switch (this.entityType) {
           case 'video_edit.sequence':
-            if (document.sequences.some(sequence => ids.includes(sequence.id) && (sequence.clips.length || sequence.annotations.length || sequence.markers?.length || sequence.captions?.length))) throw new Error('请先移除序列内的片段和标注，再移除序列。')
-            document.sequences = document.sequences.filter(sequence => !ids.includes(sequence.id)); break
+            document.sequences = removeVideoEditSequences(document, ids).sequences; break
           case 'video_edit.bin': document.bins = removeVideoEditBins(document, ids).bins; break
-          case 'video_edit.item': { const next = removeVideoEditItems(document, ids); document.items = next.items; document.media = next.media; break }
+          case 'video_edit.item': { const next = removeVideoEditItems(document, ids); document.sequences = next.sequences; document.items = next.items; document.media = next.media; break }
           case 'video_edit.code_material':
-            if (document.items.some(item => item.code && ids.includes(item.code.definitionId)) || document.sequences.some(sequence => sequence.clips.some(clip => clip.code && ids.includes(clip.code.definitionId) || clip.effects?.some(effect => effect.code && ids.includes(effect.code.definitionId))))) throw new Error('代码素材仍被素材项、片段或效果引用，请先移除引用，再移除源码定义。')
-            document.codeMaterials = document.codeMaterials?.filter(definition => !ids.includes(definition.id)); break
+            document.codeMaterials = removeVideoEditCodeMaterials(document, ids).codeMaterials; break
           case 'video_edit.clip':
             if (ids.some(id => !sequence!.clips.some(clip => clip.id === id))) throw new Error('片段不属于目标序列。')
-            if (sequence!.annotations.some(mark => Boolean(mark.clipId && ids.includes(mark.clipId)))) throw new Error('片段仍有标注，请先移除标注，再删除片段。')
-            sequence!.clips = sequence!.clips.filter(clip => !ids.includes(clip.id)); break
+            { const next = removeVideoEditSequenceClips(sequence!, ids); document.sequences = document.sequences.map(value => value.id === next.id ? next : value) } break
           case 'video_edit.annotation':
             if (ids.some(id => !sequence!.annotations.some(mark => mark.id === id))) throw new Error('标注不属于目标序列。')
             sequence!.annotations = sequence!.annotations.filter(mark => !ids.includes(mark.id)); break

@@ -7,6 +7,7 @@ import { codeMaterialVersion, type CodeMaterialMetadataReader } from './codeMate
 import { validateCodeElementOverridesWithoutObservation } from './authorEffects'
 import { codeMaterialMediaIds } from './codeMaterialResources'
 import { codeMaterialSize } from './codeMaterialTiming'
+import { retimeVideoEditContent } from './timedContent'
 
 export type VideoEditSequenceSettings = Partial<Pick<VideoEditSequence, 'name' | 'width' | 'height' | 'frameRate' | 'pixelAspectRatio' | 'sampleRate' | 'channels' | 'motionBlur' | 'spaceRender'>> & { binId?: string | null }
 export class VideoEditSequenceFrameRateRequired extends Error {
@@ -15,17 +16,48 @@ export class VideoEditSequenceFrameRateRequired extends Error {
 export function videoEditItemUsage(document: VideoEditDocument, itemId: string): Array<{ sequenceId: string; sequenceName: string; clipId: string }> {
   return document.sequences.flatMap(sequence => sequence.clips.filter(clip => clip.itemId === itemId).map(clip => ({ sequenceId: sequence.id, sequenceName: sequence.name, clipId: clip.id })))
 }
+/** 与 Premiere 一致：删片段连同挂在它上面的标注；范围标注只剩被删片段时一起删除，否则去掉这些片段的引用。 */
+export function removeVideoEditSequenceClips(sequence: VideoEditSequence, ids: readonly string[]): VideoEditSequence {
+  const removed = new Set(ids)
+  if (!sequence.clips.some(clip => removed.has(clip.id))) return sequence
+  const annotations = sequence.annotations.flatMap(mark => {
+    if (mark.clipId && removed.has(mark.clipId)) return []
+    if (mark.target.kind !== 'range' || !mark.target.clipIds?.some(id => removed.has(id))) return [mark]
+    const clipIds = mark.target.clipIds.filter(id => !removed.has(id))
+    return clipIds.length ? [{ ...mark, target: { ...mark.target, clipIds } }] : []
+  })
+  return retimeVideoEditContent(sequence, { ...sequence, clips: sequence.clips.filter(clip => !removed.has(clip.id)), annotations })
+}
+/** 与 Premiere“清除”素材一致：引用这些素材项的片段（及其标注）一并删除。 */
 export function removeVideoEditItems(document: VideoEditDocument, ids: string[]): VideoEditDocument {
-  for (const id of ids) {
-    const item = document.items.find(item => item.id === id)
-    if (!item) throw new Error('素材项不存在。')
-    const used = videoEditItemUsage(document, id)
-    if (used.length) throw new Error(`“${item.name}”仍被序列“${used[0].sequenceName}”等 ${used.length} 个片段引用。请先移除这些片段。`)
+  for (const id of ids) if (!document.items.some(item => item.id === id)) throw new Error('素材项不存在。')
+  const removedItems = new Set(ids)
+  const sequences = document.sequences.map(sequence => removeVideoEditSequenceClips(sequence, sequence.clips.filter(clip => clip.itemId && removedItems.has(clip.itemId)).map(clip => clip.id)))
+  const items = document.items.filter(item => !removedItems.has(item.id))
+  const removedMedia = new Set(document.items.filter(item => removedItems.has(item.id)).flatMap(item => [item.mediaId, ...codeMaterialMediaIds(item.code)]))
+  const codeImages = new Set([...items.flatMap(item => [...codeMaterialMediaIds(item.code)]), ...sequences.flatMap(sequence => sequence.clips.flatMap(clip => [...codeMaterialMediaIds(clip.code), ...(clip.effects ?? []).flatMap(effect => [...codeMaterialMediaIds(effect.code)])]))])
+  return { ...document, sequences, items, media: document.media.filter(media => !removedMedia.has(media.id) || items.some(item => item.mediaId === media.id) || codeImages.has(media.id)) }
+}
+/** 序列连同其中的片段、标注、标记、字幕与转场一并删除；仍有嵌套序列素材项引用它时拒绝，避免留下悬空引用。 */
+export function removeVideoEditSequences(document: VideoEditDocument, ids: readonly string[]): VideoEditDocument {
+  const removed = new Set(ids)
+  for (const id of removed) if (!document.sequences.some(sequence => sequence.id === id)) throw new Error('目标序列不存在。')
+  const nested = document.items.filter(item => item.kind === 'sequence' && item.sequenceId && removed.has(item.sequenceId))
+  if (nested.length) {
+    const users = [...new Set(nested.flatMap(item => videoEditItemUsage(document, item.id)).filter(use => !removed.has(use.sequenceId)).map(use => `“${use.sequenceName}”`))]
+    throw new Error(`序列仍被嵌套序列素材项${nested.map(item => `“${item.name}”`).join('、')}引用${users.length ? `（用在序列${users.join('、')}中）` : ''}。请先删除这些素材项（会连同引用它们的片段一起删除），再删除序列。`)
   }
-  const items = document.items.filter(item => !ids.includes(item.id))
-  const removedMedia = new Set(document.items.filter(item => ids.includes(item.id)).flatMap(item => [item.mediaId, ...codeMaterialMediaIds(item.code)]))
-  const codeImages = new Set([...items.flatMap(item => [...codeMaterialMediaIds(item.code)]), ...document.sequences.flatMap(sequence => sequence.clips.flatMap(clip => [...codeMaterialMediaIds(clip.code), ...(clip.effects ?? []).flatMap(effect => [...codeMaterialMediaIds(effect.code)])]))])
-  return { ...document, items, media: document.media.filter(media => !removedMedia.has(media.id) || items.some(item => item.mediaId === media.id) || codeImages.has(media.id)) }
+  return { ...document, sequences: document.sequences.filter(sequence => !removed.has(sequence.id)) }
+}
+/** 代码素材定义被引用时不级联：素材项会级联删除片段，先删素材项即可。 */
+export function removeVideoEditCodeMaterials(document: VideoEditDocument, ids: readonly string[]): VideoEditDocument {
+  const removed = new Set(ids)
+  const uses = (code?: { definitionId: string }): boolean => Boolean(code && removed.has(code.definitionId))
+  const items = document.items.filter(item => uses(item.code)).map(item => `素材项“${item.name}”`)
+  const clips = document.sequences.flatMap(sequence => sequence.clips.filter(clip => uses(clip.code) || clip.effects?.some(effect => uses(effect.code))).map(clip => `序列“${sequence.name}”的片段“${clip.name}”`))
+  const users = [...items, ...clips]
+  if (users.length) throw new Error(`代码素材仍被${users.slice(0, 10).join('、')}${users.length > 10 ? ` 等 ${users.length} 处` : ''}引用。请先删除这些素材项或片段（删除素材项会连同引用它的片段一起删除），再删除代码素材。`)
+  return { ...document, codeMaterials: document.codeMaterials?.filter(definition => !removed.has(definition.id)) }
 }
 export function removeVideoEditBins(document: VideoEditDocument, ids: string[]): VideoEditDocument {
   for (const id of ids) {
