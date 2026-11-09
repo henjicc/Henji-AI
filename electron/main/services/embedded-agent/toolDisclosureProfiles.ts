@@ -15,11 +15,11 @@ export const taskProfiles = {
   canvas_generation: {
     tools: [...modelTools, ...taskTools, 'get_canvas_node_schema', 'prepare_generation_task', 'create_visible_generation_task',
       'prepare_canvas_node_generation', 'submit_canvas_node_generation', 'resume_canvas_generation_task', 'tidy_canvas_nodes'],
-    guidance: '画布新生成：未指定模型时先 resolve_generation_model 读取最新默认模型与供应商，不把搜索排序或旧草稿当用户偏好；明确指定模型时遵循用户要求。选定后读取参数，再 prepare_generation_task → create_visible_generation_task，destination 为原画布；应用创建节点与参考连线，结果落在旁侧。位置优先级：明确位置、原选中节点旁、原视口空位。一条链（如三维镜头参考 → 镜头图片 → 图片生成 → 结果）建完后调用一次 tidy_canvas_nodes，connectedTo 填链上任一节点、mode=flow，按连线方向排好，不手算坐标。已有节点用 prepare_canvas_node_generation → submit_canvas_node_generation，保留节点模型。提示词引用连进来的素材写 @图片1、@视频1（按连线顺序编号）。提交后调用 wait_generation_task 等待结果，终态停止，不重复提交。',
+    guidance: '画布新生成：未指定模型时先 resolve_generation_model 读取最新默认模型与供应商，不把搜索排序或旧草稿当用户偏好；明确指定模型时遵循用户要求。选定后读取参数，再 prepare_generation_task → create_visible_generation_task，destination 为原画布；应用创建节点与参考连线，结果落在旁侧。位置优先级：明确位置、原选中节点旁、原视口空位。一条链（如三维镜头参考 → 镜头图片 → 图片生成 → 结果）建完后调用一次 tidy_canvas_nodes，connectedTo 填链上任一节点、mode=flow，按连线方向排好，不手算坐标。已有节点用 prepare_canvas_node_generation → submit_canvas_node_generation，保留节点模型。写或改提示词前先用 load_assistant_skill 读 prompt-optimization，按本次模式（文生图、参考生图、编辑、首尾帧、参考生视频等）只读对应指南；提示词引用连进来的素材写 @图片1、@视频1（按连线顺序编号）。提交后调用 wait_generation_task 等待结果，终态停止，不重复提交。',
   },
   generation: {
     tools: [...modelTools, ...taskTools, 'prepare_generation_task', 'create_visible_generation_task'],
-    guidance: '生成页新任务：未指定模型时先 resolve_generation_model 读取最新默认模型与供应商；用户明确要求沿用当前草稿时读取草稿模型。选定后读取参数，准备后提交；提交后调用 wait_generation_task 等待结果，终态停止，不重复提交。明确指定的画布目标仍优先。',
+    guidance: '生成页新任务：未指定模型时先 resolve_generation_model 读取最新默认模型与供应商；用户明确要求沿用当前草稿时读取草稿模型。写或改提示词前先用 load_assistant_skill 读 prompt-optimization，按本次模式只读对应指南。选定后读取参数，准备后提交；提交后调用 wait_generation_task 等待结果，终态停止，不重复提交。明确指定的画布目标仍优先。',
   },
   canvas_nodes: {
     tools: ['search_canvas_node_types', 'get_canvas_node_schema', 'get_canvas_node', 'duplicate_canvas_node', 'group_canvas_nodes', 'ungroup_canvas_node', 'tidy_canvas_nodes', 'open_canvas_node_editor'],

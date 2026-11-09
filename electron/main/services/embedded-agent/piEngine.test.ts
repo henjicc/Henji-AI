@@ -219,10 +219,10 @@ describe('Pi official SDK engine', () => {
   })
 
   it.each([
-    ['prompt-optimization', 'references/image.md', '图片表达一个视觉状态', '视频表达状态随时间的变化'],
-    ['prompt-optimization', 'references/video.md', '视频表达状态随时间的变化', '图片表达一个视觉状态'],
+    ['prompt-optimization', 'references/image.md', '一张图是一个冻结的瞬间', '视频写的是随时间发生的变化'],
+    ['prompt-optimization', 'references/video.md', '视频写的是随时间发生的变化', '一张图是一个冻结的瞬间'],
     ['prompt-optimization', 'references/image-edit.md', '最小必要修改', '## 标记和坐标定位'],
-    ['prompt-optimization', 'references/video-extension.md', '## 延长与连接', '## 声音、对白与文字'],
+    ['prompt-optimization', 'references/video-extension.md', '# 延长与连接', '# 声音与文字'],
       ['cinematic-director', 'references/blocking.md', '接触动作描述接近', '像幻灯片'],
     ['cinematic-director', 'references/repair.md', '像幻灯片', '接触动作描述接近'],
     ['cinematic-director', 'references/canvas-workspace.md', '场景从上到下分区', '接触动作描述接近'],

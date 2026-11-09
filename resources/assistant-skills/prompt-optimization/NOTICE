@@ -8,4 +8,11 @@ OpenAI Sora 2 prompting guide:
 https://github.com/openai/openai-cookbook/blob/9aad95f0aa4f8e12991ef9b9201df28747860bfc/examples/sora/sora2_prompting_guide.ipynb
 MIT; see LICENSE.openai. Relevant principles: concrete action beats, coherent camera motion and reference-image continuity. Model-specific duration, resolution and provider controls are not generalized.
 
+Volcengine Ark Seedance / Seedream prompt and generation guides (read 2026-11-10):
+https://docs.volcengine.com/docs/zh/ark/seedance-2-5-prompt-guide.md
+https://docs.volcengine.com/docs/zh/ark/video-generation-tutorial.md
+https://docs.volcengine.com/docs/zh/ark/seedream-5-0-pro.md
+https://docs.volcengine.com/docs/zh/ark/image-generation-tutorial.md
+Relevant principles, rewritten model-agnostically in our own words: subject + motion structure, material binding before use, one-line summary then timed or numbered shots, continuous timestamps, camera-language naming, positive description with narrow negative controls, edit scope with preserved items, keyframe vs storyboard-grid strictness, splitting complex tasks, image prompt skeleton and length. No example prompts or model-specific parameters are copied.
+
 This notice and license files are attribution metadata, not skill instructions and are not included in the assistant skill index or reference loading route.

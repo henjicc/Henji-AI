@@ -20,8 +20,9 @@ description: 用户要生成、出图、画一张图、做海报/插画/头像/�
 1. `resolve_generation_model`：按媒体类型、用户点名的模型和供应商偏好解析实际可执行的模型。
 2. `get_model_schema`：读模型参数与能力标签，参数名、枚举一律以它为准。
 3. `prepare_generation_task`：校验并规范化参数，拿到估价。结果里如果有 `adjustedParams`，说明有参数和其他参数冲突被模型规则改掉了（例如 Economy 不支持矢量图，输出被改回普通图片）；用户要的东西因此做不到时，先调整与之冲突的参数再校验，不要带着被改掉的参数提交。
-4. `create_visible_generation_task`：提交一次用户可见任务。
-5. `wait_generation_task` 或 `get_generation_task` 等权威状态；只有成功且结果引用可用，才能说生成完成。任务已经提交后，不要为了“重试验证”再提交一次。
+4. 写提示词前用 `load_assistant_skill` 读 `prompt-optimization`，按文生图、参考生图、图片编辑等模式只读对应指南。
+5. `create_visible_generation_task`：提交一次用户可见任务。
+6. `wait_generation_task` 或 `get_generation_task` 等权威状态；只有成功且结果引用可用，才能说生成完成。任务已经提交后，不要为了“重试验证”再提交一次。
 
 ## 模型选择
 
