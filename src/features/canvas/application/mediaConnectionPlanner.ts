@@ -196,3 +196,47 @@ export function planMediaConnections(input: PlanMediaConnectionsInput): MediaCon
 
   return result;
 }
+
+export interface MediaHandleBound {
+  id?: string | null;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * 连线松手在节点身上（没对准端口）时，按上游素材类型列出这个节点上同类型的端口，
+ * 同类型有几处（参考素材行、角色参考、风格参考…）时按离松手位置由近到远排列，
+ * 调用方取第一个还能再连的（离得最近的可能已经连满）。
+ * handleBounds 是节点内坐标，nodePosition 是节点左上角的画布坐标，point 是松手的画布坐标。
+ * 上游不是素材或节点上没有这类端口时返回空列表，交给调用方原有的判断。
+ */
+export function rankNearestMediaTargetHandles(input: {
+  sourceNode: CanvasNode;
+  sourceHandle?: string | null;
+  targetNode: CanvasNode;
+  nodes: CanvasNode[];
+  edges: CanvasEdge[];
+  handleBounds: readonly MediaHandleBound[];
+  nodePosition: { x: number; y: number };
+  point: { x: number; y: number };
+}): string[] {
+  const source = resolveMediaConnectionSource(input.sourceNode, input.sourceHandle);
+  if (!source) return [];
+  const candidates = [...new Set(resolveVisibleMediaInputPorts(input.targetNode, input.nodes, input.edges)
+    .filter((port) => port.kind === source.kind)
+    .map((port) => port.handleId))];
+  const distanceOf = (handleId: string): number => {
+    const bound = input.handleBounds.find((item) => (item.id ?? 'target') === handleId);
+    if (!bound) return Number.POSITIVE_INFINITY;
+    const dx = input.nodePosition.x + bound.x + bound.width / 2 - input.point.x;
+    const dy = input.nodePosition.y + bound.y + bound.height / 2 - input.point.y;
+    return dx * dx + dy * dy;
+  };
+  // 稳定排序：量不到位置的端口保持原有顺序排在最后
+  return candidates
+    .map((handleId, index) => ({ handleId, index, distance: distanceOf(handleId) }))
+    .sort((a, b) => a.distance - b.distance || a.index - b.index)
+    .map(({ handleId }) => handleId);
+}

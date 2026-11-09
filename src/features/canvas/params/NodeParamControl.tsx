@@ -180,9 +180,8 @@ function CompactAspectRatioControl({
       surface="glass"
       // 与生成页同一个比例面板（重要记录 021）：宽度跟格子数走，在触发器下方展开、不盖住这一行
       panelSize="special"
-      // 面板比参数行宽得多：在节点下方居中展开，不贴着右侧触发器往左甩出去
+      // 面板以触发器为中线展开，视线不用离开刚点的按钮
       alignment="bottomCenter"
-      centerOnSelector=".react-flow__node"
       closeOnPanelClick
       renderPanel={() => (
         <UiSpecialPanel>
@@ -291,9 +290,8 @@ function CompactPanelControl({
       surface="glass"
       // 特殊面板（重要记录 021）：宽度量面板里最宽的内容，在这一行下面展开
       panelSize="special"
-      // 面板比参数行宽得多：在节点下方居中展开，不贴着右侧触发器往左甩出去
+      // 面板以触发器为中线展开，视线不用离开刚点的按钮
       alignment="bottomCenter"
-      centerOnSelector=".react-flow__node"
       closeOnPanelClick={false}
       freezePositionOnOpen={param.panel === 'voice-selector'}
       renderPanel={() => (

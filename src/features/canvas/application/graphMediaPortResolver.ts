@@ -1,7 +1,8 @@
 import { resolveInputLimits } from '@/core/inputs/inputLimits';
 import { registry } from '@/core/ModelRegistry';
+import { llmConfigService } from '@/services/llm/LlmConfigService';
 
-import type { CanvasEdge, CanvasNode } from '../domain/canvasNodes';
+import { CANVAS_NODE_TYPES, type CanvasEdge, type CanvasNode } from '../domain/canvasNodes';
 import {
   getCanvasNodeDefinition,
   getNodeMediaOutputs,
@@ -24,6 +25,7 @@ import {
   getSchemaMediaParamKind,
   resolveVisibleSchemaParamRows,
 } from './graphValueSchema';
+import { getTextProcessingMediaKinds, listTextProcessingModels, resolveTextProcessingModel } from './textProcessing';
 
 const MEDIA_LIMIT_KEY: Record<RowMediaKind, 'images' | 'videos' | 'audios'> = {
   image: 'images',
@@ -175,8 +177,9 @@ export function resolveVisibleMediaInputPorts(
     return ports;
   }
 
+  const llmKinds = resolveTextProcessingNodeKinds(targetNode);
   for (const kind of ['image', 'video', 'audio'] as const) {
-    if (acceptedKinds.includes(kind)) {
+    if (acceptedKinds.includes(kind) && (!llmKinds || llmKinds.includes(kind))) {
       ports.push({
         kind,
         handleId: resolveMediaTargetHandle(targetNode.type, kind),
@@ -187,6 +190,19 @@ export function resolveVisibleMediaInputPorts(
     }
   }
   return ports;
+}
+
+/**
+ * 文本处理节点的模型来自大模型配置而不是生成模型注册表：按当前所选大模型能读的素材类型收口，
+ * 与节点上实际显示的素材端口一致。配置尚未读取过时不收口。
+ */
+function resolveTextProcessingNodeKinds(targetNode: CanvasNode): RowMediaKind[] | null {
+  if (targetNode.type !== CANVAS_NODE_TYPES.textProcessing) return null;
+  const config = llmConfigService.getLastConfig();
+  if (!config) return null;
+  const data = targetNode.data as { providerId?: string; modelId?: string };
+  const choice = resolveTextProcessingModel(listTextProcessingModels(config), data.providerId ?? '', data.modelId ?? '');
+  return getTextProcessingMediaKinds(choice?.model ?? null);
 }
 
 function resolveTargetModelId(targetNode: CanvasNode, nodes: CanvasNode[], edges: CanvasEdge[]): string | null {

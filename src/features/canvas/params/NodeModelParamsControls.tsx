@@ -122,7 +122,6 @@ export const NodeModelParamsControls = memo(({
         // 特殊面板（重要记录 021）：宽度量最长的模型名，在模型这一行下面展开、不盖住它
         panelSize="special"
         alignment="bottomCenter"
-        centerOnSelector=".react-flow__node"
         stableHeight
         renderPanel={() => (
           <ModelSelectorPanel

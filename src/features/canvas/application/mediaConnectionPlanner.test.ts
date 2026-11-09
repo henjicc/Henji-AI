@@ -12,7 +12,7 @@ import { canvasNodeDefinitions } from '../domain/nodeRegistry';
 import { mediaPortId, paramPortId, promptPortId } from '../domain/socketTypes';
 import { collectInputMedia } from './graphMediaResolver';
 import { collectInputValues, resolveMediaRowTargetHandles, resolveVisibleMediaInputPorts } from './graphValueResolver';
-import { planMediaConnections } from './mediaConnectionPlanner';
+import { planMediaConnections, rankNearestMediaTargetHandles } from './mediaConnectionPlanner';
 
 const TEST_MODEL_ID = 'canvas-media-planner-image';
 const testModel: ModelDefinition = {
@@ -67,6 +67,25 @@ describe('mediaConnectionPlanner', () => {
     expect(plan.connections).toEqual([
       expect.objectContaining({ source: source.id, target: target.id, targetHandle: mediaPortId('image') }),
     ]);
+  });
+
+  it('松手在节点身上时同类型端口按离松手位置由近到远排列', () => {
+    const source = node(CANVAS_NODE_TYPES.upload, 'image-1', { imageUrl: 'image://one' });
+    const target = node(CANVAS_NODE_TYPES.imageEdit, 'target', { modelId: TEST_MODEL_ID });
+    const handleBounds = [
+      { id: promptPortId(), x: 0, y: 20, width: 8, height: 8 },
+      { id: mediaPortId('image'), x: 0, y: 100, width: 8, height: 8 },
+      { id: paramPortId('characterReference'), x: 0, y: 140, width: 8, height: 8 },
+      { id: paramPortId('styleReference'), x: 0, y: 180, width: 8, height: 8 },
+    ];
+    const pick = (y: number) => rankNearestMediaTargetHandles({
+      sourceNode: source, targetNode: target, nodes: [source, target], edges: [],
+      handleBounds, nodePosition: { x: 500, y: 300 }, point: { x: 650, y: 300 + y },
+    });
+    expect(pick(10)[0]).toBe(mediaPortId('image'));
+    expect(pick(176)[0]).toBe(paramPortId('styleReference'));
+    // 量不到位置的端口（depthReference）排在最后
+    expect(pick(145)).toEqual([paramPortId('characterReference'), paramPortId('styleReference'), mediaPortId('image'), paramPortId('depthReference')]);
   });
 
   it('参考素材行只露一个端口：视频连到这个端口时落到视频端口', () => {

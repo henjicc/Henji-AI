@@ -18,6 +18,7 @@ import {
 } from '@/features/canvas/domain/nodeRegistry'
 import { mediaSourceNodeType } from '@/features/canvas/application/assetMediaAssignment'
 import { canvasEventBus } from '@/features/canvas/application/canvasServices'
+import { rankNearestMediaTargetHandles } from '@/features/canvas/application/mediaConnectionPlanner'
 import { isParamPortId } from '@/features/canvas/domain/socketTypes'
 import {
   canSourceTypeConnectToTargetHandle,
@@ -169,6 +170,27 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
   } = params
 
   const suppressNextPaneClickRef = useRef(false)
+
+  // 松手在节点身上：按上游素材类型连到这个节点上同类型、离松手位置最近且还能再连的端口
+  const nearestMediaHandleOnDrop = useCallback((
+    sourceNode: CanvasNode,
+    sourceHandle: string | null | undefined,
+    targetNode: CanvasNode,
+    clientPosition: { x: number; y: number },
+  ): string | null => {
+    const internal = reactFlowInstance.getInternalNode(targetNode.id)
+    if (!internal) return null
+    return rankNearestMediaTargetHandles({
+      sourceNode,
+      sourceHandle,
+      targetNode,
+      nodes,
+      edges: useCanvasStore.getState().edges,
+      handleBounds: internal.internals.handleBounds?.target ?? [],
+      nodePosition: internal.internals.positionAbsolute,
+      point: reactFlowInstance.screenToFlowPosition(clientPosition),
+    }).find((handle) => canSourceTypeConnectToTargetHandle(sourceNode.type, targetNode, handle, sourceHandle ?? 'source')) ?? null
+  }, [nodes, reactFlowInstance])
 
   const targetHandlesFor = useCallback((targetNode: CanvasNode, handleId: string | null | undefined): Array<string | null> => (
     handleId
@@ -399,11 +421,12 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
             ? (targetHandlesFor(targetNode, pendingConnectStart.handleId)
               .find((handle) => canSourceTypeConnectToTargetHandle(sourceNode.type, targetNode, handle))
               ?? pendingConnectStart.handleId ?? 'target')
-            : resolveCompatibleTargetHandleForSource(
-              sourceNode,
-              targetNode.type,
-              pendingConnectStart.handleId,
-            ))
+            : (nearestMediaHandleOnDrop(sourceNode, pendingConnectStart.handleId, targetNode, clientPosition)
+              ?? resolveCompatibleTargetHandleForSource(
+                sourceNode,
+                targetNode.type,
+                pendingConnectStart.handleId,
+              )))
           : null
         const compatible = Boolean(
           sourceNode &&
@@ -515,7 +538,7 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
       suppressNextPaneClickRef.current = true
       setShowNodeMenu(true)
     },
-    [connectAssetGroup, connectNodes, nodes, pendingConnectStart, reactFlowInstance, resolveAllowedTypesForPending, scheduleCanvasPersist, targetHandlesFor, wrapperRef]
+    [connectAssetGroup, connectNodes, nodes, pendingConnectStart, reactFlowInstance, resolveAllowedTypesForPending, nearestMediaHandleOnDrop, scheduleCanvasPersist, targetHandlesFor, wrapperRef]
   )
 
   return {

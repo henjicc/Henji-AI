@@ -353,14 +353,23 @@ function upgradeBuiltInModelCapabilities(model: LlmModelConfig): LlmModelConfig 
 }
 
 export class LlmConfigService {
+  private lastConfig: LlmConfigState | null = null
+
   async getConfig(): Promise<LlmConfigState> {
     const stored = await llmReadConfig()
-    return normalizeLlmConfig(stored)
+    this.lastConfig = normalizeLlmConfig(stored)
+    return this.lastConfig
+  }
+
+  /** 最近一次读取或保存的配置，供不能等待读盘的同步判断（如画布连线落点）使用；尚未读取过时为 null */
+  getLastConfig(): LlmConfigState | null {
+    return this.lastConfig
   }
 
   async saveConfig(config: LlmConfigState): Promise<void> {
     const nextConfig = normalizeLlmConfig(config)
     await llmWriteConfig(nextConfig)
+    this.lastConfig = nextConfig
     emitConfigChanged()
   }
 
@@ -379,6 +388,7 @@ export class LlmConfigService {
       credential,
     })
     const normalizedResult = { ...result, config: normalizeLlmConfig(result.config) }
+    this.lastConfig = normalizedResult.config
     emitConfigChanged()
     return normalizedResult
   }
@@ -389,6 +399,7 @@ export class LlmConfigService {
       baselineConfig: await this.getConfig(),
     })
     const normalizedResult = { ...result, config: normalizeLlmConfig(result.config) }
+    this.lastConfig = normalizedResult.config
     emitConfigChanged()
     return normalizedResult
   }
