@@ -64,32 +64,40 @@ body.single.pairmode .tag { display:block; font-size:20px; line-height:28px; mar
 .titlebar .wc { width:44px; height:100%; display:flex; align-items:center; justify-content:center; color:var(--text3); --s:14px; }
 .titlebar .wc svg { stroke-width:1.5; }
 
-/* 生成工作区：一条 960 的内容列，筛选行、记录流、输入区同一左右缘 */
-.gen { flex:1; min-height:0; display:flex; flex-direction:column; align-items:center; position:relative; }
+/* 生成工作区：筛选行、记录、输入区同一左右缘；输入区有底部、左侧两种形态 */
+.gen { flex:1; min-height:0; display:flex; position:relative; }
+.main { flex:1; min-width:0; display:flex; flex-direction:column; align-items:center; position:relative; }
 .col { width:960px; }
+.left-mode .col { width:auto; align-self:stretch; margin:0 32px; }
 .filters { height:44px; flex:none; display:flex; align-items:center; gap:2px; border-bottom:1px solid var(--line); }
 .filters .f { height:28px; padding:0 10px; display:flex; align-items:center; border-radius:6px; font-size:12px; color:var(--text3); font-weight:var(--w-medium); }
 .filters .f.cur { background:var(--selected); color:var(--text1); }
 .filters .r { margin-left:auto; display:flex; gap:2px; align-items:center; }
 .feed { flex:1; min-height:0; overflow:hidden; }
 .dock-space { flex:none; }
-.rec { padding:14px 0 16px; border-bottom:1px solid var(--line); }
+/* 一条记录：左边是输入（提示词、参考素材、模型与时间），右边是结果 */
+.rec { display:grid; grid-template-columns:300px minmax(0,1fr); column-gap:24px; padding:16px 0; border-bottom:1px solid var(--line); }
 .rec:last-child { border-bottom:0; }
-.rhead { height:24px; display:flex; align-items:center; gap:10px; margin-bottom:8px; }
-.rhead .p { font-size:13px; color:var(--text1); overflow:hidden; text-overflow:ellipsis; min-width:0; max-width:560px; }
-.rhead .m { font-size:11px; color:var(--text3); flex:none; }
-.rhead .acts { margin-left:auto; display:flex; gap:2px; }
-.results { display:flex; gap:6px; }
+.rin { display:flex; flex-direction:column; min-width:0; min-height:132px; }
+.rin .p { font-size:13px; line-height:20px; color:var(--text1); white-space:normal; display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; }
+.rin .p.none { color:var(--icon-rest); }
+.rin .refs { display:flex; gap:4px; margin-top:8px; align-items:center; }
+.rin .refs .t { width:32px; height:32px; border-radius:4px; background:var(--raised) center/cover; position:relative; flex:none; }
+.rin .refs .t b { position:absolute; left:2px; top:2px; min-width:12px; height:12px; border-radius:3px; background:rgba(0,0,0,.65); color:#fff; font-size:9px; line-height:12px; text-align:center; font-weight:var(--w-normal); }
+.rin .refs .more { font-size:11px; color:var(--text3); margin-left:4px; }
+.rin .m { font-size:11px; line-height:16px; color:var(--text3); margin-top:8px; }
+.rin .acts { margin-top:auto; padding-top:6px; display:flex; gap:2px; margin-left:-5px; }
+.results { display:flex; gap:6px; flex-wrap:wrap; align-content:flex-start; }
 .res { height:132px; border-radius:6px; background:var(--media) center/cover; position:relative; overflow:hidden; flex:none; }
+.big .res { height:176px; }
 .res .chip { position:absolute; right:6px; bottom:6px; height:18px; padding:0 6px; border-radius:4px; background:rgba(0,0,0,.6); color:#fff; font-size:10px; line-height:18px; }
 .res .play { position:absolute; left:50%; top:50%; width:36px; height:36px; margin:-18px; border-radius:50%; background:rgba(0,0,0,.55); color:#fff; display:flex; align-items:center; justify-content:center; --s:16px; }
-.res.sel { box-shadow:0 0 0 1px var(--text1); }
 .res .hover-acts { position:absolute; right:6px; top:6px; display:flex; gap:2px; padding:2px; border-radius:6px; background:rgba(0,0,0,.6); color:#fff; }
 .res .hover-acts .ib { color:#fff; width:24px; height:24px; --s:14px; }
 .res.pending { background:var(--raised); display:flex; align-items:center; justify-content:center; flex-direction:column; gap:8px; color:var(--text3); font-size:11px; }
-.res.pending .bar { width:96px; height:2px; border-radius:1px; background:var(--line-strong); position:relative; overflow:hidden; }
+.res.pending .bar { width:80px; height:2px; border-radius:1px; background:var(--line-strong); position:relative; overflow:hidden; }
 .res.pending .bar i { position:absolute; left:0; top:0; bottom:0; background:var(--text2); }
-.audio { height:40px; width:520px; border-radius:6px; background:var(--raised); display:flex; align-items:center; gap:10px; padding:0 12px 0 6px; color:var(--text2); font-size:11px; }
+.audio { height:40px; width:440px; border-radius:6px; background:var(--raised); display:flex; align-items:center; gap:10px; padding:0 12px 0 6px; color:var(--text2); font-size:11px; }
 .audio svg.w { flex:1; height:22px; color:var(--icon-rest); }
 .fail { display:flex; align-items:center; gap:10px; height:40px; padding:0 8px 0 12px; border-radius:6px; background:rgba(215,62,63,.12); width:max-content; max-width:100%; }
 .fail .fi { color:var(--danger-text); --s:16px; }
@@ -97,25 +105,50 @@ body.single.pairmode .tag { display:block; font-size:20px; line-height:28px; mar
 .fail .fm { font-size:12px; color:var(--text2); }
 .fail .fa { display:flex; gap:4px; margin-left:12px; }
 
-/* 输入区 */
+/* 输入区 · 底部形态 */
 .composer { position:absolute; left:50%; transform:translateX(-50%); bottom:16px; width:960px; background:var(--panel); border:1px solid var(--line-strong); border-radius:12px; padding:12px 12px 8px; }
 .refs { display:flex; gap:6px; margin-bottom:10px; }
-.ref { width:48px; height:48px; border-radius:6px; background:var(--raised) center/cover; position:relative; display:flex; align-items:center; justify-content:center; color:var(--icon-rest); }
+.ref { width:48px; height:48px; border-radius:6px; background:var(--raised) center/cover; position:relative; display:flex; align-items:center; justify-content:center; color:var(--icon-rest); flex:none; }
 .ref b { position:absolute; left:3px; top:3px; min-width:14px; height:14px; border-radius:4px; background:rgba(0,0,0,.65); color:#fff; font-size:10px; line-height:14px; text-align:center; font-weight:var(--w-normal); }
 .prompt { font-size:14px; line-height:22px; color:var(--text1); min-height:44px; white-space:normal; padding:0 4px; }
 .prompt.ph { color:var(--icon-rest); }
 .pbar { display:flex; align-items:center; gap:2px; height:32px; margin-top:6px; }
-.pbar .model { height:28px; padding:0 8px; display:flex; align-items:center; gap:6px; border-radius:6px; font-size:13px; font-weight:var(--w-medium); --s:12px; }
-.pbar .model small { font-size:11px; color:var(--text3); font-weight:var(--w-normal); }
-.pbar .model svg { color:var(--icon-rest); }
-.pbar .model.open { background:var(--selected); }
+.pbar .model, .lp .model { height:28px; padding:0 8px; display:flex; align-items:center; gap:6px; border-radius:6px; font-size:13px; font-weight:var(--w-medium); --s:12px; }
+.model small { font-size:11px; color:var(--text3); font-weight:var(--w-normal); }
+.model svg { color:var(--icon-rest); }
+.model.open { background:var(--selected); }
 .pbar .param { height:28px; padding:0 8px; display:flex; align-items:center; gap:6px; border-radius:6px; font-size:12px; color:var(--text2); --s:12px; }
 .pbar .param label { color:var(--text3); }
 .pbar .param svg { color:var(--icon-rest); }
 .pbar .sp { width:1px; height:14px; background:var(--line-strong); margin:0 6px; }
 .pbar .right { margin-left:auto; display:flex; align-items:center; gap:2px; }
-.pbar .price { font-size:12px; color:var(--text3); margin-right:8px; }
-.send { width:32px; height:32px; border-radius:50%; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; margin-left:6px; --s:16px; }
+.price { font-size:12px; color:var(--text3); }
+.send { width:32px; height:32px; border-radius:50%; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; margin-left:6px; --s:16px; flex:none; }
+
+/* 输入区 · 左侧形态：一块竖着排的面板，从上到下是模型、参考素材、提示词、参数，底部固定“生成” */
+.lp { width:344px; flex:none; background:var(--panel); border-right:2px solid var(--gap); display:flex; flex-direction:column; min-height:0; }
+.lp .head { height:44px; flex:none; display:flex; align-items:center; padding:0 8px 0 6px; border-bottom:1px solid var(--line); }
+.lp .head .model { font-size:13px; }
+.lp .head .r { margin-left:auto; display:flex; gap:2px; }
+.lp .body { flex:1; min-height:0; overflow:hidden; padding:12px 12px 0; display:flex; flex-direction:column; gap:14px; }
+.lp .lab { font-size:12px; font-weight:var(--w-semibold); color:var(--text2); height:20px; display:flex; align-items:center; margin-bottom:6px; }
+.lp .lab span { margin-left:auto; font-weight:var(--w-normal); font-size:11px; color:var(--icon-rest); }
+.lp .refs { margin:0; flex-wrap:wrap; }
+.lp .ref { width:72px; height:72px; }
+.lp .ptext { border-radius:8px; background:var(--raised); padding:8px 10px; font-size:13px; line-height:20px; height:148px; color:var(--text1); white-space:normal; position:relative; }
+.lp .ptext .tools { position:absolute; right:4px; bottom:4px; display:flex; gap:2px; }
+.lp .row { height:32px; display:flex; align-items:center; font-size:12px; }
+.lp .row .nm { width:88px; flex:none; color:var(--text3); }
+.lp .fld { height:28px; flex:1; min-width:0; border-radius:6px; background:var(--raised); display:flex; align-items:center; padding:0 8px; font-size:12px; color:var(--text1); --s:12px; }
+.lp .fld svg { margin-left:auto; color:var(--icon-rest); }
+.lp .seg { height:28px; flex:1; border-radius:6px; background:var(--raised); display:flex; padding:2px; gap:2px; font-size:12px; color:var(--text3); }
+.lp .seg span { flex:1; display:flex; align-items:center; justify-content:center; border-radius:4px; }
+.lp .seg span.cur { background:var(--line-overlay); color:var(--text1); font-weight:var(--w-medium); }
+.lp .cb { width:16px; height:16px; border-radius:4px; border:1px solid #4a4a4a; display:flex; align-items:center; justify-content:center; --s:11px; color:var(--text1); }
+.lp .cb svg { stroke-width:2.5; }
+.lp .disc { height:28px; display:flex; align-items:center; gap:4px; font-size:12px; color:var(--text3); --s:12px; }
+.lp .foot { flex:none; border-top:1px solid var(--line); padding:12px; display:flex; align-items:center; gap:12px; }
+.lp .go { height:36px; flex:1; border-radius:8px; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; gap:6px; font-size:14px; font-weight:var(--w-medium); --s:16px; }
 
 /* 模型面板（浮层：实底加一圈描边，不用投影） */
 .ovl { position:absolute; background:var(--overlay); border:1px solid var(--line-overlay); z-index:20; }
@@ -161,77 +194,112 @@ body.single.pairmode .tag { display:block; font-size:20px; line-height:28px; mar
 </div>
 
 <script>
-const ICONS = /*ICONS_START*/{"sparkles":"<path d=\"M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z\"/><path d=\"M20 2v4\"/><path d=\"M22 4h-4\"/><circle cx=\"4\" cy=\"20\" r=\"2\"/>","settings":"<path d=\"M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/>","minus":"<path d=\"M5 12h14\"/>","square":"<rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"/>","x":"<path d=\"M18 6 6 18\"/><path d=\"m6 6 12 12\"/>","search":"<path d=\"m21 21-4.34-4.34\"/><circle cx=\"11\" cy=\"11\" r=\"8\"/>","ellipsis":"<circle cx=\"12\" cy=\"12\" r=\"1\"/><circle cx=\"19\" cy=\"12\" r=\"1\"/><circle cx=\"5\" cy=\"12\" r=\"1\"/>","refresh-cw":"<path d=\"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8\"/><path d=\"M21 3v5h-5\"/><path d=\"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16\"/><path d=\"M8 16H3v5\"/>","square-pen":"<path d=\"M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7\"/><path d=\"M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z\"/>","download":"<path d=\"M12 15V3\"/><path d=\"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\"/><path d=\"m7 10 5 5 5-5\"/>","folder-plus":"<path d=\"M12 10v6\"/><path d=\"M9 13h6\"/><path d=\"M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z\"/>","trash-2":"<path d=\"M10 11v6\"/><path d=\"M14 11v6\"/><path d=\"M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6\"/><path d=\"M3 6h18\"/><path d=\"M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2\"/>","copy":"<rect width=\"14\" height=\"14\" x=\"8\" y=\"8\" rx=\"2\" ry=\"2\"/><path d=\"M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2\"/>","play":"<path d=\"M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z\"/>","triangle-alert":"<path d=\"m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3\"/><path d=\"M12 9v4\"/><path d=\"M12 17h.01\"/>","plus":"<path d=\"M5 12h14\"/><path d=\"M12 5v14\"/>","chevron-up":"<path d=\"m18 15-6-6-6 6\"/>","chevron-down":"<path d=\"m6 9 6 6 6-6\"/>","chevrons-up-down":"<path d=\"m7 15 5 5 5-5\"/><path d=\"m7 9 5-5 5 5\"/>","wand-sparkles":"<path d=\"m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72\"/><path d=\"m14 7 3 3\"/><path d=\"M5 6v4\"/><path d=\"M19 14v4\"/><path d=\"M10 2v2\"/><path d=\"M7 8H3\"/><path d=\"M21 16h-4\"/><path d=\"M11 3H9\"/>","bookmark":"<path d=\"m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z\"/>","arrow-up":"<path d=\"m5 12 7-7 7 7\"/><path d=\"M12 19V5\"/>","check":"<path d=\"M20 6 9 17l-5-5\"/>","image-plus":"<path d=\"M16 5h6\"/><path d=\"M19 2v6\"/><path d=\"M21 11.5V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7.5\"/><path d=\"m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21\"/><circle cx=\"9\" cy=\"9\" r=\"2\"/>","section":"<path d=\"M16 5a4 3 0 0 0-8 0c0 4 8 3 8 7a4 3 0 0 1-8 0\"/><path d=\"M8 19a4 3 0 0 0 8 0c0-4-8-3-8-7a4 3 0 0 1 8 0\"/>"}/*ICONS_END*/;
+const ICONS = /*ICONS_START*/{"sparkles":"<path d=\"M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z\"/><path d=\"M20 2v4\"/><path d=\"M22 4h-4\"/><circle cx=\"4\" cy=\"20\" r=\"2\"/>","settings":"<path d=\"M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/>","minus":"<path d=\"M5 12h14\"/>","square":"<rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"/>","x":"<path d=\"M18 6 6 18\"/><path d=\"m6 6 12 12\"/>","search":"<path d=\"m21 21-4.34-4.34\"/><circle cx=\"11\" cy=\"11\" r=\"8\"/>","ellipsis":"<circle cx=\"12\" cy=\"12\" r=\"1\"/><circle cx=\"19\" cy=\"12\" r=\"1\"/><circle cx=\"5\" cy=\"12\" r=\"1\"/>","refresh-cw":"<path d=\"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8\"/><path d=\"M21 3v5h-5\"/><path d=\"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16\"/><path d=\"M8 16H3v5\"/>","square-pen":"<path d=\"M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7\"/><path d=\"M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z\"/>","download":"<path d=\"M12 15V3\"/><path d=\"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\"/><path d=\"m7 10 5 5 5-5\"/>","folder-plus":"<path d=\"M12 10v6\"/><path d=\"M9 13h6\"/><path d=\"M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z\"/>","trash-2":"<path d=\"M10 11v6\"/><path d=\"M14 11v6\"/><path d=\"M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6\"/><path d=\"M3 6h18\"/><path d=\"M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2\"/>","copy":"<rect width=\"14\" height=\"14\" x=\"8\" y=\"8\" rx=\"2\" ry=\"2\"/><path d=\"M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2\"/>","play":"<path d=\"M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z\"/>","triangle-alert":"<path d=\"m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3\"/><path d=\"M12 9v4\"/><path d=\"M12 17h.01\"/>","plus":"<path d=\"M5 12h14\"/><path d=\"M12 5v14\"/>","chevron-up":"<path d=\"m18 15-6-6-6 6\"/>","chevron-down":"<path d=\"m6 9 6 6 6-6\"/>","chevrons-up-down":"<path d=\"m7 15 5 5 5-5\"/><path d=\"m7 9 5-5 5 5\"/>","wand-sparkles":"<path d=\"m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72\"/><path d=\"m14 7 3 3\"/><path d=\"M5 6v4\"/><path d=\"M19 14v4\"/><path d=\"M10 2v2\"/><path d=\"M7 8H3\"/><path d=\"M21 16h-4\"/><path d=\"M11 3H9\"/>","bookmark":"<path d=\"m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z\"/>","panel-left":"<rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"/><path d=\"M9 3v18\"/>","arrow-up":"<path d=\"m5 12 7-7 7 7\"/><path d=\"M12 19V5\"/>","panel-bottom":"<rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"/><path d=\"M3 15h18\"/>","check":"<path d=\"M20 6 9 17l-5-5\"/>","chevron-right":"<path d=\"m9 18 6-6-6-6\"/>","image-plus":"<path d=\"M16 5h6\"/><path d=\"M19 2v6\"/><path d=\"M21 11.5V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7.5\"/><path d=\"m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21\"/><circle cx=\"9\" cy=\"9\" r=\"2\"/>","section":"<path d=\"M16 5a4 3 0 0 0-8 0c0 4 8 3 8 7a4 3 0 0 1-8 0\"/><path d=\"M8 19a4 3 0 0 0 8 0c0-4-8-3-8-7a4 3 0 0 1 8 0\"/>"}/*ICONS_END*/;
 const I = (n, s) => `<svg class="i" viewBox="0 0 24 24" ${s?`style="--s:${s}px"`:''}>${ICONS[n]||''}</svg>`;
 const ib = (n, cls, s) => `<span class="ib ${cls||''}">${I(n, s)}</span>`;
 function rng(seed){ let x = seed*9301+49297; return () => (x = (x*9301+49297)%233280)/233280; }
-function waveSvg(seed){ const r = rng(seed); let d=''; for(let i=0;i<110;i++){ const h = 2 + r()*18*(0.4+0.6*Math.abs(Math.sin(i/9))); d += `<rect x="${i*4}" y="${11-h/2}" width="2" height="${h.toFixed(1)}" rx="1"/>`; } return `<svg class="w" viewBox="0 0 440 22" preserveAspectRatio="none" fill="currentColor">${d}</svg>`; }
+function waveSvg(seed){ const r = rng(seed); let d=''; for(let i=0;i<96;i++){ const h = 2 + r()*18*(0.4+0.6*Math.abs(Math.sin(i/9))); d += `<rect x="${i*4}" y="${11-h/2}" width="2" height="${h.toFixed(1)}" rx="1"/>`; } return `<svg class="w" viewBox="0 0 384 22" preserveAspectRatio="none" fill="currentColor">${d}</svg>`; }
+
+/* 提示词、模型与时间取自真实历史记录（2026-11-10 的资料目录） */
+const P = {
+  icon: '极简 SVG 矢量图标：一只可爱卡通小猫头像，橘白配色，圆脸，大圆眼睛，粉色小鼻子，两侧三角形耳朵，纯色底，只保留最少的路径和纯色块，线条干净，无渐变无阴影无文字',
+  sticker: '一只可爱的卡通小猫贴纸形象：圆润简洁的造型，大头小身子，大圆眼睛，橘白配色，粉色小鼻子，微笑坐姿，正面全身，扁平矢量插画风格，干净纯色浅灰背景，居中构图，无明显投影',
+  loop: '同一只可爱卡通小猫的循环小动画表情包：橘白色圆润小猫，大头大眼，粉色小鼻子，先微笑闭眼再睁开眼睛挥手打招呼，背景为纯色浅灰，角色位置与大小在帧间保持不变，扁平矢量风格，只让表情和一只前爪有细微变化',
+};
 
 function titlebar(){ return `<div class="titlebar"><span class="brand">痕迹AI</span>
   <div class="menu">${['文件','编辑','生成','视图','窗口','帮助'].map(m=>`<span>${m}</span>`).join('')}</div>
   <div class="nav">${['生成','画布','剪辑','工具','资产'].map(m=>`<span class="${m==='生成'?'cur':''}">${m}</span>`).join('')}</div>
   <div class="right">${ib('sparkles')}${ib('settings')}<span style="width:8px"></span><span class="wc">${I('minus')}</span><span class="wc">${I('square',12)}</span><span class="wc">${I('x')}</span></div></div>`; }
-function filters(o){ return `<div class="filters col"><span class="f cur">全部</span><span class="f">图片</span><span class="f">视频</span><span class="f">音频</span><div class="r">${ib('search','rest')}${ib('ellipsis','rest')}</div></div>`; }
+function filters(){ return `<div class="filters col"><span class="f cur">全部</span><span class="f">图片</span><span class="f">视频</span><span class="f">音频</span><div class="r">${ib('search','rest')}${ib('ellipsis','rest')}</div></div>`; }
 const acts = `<div class="acts">${ib('refresh-cw','s24 rest')}${ib('square-pen','s24 rest')}${ib('download','s24 rest')}${ib('folder-plus','s24 rest')}${ib('trash-2','s24 rest')}</div>`;
-const head = (p, m, showActs) => `<div class="rhead"><span class="p">${p}</span><span class="m num">${m}</span>${showActs?acts:''}</div>`;
-const img = (n, w, extra) => `<div class="res ${extra&&extra.sel?'sel':''}" style="width:${w}px;background-image:url('素材/图${n}.jpg')">${extra&&extra.hover?`<div class="hover-acts">${ib('copy')}${ib('download')}${ib('folder-plus')}</div>`:''}</div>`;
+const refThumb = (img, n) => `<span class="t" style="background-image:url('素材/${img}')"><b>${n}</b></span>`;
+/** 一条记录的输入栏：提示词（最多四行）、参考素材、模型与时间；悬停才出现整条记录的操作 */
+function rin(o){
+  const refs = o.refs ? `<div class="refs">${o.refs.map((r,i)=>refThumb(r,i+1)).join('')}${o.moreRefs?`<span class="more">+${o.moreRefs}</span>`:''}</div>` : '';
+  return `<div class="rin">${o.p ? `<div class="p">${o.p}</div>` : `<div class="p none">没有提示词</div>`}${refs}<div class="m num">${o.m}</div>${o.hover?acts:''}</div>`;
+}
+const img = (file, w, extra) => `<div class="res" style="width:${w}px;background-image:url('素材/${file}')">${extra&&extra.hover?`<div class="hover-acts">${ib('copy')}${ib('download')}${ib('folder-plus')}</div>`:''}</div>`;
 function feed(o){
-  const pending = `<div class="rec">${head('桌面上的机械键盘特写，暖色台灯，景深很浅','FLUX 3 Klein · 生成中')}<div class="results">
-    <div class="res pending" style="width:132px"><span class="num">62%</span><div class="bar"><i style="width:62%"></i></div></div>
-    <div class="res pending" style="width:132px"><span>排队中</span><div class="bar"><i style="width:0"></i></div></div></div></div>`;
-  const images = `<div class="rec">${head('清晨的山林，薄雾，电影感，35mm','Z-Image Turbo · 今天 20:44 · 4 张', true)}<div class="results">${img(2,132,{hover:1})}${img(3,132)}${img(4,132)}${img(5,132)}</div></div>`;
-  const video = `<div class="rec">${head('镜头缓慢推近山脊，云雾流动','可灵 3.0 · 今天 20:41')}<div class="results"><div class="res" style="width:235px;background-image:url('素材/图1.jpg')"><span class="play">${I('play')}</span><span class="chip num">0:05</span></div></div></div>`;
-  const audio = `<div class="rec">${head('大家好，今天聊一个新功能','MiniMax Speech · 今天 20:38')}<div class="audio">${ib('play','s24')}${waveSvg(5)}<span class="num">0:03</span></div></div>`;
-  const fail = `<div class="rec">${head('夜景城市航拍，霓虹灯','Z-Image Turbo · 今天 20:35')}<div class="fail"><span class="fi">${I('triangle-alert')}</span><span class="ft">没生成出来</span><span class="fm">请求太频繁，过一会儿再试</span><div class="fa"><span class="btn sm secondary">重试</span><span class="btn sm">详情</span></div></div></div>`;
-  return `<div class="feed col">${pending}${images}${fail}${audio}${video}</div><div class="dock-space" style="height:${o.refs?224:140}px"></div>`;
+  const h = o.big ? 176 : 132; const sq = h, pt = Math.round(h*9/16);
+  const pending = `<div class="rec">${rin({p:P.sticker, m:'GPT Image 2.6 · 生成中'})}<div class="results"><div class="res pending" style="width:${sq}px"><span class="num">62%</span><div class="bar"><i style="width:62%"></i></div></div><div class="res pending" style="width:${sq}px"><span>排队中</span><div class="bar"><i style="width:0"></i></div></div></div></div>`;
+  const icon = `<div class="rec">${rin({p:P.icon, m:'GPT Image 2.6 · 昨天 16:47', hover:1})}<div class="results">${img('猫-头像.jpg',sq,{hover:1})}${img('猫-贴纸.jpg',sq)}</div></div>`;
+  const i2i = `<div class="rec">${rin({p:'', refs:['参考-人像.jpg'], m:'FLUX 3 Klein · 昨天 00:47'})}<div class="results">${img('人像.jpg',pt)}</div></div>`;
+  const loop = `<div class="rec">${rin({p:P.loop, refs:['猫-贴纸.jpg','猫-坐姿.jpg'], moreRefs:2, m:'Seedance 2.0 · 昨天 16:52'})}<div class="results"><div class="res" style="width:${sq}px;background-image:url('素材/猫-坐姿.jpg')"><span class="play">${I('play')}</span><span class="chip num">0:04</span></div></div></div>`;
+  const fail = `<div class="rec">${rin({p:P.sticker, m:'GPT Image 2.6 · 昨天 16:45'})}<div class="results"><div class="fail"><span class="fi">${I('triangle-alert')}</span><span class="ft">没生成出来</span><span class="fm">请求太频繁，过一会儿再试</span><div class="fa"><span class="btn sm secondary">重试</span><span class="btn sm">详情</span></div></div></div></div>`;
+  return `<div class="feed col ${o.big?'big':''}">${pending}${icon}${i2i}${loop}${fail}</div>`;
 }
+const PROMPT = '同一只橘白小猫，换成站姿，举起右爪打招呼，保持贴纸风格和浅灰背景';
 function composer(o){
-  const refs = o.refs ? `<div class="refs"><div class="ref" style="background-image:url('素材/参考1.jpg')"><b>1</b></div><div class="ref" style="background-image:url('素材/参考2.jpg')"><b>2</b></div><div class="ref">${I('plus',16)}</div></div>` : '';
-  const prompt = o.prompt ? `<div class="prompt">参考图 1 的构图，换成图 2 的色调，清晨的山林，薄雾，远处有一条小路</div>` : `<div class="prompt ph">描述想要生成的内容</div>`;
+  const refs = o.refs ? `<div class="refs"><div class="ref" style="background-image:url('素材/猫-贴纸.jpg')"><b>1</b></div><div class="ref" style="background-image:url('素材/猫-坐姿.jpg')"><b>2</b></div><div class="ref">${I('plus',16)}</div></div>` : '';
+  const prompt = o.prompt ? `<div class="prompt">${PROMPT}</div>` : `<div class="prompt ph">描述想要生成的内容</div>`;
   return `<div class="composer">${refs}${prompt}
-    <div class="pbar">${ib('plus','rest')}<span class="model ${o.model?'open':''}">FLUX 3 Klein <small>KIE</small>${I(o.model?'chevron-up':'chevron-down')}</span><span class="sp"></span>
-      <span class="param"><label>分辨率</label>智能 / 1K${I('chevron-down')}</span><span class="param"><label>数量</label><span class="num">1</span>${I('chevrons-up-down')}</span>${ib('wand-sparkles','on')}
-      <div class="right"><span class="price num">预估 ¥0.054</span>${ib('bookmark','rest')}<span class="send">${I('arrow-up')}</span></div></div></div>`;
+    <div class="pbar">${ib('plus','rest')}<span class="model ${o.model?'open':''}">GPT Image 2.6 <small>KIE</small>${I(o.model?'chevron-up':'chevron-down')}</span><span class="sp"></span>
+      <span class="param"><label>分辨率</label>智能 / 1K${I('chevron-down')}</span><span class="param"><label>数量</label><span class="num">2</span>${I('chevrons-up-down')}</span>${ib('wand-sparkles','on')}
+      <div class="right"><span class="price num" style="margin-right:8px">预估 ¥0.108</span>${ib('bookmark','rest')}${ib('panel-left','rest')}<span class="send">${I('arrow-up')}</span></div></div></div>`;
 }
-function modelPanel(){
+/** 左侧形态：同一份内容竖着排开，参数一行一个 */
+function leftPanel(o){
+  const row = (n, c) => `<div class="row"><span class="nm">${n}</span>${c}</div>`;
+  const fld = t => `<span class="fld">${t}${I('chevron-down')}</span>`;
+  return `<div class="lp">
+    <div class="head"><span class="model">GPT Image 2.6 <small>KIE</small>${I('chevron-down')}</span><div class="r">${ib('bookmark','rest')}${ib('panel-bottom','rest')}</div></div>
+    <div class="body">
+      <div><div class="lab">参考素材<span class="num">2 / 8</span></div><div class="refs"><div class="ref" style="background-image:url('素材/猫-贴纸.jpg')"><b>1</b></div><div class="ref" style="background-image:url('素材/猫-坐姿.jpg')"><b>2</b></div><div class="ref">${I('plus',18)}</div></div></div>
+      <div><div class="lab">提示词</div><div class="ptext">${PROMPT}<div class="tools">${ib('wand-sparkles','s24 on')}</div></div></div>
+      <div><div class="lab">参数</div>
+        ${row('分辨率', fld('智能 / 1K'))}
+        ${row('比例', `<span class="seg"><span class="cur">1:1</span><span>3:4</span><span>4:3</span><span>16:9</span><span>9:16</span></span>`)}
+        ${row('数量', `<span class="seg"><span>1</span><span class="cur">2</span><span>3</span><span>4</span></span>`)}
+        ${row('提示词增强', `<span class="cb">${I('check')}</span>`)}
+        <div class="disc">${I('chevron-right')}更多参数</div></div>
+    </div>
+    <div class="foot"><span class="price num">预估 ¥0.108</span><span class="go">生成${I('arrow-up')}</span></div>
+  </div>`;
+}
+function modelPanel(o){
   const m = (n, p, st) => `<div class="mi ${st||''}"><span>${n}</span>${st==='cur'?I('check'):''}<small>${p}</small></div>`;
-  const rows = [['FLUX 3 Klein','KIE','cur'],['GPT Image 2.6','KIE'],['GPT Image 2.5','KIE'],['Grok Imagine Image 2.0','KIE'],['GPT Image 2','KIE','hov'],['Grok Imagine 图片','KIE'],['Z-Image Turbo','KIE'],['Nano Banana 2.1','KIE'],['Nano Banana 2','KIE'],['Nano Banana 2 Lite','KIE'],['Nano Banana Pro','KIE'],['Qwen Image 3.0','KIE'],['Seedream 5.0 Lite','KIE'],['Seedream 5.0 Pro','KIE'],['Seedream 4.5','KIE'],['Seedream 4.0','KIE'],['FLUX 3 Image','APIMart'],['GPT Image 2.6','APIMart'],['GPT Image 2.5','APIMart'],['GPT Image 2','APIMart'],['Midjourney','APIMart'],['Nano Banana 2.1','APIMart'],['Nano Banana 2','APIMart'],['Nano Banana Pro','APIMart'],['Qwen Image 3.0','APIMart'],['Seedream 5.0 Pro','APIMart'],['Seedream 4.5','APIMart'],['可灵 图片 3.0','APIMart'],['即梦 4.0','火山引擎'],['通义万相 2.6','百炼']];
-  const nav = (n, c, st, icon) => `<div class="n ${st||''}">${icon?I(icon):''}${n}<i class="num">${c}</i></div>`;
-  return `<div class="ovl mp" style="left:240px;bottom:206px">
+  const rows = [['FLUX 3 Klein','KIE'],['GPT Image 2.6','KIE','cur'],['GPT Image 2.5','KIE'],['Grok Imagine Image 2.0','KIE'],['GPT Image 2','KIE','hov'],['Grok Imagine 图片','KIE'],['Z-Image Turbo','KIE'],['Nano Banana 2.1','KIE'],['Nano Banana 2','KIE'],['Nano Banana 2 Lite','KIE'],['Nano Banana Pro','KIE'],['Qwen Image 3.0','KIE'],['Seedream 5.0 Lite','KIE'],['Seedream 5.0 Pro','KIE'],['Seedream 4.5','KIE'],['Seedream 4.0','KIE'],['FLUX 3 Image','APIMart'],['GPT Image 2.6','APIMart'],['GPT Image 2.5','APIMart'],['GPT Image 2','APIMart'],['Midjourney','APIMart'],['Nano Banana 2.1','APIMart'],['Nano Banana 2','APIMart'],['Nano Banana Pro','APIMart'],['Qwen Image 3.0','APIMart'],['Seedream 5.0 Pro','APIMart'],['Seedream 4.5','APIMart'],['可灵 图片 3.0','APIMart'],['即梦 4.0','火山引擎'],['通义万相 2.6','百炼']];
+  const nav = (n, c, st) => `<div class="n ${st||''}">${n}<i class="num">${c}</i></div>`;
+  return `<div class="ovl mp" style="left:240px;bottom:${o.refs?206:140}px">
     <div class="top"><div class="search">${I('search')}搜索模型，拼音也行</div><div class="seg"><span class="cur">全部</span><span>图片</span><span>视频</span><span>音频</span><span>其他</span></div></div>
     <div class="body"><div class="nav">${nav('全部',158,'cur')}${nav('收藏',0)}<div class="h">供应商</div>${nav('KIE',40)}${nav('APIMart',34)}${nav('百炼',8)}${nav('火山引擎',8)}${nav('魔搭',7)}${nav('Fal',51)}${nav('硅基流动',2)}</div>
       <div class="list"><div class="h">图片 <span class="num" style="margin-left:6px;color:var(--icon-rest)">72</span></div><div class="grid">${rows.map(r=>m(...r)).join('')}</div></div></div></div>`;
 }
 function app(o){
-  const body = o.empty ? `<div class="empty"><span class="ei">${I('image-plus')}</span><span style="color:var(--text2)">还没有生成记录</span><span style="font-size:12px">在下面写下想要的画面，结果会出现在这里</span></div>` : feed(o);
-  return `<div class="app shot">${titlebar()}<div class="gen">${filters(o)}${body}${composer(o)}${o.model?modelPanel():''}</div></div>`;
+  const empty = `<div class="empty" style="${o.left?'padding-bottom:0':''}"><span class="ei">${I('image-plus')}</span><span style="color:var(--text2)">还没有生成记录</span><span style="font-size:12px">${o.left?'在左边':'在下面'}写下想要的画面，结果会出现在这里</span></div>`;
+  if (o.left) return `<div class="app shot">${titlebar()}<div class="gen left-mode">${leftPanel(o)}<div class="main">${filters()}${o.empty?empty:feed({big:1})}</div></div></div>`;
+  return `<div class="app shot">${titlebar()}<div class="gen"><div class="main">${filters()}${o.empty?empty:feed(o)}<div class="dock-space" style="height:${o.refs?200:140}px"></div>${composer(o)}${o.model?modelPanel(o):''}</div></div></div>`;
 }
 function sheet(){
   const z = (html, w) => `<div class="z"><div style="width:${w||430}px">${html}</div></div>`;
   return `<div class="sheet shot" style="height:auto">
-    <div class="ex"><h3>现状（局部）</h3><p>失败的记录直接显示供应商原话，只有“问助手”，没有“重试”；标题是粗体，模型和时间另起一行。</p>
-      <div class="crop" style="height:170px;background-image:url('现状/01-有历史.png');background-size:1440px auto;background-position:-150px -560px"></div></div>
-    <div class="ex"><h3>一条记录：一行标题 + 一排结果</h3><p>提示词一行（最亮），模型和时间跟在后面（第三档）；结果统一 132 高，图片、视频按比例定宽排成一排。操作平时不出现，悬停这条记录才出现在标题行右端；单张图的复制、下载、收进资产库浮在图的右上角。</p>
-      ${z(`<div class="rec" style="border:0;padding:0">${head('清晨的山林，薄雾，电影感','Z-Image Turbo · 20:44', true)}<div class="results">${img(2,120,{hover:1})}${img(3,120)}${img(4,120)}</div></div>`)}</div>
+    <div class="ex"><h3>现状：带参考图的记录</h3><p>参考图是标题左边的一小张，只露出半截；没写提示词时这条记录没有标题，只剩一行模型和时间；结果图一张占 255 高。</p>
+      <div class="crop" style="height:300px;background-image:url('现状/02-向上滚动.png');background-size:1440px auto;background-position:-150px -60px"></div></div>
+    <div class="ex"><h3>草稿：左边输入，右边结果</h3><p>一条记录左边 300 宽是“我给了什么”：提示词最多四行（悬停看全文）、参考素材的小图带编号（和提示词里“图 1、图 2”对得上）、模型与时间；右边是“得到了什么”，统一 132 高。没写提示词就写“没有提示词”，位置不空着。悬停时左下角出现整条记录的操作。</p>
+      ${z(`<div class="rec" style="border:0;padding:0;grid-template-columns:240px minmax(0,1fr);column-gap:16px">${rin({p:P.loop, refs:['猫-贴纸.jpg','猫-坐姿.jpg'], moreRefs:2, m:'Seedance 2.0 · 昨天 16:52', hover:1})}<div class="results"><div class="res" style="width:132px;background-image:url('素材/猫-坐姿.jpg')"><span class="play">${I('play')}</span><span class="chip num">0:04</span></div></div></div>`)}</div>
     <div class="ex"><h3>生成中、排队中</h3><p>占位格和成品同样大小，落地后原地换成图，列表不跳动。进度是一根细线加百分比，不用转圈。</p>
       ${z(`<div class="results"><div class="res pending" style="width:120px;height:120px"><span class="num">62%</span><div class="bar"><i style="width:62%"></i></div></div><div class="res pending" style="width:120px;height:120px"><span>排队中</span><div class="bar"><i style="width:0"></i></div></div></div>`)}</div>
-    <div class="ex"><h3>没生成出来</h3><p>按“出问题要醒目”：一条淡红底的提示，图标是红的；标题说发生了什么，后面一句说能做什么；“重试”是这条里唯一的按钮，供应商原话收进“详情”。</p>
+    <div class="ex"><h3>没生成出来</h3><p>一条淡红底的提示，图标是红的；标题说发生了什么，后面一句说能做什么；“重试”是这条里唯一的按钮，供应商原话收进“详情”。</p>
       ${z(`<div class="fail"><span class="fi">${I('triangle-alert')}</span><span class="ft">没生成出来</span><span class="fm">请求太频繁，过一会儿再试</span><div class="fa"><span class="btn sm secondary">重试</span><span class="btn sm">详情</span></div></div>`)}</div>
-    <div class="ex" style="grid-column:1 / 3"><h3>输入区的参数条</h3><p>模型名最亮（它决定了下面有哪些参数），参数是“暗的名字 + 亮一档的值”；“提示词增强”从蓝色滑块开关改成一个图标开关，开着时图标是蓝色；整条里只有“生成”是蓝色实底。</p>
+    <div class="ex" style="grid-column:1 / 3"><h3>输入区两种形态怎么切换</h3><p>底部形态的参数条右端、左侧形态的面板右上角各有一个切换按钮（图标就是另一种形态的样子）；“视图”菜单里也有同一项。两种形态是同一份内容：切换时写到一半的提示词、参考素材、参数都原样带过去。左侧形态里参数竖着一行一个，比例和数量这类选项直接摊开，不用点开下拉。</p>
       <div class="z"><div style="width:860px;position:relative;height:96px"><div class="composer" style="width:860px;bottom:0"><div class="prompt ph" style="min-height:22px">描述想要生成的内容</div>
-        <div class="pbar">${ib('plus','rest')}<span class="model">FLUX 3 Klein <small>KIE</small>${I('chevron-down')}</span><span class="sp"></span><span class="param"><label>分辨率</label>智能 / 1K${I('chevron-down')}</span><span class="param"><label>数量</label><span class="num">1</span>${I('chevrons-up-down')}</span>${ib('wand-sparkles','on')}<div class="right"><span class="price num">预估 ¥0.054</span>${ib('bookmark','rest')}<span class="send">${I('arrow-up')}</span></div></div></div></div></div></div>
+        <div class="pbar">${ib('plus','rest')}<span class="model">GPT Image 2.6 <small>KIE</small>${I('chevron-down')}</span><span class="sp"></span><span class="param"><label>分辨率</label>智能 / 1K${I('chevron-down')}</span><span class="param"><label>数量</label><span class="num">2</span>${I('chevrons-up-down')}</span>${ib('wand-sparkles','on')}<div class="right"><span class="price num" style="margin-right:8px">预估 ¥0.108</span>${ib('bookmark','rest')}<span class="ib" style="background:var(--selected);color:var(--text1)">${I('panel-left')}</span><span class="send">${I('arrow-up')}</span></div></div></div></div></div></div>
   </div>`;
 }
 
 const SCREENS = [
-  { id:1, title:'① 有历史记录', before:'现状/01-有历史.png',
-    note:'内容列从 1150 收到 960，筛选、记录、输入区同一左右缘。一条记录是“一行标题 + 一排 132 高的结果”，一屏看得到四五条（原来两条）。生成中的任务排在最上面，占位格和成品一样大。',
+  { id:1, title:'① 底部形态', before:'现状/01-底部输入.png',
+    note:'提示词、模型都取自你的真实记录。一条记录改成“左边输入、右边结果”：长提示词有地方放（最多四行），参考素材跟在提示词下面，结果统一 132 高。一屏看得到四条多（原来两条）。',
     html: () => app({}) },
-  { id:2, title:'② 写提示词、带参考图、打开模型面板', before:'现状/02-模型面板.png',
-    note:'模型面板和输入区左缘对齐，从模型名上方展开。模型是一行一行的列表，不再是一格一格的灰块；当前模型用中性底加一个勾，不用整格蓝色。',
+  { id:2, title:'② 左侧形态', before:'现状/02-向上滚动.png',
+    note:'输入区变成左边一块竖排的面板：模型、参考素材、提示词、参数从上到下，底部固定一个“生成”按钮。右边的历史更宽，结果图放大到 176 高。写长提示词、挂多张参考图、参数多的模型更适合这个形态。',
+    html: () => app({ left:1 }) },
+  { id:3, title:'③ 底部形态：带参考图、模型面板打开', before:'现状/03-模型面板.png',
+    note:'模型面板和输入区左缘对齐，从模型名上方展开。模型是一行一行的列表；当前模型用中性底加一个勾，不用整格蓝色。',
     html: () => app({ refs:1, prompt:1, model:1 }) },
-  { id:3, title:'③ 空状态', before:'现状/03-空状态.png', note:'', html: () => app({ empty:1 }) },
-  { id:4, title:'④ 细节', before:null, note:'', html: sheet },
+  { id:4, title:'④ 空状态', before:'现状/04-空状态.png', note:'', html: () => app({ empty:1 }) },
+  { id:5, title:'⑤ 细节', before:null, note:'', html: sheet },
 ];
 const page = document.getElementById('page');
 SCREENS.forEach(s => {
