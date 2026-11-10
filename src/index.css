@@ -78,6 +78,8 @@
   --accent-text-rgb: 156 190 255;
   --accent-ring: #6A9BFE;
   --accent-ring-rgb: 106 155 254;
+  --accent-outline: #305093;
+  --accent-outline-rgb: 48 80 147;
   --accent-tint: rgba(58,111,223,0.2);
   --selected-accent: rgba(58,111,223,0.2);
   --selected-accent-hover: rgba(58,111,223,0.26);
@@ -559,10 +561,13 @@
   }
 
   /* 弹窗遮罩：整屏覆盖，用更浅的模糊档位 */
+  /*
+   * 遮罩把背后的页面压成安静的一片：去掉大半饱和度，背后强调色按钮被模糊后才不会在弹窗四周晕成一团团蓝光。
+   */
   .ui-glass-scrim {
     background-color: var(--ui-scrim-tint);
-    -webkit-backdrop-filter: blur(var(--ui-scrim-blur)) saturate(130%);
-    backdrop-filter: blur(var(--ui-scrim-blur)) saturate(130%);
+    -webkit-backdrop-filter: blur(var(--ui-scrim-blur)) saturate(30%);
+    backdrop-filter: blur(var(--ui-scrim-blur)) saturate(30%);
   }
 
   /* 弹窗自身是玻璃时的遮罩档位，见 --ui-scrim-tint-soft 处的说明 */
@@ -654,6 +659,19 @@
 
   .ui-btn-quiet:active:not(:disabled):not([aria-disabled='true']) {
     background-color: rgb(var(--selected-rgb));
+    color: rgb(var(--text1-rgb));
+  }
+
+  /*
+   * 标题栏菜单栏（AppMenuBar）的菜单名比中间的工作区导航（静息 text2）再低一档，静息辅助文字；
+   * 悬停照上面的 quiet 规则提亮，菜单展开期间保持悬停底 + 主要文字，两组导航不抢注意力。
+   */
+  [data-app-menubar] .ui-btn-quiet {
+    color: rgb(var(--text3-rgb));
+  }
+
+  [data-app-menubar] .ui-btn-quiet[aria-expanded='true'] {
+    background-color: rgb(var(--hover-rgb));
     color: rgb(var(--text1-rgb));
   }
 
@@ -1177,10 +1195,56 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   pointer-events: none;
 }
 
-/* 原生菜单按标题自然宽度测量，PopupService 可据此在窗口右缘向内避让。 */
+/*
+ * 「+N」溢出菜单：dockview 7 把这个弹层写死在 TabsContainer 里，不开放自定义渲染（只有 disableTabsOverflowList 一个开关），
+ * 所以只能在这里把它画成应用浮层（UI_TRIGGER_PANEL_SURFACE_CLASS + panelPadding="menu"）：overlay 实底、line-overlay 描边、
+ * 8 圆角、4 内边距；开启毛玻璃时与 .ui-overlay-surface 一样换成浮层玻璃。菜单项照 UiOptionButton variant="menu" size="sm"：
+ * 28 高、静息无底、悬停 overlay-hover、当前项 overlay-selected。dockview 自带样式未分层；菜单项多带一级 .dv-popover-anchor，压过各工作区给标签栏 .dv-tab 写的内边距。
+ * 按标题自然宽度测量，PopupService 可据此在窗口右缘向内避让。dockview 在点击点处展开，下移半个标签行高，
+ * 让菜单落在标签行下方、不盖住「+N」本身。PopupService 只在越界超过 10px 时才往回推，越界不足 10px 的菜单会被
+ * 窗口右缘切掉一截：右侧留 12px 外边距，把这段不推的区间留在外边距里。
+ */
 .dockview-host .dv-tabs-overflow-container {
+  display: flex;
+  margin: calc(var(--size-band-tab) / 2) 12px 0 0;
+  flex-direction: column;
+  gap: 2px;
   min-width: max-content;
+  padding: 4px;
   white-space: nowrap;
+  border: 1px solid rgb(var(--line-overlay-rgb));
+  border-radius: var(--radius-field);
+  background-color: rgb(var(--overlay-rgb));
+  color: rgb(var(--text1-rgb));
+  font-size: 12px;
+}
+:where(:root:not([data-ui-blur='off'])) .dockview-host .dv-tabs-overflow-container {
+  background-color: var(--ui-glass-overlay-tint);
+  -webkit-backdrop-filter: var(--ui-glass-filter);
+  backdrop-filter: var(--ui-glass-filter);
+}
+.dockview-host .dv-popover-anchor .dv-tabs-overflow-container .dv-tab {
+  display: flex;
+  align-items: center;
+  min-height: var(--size-control-sm);
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-field);
+  background-color: transparent;
+  color: rgb(var(--text1-rgb));
+  cursor: pointer;
+  visibility: visible;
+  pointer-events: auto;
+}
+/* 菜单里只列面板名：标签渲染器在标题后面带的面板菜单按钮（及非当前标签的占位）不进菜单。 */
+.dockview-host .dv-tabs-overflow-container [data-dock-tab] > :not(:first-child) {
+  display: none;
+}
+.dockview-host .dv-popover-anchor .dv-tabs-overflow-container .dv-tab:hover {
+  background-color: rgb(var(--overlay-hover-rgb));
+}
+.dockview-host .dv-popover-anchor .dv-tabs-overflow-container .dv-tab.dv-active-tab {
+  background-color: rgb(var(--overlay-selected-rgb));
 }
 
 .henji-cameraStage-dock.dockview-theme-abyss .dv-groupview > .dv-tabs-and-actions-container .dv-tab.dv-active-tab {
@@ -1219,7 +1283,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 }
 
 .henji-cameraStage-dock .dv-groupview {
-  /* 停靠面板组一律直角（用户确认）：面板之间靠 4px 间隙分开，圆角反而让面板像浮起的卡片，与命令带、助手不协调。 */
+  /* 停靠面板组一律直角（用户确认）：面板之间靠间隙分开，圆角反而让面板像浮起的卡片，与命令带、助手不协调。 */
   border-radius: 0;
   overflow: hidden;
 }
@@ -1260,19 +1324,20 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   --dv-separator-border: transparent;
 }
 
-/* 停靠宿主顶部与命令带之间也留一道间隙，宽度与 dockviewHostTheme 的 gap（4px）一致、底色同间隙；
+/* 停靠宿主顶部与命令带之间也留一道间隙，宽度与 dockviewHostTheme 的 DOCK_PANEL_GAP_PX（2px）一致、底色同间隙；
  * box-sizing 让 h-full 的宿主连同这道空隙一起占满，dockview 只拿到余下的高度。 */
 .dockview-host {
   box-sizing: border-box;
   background: linear-gradient(var(--shade), var(--shade)), rgb(var(--gap-rgb));
 }
 .dockview-host {
-  padding-top: 4px;
+  padding-top: 2px;
 }
 
-/* 激活面板组描边（DockviewHost 的 ActiveGroupOutline）：与选中标签底部强调线同粗（1.5px）、同色。 */
+/* 激活面板组描边（DockviewHost 的 ActiveGroupOutline）：标签下的强调细线已表明这组是当前的，描边只需若有若无，
+ * 1 像素、取强调色与面板底混合的 accent-outline（对齐 Premiere 的暗一档聚焦框）。 */
 .dock-active-outline {
-  border: 1.5px solid rgb(var(--accent-rgb));
+  border: 1px solid rgb(var(--accent-outline-rgb));
   border-radius: 0;
 }
 

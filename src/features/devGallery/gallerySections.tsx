@@ -262,7 +262,7 @@ export function OptionSection(): JSX.Element {
         <UiOptionButton variant="grid" gridCell="tier" aria-pressed={false} disabled className="justify-center">4K</UiOptionButton>
       </GalleryRow>
       <GalleryRow label="小样">
-        <UiOptionButton variant="tile" active aria-pressed><ImageIcon className={`${UI_ICON_SIZE_CLASS.md}`} />石墨</UiOptionButton>
+        <UiOptionButton variant="tile" active aria-pressed><ImageIcon className={`${UI_ICON_SIZE_CLASS.md}`} /><span className="min-w-0 flex-1 truncate text-left">石墨</span><Check aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.sm} shrink-0 text-accent-text`} /></UiOptionButton>
         <GalleryForce state="hover"><UiOptionButton variant="tile" aria-pressed={false}><ImageIcon className={`${UI_ICON_SIZE_CLASS.md}`} />纸白</UiOptionButton></GalleryForce>
       </GalleryRow>
       <GalleryRow label="色样">

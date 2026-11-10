@@ -163,7 +163,7 @@ describe('Ui primitives 选中态词汇表', () => {
     expect(compact.dataset.size).toBe('sm');
   });
 
-  it('分段中性抬起底、选项格强调实底、色样强描边（重要记录 014）', () => {
+  it('分段中性抬起底、小样格中性选中底、色样强描边（重要记录 014）', () => {
     const view = render(
       <>
         <UiSegmented ariaLabel="分段" options={[{value: "a", label: "选中段"}, {value: "b", label: "静息段"}]} value="a" onChange={() => undefined} />
@@ -180,11 +180,10 @@ describe('Ui primitives 选中态词汇表', () => {
     const activeSwatch = view.getByRole('button', { name: '选中色样' });
     const restSwatch = view.getByRole('button', { name: '静息色样' });
 
-    // 选项格选中 = 压低一档的强调实底 + 实底上的文字
     expectClasses(activeSegment, 'bg-segment-selected text-text1 border-transparent');
-    for (const active of [activeTile]) {
-      expectClasses(active, UI_OPTION_CELL_ACTIVE_CLASS);
-    }
+    // 小样格（主题预设）只是一个当前值：中性选中底 + 主要文字，不铺强调实底
+    expectClasses(activeTile, UI_OPTION_ITEM_ACTIVE_CLASS);
+    expect(activeTile.className).not.toContain('bg-accent');
     expectClasses(restSegment, 'bg-transparent text-text2 hover:bg-hover');
     expect(restSegment.classList.contains(UI_GLASS_ADAPTIVE_SELECTED_CLASS)).toBe(false);
     expectClasses(restTile, `${UI_GLASS_ADAPTIVE_TILE_CLASS} ${UI_GLASS_ADAPTIVE_OPTION_CLASS} text-text2`);

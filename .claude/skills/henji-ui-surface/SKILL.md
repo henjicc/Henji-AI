@@ -49,7 +49,7 @@ description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧
 |---|---|---|
 | 颜色 | 三层：**种子**（模式、底色色相/倾向、窗口亮度、层级对比度、强调色）→ 主题引擎推导的**语义令牌**（CSS 变量 + Tailwind 类）→ 组件内部令牌。**界面只引用语义令牌**；预设石墨/深海/胶片/纸白只是种子组合，文字三档按对比度 ≥ 4.5:1 求解 | `references/color-and-material.md` |
 | 按钮 | `UiButton` 五档 `primary`/`secondary`/`quiet`（默认）/`danger`/`dangerSolid` + `link` + `media`；`UiIconButton` 默认静默，`on`/`tone`/`shape`/`size`。外观只由枚举决定，调用点 className 只放布局 | 本文「动作层级」 |
-| 选中 | 注意力优先（重要记录 019 修订 012）：选中用**中性底 + 主要文字**，靠勾或强调文字区分，导航不画指示条（2026-11-08 用户确认，参照 Linear/Figma）；分段 `UiSegmented` / 双段开关是中性抬起底 + 强文字；强调色只给唯一主动作、播放头与时间码、键盘焦点、面板标签细线、选项格（`grid`/`card`/`tile`）的压低一档实底（多选标签保留淡强调底）；悬停只用中性抬升，悬停与选中不得同色 | 本文「选中态词汇表」 |
+| 选中 | 注意力优先（重要记录 019 修订 012）：选中用**中性底 + 主要文字**，靠勾或强调文字区分，导航不画指示条（2026-11-08 用户确认，参照 Linear/Figma）；分段 `UiSegmented` / 双段开关是中性抬起底 + 强文字；强调色只给唯一主动作、播放头与时间码、键盘焦点、面板标签细线、选项格（`grid`/`card`）的压低一档实底（多选标签保留淡强调底）；带小样的格 `tile`（主题预设）只是一个当前值，用中性选中底 + 强调色勾；悬停只用中性抬升，悬停与选中不得同色 | 本文「选中态词汇表」 |
 | 尺寸 | 控件高 28/32/36（`size` sm/md/lg）；字号 20/16/14/13/12/11（正文 13）；圆角 6 控件 / 8 输入与菜单 / 12 浮层；间距 2/4/6/8/12/16/20/24/32；动效 120/180/240（查看器 500） | `references/typography-and-tokens.md`、`references/motion.md` |
 | 材质 | **按钮扁平**：纯色实底，不用渐变、顶部高光、内描边、投影或按下位移，层次只靠颜色（静息 → 悬停 → 按下逐档加深）；“质感”来自配色、留白与对齐，不来自写实光影（重要记录 016）；**常驻表面的玻璃只压在图片、视频、画布上**（`ui-glass`、`UiPanel variant="glass"`、浮层 `surface="glass"`）；菜单、右键菜单、下拉、弹出面板这类实底浮层（`ui-overlay-surface`）在设置开启毛玻璃时自动换成同一块玻璃、关闭时为 overlay 实底（2026-10-22 用户确认），调用点不用判断 | `references/color-and-material.md` |
 | 骨架 | 一个视图一条命令带：`UiToolbar variant="command"`（左端 / `center` / `trailing` / `subordinate`），一个表面一个主动作 | 本文「页面骨架」 |
@@ -366,7 +366,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 语义 | 表达 | 通用落点 |
 |---|---|---|
 | 导航：正在看哪里 | 中性选中底 + 主要文字，不画指示条（侧栏、横向导航、标题栏工作区同一表达） | `UiNavButton active`；横向 chip 用 `selectionRole="navigation"`；面板标签用 `selectionAppearance="subtle"`（主要文字 + 底部细线）；应用标题栏的工作区导航用 `selectionAppearance="workspace"`（28 高，静息纯文字，选中为中性选中底 + 主要文字；`aria-current` 只给当前工作区，同栏里只打开浮层的开关项用 `on`：强调文字、无底无指示条 + `aria-pressed`）；面板标签底线用强调色 |
-| 单选：当前值是什么 | 分段用中性抬起底 + 强文字；菜单项、列表行用中性选中底 + 主要文字（菜单带强调色勾）；格子、小样（`grid` / `card` / `tile`）用压低一档的强调实底 + 实底上的文字（`UI_OPTION_CELL_ACTIVE_CLASS`，取强调色悬停档，比主动作暗一档），格内次要文字用 `UI_OPTION_CELL_ACTIVE_META_CLASS`，格子里不放勾；模型格不弹悬停提示，长名字悬停时用 `UiMarqueeText` 循环滚动（2026-11-08 用户确认）；其余单选不用强调色实底，也不铺淡强调底 | 分段统一 `UiSegmented`；`UiOptionButton active`：菜单 `menu`、网格 `grid`、带小样的格 `tile`、圆形色样 `swatch`（选中为主要文字色外圈一环——强调色外圈压在强调色样上看不清）、封面内容卡 `cover`（强调描边，只画在 `UI_COVER_FRAME_CLASS` 封面框上）；双段开关 `UiSwitch appearance="segmented"` 同此 |
+| 单选：当前值是什么 | 分段用中性抬起底 + 强文字；菜单项、列表行用中性选中底 + 主要文字（菜单带强调色勾）；格子（`grid` / `card`）用压低一档的强调实底 + 实底上的文字（`UI_OPTION_CELL_ACTIVE_CLASS`，取强调色悬停档，比主动作暗一档），格内次要文字用 `UI_OPTION_CELL_ACTIVE_META_CLASS`，格子里不放勾；带小样的格（`tile`，主题预设）同菜单项：中性选中底 + 主要文字，格尾放强调色勾，不铺大面积强调色；模型格不弹悬停提示，长名字悬停时用 `UiMarqueeText` 循环滚动（2026-11-08 用户确认）；其余单选不用强调色实底，也不铺淡强调底 | 分段统一 `UiSegmented`；`UiOptionButton active`：菜单 `menu`、网格 `grid`、带小样的格 `tile`、圆形色样 `swatch`（选中为主要文字色外圈一环——强调色外圈压在强调色样上看不清）、封面内容卡 `cover`（强调描边，只画在 `UI_COVER_FRAME_CLASS` 封面框上）；双段开关 `UiSwitch appearance="segmented"` 同此 |
 | 多选/标签：集合中哪些已选 | 强调描边 + 淡强调底 + 强调文字 | `UiChipButton active`；多选的选项卡用 `UiOptionButton selection="multiple"`；逐字稿词块 `UiTextToken selected` |
 | 布尔：功能是否开启 | 两种外观按所在区域分（重要记录 022，修订 018/019“一律复选框”）：设置页、表单、浮层、画布、生成参数用**滑块开关**（开着轨道铺强调色）；剪辑那类停靠工作区的面板（属性一列一列排）用**复选框外观**（中性框 + 主要文字色勾，不铺强调色）。整行保持静息；“关 / 开”双段不用于布尔 | `UiSwitch checked`：不写 `appearance` 时随区域走，`DockviewHost` 里自动是复选框外观、`UiModal` 里重置回滑块，调用点不判断；“勾选哪几项”这类真正的复选用 `UiCheckbox`；图标开关 `UiIconButton on`（不铺底，强调色图标，写 `aria-pressed`）；标题栏导航里的浮层开关 `UiChipButton on` |
 
@@ -655,7 +655,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 建一个「本目录自己的图标模块」 | 删掉，调用点直接用 lucide；私有图标集＝又一套平行体系 |
 | 一个表面出现两个 `variant="primary"` | 只留一个主动作，其余降到 `secondary` 或 `quiet` |
 | 破坏性动作用 `primary` 或手写红底 | `danger`（静息静默、悬停显红）；确认弹窗里的最终确认用 `dangerSolid` |
-| 选中/当前值用强调色实底（蓝底白字的分段、菜单项、标签） | 分段用中性抬起底 + 强文字（`UiSegmented`）；菜单项、列表行用中性选中底（`UiOptionButton active`），多选标签用淡强调底（`UiChipButton`）；例外只有选项格（`grid` / `card` / `tile`）由组件给压低一档的强调实底，调用点不手写 |
+| 选中/当前值用强调色实底（蓝底白字的分段、菜单项、标签） | 分段用中性抬起底 + 强文字（`UiSegmented`）；菜单项、列表行用中性选中底（`UiOptionButton active`），多选标签用淡强调底（`UiChipButton`）；例外只有选项格（`grid` / `card`）由组件给压低一档的强调实底，调用点不手写 |
 | 给压在纯色界面上的浮层、按钮加玻璃 | 不透明实底；玻璃只给压在图片、视频、画布上的浮层（`surface="glass"` / `UiPanel variant="glass"` / `ui-glass`） |
 | 为了省宽度把同组动作里的一个降档 | 缩短文案 / 图标化**整组** / 接受轻微偏移，不要只动一个 |
 | 用分隔线分开两组同类动作 | 加大间距；分隔线只用于交互语义根本不同的两侧，一条 bar 最多一条 |

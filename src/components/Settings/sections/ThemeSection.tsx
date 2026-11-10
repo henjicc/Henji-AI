@@ -1,4 +1,6 @@
 import React from 'react';
+import { Check } from 'lucide-react';
+import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens';
 import {
   UiButton,
   UiColorInput,
@@ -170,7 +172,8 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({ onExportTheme, onImportThem
                 onClick={() => setThemePreset(sample.id)}
               >
                 <span aria-hidden="true" className="h-5 w-5 shrink-0 rounded-md" style={presetSampleStyle(sample)} />
-                <span className="truncate">{label}</span>
+                <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+                {active ? <Check aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.sm} shrink-0 text-accent-text`} /> : null}
               </UiOptionButton>
             );
           })}

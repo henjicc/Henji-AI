@@ -22,8 +22,12 @@ const FILTERS = [{ name: '痕迹AI风格包', extensions: [VIDEO_EDIT_STYLE_PACK
 const OPEN_FILTERS = [{ name: '痕迹AI风格包', extensions: henjiDialogExtensions('style_package') }]
 const TILE = { width: 320, height: 180 }
 const DETAIL = { width: 640, height: 360 }
-function meta(entry: VideoEditLibraryStyle, isDefault: boolean, bound: boolean): string {
-  return [isDefault ? '默认' : '', bound ? '本序列' : '', entry.builtin ? '内置' : '', entry.style.version ? `v${entry.style.version}` : '未渲染'].filter(Boolean).join(' · ')
+/**
+ * 卡片副标题只写选风格时用得上的事：是不是默认、是不是本序列在用、还没渲染。版本号帮不了挑选，不上卡片；
+ * “内置”只在库里也有自建风格时才用来区分两类，全是内置时标出来就是噪音。
+ */
+function meta(entry: VideoEditLibraryStyle, isDefault: boolean, bound: boolean, hasPersonal: boolean): string {
+  return [isDefault ? '默认' : '', bound ? '本序列' : '', entry.builtin && hasPersonal ? '内置' : '', entry.style.version ? '' : '未渲染'].filter(Boolean).join(' · ')
 }
 /** 卡片画面：有缩略图就用渲染好的缩略图，没有就实时画样片的缩略图时刻。 */
 function StylePicture({ entry, size, playing, label }: { entry: VideoEditLibraryStyle; size: typeof TILE; playing: boolean; label: string }): React.ReactElement {
@@ -96,7 +100,9 @@ function Panel({ instance, onError, visible = true }: { instance: VideoEditInsta
   const bound = sequence?.styleId ? instance.document.styles?.find(style => style.id === sequence.styleId) : undefined
   const newer = bound ? newerLibraryStyleVersion(bound) : null
   const defaultId = videoEditStyleLibrary.defaultStyleId()
-  const entries = videoEditStyleLibrary.listStyles().filter(entry => !query.trim() || `${entry.style.name} ${entry.style.description}`.toLowerCase().includes(query.trim().toLowerCase()))
+  const library = videoEditStyleLibrary.listStyles()
+  const hasPersonal = library.some(entry => !entry.builtin)
+  const entries = library.filter(entry => !query.trim() || `${entry.style.name} ${entry.style.description}`.toLowerCase().includes(query.trim().toLowerCase()))
   const detail = open ? videoEditStyleLibrary.findStyle(open) : undefined
   const run = async (key: string, action: () => Promise<void> | void): Promise<void> => { setBusy(key); try { await action() } catch (reason) { onError(reason) } finally { setBusy(null) } }
   const bind = (id: string): Promise<void> => run(id, async () => { if (!sequence) throw new Error('先打开一个序列。'); const result = await bindVideoEditStyle(instance.document.id, sequence.id, id); showNotification(`本序列之后按风格“${result.style.name}” v${result.style.version} 创作。`) })
@@ -135,17 +141,17 @@ function Panel({ instance, onError, visible = true }: { instance: VideoEditInsta
     <div className="min-h-0 flex-1 overflow-y-auto">
       {entries.length
         ? <div className="grid grid-cols-[repeat(auto-fill,minmax(7rem,1fr))] gap-3" role="list" aria-label="风格">
-          {visible && entries.map(entry => <div role="listitem" key={entry.style.id} className="min-w-0">
+          {visible && entries.map(entry => { const subtitle = busy === entry.style.id ? '处理中…' : meta(entry, defaultId === entry.style.id, bound?.id === entry.style.id, hasPersonal); return <div role="listitem" key={entry.style.id} className="min-w-0">
             <UiOptionButton variant="cover" active={bound?.id === entry.style.id} className="w-full min-w-0" data-video-edit-style={entry.style.id}
               onPointerEnter={() => setHovered(entry.style.id)} onPointerLeave={() => setHovered(null)} onClick={() => setOpen(entry.style.id)}
-              onContextMenu={event => { event.preventDefault(); menu.showMenu(event, items(entry)) }} aria-label={`${entry.style.name}，${meta(entry, defaultId === entry.style.id, bound?.id === entry.style.id)}，单击查看，右键更多操作`}>
+              onContextMenu={event => { event.preventDefault(); menu.showMenu(event, items(entry)) }} aria-label={[entry.style.name, subtitle, '单击查看，右键更多操作'].filter(Boolean).join('，')}>
               <span className={`${UI_COVER_FRAME_CLASS} block aspect-video w-full overflow-hidden`}><StylePicture entry={entry} size={TILE} playing={hovered === entry.style.id} label={`${entry.style.name}预览`} /></span>
               <span className="block w-full min-w-0 px-0.5">
                 <span className="block truncate text-xs text-text1">{entry.style.name}</span>
-                <span className={`block truncate ${UI_TEXT_META_CLASS}`}>{busy === entry.style.id ? '处理中…' : meta(entry, defaultId === entry.style.id, bound?.id === entry.style.id)}</span>
+                {subtitle && <span className={`block truncate ${UI_TEXT_META_CLASS}`}>{subtitle}</span>}
               </span>
             </UiOptionButton>
-          </div>)}
+          </div> })}
         </div>
         : <UiEmpty size="sm" title={query ? '没有匹配的风格' : '风格库还在读取'} />}
     </div>

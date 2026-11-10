@@ -20,6 +20,7 @@ interface Props {
 /**
  * PR 时间线底部的缩放滚动条：与轨道区左缘对齐，滑块两端各有一个圆形手柄。
  * 拖中间平移、拖两端缩放、在条上滚滚轮缩放、单击空白处跳到那里。取代原生横向滚动条。
+ * 两端手柄静息取辅助文字灰，指针移到滑块上或拖动时才提亮，不抢节目画面与时间线内容的注意力。
  */
 export function VideoEditTimelineZoomBar({ scrollHost, pixels, extent, width, onScroll, onRange, onZoom }: Props): React.ReactElement {
   const header = useTimelineHeaderWidth()
@@ -55,9 +56,9 @@ export function VideoEditZoomBarTrack({ label, state, width, onScroll, onRange, 
     onWheel={event => { if (event.deltaY) onZoom(state.startFrame + state.visibleFrames / 2, event.deltaY < 0 ? 1.25 : 0.8) }}>
     <div className="group absolute top-1/2 flex h-2.5 -translate-y-1/2 items-center rounded-full bg-text2/30 hover:bg-text2/45" style={{ left: thumb.left, width: thumb.width }} data-video-edit-zoom-thumb
       title="拖动平移，拖两端缩放" onPointerDown={event => begin(event, 'move')}>
-      <span data-video-edit-zoom-handle="start" aria-label="拖动调整可见范围起点" className="h-2.5 w-2.5 shrink-0 cursor-ew-resize rounded-full bg-text2" onPointerDown={event => begin(event, 'start')} />
+      <span data-video-edit-zoom-handle="start" aria-label="拖动调整可见范围起点" className="h-2.5 w-2.5 shrink-0 cursor-ew-resize rounded-full bg-text3 transition-colors group-hover:bg-text1 group-active:bg-text1" onPointerDown={event => begin(event, 'start')} />
       <span className="flex-1" />
-      <span data-video-edit-zoom-handle="end" aria-label="拖动调整可见范围终点" className="h-2.5 w-2.5 shrink-0 cursor-ew-resize rounded-full bg-text2" onPointerDown={event => begin(event, 'end')} />
+      <span data-video-edit-zoom-handle="end" aria-label="拖动调整可见范围终点" className="h-2.5 w-2.5 shrink-0 cursor-ew-resize rounded-full bg-text3 transition-colors group-hover:bg-text1 group-active:bg-text1" onPointerDown={event => begin(event, 'end')} />
     </div>
   </div>
 }

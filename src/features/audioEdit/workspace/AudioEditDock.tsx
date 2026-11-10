@@ -19,7 +19,7 @@ const logger = createLogger('features.audioEdit.layout')
  * 音频编辑停靠工作区：编辑器、文字稿、处理、基本声音、效果组、历史、交付七个面板，和剪辑、3D 镜头参考共用同一套
  * dockview 宿主（拖拽重排、合并标签、调整大小，布局记住）。面板内容从工作区上下文读写，挪到哪里行为都一样。
  */
-const AUDIO_EDIT_DOCK_THEME = dockviewHostTheme('henji-cameraStage-dock henji-videoEdit-dock', 4)
+const AUDIO_EDIT_DOCK_THEME = dockviewHostTheme('henji-cameraStage-dock henji-videoEdit-dock')
 const panel = (Body: () => React.ReactElement): React.FC<IDockviewPanelProps> => function AudioEditDockPanel() { return <div className="h-full min-h-0"><Body /></div> }
 const COMPONENTS = {
   editor: panel(AudioWaveWorkspace),

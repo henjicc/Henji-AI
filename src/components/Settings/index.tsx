@@ -19,6 +19,7 @@ import { useSettingsScrollSpy } from './hooks/useSettingsScrollSpy'
 import { SettingsModalFrame } from './SettingsModalFrame'
 import { isSettingsPlaceholderShown } from './settingsPlaceholderState'
 import SettingsSearchResults from './components/SettingsSearchResults'
+import { SETTINGS_CONTENT_CLASS, SETTINGS_CONTENT_MAX_WIDTH_CLASS } from './settingsLayout'
 import { searchSettings, type SettingsSearchResult } from './settingsSearchIndex'
 import { useI18n } from '@/hooks/useI18n'
 import { useUiStore } from '@/stores/uiStore'
@@ -278,7 +279,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
           className={`settings-scroll-body min-w-0 flex-1 ${FILL_TABS.has(activeTab) && !query.trim() ? 'flex min-h-0 flex-col overflow-hidden' : 'overflow-y-auto'}`}
         >
           {query.trim() ? (
-            <div className="mx-auto max-w-3xl px-4 pb-4 pt-5">
+            <div className={`${SETTINGS_CONTENT_MAX_WIDTH_CLASS} ${SETTINGS_CONTENT_CLASS}`}>
               <SettingsSearchResults results={searchResults} onSelect={handleSearchSelect} />
             </div>
           ) : (

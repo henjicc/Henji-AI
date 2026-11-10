@@ -144,6 +144,8 @@ export const THEME_COLOR_TOKEN_NAMES = [
   'accentPressed',
   'accentText',
   'accentRing',
+  // 当前停靠面板组的四周描边：标签下的强调细线已经表明“这组是当前的”，描边只需若有若无，取强调色与面板底 6:4 混合
+  'accentOutline',
   'accentTint',
   'selectedAccent',
   'selectedAccentHover',
@@ -235,6 +237,8 @@ const SELECTED_ACCENT_HOVER_ALPHA = { dark: 0.26, light: 0.22 } as const;
 export const SELECTION_MIN_DELTA = { vsHover: 0.03, vsRest: 0.06, hoverVsSelected: 0.015 } as const;
 /** 低彩度/很暗的强调色或极端层级对比度下，选中透明度最多提到这里（再高就接近实底，与主动作抢权重）。 */
 const SELECTED_ACCENT_ALPHA_MAX = 0.6;
+/** 当前面板组描边里强调色所占比例（其余是面板底），参照 Premiere 那圈暗一档的 1 像素聚焦框。 */
+const ACCENT_OUTLINE_ALPHA = 0.6;
 
 /**
  * 文字求解起点：设计稿“标准”档（contrast = 1）的文字亮度，对所有档位相同。
@@ -553,6 +557,7 @@ export function deriveThemeTokens(seedInput: Partial<ThemeSeed>, overrides?: The
     accentPressed: A(flatSolidStateL(aL, accentRamp.on, 'pressed')),
     accentRing: A(dark ? 0.7 : 0.62),
   });
+  t.accentOutline = compositeOver(withAlpha(t.accent, ACCENT_OUTLINE_ALPHA), t.panel);
   // 选中淡强调底（重要记录 012，任务 4.3）：强调色低透明度，叠在窗口/面板/抬升面上都与悬停、静息可分。
   // 档位依据见 4.3 执行记录：深色 0.20 / 浅色 0.18（浅色 0.12 时与悬停几乎同色）；选中项悬停再加一档。
   // 5.11：低彩度/很暗的强调色或极端层级对比度下默认档位与悬停难分，按 SELECTION_MIN_DELTA 求解透明度（预设不变）。

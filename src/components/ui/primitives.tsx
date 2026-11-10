@@ -387,14 +387,15 @@ UiPanel.displayName = 'UiPanel';
 
 /**
  * 分段 / 小样 / 色样三档（segment / tile / swatch）各自的尺寸与状态；颜色在玻璃内外由 `ui-glass-adaptive-*` 统一切换。
- * 外观设置的主题预设与强调色、全局分段选择共用这几档；tile 与网格格同为压低一档的强调实底，分段使用中性抬起底
+ * 外观设置的主题预设与强调色、全局分段选择共用这几档。tile 选中同菜单项：中性选中底 + 主要文字，调用点在格尾放强调色勾——
+ * 它只是一个当前值，铺一整块强调实底会成为全页最抢眼的东西；分段使用中性抬起底
  * （色样仍用主要文字色外圈：强调色外圈压在强调色样上看不清）。
  */
 const UI_OPTION_NEUTRAL_VARIANT_CLASS = {
   tile: {
     layout: 'h-11 gap-3 rounded-lg px-3 text-13',
     rest: `border-transparent text-text2 hover:text-text1 ${UI_GLASS_ADAPTIVE_TILE_CLASS} ${UI_GLASS_ADAPTIVE_OPTION_CLASS}`,
-    active: UI_OPTION_CELL_ACTIVE_CLASS,
+    active: UI_OPTION_ITEM_ACTIVE_CLASS,
   },
   // 色样：颜色由调用点经 style.backgroundColor / backgroundImage 传入，bg-clip-content 让它只铺内圈；
   // 外圈 2px 边框 + 2px 间隙表达选中（按钮重置类会清掉 outline/ring，所以不用它们，也不会被父级裁切）。
@@ -589,6 +590,7 @@ export const UiSearchInput = forwardRef<HTMLInputElement, UiSearchInputProps>(
 
 UiSearchInput.displayName = 'UiSearchInput';
 
+/** 范围输入。手柄静息是辅助文字灰，悬停、拖动或键盘聚焦才提亮：深色界面里一排纯白圆点比内容还抢眼。 */
 export const UiRangeInput = forwardRef<HTMLInputElement, UiRangeInputProps>(
   ({ className = '', trackTone = 'neutral', ...props }, ref) => {
     const rowLabelling = resolveFormRowLabelling(useUiFormRowLabelling(), props);
@@ -598,9 +600,10 @@ export const UiRangeInput = forwardRef<HTMLInputElement, UiRangeInputProps>(
       type="range"
       className={`h-6 w-full min-w-0 cursor-pointer appearance-none bg-transparent focus-visible:outline-none
       [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full
-      [&::-webkit-slider-thumb]:-mt-1 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-0 [&::-webkit-slider-thumb]:bg-text1 [&::-webkit-slider-thumb]:shadow-thumb-sm
+      [&::-webkit-slider-thumb]:-mt-1 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-0 [&::-webkit-slider-thumb]:bg-text3 [&::-webkit-slider-thumb]:shadow-thumb-sm
+      hover:[&::-webkit-slider-thumb]:bg-text1 active:[&::-webkit-slider-thumb]:bg-text1 focus-visible:[&::-webkit-slider-thumb]:bg-text1
       [&::-moz-range-track]:h-1.5 [&::-moz-range-track]:rounded-full
-      [&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:w-3.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-text1
+      [&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:w-3.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-text3 hover:[&::-moz-range-thumb]:bg-text1 active:[&::-moz-range-thumb]:bg-text1
       focus-visible:[&::-webkit-slider-thumb]:ring-2 focus-visible:[&::-webkit-slider-thumb]:ring-accent-ring
       ${UI_RANGE_TRACK_TONE_CLASS[trackTone]}
       ${className}`}

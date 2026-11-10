@@ -15,7 +15,7 @@ import { ImageEditorDockHeaderActionsV3, ImageEditorDockTabV3 } from './ImageEdi
 import { useImageEditorShellV3 } from './ImageEditorShellContextV3'
 
 const logger = createLogger('features.imageEdit.v3.shell')
-const theme = dockviewHostTheme('henji-cameraStage-dock', 4)
+const theme = dockviewHostTheme('henji-cameraStage-dock')
 
 function registeredPanel(definition: ImageEditorPanelDefinitionV3): (props: IDockviewPanelProps) => JSX.Element {
   return function Panel({ api }: IDockviewPanelProps): JSX.Element {
