@@ -25,8 +25,12 @@ export function ParamField({ children, className = 'w-auto', inline = true }: Pa
   if (panelRows && inline) {
     const nodes = Children.toArray(children)
     const label = nodes.find(node => isValidElement(node) && node.type === ParamLabel)
+    // 控件区至少一行高并竖向居中：单行控件（开关、滑块）与参数名中线对齐，
+    // 多行控件（比例小格）第一行与参数名顶端对齐
     if (label) return <UiFormRow label={label} density="compact">
-      {nodes.filter(node => node !== label)}
+      <div className="flex min-h-control-sm items-center">
+        <div className="min-w-0 flex-1">{nodes.filter(node => node !== label)}</div>
+      </div>
     </UiFormRow>
   }
   if (layout !== 'toolbar') return <div className={className}>{children}</div>

@@ -714,7 +714,7 @@
     "inputImageAlt": "输入图片 {{index}}",
     "inputMaterials": "参考素材",
     "panelHint": "移到这里展开输入面板…",
-    "inputPanel": { "moveToLeft": "把输入面板放到左侧", "moveToBottom": "把输入面板放到底部" },
+    "inputPanel": { "resize": "调整输入面板宽度", "moveToLeft": "把输入面板放到左侧", "moveToBottom": "把输入面板放到底部" },
     "actions": {
       "regenerate": "重新生成",
       "reedit": "重新编辑",

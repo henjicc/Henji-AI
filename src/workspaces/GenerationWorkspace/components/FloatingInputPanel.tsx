@@ -5,7 +5,7 @@ import { UiPanel } from '@/components/ui'
 import { useI18n } from '@/hooks/useI18n'
 import { UI_DURATION, uiTransition } from '@/components/ui/motion'
 import { ChevronUp } from 'lucide-react'
-import { UI_PANEL_WIDTH } from '@/core/theme/panelSizes'
+import { UiResizeHandle } from '@/components/ui/UiResizeHandle'
 
 interface FloatingInputPanelProps {
   containerRef: React.RefObject<HTMLDivElement>
@@ -24,6 +24,8 @@ interface FloatingInputPanelProps {
   placement?: 'bottom' | 'side'
   /** 面板上右键：粘贴、切换位置 */
   onContextMenu?: (event: React.MouseEvent) => void
+  /** 左侧时的宽度与右缘拖动范围；拖完记住宽度 */
+  sideWidth?: { value: number; min: number; max: number; onChange: (value: number) => void; onCommit: (value: number) => void }
   children: React.ReactNode
 }
 
@@ -46,6 +48,7 @@ export function FloatingInputPanel({
   onMouseMove,
   placement = 'bottom',
   onContextMenu,
+  sideWidth,
   children,
 }: FloatingInputPanelProps): JSX.Element {
   const { t } = useI18n()
@@ -59,7 +62,7 @@ export function FloatingInputPanel({
       ref={containerRef}
       className={side ? 'absolute bottom-4 left-4 top-4 z-panel' : 'absolute bottom-5 left-1/2 z-panel -translate-x-1/2'}
       style={{
-        width: side ? UI_PANEL_WIDTH.generationInput : `min(calc(100% - ${viewportGutterPx * 2}px), ${maxWidthPx}px)`,
+        width: side ? sideWidth?.value : `min(calc(100% - ${viewportGutterPx * 2}px), ${maxWidthPx}px)`,
       }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
@@ -122,6 +125,10 @@ export function FloatingInputPanel({
           {children}
         </div>
       </UiPanel>
+      {side && sideWidth ? (
+        <UiResizeHandle variant="column" label={t('ui:workspace.inputPanel.resize')} value={sideWidth.value} min={sideWidth.min} max={sideWidth.max}
+          onChange={sideWidth.onChange} onCommit={sideWidth.onCommit} />
+      ) : null}
     </div>
   )
 }

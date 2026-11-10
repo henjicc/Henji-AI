@@ -2,18 +2,24 @@
  * Schema 数字参数：标签、单位与快捷刻度由这里编排，输入和竖排步进器复用通用 NumberInput。
  */
 
-import React from 'react'
+import React, { useContext } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import NumberField from '@/components/ui/NumberInput'
 import {
   UI_TEXT_META_CLASS,
   UiOptionButton,
+  UiRangeInput,
+  UiReadout,
 } from '@/components/ui'
+import { ParamChoicesExpandedContext } from '../paramPanelRows'
 import type { NumberParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types/I18nText'
 import { ParamLabel } from '../ParamLabel'
 import { ParamField } from '../ParamField'
+
+/** 档数再多拖动就不准了，改回数值框 */
+const SLIDER_MAX_STEPS = 100
 
 interface NumberInputProps {
   param: NumberParamDef
@@ -78,6 +84,30 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   const isMarkActive = (markValue: number): boolean => {
     const tolerance = Math.max(step / 10, Number.EPSILON)
     return Math.abs(safeValue - markValue) <= tolerance
+  }
+
+  // 摊开排布（左侧输入面板）里有上下限、档数不多的数值直接用滑块，读数跟在右边
+  const expanded = useContext(ParamChoicesExpandedContext)
+  // 只有声明了步长才知道是整数还是小数，没写步长的不猜，仍用数值框
+  const sliderSteps = typeof param.min === 'number' && typeof param.max === 'number' && param.step ? (param.max - param.min) / param.step : Infinity
+  if (expanded && !hasMarks && sliderSteps > 0 && sliderSteps <= SLIDER_MAX_STEPS) {
+    return (
+      <ParamField>
+        <ParamLabel param={param} language={i18n.language} />
+        <div className="flex w-full items-center gap-2">
+          <UiRangeInput
+            min={param.min}
+            max={param.max}
+            step={step}
+            value={safeValue}
+            disabled={disabled}
+            aria-label={displayName}
+            onChange={(event) => onChange(clampValue(Number(event.target.value), param))}
+          />
+          <UiReadout size="sm">{safeValue}{param.unit ? ` ${param.unit}` : ''}</UiReadout>
+        </div>
+      </ParamField>
+    )
   }
 
   return (

@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import PanelTrigger from '@/components/ui/PanelTrigger'
 import { UiFormRow, UiSpecialPanel } from '@/components/ui'
 import { ParamChoiceGrid } from '@/components/params/base/ParamChoiceGrid'
-import { AspectRatioTiles, type AspectRatioTileOption, type AspectTierOption } from '@/components/params/panels/ResolutionPanel/AspectRatioTiles'
+import { AspectRatioGlyph, AspectRatioTiles, type AspectRatioTileOption, type AspectTierOption } from '@/components/params/panels/ResolutionPanel/AspectRatioTiles'
 import { getI18nText } from '@/core/types'
 import {
   formatAspectRatioDisplayLabel,
@@ -348,7 +348,7 @@ const AspectResolutionPanel: React.FC<AspectResolutionPanelProps> = ({
           <UiFormRow label={aspectLabel} density="compact">
             <ParamChoiceGrid
               ariaLabel={aspectLabel}
-              options={tileOptions.map((option, index) => ({ value: index, label: option.label }))}
+              options={tileOptions.map((option, index) => ({ value: index, label: option.label, icon: <AspectRatioGlyph option={option} max={14} /> }))}
               value={activeTile}
               onChange={(index) => { const option = tileOptions[Number(index)]; if (option) void selectAspect(option) }}
             />

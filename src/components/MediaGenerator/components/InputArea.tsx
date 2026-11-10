@@ -85,7 +85,7 @@ interface InputAreaProps {
   sideHeader?: React.ReactNode
   /** 左侧排布：提示词标题行右侧的预设与优化 */
   promptTools?: React.ReactNode
-  /** 左侧排布：底部生成按钮左边的预计费用 */
+  /** 左侧排布：生成按钮右下角的预计费用 */
   price?: React.ReactNode
 }
 
@@ -583,7 +583,7 @@ const InputArea: React.FC<InputAreaProps> = ({
     return (
       <div ref={composerRef} className="relative flex h-full min-h-0 flex-col">
         {/* 参数多到放不下时只有这一段滚动，模型在顶上、生成在底下不动 */}
-        <div className="ui-scrollbar flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3.5 pb-4 pt-3.5">
+        <div className="ui-scrollbar flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-3.5 pb-4 pt-3.5">
           {sideHeader}
           {continuationChip}
           {shouldShowUpload ? (
@@ -601,21 +601,20 @@ const InputArea: React.FC<InputAreaProps> = ({
           </UiGroup>
           {footerStart}
         </div>
-        <div data-flip-key="footer" className="flex shrink-0 items-center gap-3 border-t border-line px-3.5 py-3">
-          {price}
-          {/* 这块面板唯一的主动作 */}
+        <div data-flip-key="footer" className="flex shrink-0 border-t border-line px-3.5 py-3">
+          {/* 这块面板唯一的主动作：通栏宽按钮，预估费用作角标放在按钮里的右下角 */}
           <UiButton
             variant="primary"
             size="lg"
-            className="flex-1"
+            className="relative flex-1"
             data-onboarding-target="generate"
             onClick={onGenerate}
             loading={isLoading}
             disabled={generateBlocked}
-            tooltip={isGenerating ? t('inputArea.button.queue') : undefined}
           >
             {isGenerating ? t('inputArea.button.queue') : t('inputArea.sideGenerate')}
             {isGenerating ? <Plus /> : <ArrowUp />}
+            {price ? <span className="pointer-events-none absolute bottom-1.5 right-2.5">{price}</span> : null}
           </UiButton>
         </div>
       </div>

@@ -457,7 +457,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         sideHeader={<GeneratorModelPicker uiState={uiState} arrangement="side" />}
         footerStart={<GeneratorConfigurationBar uiState={uiState} modelState={modelState} parameterPanelRef={parameterPanelRef} arrangement={arrangement} />}
         footerEnd={<UiFieldLayoutContext.Provider value="toolbar">{priceEstimate}{promptTools}</UiFieldLayoutContext.Provider>}
-        price={priceEstimate}
+        price={<PriceEstimate providerId={uiState.selectedProvider} modelId={uiState.selectedModel} params={priceEstimateParams} variant="onAccent" />}
         promptTools={promptTools}
       />
 

@@ -34,11 +34,14 @@ import { useGenerationAutoScroll } from './GenerationWorkspace/hooks/useGenerati
 import { useGenerationImageViewer } from './GenerationWorkspace/hooks/useGenerationImageViewer'
 import { GENERATION_COLUMN_MAX_WIDTH_CLASS, GENERATION_COLUMN_MAX_WIDTH_PX } from './GenerationWorkspace/generationColumn'
 import { Clipboard, Copy, PanelBottom, PanelLeft } from 'lucide-react'
-import { UI_PANEL_WIDTH } from '@/core/theme/panelSizes'
 import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
 import { pasteClipboardImageToPrompt } from '@/contexts/promptClipboardPaste'
 import { createLogger } from '@/core/logging'
 import {
+  GENERATION_SIDE_PANEL_MIN_WIDTH,
+  readGenerationSidePanelWidth,
+  resolveGenerationSidePanelMaxWidth,
+  writeGenerationSidePanelWidth,
   GENERATION_SIDE_PANEL_MIN_WORKSPACE_WIDTH,
   setGenerationInputPanelPlacement,
   useGenerationInputPanelPlacement,
@@ -143,6 +146,10 @@ const GenerationWorkspace: React.FC = () => {
   }, [])
   // 窗口太窄时左侧放不下：临时排回底部，记住的位置不变，变宽后回到左侧
   const sideDocked = placement === 'left' && mainWidth >= GENERATION_SIDE_PANEL_MIN_WORKSPACE_WIDTH
+  const [storedSideWidth, setStoredSideWidth] = useState(readGenerationSidePanelWidth)
+  const sideMaxWidth = resolveGenerationSidePanelMaxWidth(mainWidth, SIDE_PANEL_GUTTER_PX, GENERATION_COLUMN_MAX_WIDTH_PX)
+  // 窗口变窄时只按当前上限显示，记住的宽度不改，变宽后回到原宽度
+  const sideWidth = Math.min(storedSideWidth, sideMaxWidth)
   const {
     inputContainerRef,
     inputPadding,
@@ -306,7 +313,7 @@ const GenerationWorkspace: React.FC = () => {
       <main
         ref={mainRef}
         className="relative z-raised flex min-h-0 flex-1 flex-col"
-        style={sideDocked ? { paddingLeft: UI_PANEL_WIDTH.generationInput + SIDE_PANEL_GUTTER_PX } : undefined}
+        style={sideDocked ? { paddingLeft: sideWidth + SIDE_PANEL_GUTTER_PX } : undefined}
       >
         {/* 命令带：类型分段 + 搜索 + 更多；搜索展开时筛选条作为从属带紧贴其下（不另画底色与边框） */}
         <div className={`mx-auto w-full ${GENERATION_COLUMN_MAX_WIDTH_CLASS} shrink-0 px-6 pt-3`}>
@@ -396,6 +403,7 @@ const GenerationWorkspace: React.FC = () => {
           onMouseLeave={handlePanelMouseLeave}
           onMouseMove={handlePanelMouseMove}
           placement={sideDocked ? 'side' : 'bottom'}
+          sideWidth={{ value: sideWidth, min: GENERATION_SIDE_PANEL_MIN_WIDTH, max: sideMaxWidth, onChange: setStoredSideWidth, onCommit: writeGenerationSidePanelWidth }}
           onContextMenu={handleInputPanelContextMenu}
         >
           <MediaGenerator

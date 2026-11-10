@@ -714,7 +714,7 @@
     "inputImageAlt": "Input image {{index}}",
     "inputMaterials": "Reference materials",
     "panelHint": "Hover here to expand the input panel…",
-    "inputPanel": { "moveToLeft": "Move input panel to the left", "moveToBottom": "Move input panel to the bottom" },
+    "inputPanel": { "resize": "Resize input panel", "moveToLeft": "Move input panel to the left", "moveToBottom": "Move input panel to the bottom" },
     "actions": {
       "regenerate": "Regenerate",
       "reedit": "Re-edit",

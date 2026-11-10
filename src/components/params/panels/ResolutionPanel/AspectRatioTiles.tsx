@@ -24,9 +24,14 @@ type AspectRatioTilesProps = {
 
 const RATIO_ICON_MAX = 20
 
-function ratioIconSize(ratio: { width: number; height: number }): { width: number; height: number } {
-  const scale = RATIO_ICON_MAX / Math.max(ratio.width, ratio.height)
-  return { width: Math.max(3, Math.round(ratio.width * scale)), height: Math.max(3, Math.round(ratio.height * scale)) }
+/** 比例示意：按比例缩放的描边矩形，智能是闪电。比例格与左侧输入面板的比例小格共用。 */
+export function AspectRatioGlyph({ option, max = RATIO_ICON_MAX }: { option: AspectRatioTileOption; max?: number }): JSX.Element | null {
+  if (option.smart) return <Zap className={max <= 14 ? UI_ICON_SIZE_CLASS.sm : UI_ICON_SIZE_CLASS.md} />
+  if (!option.ratio) return null
+  const scale = max / Math.max(option.ratio.width, option.ratio.height)
+  const width = Math.max(3, Math.round(option.ratio.width * scale))
+  const height = Math.max(3, Math.round(option.ratio.height * scale))
+  return <span className={`rounded-sm border-current ${max <= 14 ? 'border' : 'border-2'}`} style={{ width, height }} />
 }
 
 export function AspectRatioTiles({ options, isActive, onSelect, tiers, isTierActive, onTierSelect }: AspectRatioTilesProps): JSX.Element {
@@ -34,7 +39,6 @@ export function AspectRatioTiles({ options, isActive, onSelect, tiers, isTierAct
   const twoRows = columns.some(column => column.top && column.bottom)
 
   const tile = (option: AspectRatioTileOption): JSX.Element => {
-    const icon = option.ratio ? ratioIconSize(option.ratio) : null
     return (
       <UiOptionButton
         key={String(option.value)}
@@ -46,11 +50,7 @@ export function AspectRatioTiles({ options, isActive, onSelect, tiers, isTierAct
         onClick={() => onSelect(option)}
         className="flex-col justify-center gap-1.5"
       >
-        <span className="flex h-5 items-center justify-center">
-          {option.smart ? <Zap className={UI_ICON_SIZE_CLASS.md} /> : icon ? (
-            <span className="rounded-sm border-2 border-current" style={{ width: icon.width, height: icon.height }} />
-          ) : null}
-        </span>
+        <span className="flex h-5 items-center justify-center"><AspectRatioGlyph option={option} /></span>
         <span className="leading-none">{option.label}</span>
       </UiOptionButton>
     )
