@@ -11,5 +11,6 @@ export function createElectronMediaCache(): MediaCachePlatform {
     renderList: projectId => native().renderList(projectId), renderBegin: request => native().renderBegin(request), renderCommit: request => native().renderCommit(request),
     renderDiscard: temporaryPath => native().renderDiscard(temporaryPath), renderRemove: request => native().renderRemove(request),
     hardwareCapabilities: () => native().hardwareCapabilities(), detectHardwareCapabilities: encode => native().detectHardwareCapabilities(encode),
+    readVideoEditRecord: key => native().readVideoEditRecord(key), writeVideoEditRecord: (key, text) => native().writeVideoEditRecord(key, text),
   }
 }

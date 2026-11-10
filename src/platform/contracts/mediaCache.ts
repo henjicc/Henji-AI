@@ -6,6 +6,7 @@ export const MEDIA_CACHE_CHANNELS = {
   settings: 'mediaCache:settings', setSettings: 'mediaCache:set-settings', usage: 'mediaCache:usage', clear: 'mediaCache:clear', changed: 'mediaCache:changed',
   renderList: 'mediaCache:render-list', renderBegin: 'mediaCache:render-begin', renderCommit: 'mediaCache:render-commit', renderDiscard: 'mediaCache:render-discard', renderRemove: 'mediaCache:render-remove',
   hardware: 'mediaCache:hardware', detectHardware: 'mediaCache:detect-hardware',
+  videoEditRead: 'mediaCache:video-edit-read', videoEditWrite: 'mediaCache:video-edit-write',
 } as const
 
 /** 作品目录下可重建缓存的设置、占用与清除，以及预渲染文件的存取。 */
@@ -26,4 +27,7 @@ export interface MediaCachePlatform {
   hardwareCapabilities(): Promise<HardwareCapabilitiesState>
   /** 检测解码能力并与渲染层测得的编码能力一起记录。 */
   detectHardwareCapabilities(encode: HardwareEncodeResult[]): Promise<HardwareCapabilitiesReport>
+  /** 剪辑的可重建派生记录（程序目录，按 64 位十六进制摘要寻址，总量封顶后按最久未用淘汰）；未命中返回 null。 */
+  readVideoEditRecord(key: string): Promise<string | null>
+  writeVideoEditRecord(key: string, text: string): Promise<void>
 }

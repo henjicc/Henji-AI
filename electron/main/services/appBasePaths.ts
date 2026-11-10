@@ -16,7 +16,7 @@ const APP_IDENTIFIER = 'com.henji.ai'
 const PROGRAM_DATA_DIR_NAME = 'Henji-AI'
 
 /** 程序目录下的内部存储；名称沿用现有目录，保证已有缓存与文档继续可用。 */
-export type ProgramStoreKey = 'logs' | 'thumbnails' | 'imageEditor' | 'audioEdit' | 'documentStore' | 'debug' | 'downloads' | 'smartRegions' | 'soundLibrary'
+export type ProgramStoreKey = 'logs' | 'thumbnails' | 'imageEditor' | 'audioEdit' | 'documentStore' | 'debug' | 'downloads' | 'smartRegions' | 'soundLibrary' | 'videoEditCache'
 
 export const PROGRAM_STORE_NAMES: Readonly<Record<ProgramStoreKey, string>> = {
   logs: 'logs',
@@ -31,6 +31,8 @@ export const PROGRAM_STORE_NAMES: Readonly<Record<ProgramStoreKey, string>> = {
   smartRegions: 'SmartRegions',
   /** 音效库每个音效的测量与听音向量（按路径、大小、修改时间寻址的缓存，可随时清理）。 */
   soundLibrary: 'SoundLibrary',
+  /** 剪辑的可重建派生记录：代码素材参数、播放性能观测（按内容摘要寻址，可随时清理）。 */
+  videoEditCache: 'VideoEditCache',
 }
 
 export function getAppBaseDir(): string {

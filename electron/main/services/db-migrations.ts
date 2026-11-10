@@ -1,7 +1,7 @@
 import { readPaidApprovalSettingsValue } from '../../../src/core/application-control/paidApproval'
 import { SQLITE_SCHEMA_VERSION } from '../../../src/core/persistence/schemaVersions'
 import { createRecycleSchema } from './recycle/store'
-import { createMediaRecycleTablesV21 } from './media-recycle/schema'
+import { createMediaRecycleTablesV21, guardMediaRecycleOutbox } from './media-recycle/schema'
 import { PersistenceError } from '../../../src/core/persistence/migrations'
 import { migrateApplicationReviewsV20 } from './application-runtime/operationStore'
 import fs from 'node:fs'
@@ -113,8 +113,10 @@ export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
       db.prepare('UPDATE settings SET value = ? WHERE key = ?').run(JSON.stringify(preferences), 'mcp.preferences')
     }
   } },
-  { version: SQLITE_SCHEMA_VERSION, name: 'active_asset_path_uniqueness', up: restrictAssetPathUniquenessToActive, transaction: false,
+  { version: 26, name: 'active_asset_path_uniqueness', up: restrictAssetPathUniquenessToActive, transaction: false,
     backupWhen: db => !!db.prepare('SELECT 1 FROM assets LIMIT 1').get() },
+  // 26 → 27：回收触发器只在旧行可能含媒体路径时入队；删除不含路径的存量候选与已搬出设置表的剪辑缓存。
+  { version: SQLITE_SCHEMA_VERSION, name: 'media_recycle_guarded_outbox', up: guardMediaRecycleOutbox },
 ]
 
 export const SCHEMA_MIGRATIONS_TABLE = 'schema_migrations'

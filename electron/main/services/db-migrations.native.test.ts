@@ -12,7 +12,7 @@ vi.mock('./logging/main-logger', () => ({
   createMainLogger: () => ({ trace: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
 }))
 
-import { initializeSchema } from './db'
+import { compactDatabaseIfFragmented, initializeSchema } from './db'
 import { createDatabaseMigrationFixture } from './db-migration-fixture.test-support'
 import { runSchemaMigrations, SCHEMA_MIGRATIONS } from './db-migrations'
 import { testDatabaseLocations, testLocationContext } from './db.test-support'
@@ -405,5 +405,32 @@ describe.skipIf(!process.versions.electron)('数据库仓库按位置写法存�
       expect(() => presets.get('p')).toThrow(expect.objectContaining({ code: 'invalid-content' }))
       expect(db.prepare('SELECT params FROM presets WHERE id = ?').get('p')).toEqual({ params: invalid })
     }
+  })
+})
+
+describe.skipIf(!process.versions.electron)('数据库压缩', () => {
+  it('大量空闲页时压缩并重建全文索引，检索结果与压缩前一致', async () => {
+    const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'henji-compact-'))
+    const db = new Database(path.join(dir, 'henji.db'))
+    try {
+      db.pragma('journal_mode = WAL')
+      runSchemaMigrations(db)
+      const insert = db.prepare("INSERT INTO history(id, provider_id, model_id, type, prompt, params, status) VALUES (?, 'p', 'm', 'image', ?, '{}', 'completed')")
+      for (let index = 0; index < 60; index++) insert.run(`h${(59 - index) * 7 % 61}`, index % 3 ? `日落时海边的灯塔 ${index}` : `雪山下的小木屋 ${index}`)
+      // 删掉一部分制造行号空洞，VACUUM 才有机会重排行号。
+      db.exec("DELETE FROM history WHERE rowid % 4 = 0")
+      db.exec('CREATE TABLE filler(data BLOB)')
+      const filler = db.prepare('INSERT INTO filler VALUES (zeroblob(1048576))')
+      for (let index = 0; index < 40; index++) filler.run()
+      db.exec('DROP TABLE filler')
+      const search = (phrase: string): unknown[] => db.prepare('SELECT id FROM history WHERE rowid IN (SELECT rowid FROM history_fts WHERE history_fts MATCH ?) ORDER BY id').pluck().all(`"${phrase}"`)
+      const before = search('海边的灯塔')
+      expect(before.length).toBeGreaterThan(10)
+      const pagesBefore = db.pragma('page_count', { simple: true }) as number
+      compactDatabaseIfFragmented(db)
+      expect(db.pragma('page_count', { simple: true }) as number).toBeLessThan(pagesBefore / 4)
+      expect(search('海边的灯塔')).toEqual(before)
+      expect(search('小木屋')).toEqual(db.prepare("SELECT id FROM history WHERE prompt LIKE '%小木屋%' ORDER BY id").pluck().all())
+    } finally { db.close(); await fsp.rm(dir, { recursive: true, force: true }) }
   })
 })

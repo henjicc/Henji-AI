@@ -7,5 +7,6 @@ export function createMediaCacheApi(invoke: <T>(channel: string, payload?: unkno
     renderList: projectId => invoke(c.renderList, { projectId }), renderBegin: request => invoke(c.renderBegin, request), renderCommit: request => invoke(c.renderCommit, request),
     renderDiscard: temporaryPath => invoke(c.renderDiscard, { temporaryPath }), renderRemove: request => invoke(c.renderRemove, request),
     hardwareCapabilities: () => invoke(c.hardware), detectHardwareCapabilities: encode => invoke(c.detectHardware, { encode }),
+    readVideoEditRecord: key => invoke(c.videoEditRead, { key }), writeVideoEditRecord: (key, text) => invoke(c.videoEditWrite, { key, text }),
   }
 }

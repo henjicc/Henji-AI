@@ -4,9 +4,9 @@ import { testAuthorBundle, testAuthorProgram } from '../engine/videoEditAuthorTe
 import { codeMaterialFilesKey } from '@/core/videoEdit/codeMaterial/sources'
 
 const storage = vi.hoisted(() => new Map<string, string>())
-vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ settings: {
-  get: async (key: string) => storage.has(key) ? { value: storage.get(key) } : null,
-  set: async (key: string, value: string) => { storage.set(key, value) },
+vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ mediaCache: {
+  readVideoEditRecord: async (key: string) => storage.get(key) ?? null,
+  writeVideoEditRecord: async (key: string, value: string) => { storage.set(key, value) },
 } }) }))
 beforeEach(() => storage.clear())
 

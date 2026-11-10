@@ -312,10 +312,10 @@
       "minReaderVersion": 21
     },
     "sqlite": {
-      "version": 26,
+      "version": 27,
       "fingerprint": "86dc58c581e2f83661d9d1669da03784b7abae828c9c14f3da4e2454b67e41a7",
       "supportedFrom": 21,
-      "minReaderVersion": 26
+      "minReaderVersion": 27
     },
     "sound-library-folders": {
       "version": 2,

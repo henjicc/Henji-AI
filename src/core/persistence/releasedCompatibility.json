@@ -1689,12 +1689,14 @@
       "versions": {
         "21": "b6eff11f5e95a171e12a13cc774f391e3f2ee757f75da4d6e8aa4ff1f2feb1d8",
         "22": "b6eff11f5e95a171e12a13cc774f391e3f2ee757f75da4d6e8aa4ff1f2feb1d8",
-        "26": "86dc58c581e2f83661d9d1669da03784b7abae828c9c14f3da4e2454b67e41a7"
+        "26": "86dc58c581e2f83661d9d1669da03784b7abae828c9c14f3da4e2454b67e41a7",
+        "27": "86dc58c581e2f83661d9d1669da03784b7abae828c9c14f3da4e2454b67e41a7"
       },
       "readers": {
         "21": 21,
         "22": 22,
-        "26": 26
+        "26": 26,
+        "27": 27
       },
       "samples": {
         "v21.json": "dcd25a35c0a5afe35e705a3b186a5fa2a5d7f1a6202ba5a456eb528ed6c72991",
@@ -1702,7 +1704,8 @@
         "v23.json": "0f82f19995d880bc07c311ced6b199e660fe9ce7ac1ffbb0828d5b58034561b1",
         "v24.json": "8a5bc5350956c51606f07e40b68ce5f36a77119bfd9980e395a6ba8170d2a90c",
         "v25.json": "f81538a42620cc8f175478be5e388c07a1236a5cb282c0e3780afbb4c4ac2e38",
-        "v26.json": "a75916cfa0f46b039fc41f62eb47935124f83cb13e549a0be813bcdc0f08ad58"
+        "v26.json": "a75916cfa0f46b039fc41f62eb47935124f83cb13e549a0be813bcdc0f08ad58",
+        "v27.json": "29126ac46deb86f7e5abbf25528beec766079377cb6e7a8d6eabde6f179cc98d"
       }
     },
     "sound-library-folders": {

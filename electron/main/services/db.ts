@@ -5,6 +5,7 @@ import { getProgramDataDir } from './appBasePaths'
 import { assertDatabaseVersionSupported, runSchemaMigrations, type SchemaMigrationOptions } from './db-migrations'
 import { isDatabaseCorruption, restoreDatabaseFromSnapshot, snapshotDatabase, verifyDatabase, type DatabaseRestoreResult } from './db-recovery'
 import { createMainLogger, type MainLogger } from './logging/main-logger'
+import { GENERATION_HISTORY_FTS_TABLE } from './generation-history/schema'
 
 const DB_FILE_NAME = 'henji.db'
 
@@ -101,6 +102,31 @@ export function takeDatabaseRecovery(): DatabaseRestoreResult | null {
   const result = recovery
   recovery = null
   return result
+}
+
+/**
+ * 空闲页超过 32 MB 且占文件四分之一以上时整库压缩一次（迁移清掉大量行后文件不会自己变小）。
+ * VACUUM 是同步的，只在界面起来之后调用；被其他连接占用而报忙时只记警告，下次启动条件仍成立会再试。
+ */
+export function compactDatabaseIfFragmented(connection: Database.Database = getDb()): void {
+  const pageSize = connection.pragma('page_size', { simple: true }) as number
+  const pages = connection.pragma('page_count', { simple: true }) as number
+  const freePages = connection.pragma('freelist_count', { simple: true }) as number
+  if (freePages * pageSize < 32 * 1024 ** 2 || freePages * 4 < pages) return
+  const beforeBytes = pages * pageSize
+  const started = performance.now()
+  getLogger().info('开始压缩数据库', { event: 'db.compact.start', context: { beforeBytes, freeBytes: freePages * pageSize } })
+  try {
+    connection.exec('VACUUM')
+    // history 的主键是文本 id，VACUUM 可能重排它的行号；全文索引按行号对应，必须重建。
+    connection.exec(`INSERT INTO ${GENERATION_HISTORY_FTS_TABLE}(${GENERATION_HISTORY_FTS_TABLE}) VALUES ('rebuild')`)
+    connection.pragma('wal_checkpoint(TRUNCATE)')
+  } catch (error) {
+    getLogger().warn('数据库压缩未完成，下次启动再试', { event: 'db.compact.failed', error })
+    return
+  }
+  const afterBytes = (connection.pragma('page_count', { simple: true }) as number) * pageSize
+  getLogger().info('数据库压缩完成', { event: 'db.compact.completed', context: { beforeBytes, afterBytes, durationMs: Math.round(performance.now() - started) } })
 }
 
 /** 退出时合并 WAL 并关闭，下次启动不必从日志恢复。 */

@@ -112,3 +112,49 @@ describe.skipIf(!process.versions.electron)('SQLite 21 media retirement', () => 
     } finally { state.db?.close(); state.db = undefined; await fs.rm(root, { recursive: true, force: true }) }
   })
 })
+
+describe.skipIf(!process.versions.electron)('SQLite 27 guarded retirement outbox', () => {
+  it('迁移只留下可能含路径的候选并删掉剪辑缓存设置；之后不含路径的改写不再入队，带路径的改写只记变化的列', () => {
+    const db = new Database(':memory:')
+    try {
+      runSchemaMigrations(db, SCHEMA_MIGRATIONS.slice(0, 26))
+      const enqueue = db.prepare('INSERT INTO media_recycle_candidates(source, payload) VALUES (?, ?)')
+      const kept = [
+        ['settings', { value: 'E:\\文档\\痕迹AI', type: 'string' }],
+        ['settings', { value: JSON.stringify({ folders: ['D:\\音效'] }), type: 'json' }],
+        ['application_invocations', { record_json: JSON.stringify({ media: 'henji://user/上传素材/a.png' }) }],
+        ['audio_edit_tasks', { result_json: JSON.stringify({ file: '/Users/me/a.wav' }) }],
+        ['generation_submissions', { response_json: JSON.stringify({ filePaths: ['E:/生成/a.png'] }), phase: 'completed', media_released: 0 }],
+        ['history', { params: '{}', result_paths: '[]', id: 'h' }],
+        ['paths', { paths: ['/x.png'], protectedBy: [] }],
+      ] as const
+      const dropped = [
+        ['settings', { value: JSON.stringify({ a: 1, note: 'C: drive' }), type: 'json' }],
+        ['application_invocations', { record_json: JSON.stringify({ state: 'completed' }) }],
+        ['application_observations', { record_json: JSON.stringify({ text: 'see /docs' }) }],
+        ['generation_submissions', { response_json: JSON.stringify({ filePaths: ['E:/生成/a.png'] }), phase: 'completed', media_released: 1 }],
+      ] as const
+      for (const [source, payload] of [...kept, ...dropped]) enqueue.run(source, JSON.stringify(payload))
+      const setting = db.prepare("INSERT INTO settings(key, value, type) VALUES (?, ?, 'json') ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+      setting.run(`cache.video-edit.code-metadata.v1:${'a'.repeat(64)}`, '{}')
+      setting.run('cache.video-edit.render-performance.shown', '[]')
+      setting.run('theme', '"dark"')
+      runSchemaMigrations(db)
+      const candidates = (): Array<{ source: string; payload: string }> => db.prepare('SELECT source, payload FROM media_recycle_candidates ORDER BY id').all() as Array<{ source: string; payload: string }>
+      expect(candidates().map(row => [row.source, JSON.parse(row.payload)])).toEqual(kept.map(([source, payload]) => [source, payload]))
+      expect(db.prepare("SELECT key FROM settings WHERE key GLOB 'cache.video-edit.*' OR key = 'theme'").pluck().all()).toEqual(['theme'])
+
+      db.prepare("INSERT INTO application_invocations(operation_id, caller_id, state, record_json, updated_at) VALUES ('op', 'c', 'running', '{}', 0)").run()
+      const invocation = db.prepare("UPDATE application_invocations SET record_json = ? WHERE operation_id = 'op'")
+      for (let index = 0; index < 2000; index++) { setting.run('theme', JSON.stringify({ index })); invocation.run(JSON.stringify({ state: 'running', step: index })) }
+      setting.run('theme', JSON.stringify({ index: 1999 }))
+      expect(candidates()).toHaveLength(kept.length)
+
+      db.prepare("INSERT INTO history(id, provider_id, model_id, type, params, result_paths, status) VALUES ('r', 'p', 'm', 'image', ?, ?, 'completed')").run(JSON.stringify({ image: 'D:\\上传\\in.png' }), JSON.stringify(['D:\\生成\\out.png']))
+      db.prepare("UPDATE history SET result_paths = '[]' WHERE id = 'r'").run()
+      expect(JSON.parse(candidates().at(-1)!.payload)).toEqual({ params: null, result_paths: JSON.stringify(['D:\\生成\\out.png']), id: null })
+      db.prepare("UPDATE history SET status = 'failed', params = params WHERE id = 'r'").run()
+      expect(candidates()).toHaveLength(kept.length + 1)
+    } finally { db.close() }
+  })
+})

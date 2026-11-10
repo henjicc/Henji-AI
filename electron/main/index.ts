@@ -20,7 +20,7 @@ import { registerCustomModelsIpc } from './ipc/custom-models'
 import { registerLocalRecordsIpc } from './ipc/local-records'
 import { registerFontsIpc } from './ipc/fonts'
 import { registerTestFixturesIpc } from './ipc/test-fixtures'
-import { closeDb, configureDatabaseMigrations, getDb, takeDatabaseRecovery } from './services/db'
+import { closeDb, compactDatabaseIfFragmented, configureDatabaseMigrations, getDb, takeDatabaseRecovery } from './services/db'
 import { PersistenceError } from '../../src/core/persistence/migrations'
 import { databaseMigrationOptions } from './services/db-locations'
 import { registerDocumentsIpc } from './ipc/documents'
@@ -64,7 +64,9 @@ import { configureMacDockIcon } from './app-icon'
 import { sdkRuntimeContext } from './services/ai-runtime/sdk-runtime'
 import { runElectronHostSelfCheck } from './services/ai-runtime/host-capabilities'
 import { getAiProviderApiKey } from './services/keystore'
-import { createMainLogger, runLogRetention } from './services/logging'
+import { appendLogEvents, createMainLogger, runLogRetention } from './services/logging'
+import { getLogDir } from './services/logging/writer'
+import { holdCommandLineMarker, isCommandLineProcessRunning } from './services/command-line-marker'
 import { bindApplicationShutdown } from './application-shutdown'
 import { initializeUpdater } from './services/updater'
 import { scheduleStartupDocumentIndexScan } from './services/documents/runtime'
@@ -129,6 +131,23 @@ if (isAssistantCliMode()) {
   if (!process.argv.includes('--visible')) app.commandLine.appendSwitch('disable-gpu')
 }
 
+/*
+ * 带窗口的应用只允许一个实例：两个实例共用同一个数据库和同一批文档，启动时的损坏恢复会换掉另一个实例正开着的库文件。
+ * 助手命令行与模型验证有意与主应用并存，不参与这把锁（它们留占用标记，见 command-line-marker.ts）。
+ * 隔离运行的数据目录不同，锁按用户数据目录区分，天然不冲突。
+ */
+const commandLineProcess = isAssistantCliMode() || process.argv.includes('--verify-model')
+if (!commandLineProcess && !app.requestSingleInstanceLock()) app.exit(0)
+
+const errorLogger = createMainLogger('main.errors')
+// 未捕获异常用监视事件，只记录、不改变原有处理；未处理的拒绝记录后进程照常运行。
+process.on('uncaughtExceptionMonitor', (error, origin) => {
+  errorLogger.error('主进程未捕获的异常', { event: 'main.uncaught_exception', error, context: { origin } })
+})
+process.on('unhandledRejection', (reason) => {
+  errorLogger.error('主进程未处理的 Promise 拒绝', { event: 'main.unhandled_rejection', error: reason })
+})
+
 const remoteDebuggingPort = process.env['HENJI_ELECTRON_REMOTE_DEBUGGING_PORT']
 if (remoteDebuggingPort) {
   app.commandLine.appendSwitch('remote-debugging-port', remoteDebuggingPort)
@@ -139,6 +158,7 @@ app.whenReady().then(async () => {
   const crashLogger = createMainLogger('main.crash_reporter')
   if ('directory' in crashReporterOutcome) crashLogger.info('崩溃转储已启用', { event: 'crash_reporter.start.completed', context: { directoryName: path.basename(crashReporterOutcome.directory) } })
   else crashLogger.error('崩溃转储启动失败', { event: 'crash_reporter.start.failed', error: crashReporterOutcome.error })
+  if (commandLineProcess) holdCommandLineMarker()
   try {
     getDb()
   } catch (error) {
@@ -242,9 +262,7 @@ app.whenReady().then(async () => {
     void runAssistantCli(cliWindow.webContents, assistantCliOptions).then(async (exitCode) => {
       // CLI 必须有确定的进程终点。供应商请求取消后极少数 SDK 会迟迟不释放连接，
       // 不能让已经产出终态的真实验收命令永远挂住。
-      await Promise.race([
-        new Promise<void>((resolve) => { setTimeout(resolve, 5_000) }),
-      ])
+      await new Promise<void>((resolve) => { setTimeout(resolve, 5_000) })
       app.exit(exitCode)
     })
     return
@@ -273,6 +291,15 @@ app.whenReady().then(async () => {
     },
   })
   watchApplicationHostRenderer(mainWindow.webContents)
+  // 压缩会同步占住主进程约一秒，放在首屏加载完成之后。
+  mainWindow.webContents.once('did-finish-load', () => { if (!isCommandLineProcessRunning()) compactDatabaseIfFragmented() })
+  app.on('second-instance', () => {
+    const window = mainWindow.isDestroyed() ? BrowserWindow.getAllWindows()[0] : mainWindow
+    if (!window) return
+    if (window.isMinimized()) window.restore()
+    window.show()
+    window.focus()
+  })
 
   app.on('activate', async () => {
     await startupReady
@@ -280,6 +307,14 @@ app.whenReady().then(async () => {
       watchApplicationHostRenderer(createWindow().webContents)
     }
   })
+}).catch(async (error: unknown) => {
+  // 启动链上任何一步失败都不能留下一个没有窗口、没有提示的进程。日志先写完再弹窗：弹窗会阻塞主线程。
+  await appendLogEvents([{ timestamp: new Date().toISOString(), level: 'error', domain: 'main.errors', event: 'main.startup.failed', message: '应用启动失败', error, source: 'backend' }]).catch(() => undefined)
+  const reason = error instanceof Error ? error.message : String(error)
+  const message = `痕迹AI 未能启动：${reason}\n\n详细信息已写入日志目录：${getLogDir()}`
+  if (isAssistantCliMode()) process.stderr.write(`${message}\n`)
+  else dialog.showErrorBox('痕迹AI', message)
+  app.exit(1)
 })
 
 app.on('window-all-closed', () => {
