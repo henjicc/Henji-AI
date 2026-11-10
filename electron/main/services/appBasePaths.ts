@@ -12,7 +12,7 @@ import path from 'node:path'
  * 内部存储，不随“数据目录”设置移动（重要记录 002）。
  */
 
-export const APP_IDENTIFIER = 'com.henji.ai'
+const APP_IDENTIFIER = 'com.henji.ai'
 const PROGRAM_DATA_DIR_NAME = 'Henji-AI'
 
 /** 程序目录下的内部存储；名称沿用现有目录，保证已有缓存与文档继续可用。 */

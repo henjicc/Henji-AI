@@ -5,7 +5,7 @@ import { MOTION_CURVE_KEYS, type CompiledMotion } from './motionCompiler'
 
 const KEYS = MOTION_CURVE_KEYS
 
-export function hasStaggerMotion(clip: VideoEditClip): boolean {
+function hasStaggerMotion(clip: VideoEditClip): boolean {
   return KEYS.some(key => (clip.curves?.[key]?.length ?? 0) > 1)
 }
 

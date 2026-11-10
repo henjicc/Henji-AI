@@ -3,7 +3,7 @@ import { enumerateTilesForRect, mipSize, type ImageEditDocumentV3, type ImageEdi
 import { createImageEditorV3RequestId, readImageEditorV3BrushTiles, readImageEditorV3SourceTile } from '@/commands/imageEditorV3'
 import type { ImageEditorV3ResourceDescriptor, ImageEditorV3SourceTile } from '@/platform/contracts/imageEditorV3'
 import type { ImageEditorGpuSceneWorkerEventV3 } from '../gpu/imageEditorGpuSceneProtocolV3'
-import { readImageEditorGpuBrushTilesV3 } from './imageEditorGpuBrushTileReaderV3'
+import { readImageEditorBrushTilesWithAdmissionV3 } from './imageEditorGpuBrushTileReaderV3'
 const preparedFonts = new WeakMap<ImageEditDocumentV3, Promise<void>>()
 import { applyImageEditorViewportBrushTilesV3, createTransparentImageEditorViewportRegionV3,
   loadImageEditorViewportSourceRegionV3, rasterizeImageEditorViewportVectorContentV3, rasterizeImageEditorViewportVectorImageV3,
@@ -42,7 +42,7 @@ export async function loadImageEditorGpuSceneTileV3(
     const base = sampling.sourceRef && sampling.sourceSize
       ? loadImageEditorViewportSourceRegionV3(sources, sampling.sourceRef, 0, sampling.rect, document, sampling.sourceSize)
       : createTransparentImageEditorViewportRegionV3(sampling.rect, document)
-    const loaded = sampling.tiles.length ? await readImageEditorGpuBrushTilesV3(context.readBrushTiles, {
+    const loaded = sampling.tiles.length ? await readImageEditorBrushTilesWithAdmissionV3(context.readBrushTiles, {
       requestId: createImageEditorV3RequestId('gpu-sparse-neighbors'),
       tiles: sampling.tiles.map(entry => ({ tileKey: entry.tileKey,
         resource: { resourceId: entry.resourceRef, byteSize: entry.byteLength } })),
@@ -97,7 +97,7 @@ export async function loadImageEditorGpuSceneTileV3(
   if (key.resourceKind === 'sparse-mask') {
     const byteSize = key.resourceByteLength ?? descriptor?.byteLength
     if (byteSize === undefined) throw new Error('GPU Scene 蒙版瓦片缺少受管字节数')
-    const loaded = await readImageEditorGpuBrushTilesV3(context.readBrushTiles, {
+    const loaded = await readImageEditorBrushTilesWithAdmissionV3(context.readBrushTiles, {
       requestId: createImageEditorV3RequestId('gpu-scene-mask-tile'),
       tiles: [{
         tileKey: `${key.mip}/${key.tileX}/${key.tileY}`,
@@ -127,7 +127,7 @@ export async function loadImageEditorGpuSceneTileV3(
   if (key.resourceKind === 'brush-tile') {
     const byteSize = key.resourceByteLength ?? descriptor?.byteLength
     if (byteSize === undefined) throw new Error('GPU Scene 画笔瓦片缺少受管字节数')
-    const loaded = await readImageEditorGpuBrushTilesV3(context.readBrushTiles, {
+    const loaded = await readImageEditorBrushTilesWithAdmissionV3(context.readBrushTiles, {
       requestId: createImageEditorV3RequestId('gpu-scene-brush-tile'),
       tiles: [{
         tileKey: `${key.mip}/${key.tileX}/${key.tileY}`,

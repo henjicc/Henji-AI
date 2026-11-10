@@ -24,7 +24,7 @@ import { compareModelsBySeries } from './modelSortOrder'
  *
  * 使用单例模式确保全局唯一实例
  */
-export class ModelRegistry {
+class ModelRegistry {
   private static instance: ModelRegistry
 
   /**

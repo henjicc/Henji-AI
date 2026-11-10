@@ -4,7 +4,7 @@ import { ApplicationWriteFailure } from '../application-control/execution/writeE
 export const transcriptionPreflightSchema = z.object({ sourcePath: z.string().min(1), durationMs: z.number().positive(), modelId: z.string().optional(), language: z.string().optional(), audioDocumentId: z.string().optional() }).strict()
 export type TranscriptionPreflight = z.infer<typeof transcriptionPreflightSchema>
 export interface TranscriptionPreparation { modelId?: string; requiresConfirmation: boolean; cost?: import('./asrCatalog').AsrCostEstimate }
-/** Rejections through contextBridge discard Error custom properties; transfer a plain DTO instead. */
+/** Rejections through contextBridge discard Error custom properties; transfer a plain DTO instead. @public 同时被 electron/preload/api-media.d.ts 以 import() 引用，knip 看不到。 */
 export type TranscriptionReply =
   | { ok: true; data: import('./types').AudioEditTranscriptionResult }
   | { ok: false; error: { message: string; transcriptionFacts?: TranscriptionFacts } }

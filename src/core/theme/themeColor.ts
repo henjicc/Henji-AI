@@ -41,7 +41,7 @@ const RGBA_PATTERN =
 /** 白色，统一为大写 `#RRGGBB`（与参考实现输出格式一致）。 */
 export const WHITE = WHITE_HEX.toUpperCase();
 
-export function srgbToLinear(v: number): number {
+function srgbToLinear(v: number): number {
   return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
 }
 
@@ -197,7 +197,7 @@ export function deltaEOK(x: string, y: string): number {
 }
 
 /** WCAG 相对亮度（忽略透明度；半透明颜色先用 compositeOver 合成）。 */
-export function relativeLuminance(color: string): number {
+function relativeLuminance(color: string): number {
   const { r, g, b } = requireColor(color);
   const [lr, lg, lb] = [r, g, b].map((v) => srgbToLinear(v / 255));
   return 0.2126 * lr + 0.7152 * lg + 0.0722 * lb;

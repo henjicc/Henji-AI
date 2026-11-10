@@ -351,16 +351,6 @@ export interface ModelMeta {
 }
 
 /**
- * 参数定义（从 ParamDef 导入）
- */
-export type { ParamDef } from './ParamDef'
-
-/**
- * 联动规则（从 Linkage 导入）
- */
-export type { Linkage } from './Linkage'
-
-/**
  * 模型定义（核心接口）
  *
  * 每个模型的完整配置，包含所有必要信息

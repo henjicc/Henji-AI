@@ -3,7 +3,7 @@ import type { TextStyle } from '../text'
 import { scaleTextSpatialStyle } from '../metrics'
 import { appearanceBounds, fitTextLayout, union, type TextDrawConstraints, type TextDrawPlan, type TextPlanGrapheme, type TextPlanRect, type TextSourceRange } from '../textDrawPlan'
 import { prepareShapingRuns, textFontRequest, type ShapingRuns } from './runs'
-import { ShapedParagraph, layoutUnits, availableUnits, type ParagraphLine } from './paragraph'
+import { ShapedParagraph, layoutUnits, type ParagraphLine } from './paragraph'
 import { type TextFontAccess } from './fontSession'
 import { type TextOutline, type ShapeOptions, TextShaper } from './harfbuzz'
 import { TextFlow, logicalExclusions, type TextExclusion, type TextFlowFrame, type TextFlowSlot } from './textFlow'
@@ -202,11 +202,11 @@ export function createShapedTextPlan(shaper: TextShaper, fonts: TextFontAccess, 
     return { style, rows: result.rows, stopped: result.stopped, width: Math.max(0, ...result.rows.map(row => row.line.width + (row.slot ? row.slot.inlineStart : row.lineIndent + row.lineEndIndent))), height: result.height, intrinsicWidths: { min, max } }
   }
   const overflow = (value: Pick<ReturnType<typeof make>, 'width' | 'height' | 'rows' | 'stopped'>) => {
-    const inline = !!inlineLimit && layoutUnits(value.width) > availableUnits(inlineLimit), block = !!value.stopped || blockLimit !== undefined && layoutUnits(value.height) > availableUnits(blockLimit)
+    const inline = !!inlineLimit && layoutUnits(value.width) > layoutUnits(inlineLimit), block = !!value.stopped || blockLimit !== undefined && layoutUnits(value.height) > layoutUnits(blockLimit)
     return { width: vertical ? block : inline, height: vertical ? inline : block, lines: options.maxLines !== undefined && value.rows.length > options.maxLines }
   }
   const selected = fitTextLayout(originalStyle, constraints, make, value => !Object.values(overflow(value)).some(Boolean))
-  const visible = options.truncate === false ? selected.rows : selected.rows.filter((row, index) => (options.maxLines === undefined || index < options.maxLines) && (blockLimit === undefined || flowing || layoutUnits(row.y + row.height) <= availableUnits(blockLimit)))
+  const visible = options.truncate === false ? selected.rows : selected.rows.filter((row, index) => (options.maxLines === undefined || index < options.maxLines) && (blockLimit === undefined || flowing || layoutUnits(row.y + row.height) <= layoutUnits(blockLimit)))
   const visibleBlock = Math.max(0, ...visible.map(row => row.y + row.height))
   const visibleInline = Math.max(selected.style.fontSize, ...visible.map(row => row.line.width + (row.slot ? row.slot.inlineStart : row.lineIndent + row.lineEndIndent)))
   const flowInline = flowing ? wrapWidth : undefined

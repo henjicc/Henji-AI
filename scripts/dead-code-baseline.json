@@ -838,10 +838,6 @@
         "name": "clearLegacyVideoPreviewCache"
       },
       {
-        "file": "electron/preload/api.d.ts",
-        "name": "HenjiImageEditorV3Api"
-      },
-      {
         "file": "electron/preload/image-editor-v3-api.ts",
         "name": "HenjiImageEditorV3Api"
       },
@@ -4212,10 +4208,6 @@
       {
         "file": "src/features/imageEdit/v3/execution/imageEditorGpuBrushTileReaderV3.ts",
         "name": "readImageEditorBrushTilesWithAdmissionV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/execution/imageEditorGpuBrushTileReaderV3.ts",
-        "name": "readImageEditorGpuBrushTilesV3"
       },
       {
         "file": "src/features/imageEdit/v3/execution/imageEditorGpuResourceRetryV3.ts",

@@ -568,4 +568,3 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
   )
 }
 
-export default VoiceSelectorPanel

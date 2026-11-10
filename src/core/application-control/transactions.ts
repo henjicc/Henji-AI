@@ -69,7 +69,6 @@ const applicationOperationStateSchema = z.enum([
   'failed',
   'cancelled',
 ])
-export type ApplicationOperationState = z.infer<typeof applicationOperationStateSchema>
 
 export const applicationOperationProgressSchema = z.object({
   transactionRef: applicationOpaqueRefSchema.optional(),

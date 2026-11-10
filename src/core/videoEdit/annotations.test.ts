@@ -7,7 +7,7 @@ import { copyVideoEditSequence } from './sequenceCopy'
 import { reconcileVideoEditTimedContent } from './timedContent'
 import { applyVideoEditTimelineEdit, copyVideoEditClips } from './timelineEdits'
 
-export function annotation(input: Partial<VideoEditAnnotation> = {}): VideoEditAnnotation {
+function annotation(input: Partial<VideoEditAnnotation> = {}): VideoEditAnnotation {
   return videoEditAnnotationSchema.parse({ id: 'note', frame: 20, space: 'composition-normalized', target: { kind: 'point', x: .4, y: .3 }, text: '把标题移到这里', status: 'open', author: { kind: 'user', name: '我' }, createdAt: '2026-10-08T00:00:00.000Z', thread: [], ...input })
 }
 const reply = { id: 'reply', author: { kind: 'assistant' as const, name: '助手' }, createdAt: '2026-10-08T01:00:00.000Z', text: '移动了标题，撤销本次修改可恢复。' }

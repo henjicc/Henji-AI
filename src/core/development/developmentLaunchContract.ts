@@ -49,7 +49,7 @@ export const DEVELOPMENT_LAUNCH_SURFACE_PATTERN = /^(workspace|tool|settings|ove
  * 更新提示弹窗的开发预览状态（任务 5.7）：没有真实新版本也能打开弹窗核对界面。
  * 只给开发启动与界面核对用，不访问更新服务器、不下载、不安装。
  */
-export const DEVELOPMENT_UPDATE_PREVIEW_STATES = ['available', 'downloading', 'failed'] as const
+const DEVELOPMENT_UPDATE_PREVIEW_STATES = ['available', 'downloading', 'failed'] as const
 export type DevelopmentUpdatePreviewState = (typeof DEVELOPMENT_UPDATE_PREVIEW_STATES)[number]
 
 export function isDevelopmentUpdatePreviewState(value: unknown): value is DevelopmentUpdatePreviewState {

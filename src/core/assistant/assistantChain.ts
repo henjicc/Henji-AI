@@ -66,7 +66,7 @@ const STATUS_LABEL = ASSISTANT_CHAIN_STATUS_LABEL
 const TURN_END = new Set(['embedded_agent.turn.completed', 'embedded_agent.turn.failed', 'embedded_agent.turn.cancelled'])
 const CHAIN_MARKERS = new Set(['embedded_agent.message.queued', 'embedded_agent.turn.start'])
 
-export function oneLine(value: string, limit = 120): string {
+function oneLine(value: string, limit = 120): string {
   const line = value.replace(/\s+/g, ' ').trim()
   return line.length > limit ? `${line.slice(0, limit)}…` : line
 }

@@ -21,6 +21,7 @@ export const contentTrustCommandSchema = z.discriminatedUnion('action', [
 ])
 export type ContentTrustCommand = z.input<typeof contentTrustCommandSchema>
 export interface ContentTrustCheck { records: ContentTrustReference[]; state: 'allowed' | ContentTrustFailure['state']; allowExternalContentCode: boolean; challenge?: string }
+/** @public localHostContracts.ts 以 import() 类型引用，knip 看不到。 */
 export interface ContentTrustPrompt { query: ContentTrustQuery }
 export function readContentTrustFailure(error: unknown): ContentTrustFailure | undefined {
   const seen = new Set<object>()

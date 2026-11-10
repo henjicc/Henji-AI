@@ -92,4 +92,3 @@ export class UiErrorBoundary extends React.Component<UiErrorBoundaryProps, UiErr
   }
 }
 
-export default UiErrorBoundary

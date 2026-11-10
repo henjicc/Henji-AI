@@ -47,4 +47,3 @@ export const ModelscopeCustomModelPanel: React.FC<ModelscopeCustomModelPanelProp
   )
 }
 
-export default ModelscopeCustomModelPanel

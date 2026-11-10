@@ -10,7 +10,6 @@ export type * from './documentSessionTypes'
 
 // 通用文档操作与项目页通用数据源（存储底座 2.5）
 export {
-  DocumentOperations,
   getDocumentOperations,
   registerDocumentOpener,
   registerDocumentBusyCheck,

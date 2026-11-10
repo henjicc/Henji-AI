@@ -13,7 +13,7 @@ import {
   resetImageDocumentWorkspaceForTests,
 } from '@/features/imageEdit/documents/imageDocumentWorkspace'
 import type { ImageDocumentRecoveryInfo, ImageDocumentRecoveryChoice } from '@/features/imageEdit/documents/imageDocumentPersistence'
-import { ImageMarkTool } from './ImageMarkTool'
+import ImageMarkTool from './ImageMarkTool'
 
 const mocks = vi.hoisted(() => ({
   clipboardSource: vi.fn(),

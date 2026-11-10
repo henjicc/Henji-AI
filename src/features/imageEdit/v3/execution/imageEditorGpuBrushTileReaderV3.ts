@@ -22,8 +22,6 @@ export async function readImageEditorBrushTilesWithAdmissionV3(
   }
 }
 
-export const readImageEditorGpuBrushTilesV3 = readImageEditorBrushTilesWithAdmissionV3
-
 function abortableDelay(delayMs: number, signal: AbortSignal): Promise<void> {
   if (signal.aborted) return Promise.reject(new DOMException('Aborted', 'AbortError'))
   return new Promise((resolve, reject) => {

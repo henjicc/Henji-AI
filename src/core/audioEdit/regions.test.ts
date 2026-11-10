@@ -10,8 +10,8 @@ import { rasterAudioRepairMask } from './brushMask'
 import { applyAudioEditGainRegions } from './regions'
 
 const shell = { id: 'regions', name: '声音', createdAt: 1, updatedAt: 1, revision: 0 }
-export const gain = { id: 'gain', startFrame: 0, endFrame: 24000, gainDb: -6, fadeInFrames: 100, fadeOutFrames: 100, enabled: true }
-export const repair = { id: 'heal', kind: 'spectral_heal' as const, startFrame: 1000, endFrame: 2000, lowHz: 100, highHz: 2000, strength: .5, enabled: true, strokes: [{ radius: .1, points: [{ x: .1, y: .3 }, { x: .8, y: .3 }] }] }
+const gain = { id: 'gain', startFrame: 0, endFrame: 24000, gainDb: -6, fadeInFrames: 100, fadeOutFrames: 100, enabled: true }
+const repair = { id: 'heal', kind: 'spectral_heal' as const, startFrame: 1000, endFrame: 2000, lowHz: 100, highHz: 2000, strength: .5, enabled: true, strokes: [{ radius: .1, points: [{ x: .1, y: .3 }, { x: .8, y: .3 }] }] }
 it('v1 migrates without changing old audio edits; v2 regions survive document round-trip', () => {
   const before = JSON.stringify(v1.content)
   const content = upgradePersistenceContent({ id: 'document.audio_edit', name: '音频', version: 2, minReaderVersion: 1, schema: audioEditDocumentKind.contentSchema, migrations: audioEditDocumentKind.migrations }, v1.content, 1)

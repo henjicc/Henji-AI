@@ -10,8 +10,6 @@ export interface ProviderKeyStatusDto {
   configured: boolean
 }
 
-export type { ProviderConnectionTestResultDto } from '@/platform/contracts/aiRuntime'
-
 export interface AiGenerateRequestDto {
   paidReceipt?: import('../core/application-control/paidApproval').PaidOperationReceipt
   modelId: string

@@ -40,9 +40,8 @@ export interface ParagraphLayout {
 }
 const profile = { lineBreakScan: 'blink', graphemeTable: 'chromium/char', hangTabs: true } as const
 // 保留量化前精度；只在 walker 的 fit 边界转换，不逐 glyph 累计舍入误差。
+// 可用宽度也走同一种取整：按文字自身的宽度再排一次必须放得下，否则差 1/64 像素就多折一行，末尾的字被行数上限裁掉。
 export const layoutUnits = (width: number): number => Math.round(width * 64)
-// 与 layoutUnits 同一种取整：按文字自身的宽度再排一次必须放得下，否则差 1/64 像素就多折一行，末尾的字被行数上限裁掉。
-export const availableUnits = layoutUnits
 export function graphemeEnds(text: string): number[] {
   const ends = new Int32Array(text.length)
   return Array.from(ends.subarray(0, findGraphemeEnds('chromium/char', text, 0, text.length, ends)))
@@ -338,7 +337,7 @@ export class ShapedParagraph {
         if (width === null) { stoppedAt = cursor.graphemeIndex ? this.segmentEnds[cursor.segmentIndex][cursor.graphemeIndex - 1] : this.analysis.starts[cursor.segmentIndex]; break }
         maxWidth = width
       }
-      const available = this.options.wrap === 'none' ? Infinity : availableUnits(maxWidth)
+      const available = this.options.wrap === 'none' ? Infinity : layoutUnits(maxWidth)
       const segmentStart = this.analysis.starts[cursor.segmentIndex]
       const initialOffset = cursor.graphemeIndex ? this.segmentEnds[cursor.segmentIndex][cursor.graphemeIndex - 1] : segmentStart
       const { data, ends } = this.prepared(initialOffset, available)
@@ -370,7 +369,7 @@ export class ShapedParagraph {
       cursor = { ...cursor }
     }
     const width = Math.max(0, ...lines.map(line => line.width))
-    return Object.freeze({ text: this.text, lines: Object.freeze(lines), width, height: lines.length * (this.options.lineHeight ?? this.options.size * 1.2), overflow: layoutUnits(width) > availableUnits(maxWidth), ...(stoppedAt === undefined ? {} : { stoppedAt }) })
+    return Object.freeze({ text: this.text, lines: Object.freeze(lines), width, height: lines.length * (this.options.lineHeight ?? this.options.size * 1.2), overflow: layoutUnits(width) > layoutUnits(maxWidth), ...(stoppedAt === undefined ? {} : { stoppedAt }) })
   }
   intrinsicWidths(): { min: number; max: number } {
     let min = 0, max = 0, lineStart = 0

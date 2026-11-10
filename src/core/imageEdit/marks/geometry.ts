@@ -1,6 +1,6 @@
 import type { MarkOrientation, MarkRotation, MarkCropRect } from '../types';
 import { MIN_IMAGE_EDIT_CROP_SIZE_PX } from '../constraints';
-export function clamp(value: number, min: number, max: number): number { return Math.min(max, Math.max(min, value)); }
+function clamp(value: number, min: number, max: number): number { return Math.min(max, Math.max(min, value)); }
 export type OrientationOp = 'rotate-cw' | 'rotate-ccw' | 'flip-h' | 'flip-v';
 
 const ROTATIONS: MarkRotation[] = [0, 90, 180, 270];

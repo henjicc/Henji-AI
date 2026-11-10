@@ -15,7 +15,7 @@ export function webRecordingDirectory(id: string): string {
   return path.join(webRecordingsRoot(), id)
 }
 
-export function sha256(bytes: Uint8Array): string { return crypto.createHash('sha256').update(bytes).digest('hex') }
+function sha256(bytes: Uint8Array): string { return crypto.createHash('sha256').update(bytes).digest('hex') }
 export function digestBase64(base64: string): string { return sha256(Buffer.from(base64, 'base64')) }
 
 /**

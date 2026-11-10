@@ -85,7 +85,7 @@ export interface ImageMarkToolProps {
  * - 编辑器：命令带左端返回列表（草稿离开三选一），右端“保存 / 另存为 / 导出”。
  * 打开与离开都经图片文档运行时（文档会话）；别处请求打开的文档由这里接手。
  */
-export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element {
+function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element {
   const { t } = useTranslation('ui');
   const developmentLaunch = readDevelopmentLaunchOptions();
   const { showNotification } = useNotification();

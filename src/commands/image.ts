@@ -7,12 +7,10 @@ import type {
   PrepareLocalRedrawResult,
 } from '@/platform/contracts/image'
 import {
-  extensionToMime,
   imageCmdInfo,
   isNativeImageRuntime,
   loadImageElement,
   parseAspectRatio,
-  persistBytes,
   reduceAspectRatio,
   sourceKindForLog,
   sourceToDataUrl,
@@ -199,29 +197,6 @@ export async function prepareNodeImageSource(
     aspectRatio,
     createdFilePaths: [],
   };
-}
-
-export async function prepareNodeImageBinary(
-  bytes: Uint8Array,
-  extension?: string,
-  maxPreviewDimension = 512
-): Promise<PrepareNodeImageSourceResult> {
-  const startedAt = performance.now();
-  if (isNativeImageRuntime()) {
-    try {
-      return await getPlatform().image.prepareNodeImageBinary(bytes, extension, maxPreviewDimension);
-    } catch (error) {
-      throwNativeImageFailure('prepareNodeImageBinary', startedAt, error, {
-        byteLength: bytes.byteLength,
-        extension,
-        maxPreviewDimension,
-      });
-    }
-  }
-
-  const mime = extensionToMime(extension || 'png');
-  const imagePath = await persistBytes(bytes, mime);
-  return await prepareNodeImageSource(imagePath, maxPreviewDimension);
 }
 
 export async function cropImageSource(

@@ -97,6 +97,7 @@ const surfaceDefinitions = [
   },
 ] as const
 
+/** @public scripts/check-assistant-capabilities.cjs 经 loadTypeScript 按路径读取，knip 看不到。 */
 export const APPLICATION_SURFACE_DEFINITIONS: readonly ApplicationSurfaceDefinition[] = surfaceDefinitions.map(
   (surface) => ({
     ...surface,

@@ -57,4 +57,3 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     )
 }
 
-export default NotificationContext

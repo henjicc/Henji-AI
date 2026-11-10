@@ -202,12 +202,6 @@
     {
       "category": "migration",
       "file": "src/features/canvas/imageEditV3/layerStackV1Adapter.ts",
-      "name": "LayerStackV1ImportError",
-      "reason": "读取图层包 V1 并投影到图片文档格式，名称标识迁移的源格式与目标格式"
-    },
-    {
-      "category": "migration",
-      "file": "src/features/canvas/imageEditV3/layerStackV1Adapter.ts",
       "name": "readLayerStackV1ImageEditorOption",
       "reason": "读取图层包 V1 并投影到图片文档格式，名称标识迁移的源格式与目标格式"
     },

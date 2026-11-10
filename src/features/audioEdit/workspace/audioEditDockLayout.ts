@@ -114,7 +114,7 @@ export function parseAudioEditLayout(raw: string): SerializedDockview {
 }
 
 /** 布局预设走共享的工作区布局服务（与剪辑、3D 镜头参考、图片编辑同一套：另存、改名、删除、重置、助手读写）。 */
-export const audioEditLayoutPresets = registerWorkspaceLayout({
+registerWorkspaceLayout({
   workspaceId: AUDIO_EDIT_WORKSPACE_ID,
   panels: AUDIO_EDIT_PANELS,
   builtinPresets: AUDIO_EDIT_LAYOUT_PRESETS.map(preset => ({ id: preset.id, name: preset.name, layout: preset.layout() })),

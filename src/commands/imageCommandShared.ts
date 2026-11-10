@@ -101,16 +101,6 @@ export function normalizeLocalPath(source: string): string {
   return decodeFileUrl(source.trim());
 }
 
-export function extensionToMime(extension: string): string {
-  const normalized = extension.replace(/^\./, '').toLowerCase();
-  if (normalized === 'jpg' || normalized === 'jpeg') return 'image/jpeg';
-  if (normalized === 'webp') return 'image/webp';
-  if (normalized === 'gif') return 'image/gif';
-  if (normalized === 'bmp') return 'image/bmp';
-  if (normalized === 'avif') return 'image/avif';
-  return 'image/png';
-}
-
 export function mimeToExtension(mime: string): string {
   const normalized = mime.toLowerCase();
   if (normalized.includes('jpeg') || normalized.includes('jpg')) return 'jpg';

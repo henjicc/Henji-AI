@@ -49,11 +49,6 @@ export * from './api-projects'
 export * from './api-ai'
 export * from './api-media'
 export * from './api-desktop'
-export type { HenjiImageEditorV3Api } from './image-editor-v3-api'
-export type { HenjiVideoFramesApi } from './api-video-frames'
-export type { HenjiVideoDecoderApi } from './api-video-decoder'
-export type { HenjiDocumentsApi } from './api-documents'
-export type { HenjiGenerationHistoryApi, HenjiPresetsApi, HenjiSettingsApi } from './api-local-records'
 
 export interface HenjiNativeApi {
   appMenu: AppMenuPlatform

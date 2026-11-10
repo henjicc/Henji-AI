@@ -16,7 +16,7 @@ import { createImageMarkColorMode } from '@/features/imageMark/standalone/imageM
 
 export const CANVAS_EDIT_V3_LAYER_STACK_OPTION = 'layerStackDocumentV1'
 
-export class LayerStackV1ImportError extends Error {
+class LayerStackV1ImportError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'LayerStackV1ImportError'

@@ -88,10 +88,6 @@ export async function deletePreset(id: string): Promise<void> {
     await presetService.deletePreset(id)
 }
 
-export async function renamePreset(id: string, newName: string): Promise<void> {
-    await presetService.updatePreset(id, { name: newName })
-}
-
 // 格式化时间为 "刚刚"、"5分钟前" 等
 export function formatTimeAgo(timestamp: number): string {
     const now = Date.now()

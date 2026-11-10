@@ -1,5 +1,0 @@
-export * from './imageEditorGpuSceneClientV3'
-export * from './imageEditorGpuSceneProtocolV3'
-export * from './imageEditorGpuSceneResourceRegistryV3'
-export * from './imageEditorGpuSceneRuntimeV3'
-export * from './imageEditorGpuSceneSequenceV3'

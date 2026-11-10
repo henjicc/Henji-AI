@@ -13,7 +13,7 @@ export type Pose = z.infer<typeof poseSchema>
 export const motionPropertySchema = z.enum(['position', 'rotationTurns', 'scaleXY', 'pivot'])
 export type MotionProperty = z.infer<typeof motionPropertySchema>
 export const monoSpanSchema = z.tuple([safeClockSchema, safeClockSchema]).refine(([a, b]) => b >= a, '墙钟区间倒置')
-export const timelineSchema = z.object({ sequenceRef: applicationRefSchema, frame: safeClockSchema, fps: videoEditRatioSchema, visitRef: idSchema }).strict()
+const timelineSchema = z.object({ sequenceRef: applicationRefSchema, frame: safeClockSchema, fps: videoEditRatioSchema, visitRef: idSchema }).strict()
 export type Timeline = z.infer<typeof timelineSchema>
 export const dualClockShape = {
   seq: safeClockSchema, monoUs: safeClockSchema, timeline: timelineSchema.nullable(), clockSegmentRef: idSchema,

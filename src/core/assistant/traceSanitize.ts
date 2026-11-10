@@ -87,7 +87,7 @@ function serializedBytes(value: unknown): number {
   }
 }
 
-export function isSensitiveKey(key: string): boolean {
+function isSensitiveKey(key: string): boolean {
   const lower = key.toLowerCase()
   return lower.includes('api_key') ||
     lower.includes('apikey') ||

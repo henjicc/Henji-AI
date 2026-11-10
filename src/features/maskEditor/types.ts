@@ -21,7 +21,7 @@ export interface MaskStroke {
   points: MaskPoint[];
 }
 
-export interface MaskShape {
+interface MaskShape {
   id: string;
   kind: MaskShapeKind;
   mode: MaskStrokeMode;

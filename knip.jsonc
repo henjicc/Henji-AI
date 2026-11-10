@@ -1,0 +1,98 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignoreWorkspaces": ["packages/ai-sdk"],
+  "includeEntryExports": true,
+  "workspaces": {
+    ".": {
+      "entry": [
+        "src/main.tsx",
+        "electron/main/index.ts",
+        "electron/preload/index.ts",
+        "electron/main/*-utility.ts",
+        "electron/main/*-worker.ts",
+        "electron/main/mcp-relay.ts",
+        "electron/main/services/audio/waveform-worker.ts",
+        "electron/main/services/fonts/worker.ts",
+        "src/**/*{Worker,worker}.ts",
+        "src/**/*.test.{ts,tsx}",
+        "electron/**/*.test.ts",
+        "src/tests/setup.ts",
+        "scripts/**/*.{cjs,mjs,js,ts}",
+        "*.config.{ts,js,cjs}",
+        "src/features/documents/application/documentPromptStoreLedger.ts",
+        "src/features/videoEdit/engine/videoEditColorGradeShader.ts",
+        "src/features/canvas/extensions/CanvasExtension.ts"
+      ],
+      "project": ["src/**/*.{ts,tsx}", "electron/**/*.ts", "scripts/**/*.{cjs,mjs,js,ts}", "*.config.{ts,js,cjs}", "!scripts/__fixtures__/**", "!tickets/**"]
+    },
+    "packages/web-replay-probe": {
+      "entry": ["src/index.ts", "src/replay/mainWorld.ts"]
+    }
+  },
+  "ignoreDependencies": [
+    "henji-author-opentype.js-2.0.0",
+    "henji-author-three-0.186.1",
+    "henji-author-three-gpu-pathtracer-0.0.27",
+    "henji-author-three-gpu-pathtracer-0.0.27-henji.1",
+    "henji-author-three-mesh-bvh-0.9.17",
+    "henji-author-three-types-0.186.1"
+  ],
+  // 未使用的导出、类型、重复导出由 scripts/check-dead-code.cjs 拦截（新增即失败）。
+  // 下面只登记 knip 看不见使用方、或受持久格式保护的路径；每一条写明理由，不得为了让门禁变绿而新增。
+  "ignoreIssues": {
+    // 构建与工具配置文件的默认导出由工具按约定读取
+    "electron.vite.config.ts": ["exports"],
+    "vitest.config.ts": ["exports"],
+    "postcss.config.js": ["exports"],
+    "scripts/electron-builder-after-pack.cjs": ["exports"],
+    "scripts/effect-preview/vite.config.ts": ["exports"],
+
+    // 生成脚本的产物，不手改；改生成脚本
+    "**/*.generated.ts": ["exports", "types"],
+
+    // 渲染层与主进程的契约类型：通过 import() 类型引用和全局声明生效，knip 追不到使用方
+    "electron/preload/api*.d.ts": ["exports", "types"],
+
+    // 持久格式：逐版本迁移、数据库迁移、向前兼容与其测试支撑，向后兼容规则要求保留
+    "electron/main/services/db-migrations.ts": ["exports", "types"],
+    "electron/main/services/db-migration-fixture.test-support.ts": ["exports", "types"],
+    "src/core/persistence/forwardCompat.ts": ["exports", "types"],
+    "src/core/imaging/adjustments/colorGradeMigration.ts": ["exports", "types"],
+    "src/core/videoEdit/styles/styleTemplateMigration.ts": ["exports", "types"],
+    "scripts/generate-persistence-packages.ts": ["exports", "types"],
+
+    // 按路径字符串动态加载的模块（scripts 里 loadTypeScript('路径')），knip 看不到解构出的使用方
+    "scripts/lib/premiereMigrationModel.ts": ["exports", "types"],
+    "scripts/lib/spectrogramGpuParity.ts": ["exports", "types"],
+    "scripts/lib/uiInspectionVideoEditContentFixture.ts": ["exports", "types"],
+    "scripts/lib/uiInspectionVideoEditMonitorFixtures.ts": ["exports", "types"],
+    "scripts/lib/webSourcePipelineProbe.ts": ["exports", "types"],
+
+    // 门禁自身的测试夹具，故意含有无人使用的导出
+    "scripts/__fixtures__/**": ["exports", "types", "duplicates"],
+
+    // CommonJS 脚本经 require('x').name 属性链和解构消费，knip 不追踪这种用法，导出清单不可信
+    "scripts/**/*.{cjs,mjs}": ["exports", "types"],
+
+    // 显式入口：按路径加载（着色器、文档提示词账本）或预留的第三方扩展接口
+    "src/features/canvas/extensions/CanvasExtension.ts": ["exports", "types"],
+    "src/features/documents/application/documentPromptStoreLedger.ts": ["exports", "types"],
+    "src/features/videoEdit/engine/videoEditColorGradeShader.ts": ["exports", "types"],
+    "src/core/imaging/effects/wgsl/colorGrade.ts": ["exports", "types"],
+
+    // 同一校验规则的不同语义别名（实体类型、作用域、界面），用名字区分用途，不合并
+    "src/core/application-control/identifiers.ts": ["duplicates"],
+
+    // 探针包对宿主暴露的入口，由构建产物按名称调用
+    "packages/web-replay-probe/src/**": ["exports", "types"]
+  },
+  "ignoreUnresolved": [
+    "./audio-edit-mask-worker.cjs",
+    "./audio-edit-mouth-click-worker.cjs",
+    "./audio-edit-effects-worker.cjs",
+    "./font-worker.cjs",
+    "./image-registration-worker.cjs",
+    "./image-color-lut-worker.cjs"
+  ],
+  "ignoreBinaries": ["attrib", "cargo", "rustup", "dumpbin", "powershell", "pwsh", "ffmpeg", "ffprobe", "reg", "taskkill.exe"]
+}

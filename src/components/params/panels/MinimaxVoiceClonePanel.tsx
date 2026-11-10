@@ -471,4 +471,3 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
   )
 }
 
-export default MinimaxVoiceClonePanel
