@@ -15,6 +15,7 @@ description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧
 
 | 什么时候读 | 文件 |
 |---|---|
+| **新建一屏、大改一屏，或“组件都用对了但看着不精致”**：整屏的主次、三档文字加一档图标灰、强调色出现在哪几处、行高节奏、出问题的状态怎么画，以及“先草稿、用户确认、照草稿实现、并排核对”的流程 | `references/sample-screen.md` |
 | 调颜色、写 `.css`、加毛玻璃、改对比度、碰主题引擎或语义令牌 | `references/color-and-material.md` |
 | 写任何过渡/动画，或用 `setTimeout` 卸载动画组件 | `references/motion.md` |
 | 用到任何图标 | `references/icons.md` |

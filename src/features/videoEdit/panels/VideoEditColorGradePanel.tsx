@@ -8,8 +8,9 @@ import { chooseColorGradeExportPath, describeColorGradeExport } from '@/services
 import type { ColorStatistics } from '@/core/imaging/adjustments/colorStatistics'
 import { useTranslation } from 'react-i18next'
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { RotateCcw, SquareSplitHorizontal, WandSparkles, Upload } from 'lucide-react'
-import { Dropdown, UiButton, UiEmpty, UiFieldLayoutContext, UiGroup, UiIconButton, UiLoading, UiPropertyMenuContext } from '@/components/ui'
+import { Dropdown, UiButton, UiEmpty, UiFieldLayoutContext, UiGroup, UiIconButton, UiLoading, UiPropertyMenuContext, UiToolbar } from '@/components/ui'
 import { UI_PROPERTY_INSET_CLASS } from '@/components/ui/styleTokens'
 import ContextMenu from '@/components/ContextMenu'
 import { useContextMenu } from '@/hooks/useContextMenu'
@@ -28,7 +29,7 @@ import { VideoEditBuiltinParamRows } from './VideoEditBuiltinEffectControls'
 import { importVideoEditColorLut } from '../application/videoEditColorLuts'
 import { exportVideoEditColorGrade } from '../application/videoEditColorGradeExport'
 
-function ColorGradeEditor({ target, clip, selectedId, onError }: { target: VideoEditCompositeTarget; clip: VideoEditClip; selectedId: string; onError: (reason: unknown) => void }): React.ReactElement {
+function ColorGradeEditor({ target, clip, selectedId, onError, footer }: { target: VideoEditCompositeTarget; clip: VideoEditClip; selectedId: string; onError: (reason: unknown) => void; footer: HTMLElement | null }): React.ReactElement {
   const { t } = useTranslation('ui')
   useSyncExternalStore(subscribeVideoEditView, videoEditViewRevision)
   const effect = selectedId ? clip.effects?.find(effect => effect.id === selectedId) : clip.effects?.find(effect => effect.builtin?.id === VIDEO_EDIT_COLOR_GRADE.id)
@@ -70,13 +71,15 @@ function ColorGradeEditor({ target, clip, selectedId, onError }: { target: Video
     } catch (error) { if (!controller.signal.aborted) onError(error) }
     finally { if (!controller.signal.aborted) setBusy(false) }
   }
-  return <UiGroup labelWidth={96} className="flex flex-col" gap="row">
-    <div className={`flex flex-wrap items-center justify-end gap-1 ${UI_PROPERTY_INSET_CLASS}`}>
+  // 面板自己的工具（自动、按住看调色前、导出、重置）放底栏右侧，不占内容区的第一行
+  const tools = <>
       <UiButton size="sm" disabled={busy} onClick={() => { void automatic() }} tooltip="在片段内均匀采样，分析白平衡与明暗；选择参考后匹配其颜色"><WandSparkles  />{busy ? '分析中…' : reference ? '匹配颜色' : '自动'}</UiButton>
       <VideoEditGradeCompare target={target} effectId={effect?.id} disabled={busy || !effect?.enabled} />
       <ColorGradeExportButton busy={exporting} disabled={!effect?.builtin} disabledReason="片段还没有全能调色" onExport={(format, lutSize) => { void exportGrade(format, lutSize) }} />
       <UiIconButton size="xs" tooltip="重置全能调色" aria-label="重置全能调色" disabled={busy || !effect} onClick={() => gesture.commit({ curves: {}, params: videoEditBuiltinDefaults(VIDEO_EDIT_COLOR_GRADE) })}><RotateCcw  /></UiIconButton>
-    </div>
+  </>
+  return <UiGroup labelWidth={96} className="flex flex-col" gap="row">
+    {footer && createPortal(<UiToolbar variant="footer" aria-label="全能调色工具" tools={[{ kind: 'custom', id: 'grade-tools', label: '调色工具', node: <div className="flex items-center gap-1">{tools}</div> }]}>{effect ? '' : '还没有调色'}</UiToolbar>, footer)}
     <UiFormRow label="校色参考片段" density="compact"><Dropdown ariaLabel="校色参考片段" value={reference} options={[{ value: '', label: '自动校色' }, ...getActiveVideoEditSequence(requireVideoEditInstance(target.projectId)).clips.filter(value => value.id !== clip.id && value.kind !== 'audio' && value.kind !== 'adjustment').map(value => ({ value: value.id, label: value.name }))]} onSelect={setReference} /></UiFormRow>
     {reference && <UiFormRow label="颜色匹配方式" density="compact"><Dropdown ariaLabel="颜色匹配方式" value={matchMethod} options={[{ value: 'mkl', label: '整体颜色（推荐）' }, { value: 'moments', label: '均值与反差曲线' }, { value: 'histogram', label: '颜色分布曲线' }]} onSelect={value => setMatchMethod(value as 'mkl' | 'moments' | 'histogram')} /></UiFormRow>}
     {busy && <UiLoading size="xs" message="正在处理颜色…" />}
@@ -137,13 +140,17 @@ function VideoEditColorGradePanelContent({ instance, onError, visible = true }: 
   const effects = clip?.effects?.filter(effect => effect.builtin?.id === VIDEO_EDIT_COLOR_GRADE.id) ?? []
   const selectedId = choice && choice.clipId === clip?.id && effects.some(effect => effect.id === choice.effectId) ? choice.effectId : ''
   const menu = useContextMenu()
+  const [footer, setFooter] = useState<HTMLDivElement | null>(null)
   if (!clip || clip.kind === 'audio') return <UiEmpty size="sm" title="选择画面片段以调色" />
   // 与效果控件同一套属性排布（重要记录 019 / 020）：四列属性行、秒表一列、重置在右键菜单
   return <UiFieldLayoutContext.Provider value="property"><UiPropertyMenuContext.Provider value={menu.showMenu}>
-    <div className="flex h-full min-h-0 flex-col gap-2 overflow-auto pb-8 pt-3" aria-label="全能调色">
+    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto pb-8 pt-3" aria-label="全能调色">
       <span className={`truncate text-xs font-semibold text-text1 ${UI_PROPERTY_INSET_CLASS}`} data-user-content>{clip.name}</span>
       {effects.length > 1 && <div className={UI_PROPERTY_INSET_CLASS}><Dropdown ariaLabel="编辑全能调色效果" value={selectedId || effects[0].id} options={effects.map((effect, i) => ({ value: effect.id, label: `${effect.name} ${i + 1}` }))} onSelect={effectId => setChoice({ clipId: clip.id, effectId })} /></div>}
-      {visible && <ColorGradeEditor key={`${instance.document.id}:${sequence.id}:${clip.id}:${selectedId}`} target={{ projectId: instance.document.id, sequenceId: sequence.id, clipId: clip.id }} clip={clip} selectedId={selectedId} onError={onError} />}
+      {visible && <ColorGradeEditor key={`${instance.document.id}:${sequence.id}:${clip.id}:${selectedId}`} target={{ projectId: instance.document.id, sequenceId: sequence.id, clipId: clip.id }} clip={clip} selectedId={selectedId} onError={onError} footer={footer} />}
+    </div>
+    <div ref={setFooter} className="shrink-0" data-video-edit-color-grade-footer />
     </div>
     <ContextMenu items={menu.menuItems} position={menu.menuPosition} onClose={menu.hideMenu} visible={menu.menuVisible} />
   </UiPropertyMenuContext.Provider></UiFieldLayoutContext.Provider>

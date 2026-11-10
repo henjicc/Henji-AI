@@ -101,7 +101,9 @@ const PROGRAM_COMMAND_ICONS: Record<Exclude<typeof PROGRAM_COMMAND_BUTTONS[numbe
 const PROGRAM_MARK_BUTTONS: ReadonlySet<string> = new Set(['add_marker', 'mark_in', 'mark_out', 'clear_in_out'])
 const PROGRAM_TRANSPORT_BUTTONS: ReadonlySet<string> = new Set(['go_in', 'go_out', 'go_start', 'step_back_five', 'step_back', 'play_reverse', 'play_stop', 'play_pause', 'play_forward', 'step_forward', 'step_forward_five', 'go_end', 'go_prev_edit', 'go_next_edit'])
 const programButtonGroup = (id: string): number => PROGRAM_MARK_BUTTONS.has(id) ? 0 : PROGRAM_TRANSPORT_BUTTONS.has(id) ? 1 : 2
-const PROGRAM_BUTTON_PRIORITY: Partial<Record<VideoEditProgramButtonId, number>> = { play_pause: 100, step_back: 90, step_forward: 90, mark_in: 80, mark_out: 80 }
+const PROGRAM_BUTTON_PRIORITY: Partial<Record<VideoEditProgramButtonId, number>> = { play_pause: 100, step_back: 90, step_forward: 90 }
+/** 面板变窄时整段一起收：先收其余工具，再收标记与入出点，播放一段留到最后。段首按钮不会先于前一段消失，段距一直在。 */
+const programButtonPriority = (id: string): number => PROGRAM_BUTTON_PRIORITY[id as VideoEditProgramButtonId] ?? [80, 85, 10][programButtonGroup(id)]
 /** 回放分辨率（PR“回放分辨率”）：控制条上的下拉与“更多”里的同一组选项。 */
 const PLAYBACK_RESOLUTION_OPTIONS = VIDEO_EDIT_PLAYBACK_RESOLUTIONS.map(value => ({ value, label: VIDEO_EDIT_PLAYBACK_RESOLUTION_LABELS[value] }))
 const PLAYBACK_RESOLUTION_TIP = '回放分辨率：播放卡顿时调低，画面变粗但更流畅；暂停时默认回到完整。导出、选帧和封面始终是完整分辨率。'
@@ -1165,7 +1167,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         className="flex-1 justify-center gap-0.5"
         alwaysShowOverflow
         items={[
-          ...barButtons.map((spec, index) => ({ id: spec.id, priority: PROGRAM_BUTTON_PRIORITY[spec.id as VideoEditProgramButtonId] ?? 10, node: index > 0 && programButtonGroup(spec.id) !== programButtonGroup(barButtons[index - 1].id) ? <div className="ml-4"><VideoEditMonitorButton spec={spec} /></div> : <VideoEditMonitorButton spec={spec} /> })),
+          ...barButtons.map((spec, index) => ({ id: spec.id, priority: programButtonPriority(spec.id), node: index > 0 && programButtonGroup(spec.id) !== programButtonGroup(barButtons[index - 1].id) ? <div className="ml-4"><VideoEditMonitorButton spec={spec} /></div> : <VideoEditMonitorButton spec={spec} /> })),
           { id: 'button_editor', priority: 0, pinned: true, node: <VideoEditMonitorButtonEditor kind="program" specs={programButtons} /> },
           { id: 'display', priority: 0, node: <div className="ml-2">{zoom.dropdown}</div> },
           { id: 'resolution', priority: 0, node: <Tooltip content={PLAYBACK_RESOLUTION_TIP}><div><Dropdown<VideoEditPlaybackResolution> ariaLabel="回放分辨率" appearance="text" size="sm" value={playbackResolution.resolution} options={PLAYBACK_RESOLUTION_OPTIONS} onSelect={resolution => changePlaybackResolution({ resolution })} /></div></Tooltip> },
