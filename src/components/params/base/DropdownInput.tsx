@@ -15,7 +15,8 @@ import { ParamLabel } from '../ParamLabel'
 import { ParamField } from '../ParamField'
 import { ParamChoicesExpandedContext } from '../paramPanelRows'
 import { ParamChoiceGrid } from './ParamChoiceGrid'
-import { isOrderedLevelChoice, orderLevelChoices, ParamSlider } from './ParamSlider'
+import { ParamSlider } from './ParamSlider'
+import { isOrderedLevelChoice, orderLevelChoices } from './orderedLevels'
 
 interface DropdownInputProps {
   param: DropdownParamDef
