@@ -144,3 +144,12 @@ nul
 /native/**/target/
 /native/video-decoder/ffmpeg/
 /native/audio-capture/vendor/
+
+# 验收证据与原始像素转储（体量大，验收完即删）
+tickets/**/evidence*/
+*.rgba
+*.half
+
+# 无 .gitmodules 的参考源码目录（不是子模块）
+/docs/others/gegl/
+/docs/others/gimp/

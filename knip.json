@@ -24,7 +24,7 @@
         "src/features/videoEdit/engine/videoEditColorGradeShader.ts",
         "src/features/canvas/extensions/CanvasExtension.ts"
       ],
-      "project": ["src/**/*.{ts,tsx}", "electron/**/*.ts", "scripts/**/*.{cjs,mjs,js,ts}", "*.config.{ts,js,cjs}", "!scripts/__fixtures__/**"]
+      "project": ["src/**/*.{ts,tsx}", "electron/**/*.ts", "scripts/**/*.{cjs,mjs,js,ts}", "*.config.{ts,js,cjs}", "!scripts/__fixtures__/**", "!tickets/**"]
     },
     "packages/web-replay-probe": {
       "entry": ["src/index.ts", "src/replay/mainWorld.ts"]
