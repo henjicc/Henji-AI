@@ -308,7 +308,7 @@ export const MediaStripUploader = forwardRef<MediaStripUploaderHandle, MediaStri
                     <Play aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.sm} fill-current`} />
                   </span>
                 )}
-                <span className="pointer-events-none absolute left-1 top-1 rounded-control bg-media-scrim px-1 font-mono text-2xs leading-4 text-on-media">
+                <span className="pointer-events-none absolute left-1 top-1 rounded-control bg-media-scrim px-1 tabular-nums text-2xs leading-4 text-on-media">
                   {typeNumbers[index]}
                 </span>
                 </span>

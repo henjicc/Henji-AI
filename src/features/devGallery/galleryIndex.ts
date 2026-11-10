@@ -87,7 +87,7 @@ export interface GalleryEntry {
 export const GALLERY_INDEX: readonly GalleryEntry[] = [
   ...[
     ['colors', '颜色', 'THEME_COLOR_TOKEN_NAMES 表面 文字 强调 状态 媒体 对比度'],
-    ['type', '排版', 'UI_TEXT 字号 行高 Geist'],
+    ['type', '排版', 'UI_TEXT 字号 行高 字重 字体 HarmonyOS 时间码 等宽数字'],
     ['spacing', '间距', 'UI_STACK_GAP UI_ROW_GAP UI_SECTION_STACK spacing'],
     ['radius', '圆角', 'UI_RADIUS compact default large'],
     ['shadow', '阴影', 'boxShadow 浮层 特效'],

@@ -61,13 +61,13 @@ export function VideoEditTimecodeReadout({ label, frame, fps, maxFrame, onSeek, 
     setEditing(null)
   }
   if (editing !== null) {
-    return <UiInput autoFocus size="sm" aria-label={`${label}（输入时间）`} className={`w-28 font-mono tabular-nums ${className}`} value={editing}
+    return <UiInput autoFocus size="sm" aria-label={`${label}（输入时间）`} className={`w-28 tabular-nums ${className}`} value={editing}
       onFocus={event => event.currentTarget.select()} onChange={event => setEditing(event.target.value)} onBlur={() => setEditing(null)}
       onKeyDown={event => { event.stopPropagation(); if (event.key === 'Enter') { event.preventDefault(); commit(editing) } else if (event.key === 'Escape') { event.preventDefault(); setEditing(null) } }} />
   }
   return <span role="spinbutton" tabIndex={0} aria-label={label} aria-valuenow={frame} aria-valuemin={0} aria-valuemax={maxFrame} aria-valuetext={text}
     title="拖动快速定位；单击输入时间（如 1230 = 12 秒 30 帧，2.25s = 2.25 秒）；Ctrl+单击切换时间码 / 帧号"
-    className={`shrink-0 cursor-ew-resize select-none font-mono tabular-nums text-accent-text ${className}`}
+    className={`shrink-0 cursor-ew-resize select-none tabular-nums text-accent-text ${className}`}
     onPointerDown={event => {
       if (event.button !== 0) return
       if (event.ctrlKey || event.metaKey) { event.preventDefault(); toggleTimecodeDisplay(); return }
@@ -114,7 +114,7 @@ export function VideoEditInOutDuration({ instance, className = '' }: { instance:
   const sequence = getActiveVideoEditSequence(instance)
   const frames = Math.max(0, (instance.outFrame ?? videoEditDuration(sequence)) - (instance.inFrame ?? 0))
   return <span aria-label="入出点持续时间" title="入出点持续时间" data-video-edit-in-out-duration={frames}
-    className={`shrink-0 select-none font-mono tabular-nums text-text2 ${className}`}>{timelineTimecode(frames, sequence.fps)}</span>
+    className={`shrink-0 select-none tabular-nums text-text2 ${className}`}>{timelineTimecode(frames, sequence.fps)}</span>
 }
 /**
  * 播放头：强调色竖线（设计稿 VideoEdit；强调色只用于主动作、焦点、播放头与选中指示）。

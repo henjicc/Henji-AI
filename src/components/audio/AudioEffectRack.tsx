@@ -107,7 +107,7 @@ export function AudioEffectSlots({ effects, onChange, gesture, disabled, bypasse
   const toggleRow = (id: string, open: boolean, name: string, number: number, enabled: boolean, tooltip: string | undefined) => <UiOptionButton variant="menu" size="sm" active={open} className="min-w-0 flex-1" aria-expanded={open} tooltip={tooltip} onClick={() => setOpenId(open ? null : id)}>
     <span className="flex min-w-0 items-center gap-1.5">
       {open ? <ChevronDown size={UI_ICON_SIZE.xs} className="shrink-0 text-text3" /> : <ChevronRight size={UI_ICON_SIZE.xs} className="shrink-0 text-text3" />}
-      <span className="w-4 shrink-0 text-right font-mono text-2xs tabular-nums text-text3">{number}</span>
+      <span className="w-4 shrink-0 text-right text-2xs tabular-nums text-text3">{number}</span>
       <span className={`truncate ${enabled ? '' : 'text-text3'}`}>{name}</span>
     </span>
   </UiOptionButton>

@@ -14,7 +14,7 @@ export default function RecordingFrame(): React.ReactElement | null {
     {phase === 'countdown' && <div className="absolute inset-0 flex items-center justify-center">
       {/* Zero means capture is still warming up: never show a frozen 0. */}
       {snapshot?.countdown
-        ? <span className="flex h-32 w-32 items-center justify-center rounded-full bg-media-scrim font-mono text-display font-semibold tabular-nums text-on-media" aria-live="assertive">{snapshot.countdown}</span>
+        ? <span className="flex h-32 w-32 items-center justify-center rounded-full bg-media-scrim text-display font-semibold tabular-nums text-on-media" aria-live="assertive">{snapshot.countdown}</span>
         : <span className="rounded-full bg-media-scrim px-4 py-2 text-sm font-medium text-on-media" aria-live="assertive">{t('screenRecording.preparing')}</span>}
     </div>}
     {phase === 'paused' && <span className="absolute left-1/2 top-0 -translate-x-1/2 rounded-b-md bg-warning-solid px-3 py-1 text-xs font-semibold text-on-warning">{t('screenRecording.paused')}</span>}

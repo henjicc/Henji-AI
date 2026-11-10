@@ -328,7 +328,7 @@ export const SdkModelsPage: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 >
                   <span className="flex min-w-0 flex-col">
                     <span className="truncate">{row.name}</span>
-                    <span className={`truncate ${UI_TEXT_META_CLASS} ${UI_TEXT_TIMECODE_CLASS}`}>{row.modelId}</span>
+                    <span className={`truncate ${UI_TEXT_META_CLASS} font-mono`}>{row.modelId}</span>
                   </span>
                   <span className={`truncate ${UI_TEXT_SECONDARY_CLASS}`}>{providerName(row.providerId)}</span>
                   <span className={`truncate ${UI_TEXT_SECONDARY_CLASS}`}>{CATEGORY_LABEL[row.category]}</span>
@@ -403,7 +403,7 @@ const ModelDetail: React.FC<{ row: SdkModelRow; configured: boolean; price: SdkM
       <div className="flex items-start gap-2">
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <span className={UI_TEXT_PANEL_TITLE_CLASS}>{row.name}</span>
-          <span className={`break-all ${UI_TEXT_META_CLASS} ${UI_TEXT_TIMECODE_CLASS}`}>{row.modelId}</span>
+          <span className={`break-all ${UI_TEXT_META_CLASS} font-mono`}>{row.modelId}</span>
         </div>
         <UiIconButton size="sm" tooltip="复制 Model ID" aria-label="复制 Model ID" onClick={() => void writeClipboardText(row.modelId)}><Copy /></UiIconButton>
       </div>
@@ -426,26 +426,26 @@ const ModelDetail: React.FC<{ row: SdkModelRow; configured: boolean; price: SdkM
         ) : null}
         {price?.description ? <UiFormRow label="计价说明" density="compact"><span className={UI_TEXT_SECONDARY_CLASS}>{price.description}</span></UiFormRow> : null}
         {row.tags.length ? <UiFormRow label="能力" density="compact"><span className={UI_TEXT_SECONDARY_CLASS}>{row.tags.join(' · ')}</span></UiFormRow> : null}
-        {row.rawTags.length ? <UiFormRow label="原始标签" density="compact"><span className={`${UI_TEXT_SECONDARY_CLASS} ${UI_TEXT_TIMECODE_CLASS}`}>{row.rawTags.join(' ')}</span></UiFormRow> : null}
+        {row.rawTags.length ? <UiFormRow label="原始标签" density="compact"><span className={`${UI_TEXT_SECONDARY_CLASS} font-mono`}>{row.rawTags.join(' ')}</span></UiFormRow> : null}
         {row.generation ? <>
-          <UiFormRow label="通用标识" density="compact"><span className={`${UI_TEXT_SECONDARY_CLASS} ${UI_TEXT_TIMECODE_CLASS}`}>{row.generation.definition.meta.canonicalModelId}</span></UiFormRow>
+          <UiFormRow label="通用标识" density="compact"><span className={`${UI_TEXT_SECONDARY_CLASS} font-mono`}>{row.generation.definition.meta.canonicalModelId}</span></UiFormRow>
         </> : null}
         {row.llm ? <>
-          <UiFormRow label="目录条目" density="compact"><span className={`${UI_TEXT_SECONDARY_CLASS} ${UI_TEXT_TIMECODE_CLASS}`}>{row.llm.catalogId ?? '未登记（按纯文本处理）'}</span></UiFormRow>
+          <UiFormRow label="目录条目" density="compact"><span className={`${UI_TEXT_SECONDARY_CLASS} font-mono`}>{row.llm.catalogId ?? '未登记（按纯文本处理）'}</span></UiFormRow>
           {availability ? <UiFormRow label="在售" density="compact"><AvailabilityText row={row} availability={availability} /></UiFormRow> : null}
           <UiFormRow label="接口" density="compact"><span className={UI_TEXT_SECONDARY_CLASS}>{row.llm.protocol === 'responses' ? 'Responses' : row.llm.protocol === 'chat' ? 'Chat Completions' : '不在预设里'}</span></UiFormRow>
           <UiFormRow label="上下文" density="compact"><span className={`${UI_TEXT_SECONDARY_CLASS} ${UI_TEXT_TIMECODE_CLASS}`}>{row.llm.contextWindow?.toLocaleString() ?? '未登记'} / 输出 {row.llm.maxOutputTokens?.toLocaleString() ?? '未登记'}</span></UiFormRow>
           {row.llm.note ? <UiFormRow label="备注" density="compact"><span className={UI_TEXT_SECONDARY_CLASS}>{row.llm.note}</span></UiFormRow> : null}
         </> : null}
         {row.capability ? <>
-          <UiFormRow label="能力 ID" density="compact"><span className={`break-all ${UI_TEXT_SECONDARY_CLASS} ${UI_TEXT_TIMECODE_CLASS}`}>{row.capability.descriptor.id}</span></UiFormRow>
+          <UiFormRow label="能力 ID" density="compact"><span className={`break-all ${UI_TEXT_SECONDARY_CLASS} font-mono`}>{row.capability.descriptor.id}</span></UiFormRow>
           <UiFormRow label="执行方式" density="compact"><span className={UI_TEXT_SECONDARY_CLASS}>{row.capability.descriptor.executionModes?.join(' · ') ?? '—'}</span></UiFormRow>
         </> : null}
       </UiGroup>
       {row.generation ? <>
         <UiGroup title="默认参数" titleTone="compact" divided>
           <UiPanel variant="inset" className="p-3">
-            <div className={`flex flex-col gap-1 ${UI_TEXT_META_CLASS} ${UI_TEXT_TIMECODE_CLASS}`}>
+            <div className={`flex flex-col gap-1 ${UI_TEXT_META_CLASS} font-mono`}>
               {Object.entries(defaults).map(([key, value]) => <span key={key} className="break-all">{key}: {formatValue(value)}</span>)}
             </div>
           </UiPanel>
@@ -464,7 +464,7 @@ const ModelDetail: React.FC<{ row: SdkModelRow; configured: boolean; price: SdkM
                 : <UiInlineStatus tone="error">{result.error}</UiInlineStatus>}
               {result.ok ? (
                 <UiPanel variant="inset" className="max-h-80 overflow-auto p-3">
-                  <pre className={`whitespace-pre-wrap break-all ${UI_TEXT_META_CLASS} ${UI_TEXT_TIMECODE_CLASS}`}>{JSON.stringify(result.body, null, 2)}</pre>
+                  <pre className={`whitespace-pre-wrap break-all ${UI_TEXT_META_CLASS} font-mono`}>{JSON.stringify(result.body, null, 2)}</pre>
                 </UiPanel>
               ) : null}
             </div>

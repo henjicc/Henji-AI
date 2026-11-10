@@ -79,7 +79,7 @@ const BenchColumn: React.FC<{
 
 const RunFooter: React.FC<{ requestId?: string; summary?: string }> = ({ requestId, summary }) => (
   <div className={`flex items-center gap-1 ${UI_TEXT_META_CLASS}`}>
-    <span className={`min-w-0 flex-1 truncate ${UI_TEXT_TIMECODE_CLASS}`}>{summary}</span>
+    <span className={`min-w-0 flex-1 truncate font-mono`}>{summary}</span>
     {requestId ? <>
       <UiIconButton size="xs" tooltip={`复制请求标识 ${requestId}，在日志里按它查整条链路`} aria-label="复制请求标识" onClick={() => void writeClipboardText(requestId)}><Copy /></UiIconButton>
       <UiIconButton size="xs" tooltip="打开日志" aria-label="打开日志" onClick={() => void openLogWindow()}><ScrollText /></UiIconButton>

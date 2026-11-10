@@ -308,7 +308,7 @@ function CurveGraph({ lane, sequence, selected, locked, height, pixels, view, pr
         const cx = x(entry.clip.start + point.time); const cy = y(point.value as number, range)
         return <g key={`${entry.clip.id}:${channel.key}:${point.time}`} className={on ? 'text-accent-text' : 'text-text2'}>
           <rect data-curve-clip={entry.clip.id} data-curve-key={channel.key} data-curve-time={point.time} aria-label={`${lane.label}关键帧 ${formatValue(entry, channel.key, point.value as number, sequence)}`} x={cx - 4} y={cy - 4} width={8} height={8} fill="currentColor" />
-          {on && channel === entry.channels.find(value => value.points.some(item => item.time === point.time)) && <text x={cx + 8} y={cy - 8} className="fill-text1 font-mono text-2xs" pointerEvents="none">{formatValue(entry, channel.key, point.value as number, sequence)}</text>}
+          {on && channel === entry.channels.find(value => value.points.some(item => item.time === point.time)) && <text x={cx + 8} y={cy - 8} className="fill-text1 tabular-nums text-2xs" pointerEvents="none">{formatValue(entry, channel.key, point.value as number, sequence)}</text>}
         </g>
       })
     }))}

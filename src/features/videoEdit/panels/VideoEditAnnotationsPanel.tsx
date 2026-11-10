@@ -39,11 +39,11 @@ function AnnotationRow({ instance, sequenceId, mark, number, fps, expanded, pick
   const reject = (): void => run(() => { reviewVideoEditAnnotation(projectId, mark.id, false, note); setNote('') })
   return <div className="group/annotation relative px-1" data-video-edit-annotation={mark.id} data-expanded={expanded || undefined}>
     <UiOptionButton variant="menu" active={picked} aria-pressed={picked || undefined} aria-label={`跳到标注 ${number}`} aria-expanded={expanded} className="w-full items-start gap-2" onClick={event => onPick(event, mark.id)}>
-      <span aria-hidden="true" className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-2xs font-bold ${resolved ? 'opacity-50' : ''}`} style={{ backgroundColor: VIDEO_EDIT_ANNOTATION_COLORS[videoEditAnnotationColor(mark)], color: ink(mark) }}>{number}</span>
+      <span aria-hidden="true" className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-2xs font-semibold ${resolved ? 'opacity-50' : ''}`} style={{ backgroundColor: VIDEO_EDIT_ANNOTATION_COLORS[videoEditAnnotationColor(mark)], color: ink(mark) }}>{number}</span>
       <span className="mr-6 flex min-w-0 flex-1 flex-col gap-0.5">
         <span className={`line-clamp-2 whitespace-normal break-words text-13 ${resolved ? 'text-text3' : 'text-text1'}`}>{mark.text}</span>
         <span className="flex min-w-0 items-center gap-1.5 whitespace-nowrap text-2xs text-text3">
-          <span className="font-mono">{timelineTimecode(mark.frame, fps)}{mark.endFrame !== undefined ? ` – ${timelineTimecode(mark.endFrame, fps)}` : ''}</span>
+          <span className="tabular-nums">{timelineTimecode(mark.frame, fps)}{mark.endFrame !== undefined ? ` – ${timelineTimecode(mark.endFrame, fps)}` : ''}</span>
           <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${STATUS_DOT[mark.status]}`} />{VIDEO_EDIT_ANNOTATION_STATUS_LABELS[mark.status]}
           {element && <span className="min-w-0 truncate">· {element.missing ? '元素已不存在' : element.label}</span>}
         </span>
@@ -151,7 +151,7 @@ export const VideoEditAnnotationsPanel = memo(function VideoEditAnnotationsPanel
       </div>
     </div>}
     {instance.inFrame !== null && instance.outFrame !== null && <div className="flex shrink-0 flex-col gap-2 border-b border-line px-4 py-3">
-      <span className="flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold text-text1">入出点这一段<span className="font-mono text-2xs font-normal text-text3">{timelineTimecode(instance.inFrame, fps)} – {timelineTimecode(instance.outFrame - 1, fps)}</span></span>
+      <span className="flex items-center gap-1.5 whitespace-nowrap text-xs font-semibold text-text1">入出点这一段<span className="tabular-nums text-2xs font-normal text-text3">{timelineTimecode(instance.inFrame, fps)} – {timelineTimecode(instance.outFrame - 1, fps)}</span></span>
       <div className="flex items-center gap-1"><UiInput size="sm" className="min-w-0 flex-1" aria-label="时间段标注说明" placeholder="这段要改什么？" value={rangeNote} onChange={event => setRangeNote(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) addRange() }} /><UiButton size="sm" variant="secondary" disabled={!rangeNote.trim()} onClick={addRange}>标注时间段</UiButton></div>
     </div>}
     {total > 0 && <div className="flex h-band-tab shrink-0 items-center px-1.5">

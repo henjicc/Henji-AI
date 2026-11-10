@@ -81,7 +81,7 @@ export function VideoEditZoomTrack({ instance, sequence, geometry, pixels, view,
   const playhead = instance.frame
   return <div className="absolute left-0 right-0 z-sticky border-b border-gap bg-window" style={{ top: geometry.top - geometry.clipTop, height: geometry.height }} data-video-edit-zoom-track data-layout-pinned onPointerDown={event => { if (event.button === 0) event.stopPropagation() }}>
     <div className="sticky left-0 z-sticky flex h-full items-center border-r border-gap bg-panel pl-1 pr-1.5" style={{ width: header }}>
-      <div className="flex min-w-0 flex-1 items-center gap-1.5 px-1"><span className="w-5 shrink-0 text-left font-mono text-2xs font-semibold">Z1</span><span className="truncate text-2xs">缩放</span></div>
+      <div className="flex min-w-0 flex-1 items-center gap-1.5 px-1"><span className="w-5 shrink-0 text-left tabular-nums text-2xs font-semibold">Z1</span><span className="truncate text-2xs">缩放</span></div>
     </div>
     <VideoEditTimelinePlayhead instance={instance} pixels={pixels} overBorder />
     {blocks.map(({ clip, original, region, frames }) => {

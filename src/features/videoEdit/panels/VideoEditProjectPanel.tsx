@@ -302,7 +302,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
         <LabelSwatch label={columns.label} />
         <Icon size={UI_ICON_SIZE.xs} className="shrink-0 text-text2" aria-hidden="true" />
         <span className="min-w-0 shrink-0 truncate text-left text-xs" style={{ width: Math.max(40, columnWidths.name - Math.min(row.depth, 8) * INDENT_PX - 44) }} title={entry.kind === 'item' && entry.value.tags?.length ? `${entry.value.name}（${entry.value.tags.join(' · ')}）` : `${entry.value.name} · ${detailOf(entry)}`}>{entry.value.name}</span>
-        {LIST_COLUMNS.map(column => <span key={column.key} className="shrink-0 truncate pl-2 text-left font-mono text-2xs tabular-nums text-text3" style={{ width: columnWidths[column.key] }} data-video-edit-project-column={column.key}>{cells[column.key]}</span>)}
+        {LIST_COLUMNS.map(column => <span key={column.key} className="shrink-0 truncate pl-2 text-left text-2xs tabular-nums text-text3" style={{ width: columnWidths[column.key] }} data-video-edit-project-column={column.key}>{cells[column.key]}</span>)}
       </UiOptionButton>
     </div>
   }

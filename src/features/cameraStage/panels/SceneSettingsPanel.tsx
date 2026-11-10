@@ -106,7 +106,7 @@ const SceneSettingsPanel: React.FC = () => {
           value={sceneSettings.sunlight.timeOfDay}
           onChange={setSceneSunlightTimeOfDay}
           readout={(
-            <span className="w-16 shrink-0 text-right font-mono text-xs tabular-nums text-text2">
+            <span className="w-16 shrink-0 text-right text-xs tabular-nums text-text2">
               {formatTimeOfDayLabel(sceneSettings.sunlight.timeOfDay)}
             </span>
           )}

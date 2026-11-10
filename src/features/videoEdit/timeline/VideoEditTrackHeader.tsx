@@ -91,9 +91,9 @@ export function VideoEditTrackHeader({ row, code, targeted, onTarget, onPatch, o
   return <div className={`sticky left-0 z-sticky flex h-full items-center gap-px border-r border-gap pl-1 pr-1.5 ${targeted ? 'bg-raised' : 'bg-panel'}`} style={{ width: header }} data-video-edit-track-header={track.id} onContextMenu={onContextMenu}>
     {onToggleExpanded && <UiIconButton size="2xs" aria-expanded={expanded} aria-label={expandLabel} tooltip={expanded ? expandMode === 'scene' ? '收起片子数据' : '收起关键帧' : onExpandScene ? '展开看关键帧或片子数据' : '展开看关键帧'} onClick={toggle}>{expanded ? <ChevronDown /> : <ChevronRight />}</UiIconButton>}
     {onExpandScene && <ContextMenu items={menu.menuItems} position={menu.menuPosition} visible={menu.menuVisible} onClose={menu.hideMenu} />}
-    {caption ? <div className="flex min-w-0 flex-1 items-center gap-1.5 px-1"><span className="w-5 shrink-0 text-left font-mono text-2xs font-semibold" data-video-edit-track-code>{code}</span>{header >= TRACK_NAME_MIN_HEADER && <span className="truncate text-2xs">{name}</span>}</div> : renaming ? <TrackNameInput code={code} name={name} onDone={value => onRename?.(value)} />
+    {caption ? <div className="flex min-w-0 flex-1 items-center gap-1.5 px-1"><span className="w-5 shrink-0 text-left tabular-nums text-2xs font-semibold" data-video-edit-track-code>{code}</span>{header >= TRACK_NAME_MIN_HEADER && <span className="truncate text-2xs">{name}</span>}</div> : renaming ? <TrackNameInput code={code} name={name} onDone={value => onRename?.(value)} />
       : <UiButton size="sm" className="min-w-0 flex-1 !justify-start" aria-label={`目标轨道 ${name}`} aria-pressed={targeted} onClick={onTarget} onDoubleClick={onStartRename} tooltip={channelFormat ? `${name}：${channelFormat === 'mixed' ? '既有单声道也有立体声片段' : `${CHANNEL_LABELS[channelFormat]}片段`}` : name}>
-        <span className="w-5 shrink-0 text-left font-mono text-2xs font-semibold" data-video-edit-track-code>{code}</span>
+        <span className="w-5 shrink-0 text-left tabular-nums text-2xs font-semibold" data-video-edit-track-code>{code}</span>
         {/* 声道类型在名称下方，名称保留整行宽度；窄面板里轨道头收窄时只留编号，名称在悬停提示里。 */}
         {header >= TRACK_NAME_MIN_HEADER && <span className="flex min-w-0 flex-col items-start leading-none">
           <span className="max-w-full truncate text-2xs">{name}</span>
@@ -116,7 +116,7 @@ function TrackNameInput({ code, name, onDone }: { code: string; name: string; on
   const done = useRef(false)
   const finish = (next: string | null): void => { if (done.current) return; done.current = true; onDone(next) }
   return <div className="flex min-w-0 flex-1 items-center gap-1.5 px-1">
-    <span className="w-5 shrink-0 font-mono text-2xs font-semibold">{code}</span>
+    <span className="w-5 shrink-0 tabular-nums text-2xs font-semibold">{code}</span>
     <UiInput size="sm" autoFocus aria-label="轨道名称" value={value} maxLength={80} onChange={event => setValue(event.target.value)} onFocus={event => event.currentTarget.select()}
       onBlur={() => finish(value.trim() || null)} onKeyDown={event => { event.stopPropagation(); if (event.key === 'Enter') { event.preventDefault(); finish(value.trim() || null) } else if (event.key === 'Escape') { event.preventDefault(); finish(null) } }} />
   </div>

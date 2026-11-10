@@ -3,6 +3,18 @@
 @tailwind utilities;
 
 :root {
+  /*
+   * 字重阶梯（Tailwind 的 font-light / normal / medium / semibold / bold 取这里的值）。
+   * 层级主要靠字号，字重只拉开一小步：深色底上的浅色字本来就显粗，标题不到 600。
+   * 大标题字大，比小标题略轻。强调色实底上的按钮文字与其他按钮同为 medium。
+   * 低像素密度屏幕的减重值在本文件的全局排版基准处。
+   */
+  --font-weight-light: 300;
+  --font-weight-normal: 400;
+  --font-weight-medium: 460;
+  --font-weight-semibold: 580;
+  --font-weight-bold: 560;
+
   /* 动效令牌与 motion.ts 镜像，由 motionCss.test.ts 校验；拖动不使用过渡。 */
   --ui-duration-fast: 120ms;
   --ui-duration-base: 180ms;
@@ -854,14 +866,57 @@ body,
 }
 
 /*
- * 全局排版基准（重要记录 004）：字体族由 tailwind.config.js 的 fontFamily.sans 经 preflight 作用到 html
- * （Geist + 系统中文字体回落）；正文与控件基准字号 13px 只设在 body 上——html 保持 16px，
- * 否则 Tailwind 的 rem 间距会整体缩小。未写字号类的元素继承 13px。
+ * 界面字体：HarmonyOS Sans SC 可变字体（wght 40–900），华为官方字体包里的原文件，按许可不转格式、不取子集。
+ * 族名带 UI 后缀：画面内容（字幕、花字、代码素材）里用户选的“HarmonyOS Sans SC”走本机字体，两边互不影响。
+ * 本地文件加载很快，用 block 等字体就绪再显示文字，启动时不出现换字体的跳变。
  */
+@font-face {
+  font-family: 'HarmonyOS Sans SC UI';
+  src: url('./assets/fonts/HarmonyOS_Sans_SC.ttf') format('truetype');
+  font-weight: 40 900;
+  font-style: normal;
+  font-display: block;
+}
+
+/*
+ * 全局排版基准（重要记录 004）：字体族由 tailwind.config.js 的 fontFamily.sans 经 preflight 作用到 html；
+ * 正文与控件基准字号 13px 只设在 body 上——html 保持 16px，否则 Tailwind 的 rem 间距会整体缩小。
+ * 未写字号类的元素继承 13px。字重只取字体里真实存在的值，不让浏览器合成粗体；
+ * 界面字体没有斜体，Markdown 里的强调仍靠合成倾斜显示，所以保留 style。
+ */
+html {
+  font-synthesis: style;
+}
+
+/* 画面内容的原地编辑框用的是用户选的字体与粗细，按内容的规则合成，并且不继承界面字重。 */
+[data-content-text-editor] {
+  font-synthesis: weight style small-caps;
+  font-weight: 400;
+}
+
+/*
+ * 低像素密度（100% 缩放的普通屏）下笔画不足一个物理像素的部分被抗锯齿抹宽，同一字重看起来粗一档、小字发糊，
+ * 整体减重后与高密度屏的观感一致。
+ */
+@media (max-resolution: 1.2dppx) {
+  :root {
+    --font-weight-light: 260;
+    --font-weight-normal: 330;
+    --font-weight-medium: 400;
+    --font-weight-semibold: 520;
+    --font-weight-bold: 500;
+  }
+}
+
 body {
   font-size: 13px;
-  font-optical-sizing: auto;
+  font-weight: var(--font-weight-normal);
   -webkit-font-smoothing: antialiased;
+}
+
+b,
+strong {
+  font-weight: var(--font-weight-semibold);
 }
 
 /*
@@ -1154,7 +1209,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 }
 
 .henji-cameraStage-dock.dockview-theme-abyss .dv-tab {
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 
 /* 面板标签不折行（重要记录 018）：放不下的整枚标签进「+N」，不在标签里换行。 */
@@ -1287,7 +1342,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   border-radius: var(--radius-control);
   color: rgb(var(--text3-rgb));
   font-size: 12px;
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   cursor: pointer;

@@ -1,7 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-// 界面字体 Geist / Geist Mono（SIL OFL 1.1，随包离线可用；字体栈见 tailwind.config.js fontFamily）
-import '@fontsource-variable/geist'
+// 等宽字体 Geist Mono（SIL OFL 1.1，随包离线可用）只给代码、日志与路径；界面字体在 index.css 用 @font-face 声明
 import '@fontsource-variable/geist-mono'
 import './index.css'
 import { DragDropProvider } from './contexts/DragDropContext'

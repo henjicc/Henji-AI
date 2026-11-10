@@ -53,7 +53,7 @@ description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧
 | 尺寸 | 控件高 28/32/36（`size` sm/md/lg）；字号 20/16/14/13/12/11（正文 13）；圆角 6 控件 / 8 输入与菜单 / 12 浮层；间距 2/4/6/8/12/16/20/24/32；动效 120/180/240（查看器 500） | `references/typography-and-tokens.md`、`references/motion.md` |
 | 材质 | **按钮扁平**：纯色实底，不用渐变、顶部高光、内描边、投影或按下位移，层次只靠颜色（静息 → 悬停 → 按下逐档加深）；“质感”来自配色、留白与对齐，不来自写实光影（重要记录 016）；**常驻表面的玻璃只压在图片、视频、画布上**（`ui-glass`、`UiPanel variant="glass"`、浮层 `surface="glass"`）；**毛玻璃暂不开放（2026-11-10）**：根节点固定 `data-ui-blur='off'`，菜单、下拉、弹出面板（`ui-overlay-surface`）与玻璃件一律 overlay 实底加 `line-overlay` 描边；玻璃样式与参数保留供以后只在画布上恢复，调用点不用判断 | `references/color-and-material.md` |
 | 骨架 | 一个视图一条命令带：`UiToolbar variant="command"`（左端 / `center` / `trailing` / `subordinate`），一个表面一个主动作 | 本文「页面骨架」 |
-| 字体 | 拉丁与数字 Geist，时间码与数值 Geist Mono（`UI_TEXT_TIMECODE_CLASS`），中文系统字体 | `references/typography-and-tokens.md` |
+| 字体 | 中文、拉丁与数字都是随包的 HarmonyOS Sans SC 可变字体；字重只用 `font-normal/medium/semibold/bold` 四档（外加大读数的 `font-light`），不写裸数值；时间码与数值用同一字体的等宽数字（`UI_TEXT_TIMECODE_CLASS` / `UI_TEXT_NUMERIC_CLASS`），`font-mono` 只给代码、日志、路径 | `references/typography-and-tokens.md` |
 
 这些约束大多已进门禁：`check:colors`（调色板/黑白/rgba/命名色/旧别名/未定义颜色类）、`check:surface:strict`（规则 A–E 与 S1–S5/S7–S10，E = 调用点覆盖组件外观）、`check:icons:strict`（规则 A–D、同行静态 S6）、`check:ui-residue`（任意值类与内联尺寸口径、私有样式、零引用、旧文案）、`check:ui-design`（间距/动效/死令牌）、ESLint 令牌规则；对比度、条带数、折行、截断、选中态差异、浮层裁切由 `check:ui-visual` 在真实 DOM 上判。
 
