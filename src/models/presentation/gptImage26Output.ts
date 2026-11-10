@@ -31,7 +31,8 @@ export function gpt26OutputParams(ids: Gpt26OutputIds, gifWithImages: boolean): 
       tooltip: { zh: '所有帧拼成一整张图生成和计费，帧数越多费用越高。', en: 'All frames are generated and billed as one sheet, so more frames cost more.' },
     },
     [ids.frameDuration]: {
-      name: { zh: '每帧时长（毫秒）', en: 'Frame duration (ms)' },
+      name: { zh: '每帧时长', en: 'Frame duration' },
+      unit: 'ms',
       description: { zh: '每一帧停留的毫秒数，按 10 毫秒取整。', en: 'Milliseconds each frame stays on screen, rounded to 10 ms.' },
     },
     [ids.svgModel]: {

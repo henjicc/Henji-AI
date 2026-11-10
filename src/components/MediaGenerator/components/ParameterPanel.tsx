@@ -379,7 +379,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
       <div ref={rowRef} className="flex min-w-0 flex-col">
         <ParamPanelRowsContext.Provider value>
         <ParamChoicesExpandedContext.Provider value>
-        <UiGroup labelWidth={72}>
+        <UiGroup labelWidth={96}>
           {layout.primary.map(paramRow)}
           {specialPanelSpec ? (
             <AspectResolutionPanel

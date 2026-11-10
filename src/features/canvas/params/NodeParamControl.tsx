@@ -68,7 +68,7 @@ function CompactNumberControl({
 
   return (
     <div
-      className="nodrag nowheel"
+      className="nodrag nowheel flex items-center gap-1"
       onMouseDown={(event) => event.stopPropagation()}
     >
       <NumberField
@@ -86,6 +86,7 @@ function CompactNumberControl({
         increaseLabel={i18n.language.startsWith('zh') ? `增加${displayName}` : `Increase ${displayName}`}
         decreaseLabel={i18n.language.startsWith('zh') ? `减少${displayName}` : `Decrease ${displayName}`}
       />
+      {param.unit ? <span className="shrink-0 whitespace-nowrap text-2xs text-text3">{param.unit}</span> : null}
     </div>
   );
 }

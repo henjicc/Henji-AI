@@ -5,6 +5,6 @@ export const UI_PANEL_WIDTH = {
   inspector: { min: 248, default: 320, max: 460 },
   // 助手最大宽度取当前工作区剩余宽度，不设脱离宿主的固定上限。
   assistant: { min: 320, default: 420 },
-  // 生成页左侧输入面板：参数名 72 + 分段控件放得下五段时长
+  // 生成页左侧输入面板的最窄宽度：参数名列 96 + 分段控件放得下五段时长
   generationInput: 360,
 } as const;

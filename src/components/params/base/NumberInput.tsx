@@ -9,17 +9,13 @@ import NumberField from '@/components/ui/NumberInput'
 import {
   UI_TEXT_META_CLASS,
   UiOptionButton,
-  UiRangeInput,
-  UiReadout,
 } from '@/components/ui'
+import { ParamSlider } from './ParamSlider'
 import { ParamChoicesExpandedContext } from '../paramPanelRows'
 import type { NumberParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types/I18nText'
 import { ParamLabel } from '../ParamLabel'
 import { ParamField } from '../ParamField'
-
-/** 档数再多拖动就不准了，改回数值框 */
-const SLIDER_MAX_STEPS = 100
 
 interface NumberInputProps {
   param: NumberParamDef
@@ -86,26 +82,25 @@ export const NumberInput: React.FC<NumberInputProps> = ({
     return Math.abs(safeValue - markValue) <= tolerance
   }
 
-  // 摊开排布（左侧输入面板）里有上下限、档数不多的数值直接用滑块，读数跟在右边
+  // 摊开排布（左侧输入面板）里有上下限的数值直接用滑块，读数与单位跟在右边。
+  // 只有声明了步长、或上下限都是整数时才知道该怎么分档，否则仍用数值框
   const expanded = useContext(ParamChoicesExpandedContext)
-  // 只有声明了步长才知道是整数还是小数，没写步长的不猜，仍用数值框
-  const sliderSteps = typeof param.min === 'number' && typeof param.max === 'number' && param.step ? (param.max - param.min) / param.step : Infinity
-  if (expanded && !hasMarks && sliderSteps > 0 && sliderSteps <= SLIDER_MAX_STEPS) {
+  const bounded = typeof param.min === 'number' && typeof param.max === 'number' && param.max > param.min
+  const sliderStep = param.step ?? (bounded && Number.isInteger(param.min) && Number.isInteger(param.max) && param.max! - param.min! >= 2 ? 1 : undefined)
+  if (expanded && !hasMarks && bounded && sliderStep) {
     return (
       <ParamField>
         <ParamLabel param={param} language={i18n.language} />
-        <div className="flex w-full items-center gap-2">
-          <UiRangeInput
-            min={param.min}
-            max={param.max}
-            step={step}
-            value={safeValue}
-            disabled={disabled}
-            aria-label={displayName}
-            onChange={(event) => onChange(clampValue(Number(event.target.value), param))}
-          />
-          <UiReadout size="sm">{safeValue}{param.unit ? ` ${param.unit}` : ''}</UiReadout>
-        </div>
+        <ParamSlider
+          ariaLabel={displayName}
+          min={param.min!}
+          max={param.max!}
+          step={sliderStep}
+          value={safeValue}
+          onChange={(next) => onChange(clampValue(next, param))}
+          readout={{ kind: 'number', unit: param.unit, precision: resolvePrecision(sliderStep) }}
+          disabled={disabled}
+        />
       </ParamField>
     )
   }

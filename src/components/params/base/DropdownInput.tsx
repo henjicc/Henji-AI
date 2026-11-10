@@ -15,6 +15,7 @@ import { ParamLabel } from '../ParamLabel'
 import { ParamField } from '../ParamField'
 import { ParamChoicesExpandedContext } from '../paramPanelRows'
 import { ParamChoiceGrid } from './ParamChoiceGrid'
+import { isOrderedLevelChoice, orderLevelChoices, ParamSlider } from './ParamSlider'
 
 interface DropdownInputProps {
   param: DropdownParamDef
@@ -95,6 +96,32 @@ export const DropdownInput: React.FC<DropdownInputProps> = ({
   }, [onChange, param.id, resolvedOption, selectedOption])
 
   const expanded = useContext(ParamChoicesExpandedContext)
+  if (expanded && resolvedOption && isOrderedLevelChoice(options)) {
+    const levels = orderLevelChoices(options)
+    const index = levels.indexOf(resolvedOption)
+    // 拖到不可选的档位时停在离它最近的可选档；一样近时取移动方向那一档，键盘才能越过不可选档
+    const selectNearest = (target: number): void => {
+      const direction = Math.sign(target - index)
+      const candidates = levels.map((option, i) => ({ option, i, distance: Math.abs(i - target) })).filter(item => !item.option.disabled)
+      const nearest = candidates.sort((a, b) => a.distance - b.distance || (b.i - a.i) * direction)[0]
+      if (nearest && nearest.option !== resolvedOption) onChange(nearest.option.value)
+    }
+    return (
+      <ParamField>
+        <ParamLabel param={param} language={i18n.language} />
+        <ParamSlider
+          ariaLabel={getI18nText(param.name, i18n.language) || param.id}
+          min={0}
+          max={levels.length - 1}
+          step={1}
+          value={index}
+          onChange={selectNearest}
+          readout={{ kind: 'label', text: resolvedOption.label }}
+          disabled={disabled}
+        />
+      </ParamField>
+    )
+  }
   if (expanded && resolvedOption && ParamChoiceGrid.fits(options)) {
     return (
       <ParamField>
