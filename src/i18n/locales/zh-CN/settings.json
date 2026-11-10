@@ -253,6 +253,7 @@
     "confirm": "确定",
     "openInFileManager": "在文件夹中打开",
     "changeLocation": "更换位置…",
+    "switchAndRestart": "切换并重启",
     "moveAndRestart": "移动并重新启动",
     "checkUpdate": "检查更新",
     "checking": "检查中...",
@@ -668,6 +669,8 @@
       "title": "作品目录"
     },
     "workRootConfirm": {
+      "adoptTitle": "使用已有的数据目录",
+      "adoptMessage": "这个文件夹里已经有痕迹AI的数据。切换后痕迹AI 会重新启动并使用那里的数据；当前的数据原样留在原位置，不会被移动或删除。",
       "title": "更换作品目录",
       "resetTitle": "恢复默认位置",
       "message": "将先保存所有打开的内容，再把整个作品目录移到下面的位置，完成后痕迹AI 会自动重新启动。作品较多时可能需要一些时间。"

@@ -26,6 +26,9 @@ function createService(overrides: Partial<WorkRootServiceDeps> = {}): { service:
       rootFolderNames: ['痕迹AI', 'Henji AI'],
     }),
     writeRoot: vi.fn((root: string) => { state.custom = root === defaultRoot ? null : root }),
+    hasData: () => false,
+    adoptRoot: vi.fn(),
+    adoptBlockedReason: () => null,
     ensureFolders: vi.fn(),
     refreshIndex: vi.fn(async () => undefined),
     busyReason: () => null,
@@ -106,5 +109,20 @@ describe('createWorkRootService', () => {
     expect(deps.writeRoot).not.toHaveBeenCalled()
     expect(await fs.readFile(path.join(base, '文档', '痕迹AI', '项目', '短片', '短片.hjvid'), 'utf8')).toBe('{}')
     expect(await fs.access(path.join(base, '新位置')).then(() => true, () => false)).toBe(false)
+  })
+
+  it('目标是已有的数据目录：检查结果标明，切换时不移动任何东西', async () => {
+    const existing = path.join(base, '另一份', 'HenjiAI')
+    await fs.mkdir(path.join(existing, '.system'), { recursive: true })
+    await fs.writeFile(path.join(existing, '.system', 'henji.db'), 'other')
+    const { service, deps } = createService({ hasData: (root) => root === existing })
+    expect(await service.inspectTarget({ kind: 'custom', folder: existing })).toEqual({ root: existing, status: 'existingData' })
+
+    const changed = await service.change({ kind: 'custom', folder: existing })
+    expect(changed).toMatchObject({ changed: true, root: existing, mode: 'none', requiresRestart: true })
+    expect(deps.adoptRoot).toHaveBeenCalledWith(existing)
+    expect(deps.writeRoot).not.toHaveBeenCalled()
+    expect(await fs.readFile(path.join(existing, '.system', 'henji.db'), 'utf8')).toBe('other')
+    expect(await fs.readFile(path.join(base, '文档', '痕迹AI', '项目', '短片', '短片.hjvid'), 'utf8')).toBe('{}')
   })
 })

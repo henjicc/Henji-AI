@@ -10,7 +10,7 @@ import {
   PROGRAM_STORE_NAMES,
   readDataLocation,
   resetDataLocationForTest,
-  writeDataLocation,
+  setDataLocale,
   type UserFolderLocale,
 } from './appBasePaths'
 import { PROJECT_FOLDER_NAMES, STANDALONE_FOLDER_LOCALE } from '../../../src/core/documents/projectManifest'
@@ -143,8 +143,7 @@ function ensureUserFolders(layout: UserDataLayout): void {
 export function getUserDataLayout(): UserDataLayout {
   let location = readDataLocation()
   if (!location.locale) {
-    location = { ...location, locale: localeForLanguages([uiLanguageHint, ...systemLanguages()]) }
-    writeDataLocation(location)
+    location = setDataLocale(localeForLanguages([uiLanguageHint, ...systemLanguages()]))
     getLogger().info('已确定新建内容的起名语言', {
       event: 'app_paths.user_root.locale_decided',
       context: { locale: location.locale, languageHint: uiLanguageHint },

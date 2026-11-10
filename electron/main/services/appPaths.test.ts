@@ -23,7 +23,7 @@ vi.mock('./logging/main-logger', () => ({
   createMainLogger: () => ({ trace: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
 }))
 
-import { completePendingSystemMove, readDataLocation, writeDataLocation } from './appBasePaths'
+import { beginDataLocationSetup, completePendingSystemMove, inspectDataLocation, readDataLocation, writeDataLocation } from './appBasePaths'
 import {
   getAppDirectories,
   getProgramDataDir,
@@ -52,9 +52,15 @@ describe('数据目录位置', () => {
     fs.rmSync(state.base, { recursive: true, force: true })
   })
 
-  it('新安装：文档/HenjiAI 下建英文分类文件夹，程序资料在其中的 .system，位置记在用户主目录', () => {
-    const layout = getUserDataLayout()
+  it('新安装：位置由用户决定，不悄悄在默认位置建数据；选定后建英文分类文件夹，程序资料在其中的 .system', () => {
     const root = path.join(state.base, 'documents', 'HenjiAI')
+    expect(inspectDataLocation()).toBe('needs_choice')
+    expect(fs.existsSync(locationFile())).toBe(false)
+
+    fs.mkdirSync(root, { recursive: true })
+    writeDataLocation({ root })
+    expect(inspectDataLocation()).toBe('ready')
+    const layout = getUserDataLayout()
     expect(layout.root).toBe(root)
     expect(layout.isCustom).toBe(false)
     expect(layout.locale).toBe('zh')
@@ -65,7 +71,55 @@ describe('数据目录位置', () => {
     expect(getAppDirectories().folderNames.generated).toBe('Generated')
   })
 
+  it('位置文件丢失：默认位置已有数据就直接用并补写位置文件', () => {
+    const root = path.join(state.base, 'documents', 'HenjiAI')
+    fs.mkdirSync(path.join(root, '.system'), { recursive: true })
+    fs.writeFileSync(path.join(root, '.system', 'henji.db'), 'db')
+    expect(inspectDataLocation()).toBe('ready')
+    expect(readLocationFile()).toMatchObject({ root })
+  })
+
+  it('位置文件读不懂：交给用户决定，原文件不被覆盖', () => {
+    fs.mkdirSync(path.dirname(locationFile()), { recursive: true })
+    fs.writeFileSync(locationFile(), '{ 坏掉的内容')
+    expect(inspectDataLocation()).toBe('needs_choice')
+    expect(getProgramDataDir()).toBe(path.join(state.base, 'documents', 'HenjiAI', '.system'))
+    expect(fs.readFileSync(locationFile(), 'utf8')).toBe('{ 坏掉的内容')
+  })
+
+  it('位置文件读不懂时即使默认位置有数据也由用户决定；选定后原文件另存一份', () => {
+    const root = path.join(state.base, 'documents', 'HenjiAI')
+    fs.mkdirSync(path.join(root, '.system'), { recursive: true })
+    fs.writeFileSync(path.join(root, '.system', 'henji.db'), 'db')
+    fs.mkdirSync(path.dirname(locationFile()), { recursive: true })
+    fs.writeFileSync(locationFile(), '{ 坏掉的内容')
+    expect(inspectDataLocation()).toBe('needs_choice')
+    getUserDataLayout()
+    expect(fs.readFileSync(locationFile(), 'utf8')).toBe('{ 坏掉的内容')
+
+    writeDataLocation({ root })
+    expect(fs.readFileSync(`${locationFile()}.bad`, 'utf8')).toBe('{ 坏掉的内容')
+    expect(inspectDataLocation()).toBe('ready')
+  })
+
+  it('位置文件指向的数据目录已经不在了：由用户决定', () => {
+    fs.mkdirSync(path.dirname(locationFile()), { recursive: true })
+    fs.writeFileSync(locationFile(), JSON.stringify({ version: 1, root: path.join(state.base, '拔掉的盘', 'HenjiAI') }))
+    expect(inspectDataLocation()).toBe('needs_choice')
+  })
+
+  it('等用户选数据目录期间位置指向临时文件夹；没走启动流程的进程不会写出位置文件', () => {
+    expect(getUserDataLayout().root).toBe(path.join(state.base, 'documents', 'HenjiAI'))
+    expect(fs.existsSync(locationFile())).toBe(false)
+    resetAppPathsForTest()
+    const temporary = beginDataLocationSetup()
+    expect(getProgramDataDir()).toBe(path.join(temporary, '.system'))
+    expect(fs.existsSync(locationFile())).toBe(false)
+    fs.rmSync(temporary, { recursive: true, force: true })
+  })
+
   it('起名语言按界面语言确定一次，分类文件夹名不随它变化', () => {
+    writeDataLocation({ root: path.join(state.base, 'documents', 'HenjiAI') })
     state.languages = ['zh-CN']
     setUserFolderLanguageHint('en-US')
     expect(getUserDataLayout().locale).toBe('en')

@@ -3,7 +3,7 @@ import path from 'node:path'
 
 import { hasActiveGenerationWork } from '../ai-runtime/runtime'
 import { getProgramDataDir, getUserDataLayout, USER_ROOT_FOLDER_NAMES } from '../appPaths'
-import { readDataLocation, SYSTEM_FOLDER, writeDataLocation } from '../appBasePaths'
+import { hasDataAt, readDataLocation, SYSTEM_FOLDER, writeDataLocation } from '../appBasePaths'
 import { getDocumentService } from '../documents/runtime'
 import { createMainLogger } from '../logging/main-logger'
 import { MEDIA_CACHE_FOLDER_NAMES } from '../media/media-cache'
@@ -38,6 +38,14 @@ export function getWorkRootService(): WorkRootService {
       const location = readDataLocation()
       writeDataLocation({ root, ...(location.locale ? { locale: location.locale } : {}), ...(path.relative(systemDir, path.join(root, SYSTEM_FOLDER)) === '' ? {} : { systemDir }) })
     },
+    hasData: hasDataAt,
+    adoptRoot: (root) => {
+      const { locale } = readDataLocation()
+      writeDataLocation({ root, ...(locale ? { locale } : {}) })
+    },
+    // 上次更换数据目录后程序资料还留在原处时，位置文件是唯一记着“作品在哪、程序资料在哪”的地方：
+    // 这时再切换会把当前数据拆成认不出来的两半，先重启让它搬完。
+    adoptBlockedReason: () => readDataLocation().systemDir ? '上一次更换数据目录还没有收尾，请重新启动痕迹AI 后再试' : null,
     ensureFolders: () => { getUserDataLayout() },
     refreshIndex: () => getDocumentService().refreshIndex(),
     busyReason: findWorkRootBusyReason,

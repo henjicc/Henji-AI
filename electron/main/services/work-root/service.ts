@@ -24,6 +24,12 @@ export interface WorkRootServiceDeps {
   layout: () => WorkRootInfo & { rootFolderName: string; rootFolderNames: readonly string[] }
   /** 把数据目录位置切到新目录。 */
   writeRoot: (root: string) => void
+  /** 这个文件夹是不是一份已有的数据目录。 */
+  hasData: (root: string) => boolean
+  /** 切换到一份已有的数据目录：只改位置，不移动任何东西。 */
+  adoptRoot: (root: string) => void
+  /** 目标数据目录能不能直接切换过去；不能时返回给用户看的原因（如上次更换还没收尾）。 */
+  adoptBlockedReason: (root: string) => string | null
   /** 切换后按新位置建好分类文件夹。 */
   ensureFolders: () => void
   /** 切换后刷新作品索引（项目在新位置被重新认领）。 */
@@ -79,6 +85,8 @@ export function createWorkRootService(deps: WorkRootServiceDeps): WorkRootServic
     if (target.kind === 'default') return path.resolve(layout.defaultRoot)
     const folder = path.resolve(target.folder)
     const base = path.basename(folder)
+    // 选中的本身就是一份数据目录（不论叫什么名字）：就是它，不在里面再建一层。
+    if (deps.hasData(folder)) return folder
     if (layout.rootFolderNames.some((name) => sameName(style, name, base))) return folder
     if (await isEmptyOrMissing(folder)) return folder
     return path.join(folder, layout.rootFolderName)
@@ -86,7 +94,8 @@ export function createWorkRootService(deps: WorkRootServiceDeps): WorkRootServic
 
   const inspectTarget = async (target: WorkRootTarget): Promise<WorkRootTargetInspection> => {
     const root = await resolveTarget(target)
-    return { root, status: await inspectWorkRootTarget(deps.layout().root, root) }
+    const status = await inspectWorkRootTarget(deps.layout().root, root)
+    return { root, status: status === 'notEmpty' && deps.hasData(root) ? 'existingData' : status }
   }
 
   const change = async (
@@ -108,6 +117,14 @@ export function createWorkRootService(deps: WorkRootServiceDeps): WorkRootServic
       }
       const busyReason = deps.busyReason()
       if (busyReason) throw new WorkRootMoveError('busy', `${busyReason}，请等待完成后再更换作品目录`)
+      if (await inspectWorkRootTarget(oldRoot, newRoot) === 'notEmpty' && deps.hasData(newRoot)) {
+        const blocked = deps.adoptBlockedReason(newRoot)
+        if (blocked) throw new WorkRootMoveError('busy', blocked)
+        // 目标是一份已有的数据目录：不搬动任何东西，位置切过去，重启后用那份数据；当前数据原样留在原处。
+        deps.adoptRoot(newRoot)
+        logger.info('已切换到已有的数据目录', { event: 'work_root.adopt.completed', context: { from: oldRoot, to: newRoot } })
+        return { changed: true, root: newRoot, mode: 'none', oldRootRemoved: false, requiresRestart: true }
+      }
       logger.info('开始更换作品目录', { event: 'work_root.move.start', context: { from: oldRoot, to: newRoot, useDefault } })
 
       const result = await moveWorkRoot({

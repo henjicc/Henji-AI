@@ -253,6 +253,7 @@
     "confirm": "Confirm",
     "openInFileManager": "Open in Folder",
     "changeLocation": "Change Location…",
+    "switchAndRestart": "Switch and Restart",
     "moveAndRestart": "Move and Restart",
     "checkUpdate": "Check for Updates",
     "checking": "Checking...",
@@ -668,6 +669,8 @@
       "title": "Works folder"
     },
     "workRootConfirm": {
+      "adoptTitle": "Use Existing Data Folder",
+      "adoptMessage": "This folder already contains Henji AI data. Henji AI will restart and use the data there; your current data stays where it is and is not moved or deleted.",
       "title": "Change Works Folder",
       "resetTitle": "Restore Default Location",
       "message": "Everything open will be saved first, then the whole works folder moves to the location below and Henji AI restarts automatically. This may take a while if you have many works."

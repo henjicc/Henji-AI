@@ -24,6 +24,7 @@ const DATA_ROOT_FOLDER_NAME = 'HenjiAI'
 const SYSTEM_DIR_NAME = '.system'
 const LOCATION_DIR_NAME = '.henji-ai'
 const LOCATION_FILE_NAME = 'location.json'
+const DATABASE_FILE_NAME = 'henji.db'
 
 export type UserFolderLocale = 'zh' | 'en'
 
@@ -88,9 +89,51 @@ function parseLocation(raw: string): DataLocation | null {
 let cached: { file: string; location: DataLocation } | null = null
 /** 直接指定数据目录时的内存状态（起名语言等）。 */
 let explicitState: DataLocation | null = null
+/** 等用户选数据目录期间的临时位置：这段时间里的零星写入（日志、浏览器状态）不落到任何真实数据目录。 */
+let setupLocation: DataLocation | null = null
+
+/** 这个文件夹是不是一份已有的数据目录（认程序资料里的数据库）。 */
+export function hasDataAt(root: string): boolean {
+  return fs.existsSync(path.join(root, SYSTEM_DIR_NAME, DATABASE_FILE_NAME))
+}
+
+function readLocationFile(file: string): { raw: string | null; location: DataLocation | null } {
+  let raw: string | null = null
+  try { raw = fs.readFileSync(file, 'utf8') } catch { /* 没有位置文件。 */ }
+  return { raw, location: raw === null ? null : parseLocation(raw) }
+}
 
 /**
- * 当前数据位置。位置文件不存在时用默认位置并写下来，之后默认位置变化（如系统文档目录被改）不影响已有数据。
+ * 启动时判断数据目录是否已经确定。不能悄悄新建一份空数据让人以为数据丢了，所以这些情况交给用户决定
+ * （新建，或指向已有的数据目录）：
+ * - 位置文件丢失，且默认位置没有数据（默认位置已有数据就直接用它并补写位置文件）；
+ * - 位置文件读不懂（原文件另存为 `.bad`，里面可能还认得出原来的路径）；
+ * - 位置文件指向的数据目录已经不在了（换了盘符、移动硬盘没插）。
+ * 隔离运行与直接指定数据目录时始终就绪。
+ */
+export function inspectDataLocation(): 'ready' | 'needs_choice' {
+  if (explicitRoot() || isolatedBase()) return 'ready'
+  const file = locationFilePath()
+  const { raw, location } = readLocationFile(file)
+  if (location) return fs.existsSync(location.root) || location.systemDir ? 'ready' : 'needs_choice'
+  if (raw !== null) return 'needs_choice'
+  const defaultRoot = getDefaultDataRoot()
+  if (!hasDataAt(defaultRoot)) return 'needs_choice'
+  writeDataLocation({ root: defaultRoot })
+  return 'ready'
+}
+
+/** 进入“等用户选数据目录”：在此期间数据位置指向一个临时文件夹，返回它供结束时清理。 */
+export function beginDataLocationSetup(): string {
+  const root = path.join(os.tmpdir(), `henji-ai-setup-${process.pid}`)
+  setupLocation = { root }
+  return root
+}
+
+/**
+ * 当前数据位置。隔离运行时位置文件不存在就用默认位置并写下来。
+ * 正常运行时由启动流程先确定位置（inspectDataLocation）；没走启动流程的进程（助手命令行等）读不到位置文件时
+ * 只在内存里用默认位置，不写位置文件，留给主应用下次启动时让用户决定。
  * 位置文件存在但读不懂时不改写它：那里记着用户的数据在哪，覆盖掉就再也找不回来。
  */
 export function readDataLocation(): DataLocation {
@@ -99,14 +142,14 @@ export function readDataLocation(): DataLocation {
     if (explicitState?.root !== explicit) explicitState = { root: explicit }
     return explicitState
   }
+  if (setupLocation) return setupLocation
   const file = locationFilePath()
   if (cached?.file === file) return cached.location
-  let raw: string | null = null
-  try { raw = fs.readFileSync(file, 'utf8') } catch { /* 首次启动没有位置文件。 */ }
-  let location = raw === null ? null : parseLocation(raw)
+  const { raw, location: stored } = readLocationFile(file)
+  let location = stored
   if (!location) {
     location = { root: getDefaultDataRoot() }
-    if (raw === null) persistLocation(file, location)
+    if (raw === null && isolatedBase()) persistLocation(file, location)
   }
   cached = { file, location }
   return location
@@ -124,13 +167,36 @@ function persistLocation(file: string, location: DataLocation): void {
 export function writeDataLocation(location: DataLocation): void {
   if (explicitRoot()) { explicitState = { ...location, root: explicitRoot()! }; return }
   const file = locationFilePath()
+  // 读不懂的旧位置文件先另存一份再改写。
+  const previous = readLocationFile(file)
+  if (previous.raw !== null && !previous.location) {
+    try { fs.copyFileSync(file, `${file}.bad`) } catch { /* 另存失败不阻止写入新位置。 */ }
+  }
   persistLocation(file, location)
+  setupLocation = null
   cached = { file, location }
+}
+
+/**
+ * 记下起名语言。位置文件还没建立（没走启动流程的进程用着内存里的默认位置）时只记在内存里，
+ * 不借机把默认位置写成位置文件。
+ */
+export function setDataLocale(locale: UserFolderLocale): DataLocation {
+  const location = { ...readDataLocation(), locale }
+  if (explicitRoot() || setupLocation || readLocationFile(locationFilePath()).location) writeDataLocationKeepingSetup(location)
+  else cached = { file: locationFilePath(), location }
+  return location
+}
+
+function writeDataLocationKeepingSetup(location: DataLocation): void {
+  if (setupLocation) { setupLocation = location; return }
+  writeDataLocation(location)
 }
 
 export function resetDataLocationForTest(): void {
   cached = null
   explicitState = null
+  setupLocation = null
 }
 
 export function getDataRootDir(): string {

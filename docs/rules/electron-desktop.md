@@ -92,4 +92,6 @@ Electron 自动化脚本通过 CDP/Playwright 启动构建产物。需要临时�
 
 - **不得往系统应用数据目录写任何需要保留的数据**：Windows 会把打包应用（及其启动的子进程）对它的写入转存到应用私有位置，同一台机器从不同入口启动会读到两份数据（2026-11-10 “密钥全没了”的原因）。新增存储一律从 `appPaths` 取目录，不直接用 `app.getPath('userData' | 'appData')` 或 `LOCALAPPDATA`。
 - 更换数据目录：作品当场搬（`work-root` 服务），正被占用的 `.system` 记在位置文件的 `systemDir`，下次启动最早处搬完（`completePendingSystemMove`）。
+- 启动时先确定数据位置（`inspectDataLocation`）：位置文件丢失而默认位置已有数据（认 `.system/henji.db`）就直接用并补写位置文件；位置文件丢失且默认位置没有数据、位置文件读不懂（原文件另存 `.bad`）、或它指向的数据目录已不存在时，本次启动只弹系统对话框让用户选（在默认位置新建 / 选其他位置新建 / 打开已有的数据目录），选完重启（`data-location-setup.ts`），等待期间数据位置指向临时文件夹。命令行进程遇到这些情况直接报错退出。**不得在用户不知情时新建一份空数据。**
+- 设置里更换数据目录时，目标本身是一份已有的数据目录就切换过去用那份数据（`existingData`），不移动、不删除当前数据；上一次更换还没收尾（位置文件里有 `systemDir`）时先要求重启。
 - 自动化隔离：`HENJI_DATA_ROOT` 直接指定数据目录（单元测试由 `vitest.config.ts` 统一设置），`HENJI_ISOLATED_APP_DATA` 时数据目录在隔离目录内；两者都不读写位置文件。脚本侧用 `scripts/lib/dataLocation.cjs`。

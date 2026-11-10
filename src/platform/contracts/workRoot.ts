@@ -24,9 +24,10 @@ export interface WorkRootInfo {
  * - `current`：就是当前作品目录
  * - `nested`：在当前作品目录里面，或包含当前作品目录
  * - `notEmpty`：目标文件夹里已经有东西
+ * - `existingData`：目标本身是一份已有的数据目录；可以直接切换过去用那份数据，当前数据留在原处
  * - `notDirectory`：目标位置是一个文件
  */
-export type WorkRootTargetStatus = 'ok' | 'current' | 'nested' | 'notEmpty' | 'notDirectory'
+export type WorkRootTargetStatus = 'ok' | 'current' | 'nested' | 'notEmpty' | 'notDirectory' | 'existingData'
 
 export interface WorkRootTargetInspection {
   /** 实际会成为作品目录的文件夹（所选文件夹不是空的时，在其中新建“痕迹AI”）。 */
@@ -47,7 +48,7 @@ export interface WorkRootMoveProgress {
 export interface WorkRootChangeResult {
   changed: boolean
   root: string
-  /** 同一磁盘直接改名；跨磁盘复制并核对后删除旧位置。 */
+  /** 同一磁盘直接改名；跨磁盘复制并核对后删除旧位置；`none` 是切换到已有的数据目录，没有移动任何东西。 */
   mode: 'rename' | 'copy' | 'none'
   /** 旧位置已删除；复制模式下删除失败时为 false（作品已在新位置，旧位置留有副本）。 */
   oldRootRemoved: boolean

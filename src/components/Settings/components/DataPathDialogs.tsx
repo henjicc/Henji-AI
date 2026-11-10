@@ -22,12 +22,12 @@ const DataPathDialogs: React.FC<{ dataPath: UseDataPathResult }> = ({ dataPath }
 
       <SettingsDialog
         open={confirm.open}
-        title={t(confirm.mode === 'reset' ? 'dialogs.workRootConfirm.resetTitle' : 'dialogs.workRootConfirm.title')}
-        description={t('dialogs.workRootConfirm.message')}
+        title={t(confirm.mode === 'reset' ? 'dialogs.workRootConfirm.resetTitle' : confirm.mode === 'adopt' ? 'dialogs.workRootConfirm.adoptTitle' : 'dialogs.workRootConfirm.title')}
+        description={t(confirm.mode === 'adopt' ? 'dialogs.workRootConfirm.adoptMessage' : 'dialogs.workRootConfirm.message')}
         detailPath={confirm.targetPath}
         actions={[
           { label: t('actions.cancel'), onClick: dataPath.closeConfirm, variant: 'secondary' },
-          { label: t('actions.moveAndRestart'), onClick: () => void dataPath.confirmMove(), variant: 'primary' },
+          { label: t(confirm.mode === 'adopt' ? 'actions.switchAndRestart' : 'actions.moveAndRestart'), onClick: () => void dataPath.confirmMove(), variant: 'primary' },
         ]}
         onClose={dataPath.closeConfirm}
       />

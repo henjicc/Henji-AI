@@ -1,8 +1,11 @@
 import { disposeFonts } from './services/fonts/service'
-import { completePendingSystemMove, getProgramDataDir } from './services/appBasePaths'
+import { beginDataLocationSetup, completePendingSystemMove, getProgramDataDir, inspectDataLocation } from './services/appBasePaths'
+import { runDataLocationSetup } from './data-location-setup'
 import { registerApplicationControlIpc, watchApplicationHostRenderer } from './ipc/application-control'
 import { registerAppMenuIpc } from './ipc/app-menu'
 import { app, BrowserWindow, crashReporter, dialog } from 'electron'
+import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { warmApiMartEndpointPreference, warmGrsaiEndpointPreference } from '@henjicc/ai-sdk'
 import { registerAiRuntimeIpc } from './ipc/ai-runtime'
@@ -100,7 +103,18 @@ if (isolatedAppData) {
  * 它们正在运行时主应用也不搬（它们开着同一个数据库）。
  */
 const commandLineProcess = isAssistantCliMode() || process.argv.includes('--verify-model')
-const pendingSystemMove = !commandLineProcess && app.requestSingleInstanceLock() && !isCommandLineProcessRunning() ? completePendingSystemMove() : null
+/*
+ * 数据目录还没确定（全新安装，或位置文件丢失而默认位置没有数据）：本次启动只让用户选数据目录，选完重新启动。
+ * 等待期间数据位置指向临时文件夹，不在任何真实位置新建数据。
+ */
+const dataLocationUndecided = inspectDataLocation() === 'needs_choice'
+if (commandLineProcess && dataLocationUndecided) {
+  // 命令行进程不能替用户决定数据放哪，更不能在默认位置建出一份空数据让主应用误认。
+  process.stderr.write('数据目录还没有确定：请先启动一次痕迹AI 选择数据目录，再运行命令行。' + os.EOL)
+  app.exit(1)
+}
+const dataLocationSetupDir = !commandLineProcess && dataLocationUndecided ? beginDataLocationSetup() : null
+const pendingSystemMove = !dataLocationSetupDir && !commandLineProcess && app.requestSingleInstanceLock() && !isCommandLineProcessRunning() ? completePendingSystemMove() : null
 
 /*
  * 浏览器本地存储（界面的本地设置）与密钥加密用的本机状态文件跟着数据目录走：
@@ -166,6 +180,13 @@ if (remoteDebuggingPort) {
 }
 
 app.whenReady().then(async () => {
+  if (dataLocationSetupDir) {
+    const chosen = await runDataLocationSetup()
+    try { fs.rmSync(dataLocationSetupDir, { recursive: true, force: true }) } catch { /* 临时文件夹留给系统清理。 */ }
+    if (chosen) app.relaunch()
+    app.exit(0)
+    return
+  }
   // 日志写入依赖 ready 后的应用路径，崩溃转储的启动结果放到这里补记。
   const crashLogger = createMainLogger('main.crash_reporter')
   if ('directory' in crashReporterOutcome) crashLogger.info('崩溃转储已启用', { event: 'crash_reporter.start.completed', context: { directoryName: path.basename(crashReporterOutcome.directory) } })

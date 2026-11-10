@@ -38,7 +38,8 @@ export interface MigrationProgress {
 
 interface ConfirmMoveState {
   open: boolean
-  mode: 'change' | 'reset'
+  /** `adopt`：目标是已有的数据目录，切换过去用那份数据，不移动当前数据。 */
+  mode: 'change' | 'reset' | 'adopt'
   /** 实际会成为作品目录的文件夹。 */
   targetPath: string
 }
@@ -67,7 +68,7 @@ const EMPTY_PROGRESS: MigrationProgress = { phase: null, current: 0, total: 0, f
 const CLOSED_CONFIRM: ConfirmMoveState = { open: false, mode: 'change', targetPath: '' }
 const CANCELLABLE_PHASES: ReadonlySet<WorkRootMovePhase> = new Set(['preparing', 'copying', 'verifying'])
 
-const TARGET_STATUS_ALERT: Record<Exclude<WorkRootTargetStatus, 'ok' | 'current'>, string> = {
+const TARGET_STATUS_ALERT: Record<Exclude<WorkRootTargetStatus, 'ok' | 'current' | 'existingData'>, string> = {
   nested: 'alerts.workRoot.nested',
   notEmpty: 'alerts.workRoot.notEmpty',
   notDirectory: 'alerts.workRoot.notDirectory',
@@ -128,12 +129,12 @@ export function useDataPath(enabled = true): UseDataPathResult {
     try {
       const inspection = await inspectWorkRootTarget(target)
       if (inspection.status === 'current') return
-      if (inspection.status !== 'ok') {
+      if (inspection.status !== 'ok' && inspection.status !== 'existingData') {
         showAlert(TARGET_STATUS_ALERT[inspection.status], { path: inspection.root })
         return
       }
       setPendingTarget(target)
-      setConfirm({ open: true, mode, targetPath: inspection.root })
+      setConfirm({ open: true, mode: inspection.status === 'existingData' ? 'adopt' : mode, targetPath: inspection.root })
     } catch (error) {
       logger.warn('检查作品目录新位置失败', { event: 'work_root.inspect.failed', error })
       showAlert('alerts.workRoot.failed', { message: errorDetail(error) })
