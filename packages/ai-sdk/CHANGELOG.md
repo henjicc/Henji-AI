@@ -1,7 +1,9 @@
 # Changelog
 
-## 未发布
+## 0.13.0 - 2026-11-10
 
+- 实时语音识别事件契约写进 `SpeechRecognitionEvent`：`partial.text` 是当前所有尚未定稿的文字（不含已以 final 发出的部分），`segment` 与之对应；`final.text` 是刚定稿的那一句；同一批服务端结果先发 final 再发 partial。百炼 Fun-ASR 实时与 Qwen3-ASR 实时本来就符合。
+- 修复火山 SeedASR 2.0 实时识别的 partial：此前 `text` 是整场累计全文，按“已定稿 + 当前句”显示会重复已定稿句子；现在是所有未定稿 utterance 按顺序拼接，未定稿为空时不发。同一帧里改为先发新定稿的 final 再发 partial，句子交界处下一句开头不再被 final 盖掉、约 0.3 秒后才出现。已定稿的句子在后续帧补上逐字或修订文字时不再重发 final（此前调用方会把同一句提交两次），变化只体现在完成结果的 `segments` 里。
 - `PromptOptimizationProfile` 新增可选 `reasoning`（`LlmReasoningConfig`）：方案可以自带思考设置，省略时沿用供应商的设置。
 
 ## 0.12.0 - 2026-11-10

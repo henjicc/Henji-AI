@@ -44,7 +44,15 @@ export interface SpeechRecognitionOutput {
 export type SpeechRecognitionEvent =
   | { type: 'started'; sessionId?: string }
   | { type: 'processing'; taskId: string; status: string }
+  /**
+   * 当前所有尚未定稿的文字，不含已经以 final 发出的部分；每条都替换上一条，`segment` 与 `text` 对应。
+   * 同一批服务端结果里先发新的 final 再发 partial，所以调用方显示“已定稿 + 最新 partial”即可。
+   */
   | { type: 'partial'; text: string; segment?: SpeechRecognitionSegment }
+  /**
+   * 刚定稿的那一句；调用方据此提交该句并清空当前未定稿文字，之后的 partial 只含后续内容。
+   * 每句只发一次，供应商之后对已定稿句的修订只体现在 completed 的 `segments` 里。
+   */
   | { type: 'final'; text: string; segment?: SpeechRecognitionSegment }
   | { type: 'completed'; output: SpeechRecognitionOutput }
 

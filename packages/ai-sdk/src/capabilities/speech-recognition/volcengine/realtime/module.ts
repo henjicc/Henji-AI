@@ -192,15 +192,37 @@ function parsePayload(payload: unknown): ParsedPayload {
   }
 }
 
-function lastIndefinite(
-  utterances: ParsedPayload['utterances']
-): (SpeechRecognitionSegment & { definite: boolean }) | undefined {
-  for (let index = utterances.length - 1; index >= 0; index -= 1) {
-    if (!utterances[index].definite) return utterances[index]
+/**
+ * 未定稿文字：所有未定稿 utterance 按顺序拼接。帧里没有 utterances 时，只要还没发过 final，
+ * result.text 就全是未定稿文字；已经发过 final 后再用累计全文会把已定稿句子重复一遍。
+ */
+function pendingPartial(
+  parsed: ParsedPayload,
+  hasFinals: boolean
+): { text: string; segment?: SpeechRecognitionSegment } {
+  if (!parsed.utterances.length) return { text: hasFinals ? '' : parsed.text }
+  const pending = parsed.utterances.filter((utterance) => !utterance.definite)
+  const text = pending.map((utterance) => utterance.text).join('')
+  if (!pending.length) return { text }
+  const first = pending[0]
+  const last = pending[pending.length - 1]
+  const words = pending.flatMap((utterance) => utterance.words ?? [])
+  return {
+    text,
+    segment: {
+      text,
+      startMs: first.startMs,
+      endMs: last.endMs,
+      ...(words.length ? { words } : {}),
+    },
   }
-  return undefined
 }
 
+/**
+ * result_type=full 每帧都重发全部已定稿句子，同一句后续可能补齐逐字或修订文字。
+ * 只有第一次定稿才算新的一句（返回 true）；之后的变化只更新完成结果里的 segments，
+ * 不再发 final，否则调用方会把同一句提交两次。
+ */
 function upsertFinal(segments: SpeechRecognitionSegment[], candidate: SpeechRecognitionSegment): boolean {
   const index = segments.findIndex((segment) => (
     segment.startMs === candidate.startMs
@@ -212,10 +234,9 @@ function upsertFinal(segments: SpeechRecognitionSegment[], candidate: SpeechReco
     return true
   }
   const previous = segments[index]
-  if (previous.text === candidate.text
-    && (previous.words?.length ?? 0) >= (candidate.words?.length ?? 0)) return false
-  segments[index] = candidate
-  return true
+  if (previous.text !== candidate.text
+    || (previous.words?.length ?? 0) < (candidate.words?.length ?? 0)) segments[index] = candidate
+  return false
 }
 
 function startPayload(
@@ -391,22 +412,25 @@ async function openDriver(
     } else if (phase !== 'active' && phase !== 'finishing') {
       throw new AiRuntimeError('protocol_event_out_of_order', 'Volcengine transcript arrived for an inactive session')
     }
-    if (parsed.text.trim()) {
-      if (!frame.last && parsed.text !== lastPartial) {
-        lastPartial = parsed.text
-        const candidate = lastIndefinite(parsed.utterances)
-        const partial = candidate
-          ? (({ definite: _definite, ...segment }) => segment)(candidate)
-          : undefined
-        await context.emit({ type: 'partial', text: parsed.text, segment: partial })
-        checkStopped()
-      }
-    }
+    // 先发本帧新定稿的句子，再发剩下的未定稿文字：句子交界帧同时带上一句定稿和下一句开头，
+    // 反过来发会让 final 覆盖掉调用方刚显示的下一句开头。
+    let finalized = false
     for (const utterance of parsed.utterances) {
       if (!utterance.definite) continue
       const { definite: _definite, ...segment } = utterance
       if (upsertFinal(segments, segment)) {
+        finalized = true
         await context.emit({ type: 'final', text: segment.text, segment })
+        checkStopped()
+      }
+    }
+    // final 之后调用方的当前段已清空，下一句开头即使与旧 partial 同文也要重新发。
+    if (finalized) lastPartial = ''
+    if (!frame.last) {
+      const partial = pendingPartial(parsed, segments.length > 0)
+      if (partial.text.trim() && partial.text !== lastPartial) {
+        lastPartial = partial.text
+        await context.emit({ type: 'partial', text: partial.text, segment: partial.segment })
         checkStopped()
       }
     }
