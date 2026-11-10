@@ -5,26 +5,48 @@ const { spawnSync } = require('node:child_process')
 const { checkNaming } = require('./lib/codeNaming.cjs')
 
 const baselinePath = path.join(__dirname, 'dead-code-baseline.json')
+const SYMBOL_KEYS = ['exports', 'types', 'namespaceMembers']
 
 function normalizeReport(report) {
   if (!report || !Array.isArray(report.issues)) throw new Error('Knip 未返回有效 issues 数组')
   const files = new Set()
   const dependencies = new Set()
-  let exports = 0
+  const exports = new Set()
   const diagnostics = []
   for (const issue of report.issues) {
+    const file = issue.file.replaceAll('\\', '/')
     for (const item of issue.files || []) files.add(item.name.replaceAll('\\', '/'))
     for (const key of ['dependencies', 'devDependencies', 'optionalPeerDependencies']) {
-      for (const item of issue[key] || []) dependencies.add(`${issue.file.replaceAll('\\', '/')}:${item.name}`)
+      for (const item of issue[key] || []) dependencies.add(`${file}:${item.name}`)
     }
-    exports += (issue.exports || []).length + (issue.types || []).length + (issue.namespaceMembers || []).length
+    for (const key of SYMBOL_KEYS) for (const item of issue[key] || []) exports.add(`${file}:${item.name}`)
+    // 同一个东西用多个名字导出：以 file:a=b 登记
+    for (const group of issue.duplicates || []) exports.add(`${file}:${group.map(item => item.name).sort().join('=')}`)
     for (const key of ['unlisted', 'unresolved', 'binaries']) for (const item of issue[key] || []) diagnostics.push(`${key}: ${issue.file}: ${item.name}`)
   }
-  return { files: [...files].sort(), dependencies: [...dependencies].sort(), exports, diagnostics }
+  return { files: [...files].sort(), dependencies: [...dependencies].sort(), exports: [...exports].sort(), diagnostics }
 }
 
+const exportKey = entry => `${entry.file}:${entry.name}`
+
 function compareBaseline(current, baseline) {
-  return ['files', 'dependencies'].flatMap(key => current[key].filter(item => !baseline[key].includes(item)).map(item => `新增未使用 ${key}: ${item}`))
+  const registered = new Set((baseline.exports || []).map(exportKey))
+  return [
+    ...['files', 'dependencies'].flatMap(key => current[key].filter(item => !baseline[key].includes(item)).map(item => `新增未使用 ${key}: ${item}`)),
+    ...current.exports.filter(item => !registered.has(item)).map(item => `新增未使用导出/类型/重复导出: ${item}`),
+  ]
+}
+
+// 基线里的导出条目必须写明理由，且仍被 Knip 报出；已经消失的条目要删除，保持基线只减不增。
+function checkExportEntries(current, baseline) {
+  const errors = []
+  const stale = []
+  for (const entry of baseline.exports || []) {
+    if (!entry || typeof entry.file !== 'string' || typeof entry.name !== 'string') { errors.push('导出基线条目格式错误，须为 { file, name, reason }'); continue }
+    if (typeof entry.reason !== 'string' || !entry.reason.trim()) errors.push(`导出基线条目缺少理由: ${exportKey(entry)}`)
+    if (!current.exports.includes(exportKey(entry))) stale.push(entry)
+  }
+  return { errors, stale }
 }
 
 function runKnip(root) {
@@ -35,7 +57,7 @@ function runKnip(root) {
     const bin = path.resolve(path.dirname(require.resolve('knip')), '../bin/knip.js')
     const result = spawnSync(process.execPath, [bin, '--reporter', 'json', '--no-progress', '--no-exit-code'], { cwd: root, stdio: ['ignore', fd, 'pipe'], encoding: 'utf8' })
     if (result.error || result.status !== 0) throw new Error(`Knip 执行失败: ${result.error?.message || result.stderr || result.status}`)
-    return normalizeReport(JSON.parse(fs.readFileSync(output, 'utf8').replace(/^\uFEFF/, '')))
+    return normalizeReport(JSON.parse(fs.readFileSync(output, 'utf8').replace(/^﻿/, '')))
   } finally {
     fs.closeSync(fd)
     fs.rmSync(temporary, { recursive: true, force: true })
@@ -47,9 +69,18 @@ function check(root, target, write = false) {
   if (!fs.existsSync(target)) throw new Error('死代码基线缺失；首次登记须显式使用 --initialize <理由>')
   const baseline = JSON.parse(fs.readFileSync(target, 'utf8'))
   if (baseline.version !== 1 || !Array.isArray(baseline.files) || !Array.isArray(baseline.dependencies)) throw new Error('死代码基线格式错误')
+  if (baseline.exports !== undefined && !Array.isArray(baseline.exports)) throw new Error('死代码基线 exports 须为数组')
   const errors = compareBaseline(current, baseline)
-  if (write && !errors.length) fs.writeFileSync(target, `${JSON.stringify({ ...baseline, files: current.files, dependencies: current.dependencies }, null, 2)}\n`)
-  return { ...current, errors }
+  const entries = checkExportEntries(current, baseline)
+  if (write) {
+    // 写回只允许收缩：新增违规不写，过期条目在这里清掉
+    if (!errors.length && !entries.errors.length) {
+      const exportsKept = (baseline.exports || []).filter(entry => !entries.stale.includes(entry))
+      fs.writeFileSync(target, `${JSON.stringify({ ...baseline, files: current.files, dependencies: current.dependencies, exports: exportsKept }, null, 2)}\n`)
+    }
+  } else errors.push(...entries.stale.map(entry => `过期导出基线条目，须删除: ${exportKey(entry)}`))
+  errors.push(...entries.errors)
+  return { ...current, registered: (baseline.exports || []).length, errors }
 }
 
 if (require.main === module) {
@@ -67,7 +98,7 @@ if (require.main === module) {
       const reason = process.argv[initialize + 1]?.trim()
       if (!reason || fs.existsSync(baselinePath)) throw new Error('首次登记须提供理由，且不得覆盖已有基线')
       const current = runKnip(root)
-      fs.writeFileSync(baselinePath, `${JSON.stringify({ version: 1, reason, files: current.files, dependencies: current.dependencies }, null, 2)}\n`)
+      fs.writeFileSync(baselinePath, `${JSON.stringify({ version: 1, reason, files: current.files, dependencies: current.dependencies, exports: [] }, null, 2)}\n`)
       console.log(`登记基线: ${current.files.length} 文件 / ${current.dependencies.length} 依赖`)
     } else {
       const naming = checkNaming(root, { write: process.argv.includes('--write') })
@@ -75,7 +106,7 @@ if (require.main === module) {
       console.log(`命名检查：${naming.sourceCount} 源文件 / ${naming.exempt} 长期例外；存量 ${naming.naming.files.length} 文件 / ${naming.naming.exports.length} 导出 / ${naming.naming.comments.length} 注释指纹`)
       if (naming.errors.length) throw new Error(naming.errors.join('\n'))
       const result = check(root, baselinePath, process.argv.includes('--write'))
-      console.log(`Knip: ${result.files.length} 存量未使用文件 / ${result.dependencies.length} 存量未使用依赖；${result.exports} 导出/类型仅报告`)
+      console.log(`Knip: ${result.files.length} 存量未使用文件 / ${result.dependencies.length} 存量未使用依赖 / ${result.exports.length} 未使用导出、类型与重复导出（基线登记 ${result.registered}）`)
       for (const diagnostic of result.diagnostics) console.log(diagnostic)
       for (const error of result.errors) console.error(error)
       process.exitCode = result.errors.length ? 1 : 0
@@ -85,4 +116,4 @@ if (require.main === module) {
     process.exitCode = 1
   }
 }
-module.exports = { normalizeReport, compareBaseline, check }
+module.exports = { normalizeReport, compareBaseline, checkExportEntries, runKnip, check }

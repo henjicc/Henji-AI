@@ -1,8 +1,9 @@
 {
   "version": 1,
-  "reason": "已确认的未使用文件与依赖已清理，基线不保留存量豁免；未使用导出与类型仅报告。",
+  "reason": "未使用的文件、依赖、导出、类型与重复导出已清零，基线不保留存量豁免。exports 只允许登记 { file, name, reason }，且须写明理由；knip 看不到使用方的情形优先用 @public 标注或 knip.jsonc 的 ignoreIssues 登记。",
   "files": [],
   "dependencies": [],
+  "exports": [],
   "naming": {
     "directories": [
       "electron/main/services/image-editor-v3",
