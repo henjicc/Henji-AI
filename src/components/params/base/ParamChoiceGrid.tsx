@@ -56,7 +56,8 @@ export function ParamChoiceGrid({ ariaLabel, options, value, onChange, disabled 
           active={option.value === value}
           disabled={disabled || option.disabled}
           onClick={() => onChange(option.value)}
-          className={stacked ? 'min-w-0 flex-col justify-center gap-1.5 py-2' : 'min-w-0 justify-center gap-1.5'}
+          gridCell={stacked ? 'ratio-fluid' : undefined}
+          className={stacked ? 'min-w-0 flex-col justify-center gap-1.5' : 'min-w-0 justify-center gap-1.5'}
         >
           {option.icon ? <span aria-hidden="true" className={`flex shrink-0 items-center justify-center ${stacked ? 'h-5' : 'h-3.5 w-3.5'}`}>{option.icon}</span> : null}
           <span className="max-w-full truncate leading-none">{option.label}</span>

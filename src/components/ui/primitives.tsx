@@ -411,6 +411,7 @@ const UI_OPTION_GRID_CELL_CLASS: Record<NonNullable<UiOptionButtonProps['gridCel
   ratio: 'w-[78px] h-[92px]',
   // 比例与分辨率特殊面板里横竖成对的比例格
   'ratio-md': 'w-16 h-16',
+  'ratio-fluid': 'w-full h-14',
   tier: 'w-[78px] h-[42px]',
   'tier-detail': 'w-[78px] h-[52px]',
   preset: 'w-[120px] min-h-[52px]',

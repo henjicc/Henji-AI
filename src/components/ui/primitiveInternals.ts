@@ -210,8 +210,9 @@ export interface UiOptionButtonProps extends UiButtonFeedbackProps {
    * - `ratio`：画面比例格 78 × 92（32 高的比例小样 + 名称）；
    * - `tier`：档位 / 分辨率格 78 × 42（单行）；`tier-detail`：带说明的档位格 78 × 52；
    * - `preset`：预设分辨率格 120 宽、至少 52 高（名称 + 比例）。
+   * - `ratio-fluid`：宽度随网格列、高 56（图示在上、比例在下；生成页左侧输入面板）。
    */
-  gridCell?: 'ratio' | 'ratio-md' | 'tier' | 'tier-detail' | 'preset'
+  gridCell?: 'ratio' | 'ratio-md' | 'ratio-fluid' | 'tier' | 'tier-detail' | 'preset'
   /** 选中语义：默认 `single`（单选，淡强调底（分段例外））；`multiple` 表示多选集合中已选（强调描边 + 强调文字）。 */
   selection?: 'single' | 'multiple'
   /** 键盘导航当前项（下拉 aria-activedescendant、模型网格方向键指向的项），未选中时显示悬停底。 */
