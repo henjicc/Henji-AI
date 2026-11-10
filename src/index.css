@@ -790,6 +790,11 @@
     color: rgb(var(--text2-rgb));
   }
 
+  /* restDanger：一排静息图标灰里的删除类动作，静息同邻居退到图标灰；悬停、聚焦照上面的 danger 显红。 */
+  .ui-btn-danger.ui-btn-rest-danger {
+    color: var(--icon-rest);
+  }
+
   .ui-btn-danger:hover:not(:disabled):not([aria-disabled='true']),
   .ui-btn-danger:active:not(:disabled):not([aria-disabled='true']) {
     background-color: var(--danger-tint);

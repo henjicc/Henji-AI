@@ -505,7 +505,8 @@ export function UiFormRow({
     // 说明与报错另起一行放在控件下方，不参与对齐：网格第一行只有标签、控件本体与尾部动作
     return <div data-ui-form-row="panel" data-label-width={width} data-control-lines={multilineControl ? 'multiple' : 'single'} className={`grid ${trailing !== undefined ? 'grid-cols-[auto_minmax(0,1fr)_auto]' : 'grid-cols-[auto_minmax(0,1fr)]'} items-start gap-x-3 ${className}`} {...props}>
       <div className={`flex ${FORM_LABEL_WIDTH_CLASS[width]} ${multilineControl ? 'self-start' : `${UI_FORM_ROW_MIN_HEIGHT_CLASS.sm} items-center self-center`}`}>
-        <div id={labelId} className={`min-w-0 break-words ${multilineControl ? 'leading-4' : ''} ${labelClass}`}>{labelNode}</div>
+        {/* 弹性布局：带悬停说明的名称包在行内块里，留在普通行里会多撑出几像素行高，字就不在正中 */}
+        <div id={labelId} className={`flex min-w-0 break-words ${multilineControl ? 'leading-4' : ''} ${labelClass}`}>{labelNode}</div>
       </div>
       <div ref={controlBodyRef} data-ui-form-control className="min-w-0 text-left">
         <UiFormRowLabelContext.Provider value={labelling}>{children}</UiFormRowLabelContext.Provider>
@@ -522,7 +523,7 @@ export function UiFormRow({
     return (
       <div data-ui-form-row="auto" className={`flex items-center justify-between gap-4 ${className}`} {...props}>
         <div className="min-w-0">
-          <div id={labelId} className={labelClass}>{labelNode}</div>
+          <div id={labelId} className={`flex ${labelClass}`}>{labelNode}</div>
           {hint ? <p id={hintId} className={`mt-0.5 ${UI_TEXT_META_CLASS}`}>{hint}</p> : null}
         {errorNode}
         </div>
@@ -641,8 +642,8 @@ function footerToolButton(tool: UiPanelFooterAction | UiPanelFooterMenu, extra: 
       size="sm"
       aria-label={tool.label}
       tooltip={tool.tooltip ?? tool.label}
-      // 面板底栏的工具静息时退到图标灰，开着（偏离默认）的照常着色；工具自己指定的档（删除类的危险色）照旧
-      tone={isAction && tool.tone ? tool.tone : isAction && tool.on ? 'default' : 'rest'}
+      // 面板底栏的工具静息时一律退到图标灰（删除类也是，悬停才显红），开着（偏离默认）的照常着色
+      tone={isAction && tool.tone === 'danger' ? 'restDanger' : isAction && tool.on ? 'default' : 'rest'}
       on={isAction ? tool.on : undefined}
       aria-pressed={isAction && tool.on === undefined ? tool.pressed : undefined}
       selection={isAction ? tool.selection : undefined}

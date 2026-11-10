@@ -9,6 +9,8 @@ interface ParamLabelProps {
   className?: string
   /** 说明提示框位置；一列紧挨着的行（画布节点参数行）传 `left`，避免盖住上一行。默认上方。 */
   tooltipPlacement?: 'top' | 'left'
+  /** 放进左右排的表单行当行标签：只出名称与悬停说明，字号、颜色与对齐由行统一给，不带“标签在上”的下边距。 */
+  inRow?: boolean
 }
 
 /**
@@ -23,17 +25,22 @@ export function ParamLabel({
   id,
   className = '',
   tooltipPlacement,
+  inRow = false,
 }: ParamLabelProps): JSX.Element {
   const toolbar = useUiFieldLayout() === 'toolbar'
   const label = getI18nText(param.name, language)
   const tooltip = param.tooltip ? getI18nText(param.tooltip, language) : ''
 
+  const name = (
+    <UiTooltipText tooltip={tooltip || undefined} placement={tooltipPlacement}>
+      {label}
+      {param.required ? <span className="ml-1 text-danger-text">*</span> : null}
+    </UiTooltipText>
+  )
+  if (inRow) return <span id={id} data-param-label>{name}</span>
   return (
     <div id={id} data-param-label className={`${toolbar ? UI_FIELD_LABEL_INLINE_CLASS : UI_FIELD_LABEL_CLASS} ${className}`}>
-      <UiTooltipText tooltip={tooltip || undefined} placement={tooltipPlacement}>
-        {label}
-        {param.required ? <span className="ml-1 text-danger-text">*</span> : null}
-      </UiTooltipText>
+      {name}
     </div>
   )
 }

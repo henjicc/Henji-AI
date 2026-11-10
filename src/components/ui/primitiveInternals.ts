@@ -61,10 +61,11 @@ export type IconButtonSize = '2xs' | 'xs' | UiControlSize | 'xl'
  * - `media`：压在图片/视频/画布画面上（半透明深底 + 白色图标，不随主题）；
  * - `accent`：圆形材质主动作（如生成），一个表面最多一个；
  * - `danger`：静息静默、悬停显红（删除、移除）。
+ * - `restDanger`：放在一排 `rest` 里的删除类动作：静息与邻居同为图标灰，悬停显红。
  * - `bare`：始终无底无边框，开关与悬停只改变图标颜色。
  * - `mediaBare`：画面上的无底控件（视频底栏）：只有媒体叠层文字色图标，悬停变亮；靠底部压暗保证可读。
  */
-export type IconButtonTone = 'default' | 'rest' | 'media' | 'accent' | 'danger' | 'bare' | 'mediaBare'
+export type IconButtonTone = 'default' | 'rest' | 'restDanger' | 'media' | 'accent' | 'danger' | 'bare' | 'mediaBare'
 
 export interface UiIconButtonProps extends UiButtonFeedbackProps {
   label?: string
@@ -350,6 +351,8 @@ export function resolveIconButtonClass({
         ? selection === 'mode' ? 'ui-btn-mode-on' : 'ui-btn-on'
         : tone === 'danger'
           ? UI_BUTTON_VARIANT_CLASS.danger
+          : tone === 'restDanger'
+          ? `${UI_BUTTON_VARIANT_CLASS.danger} ui-btn-rest-danger`
           : UI_BUTTON_VARIANT_CLASS.quiet
   return `${entry.box} ${radius} ${skin} ${UI_CONTROL_ICON_CLASS[size]}`
 }

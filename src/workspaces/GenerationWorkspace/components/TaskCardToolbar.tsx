@@ -87,7 +87,7 @@ export function TaskCardToolbar({
       >
         <ICON_USE_PROMPT />
       </UiIconButton>
-      <UiIconButton tone="danger"
+      <UiIconButton tone="restDanger"
         onClick={() => void onDelete()}
         tooltip={t('common:delete')}
       >
