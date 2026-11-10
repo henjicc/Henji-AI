@@ -25,6 +25,7 @@ const NON_VISUAL: Record<string, string> = {
   PromptSuggestionList: '提示词编辑器内部建议列表，依赖资源解析器，属于 PromptEditor 的子实现而非独立公共组件',
   MediaReferenceExtension: 'TipTap 扩展配置，不是 React 可见组件，媒体引用由 PromptEditor 渲染',
   TemplateVariableExtension: 'TipTap 扩展配置，不是 React 可见组件，模板变量由 PromptEditor 渲染',
+  ExternalHistoryExtension: 'TipTap 扩展配置，不是 React 可见组件，只把外部改动并入 PromptEditor 的撤销历史',
   MediaReferenceNodeView: 'TipTap 内部节点视图，需要编辑器 NodeView 上下文，由 PromptEditor 的媒体引用宿主创建',
   TemplateVariableNodeView: 'TipTap 内部节点视图，需要编辑器 NodeView 上下文，由 PromptEditor 的模板变量宿主创建',
   PromptEditorResourceRegistry: '提示词资源解析服务类，不是 React 可见组件，媒体与变量解析由正式编辑器维护',

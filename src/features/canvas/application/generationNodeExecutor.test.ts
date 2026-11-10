@@ -151,7 +151,7 @@ it('素材尺寸不合模型要求时在建结果节点前拒绝，不调用供�
   registry.unregister('executor-fixture')
   registry.register({ meta: { id: 'executor-fixture', canonicalModelId: 'nano-banana', provider: 'fixture', type: 'image', name: { zh: '执行器测试', en: 'Executor' } },
     params: [], endpoints: '/fixture', request: { builder: params => params },
-    inputLimits: { images: { max: 1 }, videos: { max: 0 }, audios: { max: 0 }, rules: [{ imageConstraints: { minShortSidePx: 300 } }] },
+    inputLimits: { images: { max: 1 }, videos: { max: 0 }, audios: { max: 0 }, rules: [{ imageConstraints: { minShortSidePx: 300, minAspectRatio: 0.4 } }] },
     pricing: { currency: '$', fixed: 0.01 } })
   Object.assign(imageInfo, { width: 200, height: 800 })
   const before = useCanvasStore.getState().nodes.length

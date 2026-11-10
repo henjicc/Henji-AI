@@ -58,7 +58,7 @@ async function mountApp(dev: boolean, surfaceId: string | null) {
     '@/features/onboarding/application/onboardingManager': { onboardingManager: { reconcileConfiguredProviders: noop } },
   }
   const module: { exports: { default?: React.ComponentType } } = { exports: {} }
-  runInNewContext(code, { module, exports: module.exports, window, HTMLElement, performance, setTimeout, clearTimeout,
+  runInNewContext(code, { module, exports: module.exports, window, document, HTMLElement, performance, setTimeout, clearTimeout,
     require: (id: string) => namespaces[id] ?? new Proxy({ __esModule: true, default: empty }, {
       get(target, key) {
         if (key in target) return Reflect.get(target, key)

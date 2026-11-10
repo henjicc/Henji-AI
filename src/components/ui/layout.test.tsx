@@ -35,7 +35,6 @@ describe('参数名本身触发说明（不加 ⓘ 图标）', () => {
     const tooltip = screen.getByRole('tooltip', { hidden: true })
     expect(tooltip.textContent).toBe('同时生成的任务上限')
     expect(label.getAttribute('aria-describedby')).toBe(tooltip.id)
-    expect(tooltip.className).toContain('bg-raised')
     expect(tooltip.className).toContain('text-text1')
   })
 

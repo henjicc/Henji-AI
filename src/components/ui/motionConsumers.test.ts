@@ -16,7 +16,6 @@ const consumers = [
   'src/components/ui/PanelTrigger.tsx',
   'src/contexts/NotificationContext.tsx',
   'src/workspaces/GenerationWorkspace/hooks/useToast.ts',
-  'src/workspaces/GenerationWorkspace/components/TaskInputPreview.tsx',
   // 任务 4.6：四种媒体查看器统一委托查看器外壳，外壳内部使用公共进出场生命周期。
   'src/components/ui/useUiViewerShell.ts',
 ];

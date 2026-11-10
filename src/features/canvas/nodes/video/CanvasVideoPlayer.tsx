@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { UiIconButton, UiRangeInput } from '@/components/ui';
 import { readVideoInfo } from '@/commands/video';
+import { formatVideoTime } from './formatVideoTime';
 
 interface CanvasVideoPlayerProps {
   src: string;
@@ -12,13 +13,6 @@ interface CanvasVideoPlayerProps {
   onOpenViewer: () => void;
   /** poster 点击播放场景：挂载后元数据就绪即自动开播 */
   autoPlayOnMount?: boolean;
-}
-
-export function formatVideoTime(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
-  const wholeSeconds = Math.floor(seconds);
-  const minutes = Math.floor(wholeSeconds / 60);
-  return `${minutes}:${String(wholeSeconds % 60).padStart(2, '0')}`;
 }
 
 /** 画布视频节点内嵌播放器：首帧直出，控制条使用项目 Ui primitives。 */

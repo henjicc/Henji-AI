@@ -45,16 +45,17 @@ describe('正式调用方共用进出场', () => {
   });
   it('音频查看器双帧进入，结束事件退出，退出中重开保留新画面', () => {
     const view = render(<AudioViewerModal open audioUrl="" onClose={() => undefined} />);
-    const root = view.getByText('音频内容').closest('.z-viewer') as HTMLElement;
-    expect(root.style.opacity).toBe('0');
+    // 外壳的淡入淡出与退出结束事件都在背景层上，内容层只跟着同一个透明度。
+    const backdrop = view.getByText('音频内容').closest('.z-viewer')!.querySelector('[data-ui-viewer-layer="backdrop"]') as HTMLElement;
+    expect(backdrop.style.opacity).toBe('0');
     act(() => vi.advanceTimersByTime(32));
-    expect(root.style.opacity).toBe('1');
+    expect(backdrop.style.opacity).toBe('1');
     view.rerender(<AudioViewerModal open={false} audioUrl="" onClose={() => undefined} />);
     view.rerender(<AudioViewerModal open audioUrl="" onClose={() => undefined} />);
     act(() => vi.advanceTimersByTime(UI_DURATION.viewer));
     expect(view.getByText('音频内容')).toBeTruthy();
     view.rerender(<AudioViewerModal open={false} audioUrl="" onClose={() => undefined} />);
-    fireEvent.transitionEnd(root);
+    fireEvent.transitionEnd(backdrop);
     expect(view.queryByText('音频内容')).toBeNull();
   });
   it('确认弹窗减少动效关闭只通知一次，无退出等待', () => {

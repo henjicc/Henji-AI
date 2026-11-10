@@ -555,6 +555,7 @@ export function MediaSection(): JSX.Element {
           <div className="flex items-center gap-1.5">
             <UiIconButton tone="media" aria-label="播放"><Play /></UiIconButton>
             <GalleryForce state="hover"><UiIconButton tone="media" aria-label="暂停（悬停）"><Pause /></UiIconButton></GalleryForce>
+            <UiIconButton tone="mediaBare" aria-label="播放（无底）"><Play /></UiIconButton>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -708,9 +709,13 @@ function ModalPreview({ size, surface }: { size: UiModalSize; surface: 'panel' |
   </div></div>
 }
 
+/** 悬停看大图的占位画面：样张没有真实图片素材，用媒体底加图标代表一张图。 */
+const GALLERY_MEDIA_PREVIEW = <span className="flex h-24 w-40 items-center justify-center text-on-media"><ImageIcon className={UI_ICON_SIZE_CLASS.lg} /></span>
+
 export function StaticOverlaySection(): JSX.Element {
   const top = useRef<HTMLSpanElement>(null)
   const left = useRef<HTMLSpanElement>(null)
+  const picture = useRef<HTMLSpanElement>(null)
   const solid = useRef<HTMLDivElement>(null)
   const glass = useRef<HTMLDivElement>(null)
   const [positions, setPositions] = useState<{ solid: { x: number; y: number }; glass: { x: number; y: number } } | null>(null)
@@ -725,10 +730,11 @@ export function StaticOverlaySection(): JSX.Element {
   }, [])
   const items = [{ id: 'edit', label: '继续编辑', icon: <Plus className={`${UI_ICON_SIZE_CLASS.md}`} />, onClick: noop }, { id: 'copy', label: '复制', icon: <Plus className={`${UI_ICON_SIZE_CLASS.md}`} />, onClick: noop }, { id: 'remove', label: '删除（禁用）', icon: <Trash2 className={`${UI_ICON_SIZE_CLASS.md}`} />, disabled: true, onClick: noop }]
   return <GallerySection title="静态浮层：无需鼠标或计时器">
-    <div className="flex h-32 items-center justify-around gap-6"><span ref={top} className="text-xs text-text2">上方锚点</span><span ref={left} className="text-xs text-text2">左侧锚点</span><Tooltip placement="top" content="正式悬停说明"><UiButton>上方说明</UiButton></Tooltip><Tooltip placement="left" content="正式悬停说明"><UiButton>左侧说明</UiButton></Tooltip></div>
+    <div className="flex h-32 items-center justify-around gap-6"><span ref={top} className="text-xs text-text2">上方锚点</span><span ref={left} className="text-xs text-text2">左侧锚点</span><span ref={picture} className="text-xs text-text2">大图锚点</span><Tooltip placement="top" appearance="text" content="正式悬停说明"><UiButton>上方说明</UiButton></Tooltip><Tooltip placement="left" content="正式悬停说明"><UiButton>左侧说明</UiButton></Tooltip><Tooltip appearance="media" content={GALLERY_MEDIA_PREVIEW}><UiButton>悬停看大图</UiButton></Tooltip></div>
     <GalleryRow label="标签"><UiTooltipText placement="top" tooltip="上方说明">参数名称</UiTooltipText><UiTooltipText placement="left" tooltip="左侧说明">参数名称</UiTooltipText></GalleryRow>
     <TooltipContent visible data-gallery-static="Tooltip" anchorRef={top} content="上方说明" placement="top" />
-    <TooltipContent visible data-gallery-static="TooltipContent" anchorRef={left} content="左侧说明" placement="left" />
+    <TooltipContent visible data-gallery-static="TooltipContent" anchorRef={left} content="左侧说明" placement="left" appearance="text" />
+    <TooltipContent visible anchorRef={picture} content={GALLERY_MEDIA_PREVIEW} placement="top" appearance="media" />
     <div data-gallery-static="ContextMenu" className="grid grid-cols-2 gap-6"><div ref={solid} className="h-52"><span className="text-xs text-text2">实底菜单</span></div><div ref={glass} className="h-52 rounded-overlay bg-media"><span className="text-xs text-on-media">媒体上的玻璃菜单</span></div></div>
     {positions && <><ContextMenu items={items} position={positions.solid} visible surface="solid" onClose={noop} /><ContextMenu items={items} position={positions.glass} visible surface="glass" onClose={noop} /></>}
   </GallerySection>

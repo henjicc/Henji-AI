@@ -58,7 +58,7 @@ export const NodeModelParamsControls = memo(({
   modelChipClassName = 'max-w-[260px] justify-start',
   onModelChipContentWidthChange,
 }: NodeModelParamsControlsProps) => {
-  const { t, i18n } = useTranslation();
+  const { i18n } = useTranslation();
   const modelChipMeasureRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   // 放不下“模型名 + 渠道”时只显示模型名，渠道进悬停说明：模型名是主要信息，不能被截成“GPT Im…”（5.8 shortTextTruncated）

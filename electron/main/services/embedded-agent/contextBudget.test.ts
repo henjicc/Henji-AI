@@ -1,12 +1,7 @@
 import { expect, it } from 'vitest'
 import { SessionManager, type AgentSession } from '@earendil-works/pi-coding-agent'
 import { archiveToolResult, contextReader } from './contextReader'
-import { budgetContext, estimateContextTokens, messageTokens, projectText } from './contextBudget'
-
-type ToolResultMessage = Extract<AgentSession['messages'][number], { role: 'toolResult' }>
-/** Pi 1.x 的会话消息 details 只收 JSON；工具返回值的 details 仍是 unknown，测试按会话落盘形状收窄。 */
-const toolMessage = (toolName: string, toolCallId: string, result: { content: ToolResultMessage['content']; details?: unknown }, isError = false, timestamp = 0): ToolResultMessage =>
-  ({ role: 'toolResult', toolName, toolCallId, content: result.content, details: result.details as ToolResultMessage['details'], isError, timestamp })
+import { budgetContext, estimateContextTokens, projectText } from './contextBudget'
 
 it('ASCII 规则不变，CJK/BMP 逐码点计一、emoji 和扩展汉字计二', () => {
   expect(estimateContextTokens('abc_def123 !')).toBe(6)

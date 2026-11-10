@@ -45,7 +45,8 @@ import { useSettingsStore } from '@/stores/settingsStore';
 import { UiEmpty, UiIconButton, UiInput } from '@/components/ui';
 import { VideoViewerModal } from '@/components/mediaViewer/VideoViewerModal';
 import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
-import { CanvasVideoPlayer, formatVideoTime } from './video/CanvasVideoPlayer';
+import { CanvasVideoPlayer } from './video/CanvasVideoPlayer';
+import { formatVideoTime } from './video/formatVideoTime';
 import { uiTransition } from '@/components/ui/motion';
 
 const VideoUploadIcon = ICON_NODE_VIDEO_UPLOAD;
@@ -233,7 +234,7 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
                 ? formatVideoTime(data.durationSec)
                 : <VideoGenerationIcon aria-hidden className={UI_ICON_SIZE_CLASS.xs} />}
             </span>
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center px-2 pb-1.5 pt-9 opacity-0 transition-opacity duration-120 group-hover/poster:opacity-100 focus-within:opacity-100">
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center px-2 pb-1.5 pt-8 opacity-0 transition-opacity duration-120 group-hover/poster:opacity-100 focus-within:opacity-100">
               <div className="absolute inset-0 bg-gradient-to-t from-media-scrim via-media-scrim to-transparent" />
               <UiIconButton size="xs" tone="mediaBare"
                 aria-label={t('node.videoNode.play')}

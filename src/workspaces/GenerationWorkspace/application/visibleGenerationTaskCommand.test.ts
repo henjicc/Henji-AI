@@ -88,7 +88,7 @@ describe('visible generation task internal result contract', () => {
 
   it('素材尺寸不合格时抛出原因交给调用方，不创建可见任务', async () => {
     registry.register({ ...testModel('min-side-model', 'apimart'),
-      inputLimits: { images: { max: 1 }, rules: [{ imageConstraints: { minShortSidePx: 300 } }] } })
+      inputLimits: { images: { max: 1 }, rules: [{ imageConstraints: { minShortSidePx: 300, minAspectRatio: 0.4 } }] } })
     const appendTask = vi.fn()
     const notify = vi.fn()
     const created = createVisibleGenerationTask({
