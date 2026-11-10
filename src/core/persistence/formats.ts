@@ -112,7 +112,8 @@ export const PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
   { ...format('setting-records', '设置记录', SETTING_RECORD_VERSION, 'SETTING_RECORD_VERSION（记录独立内容版本；SQL 升级仍走既有账本）', 'electron/main/services/settings/store.ts::getEntry', settingRecordSchema, 'sqlite-ledger', { paidApproval: paidApprovalSettingsSchema }), minReaderVersion: 22 },
   { ...format('asset-records', '素材库记录', ASSET_RECORD_VERSION, 'ASSET_RECORD_VERSION（记录独立内容版本；SQL 升级仍走既有账本）', 'electron/main/services/asset-library/index.ts', assetRecordSchema, 'sqlite-ledger', { foreign: foreignContentSchema }), minReaderVersion: 21 },
   format('generation-presets', '生成预设', GENERATION_PRESET_VERSION, 'GENERATION_PRESET_VERSION（记录独立内容版本；SQL 升级仍走既有账本）', 'electron/main/services/presets/store.ts', presetRecordSchema, 'sqlite-ledger'),
-  format('assistant-memory', '三层记忆与修改历史', 1, 'assistant_memory.state_json（SQLite账本v22）', 'electron/main/services/assistant/entry-store.ts::getState', memorySnapshotSchema, 'sqlite-ledger'),
+  // 2：全局记忆不再限条数与总字数；只放宽取值范围，旧内容原样有效，SQL 表结构不变。旧程序只在条目超出旧上限时读取失败，最低可读版本不变。
+  { ...format('assistant-memory', '三层记忆与修改历史', 2, 'assistant_memory.state_json（SQLite账本v22）', 'electron/main/services/assistant/entry-store.ts::getState', memorySnapshotSchema, 'sqlite-ledger'), minReaderVersion: 1 },
   format('sqlite', '应用数据库', SQLITE_SCHEMA_VERSION, 'SCHEMA_MIGRATIONS / schema_migrations', 'electron/main/services/db-migrations.ts::runSchemaMigrations', z.object({ version: z.number().int().positive(), name: z.string(), applied_at: z.number() }), 'sqlite-ledger', { operationOrigin: operationOriginSchema.optional(), operationState: applicationOperationStateSchema, userConfirmation: applicationUserConfirmationSchema, paidGenerationEstimateKind: z.enum(['upper-bound', 'estimate']).optional(), paidReservation: paidReservationSchema, paidApproval: paidApprovalReceiptSchema }),
 ]
 

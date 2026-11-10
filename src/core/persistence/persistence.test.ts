@@ -523,6 +523,22 @@ describe('所有登记格式的黄金样本', () => {
     expect(withoutPreviewPins(upgradePersistenceContent(versioned('document.screen_recording'), recording.content, 35))).toEqual(withoutPreviewPins(migrateVideoEditMergedEffects(migrateRecordingCaptionOwnership(recording.content))))
   })
 
+  it('记忆不限条数与字数：嵌入记忆的格式只放宽范围、最低可读版本不变，旧样本原样升上来', () => {
+    for (const [id, previous] of [['document.video_edit', 75], ['document.screen_recording', 78], ['project', 3], ['video-style-library', 20], ['video-style-package', 26]] as const) {
+      const format = PERSISTENCE_FORMATS.find(value => value.id === id)!
+      const raw = JSON.parse(fs.readFileSync(`tests/fixtures/persistence/${id}/v${previous}.json`, 'utf8'))
+      const content = id === 'project' ? raw : raw.content
+      const before = structuredClone(content)
+      // 能读上一版样本的旧程序按向前兼容规则也能打开放宽后写出的文件。
+      const next = JSON.parse(fs.readFileSync(`tests/fixtures/persistence/${id}/v${previous + 1}.json`, 'utf8'))
+      const minReader = (value: { kindMinReaderVersion?: number; minReaderVersion?: number }) => id.startsWith('document.') ? value.kindMinReaderVersion : value.minReaderVersion
+      expect(minReader(next)).toBe(minReader(raw))
+      // 只核这一步：后续版本的迁移由下方逐样本升级用例覆盖。
+      expect(format.migrations[previous](content)).toEqual(id === 'project' ? { ...content, version: previous + 1 } : content)
+      expect(content).toEqual(before)
+    }
+  })
+
   for (const format of PERSISTENCE_FORMATS) {
     const directory = path.resolve('tests/fixtures/persistence', format.id)
     for (const file of fs.readdirSync(directory).filter(file => /^v\d+\.json$/.test(file))) {

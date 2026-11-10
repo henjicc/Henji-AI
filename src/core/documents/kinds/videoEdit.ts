@@ -163,6 +163,8 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
     // 73 → 74：片段的 fadeInFrames / fadeOutFrames 并进过渡，成为片段一端的单侧过渡（画面交叉溶解、声音恒定功率，见 fadeTransitionMigration.ts）；
     // 自带声音的画面片段的声音改由单侧画面过渡带着淡，旧程序不会，最低可读版本提高到 74。
     // 74 → 75：修改记录新增键 check（助手检查过手改的时刻）；已有手改记为检查过（见 codeEditCheckMigration.ts）。旧程序原样保留它，最低可读版本不变。
+    // 75 → 76：风格的使用者偏好（记忆条目）不再限条数与总字数；旧内容原样有效。只放宽取值范围、不改已有字段含义；旧程序只在偏好条目超出旧上限时拒绝打开，不会误读，最低可读版本不变。
+    75: content => structuredClone(content),
     74: content => migrateVideoEditCodeEditChecks(content),
     73: content => migrateVideoEditClipFades(content),
     72: content => structuredClone(content),

@@ -16,7 +16,7 @@ import { restoreForwardFields } from '../persistence/forwardCompat'
  */
 
 export const PROJECT_MANIFEST_FORMAT = 'henji-project' as const
-export const PROJECT_MANIFEST_VERSION = 3 as const
+export const PROJECT_MANIFEST_VERSION = 4 as const
 /** 项目与作品目录里的内部文件夹（项目说明与内部资源），Windows 上设为隐藏。 */
 export const INTERNAL_FOLDER_NAME = '.henji'
 export const PROJECT_MANIFEST_FILE_NAME = 'project.json'
