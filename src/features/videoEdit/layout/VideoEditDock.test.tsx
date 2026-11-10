@@ -292,6 +292,10 @@ it.each(['closed', 'stacked', 'visible', 'popout_stacked', 'popout_visible'] as 
   const { host, opened } = createPopoutTestHost()
   act(() => {
     dock.layout(1440, 860)
+    // 调色面板要读已注册的工程，这个夹具只挂了实例：先关掉，免得效果控件让出位置后轮到它渲染
+    dock.getPanel('color_grade')!.api.close()
+    // 模板面板不在默认布局里，叠放用例先把它打开，再把效果控件切回前面
+    showVideoEditPanel(dock, 'title_templates'); dock.getPanel('effects')!.api.setActive()
     dock.getPanel('effects_library')!.api.moveTo({ group: dock.getPanel('project')!.group, position: 'center' })
     if (state === 'closed') dock.getPanel('effects')!.api.close()
     else if (state === 'stacked') dock.getPanel('title_templates')!.api.setActive()

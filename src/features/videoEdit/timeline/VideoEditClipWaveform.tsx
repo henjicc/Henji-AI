@@ -36,11 +36,13 @@ export const VideoEditClipWaveform = memo(function VideoEditClipWaveform({ clipI
     {ready && <div className={`pointer-events-none absolute bottom-0 flex flex-col ${lane === 'lower' ? 'h-1/2 bg-media-scrim' : 'top-0'}`} data-video-edit-waveform={clipId} data-waveform-lanes={lanes} style={{ left, width }}>
       {states.map((state, index) => <WaveformView key={index} waveform={state} gain={videoEditGainMultiplier(gainDb)} startSeconds={startSeconds} endSeconds={endSeconds} tone="clip" className={`min-h-0 flex-1 ${reverse ? '-scale-x-100' : ''}`} />)}
     </div>}
-    {/* 读不出波形的片段叠一层红斜纹，一眼看得出哪段有问题；点它重试 */}
-    {error && <div className={`ui-hatch-danger absolute inset-x-0 bottom-0 z-raised flex items-center overflow-hidden ${lane === 'lower' ? 'h-1/2' : 'top-0'}`} data-video-edit-waveform-failed={clipId} onPointerDown={event => event.stopPropagation()} onClick={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()}>
-      {compact
+    {/* 读不出波形的片段叠一层红斜纹，一眼看得出哪段有问题。红层不接指针，片段照常能选、能拖、能修剪；只有重试按钮接事件 */}
+    {error && <div className={`ui-hatch-danger pointer-events-none absolute inset-x-0 bottom-0 z-raised flex items-center overflow-hidden ${lane === 'lower' ? 'h-1/2' : 'top-0'}`} data-video-edit-waveform-failed={clipId}>
+      <span className="pointer-events-auto flex" onPointerDown={event => event.stopPropagation()} onClick={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()}>
+      {compact || lane === 'lower'
         ? <UiIconButton size="2xs" tone="bare" tooltip={t('surfaceGrammar.waveformRetry')} aria-label={t('surfaceGrammar.waveformRetry')} onClick={() => sources.forEach(source => retryWaveform(source, 'full'))}><TriangleAlert className="text-danger-text" /></UiIconButton>
         : <UiButton size="sm" tooltip={t('surfaceGrammar.waveformRetry')} aria-label={t('surfaceGrammar.waveformRetry')} onClick={() => sources.forEach(source => retryWaveform(source, 'full'))}><TriangleAlert className="text-danger-text" />{t('surfaceGrammar.waveformFailed')}</UiButton>}
+      </span>
     </div>}
   </>
 })

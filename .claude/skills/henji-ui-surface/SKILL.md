@@ -264,6 +264,7 @@ prominent/bordered/plain、Fluent 的 primary/default/subtle）。本项目（�
 | 危险 | `danger`（静息同 quiet，悬停显红）/ `dangerSolid`（只用于确认弹窗） | `tone="danger"` | 删除、清空、移除 |
 | 链接 | `link`（强调文字、悬停下划线、行内高度） | —— | 行内跳转/说明链接，不计入动作层级 |
 | 画面上 | `media` | `tone="media"` | 压在图片/视频/画布上的控件（固定媒体叠层令牌） |
+| 静息退后 | —— | `tone="rest"` | 保持默认状态的开关（轨道头的锁、眼睛、喇叭）与折叠箭头：静息是图标灰（`--icon-rest`，只给图标不给文字），偏离默认（`on`）是主要文字色，不着强调色（剪辑样板屏，2026-11-10） |
 | 行内无底 | —— | `tone="bare"` | 压在已有底色的行内，不增加悬停底；仍保留焦点与可访问名称 |
 | 窗口控件 | —— | `UiWindowControl action platform` | 只用于无边框窗口标题栏的最小化/最大化/还原/关闭（Windows 36×28 静默、关闭悬停危险实底；macOS 交通灯取状态实底令牌） |
 

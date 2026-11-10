@@ -48,22 +48,26 @@ function inspectorReference(api: DockviewApi, id: string, own?: DockviewGroupPan
   return INSPECTOR_PANELS.map(candidate => api.getPanel(candidate)).find(panel => panel && panel.id !== id && panel.group !== own && panel.api.location.type === 'grid')
 }
 
+/** 默认布局里打开的面板：右侧面板组只放最常用的四个，标签一行放得下；其余从“窗口”菜单打开。 */
+const DEFAULT_INSPECTOR_VIEWS = ['effects', 'effects_library', 'style_kits', 'color_grade'] as const
+const DEFAULT_PANEL_IDS: ReadonlySet<string> = new Set(['project', 'program', 'timeline', 'audio_meters', ...DEFAULT_INSPECTOR_VIEWS])
+
 /** A view-only layout: no project content, selection or transport state is serialized. */
 export function defaultVideoEditLayout(): SerializedDockview {
-  const panels = Object.fromEntries(VIDEO_EDIT_PANELS.filter(panel => panel.id !== 'annotations' && panel.id !== 'source' && panel.id !== 'content' && panel.id !== 'tracking' && panel.id !== 'color_grade' && panel.id !== 'audio_mixer' && panel.id !== 'code_project' && panel.id !== 'scenes').map(({ id, title }) => [id, { id, contentComponent: id, title, renderer: 'always' as const }]))
+  const panels = Object.fromEntries(VIDEO_EDIT_PANELS.filter(panel => DEFAULT_PANEL_IDS.has(panel.id)).map(({ id, title }) => [id, { id, contentComponent: id, title, renderer: 'always' as const }]))
   return {
     grid: {
       width: 1440, height: 860, orientation: Orientation.HORIZONTAL,
       root: { type: 'branch', data: [
-        { type: 'leaf', size: 240, data: { id: 'project-group', views: ['project'], activeView: 'project' } },
-        { type: 'branch', size: 880, data: [
-          { type: 'leaf', size: 540, data: { id: 'program-group', views: ['program'], activeView: 'program' } },
-          { type: 'branch', size: 320, data: [
+        { type: 'leaf', size: 264, data: { id: 'project-group', views: ['project'], activeView: 'project' } },
+        { type: 'branch', size: 840, data: [
+          { type: 'leaf', size: 490, data: { id: 'program-group', views: ['program'], activeView: 'program' } },
+          { type: 'branch', size: 370, data: [
             { type: 'leaf', size: 784, data: { id: 'timeline-group', views: ['timeline'], activeView: 'timeline' } },
-            { type: 'leaf', size: 96, data: { id: 'meters-group', views: ['audio_meters'], activeView: 'audio_meters' } },
+            { type: 'leaf', size: 56, data: { id: 'meters-group', views: ['audio_meters'], activeView: 'audio_meters' } },
           ] },
         ] },
-        { type: 'leaf', size: 320, data: { id: 'effects-group', views: ['effects', 'presets', 'effects_library', 'title_templates', 'style_kits'], activeView: 'effects' } },
+        { type: 'leaf', size: 336, data: { id: 'effects-group', views: [...DEFAULT_INSPECTOR_VIEWS], activeView: 'effects' } },
       ] },
     }, panels, activeGroup: 'program-group',
   }
@@ -82,10 +86,9 @@ export function resetVideoEditLayout(api: DockviewApi): void {
 
 function colorGradeLayout(): SerializedDockview {
   const layout = defaultVideoEditLayout()
-  layout.panels.color_grade = { id: 'color_grade', contentComponent: 'color_grade', title: '全能调色', renderer: 'always' }
   if (!Array.isArray(layout.grid.root.data)) throw new Error('默认布局根节点无效')
   const inspector = layout.grid.root.data[2]
-  if (inspector.type === 'leaf' && !Array.isArray(inspector.data)) { inspector.size = 480; inspector.data.views.unshift('color_grade'); inspector.data.activeView = 'color_grade' }
+  if (inspector.type === 'leaf' && !Array.isArray(inspector.data)) { inspector.size = 480; inspector.data.views = ['color_grade', ...inspector.data.views.filter((view: string) => view !== 'color_grade')]; inspector.data.activeView = 'color_grade' }
   return layout
 }
 /**

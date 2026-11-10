@@ -35,11 +35,11 @@ export function VideoEditDockTab({ api, containerApi, titleSlot }: IDockviewPane
   }, [api, group])
   // 文字色交给 dockview 的标签色变量（选中主要文字、其余辅助文字，见 index.css 面板标签映射）
   // 与 PR 一致：标签只有标题和紧跟其后的面板菜单（关闭在菜单里），选中线只到菜单为止。
-  // 非当前标签也占住菜单的位置（不可见），切换叠放面板时各标签文字位置不动。
+  // 只有当前标签带面板菜单；其余标签只占文字的宽度，一组四个标签一行放得下，不被挤进「+N」。
   // 当前标签在窄组里（如时间线旁的音频仪表）放不下时截断、悬停看全名，不整枚收进「+N」。
   return <span className="flex h-full min-w-0 items-center gap-1.5 text-xs" data-dock-tab={api.id} data-dock-tab-title={title}>
     {titleSlot ?? (active ? <Tooltip content={title} asChild><span className="min-w-0 truncate">{title}</span></Tooltip> : <span>{title}</span>)}
-    {active ? <VideoEditPanelMenu containerApi={containerApi} group={group} /> : <span aria-hidden="true" className="invisible flex"><UiIconButton size="2xs" tabIndex={-1}><Menu  /></UiIconButton></span>}
+    {active ? <VideoEditPanelMenu containerApi={containerApi} group={group} /> : null}
   </span>
 }
 

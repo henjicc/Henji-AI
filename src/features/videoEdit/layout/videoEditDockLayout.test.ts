@@ -92,7 +92,7 @@ describe('剪辑面板布局', () => {
 
   it('效果控件关闭后仍沿现有检查器组打开和贴回，恢复效果控件也不另开一列', () => {
     resetVideoEditLayout(api)
-    const group = api.getPanel('title_templates')!.group
+    const group = api.getPanel('effects_library')!.group
     api.getPanel('effects')!.api.close()
     api.getPanel('style_kits')!.api.close()
     const style = showVideoEditPanel(api, 'style_kits')

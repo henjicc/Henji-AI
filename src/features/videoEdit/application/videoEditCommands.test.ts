@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { VIDEO_EDIT_TRACK_HEIGHT_DEFAULT } from '@/core/videoEdit/timelineNavigation'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
@@ -206,8 +207,8 @@ it('Premiere 时间线视图键：五帧步进、轨道高度一步编辑、缩�
   expect(owner.frame).toBe(20)
   const history = owner.past.length
   await executeVideoEditCommand(captureVideoEditCommandContext(id, 'timeline'), 'increase_video_tracks')
-  const heights = () => getActiveVideoEditSequence(owner).tracks.map(track => [track.kind, track.height ?? 32])
-  expect(heights()).toEqual(sequence.tracks.map(track => [track.kind, (track.height ?? 32) + (track.kind === 'video' ? 8 : 0)]))
+  const heights = () => getActiveVideoEditSequence(owner).tracks.map(track => [track.kind, track.height ?? VIDEO_EDIT_TRACK_HEIGHT_DEFAULT])
+  expect(heights()).toEqual(sequence.tracks.map(track => [track.kind, (track.height ?? VIDEO_EDIT_TRACK_HEIGHT_DEFAULT) + (track.kind === 'video' ? 8 : 0)]))
   expect(owner.past.length).toBe(history + 1)
   await executeVideoEditCommand(captureVideoEditCommandContext(id, 'timeline'), 'minimize_all_tracks')
   expect(heights().every(([, height]) => height === 24)).toBe(true)

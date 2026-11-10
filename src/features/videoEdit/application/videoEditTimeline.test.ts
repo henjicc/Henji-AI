@@ -1,3 +1,4 @@
+import { VIDEO_EDIT_TRACK_HEIGHT_DEFAULT } from '@/core/videoEdit/timelineNavigation'
 import { createVideoEditTestProject as createVideoEditProject } from './videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -146,7 +147,7 @@ it('领域锁定覆盖手动、公共字段与拖动入口，通用事务失败�
   try {
     const result = await app.change(ref, { 'video_edit.clip.x': .2 })
     expect(result.ok).toBe(false); expect(getActiveVideoEditSequence(owner).clips[0].x).toBe(0); expect(owner.past.length).toBe(history)
-    expect((await app.read(trackRef, ['video_edit.track.height', 'video_edit.track.sync_locked'])).properties).toMatchObject({ 'video_edit.track.height': 32, 'video_edit.track.sync_locked': true })
+    expect((await app.read(trackRef, ['video_edit.track.height', 'video_edit.track.sync_locked'])).properties).toMatchObject({ 'video_edit.track.height': VIDEO_EDIT_TRACK_HEIGHT_DEFAULT, 'video_edit.track.sync_locked': true })
     updateVideoEditTrack(id, sequence.id, track.id, { locked: false })
     const baseline = await app.read(ref); const past = owner.past.length
     const failed = await app.call('change_application_entities', { summary: '验证锁定失败回滚', changes: [

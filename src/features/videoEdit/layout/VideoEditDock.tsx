@@ -1,3 +1,6 @@
+import { Volume2 } from 'lucide-react'
+import Tooltip from '@/components/ui/Tooltip'
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { bindWorkspaceLayoutDock } from '@/components/dockLayouts/useWorkspaceLayoutPresets'
 import { focusVideoEditPanelElement } from './videoEditPanelFocus'
 import { VideoEditAnnotationsPanel } from '../panels/VideoEditAnnotationsPanel'
@@ -56,8 +59,12 @@ function TimelineTabTitle(): React.ReactElement {
   const { instance, onError } = useDock(true)
   return instance.activeSequenceId ? <VideoEditSequenceTabs instance={instance} onError={onError} placement="dock" /> : <span>时间线</span>
 }
+/** 音频仪表面板只有 56 宽，放不下名字：标签用喇叭图标，名字在悬停提示与无障碍名称里。 */
+function AudioMetersTabTitle(): React.ReactElement {
+  return <Tooltip content="音频仪表" asChild><span role="img" aria-label="音频仪表" className="flex"><Volume2 size={UI_ICON_SIZE.sm} /></span></Tooltip>
+}
 function DockTab(props: IDockviewPanelHeaderProps): React.ReactElement {
-  return <VideoEditDockTab {...props} titleSlot={props.api.id === 'timeline' ? <TimelineTabTitle /> : undefined} />
+  return <VideoEditDockTab {...props} titleSlot={props.api.id === 'timeline' ? <TimelineTabTitle /> : props.api.id === 'audio_meters' ? <AudioMetersTabTitle /> : undefined} />
 }
 function TimelineBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="flex h-full min-h-0 flex-col" data-video-edit-panel="timeline"><VideoEditTimeline {...useDock(visible)} visible={visible} /></div> }
 function ContentBody({ visible }: { visible: boolean }): React.ReactElement { return <div className="h-full min-h-0" data-video-edit-panel="content"><VideoEditTimedContentPanel {...useDock(visible)} visible={visible} /></div> }

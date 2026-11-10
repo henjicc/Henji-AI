@@ -109,8 +109,6 @@ const TRANSITION_DROP_CENTER = 8
 /** 片段宽度够放淡化手柄（两角各一个）时才显示手柄。 */
 const FADE_HANDLE_MIN_WIDTH = 28
 /** 淡化块让出片段名那一行；轨道高过这么多才让，矮轨道铺满。 */
-const FADE_BLOCK_LABEL_ROW = 16
-const FADE_BLOCK_MIN_HEIGHT = 36
 const fadeLabel = (frames: number, fps: number): string => { const nominal = Math.max(1, Math.round(fps)); return `${Math.floor(frames / nominal)}:${String(frames % nominal).padStart(2, '0')}` }
 interface TransitionDropHint { kind: VideoEditTransitionKind; pair: VideoEditTransitionPair; alignment: VideoEditTransitionAlignment; track: number; start: number; duration: number }
 export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, visible = true, corner }: Props): React.ReactElement {
@@ -426,7 +424,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
     const fixed = window.side === 'in' ? 'in' : window.side === 'out' ? 'out' : undefined
     if (window.side) {
       // 淡化块压在片段名那一行下面（PR），片段名照常可读；行太矮时铺满
-      const side = window.side, inset = row.height - 4 >= FADE_BLOCK_MIN_HEIGHT ? FADE_BLOCK_LABEL_ROW : 0, height = row.height - 4 - inset
+      const side = window.side, inset = row.height - 4 >= TIMELINE_CLIP_TITLE_MIN_HEIGHT ? TIMELINE_CLIP_TITLE_HEIGHT : 0, height = row.height - 4 - inset
       return <div key={window.transition.id} data-ui-timeline-item data-video-edit-transition={window.transition.id} data-video-edit-transition-side={side} data-selected={selected || undefined} aria-label={`${preset.name}（${side === 'in' ? '淡入' : '淡出'}）`}
         className={`absolute z-raised flex overflow-hidden text-text1 ${side === 'in' ? 'rounded-l-md' : 'rounded-r-md'} ${selected ? `border ${CLIP_SELECTED_LINE}` : ''}`}
         style={{ top: row.top - region.top + 2 + inset, height, left: header + window.start * pixels, width: Math.max(4, width - (side === 'out' ? 1 : 0)) }}>
@@ -472,20 +470,18 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
         // 轨道够高时名字独占顶上一条，缩略图与波形从名条下面开始；矮轨道只有名字，垂直居中
         const titled = row.height - 4 >= TIMELINE_CLIP_TITLE_MIN_HEIGHT
         const contentTop = titled ? TIMELINE_CLIP_TITLE_HEIGHT : 0
-        // Hidden picture tracks, muted sound tracks and disabled clips dim their clips (content only, see the overlay below), as in Premiere.
-        const dimmed = !row.track.enabled || row.track.kind === 'audio' && row.track.muted || !videoEditClipEnabled(clip)
         const { left: clipLeft, width: clipWidth } = timelineBlockSpan(clip.start, clip.duration, pixels, header)
         // 淡化手柄（PR）：还没淡化时在角上，拖出来就是这一端的单侧过渡；有淡化时手柄骑在淡化终点的顶边上，拖它改长度。挂着普通过渡的一端没有
         const fadeHandles = videoEditFadeMedium(clip) && clipWidth >= FADE_HANDLE_MIN_WIDTH ? (['in', 'out'] as const).flatMap(edge => {
           const fade = videoEditClipFade(displayed, clip.id, edge)
           return fade || videoEditClipFadeRoom(displayed, clip, edge) >= VIDEO_EDIT_FADE_MIN_FRAMES ? [{ edge, fade, offset: fade ? Math.max(1, Math.min(clipWidth - 14, fade.durationFrames * pixels - 6)) : edge === 'in' ? 1 : 2 }] : []
         }) : []
-        return <div key={clip.id} data-ui-timeline-item data-video-edit-clip={clip.id} data-selected={selected || undefined} data-clip-start={clip.start} data-clip-duration={clip.duration} className="group absolute" data-clip-dimmed={dimmed || undefined} style={{ top: row.top - region.top + 2, height: row.height - 4, left: clipLeft, width: clipWidth }}>
+        return <div key={clip.id} data-ui-timeline-item data-video-edit-clip={clip.id} data-selected={selected || undefined} data-clip-start={clip.start} data-clip-duration={clip.duration} className="group absolute" style={{ top: row.top - region.top + 2, height: row.height - 4, left: clipLeft, width: clipWidth }}>
           {/* 外观层带着全部内容，右端让出 1 像素当片段间的缝；外层铺满，点在缝上仍是这个片段 */}
           <div className={`${TIMELINE_BLOCK_FACE_CLASS} overflow-clip`} style={surface}>
           <div className="absolute inset-x-0 bottom-0" style={{ top: contentTop }}>
           {picture && media && <VideoEditClipFilmstrip mode={thumbnails} clipId={clip.id} source={media.path} sourceRevision={media.sourceRevision} still={media.kind === 'image'} aspect={media.width > 0 && media.height > 0 ? media.width / media.height : 16 / 9}
-            mediaEndSeconds={media.durationSeconds} frameSeconds={media.frameRate ? media.frameRate.denominator / media.frameRate.numerator : 1 / 30} clip={clip} fps={fps} pixels={pixels} clipWidth={clipWidth} height={row.height - 6 - contentTop}
+            mediaEndSeconds={media.durationSeconds} frameSeconds={media.frameRate ? media.frameRate.denominator / media.frameRate.numerator : 1 / 30} clip={clip} fps={fps} pixels={pixels} clipWidth={clipWidth} height={row.height - 4 - contentTop}
             visibleFrom={stripEdge(view.left + header - clipLeft, clipWidth, Math.floor)} visibleTo={stripEdge(view.left + view.width - clipLeft, clipWidth, Math.ceil)} devicePixelRatio={devicePixelRatio} active={visible} />}
           {range && <VideoEditClipWaveform clipId={clip.id} gainDb={clip.gainDb} sources={range.sources} startSeconds={range.startSeconds} endSeconds={range.endSeconds} reverse={clip.reverse} left={(range.from - clip.start) * pixels} width={(range.to - range.from) * pixels} visible={visible} lane={picture ? 'lower' : 'full'} compact={clipWidth <= 110} />}
           </div>

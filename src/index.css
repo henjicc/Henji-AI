@@ -1332,7 +1332,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 /* 停靠面板组的间隙（剪辑与 3D 镜头参考共用，2026-10-07 按用户参照 PR）：
  * 间隙宽度由 dockviewHostTheme 的 gap 决定；间隙底色在间隙色上再压一层 shade，比面板底明显更深。
  * dockview 默认给 .dv-dockview 铺面板底色会把间隙涂成面板色，这里改透明，面板组自带底色不受影响。
- * 激活面板组的描边不在这里画，见 DockviewHost 的 ActiveGroupOutline（面板内容层会盖住组上的 CSS 描边）。 */
+ * 聚焦的面板组不画描边，只靠当前标签下的强调色细线表示。 */
 .henji-cameraStage-dock.dockview-theme-abyss {
   background: linear-gradient(var(--shade), var(--shade)), rgb(var(--gap-rgb));
 }
@@ -1394,11 +1394,13 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 }
 
 
-/* 剪辑面板标签（PR）：选中线到菜单图标为止。左内边距 16 与 3D 镜头参考的纯文字标签一致；
- * 标题与菜单间隔 6（加上图标按钮自带的 4，文字到图标 10），右内边距 6（图标到边缘同为 10），
- * 选中标签里“左留白 | 标题 | 菜单 | 右留白”左右匀称；非当前标签占住同一宽度，切换时文字不动。 */
+/* 剪辑面板标签（PR）：只有当前标签带面板菜单，选中线到菜单图标为止。当前标签左留白 12、标题与菜单间隔 6、右留白 6；
+ * 其余标签左右各 12，只占文字的宽度，一组四个标签一行放得下。 */
 .henji-videoEdit-dock.dockview-theme-abyss .dv-tab {
-  padding-left: 1rem;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+}
+.henji-videoEdit-dock.dockview-theme-abyss .dv-tab.dv-active-tab {
   padding-right: 0.375rem;
 }
 

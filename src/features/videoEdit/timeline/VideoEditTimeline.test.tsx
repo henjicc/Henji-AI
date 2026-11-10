@@ -473,7 +473,7 @@ it('时间线浮出到系统窗口（另一 realm 文档）后仍可点选、拖
   expect(onError).not.toHaveBeenCalled()
 })
 
-it('高度只在释放提交一次，实际32轨道与高度用于纵向命中', () => {
+it('高度只在释放提交一次，实际轨道数与高度用于纵向命中', () => {
   editVideoProject(owner.document.id, document => { document = structuredClone(document); const track = document.sequences[0].tracks[1]; document.sequences[0].tracks = Array.from({ length: 32 }, (_, index) => ({ ...track, id: `track-${index}`, index, kind: index === 0 ? 'audio' as const : 'video' as const, name: `轨道${index}` })); return document })
   const view = render(<View />); const host = view.getByRole('region', { name: '时间线编辑区域' }); const history = owner.past.length
   expect(current().tracks).toHaveLength(32)
