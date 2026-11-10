@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>画布样板屏草稿</title>
+<style>
+@font-face { font-family: 'HarmonyOS Sans SC UI'; src: url('../../../../src/assets/fonts/HarmonyOS_Sans_SC.ttf') format('truetype'); font-weight: 100 900; font-display: block; }
+:root {
+  /* 数值取自 src/index.css 的石墨主题令牌 */
+  --gap:#181818; --window:#1B1B1B; --panel:#212121; --raised:#272727; --overlay:#292929;
+  --line-overlay:#393939; --control:#2B2B2B; --hover:#2A2A2A; --selected:#333333;
+  --line:#282828; --line-strong:#313131; --media:#191919; --canvas:#161616;
+  --text1:#EEEEEE; --text2:#CACACA; --text3:#A5A5A5; --icon-rest:#737373;
+  --accent:#3A6FDF; --accent-text:#9CBEFF; --accent-ring:#6A9BFE;
+  --danger-solid:#D73E3F; --danger-text:#FB817A; --warning-text:#F5AE39;
+  --w-normal:400; --w-medium:460; --w-semibold:580;
+}
+* { box-sizing: border-box; }
+html, body { margin:0; background:#101010; color:var(--text1); font-family:'HarmonyOS Sans SC UI','Microsoft YaHei UI',sans-serif; font-size:13px; line-height:20px; font-weight:var(--w-normal); -webkit-font-smoothing:antialiased; }
+.num { font-variant-numeric: tabular-nums; }
+svg.i { width:var(--s,16px); height:var(--s,16px); flex:none; stroke:currentColor; fill:none; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round; display:block; }
+.page { padding:40px 40px 80px; }
+.page h1 { font-size:20px; line-height:28px; font-weight:560; margin:0 0 6px; }
+.page .lead { color:var(--text3); margin:0 0 36px; max-width:900px; }
+.block { margin-bottom:72px; }
+.block h2 { font-size:16px; line-height:24px; font-weight:var(--w-semibold); margin:0 0 4px; }
+.block .note { color:var(--text3); font-size:12px; line-height:18px; margin:0 0 16px; max-width:1100px; white-space:pre-line; }
+.pair { display:flex; gap:40px; align-items:flex-start; }
+.side { flex:none; }
+.side .tag { font-size:12px; color:var(--text3); margin-bottom:8px; }
+.side .tag b { color:var(--text1); font-weight:var(--w-medium); }
+.shot { width:1440px; height:900px; display:block; }
+.shot.before { object-fit:cover; object-position:0 0; }
+body.single { background:var(--gap); }
+body.single .page { padding:0; }
+body.single .page > h1, body.single .lead, body.single .block { display:none; }
+body.single .block.show { display:block; margin:0; }
+body.single .block.show h2, body.single .block.show .note, body.single .tag { display:none; }
+body.single.draft .side.before-side { display:none; }
+body.single .pair { gap:24px; zoom:1 !important; }
+body.single.pairmode { background:#101010; }
+body.single.pairmode .page { padding:24px; }
+body.single.pairmode .tag { display:block; font-size:20px; line-height:28px; margin-bottom:12px; }
+
+/* 软件界面通用零件 */
+.app { width:1440px; height:900px; position:relative; overflow:hidden; background:var(--window); display:flex; flex-direction:column; font-size:13px; color:var(--text1); white-space:nowrap; }
+.ib { width:28px; height:28px; flex:none; display:inline-flex; align-items:center; justify-content:center; border-radius:6px; color:var(--text2); }
+.ib.rest { color:var(--icon-rest); }
+.ib.s24 { width:24px; height:24px; --s:14px; }
+.btn { height:28px; padding:0 10px; display:inline-flex; align-items:center; gap:6px; border-radius:6px; font-size:13px; font-weight:var(--w-medium); color:var(--text2); --s:14px; flex:none; }
+.btn.secondary { background:var(--control); color:var(--text1); }
+.btn.primary { background:var(--accent); color:#fff; height:32px; padding:0 14px; }
+.btn.primary svg { color:#fff; }
+.titlebar { height:40px; flex:none; background:var(--window); display:flex; align-items:center; padding:0 0 0 14px; position:relative; }
+.titlebar .brand { font-size:13px; font-weight:var(--w-semibold); margin-right:14px; }
+.titlebar .menu { display:flex; gap:2px; }
+.titlebar .menu span { font-size:12px; color:var(--text3); padding:0 7px; height:24px; display:flex; align-items:center; }
+.titlebar .nav { position:absolute; left:50%; transform:translateX(-50%); display:flex; gap:2px; }
+.titlebar .nav span { height:28px; padding:0 12px; display:flex; align-items:center; border-radius:6px; font-size:13px; color:var(--text2); font-weight:var(--w-medium); }
+.titlebar .nav span.cur { background:var(--selected); color:var(--text1); }
+.titlebar .right { margin-left:auto; display:flex; align-items:center; height:100%; }
+.titlebar .wc { width:44px; height:100%; display:flex; align-items:center; justify-content:center; color:var(--text3); --s:14px; }
+.ovl { position:absolute; background:var(--overlay); border:1px solid var(--line-overlay); z-index:20; }
+
+/* ① 文档列表页（画布、音频编辑、镜头参考、图片编辑共用） */
+.lib { flex:1; min-height:0; display:flex; }
+.rail { width:224px; flex:none; border-right:1px solid var(--line); padding:12px 8px; display:flex; flex-direction:column; gap:2px; }
+.nv { height:32px; display:flex; align-items:center; gap:10px; padding:0 10px; border-radius:6px; color:var(--text2); font-size:13px; }
+.nv svg { color:var(--icon-rest); }
+.nv.cur { background:var(--selected); color:var(--text1); }
+.nv.cur svg { color:var(--text2); }
+.nv i { margin-left:auto; font-style:normal; font-size:12px; color:var(--text3); }
+.nv i.warn { color:var(--warning-text); }
+.rail .h { height:28px; display:flex; align-items:center; padding:0 10px; margin-top:12px; font-size:12px; color:var(--text3); }
+.lmain { flex:1; min-width:0; padding:0 32px; display:flex; flex-direction:column; }
+.lhead { height:64px; flex:none; display:flex; align-items:center; gap:8px; }
+.lhead .title { font-size:20px; line-height:28px; font-weight:var(--w-semibold); }
+.lhead .count { font-size:13px; color:var(--text3); margin-left:8px; }
+.lhead .grow { flex:1; }
+.search { width:240px; height:32px; border-radius:8px; background:var(--raised); display:flex; align-items:center; gap:8px; padding:0 10px; color:var(--icon-rest); font-size:13px; --s:14px; }
+.dd { height:32px; padding:0 8px 0 10px; display:flex; align-items:center; gap:6px; border-radius:6px; color:var(--text2); --s:14px; }
+.dd svg { color:var(--icon-rest); }
+.segi { display:flex; gap:2px; padding:2px; border-radius:8px; background:var(--gap); }
+.segi span { width:28px; height:28px; display:flex; align-items:center; justify-content:center; border-radius:6px; color:var(--icon-rest); }
+.segi span.cur { background:var(--selected); color:var(--text1); }
+.cards { display:grid; grid-template-columns:repeat(4, 1fr); gap:28px 16px; padding-top:8px; }
+.card .cv { aspect-ratio:16/10; border-radius:8px; background:var(--raised) center/cover; position:relative; display:flex; align-items:center; justify-content:center; color:var(--icon-rest); --s:28px; }
+.card .cv svg { stroke-width:1.5; }
+.card .t { margin-top:10px; font-size:13px; font-weight:var(--w-medium); color:var(--text1); overflow:hidden; text-overflow:ellipsis; }
+.card .m { margin-top:2px; font-size:12px; color:var(--text3); }
+.card .m .warn { color:var(--warning-text); }
+.card.hov .cv { box-shadow:0 0 0 1px var(--line-overlay); }
+.card .cv .acts { position:absolute; right:8px; top:8px; display:flex; gap:4px; }
+.card .cv .acts span { width:28px; height:28px; border-radius:6px; background:rgba(24,24,24,.72); color:#e8e8e8; display:flex; align-items:center; justify-content:center; --s:14px; }
+
+/* ② 画布编辑器 */
+.cvs { flex:1; min-height:0; position:relative; background:var(--canvas); background-image:radial-gradient(circle, #2a2a2a 1px, transparent 1.2px); background-size:20px 20px; overflow:hidden; }
+.back { position:absolute; left:12px; top:12px; height:36px; display:flex; align-items:center; gap:2px; padding:0 10px 0 4px; border-radius:10px; background:rgba(33,33,33,.92); border:1px solid var(--line-overlay); z-index:10; }
+.back .nm { font-size:13px; font-weight:var(--w-medium); color:var(--text1); margin-left:2px; }
+.back .sv { font-size:12px; color:var(--text3); margin-left:10px; }
+.zoom { position:absolute; right:12px; top:12px; height:36px; display:flex; align-items:center; gap:2px; padding:0 4px; border-radius:10px; background:rgba(33,33,33,.92); border:1px solid var(--line-overlay); z-index:10; font-size:12px; color:var(--text2); }
+.zoom .p { min-width:44px; text-align:center; }
+.mini { position:absolute; right:12px; bottom:12px; width:176px; height:112px; border-radius:8px; background:rgba(33,33,33,.92); border:1px solid var(--line-overlay); z-index:10; overflow:hidden; }
+.mini b { position:absolute; background:#4a4a4a; border-radius:2px; }
+.mini .vp { position:absolute; border:1px solid var(--text3); border-radius:2px; }
+.node { position:absolute; }
+.node .nh { height:24px; display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text3); --s:14px; padding:0 2px; }
+.node .nh svg { color:var(--icon-rest); }
+.node .nh .pr { margin-left:auto; font-size:12px; color:var(--text3); }
+.node .nb { border-radius:12px; background:var(--panel); border:1px solid var(--line-strong); overflow:hidden; position:relative; }
+.node.sel .nb { box-shadow:0 0 0 1.5px var(--accent-ring); border-color:transparent; }
+.node .media { background:var(--media) center/cover; position:relative; }
+.node .dur { position:absolute; right:8px; bottom:8px; height:20px; padding:0 6px; border-radius:4px; background:rgba(0,0,0,.6); color:#fff; font-size:11px; line-height:20px; }
+.node .ply { position:absolute; left:10px; bottom:8px; color:#fff; --s:16px; }
+.node .prm { padding:10px 12px; font-size:13px; line-height:21px; color:var(--text1); white-space:normal; height:148px; overflow:hidden; border-bottom:1px solid var(--line); }
+.chip { display:inline-flex; align-items:center; gap:4px; height:20px; padding:0 6px 0 2px; border-radius:6px; background:var(--raised); border:1px solid var(--line-strong); font-size:12px; color:var(--text2); vertical-align:1px; }
+.chip i { width:16px; height:16px; border-radius:4px; background:center/cover; }
+.rows { padding:4px 0; }
+.row { height:32px; display:flex; align-items:center; padding:0 12px; font-size:12px; color:var(--text3); position:relative; --s:12px; }
+.row .v { margin-left:auto; display:flex; align-items:center; gap:6px; font-size:13px; color:var(--text2); }
+.row .v small { color:var(--text3); font-size:12px; }
+.row .v svg { color:var(--icon-rest); }
+.row .th { width:22px; height:22px; border-radius:4px; background:center/cover; }
+.port { position:absolute; width:8px; height:8px; border-radius:50%; border:1.5px solid var(--panel); }
+.port.img { background:#7FB6FF; } .port.vid { background:#FF8A7A; }
+.edges { position:absolute; inset:0; pointer-events:none; }
+.edges path { fill:none; stroke:#5a5a5a; stroke-width:1.5; }
+.tb { position:absolute; height:40px; display:flex; align-items:center; gap:2px; padding:0 4px; border-radius:10px; background:rgba(33,33,33,.95); border:1px solid var(--line-overlay); z-index:12; }
+.tb .btn { height:30px; }
+.tb .btn svg { color:var(--text3); }
+.tb .sep { width:1px; height:18px; background:var(--line-overlay); margin:0 4px; }
+.tb .btn.primary { height:30px; }
+/* 素材找不到 */
+.fault { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; color:var(--text1); font-size:12px;
+  background:repeating-linear-gradient(135deg, rgba(215,62,63,.16) 0 6px, rgba(215,62,63,.07) 6px 12px); }
+.fault .fi { color:var(--danger-text); --s:18px; }
+.fault .fm { color:var(--text2); font-size:11px; }
+/* 右键菜单 */
+.menu { border-radius:8px; padding:4px; width:216px; font-size:13px; }
+.menu .gh { height:24px; display:flex; align-items:center; padding:0 10px; font-size:11px; color:var(--text3); }
+.menu .mi { height:28px; display:flex; align-items:center; padding:0 10px; border-radius:6px; gap:8px; color:var(--text1); --s:14px; }
+.menu .mi svg { color:var(--text3); }
+.menu .mi.hov { background:#353535; }
+.menu .ms { height:1px; background:var(--line-overlay); margin:4px 6px; }
+.menu .sr { height:32px; margin:0 0 4px; border-radius:6px; background:#303030; display:flex; align-items:center; gap:6px; padding:0 8px; color:var(--icon-rest); font-size:12px; --s:14px; }
+/* 细节放大 */
+.sheet { width:1440px; background:var(--window); padding:28px 32px; display:grid; grid-template-columns:1fr 1fr; gap:28px 40px; align-content:start; white-space:nowrap; }
+.ex h3 { margin:0 0 2px; font-size:13px; line-height:20px; font-weight:var(--w-medium); color:var(--text1); }
+.ex p { margin:0 0 10px; font-size:12px; line-height:18px; color:var(--text3); white-space:normal; }
+.ex .stage { position:relative; background:var(--canvas); background-image:radial-gradient(circle, #2a2a2a 1px, transparent 1.2px); background-size:20px 20px; border-radius:8px; overflow:hidden; }
+.crop { width:620px; background-repeat:no-repeat; border-radius:6px; }
+</style>
+</head>
+<body>
+<div class="page" id="page">
+  <h1>画布 · 样板屏设计草稿</h1>
+  <p class="lead">按剪辑样板屏的规律收拾：内容最亮，名字退后，默认值再退后；强调色只给“新建”这个主动作、选中节点的描边和焦点。文档列表页是画布、音频编辑、镜头参考、图片编辑共用的一页，这里画一次，其他几处照同一页改。</p>
+</div>
+
+<script>
+const ICONS = /*ICONS_START*/{"sparkles":"<path d=\"M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z\"/><path d=\"M20 2v4\"/><path d=\"M22 4h-4\"/><circle cx=\"4\" cy=\"20\" r=\"2\"/>","settings":"<path d=\"M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/>","minus":"<path d=\"M5 12h14\"/>","square":"<rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"/>","x":"<path d=\"M18 6 6 18\"/><path d=\"m6 6 12 12\"/>","layout-grid":"<rect width=\"7\" height=\"7\" x=\"3\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"7\" x=\"14\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"7\" x=\"14\" y=\"14\" rx=\"1\"/><rect width=\"7\" height=\"7\" x=\"3\" y=\"14\" rx=\"1\"/>","folder-open":"<path d=\"m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2\"/>","ellipsis":"<circle cx=\"12\" cy=\"12\" r=\"1\"/><circle cx=\"19\" cy=\"12\" r=\"1\"/><circle cx=\"5\" cy=\"12\" r=\"1\"/>","layers":"<path d=\"M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z\"/><path d=\"M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12\"/><path d=\"M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17\"/>","clock":"<path d=\"M12 6v6l4 2\"/><circle cx=\"12\" cy=\"12\" r=\"10\"/>","file-pen":"<path d=\"M12.659 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v9.34\"/><path d=\"M14 2v5a1 1 0 0 0 1 1h5\"/><path d=\"M10.378 12.622a1 1 0 0 1 3 3.003L8.36 20.637a2 2 0 0 1-.854.506l-2.867.837a.5.5 0 0 1-.62-.62l.836-2.869a2 2 0 0 1 .506-.853z\"/>","search":"<path d=\"m21 21-4.34-4.34\"/><circle cx=\"11\" cy=\"11\" r=\"8\"/>","chevron-down":"<path d=\"m6 9 6 6 6-6\"/>","list":"<path d=\"M3 5h.01\"/><path d=\"M3 12h.01\"/><path d=\"M3 19h.01\"/><path d=\"M8 5h13\"/><path d=\"M8 12h13\"/><path d=\"M8 19h13\"/>","plus":"<path d=\"M5 12h14\"/><path d=\"M12 5v14\"/>","clapperboard":"<path d=\"M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z\"/><path d=\"m6.2 5.3 3.1 3.9\"/><path d=\"m12.4 3.4 3.1 4\"/><path d=\"M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z\"/>","image":"<rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\" ry=\"2\"/><circle cx=\"9\" cy=\"9\" r=\"2\"/><path d=\"m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21\"/>","triangle-alert":"<path d=\"m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3\"/><path d=\"M12 9v4\"/><path d=\"M12 17h.01\"/>","film":"<rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"/><path d=\"M7 3v18\"/><path d=\"M3 7.5h4\"/><path d=\"M3 12h18\"/><path d=\"M3 16.5h4\"/><path d=\"M17 3v18\"/><path d=\"M17 7.5h4\"/><path d=\"M17 16.5h4\"/>","play":"<path d=\"M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z\"/>","brush":"<path d=\"m11 10 3 3\"/><path d=\"M6.5 21A3.5 3.5 0 1 0 3 17.5a2.62 2.62 0 0 1-.708 1.792A1 1 0 0 0 3 21z\"/><path d=\"M9.969 17.031 21.378 5.624a1 1 0 0 0-3.002-3.002L6.967 14.031\"/>","scan-search":"<path d=\"M3 7V5a2 2 0 0 1 2-2h2\"/><path d=\"M17 3h2a2 2 0 0 1 2 2v2\"/><path d=\"M21 17v2a2 2 0 0 1-2 2h-2\"/><path d=\"M7 21H5a2 2 0 0 1-2-2v-2\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/><path d=\"m16 16-1.9-1.9\"/>","sun":"<circle cx=\"12\" cy=\"12\" r=\"4\"/><path d=\"M12 2v2\"/><path d=\"M12 20v2\"/><path d=\"m4.93 4.93 1.41 1.41\"/><path d=\"m17.66 17.66 1.41 1.41\"/><path d=\"M2 12h2\"/><path d=\"M20 12h2\"/><path d=\"m6.34 17.66-1.41 1.41\"/><path d=\"m19.07 4.93-1.41 1.41\"/>","rotate-3d":"<path d=\"M16.466 7.5C15.643 4.237 13.952 2 12 2 9.239 2 7 6.477 7 12s2.239 10 5 10c.342 0 .677-.069 1-.2\"/><path d=\"m15.194 13.707 3.814 1.86-1.86 3.814\"/><path d=\"M19 15.57c-1.804.885-4.274 1.43-7 1.43-5.523 0-10-2.239-10-5s4.477-5 10-5c4.838 0 8.873 1.718 9.8 4\"/>","square-pen":"<path d=\"M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7\"/><path d=\"M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z\"/>","copy":"<rect width=\"14\" height=\"14\" x=\"8\" y=\"8\" rx=\"2\" ry=\"2\"/><path d=\"M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2\"/>","folder-plus":"<path d=\"M12 10v6\"/><path d=\"M9 13h6\"/><path d=\"M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z\"/>","download":"<path d=\"M12 15V3\"/><path d=\"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\"/><path d=\"m7 10 5 5 5-5\"/>","trash-2":"<path d=\"M10 11v6\"/><path d=\"M14 11v6\"/><path d=\"M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6\"/><path d=\"M3 6h18\"/><path d=\"M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2\"/>","upload":"<path d=\"M12 3v12\"/><path d=\"m17 8-5-5-5 5\"/><path d=\"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\"/>","arrow-left":"<path d=\"m12 19-7-7 7-7\"/><path d=\"M19 12H5\"/>","scan":"<path d=\"M3 7V5a2 2 0 0 1 2-2h2\"/><path d=\"M17 3h2a2 2 0 0 1 2 2v2\"/><path d=\"M21 17v2a2 2 0 0 1-2 2h-2\"/><path d=\"M7 21H5a2 2 0 0 1-2-2v-2\"/>","section":"<path d=\"M16 5a4 3 0 0 0-8 0c0 4 8 3 8 7a4 3 0 0 1-8 0\"/><path d=\"M8 19a4 3 0 0 0 8 0c0-4-8-3-8-7a4 3 0 0 1 8 0\"/>"}/*ICONS_END*/;
+const I = (n, s) => `<svg class="i" viewBox="0 0 24 24" ${s?`style="--s:${s}px"`:''}>${ICONS[n]||''}</svg>`;
+const ib = (n, cls, s) => `<span class="ib ${cls||''}">${I(n, s)}</span>`;
+
+function titlebar(menus){ return `<div class="titlebar"><span class="brand">痕迹AI</span>
+  <div class="menu">${menus.map(m=>`<span>${m}</span>`).join('')}</div>
+  <div class="nav">${['生成','画布','剪辑','工具','资产'].map(m=>`<span class="${m==='画布'?'cur':''}">${m}</span>`).join('')}</div>
+  <div class="right">${ib('sparkles')}${ib('settings')}<span style="width:8px"></span><span class="wc">${I('minus')}</span><span class="wc">${I('square',12)}</span><span class="wc">${I('x')}</span></div></div>`; }
+
+/* ① 列表页：真实数据（2026-11-11 的资料目录，4 个画布都不在项目里，所以“项目”一组不出现） */
+function library(o){
+  const nv = (icon, label, count, cls, warn) => `<div class="nv ${cls||''}">${I(icon)}${label}${count!=null?`<i class="num ${warn?'warn':''}">${count}</i>`:''}</div>`;
+  const card = (c) => `<div class="card ${c.hov?'hov':''}"><div class="cv" style="${c.img?`background-image:url('素材/${c.img}')`:''}">${c.img?'':I('layout-grid')}${c.hov?`<div class="acts"><span>${I('folder-open')}</span><span>${I('ellipsis')}</span></div>`:''}</div>
+    <div class="t">${c.t}</div><div class="m num">${c.draft?'<span class="warn">未保存</span> · ':''}${c.m}</div></div>`;
+  return `<div class="app shot">${titlebar(['文件','视图','窗口','帮助'])}<div class="lib">
+    <div class="rail">${nv('layers','全部',4,'cur')}${nv('clock','最近打开')}${nv('file-pen','未保存草稿',1,'',true)}</div>
+    <div class="lmain">
+      <div class="lhead"><span class="title">画布</span><span class="count num">4</span><span class="grow"></span>
+        <div class="search">${I('search')}搜索画布</div>
+        <div class="dd">最近修改${I('chevron-down')}</div>
+        <div class="segi"><span class="cur">${I('layout-grid')}</span><span>${I('list')}</span></div>
+        <span style="width:8px"></span>${ib('ellipsis','rest')}
+        <span class="btn primary">${I('plus')}新建画布</span></div>
+      <div class="cards">
+        ${card({img:'草稿-封面.jpg', t:'未命名画布 1', m:'1 个节点 · 10月25日', draft:1})}
+        ${card({img:'樱花-人像.jpg', t:'樱花仰拍参考图', m:'10 个节点 · 11月10日', hov:o.hov})}
+        ${card({img:'城市夜景-封面.jpg', t:'城市夜景仰拍人像', m:'4 个节点 · 11月9日'})}
+        ${card({t:'局部修改测试-改日期', m:'1 个节点 · 10月31日'})}
+      </div>
+    </div></div></div>`;
+}
+
+/* ② 画布：打开时视野对准全部节点；选中的是右下的人像结果，工具条贴在它上方 */
+const PROMPT = `素材用途：<span class="chip"><i style="background-image:url('素材/樱花-人像.jpg')"></i>@图片1</span> 提供人物、穿搭、妆容与整体光色氛围；<span class="chip"><i style="background-image:url('素材/镜头视频-封面.jpg')"></i>@视频1</span> 只提供运镜的节奏与方向，不沿用它的画面内容与材质。<br><br>主体：沿用 <span class="chip"><i style="background-image:url('素材/樱花-人像.jpg')"></i>@图片1</span> 中的年轻女性，长黑发，仰头看向头顶透过花枝的光，神情安静。`;
+function node(o){
+  const head = `<div class="nh">${I(o.icon)}<span>${o.title}</span>${o.price?`<span class="pr num">${o.price}</span>`:''}</div>`;
+  return `<div class="node ${o.sel?'sel':''}" style="left:${o.x}px;top:${o.y}px;width:${o.w}px">${head}<div class="nb">${o.body}</div>${o.ports||''}</div>`;
+}
+function editor(o){
+  const media = (img, h, extra) => `<div class="media" style="height:${h}px;background-image:url('素材/${img}')">${extra||''}</div>`;
+  const gen = `<div class="prm">${PROMPT}</div><div class="rows">
+    <div class="row">模型<span class="v">Seedance 2.0 Fast <small>KIE</small>${I('chevron-down')}</span></div>
+    <div class="row">参考素材<span class="v"><span class="th" style="background-image:url('素材/樱花-人像.jpg')"></span><span class="th" style="background-image:url('素材/镜头视频-封面.jpg')"></span></span></div>
+    <div class="row">模式<span class="v">多图参考${I('chevron-down')}</span></div>
+    <div class="row">宽高比<span class="v">16:9${I('chevron-down')}</span></div>
+    <div class="row">时长<span class="v"><span class="num">10</span> 秒${I('chevron-down')}</span></div></div>`;
+  const nodes = [
+    node({x:96, y:180, w:260, icon:'clapperboard', title:'3D 镜头参考', body: media('镜头参考-截图.jpg',146)}),
+    node({x:440, y:600, w:260, icon:'image', title:'樱花人像', body: o.fault ? `<div class="media" style="height:146px"><div class="fault"><span class="fi">${I('triangle-alert')}</span>素材找不到<span class="fm">上传素材/ce51adf9….png</span><span class="btn secondary" style="height:24px;margin-top:4px;font-size:12px">重新链接</span></div></div>` : media('樱花-人像.jpg',146), sel:o.sel}),
+    node({x:416, y:180, w:260, icon:'film', title:'3D 镜头视频', body: media('镜头视频-封面.jpg',146, `<span class="ply">${I('play')}</span><span class="dur num">0:10</span>`)}),
+    node({x:760, y:110, w:360, icon:'film', title:'H3 樱花仰拍运镜', price:'¥1.62', body: gen}),
+    node({x:1180, y:130, w:220, icon:'film', title:'运镜成片 · 第 1 版', body: media('运镜成片-封面.jpg',124, `<span class="ply">${I('play')}</span><span class="dur num">0:10</span>`)}),
+    node({x:1180, y:320, w:220, icon:'film', title:'运镜成片 · 第 2 版', body: media('运镜成片-封面.jpg',124, `<span class="ply">${I('play')}</span><span class="dur num">0:10</span>`)}),
+  ].join('');
+  const edges = `<svg class="edges" viewBox="0 0 1440 860"><path d="M356 277 C 386 277, 386 277, 416 277"/><path d="M676 277 C 720 277, 716 330, 760 330"/><path d="M700 697 C 740 697, 720 362, 760 362"/><path d="M1120 300 C 1150 300, 1150 216, 1180 216"/><path d="M1120 300 C 1150 300, 1150 406, 1180 406"/></svg>`;
+  const tb = o.sel ? `<div class="tb" style="left:86px;top:552px"><span class="btn">${I('brush')}局部重绘</span><span class="btn">${I('scan-search')}高清放大</span><span class="btn">${I('sun')}打光</span><span class="btn">${I('rotate-3d')}720° 全景</span><span class="btn">更多${I('chevron-down')}</span><span class="sep"></span>${ib('square-pen','rest')}${ib('copy','rest')}${ib('folder-plus','rest')}<span class="btn">${I('clapperboard')}加入剪辑${I('chevron-down')}</span>${ib('download','rest')}${ib('trash-2','rest')}</div>` : '';
+  const menu = o.menu ? `<div class="ovl menu" style="left:${o.menu[0]}px;top:${o.menu[1]}px"><div class="sr">${I('search')}搜索节点</div>
+    <div class="gh">媒体与生成</div>${['upload:上传','image:图片生成','film:视频生成','audio-lines:音频生成','layout-grid:分镜生成','rotate-3d:全景查看'].map((x,i)=>{const [ic,l]=x.split(':');return `<div class="mi ${i===1?'hov':''}">${I(ic==='upload'?'folder-open':ic)}${l}</div>`}).join('')}
+    <div class="ms"></div><div class="gh">文本与工具</div>${['wand-sparkles:文本处理','file:文本展示','clapperboard:3D 镜头参考'].map(x=>{const [ic,l]=x.split(':');return `<div class="mi">${I(ic)}${l}</div>`}).join('')}</div>` : '';
+  return `<div class="app shot">${titlebar(['文件','编辑','节点','视图','窗口','帮助'])}<div class="cvs">
+    <div class="back">${ib('arrow-left')}<span class="nm">樱花仰拍参考图</span><span class="sv">已保存</span></div>
+    <div class="zoom">${ib('minus','rest')}<span class="p num">72%</span>${ib('plus','rest')}${ib('scan','rest')}</div>
+    ${edges}${nodes}${tb}${menu}
+    <div class="mini"><b style="left:14px;top:46px;width:20px;height:12px"></b><b style="left:14px;top:66px;width:20px;height:12px"></b><b style="left:44px;top:46px;width:20px;height:12px"></b><b style="left:80px;top:36px;width:28px;height:30px"></b><b style="left:122px;top:38px;width:16px;height:10px"></b><b style="left:122px;top:58px;width:16px;height:10px"></b><span class="vp" style="left:8px;top:28px;width:140px;height:62px"></span></div>
+  </div></div>`;
+}
+
+function sheet(){
+  return `<div class="sheet shot" style="height:auto">
+    <div class="ex"><h3>素材找不到 · 现状</h3><p>图片读不到时只剩浏览器的裂图图标和替代文字（“3D 镜头视频”“当前帧预览”），看不出是坏了还是在加载。</p>
+      <div class="crop" style="height:200px;background-image:url('现状/04-多节点.png');background-size:1440px auto;background-position:-700px -600px"></div></div>
+    <div class="ex"><h3>素材找不到 · 草稿</h3><p>整块媒体区叠红斜纹，写“素材找不到”和文件名，给“重新链接”。节点其余部分照常能用。</p>
+      <div class="stage" style="height:200px">${node({x:150, y:16, w:300, icon:'image', title:'樱花人像', body:`<div class="media" style="height:160px"><div class="fault"><span class="fi">${I('triangle-alert')}</span>素材找不到<span class="fm">上传素材/ce51adf9….png</span><span class="btn secondary" style="height:24px;margin-top:4px;font-size:12px">重新链接</span></div></div>`})}</div></div>
+    <div class="ex"><h3>打开画布 · 现状</h3><p>按上次保存的视野打开；窗口尺寸变了，节点全挤在右下角，选中节点的工具条跟着跑到屏幕底边。</p>
+      <div class="crop" style="height:240px;background-image:url('现状/04-多节点.png');background-size:620px auto;background-position:0 0"></div></div>
+    <div class="ex"><h3>打开画布 · 草稿</h3><p>打开时如果一个节点都不在视野里，就对准全部节点（与“适应画布”同一个动作）；视野里有节点就保持上次的样子。右上角的缩放条也能一键对准。</p>
+      <div class="stage" style="height:240px;zoom:.43;height:560px">${'' /* 用整屏缩小示意 */}</div></div>
+  </div>`;
+}
+
+const SCREENS = [
+  { id:1, title:'① 文档列表页（画布）', before:'现状/01-画布列表.png',
+    note:'左栏只放导航：全部、最近打开、未保存草稿（数量用提示色，属于“例外”）；项目一组只列有这类文档的项目，这里 4 个画布都不在项目里，整组不出现（现状把所有测试项目都列了出来）。\n“新建画布”从左栏顶上挪到页头右端，作为这一页唯一的主动作；“打开文件…”“导入单个文件…”收进它左边的“更多”。\n卡片：名字 13 号中等字重，元信息一行第三档文字；草稿不再贴黄色胶囊，元信息开头写“未保存”（提示色）。日期与工具首页的“最近文件”同一写法。',
+    html: () => library({}) },
+  { id:2, title:'② 文档列表页 · 悬停', before:'现状/05-列表悬停.png',
+    note:'悬停时封面多一圈浮起描边，右上角两个操作（在文件夹中显示、更多）压在半透明深底上；其余操作在右键菜单里。',
+    html: () => library({ hov:1 }) },
+  { id:3, title:'③ 画布：打开时对准节点，选中节点的工具条贴在节点上方', before:'现状/04-多节点.png',
+    note:'左上角的“返回画布列表”换成返回箭头 + 画布名 + 保存状态（与剪辑、图片编辑的命令带左端同一组信息）；右上角补一个缩放条（缩小、比例、放大、适应画布）。\n节点：标题与价格退到第三档文字，图标灰；参数名第三档、值第二档、箭头图标灰；提示词是内容，最亮。选中只靠一圈强调色描边。\n工具条：特有的事（局部重绘、高清放大、打光、720° 全景、加入剪辑）留文字，通用动作（编辑、复制、收进资产、下载、删除）只放图标灰；不再出现第二个蓝色按钮。\n小地图缩到 176×112，半透明实底加描边，不再盖住节点内容。',
+    html: () => editor({ sel:1 }) },
+  { id:4, title:'④ 画布：右键添加节点', before:'现状/03-右键菜单.png',
+    note:'菜单顶上加“搜索节点”（节点种类已经二十多种，列表要滚动）；分组名第三档小字，菜单项 28 高，图标第三档。',
+    html: () => editor({ menu:[300, 120] }) },
+  { id:5, title:'⑤ 细节：素材找不到、打开时的视野', before:null, note:'', html: sheet },
+];
+const page = document.getElementById('page');
+SCREENS.forEach(s => {
+  const el = document.createElement('section'); el.className = 'block'; el.dataset.id = s.id;
+  el.innerHTML = `<h2>${s.title}</h2><p class="note">${s.note}</p><div class="pair">`
+    + (s.before ? `<div class="side before-side"><div class="tag"><b>现状</b>（真实截图）</div><img class="shot before" src="${s.before}"></div>` : '')
+    + `<div class="side"><div class="tag"><b>草稿</b></div>${s.html()}</div></div>`;
+  page.appendChild(el);
+});
+// 细节页里“打开画布 · 草稿”用缩小的整屏示意
+document.querySelectorAll('.block[data-id="5"] .ex .stage').forEach((stage, i) => { if (i === 1) stage.outerHTML = `<div style="width:620px;height:388px;overflow:hidden;border-radius:6px"><div style="zoom:.43">${editor({})}</div></div>`; });
+const q = new URLSearchParams(location.search);
+if (q.get('s')) { document.body.classList.add('single', q.get('v')==='pair'?'pairmode':'draft'); document.querySelector(`.block[data-id="${q.get('s')}"]`).classList.add('show'); }
+else { const fit = () => document.querySelectorAll('.pair').forEach(p => { p.style.zoom = Math.min(1, (innerWidth - 80) / p.scrollWidth); }); fit(); addEventListener('resize', fit); }
+</script>
+</body>
+</html>

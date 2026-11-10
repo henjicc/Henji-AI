@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>资产样板屏草稿</title>
+<style>
+
+@font-face { font-family: 'HarmonyOS Sans SC UI'; src: url('../../../../src/assets/fonts/HarmonyOS_Sans_SC.ttf') format('truetype'); font-weight: 100 900; font-display: block; }
+:root {
+  /* 数值取自 src/index.css 的石墨主题令牌 */
+  --gap:#181818; --window:#1B1B1B; --panel:#212121; --raised:#272727; --overlay:#292929;
+  --line-overlay:#393939; --control:#2B2B2B; --hover:#2A2A2A; --selected:#333333;
+  --line:#282828; --line-strong:#313131; --media:#191919; --canvas:#161616;
+  --text1:#EEEEEE; --text2:#CACACA; --text3:#A5A5A5; --icon-rest:#737373;
+  --accent:#3A6FDF; --accent-text:#9CBEFF; --accent-ring:#6A9BFE;
+  --danger-solid:#D73E3F; --danger-text:#FB817A; --warning-text:#F5AE39;
+  --w-normal:400; --w-medium:460; --w-semibold:580;
+}
+* { box-sizing: border-box; }
+html, body { margin:0; background:#101010; color:var(--text1); font-family:'HarmonyOS Sans SC UI','Microsoft YaHei UI',sans-serif; font-size:13px; line-height:20px; font-weight:var(--w-normal); -webkit-font-smoothing:antialiased; }
+.num { font-variant-numeric: tabular-nums; }
+svg.i { width:var(--s,16px); height:var(--s,16px); flex:none; stroke:currentColor; fill:none; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round; display:block; }
+.page { padding:40px 40px 80px; }
+.page h1 { font-size:20px; line-height:28px; font-weight:560; margin:0 0 6px; }
+.page .lead { color:var(--text3); margin:0 0 36px; max-width:900px; }
+.block { margin-bottom:72px; }
+.block h2 { font-size:16px; line-height:24px; font-weight:var(--w-semibold); margin:0 0 4px; }
+.block .note { color:var(--text3); font-size:12px; line-height:18px; margin:0 0 16px; max-width:1100px; white-space:pre-line; }
+.pair { display:flex; gap:40px; align-items:flex-start; }
+.side { flex:none; }
+.side .tag { font-size:12px; color:var(--text3); margin-bottom:8px; }
+.side .tag b { color:var(--text1); font-weight:var(--w-medium); }
+.shot { width:1440px; height:900px; display:block; }
+.shot.before { object-fit:cover; object-position:0 0; }
+body.single { background:var(--gap); }
+body.single .page { padding:0; }
+body.single .page > h1, body.single .lead, body.single .block { display:none; }
+body.single .block.show { display:block; margin:0; }
+body.single .block.show h2, body.single .block.show .note, body.single .tag { display:none; }
+body.single.draft .side.before-side { display:none; }
+body.single .pair { gap:24px; zoom:1 !important; }
+body.single.pairmode { background:#101010; }
+body.single.pairmode .page { padding:24px; }
+body.single.pairmode .tag { display:block; font-size:20px; line-height:28px; margin-bottom:12px; }
+
+/* 软件界面通用零件 */
+.app { width:1440px; height:900px; position:relative; overflow:hidden; background:var(--window); display:flex; flex-direction:column; font-size:13px; color:var(--text1); white-space:nowrap; }
+.ib { width:28px; height:28px; flex:none; display:inline-flex; align-items:center; justify-content:center; border-radius:6px; color:var(--text2); }
+.ib.rest { color:var(--icon-rest); }
+.ib.s24 { width:24px; height:24px; --s:14px; }
+.btn { height:28px; padding:0 10px; display:inline-flex; align-items:center; gap:6px; border-radius:6px; font-size:13px; font-weight:var(--w-medium); color:var(--text2); --s:14px; flex:none; }
+.btn.secondary { background:var(--control); color:var(--text1); }
+.btn.primary { background:var(--accent); color:#fff; height:32px; padding:0 14px; }
+.btn.primary svg { color:#fff; }
+.titlebar { height:40px; flex:none; background:var(--window); display:flex; align-items:center; padding:0 0 0 14px; position:relative; }
+.titlebar .brand { font-size:13px; font-weight:var(--w-semibold); margin-right:14px; }
+.titlebar .menu { display:flex; gap:2px; }
+.titlebar .menu span { font-size:12px; color:var(--text3); padding:0 7px; height:24px; display:flex; align-items:center; }
+.titlebar .nav { position:absolute; left:50%; transform:translateX(-50%); display:flex; gap:2px; }
+.titlebar .nav span { height:28px; padding:0 12px; display:flex; align-items:center; border-radius:6px; font-size:13px; color:var(--text2); font-weight:var(--w-medium); }
+.titlebar .nav span.cur { background:var(--selected); color:var(--text1); }
+.titlebar .right { margin-left:auto; display:flex; align-items:center; height:100%; }
+.titlebar .wc { width:44px; height:100%; display:flex; align-items:center; justify-content:center; color:var(--text3); --s:14px; }
+.ovl { position:absolute; background:var(--overlay); border:1px solid var(--line-overlay); z-index:20; }
+
+
+.ovl2 { position:absolute; background:var(--overlay); border:1px solid var(--line-overlay); border-radius:12px; z-index:20; display:flex; overflow:hidden; }
+.anav { width:196px; flex:none; border-right:1px solid var(--line-overlay); padding:8px; display:flex; flex-direction:column; gap:2px; }
+.anav.page { width:220px; border-right:1px solid var(--line); padding:12px 8px; }
+.anav .nv { height:30px; display:flex; align-items:center; gap:10px; padding:0 10px; border-radius:6px; color:var(--text2); font-size:13px; --s:16px; }
+.anav .nv svg { color:var(--icon-rest); }
+.anav .nv.cur { background:#353535; color:var(--text1); }
+.anav.page .nv.cur { background:var(--selected); }
+.anav .nv.cur svg { color:var(--text2); }
+.anav .h { height:28px; display:flex; align-items:center; padding:0 4px 0 10px; margin-top:12px; font-size:12px; color:var(--text3); }
+.anav .h .ib { margin-left:auto; }
+.amain { flex:1; min-width:0; display:flex; flex-direction:column; }
+.ahead { height:48px; flex:none; display:flex; align-items:center; gap:4px; padding:0 8px 0 12px; }
+.ahead .grow { flex:1; }
+.search { width:240px; height:30px; border-radius:8px; background:#303030; display:flex; align-items:center; gap:8px; padding:0 10px; color:var(--icon-rest); font-size:13px; --s:14px; margin-right:6px; }
+.page-head .search { background:var(--raised); height:32px; }
+.dd { height:30px; padding:0 6px 0 10px; display:flex; align-items:center; gap:4px; border-radius:6px; color:var(--text2); font-size:13px; --s:14px; }
+.dd svg { color:var(--icon-rest); }
+.agrid { flex:1; min-height:0; overflow:hidden; display:grid; grid-template-columns:repeat(var(--cols), 1fr); gap:20px 12px; padding:4px 16px 16px; align-content:start; }
+.ac .cv { aspect-ratio:1; border-radius:8px; background:var(--media) center/cover; position:relative; }
+.ac.sel .cv { box-shadow:0 0 0 2px var(--accent-ring); }
+.ac .t { margin-top:8px; font-size:13px; font-weight:var(--w-medium); color:var(--text1); overflow:hidden; text-overflow:ellipsis; }
+.ac .m { font-size:12px; color:var(--text3); overflow:hidden; text-overflow:ellipsis; }
+.dim { position:absolute; inset:0; background:url('../生成/现状/01-底部输入.png') 0 -40px/1440px auto; }
+.dim::after { content:''; position:absolute; inset:0; background:rgba(0,0,0,.35); }
+.page-head { height:56px; flex:none; display:flex; align-items:center; gap:4px; padding:0 16px 0 8px; border-bottom:1px solid var(--line); }
+.page-head .title { font-size:20px; line-height:28px; font-weight:var(--w-semibold); margin-left:4px; }
+.page-head .count { font-size:13px; color:var(--text3); margin-left:8px; }
+.page-head .grow { flex:1; }
+.page-head .dd, .page-head .btn { height:32px; }
+</style>
+</head>
+<body>
+<div class="page" id="page">
+  <h1>资产 · 样板屏设计草稿</h1>
+  <p class="lead">资产有两种样子：在任何工作区里点“资产”弹出的浮层，和“完整管理”打开的整页。两处用同一套卡片和筛选；规律同剪辑样板屏，内容（缩略图、名字）最亮，类型与尺寸退后，筛选与操作静默。</p>
+</div>
+
+<script>
+const ICONS = /*ICONS_START*/{"sparkles":"<path d=\"M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z\"/><path d=\"M20 2v4\"/><path d=\"M22 4h-4\"/><circle cx=\"4\" cy=\"20\" r=\"2\"/>","settings":"<path d=\"M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/>","minus":"<path d=\"M5 12h14\"/>","square":"<rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"/>","x":"<path d=\"M18 6 6 18\"/><path d=\"m6 6 12 12\"/>","library":"<path d=\"m16 6 4 14\"/><path d=\"M12 6v14\"/><path d=\"M8 8v12\"/><path d=\"M4 4v16\"/>","clock":"<path d=\"M12 6v6l4 2\"/><circle cx=\"12\" cy=\"12\" r=\"10\"/>","image":"<rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\" ry=\"2\"/><circle cx=\"9\" cy=\"9\" r=\"2\"/><path d=\"m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21\"/>","film":"<rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"/><path d=\"M7 3v18\"/><path d=\"M3 7.5h4\"/><path d=\"M3 12h18\"/><path d=\"M3 16.5h4\"/><path d=\"M17 3v18\"/><path d=\"M17 7.5h4\"/><path d=\"M17 16.5h4\"/>","audio-lines":"<path d=\"M2 10v3\"/><path d=\"M6 6v11\"/><path d=\"M10 3v18\"/><path d=\"M14 8v7\"/><path d=\"M18 5v13\"/><path d=\"M22 10v3\"/>","code":"<path d=\"m16 18 6-6-6-6\"/><path d=\"m8 6-6 6 6 6\"/>","plus":"<path d=\"M5 12h14\"/><path d=\"M12 5v14\"/>","chevron-down":"<path d=\"m6 9 6 6 6-6\"/>","search":"<path d=\"m21 21-4.34-4.34\"/><circle cx=\"11\" cy=\"11\" r=\"8\"/>","sliders-horizontal":"<path d=\"M10 5H3\"/><path d=\"M12 19H3\"/><path d=\"M14 3v4\"/><path d=\"M16 17v4\"/><path d=\"M21 12h-9\"/><path d=\"M21 19h-5\"/><path d=\"M21 5h-7\"/><path d=\"M8 10v4\"/><path d=\"M8 12H3\"/>","maximize-2":"<path d=\"M15 3h6v6\"/><path d=\"m21 3-7 7\"/><path d=\"m3 21 7-7\"/><path d=\"M9 21H3v-6\"/>","arrow-left":"<path d=\"m12 19-7-7 7-7\"/><path d=\"M19 12H5\"/>","square-check":"<rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"/><path d=\"m9 12 2 2 4-4\"/>","section":"<path d=\"M16 5a4 3 0 0 0-8 0c0 4 8 3 8 7a4 3 0 0 1-8 0\"/><path d=\"M8 19a4 3 0 0 0 8 0c0-4-8-3-8-7a4 3 0 0 1 8 0\"/>"}/*ICONS_END*/;
+const I = (n, s) => `<svg class="i" viewBox="0 0 24 24" ${s?`style="--s:${s}px"`:''}>${ICONS[n]||''}</svg>`;
+const ib = (n, cls, s) => `<span class="ib ${cls||''}">${I(n, s)}</span>`;
+function titlebar(cur){ return `<div class="titlebar"><span class="brand">痕迹AI</span>
+  <div class="menu">${['文件','编辑','生成','视图','窗口','帮助'].map(m=>`<span>${m}</span>`).join('')}</div>
+  <div class="nav">${['生成','画布','剪辑','工具','资产'].map(m=>`<span class="${m===cur?'cur':''}" style="${m==='资产'&&cur!=='资产'?'color:var(--accent-text)':''}">${m}</span>`).join('')}</div>
+  <div class="right">${ib('sparkles')}${ib('settings')}<span style="width:8px"></span><span class="wc">${I('minus')}</span><span class="wc">${I('square',12)}</span><span class="wc">${I('x')}</span></div></div>`; }
+
+/* 真实资产（2026-11-11 的资料目录，共 213 项） */
+const ASSETS = [
+  ['a1','正片第二版 · 成片','视频 · 3840×2160'], ['a2','1.jpg','图片 · 1080×1440'], ['a3','正片第二版 · 成片','视频 · 3840×2160'],
+  ['a4','QQ浏览器-腾讯AI浏览器','图片 · 1024×1024'], ['a5','正片第二版 · 成片','视频 · 1920×1080'], ['a6','元宝搜索口播-第二版粗剪 · 剪后','音频 · 9:39'],
+  ['a7','排版库验收草稿 · 排版验收 1','图片 · 1920×1080'], ['a8','排版库验收草稿 · 排版验收 2','图片 · 1920×1080'], ['a9','排版库验收草稿 · 排版验收 3','图片 · 1920×1080'],
+  ['a10','排版库验收草稿 · 排版验收 4','图片 · 1920×1080'], ['a11','排版库验收草稿 · 排版验收 5','图片 · 768×437'], ['a12','排版库验收草稿 · 排版验收 6','图片 · 768×437'],
+];
+const card = (a, sel) => `<div class="ac ${sel?'sel':''}"><div class="cv" style="background-image:url('素材/${a[0]}.jpg')"></div><div class="t">${a[1]}</div><div class="m num">${a[2]}</div></div>`;
+function nav(cls){
+  const nv = (icon, label, cur) => `<div class="nv ${cur?'cur':''}">${I(icon)}${label}</div>`;
+  return `<div class="anav ${cls||''}">${nv('library','全部资产',1)}${nv('clock','最近使用')}${nv('image','图片')}${nv('film','视频')}${nv('audio-lines','音频')}${nv('code','可编辑代码')}<div class="h">资产库${ib('plus','rest s24')}</div></div>`;
+}
+const filters = `<span class="dd">全部类型${I('chevron-down')}</span><span class="dd">最新加入${I('chevron-down')}</span><span class="dd">全部标签${I('chevron-down')}</span>`;
+
+function floating(){
+  return `<div class="app shot">${titlebar('生成')}<div style="flex:1;position:relative"><div class="dim"></div>
+    <div class="ovl2" style="left:271px;top:8px;width:900px;height:640px">${nav()}
+      <div class="amain"><div class="ahead"><div class="search">${I('search')}搜索资产</div>${filters}${ib('sliders-horizontal','rest')}<span class="grow"></span>${ib('maximize-2','rest')}${ib('x','rest')}</div>
+        <div class="agrid" style="--cols:3">${ASSETS.slice(0,6).map((a,i)=>card(a,i===0)).join('')}</div></div></div></div></div>`;
+}
+function workspace(){
+  return `<div class="app shot">${titlebar('资产')}
+    <div class="page-head">${ib('arrow-left')}<span class="title">资产</span><span class="count num">213</span><span class="grow"></span>
+      <div class="search">${I('search')}搜索资产</div>${filters}${ib('sliders-horizontal','rest')}<span style="width:4px"></span><span class="btn">${I('square-check')}批量管理</span></div>
+    <div style="flex:1;min-height:0;display:flex">${nav('page')}<div class="agrid" style="--cols:6;padding-top:16px">${ASSETS.map(a=>card(a)).join('')}</div></div></div>`;
+}
+
+const SCREENS = [
+  { id:1, title:'① 资产浮层', before:'现状/01-资产浮层.png',
+    note:'“完整管理”从文字按钮改成放大图标（悬停写“完整管理”），和关闭并排；筛选三项都是静默的下拉，不再一个带底色一个不带。\n卡片：名字 13 号中等字重，类型和尺寸并成一行第三档文字（现状是两端对齐的两段，名字还加粗）；选中一圈强调色描边。左侧导航当前项中性底，图标灰。',
+    html: floating },
+  { id:2, title:'② 资产整页', before:'现状/02-资产整页.png',
+    note:'页头写“资产”（与顶部导航同名，现状是“资产库”），数量第三档；“全部类型”与另外两个筛选同样是静默下拉；“批量管理”保留文字（是这一页特有的操作）。\n左栏与浮层同一套导航；卡片与浮层同一套。',
+    html: workspace },
+];
+const page = document.getElementById('page');
+SCREENS.forEach(s => {
+  const el = document.createElement('section'); el.className = 'block'; el.dataset.id = s.id;
+  el.innerHTML = `<h2>${s.title}</h2><p class="note">${s.note}</p><div class="pair">`
+    + (s.before ? `<div class="side before-side"><div class="tag"><b>现状</b>（真实截图）</div><img class="shot before" src="${s.before}"></div>` : '')
+    + `<div class="side"><div class="tag"><b>草稿</b></div>${s.html()}</div></div>`;
+  page.appendChild(el);
+});
+const q = new URLSearchParams(location.search);
+if (q.get('s')) { document.body.classList.add('single', q.get('v')==='pair'?'pairmode':'draft'); document.querySelector(`.block[data-id="${q.get('s')}"]`).classList.add('show'); }
+else { const fit = () => document.querySelectorAll('.pair').forEach(p => { p.style.zoom = Math.min(1, (innerWidth - 80) / p.scrollWidth); }); fit(); addEventListener('resize', fit); }
+</script>
+</body>
+</html>
