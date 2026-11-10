@@ -199,8 +199,8 @@ async function runVideoEditDocumentsRestart({ launch, userDataDir, outDir }) {
     const { page, app } = current
     // 同一“项目”文件夹里已有的“剪辑查重”用来验证起名查重（经正式文档接口造）
     await page.evaluate(() => window.henjiNative.documents.createProject({ name: '剪辑查重' }))
-    const workRoot = path.join(documentsRoot, '痕迹AI')
-    const projectsDir = path.join(workRoot, '项目')
+    const workRoot = path.join(documentsRoot, 'HenjiAI')
+    const projectsDir = path.join(workRoot, 'Projects')
     assert.ok(fs.existsSync(projectsDir), `首启没有在隔离的“文档”下建“项目”文件夹：${projectsDir}`)
     await openEditPage(page)
     await shot('graphite-projects-first')

@@ -1,8 +1,9 @@
 import { app, session, shell } from 'electron'
+import path from 'node:path'
 
 import { hasActiveGenerationWork } from '../ai-runtime/runtime'
-import { getUserDataLayout, USER_ROOT_FOLDER_NAMES } from '../appPaths'
-import { writeCustomDataRoot } from '../dataRoot'
+import { getProgramDataDir, getUserDataLayout, USER_ROOT_FOLDER_NAMES } from '../appPaths'
+import { readDataLocation, SYSTEM_FOLDER, writeDataLocation } from '../appBasePaths'
 import { getDocumentService } from '../documents/runtime'
 import { createMainLogger } from '../logging/main-logger'
 import { MEDIA_CACHE_FOLDER_NAMES } from '../media/media-cache'
@@ -10,7 +11,7 @@ import { findWorkRootBusyReason, registerWorkRootBusyProbe } from './busy-probes
 import { createWorkRootService, type WorkRootService } from './service'
 
 /*
- * 作品目录更换的正式运行环境：作品目录来自 appPaths，设置写入 settings 表，
+ * 数据目录更换的正式运行环境：数据目录来自 appPaths，新位置写入用户主目录的位置文件，
  * 完成后刷新作品索引；生成结果还在保存、导出等长任务进行中时拒绝开始（各任务在 busy-probes 登记）。
  */
 
@@ -27,16 +28,21 @@ export function getWorkRootService(): WorkRootService {
         root: layout.root,
         defaultRoot: layout.defaultRoot,
         isCustom: layout.isCustom,
-        rootFolderName: USER_ROOT_FOLDER_NAMES[layout.locale],
-        rootFolderNames: Object.values(USER_ROOT_FOLDER_NAMES),
+        rootFolderName: USER_ROOT_FOLDER_NAMES[0],
+        rootFolderNames: USER_ROOT_FOLDER_NAMES,
       }
     },
-    writeCustomRoot: writeCustomDataRoot,
+    // 数据库、日志等程序资料正被本进程占用：位置先切到新目录，程序资料记下原处，重启时再搬（completePendingSystemMove）
+    writeRoot: (root) => {
+      const systemDir = getProgramDataDir()
+      const location = readDataLocation()
+      writeDataLocation({ root, ...(location.locale ? { locale: location.locale } : {}), ...(path.relative(systemDir, path.join(root, SYSTEM_FOLDER)) === '' ? {} : { systemDir }) })
+    },
     ensureFolders: () => { getUserDataLayout() },
     refreshIndex: () => getDocumentService().refreshIndex(),
     busyReason: findWorkRootBusyReason,
     // 可重建的缓存不跨盘复制，随旧目录删除，新位置重新生成。
-    moveOptions: { skipTopLevel: Object.values(MEDIA_CACHE_FOLDER_NAMES) },
+    moveOptions: { skipTopLevel: Object.values(MEDIA_CACHE_FOLDER_NAMES), keepTopLevel: [SYSTEM_FOLDER] },
     logger,
   })
   return service

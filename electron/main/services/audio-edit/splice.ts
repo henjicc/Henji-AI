@@ -4,7 +4,7 @@ import { audioEditProjectFromDocument, isEmptyAudioEditSource } from '../../../.
 import type { AudioEditSpliceRequest, AudioEditSpliceResult } from '../../../../src/core/audioEdit/splice'
 import { videoEditRecordingGainDb } from '../../../../src/core/videoEdit/loudness'
 import { measureAudioFileLoudness } from '../audio/loudness'
-import { getUserRootDir } from '../appPaths'
+import { getUserAudioRecordingsDir } from '../appPaths'
 import { getDocumentService } from '../documents/runtime'
 import { resolveLocalMediaPath } from '../media/shared'
 import { loadFfmpegPath } from '../video/ffmpeg-loader'
@@ -13,7 +13,7 @@ import { runAudioEditProcess } from './process'
 import { registerOwnedMedia, enqueueMediaCandidates } from '../media-recycle/queue'
 import { runAudioEditTask } from './task-store'
 
-function audioSpliceOutputPath(requestId: string): string { return path.join(getUserRootDir(), '录音', `${requestId}.wav`) }
+function audioSpliceOutputPath(requestId: string): string { return path.join(getUserAudioRecordingsDir(), `${requestId}.wav`) }
 
 /** 分段顺序解码后用 FFmpeg concat 顺序复制，避免 asplit 等待后半段时缓存整段 PCM。 */
 export async function spliceAudioFile(request: AudioEditSpliceRequest): Promise<AudioEditSpliceResult> {

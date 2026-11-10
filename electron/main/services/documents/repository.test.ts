@@ -38,10 +38,10 @@ describe('文档仓库：新建与草稿', () => {
 
   it('新建的独立文档以草稿存进类型文件夹（用到时才建），自动名顺延', async () => {
     const { service } = env.services
-    expect(fs.existsSync(path.join(env.workRoot, '画布'))).toBe(false)
+    expect(fs.existsSync(path.join(env.workRoot, 'Canvases'))).toBe(false)
     const first = await service.createDocument({ kind: 'canvas', container: { kind: 'user' } })
     const second = await service.createDocument({ kind: 'canvas', container: { kind: 'user' } })
-    expect(first.meta.path).toBe(path.join(env.workRoot, '画布', '未命名画布 1.hjcvs'))
+    expect(first.meta.path).toBe(path.join(env.workRoot, 'Canvases', '未命名画布 1.hjcvs'))
     expect(second.meta.name).toBe('未命名画布 2')
     expect(first.meta).toMatchObject({ kind: 'canvas', draft: true, revision: 0, container: { kind: 'user' } })
     const { json } = await readStored(first.meta.path)
@@ -64,7 +64,7 @@ describe('文档仓库：新建与草稿', () => {
     expect(named.meta).toMatchObject({ name: '口播 一', draft: false })
     await expect(service.createDocument({ kind: 'audio_edit', container: { kind: 'user' }, name: '口播 一.' })).rejects.toMatchObject({ name: 'DocumentNameConflictError' })
     await expect(service.createDocument({ kind: 'audio_edit', container: { kind: 'user' }, name: 'a/b' })).rejects.toMatchObject({ name: 'DocumentNameInvalidError' })
-    expect(await listFiles(path.join(env.workRoot, '口播'))).toEqual(['口播 一.hjaud'])
+    expect(await listFiles(path.join(env.workRoot, 'Voiceovers'))).toEqual(['口播 一.hjaud'])
   })
 
   it('项目里新建：文档放在项目文件夹里，草稿名按项目语言', async () => {
@@ -333,7 +333,7 @@ describe('名称检查', () => {
     const doc = await service.createDocument({ kind: 'canvas', container: { kind: 'user' }, name: 'Demo' })
     const location = { container: { kind: 'user' as const } }
     expect(await service.checkName({ subject: { type: 'document', kind: 'canvas' }, name: 'demo. ', location })).toEqual({
-      status: 'duplicate', name: 'demo', path: path.join(env.workRoot, '画布', 'demo.hjcvs'), existingPath: doc.meta.path,
+      status: 'duplicate', name: 'demo', path: path.join(env.workRoot, 'Canvases', 'demo.hjcvs'), existingPath: doc.meta.path,
     })
     expect(await service.checkName({ subject: { type: 'document', kind: 'camera_stage' }, name: 'Demo', location: { folder: path.dirname(doc.meta.path) } })).toMatchObject({ status: 'available' })
     expect(await service.checkName({ subject: { type: 'document', kind: 'canvas' }, name: 'DEMO', location: { renaming: doc.meta.path } })).toMatchObject({ status: 'available' })

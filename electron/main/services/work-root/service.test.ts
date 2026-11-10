@@ -25,7 +25,7 @@ function createService(overrides: Partial<WorkRootServiceDeps> = {}): { service:
       rootFolderName: '痕迹AI',
       rootFolderNames: ['痕迹AI', 'Henji AI'],
     }),
-    writeCustomRoot: vi.fn((root: string | null) => { state.custom = root }),
+    writeRoot: vi.fn((root: string) => { state.custom = root === defaultRoot ? null : root }),
     ensureFolders: vi.fn(),
     refreshIndex: vi.fn(async () => undefined),
     busyReason: () => null,
@@ -59,18 +59,18 @@ describe('createWorkRootService', () => {
     expect(await service.inspectTarget({ kind: 'default' })).toEqual({ root: path.join(base, '文档', '痕迹AI'), status: 'current' })
   })
 
-  it('更换后切换设置、刷新索引；恢复默认时清除自定义设置', async () => {
+  it('更换后切换位置、刷新索引；也能换回默认位置', async () => {
     const { service, deps } = createService()
     const target = path.join(base, '新位置')
     const changed = await service.change({ kind: 'custom', folder: target })
     expect(changed).toMatchObject({ changed: true, root: target, requiresRestart: true })
-    expect(deps.writeCustomRoot).toHaveBeenLastCalledWith(target)
+    expect(deps.writeRoot).toHaveBeenLastCalledWith(target)
     expect(deps.refreshIndex).toHaveBeenCalledTimes(1)
     expect(await fs.readFile(path.join(target, '项目', '短片', '短片.hjvid'), 'utf8')).toBe('{}')
 
     const reset = await service.change({ kind: 'default' })
     expect(reset.root).toBe(path.join(base, '文档', '痕迹AI'))
-    expect(deps.writeCustomRoot).toHaveBeenLastCalledWith(null)
+    expect(deps.writeRoot).toHaveBeenLastCalledWith(path.join(base, '文档', '痕迹AI'))
     expect(await fs.readFile(path.join(base, '文档', '痕迹AI', '项目', '短片', '短片.hjvid'), 'utf8')).toBe('{}')
   })
 
@@ -79,7 +79,7 @@ describe('createWorkRootService', () => {
     const error = await service.change({ kind: 'custom', folder: path.join(base, '新位置') }).catch((caught: unknown) => caught)
     expect((error as Error).message).toMatch(/^busy:/)
     expect((error as Error).message).toContain('还有视频正在导出')
-    expect(deps.writeCustomRoot).not.toHaveBeenCalled()
+    expect(deps.writeRoot).not.toHaveBeenCalled()
     expect(await fs.access(path.join(base, '新位置')).then(() => true, () => false)).toBe(false)
     expect(service.isRunning()).toBe(false)
   })
@@ -103,7 +103,7 @@ describe('createWorkRootService', () => {
     await disposed
     expect(((await first) as Error).message).toMatch(/^cancelled:/)
     expect(service.isRunning()).toBe(false)
-    expect(deps.writeCustomRoot).not.toHaveBeenCalled()
+    expect(deps.writeRoot).not.toHaveBeenCalled()
     expect(await fs.readFile(path.join(base, '文档', '痕迹AI', '项目', '短片', '短片.hjvid'), 'utf8')).toBe('{}')
     expect(await fs.access(path.join(base, '新位置')).then(() => true, () => false)).toBe(false)
   })

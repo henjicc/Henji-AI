@@ -116,7 +116,7 @@ async function openWorkRootSettings(page) {
 async function runWorkRootRestart({ launch, userDataDir, outDir }) {
   const evidenceFile = path.join(outDir, 'work-root-restart.json')
   const documentsRoot = path.join(userDataDir, 'app-data', 'Documents')
-  const oldRoot = path.join(documentsRoot, '痕迹AI')
+  const oldRoot = path.join(documentsRoot, 'HenjiAI')
   const recycleDir = path.join(userDataDir, 'recycle')
   const relaunchMarker = path.join(userDataDir, 'relaunch-requested')
   const outside = path.join(userDataDir, '外部位置')
@@ -168,7 +168,7 @@ async function runWorkRootRestart({ launch, userDataDir, outDir }) {
     const { page, app } = current
 
     step('first-start-folders')
-    for (const folder of ['项目', '生成结果', '上传素材']) assert.ok(fs.existsSync(path.join(oldRoot, folder)), `首启应在隔离“文档/痕迹AI”下建“${folder}”`)
+    for (const folder of ['Projects', 'Generated', 'Uploads']) assert.ok(fs.existsSync(path.join(oldRoot, folder)), `首启应在隔离“文档/痕迹AI”下建“${folder}”`)
 
     step('project-documents')
     const project = await page.evaluate((name) => window.henjiNative.documents.createProject({ name }), PROJECT_NAME)
@@ -183,7 +183,7 @@ async function runWorkRootRestart({ launch, userDataDir, outDir }) {
       return { canvas: canvas.meta, voice: voice.meta, stage: stage.meta, loose: loose.meta }
     }, { projectId: project.id })
     for (const meta of [created.canvas, created.voice, created.stage]) assert.ok(inside(project.path, meta.path), `项目里新建的文档应在项目文件夹里：${meta.path}`)
-    assert.ok(inside(path.join(oldRoot, '画布'), created.loose.path), `独立画布应在作品目录“画布”里：${created.loose.path}`)
+    assert.ok(inside(path.join(oldRoot, 'Canvases'), created.loose.path), `独立画布应在作品目录“画布”里：${created.loose.path}`)
 
     step('move-in-out')
     await page.evaluate(async ({ loose, voice, projectId }) => {
@@ -194,7 +194,7 @@ async function runWorkRootRestart({ launch, userDataDir, outDir }) {
     const afterMove = await listDocuments(page, { container: { kind: 'any' } })
     const located = (id) => afterMove.find((document) => document.id === id)
     assert.ok(inside(project.path, located(created.loose.id).path), '独立画布应移进项目')
-    assert.ok(inside(path.join(oldRoot, '口播'), located(created.voice.id).path), '口播应移出项目到作品目录“口播”')
+    assert.ok(inside(path.join(oldRoot, 'Voiceovers'), located(created.voice.id).path), '口播应移出项目到作品目录“口播”')
 
     step('open-project-import-media')
     await openProjectCard(page, project.id)
@@ -209,7 +209,7 @@ async function runWorkRootRestart({ launch, userDataDir, outDir }) {
     await button(page, '新建项目').waitFor({ state: 'visible', timeout: 30000 })
 
     step('generation-record')
-    const generatedFile = path.join(oldRoot, '生成结果', '全流程生成结果.png')
+    const generatedFile = path.join(oldRoot, 'Generated', '全流程生成结果.png')
     fs.copyFileSync(SAMPLE_IMAGE, generatedFile)
     const recordId = `work-root-${Date.now()}`
     await page.evaluate(({ id, file }) => window.henjiNative.generationHistory.insert({
@@ -239,8 +239,8 @@ async function runWorkRootRestart({ launch, userDataDir, outDir }) {
     currentRun.exit = { pid: child.pid, exitCode: child.exitCode, signalCode: child.signalCode }
     current = null
     assert.ok(fs.existsSync(relaunchMarker), '移动完成后应请求重新启动')
-    assert.equal(fs.existsSync(oldRoot), false, '移动完成后旧作品目录应已删除')
-    assert.ok(fs.existsSync(path.join(newRoot, '项目', PROJECT_NAME)), '项目文件夹应在新作品目录里')
+    assert.deepEqual(fs.readdirSync(oldRoot), ['.system'], '移动完成后旧数据目录只剩重启时才搬的程序资料')
+    assert.ok(fs.existsSync(path.join(newRoot, 'Projects', PROJECT_NAME)), '项目文件夹应在新作品目录里')
     save()
 
     // ==================== 第二次启动：纸白，全部按新位置显示 ====================
@@ -253,13 +253,13 @@ async function runWorkRootRestart({ launch, userDataDir, outDir }) {
     step('verify-documents')
     const projects = await listProjects(second)
     const moved = projects.find((item) => item.id === project.id)
-    assert.ok(moved && !moved.missing && moved.path.toLowerCase() === path.join(newRoot, '项目', PROJECT_NAME).toLowerCase(), `项目应按新位置显示且同一 ID：${JSON.stringify(moved)}`)
+    assert.ok(moved && !moved.missing && moved.path.toLowerCase() === path.join(newRoot, 'Projects', PROJECT_NAME).toLowerCase(), `项目应按新位置显示且同一 ID：${JSON.stringify(moved)}`)
     const documents = await listDocuments(second, { container: { kind: 'any' }, includeDrafts: true, includeMissing: true })
     for (const id of [created.canvas.id, created.stage.id, created.loose.id, created.voice.id, edit.id]) {
       const document = documents.find((item) => item.id === id)
       assert.ok(document && !document.missing && inside(newRoot, document.path) && fs.existsSync(document.path), `文档应在新作品目录里且文件存在：${JSON.stringify(document)}`)
     }
-    assert.ok(inside(path.join(newRoot, '口播'), documents.find((item) => item.id === created.voice.id).path), '移出项目的口播仍在作品目录“口播”')
+    assert.ok(inside(path.join(newRoot, 'Voiceovers'), documents.find((item) => item.id === created.voice.id).path), '移出项目的口播仍在作品目录“口播”')
 
     step('verify-generation-record')
     const record = await second.evaluate((id) => window.henjiNative.generationHistory.get(id), recordId)
@@ -284,7 +284,7 @@ async function runWorkRootRestart({ launch, userDataDir, outDir }) {
     step('package-export-import')
     // 导出不指定位置：落在新作品目录的“导出”里；再导入，得到换新 ID 的项目，也在新作品目录里
     const exported = await second.evaluate((projectId) => window.henjiNative.documents.exportProjectPackage({ projectId }), project.id)
-    assert.ok(inside(path.join(newRoot, '导出'), exported.path) && fs.existsSync(exported.path), `单文件包应导出到新作品目录的“导出”里：${exported.path}`)
+    assert.ok(inside(path.join(newRoot, 'Exports'), exported.path) && fs.existsSync(exported.path), `单文件包应导出到新作品目录的“导出”里：${exported.path}`)
     const importedPackage = await second.evaluate((source) => window.henjiNative.documents.importPackage({ source }), exported.path)
     const importedProject = (await listProjects(second)).find((item) => item.id !== project.id && item.name.startsWith(PROJECT_NAME))
     assert.ok(importedProject && inside(newRoot, importedProject.path), `导入的项目应在新作品目录里：${JSON.stringify(importedProject)}`)

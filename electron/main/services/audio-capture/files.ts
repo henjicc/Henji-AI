@@ -7,6 +7,7 @@ import { audioCaptureRecoverySchema, type AudioCapturePlacement, type AudioCaptu
 import { audioCaptureFileName } from '../../../../src/core/audioCapture/fileName'
 import type { CaptureSettingsStore } from './settings'
 import { createMainLogger } from '../logging'
+import { USER_AUDIO_RECORDINGS_FOLDER } from '../appPaths'
 
 const KEY = 'audio_capture.pending_files'
 const logger = createMainLogger('main.audio_capture.files')
@@ -24,7 +25,7 @@ export class AudioCaptureFiles {
     return parsed.data
   }
   private write(value: ReturnType<AudioCaptureFiles['read']>): void { this.store().set(KEY, JSON.stringify(audioCaptureRecoverySchema.parse(value)), 'json') }
-  private folder(): string { return path.join(this.root(), '录音') }
+  private folder(): string { return path.join(this.root(), USER_AUDIO_RECORDINGS_FOLDER) }
   private file(name: string): AudioCaptureFile { return { outputPath: path.join(this.folder(), name), name } }
   async prepare(now = new Date(), placement?: AudioCapturePlacement): Promise<AudioCaptureFile> {
     logger.info('准备录音文件', { event: 'audio_capture.file.prepare.start' })

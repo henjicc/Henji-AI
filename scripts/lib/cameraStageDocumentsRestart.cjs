@@ -181,13 +181,13 @@ async function runCameraStageDocumentsRestart({ launch, userDataDir, outDir }) {
     const { page } = current
     // 用同一个文件夹里已有的“镜头查重”验证起名查重（经正式文档接口造数据）
     await page.evaluate(() => window.henjiNative.documents.createDocument({ kind: 'camera_stage', container: { kind: 'user' }, name: '镜头查重' }))
-    const workRoot = path.join(documentsRoot, '痕迹AI')
+    const workRoot = path.join(documentsRoot, 'HenjiAI')
     assert.ok(fs.existsSync(workRoot), `首启没有在隔离的“文档”下建作品目录：${workRoot}`)
     currentRun.workRootEntries = fs.readdirSync(workRoot)
-    for (const folder of ['项目', '生成结果', '上传素材']) {
+    for (const folder of ['Projects', 'Generated', 'Uploads']) {
       assert.ok(currentRun.workRootEntries.includes(folder), `作品目录缺少分类文件夹“${folder}”：${currentRun.workRootEntries.join('、')}`)
     }
-    const stageFolder = path.join(workRoot, '镜头参考')
+    const stageFolder = path.join(workRoot, 'Camera Stages')
 
     await openCameraStageList(page)
     await shot('graphite-list-first')
@@ -301,7 +301,7 @@ async function runCameraStageDocumentsRestart({ launch, userDataDir, outDir }) {
     await shot('paper-move-to-project')
     await moveDialog.getByRole('button', { name: '移入', exact: true }).click()
     await waitUntil(async () => (await listStageDocuments(second)).some((document) => document.id === saved.id && document.projectName === '样板项目'), '移到项目完成')
-    const projectFolder = path.join(workRoot, '项目', '样板项目')
+    const projectFolder = path.join(workRoot, 'Projects', '样板项目')
     const movedPath = path.join(projectFolder, '镜头改名.hjstg')
     assert.ok(fs.existsSync(movedPath), `移到项目后文件应在项目文件夹里：${movedPath}`)
     const projectInternal = path.join(projectFolder, '.henji')

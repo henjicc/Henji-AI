@@ -1,4 +1,5 @@
 import fsp from 'node:fs/promises'
+import { STANDALONE_FOLDER_LOCALE } from '../../../../../src/core/documents/projectManifest'
 import path from 'node:path'
 import { performance } from 'node:perf_hooks'
 
@@ -567,7 +568,7 @@ export class ImageDocumentService {
     if (container.kind === 'user') {
       const names = KIND.standaloneFolderNames
       if (!names) throw new DocumentLocationError('这种文档只能放在项目里。')
-      return { folder: path.join(layout.root, names[layout.locale]), locale: layout.locale }
+      return { folder: path.join(layout.root, names[STANDALONE_FOLDER_LOCALE]), locale: layout.locale }
     }
     const find = async (): Promise<ProjectSummary | undefined> => (
       (await this.options.catalog.listProjects({ includeDrafts: true, includeMissing: false })).find((project) => project.id === container.projectId)

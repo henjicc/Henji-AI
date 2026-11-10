@@ -215,8 +215,8 @@ async function runImageDocumentsRestart({ launch, userDataDir, outDir }) {
     await start(['--dev-theme-preset=graphite'])
     collector.begin('image-documents-first')
     const { page } = current
-    const workRoot = path.join(documentsRoot, '痕迹AI')
-    const imageFolder = path.join(workRoot, '图片文档')
+    const workRoot = path.join(documentsRoot, 'HenjiAI')
+    const imageFolder = path.join(workRoot, 'Image Documents')
 
     await openImageList(page)
     await shot('graphite-list-empty')

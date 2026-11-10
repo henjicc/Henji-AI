@@ -22,8 +22,8 @@ import { inspectWorkRootTarget, moveWorkRoot, WorkRootMoveError, type MoveWorkRo
 export interface WorkRootServiceDeps {
   /** 当前作品目录布局（每次调用重新读取设置）。 */
   layout: () => WorkRootInfo & { rootFolderName: string; rootFolderNames: readonly string[] }
-  /** 切换作品目录设置：null 表示回到默认位置。 */
-  writeCustomRoot: (root: string | null) => void
+  /** 把数据目录位置切到新目录。 */
+  writeRoot: (root: string) => void
   /** 切换后按新位置建好分类文件夹。 */
   ensureFolders: () => void
   /** 切换后刷新作品索引（项目在新位置被重新认领）。 */
@@ -33,7 +33,7 @@ export interface WorkRootServiceDeps {
   logger: MainLogger
   style?: 'win32' | 'posix'
   /** 测试注入，透传给 moveWorkRoot。 */
-  moveOptions?: Pick<MoveWorkRootInput, 'forceCopy' | 'fileOps' | 'availableBytes' | 'skipTopLevel'>
+  moveOptions?: Pick<MoveWorkRootInput, 'forceCopy' | 'fileOps' | 'availableBytes' | 'skipTopLevel' | 'keepTopLevel'>
 }
 
 export interface WorkRootService {
@@ -71,8 +71,8 @@ export function createWorkRootService(deps: WorkRootServiceDeps): WorkRootServic
   }
 
   /**
-   * 用户选的文件夹：名字本来就是“痕迹AI / Henji AI”或是空文件夹 → 直接用它；
-   * 否则在里面新建“痕迹AI”（选了“D:\”这类已有内容的文件夹时不会把作品散在里面）。
+   * 用户选的文件夹：名字本来就是数据目录的名字（HenjiAI，或早先的“痕迹AI / Henji AI”）或是空文件夹 → 直接用它；
+   * 否则在里面新建 HenjiAI（选了“D:\”这类已有内容的文件夹时不会把作品散在里面）。
    */
   const resolveTarget = async (target: WorkRootTarget): Promise<string> => {
     const layout = deps.layout()
@@ -117,7 +117,7 @@ export function createWorkRootService(deps: WorkRootServiceDeps): WorkRootServic
         signal: controller.signal,
         onProgress,
         commit: () => {
-          deps.writeCustomRoot(useDefault ? null : newRoot)
+          deps.writeRoot(newRoot)
           logger.info('作品目录设置已切换', { event: 'work_root.setting.switched', context: { to: newRoot, useDefault } })
         },
       })

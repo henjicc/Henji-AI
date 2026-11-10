@@ -189,9 +189,9 @@ async function runAudioEditDocumentsRestart({ launch, userDataDir, outDir }) {
     const { page } = current
     // 同一个文件夹里先有一份“口播查重”，用来验证起名查重（经正式文档接口造，空内容）
     await page.evaluate(() => window.henjiNative.documents.createDocument({ kind: 'audio_edit', container: { kind: 'user' }, name: '口播查重' }))
-    const workRoot = path.join(documentsRoot, '痕迹AI')
+    const workRoot = path.join(documentsRoot, 'HenjiAI')
     assert.ok(fs.existsSync(workRoot), `首启没有在隔离的“文档”下建作品目录：${workRoot}`)
-    const audioFolder = path.join(workRoot, '口播')
+    const audioFolder = path.join(workRoot, 'Voiceovers')
 
     await openAudioEditList(page)
     await shot('graphite-list-first')

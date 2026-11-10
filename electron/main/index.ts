@@ -1,4 +1,5 @@
 import { disposeFonts } from './services/fonts/service'
+import { completePendingSystemMove, getProgramDataDir } from './services/appBasePaths'
 import { registerApplicationControlIpc, watchApplicationHostRenderer } from './ipc/application-control'
 import { registerAppMenuIpc } from './ipc/app-menu'
 import { app, BrowserWindow, crashReporter, dialog } from 'electron'
@@ -85,17 +86,29 @@ import { configureCacheDeletionBoundary } from './services/media-recycle/cache-d
 import { managedMediaRoots } from './services/media-recycle/queue'
 
 /*
- * 自动化隔离的唯一开关。
- *
- * `--user-data-dir` 只改 userData，而本应用的数据库、日志、媒体目录全部挂在
- * `app.getPath('appData')` 下；Windows 上启动脚本还能靠覆盖 LOCALAPPDATA 兜住，
- * macOS / Linux 没有等价环境变量，"隔离临时数据"会直接写用户真实资料。
- * 在 ready 之前重定向 appData，四处数据目录调用点自动跟随，无需各自加分支。
+ * 自动化隔离的开关：数据目录与位置文件由 appBasePaths 按 `HENJI_ISOLATED_APP_DATA` 放进隔离目录；
+ * 这里在 ready 之前把 appData 也重定向进去，userData（缓存、崩溃转储、单实例锁）随之隔离。
  */
 const isolatedAppData = process.env['HENJI_ISOLATED_APP_DATA']
 if (isolatedAppData) {
   app.setPath('appData', isolatedAppData)
 }
+
+/*
+ * 上次更换数据目录时留在原处的程序资料，趁还没有任何文件被打开先搬进新数据目录。
+ * 只有拿到单实例锁的进程才搬：另一个实例正开着数据库时不能动它；助手命令行等不持锁的进程不搬，
+ * 它们正在运行时主应用也不搬（它们开着同一个数据库）。
+ */
+const commandLineProcess = isAssistantCliMode() || process.argv.includes('--verify-model')
+const pendingSystemMove = !commandLineProcess && app.requestSingleInstanceLock() && !isCommandLineProcessRunning() ? completePendingSystemMove() : null
+
+/*
+ * 浏览器本地存储（界面的本地设置）与密钥加密用的本机状态文件跟着数据目录走：
+ * 系统的应用数据目录会被打包应用的文件转存分成两份，放在那里的设置会“时有时无”。
+ * 应用数据目录里只剩可重建的缓存与崩溃转储。必须在 ready 之前设置。
+ */
+app.setPath('sessionData', path.join(getProgramDataDir(), 'browser'))
+if (app.isPackaged) app.commandLine.appendSwitch('disk-cache-dir', path.join(app.getPath('userData'), 'Cache'))
 
 /*
  * 崩溃转储只留在本机，供排查渲染进程、GPU 进程里的原生访问冲突；不上传、不弹窗。
@@ -136,7 +149,6 @@ if (isAssistantCliMode()) {
  * 助手命令行与模型验证有意与主应用并存，不参与这把锁（它们留占用标记，见 command-line-marker.ts）。
  * 隔离运行的数据目录不同，锁按用户数据目录区分，天然不冲突。
  */
-const commandLineProcess = isAssistantCliMode() || process.argv.includes('--verify-model')
 if (!commandLineProcess && !app.requestSingleInstanceLock()) app.exit(0)
 
 const errorLogger = createMainLogger('main.errors')
@@ -158,6 +170,11 @@ app.whenReady().then(async () => {
   const crashLogger = createMainLogger('main.crash_reporter')
   if ('directory' in crashReporterOutcome) crashLogger.info('崩溃转储已启用', { event: 'crash_reporter.start.completed', context: { directoryName: path.basename(crashReporterOutcome.directory) } })
   else crashLogger.error('崩溃转储启动失败', { event: 'crash_reporter.start.failed', error: crashReporterOutcome.error })
+  if (pendingSystemMove) {
+    const moveLogger = createMainLogger('main.work_root')
+    if (pendingSystemMove.error) moveLogger.error('程序资料没能搬进新数据目录，继续使用原位置，下次启动再试', { event: 'work_root.system_move.failed', error: pendingSystemMove.error, context: { from: pendingSystemMove.from, to: pendingSystemMove.to } })
+    else moveLogger.info('程序资料已搬进新数据目录', { event: 'work_root.system_move.completed', context: { from: pendingSystemMove.from, to: pendingSystemMove.to } })
+  }
   if (commandLineProcess) holdCommandLineMarker()
   try {
     getDb()

@@ -8,9 +8,8 @@ import { retainDetachedMediaLocation } from '../media-recycle/queue'
 import { recordDocumentMediaPublished } from '../media-recycle/providers'
 import { execFile } from 'node:child_process'
 
-import { getProgramDataDir, getProgramStoreDir, getUserDataLayout } from '../appPaths'
+import { getProgramDataDir, getProgramStoreDir, getUserDataLayout, isUserLocaleDecided } from '../appPaths'
 import { renderCoverImage } from '../covers/cover-render'
-import { readUserDataRootSettings } from '../dataRoot'
 import { getDb } from '../db'
 import { createMainLogger } from '../logging/main-logger'
 import { registerWorkRootBusyProbe } from '../work-root/busy-probes'
@@ -137,13 +136,12 @@ export async function resolveContainerInternalFolder(container: DocumentContaine
 
 /**
  * 启动后在后台扫描作品索引，不阻塞启动。作品目录尚未确定（全新安装、渲染层还没报告界面语言）时跳过，
- * 避免抢在渲染层之前按系统语言定下目录名称；之后的页面打开或刷新会触发扫描。
+ * 避免抢在渲染层之前按系统语言定下起名语言；之后的页面打开或刷新会触发扫描。
  */
 export function scheduleStartupDocumentIndexScan(delayMs = 3_000): void {
   const timer = setTimeout(() => {
     try {
-      const settings = readUserDataRootSettings()
-      if (!settings.persistedDefault && !settings.customRoot) {
+      if (!isUserLocaleDecided()) {
         logger.info('作品目录尚未确定，跳过启动扫描', { event: 'documents.index.startup_scan.skipped' })
         return
       }

@@ -20,7 +20,7 @@ describe('作品目录录音恢复', () => {
     const { files, reopen, root } = await fixture()
     const now = new Date(2026, 9, 23, 12, 0, 0)
     const first = await files.prepare(now), second = await files.prepare(now)
-    expect(first.outputPath).toBe(path.join(root, '录音', '录音 2026-10-23 120000.wav'))
+    expect(first.outputPath).toBe(path.join(root, 'Audio Recordings', '录音 2026-10-23 120000.wav'))
     expect(second.name).toBe('录音 2026-10-23 120000 (1).wav')
     expect(await files.pending()).toEqual([])
     await fs.writeFile(first.outputPath, 'unfinished')

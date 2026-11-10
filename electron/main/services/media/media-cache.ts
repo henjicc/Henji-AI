@@ -11,14 +11,14 @@ import { createContentDiskCache, type ContentDiskCache, type ContentDiskCacheOpt
 /*
  * 可重建媒体缓存的唯一位置与管理入口。
  *
- * - 位置：作品目录下的隐藏文件夹（中文作品目录 `.痕迹AI缓存`，英文 `.Henji AI Cache`），随作品所在磁盘；
+ * - 位置：作品目录下的隐藏文件夹（`.cache`；`.痕迹AI缓存` 是早先的名字，只用于清理旧位置），随作品所在磁盘；
  *   数据库、密钥、日志、设置等小而关键的数据仍在程序目录。作品目录变化（重启后生效）时，旧位置的缓存删一次，不搬迁。
  * - 分类：预渲染、代理、智能分析（智能区域、跟踪、镜头检测、声音能量）、缩略图条与波形、口播处理。
  *   各类内部仍用通用磁盘缓存（按内容命名、原子写入、最近使用刷新修改时间）。
  * - 管理：总容量上限与按最后使用时间清理在这里跨类统一执行；启动时清理旧位置与孤儿条目。
  */
 
-export const MEDIA_CACHE_FOLDER_NAMES = { zh: '.痕迹AI缓存', en: '.Henji AI Cache' } as const
+export const MEDIA_CACHE_FOLDER_NAMES = { zh: '.痕迹AI缓存', en: '.cache' } as const
 /** 每类缓存在缓存根下的子目录；分析与预览类再按来源细分。 */
 const CATEGORY_FOLDERS: Readonly<Record<MediaCacheCategory, string>> = {
   render: 'render', proxy: 'proxy', analysis: 'analysis', preview: 'preview', audio_edit: 'audio-edit',

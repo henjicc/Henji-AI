@@ -293,8 +293,8 @@ async function runCanvasDocumentsRestart({ launch, userDataDir, outDir }) {
     collector.begin('canvas-documents-first')
     const { page } = current
     await page.evaluate(() => window.henjiNative.ai.setProviderApiKey('kie', 'isolated-canvas-documents-fixture'))
-    const workRoot = path.join(documentsRoot, '痕迹AI')
-    const canvasFolder = path.join(workRoot, '画布')
+    const workRoot = path.join(documentsRoot, 'HenjiAI')
+    const canvasFolder = path.join(workRoot, 'Canvases')
     await openCanvasList(page)
 
     // —— 有内容的草稿：取消留在画布，再保存起名 ——
@@ -491,7 +491,7 @@ async function runCanvasDocumentsRestart({ launch, userDataDir, outDir }) {
     await second.waitForTimeout(400)
     await moveDialog.getByRole('button', { name: '移入', exact: true }).click()
     await waitUntil(async () => (await listCanvases(second)).some((document) => document.id === layered.canvasId && document.projectName === '图层项目'), '移到项目完成')
-    const projectFolder = path.join(workRoot, '项目', '图层项目')
+    const projectFolder = path.join(workRoot, 'Projects', '图层项目')
     const movedPath = path.join(projectFolder, '多图层画布.hjcvs')
     const movedPackage = path.join(projectFolder, '.henji', 'canvas-layers', `${documentId}.hjlyr`)
     assert.ok(fs.existsSync(movedPath), `画布应移进项目文件夹：${movedPath}`)
@@ -516,7 +516,7 @@ async function runCanvasDocumentsRestart({ launch, userDataDir, outDir }) {
     await button(second, '新建画布').waitFor({ state: 'visible', timeout: 15000 })
 
     // —— 整个项目文件夹拷到别处后打开：同样分出，图层完整 ——
-    const copiedFolder = path.join(workRoot, '项目', '图层项目 - 副本')
+    const copiedFolder = path.join(workRoot, 'Projects', '图层项目 - 副本')
     fs.cpSync(projectFolder, copiedFolder, { recursive: true })
     await second.evaluate(() => window.henjiNative.documents.refreshIndex())
     // 已打开的列表不会因为外部拷贝自动刷新；重新载入界面，相当于用户之后再来到画布页

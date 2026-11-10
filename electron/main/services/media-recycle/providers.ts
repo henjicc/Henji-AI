@@ -8,7 +8,7 @@ import { DOCUMENT_KINDS, readableDocumentExtensions } from '../../../../src/core
 import { henjiReadableExtensions } from '../../../../src/core/fileExtensions'
 import { getDb } from '../db'
 import { databaseLocationContext } from '../db-locations'
-import { getProgramDataDir, getProgramStoreDir, getUserModelsLocation, getUserRootDir } from '../appPaths'
+import { getProgramDataDir, getProgramStoreDir, getUserAudioRecordingsDir, getUserModelsLocation, getUserRootDir } from '../appPaths'
 import { MEDIA_REFERENCE_TABLES } from './schema'
 import { scanReferenceFiles, type ReferenceScanRoot } from './file-scanner'
 import { createPathCanonicalizer, within } from './paths'
@@ -81,9 +81,9 @@ export function recordReferences(source: string, raw: Record<string, unknown>, c
   if (source === 'settings' && raw.key === 'audio_capture.pending_files' && typeof raw.value === 'string') {
     const pending = JSON.parse(raw.value) as { files?: string[]; placements?: Record<string, { spliceId: string }> }
     for (const name of pending.files ?? []) {
-      values.push(path.join(getUserRootDir(), '录音', path.basename(name)))
+      values.push(path.join(getUserAudioRecordingsDir(), path.basename(name)))
       const id = pending.placements?.[name]?.spliceId
-      if (id && /^[\w-]+$/.test(id)) values.push(path.join(getUserRootDir(), '录音', `${id}.wav`))
+      if (id && /^[\w-]+$/.test(id)) values.push(path.join(getUserAudioRecordingsDir(), `${id}.wav`))
     }
   }
   for (const key of definition.json) if (raw[key] !== null && raw[key] !== undefined) values.push(JSON.parse(String(raw[key])))

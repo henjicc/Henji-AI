@@ -50,6 +50,11 @@ export interface MoveWorkRootInput {
   fileOps?: Partial<MoveWorkRootFileOps>
   /** 跨磁盘复制时不复制的顶层文件夹（可重建的缓存）；它们随旧目录一起删除。 */
   skipTopLevel?: readonly string[]
+  /**
+   * 留在旧目录原处、既不移动也不删除的顶层文件夹（正被本进程占用的程序资料，重启时另行搬走）。
+   * 有这类文件夹时旧目录本身保留，其余内容照常移动。
+   */
+  keepTopLevel?: readonly string[]
   /** 测试注入：可用空间（字节）；不传时读取磁盘。 */
   availableBytes?: (directory: string) => Promise<number | null>
 }
@@ -187,14 +192,62 @@ async function listTree(root: string, skipTopLevel: readonly string[] = []): Pro
   return entries
 }
 
+async function presentTopLevel(root: string, names: readonly string[] | undefined): Promise<string[]> {
+  const present: string[] = []
+  for (const name of names ?? []) if (await lstatOrNull(path.join(root, name))) present.push(name)
+  return present
+}
+
 function isInUseError(error: unknown): boolean {
   const code = errorCode(error)
   return code === 'EPERM' || code === 'EBUSY' || code === 'EACCES'
 }
 
+/** 旧目录里有要留在原处的文件夹时不能整体改名：新建目标目录，把其余顶层条目逐个改名过去。 */
+async function moveEntriesByRename(input: MoveWorkRootInput, ops: MoveWorkRootFileOps, keep: readonly string[]): Promise<MoveWorkRootResult | 'cross_device'> {
+  const oldRoot = path.resolve(input.oldRoot)
+  const newRoot = path.resolve(input.newRoot)
+  const targetExisted = (await lstatOrNull(newRoot)) !== null
+  const createdParents = await ensureDirectory(path.dirname(newRoot))
+  await fs.mkdir(newRoot, { recursive: true })
+  const names = (await fs.readdir(oldRoot)).filter((name) => !keep.includes(name))
+  const moved: string[] = []
+  const rollback = async (): Promise<void> => {
+    for (const name of moved.reverse()) await ops.rename(path.join(newRoot, name), path.join(oldRoot, name))
+    if (!targetExisted) await fs.rmdir(newRoot).catch(() => undefined)
+    await removeEmptyDirectories(createdParents)
+  }
+  try {
+    for (const [index, name] of names.entries()) {
+      assertNotAborted(input.signal)
+      input.onProgress?.({ phase: 'moving', current: index, total: names.length, item: name })
+      await ops.rename(path.join(oldRoot, name), path.join(newRoot, name))
+      moved.push(name)
+    }
+    await input.commit()
+  } catch (error) {
+    const crossDevice = errorCode(error) === 'EXDEV' && moved.length === 0
+    try {
+      await rollback()
+    } catch (rollbackError) {
+      throw new WorkRootMoveError('move_failed', `移动失败，且部分内容未能移回原位置，请到 ${newRoot} 查找：${describe(rollbackError)}`, { cause: error })
+    }
+    if (crossDevice) return 'cross_device'
+    if (error instanceof WorkRootMoveError) throw error
+    if (isInUseError(error)) {
+      throw new WorkRootMoveError('in_use', `作品目录里有文件正被其他程序使用，请关闭后重试（${describe(error)}）`, { cause: error })
+    }
+    throw new WorkRootMoveError('move_failed', `移动失败，内容已移回原位置：${describe(error)}`, { cause: error })
+  }
+  input.onProgress?.({ phase: 'moving', current: names.length, total: names.length, item: '' })
+  return { mode: 'rename', files: 0, bytes: 0, oldRootRemoved: true }
+}
+
 async function moveByRename(input: MoveWorkRootInput, ops: MoveWorkRootFileOps): Promise<MoveWorkRootResult | 'cross_device'> {
   const oldRoot = path.resolve(input.oldRoot)
   const newRoot = path.resolve(input.newRoot)
+  const keep = await presentTopLevel(oldRoot, input.keepTopLevel)
+  if (keep.length > 0) return await moveEntriesByRename(input, ops, keep)
   const targetExisted = (await lstatOrNull(newRoot)) !== null
   const createdParents = await ensureDirectory(path.dirname(newRoot))
   // Windows 不允许改名到已存在的空文件夹上：先删掉这个空文件夹，回滚时再建回来。
@@ -238,7 +291,9 @@ async function moveByCopy(input: MoveWorkRootInput, ops: MoveWorkRootFileOps): P
   const report = input.onProgress
 
   report?.({ phase: 'preparing', current: 0, total: 0, item: '' })
-  const plan = await listTree(oldRoot, input.skipTopLevel)
+  const keep = await presentTopLevel(oldRoot, input.keepTopLevel)
+  const notCopied = [...(input.skipTopLevel ?? []), ...keep]
+  const plan = await listTree(oldRoot, notCopied)
   const totalBytes = plan.reduce((sum, entry) => sum + entry.size, 0)
   const available = await (input.availableBytes ?? readAvailableBytes)(newRoot)
   if (available !== null && available < totalBytes) {
@@ -290,7 +345,7 @@ async function moveByCopy(input: MoveWorkRootInput, ops: MoveWorkRootFileOps): P
     }
     // 补拷：复制期间可能又有文件写进旧位置（写入已冻结，正常不会发生）。
     const seen = new Set(plan.map((entry) => entry.relative))
-    for (const entry of await listTree(oldRoot, input.skipTopLevel)) {
+    for (const entry of await listTree(oldRoot, notCopied)) {
       if (seen.has(entry.relative)) continue
       assertNotAborted(input.signal)
       await copyEntry(entry)
@@ -319,7 +374,10 @@ async function moveByCopy(input: MoveWorkRootInput, ops: MoveWorkRootFileOps): P
   report?.({ phase: 'cleaning', current: 0, total: 0, item: '' })
   let oldRootRemoved = true
   try {
-    await fs.rm(oldRoot, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 })
+    if (keep.length === 0) await fs.rm(oldRoot, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 })
+    else for (const name of await fs.readdir(oldRoot)) {
+      if (!keep.includes(name)) await fs.rm(path.join(oldRoot, name), { recursive: true, force: true, maxRetries: 3, retryDelay: 200 })
+    }
   } catch {
     oldRootRemoved = false
   }

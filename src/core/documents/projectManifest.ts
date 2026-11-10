@@ -21,6 +21,9 @@ export const PROJECT_MANIFEST_VERSION = 4 as const
 export const INTERNAL_FOLDER_NAME = '.henji'
 export const PROJECT_MANIFEST_FILE_NAME = 'project.json'
 
+/** 数据目录下各类文档独立存放的文件夹一律用英文名，与新建内容的起名语言无关。 */
+export const STANDALONE_FOLDER_LOCALE: FolderLocale = 'en'
+
 export const PROJECT_FOLDER_NAMES: Readonly<Record<FolderLocale, { generated: string; materials: string }>> = {
   zh: { generated: '生成结果', materials: '素材' },
   en: { generated: 'Generated', materials: 'Media' },

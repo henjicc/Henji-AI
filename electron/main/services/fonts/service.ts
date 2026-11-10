@@ -7,6 +7,7 @@ import { app, BrowserWindow } from 'electron'
 import type { FontCatalog, FontFaceInfo, FontFileSource, FixedFontCatalog } from '../../../../src/core/fonts/catalog'
 import { FONTS_IPC } from '../../../../src/platform/contracts/fonts'
 import { createMainLogger } from '../logging'
+import { getProgramDataDir } from '../appBasePaths'
 import type { InternalFace } from './scanner'
 import type { FontWorkerRequest } from './worker'
 const logger = createMainLogger('main.fonts')
@@ -105,5 +106,5 @@ export class FontService {
   }
 }
 let service: FontService | undefined
-export function getFontService(): FontService { return service ??= new FontService(path.join(app.getPath('userData'), 'fonts')) }
+export function getFontService(): FontService { return service ??= new FontService(path.join(getProgramDataDir(), 'fonts')) }
 export async function disposeFonts(): Promise<void> { const current = service; service = undefined; await current?.dispose() }

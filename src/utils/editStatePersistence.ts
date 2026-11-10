@@ -4,11 +4,10 @@ import { appLocalDataDir, exists, join, mkdir, readFile, writeFile } from '@/pla
 const logger = createLogger('utils.editStatePersistence')
 
 const DIR_NAME = 'EditStates'
-const APP_DIR = 'Henji-AI'
 
 async function getEditStateDir(): Promise<string> {
         const appDataDir = await appLocalDataDir()
-        const fullPath = await join(appDataDir, APP_DIR, DIR_NAME)
+        const fullPath = await join(appDataDir, DIR_NAME)
     return fullPath
 }
 

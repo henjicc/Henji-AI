@@ -14,6 +14,7 @@ import {
   PROJECT_MANIFEST_FILE_NAME,
   carryProjectManifestForward,
   type ProjectManifest,
+  STANDALONE_FOLDER_LOCALE,
 } from '../../../../src/core/documents/projectManifest'
 import type { DocumentContainerRef, FolderLocale } from '../../../../src/core/documents/types'
 import type { LocationContext } from '../../../../src/core/storage/locationCodec'
@@ -296,7 +297,7 @@ export class DocumentWorkspace {
   standaloneFolder(kind: DocumentKindDescriptor): string {
     if (!kind.standaloneFolderNames) throw new DocumentLocationError('文档类型未设置独立存放目录。')
     const layout = this.layout()
-    return path.join(layout.root, kind.standaloneFolderNames[layout.locale])
+    return path.join(layout.root, kind.standaloneFolderNames[STANDALONE_FOLDER_LOCALE])
   }
 
   /** 新建、移入时文档的默认文件夹：项目文件夹，或作品目录下的类型文件夹。 */
@@ -339,7 +340,7 @@ export class DocumentWorkspace {
     const layout = this.layout()
     for (const kind of this.options.kinds.list()) {
       const names = kind.standaloneFolderNames
-      if (names && isPathInside(this.style, path.join(layout.root, names[layout.locale]), folder)) return true
+      if (names && isPathInside(this.style, path.join(layout.root, names[STANDALONE_FOLDER_LOCALE]), folder)) return true
     }
     return this.catalog.listExternalLocations().some((location) => (
       location.kind === 'folder' ? samePath(this.style, location.path, folder) : isPathInside(this.style, location.path, folder)

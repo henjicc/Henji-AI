@@ -19,21 +19,14 @@ function loadAssistantChain() {
   return compiled.exports;
 }
 
-const APP_IDENTIFIER = 'com.henji.ai';
+const { getProgramDataDir } = require('./lib/dataLocation.cjs');
 const LOG_FILE_PREFIX = 'henji-';
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const LEVELS = ['trace', 'debug', 'info', 'warn', 'error'];
 const SOURCES = ['frontend', 'backend'];
 
 function getDefaultLogDir() {
-  if (process.platform === 'win32' && process.env.LOCALAPPDATA) {
-    return path.join(process.env.LOCALAPPDATA, APP_IDENTIFIER, 'Henji-AI', 'logs');
-  }
-
-  const appDataDir = process.platform === 'darwin'
-    ? path.join(os.homedir(), 'Library', 'Application Support')
-    : process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config');
-  return path.join(appDataDir, APP_IDENTIFIER, 'Henji-AI', 'logs');
+  return path.join(getProgramDataDir(), 'logs');
 }
 
 function getToday() {

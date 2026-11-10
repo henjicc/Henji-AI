@@ -5,7 +5,7 @@ import path from 'node:path'
 import { buildDocumentEnvelope, carryDocumentEnvelopeForward } from '../../../../src/core/documents/envelope'
 import type { DocumentKindRegistry } from '../../../../src/core/documents/kinds'
 import { sameEntryName } from '../../../../src/core/documents/naming'
-import { INTERNAL_FOLDER_NAME, type ProjectManifest } from '../../../../src/core/documents/projectManifest'
+import { INTERNAL_FOLDER_NAME, STANDALONE_FOLDER_LOCALE, type ProjectManifest } from '../../../../src/core/documents/projectManifest'
 import type { DocumentIndexScanReport } from '../../../../src/core/documents/types'
 import { isPathInside, pathKey, samePath } from '../../../../src/core/storage/pathSyntax'
 import { writeJsonFile } from '../fs/json-file'
@@ -311,7 +311,7 @@ export class DocumentIndexScanner {
 
   private standaloneFolders(): string[] {
     const layout = this.workspace.layout()
-    return this.options.kinds.list().flatMap((kind) => kind.standaloneFolderNames ? [path.join(layout.root, kind.standaloneFolderNames[layout.locale])] : [])
+    return this.options.kinds.list().flatMap((kind) => kind.standaloneFolderNames ? [path.join(layout.root, kind.standaloneFolderNames[STANDALONE_FOLDER_LOCALE])] : [])
   }
 
   private async readDirectory(directory: string): Promise<Dirent[]> {

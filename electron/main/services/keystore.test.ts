@@ -49,7 +49,7 @@ import {
 } from './keystore'
 import { createRegisteredSecretStreamRedactor, redactRegisteredSecretText } from '../../../src/core/logging/sanitize'
 
-const KEYSTORE_RELATIVE_PATH = path.join('com.henji.ai', 'Henji-AI', 'provider-keys.enc.json')
+const KEYSTORE_RELATIVE_PATH = path.join('.system', 'provider-keys.enc.json')
 
 function writeRawKeystore(keys: Record<string, string>): void {
   const filePath = path.join(mocks.appDataDir, KEYSTORE_RELATIVE_PATH)
@@ -60,7 +60,7 @@ function writeRawKeystore(keys: Record<string, string>): void {
 describe('keystore', () => {
   beforeEach(() => {
     mocks.appDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'henji-keystore-'))
-    vi.stubEnv('LOCALAPPDATA', mocks.appDataDir)
+    vi.stubEnv('HENJI_DATA_ROOT', mocks.appDataDir)
     mocks.isEncryptionAvailable.mockReturnValue(true)
   })
 
@@ -232,7 +232,7 @@ describe('keystore', () => {
 
 it('设置摘要从不返回完整密钥，替换、共享槽和清除保持一致', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'henji-key-info-'))
-  vi.stubEnv('LOCALAPPDATA', dir)
+  vi.stubEnv('HENJI_DATA_ROOT', dir)
   mocks.isEncryptionAvailable.mockReturnValue(true)
   try {
     setAiProviderApiKey('fal', 'fixture-provider-secret-1234')

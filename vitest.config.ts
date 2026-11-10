@@ -8,10 +8,10 @@ import CostSequencer from './scripts/lib/costSequencer.mjs'
 import { videoEditRenderEngineVersion } from './scripts/vite/renderEngineVersion.mjs'
 
 /**
- * 主进程模块在 Windows 按 LOCALAPPDATA 定位程序目录（日志、数据库、缓存），测试一律指到仓库临时目录，
- * 免得没替换日志或存储模块的用例写进用户真实资料。其他平台走 electron 的 app.getPath，测试里由各自的 mock 决定。
+ * 主进程模块按数据目录定位程序资料（日志、数据库、缓存）与作品，测试一律指到仓库临时目录，
+ * 免得没替换日志或存储模块的用例写进用户真实资料，也不读写用户主目录里的位置文件。
  */
-const TEST_PROGRAM_ENV = { LOCALAPPDATA: path.resolve(__dirname, '.tmp/test-local-app-data') }
+const TEST_PROGRAM_ENV = { HENJI_DATA_ROOT: path.resolve(__dirname, '.tmp/test-data-root') }
 
 /**
  * 本机跑测试时开发者同时在用这台电脑，CPU 不能被测试吃满：并行上限取一半逻辑核，并把测试进程降到低于正常优先级，

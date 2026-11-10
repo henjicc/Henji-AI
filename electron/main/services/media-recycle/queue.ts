@@ -1,12 +1,12 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { getDb } from '../db'
-import { getProgramDataDir, getProgramStoreDir, getUserFolderDir, getUserRootDir } from '../appPaths'
+import { getProgramDataDir, getProgramStoreDir, getUserAudioRecordingsDir, getUserFolderDir, getUserRootDir } from '../appPaths'
 import { canonicalPath, fileIdentity, localMediaPath, pathKey, within } from './paths'
 
 /** Deliberately excludes project folders, exports and the general user root. */
 export function managedMediaRoots(): string[] {
-  return [path.join(getUserRootDir(), '录音'), getUserFolderDir('generated'), getUserFolderDir('uploads'), getProgramStoreDir('thumbnails'),
+  return [getUserAudioRecordingsDir(), getUserFolderDir('generated'), getUserFolderDir('uploads'), getProgramStoreDir('thumbnails'),
     path.join(getProgramDataDir(), 'EditStates')]
 }
 

@@ -77,3 +77,19 @@ Electron 自动化脚本通过 CDP/Playwright 启动构建产物。需要临时�
 当前分支基线是 Electron。旧 Tauri/Rust 外壳、依赖、脚本与 PAL adapter 已从工作树移除，需回看只走 Git 历史或 `old-Henji-AI/` 备份对照。
 
 图像水印/分镜文字与旧 Rust 输出的像素级基线对比尚未做（功能 smoke 已过，可后置）。
+
+## 数据放在哪（2026-11-11 用户确定）
+
+全部数据放在一个**数据目录**里，默认 `<文档>/HenjiAI`，用户可在设置里更换；唯一来源是 `electron/main/services/appPaths.ts`（底层 `appBasePaths.ts`）。
+
+| 位置 | 放什么 |
+|---|---|
+| `<数据目录>/Projects`、`Generated`、`Uploads`、`Exports`、`Skills`、`Models` 与各类文档文件夹（`Canvases`、`Video Edits`、`Voiceovers`、`Camera Stages`、`Image Documents`、`Recordings`、`Web Recordings`） | 用户作品。文件夹名固定英文，不随界面语言变化；项目内部的文件夹与“未命名”起名仍按起名语言 |
+| `<数据目录>/.system` | 程序资料：数据库、密钥、配置、助手、风格库、字体、日志、回收区、各工具内部存储与缓存，以及 `browser/`（界面本地存储、密钥加密用的本机状态文件） |
+| `<数据目录>/.cache` | 可重建的媒体缓存 |
+| `~/.henji-ai/location.json` | 只记数据目录在哪（及起名语言） |
+| 系统应用数据目录（Electron `userData`） | 只剩可重建的浏览器缓存、崩溃转储与窗口外观；丢了不影响数据 |
+
+- **不得往系统应用数据目录写任何需要保留的数据**：Windows 会把打包应用（及其启动的子进程）对它的写入转存到应用私有位置，同一台机器从不同入口启动会读到两份数据（2026-11-10 “密钥全没了”的原因）。新增存储一律从 `appPaths` 取目录，不直接用 `app.getPath('userData' | 'appData')` 或 `LOCALAPPDATA`。
+- 更换数据目录：作品当场搬（`work-root` 服务），正被占用的 `.system` 记在位置文件的 `systemDir`，下次启动最早处搬完（`completePendingSystemMove`）。
+- 自动化隔离：`HENJI_DATA_ROOT` 直接指定数据目录（单元测试由 `vitest.config.ts` 统一设置），`HENJI_ISOLATED_APP_DATA` 时数据目录在隔离目录内；两者都不读写位置文件。脚本侧用 `scripts/lib/dataLocation.cjs`。

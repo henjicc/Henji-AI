@@ -36,7 +36,7 @@ beforeAll(async () => {
   parent = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-mcp-native-media-'))
   fixture.root = path.join(parent, 'profile')
   await fs.mkdir(path.join(fixture.root, 'downloads'), { recursive: true })
-  vi.stubEnv('LOCALAPPDATA', path.join(fixture.root, 'local'))
+  vi.stubEnv('HENJI_DATA_ROOT', path.join(fixture.root, 'local'))
   fixture.db = new Database(path.join(parent, 'media.sqlite'))
   initializeSchema(fixture.db)
   file = path.join(fixture.root, 'downloads', 'result.png')

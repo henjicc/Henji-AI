@@ -202,4 +202,27 @@ describe('moveWorkRoot', () => {
     expect(codeOf(error)).toBe('insufficient_space')
     expect(await exists(path.join(base, '小盘'))).toBe(false)
   })
+
+  it.each([['同一磁盘', false], ['跨磁盘', true]])('%s：留在原处的程序资料不移动不删除，其余内容搬到新位置', async (_name, forceCopy) => {
+    await writeFile(oldRoot, '.system/henji.db', 'db')
+    await writeFile(oldRoot, 'Projects/短片/短片.hjvid', '{}')
+    const newRoot = path.join(base, '新位置', 'HenjiAI')
+    const result = await moveWorkRoot({ oldRoot, newRoot, commit: vi.fn(), forceCopy, keepTopLevel: ['.system'] })
+    expect(result.oldRootRemoved).toBe(true)
+    expect(await fs.readFile(path.join(newRoot, 'Projects', '短片', '短片.hjvid'), 'utf8')).toBe('{}')
+    expect(await exists(path.join(newRoot, '.system'))).toBe(false)
+    expect(await fs.readdir(oldRoot)).toEqual(['.system'])
+    expect(await fs.readFile(path.join(oldRoot, '.system', 'henji.db'), 'utf8')).toBe('db')
+  })
+
+  it('有留在原处的文件夹时提交失败：已移动的内容全部移回', async () => {
+    await writeFile(oldRoot, '.system/henji.db', 'db')
+    await writeFile(oldRoot, 'Projects/a.txt', 'a')
+    const before = await snapshot(oldRoot)
+    const newRoot = path.join(base, '新位置', 'HenjiAI')
+    const error = await moveWorkRoot({ oldRoot, newRoot, keepTopLevel: ['.system'], commit: () => { throw new Error('写位置文件失败') } }).catch((caught: unknown) => caught)
+    expect(codeOf(error)).toBe('move_failed')
+    expect(await snapshot(oldRoot)).toEqual(before)
+    expect(await exists(newRoot)).toBe(false)
+  })
 })

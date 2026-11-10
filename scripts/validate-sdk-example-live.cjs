@@ -1,4 +1,5 @@
 const { app, safeStorage } = require('electron')
+const { getProgramDataDir } = require('./lib/dataLocation.cjs')
 const { spawn } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -21,21 +22,14 @@ const EXAMPLES = {
   },
 }
 
-// 开发态 Electron 脚本默认会落到 `Electron/` profile；正式应用使用 package name
-// `henji-ai/`。safeStorage 的加密材料位于既有 userData/sessionData，必须在 ready 前
-// 指向真实 profile，不能只猜密文文件的位置。
+// safeStorage 的加密材料（本机状态文件）在数据目录的 `.system/browser`，必须在 ready 前
+// 把 sessionData 指到那里，否则解不开应用存的密钥。
 app.setName('henji-ai')
-const realProfilePath = path.join(app.getPath('appData'), 'henji-ai')
-app.setPath('userData', realProfilePath)
-app.setPath('sessionData', realProfilePath)
+app.setPath('userData', path.join(app.getPath('appData'), 'henji-ai'))
+app.setPath('sessionData', path.join(getProgramDataDir(), 'browser'))
 
 function readEncryptedValue(storeKey) {
-  const storePath = path.join(
-    app.getPath('appData'),
-    'com.henji.ai',
-    'Henji-AI',
-    'provider-keys.enc.json',
-  )
+  const storePath = path.join(getProgramDataDir(), 'provider-keys.enc.json')
   const parsed = JSON.parse(fs.readFileSync(storePath, 'utf8'))
   const encrypted = parsed?.version === 1 ? parsed.keys?.[storeKey] : undefined
   if (typeof encrypted !== 'string' || !encrypted) {

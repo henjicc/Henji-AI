@@ -8,7 +8,7 @@ import type { VideoEditLoudnessMeasurement } from '../../../../src/core/videoEdi
 import { spliceAudioFile } from './splice'
 
 const state = vi.hoisted(() => ({ root: '', takeFrames: 96_000, read: vi.fn(), measure: vi.fn(), process: vi.fn() }))
-vi.mock('../appPaths', () => ({ getUserRootDir: () => state.root }))
+vi.mock('../appPaths', () => ({ getUserRootDir: () => state.root, getUserAudioRecordingsDir: () => path.join(state.root, 'Audio Recordings') }))
 vi.mock('../documents/runtime', () => ({ getDocumentService: () => ({ readDocument: state.read }) }))
 vi.mock('../media/shared', () => ({ resolveLocalMediaPath: async (file: string) => file }))
 vi.mock('../video/ffmpeg-loader', () => ({ loadFfmpegPath: async () => 'ffmpeg' }))

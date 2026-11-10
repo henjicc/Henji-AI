@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
-import { getProgramDataDir, getProgramStoreDir, getUserDataLayout } from '../appPaths'
+import { getProgramDataDir, getProgramStoreDir, getUserDataLayout, USER_ROOT_FOLDER_LOCALE } from '../appPaths'
 import { createMainLogger } from '../logging'
 import { getSettingsStore } from '../settings/store'
 import { MediaCacheManager } from './media-cache'
@@ -30,7 +30,8 @@ let webSegments: WebCacheSegments | undefined
 export function getMediaCacheManager(): MediaCacheManager {
   if (manager) return manager
   manager = new MediaCacheManager({
-    userRoot: () => { const layout = getUserDataLayout(); return { root: layout.root, locale: layout.locale } },
+    // 缓存文件夹在数据目录下，与其他分类文件夹一样用英文名
+    userRoot: () => ({ root: getUserDataLayout().root, locale: USER_ROOT_FOLDER_LOCALE }),
     settings: getSettingsStore(),
     legacyDirectories,
     liveDocumentIds: async kind => {

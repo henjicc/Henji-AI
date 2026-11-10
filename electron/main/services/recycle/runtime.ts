@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { shell } from 'electron'
 import type { RecycledItem } from '../../../../src/core/localRecords/recycle'
 import { getDb } from '../db'
-import { getProgramDataDir, getUserRootDir } from '../appPaths'
+import { getProgramDataDir, getUserAudioRecordingsDir, getUserRootDir } from '../appPaths'
 import { createMainLogger } from '../logging/main-logger'
 import { RecycleStore, recycledFile, type RecycledLink } from './store'
 import { copyRecycledFile } from './file-copy'
@@ -143,7 +143,7 @@ export const restoreRecycledItem = (id: string, integrations: Pick<RecycleIntegr
         }
         if (await fs.access(item.target).then(() => true, () => false)) await shell.trashItem(item.target)
         await fs.rename(staging, item.target)
-        if (path.resolve(path.dirname(item.target)) === path.resolve(getUserRootDir(), '录音')) {
+        if (path.resolve(path.dirname(item.target)) === path.resolve(getUserAudioRecordingsDir())) {
           const { AudioCaptureFiles } = await import('../audio-capture/files')
           const { getSettingsStore } = await import('../settings/store')
           new AudioCaptureFiles(getUserRootDir, getSettingsStore, (file, placement) => trashUserFile(file, undefined, placement)).restore(item.target, saved.capturePlacement)

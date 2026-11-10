@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const state = vi.hoisted(() => ({
   base: '',
   languages: ['zh-CN'] as string[],
-  settings: new Map<string, string>(),
 }))
 
 vi.mock('electron', () => ({
@@ -16,17 +15,15 @@ vi.mock('electron', () => ({
     getLocale: () => state.languages[0] ?? '',
   },
 }))
-vi.mock('./dataRoot', () => ({
-  readUserDataRootSettings: () => ({
-    customRoot: state.settings.get('custom_data_directory') ?? null,
-    persistedDefault: state.settings.get('user_data_root') ?? null,
-  }),
-  writePersistedDefaultUserDataRoot: (value: string) => { state.settings.set('user_data_root', value) },
-}))
+vi.mock('node:os', async (original) => {
+  const actual = await original<typeof import('node:os')>()
+  return { ...actual, default: { ...actual, homedir: () => path.join(state.base, 'home') }, homedir: () => path.join(state.base, 'home') }
+})
 vi.mock('./logging/main-logger', () => ({
   createMainLogger: () => ({ trace: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
 }))
 
+import { completePendingSystemMove, readDataLocation, writeDataLocation } from './appBasePaths'
 import {
   getAppDirectories,
   getProgramDataDir,
@@ -34,19 +31,19 @@ import {
   getUserDataLayout,
   getUserFolderDir,
   resetAppPathsForTest,
-  resolveUserDataLayout,
   setUserFolderLanguageHint,
 } from './appPaths'
 
-const ZH_FOLDERS = ['项目', '生成结果', '上传素材', '导出', '助手技能']
-const EN_FOLDERS = ['Projects', 'Generated', 'Uploads', 'Exports', 'Assistant Skills']
+const FOLDERS = ['Projects', 'Generated', 'Uploads', 'Exports', 'Skills']
+const locationFile = (): string => path.join(state.base, 'home', '.henji-ai', 'location.json')
+const readLocationFile = (): Record<string, unknown> => JSON.parse(fs.readFileSync(locationFile(), 'utf8')) as Record<string, unknown>
 
-describe('应用目录唯一来源', () => {
+describe('数据目录位置', () => {
   beforeEach(() => {
     state.base = fs.mkdtempSync(path.join(os.tmpdir(), 'henji-app-paths-'))
     state.languages = ['zh-CN']
-    state.settings.clear()
     resetAppPathsForTest()
+    vi.stubEnv('HENJI_DATA_ROOT', '')
     vi.stubEnv('HENJI_ISOLATED_APP_DATA', '')
   })
 
@@ -55,82 +52,62 @@ describe('应用目录唯一来源', () => {
     fs.rmSync(state.base, { recursive: true, force: true })
   })
 
-  it('中文系统新安装：文档/痕迹AI 下建立中文分类文件夹并记住选择', () => {
+  it('新安装：文档/HenjiAI 下建英文分类文件夹，程序资料在其中的 .system，位置记在用户主目录', () => {
     const layout = getUserDataLayout()
-    const expectedRoot = path.join(state.base, 'documents', '痕迹AI')
-    expect(layout.root).toBe(expectedRoot)
+    const root = path.join(state.base, 'documents', 'HenjiAI')
+    expect(layout.root).toBe(root)
     expect(layout.isCustom).toBe(false)
-    expect(fs.readdirSync(expectedRoot).sort()).toEqual([...ZH_FOLDERS].sort())
-    expect(JSON.parse(state.settings.get('user_data_root') ?? '')).toEqual({ root: expectedRoot, locale: 'zh' })
-    expect(getUserFolderDir('generated')).toBe(path.join(expectedRoot, '生成结果'))
+    expect(layout.locale).toBe('zh')
+    for (const name of FOLDERS) expect(fs.statSync(path.join(root, name)).isDirectory()).toBe(true)
+    expect(getProgramDataDir()).toBe(path.join(root, '.system'))
+    expect(getProgramStoreDir('logs')).toBe(path.join(root, '.system', 'logs'))
+    expect(readLocationFile()).toMatchObject({ root, locale: 'zh' })
+    expect(getAppDirectories().folderNames.generated).toBe('Generated')
   })
 
-  it('英文界面新安装：文档/Henji AI 下建立英文分类文件夹', () => {
+  it('起名语言按界面语言确定一次，分类文件夹名不随它变化', () => {
     state.languages = ['zh-CN']
     setUserFolderLanguageHint('en-US')
-    const layout = getUserDataLayout()
-    const expectedRoot = path.join(state.base, 'documents', 'Henji AI')
-    expect(layout.root).toBe(expectedRoot)
-    expect(fs.readdirSync(expectedRoot).sort()).toEqual([...EN_FOLDERS].sort())
-    expect(layout.folders.uploads).toBe(path.join(expectedRoot, 'Uploads'))
-  })
-
-  it('首次确定后不随界面语言变化', () => {
-    const first = getUserDataLayout()
+    expect(getUserDataLayout().locale).toBe('en')
     resetAppPathsForTest()
-    state.languages = ['en-US']
-    setUserFolderLanguageHint('en-US')
-    const second = getUserDataLayout()
-    expect(second.root).toBe(first.root)
-    expect(second.folders).toEqual(first.folders)
-    expect(fs.existsSync(path.join(state.base, 'documents', 'Henji AI'))).toBe(false)
+    setUserFolderLanguageHint('zh-CN')
+    const layout = getUserDataLayout()
+    expect(layout.locale).toBe('en')
+    expect(path.basename(getUserFolderDir('uploads'))).toBe('Uploads')
   })
 
-  it('设置了数据目录时分类文件夹建在该目录下，默认目录仍记录在案', () => {
-    const custom = path.join(state.base, 'custom root')
-    state.settings.set('custom_data_directory', custom)
-    const directories = getAppDirectories()
-    expect(directories.userRoot).toBe(custom)
-    expect(directories.isCustomUserRoot).toBe(true)
-    expect(directories.defaultUserRoot).toBe(path.join(state.base, 'documents', '痕迹AI'))
-    expect(fs.readdirSync(custom).sort()).toEqual([...ZH_FOLDERS].sort())
-    expect(directories.folders.skills).toBe(path.join(custom, '助手技能'))
+  it('位置文件指向别处时用它，默认位置变化不影响已有数据', () => {
+    const root = path.join(state.base, '数据盘', 'HenjiAI')
+    fs.mkdirSync(path.dirname(locationFile()), { recursive: true })
+    fs.writeFileSync(locationFile(), JSON.stringify({ version: 1, root, locale: 'zh' }))
+    const layout = getUserDataLayout()
+    expect(layout.root).toBe(root)
+    expect(layout.isCustom).toBe(true)
+    expect(getProgramDataDir()).toBe(path.join(root, '.system'))
   })
 
-  it('内部数据留在程序目录，不随用户目录移动', () => {
-    state.settings.set('custom_data_directory', path.join(state.base, 'custom'))
-    const directories = getAppDirectories()
-    expect(directories.programDir).toBe(getProgramDataDir())
-    expect(directories.thumbnailsDir).toBe(path.join(getProgramDataDir(), 'Thumbnails'))
-    expect(getProgramStoreDir('imageEditor')).toBe(path.join(getProgramDataDir(), 'ImageEditorV3'))
-    expect(directories.thumbnailsDir.startsWith(directories.userRoot)).toBe(false)
+  it('更换数据目录后程序资料先留在原处，下次启动搬进新目录并删掉旧目录空壳', () => {
+    const oldRoot = path.join(state.base, 'old', 'HenjiAI')
+    const newRoot = path.join(state.base, 'new', 'HenjiAI')
+    const oldSystem = path.join(oldRoot, '.system')
+    fs.mkdirSync(oldSystem, { recursive: true })
+    fs.writeFileSync(path.join(oldSystem, 'henji.db'), 'db')
+    writeDataLocation({ root: newRoot, systemDir: oldSystem, locale: 'zh' })
+
+    expect(getProgramDataDir()).toBe(oldSystem)
+    expect(completePendingSystemMove()).toEqual({ from: oldSystem, to: path.join(newRoot, '.system') })
+    expect(fs.readFileSync(path.join(newRoot, '.system', 'henji.db'), 'utf8')).toBe('db')
+    expect(fs.existsSync(oldRoot)).toBe(false)
+    expect(readDataLocation()).toEqual({ root: newRoot, locale: 'zh' })
+    expect(readLocationFile()).not.toHaveProperty('systemDir')
+    expect(completePendingSystemMove()).toBeNull()
   })
 
-  it('隔离资料目录下不写系统真实“文档”', () => {
+  it('指定了隔离数据目录时不读写用户主目录的位置文件', () => {
     const isolated = path.join(state.base, 'isolated')
-    vi.stubEnv('HENJI_ISOLATED_APP_DATA', isolated)
-    expect(getUserDataLayout().root).toBe(path.join(isolated, 'Documents', '痕迹AI'))
-    expect(fs.existsSync(path.join(state.base, 'documents'))).toBe(false)
-  })
-
-  it('程序目录：Windows 用 LOCALAPPDATA，其他平台用 appData', () => {
-    const local = path.join(state.base, 'local')
-    vi.stubEnv('LOCALAPPDATA', local)
-    const expected = process.platform === 'win32'
-      ? path.join(local, 'com.henji.ai', 'Henji-AI')
-      : path.join(state.base, 'appData', 'com.henji.ai', 'Henji-AI')
-    expect(getProgramDataDir()).toBe(expected)
-  })
-
-  it('已记录的设置损坏时重新确定，而不是返回非法路径', () => {
-    const resolved = resolveUserDataLayout({
-      customRoot: null,
-      persisted: null,
-      documentsDir: () => path.join(state.base, 'docs'),
-      languages: () => [undefined, '', 'en-GB'],
-    })
-    expect(resolved.persist).toEqual({ root: path.join(state.base, 'docs', 'Henji AI'), locale: 'en' })
-    state.settings.set('user_data_root', '{"root":"relative","locale":"zh"}')
-    expect(getUserDataLayout().root).toBe(path.join(state.base, 'documents', '痕迹AI'))
+    vi.stubEnv('HENJI_DATA_ROOT', isolated)
+    expect(getUserDataLayout().root).toBe(isolated)
+    expect(getProgramDataDir()).toBe(path.join(isolated, '.system'))
+    expect(fs.existsSync(locationFile())).toBe(false)
   })
 })
