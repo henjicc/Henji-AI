@@ -5,6 +5,7 @@ import { UiPanel } from '@/components/ui'
 import { useI18n } from '@/hooks/useI18n'
 import { UI_DURATION, uiTransition } from '@/components/ui/motion'
 import { ChevronUp } from 'lucide-react'
+import { UI_PANEL_WIDTH } from '@/core/theme/panelSizes'
 
 interface FloatingInputPanelProps {
   containerRef: React.RefObject<HTMLDivElement>
@@ -19,9 +20,17 @@ interface FloatingInputPanelProps {
   onMouseEnter: () => void
   onMouseLeave: () => void
   onMouseMove: () => void
+  /** `side`：竖着贴在左侧，铺满上下、不收起 */
+  placement?: 'bottom' | 'side'
+  /** 面板上右键：粘贴、切换位置 */
+  onContextMenu?: (event: React.MouseEvent) => void
   children: React.ReactNode
 }
 
+/**
+ * 生成页唯一的输入卡片。底部与左侧两种位置共用同一棵元素树：切换位置时里面的生成器不重新挂载，
+ * 写到一半的参数（只存在生成器自己的状态里）原样保留。
+ */
 export function FloatingInputPanel({
   containerRef,
   compact,
@@ -35,64 +44,74 @@ export function FloatingInputPanel({
   onMouseEnter,
   onMouseLeave,
   onMouseMove,
+  placement = 'bottom',
+  onContextMenu,
   children,
 }: FloatingInputPanelProps): JSX.Element {
   const { t } = useI18n()
+  const side = placement === 'side'
   const hintText = prompt.trim() ? prompt : t('ui:workspace.panelHint')
   const displayModel = modelLabel || t('models:selectModel')
+  const collapsed = !side && (isCollapsed || isCollapsing)
 
   return (
     <div
       ref={containerRef}
-      className="absolute bottom-5 left-1/2 z-panel -translate-x-1/2"
+      className={side ? 'absolute bottom-4 left-4 top-4 z-panel' : 'absolute bottom-5 left-1/2 z-panel -translate-x-1/2'}
       style={{
-        width: `min(calc(100% - ${viewportGutterPx * 2}px), ${maxWidthPx}px)`,
+        width: side ? UI_PANEL_WIDTH.generationInput : `min(calc(100% - ${viewportGutterPx * 2}px), ${maxWidthPx}px)`,
       }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       onMouseMove={onMouseMove}
+      onContextMenu={onContextMenu}
+      data-generation-input-placement={placement}
       data-layout-density={compact ? 'compact' : 'comfortable'}
     >
-      {/* 一整块实底输入卡片（设计稿 Generation）：浮在记录列表之上，是这页唯一的卡片 */}
-      {/* 收起 48 高（一行提示）↔ 展开最高 600：max-height 过渡做收起动画 */}
+      {/* 一整块实底输入卡片（设计稿 Generation）：底部时浮在记录列表之上，左侧时铺满上下 */}
+      {/* 底部收起 48 高（一行提示）↔ 展开最高 600：max-height 过渡做收起动画 */}
       <UiPanel
-        className={`relative cursor-pointer overflow-hidden ${isCollapsed || isCollapsing ? 'max-h-12 min-h-12' : UI_INPUT_PANEL_MAX_HEIGHT_CLASS} ${compact ? 'p-2' : 'px-3 pb-2 pt-3'}`}
-        style={{
+        className={side
+          ? 'relative flex h-full min-h-0 flex-col overflow-hidden'
+          : `relative cursor-pointer overflow-hidden ${collapsed ? 'max-h-12 min-h-12' : UI_INPUT_PANEL_MAX_HEIGHT_CLASS} ${compact ? 'p-2' : 'px-3 pb-2 pt-3'}`}
+        style={side ? undefined : {
           transition: uiTransition(['max-height'], UI_DURATION.slow),
           opacity: 1,
           overflow: isCollapsed && !isCollapsing ? 'visible' : 'hidden',
         }}
         onClick={() => {
-          if (isCollapsed) onExpand()
+          if (!side && isCollapsed) onExpand()
         }}
       >
-        <div
-          className={`absolute left-0 right-0 ${isCollapsed || isCollapsing ? 'px-4' : 'px-3'}`}
-          style={{
-            // 位移走 transform 而不是过渡 top：top 是布局属性，过渡期间每帧重排；
-            // translateY 只走合成器。12px → -60px 等价于位移 -72px。
-            top: '10px',
-            transform: isCollapsed || isCollapsing ? 'translateY(0)' : 'translateY(-72px)',
-            opacity: isCollapsed || isCollapsing ? 1 : 0,
-            transition: uiTransition(['opacity', 'transform'], UI_DURATION.slow),
-          }}
-        >
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3 flex-1 min-w-0">
-              <span className="whitespace-nowrap text-xs font-medium text-text2">
-                {displayModel}
-              </span>
-              <span className="flex-1 truncate text-13 text-text3">
-                {hintText}
-              </span>
+        {side ? null : (
+          <div
+            className={`absolute left-0 right-0 ${collapsed ? 'px-4' : 'px-3'}`}
+            style={{
+              // 位移走 transform 而不是过渡 top：top 是布局属性，过渡期间每帧重排；
+              // translateY 只走合成器。12px → -60px 等价于位移 -72px。
+              top: '10px',
+              transform: collapsed ? 'translateY(0)' : 'translateY(-72px)',
+              opacity: collapsed ? 1 : 0,
+              transition: uiTransition(['opacity', 'transform'], UI_DURATION.slow),
+            }}
+          >
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <span className="whitespace-nowrap text-xs font-medium text-text2">
+                  {displayModel}
+                </span>
+                <span className="flex-1 truncate text-13 text-text3">
+                  {hintText}
+                </span>
+              </div>
+              <ChevronUp aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.md} text-text3`} />
             </div>
-            <ChevronUp aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.md} text-text3`} />
           </div>
-        </div>
+        )}
 
         <div
-          className="relative rounded-[inherit]"
-          style={{
+          className={side ? 'relative flex min-h-0 flex-1 flex-col' : 'relative rounded-[inherit]'}
+          style={side ? undefined : {
             opacity: !isCollapsed && !isCollapsing ? 1 : 0,
             transition: uiTransition(['opacity'], UI_DURATION.slow, UI_DURATION.fast),
             pointerEvents: !isCollapsed && !isCollapsing ? 'auto' : 'none',

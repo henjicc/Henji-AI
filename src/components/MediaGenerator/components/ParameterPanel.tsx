@@ -11,7 +11,7 @@ import { registry } from '@/core/ModelRegistry'
 import { getI18nText, type ParamDef } from '@/core/types'
 import { LinkageEngine } from '@/core/linkage'
 import { ParamRenderer } from '@/components/params/ParamRenderer'
-import { ParamPanelRowsContext } from '@/components/params/paramPanelRows'
+import { ParamChoicesExpandedContext, ParamPanelRowsContext } from '@/components/params/paramPanelRows'
 import {
   countChangedParams,
   findMissingRequiredParams,
@@ -44,6 +44,8 @@ interface ParameterPanelProps {
   /** 工具条排布下排在最前、永不收起的项（生成底栏的模型选择） */
   toolbarLeading?: React.ReactNode
   controllerRef?: React.Ref<ParameterPanelController>
+  /** `side`：左侧输入面板里竖排，全部参数一行一个直接摊开，不收进“更多参数”。 */
+  arrangement?: 'bar' | 'side'
 }
 
 const SPECIAL_PANEL_ITEM_ID = 'special:aspect-resolution'
@@ -93,6 +95,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
   onChanges,
   toolbarLeading,
   controllerRef,
+  arrangement = 'bar',
 }) => {
   const { i18n } = useTranslation()
   const zh = i18n.language.startsWith('zh')
@@ -323,7 +326,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
     revealFirstMissingRequired: () => {
       const missing = missingRequired[0]
       if (!missing) return false
-      const collapsed = collapsedEntries(hiddenIdsRef.current)
+      const collapsed = arrangement === 'side' ? [] : collapsedEntries(hiddenIdsRef.current)
       const inPanel = collapsed.some((entry) => entryParams(entry).some((param) => param.id === missing.id))
       if (inPanel && moreControlsRef.current) {
         const controls = moreControlsRef.current
@@ -335,13 +338,63 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
       focusFirstControl(rowRef.current, missing.id)
       return true
     },
-  }), [collapsedEntries, entryParams, missingRequired])
+  }), [arrangement, collapsedEntries, entryParams, missingRequired])
 
   if (!modelDef || params.length === 0) {
     if (!toolbarLayout || toolbarLeading === undefined) return null
     return (
       <div ref={rowRef} className="flex min-w-0 flex-1">
         <UiOverflowRow className="flex-1 gap-x-3" items={[{ id: LEADING_ITEM_ID, priority: PRIORITY.leading, pinned: true, node: toolbarLeading }]} renderOverflow={() => null} />
+      </div>
+    )
+  }
+
+  if (arrangement === 'side') {
+    const renderGroup = (item: Extract<ReturnType<typeof resolveParameterPanelLayout>['items'][number], { kind: 'group' }>): React.ReactNode => (
+      <UiGroup
+        key={item.group.id}
+        data-param-group-id={item.group.id}
+        title={getI18nText(item.group.name, i18n.language) || item.group.id}
+        titleTone="compact"
+        divided
+        gap="none"
+      >
+        <ParamGroupSections
+          group={item.group}
+          params={item.params}
+          values={runtimeValues}
+          onChange={onChange}
+          onChanges={onChanges}
+          linkageEngine={linkageEngine}
+          uploadedImages={uploadedImages}
+          uploadedVideos={uploadedVideos}
+          sectionTitleTone="compact"
+        />
+      </UiGroup>
+    )
+    const paramRow = (param: ParamDef): React.ReactNode => (
+      <div key={param.id} data-param-id={param.id} className="min-w-0">{renderParam(param)}</div>
+    )
+    return (
+      <div ref={rowRef} className="flex min-w-0 flex-col">
+        <ParamPanelRowsContext.Provider value>
+        <ParamChoicesExpandedContext.Provider value>
+        <UiGroup labelWidth={72}>
+          {layout.primary.map(paramRow)}
+          {specialPanelSpec ? (
+            <AspectResolutionPanel
+              layout="rows"
+              aspectParam={specialPanelSpec.aspectParam}
+              resolutionParam={specialPanelSpec.resolutionParam}
+              values={values}
+              uploadedImages={uploadedImages}
+              onChange={onChange}
+            />
+          ) : null}
+          {layout.items.map((item) => item.kind === 'param' ? paramRow(item.param) : renderGroup(item))}
+        </UiGroup>
+        </ParamChoicesExpandedContext.Provider>
+        </ParamPanelRowsContext.Provider>
       </div>
     )
   }

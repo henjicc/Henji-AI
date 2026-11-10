@@ -6,13 +6,15 @@
  * 支持禁用和条件显示
  */
 
-import React, { useEffect, useMemo, useRef } from 'react'
+import React, { useContext, useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { DropdownParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types/I18nText'
 import Dropdown from '@/components/ui/Dropdown'
 import { ParamLabel } from '../ParamLabel'
 import { ParamField } from '../ParamField'
+import { ParamChoicesExpandedContext } from '../paramPanelRows'
+import { ParamChoiceGrid } from './ParamChoiceGrid'
 
 interface DropdownInputProps {
   param: DropdownParamDef
@@ -91,6 +93,22 @@ export const DropdownInput: React.FC<DropdownInputProps> = ({
     autoFixedRef.current = guardKey
     onChange(resolvedOption.value)
   }, [onChange, param.id, resolvedOption, selectedOption])
+
+  const expanded = useContext(ParamChoicesExpandedContext)
+  if (expanded && resolvedOption && ParamChoiceGrid.fits(options)) {
+    return (
+      <ParamField>
+        <ParamLabel param={param} language={i18n.language} />
+        <ParamChoiceGrid
+          ariaLabel={getI18nText(param.name, i18n.language) || param.id}
+          options={options}
+          value={resolvedOption.value}
+          onChange={onChange}
+          disabled={disabled}
+        />
+      </ParamField>
+    )
+  }
 
   return (
     <ParamField>

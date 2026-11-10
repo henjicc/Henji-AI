@@ -14,23 +14,17 @@ interface GeneratorConfigurationBarProps {
   modelState: ModelState
   /** 生成前定位必填参数（打开“更多参数”并聚焦） */
   parameterPanelRef?: Ref<ParameterPanelController>
+  /** `bar`：底部一行参数条；`side`：左侧输入面板，只渲染摊开的参数，模型另用 `GeneratorModelPicker` 放在面板顶端。 */
+  arrangement?: 'bar' | 'side'
 }
 
-/**
- * 生成输入区底栏的模型与参数条（设计稿 Generation）：一行静默触发器，参数名在控件左侧，
- * 不再是“标签在上 + 字段框”的表单。参数本身仍由 `ParameterPanel` 按模型 schema 渲染；
- * 始终单行，放不下的参数收进行末“更多参数”（任务 4.3），模型选择永不收起。
- */
-export function GeneratorConfigurationBar({
-  uiState,
-  modelState,
-  parameterPanelRef,
-}: GeneratorConfigurationBarProps): JSX.Element {
+export function GeneratorModelPicker({ uiState, arrangement = 'bar' }: { uiState: UIState; arrangement?: 'bar' | 'side' }): JSX.Element {
   const { t } = useTranslation('models')
   const providers = getAvailableProviders()
   const currentProvider = providers.find((provider) => provider.id === uiState.selectedProvider)
   const currentModel = getModelInfo(uiState.selectedModel)
   const modelName = currentModel?.name || t('selectModel')
+  const side = arrangement === 'side'
 
   const handleToggleFavorite = (event: MouseEvent, providerId: string, modelId: string): void => {
     event.stopPropagation()
@@ -46,14 +40,15 @@ export function GeneratorConfigurationBar({
     })
   }
 
-  const modelTrigger = (
-    <div data-onboarding-target="model" className="min-w-0">
+  return (
+    <div data-onboarding-target="model" className={side ? 'w-full min-w-0' : 'min-w-0'}>
       {/* 视觉上模型名自明，不显示“模型”标签；保留给读屏与按名称定位 */}
       <label className="sr-only">{t('title')}</label>
       <PanelTrigger
-        className="min-w-0"
+        className={side ? 'w-full min-w-0' : 'min-w-0'}
         panelSize="special"
-        alignment="aboveCenter"
+        // 底部时贴着模型按钮往上弹、左缘对齐按钮；左侧时向下展开
+        alignment={side ? 'bottomLeft' : 'aboveLeft'}
         stableHeight
         closeOnPanelClick={(target) => {
           if ((target as HTMLElement).closest('[data-prevent-close]')) return false
@@ -80,24 +75,38 @@ export function GeneratorConfigurationBar({
       >
         {({ open, togglePanel }) => (
           <UiFieldTrigger
-            appearance="quiet"
+            appearance={side ? 'field' : 'quiet'}
+            size={side ? 'lg' : 'md'}
             open={open}
             onClick={togglePanel}
             data-panel-trigger-button
             aria-expanded={open}
             aria-label={`${t('title')}：${currentProvider?.name ? `${currentProvider.name} ` : ''}${modelName}`}
-            className="max-w-80 cursor-pointer"
+            className={side ? 'w-full cursor-pointer' : 'max-w-80 cursor-pointer'}
           >
-            <span className="text-text1">{modelName}</span>
+            <span className="font-medium text-text1">{modelName}</span>
             {currentProvider?.name ? <span className="ml-1.5 text-text3">{currentProvider.name}</span> : null}
           </UiFieldTrigger>
         )}
       </PanelTrigger>
     </div>
   )
+}
 
+/**
+ * 生成输入区的模型与参数（设计稿 Generation）。底部时是一行静默触发器，参数名在控件左侧，
+ * 放不下的参数收进行末“更多参数”（任务 4.3），模型选择永不收起；左侧时参数一行一个全部摊开。
+ * 参数本身都由 `ParameterPanel` 按模型 schema 渲染。
+ */
+export function GeneratorConfigurationBar({
+  uiState,
+  modelState,
+  parameterPanelRef,
+  arrangement = 'bar',
+}: GeneratorConfigurationBarProps): JSX.Element {
+  const currentModel = getModelInfo(uiState.selectedModel)
   return (
-    <UiFieldLayoutContext.Provider value="toolbar">
+    <UiFieldLayoutContext.Provider value={arrangement === 'side' ? 'form' : 'toolbar'}>
       <ParameterPanel
         currentModel={currentModel}
         selectedModel={uiState.selectedModel}
@@ -106,8 +115,9 @@ export function GeneratorConfigurationBar({
         values={modelState.params}
         onChange={modelState.setParam}
         onChanges={modelState.setParams}
-        toolbarLeading={modelTrigger}
+        toolbarLeading={arrangement === 'side' ? undefined : <GeneratorModelPicker uiState={uiState} />}
         controllerRef={parameterPanelRef}
+        arrangement={arrangement}
       />
     </UiFieldLayoutContext.Provider>
   )

@@ -305,7 +305,6 @@
   "download": "下载",
   "delete": "删除",
   "upload": "上传",
-  "retry": "继续获取结果",
   "priceEstimate": {
     "label": "预估",
     "upperBound": "估算上限",
@@ -323,6 +322,9 @@
     }
   },
   "inputArea": {
+    "sideReferences": "参考素材",
+    "sidePrompt": "提示词",
+    "sideGenerate": "生成",
     "importingVideo": "正在导入视频…",
     "unit": {
       "images": "张图片",
@@ -698,6 +700,7 @@
   "errorState": {
     "title": "操作未完成",
     "details": "查看详情",
+    "detailsShort": "详情",
     "hideDetails": "收起详情",
     "copyDetails": "复制详情",
     "detailsCopied": "已复制",
@@ -711,6 +714,7 @@
     "inputImageAlt": "输入图片 {{index}}",
     "inputMaterials": "参考素材",
     "panelHint": "移到这里展开输入面板…",
+    "inputPanel": { "moveToLeft": "把输入面板放到左侧", "moveToBottom": "把输入面板放到底部" },
     "actions": {
       "regenerate": "重新生成",
       "reedit": "重新编辑",

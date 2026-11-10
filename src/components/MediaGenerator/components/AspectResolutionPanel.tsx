@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import PanelTrigger from '@/components/ui/PanelTrigger'
-import { UiSpecialPanel } from '@/components/ui'
+import { UiFormRow, UiSpecialPanel } from '@/components/ui'
+import { ParamChoiceGrid } from '@/components/params/base/ParamChoiceGrid'
 import { AspectRatioTiles, type AspectRatioTileOption, type AspectTierOption } from '@/components/params/panels/ResolutionPanel/AspectRatioTiles'
 import { getI18nText } from '@/core/types'
 import {
@@ -25,6 +26,8 @@ interface AspectResolutionPanelProps {
   values: DynamicValueMap
   uploadedImages: string[]
   onChange: (paramId: string, value: DynamicValue) => void
+  /** `trigger`：参数条里的一个触发器，点开是比例格子；`rows`：比例与分辨率各占一行直接摊开（左侧输入面板）。 */
+  layout?: 'trigger' | 'rows'
 }
 
 type AspectRenderOption = AspectRatioTileOption
@@ -120,6 +123,7 @@ const AspectResolutionPanel: React.FC<AspectResolutionPanelProps> = ({
   values,
   uploadedImages,
   onChange,
+  layout = 'trigger',
 }) => {
   const { t, i18n } = useTranslation('ui')
   const smartInitRef = useRef<string | null>(null)
@@ -332,6 +336,36 @@ const AspectResolutionPanel: React.FC<AspectResolutionPanelProps> = ({
     if (!activeRatio) return
     const nextValue = pickSizeDerivedValue(sizeDerivedSpec, activeRatio, String(option.value))
     if (nextValue !== null) onChange(resolutionParam.id, nextValue)
+  }
+
+  if (layout === 'rows') {
+    // 选项值可能是数字或对象化字符串，分段与小格按序号取值，选中后换回原选项
+    const activeTile = tileOptions.findIndex(isAspectActive)
+    const activeTier = tierOptions.findIndex(isTierActive)
+    return (
+      <>
+        {aspectParam || sizeDerivedSpec ? (
+          <UiFormRow label={aspectLabel} density="compact">
+            <ParamChoiceGrid
+              ariaLabel={aspectLabel}
+              options={tileOptions.map((option, index) => ({ value: index, label: option.label }))}
+              value={activeTile}
+              onChange={(index) => { const option = tileOptions[Number(index)]; if (option) void selectAspect(option) }}
+            />
+          </UiFormRow>
+        ) : null}
+        {resolutionParam && tierOptions.length > 0 ? (
+          <UiFormRow label={resolutionLabel} density="compact">
+            <ParamChoiceGrid
+              ariaLabel={resolutionLabel}
+              options={tierOptions.map((option, index) => ({ value: index, label: option.label, disabled: 'disabled' in option && option.disabled }))}
+              value={activeTier}
+              onChange={(index) => { const option = tierOptions[Number(index)]; if (option) selectTier(option) }}
+            />
+          </UiFormRow>
+        ) : null}
+      </>
+    )
   }
 
   return (

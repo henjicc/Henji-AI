@@ -22,7 +22,7 @@ import { usePriceEstimateParams } from './hooks/usePriceEstimateParams'
 import { useReeditContent } from './hooks/useReeditContent'
 import { PresetManager } from './preset/PresetManager'
 import InputArea from './components/InputArea'
-import { GeneratorConfigurationBar } from './components/GeneratorConfigurationBar'
+import { GeneratorConfigurationBar, GeneratorModelPicker } from './components/GeneratorConfigurationBar'
 import type { ParameterPanelController } from './components/ParameterPanel'
 import { PromptOptimizeButton } from './components/PromptOptimizeButton'
 import { UiError, UiFieldLayoutContext, type PromptEditorHandle } from '@/components/ui'
@@ -42,6 +42,11 @@ interface MediaGeneratorProps {
   onSetUploadedImagesRef?: (setter: React.Dispatch<React.SetStateAction<string[]>>) => void
   onSetUploadedFilePathsRef?: (setter: React.Dispatch<React.SetStateAction<string[]>>) => void
   onStateChange?: (state: { modelId: string; prompt: string }) => void
+  /**
+   * 输入面板在底部（一行参数条）还是左侧（竖排、参数全部摊开）。草稿在 store 里，模型参数只在本组件的状态里，
+   * 所以切换位置时宿主必须保持本组件挂载，只换排布。
+   */
+  arrangement?: 'bar' | 'side'
 }
 
 /**
@@ -57,7 +62,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
   isGenerating,
   onSetUploadedImagesRef,
   onSetUploadedFilePathsRef,
-  onStateChange
+  onStateChange,
+  arrangement = 'bar',
 }) => {
   // 1. UI 状态管理
   const uiState = useUIState()
@@ -331,8 +337,62 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
 
 
 
+  const priceEstimate = (
+    <PriceEstimate
+      providerId={uiState.selectedProvider}
+      modelId={uiState.selectedModel}
+      params={priceEstimateParams}
+    />
+  )
+  const promptTools = (
+    <>
+      <PresetPanel
+        getCurrentState={() => ({
+          input: uiState.input,
+          promptDocument: uiState.promptDocument,
+          promptMediaBindings: uiState.promptMediaBindings,
+          uploadedImages: uiState.uploadedImages,
+          uploadedFilePaths: uiState.uploadedFilePaths,
+          params: modelState.params,
+        })}
+        onLoadPreset={handleLoadPreset}
+      />
+      <PromptOptimizeButton
+        prompt={uiState.input}
+        uploadedImages={uiState.uploadedImages}
+        uploadedFilePaths={uiState.uploadedFilePaths}
+        uploadedVideos={uiState.uploadedVideos}
+        uploadedVideoFiles={uiState.uploadedVideoFiles}
+        uploadedVideoFilePaths={uiState.uploadedVideoFilePaths}
+        targetModel={{
+          providerId: uiState.selectedProvider,
+          providerName: currentProvider?.name,
+          modelId: uiState.selectedModel,
+          modelName: currentModel?.name,
+          modelType: currentModel?.type,
+          modelFunctions: currentModel?.functions,
+          modelPromptLanguage: currentModel?.promptLanguage,
+          modelDescription: currentModel?.description,
+        }}
+        disabled={inputBusy}
+        onOptimized={(value) => {
+          const document = parseLegacyPromptString(value, {
+            references: uiState.promptReferences,
+          })
+          if (promptEditorRef.current) {
+            promptEditorRef.current.replaceDocument(document, { addToHistory: true })
+            return
+          }
+          uiState.setPromptDocument(document)
+        }}
+        onStreamPreviewChange={setPromptOptimizationPreview}
+        onAlert={uiState.showAlert}
+      />
+    </>
+  )
+
   return (
-    <div className="relative w-full">
+    <div className={arrangement === 'side' ? 'relative flex h-full min-h-0 w-full flex-col' : 'relative w-full'}>
       {unavailable && <UiError size="xs" align="start" title="暂时无法生成" message={`${unavailable.message} 处理后可点击生成手动重试。`} />}
       {/* 输入区域：参考素材 · 提示词 · 底栏（模型与参数 ｜ 费用、预设、优化、生成） */}
       <InputArea
@@ -393,58 +453,12 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
         promptOptimizationPreview={promptOptimizationPreview}
         promptEditorRef={promptEditorRef}
         onGenerate={handleGenerate}
-        footerStart={<GeneratorConfigurationBar uiState={uiState} modelState={modelState} parameterPanelRef={parameterPanelRef} />}
-        footerEnd={(
-          <UiFieldLayoutContext.Provider value="toolbar">
-            <PriceEstimate
-              providerId={uiState.selectedProvider}
-              modelId={uiState.selectedModel}
-              params={priceEstimateParams}
-            />
-            <PresetPanel
-              getCurrentState={() => ({
-                input: uiState.input,
-                promptDocument: uiState.promptDocument,
-                promptMediaBindings: uiState.promptMediaBindings,
-                uploadedImages: uiState.uploadedImages,
-                uploadedFilePaths: uiState.uploadedFilePaths,
-                params: modelState.params,
-              })}
-              onLoadPreset={handleLoadPreset}
-            />
-            <PromptOptimizeButton
-              prompt={uiState.input}
-              uploadedImages={uiState.uploadedImages}
-              uploadedFilePaths={uiState.uploadedFilePaths}
-              uploadedVideos={uiState.uploadedVideos}
-              uploadedVideoFiles={uiState.uploadedVideoFiles}
-              uploadedVideoFilePaths={uiState.uploadedVideoFilePaths}
-              targetModel={{
-                providerId: uiState.selectedProvider,
-                providerName: currentProvider?.name,
-                modelId: uiState.selectedModel,
-                modelName: currentModel?.name,
-                modelType: currentModel?.type,
-                modelFunctions: currentModel?.functions,
-                modelPromptLanguage: currentModel?.promptLanguage,
-                modelDescription: currentModel?.description,
-              }}
-              disabled={inputBusy}
-              onOptimized={(value) => {
-                const document = parseLegacyPromptString(value, {
-                  references: uiState.promptReferences,
-                })
-                if (promptEditorRef.current) {
-                  promptEditorRef.current.replaceDocument(document, { addToHistory: true })
-                  return
-                }
-                uiState.setPromptDocument(document)
-              }}
-              onStreamPreviewChange={setPromptOptimizationPreview}
-              onAlert={uiState.showAlert}
-            />
-          </UiFieldLayoutContext.Provider>
-        )}
+        arrangement={arrangement}
+        sideHeader={<GeneratorModelPicker uiState={uiState} arrangement="side" />}
+        footerStart={<GeneratorConfigurationBar uiState={uiState} modelState={modelState} parameterPanelRef={parameterPanelRef} arrangement={arrangement} />}
+        footerEnd={<UiFieldLayoutContext.Provider value="toolbar">{priceEstimate}{promptTools}</UiFieldLayoutContext.Provider>}
+        price={priceEstimate}
+        promptTools={promptTools}
       />
 
       {videoTrimState && videoTrimMaxClipSeconds && (

@@ -24,7 +24,7 @@ import { TaskInputPreview } from "./TaskInputPreview"
 import { TaskPrompt } from "./TaskPrompt"
 import { TaskCardToolbar } from './TaskCardToolbar'
 import { useHistoryDrag } from "../hooks/useHistoryDrag"
-import { Copy, FolderCheck, FolderPlus, MessageCircleQuestion, Play } from 'lucide-react'
+import { Copy, FolderCheck, FolderPlus, Play } from 'lucide-react'
 import { useAddToAssetLibrary } from '@/features/assets/hooks/useAddToAssetLibrary'
 import { checkAssetPaths } from '@/commands/assetLibrary'
 import { openAssistantForDiagnosis } from '@/features/assistant/diagnostics/openAssistantDiagnosis'
@@ -211,17 +211,18 @@ const TaskCard = React.memo(function TaskCard({
     if (task.status === "error") {
       return (
         <UiError
-          size="xs"
-          align="start"
+          appearance="banner"
           title={t('history:failure.title')}
           message={taskErrorMessage(task.error, task.provider, t)}
-          // 只有拿得到供应商任务号时“继续获取结果”才有意义；没有任务号的失败（如提交即被拒）用工具条的“重新生成”
+          detail={task.error || undefined}
+          // 拿得到供应商任务号时重试是续上原任务取结果（超时的任务可能已在供应商侧完成，不重复付费）；
+          // 拿不到（如提交即被拒）才按原参数重新生成
+          onRetry={() => void (resolveResumableServerTaskId(task) ? onRetryPolling(task) : onRegenerate(task))}
           actions={
             <>
               <UiButton
                 variant="quiet"
                 size="sm"
-
                 onClick={() => openAssistantForDiagnosis({
                   title: t('history:failure.title'),
                   message: task.error || t('history:failure.title'),
@@ -231,13 +232,8 @@ const TaskCard = React.memo(function TaskCard({
                   occurredAt: task.createdAt.toISOString(),
                 })}
               >
-                <MessageCircleQuestion  />{t('history:askAssistant')}
+                {t('history:askAssistant')}
               </UiButton>
-              {resolveResumableServerTaskId(task) && (
-                <UiButton variant="quiet" size="sm" onClick={() => void onRetryPolling(task)}>
-                  {t('ui:retry')}
-                </UiButton>
-              )}
             </>
           }
         />

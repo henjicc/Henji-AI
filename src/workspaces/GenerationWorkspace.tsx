@@ -1,7 +1,7 @@
 import { GenerationAppMenus } from './GenerationWorkspace/components/GenerationAppMenus'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useGenerationLifecycleContext } from '@/features/generation/application/generationLifecycle'
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { toDisplaySrc } from '@/platform/desktopApi'
 import MediaGenerator from '@/components/MediaGenerator'
 import ContextMenu from '@/components/ContextMenu'
@@ -33,7 +33,16 @@ import { useGenerationHistoryFilterStore } from '@/stores/generationHistoryFilte
 import { useGenerationAutoScroll } from './GenerationWorkspace/hooks/useGenerationAutoScroll'
 import { useGenerationImageViewer } from './GenerationWorkspace/hooks/useGenerationImageViewer'
 import { GENERATION_COLUMN_MAX_WIDTH_CLASS, GENERATION_COLUMN_MAX_WIDTH_PX } from './GenerationWorkspace/generationColumn'
-import { Copy } from 'lucide-react'
+import { Clipboard, Copy, PanelBottom, PanelLeft } from 'lucide-react'
+import { UI_PANEL_WIDTH } from '@/core/theme/panelSizes'
+import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
+import { pasteClipboardImageToPrompt } from '@/contexts/promptClipboardPaste'
+import { createLogger } from '@/core/logging'
+import {
+  GENERATION_SIDE_PANEL_MIN_WORKSPACE_WIDTH,
+  setGenerationInputPanelPlacement,
+  useGenerationInputPanelPlacement,
+} from './GenerationWorkspace/inputPanelPlacement'
 import { ICON_DOWNLOAD } from '@/core/theme/icons'
 
 // 与历史列的外框同宽：输入卡片两侧比记录文字各宽出一档留白（设计稿 Generation）；列宽随窗口变宽，见 generationColumn
@@ -43,6 +52,21 @@ const FLOATING_INPUT_PANEL_GUTTER_PX = 24
 // 稳定引用：删除/清空任务时清掉对应的瞬态进度，避免 store 里残留已结束任务的条目
 const clearGenerationTaskProgress = (taskId: string): void =>
   useGenerationTaskProgressStore.getState().clearProgress(taskId)
+
+const logger = createLogger('workspaces.GenerationWorkspace')
+
+/** 左侧输入面板与窗口左缘、记录列之间的留白 */
+const SIDE_PANEL_GUTTER_PX = 16
+
+/** 右键“粘贴”：图片走提示词的图片导入（同 Ctrl+V），文字插到提示词光标处。 */
+async function pasteIntoPrompt(panel: HTMLElement | null): Promise<void> {
+  if (await pasteClipboardImageToPrompt()) return
+  const text = isDesktopRuntime() ? await getPlatform().clipboard.readText() : await navigator.clipboard.readText()
+  const editor = panel?.querySelector<HTMLElement>('[data-onboarding-target="prompt"] [contenteditable="true"]')
+  if (!text || !editor) return
+  editor.focus()
+  document.execCommand('insertText', false, text)
+}
 
 const GenerationWorkspace: React.FC = () => {
   const { t } = useI18n()
@@ -105,6 +129,20 @@ const GenerationWorkspace: React.FC = () => {
   useTestModeShortcuts({ togglePanel: () => setIsTestPanelOpen((v) => !v) })
   const { menuVisible, menuPosition, menuItems, showMenu, hideMenu } = useContextMenu()
   const { listContainerRef, contentRef } = useGenerationAutoScroll(isTasksLoaded, listedTasks.length)
+  const placement = useGenerationInputPanelPlacement()
+  const mainRef = useRef<HTMLElement | null>(null)
+  // 量外框宽度：停到左侧后 main 会加左内边距，量内容宽会让宽度在门槛两侧来回跳
+  const [mainWidth, setMainWidth] = useState(() => window.innerWidth)
+  useLayoutEffect(() => {
+    const element = mainRef.current
+    if (!element) return
+    setMainWidth(element.getBoundingClientRect().width)
+    const observer = new ResizeObserver(([entry]) => setMainWidth(entry.borderBoxSize[0]?.inlineSize ?? element.getBoundingClientRect().width))
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
+  // 窗口太窄时左侧放不下：临时排回底部，记住的位置不变，变宽后回到左侧
+  const sideDocked = placement === 'left' && mainWidth >= GENERATION_SIDE_PANEL_MIN_WORKSPACE_WIDTH
   const {
     inputContainerRef,
     inputPadding,
@@ -115,7 +153,7 @@ const GenerationWorkspace: React.FC = () => {
     handlePanelMouseEnter,
     handlePanelMouseLeave,
     handlePanelMouseMove,
-  } = useBottomPanel({ listContainerRef })
+  } = useBottomPanel({ listContainerRef, sideDocked })
   const onboarding = useOnboardingState()
   useEffect(() => {
     if (!onboarding.firstTaskPrepared || onboarding.firstTaskCompleted) return
@@ -235,14 +273,41 @@ const GenerationWorkspace: React.FC = () => {
     window.addEventListener('open-audio-viewer', handleOpenAudioViewer as EventListener)
     return () => window.removeEventListener('open-audio-viewer', handleOpenAudioViewer as EventListener)
   }, [])
+  const togglePlacement = useCallback((): void => {
+    setGenerationInputPanelPlacement(placement === 'left' ? 'bottom' : 'left')
+  }, [placement])
+  const handleInputPanelContextMenu = (event: React.MouseEvent): void => {
+    const panel = event.currentTarget as HTMLElement
+    // 面板里打开的浮层经 portal 渲染，右键事件仍会冒泡到这里；只接管面板本身上的右键
+    if (!(event.target instanceof Node) || !panel.contains(event.target)) return
+    showMenu(event, [
+      {
+        id: 'paste',
+        label: t('common:actions.paste'),
+        icon: <Clipboard className={UI_ICON_SIZE_CLASS.md} />,
+        onClick: () => { void pasteIntoPrompt(panel).catch((error: unknown) => logger.warn('输入面板粘贴失败', { event: 'generation.input_panel.paste_failed', error })) },
+      },
+      {
+        id: 'toggle-placement',
+        label: t(placement === 'left' ? 'ui:workspace.inputPanel.moveToBottom' : 'ui:workspace.inputPanel.moveToLeft'),
+        icon: placement === 'left' ? <PanelBottom className={UI_ICON_SIZE_CLASS.md} /> : <PanelLeft className={UI_ICON_SIZE_CLASS.md} />,
+        onClick: togglePlacement,
+      },
+    ])
+  }
   const handleDownloadFromViewer = async (filePath: string) => {
     await download(filePath, true)
   }
   return (
     <div className="relative flex h-full flex-1 flex-col overflow-hidden bg-window text-text1">
-      <GenerationAppMenus onSearch={toggleSearch} onClear={() => setIsClearDialogOpen(true)} hasTasks={listedTasks.length > 0} />
+      <GenerationAppMenus onSearch={toggleSearch} onClear={() => setIsClearDialogOpen(true)} hasTasks={listedTasks.length > 0}
+        inputPanelPlacement={placement} onToggleInputPanelPlacement={togglePlacement} />
       {notification && <UiToast message={notification.message} tone={notification.type} visible={notificationVisible} />}
-      <main className="relative z-raised flex min-h-0 flex-1 flex-col">
+      <main
+        ref={mainRef}
+        className="relative z-raised flex min-h-0 flex-1 flex-col"
+        style={sideDocked ? { paddingLeft: UI_PANEL_WIDTH.generationInput + SIDE_PANEL_GUTTER_PX } : undefined}
+      >
         {/* 命令带：类型分段 + 搜索 + 更多；搜索展开时筛选条作为从属带紧贴其下（不另画底色与边框） */}
         <div className={`mx-auto w-full ${GENERATION_COLUMN_MAX_WIDTH_CLASS} shrink-0 px-6 pt-3`}>
           <GenerationHistoryToolbar
@@ -330,8 +395,11 @@ const GenerationWorkspace: React.FC = () => {
           onMouseEnter={handlePanelMouseEnter}
           onMouseLeave={handlePanelMouseLeave}
           onMouseMove={handlePanelMouseMove}
+          placement={sideDocked ? 'side' : 'bottom'}
+          onContextMenu={handleInputPanelContextMenu}
         >
           <MediaGenerator
+            arrangement={sideDocked ? 'side' : 'bar'}
             compact={isCompactLayout}
             onGenerate={handleGenerate}
             isLoading={isGenerating}

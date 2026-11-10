@@ -508,7 +508,7 @@ export function StateSection(): JSX.Element {
 
 const LONG_ERROR_DETAIL = 'VideoEditRenderWorkerError: GPUDevice lost (reason: unknown)\n    at VideoEditRenderSession.renderBitmap (videoEditRenderSession.ts:412)\n    at async step (VideoEditPreview.tsx:917)'
 
-/** UiError 两种外观 × 有无正文、详情、两个动作、长文案。 */
+/** UiError 三种外观 × 有无正文、详情、两个动作、长文案。 */
 function ErrorAppearanceSamples(): JSX.Element {
   const twoActions = <><UiButton variant="secondary" size="sm" onClick={noop}>打开日志</UiButton><UiButton variant="secondary" size="sm" onClick={noop}>重新加载</UiButton></>
   return <>
@@ -520,6 +520,11 @@ function ErrorAppearanceSamples(): JSX.Element {
       <div className="w-full max-w-sm"><UiError appearance="overlay" title="节目画面无法显示" message="重新加载预览试试；仍不显示就重启软件。" detail={LONG_ERROR_DETAIL} onRetry={noop} retryLabel="重新加载" /></div>
       <div className="w-full max-w-sm"><UiError appearance="overlay" tone="warning" title="部分效果已跳过：发光、色差与胶片颗粒三个效果在这一帧执行失败" message="出错的效果先不显示，其余画面照常；修改参数或移除这些效果后会重新尝试，导出前请确认画面。" actions={twoActions} /></div>
       <div className="w-full max-w-sm"><UiError appearance="overlay" tone="notice" title="预览已简化" /></div>
+    </div>
+    <div data-gallery-error-banner className="flex flex-col items-start gap-2">
+      <UiError appearance="banner" title="没生成出来" message="请求太频繁，过一会儿再试" detail={LONG_ERROR_DETAIL} onRetry={noop}
+        actions={<UiButton variant="quiet" size="sm" onClick={noop}>问助手</UiButton>} />
+      <UiError appearance="banner" tone="warning" title="结果可能不完整" />
     </div>
   </>
 }

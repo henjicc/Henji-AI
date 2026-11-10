@@ -13,6 +13,11 @@ import {
   COLLAPSE_SETTING_SPECS,
 } from '@/hooks/useLocalStorageSetting'
 import { useSettingsStore } from '@/stores/settingsStore'
+import {
+  GENERATION_INPUT_PANEL_PLACEMENT_EVENT,
+  GENERATION_INPUT_PANEL_PLACEMENT_KEY,
+  parseGenerationInputPanelPlacement,
+} from '@/workspaces/GenerationWorkspace/inputPanelPlacement'
 import { videoEditShortcutOverridesSchema, type VideoEditShortcutOverrides } from '@/core/videoEdit/commands'
 import { videoEditMonitorButtonLayoutsSchema } from '@/core/videoEdit/monitorButtons'
 import { videoEditTrackHeaderButtonLayoutsSchema } from '@/core/videoEdit/trackHeaderButtons'
@@ -182,6 +187,13 @@ export const INTERFACE_APPLICATION_SETTING_DEFINITIONS: ApplicationSettingDefini
     target: settingsTarget('workspace-generation'), requiresReload: false, requiresRestart: false, sensitive: false,
   }, COLLAPSE_SETTING_SPECS.collapseOnScrollOnly.key,
   COLLAPSE_SETTING_SPECS.collapseOnScrollOnly.parse, COLLAPSE_SETTING_CHANGED_EVENT),
+  storageSetting({
+    id: 'interface.generation_input_panel_placement', title: '生成输入面板位置',
+    description: '生成页输入面板放在底部（一行参数条）还是左侧（竖排，参数全部摊开）。窗口太窄时左侧会临时排回底部。',
+    aliases: ['输入面板', '输入面板放到左侧', '输入面板放到底部', '左侧输入'], schema: z.enum(['bottom', 'left']), defaultValue: 'bottom',
+    target: settingsTarget('workspace-generation'), requiresReload: false, requiresRestart: false, sensitive: false,
+  }, GENERATION_INPUT_PANEL_PLACEMENT_KEY,
+  parseGenerationInputPanelPlacement, GENERATION_INPUT_PANEL_PLACEMENT_EVENT),
   storeSetting({
     id: 'canvas.detail_level', title: '画布细节等级', description: '控制缩小画布时的内容简化程度。',
     aliases: ['画布性能', '画布细节', 'LOD', '简化'], schema: z.enum(['off', 'detail', 'balanced', 'performance']), defaultValue: 'balanced',

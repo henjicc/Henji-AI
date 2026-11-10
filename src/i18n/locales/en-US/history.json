@@ -8,7 +8,7 @@
   "noMore": "No more records",
   "askAssistant": "Ask Assistant",
   "failure": {
-    "title": "Generation failed",
+    "title": "Didn't generate",
     "kieInternal": "KIE encountered an internal error. You can retry manually later.",
     "service": "The generation service is temporarily unavailable. Please retry later.",
     "credentials": "Authentication failed. Check the service API key in Settings.",

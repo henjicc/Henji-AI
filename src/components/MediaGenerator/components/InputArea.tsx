@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { showAlertDialog } from '@/stores/alertDialogStore'
-import { PromptEditor, MediaStripUploader, UiChipButton, UiIconButton, UiLoading } from '@/components/ui'
+import { PromptEditor, MediaStripUploader, UiButton, UiChipButton, UiGroup, UiIconButton, UiLoading } from '@/components/ui'
 import type {
   PromptEditorHandle,
   PromptReferenceItem,
@@ -76,6 +76,17 @@ interface InputAreaProps {
   footerStart?: React.ReactNode
   /** 底栏右侧（生成按钮之前）：预计费用、预设、优化。 */
   footerEnd?: React.ReactNode
+  /**
+   * `bar`：底部输入卡片（素材、提示词、一行参数条）；`side`：左侧竖排，从上到下是模型、参考素材、提示词、
+   * 全部参数，底部固定预估与生成。
+   */
+  arrangement?: 'bar' | 'side'
+  /** 左侧排布：面板顶端的模型选择 */
+  sideHeader?: React.ReactNode
+  /** 左侧排布：提示词标题行右侧的预设与优化 */
+  promptTools?: React.ReactNode
+  /** 左侧排布：底部生成按钮左边的预计费用 */
+  price?: React.ReactNode
 }
 
 /**
@@ -134,7 +145,12 @@ const InputArea: React.FC<InputAreaProps> = ({
   onGenerate,
   footerStart,
   footerEnd,
+  arrangement = 'bar',
+  sideHeader,
+  promptTools,
+  price,
 }) => {
+  const side = arrangement === 'side'
   const { t } = useTranslation('ui')
   // 弹窗渲染统一收在 App 根部的 GlobalAlertDialog，这里只负责发起
   const showAlert = (title: string, message: string, type: 'info' | 'warning' | 'error' = 'warning') => {
@@ -330,9 +346,11 @@ const InputArea: React.FC<InputAreaProps> = ({
   }
   // 紧凑模式由生成工作区的真实可用尺寸决定，CSS 像素已包含系统缩放与应用缩放。
   // 长提示词在编辑区内部滚动。
-  const promptHeightClass = compact
-    ? 'min-h-12 max-h-44'
-    : 'min-h-textarea-short max-h-[260px]'
+  const promptHeightClass = side
+    ? 'min-h-28 max-h-[260px]'
+    : compact
+      ? 'min-h-12 max-h-44'
+      : 'min-h-textarea-short max-h-[260px]'
   const uploaderRef = useRef<MediaStripUploaderHandle>(null)
   const localPromptEditorRef = useRef<PromptEditorHandle>(null)
   const editorRef = promptEditorRef ?? localPromptEditorRef
@@ -452,9 +470,9 @@ const InputArea: React.FC<InputAreaProps> = ({
     displayedPromptOptimizationReasoningGlyphs.length
   ])
 
-  return (
-    <div ref={composerRef} className="relative flex flex-col gap-1.5">
-        {/* 续接标记：这次生成会接着哪个结果做，点一下改回普通生成 */}
+  const generateBlocked = generateDisabled || isPromptOptimizing || renderPromptOptimizationPreview
+  const continuationChip = (
+    <>
         {continuationAction && onClearContinuation && (
           <div className="px-1 pt-0.5">
             <UiChipButton active size="sm" onClick={onClearContinuation} tooltip={t('workspace.continuation.chipClear')} data-generation-continuation-chip="">
@@ -463,10 +481,12 @@ const InputArea: React.FC<InputAreaProps> = ({
             </UiChipButton>
           </div>
         )}
-
-        {/* 参考素材条：始终挂载（系统拖入、替换与裁剪都走它），没有素材且不在拖拽中时不占位 */}
+    </>
+  )
+  const referenceStrip = (
+    <>
         {shouldShowUpload && (
-          <div className={showReferenceRow ? 'pointer-events-auto min-w-0' : 'hidden'}>
+          <div className={side || showReferenceRow ? 'pointer-events-auto min-w-0' : 'hidden'}>
             <MediaStripUploader
               ref={uploaderRef}
               onBeforeLayoutChange={captureComposerLayout}
@@ -499,8 +519,9 @@ const InputArea: React.FC<InputAreaProps> = ({
             {importingMedia && <UiLoading size="xs" message={t('inputArea.importingVideo')} />}
           </div>
         )}
-
-        {/* 文本输入框：外层输入卡片已经画了表面，编辑器本身无框 */}
+    </>
+  )
+  const promptField = (
         <div data-onboarding-target="prompt" data-flip-key="prompt" className="relative">
           <PromptEditor
             ref={editorRef}
@@ -508,7 +529,7 @@ const InputArea: React.FC<InputAreaProps> = ({
             onChange={onPromptDocumentChange}
             preset="media-references"
             layout="fill-scroll"
-            frame="none"
+            frame={side ? 'field' : 'none'}
             ariaLabel={t('inputArea.placeholder.default')}
             references={promptReferences}
             onPaste={mediaOperation(onPaste)}
@@ -555,6 +576,62 @@ const InputArea: React.FC<InputAreaProps> = ({
           </div>
           ) : null}
         </div>
+  )
+
+  if (side) {
+    const referenceCount = mixedFiles.length
+    return (
+      <div ref={composerRef} className="relative flex h-full min-h-0 flex-col">
+        {/* 参数多到放不下时只有这一段滚动，模型在顶上、生成在底下不动 */}
+        <div className="ui-scrollbar flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3.5 pb-4 pt-3.5">
+          {sideHeader}
+          {continuationChip}
+          {shouldShowUpload ? (
+            <UiGroup
+              title={t('inputArea.sideReferences')}
+              titleTone="compact"
+              gap="none"
+              actions={mixedMaxCount ? <span className="text-xs tabular-nums text-text3">{referenceCount} / {mixedMaxCount}</span> : undefined}
+            >
+              {referenceStrip}
+            </UiGroup>
+          ) : null}
+          <UiGroup title={t('inputArea.sidePrompt')} titleTone="compact" gap="none" actions={<div className="flex items-center gap-0.5">{promptTools}</div>}>
+            {promptField}
+          </UiGroup>
+          {footerStart}
+        </div>
+        <div data-flip-key="footer" className="flex shrink-0 items-center gap-3 border-t border-line px-3.5 py-3">
+          {price}
+          {/* 这块面板唯一的主动作 */}
+          <UiButton
+            variant="primary"
+            size="lg"
+            className="flex-1"
+            data-onboarding-target="generate"
+            onClick={onGenerate}
+            loading={isLoading}
+            disabled={generateBlocked}
+            tooltip={isGenerating ? t('inputArea.button.queue') : undefined}
+          >
+            {isGenerating ? t('inputArea.button.queue') : t('inputArea.sideGenerate')}
+            {isGenerating ? <Plus /> : <ArrowUp />}
+          </UiButton>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div ref={composerRef} className="relative flex flex-col gap-1.5">
+        {/* 续接标记：这次生成会接着哪个结果做，点一下改回普通生成 */}
+        {continuationChip}
+
+        {/* 参考素材条：始终挂载（系统拖入、替换与裁剪都走它），没有素材且不在拖拽中时不占位 */}
+        {referenceStrip}
+
+        {/* 文本输入框：外层输入卡片已经画了表面，编辑器本身无框 */}
+        {promptField}
 
         {/* 底栏：添加素材 · 模型 · 参数 ｜ 预计费用 · 预设 · 优化 · 生成（设计稿 Generation）。
             始终单行：参数放不下时由 footerStart 内的溢出收纳收进“更多参数”（任务 4.3），不换行 */}
@@ -582,7 +659,7 @@ const InputArea: React.FC<InputAreaProps> = ({
               type="button"
               data-onboarding-target="generate"
               onClick={onGenerate}
-              loading={isLoading} disabled={generateDisabled || isPromptOptimizing || renderPromptOptimizationPreview}
+              loading={isLoading} disabled={generateBlocked}
               tooltip={isGenerating ? t('inputArea.button.queue') : t('inputArea.button.generate')}
             >
               {isGenerating ? (

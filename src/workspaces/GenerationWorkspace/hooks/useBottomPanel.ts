@@ -5,6 +5,8 @@ import { useNavigationStore } from '@/stores/navigationStore'
 
 interface UseBottomPanelOptions {
   listContainerRef: RefObject<HTMLDivElement>
+  /** 输入面板在左侧时不压在列表上：列表底部只留常规留白，也不自动收起。 */
+  sideDocked?: boolean
 }
 
 interface UseBottomPanelResult {
@@ -20,7 +22,10 @@ interface UseBottomPanelResult {
   handlePanelMouseMove: () => void
 }
 
-export function useBottomPanel({ listContainerRef }: UseBottomPanelOptions): UseBottomPanelResult {
+/** 输入面板在左侧时列表底部的留白 */
+const SIDE_DOCKED_LIST_PADDING = 32
+
+export function useBottomPanel({ listContainerRef, sideDocked = false }: UseBottomPanelOptions): UseBottomPanelResult {
   const isActive = useNavigationStore(state => state.activeWorkspace === 'generation')
   const inputContainerRef = useRef<HTMLDivElement>(null)
   const [inputPadding, setInputPadding] = useState<number>(400)
@@ -107,7 +112,7 @@ export function useBottomPanel({ listContainerRef }: UseBottomPanelOptions): Use
       const availableWidth = listEl.clientWidth
       setIsCompactLayout(shouldUseCompactGenerationLayout(availableWidth, availableHeight))
       const actualHeight = (isPanelCollapsed && !isCollapsing) ? 60 : h
-      const newPadding = actualHeight + 48
+      const newPadding = sideDocked ? SIDE_DOCKED_LIST_PADDING : actualHeight + 48
       setInputPadding(newPadding)
 
       const oldPadding = parseInt(listEl.style.paddingBottom || '0', 10) || 0
@@ -131,7 +136,7 @@ export function useBottomPanel({ listContainerRef }: UseBottomPanelOptions): Use
     ro.observe(inputEl)
     ro.observe(listEl)
     return () => ro.disconnect()
-  }, [isPanelCollapsed, isCollapsing, listContainerRef])
+  }, [isPanelCollapsed, isCollapsing, listContainerRef, sideDocked])
 
   const collapsePanelSmooth = useCallback((): void => {
     if (isPanelCollapsed || isCollapsing) return
@@ -168,7 +173,7 @@ export function useBottomPanel({ listContainerRef }: UseBottomPanelOptions): Use
 
   const handlePanelMouseLeave = useCallback((): void => {
     isPanelHoveredRef.current = false
-    if (!enableAutoCollapse) return
+    if (!enableAutoCollapse || sideDocked) return
     if (collapseOnScrollOnly) return
 
     const el = listContainerRef.current
@@ -195,7 +200,7 @@ export function useBottomPanel({ listContainerRef }: UseBottomPanelOptions): Use
         }
       }, collapseDelay)
     }
-  }, [collapseDelay, collapseOnScrollOnly, collapsePanelSmooth, enableAutoCollapse, listContainerRef])
+  }, [collapseDelay, collapseOnScrollOnly, collapsePanelSmooth, enableAutoCollapse, listContainerRef, sideDocked])
 
   const handlePanelMouseMove = useCallback((): void => {
     if (!isPanelHoveredRef.current) {
@@ -204,7 +209,7 @@ export function useBottomPanel({ listContainerRef }: UseBottomPanelOptions): Use
   }, [])
 
   useEffect(() => {
-    if (!enableAutoCollapse) {
+    if (!enableAutoCollapse || sideDocked) {
       expandPanelSmooth()
       return
     }
@@ -260,7 +265,7 @@ export function useBottomPanel({ listContainerRef }: UseBottomPanelOptions): Use
         clearTimeout(collapseAnimationRef.current)
       }
     }
-  }, [enableAutoCollapse, expandPanelSmooth, collapsePanelSmooth, listContainerRef])
+  }, [enableAutoCollapse, sideDocked, expandPanelSmooth, collapsePanelSmooth, listContainerRef])
 
   return {
     inputContainerRef,

@@ -49,20 +49,20 @@ export function TaskCardToolbar({
           {t(`ui:workspace.continuation.action.${continuation.id}`)}
         </UiButton>
       ))}
-      <UiIconButton
+      <UiIconButton tone="rest"
         onClick={() => void onRegenerate()}
         tooltip={t('ui:workspace.actions.regenerate')}
       >
         <ICON_REGENERATE />
       </UiIconButton>
-      <UiIconButton
+      <UiIconButton tone="rest"
         onClick={onReedit}
         tooltip={t('ui:workspace.actions.reedit')}
       >
         <ICON_REEDIT />
       </UiIconButton>
       {task.result && task.result.filePaths.length > 0 && (
-        <UiIconButton
+        <UiIconButton tone="rest"
           onClick={() => void onDownloadAll()}
           tooltip={t('common:actions.download')}
         >
@@ -70,7 +70,7 @@ export function TaskCardToolbar({
         </UiIconButton>
       )}
       {task.result && task.result.filePaths.length > 0 && (
-        <UiIconButton
+        <UiIconButton tone="rest"
           onClick={() => void onCollectAll()}
           disabled={collecting}
           on={allResultsCollected}
@@ -81,7 +81,7 @@ export function TaskCardToolbar({
             : <FolderPlus  />}
         </UiIconButton>
       )}
-      <UiIconButton
+      <UiIconButton tone="rest"
         onClick={onUsePrompt}
         tooltip={t('ui:workspace.actions.usePrompt')}
       >

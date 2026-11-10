@@ -8,7 +8,7 @@
   "noMore": "没有更多了",
   "askAssistant": "问助手",
   "failure": {
-    "title": "生成任务失败",
+    "title": "没生成出来",
     "kieInternal": "KIE 服务内部错误，可稍后手动重试。",
     "service": "生成服务暂时无法响应，请稍后重试。",
     "credentials": "生成服务认证失败，请在设置中检查 API 密钥。",

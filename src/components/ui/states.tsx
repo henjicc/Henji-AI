@@ -91,9 +91,11 @@ interface UiLoadingProps {
 /**
  * 报错外观：
  * - `block`（默认）：面板或内容区里的状态块，图标、标题、正文、动作依次排列（`align` 决定居中或靠左）；
- * - `overlay`：压在画面或画布上的浮起小条，实底加浮起描边，左图标、中间标题与正文、右侧动作。
+ * - `overlay`：压在画面或画布上的浮起小条，实底加浮起描边，左图标、中间标题与正文、右侧动作；
+ * - `banner`：列表记录里代替结果的一条淡色底提示，图标、标题、正文、动作排成一行，宽度跟内容走；
+ *   详情按钮排在重试之后，展开的原始信息落在条内下方。
  */
-type UiErrorAppearance = 'block' | 'overlay';
+type UiErrorAppearance = 'block' | 'overlay' | 'banner';
 
 /** 语气只进图标颜色：失败、可能不完整、普通提示。标题与正文始终是主要/次要文字色。 */
 type UiErrorTone = 'error' | 'warning' | 'notice';
@@ -125,10 +127,9 @@ const ERROR_TONE_ICON: Record<UiErrorTone, { Icon: LucideIcon; color: string }> 
 
 const ERROR_ICON_SIZE: Record<StateSize, string> = { xs: UI_ICON_SIZE_CLASS.md, sm: UI_ICON_SIZE_CLASS.lg, md: UI_ICON_SIZE_CLASS.xl };
 
-/** 报错详情：折叠的原始信息 + 复制。 */
-function UiErrorDetail({ detail, align }: { detail: string; align: 'center' | 'start' }): JSX.Element {
+/** 报错详情的展开内容：原始信息 + 复制。 */
+function UiErrorDetailBody({ detail, open }: { detail: string; open: boolean }): JSX.Element {
   const { t } = useTranslation('ui');
-  const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const copy = (): void => {
     void writeClipboardText(detail).then(() => setCopied(true), (error: unknown) => {
@@ -136,18 +137,60 @@ function UiErrorDetail({ detail, align }: { detail: string; align: 'center' | 's
     });
   };
   return (
+    <UiDisclosurePanel open={open} className="pt-1.5">
+      <div className="flex w-full items-start gap-1 rounded-field bg-gap py-1.5 pl-3 pr-1 text-left">
+        <pre className={`max-h-32 min-w-0 flex-1 overflow-auto whitespace-pre-wrap break-words py-0.5 text-2xs leading-4 text-text2 ${UI_TEXT_TIMECODE_CLASS}`}>{detail}</pre>
+        <UiIconButton size="xs" tooltip={copied ? t('errorState.detailsCopied', '已复制') : t('errorState.copyDetails', '复制详情')} onClick={copy}>
+          {copied ? <Check /> : <Copy />}
+        </UiIconButton>
+      </div>
+    </UiDisclosurePanel>
+  );
+}
+
+function UiErrorDetailToggle({ open, onToggle, label }: { open: boolean; onToggle: () => void; label: 'short' | 'long' }): JSX.Element {
+  const { t } = useTranslation('ui');
+  return (
+    <UiButton variant="quiet" size="sm" aria-expanded={open} onClick={onToggle}>
+      {open ? t('errorState.hideDetails', '收起详情') : label === 'short' ? t('errorState.detailsShort', '详情') : t('errorState.details', '查看详情')}
+    </UiButton>
+  );
+}
+
+/** 报错详情：折叠的原始信息 + 复制。 */
+function UiErrorDetail({ detail, align }: { detail: string; align: 'center' | 'start' }): JSX.Element {
+  const [open, setOpen] = useState(false);
+  return (
     <div className={`flex w-full flex-col ${align === 'center' ? 'items-center' : 'items-start'}`}>
-      <UiButton variant="quiet" size="sm" aria-expanded={open} onClick={() => setOpen(value => !value)}>
-        {open ? t('errorState.hideDetails', '收起详情') : t('errorState.details', '查看详情')}
-      </UiButton>
-      <UiDisclosurePanel open={open} className="pt-1.5">
-        <div className="flex w-full items-start gap-1 rounded-field bg-gap py-1.5 pl-3 pr-1 text-left">
-          <pre className={`max-h-32 min-w-0 flex-1 overflow-auto whitespace-pre-wrap break-words py-0.5 text-2xs leading-4 text-text2 ${UI_TEXT_TIMECODE_CLASS}`}>{detail}</pre>
-          <UiIconButton size="xs" tooltip={copied ? t('errorState.detailsCopied', '已复制') : t('errorState.copyDetails', '复制详情')} onClick={copy}>
-            {copied ? <Check /> : <Copy />}
-          </UiIconButton>
+      <UiErrorDetailToggle open={open} onToggle={() => setOpen(value => !value)} label="long" />
+      <UiErrorDetailBody detail={detail} open={open} />
+    </div>
+  );
+}
+
+/**
+ * 列表记录里的报错横条：淡色底只表达“这条出了问题”，危险色仍只给图标。
+ * 一行放不下时动作整组换到下一行，不把标题和正文挤成窄条。
+ */
+function UiErrorBanner({ role, Icon, color, title, message, detail, leadingActions, actions, className }: {
+  role: 'alert' | 'status'; Icon: LucideIcon; color: string; title: ReactNode; message?: ReactNode; detail?: string;
+  leadingActions: ReactNode; actions: ReactNode; className: string;
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const tint = color === 'text-danger-text' ? 'bg-danger-tint' : 'bg-raised';
+  return (
+    <div role={role} data-ui-error="banner" className={`flex w-fit max-w-full flex-col py-1.5 pl-3 pr-1.5 ${tint} ${UI_RADIUS_CLASS.field} ${className}`}>
+      <div className="flex min-h-8 flex-wrap items-center gap-x-2.5 gap-y-1">
+        <Icon aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.md} shrink-0 ${color}`} />
+        <span className="text-13 font-medium text-text1">{title}</span>
+        {message ? <span className={`min-w-0 ${UI_TEXT_SECONDARY_CLASS}`}>{message}</span> : null}
+        <div className="ml-auto flex shrink-0 items-center gap-1 pl-1.5">
+          {leadingActions}
+          {detail ? <UiErrorDetailToggle open={open} onToggle={() => setOpen(value => !value)} label="short" /> : null}
+          {actions}
         </div>
-      </UiDisclosurePanel>
+      </div>
+      {detail ? <div className="pr-1.5"><UiErrorDetailBody detail={detail} open={open} /></div> : null}
     </div>
   );
 }
@@ -237,11 +280,16 @@ export function UiError({
   const role = tone === 'error' ? 'alert' : 'status';
   const overlay = appearance === 'overlay';
   const retry = onRetry ? (
-    <UiButton variant="secondary" size={overlay || size === 'xs' ? 'sm' : 'md'} onClick={onRetry}>
+    <UiButton variant="secondary" size={overlay || appearance === 'banner' || size === 'xs' ? 'sm' : 'md'} onClick={onRetry}>
       {retryLabel ?? t('errorState.retry', '重试')}
     </UiButton>
   ) : null;
   const hasActions = Boolean(actions || retry);
+
+  if (appearance === 'banner') {
+    return <UiErrorBanner role={role} Icon={Icon} color={color} title={resolvedTitle} message={message} detail={detail}
+      leadingActions={retry} actions={actions} className={className} />;
+  }
 
   if (overlay) {
     return (

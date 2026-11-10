@@ -5,7 +5,7 @@ import ContextMenu from '@/components/ContextMenu'
 import { useI18n } from '@/hooks/useI18n'
 import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
 import { Clipboard } from 'lucide-react'
-import { readClipboardFiles, readClipboardImage } from '@/commands/clipboard'
+import { pasteClipboardImageToPrompt } from './promptClipboardPaste'
 
 const logger = createLogger('contexts.GlobalContextMenuProvider')
 
@@ -13,9 +13,6 @@ interface MenuPosition {
   x: number
   y: number
 }
-
-// 自定义事件名称，用于通知图片粘贴
-const PASTE_IMAGE_EVENT = 'globalPasteImage'
 
 /**
  * 全局右键菜单 Provider
@@ -83,40 +80,7 @@ const GlobalContextMenuProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       targetElement.focus()
 
       try {
-        // 文件只传路径给统一导入入口；仅无文件路径的截图读取位图。
-        if (isDesktopRuntime()) {
-          const files = await readClipboardFiles()
-          const images = files.filter(file => file.mimeType.startsWith('image/'))
-          if (images.length) {
-            window.dispatchEvent(new CustomEvent(PASTE_IMAGE_EVENT, {
-              detail: { clipboardPaths: images },
-            }))
-            return
-          }
-          const image = files.length === 0 ? await readClipboardImage() : null
-          if (image) {
-            window.dispatchEvent(new CustomEvent(PASTE_IMAGE_EVENT, {
-              detail: { clipboardFiles: [{ data: image.dataUrl, name: image.name }] },
-            }))
-            return
-          }
-        }
-
-        // 浏览器宿主使用浏览器剪贴板；桌面已经检查过图片，直接回退文本。
-        const clipboardItems = isDesktopRuntime() ? [] : await navigator.clipboard.read()
-        for (const item of clipboardItems) {
-          const imageType = item.types.find(type => type.startsWith('image/'))
-          if (imageType) {
-            const blob = await item.getType(imageType)
-            if (blob && blob.size > 0) {
-              const customEvent = new CustomEvent(PASTE_IMAGE_EVENT, {
-                detail: { imageBlob: blob, imageType }
-              })
-              window.dispatchEvent(customEvent)
-              return
-            }
-          }
-        }
+        if (await pasteClipboardImageToPrompt()) return
 
         // 没有图片，尝试粘贴文本
         const text = await navigator.clipboard.readText()
