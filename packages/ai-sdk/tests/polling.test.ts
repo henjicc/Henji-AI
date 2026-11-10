@@ -1,11 +1,17 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AiRuntimeError } from '../src/runtime/errors'
 import { POLL_QUERY_FAILED, pollUntilResult, waitIntervalMs } from '../src/protocols/polling'
 
 const fastPoll = { requestId: 'test-request', polling: { interval: 1 } }
 
-describe('pollUntilResult', () => {
+/** 轮询每轮都要等一个间隔；用假定时器推进时间，避免几百轮真实等待受系统定时器精度拖慢到超时。 */
+async function drive<T>(assertion: Promise<T>): Promise<T> {
+  await vi.runAllTimersAsync()
+  return assertion
+}
+
+describe('waitIntervalMs', () => {
   it('每轮等待完成后移除 AbortSignal 监听器，长轮询不会累积监听器', async () => {
     const controller = new AbortController()
     const add = vi.spyOn(controller.signal, 'addEventListener')
@@ -32,6 +38,16 @@ describe('pollUntilResult', () => {
     expect(remove).toHaveBeenCalledTimes(1)
     vi.useRealTimers()
   })
+})
+
+describe('pollUntilResult', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
 
   it('任务长时间处理中也不放弃，直到拿到结果', async () => {
     let calls = 0
@@ -41,7 +57,7 @@ describe('pollUntilResult', () => {
       return calls < 500 ? undefined : 'done'
     })
 
-    await expect(pollUntilResult(fastPoll, step)).resolves.toBe('done')
+    await drive(expect(pollUntilResult(fastPoll, step)).resolves.toBe('done'))
     expect(calls).toBe(500)
   })
 
@@ -50,14 +66,14 @@ describe('pollUntilResult', () => {
       throw new AiRuntimeError('provider_task_failed', '内容审核未通过')
     })
 
-    await expect(pollUntilResult(fastPoll, step)).rejects.toThrow('内容审核未通过')
+    await drive(expect(pollUntilResult(fastPoll, step)).rejects.toThrow('内容审核未通过'))
     expect(step).toHaveBeenCalledTimes(1)
   })
 
   it('查询连续失败到上限后放弃，避免失效任务永久轮询', async () => {
     const step = vi.fn(async () => POLL_QUERY_FAILED)
 
-    await expect(pollUntilResult(fastPoll, step)).rejects.toThrow('provider_task_unreachable')
+    await drive(expect(pollUntilResult(fastPoll, step)).rejects.toThrow('provider_task_unreachable'))
     expect(step.mock.calls.length).toBeLessThan(50)
   })
 
@@ -71,7 +87,7 @@ describe('pollUntilResult', () => {
       return 'recovered'
     })
 
-    await expect(pollUntilResult(fastPoll, step)).resolves.toBe('recovered')
+    await drive(expect(pollUntilResult(fastPoll, step)).resolves.toBe('recovered'))
   })
 
   it('中途成功一次会重置连续失败计数', async () => {
@@ -85,6 +101,6 @@ describe('pollUntilResult', () => {
       return 'done'
     })
 
-    await expect(pollUntilResult(fastPoll, step)).resolves.toBe('done')
+    await drive(expect(pollUntilResult(fastPoll, step)).resolves.toBe('done'))
   })
 })
