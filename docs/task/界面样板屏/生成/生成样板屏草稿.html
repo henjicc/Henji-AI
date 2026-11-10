@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>生成样板屏草稿</title>
+<style>
+@font-face { font-family: 'HarmonyOS Sans SC UI'; src: url('../../../../src/assets/fonts/HarmonyOS_Sans_SC.ttf') format('truetype'); font-weight: 100 900; font-display: block; }
+:root {
+  /* 数值取自 src/index.css 的石墨主题令牌；--icon-rest 是剪辑样板屏新增的静息图标灰 */
+  --gap:#181818; --window:#1B1B1B; --panel:#212121; --raised:#272727; --overlay:#292929;
+  --line-overlay:#393939; --control:#2B2B2B; --hover:#2A2A2A; --selected:#333333;
+  --line:#282828; --line-strong:#313131; --media:#191919;
+  --text1:#EEEEEE; --text2:#CACACA; --text3:#A5A5A5; --text-disabled:#4E4E4E; --icon-rest:#737373;
+  --accent:#3A6FDF; --accent-text:#9CBEFF; --accent-ring:#6A9BFE; --on-accent:#FFFFFF;
+  --danger-solid:#D73E3F; --danger-text:#FB817A; --warning-text:#F5AE39;
+  --w-normal:400; --w-medium:460; --w-semibold:580;
+}
+* { box-sizing: border-box; }
+html, body { margin:0; background:#101010; color:var(--text1); font-family:'HarmonyOS Sans SC UI','Microsoft YaHei UI',sans-serif; font-size:13px; line-height:20px; font-weight:var(--w-normal); -webkit-font-smoothing:antialiased; font-synthesis:style; }
+.num { font-variant-numeric: tabular-nums; }
+svg.i { width:var(--s,16px); height:var(--s,16px); flex:none; stroke:currentColor; fill:none; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round; display:block; }
+
+/* 页面外框（不属于软件界面） */
+.page { padding:40px 40px 80px; }
+.page h1 { font-size:20px; line-height:28px; font-weight:560; margin:0 0 6px; }
+.page .lead { color:var(--text3); margin:0 0 36px; max-width:900px; }
+.block { margin-bottom:72px; }
+.block h2 { font-size:16px; line-height:24px; font-weight:var(--w-semibold); margin:0 0 4px; }
+.block .note { color:var(--text3); font-size:12px; line-height:18px; margin:0 0 16px; max-width:1100px; white-space:pre-line; }
+.pair { display:flex; gap:40px; align-items:flex-start; }
+.side { flex:none; }
+.side .tag { font-size:12px; color:var(--text3); margin-bottom:8px; }
+.side .tag b { color:var(--text1); font-weight:var(--w-medium); }
+.shot { width:1440px; height:900px; display:block; }
+.shot.before { object-fit:cover; object-position:0 0; }
+body.single { background:var(--gap); }
+body.single .page { padding:0; }
+body.single .page > h1, body.single .lead, body.single .block { display:none; }
+body.single .block.show { display:block; margin:0; }
+body.single .block.show h2, body.single .block.show .note, body.single .tag { display:none; }
+body.single.draft .side.before-side { display:none; }
+body.single .pair { gap:24px; zoom:1 !important; }
+body.single.pairmode { background:#101010; }
+body.single.pairmode .page { padding:24px; }
+body.single.pairmode .tag { display:block; font-size:20px; line-height:28px; margin-bottom:12px; }
+
+/* 软件界面 */
+.app { width:1440px; height:900px; position:relative; overflow:hidden; background:var(--window); display:flex; flex-direction:column; font-size:13px; color:var(--text1); white-space:nowrap; }
+.ib { width:28px; height:28px; flex:none; display:inline-flex; align-items:center; justify-content:center; border-radius:6px; color:var(--text2); }
+.ib.s24 { width:24px; height:24px; --s:14px; }
+.ib.rest { color:var(--icon-rest); }
+.ib.on { color:var(--accent-text); }
+.btn { height:28px; padding:0 10px; display:inline-flex; align-items:center; gap:6px; border-radius:6px; font-size:12px; font-weight:var(--w-medium); color:var(--text2); --s:14px; flex:none; }
+.btn.secondary { background:var(--control); color:var(--text1); }
+.btn.sm { height:24px; padding:0 8px; }
+.titlebar { height:40px; flex:none; background:var(--window); display:flex; align-items:center; padding:0 0 0 14px; position:relative; }
+.titlebar .brand { font-size:13px; font-weight:var(--w-semibold); margin-right:14px; }
+.titlebar .menu { display:flex; gap:2px; }
+.titlebar .menu span { font-size:12px; color:var(--text3); padding:0 7px; height:24px; display:flex; align-items:center; }
+.titlebar .nav { position:absolute; left:50%; transform:translateX(-50%); display:flex; gap:2px; }
+.titlebar .nav span { height:28px; padding:0 12px; display:flex; align-items:center; border-radius:6px; font-size:13px; color:var(--text2); font-weight:var(--w-medium); }
+.titlebar .nav span.cur { background:var(--selected); color:var(--text1); }
+.titlebar .right { margin-left:auto; display:flex; align-items:center; height:100%; }
+.titlebar .wc { width:44px; height:100%; display:flex; align-items:center; justify-content:center; color:var(--text3); --s:14px; }
+.titlebar .wc svg { stroke-width:1.5; }
+
+/* 生成工作区：一条 960 的内容列，筛选行、记录流、输入区同一左右缘 */
+.gen { flex:1; min-height:0; display:flex; flex-direction:column; align-items:center; position:relative; }
+.col { width:960px; }
+.filters { height:44px; flex:none; display:flex; align-items:center; gap:2px; border-bottom:1px solid var(--line); }
+.filters .f { height:28px; padding:0 10px; display:flex; align-items:center; border-radius:6px; font-size:12px; color:var(--text3); font-weight:var(--w-medium); }
+.filters .f.cur { background:var(--selected); color:var(--text1); }
+.filters .r { margin-left:auto; display:flex; gap:2px; align-items:center; }
+.feed { flex:1; min-height:0; overflow:hidden; }
+.dock-space { flex:none; }
+.rec { padding:14px 0 16px; border-bottom:1px solid var(--line); }
+.rec:last-child { border-bottom:0; }
+.rhead { height:24px; display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+.rhead .p { font-size:13px; color:var(--text1); overflow:hidden; text-overflow:ellipsis; min-width:0; max-width:560px; }
+.rhead .m { font-size:11px; color:var(--text3); flex:none; }
+.rhead .acts { margin-left:auto; display:flex; gap:2px; }
+.results { display:flex; gap:6px; }
+.res { height:132px; border-radius:6px; background:var(--media) center/cover; position:relative; overflow:hidden; flex:none; }
+.res .chip { position:absolute; right:6px; bottom:6px; height:18px; padding:0 6px; border-radius:4px; background:rgba(0,0,0,.6); color:#fff; font-size:10px; line-height:18px; }
+.res .play { position:absolute; left:50%; top:50%; width:36px; height:36px; margin:-18px; border-radius:50%; background:rgba(0,0,0,.55); color:#fff; display:flex; align-items:center; justify-content:center; --s:16px; }
+.res.sel { box-shadow:0 0 0 1px var(--text1); }
+.res .hover-acts { position:absolute; right:6px; top:6px; display:flex; gap:2px; padding:2px; border-radius:6px; background:rgba(0,0,0,.6); color:#fff; }
+.res .hover-acts .ib { color:#fff; width:24px; height:24px; --s:14px; }
+.res.pending { background:var(--raised); display:flex; align-items:center; justify-content:center; flex-direction:column; gap:8px; color:var(--text3); font-size:11px; }
+.res.pending .bar { width:96px; height:2px; border-radius:1px; background:var(--line-strong); position:relative; overflow:hidden; }
+.res.pending .bar i { position:absolute; left:0; top:0; bottom:0; background:var(--text2); }
+.audio { height:40px; width:520px; border-radius:6px; background:var(--raised); display:flex; align-items:center; gap:10px; padding:0 12px 0 6px; color:var(--text2); font-size:11px; }
+.audio svg.w { flex:1; height:22px; color:var(--icon-rest); }
+.fail { display:flex; align-items:center; gap:10px; height:40px; padding:0 8px 0 12px; border-radius:6px; background:rgba(215,62,63,.12); width:max-content; max-width:100%; }
+.fail .fi { color:var(--danger-text); --s:16px; }
+.fail .ft { font-size:13px; color:var(--text1); font-weight:var(--w-medium); }
+.fail .fm { font-size:12px; color:var(--text2); }
+.fail .fa { display:flex; gap:4px; margin-left:12px; }
+
+/* 输入区 */
+.composer { position:absolute; left:50%; transform:translateX(-50%); bottom:16px; width:960px; background:var(--panel); border:1px solid var(--line-strong); border-radius:12px; padding:12px 12px 8px; }
+.refs { display:flex; gap:6px; margin-bottom:10px; }
+.ref { width:48px; height:48px; border-radius:6px; background:var(--raised) center/cover; position:relative; display:flex; align-items:center; justify-content:center; color:var(--icon-rest); }
+.ref b { position:absolute; left:3px; top:3px; min-width:14px; height:14px; border-radius:4px; background:rgba(0,0,0,.65); color:#fff; font-size:10px; line-height:14px; text-align:center; font-weight:var(--w-normal); }
+.prompt { font-size:14px; line-height:22px; color:var(--text1); min-height:44px; white-space:normal; padding:0 4px; }
+.prompt.ph { color:var(--icon-rest); }
+.pbar { display:flex; align-items:center; gap:2px; height:32px; margin-top:6px; }
+.pbar .model { height:28px; padding:0 8px; display:flex; align-items:center; gap:6px; border-radius:6px; font-size:13px; font-weight:var(--w-medium); --s:12px; }
+.pbar .model small { font-size:11px; color:var(--text3); font-weight:var(--w-normal); }
+.pbar .model svg { color:var(--icon-rest); }
+.pbar .model.open { background:var(--selected); }
+.pbar .param { height:28px; padding:0 8px; display:flex; align-items:center; gap:6px; border-radius:6px; font-size:12px; color:var(--text2); --s:12px; }
+.pbar .param label { color:var(--text3); }
+.pbar .param svg { color:var(--icon-rest); }
+.pbar .sp { width:1px; height:14px; background:var(--line-strong); margin:0 6px; }
+.pbar .right { margin-left:auto; display:flex; align-items:center; gap:2px; }
+.pbar .price { font-size:12px; color:var(--text3); margin-right:8px; }
+.send { width:32px; height:32px; border-radius:50%; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; margin-left:6px; --s:16px; }
+
+/* 模型面板（浮层：实底加一圈描边，不用投影） */
+.ovl { position:absolute; background:var(--overlay); border:1px solid var(--line-overlay); z-index:20; }
+.mp { border-radius:12px; width:720px; height:404px; display:flex; flex-direction:column; overflow:hidden; }
+.mp .top { height:44px; flex:none; display:flex; align-items:center; gap:8px; padding:0 8px; border-bottom:1px solid var(--line-overlay); }
+.mp .search { flex:1; height:28px; border-radius:8px; background:#303030; display:flex; align-items:center; gap:6px; padding:0 8px; color:var(--text3); font-size:12px; --s:14px; }
+.mp .seg { display:flex; gap:2px; font-size:12px; color:var(--text3); }
+.mp .seg span { height:24px; padding:0 8px; display:flex; align-items:center; border-radius:6px; }
+.mp .seg span.cur { background:#3a3a3a; color:var(--text1); font-weight:var(--w-medium); }
+.mp .body { flex:1; min-height:0; display:flex; }
+.mp .nav { width:148px; flex:none; border-right:1px solid var(--line-overlay); padding:6px 4px; }
+.mp .nav .n { height:28px; display:flex; align-items:center; padding:0 8px; border-radius:6px; font-size:12px; color:var(--text2); gap:6px; --s:14px; }
+.mp .nav .n.cur { background:#3a3a3a; color:var(--text1); }
+.mp .nav .n i { margin-left:auto; font-style:normal; font-size:11px; color:var(--icon-rest); }
+.mp .nav .h { height:24px; display:flex; align-items:center; padding:0 8px; font-size:11px; color:var(--icon-rest); margin-top:6px; }
+.mp .list { flex:1; min-width:0; padding:6px 6px 0; overflow:hidden; }
+.mp .list .h { height:24px; display:flex; align-items:center; padding:0 8px; font-size:11px; color:var(--text3); }
+.mp .grid { display:grid; grid-template-columns:1fr 1fr 1fr; column-gap:4px; }
+.mp .mi { height:28px; display:flex; align-items:center; padding:0 8px; border-radius:6px; font-size:12px; color:var(--text1); gap:6px; min-width:0; --s:12px; }
+.mp .mi span { overflow:hidden; text-overflow:ellipsis; min-width:0; }
+.mp .mi small { margin-left:auto; font-size:11px; color:var(--icon-rest); flex:none; }
+.mp .mi.cur { background:#3a3a3a; }
+.mp .mi.cur svg { color:var(--accent-text); flex:none; }
+.mp .mi.hov { background:#323232; }
+
+/* 空状态 */
+.empty { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; color:var(--text3); font-size:13px; padding-bottom:170px; }
+.empty .ei { color:var(--icon-rest); --s:28px; margin-bottom:6px; }
+.empty .ei svg { stroke-width:1.5; }
+
+/* 细节放大图 */
+.sheet { width:1440px; background:var(--window); padding:28px 32px; display:grid; grid-template-columns:1fr 1fr; gap:28px 40px; align-content:start; white-space:nowrap; }
+.ex h3 { margin:0 0 2px; font-size:13px; line-height:20px; font-weight:var(--w-medium); color:var(--text1); }
+.ex p { margin:0 0 10px; font-size:12px; line-height:18px; color:var(--text3); white-space:normal; }
+.ex .z { zoom:1.5; }
+.crop { width:660px; background-repeat:no-repeat; border-radius:4px; }
+</style>
+</head>
+<body>
+<div class="page" id="page">
+  <h1>生成工作区 · 样板屏设计草稿</h1>
+  <p class="lead">照剪辑样板屏定下的规律画：内容最亮，名字退后，蓝色只给“生成”这一个主动作。左边是现在的真实截图，右边是草稿，静态画面不能点。</p>
+</div>
+
+<script>
+const ICONS = /*ICONS_START*/{"sparkles":"<path d=\"M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z\"/><path d=\"M20 2v4\"/><path d=\"M22 4h-4\"/><circle cx=\"4\" cy=\"20\" r=\"2\"/>","settings":"<path d=\"M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/>","minus":"<path d=\"M5 12h14\"/>","square":"<rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"/>","x":"<path d=\"M18 6 6 18\"/><path d=\"m6 6 12 12\"/>","search":"<path d=\"m21 21-4.34-4.34\"/><circle cx=\"11\" cy=\"11\" r=\"8\"/>","ellipsis":"<circle cx=\"12\" cy=\"12\" r=\"1\"/><circle cx=\"19\" cy=\"12\" r=\"1\"/><circle cx=\"5\" cy=\"12\" r=\"1\"/>","refresh-cw":"<path d=\"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8\"/><path d=\"M21 3v5h-5\"/><path d=\"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16\"/><path d=\"M8 16H3v5\"/>","square-pen":"<path d=\"M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7\"/><path d=\"M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z\"/>","download":"<path d=\"M12 15V3\"/><path d=\"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\"/><path d=\"m7 10 5 5 5-5\"/>","folder-plus":"<path d=\"M12 10v6\"/><path d=\"M9 13h6\"/><path d=\"M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z\"/>","trash-2":"<path d=\"M10 11v6\"/><path d=\"M14 11v6\"/><path d=\"M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6\"/><path d=\"M3 6h18\"/><path d=\"M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2\"/>","copy":"<rect width=\"14\" height=\"14\" x=\"8\" y=\"8\" rx=\"2\" ry=\"2\"/><path d=\"M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2\"/>","play":"<path d=\"M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z\"/>","triangle-alert":"<path d=\"m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3\"/><path d=\"M12 9v4\"/><path d=\"M12 17h.01\"/>","plus":"<path d=\"M5 12h14\"/><path d=\"M12 5v14\"/>","chevron-up":"<path d=\"m18 15-6-6-6 6\"/>","chevron-down":"<path d=\"m6 9 6 6 6-6\"/>","chevrons-up-down":"<path d=\"m7 15 5 5 5-5\"/><path d=\"m7 9 5-5 5 5\"/>","wand-sparkles":"<path d=\"m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72\"/><path d=\"m14 7 3 3\"/><path d=\"M5 6v4\"/><path d=\"M19 14v4\"/><path d=\"M10 2v2\"/><path d=\"M7 8H3\"/><path d=\"M21 16h-4\"/><path d=\"M11 3H9\"/>","bookmark":"<path d=\"m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z\"/>","arrow-up":"<path d=\"m5 12 7-7 7 7\"/><path d=\"M12 19V5\"/>","check":"<path d=\"M20 6 9 17l-5-5\"/>","image-plus":"<path d=\"M16 5h6\"/><path d=\"M19 2v6\"/><path d=\"M21 11.5V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7.5\"/><path d=\"m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21\"/><circle cx=\"9\" cy=\"9\" r=\"2\"/>","section":"<path d=\"M16 5a4 3 0 0 0-8 0c0 4 8 3 8 7a4 3 0 0 1-8 0\"/><path d=\"M8 19a4 3 0 0 0 8 0c0-4-8-3-8-7a4 3 0 0 1 8 0\"/>"}/*ICONS_END*/;
+const I = (n, s) => `<svg class="i" viewBox="0 0 24 24" ${s?`style="--s:${s}px"`:''}>${ICONS[n]||''}</svg>`;
+const ib = (n, cls, s) => `<span class="ib ${cls||''}">${I(n, s)}</span>`;
+function rng(seed){ let x = seed*9301+49297; return () => (x = (x*9301+49297)%233280)/233280; }
+function waveSvg(seed){ const r = rng(seed); let d=''; for(let i=0;i<110;i++){ const h = 2 + r()*18*(0.4+0.6*Math.abs(Math.sin(i/9))); d += `<rect x="${i*4}" y="${11-h/2}" width="2" height="${h.toFixed(1)}" rx="1"/>`; } return `<svg class="w" viewBox="0 0 440 22" preserveAspectRatio="none" fill="currentColor">${d}</svg>`; }
+
+function titlebar(){ return `<div class="titlebar"><span class="brand">痕迹AI</span>
+  <div class="menu">${['文件','编辑','生成','视图','窗口','帮助'].map(m=>`<span>${m}</span>`).join('')}</div>
+  <div class="nav">${['生成','画布','剪辑','工具','资产'].map(m=>`<span class="${m==='生成'?'cur':''}">${m}</span>`).join('')}</div>
+  <div class="right">${ib('sparkles')}${ib('settings')}<span style="width:8px"></span><span class="wc">${I('minus')}</span><span class="wc">${I('square',12)}</span><span class="wc">${I('x')}</span></div></div>`; }
+function filters(o){ return `<div class="filters col"><span class="f cur">全部</span><span class="f">图片</span><span class="f">视频</span><span class="f">音频</span><div class="r">${ib('search','rest')}${ib('ellipsis','rest')}</div></div>`; }
+const acts = `<div class="acts">${ib('refresh-cw','s24 rest')}${ib('square-pen','s24 rest')}${ib('download','s24 rest')}${ib('folder-plus','s24 rest')}${ib('trash-2','s24 rest')}</div>`;
+const head = (p, m, showActs) => `<div class="rhead"><span class="p">${p}</span><span class="m num">${m}</span>${showActs?acts:''}</div>`;
+const img = (n, w, extra) => `<div class="res ${extra&&extra.sel?'sel':''}" style="width:${w}px;background-image:url('素材/图${n}.jpg')">${extra&&extra.hover?`<div class="hover-acts">${ib('copy')}${ib('download')}${ib('folder-plus')}</div>`:''}</div>`;
+function feed(o){
+  const pending = `<div class="rec">${head('桌面上的机械键盘特写，暖色台灯，景深很浅','FLUX 3 Klein · 生成中')}<div class="results">
+    <div class="res pending" style="width:132px"><span class="num">62%</span><div class="bar"><i style="width:62%"></i></div></div>
+    <div class="res pending" style="width:132px"><span>排队中</span><div class="bar"><i style="width:0"></i></div></div></div></div>`;
+  const images = `<div class="rec">${head('清晨的山林，薄雾，电影感，35mm','Z-Image Turbo · 今天 20:44 · 4 张', true)}<div class="results">${img(2,132,{hover:1})}${img(3,132)}${img(4,132)}${img(5,132)}</div></div>`;
+  const video = `<div class="rec">${head('镜头缓慢推近山脊，云雾流动','可灵 3.0 · 今天 20:41')}<div class="results"><div class="res" style="width:235px;background-image:url('素材/图1.jpg')"><span class="play">${I('play')}</span><span class="chip num">0:05</span></div></div></div>`;
+  const audio = `<div class="rec">${head('大家好，今天聊一个新功能','MiniMax Speech · 今天 20:38')}<div class="audio">${ib('play','s24')}${waveSvg(5)}<span class="num">0:03</span></div></div>`;
+  const fail = `<div class="rec">${head('夜景城市航拍，霓虹灯','Z-Image Turbo · 今天 20:35')}<div class="fail"><span class="fi">${I('triangle-alert')}</span><span class="ft">没生成出来</span><span class="fm">请求太频繁，过一会儿再试</span><div class="fa"><span class="btn sm secondary">重试</span><span class="btn sm">详情</span></div></div></div>`;
+  return `<div class="feed col">${pending}${images}${fail}${audio}${video}</div><div class="dock-space" style="height:${o.refs?224:140}px"></div>`;
+}
+function composer(o){
+  const refs = o.refs ? `<div class="refs"><div class="ref" style="background-image:url('素材/参考1.jpg')"><b>1</b></div><div class="ref" style="background-image:url('素材/参考2.jpg')"><b>2</b></div><div class="ref">${I('plus',16)}</div></div>` : '';
+  const prompt = o.prompt ? `<div class="prompt">参考图 1 的构图，换成图 2 的色调，清晨的山林，薄雾，远处有一条小路</div>` : `<div class="prompt ph">描述想要生成的内容</div>`;
+  return `<div class="composer">${refs}${prompt}
+    <div class="pbar">${ib('plus','rest')}<span class="model ${o.model?'open':''}">FLUX 3 Klein <small>KIE</small>${I(o.model?'chevron-up':'chevron-down')}</span><span class="sp"></span>
+      <span class="param"><label>分辨率</label>智能 / 1K${I('chevron-down')}</span><span class="param"><label>数量</label><span class="num">1</span>${I('chevrons-up-down')}</span>${ib('wand-sparkles','on')}
+      <div class="right"><span class="price num">预估 ¥0.054</span>${ib('bookmark','rest')}<span class="send">${I('arrow-up')}</span></div></div></div>`;
+}
+function modelPanel(){
+  const m = (n, p, st) => `<div class="mi ${st||''}"><span>${n}</span>${st==='cur'?I('check'):''}<small>${p}</small></div>`;
+  const rows = [['FLUX 3 Klein','KIE','cur'],['GPT Image 2.6','KIE'],['GPT Image 2.5','KIE'],['Grok Imagine Image 2.0','KIE'],['GPT Image 2','KIE','hov'],['Grok Imagine 图片','KIE'],['Z-Image Turbo','KIE'],['Nano Banana 2.1','KIE'],['Nano Banana 2','KIE'],['Nano Banana 2 Lite','KIE'],['Nano Banana Pro','KIE'],['Qwen Image 3.0','KIE'],['Seedream 5.0 Lite','KIE'],['Seedream 5.0 Pro','KIE'],['Seedream 4.5','KIE'],['Seedream 4.0','KIE'],['FLUX 3 Image','APIMart'],['GPT Image 2.6','APIMart'],['GPT Image 2.5','APIMart'],['GPT Image 2','APIMart'],['Midjourney','APIMart'],['Nano Banana 2.1','APIMart'],['Nano Banana 2','APIMart'],['Nano Banana Pro','APIMart'],['Qwen Image 3.0','APIMart'],['Seedream 5.0 Pro','APIMart'],['Seedream 4.5','APIMart'],['可灵 图片 3.0','APIMart'],['即梦 4.0','火山引擎'],['通义万相 2.6','百炼']];
+  const nav = (n, c, st, icon) => `<div class="n ${st||''}">${icon?I(icon):''}${n}<i class="num">${c}</i></div>`;
+  return `<div class="ovl mp" style="left:240px;bottom:206px">
+    <div class="top"><div class="search">${I('search')}搜索模型，拼音也行</div><div class="seg"><span class="cur">全部</span><span>图片</span><span>视频</span><span>音频</span><span>其他</span></div></div>
+    <div class="body"><div class="nav">${nav('全部',158,'cur')}${nav('收藏',0)}<div class="h">供应商</div>${nav('KIE',40)}${nav('APIMart',34)}${nav('百炼',8)}${nav('火山引擎',8)}${nav('魔搭',7)}${nav('Fal',51)}${nav('硅基流动',2)}</div>
+      <div class="list"><div class="h">图片 <span class="num" style="margin-left:6px;color:var(--icon-rest)">72</span></div><div class="grid">${rows.map(r=>m(...r)).join('')}</div></div></div></div>`;
+}
+function app(o){
+  const body = o.empty ? `<div class="empty"><span class="ei">${I('image-plus')}</span><span style="color:var(--text2)">还没有生成记录</span><span style="font-size:12px">在下面写下想要的画面，结果会出现在这里</span></div>` : feed(o);
+  return `<div class="app shot">${titlebar()}<div class="gen">${filters(o)}${body}${composer(o)}${o.model?modelPanel():''}</div></div>`;
+}
+function sheet(){
+  const z = (html, w) => `<div class="z"><div style="width:${w||430}px">${html}</div></div>`;
+  return `<div class="sheet shot" style="height:auto">
+    <div class="ex"><h3>现状（局部）</h3><p>失败的记录直接显示供应商原话，只有“问助手”，没有“重试”；标题是粗体，模型和时间另起一行。</p>
+      <div class="crop" style="height:170px;background-image:url('现状/01-有历史.png');background-size:1440px auto;background-position:-150px -560px"></div></div>
+    <div class="ex"><h3>一条记录：一行标题 + 一排结果</h3><p>提示词一行（最亮），模型和时间跟在后面（第三档）；结果统一 132 高，图片、视频按比例定宽排成一排。操作平时不出现，悬停这条记录才出现在标题行右端；单张图的复制、下载、收进资产库浮在图的右上角。</p>
+      ${z(`<div class="rec" style="border:0;padding:0">${head('清晨的山林，薄雾，电影感','Z-Image Turbo · 20:44', true)}<div class="results">${img(2,120,{hover:1})}${img(3,120)}${img(4,120)}</div></div>`)}</div>
+    <div class="ex"><h3>生成中、排队中</h3><p>占位格和成品同样大小，落地后原地换成图，列表不跳动。进度是一根细线加百分比，不用转圈。</p>
+      ${z(`<div class="results"><div class="res pending" style="width:120px;height:120px"><span class="num">62%</span><div class="bar"><i style="width:62%"></i></div></div><div class="res pending" style="width:120px;height:120px"><span>排队中</span><div class="bar"><i style="width:0"></i></div></div></div>`)}</div>
+    <div class="ex"><h3>没生成出来</h3><p>按“出问题要醒目”：一条淡红底的提示，图标是红的；标题说发生了什么，后面一句说能做什么；“重试”是这条里唯一的按钮，供应商原话收进“详情”。</p>
+      ${z(`<div class="fail"><span class="fi">${I('triangle-alert')}</span><span class="ft">没生成出来</span><span class="fm">请求太频繁，过一会儿再试</span><div class="fa"><span class="btn sm secondary">重试</span><span class="btn sm">详情</span></div></div>`)}</div>
+    <div class="ex" style="grid-column:1 / 3"><h3>输入区的参数条</h3><p>模型名最亮（它决定了下面有哪些参数），参数是“暗的名字 + 亮一档的值”；“提示词增强”从蓝色滑块开关改成一个图标开关，开着时图标是蓝色；整条里只有“生成”是蓝色实底。</p>
+      <div class="z"><div style="width:860px;position:relative;height:96px"><div class="composer" style="width:860px;bottom:0"><div class="prompt ph" style="min-height:22px">描述想要生成的内容</div>
+        <div class="pbar">${ib('plus','rest')}<span class="model">FLUX 3 Klein <small>KIE</small>${I('chevron-down')}</span><span class="sp"></span><span class="param"><label>分辨率</label>智能 / 1K${I('chevron-down')}</span><span class="param"><label>数量</label><span class="num">1</span>${I('chevrons-up-down')}</span>${ib('wand-sparkles','on')}<div class="right"><span class="price num">预估 ¥0.054</span>${ib('bookmark','rest')}<span class="send">${I('arrow-up')}</span></div></div></div></div></div></div>
+  </div>`;
+}
+
+const SCREENS = [
+  { id:1, title:'① 有历史记录', before:'现状/01-有历史.png',
+    note:'内容列从 1150 收到 960，筛选、记录、输入区同一左右缘。一条记录是“一行标题 + 一排 132 高的结果”，一屏看得到四五条（原来两条）。生成中的任务排在最上面，占位格和成品一样大。',
+    html: () => app({}) },
+  { id:2, title:'② 写提示词、带参考图、打开模型面板', before:'现状/02-模型面板.png',
+    note:'模型面板和输入区左缘对齐，从模型名上方展开。模型是一行一行的列表，不再是一格一格的灰块；当前模型用中性底加一个勾，不用整格蓝色。',
+    html: () => app({ refs:1, prompt:1, model:1 }) },
+  { id:3, title:'③ 空状态', before:'现状/03-空状态.png', note:'', html: () => app({ empty:1 }) },
+  { id:4, title:'④ 细节', before:null, note:'', html: sheet },
+];
+const page = document.getElementById('page');
+SCREENS.forEach(s => {
+  const el = document.createElement('section'); el.className = 'block'; el.dataset.id = s.id;
+  el.innerHTML = `<h2>${s.title}</h2><p class="note">${s.note}</p><div class="pair">`
+    + (s.before ? `<div class="side before-side"><div class="tag"><b>现状</b>（真实截图）</div><img class="shot before" src="${s.before}"></div>` : '')
+    + `<div class="side"><div class="tag"><b>草稿</b></div>${s.html()}</div></div>`;
+  page.appendChild(el);
+});
+const q = new URLSearchParams(location.search);
+if (q.get('s')) { document.body.classList.add('single', q.get('v')==='pair'?'pairmode':'draft'); document.querySelector(`.block[data-id="${q.get('s')}"]`).classList.add('show'); }
+else { const fit = () => document.querySelectorAll('.pair').forEach(p => { p.style.zoom = Math.min(1, (innerWidth - 80) / p.scrollWidth); }); fit(); addEventListener('resize', fit); }
+</script>
+</body>
+</html>
