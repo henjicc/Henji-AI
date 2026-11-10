@@ -18,7 +18,7 @@ import { UiSpinner } from './UiSpinner';
 export { UiSpinner } from './UiSpinner';
 import Tooltip from './Tooltip';
 import { UiButton, UiIconButton } from './primitives';
-import { UiDisclosurePanel } from './layout';
+import { UiDisclosurePanel } from './UiDisclosurePanel';
 import {
   UI_FLOATING_EDGE_CLASS, UI_ICON_SIZE_CLASS, UI_RADIUS_CLASS, UI_TEXT_META_CLASS, UI_TEXT_PANEL_TITLE_CLASS,
   UI_TEXT_SECONDARY_CLASS, UI_TEXT_SECTION_CLASS, UI_TEXT_TIMECODE_CLASS,

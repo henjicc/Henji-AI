@@ -13,7 +13,7 @@
  *   Surface  UiPanel variant=inset 仅更暗底色
  *   Card     UiPanel               唯一允许画完整卡片的一层（浮层/弹窗/侧栏/画布节点）
  */
-import { createContext, useContext, useId, useLayoutEffect, useRef, type HTMLAttributes, type ReactNode } from 'react';
+import { createContext, useContext, useId, useRef, type HTMLAttributes, type ReactNode } from 'react';
 import { ArrowLeft, Check, MoreHorizontal, type LucideIcon } from 'lucide-react';
 import { UI_ICON_SIZE } from '@/core/theme/icons';
 import { Z_LAYERS } from '@/core/theme/zLayers';
@@ -524,51 +524,6 @@ export function UiPropertyUnit({ children, hanging = true }: { children?: ReactN
   const long = typeof children === 'string' && (children.length > 2 || children.length > 1 && [...children].some(char => char.charCodeAt(0) >= 0x3000));
   if (long) return <span className="shrink-0 whitespace-nowrap pl-1 text-2xs text-text3">{children}</span>;
   return <span aria-hidden={children ? undefined : true} className={`w-4 shrink-0 whitespace-nowrap pl-1 text-2xs text-text3 ${hanging ? '-mr-4' : ''}`}>{children}</span>;
-}
-
-interface UiDisclosurePanelProps {
-  open: boolean;
-  children: ReactNode;
-  className?: string;
-}
-
-/**
- * 折叠内容的展开动画外壳：grid-rows 撑高 + 轻微位移，折叠态不 unmount 只是收到 0 高。
- * 用于"默认收起、点了才看"的次要/进阶内容（如高级参数、技术性验证详情），
- * 不要在每个调用点各写一遍这段 grid-rows 过渡。
- */
-export function UiDisclosurePanel({ open, children, className = '' }: UiDisclosurePanelProps): JSX.Element {
-  const contentRef = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
-    const content = contentRef.current;
-    if (!content) return;
-    if (!open && content.contains(content.ownerDocument.activeElement)) {
-      // 展开按钮位于内容前；跳过下拉菜单触发器，不要求调用方增加 ref。
-      let sibling = content.previousElementSibling;
-      while (sibling) {
-        const trigger = sibling.matches('button[aria-expanded]:not([aria-haspopup])')
-          ? sibling : sibling.querySelector('button[aria-expanded]:not([aria-haspopup])');
-        if (trigger instanceof HTMLElement) { trigger.focus({ preventScroll: true }); break; }
-        sibling = sibling.previousElementSibling;
-      }
-    }
-    content.toggleAttribute('inert', !open);
-    content.setAttribute('aria-hidden', String(!open));
-  }, [open]);
-  return (
-    <div
-      ref={contentRef}
-      className={`grid transition-[grid-template-rows,opacity] duration-180 ease-out ${
-        open ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
-      }`}
-    >
-      <div className="min-h-0 overflow-hidden">
-        <div className={`transition-transform duration-180 ease-out ${open ? 'translate-y-0' : '-translate-y-2'} ${className}`}>
-          {children}
-        </div>
-      </div>
-    </div>
-  );
 }
 
 /**

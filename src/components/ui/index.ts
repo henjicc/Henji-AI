@@ -2,6 +2,7 @@ export * from './useUiViewerShell';
 export * from './primitives';
 export * from './UiModal';
 export * from './layout';
+export * from './UiDisclosurePanel';
 export * from './states';
 export { default as Dropdown } from './Dropdown';
 export { default as PanelTrigger } from './PanelTrigger';

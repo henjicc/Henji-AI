@@ -99,7 +99,7 @@ style={{ transition: uiTransition(['opacity', 'transform'], UI_DURATION.slow) }}
 | 位置 | 属性 | 为什么改不了 |
 |---|---|---|
 | `src/components/TabContainer.tsx` | `padding` | 助手停靠的 inset，工作区必须真的收缩；resize 期间已用 `--assistant-layout-transition-duration: 0ms` 关掉过渡 |
-| `src/components/ui/layout.tsx` 的 `UiDisclosurePanel` | `grid-template-rows` | `0fr → 1fr` 是 auto-height 动画的推荐做法，替代方案（max-height / JS 测高）更差 |
+| `src/components/ui/UiDisclosurePanel.tsx` 的 `UiDisclosurePanel` | `grid-template-rows` | `0fr → 1fr` 是 auto-height 动画的推荐做法，替代方案（max-height / JS 测高）更差 |
 | `src/workspaces/GenerationWorkspace/components/FloatingInputPanel.tsx` | `max-height` | 同上，折叠展开的高度动画 |
 
 **已经改掉的**：`FloatingInputPanel` 的 `top` 已合并进 `transform`（绝对定位元素的位移没有理由走布局属性）；生成记录的参考素材堆（`TaskInputPreview`）叠放与铺开只用 `translateX + rotate`。

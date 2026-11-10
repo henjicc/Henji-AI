@@ -3,7 +3,8 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { UiDisclosurePanel, UiFormRow, UiGroup, UiToolbar, UiTooltipText } from './layout'
+import { UiDisclosurePanel } from './UiDisclosurePanel'
+import { UiFormRow, UiGroup, UiToolbar, UiTooltipText } from './layout'
 import { UiPrimaryActionContext } from './actionPriority'
 
 afterEach(cleanup)
