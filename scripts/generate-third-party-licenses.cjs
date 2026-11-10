@@ -304,6 +304,13 @@ function generate(options) {
   else runtime.push({ id: 'reference:hq-icon', name: 'HQ-ICON (App Store icon retrieval, YuKongA)', version: 'reference', license: 'MIT', ecosystem: 'runtime',
     homepage: 'https://github.com/YuKongA/HQ-ICON', sources: ['https://github.com/YuKongA/HQ-ICON (input parsing and high-resolution icon URL method)', 'https://performance-partners.apple.com/search-api (Apple data source)'],
     textIds: [textTable.add(hqIconLicense)], textOrigin: 'reference' })
+  // 界面字体 HarmonyOS Sans SC 是华为官方字体包里的可变字体原文件（src/assets/fonts），不在 npm ls 里。
+  // 许可只允许分发未修改的字体，并要求在软件里声明使用了该字体、随附版权声明与协议全文：文件按原样入库，不转格式、不取子集。
+  const harmonyFontLicense = readTextIfExists(path.join(REFERENCE_DIR, 'HarmonyOS-Sans-Fonts-License.txt'))
+  if (!harmonyFontLicense) missing.push('HarmonyOS Sans：缺少字体许可协议原文')
+  else runtime.push({ id: 'bundled:harmonyos-sans-sc', name: 'HarmonyOS Sans SC (interface font, bundled unmodified)', version: 'variable (wght 40-900)', license: 'HarmonyOS Sans Fonts License Agreement', ecosystem: 'runtime',
+    homepage: 'https://developer.huawei.com/consumer/cn/doc/doccenter-ux-design/font-0000001828772001', sources: ['HarmonyOS_Sans_SC.ttf (Copyright 2021 Huawei Device Co., Ltd.; unmodified copy from the official font package)'],
+    textIds: [textTable.add(harmonyFontLicense)], textOrigin: 'package' })
   // 代码效果内置库（three、opentype.js）随库分发的第三方组件不在 npm ls 里；与 scripts/build-author-libraries.ts 写 NOTICE.txt 用同一张表。
   for (const component of readAuthorLibraryComponents()) {
     const texts = component.texts.map((name) => readTextIfExists(path.join(AUTHOR_LIBRARY_LICENSE_DIR, name)))

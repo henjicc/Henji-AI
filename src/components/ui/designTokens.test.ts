@@ -251,14 +251,16 @@ describe('设计令牌：字体与字号', () => {
     expect(UI_TEXT_META_CLASS).toMatch(/^text-2xs font-medium text-text3$/)
   })
 
-  it('Geist / Geist Mono 随包加载（不走网络字体），字体栈拉丁在前、中文回落系统字体', () => {
-    expect(mainTsx).toContain("import '@fontsource-variable/geist'")
-    expect(mainTsx).toContain("import '@fontsource-variable/geist-mono'")
+  it('界面字体随包加载（不走网络字体）、排在系统中文字体之前，浏览器只合成倾斜、不合成粗体', () => {
     expect(fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8')).not.toMatch(/fonts\.googleapis|fonts\.gstatic/)
+    const face = indexCss.match(/@font-face \{[^}]*\}/)?.[0] ?? ''
+    expect(face).toContain("font-family: 'HarmonyOS Sans SC UI'")
+    expect(fs.existsSync(path.join(ROOT, 'src', face.match(/url\('\.\/([^']+)'\)/)?.[1] ?? 'missing'))).toBe(true)
     const sans = tailwindConfig.slice(tailwindConfig.indexOf('sans: ['), tailwindConfig.indexOf('mono: ['))
-    expect(sans.indexOf('Geist Variable')).toBeGreaterThan(-1)
-    expect(sans.indexOf('Geist Variable')).toBeLessThan(sans.indexOf('Microsoft YaHei UI'))
-    expect(tailwindConfig).toMatch(/mono: \[\s*'"Geist Mono Variable"'/)
+    expect(sans.indexOf('HarmonyOS Sans SC UI')).toBeGreaterThan(-1)
+    expect(sans.indexOf('HarmonyOS Sans SC UI')).toBeLessThan(sans.indexOf('Microsoft YaHei UI'))
+    expect(mainTsx).toContain("import '@fontsource-variable/geist-mono'")
+    expect(indexCss).toMatch(/html \{\s*font-synthesis: style;/)
   })
 
   it('正文基准字号 13px 只设在 body（html 保持 16px，rem 间距不变）', () => {

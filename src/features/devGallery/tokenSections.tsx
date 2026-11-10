@@ -1,7 +1,7 @@
 import { UiSpinner, UiSkeleton } from '@/components/ui'
 import { createPlainTextPromptDocument } from '@/core/inputs/promptDocument'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
-import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { Fragment, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import { Play, Square } from 'lucide-react'
 import '@/features/canvas/storyboard.css'
 import resolveConfig from 'tailwindcss/resolveConfig'
@@ -53,8 +53,63 @@ export function ColorTokensSection(): JSX.Element {
   </UiGroup>
 }
 
+const SPECIMEN_SIZES = [['20', 'text-xl'], ['16', 'text-base'], ['14', 'text-sm'], ['13', 'text-13'], ['12', 'text-xs'], ['11', 'text-2xs']] as const
+const SPECIMEN_WEIGHTS = [['正文 normal', 'font-normal'], ['标签 medium', 'font-medium'], ['小标题 semibold', 'font-semibold'], ['大标题 bold', 'font-bold']] as const
+const SPECIMEN_FIGURES = [['片段时长', '00:01:23:14'], ['预估费用', '¥1,280.50'], ['帧率', '59.94'], ['素材数量', '1,024'], ['导出进度', '87.5%'], ['码率', '111.11 Mbps']] as const
+
+/** 实测 0–9 在界面字体下的渲染宽度：全部相等才能让时间码与数值列不用等宽字体。 */
+function DigitWidths(): JSX.Element {
+  const ref = useRef<HTMLDivElement>(null)
+  const [result, setResult] = useState('')
+  useLayoutEffect(() => {
+    let cancelled = false
+    void document.fonts.ready.then(() => {
+      if (cancelled || !ref.current) return
+      const widths = Array.from(ref.current.querySelectorAll('span')).map(node => node.getBoundingClientRect().width / 20)
+      const spread = Math.max(...widths) - Math.min(...widths)
+      setResult(`0–9 单字宽 ${widths.map(width => width.toFixed(3)).join(' / ')} px，最大差 ${spread.toFixed(3)} px`)
+    })
+    return () => { cancelled = true }
+  }, [])
+  return <div className="flex flex-col gap-1" data-gallery-digit-widths>
+    <div ref={ref} aria-hidden className={`flex flex-col text-13 ${styleTokens.UI_TEXT_NUMERIC_CLASS}`}>{'0123456789'.split('').map(digit => <span key={digit} className="w-fit leading-none">{digit.repeat(20)}</span>)}</div>
+    <code className={UI_TEXT_META_CLASS}>{result}</code>
+  </div>
+}
+
 export function TypeTokensSection(): JSX.Element {
-  return <UiGroup title="排版阶梯" titleTone="compact">{GALLERY_TEXT_TOKENS.map(([name, value]) => <TypeSample key={name} name={name} className={String(value)} />)}</UiGroup>
+  return <>
+    <UiGroup title="排版阶梯" titleTone="compact">{GALLERY_TEXT_TOKENS.map(([name, value]) => <TypeSample key={name} name={name} className={String(value)} />)}</UiGroup>
+    <UiGroup title="字号 × 字重" titleTone="compact">
+      <div className="grid grid-cols-[auto_repeat(4,minmax(0,1fr))] items-baseline gap-x-6 gap-y-3" data-gallery-type-specimen>
+        <span />{SPECIMEN_WEIGHTS.map(([label]) => <code key={label} className={UI_TEXT_META_CLASS}>{label}</code>)}
+        {SPECIMEN_SIZES.map(([size, sizeClass]) => <Fragment key={size}>
+          <code className={UI_TEXT_META_CLASS}>{size}</code>
+          {SPECIMEN_WEIGHTS.map(([label, weightClass]) => <span key={label} className={`truncate text-text1 ${sizeClass} ${weightClass}`}>痕迹AI 创作工作台 Henji 2026</span>)}
+        </Fragment>)}
+      </div>
+    </UiGroup>
+    <UiGroup title="中英数字混排" titleTone="compact">
+      <p className={styleTokens.UI_TEXT_BODY_CLASS}>用 Seedance 2.0 生成 5 秒 1080p 视频，预估 ¥0.54；导出为 H.264 MP4（3840×2160，60 fps）。</p>
+      <p className={styleTokens.UI_TEXT_SECONDARY_CLASS}>共 128 条 · 已选 3 项 · 上次保存于 2026-11-10 14:32 · FLUX 3 Klein / KIE</p>
+      <p className={styleTokens.UI_TEXT_META_CLASS}>V1 轨道 · 00:00:12:08 – 00:00:18:20 · 4K 60 帧 · Rec.709</p>
+    </UiGroup>
+    <UiGroup title="时间码与数值列" titleTone="compact">
+      <div className="flex flex-wrap items-start gap-8">
+        <div className="flex flex-col gap-2">
+          {(['text-sm', 'text-13', 'text-xs', 'text-2xs'] as const).map(sizeClass => <div key={sizeClass} className={`flex items-baseline gap-2 ${sizeClass}`}>
+            <span className="text-text2">入点</span><span className={`${styleTokens.UI_TEXT_TIMECODE_CLASS} text-text1`}>00:01:11:17</span>
+            <span className="text-text2">出点</span><span className={`${styleTokens.UI_TEXT_TIMECODE_CLASS} text-accent-text`}>00:08:40:09</span>
+          </div>)}
+        </div>
+        <div className="grid grid-cols-[auto_auto] gap-x-8 gap-y-1 text-13">
+          {SPECIMEN_FIGURES.map(([label, value]) => <Fragment key={label}><span className="text-text2">{label}</span><span className={`text-right text-text1 ${styleTokens.UI_TEXT_NUMERIC_CLASS}`}>{value}</span></Fragment>)}
+        </div>
+        <DigitWidths />
+        <pre className="font-mono text-xs text-text2">{'// 等宽只给代码、日志与路径\nconst fps = 59.94 // 帧率'}</pre>
+      </div>
+    </UiGroup>
+  </>
 }
 
 export function SpacingTokensSection(): JSX.Element {

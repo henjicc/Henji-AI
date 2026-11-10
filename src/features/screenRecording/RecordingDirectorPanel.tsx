@@ -101,7 +101,7 @@ export function RecordingDirectorScript({ sessionId, recording }: { sessionId: s
       {error && <UiError message={error} />}
       <ol className="flex flex-col" aria-label={t('recording.directorScript')}>
         {narration.map((line, index) => <li key={line.stepId} className={`grid grid-cols-[32px_minmax(0,1fr)] gap-x-3 gap-y-2 py-4 ${index > 0 ? 'border-t border-line/60' : ''}`}>
-          <span className="pt-0.5 font-mono text-sm text-text3">{index + 1}</span>
+          <span className="pt-0.5 tabular-nums text-sm text-text3">{index + 1}</span>
           <div className="flex min-w-0 flex-col gap-2">
             <div className="flex flex-wrap items-baseline gap-x-2">
               <span className="text-13 font-medium text-text1">{steps[index]?.title ?? ''}</span>

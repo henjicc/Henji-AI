@@ -184,11 +184,11 @@ export function VideoEditSourcePanel({ instance, onError, visible = true }: { in
         {!previewed && <VideoEditSourceInOut inUs={state.inUs} outUs={state.outUs} durationUs={sourceDurationUs} playheadUs={state.timeUs} onChange={run} />}
       </div>}
       {hasWave && waveform.data && <div className="pointer-events-none flex w-full flex-col gap-0.5" data-video-edit-source-waveform>
-        <span className="font-mono text-2xs tabular-nums text-text3">{sourceTimecode(waveStartUs)} — {sourceTimecode(waveEndUs)}</span>
+        <span className="text-2xs tabular-nums text-text3">{sourceTimecode(waveStartUs)} — {sourceTimecode(waveEndUs)}</span>
         <WaveformView waveform={waveform} startSeconds={waveStartUs / 1e6} endSeconds={waveEndUs / 1e6} playedSeconds={state.timeUs / 1e6} height={20 * waveform.data.pyramid.channelCount} />
       </div>}
       {hasWave && waveform.status === 'error' && <UiError size="xs" align="start" title={t('surfaceGrammar.waveformFailed')} message={t('surfaceGrammar.waveformRetryHint')} onRetry={() => { if (waveRef) retryWaveform(waveRef, 'full') }} />}
-      {media && media.kind !== 'image' && <span className="font-mono text-2xs tabular-nums text-text3">入点 {state.inUs === null ? '未设置' : sourceTimecode(state.inUs)} · 出点 {state.outUs === null ? '未设置' : sourceTimecode(state.outUs)}</span>}
+      {media && media.kind !== 'image' && <span className="text-2xs tabular-nums text-text3">入点 {state.inUs === null ? '未设置' : sourceTimecode(state.inUs)} · 出点 {state.outUs === null ? '未设置' : sourceTimecode(state.outUs)}</span>}
     </div>}
     {/* 与节目监视器同一种单行控制条：窄面板下按钮从后往前收进“更多”，不再折成多行压掉画面（重要记录 020，960 宽尺寸扫描发现） */}
     {state.itemId && <div className="flex min-h-10 shrink-0 items-center gap-x-1 whitespace-nowrap border-t border-line px-2 py-1" role="toolbar" aria-label="源监视器控制">

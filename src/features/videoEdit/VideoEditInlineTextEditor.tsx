@@ -39,7 +39,7 @@ export const VideoEditInlineTextEditor = forwardRef<HTMLDivElement, VideoEditInl
     // 正文只在挂载时写入。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  return <div ref={editor} role="textbox" aria-label={ariaLabel} aria-multiline contentEditable="plaintext-only" suppressContentEditableWarning className={`${transparent ? 'text-transparent' : ''} outline-none ${className}`} style={{ caretColor: 'var(--on-media)', ...style }}
+  return <div ref={editor} role="textbox" data-content-text-editor aria-label={ariaLabel} aria-multiline contentEditable="plaintext-only" suppressContentEditableWarning className={`${transparent ? 'text-transparent' : ''} outline-none ${className}`} style={{ caretColor: 'var(--on-media)', ...style }}
     onPointerDown={event => event.stopPropagation()}
     onInput={event => {
       const raw = event.currentTarget.innerText ?? event.currentTarget.textContent ?? ''; let value = raw.slice(0, maxLength)

@@ -337,7 +337,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
       <span className="flex min-w-0 flex-1 items-center gap-2">
         {icon}
         <span className="min-w-0 flex-1 truncate text-left">{label}</span>
-        <span className="font-mono text-2xs text-text3">{count}</span>
+        <span className="tabular-nums text-2xs text-text3">{count}</span>
       </span>
     </UiNavButton>
   )
@@ -404,7 +404,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
         highlightedIndex={highlightedRow >= 0 ? highlightedRow : undefined}
         emptyState={<UiEmpty size="xs" title={t('ui:workspaceFilters.emptyFiltered')} />}
         renderItem={(row) => row.kind === 'header' ? (
-          <div className="flex h-7 items-end gap-1.5 pb-1.5 text-2xs text-text3">{row.label}<span className="font-mono">{row.count}</span></div>
+          <div className="flex h-7 items-end gap-1.5 pb-1.5 text-2xs text-text3">{row.label}<span className="tabular-nums">{row.count}</span></div>
         ) : (
           <div className="grid pb-1.5" style={{ gridTemplateColumns: `repeat(${columns}, ${CELL_WIDTH}px)`, columnGap: CELL_GAP }}>
             {row.items.map(({ p, m }, column) => {

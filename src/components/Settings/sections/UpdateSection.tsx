@@ -80,7 +80,7 @@ const UpdateSection: React.FC = () => {
   return (
     <>
       <UiFormRow label={t('sections.updates.currentVersionLabel')} inline>
-        <span className={`font-mono ${UI_TEXT_META_CLASS}`}>{currentVersion}</span>
+        <span className={`tabular-nums ${UI_TEXT_META_CLASS}`}>{currentVersion}</span>
         <UiButton
           onClick={handleCheck}
           disabled={isChecking}
@@ -110,7 +110,7 @@ const UpdateSection: React.FC = () => {
           info={t('sections.updates.clearIgnoredHint')}
           inline
         >
-          <span className={`font-mono ${UI_TEXT_META_CLASS}`}>{config.ignoredVersions.join('、')}</span>
+          <span className={`tabular-nums ${UI_TEXT_META_CLASS}`}>{config.ignoredVersions.join('、')}</span>
           <UiButton onClick={clearIgnored} variant="secondary">
             {t('sections.updates.clearIgnoredAction')}
           </UiButton>

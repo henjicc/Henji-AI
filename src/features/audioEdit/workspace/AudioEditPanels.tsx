@@ -105,14 +105,14 @@ export function AudioEditTranscriptPanel() {
         <Virtuoso ref={listRef} className="h-full" data={rows} increaseViewportBy={320} components={{ Header: TranscriptEdge, Footer: TranscriptEdge }}
           itemContent={(_, row) => (
             <div className="mx-auto max-w-3xl pb-5">
-              <div className="mb-1 font-mono text-xs tabular-nums text-text3">{formatTime(row[0]?.startFrame ?? 0, project.source.sampleRate)}</div>
+              <div className="mb-1 text-xs tabular-nums text-text3">{formatTime(row[0]?.startFrame ?? 0, project.source.sampleRate)}</div>
               <p className="m-0 leading-loose">
                 {row.map((block, index) => {
                   const isActive = !search.fragments.has(block.id) && activeBlockId === block.id && (mode === 'source' || block.included)
                   const previous = index > 0 ? row[index - 1] : null
                   const gap = previous ? block.startFrame - previous.endFrame : 0
                   return <Fragment key={block.id}>
-                    {previous && gap >= pauseFrames ? <span aria-hidden="true" className="mx-1 inline-block rounded-control bg-raised px-1.5 align-middle font-mono text-2xs leading-5 text-text3">{(gap / project.source.sampleRate).toFixed(1)}s</span> : null}
+                    {previous && gap >= pauseFrames ? <span aria-hidden="true" className="mx-1 inline-block rounded-control bg-raised px-1.5 align-middle tabular-nums text-2xs leading-5 text-text3">{(gap / project.source.sampleRate).toFixed(1)}s</span> : null}
                     <UiTextToken data-audio-word={block.id} aria-current={isActive ? 'true' : undefined} current={isActive} selected={selected.includes(block.id)} excluded={!block.included}
                       flagged={block.included && fillers.has(normalizeAudioEditFiller(block.text))} disabled={disabled}
                       onDoubleClick={() => workspace.editBlock(block.id)}

@@ -85,13 +85,27 @@ export default {
       // 复选框 16px 方框：比控件档小 2px，随“圆角”设置一起变
       check: 'calc(var(--radius-control) - 2px)',
     },
+    // 字重阶梯：界面字体是可变字体（wght 40–900），界面只用这五档，调用点不写裸数值。
+    // 数值在 src/index.css 的 --font-weight-*（低像素密度屏幕整体减重），这里只做类名到令牌的映射。
+    fontWeight: {
+      // 大读数（录制计时、倒计时 40px）
+      light: 'var(--font-weight-light)',
+      // 正文、控件里的值、辅助文字
+      normal: 'var(--font-weight-normal)',
+      // 行标签、按钮文字（含强调色实底上的按钮）、需要强调的词
+      medium: 'var(--font-weight-medium)',
+      // 小标题：分区标题、面板标题、弹窗标题（16 及以下）
+      semibold: 'var(--font-weight-semibold)',
+      // 大标题：页面标题（20 及以上），字大所以比小标题略轻
+      bold: 'var(--font-weight-bold)',
+    },
     extend: {
-      // 字体：拉丁字母与数字 Geist / Geist Mono（@fontsource-variable，随包、离线可用，SIL OFL 1.1），
-      // 中文按平台回落系统字体（重要记录 004）：Windows 微软雅黑 UI，macOS 苹方，Linux 思源/Noto。
-      // 浏览器逐字回落：Geist 没有的汉字自动取下一个含该字的字体，不需要拆 unicode-range。
+      // 字体：中文、拉丁字母与数字都用随包的 HarmonyOS Sans SC 可变字体（@font-face 在 src/index.css，
+      // 族名带 UI 后缀，与用户在画面内容里选用的同名系统字体互不影响）；缺字时按平台回落系统字体。
+      // 等宽 Geist Mono（@fontsource-variable，SIL OFL 1.1）只给代码、日志、路径，其中的汉字回落界面字体。
       fontFamily: {
         sans: [
-          '"Geist Variable"',
+          '"HarmonyOS Sans SC UI"',
           '"Microsoft YaHei UI"',
           '"Microsoft YaHei"',
           '"PingFang SC"',
@@ -111,6 +125,7 @@ export default {
           'SFMono-Regular',
           'Menlo',
           'Consolas',
+          '"HarmonyOS Sans SC UI"',
           '"Microsoft YaHei UI"',
           '"PingFang SC"',
           'monospace',
