@@ -1,5 +1,5 @@
 import { useSettingsStore } from '@/stores/settingsStore'
-import { videoEditClipLabelSurface } from './clipLabelSurface'
+import { TIMELINE_SELECTED_RING_CLASS, videoEditClipLabelSurface, videoEditClipTitleSurface } from './clipLabelSurface'
 import { videoEditClipLabel } from '@/core/videoEdit/labels'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { VideoEditAnnotationMarks } from './VideoEditAnnotationMarks'
@@ -64,7 +64,7 @@ import type { VideoEditSceneTarget } from '../application/videoEditSceneDetectio
 import { closeVideoEditSpeedDialog, useVideoEditSpeedDialogRequest } from '../application/videoEditSpeedDialog'
 import { useVideoEditClipSource } from '../panels/useVideoEditClipSource'
 import { elementOfEventTarget } from '@/utils/crossRealmDom'
-import { TIMELINE_DEFAULT_SPLIT, TIMELINE_END_MARGIN, TIMELINE_MARK_LANE_HEIGHT, TIMELINE_RULER_HEIGHT, TimelineHeaderWidthContext, TIMELINE_TRACK_SECTION_GAP, timelineLayout, timelineStickyBottom, timelineNewTrackZone, timelineRegionAt, timelineRulerLabel, timelineRulerScale, timelineTrackAt, TIMELINE_BLOCK_FACE_CLASS, TIMELINE_HEADER_WIDTH_ATTRIBUTE, timelineBlockSpan, timelineHeaderWidth, timelineHeaderWidthOf, timelineVisibleClips, timelineVisibleTrackRows, timelineWheelAction, type TimelineRegion, type TimelineRegionKind, type TimelineViewport } from './timelineGeometry'
+import { TIMELINE_DEFAULT_SPLIT, TIMELINE_END_MARGIN, TIMELINE_MARK_LANE_HEIGHT, TIMELINE_RULER_HEIGHT, TimelineHeaderWidthContext, TIMELINE_TRACK_SECTION_GAP, timelineLayout, timelineStickyBottom, timelineNewTrackZone, timelineRegionAt, timelineRulerLabel, timelineRulerScale, timelineTrackAt, TIMELINE_BLOCK_FACE_CLASS, TIMELINE_CLIP_TITLE_HEIGHT, TIMELINE_CLIP_TITLE_MIN_HEIGHT, TIMELINE_HEADER_WIDTH_ATTRIBUTE, timelineBlockSpan, timelineHeaderWidth, timelineHeaderWidthOf, timelineVisibleClips, timelineVisibleTrackRows, timelineWheelAction, type TimelineRegion, type TimelineRegionKind, type TimelineViewport } from './timelineGeometry'
 import { videoEditTrackCodes } from '@/core/videoEdit/tracks'
 import { videoEditTrackHeaderButtons } from '@/core/videoEdit/trackHeaderButtons'
 import { useTrackHeaderMenu } from './useTrackHeaderMenu'
@@ -87,7 +87,8 @@ import { openVideoEditNestedClip, type VideoEditNestTarget } from '../applicatio
 /** corner：轨道头上方、标尺左端的角落格（时间码与这条时间线的统一开关，重要记录 019）。 */
 interface Props { instance: VideoEditInstance; sequence: VideoEditSequence; pixels: number; onError: (error: unknown) => void; visible?: boolean; corner?: React.ReactNode }
 const dropLogger = createLogger('features.videoEdit.timeline.drop')
-const CLIP_SELECTED_LINE = 'border-accent-ring ring-1 ring-accent-ring'
+/** 过渡块选中：主要文字色描边，与片段选中的白线一致；强调色留给播放头。 */
+const CLIP_SELECTED_LINE = 'border-text1'
 /**
  * 缩略图条的可见范围按 64px 取整并限制在片段两侧各 64px 内：完全可见的片段滚动时属性不变、整段跳过重绘，
  * 部分可见的片段每滚过 64px 才重新铺格（铺格本身前后各多一格，取整不会露出空白）。
@@ -466,7 +467,11 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
         const sound = clip.kind === 'audio' || clip.kind === 'video' && clip.sourceComponent === 'audio'
         const picture = !sound && (clip.kind === 'video' && media?.kind === 'video' || clip.kind === 'image' && media?.kind === 'image')
         // 片段底色按标签色（重要记录 019）：给素材改标签，时间线上的片段跟着变。
-        const surface = videoEditClipLabelSurface(videoEditClipLabel(instance.document, clip), selected)
+        const label = videoEditClipLabel(instance.document, clip)
+        const surface = videoEditClipLabelSurface(label, selected)
+        // 轨道够高时名字独占顶上一条，缩略图与波形从名条下面开始；矮轨道只有名字，垂直居中
+        const titled = row.height - 4 >= TIMELINE_CLIP_TITLE_MIN_HEIGHT
+        const contentTop = titled ? TIMELINE_CLIP_TITLE_HEIGHT : 0
         // Hidden picture tracks, muted sound tracks and disabled clips dim their clips (content only, see the overlay below), as in Premiere.
         const dimmed = !row.track.enabled || row.track.kind === 'audio' && row.track.muted || !videoEditClipEnabled(clip)
         const { left: clipLeft, width: clipWidth } = timelineBlockSpan(clip.start, clip.duration, pixels, header)
@@ -477,20 +482,22 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
         }) : []
         return <div key={clip.id} data-ui-timeline-item data-video-edit-clip={clip.id} data-selected={selected || undefined} data-clip-start={clip.start} data-clip-duration={clip.duration} className="group absolute" data-clip-dimmed={dimmed || undefined} style={{ top: row.top - region.top + 2, height: row.height - 4, left: clipLeft, width: clipWidth }}>
           {/* 外观层带着全部内容，右端让出 1 像素当片段间的缝；外层铺满，点在缝上仍是这个片段 */}
-          <div className={`${TIMELINE_BLOCK_FACE_CLASS} overflow-clip ${selected ? CLIP_SELECTED_LINE : ''}`} style={surface}>
+          <div className={`${TIMELINE_BLOCK_FACE_CLASS} overflow-clip`} style={surface}>
+          <div className="absolute inset-x-0 bottom-0" style={{ top: contentTop }}>
           {picture && media && <VideoEditClipFilmstrip mode={thumbnails} clipId={clip.id} source={media.path} sourceRevision={media.sourceRevision} still={media.kind === 'image'} aspect={media.width > 0 && media.height > 0 ? media.width / media.height : 16 / 9}
-            mediaEndSeconds={media.durationSeconds} frameSeconds={media.frameRate ? media.frameRate.denominator / media.frameRate.numerator : 1 / 30} clip={clip} fps={fps} pixels={pixels} clipWidth={clipWidth} height={row.height - 6}
+            mediaEndSeconds={media.durationSeconds} frameSeconds={media.frameRate ? media.frameRate.denominator / media.frameRate.numerator : 1 / 30} clip={clip} fps={fps} pixels={pixels} clipWidth={clipWidth} height={row.height - 6 - contentTop}
             visibleFrom={stripEdge(view.left + header - clipLeft, clipWidth, Math.floor)} visibleTo={stripEdge(view.left + view.width - clipLeft, clipWidth, Math.ceil)} devicePixelRatio={devicePixelRatio} active={visible} />}
-          {range && <VideoEditClipWaveform clipId={clip.id} gainDb={clip.gainDb} sources={range.sources} startSeconds={range.startSeconds} endSeconds={range.endSeconds} reverse={clip.reverse} left={(range.from - clip.start) * pixels} width={(range.to - range.from) * pixels} visible={visible} lane={picture ? 'lower' : 'full'} />}
-          {/* 隐藏轨/静音轨/停用片段只淡化画面与波形（盖一层半透明窗口底），片段名标签不跟着变淡：整片 opacity-50 时
-              纸白下标签只剩 1.5:1（4.1 对比度审计） */}
-          {dimmed && <div className="pointer-events-none absolute inset-0 bg-window/50" aria-hidden="true" />}
+          {range && <VideoEditClipWaveform clipId={clip.id} gainDb={clip.gainDb} sources={range.sources} startSeconds={range.startSeconds} endSeconds={range.endSeconds} reverse={clip.reverse} left={(range.from - clip.start) * pixels} width={(range.to - range.from) * pixels} visible={visible} lane={picture ? 'lower' : 'full'} compact={clipWidth <= 110} />}
+          </div>
+          {titled && <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0" style={{ height: TIMELINE_CLIP_TITLE_HEIGHT, ...videoEditClipTitleSurface(label, selected) }} />}
+          {/* 停用的片段盖一层半透明窗口底；隐藏轨、静音轨、锁定轨由整条轨道的叠层表达，不逐片段处理 */}
+          {!videoEditClipEnabled(clip) && <div className="pointer-events-none absolute inset-0 bg-window/50" aria-hidden="true" />}
           <div className="absolute inset-0 flex">
             {/* ui-surface-allow 片段入点裁剪柄：命中区不是按钮档位，外观由片段容器的 clip 令牌给出 */}
             <UiButton data-video-edit-trim="in" aria-label={`裁剪${clip.name}入点`} className="!h-full !w-2 shrink-0 cursor-ew-resize !rounded-none !bg-transparent !p-0" tabIndex={-1} />
             {/* ui-surface-allow 片段体：整块是选择命中区，名称条压在缩略图/波形之上（设计稿 VideoEdit 片段名称条） */}
-            <UiButton aria-label={`选择片段 ${clip.name}`} tooltip={`${clip.name}${speedLabel ? ` ${speedLabel}` : ''}${channelType ? ` · ${videoEditAudioFormatLabel(channelType)}` : ''}${offset === undefined ? '' : `：与链接片段失步 ${Math.abs(offset)} 帧，右键可移入同步或滑入同步`}`} data-video-edit-audio-format={channelType} className="!h-full min-w-0 flex-1 !items-start !justify-start !rounded-none !bg-transparent !p-0" onClick={event => { if (event.detail === 0) run(() => pointer.select([clip.id], event.shiftKey || event.ctrlKey || event.metaKey, false, videoEditPickRelations(instance.linkedSelection !== false, event.altKey))) }}>
-              <span data-user-content className={`sticky max-w-full truncate rounded-br-hairline px-1.5 text-2xs leading-4 ${picture || sound ? 'bg-media-scrim text-on-media' : 'text-text1'}`} style={{ left: header }}>{clip.name}{speedLabel && <span className={UI_TEXT_NUMERIC_CLASS}> {speedLabel}</span>}</span>
+            <UiButton aria-label={`选择片段 ${clip.name}`} tooltip={`${clip.name}${speedLabel ? ` ${speedLabel}` : ''}${channelType ? ` · ${videoEditAudioFormatLabel(channelType)}` : ''}${offset === undefined ? '' : `：与链接片段失步 ${Math.abs(offset)} 帧，右键可移入同步或滑入同步`}`} data-video-edit-audio-format={channelType} className={`!h-full min-w-0 flex-1 ${titled ? '!items-start' : '!items-center'} !justify-start !rounded-none !bg-transparent !p-0`} onClick={event => { if (event.detail === 0) run(() => pointer.select([clip.id], event.shiftKey || event.ctrlKey || event.metaKey, false, videoEditPickRelations(instance.linkedSelection !== false, event.altKey))) }}>
+              <span data-user-content className={`sticky max-w-full truncate px-1.5 text-2xs font-medium leading-4 ${!titled && (picture || sound) ? 'rounded-hairline bg-media-scrim text-on-media' : 'text-text1'}`} style={{ left: header }}>{clip.name}{speedLabel && <span className={UI_TEXT_NUMERIC_CLASS}> {speedLabel}</span>}</span>
             </UiButton>
             {/* ui-surface-allow 出点裁剪柄，同入点 */}
             <UiButton data-video-edit-trim="out" aria-label={`裁剪${clip.name}出点`} className="!h-full !w-2 shrink-0 cursor-ew-resize !rounded-none !bg-transparent !p-0" tabIndex={-1} />
@@ -499,13 +506,18 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
           {instance.tool !== 'pen' && fadeHandles.map(({ edge, fade, offset }) => {
             const adjusting = fade ? pointer.adjusting === fade.id : false
             return <div key={edge} data-video-edit-fade={edge} aria-label={edge === 'in' ? `拖动设置${clip.name}淡入` : `拖动设置${clip.name}淡出`}
-              className={`absolute top-0.5 z-raised flex h-3 w-3 cursor-ew-resize items-center justify-center transition-opacity duration-120 ${selected || adjusting ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
-              style={edge === 'in' ? { left: offset } : { right: offset }}>
-              <VideoEditFadeGlyph edge={edge} />
+              className={`absolute z-raised flex h-3 w-3 cursor-ew-resize items-center justify-center transition-opacity duration-120 ${selected || adjusting ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+              style={{ top: titled ? TIMELINE_CLIP_TITLE_HEIGHT - 6 : 2, ...(edge === 'in' ? { left: offset } : { right: offset }) }}>
+              <VideoEditFadeGlyph />
               {adjusting && <span data-video-edit-fade-readout className={`pointer-events-none absolute top-0 whitespace-nowrap rounded-hairline bg-raised px-1 text-2xs leading-3 text-text1 ${UI_TEXT_NUMERIC_CLASS} ${edge === 'in' ? 'left-full ml-1' : 'right-full mr-1'}`}>{edge === 'in' ? '淡入' : '淡出'} {fadeLabel(fade!.durationFrames, fps)}</span>}
             </div>
           })}
           {offsetLabel && <span className="pointer-events-none absolute right-2.5 top-0.5 rounded-hairline bg-danger-solid px-1 text-2xs font-medium leading-4 tabular-nums text-on-danger" data-video-edit-sync-offset={offset}>{offsetLabel}</span>}
+          {selected && <>
+            <span aria-hidden="true" className={TIMELINE_SELECTED_RING_CLASS} />
+            <span aria-hidden="true" className="pointer-events-none absolute inset-y-1 left-0.5 z-raised w-0.5 rounded-full bg-text1" />
+            <span aria-hidden="true" className="pointer-events-none absolute inset-y-1 right-0.5 z-raised w-0.5 rounded-full bg-text1" />
+          </>}
           </div>
           {/* 缝上那 1 像素也是出点修剪柄，和外观层里的修剪柄连成一片 */}
           <span aria-hidden="true" data-video-edit-trim="out" className="absolute inset-y-0 right-0 w-px cursor-ew-resize" />
@@ -696,6 +708,15 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
             })}
             {visibleClips.filter(clip => rows.find(row => row.track.index === clip.track)?.region === kind).map(clip => renderClip(clip, region))}
             {transitionWindows.filter(window => rows.find(row => row.track.index === window.left.track)?.region === kind).map(window => renderTransition(window, region))}
+            {/* 轨道状态用整条轨道的样子表达，不靠文字：隐藏、静音压一层半透明的暗底，锁定叠一层细斜线 */}
+            {headerRows.filter(row => row.region === kind).flatMap(row => {
+              const off = !row.track.enabled || row.track.kind === 'audio' && row.track.muted
+              const span = { top: row.top - region.top, height: row.height, left: header }
+              return [
+                ...(off ? [<div key={`off-${row.track.id}`} aria-hidden="true" data-video-edit-track-state="off" className="pointer-events-none absolute right-0 z-raised bg-gap/60" style={span} />] : []),
+                ...(row.track.locked ? [<div key={`locked-${row.track.id}`} aria-hidden="true" data-video-edit-track-state="locked" className="ui-hatch-locked pointer-events-none absolute right-0 z-raised" style={span} />] : []),
+              ]
+            })}
             {transitionHint && rows.find(row => row.track.index === transitionHint.track)?.region === kind && <VideoEditTransitionDropBlock hint={transitionHint} row={rows.find(value => value.track.index === transitionHint.track)!} region={region} pixels={pixels} />}
             <VideoEditEffectDropTargets projectId={projectId} clips={visibleClips} rows={rows.filter(row => row.region === kind)} region={region} pixels={pixels} />
             <VideoEditInPlacePlaceholders projectId={projectId} sequence={displayed} rows={rows.filter(row => row.region === kind)} region={region} pixels={pixels} onReopen={inPlace.reopen} onError={onError} />

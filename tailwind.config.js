@@ -277,6 +277,8 @@ export default {
         text1: withOpacity('--text1-rgb'),
         text2: withOpacity('--text2-rgb'),
         text3: withOpacity('--text3-rgb'),
+        // 静息图标灰：只给图标（见 index.css 的 --icon-rest）
+        'icon-rest': cssVar('--icon-rest'),
         text: {
           disabled: withOpacity('--text-disabled-rgb'),
         },

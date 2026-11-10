@@ -54,11 +54,11 @@ export function VideoEditZoomBarTrack({ label, state, width, onScroll, onRange, 
   return <div className="relative mx-1 h-full flex-1" role="scrollbar" aria-orientation="horizontal" aria-label={label} aria-valuemin={0} aria-valuemax={Math.round(state.totalFrames)} aria-valuenow={Math.round(state.startFrame)}
     onPointerDown={event => { if (event.button === 0 && event.target === event.currentTarget) onScroll(timelineZoomBarCenterAt(state, event.clientX - event.currentTarget.getBoundingClientRect().left, width)) }}
     onWheel={event => { if (event.deltaY) onZoom(state.startFrame + state.visibleFrames / 2, event.deltaY < 0 ? 1.25 : 0.8) }}>
-    <div className="group absolute top-1/2 flex h-2.5 -translate-y-1/2 items-center rounded-full bg-text2/30 hover:bg-text2/45" style={{ left: thumb.left, width: thumb.width }} data-video-edit-zoom-thumb
+    <div className="group absolute top-1/2 flex h-2.5 -translate-y-1/2 items-center rounded-full bg-text2/15 hover:bg-text2/30" style={{ left: thumb.left, width: thumb.width }} data-video-edit-zoom-thumb
       title="拖动平移，拖两端缩放" onPointerDown={event => begin(event, 'move')}>
-      <span data-video-edit-zoom-handle="start" aria-label="拖动调整可见范围起点" className="h-2.5 w-2.5 shrink-0 cursor-ew-resize rounded-full bg-text3 transition-colors group-hover:bg-text1 group-active:bg-text1" onPointerDown={event => begin(event, 'start')} />
+      <span data-video-edit-zoom-handle="start" aria-label="拖动调整可见范围起点" className="h-2.5 w-2.5 shrink-0 cursor-ew-resize rounded-full bg-icon-rest transition-colors group-hover:bg-text2 group-active:bg-text1" onPointerDown={event => begin(event, 'start')} />
       <span className="flex-1" />
-      <span data-video-edit-zoom-handle="end" aria-label="拖动调整可见范围终点" className="h-2.5 w-2.5 shrink-0 cursor-ew-resize rounded-full bg-text3 transition-colors group-hover:bg-text1 group-active:bg-text1" onPointerDown={event => begin(event, 'end')} />
+      <span data-video-edit-zoom-handle="end" aria-label="拖动调整可见范围终点" className="h-2.5 w-2.5 shrink-0 cursor-ew-resize rounded-full bg-icon-rest transition-colors group-hover:bg-text2 group-active:bg-text1" onPointerDown={event => begin(event, 'end')} />
     </div>
   </div>
 }

@@ -16,8 +16,8 @@ const ZOOM_MIN = 0.1
 const ZOOM_MAX = 20
 
 /**
- * 时间线（重要记录 019）：不再单占一行工具栏。编辑工具在剪辑命令带；轨道头上方的角落格分两行（与标尺的标记行、刻度行对齐）：
- * 上面是时间码（Premiere 播放指示器的位置，可拖动、单击输入、Ctrl+单击切换帧号），下面是这条时间线的统一开关
+ * 时间线（重要记录 019）：不再单占一行工具栏。编辑工具在剪辑命令带；轨道头上方的角落格只有一行：
+ * 左边是时间码（Premiere 播放指示器的位置，可拖动、单击输入、Ctrl+单击切换帧号），右边是这条时间线的统一开关
  * （链接选择、吸附、运动模糊、帧混合、序列设置）；缩放在右下角底栏。
  * 拆分、删除在“剪辑”“编辑”菜单与快捷键里。播放控制在节目监视器。
  */
@@ -38,13 +38,13 @@ function VideoEditTimelineContent({ instance, onError, visible = true }: { insta
     return { kind: 'action', id, label, icon, tooltip: state.label, disabled: !state.enabled, disabledReason: state.reason, onSelect: () => execute(id) }
   }
   const zoomSlider = <UiRangeInput aria-label="时间线缩放" min={ZOOM_MIN} max={ZOOM_MAX} step={0.1} value={instance.zoom} onChange={event => run(() => setVideoEditTimelineView(instance.document.id, { zoom: Number(event.target.value) }))} />
-  const corner = <div className="flex min-w-0 flex-1 flex-col">
-    <div className="flex min-h-0 flex-1 items-center"><CornerTimecode instance={instance} /></div>
+  const corner = <div className="flex min-w-0 flex-1 items-center">
+    <div className="flex min-w-0 flex-1 items-center"><CornerTimecode instance={instance} /></div>
     <div className="flex h-6 shrink-0 items-center gap-0.5" role="toolbar" aria-label="时间线开关">
       <UiIconButton size="xs" on={linkedSelection.checked} disabled={!linkedSelection.enabled} aria-label={linkedSelection.title} tooltip={`${linkedSelection.tooltip}（按住 Alt 临时切换）`} onClick={() => execute('toggle_linked_selection')}><Link /></UiIconButton>
       <UiIconButton size="xs" on={snapping.checked} disabled={!snapping.enabled} aria-label={snapping.title} tooltip={snapping.tooltip} onClick={() => execute('toggle_snapping')}><Magnet /></UiIconButton>
-      <UiIconButton size="xs" on={motionBlur.checked} disabled={!motionBlur.enabled} aria-label={motionBlur.title} tooltip={`${motionBlur.tooltip}：整条序列的总开关，运动的片段与图层沿运动方向模糊`} onClick={() => execute('toggle_motion_blur')}><MotionBlurIcon /></UiIconButton>
-      <UiIconButton size="xs" on={frameBlend.checked} disabled={!frameBlend.enabled} aria-label={frameBlend.title} tooltip={`${frameBlend.tooltip}：慢放片段默认把相邻两帧混合`} onClick={() => execute('toggle_frame_blend')}><FrameBlendIcon /></UiIconButton>
+      <UiIconButton size="xs" tone={motionBlur.checked ? 'default' : 'rest'} on={motionBlur.checked} disabled={!motionBlur.enabled} aria-label={motionBlur.title} tooltip={`${motionBlur.tooltip}：整条序列的总开关，运动的片段与图层沿运动方向模糊`} onClick={() => execute('toggle_motion_blur')}><MotionBlurIcon /></UiIconButton>
+      <UiIconButton size="xs" tone={frameBlend.checked ? 'default' : 'rest'} on={frameBlend.checked} disabled={!frameBlend.enabled} aria-label={frameBlend.title} tooltip={`${frameBlend.tooltip}：慢放片段默认把相邻两帧混合`} onClick={() => execute('toggle_frame_blend')}><FrameBlendIcon /></UiIconButton>
       <VideoEditSequenceTabs instance={instance} onError={onError} />
     </div>
   </div>
@@ -62,7 +62,7 @@ function VideoEditTimelineContent({ instance, onError, visible = true }: { insta
 /** 角落格的时间码：轨道头随窄面板收窄时字号跟着变小，读数不被裁掉。 */
 function CornerTimecode({ instance }: { instance: VideoEditInstance }): React.ReactElement {
   const compact = useTimelineHeaderWidth() < 180
-  return <VideoEditTimecode instance={instance} label="当前时间码" className={compact ? 'px-1 text-xs' : 'px-1.5 text-base'} />
+  return <VideoEditTimecode instance={instance} label="当前时间码" primary className={compact ? 'px-1 text-xs' : 'px-1.5 text-15'} />
 }
 
 export function VideoEditTimeline(props: Parameters<typeof VideoEditTimelineContent>[0]): React.ReactElement {

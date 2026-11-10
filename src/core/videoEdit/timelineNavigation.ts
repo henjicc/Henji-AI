@@ -31,7 +31,8 @@ export function videoEditClipsAtFrame<T extends { track: number; start: number; 
 /** 轨道高度档位：与轨道头拖动同一范围。 */
 export const VIDEO_EDIT_TRACK_HEIGHT_MIN = 24
 export const VIDEO_EDIT_TRACK_HEIGHT_MAX = 160
-export const VIDEO_EDIT_TRACK_HEIGHT_DEFAULT = 32
+/** 默认轨道高度：放得下 16 像素名条加一行缩略图或波形。 */
+export const VIDEO_EDIT_TRACK_HEIGHT_DEFAULT = 44
 export function clampVideoEditTrackHeight(height: number): number { return Math.max(VIDEO_EDIT_TRACK_HEIGHT_MIN, Math.min(VIDEO_EDIT_TRACK_HEIGHT_MAX, Math.round(height))) }
 
 /** 时间线缩放范围（每秒 60 × zoom 像素），与时间线视图校验一致。 */

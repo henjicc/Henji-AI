@@ -234,6 +234,7 @@
     "strokePosition": "Position",
     "inputLut": "Input LUT",
     "creativeLook": "Creative Look",
+    "waveformFailed": "Waveform unavailable",
     "waveformRetry": "Waveform unavailable · Retry",
     "waveformFailed": "Waveform unavailable",
     "waveformRetryHint": "Retry, or check that the original media is available.",

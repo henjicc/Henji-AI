@@ -234,6 +234,7 @@
     "strokePosition": "位置",
     "inputLut": "输入 LUT",
     "creativeLook": "创意 Look",
+    "waveformFailed": "波形读取失败",
     "waveformRetry": "波形未能读取 · 重试",
     "waveformFailed": "波形未能读取",
     "waveformRetryHint": "请重试；仍失败时检查原素材是否可用。",

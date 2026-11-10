@@ -26,6 +26,7 @@ import { VideoEditTimelineTools } from './VideoEditTimelineTools'
 import { timelineCommandPresentation } from './timelineCommandPresentation'
 import { VideoEditInOutDuration } from './VideoEditTimelineTransport'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { VIDEO_EDIT_TRACK_HEIGHT_DEFAULT } from '@/core/videoEdit/timelineNavigation'
 import { TIMELINE_HEADER_WIDTH as header, TIMELINE_RULER_HEIGHT as ruler, TIMELINE_DEFAULT_SPLIT, timelineLayout } from './timelineGeometry'
 import { addLegacyVideoEditTracks } from '@/core/videoEdit/testFixtures'
 import { resetFilmstripFramesForTests } from '@/services/videoFilmstrip/filmstripFrameService'
@@ -376,7 +377,7 @@ it('新序列只有 V1/A1：片段拖到最上视频轨之上自动加轨，素�
   expect(view.container.querySelectorAll('[data-video-edit-track]')).toHaveLength(2)
   const history = owner.past.length
   fireEvent.pointerDown(view.getByRole('button', { name: '选择片段 视频' }), event(header + 20))
-  fireEvent.pointerMove(host, event(header + 20, ruler + 32))
+  fireEvent.pointerMove(host, event(header + 20, trackTop(1) - 4))
   // 预览里已出现新轨道，继续在它上面移动仍是同一条新轨道
   expect(view.container.querySelectorAll('[data-video-edit-track]')).toHaveLength(3)
   fireEvent.pointerMove(host, event(header + 22, trackClientY(2))); fireEvent.pointerUp(host, event(header + 22, trackClientY(2)))
@@ -384,8 +385,8 @@ it('新序列只有 V1/A1：片段拖到最上视频轨之上自动加轨，素�
   expect(current().clips.find(clip => clip.id === ids[0])).toMatchObject({ track: 2, start: 1 }); expect(owner.past).toHaveLength(history + 1)
   act(() => undoVideoEdit(owner.document.id)); expect(current().tracks).toHaveLength(2)
   const transfer = { types: [VIDEO_EDIT_ITEM_DRAG_MIME], getData: () => JSON.stringify({ projectId: owner.document.id, itemIds: ['video-item'] }) }
-  fireEvent.dragOver(host, { clientX: header + 200, clientY: ruler + 32, dataTransfer: transfer })
-  fireEvent.drop(host, { clientX: header + 200, clientY: ruler + 32, dataTransfer: transfer })
+  fireEvent.dragOver(host, { clientX: header + 200, clientY: trackTop(1) - 4, dataTransfer: transfer })
+  fireEvent.drop(host, { clientX: header + 200, clientY: trackTop(1) - 4, dataTransfer: transfer })
   await waitFor(() => expect(current().clips).toHaveLength(3))
   expect(current().tracks).toHaveLength(3); expect(current().clips.at(-1)).toMatchObject({ itemId: 'video-item', track: 2, start: 100 })
   expect(owner.past).toHaveLength(history + 1); expect(onError).not.toHaveBeenCalled()
@@ -480,10 +481,10 @@ it('高度只在释放提交一次，实际32轨道与高度用于纵向命中',
   const resizeY = trackClientY() + 15
   fireEvent.pointerDown(view.getByRole('separator', { name: '调整轨道1高度' }), event(100, resizeY)); fireEvent.pointerMove(host, event(100, resizeY + 40))
   expect(current().tracks[1].height).toBeUndefined(); expect(owner.past).toHaveLength(history)
-  fireEvent.pointerUp(host, event(100, resizeY + 40)); expect(current().tracks[1].height).toBe(72); expect(owner.past).toHaveLength(history + 1)
+  fireEvent.pointerUp(host, event(100, resizeY + 40)); expect(current().tracks[1].height).toBe(VIDEO_EDIT_TRACK_HEIGHT_DEFAULT + 40); expect(owner.past).toHaveLength(history + 1)
   fireEvent.pointerDown(view.getByRole('button', { name: '选择片段 视频' }), event(header + 20))
   // 拖动中 Ctrl+滚轮把视频区往上滚，露出上层轨道（只滚光标所在的视频区）
-  fireEvent.wheel(host, { deltaY: -870, ctrlKey: true, clientX: 300, clientY: ruler + 32 }); const targetY = trackClientY(29)
+  fireEvent.wheel(host, { deltaY: -Math.round(870 * VIDEO_EDIT_TRACK_HEIGHT_DEFAULT / 32), ctrlKey: true, clientX: 300, clientY: trackTop(1) - 4 }); const targetY = trackClientY(29)
   // 落在置顶字幕轨之下、视频区（视口 300 减标尺与分隔条后的一半）之内
   expect(targetY).toBeGreaterThanOrEqual(ruler + 24); expect(targetY).toBeLessThan(ruler + 120)
   fireEvent.pointerMove(host, event(header + 20, targetY)); fireEvent.pointerUp(host, event(header + 20, targetY))
@@ -688,7 +689,7 @@ it('滚轮横向滚动、Ctrl 纵向；Alt 缩放保持光标处时间；Shift �
   fireEvent.wheel(host, { deltaY: -100, shiftKey: true, clientX: 300, clientY: trackClientY(video.index) })
   expect(owner.past.length).toBe(history)
   await waitFor(() => expect(owner.past.length).toBe(history + 1))
-  expect(current().tracks.find(track => track.id === video.id)!.height).toBe((video.height ?? 32) + 16)
+  expect(current().tracks.find(track => track.id === video.id)!.height).toBe((video.height ?? VIDEO_EDIT_TRACK_HEIGHT_DEFAULT) + 16)
   expect(onError).not.toHaveBeenCalled()
 })
 
@@ -781,6 +782,8 @@ it('素材项拖放按重排后的原轨道命中，音画分界不产生伪落�
   expect(onError).toHaveBeenCalledOnce()
   expect(onError.mock.calls[0][0]).toMatchObject({ message: '拖入位置不在可用轨道上，请把素材拖到时间线轨道内。' })
   onError.mockClear()
+  // 视频区放不下第三条画面轨时先往上滚一条，露出要落的轨道
+  fireEvent.wheel(host, { deltaY: -VIDEO_EDIT_TRACK_HEIGHT_DEFAULT, ctrlKey: true, clientX: 300, clientY: trackClientY(1) })
   const y = trackClientY(3)
   fireEvent.dragOver(host, { clientX: header + 200, clientY: y, dataTransfer: transfer })
   fireEvent.drop(host, { clientX: header + 200, clientY: y, dataTransfer: transfer })
@@ -945,7 +948,7 @@ it('轨道头右键：添加／删除单个轨道各一步撤销，重命名，�
   // 新轨道紧贴在 V1 之上，原 V2 及以上顺延为 V3…
   const codes = [...view.container.querySelectorAll('[data-video-edit-track-code]')].map(node => node.textContent)
   // 最上面的轨道被置顶字幕轨盖住、不在可见范围内挂载，只核对可见的连续编号
-  expect(codes.filter(code => code?.startsWith('V')).slice(-5)).toEqual(['V5', 'V4', 'V3', 'V2', 'V1'])
+  expect(codes.filter(code => code?.startsWith('V')).slice(-4)).toEqual(['V4', 'V3', 'V2', 'V1'])
   expect(current().clips.every(clip => current().tracks.some(track => track.index === clip.track))).toBe(true)
   act(() => undoVideoEdit(owner.document.id)); expect(count('video')).toBe(7)
   fireEvent.contextMenu(headerOf(v1.id), { clientX: 40, clientY: 100 }); fireEvent.click(await view.findByText('重命名'))

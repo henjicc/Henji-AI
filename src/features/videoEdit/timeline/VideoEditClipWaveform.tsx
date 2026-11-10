@@ -1,7 +1,8 @@
 import { videoEditGainMultiplier } from '@/core/videoEdit/loudness'
 import { memo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { UiButton } from '@/components/ui'
+import { TriangleAlert } from 'lucide-react'
+import { UiButton, UiIconButton } from '@/components/ui'
 import { WaveformView } from '@/components/waveform/WaveformView'
 import { retryWaveform, useWaveformDataList, type WaveformSourceRef } from '@/hooks/useWaveformData'
 
@@ -9,7 +10,7 @@ import { retryWaveform, useWaveformDataList, type WaveformSourceRef } from '@/ho
  * 时间线片段的波形（任务 2.3）：每个来源一份整段多级峰值，片段可见部分直接从中切片，
  * 滚动与缩放不再按区间重新解码。声道映射片段每条片段声道一个来源，自上而下各占一条。
  */
-export const VideoEditClipWaveform = memo(function VideoEditClipWaveform({ clipId, sources, startSeconds, endSeconds, gainDb, reverse, left, width, visible, lane = 'full' }: {
+export const VideoEditClipWaveform = memo(function VideoEditClipWaveform({ clipId, sources, startSeconds, endSeconds, gainDb, reverse, left, width, visible, lane = 'full', compact = false }: {
   gainDb?: number
   clipId: string
   sources: readonly WaveformSourceRef[]
@@ -23,6 +24,8 @@ export const VideoEditClipWaveform = memo(function VideoEditClipWaveform({ clipI
   visible: boolean
   /** full：铺满片段；lower：带声音的画面片段（未拆分音视频）把波形放在缩略图条下半部。 */
   lane?: 'full' | 'lower'
+  /** 片段太窄放不下文字：读取失败时只留警示图标。 */
+  compact?: boolean
 }) {
   const { t } = useTranslation('ui')
   const states = useWaveformDataList(sources, 'full', visible)
@@ -33,8 +36,11 @@ export const VideoEditClipWaveform = memo(function VideoEditClipWaveform({ clipI
     {ready && <div className={`pointer-events-none absolute bottom-0 flex flex-col ${lane === 'lower' ? 'h-1/2 bg-media-scrim' : 'top-0'}`} data-video-edit-waveform={clipId} data-waveform-lanes={lanes} style={{ left, width }}>
       {states.map((state, index) => <WaveformView key={index} waveform={state} gain={videoEditGainMultiplier(gainDb)} startSeconds={startSeconds} endSeconds={endSeconds} tone="clip" className={`min-h-0 flex-1 ${reverse ? '-scale-x-100' : ''}`} />)}
     </div>}
-    {error && <div className="absolute bottom-0 z-raised max-w-full" onPointerDown={event => event.stopPropagation()} onClick={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()}>
-      <UiButton variant="link" size="sm" tooltip={t('surfaceGrammar.waveformRetry')} aria-label={t('surfaceGrammar.waveformRetry')} onClick={() => sources.forEach(source => retryWaveform(source, 'full'))}>{t('errorState.retry')}</UiButton>
+    {/* 读不出波形的片段叠一层红斜纹，一眼看得出哪段有问题；点它重试 */}
+    {error && <div className={`ui-hatch-danger absolute inset-x-0 bottom-0 z-raised flex items-center overflow-hidden ${lane === 'lower' ? 'h-1/2' : 'top-0'}`} data-video-edit-waveform-failed={clipId} onPointerDown={event => event.stopPropagation()} onClick={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()}>
+      {compact
+        ? <UiIconButton size="2xs" tone="bare" tooltip={t('surfaceGrammar.waveformRetry')} aria-label={t('surfaceGrammar.waveformRetry')} onClick={() => sources.forEach(source => retryWaveform(source, 'full'))}><TriangleAlert className="text-danger-text" /></UiIconButton>
+        : <UiButton size="sm" tooltip={t('surfaceGrammar.waveformRetry')} aria-label={t('surfaceGrammar.waveformRetry')} onClick={() => sources.forEach(source => retryWaveform(source, 'full'))}><TriangleAlert className="text-danger-text" />{t('surfaceGrammar.waveformFailed')}</UiButton>}
     </div>}
   </>
 })

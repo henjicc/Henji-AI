@@ -97,6 +97,10 @@ const PROGRAM_COMMAND_ICONS: Record<Exclude<typeof PROGRAM_COMMAND_BUTTONS[numbe
   step_forward: ChevronRight, step_forward_five: ChevronsRight, go_end: SkipForward, go_prev_edit: StepBack, go_next_edit: StepForward, lift: ArrowUpFromLine, extract: FoldHorizontal, toggle_safe_margins: Scan,
 }
 /** 窄面板先收起优先级低的：播放、逐帧、入出点留到最后。 */
+/** 按钮栏分三段，段与段之间留一段空：标记与入出点、播放、其余工具。同段按钮挨着，眼睛先找到段再找到按钮。 */
+const PROGRAM_MARK_BUTTONS: ReadonlySet<string> = new Set(['add_marker', 'mark_in', 'mark_out', 'clear_in_out'])
+const PROGRAM_TRANSPORT_BUTTONS: ReadonlySet<string> = new Set(['go_in', 'go_out', 'go_start', 'step_back_five', 'step_back', 'play_reverse', 'play_stop', 'play_pause', 'play_forward', 'step_forward', 'step_forward_five', 'go_end', 'go_prev_edit', 'go_next_edit'])
+const programButtonGroup = (id: string): number => PROGRAM_MARK_BUTTONS.has(id) ? 0 : PROGRAM_TRANSPORT_BUTTONS.has(id) ? 1 : 2
 const PROGRAM_BUTTON_PRIORITY: Partial<Record<VideoEditProgramButtonId, number>> = { play_pause: 100, step_back: 90, step_forward: 90, mark_in: 80, mark_out: 80 }
 /** 回放分辨率（PR“回放分辨率”）：控制条上的下拉与“更多”里的同一组选项。 */
 const PLAYBACK_RESOLUTION_OPTIONS = VIDEO_EDIT_PLAYBACK_RESOLUTIONS.map(value => ({ value, label: VIDEO_EDIT_PLAYBACK_RESOLUTION_LABELS[value] }))
@@ -1040,7 +1044,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     { id: 'toggle_proxies', title: '切换代理', Icon: ICON_VIDEO_EDIT_PROXY, on: getVideoEditProxyPreference(instance.document.id).enabled, tooltip: '切换代理：看片使用已有代理；导出默认用原片（可在导出设置中选代理）；分析使用原片', onClick: () => { try { setVideoEditProxyPreference(instance.document.id, { enabled: !getVideoEditProxyPreference(instance.document.id).enabled }) } catch (error) { onError(error) } } },
     ...PROGRAM_COMMAND_BUTTONS.map((id): VideoEditMonitorButtonSpec => {
       const command = id === 'lift' || id === 'extract' ? rangeEdits[id] : timelineCommandPresentation(commandContext, id, shortcuts)
-      if (id === 'play_pause') return { id, title: command.title, tooltip: command.tooltip, Icon: instance.playing ? Pause : Play, enabled: command.enabled, onClick: () => runCommand(id) }
+      if (id === 'play_pause') return { id, title: command.title, tooltip: command.tooltip, Icon: instance.playing ? Pause : Play, size: 'md' as const, enabled: command.enabled, onClick: () => runCommand(id) }
       return { id, title: command.title, tooltip: id === 'toggle_safe_margins' ? '安全框：动作安全区（93%）与字幕安全区（90%）' : command.tooltip, Icon: PROGRAM_COMMAND_ICONS[id], enabled: command.enabled, on: command.checked, onClick: () => runCommand(id) }
     }),
     { id: 'export_frame', title: '导出帧', tooltip: '导出帧：把当前画面加入资产库', Icon: Camera, enabled: !busy, onClick: captureFrame },
@@ -1150,8 +1154,6 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     {/* 节目监视器控制条单行（5.8 toolbarWrap）：窄面板下先让出时间码（时间线左上角有同一读数），
         再把显示比例与节目工具按优先级收进“更多”，不再折成多行 */}
     <div ref={programToolbarRef} className="flex min-h-10 shrink-0 items-center gap-x-1 whitespace-nowrap px-2 py-1" role="toolbar" aria-label="节目监视器控制">
-      <VideoEditMotionControls owner={instance} onError={onError} />
-      <VideoEditExplanationControls owner={instance} onError={onError} />
       <ContextMenu surface="glass" visible={annotationMenu.menuVisible} items={annotationMenu.menuItems} position={annotationMenu.menuPosition} onClose={annotationMenu.hideMenu} />
       {compactProgramToolbar ? null : <VideoEditTimecode instance={instance} label="节目时间码" className="w-28 px-1.5 text-13" />}
       {compactProgramToolbar ? null : <VideoEditInOutDuration instance={instance} className="px-1.5 text-xs" />}
@@ -1159,7 +1161,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         className="flex-1 justify-center gap-0.5"
         alwaysShowOverflow
         items={[
-          ...barButtons.map(spec => ({ id: spec.id, priority: PROGRAM_BUTTON_PRIORITY[spec.id as VideoEditProgramButtonId] ?? 10, node: <VideoEditMonitorButton spec={spec} /> })),
+          ...barButtons.map((spec, index) => ({ id: spec.id, priority: PROGRAM_BUTTON_PRIORITY[spec.id as VideoEditProgramButtonId] ?? 10, node: index > 0 && programButtonGroup(spec.id) !== programButtonGroup(barButtons[index - 1].id) ? <div className="ml-4"><VideoEditMonitorButton spec={spec} /></div> : <VideoEditMonitorButton spec={spec} /> })),
           { id: 'button_editor', priority: 0, pinned: true, node: <VideoEditMonitorButtonEditor kind="program" specs={programButtons} /> },
           { id: 'display', priority: 0, node: <div className="ml-2">{zoom.dropdown}</div> },
           { id: 'resolution', priority: 0, node: <Tooltip content={PLAYBACK_RESOLUTION_TIP}><div><Dropdown<VideoEditPlaybackResolution> ariaLabel="回放分辨率" appearance="text" size="sm" value={playbackResolution.resolution} options={PLAYBACK_RESOLUTION_OPTIONS} onSelect={resolution => changePlaybackResolution({ resolution })} /></div></Tooltip> },
@@ -1190,6 +1192,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         {({ open, togglePanel }) => <UiIconButton size="sm" aria-label="更多节目操作" tooltip="更多：重新加载预览、选帧加入资产库、编辑当前帧" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><MoreHorizontal /></UiIconButton>}
       </PanelTrigger>}
  />
+      <VideoEditMotionControls owner={instance} onError={onError} />
+      <VideoEditExplanationControls owner={instance} onError={onError} />
     </div>
     {canvasSend && <VideoEditCanvasSendDialog request={canvasSend} onClose={() => setCanvasSend(null)} />}
   </div>

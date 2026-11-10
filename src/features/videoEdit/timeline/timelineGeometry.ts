@@ -1,6 +1,6 @@
 import type { VideoEditClip, VideoEditSequence } from '@/core/videoEdit/document'
 import { videoEditFrameTimecode } from '@/core/videoEdit/timecode'
-import { VIDEO_EDIT_TRACK_HEIGHT_MIN } from '@/core/videoEdit/timelineNavigation'
+import { VIDEO_EDIT_TRACK_HEIGHT_DEFAULT } from '@/core/videoEdit/timelineNavigation'
 import { createContext, useContext } from 'react'
 
 /** 轨道头宽：名称按钮 + 6 个 24 命中区的图标开关（5.8：原 20 的开关低于命中区下限 24，宽度随之 208 → 232） */
@@ -20,10 +20,11 @@ export const TimelineHeaderWidthContext = createContext(TIMELINE_HEADER_WIDTH)
 export function useTimelineHeaderWidth(): number { return useContext(TimelineHeaderWidthContext) }
 /** 播放头在标尺上的“头”（Premiere 的蓝色指示器）的形状：时间线与节目标尺共用。 */
 export const TIMELINE_PLAYHEAD_HEAD_SHAPE = { clipPath: 'polygon(0 0, 100% 0, 100% 55%, 50% 100%, 0 55%)' }
-/** 标尺两行（参照 Premiere）：上面一行放标记与批注，下面一行是时间刻度，标记不压时间数字；角落格也正好排两行。 */
-export const TIMELINE_RULER_HEIGHT = 52
-export const TIMELINE_MARK_LANE_HEIGHT = 24
-export const TIMELINE_CAPTION_HEIGHT = VIDEO_EDIT_TRACK_HEIGHT_MIN
+/** 标尺两行（参照 Premiere）：上面一窄行放标记与批注，下面一行是时间刻度，标记不压时间数字；角落格的时间码与开关并在同一行里。 */
+export const TIMELINE_RULER_HEIGHT = 40
+export const TIMELINE_MARK_LANE_HEIGHT = 14
+/** 字幕轨只有一行字，比画面、声音轨矮。 */
+export const TIMELINE_CAPTION_HEIGHT = 28
 /** 缩放轨 Z1：序列里有录屏片段开启自动缩放时，钉在字幕轨下面。 */
 const TIMELINE_ZOOM_HEIGHT = 24
 /** 视频区与音频区之间的分隔条高度（可拖动调整两区比例）。 */
@@ -71,7 +72,7 @@ export function timelineLayout(sequence: Pick<VideoEditSequence, 'tracks'>, inpu
   const area = Math.max(0, input.viewportHeight - trackTop - TIMELINE_TRACK_SECTION_GAP)
   const min = Math.min(TIMELINE_REGION_MIN, area / 2)
   const videoHeight = Math.round(Math.max(min, Math.min(area - min, area * input.split)))
-  const height = (track: VideoEditSequence['tracks'][number]): number => resized?.trackId === track.id ? resized.height : track.height ?? 32
+  const height = (track: VideoEditSequence['tracks'][number]): number => resized?.trackId === track.id ? resized.height : track.height ?? VIDEO_EDIT_TRACK_HEIGHT_DEFAULT
   const lane = (track: VideoEditSequence['tracks'][number]): number => input.lanes?.get(track.id) ?? 0
   const extra = (track: VideoEditSequence['tracks'][number]): { lane?: number } => lane(track) > 0 ? { lane: lane(track) } : {}
   const tracks = { video: sequence.tracks.filter(track => track.kind === 'video').sort((a, b) => a.index - b.index), audio: sequence.tracks.filter(track => track.kind === 'audio').sort((a, b) => a.index - b.index) }
@@ -120,10 +121,14 @@ export function timelineVisibleTrackRows(rows: readonly TimelineTrackRow[], reta
   return rows.filter(row => retained.includes(row.track.id) || row.top + row.height + (row.lane ?? 0) > row.clipTop - overscan && row.top < row.clipBottom + overscan)
 }
 /**
- * 片段块的外观层（底色与描边）：右端让出 1 像素，前后相连的片段之间露一道缝，两条边各自完整、紧贴而不叠成一条（PR、达芬奇）；
+ * 片段块的外观层（只有底色，不描边）：右端让出 1 像素，前后相连的片段之间露一道缝（PR、达芬奇）；
  * 块本身仍铺满到下一个片段，点在缝上还是点中这个片段。
  */
-export const TIMELINE_BLOCK_FACE_CLASS = 'absolute inset-y-0 left-0 right-px rounded-md border'
+export const TIMELINE_BLOCK_FACE_CLASS = 'absolute inset-y-0 left-0 right-px rounded-check'
+/** 片段顶上的名条高度：轨道够高时名字独占这一条，缩略图与波形从它下面开始。 */
+export const TIMELINE_CLIP_TITLE_HEIGHT = 16
+/** 片段内高不到这个值时不画名条，名字垂直居中压在内容上。 */
+export const TIMELINE_CLIP_TITLE_MIN_HEIGHT = 36
 /**
  * 片段块（片段、字幕、拖入虚影）的横向范围：两端落在整像素上，相连的片段首尾相接。缝不在这里让：
  * 让出来的那 1 像素不属于任何片段，点切点就落空了；缝由块里的外观层留出（TIMELINE_BLOCK_FACE_CLASS）。

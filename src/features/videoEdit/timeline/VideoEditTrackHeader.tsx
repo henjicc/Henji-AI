@@ -89,22 +89,22 @@ export function VideoEditTrackHeader({ row, code, targeted, onTarget, onPatch, o
     ])
   }
   return <div className={`sticky left-0 z-sticky flex h-full items-center gap-px border-r border-gap pl-1 pr-1.5 ${targeted ? 'bg-raised' : 'bg-panel'}`} style={{ width: header }} data-video-edit-track-header={track.id} onContextMenu={onContextMenu}>
-    {onToggleExpanded && <UiIconButton size="2xs" aria-expanded={expanded} aria-label={expandLabel} tooltip={expanded ? expandMode === 'scene' ? '收起片子数据' : '收起关键帧' : onExpandScene ? '展开看关键帧或片子数据' : '展开看关键帧'} onClick={toggle}>{expanded ? <ChevronDown /> : <ChevronRight />}</UiIconButton>}
+    {onToggleExpanded && <UiIconButton size="2xs" tone="rest" aria-expanded={expanded} aria-label={expandLabel} tooltip={expanded ? expandMode === 'scene' ? '收起片子数据' : '收起关键帧' : onExpandScene ? '展开看关键帧或片子数据' : '展开看关键帧'} onClick={toggle}>{expanded ? <ChevronDown /> : <ChevronRight />}</UiIconButton>}
     {onExpandScene && <ContextMenu items={menu.menuItems} position={menu.menuPosition} visible={menu.menuVisible} onClose={menu.hideMenu} />}
-    {caption ? <div className="flex min-w-0 flex-1 items-center gap-1.5 px-1"><span className="w-5 shrink-0 text-left tabular-nums text-2xs font-semibold" data-video-edit-track-code>{code}</span>{header >= TRACK_NAME_MIN_HEADER && <span className="truncate text-2xs">{name}</span>}</div> : renaming ? <TrackNameInput code={code} name={name} onDone={value => onRename?.(value)} />
+    {caption ? <div className="flex min-w-0 flex-1 items-center gap-1.5 px-1"><span className="w-5 shrink-0 text-left tabular-nums text-2xs font-semibold" data-video-edit-track-code>{code}</span>{header >= TRACK_NAME_MIN_HEADER && <span className="truncate text-xs text-text2">{name}</span>}</div> : renaming ? <TrackNameInput code={code} name={name} onDone={value => onRename?.(value)} />
       : <UiButton size="sm" className="min-w-0 flex-1 !justify-start" aria-label={`目标轨道 ${name}`} aria-pressed={targeted} onClick={onTarget} onDoubleClick={onStartRename} tooltip={channelFormat ? `${name}：${channelFormat === 'mixed' ? '既有单声道也有立体声片段' : `${CHANNEL_LABELS[channelFormat]}片段`}` : name}>
         <span className="w-5 shrink-0 text-left tabular-nums text-2xs font-semibold" data-video-edit-track-code>{code}</span>
         {/* 声道类型在名称下方，名称保留整行宽度；窄面板里轨道头收窄时只留编号，名称在悬停提示里。 */}
         {header >= TRACK_NAME_MIN_HEADER && <span className="flex min-w-0 flex-col items-start leading-none">
-          <span className="max-w-full truncate text-2xs">{name}</span>
+          <span className="max-w-full truncate text-xs font-normal text-text2">{name}</span>
           {channelFormat && <span className="mt-0.5 max-w-full truncate text-2xs text-text3" data-video-edit-track-channels={channelFormat}>{CHANNEL_LABELS[channelFormat]}</span>}
         </span>}
       </UiButton>}
     {ids.map(id => {
       if (caption && id !== 'locked' && id !== 'enabled') return <span key={id} aria-hidden="true" className="h-6 w-6 shrink-0" />
       const spec = specs.get(id)!; const label = caption ? t(`captionTrack.${id === 'enabled' ? track.enabled ? 'hide' : 'show' : track.locked ? 'unlock' : 'lock'}`) : `${name}${SHORT_LABELS[id]}`
-      // 默认状态不高亮（注意力优先，重要记录 019）：显示与同步锁定默认开着，关掉才着色；其余开着才着色。
-      return <UiIconButton key={id} size="xs" on={DEFAULT_ON.has(id) ? !spec.on : spec.on} aria-label={label} aria-pressed={spec.on} tooltip={caption ? label : spec.tooltip} onClick={spec.onClick}><spec.Icon /></UiIconButton>
+      // 默认状态退到图标灰；偏离默认（锁上、隐藏、静音、独奏）才变成主要文字色，不着强调色：显示与同步锁定默认开着，关掉才亮。
+      return <UiIconButton key={id} size="xs" tone="rest" on={DEFAULT_ON.has(id) ? !spec.on : spec.on} aria-label={label} aria-pressed={spec.on} tooltip={caption ? label : spec.tooltip} onClick={spec.onClick}><spec.Icon /></UiIconButton>
     })}
     {!caption && <div role="separator" tabIndex={0} aria-label={`调整${name}高度`} aria-orientation="horizontal" aria-valuemin={24} aria-valuemax={160} aria-valuenow={row.height} className="absolute bottom-0 left-0 right-0 h-1 cursor-row-resize focus-visible:bg-accent" onPointerDown={onResize}
       onKeyDown={event => { if (event.key === 'ArrowUp' || event.key === 'ArrowDown') { event.preventDefault(); event.stopPropagation(); onPatch({ height: Math.max(24, Math.min(160, row.height + (event.key === 'ArrowUp' ? -4 : 4))) }) } }} />}

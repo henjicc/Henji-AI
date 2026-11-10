@@ -254,6 +254,11 @@
    * 输入框与浮层按 4/3、2 倍推导，默认 6 → 6 / 8 / 12；界面控件与画布节点（--node-radius）一起缩放。
    * 必须留在这个全局加载的文件里：曾写在懒加载的 storyboard.css，导致没进过画布时圆角设置不生效。
    */
+  /*
+   * 静息图标灰：保持默认状态的开关、面板底栏工具、折叠箭头用，比辅助文字再退一档；只给图标，不给文字。
+   * 由辅助文字色与面板底混合得到，深浅主题、任何强调色下都跟着变。
+   */
+  --icon-rest: color-mix(in srgb, rgb(var(--text3-rgb)) 62%, rgb(var(--panel-rgb)));
   --radius-base: 6px;
   --radius-control: var(--radius-base);
   --radius-field: calc(var(--radius-base) * 4 / 3);
@@ -556,6 +561,15 @@
   /*
    * 遮罩把背后的页面压成安静的一片：去掉大半饱和度，背后强调色按钮被模糊后才不会在弹窗四周晕成一团团蓝光。
    */
+  /* 斜纹叠层：出问题的片段叠红，锁定的轨道叠细线。颜色只取令牌，深浅主题一起变。 */
+  .ui-hatch-danger {
+    background:
+      repeating-linear-gradient(135deg, rgb(var(--danger-rgb) / 0.34) 0 4px, transparent 4px 8px),
+      rgb(var(--danger-rgb) / 0.3);
+  }
+  .ui-hatch-locked {
+    background: repeating-linear-gradient(135deg, rgb(var(--text1-rgb) / 0.11) 0 1px, transparent 1px 7px);
+  }
   .ui-glass-scrim {
     background-color: var(--ui-scrim-tint);
     -webkit-backdrop-filter: blur(var(--ui-scrim-blur)) saturate(30%);
@@ -651,6 +665,15 @@
 
   .ui-btn-quiet:active:not(:disabled):not([aria-disabled='true']) {
     background-color: rgb(var(--selected-rgb));
+    color: rgb(var(--text1-rgb));
+  }
+
+  /* rest：静息时退到图标灰，悬停照 quiet 提亮；开着（偏离默认）是主要文字色，不着强调色。 */
+  .ui-btn-rest {
+    color: var(--icon-rest);
+  }
+
+  .ui-btn-rest-on {
     color: rgb(var(--text1-rgb));
   }
 
@@ -1180,7 +1203,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   /*
    * 面板标签（设计稿面板头，任务 2.2）：标签条与面板同底（panel），32 高、12/500；
    * 选中的可见标签 = 主要文字 + 底部 1.5px 强调色细线（重要记录 012，与 UiChipButton subtle 面板标签一致；
-   * 非激活分组里的当前标签降为 line-strong 细线），其余标签辅助文字；不再用底色块区分标签。
+   * 非激活分组里的当前标签不画线），其余标签辅助文字；不再用底色块区分标签。
    * 与 UiChipButton selectionRole="navigation" selectionAppearance="subtle" 是同一套面板标签外观。
    */
   --dv-color-abyss-accent: rgb(var(--accent-rgb));
@@ -1286,8 +1309,9 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   box-shadow: inset 0 -1.5px 0 rgb(var(--accent-rgb));
 }
 
+/* 聚焦的面板组只靠这条强调色细线表示，不另画整圈描边；没聚焦的面板组里当前标签只是主要文字色，不画线。 */
 .henji-cameraStage-dock.dockview-theme-abyss .dv-groupview.dv-inactive-group > .dv-tabs-and-actions-container .dv-tab.dv-active-tab {
-  box-shadow: inset 0 -1.5px 0 rgb(var(--line-strong-rgb));
+  box-shadow: none;
 }
 
 /* 停靠拖放指示（剪辑对齐 PR 1.1，按用户 PR 录屏，剪辑与 3D 镜头参考共用）：半透明强调色着色放下后占的区域——
@@ -1369,12 +1393,6 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   padding-top: 2px;
 }
 
-/* 激活面板组描边（DockviewHost 的 ActiveGroupOutline）：标签下的强调细线已表明这组是当前的，描边只需若有若无，
- * 1 像素、取强调色与面板底混合的 accent-outline（对齐 Premiere 的暗一档聚焦框）。 */
-.dock-active-outline {
-  border: 1px solid rgb(var(--accent-outline-rgb));
-  border-radius: 0;
-}
 
 /* 剪辑面板标签（PR）：选中线到菜单图标为止。左内边距 16 与 3D 镜头参考的纯文字标签一致；
  * 标题与菜单间隔 6（加上图标按钮自带的 4，文字到图标 10），右内边距 6（图标到边缘同为 10），

@@ -27,7 +27,7 @@ function subscribeTimecodeDisplay(listener: () => void): () => void { displayLis
  *   写“2.25s”按秒精确定位；回车跳转、Esc 取消；
  * - Ctrl+单击在时间码与帧号之间切换显示。
  */
-export function VideoEditTimecodeReadout({ label, frame, fps, maxFrame, onSeek, onSeekSeconds, className = '' }: {
+export function VideoEditTimecodeReadout({ label, frame, fps, maxFrame, onSeek, onSeekSeconds, className = '', primary = false }: {
   label: string
   frame: number
   fps: number
@@ -37,6 +37,8 @@ export function VideoEditTimecodeReadout({ label, frame, fps, maxFrame, onSeek, 
   /** 按秒输入时精确定位；不给时换算成最近的帧 */
   onSeekSeconds?: (seconds: number) => void
   className?: string
+  /** 一屏只有一个时间码用强调色（时间线左上角那个）；其余读数用主要文字色。 */
+  primary?: boolean
 }): React.ReactElement {
   const display = useSyncExternalStore(subscribeTimecodeDisplay, () => timecodeDisplay)
   const [editing, setEditing] = useState<string | null>(null)
@@ -67,7 +69,7 @@ export function VideoEditTimecodeReadout({ label, frame, fps, maxFrame, onSeek, 
   }
   return <span role="spinbutton" tabIndex={0} aria-label={label} aria-valuenow={frame} aria-valuemin={0} aria-valuemax={maxFrame} aria-valuetext={text}
     title="拖动快速定位；单击输入时间（如 1230 = 12 秒 30 帧，2.25s = 2.25 秒）；Ctrl+单击切换时间码 / 帧号"
-    className={`shrink-0 cursor-ew-resize select-none tabular-nums text-accent-text ${className}`}
+    className={`shrink-0 cursor-ew-resize select-none tabular-nums ${primary ? 'font-medium text-accent-text' : 'text-text1'} ${className}`}
     onPointerDown={event => {
       if (event.button !== 0) return
       if (event.ctrlKey || event.metaKey) { event.preventDefault(); toggleTimecodeDisplay(); return }
@@ -93,10 +95,10 @@ export function VideoEditTimecodeReadout({ label, frame, fps, maxFrame, onSeek, 
 }
 
 /** 节目监视器与时间线的时间码：序列播放头 */
-export function VideoEditTimecode({ instance, label, className = '' }: { instance: VideoEditInstance; label: string; className?: string }): React.ReactElement {
+export function VideoEditTimecode({ instance, label, className = '', primary = false }: { instance: VideoEditInstance; label: string; className?: string; primary?: boolean }): React.ReactElement {
   useVideoEditViewSelector(() => [videoEditRevision(), instance.frame], sameVideoEditViewFields)
   const sequence = getActiveVideoEditSequence(instance)
-  return <VideoEditTimecodeReadout label={label} frame={instance.frame} fps={sequence.fps} maxFrame={Math.floor(sequence.fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS)} className={className}
+  return <VideoEditTimecodeReadout label={label} frame={instance.frame} fps={sequence.fps} maxFrame={Math.floor(sequence.fps * VIDEO_EDIT_MAX_SEQUENCE_SECONDS)} className={className} primary={primary}
     onSeek={(frame, scrubbing) => {
       setVideoEditView(instance.document.id, { frame, playing: false, scrubbing })
       // 读数拖动每像素一帧，位置本来就是整帧

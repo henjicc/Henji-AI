@@ -14,40 +14,10 @@ import { UiBooleanAppearanceContext } from '@/components/ui/booleanAppearance'
  *    （剪辑素材面板的素材行等 `draggable` 元素）当成拖放源，指针一移出 4px 宽的分隔条就触发
  *    dragstart → pointercancel，dockview 的拖动随之中断，分隔条只能挪动第一下。
  * 4. 根元素是 PR 式拖放的宿主（`dockviewDocking.ts`）：窗口边缘停靠指示画在它里面，所以带 `relative`。
- * 5. 激活面板组的强调色描边（PR 式）画在宿主里一层独立的框上，跟踪 `.dv-active-group` 的位置：面板内容层
- *    `.dv-render-overlay` 按 dockview 每帧缓存的内容区矩形定位，会盖住组自身的边框或组内伪元素，CSS 描边不可靠。
- *    这层框在内容层（z 1）之上、分隔条（z 99）之下，用 z-raised，不接收指针。
+ * 5. 聚焦的面板组不画整圈描边，只靠当前标签下的强调色细线表示（index.css 的 .dv-active-tab）。
  * 6. 顶部留一道与面板间隙同宽同色的空隙（`.dockview-host`，index.css），面板组不贴着上方命令带。
  * 7. 停靠面板里的开关画成复选框外观（重要记录 022）：属性一列一列排，一排强调色滑块太抢注意力；其他地方仍是滑块开关。
  */
-function ActiveGroupOutline({ host }: { host: React.RefObject<HTMLDivElement> }): React.ReactElement {
-  const outline = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    const root = host.current; const box = outline.current
-    if (!root || !box) return
-    let pending = false
-    const place = (): void => {
-      pending = false
-      const group = root.querySelector('.dv-groupview.dv-active-group')
-      const rect = group?.getBoundingClientRect()
-      if (!rect || !rect.width || !rect.height) { box.style.display = 'none'; return }
-      const origin = root.getBoundingClientRect()
-      Object.assign(box.style, { display: '', left: `${rect.left - origin.left}px`, top: `${rect.top - origin.top}px`, width: `${rect.width}px`, height: `${rect.height}px` })
-    }
-    // 用微任务合并同一批变化，不等下一帧：窗口在后台时 requestAnimationFrame 会暂停，描边会落后一步。
-    const schedule = (): void => { if (!pending) { pending = true; queueMicrotask(place) } }
-    // dockview 用 class 标激活组、用内联 style 摆放各视图和浮动组，只对这几类元素的变化重算；面板内部（如回放时
-    // 每帧改 style 的时间线）的变化直接忽略，避免回放中反复强制布局。尺寸变化另由 ResizeObserver 兜底。
-    const layoutTarget = (node: Node): boolean => node instanceof Element && (node.classList.contains('dv-groupview') || node.classList.contains('dv-view') || node.classList.contains('dv-resize-container'))
-    const mutations = new MutationObserver(records => { if (records.some(record => layoutTarget(record.target))) schedule() })
-    mutations.observe(root, { subtree: true, attributes: true, attributeFilter: ['class', 'style'] })
-    const resize = new ResizeObserver(schedule)
-    resize.observe(root)
-    schedule()
-    return () => { mutations.disconnect(); resize.disconnect() }
-  }, [host])
-  return <div ref={outline} aria-hidden="true" data-dock-active-outline className="dock-active-outline pointer-events-none absolute z-raised" style={{ display: 'none' }} />
-}
 
 /** Dockview 的溢出菜单收纳不完整标签；滚动条边缘不再露出残字，缩窄后当前标签仍完整可见。 */
 function useWholeDockTabs(host: React.RefObject<HTMLDivElement>): void {
@@ -116,7 +86,6 @@ export const DockviewHost = forwardRef<HTMLDivElement, { className?: string; chi
       }}
     >
       <UiBooleanAppearanceContext.Provider value="checkbox">{children}</UiBooleanAppearanceContext.Provider>
-      <ActiveGroupOutline host={host} />
     </div>
   )
 })

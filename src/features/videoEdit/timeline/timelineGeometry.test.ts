@@ -1,5 +1,6 @@
 import { createVideoEditTestDocument as createVideoEditDocument } from '../../../core/videoEdit/testFixtures'
 import { expect, it } from 'vitest'
+import { VIDEO_EDIT_TRACK_HEIGHT_DEFAULT } from '@/core/videoEdit/timelineNavigation'
 import { type VideoEditSequence } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { TIMELINE_CAPTION_HEIGHT, TIMELINE_END_MARGIN, TIMELINE_NEW_TRACK_ZONE, TIMELINE_RULER_HEIGHT, TIMELINE_TRACK_SECTION_GAP, timelineArmedEdgeVelocity, timelineEdgeAxis, timelineFollowScrollLeft, timelineLayout, timelineNewTrackZone, timelineRegionAt, timelineTrackAt, timelineVisibleClips, timelineVisibleTrackRows, timelineWheelAction } from './timelineGeometry'
@@ -45,7 +46,7 @@ it('PR 两区：视频区在上、音频区在下，V1 贴分隔条上方、A1 �
   const layout = timelineLayout(sequence, input())
   expect(layout.rows.map(row => row.track.index)).toEqual([4, 3, 1, 0, 2])
   expect(layout.rows.map(row => [row.top, row.height])).toEqual([[R - 116, 40], [R - 76, 160], [R + 84, 48], [R + 140, 24], [R + 164, 32]])
-  expect(layout.regions.video).toMatchObject({ top: R, height: 132, content: 248 + TIMELINE_NEW_TRACK_ZONE + 24, maxScroll: 172 })
+  expect(layout.regions.video).toMatchObject({ top: R, height: 132, content: 248 + TIMELINE_NEW_TRACK_ZONE + TIMELINE_CAPTION_HEIGHT, maxScroll: 248 + TIMELINE_NEW_TRACK_ZONE + TIMELINE_CAPTION_HEIGHT - 132 })
   expect(layout.regions.audio).toMatchObject({ top: R + 140, height: 132, maxScroll: 0 })
   expect(layout.divider).toBe(R + 136)
   for (const row of layout.rows) expect(row.track).toBe(original.find(track => track.id === row.track.id))
@@ -56,9 +57,12 @@ it('PR 两区：视频区在上、音频区在下，V1 贴分隔条上方、A1 �
 it('两区各自滚动并夹在范围内：视频区往上滚露出上层轨道，滚出本区的轨道不命中也不算可见', () => {
   const sequence = fixture()
   const scrolled = timelineLayout(sequence, input({ video: 1000, audio: 50 }))
-  expect(scrolled.regions.video.scroll).toBe(172); expect(scrolled.regions.audio.scroll).toBe(0)
-  expect(scrolled.rows.map(row => row.top)).toEqual([R + 56, R + 96, R + 256, R + 140, R + 164])
-  expect(timelineTrackAt(scrolled.rows, R + 56)?.track.index).toBe(4)
+  const maxVideoScroll = 248 + TIMELINE_NEW_TRACK_ZONE + TIMELINE_CAPTION_HEIGHT - 132
+  // 滚到顶时最上面的轨道正好露在置顶字幕轨下面
+  const top = R + TIMELINE_CAPTION_HEIGHT + TIMELINE_NEW_TRACK_ZONE
+  expect(scrolled.regions.video.scroll).toBe(maxVideoScroll); expect(scrolled.regions.audio.scroll).toBe(0)
+  expect(scrolled.rows.map(row => row.top)).toEqual([top, top + 40, top + 200, R + 140, R + 164])
+  expect(timelineTrackAt(scrolled.rows, top)?.track.index).toBe(4)
   expect(timelineTrackAt(scrolled.rows, R + 131)?.track.index).toBe(3)
   // V1 已滚到分隔条下方：在音频区坐标里不能命中它
   expect(timelineTrackAt(scrolled.rows, R + 242)).toBeUndefined()
@@ -84,7 +88,7 @@ it('轨道命中采用半开边界，标尺、分隔条与新建轨道空白不�
 it('新序列 V1/A1 居中：最上视频轨之上、最下音频轨之下是新建轨道的落点，区由分隔条划分', () => {
   const sequence = createVideoEditDocument('新序列').sequences[0]
   const layout = timelineLayout(sequence, input())
-  expect(layout.rows.map(row => [row.track.kind, row.top])).toEqual([['video', R + 100], ['audio', R + 140]])
+  expect(layout.rows.map(row => [row.track.kind, row.top])).toEqual([['video', R + 132 - VIDEO_EDIT_TRACK_HEIGHT_DEFAULT], ['audio', R + 140]])
   expect(timelineNewTrackZone(layout, R + 72)).toBe('video'); expect(timelineNewTrackZone(layout, R + 100)).toBeUndefined()
   expect(timelineNewTrackZone(layout, R + 194)).toBe('audio'); expect(timelineNewTrackZone(layout, R + 140)).toBeUndefined()
   expect(timelineNewTrackZone(layout, R + 134)).toBeUndefined()

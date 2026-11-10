@@ -65,7 +65,7 @@ describe('设计令牌：Tailwind ↔ CSS 变量', () => {
       // 材质与遮罩由 .ui-glass / .ui-glass-scrim 类消费，阴影色由 shadow-* 档位消费
       'shade', 'glassTint', 'glassOverlayTint', 'glassEdge', 'glassSheen', 'glassHover', 'glassPressed', 'glassSelected', 'glassSelectedAccent',
       'glassDivider', 'glassControlTint', 'glassRegionTint', 'glassSurfaceTint',
-      // 当前停靠面板组的描边只由 index.css 的 .dock-active-outline 消费
+      // 聚焦描边的备用色：聚焦面板组只画标签下的细线，这一档暂时没有消费方
       'accentOutline',
     ])
     const missing = THEME_COLOR_TOKEN_NAMES.filter((name) => {
