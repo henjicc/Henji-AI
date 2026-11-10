@@ -1124,9 +1124,13 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         {collecting && !preparing && <span className="whitespace-nowrap px-1">正在处理当前帧…</span>}
       </div>}
       {visible && !motionRecording && <VideoEditUserEditReviewButton instance={instance} hidden={!pictureReady || Boolean(renderFailure || effectFailure)} onError={onError} />}
-      {/* 画面上的状态条统一叠在左下角：失败、可能不完整、已简化，各自一条，原始信息收进详情 */}
-      {(renderFailure || effectFailure || (spaceSimplified && !preparing && !collecting)) && <div className="pointer-events-none absolute inset-x-3 bottom-3 flex flex-col items-start gap-2" data-video-edit-program-status>
-        {(renderFailure || effectFailure) && <div className="pointer-events-auto w-full max-w-sm">
+      {/* 不影响出画面的状态条叠在左下角：可能不完整、效果被跳过、已简化，各自一条，原始信息收进详情 */}
+      {/* 画面根本出不来：报错直接占满节目画面，和脱机素材的提示一样醒目；外来代码待确认时走下面带“运行”的小条 */}
+      {renderFailure && !trustFailure?.records.length && <div className="ui-fault-surface absolute inset-0 flex items-center justify-center p-6" data-video-edit-program-fault>
+        <UiError title="节目画面无法显示" message="重新加载预览试试；仍不显示就重启软件。" detail={renderFailure} onRetry={reloadPreview} retryLabel="重新加载" />
+      </div>}
+      {((renderFailure && trustFailure?.records.length) || effectFailure || (spaceSimplified && !preparing && !collecting)) && <div className="pointer-events-none absolute inset-x-3 bottom-3 flex flex-col items-start gap-2" data-video-edit-program-status>
+        {((renderFailure && trustFailure?.records.length) || (!renderFailure && effectFailure)) && <div className="pointer-events-auto w-full max-w-sm">
           {(() => {
             // 标题始终按实际失败说；外来代码待确认时正文与动作换成“运行”，其余情况给重新加载
             const gpuFrame = !renderFailure && isVideoEditGpuFrameFailureText(effectFailure ?? '')

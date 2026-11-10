@@ -77,8 +77,8 @@ export function WorkspaceLayoutMenu({ workspaceId, dockApi }: { workspaceId: str
       {(error || layouts.error) && <UiInlineStatus role="alert" className="mt-1 px-2">{error || layouts.error}</UiInlineStatus>}
     </div>
   )}>
-    {({ togglePanel }) => <UiButton size="md" aria-haspopup="menu" aria-expanded={open} onClick={togglePanel} data-panel-trigger-button>
-      <LayoutPanelLeft className="mr-1" />{active?.name ?? '工作区'}{layouts.dirty ? <span aria-label="已调整" className="ml-1 h-1.5 w-1.5 rounded-full bg-accent" /> : null}
+    {({ togglePanel }) => <UiButton size="md" aria-haspopup="menu" aria-expanded={open} onClick={togglePanel} data-panel-trigger-button tooltip={layouts.dirty ? `布局“${active?.name ?? '默认'}”已调整，点开可重置或保存` : '切换或保存面板布局'}>
+      <LayoutPanelLeft className="mr-1" />{active?.name ?? '工作区'}
     </UiButton>}
   </PanelTrigger>
 }

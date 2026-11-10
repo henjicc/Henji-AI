@@ -61,7 +61,7 @@ export function EssentialSoundControls({ value, onChange, gesture, offline = fal
     </div>
   }
 
-  if (!value) return <UiGroup titleTone="compact" title="这段声音是什么类型？" description="选好类型后，按常用的处理一项项打开即可。">
+  if (!value) return <UiGroup>
     <UiFormRow label="声音类型" density="compact"><UiSegmented ariaLabel="声音类型" size="sm" fullWidth disabled={disabled} value={'' as EssentialSoundType} options={TYPES} onChange={type => onChange(defaultEssentialSound(type))} /></UiFormRow>
   </UiGroup>
 

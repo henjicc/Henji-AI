@@ -34,6 +34,8 @@ type NumberInputProps = {
   step?: number
   /** 外框宽度（布局类）。读数比它长时外框按内容撑开，读数不会被裁切。 */
   widthClassName?: string
+  /** 属性面板里“没改过”的参照值：读数等于它时退到次要文字色。只影响外观，不带双击重置（那是 defaultValue）。 */
+  restValue?: number
   className?: string
   precision?: number
   disabled?: boolean
@@ -123,6 +125,7 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
     scrubMax,
     step = 1,
     widthClassName: widthClassNameProp,
+    restValue,
     className,
     precision,
     disabled = false,
@@ -146,7 +149,8 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
   const fillControl = useUiFormRowLabelling()?.fillControl === true && !propertyLayout
   const widthClassNameOverride = widthClassNameProp ?? (propertyLayout ? UI_PROPERTY_NUMBER_WIDTH_CLASS : 'w-24')
   const widthClassName = fillControl ? 'w-full' : widthClassNameOverride
-  const widthStrategy = fillControl ? 'fixed' : widthStrategyOverride
+  // 属性面板里读数按位数定宽，单位才能直接跟在数字后面；调用点自己给了宽度的照旧
+  const widthStrategy = fillControl ? 'fixed' : propertyLayout && widthClassNameProp === undefined ? 'content' : widthStrategyOverride
 
   const safeValue = typeof value === 'number' && Number.isFinite(value) ? value : (min ?? 0)
   const effectivePrecision = precision ?? resolvePrecision(step)
@@ -342,10 +346,13 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
     onLostPointerCapture: cancelScrub,
   })
 
-  const alignClass = align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'
+  // 属性面板里数值紧跟名称左对齐；知道默认值时，还是默认值的读数退到次要文字色（聚焦编辑时恢复），改过的加重
+  const alignClass = propertyLayout ? 'text-left' : align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'
+  const rest = restValue ?? defaultValue
+  const propertyToneClass = !propertyLayout || rest === undefined ? '' : safeValue !== rest ? 'font-medium' : '!text-text2 focus:!text-text1'
   // 参数条里按实际位数收窄，步进箭头紧跟数字；其他排布至少留两位，避免输入时宽度跳动
   const contentWidthCharacterCount = Math.max(inputValue.length, placeholder?.length ?? 0, fieldLayout === 'toolbar' ? 1 : 2)
-  const minContentWidth = `calc(${contentWidthCharacterCount}ch + ${propertyLayout ? 12 : NUMBER_FIELD_CHROME_PX[size]}px)`
+  const minContentWidth = `calc(${contentWidthCharacterCount}ch + ${propertyLayout ? 20 : NUMBER_FIELD_CHROME_PX[size]}px)`
   const scrubCursorClass = disabled ? '' : isFocused ? 'cursor-text' : 'cursor-ew-resize'
 
   return (
@@ -408,7 +415,8 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
           placeholder={placeholder}
           // 外框已经画了字段表面与焦点环：内层输入框只负责文字，铺满高度
           frame="inner"
-          className={`min-w-0 flex-1 appearance-none tabular-nums ${alignClass} ${scrubCursorClass}`}
+          // ui-surface-allow: E 数值框自己的内层输入；属性面板里默认值与改过的值用两档文字色区分，是组件内部外观，不是调用点覆盖
+          className={`min-w-0 flex-1 appearance-none tabular-nums ${alignClass} ${propertyToneClass} ${scrubCursorClass}`}
           min={min}
           max={max}
           step={step}

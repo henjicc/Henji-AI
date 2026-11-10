@@ -67,7 +67,7 @@ export function VideoEditTextStylePanel({ projectId, sequenceId, clip, height, o
     },
   }
   return <EffectSection id="text-style" title="文字样式" enabled={!clip.disabledIntrinsicSections?.includes('textStyle')} onEnabledChange={enabled => { end(); try { updateVideoEditClipProperties(projectId, sequenceId, clip.id, { disabledIntrinsicSections: enabled ? (clip.disabledIntrinsicSections ?? []).filter(value => value !== 'textStyle') : [...(clip.disabledIntrinsicSections ?? []), 'textStyle'] }) } catch (error) { onError(error) } }}>
-    <div ref={fields} className="flex flex-col gap-2 pl-5">
+    <div ref={fields} className="flex flex-col gap-2">
       <VideoEditTypographyPanel key={`${projectId}:${sequenceId}:${clip.id}`} style={style} onChange={value => write(value)} onError={onError} onBegin={begin} onEnd={end} onFontPreview={fontPreview} projectFonts={collectVideoEditFonts(owner.document).map(use => use.font)} axisKeyframes={axisKeyframes} transform={<VideoEditTextTransformControls clip={clip} frame={{ width: sequence.width, height: sequence.height, playhead: owner.frame }} gesture={motionGesture} />} />
     </div>
   </EffectSection>

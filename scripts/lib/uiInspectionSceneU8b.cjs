@@ -35,7 +35,7 @@ async function panel(page, id, title) {
 }
 async function formColumns(host) {
   const issues = await host.evaluate(root => {
-    // 停靠面板（效果控件、全能调色）用属性行：控件格在网格第四列（通栏控件跨两列不参与比对），数值按右对齐读数显示、不填满。
+    // 停靠面板（效果控件、全能调色）用属性行：控件格在网格第四列（通栏控件跨两列不参与比对），数值紧跟名称左对齐、不填满。
     const visible = kind => [...root.querySelectorAll(`[data-ui-form-row="${kind}"]`)].filter(row => row.getBoundingClientRect().width)
     const panelRows = visible('panel'), property = !panelRows.length
     const rows = property ? visible('property').filter(row => !row.querySelector('[data-ui-form-control]').classList.contains('col-span-2')) : panelRows

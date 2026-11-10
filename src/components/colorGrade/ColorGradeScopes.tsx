@@ -27,7 +27,7 @@ function drawScope(canvas: HTMLCanvasElement, statistics: ColorStatistics, mode:
   if (mode === 'histogram') {
     context.globalCompositeOperation = 'lighter'
     for (const [values, color] of [[scopes.histogram.red, UI_SCOPE_COLORS.red], [scopes.histogram.green, UI_SCOPE_COLORS.green], [scopes.histogram.blue, UI_SCOPE_COLORS.blue]] as const) {
-      context.fillStyle = color; context.globalAlpha = .55; context.beginPath(); context.moveTo(0, height)
+      context.fillStyle = color; context.globalAlpha = .28; context.beginPath(); context.moveTo(0, height)
       values.forEach((value, i) => context.lineTo(i / (values.length - 1) * width, height - value * height * .95))
       context.lineTo(width, height); context.closePath(); context.fill()
     }
@@ -66,13 +66,14 @@ export function ColorGradeScopes({ statistics, busy, error, onRefresh }: { stati
       <UiSegmented ariaLabel="示波器类型" size="sm" fullWidth value={mode} onChange={setMode} options={MODES} />
     </UiFormRow>
     {error ? <UiError message={error} onRetry={onRefresh} /> : !statistics ? <UiEmpty size="sm" title={busy ? '正在读取画面…' : '暂无读数'} /> : <>
-      <canvas ref={canvas} className="aspect-video w-full rounded-control bg-media" aria-label={MODES.find(value => value.value === mode)!.label} />
-      {readout && <div className="flex flex-col gap-1">
+      <div className="px-3"><canvas ref={canvas} className="block aspect-video w-full rounded-control bg-media" aria-label={MODES.find(value => value.value === mode)!.label} /></div>
+      {/* 读数并成一行、与示波器同一左缘；只有提示要校正的那一项用警告色 */}
+      {readout && <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3">
         <ReadoutLine warning={Math.abs(readout.exposure.middleGrayOffsetEv) > .7 && readout.exposure.key === 'normal'} text={`曝光 ${readout.exposure.middleGrayOffsetEv > 0 ? '+' : ''}${readout.exposure.middleGrayOffsetEv} EV${readout.exposure.key === 'low' ? '（低调画面）' : readout.exposure.key === 'high' ? '（高调画面）' : ''}`} />
         <ReadoutLine warning={readout.clipping.highlightsPercent > .5 || readout.clipping.shadowsPercent > .5} text={`高光溢出 ${readout.clipping.highlightsPercent}% · 暗部死黑 ${readout.clipping.shadowsPercent}%`} />
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-1 items-center justify-between gap-2">
           <ReadoutLine warning={readout.whiteBalance.confidence >= .4 && Math.abs(readout.whiteBalance.kelvin - 6500) > 600} text={`光源约 ${readout.whiteBalance.kelvin} K`} />
-          <UiIconButton size="xs" tooltip="重新读取" aria-label="重新读取示波器" loading={busy} onClick={onRefresh}><RefreshCw /></UiIconButton>
+          <UiIconButton size="xs" tone="rest" tooltip="重新读取" aria-label="重新读取示波器" loading={busy} onClick={onRefresh}><RefreshCw /></UiIconButton>
         </div>
       </div>}
     </>}

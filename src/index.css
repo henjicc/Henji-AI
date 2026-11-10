@@ -567,6 +567,12 @@
       repeating-linear-gradient(135deg, rgb(var(--danger-rgb) / 0.34) 0 4px, transparent 4px 8px),
       rgb(var(--danger-rgb) / 0.3);
   }
+  /* 画面出不来时铺满节目画面的底：媒体底染一点危险色加宽斜纹，一眼看得出是出了问题而不是黑场。 */
+  .ui-fault-surface {
+    background:
+      repeating-linear-gradient(135deg, rgb(var(--danger-rgb) / 0.1) 0 10px, transparent 10px 20px),
+      color-mix(in srgb, rgb(var(--danger-rgb)) 12%, rgb(var(--media-rgb)));
+  }
   .ui-hatch-locked {
     background: repeating-linear-gradient(135deg, rgb(var(--text1-rgb) / 0.11) 0 1px, transparent 1px 7px);
   }

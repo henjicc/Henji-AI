@@ -12,10 +12,10 @@ export function VideoEditTypographyPanel(props: VideoEditTypographyPanelProps): 
   const row = (label: string, children: React.ReactNode): React.ReactElement => <UiFormRow key={label} label={label} density="compact">{children}</UiFormRow>
   const run = (action: () => void): void => { try { onEnd?.(true); action() } catch (error) { onError(error) } }
   return <div data-video-edit-typography><TypographyPanel {...props} footer={props.fields === 'code-element' ? undefined : (
-    <UiGroup title="链接样式" titleTone="compact" divided>
+    <UiGroup title={<span className="pl-3">链接样式</span>} titleTone="compact" divided>
       {row('样式预设', <Dropdown size="sm" ariaLabel="文字样式预设" value={presetId} options={[{ value: '', label: '选择预设' }, ...presets.map(preset => ({ value: preset.id, label: preset.name }))]} onSelect={id => { setPresetId(id); const preset = presets.find(entry => entry.id === id); if (preset) { setName(preset.name); run(() => onChange(preset.style)) } }} />)}
       {row('名称', <UiInput size="sm" aria-label="文字样式预设名称" value={name} maxLength={200} onChange={event => setName(event.target.value)} />)}
-      <div className="flex flex-wrap gap-1"><UiButton size="sm" disabled={!name.trim()} onClick={() => run(() => setPresetId(videoEditTextPresetLibrary.save(name, style).id))}>保存当前样式</UiButton><UiButton size="sm" disabled={!selectedPreset || !name.trim()} onClick={() => run(() => { videoEditTextPresetLibrary.update(presetId, { name }); })}>重命名</UiButton><UiButton size="sm" variant="danger" disabled={!selectedPreset} onClick={() => run(() => { videoEditTextPresetLibrary.remove(presetId); setPresetId(''); setName('') })}>删除预设</UiButton></div>
+      <div className="flex flex-wrap gap-1 pl-12 pr-3 pt-1"><UiButton size="sm" disabled={!name.trim()} onClick={() => run(() => setPresetId(videoEditTextPresetLibrary.save(name, style).id))}>保存当前样式</UiButton><UiButton size="sm" disabled={!selectedPreset || !name.trim()} onClick={() => run(() => { videoEditTextPresetLibrary.update(presetId, { name }); })}>重命名</UiButton><UiButton size="sm" variant="danger" disabled={!selectedPreset} onClick={() => run(() => { videoEditTextPresetLibrary.remove(presetId); setPresetId(''); setName('') })}>删除预设</UiButton></div>
       {videoEditTextPresetLibrary.loadError() && <UiError size="xs" message={videoEditTextPresetLibrary.loadError()} />}
     </UiGroup>
   )} /></div>

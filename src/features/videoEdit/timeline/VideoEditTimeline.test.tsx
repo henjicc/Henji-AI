@@ -484,7 +484,9 @@ it('高度只在释放提交一次，实际轨道数与高度用于纵向命中'
   fireEvent.pointerUp(host, event(100, resizeY + 40)); expect(current().tracks[1].height).toBe(VIDEO_EDIT_TRACK_HEIGHT_DEFAULT + 40); expect(owner.past).toHaveLength(history + 1)
   fireEvent.pointerDown(view.getByRole('button', { name: '选择片段 视频' }), event(header + 20))
   // 拖动中 Ctrl+滚轮把视频区往上滚，露出上层轨道（只滚光标所在的视频区）
-  fireEvent.wheel(host, { deltaY: -Math.round(870 * VIDEO_EDIT_TRACK_HEIGHT_DEFAULT / 32), ctrlKey: true, clientX: 300, clientY: trackTop(1) - 4 }); const targetY = trackClientY(29)
+  // 滚动量按布局算：把第 29 条轨道滚到置顶字幕轨下面一点
+  const still = timelineLayout(current(), { viewportHeight, split: TIMELINE_DEFAULT_SPLIT, scroll: { video: 0, audio: 0 } })
+  fireEvent.wheel(host, { deltaY: still.rows.find(row => row.track.index === 29)!.top - still.regions.video.top - 40, ctrlKey: true, clientX: 300, clientY: trackTop(1) - 4 }); const targetY = trackClientY(29)
   // 落在置顶字幕轨之下、视频区（视口 300 减标尺与分隔条后的一半）之内
   expect(targetY).toBeGreaterThanOrEqual(ruler + 24); expect(targetY).toBeLessThan(ruler + 120)
   fireEvent.pointerMove(host, event(header + 20, targetY)); fireEvent.pointerUp(host, event(header + 20, targetY))

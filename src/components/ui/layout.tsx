@@ -339,6 +339,8 @@ export function UiGroup({
   ...props
 }: UiGroupProps): JSX.Element {
   const hasHeader = Boolean(title || description || actions);
+  // 属性面板一行 28 紧挨着排，行距由行高给出；表单排布才按 gap 留间距
+  const propertyRows = useUiFieldLayout() === 'property' && gap === 'row';
   const titleClass = titleTone === 'overline'
     ? 'text-xs font-medium uppercase tracking-wider text-text2'
     : titleTone === 'compact'
@@ -366,7 +368,7 @@ export function UiGroup({
           {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
         </div>
       )}
-      <div className={resolveGapClass(gap)}>{labelWidth === undefined ? children : (
+      <div className={propertyRows ? 'flex flex-col' : resolveGapClass(gap)}>{labelWidth === undefined ? children : (
         <FormLabelWidthContext.Provider value={labelWidth}>{children}</FormLabelWidthContext.Provider>
       )}</div>
     </div>
@@ -458,6 +460,8 @@ export function UiFormRow({
   const labelling = { labelId, hintId, errorId, fillControl: fixedColumn || fieldLayout === 'property' };
 
   if (fieldLayout === 'property') {
+    // 名称列定宽，放不下的名称截断；没有另写说明时悬停显示完整名称
+    const propertyLabelNode = <UiTooltipText tooltip={info ?? (typeof label === 'string' && label.length > 7 ? label : undefined)} delay={infoDelay}>{label}</UiTooltipText>;
     const control = <UiFormRowLabelContext.Provider value={labelling}>{children}</UiFormRowLabelContext.Provider>;
     const notes = hint || errorNode ? <div className="col-span-2 col-start-3 pb-1">{hint ? <p id={hintId} className={UI_TEXT_META_CLASS}>{hint}</p> : null}{errorNode}</div> : null;
     return <div data-ui-form-row="property" className={`${UI_PROPERTY_ROW_CLASS} ${className}`} {...props}>
@@ -465,11 +469,11 @@ export function UiFormRow({
       <span className="flex items-center justify-center">{leading}</span>
       {/* 名称后的悬停内容（关键帧导航）叠在名称列右端、不占宽度：占宽时窄面板里名称只剩一个字（重要记录 020） */}
       <div className="relative flex min-w-0 items-center">
-        <div id={labelId} className="min-w-0 truncate text-xs text-text2">{labelNode}</div>
+        <div id={labelId} className="min-w-0 truncate text-xs text-text3">{propertyLabelNode}</div>
         {labelTrailing ? <span className="absolute inset-y-0 right-0 flex items-center">{labelTrailing}</span> : null}
       </div>
-      {wide ? <span aria-hidden="true" /> : <div data-ui-form-control className="flex min-w-0 items-center justify-end gap-1 pr-4">{control}{trailing}</div>}
-      {wide ? <div data-ui-form-control className="col-span-2 col-start-3 min-w-0 pb-2 pr-4">{control}{trailing}</div> : null}
+      {wide ? <span aria-hidden="true" /> : <div data-ui-form-control className="flex min-w-0 items-center justify-start gap-1 pr-2">{control}{trailing}</div>}
+      {wide ? <div data-ui-form-control className="col-span-2 col-start-3 min-w-0 pb-2 pr-2">{control}{trailing}</div> : null}
       {notes}
     </div>;
   }
@@ -515,15 +519,16 @@ export function UiFormRow({
 }
 
 /**
- * 属性面板里数值后的单位（%、°、px）。数值列右侧留一条 16px 的单位道：所有控件右缘对齐到道边，
- * 行末的单位挂进道里（`hanging`，默认）；成对数值中间的那个单位照常占位（`hanging={false}`），两个读数之间也就留出同样的距离。
+ * 属性面板里数值后的单位（%、°、px）。数值紧跟名称左对齐，单位直接跟在数字后面（`hanging`，默认）；
+ * 成对数值中间的那个单位占住 16px（`hanging={false}`），没有单位时也留空位，两个读数之间的距离才一致。
  */
 export function UiPropertyUnit({ children, hanging = true }: { children?: ReactNode; hanging?: boolean }): JSX.Element {
-  // 放不进 16px 的单位（中文两字以上如“半音”“画面高度”、三个字母以上）照常占位，读数跟着左移，不挂进道里被截断；
+  // 放不进 16px 的单位（中文两字以上如“半音”“画面高度”、三个字母以上）按内容占位；
   // 单个汉字（“档”“倍”）与两个字母一样放得下，照样挂进道里，读数右缘才和同列其他行对齐。
   const long = typeof children === 'string' && (children.length > 2 || children.length > 1 && [...children].some(char => char.charCodeAt(0) >= 0x3000));
-  if (long) return <span className="shrink-0 whitespace-nowrap pl-1 text-2xs text-text3">{children}</span>;
-  return <span aria-hidden={children ? undefined : true} className={`w-4 shrink-0 whitespace-nowrap pl-1 text-2xs text-text3 ${hanging ? '-mr-4' : ''}`}>{children}</span>;
+  // 数值紧跟在名称后面左对齐，单位直接跟在数字后；成对数值中间的单位占住 16px，两个数的起点才各自对齐
+  if (long || hanging) return children ? <span className="shrink-0 whitespace-nowrap pl-0.5 pr-1 text-2xs text-text3">{children}</span> : <></>;
+  return <span aria-hidden={children ? undefined : true} className="w-4 shrink-0 whitespace-nowrap pl-0.5 text-2xs text-text3">{children}</span>;
 }
 
 /**
@@ -611,7 +616,8 @@ function footerToolButton(tool: UiPanelFooterAction | UiPanelFooterMenu, extra: 
       size="sm"
       aria-label={tool.label}
       tooltip={tool.tooltip ?? tool.label}
-      tone={isAction ? tool.tone : undefined}
+      // 面板底栏的工具静息时退到图标灰，开着（偏离默认）的照常着色；工具自己指定的档（删除类的危险色）照旧
+      tone={isAction && tool.tone && tool.tone !== 'default' ? tool.tone : isAction && tool.on ? 'default' : 'rest'}
       on={isAction ? tool.on : undefined}
       aria-pressed={isAction && tool.on === undefined ? tool.pressed : undefined}
       selection={isAction ? tool.selection : undefined}

@@ -140,7 +140,7 @@ function VideoEditColorGradePanelContent({ instance, onError, visible = true }: 
   if (!clip || clip.kind === 'audio') return <UiEmpty size="sm" title="选择画面片段以调色" />
   // 与效果控件同一套属性排布（重要记录 019 / 020）：四列属性行、秒表一列、重置在右键菜单
   return <UiFieldLayoutContext.Provider value="property"><UiPropertyMenuContext.Provider value={menu.showMenu}>
-    <div className="flex h-full min-h-0 flex-col gap-2 overflow-auto py-3" aria-label="全能调色">
+    <div className="flex h-full min-h-0 flex-col gap-2 overflow-auto pb-8 pt-3" aria-label="全能调色">
       <span className={`truncate text-xs font-semibold text-text1 ${UI_PROPERTY_INSET_CLASS}`} data-user-content>{clip.name}</span>
       {effects.length > 1 && <div className={UI_PROPERTY_INSET_CLASS}><Dropdown ariaLabel="编辑全能调色效果" value={selectedId || effects[0].id} options={effects.map((effect, i) => ({ value: effect.id, label: `${effect.name} ${i + 1}` }))} onSelect={effectId => setChoice({ clipId: clip.id, effectId })} /></div>}
       {visible && <ColorGradeEditor key={`${instance.document.id}:${sequence.id}:${clip.id}:${selectedId}`} target={{ projectId: instance.document.id, sequenceId: sequence.id, clipId: clip.id }} clip={clip} selectedId={selectedId} onError={onError} />}

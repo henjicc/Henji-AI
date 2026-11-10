@@ -42,7 +42,8 @@ function PropertyNumber({ view, clip, frame, gesture, last }: { view: PropertyVi
   const value = view.toDisplay(videoEditClipValue({ ...clip, disabledIntrinsicSections: [] }, view.key, frame.playhead), frame)
   const bounds = videoEditClipPropertyBounds(view.key)
   const factor = 10 ** view.precision
-  return <span className="flex shrink-0 items-center">
+  // 成对数值的前一个占住固定宽度，后一个的起点才不随前一个的位数移动
+  return <span className={`flex shrink-0 items-center ${last ? '' : 'min-w-16'}`}>
     <NumberInput ariaLabel={view.label} increaseLabel={`增加${view.label}`} decreaseLabel={`减少${view.label}`} size="sm" value={value} min={view.toDisplay(bounds.min, frame)} max={view.toDisplay(bounds.max, frame)} step={view.step} precision={view.precision} align="right"
       onScrubStart={gesture.begin} onScrubEnd={cancelled => { if (cancelled) gesture.cancel(); else gesture.finish() }}
       onChange={next => { if (gesture.active() || Math.round(next * factor) !== Math.round(value * factor)) gesture.commit({ [view.key]: view.fromDisplay(next, frame) }) }} />

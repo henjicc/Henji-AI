@@ -21,8 +21,8 @@ export function useTimelineHeaderWidth(): number { return useContext(TimelineHea
 /** 播放头在标尺上的“头”（Premiere 的蓝色指示器）的形状：时间线与节目标尺共用。 */
 export const TIMELINE_PLAYHEAD_HEAD_SHAPE = { clipPath: 'polygon(0 0, 100% 0, 100% 55%, 50% 100%, 0 55%)' }
 /** 标尺两行（参照 Premiere）：上面一窄行放标记与批注，下面一行是时间刻度，标记不压时间数字；角落格的时间码与开关并在同一行里。 */
-export const TIMELINE_RULER_HEIGHT = 40
-export const TIMELINE_MARK_LANE_HEIGHT = 14
+export const TIMELINE_RULER_HEIGHT = 44
+export const TIMELINE_MARK_LANE_HEIGHT = 20
 /** 字幕轨只有一行字，比画面、声音轨矮。 */
 export const TIMELINE_CAPTION_HEIGHT = 28
 /** 缩放轨 Z1：序列里有录屏片段开启自动缩放时，钉在字幕轨下面。 */
