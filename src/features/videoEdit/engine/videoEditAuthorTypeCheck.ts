@@ -1,4 +1,5 @@
-import { reviewCodeEffectUsage, type CodeEffectSuggestion } from '@/core/videoEdit/codeEffectReview'
+import { reviewCodeEffectUsage } from '@/core/videoEdit/codeEffectReview'
+import type { CodeEffectSuggestion } from '@/core/videoEdit/codeEffectSuggestion'
 import { authorEffectDiagnostics } from './videoEditAuthorEffectDiagnostics'
 import ts from 'typescript'
 import { resolveAuthorProjectImport } from '@/core/videoEdit/codeMaterial/authorModulePaths'

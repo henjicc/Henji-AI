@@ -18,7 +18,7 @@ function isPureCoreViolation({ from, to }) {
 // 明确守住首屏代码加载边界；纯几何/文档/调度契约不因名字含 GPU 被误拦。
 const FIRST_SCREEN_HEAVY_PACKAGES = [
   'konva', 'react-konva', 'vgpu', 'onnxruntime-web', 'onnxruntime-node', 'onnxruntime-common',
-  'three', '@react-three/fiber', '@react-three/drei', 'monaco-editor', '@monaco-editor/react',
+  'three', '@react-three/fiber', '@react-three/drei', 'monaco-editor', '@monaco-editor/react', 'typescript',
 ]
 const FIRST_SCREEN_HEAVY_MODULE_PREFIXES = [
   'src/features/imageEdit/v3/editor/',

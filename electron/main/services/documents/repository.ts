@@ -52,6 +52,7 @@ import {
   indexedFromFile,
   loadDocumentFile,
   metaFromFile,
+  statDocumentLocation,
   summarizeFile,
   type DecodedDocumentContent,
   type LoadedDocumentFile,
@@ -205,10 +206,11 @@ export class DocumentRepository {
     let repeated = false
     const onFailure = (_error: unknown, cached: boolean): void => { repeated = cached }
     try {
-      const file = await this.locate(target, onFailure)
-      if (!file.envelope) throw new DocumentUnsupportedError('这种文档请在它自己的编辑器里打开。')
-      const container = await this.workspace.containerForPath(file.path)
-      const decoded = await this.readFailures.read(file.path, () => this.decode(file, container), onFailure, { documentId: target.id, stat: file.stat })
+      const located = await this.locate(target, onFailure)
+      if (!located.envelope) throw new DocumentUnsupportedError('这种文档请在它自己的编辑器里打开。')
+      const container = await this.workspace.containerForPath(located.path)
+      const decoded = await this.readFailures.read(located.path, () => this.decode(located, container), onFailure, { documentId: target.id, stat: located.stat })
+      const file = located.backupPath === undefined ? located : await this.writeBackUpgraded(located, container, decoded.content)
       const references = await this.inspectReferences(decoded.report)
       this.warnProgramReferences('read', file, decoded.report)
       this.logger.debug('文档已读取', {
@@ -225,6 +227,33 @@ export class DocumentRepository {
     } catch (error) {
       if (!repeated) this.logFailure('read', { documentId: target.id }, error)
       throw error
+    }
+  }
+
+  /**
+   * 打开时读到旧版本并升级成功：在文档锁内把当前版本原子写回，之后的读取与索引扫描不再重复升级和备份。
+   * 修订号与修改时间不变（内容含义没变）；锁内发现文件已被改动就让给那次写入。写不进去（只读位置、权限不足）时照旧只在内存里升级。
+   */
+  private async writeBackUpgraded(file: LoadedDocumentFile, container: ResolvedContainer, content: unknown): Promise<LoadedDocumentFile> {
+    try {
+      return await this.exclusive(file.header.id, async () => {
+        const current = await statDocumentLocation(file.kind, file.path, this.options.adapters)
+        if (current.mtimeMs !== file.stat.mtimeMs || current.size !== file.stat.size) return file
+        const stamped = this.stamped(file, () => content, content)
+        const envelope = this.withHeader(file.envelope!, {
+          kindVersion: stamped.kindVersion,
+          kindMinReaderVersion: stamped.kindMinReaderVersion,
+          content: this.encode(file.kind, container, stamped.content).content,
+        })
+        await writeBufferAtomically(file.path, this.bytes(envelope))
+        const written = await describeWrittenDocument(file.kind, file.path, envelope)
+        this.workspace.catalog.upsertDocument(indexedFromFile(written, container, file.kind.summarize(content)))
+        this.logger.info('旧版本文档已升级写回', { event: 'documents.upgrade.written', context: { documentId: file.header.id, format: file.kind.id, toVersion: file.kind.version, backupPath: file.backupPath } })
+        return written
+      })
+    } catch (error) {
+      this.logger.warn('升级结果未能写回原文件，本次只在内存里升级', { event: 'documents.upgrade.write_failed', context: { documentId: file.header.id, format: file.kind.id }, error })
+      return file
     }
   }
 

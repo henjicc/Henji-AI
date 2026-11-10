@@ -13,7 +13,7 @@ export interface VideoEditReviewRecord {
   path: readonly VideoEditSourceMapStep[]
   subjectId: string
   subjectType?: 'video_edit.clip' | 'video_edit.effect' | 'video_edit.caption' | 'video_edit.sequence'
-  effectSuggestion?: import('./codeEffectReview').CodeEffectSuggestion
+  effectSuggestion?: import('./codeEffectSuggestion').CodeEffectSuggestion
   confidence?: number
   source?: { fromUs: number; toUs: number }
   motionEvidence?: { basis: 'clip_transform' | 'structural_events' | 'code_structure' | 'video_pixels' | 'code_input_pixels' | 'text_layout' | 'program_pixels'; elementPath?: string[]; peakSpeed?: number; gapSeconds?: number; suggestion: string;

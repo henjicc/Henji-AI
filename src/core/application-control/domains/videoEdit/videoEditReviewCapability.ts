@@ -1,4 +1,4 @@
-import { codeEffectSuggestionSchema } from '../../../videoEdit/codeEffectReview'
+import { codeEffectSuggestionSchema } from '../../../videoEdit/codeEffectSuggestion'
 import { z } from 'zod'
 import { applicationRefSchema } from '../../applicationCapabilities'
 import { capabilityControl, defineApplicationCapability } from '../shared/defineApplicationCapability'

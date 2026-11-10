@@ -1,6 +1,6 @@
-import ts from 'typescript'
-import { reviewCodeTrackSeparation, type CodeTrackSuggestion } from '@/core/videoEdit/codeTrackReview'
-import { reviewCodeEffectUsage, type CodeEffectSuggestion } from '@/core/videoEdit/codeEffectReview'
+import type ts from 'typescript'
+import type { CodeTrackSuggestion } from '@/core/videoEdit/codeTrackReview'
+import type { CodeEffectSuggestion } from '@/core/videoEdit/codeEffectSuggestion'
 import { codeMaterialVersion } from '@/core/videoEdit/codeMaterialDocument'
 import { documentCodeSourceResolver, resolveCodeMaterialFiles, loadCodeSourceReferences } from '@/core/videoEdit/codeMaterial/sources'
 import { createLogger } from '@/core/logging'
@@ -201,6 +201,8 @@ async function executeVideoEditReview(raw: unknown, context: Pick<CapabilityExec
           try {
             const version = codeMaterialVersion(local, clip.code!)
             let suggestions = scanned.get(version.id)
+            // 源码审查要带完整 TypeScript 编译器，只在真有代码片段时加载，不进首屏包。
+            const [{ default: ts }, { reviewCodeEffectUsage }, { reviewCodeTrackSeparation }] = await Promise.all([import('typescript'), import('@/core/videoEdit/codeEffectReview'), import('@/core/videoEdit/codeTrackReview')])
             if (!suggestions) {
               await loadCodeSourceReferences(version)
               assertCurrent()

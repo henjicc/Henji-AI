@@ -19,7 +19,8 @@ function buildElectronBundlePlan(root) {
       command: process.execPath,
       // electron-vite build 总把 NODE_ENV 固定为 production；开发巡检产物用 HENJI_BUNDLE_MODE=development 传 --mode，
       // 渲染层以 import.meta.env.MODE 判断（Vite 静态替换，正式构建仍可裁掉开发页）。
-      args: [path.join(root, 'node_modules/electron-vite/bin/electron-vite.js'), 'build', ...(process.env.HENJI_BUNDLE_MODE ? ['--mode', process.env.HENJI_BUNDLE_MODE] : [])],
+      // 渲染层上千个模块打包加压缩会超过 Node 默认堆上限（退出码 134），构建子进程固定给足堆。
+      args: ['--max-old-space-size=8192', path.join(root, 'node_modules/electron-vite/bin/electron-vite.js'), 'build', ...(process.env.HENJI_BUNDLE_MODE ? ['--mode', process.env.HENJI_BUNDLE_MODE] : [])],
     },
   ]
 }

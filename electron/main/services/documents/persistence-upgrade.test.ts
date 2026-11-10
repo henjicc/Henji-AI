@@ -8,6 +8,7 @@ import { buildDocumentEnvelope, serializeDocumentEnvelope, documentEnvelopeContr
 import { createTestEnvironment, type TestEnvironment } from './documents.test-support'
 import * as persistenceContracts from '../../../../src/core/persistence/fileContracts'
 import { upgradeStoredFile } from '../persistence/stored-file'
+import * as fileUpgrade from '../persistence/file-upgrade'
 
 let environment: TestEnvironment | undefined
 afterEach(async () => { await environment?.cleanup(); environment = undefined; vi.restoreAllMocks() })
@@ -24,17 +25,19 @@ describe('文档升级的真实文件边界', () => {
     await fsp.writeFile(filePath, text)
     return { env: environment, filePath, text, step }
   }
-  it('打开前备份一次，读取后原文件不变，首次保存才写入当前格式', async () => {
+  it('打开时备份一次并写回当前格式，再次打开不再备份，修订号不变', async () => {
     const { env, filePath, text } = await setup()
     const target = { id: 'upgrade', path: filePath }
     const read = await env.services.service.readDocument(target)
-    expect(read.content).toEqual({ title: '原内容' }); expect(await fsp.readFile(filePath, 'utf8')).toBe(text)
+    expect(read.content).toEqual({ title: '原内容' })
+    expect(JSON.parse(await fsp.readFile(filePath, 'utf8'))).toMatchObject({ kindVersion: 2, revision: 0, content: { title: '原内容' } })
     const backups = path.join(path.dirname(filePath), '.henji/backups')
     const files = await fsp.readdir(backups); expect(files).toHaveLength(1); expect(await fsp.readFile(path.join(backups, files[0]), 'utf8')).toBe(text)
-    await env.services.service.readDocument(target); expect(await fsp.readdir(backups)).toEqual(files)
-    await env.services.service.saveDocument({ target, expectedRevision: 0, content: read.content })
-    expect(JSON.parse(await fsp.readFile(filePath, 'utf8'))).toMatchObject({ kindVersion: 2, revision: 1, content: { title: '原内容' } })
-    expect(await fsp.readFile(path.join(backups, files[0]), 'utf8')).toBe(text)
+    const backup = vi.spyOn(fileUpgrade, 'backupBeforePersistenceUpgrade')
+    expect((await env.services.service.readDocument(target)).content).toEqual({ title: '原内容' })
+    expect(backup).not.toHaveBeenCalled()
+    await env.services.service.saveDocument({ target, expectedRevision: read.meta.revision, content: { title: '改过' } })
+    expect(JSON.parse(await fsp.readFile(filePath, 'utf8'))).toMatchObject({ kindVersion: 2, revision: 1, content: { title: '改过' } })
   })
   it('非法 UTF-8 按原始字节核验备份，解码替换字符不误报并发修改', async () => {
     const { env, filePath, text } = await setup()
@@ -47,7 +50,6 @@ describe('文档升级的真实文件边界', () => {
     const files = await fsp.readdir(backups)
     expect(files).toHaveLength(1)
     expect(await fsp.readFile(path.join(backups, files[0]))).toEqual(bytes)
-    expect(await fsp.readFile(filePath)).toEqual(bytes)
   })
 
   it('迁移失败包含步骤和备份位置，原文件不变；缺迁移明确提示旧格式', async () => {
@@ -99,7 +101,6 @@ describe('文档升级的真实文件边界', () => {
       const read = await env.services.service.readDocument({ id: 'upgrade', path: filePath })
       expect(read.content).toEqual({ title: '原内容' })
       expect(envelopeStep.mock.invocationCallOrder[0]).toBeLessThan(step.mock.invocationCallOrder[0])
-      expect(await realRead(filePath, 'utf8')).toBe(original)
       const directory = path.join(path.dirname(filePath), '.henji/backups')
       const files = await fsp.readdir(directory)
       expect(await realRead(path.join(directory, files[0]), 'utf8')).toBe(original)
@@ -107,7 +108,7 @@ describe('文档升级的真实文件边界', () => {
       await fsp.writeFile(filePath, JSON.stringify({ ...raw, envelopeVersion: 3, minReaderVersion: 3 }))
       await expect(env.services.service.readDocument({ id: 'upgrade', path: filePath })).rejects.toMatchObject({ code: 'newer-version', formatId: 'document-envelope' })
       expect(envelopeStep).not.toHaveBeenCalled()
-      await fsp.writeFile(filePath, original)
+      await fsp.writeFile(filePath, original.replace('原内容', '尚未备份'))
       vi.spyOn(fsp, 'mkdir').mockRejectedValue(new Error('backup denied'))
       await expect(env.services.service.readDocument({ id: 'upgrade', path: filePath })).rejects.toMatchObject({ code: 'backup-failed' })
       expect(envelopeStep).not.toHaveBeenCalled()

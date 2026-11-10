@@ -1,12 +1,6 @@
 import ts from 'typescript'
-import { z } from 'zod'
 import { VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS } from './builtinEffects'
-
-export const codeEffectSuggestionSchema = z.object({
-  file: z.string(), line: z.number().int().positive(), column: z.number().int().positive(), evidence: z.string(),
-  factory: z.string(), confidence: z.enum(['static_assignment', 'structural_candidate']), message: z.string(),
-}).strict()
-export type CodeEffectSuggestion = z.infer<typeof codeEffectSuggestionSchema>
+import type { CodeEffectSuggestion } from './codeEffectSuggestion'
 
 /** 只报告可定位的源码事实；不执行作者代码，也不把算法候选当像素结论。 */
 export function reviewCodeEffectUsage(source: ts.SourceFile): CodeEffectSuggestion[] {

@@ -274,7 +274,7 @@ test('发布构建仍保留完整静态与助手能力门禁', () => {
   assert.match(script, /check:assistant-capabilities/)
   assert.match(script, /check:sdk/)
   assert.match(script, /tsc -p tsconfig\.electron\.json/)
-  assert.match(script, /electron-vite build/)
+  assert.match(script, /electron-vite(?:\.js)? build/)
   assert.match(script, /build:video-decoder/)
 })
 

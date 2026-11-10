@@ -1,4 +1,4 @@
-import type { CodeEffectSuggestion } from '../codeEffectReview'
+import type { CodeEffectSuggestion } from '../codeEffectSuggestion'
 import type { CodeSourceSpan } from './contract'
 import type ts from 'typescript'
 
