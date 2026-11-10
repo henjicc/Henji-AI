@@ -6,9 +6,9 @@ import type {
   StageVec3,
 } from '../domain/sceneTypes'
 
-export type CameraStageObjectRole = 'subject' | 'prop' | 'character' | 'camera' | 'environment'
-export type CameraStageReusePolicy = 'prefer_existing' | 'require_new'
-export type CameraStagePlacementMode = 'auto' | 'beside' | 'surround' | 'foreground' | 'background'
+type CameraStageObjectRole = 'subject' | 'prop' | 'character' | 'camera' | 'environment'
+type CameraStageReusePolicy = 'prefer_existing' | 'require_new'
+type CameraStagePlacementMode = 'auto' | 'beside' | 'surround' | 'foreground' | 'background'
 
 export interface CameraStageObjectSpec {
   objectId?: string
@@ -114,7 +114,7 @@ export function matchReusableSceneObject(
   return { object: null, reason: candidates.length > 1 ? '存在多个候选，避免猜测并新建明确对象。' : '场景中没有满足约束的对象。' }
 }
 
-export function baseDimensionsForObject(object: Pick<StageObject, 'type'> & Partial<StageObject>): StageVec3 {
+function baseDimensionsForObject(object: Pick<StageObject, 'type'> & Partial<StageObject>): StageVec3 {
   if (object.type === 'primitive') {
     const kind = 'kind' in object && object.kind ? object.kind : 'box'
     return { ...BASE_DIMENSIONS[kind] }
@@ -163,7 +163,7 @@ export function stageBoundsOverlap(a: StageObjectBounds, b: StageObjectBounds, m
     && a.min.z < b.max.z + margin && a.max.z > b.min.z - margin
 }
 
-export function listStageBoundsConflicts(
+function listStageBoundsConflicts(
   bounds: StageObjectBounds,
   objects: StageObject[],
   excludedObjectId?: string,

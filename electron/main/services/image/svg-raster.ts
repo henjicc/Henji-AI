@@ -10,7 +10,7 @@ const DEFAULT_CACHE_DIR = path.join(os.tmpdir(), 'henji-svg-raster')
 /** 同一文件并发首次使用（多处参考同一张、上传前先探测）共用一次渲染，避免互相覆盖正在读取的缓存。 */
 const pending = new Map<string, Promise<string>>()
 
-export function isSvgPath(filePath: string): boolean {
+function isSvgPath(filePath: string): boolean {
   return path.extname(filePath).toLowerCase() === '.svg'
 }
 

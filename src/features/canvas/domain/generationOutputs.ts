@@ -27,7 +27,7 @@ export const CANVAS_GENERATION_OUTPUT_STRATEGIES = [
 export type CanvasGenerationOutputStrategy =
   (typeof CANVAS_GENERATION_OUTPUT_STRATEGIES)[number];
 
-export interface CanvasGenerationOutputSemanticV1 {
+interface CanvasGenerationOutputSemanticV1 {
   /** 稳定语义键，例如 camera-view、grid-cell、layer。 */
   kind: string;
   /** 成员结果自身的图片语义；组语义由落图策略另行保存。 */
@@ -35,19 +35,19 @@ export interface CanvasGenerationOutputSemanticV1 {
   label?: string;
 }
 
-export interface CanvasGenerationOutputProfileV1 {
+interface CanvasGenerationOutputProfileV1 {
   /** 能力定义的稳定控制档，例如 continuous-v1 / discrete-v1。 */
   id: string;
   /** 只描述模型可承诺的控制等级，不把学习控制伪装成物理相机。 */
   precision?: string;
 }
 
-export interface CanvasGenerationOutputAngleV1 {
+interface CanvasGenerationOutputAngleV1 {
   /** 原生数值、离散预设或提示词近似，由 profile 决定解释方式。 */
   control: DynamicValueMap;
 }
 
-export interface CanvasGenerationOutputLayerV1 {
+interface CanvasGenerationOutputLayerV1 {
   index: number;
   name?: string;
   opacity?: number;

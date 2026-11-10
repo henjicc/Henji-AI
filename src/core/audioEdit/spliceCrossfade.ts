@@ -13,7 +13,7 @@ import type { AudioEditTimelineSpan } from './types'
 export const AUDIO_EDIT_SPLICE_QUIET_HALF_SECONDS = 0.02
 export const AUDIO_EDIT_SPLICE_SPEECH_HALF_SECONDS = 0.005
 /** 拼接点两侧各 20 ms 的声音都低于它才算安静（dBFS，按全部声道的均方根） */
-export const AUDIO_EDIT_SPLICE_QUIET_DBFS = -42
+const AUDIO_EDIT_SPLICE_QUIET_DBFS = -42
 
 /** 按源采样帧随机读取交错 PCM；越界部分补零。 */
 export interface AudioEditPcmReader {

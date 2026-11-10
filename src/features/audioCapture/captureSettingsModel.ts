@@ -1,7 +1,7 @@
 import { AUDIO_CAPTURE_RATES, audioCaptureSettingsSchema, type AudioCaptureInventory, type AudioCaptureSettings } from '@/core/audioCapture/contracts'
 import type { DropdownOption } from '@/components/ui/Dropdown'
 
-export const captureHostLabel = (host: string): string => host === 'default' ? '系统默认' : host === 'CoreAudio' ? 'Core Audio' : host
+const captureHostLabel = (host: string): string => host === 'default' ? '系统默认' : host === 'CoreAudio' ? 'Core Audio' : host
 export const captureRateLabel = (rate: number): string => `${rate / 1000} kHz`
 export const captureDepthLabel = (depth: number): string => depth === 32 ? '32 位浮点' : `${depth} 位`
 export function captureSummary(settings: Omit<AudioCaptureSettings, 'sampleRate'> & { sampleRate: number }): string {
@@ -13,7 +13,7 @@ export function captureHostOptions(inventory: AudioCaptureInventory): DropdownOp
     return value.success && value.data !== 'default' && (value.data !== 'ASIO' || inventory.asioCompiled) ? [{ value: value.data, label: captureHostLabel(value.data) }] : []
   })]
 }
-export function captureDevices(inventory: AudioCaptureInventory, settings: AudioCaptureSettings): AudioCaptureInventory['devices'] {
+function captureDevices(inventory: AudioCaptureInventory, settings: AudioCaptureSettings): AudioCaptureInventory['devices'] {
   const host = settings.hostApi === 'default' ? inventory.devices.find(device => device.index === inventory.defaultInputDevice)?.hostApi : settings.hostApi
   return inventory.devices.filter(device => device.hostApi === host && device.maxInputChannels > 0)
 }

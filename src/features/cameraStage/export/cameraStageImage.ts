@@ -36,7 +36,7 @@ export function flipRgbaRows(
   return flipWebglRgbaRows(pixels, width, height)
 }
 
-export function rgbaToPngDataUrl(
+function rgbaToPngDataUrl(
   pixels: Uint8Array,
   width: number,
   height: number,

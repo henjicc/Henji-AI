@@ -25,7 +25,7 @@ export function clampTransition(seconds: number, _fps: number): number {
   return Math.max(0, seconds)
 }
 
-export type StateKeyframeClipBlockKind = 'static' | 'transition'
+type StateKeyframeClipBlockKind = 'static' | 'transition'
 
 /** 时间轴上的一个比例块：静止块标记状态关键帧的时间点，过渡块来自该点到下一点的 transition 段 */
 export interface StateKeyframeClipBlock {

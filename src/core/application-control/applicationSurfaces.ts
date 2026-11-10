@@ -27,7 +27,7 @@ export const APPLICATION_OBSERVATION_TARGETS = [
 
 export type ApplicationObservationTarget = (typeof APPLICATION_OBSERVATION_TARGETS)[number]
 
-export type SurfaceObservationStrategy =
+type SurfaceObservationStrategy =
   | 'native_media_preferred'
   | 'specialized_region'
   | 'registered_region'

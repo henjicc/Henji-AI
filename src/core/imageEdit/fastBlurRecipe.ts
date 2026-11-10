@@ -2,7 +2,7 @@ export const FAST_BLUR_RECIPE_VERSION = 3 as const;
 export const FAST_BLUR_MAX_PYRAMID_LEVELS = 10;
 export const FAST_BLUR_MAX_PAIRED_TAPS = 8;
 
-export interface FastBlurPairedTap {
+interface FastBlurPairedTap {
   readonly offset: number;
   readonly weight: number;
 }

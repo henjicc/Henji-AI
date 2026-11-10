@@ -1,12 +1,12 @@
 import { assertMemoryContentSafe } from './memoryPolicy'
 import { z } from 'zod'
 
-export const MEMORY_ENTRY_MAX_LENGTH = 200
+const MEMORY_ENTRY_MAX_LENGTH = 200
 export const MEMORY_HISTORY_LIMIT = 100
-export const memoryLayerSchema = z.enum(['global', 'project', 'style'])
+const memoryLayerSchema = z.enum(['global', 'project', 'style'])
 export type MemoryLayer = z.infer<typeof memoryLayerSchema>
 const sentence = z.string().trim().min(1).max(MEMORY_ENTRY_MAX_LENGTH).refine(value => !/[\0\r\n]/.test(value), '请用一句话记录记忆。')
-export const memoryValueSchema = z.discriminatedUnion('key', [
+const memoryValueSchema = z.discriminatedUnion('key', [
   z.object({ key: z.enum(['font.zh', 'font.latin', 'font.numeric']), fonts: z.array(z.string().trim().min(1).max(100)).min(1).max(12) }).strict(),
   z.object({ key: z.literal('style'), id: z.string().min(1).max(100) }).strict(),
   z.object({ key: z.literal('voice'), providerId: z.string().min(1).max(100), voiceId: z.string().min(1).max(200) }).strict(),

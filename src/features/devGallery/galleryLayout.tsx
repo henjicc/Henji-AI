@@ -46,13 +46,13 @@ export function GalleryRow({ label, children }: { label: string; children: React
   )
 }
 
-export interface GalleryMatrixRow {
+interface GalleryMatrixRow {
   label: string
   /** 按列给出同一组件在各状态下的样本 */
   render: (state: GalleryMatrixState) => ReactNode
 }
 
-export type GalleryMatrixState = 'rest' | 'hover' | 'focus' | 'disabled'
+type GalleryMatrixState = 'rest' | 'hover' | 'focus' | 'disabled'
 
 const MATRIX_COLUMNS: ReadonlyArray<{ state: GalleryMatrixState; label: string }> = [
   { state: 'rest', label: '静息' },

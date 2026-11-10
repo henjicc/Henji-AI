@@ -239,6 +239,6 @@ async function main(argv = process.argv.slice(2)) {
   process.stdout.write(`依赖图${write ? '基线已更新' : '门禁通过'}：${current.cycles.length} 个静态值 SCC，${current.forbiddenEdges.length} 条冻结跨层边，${current.featureEdges.length} 条跨 feature 非 index 导入；首屏 ${current.firstScreen.moduleCount} 模块 / ${current.firstScreen.heavyModules.length} 重模块，${current.dynamicBackEdges.length} 动态值回边；${((performance.now() - started) / 1000).toFixed(2)} 秒。\n`)
 }
 
-module.exports = { scan, compare, forbiddenReason, featureCell, writeBaseline, cyclePath, firstScreenReachability,
+module.exports = { scan, compare, forbiddenReason, writeBaseline, firstScreenReachability,
   FIRST_SCREEN_HEAVY_PACKAGES, FIRST_SCREEN_HEAVY_MODULE_PREFIXES, PURE_CORE_DIRECTORIES }
 if (require.main === module) main().catch((error) => { process.stderr.write(`${error.message}\n`); process.exitCode = 1 })

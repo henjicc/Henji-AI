@@ -5,7 +5,7 @@ import { linearSrgbToOklab, linearSrgbToXyz, luminance, MIDDLE_GRAY, srgbToLinea
  * Input: straight sRGB-encoded RGBA, already downsampled (≈256 px long edge). Everything is in semantic units:
  * EV, percent of pixels, perceptual percent (0–100 on the display scale), kelvin, OkLCh chroma.
  */
-export interface ColorReadout {
+interface ColorReadout {
   exposure: { middleGrayOffsetEv: number; key: 'low' | 'normal' | 'high' }
   clipping: { highlightsPercent: number; shadowsPercent: number }
   tone: { p2: number; p50: number; p98: number }
@@ -13,7 +13,7 @@ export interface ColorReadout {
   color: { chromaMedian: number; chromaP95: number; oversaturatedPercent: number; palette: Array<{ hex: string; percent: number }> }
   skin: { candidatePercent: number; hueOffsetDegrees: number | null }
 }
-export interface ColorScopes {
+interface ColorScopes {
   /** 64 bins each over 0–1 display values, normalized to the largest bin. */
   histogram: { luma: number[]; red: number[]; green: number[]; blue: number[] }
   /** Luma waveform: `columns` × `levels` densities (column-major, bottom level first), normalized 0–1. */

@@ -38,7 +38,7 @@ export function onlyToken(dirty: Rectangle, side: number): boolean {
 }
 
 /** A small JPEG data URL of a picture for the live preview, token painted over. */
-export function previewJpegOf(image: NativeImage, side: number): string {
+function previewJpegOf(image: NativeImage, side: number): string {
   const width = image.getSize().width
   const small = image.resize({ width: Math.min(1280, width) })
   const size = small.getSize()

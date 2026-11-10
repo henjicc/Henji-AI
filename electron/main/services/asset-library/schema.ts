@@ -22,7 +22,7 @@ function assetColumns(conn: Database.Database): string[] {
 }
 
 /** 缩略图绝对路径 → 文件名；不是本程序生成的缩略图（名称不符）返回 null，由下次检查重新生成。 */
-export function thumbnailNameFromLegacyPath(value: string | null): string | null {
+function thumbnailNameFromLegacyPath(value: string | null): string | null {
   if (!value) return null
   const name = value.split(/[\\/]/).pop() ?? ''
   return THUMBNAIL_NAME_PATTERN.test(name) ? name : null
@@ -107,7 +107,7 @@ function upgradeAssetThumbnailNames(conn: Database.Database): void {
 }
 
 /** 只调整来源和类型约束，完整保留列与关联。 */
-export function upgradeAssetSources(conn: Database.Database): void {
+function upgradeAssetSources(conn: Database.Database): void {
   const existing = conn.prepare("SELECT sql FROM sqlite_schema WHERE type='table' AND name='assets'").get() as { sql: string }
   const constraint = /\bsource\s+TEXT\s+NOT\s+NULL\s+CHECK\s*\(\s*source\s+IN\s*\(([^)]*)\)\s*\)/i
   const values = existing.sql.match(constraint)?.[1]

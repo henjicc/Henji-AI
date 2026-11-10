@@ -17,7 +17,7 @@ export type CanvasMediaType = 'image' | 'video' | 'audio';
 
 const PROGRESS_THROTTLE_MS = 200;
 
-export interface CanvasGenerationUpstream {
+interface CanvasGenerationUpstream {
   images?: string[];
   videos?: string[];
   audios?: string[];
@@ -76,7 +76,7 @@ export interface CanvasGenerationOutput {
  * 兼容旧画布节点数据中的模型 ID（短 ID、带 provider 前缀的别名等）。
  * 未匹配时回退到对应媒体类型的第一个模型并记录告警。
  */
-export function resolveCanvasModelId(inputModelId: string, mediaType: CanvasMediaType = 'image'): string {
+function resolveCanvasModelId(inputModelId: string, mediaType: CanvasMediaType = 'image'): string {
   const requested = (inputModelId ?? '').trim();
   if (requested && (registry.getModel(requested) || getControlledExecutionModel(requested))) {
     return requested;

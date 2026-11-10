@@ -57,7 +57,7 @@ export interface DatabaseLocations {
 }
 
 /** 已知项目：作品索引里的全部项目（含暂时缺失的，解码时仍能给出原位置）。 */
-export function listLocationProjects(db: Database.Database): LocationContext['projects'] {
+function listLocationProjects(db: Database.Database): LocationContext['projects'] {
   return new DocumentIndexStore(db, STYLE).listProjects().map((project) => ({ id: project.id, root: project.path }))
 }
 

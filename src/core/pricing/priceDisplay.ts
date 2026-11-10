@@ -85,7 +85,7 @@ export function normalizeUsdToCnyRate(input: DynamicValue): number {
   return Math.round(parsed * 10000) / 10000
 }
 
-export function resolveDisplayCurrency(
+function resolveDisplayCurrency(
   mode: PriceEstimateCurrencyMode,
   language: string
 ): PriceEstimateCurrency {
@@ -114,7 +114,7 @@ export function resolvePricingCurrency(
   return undefined
 }
 
-export function resolveCurrencySymbol(currency: PriceEstimateCurrency): string {
+function resolveCurrencySymbol(currency: PriceEstimateCurrency): string {
   return currency === 'CNY' ? '¥' : '$'
 }
 

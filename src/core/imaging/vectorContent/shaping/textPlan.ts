@@ -18,10 +18,10 @@ export type ShapedTextOptions = Omit<TextDrawConstraints, 'wrap'> & {
   exclusions?: readonly TextExclusion[]
 }
 /** 列表标记：纯符号或按段落顺序计数。 */
-export interface TextParagraphList { type?: 'decimal' | 'cjk' | 'alpha' | 'bullet'; level?: number; start?: number; indent?: number; marker?: string }
+interface TextParagraphList { type?: 'decimal' | 'cjk' | 'alpha' | 'bullet'; level?: number; start?: number; indent?: number; marker?: string }
 /** 段落的版式：缩进和列表都不进入文字内容本身。 */
 export interface TextParagraphLayout { firstLineIndent?: number; indent?: number; indentEnd?: number; list?: TextParagraphList }
-export interface OutlinePlacement { outline: TextOutline; x: number; y: number; scale: number }
+interface OutlinePlacement { outline: TextOutline; x: number; y: number; scale: number }
 export interface ShapedTextCluster { owner: number; style: TextStyle; x: number; baseline: number; advance: number; glyphs: OutlinePlacement[]; inkBounds: TextPlanRect | null; emoji?: string
   /** 竖排里旋转的拉丁文：簇原点上再转这个角度。 */
   rotate?: number
@@ -30,7 +30,7 @@ export interface ShapedTextCluster { owner: number; style: TextStyle; x: number;
   /** 竖排直立的 emoji：字形原点相对簇原点有偏移。 */
   upright?: boolean
 }
-export interface ShapedTextGrapheme extends Omit<TextPlanGrapheme, 'positionKind'> { owner: number; positionKind: 'individual' | 'shared-cluster' }
+interface ShapedTextGrapheme extends Omit<TextPlanGrapheme, 'positionKind'> { owner: number; positionKind: 'individual' | 'shared-cluster' }
 export interface ShapedTextPlan extends Omit<TextDrawPlan, 'batches' | 'rasterBounds' | 'graphemes'> { graphemes: ShapedTextGrapheme[]; clusters: ShapedTextCluster[]; diagnostics: Array<{ kind: 'missing-glyph' | 'inferred-script'; source: { start: number; end: number }; text: string }>; fontIdentity: string; intrinsicWidths: { min: number; max: number }; vertical: boolean }
 interface Row { paragraph: number; sourceOffset: number; source: string; runs: ShapingRuns; line: ParagraphLine; y: number; height: number; baselineOffset: number; align: TextStyle['align']; slot?: TextFlowSlot; lineIndent: number; lineEndIndent: number; marker?: { rightToLeft: boolean; text: string; style: TextStyle } }
 const ideographic = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u

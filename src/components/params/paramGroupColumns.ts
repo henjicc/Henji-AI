@@ -6,8 +6,8 @@ import { resolveParamPresentationSections, type ResolvedParamPresentationSection
  * 分节多、参数多时把分节分到左右两列，每列定宽 320（标签 96 + 间隔 12 + 控件 212），
  * 控件不再被拉成长条；分节顺序不变，只在两节之间断开。
  */
-export const PARAM_GROUP_COLUMN_WIDTH = 320
-export const PARAM_GROUP_COLUMN_GAP = 24
+const PARAM_GROUP_COLUMN_WIDTH = 320
+const PARAM_GROUP_COLUMN_GAP = 24
 const TWO_COLUMN_MIN_PARAMS = 8
 
 /** 上传与多行文本占的高度约等于两行普通参数 */

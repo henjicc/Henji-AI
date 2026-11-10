@@ -1,7 +1,7 @@
 import { resolveGaussianBlurV2Geometry } from './effects/gaussianBlur'
 
 export const IMAGE_EDIT_STORAGE_TILE_SIZE = 512;
-export const IMAGE_EDIT_SUPERTILE_SIZE = 1024;
+const IMAGE_EDIT_SUPERTILE_SIZE = 1024;
 
 export interface ImageEditSize {
   width: number;

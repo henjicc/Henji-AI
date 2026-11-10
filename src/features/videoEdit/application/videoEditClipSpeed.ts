@@ -12,7 +12,7 @@ import { resolveVideoEditContentAnchor } from './videoEditContentAnchors'
  * 对话框走同一个领域入口（`applyVideoEditSpeedChange`，不波纹：变长只用到后面片段之前的空白）。
  * 原子波纹变速走 ripple_video_edit_clip_speed，复用时间线 speed 编辑，不让助手手算后移量。
  */
-export const VIDEO_EDIT_SPEED_DATA_KEYS = ['speedPercent', 'reverse', 'preservePitch', 'timeRemap', 'frameInterpolation', 'pitchSemitones'] as const
+const VIDEO_EDIT_SPEED_DATA_KEYS = ['speedPercent', 'reverse', 'preservePitch', 'timeRemap', 'frameInterpolation', 'pitchSemitones'] as const
 type Data = Record<string, JsonValue>
 
 /** 读回：速度百分比（100 为原速；速度曲线片段为曲线最高速度）、倒放、保持音调、速度曲线、补帧与变调。 */

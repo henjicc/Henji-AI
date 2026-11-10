@@ -9,9 +9,9 @@ export type ImageEditRenderNodeCategory =
   | 'source';
 
 export type ImageEditRenderQuality = 'draft' | 'stable' | 'export';
-export type ImageEditRenderBackend = 'webgpu' | 'cpu-libvips' | 'browser-canvas';
+type ImageEditRenderBackend = 'webgpu' | 'cpu-libvips' | 'browser-canvas';
 export type ImageEditColorDomain = 'source-encoded' | 'linear-light' | 'perceptual-working';
-export type ImageEditAlphaContract = 'premultiplied' | 'straight' | 'passthrough';
+type ImageEditAlphaContract = 'premultiplied' | 'straight' | 'passthrough';
 
 export interface ImageEditRenderColorContract {
   input: ImageEditColorDomain;
@@ -27,7 +27,7 @@ export interface ImageEditRenderEstimateContext {
   quality: ImageEditRenderQuality;
 }
 
-export interface ImageEditGlobalAnalysisDefinition {
+interface ImageEditGlobalAnalysisDefinition {
   maxEdge: number;
   cacheScope: 'subtree';
   resultVersion: number;
@@ -103,7 +103,7 @@ export type ImageEditCpuPixelKernelV3 = (
 ) => Float32PremultipliedRgbaTile | Promise<Float32PremultipliedRgbaTile>;
 
 /** GPU kernel 引用是宿主 ABI 名称，设备/纹理生命周期仍由 GPU 宿主绑定。 */
-export interface ImageEditGpuKernelV3 {
+interface ImageEditGpuKernelV3 {
   kind: 'adjustment' | 'effect';
   kernel: string;
   uniformCode?: number;

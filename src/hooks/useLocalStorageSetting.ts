@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-export interface LocalStorageSettingSpec<T> {
+interface LocalStorageSettingSpec<T> {
   key: string
   parse: (raw: string | null) => T
 }

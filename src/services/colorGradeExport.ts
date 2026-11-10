@@ -35,7 +35,7 @@ export interface ColorGradeExportFileResult {
   accuracy: ColorGradeExportAccuracy
 }
 
-export const COLOR_GRADE_EXPORT_EXTENSIONS: Record<ColorGradeExportFormat, string> = { cube: 'cube', cdl: 'cdl' }
+const COLOR_GRADE_EXPORT_EXTENSIONS: Record<ColorGradeExportFormat, string> = { cube: 'cube', cdl: 'cdl' }
 
 function buildOffThread(request: ColorGradeExportWorkerRequest, signal?: AbortSignal): Promise<ColorGradeExportBuild> {
   signal?.throwIfAborted()

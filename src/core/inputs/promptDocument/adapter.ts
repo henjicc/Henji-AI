@@ -12,7 +12,7 @@ import {
   type PromptDocumentValidationReason,
 } from './validation'
 
-export interface PromptDocumentFallbackDiagnostic {
+interface PromptDocumentFallbackDiagnostic {
   event: 'prompt_document.parse.fallback'
   carrierType: string
   carrierId?: string
@@ -42,7 +42,7 @@ export interface PromptDocumentDoubleWrite {
   legacyText: string
 }
 
-export function reportPromptDocumentFallback(
+function reportPromptDocumentFallback(
   diagnostic: PromptDocumentFallbackDiagnostic,
 ): void {
   createLogger('core.inputs.promptDocument').warn(

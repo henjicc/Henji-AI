@@ -13,7 +13,7 @@ export type RegionCombine = 'replace' | 'add' | 'subtract' | 'intersect' | 'pain
 export type RegionIntent = RegionGeometry
   | { type: 'brush'; points: readonly RegionPoint[]; radius: number }
   | { type: 'mask'; width: number; height: number; matrix: RegionTransform; runs: readonly (readonly [number, number, number])[] };
-export interface RegionOperation { shape: RegionIntent; combine: RegionCombine; invertBefore?: boolean; opacity?: number }
+interface RegionOperation { shape: RegionIntent; combine: RegionCombine; invertBefore?: boolean; opacity?: number }
 export interface RegionProgram { operations: readonly RegionOperation[]; feather: number; inverted: boolean }
 export interface Coverage extends RegionRect { data: Float32Array }
 /** Rational source ticks: the host resolves speed, trim and reverse before calling the kernel. */

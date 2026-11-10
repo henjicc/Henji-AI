@@ -10,7 +10,7 @@ export type TranscriptionReply =
   | { ok: false; error: { message: string; transcriptionFacts?: TranscriptionFacts } }
 
 /** Only execution facts, never credentials, paths or provider response bodies, cross IPC. */
-export const transcriptionFactsSchema = z.object({
+const transcriptionFactsSchema = z.object({
   billing: z.enum(['not_charged', 'submitted', 'completed', 'unknown']),
   targetMutation: z.enum(['none', 'applied']),
   audioDocumentId: z.string().optional(),

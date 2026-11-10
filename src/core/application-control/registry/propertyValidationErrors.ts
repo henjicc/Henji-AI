@@ -2,7 +2,7 @@ import type { z } from 'zod'
 import type { JsonValue } from '../identifiers'
 import { HEX_COLOR_EXAMPLE } from '../../theme/colorTokens'
 
-export const schemaObject = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+const schemaObject = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
 
 export function receivedPropertyValue(value: unknown): string {
   if (value === undefined) return '未提供'

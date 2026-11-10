@@ -19,7 +19,7 @@ const logger = createMainLogger('main.image_editor_v3.managed_raster')
 const STALE_OUTPUT_AGE_MS = 24 * 60 * 60 * 1_000
 const MAX_MANAGED_OUTPUT_BYTES = 16 * 1024 * 1024 * 1024
 
-export type ManagedRasterPublication = 'document-preview' | 'standalone-image'
+type ManagedRasterPublication = 'document-preview' | 'standalone-image'
 
 type ManagedStartRequest = Omit<StartRasterExportSessionRequest, 'targetPath'> & {
   publication?: ManagedRasterPublication

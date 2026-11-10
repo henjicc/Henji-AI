@@ -3,12 +3,12 @@ import { textWidth } from './metrics';
 import type { TextStyle } from './text';
 import { throwIfRegionAborted } from '../regions';
 
-export interface PositionedTextRun extends TextRun { x: number; y: number; width: number; lineHeight: number; direction: 'auto' | 'ltr' | 'rtl' }
+interface PositionedTextRun extends TextRun { x: number; y: number; width: number; lineHeight: number; direction: 'auto' | 'ltr' | 'rtl' }
 export interface RichTextLayout { runs: PositionedTextRun[]; lines: Array<{text:string;y:number;width:number;lineHeight:number}>; width: number; height: number }
 export type TextMeasure = (text: string, font: string) => number;
 const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
-export interface RichTextFlowLine { text: string; y: number; width: number; lineHeight: number; runs: TextRun[]; paragraph: TextParagraph; last: boolean }
+interface RichTextFlowLine { text: string; y: number; width: number; lineHeight: number; runs: TextRun[]; paragraph: TextParagraph; last: boolean }
 export interface RichTextFlow { lines: RichTextFlowLine[]; width: number; height: number; originY: number }
 export interface RichTextPositionPlan extends RichTextLayout { contentTop: number; rowRuns: PositionedTextRun[][] }
 

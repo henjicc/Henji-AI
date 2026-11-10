@@ -11,7 +11,7 @@ export const PROBE_WS_PATH = '/web-replay'
 
 export type HostKind = 'tauri' | 'electron' | 'web'
 export interface AppInfo { name: string; version: string }
-export interface Viewport { width: number; height: number; dpr: number }
+interface Viewport { width: number; height: number; dpr: number }
 export interface ProbeEnvironment {
   url: string
   viewport: Viewport
@@ -77,7 +77,7 @@ export type DataEvent =
 // ---------------------------------------------------------------- behavior track events
 
 export interface WireFile { name: string; type: string; lastModified: number; body: WireBody }
-export type PointerKind = 'move' | 'down' | 'up'
+type PointerKind = 'move' | 'down' | 'up'
 
 export type BehaviorEvent =
   | { kind: 'pointer'; t: number; type: PointerKind; x: number; y: number; button: number; buttons: number; clickCount: number; pointerType: string; mods: Modifiers; target?: ElementInfo }
@@ -95,7 +95,7 @@ export type ProbeEvent = (DataEvent | BehaviorEvent) & { seq: number }
 
 // ---------------------------------------------------------------- storage
 
-export interface IdbIndexDump { name: string; keyPath: string | string[]; unique: boolean; multiEntry: boolean }
+interface IdbIndexDump { name: string; keyPath: string | string[]; unique: boolean; multiEntry: boolean }
 export interface IdbStoreDump { name: string; keyPath: string | string[] | null; autoIncrement: boolean; indexes: IdbIndexDump[]; records: Array<{ key: Encoded; value: Encoded }> }
 export interface IdbDatabaseDump { name: string; version: number; stores: IdbStoreDump[] }
 export interface StorageSnapshot { local: Array<[string, string]>; session: Array<[string, string]>; indexedDB: IdbDatabaseDump[] }

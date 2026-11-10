@@ -8,7 +8,7 @@
 const CJK = /[㐀-鿿豈-﫿]/
 const WORD = /[a-z0-9]+(?:[._-][a-z0-9]+)*/g
 
-export function keywordTokens(text: string): string[] {
+function keywordTokens(text: string): string[] {
   const lower = text.toLowerCase()
   const tokens = [...lower.matchAll(WORD)].map(match => match[0])
   const runs = lower.split(/[^㐀-鿿豈-﫿]+/).filter(run => run && CJK.test(run))

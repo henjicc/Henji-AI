@@ -29,13 +29,13 @@ interface LocalMediaImportBase {
   cacheHit: boolean
 }
 
-export interface ImportedImageMedia extends LocalMediaImportBase {
+interface ImportedImageMedia extends LocalMediaImportBase {
   kind: 'image'
   previewPath: string
   aspectRatio: string
 }
 
-export interface ImportedVideoMedia extends LocalMediaImportBase {
+interface ImportedVideoMedia extends LocalMediaImportBase {
   kind: 'video'
   posterPath: string
   aspectRatio: string
@@ -43,7 +43,7 @@ export interface ImportedVideoMedia extends LocalMediaImportBase {
   hasAudio: boolean
 }
 
-export interface ImportedAudioMedia extends LocalMediaImportBase {
+interface ImportedAudioMedia extends LocalMediaImportBase {
   kind: 'audio'
   durationSeconds: number
 }

@@ -7,12 +7,12 @@ import { truncateCodePoints } from './identifiers'
 
 export const APPLICATION_HOST_CONTRACT_VERSION = 'application-host/v1' as const
 export const HOST_ANNOTATION_PREVIEW_CHARACTERS = 200
-export const HOST_ANNOTATION_PREVIEW_ITEMS = 12
+const HOST_ANNOTATION_PREVIEW_ITEMS = 12
 
-export const hostScopeSchema = z.string().regex(/^[a-z][a-z0-9_.-]{1,63}$/)
+const hostScopeSchema = z.string().regex(/^[a-z][a-z0-9_.-]{1,63}$/)
 export type HostScope = z.infer<typeof hostScopeSchema>
 
-export const hostScopeRevisionsSchema = z.object({
+const hostScopeRevisionsSchema = z.object({
   navigation: z.number().int().nonnegative(),
   generation: z.number().int().nonnegative(),
   canvas: z.number().int().nonnegative(),
@@ -158,7 +158,7 @@ export const hostErrorCodeSchema = z.enum([
 ])
 export type HostErrorCode = z.infer<typeof hostErrorCodeSchema>
 
-export const applicationCapabilityResultSchema = z.discriminatedUnion('ok', [
+const applicationCapabilityResultSchema = z.discriminatedUnion('ok', [
   z.object({
     ok: z.literal(true),
     data: z.record(z.string(), z.unknown()),

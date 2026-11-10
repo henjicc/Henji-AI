@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { MutableRefObject, RefObject } from 'react'
 
-export interface FilePreviewDragState {
+interface FilePreviewDragState {
   isDragging: boolean
   isDropping: boolean
   fromIndex: number | null

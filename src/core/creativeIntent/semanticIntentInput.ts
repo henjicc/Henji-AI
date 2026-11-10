@@ -4,7 +4,7 @@ import { visualEvidenceSchema, type ExplanationSession, type VisualEvidence } fr
 
 /** Transfer budgets, not limits on the recording or its unresolved references. */
 export const SEMANTIC_IMAGE_LONG_EDGE = 640
-export const SEMANTIC_IMAGE_PIXEL_BUDGET = 2_500_000
+const SEMANTIC_IMAGE_PIXEL_BUDGET = 2_500_000
 export const semanticIntentImageSchema = z.object({
   mimeType: z.literal('image/jpeg'), data: z.string().min(1),
   manifest: visualEvidenceSchema,

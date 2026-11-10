@@ -16,7 +16,7 @@ import StreamlineGenerator, { type StreamlineParams } from './streamlines'
 import type TensorField from './tensor_field'
 import Vector from './vector'
 
-export interface NoiseStreamlineParams {
+interface NoiseStreamlineParams {
   noiseEnabled: boolean
   noiseSize: number
   /** 度 */

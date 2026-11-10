@@ -9,9 +9,9 @@ import type Database from 'better-sqlite3'
  *   路径本身的写法由第 14 项 stored_locations 统一换成位置写法。
  */
 
-export const GENERATION_HISTORY_TABLE = 'history'
+const GENERATION_HISTORY_TABLE = 'history'
 export const GENERATION_HISTORY_FTS_TABLE = 'history_fts'
-export const RESULT_PATH_SEPARATOR_LEGACY = '|||'
+const RESULT_PATH_SEPARATOR_LEGACY = '|||'
 
 const COLUMNS_SQL = `
   id TEXT PRIMARY KEY,
@@ -35,7 +35,7 @@ function tableColumns(db: Database.Database, table: string): string[] {
 }
 
 /** 旧版 `|||` 拼接的结果列拆成数组（去空白、去空段）。 */
-export function splitLegacyResultPaths(value: string | null | undefined): string[] {
+function splitLegacyResultPaths(value: string | null | undefined): string[] {
   if (!value) return []
   return value.split(RESULT_PATH_SEPARATOR_LEGACY).map((item) => item.trim()).filter(Boolean)
 }

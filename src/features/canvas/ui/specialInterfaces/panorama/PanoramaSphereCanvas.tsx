@@ -197,7 +197,7 @@ function PanoramaCameraControls({
   return null;
 }
 
-export interface PanoramaCaptureOptions {
+interface PanoramaCaptureOptions {
   width: number;
   height: number;
 }

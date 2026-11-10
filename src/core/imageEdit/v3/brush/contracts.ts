@@ -31,7 +31,7 @@ export interface BufferedImageEditBrushPointV3 {
 
 export interface ImageEditBrushShapeV3 extends PaintBrush {}
 
-export interface ImageEditRgbaBrushTargetV3 {
+interface ImageEditRgbaBrushTargetV3 {
   kind: 'raster-rgba';
   colorDomain: ImageEditColorDomain;
   workingSpace: ImageEditWorkingSpaceV3;
@@ -41,7 +41,7 @@ export interface ImageEditRgbaBrushTargetV3 {
   premultipliedColor: readonly [number, number, number, number];
 }
 
-export interface ImageEditMaskBrushTargetV3 {
+interface ImageEditMaskBrushTargetV3 {
   kind: 'mask';
   /** brush 向该值混合，eraser 始终向 0 混合。 */
   brushValue?: number;
@@ -101,13 +101,13 @@ export interface ImageEditBrushTileChangeV3 {
   newRawByteSize: number;
 }
 
-export interface ImageEditBrushPendingHistoryV3 {
+interface ImageEditBrushPendingHistoryV3 {
   oldResources: readonly ImageEditBrushResourceReferenceV3[];
   oldResourceBytes: number;
   pendingNewRawBytes: number;
 }
 
-export interface ImageEditBrushStrokeMetricsV3 extends ImageEditBrushPointBufferStatsV3 {
+interface ImageEditBrushStrokeMetricsV3 extends ImageEditBrushPointBufferStatsV3 {
   simplifiedPointCount: number;
   loadedTileCount: number;
   changedTileCount: number;

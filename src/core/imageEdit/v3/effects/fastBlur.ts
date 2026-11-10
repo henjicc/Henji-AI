@@ -34,7 +34,7 @@ export const FAST_BLUR_V3_CONTRACT: CpuReferenceKernelContract = {
 };
 
 /** 小半径分块精确求值；超过这个邻域后切换为共享低频分析，避免 halo 随半径膨胀。 */
-export const FAST_BLUR_V3_MAX_LOCAL_HALO = 48;
+const FAST_BLUR_V3_MAX_LOCAL_HALO = 48;
 
 export function resolveFastBlurV3Geometry(
   parameters: FastBlurV3Parameters,

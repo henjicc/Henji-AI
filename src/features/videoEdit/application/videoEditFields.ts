@@ -33,7 +33,7 @@ import { videoEditFrameInterpolationSchema, videoEditTimeRemapSchema } from '@/c
 export const VIDEO_EDIT_TYPES = ['video_edit.document', 'video_edit.clip', 'video_edit.annotation', 'video_edit.media', 'video_edit.sequence', 'video_edit.bin', 'video_edit.item', 'video_edit.track', 'video_edit.source', 'video_edit.code_material', 'video_edit.code_version', 'video_edit.marker', 'video_edit.caption', ...VIDEO_EDIT_COMPOSITE_TYPES, 'video_edit.builtin_effect'] as const
 export type VideoEditEntityType = typeof VIDEO_EDIT_TYPES[number]
 export type VideoEditFieldData = Record<string, JsonValue>
-export function videoEditPropertyKey(key: string): string { return key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`) }
+function videoEditPropertyKey(key: string): string { return key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`) }
 export function videoEditDataKey(key: string): string { return key.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase()) }
 const text = z.string().max(2000)
 export const VIDEO_EDIT_TIME_CASCADES = [
@@ -346,7 +346,7 @@ labels.elementOverrides = '元素覆盖'
 descriptions['video_edit.item.element_overrides'] = '此代码素材项插入新片段时复制的初始元素覆盖；片段插入后独立编辑 clip.element_overrides。结构与片段元素覆盖相同（含按代码效果 key 的 effects 与追加的 addedEffects），整体替换前先读取保留其它元素。素材项不在时间线上、没有当前帧观察：写入严格校验作者接口版本、追加效果的整组参数、LUT 与关键帧；代码效果的 key 与参数要放进片段后按观察校验，读取时组合非法会退回代码值。'
 const codeKeys: Record<string, string> = { codeParameters: 'parameters', codeCurves: 'curves', codeVersionId: 'versionId' }
 /** 剪辑名就是剪辑文件的文件名（3.1）：改名走通用文档属性。 */
-export const VIDEO_EDIT_PROJECT_NAME_READ_ONLY = '剪辑名就是剪辑文件名，请改 documents.document 的 name（文档 ID 与本剪辑相同）；剪辑内容能力不改名。'
+const VIDEO_EDIT_PROJECT_NAME_READ_ONLY = '剪辑名就是剪辑文件名，请改 documents.document 的 name（文档 ID 与本剪辑相同）；剪辑内容能力不改名。'
 /** 内置效果目录的只读原因（属性与实体共用）：指向真正能加效果的写入路径。 */
 export const VIDEO_EDIT_BUILTIN_CATALOG_READ_ONLY = '内置效果与过渡目录由应用登记、随版本更新，只读；给片段加效果请在片段下创建 video_edit.effect，definition_id 写这里的 ID（effect:<ID>），parameters 按 params 取值；加过渡请在序列下创建 video_edit.transition，kind 写 transition:<种类> 里的种类名，parameters 按 params 取值。'
 export const VIDEO_EDIT_CONTROLLED_AGGREGATES = ['code', 'graphic', 'effects', 'adjustment', 'transitions', 'creativeSource', 'takes', 'trackers'] as const

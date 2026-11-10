@@ -20,7 +20,7 @@ import { forgetCameraStageUndo, restoreCameraStageUndo, afterCameraStageWrite } 
 
 type CollectionStep = Extract<ApplicationPlannedStep, { kind: 'collection' }>
 
-export const cameraStageSetGenerateInputSchema = z.object({
+const cameraStageSetGenerateInputSchema = z.object({
   projectId: z.string().min(1),
   layout: cameraStageSetLayoutSchema,
   name: z.string().trim().min(1).max(CAMERA_STAGE_NAME_MAX_LENGTH).optional(),

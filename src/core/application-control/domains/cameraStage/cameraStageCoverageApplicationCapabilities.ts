@@ -29,7 +29,7 @@ const rangeRefine = (input: { startTime?: number; endTime?: number }, context: z
   }
 }
 
-export const coverCameraStageSceneCapability = defineApplicationCapability({
+const coverCameraStageSceneCapability = defineApplicationCapability({
   id: COVER_CAMERA_STAGE_SCENE_CAPABILITY_ID,
   resolveOperationTargets: input => [{ kind: 'camera_stage.document', id: input.documentId }],
   version: 1,
@@ -62,7 +62,7 @@ export const coverCameraStageSceneCapability = defineApplicationCapability({
   summarize: (output) => `多机位覆盖事务 ${output.transactionRef} 已完成。`,
 })
 
-export const cutCameraStageCoverageCapability = defineApplicationCapability({
+const cutCameraStageCoverageCapability = defineApplicationCapability({
   id: CUT_CAMERA_STAGE_COVERAGE_CAPABILITY_ID,
   resolveOperationTargets: input => [{ kind: 'camera_stage.document', id: input.documentId }],
   version: 1,
@@ -96,7 +96,7 @@ export const cutCameraStageCoverageCapability = defineApplicationCapability({
   summarize: (output) => `剪辑事务 ${output.transactionRef} 已完成。`,
 })
 
-export const checkCameraStageEditCapability = defineApplicationCapability({
+const checkCameraStageEditCapability = defineApplicationCapability({
   id: CHECK_CAMERA_STAGE_EDIT_CAPABILITY_ID,
   version: 1,
   title: '检查剪辑规则',

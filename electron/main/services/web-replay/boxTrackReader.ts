@@ -14,7 +14,7 @@ const lineSchema = z.object({
 }).strict().refine(line => !line.items.length || (line.width > 0 && line.height > 0))
 const pageSchema = z.object({ offset: z.number().int().nonnegative(), limit: z.number().int().min(1) })
 
-export interface BoxTrackEntry {
+interface BoxTrackEntry {
   key: string
   seconds: number
   /** 与文字轨相同的视口比例；部分出视口的边框裁切到 0–1。null 表示消失。 */

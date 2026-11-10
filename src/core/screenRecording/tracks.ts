@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { clockAnchorSchema, monoSpanSchema, safeClockSchema } from '../captureLog/clock'
 
-export const recordingTrackKindSchema = z.enum(['microphone', 'systemAudio', 'camera'])
+const recordingTrackKindSchema = z.enum(['microphone', 'systemAudio', 'camera'])
 export type RecordingTrackKind = z.infer<typeof recordingTrackKindSchema>
 export const recordingTrackOptionsSchema = z.object({
   microphone: z.object({}).strict().optional(),
@@ -9,7 +9,7 @@ export const recordingTrackOptionsSchema = z.object({
   camera: z.object({ deviceId: z.string().min(1).optional(), width: z.number().int().min(160).max(3840).default(1280), height: z.number().int().min(120).max(2160).default(720), frameRate: z.number().int().min(1).max(60).default(30) }).strict().optional(),
 }).strict()
 export type RecordingTrackOptions = z.infer<typeof recordingTrackOptionsSchema>
-export const recordingTrackSegmentSchema = z.object({
+const recordingTrackSegmentSchema = z.object({
   id: z.string().uuid(), file: z.string().regex(/^[a-f0-9-]+\.(wav|mp4)$/), monoSpanUs: monoSpanSchema,
   sampleRate: z.number().int().positive().optional(), channels: z.number().int().min(1).max(2).optional(),
   width: z.number().int().positive().optional(), height: z.number().int().positive().optional(),

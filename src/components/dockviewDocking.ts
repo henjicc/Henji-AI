@@ -30,11 +30,11 @@ export const DOCKVIEW_HOST_DND_OPTIONS: Pick<DockviewOptions, 'dndStrategy' | 'd
 }
 
 /** 距停靠区域外沿多少像素内算“贴到整个窗口边缘”。 */
-export const DOCK_ROOT_EDGE_PX = 20
+const DOCK_ROOT_EDGE_PX = 20
 /** 面板组四边多大比例算停靠区（与 dockview 默认一致）。 */
 const GROUP_EDGE_RATIO = 0.2
 
-export type DockEdge = 'left' | 'right' | 'top' | 'bottom'
+type DockEdge = 'left' | 'right' | 'top' | 'bottom'
 export interface DockRect { left: number; top: number; width: number; height: number }
 /** 停靠区（贴在旁边）或编组区（叠成标签）。`rect` 为指示区域，坐标与输入点同一视口。 */
 export type DockDropZone =
@@ -43,11 +43,11 @@ export type DockDropZone =
 export type DockDragSource = { kind: 'panel'; panel: IDockviewPanel } | { kind: 'group'; group: DockviewGroupPanel }
 
 /** 区分“停靠”和“编组”两种指示。 */
-export function dockDropZoneKind(zone: DockDropZone): 'dock' | 'group' {
+function dockDropZoneKind(zone: DockDropZone): 'dock' | 'group' {
   return zone.kind === 'group' && zone.position === 'center' ? 'group' : 'dock'
 }
 
-export function rectContains(rect: DockRect, x: number, y: number): boolean {
+function rectContains(rect: DockRect, x: number, y: number): boolean {
   return x >= rect.left && x <= rect.left + rect.width && y >= rect.top && y <= rect.top + rect.height
 }
 
@@ -102,7 +102,7 @@ export function resolveDockDropZone(api: DockviewApi, root: HTMLElement, x: numb
 }
 
 /** 把面板或整组停靠到整个区域的一边。 */
-export function dockSourceToRootEdge(api: DockviewApi, source: DockDragSource, side: DockEdge): void {
+function dockSourceToRootEdge(api: DockviewApi, source: DockDragSource, side: DockEdge): void {
   const group = source.kind === 'group' ? source.group : source.panel.group.panels.length === 1 ? source.panel.group : null
   if (group) { group.api.moveTo({ position: side }); return }
   if (source.kind !== 'panel') return
@@ -163,10 +163,10 @@ export function createDockDropIndicator(root: HTMLElement): DockDropIndicator {
 }
 
 /** 浮动窗口预览（PR：拖到空白处时指针处显示浅色标题条 + 面板虚影）。只能画在主窗口内。 */
-export interface DockFloatPreview { show(x: number, y: number): void; hide(): void; dispose(): void }
+interface DockFloatPreview { show(x: number, y: number): void; hide(): void; dispose(): void }
 const PREVIEW_MAX = { width: 420, height: 300 }
-export const DOCK_FLOAT_PREVIEW_GRAB = { x: 48, y: 12 }
-export function createDockFloatPreview(documentRef: Document, title: string, size: { width: number; height: number }): DockFloatPreview {
+const DOCK_FLOAT_PREVIEW_GRAB = { x: 48, y: 12 }
+function createDockFloatPreview(documentRef: Document, title: string, size: { width: number; height: number }): DockFloatPreview {
   const element = documentRef.createElement('div')
   element.className = `${PREVIEW_CLASS} hidden`
   element.dataset.dockFloatPreview = ''

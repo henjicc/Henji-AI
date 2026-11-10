@@ -3,13 +3,13 @@ import { ApplicationPreflightFailure } from './application-control/execution/tra
 
 export const EXTERNAL_CONTENT_CODE_SETTING_KEY = 'general.allow_external_content_code'
 
-export const contentSourceTypeSchema = z.enum(['style_package', 'template', 'project', 'document_package', 'code_asset', 'web_recording', 'skill'])
-export const contentTrustReferenceSchema = z.object({ id: z.string(), sourceType: contentSourceTypeSchema, sourceName: z.string() }).strict()
+const contentSourceTypeSchema = z.enum(['style_package', 'template', 'project', 'document_package', 'code_asset', 'web_recording', 'skill'])
+const contentTrustReferenceSchema = z.object({ id: z.string(), sourceType: contentSourceTypeSchema, sourceName: z.string() }).strict()
 export type ContentTrustReference = z.infer<typeof contentTrustReferenceSchema>
 export const foreignContentSchema = contentTrustReferenceSchema
 export const contentTrustQuerySchema = z.object({ contents: z.array(contentTrustReferenceSchema) }).strict()
 export type ContentTrustQuery = z.infer<typeof contentTrustQuerySchema>
-export const contentTrustFailureSchema = z.object({ state: z.enum(['awaiting_user_confirmation', 'denied']), records: z.array(contentTrustReferenceSchema) })
+const contentTrustFailureSchema = z.object({ state: z.enum(['awaiting_user_confirmation', 'denied']), records: z.array(contentTrustReferenceSchema) })
 export type ContentTrustFailure = z.infer<typeof contentTrustFailureSchema>
 export const contentTrustCommandSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('prepare'), sourceType: z.enum(['web_recording', 'skill']), id: z.string() }).strict(),

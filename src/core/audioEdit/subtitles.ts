@@ -5,9 +5,9 @@ import { formatSubtitleTimestampUs } from '../media/subtitleFormat'
 import { isAudioEditSubtitleFiller } from './scriptCaptions'
 
 /** 两条字幕间隔短于此（秒）就接上：前一条一直显示到后一条出现，不闪空。 */
-export const AUDIO_EDIT_SUBTITLE_JOIN_GAP_SECONDS = 0.5
+const AUDIO_EDIT_SUBTITLE_JOIN_GAP_SECONDS = 0.5
 /** 字幕比第一个字的起音早这么多秒出现：正好卡在起音上，看的人读到时声音已经过去了，会觉得字幕慢半拍。 */
-export const AUDIO_EDIT_SUBTITLE_LEAD_SECONDS = 0.1
+const AUDIO_EDIT_SUBTITLE_LEAD_SECONDS = 0.1
 
 const HAN_TO_ASCII = /(\p{Script=Han})[ \u3000]*([A-Za-z0-9])/gu
 const ASCII_TO_HAN = /([A-Za-z0-9])[ \u3000]*(\p{Script=Han})/gu
@@ -44,7 +44,7 @@ function outputRange(startFrame: number, endFrame: number, spans: readonly Audio
   return { start: first.outputStartFrame + Math.max(0, startFrame - first.sourceStartFrame), end: last.outputStartFrame + Math.min(endFrame, last.sourceEndFrame) - last.sourceStartFrame }
 }
 
-export interface AudioEditSubtitleWord { blockId: string; text: string; startFrame: number; endFrame: number }
+interface AudioEditSubtitleWord { blockId: string; text: string; startFrame: number; endFrame: number }
 /** 一条成片字幕：时间是剪后成品的采样帧。id 为这段第一个词块的 ID（与 audio_edit.caption 实体一致）。 */
 export interface AudioEditSubtitleCue { id: string; startFrame: number; endFrame: number; text: string; words: AudioEditSubtitleWord[] }
 

@@ -281,4 +281,4 @@ function buildPremiereMigration(graph, probes, options) {
   return { document: parsed, evidence }
 }
 
-module.exports = { buildPremiereMigration, probeMigrationMedia, sourceTime, stable }
+module.exports = { buildPremiereMigration, sourceTime, stable }

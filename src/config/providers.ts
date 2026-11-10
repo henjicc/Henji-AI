@@ -8,7 +8,7 @@ export interface Provider {
   models: Model[]
 }
 
-export interface Model {
+interface Model {
   id: string
   canonicalModelId: string
   name: string

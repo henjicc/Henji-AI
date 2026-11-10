@@ -28,7 +28,7 @@ export interface TimestampedTranscriptionPlan {
   readonly cost: Readonly<AsrCostEstimate>
 }
 
-export interface TimestampedAsrModel {
+interface TimestampedAsrModel {
   id: string
   providerId: string
   configured: boolean

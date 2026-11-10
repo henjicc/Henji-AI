@@ -17,7 +17,7 @@ export const videoEditExportInputSchema = z.object({ documentRef, quality: video
   if (value.subtitleClock && value.format !== 'srt' && value.format !== 'vtt') ctx.addIssue({ code: 'custom', message: 'subtitleClock 只用于字幕文件。' })
   if (value.settings && (value.format || value.loudness || value.subtitleClock)) ctx.addIssue({ code: 'custom', message: '完整 settings 不能与顶层格式、响度或字幕时间混用。' })
 })
-export const videoEditExportJobSummarySchema = z.object({
+const videoEditExportJobSummarySchema = z.object({
   id: z.string(), documentRef, sequenceRef: ref('video_edit.sequence'), name: z.string(), presetName: z.string(),
   state: z.enum(['queued', 'running', 'completed', 'failed', 'cancelled', 'interrupted']).describe('interrupted：界面重新加载时正在导出，未完成文件已清理，可用 retryTaskId 按原快照重试。'), progress: z.number().min(0).max(1), range, settings: videoEditExportSettingsSchema,
   phase: z.enum(['composition', 'compression']).optional(), compositionProgress: z.number().min(0).max(1).optional(), compressionProgress: z.number().min(0).max(1).optional(),

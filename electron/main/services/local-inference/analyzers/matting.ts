@@ -7,7 +7,7 @@ import { float16ToUnorm8Table, unorm8ToFloat16Table } from '../fp16'
  * - MediaPipe Selfie Segmentation：输入 256×256 RGB 0–1（拉伸），输出 alphas；没有时间状态，作为 RVM 不可用时的后备。
  */
 
-export const RVM_LONG_SIDE = 512
+const RVM_LONG_SIDE = 512
 export const RVM_DOWNSAMPLE_RATIO = 0.5
 export const SELFIE_INPUT_SIZE = 256
 

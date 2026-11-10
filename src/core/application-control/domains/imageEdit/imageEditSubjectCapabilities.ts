@@ -4,7 +4,7 @@ import { capabilityControl, capabilityOutputSchema, defineApplicationCapability 
 
 const layerRef = z.object({ kind: z.literal('image_edit.layer'), id: z.string().startsWith('v3:') }).strict()
 const selectionRef = z.object({ kind: z.literal('image_edit.selection'), id: z.string().startsWith('v3:') }).strict()
-export const imageEditSubjectSelectionInputSchema = z.object({ targetRef: layerRef, region: imageEditSubjectRegionSchemaV3.default({ kind: 'subject' }),
+const imageEditSubjectSelectionInputSchema = z.object({ targetRef: layerRef, region: imageEditSubjectRegionSchemaV3.default({ kind: 'subject' }),
   candidateId: z.string().min(1).optional(), combine: z.enum(['replace', 'add', 'subtract', 'intersect']).default('replace') }).strict()
 const bounds = z.object({ x: z.number().finite(), y: z.number().finite(), width: z.number().nonnegative(), height: z.number().nonnegative() }).strict()
 export const selectImageEditRegionCapability = defineApplicationCapability({

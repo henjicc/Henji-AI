@@ -2,9 +2,9 @@ import { z } from 'zod'
 import { ApplicationPreflightFailure } from './execution/transactionFailure'
 
 export const PAID_APPROVAL_SETTING_KEY = 'ai.paid_approval'
-export const paidOperationCategorySchema = z.enum(['generation', 'recognition', 'translation', 'title', 'explanation'])
+const paidOperationCategorySchema = z.enum(['generation', 'recognition', 'translation', 'title', 'explanation'])
 export type PaidOperationCategory = z.infer<typeof paidOperationCategorySchema>
-export const paidProjectSchema = z.object({ id: z.string().min(1), name: z.string().min(1) }).strict()
+const paidProjectSchema = z.object({ id: z.string().min(1), name: z.string().min(1) }).strict()
 export const paidApprovalSettingsSchema = z.object({
   version: z.literal(2).default(2),
   singleLimitCny: z.number().finite().nonnegative().default(2),
@@ -35,7 +35,7 @@ export const UI_PAID_CAPABILITIES = {
   ui_verify_model: 'generation', ui_assistant_chat: 'generation',
 } as const satisfies Record<string, PaidOperationCategory>
 /** Trusted application UI, never an Agent tool input. */
-export const paidFailureFactsSchema = z.object({ billing: z.enum(['not_charged', 'submitted', 'completed', 'unknown']) }).strict()
+const paidFailureFactsSchema = z.object({ billing: z.enum(['not_charged', 'submitted', 'completed', 'unknown']) }).strict()
 export type PaidFailureFacts = z.infer<typeof paidFailureFactsSchema>
 
 /** 只消费执行层的明确计费事实；HTTP 状态、错误文案与取消本身都不能证明未计费。 */

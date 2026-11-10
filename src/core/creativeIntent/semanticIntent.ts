@@ -15,7 +15,7 @@ export const semanticIntentPlanSchema = z.object({
   protectedRefs: z.array(applicationRefSchema),
   questions: z.array(z.string().min(1)),
 }).strict()
-export type SemanticIntentPlan = z.infer<typeof semanticIntentPlanSchema>
+type SemanticIntentPlan = z.infer<typeof semanticIntentPlanSchema>
 export interface SemanticIntentReview {
   status: 'candidate' | 'confirmation_required' | 'local_fallback'
   plan?: SemanticIntentPlan

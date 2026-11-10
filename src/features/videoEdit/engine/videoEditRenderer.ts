@@ -99,20 +99,20 @@ export type VideoEditScrubMode = boolean | 'fast'
  * 快速拖动时，代码视频输入的当前画面离目标不超过这么久（秒）就先沿用它、后台追向目标；更远（跳到别处）时先取目标处
  * 的近似画面再出这一帧。约一个 4 秒 GOP：录屏窗口的内容在这个范围内是相邻画面。
  */
-export const VIDEO_EDIT_SCRUB_HOLD_SECONDS = 4
+const VIDEO_EDIT_SCRUB_HOLD_SECONDS = 4
 /** 慢速拖动时，目标在代码视频输入当前画面之后不超过这么久（秒，约 6 帧）就直接续解出精确画面，不先沿用旧画面。 */
-export const VIDEO_EDIT_SCRUB_CONTINUE_SECONDS = 0.1
+const VIDEO_EDIT_SCRUB_CONTINUE_SECONDS = 0.1
 /**
  * 拖动中后台追向指针的精确读取：指针退回、或向前跳过这么久（秒）以上时放弃它（解码器停在已解到的位置），改读新位置。
  * 更小的向前移动多半还在同一个 GOP 里，读完再接着追更快；每次都放弃的话一直拿不到画面。
  */
-export const VIDEO_EDIT_SCRUB_RETARGET_SECONDS = 0.5
+const VIDEO_EDIT_SCRUB_RETARGET_SECONDS = 0.5
 /** 拖动播放头混音时保留的空闲声音来源（含嵌套序列的声音渲染器）上限。 */
-export const VIDEO_EDIT_IDLE_AUDIO_SOURCES = 8
+const VIDEO_EDIT_IDLE_AUDIO_SOURCES = 8
 /** 浏览器回退路径的闲置读取器上限；原生会话按服务端预算保留，不使用此数量。 */
-export const VIDEO_EDIT_IDLE_SCRUB_RENDERERS = 4
+const VIDEO_EDIT_IDLE_SCRUB_RENDERERS = 4
 /** 拖动播放头时保留的空闲已解码图片上限（另受图片显存预算约束，见 videoEditGpuBudget.ts）。 */
-export const VIDEO_EDIT_IDLE_SCRUB_IMAGES = 6
+const VIDEO_EDIT_IDLE_SCRUB_IMAGES = 6
 
 /**
  * 按最近使用维护空闲表：`idle` 是本次未用到的键（按当前顺序），返回超出 `limit` 后应释放的最旧键，并把它们从表中移除。
@@ -258,7 +258,7 @@ const BACKGROUND_IDLE_MS = 60
  * 远距离跳转与很快的拖动（`'fast'`）一步至少跨这么久（秒），就先画预渲染文件里常驻的关键帧（`videoEditJumpPreview.ts`）：
  * 不开解码会话、不读素材、不跑代码，几毫秒出画面；节目随后按精确方式补这一帧。与节目“远距离跳转”的门槛一致。
  */
-export const VIDEO_EDIT_JUMP_PREVIEW_LEAP_SECONDS = 0.5
+const VIDEO_EDIT_JUMP_PREVIEW_LEAP_SECONDS = 0.5
 /** 节目停下这么久（毫秒）没有新画面才补常驻关键帧；一有画面请求就停。 */
 const JUMP_PREVIEW_FILL_IDLE_MS = 400
 /** 补常驻关键帧两步之间让出的时间（毫秒）。 */

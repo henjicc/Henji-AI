@@ -5,7 +5,7 @@ import { codeMultiply, codePoint } from '@/core/videoEdit/codeMaterial/geometry'
 
 type Box = { x: number; y: number; width: number; height: number }
 export const CODE_MOTION_UNIFORM_BYTES = (12 + 64 * 8) * 4
-export const CODE_MOTION_PIXEL_SAMPLE_BUDGET = 256 * 1024 * 1024
+const CODE_MOTION_PIXEL_SAMPLE_BUDGET = 256 * 1024 * 1024
 
 /** One uniform array and one fragment invocation sum the full premultiplied
  * exposure. Repeated source-over draws would incorrectly darken its overlaps. */

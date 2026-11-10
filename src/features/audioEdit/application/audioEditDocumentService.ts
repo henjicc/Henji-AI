@@ -22,7 +22,7 @@ import {
 
 const logger = createLogger('features.audioEdit.documents')
 
-export const AUDIO_EDIT_MEDIA_EXTENSIONS = ['wav', 'mp3', 'm4a', 'aac', 'flac', 'ogg', 'mp4', 'mov', 'mkv', 'webm']
+const AUDIO_EDIT_MEDIA_EXTENSIONS = ['wav', 'mp3', 'm4a', 'aac', 'flac', 'ogg', 'mp4', 'mov', 'mkv', 'webm']
 
 /** 用户取消了“保存 / 不保存 / 取消”里的取消：留在当前口播，不切换。 */
 export class AudioEditLeaveCancelledError extends Error {

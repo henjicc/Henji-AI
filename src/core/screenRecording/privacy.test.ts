@@ -3,7 +3,7 @@ import { sensitiveTextMatches, identityValid, luhnValid, privacyCandidateSchema,
 import { confirmedRecordingPrivacyFragments, privacyCandidateEffect } from './privacyEffects'
 import { evaluateVideoEditMaskPath } from '../videoEdit/maskPathAnimation'
 import { rasterizeVideoEditMaskShapes } from '../videoEdit/effectMasks'
-export function privacyFixture(): PrivacyCandidate {
+function privacyFixture(): PrivacyCandidate {
   return privacyCandidateSchema.parse({ id: 'private-line', mediaId: 'screen', kind: 'email', hint: 'email · ••••', fingerprint: 'a'.repeat(64), status: 'pending', startUs: 3000000, endUs: 3300000,
     samples: [{ monoUs: 3000000, box: [.1, .2, .4, .1], confidence: .99 }, { monoUs: 3200000, box: [.1, .4, .4, .1], confidence: .98 }] })
 }

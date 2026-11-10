@@ -28,7 +28,7 @@ export interface MusicRemixRequest {
   marginSeconds?: number
 }
 
-export interface MusicRemixSegment {
+interface MusicRemixSegment {
   /** 源区间 [start, end)（秒）。 */
   sourceStartSeconds: number
   sourceEndSeconds: number
@@ -41,7 +41,7 @@ export interface MusicRemixSegment {
   gainDb: number
 }
 
-export interface MusicRemixSeam {
+interface MusicRemixSeam {
   /** 接缝处“下一拍”在结果中的理想时刻（秒）。 */
   timelineSeconds: number
   /** 跳出前最后播放的拍、跳入的拍（分析拍下标）。 */

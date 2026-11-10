@@ -162,4 +162,4 @@ async function buildYogaAuthorTimeline(base, graph, sourceRoot, preparedRoot) {
     remaining: base.evidence.limitations.filter(value => !/待迁移代码画面|待重建生成画面/.test(value.text) && !restoredTransitions.has(value.sourceClipId) && !restoredVolume.has(value.sourceClipId)), source: graph.source }
 }
 
-module.exports = { buildYogaAuthorTimeline, yogaCaptionStyle }
+module.exports = { }

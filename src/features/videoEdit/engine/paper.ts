@@ -15,11 +15,11 @@ import { seedOffset } from './dissolveReveal'
 import { contentBox } from './lightSweep'
 import { EFFECT_MATH_BLOCK } from './effectShaderPrelude'
 
-export const PAPER_ENTRIES = ['paper'] as const
+const PAPER_ENTRIES = ['paper'] as const
 const n = (params: VideoEditBuiltinParams, key: string): number => Number(params[key] ?? 0)
 
 /** `params` 已补齐默认值。 */
-export function planPaper(params: VideoEditBuiltinParams, width: number, height: number, context?: LayerEffectReference): VideoEditBuiltinPlan {
+function planPaper(params: VideoEditBuiltinParams, width: number, height: number, context?: LayerEffectReference): VideoEditBuiltinPlan {
   const plan = new Planner(width, height)
   const finish = (): VideoEditBuiltinPlan => ({ width, height, scratch: plan.scratch, passes: plan.passes })
   const amount = n(params, 'amount') / 100
@@ -38,7 +38,7 @@ export function planPaper(params: VideoEditBuiltinParams, width: number, height:
   return finish()
 }
 
-export const PAPER_WGSL = `
+const PAPER_WGSL = `
 // 纸张：a = (纹理格子边长（像素）, 强度 0..1, 粗糙度 0..1, 轮廓最远挪动（像素）)，b = (内容左上角, 随机种子, 0)，
 // c = (三层纤维的方向, 颗粒的起始转角)（弧度）。
 // 几层噪声平均后起伏只剩 ±0.15 左右，放大到约 ±0.4，强度 100 时明暗变化约 ±12%。

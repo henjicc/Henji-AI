@@ -222,10 +222,6 @@ function resultSummary(results) {
 
 module.exports = {
   buildFacets,
-  compareFacets,
-  extractCategorySignals,
-  extractModelSignals,
-  fetchOfficialSource,
   inspectRegistry,
   inspectSource,
   normalizeSourceText,

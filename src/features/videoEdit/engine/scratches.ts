@@ -14,16 +14,16 @@ import { seedOffset } from './dissolveReveal'
 import { contentBox } from './lightSweep'
 import { EFFECT_MATH_BLOCK } from './effectShaderPrelude'
 
-export const SCRATCHES_ENTRIES = ['scratches'] as const
+const SCRATCHES_ENTRIES = ['scratches'] as const
 const n = (params: VideoEditBuiltinParams, key: string): number => Number(params[key] ?? 0)
 /** 竖条宽度占画面宽度的比例。 */
 const COLUMN = 0.04
 
 /** 数量 → 每条竖条在一个时间段里出现划痕的概率：30 约 0.11（偶尔几条），80 约 0.62（满屏）。 */
-export function scratchChance(amount: number): number { return 0.9 * Math.min(1, Math.max(0, amount / 100)) ** 1.7 }
+function scratchChance(amount: number): number { return 0.9 * Math.min(1, Math.max(0, amount / 100)) ** 1.7 }
 
 /** `params` 已补齐默认值；`seed` 是 `scratchFrameSeed` 的返回值，同一种子预览与导出相同。 */
-export function planScratches(params: VideoEditBuiltinParams, width: number, height: number, seed: number, context?: LayerEffectReference): VideoEditBuiltinPlan {
+function planScratches(params: VideoEditBuiltinParams, width: number, height: number, seed: number, context?: LayerEffectReference): VideoEditBuiltinPlan {
   const plan = new Planner(width, height)
   const finish = (): VideoEditBuiltinPlan => ({ width, height, scratch: plan.scratch, passes: plan.passes })
   const chance = scratchChance(n(params, 'amount')), opacity = n(params, 'opacity') / 100
@@ -39,7 +39,7 @@ export function planScratches(params: VideoEditBuiltinParams, width: number, hei
   return finish()
 }
 
-export const SCRATCHES_WGSL = `
+const SCRATCHES_WGSL = `
 // 划痕：a = 画面框（左上、宽高，像素），b = (竖条宽, 出现概率, 不透明度, 线宽（像素）)，c = (帧号, 停留帧数（0 一直不动）, 随机种子, 颜色 0 亮 / 1 暗)。
 fn scratchMask(p: vec2f, column: i32) -> f32 {
  let seed = u32(u.c.z); let lane = u32(column + 4096);

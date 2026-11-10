@@ -3,8 +3,8 @@ import { boxSelectorsSchema, boxTrackQueryShape, validBoxTimeRange } from '../..
 import { webReplayDirectorSchema, webReplayTakeNameSchema } from '../../../webReplay/director'
 import { capabilityControl, capabilityOutputSchema, defineApplicationCapability } from '../shared/defineApplicationCapability'
 
-export const webAppRefSchema = z.object({ kind: z.literal('screen_recording.web_app'), id: z.string().uuid() }).strict()
-export const webRecordingRefSchema = z.object({ kind: z.literal('screen_recording.web_recording'), id: z.string().uuid() }).strict()
+const webAppRefSchema = z.object({ kind: z.literal('screen_recording.web_app'), id: z.string().uuid() }).strict()
+const webRecordingRefSchema = z.object({ kind: z.literal('screen_recording.web_recording'), id: z.string().uuid() }).strict()
 
 // Web recordings keep everything the app saw, credentials included; the user chose full visibility for the assistant.
 const common = { version: 1, domain: 'screen_recording', readOnly: false, dataClasses: ['C1' as const], idempotent: false, destructive: false,

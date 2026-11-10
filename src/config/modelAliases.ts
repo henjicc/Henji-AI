@@ -5,7 +5,7 @@
 
 const STORAGE_KEY = 'model_aliases'
 
-export function getModelAliases(): Record<string, string> {
+function getModelAliases(): Record<string, string> {
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
     return stored ? JSON.parse(stored) : {}
@@ -14,7 +14,7 @@ export function getModelAliases(): Record<string, string> {
   }
 }
 
-export function saveModelAliases(aliases: Record<string, string>): void {
+function saveModelAliases(aliases: Record<string, string>): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(aliases))
 }
 

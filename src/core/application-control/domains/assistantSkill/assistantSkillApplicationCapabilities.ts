@@ -15,7 +15,7 @@ export const loadAssistantSkillInputSchema = z.object({
   reason: z.string().min(1).max(500),
 }).strict()
 
-export const loadAssistantSkillOutputSchema = assistantSkillDetailSchema.extend({
+const loadAssistantSkillOutputSchema = assistantSkillDetailSchema.extend({
   referencePaths: z.array(assistantSkillReferencePathSchema),
 }).strict()
 

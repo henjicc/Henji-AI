@@ -20,7 +20,7 @@ export const STYLE_GUIDE_SECTIONS = [
 ] as const
 export const STYLE_GUIDE_MAX_LENGTH = 64 * 1024
 /** 原地生成图片或视频时并入提示词的可选自定义栏目（旧说明书迁移后保留）。 */
-export const STYLE_GUIDE_GENERATION_SECTION = '画面生成提示'
+const STYLE_GUIDE_GENERATION_SECTION = '画面生成提示'
 
 export interface StyleGuideSection { title: string; body: string }
 const HTML_COMMENT = /<!--[\s\S]*?-->/g
@@ -37,7 +37,7 @@ export function parseStyleGuide(guide: string): StyleGuideSection[] {
   return lead ? [{ title: '', body: lead }, ...sections] : sections
 }
 /** 栏目正文，去掉模板里的写法注释；没有这一栏时为空串。 */
-export function styleGuideSection(guide: string, title: string): string {
+function styleGuideSection(guide: string, title: string): string {
   return (parseStyleGuide(guide).find(section => section.title === title)?.body ?? '').replace(HTML_COMMENT, '').trim()
 }
 /** 规范顺序：前言，固定栏目，作者追加的栏目按原顺序排在后面；空的固定栏目保留标题，方便补写。 */

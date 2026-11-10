@@ -15,7 +15,7 @@ export const SPECTRAL_PEAK_WEIGHT = 0.65
 export const SPECTRAL_TIME_SAMPLES = 4
 export const SPECTRAL_BIN_SAMPLES = 8
 /** 比目标层更细的块最多往下借两层（每像素最多 4 列），再细的不画。 */
-export const SPECTRAL_FINER_FALLBACK = 2
+const SPECTRAL_FINER_FALLBACK = 2
 
 export interface SpectralTileSet {
   sampleRate: number; channels: number; durationFrames: number
@@ -82,7 +82,7 @@ export function spectralDesiredLevel(view: SpectralView): number {
 }
 
 /** 绘制优先级从高到低：目标层 → 逐级更粗 → 最多两级更细。 */
-export function spectralLevelPriority(desired: number): number[] {
+function spectralLevelPriority(desired: number): number[] {
   const levels: number[] = []
   for (let level = desired; level <= SPECTRAL_MAX_LEVEL; level++) levels.push(level)
   for (let step = 1; step <= SPECTRAL_FINER_FALLBACK && desired - step >= SPECTRAL_MIN_LEVEL; step++) levels.push(desired - step)
@@ -128,9 +128,9 @@ export function spectralCoverage(tiles: SpectralTileSet, view: SpectralView): 'e
   return draws.every(draw => draw.level === desired && draw.tile.complete) ? 'exact' : 'fallback'
 }
 
-export const spectralPower =(value: number): number => 10 ** ((value / 255 * 120 - 120) / 10)
-export const spectralDb = (power: number): number => Math.max(0, Math.min(255, (10 * Math.log10(Math.max(1e-12, power)) + 120) * 255 / 120))
-export const smoothStep = (edge0: number, edge1: number, x: number): number => {
+const spectralPower =(value: number): number => 10 ** ((value / 255 * 120 - 120) / 10)
+const spectralDb = (power: number): number => Math.max(0, Math.min(255, (10 * Math.log10(Math.max(1e-12, power)) + 120) * 255 / 120))
+const smoothStep = (edge0: number, edge1: number, x: number): number => {
   const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)))
   return t * t * (3 - 2 * t)
 }

@@ -26,7 +26,7 @@ import { stageSetPlacement, stageSetToWorld, type StageSetPlacement } from '../d
 const DEG2RAD = Math.PI / 180
 
 /** 各铺装的顶面高度与厚度（米）。人行道只抬 4 厘米：角色和自动布置都落在 y=0，抬成真实的 15 厘米路缘会把脚埋进去。 */
-export const SURFACE_LEVELS: Record<StageSetSurfaceKind, { top: number; thickness: number }> = {
+const SURFACE_LEVELS: Record<StageSetSurfaceKind, { top: number; thickness: number }> = {
   road: { top: 0.02, thickness: 0.06 },
   sidewalk: { top: 0.04, thickness: 0.08 },
   plaza: { top: 0.04, thickness: 0.08 },
@@ -44,10 +44,10 @@ export const MARKING_STYLES: Record<StageSetMarkingKind, { width: number; period
   crosswalk: { width: 4, period: 1, on: 0.45 },
 }
 
-export const MARKING_HEIGHT = 0.026
+const MARKING_HEIGHT = 0.026
 
 /** 任意形状铺装的顶面高度与厚度：与同名的矩形铺装一致；水面压在车行道上、低于人行道。 */
-export const AREA_LEVELS: Record<StageSetAreaKind, { top: number; thickness: number }> = {
+const AREA_LEVELS: Record<StageSetAreaKind, { top: number; thickness: number }> = {
   sidewalk: SURFACE_LEVELS.sidewalk,
   median: SURFACE_LEVELS.median,
   lawn: SURFACE_LEVELS.lawn,

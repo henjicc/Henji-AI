@@ -14,7 +14,7 @@ export { analyzeVideoEditScreenAttentionOffThread } from './application/videoEdi
 export { observeVideoEditFrame } from './application/videoEditFrameObservation'
 export { prepareVideoEditAudioGain, prepareVideoEditRecordingGain, measureVideoEditClips } from './application/videoEditLoudness'
 export { readVideoMotionGroup } from './application/videoEditMotionGroup'
-export { removeSuperKeyframeTake, superKeyframeAttachment, openVideoSuperKeyframesInAssistant } from './application/videoEditSuperKeyframes'
+export { removeSuperKeyframeTake, superKeyframeAttachment } from './application/videoEditSuperKeyframes'
 export { listVideoEditInstances, subscribeVideoEditDomain, videoEditDomainRevision } from './application/videoEditService'
 export { selectVideoEditSubtitle } from './application/videoEditSubtitleSelection'
 export { subscribeVideoEditSceneSelection, videoEditSelectedSceneRecordRef } from './application/videoEditSceneSelection'

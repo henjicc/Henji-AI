@@ -37,7 +37,6 @@ function buildAssistantProductionTestPlan(packageJson, root) {
 }
 
 module.exports = {
-  VITEST_SCRIPT_NAMES,
   buildAssistantProductionTestPlan,
   extractVitestTargets,
 }

@@ -110,7 +110,7 @@ export interface UiChipButtonProps extends UiButtonFeedbackProps {
  * - `inline`：行内词块，继承段落字号与行高，静息无底；
  * - `chip`：时间轴上的字幕块，高度填满所在泳道、11 号字，静息铺 raised。
  */
-export type UiTextTokenAppearance = 'inline' | 'chip'
+type UiTextTokenAppearance = 'inline' | 'chip'
 
 export interface UiTextTokenProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   appearance?: UiTextTokenAppearance

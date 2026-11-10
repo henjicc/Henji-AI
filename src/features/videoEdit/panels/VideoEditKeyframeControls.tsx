@@ -5,7 +5,7 @@ import { putVideoEditKeyframe, type VideoEditKeyframe, type VideoEditKeyframes }
 import { VideoEditKeyframeInterpolation } from './VideoEditKeyframeInterpolation'
 
 /** 一行属性里的一个分量（位置的 X 或 Y）：它的关键帧与播放头处的当前值。 */
-export interface VideoEditKeyframeChannel { key: string; points: VideoEditKeyframes | undefined; value: VideoEditKeyframe['value'] }
+interface VideoEditKeyframeChannel { key: string; points: VideoEditKeyframes | undefined; value: VideoEditKeyframe['value'] }
 
 export interface VideoEditKeyframeControlProps {
   label: string; channels: readonly VideoEditKeyframeChannel[]; time: number; duration: number; discrete?: boolean

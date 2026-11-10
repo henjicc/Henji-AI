@@ -47,7 +47,7 @@ export interface AudioWaveformPyramidRequest {
   ifNoneMatch?: string
 }
 
-export interface AudioWaveformPyramidLevelDto {
+interface AudioWaveformPyramidLevelDto {
   samplesPerBucket: number
   bucketCount: number
   /** 每个选中声道的有符号上下沿：线性幅度 = 值 × amplitudeScale / 32767。 */

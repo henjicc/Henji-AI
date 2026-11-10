@@ -42,7 +42,7 @@ export function isVideoEditImportableFile(path: string): boolean { return IMPORT
 function skip(state: Enumeration, path: string, reason: VideoEditImportSkipReason, message?: string): void { state.skipped++; state.onSkipped?.({ path, reason, ...(message ? { message } : {}) }) }
 
 /** Iterative traversal: realpath detects junction/symlink cycles; IPC pages bound I/O and cancellation latency. */
-export async function readVideoEditImportFolder(path: string, state: Enumeration = { visited: new Set(), skipped: 0, entries: 0 }): Promise<VideoEditImportFolder | undefined> {
+async function readVideoEditImportFolder(path: string, state: Enumeration = { visited: new Set(), skipped: 0, entries: 0 }): Promise<VideoEditImportFolder | undefined> {
   const root: VideoEditImportFolder = { path, name: baseName(path), files: [], folders: [] }
   const pending = [{ folder: root, parent: undefined as VideoEditImportFolder | undefined }]
   let rootRead = false

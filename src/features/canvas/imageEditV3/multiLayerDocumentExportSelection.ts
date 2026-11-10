@@ -3,7 +3,7 @@ import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import { imageEditV3GroupRef, imageEditV3LayerRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
 import { findImageEditLayerLocationV3 } from '@/features/imageEdit/v3/editor/layerTreeV3'
 
-export type MultiLayerDocumentExportTargetRef = ApplicationRef & {
+type MultiLayerDocumentExportTargetRef = ApplicationRef & {
   kind: 'image_edit.layer' | 'image_edit.group'
 }
 

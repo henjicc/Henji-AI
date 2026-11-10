@@ -12,7 +12,7 @@ export type ImageEditExportTargetV3 =
   | { kind: 'layer-group'; layerId: string }
   | { kind: 'content-layer'; layerId: string }
 
-export type ImageEditExportTargetContentStateV3 = 'rendered' | 'hidden' | 'empty'
+type ImageEditExportTargetContentStateV3 = 'rendered' | 'hidden' | 'empty'
 
 export interface ImageEditExportTargetViewV3 {
   document: ImageEditDocumentV3

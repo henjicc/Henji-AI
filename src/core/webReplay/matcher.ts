@@ -26,13 +26,13 @@ function wireBodyKey(body: WireBodyValue | undefined, digest: DigestBase64): str
 }
 
 /** Stable JSON: object keys sorted, so argument order in the app's literal does not matter. */
-export function canonicalJson(value: unknown): string {
+function canonicalJson(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'undefined'
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
   return `{${Object.keys(value).sort().map(k => `${JSON.stringify(k)}:${canonicalJson((value as Record<string, unknown>)[k])}`).join(',')}}`
 }
 
-export type MatchQuality = 'exact' | 'loose'
+type MatchQuality = 'exact' | 'loose'
 export interface MatchResult<C> { call: C; quality: MatchQuality }
 
 class Queues<C> {

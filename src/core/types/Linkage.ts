@@ -24,14 +24,14 @@ export type LinkageEffect =
  *
  * Intentionally avoids `any` so function expressions get contextual typing under `strict`.
  */
-export type LinkageValue = string | number | boolean | null | undefined | object
+type LinkageValue = string | number | boolean | null | undefined | object
 
 /**
  * 基础联动接口
  *
  * 所有联动类型的共同字段
  */
-export interface BaseLinkage {
+interface BaseLinkage {
   /**
    * 触发器参数ID
    *
@@ -91,7 +91,7 @@ export interface BaseLinkage {
  * }
  * ```
  */
-export interface ResetLinkage extends BaseLinkage {
+interface ResetLinkage extends BaseLinkage {
   effect: 'reset'
 
   /**
@@ -134,7 +134,7 @@ export interface ResetLinkage extends BaseLinkage {
  * }
  * ```
  */
-export interface FilterOptionsLinkage extends BaseLinkage {
+interface FilterOptionsLinkage extends BaseLinkage {
   effect: 'filterOptions'
 
   /**
@@ -178,7 +178,7 @@ export interface FilterOptionsLinkage extends BaseLinkage {
  * }
  * ```
  */
-export interface FilterRangeLinkage extends BaseLinkage {
+interface FilterRangeLinkage extends BaseLinkage {
   effect: 'filterRange'
 
   /**
@@ -219,7 +219,7 @@ export interface FilterRangeLinkage extends BaseLinkage {
  * }
  * ```
  */
-export interface SetValueLinkage extends BaseLinkage {
+interface SetValueLinkage extends BaseLinkage {
   effect: 'setValue'
 
   /**
@@ -258,7 +258,7 @@ export interface SetValueLinkage extends BaseLinkage {
  * }
  * ```
  */
-export interface AutoSwitchLinkage extends BaseLinkage {
+interface AutoSwitchLinkage extends BaseLinkage {
   effect: 'autoSwitch'
 
   /**
@@ -313,7 +313,7 @@ export interface AutoSwitchLinkage extends BaseLinkage {
  * }
  * ```
  */
-export interface DisableLinkage extends BaseLinkage {
+interface DisableLinkage extends BaseLinkage {
   effect: 'disable'
 
   /**
@@ -354,7 +354,7 @@ export interface DisableLinkage extends BaseLinkage {
  * }
  * ```
  */
-export interface HideLinkage extends BaseLinkage {
+interface HideLinkage extends BaseLinkage {
   effect: 'hide'
 
   /**
@@ -393,7 +393,7 @@ export interface HideLinkage extends BaseLinkage {
  * }
  * ```
  */
-export interface CustomLinkage extends BaseLinkage {
+interface CustomLinkage extends BaseLinkage {
   effect: 'custom'
 
   /**

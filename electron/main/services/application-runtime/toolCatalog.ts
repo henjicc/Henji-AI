@@ -152,7 +152,7 @@ function buildCapabilityTool(tool: LocalTool, definition: CapabilityDefinition):
  * 内置 Pi 已通过 skills_index 层拿到同一工具，所以只在外部目录里投影一次。
  * 参数与输出直接取正式能力声明，不在协议层另写 schema；可用技能清单在契约的 skills 中。
  */
-export function assistantSkillTool(): Tool {
+function assistantSkillTool(): Tool {
   const definition = loadAssistantSkillCapability
   return {
     name: definition.id, title: definition.title,

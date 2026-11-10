@@ -27,7 +27,7 @@ function namedError(name: string, message: string): Error {
  * 网页重演任务登记：结果、进度和取消控制都在主进程，渲染层重载不影响它们。只放内存，应用重启后
  * 没跑完的重演本来就不在了。每段录制同一时间最多一个未结束的任务。
  */
-export class WebReplayRenderJobs {
+class WebReplayRenderJobs {
   private readonly jobs = new Map<string, Job>()
   private readonly listeners = new Set<(job: WebReplayJobSnapshot) => void>()
   /** 由应用运行时提供：把任务标识换成调用方查得到的操作 ID，写进重复提交的拒绝里。 */

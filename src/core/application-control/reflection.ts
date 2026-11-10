@@ -12,7 +12,7 @@ import {
   jsonValueSchema,
 } from './identifiers'
 
-export const applicationNumberRangeSchema = z.object({
+const applicationNumberRangeSchema = z.object({
   min: z.number().optional(),
   max: z.number().optional(),
   step: z.number().positive().optional(),
@@ -21,7 +21,7 @@ export const applicationNumberRangeSchema = z.object({
   { message: '数值范围的最小值不能大于最大值' }
 )
 
-export const applicationPropertyValueSchema = z.discriminatedUnion('kind', [
+const applicationPropertyValueSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('boolean') }).strict(),
   z.object({ kind: z.literal('string'), minLength: z.number().int().nonnegative().optional(), maxLength: z.number().int().positive().optional() }).strict(),
   z.object({ kind: z.literal('number'), hardRange: applicationNumberRangeSchema.optional(), softRange: applicationNumberRangeSchema.optional() }).strict(),
@@ -107,7 +107,7 @@ export const applicationPropertyDescriptorSchema = z.object({
 }).strict()
 export type ApplicationPropertyDescriptor = z.infer<typeof applicationPropertyDescriptorSchema>
 
-export const applicationAvailabilityRecoverySchema = z.object({
+const applicationAvailabilityRecoverySchema = z.object({
   summary: z.string().min(1).max(500),
   capabilityIds: z.array(z.string().regex(/^[a-z][a-z0-9_]{1,63}$/)).max(12),
   entityTypes: z.array(applicationEntityTypeIdSchema).max(16),
@@ -115,7 +115,7 @@ export const applicationAvailabilityRecoverySchema = z.object({
 }).strict()
 export type ApplicationAvailabilityRecovery = z.infer<typeof applicationAvailabilityRecoverySchema>
 
-export const applicationAvailabilityBlockSchema = z.discriminatedUnion('kind', [
+const applicationAvailabilityBlockSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('structural') }).strict(),
   z.object({ kind: z.literal('permission') }).strict(),
   z.object({
@@ -139,7 +139,7 @@ export const applicationPropertyAvailabilitySchema = z.object({
 }).strict()
 export type ApplicationPropertyAvailability = z.infer<typeof applicationPropertyAvailabilitySchema>
 
-export const applicationCollectionOperationAvailabilitySchema = z.object({
+const applicationCollectionOperationAvailabilitySchema = z.object({
   available: z.boolean(),
   reasons: z.array(z.string().min(1).max(500)).max(12),
   blocks: z.array(applicationAvailabilityBlockSchema).max(12).optional(),
@@ -194,7 +194,7 @@ export const applicationEntitySnapshotSchema = z.object({
 }).strict()
 export type ApplicationEntitySnapshot = z.infer<typeof applicationEntitySnapshotSchema>
 
-export const applicationSchemaQuerySchema = z.object({
+const applicationSchemaQuerySchema = z.object({
   entityTypes: z.array(applicationEntityTypeIdSchema).max(64),
   propertyIds: z.array(applicationPropertyIdSchema).max(256),
   includeUnavailable: z.boolean().default(false),

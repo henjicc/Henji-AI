@@ -46,7 +46,7 @@ export interface ImageEditDocumentRepositoryV3 {
   collectGarbage(documentId: string, retainedResourceIds: readonly string[]): Promise<void>;
 }
 
-export interface ImageEditSourceMetadataV3 extends ImageEditSize {
+interface ImageEditSourceMetadataV3 extends ImageEditSize {
   format: string;
   bitDepth: number | null;
   channels: number;
@@ -62,7 +62,7 @@ export interface ImageEditSourceMetadataV3 extends ImageEditSize {
   hdr: boolean;
 }
 
-export interface ImageEditSourceTileV3 {
+interface ImageEditSourceTileV3 {
   coordinate: ImageEditTileCoordinate;
   region: ImageEditRect;
   width: number;
@@ -88,7 +88,7 @@ export interface ImageEditSourceProviderV3 {
   ): Promise<ImageEditSourceTileV3>;
 }
 
-export interface ImageEditTileOutputDescriptorV3 {
+interface ImageEditTileOutputDescriptorV3 {
   width: number;
   height: number;
   channels: 3 | 4;

@@ -4,7 +4,7 @@ import { capabilityControl, defineApplicationCapability } from '../shared/define
 
 const documentRef = z.object({ kind: z.literal('image_edit.document'), id: z.string().startsWith('v3:') }).strict();
 const taskRef = z.object({ kind: z.literal('generation.task'), id: z.string().min(1) }).strict();
-export const imageEditOutpaintInputSchema = z.object({ documentRef, margins: imageEditOutpaintMarginsSchemaV3.describe('相对于原画幅的扩展比例：right=0.25 表示右侧增加原宽度的 25%，bottom=0.5 表示下方增加原高度的 50%。left/top 为左/上扩展比例，可省略表示不扩展；至少一边大于零。'),
+const imageEditOutpaintInputSchema = z.object({ documentRef, margins: imageEditOutpaintMarginsSchemaV3.describe('相对于原画幅的扩展比例：right=0.25 表示右侧增加原宽度的 25%，bottom=0.5 表示下方增加原高度的 50%。left/top 为左/上扩展比例，可省略表示不扩展；至少一边大于零。'),
   prompt: z.string().trim().min(1).describe('新增画面的内容描述；模型自动收到当前合成图与新增边缘，不必手动上传。'),
   modelId: z.string().min(1).optional(), params: z.record(z.string(), z.unknown()).optional() }).strict();
 const common = { version: 1, domain: 'image_edit' as const, side: 'frontend' as const, dataClasses: ['C1' as const], idempotent: true, destructive: false, supportsPreview: false,

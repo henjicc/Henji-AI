@@ -64,7 +64,7 @@ export interface VideoEditSceneNaming {
   /** 写入失败时给用户看的原因；不是片子数据拒绝的错误原样交出去。 */
   readonly error: (reason: unknown) => unknown
 }
-export function videoEditSceneNaming(scene: VideoEditScene | undefined, state: VideoEditSceneDeclarationState | undefined, order: readonly VideoEditSceneRecord[], media: ReadonlyMap<string, CodeSceneMediaKind>): VideoEditSceneNaming {
+function videoEditSceneNaming(scene: VideoEditScene | undefined, state: VideoEditSceneDeclarationState | undefined, order: readonly VideoEditSceneRecord[], media: ReadonlyMap<string, CodeSceneMediaKind>): VideoEditSceneNaming {
   const declaration = state?.declaration
   const kindTitle = (kind: string): string => videoEditSceneKindOf(declaration, kind)?.title ?? kind
   const ordinals = new Map<string, number>(), counts = new Map<string, number>()

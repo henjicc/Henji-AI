@@ -17,7 +17,7 @@ export interface VideoEditJumpPreviewWindow { key: string; startFrame: number; e
 export type VideoEditJumpPreviewLog = (level: 'debug' | 'info' | 'warn', message: string, event: string, context: Record<string, unknown>) => void
 
 /** 常驻画面的显存预算（字节）。 */
-export const VIDEO_EDIT_JUMP_PREVIEW_BYTES = 384 * 1024 ** 2
+const VIDEO_EDIT_JUMP_PREVIEW_BYTES = 384 * 1024 ** 2
 /** 常驻画面按序列尺寸缩小的倍数。 */
 export const VIDEO_EDIT_JUMP_PREVIEW_DIVISOR = 4
 /** 常驻画面的采样间隔（秒）；精确读取仍可直接定位预渲染文件中的任一帧。 */

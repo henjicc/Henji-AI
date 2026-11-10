@@ -94,7 +94,7 @@ export function imagePlaneSize(aspect: number): { width: number; height: number 
 }
 
 /** Static ring geometry, split into near/far halves so rear arcs can be drawn faint and dashed. */
-export function spatialOrbitPaths(points: SpatialPoint[], project: (p: SpatialPoint) => SpatialPoint): { front: string; back: string } {
+function spatialOrbitPaths(points: SpatialPoint[], project: (p: SpatialPoint) => SpatialPoint): { front: string; back: string } {
   let front = ''; let back = ''; let previous: SpatialPoint | undefined
   let wasFront: boolean | undefined
   for (const point of points) {

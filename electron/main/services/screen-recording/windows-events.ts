@@ -2,7 +2,7 @@ import koffi from 'koffi'
 import type { CaptureRect } from '../../../../src/core/captureLog/coordinates'
 import type { cursorShapes } from '../../../../src/core/captureLog/events'
 
-export interface DesktopWindowFact { windowId: string | null; bounds: CaptureRect | null; available: boolean }
+interface DesktopWindowFact { windowId: string | null; bounds: CaptureRect | null; available: boolean }
 export interface DesktopNativeFacts { cursor(): typeof cursorShapes[number]; foreground(): DesktopWindowFact; bounds?(windowId: string): CaptureRect | null }
 /** No titles, process command lines or key contents are requested from the OS. */
 export function createWindowsEventFacts(): DesktopNativeFacts {

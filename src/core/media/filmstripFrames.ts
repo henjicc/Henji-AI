@@ -10,7 +10,7 @@
 /** 缓存格式版本：改动取帧参数（缩放算法、编码质量）时递增，旧缓存自然失效。 */
 export const FILMSTRIP_FORMAT_VERSION = 1
 /** 取帧高度档（设备像素）。 */
-export const FILMSTRIP_HEIGHTS = [32, 48, 64, 96, 128, 192, 256] as const
+const FILMSTRIP_HEIGHTS = [32, 48, 64, 96, 128, 192, 256] as const
 export type FilmstripHeight = typeof FILMSTRIP_HEIGHTS[number]
 /** 网格最小单位：1/64 秒（微秒）。 */
 export const FILMSTRIP_GRID_US = 15_625

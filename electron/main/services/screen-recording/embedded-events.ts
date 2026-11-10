@@ -13,7 +13,7 @@ import { jsonChunks, readJsonStream } from '../fs/json-file'
 export const RECORDING_EVENTS_BOX_UUID = Buffer.from('6b8f2a1c4d3e4f5a9b0c7d1e2f3a4b5c', 'hex')
 
 /** Compact rows: [outputMs, kind, ...fields]; points are output pixels of the video frame. */
-export const embeddedRecordingEventsSchema = z.object({
+const embeddedRecordingEventsSchema = z.object({
   format: z.literal('henji.recording-events'),
   version: z.literal(1),
   video: z.object({ width: z.number().int().positive(), height: z.number().int().positive(), fps: z.number().positive(), durationMs: z.number().nonnegative() }).strict(),

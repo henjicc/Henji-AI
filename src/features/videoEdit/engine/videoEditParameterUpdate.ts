@@ -1,7 +1,7 @@
 import type { VideoEditClip, VideoEditComposition, VideoEditSequence } from '@/core/videoEdit/document'
 import type { VideoEditEffect } from '@/core/videoEdit/compositing'
 
-export interface VideoEditParameterPatch {
+interface VideoEditParameterPatch {
   sequenceId: string
   clipId: string
   layout?: Pick<VideoEditClip, 'x' | 'y' | 'scale' | 'rotation' | 'anchorX' | 'anchorY' | 'opacity'>

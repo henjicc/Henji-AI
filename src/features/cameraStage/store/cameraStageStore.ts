@@ -193,7 +193,7 @@ export interface CameraStageState extends CameraStagePathActions, CameraCutSlice
 }
 
 /** 新场景默认镜头参考名 */
-export const CAMERA_STAGE_DEFAULT_PROJECT_NAME = '未命名场景'
+const CAMERA_STAGE_DEFAULT_PROJECT_NAME = '未命名场景'
 
 /** 撤销历史跟踪场景数据切片（对象列表 + 动画轨道），界面态/播放态不入历史 */
 type TrackedState = Pick<CameraStageState, 'objects' | 'animation' | 'stateKeyframes' | 'sets' | 'cameraCuts' | 'coverages'>

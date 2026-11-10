@@ -6,7 +6,7 @@ import { defaultTextStyle } from '@/core/imaging/vectorContent/text';
 import { paintVectorAppearance } from './appearance';
 import { filterCoverage } from '@/core/imaging/regions/selectionAlgorithms/modify';
 
-export type VectorRasterContent = { type: 'text'; content: RichTextContent } | { type: 'shape' | 'path'; content: VectorPathContent };
+type VectorRasterContent = { type: 'text'; content: RichTextContent } | { type: 'shape' | 'path'; content: VectorPathContent };
 export interface VectorRasterRegion { x: number; y: number; width: number; height: number; scale: number }
 /** Host raster adapter: only the requested ROI is allocated. Every image output uses this entry. */
 function renderVectorContent(value: unknown, region: VectorRasterRegion, evaluation: VectorEvaluationContext): ImageData {

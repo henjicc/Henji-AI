@@ -210,7 +210,6 @@ function analyzeLayoutMetrics(raw, expect = {}) {
 }
 
 module.exports = {
-  SHORT_LABEL_MAX_CHARS,
   analyzeLayoutMetrics,
   collectLayoutMeasurements,
   countVisualRows,

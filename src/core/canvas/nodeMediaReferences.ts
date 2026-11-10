@@ -1,6 +1,6 @@
 import { derivedMediaStateKey } from '../params/derivedMediaStateKey'
 
-export interface CanvasMediaParamDescriptor { id: string; type: string }
+interface CanvasMediaParamDescriptor { id: string; type: string }
 export type CanvasMediaSchemaResolver = (modelId: string) => readonly CanvasMediaParamDescriptor[] | undefined
 
 const MEDIA_URL_FIELDS = [

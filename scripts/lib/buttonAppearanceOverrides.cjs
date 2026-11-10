@@ -408,9 +408,7 @@ function findButtonAppearanceOverrides({ srcRoot, projectRoot, files }) {
 
 module.exports = {
   CHECKED_ATTRIBUTES,
-  CHECKED_COMPONENTS,
   RULE_E_EXEMPT,
-  classifyToken,
   collectConstants,
   collectStrings,
   collectImportedConstants,

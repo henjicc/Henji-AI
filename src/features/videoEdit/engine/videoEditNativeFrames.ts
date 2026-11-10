@@ -3,7 +3,7 @@ import { VideoEditNativeCallError } from './videoEditNativeFailure'
 import type { WebSourceContentChange } from '@/platform/contracts/videoFrames'
 
 /** 只需要设备队列的“已提交工作完成”通知。 */
-export interface NativeFrameReleaseDevice {
+interface NativeFrameReleaseDevice {
   queue: { onSubmittedWorkDone(): Promise<void> }
 }
 

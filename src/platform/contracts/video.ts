@@ -5,7 +5,7 @@ export interface VideoInfoResult {
   hasAudio: boolean
 }
 
-export interface TrimVideoSourcePayload {
+interface TrimVideoSourcePayload {
   source: string
   startSeconds: number
   endSeconds: number
@@ -16,7 +16,7 @@ export interface TrimVideoSourceResult {
   durationSeconds: number
 }
 
-export interface CompressVideoToFitPayload {
+interface CompressVideoToFitPayload {
   source: string
   maxSizeMB: number
 }

@@ -10,7 +10,7 @@ import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-contr
 
 import { listToolboxTools } from './toolboxApplicationService'
 
-export const TOOLBOX_TOOL_ENTITY_TYPE = 'toolbox.tool' as const
+const TOOLBOX_TOOL_ENTITY_TYPE = 'toolbox.tool' as const
 
 function digest(seed: string): string {
   const value = [...seed].reduce((total, char) => (total * 33 + char.charCodeAt(0)) >>> 0, 5381).toString(16)

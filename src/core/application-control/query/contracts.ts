@@ -35,7 +35,7 @@ const applicationObservationBudgetSchema = z.object({
   { message: 'Artifact 卸载阈值不能大于观察字节预算' }
 )
 
-export const applicationStructuredObservationRequestSchema = z.object({
+const applicationStructuredObservationRequestSchema = z.object({
   contractVersion: z.literal(APPLICATION_CONTROL_CONTRACT_VERSION),
   requestId: z.string().min(1).max(200),
   domains: z.array(applicationEntityTypeIdSchema).max(32).default([]),
@@ -71,7 +71,7 @@ export type ApplicationStructuredObservationRequest = z.infer<
   typeof applicationStructuredObservationRequestSchema
 >
 
-export const applicationStructuredObservationItemSchema = z.discriminatedUnion('kind', [
+const applicationStructuredObservationItemSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('entity_schema'), descriptor: applicationEntityTypeDescriptorSchema }).strict(),
   z.object({ kind: z.literal('property_schema'), descriptor: applicationPropertyDescriptorSchema }).strict(),
   z.object({ kind: z.literal('entity_ref'), ref: applicationRefSchema }).strict(),
@@ -92,7 +92,7 @@ export type ApplicationStructuredObservationItem = z.infer<
   typeof applicationStructuredObservationItemSchema
 >
 
-export const applicationStructuredObservationResponseSchema = z.object({
+const applicationStructuredObservationResponseSchema = z.object({
   contractVersion: z.literal(APPLICATION_CONTROL_CONTRACT_VERSION),
   requestId: z.string().min(1).max(200),
   catalogVersion: z.string().regex(/^application-capabilities\/v[1-9][0-9]*$/),

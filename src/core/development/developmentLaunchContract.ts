@@ -17,7 +17,7 @@ export const DEVELOPMENT_LAUNCH_QUERY_KEYS = {
  * 运行时布局守卫（重要记录 020）：`--dev-layout-guard`（描边 + 日志）或 `--dev-layout-guard=log`（只记日志）。
  * 默认不运行（开发运行与正式版一致，2026-10-26 起）；`--dev-checks` 时描边；安装包不运行。
  */
-export const DEVELOPMENT_LAYOUT_GUARD_MODES = ['outline', 'log'] as const
+const DEVELOPMENT_LAYOUT_GUARD_MODES = ['outline', 'log'] as const
 export type DevelopmentLayoutGuardMode = (typeof DEVELOPMENT_LAYOUT_GUARD_MODES)[number]
 export function isDevelopmentLayoutGuardMode(value: unknown): value is DevelopmentLayoutGuardMode {
   return typeof value === 'string' && (DEVELOPMENT_LAYOUT_GUARD_MODES as readonly string[]).includes(value)

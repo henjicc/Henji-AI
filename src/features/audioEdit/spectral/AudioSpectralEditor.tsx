@@ -16,7 +16,7 @@ import {
 } from './spectralEditorModel'
 
 export type AudioEditorDisplay = 'both' | 'waveform' | 'spectrum'
-export interface AudioEditorRegion { id: string; start: number; end: number; lowHz?: number; highHz?: number }
+interface AudioEditorRegion { id: string; start: number; end: number; lowHz?: number; highHz?: number }
 /** 播放位置的来源：播放时每帧都在变，编辑区直接改播放头的位置，不经过 React 重新渲染。 */
 export interface AudioPlayheadSource { current: () => number; subscribe: (listener: (frame: number) => void) => () => void }
 

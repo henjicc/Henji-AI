@@ -12,7 +12,7 @@ import { registerCanvasNode } from '@/features/canvas/domain/nodeRegistry';
  *
  * 借鉴 ComfyUI 的 ComfyExtension：name + 节点注册 + widget 注册 + 生命周期钩子。
  */
-export interface CanvasExtension {
+interface CanvasExtension {
   /** 扩展唯一名（用于去重与诊断） */
   name: string;
   /** 返回要注册的节点定义列表 */
@@ -24,7 +24,7 @@ export interface CanvasExtension {
 }
 
 /** 自定义参数控件渲染器签名（与 src/components/params 的控件 props 对齐） */
-export type CanvasWidgetRenderer = ReactComponentType<{
+type CanvasWidgetRenderer = ReactComponentType<{
   value: DynamicValue;
   onChange: (value: DynamicValue) => void;
   disabled?: boolean;
@@ -33,7 +33,7 @@ export type CanvasWidgetRenderer = ReactComponentType<{
 /** 自定义控件注册表（按 componentType / socketType 索引） */
 const widgetRegistry = new Map<string, CanvasWidgetRenderer>();
 
-export function registerCanvasWidget(key: string, renderer: CanvasWidgetRenderer): void {
+function registerCanvasWidget(key: string, renderer: CanvasWidgetRenderer): void {
   widgetRegistry.set(key, renderer);
 }
 

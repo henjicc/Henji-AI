@@ -62,7 +62,7 @@ export function videoEditEffectDropClips(sequence: Pick<VideoEditSequence, 'clip
   // 智能效果（带作用区域）只加到视频、图片片段（与松手时同一规则）。
   return sequence.clips.filter(clip => candidates.includes(clip.id) && videoEditEffectAccepts(media, clip) && !locked.has(clip.track) && (!template?.needsSource || clip.kind === 'video' || clip.kind === 'image')).map(clip => clip.id)
 }
-export function readVideoEditEffectDrag(dataTransfer: DataTransfer | null, projectId: string): string | undefined {
+function readVideoEditEffectDrag(dataTransfer: DataTransfer | null, projectId: string): string | undefined {
   if (!dataTransfer || !Array.from(dataTransfer.types).includes(VIDEO_EDIT_EFFECT_DRAG_TYPE)) return undefined
   const data = dataTransfer.getData(VIDEO_EDIT_EFFECT_DRAG_TYPE)
   if (data) return resolveVideoEditLibraryEffects(data) ? data : undefined
@@ -126,7 +126,7 @@ export function handleVideoEditEffectDrop(event: DropEvent, projectId: string, s
  * 拖到代码元素（画面选框或效果控件的元素视图）上的效果：元素效果链只放内置画面效果的参数，
  * 带作用区域、要分析素材的智能效果与风格件不能追加到元素上。
  */
-export function readVideoEditElementEffectDrag(dataTransfer: DataTransfer | null, projectId: string): { id: string; params: CodeElementAddedEffect['params'] } | undefined {
+function readVideoEditElementEffectDrag(dataTransfer: DataTransfer | null, projectId: string): { id: string; params: CodeElementAddedEffect['params'] } | undefined {
   const ref = readVideoEditEffectDrag(dataTransfer, projectId)
   const resolved = ref ? resolveVideoEditLibraryEffects(ref) : undefined
   const effect = resolved?.effects.length === 1 ? resolved.effects[0] : undefined

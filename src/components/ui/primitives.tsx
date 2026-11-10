@@ -73,7 +73,7 @@ import {
   resolveTextHistoryValue,
   resolveUiPanelSurface,
 } from './primitiveInternals';
-export type { UiControlSize, UiRangeTrackTone, UiTextTokenAppearance, UiWindowControlAction } from './primitiveInternals';
+export type { UiControlSize, UiRangeTrackTone, UiWindowControlAction } from './primitiveInternals';
 
 /** 所有按钮共享反馈与禁用契约；原生按钮始终保持同一个 DOM 节点。 */
 const FeedbackButton = forwardRef<HTMLButtonElement, UiButtonFeedbackProps>(

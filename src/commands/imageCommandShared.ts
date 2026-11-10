@@ -35,12 +35,12 @@ export function imageCmdInfo(message: string, payload: DynamicValue): void {
   logger.info(`${IMAGE_CMD_LOG_PREFIX} ${message}`, payload);
 }
 
-export function imageCmdWarn(message: string, payload: DynamicValue): void {
+function imageCmdWarn(message: string, payload: DynamicValue): void {
   if (!IMAGE_CMD_LOG_ENABLED) return;
   logger.warn(`${IMAGE_CMD_LOG_PREFIX} ${message}`, payload);
 }
 
-export function normalizeErrorMessage(error: unknown): string {
+function normalizeErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
@@ -77,11 +77,11 @@ export function isDataUrl(source: string): boolean {
   return source.startsWith('data:');
 }
 
-export function isHttpUrl(source: string): boolean {
+function isHttpUrl(source: string): boolean {
   return source.startsWith('http://') || source.startsWith('https://');
 }
 
-export function isBlobUrl(source: string): boolean {
+function isBlobUrl(source: string): boolean {
   return source.startsWith('blob:');
 }
 
@@ -93,7 +93,7 @@ export function isLikelyLocalPath(source: string): boolean {
   return LOCAL_PATH_PATTERN.test(source);
 }
 
-export function decodeFileUrl(source: string): string {
+function decodeFileUrl(source: string): string {
   return decodeMediaFileUrl(source);
 }
 
@@ -121,7 +121,7 @@ export function mimeToExtension(mime: string): string {
   return 'png';
 }
 
-export function parseDataUrl(dataUrl: string): { mime: string; bytes: Uint8Array } {
+function parseDataUrl(dataUrl: string): { mime: string; bytes: Uint8Array } {
   const match = dataUrl.match(/^data:([\w/+.-]+);base64,(.+)$/);
   if (!match) {
     throw new Error('Invalid data URL');
@@ -135,7 +135,7 @@ export function parseDataUrl(dataUrl: string): { mime: string; bytes: Uint8Array
   return { mime, bytes };
 }
 
-export async function blobToDataUrl(blob: Blob): Promise<string> {
+async function blobToDataUrl(blob: Blob): Promise<string> {
   const reader = new FileReader();
   return await new Promise((resolve, reject) => {
     reader.onload = () => resolve(reader.result as string);
@@ -144,7 +144,7 @@ export async function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
-export function resolveDisplaySource(source: string): string {
+function resolveDisplaySource(source: string): string {
   if (isLikelyLocalPath(source)) {
     return toDisplaySrc(normalizeLocalPath(source));
   }

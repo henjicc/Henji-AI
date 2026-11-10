@@ -19,7 +19,7 @@ type MutableEntityType = typeof AUDIO_EDIT_ENTITY_TYPES.project | typeof AUDIO_E
 
 const MAX_UNDO_RECORDS = 50
 const undoRecords = new Map<string, { previous: AudioEditProjectDocument; afterContent: string; target: { kind: MutableEntityType; id: string } }>()
-export function clearAudioEditUndoRecords(projectId?: string): void {
+function clearAudioEditUndoRecords(projectId?: string): void {
   for (const [token, record] of undoRecords) {
     if (projectId === undefined || record.previous.id === projectId) undoRecords.delete(token)
   }

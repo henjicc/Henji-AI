@@ -12,7 +12,7 @@
  * reserved 只占名，代码里还没有这种文件；正式启用时把 status 改成 active。
  */
 
-export type HenjiFileCategory = 'work' | 'exchange' | 'library'
+type HenjiFileCategory = 'work' | 'exchange' | 'library'
 
 export interface HenjiFileType {
   /** 当前写出的后缀，含点。 */

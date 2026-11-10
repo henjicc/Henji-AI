@@ -14,7 +14,7 @@ export interface RasterReplacementV3 {
 }
 
 /** 当前输出像素中心在 mip0 中的四点双线性足迹；不对单个存储瓦片 clamp。 */
-export function imageEditRasterSamplePointsV3(x: number, y: number, scaleX: number, scaleY = scaleX,
+function imageEditRasterSamplePointsV3(x: number, y: number, scaleX: number, scaleY = scaleX,
   bounds?: ImageEditSize): Array<{ x: number; y: number; weight: number }> {
   const rawX = (x + 0.5) * scaleX - 0.5, rawY = (y + 0.5) * scaleY - 0.5
   const sx = bounds ? Math.max(0, Math.min(bounds.width - 1, rawX)) : rawX
@@ -29,7 +29,7 @@ export function imageEditRasterSamplePointsV3(x: number, y: number, scaleX: numb
   ].filter((point) => point.weight > 0)
 }
 
-export function imageEditRasterRectContainsV3(rect: ImageEditRect, x: number, y: number): boolean {
+function imageEditRasterRectContainsV3(rect: ImageEditRect, x: number, y: number): boolean {
   return x >= rect.x && y >= rect.y && x < rect.x + rect.width && y < rect.y + rect.height
 }
 

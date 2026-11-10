@@ -27,8 +27,6 @@ import {
 
 export { canvasNodeDefinitions } from './nodeRegistryBuiltins';
 export type {
-  CanvasNodeCapabilities,
-  CanvasNodeConnectivity,
   CanvasNodeDefinition,
   CanvasNodeExecutionKind,
   MenuIconKey,

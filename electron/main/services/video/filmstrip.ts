@@ -57,7 +57,7 @@ export interface FilmstripServiceDependencies {
   decodeThreads?: number
 }
 
-export interface FilmstripSourceProbe { startSeconds: number; width: number; height: number }
+interface FilmstripSourceProbe { startSeconds: number; width: number; height: number }
 
 export interface FilmstripStatistics { hits: number; generated: number; failed: number; batches: number; batchMs: number; pending: number; running: number }
 
@@ -84,7 +84,7 @@ const RETRY_MARGIN_US = 10_000_000
 
 const abortError = (): DOMException => new DOMException('缩略帧请求已取消', 'AbortError')
 
-export function filmstripScaleFilter(height: FilmstripHeight): string {
+function filmstripScaleFilter(height: FilmstripHeight): string {
   // 按显示比例（含非方形像素）缩放到目标高度；area 适合 4K → 几十像素的大倍率缩小。
   return `scale=w='max(2,trunc(${height}*dar/2)*2)':h=${height}:flags=area`
 }

@@ -16,7 +16,7 @@ import { planGaussian } from '@/core/imaging/adjustments/gaussianPlan'
 import type { VideoEditBuiltinPlan, VideoEditBuiltinTexture } from './videoEditBuiltinEffectPasses'
 import type { VideoEditBuiltinEffectEntry } from './videoEditBuiltinEffectShaders'
 
-export const DROP_SHADOW_ENTRIES = ['shadow_composite', 'shadow_layer'] as const
+const DROP_SHADOW_ENTRIES = ['shadow_composite', 'shadow_layer'] as const
 type V4 = readonly [number, number, number, number]
 const ZERO: V4 = [0, 0, 0, 0]
 const n = (params: VideoEditBuiltinParams, key: string): number => Number(params[key] ?? 0)
@@ -27,7 +27,7 @@ function encodedColor(value: unknown): [number, number, number] {
 }
 
 /** `params` 已补齐默认值；`split` 为图层拆输出。 */
-export function planDropShadow(params: VideoEditBuiltinParams, width: number, height: number, context?: LayerEffectReference, split = false): VideoEditBuiltinPlan {
+function planDropShadow(params: VideoEditBuiltinParams, width: number, height: number, context?: LayerEffectReference, split = false): VideoEditBuiltinPlan {
   const plan: VideoEditBuiltinPlan = { width, height, scratch: [], passes: [], linearScratch: true }
   const size = (texture: VideoEditBuiltinTexture): [number, number] => typeof texture === 'number' ? [plan.scratch[texture].width, plan.scratch[texture].height] : [width, height]
   const pass = (entry: VideoEditBuiltinEffectEntry, source: VideoEditBuiltinTexture, target: VideoEditBuiltinTexture, a: V4 = ZERO, b: V4 = ZERO): void => {
@@ -69,7 +69,7 @@ export function planDropShadow(params: VideoEditBuiltinParams, width: number, he
   return keep()
 }
 
-export const DROP_SHADOW_WGSL = `
+const DROP_SHADOW_WGSL = `
 // 影子：a = (偏移 u, 偏移 v, 不透明度, 扩展)，b = (颜色（编码值）, 原画不透明度)。
 // 偏移后落到纹理外的取样一律当作透明，不让 clamp 取样把边缘像素拉成长影。颜色由 alpha 推出，预乘始终成立。
 // 扩展把模糊后的 alpha 按 1/(1 − 0.95·扩展) 放大：100% 时 5% 以上的 alpha 都变实，边缘落在高斯尾巴里，

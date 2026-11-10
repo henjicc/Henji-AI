@@ -10,13 +10,13 @@ import type {
 
 const RESOURCE_ID_PATTERN = /^sha256:[a-f0-9]{64}$/;
 
-export interface ImageEditBrushTileHistoryTransitionV3 {
+interface ImageEditBrushTileHistoryTransitionV3 {
   tileKey: string;
   oldResource: ImageEditBrushResourceReferenceV3 | null;
   newResource: ImageEditBrushResourceReferenceV3;
 }
 
-export interface ImageEditBrushHistoryRetentionV3 {
+interface ImageEditBrushHistoryRetentionV3 {
   transitions: readonly ImageEditBrushTileHistoryTransitionV3[];
   oldResources: readonly ImageEditBrushResourceReferenceV3[];
   newResources: readonly ImageEditBrushResourceReferenceV3[];

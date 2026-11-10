@@ -38,7 +38,7 @@ const manifestSchema = videoEditSubtitleManifestSchema
 type Manifest = z.infer<typeof manifestSchema>
 const active = new WeakSet<VideoEditInstance>()
 
-export async function videoEditSubtitleSequenceSignature(snapshot: VideoEditComposition): Promise<string> {
+async function videoEditSubtitleSequenceSignature(snapshot: VideoEditComposition): Promise<string> {
   return subtitleSoundSignature(videoEditAudioContent(snapshot))
 }
 async function subtitleSoundSignature(sound: string): Promise<string> {

@@ -5,8 +5,7 @@
  */
 
 // RequestBuilder
-export { RequestBuilder, requestBuilder } from './RequestBuilder'
-export type { BuildResult, BuildOptions } from './RequestBuilder'
+export { requestBuilder } from './RequestBuilder'
 
 // 参数验证器
 export { validateParams, validateParamValue } from './paramValidator'

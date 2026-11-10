@@ -46,7 +46,6 @@ export {
   createDefaultProviderReasoning,
   createLlmCapabilitiesForModel,
   DEFAULT_DEEPSEEK_BASE_URL,
-  DEFAULT_DEEPSEEK_MODEL_ID,
   DEFAULT_DEEPSEEK_PROVIDER_ID,
   DEFAULT_LLM_CAPABILITIES,
   DEFAULT_LLM_REASONING_EFFORT,
@@ -198,7 +197,7 @@ export function createDefaultPromptProfile(now = new Date().toISOString()): Prom
   })
 }
 
-export function createBuiltInLlmProviders(): LlmProviderConfig[] {
+function createBuiltInLlmProviders(): LlmProviderConfig[] {
   return [
     {
       providerId: DEFAULT_PPIO_PROVIDER_ID,

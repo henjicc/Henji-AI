@@ -28,7 +28,7 @@ export type DocumentLibraryFilter =
 
 export const ALL_DOCUMENTS_FILTER: DocumentLibraryFilter = { kind: 'all' }
 
-export function documentLibraryFilterToContainer(filter: DocumentLibraryFilter): DocumentContainerFilter {
+function documentLibraryFilterToContainer(filter: DocumentLibraryFilter): DocumentContainerFilter {
   if (filter.kind === 'all') return { kind: 'any' }
   if (filter.kind === 'standalone') return { kind: 'user' }
   return { kind: 'project', projectId: filter.projectId }
@@ -58,7 +58,7 @@ export interface DocumentCardFormatOptions {
 }
 
 /** 所在位置的说法：项目名；不在项目里的外部文档显示所在文件夹；其余“不在项目里”。 */
-export function documentLocationLabel(document: DocumentSummary, t: TFunction): string {
+function documentLocationLabel(document: DocumentSummary, t: TFunction): string {
   if (document.projectName) return document.projectName
   if (document.external) return parentFolderOf(document.path)
   return t('documentLibrary.location.standalone')

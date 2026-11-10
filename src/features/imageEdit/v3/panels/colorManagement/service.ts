@@ -13,7 +13,7 @@ import { retainSmartContentResourcesV3 } from '../../smartContent/resourceLeases
 
 const logger = createLogger('features.imageEdit.v3.color_management');
 
-export function colorModeFromSettings(settings: ColorSettings): ImageEditColorModeV3 {
+function colorModeFromSettings(settings: ColorSettings): ImageEditColorModeV3 {
   const hdr = settings.transferFunction === 'pq' || settings.transferFunction === 'hlg';
   return { workingSpace: settings.workingSpace, bitDepth: settings.bitDepth,
     transferFunction: settings.transferFunction,

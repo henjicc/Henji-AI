@@ -14,7 +14,7 @@ export const canvasNodeGenerationConfigSchema = z.object({
 
 export type CanvasNodeGenerationConfig = z.infer<typeof canvasNodeGenerationConfigSchema>
 
-export function isCanvasNodeModelLocked(node: CanvasNode): boolean {
+function isCanvasNodeModelLocked(node: CanvasNode): boolean {
   const ui = node.data.generationUi
   return Boolean(ui && typeof ui === 'object' && !Array.isArray(ui)
     && (ui as Record<string, unknown>).modelMode === 'locked')

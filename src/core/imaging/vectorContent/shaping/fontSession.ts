@@ -38,7 +38,7 @@ const windowsScripts: Readonly<Record<string, readonly string[]>> = {
   Java: ['Javanese Text'],
 }
 const windowsPatterns = Object.keys(windowsScripts).filter(script => script !== 'Hant').map(script => [script, new RegExp(`\\p{Script_Extensions=${script}}`, 'u')] as const)
-export function defaultTextFonts(platform: keyof typeof defaults, declaration: TextFontDeclaration = {}): readonly TextFontRequest[] {
+function defaultTextFonts(platform: keyof typeof defaults, declaration: TextFontDeclaration = {}): readonly TextFontRequest[] {
   const scripts = declaration.scripts ?? [], text = (declaration.text ?? []).join('')
   const all = !declaration.text?.length && !scripts.length
   const eastAsianCommon = /[\u3000-\u303f\uff00-\uffef]/u.test(text)
@@ -57,7 +57,7 @@ export function defaultTextFonts(platform: keyof typeof defaults, declaration: T
 }
 export const fontRequestKey = (request: TextFontRequest): string => JSON.stringify([request.family.trim().toLowerCase(), request.weight ?? 400, request.style ?? 'normal', orderedValues(request.variations)])
 
-export function nearestPreparedFont<T>(request: TextFontRequest, choices: readonly { request: TextFontRequest; value: T }[]): T | undefined {
+function nearestPreparedFont<T>(request: TextFontRequest, choices: readonly { request: TextFontRequest; value: T }[]): T | undefined {
   const weight = request.weight ?? 400
   const rank = (other: TextFontRequest): number => {
     const candidate = other.weight ?? 400
@@ -72,7 +72,7 @@ export function nearestPreparedFont<T>(request: TextFontRequest, choices: readon
 }
 
 /** 通用族与同名样式匹配属于发行策略，宿主只列举目录和读取选定 ID。 */
-export function matchFontFace(platform: 'win32' | 'darwin', request: TextFontRequest, faces: readonly FontFaceInfo[]): FontFaceInfo | undefined {
+function matchFontFace(platform: 'win32' | 'darwin', request: TextFontRequest, faces: readonly FontFaceInfo[]): FontFaceInfo | undefined {
   const generic: Record<string, string> = platform === 'win32' ? { 'sans-serif': 'Arial', serif: 'Times New Roman', monospace: 'Consolas' } : { 'sans-serif': 'Helvetica', serif: 'Times', monospace: 'Menlo' }
   const family = generic[request.family.trim().toLowerCase()] ?? request.family
   const candidates = faces.filter(face => !face.id.startsWith('generic:') && fontMatchesName(face, family)).sort((a, b) => a.id.localeCompare(b.id))

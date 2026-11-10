@@ -12,7 +12,7 @@ const uiPaidReceiptSql = `coalesce(json_extract(record_json, '$.origin.actor') =
   AND request_id IS NULL AND renderer_epoch IS NULL
   AND coalesce(json_array_length(record_json, '$.targetRefs'), 0) = 0, 0)`
 
-export type OperationState = import('../../../../src/core/application-control/userConfirmation').ApplicationOperationState
+type OperationState = import('../../../../src/core/application-control/userConfirmation').ApplicationOperationState
 export interface OperationRecord {
   operationId: string
   callerId: string

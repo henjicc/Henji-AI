@@ -5,8 +5,8 @@
 
 export type TimeRulerMode = 'seconds' | 'frames'
 
-export const TIMELINE_MIN_PX_PER_SECOND = 40
-export const TIMELINE_MAX_PX_PER_SECOND = 600
+const TIMELINE_MIN_PX_PER_SECOND = 40
+const TIMELINE_MAX_PX_PER_SECOND = 600
 
 export function clampPxPerSecond(value: number): number {
   return Math.max(TIMELINE_MIN_PX_PER_SECOND, Math.min(TIMELINE_MAX_PX_PER_SECOND, value))

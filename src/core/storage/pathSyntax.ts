@@ -30,7 +30,7 @@ const WIN_UNC = /^[\\/]{2}([^\\/?.][^\\/]*)[\\/]+([^\\/]+)(?:[\\/]|$)/
 /** 远超系统上限的字符串直接视为非路径，避免对大段文本做无谓解析。 */
 const MAX_PATH_LENGTH = 32_767
 
-export function hasControlCharacters(value: string): boolean {
+function hasControlCharacters(value: string): boolean {
   return CONTROL_CHARACTERS.test(value)
 }
 

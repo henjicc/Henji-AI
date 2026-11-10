@@ -47,7 +47,6 @@ import { withCanvasProjectRuntime } from './canvasProjectRuntime'
 
 export { hasReachableNonDisplayConsumer } from './canvasExecutionReachability'
 export type {
-  CanvasExecutionTrigger,
   CanvasNodeExecutionContext,
   CanvasNodeExecutionResult,
   CanvasNodePreflightContext,

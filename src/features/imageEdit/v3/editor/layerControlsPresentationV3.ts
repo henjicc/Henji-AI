@@ -55,7 +55,7 @@ export class ImageEditorLayerControlsPresentationV3 {
   }
 }
 
-export function paintImageEditorLayerControlsV3(root: HTMLDivElement | null, matrix: ImageEditTransformV3,
+function paintImageEditorLayerControlsV3(root: HTMLDivElement | null, matrix: ImageEditTransformV3,
   bounds: LayerContentBoundsV3, outputWidth: number, outputHeight: number, zoom: number): void {
   if (!root) return
   const { x, y, width, height } = bounds

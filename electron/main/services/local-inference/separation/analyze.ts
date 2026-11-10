@@ -20,7 +20,7 @@ import { Float32WavWriter, WAV_MAX_DATA_BYTES } from './wav'
  */
 
 /** 最长 1 小时：44.1 kHz 立体声整段 PCM 常驻约 640 MB（非 44.1 kHz 时另有一份模型输入）。 */
-export const SEPARATION_MAX_SECONDS = 60 * 60
+const SEPARATION_MAX_SECONDS = 60 * 60
 export const SEPARATION_PRIMARY_FILE = 'primary.wav.tmp'
 export const SEPARATION_RESIDUAL_FILE = 'residual.wav.tmp'
 /** DirectML 与 CPU 输出的相对误差上限（RTX 4090 实测约 3e-6；坏驱动的输出通常差到 1 的量级）。 */
@@ -52,7 +52,7 @@ function allFinite(values: Float32Array): boolean {
 }
 
 /** 核对用的固定输入：一段带谐波、包络起伏与噪声的合成立体声，经同样的前处理变成模型谱。 */
-export function separationProbeSpectrogram(model: MdxSeparationModel): Float32Array {
+function separationProbeSpectrogram(model: MdxSeparationModel): Float32Array {
   const stft = new MdxStft(model)
   const length = stft.chunkSize
   const left = new Float64Array(length), right = new Float64Array(length)

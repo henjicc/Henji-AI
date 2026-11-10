@@ -26,7 +26,7 @@ export interface VideoEditNativeCapableBackend extends VideoEditFrameBackend {
  * in a row (a service restart takes 0.3–3.5s, 1.1/3.1 measurements); then new reads try native again ("恢复后新请求自动回到
  * 原生"). A file only native decodes retries native once per read instead, on a new session.
  */
-export const VIDEO_EDIT_NATIVE_RETRY_MS = 2000
+const VIDEO_EDIT_NATIVE_RETRY_MS = 2000
 const NATIVE_RETRY_MAX_MS = 30_000
 
 interface Decision {

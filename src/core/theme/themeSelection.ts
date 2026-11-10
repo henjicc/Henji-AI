@@ -27,7 +27,7 @@ export const THEME_CUSTOM_PRESET = 'custom' as const;
 
 export type ThemeSelectionPreset = ThemePresetId | typeof THEME_CUSTOM_PRESET;
 
-export const THEME_SELECTION_PRESETS: readonly ThemeSelectionPreset[] = [...THEME_PRESET_IDS, THEME_CUSTOM_PRESET];
+const THEME_SELECTION_PRESETS: readonly ThemeSelectionPreset[] = [...THEME_PRESET_IDS, THEME_CUSTOM_PRESET];
 
 export const THEME_CONTRAST_LEVEL_IDS = Object.keys(THEME_CONTRAST_LEVELS) as ThemeContrastLevel[];
 
@@ -58,11 +58,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-export function isThemeSelectionPreset(value: unknown): value is ThemeSelectionPreset {
+function isThemeSelectionPreset(value: unknown): value is ThemeSelectionPreset {
   return typeof value === 'string' && (THEME_SELECTION_PRESETS as readonly string[]).includes(value);
 }
 
-export function isThemeContrastLevel(value: unknown): value is ThemeContrastLevel {
+function isThemeContrastLevel(value: unknown): value is ThemeContrastLevel {
   return typeof value === 'string' && (THEME_CONTRAST_LEVEL_IDS as readonly string[]).includes(value);
 }
 

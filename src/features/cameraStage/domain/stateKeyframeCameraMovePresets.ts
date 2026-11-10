@@ -23,7 +23,7 @@ import type { StageVec3 } from './sceneTypes'
 import type { StageCameraMove } from './stateKeyframeTypes'
 
 /** 环绕预设每个中间关键帧覆盖的角度步长（度）；越小圆弧近似越平滑，代价是关键帧更密 */
-export const ORBIT_DEGREES_PER_KEYFRAME = 15
+const ORBIT_DEGREES_PER_KEYFRAME = 15
 
 /** 运镜预设参数一期推荐默认值：供 2.3 细节层 UI 初始值参考，也是本文件内部参数非法时的兜底 */
 export const STAGE_CAMERA_MOVE_DEFAULTS = {

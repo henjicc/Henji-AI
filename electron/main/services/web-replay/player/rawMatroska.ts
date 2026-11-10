@@ -40,7 +40,7 @@ const ID = {
 } as const
 
 /** Timestamps are in microseconds. */
-export const MATROSKA_TIMESTAMP_SCALE_NS = 1000
+const MATROSKA_TIMESTAMP_SCALE_NS = 1000
 
 export type RawPixelFormat = 'bgra' | 'nv12'
 

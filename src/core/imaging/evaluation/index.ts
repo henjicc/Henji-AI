@@ -1,6 +1,6 @@
 import type { Coverage, RegionGrid, RegionRect, RegionSampleTime } from '../regions';
 
-export interface EvaluationInputRequest {
+interface EvaluationInputRequest {
   ref: { kind: string; id: string };
   sourceVersion: string;
   time: RegionSampleTime;
@@ -9,7 +9,7 @@ export interface EvaluationInputRequest {
 }
 
 /** 宿主绑定资源/区域读取；算法不访问文件路径、当前播放头或 feature。 */
-export interface EvaluationInputs {
+interface EvaluationInputs {
   readPixels(request: EvaluationInputRequest): Promise<{
     region: RegionRect; data: Float32Array; alpha: 'premultiplied' | 'straight';
     workingSpace: string; transferFunction: string;

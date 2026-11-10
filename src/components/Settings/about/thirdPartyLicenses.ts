@@ -10,9 +10,9 @@ import { createLogger } from '@/core/logging'
 
 const logger = createLogger('components.Settings.about.thirdPartyLicenses')
 
-export type ThirdPartyEcosystem = 'runtime' | 'npm' | 'cargo'
+type ThirdPartyEcosystem = 'runtime' | 'npm' | 'cargo'
 /** package：组件自带许可文件；standard：组件未附带，回退为该许可的标准文本；none：无全文 */
-export type ThirdPartyTextOrigin = 'package' | 'standard' | 'none'
+type ThirdPartyTextOrigin = 'package' | 'standard' | 'none'
 
 /** 发布版本用于许可界面；提交哈希等构建标识只留在原始清单。 */
 export function readableThirdPartyVersion(version: string | null): string | undefined {

@@ -8,7 +8,7 @@ import { Dropdown } from '@/components/ui'
  * - 放大后按住鼠标中键拖动平移（滚动容器）；
  * - 选“适合”回到铺满。节目与源监视器共用。
  */
-export type MonitorDisplay = 'fit' | number
+type MonitorDisplay = 'fit' | number
 const LEVELS = [0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 4, 8, 16] as const
 const MIN_SCALE = 0.05
 const MAX_SCALE = 16

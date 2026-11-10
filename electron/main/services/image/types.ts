@@ -37,7 +37,7 @@ export interface StoryboardImageMetadataDto {
   frameNotes: string[]
 }
 
-export interface PanoramaImageMetadataDto {
+interface PanoramaImageMetadataDto {
   projectionType: 'equirectangular'
   usePanoramaViewer: true
   fullPanoWidthPixels: number

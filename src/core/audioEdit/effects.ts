@@ -44,7 +44,7 @@ const separationItemSchema = z.object({ id, kind: z.literal('separation'), enabl
 /** 第三方插件：pluginId 为宿主插件目录里的标识；parameters 为插件参数名到 0–1 归一化值。 */
 const pluginItemSchema = z.object({ id, kind: z.literal('plugin'), name, enabled: z.boolean(), pluginId: z.string().min(1).max(200), parameters: z.record(z.string(), z.number().min(0).max(1)) }).strict()
 
-export const audioEditChainItemSchema = z.discriminatedUnion('kind', [builtinItemSchema, essentialItemSchema, mouthDeclickItemSchema, breathItemSchema, separationItemSchema, pluginItemSchema])
+const audioEditChainItemSchema = z.discriminatedUnion('kind', [builtinItemSchema, essentialItemSchema, mouthDeclickItemSchema, breathItemSchema, separationItemSchema, pluginItemSchema])
 export const audioEditEffectChainSchema = z.array(audioEditChainItemSchema).max(AUDIO_EDIT_MAX_CHAIN_ITEMS).superRefine((items, ctx) => {
   if (new Set(items.map(item => item.id)).size !== items.length) ctx.addIssue({ code: 'custom', message: '效果引用重复' })
   for (const item of items) {
@@ -61,7 +61,7 @@ export const audioEditOutputSchema = z.object({
 }).strict()
 
 export type AudioEditChainItem = z.infer<typeof audioEditChainItemSchema>
-export type AudioEditBuiltinChainItem = z.infer<typeof builtinItemSchema>
+type AudioEditBuiltinChainItem = z.infer<typeof builtinItemSchema>
 export type AudioEditMouthDeclickItem = z.infer<typeof mouthDeclickItemSchema>
 export type AudioEditBreathItem = z.infer<typeof breathItemSchema>
 export type AudioEditSeparationItem = z.infer<typeof separationItemSchema>
@@ -71,7 +71,7 @@ export type AudioEditOutput = z.infer<typeof audioEditOutputSchema>
 interface ChainOwner { effectChain?: readonly AudioEditChainItem[]; chainBypassed?: boolean; output?: AudioEditOutput }
 
 /** 这一项会不会改变声音（开着且有实际作用）。 */
-export function audioEditChainItemActive(item: AudioEditChainItem): boolean {
+function audioEditChainItemActive(item: AudioEditChainItem): boolean {
   if (!item.enabled) return false
   switch (item.kind) {
     case 'builtin': return item.amount > 0
@@ -84,13 +84,13 @@ export function audioEditChainItemActive(item: AudioEditChainItem): boolean {
 }
 
 /** 要先整段处理的效果（不能边播边算）。 */
-export function audioEditChainItemWholeFile(item: AudioEditChainItem): boolean {
+function audioEditChainItemWholeFile(item: AudioEditChainItem): boolean {
   return item.kind === 'mouth_declick' || item.kind === 'breath' || item.kind === 'separation' || item.kind === 'plugin'
     || (item.kind === 'essential' && essentialSoundOfflineStages(item.settings).length > 0)
 }
 
 /** 实际生效的效果（效果控件整体关闭时为空），按处理顺序。 */
-export function audioEditActiveChain(project: ChainOwner): AudioEditChainItem[] {
+function audioEditActiveChain(project: ChainOwner): AudioEditChainItem[] {
   return project.chainBypassed ? [] : (project.effectChain ?? []).filter(audioEditChainItemActive)
 }
 
@@ -125,7 +125,7 @@ export function audioEditChainItemEffects(item: AudioEditChainItem): AudioEffect
 }
 
 /** 输出一节换算成的实时效果：音量（含响度补偿），开了自动匹配响度时末尾限幅 -1 dB。 */
-export function audioEditOutputEffects(output: AudioEditOutput | undefined): AudioEffectInstance[] {
+function audioEditOutputEffects(output: AudioEditOutput | undefined): AudioEffectInstance[] {
   if (!output) return []
   const gain = (output.loudness?.enabled ? output.loudness.gainDb : 0) + output.volumeDb
   const effects: AudioEffectInstance[] = []

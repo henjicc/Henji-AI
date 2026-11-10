@@ -15,7 +15,7 @@ export interface VideoEditStylePackageIo { read(path: string): Promise<string>; 
 const desktopIo: VideoEditStylePackageIo = { read: readTextFile, write: writeTextFile, exists, preserve: path => getPlatform().settings.preserveFile(path) }
 
 /** 风格包文本：风格、属于它的库模板、预览视频、缩略图与锚点帧（不含字体）。 */
-export async function videoEditStylePackageText(styleId: string): Promise<{ text: string; style: VideoEditStyle; templates: VideoEditTemplate[] }> {
+async function videoEditStylePackageText(styleId: string): Promise<{ text: string; style: VideoEditStyle; templates: VideoEditTemplate[] }> {
   await videoEditStyleLibrary.ready()
   const entry = videoEditStyleLibrary.requireStyle(styleId)
   const templates = videoEditStyleLibrary.listTemplates(styleId).map(value => value.template)

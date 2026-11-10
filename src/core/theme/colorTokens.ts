@@ -249,7 +249,7 @@ export const BLANK_IMAGE_BACKGROUND_PRESET_HEX = [
   BLACK_HEX,
 ] as const;
 
-export const DEFAULT_THEME_COLOR_SCHEME_HEX = {
+const DEFAULT_THEME_COLOR_SCHEME_HEX = {
   bg: '#171717',
   surface: '#262626',
   border: '#404040',
@@ -267,7 +267,7 @@ export const DEFAULT_THEME_COLOR_SCHEME_HEX = {
  */
 export const APP_WINDOW_BACKGROUND_HEX = '#1B1B1B';
 
-export const LEGACY_DEFAULT_THEME_COLOR_SCHEME_HEX = {
+const LEGACY_DEFAULT_THEME_COLOR_SCHEME_HEX = {
   bg: '#0F0F0F',
   surface: '#1A1A1A',
   border: '#2A2A2A',
@@ -279,7 +279,7 @@ export const LEGACY_DEFAULT_THEME_COLOR_SCHEME_HEX = {
   layer: '#1B1C21',
 } as const;
 
-export const LEGACY_NEUTRAL_THEME_COLOR_SCHEME_HEX = {
+const LEGACY_NEUTRAL_THEME_COLOR_SCHEME_HEX = {
   bg: '#0F0F0F',
   surface: '#1A1A1A',
   border: '#2A2A2A',

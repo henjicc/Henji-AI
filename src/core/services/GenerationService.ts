@@ -76,7 +76,7 @@ interface PendingProgressSampleContext {
  * 原来抛 `Generation failed for <modelId>: <原因>`，克隆面板、画布节点等直接展示 error.message 的地方
  * 把英文前缀与模型 ID 带进了正式界面；模型 ID 已写进结构化日志，这里单独挂在 modelId 上。
  */
-export class GenerationFailedError extends Error {
+class GenerationFailedError extends Error {
   readonly modelId: string
   readonly code?: string
   constructor(modelId: string, reason: string) {

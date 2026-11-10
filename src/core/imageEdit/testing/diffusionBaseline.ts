@@ -1,7 +1,7 @@
 import type { DiffusionPresetId } from '../diffusionPresets';
 import type { DiffusionChartId } from './diffusionCharts';
 
-export type DiffusionBaselineStatus = 'frozen' | 'pending-electron-runtime';
+type DiffusionBaselineStatus = 'frozen' | 'pending-electron-runtime';
 
 export interface DiffusionQualityThreshold {
   readonly id: string;
@@ -11,7 +11,7 @@ export interface DiffusionQualityThreshold {
   readonly rationale: string;
 }
 
-export interface DiffusionGoldenDefinition {
+interface DiffusionGoldenDefinition {
   readonly id: string;
   readonly chartId: DiffusionChartId;
   readonly presetId: DiffusionPresetId;
@@ -23,7 +23,7 @@ export interface DiffusionGoldenDefinition {
  * 程序化 Golden 的输入与断言索引；实际 WebGPU/Sharp 输出在 4.2 的真实 Electron 验收中采集。
  * 不依赖外部照片，因此没有额外数据授权或派生资产风险。
  */
-export const DIFFUSION_GOLDEN_INDEX: readonly DiffusionGoldenDefinition[] = [
+const DIFFUSION_GOLDEN_INDEX: readonly DiffusionGoldenDefinition[] = [
   { id: 'black-low-black-field', chartId: 'black-field-highlight', presetId: 'black-mist-low', output: 'webgpu-export', assertions: ['暗部不被整体抬灰', '高光边缘柔化'] },
   { id: 'black-medium-edge', chartId: 'sharp-edge', presetId: 'black-mist-medium', output: 'webgpu-preview', assertions: ['边缘无黑边', '高频保留'] },
   { id: 'black-high-noise', chartId: 'noise-detail', presetId: 'black-mist-high', output: 'webgpu-export', assertions: ['长尾散射', '细节不被完全抹除'] },

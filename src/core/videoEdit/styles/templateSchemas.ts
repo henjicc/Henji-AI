@@ -22,7 +22,7 @@ export const VIDEO_EDIT_STYLE_PACKAGE_EXTENSION = henjiExtension('style_package'
 export const VIDEO_EDIT_STYLE_PACKAGE_VERSION = 27
 export const VIDEO_EDIT_STYLE_PACKAGE_MAX_BYTES = 16 * 1024 * 1024
 const base64 = z.string().max(12 * 1024 * 1024).regex(/^[A-Za-z0-9+/]*={0,2}$/, '媒体内容必须是 base64。')
-export const videoEditStylePackageMediaSchema = z.object({
+const videoEditStylePackageMediaSchema = z.object({
   preview: base64.optional().describe('预览视频（H.264 MP4，长边不超过 1920）。'),
   thumbnail: base64.optional().describe('缩略图（JPEG）。'),
   anchors: z.array(base64).max(10).describe('锚点帧（JPEG），顺序对应 sample.anchors。'),

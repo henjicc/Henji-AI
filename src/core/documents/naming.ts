@@ -31,7 +31,7 @@ const INVALID_MESSAGES: Record<EntryNameInvalidReason, string> = {
 }
 
 /** 去掉首尾空白与末尾的点。 */
-export function trimEntryName(input: string): string {
+function trimEntryName(input: string): string {
   return input.trim().replace(/[.\s]+$/u, '').trim()
 }
 

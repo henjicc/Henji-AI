@@ -7,9 +7,9 @@ import {
 } from '../../../../src/core/imageEdit/diffusionRecipe'
 import { parseDiffusionOperationParams } from '../../../../src/core/imageEdit/diffusionParams'
 
-export type SharpDiffusionMode = 'black-diffusion' | 'white-diffusion' | 'glow'
-export type SharpDiffusionPurpose = 'preview' | 'export'
-export type SharpDiffusionFormat = 'png' | 'jpeg' | 'webp'
+type SharpDiffusionMode = 'black-diffusion' | 'white-diffusion' | 'glow'
+type SharpDiffusionPurpose = 'preview' | 'export'
+type SharpDiffusionFormat = 'png' | 'jpeg' | 'webp'
 
 export interface SharpDiffusionFallbackRequest {
   requestId: string

@@ -9,8 +9,8 @@ import { restoreForwardFields } from '../persistence/forwardCompat'
  * 文件里 content 中的位置是存储写法（henji:/ 等），读出后由主进程文档仓库换回绝对路径。
  */
 
-export const DOCUMENT_FORMAT = 'henji-document' as const
-export const DOCUMENT_ENVELOPE_VERSION = 1
+const DOCUMENT_FORMAT = 'henji-document' as const
+const DOCUMENT_ENVELOPE_VERSION = 1
 export const DOCUMENT_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/
 
 export const documentIdSchema = z.string().regex(DOCUMENT_ID_PATTERN, '文档 ID 无效。')
@@ -156,7 +156,7 @@ export function serializeDocumentEnvelope(envelope: DocumentEnvelope): string {
   return `${JSON.stringify(envelope)}\n`
 }
 
-export function parseDocumentRawText(text: string): unknown {
+function parseDocumentRawText(text: string): unknown {
   let raw: unknown
   try {
     raw = JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text) as unknown

@@ -30,7 +30,7 @@ export interface HenjiImagePackageResource {
   mediaType?: string
 }
 
-export interface HenjiImagePackageThumbnail {
+interface HenjiImagePackageThumbnail {
   path: string
   sha256: string
   byteLength: number
@@ -115,7 +115,7 @@ function optionalImageMediaType(value: unknown, label: string): string | undefin
   return mediaType
 }
 
-export function packageResourcePath(resourceId: ResourceId): string {
+function packageResourcePath(resourceId: ResourceId): string {
   return `resources/${parseResourceId(resourceId)}`
 }
 

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
-export const SENSITIVE_TEXT_KINDS = ['email', 'phone', 'identity', 'bank_card', 'secret', 'url_token', 'password'] as const
-export type SensitiveTextKind = typeof SENSITIVE_TEXT_KINDS[number]
+const SENSITIVE_TEXT_KINDS = ['email', 'phone', 'identity', 'bank_card', 'secret', 'url_token', 'password'] as const
+type SensitiveTextKind = typeof SENSITIVE_TEXT_KINDS[number]
 const unit = z.number().finite().min(0).max(1)
 export const privacyBoxSchema = z.tuple([unit, unit, unit.positive(), unit.positive()]).refine(b => b[0] + b[2] <= 1.000001 && b[1] + b[3] <= 1.000001, '区域必须位于画面内')
 export const privacyCandidateSchema = z.object({

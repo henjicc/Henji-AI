@@ -102,7 +102,7 @@ let edgesBySourceCacheKey: CanvasEdge[] | null = null;
 let edgesBySourceCacheValue: Map<string, CanvasEdge[]> | null = null;
 
 /** 按 source 节点 id 分桶，供依赖执行与输出连接判断复用。 */
-export function getEdgesBySource(edges: CanvasEdge[]): Map<string, CanvasEdge[]> {
+function getEdgesBySource(edges: CanvasEdge[]): Map<string, CanvasEdge[]> {
   if (edgesBySourceCacheKey === edges && edgesBySourceCacheValue) {
     return edgesBySourceCacheValue;
   }

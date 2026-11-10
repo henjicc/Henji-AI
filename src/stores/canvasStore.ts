@@ -31,13 +31,10 @@ import { createCanvasStructureActions } from './canvasStoreStructureActions';
 import { createClosedCanvasImageViewerState } from './canvasStoreHelpers';
 
 export type {
-  ActiveToolDialog,
   CanvasEdge,
   CanvasNode,
   CanvasNodeData,
-  CanvasNodeType,
   NodeToolType,
-  StoryboardFrameItem,
 };
 
 export interface CanvasHistorySnapshot {

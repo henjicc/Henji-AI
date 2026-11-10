@@ -39,7 +39,7 @@ export const generationHistoryInsertSchema: z.ZodType<GenerationHistoryInsertDto
   createdAt: z.string().min(1).max(64).optional(),
 }).strict()
 
-export const generationHistoryUpdateSchema: z.ZodType<GenerationHistoryUpdateDto> = z.object({
+const generationHistoryUpdateSchema: z.ZodType<GenerationHistoryUpdateDto> = z.object({
   providerId: z.string().max(512).optional(),
   modelId: z.string().min(1).max(512).optional(),
   type: mediaTypeSchema.optional(),
@@ -79,7 +79,7 @@ export const presetInsertSchema: z.ZodType<PresetInsertDto> = z.object({
   isFavorite: z.boolean(),
 }).strict()
 
-export const presetUpdateSchema: z.ZodType<PresetUpdateDto> = z.object({
+const presetUpdateSchema: z.ZodType<PresetUpdateDto> = z.object({
   name: z.string().min(1).max(1_024).optional(),
   description: z.string().nullable().optional(),
   params: paramsSchema.optional(),

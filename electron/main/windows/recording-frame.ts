@@ -31,7 +31,7 @@ export function recordingFrameShape(width: number, height: number, phase: FrameP
  * Only systems that drop protected windows from every capture path may show the frame.
  * Older Windows paints protected windows black, which would cover the whole recording.
  */
-export function recordingFrameSupported(platform: NodeJS.Platform = process.platform, systemRelease: string = release()): boolean {
+function recordingFrameSupported(platform: NodeJS.Platform = process.platform, systemRelease: string = release()): boolean {
   if (platform === 'darwin') return true
   return platform === 'win32' && Number(systemRelease.split('.')[2]) >= 19041
 }

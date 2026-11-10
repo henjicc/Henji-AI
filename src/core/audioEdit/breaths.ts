@@ -20,10 +20,10 @@ import type { AudioEditCut, AudioEditProjectDocument, AudioEditRange, AudioEditT
  */
 
 export type AudioEditBreathPolicy = 'delete' | 'attenuate' | 'mute' | 'keep'
-export type AudioEditBreathContext = 'edge' | 'sentence' | 'clause' | 'touching' | 'removed'
+type AudioEditBreathContext = 'edge' | 'sentence' | 'clause' | 'touching' | 'removed'
 export type AudioEditBreathHandling = 'deleted' | 'attenuated' | 'muted' | 'kept' | 'removed'
 
-export const AUDIO_EDIT_BREATH_ID_PREFIX = 'breath:'
+const AUDIO_EDIT_BREATH_ID_PREFIX = 'breath:'
 export const AUDIO_EDIT_BREATH_ATTENUATION_DB = -18
 const MIN_GAP_MS = 80
 const SENTENCE_GAP_MS = 150
@@ -182,7 +182,7 @@ export function describeAudioEditBreaths(document: AudioEditProjectDocument, bre
 }
 
 /** 按策略与上下文决定一处呼吸怎么处理。 */
-export function decideAudioEditBreath(context: AudioEditBreathContext, policy: AudioEditBreathPolicy): 'delete' | 'attenuate' | 'mute' | 'keep' {
+function decideAudioEditBreath(context: AudioEditBreathContext, policy: AudioEditBreathPolicy): 'delete' | 'attenuate' | 'mute' | 'keep' {
   if (context === 'removed' || policy === 'keep') return 'keep'
   if (policy === 'attenuate') return 'attenuate'
   if (policy === 'mute') return context === 'touching' ? 'attenuate' : 'mute'

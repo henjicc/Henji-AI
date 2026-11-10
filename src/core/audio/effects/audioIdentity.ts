@@ -18,7 +18,7 @@ export interface AudioIdentityBuiltin {
   id: string; params: Readonly<Record<string, unknown>>; identityAliases?: AudioIdentityAliases
 }
 
-export function audioIdentityJson(value: unknown): string {
+function audioIdentityJson(value: unknown): string {
   return JSON.stringify(value, (_key, entry: unknown) => entry && typeof entry === 'object' && !Array.isArray(entry)
     ? Object.fromEntries(Object.entries(entry).sort(([a], [b]) => a.localeCompare(b))) : entry)
 }

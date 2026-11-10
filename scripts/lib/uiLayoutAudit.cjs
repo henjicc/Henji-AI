@@ -44,4 +44,4 @@ async function auditPageRules(page, context = {}) {
   return mergeLayoutAudit(rules, layout, context)
 }
 
-module.exports = { LAYOUT_RULES, auditPageRules, loadLayoutAudit, mergeLayoutAudit }
+module.exports = { auditPageRules, loadLayoutAudit, mergeLayoutAudit }

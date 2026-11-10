@@ -11,13 +11,10 @@ export {
   createDocumentKindRegistry,
   defineSkeletonDocumentKind,
   documentNameForKind,
-  DocumentKindError,
   readableDocumentExtensions,
   usesLegacyDocumentExtension,
-  placeholderContentSchema,
   type DocumentKindDescriptor,
   type DocumentKindRegistry,
-  type DocumentStorageMode,
 } from './registry'
 
 /** 登记表：新增文档类型时在 kinds/ 下新增一个文件，再在这里登记一行。 */

@@ -470,16 +470,13 @@ function renderNoticesText(notices) {
 }
 
 module.exports = {
-  FORMAT_VERSION,
   NATIVE_CRATES,
-  PLATFORM_EXCLUDED_NPM_PACKAGES,
   RUST_TARGETS,
   buildNotices,
   collectCargoPackages,
   collectNpmPackages,
   createTextTable,
   isCopyleft,
-  licenseIdsOf,
   matchesPlatformList,
   normalizeLicenseExpression,
   normalizeRepositoryUrl,
@@ -489,5 +486,4 @@ module.exports = {
   renderNoticesText,
   sqliteBlessingFromHeader,
   sqliteVersionFromHeader,
-  standardLicenseText,
 }

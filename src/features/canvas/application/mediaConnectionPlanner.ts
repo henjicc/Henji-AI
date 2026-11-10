@@ -16,14 +16,14 @@ import {
   validateParamConnection,
 } from './graphValueResolver';
 
-export type MediaConnectionSkipReason =
+type MediaConnectionSkipReason =
   | 'source-not-media'
   | 'target-unsupported'
   | 'capacity-exceeded'
   | 'duplicate'
   | 'cycle';
 
-export interface MediaConnectionSkippedItem {
+interface MediaConnectionSkippedItem {
   sourceNodeId: string;
   reason: MediaConnectionSkipReason;
   mediaKind?: RowMediaKind;

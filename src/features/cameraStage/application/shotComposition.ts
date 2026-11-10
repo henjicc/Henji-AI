@@ -52,7 +52,7 @@ import { pointInsideObstacle, type StageObstacle } from './stageObstacles'
 
 const DEG = Math.PI / 180
 
-export const SHOT_LENS_FOCAL_LENGTH: Record<CameraStageShotLens, number> = { wide: 24, standard: 50, telephoto: 85 }
+const SHOT_LENS_FOCAL_LENGTH: Record<CameraStageShotLens, number> = { wide: 24, standard: 50, telephoto: 85 }
 const LENS_ORDER: readonly CameraStageShotLens[] = ['wide', 'standard', 'telephoto']
 
 /** 角度意图的仰角（度，从主体关键点看镜头）与避让时允许的范围。 */
@@ -121,7 +121,7 @@ export interface ShotSpec {
   obstacles: readonly StageObstacle[]
 }
 
-export type ShotAdjustment = NonNullable<z.infer<typeof cameraStageComposedShotSchema>['adjusted']>
+type ShotAdjustment = NonNullable<z.infer<typeof cameraStageComposedShotSchema>['adjusted']>
 
 export interface ShotSolution {
   camera: StageShotCamera
@@ -152,7 +152,7 @@ interface Candidate {
 }
 
 /** 焦距归到档位：35mm 以下算广角，70mm 以上算长焦。 */
-export function lensOfFocalLength(focal: number): CameraStageShotLens {
+function lensOfFocalLength(focal: number): CameraStageShotLens {
   return focal < 35 ? 'wide' : focal > 70 ? 'telephoto' : 'standard'
 }
 

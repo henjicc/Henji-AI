@@ -40,7 +40,7 @@ export interface VideoDecoderChildProcess {
   once(event: 'error', listener: (error: Error) => void): this
 }
 
-export type VideoDecoderSpawn = (executable: string) => VideoDecoderChildProcess
+type VideoDecoderSpawn = (executable: string) => VideoDecoderChildProcess
 
 export interface VideoDecoderRestartPolicy {
   /** 时间窗内允许的自动重启次数，超过后进入失败状态。 */

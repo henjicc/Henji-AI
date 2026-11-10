@@ -1,4 +1,4 @@
-export type FloatingPanelPlacement = 'above' | 'below'
+type FloatingPanelPlacement = 'above' | 'below'
 
 /** 同时供面板和提示框使用；尺寸超过边界时由调用方限制尺寸。 */
 export function clampFloatingAxis(position: number, size: number, start: number, end: number): number {

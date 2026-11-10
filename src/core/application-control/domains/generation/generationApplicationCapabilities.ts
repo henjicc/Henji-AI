@@ -4,13 +4,13 @@ import { APPLICATION_MEDIA_REFERENCE_GUIDANCE, APPLICATION_MEDIA_REFERENCE_KINDS
 import { canvasNodePlacementSchema } from '../canvas/canvasMutationApplicationCapabilities'
 
 
-export const generationDestinationSchema = z.discriminatedUnion('mode', [
+const generationDestinationSchema = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('history') }).strict(),
   z.object({ mode: z.literal('canvas'), documentId: z.string().min(1), sourceNodeIds: z.array(z.string().min(1)).default([]), placement: canvasNodePlacementSchema.optional() }).strict(),
 ])
 export type GenerationDestination = z.infer<typeof generationDestinationSchema>
 
-export const canvasGenerationResumeInputSchema = z.object({
+const canvasGenerationResumeInputSchema = z.object({
   taskId: z.string().min(1),
   documentId: z.string().min(1),
   sourceNodeId: z.string().min(1),

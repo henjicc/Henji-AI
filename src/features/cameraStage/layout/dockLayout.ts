@@ -5,7 +5,7 @@ const logger = createLogger('features.cameraStage.layout')
 
 /** dockview 布局存储键与默认布局构建（供容器与面板头汉堡菜单共用） */
 
-export const LAYOUT_STORAGE_KEY = 'henji.cameraStage.dockLayout.v2'
+const LAYOUT_STORAGE_KEY = 'henji.cameraStage.dockLayout.v2'
 
 /**
  * 面板标题。标题会随布局一起记进 localStorage，旧布局里存的是旧标题（如“资源管理器”），
@@ -46,7 +46,7 @@ export const cameraStageLayoutPresets = registerWorkspaceLayout({
   builtinPresets: [{ id: 'default', name: '默认', layout: defaultCameraStageLayout() }, { id: 'viewport', name: '专注视口', layout: defaultCameraStageLayout(true) }],
   readLegacy: () => { const raw = localStorage.getItem(LAYOUT_STORAGE_KEY); return raw ? JSON.parse(raw) as SerializedDockview : undefined },
 })
-export function resetLayout(_api: DockviewApi): void {
+function resetLayout(_api: DockviewApi): void {
   void cameraStageLayoutPresets.resetActive().catch(error => logger.warn('三维布局重置失败', { error }))
 }
 /** 布局入口只重置当前预设，不修改场景或视口来源。 */

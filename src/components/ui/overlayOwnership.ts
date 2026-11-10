@@ -21,7 +21,7 @@ import { UiFormRowLabelContext } from './formRowLabel'
  */
 
 export const UI_OVERLAY_ID_ATTRIBUTE = 'data-ui-overlay-id'
-export const UI_OVERLAY_DETACHED_ATTRIBUTE = 'data-ui-overlay-detached'
+const UI_OVERLAY_DETACHED_ATTRIBUTE = 'data-ui-overlay-detached'
 
 export type UiOverlayTargetRelation = 'self' | 'descendant' | 'outside'
 
@@ -134,7 +134,7 @@ export function hasOpenUiOverlayDescendant(overlayId: string): boolean {
 }
 
 /** 是否有打开中的模态后代层（祖先层在此期间不响应点外关闭）。 */
-export function hasOpenModalUiOverlayDescendant(overlayId: string): boolean {
+function hasOpenModalUiOverlayDescendant(overlayId: string): boolean {
   return [...openModalOverlays].some((id) => isAncestorOverlay(overlayId, id))
 }
 

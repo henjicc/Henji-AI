@@ -348,13 +348,13 @@ export function parseImageEditorV3TilePayload(input: unknown): TilePayload {
 }
 
 
-export type ImageDocumentThumbnailPayload = {
+type ImageDocumentThumbnailPayload = {
   bytes: Uint8Array
   extension: 'png' | 'webp'
   mediaType: 'image/png' | 'image/webp'
 }
 
-export interface ImageDocumentTargetPayload { id: string; path?: string }
+interface ImageDocumentTargetPayload { id: string; path?: string }
 export interface OpenImageDocumentPayload extends BasePayload {
   target: ImageDocumentTargetPayload
   recovery: 'ask' | 'restore' | 'discard'

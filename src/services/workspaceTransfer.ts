@@ -16,7 +16,7 @@ import { assetApplicationService } from '@/features/assets/application/assetAppl
 import { requireVideoEditInstance, type VideoEditInstance } from '@/features/videoEdit/application/videoEditService'
 
 const logger = createLogger('services.workspaceTransfer')
-export type VideoEditCanvasSource = { kind: 'frame'; frame: number } | { kind: 'clip'; clipId: string }
+type VideoEditCanvasSource = { kind: 'frame'; frame: number } | { kind: 'clip'; clipId: string }
 export interface VideoEditCanvasTransfer {
   projectId: string
   sequenceId: string

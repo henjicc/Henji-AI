@@ -33,7 +33,7 @@ export function getWebCacheActivity(): WebCacheActivity | undefined {
 }
 
 /** 按需由缓存录制调度器检查，不在实时网页打开或应用启动时抢占 GPU。 */
-export function getWebCacheCapabilityGate(): WebCacheCapabilityGate {
+function getWebCacheCapabilityGate(): WebCacheCapabilityGate {
   if (capability) return capability
   const logger = createMainLogger('main.web_source')
   const service = getVideoDecoderService()

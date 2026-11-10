@@ -15,7 +15,7 @@ export function decodeFileUrlPath(value: string): string {
   return process.platform === 'win32' && /^\/[A-Za-z]:/.test(decoded) ? decoded.slice(1) : decoded
 }
 
-export function decodeHenjiMediaPath(value: string): string {
+function decodeHenjiMediaPath(value: string): string {
   const encoded = value.trim().slice(HENJI_MEDIA_PREFIX.length)
   return decodeURIComponent(encoded)
 }

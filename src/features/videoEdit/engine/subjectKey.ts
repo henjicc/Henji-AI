@@ -20,7 +20,7 @@ import { subjectChokeDistance, subjectFeatherSigma } from '@/core/videoEdit/subj
 import { planGaussian } from '@/core/imaging/adjustments/gaussianPlan'
 import { Planner, ZERO, type VideoEditBuiltinPlan, type VideoEditBuiltinTexture } from './effectPlan'
 
-export const SUBJECT_KEY_ENTRIES = ['subject_choke', 'subject_key_gather', 'subject_fill_pull', 'subject_fill_push', 'subject_key_composite', 'subject_footprint'] as const
+const SUBJECT_KEY_ENTRIES = ['subject_choke', 'subject_key_gather', 'subject_fill_pull', 'subject_fill_push', 'subject_key_composite', 'subject_footprint'] as const
 /** 拉推法缩小到长边不超过它就停：最粗一级已经覆盖整个画面。 */
 const FILL_COARSEST = 8
 
@@ -50,7 +50,7 @@ export function planSubjectFootprint(width: number, height: number): VideoEditBu
 }
 
 /** `params` 已补齐默认值。“去掉主体”时保留量是 1 − 蒙版：收缩 / 扩展作用在保留的部分上，所以对人物蒙版反向。 */
-export function planSubjectKey(params: VideoEditBuiltinParams, width: number, height: number): VideoEditBuiltinPlan {
+function planSubjectKey(params: VideoEditBuiltinParams, width: number, height: number): VideoEditBuiltinPlan {
   const plan = new Planner(width, height)
   const invert = params.invert === true
   const choke = Number(params.choke ?? 0)
@@ -75,7 +75,7 @@ export function planSubjectKey(params: VideoEditBuiltinParams, width: number, he
   return { width, height, scratch: plan.scratch, passes: plan.passes, linearScratch: true }
 }
 
-export const SUBJECT_KEY_WGSL = `
+const SUBJECT_KEY_WGSL = `
 // 一维最大（扩展）/ 最小（收缩）值：a = (每步 u, 每步 v, 半径（像素，可带小数）, 1 扩展 / 0 收缩)，只看 alpha。
 // 半径的小数部分是最外一对取样的权重，参数连续变化时边缘连续移动。取样落在纹素中心，画面外按边缘像素延伸。
 fn subjectExtreme(a: f32, b: f32, grow: bool) -> f32 { return select(min(a, b), max(a, b), grow); }

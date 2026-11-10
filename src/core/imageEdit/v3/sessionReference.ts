@@ -1,5 +1,5 @@
-export type ImageEditDocumentRefV3 = `image-edit-v3:${string}`
-export type ImageEditPreviewRefV3 = `sha256:${string}`
+type ImageEditDocumentRefV3 = `image-edit-v3:${string}`
+type ImageEditPreviewRefV3 = `sha256:${string}`
 
 /**
  * 查看器等轻宿主只跨边界保存受管文档引用，不复制 V3 文档或完整像素。

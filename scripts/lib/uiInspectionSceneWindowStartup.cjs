@@ -109,4 +109,4 @@ function createWindowStartupScene() {
   }
 }
 
-module.exports = { WINDOWS_MAX_FRAME_INSET_DIP, createWindowStartupScene, inspectRestore, maximizedFrameInsets }
+module.exports = { WINDOWS_MAX_FRAME_INSET_DIP, createWindowStartupScene, maximizedFrameInsets }

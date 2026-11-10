@@ -35,7 +35,7 @@ interface TooltipContentProps extends Omit<React.HTMLAttributes<HTMLSpanElement>
 }
 
 /** text：文字说明气泡；media：悬停看大图，只有圆角图片与投影，不包气泡底和内边距。 */
-export type TooltipAppearance = 'text' | 'media'
+type TooltipAppearance = 'text' | 'media'
 
 const TOOLTIP_APPEARANCE_CLASS: Record<TooltipAppearance, string> = {
     text: 'whitespace-normal [overflow-wrap:anywhere] overflow-auto overscroll-contain text-left leading-5 bg-overlay ui-floating-edge border border-line-overlay rounded-field text-xs text-text1 px-3 py-1.5',

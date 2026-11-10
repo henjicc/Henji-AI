@@ -4,19 +4,19 @@ import { recordingScriptSchema } from './script'
 import { recordingDirectorSchema } from './director'
 
 const time = z.number().int().nonnegative().safe()
-export const recordingRangeSchema = z.object({ startUs: time, endUs: time }).strict().refine(v => v.endUs > v.startUs, '结束时间必须晚于开始时间')
+const recordingRangeSchema = z.object({ startUs: time, endUs: time }).strict().refine(v => v.endUs > v.startUs, '结束时间必须晚于开始时间')
 const range = { startUs: time, endUs: time }
-export const recordingTranscriptSchema = z.object({
+const recordingTranscriptSchema = z.object({
   id: z.string().min(1), ...range, text: z.string().max(20000), granularity: z.enum(['word', 'segment']),
   audioDocumentId: z.string().min(1).optional(), mediaId: z.string().min(1),
   protected: z.boolean().optional(),
 }).strict().refine(v => v.endUs > v.startUs)
-export const recordingStepSchema = z.object({
+const recordingStepSchema = z.object({
   id: z.string().min(1), ...range, title: z.string().min(1).max(120), description: z.string().max(4000),
   signal: z.enum(['capability', 'window', 'click', 'scene', 'speech', 'marker', 'start']),
   eventIds: z.array(z.string()).max(100),
 }).strict().refine(v => v.endUs > v.startUs)
-export const recordingCandidateSchema = z.object({
+const recordingCandidateSchema = z.object({
   id: z.string().min(1), ...range, kind: z.enum(['wait', 'pause', 'filler', 'mistake']),
   reason: z.string().min(1).max(1000), status: z.enum(['pending', 'accepted', 'rejected']),
   eventIds: z.array(z.string()).max(100),

@@ -102,4 +102,4 @@ function testSuiteOptions(mode, defaultExcludes = []) {
   return { include: ALL_TEST_PATTERNS, exclude: [...defaultExcludes, ...NATIVE_TEST_FILES], poolMatchGlobs: FORK_POOL_MATCH_GLOBS }
 }
 
-module.exports = { PERFORMANCE_TEST_FILES, GPU_TEST_FILES, IMAGE_EXPORT_TEST_FILES, NATIVE_TEST_FILES, FFMPEG_CLI_TEST_FILES, FORK_POOL_TEST_FILES, FORK_POOL_MATCH_GLOBS, ALL_TEST_PATTERNS, testSuiteForFile, testSuiteOptions }
+module.exports = { GPU_TEST_FILES, IMAGE_EXPORT_TEST_FILES, NATIVE_TEST_FILES, FFMPEG_CLI_TEST_FILES, FORK_POOL_TEST_FILES, FORK_POOL_MATCH_GLOBS, ALL_TEST_PATTERNS, testSuiteForFile, testSuiteOptions }

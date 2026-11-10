@@ -63,7 +63,7 @@ async function templateOperation<T>(projectId: string, work: (external: () => vo
   }
 }
 
-export function requireProjectTemplate(document: Pick<VideoEditDocument, 'templates'>, id: string): VideoEditProjectTemplate {
+function requireProjectTemplate(document: Pick<VideoEditDocument, 'templates'>, id: string): VideoEditProjectTemplate {
   const template = document.templates?.find(value => value.id === id)
   if (!template) throw new Error(`NOT_FOUND：工程里没有这个模板（${id}），请重新列出 video_edit.project_template。`)
   return template

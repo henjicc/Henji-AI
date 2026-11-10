@@ -7,7 +7,7 @@ import { boxIoU } from './yunet'
  * 剪辑里只需要区域，所以输出轴对齐框；旋转文字的框会稍大，不影响打码。
  */
 
-export const PPOCR_LONG_SIDE = 960
+const PPOCR_LONG_SIDE = 960
 
 export function ppocrInputSize(sourceWidth: number, sourceHeight: number): { width: number; height: number } {
   const scale = Math.max(Math.min(1, PPOCR_LONG_SIDE / Math.max(1, sourceWidth, sourceHeight)), 448 / Math.max(1, Math.min(sourceWidth, sourceHeight)))

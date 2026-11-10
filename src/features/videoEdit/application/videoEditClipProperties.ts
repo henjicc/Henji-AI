@@ -25,7 +25,7 @@ export function videoEditClipPropertyDefault(clip: Pick<VideoEditClip, 'kind'>, 
   return key === 'volume' && clip.kind === 'adjustment' ? 0 : DEFAULTS[key]
 }
 
-export function clampVideoEditClipProperty(key: VideoEditClipPropertyKey, value: number): number {
+function clampVideoEditClipProperty(key: VideoEditClipPropertyKey, value: number): number {
   if (!Number.isFinite(value)) throw new Error('数值无效。')
   const { min, max } = videoEditClipPropertyBounds(key)
   return Math.min(max, Math.max(min, value))

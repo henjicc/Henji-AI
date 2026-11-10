@@ -1,7 +1,7 @@
 import { createDefaultDiffusionOperationParams } from './diffusionParams';
 import type { DiffusionDensity, DiffusionMode, DiffusionOperationParams } from './types';
 
-export type DiffusionPresetIntensity = 'low' | 'medium' | 'high';
+type DiffusionPresetIntensity = 'low' | 'medium' | 'high';
 
 export type DiffusionPresetId =
   | 'black-mist-low'
@@ -15,14 +15,14 @@ export type DiffusionPresetId =
   | 'glow-high';
 
 /** 第三阶段已写入文档的预设 ID，读取时映射到当前中等强度预设。 */
-export type LegacyDiffusionPresetId = 'black-mist-soft' | 'white-mist-soft' | 'glow-soft';
+type LegacyDiffusionPresetId = 'black-mist-soft' | 'white-mist-soft' | 'glow-soft';
 export type DiffusionPresetSelectionId = DiffusionPresetId | LegacyDiffusionPresetId;
 
 /**
  * 预设就是「模式 × 档位」的调校基准，因此不再单独存 presetId：
  * mode + density 已经唯一确定一组基准值，再存一个 ID 只会和用户的手动微调打架。
  */
-export interface DiffusionPresetPatch {
+interface DiffusionPresetPatch {
   readonly strength: number;
   readonly glowRange: number;
   readonly highlightResponse: number;
@@ -162,7 +162,7 @@ export function applyDiffusionPreset(presetId: DiffusionPresetSelectionId): Diff
  * 取「模式 × 档位」对应的调校基准。用户切换模式或档位时套用它，
  * 因为同一组数值在黑柔和辉光下的观感差别很大，直接沿用上一模式的数值会很怪。
  */
-export function resolveDiffusionPreset(
+function resolveDiffusionPreset(
   mode: DiffusionMode,
   density: DiffusionDensity
 ): DiffusionPresetDefinition {

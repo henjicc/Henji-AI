@@ -12,7 +12,7 @@ import { videoEditFft } from '../videoEdit/fft'
  * 且长音频同样随机截取；这里只需百余行纯计算，按 Python 参考向量做一致性测试。
  */
 
-export const CLAP_SAMPLE_RATE = 48_000
+const CLAP_SAMPLE_RATE = 48_000
 export const CLAP_WINDOW_SAMPLES = 480_000
 export const CLAP_FRAMES = 1001
 export const CLAP_MEL_BINS = 64

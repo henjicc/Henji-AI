@@ -2,7 +2,7 @@ import { create } from 'zustand'
 
 export type CanvasNodeExecutionPhase = 'processing' | 'generating'
 
-export interface ActiveCanvasNodeExecution {
+interface ActiveCanvasNodeExecution {
   runId: string
   phase: CanvasNodeExecutionPhase
 }

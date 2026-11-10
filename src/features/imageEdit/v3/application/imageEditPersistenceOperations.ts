@@ -27,7 +27,7 @@ export function imageEditPersistenceAvailabilityV3(documentId: string, availabil
     remove: { ...availability.remove, available: false, reasons: [IMAGE_EDIT_PREVIEW_ONLY_REASON], blocks: [block] } }
 }
 
-export function imageEditPersistenceDocumentId(ref: ApplicationRef): string | null {
+function imageEditPersistenceDocumentId(ref: ApplicationRef): string | null {
   if (!ref.kind.startsWith('image_edit.') || !ref.id.startsWith('v3:')) return null
   return decodeURIComponent(ref.id.slice(3).split(':')[0])
 }

@@ -3,7 +3,7 @@ import type { CodeSourceSpan } from './contract'
 
 export interface CodeHeavyStructure { kind: string; cpuMs: number; sourceSpan: CodeSourceSpan }
 export interface CodeStructureCost extends CodeHeavyStructure { gpuMs: number; cpuShare: number; gpuShare: number }
-export interface CodeReuseStatistics { culledGroups: number; culledDraws: number; frameHits: number; subtreeHits: number; subtreeMisses: number; operations: number }
+interface CodeReuseStatistics { culledGroups: number; culledDraws: number; frameHits: number; subtreeHits: number; subtreeMisses: number; operations: number }
 /**
  * Canvas 图层这一帧的栅格情况（ES 模块作者运行时）：按作者图层计数。`reused` 沿用已上传的栅格，`redrawn` 重放录制的指令重画，
  * `direct` 录制不了、直接画；`video` 是其中画着逐帧变化输入（视频）的层。`uploads`/`uploadBytes` 是画布拷进纹理的次数与字节

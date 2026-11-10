@@ -10,7 +10,7 @@ import type {
  * 会话逻辑不依赖 React：它只调用 prompter，拿到用户的选择。
  */
 
-export type DocumentPromptRequest =
+type DocumentPromptRequest =
   | { key: number; type: 'saveName'; info: DocumentSaveNamePromptInfo; resolve: (saved: boolean) => void }
 
 interface DocumentPromptState {

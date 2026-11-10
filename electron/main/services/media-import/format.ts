@@ -9,7 +9,7 @@ export interface DetectedMediaFormat {
   durationProbe?: 'optional'
 }
 
-export const EXTENSION_FORMATS: Readonly<Record<string, DetectedMediaFormat>> = {
+const EXTENSION_FORMATS: Readonly<Record<string, DetectedMediaFormat>> = {
   '.png': { kind: 'image', mimeType: 'image/png', extension: 'png' },
   '.jpg': { kind: 'image', mimeType: 'image/jpeg', extension: 'jpg' },
   '.jpeg': { kind: 'image', mimeType: 'image/jpeg', extension: 'jpg' },

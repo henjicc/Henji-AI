@@ -74,7 +74,7 @@ export async function observeImageEditColorV3(documentId: string, options: { lay
 }
 
 /** Slider keys the shared MKL back-fit writes (same algorithm and fit as analyze_video_edit_color with referenceClipRef). */
-export const IMAGE_EDIT_COLOR_MATCH_KEYS = ['temperature_kelvin', 'tint', 'exposure', 'contrast', 'saturation', 'highlights', 'shadows'] as const
+const IMAGE_EDIT_COLOR_MATCH_KEYS = ['temperature_kelvin', 'tint', 'exposure', 'contrast', 'saturation', 'highlights', 'shadows'] as const
 export interface ImageEditColorSuggestion {
   parameters: Record<string, number>
   /** `merge`: automatic correction, merge into the layer's params. `replace`: a match starts from a neutral grade, so the

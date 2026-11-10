@@ -9,7 +9,7 @@ const fontDeclaration = z.object({
   text: z.array(z.string()).optional(), scripts: z.array(z.string().regex(/^(?:[A-Z][a-z]{3}|Emoji)$/)).optional(),
   bindings: z.array(z.object({ text: z.string().min(1), style: z.string().min(1) }).strict()).optional(),
 }).strict()
-export interface TextFontDiagnostic { start: number; end: number; message: string; severity: 'warning' | 'error' }
+interface TextFontDiagnostic { start: number; end: number; message: string; severity: 'warning' | 'error' }
 export interface StaticTextFonts {
   usesText?: boolean
   declaration: TextFontDeclaration

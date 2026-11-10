@@ -90,7 +90,7 @@ export function appendVideoEditItems(projectId: string, itemIds: string[], seque
 export function createVideoEditSequenceFromItem(projectId: string, itemId: string, settings: VideoEditSequenceSettings = {}): string {
   return createVideoEditSequenceFromItems(projectId, [itemId], settings)
 }
-export function createVideoEditSequenceFromItems(projectId: string, itemIds: string[], settings: VideoEditSequenceSettings = {}): string {
+function createVideoEditSequenceFromItems(projectId: string, itemIds: string[], settings: VideoEditSequenceSettings = {}): string {
   const instance = requireVideoEditInstance(projectId)
   const sequence = makeVideoEditItemSequence(instance.document, itemIds, settings, readVideoEditCodeMetadata(instance, instance.document))
   editVideoProject(projectId, document => { const styled = withDefaultVideoEditStyle(document, sequence); return { ...styled.document, sequences: [...document.sequences, styled.sequence] } })

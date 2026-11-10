@@ -101,7 +101,7 @@ export interface ParamPresentationEntry {
   aspectRatioDisplay?: Record<string, { label: string; icon?: string }>
 }
 
-export interface ModelPresentationMeta {
+interface ModelPresentationMeta {
   /** 模型名称（支持国际化） */
   name: I18nText
 

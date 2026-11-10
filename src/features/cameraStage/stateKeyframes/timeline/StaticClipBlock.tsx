@@ -7,7 +7,7 @@ import { formatStateKeyframeTimecode } from './stateKeyframeTimecodeFormat'
 
 const KEYFRAME_HIT_SIZE = 24
 
-export interface ClipBlockPointerHandlers {
+interface ClipBlockPointerHandlers {
   onPointerDown: (event: React.PointerEvent) => void
   onPointerMove: (event: React.PointerEvent) => void
   onPointerUp: (event: React.PointerEvent) => void

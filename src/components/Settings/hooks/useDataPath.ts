@@ -19,12 +19,12 @@ import {
 
 const logger = createLogger('components.Settings.hooks.useDataPath')
 
-export type AlertMessage = {
+type AlertMessage = {
   key: string
   params?: Record<string, string | number>
 }
 
-export interface AlertState {
+interface AlertState {
   open: boolean
   message: AlertMessage
 }
@@ -36,7 +36,7 @@ export interface MigrationProgress {
   file: string
 }
 
-export interface ConfirmMoveState {
+interface ConfirmMoveState {
   open: boolean
   mode: 'change' | 'reset'
   /** 实际会成为作品目录的文件夹。 */

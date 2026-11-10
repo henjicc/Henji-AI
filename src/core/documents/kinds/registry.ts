@@ -12,7 +12,7 @@ import type { DocumentKindId, DocumentListSummary, FolderLocale } from '../types
  * 显示名、图标、打开方式等界面部分由渲染层另行登记。
  */
 
-export type DocumentStorageMode = 'json' | 'package' | 'folder'
+type DocumentStorageMode = 'json' | 'package' | 'folder'
 
 export interface DocumentKindDescriptor<TContent = unknown> {
   readonly id: DocumentKindId
@@ -76,7 +76,7 @@ export function usesLegacyDocumentExtension(kind: Pick<DocumentKindDescriptor, '
   return documentNameFromFileName(fileName, kind.extension) === null && documentNameForKind(kind, fileName) !== null
 }
 
-export class DocumentKindError extends Error {
+class DocumentKindError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'DocumentKindError'
@@ -135,7 +135,7 @@ export function createDocumentKindRegistry(kinds: readonly DocumentKindDescripto
 }
 
 /** 内容 schema 尚未补全的类型（各工具接入任务补全）：任意 JSON 对象。 */
-export const placeholderContentSchema = z.record(z.string(), z.unknown())
+const placeholderContentSchema = z.record(z.string(), z.unknown())
 export type PlaceholderContent = z.infer<typeof placeholderContentSchema>
 
 export interface SkeletonKindOptions {

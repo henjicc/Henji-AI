@@ -9,7 +9,7 @@ import type { LocalExecutionProvider, LocalInferenceLog } from '../providers'
 import type { BreathDetectionJob, BreathDetectionJobResult } from './protocol'
 
 /** 口播通常几分钟到一小时；3 小时以上不做（整段 16 kHz 单声道常驻内存约 690 MB）。 */
-export const BREATH_MAX_SECONDS = 3 * 60 * 60
+const BREATH_MAX_SECONDS = 3 * 60 * 60
 
 export interface BreathDetectionDependencies {
   openModel(model: LocalInferenceModelFile, providers: readonly LocalExecutionProvider[], shape: string): Promise<LocalModelRunner>

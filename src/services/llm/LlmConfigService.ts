@@ -498,7 +498,7 @@ export class LlmConfigService {
 
 let instance: LlmConfigService | null = null
 
-export function getLlmConfigService(): LlmConfigService {
+function getLlmConfigService(): LlmConfigService {
   if (!instance) {
     instance = new LlmConfigService()
   }

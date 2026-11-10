@@ -109,4 +109,4 @@ async function prepareYogaAuthorBatch(root, graph, output, batch = 0, options = 
   return entries
 }
 
-module.exports = { YOGA_AUTHOR_BATCHES, readYogaAuthors, yogaInstanceParameters, prepareYogaAuthorBatch }
+module.exports = { readYogaAuthors, yogaInstanceParameters }

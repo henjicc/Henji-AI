@@ -23,12 +23,12 @@ export type ComponentType =
 /**
  * 布局类型
  */
-export type LayoutType = 'vertical' | 'horizontal' | 'grid'
+type LayoutType = 'vertical' | 'horizontal' | 'grid'
 
 /**
  * 联动效果类型
  */
-export type LinkageEffect = 'filter' | 'reset' | 'update' | 'disable' | 'hide'
+type LinkageEffect = 'filter' | 'reset' | 'update' | 'disable' | 'hide'
 
 /**
  * 组件配置
@@ -56,7 +56,7 @@ export interface ComponentConfig {
 /**
  * 组件联动配置
  */
-export interface ComponentLinkage {
+interface ComponentLinkage {
   /** 源组件 ID */
   source: string
 

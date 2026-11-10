@@ -10,7 +10,7 @@ import { createLogger } from '@/core/logging'
 import { rollbackStepWrites } from '@/core/application-control/execution/persistence'
 const logger = createLogger('features.applicationControl.creativeIntent')
 
-export function explanationBodyRecord(ref: ApplicationRef) {
+function explanationBodyRecord(ref: ApplicationRef) {
   const domain = ref.kind.split('.')[0] as IntentDomain, split = ref.id.lastIndexOf(':')
   if (!['video_edit', 'image_edit'].includes(domain) || ref.kind !== `${domain}.explanation_body` || split < 1) throw new Error('请使用讲解正文目录返回的完整引用。')
   const host = intentHost({ kind: `${domain}.document`, id: ref.id.slice(0, split) })

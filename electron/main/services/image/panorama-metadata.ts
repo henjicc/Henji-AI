@@ -7,8 +7,8 @@ const JPEG_XMP_HEADER = Buffer.from('http://ns.adobe.com/xap/1.0/\0', 'ascii')
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
 const PNG_XMP_KEYWORD = 'XML:com.adobe.xmp'
 
-export type PanoramaMetadataFormat = 'png' | 'jpeg' | 'webp'
-export type PanoramaMetadataStatus = 'valid' | 'absent' | 'invalid' | 'unsupported'
+type PanoramaMetadataFormat = 'png' | 'jpeg' | 'webp'
+type PanoramaMetadataStatus = 'valid' | 'absent' | 'invalid' | 'unsupported'
 
 export interface PanoramaImageMetadataDto {
   projectionType: 'equirectangular'
@@ -132,7 +132,7 @@ export async function readPanoramaMetadataFromImage(
   }
 }
 
-export function parsePanoramaXmp(xmp: string): PanoramaImageMetadataDto {
+function parsePanoramaXmp(xmp: string): PanoramaImageMetadataDto {
   const projectionType = readXmpString(xmp, 'ProjectionType')
   if (projectionType !== 'equirectangular') {
     throw new Error('GPano ProjectionType must be equirectangular')

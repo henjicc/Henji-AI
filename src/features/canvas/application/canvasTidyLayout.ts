@@ -8,11 +8,11 @@ import { nearbyTidyDeltas, type NearbyRect } from './canvasTidyNearby'
 /** nearby（就近整理）排第一：用户说“整理一下”时默认它，只理顺不重排 */
 export const CANVAS_TIDY_MODES = ['nearby', 'flow', 'align', 'distribute', 'grid'] as const
 export type CanvasTidyMode = typeof CANVAS_TIDY_MODES[number]
-export interface CanvasTidyPlacement { nodeId: string; position: { x: number; y: number } }
+interface CanvasTidyPlacement { nodeId: string; position: { x: number; y: number } }
 export interface CanvasTidyCandidate { mode: CanvasTidyMode; placements: CanvasTidyPlacement[]; unavailable?: string }
 
 /** 尚未测量的节点按类型估值参与整理，不因同一回合刚建的节点而失败。 */
-export function canvasTidySize(node: CanvasNode): { width: number; height: number } {
+function canvasTidySize(node: CanvasNode): { width: number; height: number } {
   return resolveCanvasNodeLayoutSize(node)
 }
 

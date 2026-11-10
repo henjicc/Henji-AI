@@ -3,7 +3,7 @@ import { refKey, type ClockSegment, type Timeline } from './contracts'
 import { alignExplanationEntry, type PointerEvidence } from './alignment'
 import type { ExplanationEvent, ExplanationSession, TranscriptEntry } from './schema'
 
-export type IntentSlot = 'target' | 'source' | 'destination' | 'dwell' | 'exit'
+type IntentSlot = 'target' | 'source' | 'destination' | 'dwell' | 'exit'
 export interface DeicticCandidate { evidenceSeqs: number[]; targetRefs: ApplicationRef[]; point: [number, number]; timeline: Timeline | null; pointer: PointerEvidence | null }
 export interface DeicticMention {
   id: string; text: string; slot: IntentSlot; entry: TranscriptEntry; entries: TranscriptEntry[]; negated: boolean

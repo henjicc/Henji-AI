@@ -23,17 +23,17 @@ const logger = createLogger('features.videoEdit.styleLibrary')
 const STYLE_FORMAT = PERSISTENCE_FORMATS.find(format => format.id === 'video-style-library')!
 const TEMPLATE_FORMAT = PERSISTENCE_FORMATS.find(format => format.id === 'video-template-library')!
 /** 内置风格按“克制 → 热闹 → 纪实”排列（与 Frameflow 档位表同序）。 */
-export const BUILTIN_STYLE_IDS = ['restrained', 'tech-info', 'explainer', 'variety', 'promo', 'warm-documentary'] as const
+const BUILTIN_STYLE_IDS = ['restrained', 'tech-info', 'explainer', 'variety', 'promo', 'warm-documentary'] as const
 const MIGRATION_STORAGE_KEYS = { styles: 'video-edit-style-kits', templates: 'video-edit-title-templates' } as const
 
 /** 样片派生的媒体文件（本机绝对路径）；没有渲染过时为空。 */
-export interface VideoEditStyleMedia { preview?: string; thumbnail?: string; anchors: string[] }
+interface VideoEditStyleMedia { preview?: string; thumbnail?: string; anchors: string[] }
 export interface VideoEditLibraryStyle {
   style: VideoEditStyle; builtin: boolean; dir: string; media: VideoEditStyleMedia
   /** 说明书或样片改过、还没重新渲染（预览与版本号仍是上一次渲染的）。 */
   stale: boolean
 }
-export interface VideoEditLibraryTemplate { template: VideoEditTemplate; file: string }
+interface VideoEditLibraryTemplate { template: VideoEditTemplate; file: string }
 export interface VideoEditStyleMediaBytes { preview?: Uint8Array; thumbnail?: Uint8Array; anchors: Uint8Array[] }
 
 /** 文件访问边界：正式环境走桌面 PAL，测试注入隔离目录。 */
@@ -52,7 +52,7 @@ export interface VideoEditStyleLibraryIo {
   preserve?(path: string, name?: string): Promise<void>
   removeCache?(path: string): Promise<void>
 }
-export const desktopStyleLibraryIo: VideoEditStyleLibraryIo = {
+const desktopStyleLibraryIo: VideoEditStyleLibraryIo = {
   root: async () => join(await appLocalDataDir(), 'video-edit-styles'),
   builtinRoot: async () => { const index = await getBundledResourcePath('video-edit-styles/index.json'); return index ? index.replace(/[\\/]index\.json$/, '') : null },
   join, exists, readText: readTextFile, writeText: writeTextFile, readBytes: readFile, writeBytes: writeFile,
@@ -74,7 +74,7 @@ const padded = (index: number): string => String(index + 1).padStart(2, '0')
  * 目录：<应用数据>/video-edit-styles/styles/<ID>/{style.json, preview.mp4, thumbnail.jpg, anchors/NN.jpg}，
  * templates/<ID>.json。读写全部经这里串行，写完通知界面与助手目录刷新。
  */
-export class VideoEditStyleLibrary {
+class VideoEditStyleLibrary {
   private styles = new Map<string, VideoEditLibraryStyle>()
   private templates = new Map<string, VideoEditLibraryTemplate>()
   private loading?: Promise<void>

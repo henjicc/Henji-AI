@@ -5,7 +5,7 @@ import type { AnnotationMatrixV3 } from './annotationGeometryV3'
 import { resolveAnnotationLayerToOutputMatrixV3 } from './annotationGeometryV3'
 import { findImageEditLayerLocationV3 } from './layerTreeV3'
 
-export interface EditableImageEditorRasterLayerV3 {
+interface EditableImageEditorRasterLayerV3 {
   layer: ImageEditRasterLayerV3
   matrix: AnnotationMatrixV3
   inverseMatrix: AnnotationMatrixV3

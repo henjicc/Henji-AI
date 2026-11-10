@@ -16,7 +16,7 @@ export interface SettingsSearchEntry {
 
 export const SETTINGS_SEARCH_INDEX: readonly SettingsSearchEntry[] = SETTINGS_REGISTRATION.search
 
-export function settingsTabOfSection(sectionId: SettingsSectionId): SettingsTabId {
+function settingsTabOfSection(sectionId: SettingsSectionId): SettingsTabId {
   return settingsTarget(sectionId).tab
 }
 

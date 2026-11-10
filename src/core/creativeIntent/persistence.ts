@@ -7,7 +7,7 @@ import { videoEditClipCurvesSchema } from '../videoEdit/keyframes'
 import { motionIntentSchema } from './recipe'
 
 /** Resource IDs are opaque; only this directory carries relocatable file locations. */
-export const creativeIntentResourceSchema = resourceRefSchema.extend({
+const creativeIntentResourceSchema = resourceRefSchema.extend({
   path: z.string().min(1), kind: z.enum(['page', 'candidate', 'recipe', 'audio', 'visual']),
   sourceDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/).optional(),
 }).strict()

@@ -7,7 +7,7 @@ import type {
   MaskStroke,
 } from './types';
 
-export const MASK_POINT_MIN_DISTANCE = 0.75;
+const MASK_POINT_MIN_DISTANCE = 0.75;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -210,7 +210,7 @@ export function hasPaintedMask(document: MaskEditorDocument): boolean {
   return document.strokes.some((stroke) => stroke.mode === 'paint' && stroke.points.length > 0);
 }
 
-export interface MaskHistoryDelta {
+interface MaskHistoryDelta {
   index: number;
   removed: MaskMark[];
   added: MaskMark[];

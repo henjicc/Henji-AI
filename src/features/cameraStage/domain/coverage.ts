@@ -9,7 +9,7 @@
 import type { CameraStageCoverageRole } from '@/core/application-control/domains/cameraStage/cameraStageCoverageSchemas'
 import type { StageObject, StageVec3 } from './sceneTypes'
 
-export type StageCoverageRole = CameraStageCoverageRole
+type StageCoverageRole = CameraStageCoverageRole
 
 export interface StageCoverageSetup {
   cameraId: string
@@ -23,7 +23,7 @@ export interface StageCoverageSetup {
   size: string
 }
 
-export interface StageCoverageLine {
+interface StageCoverageLine {
   speakerId: string
   startTime: number
   endTime: number

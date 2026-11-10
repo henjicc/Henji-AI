@@ -1,5 +1,5 @@
-export type ImageEditorSnapAxisV3 = 'x' | 'y'
-export type ImageEditorSnapAnchorV3 = 'start' | 'center' | 'end'
+type ImageEditorSnapAxisV3 = 'x' | 'y'
+type ImageEditorSnapAnchorV3 = 'start' | 'center' | 'end'
 
 export interface ImageEditorSnapBoundsV3 {
   left: number

@@ -19,7 +19,7 @@ export interface StageSceneExtent {
 }
 
 /** 默认地面边长，也是小场景的地面边长 */
-export const STAGE_GROUND_MIN_SIZE = 160
+const STAGE_GROUND_MIN_SIZE = 160
 
 export function resolveStageSceneExtent(objects: readonly StageObject[]): StageSceneExtent {
   let minX = Infinity

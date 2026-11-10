@@ -18,7 +18,7 @@ export const APPLICATION_CAPABILITY_CATALOG_VERSION = 'application-capabilities/
 export { applicationRefSchema }
 export type { ApplicationRef }
 
-export interface ApplicationCapabilityVerificationContract {
+interface ApplicationCapabilityVerificationContract {
   /** 第一版统一以 Gateway 观察到的强类型 Effect Receipt 作为最低可执行验证。 */
   kind: 'effect_receipt'
   /** 写能力必须至少产生一项非 observe/navigate 的真实 Effect。 */

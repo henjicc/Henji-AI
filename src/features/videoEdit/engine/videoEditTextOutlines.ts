@@ -11,14 +11,14 @@ export interface TextAppearance {
   bounds: { x: number; y: number; width: number; height: number }
   draw(context: OffscreenCanvasRenderingContext2D): void
 }
-export type TextAppearanceContext = { [TEXT_APPEARANCE_DRAW]?: (appearance: TextAppearance) => void }
+type TextAppearanceContext = { [TEXT_APPEARANCE_DRAW]?: (appearance: TextAppearance) => void }
 /** 指纹只录内容身份；真实栅格尺寸在重放阶段决定。 */
 export function drawTextAppearance(context: OffscreenCanvasRenderingContext2D, appearance: TextAppearance): void {
   const record = (context as TextAppearanceContext)[TEXT_APPEARANCE_DRAW]
   if (record) record(appearance)
   else appearance.draw(context)
 }
-export type TextOutlineContext = { [TEXT_OUTLINE_DRAW]?: (outline: TextOutline, stroke: boolean) => void }
+type TextOutlineContext = { [TEXT_OUTLINE_DRAW]?: (outline: TextOutline, stroke: boolean) => void }
 export function drawTextOutline(context: OffscreenCanvasRenderingContext2D, outline: TextOutline, stroke = false): void {
   const record = (context as TextOutlineContext)[TEXT_OUTLINE_DRAW]
   if (record) record(outline, stroke)

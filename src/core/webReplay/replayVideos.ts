@@ -7,7 +7,7 @@ export const REPLAY_CLEAN_SUFFIX = '.clean.mp4'
 
 const REPLAY_VIDEO = /^replay-.*\.mp4$/
 
-export function isReplayVideoName(name: string): boolean { return REPLAY_VIDEO.test(name) }
+function isReplayVideoName(name: string): boolean { return REPLAY_VIDEO.test(name) }
 export function isCleanReplayName(name: string): boolean { return isReplayVideoName(name) && name.endsWith(REPLAY_CLEAN_SUFFIX) }
 
 /** 最新的重演视频；clean 给 true 时只在干净画面里挑。 */

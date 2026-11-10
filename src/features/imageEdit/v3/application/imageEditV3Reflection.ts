@@ -64,7 +64,7 @@ function property(
   }
 }
 
-export const IMAGE_EDIT_V3_DOCUMENT_PROPERTIES: ApplicationPropertyDescriptor[] = [
+const IMAGE_EDIT_V3_DOCUMENT_PROPERTIES: ApplicationPropertyDescriptor[] = [
   ...fieldDescriptors(IMAGE_EDIT_V3_DOCUMENT_FIELDS),
   ...fieldDescriptors(IMAGE_EDIT_HISTORY_FIELDS_V3),
   ...fieldDescriptors(IMAGE_EDIT_WORKFLOW_FIELDS_V3),
@@ -79,7 +79,7 @@ export const IMAGE_EDIT_V3_DOCUMENT_PROPERTIES: ApplicationPropertyDescriptor[] 
   }),
 ]
 
-export const IMAGE_EDIT_V3_RESOURCE_PROPERTIES: ApplicationPropertyDescriptor[] = [
+const IMAGE_EDIT_V3_RESOURCE_PROPERTIES: ApplicationPropertyDescriptor[] = [
   property('image_edit.resource', 'document_ref', '所属文档', {
     kind: 'ref', refKinds: ['image_edit.document'],
   }),

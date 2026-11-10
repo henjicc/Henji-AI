@@ -1,6 +1,5 @@
 import { combineRegionCoverage } from '../../../imaging/regions/coverage';
 import { rasterizeRegionGeometry as rasterizeSelectionCoverage } from '../../../imaging/regions/rasterize';
-export { rasterizeSelectionCoverage };
 import {
   assertFloat32MaskTile,
   createFloat32MaskTile,

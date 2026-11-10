@@ -5,7 +5,7 @@ import type * as Three from 'three'
  * 实时与路径追踪读同一份参数：磨砂、金属、薄膜金属、亚克力、发光体直接是经典材质参数，两边一致；
  * 实心玻璃实时用两次折射的节点材质（three 自带的透射只折一次、看起来是空心的），路径追踪时换成同参数的经典透射材质（真实体积）。
  */
-export const SPACE_MATERIAL_PRESETS = ['matte', 'metal', 'thin-film', 'acrylic', 'glass', 'emissive'] as const
+const SPACE_MATERIAL_PRESETS = ['matte', 'metal', 'thin-film', 'acrylic', 'glass', 'emissive'] as const
 export type SpaceMaterialPreset = typeof SPACE_MATERIAL_PRESETS[number]
 export interface SpaceMaterialParams {
   /** 颜色：'#rrggbb' 或 0xrrggbb。磨砂、金属、薄膜金属的底色，发光体的光色。 */
@@ -59,7 +59,7 @@ export interface SpaceGlassShared {
   environments: Set<TslNode & { value: Three.Texture }>; environmentIntensity: TslNode & { value: number }; environmentRotation: TslNode & { value: number }
   placeholder: Three.Texture
 }
-export const SPACE_GLASS_LAYER = 30
+const SPACE_GLASS_LAYER = 30
 const shared = new WeakMap<object, SpaceGlassShared>()
 export function spaceGlassShared(library: Library, tsl: Tsl): SpaceGlassShared {
   let value = shared.get(library)

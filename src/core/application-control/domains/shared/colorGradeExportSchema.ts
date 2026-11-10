@@ -9,7 +9,7 @@ export const colorGradeExportInputShape = {
   path: z.string().trim().min(1).max(4096).describe('要写出的本机绝对路径，扩展名与 format 一致（.cube 或 .cdl）。'),
   overwrite: z.boolean().optional().describe('目标文件已存在时覆盖；先问用户。'),
 }
-export const colorGradeExportAccuracySchema = z.object({
+const colorGradeExportAccuracySchema = z.object({
   meanDeltaE: z.number().nonnegative(), maxDeltaE: z.number().nonnegative(), samples: z.number().int().positive(),
 }).strict().describe('写出后用正式解析器读回，512 个测试色与正式调色比较的 CIEDE2000 色差；<1 基本看不出，2–3 一眼可见。')
 export const colorGradeExportOutputShape = {

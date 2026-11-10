@@ -14,7 +14,7 @@ import { parseFloat32WavHeader } from './wav'
 
 export interface DecodedAudio { sampleRate: number; channels: Float32Array[] }
 
-export interface SeparationResampler {
+interface SeparationResampler {
   /** 写入一段（每声道一段，等长）；重采样结果经 onOutput 按顺序交付。 */
   write(block: readonly Float32Array[]): Promise<void>
   /** 输入结束，等全部输出交付完。 */

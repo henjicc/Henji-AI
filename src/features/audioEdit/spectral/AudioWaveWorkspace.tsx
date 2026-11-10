@@ -39,7 +39,7 @@ const TOOLS: Array<{ id: AudioEditorTool; label: string; icon: React.ReactNode }
   { id: 'hand', label: '平移 · H', icon: <Hand /> },
 ]
 /** 从属参数带：工具（模式）在左，显示方式与画笔大小随后；选区动作只在有选区时出现。 */
-export function AudioWaveToolbar({ editor, selection, disabled, actions, onEditSelection }: {
+function AudioWaveToolbar({ editor, selection, disabled, actions, onEditSelection }: {
   editor: AudioWaveEditorState
   selection: AudioEditRange | null
   disabled: boolean

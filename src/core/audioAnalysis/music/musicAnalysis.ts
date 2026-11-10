@@ -104,7 +104,7 @@ export function barPositionsFromDownbeats(beats: readonly number[], downbeats: r
 }
 
 /** 无下拍信息（谱通量回退）时，取平均起音强度最大的相位作为下拍。 */
-export function barPositionsFromAccents(strengths: readonly number[], beatsPerBar = 4): number[] {
+function barPositionsFromAccents(strengths: readonly number[], beatsPerBar = 4): number[] {
   const sums = new Array<number>(beatsPerBar).fill(0), counts = new Array<number>(beatsPerBar).fill(0)
   strengths.forEach((value, i) => { sums[i % beatsPerBar] += value; counts[i % beatsPerBar]++ })
   let phase = 0
@@ -121,7 +121,7 @@ function dct(values: Float64Array, coefficient: number): number {
 interface BeatFeatures { chroma: number[]; timbre: number[]; loudness: number[] }
 
 /** 每拍跨度 [t_i, t_{i+1}) 内的平均色度（归一化）、梅尔倒谱 c1..c12 与 RMS 响度。 */
-export function beatFeatures(beats: readonly number[], spectrogram: MusicSpectrogram, mono: Float32Array, durationSeconds: number, sampleRate = BEAT_THIS_SAMPLE_RATE): BeatFeatures {
+function beatFeatures(beats: readonly number[], spectrogram: MusicSpectrogram, mono: Float32Array, durationSeconds: number, sampleRate = BEAT_THIS_SAMPLE_RATE): BeatFeatures {
   const chroma: number[] = [], timbre: number[] = [], loudness: number[] = []
   const typical = median(beats.slice(1).map((beat, i) => beat - beats[i])) || 0.5
   const mel = new Float64Array(BEAT_THIS_MELS)
@@ -164,7 +164,7 @@ function combined(features: BeatFeatures, count: number): Float64Array[] {
  * Foote（2000）棋盘核新奇度：拍级自相似矩阵上滑动高斯渐隐的棋盘核，峰值即段落边界，吸附到最近的下拍。
  * 段落标签按段均值特征贪心聚类（余弦相似 ≥ 0.9 视为同一类）。
  */
-export function musicSections(features: BeatFeatures, positions: readonly number[], beatsPerBar: number): MusicAnalysis['sections'] {
+function musicSections(features: BeatFeatures, positions: readonly number[], beatsPerBar: number): MusicAnalysis['sections'] {
   const count = features.loudness.length
   if (count < beatsPerBar * 8) return [{ startBeat: 0, label: 'A' }]
   const vectors = combined(features, count)
@@ -239,9 +239,9 @@ export interface BuildMusicAnalysisInput {
   sampleRate?: number
 }
 
-export const MUSIC_MIN_BEATS = 16
-export const MUSIC_MIN_REGULARITY = 0.75
-export const MUSIC_MIN_COVERAGE = 0.5
+const MUSIC_MIN_BEATS = 16
+const MUSIC_MIN_REGULARITY = 0.75
+const MUSIC_MIN_COVERAGE = 0.5
 
 /** 汇总一首曲子的结构分析：细化拍点、编小节位置、算每拍特征与段落，并判定是否适合重构。 */
 export function buildMusicAnalysis(input: BuildMusicAnalysisInput): MusicAnalysis {

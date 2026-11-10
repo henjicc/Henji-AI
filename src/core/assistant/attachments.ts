@@ -12,9 +12,9 @@ export const AGENT_ATTACHMENT_MIME_TYPES: Record<'image' | 'video' | 'audio', re
   video: ['video/mp4', 'video/webm', 'video/quicktime'],
   audio: ['audio/wav', 'audio/x-wav', 'audio/mpeg', 'audio/mp3'],
 }
-export const agentAttachmentModalitySchema = z.enum(AGENT_INPUT_MODALITIES)
+const agentAttachmentModalitySchema = z.enum(AGENT_INPUT_MODALITIES)
 
-export const agentMediaAttachmentSchema = z.object({
+const agentMediaAttachmentSchema = z.object({
   schemaVersion: z.literal(AGENT_ATTACHMENT_SCHEMA_VERSION),
   mediaRef: z.string().regex(/^asset:[^\s]+$/),
   modality: agentAttachmentModalitySchema,

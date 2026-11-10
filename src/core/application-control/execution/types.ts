@@ -65,13 +65,13 @@ export function directOnlyEffectContract(): ApplicationEffectContract {
   return { direct: [], cascades: [] }
 }
 
-export interface ApplicationSubmittedStepResult {
+interface ApplicationSubmittedStepResult {
   status: 'submitted'
   taskRef: ApplicationRef
   resultingRevisions: Record<string, number>
 }
 
-export interface ApplicationWaitingUserStepResult {
+interface ApplicationWaitingUserStepResult {
   status: 'waiting_user'
   reason: string
   resumeRef: string

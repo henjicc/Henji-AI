@@ -42,7 +42,7 @@ export function subscribeCodeImageGeneration(listener: () => void): () => void {
 export function codeImageGenerationRevision(): number { return revision }
 function publish(): void { revision++; for (const listener of listeners) listener() }
 function update(job: CodeImageGenerationJob, patch: Partial<CodeImageGenerationJob>): void { Object.assign(job, patch); publish() }
-export function sameCodeImageParameter(target: VideoEditCodeTarget, key: string, candidate: Pick<VideoEditCodeTarget, 'sequenceId' | 'clipId' | 'versionId' | 'effectId'> & { parameterKey: string }): boolean {
+function sameCodeImageParameter(target: VideoEditCodeTarget, key: string, candidate: Pick<VideoEditCodeTarget, 'sequenceId' | 'clipId' | 'versionId' | 'effectId'> & { parameterKey: string }): boolean {
   return target.sequenceId === candidate.sequenceId && target.clipId === candidate.clipId && target.versionId === candidate.versionId && target.effectId === candidate.effectId && key === candidate.parameterKey
 }
 export function codeImageGenerationJobs(target: VideoEditCodeTarget, key: string): CodeImageGenerationJob[] {

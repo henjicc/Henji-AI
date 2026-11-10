@@ -13,7 +13,7 @@ import { buildAudioEditCaptionGroups } from '@/core/audioEdit/captions'
 import { VIDEO_EDIT_FADE_MIN_FRAMES, setVideoEditClipFade } from '@/core/videoEdit/fades'
 import { videoEditSubtitleStyleSchema } from '@/core/videoEdit/subtitleStyle'
 
-export function recordingMovieEffect(id: string, name: string, params: Record<string, number | boolean | string> = {}, mask?: VideoEditEffectMask): VideoEditEffect {
+function recordingMovieEffect(id: string, name: string, params: Record<string, number | boolean | string> = {}, mask?: VideoEditEffectMask): VideoEditEffect {
   return { id: crypto.randomUUID(), name, enabled: true, amount: 1, builtin: { id, params }, ...(mask ? { mask } : {}) }
 }
 function shapeClip(document: VideoEditDocument, sequence: VideoEditSequence, name: string, graphic: NonNullable<VideoEditClip['graphic']>, start: number, duration: number, track: number): VideoEditClip {

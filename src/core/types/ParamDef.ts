@@ -199,7 +199,7 @@ export interface BaseParamDef {
  * }
  * ```
  */
-export interface TextParamEditorVariableDef {
+interface TextParamEditorVariableDef {
   key: string
   label: I18nText
   group?: I18nText

@@ -9,7 +9,7 @@ const level = (value: number): number => Math.max(-120, Math.min(0, Math.round(v
 const MAX_FRAMES = 2_160_000 // Six hours; about 35 MB of numeric band data at the upper bound.
 
 /** Keep channels separate: downmixing opposite-phase stereo can manufacture silence. */
-export function speechEnergyFilter(options: SpeechEnergyOptions): { filter: string; complex: boolean } {
+function speechEnergyFilter(options: SpeechEnergyOptions): { filter: string; complex: boolean } {
   const stats = (name: string): string => `astats=metadata=1:reset=1:measure_perchannel=none:measure_overall=RMS_level${name === 'wide' ? '+Number_of_samples' : ''},ametadata@${name}=print${name === 'wide' ? '' : ':key=lavfi.astats.Overall.RMS_level'}`
   const measure = `aresample=16000,asetpts=N/SR/TB,asetnsamples=n=160:p=0,${stats('wide')},highpass=f=2500,${stats('high')}`
   if (!options.channels) return { filter: measure, complex: false }

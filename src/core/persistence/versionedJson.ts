@@ -4,7 +4,7 @@ import { formatMigrations } from './formatMigrations'
 import { assertPersistenceVersion, PersistenceError, persistenceForwardFields, persistenceMinReaderVersion, upgradePersistenceContent, type PersistenceContract } from './migrations'
 import { restoreForwardFields, type ForwardField } from './forwardCompat'
 
-export interface VersionedPersistenceJson { version: number; minReaderVersion?: number; content: unknown }
+interface VersionedPersistenceJson { version: number; minReaderVersion?: number; content: unknown }
 /** 每个本机库只有一份当前内容：记住最近一次前向读取，保存时带回未知字段与原版本戳。 */
 const forwardReads = new Map<string, { version: number; minReaderVersion: number; fields: readonly ForwardField[] }>()
 export const LOCAL_LIBRARY_FORMATS: Readonly<Record<string, { id: string; name: string; version: number; minReaderVersion?: number }>> = {

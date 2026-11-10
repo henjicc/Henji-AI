@@ -25,7 +25,7 @@ let warned = false
 let subscribed = false
 
 /** 网页内容指纹还在读取：指纹与读好后的不同，不能拿来回收或渲染预览文件。 */
-export class VideoEditWebContentPending extends VideoEditCodeMetadataPending {
+class VideoEditWebContentPending extends VideoEditCodeMetadataPending {
   constructor(ready: Promise<void>) { super(ready); this.message = '正在读取网页内容…' }
 }
 

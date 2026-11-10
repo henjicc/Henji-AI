@@ -1,6 +1,6 @@
 import type { CanvasToolPlugin, ToolFieldSchema, ToolOptions } from '@/features/canvas/tools';
 
-export interface ToolEditorBaseProps {
+interface ToolEditorBaseProps {
   plugin: CanvasToolPlugin;
   options: ToolOptions;
   onOptionsChange: (next: ToolOptions) => void;

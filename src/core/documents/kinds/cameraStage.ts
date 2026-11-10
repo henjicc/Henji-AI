@@ -181,7 +181,7 @@ function migrateCameraCutsV7(content: LooseRecord): LooseRecord {
   return next
 }
 
-export const cameraStageContentSchema = z.object({
+const cameraStageContentSchema = z.object({
   objects: z.array(stageObjectSchema),
   activeCameraId: z.string().nullable(),
   /** 场景级设置；缺字段或不合法时工具按默认值补齐。 */

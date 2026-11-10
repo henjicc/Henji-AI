@@ -106,7 +106,7 @@ export function readVideoEditCodeProgram(owner: object, document: VideoEditDocum
   readVideoEditCodeMetadata(owner, document)(instance)
   return states.get(owner)!.get(instance.versionId)!.program
 }
-export async function ensureVideoEditCodeDocumentMetadata(owner: object, document: VideoEditDocument, signal?: AbortSignal, versions?: ReadonlySet<string>): Promise<void> {
+async function ensureVideoEditCodeDocumentMetadata(owner: object, document: VideoEditDocument, signal?: AbortSignal, versions?: ReadonlySet<string>): Promise<void> {
   for (const instance of videoEditCodeReferences(document)) {
     if (versions && !versions.has(instance.versionId)) continue
     signal?.throwIfAborted()

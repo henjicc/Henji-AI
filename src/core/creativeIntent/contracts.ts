@@ -4,7 +4,7 @@ import { idSchema, safeClockSchema, finiteSchema, digestSchema, poseSchema, moti
 export { idSchema, safeClockSchema, finiteSchema, digestSchema, pointSchema, affineSchema, poseSchema, motionPropertySchema, monoSpanSchema, timelineSchema, dualClockShape, dualClockSchema, clockAnchorSchema, clockSegmentSchema, clockSegmentsSchema, clockEventIssue, timelineSpanSchema, refKey, type Pose, type MotionProperty, type Timeline, type ClockAnchor, type ClockSegment, type TimelineSpan } from '../captureLog/clock'
 
 /** Proposed pure contract. Not a registered persistence format until P1 storage wiring. */
-export const CREATIVE_INTENT_VERSION = 1 as const
+const CREATIVE_INTENT_VERSION = 1 as const
 export const sampleSchema = z.object({ ...dualClockShape, sampleId: idSchema, takeRef: idSchema, targetRef: applicationRefSchema, pose: poseSchema, gestureKind: z.enum(['place', 'move', 'rotate', 'scale', 'path']), quality: z.enum(['presented', 'estimated', 'unavailable']), confirmed: z.boolean(), event: z.enum(['down', 'up', 'dwell-start', 'dwell-end', 'turn', 'sample']) }).strict().superRefine((v, ctx) => {
   if (v.timeline === null && !v.unavailableReason || v.timeline !== null && v.unavailableReason) ctx.addIssue({ code: 'custom', message: '双时钟可用性不一致' })
   if (v.quality === 'presented' && v.timeline === null && v.unavailableReason !== 'static') ctx.addIssue({ code: 'custom', message: '缺呈现不可标精确' })
@@ -16,7 +16,7 @@ export type CreativeIntentResourceRef = z.infer<typeof resourceRefSchema>
 export type CreativeIntentPageRef = z.infer<typeof pageRefSchema>
 export const pinSchema = z.object({ id: idSchema, sampleId: idSchema, targetRef: applicationRefSchema, properties: z.array(motionPropertySchema).min(1), timeLocked: z.boolean(), valueLocked: z.boolean() }).strict().refine(v => new Set(v.properties).size === v.properties.length && (v.timeLocked || v.valueLocked), 'pin 属性重复或没有锁定任何维度')
 export type MotionPin = z.infer<typeof pinSchema>
-export const targetSchema = z.object({ ref: applicationRefSchema, ownerRef: applicationRefSchema, editable: z.array(motionPropertySchema), basePose: poseSchema, baseDigest: digestSchema, geometryDigest: digestSchema, compositionSize: z.tuple([finiteSchema.positive(), finiteSchema.positive()]) }).strict()
+const targetSchema = z.object({ ref: applicationRefSchema, ownerRef: applicationRefSchema, editable: z.array(motionPropertySchema), basePose: poseSchema, baseDigest: digestSchema, geometryDigest: digestSchema, compositionSize: z.tuple([finiteSchema.positive(), finiteSchema.positive()]) }).strict()
 export type MotionTarget = z.infer<typeof targetSchema>
 export const takeSchema = z.object({ id: idSchema, intent: z.enum(['navigate', 'demonstrate']), pathDemonstration: z.boolean(), placement: z.literal(true).optional(), monoSpanUs: monoSpanSchema, direction: z.union([z.literal(-1), z.literal(0), z.literal(1)]), visitRef: idSchema.nullable(), timelineRange: z.tuple([safeClockSchema, safeClockSchema]).nullable(), samplePages: z.array(pageRefSchema), geometryDigest: digestSchema }).strict()
 export type MotionTake = z.infer<typeof takeSchema>

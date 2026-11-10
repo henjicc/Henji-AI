@@ -20,7 +20,7 @@ import { validateParamPresentation } from './paramPresentationValidator'
 /**
  * 验证错误类
  */
-export class ModelValidationError extends Error {
+class ModelValidationError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'ModelValidationError'

@@ -8,7 +8,7 @@ import { readRecordingUnderstanding } from './recordingUnderstandingService'
 
 export const UNDERSTANDING_ENTITY = 'screen_recording.understanding'
 export const UNDERSTANDING_PROPERTY = `${UNDERSTANDING_ENTITY}.result`
-export function understandingSchemaRef(kind: 'entity' | 'property', id: string): ApplicationSchemaRef {
+function understandingSchemaRef(kind: 'entity' | 'property', id: string): ApplicationSchemaRef {
   const hash = [...`${id}:5`].reduce((v, c) => (v * 33 + c.charCodeAt(0)) >>> 0, 5381).toString(16)
   return { catalogVersion: APPLICATION_CAPABILITY_CATALOG_VERSION, kind, id, version: 5, digest: `sha256:${hash.padEnd(64, hash).slice(0, 64)}` }
 }
@@ -18,7 +18,7 @@ export function editableRecordingUnderstanding(value: RecordingUnderstanding): z
   const { confirmed: _confirmed, ...director } = value.director
   return { ...value, director }
 }
-export const understandingFields: ApplicationFieldDefinition<RecordingUnderstanding, { value?: RecordingUnderstanding }>[] = [{
+const understandingFields: ApplicationFieldDefinition<RecordingUnderstanding, { value?: RecordingUnderstanding }>[] = [{
   propertyId: UNDERSTANDING_PROPERTY, storeActions: [],
   descriptor: { id: UNDERSTANDING_PROPERTY, entityType: UNDERSTANDING_ENTITY, version: 5, title: '文字稿、步骤、剪辑与打码候选',
     description: '先读取完整结果，再 set 校正标题、说明、时间、章节及剪辑候选 pending/accepted/rejected；privacy.candidates 是敏感信息候选，status accepted 表示确认打码，rejected 表示忽略，pending 尚未确认。支持逐条或全部确认，保留完整其余字段。微秒时间与原录制同钟，确认不会删除原片。operationScript 保存可编辑的录制操作脚本；只能修改已捕获步骤的标题、受支持属性参数和停留时间，不可移除阻断或扩大目标范围。导演会话还含 director.goal、narration（逐步旁白与预计画面）与 voice；修改脚本或音色保存后即可直接执行。只能使用有限脚本属性，不接受代码。可用返回的 undoRef 撤销。',

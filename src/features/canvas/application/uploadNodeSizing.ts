@@ -4,7 +4,7 @@ import type { CanvasNodeData } from '../domain/canvasNodes';
 import type { ImageNodeSize } from './imageNodeSizing';
 import { resolveAspectRatioValue } from './imageNodeSizing';
 
-export const UPLOAD_NODE_DEFAULT_EDGE = 320;
+const UPLOAD_NODE_DEFAULT_EDGE = 320;
 const UPLOAD_NODE_DEFAULT_MAX_EDGE = 640;
 const UPLOAD_NODE_MIN_EDGE = 64;
 export const UPLOAD_AUDIO_ASPECT_RATIO = '2:1';

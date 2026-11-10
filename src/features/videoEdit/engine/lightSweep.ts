@@ -14,7 +14,7 @@ import type { LayerEffectReference } from '@/core/videoEdit/layerEffectGeometry'
 import type { VideoEditBuiltinPlan } from './videoEditBuiltinEffectPasses'
 import { appendGlow, createGlowPlanner } from './glow'
 
-export const LIGHT_SWEEP_ENTRIES = ['sweep_image', 'sweep_light'] as const
+const LIGHT_SWEEP_ENTRIES = ['sweep_image', 'sweep_light'] as const
 const n = (params: VideoEditBuiltinParams, key: string): number => Number(params[key] ?? 0)
 
 /** sRGB 编码的 #rrggbb → 线性光。 */
@@ -39,7 +39,7 @@ export function contentBox(width: number, height: number, context?: LayerEffectR
 }
 
 /** `params` 已补齐默认值；`split` 为图层拆输出。 */
-export function planLightSweep(params: VideoEditBuiltinParams, width: number, height: number, context?: LayerEffectReference, split = false): VideoEditBuiltinPlan {
+function planLightSweep(params: VideoEditBuiltinParams, width: number, height: number, context?: LayerEffectReference, split = false): VideoEditBuiltinPlan {
   const glow = createGlowPlanner(width, height, context)
   const progress = n(params, 'progress') / 100, intensity = n(params, 'intensity') / 100
   if (intensity <= 0 || progress <= 0 || progress >= 1) { glow.pass('copy', 'input', 'output'); return glow.plan }
@@ -69,7 +69,7 @@ export function planLightSweep(params: VideoEditBuiltinParams, width: number, he
   return glow.plan
 }
 
-export const LIGHT_SWEEP_WGSL = `
+const LIGHT_SWEEP_WGSL = `
 // a = (扫动方向, 内容框中心)，b = (光（线性，乘过亮度）, 光带中心的位置)，c = (半宽, 核心发白, 抖动, 单色)，layer = (内容原点, 光带边缘开始变暗处 0..1, 0)。
 fn sweepLight(v: Vertex) -> vec3f {
  let s = dot(v.position.xy - u.a.zw, u.a.xy);

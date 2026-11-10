@@ -138,7 +138,7 @@ function syncFromSession(record: InstanceRecord): void {
 }
 
 /** 把一个已打开的文档会话接成实例（同步）：读内容、附着到会话、同步名称与保存状态、会话结束时自动拆掉。 */
-export function bindAudioEditSession(session: DocumentSession): AudioEditProjectInstance {
+function bindAudioEditSession(session: DocumentSession): AudioEditProjectInstance {
   const existing = records.get(session.id)
   if (existing && existing.instance.session === session && !session.isEnded) return existing.instance
   existing?.dispose()

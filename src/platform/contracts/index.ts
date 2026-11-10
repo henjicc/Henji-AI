@@ -83,31 +83,6 @@ export interface PlatformRuntime {
   videoEditExport: VideoEditExportPlatform
 }
 
-export type {
-  AiRuntimePlatform,
-  LlmRuntimePlatform,
-  GenerationHistoryPlatform,
-  PresetsPlatform,
-  SettingsPlatform,
-  CustomModelsPlatform,
-  SystemPlatform,
-  MediaPlatform,
-  ImagePlatform,
-  ImageEditorV3Platform,
-  VideoPlatform,
-  ClipboardPlatform,
-  DragDropPlatform,
-  CameraStageRenderPlatform,
-  WindowPlatform,
-  LoggingPlatform,
-  UpdaterPlatform,
-  AssetLibraryPlatform,
-  AssistantPlatform,
-  AudioEditPlatform,
-  VideoFramesPlatform,
-  VideoDecoderPlatform,
-  DocumentsPlatform,
-}
 export * from './aiRuntime'
 export * from './llmRuntime'
 export * from './localRecords'

@@ -6,7 +6,7 @@ import {
   type ImageEditorViewportPanV3,
 } from '../editor/viewportNavigationV3'
 
-export interface ImageEditorLayerDragStateV3 {
+interface ImageEditorLayerDragStateV3 {
   layerId: string
   overLayerId: string | null
 }

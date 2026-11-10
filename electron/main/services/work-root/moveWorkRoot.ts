@@ -27,7 +27,7 @@ export class WorkRootMoveError extends Error {
   }
 }
 
-export interface MoveWorkRootFileOps {
+interface MoveWorkRootFileOps {
   copyFile(source: string, target: string): Promise<void>
   rename(source: string, target: string): Promise<void>
 }

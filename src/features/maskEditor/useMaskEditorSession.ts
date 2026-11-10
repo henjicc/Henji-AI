@@ -37,7 +37,7 @@ interface UseMaskEditorSessionOptions {
   onConfirm?: (result: MaskEditorResult) => void | Promise<void>;
 }
 
-export function defaultMaskBrushSize(width: number, height: number): number {
+function defaultMaskBrushSize(width: number, height: number): number {
   return Math.min(256, Math.max(12, Math.round(Math.min(width, height) * 0.04)));
 }
 

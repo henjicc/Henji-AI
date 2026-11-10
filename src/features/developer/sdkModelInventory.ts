@@ -502,7 +502,7 @@ export async function checkGenerationParamDelivery(modelId: string): Promise<Sdk
 }
 
 /** 参考价用的示例素材指标：按时长、像素计价的模型拿它算，免得都显示成缺价格。 */
-export const SAMPLE_PRICING_MEDIA = { image: { width: 1024, height: 1024, fileSizeBytes: 1_048_576 }, video: { width: 1280, height: 720, durationSeconds: 5 }, audio: { durationSeconds: 10 } } as const
+const SAMPLE_PRICING_MEDIA = { image: { width: 1024, height: 1024, fileSizeBytes: 1_048_576 }, video: { width: 1280, height: 720, durationSeconds: 5 }, audio: { durationSeconds: 10 } } as const
 const SAMPLE_PRICING_READERS: PricingMediaMetadataReaders = {
   image: async () => SAMPLE_PRICING_MEDIA.image,
   video: async () => SAMPLE_PRICING_MEDIA.video,

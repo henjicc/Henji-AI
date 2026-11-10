@@ -10,5 +10,4 @@ export type {
   SharedFieldKey,
   SharedModeKey,
   SharedOptionKey,
-  SharedTextPath,
 } from './modelText'

@@ -2,7 +2,7 @@ import { exists, mkdir, toDisplaySrc, writeFile } from '@/platform/desktopApi'
 import { getVideoThumbnailCachePath } from './thumbnailCachePaths'
 import type { CachedThumbnailResult } from './thumbnailCacheImage'
 
-export async function generateAndCacheVideoThumbnail(videoPath: string, videoUrl: string): Promise<string> {
+async function generateAndCacheVideoThumbnail(videoPath: string, videoUrl: string): Promise<string> {
   const { getThumbnailsPath } = await import('@/utils/dataPath')
 
   const cachePath = await getVideoThumbnailCachePath(videoPath)

@@ -39,7 +39,7 @@ const logger = createLogger('workspaces.GenerationWorkspace.hooks.useTaskGenerat
 type GenerationProgressCallback = NonNullable<Parameters<GenerationService['generate']>[2]>
 type GenerationProgressStatus = Parameters<GenerationProgressCallback>[0]
 
-export interface UseTaskGenerationMessages {
+interface UseTaskGenerationMessages {
   testModeIntercepted: string
   missingInput: string
   genericGenerateFailed: string

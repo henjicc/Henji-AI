@@ -29,7 +29,7 @@ const historyLogger = createLogger('features.imageEdit.v3.history');
 
 type SessionHistoryEntry = { commandId: string; commandIndex: number; selectionBefore?: ImageEditSelectionSessionV3 | null; selectionAfter?: ImageEditSelectionSessionV3 | null; projection?: ReturnType<typeof projectImageEditHistoryCommandV3> } | { selectionCommandId: number; before: ImageEditSelectionSessionV3 | null; after: ImageEditSelectionSessionV3 | null };
 
-export type ImageEditPreviewOverrideKindV3 =
+type ImageEditPreviewOverrideKindV3 =
   | 'parameter'
   | 'crop'
   | 'transform'

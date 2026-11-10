@@ -12,7 +12,7 @@ import type { EffectShaderBlock } from './effectPlanner'
  */
 export const COLOR_MATH_BLOCK: EffectShaderBlock = { name: 'color-math', wgsl: COLOR_MATH_WGSL }
 export const EFFECT_MATH_BLOCK: EffectShaderBlock = { name: 'effect-math', wgsl: EFFECT_SHADER_MATH_WGSL }
-export const BASIC_EFFECT_BLOCK: EffectShaderBlock = { name: 'builtin-abi', wgsl: BASIC_EFFECT_WGSL }
+const BASIC_EFFECT_BLOCK: EffectShaderBlock = { name: 'builtin-abi', wgsl: BASIC_EFFECT_WGSL }
 export const EFFECT_SHADER_PRELUDE = [COLOR_MATH_BLOCK, EFFECT_MATH_BLOCK, BASIC_EFFECT_BLOCK] as const
 export const EFFECT_SHARED_ENTRIES = BASIC_EFFECT_ENTRIES
 export const EFFECT_UNFILTERED_SHARED_ENTRIES = ['gaussian_copy', 'gaussian_linear', 'gaussian_encoded', 'gaussian_blur', 'gaussian_resample'] as const

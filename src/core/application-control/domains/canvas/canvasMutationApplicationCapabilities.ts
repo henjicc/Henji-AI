@@ -909,7 +909,7 @@ const disconnectCanvasEdge = defineApplicationCapability({
   }] },
 })
 
-export const EXPORT_IMAGE_EDIT_TARGET_TO_CANVAS_CAPABILITY_ID = 'export_image_edit_target_to_canvas'
+const EXPORT_IMAGE_EDIT_TARGET_TO_CANVAS_CAPABILITY_ID = 'export_image_edit_target_to_canvas'
 
 const canvasDocumentRefSchema = applicationRefSchema.extend({
   kind: z.literal('canvas.document'),

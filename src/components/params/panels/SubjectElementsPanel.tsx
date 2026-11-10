@@ -21,7 +21,7 @@ import { importLocalMedia } from '@/services/localMediaImport'
 import { resolveImageDisplayUrl } from '@/services/imageSource'
 import { ImageUpload } from '../upload/ImageUpload'
 
-export interface SubjectElementsPanelConfig {
+interface SubjectElementsPanelConfig {
   naming: 'indexed' | 'named'
   maxItems: number
   maxVideoItems: number

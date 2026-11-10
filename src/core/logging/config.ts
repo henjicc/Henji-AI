@@ -46,7 +46,7 @@ export function getLogConfig(): LogConfig {
   return logConfig
 }
 
-export function setLogConfig(partial: Partial<LogConfig>): LogConfig {
+function setLogConfig(partial: Partial<LogConfig>): LogConfig {
   logConfig = {
     ...logConfig,
     ...partial,

@@ -10,7 +10,7 @@ import { VIDEO_EDIT_SEQUENCE_LIMITS } from '@/core/videoEdit/sequenceSize'
 import { VIDEO_EDIT_EXPORT_AUDIO_BITRATES } from '../engine/videoEditExportEncoder'
 import { hardwareEncodeLimitation } from '@/services/mediaCache/hardwareCapabilities'
 
-export type ExportSection = 'video' | 'advanced' | 'audio' | 'loudness' | 'captions' | 'general'
+type ExportSection = 'video' | 'advanced' | 'audio' | 'loudness' | 'captions' | 'general'
 const expansion = new WeakMap<object, ExportSection[]>()
 export function VideoEditExportField({ label, info, children, lock }: { label: string; info?: string; children: ReactNode; lock?: ReactNode }): React.ReactElement {
   return <UiFormRow label={label} info={info} density="compact" trailing={lock ?? null}>{children}</UiFormRow>

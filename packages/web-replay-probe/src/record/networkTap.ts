@@ -5,7 +5,7 @@ import { nowUs, type EventQueue } from './events'
 export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 
 /** Marks a call that the seam wrapper already records, so the window.fetch tap does not record it twice. */
-export const SEAM_MARK = '__henjiWebReplaySeam'
+const SEAM_MARK = '__henjiWebReplaySeam'
 
 let nextId = 1
 let pendingSeam = 0

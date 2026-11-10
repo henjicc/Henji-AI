@@ -1,7 +1,7 @@
 import { VIDEO_EDIT_TRANSITION_PRESETS, type VideoEditTransitionKind } from '@/core/videoEdit/transitions'
 
 /** 从效果面板拖出过渡预设：拖动数据带上种类；拖动中（dragover 读不到数据）由这里记住正在拖的预设。 */
-export const VIDEO_EDIT_TRANSITION_DRAG_TYPE = 'application/x-henji-video-edit-transition'
+const VIDEO_EDIT_TRANSITION_DRAG_TYPE = 'application/x-henji-video-edit-transition'
 let active: { projectId: string; kind: VideoEditTransitionKind } | null = null
 export function startVideoEditTransitionDrag(dataTransfer: DataTransfer, projectId: string, kind: VideoEditTransitionKind): void {
   dataTransfer.setData(VIDEO_EDIT_TRANSITION_DRAG_TYPE, kind)

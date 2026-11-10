@@ -174,12 +174,12 @@ export interface StageGroundSettings {
   checkerDarkColor: string
 }
 
-export interface StageSkySettings {
+interface StageSkySettings {
   color: string
   environmentImageUrl: string | null
 }
 
-export interface StageSunlightSettings {
+interface StageSunlightSettings {
   enabled: boolean
   intensity: number
   timeOfDay: number
@@ -205,11 +205,11 @@ export interface StageNameLabelSettings {
 }
 
 /** 最终渲染设置：摄像机画面与导出成片共用的成像方式 */
-export interface StageRenderSettings {
+interface StageRenderSettings {
   style: StageRenderStyle
 }
 
-export interface StageDisplaySettings {
+interface StageDisplaySettings {
   showNameLabels: boolean
   nameLabel: StageNameLabelSettings
 }

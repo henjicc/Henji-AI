@@ -71,12 +71,12 @@ export class VideoDecoderError extends Error {
   }
 }
 
-export interface VideoDecoderRational {
+interface VideoDecoderRational {
   num: number
   den: number
 }
 
-export interface VideoDecoderAdapter {
+interface VideoDecoderAdapter {
   description: string
   vendorId: string
   deviceId: string
@@ -87,9 +87,9 @@ export interface VideoDecoderAdapter {
 }
 
 /** `sharedTexture.importSharedTexture` 支持的像素格式。 */
-export type VideoSharedFormat = 'nv12' | 'nv16' | 'p010le' | 'rgba' | 'bgra' | 'rgbaf16'
+type VideoSharedFormat = 'nv12' | 'nv16' | 'p010le' | 'rgba' | 'bgra' | 'rgbaf16'
 
-export type VideoDecoderD3D11Summary =
+type VideoDecoderD3D11Summary =
   | {
       available: true
       adapter: VideoDecoderAdapter
@@ -128,7 +128,7 @@ export interface VideoDecoderHello {
 }
 
 /** 原生服务的资源预算（3.1）：解码显存登记、硬解会话与会话数上限。 */
-export interface VideoDecoderBudgetStats {
+interface VideoDecoderBudgetStats {
   vramLimitBytes: number
   vramReservedBytes: number
   vramPeakReservedBytes: number
@@ -145,7 +145,7 @@ export interface VideoDecoderLimitOverrides {
 }
 
 /** Electron `ColorSpace` 结构（原生服务按格式给出）。 */
-export interface VideoFrameColorSpace {
+interface VideoFrameColorSpace {
   primaries: string
   transfer: string
   matrix: string
@@ -178,7 +178,7 @@ export interface VideoDecoderStreamStarted {
   setupMs: number
 }
 
-export type VideoDecoderStreamCounters = VideoFrameNativeStreamCounters
+type VideoDecoderStreamCounters = VideoFrameNativeStreamCounters
 
 export interface VideoDecoderStreamStopped {
   streamId: string
@@ -221,7 +221,7 @@ export interface VideoDecoderFrameEvent {
   request?: VideoFrameRequestTag
 }
 
-export interface VideoDecoderStreamEndedEvent {
+interface VideoDecoderStreamEndedEvent {
   event: 'stream_ended'
   streamId: string
   reason: 'completed' | 'error'
@@ -229,7 +229,7 @@ export interface VideoDecoderStreamEndedEvent {
   counters: VideoDecoderStreamCounters
 }
 
-export interface VideoDecoderFrameMissingEvent {
+interface VideoDecoderFrameMissingEvent {
   event: 'frame_missing'
   streamId: string
   scheduleId: string
@@ -237,7 +237,7 @@ export interface VideoDecoderFrameMissingEvent {
   reason: 'no_picture' | 'decode_error' | 'superseded'
 }
 
-export interface VideoDecoderScheduleDoneEvent {
+interface VideoDecoderScheduleDoneEvent {
   event: 'schedule_done'
   streamId: string
   scheduleId: string
@@ -248,7 +248,7 @@ export interface VideoDecoderScheduleDoneEvent {
 
 export type VideoDecoderEvent = VideoDecoderFrameEvent | VideoDecoderStreamEndedEvent | VideoDecoderFrameMissingEvent | VideoDecoderScheduleDoneEvent
 
-export interface VideoDecoderVideoStreamInfo {
+interface VideoDecoderVideoStreamInfo {
   width: number
   height: number
   pixelFormat: string | null
@@ -272,7 +272,7 @@ export interface VideoDecoderVideoStreamInfo {
   hdr: boolean
 }
 
-export interface VideoDecoderAudioStreamInfo {
+interface VideoDecoderAudioStreamInfo {
   sampleRate: number
   channels: number
   channelLayout: string | null
@@ -280,7 +280,7 @@ export interface VideoDecoderAudioStreamInfo {
   bitsPerSample: number | null
 }
 
-export interface VideoDecoderStreamInfo {
+interface VideoDecoderStreamInfo {
   index: number
   kind: 'video' | 'audio' | 'subtitle' | 'data' | 'attachment' | 'unknown'
   codec: string | null

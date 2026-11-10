@@ -45,7 +45,7 @@ export class TrackingError extends Error {
 
 const CHUNK = 32
 /** 物体框跟踪的解码尺寸：按显示比例，长边不超过 1280（搜索区缩到 256，大于这个尺寸收益很小）。 */
-export function vitFrameSize(display: { width: number; height: number }): { width: number; height: number } {
+function vitFrameSize(display: { width: number; height: number }): { width: number; height: number } {
   const scale = Math.min(1, 1280 / Math.max(1, display.width, display.height))
   return { width: Math.max(16, Math.round(display.width * scale)), height: Math.max(16, Math.round(display.height * scale)) }
 }
@@ -304,7 +304,7 @@ async function trackBoxes(job: TrackingJob, deps: TrackingDependencies, stored: 
 
 // ==================== 形状（EfficientTAM） ====================
 
-export function etamParts(job: { models: LocalInferenceModelFile[]; providers: LocalExecutionProvider[] }, deps: Pick<TrackingDependencies, 'openModel'>): Promise<{ session: EfficientTamSession; provider: LocalExecutionProvider }> {
+function etamParts(job: { models: LocalInferenceModelFile[]; providers: LocalExecutionProvider[] }, deps: Pick<TrackingDependencies, 'openModel'>): Promise<{ session: EfficientTamSession; provider: LocalExecutionProvider }> {
   const open = (name: LocalInferenceModelName): Promise<LocalModelRunner> => deps.openModel(name === 'etam_mask_decoder'
     ? { ...modelOf(job, name), extraOutputs: [{ name: ETAM_CANDIDATES_OUTPUT, elementType: 1, dims: [1, 4, 128, 128] }] }
     : modelOf(job, name), job.providers, 'etam-512')

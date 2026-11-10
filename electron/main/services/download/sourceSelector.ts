@@ -11,11 +11,11 @@
  */
 
 export type DownloadRegion = 'domestic' | 'global'
-export type DownloadSourcePreference = 'auto' | DownloadRegion
+type DownloadSourcePreference = 'auto' | DownloadRegion
 
-export const DOWNLOAD_REGIONS: readonly DownloadRegion[] = ['domestic', 'global']
+const DOWNLOAD_REGIONS: readonly DownloadRegion[] = ['domestic', 'global']
 
-export type ProbeFetch = (url: string, init: { method: 'HEAD'; signal: AbortSignal; redirect: 'manual' }) => Promise<unknown>
+type ProbeFetch = (url: string, init: { method: 'HEAD'; signal: AbortSignal; redirect: 'manual' }) => Promise<unknown>
 
 export interface DownloadSourceSelectorOptions {
   /** 每个区域一个小探测地址（任何 HTTP 响应都算可达）。 */

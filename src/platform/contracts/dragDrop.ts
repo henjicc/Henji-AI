@@ -1,6 +1,6 @@
 /** target：松手处的元素，接收方据此判断是不是落在自己身上。 */
-export type DragDropFileHandler = (files: File[], target: EventTarget | null) => void
-export type DragStateHandler = (isDragging: boolean) => void
+type DragDropFileHandler = (files: File[], target: EventTarget | null) => void
+type DragStateHandler = (isDragging: boolean) => void
 
 export interface DragDropPlatform {
   /** 拖出：把本地文件拖到桌面/外部应用；Electron 走 webContents.startDrag（仅支持已存在的本地文件）。 */

@@ -1,6 +1,6 @@
 export type ImageEditorDiagnosticHostV3 = 'full' | 'quick' | 'canvas-edit' | 'mask'
 
-export interface ImageEditorDiagnosticLayerSummaryV3 {
+interface ImageEditorDiagnosticLayerSummaryV3 {
   raster: number
   annotation: number
   effect: number

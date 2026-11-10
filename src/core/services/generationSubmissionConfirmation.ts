@@ -5,7 +5,7 @@ import { applicationPaidOperationReceipt, hasApplicationPaidApproval } from '../
 import type { PaidOperationReceipt } from '../application-control/paidApproval'
 import { prepareGenerationPaidApproval } from '@/services/paidApproval'
 
-export interface GenerationSubmissionConfirmationRequest {
+interface GenerationSubmissionConfirmationRequest {
   type: 'warning'
   title: string
   message: string

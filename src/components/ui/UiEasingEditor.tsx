@@ -5,7 +5,7 @@ import { clampParameter, parameterKeyStep, parameterPosition, useParameterGestur
 import { UI_PARAMETER_HANDLE_CLASS, UI_PARAMETER_HANDLE_RADIUS, UI_PARAMETER_SURFACE_CLASS } from './styleTokens'
 
 export type UiCubicBezier = [number, number, number, number]
-export interface UiEasingPreset { value: string; label: string; curve: UiCubicBezier }
+interface UiEasingPreset { value: string; label: string; curve: UiCubicBezier }
 export interface UiEasingEditorProps extends ParameterControlProps<string | UiCubicBezier> { presets: readonly UiEasingPreset[]; customLabel?: string }
 
 export function UiEasingEditor(props: UiEasingEditorProps) {

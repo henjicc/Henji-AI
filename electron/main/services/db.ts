@@ -33,7 +33,7 @@ export function getHenjiDataDir(): string {
   return getProgramDataDir()
 }
 
-export function getHenjiDbPath(): string {
+function getHenjiDbPath(): string {
   return path.join(getHenjiDataDir(), DB_FILE_NAME)
 }
 

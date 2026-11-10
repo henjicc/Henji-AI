@@ -60,7 +60,7 @@ function mergeNodeModelParamValues(
   };
 }
 
-export function resolveNodeModelParamValues(
+function resolveNodeModelParamValues(
   modelId: string,
   storedParams: DynamicValueMap | undefined,
   media: UseNodeModelParamsOptions['media'],

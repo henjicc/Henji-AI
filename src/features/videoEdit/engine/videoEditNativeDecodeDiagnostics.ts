@@ -15,7 +15,7 @@ export interface DecodeCaptureRequest { action: 'capture'; streamId: string; tic
 export interface DecodeBrowserCaptureRequest { action: 'browserCapture'; url: string; time: number; coords: number[] }
 /** `fps` 为 0 时不按节拍：帧到达即记录并交回（只核对每项结果，不作为帧率数字）。 */
 export interface DecodePaceRequest { action: 'pace'; streamId: string; scheduleId: string; count: number; fps: number; warmupFrames?: number }
-export interface DecodePaceResultRequest { action: 'paceResult'; streamId: string; timeoutMs?: number }
+interface DecodePaceResultRequest { action: 'paceResult'; streamId: string; timeoutMs?: number }
 export type DecodeDiagnosticsRequest = DecodeCaptureRequest | DecodeBrowserCaptureRequest | DecodePaceRequest | DecodePaceResultRequest
 
 export interface DecodeCapture {
@@ -104,7 +104,7 @@ function quantile(sorted: number[], q: number): number {
 const round = (value: number, digits = 3): number => Math.round(value * 10 ** digits) / 10 ** digits
 
 /** 按坐标读回外部纹理颜色。调用方负责帧的生命周期。 */
-export async function readExternalFrame(gpu: DecodeDiagnosticsGpu, frame: VideoFrame, coords: number[]): Promise<number[]> {
+async function readExternalFrame(gpu: DecodeDiagnosticsGpu, frame: VideoFrame, coords: number[]): Promise<number[]> {
   const { device } = gpu
   const count = coords.length / 2
   const input = device.createBuffer({ size: Math.max(16, count * 8), usage: BUFFER_STORAGE | BUFFER_COPY_DST })

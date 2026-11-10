@@ -53,7 +53,7 @@ export type StageCameraMove =
 
 export type StageCameraMovePreset = Exclude<StageCameraMove, { kind: 'direct' }>
 
-export type StageSpatialPathSource =
+type StageSpatialPathSource =
   | { kind: 'preset'; preset: StageCameraMovePreset }
   | { kind: 'custom'; originPreset?: StageCameraMovePreset }
 
@@ -104,7 +104,7 @@ export interface StageStateKeyframeTransitionObjectDetail {
   follow?: StageCameraFollow
 }
 
-export interface StageStateKeyframeTransition {
+interface StageStateKeyframeTransition {
   perObject: Record<string, StageStateKeyframeTransitionObjectDetail>
 }
 
@@ -131,7 +131,7 @@ export interface StageCameraEffector {
   frequency: number
 }
 
-export const STAGE_STATE_KEYFRAME_DEFAULT_TRANSITION_DURATION = 2
+const STAGE_STATE_KEYFRAME_DEFAULT_TRANSITION_DURATION = 2
 const STAGE_STATE_KEYFRAME_DEFAULT_NAME = '关键帧'
 
 function requireAnimatableGroup(path: string): AnimatableGroup {

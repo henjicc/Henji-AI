@@ -26,12 +26,12 @@ export interface ImageEditorViewportCompositeRenderRequestV3 {
   brushTiles: ImageEditorPreviewBrushTileV3[]
 }
 
-export interface ImageEditorViewportCompositeCancelRequestV3 {
+interface ImageEditorViewportCompositeCancelRequestV3 {
   type: 'cancel'
   requestId: string
 }
 
-export interface ImageEditorViewportCompositeDisposeRequestV3 {
+interface ImageEditorViewportCompositeDisposeRequestV3 {
   type: 'dispose'
 }
 
@@ -74,7 +74,7 @@ export interface ImageEditorViewportCompositeRenderedEventV3 {
   completedTiles: number
 }
 
-export interface ImageEditorViewportCompositeFailedEventV3 {
+interface ImageEditorViewportCompositeFailedEventV3 {
   type: 'failed'
   requestId: string
   sequence: number

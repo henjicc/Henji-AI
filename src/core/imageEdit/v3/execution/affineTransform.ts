@@ -19,13 +19,13 @@ export class ImageEditSingularTransformErrorV3 extends Error {
   }
 }
 
-export function imageEditTransformDeterminantV3(
+function imageEditTransformDeterminantV3(
   transform: readonly number[],
 ): number {
   return transform[0] * transform[3] - transform[1] * transform[2]
 }
 
-export function isImageEditTransformV3(value: unknown): value is ImageEditTransformV3 {
+function isImageEditTransformV3(value: unknown): value is ImageEditTransformV3 {
   return Array.isArray(value)
     && value.length === 6
     && value.every((entry) => typeof entry === 'number' && Number.isFinite(entry))
@@ -39,7 +39,7 @@ export function isImageEditTransformInvertibleV3(
   return Number.isFinite(determinant) && Math.abs(determinant) >= MIN_AFFINE_DETERMINANT_V3
 }
 
-export function assertImageEditTransformInvertibleV3(
+function assertImageEditTransformInvertibleV3(
   transform: readonly number[],
 ): asserts transform is ImageEditTransformV3 {
   if (!isImageEditTransformInvertibleV3(transform)) {

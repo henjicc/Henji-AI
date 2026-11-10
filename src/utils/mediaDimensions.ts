@@ -11,7 +11,7 @@ const logger = createLogger('utils.mediaDimensions')
 /**
  * 从图片 URL 获取尺寸
  */
-export const getImageDimensions = (url: string): Promise<{ width: number; height: number }> => {
+const getImageDimensions = (url: string): Promise<{ width: number; height: number }> => {
 
   return new Promise((resolve, reject) => {
     const img = new Image()
@@ -28,7 +28,7 @@ export const getImageDimensions = (url: string): Promise<{ width: number; height
 /**
  * 从视频 URL 获取尺寸和时长
  */
-export const getVideoDimensions = (url: string): Promise<{ width: number; height: number; duration: number }> => {
+const getVideoDimensions = (url: string): Promise<{ width: number; height: number; duration: number }> => {
   return new Promise((resolve, reject) => {
     const video = document.createElement('video')
     video.onloadedmetadata = () => {

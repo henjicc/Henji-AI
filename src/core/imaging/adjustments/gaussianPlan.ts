@@ -3,7 +3,7 @@ export const MAX_GAUSSIAN_DIRECT_SIGMA = 3
 export const MAX_GAUSSIAN_LEVELS = 7
 
 interface GaussianSize { width: number; height: number }
-export interface GaussianPlanningPolicy {
+interface GaussianPlanningPolicy {
   directSigma: number
   support: number
   /** 旧调用方保持七级；效果描述按画面实际尺寸结束，不设半径上限。 */

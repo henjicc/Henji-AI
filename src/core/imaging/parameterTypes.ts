@@ -26,13 +26,13 @@ export interface CodePoint { x: number; y: number }
 export interface CodeGrade { hue: number; strength: number; luminance: number }
 export interface CodeGradientStop { at: number; color: CodeColor }
 export type CodeRange = [number, number]
-export type CodeEasing = string | CodeColor
+type CodeEasing = string | CodeColor
 export type CodeBasicParameterValue = number | boolean | string | CodeColor | CodeRange | CodePoint | CodeGrade | CodeGradientStop[] | CodePoint[]
 export type CodeParameterObject = Record<string, CodeBasicParameterValue>
 export type CodeParameterTableRow = Record<string, CodeBasicParameterValue | TextStyle>
 export type CodeParameterValue = CodeBasicParameterValue | CodeParameterObject | CodeParameterTableRow[] | TextStyle | CodeImageReference | CodeAudioReference | CodeSceneReference | null
 export type CodeParameterValues = Record<string, CodeParameterValue>
-export interface CodeParameterComparison { param: string; equals?: number | boolean | string; notEquals?: number | boolean | string; in?: (number | boolean | string)[] }
+interface CodeParameterComparison { param: string; equals?: number | boolean | string; notEquals?: number | boolean | string; in?: (number | boolean | string)[] }
 export type CodeParameterVisibility = CodeParameterComparison | { all: CodeParameterComparison[] }
 interface ParameterBase { key: string; title: string; description: string; animatable: boolean; tooltip?: string; group?: string; layer?: string; advanced?: boolean; visibleWhen?: CodeParameterVisibility }
 export type CodeBasicParameterDeclaration = ParameterBase & (
@@ -52,7 +52,7 @@ export type CodeBasicParameterDeclaration = ParameterBase & (
   | { type: 'seed'; default: number }
 )
 export interface CodeParameterTypeDefinition { title: string; layout: 'stack' | 'row' | 'grid' | 'wheel'; fields: Record<string, CodeBasicParameterDeclaration> }
-export type CodeTextStyleParameterDeclaration = ParameterBase & { type: 'textStyle'; default: TextStyle }
+type CodeTextStyleParameterDeclaration = ParameterBase & { type: 'textStyle'; default: TextStyle }
 /** A closed IR tag keeps consumers exhaustive; typeName retains the author's open type name. */
 export type CodeParameterDeclaration = CodeBasicParameterDeclaration | CodeTextStyleParameterDeclaration | (ParameterBase & (
   | { type: 'image'; default: null; animatable: false }

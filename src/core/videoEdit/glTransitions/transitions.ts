@@ -13,7 +13,7 @@ import data from './zh.json'
 
 export { GL_TRANSITION_KINDS, GL_TRANSITIONS_PACKAGE } from './catalog.generated'
 export type GlTransitionKind = typeof GL_TRANSITION_KINDS[number]
-export const GL_TRANSITION_PREFIX = 'gl.'
+const GL_TRANSITION_PREFIX = 'gl.'
 
 interface CuratedParam { label?: string; min?: number; max?: number; step?: number; position?: boolean; direction?: boolean; options?: Readonly<Record<string, string>> }
 interface Curated { group: string; name: string; tooltip: string; params?: Readonly<Record<string, string | CuratedParam>> }

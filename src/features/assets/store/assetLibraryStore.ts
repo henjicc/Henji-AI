@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import type { AssetMediaType, AssetRecord } from '@/platform/contracts/assetLibrary'
 
 export type AssetLibraryView = 'closed' | 'floating' | 'workspace'
-export type AssetSort = 'created' | 'recent'
+type AssetSort = 'created' | 'recent'
 
 interface AssetLibraryState {
   view: AssetLibraryView

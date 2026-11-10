@@ -37,7 +37,7 @@ export interface TrackingServiceDependencies {
 }
 
 /** 结果格式或算法变化时加一，旧结果自然失效。 */
-export const TRACKING_RESULT_VERSION = 1
+const TRACKING_RESULT_VERSION = 1
 
 const EFFICIENTTAM_FILES: Record<string, LocalInferenceModelFile['name']> = {
   'efficienttam_ti_512_image_encoder.onnx': 'etam_image_encoder', 'efficienttam_ti_512_mask_decoder.onnx': 'etam_mask_decoder',
@@ -48,7 +48,7 @@ const EFFICIENTTAM_FILES: Record<string, LocalInferenceModelFile['name']> = {
 function digest(parts: readonly unknown[]): string { return createHash('sha256').update(JSON.stringify(parts)).digest('hex') }
 
 class TrackingFailure extends Error { constructor(readonly reason: TrackingFailureReason, message: string) { super(message) } }
-export function trackingFailureReason(error: unknown): TrackingFailureReason {
+function trackingFailureReason(error: unknown): TrackingFailureReason {
   if (error instanceof TrackingFailure) return error.reason
   const code = (error as Partial<LocalInferenceFailure>)?.code
   return code === 'decode' ? 'decode' : code === 'output' ? 'disk' : 'inference'

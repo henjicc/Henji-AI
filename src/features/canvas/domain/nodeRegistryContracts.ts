@@ -33,7 +33,7 @@ export type MenuIconKey =
 
 export type NodeMenuSection = 'media' | 'textTools' | 'models' | 'parameters' | 'extensions';
 
-export interface CanvasNodeCapabilities {
+interface CanvasNodeCapabilities {
   toolbar: boolean;
   promptInput: boolean;
   /** 是否在节点已有可用媒体结果时显示下载入口（默认 false）。 */
@@ -47,7 +47,7 @@ export interface CanvasNodeCapabilities {
   toolbarImageCapabilities?: boolean;
 }
 
-export interface CanvasNodeConnectivity {
+interface CanvasNodeConnectivity {
   sourceHandle: boolean;
   targetHandle: boolean;
   connectMenu: {

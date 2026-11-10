@@ -129,7 +129,7 @@ var SHARED_TEXTS = {
 export type SharedFieldKey = keyof typeof SHARED_FIELDS
 export type SharedOptionKey = keyof typeof SHARED_OPTIONS
 export type SharedModeKey = keyof typeof SHARED_MODES
-export type SharedTextPath = keyof typeof SHARED_TEXTS
+type SharedTextPath = keyof typeof SHARED_TEXTS
 
 function resolveSharedFallback<K extends string>(
   dictionary: Record<K, string> | undefined,

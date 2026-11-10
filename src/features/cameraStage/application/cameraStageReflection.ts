@@ -210,7 +210,7 @@ const propertiesByEntity: Record<EntityType, ApplicationPropertyDescriptor[]> = 
  *
  * 写得进去读不回来等于没写：结算要靠读回的值当证据，助手也要靠它确认改对没有。
  */
-export function sceneAppearanceProperties(settings: StageSceneSettings): Record<string, JsonValue> {
+function sceneAppearanceProperties(settings: StageSceneSettings): Record<string, JsonValue> {
   return fieldReadValues(SCENE_APPEARANCE_FIELDS, settings)
 }
 

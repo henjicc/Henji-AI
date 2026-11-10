@@ -7,10 +7,10 @@ import { createMainLogger } from '../logging'
 import { writeBufferAtomically } from '../fs/atomic-file'
 import { KeyedSerialExecutor } from './serial-executor'
 
-export const DEFAULT_DERIVED_CACHE_QUOTA_BYTES = 8 * 1024 * 1024 * 1024
-export const DEFAULT_DERIVED_CACHE_MAX_ENTRY_BYTES = 512 * 1024 * 1024
-export const DERIVED_CACHE_KINDS = ['proxy', 'pyramid', 'tile', 'analysis'] as const
-export type DerivedCacheKind = typeof DERIVED_CACHE_KINDS[number]
+const DEFAULT_DERIVED_CACHE_QUOTA_BYTES = 8 * 1024 * 1024 * 1024
+const DEFAULT_DERIVED_CACHE_MAX_ENTRY_BYTES = 512 * 1024 * 1024
+const DERIVED_CACHE_KINDS = ['proxy', 'pyramid', 'tile', 'analysis'] as const
+type DerivedCacheKind = typeof DERIVED_CACHE_KINDS[number]
 
 export interface DerivedCacheAddress {
   kind: DerivedCacheKind

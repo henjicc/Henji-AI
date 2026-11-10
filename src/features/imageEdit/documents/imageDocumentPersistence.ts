@@ -71,7 +71,7 @@ export interface ImageDocumentWorkingHooks {
   beforeReload?(): Promise<void>
 }
 
-export class ImageDocumentOpenCancelledError extends Error {
+class ImageDocumentOpenCancelledError extends Error {
   constructor() {
     super('已取消打开图片文档。')
     this.name = 'AbortError'

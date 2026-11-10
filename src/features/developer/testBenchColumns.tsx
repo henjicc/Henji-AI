@@ -20,7 +20,7 @@ import { resolveImageDisplayUrl, toFetchableMediaUrl } from '@/services/imageSou
 import { sdkProviderName, type SdkModelRow } from './sdkModelInventory'
 import type { GenerationTestResult, LlmTestResult, TextTestResult } from './modelTestRunner'
 
-export type RunStatus = 'idle' | 'running' | 'done' | 'failed' | 'stopped'
+type RunStatus = 'idle' | 'running' | 'done' | 'failed' | 'stopped'
 
 export interface GenerationRun {
   status: RunStatus

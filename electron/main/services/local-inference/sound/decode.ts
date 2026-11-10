@@ -7,7 +7,7 @@ import { SOUND_ANALYSIS_SAMPLE_RATE } from '../../../../../src/core/soundLibrary
  * 最多读前 MAX_SECONDS 秒；更长的文件时长取容器报告的总时长。
  */
 
-export const SOUND_DECODE_MAX_SECONDS = 60
+const SOUND_DECODE_MAX_SECONDS = 60
 const STDERR_LIMIT = 16_384
 
 export interface DecodedSound { channels: Float32Array[]; durationSeconds: number }

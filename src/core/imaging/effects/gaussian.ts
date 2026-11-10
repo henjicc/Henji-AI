@@ -3,9 +3,9 @@ import { planGaussian, type GaussianPass } from '../adjustments/gaussianPlan'
 import type { ImagingParam } from '../parameterDefinition'
 import type { EffectDescriptor, EffectEvaluationContext, EffectQuality, EffectSize } from './descriptor'
 
-export const GAUSSIAN_EFFECT_ID = 'gaussian_blur'
+const GAUSSIAN_EFFECT_ID = 'gaussian_blur'
 const SIGMA_DESCRIPTION = '高斯标准差占完整文档或序列画面高度的比例。0 无模糊；0.003 轻微柔化；0.009 背景虚化；0.03 强烈虚化。与视口、瓦片及预览缩放无关。'
-export const GAUSSIAN_PARAMETERS: readonly ImagingParam[] = [
+const GAUSSIAN_PARAMETERS: readonly ImagingParam[] = [
   { key: 'sigma_fraction_height', name: '模糊尺度', type: 'number', unit: 'fraction_height', min: 0, max: Number.MAX_VALUE, step: 0.001, default: 0.009, animatable: true, tooltip: '标准差占画面高度的比例', description: SIGMA_DESCRIPTION },
   { key: 'axis', name: '模糊方向', type: 'enum', default: 'both', animatable: true, options: [{ value: 'both', label: '水平和垂直' }, { value: 'horizontal', label: '水平' }, { value: 'vertical', label: '垂直' }], tooltip: '选择模糊方向', description: 'both 同时模糊两轴；horizontal 只水平；vertical 只垂直。' },
   { key: 'edge_mode', name: '边缘处理', type: 'enum', default: 'clamp', animatable: true, options: [{ value: 'clamp', label: '延伸边缘' }, { value: 'transparent', label: '透明边缘' }], tooltip: '决定画面外的取样方式', description: 'clamp 使用最近的画面边缘像素；transparent 把画面外视为透明。瓦片接缝始终读取真实相邻像素。' },
@@ -38,7 +38,7 @@ export interface ResolvedGaussianPlan {
   readonly intermediateFormat: 'rgba16float' | 'rgba32float'
   readonly scratchBytes: number
 }
-export const GAUSSIAN_QUALITY = {
+const GAUSSIAN_QUALITY = {
   interactive: { directSigma: 3, support: 3, maxLevels: Infinity, maxRadius: Infinity },
   final: { directSigma: 16, support: 4, maxLevels: Infinity, maxRadius: Infinity, prefilterSigma: 1.25, discreteReconstruction: true, minimumSigma: 0 },
 } as const

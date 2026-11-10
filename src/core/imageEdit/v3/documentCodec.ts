@@ -42,7 +42,7 @@ import { assertImageEditSmartGraphV3, assertImageEditSmartInstancesConsistentV3 
 import { imageEditSmartOriginSchemaV3 } from './smartContent/schema';
 import { creativeIntentsSchema } from '../../creativeIntent/persistence';
 
-export type ImageEditDocumentSourceFormatV3 = 'v3' | 'invalid' | 'unknown-version';
+type ImageEditDocumentSourceFormatV3 = 'v3' | 'invalid' | 'unknown-version';
 
 export interface ImageEditDocumentDecodeResultV3 {
   document: ImageEditDocumentV3 | null;
@@ -50,7 +50,7 @@ export interface ImageEditDocumentDecodeResultV3 {
   issues: string[];
 }
 
-export class InvalidImageEditDocumentV3Error extends Error {}
+class InvalidImageEditDocumentV3Error extends Error {}
 
 const FORBIDDEN_JSON_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 const WORKING_SPACES = new Set<ImageEditWorkingSpaceV3>(['srgb', 'display-p3', 'rec2020']);

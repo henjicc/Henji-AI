@@ -81,7 +81,7 @@ function renderVariantSummary(rows) {
   return `${lines.join('\n')}\n`
 }
 
-module.exports = { ROOM_FOR_ONE_TRIGGER_PX, renderVariantSummary, summarizeVariantMetrics }
+module.exports = { renderVariantSummary, summarizeVariantMetrics }
 
 // 对已有输出目录补出汇总：node scripts/lib/uiReviewSummary.cjs .ui-tour/review/all-models
 if (require.main === module) {

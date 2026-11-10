@@ -31,7 +31,7 @@ const IMAGE_MEDIA_TYPE_PATTERN = /^image\/[a-z0-9][a-z0-9.+-]{0,63}$/
 const INVALID_BASE64_CHARACTER = /[^A-Za-z0-9+/]/
 const RELEASE_IMAGE_MEDIA_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/tiff', 'image/avif', 'image/heif', 'image/heic'])
 
-export const IMAGE_EDITOR_V3_SOURCE_INGEST_LIMITS: ImageEditorV3SourceIngestLimits = {
+const IMAGE_EDITOR_V3_SOURCE_INGEST_LIMITS: ImageEditorV3SourceIngestLimits = {
   localMaxBytes: 8 * 1024 * 1024 * 1024,
   remoteMaxBytes: 2 * 1024 * 1024 * 1024,
   dataUrlMaxBytes: 32 * 1024 * 1024,

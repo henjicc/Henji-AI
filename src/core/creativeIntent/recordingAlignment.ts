@@ -15,7 +15,7 @@ function presentedAt(segment: ClockSegment, at: number): Timeline | null {
   return result
 }
 /** No interpolation over scrub/seek; the last acknowledged picture remains visible. */
-export function recordingTimelineSpans(clocks: readonly ClockSegment[], span: [number, number]): TimelineSpan[] {
+function recordingTimelineSpans(clocks: readonly ClockSegment[], span: [number, number]): TimelineSpan[] {
   const result: TimelineSpan[] = []
   for (const clock of clocks) {
     if (clock.mode === 'seek') continue

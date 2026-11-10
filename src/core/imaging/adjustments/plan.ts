@@ -1,7 +1,7 @@
 import { COLOR_GRADE_HSL_CORRECTION_KEYS, colorGradeWhiteBalance } from './colorGrade'
 import { buildColorGradeTable } from './unifiedGrade'
 import { MAX_GAUSSIAN_DIRECT_SIGMA as MAX_DIRECT_SIGMA, MAX_GAUSSIAN_LEVELS as MAX_LEVELS, planGaussian } from './gaussianPlan'
-export type AdjustmentPassEntry = 'copy' | 'blur' | 'unsharp' | 'color_grade_unified' | 'color_grade_vignette' | 'color_grade_lut' | 'color_grade_hsl_key' | 'color_grade_hsl_correct' | 'color_grade_linear' | 'color_grade_hsl_sharpen'
+type AdjustmentPassEntry = 'copy' | 'blur' | 'unsharp' | 'color_grade_unified' | 'color_grade_vignette' | 'color_grade_lut' | 'color_grade_hsl_key' | 'color_grade_hsl_correct' | 'color_grade_linear' | 'color_grade_hsl_sharpen'
 export type AdjustmentTexture = 'input' | 'output' | number
 export interface AdjustmentPass { entry: AdjustmentPassEntry; source: AdjustmentTexture; target: AdjustmentTexture; original?: AdjustmentTexture; mask?: AdjustmentTexture; uniforms: Float32Array; lookup?: AdjustmentLookup }
 /** `table`: RGBA32F rows bound as `original` (unified grade parameters and curves); `cube`: imported LUT reference. */

@@ -13,7 +13,7 @@ import type { VideoEditAttentionBox } from '@/core/videoEdit/reframe'
  * 没有可用段落时返回 undefined，调用方跳过这个效果（预览先不显示，导出前会等分析完成）。
  */
 
-export interface VideoEditSmartRegionSegment { url: string; startUs: number; endUs: number; still: boolean }
+interface VideoEditSmartRegionSegment { url: string; startUs: number; endUs: number; still: boolean }
 /** 素材地址（Worker 里可 fetch 的形态）→ 分析种类 → 段落。 */
 export type VideoEditSmartRegionSegments = Readonly<Record<string, Partial<Record<SmartRegionAnalysisKind, readonly VideoEditSmartRegionSegment[]>>>>
 

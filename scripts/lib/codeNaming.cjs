@@ -291,4 +291,4 @@ function checkNaming(root, { write = false, initialize } = {}) {
   return { ...result, errors, messages: formatAllowlistAdditions(added) }
 }
 
-module.exports = { hasIterationName, hasNumberedComment, fingerprintComment, inspectSource, productExceptions, scanNamingFacts, scanNaming, namingEntries, compareNaming, checkNaming, readProtectedNaming, protectAllowlist, allowlistAdditions, formatAllowlistAdditions }
+module.exports = { hasIterationName, hasNumberedComment, fingerprintComment, inspectSource, productExceptions, scanNamingFacts, compareNaming, checkNaming, protectAllowlist, allowlistAdditions, formatAllowlistAdditions }

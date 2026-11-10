@@ -14,7 +14,7 @@ export interface AudioEditBatchSettings {
   trimEdges: boolean
   fillers: string[]
 }
-export interface AudioEditVideoMetadata {
+interface AudioEditVideoMetadata {
   frameRate: AudioEditFrameRate
   width: number
   height: number

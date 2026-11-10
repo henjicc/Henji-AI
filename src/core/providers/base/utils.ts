@@ -49,7 +49,7 @@ export function dataURItoBlob(dataURI: string): Blob {
  * @param blob - Blob 对象
  * @returns Promise<Data URI 字符串>
  */
-export async function blobToDataURI(blob: Blob): Promise<string> {
+async function blobToDataURI(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(reader.result as string)
@@ -136,7 +136,7 @@ export function normalizeFilePath(path: string): string {
  * @param str - 字符串
  * @returns 是否为 Data URI
  */
-export function isDataURI(str: string): boolean {
+function isDataURI(str: string): boolean {
   return /^data:[^;]+;base64,/.test(str) || /^data:[^;]+,/.test(str)
 }
 
@@ -156,7 +156,7 @@ export function isRemoteURL(str: string): boolean {
  * @param source - 文件路径或 URL
  * @returns MIME 类型
  */
-export function extractMimeType(source: string): string {
+function extractMimeType(source: string): string {
   // 从 Data URI 提取
   if (isDataURI(source)) {
     const match = source.match(/^data:([^;]+);/)

@@ -62,7 +62,7 @@ export interface CanvasTidyRequest {
 }
 
 /** 要整理的节点：显式列出的节点并上 connectedTo 所在的连通链；都没给时整理画布顶层的全部节点。 */
-export function collectCanvasTidyTargets(nodes: readonly CanvasNode[], edges: readonly CanvasEdge[], request: Omit<CanvasTidyRequest, 'mode'>): string[] {
+function collectCanvasTidyTargets(nodes: readonly CanvasNode[], edges: readonly CanvasEdge[], request: Omit<CanvasTidyRequest, 'mode'>): string[] {
   const byId = new Map(nodes.map(node => [node.id, node]))
   const missing = [...(request.nodeIds ?? []), ...(request.connectedTo ? [request.connectedTo] : []), ...(request.pinNodeId ? [request.pinNodeId] : [])]
     .filter(id => !byId.has(id))

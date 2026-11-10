@@ -25,13 +25,13 @@ export const TIMELINE_RULER_HEIGHT = 52
 export const TIMELINE_MARK_LANE_HEIGHT = 24
 export const TIMELINE_CAPTION_HEIGHT = VIDEO_EDIT_TRACK_HEIGHT_MIN
 /** 缩放轨 Z1：序列里有录屏片段开启自动缩放时，钉在字幕轨下面。 */
-export const TIMELINE_ZOOM_HEIGHT = 24
+const TIMELINE_ZOOM_HEIGHT = 24
 /** 视频区与音频区之间的分隔条高度（可拖动调整两区比例）。 */
 export const TIMELINE_TRACK_SECTION_GAP = 8
 /** 视频区最上轨之上、音频区最下轨之下始终留出的空白：把片段拖到这里新建轨道（PR）。 */
 export const TIMELINE_NEW_TRACK_ZONE = 32
 /** 每个区至少保留的高度，拖动分隔条不能把一区压没。 */
-export const TIMELINE_REGION_MIN = 40
+const TIMELINE_REGION_MIN = 40
 export type TimelineRegionKind = 'video' | 'audio'
 /**
  * 一行轨道：`top` 是在时间线内容里的位置；轨道所在区（视频区或音频区）各自纵向滚动，`clipTop`／`clipBottom`
@@ -142,7 +142,7 @@ export function timelineVisibleClips(clips: readonly VideoEditClip[], rows: read
 const TIMELINE_EDGE_ZONE = 32
 /** Pointer travel toward an edge that counts as intent; matches the clip drag threshold. */
 const TIMELINE_EDGE_ARM = 3
-export function timelineEdgeVelocity(position: number, from: number, to: number): number {
+function timelineEdgeVelocity(position: number, from: number, to: number): number {
   const edge = TIMELINE_EDGE_ZONE
   if (position < from + edge) return -Math.ceil(18 * Math.min(1, (from + edge - position) / edge))
   if (position > to - edge) return Math.ceil(18 * Math.min(1, (position - to + edge) / edge))
@@ -164,7 +164,7 @@ export function timelineArmedEdgeVelocity(axis: TimelineEdgeAxis, position: numb
 export interface TimelineWheelInput { deltaX: number; deltaY: number; deltaMode: number; ctrlKey: boolean; metaKey: boolean; altKey: boolean; shiftKey: boolean }
 export type TimelineWheelAction = { kind: 'scroll'; left: number; top: number } | { kind: 'zoom'; factor: number } | { kind: 'track-height'; delta: number }
 /** 一格滚轮（Windows 100px）改变的轨道高度。 */
-export const TIMELINE_WHEEL_TRACK_STEP = 8
+const TIMELINE_WHEEL_TRACK_STEP = 8
 /**
  * Premiere（Windows 默认，用户实机确认）的时间线滚轮：滚轮横向滚动；Alt+滚轮以光标为中心横向缩放；
  * Shift+滚轮调整光标所在区域（画面轨或声音轨）的轨道高度，即纵向缩放；Ctrl+滚轮在光标所在的视频区或音频区内纵向滚动。

@@ -14,7 +14,7 @@ import type { VideoEditBuiltinPlan } from './videoEditBuiltinEffectPasses'
 import { appendGlow, createGlowPlanner, GLOW_COMPOSITE_BLOCK, glowLevelWeights, glowLevels } from './glow'
 import { linearHex } from './lightSweep'
 
-export const LENS_FLARE_ENTRIES = ['flare_source', 'flare_image', 'flare_layer_image', 'flare_light'] as const
+const LENS_FLARE_ENTRIES = ['flare_source', 'flare_image', 'flare_layer_image', 'flare_light'] as const
 const n = (params: VideoEditBuiltinParams, key: string): number => Number(params[key] ?? 0)
 
 /** 光核的标准差（画面高度的比例）。 */
@@ -54,7 +54,7 @@ function haloEmitter(halo: VideoEditBuiltinParams, width: number, height: number
 }
 
 /** `params` 已补齐默认值；`split` 为图层拆输出。 */
-export function planLensFlare(params: VideoEditBuiltinParams, width: number, height: number, split = false): VideoEditBuiltinPlan {
+function planLensFlare(params: VideoEditBuiltinParams, width: number, height: number, split = false): VideoEditBuiltinPlan {
   const glow = createGlowPlanner(width, height)
   const light = linearHex(params.color).map(value => value * n(params, 'brightness') / 100)
   if (light.every(value => value <= 0)) { glow.pass('copy', 'input', 'output'); return glow.plan }
@@ -95,7 +95,7 @@ export function planLensFlare(params: VideoEditBuiltinParams, width: number, hei
   return glow.plan
 }
 
-export const LENS_FLARE_WGSL = `
+const LENS_FLARE_WGSL = `
 // a = (光源（全分辨率像素）, 光核标准差（已按本道纹素放宽）, 星芒衰减距离)，b = (光色 × 亮度（线性）, 星芒强度)，c = (星芒数量, 核心发白, 0, 0)，
 // layer = (光核峰值, 拉丝强度, 拉丝衰减距离, 拉丝粗细)，grid = (鬼影强度, 色散, 画外发光点的标准差, 画外发光点的峰值倍数)；长度都是全分辨率像素。
 fn flarePixel(v: Vertex) -> vec2f { return v.position.xy * u.size.zw / u.size.xy; }

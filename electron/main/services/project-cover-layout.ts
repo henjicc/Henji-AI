@@ -1,4 +1,4 @@
-export type ProjectCoverSourceKind = 'image' | 'video'
+type ProjectCoverSourceKind = 'image' | 'video'
 
 export interface ProjectCoverSourceDto {
   source: string

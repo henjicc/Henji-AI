@@ -30,7 +30,7 @@ function registrations(): ApplicationEntityRegistration[] {
     } }]
 }
 type Step = Extract<ApplicationPlannedStep, { kind: 'mutation' }>
-export class AudioCaptureMutationExecutor implements ApplicationMutationExecutor {
+class AudioCaptureMutationExecutor implements ApplicationMutationExecutor {
   readonly entityType = ENTITY
   readonly effectContract = { direct: [], cascades: [] }
   readonly table = fieldWriterTable(audioCaptureFields)

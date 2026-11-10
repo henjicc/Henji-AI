@@ -19,7 +19,7 @@ import type { DocumentWorkspace } from './workspace'
 import type { DocumentRepository } from './repository'
 
 const digest = (source: string): string => createHash('sha256').update(source, 'utf8').digest('hex')
-export function codeFolderName(name: string): string {
+function codeFolderName(name: string): string {
   const value = [...name].map(character => character.charCodeAt(0) < 32 ? '_' : character).join('').replace(/[<>:"/\\|?*]/g, '_').replace(/[. ]+$/, '').trim() || '代码素材'
   return /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(value) ? `_${value}` : value
 }

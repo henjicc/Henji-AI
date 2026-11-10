@@ -382,7 +382,7 @@ export async function importMediaFromBytes(request: ImportMediaFromBytesRequest)
   })
 }
 
-export async function cleanupStaleMediaImportTemps(now = Date.now()): Promise<number> {
+async function cleanupStaleMediaImportTemps(now = Date.now()): Promise<number> {
   const uploadsDir = getUploadsDir()
   const names = await fsp.readdir(uploadsDir)
   let removed = 0

@@ -2,7 +2,7 @@ import type Database from 'better-sqlite3'
 import { randomUUID } from 'node:crypto'
 import { RECYCLE_RETENTION_MS, type RecycledItem } from '../../../../src/core/localRecords/recycle'
 
-export const RECYCLE_TABLES = {
+const RECYCLE_TABLES = {
   assets: { name: 'display_name', category: '素材' },
   asset_libraries: { name: 'name', category: '集合' },
   history: { name: "COALESCE(NULLIF(prompt, ''), model_id)", category: '生成历史' },

@@ -44,7 +44,7 @@ const MAX_MIP_LEVEL = 30
 const MAX_TILE_HALO = 2048
 const MAX_SOURCE_ICC_PROFILE_BYTES = 16 * 1024 * 1024
 /** 元数据缓存可淘汰；图像内容按瓦片读取。 */
-export const IMAGE_EDIT_METADATA_CACHE_LIMIT = 256
+const IMAGE_EDIT_METADATA_CACHE_LIMIT = 256
 
 export interface SharpSourceProviderOptions {
   metadataCacheLimit?: number

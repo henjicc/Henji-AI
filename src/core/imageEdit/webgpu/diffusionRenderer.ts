@@ -71,7 +71,7 @@ export interface DiffusionRenderOutput {
   invalidation: DiffusionInvalidation;
 }
 
-export type DiffusionInvalidation = 'source' | 'pyramid' | 'composite' | 'none';
+type DiffusionInvalidation = 'source' | 'pyramid' | 'composite' | 'none';
 
 export class WebGpuDiffusionRenderer {
   private cache: DiffusionCache | null = null;
@@ -326,7 +326,7 @@ export class WebGpuDiffusionRenderer {
   }
 }
 
-export function determineDiffusionInvalidation(
+function determineDiffusionInvalidation(
   cache: Pick<DiffusionCache, 'sourceKey' | 'width' | 'height' | 'sourceSignature' | 'pyramidSignature'> | null,
   input: Pick<DiffusionRenderInput, 'sourceKey' | 'width' | 'height' | 'recipe'>
 ): DiffusionInvalidation {

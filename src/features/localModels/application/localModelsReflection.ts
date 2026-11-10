@@ -37,8 +37,8 @@ import {
  * 真相源是主进程 LocalModelService，经 `src/commands/localModels.ts` 访问；设置页与助手共用同一组命令。
  */
 
-export const LOCAL_MODEL_ENTITY_TYPE = 'local_model.item'
-export const LOCAL_MODEL_SETTINGS_ENTITY_TYPE = 'local_model.settings'
+const LOCAL_MODEL_ENTITY_TYPE = 'local_model.item'
+const LOCAL_MODEL_SETTINGS_ENTITY_TYPE = 'local_model.settings'
 const DOMAIN = 'local_models'
 const REVISION_SCOPE = 'local_models'
 const SETTINGS_REF: ApplicationRef = { kind: LOCAL_MODEL_SETTINGS_ENTITY_TYPE, id: 'singleton' }

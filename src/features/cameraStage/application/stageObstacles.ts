@@ -39,7 +39,7 @@ export function stageObjectObstacle(object: StageObject, margin = 0): StageObsta
   }, object.transform.rotation.y)
 }
 
-export function toObstacleLocal(point: StageVec3, obstacle: StageObstacle): StageVec3 {
+function toObstacleLocal(point: StageVec3, obstacle: StageObstacle): StageVec3 {
   const dx = point.x - obstacle.center.x
   const dz = point.z - obstacle.center.z
   return {
@@ -50,7 +50,7 @@ export function toObstacleLocal(point: StageVec3, obstacle: StageObstacle): Stag
 }
 
 /** 线段与以原点为中心的盒子相交（slab 法），端点已换到盒子局部坐标。 */
-export function localSegmentHitsBox(from: StageVec3, to: StageVec3, half: StageVec3): boolean {
+function localSegmentHitsBox(from: StageVec3, to: StageVec3, half: StageVec3): boolean {
   let enter = 0
   let exit = 1
   for (const axis of ['x', 'y', 'z'] as const) {

@@ -165,7 +165,7 @@ function animatableField<TSource>(
   }
 }
 
-export const STATE_KEYFRAME_CASCADES = [
+const STATE_KEYFRAME_CASCADES = [
   {
     declarationId: 'camera_stage.auto_state_keyframe_create', effect: 'create',
     entityType: 'camera_stage.state_keyframe', propertyIds: [], revisionScopes: ['camera_stage'],
@@ -181,9 +181,9 @@ const CAMERA_ANIMATABLE_PATHS = listAnimatablePropertyPaths().filter((path) => (
   path.startsWith('transform.position.') || path.startsWith('transform.rotation.') || path === 'color' || path === 'fov'
 ))
 
-export const OBJECT_ANIMATABLE_FIELDS = OBJECT_ANIMATABLE_PATHS
+const OBJECT_ANIMATABLE_FIELDS = OBJECT_ANIMATABLE_PATHS
   .map((path) => animatableField<NonCameraObject>(OBJECT_ENTITY_TYPE, path, (object) => object))
-export const CAMERA_ANIMATABLE_FIELDS = CAMERA_ANIMATABLE_PATHS
+const CAMERA_ANIMATABLE_FIELDS = CAMERA_ANIMATABLE_PATHS
   .map((path) => animatableField<CameraFieldSource>(CAMERA_ENTITY_TYPE, path, ({ camera }) => camera))
 
 /** 供反射层按对象实际类型过滤"这条动画属性对这个对象是否可用"（如姿态关节只对角色可用）。 */

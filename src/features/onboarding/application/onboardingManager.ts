@@ -27,8 +27,8 @@ export const ONBOARDING_STEP_IDS = [
 ] as const
 
 export type OnboardingStepId = (typeof ONBOARDING_STEP_IDS)[number]
-export type OnboardingStatus = 'not_started' | 'in_progress' | 'completed' | 'skipped'
-export type OnboardingEntryReason = 'fresh_install' | 'existing_install' | 'manual'
+type OnboardingStatus = 'not_started' | 'in_progress' | 'completed' | 'skipped'
+type OnboardingEntryReason = 'fresh_install' | 'existing_install' | 'manual'
 
 export interface OnboardingStateV2 {
   version: 2

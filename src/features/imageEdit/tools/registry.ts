@@ -3,9 +3,9 @@ import type { ImageEditorToolDefinition } from './types';
 import { IMAGE_EDITOR_TOOL_CONTROL_DEFINITIONS } from './controlCatalog';
 import { ICON_IMAGE_GLOW_PRO } from '@/core/theme/icons';
 
-export class ImageEditorToolRegistrationError extends Error {}
+class ImageEditorToolRegistrationError extends Error {}
 
-export class ImageEditorToolRegistry {
+class ImageEditorToolRegistry {
   private readonly definitions = new Map<string, ImageEditorToolDefinition>();
 
   register(definition: ImageEditorToolDefinition): void {
@@ -24,7 +24,7 @@ export class ImageEditorToolRegistry {
   }
 }
 
-export const imageEditorToolRegistry = new ImageEditorToolRegistry();
+const imageEditorToolRegistry = new ImageEditorToolRegistry();
 const geometry = IMAGE_EDITOR_TOOL_CONTROL_DEFINITIONS.find((item) => item.id === 'geometry')!;
 const blur = IMAGE_EDITOR_TOOL_CONTROL_DEFINITIONS.find((item) => item.id === 'blur')!;
 const diffusion = IMAGE_EDITOR_TOOL_CONTROL_DEFINITIONS.find((item) => item.id === 'diffusion')!;

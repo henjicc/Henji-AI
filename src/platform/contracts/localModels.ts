@@ -87,7 +87,7 @@ export interface LocalModelProgressEvent {
   lastFailure: LocalModelFailureCode | null
 }
 
-export interface LocalModelFileLocation {
+interface LocalModelFileLocation {
   name: string
   /** 文件在模型里的作用，如 `model`。 */
   role: string

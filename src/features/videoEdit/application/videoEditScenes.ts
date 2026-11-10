@@ -71,9 +71,9 @@ export function findVideoEditScene(document: Pick<VideoEditDocument, 'scenes'>, 
 }
 
 /** 持有代码实例的对象：素材项、片段（含镜头版本里的链接音频片段）或片段上的代码效果。 */
-export interface VideoEditSceneCodeHolder { readonly kind: 'video_edit.item' | 'video_edit.clip' | 'video_edit.effect'; readonly id: string; readonly name: string }
+interface VideoEditSceneCodeHolder { readonly kind: 'video_edit.item' | 'video_edit.clip' | 'video_edit.effect'; readonly id: string; readonly name: string }
 /** 引用这份片子数据的代码实例与参数键（与文档层的引用核对同一范围）。 */
-export function videoEditSceneCodeReferences(document: VideoEditDocument, sceneId: string): Array<{ code: CodeMaterialInstance; key: string; holder: VideoEditSceneCodeHolder }> {
+function videoEditSceneCodeReferences(document: VideoEditDocument, sceneId: string): Array<{ code: CodeMaterialInstance; key: string; holder: VideoEditSceneCodeHolder }> {
   const clips = document.sequences.flatMap(sequence => sequence.clips.flatMap(clip => [clip, ...(clip.takes ?? []).flatMap(take => take.linkedAudio?.map(entry => entry.clip) ?? [])]))
   const holders: Array<{ code: CodeMaterialInstance | undefined; holder: VideoEditSceneCodeHolder }> = [
     ...document.items.map(item => ({ code: item.code, holder: { kind: 'video_edit.item' as const, id: item.id, name: item.name } })),

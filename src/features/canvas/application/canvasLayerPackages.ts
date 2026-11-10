@@ -85,7 +85,7 @@ export async function prepareCanvasLayers(
 }
 
 /** 画布仍在用的内嵌图片文档：当前节点 + 撤销 / 重做记录里的节点（撤销能把删掉的节点找回来）。 */
-export function retainedCanvasLayerDocumentIds(nodes: readonly CanvasNode[], history: CanvasHistoryState): string[] {
+function retainedCanvasLayerDocumentIds(nodes: readonly CanvasNode[], history: CanvasHistoryState): string[] {
   const snapshots = [...history.past, ...history.future]
   return canvasLayerDocumentIds([...nodes, ...snapshots.flatMap((snapshot) => snapshot.nodes)])
 }

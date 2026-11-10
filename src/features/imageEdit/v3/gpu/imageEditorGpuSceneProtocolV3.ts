@@ -51,7 +51,7 @@ interface ImageEditorGpuSceneSequencedRequestV3 {
   sceneGeneration: number
 }
 
-export interface ImageEditorGpuSceneInitializeRequestV3 {
+interface ImageEditorGpuSceneInitializeRequestV3 {
   type: 'initialize'
   protocolVersion: typeof IMAGE_EDITOR_GPU_SCENE_PROTOCOL_VERSION_V3
   sessionId: string
@@ -60,7 +60,7 @@ export interface ImageEditorGpuSceneInitializeRequestV3 {
   diagnosticInitializationFailure?: boolean
 }
 
-export interface ImageEditorGpuSceneSyncRequestV3 extends ImageEditorGpuSceneSequencedRequestV3 {
+interface ImageEditorGpuSceneSyncRequestV3 extends ImageEditorGpuSceneSequencedRequestV3 {
   type: 'sync-scene'
   quality: ImageEditRenderQuality
   document: ImageEditDocumentV3
@@ -69,27 +69,27 @@ export interface ImageEditorGpuSceneSyncRequestV3 extends ImageEditorGpuSceneSeq
   sourcePyramids?: Readonly<Record<string, ImageEditorV3PyramidDescriptor>>
 }
 
-export interface ImageEditorGpuSceneUploadTilesRequestV3 extends ImageEditorGpuSceneSequencedRequestV3 {
+interface ImageEditorGpuSceneUploadTilesRequestV3 extends ImageEditorGpuSceneSequencedRequestV3 {
   type: 'upload-tiles'
   /** 存在时只写入该导出 job 的有界 residency，不污染预览 atlas。 */
   exportRequestId?: string
   tiles: readonly ImageEditorGpuSceneUploadTileV3[]
 }
 
-export interface ImageEditorGpuSceneTransformRequestV3 extends ImageEditorGpuSceneSequencedRequestV3 {
+interface ImageEditorGpuSceneTransformRequestV3 extends ImageEditorGpuSceneSequencedRequestV3 {
   type: 'update-transform'
   interactionSequence: number
   layerId: string
   transform: ImageEditTransformV3 | null
 }
 
-export interface ImageEditorGpuSceneViewportRequestV3 extends ImageEditorGpuSceneSequencedRequestV3 {
+interface ImageEditorGpuSceneViewportRequestV3 extends ImageEditorGpuSceneSequencedRequestV3 {
   type: 'update-viewport'
   cameraSequence: number
   layout: ImageEditorViewportLayoutV3
 }
 
-export interface ImageEditorGpuSceneAttachSurfaceRequestV3 {
+interface ImageEditorGpuSceneAttachSurfaceRequestV3 {
   type: 'attach-presentation-surface'
   surfaceGeneration: number
   canvas: OffscreenCanvas
@@ -132,23 +132,23 @@ export interface ImageEditorGpuSceneExportTilePlanV3 {
   coreOffsetY: number
 }
 
-export interface ImageEditorGpuSceneCancelExportRequestV3 {
+interface ImageEditorGpuSceneCancelExportRequestV3 {
   type: 'cancel-export'
   requestId: string
 }
 
-export interface ImageEditorGpuSceneExportTileConsumedRequestV3 {
+interface ImageEditorGpuSceneExportTileConsumedRequestV3 {
   type: 'export-tile-consumed'
   requestId: string
   tileX: number
   tileY: number
 }
 
-export interface ImageEditorGpuSceneDisposeRequestV3 {
+interface ImageEditorGpuSceneDisposeRequestV3 {
   type: 'dispose'
 }
 
-export interface ImageEditorGpuSceneDiagnosticDeviceLossRequestV3 {
+interface ImageEditorGpuSceneDiagnosticDeviceLossRequestV3 {
   type: 'diagnostic-device-loss'
   recovery: 'success' | 'failure'
 }
@@ -172,17 +172,17 @@ interface ImageEditorGpuSceneEventBaseV3 {
   deviceGeneration: number
 }
 
-export interface ImageEditorGpuSceneReadyEventV3 extends ImageEditorGpuSceneEventBaseV3 {
+interface ImageEditorGpuSceneReadyEventV3 extends ImageEditorGpuSceneEventBaseV3 {
   type: 'ready'
   recovered: boolean
 }
 
 /** 宿主完成本场景源几何准备；不是 Worker 的设备就绪事件。 */
-export interface ImageEditorGpuSceneResourcesReadyEventV3 extends ImageEditorGpuSceneEventBaseV3 {
+interface ImageEditorGpuSceneResourcesReadyEventV3 extends ImageEditorGpuSceneEventBaseV3 {
   type: 'scene-resources-ready'
 }
 
-export interface ImageEditorGpuSceneTilesNeededEventV3 extends ImageEditorGpuSceneEventBaseV3 {
+interface ImageEditorGpuSceneTilesNeededEventV3 extends ImageEditorGpuSceneEventBaseV3 {
   type: 'tiles-needed'
   /** 存在时资源必须回到对应导出 job，不能写入预览 residency。 */
   exportRequestId?: string
@@ -215,7 +215,7 @@ export interface ImageEditorGpuSceneFrameReadyEventV3 extends ImageEditorGpuScen
   }
 }
 
-export interface ImageEditorGpuSceneSurfaceFrameReadyEventV3 extends ImageEditorGpuSceneEventBaseV3 {
+interface ImageEditorGpuSceneSurfaceFrameReadyEventV3 extends ImageEditorGpuSceneEventBaseV3 {
   type: 'surface-frame-ready'
   requestId: string
   cameraSequence: number
@@ -227,7 +227,7 @@ export interface ImageEditorGpuSceneSurfaceFrameReadyEventV3 extends ImageEditor
   diagnostics?: ImageEditorGpuSceneFrameReadyEventV3['diagnostics']
 }
 
-export interface ImageEditorGpuSceneExportTileEventV3 extends ImageEditorGpuSceneEventBaseV3 {
+interface ImageEditorGpuSceneExportTileEventV3 extends ImageEditorGpuSceneEventBaseV3 {
   type: 'export-tile'
   requestId: string
   tileX: number
@@ -250,7 +250,7 @@ export interface ImageEditorGpuSceneExportTileEventV3 extends ImageEditorGpuScen
   }
 }
 
-export interface ImageEditorGpuSceneDeviceLostEventV3 extends ImageEditorGpuSceneEventBaseV3 {
+interface ImageEditorGpuSceneDeviceLostEventV3 extends ImageEditorGpuSceneEventBaseV3 {
   type: 'device-lost'
   reason: string
   retryAfterMs: number

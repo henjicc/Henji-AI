@@ -7,7 +7,7 @@ import type { PrivacyBox } from '../../../../../src/core/screenRecording/privacy
 
 // The CRF23 encoded still fixture differs by at most 8/255 in a handful of scan pixels across I/P frames.
 // Keep every larger difference (no minimum changed area); compare against the accepted reference so edits accumulate.
-export const SCREEN_CODEC_NOISE = 8
+const SCREEN_CODEC_NOISE = 8
 
 /** Compress consecutive selected indices, preserving the original ten-Hz frame clock through FFmpeg select. */
 export function frameSelection(indices: readonly number[]): string {

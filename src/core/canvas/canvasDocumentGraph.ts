@@ -9,7 +9,7 @@ import { mapCanvasNodeMediaReferences, type CanvasMediaSchemaResolver } from './
  * 撤销记录（程序目录里的会话状态）用同一套规则校验，读不懂就丢弃。
  */
 
-export const PROJECT_IMAGE_REFERENCE_PREFIX = '__img_ref__:'
+const PROJECT_IMAGE_REFERENCE_PREFIX = '__img_ref__:'
 
 export type CanvasGraphField = 'nodes' | 'edges' | 'history'
 
@@ -20,7 +20,7 @@ interface GraphNode extends Record<string, unknown> {
   data: Record<string, unknown>
 }
 interface GraphEdge extends Record<string, unknown> { id: string; source: string; target: string }
-export interface CanvasGraph { nodes: GraphNode[]; edges: GraphEdge[] }
+interface CanvasGraph { nodes: GraphNode[]; edges: GraphEdge[] }
 export interface ParsedCanvasDocumentGraph extends CanvasGraph { imagePool: string[] }
 export interface ParsedCanvasHistory { past: CanvasGraph[]; future: CanvasGraph[] }
 
@@ -52,7 +52,7 @@ export function decodeCanvasImageReference(value: string, pool: readonly string[
   return pool[index]
 }
 
-export function parseCanvasGraph(
+function parseCanvasGraph(
   nodes: unknown,
   edges: unknown,
   pool: readonly string[],

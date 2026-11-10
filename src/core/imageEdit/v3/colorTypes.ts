@@ -14,17 +14,17 @@ export interface ImageEditCicpMetadataV3 {
   fullRange: boolean;
 }
 
-export interface ImageEditHdrChromaticityV3 {
+interface ImageEditHdrChromaticityV3 {
   x: number;
   y: number;
 }
 
-export interface ImageEditHdrContentLightV3 {
+interface ImageEditHdrContentLightV3 {
   maxContentLightLevelNits: number;
   maxFrameAverageLightLevelNits: number;
 }
 
-export interface ImageEditHdrMasteringDisplayV3 {
+interface ImageEditHdrMasteringDisplayV3 {
   red: ImageEditHdrChromaticityV3;
   green: ImageEditHdrChromaticityV3;
   blue: ImageEditHdrChromaticityV3;

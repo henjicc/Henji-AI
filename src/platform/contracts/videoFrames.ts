@@ -54,7 +54,7 @@ export interface VideoFramePortReleaseMessage {
   token: number
 }
 
-export interface VideoFrameChannel {
+interface VideoFrameChannel {
   route: string
   /** 交给消费方 Worker（transfer）；帧消息与交回协议见文件头。 */
   port: MessagePort

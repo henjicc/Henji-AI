@@ -26,8 +26,8 @@ import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-contr
 
 const logger = createLogger('features.generation.preparation')
 
-export type GenerationMediaType = 'image' | 'video' | 'audio'
-export type GenerationModelSearchSort = 'registry' | 'recommended' | 'lowest_estimated_price'
+type GenerationMediaType = 'image' | 'video' | 'audio'
+type GenerationModelSearchSort = 'registry' | 'recommended' | 'lowest_estimated_price'
 export interface GenerationModelSearchInput {
   query?: string
   mediaType?: GenerationMediaType
@@ -194,7 +194,7 @@ function modelDescriptionText(model: ModelDefinition): string {
  * 将模型当前参数的价格规则转为可安全提供给 Agent 的估算值。
  * 搜索阶段使用配置默认值；真正提交前会再次用已解析的参数计算一次。
  */
-export function createPriceEstimate(
+function createPriceEstimate(
   model: ModelDefinition,
   params = registry.getDefaultValues(model.meta.id),
   usdToCnyRate = readPriceEstimateDisplaySettings().usdToCnyRate
@@ -495,7 +495,7 @@ function applyLinkages(model: ModelDefinition, values: DynamicValueMap, supplied
  * 联动会把冲突的值换成可用值（旧节点里存过的档位也靠它迁移），这一步不能去掉；
  * 但调用方明确传入的值被换掉时必须说出来，否则会出现“要矢量图、实际出普通图却报已通过校验”。
  */
-export function adjustedParams(model: ModelDefinition, supplied: Record<string, unknown>, normalized: DynamicValueMap): Array<{ paramId: string; requested: unknown; applied: unknown }> {
+function adjustedParams(model: ModelDefinition, supplied: Record<string, unknown>, normalized: DynamicValueMap): Array<{ paramId: string; requested: unknown; applied: unknown }> {
   return model.params
     .filter((param) => param.id in supplied && JSON.stringify(supplied[param.id]) !== JSON.stringify(normalized[param.id]))
     .map((param) => ({ paramId: param.id, requested: supplied[param.id], applied: normalized[param.id] }))

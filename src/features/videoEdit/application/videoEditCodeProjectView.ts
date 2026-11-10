@@ -1,7 +1,7 @@
 import { focusVideoEditPanel } from './videoEditService'
 
 /** 代码工程面板的视图状态，每个剪辑实例一份：看文件还是看提交、打开了哪个文件、展开了哪些文件夹。 */
-export type VideoEditCodeProjectMode = 'files' | 'history'
+type VideoEditCodeProjectMode = 'files' | 'history'
 /** `highlight`：打开文件后选中这一段（元素的源码位置）；`hash` 是定位所依据的文件内容，工作区里的文件改过就不选。 */
 export interface VideoEditCodeProjectHighlight { path: string; hash: string; start: number; end: number }
 export interface VideoEditCodeProjectView { mode: VideoEditCodeProjectMode; openPath: string | null; expanded: readonly string[]; onlySelection: boolean; highlight: VideoEditCodeProjectHighlight | null }

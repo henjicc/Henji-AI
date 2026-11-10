@@ -1,5 +1,5 @@
-export type UiWidthBand = 'narrow' | 'regular'
-export type UiHeightBand = 'short' | 'constrained' | 'spacious'
+type UiWidthBand = 'narrow' | 'regular'
+type UiHeightBand = 'short' | 'constrained' | 'spacious'
 
 export interface UiAvailableSpaceProfile {
   widthBand: UiWidthBand

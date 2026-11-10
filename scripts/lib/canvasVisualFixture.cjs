@@ -315,7 +315,6 @@ async function prepareFullTypeFixture(page, fixture, enabled) {
 }
 
 module.exports = {
-  buildSyntheticVisualSourceNodes,
   ensureVisualSourceProject,
   prepareFullTypeFixture,
   prepareModelSelectorFixture,

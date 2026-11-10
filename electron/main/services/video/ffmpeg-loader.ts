@@ -22,8 +22,8 @@ export interface MediaBinaryContext {
   readText?: (file: string) => string | null
 }
 
-export const UNIFIED_FFMPEG_PACKAGED_SEGMENTS = ['resources', 'video-decoder'] as const
-export const UNIFIED_FFMPEG_POINTER_SEGMENTS = ['native', 'video-decoder', 'ffmpeg', 'current.json'] as const
+const UNIFIED_FFMPEG_PACKAGED_SEGMENTS = ['resources', 'video-decoder'] as const
+const UNIFIED_FFMPEG_POINTER_SEGMENTS = ['native', 'video-decoder', 'ffmpeg', 'current.json'] as const
 
 function readTextOrNull(file: string): string | null {
   try {
@@ -67,7 +67,7 @@ export function unifiedMediaBinaryPath(name: MediaBinaryName, context: MediaBina
  * 打包后该路径落在 app.asar 里，二进制无法从 asar 虚拟文件系统内直接被子进程执行，
  * 必须重写成 electron-builder asarUnpack 生成的 app.asar.unpacked 真实磁盘路径。
  */
-export function resolveUnpackedBinaryPath(binaryPath: string): string {
+function resolveUnpackedBinaryPath(binaryPath: string): string {
   const asarSegment = `${path.sep}app.asar${path.sep}`
   if (!binaryPath.includes(asarSegment)) return binaryPath
   return binaryPath.replace(asarSegment, `${path.sep}app.asar.unpacked${path.sep}`)

@@ -40,7 +40,6 @@ function clearElectronDevState(root, pid = process.pid) {
 
 module.exports = {
   clearElectronDevState,
-  electronDevStatePath,
   isProcessAlive,
   readElectronDevState,
   writeElectronDevState,

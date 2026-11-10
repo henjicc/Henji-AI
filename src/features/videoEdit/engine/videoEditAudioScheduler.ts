@@ -1,5 +1,5 @@
 export const VIDEO_EDIT_AUDIO_BLOCK_SECONDS = 0.5
-export const VIDEO_EDIT_AUDIO_LOOKAHEAD_SECONDS = 0.4
+const VIDEO_EDIT_AUDIO_LOOKAHEAD_SECONDS = 0.4
 export const VIDEO_EDIT_AUDIO_FADE_SECONDS = 0.005
 /**
  * 同时在混的块上限（含停止后仍在混、结果会被丢弃的旧块）。混音在渲染会话里串行执行、请求数有上限：

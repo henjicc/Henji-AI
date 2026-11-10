@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 /** Sort object keys and set-like JSON Schema arrays, preserving tuple/union order. */
-export function canonicalPersistenceJson(value: unknown, key = ''): unknown {
+function canonicalPersistenceJson(value: unknown, key = ''): unknown {
   if (Array.isArray(value)) {
     const entries = value.map(item => canonicalPersistenceJson(item))
     return key === 'required' || key === 'enum' ? entries.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b), 'en')) : entries

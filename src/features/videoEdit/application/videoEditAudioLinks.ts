@@ -155,7 +155,7 @@ async function applyVideoEditAudioLayout(): Promise<void> {
  * 音频编辑的“多轨”（参照 Audition 的“波形 | 多轨”）：多轨就是剪辑的序列，用“音频”布局打开（时间线 + 音轨混合器）。
  * 已打开的剪辑里有片段链接着这份音频作品时回到那里；否则新建一份多轨剪辑，把这份作品渲染的声音以动态链接放在第一条音频轨上。
  */
-export async function openAudioDocumentInMultitrack(audioDocumentId: string): Promise<void> {
+async function openAudioDocumentInMultitrack(audioDocumentId: string): Promise<void> {
   const operations = videoEditDocumentOperations()
   /** 打开剪辑、切到音频布局，并选中链接着这份作品的片段。 */
   const reveal = async (summary: DocumentSummary): Promise<void> => {

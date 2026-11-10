@@ -1,8 +1,7 @@
 import { distributeTableColumns, type TableColumn } from '../../../core/imaging/vectorContent/shaping/table'
 import { prepareTextLayout, textIntrinsicWidths } from './shapedText'
 import type { RichTextContent, TextStyleInput, TextLayout } from './text'
-export type { TableColumn }
-export interface TableCell { text: string | RichTextContent; style?: TextStyleInput; colSpan?: number; rowSpan?: number }
+interface TableCell { text: string | RichTextContent; style?: TextStyleInput; colSpan?: number; rowSpan?: number }
 export interface TableInput { columns: readonly TableColumn[]; rows: readonly Readonly<Record<string, string | TableCell>>[]; style?: TextStyleInput }
 export interface TableOptions { width?: number; cellPadding?: number; columnGap?: number; rowGap?: number }
 export interface TableLayout {

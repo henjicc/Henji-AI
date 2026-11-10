@@ -80,12 +80,6 @@
       "reason": "冻结数据库结构或历史字段解释，保留指定数据格式的兼容读取与逐版本迁移"
     },
     {
-      "category": "format",
-      "file": "electron/main/services/image-editor-v3/brush-tile-codec.ts",
-      "name": "IMAGE_EDIT_BRUSH_TILE_CODEC_VERSION_V3",
-      "reason": "版本用于校验持久数据或跨线程协议兼容性，不能作为实现迭代名称删除"
-    },
-    {
       "category": "migration",
       "file": "electron/main/services/logging/traceSchema.ts",
       "name": "createModelTraceTablesV1",

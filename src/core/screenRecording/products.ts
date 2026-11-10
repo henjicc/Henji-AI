@@ -21,7 +21,7 @@ export function recordingProductSteps(recording: RecordingDocument, understandin
   })
 }
 
-export function recordingHtmlEscape(value: string): string { return value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]!)) }
+function recordingHtmlEscape(value: string): string { return value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]!)) }
 function markdownText(value: string): string { return value.replace(/\\/g, '\\\\').replace(/([`*_{}[\]<>#!|])/g, '\\$1').replace(/\r?\n/g, '  \n') }
 export function recordingStepsMarkdown(name: string, steps: readonly RecordingProductStep[], warnings: readonly string[] = []): string {
   return [`# ${markdownText(name)}`, ...warnings.map(warning => `> ${markdownText(warning)}`), ...steps.flatMap((step, index) => [`## ${index + 1}. ${markdownText(step.title)}`, markdownText(step.description), `![步骤 ${index + 1}](./${step.image})`])].join('\n\n') + '\n'

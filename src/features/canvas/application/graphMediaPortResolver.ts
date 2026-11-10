@@ -33,7 +33,7 @@ const MEDIA_LIMIT_KEY: Record<RowMediaKind, 'images' | 'videos' | 'audios'> = {
   audio: 'audios',
 };
 
-export type ConnectionRejectionReason = 'type-mismatch' | 'media-limit-exceeded';
+type ConnectionRejectionReason = 'type-mismatch' | 'media-limit-exceeded';
 
 export interface ParamConnectionValidationResult {
   compatible: boolean;

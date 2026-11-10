@@ -13,19 +13,19 @@ import { parseRecord, parseVoid, registerIpcHandler } from './registry'
  * → `src/commands/localModels.ts` 调用。下载进度经 `localModels:progress` 推给所有窗口。
  */
 
-export function parseLocalModelIdPayload(input: unknown): LocalModelId {
+function parseLocalModelIdPayload(input: unknown): LocalModelId {
   const record = parseRecord(input)
   if (!isLocalModelId(record.id) || Object.keys(record).length !== 1) throw new Error('Expected { id: LocalModelId }')
   return record.id
 }
 
-export function parseOptionalLocalModelIdPayload(input: unknown): LocalModelId | null {
+function parseOptionalLocalModelIdPayload(input: unknown): LocalModelId | null {
   const record = parseRecord(input)
   if (record.id === null && Object.keys(record).length === 1) return null
   return parseLocalModelIdPayload(input)
 }
 
-export function parseDownloadSourcePayload(input: unknown): LocalModelDownloadSource {
+function parseDownloadSourcePayload(input: unknown): LocalModelDownloadSource {
   const record = parseRecord(input)
   const source = record.source
   if (typeof source !== 'string' || !(LOCAL_MODEL_DOWNLOAD_SOURCES as readonly string[]).includes(source) || Object.keys(record).length !== 1) {

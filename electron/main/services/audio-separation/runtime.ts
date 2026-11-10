@@ -30,7 +30,7 @@ function modelFile(mode: AudioSeparationMode): { name: string; sha256: string } 
   return file
 }
 
-export function getAudioSeparationService(): AudioSeparationService {
+function getAudioSeparationService(): AudioSeparationService {
   if (service) return service
   const host = getLocalInferenceHost()
   const created = new AudioSeparationService({

@@ -5,7 +5,7 @@ import { assetApplicationService } from './assetApplicationService'
 const logger = createLogger('features.assets.batch')
 const BATCH_CONCURRENCY = 4
 
-export interface AssetBatchFailure {
+interface AssetBatchFailure {
   assetId: string
   message: string
 }

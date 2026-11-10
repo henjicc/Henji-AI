@@ -12,7 +12,7 @@ import {
 } from './annotationGeometryV3'
 import { findImageEditLayerLocationV3 } from './layerTreeV3'
 
-export type ImageEditorSelectionMaskTargetReasonV3 =
+type ImageEditorSelectionMaskTargetReasonV3 =
   | 'select-one'
   | 'locked'
   | 'hidden'

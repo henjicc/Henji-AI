@@ -25,7 +25,7 @@ export interface AuthorTypeChecker {
 }
 
 /** 作者代码运行在剪辑渲染 Worker 里：用 worker 标准库，不给 DOM。 */
-export const AUTHOR_TYPE_LIBS = ['lib.esnext.d.ts', 'lib.webworker.d.ts', 'lib.webworker.iterable.d.ts', 'lib.webworker.asynciterable.d.ts'] as const
+const AUTHOR_TYPE_LIBS = ['lib.esnext.d.ts', 'lib.webworker.d.ts', 'lib.webworker.iterable.d.ts', 'lib.webworker.asynciterable.d.ts'] as const
 const AUTHOR_ROOT = '/author/'
 const LIB_ROOT = '/lib/'
 const ENV = { webgpu: '/env/webgpu.d.ts', api: '/env/henji-author-api.d.ts', globals: '/env/henji-author-globals.d.ts', modules: '/env/henji-author-modules.d.ts', untypedLibrary: '/env/henji-author-untyped-library.d.ts' } as const
@@ -95,7 +95,7 @@ interface Insertion { at: number; length: number }
  * 作者通常不写类型注解：把入口的默认导出改写成 __henjiAuthorModule(...) 再检查，draw/layers 的参数
  * 就有了上下文类型。改写只在检查器内存里，位置按插入表换回原文。
  */
-export function wrapAuthorEntry(file: string, text: string): { text: string; insertions: Insertion[] } {
+function wrapAuthorEntry(file: string, text: string): { text: string; insertions: Insertion[] } {
   const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, /\.[cm]?tsx?$/.test(file) ? ts.ScriptKind.TS : ts.ScriptKind.JS)
   const target = authorDefaultExpression(ts, source)
   if (!target) return { text, insertions: [] }

@@ -18,7 +18,7 @@ export const srgbToLinear = (x: number): number => { const a = Math.abs(x); retu
 export const linearToSrgb = (x: number): number => { const a = Math.abs(x); return Math.sign(x) * (a <= .0031308 ? a * 12.92 : 1.055 * a ** (1 / 2.4) - .055) }
 export const luminance = (rgb: readonly number[]): number => rgb[0] * REC709_LUMA[0] + rgb[1] * REC709_LUMA[1] + rgb[2] * REC709_LUMA[2]
 
-export function mulMat3(a: Mat3, b: Mat3): Mat3 {
+function mulMat3(a: Mat3, b: Mat3): Mat3 {
   const r = new Array<number>(9) as Mat3
   for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) r[i * 3 + j] = a[i * 3] * b[j] + a[i * 3 + 1] * b[3 + j] + a[i * 3 + 2] * b[6 + j]
   return r
@@ -44,7 +44,7 @@ export function xyzToXy(xyz: readonly number[]): [number, number] { const sum = 
 export const xyToUv = (x: number, y: number): [number, number] => { const d = -2 * x + 12 * y + 3; return [4 * x / d, 6 * y / d] }
 export const uvToXy = (u: number, v: number): [number, number] => { const d = 2 * u - 8 * v + 4; return [3 * u / d, 2 * v / d] }
 /** Kim et al. (2002) cubic fit of the Planckian locus, 1667–25000 K. */
-export function planckianXy(kelvin: number): [number, number] {
+function planckianXy(kelvin: number): [number, number] {
   const t = Math.min(25000, Math.max(1667, kelvin))
   const x = t <= 4000 ? -.2661239e9 / t ** 3 - .2343589e6 / t ** 2 + .8776956e3 / t + .17991 : -3.0258469e9 / t ** 3 + 2.1070379e6 / t ** 2 + .2226347e3 / t + .24039
   const y = t <= 2222 ? -1.1063814 * x ** 3 - 1.3481102 * x ** 2 + 2.18555832 * x - .20219683
@@ -59,7 +59,7 @@ function planckianUvFrame(kelvin: number): { uv: [number, number]; normal: [numb
   const normal: [number, number] = [-dv / length, du / length]
   return { uv, normal: normal[1] >= 0 ? normal : [-normal[0], -normal[1]] }
 }
-export const REFERENCE_WHITE_KELVIN = 6500
+const REFERENCE_WHITE_KELVIN = 6500
 /** Planckian 6500 K is shifted onto D65 exactly so that the neutral slider position is an identity. */
 const D65_OFFSET = ((): [number, number] => { const d65 = xyToUv(...D65_XY); const p = planckianUvFrame(REFERENCE_WHITE_KELVIN).uv; return [d65[0] - p[0], d65[1] - p[1]] })()
 /** Illuminant chromaticity for a color temperature and Duv offset (positive Duv = greener light). */
@@ -83,7 +83,7 @@ export function xyToKelvinDuv(x: number, y: number): { kelvin: number; duv: numb
 }
 
 /** Von Kries adaptation in CAT16 space, expressed as one linear sRGB matrix (source white → destination white). */
-export function chromaticAdaptationMatrix(sourceXy: readonly [number, number], destinationXy: readonly [number, number]): Mat3 {
+function chromaticAdaptationMatrix(sourceXy: readonly [number, number], destinationXy: readonly [number, number]): Mat3 {
   const source = applyMat3(CAT16, xyToXyz(sourceXy[0], sourceXy[1])); const destination = applyMat3(CAT16, xyToXyz(destinationXy[0], destinationXy[1]))
   const scale: Mat3 = [destination[0] / source[0], 0, 0, 0, destination[1] / source[1], 0, 0, 0, destination[2] / source[2]]
   return mulMat3(XYZ_TO_SRGB, mulMat3(invertMat3(CAT16), mulMat3(scale, mulMat3(CAT16, SRGB_TO_XYZ))))

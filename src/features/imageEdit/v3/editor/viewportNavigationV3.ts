@@ -16,8 +16,8 @@ export interface ImageEditorNavigationGestureV3 {
   moved: boolean
 }
 
-export const IMAGE_EDITOR_VIEWPORT_MIN_ZOOM_V3 = 0.05
-export const IMAGE_EDITOR_VIEWPORT_MAX_ZOOM_V3 = 8
+const IMAGE_EDITOR_VIEWPORT_MIN_ZOOM_V3 = 0.05
+const IMAGE_EDITOR_VIEWPORT_MAX_ZOOM_V3 = 8
 
 export function clampImageEditorViewportZoomV3(value: number): number {
   if (!Number.isFinite(value)) return 1

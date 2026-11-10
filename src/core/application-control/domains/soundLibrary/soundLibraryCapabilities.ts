@@ -3,8 +3,8 @@ import { applicationRefSchema } from '../../applicationCapabilities'
 import { capabilityControl, defineApplicationCapability } from '../shared/defineApplicationCapability'
 
 const ref = <K extends string>(kind: K) => applicationRefSchema.extend({ kind: z.literal(kind) }).strict()
-export const soundLibraryFolderRef = ref('sound_library.folder')
-export const soundLibrarySoundRef = ref('sound_library.sound')
+const soundLibraryFolderRef = ref('sound_library.folder')
+const soundLibrarySoundRef = ref('sound_library.sound')
 const folderStatus = z.enum(['not_indexed', 'indexing', 'ready', 'failed'])
 
 export const addSoundLibraryFolderCapability = defineApplicationCapability({

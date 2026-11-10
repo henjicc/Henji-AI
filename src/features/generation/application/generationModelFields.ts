@@ -6,7 +6,7 @@ import {
 } from '@/core/application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 
-export const GENERATION_MODEL_ENTITY_TYPE = 'generation.model' as const
+const GENERATION_MODEL_ENTITY_TYPE = 'generation.model' as const
 
 const MODEL_VISIBILITY_CHANGED_EVENT = 'modelVisibilityChanged'
 

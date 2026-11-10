@@ -74,4 +74,4 @@ function findSymbolGlyphs(source, options = {}) {
   return findings
 }
 
-module.exports = { SYMBOL_GLYPH_PATTERN, blankComments, findSymbolGlyphs }
+module.exports = { findSymbolGlyphs }

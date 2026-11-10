@@ -15,14 +15,14 @@ export function resolveDropdownDisplay<T extends string | number | boolean>(
 export const UI_MENU_ITEM_PADDING_X_PX = { sm: 16, md: 24, lg: 24 } as const
 
 /** 选中勾槽：文字与勾的间距 8 + 勾 14。只有带选中态的菜单（下拉选值）才预留；动作菜单没有勾，不留（任务 5.9）。 */
-export const UI_MENU_ITEM_CHECK_SLOT_PX = 22
+const UI_MENU_ITEM_CHECK_SLOT_PX = 22
 
 /**
  * 带选中态的文字菜单项除文字外的横向占位 = 内边距 + 勾槽。
  * 菜单宽度必须按“菜单项自己的留白”算，不能借用触发器的留白——
  * 4.3 前借用触发器留白（静默 40 / 字段 44），带勾的选中项差 8–12px 被截成“参考生…”。
  */
-export const UI_MENU_ITEM_HORIZONTAL_CHROME_PX = {
+const UI_MENU_ITEM_HORIZONTAL_CHROME_PX = {
   sm: UI_MENU_ITEM_PADDING_X_PX.sm + UI_MENU_ITEM_CHECK_SLOT_PX,
   md: UI_MENU_ITEM_PADDING_X_PX.md + UI_MENU_ITEM_CHECK_SLOT_PX,
   lg: UI_MENU_ITEM_PADDING_X_PX.lg + UI_MENU_ITEM_CHECK_SLOT_PX,
@@ -37,7 +37,7 @@ export function resolveMenuItemHorizontalChrome(size: keyof typeof UI_MENU_ITEM_
 }
 
 /** 下拉浮层自身的横向占位：边框 1+1 + 列表内边距 p-1（4+4）。 */
-export const DROPDOWN_PANEL_HORIZONTAL_CHROME_PX = 10
+const DROPDOWN_PANEL_HORIZONTAL_CHROME_PX = 10
 
 /** 按选项内容自适应的菜单宽度上限；超过才截断（截断项带 title）。 */
 export const DROPDOWN_MENU_MAX_WIDTH_PX = 360

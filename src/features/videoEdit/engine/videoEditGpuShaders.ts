@@ -4,7 +4,7 @@
  */
 
 /** Layer geometry: 24 floats (96 bytes), including optional corner-pin homography. */
-export const VIDEO_EDIT_LAYER_VERTEX = `
+const VIDEO_EDIT_LAYER_VERTEX = `
 struct Params { size: vec2f, rotation: vec2f, position: vec2f, opacity: f32, alignment: f32, aspect: vec2f, padding: vec2f, warp0: vec4f, warp1: vec4f, warp2: vec4f }
 @group(0) @binding(2) var<uniform> p: Params;
 struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f }

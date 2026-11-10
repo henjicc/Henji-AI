@@ -60,7 +60,7 @@ interface PublishedSource {
 }
 
 /** 来源文档找不到（被删除、移走且索引里没有）：“回到来源”据此提示重新定位。 */
-export class VideoEditSourceMissingError extends Error {
+class VideoEditSourceMissingError extends Error {
   constructor() {
     super('找不到这个片段的来源文档，它可能已被删除或移到了别处。')
     this.name = 'VideoEditSourceMissingError'
@@ -194,7 +194,7 @@ async function audioSource(meta: DocumentMeta, options: VideoEditCreativeSourceO
     ...(captions.trim() ? { captions } : {}), linked, recheck: async () => { assertSource() } }
 }
 
-export async function resolveVideoEditSourceDocument(docRef: { docId: string; path: string }): Promise<DocumentMeta> {
+async function resolveVideoEditSourceDocument(docRef: { docId: string; path: string }): Promise<DocumentMeta> {
   const resolved = await getDocumentOperations().resolveDocumentLink(docRef)
   if (resolved.status !== 'found') throw new VideoEditSourceMissingError()
   return resolved.meta

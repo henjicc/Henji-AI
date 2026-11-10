@@ -55,7 +55,7 @@ export class FilterCascade implements AudioProcessor {
 }
 
 /** 均衡器图形方式的 10 个倍频程频段（参数键 → 中心频率）。 */
-export const GRAPHIC_EQ_BANDS: ReadonlyArray<readonly [string, number]> = [['band_31', 31.25], ['band_63', 62.5], ['band_125', 125], ['band_250', 250], ['band_500', 500], ['band_1k', 1000], ['band_2k', 2000], ['band_4k', 4000], ['band_8k', 8000], ['band_16k', 16000]]
+const GRAPHIC_EQ_BANDS: ReadonlyArray<readonly [string, number]> = [['band_31', 31.25], ['band_63', 62.5], ['band_125', 125], ['band_250', 250], ['band_500', 500], ['band_1k', 1000], ['band_2k', 2000], ['band_4k', 4000], ['band_8k', 8000], ['band_16k', 16000]]
 /** 每段一个倍频程宽的峰值滤波器（Q = √2）。 */
 export const graphicEqDesign = (params: VideoEditBuiltinParams): BiquadSpec[] => GRAPHIC_EQ_BANDS.map(([key, frequency]) => ({ kind: 'peaking', frequency, q: Math.SQRT2, gain: params[key] as number }))
 
@@ -79,7 +79,7 @@ export const notchQ = (width: number): number => 30 * (1 / 30) ** (width / 100)
 export const notchDesign = (params: VideoEditBuiltinParams): BiquadSpec[] => [{ kind: 'cut', frequency: params.frequency as number, q: notchQ(params.width as number), gain: params.depth as number }]
 
 /** 去嗡声最多处理的谐波数（含基频）。 */
-export const DEHUM_MAX_HARMONICS = 10
+const DEHUM_MAX_HARMONICS = 10
 /** 去嗡声的“强度”0–100 → 每个陷波的深度（dB）与 Q：强度越大越深、略宽（容得下电源频率的小漂移）。 */
 export const dehumNotch = (amount: number): { depth: number; q: number } => ({ depth: -0.6 * amount, q: 30 - 20 * amount / 100 })
 /** 去嗡声：30 Hz 四阶高通（直流与次低频）+ 基频及倍频的陷波，固定 2 + 10 段（多出的谐波为直通段）。 */

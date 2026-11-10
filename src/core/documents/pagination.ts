@@ -1,5 +1,5 @@
 /** Per-response work budget; callers can continue until nextCursor is null. */
-export const DOCUMENT_PAGE_SIZE = 100
+const DOCUMENT_PAGE_SIZE = 100
 export const MAX_DOCUMENT_PAGE_SIZE = 1000
 
 export interface ListPageRequest {

@@ -13,15 +13,15 @@ import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
 import { videoEditCodeInputParameters, type VideoEditCodeDeclarationReader } from '@/core/videoEdit/codeInputParameters'
 
 // 原片打开约 200ms，加约 1 秒 GOP 定位及调度余量；3 秒覆盖切点，避免预打开整条时间线。
-export const VIDEO_EDIT_DECODE_LOOKAHEAD_SECONDS = 3
-export const VIDEO_EDIT_DECODE_NEIGHBOUR_SECONDS = 2
+const VIDEO_EDIT_DECODE_LOOKAHEAD_SECONDS = 3
+const VIDEO_EDIT_DECODE_NEIGHBOUR_SECONDS = 2
 /**
  * Stills (code video inputs fixed at one time) are decoded once and kept for the session, so while paused or idle they
  * are looked for this far ahead of the playhead (and `VIDEO_EDIT_DECODE_NEIGHBOUR_SECONDS` behind it), nearest first,
  * as far as the renderer's still store holds them (`VideoEditRenderer.prepareLookahead`). Playback then rarely decodes
  * one while playing (each such decode competes with the pictures being shown for the one native decoder).
  */
-export const VIDEO_EDIT_STILL_LOOKAHEAD_SECONDS = 60
+const VIDEO_EDIT_STILL_LOOKAHEAD_SECONDS = 60
 /**
  * Moving code video inputs (a code clip's video parameter following the clip, or taking frames by a timetable) of clips
  * about to start, or about to enter their next span, are opened and
@@ -29,7 +29,7 @@ export const VIDEO_EDIT_STILL_LOOKAHEAD_SECONDS = 60
  * within the paused neighbourhood ahead (`VIDEO_EDIT_DECODE_NEIGHBOUR_SECONDS`): pressing play then reaches them already
  * positioned. Farther ones the renderer prepares itself once playing (three seconds ahead, stepping between frames).
  */
-export const VIDEO_EDIT_INPUT_LOOKAHEAD_REFERENCES = 6
+const VIDEO_EDIT_INPUT_LOOKAHEAD_REFERENCES = 6
 export interface VideoEditLookaheadScope { document: VideoEditComposition; key: string; input?: CodeMediaInput; parent?: VideoEditComposition }
 export interface VideoEditDecodeTarget { media: VideoEditMedia; time: number; purpose: 'playback' | 'seek'; distance: number; clipId?: string }
 /**

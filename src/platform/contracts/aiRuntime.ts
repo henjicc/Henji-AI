@@ -3,7 +3,7 @@ import type { AiRuntimeTrace } from '@/core/types'
 import type { StructuredGenerationOutput, TtsVoice } from '@henjicc/ai-sdk'
 import type { DocumentContainerRef } from '../../core/documents/types'
 
-export interface ProviderKeyStatusDto {
+interface ProviderKeyStatusDto {
   providerId: string
   configured: boolean
 }
@@ -29,7 +29,7 @@ export interface ProviderConnectionTestResultDto {
   unlimitedBalance?: boolean
 }
 
-export interface AiGenerateRequestDto {
+interface AiGenerateRequestDto {
   paidReceipt?: import('../../core/application-control/paidApproval').PaidOperationReceipt
   modelId: string
   params: DynamicValueMap
@@ -38,7 +38,7 @@ export interface AiGenerateRequestDto {
   outputContainer?: DocumentContainerRef
 }
 
-export interface AiContinuePollingRequestDto {
+interface AiContinuePollingRequestDto {
   modelId: string
   taskId: string
   params?: DynamicValueMap
@@ -47,12 +47,12 @@ export interface AiContinuePollingRequestDto {
   outputContainer?: DocumentContainerRef
 }
 
-export interface AiGetProgressEstimateRequestDto {
+interface AiGetProgressEstimateRequestDto {
   modelId: string
   params?: DynamicValueMap
 }
 
-export interface AiRecordProgressSampleRequestDto {
+interface AiRecordProgressSampleRequestDto {
   modelId: string
   params?: DynamicValueMap
   startedAtMs: number
@@ -60,7 +60,7 @@ export interface AiRecordProgressSampleRequestDto {
   source: 'generation' | 'canvas'
 }
 
-export interface AiGenerateResponseDto {
+interface AiGenerateResponseDto {
   status: 'completed' | 'pending' | 'failed'
   /** 供应商返回的结果地址，按输出顺序。 */
   urls: string[]
@@ -73,7 +73,7 @@ export interface AiGenerateResponseDto {
   trace?: AiRuntimeTrace
 }
 
-export interface AiProgressEstimateDto {
+interface AiProgressEstimateDto {
   durationMs: number
   source: 'time-bucket' | 'global' | 'seed' | 'meta' | 'default'
   profileKey: string
@@ -87,11 +87,12 @@ export interface AiProgressEstimateDto {
   recentBucketDurationsMs: number[]
 }
 
-export interface AiRecordProgressSampleResponseDto {
+interface AiRecordProgressSampleResponseDto {
   actualDurationMs: number
   estimate: AiProgressEstimateDto
 }
 
+/** @public 通过 import() 类型引用，knip 看不到。 */
 export interface AiSavedResult { status?: string; taskId?: string; urls?: string[]; filePaths?: string[]; createdFilePaths?: string[]; metadata?: unknown; structuredOutput?: unknown }
 
 export interface AiRuntimePlatform {

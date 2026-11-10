@@ -21,7 +21,7 @@ export type ColorGradeExportFormat = 'cube' | 'cdl'
 export const CDL_MAX_MEAN_DELTA_E = 3
 
 export interface AscCdl { slope: Vec3; offset: Vec3; power: Vec3; saturation: number }
-export interface ColorGradeExportScope {
+interface ColorGradeExportScope {
   /** 去掉空间类操作后的逐像素参数。 */
   params: Record<string, unknown>
   /** 无法写进逐色映射、已从导出中去掉的部分（锐化、晕影等依赖相邻像素或画面位置的操作）。 */
@@ -52,7 +52,7 @@ const number = (params: Readonly<Record<string, unknown>>, key: string): number 
 const curveSet = (value: unknown): boolean => Array.isArray(value) ? value.length > 0 : typeof value === 'string' && value.length > 0
 
 /** 逐像素部分保留，空间类部分去掉；查看选区蒙版是观察开关，不属于调色结果。 */
-export function colorGradeExportScope(params: Readonly<Record<string, unknown>>): ColorGradeExportScope {
+function colorGradeExportScope(params: Readonly<Record<string, unknown>>): ColorGradeExportScope {
   const next: Record<string, unknown> = { ...params, hsl_show_mask: false }
   const omitted: string[] = []; const approximated: string[] = []
   if (number(params, 'sharpen')) { omitted.push('锐化'); next.sharpen = 0 }
@@ -65,7 +65,7 @@ export function colorGradeExportScope(params: Readonly<Record<string, unknown>>)
 }
 
 /** 只能按颜色选择性处理、CDL 的每通道公式无法表达的部分。 */
-export function colorGradeCdlInexpressible(params: Readonly<Record<string, unknown>>): string[] {
+function colorGradeCdlInexpressible(params: Readonly<Record<string, unknown>>): string[] {
   const parts: string[] = []
   if (COLOR_GRADE_MIXER_PARAMS.some(param => number(params, param.key) !== 0)) parts.push('混色器')
   if (COLOR_GRADE_HUE_CURVES.some(curve => curveSet(params[`curve_${curve}_points`]))) parts.push('色相曲线')
@@ -92,7 +92,7 @@ export function gradeEncodedColors(params: Readonly<Record<string, unknown>>, co
 }
 
 /** Adobe .cube 顺序：红变化最快，其次绿、蓝。 */
-export function colorGradeLattice(size: number): Float32Array {
+function colorGradeLattice(size: number): Float32Array {
   const colors = new Float32Array(size ** 3 * 3)
   for (let b = 0, i = 0; b < size; b++) for (let g = 0; g < size; g++) for (let r = 0; r < size; r++, i++) colors.set([r / (size - 1), g / (size - 1), b / (size - 1)], i * 3)
   return colors
@@ -101,7 +101,7 @@ export function colorGradeLattice(size: number): Float32Array {
  * 核对用测试色：512 个低差异准随机色（Roberts R3 序列），均匀铺满 RGB 立方体且不落在任何格点上，
  * 这样量到的是插值误差本身（规则网格的格心在 17/33/65 格点上恰好是格点，会量出 0）。
  */
-export function colorGradeCheckColors(count = 512): Float32Array {
+function colorGradeCheckColors(count = 512): Float32Array {
   const phi = 1.2207440846057596; const step = [1 / phi, 1 / phi ** 2, 1 / phi ** 3]
   const colors = new Float32Array(count * 3)
   for (let i = 0; i < count; i++) for (let c = 0; c < 3; c++) { const x = .5 + step[c] * (i + 1); colors[i * 3 + c] = x - Math.floor(x) }
@@ -111,7 +111,7 @@ export function colorGradeCheckColors(count = 512): Float32Array {
 const sanitizeTitle = (title: string): string => title.replace(/["\r\n#]/g, ' ').trim().slice(0, 120) || '痕迹AI 全能调色'
 const fixed = (x: number): string => (Math.abs(x) < 5e-7 ? 0 : x).toFixed(6)
 
-export function formatColorGradeCube(title: string, size: number, rgb: Float32Array, notes: readonly string[] = []): string {
+function formatColorGradeCube(title: string, size: number, rgb: Float32Array, notes: readonly string[] = []): string {
   const lines = [
     '# 痕迹AI 全能调色导出',
     '# 色彩空间：输入与输出均为 sRGB 原色（同 Rec.709）的 sRGB 编码值，定义域 0–1，超出按 0–1 裁切',
@@ -144,7 +144,7 @@ function solve(a: number[][], b: number[]): number[] | null {
 }
 
 /** Levenberg–Marquardt 拟合 10 个 CDL 参数，残差取 OkLab（感知均匀），数值雅可比。 */
-export function fitAscCdl(inputs: Float32Array, targets: Float32Array): AscCdl {
+function fitAscCdl(inputs: Float32Array, targets: Float32Array): AscCdl {
   const count = inputs.length / 3
   const target = Array.from({ length: count }, (_, i) => linearSrgbToOklab([0, 1, 2].map(c => srgbToLinear(targets[i * 3 + c]))))
   const residuals = (p: number[]): number[] => {
@@ -178,7 +178,7 @@ export function fitAscCdl(inputs: Float32Array, targets: Float32Array): AscCdl {
 }
 
 const escapeXml = (text: string): string => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-export function formatAscCdl(id: string, cdl: AscCdl, descriptions: readonly string[] = []): string {
+function formatAscCdl(id: string, cdl: AscCdl, descriptions: readonly string[] = []): string {
   const triple = (v: Vec3): string => v.map(fixed).join(' ')
   const safeId = id.replace(/[^\w.-]+/g, '_').replace(/^([^A-Za-z_])/, '_$1').slice(0, 64) || 'henji_grade'
   return [

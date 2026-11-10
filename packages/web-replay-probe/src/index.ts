@@ -7,7 +7,7 @@ import { REPLAY_GLOBAL } from './replay/types'
 export type { AppInfo } from './protocol'
 export type { LocatorOptions } from './shared/locator'
 
-export interface ProbeConfig {
+interface ProbeConfig {
   app: AppInfo
   /** Henji's local port. Default 47831. */
   port?: number

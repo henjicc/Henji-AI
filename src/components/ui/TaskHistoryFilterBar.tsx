@@ -10,7 +10,7 @@ import Dropdown from './Dropdown'
 import { UiDatePicker } from './UiDatePicker'
 import { UI_TEXT_META_CLASS } from './styleTokens'
 
-export interface UiTaskHistoryModelOption {
+interface UiTaskHistoryModelOption {
   label: string
   value: string
 }

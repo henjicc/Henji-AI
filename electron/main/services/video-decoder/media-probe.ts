@@ -32,7 +32,7 @@ export function nativeStreamDecodable(codec: string | null, kind: NativeMediaStr
   return (DECODER_ALIASES[codec] ?? [codec]).some((name) => decoders.includes(name))
 }
 
-export function toNativeMediaProbe(result: VideoDecoderProbeResult, hello: VideoDecoderHello): NativeMediaProbe {
+function toNativeMediaProbe(result: VideoDecoderProbeResult, hello: VideoDecoderHello): NativeMediaProbe {
   return {
     container: { formatName: result.container.formatName, startTimeSeconds: result.container.startTimeSeconds, durationSeconds: result.container.durationSeconds },
     primaryVideoStreamIndex: result.primaryVideoStreamIndex,

@@ -7,7 +7,7 @@ import type { MusicAnalysis } from '../../core/audioAnalysis/music/musicAnalysis
 
 export const MUSIC_ANALYSIS_CHANNELS = { analyze: 'music:analyze', cancel: 'music:analyze-cancel', progress: 'music:analyze-progress' } as const
 
-export interface MusicAnalysisRequest {
+interface MusicAnalysisRequest {
   requestId: string
   /** 素材本机绝对路径（须在已授权的媒体目录内）。 */
   source: string

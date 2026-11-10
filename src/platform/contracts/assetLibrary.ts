@@ -3,7 +3,7 @@ import type { ContentTrustReference } from '../../core/contentTrust'
 
 export type AssetMediaType = 'image' | 'video' | 'audio' | 'code'
 export type AssetSource = 'generated' | 'canvas' | 'camera-stage' | 'imported' | 'external' | 'video-edit'
-export type AssetInspectionStatus = 'pending' | 'ready' | 'missing' | 'failed'
+type AssetInspectionStatus = 'pending' | 'ready' | 'missing' | 'failed'
 export interface AssetFileContent { sizeBytes: number; fileModifiedAt: number; contentIdentity: string }
 export interface AssetRecord { id: string; wasExisting?: boolean; foreign?: ContentTrustReference; mediaType: AssetMediaType; displayName: string; filePath: string; displayUrl: string; source: AssetSource; mimeType: string | null; sizeBytes: number | null; width: number | null; height: number | null; durationSeconds: number | null; thumbnailPath: string | null; thumbnailUrl: string | null; inspectionStatus: AssetInspectionStatus; inspectionError: string | null; fileModifiedAt: number | null; contentIdentity?: string | null; lastUsedAt: number | null; createdAt: number; updatedAt: number; tags: string[]; libraryIds: string[] }
 export interface AssetLibraryRecord { id: string; name: string; createdAt: number; updatedAt: number }

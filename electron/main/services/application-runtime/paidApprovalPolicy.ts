@@ -23,7 +23,7 @@ export function decidePaidApproval(settings: PaidApprovalSettings, request: Paid
   const cost = `${estimateKind === 'upper-bound' ? '按上限估算' : '预计'} ¥${request.estimatedCny.toFixed(4)}`
   return decision('auto', `${cost}，费用在额度内`)
 }
-export function readPaidApprovalSettings(): PaidApprovalSettings {
+function readPaidApprovalSettings(): PaidApprovalSettings {
   const raw = getSettingsStore().get(PAID_APPROVAL_SETTING_KEY)
   return readPaidApprovalSettingsValue(raw ? JSON.parse(raw) : {})
 }

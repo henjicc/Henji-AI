@@ -1,5 +1,4 @@
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
-/* eslint-disable react-refresh/only-export-components */
 import { createLogger } from '@/core/logging'
 import React, { useEffect, useState, useCallback } from 'react'
 import ContextMenu from '@/components/ContextMenu'
@@ -16,7 +15,7 @@ interface MenuPosition {
 }
 
 // 自定义事件名称，用于通知图片粘贴
-export const PASTE_IMAGE_EVENT = 'globalPasteImage'
+const PASTE_IMAGE_EVENT = 'globalPasteImage'
 
 /**
  * 全局右键菜单 Provider

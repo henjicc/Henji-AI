@@ -57,6 +57,6 @@ export const MODEL_SELECTOR_EXPANDED_MIN_HEIGHT = 320;
 export const MODEL_SELECTOR_EXPANDED_MAX_WIDTH = 520;
 export const MODEL_SELECTOR_EXPANDED_MAX_HEIGHT = 640;
 
-export const IMAGE_SIZES = ['0.5K', '1K', '2K', '4K'] as const;
+const IMAGE_SIZES = ['0.5K', '1K', '2K', '4K'] as const;
 
 export type ImageSize = (typeof IMAGE_SIZES)[number];

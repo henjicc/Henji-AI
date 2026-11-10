@@ -10,7 +10,7 @@ import { installInputTap } from './inputTap'
 import { installBoundaryTap, installMediaTap } from './mediaTap'
 import { installWindowFetchTap, recordFetch, type FetchLike } from './networkTap'
 
-export function hostKind(): HostKind {
+function hostKind(): HostKind {
   if ('__TAURI_INTERNALS__' in window) return 'tauri'
   return /Electron\//.test(navigator.userAgent) ? 'electron' : 'web'
 }

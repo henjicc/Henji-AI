@@ -81,7 +81,7 @@ export function imageEditorGpuGraphCurveValuesV3(adjustment: ImageEditorGpuGraph
   ]) }
 }
 
-export function imageEditorGpuGraphBlendIndexV3(mode: ImageEditBlendModeV3): number {
+function imageEditorGpuGraphBlendIndexV3(mode: ImageEditBlendModeV3): number {
   return mode === 'multiply' ? 1 : mode === 'screen' ? 2 : mode === 'overlay' ? 3 : mode === 'soft-light' ? 4 : 0
 }
 

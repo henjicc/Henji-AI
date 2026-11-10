@@ -54,7 +54,7 @@ export const imageEditToolPlugin: CanvasToolPlugin = {
     await context.processTool(NODE_TOOL_TYPES.edit, sourceImageUrl, options),
 };
 
-export const splitStoryboardToolPlugin: CanvasToolPlugin = {
+const splitStoryboardToolPlugin: CanvasToolPlugin = {
   type: NODE_TOOL_TYPES.splitStoryboard,
   label: '切割',
   icon: 'split',

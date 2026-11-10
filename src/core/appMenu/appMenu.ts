@@ -10,7 +10,7 @@
  */
 
 /** 顶层菜单 id：公共菜单固定为 file、edit、view、window、help；工作区菜单用自己的 id（如 sequence、clip、marker、audio、image、layer）。 */
-export type AppMenuId = string
+type AppMenuId = string
 export type AppMenuEditRole = 'undo' | 'redo' | 'cut' | 'copy' | 'paste' | 'selectAll'
 
 export interface AppMenuCommand {
@@ -30,8 +30,8 @@ export interface AppMenuCommand {
   danger?: boolean
   run: () => void | Promise<void>
 }
-export interface AppMenuSubmenu { kind: 'submenu'; id: string; label: string; items: readonly AppMenuEntry[]; disabledReason?: string }
-export interface AppMenuSeparator { kind: 'separator' }
+interface AppMenuSubmenu { kind: 'submenu'; id: string; label: string; items: readonly AppMenuEntry[]; disabledReason?: string }
+interface AppMenuSeparator { kind: 'separator' }
 export type AppMenuEntry = AppMenuCommand | AppMenuSubmenu | AppMenuSeparator
 
 export interface AppMenuSection {
@@ -45,9 +45,9 @@ export interface AppMenuSection {
 }
 
 /** 顶层菜单在菜单栏里的顺序：文件、编辑，然后是工作区自己的菜单（按声明顺序），最后视图、窗口、帮助。 */
-export const APP_MENU_LEADING: readonly AppMenuId[] = ['file', 'edit']
-export const APP_MENU_TRAILING: readonly AppMenuId[] = ['view', 'window', 'help']
-export const APP_MENU_LABELS: Readonly<Record<'file' | 'edit' | 'view' | 'window' | 'help', string>> = {
+const APP_MENU_LEADING: readonly AppMenuId[] = ['file', 'edit']
+const APP_MENU_TRAILING: readonly AppMenuId[] = ['view', 'window', 'help']
+const APP_MENU_LABELS: Readonly<Record<'file' | 'edit' | 'view' | 'window' | 'help', string>> = {
   file: '文件', edit: '编辑', view: '视图', window: '窗口', help: '帮助',
 }
 

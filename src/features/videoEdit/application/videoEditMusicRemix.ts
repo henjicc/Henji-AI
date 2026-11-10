@@ -36,7 +36,7 @@ export interface VideoEditMusicRemixInput {
   seed?: number
 }
 
-export interface VideoEditMusicRemixSeam { frame: number; confidence: number; kind: 'repeat' | 'skip'; fromSeconds: number; toSeconds: number }
+interface VideoEditMusicRemixSeam { frame: number; confidence: number; kind: 'repeat' | 'skip'; fromSeconds: number; toSeconds: number }
 
 export interface VideoEditMusicRemixResult {
   remixId: string

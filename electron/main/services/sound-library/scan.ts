@@ -10,7 +10,7 @@ const logger = createMainLogger('main.sound_library.scan')
  * 跳过隐藏文件、系统文件（desktop.ini）与读不了的子目录；用真实路径去重避免链接循环。
  */
 
-export const SOUND_LIBRARY_EXTENSIONS = new Set(['.wav', '.mp3', '.flac', '.ogg', '.oga', '.opus', '.m4a', '.aac', '.aif', '.aiff', '.wma', '.caf'])
+const SOUND_LIBRARY_EXTENSIONS = new Set(['.wav', '.mp3', '.flac', '.ogg', '.oga', '.opus', '.m4a', '.aac', '.aif', '.aiff', '.wma', '.caf'])
 
 export interface ScannedSoundFile {
   /** 相对登记文件夹，用 / 分隔。 */
@@ -20,7 +20,7 @@ export interface ScannedSoundFile {
   mtimeMs: number
 }
 
-export class SoundLibraryScanError extends Error {
+class SoundLibraryScanError extends Error {
   constructor(message: string) { super(message); this.name = 'SoundLibraryScanError' }
 }
 

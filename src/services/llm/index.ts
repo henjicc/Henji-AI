@@ -1,8 +1,6 @@
-export { LlmConfigService, getLlmConfigService, llmConfigService } from './LlmConfigService'
+export { LlmConfigService, llmConfigService } from './LlmConfigService'
 export {
-  createPromptOptimizationModelSource,
   ensurePromptOptimizationModelSelection,
-  loadConfiguredLlmProviderIds,
   resolvePromptOptimizationReadiness,
   type PromptOptimizationModelResolution,
   type PromptOptimizationReadiness,

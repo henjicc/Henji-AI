@@ -35,7 +35,7 @@ function keyOf(target: string): string {
   return key
 }
 
-export class MemoryDocumentCatalog implements DocumentCatalog {
+class MemoryDocumentCatalog implements DocumentCatalog {
   readonly documents = new Map<string, IndexedDocument>()
   readonly projects = new Map<string, IndexedProject>()
   readonly locations = new Map<string, ExternalLocation>()
@@ -177,7 +177,7 @@ export interface TestEnvironmentOptions {
  * 通用仓库测试用的类型登记：画布（3.4 起有真实内容规则）在这里换成内容任意的骨架类型，
  * 仓库、索引与项目测试照旧拿它当“任意 JSON 文档”；其余类型用正式登记。
  */
-export const GENERIC_TEST_DOCUMENT_KINDS: DocumentKindRegistry = createDocumentKindRegistry(DOCUMENT_KINDS.map((kind) => (
+const GENERIC_TEST_DOCUMENT_KINDS: DocumentKindRegistry = createDocumentKindRegistry(DOCUMENT_KINDS.map((kind) => (
   kind.id === 'canvas'
     ? defineSkeletonDocumentKind({ id: kind.id, extension: kind.extension, standaloneFolderNames: kind.standaloneFolderNames, untitledNames: kind.untitledNames, storage: kind.storage })
     : kind

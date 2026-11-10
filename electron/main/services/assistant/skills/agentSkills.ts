@@ -24,7 +24,7 @@ export const AGENT_SKILL_NAMES: ReadonlySet<string> = new Set([
 export type AgentSkillCaller = 'embedded' | 'external'
 
 /** 已启用且已准入的技能元数据；扫描失败按"本轮没有技能"处理。 */
-export async function listAgentSkills(): Promise<AssistantSkillMetadata[]> {
+async function listAgentSkills(): Promise<AssistantSkillMetadata[]> {
   return (await listEnabledAssistantSkills()).filter(skill => AGENT_SKILL_NAMES.has(skill.name))
 }
 

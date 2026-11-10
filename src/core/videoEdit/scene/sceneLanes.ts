@@ -2,7 +2,7 @@ import type { CodeSceneLaneStyle } from './sceneDeclaration'
 import { resolveVideoEditScene, videoEditSceneCutTime, videoEditSceneWriteBackTime, type ResolvedVideoEditScene, type ResolvedVideoEditSceneRecord, type ResolvedVideoEditSceneShot, type VideoEditSceneResolveIssue } from './sceneResolve'
 
 export interface VideoEditSceneLaneRange { readonly from: number; readonly to: number }
-export interface VideoEditSceneLaneCut {
+interface VideoEditSceneLaneCut {
   readonly enabled: boolean
   /** 未剪区间，供恢复剪切与显示被剪长度使用。 */
   readonly from: number

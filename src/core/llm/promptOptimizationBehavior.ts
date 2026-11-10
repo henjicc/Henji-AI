@@ -1,6 +1,6 @@
 export type PromptOptimizationButtonBehavior = 'select-profile' | 'direct-optimize'
 
-export const PROMPT_OPTIMIZATION_BUTTON_BEHAVIOR_STORAGE_KEY = 'prompt_optimization_button_behavior'
+const PROMPT_OPTIMIZATION_BUTTON_BEHAVIOR_STORAGE_KEY = 'prompt_optimization_button_behavior'
 export const PROMPT_OPTIMIZATION_BUTTON_BEHAVIOR_CHANGED_EVENT = 'prompt-optimization-button-behavior-changed'
 
 export function normalizePromptOptimizationButtonBehavior(

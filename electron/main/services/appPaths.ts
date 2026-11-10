@@ -12,7 +12,6 @@ export {
   getProgramDataDir,
   getProgramFilePath,
   getProgramStoreDir,
-  PROGRAM_DATA_DIR_NAME,
   type ProgramStoreKey,
 } from './appBasePaths'
 
@@ -40,7 +39,7 @@ export type UserFolderKey = 'projects' | 'generated' | 'uploads' | 'exports' | '
  * 首次需要用户目录时就建好的分类文件夹。各类文档独立存放的文件夹（画布、口播、镜头参考、图片文档）
  * 与作品目录的 `.henji/` 由文档底座按文档类型登记在用到时才建（src/core/documents/kinds）。
  */
-export const USER_FOLDER_KEYS: readonly UserFolderKey[] = [
+const USER_FOLDER_KEYS: readonly UserFolderKey[] = [
   'projects', 'generated', 'uploads', 'exports', 'skills',
 ]
 
@@ -49,7 +48,7 @@ export const USER_ROOT_FOLDER_NAMES: Readonly<Record<UserFolderLocale, string>> 
   en: 'Henji AI',
 }
 
-export const USER_FOLDER_NAMES: Readonly<Record<UserFolderLocale, Readonly<Record<UserFolderKey, string>>>> = {
+const USER_FOLDER_NAMES: Readonly<Record<UserFolderLocale, Readonly<Record<UserFolderKey, string>>>> = {
   zh: {
     projects: '项目',
     generated: '生成结果',
@@ -75,7 +74,7 @@ function getLogger(): MainLogger {
 
 // ==================== 用户目录 ====================
 
-export interface PersistedUserDataRoot {
+interface PersistedUserDataRoot {
   root: string
   locale: UserFolderLocale
 }
@@ -105,13 +104,13 @@ export interface ResolvedUserDataLayout {
   persist: PersistedUserDataRoot | null
 }
 
-export function folderLocaleForLanguages(languages: ReadonlyArray<string | null | undefined>): UserFolderLocale {
+function folderLocaleForLanguages(languages: ReadonlyArray<string | null | undefined>): UserFolderLocale {
   const first = languages.map((value) => value?.trim().toLowerCase()).find((value) => Boolean(value))
   if (!first) return 'zh'
   return first.startsWith('zh') ? 'zh' : 'en'
 }
 
-export function parsePersistedUserDataRoot(raw: string | null): PersistedUserDataRoot | null {
+function parsePersistedUserDataRoot(raw: string | null): PersistedUserDataRoot | null {
   if (!raw) return null
   try {
     const value = JSON.parse(raw) as unknown
@@ -126,7 +125,7 @@ export function parsePersistedUserDataRoot(raw: string | null): PersistedUserDat
   }
 }
 
-export function buildUserFolders(root: string, locale: UserFolderLocale): Record<UserFolderKey, string> {
+function buildUserFolders(root: string, locale: UserFolderLocale): Record<UserFolderKey, string> {
   const names = USER_FOLDER_NAMES[locale]
   const folders = {} as Record<UserFolderKey, string>
   for (const key of USER_FOLDER_KEYS) folders[key] = path.join(root, names[key])
@@ -157,7 +156,7 @@ export function resolveUserDataLayout(input: ResolveUserDataLayoutInput): Resolv
 }
 
 /** 系统“文档”目录；隔离测试环境下改到隔离资料目录内，不写用户真实文档。 */
-export function getSystemDocumentsDir(): string {
+function getSystemDocumentsDir(): string {
   const isolated = process.env['HENJI_ISOLATED_APP_DATA']?.trim()
   if (isolated) return path.join(isolated, 'Documents')
   try {
@@ -254,7 +253,7 @@ export function getUserFolderDir(key: UserFolderKey): string {
  * 本地模型文件夹（任务 4.11）：不在首次创建的分类文件夹里，第一次下载模型时才建。
  * 每个模型一个子文件夹，用户能看懂、能手动删除；程序读取前按清单校验。
  */
-export const USER_MODELS_FOLDER_NAMES: Readonly<Record<UserFolderLocale, string>> = {
+const USER_MODELS_FOLDER_NAMES: Readonly<Record<UserFolderLocale, string>> = {
   zh: '模型',
   en: 'Models',
 }

@@ -15,7 +15,7 @@ const BLEND_ZH: Readonly<Record<string, string>> = {
   darken: '变暗', lighten: '变亮', difference: '差值', exclusion: '排除', hue: '色相', saturation: '饱和度', color: '颜色', luminosity: '明度',
 }
 
-export function shaderColor(value: unknown): string {
+function shaderColor(value: unknown): string {
   if (typeof value !== 'string') return BLACK_HEX
   const text = value.trim().toLowerCase()
   if (/^#[0-9a-f]{6}([0-9a-f]{2})?$/.test(text)) return text
@@ -24,9 +24,9 @@ export function shaderColor(value: unknown): string {
 }
 const label = (prop: ShaderComponentProp): string => SHADER_LABEL_ZH[prop.label] ?? prop.label
 /** 效果参数键沿用剪辑的下划线写法（组件的 colorA → color_a），读写实体与关键帧都用它。 */
-export const shaderParamKey = (key: string): string => key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`)
+const shaderParamKey = (key: string): string => key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`)
 /** 位置属性拆成的两个百分比参数键。 */
-export const shaderPositionKeys = (key: string): readonly [string, string] => [`${shaderParamKey(key)}_x`, `${shaderParamKey(key)}_y`]
+const shaderPositionKeys = (key: string): readonly [string, string] => [`${shaderParamKey(key)}_x`, `${shaderParamKey(key)}_y`]
 
 /** 生成器的混合模式参数：生成的画面怎样叠在片段画面上。 */
 export function shaderBlendModeParam(group?: string): VideoEditBuiltinParam {

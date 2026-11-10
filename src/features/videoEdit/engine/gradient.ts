@@ -32,12 +32,12 @@ function stop(value: unknown, perceptual: boolean): [number, number, number, num
 }
 
 /** 颜色点在时刻 t 的游动（-1..1 两个分量）：两组无理比频率的正弦叠加，可任意跳帧。 */
-export function gradientDrift(index: number, time: number): [number, number] {
+function gradientDrift(index: number, time: number): [number, number] {
   const wave = (phase: number): number => 0.6 * Math.sin(2 * Math.PI * DRIFT_HZ[0] * time + phase) + 0.4 * Math.sin(2 * Math.PI * DRIFT_HZ[1] * time + phase * 1.7)
   return [wave(index * 2.1 + 0.3), wave(index * 1.3 + 2.4)]
 }
 
-export function planGradient(params: VideoEditBuiltinParams, frame: EffectPlannerFrame): VideoEditBuiltinPlan {
+function planGradient(params: VideoEditBuiltinParams, frame: EffectPlannerFrame): VideoEditBuiltinPlan {
   const { width, height } = frame
   const box = contentBox(width, height, frame.layer)
   const at = (x: number, y: number): [number, number] => [box.x + x / 100 * box.width, box.y + y / 100 * box.height]
@@ -70,7 +70,7 @@ export function planGradient(params: VideoEditBuiltinParams, frame: EffectPlanne
   }] }
 }
 
-export const GRADIENT_WGSL = `
+const GRADIENT_WGSL = `
 /** W3C 混合公式，编码 sRGB 直通色：1 正片叠底，2 滤色，3 叠加，4 柔光。 */
 fn gradientBlend(c: vec3f, g: vec3f, mode: f32) -> vec3f {
  if (mode < 1.5) { return c * g; }

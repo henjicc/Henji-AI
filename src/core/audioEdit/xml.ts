@@ -1,7 +1,7 @@
 import { buildProjectAudioEditTimeline, splitAudioEditMutedSpans } from './timeline'
 import type { AudioEditFrameRate, AudioEditProjectDocument, AudioEditTimelineSpan } from './types'
 
-export interface AudioEditXmlClip {
+interface AudioEditXmlClip {
   muted?: boolean
   sourceIn: number
   sourceOut: number

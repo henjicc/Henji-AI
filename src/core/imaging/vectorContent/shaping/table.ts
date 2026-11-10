@@ -4,7 +4,7 @@ import { ShapedParagraph, type ParagraphLayout } from './paragraph'
 export interface TableColumn { key: string; width?: number; align?: 'left' | 'center' | 'right'; numeric?: boolean }
 export interface TableInput { columns: readonly TableColumn[]; rows: readonly Readonly<Record<string, string>>[] }
 export interface TableOptions { width?: number; cellPadding?: number; columnGap?: number; rowGap?: number }
-export interface TableCellLayout { row: number; column: number; x: number; y: number; width: number; height: number; textX: number; textY: number; text: ParagraphLayout }
+interface TableCellLayout { row: number; column: number; x: number; y: number; width: number; height: number; textX: number; textY: number; text: ParagraphLayout }
 export interface TableLayout { readonly columns: readonly number[]; readonly rows: readonly number[]; readonly cells: readonly Readonly<TableCellLayout>[]; readonly width: number; readonly height: number; readonly overflow: boolean; readonly diagnostics: readonly string[] }
 
 export function distributeTableColumns(columns: readonly TableColumn[], measures: readonly { min: number; max: number }[], total?: number, gap = 0): number[] {

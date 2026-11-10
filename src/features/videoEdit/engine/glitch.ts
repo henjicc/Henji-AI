@@ -13,7 +13,7 @@ import type { LayerEffectReference } from '@/core/videoEdit/layerEffectGeometry'
 import { GLITCH_BLOCK_ASPECT, GLITCH_MAX_BAR_SHIFT, GLITCH_MAX_BLOCK_SHIFT, glitchBlockPixels, glitchFrameSeed, glitchSplitDistance } from '@/core/videoEdit/glitch'
 import { Planner, type VideoEditBuiltinPlan } from './effectPlan'
 
-export const GLITCH_ENTRIES = ['glitch'] as const
+const GLITCH_ENTRIES = ['glitch'] as const
 const MODES: Readonly<Record<string, number>> = { digital: 0, bars: 1, compression: 2 }
 /** 强度 100 时数字故障错开的块占全部块的比例。 */
 const DIGITAL_BLOCK_SHARE = 0.3
@@ -23,7 +23,7 @@ const n = (params: VideoEditBuiltinParams, key: string): number => Number(params
 
 
 /** `params` 已补齐默认值；`segment` 是 `glitchFrameSeed` 给出的本帧错法段号。 */
-export function planGlitch(params: VideoEditBuiltinParams, width: number, height: number, segment: number, context?: LayerEffectReference): VideoEditBuiltinPlan {
+function planGlitch(params: VideoEditBuiltinParams, width: number, height: number, segment: number, context?: LayerEffectReference): VideoEditBuiltinPlan {
   const plan = new Planner(width, height)
   const strength = Math.min(1, n(params, 'amount') / 100)
   if (strength <= 0) { plan.pass('copy', 'input', 'output'); return { width, height, scratch: plan.scratch, passes: plan.passes } }
@@ -50,7 +50,7 @@ export function planGlitch(params: VideoEditBuiltinParams, width: number, height
 }
 
 const f = (value: number): string => value.toFixed(4)
-export const GLITCH_WGSL = `
+const GLITCH_WGSL = `
 // a = (方式 0 数字故障 / 1 条带错位 / 2 压缩失真, 强度 0..1, 块宽, 块高)，b = (本段种子, 条带走向 cos, sin, 条数)，
 // c = (条带最大偏移, 反色块的列, 行, 红蓝错开)，layer = (内容原点 x, y, 内容宽, 高)；长度都是像素。
 fn glitchTap(p: vec2f) -> vec4f { let uv = p / u.size.zw; if (!inside(uv)) { return vec4f(0.0); } return tap(uv); }

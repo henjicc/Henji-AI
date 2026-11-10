@@ -98,7 +98,6 @@ async function createTailwindClassProbe(projectRoot, cssClassNames = []) {
 }
 
 module.exports = {
-  COLOR_CLASS_TOKEN,
   createTailwindClassProbe,
   extractColorClassCandidates,
 }

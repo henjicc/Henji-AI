@@ -14,7 +14,7 @@ interface EffectSelection { projectId: string; selectedId: string; select: (proj
 export const useAudioEditEffectSelection = create<EffectSelection>(set => ({ projectId: '', selectedId: '', select: (projectId, selectedId) => set({ projectId, selectedId }) }))
 
 /** 当前作品里选中的效果项 id（换了作品就不算）。 */
-export function selectedAudioEditEffect(projectId: string): string {
+function selectedAudioEditEffect(projectId: string): string {
   const state = useAudioEditEffectSelection.getState()
   return state.projectId === projectId ? state.selectedId : ''
 }

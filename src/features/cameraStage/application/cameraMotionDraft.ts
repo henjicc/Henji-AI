@@ -106,7 +106,7 @@ export function pinCameraMotion(projectId: string, unpinId?: string): void {
   else if (!frame) throw new Error('请先在当前位置摆放机位。')
   draft.review = undefined; draft.preview = undefined; draft.selected = 'original'; publish()
 }
-export function cameraMotionRequest(state: CameraStageState, cameraId: string, stateKeyframeIds: string[], pinnedIds: string[] = []): CameraMotionCandidateRequest {
+function cameraMotionRequest(state: CameraStageState, cameraId: string, stateKeyframeIds: string[], pinnedIds: string[] = []): CameraMotionCandidateRequest {
   const camera = state.objects.find((object): object is StageCameraObject => object.id === cameraId && object.type === 'camera')
   if (!camera) throw new Error('请选择一个机位。')
   const target = resolveCameraLookAtTarget(camera, state.objects), position = camera.transform.position

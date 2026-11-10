@@ -25,7 +25,7 @@ export type CameraStageShotAngle = typeof CAMERA_STAGE_SHOT_ANGLES[number]
 export const CAMERA_STAGE_SHOT_LENSES = ['wide', 'standard', 'telephoto'] as const
 export type CameraStageShotLens = typeof CAMERA_STAGE_SHOT_LENSES[number]
 
-export const CAMERA_STAGE_SHOT_RELATIONS = ['single', 'two_shot', 'over_shoulder', 'reverse_pair'] as const
+const CAMERA_STAGE_SHOT_RELATIONS = ['single', 'two_shot', 'over_shoulder', 'reverse_pair'] as const
 export type CameraStageShotRelation = typeof CAMERA_STAGE_SHOT_RELATIONS[number]
 
 export const CAMERA_STAGE_SHOT_POSITIONS = ['auto', 'left', 'center', 'right'] as const
@@ -34,7 +34,7 @@ export type CameraStageShotPosition = typeof CAMERA_STAGE_SHOT_POSITIONS[number]
 export const CAMERA_STAGE_SHOT_VIEWS = ['front', 'front_left', 'front_right', 'left', 'right', 'back'] as const
 export type CameraStageShotView = typeof CAMERA_STAGE_SHOT_VIEWS[number]
 
-export const cameraStageShotSubjectSchema = z.union([
+const cameraStageShotSubjectSchema = z.union([
   z.object({
     objectId: z.string().min(1).describe('主体对象 id：取自 observe_camera_stage_scene 的 objects[].id；布景成员用 list_application_entities 查到的 id'),
   }).strict(),

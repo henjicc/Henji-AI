@@ -30,7 +30,7 @@ export interface AuthorThreeHost {
   /** 作者接口 17 起：与时间线物体同一实现的标准材质与环境（实时与路径追踪读同一份参数）。 */
   readonly space?: AuthorSpaceHost
 }
-export interface AuthorSpaceHost {
+interface AuthorSpaceHost {
   /** 标准材质：matte 磨砂、metal 金属、thin-film 薄膜金属、acrylic 亚克力、glass 实心玻璃、emissive 发光体；参数见 SpaceMaterialParams。 */
   material(preset: SpaceMaterialPreset, params?: SpaceMaterialParams): Three.Material
   /** 预设环境图（等距柱状、线性半精度）：宿主所有，作者不必也不能释放；none 返回 null。 */

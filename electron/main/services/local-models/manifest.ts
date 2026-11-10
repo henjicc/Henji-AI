@@ -15,9 +15,9 @@ import type { DownloadRegion } from '../download/sourceSelector'
  */
 
 /** 我们自己的 ModelScope 模型仓库（用户上传后生效）。目录结构见任务文件 4.11 的上传清单。 */
-export const OWN_MODELSCOPE_REPO = 'henjicc/henji-ai-local-models'
+const OWN_MODELSCOPE_REPO = 'henjicc/henji-ai-local-models'
 
-export function modelScopeUrl(repo: string, file: string): string {
+function modelScopeUrl(repo: string, file: string): string {
   return `https://www.modelscope.cn/models/${repo}/resolve/master/${file}`
 }
 
@@ -80,7 +80,7 @@ export interface LocalModelFileSpec {
   sources: readonly LocalModelSource[]
 }
 
-export interface LocalModelLicense {
+interface LocalModelLicense {
   /** SPDX 简称。 */
   spdx: string
   url: string

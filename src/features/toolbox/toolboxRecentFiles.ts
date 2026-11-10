@@ -14,7 +14,7 @@ import { selectToolboxTool } from '@/stores/navigationStore'
 
 const logger = createLogger('features.toolbox.recent')
 
-export type ToolboxRecentTool = ToolboxToolId
+type ToolboxRecentTool = ToolboxToolId
 
 export interface ToolboxRecentFile<TToolId extends string = ToolboxRecentTool> {
   key: string

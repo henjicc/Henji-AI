@@ -33,7 +33,7 @@ import { getAgentMemoryStore } from '../services/assistant/memory'
 import { getMainWindow } from '../window'
 import { parseVoid, registerIpcHandler } from './registry'
 
-export function assertTrustedAssistantRenderer(event: IpcMainInvokeEvent): void {
+function assertTrustedAssistantRenderer(event: IpcMainInvokeEvent): void {
   const owner = BrowserWindow.fromWebContents(event.sender)
   const mainWindow = getMainWindow()
   if (!owner || owner !== mainWindow || owner.isDestroyed() || event.senderFrame !== event.sender.mainFrame) {

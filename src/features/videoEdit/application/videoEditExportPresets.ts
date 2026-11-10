@@ -7,7 +7,7 @@ import { publishVideoEdit } from './videoEditService'
 import { localLibraryContract, readLocalPersistenceJson, serializeVersionedPersistenceJson } from '@/core/persistence/versionedJson'
 
 const logger = createLogger('features.videoEdit.exportPresets')
-export const VIDEO_EDIT_EXPORT_PRESETS_KEY = 'video-edit-export-presets'
+const VIDEO_EDIT_EXPORT_PRESETS_KEY = 'video-edit-export-presets'
 const librarySchema = z.array(videoEditExportPresetSchema)
 export class VideoEditExportPresetLibrary {
   private presets: VideoEditExportPreset[] = []

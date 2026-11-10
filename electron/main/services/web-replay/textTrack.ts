@@ -41,7 +41,7 @@ export const TEXT_SAMPLE_SCRIPT = `(() => {
   return { width: vw, height: vh, items: out }
 })()`
 
-export type TextItem = [text: string, x: number, y: number, width: number, height: number]
+type TextItem = [text: string, x: number, y: number, width: number, height: number]
 export interface TextSample { width: number; height: number; items: TextItem[] }
 type TextLine = { t: number; width: number; height: number; items: TextItem[] }
 

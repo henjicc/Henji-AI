@@ -60,7 +60,7 @@ const propsShape = {
     .describe('比例参照物：人行道与路缘、车道线与斑马线、行道树、路灯、车辆，默认开；关掉只留楼体'),
 }
 
-export const cameraStageCityLayoutSchema = z.object({
+const cameraStageCityLayoutSchema = z.object({
   preset: z.literal('city'),
   ...placementShape,
   style: z.enum(CAMERA_STAGE_CITY_STYLES).optional()
@@ -83,7 +83,7 @@ export const cameraStageCityLayoutSchema = z.object({
   ...propsShape,
 }).strict()
 
-export const cameraStageStreetLayoutSchema = z.object({
+const cameraStageStreetLayoutSchema = z.object({
   preset: z.literal('street'),
   ...placementShape,
   length: length('街道长度（米），默认 160').optional(),
@@ -95,7 +95,7 @@ export const cameraStageStreetLayoutSchema = z.object({
   ...propsShape,
 }).strict()
 
-export const cameraStagePlazaLayoutSchema = z.object({
+const cameraStagePlazaLayoutSchema = z.object({
   preset: z.literal('plaza'),
   ...placementShape,
   size: length('广场铺装边长（米），默认 80；四周一圈支路，再外面是楼').optional(),
@@ -105,7 +105,7 @@ export const cameraStagePlazaLayoutSchema = z.object({
   ...propsShape,
 }).strict()
 
-export const cameraStageCrowdLayoutSchema = z.object({
+const cameraStageCrowdLayoutSchema = z.object({
   preset: z.literal('crowd'),
   ...placementShape,
   count: z.number().int().positive().optional().describe('人数，默认 24'),

@@ -5,7 +5,7 @@ import { z } from 'zod'
 
 const jsonObject = z.record(z.string(), z.json())
 export const presetExportSchema = z.object({ version: z.literal('1.0'), name: z.string().min(1), description: z.string().nullable().optional(), modelId: z.string().nullable().optional(), params: jsonObject })
-export const themeSeedSchema = z.object({ mode: z.enum(['dark', 'light']), hue: z.number(), tint: z.number(), base: z.number(), contrast: z.number(), accent: z.string() }).passthrough()
+const themeSeedSchema = z.object({ mode: z.enum(['dark', 'light']), hue: z.number(), tint: z.number(), base: z.number(), contrast: z.number(), accent: z.string() }).passthrough()
 export const themePayloadSchema = z.object({ version: z.literal(2), seed: themeSeedSchema, overrides: z.record(z.string(), z.string()).optional(), uiRadiusPreset: z.enum(['compact', 'default', 'large']) })
 export const encryptedKeystoreSchema = z.object({ version: z.literal(KEYSTORE_VERSION), keys: z.record(z.string(), z.string()) })
 export const mediaGrantsSchema = z.object({ version: z.literal(MEDIA_GRANTS_VERSION), roots: z.array(z.object({ path: z.string(), grantedAt: z.number() })) })

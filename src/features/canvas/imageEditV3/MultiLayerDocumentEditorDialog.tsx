@@ -36,7 +36,7 @@ export interface MultiLayerDocumentEditorCloseResult {
   session: ImageEditSessionReferenceV3
 }
 
-export type MultiLayerDocumentEditorCloseContinuation = (
+type MultiLayerDocumentEditorCloseContinuation = (
   result: MultiLayerDocumentEditorCloseResult,
 ) => Promise<ImageEditPersistenceProjectionV3 | void>
 

@@ -8,7 +8,7 @@ import { listVideoEditInstances, openVideoEditDocument, videoEditDomainRevision 
 import { projectCodeComponents, publishProjectCodeComponent, refuseCodeComponentRemoval, discardProjectCodeComponents, withdrawProjectCodeComponents, codeComponentReferences, type CodeComponentReference } from './videoEditCodeStorage'
 import type { CodeComponentPin } from '@/core/videoEdit/codeMaterial/sources'
 
-export const CODE_COMPONENT_ENTITY = 'video_edit.code_component'
+const CODE_COMPONENT_ENTITY = 'video_edit.code_component'
 const type = CODE_COMPONENT_ENTITY
 const reason = '项目组件每次发布创建不可变版本，现有素材固定引用原版本。修改请以相同 name 和新 source 再创建；此集合用于读取和发布，不删除已发布的源码文件。'
 const creation = { name: codeComponentNameSchema, source: codeSourceTextSchema, description: z.string().max(10000).default('') }

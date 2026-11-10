@@ -21,7 +21,7 @@ const seconds = z.number().finite().nonnegative()
 const finite = z.number().finite()
 
 /** 页面里的一个元素或一个点：CSS 选择器、文字，或视口 CSS 像素坐标。 */
-export const directorTargetSchema = z.object({
+const directorTargetSchema = z.object({
   selector: z.string().trim().min(1).max(1000).optional().describe('CSS 选择器，如 ".ask-submit" 或 "[data-replay-id=\\"node-n5\\"]"'),
   text: z.string().trim().min(1).max(500).optional().describe('按看得见的文字找元素（包含这段文字的最小元素）'),
   index: z.number().int().nonnegative().max(1000).optional().describe('同样匹配的第几个（从 0 开始），默认 0'),
@@ -35,7 +35,7 @@ export const directorTargetSchema = z.object({
 })
 export type DirectorTarget = z.infer<typeof directorTargetSchema>
 
-export const directorEasingSchema = z.enum(['linear', 'ease-in', 'ease-out', 'ease-in-out'])
+const directorEasingSchema = z.enum(['linear', 'ease-in', 'ease-out', 'ease-in-out'])
 export type DirectorEasing = z.infer<typeof directorEasingSchema>
 
 const segmentSchema = z.object({

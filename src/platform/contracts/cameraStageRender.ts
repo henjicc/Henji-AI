@@ -1,4 +1,4 @@
-export type CameraStageRenderResolutionPreset = '720p' | '1080p'
+type CameraStageRenderResolutionPreset = '720p' | '1080p'
 export type CameraStageRenderOutputKind = 'image' | 'video'
 
 export interface CameraStageRenderRequest {
@@ -18,7 +18,7 @@ export interface CameraStageRenderWorkerJob extends CameraStageRenderRequest {
   sceneContent: unknown
 }
 
-export interface CameraStageImageRenderResult {
+interface CameraStageImageRenderResult {
   kind: 'image'
   mediaUrl: string
   mediaPath: string
@@ -29,7 +29,7 @@ export interface CameraStageImageRenderResult {
   selectedTimeSec: number
 }
 
-export interface CameraStageVideoRenderResult {
+interface CameraStageVideoRenderResult {
   kind: 'video'
   mediaUrl: string
   mediaPath: string

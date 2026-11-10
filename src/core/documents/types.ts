@@ -208,7 +208,7 @@ export type NameCheckSubject = { type: 'project' } | { type: 'document'; kind: D
  * - folder：另选的文件夹。
  * - renaming：改名时给出现有文件或项目文件夹，查它所在的文件夹并排除它自己。
  */
-export type NameCheckLocation = { container: DocumentContainerRef } | { folder: string } | { renaming: string }
+type NameCheckLocation = { container: DocumentContainerRef } | { folder: string } | { renaming: string }
 
 export interface NameCheckRequest {
   subject: NameCheckSubject
@@ -241,7 +241,7 @@ export interface SetProjectMainDocumentRequest {
 }
 
 /** 复制进容器的哪个固定子文件夹：生成结果，或素材（作品目录为“上传素材”）。 */
-export type ContainerFileFolder = 'generated' | 'materials'
+type ContainerFileFolder = 'generated' | 'materials'
 
 export interface ImportFileRequest {
   container: DocumentContainerRef

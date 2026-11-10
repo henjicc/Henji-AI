@@ -45,7 +45,7 @@ export type ImageEditorCropAspectRatioV3 =
   | '2:1'
   | '21:9'
 
-export interface ImageEditorSessionStateV3 {
+interface ImageEditorSessionStateV3 {
   activeTool: ImageEditorToolIdV3
   selectedLayerIds: string[]
   expandedGroupIds: string[]

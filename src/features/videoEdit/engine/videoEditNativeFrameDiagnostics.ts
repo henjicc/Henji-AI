@@ -19,7 +19,7 @@ export interface NativeFramePatternLayout {
   background: { x: number; y: number }
 }
 
-export interface NativeFrameDiagnosticsStream {
+interface NativeFrameDiagnosticsStream {
   streamId: string
   pattern?: NativeFramePatternLayout
   /** 跳过开头几帧后做像素校验的帧数。 */
@@ -33,7 +33,7 @@ export type NativeFrameDiagnosticsRequest =
   | { action: 'snapshot' }
   | DecodeDiagnosticsRequest
 
-export interface NativeFramePixelCheck {
+interface NativeFramePixelCheck {
   frameIndex: number
   decodedBits: number
   bitsOk: boolean
@@ -49,7 +49,7 @@ export interface NativeFramePixelCheck {
   codedSize: [number, number]
 }
 
-export interface NativeFrameIntervalSummary {
+interface NativeFrameIntervalSummary {
   count: number
   p50: number
   p95: number
@@ -57,7 +57,7 @@ export interface NativeFrameIntervalSummary {
   max: number
 }
 
-export interface NativeFrameStreamDiagnostics {
+interface NativeFrameStreamDiagnostics {
   streamId: string
   received: number
   spanMs: number

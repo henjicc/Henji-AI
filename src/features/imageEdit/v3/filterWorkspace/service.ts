@@ -20,7 +20,7 @@ function editable(bus: ImageEditCommandBusV3, layerId: string) {
   return location;
 }
 
-export function imageEditFilterWorkspaceIdentityV3(bus: ImageEditCommandBusV3, layerId: string): string {
+function imageEditFilterWorkspaceIdentityV3(bus: ImageEditCommandBusV3, layerId: string): string {
   const { document } = bus.getSnapshot();
   const location = editable(bus, layerId);
   return filterStackCacheIdentity(location.layer.filters, {

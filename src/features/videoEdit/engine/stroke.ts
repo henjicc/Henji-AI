@@ -24,11 +24,11 @@ import type { LayerEffectReference } from '@/core/videoEdit/layerEffectGeometry'
 import type { VideoEditBuiltinPlan, VideoEditBuiltinTexture } from './videoEditBuiltinEffectPasses'
 import type { VideoEditBuiltinEffectEntry } from './videoEditBuiltinEffectShaders'
 
-export const STROKE_ENTRIES = ['stroke_seed', 'stroke_jfa', 'stroke_shade', 'stroke_near'] as const
+const STROKE_ENTRIES = ['stroke_seed', 'stroke_jfa', 'stroke_shade', 'stroke_near'] as const
 /** 只用 textureLoad 读 `source` 的描边工序（种子是不可过滤的 rg32float）。 */
-export const STROKE_FIELD_ENTRIES = ['stroke_seed', 'stroke_jfa', 'stroke_shade'] as const
+const STROKE_FIELD_ENTRIES = ['stroke_seed', 'stroke_jfa', 'stroke_shade'] as const
 /** 覆盖距离（纹理像素）不超过它只走邻域取样，超过 `STROKE_NEAR_BLEND` 只走距离场，中间两路混合。 */
-export const STROKE_NEAR_MAX = 3
+const STROKE_NEAR_MAX = 3
 const STROKE_NEAR_BLEND = 4
 type V4 = readonly [number, number, number, number]
 const ZERO: V4 = [0, 0, 0, 0]
@@ -80,7 +80,7 @@ export function planStroke(params: VideoEditBuiltinParams, width: number, height
   return plan
 }
 
-export const STROKE_WGSL = `
+const STROKE_WGSL = `
 // 轮廓来源为主体（c.z = 1）时，片段画面外（r < 0.5）的纹素不算数。
 fn strokeInFrame(p: vec2i) -> bool {
  let size = vec2i(textureDimensions(source));

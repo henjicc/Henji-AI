@@ -16,7 +16,7 @@ import { mergeModelAliasParamDefaults } from '../params/modelAliasDefaults'
 /**
  * 构建结果接口
  */
-export interface BuildResult {
+interface BuildResult {
   /**
    * API 端点 URL
    */
@@ -36,7 +36,7 @@ export interface BuildResult {
 /**
  * 构建选项
  */
-export interface BuildOptions {
+interface BuildOptions {
   /**
    * 是否启用调试日志
    */
@@ -63,7 +63,7 @@ export interface BuildOptions {
  *
  * 负责将模型参数转换为 API 请求
  */
-export class RequestBuilder {
+class RequestBuilder {
   /**
    * 构建 API 请求
    *

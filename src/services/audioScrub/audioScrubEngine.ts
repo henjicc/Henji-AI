@@ -14,7 +14,7 @@ import { createLogger } from '@/core/logging'
 const logger = createLogger('services.audioScrub')
 
 /** 声音块长度（秒）：剪辑混音每次有约 20–30ms 固定开销，块太短开销占比大，太长第一声等得久。 */
-export const AUDIO_SCRUB_BLOCK_SECONDS = 0.25
+const AUDIO_SCRUB_BLOCK_SECONDS = 0.25
 /** 单步（方向键、逐帧）播放的原速声音长度（秒）。 */
 export const AUDIO_SCRUB_STEP_SECONDS = 0.1
 const PROCESSOR = 'henji-audio-scrub'

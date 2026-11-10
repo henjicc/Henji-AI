@@ -2,11 +2,11 @@ const PNG_DATA_URL_PREFIX = 'data:image/png;base64,';
 const PNG_SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10] as const;
 const PNG_PHYS_CHUNK = 'pHYs';
 
-export const BLANK_IMAGE_MIN_EDGE = 16;
-export const BLANK_IMAGE_MAX_EDGE = 8192;
-export const BLANK_IMAGE_MAX_PIXELS = 40_000_000;
-export const BLANK_IMAGE_MIN_DPI = 1;
-export const BLANK_IMAGE_MAX_DPI = 1200;
+const BLANK_IMAGE_MIN_EDGE = 16;
+const BLANK_IMAGE_MAX_EDGE = 8192;
+const BLANK_IMAGE_MAX_PIXELS = 40_000_000;
+const BLANK_IMAGE_MIN_DPI = 1;
+const BLANK_IMAGE_MAX_DPI = 1200;
 
 export interface BlankImageSpec {
   width: number;

@@ -11,11 +11,11 @@ import { videoEditFft } from '../../videoEdit/fft'
 
 export const BEAT_THIS_SAMPLE_RATE = 22050
 export const BEAT_THIS_FPS = 50
-export const BEAT_THIS_N_FFT = 1024
-export const BEAT_THIS_HOP = 441
+const BEAT_THIS_N_FFT = 1024
+const BEAT_THIS_HOP = 441
 export const BEAT_THIS_MELS = 128
 export const BEAT_THIS_CHUNK = 1500
-export const BEAT_THIS_BORDER = 6
+const BEAT_THIS_BORDER = 6
 const BINS = BEAT_THIS_N_FFT / 2 + 1
 const CHROMA_MIN_HZ = 55
 const CHROMA_MAX_HZ = 5000

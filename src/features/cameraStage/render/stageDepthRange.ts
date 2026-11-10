@@ -27,7 +27,7 @@ const scratchForward = new Vector3()
 const scratchOrigin = new Vector3()
 
 /** 收集主体包围盒；没有主体时返回空盒。 */
-export function collectStageSubjectBox(scene: Scene, box: Box3 = new Box3()): Box3 {
+function collectStageSubjectBox(scene: Scene, box: Box3 = new Box3()): Box3 {
   box.makeEmpty()
   scene.traverse((node) => {
     if (node.visible && node.userData?.[STAGE_STYLE_SUBJECT_KEY] === true) box.expandByObject(node)

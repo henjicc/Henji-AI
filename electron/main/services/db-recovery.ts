@@ -9,12 +9,12 @@ import Database from 'better-sqlite3'
  * 合并后整库报 malformed；起因未能确认，所以这里不假设原因，只保证能退回最近的完好状态。
  */
 
-export const DATABASE_SNAPSHOT_KEEP = 7
-export const DATABASE_SNAPSHOT_INTERVAL_MS = 24 * 60 * 60 * 1000
+const DATABASE_SNAPSHOT_KEEP = 7
+const DATABASE_SNAPSHOT_INTERVAL_MS = 24 * 60 * 60 * 1000
 
 const SNAPSHOT_PATTERN = /^henji-snapshot-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z\.db$/
 
-export class DatabaseCorruptError extends Error {
+class DatabaseCorruptError extends Error {
   constructor(message: string) { super(message); this.name = 'DatabaseCorruptError' }
 }
 

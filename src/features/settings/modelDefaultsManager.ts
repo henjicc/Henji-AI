@@ -15,7 +15,7 @@ export type DefaultModelMediaType = 'image' | 'video' | 'audio'
 export type DefaultModelPurpose = DefaultModelMediaType | 'transcription'
 
 export const MODEL_DEFAULTS_STORAGE_KEY = 'henji-model-defaults'
-export const MODEL_DEFAULTS_STATE_VERSION = MODEL_DEFAULTS_VERSION
+const MODEL_DEFAULTS_STATE_VERSION = MODEL_DEFAULTS_VERSION
 
 const DEFAULT_PROVIDER: ApiKeyProvider = 'kie'
 const MEDIA_TYPES: DefaultModelPurpose[] = ['image', 'video', 'audio', 'transcription']

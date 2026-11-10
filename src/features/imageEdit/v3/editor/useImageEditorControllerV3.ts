@@ -25,7 +25,7 @@ interface DefaultLayerCandidateV3 {
 }
 
 /** 新会话优先选中可见、未锁定的原始栅格层，而不是最上面的效果或空容器。 */
-export function resolveImageEditorDefaultLayerIdV3(
+function resolveImageEditorDefaultLayerIdV3(
   layers: readonly ImageEditLayerV3[],
 ): string | null {
   const candidates: DefaultLayerCandidateV3[] = []

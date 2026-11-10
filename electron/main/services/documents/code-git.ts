@@ -23,7 +23,7 @@ const CODE_WORKING_ROOTS: Record<GitCodeVersion['kind'], readonly string[]> = {
   素材: ['软件维护/素材', 'legacy/materials', '素材'],
   组件: ['软件维护/组件', 'legacy/components', '组件'],
 }
-export const codeWorkingPrefix = (kind: GitCodeVersion['kind'], name: string): string => `${CODE_WORKING_ROOTS[kind][0]}/${name}`
+const codeWorkingPrefix = (kind: GitCodeVersion['kind'], name: string): string => `${CODE_WORKING_ROOTS[kind][0]}/${name}`
 /** 这份素材/组件可能的全部工作副本目录，当前位置在前。 */
 export const codeWorkingPrefixes = (kind: GitCodeVersion['kind'], name: string): string[] => CODE_WORKING_ROOTS[kind].map(root => `${root}/${name}`)
 /** 仓库内路径属于哪份素材/组件的工作副本；工程作者自己的文件返回 null。 */
@@ -38,7 +38,7 @@ export function codeWorkingOwner(filepath: string): { kind: GitCodeVersion['kind
 const OUTDATED_WORKING_ROOTS = Object.values(CODE_WORKING_ROOTS).flatMap(roots => roots.slice(1))
 
 /** Git rejects spaces and a handful of ref characters. Preserve readable Chinese names. */
-export const codeVersionTag = (kind: GitCodeVersion['kind'], name: string, version: number): string => `${kind}/${name.replace(/[%\s~^:?*[\\/]/g, value => `%${value.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0')}`).replace(/\.\./g, '%2E%2E').replace(/@\{/g, '%40%7B').replace(/^\./, '%2E')}@v${version}`
+const codeVersionTag = (kind: GitCodeVersion['kind'], name: string, version: number): string => `${kind}/${name.replace(/[%\s~^:?*[\\/]/g, value => `%${value.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0')}`).replace(/\.\./g, '%2E%2E').replace(/@\{/g, '%40%7B').replace(/^\./, '%2E')}@v${version}`
 
 /** All Git operations stay in the main-process storage service; no executable Git is needed. */
 export class CodeGitRepository {

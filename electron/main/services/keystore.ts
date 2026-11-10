@@ -21,9 +21,9 @@ const KEYSTORE_FILE_NAME = 'provider-keys.enc.json'
  * `AI_KEY_NAMESPACE` / `LLM_KEY_NAMESPACE` 保留为源码兼容别名，实际都指向这里；旧文件里的
  * `ai:*` / `llm:*` 会在首次读取时无损迁移。
  */
-export const PROVIDER_KEY_NAMESPACE = 'provider'
+const PROVIDER_KEY_NAMESPACE = 'provider'
 export const AI_KEY_NAMESPACE = PROVIDER_KEY_NAMESPACE
-export const KNOWN_AI_PROVIDER_IDS = [
+const KNOWN_AI_PROVIDER_IDS = [
   'ppio', 'fal', 'kie', 'apimart', 'bailian', 'volcengine', 'modelscope', 'grsai',
   'siliconflow', 'volcengine-speech', 'groq',
 ] as const

@@ -6,13 +6,13 @@ import type Database from 'better-sqlite3'
  */
 
 /** 表存在且至少有一行。 */
-export function tableHasRows(db: Database.Database, table: string): boolean {
+function tableHasRows(db: Database.Database, table: string): boolean {
   const exists = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table)
   if (!exists) return false
   return Boolean(db.prepare(`SELECT 1 FROM ${table} LIMIT 1`).get())
 }
 
-export function tablesHaveRows(...tables: string[]): (db: Database.Database) => boolean {
+function tablesHaveRows(...tables: string[]): (db: Database.Database) => boolean {
   return (db) => tables.some((table) => tableHasRows(db, table))
 }
 

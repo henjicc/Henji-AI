@@ -9,7 +9,7 @@ import type { SpecialPanelConfig, PanelType } from '@/core/types/PanelTypes'
 /**
  * 验证结果
  */
-export interface ValidationResult {
+interface ValidationResult {
   valid: boolean
   errors: string[]
 }

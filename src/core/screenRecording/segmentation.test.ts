@@ -6,7 +6,7 @@ import { recordingUnderstandingSchema } from './understanding'
 function event(seconds: number, payload: CapturePayload): CaptureEvent {
   return { ...payload, monoUs: seconds * 1e6, recordingUs: seconds * 1e6, seq: Math.round(seconds * 100), eventId: `event:${seconds}`, timeline: null, clockSegmentRef: 'clock', unavailableReason: 'static' }
 }
-export function narratedRecordingFixture(): RecordingAnalysisInput {
+function narratedRecordingFixture(): RecordingAnalysisInput {
   return {
     active: [{ startUs: 3000000, endUs: 23000000 }],
     events: [event(3, { kind: 'control', action: 'start' }), event(3.1, { kind: 'window', available: true, windowId: 'main', bounds: null }),

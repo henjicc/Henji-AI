@@ -10,7 +10,7 @@ import {
 const MAX_RECOVERY_GAIN = 3;
 const ALPHA_EPSILON = 0.00001;
 
-export interface DiffusionGlobalScatterV4 {
+interface DiffusionGlobalScatterV4 {
   readonly tile: Float32PremultipliedRgbaTile;
   readonly documentWidth: number;
   readonly documentHeight: number;

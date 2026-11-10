@@ -38,7 +38,7 @@ export interface CanvasImageCapabilityAction {
   disabledReasonKey: string | null
 }
 
-export type CanvasImageCapabilityMenuGroup = 'transformation' | 'structure' | 'local'
+type CanvasImageCapabilityMenuGroup = 'transformation' | 'structure' | 'local'
 
 const MENU_GROUPS: ReadonlyArray<{
   group: CanvasImageCapabilityMenuGroup

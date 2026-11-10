@@ -34,7 +34,7 @@ export type PromptOptimizationReadiness =
   | { status: 'missing-model' }
 
 /** 返回已配置密钥的供应商 id；`undefined` 表示无法判断（非桌面运行时或查询失败），此时不按密钥过滤 */
-export async function loadConfiguredLlmProviderIds(
+async function loadConfiguredLlmProviderIds(
   config: LlmConfigState,
 ): Promise<string[] | undefined> {
   if (!isDesktopRuntime()) return undefined
@@ -56,7 +56,7 @@ export async function loadConfiguredLlmProviderIds(
   }
 }
 
-export async function createPromptOptimizationModelSource(
+async function createPromptOptimizationModelSource(
   config: LlmConfigState,
 ): Promise<PromptOptimizationModelSource> {
   return {

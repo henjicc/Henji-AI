@@ -1,7 +1,7 @@
 import type { PaintSurface, PaintTarget } from '../contracts';
 import { compositePaintPixel } from '../rasterize';
 
-export interface GradientStop { position: number; color: readonly [number, number, number, number] }
+interface GradientStop { position: number; color: readonly [number, number, number, number] }
 export type PaintFill = { kind: 'solid'; target: PaintTarget }
   | { kind: 'linear' | 'radial'; start: { x: number; y: number }; end: { x: number; y: number }; stops: readonly GradientStop[] };
 

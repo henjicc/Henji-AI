@@ -38,12 +38,12 @@ export interface ImageEditorPreviewExecutionStatsV3 {
   fastBlurFallbackReasons: string[]
 }
 
-export interface ImageEditorPreviewCancelRequestV3 {
+interface ImageEditorPreviewCancelRequestV3 {
   type: 'cancel'
   requestId: string
 }
 
-export interface ImageEditorPreviewDisposeRequestV3 {
+interface ImageEditorPreviewDisposeRequestV3 {
   type: 'dispose'
 }
 
@@ -67,7 +67,7 @@ interface ImageEditorPreviewCompletedBaseV3 {
   }
 }
 
-export interface ImageEditorPreviewBitmapEventV3 extends ImageEditorPreviewCompletedBaseV3 {
+interface ImageEditorPreviewBitmapEventV3 extends ImageEditorPreviewCompletedBaseV3 {
   type: 'rendered-bitmap'
   bitmap: ImageBitmap
 }
@@ -78,7 +78,7 @@ export interface ImageEditorPreviewBlobEventV3 extends ImageEditorPreviewComplet
   bytes: ArrayBuffer
 }
 
-export interface ImageEditorPreviewFailedEventV3 {
+interface ImageEditorPreviewFailedEventV3 {
   type: 'failed'
   requestId: string
   sequence: number

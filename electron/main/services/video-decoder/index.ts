@@ -37,9 +37,7 @@ export type {
   VideoDecoderHello,
   VideoDecoderProbeResult,
   VideoDecoderStats,
-  VideoDecoderStreamInfo,
   VideoDecoderStreamStarted,
-  VideoSharedFormat,
 } from './protocol'
 
 let service: VideoDecoderService | null = null

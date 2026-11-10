@@ -19,8 +19,8 @@ import { CAMERA_STAGE_ENTITY_TYPES } from './cameraStageReflection'
 import { forgetCameraStageUndo, restoreCameraStageUndo } from './cameraStageUndo'
 import { blockCameraStageCharacter } from './characterBlockingService'
 
-export const cameraStageBlockingInputSchema = z.object({ projectId: z.string().min(1), ...cameraStageBlockingIntentShape }).strict().superRefine(refineCameraStageBlocking)
-export const cameraStageFollowInputSchema = z.object({ projectId: z.string().min(1), ...cameraStageFollowIntentShape }).strict()
+const cameraStageBlockingInputSchema = z.object({ projectId: z.string().min(1), ...cameraStageBlockingIntentShape }).strict().superRefine(refineCameraStageBlocking)
+const cameraStageFollowInputSchema = z.object({ projectId: z.string().min(1), ...cameraStageFollowIntentShape }).strict()
 
 function asJson(value: unknown): JsonValue {
   return JSON.parse(JSON.stringify(value)) as JsonValue

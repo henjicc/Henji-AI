@@ -69,7 +69,7 @@ export function resolveImageEditorViewportSourceMipV3(
 }
 
 /** 把输出 mip 的逻辑源区域映射到真实可读取的源 mip。 */
-export function resolveImageEditorViewportActualSourceRegionV3(
+function resolveImageEditorViewportActualSourceRegionV3(
   region: ImageEditRect,
   outputMip: number,
   sourceMip: number,
@@ -87,7 +87,7 @@ export function resolveImageEditorViewportActualSourceRegionV3(
   )
 }
 
-export function resolveImageEditorViewportSourceMipTransformV3(
+function resolveImageEditorViewportSourceMipTransformV3(
   outputMip: number,
   sourceMip: number,
 ): readonly [number, number, number, number, 0, 0] {

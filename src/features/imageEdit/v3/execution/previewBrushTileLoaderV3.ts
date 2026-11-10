@@ -12,8 +12,8 @@ import type { ImageEditorPreviewBrushResourceRequestV3 } from './previewDocument
 import type { ImageEditorPreviewBrushTileV3 } from './previewProtocolV3'
 import { readImageEditorBrushTilesWithAdmissionV3 } from './imageEditorGpuBrushTileReaderV3'
 
-export const IMAGE_EDITOR_PREVIEW_BRUSH_CACHE_MAX_BYTES_V3 = 64 * 1024 * 1024
-export const IMAGE_EDITOR_PREVIEW_BRUSH_TRANSFER_MAX_BYTES_V3 = 128 * 1024 * 1024
+const IMAGE_EDITOR_PREVIEW_BRUSH_CACHE_MAX_BYTES_V3 = 64 * 1024 * 1024
+const IMAGE_EDITOR_PREVIEW_BRUSH_TRANSFER_MAX_BYTES_V3 = 128 * 1024 * 1024
 const BRUSH_TILE_BATCH_MAX_BYTES = 32 * 1024 * 1024
 const BRUSH_TILE_BATCH_MAX_COUNT = 16
 

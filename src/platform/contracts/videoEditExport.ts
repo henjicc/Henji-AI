@@ -22,7 +22,7 @@ export const VIDEO_EDIT_EXPORT_CHANNELS = {
   restore: 'video-edit-export:restore',
 } as const
 
-export type VideoEditExportJobState = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted'
+type VideoEditExportJobState = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted'
 
 export interface VideoEditExportJobRegistration {
   invocationId?: string

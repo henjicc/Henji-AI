@@ -24,7 +24,7 @@ import { createImageEditorRasterBrushTileLoaderV3 } from '../../editor/rasterBru
 import type { ImageEditCommandBusV3 } from '../../application/imageEditCommandBus';
 import { GeometryWorkerClient } from './workerClient';
 
-export const geometryRequestSchemaV3 = documentSizeSchemaV3.extend({ mode: z.enum(['canvas', 'resample', 'content-aware']), anchor: canvasAnchorSchemaV3.default('center'), protectSelection: z.boolean().default(true) });
+const geometryRequestSchemaV3 = documentSizeSchemaV3.extend({ mode: z.enum(['canvas', 'resample', 'content-aware']), anchor: canvasAnchorSchemaV3.default('center'), protectSelection: z.boolean().default(true) });
 export type GeometryRequestV3 = z.input<typeof geometryRequestSchemaV3>;
 export interface GeometryDraftV3 { original: ImageEditDocumentV3; selectionVersion: number; command: ImageEditCommandV3; document: ImageEditDocumentV3; selection: ImageEditSelectionSessionV3 | null; bytes: Readonly<Record<string, number>>; release: () => Promise<void>; mode: 'canvas' | 'resample' | 'content-aware' }
 export interface GeometryServiceOptionsV3 { signal?: AbortSignal; time?: RegionSampleTime; onProgress?: (value: number) => void }

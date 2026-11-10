@@ -241,7 +241,7 @@ export interface UiPanelFooterAction extends UiPanelFooterToolBase {
 }
 
 /** 底栏工具：点开一个菜单。底栏里是图标按钮 + 弹出菜单；收进“更多”后这份菜单内容作为同名的一节直接列出。 */
-export interface UiPanelFooterMenu extends UiPanelFooterToolBase {
+interface UiPanelFooterMenu extends UiPanelFooterToolBase {
   kind: 'menu';
   icon: LucideIcon;
   /** 菜单内容（`UiOptionButton variant="menu"` 等），两处共用同一份 */
@@ -257,7 +257,7 @@ export interface UiPanelFooterMenu extends UiPanelFooterToolBase {
  * 底栏工具：调用方自己画的控件（滑杆、带状态的组件）。给了 `overflow` 才能收起，收起后在“更多”里显示为
  * “图标 + 名称”小标题下的这段内容；不给就永不收起——自带进行中任务或对话框状态的组件卸载会丢掉它们。
  */
-export interface UiPanelFooterCustom extends UiPanelFooterToolBase {
+interface UiPanelFooterCustom extends UiPanelFooterToolBase {
   kind: 'custom';
   node: ReactNode;
   icon?: LucideIcon;

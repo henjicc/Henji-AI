@@ -107,7 +107,7 @@ export function isTypingTarget(target: EventTarget | null): boolean {
 }
 
 export type CanvasMediaKind = 'image' | 'video' | 'audio'
-export type ClipboardMediaKind = CanvasMediaKind
+type ClipboardMediaKind = CanvasMediaKind
 
 export interface ClipboardMediaFile {
   kind: ClipboardMediaKind

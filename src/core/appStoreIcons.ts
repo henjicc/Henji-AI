@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export const appStorePlatformSchema = z.enum(['iphone', 'ipad', 'mac'])
+const appStorePlatformSchema = z.enum(['iphone', 'ipad', 'mac'])
 const countrySchema = z.string().regex(/^[a-zA-Z]{2}$/).default('cn')
 export const searchAppStoreIconsSchema = z.object({
   query: z.string().trim().min(1).max(500), country: countrySchema,

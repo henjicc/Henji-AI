@@ -13,12 +13,12 @@ const gradient = z.array(z.object({ at: unit, color }).strict()).min(2).max(32).
 const curve = z.array(z.object({ x: unit, y: unit }).strict()).min(2).max(64).refine(points => points.length >= 2 && points[0].x === 0 && points.at(-1)!.x === 1 && points.every((point, i) => !i || point.x > points[i - 1].x), '曲线首尾 x=0/1，x 严格递增。')
 export const codeMaterialParameterKeySchema = z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/).refine(key => !['__proto__', 'prototype', 'constructor', 'caller', 'callee', 'arguments'].includes(key), '不允许的参数名称。')
 // Four-number tuples also carry cubic Bézier values; declaration validation distinguishes them from RGBA.
-export const codeMaterialBasicParameterValueSchema = z.union([finite, z.boolean(), z.string().max(4096), z.tuple([finite, finite, finite, finite]), z.tuple([finite, finite]).refine(value => value[0] <= value[1], 'range 必须 a≤b。'), point, codeMaterialGradeValueSchema, gradient, curve])
+const codeMaterialBasicParameterValueSchema = z.union([finite, z.boolean(), z.string().max(4096), z.tuple([finite, finite, finite, finite]), z.tuple([finite, finite]).refine(value => value[0] <= value[1], 'range 必须 a≤b。'), point, codeMaterialGradeValueSchema, gradient, curve])
 const structure = z.record(codeMaterialParameterKeySchema, codeMaterialBasicParameterValueSchema).refine(value => Object.keys(value).length >= 1 && Object.keys(value).length <= 16, '自定义参数结构必须有 1–16 个基础字段，不能嵌套。')
-export const codeMaterialTableValueSchema = z.array(z.record(codeMaterialParameterKeySchema, z.union([codeMaterialBasicParameterValueSchema, textStyleSchema])))
+const codeMaterialTableValueSchema = z.array(z.record(codeMaterialParameterKeySchema, z.union([codeMaterialBasicParameterValueSchema, textStyleSchema])))
 export const codeMaterialAnimatedParameterValueSchema = z.union([codeMaterialBasicParameterValueSchema, structure, textStyleSchema, codeMaterialTableValueSchema])
 /** 视频参数的取帧时间表（语义见 CodeVideoSpan）：按 from 升序、互不重叠，与固定时刻 time 互斥。 */
-export const codeMaterialVideoSpansSchema = z.array(z.object({ from: finite, to: finite, src: finite.nonnegative(), rate: finite.nonnegative().optional(), cursor: z.boolean().optional() }).strict()).min(1).max(CODE_VIDEO_SPAN_LIMIT).superRefine((spans, context) => {
+const codeMaterialVideoSpansSchema = z.array(z.object({ from: finite, to: finite, src: finite.nonnegative(), rate: finite.nonnegative().optional(), cursor: z.boolean().optional() }).strict()).min(1).max(CODE_VIDEO_SPAN_LIMIT).superRefine((spans, context) => {
   const issue = codeVideoSpansIssue(spans)
   if (issue) context.addIssue({ code: 'custom', message: issue })
 })
@@ -45,7 +45,7 @@ const webReference = z.object({
 })
 export const codeMaterialImageReferenceSchema = z.union([z.object({ kind: z.literal('image'), mediaId: z.string().min(1).max(100) }).strict(), videoReference, z.object({ kind: z.literal('sequence'), mediaId: z.literal('below') }).strict(), webReference,
   z.object({ kind: z.literal('clip'), clipId: z.string().min(1).max(100) }).strict()])
-export const codeMaterialAudioReferenceSchema = z.object({ kind: z.literal('audio'), mediaId: z.string().min(1).max(100) }).strict()
+const codeMaterialAudioReferenceSchema = z.object({ kind: z.literal('audio'), mediaId: z.string().min(1).max(100) }).strict()
 /** 片子数据参数的值（剪辑内容第 37 版，作者接口 v5）：引用同一剪辑 scenes 里的一份，引用须存在由剪辑文档校验。 */
-export const codeMaterialSceneReferenceSchema = z.object({ kind: z.literal('scene'), sceneId: z.string().min(1).max(100) }).strict()
+const codeMaterialSceneReferenceSchema = z.object({ kind: z.literal('scene'), sceneId: z.string().min(1).max(100) }).strict()
 export const codeMaterialParameterValueSchema = z.union([codeMaterialAnimatedParameterValueSchema, codeMaterialImageReferenceSchema, codeMaterialAudioReferenceSchema, codeMaterialSceneReferenceSchema, z.null()])

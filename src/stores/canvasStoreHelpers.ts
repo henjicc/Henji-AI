@@ -149,7 +149,7 @@ export function getNodeSize(node: CanvasNode): { width: number; height: number }
   return resolveCanvasNodeLayoutSize(node);
 }
 
-export function isMediaAutoResizableType(type: CanvasNodeType): boolean {
+function isMediaAutoResizableType(type: CanvasNodeType): boolean {
   return type === CANVAS_NODE_TYPES.upload
     || type === CANVAS_NODE_TYPES.imageEdit
     || type === CANVAS_NODE_TYPES.exportImage
@@ -170,7 +170,7 @@ export function isModelSelectorNodeType(type: CanvasNodeType): boolean {
 }
 
 /** 上传类节点（图片/视频）始终按当前尺寸自适应重新贴合，不受手动调整锁定影响 */
-export function isAdaptiveUploadNodeType(type: CanvasNodeType): boolean {
+function isAdaptiveUploadNodeType(type: CanvasNodeType): boolean {
   return type === CANVAS_NODE_TYPES.upload || type === CANVAS_NODE_TYPES.videoUpload;
 }
 

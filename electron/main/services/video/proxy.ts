@@ -18,12 +18,12 @@ const MAX_FRAMES = 1_000_000
  * 而 4 线程软解 + NVENC 已约 1 倍速处理 4K60，后台任务也不占满处理器。
  * 参数变化时递增 VIDEO_PROXY_PARAMS_VERSION：它进入缓存键，旧代理随之失效。
  */
-export const VIDEO_PROXY_PARAMS_VERSION = 'h264-pts-v3'
+const VIDEO_PROXY_PARAMS_VERSION = 'h264-pts-v3'
 export function videoProxyKey(identity: string, preset: VideoProxyPreset): string {
   return createHash('sha256').update(JSON.stringify([VIDEO_PROXY_PARAMS_VERSION, identity, preset])).digest('hex')
 }
 /** 原片的色彩标记（ffprobe 字段原值）；未标记的项省略，代理也不写。 */
-export interface VideoProxyColor { primaries?: string; transfer?: string; matrix?: string; range?: string }
+interface VideoProxyColor { primaries?: string; transfer?: string; matrix?: string; range?: string }
 export interface VideoProxyPlan { width: number; height: number; fps: number; encoder: EncoderChoice; color?: VideoProxyColor }
 
 /** 代理尺寸：auto 为源的一半、短边最高 1080；旧预设 720p/540p 按高度上限。宽高取偶数。 */

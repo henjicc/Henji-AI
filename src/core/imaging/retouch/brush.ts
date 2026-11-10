@@ -10,7 +10,7 @@ export function assertRetouchPixels(pixels: RetouchPixels): void {
 }
 
 /** Transparent outside the source; never stretch an edge pixel into an absent donor. */
-export function sampleRetouchPixel(pixels: RetouchPixels, x: number, y: number, channel: number): number {
+function sampleRetouchPixel(pixels: RetouchPixels, x: number, y: number, channel: number): number {
   const px = x - pixels.originX, py = y - pixels.originY, ix = Math.floor(px), iy = Math.floor(py);
   const fx = px - ix, fy = py - iy;
   const at = (dx: number, dy: number): number => dx >= 0 && dy >= 0 && dx < pixels.width && dy < pixels.height

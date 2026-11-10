@@ -26,7 +26,7 @@ export const WEB_REPLAY_CHANNELS = {
   appsChanged: 'webReplay:apps-changed',
 } as const
 
-export interface WebReplayConnectedApp {
+interface WebReplayConnectedApp {
   connectionId: string
   app: AppInfoValue
   host: WebRecordingManifest['host']

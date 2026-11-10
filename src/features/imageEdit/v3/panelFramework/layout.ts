@@ -4,7 +4,7 @@ import { Orientation, type DockviewApi, type SerializedDockview } from 'dockview
 import type { ImageEditorHostProfileIdV3 } from '../application/imageEditorHostProfiles'
 import { imageEditorDockPanelsV3, type ImageEditorPanelDefinitionV3 } from './panelRegistry'
 
-export const IMAGE_EDITOR_PREVIEW_PANEL_V3 = 'preview'
+const IMAGE_EDITOR_PREVIEW_PANEL_V3 = 'preview'
 
 /** 仅为运行时布局 DTO；持久 schema/版本由宿主适配器登记，禁止写进作品。 */
 export interface ImageEditorDockLayoutV3 {

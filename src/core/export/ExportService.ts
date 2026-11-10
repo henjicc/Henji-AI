@@ -12,7 +12,7 @@ import type { ExportData, ExportType, ExportOptions } from './types'
 /**
  * 导出服务类
  */
-export class ExportService {
+class ExportService {
   private cleaner: ParamCleaner
   private version = '1.0.0'
 

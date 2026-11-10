@@ -18,7 +18,7 @@ import {
   type ImageEditRasterLayerV3,
 } from './layerTypes';
 
-export type ImageEditIdFactoryV3 = (prefix: string) => string;
+type ImageEditIdFactoryV3 = (prefix: string) => string;
 
 export interface CreateImageEditDocumentOptionsV3 {
   width: number;

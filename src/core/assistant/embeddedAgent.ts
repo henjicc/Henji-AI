@@ -3,7 +3,7 @@ import { applicationRefSchema, truncateCodePoints } from '../application-control
 import { agentAttachmentsSchema, type AgentAttachment, type AgentMediaAttachment } from './attachments'
 import { HOST_ANNOTATION_PREVIEW_CHARACTERS, type HostContextSnapshot } from '../application-control/hostContracts'
 
-export const EMBEDDED_CONTEXT_MAX_CHARACTERS = 16000
+const EMBEDDED_CONTEXT_MAX_CHARACTERS = 16000
 type HostAnnotationList = NonNullable<HostContextSnapshot['videoEdit']>['openAnnotations']
 function promptAnnotationList(list: HostAnnotationList): HostAnnotationList {
   return { ...list, items: list.items.map(item => ({ ...item,
@@ -42,7 +42,7 @@ export function embeddedInputModalities(capabilities: Partial<Record<AgentMediaA
   return (['image', 'video', 'audio'] as const).filter(type => capabilities[type] && !(api === 'openai-responses' && type === 'audio'))
 }
 
-export const embeddedIntentRequestSchema = z.object({
+const embeddedIntentRequestSchema = z.object({
   documentRef: applicationRefSchema.extend({ kind: z.enum(['video_edit.document', 'image_edit.document']) }),
   sessionId: z.string().min(1),
   draftRefs: z.array(applicationRefSchema.extend({ kind: z.enum(['video_edit.intent_draft', 'image_edit.intent_draft']) })).min(1),

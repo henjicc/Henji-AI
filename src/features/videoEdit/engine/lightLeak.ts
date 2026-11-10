@@ -17,7 +17,7 @@ import { linearHex } from './lightSweep'
 import { lightLeakFrameSeed } from '@/core/videoEdit/lightLeak'
 import { GLOW_COMPOSITE_BLOCK } from './glow'
 
-export const LIGHT_LEAK_ENTRIES = ['leak_light', 'leak_composite', 'leak_layer_image', 'leak_layer_light'] as const
+const LIGHT_LEAK_ENTRIES = ['leak_light', 'leak_composite', 'leak_layer_image', 'leak_layer_light'] as const
 const n = (params: VideoEditBuiltinParams, key: string): number => Number(params[key] ?? 0)
 
 /** 强度 100 时最亮处的线性光。 */
@@ -54,7 +54,7 @@ export function lightLeakFlicker(flicker: number, time: number, seed: number): n
 }
 
 /** `params` 已补齐默认值；`time` 是效果时钟的秒数；`split` 为图层拆输出。 */
-export function planLightLeak(params: VideoEditBuiltinParams, width: number, height: number, time: number, split = false): VideoEditBuiltinPlan {
+function planLightLeak(params: VideoEditBuiltinParams, width: number, height: number, time: number, split = false): VideoEditBuiltinPlan {
   const plan = new Planner(width, height)
   const finish = (underlay?: number): VideoEditBuiltinPlan => ({ width, height, scratch: plan.scratch, passes: plan.passes, linearScratch: true, ...(underlay !== undefined ? { underlay } : {}) })
   const seed = Math.round(n(params, 'seed'))
@@ -82,7 +82,7 @@ export function planLightLeak(params: VideoEditBuiltinParams, width: number, hei
   return finish(underlay)
 }
 
-export const LIGHT_LEAK_WGSL = `
+const LIGHT_LEAK_WGSL = `
 // a = (起点（全分辨率像素）, 射入方向)，b = (深度（全分辨率像素）, 沿边收窄, 条纹, 种子偏移)，c.x = 流动时间，
 // layer.rgb / grid.rgb = 中心色 / 边缘色（线性光，乘过强度与闪烁）。
 fn leakNoise(p: vec2f) -> f32 { return 0.7 * simplexNoise(p) + 0.3 * simplexNoise(p * 1.9 + vec2f(17.1, 3.7)); }

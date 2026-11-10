@@ -13,7 +13,7 @@ import {
  * - 编码：WebCodecs 只在渲染层可用，结果由渲染层带来一起写入。
  */
 export interface GpuDeviceInfo { vendorId: number; deviceId: number; driverVersion?: string; active?: boolean }
-export interface DecoderAdapterInfo { description: string; vendorId: string; deviceId: string; dedicatedVideoMemoryMiB: number; software: boolean; luid?: string }
+interface DecoderAdapterInfo { description: string; vendorId: string; deviceId: string; dedicatedVideoMemoryMiB: number; software: boolean; luid?: string }
 
 export interface HardwareCapabilitiesHost {
   gpuDevices(): Promise<GpuDeviceInfo[]>

@@ -4,7 +4,7 @@ import type { CanvasImageCapabilityModelPolicy } from './types';
 
 export const LAYER_STACK_CONTRACT_VERSION = 1 as const;
 export const LAYER_SEPARATION_DEFAULT_MODEL_ID = 'volcengine-seedream-5.0-pro';
-export const LAYER_SEPARATION_PROVIDER_PRIORITY = ['volcengine', 'apimart', 'kie'] as const;
+const LAYER_SEPARATION_PROVIDER_PRIORITY = ['volcengine', 'apimart', 'kie'] as const;
 
 export const LAYER_SEPARATION_MODEL_POLICY = {
   mode: 'verified-families',

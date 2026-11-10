@@ -23,11 +23,11 @@ import {
 } from './imageMarkRasterExport'
 
 const logger = createLogger('features.imageMark.v3_host')
-export interface ImageMarkRasterExportUiState extends ImageMarkRasterExportProgress {
+interface ImageMarkRasterExportUiState extends ImageMarkRasterExportProgress {
   cancelling: boolean
 }
 
-export interface ImageMarkRasterExportOption {
+interface ImageMarkRasterExportOption {
   format: ImageEditorV3RasterExportFormat
   readiness: ImageEditorCapabilityReadinessV3
 }

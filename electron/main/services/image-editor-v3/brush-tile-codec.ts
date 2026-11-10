@@ -10,9 +10,9 @@ import {
 } from '../../../../src/core/imageEdit/v3/effects/contracts'
 import type { ImageEditBrushTileV3 } from '../../../../src/core/imageEdit/v3/brush/contracts'
 
-export const IMAGE_EDIT_BRUSH_TILE_CODEC_VERSION_V3 = 1
+const IMAGE_EDIT_BRUSH_TILE_CODEC_VERSION_V3 = 1
 export const IMAGE_EDIT_BRUSH_TILE_MEDIA_TYPE_V3 = 'application/x-henji-brush-tile-v3'
-export const IMAGE_EDIT_BRUSH_TILE_MAX_EDGE_V3 = 512
+const IMAGE_EDIT_BRUSH_TILE_MAX_EDGE_V3 = 512
 export const IMAGE_EDIT_BRUSH_TILE_MAX_RAW_BYTES_V3 = 512 * 512 * 4 * Float32Array.BYTES_PER_ELEMENT
 export const IMAGE_EDIT_BRUSH_TILE_MAX_RESOURCE_BYTES_V3 = 5 * 1024 * 1024
 

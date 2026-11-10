@@ -1,7 +1,7 @@
-export const PANORAMA_VIEW_MODES = ['sphere', 'flat'] as const;
+const PANORAMA_VIEW_MODES = ['sphere', 'flat'] as const;
 export type PanoramaViewMode = (typeof PANORAMA_VIEW_MODES)[number];
 
-export const PANORAMA_PROJECTION_MODES = ['strict-2:1', 'experimental-wide'] as const;
+const PANORAMA_PROJECTION_MODES = ['strict-2:1', 'experimental-wide'] as const;
 export type PanoramaProjectionMode = (typeof PANORAMA_PROJECTION_MODES)[number];
 
 export const PANORAMA_VIEWPORT_ASPECT_RATIOS = [
@@ -24,7 +24,7 @@ export const PANORAMA_MIN_FOV = 30;
 export const PANORAMA_MAX_FOV = 90;
 export const PANORAMA_MAX_PITCH = Math.PI * 0.47;
 export const PANORAMA_DEFAULT_VIEW_MODE: PanoramaViewMode = 'sphere';
-export const PANORAMA_DEFAULT_PROJECTION_MODE: PanoramaProjectionMode = 'strict-2:1';
+const PANORAMA_DEFAULT_PROJECTION_MODE: PanoramaProjectionMode = 'strict-2:1';
 export const PANORAMA_DEFAULT_VIEWPORT_ASPECT_RATIO: PanoramaViewportAspectRatio = '16:9';
 export const PANORAMA_DEFAULT_CAMERA_VIEW: Readonly<PanoramaCameraView> = {
   yaw: 0,

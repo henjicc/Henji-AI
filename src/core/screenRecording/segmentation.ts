@@ -2,7 +2,7 @@ import type { CaptureEvent } from '../captureLog/events'
 import { audioEditFillerConfidence } from '../audioEdit/analysis'
 import { emptyRecordingUnderstanding, recordingUnderstandingSchema, type RecordingUnderstanding, type RecordingRange, type RecordingTranscript } from './understanding'
 
-export function mergeRecordingRanges(ranges: readonly RecordingRange[]): RecordingRange[] {
+function mergeRecordingRanges(ranges: readonly RecordingRange[]): RecordingRange[] {
   const result: RecordingRange[] = []
   for (const range of [...ranges].sort((a, b) => a.startUs - b.startUs)) {
     if (range.endUs <= range.startUs) continue

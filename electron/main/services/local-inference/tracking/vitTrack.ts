@@ -9,12 +9,12 @@ import type { LocalModelRunner } from '../analysis'
  * 原生测试与 Python 参考（同一流程 + onnxruntime）逐帧对照。
  */
 
-export const VIT_TEMPLATE_SIZE = 128
-export const VIT_SEARCH_SIZE = 256
+const VIT_TEMPLATE_SIZE = 128
+const VIT_SEARCH_SIZE = 256
 const MEAN = [0.485, 0.456, 0.406]
 const STD = [0.229, 0.224, 0.225]
 /** OpenCV TrackerVit::Params 的默认阈值。 */
-export const VIT_SCORE_THRESHOLD = 0.2
+const VIT_SCORE_THRESHOLD = 0.2
 
 export interface VitRect { x: number; y: number; width: number; height: number }
 export interface VitFrame { rgb: Uint8Array; width: number; height: number }
@@ -46,7 +46,7 @@ export function vitCrop(frame: VitFrame, box: VitRect, factor: number): { pixels
 }
 
 /** cv::resize INTER_LINEAR（像素中心对齐、边缘夹取，8 位四舍五入）后按 ImageNet 均值方差归一化成 CHW（RGB 顺序）。 */
-export function vitBlob(crop: { pixels: Uint8Array; size: number }, target: number): Float32Array {
+function vitBlob(crop: { pixels: Uint8Array; size: number }, target: number): Float32Array {
   const output = new Float32Array(3 * target * target)
   const scale = crop.size / target; const plane = target * target
   for (let y = 0; y < target; y++) {

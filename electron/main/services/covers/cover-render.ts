@@ -9,8 +9,8 @@ import { selectProjectCoverSources, type ProjectCoverSourceDto } from '../projec
  */
 
 /** 卡片封面固定 4:3；640 宽能覆盖常见 2x DPR，同时控制单张文件体积。 */
-export const COVER_WIDTH = 640
-export const COVER_HEIGHT = 480
+const COVER_WIDTH = 640
+const COVER_HEIGHT = 480
 
 export type CoverSource = ProjectCoverSourceDto
 

@@ -26,13 +26,13 @@ export function parseDocumentCapabilityInput<TInput>(id: string, input: unknown)
   return documentIdToProjectId(parseCapabilityInput<Record<string, unknown>>(id, input)) as TInput
 }
 
-export function documentIdToProjectId<T>(value: T): T {
+function documentIdToProjectId<T>(value: T): T {
   if (!value || typeof value !== 'object' || Array.isArray(value) || !('documentId' in value)) return value
   const { documentId, ...rest } = value as Record<string, unknown>
   return { ...rest, projectId: documentId } as T
 }
 
-export function projectIdToDocumentId(value: Record<string, unknown>): Record<string, unknown> {
+function projectIdToDocumentId(value: Record<string, unknown>): Record<string, unknown> {
   if (!('projectId' in value)) return value
   const { projectId, ...rest } = value
   return { ...rest, documentId: projectId }

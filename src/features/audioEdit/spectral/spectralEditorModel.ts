@@ -19,7 +19,7 @@ export interface AudioBrushStroke { points: AudioBrushPoint[]; radiusFrames: num
 
 export interface FrequencyView { minHz: number; maxHz: number; scale: SpectrogramScale }
 
-export const AMPLITUDE_ZOOM_LIMITS = { min: 1, max: 64 } as const
+const AMPLITUDE_ZOOM_LIMITS = { min: 1, max: 64 } as const
 
 export function frameAtX(x: number, width: number, view: WaveformViewport): number {
   return view.start + Math.max(0, Math.min(1, x / Math.max(1, width))) * (view.end - view.start)
@@ -35,7 +35,7 @@ export function yAtHz(hz: number, height: number, frequency: FrequencyView): num
 }
 
 /** 一格滚轮的缩放倍数；deltaY > 0（向下滚）缩小视野（看到更多）。触控板的细小增量按比例换算。 */
-export function wheelZoomFactor(deltaY: number): number {
+function wheelZoomFactor(deltaY: number): number {
   return Math.exp(Math.max(-0.5, Math.min(0.5, deltaY * 0.0025)))
 }
 

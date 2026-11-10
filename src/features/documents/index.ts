@@ -14,7 +14,7 @@ export {
   type LeftoverDraftQuery,
   type OpenDocumentOptions,
 } from './documentSessionRegistry'
-export { createJsonDocumentPersistence, resolveDocumentPersistence } from './documentPersistence'
+export { resolveDocumentPersistence } from './documentPersistence'
 export {
   DocumentSessionBusyError,
   DocumentSessionClosedError,
@@ -54,7 +54,6 @@ export {
 export { documentKindPresentation, type DocumentKindPresentation } from './documentKindPresentation'
 export {
   ALL_DOCUMENTS_FILTER,
-  documentLibraryFilterToContainer,
   toDocumentCardItems,
   toProjectCardItems,
   useDocumentLibrary,

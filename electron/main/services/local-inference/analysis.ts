@@ -57,7 +57,7 @@ function expectedFrames(job: SmartRegionAnalysisJob): number {
 }
 
 /** 人脸检测的解码尺寸：按比例让长边恰好 640（小画面放大，提高小脸检出），放进 640×640 的左上角。 */
-export function faceFrameSize(display: { width: number; height: number }): FrameRequest {
+function faceFrameSize(display: { width: number; height: number }): FrameRequest {
   const scale = YUNET_INPUT_SIZE / Math.max(1, display.width, display.height)
   return { width: Math.max(1, Math.min(YUNET_INPUT_SIZE, Math.round(display.width * scale))), height: Math.max(1, Math.min(YUNET_INPUT_SIZE, Math.round(display.height * scale))) }
 }

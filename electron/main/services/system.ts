@@ -13,7 +13,7 @@ export interface FsDirEntryDto {
   isDirectory: boolean
 }
 
-export interface DialogFilterDto {
+interface DialogFilterDto {
   name: string
   extensions: string[]
 }
@@ -38,7 +38,7 @@ export interface NativeFetchRequestDto {
   timeoutMs?: number
 }
 
-export const NATIVE_FETCH_DEFAULT_TIMEOUT_MS = 60_000
+const NATIVE_FETCH_DEFAULT_TIMEOUT_MS = 60_000
 export const NATIVE_FETCH_MAX_TIMEOUT_MS = 300_000
 
 export interface NativeFetchResponseDto {

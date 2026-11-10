@@ -36,7 +36,7 @@ export async function acquireSharedTextFontLease(version?: string): Promise<Text
     throw error
   }
 }
-export async function acquireTextFontLease(signal?: AbortSignal, version?: string): Promise<TextFontLease> {
+async function acquireTextFontLease(signal?: AbortSignal, version?: string): Promise<TextFontLease> {
   if (!channel) return Promise.reject(new Error('文字字体通道尚未连接'))
   const policy = version ? await importFontPolicy(authorLibraryUrl('henji-layout', version, 'font-session.mjs')) : undefined
   return channel.open(signal, policy?.TextFontSession)

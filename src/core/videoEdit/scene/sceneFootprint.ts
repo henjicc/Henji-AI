@@ -12,7 +12,7 @@ import { VIDEO_EDIT_SCENE_CUT_LEAD_SECONDS, type ResolvedVideoEditScene, type Re
  * 时段用的是解析后的时刻，所以锚定、剪切移动了记录时，它会落到新的分段里；分段指纹也应按解析后的取值计算。
  * 按解析结果对象身份缓存。
  */
-export interface VideoEditSceneFootprint { readonly record: ResolvedVideoEditSceneRecord; readonly from: number; readonly to: number }
+interface VideoEditSceneFootprint { readonly record: ResolvedVideoEditSceneRecord; readonly from: number; readonly to: number }
 export interface VideoEditSceneFootprints {
   /** 说不清时段、每一段都要计入的记录。 */
   readonly global: readonly ResolvedVideoEditSceneRecord[]

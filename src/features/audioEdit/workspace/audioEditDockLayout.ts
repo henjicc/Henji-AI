@@ -18,7 +18,7 @@ export const AUDIO_EDIT_PANELS = [
   { id: 'history', title: '历史记录', ...SIDE_MIN },
   { id: 'delivery', title: '交付', ...SIDE_MIN },
 ] as const
-export type AudioEditPanelId = typeof AUDIO_EDIT_PANELS[number]['id']
+type AudioEditPanelId = typeof AUDIO_EDIT_PANELS[number]['id']
 const TITLES = Object.fromEntries(AUDIO_EDIT_PANELS.map(panel => [panel.id, panel.title])) as Record<AudioEditPanelId, string>
 
 type Leaf = { size: number; views: AudioEditPanelId[]; id: string }

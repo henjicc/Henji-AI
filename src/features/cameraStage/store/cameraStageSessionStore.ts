@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { StageViewMode } from '../domain/sceneTypes'
 
-export type CameraStageAppView = 'list' | 'editor'
+type CameraStageAppView = 'list' | 'editor'
 
 interface CameraStageSessionState {
   appView: CameraStageAppView

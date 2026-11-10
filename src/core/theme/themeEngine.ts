@@ -216,18 +216,18 @@ export interface ThemeTokens {
 export const THEME_TEXT_MIN_CONTRAST = 4.5;
 
 /** 深色玻璃底（黑）的不透明度：保证辅助文字在玻璃上 ≥ 4.5:1（任务 4.3，主控决定 ≥ 0.70）。 */
-export const DARK_GLASS_TINT_ALPHA = 0.72;
+const DARK_GLASS_TINT_ALPHA = 0.72;
 /** 浅色玻璃底：面板色 82%（纸白下查看器、画布上的玻璃浮层） */
-export const LIGHT_GLASS_TINT_ALPHA = 0.82;
+const LIGHT_GLASS_TINT_ALPHA = 0.82;
 /** 浮起来的玻璃底的不透明度：在白、黑两种极端底上辅助文字都 ≥ 4.5:1（themeEngine.test 断言）。 */
-export const GLASS_OVERLAY_TINT_ALPHA = 0.92;
+const GLASS_OVERLAY_TINT_ALPHA = 0.92;
 /** 玻璃上的强调选中底透明度（深色 / 浅色） */
 const GLASS_SELECTED_ACCENT_ALPHA = { dark: 0.28, light: 0.18 } as const;
 
 /** 选中淡强调底的强调色透明度（重要记录 012，任务 4.3）。 */
-export const SELECTED_ACCENT_ALPHA = { dark: 0.2, light: 0.18 } as const;
+const SELECTED_ACCENT_ALPHA = { dark: 0.2, light: 0.18 } as const;
 /** 选中项悬停：在选中底上再加一档，不回落中性悬停。 */
-export const SELECTED_ACCENT_HOVER_ALPHA = { dark: 0.26, light: 0.22 } as const;
+const SELECTED_ACCENT_HOVER_ALPHA = { dark: 0.26, light: 0.22 } as const;
 /**
  * 选中淡底必须与悬停、静息一眼可辨（重要记录 012；OKLab ΔE 门槛，四预设的 4.3 断言与 5.11 组合测试共用）：
  * 选中 vs 中性悬停 ≥ vsHover、选中 vs 所在表面 ≥ vsRest、选中项悬停 vs 选中 ≥ hoverVsSelected。
@@ -253,7 +253,7 @@ const TEXT2_MIN_GAP = { dark: 0.12, light: 0.05 } as const;
 const ACCENT_L_RANGE = { dark: { min: 0.5, max: 0.64 }, light: { min: 0.46, max: 0.6 } } as const;
 
 /** 主按钮为白字压暗实底时，相对设计稿推导亮度的最大降幅（主控决定 2026-10-03）。 */
-export const ACCENT_MAX_DARKEN = 0.04;
+const ACCENT_MAX_DARKEN = 0.04;
 
 /** 固定媒体叠层：压在画面上，不随主题变化。 */
 export const MEDIA_OVERLAY_TOKENS = {
@@ -307,7 +307,7 @@ interface SolveOptions {
  * 从起点亮度出发，找离起点最近、且对全部背景都达到目标对比度的亮度。
  * 起点已达标时原样返回（保证设计稿数值达标时不被改动）。
  */
-export function solveLightnessForContrast(options: SolveOptions): number {
+function solveLightnessForContrast(options: SolveOptions): number {
   const { startL, chroma, hue, beds, target, direction } = options;
   const passes = (L: number) => minContrast(oklchToHex(L, chroma, hue), beds) >= target;
   if (passes(startL)) {
@@ -330,7 +330,7 @@ export function solveLightnessForContrast(options: SolveOptions): number {
 }
 
 /** 在白字与深色墨水之间按对比度自动选择：白字达标优先，否则墨水达标，再否则取更高者。 */
-export function pickOnColor(backgrounds: readonly string[], ink: string): string {
+function pickOnColor(backgrounds: readonly string[], ink: string): string {
   const white = minContrast(WHITE, backgrounds);
   if (white >= THEME_TEXT_MIN_CONTRAST) {
     return WHITE;
@@ -346,7 +346,7 @@ export function pickOnColor(backgrounds: readonly string[], ink: string): string
  * 非按钮实底（成功/警示徽标等）亮度：白字或深色墨水任一达标时保持起点；
  * 两者都不达标时往暗处找第一个让白字达标的亮度（只影响落在“中灰区”的颜色）。
  */
-export function solveSolidFillL(startL: number, chroma: number, hue: number, ink: string): number {
+function solveSolidFillL(startL: number, chroma: number, hue: number, ink: string): number {
   const fill = (L: number) => oklchToHex(L, chroma, hue);
   const ok = (L: number) => {
     const bg = [fill(L)];
@@ -376,7 +376,7 @@ export function solveSolidFillL(startL: number, chroma: number, hue: number, ink
 export const FLAT_SOLID_STATE_DELTA = { hover: 0.06, pressed: 0.11 } as const;
 
 /** 扁平实底按钮悬停、按下的亮度：朝“让文字更清楚”的方向走。 */
-export function flatSolidStateL(L: number, on: string, state: keyof typeof FLAT_SOLID_STATE_DELTA): number {
+function flatSolidStateL(L: number, on: string, state: keyof typeof FLAT_SOLID_STATE_DELTA): number {
   const delta = FLAT_SOLID_STATE_DELTA[state];
   return on === WHITE ? Math.max(0, L - delta) : Math.min(1, L + delta);
 }
@@ -437,7 +437,7 @@ export function solveSolidRamp(options: {
  * SELECTION_MIN_DELTA 时原样返回（四个预设取值不变）；否则按 0.01 步进往上找第一个满足的透明度，
  * 上限 SELECTED_ACCENT_ALPHA_MAX。只在强调色彩度很低或很暗、或层级对比度很高（中性悬停被拉亮/拉暗）时触发（任务 5.11）。
  */
-export function solveSelectedAccentAlpha(options: {
+function solveSelectedAccentAlpha(options: {
   accent: string;
   /** 选中项会落在的表面（面板、抬升面） */
   beds: readonly string[];

@@ -34,8 +34,8 @@ import { KeyedSerialExecutor } from '../serial-executor'
  * 还指着原文档的副本）提到的一律保留；读别的画布失败时整次不清理。
  */
 
-export const CANVAS_LAYER_PACKAGE_EXTENSION = henjiExtension('canvas_layer_package')
-export const CANVAS_LAYER_FOLDER_NAME = 'canvas-layers'
+const CANVAS_LAYER_PACKAGE_EXTENSION = henjiExtension('canvas_layer_package')
+const CANVAS_LAYER_FOLDER_NAME = 'canvas-layers'
 const HEADER_FORMAT = 'henji-canvas-layer'
 const HEADER_VERSION = CANVAS_LAYER_PACKAGE_VERSION
 const DOCUMENT_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/

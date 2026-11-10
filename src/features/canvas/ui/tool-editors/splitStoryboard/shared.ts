@@ -5,14 +5,14 @@ export const MAX_LINE_THICKNESS_PERCENT = 20;
 export const LEGACY_DEFAULT_LINE_THICKNESS_PX = 6;
 export const PREVIEW_VIEWPORT_HEIGHT = 'h-[min(560px,60vh)]';
 
-export interface OverlayRect {
+interface OverlayRect {
   x: number;
   y: number;
   width: number;
   height: number;
 }
 
-export interface CellRect {
+interface CellRect {
   x: number;
   y: number;
   width: number;

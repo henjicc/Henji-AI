@@ -73,7 +73,6 @@ export type { ImageEditorManagedPreviewRequestV3, ImageEditorPreviewClientOption
 let previewClientSequence = 0
 
 export {
-  IMAGE_EDITOR_PREVIEW_PROXY_CACHE_MAX_BYTES_V3,
   IMAGE_EDITOR_PREVIEW_PYRAMID_PREWARM_TILE_BUDGET_V3,
 } from './imageEditorPreviewResourcesV3'
 

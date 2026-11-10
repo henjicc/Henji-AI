@@ -41,7 +41,7 @@ export interface VisibleGenerationTaskInput {
   operationId?: string
 }
 
-export interface VisibleGenerationTaskMessages {
+interface VisibleGenerationTaskMessages {
   testModeIntercepted: string
   missingInput: string
 }
@@ -60,7 +60,7 @@ export interface VisibleGenerationTaskDependencies {
   setUploadedFilePaths?: (paths: string[]) => void
 }
 
-export type VisibleGenerationTaskHandler = (input: VisibleGenerationTaskInput) => Promise<string | null>
+type VisibleGenerationTaskHandler = (input: VisibleGenerationTaskInput) => Promise<string | null>
 
 export type VisibleGenerationTaskSummary = GenerationTaskStatusSnapshot
 

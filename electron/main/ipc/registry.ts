@@ -4,7 +4,7 @@ import { readPaidFailureFacts, type PaidFailureFacts } from '../../../src/core/a
 import { redactLogCredentials } from '../../../src/core/logging/sanitize'
 import { readContentTrustFailure, type ContentTrustFailure } from '../../../src/core/contentTrust'
 
-export interface IpcErrorEnvelope {
+interface IpcErrorEnvelope {
   name: string
   message: string
   code: string
@@ -14,7 +14,7 @@ export interface IpcErrorEnvelope {
   contentTrust?: ContentTrustFailure
 }
 
-export type IpcResultEnvelope<T> =
+type IpcResultEnvelope<T> =
   | { ok: true; data: T }
   | { ok: false; error: IpcErrorEnvelope }
 

@@ -4,7 +4,7 @@ import type { CanvasNodeExecutionKind } from '../domain/nodeRegistry'
 import type { CanvasDependencyOutputMode } from './canvasExecutionCache'
 import type { useCanvasStore } from '@/stores/canvasStore'
 
-export type CanvasExecutionTrigger = 'direct' | 'dependency'
+type CanvasExecutionTrigger = 'direct' | 'dependency'
 
 export interface CanvasNodePreflightContext {
   signal?: AbortSignal

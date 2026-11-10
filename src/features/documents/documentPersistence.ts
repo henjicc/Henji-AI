@@ -11,7 +11,7 @@ import type { DocumentPersistence, DocumentSessionCommands } from './documentSes
  *   由 3.5 实现 DocumentPersistence 并在打开时传入。
  */
 
-export function createJsonDocumentPersistence(commands: Pick<DocumentSessionCommands, 'saveDocument'>): DocumentPersistence {
+function createJsonDocumentPersistence(commands: Pick<DocumentSessionCommands, 'saveDocument'>): DocumentPersistence {
   return {
     mode: 'json',
     save: (request) => commands.saveDocument(request),

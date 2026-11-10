@@ -13,7 +13,7 @@ import { VideoEditRecordingCursorSource, type RecordingCursorPageReader } from '
 import { videoEditTrackResults, videoEditTrackingRequest, waitVideoEditTrackingDefinitions } from './videoEditTracking'
 import type { VideoEditCompositeTarget } from './videoEditCompositing'
 
-export function assertVideoEditTrackerClip(document: VideoEditDocument, clip: VideoEditClip): void {
+function assertVideoEditTrackerClip(document: VideoEditDocument, clip: VideoEditClip): void {
   const media = videoEditClipMedia(document, clip)
   if (clip.kind === 'sequence' && document.sequences.some(sequence => sequence.id === document.items.find(item => item.id === clip.itemId)?.sequenceId)) return
   if (!media || (clip.kind !== 'video' && clip.kind !== 'image')) throw new Error('请选择视频、图片或嵌套序列片段建立跟踪。')
@@ -110,7 +110,7 @@ export async function readVideoEditTrackingPlacement(projectId: string, sequence
   return (await applyVideoEditClipFollow(document, [clip], frame))[0]
 }
 /** 跟随用的一帧跟踪（框与姿态），与渲染 Worker 同一读取。 */
-export async function readVideoEditTrackingFollow(projectId: string, sequenceId: string, clipId: string, trackerId: string, frame: number): Promise<VideoEditFollowTrack | undefined> {
+async function readVideoEditTrackingFollow(projectId: string, sequenceId: string, clipId: string, trackerId: string, frame: number): Promise<VideoEditFollowTrack | undefined> {
   const instance = requireVideoEditInstance(projectId)
   const document = videoEditComposition(instance.document, sequenceId)
   const clip = document.clips.find(entry => entry.id === clipId)

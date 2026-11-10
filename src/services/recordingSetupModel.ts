@@ -15,7 +15,7 @@ export function orderedScreens(sources: readonly CaptureSource[]): CaptureSource
 
 export type RecordingQuality = '1080p' | '1440p' | '2160p'
 /** `full` keeps every track separate for AI editing; `quick` records the pointer in and saves one MP4. */
-export type RecordingMode = 'full' | 'quick'
+type RecordingMode = 'full' | 'quick'
 export interface RecordingSetup extends RecordingEncoding {
   mode: RecordingMode
   /** Quick mode output folder; empty means the app's export folder. */

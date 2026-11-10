@@ -27,7 +27,7 @@ export interface ParamListProps {
   /** 与来源不同的参数：键 → 悬停说明（空串用缺省“已改”）；属性面板排布在名称前画中性小点。 */
   modified?: Readonly<Record<string, string>>
 }
-export interface ParamAnimationSlots { leading: ReactNode; labelTrailing?: ReactNode }
+interface ParamAnimationSlots { leading: ReactNode; labelTrailing?: ReactNode }
 const isAnimationSlots = (value: unknown): value is ParamAnimationSlots => typeof value === 'object' && value !== null && !isValidElement(value) && 'leading' in value
 /** 属性面板里需要整行宽度的控件：名称单独一行，控件在下面占满名称列与数值列。 */
 const WIDE_TYPES = new Set<ParamFieldSpec['type']>(['textStyle', 'table', 'curve', 'grade', 'gradient', 'point', 'text', 'custom', 'image', 'audio', 'range'])

@@ -15,11 +15,11 @@ import { CELL_AVERAGE_BLOCK, cellAveragePass } from './halftone'
 import { COLOR_MATH_BLOCK, EFFECT_MATH_BLOCK } from './effectShaderPrelude'
 import { contentBox, linearHex } from './lightSweep'
 
-export const DITHER_PATTERN_ENTRIES = ['cell_average', 'dither_pattern'] as const
+const DITHER_PATTERN_ENTRIES = ['cell_average', 'dither_pattern'] as const
 const n = (params: VideoEditBuiltinParams, key: string): number => Number(params[key] ?? 0)
 
 /** `params` 已补齐默认值。 */
-export function planDitherPattern(params: VideoEditBuiltinParams, width: number, height: number, context?: LayerEffectReference): VideoEditBuiltinPlan {
+function planDitherPattern(params: VideoEditBuiltinParams, width: number, height: number, context?: LayerEffectReference): VideoEditBuiltinPlan {
   const plan = new Planner(width, height)
   const h = context ? context.referenceSize.height * context.rasterScale : height
   const box = contentBox(width, height, context)
@@ -40,7 +40,7 @@ export function planDitherPattern(params: VideoEditBuiltinParams, width: number,
   return { width, height, scratch: plan.scratch, passes: plan.passes }
 }
 
-export const DITHER_PATTERN_WGSL = `
+const DITHER_PATTERN_WGSL = `
 // 抖动点阵：source 是每个点一纹素的平均色，蓝噪声时 original 是 64×64 阈值表。
 // a = (小图原点, 点的边长（像素）, 色阶)，b = (内容左上角所在的点, 图案 0 方格 / 1 蓝噪声, 颜色 0 双色 / 1 原色)，
 // c.x 明暗偏移，layer.rgb 暗色，grid.rgb 亮色（线性光）。

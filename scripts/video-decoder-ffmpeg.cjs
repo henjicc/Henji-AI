@@ -315,10 +315,7 @@ async function main() {
 }
 
 module.exports = {
-  CLI_EXECUTABLES,
-  CURRENT_POINTER,
   FFMPEG_BUILD,
-  FFMPEG_DLL,
   FFMPEG_URL,
   crateDir,
   downloadWithRetry,

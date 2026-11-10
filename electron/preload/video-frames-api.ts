@@ -23,7 +23,7 @@ interface ClosableFrame {
 }
 
 /** Electron 共享纹理的显示尺寸沿用 codedSize；WebCodecs 只调整帧视图，不读回像素。 */
-export function sharedVideoFrame(imported: Pick<Electron.SharedTextureImported, 'getVideoFrame'>, displaySize?: VideoFrameMeta['displaySize']): ClosableFrame {
+function sharedVideoFrame(imported: Pick<Electron.SharedTextureImported, 'getVideoFrame'>, displaySize?: VideoFrameMeta['displaySize']): ClosableFrame {
   const original: ClosableFrame = imported.getVideoFrame()
   if (!displaySize) return original
   try {

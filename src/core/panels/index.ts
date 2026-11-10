@@ -6,4 +6,3 @@
 
 export { panelRegistry } from './PanelRegistry'
 export { validatePanelConfig, isValidPanelType } from './validatePanelConfig'
-export type { ValidationResult } from './validatePanelConfig'

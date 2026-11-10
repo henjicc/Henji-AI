@@ -10,18 +10,18 @@ import { videoEditSceneSchemaIdSchema, type VideoEditScene, type VideoEditSceneR
  */
 export const CODE_SCENE_MIN_API_VERSION = 5
 export const CODE_SCENE_LIMITS = Object.freeze({ kinds: 64, fields: 64, cues: 16, options: 64, listItems: 4096, pathPoints: CODE_MATERIAL_LIMITS.pathPoints, coordinate: 1e9, seconds: 86_400, margin: 600, textLength: 4096, uiKeyLength: 512 })
-export const CODE_SCENE_FIELD_TYPES = ['time', 'duration', 'sourceTime', 'media', 'ref', 'desk', 'deskRect', 'deskPoint', 'deskPath', 'windowRegion', 'uiTrack', 'region', 'list', 'number', 'text', 'boolean', 'choice', 'color', 'textStyle', 'seed'] as const
-export const CODE_SCENE_LANE_STYLES = ['bar', 'block', 'key', 'row', 'cut'] as const
-export const CODE_SCENE_INFLUENCES = ['span', 'untilNext', 'neighbors'] as const
-export const CODE_SCENE_MEDIA_KINDS = ['video', 'image', 'audio'] as const
-export const CODE_SCENE_ROLES = ['cut', 'segment', 'shot'] as const
+const CODE_SCENE_FIELD_TYPES = ['time', 'duration', 'sourceTime', 'media', 'ref', 'desk', 'deskRect', 'deskPoint', 'deskPath', 'windowRegion', 'uiTrack', 'region', 'list', 'number', 'text', 'boolean', 'choice', 'color', 'textStyle', 'seed'] as const
+const CODE_SCENE_LANE_STYLES = ['bar', 'block', 'key', 'row', 'cut'] as const
+const CODE_SCENE_INFLUENCES = ['span', 'untilNext', 'neighbors'] as const
+const CODE_SCENE_MEDIA_KINDS = ['video', 'image', 'audio'] as const
+const CODE_SCENE_ROLES = ['cut', 'segment', 'shot'] as const
 /** 窗口内容（role 'shot'）的约定字段与类型：倍速、叠化进来的时长、是否画录制鼠标。 */
-export const CODE_SCENE_SHOT_FIELDS = Object.freeze({ rate: 'number', xf: 'duration', cursor: 'boolean' } as const)
-export type CodeSceneFieldType = typeof CODE_SCENE_FIELD_TYPES[number]
+const CODE_SCENE_SHOT_FIELDS = Object.freeze({ rate: 'number', xf: 'duration', cursor: 'boolean' } as const)
+type CodeSceneFieldType = typeof CODE_SCENE_FIELD_TYPES[number]
 export type CodeSceneLaneStyle = typeof CODE_SCENE_LANE_STYLES[number]
-export type CodeSceneInfluence = typeof CODE_SCENE_INFLUENCES[number]
+type CodeSceneInfluence = typeof CODE_SCENE_INFLUENCES[number]
 export type CodeSceneMediaKind = typeof CODE_SCENE_MEDIA_KINDS[number]
-export type CodeSceneRole = typeof CODE_SCENE_ROLES[number]
+type CodeSceneRole = typeof CODE_SCENE_ROLES[number]
 export type CodeSceneValue = null | boolean | number | string | CodeSceneValue[] | { [key: string]: CodeSceneValue }
 
 /**
@@ -36,7 +36,7 @@ export type CodeSceneValue = null | boolean | number | string | CodeSceneValue[]
  * - 其余同代码参数：number、text、boolean、choice、color（RGBA 0–1）、textStyle、seed。
  * sourceTime、windowRegion、uiTrack 与 anchor:'footage' 的 time 都按记录类型的 footage 解释，声明它们的类型必须声明 footage。
  */
-export type CodeSceneValueDeclaration =
+type CodeSceneValueDeclaration =
   | { type: 'time'; anchor?: 'footage' }
   | { type: 'duration'; min: number; max: number }
   | { type: 'sourceTime' }
@@ -56,7 +56,7 @@ export type CodeSceneValueDeclaration =
   | { type: 'color'; alpha: boolean }
   | { type: 'textStyle' }
   | { type: 'seed' }
-export type CodeSceneListDeclaration = { type: 'list'; of: CodeSceneValueDeclaration; min: number; max: number }
+type CodeSceneListDeclaration = { type: 'list'; of: CodeSceneValueDeclaration; min: number; max: number }
 /** 记录里的一个字段：没有 default 且未写 optional:true 的字段必填。 */
 export type CodeSceneFieldDeclaration = (CodeSceneValueDeclaration | CodeSceneListDeclaration) & { title?: string; description?: string; optional: boolean; default?: CodeSceneValue }
 export interface CodeSceneKindDeclaration {

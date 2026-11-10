@@ -35,7 +35,7 @@ export interface CanvasNodeControlCatalogEntry {
   aliases: string[]
 }
 
-export interface CanvasNodeConnectionHandle {
+interface CanvasNodeConnectionHandle {
   handleId: string
   purpose: 'source' | 'prompt' | 'model'
   valueType?: string

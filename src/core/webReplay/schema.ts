@@ -25,35 +25,35 @@ const finite = z.number().finite()
 const id = z.number().int().nonnegative()
 const digest = z.string().regex(/^[a-f0-9]{64}$/)
 const encoded = z.unknown()
-export const headerListSchema = z.array(z.tuple([z.string(), z.string()]))
-export const wireBodySchema = z.union([z.object({ text: z.string() }).strict(), z.object({ base64: z.string() }).strict()])
+const headerListSchema = z.array(z.tuple([z.string(), z.string()]))
+const wireBodySchema = z.union([z.object({ text: z.string() }).strict(), z.object({ base64: z.string() }).strict()])
 export type WireBodyValue = z.infer<typeof wireBodySchema>
 /** Stored bodies keep text inline; bytes that are not UTF-8 live in blobs/<sha256>. */
-export const storedBodySchema = z.union([z.object({ text: z.string() }).strict(), z.object({ blob: digest, size: us }).strict()])
+const storedBodySchema = z.union([z.object({ text: z.string() }).strict(), z.object({ blob: digest, size: us }).strict()])
 export type StoredBody = z.infer<typeof storedBodySchema>
 
-export const appInfoSchema = z.object({ name: z.string().min(1).max(200), version: z.string().max(100) }).strict()
+const appInfoSchema = z.object({ name: z.string().min(1).max(200), version: z.string().max(100) }).strict()
 export type AppInfoValue = z.infer<typeof appInfoSchema>
-export const hostKindSchema = z.enum(['tauri', 'electron', 'web'])
-export const viewportSchema = z.object({ width: finite.positive(), height: finite.positive(), dpr: finite.positive() }).strict()
-export const environmentSchema = z.object({
+const hostKindSchema = z.enum(['tauri', 'electron', 'web'])
+const viewportSchema = z.object({ width: finite.positive(), height: finite.positive(), dpr: finite.positive() }).strict()
+const environmentSchema = z.object({
   url: z.string().url(), viewport: viewportSchema, colorScheme: z.enum(['light', 'dark']), reducedMotion: z.boolean(),
   locale: z.string(), timeZone: z.string(), userAgent: z.string(),
 }).strict()
 export type WebRecordingEnvironment = z.infer<typeof environmentSchema>
 
 const rectSchema = z.object({ x: finite, y: finite, width: finite, height: finite }).strict()
-export const locatorSchema = z.object({
+const locatorSchema = z.object({
   replayId: z.string().optional(), act: z.object({ name: z.string(), anchor: z.string().optional(), scope: z.string().optional() }).strict().optional(),
   role: z.string().optional(), name: z.string().optional(), tag: z.string(), path: z.string(),
 }).strict()
-export const elementInfoSchema = z.object({ locator: locatorSchema, rect: rectSchema, offset: z.tuple([finite, finite]) }).strict()
+const elementInfoSchema = z.object({ locator: locatorSchema, rect: rectSchema, offset: z.tuple([finite, finite]) }).strict()
 export type ElementInfoValue = z.infer<typeof elementInfoSchema>
 
 // ---------------------------------------------------------------- probe events (wire)
 
 const httpPhase = z.enum(['request', 'body'])
-export const dataEventSchemas = [
+const dataEventSchemas = [
   z.object({ kind: z.literal('http.request'), id, t: us, via: z.enum(['seam', 'fetch']), method: z.string(), url: z.string(), headers: headerListSchema, body: wireBodySchema.optional() }).strict(),
   z.object({ kind: z.literal('http.response'), id, t: us, status: z.number().int(), statusText: z.string(), url: z.string(), headers: headerListSchema }).strict(),
   z.object({ kind: z.literal('http.chunk'), id, t: us, body: wireBodySchema }).strict(),
@@ -148,12 +148,12 @@ const hostCall = z.object({
   kind: z.literal('host'), id, t: us, command: z.string(), args: encoded,
   result: z.union([z.object({ at: us, ok: z.literal(true), value: encoded }).strict(), z.object({ at: us, ok: z.literal(false), error: encoded }).strict()]).optional(),
 }).strict()
-export const webRecordingCallSchema = z.discriminatedUnion('kind', [httpCall, hostCall])
+const webRecordingCallSchema = z.discriminatedUnion('kind', [httpCall, hostCall])
 export type WebRecordingCall = z.infer<typeof webRecordingCallSchema>
 export type WebRecordingHttpCall = z.infer<typeof httpCall>
 export type WebRecordingHostCall = z.infer<typeof hostCall>
 
-export const externalResourceSchema = z.object({
+const externalResourceSchema = z.object({
   url: z.string(), t: us, initiator: z.string(), outcome: z.enum(['load', 'error']).optional(), width: finite.optional(), height: finite.optional(),
   /** Henji's own fetch of the URL during recording. */
   fetched: z.union([z.object({ ok: z.literal(true), status: z.number().int(), contentType: z.string(), blob: digest, size: us }).strict(), z.object({ ok: z.literal(false), message: z.string() }).strict()]).optional(),
@@ -169,7 +169,7 @@ export const webRecordingDataSchema = z.object({
 }).strict()
 export type WebRecordingData = z.infer<typeof webRecordingDataSchema>
 
-export const webRecordingBehaviorEventSchema = z.discriminatedUnion('kind', behaviorEventSchemas(storedBodySchema))
+const webRecordingBehaviorEventSchema = z.discriminatedUnion('kind', behaviorEventSchemas(storedBodySchema))
 export type WebRecordingBehaviorEvent = z.infer<typeof webRecordingBehaviorEventSchema>
 export const webRecordingBehaviorSchema = z.object({ events: z.array(webRecordingBehaviorEventSchema) }).strict()
 

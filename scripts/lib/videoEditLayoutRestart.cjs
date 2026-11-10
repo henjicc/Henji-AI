@@ -237,4 +237,4 @@ async function runVideoEditLayoutRestart({ launch, userDataDir, outDir }) {
   return evidence
 }
 
-module.exports = { assertLayoutRestored, layoutSnapshot, runVideoEditLayoutRestart }
+module.exports = { assertLayoutRestored, runVideoEditLayoutRestart }

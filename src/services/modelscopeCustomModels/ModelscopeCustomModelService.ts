@@ -10,7 +10,7 @@ const PROVIDER_ID = 'modelscope'
 const CONFIG_KIND = 'modelscope-custom-model-ref'
 const LEGACY_STORAGE_KEY = 'modelscope_custom_models'
 
-export interface ModelscopeCustomModelType {
+interface ModelscopeCustomModelType {
   imageGeneration: boolean
   imageEditing: boolean
 }

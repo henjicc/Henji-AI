@@ -5,7 +5,7 @@
 
 import { readGenerationConcurrency, subscribeGenerationConcurrency } from '@/core/settings/generationConcurrency'
 
-export interface QueuedTask {
+interface QueuedTask {
     id: string
     providerId?: string
     execute: () => Promise<void>

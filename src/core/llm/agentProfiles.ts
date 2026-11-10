@@ -15,7 +15,7 @@ export interface AgentModelReferenceLike {
   modelId: string
 }
 
-export interface AgentModelVerificationLike extends AgentModelReferenceLike {
+interface AgentModelVerificationLike extends AgentModelReferenceLike {
   checks: Array<{ id: string; status: string }>
 }
 
@@ -90,7 +90,7 @@ export function findAgentModelVerification<TProfile extends AgentModelProfileLik
   return profile.verifications.find(verification => isSameModel(verification, reference))
 }
 
-export function isAgentModelVerified(
+function isAgentModelVerified(
   profile: AgentModelProfileLike,
   reference: AgentModelReferenceLike
 ): boolean {
@@ -101,7 +101,7 @@ export function isAgentModelVerified(
   ))
 }
 
-export function isAgentModelStaticallyCapable(model: AgentModelConfigLike | undefined): boolean {
+function isAgentModelStaticallyCapable(model: AgentModelConfigLike | undefined): boolean {
   return model?.enabled === true
     && model.capabilities.text
     && model.capabilities.streaming

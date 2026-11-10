@@ -20,8 +20,8 @@ import { forgetCameraStageUndo, restoreCameraStageUndo } from './cameraStageUndo
 import { coverCameraStageScene } from './coverageService'
 import { cutCameraStageCoverage } from './editService'
 
-export const cameraStageCoverageInputSchema = z.object({ projectId: z.string().min(1), ...cameraStageCoverageIntentShape }).strict().superRefine(refineCameraStageCoverage)
-export const cameraStageCutInputSchema = z.object({ projectId: z.string().min(1), ...cameraStageCutIntentShape }).strict()
+const cameraStageCoverageInputSchema = z.object({ projectId: z.string().min(1), ...cameraStageCoverageIntentShape }).strict().superRefine(refineCameraStageCoverage)
+const cameraStageCutInputSchema = z.object({ projectId: z.string().min(1), ...cameraStageCutIntentShape }).strict()
   .superRefine((input, context) => refineCameraStageLines(input.lines, context))
 
 export const COVERAGE_FACT = '多机位覆盖已布置。'

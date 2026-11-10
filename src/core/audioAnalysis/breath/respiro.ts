@@ -13,14 +13,14 @@ export const RESPIRO_SAMPLE_RATE = 16_000
 export const RESPIRO_HOP = 160
 export const RESPIRO_CHUNK_SAMPLES = 30 * RESPIRO_SAMPLE_RATE
 export const RESPIRO_CHUNK_FRAMES = 1 + RESPIRO_CHUNK_SAMPLES / RESPIRO_HOP
-export const RESPIRO_STEP_SAMPLES = 25 * RESPIRO_SAMPLE_RATE
+const RESPIRO_STEP_SAMPLES = 25 * RESPIRO_SAMPLE_RATE
 /** 官方在验证集上调出的阈值与最短长度（超过 20 帧，即 200 ms 以上） */
-export const RESPIRO_THRESHOLD = 0.064
-export const RESPIRO_MIN_FRAMES = 20
+const RESPIRO_THRESHOLD = 0.064
+const RESPIRO_MIN_FRAMES = 20
 /** 2：改为只用 CPU 推理（DirectML 结果不可用），作废此前的检测缓存 */
 export const BREATH_DETECTION_VERSION = 2
 
-export const audioBreathSchema = z.object({
+const audioBreathSchema = z.object({
   startMs: z.number().nonnegative(),
   endMs: z.number().positive(),
   /** 区间内最高的呼吸概率 */

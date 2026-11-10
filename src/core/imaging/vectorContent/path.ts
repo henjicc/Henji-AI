@@ -71,7 +71,7 @@ export function flattenVectorPath(path: VectorPath, tolerance = .125, signal?: A
   }
   return result;
 }
-export function createVectorRegionSource(operands: readonly VectorPathOperand[]): RegionSource {
+function createVectorRegionSource(operands: readonly VectorPathOperand[]): RegionSource {
   return { defaultValue: 0, read: (region: RegionRect, context): Coverage => {
     assertRegionRect(region); throwIfRegionAborted(context.signal);
     const output = new Float32Array(region.width * region.height);

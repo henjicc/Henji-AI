@@ -28,7 +28,7 @@ export interface ScreenCaptureBackend {
   cancel(): Promise<void>
 }
 export interface CaptureCommand { sessionId: string; requestId: string; operation: CaptureOperation }
-export const captureSpanSchema = z.object({
+const captureSpanSchema = z.object({
   index: z.number().int().nonnegative(), file: z.string().regex(/^screen-\d{6}\.mp4$/),
   monoUs: z.number().int().nonnegative(), durationUs: z.number().int().nonnegative(),
   finalized: z.boolean(),

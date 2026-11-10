@@ -16,7 +16,7 @@ import type {
 import { ImageEditorViewportTileCacheV3 } from './viewportTileCacheV3'
 import { ImageEditorViewportTileSchedulerV3 } from './viewportTileSchedulerV3'
 
-export interface ImageEditorRenderClientV3 {
+interface ImageEditorRenderClientV3 {
   render(request: ImageEditorViewportCompositeRequestV3): Promise<ImageEditorManagedViewportCompositeV3>
   cancel(): void
   dispose(): void

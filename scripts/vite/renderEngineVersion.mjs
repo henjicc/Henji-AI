@@ -28,7 +28,7 @@ const RESOLVED_ID = `\0${MODULE_ID}`
  * 主线程的预渲染调度与会话代理只散列文件本身：它们经剪辑服务引到整个应用（约 1400 个文件），
  * 沿闭包散列会让任何界面改动都使整片预渲染失效；画面本身由 Worker 闭包决定。
  */
-export const RENDER_ENGINE_CLOSURES = [
+const RENDER_ENGINE_CLOSURES = [
   'src/features/videoEdit/engine/videoEditWorker.ts',
   'src/features/videoEdit/engine/videoEditCodeCompiler.worker.ts',
   'src/core/videoEdit/renderCache.ts',
@@ -41,7 +41,7 @@ export const RENDER_ENGINE_CLOSURES = [
  * 应用控制标识、界面文案、创作意图记录、文档信封；不设边界时改任一 IPC 适配器、日志或错误文案都会让所有用户的预渲染作废。
  * 持久化的迁移实现（migrations、formatMigrations）留在闭包里：渲染时展开代码组件会就地迁移组件说明。
  */
-export const RENDER_ENGINE_BOUNDARIES = [
+const RENDER_ENGINE_BOUNDARIES = [
   'src/core/logging',
   'src/platform/runtime',
   'src/core/persistence/formats',
@@ -53,7 +53,7 @@ export const RENDER_ENGINE_BOUNDARIES = [
   'src/core/creativeIntent',
   'src/core/documents',
 ]
-export const RENDER_ENGINE_FILES = [
+const RENDER_ENGINE_FILES = [
   'src/features/videoEdit/application/videoEditRenderCache.ts',
   'src/features/videoEdit/engine/videoEditRenderSession.ts',
   'src/features/videoEdit/engine/videoEditRenderTransport.ts',

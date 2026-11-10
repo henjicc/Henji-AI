@@ -9,7 +9,7 @@
  *
  * 根据条件选择不同的端点
  */
-export interface EndpointRule {
+interface EndpointRule {
   /**
    * 匹配条件
    *

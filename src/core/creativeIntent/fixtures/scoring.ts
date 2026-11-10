@@ -9,7 +9,7 @@ import { type MotionFixture, fixtureMapping } from './motionFixtures'
 export interface BenchmarkScore {
   id: string; score: number; hardFailures: string[]; maxPositionError: number; rms: number; p95: number; angleError: number; scaleError: number; focusDrift: number; eventOffsetFrames: number; eventF1: number | null; keyCount: number; candidates: number; elapsedMs: number; rmsImprovement: number | null
 }
-export const qualityScore = (ratio: number, budget: number): number => Math.max(0, 1 - .15 * ratio / budget)
+const qualityScore = (ratio: number, budget: number): number => Math.max(0, 1 - .15 * ratio / budget)
 
 /** Includes deliberate corruption tests: hard failures stay failures regardless of aggregate score. */
 export function scoreMotionFixture(fixture: MotionFixture, candidateOverride?: MotionCandidate): BenchmarkScore {

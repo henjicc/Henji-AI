@@ -29,11 +29,11 @@ import { jsonEqual } from '@/core/jsonEqual'
  */
 export const STYLE_ENTITY = 'video_edit.style'
 export const TEMPLATE_ENTITY = 'video_edit.template'
-export const PROJECT_STYLE_ENTITY = 'video_edit.project_style'
-export const PROJECT_TEMPLATE_ENTITY = 'video_edit.project_template'
+const PROJECT_STYLE_ENTITY = 'video_edit.project_style'
+const PROJECT_TEMPLATE_ENTITY = 'video_edit.project_template'
 /** 风格库本身：全局单例，是风格与库模板增删的父对象，不依赖任何打开的剪辑。 */
-export const STYLE_LIBRARY_ENTITY = 'video_edit.style_library'
-export const STYLE_LIBRARY_REF: ApplicationRef = { kind: STYLE_LIBRARY_ENTITY, id: 'singleton' }
+const STYLE_LIBRARY_ENTITY = 'video_edit.style_library'
+const STYLE_LIBRARY_REF: ApplicationRef = { kind: STYLE_LIBRARY_ENTITY, id: 'singleton' }
 const LIBRARY_PARENT_HINT = `parent 用 ${STYLE_LIBRARY_ENTITY}:singleton（风格库是全局的，不用打开剪辑）`
 const revisions = (): Record<string, number> => ({ video_edit: videoEditDomainRevision() })
 const exposures = ['ui', 'assistant', 'local_adapter'] as const

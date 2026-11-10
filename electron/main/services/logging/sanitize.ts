@@ -28,7 +28,7 @@ const BASE64_HEAD_LEN = 160
 const BASE64_TAIL_LEN = 48
 
 /** 单条日志事件体积保险丝（字节）：无论捕获模式如何，超限一律强制截断，防止拖垮写入与页面渲染。 */
-export const MAIN_LOG_EVENT_MAX_BYTES = 2 * 1024 * 1024
+const MAIN_LOG_EVENT_MAX_BYTES = 2 * 1024 * 1024
 
 export function sanitizeJsonValue(value: JsonValue, depth = 0): JsonValue {
   const mode = getLogCaptureMode()

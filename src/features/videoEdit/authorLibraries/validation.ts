@@ -95,7 +95,7 @@ export function parseTextInput(content: string | RichTextContent, style: TextSty
   }
 }
 
-export function validateTextOptions(options: TextOptions): void {
+function validateTextOptions(options: TextOptions): void {
   parse(textOptionsSchema, options, '文字排版选项', Object.keys(textOptionsSchema.shape))
 }
 

@@ -37,7 +37,7 @@ function lightOf(sum: readonly number[]): { kelvin: number; duv: number } | unde
 }
 
 /** Four classic estimators (van de Weijer's framework): gray world, shades of gray p=6, first-order gray edge, white patch. */
-export function voteIlluminant(samples: Samples): IlluminantVote[] {
+function voteIlluminant(samples: Samples): IlluminantVote[] {
   const { linear, peak, width } = samples; const total = peak.length
   const usable = (i: number): boolean => peak[i] > .03 && peak[i] < .97
   const gray = [0, 0, 0]; const shades = [0, 0, 0]; const edge = [0, 0, 0]; let grayCount = 0; let shadesCount = 0; let edgeCount = 0
@@ -88,7 +88,7 @@ function partial(kelvin: number, duv: number, strength: number): { kelvin: numbe
 }
 
 /** Exposure from the log-average key, keeping intentional low/high key scenes and protecting the brightest unclipped values. */
-export function estimateExposure(samples: Samples, gains: Vec3): { exposure: number; key: 'low' | 'normal' | 'high' } {
+function estimateExposure(samples: Samples, gains: Vec3): { exposure: number; key: 'low' | 'normal' | 'high' } {
   const values: number[] = []; let logSum = 0
   for (let i = 0; i < samples.peak.length; i++) {
     if (samples.peak[i] < 0) continue
@@ -172,7 +172,7 @@ function oklabMoments(pixels: ArrayLike<number>, scale: number, limit = 4096): M
   return { mean, covariance, samples }
 }
 /** Pitié & Kokaram (2007) linear Monge–Kantorovich transfer: T = Σs^-½ (Σs^½ Σr Σs^½)^½ Σs^-½. */
-export function mklTransfer(source: Moments, reference: Moments): (lab: Vec3) => Vec3 {
+function mklTransfer(source: Moments, reference: Moments): (lab: Vec3) => Vec3 {
   const half = symmetricPower(source.covariance, .5); const inverseHalf = symmetricPower(source.covariance, -.5)
   const t = mul(mul(inverseHalf, symmetricPower(mul(mul(half, reference.covariance), half), .5)), inverseHalf)
   return lab => [0, 1, 2].map(r => reference.mean[r] + t[r].reduce((sum, value, k) => sum + value * (lab[k] - source.mean[k]), 0)) as Vec3
@@ -185,7 +185,7 @@ const FIT_LIMIT: Record<typeof FIT_KEYS[number], [number, number]> = { temperatu
  * Parameter back-fitting: Nelder–Mead over the basic sliders so the production grade (CPU reference) reproduces the target
  * colors on a small sample. Any target — MKL match, a model output or a LUT — becomes editable sliders.
  */
-export function fitGradeParameters(sources: readonly Vec3[], targets: readonly Vec3[], start: Record<string, number> = {}): { params: Record<string, number>; error: number } {
+function fitGradeParameters(sources: readonly Vec3[], targets: readonly Vec3[], start: Record<string, number> = {}): { params: Record<string, number>; error: number } {
   const encodedSources = sources.map(lab => lab)
   const base = colorGradeDefaults()
   const decode = (x: number[]): Record<string, number> => Object.fromEntries(FIT_KEYS.map((key, i) => [key, clamp(Number(base[key]) + x[i] * FIT_SCALE[key], ...FIT_LIMIT[key])]))

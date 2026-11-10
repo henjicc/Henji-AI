@@ -23,8 +23,8 @@ import type { AudioEditCut, AudioEditProjectDocument, AudioEditRange } from './t
  * - 只在两个保留的字之间、识别的字边界附近找，几十毫秒内的口水音、咔哒声并进气口一起静音。
  */
 
-export const AUDIO_EDIT_GAP_ID_PREFIX = 'gap:'
-export const isAudioEditGapEdit = (item: { id: string; reason?: string }): boolean => item.reason !== 'manual' && item.id.startsWith(AUDIO_EDIT_GAP_ID_PREFIX)
+const AUDIO_EDIT_GAP_ID_PREFIX = 'gap:'
+const isAudioEditGapEdit = (item: { id: string; reason?: string }): boolean => item.reason !== 'manual' && item.id.startsWith(AUDIO_EDIT_GAP_ID_PREFIX)
 
 /** 逐帧全频与高频电平（dBFS），与停顿压缩、去重念同一分析 */
 export interface AudioEditLevels { resolutionMs: number; wideDb: readonly number[]; highDb?: readonly number[] }

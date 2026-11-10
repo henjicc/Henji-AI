@@ -54,10 +54,10 @@ export interface VideoEditFrameObservation {
   contactSheet?: { frames: number[]; columns: number; rows: number }
   comparison?: { referenceItemId: string; referenceTimesUs: number[] }
 }
-export const VIDEO_EDIT_OBSERVATION_DEFAULT_WIDTH = 1920
+const VIDEO_EDIT_OBSERVATION_DEFAULT_WIDTH = 1920
 
 /** A one-clip composition shows the original source pixels at an exact source time, through the production renderer. */
-export function videoEditSourceComposition(document: VideoEditDocument, itemId: string, timeUs: number): VideoEditComposition {
+function videoEditSourceComposition(document: VideoEditDocument, itemId: string, timeUs: number): VideoEditComposition {
   const item = document.items.find(value => value.id === itemId)
   const media = document.media.find(value => value.id === item?.mediaId)
   if (!item || !media) throw new Error('请指定剪辑中带源文件的视频或图片素材项。')

@@ -15,7 +15,7 @@
  * apiField: 'video_duration'
  * ```
  */
-export type ApiFieldMapping = string
+type ApiFieldMapping = string
 
 /**
  * API 转换函数（复杂映射）
@@ -48,7 +48,7 @@ export type ApiTransform = (value: DynamicValue, allParams?: DynamicValueMap) =>
  * }
  * ```
  */
-export type ApiMapping = Record<string, string | ApiTransform>
+type ApiMapping = Record<string, string | ApiTransform>
 
 /**
  * API 配置（完整配置）

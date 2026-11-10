@@ -25,7 +25,7 @@ export type StageEasingPreset = 'linear' | 'easeIn' | 'easeOut' | 'easeInOut' | 
  * 自定义贝塞尔缓动：等价 CSS `cubic-bezier(out[0], out[1], in[0], in[1])`。
  * out = 起点关键帧的出手柄控制点，in = 终点关键帧的入手柄控制点（语义对齐 AE）。
  */
-export interface StageBezierEasing {
+interface StageBezierEasing {
   type: 'bezier'
   out: [number, number]
   in: [number, number]
@@ -150,7 +150,7 @@ export interface StagePlaybackState {
   loop: boolean
 }
 
-export const CAMERA_STAGE_DEFAULT_DURATION = 5
+const CAMERA_STAGE_DEFAULT_DURATION = 5
 export const CAMERA_STAGE_DEFAULT_FPS = 30
 
 export function createDefaultAnimation(): StageSceneAnimation {

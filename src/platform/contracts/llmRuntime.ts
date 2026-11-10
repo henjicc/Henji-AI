@@ -8,7 +8,7 @@ import type {
 import type { ModelStepEvent, ModelStepInput, ModelStepResult } from '@henjicc/ai-sdk'
 import type { ModelCapabilitySmokeRequest, ModelCapabilitySmokeResult } from '@/core/llm/capabilitySmoke'
 
-export interface LlmProviderKeyStatusDto {
+interface LlmProviderKeyStatusDto {
   credentialId: string
   configured: boolean
   maskedHint?: string | null

@@ -34,13 +34,13 @@ export type VideoEditNativeChannel = Pick<VideoEditNativeFrameReceiver, 'call' |
  * program and source monitor together stay within the service's 32 sessions; the service also budgets video memory
  * and hardware decoders across all windows (`native/video-decoder/src/budget.rs`). Beyond it reads fail in place.
  */
-export const VIDEO_EDIT_NATIVE_MAX_SESSIONS = 10
+const VIDEO_EDIT_NATIVE_MAX_SESSIONS = 10
 /**
  * Exclusive sessions (code video inputs, one per reference) leave this many of the renderer's sessions to shared ones
  * (playback schedules, the shared single-frame session a reference falls back to); a reference beyond that shares its
  * file's session as all references did before, slower when they interleave but never a failed frame.
  */
-export const VIDEO_EDIT_NATIVE_EXCLUSIVE_RESERVE = 3
+const VIDEO_EDIT_NATIVE_EXCLUSIVE_RESERVE = 3
 /** The native service accepts at most this many times per schedule; later frames use the regular path. */
 const MAX_SCHEDULE_TIMES = 200_000
 /**
@@ -56,13 +56,13 @@ const FILE_FAILURE_HOLD_MS = 2000
 /** How long an exclusive reader the budget refused an own session reads on the file's shared session before trying again. */
 const EXCLUSIVE_RETRY_MS = 2000
 /** Seek windows of long-GOP material: decoded once into the shared frame cache, like the browser's GOP ranges. */
-export const VIDEO_EDIT_NATIVE_SEEK_WINDOW_SECONDS = 1
+const VIDEO_EDIT_NATIVE_SEEK_WINDOW_SECONDS = 1
 /**
  * 播放计划在剪辑点前这么多项（时间线帧）就让下一段在文件的另一个播放会话上开始定位。H.264/HEVC 的剪辑点要清空解码器、
  * 从关键帧解到入点（4K 每帧约 4.6ms，GOP 中段约 0.3 秒，长 GOP 末尾可过半秒）；同一个解码器要等剪辑点之前的帧都交完才
  * 轮到它，播放池那几帧余量盖不住。60 帧在 60fps 时间线上约 1 秒。
  */
-export const VIDEO_EDIT_NATIVE_NEXT_SEGMENT_LEAD = 60
+const VIDEO_EDIT_NATIVE_NEXT_SEGMENT_LEAD = 60
 /**
  * 向前跳过超过这么久（秒）才另起一段。原生服务只在目标的关键帧位于已送入的包之后时定位（`plan.rs` 的
  * `seek_decision`），这里不知道关键帧在哪：跳得近时服务多半续解，或只定位到很近的关键帧，单独起段反而让两个解码器
@@ -961,7 +961,7 @@ interface ScrubReader {
  * seeker reuses whole GOPs; consecutive forward windows continue the decoder without seeking, and a scrub direction
  * prefetches the neighbouring window while the session is idle.
  */
-export class VideoEditNativeSeeker implements VideoEditFrameSeeker {
+class VideoEditNativeSeeker implements VideoEditFrameSeeker {
   private opened?: { key: string; source: VideoEditNativeFileSource }
   private readonly windows = new Map<number, SeekWindow>()
   private disposed = false

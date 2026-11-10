@@ -9,7 +9,7 @@ import { annotationPoseEvaluator, type IntentAnnotation } from './annotationCons
 import { interpolateMotionPose, relativeMotionEvaluator, type RelativeMotionInput } from './referenceTransforms'
 import { snapMotionToBeats } from './beatSnap'
 
-export const MOTION_ALGORITHM_VERSION = 'p2-annotation-relative/1'
+const MOTION_ALGORITHM_VERSION = 'p2-annotation-relative/1'
 export interface MotionCandidate { id: string; label: string; identity: CandidateIdentity; motions: CompiledMotion[] }
 export interface MotionCandidateResult { candidates: MotionCandidate[]; unavailable: { family: string; code: string; refs: readonly string[]; message: string }[] }
 export interface OptimizeMotionInput { draft: MotionDraft; samples: readonly MotionSample[]; mappings: Record<string, MotionCompileContext>; selectedTakeIds?: readonly string[]; intent?: MotionIntent; annotations?: readonly IntentAnnotation[]; relative?: RelativeMotionInput; beatFrames?: readonly number[] }

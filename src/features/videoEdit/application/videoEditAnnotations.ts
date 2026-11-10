@@ -116,7 +116,7 @@ function reviewVideoEditAnnotations(projectId: string, ids: readonly string[], p
 export function reviewVideoEditAnnotation(projectId: string, id: string, pass: boolean, opinion = ''): void { reviewVideoEditAnnotations(projectId, [id], pass, opinion) }
 
 /** 批注面板的批量命令：快捷键、菜单栏与面板按钮都走这里，只在批注作用域生效。 */
-export const VIDEO_EDIT_ANNOTATION_BATCH_COMMANDS = ['select_all', 'delete', 'annotations_resolve', 'annotations_reject', 'annotations_mark_addressed', 'annotations_select_in_out', 'annotations_select_clips', 'annotations_clear_handled', 'annotations_clear_all'] as const satisfies readonly VideoEditCommandId[]
+const VIDEO_EDIT_ANNOTATION_BATCH_COMMANDS = ['select_all', 'delete', 'annotations_resolve', 'annotations_reject', 'annotations_mark_addressed', 'annotations_select_in_out', 'annotations_select_clips', 'annotations_clear_handled', 'annotations_clear_all'] as const satisfies readonly VideoEditCommandId[]
 export type VideoEditAnnotationBatchCommand = typeof VIDEO_EDIT_ANNOTATION_BATCH_COMMANDS[number]
 export function isVideoEditAnnotationBatchCommand(id: VideoEditCommandId): id is VideoEditAnnotationBatchCommand { return (VIDEO_EDIT_ANNOTATION_BATCH_COMMANDS as readonly string[]).includes(id) }
 const BATCH_STATUS = { annotations_resolve: 'resolved', annotations_reject: 'open', annotations_mark_addressed: 'addressed' } as const

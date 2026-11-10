@@ -37,7 +37,7 @@ interface SchedulerOptions {
 }
 
 /** 抢占期间显存紧张：放弃本组保留的页面、读回器与编码会话，段从首帧向前重演，不算资源失败。 */
-export class WebCacheMemoryRelease extends Error {
+class WebCacheMemoryRelease extends Error {
   constructor() { super('显存紧张，网页补录释放已保留的会话') }
 }
 const MEMORY_POLL_MS = 2_000

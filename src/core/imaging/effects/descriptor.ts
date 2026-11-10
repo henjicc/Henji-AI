@@ -2,7 +2,7 @@ import type { z } from 'zod'
 import type { ImagingParam } from '../parameterDefinition'
 
 export type EffectQuality = 'interactive' | 'final'
-export type EffectHost = 'image' | 'video'
+type EffectHost = 'image' | 'video'
 export interface EffectSize { width: number; height: number }
 export interface EffectEvaluationContext {
   /** 文档/序列完整画面，不得传视口、裁剪或 tile 尺寸。 */

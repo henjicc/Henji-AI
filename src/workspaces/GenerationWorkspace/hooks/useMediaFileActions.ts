@@ -7,7 +7,7 @@ import type { ToastNotification } from '../types'
 
 const logger = createLogger('workspaces.GenerationWorkspace.hooks.useMediaFileActions')
 
-export interface MediaFileActionMessages {
+interface MediaFileActionMessages {
   downloadSuccess: string
   downloadInvalidPath: string
   downloadFailed: (reason: string) => string

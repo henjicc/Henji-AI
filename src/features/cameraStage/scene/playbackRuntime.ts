@@ -1,4 +1,4 @@
-export type CameraStagePlaybackRuntimeReason = 'frame' | 'seek' | 'pause' | 'reset'
+type CameraStagePlaybackRuntimeReason = 'frame' | 'seek' | 'pause' | 'reset'
 
 export interface CameraStagePlaybackRuntimeSnapshot {
   time: number

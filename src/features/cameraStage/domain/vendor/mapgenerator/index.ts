@@ -15,7 +15,7 @@ import Vector from './vector'
 import WaterGenerator, { type WaterParams } from './water_generator'
 
 export { TensorField, Vector }
-export type { NoiseParams, StreamlineParams, WaterParams }
+export type { NoiseParams, StreamlineParams }
 
 export interface RoadNetworkParams {
   main: StreamlineParams

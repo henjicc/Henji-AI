@@ -316,7 +316,7 @@ export async function readAssistantSkillFrom(
   return detail
 }
 
-export function resolveSkillDirectories(): SkillDirectorySet {
+function resolveSkillDirectories(): SkillDirectorySet {
   return {
     builtinDir: getBuiltinSkillsDir(),
     userDir: getUserSkillsDir(),

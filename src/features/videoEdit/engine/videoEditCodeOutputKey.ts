@@ -58,7 +58,7 @@ export function codeOutputInputs(document: VideoEditComposition, plan: VideoEdit
 }
 
 const sceneKeys = new WeakMap<object, string>()
-export function codeOutputScenes(document: VideoEditComposition, plan: VideoEditCodePlan): unknown {
+function codeOutputScenes(document: VideoEditComposition, plan: VideoEditCodePlan): unknown {
   const inputs = videoEditCodeInputs(document, plan.clip.code, () => plan.program!.parameters)
   return Object.entries(inputs?.scenes ?? {}).map(([name, scene]) => {
     let key = sceneKeys.get(scene)

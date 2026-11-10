@@ -151,6 +151,5 @@ function reconcileSampleIssues(result, samples = UI_VISUAL_RULE_SAMPLES) {
 
 module.exports = {
   UI_VISUAL_RULE_SAMPLES,
-  buildSampleHostHtml,
   reconcileSampleIssues,
 }

@@ -153,7 +153,7 @@ function breathGainRegions(item: AudioEditBreathItem, sampleRate: number): Audio
 }
 
 /** 渲染源已是同采样率、同声道的 32 位浮点 WAV 时原样返回；否则在缓存里转一份，返回转好的文件。 */
-export async function audioEditF32Source(project: AudioEditProjectDocument, source: string, signal?: AbortSignal): Promise<string> {
+async function audioEditF32Source(project: AudioEditProjectDocument, source: string, signal?: AbortSignal): Promise<string> {
   const direct = await openF32Wav(source)
   const matches = direct && direct.sampleRate === project.source.sampleRate && direct.channels === project.source.channels
   await direct?.close()

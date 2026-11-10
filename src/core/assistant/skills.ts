@@ -115,9 +115,9 @@ export const assistantSkillReferencePathSchema = z.string()
     return /\.(?:md|txt)$/i.test(segments[segments.length - 1] ?? '')
   }, '引用路径必须位于 references/ 下、以 .md 或 .txt 结尾，且不含上级目录或非法字符')
 
-export const assistantSkillSourceSchema = z.enum(['builtin', 'user'])
+const assistantSkillSourceSchema = z.enum(['builtin', 'user'])
 
-export const assistantSkillMetadataSchema = z.object({
+const assistantSkillMetadataSchema = z.object({
   foreign: foreignContentSchema.optional(),
   name: assistantSkillNameSchema,
   description: z.string().min(1).max(ASSISTANT_SKILL_MAX_DESCRIPTION_LENGTH),
@@ -138,12 +138,12 @@ export const assistantSkillDetailSchema = z.object({
   bytes: z.number().int().nonnegative(),
 }).strict()
 
-export const assistantSkillInvalidEntrySchema = z.object({
+const assistantSkillInvalidEntrySchema = z.object({
   path: z.string().min(1),
   reason: z.string().min(1),
 }).strict()
 
-export const assistantSkillManifestSchema = z.object({
+const assistantSkillManifestSchema = z.object({
   schemaVersion: z.literal(ASSISTANT_SKILL_SCHEMA_VERSION),
   skills: z.array(assistantSkillMetadataSchema),
   invalid: z.array(assistantSkillInvalidEntrySchema),
@@ -154,12 +154,12 @@ export const assistantSkillInstallRequestSchema = z.object({
   /** 同名用户技能已存在时是否整体替换；缺省为 false，服务层返回 SKILL_ALREADY_EXISTS。 */
 }).strict()
 
-export const assistantSkillSkippedFileSchema = z.object({
+const assistantSkillSkippedFileSchema = z.object({
   path: z.string().min(1),
   reason: z.string().min(1),
 }).strict()
 
-export const assistantSkillInstallResultSchema = z.object({
+const assistantSkillInstallResultSchema = z.object({
   installed: z.array(assistantSkillNameSchema),
   replaced: z.array(assistantSkillNameSchema),
   skippedFiles: z.array(assistantSkillSkippedFileSchema),
@@ -190,7 +190,7 @@ export type AssistantSkillDetail = z.infer<typeof assistantSkillDetailSchema>
 export type AssistantSkillInvalidEntry = z.infer<typeof assistantSkillInvalidEntrySchema>
 export type AssistantSkillManifest = z.infer<typeof assistantSkillManifestSchema>
 
-export const ASSISTANT_SKILL_ERROR_CODES = [
+const ASSISTANT_SKILL_ERROR_CODES = [
   'SKILL_NOT_FOUND',
   'SKILL_REFERENCE_NOT_FOUND',
   'SKILL_DISABLED',

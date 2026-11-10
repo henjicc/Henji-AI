@@ -18,7 +18,7 @@ import {
   type ImageEditRenderPlanNode,
 } from '@/core/imageEdit/v3'
 
-export type ImageEditorGpuBaselineFixtureIdV3 =
+type ImageEditorGpuBaselineFixtureIdV3 =
   | 'kie-five-layer'
   | 'sixteen-layer'
   | 'complex-mask'

@@ -23,12 +23,12 @@ import {
 } from './canvasNodeConstants';
 import type { CanvasNodeData } from './canvasNodes';
 
-export interface NodeDisplayData {
+interface NodeDisplayData {
   displayName?: string;
   [key: string]: DynamicValue;
 }
 
-export interface CameraStageRenderCompletionReceiptV1 extends CameraStageRenderRequest {
+interface CameraStageRenderCompletionReceiptV1 extends CameraStageRenderRequest {
   version: 1;
 }
 
@@ -37,7 +37,7 @@ export interface CameraStageRenderCompletionReceiptV1 extends CameraStageRenderR
  * 占位节点在点击生成时就已建好（见 GenerationNodeShell），这组字段描述它此刻处于
  * 生成中 / 成功 / 失败的哪一态；失败原因写在这里而不是回挂到发起节点上。
  */
-export interface NodeGenerationStatus {
+interface NodeGenerationStatus {
   isGenerating?: boolean;
   generationStartedAt?: number | null;
   generationDurationMs?: number;
@@ -60,7 +60,7 @@ export interface NodeGenerationStatus {
   generationContinuation?: { modelId: string; params: DynamicValueMap } | null;
 }
 
-export interface NodeImageData extends NodeDisplayData, NodeGenerationStatus {
+interface NodeImageData extends NodeDisplayData, NodeGenerationStatus {
   imageUrl: string | null;
   previewImageUrl?: string | null;
   aspectRatio: string;
@@ -72,7 +72,7 @@ export interface UploadImageNodeData extends NodeImageData {
   sourceFileName?: string | null;
 }
 
-export const CANVAS_IMAGE_RESULT_KINDS = [
+const CANVAS_IMAGE_RESULT_KINDS = [
   'image',
   'panorama',
   'image-group',
@@ -83,7 +83,7 @@ export const CANVAS_IMAGE_RESULT_KINDS = [
 export type CanvasImageResultKind = (typeof CANVAS_IMAGE_RESULT_KINDS)[number];
 
 /** 旧结果来源值仍保留，用于分镜等节点的默认标题兼容。 */
-export type LegacyExportImageNodeResultKind =
+type LegacyExportImageNodeResultKind =
   | 'generic'
   | 'storyboardGenOutput'
   | 'storyboardSplitExport'
@@ -93,7 +93,7 @@ export type ExportImageNodeResultKind =
   | 'image'
   | LegacyExportImageNodeResultKind;
 
-export const CANVAS_IMAGE_VIEWER_MODES = ['image', 'panorama'] as const;
+const CANVAS_IMAGE_VIEWER_MODES = ['image', 'panorama'] as const;
 export type CanvasImageViewerMode = (typeof CANVAS_IMAGE_VIEWER_MODES)[number];
 
 export interface CanvasImageViewerRequest {
@@ -173,7 +173,7 @@ export interface UniversalUploadNodeData extends NodeDisplayData {
   uploadError?: 'unsupported' | 'typeMismatch' | 'failed' | null;
 }
 
-export type ConcreteUploadNodeType =
+type ConcreteUploadNodeType =
   | typeof CANVAS_NODE_TYPES.upload
   | typeof CANVAS_NODE_TYPES.videoUpload
   | typeof CANVAS_NODE_TYPES.audioUpload;
@@ -311,7 +311,7 @@ export interface StoryboardSplitNodeData {
   [key: string]: DynamicValue;
 }
 
-export interface StoryboardGenFrameItem {
+interface StoryboardGenFrameItem {
   id: string;
   description: string;
   descriptionDocument?: PromptDocumentV1;

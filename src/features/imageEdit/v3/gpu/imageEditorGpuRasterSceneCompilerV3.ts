@@ -53,7 +53,7 @@ interface ImageEditorGpuGraphNodeBaseV3 {
   fingerprint: string
 }
 
-export interface ImageEditorGpuGraphSourceNodeV3 extends ImageEditorGpuGraphNodeBaseV3 {
+interface ImageEditorGpuGraphSourceNodeV3 extends ImageEditorGpuGraphNodeBaseV3 {
   kind: 'source'
   resourceKey: ImageEditorGpuSceneTileKeyV3 | null
 }
@@ -99,7 +99,7 @@ export interface ImageEditorGpuGraphEffectNodeV3 extends ImageEditorGpuGraphNode
   mask: ImageEditorGpuGraphMaskV3 | null
 }
 
-export interface ImageEditorGpuGraphAliasNodeV3 extends ImageEditorGpuGraphNodeBaseV3 {
+interface ImageEditorGpuGraphAliasNodeV3 extends ImageEditorGpuGraphNodeBaseV3 {
   kind: 'alias'
   inputNodeId: string
 }

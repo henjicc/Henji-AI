@@ -8,7 +8,7 @@ import { snapshotVideoEditStyleEffects } from './videoEditStyleCode'
 import { sha256HexString } from '@/utils/save/hash'
 import type { VideoEditStyleCodeSnapshot } from '@/core/videoEdit/styleCodeSnapshot'
 
-export const videoEditStyleEffectReferenceSchema = z.object({ id: videoEditEffectSchema.shape.id.optional(), ref: z.object({ kind: z.literal('video_edit.effect'), id: z.string().min(1), label: z.string().optional() }).strict() }).strict()
+const videoEditStyleEffectReferenceSchema = z.object({ id: videoEditEffectSchema.shape.id.optional(), ref: z.object({ kind: z.literal('video_edit.effect'), id: z.string().min(1), label: z.string().optional() }).strict() }).strict()
 export const videoEditStylePieceDefinitionInputSchema = z.object({ ...videoEditEffectPresetSchema.shape, id: videoEditEffectPresetSchema.shape.id.optional(), effects: z.array(z.union([videoEditEffectSchema, videoEditStyleEffectReferenceSchema])).min(1) }).strict()
 
 const stable = (value: unknown): string => JSON.stringify(value, (_key, item: unknown) => item && typeof item === 'object' && !Array.isArray(item) ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item)

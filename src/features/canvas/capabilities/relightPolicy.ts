@@ -6,13 +6,13 @@ import {
 } from './modelCompatibility'
 import type { CanvasImageCapabilityModelPolicy } from './types'
 
-export const RELIGHT_CONTRACT_VERSION = 1 as const
+const RELIGHT_CONTRACT_VERSION = 1 as const
 export const RELIGHT_MANUAL_TEMPLATE_VERSION = 'relight-manual-iclight-v2'
 export const RELIGHT_SMART_TEMPLATE_VERSION = 'relight-smart-gpt-image-2-v1'
 
 export const RELIGHT_KEY_DIRECTIONS = ['none', 'left', 'right', 'top', 'bottom'] as const
 export const RELIGHT_BRIGHTNESS_LEVELS = [-2, -1, 0, 1, 2] as const
-export const RELIGHT_COLOR_PRESETS = [
+const RELIGHT_COLOR_PRESETS = [
   'neutral', 'warm', 'cool', 'amber', 'red', 'blue', 'cyan', 'magenta',
 ] as const
 export const RELIGHT_RIM_DIRECTIONS = [
@@ -93,7 +93,7 @@ export const RELIGHT_MANUAL_MODEL_POLICY = {
   },
 } as const satisfies CanvasImageCapabilityModelPolicy
 
-export const RELIGHT_SMART_MODEL_POLICY = {
+const RELIGHT_SMART_MODEL_POLICY = {
   mode: 'verified-families',
   allowedCanonicalFamilies: ['gpt-image-2'],
   requiredTags: ['image-to-image'],
@@ -219,7 +219,7 @@ export function compileSmartRelightPrompt(settings: RelightSettingsV1): string {
   return `[源图角色]\n图像 1 是要保留内容的源图。保留其主体身份、五官、姿势、物体几何、构图、镜头、背景布局、文字和标志。\n\n[打光任务]\n仅改变照明、阴影、反射与由光照带来的氛围。\n\n[预设]\n${SMART_PRESET_PROMPTS[normalized.smart.preset]}${user}${reference}\n\n[输出约束]\n输出一张与源图同构图、可继续编辑的普通图片；不添加边框、分栏、水印或说明文字。`
 }
 
-export function relightDirectionToFal(direction: RelightKeyDirection): string {
+function relightDirectionToFal(direction: RelightKeyDirection): string {
   return ({ none: 'None', left: 'Left', right: 'Right', top: 'Top', bottom: 'Bottom' })[direction]
 }
 

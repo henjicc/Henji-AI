@@ -20,7 +20,7 @@ import { capabilityControl, capabilityOutputSchema, defineApplicationCapability 
  * 能力处理器委托渲染层唯一的通用文档操作服务（与项目页右键同一条路）。
  */
 
-export const DOCUMENTS_DOMAIN = 'documents'
+const DOCUMENTS_DOMAIN = 'documents'
 export const DOCUMENT_ENTITY_TYPE = 'documents.document'
 export const DOCUMENT_PROJECT_ENTITY_TYPE = 'documents.project'
 

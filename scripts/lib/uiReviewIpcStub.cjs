@@ -112,8 +112,6 @@ async function restoreIpcStubs(app) {
 }
 
 module.exports = {
-  IPC_STUB_MODES,
-  PAID_CHANNEL_PATTERN,
   normalizeReleaseIpc,
   normalizeStubIpc,
   releaseIpc,

@@ -25,7 +25,7 @@ export interface ImageEditSelectionExistingMaskTileV3 {
   resource: ImageEditSelectionMaskResourceReferenceV3;
 }
 
-export type ImageEditSelectionMaskTileLoaderV3 = (
+type ImageEditSelectionMaskTileLoaderV3 = (
   coordinate: ImageEditTileCoordinate,
   existing: ImageEditSelectionExistingMaskTileV3,
   signal?: AbortSignal,

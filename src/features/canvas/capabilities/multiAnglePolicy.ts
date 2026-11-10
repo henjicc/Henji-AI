@@ -2,12 +2,12 @@ import type { CanvasGenerationOutputBatchContractV1 } from '../domain/generation
 
 export const MULTI_ANGLE_BATCH_VERSION = 1 as const
 export const MULTI_ANGLE_CONCURRENCY = 2 as const
-export const MULTI_ANGLE_DEFAULT_VIEW_COUNT = 1 as const
+const MULTI_ANGLE_DEFAULT_VIEW_COUNT = 1 as const
 export const MULTI_ANGLE_MAX_VIEW_COUNT = 6 as const
 
-export const MULTI_ANGLE_PROFILES = ['continuous-v1', 'discrete-v1', 'flux-native-v1'] as const
+const MULTI_ANGLE_PROFILES = ['continuous-v1', 'discrete-v1', 'flux-native-v1'] as const
 export type MultiAngleControlProfile = (typeof MULTI_ANGLE_PROFILES)[number]
-export type MultiAngleControlPrecision = 'learned-native' | 'discrete-native' | 'numeric-native'
+type MultiAngleControlPrecision = 'learned-native' | 'discrete-native' | 'numeric-native'
 
 export const MULTI_ANGLE_CONTINUOUS_MODEL_ID = 'fal-qwen-image-edit-2511-multiple-angles'
 export const MULTI_ANGLE_CONTINUOUS_ENDPOINT_ID = 'fal-ai/qwen-image-edit-2511-multiple-angles'
@@ -16,7 +16,7 @@ export const MULTI_ANGLE_DISCRETE_ENDPOINT_ID = 'fal-ai/image-apps-v2/perspectiv
 export const MULTI_ANGLE_FLUX_MODEL_ID = 'fal-flux-2-multiple-angles'
 export const MULTI_ANGLE_FLUX_ENDPOINT_ID = 'fal-ai/flux-2-lora-gallery/multiple-angles'
 
-export const MULTI_ANGLE_DISCRETE_PRESETS = [
+const MULTI_ANGLE_DISCRETE_PRESETS = [
   'front', 'left_side', 'right_side', 'back', 'top_down', 'bottom_up',
   'birds_eye', 'three_quarter_left', 'three_quarter_right',
 ] as const

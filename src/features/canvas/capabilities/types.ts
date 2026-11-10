@@ -37,12 +37,12 @@ export type CanvasImageCapabilityEditorKind =
   | 'mask'
   | 'gridSplit';
 
-export type CanvasImageCapabilityNodeKind =
+type CanvasImageCapabilityNodeKind =
   | 'standard-generation'
   | 'special-generation'
   | 'local-tool';
 
-export type CanvasImageCapabilityResultKind =
+type CanvasImageCapabilityResultKind =
   | 'image'
   | 'panorama'
   | 'image-group'
@@ -54,7 +54,7 @@ export type CanvasImageCapabilityReleaseStage =
   | 'available'
   | 'disabled';
 
-export type CanvasImageCapabilityPostProcess =
+type CanvasImageCapabilityPostProcess =
   | 'none'
   | 'validate-panorama'
   | 'split-grid'
@@ -62,21 +62,21 @@ export type CanvasImageCapabilityPostProcess =
   | 'assemble-layer-stack'
   | 'local-redraw-composite';
 
-export interface CanvasImageCapabilitySourceRequirement {
+interface CanvasImageCapabilitySourceRequirement {
   mediaTypes: readonly MediaPortKind[];
   minCount: number;
   maxCount: number;
   requireMaterializedMedia: boolean;
 }
 
-export interface CanvasImageCapabilityNodePresentation {
+interface CanvasImageCapabilityNodePresentation {
   kind: CanvasImageCapabilityNodeKind;
   editor: CanvasImageCapabilityEditorKind;
   /** 创建节点并完成连线后，是否立即打开已登记的专用编辑器。 */
   openEditorOnCreate?: boolean;
 }
 
-export type CanvasImageCapabilityExecution =
+type CanvasImageCapabilityExecution =
   | {
       kind: 'canvas-node';
       nodeType: CanvasNodeType;
@@ -130,7 +130,7 @@ export interface CanvasImageCapabilityProviderConfiguration {
   allowedSemanticValues?: Readonly<Partial<Record<'resolution' | 'quality', readonly string[]>>>;
 }
 
-export interface CanvasImageCapabilityReferenceImageRequirement {
+interface CanvasImageCapabilityReferenceImageRequirement {
   min: number;
   max: number;
 }
@@ -148,12 +148,12 @@ export interface CanvasImageCapabilityModelSemanticRequirements {
 }
 
 /** 与固定约束分离的初始偏好；目标模型缺少精确值时选择最接近的合法档位。 */
-export interface CanvasImageCapabilityModelSemanticDefaults {
+interface CanvasImageCapabilityModelSemanticDefaults {
   resolution?: string;
   quality?: string;
 }
 
-export type CanvasImageCapabilitySemanticValue = string | number | boolean;
+type CanvasImageCapabilitySemanticValue = string | number | boolean;
 
 export interface CanvasImageCapabilityPromptPolicy {
   hiddenTemplateVersion: string | null;
@@ -168,7 +168,7 @@ export interface CanvasImageCapabilityPromptPolicy {
   visibleParameterTransferKeys?: readonly string[];
 }
 
-export type CanvasImageCapabilityOutputCount =
+type CanvasImageCapabilityOutputCount =
   | {
       mode: 'single';
     }
@@ -211,7 +211,7 @@ export function resolveCanvasImageCapabilityExpectedOutputCount(
   return Math.min(policy.count.maxCount, Math.max(policy.count.minCount, value));
 }
 
-export interface CanvasImageCapabilityAvailability {
+interface CanvasImageCapabilityAvailability {
   releaseStage: CanvasImageCapabilityReleaseStage;
   defaultEnabled: boolean;
   unavailableReasonKey: string | null;

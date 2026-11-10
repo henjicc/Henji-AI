@@ -19,7 +19,7 @@ export const applicationOperationImpactSchema = z.object({
 }).strict()
 export type ApplicationOperationImpact = z.infer<typeof applicationOperationImpactSchema>
 
-export const applicationEffectKindSchema = z.enum(['create', 'update', 'delete', 'execute'])
+const applicationEffectKindSchema = z.enum(['create', 'update', 'delete', 'execute'])
 export type ApplicationEffectKind = z.infer<typeof applicationEffectKindSchema>
 
 /**
@@ -59,7 +59,7 @@ export const applicationOperationExecutionSchema = z.object({
 }).strict()
 export type ApplicationOperationExecution = z.infer<typeof applicationOperationExecutionSchema>
 
-export const applicationOperationStateSchema = z.enum([
+const applicationOperationStateSchema = z.enum([
   'planned',
   'running',
   'waiting_approval',
@@ -81,7 +81,7 @@ export const applicationOperationProgressSchema = z.object({
 }).strict()
 export type ApplicationOperationProgress = z.infer<typeof applicationOperationProgressSchema>
 
-export const applicationPropertyMutationSchema = z.object({
+const applicationPropertyMutationSchema = z.object({
   propertyId: applicationPropertyIdSchema,
   operation: z.enum(['set', 'clear', 'append', 'remove']),
   value: jsonValueSchema.optional(),
@@ -91,7 +91,7 @@ export const applicationPropertyMutationSchema = z.object({
 )
 export type ApplicationPropertyMutation = z.infer<typeof applicationPropertyMutationSchema>
 
-export const applicationMutationPlanSchema = z.object({
+const applicationMutationPlanSchema = z.object({
   kind: z.literal('mutation'),
   target: applicationRefSchema,
   entityType: applicationEntityTypeIdSchema,
@@ -99,7 +99,7 @@ export const applicationMutationPlanSchema = z.object({
   mutations: z.array(applicationPropertyMutationSchema).min(1),
 }).strict()
 
-export const applicationSemanticOperationPlanSchema = z.object({
+const applicationSemanticOperationPlanSchema = z.object({
   kind: z.literal('operation'),
   capabilityId: z.string().regex(/^[a-z][a-z0-9_]{1,63}$/),
   capabilityVersion: z.number().int().positive(),
@@ -117,7 +117,7 @@ export const applicationSemanticOperationPlanSchema = z.object({
  *
  * 与 mutation 共用同一套事务语义：expectedRevisions 乐观并发、失败补偿、撤销、结构化验证。
  */
-export const applicationCollectionPlanSchema = z.object({
+const applicationCollectionPlanSchema = z.object({
   kind: z.literal('collection'),
   /** 子实体挂在哪个父实体下 */
   parent: applicationRefSchema,
@@ -138,7 +138,7 @@ export const applicationCollectionPlanSchema = z.object({
   ]),
 }).strict()
 
-export const applicationPlannedStepSchema = z.discriminatedUnion('kind', [
+const applicationPlannedStepSchema = z.discriminatedUnion('kind', [
   applicationMutationPlanSchema,
   applicationSemanticOperationPlanSchema,
   applicationCollectionPlanSchema,
@@ -172,7 +172,7 @@ export const applicationVerificationConditionSchema = z.discriminatedUnion('kind
 ])
 export type ApplicationVerificationCondition = z.infer<typeof applicationVerificationConditionSchema>
 
-export const applicationTransactionModeSchema = z.enum([
+const applicationTransactionModeSchema = z.enum([
   'atomic',
   'compensatable',
   'non_reversible',

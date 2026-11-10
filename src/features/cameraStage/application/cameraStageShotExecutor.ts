@@ -15,7 +15,7 @@ import type { CameraStageControlExecutorDependencies } from './cameraStageContro
 import { CAMERA_STAGE_ENTITY_TYPES } from './cameraStageReflection'
 import { forgetCameraStageUndo, restoreCameraStageUndo } from './cameraStageUndo'
 
-export const cameraStageShotInputSchema = z.object({ projectId: z.string().min(1), ...cameraStageShotIntentShape }).strict().superRefine(refineCameraStageShotIntent)
+const cameraStageShotInputSchema = z.object({ projectId: z.string().min(1), ...cameraStageShotIntentShape }).strict().superRefine(refineCameraStageShotIntent)
 
 const CAMERA_PROPERTY_IDS = [
   'camera_stage.camera.transform.position', 'camera_stage.camera.transform.rotation',

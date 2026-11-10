@@ -19,7 +19,7 @@ interface StructuralImage {
   validMask?: Uint8Array;
 }
 
-export interface SimilarityRefinementResult {
+interface SimilarityRefinementResult {
   transform: SimilarityTransform;
   scoreBefore: number;
   scoreAfter: number;

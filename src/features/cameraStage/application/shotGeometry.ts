@@ -24,7 +24,7 @@ const DEG = Math.PI / 180
 export const WORLD_UP = new Vector3(0, 1, 0)
 
 /** Quaternius 角色标准体型身高（米）；体型变体与缩放在此基础上乘。 */
-export const CHARACTER_HEIGHT = 1.79
+const CHARACTER_HEIGHT = 1.79
 /** 人体关键高度占身高的比例（标准人体比例）。 */
 export const BODY = { eye: 0.936, shoulder: 0.82, chest: 0.72, hip: 0.5, knee: 0.285 } as const
 
@@ -51,7 +51,7 @@ export function shotHeightRatio(size: CameraStageShotSize): number {
 }
 
 /** 按主体占画高的比例归到最近的景别（相邻两档按几何中点分界）。 */
-export function classifyShotSize(heightRatio: number): CameraStageShotSize {
+function classifyShotSize(heightRatio: number): CameraStageShotSize {
   for (let index = 0; index < CAMERA_STAGE_SHOT_SIZES.length - 1; index += 1) {
     const boundary = Math.sqrt(shotHeightRatio(CAMERA_STAGE_SHOT_SIZES[index]) * shotHeightRatio(CAMERA_STAGE_SHOT_SIZES[index + 1]))
     if (heightRatio < boundary) return CAMERA_STAGE_SHOT_SIZES[index]
@@ -76,7 +76,7 @@ function frontOf(yawDegrees: number): Vector3 {
   return new Vector3(Math.sin(yawDegrees * DEG), 0, Math.cos(yawDegrees * DEG))
 }
 
-export function characterHeight(object: Extract<StageObject, { type: 'character' }>): number {
+function characterHeight(object: Extract<StageObject, { type: 'character' }>): number {
   return CHARACTER_HEIGHT * getBodyVariant(object.variant).bodyScale.y * Math.abs(object.transform.scale.y)
 }
 
@@ -154,7 +154,7 @@ export interface StageShotProjection {
   front: boolean
 }
 
-export function cameraQuaternion(rotation: StageVec3): Quaternion {
+function cameraQuaternion(rotation: StageVec3): Quaternion {
   return new Quaternion().setFromEuler(new Euler(rotation.x * DEG, rotation.y * DEG, rotation.z * DEG, 'YXZ'))
 }
 
@@ -290,7 +290,7 @@ export function measureVisibility(
 /* ── 读回 ─────────────────────────────────────────────────────────── */
 
 /** 读回的形状就是对外契约，类型从契约 schema 推出，两边不会各写一份。 */
-export type ShotSubjectReadback = z.infer<typeof cameraStageShotSubjectReadbackSchema>
+type ShotSubjectReadback = z.infer<typeof cameraStageShotSubjectReadbackSchema>
 export type ShotReadback = z.infer<typeof cameraStageShotReadbackSchema>
 
 const round3 = (value: number): number => Math.round(value * 1000) / 1000
@@ -337,7 +337,7 @@ export function foregroundEdge(camera: StageShotCamera, subject: StageShotSubjec
 }
 
 /** 机位相对主体关键点的仰角分类；没有主体时按镜头俯仰。 */
-export function classifyShotAngle(camera: StageShotCamera, subject: StageShotSubject | null): CameraStageShotAngle {
+function classifyShotAngle(camera: StageShotCamera, subject: StageShotSubject | null): CameraStageShotAngle {
   let elevation = camera.rotation.x
   if (subject) {
     const key = subjectKeyPoint(subject)
@@ -368,7 +368,7 @@ export function projectedHeightRatio(camera: StageShotCamera, subject: StageShot
   return top.front && bottom.front ? Math.hypot(top.x - bottom.x, top.y - bottom.y) / 2 : null
 }
 
-export function readSubject(
+function readSubject(
   camera: StageShotCamera,
   subject: StageShotSubject,
   obstacles: readonly StageObstacle[],

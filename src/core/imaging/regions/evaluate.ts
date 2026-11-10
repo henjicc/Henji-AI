@@ -8,7 +8,7 @@ function requireFeather(port?: RegionFeatherPort): RegionFeatherPort {
   return port;
 }
 
-export function rasterizeRegionIntent(shape: RegionIntent, size: { width: number; height: number }, region: RegionRect): Float32Array {
+function rasterizeRegionIntent(shape: RegionIntent, size: { width: number; height: number }, region: RegionRect): Float32Array {
   if (shape.type === 'mask') {
     const inverse = invertRegionTransform(shape.matrix);
     const result = new Float32Array(region.width * region.height)

@@ -17,7 +17,7 @@ export interface Provider {
   models: Model[]
 }
 
-export interface Model {
+interface Model {
   id: string
   name: string
   type: 'image' | 'video' | 'audio'

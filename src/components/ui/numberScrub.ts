@@ -5,7 +5,7 @@
 /** 按下后水平移动超过这个距离才算拖动，否则视为点击（进入编辑）。 */
 export const SCRUB_START_THRESHOLD_PX = 3
 /** 范围未知或步数很多时，每移动这么多像素走一个步长。 */
-export const SCRUB_PIXELS_PER_STEP = 2
+const SCRUB_PIXELS_PER_STEP = 2
 /** 拖完整个范围大约要移动的距离：范围只有几步时每步给足距离，才能稳稳停在中间的值上。 */
 const SCRUB_FULL_RANGE_PX = 240
 const SCRUB_MAX_PIXELS_PER_STEP = 16

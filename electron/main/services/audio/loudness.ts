@@ -8,7 +8,7 @@ import { invertVideoEditSilence, videoEditActivityThreshold, type VideoEditAudio
 
 const number = (text: string | undefined): number | null => text !== undefined && Number.isFinite(Number(text)) ? Number(text) : null
 /** FFmpeg's final summary is authoritative; silence/ungated audio has no integrated LUFS. */
-export function parseLoudnessLog(text: string, durationSeconds: number, samplePeak: number | null): VideoEditLoudnessMeasurement {
+function parseLoudnessLog(text: string, durationSeconds: number, samplePeak: number | null): VideoEditLoudnessMeasurement {
   const summary = text.slice(text.lastIndexOf('Summary:'))
   const integrated = number(summary.match(/Integrated loudness:\s*I:\s*([-\d.]+)/)?.[1])
   const threshold = number(summary.match(/Integrated loudness:[\s\S]*?Threshold:\s*([-\d.]+)/)?.[1])

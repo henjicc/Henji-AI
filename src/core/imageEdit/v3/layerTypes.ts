@@ -12,7 +12,7 @@ export type ImageEditBlendModeV3 =
   | 'overlay'
   | 'soft-light';
 
-export type ImageEditJsonPrimitiveV3 = string | number | boolean | null;
+type ImageEditJsonPrimitiveV3 = string | number | boolean | null;
 export type ImageEditJsonValueV3 =
   | ImageEditJsonPrimitiveV3
   | ImageEditJsonValueV3[]
@@ -82,7 +82,7 @@ export interface ImageEditLayerFilterV3 {
   mask: ImageEditSparseMaskReferenceV3 | null;
 }
 
-export type ImageEditRasterSourceV3 =
+type ImageEditRasterSourceV3 =
   | { kind: 'empty' }
   | { kind: 'resource'; resourceId: string };
 

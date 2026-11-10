@@ -7,7 +7,7 @@ import { refKey, type Pose } from './contracts'
 import { CreativeIntentError, type FramePose, type PreparedTake } from './sampling'
 
 const finite = z.number().finite()
-export const referenceTransformTrackSchema = z.object({
+const referenceTransformTrackSchema = z.object({
   ref: applicationRefSchema, identity: z.string().min(1),
   samples: z.array(z.object({ frame: finite.nonnegative(), matrix: z.tuple([finite, finite, finite, finite, finite, finite]) }).strict()).min(1).optional(),
   native: z.object({ start: finite.int().nonnegative(), end: finite.int().nonnegative(),

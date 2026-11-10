@@ -5,7 +5,7 @@ import { resolveBidi, type BaseDirection, type BidiLevels } from './bidi'
 import { graphemeEnds, type ParagraphOptions, type ParagraphRun } from './paragraph'
 
 export interface TextStyleSpan { readonly start: number; readonly end: number; readonly style: TextStyle }
-export interface DisplayGrapheme {
+interface DisplayGrapheme {
   readonly start: number; readonly end: number
   readonly sourceStart: number; readonly sourceEnd: number
   readonly style: TextStyle; readonly baselineShift: number; readonly missing: boolean; readonly inferredScript: boolean
@@ -26,7 +26,7 @@ const scriptPatterns = unicodeScripts.flatMap(script => {
   try { return [[script, new RegExp(`\\p{Script=${script}}`, 'u')] as const] }
   catch { return [] }
 })
-export function textScript(text: string): string | undefined {
+function textScript(text: string): string | undefined {
   if (/\p{Extended_Pictographic}|\p{Regional_Indicator}|\u20e3/u.test(text)) return 'Emoji'
   return scriptPatterns.find(([, pattern]) => pattern.test(text))?.[0] ?? ([...text].some(char => /\p{Letter}/u.test(char) && !/[\p{Script=Common}\p{Script=Inherited}]/u.test(char)) ? 'Zzzz' : undefined)
 }

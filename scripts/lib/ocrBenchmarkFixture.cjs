@@ -27,5 +27,5 @@ async function createOcrBenchmarkFixture(root) {
   await fs.writeFile(file('cursor.json'), JSON.stringify(cursor))
   return { video: file('typical-600.mp4'), cursor: file('cursor.json'), static: file('static-600.mp4') }
 }
-module.exports = { createOcrBenchmarkFixture }
+module.exports = { }
 if (require.main === module) createOcrBenchmarkFixture(path.resolve(process.argv[2] ?? '.tmp/ocr2')).then(value => console.log(JSON.stringify(value)), error => { console.error(error); process.exitCode = 1 })

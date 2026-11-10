@@ -168,4 +168,4 @@ const PERFORMANCE_GENERATOR = `export default {
 }`
 const PERFORMANCE_FILTER = authorFilterSource({ name: '受控暖色', params: [number('warm', '暖色', .9, 0, 1, .01, true)], expression: 'vec4f(c.r,c.g * p.v.x,c.b * p.v.x,c.a)' })
 
-module.exports = { authorFilterSource, trackTitleSource, staticCardSource, redGainFilter, AGENT_COLOR_SOURCE, ASSET_SOURCE, OBSERVATION_SOURCES, PERFORMANCE_GENERATOR, PERFORMANCE_FILTER }
+module.exports = { trackTitleSource, staticCardSource, redGainFilter, AGENT_COLOR_SOURCE, ASSET_SOURCE, OBSERVATION_SOURCES, PERFORMANCE_GENERATOR, PERFORMANCE_FILTER }

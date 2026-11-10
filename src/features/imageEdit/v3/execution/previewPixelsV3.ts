@@ -65,13 +65,13 @@ function createCanvas(width: number, height: number): {
   return { canvas, context }
 }
 
-export async function decodePreviewProxyBitmapV3(
+async function decodePreviewProxyBitmapV3(
   proxy: ImageEditorPreviewProxyV3,
 ): Promise<ImageBitmap> {
   return await createImageBitmap(new Blob([proxy.bytes], { type: proxy.mediaType }))
 }
 
-export function imageDataToLinearPreviewTileV3(imageData: ImageData): Float32PremultipliedRgbaTile {
+function imageDataToLinearPreviewTileV3(imageData: ImageData): Float32PremultipliedRgbaTile {
   const output = new Float32Array(imageData.width * imageData.height * 4)
   for (let offset = 0; offset < output.length; offset += 4) {
     const alpha = imageData.data[offset + 3] / 255

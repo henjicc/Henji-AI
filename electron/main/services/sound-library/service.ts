@@ -23,7 +23,7 @@ import { scanSoundFolder, type ScannedSoundFile } from './scan'
  */
 
 /** 改动测量算法或缓存结构时加一，旧缓存自然失效（缓存可重建，不是用户数据）。 */
-export const SOUND_ANALYSIS_VERSION = 1
+const SOUND_ANALYSIS_VERSION = 1
 const ANALYSIS_BATCH = 32
 const CLAP_MODEL_TAG = 'larger_clap_general_fp16'
 
@@ -56,7 +56,7 @@ export interface SoundLibraryServiceDeps {
   log(level: 'info' | 'warn' | 'error', message: string, event: string, context: Record<string, unknown>, error?: unknown): void
 }
 
-export class SoundLibraryError extends Error {
+class SoundLibraryError extends Error {
   constructor(message: string) { super(message); this.name = 'SoundLibraryError' }
 }
 

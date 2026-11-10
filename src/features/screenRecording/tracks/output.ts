@@ -6,7 +6,7 @@ import type { RecordingTrackKind, RecordingTrackSegment } from '@/core/screenRec
 import type { ClockAnchor } from '@/core/captureLog/clock'
 
 /** Five second independent files keep WAV gap-free and drift corrections editable; never buffer a whole take. */
-export const RECORDING_SEGMENT_US = 5_000_000
+const RECORDING_SEGMENT_US = 5_000_000
 export interface TrackOutput {
   audio(block: CapturedAudioBlock): Promise<void>
   video(frame: VideoFrame, monoUs: number, uncertaintyUs: number, compensationUs: number): Promise<void>

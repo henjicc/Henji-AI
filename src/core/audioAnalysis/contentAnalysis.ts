@@ -1,7 +1,7 @@
 import { BeatAnalyzer } from './beatAnalysis'
 import { videoEditFft } from '../videoEdit/fft'
 
-export const AUDIO_BANDS = ['bass', 'mid', 'treble'] as const
+const AUDIO_BANDS = ['bass', 'mid', 'treble'] as const
 export type AudioBand = typeof AUDIO_BANDS[number]
 /** Times are seconds from the beginning of the analyzed interval. No PCM is retained. */
 export interface AudioContentAnalysis {

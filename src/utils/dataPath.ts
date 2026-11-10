@@ -13,7 +13,7 @@ let lastAppDirectories: AppDirectories | null = null
  * 目录唯一来源在主进程 `electron/main/services/appPaths.ts`，这里只读取快照，不自行拼接目录名。
  * 首次调用时把当前界面语言带给主进程，用于首次确定默认目录名称（痕迹AI / Henji AI）。
  */
-export async function getAppDirectories(): Promise<AppDirectories> {
+async function getAppDirectories(): Promise<AppDirectories> {
   const uiLanguage = i18n.resolvedLanguage ?? i18n.language
   lastAppDirectories = await appDirectories(uiLanguage ? { uiLanguage } : undefined)
   return lastAppDirectories

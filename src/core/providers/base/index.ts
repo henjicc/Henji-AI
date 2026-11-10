@@ -21,8 +21,6 @@ export type {
 
 // 错误处理
 export {
-  ProviderError,
-  ProviderErrorCode,
   createApiKeyMissingError,
   createPollingTimeoutError,
   createInvalidResponseError,
@@ -32,18 +30,13 @@ export {
 export {
   // 文件转换
   dataURItoBlob,
-  blobToDataURI,
   blobToBase64,
 
   // 本地文件处理
   readLocalFile,
   isLocalPath,
   normalizeFilePath,
-
-  // URL 处理
-  isDataURI,
   isRemoteURL,
-  extractMimeType,
   extractExtension,
 
   // API 密钥管理

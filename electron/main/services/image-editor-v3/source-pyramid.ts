@@ -74,7 +74,7 @@ function validateLayout(layout: SourcePyramidTileLayout): void {
   }
 }
 
-export function sourcePyramidCacheAddress(
+function sourcePyramidCacheAddress(
   request: Pick<SourceTileRequest, 'resourceId' | 'mip' | 'tileX' | 'tileY'>,
   layout: SourcePyramidTileLayout,
 ): DerivedCacheAddress {

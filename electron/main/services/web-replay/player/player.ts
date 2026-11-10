@@ -104,7 +104,7 @@ function installIpc(): void {
  * the recording. Farther apart than this, the match is by order, not a slightly early call: no shift.
  */
 const ANCHOR_LIMIT_US = 500_000
-export function anchorShiftUs(pageUs: number | undefined, recordedUs: number): number {
+function anchorShiftUs(pageUs: number | undefined, recordedUs: number): number {
   if (pageUs === undefined || !Number.isFinite(pageUs)) return 0
   const early = recordedUs - pageUs
   return early > 0 && early <= ANCHOR_LIMIT_US ? Math.round(early) : 0

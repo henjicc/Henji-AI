@@ -4,7 +4,7 @@ import { cameraStageVec3Schema } from './cameraStageCapabilitySchemas'
 import { CAMERA_STAGE_SHOT_SIZES, cameraStageShotReadbackSchema } from './cameraStageShotSchemas'
 
 /** 覆盖里的镜头角色。单人、反应、插入一台拍一个主体；过肩拍对面那人（从这个人肩后）。 */
-export const CAMERA_STAGE_COVERAGE_ROLES = ['establishing', 'master', 'over_shoulder', 'single', 'reaction', 'insert'] as const
+const CAMERA_STAGE_COVERAGE_ROLES = ['establishing', 'master', 'over_shoulder', 'single', 'reaction', 'insert'] as const
 export type CameraStageCoverageRole = typeof CAMERA_STAGE_COVERAGE_ROLES[number]
 
 export const CAMERA_STAGE_COVERAGE_ROLE_LABELS: Record<CameraStageCoverageRole, string> = {
@@ -33,7 +33,7 @@ export const cameraStageCoverageLineSchema = z.object({
 
 const linesSchema = z.array(cameraStageCoverageLineSchema).max(200)
 
-export const cameraStageCoverageInsertSchema = z.union([
+const cameraStageCoverageInsertSchema = z.union([
   z.object({ objectId: z.string().min(1).describe('插入镜头拍的对象 id（道具、门、手边的东西）') }).strict(),
   z.object({
     point: cameraStageVec3Schema.describe('插入镜头拍的地点（米）'),
@@ -76,7 +76,7 @@ export function refineCameraStageCoverage(input: { subjects: string[]; shots?: C
 
 const spanSchema = z.object({ startTime: z.number(), endTime: z.number() }).strict()
 
-export const cameraStageCoverageSetupResultSchema = z.object({
+const cameraStageCoverageSetupResultSchema = z.object({
   cameraId: z.string(),
   name: z.string(),
   role: z.enum(CAMERA_STAGE_COVERAGE_ROLES),
@@ -106,7 +106,7 @@ export const cameraStageCoverageResultShape = {
 export const CAMERA_STAGE_EDIT_RULES = ['axis', 'jump_cut', 'cut_on_action', 'speaker', 'duration', 'establishing', 'size_progression', 'subject_visible'] as const
 export type CameraStageEditRule = typeof CAMERA_STAGE_EDIT_RULES[number]
 
-export const cameraStageEditShotSchema = z.object({
+const cameraStageEditShotSchema = z.object({
   index: z.number().int().nonnegative(),
   startTime: z.number(),
   endTime: z.number(),
@@ -120,7 +120,7 @@ export const cameraStageEditShotSchema = z.object({
   reason: z.string().optional().describe('剪辑时为什么在这里用这一镜'),
 }).strict()
 
-export const cameraStageEditViolationSchema = z.object({
+const cameraStageEditViolationSchema = z.object({
   rule: z.enum(CAMERA_STAGE_EDIT_RULES),
   severity: z.enum(['error', 'warning']),
   shotIndexes: z.array(z.number().int().nonnegative()).describe('涉及哪几镜（shots[].index）'),

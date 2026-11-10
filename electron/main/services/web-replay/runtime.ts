@@ -43,7 +43,7 @@ const listeners = new Set<(state: WebReplayServerState) => void>()
 function snapshot(): WebReplayServerState { return { ...state, apps: server?.apps() ?? [] } }
 
 /** Starts the local probe hub. A busy port is reported in the state, not thrown at startup. */
-export async function startWebReplayService(port = Number(process.env.HENJI_WEB_REPLAY_PORT) || WEB_REPLAY_PORT): Promise<void> {
+async function startWebReplayService(port = Number(process.env.HENJI_WEB_REPLAY_PORT) || WEB_REPLAY_PORT): Promise<void> {
   if (server) return
   server = new WebReplayServer(fetchExternal, async session => {
     if (!session.backupOptions) return null
@@ -86,12 +86,12 @@ function requireServer(): WebReplayServer {
 }
 
 /** File names cannot carry these characters; the title keeps the user's words otherwise. */
-export function webRecordingFileName(title: string): string {
+function webRecordingFileName(title: string): string {
   // eslint-disable-next-line no-control-regex -- 文件名里不能有控制字符
   return title.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '-').replace(/[. ]+$/, '').trim().slice(0, 120) || '网页录制'
 }
 
-export function defaultProjectRecordingTitle(app: string, at: Date): string {
+function defaultProjectRecordingTitle(app: string, at: Date): string {
   const pad = (value: number): string => String(value).padStart(2, '0')
   return `${app} ${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())} ${pad(at.getHours())}.${pad(at.getMinutes())}.${pad(at.getSeconds())}`
 }
@@ -334,7 +334,7 @@ export async function renameWebRecordings(items: Array<{ recordingId: string; ti
   logger.info('网页录制已重命名', { event: 'web_replay.recording.renamed', context: { count: items.length } })
 }
 
-export function webRecordingTitle(manifest: WebRecordingManifest): string {
+function webRecordingTitle(manifest: WebRecordingManifest): string {
   return manifest.title ?? `${manifest.app.name} ${new Date(manifest.createdAt).toLocaleString('zh-CN', { hour12: false })}`
 }
 
@@ -376,7 +376,7 @@ export async function backupAudioDirectory(recordingId: string): Promise<string>
 /** The page stops its sound after the recording ended elsewhere; the picture may still be saving. */
 export async function mixWebRecordingAudio(recordingId: string): Promise<boolean> { return mixWebRecordingBackupAudio(await resolveWebRecordingDirectory(recordingId), 60_000) }
 
-export function takeInfo(take: WebReplayTakeSummary): WebRecordingTakeInfo {
+function takeInfo(take: WebReplayTakeSummary): WebRecordingTakeInfo {
   return { name: take.name, directory: take.directory, video: take.videoPath, frames: take.frames, durationMs: Math.round(take.durationUs / 1000), fps: take.fps, pointer: take.pointer, createdAt: take.createdAt, conflicts: take.conflicts }
 }
 

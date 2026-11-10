@@ -12,7 +12,7 @@ export interface NormalizedMediaResult {
 }
 
 /** 本地结果文件 → 渲染层显示地址（按顺序）。 */
-export function toDisplayUrlsFromFilePaths(filePaths: readonly string[]): string[] {
+function toDisplayUrlsFromFilePaths(filePaths: readonly string[]): string[] {
   return filePaths.map((filePath) => toDisplaySrc(filePath.replace(/\\/g, '/')))
 }
 

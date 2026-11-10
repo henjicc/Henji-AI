@@ -13,7 +13,7 @@ export interface RegistrationWorkerRequest {
   forceApplyResult: boolean
 }
 
-export interface RegistrationWorkerSuccess {
+interface RegistrationWorkerSuccess {
   type: 'registration.result'
   protocolVersion: typeof REGISTRATION_WORKER_PROTOCOL_VERSION
   requestId: string
@@ -22,7 +22,7 @@ export interface RegistrationWorkerSuccess {
   movingData: Uint8Array
 }
 
-export interface RegistrationWorkerFailure {
+interface RegistrationWorkerFailure {
   type: 'registration.result'
   protocolVersion: typeof REGISTRATION_WORKER_PROTOCOL_VERSION
   requestId: string

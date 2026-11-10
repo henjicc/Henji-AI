@@ -96,7 +96,7 @@ export async function generateImageHistoryPersistenceFixtures(sourceFixture: str
 }
 
 /** Archive filenames follow the embedded package version, independently of header/kind versions. */
-export async function generateImagePersistencePackages(root = process.cwd()): Promise<void> {
+async function generateImagePersistencePackages(root = process.cwd()): Promise<void> {
   const fixture = (id: string, file: string): string => path.join(root, 'tests/fixtures/persistence', id, file)
   const read = async (id: string, version: number): Promise<unknown> => JSON.parse(await fsp.readFile(fixture(id, `v${version}.json`), 'utf8')) as unknown
   const resources = await fsp.mkdtemp(path.join(os.tmpdir(), 'henji-persistence-resources-'))

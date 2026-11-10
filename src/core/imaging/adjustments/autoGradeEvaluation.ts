@@ -14,8 +14,8 @@ const CHECKER_8BIT: readonly Vec3[] = [
   [243, 243, 242], [200, 200, 200], [160, 160, 160], [122, 122, 121], [85, 85, 85], [52, 52, 52],
 ]
 /** ColorChecker classic in linear sRGB (D65); index 21 is the ~18% middle grey, 18–23 the neutral row. */
-export const CHECKER_LINEAR: readonly Vec3[] = CHECKER_8BIT.map(rgb => rgb.map(x => srgbToLinear(x / 255)) as Vec3)
-export const NEUTRAL_PATCHES = [18, 19, 20, 21, 22, 23] as const
+const CHECKER_LINEAR: readonly Vec3[] = CHECKER_8BIT.map(rgb => rgb.map(x => srgbToLinear(x / 255)) as Vec3)
+const NEUTRAL_PATCHES = [18, 19, 20, 21, 22, 23] as const
 
 export interface EvaluationScene { name: string; width: number; height: number; linear: Float32Array; patches: Array<{ index: number; x: number; y: number }> }
 export interface EvaluationCast { kelvin: number; tint: number; ev: number }
@@ -44,7 +44,7 @@ export function createEvaluationScenes(): EvaluationScene[] {
     scene('雪景高调', (x) => { const v = .7 + .15 * x; return [v, v, v * 1.02] }),
   ]
 }
-export const EVALUATION_CASTS: readonly EvaluationCast[] = [
+const EVALUATION_CASTS: readonly EvaluationCast[] = [
   { kelvin: 3200, tint: 0, ev: 0 }, { kelvin: 9000, tint: 0, ev: 0 }, { kelvin: 6500, tint: 25, ev: 0 },
   { kelvin: 6500, tint: 0, ev: -1.5 }, { kelvin: 6500, tint: 0, ev: 1 }, { kelvin: 4300, tint: -15, ev: -.7 },
 ]

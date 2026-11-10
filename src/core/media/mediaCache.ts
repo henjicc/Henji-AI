@@ -18,9 +18,9 @@ export const VIDEO_RENDER_CACHE_QUALITIES = ['standard', 'high'] as const
 export type VideoRenderCacheQuality = (typeof VIDEO_RENDER_CACHE_QUALITIES)[number]
 
 /** 总容量上限最低 10GB；自动上限取所在盘可用空间的 10% 与 50GB 中较小者，再不低于最低值。 */
-export const MEDIA_CACHE_MIN_BUDGET_GB = 10
-export const MEDIA_CACHE_AUTO_BUDGET_MAX_GB = 50
-export const MEDIA_CACHE_MAX_BUDGET_GB = 4096
+const MEDIA_CACHE_MIN_BUDGET_GB = 10
+const MEDIA_CACHE_AUTO_BUDGET_MAX_GB = 50
+const MEDIA_CACHE_MAX_BUDGET_GB = 4096
 export const mediaCacheBudgetGbSchema = z.number().int().min(MEDIA_CACHE_MIN_BUDGET_GB).max(MEDIA_CACHE_MAX_BUDGET_GB)
 
 export const mediaCacheSettingsSchema = z.object({

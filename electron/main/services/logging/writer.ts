@@ -7,7 +7,7 @@ export function getLogDir(): string {
   return getProgramStoreDir('logs')
 }
 
-export function getLogFilePath(date = new Date()): string {
+function getLogFilePath(date = new Date()): string {
   return path.join(getLogDir(), `${MAIN_LOG_FILE_PREFIX}${date.toISOString().slice(0, 10)}.log`)
 }
 

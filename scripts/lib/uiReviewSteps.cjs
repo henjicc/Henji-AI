@@ -1130,8 +1130,6 @@ function loadStepScenes(files, context, root = ROOT) {
 }
 
 module.exports = {
-  STEP_ACTIONS,
-  VARIANT_SOURCES,
   buildDevSurfaceUrl,
   compileStepScene,
   expandTemplate,
@@ -1140,12 +1138,9 @@ module.exports = {
   loadStepSpecFile,
   normalizeStep,
   normalizeStepSpec,
-  normalizeTarget,
   parsePattern,
   pointInBox,
   resolveFixtureFile,
-  resolveTarget,
   sanitizeSuffix,
   variantId,
-  waitForStable,
 }

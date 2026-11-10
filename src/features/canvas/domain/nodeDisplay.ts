@@ -53,7 +53,7 @@ function resolveExportResultDefault(data: Partial<CanvasNodeData>): string {
   return EXPORT_RESULT_DISPLAY_NAME[resultKind];
 }
 
-export function getDefaultNodeDisplayName(type: CanvasNodeType, data: Partial<CanvasNodeData>): string {
+function getDefaultNodeDisplayName(type: CanvasNodeType, data: Partial<CanvasNodeData>): string {
   if (type === CANVAS_NODE_TYPES.exportImage) {
     return resolveExportResultDefault(data);
   }

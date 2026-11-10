@@ -8,8 +8,8 @@ import { readVideoEditCodeMetadata } from './videoEditCodeState'
 import { observeVideoEditFrame } from './videoEditFrameObservation'
 import { requireVideoEditInstance } from './videoEditService'
 
-export interface VideoEditUserEdit { label: string; before?: unknown; after: unknown }
-export interface VideoEditUserEditClip { clip: VideoEditClip; edits: VideoEditUserEdit[]; related: string[] }
+interface VideoEditUserEdit { label: string; before?: unknown; after: unknown }
+interface VideoEditUserEditClip { clip: VideoEditClip; edits: VideoEditUserEdit[]; related: string[] }
 
 const sameColor = (a: unknown, b: unknown): boolean => Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((value, index) => typeof value === 'number' && Math.abs(value - Number(b[index])) < .5 / 255)
 const short = (value: unknown): unknown => { const text = JSON.stringify(value); return text !== undefined && text.length > 240 ? `${text.slice(0, 240)}…` : value }
@@ -18,7 +18,7 @@ const short = (value: unknown): unknown => { const text = JSON.stringify(value);
  * 序列里上次助手检查之后用户手改过的代码片段：每处改动的名称、代码原值（参数默认值；元素覆盖的原值在代码里）与现值，
  * 以及改掉的颜色在别处还在用的位置（同一片段其他颜色参数、其他代码片段同色参数），交给助手判断要不要一起改。
  */
-export function videoEditPendingUserEdits(document: VideoEditDocument, sequenceId: string, owner: object): VideoEditUserEditClip[] {
+function videoEditPendingUserEdits(document: VideoEditDocument, sequenceId: string, owner: object): VideoEditUserEditClip[] {
   const sequence = document.sequences.find(value => value.id === sequenceId)
   if (!sequence) return []
   const metadata = readVideoEditCodeMetadata(owner, document)

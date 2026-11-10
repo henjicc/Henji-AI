@@ -42,7 +42,7 @@ export type ImageEditorV3PreviewOutput =
     }
   | { kind: 'content'; content: ReactNode }
 
-export interface ImageEditorV3PreviewRendererContext {
+interface ImageEditorV3PreviewRendererContext {
   sourceImageUrl: string
   snapshot: ImageEditCommandBusSnapshotV3
   activeTool: ImageEditorToolIdV3

@@ -40,7 +40,7 @@ export function getUpdateConfig(): UpdateConfig {
 /**
  * 保存更新配置
  */
-export function saveUpdateConfig(config: Partial<UpdateConfig>): void {
+function saveUpdateConfig(config: Partial<UpdateConfig>): void {
   try {
     const current = getUpdateConfig()
     const updated = { ...current, ...config }

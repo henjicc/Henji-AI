@@ -22,7 +22,7 @@ export class ImageEditorResourcePressureErrorV3 extends Error {
   }
 }
 
-export function createImageEditorResourcePressureErrorV3(
+function createImageEditorResourcePressureErrorV3(
   scope: ImageEditorResourcePressureErrorV3['scope'],
   category: ImageEditMemoryCategory,
   requestedBytes: number,

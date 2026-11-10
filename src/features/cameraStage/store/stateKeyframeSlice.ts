@@ -98,7 +98,7 @@ export function syncCameraLookAtAcrossStateKeyframes(
   return compileAndAlignCurrentFrame(state, stateKeyframes, objects)
 }
 
-export function applyStateKeyframeToObjects(objects: StageObject[], stateKeyframe: StageStateKeyframe): StageObject[] {
+function applyStateKeyframeToObjects(objects: StageObject[], stateKeyframe: StageStateKeyframe): StageObject[] {
   return objects.map((object) => {
     const snapshot = stateKeyframe.objectStates[object.id]
     if (!snapshot) return object
@@ -325,7 +325,7 @@ function replaceSpatialPath(
 /**
  * 作者在一张卡上动了摄像机（拖动、定机位、改注视），这张卡前后两段就不再跟拍：跟拍会盖住这次改动。
  */
-export function endFollowAround(stateKeyframes: StageStateKeyframe[], stateKeyframeId: string | null, objectIds: readonly string[]): StageStateKeyframe[] {
+function endFollowAround(stateKeyframes: StageStateKeyframe[], stateKeyframeId: string | null, objectIds: readonly string[]): StageStateKeyframe[] {
   const index = stateKeyframes.findIndex((stateKeyframe) => stateKeyframe.id === stateKeyframeId)
   if (index < 0) return stateKeyframes
   const touched = new Set([index - 1, index])

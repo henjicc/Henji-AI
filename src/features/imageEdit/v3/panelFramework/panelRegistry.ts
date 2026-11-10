@@ -23,9 +23,9 @@ export interface ImageEditorPanelDefinitionV3 {
 }
 
 /** 右侧面板的默认最小宽度：图层行（缩略图、名称、显隐与操作按钮）在这个宽度下不裁切。 */
-export const IMAGE_EDITOR_PANEL_MIN_WIDTH_V3 = 260
+const IMAGE_EDITOR_PANEL_MIN_WIDTH_V3 = 260
 /** 画布的最小宽度。 */
-export const IMAGE_EDITOR_PREVIEW_MIN_WIDTH_V3 = 320
+const IMAGE_EDITOR_PREVIEW_MIN_WIDTH_V3 = 320
 
 /** 停靠布局用的面板定义：画布在前，各面板没写最小宽度时取默认值（布局解析与预设登记共用这一份）。 */
 export function imageEditorDockPanelsV3(definitions: readonly ImageEditorPanelDefinitionV3[]): Array<{ id: string; title?: string; minimumWidth?: number; minimumHeight?: number }> {

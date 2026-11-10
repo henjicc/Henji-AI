@@ -51,7 +51,7 @@ export interface ImageMarkToolHostProps {
   onSaveAs: () => Promise<void>
 }
 
-export type ImageMarkBootstrapState =
+type ImageMarkBootstrapState =
   | { kind: 'loading' }
   | { kind: 'failed' }
   | {
@@ -61,8 +61,6 @@ export type ImageMarkBootstrapState =
       resourceByteSizes: Record<string, number>
       resourceDescriptors: ImageEditorV3ResourceDescriptor[]
     }
-
-export type { ImageMarkRasterExportUiState } from './useImageMarkToolActions'
 
 export interface ImageMarkToolHostController extends ImageMarkToolActionsController {
   bootstrap: ImageMarkBootstrapState

@@ -1,4 +1,4 @@
-export type UpdaterStatus =
+type UpdaterStatus =
   | 'idle'
   | 'checking'
   | 'available'
@@ -7,7 +7,7 @@ export type UpdaterStatus =
   | 'downloaded'
   | 'error'
 
-export interface UpdaterReleaseInfo {
+interface UpdaterReleaseInfo {
   version: string
   name: string
   body: string
@@ -15,7 +15,7 @@ export interface UpdaterReleaseInfo {
   htmlUrl: string
 }
 
-export interface UpdaterProgressInfo {
+interface UpdaterProgressInfo {
   percent: number
   transferred: number
   total: number

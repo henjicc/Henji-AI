@@ -9,7 +9,7 @@ import type {
   CanvasImageCapabilityProviderConfiguration,
 } from './types';
 
-export type CanvasModelCompatibilityReasonCode =
+type CanvasModelCompatibilityReasonCode =
   | 'canonical-family'
   | 'required-tag'
   | 'provider-configuration'
@@ -21,7 +21,7 @@ export type CanvasModelCompatibilityReasonCode =
   | 'quality'
   | 'parameter-value';
 
-export interface CanvasModelCompatibilityReason {
+interface CanvasModelCompatibilityReason {
   code: CanvasModelCompatibilityReasonCode;
   message: string;
 }
@@ -32,7 +32,7 @@ export interface CanvasModelSemanticMappingResult {
   reasons: CanvasModelCompatibilityReason[];
 }
 
-export interface CanvasModelCandidateResult extends CanvasModelSemanticMappingResult {
+interface CanvasModelCandidateResult extends CanvasModelSemanticMappingResult {
   model: ModelDefinition;
 }
 

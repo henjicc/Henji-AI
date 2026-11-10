@@ -19,7 +19,7 @@ import { videoEditEffectPresetSchema, type VideoEditEffectPreset } from '../effe
  */
 export const videoEditStyleIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{1,63}$/, '风格与模板标识只能使用小写字母、数字和连字符。')
 /** 64 位十六进制摘要；空串表示旧数据迁移而来、下次写入时补算。 */
-export const videoEditContentHashSchema = z.string().regex(/^(?:[a-f0-9]{64})?$/)
+const videoEditContentHashSchema = z.string().regex(/^(?:[a-f0-9]{64})?$/)
 // 样片画布最大 4K、60 帧（剪辑格式 30 / 风格库 3 / 风格包 3 放宽，2026-10-26 用户要求：偏好 4K60 的用户样片也按 4K60 做）。
 const dimension = z.number().int().min(320).max(3840).multipleOf(2)
 /** 解析缺省值：旧文件里缺的字段按当时的标准样片补，保持原含义。 */
@@ -61,7 +61,7 @@ export const videoEditStyleSchema = z.object({
 })
 export type VideoEditStyle = z.infer<typeof videoEditStyleSchema>
 /** 模板属于哪个风格（以及登记时的风格版本）；null 表示单独存在。 */
-export const videoEditTemplateStyleSchema = z.object({ id: videoEditStyleIdSchema, version: z.number().int().min(0) }).strict()
+const videoEditTemplateStyleSchema = z.object({ id: videoEditStyleIdSchema, version: z.number().int().min(0) }).strict()
 export const videoEditTemplateOriginSchema = z.object({ id: videoEditStyleIdSchema, version: z.number().int().positive() }).strict()
 /** 库模板与工程模板共用的描述字段。 */
 export const videoEditTemplateMetaShape = {

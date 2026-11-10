@@ -22,7 +22,7 @@ export interface ImageEditorGpuCurveDataV3 {
   slopes: Float32Array
 }
 
-export function imageEditorGpuNumberParameterV3(
+function imageEditorGpuNumberParameterV3(
   params: Readonly<Record<string, unknown>>,
   key: string,
   fallback: number,

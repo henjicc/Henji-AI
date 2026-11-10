@@ -33,7 +33,7 @@ interface UseScopedTextHistoryOptions {
   binding?: ScopedTextHistoryBinding
 }
 
-export interface ScopedTextHistoryController {
+interface ScopedTextHistoryController {
   recordNativeChange: (element: TextHistoryElement, nativeEvent: Event) => void
   recordProgrammaticChange: (element: TextHistoryElement, nextValue: string, nextCursor: number) => void
   synchronizeValue: (element: TextHistoryElement, nextValue: string, nextCursor: number) => void
@@ -101,7 +101,7 @@ function restoreSnapshot(element: TextHistoryElement, snapshot: TextHistorySnaps
   })
 }
 
-export function useScopedTextHistory({
+function useScopedTextHistory({
   value,
   binding,
 }: UseScopedTextHistoryOptions): ScopedTextHistoryController {

@@ -14,11 +14,11 @@ import type { LocalModelRunner, LocalTensorInput, LocalTensorOutput } from '../a
  */
 
 export const ETAM_IMAGE_SIZE = 512
-export const ETAM_LOW_RES = 128
+const ETAM_LOW_RES = 128
 const NUM_MASKMEM = 7
 const MAX_OBJ_PTRS = 16
 /** 记忆库里最多带几个条件帧（官方默认全部；提示很多时只取时间上最近的几个，控制记忆注意力的开销）。 */
-export const ETAM_MAX_COND_IN_ATTENTION = 4
+const ETAM_MAX_COND_IN_ATTENTION = 4
 
 export interface EtamParts {
   imageEncoder: LocalModelRunner
@@ -48,7 +48,7 @@ function output(outputs: Record<string, LocalTensorOutput>, name: string): Float
 }
 
 /** RGB24（512×512，已拉伸）→ [1,3,512,512] 0–1（归一化在图内）。 */
-export function etamImageTensor(rgb: Uint8Array, target = new Float32Array(3 * ETAM_IMAGE_SIZE * ETAM_IMAGE_SIZE)): Float32Array {
+function etamImageTensor(rgb: Uint8Array, target = new Float32Array(3 * ETAM_IMAGE_SIZE * ETAM_IMAGE_SIZE)): Float32Array {
   const plane = ETAM_IMAGE_SIZE * ETAM_IMAGE_SIZE
   for (let index = 0; index < plane; index++) {
     target[index] = rgb[index * 3] / 255; target[plane + index] = rgb[index * 3 + 1] / 255; target[plane * 2 + index] = rgb[index * 3 + 2] / 255
@@ -68,7 +68,7 @@ export function etamPromptFromNormalized(prompt: { points?: ReadonlyArray<readon
 }
 
 /** 512×512 的 0/1 遮罩做“面积平均”缩到 128×128 的 logit（×20 − 10，官方用带抗锯齿的双线性；4×4 面积平均与之等价到 1e-6 量级）。 */
-export function etamMaskLogits(mask: Float32Array): Float32Array {
+function etamMaskLogits(mask: Float32Array): Float32Array {
   const factor = ETAM_IMAGE_SIZE / ETAM_LOW_RES
   const output = new Float32Array(ETAM_LOW_RES * ETAM_LOW_RES)
   for (let y = 0; y < ETAM_LOW_RES; y++) for (let x = 0; x < ETAM_LOW_RES; x++) {

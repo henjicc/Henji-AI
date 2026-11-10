@@ -55,7 +55,7 @@ const AUTOMATIC_EDIT = /^(breath|gap):\d+/
  * 用户手动改了某处自动剪辑（拖边缘、在选区里删、静音、恢复）后，这处就是用户的：同一处的自动剪辑与音量区域改名为手动的，
  * 原标识留一条停用的标记（与“逐处恢复”相同），之后重跑呼吸声、气口处理都跳过这里，不覆盖用户的改动。
  */
-export function adoptAudioEditAutomaticEdits(project: AudioEditProjectDocument, range: AudioEditRange): AudioEditProjectDocument {
+function adoptAudioEditAutomaticEdits(project: AudioEditProjectDocument, range: AudioEditRange): AudioEditProjectDocument {
   const baseOf = (id: string): string | undefined => AUTOMATIC_EDIT.exec(id)?.[0]
   const touched = new Set([...(project.cuts ?? []), ...(project.gainRegions ?? [])]
     .filter((item) => item.enabled && baseOf(item.id) && item.startFrame < range.endFrame && item.endFrame > range.startFrame).map((item) => baseOf(item.id)!))

@@ -1,5 +1,4 @@
 export type {
-  ConnectionRejectionReason,
   ParamConnectionValidationResult,
   VisibleMediaInputPort,
 } from './graphMediaPortResolver';

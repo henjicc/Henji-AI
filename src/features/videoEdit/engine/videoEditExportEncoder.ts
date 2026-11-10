@@ -50,7 +50,7 @@ export async function probeVideoEditExportAudioBitrates(settings: AudioSettings)
   const values = await Promise.all(bitrates.map(async value => [value, await canEncodeVideoEditExportAudio({ codec: 'aac', sampleRate: settings.sampleRate, numberOfChannels: settings.channels, bitrate: value * 1000 })] as const))
   return Object.fromEntries(values)
 }
-export function videoEditExportAudioUnsupportedMessage(settings: AudioSettings, supported: Record<number, boolean>): string {
+function videoEditExportAudioUnsupportedMessage(settings: AudioSettings, supported: Record<number, boolean>): string {
   const lower = Object.keys(supported).map(Number).filter(value => supported[value] && value < settings.audioBitrateKbps)
   return `此设备的 AAC 编码不支持 ${settings.audioBitrateKbps} kbps（${settings.sampleRate / 1000} kHz，${settings.channels === 2 ? '立体声' : '单声道'}），${lower.length ? `请改用 ${Math.max(...lower)} kbps 或更低。` : '请调整采样率、声道或改用 WAV。'}`
 }

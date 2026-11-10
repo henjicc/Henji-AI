@@ -20,7 +20,7 @@ export interface SolidSurface {
   /** 卡片画面的内容身份（相同就是同一张画面）；缺省为逐帧变化的画面。 */
   contentKey?: string
 }
-export function solidSurfaceKey(surface: SolidSurface): string { return JSON.stringify([surface.lit, surface.material]) }
+function solidSurfaceKey(surface: SolidSurface): string { return JSON.stringify([surface.lit, surface.material]) }
 
 interface TslNode {
   mul(value: TslInput): TslNode; div(value: TslInput): TslNode; add(value: TslInput): TslNode

@@ -6,11 +6,11 @@ import { useSettingsStore, type LargeUploadStrategy } from '@/stores/settingsSto
 const logger = createLogger('services.largeUploadPolicy')
 
 /** 大文件阈值：小于等于该值一律复制进数据目录，超过才应用用户策略 */
-export const LARGE_UPLOAD_THRESHOLD_BYTES = 100 * 1024 * 1024
+const LARGE_UPLOAD_THRESHOLD_BYTES = 100 * 1024 * 1024
 
 export type LargeUploadAction = 'copy' | 'reference'
 
-export interface LargeUploadPromptRequest {
+interface LargeUploadPromptRequest {
   fileName: string
   sizeMB: number
   resolve: (result: { action: LargeUploadAction; remember: boolean }) => void

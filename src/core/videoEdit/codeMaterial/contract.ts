@@ -1,21 +1,21 @@
 import type { AudioContentAnalysis } from '../../audioAnalysis/contentAnalysis'
 /** Host safety bounds for structured graphics, component graphs and glyph requests; author JS has no language budget. */
 export const CODE_MATERIAL_LIMITS = Object.freeze({ stringLength: 4096, textCharacters: 8192, pathPoints: 4096 })
-export type { CodeColor, CodeImageReference, CodeVideoSpan, CodeAudioReference, CodeSceneReference, CodePoint, CodeGrade, CodeGradientStop, CodeRange, CodeEasing, CodeBasicParameterValue, CodeParameterObject, CodeParameterValue, CodeParameterValues, CodeParameterVisibility, CodeBasicParameterDeclaration, CodeParameterTypeDefinition, CodeParameterDeclaration } from '../../imaging/parameterTypes'
+export type { CodeColor, CodeImageReference, CodeVideoSpan, CodeAudioReference, CodeSceneReference, CodePoint, CodeGrade, CodeGradientStop, CodeRange, CodeBasicParameterValue, CodeParameterObject, CodeParameterValue, CodeParameterValues, CodeParameterVisibility, CodeBasicParameterDeclaration, CodeParameterTypeDefinition, CodeParameterDeclaration } from '../../imaging/parameterTypes'
 import type { CodeColor, CodeImageReference, CodeVideoSpan, CodeWebLayer, CodeWebReference } from '../../imaging/parameterTypes'
 import { CODE_VIDEO_SPAN_LIMIT, codeVideoSpansIssue } from './videoSpans'
 import { codeWebBoxesIssue, codeWebFolderOf, codeWebLayerIssue, codeWebViewIssue } from './webSource'
 export const CODE_PARAMETER_TYPES = ['number', 'angle', 'point', 'range', 'color', 'gradient', 'curve', 'grade', 'choice', 'boolean', 'text', 'textStyle', 'table', 'font', 'image', 'audio', 'easing', 'seed', 'scene'] as const
 export interface CodeMaterialContext { time: number; localTime: number; sequenceTime: number; width: number; height: number; frame: number; fps: number; seed?: number; audio?: AudioContentAnalysis; audioTime?: number }
 export interface CodeSourceSpan { file: string; start: number; end: number; startLine: number; startColumn: number; endLine: number; endColumn: number }
-export const CODE_BLEND_NAMES = ['normal', 'multiply', 'screen', 'overlay', 'add', 'lighten', 'darken', 'difference', 'exclusion', 'soft-light', 'hard-light', 'color-dodge', 'color-burn', 'hue', 'saturation', 'color', 'luminosity'] as const
-export type CodeBlend = typeof CODE_BLEND_NAMES[number]
-export interface CodeGradient { kind: 'linearGradient' | 'radialGradient' | 'conicGradient'; x1?: number; y1?: number; x2?: number; y2?: number; cx?: number; cy?: number; r?: number; angle?: number; stops: [number, CodeColor][] }
-export type CodePaint = CodeColor | CodeGradient
+const CODE_BLEND_NAMES = ['normal', 'multiply', 'screen', 'overlay', 'add', 'lighten', 'darken', 'difference', 'exclusion', 'soft-light', 'hard-light', 'color-dodge', 'color-burn', 'hue', 'saturation', 'color', 'luminosity'] as const
+type CodeBlend = typeof CODE_BLEND_NAMES[number]
+interface CodeGradient { kind: 'linearGradient' | 'radialGradient' | 'conicGradient'; x1?: number; y1?: number; x2?: number; y2?: number; cx?: number; cy?: number; r?: number; angle?: number; stops: [number, CodeColor][] }
+type CodePaint = CodeColor | CodeGradient
 export type CodeMatrix = [number, number, number, number, number, number]
 export interface CodeTextLayout { width: number; height: number; lines: string[]; lineWidths?: number[]; baselineOffset?: number; fontSize: number; font: string; fontGeneration?: number; missingFont?: string; glyphs: { text: string; x: number; y: number; width: number }[] }
 export interface CodeTextMeasureRequest { text: string; fontFamily: string; fontWeight: number; fontStyle: string; fontSize: number; letterSpacing: number; lineHeight: number; maxWidth: number; wrap: boolean; maxLines: number }
-export interface CodeDrawMetadata {
+interface CodeDrawMetadata {
   /** Host-only evaluated correction; never accepted by the author language. */
   elementTransform?: CodeMatrix; authorAnchor?: boolean; authorElementId?: string
   elementId?: string; sourceSpan?: CodeSourceSpan; elementPath?: string[]

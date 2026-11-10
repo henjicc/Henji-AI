@@ -3,7 +3,7 @@ import type { VideoEditBuiltinParams } from '@/core/videoEdit/builtinEffects'
 export type ColorGradeWorkerRequest = { kind: 'lut'; bytes: Uint8Array } | { kind: 'analyze'; pixels: Uint8ClampedArray; width?: number; reference?: Uint8ClampedArray; method?: ColorGradeMatchMethod }
 /** `mkl`: OkLab Monge–Kantorovich match fitted back to sliders (default); `moments` / `histogram`: per-channel RGB curves. */
 export type ColorGradeMatchMethod = 'mkl' | 'moments' | 'histogram'
-export type ColorGradeWorkerResult = { lut: CubeLut; contentIdentity: string } | { parameters: VideoEditBuiltinParams }
+type ColorGradeWorkerResult = { lut: CubeLut; contentIdentity: string } | { parameters: VideoEditBuiltinParams }
 /** One import/verification owns one worker; large 65³ tables never parse on the UI thread. */
 function request(request: ColorGradeWorkerRequest, transfer: Transferable[], signal?: AbortSignal): Promise<ColorGradeWorkerResult> {
   signal?.throwIfAborted()

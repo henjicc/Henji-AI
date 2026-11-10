@@ -7,7 +7,7 @@ import type { VideoEditGpuColorFormat } from './videoEditGpuFrame'
 // 宿主以结构类型借用原生纹理，避免 WebGPU 全局声明改变既有 Canvas 重载。
 type GPUTextureUsageFlags = number
 
-export type SpatialContentKind = 'card' | 'worldScene';
+type SpatialContentKind = 'card' | 'worldScene';
 export interface SpatialSourceDescriptor {
   clipId: string; kind: SpatialContentKind; spaceDependency: boolean;
 }

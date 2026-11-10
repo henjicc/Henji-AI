@@ -1,6 +1,6 @@
 import type { ConditionExpression, ConditionFunction } from './ConditionTypes'
 
-export type RequirementCondition = ConditionExpression | ConditionFunction
+type RequirementCondition = ConditionExpression | ConditionFunction
 
 export interface RequirementMessage {
   title: string
@@ -8,7 +8,7 @@ export interface RequirementMessage {
   type?: 'info' | 'warning' | 'error'
 }
 
-export interface RequirementCount {
+interface RequirementCount {
   min?: number
   max?: number
   exact?: number

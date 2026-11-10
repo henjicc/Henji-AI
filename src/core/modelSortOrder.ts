@@ -15,7 +15,7 @@ export const PROVIDER_ORDER: Record<string, number> = {
 }
 
 /** 生成 tab 模型面板的类型宏观分组顺序 */
-export const MODEL_TYPE_ORDER: Record<BuiltinModelType, number> = {
+const MODEL_TYPE_ORDER: Record<BuiltinModelType, number> = {
   image: 0,
   video: 1,
   audio: 2

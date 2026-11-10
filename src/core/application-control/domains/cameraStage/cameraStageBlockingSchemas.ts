@@ -55,7 +55,7 @@ const GAIT_NAMES = Object.keys(CAMERA_STAGE_CHARACTER_GAITS) as [CameraStageChar
 const planarPointSchema = z.object({ x: z.number().finite(), z: z.number().finite() }).strict()
 
 /** 地点：地面上一点，或布景、场景里的一个对象（走到它旁边，不走进它里面）。 */
-export const cameraStageCharacterPlaceSchema = z.union([
+const cameraStageCharacterPlaceSchema = z.union([
   z.object({ point: planarPointSchema.describe('地面坐标（米），y 取地面') }).strict(),
   z.object({
     objectId: z.string().min(1).describe('对象 id（门、桌子、另一个角色、布景里的楼；取自观察结果或 list_application_entities）'),
@@ -74,7 +74,7 @@ const towardSchema = z.union([
   z.object({ yaw: z.number().finite().describe('朝向角（度）：0 朝 +Z，90 朝 +X') }).strict(),
 ])
 
-export const cameraStageCharacterBeatSchema = z.discriminatedUnion('kind', [
+const cameraStageCharacterBeatSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('move'),
     to: cameraStageCharacterPlaceSchema.describe('走到哪里'),

@@ -25,12 +25,12 @@ export type PanelType =
 /**
  * 面板触发器样式
  */
-export type TriggerStyle = 'button' | 'input' | 'card'
+type TriggerStyle = 'button' | 'input' | 'card'
 
 /**
  * 面板对齐方式
  */
-export type PanelAlignment = 'above' | 'below' | 'left' | 'right' | 'center'
+type PanelAlignment = 'above' | 'below' | 'left' | 'right' | 'center'
 
 /**
  * 分辨率面板配置
@@ -84,7 +84,7 @@ export interface MinimaxVoiceClonePanelConfig {
 /**
  * 组合面板配置
  */
-export interface CompositePanelConfig {
+interface CompositePanelConfig {
   panels: Array<{
     type: PanelType
     config: DynamicValue

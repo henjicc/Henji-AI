@@ -6,12 +6,12 @@ export type ImageEditorHostProfileIdV3 = 'full' | 'quick' | 'canvas-edit' | 'mas
 
 export type ImageEditorToolIdV3 = ImageEditorRegisteredToolId;
 
-export type ImageEditorPanelIdV3 = 'layers' | 'properties' | 'histogram' | 'color' | 'history' | 'channels' | 'adjustments';
-export type ImageEditorLayerControlV3 = 'blend-mode' | 'mask';
-export type ImageEditorSaveActionV3 = 'save-document' | 'save-package' | 'export-raster';
+type ImageEditorPanelIdV3 = 'layers' | 'properties' | 'histogram' | 'color' | 'history' | 'channels' | 'adjustments';
+type ImageEditorLayerControlV3 = 'blend-mode' | 'mask';
+type ImageEditorSaveActionV3 = 'save-document' | 'save-package' | 'export-raster';
 export type ImageEditorLayerKindV3 = 'raster' | 'smart' | 'text' | 'shape' | 'path' | 'effect' | 'adjustment' | 'group';
 
-export type ImageEditorCapabilityReadinessStateV3 = 'ready' | 'disabled' | 'limited';
+type ImageEditorCapabilityReadinessStateV3 = 'ready' | 'disabled' | 'limited';
 
 export type ImageEditorReadinessReasonKeyV3 =
   | 'imageEditor.v3.readiness.reasons.hand'
@@ -46,7 +46,7 @@ export class ImageEditorReadinessErrorV3 extends Error {
   }
 }
 
-export interface ImageEditorCapabilityV3<TId extends string> {
+interface ImageEditorCapabilityV3<TId extends string> {
   id: TId;
   readiness: ImageEditorCapabilityReadinessV3;
 }
@@ -81,7 +81,7 @@ const HDR_LIMITATION: ImageEditorCapabilityReadinessV3 = {
   reasonKey: 'imageEditor.v3.readiness.reasons.hdrExport',
 };
 
-export const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
+const IMAGE_EDITOR_HOST_PROFILES_V3: Readonly<
   Record<ImageEditorHostProfileIdV3, ImageEditorHostProfileV3>
 > = {
   full: {

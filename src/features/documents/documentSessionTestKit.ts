@@ -61,7 +61,7 @@ import type {
  */
 
 export const TEST_DOCUMENT_ROOT = 'D:/作品/测试文档'
-export const TEST_PROJECT_ROOT = 'D:/作品/项目'
+const TEST_PROJECT_ROOT = 'D:/作品/项目'
 
 export const testContentSchema = z.object({ items: z.array(z.string()) })
 export type TestContent = z.infer<typeof testContentSchema>

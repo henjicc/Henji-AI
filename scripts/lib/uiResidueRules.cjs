@@ -510,10 +510,8 @@ function resolveRegion(relativePath, inventory) {
 }
 
 module.exports = {
-  ARBITRARY_VALUE_PATTERN,
   COLOR_UTILITY_PREFIX,
   LEGACY_ALIAS_COLOR_NAMES,
-  LEGACY_ALIAS_PATTERN,
   RESIDUE_CATEGORIES,
   applyResidueAllowlist,
   classReferencePattern,

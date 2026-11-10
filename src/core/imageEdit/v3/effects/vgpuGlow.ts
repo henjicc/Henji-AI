@@ -21,7 +21,7 @@ interface FloatRgbaSurface {
   data: Float32Array
 }
 
-export interface VgpuGlowGlobalScatterV4 {
+interface VgpuGlowGlobalScatterV4 {
   readonly tile: Float32PremultipliedRgbaTile
   readonly documentWidth: number
   readonly documentHeight: number

@@ -20,7 +20,7 @@ type ScrollFn = (this: Element, ...args: unknown[]) => void
 interface Move { from: Point; to: Point }
 interface Running { curve: ScrollCurve; start: number }
 
-export function smoothScrollDurationMs(distancePx: number): number { return Math.min(Math.sqrt(Math.abs(distancePx)), 12) / 60 * 1000 }
+function smoothScrollDurationMs(distancePx: number): number { return Math.min(Math.sqrt(Math.abs(distancePx)), 12) / 60 * 1000 }
 
 /** Scroll animations on page time, one per scroller; a new one on the same scroller replaces the old. */
 export class ScrollAnimator {

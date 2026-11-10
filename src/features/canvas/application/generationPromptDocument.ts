@@ -12,7 +12,7 @@ import {
 import type { RowMediaKind } from '@/features/canvas/domain/socketTypes'
 import type { NodeMediaOutput } from '@/features/canvas/domain/nodePorts'
 
-export interface CanvasPromptReference {
+interface CanvasPromptReference {
   resourceId: string
   mediaType: PromptMediaType
   label: string
@@ -48,7 +48,7 @@ function defaultLocalResourceIdFactory(nodeId: string): string {
   return `canvas-local:${nodeId}:${globalThis.crypto.randomUUID()}`
 }
 
-export function isCanvasPromptMediaBinding(value: unknown): value is PromptMediaBinding {
+function isCanvasPromptMediaBinding(value: unknown): value is PromptMediaBinding {
   if (!value || typeof value !== 'object') return false
   const candidate = value as Partial<PromptMediaBinding>
   return typeof candidate.resourceId === 'string'

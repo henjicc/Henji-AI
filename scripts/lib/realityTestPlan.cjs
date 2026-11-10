@@ -147,4 +147,4 @@ function buildRealityTestPlan(options, root) {
   return plans
 }
 
-module.exports = { SUITES, buildRealityTestPlan, parseRealityTestArgs, parseRestartCheckArgs, resolveRestartTarget }
+module.exports = { buildRealityTestPlan, parseRealityTestArgs, parseRestartCheckArgs, resolveRestartTarget }

@@ -4,8 +4,8 @@ export { dataUrlToFile, urlToFile, convertBlobToPng } from './imageConversion/fi
 export { extractImagesFromClipboard } from './imageConversion/clipboard'
 export { generateThumbnail, generateVideoThumbnail, generateVideoPreviewDataUrl } from './imageConversion/dragThumbnails'
 export { getVideoThumbnailCachePath, getImageThumbnailCachePath } from './imageConversion/thumbnailCachePaths'
-export { generateAndCacheVideoThumbnail, getOrCreateVideoThumbnail } from './imageConversion/thumbnailCacheVideo'
-export { generateAndCacheImageThumbnail, getOrCreateImageThumbnail } from './imageConversion/thumbnailCacheImage'
+export { getOrCreateVideoThumbnail } from './imageConversion/thumbnailCacheVideo'
+export { getOrCreateImageThumbnail } from './imageConversion/thumbnailCacheImage'
 export { deleteThumbnailCache } from './imageConversion/thumbnailCacheCleanup'
 
 // Backward-compatible helper

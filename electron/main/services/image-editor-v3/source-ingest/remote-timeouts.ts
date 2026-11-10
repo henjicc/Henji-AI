@@ -2,7 +2,7 @@ type SourceBodyReadResult =
   | { done: false; value: Uint8Array }
   | { done: true; value?: Uint8Array }
 
-export function sourceIngestAbortError(): Error {
+function sourceIngestAbortError(): Error {
   const error = new Error('Image source import was cancelled')
   error.name = 'AbortError'
   return error

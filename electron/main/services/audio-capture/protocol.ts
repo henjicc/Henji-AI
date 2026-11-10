@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 const errorSchema = z.object({ code: z.string(), message: z.string(), recoverable: z.boolean() })
-export const nativeAudioMessageSchema = z.object({
+const nativeAudioMessageSchema = z.object({
   id: z.string().optional(), ok: z.boolean().optional(), result: z.unknown().optional(), error: errorSchema.optional(),
   event: z.enum(['level', 'samples', 'interrupted']).optional(), binaryBytes: z.number().int().min(0).max(8192),
 }).passthrough()

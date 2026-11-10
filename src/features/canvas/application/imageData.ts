@@ -23,11 +23,8 @@ import {
 export {
   blobToDataUrl,
   canvasToDataUrl,
-  imageUrlToDataUrl,
-  isLikelyLocalImagePath,
   loadImageElement,
   persistImageLocally,
-  readFileAsDataUrl,
   resolveImageDisplayUrl,
 };
 

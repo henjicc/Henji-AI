@@ -82,7 +82,7 @@ export function getTestModeState(): TestModeState {
 }
 
 // 保存测试模式状态
-export function saveTestModeState(state: TestModeState): void {
+function saveTestModeState(state: TestModeState): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
     refreshLogConfigByRuntime()

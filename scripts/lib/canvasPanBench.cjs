@@ -450,7 +450,6 @@ module.exports = {
   findPanePoint,
   readCanvasState,
   sweep,
-  duplicateGraph,
   median,
   sleep,
 }

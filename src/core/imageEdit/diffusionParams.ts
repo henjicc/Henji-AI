@@ -6,7 +6,7 @@ import type {
   DiffusionTintParams,
 } from './types';
 
-export class InvalidDiffusionOperationParamsError extends Error {}
+class InvalidDiffusionOperationParamsError extends Error {}
 
 const DIFFUSION_MODES: DiffusionMode[] = ['black_mist', 'white_mist', 'glow'];
 const DIFFUSION_DENSITIES: DiffusionDensity[] = ['low', 'medium', 'high'];
@@ -14,7 +14,7 @@ const DIFFUSION_QUALITIES: DiffusionQuality[] = ['realtime', 'high'];
 
 export const DIFFUSION_PARAMS_SCHEMA_VERSION = 4 as const;
 
-export function createDefaultDiffusionTintParams(): DiffusionTintParams {
+function createDefaultDiffusionTintParams(): DiffusionTintParams {
   return { enabled: false, hue: 210, saturation: 0.5, lightness: 0 };
 }
 

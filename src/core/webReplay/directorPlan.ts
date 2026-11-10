@@ -18,9 +18,9 @@ import type { WebRecordingBehaviorEvent } from './schema'
  */
 export const PAGE_FRAME_US = 1e6 / 60
 /** typewriter.at 与文字输入的录制时刻最多差这么多。 */
-export const TYPEWRITER_MATCH_US = 300_000
+const TYPEWRITER_MATCH_US = 300_000
 /** clicks.at 与录制的按下时刻最多差这么多。 */
-export const CLICK_MATCH_US = 500_000
+const CLICK_MATCH_US = 500_000
 /** 注入的点击按住多久。 */
 const CLICK_PRESS_US = 80_000
 /** 注入的滚动每步最多滚这么多（一格滚轮）。 */
@@ -28,9 +28,9 @@ const WHEEL_STEP_PX = 100
 
 /** 鼠标位置：固定坐标、页面里解析的目标（anchor 序号），或一段滑动（glide 序号）上的进度 u。 */
 export type PlanPoint = { x: number; y: number } | { anchor: number } | { glide: number; u: number }
-export type GlideEnd = { x: number; y: number } | { anchor: number } | { pointer: true }
+type GlideEnd = { x: number; y: number } | { anchor: number } | { pointer: true }
 /** 一段滑动：两端在第一次用到时确定（pointer 是那时鼠标所在的位置），中间按缓动插值。 */
-export interface PlanGlide { from: GlideEnd; to: GlideEnd; easing: DirectorEasing }
+interface PlanGlide { from: GlideEnd; to: GlideEnd; easing: DirectorEasing }
 
 interface OpBase {
   outUs: number

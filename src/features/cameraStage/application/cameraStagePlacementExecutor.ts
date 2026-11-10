@@ -16,7 +16,7 @@ import { CAMERA_STAGE_ENTITY_TYPES } from './cameraStageReflection'
 
 const vec3Schema = z.object({ x: z.number(), y: z.number(), z: z.number() }).strict()
 
-export const cameraStagePlacementInputSchema = z.object({
+const cameraStagePlacementInputSchema = z.object({
   projectId: z.string().min(1),
   objectId: z.string().min(1).optional(),
   objectType: z.enum(['primitive', 'character', 'camera']),

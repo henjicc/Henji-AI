@@ -9,7 +9,7 @@ export const recordingEncodingFields = {
   codec: z.enum(['h264', 'hevc']).optional(),
   encoder: z.enum(['auto', 'nvidia', 'intel', 'amd', 'apple', 'software']).optional(),
 }
-export const recordingEncodingSchema = z.object(recordingEncodingFields).strict()
+const recordingEncodingSchema = z.object(recordingEncodingFields).strict()
 export type RecordingEncoding = z.infer<typeof recordingEncodingSchema>
 export type RecordingEncoder = NonNullable<RecordingEncoding['encoder']>
 export type RecordingCodec = NonNullable<RecordingEncoding['codec']>
@@ -28,7 +28,7 @@ export function recordingEncoding(options: RecordingEncoding & { width: number; 
     bitrate: options.bitrate ?? Math.round((options.fps > 30 ? row.bitrate60 : row.bitrate30) * (codec === 'hevc' ? .7 : 1) * 1_000_000) }
 }
 
-export const AUTO_KEYFRAME_FRAMES = 30
+const AUTO_KEYFRAME_FRAMES = 30
 /** 拖动定位的最坏等待只取决于最长间隔；突变处补关键帧让剪切点落在关键帧上、突变画面不糊。 */
 export function recordingKeyframes(keyframeFrames: RecordingEncoding['keyframeFrames']): { gop: number; sceneCut: boolean } {
   return keyframeFrames ? { gop: keyframeFrames, sceneCut: false } : { gop: AUTO_KEYFRAME_FRAMES, sceneCut: true }

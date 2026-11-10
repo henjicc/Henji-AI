@@ -31,7 +31,7 @@ export interface AudioPlaybackState {
   volume: number
 }
 
-export interface ControlledAudioPlayback {
+interface ControlledAudioPlayback {
   currentTime: number
   duration: number
   playing: boolean

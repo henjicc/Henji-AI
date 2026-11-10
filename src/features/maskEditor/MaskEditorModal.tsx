@@ -28,14 +28,14 @@ interface MaskEditorModalBaseProps {
   onCancel: () => void;
 }
 
-export interface QuickMaskEditorModalProps extends MaskEditorModalBaseProps {
+interface QuickMaskEditorModalProps extends MaskEditorModalBaseProps {
   initialDocument?: MaskEditorDocument | null;
   onConfirm: (result: MaskEditorResult) => void | Promise<void>;
   v3Session?: never;
   onConfirmV3?: never;
 }
 
-export interface V3MaskEditorModalProps extends MaskEditorModalBaseProps {
+interface V3MaskEditorModalProps extends MaskEditorModalBaseProps {
   initialDocument?: never;
   onConfirm?: never;
   v3Session: {

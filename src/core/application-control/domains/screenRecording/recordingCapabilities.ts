@@ -10,7 +10,7 @@ import { recordingScriptCapabilities } from './scriptCapability'
 import { recordingDirectorCapabilities } from './directorCapability'
 import { WEB_APP_RECORDING_CAPABILITIES } from './webAppCapability'
 
-export const RECORDING_DOMAIN = 'screen_recording'
+const RECORDING_DOMAIN = 'screen_recording'
 export const recordingRefSchema = z.object({ kind: z.literal('screen_recording.session'), id: z.string().uuid() }).strict()
 export const recordingDestinationSchema = z.object({ documentId: z.string().min(1), sequenceId: z.string().min(1).optional(), frame: z.number().int().nonnegative().optional() }).strict()
 export const startRecordingInputSchema = z.object({

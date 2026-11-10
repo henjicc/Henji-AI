@@ -10,7 +10,7 @@ import { removeUnmanagedCachePath } from '../media-recycle/cache-deletion'
  * 渲染层先 begin 拿到临时文件、按块写入编码结果，再 commit 原子改名；中途失败或取消 discard。
  * 说明记录所属剪辑与序列：删除剪辑、删除序列、启动时发现剪辑已不存在，都按它回收。
  */
-export function videoRenderCacheKey(windowKey: string, profile: string, projectId: string, provenance?: VideoRenderCacheEntry['provenance']): string {
+function videoRenderCacheKey(windowKey: string, profile: string, projectId: string, provenance?: VideoRenderCacheEntry['provenance']): string {
   return createHash('sha256').update(JSON.stringify(['render-v2', projectId, windowKey, profile, ...(provenance === 'web-cache' ? ['web-cache'] : [])])).digest('hex')
 }
 

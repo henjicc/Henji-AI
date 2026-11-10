@@ -9,7 +9,7 @@ import { ensureImageEditRefInstanceV3 } from './imageEditDocumentLoading'
 const entityType = 'image_edit.selection'
 const schemaRef = imageEditV3SchemaRef('property', `${entityType}.region.value`)
 type Draft = { value: ImageEditSelectionSessionV3 | null }
-export const IMAGE_EDIT_SELECTION_FIELDS_V3: ApplicationFieldDefinition<Draft, Draft>[] = [{
+const IMAGE_EDIT_SELECTION_FIELDS_V3: ApplicationFieldDefinition<Draft, Draft>[] = [{
   propertyId: `${entityType}.region`,
   descriptor: { id: `${entityType}.region`, entityType, version: 1, title: '选区形状与边缘',
     description: '独立于图层蒙版的当前选区。坐标为未裁剪画面比例，羽化为短边比例；形状按顺序组合。null 取消选区。应用到图层请使用 apply_image_edit_selection。',

@@ -453,7 +453,7 @@ export async function prepareVideoExplanationGeneration(id: string): Promise<voi
     assertCurrent: () => assertCurrent(owner, state),
   })
 }
-export async function runVideoExplanationGeneration(id: string, local: () => Promise<void>): Promise<void> {
+async function runVideoExplanationGeneration(id: string, local: () => Promise<void>): Promise<void> {
   const runtime = states.get(requireVideoEditInstance(id)), generation = runtime?.generation
   if (runtime) runtime.generation = undefined
   if (generation) await generation.run(local)

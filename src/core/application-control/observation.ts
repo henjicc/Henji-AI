@@ -20,14 +20,14 @@ const normalizedRectSchema = z.object({
   { message: '遮罩区域必须位于目标 Surface 内' }
 )
 
-export const applicationObservationTargetSchema = z.discriminatedUnion('kind', [
+const applicationObservationTargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('entity'), ref: applicationRefSchema }).strict(),
   z.object({ kind: z.literal('media'), ref: applicationMediaRefSchema }).strict(),
   z.object({ kind: z.literal('surface'), surfaceId: applicationSurfaceIdSchema }).strict(),
 ])
 export type ApplicationObservationTarget = z.infer<typeof applicationObservationTargetSchema>
 
-export const applicationObservationProviderDescriptorSchema = z.object({
+const applicationObservationProviderDescriptorSchema = z.object({
   id: applicationStableIdSchema,
   version: z.number().int().positive(),
   targetKinds: z.array(z.enum(['entity', 'media', 'surface'])).min(1).max(3),

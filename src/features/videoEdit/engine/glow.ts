@@ -20,7 +20,7 @@ import { GLOW_ABERRATION_PREFIX } from '@/core/videoEdit/glow'
 import { includedEffectValues } from '@/core/videoEdit/effectIncludes'
 import { chromaticAberrationPass } from './chromaticAberration'
 
-export const GLOW_ENTRIES = ['glow_prefilter', 'glow_down', 'glow_blur', 'glow_up', 'glow_composite', 'glow_shape_composite', 'glow_shape_light', 'glow_subject_composite', 'glow_source', 'glow_layer_image', 'glow_layer_light'] as const
+const GLOW_ENTRIES = ['glow_prefilter', 'glow_down', 'glow_blur', 'glow_up', 'glow_composite', 'glow_shape_composite', 'glow_shape_light', 'glow_subject_composite', 'glow_source', 'glow_layer_image', 'glow_layer_light'] as const
 type V3 = [number, number, number]
 type V4 = readonly [number, number, number, number]
 const ZERO: V4 = [0, 0, 0, 0]
@@ -82,7 +82,7 @@ function emissionUniform(params: VideoEditBuiltinParams, emission: GlowEmission)
 }
 
 /** `params` 已补齐默认值。 */
-export function planGlow(params: VideoEditBuiltinParams, width: number, height: number, context?: LayerEffectReference, split = false): VideoEditBuiltinPlan {
+function planGlow(params: VideoEditBuiltinParams, width: number, height: number, context?: LayerEffectReference, split = false): VideoEditBuiltinPlan {
   const glow = createGlowPlanner(width, height, context)
   const emission: GlowEmission = params.mode === 'shape' ? 'shape' : 'bright'
   const source: VideoEditBuiltinTexture = emission === 'shape' && params.contour === 'subject' ? 'subject' : 'input'
@@ -175,7 +175,7 @@ export function appendGlow(glow: GlowPlanner, params: VideoEditBuiltinParams, wi
   }
 }
 
-export const GLOW_WGSL = `
+const GLOW_WGSL = `
 // 局部纹理按内容原点定位采样网格，外扩尺寸变化不缩放网格或移动噪声。
 fn glowUv(v: Vertex) -> vec2f {
  if (u.grid.x > 0.0) { return (v.position.xy * u.grid.x + u.grid.yz) / u.size.zw; }

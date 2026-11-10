@@ -52,12 +52,12 @@ type NodeHeaderProps = {
 export const NODE_HEADER_ICON_TITLE_ADJUST: HeaderAdjust = { x: -8, y: 8, scale: 1 };
 // 统一控制点：所有节点右上角价格徽标（PriceEstimate）相对于节点的位置微调。
 // 只改这一处数值即可同时影响全部节点；x/y 单位为 px，scale 为缩放比例。
-export const NODE_HEADER_PRICE_ADJUST: HeaderAdjust = NODE_HEADER_ICON_TITLE_ADJUST;
+const NODE_HEADER_PRICE_ADJUST: HeaderAdjust = NODE_HEADER_ICON_TITLE_ADJUST;
 
 // 浮动标题压在画布底上（不在节点卡片内），取辅助文字色：两种模式都保证 ≥ 4.5:1，深色下与原 55% 白观感一致。
-export const NODE_HEADER_TONE_CLASS = 'text-text3';
-export const NODE_HEADER_TITLE_CLASS = 'text-sm font-normal';
-export const NODE_HEADER_META_CLASS = 'text-xs text-text2';
+const NODE_HEADER_TONE_CLASS = 'text-text3';
+const NODE_HEADER_TITLE_CLASS = 'text-sm font-normal';
+const NODE_HEADER_META_CLASS = 'text-xs text-text2';
 export const NODE_HEADER_FLOATING_POSITION_CLASS = 'absolute -top-8 left-2 right-2 z-sticky';
 // 标题不再用 max-w-[60%] 限宽：百分比宽度作用在"宽度由内容撑出"的祖先链上时
 // 解析不稳定（浏览器常把它解析成一个很小的值），改用逐层 min-w-0 + flex-1 的

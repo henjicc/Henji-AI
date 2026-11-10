@@ -9,7 +9,7 @@ export { identityDatabaseLocations } from './db-locations-identity.test-support'
  * 测试里的绝对路径按当前平台构造（CI 在 Linux 上运行，不写死盘符）。
  */
 
-export const HOST_PATH_STYLE: LocationContext['style'] = process.platform === 'win32' ? 'win32' : 'posix'
+const HOST_PATH_STYLE: LocationContext['style'] = process.platform === 'win32' ? 'win32' : 'posix'
 
 /** 以 base 为父目录的作品目录与程序目录。 */
 export function testLocationContext(base: string, projects: LocationContext['projects'] = []): LocationContext {

@@ -109,14 +109,14 @@ function curve(table: Float32Array, row: number, x: number): number {
 const dot = (a: readonly number[], b: readonly number[]): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 function knee(x: number, limit: number): number { const a = Math.abs(x); const k = .8 * limit; return Math.sign(x) * (a <= k ? a : limit - .2 * limit * Math.exp(-(a - k) / (.2 * limit))) }
 /** Contrast around perceptual middle gray, soft-limited so a steep slope rolls into black/white instead of clipping. */
-export function gradeContrast(perceptual: number, slope: number): number {
+function gradeContrast(perceptual: number, slope: number): number {
   if (slope === 1) return perceptual
   const p0 = PERCEPTUAL_MIDDLE_GRAY
   const toned = (x: number): number => { const d = (x - p0) * slope; return p0 + (slope > 1 ? knee(d, d > 0 ? 1 - p0 : p0) : d) }
   return perceptual > 1 ? toned(1) + (perceptual - 1) : toned(perceptual)
 }
 function bump(y: number, center: number): number { const d = Math.abs(y - center); return d >= .25 ? 0 : Math.cos(Math.PI * d / .5) ** 2 }
-export function gradeTone(perceptual: number, tone: readonly number[], tone2: readonly number[], color: readonly number[]): number {
+function gradeTone(perceptual: number, tone: readonly number[], tone2: readonly number[], color: readonly number[]): number {
   const y = clamp(perceptual)
   const shadow = 1 - smooth(0, .5, y); const high = smooth(.5, 1, y)
   let value = perceptual + .25 * (tone[1] * high + tone[2] * shadow + tone[3] * y ** 4 + tone2[0] * (1 - y) ** 4)
@@ -141,7 +141,7 @@ const encode = (rgb: readonly number[]): Vec3 => rgb.map(linearToSrgb) as Vec3
 const decode = (rgb: readonly number[]): Vec3 => rgb.map(srgbToLinear) as Vec3
 
 /** Slope of `gradeContrast` at a perceptual value: the old per-channel contrast scaled chroma by this amount. */
-export function gradeContrastSlope(perceptual: number, slope: number): number {
+function gradeContrastSlope(perceptual: number, slope: number): number {
   if (slope <= 1) return slope
   // Above white keep the roll-off reached at white: returning to full chroma there bands bright yellows and oranges.
   const p0 = PERCEPTUAL_MIDDLE_GRAY; const d = (Math.min(perceptual, 1) - p0) * slope; const limit = d > 0 ? 1 - p0 : p0; const k = .8 * limit

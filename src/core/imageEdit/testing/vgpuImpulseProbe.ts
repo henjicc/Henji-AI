@@ -4,9 +4,9 @@ import type { Gpu, Target } from 'vgpu';
 const RGBA_COMPONENTS = 4;
 const HALF_FLOAT_MAX = 65_504;
 
-export type VgpuImpulseChannel = 0 | 1 | 2 | 3;
+type VgpuImpulseChannel = 0 | 1 | 2 | 3;
 
-export interface VgpuImpulseChannelMetrics {
+interface VgpuImpulseChannelMetrics {
   readonly channel: VgpuImpulseChannel;
   /** 保留符号的离散积分，用于发现读回中的负瓣。 */
   readonly signedEnergy: number;

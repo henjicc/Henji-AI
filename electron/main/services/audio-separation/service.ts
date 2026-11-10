@@ -16,7 +16,7 @@ import { removeUnmanagedCachePath } from '../media-recycle/cache-deletion'
  */
 
 /** 前后处理或输出格式变化时加一，旧缓存自然失效。 */
-export const AUDIO_SEPARATION_CACHE_VERSION = 1
+const AUDIO_SEPARATION_CACHE_VERSION = 1
 
 export interface AudioSeparationResult {
   /** vocals：人声；dereverb：去混响后的干声。 */

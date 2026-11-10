@@ -8,7 +8,7 @@ export const PANORAMA_REFERENCE_TEMPLATE_VERSION = 'panorama-equirectangular-ref
 export const PANORAMA_DEFAULT_PROMPT_VERSION = 'panorama-user-default-v1';
 export const PANORAMA_DEFAULT_PROMPT = '生成一张完整、自然、可沉浸浏览的 360°×180° 等距柱状全景图，左右边缘无缝衔接。';
 
-export const PANORAMA_EXPERIMENTAL_WIDE_FAMILIES = [
+const PANORAMA_EXPERIMENTAL_WIDE_FAMILIES = [
   'nano-banana-2-lite',
   'nano-banana-2',
   'nano-banana-pro',

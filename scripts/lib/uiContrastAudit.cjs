@@ -456,18 +456,10 @@ async function auditPageContrast(page, capture, options = {}) {
 
 module.exports = {
   CONTRAST_GRAPHIC_MIN,
-  CONTRAST_ICON_MIN,
-  CONTRAST_MEASUREMENT_TOLERANCE,
-  CONTRAST_LARGE_MIN,
-  CONTRAST_TEXT_MIN,
   DEFAULT_EXCEPTIONS_FILE,
-  HIDE_FOREGROUND_CSS,
   auditPageContrast,
-  collectContrastCandidates,
-  compositeOver,
   contrastRatio,
   evaluateContrast,
-  findContrastException,
   loadContrastExceptions,
   parseCssColor,
   percentile,

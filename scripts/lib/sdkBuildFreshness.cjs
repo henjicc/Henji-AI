@@ -60,10 +60,7 @@ function writeSdkBuildStamp(root, digest) {
 }
 
 module.exports = {
-  SDK_INPUTS,
   calculateSdkInputDigest,
   isSdkBuildCurrent,
-  readSdkBuildStamp,
-  sdkBuildStampPath,
   writeSdkBuildStamp,
 }

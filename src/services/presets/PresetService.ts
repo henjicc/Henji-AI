@@ -177,7 +177,7 @@ export class PresetService {
 // 单例导出
 let presetServiceInstance: PresetService | null = null
 
-export function getPresetService(): PresetService {
+function getPresetService(): PresetService {
   if (!presetServiceInstance) {
     presetServiceInstance = new PresetService()
   }

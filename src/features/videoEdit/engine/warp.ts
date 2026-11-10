@@ -83,18 +83,18 @@ function cycles(params: VideoEditBuiltinParams, time: number | undefined, phase 
   return (phase ? number(params, 'phase') / 360 : 0) + number(params, 'speed') / 100 * (time ?? 0)
 }
 
-export function planMirror(params: VideoEditBuiltinParams, frame: EffectPlannerFrame): VideoEditBuiltinPlan {
+function planMirror(params: VideoEditBuiltinParams, frame: EffectPlannerFrame): VideoEditBuiltinPlan {
   const [cx, cy] = centerOf(params, geometryOf(frame)), [nx, ny] = mirrorNormal(params)
   return warp(frame, params, WARP_KIND.mirror, [cx, cy, nx, ny], [params.side === 'back' ? 1 : 0, 0, 0, 0])
 }
 
-export function planBulge(params: VideoEditBuiltinParams, frame: EffectPlannerFrame): VideoEditBuiltinPlan {
+function planBulge(params: VideoEditBuiltinParams, frame: EffectPlannerFrame): VideoEditBuiltinPlan {
   const geometry = geometryOf(frame), radius = number(params, 'radius') / 100 * geometry.H, value = number(params, 'amount') / 100
   if (radius < 0.5 || value === 0) return copy(frame)
   return warp(frame, params, WARP_KIND.bulge, [...centerOf(params, geometry), radius, value], [params.shape === 'sphere' ? 1 : 0, 0, 0, 0])
 }
 
-export function planTwirl(params: VideoEditBuiltinParams, frame: EffectPlannerFrame): VideoEditBuiltinPlan {
+function planTwirl(params: VideoEditBuiltinParams, frame: EffectPlannerFrame): VideoEditBuiltinPlan {
   const geometry = geometryOf(frame), radius = number(params, 'radius') / 100 * geometry.H, turn = number(params, 'angle') * Math.PI / 180
   if (radius < 0.5 || turn === 0) return copy(frame)
   const rings = params.mode === 'rings'
@@ -102,7 +102,7 @@ export function planTwirl(params: VideoEditBuiltinParams, frame: EffectPlannerFr
     [rings ? 1 : 0, Math.max(2, Math.round(number(params, 'rings'))), number(params, 'ring_random') / 100, number(params, 'ring_softness') / 100], [effectHash(Math.round(number(params, 'seed')), 0) % 65_521, 0, 0, 0])
 }
 
-export function planWave(params: VideoEditBuiltinParams, frame: EffectPlannerFrame, time?: number): VideoEditBuiltinPlan {
+function planWave(params: VideoEditBuiltinParams, frame: EffectPlannerFrame, time?: number): VideoEditBuiltinPlan {
   const geometry = geometryOf(frame), amplitude = warpDistance(number(params, 'amount')) * geometry.H
   if (amplitude <= 0) return copy(frame)
   const length = Math.max(1, waveLength(number(params, 'wavelength')) * geometry.H), phase = cycles(params, time)
@@ -116,7 +116,7 @@ export function planWave(params: VideoEditBuiltinParams, frame: EffectPlannerFra
   return warp(frame, params, WARP_KIND.wave, [Math.cos(direction), Math.sin(direction), length, amplitude], [0, WAVEFORMS[String(params.waveform)] ?? 0, phase - Math.floor(phase), 0])
 }
 
-export function planCornerPin(params: VideoEditBuiltinParams, frame: EffectPlannerFrame): VideoEditBuiltinPlan {
+function planCornerPin(params: VideoEditBuiltinParams, frame: EffectPlannerFrame): VideoEditBuiltinPlan {
   const quad = cornerPinQuad(params)
   if (quad.every(([x, y], index) => x === [0, 1, 1, 0][index] && y === [0, 0, 1, 1][index])) return copy(frame)
   // 交叉或退化的四边形没有把整块内容贴上去的透视，内容消失（说明里写明要围成凸四边形）。
@@ -125,7 +125,7 @@ export function planCornerPin(params: VideoEditBuiltinParams, frame: EffectPlann
   return warp(frame, params, WARP_KIND.cornerPin, [m[0], m[1], m[2], m[3]], [m[4], m[5], m[6], m[7]], [m[8], 0, 0, 0])
 }
 
-export function planDisplace(params: VideoEditBuiltinParams, frame: EffectPlannerFrame, time?: number): VideoEditBuiltinPlan {
+function planDisplace(params: VideoEditBuiltinParams, frame: EffectPlannerFrame, time?: number): VideoEditBuiltinPlan {
   const geometry = geometryOf(frame), amplitude = warpDistance(number(params, 'amount')) * geometry.H
   if (amplitude <= 0) return copy(frame)
   if (params.source === 'luma') {
@@ -136,7 +136,7 @@ export function planDisplace(params: VideoEditBuiltinParams, frame: EffectPlanne
   return noiseWarp(frame, params, WARP_KIND.displace, size / 2.3, [amplitude, 0, 0, 0], [size, number(params, 'detail') / 100, wrapDrift(cycles(params, time, false), DISPLACE_DRIFT_PERIOD), 0], [offset(seed, 5), offset(seed, 6), offset(seed, 7), offset(seed, 8)])
 }
 
-export function planRepeat(params: VideoEditBuiltinParams, frame: EffectPlannerFrame): VideoEditBuiltinPlan {
+function planRepeat(params: VideoEditBuiltinParams, frame: EffectPlannerFrame): VideoEditBuiltinPlan {
   const geometry = geometryOf(frame), layout = repeatLayout(params), [width, height] = geometry.box
   const grid = (kind: number): Vec4 => [0, geometry.H, kind, 0]
   if (layout.mode === 'grid') {
@@ -153,7 +153,7 @@ export function planRepeat(params: VideoEditBuiltinParams, frame: EffectPlannerF
   return single(frame, 'warp_repeat', geometry, grid(REPEAT_KIND.ring), [layout.count, number(params, 'radius') / 100 * geometry.H, params.face_center === true ? 1 : 0, 0], [layout.scale, layout.fade, 0, 0])
 }
 
-export const WARP_WGSL = `
+const WARP_WGSL = `
 // —— 变形 ——
 // 内容像素 p = 纹理像素 − u.layer.xy；内容框大小 u.layer.zw；u.grid = (边缘 0 透明 / 1 重复边缘 / 2 镜像, 画面高度, 种类, 0)。
 fn warpCover(q: vec2f, size: vec2f) -> f32 {
@@ -353,7 +353,7 @@ fn repeatGrid(p: vec2f) -> vec4f {
 `
 
 /** 七个效果共用的取样工序与噪声位移场：具名共享块，按块名只装配一次；依赖共用数学里的 ramp、hash、单形噪声与 B 样条取样。 */
-export const WARP_BLOCK: EffectShaderBlock = { name: 'warp', wgsl: WARP_WGSL }
+const WARP_BLOCK: EffectShaderBlock = { name: 'warp', wgsl: WARP_WGSL }
 const shared = [EFFECT_MATH_BLOCK, WARP_BLOCK]
 export const WARP_PLANNERS = [
   definePlanner({ id: 'mirror', entries: ['warp'], shared, plan: (params, frame) => planMirror(params, frame) }),

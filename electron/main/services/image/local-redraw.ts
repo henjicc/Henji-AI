@@ -29,7 +29,7 @@ export interface LocalRedrawSettingsDto {
   forceRegistration: boolean
 }
 
-export interface LocalRedrawRectDto {
+interface LocalRedrawRectDto {
   x: number
   y: number
   width: number

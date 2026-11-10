@@ -61,7 +61,7 @@ export function superKeyframeAttachment(id: string, draftId: string): SuperKeyfr
       elements: draft.targets.map(target => owner.document.sequences.flatMap(sequence => sequence.clips).find(clip => `${id}:${clip.id}` === target.ref.id)?.name ?? '已移除元素'), hasNarration: Boolean(session?.pages.some(page => page.kind === 'transcript')) } }
 }
 /** 渲染层交接入口：只把正式原稿引用放进助手草稿，不自动发送。 */
-export function openVideoSuperKeyframesInAssistant(id: string, draftId: string): void {
+function openVideoSuperKeyframesInAssistant(id: string, draftId: string): void {
   const attachment = superKeyframeAttachment(id, draftId)
   if (!attachment.summary.takeCount) throw new Error('请先录制一段超级关键帧。')
   openAssistant('请处理这组超级关键帧。', { autoSend: false, appendToDraft: true, attachments: [{ attachment, previewSrc: '' }] })

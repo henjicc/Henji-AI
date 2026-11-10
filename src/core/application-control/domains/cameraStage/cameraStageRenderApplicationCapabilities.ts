@@ -9,15 +9,15 @@ export const CANCEL_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID = 'cancel_camera_stag
 export const WAIT_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID = 'wait_camera_stage_render_task'
 export const RECOVER_CAMERA_STAGE_RENDER_TASK_CAPABILITY_ID = 'recover_camera_stage_render_task'
 
-export const cameraStageRenderCanvasRefSchema = applicationRefSchema.extend({
+const cameraStageRenderCanvasRefSchema = applicationRefSchema.extend({
   kind: z.literal('canvas.document'),
 }).strict()
 
-export const cameraStageRenderNodeRefSchema = applicationRefSchema.extend({
+const cameraStageRenderNodeRefSchema = applicationRefSchema.extend({
   kind: z.literal('canvas.node'),
 }).strict()
 
-export const cameraStageRenderTaskRefSchema = applicationRefSchema.extend({
+const cameraStageRenderTaskRefSchema = applicationRefSchema.extend({
   kind: z.literal('camera_stage.render_task'),
 }).strict()
 

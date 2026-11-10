@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { captureRequestSchema } from './capture'
 import { capabilityCaptureSchema } from '../captureLog/events'
 
-export const captureKinds = ['microphone', 'camera', 'screen', 'systemAudio'] as const
+const captureKinds = ['microphone', 'camera', 'screen', 'systemAudio'] as const
 export type CaptureKind = typeof captureKinds[number]
 export const recordingActions = ['toggle', 'mark', 'stop'] as const
 export type RecordingAction = typeof recordingActions[number]
@@ -41,7 +41,7 @@ export interface CapturePermissionStatus {
   status: 'not-determined' | 'granted' | 'denied' | 'restricted' | 'unknown' | 'unsupported'
   recovery: 'request' | 'system-settings' | 'none'
 }
-export type RecordingPhase = 'ready' | 'countdown' | 'recording' | 'paused' | 'stopping' | 'stopped' | 'failed'
+type RecordingPhase = 'ready' | 'countdown' | 'recording' | 'paused' | 'stopping' | 'stopped' | 'failed'
 export interface RecordingControlSnapshot {
   sessionId: string
   phase: RecordingPhase
@@ -54,12 +54,12 @@ export interface RecordingControlSnapshot {
   cameraPreview?: string | null
   trackWarnings?: Array<'system-audio-silent' | 'system-audio-unavailable' | 'device-disconnected'>
 }
-export const recordingTrackStatusSchema = z.object({ microphoneLevel: z.number().finite().min(0).max(1).nullable(), cameraPreview: z.string().max(100_000).regex(/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/).nullable(), warnings: z.array(z.enum(['system-audio-silent', 'system-audio-unavailable', 'device-disconnected'])).max(3) }).strict()
+const recordingTrackStatusSchema = z.object({ microphoneLevel: z.number().finite().min(0).max(1).nullable(), cameraPreview: z.string().max(100_000).regex(/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/).nullable(), warnings: z.array(z.enum(['system-audio-silent', 'system-audio-unavailable', 'device-disconnected'])).max(3) }).strict()
 export type RecordingTrackStatus = z.infer<typeof recordingTrackStatusSchema>
 const sessionId = z.string().uuid()
-export const recordingSensitiveDomSchema = z.array(z.object({ id: z.string().uuid(), x: z.number().finite().nonnegative(), y: z.number().finite().nonnegative(), width: z.number().finite().positive(), height: z.number().finite().positive() }).strict()).max(256)
+const recordingSensitiveDomSchema = z.array(z.object({ id: z.string().uuid(), x: z.number().finite().nonnegative(), y: z.number().finite().nonnegative(), width: z.number().finite().positive(), height: z.number().finite().positive() }).strict()).max(256)
 export type RecordingSensitiveDom = z.infer<typeof recordingSensitiveDomSchema>
-export const captureSelectionSchema = z.object({
+const captureSelectionSchema = z.object({
   sourceId: z.string().regex(/^(screen|window):\d+:\d+$/),
   excludedSourceIds: z.array(z.string().regex(/^window:\d+:\d+$/)).max(256).default([]),
 }).strict()

@@ -44,7 +44,7 @@ export interface ImageEditorViewportTileRequestV3 {
   estimatedBytes: number
 }
 
-export type ImageEditorViewportOutputTileV3 = Omit<
+type ImageEditorViewportOutputTileV3 = Omit<
   ImageEditorViewportTileRequestV3,
   'key' | 'resourceRef'
 >
@@ -93,7 +93,7 @@ export interface ImageEditorViewportTilePlanOptionsV3 {
 }
 
 /** 与主进程 source-provider 的单瓦片 halo 硬上限保持一致。 */
-export const IMAGE_EDITOR_VIEWPORT_MAX_TILE_HALO_V3 = 2_048
+const IMAGE_EDITOR_VIEWPORT_MAX_TILE_HALO_V3 = 2_048
 
 export class ImageEditorViewportAdmissionErrorV3 extends Error {
   constructor() {

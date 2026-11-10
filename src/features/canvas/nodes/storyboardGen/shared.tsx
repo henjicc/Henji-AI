@@ -36,8 +36,8 @@ export const NODE_VERTICAL_PADDING_PX = 24
  * 上限放宽到 18：旧的 10px 上限在节点略大于最小尺寸时就被顶满，导致放大节点时字号"看着没变"；
  * 放宽后从最小到放大全程都有可见的字号变化，同时仍有封顶避免无限增大。
  */
-export const FRAME_TEXT_MIN_FONT_SIZE_PX = 2
-export const FRAME_TEXT_MAX_FONT_SIZE_PX = 18
+const FRAME_TEXT_MIN_FONT_SIZE_PX = 2
+const FRAME_TEXT_MAX_FONT_SIZE_PX = 18
 export const FRAME_CELL_MIN_WIDTH_PX = 24
 export const FRAME_CELL_MIN_HEIGHT_PX = 16
 /** 格子内文字单侧内边距，需与 StoryboardGridEditor 中 textarea 的 px-1.5 保持一致 */

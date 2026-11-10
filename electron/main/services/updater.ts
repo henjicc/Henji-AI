@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { createMainLogger } from './logging'
 
-export type UpdaterStatus =
+type UpdaterStatus =
   | 'idle'
   | 'checking'
   | 'available'
@@ -13,7 +13,7 @@ export type UpdaterStatus =
   | 'downloaded'
   | 'error'
 
-export interface UpdaterReleaseInfoDto {
+interface UpdaterReleaseInfoDto {
   version: string
   name: string
   body: string
@@ -21,7 +21,7 @@ export interface UpdaterReleaseInfoDto {
   htmlUrl: string
 }
 
-export interface UpdaterProgressInfoDto {
+interface UpdaterProgressInfoDto {
   percent: number
   transferred: number
   total: number
@@ -38,7 +38,7 @@ export interface UpdaterCheckResultDto {
   errorMessage?: string
 }
 
-export type UpdaterEventDto =
+type UpdaterEventDto =
   | { type: 'checking'; result: UpdaterCheckResultDto }
   | { type: 'available'; result: UpdaterCheckResultDto }
   | { type: 'not-available'; result: UpdaterCheckResultDto }

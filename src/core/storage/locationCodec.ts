@@ -31,9 +31,9 @@ import {
  * - 解码只处理带前缀的值；无法解析的引用（项目不在、写法损坏、`..` 越界）原样保留并报告。
  */
 
-export const LOCATION_CONTAINER_PREFIX = 'henji:/'
-export const LOCATION_USER_PREFIX = 'henji://user/'
-export const LOCATION_PROJECT_PREFIX = 'henji://project/'
+const LOCATION_CONTAINER_PREFIX = 'henji:/'
+const LOCATION_USER_PREFIX = 'henji://user/'
+const LOCATION_PROJECT_PREFIX = 'henji://project/'
 const LOCATION_HOST_PREFIX = 'henji://'
 const PROJECT_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/
 const LOCAL_MEDIA_URL = /^henji-media:\/\/local\//i
@@ -43,9 +43,9 @@ const FILE_URL = /^file:\/\//i
 const PATH_LIKE = /^(?:[A-Za-z]:[\\/]|[\\/]|henji|file:)/i
 const MAX_TRAVERSAL_DEPTH = 1_024
 
-export type LocationContainer = { kind: 'user' } | { kind: 'project'; projectId: string }
+type LocationContainer = { kind: 'user' } | { kind: 'project'; projectId: string }
 
-export interface LocationProjectRoot {
+interface LocationProjectRoot {
   id: string
   /** 项目文件夹的绝对路径（原生写法）。 */
   root: string
@@ -63,7 +63,7 @@ export interface LocationContext {
   container?: LocationContainer
 }
 
-export type LocationScope = 'container' | 'user' | 'project' | 'external'
+type LocationScope = 'container' | 'user' | 'project' | 'external'
 
 export interface LocationReference {
   /** 内存形态（绝对路径）。 */
@@ -73,9 +73,9 @@ export interface LocationReference {
   projectId?: string
 }
 
-export type LocationUnresolvedReason = 'unknown_project' | 'no_container' | 'invalid'
+type LocationUnresolvedReason = 'unknown_project' | 'no_container' | 'invalid'
 
-export interface LocationUnresolved {
+interface LocationUnresolved {
   /** 原样保留的存储值。 */
   value: string
   reason: LocationUnresolvedReason
@@ -91,13 +91,13 @@ export interface LocationReport {
   unresolved: LocationUnresolved[]
 }
 
-export interface LocationEncodeResult {
+interface LocationEncodeResult {
   stored: string
   reference?: LocationReference
   programReference?: boolean
 }
 
-export interface LocationDecodeResult {
+interface LocationDecodeResult {
   value: string
   reference?: LocationReference
   programReference?: boolean
@@ -112,7 +112,7 @@ export interface LocationCodec {
   decodeContent(content: unknown): { content: unknown; report: LocationReport }
 }
 
-export class LocationTraversalError extends Error {
+class LocationTraversalError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'LocationTraversalError'
@@ -136,7 +136,7 @@ function requireRoot(style: PathStyle, value: string, label: string): ParsedAbso
 }
 
 /** 存储形态是否为相对写法（`henji:/`、`henji://user/`、`henji://project/`）。 */
-export function isEncodedLocation(value: string): boolean {
+function isEncodedLocation(value: string): boolean {
   return value.startsWith(LOCATION_CONTAINER_PREFIX)
 }
 

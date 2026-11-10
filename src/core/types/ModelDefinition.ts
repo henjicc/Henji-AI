@@ -20,7 +20,7 @@ export type BuiltinModelType = 'image' | 'video' | 'audio'
 // eslint-disable-next-line @typescript-eslint/ban-types -- string & {} 保留内置字面量补全，同时允许第三方扩展值。
 export type ModelType = BuiltinModelType | (string & {})
 
-export type BuiltinProviderId =
+type BuiltinProviderId =
   | 'apimart'
   | 'bailian'
   | 'volcengine'
@@ -65,22 +65,22 @@ export interface ProgressCurveConfig {
   tailFactor?: number
 }
 
-export interface ProgressLearningFieldSegment {
+interface ProgressLearningFieldSegment {
   kind: 'field'
   field: string
 }
 
-export interface ProgressLearningTextLengthSegment {
+interface ProgressLearningTextLengthSegment {
   kind: 'textLength'
   field: 'prompt' | 'text'
   buckets: number[]
 }
 
-export type ProgressLearningSegment =
+type ProgressLearningSegment =
   | ProgressLearningFieldSegment
   | ProgressLearningTextLengthSegment
 
-export interface ProgressLearningConfig {
+interface ProgressLearningConfig {
   segments?: ProgressLearningSegment[]
   enableTimeBuckets?: boolean
 }
@@ -88,7 +88,7 @@ export interface ProgressLearningConfig {
 /**
  * Progress config for sync models
  */
-export interface ProgressTimeConfig {
+interface ProgressTimeConfig {
   /** Mode: time-based estimate */
   mode: 'time'
 
@@ -121,7 +121,7 @@ export interface ProgressTimeConfig {
 /**
  * Progress config for async models
  */
-export interface ProgressPollingConfig {
+interface ProgressPollingConfig {
   /** Mode: polling-based estimate */
   mode: 'polling'
 

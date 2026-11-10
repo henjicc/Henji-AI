@@ -13,7 +13,7 @@ import { RETRO_SCREEN_SHADER_GRAPH } from '../retroScreen'
 import { WRAPPED_GENERATOR_SHADER_GRAPHS, WRAPPED_GENERATOR_SOURCES } from '../generators'
 import { shaderComponentParams, shaderComponentProps } from './componentParams'
 
-export { shaderComponentParams, shaderComponentProps, shaderParamKey, shaderPositionKeys } from './componentParams'
+export { shaderComponentParams, shaderComponentProps } from './componentParams'
 export const SHADER_EFFECT_PREFIX = 'shaders.'
 const GROUPS: Readonly<Record<string, VideoEditBuiltinGroup>> = {
   Textures: 'shader_texture', 'Shape Effects': 'shader_material', Blurs: 'shader_blur', Distortions: 'shader_distort', Adjustments: 'shader_adjust', Stylize: 'shader_stylize',

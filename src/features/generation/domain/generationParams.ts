@@ -17,7 +17,7 @@ import { validateParamValue } from '@/hooks/utils/defaultExtractor'
  * registry.getModel(id).linkages）。这里的签名把 linkages 加回来，不是可选项。
  */
 
-export interface GenerationParamIssue {
+interface GenerationParamIssue {
   paramId: string
   reason: string
 }

@@ -12,7 +12,7 @@ const logger = createLogger('features.videoEdit.annotationBatch')
 /** 谁在改：界面是用户本人，能力调用方一律按助手对待（只能追加自己的回复、不能代用户确认未改完的批注）。 */
 export interface VideoEditAnnotationActor { source: 'user' | 'agent'; author: VideoEditAnnotation['author'] }
 export const VIDEO_EDIT_ANNOTATION_USER: VideoEditAnnotationActor = { source: 'user', author: { kind: 'user', name: '我' } }
-export const VIDEO_EDIT_ANNOTATION_ASSISTANT: VideoEditAnnotationActor = { source: 'agent', author: { kind: 'assistant', name: '助手' } }
+const VIDEO_EDIT_ANNOTATION_ASSISTANT: VideoEditAnnotationActor = { source: 'agent', author: { kind: 'assistant', name: '助手' } }
 
 /** 选中一批批注：显式给 id，或按条件（可限定序列）筛选。 */
 export type VideoEditAnnotationSelection = { ids: readonly string[] } | { sequenceId?: string; filter: VideoEditAnnotationFilter }
@@ -61,7 +61,7 @@ function message(actor: VideoEditAnnotationActor, text: string): VideoEditAnnota
 }
 
 /** 某一条批注不合规则让整批被拒：带上那一条的 id，能力适配层据此给出完整引用，界面只显示正文摘要。 */
-export class VideoEditAnnotationRejection extends Error {
+class VideoEditAnnotationRejection extends Error {
   constructor(message: string, readonly annotationId: string) { super(message); this.name = 'VideoEditAnnotationRejection' }
 }
 

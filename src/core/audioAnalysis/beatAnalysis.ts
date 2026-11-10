@@ -1,6 +1,6 @@
 import { videoEditFft } from '../videoEdit/fft'
 
-export interface AudioBeat { seconds: number; strength: number }
+interface AudioBeat { seconds: number; strength: number }
 export interface BeatAnalysisResult { beats: AudioBeat[]; onsets: AudioBeat[]; tempo: number | null }
 
 /**

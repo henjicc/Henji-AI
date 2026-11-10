@@ -20,7 +20,7 @@ import { mapCanvasNodeMediaReferences, resolveCanvasNodeMediaSchema } from './ca
 
 export const DEFAULT_CANVAS_VIEWPORT: Viewport = { x: 0, y: 0, zoom: 1 }
 /** 程序目录里保留的撤销步数（与原画布记录一致）。 */
-export const MAX_PERSISTED_CANVAS_HISTORY_STEPS = 12
+const MAX_PERSISTED_CANVAS_HISTORY_STEPS = 12
 
 export interface ProjectSummary {
   /** 画布文档 ID。 */

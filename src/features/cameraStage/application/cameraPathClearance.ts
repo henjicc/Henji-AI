@@ -21,7 +21,7 @@ const MIN_SAMPLES = 96
 const MAX_SAMPLES = 4000
 const REPORT_LIMIT = 8
 
-export interface CameraPathObstruction {
+interface CameraPathObstruction {
   objectId: string
   name: string
   /** 第一次碰到它的时间（秒） */

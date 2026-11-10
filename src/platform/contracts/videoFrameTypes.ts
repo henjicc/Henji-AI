@@ -35,7 +35,7 @@ export interface VideoFramesPortWindowMessage {
   route: string
 }
 
-export interface VideoFrameColorSpace {
+interface VideoFrameColorSpace {
   primaries: string
   transfer: string
   matrix: string
@@ -85,7 +85,7 @@ export interface VideoFrameDecoderRequest {
 }
 
 /** 解码会话的解码细节（诊断与日志用，不进正式界面）。 */
-export interface VideoFrameDecoderDetails {
+interface VideoFrameDecoderDetails {
   codec: string | null
   decoderName: string
   hardware: boolean
@@ -371,7 +371,7 @@ export interface VideoFramePortResponseMessage {
 }
 
 /** 主进程的解码错误在 IPC 中以错误名 `VideoDecoderError:<错误码>` 传递（3.1）。 */
-export const VIDEO_DECODER_ERROR_NAME_PREFIX = 'VideoDecoderError:'
+const VIDEO_DECODER_ERROR_NAME_PREFIX = 'VideoDecoderError:'
 
 /** 从 IPC 传来的错误名取回错误码；不是解码服务的错误时为 undefined。 */
 export function videoFrameErrorCode(name: unknown): string | undefined {

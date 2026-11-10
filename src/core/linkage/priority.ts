@@ -21,7 +21,7 @@ import { LinkageEffect } from '../types/Linkage'
  * 7. hide: 隐藏参数
  * 8. custom: 最后执行，自定义逻辑
  */
-export const DEFAULT_LINKAGE_PRIORITY: Record<LinkageEffect, number> = {
+const DEFAULT_LINKAGE_PRIORITY: Record<LinkageEffect, number> = {
   reset: 1,
   setValue: 2,
   autoSwitch: 3,
@@ -38,7 +38,7 @@ export const DEFAULT_LINKAGE_PRIORITY: Record<LinkageEffect, number> = {
  * @param linkage - 联动配置
  * @returns 优先级数值（越小优先级越高）
  */
-export function getLinkagePriority(linkage: { effect: LinkageEffect; priority?: number }): number {
+function getLinkagePriority(linkage: { effect: LinkageEffect; priority?: number }): number {
   // 如果联动配置中指定了优先级，使用指定的优先级
   if (linkage.priority !== undefined) {
     return linkage.priority

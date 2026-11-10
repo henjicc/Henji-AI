@@ -105,7 +105,7 @@ export class VideoEditTimeStretcher {
 }
 
 /** 把若干源缓冲（声道映射的各个流）按输入坐标读出来的读取器；输入坐标 u = 方向 × 源样本号。 */
-export function videoEditStretchBufferReader(buffers: readonly VideoEditSourceBuffer[], direction: 1 | -1): VideoEditStretchInputRead {
+function videoEditStretchBufferReader(buffers: readonly VideoEditSourceBuffer[], direction: 1 | -1): VideoEditStretchInputRead {
   return (from, count, planes) => {
     for (const plane of planes) plane.fill(0, 0, count)
     for (const buffer of buffers) for (let channel = 0; channel < planes.length; channel++) {

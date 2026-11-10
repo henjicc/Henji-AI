@@ -34,7 +34,7 @@ export function boxIoU(a: Pick<FaceDetection, 'x' | 'y' | 'width' | 'height'>, b
   return union > 0 ? intersection / union : 0
 }
 
-export function nonMaximumSuppression<T extends FaceDetection>(detections: readonly T[], threshold: number): T[] {
+function nonMaximumSuppression<T extends FaceDetection>(detections: readonly T[], threshold: number): T[] {
   const sorted = [...detections].sort((a, b) => b.score - a.score)
   const kept: T[] = []
   for (const detection of sorted) if (kept.every(other => boxIoU(detection, other) <= threshold)) kept.push(detection)

@@ -17,7 +17,7 @@ export function outpaintSamplePosition(u: number, v: number): [number, number] {
 }
 
 /** One continuous low-resolution field, never independently stretched tiles. */
-export function bakeOutpaintPreview(pixels: Uint8ClampedArray, width: number, height: number, maximum: number): string {
+function bakeOutpaintPreview(pixels: Uint8ClampedArray, width: number, height: number, maximum: number): string {
   const padding = 48
   const padded = document.createElement('canvas')
   const output = document.createElement('canvas')

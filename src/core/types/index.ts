@@ -14,7 +14,6 @@ export type { ModelTag } from './ModelTags'
 // 端点配置
 export type {
   EndpointConfig,
-  EndpointRule,
   RouteDefinition
 } from './EndpointConfig'
 
@@ -23,8 +22,7 @@ export type { RequestConfig } from './RequestConfig'
 
 // 价格配置
 export type {
-  PricingConfig,
-  Currency
+  PricingConfig
 } from './PricingConfig'
 
 // 组件类型
@@ -36,9 +34,7 @@ export { deriveSocketType, isSocketCompatible, getSocketColor } from './SocketTy
 
 // API 映射
 export type {
-  ApiFieldMapping,
   ApiTransform,
-  ApiMapping,
   ApiConfig
 } from './ApiMapping'
 
@@ -55,7 +51,6 @@ export type {
 export type {
   InputLimits,
   InputLimitsConfig,
-  InputLimitsResolver,
   InputLimitRule,
   InputCountLimit,
   ImageConstraints,
@@ -65,18 +60,11 @@ export type {
 // 生成要求
 export type {
   GenerationRequirement,
-  RequirementMessage,
-  RequirementCount
+  RequirementMessage
 } from './GenerationRequirements'
 
 // 运行时约束
 export type {
-  RuntimeConstraintValue,
-  RuntimeNumberFieldConstraint,
-  RuntimeEnumFieldConstraint,
-  RuntimeImageSizeFieldConstraint,
-  RuntimeMediaFieldKind,
-  RuntimeMediaFieldConstraint,
   RuntimeConstraints
 } from './RuntimeConstraints'
 
@@ -102,16 +90,7 @@ export type {
 export type {
   Linkage,
   LinkageArray,
-  LinkageEffect,
-  BaseLinkage,
-  ResetLinkage,
-  FilterOptionsLinkage,
-  FilterRangeLinkage,
-  SetValueLinkage,
-  AutoSwitchLinkage,
-  DisableLinkage,
-  HideLinkage,
-  CustomLinkage
+  LinkageEffect
 } from './Linkage'
 
 // 模型定义（核心）
@@ -121,29 +100,19 @@ export type {
   ModelMeta,
   BuiltinModelType,
   ModelType,
-  BuiltinProviderId,
   ProviderId,
   ModelParamPresentation,
   ParamPresentationGroup,
   ParamPresentationSection,
   ProgressConfig,
-  ProgressTimeConfig,
-  ProgressPollingConfig,
-  ProgressCurveConfig,
-  ProgressLearningConfig,
-  ProgressLearningSegment,
-  ProgressLearningFieldSegment,
-  ProgressLearningTextLengthSegment
+  ProgressCurveConfig
 } from './ModelDefinition'
 
 // 面板类型
 export type {
   PanelType,
-  TriggerStyle,
-  PanelAlignment,
   ResolutionPanelConfig,
   VoiceSelectorConfig,
-  CompositePanelConfig,
   CustomPanelConfig,
   SpecialPanelConfig
 } from './PanelTypes'
@@ -151,10 +120,9 @@ export type {
 // 预设类型
 export type {
   Preset,
-  PresetParams,
   CreatePresetInput,
   UpdatePresetInput,
   PresetQueryOptions
 } from './Preset'
 
-export type { AiRuntimeTrace, AiRuntimeTracePhase } from './AiRuntimeTrace'
+export type { AiRuntimeTrace } from './AiRuntimeTrace'

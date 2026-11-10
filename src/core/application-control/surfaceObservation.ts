@@ -4,7 +4,7 @@ import { APPLICATION_OBSERVATION_TARGETS } from './applicationSurfaces'
 
 export const SURFACE_OBSERVATION_SCHEMA_VERSION = 'surface-observation/v1' as const
 
-export const surfaceCaptureRectSchema = z.object({
+const surfaceCaptureRectSchema = z.object({
   x: z.number().int().nonnegative().max(16_384),
   y: z.number().int().nonnegative().max(16_384),
   width: z.number().int().min(1).max(4_096),
@@ -40,7 +40,7 @@ export const surfaceCaptureResultSchema = z.object({
 }).strict()
 export type SurfaceCaptureResult = z.infer<typeof surfaceCaptureResultSchema>
 
-export const surfaceObservationVerificationSchema = z.enum([
+const surfaceObservationVerificationSchema = z.enum([
   'structured',
   'visual_pending_model',
   'visual_verified_by_primary',
@@ -57,7 +57,7 @@ export type SurfaceObservationVerification = z.infer<typeof surfaceObservationVe
  * 合法附件，像素就一定会进模型；反过来，产不出附件的能力也就不会让模型误以为
  * “已经看过画面”。
  */
-export const pendingVisualObservationSchema = z.object({
+const pendingVisualObservationSchema = z.object({
   verificationKind: z.literal('visual_pending_model'),
   attachment: z.unknown(),
 })

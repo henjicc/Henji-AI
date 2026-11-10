@@ -14,7 +14,7 @@ import { createMainLogger, type MainLogger } from './logging/main-logger'
  * 这样纸白等浅色主题在窗口 ready-to-show 之前、缩放露底时也不会露出深色底。
  */
 
-export type WindowColorScheme = 'dark' | 'light'
+type WindowColorScheme = 'dark' | 'light'
 
 export interface WindowAppearance {
   windowBackground: string
@@ -49,7 +49,7 @@ export function parseWindowAppearance(input: unknown): WindowAppearance {
   return { windowBackground: windowBackground.toUpperCase(), colorScheme }
 }
 
-export interface WindowAppearanceTarget {
+interface WindowAppearanceTarget {
   isDestroyed(): boolean
   setBackgroundColor(color: string): void
 }

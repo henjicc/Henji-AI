@@ -7,13 +7,13 @@ export const motionReviewSampleSchema = interval.safeExtend({
   change: z.number().finite().min(0).max(1).nullable(), cut: z.boolean(), still: z.boolean().nullable(),
 }).strict()
 export type MotionReviewSample = z.infer<typeof motionReviewSampleSchema>
-export const motionReviewEventSchema = interval.safeExtend({
+const motionReviewEventSchema = interval.safeExtend({
   kind: z.enum(['cut', 'move', 'change']), peak: z.number().finite().nonnegative().optional(),
   motion: z.enum(['push', 'pull', 'pan']).optional(), hardStop: z.boolean().optional(),
   changedRatio: z.number().min(0).max(1).optional(),
 }).strict()
-export type MotionReviewEvent = z.infer<typeof motionReviewEventSchema>
-export const motionReviewReportSchema = z.object({
+type MotionReviewEvent = z.infer<typeof motionReviewEventSchema>
+const motionReviewReportSchema = z.object({
   events: z.array(motionReviewEventSchema).max(20000), stillness: z.array(interval).max(20000), unknown: z.array(interval).max(20000),
   crowded: z.array(interval.safeExtend({ gapSeconds: z.number().finite().nonnegative(), kinds: z.tuple([z.enum(['cut', 'move', 'change']), z.enum(['cut', 'move', 'change'])]) }).strict()).max(20000),
   curve: z.array(z.object({ timeSeconds: seconds, speed: z.number().finite().nonnegative().nullable(), change: z.number().min(0).max(1).nullable() }).strict()).max(400),

@@ -5,7 +5,7 @@
 import type { RuntimeImageConstraints, RuntimeMediaDimensionConstraints } from '@henjicc/ai-sdk'
 import type { ConditionExpression, ConditionFunction } from './ConditionTypes'
 
-export type InputCondition = ConditionExpression | ConditionFunction
+type InputCondition = ConditionExpression | ConditionFunction
 
 export interface InputCountLimit {
   min?: number
@@ -44,6 +44,6 @@ export interface InputLimitsConfig {
   rules?: InputLimitRule[]
 }
 
-export type InputLimitsResolver = (params: DynamicValueMap) => InputLimitsConfig
+type InputLimitsResolver = (params: DynamicValueMap) => InputLimitsConfig
 
 export type InputLimits = InputLimitsConfig | InputLimitsResolver

@@ -20,7 +20,7 @@ export function getMediaCacheSettings(): MediaCacheSettings { return snapshot }
 export function subscribeMediaCacheSettings(listener: () => void): () => void { listeners.add(listener); return () => { listeners.delete(listener) } }
 
 /** 启动时与主进程通知变化时调用；宿主不可用时保持默认值。 */
-export function loadMediaCacheSettings(): Promise<MediaCacheSettings> {
+function loadMediaCacheSettings(): Promise<MediaCacheSettings> {
   loading ??= (async () => {
     try {
       snapshot = mediaCacheSettingsSchema.parse(await getPlatform().mediaCache.getSettings())

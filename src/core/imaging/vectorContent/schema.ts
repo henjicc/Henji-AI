@@ -5,7 +5,7 @@ import type { RichTextContent } from './contracts';
 const coordinate = z.number().finite().refine(value => Math.abs(value) <= Number.MAX_SAFE_INTEGER, '路径坐标超出浮点精确坐标范围。');
 const nonnegative = coordinate.nonnegative();
 const point = { x: coordinate, y: coordinate };
-export const vectorPathSchema = z.object({
+const vectorPathSchema = z.object({
   commands: z.array(z.discriminatedUnion('kind', [
     z.object({ kind: z.literal('move'), ...point }).strict(),
     z.object({ kind: z.literal('line'), ...point }).strict(),

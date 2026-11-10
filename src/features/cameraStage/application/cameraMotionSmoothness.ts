@@ -9,7 +9,7 @@ import { sampleAnimationFrame } from '../store/playbackSampling'
  * 结果写进运镜能力的结果证据，助手据此自检“有没有一顿一顿”。
  */
 
-export interface CameraMotionJointSmoothness {
+interface CameraMotionJointSmoothness {
   time: number
   /** 经过衔接点时的速度（米/秒） */
   speed: number

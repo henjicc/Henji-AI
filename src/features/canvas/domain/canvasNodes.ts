@@ -58,7 +58,7 @@ export type CanvasNodeData =
 
 export type CanvasNode = Node<CanvasNodeData, CanvasNodeType>;
 
-export interface CanvasEdgeData extends Record<string, unknown> {
+interface CanvasEdgeData extends Record<string, unknown> {
   managedByAssetGroup?: {
     groupId: string;
     bindingId: string;

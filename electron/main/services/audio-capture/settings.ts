@@ -2,7 +2,7 @@ import { audioCaptureSettingsEnvelopeSchema, audioCaptureSettingsSchema, DEFAULT
 import { getSettingsStore } from '../settings/store'
 import { AudioCaptureError } from './protocol'
 
-export const AUDIO_CAPTURE_SETTINGS_KEY = 'audio_capture.settings'
+const AUDIO_CAPTURE_SETTINGS_KEY = 'audio_capture.settings'
 export interface CaptureSettingsStore { get(key: string): string | null; set(key: string, value: string, type: 'json'): void }
 /** 不静默清除损坏/较新版本的设置；读取不会改写数据库。 */
 export class AudioCaptureSettingsService {

@@ -7,16 +7,16 @@ export interface PromptMediaBinding {
   filePath?: string
 }
 
-export interface PromptTextV1 {
+interface PromptTextV1 {
   type: 'text'
   text: string
 }
 
-export interface PromptHardBreakV1 {
+interface PromptHardBreakV1 {
   type: 'hardBreak'
 }
 
-export interface PromptMediaReferenceV1 {
+interface PromptMediaReferenceV1 {
   type: 'mediaReference'
   attrs: {
     resourceId: string
@@ -26,7 +26,7 @@ export interface PromptMediaReferenceV1 {
   }
 }
 
-export interface PromptTemplateVariableV1 {
+interface PromptTemplateVariableV1 {
   type: 'templateVariable'
   attrs: {
     key: string

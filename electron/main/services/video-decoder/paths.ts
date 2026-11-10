@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-export const VIDEO_DECODER_EXECUTABLE_NAME = 'henji-video-decoder.exe'
+const VIDEO_DECODER_EXECUTABLE_NAME = 'henji-video-decoder.exe'
 
 export interface VideoDecoderPathContext {
   isPackaged: boolean

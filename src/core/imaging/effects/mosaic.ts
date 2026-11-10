@@ -2,7 +2,7 @@ import { z } from 'zod'
 import type { EffectDescriptor, EffectEvaluationContext } from './descriptor'
 import type { ImagingParam } from '../parameterDefinition'
 
-export const MOSAIC_PARAMETERS: readonly ImagingParam[] = [{
+const MOSAIC_PARAMETERS: readonly ImagingParam[] = [{
   key: 'block_fraction_height', name: '色块大小', type: 'number', unit: 'fraction_height',
   min: 0, max: 1, step: 0.001, default: 0.02, animatable: true,
   tooltip: '色块边长占画面高度的比例',

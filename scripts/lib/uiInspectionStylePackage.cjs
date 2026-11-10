@@ -46,4 +46,4 @@ async function prepareStylePackage(filename, exportBuiltin) {
   return { builtin: value.style.id, styleId: style.id, templates: templates.map(template => template.id), bytes: fs.statSync(filename).size }
 }
 
-module.exports = { prepareStylePackage, templateSource }
+module.exports = { prepareStylePackage }

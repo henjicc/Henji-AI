@@ -11,7 +11,7 @@ export interface AssistantCliOptions {
   threadId?: string
 }
 
-export interface AssistantCliHelpOptions {
+interface AssistantCliHelpOptions {
   help: true
 }
 

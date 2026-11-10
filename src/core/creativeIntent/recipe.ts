@@ -4,11 +4,11 @@ import { interpolateVideoEditKeyframe, videoEditBezierSchema } from '../videoEdi
 import { finiteSchema, pointSchema, poseSchema, type Pose } from './contracts'
 
 const scales = z.tuple([finiteSchema.positive(), finiteSchema.positive()])
-export const motionTimingSchema = z.discriminatedUnion('kind', [
+const motionTimingSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('linear') }).strict(),
   z.object({ kind: z.literal('bezier'), bezier: videoEditBezierSchema }).strict(),
 ])
-export const primitiveIntentSchema = z.discriminatedUnion('kind', [
+const primitiveIntentSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('follow_path'), preserveJitter: z.boolean(), timing: motionTimingSchema.optional() }).strict(),
   z.object({ kind: z.literal('move_line'), from: pointSchema, to: pointSchema, timing: motionTimingSchema.optional() }).strict(),
   z.object({ kind: z.literal('move_arc'), from: pointSchema, to: pointSchema, bendRatio: finiteSchema, timing: motionTimingSchema.optional() }).strict(),
@@ -26,7 +26,7 @@ export const primitiveIntentSchema = z.discriminatedUnion('kind', [
 ])
 export type PrimitiveIntent = z.infer<typeof primitiveIntentSchema>
 /** Nonrecursive finite composition; period is a frame-grid constraint, not a product limit. */
-export const cycleIntentSchema = z.object({
+const cycleIntentSchema = z.object({
   kind: z.literal('cycle'), template: primitiveIntentSchema, mode: z.enum(['loop', 'pingpong']), periodFrames: z.number().int().positive(),
 }).strict().refine(v => v.template.kind !== 'follow_path', '循环模板必须是明确动作')
 export const motionIntentSchema = z.union([primitiveIntentSchema, cycleIntentSchema])

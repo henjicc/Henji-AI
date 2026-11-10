@@ -11,7 +11,7 @@ import { splitImageEditV3DocumentRef } from './imageEditDocumentRefs'
 
 /** 校色参考：本机图片文件（界面选择），或助手传入的稳定引用（素材、生成结果、编辑预览、画布节点、另一份图片文档）。 */
 export type ImageEditColorReferenceV3 = { kind: 'file'; path: string } | { kind: 'ref'; ref: ApplicationRef }
-export const IMAGE_EDIT_COLOR_REFERENCE_KINDS = ['asset', 'generation.result', 'image_edit.preview', 'canvas.node', 'image_edit.document'] as const
+const IMAGE_EDIT_COLOR_REFERENCE_KINDS = ['asset', 'generation.result', 'image_edit.preview', 'canvas.node', 'image_edit.document'] as const
 
 const SAMPLE_EDGE = 256
 

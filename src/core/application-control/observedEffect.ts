@@ -12,9 +12,9 @@ import { z } from 'zod'
  */
 
 /** 单条 Effect 能带的实体类型数量上限。 */
-export const APPLICATION_EFFECT_ENTITY_TYPE_LIMIT = 16
+const APPLICATION_EFFECT_ENTITY_TYPE_LIMIT = 16
 
-export const applicationObservedEffectKindSchema = z.enum([
+const applicationObservedEffectKindSchema = z.enum([
   'observe',
   'create',
   'update',
@@ -45,7 +45,7 @@ export function isMutatingEffect(effect: { effect: ApplicationObservedEffectKind
 }
 
 /** 能力的动作类别。只用于能力发现的排序与可达性门禁，不参与任何执行判定。 */
-export const applicationCapabilityKindSchema = z.enum([
+const applicationCapabilityKindSchema = z.enum([
   'observe',
   'query',
   'plan',
@@ -55,7 +55,7 @@ export const applicationCapabilityKindSchema = z.enum([
 ])
 export type ApplicationCapabilityKind = z.infer<typeof applicationCapabilityKindSchema>
 
-export const applicationEffectTargetSchema = z.object({
+const applicationEffectTargetSchema = z.object({
   kind: z.string().min(1).max(128),
   id: z.string().min(1).max(500),
 }).strict()

@@ -7,9 +7,9 @@
  * - 本文件是纯类型，主进程与渲染层共用，只用相对导入。
  */
 
-export type GenerationHistoryMediaType = 'image' | 'video' | 'audio'
+type GenerationHistoryMediaType = 'image' | 'video' | 'audio'
 
-export type GenerationHistoryStatus =
+type GenerationHistoryStatus =
   | 'queued'
   | 'pending'
   | 'generating'
@@ -21,7 +21,7 @@ export type GenerationHistoryStatus =
   | 'completed'
   | 'failed'
 
-export type LocalRecordParams = Record<string, unknown>
+type LocalRecordParams = Record<string, unknown>
 
 export interface GenerationHistoryRecordDto {
   id: string

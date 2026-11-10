@@ -25,7 +25,7 @@ import type { StageObstacle } from './stageObstacles'
  * 覆盖、剪辑与检查都用这一份量法，剪辑规则判的是实际画面，不是意图。
  */
 
-export const EDIT_SAMPLE_STEP = 0.2
+const EDIT_SAMPLE_STEP = 0.2
 /** 骑轴：机位到两人中点的水平方向与轴线夹角小于这个角度（度）时既不算这一侧也不算那一侧。 */
 const ON_AXIS_DEGREES = 6
 const DEG = Math.PI / 180

@@ -39,7 +39,7 @@ function settingsTargetMatches(
     && (current.sectionId ?? null) === (expected.sectionId ?? null)
 }
 
-export function isApplicationSurfaceActive(surface: ApplicationSurfaceDefinition): boolean {
+function isApplicationSurfaceActive(surface: ApplicationSurfaceDefinition): boolean {
   if (surface.id === 'overlay.assistant') return useAssistantUiStore.getState().open
   if (surface.settingsTarget) {
     const ui = useUiStore.getState()

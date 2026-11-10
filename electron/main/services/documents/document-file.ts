@@ -31,7 +31,7 @@ export interface DocumentFileStat {
   birthtimeMs: number
 }
 
-export interface DocumentFileHeader {
+interface DocumentFileHeader {
   id: string
   /** 文件头里的名称；对外以文件名为准，保存时同步。 */
   name: string
@@ -159,7 +159,7 @@ export async function statDocumentLocation(kind: DocumentKindDescriptor, filePat
   return { size: header.size, mtimeMs: header.mtimeMs, birthtimeMs: info.birthtimeMs }
 }
 
-export function documentPersistenceContract(kind: DocumentKindDescriptor): PersistenceContract {
+function documentPersistenceContract(kind: DocumentKindDescriptor): PersistenceContract {
   return { id: `document.${kind.id}`, name: kind.untitledNames.zh.replace('未命名', ''), version: kind.version, minReaderVersion: kind.minReaderVersion, schema: kind.contentSchema, migrations: kind.migrations }
 }
 

@@ -129,7 +129,6 @@ function passesRasterControl(candidate, negativeControl, ratioLimit = RASTER_CON
 
 module.exports = {
   diffColorBuffers,
-  PIXEL_DIFF_THRESHOLD,
   RASTER_CONTROL_RATIO_LIMIT,
   cropCompare,
   diffBuffers,

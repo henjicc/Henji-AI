@@ -35,7 +35,7 @@ const logger = createLogger('features.cameraStage.shot')
 export type CameraStageShotInput = { projectId: string } & z.output<z.ZodObject<typeof cameraStageShotIntentShape>>
 
 /** 每台摄像机的结果就是对外契约里的一条，类型从契约 schema 推出。 */
-export type CameraStageShotCameraResult = z.infer<typeof cameraStageComposedShotSchema>
+type CameraStageShotCameraResult = z.infer<typeof cameraStageComposedShotSchema>
 
 export interface CameraStageShotResult {
   projectId: string

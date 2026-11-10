@@ -24,7 +24,7 @@ const EASING_PRESET_BEZIER: Record<string, [number, number, number, number]> = {
   easeInOut: [0.42, 0, 0.58, 1],
 }
 
-export function resolveEasingControlPoints(easing: StageEasing): [number, number, number, number] {
+function resolveEasingControlPoints(easing: StageEasing): [number, number, number, number] {
   if (typeof easing === 'string') {
     return EASING_PRESET_BEZIER[easing] ?? EASING_PRESET_BEZIER.linear
   }
@@ -47,7 +47,7 @@ function bezierAxisDerivative(c1: number, c2: number, t: number): number {
  * 求 cubic-bezier 在给定归一化时间 x（∈[0,1]）处的缓动进度 y。
  * 先由 x 解出参数 t（牛顿迭代，失败回退二分），再代入 y 轴曲线。
  */
-export function cubicBezierEase(
+function cubicBezierEase(
   x1: number,
   y1: number,
   x2: number,
@@ -189,7 +189,7 @@ function lerpVec3(a: StageVec3, b: StageVec3, f: number): StageVec3 {
 }
 
 /** #rgb / #rrggbb → [r,g,b]（0~255） */
-export function parseHexColor(hex: string): [number, number, number] {
+function parseHexColor(hex: string): [number, number, number] {
   let value = hex.trim().replace(/^#/, '')
   if (value.length === 3) {
     value = value
@@ -214,7 +214,7 @@ function lerpColor(a: string, b: string, f: number): string {
   return toHexColor(lerp(ar, br, f), lerp(ag, bg, f), lerp(ab, bb, f))
 }
 
-export function interpolateValue(
+function interpolateValue(
   a: StageKeyframeValue,
   b: StageKeyframeValue,
   f: number,
@@ -272,7 +272,7 @@ export function sampleTrack(
 }
 
 /** 关键帧数组内查找与目标时间同点（容差内）的下标，无则 -1 */
-export function indexOfKeyframeAtTime(keyframes: StageKeyframe[], time: number): number {
+function indexOfKeyframeAtTime(keyframes: StageKeyframe[], time: number): number {
   return keyframes.findIndex((kf) => Math.abs(kf.time - time) <= KEYFRAME_TIME_EPSILON)
 }
 

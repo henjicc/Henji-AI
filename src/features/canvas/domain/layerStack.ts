@@ -1,7 +1,7 @@
 export const LAYER_STACK_VERSION = 1 as const;
 
-export type LayerStackStatus = 'ready' | 'degraded';
-export type LayerStackResourceStatus = 'ready' | 'missing';
+type LayerStackStatus = 'ready' | 'degraded';
+type LayerStackResourceStatus = 'ready' | 'missing';
 
 export interface LayerStackMediaResourceV1 {
   version: 1;
@@ -16,7 +16,7 @@ export interface LayerStackMediaResourceV1 {
   sha256: string | null;
 }
 
-export interface LayerStackLayerV1 {
+interface LayerStackLayerV1 {
   version: 1;
   layerId: string;
   sourceOutputIndex: number;
@@ -65,7 +65,7 @@ export interface LayerStackDocumentV1 {
   resources: LayerStackMediaResourceV1[];
 }
 
-export class LayerStackContractError extends Error {
+class LayerStackContractError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'LayerStackContractError';

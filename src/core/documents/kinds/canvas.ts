@@ -34,7 +34,7 @@ const canvasEdgeSchema = z.looseObject({
   target: z.string().min(1),
 })
 
-export const canvasContentSchema = z.looseObject({
+const canvasContentSchema = z.looseObject({
   nodes: z.array(canvasNodeSchema),
   edges: z.array(canvasEdgeSchema),
   imagePool: z.array(z.string()).optional(),

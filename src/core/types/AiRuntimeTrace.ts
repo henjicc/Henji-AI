@@ -1,4 +1,4 @@
-export type AiRuntimeTracePhase = 'generate' | 'continuePolling'
+type AiRuntimeTracePhase = 'generate' | 'continuePolling'
 
 export interface AiRuntimeTrace {
   modelId: string

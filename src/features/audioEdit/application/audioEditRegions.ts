@@ -37,7 +37,7 @@ function rememberSavedRevision(instance: AudioEditProjectInstance, file: number,
   savedRevisions.set(instance, list)
 }
 /** 宿主标的文件版本换算成显示端用的内存版本（见上）。 */
-export function audioEditMemoryRevision(projectId: string, fileRevision: number): number {
+function audioEditMemoryRevision(projectId: string, fileRevision: number): number {
   const instance = getAudioEditProjectInstance(projectId)
   let memory = -1
   for (const entry of (instance && savedRevisions.get(instance)) || []) {
@@ -67,7 +67,7 @@ export function cancelAudioEditSpectralTile(requestId: string): Promise<void> {
   if (state) state.cancelled = true
   return getPlatform().audioEdit.spectralCancel(requestId)
 }
-export function subscribeAudioEditSpectralProgress(handler: (progress: AudioEditSpectralProgress) => void): () => void {
+function subscribeAudioEditSpectralProgress(handler: (progress: AudioEditSpectralProgress) => void): () => void {
   return getPlatform().audioEdit.onSpectralProgress(progress => handler(progress.mode === 'edited' ? { ...progress, revision: audioEditMemoryRevision(progress.projectId, progress.revision) } : progress))
 }
 export async function renderAudioEdit(projectId: string, requestId: string = crypto.randomUUID()): Promise<AudioEditRenderedAudio> {

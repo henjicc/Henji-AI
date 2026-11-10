@@ -24,7 +24,7 @@ import type { VideoEditScene, VideoEditSceneRecord } from './sceneSchema'
  */
 
 /** 窗口里换一段素材时默认叠化的时长（秒）；同一段素材跳到别处时不叠化，写了 xf 的按 xf。 */
-export const VIDEO_EDIT_SCENE_CROSSFADE_SECONDS = 0.45
+const VIDEO_EDIT_SCENE_CROSSFADE_SECONDS = 0.45
 /**
  * 剪切结尾前这么久起步的记录算剪切后面的。这是给整段剪掉准备的：下一段的镜头往往比段落早一点起动。
  * 很短的剪切（剪掉一口气、一个停顿）里没有段落，取不超过剪切长度的一半，剪切口本身不跟着移动。
@@ -146,7 +146,7 @@ export interface ResolvedVideoEditSceneShot {
   /** 作者代码 inputs.images 里这一项画面的键（取帧参数按同一个键派生）。 */
   readonly input: string
 }
-export interface ResolvedVideoEditSceneTimetable {
+interface ResolvedVideoEditSceneTimetable {
   /** 容纳它的窗口记录；窗口内容没有父记录时 undefined。 */
   readonly container: ResolvedVideoEditSceneRecord | undefined
   /** 窗口内容的记录类型。 */

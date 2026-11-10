@@ -21,7 +21,7 @@ const logger = createLogger('core.linkage.smartMatch')
  * // '16:9' (1.777... 最接近 1.77)
  * ```
  */
-export function findClosestRatio(targetRatio: number, ratios: string[]): string {
+function findClosestRatio(targetRatio: number, ratios: string[]): string {
   if (ratios.length === 0) {
     throw new Error('Ratios array cannot be empty')
   }
@@ -65,7 +65,7 @@ export function findClosestRatio(targetRatio: number, ratios: string[]): string 
  * // '16:9'
  * ```
  */
-export function findClosestAspectRatio(
+function findClosestAspectRatio(
   imageSize: { width: number; height: number },
 
   ratios: string[]
@@ -90,7 +90,7 @@ export function findClosestAspectRatio(
  * // { width: 1920, height: 1080 }
  * ```
  */
-export async function getImageSize(
+async function getImageSize(
   dataUrl: string
 ): Promise<{ width: number; height: number }> {
   return new Promise((resolve, reject) => {

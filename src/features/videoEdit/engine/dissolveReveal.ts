@@ -19,7 +19,7 @@ import { appendGlow, createGlowPlanner } from './glow'
 import { linearHex } from './lightSweep'
 import { BLUE_NOISE_64_RANKS } from './blueNoise64.generated'
 
-export const DISSOLVE_REVEAL_ENTRIES = ['dissolve_image', 'dissolve_light', 'dissolve_transition'] as const
+const DISSOLVE_REVEAL_ENTRIES = ['dissolve_image', 'dissolve_light', 'dissolve_transition'] as const
 const MODES: Readonly<Record<string, number>> = { noise: 0, dots: 1, halftone: 2, blocks: 3 }
 const n = (params: VideoEditBuiltinParams, key: string): number => Number(params[key] ?? 0)
 
@@ -73,7 +73,7 @@ export function planDissolveReveal(params: VideoEditBuiltinParams, width: number
   return glow.plan
 }
 
-export const DISSOLVE_REVEAL_WGSL = `
+const DISSOLVE_REVEAL_WGSL = `
 // a = (方式 0 噪声 / 1 点阵 / 2 半调, 格子边长（像素）, 进度, 柔和半宽)，b = (亮边颜色, 亮边宽度)，
 // c = (蓝噪声平移 x, y, 点阵哈希种子, 0)，layer.xy = 内容原点。噪声方式的蓝噪声表绑定在 original。
 fn dissolveNoise(q: vec2f) -> f32 {

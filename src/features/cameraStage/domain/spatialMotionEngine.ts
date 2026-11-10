@@ -40,7 +40,7 @@ import {
 import { resolveCameraRigPreset } from './cameraRigs'
 import type { StageCameraRig, StageVec3 } from './sceneTypes'
 
-export interface StageMotionPeaks {
+interface StageMotionPeaks {
   /** 米/秒 */
   speed: number
   /** 米/秒²，含转弯的向心部分 */
@@ -49,7 +49,7 @@ export interface StageMotionPeaks {
   jerk: number
 }
 
-export interface StageMotionSag {
+interface StageMotionSag {
   /** 速度塌得最低的时刻 */
   time: number
   speed: number

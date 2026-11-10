@@ -17,7 +17,7 @@ const GRID_STEP = 1 / 60
 /** 平滑后的主体速度低于这个值（米/秒）时行进方向保持不变 */
 const HEADING_MIN_SPEED = 0.15
 
-export interface CameraFollowPose {
+interface CameraFollowPose {
   position: StageVec3
   aimTarget: StageVec3
 }

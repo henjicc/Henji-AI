@@ -15,7 +15,7 @@ import { audioIdentityAliasesSchema } from './effects/audioIdentity'
 const amount = z.number().finite().min(0).max(100)
 const toggle = z.object({ enabled: z.boolean(), amount }).strict()
 
-export const ESSENTIAL_SOUND_TYPES = ['dialogue', 'music', 'sound_effect', 'ambience'] as const
+const ESSENTIAL_SOUND_TYPES = ['dialogue', 'music', 'sound_effect', 'ambience'] as const
 export const ESSENTIAL_SOUND_EQ_PRESETS = ['podcast', 'broadcast', 'warm', 'bright', 'thin_voice', 'telephone'] as const
 export const ESSENTIAL_SOUND_REVERB_PRESETS = ['room', 'studio', 'hall', 'outdoor'] as const
 

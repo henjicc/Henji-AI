@@ -100,7 +100,7 @@ export async function copyKeepingBoth(source: string, desired: string, reuseIden
 }
 
 /** Component integrity is part of the same immutable publication, including document-only packages. */
-export async function copyCodeIntegrity(source: string, destination: string): Promise<void> {
+async function copyCodeIntegrity(source: string, destination: string): Promise<void> {
   if (!source.split(/[\\/]/).includes('组件库') || !source.endsWith('.ts')) return
   const integrity = `${source}.sha256`
   if (!(await fsp.stat(integrity).catch(() => null))?.isFile()) throw new Error('项目组件校验文件缺失，请从项目备份恢复后重新复制。')

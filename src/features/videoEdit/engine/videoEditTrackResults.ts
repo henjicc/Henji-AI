@@ -226,7 +226,7 @@ const stabilizations = new Map<string, Promise<VideoEditStabilizationSolution & 
 const MAX_STABILIZATIONS = 16
 
 /** 相机运动（防抖分析）的结果键：同一素材共用，与片段参数无关。 */
-export function videoEditCameraKey(sourceId: string): string { return videoEditTrackerKey(sourceId, { method: 'camera' as VideoEditTracker['method'], prompts: [] }) }
+function videoEditCameraKey(sourceId: string): string { return videoEditTrackerKey(sourceId, { method: 'camera' as VideoEditTracker['method'], prompts: [] }) }
 
 /**
  * 片段用到的那段相机路径的平滑解（按结果版本、参数、范围与画面宽高比缓存）；还没有分析结果时 undefined。
@@ -260,7 +260,7 @@ export async function videoEditClipStabilizationSolution(document: VideoEditComp
 }
 
 /** 片段在序列第 frame 帧的画面修正（原画面 → 稳定后的画面）；没有防抖或还没有结果时 undefined。 */
-export async function videoEditClipStabilizationTransform(document: VideoEditComposition, clip: VideoEditClip, frame: number): Promise<VideoEditSimilarity | undefined> {
+async function videoEditClipStabilizationTransform(document: VideoEditComposition, clip: VideoEditClip, frame: number): Promise<VideoEditSimilarity | undefined> {
   const params: VideoEditClipStabilization | undefined = clip.stabilization
   if (!params) return undefined
   const solution = await videoEditClipStabilizationSolution(document, clip).catch((error: unknown) => {

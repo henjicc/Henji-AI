@@ -1,7 +1,7 @@
 export type AssetMediaType = 'image' | 'video' | 'audio' | 'code'
 import type { ContentTrustReference } from '../../../../src/core/contentTrust'
 export type AssetSource = 'generated' | 'canvas' | 'camera-stage' | 'imported' | 'external' | 'video-edit'
-export type AssetInspectionStatus = 'pending' | 'ready' | 'missing' | 'failed'
+type AssetInspectionStatus = 'pending' | 'ready' | 'missing' | 'failed'
 export interface AssetFileContent { sizeBytes: number; fileModifiedAt: number; contentIdentity: string }
 
 export interface AssetDto {

@@ -16,7 +16,7 @@ import type { LayerEffectReference } from '@/core/videoEdit/layerEffectGeometry'
 import { Planner, type VideoEditBuiltinPlan, type VideoEditBuiltinTexture } from './effectPlan'
 import { contentBox, linearHex, linearHexAlpha } from './lightSweep'
 
-export const HALFTONE_ENTRIES = ['cell_average', 'halftone_dots'] as const
+const HALFTONE_ENTRIES = ['cell_average', 'halftone_dots'] as const
 const n = (params: VideoEditBuiltinParams, key: string): number => Number(params[key] ?? 0)
 /** 每个纹素盒式平均最多取 24×24 个双线性样本（纹素再大也只是略微欠采样的平均色）。 */
 const MAX_AVERAGE_TAPS = 24
@@ -36,7 +36,7 @@ export function cellAveragePass(plan: Planner, origin: readonly [number, number]
 const smoothstep = (edge0: number, edge1: number, x: number): number => { const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0))); return t * t * (3 - 2 * t) }
 
 /** `params` 已补齐默认值。 */
-export function planHalftone(params: VideoEditBuiltinParams, width: number, height: number, context?: LayerEffectReference): VideoEditBuiltinPlan {
+function planHalftone(params: VideoEditBuiltinParams, width: number, height: number, context?: LayerEffectReference): VideoEditBuiltinPlan {
   const plan = new Planner(width, height)
   const finish = (): VideoEditBuiltinPlan => ({ width, height, scratch: plan.scratch, passes: plan.passes })
   const h = context ? context.referenceSize.height * context.rasterScale : height
@@ -75,7 +75,7 @@ export const CELL_AVERAGE_BLOCK: EffectShaderBlock = { name: 'cell-average', wgs
 }
 ` }
 
-export const HALFTONE_WGSL = `
+const HALFTONE_WGSL = `
 // 半调网点：source 是每格 2×2 纹素的格子平均色，original 是原画。
 // a = (内容中心, 格子边长, 套色偏移)（像素），b = (小图原点, 纹素边长, 对比度斜率)，
 // c = (方式 0 原色 / 1 双色 / 2 彩色印刷, 形状 0 圆点 / 1 线条, 退成平均色调的比例, 0)，layer.rgb 墨色，grid 纸色（线性光直通色与 alpha）。

@@ -31,7 +31,7 @@ async function exists(target: string): Promise<boolean> {
 }
 
 /** 两个路径在当前平台是否指向同一位置（Windows 不分大小写）。 */
-export function isSameLocation(left: string, right: string, style: PathStyle = HOST_STYLE): boolean {
+function isSameLocation(left: string, right: string, style: PathStyle = HOST_STYLE): boolean {
   const leftKey = pathKey(style, left)
   return leftKey !== null && leftKey === pathKey(style, right)
 }

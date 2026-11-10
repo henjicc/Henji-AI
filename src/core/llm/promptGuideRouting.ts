@@ -13,7 +13,7 @@ export type PromptGuideId =
   | 'video' | 'video-frames' | 'video-reference' | 'video-storyboard' | 'video-edit' | 'video-extension'
   | 'video-continuity' | 'video-sound'
 
-export const PROMPT_GUIDE_TITLES: Record<PromptGuideId, string> = {
+const PROMPT_GUIDE_TITLES: Record<PromptGuideId, string> = {
   image: '文生图：只有文字，从零出图',
   'image-reference': '参考生图：参考图提供人物、服装、风格等，生成新画面',
   'image-edit': '图片编辑：在原图上增删改，其余保持',

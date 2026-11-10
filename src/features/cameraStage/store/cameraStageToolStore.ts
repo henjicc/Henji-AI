@@ -3,7 +3,7 @@ import type { StageStateKeyframe } from '../domain/stateKeyframeTypes'
 
 export type StageEditorTool = 'translate' | 'rotate' | 'scale' | 'path'
 
-export interface StagePathSelection {
+interface StagePathSelection {
   stateKeyframeId: string
   objectId: string
 }

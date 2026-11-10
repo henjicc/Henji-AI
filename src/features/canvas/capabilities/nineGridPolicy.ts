@@ -3,11 +3,11 @@ import type { CanvasGenerationOutputBatchContractV1 } from '../domain/generation
 
 export const NINE_GRID_PRESET_ID = 'nine-grid-v1' as const
 export const NINE_GRID_PROMPT_TEMPLATE_VERSION = 'nine-grid-storyboard-v1' as const
-export const NINE_GRID_ROWS = 3
-export const NINE_GRID_COLS = 3
-export const NINE_GRID_CELL_COUNT = NINE_GRID_ROWS * NINE_GRID_COLS
+const NINE_GRID_ROWS = 3
+const NINE_GRID_COLS = 3
+const NINE_GRID_CELL_COUNT = NINE_GRID_ROWS * NINE_GRID_COLS
 
-export type NineGridPresetId = typeof NINE_GRID_PRESET_ID
+type NineGridPresetId = typeof NINE_GRID_PRESET_ID
 
 export interface NineGridNodeInitialData {
   displayName: string

@@ -4,7 +4,7 @@ import type { ApplicationRef } from '@/core/application-control'
 
 type ExpectedSampleValue = number | string | { x: number; y: number; z: number }
 
-export interface CameraStageExpectedStateSample {
+interface CameraStageExpectedStateSample {
   objectId?: string
   objectRef?: ApplicationRef
   time: number
@@ -23,7 +23,7 @@ export interface CameraStageVerificationRequest {
   requireNoCollisions: boolean
 }
 
-export interface CameraStageVerificationEvidence {
+interface CameraStageVerificationEvidence {
   kind: 'entity' | 'camera' | 'layout' | 'trajectory' | 'state_keyframe' | 'playback'
   fact: string
   refs: string[]

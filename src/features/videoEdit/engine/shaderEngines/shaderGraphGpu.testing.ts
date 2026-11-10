@@ -4,7 +4,7 @@ import { init } from 'vgpu/node'
  * Node 下的 Dawn（vgpu/node）没有 navigator.gpu；TypeGPU 配置画布时只向它要首选格式。
  * 只给 GPU 测试用：Worker 与 Electron 渲染进程本来就有 navigator.gpu。
  */
-export function ensureNodeCanvasFormat(): void {
+function ensureNodeCanvasFormat(): void {
   const nav = globalThis.navigator as unknown as { gpu?: unknown } | undefined
   if (nav && !nav.gpu) Object.defineProperty(globalThis.navigator, 'gpu', { value: { getPreferredCanvasFormat: () => 'bgra8unorm' }, configurable: true })
 }

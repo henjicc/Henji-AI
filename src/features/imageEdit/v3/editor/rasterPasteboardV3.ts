@@ -13,7 +13,7 @@ const SUPPORTED_RASTER_PASTEBOARD_MEDIA_TYPES_V3 = new Set([
   'image/webp',
 ])
 
-export const IMAGE_EDITOR_RASTER_PASTEBOARD_MAX_LAYERS_V3 = 16
+const IMAGE_EDITOR_RASTER_PASTEBOARD_MAX_LAYERS_V3 = 16
 
 function hasDirectRasterPasteboardColorV3(document: ImageEditDocumentV3): boolean {
   return document.color.workingSpace === 'srgb'

@@ -23,7 +23,7 @@ export const STAGE_RENDER_STYLE_LABELS: Record<StageRenderStyle, string> = {
 export const STAGE_RENDER_STYLE_OPTIONS: Array<{ value: StageRenderStyle; label: string }> =
   STAGE_RENDER_STYLE_VALUES.map((value) => ({ value, label: STAGE_RENDER_STYLE_LABELS[value] }))
 
-export function isStageRenderStyle(raw: unknown): raw is StageRenderStyle {
+function isStageRenderStyle(raw: unknown): raw is StageRenderStyle {
   return typeof raw === 'string' && (STAGE_RENDER_STYLE_VALUES as readonly string[]).includes(raw)
 }
 

@@ -39,7 +39,7 @@ export interface SoundSearchQuery {
   limit: number
 }
 
-export interface SoundSearchHit {
+interface SoundSearchHit {
   entry: SoundIndexEntry
   score: number
   nameScore: number
@@ -56,10 +56,10 @@ export interface SoundSearchResult {
   considered: number
 }
 
-export const LISTEN_FLOOR = 0.15
-export const LISTEN_MATCH = 0.25
+const LISTEN_FLOOR = 0.15
+const LISTEN_MATCH = 0.25
 /** 名字命中门槛：多词关键词只命中一半（“car horn”对“Car Door”）不算。 */
-export const NAME_MATCH = 0.75
+const NAME_MATCH = 0.75
 const LISTEN_SPAN = 0.3
 const NAME_WEIGHT = 0.4
 

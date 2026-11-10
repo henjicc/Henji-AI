@@ -7,11 +7,11 @@ import type { AnnotationOutputGeometryV3 } from '../editor/annotationGeometryV3'
 import type { ImageEditorV3Controller } from '../editor/types'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 
-/** Each built-in entry augments this map; new tools don't edit a central union. */
+/** Each built-in entry augments this map; new tools don't edit a central union. @public 扩充目标，必须保持导出。 */
 export interface ImageEditorToolCatalog {}
 export type ImageEditorRegisteredToolId = keyof ImageEditorToolCatalog
 
-export interface ToolContext {
+interface ToolContext {
   controller: ImageEditorV3Controller
   bus: ImageEditCommandBusV3
   time: InteractionTime

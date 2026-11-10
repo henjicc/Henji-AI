@@ -44,7 +44,7 @@ export function staggerVideoMotion(id: string, sequenceId: string, sourceId: str
   } catch (error) { logger.error('错峰复制失败', error, { event: 'video_edit.motion.stagger.failed', context: { documentId: id } }); throw error }
 }
 const OVERLAY_SAMPLE_BUDGET = 96
-export type MotionCaptureMode = 'navigate' | 'demonstrate'
+type MotionCaptureMode = 'navigate' | 'demonstrate'
 export type MotionCaptureProperty = Exclude<MotionProperty, 'pivot'>
 export interface MotionPresentation { frame: number; revision: number; sequenceId: string; at: number; scrubbing?: boolean }
 interface PresentedPose { timeline: Timeline; pose: Pose; monoUs: number; clockId: string }

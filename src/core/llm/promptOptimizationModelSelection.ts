@@ -20,7 +20,7 @@ export interface PromptOptimizationModelSource {
 
 export type PromptOptimizationModelReference = Pick<PromptOptimizationProfile, 'providerId' | 'modelId'>
 
-export function supportsPromptOptimizationVisionInput(model: LlmModelConfig): boolean {
+function supportsPromptOptimizationVisionInput(model: LlmModelConfig): boolean {
   return model.capabilities.image === true || model.capabilities.video === true
 }
 
@@ -56,7 +56,7 @@ export function selectPromptOptimizationModel(
   return candidates.find(supportsPromptOptimizationVisionInput) ?? candidates[0]
 }
 
-export function findPromptOptimizationModel(
+function findPromptOptimizationModel(
   source: PromptOptimizationModelSource,
   reference: PromptOptimizationModelReference,
 ): LlmModelConfig | null {

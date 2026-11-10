@@ -2,4 +2,4 @@
  * Presets Service Exports
  */
 
-export { PresetService, presetService, getPresetService } from './PresetService'
+export { PresetService, presetService } from './PresetService'

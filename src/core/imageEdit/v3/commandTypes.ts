@@ -18,7 +18,7 @@ import type {
 import { collectImageEditMaskResourceIdsV3 } from './layerTypes';
 import type { ImageEditNamedRegionV3 } from './namedRegions';
 
-export interface ImageEditNamedRegionsCommandV3 extends ImageEditCommandBaseV3 {
+interface ImageEditNamedRegionsCommandV3 extends ImageEditCommandBaseV3 {
   type: 'document.set-named-regions';
   regions: ImageEditNamedRegionV3[];
 }
@@ -29,19 +29,19 @@ export interface ImageEditLayersMoveCommandV3 extends ImageEditCommandBaseV3 {
   moves: { layerId: string; parentId: string | null; index: number }[];
 }
 
-export interface ImageEditCommandBaseV3 {
+interface ImageEditCommandBaseV3 {
   commandId: string;
   expectedRevision: number;
 }
 
-export interface ImageEditDocumentUpdateOutputGeometryCommandV3 extends ImageEditCommandBaseV3 {
+interface ImageEditDocumentUpdateOutputGeometryCommandV3 extends ImageEditCommandBaseV3 {
   type: 'document.update-output-geometry';
   orientation: ImageEditOrientationV3;
   crop: ImageEditCropRectV3 | null;
 }
 
 /** 改画布边界，不重采样图层像素；宿主负责将需要移动的内容纳入同一原子命令。 */
-export interface ImageEditDocumentSetCanvasSizeCommandV3 extends ImageEditCommandBaseV3 {
+interface ImageEditDocumentSetCanvasSizeCommandV3 extends ImageEditCommandBaseV3 {
   type: 'document.set-canvas-size';
   width: number;
   height: number;
@@ -62,7 +62,7 @@ export type ImageEditLayerCommonPatchV3 = Partial<{
   deformation: import("../../imaging/transforms").Deformation | null;
 }>;
 
-export interface ImageEditLayerAddCommandV3 extends ImageEditCommandBaseV3 {
+interface ImageEditLayerAddCommandV3 extends ImageEditCommandBaseV3 {
   type: 'layer.add';
   parentId: string | null;
   index: number;
@@ -71,7 +71,7 @@ export interface ImageEditLayerAddCommandV3 extends ImageEditCommandBaseV3 {
   resources?: ImageEditCommandResourceDescriptorV3[];
 }
 
-export interface ImageEditLayerDeleteCommandV3 extends ImageEditCommandBaseV3 {
+interface ImageEditLayerDeleteCommandV3 extends ImageEditCommandBaseV3 {
   type: 'layer.delete';
   layerId: string;
   resources?: ImageEditCommandResourceDescriptorV3[];
@@ -85,7 +85,7 @@ export interface ImageEditLayerReplaceCommandV3 extends ImageEditCommandBaseV3 {
   resources?: ImageEditCommandResourceDescriptorV3[];
 }
 
-export interface ImageEditLayerMoveCommandV3 extends ImageEditCommandBaseV3 {
+interface ImageEditLayerMoveCommandV3 extends ImageEditCommandBaseV3 {
   type: 'layer.move';
   layerId: string;
   parentId: string | null;
@@ -93,7 +93,7 @@ export interface ImageEditLayerMoveCommandV3 extends ImageEditCommandBaseV3 {
   index: number;
 }
 
-export interface ImageEditLayerDuplicateCommandV3 extends ImageEditCommandBaseV3 {
+interface ImageEditLayerDuplicateCommandV3 extends ImageEditCommandBaseV3 {
   type: 'layer.duplicate';
   layerId: string;
   parentId: string | null;
@@ -103,7 +103,7 @@ export interface ImageEditLayerDuplicateCommandV3 extends ImageEditCommandBaseV3
   resources?: ImageEditCommandResourceDescriptorV3[];
 }
 
-export interface ImageEditLayerGroupCommandV3 extends ImageEditCommandBaseV3 {
+interface ImageEditLayerGroupCommandV3 extends ImageEditCommandBaseV3 {
   type: 'layer.group';
   /** 必须是同一容器中连续的图层；按原有顺序进入组。 */
   layerIds: string[];
@@ -111,13 +111,13 @@ export interface ImageEditLayerGroupCommandV3 extends ImageEditCommandBaseV3 {
   resources?: ImageEditCommandResourceDescriptorV3[];
 }
 
-export interface ImageEditLayerUngroupCommandV3 extends ImageEditCommandBaseV3 {
+interface ImageEditLayerUngroupCommandV3 extends ImageEditCommandBaseV3 {
   type: 'layer.ungroup';
   groupId: string;
   resources?: ImageEditCommandResourceDescriptorV3[];
 }
 
-export interface ImageEditLayerUpdateCommonCommandV3 extends ImageEditCommandBaseV3 {
+interface ImageEditLayerUpdateCommonCommandV3 extends ImageEditCommandBaseV3 {
   type: 'layer.update-common';
   layerId: string;
   patch: ImageEditLayerCommonPatchV3;
@@ -144,13 +144,13 @@ export interface ImageEditCommandResourceDescriptorV3 {
 
 export type ImageEditMaskResourceDescriptorV3 = ImageEditCommandResourceDescriptorV3;
 
-export interface ImageEditLayerUpdateParamsCommandV3 extends ImageEditCommandBaseV3 {
+interface ImageEditLayerUpdateParamsCommandV3 extends ImageEditCommandBaseV3 {
   type: 'layer.update-params';
   layerId: string;
   params: ImageEditJsonObjectV3;
 }
 
-export interface ImageEditGroupUpdateIsolationCommandV3 extends ImageEditCommandBaseV3 {
+interface ImageEditGroupUpdateIsolationCommandV3 extends ImageEditCommandBaseV3 {
   type: 'group.update-isolation';
   layerId: string;
   isolated: boolean;
@@ -182,7 +182,7 @@ export interface ImageEditMaskTileDeltaCommandV3 extends ImageEditCommandBaseV3 
   changes: ImageEditRasterTileChangeV3[];
 }
 
-export interface ImageEditDocumentSetColorCommandV3 extends ImageEditCommandBaseV3 {
+interface ImageEditDocumentSetColorCommandV3 extends ImageEditCommandBaseV3 {
   type: 'document.set-color';
   resources?: ImageEditCommandResourceDescriptorV3[];
   color: import('./colorTypes').ImageEditColorModeV3;
@@ -209,7 +209,7 @@ export type ImageEditLeafCommandV3 =
   | ImageEditRasterTileDeltaCommandV3
   | ImageEditMaskTileDeltaCommandV3;
 
-export interface ImageEditSetCreativeIntentsCommandV3 extends ImageEditCommandBaseV3 {
+interface ImageEditSetCreativeIntentsCommandV3 extends ImageEditCommandBaseV3 {
   type: 'document.set-creative-intents';
   intents: import('../../creativeIntent/persistence').CreativeIntents | null;
   resources: ImageEditCommandResourceDescriptorV3[];

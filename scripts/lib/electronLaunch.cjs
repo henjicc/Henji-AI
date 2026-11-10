@@ -399,7 +399,6 @@ module.exports = {
   launchElectronApp,
   waitForApp,
   assert,
-  createElectronEnv,
   createIsolatedUserDataDir,
   cleanupIsolatedUserDataDir,
 }

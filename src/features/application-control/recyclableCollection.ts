@@ -86,7 +86,7 @@ export async function captureRecycledRemoval(remove: () => Promise<unknown>, mat
   return item.id
 }
 
-export interface RecyclableRecord { id: string; name: string; content: JsonValue }
+interface RecyclableRecord { id: string; name: string; content: JsonValue }
 export interface RecyclableRecordSource {
   entityType: string
   domain: string

@@ -11,7 +11,7 @@
  */
 import { DEFAULT_THEME_SEED, THEME_COLOR_TOKEN_NAMES, deriveThemeTokens, type ThemeTokens } from './themeEngine';
 
-export type ThemeTokensListener = (tokens: ThemeTokens) => void;
+type ThemeTokensListener = (tokens: ThemeTokens) => void;
 
 export interface ThemeTokenStore {
   getThemeTokens: () => ThemeTokens;

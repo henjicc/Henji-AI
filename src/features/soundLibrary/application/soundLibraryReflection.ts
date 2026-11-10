@@ -22,9 +22,9 @@ import type { SoundLibraryFolderInfo, SoundLibrarySoundSummary, SoundLibraryStat
  * 真相源是主进程 SoundLibraryService，经 `src/commands/soundLibrary.ts` 访问；设置页与助手共用。
  */
 
-export const SOUND_LIBRARY_ENTITY = 'sound_library.library'
-export const SOUND_LIBRARY_FOLDER_ENTITY = 'sound_library.folder'
-export const SOUND_LIBRARY_SOUND_ENTITY = 'sound_library.sound'
+const SOUND_LIBRARY_ENTITY = 'sound_library.library'
+const SOUND_LIBRARY_FOLDER_ENTITY = 'sound_library.folder'
+const SOUND_LIBRARY_SOUND_ENTITY = 'sound_library.sound'
 const DOMAIN = 'sound_library'
 const LIBRARY_REF: ApplicationRef = { kind: SOUND_LIBRARY_ENTITY, id: 'singleton', label: '音效库' }
 const READ = { read: ['video_edit:read'], write: [] as string[] }

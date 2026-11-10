@@ -19,7 +19,7 @@ export const recordingOperationSchema = z.object({
 export type RecordingOperation = z.infer<typeof recordingOperationSchema>
 export const recordingCallSchema = z.object({ callId: z.string().uuid(), operations: z.array(recordingOperationSchema).min(1).max(64) }).strict()
 export const recordingBaselineSchema = z.object({ documentId: z.string().min(1), content: videoEditDocumentSchema }).strict().refine(v => v.documentId === v.content.id, '快照归属不符')
-export const recordingScriptStepSchema = z.object({
+const recordingScriptStepSchema = z.object({
   id: z.string().min(1), title: z.string().min(1).max(120), startUs: z.number().int().nonnegative(), endUs: z.number().int().positive(),
   operations: z.array(recordingOperationSchema).max(256), narrationIds: z.array(z.string()).max(1000),
   wait: z.object({ kind: z.literal('capability_completed'), settleMs: z.number().int().min(100).max(10000) }).strict(),

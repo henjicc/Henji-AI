@@ -14,7 +14,7 @@ import type { MusicAnalysisJob, MusicAnalysisJobResult } from './protocol'
  */
 
 /** 超过 20 分钟的音频不按音乐重构处理（整曲 PCM 常驻内存）。 */
-export const MUSIC_MAX_SECONDS = 20 * 60
+const MUSIC_MAX_SECONDS = 20 * 60
 
 export interface MusicAnalysisDependencies {
   openModel(model: LocalInferenceModelFile, providers: readonly LocalExecutionProvider[], shape: string): Promise<LocalModelRunner>

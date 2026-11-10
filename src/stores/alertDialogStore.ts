@@ -6,7 +6,7 @@ import { ApplicationPreflightFailure } from '@/core/application-control/executio
 import type { SettingsNavigationTarget } from '@/core/types/settingsNavigation'
 import type { OperationReviewItem } from '@/core/application-control/operationReview'
 
-export type AlertDialogType = 'info' | 'warning' | 'error'
+type AlertDialogType = 'info' | 'warning' | 'error'
 
 /**
  * 一次弹窗请求。

@@ -8,7 +8,7 @@ const logger = createMainLogger('main.video_edit_export')
 /** 一个页面：webContents 重载后编号不变，页面编号由预加载脚本每次加载重新生成。 */
 export interface VideoEditExportPage { senderId: number; pageId: string }
 /** 主进程独占创建文件时记下的身份；清理前再核一次，路径上换成别的文件就不删。 */
-export interface VideoEditExportFileIdentity { dev: bigint; ino: bigint; birthtimeNs: bigint }
+interface VideoEditExportFileIdentity { dev: bigint; ino: bigint; birthtimeNs: bigint }
 export interface VideoEditExportRegistryFiles {
   createExclusive(path: string): Promise<void>
   identify(path: string): Promise<VideoEditExportFileIdentity | null>

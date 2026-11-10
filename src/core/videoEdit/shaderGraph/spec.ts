@@ -14,7 +14,7 @@ import catalog from './components.generated.json'
 export const SHADER_GRAPH_INPUT = '@input'
 export const SHADER_GRAPH_SECOND = '@second'
 
-export type ShaderComponentRole = 'generator' | 'filter' | 'transition' | 'group'
+type ShaderComponentRole = 'generator' | 'filter' | 'transition' | 'group'
 export interface ShaderComponentProp {
   key: string
   /** 框架的控件类型：range、color、position、select、checkbox、gradient-stops、shape 等。 */
@@ -77,12 +77,12 @@ export function shaderClockRateProps(component: ShaderComponent): readonly strin
 }
 
 /** 框架给每个图层的通用属性（混合、透明度、遮罩、变换、包围盒）。 */
-export const SHADER_GRAPH_UNIVERSAL_PROPS = ['blendMode', 'opacity', 'visible', 'maskSource', 'maskType', 'transform', 'boundingBox'] as const
+const SHADER_GRAPH_UNIVERSAL_PROPS = ['blendMode', 'opacity', 'visible', 'maskSource', 'maskType', 'transform', 'boundingBox'] as const
 export const SHADER_BLEND_MODES = ['normal', 'multiply', 'screen', 'overlay', 'softLight', 'hardLight', 'linearDodge', 'linearBurn', 'colorDodge', 'colorBurn', 'darken', 'lighten', 'difference', 'exclusion', 'hue', 'saturation', 'color', 'luminosity'] as const
 
 const identifier = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]{0,63}$/, '名称只能用字母、数字、下划线，且不以数字开头')
 export interface ShaderGraphLayer { type: string; id?: string; props?: Record<string, unknown>; children?: ShaderGraphLayer[] }
-export const shaderGraphLayerSchema: z.ZodType<ShaderGraphLayer> = z.lazy(() => z.object({
+const shaderGraphLayerSchema: z.ZodType<ShaderGraphLayer> = z.lazy(() => z.object({
   type: z.string().min(1).max(64),
   id: z.string().regex(/^[A-Za-z0-9_.:-]{1,64}$/).optional(),
   props: z.record(z.string().max(64), z.unknown()).optional(),
@@ -90,7 +90,7 @@ export const shaderGraphLayerSchema: z.ZodType<ShaderGraphLayer> = z.lazy(() => 
 }).strict())
 
 /** 作者着色器的属性：类型决定 WGSL 里拿到的值（数值 f32、颜色 vec4f 线性光、位置 vec2f、角度弧度、开关 0/1）。 */
-export const shaderGraphCustomPropSchema = z.object({
+const shaderGraphCustomPropSchema = z.object({
   type: z.enum(['number', 'color', 'position', 'angle', 'boolean']).optional(),
   default: z.union([z.number().finite(), z.string().max(64), z.boolean(), z.object({ x: z.number().finite(), y: z.number().finite() }).strict()]),
   min: z.number().finite().optional(),
@@ -104,7 +104,7 @@ export function shaderGraphCustomPropKind(prop: ShaderGraphCustomProp): 'number'
   return typeof prop.default === 'string' ? 'color' : typeof prop.default === 'boolean' ? 'boolean' : typeof prop.default === 'object' ? 'position' : 'number'
 }
 
-export const shaderGraphCustomShaderSchema = z.object({
+const shaderGraphCustomShaderSchema = z.object({
   name: identifier,
   /** generator：自己画出画面；filter：处理它之前画好的图层（函数体里可读 child、childTexture）。 */
   kind: z.enum(['generator', 'filter']),
@@ -120,7 +120,7 @@ export const shaderGraphCustomShaderSchema = z.object({
 }).strict()
 export type ShaderGraphCustomShader = z.infer<typeof shaderGraphCustomShaderSchema>
 
-export const shaderGraphSpecSchema = z.object({
+const shaderGraphSpecSchema = z.object({
   layers: z.array(shaderGraphLayerSchema).min(1),
   shaders: z.array(shaderGraphCustomShaderSchema).optional(),
 }).strict()

@@ -121,4 +121,4 @@ function computeFitViewport(nodeCount, canvasWidth = 2560, canvasHeight = 1360) 
   return { x, y, zoom }
 }
 
-module.exports = { buildNodes, buildEdges, computeFitViewport, GRID_COLUMNS }
+module.exports = { buildNodes, buildEdges, computeFitViewport }

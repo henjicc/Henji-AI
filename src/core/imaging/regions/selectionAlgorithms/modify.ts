@@ -30,7 +30,7 @@ export function filterCoverage(data: Float32Array, width: number, height: number
   return pass(pass(data, false), true);
 }
 
-export async function readCoverageHalo(source: SelectionCoverageSource, region: RegionRect, radius: number, options: SelectionAlgorithmOptions): Promise<Coverage> {
+async function readCoverageHalo(source: SelectionCoverageSource, region: RegionRect, radius: number, options: SelectionAlgorithmOptions): Promise<Coverage> {
   const x = region.x - radius, y = region.y - radius, width = region.width + radius * 2, height = region.height + radius * 2;
   const clip = { x: Math.max(0, x), y: Math.max(0, y), width: Math.min(source.grid.width, x + width) - Math.max(0, x), height: Math.min(source.grid.height, y + height) - Math.max(0, y) };
   const input = await source.read(clip, options.context);

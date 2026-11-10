@@ -100,7 +100,7 @@ export interface ImageDocumentThumbnailInput {
 }
 
 /** 文档底座里图片文档服务用到的部分；正式运行由 getDocumentService() 与作品目录布局提供。 */
-export interface ImageDocumentCatalogAccess {
+interface ImageDocumentCatalogAccess {
   listDocuments(query: DocumentListQuery): Promise<DocumentSummary[]>
   listProjects(query: ProjectListQuery): Promise<ProjectSummary[]>
   refreshIndex(): Promise<unknown>

@@ -48,7 +48,7 @@ type NodeRenderComponent<TProps extends object> = ((props: TProps) => ReactNode)
   name?: string;
 };
 
-export const CANVAS_NODE_PAINT_CONTAINMENT_ENABLED = true;
+const CANVAS_NODE_PAINT_CONTAINMENT_ENABLED = true;
 
 function withNodePaintFrame<TProps extends object>(
   Component: NodeRenderComponent<TProps>,
@@ -106,34 +106,5 @@ export const nodeTypes: NodeTypes = {
 };
 
 export {
-  AudioGenNode,
-  AudioNode,
-  GroupNode,
-  AssetGroupNode,
-  ImageEditNode,
-  PanoramaGenerationNode,
-  PanoramaViewerNode,
-  RelightGenerationNode,
-  MultiAngleGenerationNode,
-  UpscaleGenerationNode,
-  ElementEditGenerationNode,
-  LayerSeparationGenerationNode,
-  LayerStackResultNode,
-  ImageNode,
-  StoryboardGenNode,
-  StoryboardNode,
-  TextAnnotationNode,
-  TextProcessingNode,
   UploadNode,
-  UniversalUploadNode,
-  VideoGenNode,
-  VideoNode,
-  IntSourceNode,
-  FloatSourceNode,
-  StringSourceNode,
-  BooleanSourceNode,
-  ImageModelSelectorNode,
-  VideoModelSelectorNode,
-  AudioModelSelectorNode,
-  CameraStageNode,
 };

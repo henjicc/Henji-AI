@@ -1,6 +1,6 @@
 import type { DiffusionOperationParams } from '@/core/imageEdit/types'
 
-export interface MergeStoryboardImagesPayload {
+interface MergeStoryboardImagesPayload {
   frameSources: string[]
   rows: number
   cols: number
@@ -19,7 +19,7 @@ export interface MergeStoryboardImagesPayload {
   frameNotes?: string[]
 }
 
-export interface MergeStoryboardImagesResult {
+interface MergeStoryboardImagesResult {
   imagePath: string
   canvasWidth: number
   canvasHeight: number
@@ -33,13 +33,13 @@ export interface MergeStoryboardImagesResult {
   metadataEmbedded?: boolean
 }
 
-export interface StoryboardImageMetadata {
+interface StoryboardImageMetadata {
   gridRows: number
   gridCols: number
   frameNotes: string[]
 }
 
-export interface PanoramaImageMetadata {
+interface PanoramaImageMetadata {
   projectionType: 'equirectangular'
   usePanoramaViewer: true
   fullPanoWidthPixels: number
@@ -63,7 +63,7 @@ export interface PanoramaMetadataEmbedResult {
   metadata: PanoramaImageMetadata
 }
 
-export interface PrepareNodeImageSourceResult {
+interface PrepareNodeImageSourceResult {
   imagePath: string
   previewImagePath: string
   aspectRatio: string
@@ -75,7 +75,7 @@ export interface PersistImageSourceTrackedResult {
   createdFilePaths: string[]
 }
 
-export interface CropImageSourcePayload {
+interface CropImageSourcePayload {
   source: string
   aspectRatio?: string
   cropX?: number
@@ -84,8 +84,8 @@ export interface CropImageSourcePayload {
   cropHeight?: number
 }
 
-export type LocalRedrawRegistrationQuality = 'fast' | 'precise' | 'extreme'
-export type LocalRedrawAspectRatio = 'auto' | '1:1' | '4:3' | '3:4' | '16:9' | '9:16'
+type LocalRedrawRegistrationQuality = 'fast' | 'precise' | 'extreme'
+type LocalRedrawAspectRatio = 'auto' | '1:1' | '4:3' | '3:4' | '16:9' | '9:16'
 
 export interface LocalRedrawSettings {
   contextScale: number
@@ -107,7 +107,7 @@ export interface LocalRedrawContext {
   settings: LocalRedrawSettings
 }
 
-export interface LocalRedrawRegistrationDiagnostics {
+interface LocalRedrawRegistrationDiagnostics {
   referenceKeypoints: number
   movingKeypoints: number
   matches: number
@@ -146,7 +146,7 @@ export interface ComposeLocalRedrawResult {
   diagnostics: LocalRedrawRegistrationDiagnostics
 }
 
-export interface ImageInfoResult {
+interface ImageInfoResult {
   source: string
   fileName: string | null
   extension: string
@@ -159,7 +159,7 @@ export interface ImageInfoResult {
   modifiedAt: number | null
 }
 
-export interface ImageDiffusionFallbackRequest {
+interface ImageDiffusionFallbackRequest {
   requestId: string
   source: string
   purpose: 'preview' | 'export'
@@ -169,7 +169,7 @@ export interface ImageDiffusionFallbackRequest {
   params: DiffusionOperationParams
 }
 
-export interface ImageDiffusionFallbackResult {
+interface ImageDiffusionFallbackResult {
   bytes: Uint8Array
   width: number
   height: number
@@ -179,7 +179,7 @@ export interface ImageDiffusionFallbackResult {
   unsupportedParameters: readonly string[]
 }
 
-export interface ImageDiffusionFallbackCapabilities {
+interface ImageDiffusionFallbackCapabilities {
   available: boolean
   supportedParameters: readonly string[]
   unsupportedParameters: readonly string[]

@@ -147,7 +147,6 @@ function finalizeSceneEvidence(evidence, setupError = null) {
 }
 
 module.exports = {
-  LOG_QUERY_LIMIT,
   createRuntimeEvidenceCollector,
   finalizeSceneEvidence,
   isBenignBrowserError,

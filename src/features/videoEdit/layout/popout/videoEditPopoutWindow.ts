@@ -8,7 +8,7 @@ import { isHtmlElementNode } from '@/utils/crossRealmDom'
  *
  * 前缀必须与 `electron/main/windows/video-edit-popout-policy.ts` 一致，主进程只放行该白名单。
  */
-export const VIDEO_EDIT_POPOUT_FRAME_PREFIX = 'henji-video-edit-popout:'
+const VIDEO_EDIT_POPOUT_FRAME_PREFIX = 'henji-video-edit-popout:'
 
 /** 浮窗内容中由 React 渲染、可聚焦的焦点根（tabIndex=-1）。 */
 export const VIDEO_EDIT_POPOUT_FOCUS_ATTRIBUTE = 'data-video-edit-popout-focus'
@@ -60,7 +60,7 @@ export interface OpenVideoEditPopoutOptions {
 
 /** 浮窗标题栏高度（DIP）；与主进程 `VIDEO_EDIT_POPOUT_TITLEBAR_HEIGHT` 同值。 */
 export const VIDEO_EDIT_POPOUT_TITLEBAR_HEIGHT = 32
-export type VideoEditPopoutControl =
+type VideoEditPopoutControl =
   | { action: 'begin-move' | 'move'; x: number; y: number }
   | { action: 'end-move' | 'collapse' | 'expand' | 'toggle-maximize' }
 

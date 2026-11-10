@@ -38,7 +38,7 @@ const BOUNDARY_PAUSE_MS = 80
 /** 切点离后一句开头保留的气口（毫秒） */
 const BREATH_MS = 120
 
-export type AudioEditRetakeKind = 'restart' | 'lead_in' | 'broken_start'
+type AudioEditRetakeKind = 'restart' | 'lead_in' | 'broken_start'
 
 export interface AudioEditRetake {
   id: string

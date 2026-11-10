@@ -16,7 +16,7 @@
  */
 
 /** 有意不开放写入的类别。选哪一类决定了理由该怎么写，也让统计能按类别看差集。 */
-export type ApplicationExclusionCategory =
+type ApplicationExclusionCategory =
   /** 纯视图：手柄模式、四窗布局、面板宽度。不进工程文件，不影响产物。 */
   | 'view_state'
   /** 选中、悬浮、展开这类鼠标操作的中间产物。助手用稳定引用直接寻址，不需要先"选中"。 */
@@ -72,7 +72,7 @@ export interface ApplicationLedgerAuditInput {
   readonly capabilityIds: ReadonlySet<string>
 }
 
-export interface ApplicationLedgerProblem {
+interface ApplicationLedgerProblem {
   readonly action: string
   readonly problem: string
 }

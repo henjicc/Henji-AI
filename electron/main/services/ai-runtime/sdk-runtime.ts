@@ -44,7 +44,7 @@ import type { ElectronHostTransport, ElectronHostMediaReader, ElectronHostRuntim
  * 发请求、老实地把失败 throw 出去。
  */
 const diagnosticTransport = createDiagnosticTransport((url, init) => fetch(url, init))
-export const electronTransport: ElectronHostTransport = {
+const electronTransport: ElectronHostTransport = {
   fetch: diagnosticTransport.fetch,
   uploadFile: createNativeFileUpload(diagnosticTransport.fetch),
   fetchStream: createNativeStreamFetch(diagnosticTransport.fetch),
@@ -128,7 +128,7 @@ export const electronMediaReader: ElectronHostMediaReader = {
  */
 const mainLogger = createMainLogger('ai-runtime.sdk')
 
-export const electronLogger: Logger = {
+const electronLogger: Logger = {
   info: (message, ctx) => mainLogger.info(message, ctx),
   warn: (message, ctx) => mainLogger.warn(message, ctx),
   error: (message, ctx) => mainLogger.error(message, ctx),
@@ -143,7 +143,7 @@ export const electronLogger: Logger = {
  * 按重要记录 014 留在应用侧，不能塞回通用 SDK；当前 Electron 宿主没有独立 APM，
  * 因此使用 no-op 实现，既保留统一注入点，也不制造第二份助手追踪数据。
  */
-export const electronTracer = noopTracer
+const electronTracer = noopTracer
 
 // ---------------------------------------------------------------------------
 // RuntimeContext 单例

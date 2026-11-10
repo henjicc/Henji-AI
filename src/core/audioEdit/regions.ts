@@ -3,7 +3,7 @@ import { audioEditChainItemRecipe, splitAudioEditChain, type AudioEditChainItem 
 
 const frame = z.number().int().nonnegative()
 const base = { id: z.string().min(1).max(200), startFrame: frame, endFrame: frame, enabled: z.boolean() }
-export const audioEditGainRegionSchema = z.object({
+const audioEditGainRegionSchema = z.object({
   ...base, gainDb: z.number().min(-120).max(36), fadeInFrames: frame, fadeOutFrames: frame,
 }).strict().refine(r => r.endFrame > r.startFrame && r.fadeInFrames + r.fadeOutFrames <= r.endFrame - r.startFrame, '音量区域或淡变时长无效')
 
@@ -12,7 +12,7 @@ export const audioEditGainRegionSchema = z.object({
  * radius is the horizontal radius; radiusY (optional, defaults to radius) is the vertical one, so a round
  * brush on screen stays round after the rectangle is stretched to the repair's time and frequency span.
  */
-export const audioEditBrushStrokeSchema = z.object({
+const audioEditBrushStrokeSchema = z.object({
   radius: z.number().positive().max(1), radiusY: z.number().positive().max(1).optional(),
   points: z.array(z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }).strict()).min(1).max(10000),
 }).strict()

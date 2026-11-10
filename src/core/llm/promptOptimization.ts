@@ -24,14 +24,14 @@ export interface PromptOptimizationContext {
   targetModel?: PromptOptimizationTargetModel
 }
 
-export interface PromptOptimizationVariable {
+interface PromptOptimizationVariable {
   token: string
   label: string
   description: string
   group: '输入' | '当前模型'
 }
 
-export const PROMPT_OPTIMIZATION_VARIABLES: PromptOptimizationVariable[] = [
+const PROMPT_OPTIMIZATION_VARIABLES: PromptOptimizationVariable[] = [
   { token: '{{prompt}}', label: '当前提示词', description: '用户在主输入框里输入的原始提示词', group: '输入' },
   { token: '{{target.model.name}}', label: '目标模型名称', description: '当前生成模型显示名称', group: '当前模型' },
   { token: '{{target.model.type}}', label: '目标模型类型', description: '图片、视频或音频等生成类型', group: '当前模型' },

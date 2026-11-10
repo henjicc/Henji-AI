@@ -6,8 +6,8 @@ import type { LocalInferenceLog, LocalExecutionProvider } from '../providers'
 import { assertInpaintRoi, type ImageInpaintJob, type ImageInpaintQuality, type ImageInpaintResult, type InpaintRoi } from './protocol'
 
 /** 资源引用只在宿主内部解析；不接受本地路径、远程 URL 或任意张量。 */
-export interface InpaintImageRef { id: string }
-export interface InpaintResourceLease { path: string; release(): Promise<void> }
+interface InpaintImageRef { id: string }
+interface InpaintResourceLease { path: string; release(): Promise<void> }
 export interface ImageInpaintInput { image: InpaintImageRef; mask: InpaintImageRef; roi: InpaintRoi; quality: ImageInpaintQuality; sample?: InpaintImageRef }
 export interface ImageInpaintOutput extends Omit<ImageInpaintResult, 'outputPath'> { patch: InpaintImageRef }
 export interface ImageInpaintProgress { stage: 'resolving' | 'downloading' | 'processing' | 'publishing'; done: number; total: number }

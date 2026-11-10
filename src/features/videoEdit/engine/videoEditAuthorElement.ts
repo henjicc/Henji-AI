@@ -3,7 +3,7 @@ import { contours } from 'd3-contour'
 import simplify from 'simplify-js'
 
 /** 作者根空间里的一个点（three 的 Vector3 可以直接 copy）。 */
-export interface AuthorElementPoint { x: number; y: number; z: number }
+interface AuthorElementPoint { x: number; y: number; z: number }
 
 /**
  * 三维作者通过图片参数引用的时间线片段：它此刻在三维里的位置与形状（`info.elements[参数键]`）。
@@ -27,7 +27,7 @@ export interface AuthorElement {
    */
   outline?(tolerance?: number): AuthorElementPolygon[]
 }
-export interface AuthorElementPolygon { outer: Array<[number, number]>; holes: Array<Array<[number, number]>> }
+interface AuthorElementPolygon { outer: Array<[number, number]>; holes: Array<Array<[number, number]>> }
 
 interface Coverage { width: number; height: number; alpha: Uint8ClampedArray }
 /**

@@ -7,7 +7,7 @@ import type { SoundFeatures } from '../../core/soundLibrary/soundFeatures'
  * 主进程实现在 `electron/main/services/sound-library/`，渲染层经 `src/commands/soundLibrary.ts` 调用。
  */
 
-export type SoundLibraryIndexStatus = 'not_indexed' | 'indexing' | 'ready' | 'failed'
+type SoundLibraryIndexStatus = 'not_indexed' | 'indexing' | 'ready' | 'failed'
 
 export interface SoundLibrarySkippedFile {
   /** 相对登记文件夹的路径。 */
@@ -55,7 +55,7 @@ export interface SoundLibrarySearchRequest {
   limit: number
 }
 
-export interface SoundLibraryMatch extends SoundFeatures {
+interface SoundLibraryMatch extends SoundFeatures {
   id: string
   folderId: string
   relativePath: string

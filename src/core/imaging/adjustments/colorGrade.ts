@@ -37,7 +37,7 @@ export const COLOR_GRADE_WHEEL_PARAMS: readonly ImagingParam[] = [
   signed('grade_balance', '分级平衡', '分级模式下阴影与高光的分界；正值让高光区扩大，负值让阴影区扩大。'),
 ]
 export const COLOR_GRADE_MIXER_COLORS = ['red', 'orange', 'yellow', 'green', 'aqua', 'blue', 'purple', 'magenta'] as const
-export const COLOR_GRADE_MIXER_COLOR_NAMES = ['红色', '橙色', '黄色', '绿色', '浅绿', '蓝色', '紫色', '洋红'] as const
+const COLOR_GRADE_MIXER_COLOR_NAMES = ['红色', '橙色', '黄色', '绿色', '浅绿', '蓝色', '紫色', '洋红'] as const
 /** Display-hue centres of the eight named colors (Lightroom HSL / Color Mixer). */
 export const COLOR_GRADE_MIXER_CENTERS = [0, 30, 60, 120, 180, 240, 270, 300] as const
 export const COLOR_GRADE_MIXER_PARAMS: readonly ImagingParam[] = COLOR_GRADE_MIXER_COLORS.flatMap((color, i) => [

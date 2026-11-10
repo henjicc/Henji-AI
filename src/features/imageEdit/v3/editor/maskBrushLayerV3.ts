@@ -9,7 +9,7 @@ import type { AnnotationMatrixV3 } from './annotationGeometryV3'
 import { resolveAnnotationLayerToOutputMatrixV3 } from './annotationGeometryV3'
 import { findImageEditLayerLocationV3 } from './layerTreeV3'
 
-export interface EditableImageEditorMaskV3 {
+interface EditableImageEditorMaskV3 {
   layer: ImageEditLayerV3 & { mask: ImageEditSparseMaskReferenceV3 }
   matrix: AnnotationMatrixV3
   inverseMatrix: AnnotationMatrixV3

@@ -97,7 +97,7 @@ const DEFAULT_EXTENSIONS: Record<MediaType, string> = {
 /**
  * 方法1: 从 Content-Type 响应头检测文件类型
  */
-export function detectFromContentType(contentType: string | null | undefined): string | null {
+function detectFromContentType(contentType: string | null | undefined): string | null {
   if (!contentType) return null
 
   // 移除参数部分（如 "image/jpeg; charset=utf-8" -> "image/jpeg"）
@@ -110,7 +110,7 @@ export function detectFromContentType(contentType: string | null | undefined): s
  * 方法2: 从文件头（魔数）检测文件类型
  * @param buffer 文件的前几个字节（建议至少 4KB）
  */
-export function detectFromMagicNumber(buffer: Uint8Array): string | null {
+function detectFromMagicNumber(buffer: Uint8Array): string | null {
   if (!buffer || buffer.length === 0) return null
 
   for (const magic of MAGIC_NUMBERS) {
@@ -161,7 +161,7 @@ function detectRIFFSubtype(buffer: Uint8Array): string | null {
 /**
  * 方法3: 从 URL 中提取扩展名
  */
-export function detectFromURL(url: string): string | null {
+function detectFromURL(url: string): string | null {
   if (!url) return null
 
   try {
@@ -186,7 +186,7 @@ export function detectFromURL(url: string): string | null {
 /**
  * 方法4: 使用媒体类型的默认扩展名
  */
-export function getDefaultExtension(mediaType: MediaType): string {
+function getDefaultExtension(mediaType: MediaType): string {
   return DEFAULT_EXTENSIONS[mediaType]
 }
 

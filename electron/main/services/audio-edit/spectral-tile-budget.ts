@@ -6,7 +6,7 @@ import { removeUnmanagedCachePath } from '../media-recycle/cache-deletion'
  * 细层（level < 3）频谱块按需计算、按块落盘，每块约 5 MB；声音每改一次，看过的块就换一套。
  * 它们单独限额、按最近使用清理（读取时刷新修改时间），不靠全局的容量上限兜底。
  */
-export const SPECTRAL_TILE_BUDGET_BYTES = 1024 ** 3
+const SPECTRAL_TILE_BUDGET_BYTES = 1024 ** 3
 /** 刚用过的块不删：读取方可能正要打开它。 */
 const RECENT_MS = 60_000
 /** 只认发布后的块（内容哈希名）；计算中的临时文件是随机名，不动。 */

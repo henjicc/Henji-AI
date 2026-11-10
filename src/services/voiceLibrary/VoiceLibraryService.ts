@@ -29,7 +29,7 @@ export interface VoiceLibraryRecord {
   activated?: boolean
 }
 
-export interface UpsertVoiceLibraryInput {
+interface UpsertVoiceLibraryInput {
   createdAt?: string
   voiceId: string
   voiceName: string

@@ -25,4 +25,4 @@ function dynamicMsvcRuntimeOf(buffer) {
   return buffer.toString('latin1').match(DYNAMIC_MSVC_RUNTIME)?.[0] ?? null
 }
 
-module.exports = { STATIC_CRT_FLAG, WINDOWS_MSVC_RUSTFLAGS_ENV, dynamicMsvcRuntimeOf, withStaticMsvcCrt }
+module.exports = { WINDOWS_MSVC_RUSTFLAGS_ENV, dynamicMsvcRuntimeOf, withStaticMsvcCrt }

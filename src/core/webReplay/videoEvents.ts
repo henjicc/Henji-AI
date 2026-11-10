@@ -20,7 +20,7 @@ export const webRecordingBackupTimingSchema = z.object({
   originUs: z.number().finite(),
   spans: z.array(z.object({ monoUs: z.number().finite(), durationUs: z.number().finite().nonnegative() }).strict()),
 }).strict()
-export type WebRecordingBackupTiming = z.infer<typeof webRecordingBackupTimingSchema>
+type WebRecordingBackupTiming = z.infer<typeof webRecordingBackupTimingSchema>
 
 export type WebRecordingVideoClock = { kind: 'replay' } | { kind: 'backup'; monoAtZeroUs: number; timing: WebRecordingBackupTiming }
 

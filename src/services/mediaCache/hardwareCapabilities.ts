@@ -42,7 +42,7 @@ export function hardwareEncodeLimitation(codec: 'avc' | 'hevc', width: number, h
 const ENCODE_PROBE_TIMEOUT_MS = 30_000
 
 /** 编码能力在一次性 Worker 里实测（见 hardwareEncodeProbe.worker），不占界面线程；没有 Worker 的环境（单元测试）不检测。 */
-export async function detectEncodeCapabilities(): Promise<HardwareEncodeResult[]> {
+async function detectEncodeCapabilities(): Promise<HardwareEncodeResult[]> {
   if (typeof Worker === 'undefined') return []
   const worker = new Worker(new URL('./hardwareEncodeProbe.worker.ts', import.meta.url), { type: 'module' })
   let timer: ReturnType<typeof setTimeout> | undefined

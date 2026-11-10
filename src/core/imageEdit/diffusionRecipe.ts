@@ -5,9 +5,9 @@ import type {
 } from './types';
 
 export const DIFFUSION_RECIPE_VERSION = 2 as const;
-export const DIFFUSION_SCALE_COUNT = 6 as const;
+const DIFFUSION_SCALE_COUNT = 6 as const;
 
-export interface DiffusionScaleRecipe {
+interface DiffusionScaleRecipe {
   index: number;
   radius: number;
   weight: number;

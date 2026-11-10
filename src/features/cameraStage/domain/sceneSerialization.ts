@@ -258,7 +258,7 @@ export function sceneToDocumentContent(input: StageSceneSnapshotInput): CameraSt
 }
 
 /** 摄像机被删掉的切换点不再生效，也不写进文件。 */
-export function liveCameraCuts(cuts: readonly StageCameraCut[], objects: readonly StageObject[]): StageCameraCut[] {
+function liveCameraCuts(cuts: readonly StageCameraCut[], objects: readonly StageObject[]): StageCameraCut[] {
   const cameras = new Set(objects.filter((object) => object.type === 'camera').map((object) => object.id))
   return cuts.filter((cut) => cut.cameraId === null || cameras.has(cut.cameraId))
 }

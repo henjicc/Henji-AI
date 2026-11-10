@@ -13,7 +13,7 @@ export const applicationUserConfirmationSchema = z.object({
   paid: paidApprovalDecisionSchema.optional(),
 }).strict()
 export type ApplicationUserConfirmation = z.infer<typeof applicationUserConfirmationSchema>
-export type ApplicationConfirmationProgress =
+type ApplicationConfirmationProgress =
   | { phase: 'awaiting_user_confirmation'; confirmation: ApplicationUserConfirmation }
   | { phase: 'executing' }
   | { phase: 'paid_approval'; request: PaidApprovalRequest; consent?: 'once' }

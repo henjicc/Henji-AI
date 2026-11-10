@@ -13,7 +13,7 @@ import { validateCodeSceneRecords } from '@/core/videoEdit/scene/sceneDeclaratio
 import { readRecordingClipEvents } from './videoEditRecordingClip'
 import { videoEditSceneRef, videoEditSceneRecordRef } from './videoEditSceneFields'
 
-export interface VideoEditSceneReviewProposal { ref: ApplicationRef; propertyId: string; value: JsonValue }
+interface VideoEditSceneReviewProposal { ref: ApplicationRef; propertyId: string; value: JsonValue }
 export interface VideoEditSceneReviewRecord extends Omit<VideoEditReviewRecord, 'kind' | 'subjectType' | 'motionEvidence'> {
   kind: VideoEditSceneReviewKind
   subjectType: 'video_edit.scene_record' | 'video_edit.scene'
@@ -24,7 +24,7 @@ export interface VideoEditSceneReviewRecord extends Omit<VideoEditReviewRecord, 
 }
 export type VideoEditSceneReviewInput = NonNullable<z.infer<typeof queryVideoEditReviewCapability.inputSchema>['scene']>
 /** 二分查找与区间划分的计算预算，与最终返回的候选条数分别计量。 */
-export const VIDEO_EDIT_SCENE_REVIEW_WORK_BUDGET = 5_000_000
+const VIDEO_EDIT_SCENE_REVIEW_WORK_BUDGET = 5_000_000
 
 function seconds(value: number): string {
   const centiseconds = Math.round(value * 100)

@@ -75,7 +75,7 @@ function compactJson(value: unknown, limit = 120): string {
   try { return oneLine(JSON.stringify(value) ?? '', limit) } catch { return '' }
 }
 
-export function formatChainTokens(value: number | undefined | null): string {
+function formatChainTokens(value: number | undefined | null): string {
   if (value === undefined || value === null) return '—'
   return value >= 1000 ? `${(value / 1000).toFixed(1)}K` : String(value)
 }

@@ -46,7 +46,7 @@ export const GROUND_PATTERN_OPTIONS: Array<{ value: StageGroundPattern; label: s
   { value: 'checker', label: '棋盘' },
 ]
 
-export function createIdentityTransform(): StageTransform {
+function createIdentityTransform(): StageTransform {
   return {
     position: { x: 0, y: 0, z: 0 },
     rotation: { x: 0, y: 0, z: 0 },

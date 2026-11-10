@@ -6,7 +6,7 @@ import { registerVideoEditProgramCoverCapture, saveVideoEditPosterCover } from '
 import { publishVideoEditOutput, verifyVideoEditOutput, type VideoEditOutputReceipt } from './videoEditOutputs'
 
 const logger = createLogger('features.videoEdit.programCapture')
-export interface VideoEditProgramCaptureRequest { document: VideoEditComposition; frame: number; assertCurrent(): void }
+interface VideoEditProgramCaptureRequest { document: VideoEditComposition; frame: number; assertCurrent(): void }
 type Capture = (request: VideoEditProgramCaptureRequest, signal?: AbortSignal) => Promise<Blob>
 const providers = new WeakMap<VideoEditInstance, { sequenceId: string | (() => string); capture: Capture }>()
 const providerSequence = (provider: { sequenceId: string | (() => string) }): string => typeof provider.sequenceId === 'function' ? provider.sequenceId() : provider.sequenceId

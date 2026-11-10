@@ -17,7 +17,7 @@ import {
 } from '@henjicc/ai-sdk'
 import { sdkRuntimeContext } from '../../ai-runtime/sdk-runtime'
 
-export const MODEL_STEP_ADAPTER_VERSION = 'ai@6.0.234/openai-compatible@2.0.62'
+const MODEL_STEP_ADAPTER_VERSION = 'ai@6.0.234/openai-compatible@2.0.62'
 const logger = createMainLogger('main.llm_capability_smoke')
 
 const emptyUsage: ModelStepUsage = {

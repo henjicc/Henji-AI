@@ -37,7 +37,7 @@ export const smoothing = (seconds: number, rate: number): number => Math.exp(-1 
  * `cut` 为有限深度的陷波：理想陷波 N 与直通按深度混合，H = G + (1 - G)·N（G 为 `gain` dB 换算的线性增益）。
  * 宽度由 N 决定（-3 dB 处带宽 ≈ 频率 / Q），深切时裙边也很窄；RBJ 峰值段的 Q 按一半深度处的带宽算，深切时裙边宽得多。
  */
-export type BiquadKind = 'lowpass' | 'highpass' | 'peaking' | 'lowshelf' | 'highshelf' | 'notch' | 'allpass' | 'cut'
+type BiquadKind = 'lowpass' | 'highpass' | 'peaking' | 'lowshelf' | 'highshelf' | 'notch' | 'allpass' | 'cut'
 export interface BiquadSpec { kind: BiquadKind; frequency: number; q: number; gain?: number }
 export interface Coefficients { b0: number; b1: number; b2: number; a1: number; a2: number }
 /** 增益 0 dB 的峰值段：系数恰好是直通（b0 = 1，b1 = a1，b2 = a2），状态为零时输出与输入逐样本相同。用于关掉的段，保持段数不变。 */

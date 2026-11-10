@@ -1,7 +1,7 @@
 import type { ContentTrustCommand, ContentTrustCheck } from '../../../../src/core/contentTrust'
 import { contentTrust } from './runtime'
 
-export async function prepareForeignContent(sourceType: 'web_recording' | 'skill', id: string) {
+async function prepareForeignContent(sourceType: 'web_recording' | 'skill', id: string) {
   if (sourceType === 'web_recording') {
     const { resolveWebRecordingDirectory } = await import('../web-replay/locations')
     const { WebRecordingStore } = await import('../web-replay/store')

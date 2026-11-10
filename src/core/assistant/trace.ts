@@ -7,18 +7,18 @@ import {
   modelStepUsageSchema,
 } from '@henjicc/ai-sdk'
 
-export const AGENT_TRACE_SCHEMA_VERSION = 'agent-trace/v1' as const
+const AGENT_TRACE_SCHEMA_VERSION = 'agent-trace/v1' as const
 
 export const agentTraceCaptureModeSchema = z.enum(['summary', 'detailed'])
 export type AgentTraceCaptureMode = z.infer<typeof agentTraceCaptureModeSchema>
 
-export const agentTraceStepKindSchema = z.enum(['router', 'primary', 'summarizer', 'fallback', 'observer', 'other'])
+const agentTraceStepKindSchema = z.enum(['router', 'primary', 'summarizer', 'fallback', 'observer', 'other'])
 export type AgentTraceStepKind = z.infer<typeof agentTraceStepKindSchema>
 
-export const agentTraceStatusSchema = z.enum(['running', 'completed', 'failed', 'cancelled', 'interrupted'])
+const agentTraceStatusSchema = z.enum(['running', 'completed', 'failed', 'cancelled', 'interrupted'])
 export type AgentTraceStatus = z.infer<typeof agentTraceStatusSchema>
 
-export const agentTraceLayerReportSchema = z.object({
+const agentTraceLayerReportSchema = z.object({
   id: z.string().min(1).max(100),
   included: z.boolean(),
   estimatedTokens: z.number().int().nonnegative(),
@@ -27,7 +27,7 @@ export const agentTraceLayerReportSchema = z.object({
 }).strict()
 export type AgentTraceLayerReport = z.infer<typeof agentTraceLayerReportSchema>
 
-export const agentTraceContextMetadataSchema = z.object({
+const agentTraceContextMetadataSchema = z.object({
   kind: agentTraceStepKindSchema.optional(),
   turn: z.number().int().positive().optional(),
   snapshotRevision: z.number().int().nonnegative().optional(),
@@ -44,7 +44,7 @@ export const agentTraceContextMetadataSchema = z.object({
 }).strict()
 export type AgentTraceContextMetadata = z.infer<typeof agentTraceContextMetadataSchema>
 
-export const agentTraceHttpRequestSchema = z.object({
+const agentTraceHttpRequestSchema = z.object({
   method: z.string().min(1).max(20),
   url: z.string().min(1).max(4_000),
   headers: z.record(z.string(), z.string().max(2_000)),
@@ -52,7 +52,7 @@ export const agentTraceHttpRequestSchema = z.object({
 }).strict()
 export type AgentTraceHttpRequest = z.infer<typeof agentTraceHttpRequestSchema>
 
-export const agentTraceHttpResponseSchema = z.object({
+const agentTraceHttpResponseSchema = z.object({
   status: z.number().int().nonnegative().optional(),
   statusText: z.string().max(500).optional(),
   headers: z.record(z.string(), z.string().max(2_000)).optional(),
@@ -60,7 +60,7 @@ export const agentTraceHttpResponseSchema = z.object({
 }).strict()
 export type AgentTraceHttpResponse = z.infer<typeof agentTraceHttpResponseSchema>
 
-export const agentTraceStreamSummarySchema = z.object({
+const agentTraceStreamSummarySchema = z.object({
   firstChunkMs: z.number().int().nonnegative().nullable(),
   totalEventCount: z.number().int().nonnegative(),
   textDeltaCount: z.number().int().nonnegative(),
@@ -71,7 +71,7 @@ export const agentTraceStreamSummarySchema = z.object({
 }).strict()
 export type AgentTraceStreamSummary = z.infer<typeof agentTraceStreamSummarySchema>
 
-export const agentTraceResponseSchema = z.object({
+const agentTraceResponseSchema = z.object({
   text: z.string(),
   reasoningText: z.string(),
   structuredOutput: z.unknown().nullable(),
@@ -84,7 +84,7 @@ export const agentTraceResponseSchema = z.object({
 }).strict()
 export type AgentTraceResponse = z.infer<typeof agentTraceResponseSchema>
 
-export const agentTraceErrorSchema = z.object({
+const agentTraceErrorSchema = z.object({
   name: z.string().max(200).optional(),
   message: z.string().max(4_000),
   code: z.string().max(200).optional(),
@@ -118,7 +118,7 @@ export const agentTraceDetailSchema = z.object({
 }).strict()
 export type AgentTraceDetail = z.infer<typeof agentTraceDetailSchema>
 
-export const agentTraceStepSummarySchema = z.object({
+const agentTraceStepSummarySchema = z.object({
   traceId: z.string().min(1),
   runId: z.string().min(1),
   requestId: z.string().min(1),
@@ -141,7 +141,7 @@ export const agentTraceStepSummarySchema = z.object({
 }).strict()
 export type AgentTraceStepSummary = z.infer<typeof agentTraceStepSummarySchema>
 
-export const agentTraceRunSummarySchema = z.object({
+const agentTraceRunSummarySchema = z.object({
   runId: z.string().min(1),
   threadId: z.string().min(1).optional(),
   goal: z.string().max(32 * 1024).optional(),

@@ -11,7 +11,7 @@ import {
 } from '../shared/defineApplicationCapability'
 import { canvasNodePlacementSchema } from './canvasMutationApplicationCapabilities'
 
-export const canvasBatchOperationSchema = z.discriminatedUnion('kind', [
+const canvasBatchOperationSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('add_node'),
     nodeType: z.string().min(1),

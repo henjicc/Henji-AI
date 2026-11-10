@@ -5,11 +5,11 @@ import { recordingUnderstandingSchema, emptyRecordingUnderstanding } from './und
 import { recordingScriptCaptureSchema } from './script'
 import { recordingDirectorRunSchema } from './director'
 
-export const recordingMediaSchema = z.object({
+const recordingMediaSchema = z.object({
   id: z.string().min(1), kind: z.enum(['screen', 'microphone', 'systemAudio', 'camera']),
   path: z.string().min(1), monoUs: z.number().int().nonnegative(), durationUs: z.number().int().nonnegative(),
 }).strict()
-export const recordingPageReferenceSchema = z.object({
+const recordingPageReferenceSchema = z.object({
   path: z.string().min(1), firstSequence: z.number().int().nonnegative(), lastSequence: z.number().int().nonnegative(),
 }).strict()
 export const recordingDocumentSchema = z.object({

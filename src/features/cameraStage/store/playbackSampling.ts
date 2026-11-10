@@ -240,7 +240,7 @@ function followSamplerFor(entry: StageCameraFollowEntry, subject: StageObject, a
 }
 
 /** 跟拍区间内的机位与注视点；不在跟拍区间或主体不在场景里返回 undefined。 */
-export function resolveCameraFollowPose(
+function resolveCameraFollowPose(
   camera: StageCameraObject,
   objects: StageObject[],
   animation: StageAnimationSampleSource,
@@ -261,7 +261,7 @@ export function resolveCameraFollowPose(
  * - 注视跟随滞后（设备默认或摄像机单独设置）对上面得到的朝向统一滤波，只在动画产物里有这台摄像机时生效。
  * roll 不属于注视点，始终取轨道或快照值。
  */
-export function resolveSampledCameraRotation(
+function resolveSampledCameraRotation(
   camera: StageCameraObject,
   objects: StageObject[],
   animation: StageAnimationSampleSource,

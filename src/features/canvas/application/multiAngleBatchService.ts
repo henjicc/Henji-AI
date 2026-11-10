@@ -11,9 +11,9 @@ import {
 
 const logger = createLogger('features.canvas.multi-angle-batch')
 
-export type MultiAngleBatchItemStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+type MultiAngleBatchItemStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled'
 
-export interface MultiAngleBatchItemStateV1 {
+interface MultiAngleBatchItemStateV1 {
   viewId: string
   order: number
   label: string
@@ -44,7 +44,7 @@ export interface MultiAngleBatchExecutionResult {
   errors: string[]
 }
 
-export interface MultiAngleBatchExecuteContext {
+interface MultiAngleBatchExecuteContext {
   signal: AbortSignal
   resumeProviderRequestId?: string
   onProviderRequestId: (requestId: string) => void

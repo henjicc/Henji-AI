@@ -12,7 +12,7 @@ export function normalizeEffectRefLabels(effect: ApplicationEffectReceipt): Appl
   return { ...effect, refs: effect.refs.map(normalizeApplicationRefLabel) }
 }
 
-export interface ApplicationPersistenceRecovery {
+interface ApplicationPersistenceRecovery {
   capabilityId: string
   target: ApplicationRef
   replayMutation: false

@@ -45,7 +45,7 @@ export const GALLERY_CONTROL_SIZES = Object.keys(UI_CONTROL_HEIGHT_CLASS) as UiC
 const iconSizeType = primitiveSource.match(/export interface UiIconButtonProps[\s\S]*?\n}/)?.[0].match(/\bsize\?:\s*([A-Za-z0-9_]+)/)?.[1]
 if (!iconSizeType) throw new Error('图标按钮 size 属性未找到')
 export const GALLERY_ICON_SIZES = readLiteralUnion(primitiveSource, iconSizeType) as IconButtonSize[]
-export function readSizeUnion(source: string): string[] {
+function readSizeUnion(source: string): string[] {
   const declaration = source.match(/size\??:\s*([^\n;]+)/)?.[1]
   if (!declaration) throw new Error('组件 size 枚举未找到')
   if (declaration.trim() === 'UiControlSize') return GALLERY_CONTROL_SIZES

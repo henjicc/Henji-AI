@@ -21,7 +21,7 @@ const TITLE_STRIP = 32
 /** 主窗口标题；Reality 与宿主以它识别主窗口，浮窗标题必须与之区分。 */
 const MAIN_WINDOW_TITLE = '痕迹AI'
 const POPOUT_TITLE_PREFIX = `${MAIN_WINDOW_TITLE} · `
-export const VIDEO_EDIT_POPOUT_DEFAULT_TITLE = `${POPOUT_TITLE_PREFIX}剪辑面板`
+const VIDEO_EDIT_POPOUT_DEFAULT_TITLE = `${POPOUT_TITLE_PREFIX}剪辑面板`
 const MAX_TITLE_NAME = 64
 const POPOUT_TITLE_PATTERN = /^痕迹AI\s*·\s*/
 

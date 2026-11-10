@@ -3,13 +3,13 @@ import { UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS, UI_TEXT_TITLE_CLASS, UiButton, 
 
 type DialogActionVariant = 'primary' | 'secondary' | 'danger'
 
-export interface DialogAction {
+interface DialogAction {
   label: string
   onClick: () => void
   variant?: DialogActionVariant
 }
 
-export interface SettingsDialogProps {
+interface SettingsDialogProps {
   open: boolean
   title: string
   description?: string

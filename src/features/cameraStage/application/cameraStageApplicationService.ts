@@ -73,7 +73,7 @@ export interface CameraStageStateKeyframeUpdate {
   captureObjectIds?: string[]
 }
 
-export interface CameraStageSceneObservation {
+interface CameraStageSceneObservation {
   project: { id: string; name: string }
   activeCameraId: string | null
   objects: Array<{
@@ -137,7 +137,7 @@ export interface CameraStageSetSummary {
   propCounts: StageSetDecorCounts
 }
 
-export interface CameraStageSetResult {
+interface CameraStageSetResult {
   projectId: string
   set: CameraStageSetSummary
   replaced: boolean
@@ -396,7 +396,7 @@ async function readDomainSnapshot(projectId: string): Promise<CameraStageProject
 }
 
 /** 助手可见的镜头参考文档：已保存的（含项目里的），以及当前已打开的草稿；找不到文件的不列。 */
-export interface CameraStageDocumentListItem { id: string; name: string; path: string }
+interface CameraStageDocumentListItem { id: string; name: string; path: string }
 
 const implementation = {
   async listProjects(): Promise<CameraStageDocumentListItem[]> {

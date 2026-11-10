@@ -8,7 +8,7 @@ interface CanvasTextStreamState {
   clearAllPreviews: () => void
 }
 
-export interface CanvasTextStreamPreview {
+interface CanvasTextStreamPreview {
   content: string
   reasoning: string
 }

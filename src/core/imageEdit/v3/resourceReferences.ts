@@ -1,7 +1,7 @@
 import { creativeIntentLiveResources, type CreativeIntents } from '../../creativeIntent/persistence';
 import { IMAGE_EDIT_DOCUMENT_VERSION_V3 } from './documentTypes';
 
-export const IMAGE_EDIT_RESOURCE_ID_PATTERN_V3 = /^sha256:[a-f0-9]{64}$/;
+const IMAGE_EDIT_RESOURCE_ID_PATTERN_V3 = /^sha256:[a-f0-9]{64}$/;
 
 /** Identify the authoritative document field, never a same-named arbitrary effect parameter. */
 export function isImageEditDocumentResourceContainerV3(value:unknown):boolean {

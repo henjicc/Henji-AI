@@ -3,10 +3,10 @@ import type { VideoEditTrimMode } from '@/core/videoEdit/timelineTrims'
 import type { VideoEditTimelineTool } from '@/core/videoEdit/timelineSelection'
 
 /** 修剪工具在片段一端多近（像素）算抓住这一端（PR 光标在编辑点附近才变成修剪光标）。 */
-export const TIMELINE_TRIM_EDGE_PIXELS = 10
+const TIMELINE_TRIM_EDGE_PIXELS = 10
 /** 修剪类工具：四种修剪加比率拉伸（4.13，拖一端改速度，与波纹、滚动一样要抓住一端）。 */
 export type TimelineTrimTool = VideoEditTrimMode | 'rate_stretch'
-export const TIMELINE_TRIM_TOOLS = new Set<VideoEditTimelineTool>(['ripple', 'roll', 'rate_stretch', 'slip', 'slide'])
+const TIMELINE_TRIM_TOOLS = new Set<VideoEditTimelineTool>(['ripple', 'roll', 'rate_stretch', 'slip', 'slide'])
 export function isTimelineTrimTool(tool: VideoEditTimelineTool): tool is TimelineTrimTool { return TIMELINE_TRIM_TOOLS.has(tool) }
 /** 要抓住片段一端才生效的工具（点在中间只选中）。 */
 export function timelineTrimNeedsEdge(tool: TimelineTrimTool): boolean { return tool === 'ripple' || tool === 'roll' || tool === 'rate_stretch' }

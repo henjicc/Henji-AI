@@ -45,10 +45,10 @@ export type ProviderKeyStatusMap = Record<string, boolean>;
 export type LargeUploadStrategy = 'ask' | 'copy' | 'reference';
 /** 画布缩放简化（LOD）等级：off 不简化；detail 只在极小倍率简化；balanced 默认；performance 更早简化 */
 export type CanvasLodLevel = 'off' | 'detail' | 'balanced' | 'performance';
-export type AssetTabAction = 'floating' | 'workspace';
-export type AssetPanelPosition = 'top' | 'left' | 'right';
-export type AssetTriggerEdge = 'left' | 'right';
-export type AssetThumbnailFit = 'cover' | 'contain';
+type AssetTabAction = 'floating' | 'workspace';
+type AssetPanelPosition = 'top' | 'left' | 'right';
+type AssetTriggerEdge = 'left' | 'right';
+type AssetThumbnailFit = 'cover' | 'contain';
 const DEFAULT_UPLOAD_PROVIDER: UploadProvider = 'kie';
 
 interface SettingsState {

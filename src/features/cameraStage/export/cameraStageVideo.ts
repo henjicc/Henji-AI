@@ -67,7 +67,7 @@ export interface CameraStageVideoExportProgress {
   totalFrames: number
 }
 
-export function resolveVideoExportSize(
+function resolveVideoExportSize(
   ratio: number,
   preset: CameraStageVideoResolutionPreset,
 ): { width: number; height: number } {

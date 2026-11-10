@@ -13,7 +13,7 @@ const logger = createLogger('features.assets.observations')
  */
 export const OBSERVATION_ASSET_TAG = '助手观察'
 export const OBSERVATION_KEEP_COUNT = 200
-export const OBSERVATION_KEEP_DAYS = 7
+const OBSERVATION_KEEP_DAYS = 7
 const DAY_MS = 86_400_000
 const PAGE_SIZE = 200
 const PRUNE_INTERVAL_MS = 60_000
@@ -75,7 +75,7 @@ export async function pruneObservationAssets(now = Date.now()): Promise<number> 
 let pruning: Promise<unknown> | undefined
 let lastPrune = 0
 /** 每次登记后在后台清理，一分钟最多一次。 */
-export function scheduleObservationPrune(): void {
+function scheduleObservationPrune(): void {
   if (pruning || Date.now() - lastPrune < PRUNE_INTERVAL_MS) return
   lastPrune = Date.now()
   pruning = pruneObservationAssets()

@@ -47,7 +47,7 @@ interface IndexEntry { key: string; startUs: number; endUs: number; still: boole
 interface Job { id: string; request: SmartRegionRequest; status: SmartRegionStatus; done: Promise<SmartRegionStatus>; cancelled: boolean }
 
 /** 各分析的帧率上限：人物要跟住边缘，按素材帧率（最多 60）；人脸 30 帧（播放时按轨迹插值）；文字变化慢，10 帧。 */
-export const SMART_REGION_FPS_LIMITS: Readonly<Record<SmartRegionAnalysisKind, number>> = { face: 30, person: 60, text: 10 }
+const SMART_REGION_FPS_LIMITS: Readonly<Record<SmartRegionAnalysisKind, number>> = { face: 30, person: 60, text: 10 }
 
 const MODELS: Readonly<Record<SmartRegionAnalysisKind, Array<{ id: LocalModelId | BundledOcrModelId; name: LocalInferenceModelFile['name'] }>>> = {
   face: [{ id: 'face_detection_yunet', name: 'yunet' }],
@@ -61,7 +61,7 @@ const ANALYSIS_CACHE_VERSION = 3
 
 class SmartRegionFailure extends Error { constructor(readonly reason: SmartRegionFailureReason, message: string) { super(message) } }
 
-export function failureReasonOf(error: unknown): SmartRegionFailureReason {
+function failureReasonOf(error: unknown): SmartRegionFailureReason {
   if (error instanceof SmartRegionFailure) return error.reason
   const code = (error as Partial<LocalInferenceFailure>)?.code
   return code === 'decode' ? 'decode' : code === 'output' ? 'disk' : 'inference'

@@ -48,7 +48,7 @@ export function dotVec3(a: StageVec3, b: StageVec3): number {
   return a.x * b.x + a.y * b.y + a.z * b.z
 }
 
-export function normalizeVec3(value: StageVec3): StageVec3 {
+function normalizeVec3(value: StageVec3): StageVec3 {
   const length = lengthVec3(value)
   return length <= 1e-12 ? { ...ZERO_VEC3 } : scaleVec3(value, 1 / length)
 }

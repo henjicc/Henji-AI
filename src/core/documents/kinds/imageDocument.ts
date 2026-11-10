@@ -16,7 +16,7 @@ import type { DocumentKindDescriptor } from './registry'
  * 以及“新建空白图片后还没编辑过”的判断依据。图片、图层与历史都在工作副本里，由编辑器实例持有。
  */
 
-export const imageDocumentContentSchema = z.object({
+const imageDocumentContentSchema = z.object({
   /** 工作副本（V3 文档）的当前版本。 */
   workingRevision: z.number().int().nonnegative(),
   /** 新建空白图片时的版本；之后没有任何编辑（workingRevision 不超过它）就算空内容。从图片创建的为 null。 */

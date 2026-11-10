@@ -92,7 +92,7 @@ function colorGradeLayout(): SerializedDockview {
  * 音频（多轨）布局，参照 Audition 的多轨视图：时间线占主区，下方音轨混合器；右侧上面是小节目画面，下面效果控件（片段效果与基本声音）。
  * 素材在左。音频编辑点“多轨”打开序列时用它。
  */
-export function audioVideoEditLayout(): SerializedDockview {
+function audioVideoEditLayout(): SerializedDockview {
   const panel = (id: VideoEditPanelId, title: string) => ({ id, contentComponent: id, title, renderer: 'always' as const })
   return {
     grid: {

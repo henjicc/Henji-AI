@@ -5,7 +5,7 @@ type Message = AgentSession['messages'][number]
 type ContextDetails = { contextIdentity: string; hostSnapshot: unknown; fullContextContent: string }
 
 /** 只忽略采集时间；revision、播放头和选区变化仍须送达。 */
-export function hostContextIdentity(value: unknown): string {
+function hostContextIdentity(value: unknown): string {
   return JSON.stringify(value, (key, item: unknown) => key === 'capturedAt' ? undefined : item)
 }
 

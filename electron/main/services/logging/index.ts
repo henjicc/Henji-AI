@@ -7,14 +7,14 @@ export { appendLogEvents, LOG_EVENT_CHANNEL, pushLogEvents } from './push'
 export { createMainLogger } from './main-logger'
 export type { MainLogger, MainLoggerMeta } from './main-logger'
 export { runLogRetention } from './retention'
-export { isSensitiveKey, MAIN_LOG_EVENT_MAX_BYTES, sanitizeJsonValue } from './sanitize'
+export { isSensitiveKey, sanitizeJsonValue } from './sanitize'
 export { getLogCaptureMode, setLogCaptureMode } from './capture-config'
 export type { LogCaptureMode } from './capture-config'
 export { getAgentTraceCaptureMode, setAgentTraceCaptureMode } from './agent-trace-config'
 export { listLogDates, queryLogEvents } from './query'
 export type { LogQueryParams, LogQueryResult } from './query'
 export { exportImageEditorDiagnosticBundle } from './diagnostic-bundle'
-export { AgentTraceStore, createAgentTraceStore }
+export { AgentTraceStore }
 export type {
   AgentTraceCompleteInput,
   AgentTraceDetailResult,

@@ -19,7 +19,7 @@ import { GAUSSIAN_EFFECT, gaussianParameterSchema } from '@/core/imaging/effects
 import type { EffectQuality, EffectSize } from '@/core/imaging/effects/descriptor'
 import { Planner, type Vec4, type VideoEditBuiltinPass, type VideoEditBuiltinPlan, type VideoEditBuiltinTexture } from './effectPlan'
 
-export const BLUR_ENTRIES = ['blur_line', 'blur_zoom', 'blur_spin', 'blur_lens', 'blur_lens_band', 'blur_range_down', 'blur_range_up', 'blur_range_finish'] as const
+const BLUR_ENTRIES = ['blur_line', 'blur_zoom', 'blur_spin', 'blur_lens', 'blur_lens_band', 'blur_range_down', 'blur_range_up', 'blur_range_finish'] as const
 const TAPS = 16
 /** 镜头圆盘取样数；与 WGSL 里的循环次数一致。 */
 const LENS_TAPS = 96
@@ -165,7 +165,7 @@ function planLensRangeBlur(radius: number, highlights: number, repeatEdges: bool
 const farthest = (center: readonly [number, number], width: number, height: number): number => Math.max(...[[0, 0], [width, 0], [0, height], [width, height]].map(([x, y]) => Math.hypot(x - center[0], y - center[1])))
 
 /** `params` 已补齐默认值；`width`/`height` 是这次渲染的画面（或图层纹理）尺寸。 */
-export function planBlur(params: VideoEditBuiltinParams, width: number, height: number, frame: BlurFrame): VideoEditBuiltinPlan {
+function planBlur(params: VideoEditBuiltinParams, width: number, height: number, frame: BlurFrame): VideoEditBuiltinPlan {
   const amount = Number(params.amount)
   const repeat = params.repeat_edges !== false
   const layer = frame.layer
@@ -228,7 +228,7 @@ export function planBlur(params: VideoEditBuiltinParams, width: number, height: 
   }
 }
 
-export const BLUR_WGSL = `
+const BLUR_WGSL = `
 /** 等权直线取样（方向模糊）：a = (每步 u, 每步 v, 取样数, 重复边缘)，以当前像素为中心。 */
 @fragment fn blur_line(v: Vertex) -> @location(0) vec4f {
  let uv = uvOf(v); let n = i32(u.a.z); let middle = (u.a.z - 1.0) * 0.5;

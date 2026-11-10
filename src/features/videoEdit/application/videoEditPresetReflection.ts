@@ -9,7 +9,7 @@ import { VIDEO_EDIT_EFFECT_LIBRARY_SCOPE, videoEditEffectLibraryRevisions } from
 import { listAllVideoEditPresets, requireVideoEditPreset, setVideoEditPresetDefault, setVideoEditPresetRating, type VideoEditPresetEntry } from './videoEditPresetCatalog'
 import { videoEditPresetPreferences } from './videoEditPresetPreferences'
 
-export const PRESET_ENTITY = 'video_edit.preset'
+const PRESET_ENTITY = 'video_edit.preset'
 const SOURCE_ENTITY: Partial<Record<VideoEditPresetCategory, string>> = { text: 'video_edit.subtitle_preset', effect: 'video_edit.effect_preset' }
 const description = '剪辑预设面板里的预设（文字、效果、转场）及用户偏好。rating 为喜爱程度 0–5（0 未评分），is_default 为该类默认（效果没有默认）：文字默认用于新字幕，转场默认即默认过渡。用户没有指定时优先用默认，没有默认就推荐 recommended（评分最高）。内容本身经 source_ref 指向的原实体读写或删除。风格与模板在 video_edit.style / video_edit.template。'
 type Entry = VideoEditPresetEntry

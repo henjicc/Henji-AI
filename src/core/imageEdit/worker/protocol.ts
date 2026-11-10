@@ -1,4 +1,4 @@
-export type ImageEditExportFormat = 'image/png' | 'image/jpeg' | 'image/webp'
+type ImageEditExportFormat = 'image/png' | 'image/jpeg' | 'image/webp'
 
 /**
  * Worker 初始化失败时可安全写入日志的阶段码。它不携带路径、驱动版本或原始异常，

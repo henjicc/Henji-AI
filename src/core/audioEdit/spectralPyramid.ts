@@ -19,14 +19,14 @@ import { z } from 'zod'
  * 列中心在 origin + (c + 0.5) * hop。level >= 0 时 origin = -256（基础列 i 以 i * 512 为中心，汇总列正好覆盖其基础列）；
  * level < 0 时 origin = -hop / 2（第 c 列以 c * hop 为中心）。
  */
-export const SPECTRAL_SHORT_WINDOW = 2048
-export const SPECTRAL_LONG_WINDOW = 8192
+const SPECTRAL_SHORT_WINDOW = 2048
+const SPECTRAL_LONG_WINDOW = 8192
 export const SPECTRAL_HIGH_BINS = SPECTRAL_SHORT_WINDOW / 2 + 1
 /** 低频段上限；两段在 CROSSOVER 区间内由显示端混合。 */
-export const SPECTRAL_LOW_BAND_MAX_HZ = 1200
+const SPECTRAL_LOW_BAND_MAX_HZ = 1200
 export const SPECTRAL_CROSSOVER_START_HZ = 700
 export const SPECTRAL_CROSSOVER_END_HZ = 1100
-export const SPECTRAL_BASE_HOP = 512
+const SPECTRAL_BASE_HOP = 512
 export const SPECTRAL_MIN_LEVEL = -5
 export const SPECTRAL_MAX_LEVEL = 15
 export const SPECTRAL_PERSISTED_MIN_LEVEL = 3

@@ -28,7 +28,7 @@ export interface OklchColor {
   H: number;
 }
 
-export interface OklabColor {
+interface OklabColor {
   L: number;
   a: number;
   b: number;
@@ -45,7 +45,7 @@ export function srgbToLinear(v: number): number {
   return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
 }
 
-export function linearToSrgb(v: number): number {
+function linearToSrgb(v: number): number {
   return v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055;
 }
 
@@ -74,7 +74,7 @@ function oklchToSrgbUnclamped(L: number, C: number, H: number): [number, number,
 /**
  * OKLCH → sRGB（0–1），出色域时逐步降低彩度直到落入色域（参考实现算法）。
  */
-export function oklchToSrgb(L: number, C: number, H: number): [number, number, number] {
+function oklchToSrgb(L: number, C: number, H: number): [number, number, number] {
   let chroma = C;
   for (let n = 0; n < 60; n += 1) {
     const rgb = oklchToSrgbUnclamped(L, chroma, H);
@@ -92,7 +92,7 @@ function channelToHex(v: number): string {
     .padStart(2, '0');
 }
 
-export function srgbToHex(rgb: readonly [number, number, number]): string {
+function srgbToHex(rgb: readonly [number, number, number]): string {
   return `#${rgb.map(channelToHex).join('')}`.toUpperCase();
 }
 
@@ -158,7 +158,7 @@ export function compositeOver(foreground: string, background: string): string {
   return srgbToHex([mix(fg.r, bg.r), mix(fg.g, bg.g), mix(fg.b, bg.b)]);
 }
 
-export function hexToOklab(color: string): OklabColor {
+function hexToOklab(color: string): OklabColor {
   const { r, g, b } = requireColor(color);
   const [lr, lg, lb] = [r, g, b].map((v) => srgbToLinear(v / 255));
   const l = Math.cbrt(0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb);
@@ -171,7 +171,7 @@ export function hexToOklab(color: string): OklabColor {
   };
 }
 
-export function oklabToHex({ L, a, b }: OklabColor): string {
+function oklabToHex({ L, a, b }: OklabColor): string {
   const C = Math.hypot(a, b);
   const H = ((Math.atan2(b, a) * 180) / Math.PI + 360) % 360;
   return oklchToHex(L, C, H);

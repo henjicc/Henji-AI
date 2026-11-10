@@ -13,7 +13,7 @@ import { useReorderDrag } from '@/components/ui/fileUploader/useReorderDrag'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { getI18nText } from '@/core/types/I18nText'
 
-export interface ShotListPanelConfig {
+interface ShotListPanelConfig {
   minShotSeconds: number
   maxShotSeconds: number
   minTotalSeconds: number

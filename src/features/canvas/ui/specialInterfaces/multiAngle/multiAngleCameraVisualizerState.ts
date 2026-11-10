@@ -168,13 +168,13 @@ export function discretePresetForOrientation(pose: MultiAngleOrientation): Multi
   return closest.view.preset
 }
 
-export function describeMultiAngleVertical(value: number): string {
+function describeMultiAngleVertical(value: number): string {
   if (value > 0) return `俯视 ${Math.round(value)}°`
   if (value < 0) return `仰视 ${Math.round(Math.abs(value))}°`
   return '水平'
 }
 
-export function describeMultiAngleProximity(value: number): string {
+function describeMultiAngleProximity(value: number): string {
   if (value <= 2) return '全景'
   if (value <= 4) return '远景'
   if (value <= 6) return '中景'

@@ -8,7 +8,7 @@ import { approveAllWindowsClose } from './window'
  * → `src/commands/workRoot.ts` 调用。移动进度经 `workRoot:progress` 事件推给发起的窗口。
  */
 
-export function parseWorkRootTarget(input: unknown): WorkRootTarget {
+function parseWorkRootTarget(input: unknown): WorkRootTarget {
   const record = parseRecord(input)
   if (record.kind === 'default' && Object.keys(record).length === 1) return { kind: 'default' }
   if (record.kind === 'custom' && typeof record.folder === 'string' && record.folder.trim() && Object.keys(record).length === 2) {

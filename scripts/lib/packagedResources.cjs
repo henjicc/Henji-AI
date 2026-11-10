@@ -159,4 +159,4 @@ function verifyPackagedResources({ appOutDir, platform, productFilename, videoDe
   return problems
 }
 
-module.exports = { VIDEO_DECODER_EXECUTABLE, resourcesDirOf, verifyPackagedResources }
+module.exports = { VIDEO_DECODER_EXECUTABLE, verifyPackagedResources }

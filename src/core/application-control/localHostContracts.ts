@@ -39,7 +39,7 @@ export const localHostReplySchema = z.object({
   ]).optional(),
 }).strict()
 export type LocalHostReply = z.infer<typeof localHostReplySchema>
-export const localToolSchema = z.object({
+const localToolSchema = z.object({
   id: z.enum(APPLICATION_CAPABILITY_IDS), version: z.number().int().positive(),
   title: z.string(), description: z.string(), inputSchema: z.record(z.string(), z.unknown()),
 }).strict()
@@ -51,14 +51,14 @@ export type LocalTool = z.infer<typeof localToolSchema>
  * `readOnlyReason` 直接来自实体的 `writeExclusion.reason`——门禁（collectionCoverage.test.ts）
  * 已经保证「要么能写，要么写明由谁维护」，所以外部看到的"有意排除"不可能是"忘了实现"。
  */
-export const localEntitySurfaceSchema = z.object({
+const localEntitySurfaceSchema = z.object({
   id: z.string().min(1).max(128), title: z.string().min(1).max(120),
   writableProperties: z.number().int().nonnegative(),
   creatable: z.boolean(), removable: z.boolean(),
   readOnlyReason: z.string().min(1).max(500).optional(),
 }).strict()
 export type LocalEntitySurface = z.infer<typeof localEntitySurfaceSchema>
-export const localDomainSurfaceSchema = z.object({
+const localDomainSurfaceSchema = z.object({
   id: z.string().min(1).max(128), readable: z.boolean(), writable: z.boolean(),
   entities: z.array(localEntitySurfaceSchema).max(128),
 }).strict()

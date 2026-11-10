@@ -9,7 +9,7 @@ const documentRef = ref('video_edit.document')
 /** 一次回执里逐项列出的上限；超出部分仍已导入，按 video_edit.item 列表读取。 */
 export const VIDEO_EDIT_PROJECT_IMPORT_ITEM_LIMIT = 500
 export const VIDEO_EDIT_PROJECT_IMPORT_SKIP_LIMIT = 200
-export const VIDEO_EDIT_PROJECT_IMPORT_SKIP_REASONS = ['unsupported', 'duplicate', 'unreadable', 'repeated_folder', 'outside_project'] as const
+const VIDEO_EDIT_PROJECT_IMPORT_SKIP_REASONS = ['unsupported', 'duplicate', 'unreadable', 'repeated_folder', 'outside_project'] as const
 
 const importedItem = z.object({
   itemRef: ref('video_edit.item'), mediaRef: ref('video_edit.media'), binRef: ref('video_edit.bin').nullable(),

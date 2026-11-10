@@ -5,8 +5,8 @@ import { joinAudioEditText } from '../audioEdit/captions'
 import { screenChangeSchema } from './screenChangeEvidence'
 
 export const mediaContentKindSchema = z.enum(['transcript', 'caption', 'description', 'chapter', 'pause', 'scene', 'screen_change'])
-export type MediaContentKind = z.infer<typeof mediaContentKindSchema>
-export const mediaContentRangeSchema = z.object({ fromUs: z.number().int().nonnegative().safe(), toUs: z.number().int().nonnegative().safe() }).strict().refine(value => value.toUs >= value.fromUs, '源范围倒置。')
+type MediaContentKind = z.infer<typeof mediaContentKindSchema>
+const mediaContentRangeSchema = z.object({ fromUs: z.number().int().nonnegative().safe(), toUs: z.number().int().nonnegative().safe() }).strict().refine(value => value.toUs >= value.fromUs, '源范围倒置。')
 export type MediaContentRange = z.infer<typeof mediaContentRangeSchema>
 export const mediaContentRecordSchema = z.object({
   id: z.string().min(1), kind: mediaContentKindSchema, text: z.string().max(4000), textTruncated: z.boolean(),

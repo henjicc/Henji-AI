@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 
 export const ASSET_SIDEBAR_MIN_WIDTH = UI_PANEL_WIDTH.sidebar.min
 export const ASSET_SIDEBAR_MAX_WIDTH = UI_PANEL_WIDTH.sidebar.max
-export const ASSET_SIDEBAR_DEFAULT_WIDTH = UI_PANEL_WIDTH.sidebar.default
+const ASSET_SIDEBAR_DEFAULT_WIDTH = UI_PANEL_WIDTH.sidebar.default
 
 function viewportMaxWidth(viewportWidth: number): number {
   return Math.round(Math.max(ASSET_SIDEBAR_MIN_WIDTH, Math.min(ASSET_SIDEBAR_MAX_WIDTH, viewportWidth * 0.3)))

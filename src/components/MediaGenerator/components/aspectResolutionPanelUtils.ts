@@ -3,7 +3,7 @@ interface SizePresetTier {
   pixels: number
 }
 
-export interface SizeDerivedOption {
+interface SizeDerivedOption {
   optionValue: string | number
   ratioText: string
   ratioValue: number

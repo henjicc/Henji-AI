@@ -10,8 +10,8 @@
  * 所以谓词提到这里，两边都调它。纯函数，不 import React，`now` 由调用方传入以便测试。
  */
 
-export type GenerationHistoryMediaFilter = 'image' | 'video' | 'audio'
-export type GenerationHistoryTimePreset = '7d' | '30d' | '90d' | 'custom'
+type GenerationHistoryMediaFilter = 'image' | 'video' | 'audio'
+type GenerationHistoryTimePreset = '7d' | '30d' | '90d' | 'custom'
 
 export interface GenerationHistoryFilterCriteria {
   /** 大小写不敏感的子串匹配，搜索范围见 buildGenerationHistorySearchText */
@@ -92,7 +92,7 @@ export function resolveGenerationHistoryTimeRange(
   return { start, end }
 }
 
-export function buildGenerationHistorySearchText(subject: GenerationHistorySubject): string {
+function buildGenerationHistorySearchText(subject: GenerationHistorySubject): string {
   return [
     subject.prompt ?? '',
     subject.modelId,

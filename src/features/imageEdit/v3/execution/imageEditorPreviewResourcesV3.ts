@@ -81,7 +81,7 @@ export interface ImageEditorLoadedProxyResourcesV3 {
   transientLeases: ImageEditMemoryLease[]
 }
 
-export const IMAGE_EDITOR_PREVIEW_PROXY_CACHE_MAX_BYTES_V3 = 128 * 1024 * 1024
+const IMAGE_EDITOR_PREVIEW_PROXY_CACHE_MAX_BYTES_V3 = 128 * 1024 * 1024
 export const IMAGE_EDITOR_PREVIEW_PYRAMID_PREWARM_TILE_BUDGET_V3 = 64
 
 const logger = createLogger('image_editor_v3.preview_client')

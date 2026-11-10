@@ -45,7 +45,7 @@ export function sanitizeAgentTraceUrl(rawUrl: string): string {
   }
 }
 
-export function sanitizeAgentTraceHttpRequest(request: AgentTraceHttpRequest): AgentTraceHttpRequest {
+function sanitizeAgentTraceHttpRequest(request: AgentTraceHttpRequest): AgentTraceHttpRequest {
   return {
     method: request.method,
     url: sanitizeAgentTraceUrl(request.url),
@@ -54,7 +54,7 @@ export function sanitizeAgentTraceHttpRequest(request: AgentTraceHttpRequest): A
   }
 }
 
-export function sanitizeAgentTraceHttpResponse(response: AgentTraceHttpResponse): AgentTraceHttpResponse {
+function sanitizeAgentTraceHttpResponse(response: AgentTraceHttpResponse): AgentTraceHttpResponse {
   return {
     ...response,
     headers: response.headers ? sanitizeAgentTraceHeaders(response.headers) : undefined,
@@ -79,7 +79,7 @@ export function sanitizeAgentTraceDetail(detail: AgentTraceDetail): AgentTraceDe
   return next
 }
 
-export function serializedBytes(value: unknown): number {
+function serializedBytes(value: unknown): number {
   try {
     return new TextEncoder().encode(JSON.stringify(value)).byteLength
   } catch {

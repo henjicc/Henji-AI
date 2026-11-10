@@ -35,7 +35,7 @@ export interface ParamGesture {
   atomic: (value: CodeParameterValue) => void
   epoch?: number
 }
-export interface ParamFontOptions {
+interface ParamFontOptions {
   projectFonts: React.ComponentProps<typeof UiFontPicker>['projectFonts']
   onPreview: (name: string | null, path?: readonly string[]) => void
 }

@@ -22,9 +22,9 @@ export const modelCapabilitySmokeRequestSchema = z.object({
 
 export type ModelCapabilitySmokeRequest = z.infer<typeof modelCapabilitySmokeRequestSchema>
 
-export const capabilitySmokeCheckIdSchema = z.enum(['text', 'toolCall', 'structuredOutput', 'streaming', 'usage', 'cancel', 'image', 'video', 'audio'])
+const capabilitySmokeCheckIdSchema = z.enum(['text', 'toolCall', 'structuredOutput', 'streaming', 'usage', 'cancel', 'image', 'video', 'audio'])
 export type CapabilitySmokeCheckId = z.infer<typeof capabilitySmokeCheckIdSchema>
-export type CapabilitySmokeStatus = 'passed' | 'failed' | 'skipped'
+type CapabilitySmokeStatus = 'passed' | 'failed' | 'skipped'
 
 export interface CapabilitySmokeCheck {
   id: CapabilitySmokeCheckId

@@ -7,7 +7,7 @@ import {
   type MinimaxVoiceClonePanelValue,
 } from './types'
 
-export function isRecord(value: DynamicValue): value is DynamicValueMap {
+function isRecord(value: DynamicValue): value is DynamicValueMap {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
@@ -18,7 +18,7 @@ export function normalizeString(value: DynamicValue): string {
   return value.trim()
 }
 
-export function normalizeBoolean(value: DynamicValue, fallback: boolean): boolean {
+function normalizeBoolean(value: DynamicValue, fallback: boolean): boolean {
   if (typeof value === 'boolean') {
     return value
   }

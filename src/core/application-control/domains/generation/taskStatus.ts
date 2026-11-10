@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export const generationTaskStatusSchema = z.enum([
+const generationTaskStatusSchema = z.enum([
   'pending', 'queued', 'generating', 'success', 'error', 'cancelled', 'timeout',
 ])
 export type GenerationTaskStatus = z.infer<typeof generationTaskStatusSchema>

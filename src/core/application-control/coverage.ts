@@ -11,7 +11,7 @@ import {
 
 export const APPLICATION_CONTROL_COVERAGE_VERSION = 'application-control-coverage/v1' as const
 
-export const applicationCapabilityMigrationSchema = z.object({
+const applicationCapabilityMigrationSchema = z.object({
   capabilityId: z.string().regex(/^[a-z][a-z0-9_]{1,63}$/),
   domain: applicationStableIdSchema,
   source: z.string().min(1).max(500),
@@ -24,7 +24,7 @@ export const applicationCapabilityMigrationSchema = z.object({
 }).strict()
 export type ApplicationCapabilityMigration = z.infer<typeof applicationCapabilityMigrationSchema>
 
-export const applicationDomainCoverageSchema = z.object({
+const applicationDomainCoverageSchema = z.object({
   domain: applicationStableIdSchema,
   migrationTask: z.string().regex(/^[1-7]\.[1-9][0-9]*$/),
   formalService: z.string().min(1).max(500),
@@ -38,7 +38,7 @@ export const applicationDomainCoverageSchema = z.object({
 }).strict()
 export type ApplicationDomainCoverage = z.infer<typeof applicationDomainCoverageSchema>
 
-export const applicationSurfaceObservationCoverageSchema = z.object({
+const applicationSurfaceObservationCoverageSchema = z.object({
   surfaceId: applicationSurfaceIdSchema,
   providerId: applicationStableIdSchema,
   implementationStatus: z.enum(['available', 'planned']),

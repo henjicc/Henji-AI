@@ -17,7 +17,7 @@ import { parseRecord, registerIpcHandler } from './registry'
 /** 素材时间上限：24 小时（微秒）。 */
 const MAX_TIME_US = 24 * 3600 * 1e6
 
-export function parseSmartRegionRequest(input: unknown): SmartRegionRequest {
+function parseSmartRegionRequest(input: unknown): SmartRegionRequest {
   const record = parseRecord(input)
   const { source, kind, startUs, endUs, still } = record
   if (Object.keys(record).some(key => !['source', 'kind', 'startUs', 'endUs', 'still'].includes(key))) throw new Error('智能区域请求含未知字段。')

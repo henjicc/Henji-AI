@@ -13,7 +13,7 @@ import {
   type LayerStackDocumentV1,
 } from './layerStack'
 
-export type MultiLayerDocumentNodeDegradedReason =
+type MultiLayerDocumentNodeDegradedReason =
   | 'document-unavailable'
   | 'legacy-resources-unavailable'
   | 'materialized-image-unavailable'

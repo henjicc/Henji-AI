@@ -44,7 +44,7 @@ function closestAction(target: Element, options: LocatorOptions): Element | null
  * container wins over the container (a node's "detail" button, not the node); otherwise the
  * identified element, then the action, then the nearest interactive ancestor.
  */
-export function representativeElement(target: Element, options: LocatorOptions = DEFAULT_LOCATOR_OPTIONS): Element {
+function representativeElement(target: Element, options: LocatorOptions = DEFAULT_LOCATOR_OPTIONS): Element {
   const identified = target.closest(`[${options.idAttribute}]`)
   const action = closestAction(target, options)
   if (action && (!identified || (identified !== action && identified.contains(action)))) return action
@@ -56,7 +56,7 @@ function scopeOf(element: Element, options: LocatorOptions): Element | null {
   return element.parentElement?.closest(`[${options.idAttribute}]`) ?? null
 }
 
-export function describeLocator(element: Element, options: LocatorOptions = DEFAULT_LOCATOR_OPTIONS): Locator {
+function describeLocator(element: Element, options: LocatorOptions = DEFAULT_LOCATOR_OPTIONS): Locator {
   const locator: Locator = { tag: element.tagName.toLowerCase(), path: cssPath(element) }
   const replayId = element.getAttribute(options.idAttribute)
   if (replayId) locator.replayId = replayId

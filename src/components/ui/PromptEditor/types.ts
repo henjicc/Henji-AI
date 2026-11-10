@@ -9,7 +9,7 @@ export type PromptEditorPreset =
   | 'media-references'
   | 'template-variables'
   | 'structured'
-export type PromptEditorMode = 'edit' | 'static'
+type PromptEditorMode = 'edit' | 'static'
 export type PromptEditorLayout = 'auto' | 'fill-scroll'
 export type PromptEditorSubmitShortcut = 'enter' | 'mod-enter' | 'none'
 
@@ -45,7 +45,7 @@ export type PromptVariableSuggestionProvider = (
   query: string,
 ) => readonly PromptVariableItem[] | Promise<readonly PromptVariableItem[]>
 
-export interface ReplacePromptDocumentOptions {
+interface ReplacePromptDocumentOptions {
   addToHistory?: boolean
 }
 
@@ -54,7 +54,7 @@ export interface PromptEditorActivationPoint {
   clientY: number
 }
 
-export interface PromptEditorActivationRange {
+interface PromptEditorActivationRange {
   anchor: PromptEditorActivationPoint
   head: PromptEditorActivationPoint
 }
@@ -89,7 +89,7 @@ export interface PromptEditorHandle {
 }
 
 /** 拖放落点：松手处对应的文档位置，落在文字区之外时为 null。 */
-export interface PromptEditorDropTarget {
+interface PromptEditorDropTarget {
   position: number | null
 }
 

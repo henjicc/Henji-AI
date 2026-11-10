@@ -12,7 +12,7 @@ const at = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('marker'), markerRef: ref('video_edit.marker').describe('节拍或普通标记，如 analyze_video_edit_beats 生成的节拍。') }).strict(),
   z.object({ kind: z.literal('cut'), clipRef: clipRef.describe('切点所在片段。'), edge: z.enum(['start', 'end']).describe('start 为片段入点（切入），end 为出点（切出）。') }).strict(),
 ])
-export const videoEditSoundEffectPlacementSchema = z.object({
+const videoEditSoundEffectPlacementSchema = z.object({
   soundRef: soundRef.describe('search_sound_effects 返回的音效。'),
   at,
   anchor: z.enum(['hit', 'attack']).default('hit').describe('hit：声音最响的击中点对齐到目标时刻（默认，嗖、冲击、叮都用它）；attack：起音点对齐（需要声音从这一刻开始响时用）。'),

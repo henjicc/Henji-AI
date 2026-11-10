@@ -5,7 +5,7 @@ import { applicationRefSchema } from '../../application-control/identifiers'
 import { composeAffine, inverseAffine, translateAffine, type Affine } from '../../imaging/transforms'
 
 /** Immutable, bounded pages preserve complete affine geometry alongside the shared semantic sample. */
-export const imageLayoutEntrySchema = z.object({
+const imageLayoutEntrySchema = z.object({
   layerId: z.string().min(1), sample: sampleSchema, item: layoutItemSchema,
   localAffine: affineSchema, parentAffine: affineSchema,
 }).strict()

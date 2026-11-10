@@ -1,7 +1,7 @@
 import type { AgentSession, ToolDefinition } from '@earendil-works/pi-coding-agent'
 
 type AgentMessage = AgentSession['messages'][number]
-export const CONTEXT_BUDGET_ERROR = '当前对话和已加载工具超出所选模型的上下文预算。请新建对话并只加载本次所需工具，或切换更大上下文的模型；已有操作不会重新执行。'
+const CONTEXT_BUDGET_ERROR = '当前对话和已加载工具超出所选模型的上下文预算。请新建对话并只加载本次所需工具，或切换更大上下文的模型；已有操作不会重新执行。'
 
 /** 多模型预算估算，不是计费分词：ASCII 单词按三字符、标点逐个；非 ASCII BMP 码点计 1，辅助平面码点计 2。 */
 export function estimateContextTokens(text: string): number {
@@ -14,7 +14,7 @@ export function estimateContextTokens(text: string): number {
   return tokens
 }
 
-export function messageTokens(message: AgentMessage, attachmentTokens: (text: string) => number = () => 0): number {
+function messageTokens(message: AgentMessage, attachmentTokens: (text: string) => number = () => 0): number {
   const textTokens = (text: string): number => estimateContextTokens(text) + attachmentTokens(text)
   if ('content' in message) {
     if (typeof message.content === 'string') return 16 + textTokens(message.content)

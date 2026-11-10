@@ -117,7 +117,7 @@ export async function loadAllModels(): Promise<LoadStats> {
  * window.__listModels()
  * ```
  */
-export function listLoadedModels(): void {
+function listLoadedModels(): void {
   const models = registry.listAllModels()
 
   logger.info(`[ModelLoader] Total Models: ${models.length}`)
@@ -145,7 +145,7 @@ export function listLoadedModels(): void {
  * window.__getModelStats()
  * ```
  */
-export function getLoaderStats(): void {
+function getLoaderStats(): void {
   const stats = registry.getStats()
 
   logger.info('[ModelLoader] Registry Statistics:')
@@ -181,7 +181,7 @@ export function getLoaderStats(): void {
  * window.__reloadModels()
  * ```
  */
-export async function reloadModels(): Promise<void> {
+async function reloadModels(): Promise<void> {
   if (!import.meta.env.DEV) {
     logger.warn('[ModelLoader] reloadModels() is only available in development mode')
     return

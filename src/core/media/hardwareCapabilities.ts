@@ -8,7 +8,7 @@ import { z } from 'zod'
 export const HARDWARE_CAPABILITIES_VERSION = 1
 export const HARDWARE_DECODE_CODECS = ['h264', 'hevc', 'av1', 'vp9'] as const
 export type HardwareDecodeCodec = (typeof HARDWARE_DECODE_CODECS)[number]
-export const HARDWARE_ENCODE_CODECS = ['h264', 'hevc', 'av1'] as const
+const HARDWARE_ENCODE_CODECS = ['h264', 'hevc', 'av1'] as const
 export type HardwareEncodeCodec = (typeof HARDWARE_ENCODE_CODECS)[number]
 export type HardwareChroma = '420' | '422' | '444'
 

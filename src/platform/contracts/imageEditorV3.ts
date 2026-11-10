@@ -6,7 +6,7 @@ import type { DocumentContainerRef, DocumentMeta, DocumentReadResult } from '../
 
 export type ImageEditorV3DocumentRef = `image-edit-v3:${string}`
 export type ImageEditorV3ResourceRef = `sha256:${string}`
-export type ImageEditorV3RasterOutputRef = `image-export-v3:${string}@${number}:${ImageEditorV3RasterExportFormat}`
+type ImageEditorV3RasterOutputRef = `image-export-v3:${string}@${number}:${ImageEditorV3RasterExportFormat}`
 
 /**
  * 当前 FFmpeg HDR AVIF 编码器的真实内存门槛；渲染层 readiness 与主进程 admission
@@ -15,7 +15,7 @@ export type ImageEditorV3RasterOutputRef = `image-export-v3:${string}@${number}:
 export const IMAGE_EDITOR_V3_HDR_AVIF_MAX_PIXELS = 9_000_000
 export const IMAGE_EDITOR_V3_PACKAGE_THUMBNAIL_MAX_BYTES = 2 * 1024 * 1024
 
-export interface ImageEditorV3DocumentReference {
+interface ImageEditorV3DocumentReference {
   documentRef: ImageEditorV3DocumentRef
   revision: number
   previewRef: ImageEditorV3ResourceRef | null
@@ -139,7 +139,7 @@ export interface ImageEditorV3SourceTileBatchItem {
   priority: number
 }
 
-export interface ImageEditorV3SourceTileBatchProgress {
+interface ImageEditorV3SourceTileBatchProgress {
   index: number
   tile: ImageEditorV3SourceTile
 }
@@ -154,7 +154,7 @@ export interface ImageEditorV3SourceTileStreamCredit {
   count: number
 }
 
-export interface ImageEditorV3BrushRgbaTile {
+interface ImageEditorV3BrushRgbaTile {
   storage: 'rgba-float32'
   width: number
   height: number
@@ -167,21 +167,21 @@ export interface ImageEditorV3BrushRgbaTile {
   alpha: 'premultiplied'
 }
 
-export interface ImageEditorV3BrushMaskTile {
+interface ImageEditorV3BrushMaskTile {
   storage: 'mask-float32'
   width: number
   height: number
   data: ArrayBuffer | Float32Array
 }
 
-export type ImageEditorV3BrushTile = ImageEditorV3BrushRgbaTile | ImageEditorV3BrushMaskTile
+type ImageEditorV3BrushTile = ImageEditorV3BrushRgbaTile | ImageEditorV3BrushMaskTile
 
-export interface ImageEditorV3BrushTileResource {
+interface ImageEditorV3BrushTileResource {
   resourceRef: ImageEditorV3ResourceRef
   byteSize: number
 }
 
-export interface ImageEditorV3PersistedBrushTile {
+interface ImageEditorV3PersistedBrushTile {
   tileKey: string
   resource: ImageEditorV3BrushTileResource
 }
@@ -202,7 +202,7 @@ export interface ImageEditorV3PackageThumbnail {
 }
 
 /** 图片文档（.hjimg，3.5）的位置：给了 path 先按位置找并核对 ID，找不到再按作品索引。 */
-export interface ImageEditorV3ImageDocumentTarget {
+interface ImageEditorV3ImageDocumentTarget {
   id: string
   path?: string
 }
@@ -232,18 +232,18 @@ export interface ImageEditorV3ImageDocumentRecoveryRequired {
   fileSavedAt: number
 }
 
-export type ImageEditorV3ImageDocumentOpenResult =
+type ImageEditorV3ImageDocumentOpenResult =
   | ImageEditorV3ImageDocumentReady
   | ImageEditorV3ImageDocumentRecoveryRequired
 
-export interface ImageEditorV3ImageDocumentCommitResult {
+interface ImageEditorV3ImageDocumentCommitResult {
   meta: DocumentMeta
   /** 工作副本与文件一致，没有写文件。 */
   unchanged: boolean
 }
 
 /** 画布多图层节点的内嵌图片文档（3.4）：打开画布时的准备结果。 */
-export interface ImageEditorV3CanvasLayersPrepareResult {
+interface ImageEditorV3CanvasLayersPrepareResult {
   /** 画布副本分出的新文档：旧文档 ID → 新文档 ID（节点要改指向新的）。 */
   rewrites: Record<string, string>
   /** 既没有工作副本也找不到包的文档 ID。 */
@@ -251,7 +251,7 @@ export interface ImageEditorV3CanvasLayersPrepareResult {
 }
 
 /** 画布写回时写出内嵌图片文档包的结果。 */
-export interface ImageEditorV3CanvasLayersCommitResult {
+interface ImageEditorV3CanvasLayersCommitResult {
   /** 文档 ID → 包所在位置（画布所在容器的 `.henji/canvas-layers/`）。 */
   packages: Record<string, string>
   written: number
@@ -289,7 +289,7 @@ export interface ImageEditorV3RasterExportDescription {
   } | null
 }
 
-export interface ImageEditorV3RasterExportStartResult {
+interface ImageEditorV3RasterExportStartResult {
   sessionId: string
   documentRef: ImageEditorV3DocumentRef
   revision: number

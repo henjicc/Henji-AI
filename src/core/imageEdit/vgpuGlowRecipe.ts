@@ -9,14 +9,14 @@ export const VGPU_GLOW_RECIPE_VERSION = 14 as const;
  * SDR 发射源估计的公共常量。所有值都与 vgpuGlowBloom.wgsl 保持一致，CPU 参考测试
  * 用它们钉住渐变连续性、中性灰不变量和 8-bit 顶值稳定性。
  */
-export const VGPU_GLOW_SOFT_PEAK_TAU = 0.06;
-export const VGPU_GLOW_SPECTRAL_CHROMA_START = 0.025;
-export const VGPU_GLOW_SPECTRAL_CHROMA_END = 0.1;
-export const VGPU_GLOW_LDR_EMISSION_GAMMA = 1.35;
+const VGPU_GLOW_SOFT_PEAK_TAU = 0.06;
+const VGPU_GLOW_SPECTRAL_CHROMA_START = 0.025;
+const VGPU_GLOW_SPECTRAL_CHROMA_END = 0.1;
+const VGPU_GLOW_LDR_EMISSION_GAMMA = 1.35;
 /** 至少保留约 46 个 8-bit code value 的肩部，避免最高门槛把 254→255 放大成亮点。 */
-export const VGPU_GLOW_HDR_SHOULDER_MAX_START = 0.82;
+const VGPU_GLOW_HDR_SHOULDER_MAX_START = 0.82;
 
-export interface VgpuGlowScatterLevel {
+interface VgpuGlowScatterLevel {
   /** 相对全分辨率的连续 2× 降采样倍数。 */
   divisor: number;
   /** 当前 13-tap + 坐标对齐的 progressive tent 链在全分辨率像素中的精确等效标准差。 */
@@ -65,7 +65,7 @@ export interface CompileVgpuGlowRecipeOptions {
   height: number;
 }
 
-export interface VgpuGlowOpticalScatterModel {
+interface VgpuGlowOpticalScatterModel {
   coreEnergy: number;
   inverseCubeEnergy: number;
   inverseSquareEnergy: number;

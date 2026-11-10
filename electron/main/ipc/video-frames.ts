@@ -38,7 +38,7 @@ import { parseStringField, parseVoid, registerIpcHandler } from './registry'
 const targets = new WeakMap<WebContents, VideoFrameTarget>()
 
 /** 把 WebContents 适配为帧目标；导航、渲染进程退出或销毁都视为页面内接收端失效。 */
-export function webContentsFrameTarget(contents: WebContents): VideoFrameTarget {
+function webContentsFrameTarget(contents: WebContents): VideoFrameTarget {
   const existing = targets.get(contents)
   if (existing) return existing
   const target: VideoFrameTarget = {
@@ -69,7 +69,7 @@ export function webContentsFrameTarget(contents: WebContents): VideoFrameTarget 
 }
 
 /** 合成测试画面只用于开发与诊断，正式安装包需显式开启。 */
-export function isVideoFrameTestPatternAllowed(isPackaged: boolean, env: NodeJS.ProcessEnv): boolean {
+function isVideoFrameTestPatternAllowed(isPackaged: boolean, env: NodeJS.ProcessEnv): boolean {
   return !isPackaged || env.HENJI_VIDEO_FRAME_DIAGNOSTICS === '1'
 }
 

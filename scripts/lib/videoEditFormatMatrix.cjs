@@ -193,4 +193,4 @@ function referencePicture(described, index) {
   return rgb
 }
 
-module.exports = { PICTURE_TOLERANCE_SECONDS, ROOT, SECONDS, SAMPLES, BITS, codeHeight, codesOf, describe, encodeArgs, ensureSamples, fileOf, frameCodes, framePts, probe, referencePicture, referenceStreams, rate }
+module.exports = { PICTURE_TOLERANCE_SECONDS, ROOT, SECONDS, SAMPLES, BITS, codesOf, describe, encodeArgs, ensureSamples, frameCodes, probe, referencePicture, referenceStreams, rate }

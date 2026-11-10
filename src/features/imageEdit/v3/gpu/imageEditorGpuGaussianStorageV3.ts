@@ -2,14 +2,14 @@ import type { ResolvedGaussianPlan } from '@/core/imaging/effects/gaussian'
 import type { GaussianRegion } from '@/core/imaging/effects/cpu/gaussian'
 
 /** interactive 金字塔尺寸缩小后提升存储精度，阻止多个 fp16 写入的有向量化误差累积。 */
-export function imageEditorGpuGaussianStorageV3(plan: ResolvedGaussianPlan, passIndex: number): 'rgba16float' | 'rgba32float' {
+function imageEditorGpuGaussianStorageV3(plan: ResolvedGaussianPlan, passIndex: number): 'rgba16float' | 'rgba32float' {
   const pass = plan.passes[passIndex].operation
   return plan.quality === 'interactive' && (pass.width < plan.outputSize.width || pass.height < plan.outputSize.height)
     ? 'rgba32float' : plan.intermediateFormat
 }
 
 /** 工作窗口是逻辑范围；物理中间纹理允许少量尾部余量，避免拖参数时每一像素都重建资源。 */
-export function imageEditorGpuGaussianAllocationSizeV3(width: number, height: number): readonly [number, number] {
+function imageEditorGpuGaussianAllocationSizeV3(width: number, height: number): readonly [number, number] {
   return [Math.ceil(width / 32) * 32, Math.ceil(height / 32) * 32]
 }
 

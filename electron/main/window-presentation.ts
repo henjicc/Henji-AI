@@ -1,6 +1,6 @@
 import type { BrowserWindow, Display, Point, Rectangle, Size } from 'electron'
 
-export const BACKGROUND_WINDOW_SWITCH = '--background'
+const BACKGROUND_WINDOW_SWITCH = '--background'
 
 export type WindowPresentationMode = 'foreground' | 'background'
 

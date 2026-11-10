@@ -148,4 +148,4 @@ function findUnusedTokens(files) {
   }
   return hits
 }
-module.exports = { findDesignRules, findUnusedTokens, SPACING_EXCEPTIONS, LAYOUT_EXCEPTIONS }
+module.exports = { findDesignRules, findUnusedTokens, SPACING_EXCEPTIONS }

@@ -7,7 +7,7 @@
 /**
  * Provider 错误码枚举
  */
-export enum ProviderErrorCode {
+enum ProviderErrorCode {
   /** API密钥缺失 */
   API_KEY_MISSING = 'API_KEY_MISSING',
   /** API请求失败 */
@@ -35,7 +35,7 @@ export enum ProviderErrorCode {
  *
  * 统一的错误处理类，包含错误码、Provider名称和详细信息
  */
-export class ProviderError extends Error {
+class ProviderError extends Error {
   /** 错误名称 */
   public readonly name = 'ProviderError'
 

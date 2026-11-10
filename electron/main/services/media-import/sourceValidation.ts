@@ -5,7 +5,7 @@ import type { FileHandle } from 'node:fs/promises'
 import type { LocalMediaKind } from '../../../../src/core/media/localMediaImportContracts'
 import { detectMediaFormat, detectBySignature, IMPORT_EXTENSION_FORMATS, type DetectedMediaFormat } from './format'
 
-export class MediaSourceValidationError extends Error {
+class MediaSourceValidationError extends Error {
   constructor(readonly code: string, message: string) { super(`${code}: ${message}`); this.name = 'MediaSourceValidationError' }
 }
 
@@ -25,7 +25,7 @@ export function mediaSourceFailure(error: unknown): Error {
   return redactMediaError(error)
 }
 
-export async function readDetectedMediaFormat(file: FileHandle, fileName: string, allowRawPcm = false, realPath = fileName): Promise<DetectedMediaFormat> {
+async function readDetectedMediaFormat(file: FileHandle, fileName: string, allowRawPcm = false, realPath = fileName): Promise<DetectedMediaFormat> {
   const header = Buffer.alloc(4096)
   const { bytesRead } = await file.read(header, 0, header.length, 0)
   const extension = path.extname(fileName).toLowerCase()

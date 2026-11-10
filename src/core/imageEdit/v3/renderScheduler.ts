@@ -1,4 +1,4 @@
-export type ImageEditRenderLane = 'gpu' | 'cpu';
+type ImageEditRenderLane = 'gpu' | 'cpu';
 export type ImageEditRenderTaskKind = 'preview' | 'export' | 'prefetch';
 export type ImageEditRenderPurpose = 'display' | 'thumbnail' | 'export' | 'prefetch';
 
@@ -10,7 +10,7 @@ export const IMAGE_EDIT_RENDER_PRIORITY = {
   prefetch: 100,
 } as const;
 
-export interface ImageEditRenderTaskContext {
+interface ImageEditRenderTaskContext {
   signal: AbortSignal;
   /** 长任务在每个瓦片或 pass 后调用，主动把执行权还给事件循环。 */
   yieldAfterAtomicUnit(): Promise<void>;

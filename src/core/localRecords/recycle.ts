@@ -13,7 +13,7 @@ export function mergeRecycledMembers<T>(current: readonly T[], removed: readonly
   }
   return { values, restored }
 }
-export const recycledItemSchema = z.object({
+const recycledItemSchema = z.object({
   id: z.string(), name: z.string(), category: z.string(), deletedAt: z.number(), path: z.string().optional(), recordIds: z.array(z.string()).optional(),
 })
 export type RecycledItem = z.infer<typeof recycledItemSchema>

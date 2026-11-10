@@ -31,7 +31,7 @@ import type { ImageEditHistoryCheckpointV3 } from './historyPaging/schema';
 
 export const IMAGE_EDIT_HISTORY_LEGACY_SNAPSHOT_VERSION_V3 = 1 as const;
 export const IMAGE_EDIT_HISTORY_SNAPSHOT_VERSION_V3 = 2 as const;
-export const IMAGE_EDIT_HISTORY_SNAPSHOT_DEFAULT_MAX_JSON_BYTES_V3 = 32 * 1024 * 1024;
+const IMAGE_EDIT_HISTORY_SNAPSHOT_DEFAULT_MAX_JSON_BYTES_V3 = 32 * 1024 * 1024;
 
 export interface ImageEditHistoryEntrySnapshotV3 {
   forward: ImageEditCommandV3;

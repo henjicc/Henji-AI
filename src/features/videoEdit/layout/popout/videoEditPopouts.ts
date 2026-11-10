@@ -12,7 +12,7 @@ const logger = createLogger('features.videoEdit.layout.popout')
  * 允许浮出的面板。节目面板以“重挂载 + 旧渲染会话实际退场后再接入新显示面”迁移；
  * 源监视器仍不开放：重挂载会关闭当前源素材。
  */
-export const VIDEO_EDIT_POPOUT_PANELS = ['project', 'program', 'effects', 'timeline', 'content', 'effects_library', 'tracking', 'color_grade', 'title_templates'] as const satisfies readonly VideoEditPanelId[]
+const VIDEO_EDIT_POPOUT_PANELS = ['project', 'program', 'effects', 'timeline', 'content', 'effects_library', 'tracking', 'color_grade', 'title_templates'] as const satisfies readonly VideoEditPanelId[]
 export type VideoEditPopoutPanelId = typeof VIDEO_EDIT_POPOUT_PANELS[number]
 export function isVideoEditPopoutPanel(id: string): id is VideoEditPopoutPanelId {
   return (VIDEO_EDIT_POPOUT_PANELS as readonly string[]).includes(id)
@@ -303,7 +303,7 @@ export function floatVideoEditDockSource(api: DockviewApi, source: DockDragSourc
 }
 
 /** 关闭全部浮窗且不贴回。`keepRecords` 时保留记录与最后位置（工作区卸载）；否则一并清除。 */
-export function closeAllVideoEditPopouts(options: { keepRecords?: boolean } = {}): void {
+function closeAllVideoEditPopouts(options: { keepRecords?: boolean } = {}): void {
   const target = dockApi
   const retained = retainRecords
   if (options.keepRecords) rememberOpenBounds()

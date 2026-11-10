@@ -13,7 +13,7 @@ import { runAudioEditProcess } from './process'
 import { registerOwnedMedia, enqueueMediaCandidates } from '../media-recycle/queue'
 import { runAudioEditTask } from './task-store'
 
-export function audioSpliceOutputPath(requestId: string): string { return path.join(getUserRootDir(), '录音', `${requestId}.wav`) }
+function audioSpliceOutputPath(requestId: string): string { return path.join(getUserRootDir(), '录音', `${requestId}.wav`) }
 
 /** 分段顺序解码后用 FFmpeg concat 顺序复制，避免 asplit 等待后半段时缓存整段 PCM。 */
 export async function spliceAudioFile(request: AudioEditSpliceRequest): Promise<AudioEditSpliceResult> {

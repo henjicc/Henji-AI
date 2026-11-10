@@ -7,7 +7,7 @@ import { HENJI_DRAG_DATA_MIME } from './dragDataTransfer'
 
 const logger = createLogger('contexts.DragDropContext')
 
-export interface DragData {
+interface DragData {
     type: 'image' | 'video' | 'audio'
     imageUrl: string  // 图片或视频的预览URL
     filePath?: string  // 原始文件路径（桌面环境用于直接读取本地文件）

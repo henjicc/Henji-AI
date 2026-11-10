@@ -17,7 +17,7 @@ async function decode(source: string): Promise<HTMLImageElement> {
 }
 
 /** 与工作面共用模糊底图；只在提交时合成，控件、网格线不进入模型输入。 */
-export async function renderOutpaintInput(source: string, margins: OutpaintMargins): Promise<string> {
+async function renderOutpaintInput(source: string, margins: OutpaintMargins): Promise<string> {
   const response = await fetch(toFetchableMediaUrl(source))
   if (!response.ok) throw new Error(`读取扩图源图片失败 (${response.status})`)
   const url = URL.createObjectURL(await response.blob())

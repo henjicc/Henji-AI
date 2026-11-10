@@ -15,7 +15,7 @@ import { UiError } from './states'
  * `main.tsx` 里的 window.onerror 只负责记日志，它接不住 React 的卸载，也变不出界面。
  */
 
-export interface UiErrorBoundaryFallbackContext {
+interface UiErrorBoundaryFallbackContext {
   error: Error
   retry: () => void
 }

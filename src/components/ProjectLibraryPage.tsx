@@ -83,7 +83,7 @@ export interface ProjectLibraryLabels {
 }
 
 /** 新建来源菜单里的一项（如“打开图片”“新建空白图片”“粘贴剪贴板图片”）。 */
-export interface ProjectLibraryCreateOption {
+interface ProjectLibraryCreateOption {
   id: string;
   label: string;
   icon: LucideIcon;
@@ -106,7 +106,7 @@ export type ProjectLibraryCreate =
  * `defaultValue` 那一项就是左栏的「全部」，不在组里重复。
  * 数据由调用方按筛选取好再传 `items`；筛选不在默认值时，列表为空显示“没有符合条件的”，不显示新建邀请。
  */
-export interface ProjectLibraryFilter {
+interface ProjectLibraryFilter {
   value: string;
   defaultValue: string;
   /** `icon` 默认是文件夹（项目）；“不在项目里”这类非项目位置由调用方给别的图标 */

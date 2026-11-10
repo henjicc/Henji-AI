@@ -702,22 +702,6 @@
         "name": "registerImageEditorV3Ipc"
       },
       {
-        "file": "electron/main/services/asset-library/schema.ts",
-        "name": "thumbnailNameFromLegacyPath"
-      },
-      {
-        "file": "electron/main/services/generation-history/schema.ts",
-        "name": "RESULT_PATH_SEPARATOR_LEGACY"
-      },
-      {
-        "file": "electron/main/services/generation-history/schema.ts",
-        "name": "splitLegacyResultPaths"
-      },
-      {
-        "file": "electron/main/services/image-editor-v3/brush-tile-codec.ts",
-        "name": "IMAGE_EDIT_BRUSH_TILE_MAX_EDGE_V3"
-      },
-      {
         "file": "electron/main/services/image-editor-v3/brush-tile-codec.ts",
         "name": "IMAGE_EDIT_BRUSH_TILE_MAX_RAW_BYTES_V3"
       },
@@ -851,10 +835,6 @@
       },
       {
         "file": "electron/main/services/image-editor-v3/source-ingest/source-ingestor.ts",
-        "name": "IMAGE_EDITOR_V3_SOURCE_INGEST_LIMITS"
-      },
-      {
-        "file": "electron/main/services/image-editor-v3/source-ingest/source-ingestor.ts",
         "name": "ImageEditorV3SourceIngestor"
       },
       {
@@ -888,10 +868,6 @@
       {
         "file": "scripts/lib/uiResidueRules.cjs",
         "name": "LEGACY_ALIAS_COLOR_NAMES"
-      },
-      {
-        "file": "scripts/lib/uiResidueRules.cjs",
-        "name": "LEGACY_ALIAS_PATTERN"
       },
       {
         "file": "scripts/lib/uiResidueRules.cjs",
@@ -1070,10 +1046,6 @@
         "name": "usesLegacyHenjiExtension"
       },
       {
-        "file": "src/core/imageEdit/diffusionPresets.ts",
-        "name": "LegacyDiffusionPresetId"
-      },
-      {
         "file": "src/core/imageEdit/v3/aiWorkflows/outpaint.ts",
         "name": "ImageEditOutpaintMarginsV3"
       },
@@ -1107,10 +1079,6 @@
       },
       {
         "file": "src/core/imageEdit/v3/brush/contracts.ts",
-        "name": "ImageEditBrushPendingHistoryV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/brush/contracts.ts",
         "name": "ImageEditBrushPointBufferStatsV3"
       },
       {
@@ -1124,10 +1092,6 @@
       {
         "file": "src/core/imageEdit/v3/brush/contracts.ts",
         "name": "ImageEditBrushShapeV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/brush/contracts.ts",
-        "name": "ImageEditBrushStrokeMetricsV3"
       },
       {
         "file": "src/core/imageEdit/v3/brush/contracts.ts",
@@ -1163,14 +1127,6 @@
       },
       {
         "file": "src/core/imageEdit/v3/brush/contracts.ts",
-        "name": "ImageEditMaskBrushTargetV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/brush/contracts.ts",
-        "name": "ImageEditRgbaBrushTargetV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/brush/contracts.ts",
         "name": "PersistedImageEditBrushTileV3"
       },
       {
@@ -1196,14 +1152,6 @@
       {
         "file": "src/core/imageEdit/v3/brush/strokeSession.ts",
         "name": "imageEditBrushTileKeyV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/brush/tileDelta.ts",
-        "name": "ImageEditBrushHistoryRetentionV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/brush/tileDelta.ts",
-        "name": "ImageEditBrushTileHistoryTransitionV3"
       },
       {
         "file": "src/core/imageEdit/v3/brush/tileDelta.ts",
@@ -1244,18 +1192,6 @@
       {
         "file": "src/core/imageEdit/v3/colorTypes.ts",
         "name": "ImageEditColorModeV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/colorTypes.ts",
-        "name": "ImageEditHdrChromaticityV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/colorTypes.ts",
-        "name": "ImageEditHdrContentLightV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/colorTypes.ts",
-        "name": "ImageEditHdrMasteringDisplayV3"
       },
       {
         "file": "src/core/imageEdit/v3/colorTypes.ts",
@@ -1332,10 +1268,6 @@
       {
         "file": "src/core/imageEdit/v3/commandHistoryCodec.ts",
         "name": "DecodedImageEditHistorySnapshotV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/commandHistoryCodec.ts",
-        "name": "IMAGE_EDIT_HISTORY_SNAPSHOT_DEFAULT_MAX_JSON_BYTES_V3"
       },
       {
         "file": "src/core/imageEdit/v3/commandHistoryCodec.ts",
@@ -1459,10 +1391,6 @@
       },
       {
         "file": "src/core/imageEdit/v3/commandTypes.ts",
-        "name": "ImageEditCommandBaseV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/commandTypes.ts",
         "name": "ImageEditCommandResourceDescriptorV3"
       },
       {
@@ -1471,47 +1399,11 @@
       },
       {
         "file": "src/core/imageEdit/v3/commandTypes.ts",
-        "name": "ImageEditDocumentSetCanvasSizeCommandV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/commandTypes.ts",
-        "name": "ImageEditDocumentSetColorCommandV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/commandTypes.ts",
-        "name": "ImageEditDocumentUpdateOutputGeometryCommandV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/commandTypes.ts",
-        "name": "ImageEditGroupUpdateIsolationCommandV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/commandTypes.ts",
         "name": "ImageEditHistoryResourceReferenceV3"
       },
       {
         "file": "src/core/imageEdit/v3/commandTypes.ts",
-        "name": "ImageEditLayerAddCommandV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/commandTypes.ts",
         "name": "ImageEditLayerCommonPatchV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/commandTypes.ts",
-        "name": "ImageEditLayerDeleteCommandV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/commandTypes.ts",
-        "name": "ImageEditLayerDuplicateCommandV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/commandTypes.ts",
-        "name": "ImageEditLayerGroupCommandV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/commandTypes.ts",
-        "name": "ImageEditLayerMoveCommandV3"
       },
       {
         "file": "src/core/imageEdit/v3/commandTypes.ts",
@@ -1520,18 +1412,6 @@
       {
         "file": "src/core/imageEdit/v3/commandTypes.ts",
         "name": "ImageEditLayerSetMaskCommandV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/commandTypes.ts",
-        "name": "ImageEditLayerUngroupCommandV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/commandTypes.ts",
-        "name": "ImageEditLayerUpdateCommonCommandV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/commandTypes.ts",
-        "name": "ImageEditLayerUpdateParamsCommandV3"
       },
       {
         "file": "src/core/imageEdit/v3/commandTypes.ts",
@@ -1551,19 +1431,11 @@
       },
       {
         "file": "src/core/imageEdit/v3/commandTypes.ts",
-        "name": "ImageEditNamedRegionsCommandV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/commandTypes.ts",
         "name": "ImageEditRasterTileChangeV3"
       },
       {
         "file": "src/core/imageEdit/v3/commandTypes.ts",
         "name": "ImageEditRasterTileDeltaCommandV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/commandTypes.ts",
-        "name": "ImageEditSetCreativeIntentsCommandV3"
       },
       {
         "file": "src/core/imageEdit/v3/commandTypes.ts",
@@ -1587,14 +1459,6 @@
       },
       {
         "file": "src/core/imageEdit/v3/documentCodec.ts",
-        "name": "ImageEditDocumentSourceFormatV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/documentCodec.ts",
-        "name": "InvalidImageEditDocumentV3Error"
-      },
-      {
-        "file": "src/core/imageEdit/v3/documentCodec.ts",
         "name": "cloneImageEditJsonObjectV3"
       },
       {
@@ -1612,10 +1476,6 @@
       {
         "file": "src/core/imageEdit/v3/documentFactory.ts",
         "name": "CreateImageEditDocumentOptionsV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/documentFactory.ts",
-        "name": "ImageEditIdFactoryV3"
       },
       {
         "file": "src/core/imageEdit/v3/documentFactory.ts",
@@ -1711,10 +1571,6 @@
       },
       {
         "file": "src/core/imageEdit/v3/effects/diffusion.ts",
-        "name": "DiffusionGlobalScatterV4"
-      },
-      {
-        "file": "src/core/imageEdit/v3/effects/diffusion.ts",
         "name": "applyDiffusionV4"
       },
       {
@@ -1732,10 +1588,6 @@
       {
         "file": "src/core/imageEdit/v3/effects/fastBlur.ts",
         "name": "FAST_BLUR_V3_CONTRACT"
-      },
-      {
-        "file": "src/core/imageEdit/v3/effects/fastBlur.ts",
-        "name": "FAST_BLUR_V3_MAX_LOCAL_HALO"
       },
       {
         "file": "src/core/imageEdit/v3/effects/fastBlur.ts",
@@ -1779,10 +1631,6 @@
       },
       {
         "file": "src/core/imageEdit/v3/effects/vgpuGlow.ts",
-        "name": "VgpuGlowGlobalScatterV4"
-      },
-      {
-        "file": "src/core/imageEdit/v3/effects/vgpuGlow.ts",
         "name": "applyVgpuGlowV4"
       },
       {
@@ -1795,10 +1643,6 @@
       },
       {
         "file": "src/core/imageEdit/v3/execution/affineTransform.ts",
-        "name": "assertImageEditTransformInvertibleV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/execution/affineTransform.ts",
         "name": "cropImageEditRgbaRegionV3"
       },
       {
@@ -1807,19 +1651,11 @@
       },
       {
         "file": "src/core/imageEdit/v3/execution/affineTransform.ts",
-        "name": "imageEditTransformDeterminantV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/execution/affineTransform.ts",
         "name": "invertImageEditTransformV3"
       },
       {
         "file": "src/core/imageEdit/v3/execution/affineTransform.ts",
         "name": "isImageEditTransformInvertibleV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/execution/affineTransform.ts",
-        "name": "isImageEditTransformV3"
       },
       {
         "file": "src/core/imageEdit/v3/execution/affineTransform.ts",
@@ -2055,14 +1891,6 @@
       },
       {
         "file": "src/core/imageEdit/v3/execution/rasterTileReplacement.ts",
-        "name": "imageEditRasterRectContainsV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/execution/rasterTileReplacement.ts",
-        "name": "imageEditRasterSamplePointsV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/execution/rasterTileReplacement.ts",
         "name": "missingImageEditRasterBaseSamplesV3"
       },
       {
@@ -2119,10 +1947,6 @@
       },
       {
         "file": "src/core/imageEdit/v3/exportTargetView.ts",
-        "name": "ImageEditExportTargetContentStateV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/exportTargetView.ts",
         "name": "ImageEditExportTargetErrorCodeV3"
       },
       {
@@ -2156,10 +1980,6 @@
       {
         "file": "src/core/imageEdit/v3/gpuAdjustmentPacking.ts",
         "name": "imageEditorGpuHslParametersV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/gpuAdjustmentPacking.ts",
-        "name": "imageEditorGpuNumberParameterV3"
       },
       {
         "file": "src/core/imageEdit/v3/gpuAdjustmentPacking.ts",
@@ -2327,10 +2147,6 @@
       },
       {
         "file": "src/core/imageEdit/v3/layerTypes.ts",
-        "name": "ImageEditJsonPrimitiveV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/layerTypes.ts",
         "name": "ImageEditJsonValueV3"
       },
       {
@@ -2360,10 +2176,6 @@
       {
         "file": "src/core/imageEdit/v3/layerTypes.ts",
         "name": "ImageEditRasterLayerV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/layerTypes.ts",
-        "name": "ImageEditRasterSourceV3"
       },
       {
         "file": "src/core/imageEdit/v3/layerTypes.ts",
@@ -2436,10 +2248,6 @@
       {
         "file": "src/core/imageEdit/v3/namedRegions.ts",
         "name": "ImageEditNamedRegionV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/namedRegions.ts",
-        "name": "imageEditNamedRegionSchemaV3"
       },
       {
         "file": "src/core/imageEdit/v3/namedRegions.ts",
@@ -2559,10 +2367,6 @@
       },
       {
         "file": "src/core/imageEdit/v3/renderNodeDefinition.ts",
-        "name": "ImageEditGpuKernelV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/renderNodeDefinition.ts",
         "name": "ImageEditPixelExecutionContextV3"
       },
       {
@@ -2600,10 +2404,6 @@
       {
         "file": "src/core/imageEdit/v3/repairQuality.ts",
         "name": "routeImageEditRepairQualityV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/resourceReferences.ts",
-        "name": "IMAGE_EDIT_RESOURCE_ID_PATTERN_V3"
       },
       {
         "file": "src/core/imageEdit/v3/resourceReferences.ts",
@@ -2668,10 +2468,6 @@
       {
         "file": "src/core/imageEdit/v3/selection/contracts.ts",
         "name": "ImageEditSelectionMaskTileChangeV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/selection/contracts.ts",
-        "name": "ImageEditSelectionMaskTileLoaderV3"
       },
       {
         "file": "src/core/imageEdit/v3/selection/contracts.ts",
@@ -2762,10 +2558,6 @@
         "name": "imageEditSelectionSessionSchemaV3"
       },
       {
-        "file": "src/core/imageEdit/v3/selection/session.ts",
-        "name": "imageEditSelectionShapeSchemaV3"
-      },
-      {
         "file": "src/core/imageEdit/v3/selection/sessionRaster.ts",
         "name": "exportImageEditSelectionMaskV3"
       },
@@ -2803,31 +2595,11 @@
       },
       {
         "file": "src/core/imageEdit/v3/serviceContracts.ts",
-        "name": "ImageEditSourceMetadataV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/serviceContracts.ts",
         "name": "ImageEditSourceProviderV3"
       },
       {
         "file": "src/core/imageEdit/v3/serviceContracts.ts",
-        "name": "ImageEditSourceTileV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/serviceContracts.ts",
-        "name": "ImageEditTileOutputDescriptorV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/serviceContracts.ts",
         "name": "ImageEditTileOutputSinkV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/sessionReference.ts",
-        "name": "ImageEditDocumentRefV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/sessionReference.ts",
-        "name": "ImageEditPreviewRefV3"
       },
       {
         "file": "src/core/imageEdit/v3/sessionReference.ts",
@@ -2971,27 +2743,11 @@
       },
       {
         "file": "src/core/inputs/promptDocument/types.ts",
-        "name": "PromptHardBreakV1"
-      },
-      {
-        "file": "src/core/inputs/promptDocument/types.ts",
         "name": "PromptInlineNodeV1"
       },
       {
         "file": "src/core/inputs/promptDocument/types.ts",
-        "name": "PromptMediaReferenceV1"
-      },
-      {
-        "file": "src/core/inputs/promptDocument/types.ts",
         "name": "PromptParagraphV1"
-      },
-      {
-        "file": "src/core/inputs/promptDocument/types.ts",
-        "name": "PromptTemplateVariableV1"
-      },
-      {
-        "file": "src/core/inputs/promptDocument/types.ts",
-        "name": "PromptTextV1"
       },
       {
         "file": "src/core/inputs/promptDocument/validation.ts",
@@ -3002,28 +2758,12 @@
         "name": "ImageEditorDiagnosticHostV3"
       },
       {
-        "file": "src/core/logging/diagnosticBundle.ts",
-        "name": "ImageEditorDiagnosticLayerSummaryV3"
-      },
-      {
         "file": "src/core/logging/index.ts",
         "name": "ImageEditorDiagnosticHostV3"
       },
       {
-        "file": "src/core/logging/index.ts",
-        "name": "ImageEditorDiagnosticLayerSummaryV3"
-      },
-      {
         "file": "src/core/persistence/mcpConnectionSchema.ts",
         "name": "migrateMcpConnectionStorageV1"
-      },
-      {
-        "file": "src/core/theme/colorTokens.ts",
-        "name": "LEGACY_DEFAULT_THEME_COLOR_SCHEME_HEX"
-      },
-      {
-        "file": "src/core/theme/colorTokens.ts",
-        "name": "LEGACY_NEUTRAL_THEME_COLOR_SCHEME_HEX"
       },
       {
         "file": "src/core/theme/colorTokens.ts",
@@ -3060,10 +2800,6 @@
       {
         "file": "src/features/canvas/application/canvasExecutionCache.ts",
         "name": "CanvasLatestExecutionV1"
-      },
-      {
-        "file": "src/features/canvas/application/multiAngleBatchService.ts",
-        "name": "MultiAngleBatchItemStateV1"
       },
       {
         "file": "src/features/canvas/application/multiAngleBatchService.ts",
@@ -3110,18 +2846,6 @@
         "name": "RelightSettingsV1"
       },
       {
-        "file": "src/features/canvas/domain/canvasNodeData.ts",
-        "name": "CameraStageRenderCompletionReceiptV1"
-      },
-      {
-        "file": "src/features/canvas/domain/canvasNodeData.ts",
-        "name": "LegacyExportImageNodeResultKind"
-      },
-      {
-        "file": "src/features/canvas/domain/generationOutputs.ts",
-        "name": "CanvasGenerationOutputAngleV1"
-      },
-      {
         "file": "src/features/canvas/domain/generationOutputs.ts",
         "name": "CanvasGenerationOutputBatchContractV1"
       },
@@ -3130,24 +2854,8 @@
         "name": "CanvasGenerationOutputDescriptorV1"
       },
       {
-        "file": "src/features/canvas/domain/generationOutputs.ts",
-        "name": "CanvasGenerationOutputLayerV1"
-      },
-      {
-        "file": "src/features/canvas/domain/generationOutputs.ts",
-        "name": "CanvasGenerationOutputProfileV1"
-      },
-      {
-        "file": "src/features/canvas/domain/generationOutputs.ts",
-        "name": "CanvasGenerationOutputSemanticV1"
-      },
-      {
         "file": "src/features/canvas/domain/layerStack.ts",
         "name": "LayerStackDocumentV1"
-      },
-      {
-        "file": "src/features/canvas/domain/layerStack.ts",
-        "name": "LayerStackLayerV1"
       },
       {
         "file": "src/features/canvas/domain/layerStack.ts",
@@ -3292,10 +3000,6 @@
       {
         "file": "src/features/imageEdit/v3/application/imageEditCommandBus.ts",
         "name": "ImageEditCommandBusV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/application/imageEditCommandBus.ts",
-        "name": "ImageEditPreviewOverrideKindV3"
       },
       {
         "file": "src/features/imageEdit/v3/application/imageEditCommandBus.ts",
@@ -3711,10 +3415,6 @@
       },
       {
         "file": "src/features/imageEdit/v3/application/imageEditSelectionEntityV3.ts",
-        "name": "IMAGE_EDIT_SELECTION_FIELDS_V3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/application/imageEditSelectionEntityV3.ts",
         "name": "ImageEditSelectionMutationExecutorV3"
       },
       {
@@ -3863,15 +3563,7 @@
       },
       {
         "file": "src/features/imageEdit/v3/application/imageEditV3Reflection.ts",
-        "name": "IMAGE_EDIT_V3_DOCUMENT_PROPERTIES"
-      },
-      {
-        "file": "src/features/imageEdit/v3/application/imageEditV3Reflection.ts",
         "name": "IMAGE_EDIT_V3_PROPERTIES"
-      },
-      {
-        "file": "src/features/imageEdit/v3/application/imageEditV3Reflection.ts",
-        "name": "IMAGE_EDIT_V3_RESOURCE_PROPERTIES"
       },
       {
         "file": "src/features/imageEdit/v3/application/imageEditV3Reflection.ts",
@@ -3895,19 +3587,7 @@
       },
       {
         "file": "src/features/imageEdit/v3/application/imageEditorHostProfiles.ts",
-        "name": "IMAGE_EDITOR_HOST_PROFILES_V3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/application/imageEditorHostProfiles.ts",
-        "name": "ImageEditorCapabilityReadinessStateV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/application/imageEditorHostProfiles.ts",
         "name": "ImageEditorCapabilityReadinessV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/application/imageEditorHostProfiles.ts",
-        "name": "ImageEditorCapabilityV3"
       },
       {
         "file": "src/features/imageEdit/v3/application/imageEditorHostProfiles.ts",
@@ -3919,15 +3599,7 @@
       },
       {
         "file": "src/features/imageEdit/v3/application/imageEditorHostProfiles.ts",
-        "name": "ImageEditorLayerControlV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/application/imageEditorHostProfiles.ts",
         "name": "ImageEditorLayerKindV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/application/imageEditorHostProfiles.ts",
-        "name": "ImageEditorPanelIdV3"
       },
       {
         "file": "src/features/imageEdit/v3/application/imageEditorHostProfiles.ts",
@@ -3936,10 +3608,6 @@
       {
         "file": "src/features/imageEdit/v3/application/imageEditorHostProfiles.ts",
         "name": "ImageEditorReadinessReasonKeyV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/application/imageEditorHostProfiles.ts",
-        "name": "ImageEditorSaveActionV3"
       },
       {
         "file": "src/features/imageEdit/v3/application/imageEditorHostProfiles.ts",
@@ -4179,14 +3847,6 @@
       },
       {
         "file": "src/features/imageEdit/v3/editor/imageEditorMoveSnappingV3.ts",
-        "name": "ImageEditorSnapAnchorV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/editor/imageEditorMoveSnappingV3.ts",
-        "name": "ImageEditorSnapAxisV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/editor/imageEditorMoveSnappingV3.ts",
         "name": "ImageEditorSnapBoundsV3"
       },
       {
@@ -4219,10 +3879,6 @@
       },
       {
         "file": "src/features/imageEdit/v3/editor/index.ts",
-        "name": "ImageEditorV3PreviewRendererContext"
-      },
-      {
-        "file": "src/features/imageEdit/v3/editor/index.ts",
         "name": "ImageEditorV3Props"
       },
       {
@@ -4232,10 +3888,6 @@
       {
         "file": "src/features/imageEdit/v3/editor/layerControlsPresentationV3.ts",
         "name": "ImageEditorLayerControlsPresentationV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/editor/layerControlsPresentationV3.ts",
-        "name": "paintImageEditorLayerControlsV3"
       },
       {
         "file": "src/features/imageEdit/v3/editor/layerPickingV3.ts",
@@ -4395,10 +4047,6 @@
       },
       {
         "file": "src/features/imageEdit/v3/editor/maskBrushLayerV3.ts",
-        "name": "EditableImageEditorMaskV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/editor/maskBrushLayerV3.ts",
         "name": "ImageEditorMaskLayerResolutionV3"
       },
       {
@@ -4447,10 +4095,6 @@
       },
       {
         "file": "src/features/imageEdit/v3/editor/rasterBrushLayerV3.ts",
-        "name": "EditableImageEditorRasterLayerV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/editor/rasterBrushLayerV3.ts",
         "name": "ImageEditorRasterLayerResolutionV3"
       },
       {
@@ -4484,10 +4128,6 @@
       {
         "file": "src/features/imageEdit/v3/editor/rasterBrushToolSlotV3.tsx",
         "name": "rasterBrushToolSlotV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/editor/rasterPasteboardV3.ts",
-        "name": "IMAGE_EDITOR_RASTER_PASTEBOARD_MAX_LAYERS_V3"
       },
       {
         "file": "src/features/imageEdit/v3/editor/rasterPasteboardV3.ts",
@@ -4539,10 +4179,6 @@
       },
       {
         "file": "src/features/imageEdit/v3/editor/selectionMaskLayerV3.ts",
-        "name": "ImageEditorSelectionMaskTargetReasonV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/editor/selectionMaskLayerV3.ts",
         "name": "ImageEditorSelectionMaskTargetResolutionV3"
       },
       {
@@ -4575,15 +4211,7 @@
       },
       {
         "file": "src/features/imageEdit/v3/editor/types.ts",
-        "name": "ImageEditorV3PreviewRendererContext"
-      },
-      {
-        "file": "src/features/imageEdit/v3/editor/types.ts",
         "name": "ImageEditorV3Props"
-      },
-      {
-        "file": "src/features/imageEdit/v3/editor/useImageEditorControllerV3.ts",
-        "name": "resolveImageEditorDefaultLayerIdV3"
       },
       {
         "file": "src/features/imageEdit/v3/editor/useImageEditorControllerV3.ts",
@@ -4667,14 +4295,6 @@
       },
       {
         "file": "src/features/imageEdit/v3/editor/viewportNavigationV3.ts",
-        "name": "IMAGE_EDITOR_VIEWPORT_MAX_ZOOM_V3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/editor/viewportNavigationV3.ts",
-        "name": "IMAGE_EDITOR_VIEWPORT_MIN_ZOOM_V3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/editor/viewportNavigationV3.ts",
         "name": "ImageEditorNavigationGestureV3"
       },
       {
@@ -4739,19 +4359,11 @@
       },
       {
         "file": "src/features/imageEdit/v3/execution/imageEditorPresentationAtlasV3.ts",
-        "name": "IMAGE_EDITOR_PRESENTATION_ATLAS_GUTTER_V3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/execution/imageEditorPresentationAtlasV3.ts",
         "name": "IMAGE_EDITOR_PRESENTATION_ATLAS_MAX_PAGES_V3"
       },
       {
         "file": "src/features/imageEdit/v3/execution/imageEditorPresentationAtlasV3.ts",
         "name": "IMAGE_EDITOR_PRESENTATION_ATLAS_PAGE_SIZE_V3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/execution/imageEditorPresentationAtlasV3.ts",
-        "name": "IMAGE_EDITOR_PRESENTATION_ATLAS_TILE_SIZE_V3"
       },
       {
         "file": "src/features/imageEdit/v3/execution/imageEditorPresentationAtlasV3.ts",
@@ -4799,10 +4411,6 @@
       },
       {
         "file": "src/features/imageEdit/v3/execution/imageEditorPreviewClientV3.ts",
-        "name": "IMAGE_EDITOR_PREVIEW_PROXY_CACHE_MAX_BYTES_V3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/execution/imageEditorPreviewClientV3.ts",
         "name": "IMAGE_EDITOR_PREVIEW_PYRAMID_PREWARM_TILE_BUDGET_V3"
       },
       {
@@ -4844,10 +4452,6 @@
       {
         "file": "src/features/imageEdit/v3/execution/imageEditorPreviewMemoryV3.ts",
         "name": "imageEditorPreviewOutputBytesV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/execution/imageEditorPreviewResourcesV3.ts",
-        "name": "IMAGE_EDITOR_PREVIEW_PROXY_CACHE_MAX_BYTES_V3"
       },
       {
         "file": "src/features/imageEdit/v3/execution/imageEditorPreviewResourcesV3.ts",
@@ -4896,10 +4500,6 @@
       {
         "file": "src/features/imageEdit/v3/execution/imageEditorRenderRuntimeV3.ts",
         "name": "imageEditorRenderRuntimePatchV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/execution/imageEditorRenderSessionClientsV3.ts",
-        "name": "ImageEditorRenderClientV3"
       },
       {
         "file": "src/features/imageEdit/v3/execution/imageEditorRenderSessionClientsV3.ts",
@@ -5030,10 +4630,6 @@
         "name": "acquireImageEditorResourceLeaseV3"
       },
       {
-        "file": "src/features/imageEdit/v3/execution/imageEditorResourcePressureV3.ts",
-        "name": "createImageEditorResourcePressureErrorV3"
-      },
-      {
         "file": "src/features/imageEdit/v3/execution/imageEditorSessionResourceBudgetV3.ts",
         "name": "AcquireImageEditorSessionResourceBudgetOptionsV3"
       },
@@ -5104,14 +4700,6 @@
       {
         "file": "src/features/imageEdit/v3/execution/interactionTraceV3.ts",
         "name": "traceImageEditorStageV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/execution/previewBrushTileLoaderV3.ts",
-        "name": "IMAGE_EDITOR_PREVIEW_BRUSH_CACHE_MAX_BYTES_V3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/execution/previewBrushTileLoaderV3.ts",
-        "name": "IMAGE_EDITOR_PREVIEW_BRUSH_TRANSFER_MAX_BYTES_V3"
       },
       {
         "file": "src/features/imageEdit/v3/execution/previewBrushTileLoaderV3.ts",
@@ -5235,14 +4823,6 @@
       },
       {
         "file": "src/features/imageEdit/v3/execution/previewPixelsV3.ts",
-        "name": "decodePreviewProxyBitmapV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/execution/previewPixelsV3.ts",
-        "name": "imageDataToLinearPreviewTileV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/execution/previewPixelsV3.ts",
         "name": "linearPreviewTileToBitmapV3"
       },
       {
@@ -5275,10 +4855,6 @@
       },
       {
         "file": "src/features/imageEdit/v3/execution/previewProtocolV3.ts",
-        "name": "ImageEditorPreviewBitmapEventV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/execution/previewProtocolV3.ts",
         "name": "ImageEditorPreviewBlobEventV3"
       },
       {
@@ -5287,19 +4863,7 @@
       },
       {
         "file": "src/features/imageEdit/v3/execution/previewProtocolV3.ts",
-        "name": "ImageEditorPreviewCancelRequestV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/execution/previewProtocolV3.ts",
-        "name": "ImageEditorPreviewDisposeRequestV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/execution/previewProtocolV3.ts",
         "name": "ImageEditorPreviewExecutionStatsV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/execution/previewProtocolV3.ts",
-        "name": "ImageEditorPreviewFailedEventV3"
       },
       {
         "file": "src/features/imageEdit/v3/execution/previewProtocolV3.ts",
@@ -5563,18 +5127,6 @@
       },
       {
         "file": "src/features/imageEdit/v3/execution/viewportCompositeProtocolV3.ts",
-        "name": "ImageEditorViewportCompositeCancelRequestV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/execution/viewportCompositeProtocolV3.ts",
-        "name": "ImageEditorViewportCompositeDisposeRequestV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/execution/viewportCompositeProtocolV3.ts",
-        "name": "ImageEditorViewportCompositeFailedEventV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/execution/viewportCompositeProtocolV3.ts",
         "name": "ImageEditorViewportCompositeRenderRequestV3"
       },
       {
@@ -5727,15 +5279,7 @@
       },
       {
         "file": "src/features/imageEdit/v3/execution/viewportTilePlannerV3.ts",
-        "name": "IMAGE_EDITOR_VIEWPORT_MAX_TILE_HALO_V3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/execution/viewportTilePlannerV3.ts",
         "name": "ImageEditorViewportAdmissionErrorV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/execution/viewportTilePlannerV3.ts",
-        "name": "ImageEditorViewportOutputTileV3"
       },
       {
         "file": "src/features/imageEdit/v3/execution/viewportTilePlannerV3.ts",
@@ -5836,14 +5380,6 @@
       {
         "file": "src/features/imageEdit/v3/execution/viewportTileSchedulingSupportV3.ts",
         "name": "normalizeImageEditorViewportResourceRefsV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/execution/viewportTileSchedulingSupportV3.ts",
-        "name": "resolveImageEditorViewportActualSourceRegionV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/execution/viewportTileSchedulingSupportV3.ts",
-        "name": "resolveImageEditorViewportSourceMipTransformV3"
       },
       {
         "file": "src/features/imageEdit/v3/execution/viewportTileSchedulingSupportV3.ts",
@@ -6127,10 +5663,6 @@
       },
       {
         "file": "src/features/imageEdit/v3/filterWorkspace/service.ts",
-        "name": "imageEditFilterWorkspaceIdentityV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/filterWorkspace/service.ts",
         "name": "prepareImageEditFilterConversionV3"
       },
       {
@@ -6255,19 +5787,11 @@
       },
       {
         "file": "src/features/imageEdit/v3/gpu/imageEditorGpuGaussianStorageV3.ts",
-        "name": "imageEditorGpuGaussianAllocationSizeV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/gpu/imageEditorGpuGaussianStorageV3.ts",
         "name": "imageEditorGpuGaussianAllocationsV3"
       },
       {
         "file": "src/features/imageEdit/v3/gpu/imageEditorGpuGaussianStorageV3.ts",
         "name": "imageEditorGpuGaussianScratchBytesV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/gpu/imageEditorGpuGaussianStorageV3.ts",
-        "name": "imageEditorGpuGaussianStorageV3"
       },
       {
         "file": "src/features/imageEdit/v3/gpu/imageEditorGpuGlowRendererV3.ts",
@@ -6276,10 +5800,6 @@
       {
         "file": "src/features/imageEdit/v3/gpu/imageEditorGpuGraphUniformsV3.ts",
         "name": "imageEditorGpuGraphAdjustmentValuesV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/gpu/imageEditorGpuGraphUniformsV3.ts",
-        "name": "imageEditorGpuGraphBlendIndexV3"
       },
       {
         "file": "src/features/imageEdit/v3/gpu/imageEditorGpuGraphUniformsV3.ts",
@@ -6399,10 +5919,6 @@
       },
       {
         "file": "src/features/imageEdit/v3/gpu/imageEditorGpuRasterSceneCompilerV3.ts",
-        "name": "ImageEditorGpuGraphAliasNodeV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/gpu/imageEditorGpuRasterSceneCompilerV3.ts",
         "name": "ImageEditorGpuGraphCompositeNodeV3"
       },
       {
@@ -6412,10 +5928,6 @@
       {
         "file": "src/features/imageEdit/v3/gpu/imageEditorGpuRasterSceneCompilerV3.ts",
         "name": "ImageEditorGpuGraphMaskV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/gpu/imageEditorGpuRasterSceneCompilerV3.ts",
-        "name": "ImageEditorGpuGraphSourceNodeV3"
       },
       {
         "file": "src/features/imageEdit/v3/gpu/imageEditorGpuRasterSceneCompilerV3.ts",
@@ -6575,35 +6087,7 @@
       },
       {
         "file": "src/features/imageEdit/v3/gpu/imageEditorGpuSceneProtocolV3.ts",
-        "name": "ImageEditorGpuSceneAttachSurfaceRequestV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/gpu/imageEditorGpuSceneProtocolV3.ts",
-        "name": "ImageEditorGpuSceneCancelExportRequestV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/gpu/imageEditorGpuSceneProtocolV3.ts",
-        "name": "ImageEditorGpuSceneDeviceLostEventV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/gpu/imageEditorGpuSceneProtocolV3.ts",
-        "name": "ImageEditorGpuSceneDiagnosticDeviceLossRequestV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/gpu/imageEditorGpuSceneProtocolV3.ts",
-        "name": "ImageEditorGpuSceneDisposeRequestV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/gpu/imageEditorGpuSceneProtocolV3.ts",
         "name": "ImageEditorGpuSceneExportRequestV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/gpu/imageEditorGpuSceneProtocolV3.ts",
-        "name": "ImageEditorGpuSceneExportTileConsumedRequestV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/gpu/imageEditorGpuSceneProtocolV3.ts",
-        "name": "ImageEditorGpuSceneExportTileEventV3"
       },
       {
         "file": "src/features/imageEdit/v3/gpu/imageEditorGpuSceneProtocolV3.ts",
@@ -6619,14 +6103,6 @@
       },
       {
         "file": "src/features/imageEdit/v3/gpu/imageEditorGpuSceneProtocolV3.ts",
-        "name": "ImageEditorGpuSceneInitializeRequestV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/gpu/imageEditorGpuSceneProtocolV3.ts",
-        "name": "ImageEditorGpuSceneReadyEventV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/gpu/imageEditorGpuSceneProtocolV3.ts",
         "name": "ImageEditorGpuSceneRenderRequestV3"
       },
       {
@@ -6635,39 +6111,11 @@
       },
       {
         "file": "src/features/imageEdit/v3/gpu/imageEditorGpuSceneProtocolV3.ts",
-        "name": "ImageEditorGpuSceneResourcesReadyEventV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/gpu/imageEditorGpuSceneProtocolV3.ts",
-        "name": "ImageEditorGpuSceneSurfaceFrameReadyEventV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/gpu/imageEditorGpuSceneProtocolV3.ts",
-        "name": "ImageEditorGpuSceneSyncRequestV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/gpu/imageEditorGpuSceneProtocolV3.ts",
         "name": "ImageEditorGpuSceneTileKeyV3"
       },
       {
         "file": "src/features/imageEdit/v3/gpu/imageEditorGpuSceneProtocolV3.ts",
-        "name": "ImageEditorGpuSceneTilesNeededEventV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/gpu/imageEditorGpuSceneProtocolV3.ts",
-        "name": "ImageEditorGpuSceneTransformRequestV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/gpu/imageEditorGpuSceneProtocolV3.ts",
         "name": "ImageEditorGpuSceneUploadTileV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/gpu/imageEditorGpuSceneProtocolV3.ts",
-        "name": "ImageEditorGpuSceneUploadTilesRequestV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/gpu/imageEditorGpuSceneProtocolV3.ts",
-        "name": "ImageEditorGpuSceneViewportRequestV3"
       },
       {
         "file": "src/features/imageEdit/v3/gpu/imageEditorGpuSceneProtocolV3.ts",
@@ -6815,10 +6263,6 @@
       },
       {
         "file": "src/features/imageEdit/v3/panelFramework/layout.ts",
-        "name": "IMAGE_EDITOR_PREVIEW_PANEL_V3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/panelFramework/layout.ts",
         "name": "ImageEditorDockLayoutV3"
       },
       {
@@ -6844,14 +6288,6 @@
       {
         "file": "src/features/imageEdit/v3/panelFramework/layout.ts",
         "name": "validateImageEditorDockLayoutV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/panelFramework/panelRegistry.ts",
-        "name": "IMAGE_EDITOR_PANEL_MIN_WIDTH_V3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/panelFramework/panelRegistry.ts",
-        "name": "IMAGE_EDITOR_PREVIEW_MIN_WIDTH_V3"
       },
       {
         "file": "src/features/imageEdit/v3/panelFramework/panelRegistry.ts",
@@ -6987,19 +6423,11 @@
       },
       {
         "file": "src/features/imageEdit/v3/store/imageEditorInteractionStoreV3.ts",
-        "name": "ImageEditorLayerDragStateV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/store/imageEditorInteractionStoreV3.ts",
         "name": "useImageEditorInteractionStoreV3"
       },
       {
         "file": "src/features/imageEdit/v3/store/imageEditorSessionStoreV3.ts",
         "name": "ImageEditorCropAspectRatioV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/store/imageEditorSessionStoreV3.ts",
-        "name": "ImageEditorSessionStateV3"
       },
       {
         "file": "src/features/imageEdit/v3/store/imageEditorSessionStoreV3.ts",
@@ -7016,10 +6444,6 @@
       {
         "file": "src/features/imageEdit/v3/testing/imageEditorGpuBaselineV3.ts",
         "name": "ImageEditorGoldenComparisonV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/testing/imageEditorGpuBaselineV3.ts",
-        "name": "ImageEditorGpuBaselineFixtureIdV3"
       },
       {
         "file": "src/features/imageEdit/v3/testing/imageEditorGpuBaselineV3.ts",
@@ -7072,10 +6496,6 @@
       {
         "file": "src/features/imageEdit/v3/tools/documentGeometry/service.ts",
         "name": "commitDocumentGeometryV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/tools/documentGeometry/service.ts",
-        "name": "geometryRequestSchemaV3"
       },
       {
         "file": "src/features/imageEdit/v3/tools/documentGeometry/service.ts",
@@ -7162,10 +6582,6 @@
         "name": "setImageEditVectorContentV3"
       },
       {
-        "file": "src/features/maskEditor/MaskEditorModal.tsx",
-        "name": "V3MaskEditorModalProps"
-      },
-      {
         "file": "src/features/maskEditor/document.ts",
         "name": "MaskEditorV3Result"
       },
@@ -7180,10 +6596,6 @@
       {
         "file": "src/features/maskEditor/index.ts",
         "name": "MaskEditorV3HostProps"
-      },
-      {
-        "file": "src/features/maskEditor/index.ts",
-        "name": "V3MaskEditorModalProps"
       },
       {
         "file": "src/features/maskEditor/types.ts",
@@ -7231,39 +6643,11 @@
       },
       {
         "file": "src/platform/contracts/imageEditorV3.ts",
-        "name": "ImageEditorV3BrushMaskTile"
-      },
-      {
-        "file": "src/platform/contracts/imageEditorV3.ts",
-        "name": "ImageEditorV3BrushRgbaTile"
-      },
-      {
-        "file": "src/platform/contracts/imageEditorV3.ts",
-        "name": "ImageEditorV3BrushTile"
-      },
-      {
-        "file": "src/platform/contracts/imageEditorV3.ts",
-        "name": "ImageEditorV3BrushTileResource"
-      },
-      {
-        "file": "src/platform/contracts/imageEditorV3.ts",
-        "name": "ImageEditorV3CanvasLayersCommitResult"
-      },
-      {
-        "file": "src/platform/contracts/imageEditorV3.ts",
-        "name": "ImageEditorV3CanvasLayersPrepareResult"
-      },
-      {
-        "file": "src/platform/contracts/imageEditorV3.ts",
         "name": "ImageEditorV3DialogResult"
       },
       {
         "file": "src/platform/contracts/imageEditorV3.ts",
         "name": "ImageEditorV3DocumentRef"
-      },
-      {
-        "file": "src/platform/contracts/imageEditorV3.ts",
-        "name": "ImageEditorV3DocumentReference"
       },
       {
         "file": "src/platform/contracts/imageEditorV3.ts",
@@ -7275,23 +6659,11 @@
       },
       {
         "file": "src/platform/contracts/imageEditorV3.ts",
-        "name": "ImageEditorV3ImageDocumentCommitResult"
-      },
-      {
-        "file": "src/platform/contracts/imageEditorV3.ts",
-        "name": "ImageEditorV3ImageDocumentOpenResult"
-      },
-      {
-        "file": "src/platform/contracts/imageEditorV3.ts",
         "name": "ImageEditorV3ImageDocumentReady"
       },
       {
         "file": "src/platform/contracts/imageEditorV3.ts",
         "name": "ImageEditorV3ImageDocumentRecoveryRequired"
-      },
-      {
-        "file": "src/platform/contracts/imageEditorV3.ts",
-        "name": "ImageEditorV3ImageDocumentTarget"
       },
       {
         "file": "src/platform/contracts/imageEditorV3.ts",
@@ -7312,10 +6684,6 @@
       {
         "file": "src/platform/contracts/imageEditorV3.ts",
         "name": "ImageEditorV3PackageThumbnail"
-      },
-      {
-        "file": "src/platform/contracts/imageEditorV3.ts",
-        "name": "ImageEditorV3PersistedBrushTile"
       },
       {
         "file": "src/platform/contracts/imageEditorV3.ts",
@@ -7340,14 +6708,6 @@
       {
         "file": "src/platform/contracts/imageEditorV3.ts",
         "name": "ImageEditorV3RasterExportResult"
-      },
-      {
-        "file": "src/platform/contracts/imageEditorV3.ts",
-        "name": "ImageEditorV3RasterExportStartResult"
-      },
-      {
-        "file": "src/platform/contracts/imageEditorV3.ts",
-        "name": "ImageEditorV3RasterOutputRef"
       },
       {
         "file": "src/platform/contracts/imageEditorV3.ts",
@@ -7387,10 +6747,6 @@
       },
       {
         "file": "src/platform/contracts/imageEditorV3.ts",
-        "name": "ImageEditorV3SourceTileBatchProgress"
-      },
-      {
-        "file": "src/platform/contracts/imageEditorV3.ts",
         "name": "ImageEditorV3SourceTileStreamCredit"
       },
       {
@@ -7412,10 +6768,6 @@
       {
         "file": "src/platform/contracts/imageEditorV3.ts",
         "name": "ImageEditorV3SubjectResult"
-      },
-      {
-        "file": "src/platform/contracts/index.ts",
-        "name": "ImageEditorV3Platform"
       }
     ],
     "comments": [

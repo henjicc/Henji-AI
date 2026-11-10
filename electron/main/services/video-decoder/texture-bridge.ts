@@ -102,7 +102,7 @@ const SHARED_FORMATS: readonly VideoSharedFormat[] = ['nv12', 'nv16', 'p010le', 
  * - nv16：对应的 DXGI_FORMAT_P208 在驱动上不能创建为 2D 纹理。
  * 原生侧改用 rgbaf16 输出这些位深/采样；诊断时可用 HENJI_VIDEO_FRAMES_UNSUPPORTED_FORMATS=1 放行复测。
  */
-export const VIDEO_FRAMES_UNSUPPORTED_FORMATS: ReadonlySet<VideoSharedFormat> = new Set(['p010le', 'nv16'])
+const VIDEO_FRAMES_UNSUPPORTED_FORMATS: ReadonlySet<VideoSharedFormat> = new Set(['p010le', 'nv16'])
 const ROUTE_PATTERN = /^[A-Za-z0-9_-]{1,64}$/
 const ID_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/
 const MAX_SCHEDULE_TIMES = 200_000

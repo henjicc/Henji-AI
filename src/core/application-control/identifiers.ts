@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 export const APPLICATION_CONTROL_CONTRACT_VERSION = 'application-control/v2' as const
-export const APPLICATION_CAPABILITY_CATALOG_VERSION_PATTERN = /^application-capabilities\/v[1-9][0-9]*$/
+const APPLICATION_CAPABILITY_CATALOG_VERSION_PATTERN = /^application-capabilities\/v[1-9][0-9]*$/
 
 const stableIdPattern = /^[a-z][a-z0-9_.-]{1,127}$/
 const propertyIdPattern = /^[a-z][a-z0-9_-]*(\.[a-z0-9][a-z0-9_-]*){1,15}$/
@@ -60,7 +60,7 @@ export function truncateCodePoints(text: string, maxUnits: number): string {
  * 契约限 1–200 个 UTF-16 单位，任何一条超限都会让整页结果被拒，所以在公共出口统一收敛：
  * 折叠空白、按码点截断不劈开代理对，空串返回 undefined 让调用方省略 label。
  */
-export function toApplicationRefLabel(value: string | null | undefined): string | undefined {
+function toApplicationRefLabel(value: string | null | undefined): string | undefined {
   const text = (value ?? '').replace(/\s+/g, ' ').trim()
   if (!text) return undefined
   if (text.length <= APPLICATION_REF_LABEL_MAX) return text

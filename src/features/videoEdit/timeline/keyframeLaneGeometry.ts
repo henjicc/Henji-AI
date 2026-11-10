@@ -7,7 +7,7 @@ export const KEYFRAME_LANE_HEADER = 32
 /** 关键帧视图里每个有动画的属性一行；片子数据视图每个子行同高。 */
 export const KEYFRAME_LANE_ROW = 28
 /** 速度曲线视图的最小高度：左侧属性列表与“选中的关键帧”形状切换都要放得下。 */
-export const KEYFRAME_CURVE_MIN_HEIGHT = 168
+const KEYFRAME_CURVE_MIN_HEIGHT = 168
 const CURVE_FOOTER = 64
 
 /** 片子数据视图显示的子行数：展开的组每个子行一行，收起的组合成一行。 */

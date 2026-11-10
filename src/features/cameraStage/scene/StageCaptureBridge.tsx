@@ -27,12 +27,12 @@ import { StageVideoFrameReader } from './stageVideoFrameReader'
  * 视口预览与导出成片就对不上了。
  */
 
-export interface StageOffscreenCaptureOptions {
+interface StageOffscreenCaptureOptions {
   width: number
   height: number
 }
 
-export interface StageVideoFrameCaptureOptions extends StageOffscreenCaptureOptions {
+interface StageVideoFrameCaptureOptions extends StageOffscreenCaptureOptions {
   /** 写入目标，长度为 yuv420pFrameByteLength(width, height)；Promise 兑现前调用方不得复用。 */
   target: Uint8Array
 }

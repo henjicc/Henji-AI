@@ -7,7 +7,7 @@ export interface CachedThumbnailResult {
   dataUrl?: string
 }
 
-export async function generateAndCacheImageThumbnail(imagePath: string, imageUrl: string): Promise<string> {
+async function generateAndCacheImageThumbnail(imagePath: string, imageUrl: string): Promise<string> {
   const { getThumbnailsPath } = await import('@/utils/dataPath')
 
   const cachePath = await getImageThumbnailCachePath(imagePath)

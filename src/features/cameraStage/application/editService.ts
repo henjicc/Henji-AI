@@ -289,7 +289,7 @@ function rangeOf(state: State, coverage: StageCoverage | undefined, startTime: n
 }
 
 /** 机位轨在 [start, end) 里的每一段；null 段换成活动摄像机。 */
-export function segmentsFromCuts(cuts: readonly StageCameraCut[], activeCameraId: string | null, start: number, end: number): EditSegment[] {
+function segmentsFromCuts(cuts: readonly StageCameraCut[], activeCameraId: string | null, start: number, end: number): EditSegment[] {
   const resolve = (cameraId: string | null): string | null => cameraId ?? activeCameraId
   const segments: EditSegment[] = [{ startTime: start, endTime: end, cameraId: resolve(cameraLiveAt(cuts, start)) }]
   for (const cut of cuts) {

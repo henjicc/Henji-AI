@@ -30,7 +30,6 @@ export type {
   ComposeLocalRedrawResult,
   LocalRedrawContext,
   LocalRedrawSettings,
-  PanoramaImageMetadata,
   PanoramaMetadataEmbedResult,
   PanoramaMetadataReadResult,
   PersistImageSourceTrackedResult,
