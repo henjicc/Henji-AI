@@ -231,8 +231,23 @@ describe('火山 SeedASR 2.0 实时协议', () => {
   })
 })
 
+type Utterance = Record<string, unknown>
+function utterancesOf(payload: unknown): Utterance[] {
+  return (payload as { result: { utterances: Utterance[] } }).result.utterances
+}
+/** 用官方响应帧结构替换 utterances 与累计全文，构造实时过程中的中间帧。 */
+function payloadWith(base: unknown, utterances: Utterance[], text: string): unknown {
+  const root = base as { result: Record<string, unknown> }
+  return { ...root, result: { ...root.result, text, utterances } }
+}
+/** 句子交界帧：上一句定稿，同时带出下一句开头。 */
+function boundaryPayload(official: OfficialFixture, constructed: ConstructedFixture): unknown {
+  const next = { ...utterancesOf(constructed.realtime.partialPayload)[0], start_time: 5000, end_time: 5400 }
+  return payloadWith(official.realtime.final, [utterancesOf(official.realtime.final)[0], next], '打开客厅空调，退出。你好')
+}
+
 describe('火山 SeedASR 2.0 实时会话', () => {
-  it('同一响应帧的 partial 回调取消后不再发出 final', async () => {
+  it('同一响应帧的 final 回调取消后不再发出下一句 partial', async () => {
     const official = fixture<OfficialFixture>('asr-seedasr-official.json')
     const constructed = fixture<ConstructedFixture>('asr-seedasr-field-construction.json')
     const connection = new ScriptedConnection(() => {
@@ -243,17 +258,102 @@ describe('火山 SeedASR 2.0 实时会话', () => {
     })
     const events: string[] = []
     const session = await open(client, { mediaType: 'audio/pcm' }, {
-      requestId: 'cancel-in-partial', onEvent: event => {
+      requestId: 'cancel-in-final', onEvent: event => {
         events.push(event.type)
-        if (event.type === 'partial') client.cancel('cancel-in-partial')
+        if (event.type === 'final') client.cancel('cancel-in-final')
       },
     })
-    connection.push(serverFrame({ payload: official.realtime.final, sequence: 2, last: false }))
+    connection.push(serverFrame({ payload: boundaryPayload(official, constructed), sequence: 2 }))
     await expect(session.result).rejects.toMatchObject({ code: 'cancelled' })
-    // Let the already-running frame handler resume after the callback.
+    // 让已在执行的帧处理在回调返回后继续跑完。
     await Promise.resolve()
-    expect(events).toEqual(['started', 'partial'])
+    expect(events).toEqual(['started', 'final'])
     expect(connection.close).toHaveBeenCalledOnce()
+    await client.dispose()
+  })
+
+  it('句子交界帧先发上一句 final，再发只含未定稿文字的 partial，相同 partial 不重发', async () => {
+    const official = fixture<OfficialFixture>('asr-seedasr-official.json')
+    const constructed = fixture<ConstructedFixture>('asr-seedasr-field-construction.json')
+    const connection = new ScriptedConnection(() => {
+      connection.push(serverFrame({ payload: official.realtime.handshake, sequence: 1 }))
+    })
+    const client = createCapabilityClient({ runtime: runtime(connection),
+      realtimeModules: [createVolcengineRealtimeAsrModule(volcengineSeedAsrRealtime, { requestIdFactory: () => constructed.taskId })],
+    })
+    const events: SpeechRecognitionEvent[] = []
+    const session = await open(client, { mediaType: 'audio/pcm' }, {
+      requestId: 'sentence-boundary', onEvent: event => { events.push(event) },
+    })
+    const finalUtterance = utterancesOf(official.realtime.final)[0]
+    const nextUtterance = { ...utterancesOf(constructed.realtime.partialPayload)[0], start_time: 5000, end_time: 5400 }
+    const frames = [
+      // 第一句还没定稿：partial 就是它。
+      payloadWith(official.realtime.final, [{ ...finalUtterance, definite: false }], '打开客厅空调，退出。'),
+      // 交界帧：第一句定稿，同时带出第二句开头；result.text 是整场累计全文。
+      boundaryPayload(official, constructed),
+      // 下一帧内容不变，不重复发。
+      boundaryPayload(official, constructed),
+      // 第二句后面还有一个未定稿 utterance：partial 按顺序拼接全部未定稿文字。
+      payloadWith(official.realtime.final, [
+        finalUtterance,
+        nextUtterance,
+        { definite: false, start_time: 5600, end_time: 6000, text: '空调' },
+      ], '打开客厅空调，退出。你好空调'),
+    ]
+    for (const [index, payload] of frames.entries()) {
+      connection.push(serverFrame({ payload, sequence: index + 2 }))
+    }
+    await vi.waitFor(() => { expect(events).toHaveLength(5) })
+    expect(events.map(event => [event.type, 'text' in event ? event.text : undefined])).toEqual([
+      ['started', undefined],
+      ['partial', '打开客厅空调，退出。'],
+      ['final', '打开客厅空调，退出。'],
+      ['partial', '你好'],
+      ['partial', '你好空调'],
+    ])
+    expect(events[4]).toMatchObject({ segment: { text: '你好空调', startMs: 5000, endMs: 6000 } })
+    await session.close()
+    await client.dispose()
+  })
+
+  it('定稿后下一句开头与上一条 partial 同文也照发；已定稿句补逐字不重发 final；没有 utterances 且未定稿时 partial 是全文', async () => {
+    const official = fixture<OfficialFixture>('asr-seedasr-official.json')
+    const constructed = fixture<ConstructedFixture>('asr-seedasr-field-construction.json')
+    const connection = new ScriptedConnection(() => {
+      connection.push(serverFrame({ payload: official.realtime.handshake, sequence: 1 }))
+    })
+    const client = createCapabilityClient({ runtime: runtime(connection),
+      realtimeModules: [createVolcengineRealtimeAsrModule(volcengineSeedAsrRealtime, { requestIdFactory: () => constructed.taskId })],
+    })
+    const events: SpeechRecognitionEvent[] = []
+    const session = await open(client, { mediaType: 'audio/pcm' }, {
+      requestId: 'repeat-after-final', onEvent: event => { events.push(event) },
+    })
+    const first = utterancesOf(constructed.realtime.partialPayload)[0]
+    const second = { ...first, start_time: 1000, end_time: 1400 }
+    const frames = [
+      payloadWith(constructed.realtime.partialPayload, [], '你好'),
+      payloadWith(constructed.realtime.partialPayload, [{ ...first, definite: true }], '你好'),
+      payloadWith(constructed.realtime.partialPayload, [{ ...first, definite: true }, second], '你好你好'),
+      // 已定稿的句子补上逐字：不算新的一句，不再发 final。
+      payloadWith(constructed.realtime.partialPayload, [
+        { ...first, definite: true, words: [{ text: '你', start_time: 0, end_time: 200 }, { text: '好', start_time: 200, end_time: 400 }] },
+        second,
+      ], '你好你好'),
+      payloadWith(constructed.realtime.partialPayload, [{ ...first, definite: true }, { ...second, text: '你好呀' }], '你好你好呀'),
+    ]
+    for (const [index, payload] of frames.entries()) {
+      connection.push(serverFrame({ payload, sequence: index + 2 }))
+    }
+    await vi.waitFor(() => { expect(events).toHaveLength(5) })
+    expect(events.slice(1).map(event => [event.type, 'text' in event ? event.text : undefined])).toEqual([
+      ['partial', '你好'],
+      ['final', '你好'],
+      ['partial', '你好'],
+      ['partial', '你好呀'],
+    ])
+    await session.close()
     await client.dispose()
   })
 

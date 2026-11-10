@@ -114,8 +114,8 @@ SDK 对音频保留一块延迟：收到下一块时才把上一块以正 sequen
 | 服务端帧/字段 | Capability 事件 | 终态 | 行为 |
 |---|---|---|---|
 | 首个合法 type `9` full response | `started` | 否 | 官方附件该帧 `result.text=""`；2026-11-10 真实服务该帧头为 `11 90 10 00`（不带 sequence、不压缩），payload 只有 `result.additions.log_id`，没有 `audio_info` 与 `result.text`。缺失的 `text` 按空串处理（存在但非字符串仍拒绝）；SDK 不要求必须为空，也不产生空 partial |
-| type `9`，非空 `result.text` | `partial` | 否 | 文本变化才发，重复内容去重 |
-| `result.utterances[].definite=true` | `final` | 否 | 表示句段已确定，不等于整个连接结束；按时间范围/文本去重 |
+| type `9`，有未定稿文字 | `partial` | 否 | `text` = 所有 `definite=false` 的 utterance 按顺序拼接，`segment` 覆盖它们的起止时间与逐字；帧里没有 utterances 且尚未发过 final 时取 `result.text`。`result.text` 是整场累计全文，不能直接当 partial。未定稿部分为空不发；与上一条 partial 相同不发，发过 final 后重新计 |
+| `result.utterances[].definite=true` | `final` | 否 | 表示句段已确定，不等于整个连接结束；按时间范围/文本去重；`result_type=full` 每帧重发全部已定稿句，同一句只在第一次定稿时发 final，之后补逐字或修订文字只更新完成结果的 `segments`。同一帧里先发全部新 final 再发 partial |
 | flag bit `2`（last） | `completed` | 是 | 只有客户端已 `finish()` 后才合法；输出 `result.text/utterances/audio_info.duration` |
 | type `15` | 无 | 是（错误） | 读取 uint32 错误码；错误 payload 可为 JSON 或 UTF-8 文本，默认异常/日志只保留错误码，不带原始 message |
 | 未知 `event` 数字 | 无 | 否 | 只记脱敏 warning，仍按 type/payload 处理 |
@@ -126,7 +126,7 @@ SDK 对音频保留一块延迟：收到下一块时才把上一块以正 sequen
 
 用户主动取消只关闭连接，不发送负 sequence 终帧，也不把取消伪装成正常完成。full request 默认在 15 秒内必须收到首个服务端响应，可用 `openTimeoutMs` 显式调整；超时会关闭半开连接。`finish()`、连接释放和显式 `close()` 都幂等；发送失败、服务端错误、断线、超时和取消都走同一个释放边界。
 
-同一响应帧可能同时产生 partial 与一个或多个 final。每次事件回调后重新检查取消/关闭，避免调用方在 partial 回调取消后，SDK 仍继续发出该帧的 final；该场景使用官方响应 payload 调整 last 标志构造，不代表新的供应商事件类型。
+同一响应帧可能同时产生一个或多个 final 与 partial：句子交界的帧通常同时带上一句定稿和下一句开头。SDK 先发 final 再发 partial，调用方按“已定稿 + 最新 partial”显示即可；反过来发会让 final 覆盖刚显示的下一句开头，直到下一帧才恢复。每次事件回调后重新检查取消/关闭，避免调用方在 final 回调取消后，SDK 仍继续发出该帧的 partial；这些场景用官方响应 payload 调整 utterances、`result.text` 与 last 标志构造，不代表新的供应商事件类型。
 
 2026-09-24 诊断复核：异常 details 保留实际 `modelId=seedasr-2.0-realtime`、`protocol=volcengine-binary-v1`、会话阶段、操作与最后一帧的序号/event/last 标志。原始服务端 message 和宿主异常可能包含识别内容或凭据，不进入默认诊断。握手失败后若关闭也失败，继续报告首个故障，并附 `cleanupFailed=true`。`volcengine-realtime-asr.test.ts` 使用既有官方帧结构、受控敏感文本错误与 Mock close 拒绝验证这些边界；不是额外真实服务实录。
 
