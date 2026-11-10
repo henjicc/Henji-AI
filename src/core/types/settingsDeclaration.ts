@@ -147,6 +147,7 @@ export const SETTINGS_DECLARATION = {
             'sections.display.autoFocusLabel',
             ['sections.interface.autoCollapseLabel', ['底部面板', '折叠', 'collapse']],
             ['sections.interface.collapseDelayLabel', ['移出后等待', 'collapse delay']],
+            ['sections.interface.historyOrderLabel', ['最新在上', '最新在下', '记录顺序', 'newest first', 'history order']],
           ]),
         ],
       }),

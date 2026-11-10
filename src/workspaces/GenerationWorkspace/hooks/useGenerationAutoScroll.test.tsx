@@ -13,7 +13,7 @@ it('用户离开底部后同帧的尺寸回调不拉回；回到底部后继续�
     observe() {} disconnect() {}
   })
   function Fixture() {
-    const { listContainerRef, contentRef } = useGenerationAutoScroll(true, 1000)
+    const { listContainerRef, contentRef } = useGenerationAutoScroll(true, 1000, 'last', false)
     return <div ref={listContainerRef} data-testid="scroll"><div ref={contentRef} /></div>
   }
   const view = render(<Fixture />)
@@ -35,11 +35,11 @@ it('用户离开底部后同帧的尺寸回调不拉回；回到底部后继续�
     height = 11000
     resized?.()
   })
-  expect(scroller.scrollTop).toBe(11000)
+  expect(scroller.scrollTop).toBe(11000 - 600)
   act(() => {
     height = 12000
     fireEvent.scroll(scroller)
     resized?.()
   })
-  expect(scroller.scrollTop).toBe(12000)
+  expect(scroller.scrollTop).toBe(12000 - 600)
 })

@@ -141,7 +141,6 @@ export function ParamGroupTrigger({
         // 特殊面板（重要记录 021）：宽度量内容，分组声明了宽度时作为正文最小宽
         panelSize="special"
         alignment="aboveCenter"
-        gap={compact ? 8 : 45}
         freezePositionOnOpen
         closeOnPanelClick={false}
         renderPanel={() => (

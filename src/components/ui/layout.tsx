@@ -13,7 +13,7 @@
  *   Surface  UiPanel variant=inset 仅更暗底色
  *   Card     UiPanel               唯一允许画完整卡片的一层（浮层/弹窗/侧栏/画布节点）
  */
-import { createContext, useContext, useId, useRef, type HTMLAttributes, type ReactNode } from 'react';
+import { createContext, useContext, useId, useLayoutEffect, useRef, useState, type HTMLAttributes, type ReactNode, type RefObject } from 'react';
 import { ArrowLeft, Check, MoreHorizontal, type LucideIcon } from 'lucide-react';
 import { UI_ICON_SIZE } from '@/core/theme/icons';
 import { Z_LAYERS } from '@/core/theme/zLayers';
@@ -419,6 +419,26 @@ export function UiPageHeader({
   );
 }
 
+/** 单行控件最高 36（lg）；控件本体超过这个高度（比例格、多行文本、上传区）就按多行对齐。 */
+const SINGLE_LINE_CONTROL_MAX_HEIGHT_PX = 40;
+
+/** 控件本体的高度：随内容与宽度变化（比例格在窄面板里折成两三行），所以按实际尺寸量，未量到时为 0。 */
+function useControlBodyHeight(ref: RefObject<HTMLElement>, enabled: boolean): number {
+  const [height, setHeight] = useState(0);
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!enabled || !element) return;
+    const measure = (): void => setHeight(Math.round(element.getBoundingClientRect().height));
+    measure();
+    const ResizeObserverClass = element.ownerDocument.defaultView?.ResizeObserver;
+    if (!ResizeObserverClass) return;
+    const observer = new ResizeObserverClass(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [enabled, ref]);
+  return height;
+}
+
 /**
  * 表单行：**一行设置的唯一写法**。统一标签与控件的对齐、间距和文字层级。
  * 控件本身自带边框是合理的（可输入语义），但这一行不再套框，也不画分隔线——
@@ -458,6 +478,8 @@ export function UiFormRow({
   const labelClass = density === 'compact' ? 'text-xs text-text2' : UI_TEXT_PANEL_TITLE_CLASS;
   // 行内控件没有自己的名称时，用 aria-labelledby 指向这行标签（B-50）
   const labelling = { labelId, hintId, errorId, fillControl: fixedColumn || fieldLayout === 'property' };
+  const controlBodyRef = useRef<HTMLDivElement>(null);
+  const multilineControl = useControlBodyHeight(controlBodyRef, fixedColumn && fieldLayout !== 'property') > SINGLE_LINE_CONTROL_MAX_HEIGHT_PX;
 
   if (fieldLayout === 'property') {
     // 名称列定宽，放不下的名称截断；没有另写说明时悬停显示完整名称
@@ -479,16 +501,20 @@ export function UiFormRow({
 
   if (fixedColumn) {
     const width = labelWidth ?? panelLabelWidth ?? 72;
-    return <div data-ui-form-row="panel" data-label-width={width} className={`flex items-start gap-3 ${className}`} {...props}>
-      <div className={`flex ${UI_FORM_ROW_MIN_HEIGHT_CLASS.sm} ${FORM_LABEL_WIDTH_CLASS[width]} shrink-0 items-center`}>
-        <div id={labelId} className={`min-w-0 break-words ${labelClass}`}>{labelNode}</div>
+    // 单行控件：标签与控件垂直居中；多行控件（比例格、多行文本）：标签与控件顶边对齐。
+    // 说明与报错另起一行放在控件下方，不参与对齐：网格第一行只有标签、控件本体与尾部动作
+    return <div data-ui-form-row="panel" data-label-width={width} data-control-lines={multilineControl ? 'multiple' : 'single'} className={`grid ${trailing !== undefined ? 'grid-cols-[auto_minmax(0,1fr)_auto]' : 'grid-cols-[auto_minmax(0,1fr)]'} items-start gap-x-3 ${className}`} {...props}>
+      <div className={`flex ${FORM_LABEL_WIDTH_CLASS[width]} ${multilineControl ? 'self-start' : `${UI_FORM_ROW_MIN_HEIGHT_CLASS.sm} items-center self-center`}`}>
+        <div id={labelId} className={`min-w-0 break-words ${multilineControl ? 'leading-4' : ''} ${labelClass}`}>{labelNode}</div>
       </div>
-      <div data-ui-form-control className="min-w-0 flex-1 text-left">
+      <div ref={controlBodyRef} data-ui-form-control className="min-w-0 text-left">
         <UiFormRowLabelContext.Provider value={labelling}>{children}</UiFormRowLabelContext.Provider>
+      </div>
+      {trailing !== undefined ? <div data-ui-form-trailing className={`flex min-h-control-sm w-control-sm items-center justify-center ${multilineControl ? 'self-start' : 'self-center'}`}>{trailing}</div> : null}
+      {hint || errorNode ? <div className="col-start-2 min-w-0 text-left">
         {hint ? <p id={hintId} className={`mt-0.5 ${UI_TEXT_META_CLASS}`}>{hint}</p> : null}
         {errorNode}
-      </div>
-      {trailing !== undefined ? <div data-ui-form-trailing className="flex min-h-control-sm w-control-sm shrink-0 items-center justify-center">{trailing}</div> : null}
+      </div> : null}
     </div>;
   }
 
@@ -616,7 +642,7 @@ function footerToolButton(tool: UiPanelFooterAction | UiPanelFooterMenu, extra: 
       aria-label={tool.label}
       tooltip={tool.tooltip ?? tool.label}
       // 面板底栏的工具静息时退到图标灰，开着（偏离默认）的照常着色；工具自己指定的档（删除类的危险色）照旧
-      tone={isAction && tool.tone && tool.tone !== 'default' ? tool.tone : isAction && tool.on ? 'default' : 'rest'}
+      tone={isAction && tool.tone ? tool.tone : isAction && tool.on ? 'default' : 'rest'}
       on={isAction ? tool.on : undefined}
       aria-pressed={isAction && tool.on === undefined ? tool.pressed : undefined}
       selection={isAction ? tool.selection : undefined}

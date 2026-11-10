@@ -543,6 +543,13 @@
       },
       "collapseDelayLabel": "Wait after leaving ({{value}} s)",
       "collapseDelayHint": "How long to wait after the pointer leaves the panel.",
+      "historyOrderLabel": "Newest results",
+      "historyOrderHint": "Follow panel: newest at the bottom when the input panel is at the bottom, at the top when it is on the left.",
+      "historyOrderModes": {
+        "auto": "Follow panel",
+        "bottom": "Bottom",
+        "top": "Top"
+      },
       "startupTitle": "Startup",
       "uiScaleLabel": "Interface scale",
       "uiScaleHint": "Auto picks the interface size from the current display's available space so smaller screens show more complete content. Resizing the window does not change the scale.",

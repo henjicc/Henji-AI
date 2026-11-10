@@ -16,7 +16,7 @@ import {
   countChangedParams,
   findMissingRequiredParams,
   isParamDisabled,
-  applyLinkageFilters, isParamVisible,
+  applyLinkageFilters, isParamVisible, offersChoice,
 } from '@/components/params/paramVisibility'
 import { analyzeRatioResolutionParams } from '@/core/params/ratioResolution'
 import { ParamGroupSections, ParamGroupTrigger } from '@/components/params/ParamGroupTrigger'
@@ -130,7 +130,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
   )
 
   const filteredParams = useMemo(
-    () => visibleParams.map((param) => applyLinkageFilters(param, runtimeValues, params, linkageEngine)),
+    () => visibleParams.map((param) => applyLinkageFilters(param, runtimeValues, params, linkageEngine)).filter((param) => offersChoice(param, runtimeValues)),
     [linkageEngine, params, runtimeValues, visibleParams]
   )
 

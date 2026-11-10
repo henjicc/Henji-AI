@@ -352,8 +352,10 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
       const top = placement === 'above'
         ? Math.max(viewportPadding, rect.top - panelHeight - DROPDOWN_PANEL_GAP_PX)
         : Math.min(rect.bottom + DROPDOWN_PANEL_GAP_PX, viewport.innerHeight - viewportPadding)
+      // 一行参数条里的触发器只有值那么宽，菜单常比它宽：居中对齐触发器；表单字段左缘对齐
+      const preferredLeft = toolbarLayout ? rect.left + rect.width / 2 - panelWidth / 2 : rect.left
       const left = Math.min(
-        Math.max(viewportPadding, rect.left),
+        Math.max(viewportPadding, preferredLeft),
         Math.max(viewportPadding, viewport.innerWidth - panelWidth - viewportPadding)
       )
       setFixedPos({ top, left, width: rect.width, placement })
@@ -369,7 +371,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
         ownerWindow.removeEventListener('resize', onScrollOrResize)
       }
     }
-  }, [open, shouldRender, panelMinWidthPx, panelWidthStrategy, scrollGutterPx, panelSize, hasFixedPosition])
+  }, [open, shouldRender, panelMinWidthPx, panelWidthStrategy, scrollGutterPx, panelSize, hasFixedPosition, toolbarLayout])
 
   useLayoutEffect(() => {
     if (!open) return

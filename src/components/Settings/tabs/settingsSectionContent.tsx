@@ -15,7 +15,8 @@ import PromptOptimizationSection from '../sections/PromptOptimizationSection'
 import BottomPanelSection from '../sections/BottomPanelSection'
 import DownloadSection from '../sections/DownloadSection'
 import ProviderCenterSection from '../sections/ProviderCenterSection'
-import { UiGroup, UiLoading } from '@/components/ui'
+import { UiFormRow, UiGroup, UiLoading, UiSegmented } from '@/components/ui'
+import { setGenerationHistoryOrder, useGenerationHistoryOrder, type GenerationHistoryOrder } from '@/workspaces/GenerationWorkspace/historyOrder'
 
 const logger = createLogger('components.Settings.tabs.GeneralTab')
 
@@ -90,7 +91,25 @@ export function GenerationSettingsSection(): React.ReactElement {
             onChangeDelay={(value) => updateSetting('collapseDelay', value)}
             onToggleScrollOnly={(value) => updateSetting('collapseOnScrollOnly', value)}
           />
+          <HistoryOrderRow />
         </UiGroup></>
+}
+
+const HISTORY_ORDERS: readonly GenerationHistoryOrder[] = ['auto', 'bottom', 'top']
+
+function HistoryOrderRow(): React.ReactElement {
+  const { t } = useI18n('settings')
+  const order = useGenerationHistoryOrder()
+  return (
+    <UiFormRow label={t('sections.interface.historyOrderLabel')} info={t('sections.interface.historyOrderHint')} inline>
+      <UiSegmented
+        ariaLabel={t('sections.interface.historyOrderLabel')}
+        options={HISTORY_ORDERS.map((value) => ({ value, label: t(`sections.interface.historyOrderModes.${value}`) }))}
+        value={order}
+        onChange={setGenerationHistoryOrder}
+      />
+    </UiFormRow>
+  )
 }
 
 export function DownloadSettingsSection(): React.ReactElement {

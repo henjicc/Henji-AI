@@ -47,8 +47,8 @@ export function GeneratorModelPicker({ uiState, arrangement = 'bar' }: { uiState
       <PanelTrigger
         className={side ? 'w-full min-w-0' : 'min-w-0'}
         panelSize="special"
-        // 底部时贴着模型按钮往上弹、左缘对齐按钮；左侧时向下展开
-        alignment={side ? 'bottomLeft' : 'aboveLeft'}
+        // 底部时在模型按钮上方居中弹出（放不下时向窗口内平移）；左侧时左缘对齐按钮向下展开，与竖排面板同一条左缘
+        alignment={side ? 'bottomLeft' : 'aboveCenter'}
         stableHeight
         closeOnPanelClick={(target) => {
           if ((target as HTMLElement).closest('[data-prevent-close]')) return false

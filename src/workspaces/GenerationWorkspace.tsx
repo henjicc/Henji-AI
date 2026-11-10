@@ -20,6 +20,7 @@ import { ClearHistoryDialog } from './GenerationWorkspace/components/ClearHistor
 import { ImageViewerModal } from '@/components/mediaViewer/ImageViewerModal'
 import { VideoViewerModal } from '@/components/mediaViewer/VideoViewerModal'
 import { AudioViewerModal } from '@/components/mediaViewer/AudioViewerModal'
+import { resolveNewestFirst, useGenerationHistoryOrder } from './GenerationWorkspace/historyOrder'
 import { TaskList } from './GenerationWorkspace/components/TaskList'
 import { useBottomPanel } from './GenerationWorkspace/hooks/useBottomPanel'
 import { useMediaFileActions } from './GenerationWorkspace/hooks/useMediaFileActions'
@@ -131,8 +132,8 @@ const GenerationWorkspace: React.FC = () => {
   const [isTestPanelOpen, setIsTestPanelOpen] = useState(false)
   useTestModeShortcuts({ togglePanel: () => setIsTestPanelOpen((v) => !v) })
   const { menuVisible, menuPosition, menuItems, showMenu, hideMenu } = useContextMenu()
-  const { listContainerRef, contentRef } = useGenerationAutoScroll(isTasksLoaded, listedTasks.length)
   const placement = useGenerationInputPanelPlacement()
+  const historyOrder = useGenerationHistoryOrder()
   const mainRef = useRef<HTMLElement | null>(null)
   // 量外框宽度：停到左侧后 main 会加左内边距，量内容宽会让宽度在门槛两侧来回跳
   const [mainWidth, setMainWidth] = useState(() => window.innerWidth)
@@ -146,6 +147,9 @@ const GenerationWorkspace: React.FC = () => {
   }, [])
   // 窗口太窄时左侧放不下：临时排回底部，记住的位置不变，变宽后回到左侧
   const sideDocked = placement === 'left' && mainWidth >= GENERATION_SIDE_PANEL_MIN_WORKSPACE_WIDTH
+  const newestFirst = resolveNewestFirst(historyOrder, sideDocked)
+  const { listContainerRef, contentRef, isAtNewestEdge } = useGenerationAutoScroll(isTasksLoaded, filteredTasks.length, filteredTasks.at(-1)?.id, newestFirst)
+  const displayedTasks = useMemo(() => newestFirst ? [...filteredTasks].reverse() : filteredTasks, [filteredTasks, newestFirst])
   const [storedSideWidth, setStoredSideWidth] = useState(readGenerationSidePanelWidth)
   const sideMaxWidth = resolveGenerationSidePanelMaxWidth(mainWidth, SIDE_PANEL_GUTTER_PX, GENERATION_COLUMN_MAX_WIDTH_PX)
   // 窗口变窄时只按当前上限显示，记住的宽度不改，变宽后回到原宽度
@@ -369,7 +373,9 @@ const GenerationWorkspace: React.FC = () => {
           <div ref={contentRef}>
             <TaskList
               scrollContainerRef={listContainerRef}
-              tasks={filteredTasks}
+              tasks={displayedTasks}
+              newestFirst={newestFirst}
+              isAtNewestEdge={isAtNewestEdge}
               totalCount={listedTasks.length}
               hasActiveFilters={hasActiveFilters}
               showMenu={showMenu}

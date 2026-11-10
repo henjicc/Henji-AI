@@ -52,7 +52,7 @@ function tasks(count: number): GenerationTask[] {
 const callbacks = {
   showMenu: vi.fn(), onDownload: vi.fn(), onCopyImage: vi.fn(), onRegenerate: vi.fn(), onRetryPolling: vi.fn(),
   onReedit: vi.fn(), onContinue: vi.fn(), onDelete: vi.fn(), onUsePrompt: vi.fn(), onRememberResultImageDimensions: vi.fn(),
-  onOpenImageViewer: vi.fn(), onOpenVideoViewer: vi.fn(), onOpenAudioViewer: vi.fn(), notify: vi.fn(),
+  onOpenImageViewer: vi.fn(), onOpenVideoViewer: vi.fn(), onOpenAudioViewer: vi.fn(), notify: vi.fn(), newestFirst: false, isAtNewestEdge: () => true,
 } satisfies Omit<TaskListProps, 'scrollContainerRef' | 'tasks' | 'totalCount' | 'hasActiveFilters'>
 function Fixture({ items }: { items: GenerationTask[] }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -64,7 +64,7 @@ function scroll(element: HTMLElement, top: number) { act(() => { element.scrollT
 it.each([false, true])('历史首屏定位不会被虚拟列表重置，异步载入=%s', asyncLoad => {
   function InitialHistory({ loaded }: { loaded: boolean }) {
     const items = loaded ? tasks(1000) : []
-    const { listContainerRef, contentRef } = useGenerationAutoScroll(loaded, items.length)
+    const { listContainerRef, contentRef } = useGenerationAutoScroll(loaded, items.length, items.at(-1)?.id, false)
     return <div ref={listContainerRef} data-testid="scroll"><div ref={contentRef}>
       <TaskList {...callbacks} scrollContainerRef={listContainerRef} tasks={items} totalCount={items.length} hasActiveFilters={false} />
     </div></div>

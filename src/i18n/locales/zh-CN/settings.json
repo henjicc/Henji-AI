@@ -543,6 +543,13 @@
       },
       "collapseDelayLabel": "移出后等待（{{value}} 秒）",
       "collapseDelayHint": "鼠标离开面板后等多久再收起。",
+      "historyOrderLabel": "最新结果的位置",
+      "historyOrderHint": "跟随面板：输入面板在底部时最新结果在下，在左侧时在上。",
+      "historyOrderModes": {
+        "auto": "跟随面板",
+        "bottom": "底部",
+        "top": "顶部"
+      },
       "startupTitle": "启动",
       "uiScaleLabel": "界面缩放",
       "uiScaleHint": "自动模式会根据当前显示器的可用空间选择界面大小，小屏幕优先显示更多完整内容；调整窗口大小不会改变界面比例。",

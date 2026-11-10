@@ -1,6 +1,7 @@
 import { UiRecordItem } from '@/components/ui'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
-import React, { useCallback, useRef } from 'react'
+import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { UI_DURATION, UI_EASE } from '@/components/ui/motion'
 import { History } from 'lucide-react'
 import { useI18n } from '@/hooks/useI18n'
 import type { MenuItem } from '@/hooks/useContextMenu'
@@ -34,6 +35,42 @@ export interface TaskListProps {
   onOpenVideoViewer: (url: string, filePath?: string, trimRange?: { start: number; end: number }) => void
   onOpenAudioViewer: (url: string, filePath?: string) => void
   notify: (message: string, type?: 'success' | 'error') => void
+  /** 最新记录排在顶部（新记录从顶上插入，其余记录往下让） */
+  newestFirst: boolean
+  /** 列表此刻是否停在最新那一端：只有停在那里时，顶上插入才让其余记录滑下去 */
+  isAtNewestEdge: () => boolean
+}
+
+/** 一次新增超过这么多条多半是切换筛选，不当成新生成的记录做进场 */
+const MAX_ANIMATED_INSERTIONS = 3
+
+/**
+ * 新出现的记录淡入；最新在上且列表停在顶部时，其余记录同时滑到新位置。
+ * 首次载入与切换筛选不做进场。
+ */
+function useInsertionMotion(tasks: GenerationTask[], newestFirst: boolean, isAtNewestEdge: () => boolean): { entering: ReadonlySet<string>; shifting: boolean } {
+  const idsKey = useMemo(() => tasks.map(task => task.id).join('|'), [tasks])
+  const knownIds = useRef<Set<string> | null>(null)
+  const timer = useRef<number | null>(null)
+  const [motion, setMotion] = useState<{ entering: ReadonlySet<string>; shifting: boolean }>({ entering: new Set(), shifting: false })
+  useLayoutEffect(() => {
+    const ids = idsKey ? idsKey.split('|') : []
+    const known = knownIds.current
+    knownIds.current = new Set(ids)
+    if (!known || known.size === 0) return
+    const fresh = ids.filter(id => !known.has(id))
+    if (fresh.length === 0 || fresh.length > MAX_ANIMATED_INSERTIONS) return
+    setMotion({ entering: new Set(fresh), shifting: newestFirst && isAtNewestEdge() })
+    if (timer.current !== null) window.clearTimeout(timer.current)
+    timer.current = window.setTimeout(() => {
+      timer.current = null
+      setMotion({ entering: new Set(), shifting: false })
+    }, UI_DURATION.slow)
+  // 只在记录增删时判断；排列方向与停靠位置在那一刻读取即可
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idsKey])
+  useLayoutEffect(() => () => { if (timer.current !== null) window.clearTimeout(timer.current) }, [])
+  return motion
 }
 
 export function TaskList({
@@ -55,9 +92,12 @@ export function TaskList({
   onOpenVideoViewer,
   onOpenAudioViewer,
   notify,
+  newestFirst,
+  isAtNewestEdge,
 }: TaskListProps): JSX.Element {
   const { t } = useI18n()
   const { listRef, retention, virtualizer, scrollMargin } = useVirtualTaskList(tasks, scrollContainerRef)
+  const insertion = useInsertionMotion(tasks, newestFirst, isAtNewestEdge)
   const taskIdAt = (target: EventTarget | null) => target instanceof Element
     ? target.closest<HTMLElement>('[data-generation-task-id]')?.dataset.generationTaskId
     : undefined
@@ -114,6 +154,8 @@ export function TaskList({
             top={row.start - scrollMargin}
             measure={virtualizer.measureElement}
             retention={retention}
+            entering={insertion.entering.has(task.id)}
+            shifting={insertion.shifting}
             task={task}
             showMenu={showMenu}
             onDownload={onDownload}
@@ -136,11 +178,13 @@ export function TaskList({
   )
 }
 
-function TaskListRow({ index, top, measure, retention, ...props }: TaskCardProps & {
+function TaskListRow({ index, top, measure, retention, entering, shifting, ...props }: TaskCardProps & {
   index: number
   top: number
   measure: (element: HTMLDivElement | null) => void
   retention: TaskListRetention
+  entering: boolean
+  shifting: boolean
 }): JSX.Element {
   const previous = useRef<HTMLDivElement | null>(null)
   const id = props.task.id
@@ -150,7 +194,9 @@ function TaskListRow({ index, top, measure, retention, ...props }: TaskCardProps
     measure(element)
   }, [id, measure, retention])
   // 用完整列表索引决定分隔线，不依赖虚拟窗口内的 DOM 首项。留白和线一起计入测量高度。
-  return <UiRecordItem ref={ref} index={index} density="page" data-index={index} className="absolute left-0 top-0 w-full" style={{ transform: `translateY(${top}px)` }}>
+  // 进场只动不透明度，位置由 transform 管；让位的滑动只在插入那一刻打开，平时测高变化即时生效
+  return <UiRecordItem ref={ref} index={index} density="page" data-index={index} className={`absolute left-0 top-0 w-full ${entering ? 'animate-fade-in' : ''}`}
+    style={{ transform: `translateY(${top}px)`, transition: shifting ? `transform ${UI_DURATION.slow}ms ${UI_EASE}` : undefined }}>
     <TaskCard {...props} />
   </UiRecordItem>
 }

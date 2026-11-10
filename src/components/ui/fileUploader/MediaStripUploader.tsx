@@ -340,8 +340,9 @@ export const MediaStripUploader = forwardRef<MediaStripUploaderHandle, MediaStri
           )
         })}
         {showUploadCard ? (
-          // 添加卡与缩略图同尺寸同圆角的实底竖块，加号居中；封面框只负责悬停发丝线与键盘焦点环
-          <UiOptionButton type="button" variant="cover" aria-label="添加素材" tooltip={hintText ?? '添加素材'}
+          // 添加卡与缩略图同尺寸同圆角的实底竖块，加号居中；封面框只负责悬停发丝线与键盘焦点环。
+          // 加号本身就说明了用途，只有宿主给出数量要求时才悬停提示
+          <UiOptionButton type="button" variant="cover" aria-label="添加素材" tooltip={hintText}
             className={`${UI_COVER_GROUP_CLASS} shrink-0`}
             onClick={openFilePicker}>
             <span className={`${UI_COVER_FRAME_CLASS} ${CARD_FRAME_CLASS} rounded-lg`}>

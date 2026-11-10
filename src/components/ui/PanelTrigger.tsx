@@ -55,9 +55,9 @@ type PanelTriggerProps = {
   panelWidthLabels?: readonly string[]
   /** 配合 `panelWidthLabels`：`none` 动作菜单（默认，项上没有勾，不留勾槽）/ `single` 选值菜单（预留选中勾槽）。 */
   menuSelection?: UiMenuSelection
-  /** bottomLeft：下方左对齐；bottomRight：下方右缘对齐（卡片角上的“更多”按钮）；aboveCenter：上方居中；aboveLeft：上方左缘对齐（贴着触发器往上弹）。空间不足时自动翻到另一侧。 */
-  alignment?: 'bottomLeft' | 'bottomRight' | 'bottomCenter' | 'aboveCenter' | 'aboveLeft'
-  /** 上方对齐时面板底部与触发按钮顶部的间距（默认 45；工具条排布下默认 8；与画布节点行内紧凑触发器保持一致时可调小） */
+  /** bottomLeft：下方左对齐；bottomRight：下方右缘对齐（卡片角上的“更多”按钮）；aboveCenter：上方居中。空间不足时自动翻到另一侧，左右放不下时向窗口内平移。 */
+  alignment?: 'bottomLeft' | 'bottomRight' | 'bottomCenter' | 'aboveCenter'
+  /** 上方对齐时面板底部与触发按钮顶部的间距（默认 8） */
   gap?: number
   /**
    * 是否在点击面板内容后关闭。交互型面板默认保持打开；
@@ -169,8 +169,8 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
   const rowLabelledBy = !label && formRowLabelling ? `${formRowLabelling.labelId} ${triggerId}` : undefined
   const toolbarLayout = fieldLayout === 'toolbar'
   const resolvedAppearance = appearance ?? (toolbarLayout ? 'quiet' : 'field')
-  // 表单排布的触发器在输入区顶部，浮层要越过整块输入区；工具条里的触发器就近弹出。
-  const gapProp = gapOverride ?? (toolbarLayout ? 8 : 45)
+  // 浮层贴着触发器弹出，与触发器之间不夹别的内容
+  const gapProp = gapOverride ?? 8
   const [open, setOpen] = useState(false)
   const panelRef = useRef<HTMLDivElement | null>(null)
   const { shouldRender, closing } = useDialogTransition(open, UI_POPOVER_TRANSITION_MS, true, {
@@ -231,10 +231,14 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
 
   const updatePanelPosition = useCallback((rect: FloatingPanelAnchorRect, reveal: boolean): void => {
     anchorRectRef.current = rect
+    // 量内容本来要多高：浮层外框已被上一次算出的可用高度封顶，正文在滚动区里滚，只量外框会把裁过的高度
+    // 当成需要的高度，上方放不下时永远不翻到下方
+    const scrollRegion = panelRef.current?.querySelector<HTMLElement>('[data-panel-scroll-region]')
     const measuredPanelHeight = Math.max(
       0,
       panelRef.current?.scrollHeight ?? 0,
       panelRef.current?.getBoundingClientRect().height ?? 0,
+      scrollRegion ? scrollRegion.scrollHeight + UI_TRIGGER_PANEL_CHROME_Y_PX[panelPadding] : 0,
     )
     const position = resolveFloatingPanelPosition({
       anchor: rect,
@@ -243,9 +247,9 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
       panelHeight: measuredPanelHeight,
       viewportWidth: ownerWindowOf(ref.current).innerWidth,
       viewportHeight: ownerWindowOf(ref.current).innerHeight,
-      preferredPlacement: alignment === 'aboveCenter' || alignment === 'aboveLeft' ? 'above' : 'below',
+      preferredPlacement: alignment === 'aboveCenter' ? 'above' : 'below',
       horizontalAlign: alignment === 'aboveCenter' || alignment === 'bottomCenter' ? 'center' : alignment === 'bottomRight' ? 'right' : 'left',
-      gap: alignment === 'aboveCenter' || alignment === 'aboveLeft' ? gapProp : 4,
+      gap: alignment === 'aboveCenter' ? gapProp : 4,
       viewportGutter: PANEL_VIEWPORT_GUTTER_PX,
       viewportTopInset: PANEL_VIEWPORT_TOP_INSET_PX,
     })
@@ -257,7 +261,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
 
     setPos(position)
     if (reveal) setReady(true)
-  }, [alignment, boundarySelector, contentWidth, gapProp, resolvedPanelWidth, stableHeight])
+  }, [alignment, boundarySelector, contentWidth, gapProp, panelPadding, resolvedPanelWidth, stableHeight])
 
   const computePanelPosition = useCallback((): void => {
     const rect = readAnchorRect()

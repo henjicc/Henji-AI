@@ -22,7 +22,7 @@ export const GENERAL_OPTIMIZER_USER_TEMPLATE = [
 
 /**
  * 智能优化的存储形态：供应商与模型留空表示跟随智能助手的模型；系统提示词与模板不使用，
- * 运行时按模式读取助手技能里的写作指南。思考程度默认低档，优化是即时的小活。
+ * 运行时按模式读取助手技能里的写作指南。思考程度默认高档：优化要读懂目标模型与参考素材，想得深一些写得更准。
  */
 export function createSmartPromptProfile(now = new Date().toISOString()): PromptOptimizationProfile {
   return {
@@ -34,7 +34,7 @@ export function createSmartPromptProfile(now = new Date().toISOString()): Prompt
     systemPrompt: GENERAL_OPTIMIZER_SYSTEM_PROMPT,
     userTemplate: GENERAL_OPTIMIZER_USER_TEMPLATE,
     capabilities: { text: true, image: false, video: false },
-    reasoning: { enabled: true, effort: 'low' },
+    reasoning: { enabled: true, effort: 'high' },
     isDefault: true,
     enabled: true,
     createdAt: now,

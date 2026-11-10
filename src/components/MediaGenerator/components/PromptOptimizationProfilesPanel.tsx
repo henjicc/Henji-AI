@@ -261,7 +261,7 @@ export function PromptOptimizationProfilesPanel({
   }
 
   return (
-    <div className="flex max-h-[min(680px,calc(100vh-96px))] flex-col p-4">
+    <div className="flex min-h-0 flex-1 flex-col p-4">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
           <div className={UI_TEXT_PANEL_TITLE_CLASS}>提示词优化配置</div>
@@ -271,8 +271,8 @@ export function PromptOptimizationProfilesPanel({
         </div>
       </div>
 
-      <div className="grid min-h-0 gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
-        <div className="space-y-2 pr-1">
+      <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
+        <div className="ui-scrollbar min-h-0 space-y-2 overflow-y-auto pr-1">
           {profiles.map(profile => (
             <UiOptionButton
               key={profile.id}
@@ -298,7 +298,7 @@ export function PromptOptimizationProfilesPanel({
           </UiButton>
         </div>
 
-        <div className="space-y-3 p-1">
+        <div className="ui-scrollbar min-h-0 space-y-3 overflow-y-auto p-1">
           {smart ? (
             <div className={UI_TEXT_PANEL_TITLE_CLASS}>{selectedProfile.name}</div>
           ) : (
@@ -309,7 +309,8 @@ export function PromptOptimizationProfilesPanel({
             />
           )}
 
-          <UiGroup labelWidth={96}>
+          {/* 供应商、模型、思考程度的值都很短，下拉不拉满整列 */}
+          <UiGroup labelWidth={96} className="max-w-sm">
             <UiFormRow label={t('promptProfileFields.provider')}>
             <Dropdown
               ariaLabel={t('promptProfileFields.provider')}

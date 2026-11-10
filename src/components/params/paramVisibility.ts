@@ -98,3 +98,14 @@ export function applyLinkageFilters(param: ParamDef, values: ParamValueMap, sche
   }
   return param
 }
+
+/**
+ * 选项类参数只剩一个可选值、且当前值就是它时（通常是联动筛掉了其他值）没有可选的余地，界面不显示这一项。
+ * 当前值还不是那个唯一选项时照常显示，用户能看到并改正，提交时不会报一个看不见的参数冲突。
+ * 没有静态选项的下拉（选项运行时载入）不在此列。
+ */
+export function offersChoice(param: ParamDef, values: ParamValueMap): boolean {
+  if (param.type !== 'dropdown' && param.type !== 'radio') return true
+  if (param.options?.length !== 1) return true
+  return String(param.options[0].value) !== String(values[param.id] ?? param.default)
+}

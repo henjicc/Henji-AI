@@ -20,6 +20,7 @@ import type { Editor } from '@tiptap/react'
 import type { PromptDocumentV1 } from '@/core/inputs/promptDocument'
 import { UI_TEXT_META_CLASS } from '../styleTokens'
 
+import { EmptySelectionExtension } from './extensions/emptySelection'
 import { addExternalChange, ExternalHistoryExtension } from './extensions/externalHistory'
 import { MediaReferenceExtension } from './extensions/mediaReference'
 import { TemplateVariableExtension } from './extensions/templateVariable'
@@ -182,6 +183,7 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
         HardBreak,
         UndoRedo.configure({ depth: 100, newGroupDelay: 500 }),
         ExternalHistoryExtension,
+        EmptySelectionExtension,
         Placeholder.configure({ placeholder: () => placeholderRef.current }),
         CharacterCount.configure({ limit: maxCharacters ?? null, mode: 'textSize' }),
         ...(capabilities.mediaReferences
