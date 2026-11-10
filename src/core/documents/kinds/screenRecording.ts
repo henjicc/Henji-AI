@@ -12,7 +12,7 @@ import { migrateVideoEditMergedEffects } from '../../videoEdit/mergedEffectsMigr
 import { createRecordingDocument, recordingDocumentSchema, type RecordingDocument } from '../../screenRecording/document'
 
 export const screenRecordingDocumentKind: DocumentKindDescriptor<RecordingDocument> = {
-  id: 'screen_recording', extension: henjiExtension('screen_recording'), legacyExtensions: henjiLegacyExtensions('screen_recording'), storage: 'json', version: 79, minReaderVersion: 77,
+  id: 'screen_recording', extension: henjiExtension('screen_recording'), legacyExtensions: henjiLegacyExtensions('screen_recording'), storage: 'json', version: 80, minReaderVersion: 77,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
     // 72 → 73：嵌入剪辑的新增灯光片段与灯光素材项（kind light，字段 lightKind、lightColor、lightIntensity 可关键帧、lightCastShadow、lightSoftness、lightAngle），序列 spaceRender 新增 defaultLighting；旧内容没有灯光，画面不变；片段与素材项的 kind、关键帧键是封闭枚举，旧程序读到 light 或 curves.lightIntensity 会拒读，最低可读版本随版本提高。
@@ -22,6 +22,8 @@ export const screenRecordingDocumentKind: DocumentKindDescriptor<RecordingDocume
     // 76 → 77：嵌入剪辑随剪辑内容 74 把片段淡入淡出并进单侧过渡；旧程序不会让自带声音的画面片段随单侧画面过渡淡，最低可读版本提高到 77。
     // 77 → 78：嵌入剪辑随剪辑内容 75 给已有手改补检查记录（键 check）；旧程序原样保留，最低可读版本不变。
     // 78 → 79：嵌入剪辑随剪辑内容 76 不再限风格使用者偏好的条数与总字数；内容原样保留；旧程序只在条目超出旧上限时拒绝打开，最低可读版本不变。
+    // 79 → 80：嵌入剪辑随剪辑内容 77：文字样式新增可选 fontVariations（可变字体轴数值）与文字片段轴动画；内容原样保留，最低可读版本不变。
+    79: content => structuredClone(content),
     78: content => structuredClone(content),
     77: content => migrateEmbeddedVideoEditCodeEditChecks(content),
     76: content => migrateEmbeddedVideoEditClipFades(content),

@@ -3,11 +3,11 @@ import { readFile, stat, readdir, mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
 import { discoverSystemFonts, FONT_FILE_EXTENSION, type FontDiscovery } from './discovery'
-import { parseFontFile, standaloneFont, type ParsedFontFace } from './metadata'
+import { FONT_METADATA_VERSION, parseFontFile, standaloneFont, type ParsedFontFace } from './metadata'
 import type { FontFaceInfo } from '../../../../src/core/fonts/catalog'
 
 export interface InternalFace { face: FontFaceInfo; path: string; index: number; signature: string }
-interface CachedFile { signature: string; faces: ParsedFontFace[] }
+interface CachedFile { signature: string; parser?: number; faces: ParsedFontFace[] }
 export class FontScanner {
   private cache: Record<string, CachedFile> = {}
   private initialized = false
@@ -29,8 +29,8 @@ export class FontScanner {
       try {
         const info = await stat(file); const signature = `${info.size}:${info.mtimeMs}`
         const cached = this.cache[file]
-        const parsed = cached?.signature === signature ? cached.faces : parseFontFile(await readFile(file))
-        next[file] = { signature, faces: parsed }
+        const parsed = cached?.signature === signature && cached.parser === FONT_METADATA_VERSION ? cached.faces : parseFontFile(await readFile(file))
+        next[file] = { signature, parser: FONT_METADATA_VERSION, faces: parsed }
         for (const value of parsed) faces.push({ face: { ...value.face, id: createHash('sha256').update(`${file}:${value.index}:${signature}:${JSON.stringify(value.face.variation ?? {})}`).digest('hex'), imported: importedSet.has(file) }, path: file, index: value.index, signature })
       } catch (error) { failures.push(`${path.basename(file)}: ${error instanceof Error ? error.message : String(error)}`) }
     }

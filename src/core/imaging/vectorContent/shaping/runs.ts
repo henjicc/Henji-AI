@@ -1,6 +1,6 @@
 import type { TextStyle } from '../text'
 import type { TextFontAccess, TextFontRequest } from './fontSession'
-import { TextShaper, shapingKey, orderedValues, type ShapeOptions } from './harfbuzz'
+import { TextShaper, shapingKey, orderedValues, type FontSource, type ShapeOptions } from './harfbuzz'
 import { resolveBidi, type BaseDirection, type BidiLevels } from './bidi'
 import { graphemeEnds, type ParagraphOptions, type ParagraphRun } from './paragraph'
 
@@ -33,6 +33,13 @@ function textScript(text: string): string | undefined {
 // UAX #50 里竖排保持直立的文字；其余（拉丁字母、数字、西文标点）转 90 度。
 const uprightInVertical = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Bopomofo}\p{Script=Yi}\p{Extended_Pictographic}\p{Regional_Indicator}\u20e3\u2460-\u24ff\u3200-\u33ff\u3000-\u303f\uff00-\uff60\uffe0-\uffe6\u30a0-\u30ff\u2e80-\u2fdf]/u
 export const textFontRequest = (style: TextStyle): TextFontRequest => ({ family: style.fontFamily, weight: style.fontWeight, style: style.fontStyle })
+/**
+ * 轴数值不进字体请求：请求身份决定预先准备的字体链，逐帧变化的轴若进身份，每帧都要重新准备。
+ * 选定字体后再把样式的轴数值盖在命名实例坐标上交给 HarfBuzz；字体没有的轴由 HarfBuzz 忽略，越界由它夹取。
+ */
+export function styledFontSource(font: FontSource, style: Pick<TextStyle, 'fontVariations'>): FontSource {
+  return style.fontVariations && Object.keys(style.fontVariations).length ? Object.freeze({ ...font, variations: Object.freeze({ ...font.variations, ...style.fontVariations }) }) : font
+}
 
 /** 富文本的绘制样式单独保留；仅真正影响 shaping 的事实划分 run。 */
 export function prepareShapingRuns(shaper: TextShaper, fonts: TextFontAccess, source: string, spans: readonly TextStyleSpan[], options: ShapeOptions, baseDirection: BaseDirection = options.direction === 'rtl' ? 'rtl' : 'ltr', vertical = false): ShapingRuns {
@@ -75,7 +82,7 @@ export function prepareShapingRuns(shaper: TextShaper, fonts: TextFontAccess, so
     const shapeOptions: ShapeOptions = { ...options, size, direction: vertical && uprightInVertical.test(value) ? 'ttb' : level % 2 ? 'rtl' : 'ltr', features: { ...options.features, kern: style.kerning === 'auto' ? 1 : 0 }, script: script === 'Emoji' ? 'Zyyy' : script === 'Zzzz' ? options.script : script }
     const request = textFontRequest(style), chain = fonts.chain(request)
     identities.add(chain.identity)
-    const { font, missing } = fonts.choose(chain, value, shaper, shapeOptions)
+    const chosen = fonts.choose(chain, value, shaper, shapeOptions), missing = chosen.missing, font = styledFontSource(chosen.font, style)
     const start = text.length, end = start + value.length
     const key = JSON.stringify([font.hash, font.face ?? 0, orderedValues(font.variations), shapingKey(shapeOptions), script === 'Zzzz' ? item.value : script, level])
     const last = runs.at(-1)

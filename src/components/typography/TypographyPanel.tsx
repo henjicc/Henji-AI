@@ -9,6 +9,7 @@ import { UiFontPicker } from '@/components/ui/UiFontPicker'
 import { UiFormRow, UiGroup } from '@/components/ui/layout'
 import NumberInput from '@/components/ui/NumberInput'
 import { defaultTextStyle, textStyleSchema, type TextStyle } from '@/core/imaging/vectorContent/text'
+import { fontAxisLabel, type FontVariationAxis } from '@/core/fonts/catalog'
 import { BLACK_HEX } from '@/core/theme/colorTokens'
 import { fontLibrarySnapshot, subscribeFontLibrary, resolveFont, readFontPayload } from '@/platform/fonts'
 import { loadDocumentFont } from '@/platform/fontFaces'
@@ -25,9 +26,16 @@ export interface TypographyPanelProps {
   transform?: ReactNode
   footer?: ReactNode
   fields?: 'all' | 'rich-text' | 'code-element' | 'author-text' | 'appearance'
+  /** 可做动画的宿主（剪辑文字片段）给变化轴提供播放头处的值、秒表与关键帧导航；写入有关键帧的轴时由宿主改关键帧并返回 true。 */
+  axisKeyframes?: TypographyAxisKeyframes
+}
+export interface TypographyAxisKeyframes {
+  value: (tag: string) => number | undefined
+  controls: (axis: FontVariationAxis, value: number) => { stopwatch: ReactNode; navigator: ReactNode }
+  write: (tag: string, value: number) => boolean
 }
 /** All four hosts edit this schema; placement is supplied only by hosts that support it. */
-export function TypographyPanel({ style, onChange, onError, onBegin, onEnd, onFontPreview, projectFonts, fontLabel = '文字字体', transform, footer, fields = 'all' }: TypographyPanelProps): React.ReactElement {
+export function TypographyPanel({ style, onChange, onError, onBegin, onEnd, onFontPreview, projectFonts, fontLabel = '文字字体', transform, footer, fields = 'all', axisKeyframes }: TypographyPanelProps): React.ReactElement {
   const { t } = useTranslation('ui')
   const library = useSyncExternalStore(subscribeFontLibrary, fontLibrarySnapshot)
   const styleRef = useRef(style); styleRef.current = style
@@ -58,7 +66,7 @@ export function TypographyPanel({ style, onChange, onError, onBegin, onEnd, onFo
   // Requesting 700/italic again would synthesize it a second time. Family-name writes may still use CSS weight/style.
   const faces = library.faces.filter(face => face.family === currentFont?.family && !face.id.startsWith('generic:'))
   const selectedFace = faces.find(face => face.fullName === style.fontFamily) ?? faces.find(face => face.weight === style.fontWeight && face.italic === (style.fontStyle !== 'normal')) ?? currentFont
-  const fontPicker = <UiFontPicker size="sm" ariaLabel={fontLabel} value={style.fontFamily} projectFonts={projectFonts} onPreview={face => onFontPreview?.(face?.fullName ?? null)} onSelect={fontFamily => { onEnd?.(false); write({ fontFamily, fontWeight: 400, fontStyle: 'normal' }) }} />
+  const fontPicker = <UiFontPicker size="sm" ariaLabel={fontLabel} value={style.fontFamily} projectFonts={projectFonts} onPreview={face => onFontPreview?.(face?.fullName ?? null)} onSelect={fontFamily => { onEnd?.(false); write({ fontFamily, fontWeight: 400, fontStyle: 'normal', fontVariations: undefined }) }} />
   const strokeControls = <UiGroup title="描边" titleTone="compact" actions={<UiIconButton size="xs" aria-label="添加描边" onClick={() => write({ strokes: [...style.strokes, { enabled: true, color: BLACK_HEX, width: 2, position: 'outside' }] })}><Plus  /></UiIconButton>}>
         {style.strokes.map((stroke, index) => <div key={index} className="flex flex-col gap-2">
           {row(t('surfaceGrammar.strokeColor'), <div className="flex items-center justify-end gap-2"><UiCheckbox aria-label={`启用描边${index + 1}`} checked={stroke.enabled} onCheckedChange={enabled => write({ strokes: style.strokes.map((entry, i) => i === index ? { ...entry, enabled } : entry) })} />{color(`描边${index + 1}颜色`, stroke.color, value => write({ strokes: style.strokes.map((entry, i) => i === index ? { ...entry, color: value } : entry) }))}<UiIconButton size="xs" tone="danger" aria-label={`删除描边${index + 1}`} onClick={() => write({ strokes: style.strokes.filter((_, i) => i !== index) })}><Trash2  /></UiIconButton></div>)}
@@ -84,8 +92,24 @@ export function TypographyPanel({ style, onChange, onError, onBegin, onEnd, onFo
       {row('字形样式', faces.length ? <Dropdown size="sm" ariaLabel="字形样式" value={selectedFace?.fullName ?? style.fontFamily} options={faces.map(face => ({ value: face.fullName, label: face.style }))} onSelect={value => {
         const face = faces.find(face => face.fullName === value); if (!face) return
         const epoch = ++fontEpoch.current; const baseline = styleRef.current
-        void readFontPayload(face).then(loadDocumentFont).then(() => { if (alive.current && epoch === fontEpoch.current && styleRef.current === baseline) write({ fontFamily: face.fullName, fontWeight: 400, fontStyle: 'normal' }) }, error => { if (alive.current && epoch === fontEpoch.current) onError(error) })
+        // 选样式就是回到该命名实例的坐标：清掉轴覆盖，否则选了“粗体”画面却不变。
+        void readFontPayload(face).then(loadDocumentFont).then(() => { if (alive.current && epoch === fontEpoch.current && styleRef.current === baseline) write({ fontFamily: face.fullName, fontWeight: 400, fontStyle: 'normal', fontVariations: undefined }) }, error => { if (alive.current && epoch === fontEpoch.current) onError(error) })
       }} /> : <Dropdown size="sm" ariaLabel="字形样式" value={`${style.fontWeight}:${style.fontStyle}`} options={[{ value: '400:normal', label: 'Regular' }, { value: '700:normal', label: 'Bold' }, { value: '400:italic', label: 'Italic' }, { value: '700:italic', label: 'Bold Italic' }]} onSelect={value => { const [weight, variant] = value.split(':'); write({ fontWeight: Number(weight), fontStyle: variant === 'italic' ? 'italic' : 'normal' }) }} />)}
+      {selectedFace?.axes?.map(axis => {
+        const animated = axisKeyframes?.value(axis.tag)
+        const value = animated ?? style.fontVariations?.[axis.tag] ?? selectedFace.variation?.[axis.tag] ?? axis.default
+        const label = fontAxisLabel(axis)
+        const step = axis.max - axis.min > 20 ? 1 : .1
+        const change = (next: number): void => { if (!axisKeyframes?.write(axis.tag, next)) write({ fontVariations: { ...styleRef.current.fontVariations, [axis.tag]: next } }) }
+        const controls = axisKeyframes?.controls(axis, value)
+        // 秒表进属性行的秒表列、关键帧导航叠在名称后（悬停本行出现），与运动属性行同一排布。
+        return <UiFormRow key={`axis:${axis.tag}`} label={label} info={`${axis.tag}：${axis.min}–${axis.max}`} density="compact" leading={controls?.stopwatch} labelTrailing={controls?.navigator}>
+          <span className="flex min-w-0 items-center gap-2">
+            <UiRangeInput aria-label={`${label}滑杆`} min={axis.min} max={axis.max} step={step} value={value} onPointerDown={onBegin} onPointerUp={() => onEnd?.(true)} onPointerCancel={() => onEnd?.(false)} onBlur={() => onEnd?.(true)} onChange={event => change(Number(event.target.value))} />
+            <span className="w-20 shrink-0">{number(label, value, change, axis.min, axis.max, step)}</span>
+          </span>
+        </UiFormRow>
+      })}
       {iconRow(t('surfaceGrammar.glyphEffects'), <>{toggles.map(([key, label, Icon]) => <UiIconButton key={key} size="xs" on={style[key]} aria-pressed={style[key]} aria-label={label} tooltip={label} onClick={() => write({ [key]: !style[key], ...(key === 'superscript' && !style[key] ? { subscript: false } : key === 'subscript' && !style[key] ? { superscript: false } : {}) })}><Icon  /></UiIconButton>)}</>)}
       {row('字号', <span className="flex items-center gap-2"><UiRangeInput aria-label="字号滑杆" min={1} max={Math.max(256, style.fontSize)} value={style.fontSize} onPointerDown={onBegin} onPointerUp={() => onEnd?.(true)} onPointerCancel={() => onEnd?.(false)} onBlur={() => onEnd?.(true)} onChange={event => write({ fontSize: Number(event.target.value) })} /><span className="w-20 shrink-0">{number('文字字号', style.fontSize, fontSize => write({ fontSize }), 1)}</span></span>)}
       {iconRow('段落对齐', <>{([['left', '左对齐', AlignLeft], ['center', '居中', AlignCenter], ['right', '右对齐', AlignRight], ['justify', '两端对齐末行左', AlignJustify], ['justify-center', '两端对齐末行中', AlignCenter], ['justify-right', '两端对齐末行右', AlignRight], ['justify-all', '全部两端对齐', AlignJustify]] as const).map(([align, label, Icon]) => <UiIconButton key={align} size="xs" selection="mode" on={style.align === align} aria-label={label} tooltip={label} onClick={() => write({ align })}><Icon  /></UiIconButton>)}</>)}

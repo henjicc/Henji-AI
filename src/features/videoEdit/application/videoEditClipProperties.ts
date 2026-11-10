@@ -1,6 +1,6 @@
 import { videoEditClipSchema, type VideoEditClip, type VideoEditDocument, type VideoEditSequence } from '@/core/videoEdit/document'
 import { editVideoProject, requireVideoEditInstance, updateVideoEditGesture, type VideoEditGesture } from './videoEditService'
-import { writeVideoEditClipKeyframes, putVideoEditKeyframe, type VideoEditAnimatableKey, type VideoEditKeyframes } from '@/core/videoEdit/keyframes'
+import { writeVideoEditClipKeyframes, putVideoEditKeyframe, type VideoEditClipCurveKey, type VideoEditKeyframes } from '@/core/videoEdit/keyframes'
 import { demonstrateVideoMotion, videoMotionState } from './videoEditMotionDraft'
 
 /** 效果控件里可直接调的片段固有属性（PR 的“运动 / 不透明度 / 音量”等固定效果）。 */
@@ -96,7 +96,7 @@ export function updateVideoEditClipProperties(projectId: string, sequenceId: str
   return editVideoProject(projectId, update)
 }
 /** UI and pen edits share the formal document validator, lock check and gesture undo. */
-export function updateVideoEditClipKeyframes(projectId: string, sequenceId: string, clipId: string, key: VideoEditAnimatableKey, points: VideoEditKeyframes, gesture?: VideoEditGesture): void {
+export function updateVideoEditClipKeyframes(projectId: string, sequenceId: string, clipId: string, key: VideoEditClipCurveKey, points: VideoEditKeyframes, gesture?: VideoEditGesture): void {
   const update = (document: VideoEditDocument): VideoEditDocument => {
     const sequence = document.sequences.find(value => value.id === sequenceId)
     const clip = sequence?.clips.find(value => value.id === clipId)

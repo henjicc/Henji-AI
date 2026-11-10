@@ -1,3 +1,5 @@
+/** 可变字体的一个变化轴；tag 是四字符 OpenType 轴标签，name 优先取字体自带的中文名。 */
+export interface FontVariationAxis { tag: string; name: string; min: number; default: number; max: number }
 /** 字体样式元数据；文件身份仅通过导出会话的独立清单传递。 */
 export interface FontFaceInfo {
   id: string
@@ -12,8 +14,22 @@ export interface FontFaceInfo {
   supportsCjk: boolean
   category: 'serif' | 'sans-serif' | 'monospace' | 'handwriting' | 'unknown'
   aliases: string[]
-  /** Only named instances declared by a variable font, never synthetic styles. */
+  /** 这个样式对应的命名实例坐标；只有可变字体声明的命名实例才有，不合成样式。 */
   variation?: Record<string, number>
+  /** 可变字体的全部变化轴；同一字体文件展开出的每个样式都带同一份。非可变字体没有。 */
+  axes?: FontVariationAxis[]
+}
+/** 常见注册轴的中文名；自定义轴用字体自带的名称。 */
+const REGISTERED_AXIS_NAMES: Record<string, string> = { wght: '字重', wdth: '字宽', slnt: '倾斜', ital: '斜体', opsz: '光学尺寸' }
+export function fontAxisLabel(axis: FontVariationAxis): string { return REGISTERED_AXIS_NAMES[axis.tag] ?? (axis.name || axis.tag) }
+/**
+ * 文字样式里的轴数值只作用于所选字体真有的轴，并夹在轴范围内；没填的轴取所选样式（命名实例）的坐标。
+ * 返回 undefined 表示没有可应用的覆盖（非可变字体或没有命中的轴）。
+ */
+export function resolveFontVariations(face: Pick<FontFaceInfo, 'axes' | 'variation'> | undefined, overrides: Readonly<Record<string, number>> | undefined): Record<string, number> | undefined {
+  if (!face?.axes?.length || !overrides) return undefined
+  const applied = face.axes.filter(axis => typeof overrides[axis.tag] === 'number').map(axis => [axis.tag, Math.min(axis.max, Math.max(axis.min, overrides[axis.tag]))] as const)
+  return applied.length ? { ...face.variation, ...Object.fromEntries(applied) } : undefined
 }
 export interface FontCatalog { faces: FontFaceInfo[]; revision: number }
 /** 导出固定目录的文件身份；只在会话内传递，不写入作品。 */

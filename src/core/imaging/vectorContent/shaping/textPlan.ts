@@ -2,7 +2,7 @@ import type { RichTextContent, TextParagraph } from '../contracts'
 import type { TextStyle } from '../text'
 import { scaleTextSpatialStyle } from '../metrics'
 import { appearanceBounds, fitTextLayout, union, type TextDrawConstraints, type TextDrawPlan, type TextPlanGrapheme, type TextPlanRect, type TextSourceRange } from '../textDrawPlan'
-import { prepareShapingRuns, textFontRequest, type ShapingRuns } from './runs'
+import { prepareShapingRuns, styledFontSource, textFontRequest, type ShapingRuns } from './runs'
 import { ShapedParagraph, layoutUnits, type ParagraphLine } from './paragraph'
 import { type TextFontAccess } from './fontSession'
 import { type TextOutline, type ShapeOptions, TextShaper } from './harfbuzz'
@@ -107,7 +107,7 @@ export function createShapedTextPlan(shaper: TextShaper, fonts: TextFontAccess, 
       for (const value of new Set(styles)) {
         let metric = primaryMetrics.get(value)
         if (!metric) {
-          const font = fonts.chain(textFontRequest(value)).candidates.find(candidate => candidate.font)?.font ?? fallback
+          const font = styledFontSource(fonts.chain(textFontRequest(value)).candidates.find(candidate => candidate.font)?.font ?? fallback, value)
           metric = shaper.metrics(font, { ...shapeOptions, size: value.fontSize }); primaryMetrics.set(value, metric)
         }
         const leading = value.leading || value.fontSize * 1.25, half = (leading - metric.ascent - metric.descent) / 2

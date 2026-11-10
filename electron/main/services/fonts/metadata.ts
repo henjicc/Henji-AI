@@ -1,10 +1,31 @@
 import { create, type Font } from 'fontkit'
 import { convert } from 'fontverter'
-import { normalizeFontFace, type FontFaceInfo } from '../../../../src/core/fonts/catalog'
+import { normalizeFontFace, type FontFaceInfo, type FontVariationAxis } from '../../../../src/core/fonts/catalog'
 
 type NameRecords = Record<string, Record<string, string>>
-type FontTables = { name?: { records?: NameRecords }; post?: { isFixedPitch?: number }; namedVariations?: Record<string, Record<string, number>> }
+type LocalizedName = Record<string, string> | undefined
+interface FvarTable { axis: Array<{ axisTag: string; minValue: number; defaultValue: number; maxValue: number; name?: LocalizedName }>; instance: Array<{ name?: LocalizedName; nameID: number; coord: number[] }> }
+type FontTables = { name?: { records?: NameRecords }; post?: { isFixedPitch?: number }; fvar?: FvarTable }
 export interface ParsedFontFace { face: Omit<FontFaceInfo, 'id' | 'imported'>; index: number }
+/** 解析结果的结构版本；缓存里旧版本的解析结果（缺少变化轴）在下次扫描时重新解析。 */
+export const FONT_METADATA_VERSION = 2
+
+const localized = (value: LocalizedName): string => {
+  const entries = Object.entries(value ?? {}).filter(([, text]) => typeof text === 'string' && text.trim())
+  return (entries.find(([language]) => /^zh(?:-|$)/i.test(language)) ?? entries.find(([language]) => /^en(?:-|$)/i.test(language)) ?? entries[0])?.[1].trim() ?? ''
+}
+/** 直接读 fvar：fontkit 的 namedVariations 在实例名引用 nameID 2/17 时会因取不到英文名而抛错，整个字体就导入不了。 */
+function variableAxes(font: Font): { axes: FontVariationAxis[]; instances: Array<{ style: string; variation: Record<string, number> }> } | undefined {
+  const fvar = (font as Font & FontTables).fvar
+  if (!fvar?.axis?.length) return undefined
+  const axes = fvar.axis.map(axis => ({ tag: axis.axisTag, name: localized(axis.name) || axis.axisTag, min: axis.minValue, default: axis.defaultValue, max: axis.maxValue }))
+  const fallback = (id: number): string => id === 2 ? font.subfamilyName : id === 17 ? localized((font as Font & FontTables).name?.records?.preferredSubfamily) || font.subfamilyName : ''
+  const instances = (fvar.instance ?? []).flatMap(instance => {
+    const style = localized(instance.name) || fallback(instance.nameID)
+    return style ? [{ style, variation: Object.fromEntries(axes.map((axis, index) => [axis.tag, instance.coord[index] ?? axis.default])) }] : []
+  })
+  return { axes, instances }
+}
 
 export function fontMetadata(font: Font): Omit<FontFaceInfo, 'id' | 'imported'> {
   const tables = font as Font & FontTables
@@ -31,10 +52,11 @@ export function parseFontFile(bytes: Buffer): ParsedFontFace[] {
   const value = create(bytes)
   const fonts = 'fonts' in value ? value.fonts : [value]
   return fonts.flatMap((font, index) => {
-    const base = fontMetadata(font)
+    const variable = variableAxes(font)
+    const base = { ...fontMetadata(font), ...(variable ? { axes: variable.axes } : {}) }
     const result: ParsedFontFace[] = [{ face: base, index }]
-    for (const [style, variation] of Object.entries((font as Font & FontTables).namedVariations ?? {})) {
-      if (style === base.style) continue
+    for (const { style, variation } of variable?.instances ?? []) {
+      if (style === base.style || result.some(entry => entry.face.style === style)) continue
       result.push({ index, face: { ...base, style, fullName: `${base.family} ${style}`, postscriptName: base.postscriptName, weight: variation.wght ?? base.weight, italic: variation.ital === 1 || Boolean(variation.slnt) || base.italic, variation, aliases: base.aliases.filter(alias => alias !== base.fullName) } })
     }
     return result.flatMap(entry => { const face = normalizeFontFace(entry.face); return face ? [{ ...entry, face }] : [] })

@@ -6,6 +6,7 @@ import { clampVideoEditAnimationValue, interpolateVideoEditKeyframe, VIDEO_EDIT_
 import { isRemovedVideoEditBuiltinEffect, requireVideoEditBuiltinEffect, videoEditBuiltinParamValue, type VideoEditBuiltinParams } from './builtinEffects'
 import type { VideoEditClip } from './document'
 import type { VideoEditEffect } from './compositing'
+import type { TextStyle } from '../imaging/vectorContent/text'
 
 export const videoEditClipAnimatedValueSchemas = {
   depth: z.number().finite(), rotationX: z.number().finite(), rotationY: z.number().finite(), anchorDepth: z.number().finite(),
@@ -21,7 +22,16 @@ export function videoEditKeyframeValues(point: VideoEditKeyframe): VideoEditKeyf
 export const VIDEO_EDIT_ANIMATABLE_KEYS = ['x', 'y', 'scale', 'rotation', 'anchorX', 'anchorY', 'opacity', 'volume', ...SPATIAL_KEYS, ...SPACE_SURFACE_KEYS, 'lightIntensity'] as const
 export type VideoEditAnimatableKey = typeof VIDEO_EDIT_ANIMATABLE_KEYS[number]
 export const videoEditCurvesSchema = z.record(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/), videoEditKeyframesSchema)
+/** 文字片段可变字体轴的关键帧：曲线键 `fontAxis_<轴标签>`，值是轴坐标，求值后覆盖文字样式的同名轴。 */
+export const VIDEO_EDIT_FONT_AXIS_CURVE_PREFIX = 'fontAxis_'
+export type VideoEditFontAxisCurveKey = `fontAxis_${string}`
+export type VideoEditClipCurveKey = VideoEditAnimatableKey | VideoEditFontAxisCurveKey
+export const videoEditFontAxisCurveKey = (tag: string): VideoEditFontAxisCurveKey => `fontAxis_${tag}`
+export const videoEditFontAxisTag = (key: string): string | undefined => key.startsWith(VIDEO_EDIT_FONT_AXIS_CURVE_PREFIX) ? key.slice(VIDEO_EDIT_FONT_AXIS_CURVE_PREFIX.length) : undefined
 export const videoEditClipCurvesSchema = z.partialRecord(z.enum(VIDEO_EDIT_ANIMATABLE_KEYS), videoEditKeyframesSchema)
+export type VideoEditClipPropertyCurves = Partial<Record<VideoEditAnimatableKey, VideoEditKeyframes>> & { [key: VideoEditFontAxisCurveKey]: VideoEditKeyframes }
+/** 片段存档里的全部关键帧：固有属性加文字片段的字体轴。类型写成交集，读取固有属性时仍是可选值。 */
+export const videoEditClipPropertyCurvesSchema = z.partialRecord(z.union([z.enum(VIDEO_EDIT_ANIMATABLE_KEYS), z.templateLiteral([VIDEO_EDIT_FONT_AXIS_CURVE_PREFIX, z.string().regex(/^[\x20-\x7e]{4}$/)])]), videoEditKeyframesSchema) as unknown as z.ZodType<VideoEditClipPropertyCurves>
 export type VideoEditCurves = z.infer<typeof videoEditCurvesSchema>
 
 /** Sorted persisted tracks: bounded binary search, no per-sample sort/parse. */
@@ -61,11 +71,11 @@ export function claimVideoEditManualKeyframes(points: VideoEditKeyframes, previo
   })
 }
 /** Shared motion/curve write contract for UI and generated algorithms. */
-export function writeVideoEditClipKeyframes(clip: VideoEditClip, key: VideoEditAnimatableKey, points: VideoEditKeyframes, manual = true): VideoEditClip {
+export function writeVideoEditClipKeyframes(clip: VideoEditClip, key: VideoEditClipCurveKey, points: VideoEditKeyframes, manual = true): VideoEditClip {
   const parsed = videoEditKeyframesSchema.parse(points)
-  const curves = { ...clip.curves, [key]: manual ? claimVideoEditManualKeyframes(parsed, clip.curves?.[key]) : parsed }
+  const curves: Record<string, VideoEditKeyframes> = { ...clip.curves, [key]: manual ? claimVideoEditManualKeyframes(parsed, (clip.curves as Record<string, VideoEditKeyframes> | undefined)?.[key]) : parsed }
   if (!points.length) delete curves[key]
-  return { ...clip, curves }
+  return { ...clip, curves: curves as VideoEditClipPropertyCurves }
 }
 export function videoEditClipValue(clip: VideoEditClip, key: VideoEditAnimatableKey, timelineFrame: number): number {
   const section = key === 'volume' ? 'audio' : key === 'opacity' ? 'opacity' : 'motion'
@@ -104,8 +114,20 @@ export function evaluateVideoEditClip(clip: VideoEditClip, timelineFrame: number
   const result = { ...clip, ...values, ...(clip.effects ? { effects: clip.effects.map(effect => evaluateVideoEditEffect(effect, timelineFrame - clip.start)) } : {}) }
   if (clip.disabledIntrinsicSections?.includes('text')) result.text = ''
   if (clip.disabledIntrinsicSections?.includes('textStyle')) delete result.textStyle
+  else if (result.textStyle) result.textStyle = evaluateVideoEditFontAxes(clip, result.textStyle, timelineFrame - clip.start)
   if (clip.disabledIntrinsicSections?.includes('motion')) { delete result.follow; delete (result as VideoEditClip & { trackingQuad?: unknown }).trackingQuad; delete (result as VideoEditClip & { trackingRotation?: unknown }).trackingRotation }
   return result
+}
+/** 轴关键帧在片段内时间求值后覆盖样式的同名轴；没有轴关键帧时原样返回同一对象，纹理缓存键不变。 */
+export function evaluateVideoEditFontAxes<T extends Pick<TextStyle, 'fontVariations'>>(clip: Pick<VideoEditClip, 'curves'>, style: T, time: number): T {
+  let variations: Record<string, number> | undefined
+  for (const [key, points] of Object.entries(clip.curves ?? {})) {
+    const tag = videoEditFontAxisTag(key)
+    if (!tag || !points?.length) continue
+    variations ??= { ...style.fontVariations }
+    variations[tag] = evaluateVideoEditKeyframes(points, time, style.fontVariations?.[tag] ?? points[0].value as number) as number
+  }
+  return variations ? { ...style, fontVariations: variations } : style
 }
 export function assertVideoEditKeyframeTimes(curves: VideoEditCurves | undefined, duration: number, title: string): void {
   for (const [key, points] of Object.entries(curves ?? {})) for (const point of points) if (point.time > duration) throw new Error(`${title} ${key}.keyframes 的 time 越界：允许 0–${duration} 帧（末点只用于片段右边界插值）。`)

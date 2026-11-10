@@ -10,6 +10,7 @@ export function registerFontsIpc(): void {
   const source = z.object({ path: z.string().min(1), index: z.number().int().nonnegative(), signature: z.string(), face: z.object({
     id: z.string(), family: z.string(), localizedFamily: z.string(), fullName: z.string(), postscriptName: z.string(), style: z.string(),
     weight: z.number(), italic: z.boolean(), imported: z.boolean(), supportsCjk: z.boolean(), category: z.enum(['serif', 'sans-serif', 'monospace', 'handwriting', 'unknown']), aliases: z.array(z.string()), variation: z.record(z.string(), z.number()).optional(),
+    axes: z.array(z.object({ tag: z.string(), name: z.string(), min: z.number(), default: z.number(), max: z.number() }).strict()).optional(),
   }).strict() }).strict()
   registerIpcHandler(FONTS_IPC.list, value => z.object({ fixed: z.boolean().optional() }).strict().optional().parse(value), value => value?.fixed ? getFontService().captureSnapshot() : getFontService().list(), assertTrustedApplicationSender)
   registerIpcHandler(FONTS_IPC.readFace, value => z.object({ id: z.string().regex(/^[a-f0-9]{64}$/), source: source.optional() }).strict().parse(value), value => getFontService().readFace(value.id, value.source), assertTrustedApplicationSender)

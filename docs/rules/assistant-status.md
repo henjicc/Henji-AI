@@ -1,3 +1,5 @@
+2026-11-10（内容文字可变字体）：字体实体 font 新增只读属性 axes（四字符轴标签、名称、最小/默认/最大值，空数组为非可变字体）；文字样式新增可选 fontVariations（轴标签→数值，覆盖所选命名实例的同名轴），沿 video_edit.clip.text_style、字幕 style、图形对象 text_style、代码 textStyle 参数等所有共用文字样式的属性写入；文字片段新增可写属性 video_edit.clip.font_variation_keyframes（轴标签→关键帧序列，存为 curves.fontAxis_<标签>，随切分、变速一起移动）。无新增专用工具。作者库 henji-layout 2.2.0 的 layoutText 接受 fontVariations。正式应用能力读写读回由 applicationHarness.fontVariations 测试覆盖；未用真实 Pi/MCP 跑。
+
 2026-11-10（上下文交给 Pi 管理）：取消内置助手自己的上下文裁剪——每条工具结果 4000 token 上限、旧结果只留摘要、技能原文压缩都已删除，工具结果与技能原文原样进上下文；单条超过模型窗口一半才转成事实加约 4000 token 摘录与可续读引用（从摘录结束处续读，每页最多窗口的 1/8、不超过 16000）；发送前只在超窗时让出最旧的界面快照，历史与本轮较早的往返超窗交给 Pi 自动压缩（预留量设为输出上限加 8192，先于本地检查压缩）；最后一次回复之后新进来的一批自身装不下窗口时才报上下文预算错误。取代此前“按预算投影工具结果”的做法。
 
 2026-11-09（画布 3D 节点可由助手打开、运镜可一次检查）：open_multi_layer_document_node_editor 改名并扩展为 open_canvas_node_editor，按节点类型打开多图层图片编辑器或 3D 镜头参考编辑器（返回节点的 camera_stage.document 引用；新建节点第一次打开时创建镜头参考），结果带 verification，不再被记成结果未知；3D 编辑器开关改为界面与助手共用的状态。observe_camera_stage_scene 给 times 时另返回每台摄像机在各时刻的位置、实际注视点与构图（cameraSamples），检查运镜不再拖播放头。load_application_tools 按领域加载时附带领域做法与技能（camera_stage → 三维镜头构图）。真跑复测：同一句运镜需求从 38 轮被停、未打开页面，变为读技能、按时刻摆机位、完成并打开 3D 页面（60 轮，7 分 25 秒，deepseek-flash）。

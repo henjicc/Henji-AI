@@ -1,6 +1,16 @@
 import { cssFontFamily } from '../../fonts/catalog'
 import type { TextStyle, TextLayout } from './text'
-export function textFont(style: TextStyle, size = style.fontSize): string { return `${style.fontStyle} ${style.fontWeight} ${size}px ${cssFontFamily(style.fontFamily)}` }
+/**
+ * Canvas 文字没有 font-variation-settings；带轴数值的样式改用宿主按需注册的变体字体名（同一份字体字节、固定轴坐标）。
+ * 宿主（窗口与各 Worker 的已加载字体集）在自己的线程里登记解析器；未登记或非可变字体时沿用原字体名。
+ */
+type VariationFamilyResolver = (style: Pick<TextStyle, 'fontFamily' | 'fontWeight' | 'fontStyle' | 'fontVariations'>) => string | undefined
+let variationFamily: VariationFamilyResolver = () => undefined
+export function setTextVariationFamilyResolver(resolve: VariationFamilyResolver): void { variationFamily = resolve }
+export function textFont(style: TextStyle, size = style.fontSize): string {
+  const family = style.fontVariations && Object.keys(style.fontVariations).length ? variationFamily(style) ?? style.fontFamily : style.fontFamily
+  return `${style.fontStyle} ${style.fontWeight} ${size}px ${cssFontFamily(family)}`
+}
 const textSegments = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
 export function textCharacters(text: string, style: TextStyle): Array<{ text: string; source: string; size: number }> {
   const scriptScale = style.superscript || style.subscript ? .65 : 1

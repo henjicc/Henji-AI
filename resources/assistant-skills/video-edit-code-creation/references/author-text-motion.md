@@ -51,6 +51,24 @@ export default {
 }
 ```
 
+### 可变字体轴
+
+样式里的 `fontVariations` 是可变字体的轴数值 `{ 轴标签: 数值 }`，如 `{ wght: 650, wdth: 90 }`，可在轴范围内取任意中间值。没写的轴取所选样式（命名实例）的坐标；字体没有的轴忽略，越界按轴范围夹取；非可变字体整组忽略。字体有哪些轴、范围多少，读 `font` 实体的 `axes`。轴数值逐帧变化不需要额外声明，排版和字形轮廓都按当帧数值取形，所以字重、字宽可以直接做动画（需要 henji-layout 2.2.0 起，新代码默认就是）：
+
+```ts
+import { layoutText, drawText } from "henji-layout/text"
+export const textFonts = { faces: [{ family: "HarmonyOS Sans" }], text: ["字重变化"] }
+export default {
+  name: "字重渐变", kind: "generator", mode: "dynamic", width: 1920, height: 1080,
+  draw(ctx, time, params, width, height) {
+    const wght = 100 + 800 * Math.min(1, time / 2)
+    drawText(ctx, layoutText("字重变化", { fontFamily: "HarmonyOS Sans", fontSize: 180, fontVariations: { wght } }, { anchor: { x: width / 2, y: height / 2, horizontal: .5, vertical: .5 } }))
+  }
+}
+```
+
+剪辑里的普通文字片段不用写代码：轴数值写在 `video_edit.clip.text_style` 的 `fontVariations`，轴动画写 `video_edit.clip.font_variation_keyframes`。
+
 ## layoutText 与 drawText
 
 `layoutText(text, style, options)` 只排版不绘制，返回的布局对象原样交给 `drawText(ctx, layout)`；不要展开、复制或 JSON 往返，否则 drawText 认不出。

@@ -5,11 +5,15 @@ import { useVideoEditClipPropertyGesture } from './useVideoEditClipPropertyGestu
 import { defaultVideoEditTextStyle, type VideoEditTextStyle } from '@/core/videoEdit/text'
 import type { VideoEditClip } from '@/core/videoEdit/document'
 import { EffectSection } from '@/components/effects/EffectSection'
-import { updateVideoEditClipProperties } from '../application/videoEditClipProperties'
+import { updateVideoEditClipKeyframes, updateVideoEditClipProperties } from '../application/videoEditClipProperties'
 import { beginVideoEditGesture, finishVideoEditGesture, type VideoEditGesture } from '../application/videoEditService'
 import { useVideoEditFontPreview } from './useVideoEditFontPreview'
 import { collectVideoEditFonts } from '@/core/videoEdit/fonts'
 import { requireVideoEditInstance } from '../application/videoEditService'
+import { evaluateVideoEditKeyframes, putVideoEditKeyframe, videoEditFontAxisCurveKey, type VideoEditFontAxisCurveKey, type VideoEditKeyframes } from '@/core/videoEdit/keyframes'
+import { fontAxisLabel } from '@/core/fonts/catalog'
+import type { TypographyAxisKeyframes } from '@/components/typography/TypographyPanel'
+import { VideoEditKeyframeNavigator, VideoEditKeyframeStopwatch, type VideoEditKeyframeControlProps } from './VideoEditKeyframeControls'
 
 /** Reuses the existing content row; all style writes use the same clip mutation and gesture history. */
 export function VideoEditTextStylePanel({ projectId, sequenceId, clip, height, onError }: { projectId: string; sequenceId: string; clip: VideoEditClip; height: number; onError: (error: unknown) => void }): React.ReactElement {
@@ -33,9 +37,38 @@ export function VideoEditTextStylePanel({ projectId, sequenceId, clip, height, o
   const write = (patch: Partial<VideoEditTextStyle>): void => {
     try { updateVideoEditClipProperties(projectId, sequenceId, clip.id, { textStyle: { ...style, ...patch } }, gesture.current) } catch (error) { end(false); onError(error) }
   }
+  const time = owner.frame - clip.start
+  const axisPoints = (tag: string) => (clip.curves as Record<string, VideoEditKeyframes> | undefined)?.[videoEditFontAxisCurveKey(tag)]
+  // 轴关键帧与运动属性同一套秒表、导航与撤销：动画开着时改数值就是改播放头处的关键帧。
+  const axisKeyframes: TypographyAxisKeyframes = {
+    value: tag => { const points = axisPoints(tag); return points?.length ? evaluateVideoEditKeyframes(points, time, points[0].value) as number : undefined },
+    write: (tag, value) => {
+      const points = axisPoints(tag); if (!points?.length) return false
+      if (time < 0 || time >= clip.duration) { onError(new Error(`请将播放头放在片段内（${clip.start}–${clip.start + clip.duration - 1} 帧）再编辑关键帧。`)); return true }
+      const current = points.find(point => point.time === time)
+      try { updateVideoEditClipKeyframes(projectId, sequenceId, clip.id, videoEditFontAxisCurveKey(tag), putVideoEditKeyframe(points, { ...current, easeRange: undefined, easeValues: undefined, time, value, interpolation: current?.interpolation ?? 'linear' }), gesture.current) } catch (error) { end(false); onError(error) }
+      return true
+    },
+    controls: (axis, value) => {
+      const key = videoEditFontAxisCurveKey(axis.tag), label = fontAxisLabel(axis)
+      const props: VideoEditKeyframeControlProps = {
+        label, channels: [{ key, points: axisPoints(axis.tag), value }], time, duration: clip.duration,
+        onChange: changes => {
+          const own = !motionGesture.active(); if (own) motionGesture.begin()
+          // 新片段可能还没有存样式；关键帧求值要盖在已存的样式上。
+          if (!clip.textStyle) motionGesture.commit({ textStyle: style })
+          for (const [curve, next] of Object.entries(changes)) motionGesture.keyframes(curve as VideoEditFontAxisCurveKey, next)
+          if (own) motionGesture.finish()
+        },
+        onDisable: () => { motionGesture.begin(); motionGesture.keyframes(key, []); motionGesture.commit({ textStyle: { ...style, fontVariations: { ...style.fontVariations, [axis.tag]: value } } }); motionGesture.finish() },
+        onSeek: frame => motionGesture.seek(clip.start + frame), onBegin: motionGesture.begin, onFinish: motionGesture.finish, onCancel: motionGesture.cancel,
+      }
+      return { stopwatch: <VideoEditKeyframeStopwatch {...props} />, navigator: <VideoEditKeyframeNavigator {...props} /> }
+    },
+  }
   return <EffectSection id="text-style" title="文字样式" enabled={!clip.disabledIntrinsicSections?.includes('textStyle')} onEnabledChange={enabled => { end(); try { updateVideoEditClipProperties(projectId, sequenceId, clip.id, { disabledIntrinsicSections: enabled ? (clip.disabledIntrinsicSections ?? []).filter(value => value !== 'textStyle') : [...(clip.disabledIntrinsicSections ?? []), 'textStyle'] }) } catch (error) { onError(error) } }}>
     <div ref={fields} className="flex flex-col gap-2 pl-5">
-      <VideoEditTypographyPanel key={`${projectId}:${sequenceId}:${clip.id}`} style={style} onChange={value => write(value)} onError={onError} onBegin={begin} onEnd={end} onFontPreview={fontPreview} projectFonts={collectVideoEditFonts(owner.document).map(use => use.font)} transform={<VideoEditTextTransformControls clip={clip} frame={{ width: sequence.width, height: sequence.height, playhead: owner.frame }} gesture={motionGesture} />} />
+      <VideoEditTypographyPanel key={`${projectId}:${sequenceId}:${clip.id}`} style={style} onChange={value => write(value)} onError={onError} onBegin={begin} onEnd={end} onFontPreview={fontPreview} projectFonts={collectVideoEditFonts(owner.document).map(use => use.font)} axisKeyframes={axisKeyframes} transform={<VideoEditTextTransformControls clip={clip} frame={{ width: sequence.width, height: sequence.height, playhead: owner.frame }} gesture={motionGesture} />} />
     </div>
   </EffectSection>
 }

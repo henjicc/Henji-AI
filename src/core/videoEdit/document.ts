@@ -32,7 +32,7 @@ import { videoEditTrackerSchema, videoEditClipFollowSchema, VIDEO_EDIT_MAX_TRACK
 import { videoEditClipStabilizationSchema } from './stabilization'
 import { videoEditAudioLayoutSchema, videoEditAudioMappingIssue, videoEditAudioMappingSchema, videoEditAudioStreamsSchema } from './audioChannels'
 import { videoEditInPlaceRecordsSchema } from './inPlacePersistence'
-import { videoEditClipCurvesSchema, assertVideoEditKeyframeTimes, sliceVideoEditClipKeyframes, rescaleVideoEditClipKeyframes, VIDEO_EDIT_ANIMATABLE_KEYS, videoEditClipAnimatedValueSchemas, videoEditKeyframeValues } from './keyframes'
+import { videoEditClipPropertyCurvesSchema, assertVideoEditKeyframeTimes, sliceVideoEditClipKeyframes, rescaleVideoEditClipKeyframes, VIDEO_EDIT_ANIMATABLE_KEYS, videoEditClipAnimatedValueSchemas, videoEditKeyframeValues, videoEditFontAxisTag } from './keyframes'
 import { videoEditTextStyleSchema } from './text'
 import { colorLutAssetSchema } from './colorLutAsset'
 import { videoEditAudioRoleSchema } from './audioDucking'
@@ -115,7 +115,7 @@ const videoEditClipStateSchema = z.object({
   scale: videoEditClipAnimatedValueSchemas.scale, rotation: videoEditClipAnimatedValueSchemas.rotation,
   /** 非等比缩放（重要记录 019，AE 缩放链条解开）：垂直缩放与水平缩放之比。scale 是水平缩放，垂直缩放 = scale × scaleAspect；缺省为 1（等比）。 */
   scaleAspect: z.number().min(0.01).max(100).optional().describe('非等比缩放：垂直缩放与水平缩放之比，缺省 1 为等比。scale 是水平缩放，垂直缩放 = scale × scale_aspect；scale 的关键帧按这个比例同时缩放两个方向。'),
-  anchorX: videoEditClipAnimatedValueSchemas.anchorX.optional(), anchorY: videoEditClipAnimatedValueSchemas.anchorY.optional(), curves: videoEditClipCurvesSchema.optional(),
+  anchorX: videoEditClipAnimatedValueSchemas.anchorX.optional(), anchorY: videoEditClipAnimatedValueSchemas.anchorY.optional(), curves: videoEditClipPropertyCurvesSchema.optional(),
   /** 片段的运动模糊（只给助手调，界面不提供）：省略跟随序列总开关，true 强制开，false 关。 */
   motionBlur: z.boolean().optional().describe('片段的运动模糊：省略时跟随序列总开关，true 即使序列总开关关着也开，false 只关掉这个片段（作者接口 18 起含片段里的代码图层）。代码素材里单个图层看源码图层的 motionBlur 和元素覆盖。'),
   /** 片段启用开关（剪辑内容第 37 版，PR 的“启用”）：只存“停用”，省略即启用。 */
@@ -329,6 +329,10 @@ export const videoEditDocumentSchema = z.object({
         for (const key of VIDEO_EDIT_ANIMATABLE_KEYS) for (const point of clip.curves?.[key] ?? []) for (const value of videoEditKeyframeValues(point)) videoEditClipAnimatedValueSchemas[key].parse(value)
         for (const effect of clip.effects ?? []) assertVideoEditKeyframeTimes(effect.builtin?.curves, clip.duration, `效果“${effect.name}”`)
         if (clip.kind === 'adjustment' && Object.keys(clip.curves ?? {}).some(key => key !== 'opacity')) issue('调整图层只允许不透明度关键帧。')
+        for (const [key, points] of Object.entries(clip.curves ?? {})) if (videoEditFontAxisTag(key) !== undefined) {
+          if (clip.kind !== 'text') issue('字体轴关键帧只能用于文字片段。')
+          if (points?.some(point => videoEditKeyframeValues(point).some(value => typeof value !== 'number' || !Number.isFinite(value)))) issue(`${key} 的关键帧值必须是数值。`)
+        }
       } catch (error) { issue(error instanceof Error ? error.message : '片段关键帧无效。') }
       if (clip.trackers?.length && !['video', 'image', 'sequence'].includes(clip.kind)) issue('跟踪器只能放在视频、图片或嵌套序列片段上。')
       if (new Set(clip.trackers?.map(tracker => tracker.id)).size !== (clip.trackers?.length ?? 0)) issue(`片段“${clip.name}”的跟踪器 ID 重复。`)

@@ -4,6 +4,7 @@ import type { ReferenceTransformTrack } from '@/core/creativeIntent/referenceTra
 import { videoEditClipSchema, type VideoEditClip, type VideoEditComposition } from '@/core/videoEdit/document'
 import type { VideoEditAnnotation } from '@/core/videoEdit/annotations'
 import { videoEditClipPictureSize } from '@/core/videoEdit/clipGeometry'
+import { videoEditFontAxisTag } from '@/core/videoEdit/keyframes'
 
 export const videoMotionConstraintOptionsSchema = z.object({
   kind: z.literal('video-motion-constraints'), version: z.literal(1),
@@ -56,6 +57,7 @@ export function sampleVideoMotionReference(projectId: string, reference: NonNull
   }
   return { ref: { kind: 'video_edit.clip', id: `${projectId}:${clip.id}` }, identity: JSON.stringify(reference), native: {
     start: clip.start, end: clip.start + clip.duration - 1, base: { x: clip.x, y: clip.y, scale: clip.scale, rotation: clip.rotation, anchorX: clip.anchorX ?? .5, anchorY: clip.anchorY ?? .5 },
-    curves: clip.curves, pictureSize: [picture.width, picture.height], compositionSize: [width, height],
+    // 参照只取运动曲线：文字片段的字体轴关键帧不是变换，也不在参照轨迹的曲线键里。
+    curves: clip.curves && Object.fromEntries(Object.entries(clip.curves).filter(([key]) => videoEditFontAxisTag(key) === undefined)) as NonNullable<ReferenceTransformTrack['native']>['curves'], pictureSize: [picture.width, picture.height], compositionSize: [width, height],
   } }
 }

@@ -1,6 +1,7 @@
 import type { UiControlSize } from './primitiveInternals'
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { Star, Trash2, Upload } from 'lucide-react'
+import { Star, Trash2, Upload, Variable } from 'lucide-react'
+import { UI_ICON_SIZE_CLASS } from './styleTokens'
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
 import PanelTrigger from './PanelTrigger'
 import Dropdown from './Dropdown'
@@ -38,7 +39,10 @@ function FontRow({ face, active, selected, favorite, onPreview, onSelect, onErro
   }, [face.id, face, onError])
   return <div className="flex items-center gap-1" onPointerEnter={onPreview}>
     <UiOptionButton id={optionId} role="option" aria-selected={selected} variant="menu" size="md" active={active || selected} className="min-w-0 flex-1 justify-between gap-3" onClick={onSelect}>
-      <span className="min-w-0 truncate" style={{ fontFamily: ready ? cssFontFamily(face.fullName) : undefined }}>{face.localizedFamily}</span>
+      <span className="flex min-w-0 items-center gap-1.5">
+        <span className="min-w-0 truncate" style={{ fontFamily: ready ? cssFontFamily(face.fullName) : undefined }}>{face.localizedFamily}</span>
+        {face.axes?.length ? <Variable role="img" aria-label="可变字体" className={`${UI_ICON_SIZE_CLASS.sm} shrink-0 text-text3`} /> : null}
+      </span>
       <span className="shrink-0 text-sm text-text2" style={{ fontFamily: ready ? cssFontFamily(face.fullName) : undefined }}>{face.supportsCjk ? '痕迹 永 Aa' : 'Aa Bb 123'}</span>
     </UiOptionButton>
     <UiIconButton size="xs" on={favorite} aria-label={`${favorite ? '取消收藏' : '收藏'}${face.localizedFamily}`} onClick={() => favoriteFont(face.family)}><Star  /></UiIconButton>

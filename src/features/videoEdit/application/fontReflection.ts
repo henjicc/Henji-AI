@@ -11,11 +11,15 @@ const fields: ApplicationFieldDefinition<FontFaceInfo, FontFaceInfo>[] = [
   propertyId: `font.${name}`, storeActions: [], read: face => face[key as keyof FontFaceInfo] as string | number | boolean,
   descriptor: { id: `font.${name}`, entityType: 'font', version: 1, title, description: `${title}。可在 list_application_entities 的 where 按此属性等值过滤，并用 limit/cursor 分页。`, value: { kind: kind as 'string' | 'number' | 'boolean' }, nullable: false, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['video_edit:read'], write: [] }, revisionScopes: ['fonts'], schemaRef: schemaRef(name), readOnlyReason: reason },
 }))
+fields.push({
+  propertyId: 'font.axes', storeActions: [], read: face => (face.axes ?? []).map(axis => ({ ...axis })),
+  descriptor: { id: 'font.axes', entityType: 'font', version: 1, title: '可变字体变化轴', description: '可变字体的全部变化轴 [{tag 四字符轴标签, name 字体自带名称, min, default, max}]；空数组表示不是可变字体。把数值写进文字样式 fontVariations（{tag: 数值}，在 min–max 内连续取值）即可得到任意中间字重、字宽等；剪辑文字片段的轴动画写 video_edit.clip.font_variation_keyframes。', value: { kind: 'json', schemaRef: schemaRef('axes.value') }, nullable: false, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['video_edit:read'], write: [] }, revisionScopes: ['fonts'], schemaRef: schemaRef('axes'), readOnlyReason: reason },
+})
 export function createFontRegistration(): ApplicationEntityRegistration {
   const revisions = (): Record<string, number> => ({ fonts: fontLibrarySnapshot().revision })
   const requireFace = async (ref: { kind: string; id: string }): Promise<FontFaceInfo> => { const library = await loadFontLibrary(); const face = library.faces.find(value => value.id === ref.id); if (ref.kind !== 'font' || !face) throw new Error('字体不存在，请重新查询 font 实体。'); return face }
   return {
-    entity: { id: 'font', domain: 'video_edit', version: 1, title: '可用字体', description: '本机与导入字体；family/中文名查询，category（serif/sans-serif/monospace/handwriting/unknown）、supports_cjk 与 imported 支持等值筛选。分页后读取 name，可用于所有剪辑字体字段。', refKind: 'font', dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: [], revisionScopes: ['fonts'], queryCapabilityIds: ['read_application_entity'], schemaRef: schemaRef('entity'), writeExclusion: { reason } },
+    entity: { id: 'font', domain: 'video_edit', version: 1, title: '可用字体', description: '本机与导入字体；family/中文名查询，category（serif/sans-serif/monospace/handwriting/unknown）、supports_cjk 与 imported 支持等值筛选。分页后读取 name，可用于所有剪辑字体字段；axes 非空的是可变字体，可在轴范围内连续取值。', refKind: 'font', dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: [], revisionScopes: ['fonts'], queryCapabilityIds: ['read_application_entity'], schemaRef: schemaRef('entity'), writeExclusion: { reason } },
     properties: fieldDescriptors(fields),
     provider: {
       entityType: 'font',

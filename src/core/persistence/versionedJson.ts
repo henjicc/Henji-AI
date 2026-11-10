@@ -10,8 +10,8 @@ const forwardReads = new Map<string, { version: number; minReaderVersion: number
 export const LOCAL_LIBRARY_FORMATS: Readonly<Record<string, { id: string; name: string; version: number; minReaderVersion?: number }>> = {
   'video-edit-effects-library': { id: 'video-effect-library', name: '本机风格件与效果收藏', version: VIDEO_EDIT_EFFECT_LIBRARY_VERSION, minReaderVersion: 17 },
   'video-edit-style-kits': { id: 'style-kits', name: '本机风格包', version: 4, minReaderVersion: 3 },
-  'video-edit-title-templates': { id: 'title-templates', name: '本机标题模板', version: 15, minReaderVersion: 15 },
-  'video-edit-text-presets': { id: 'text-presets', name: '本机文字和字幕预设', version: 1 },
+  'video-edit-title-templates': { id: 'title-templates', name: '本机标题模板', version: 16, minReaderVersion: 15 },
+  'video-edit-text-presets': { id: 'text-presets', name: '本机文字和字幕预设', version: 2, minReaderVersion: 1 },
   'video-edit-export-presets': { id: 'export-presets', name: '本机导出预设', version: 5, minReaderVersion: 1 },
   'video-edit-export-memory': { id: 'export-memory', name: '上次导出设置', version: 3, minReaderVersion: 1 },
   'video-edit-preset-preferences': { id: 'preset-preferences', name: '预设评分与默认', version: 2, minReaderVersion: 2 },

@@ -10,6 +10,8 @@ const color = z.string().regex(/^#[\da-f]{6}$/i, `应为 6 位十六进制颜色
 export const textStyleSchema = z.object({
   fontFamily: z.string().trim().min(1).max(512).default('sans-serif'),
   fontWeight: z.number().int().min(1).max(1000).default(400), fontStyle: z.enum(['normal', 'italic', 'oblique']).default('normal'),
+  fontVariations: z.record(z.string().regex(/^[\x20-\x7e]{4}$/, '轴标签是四个字符，例如 wght。'), z.number().finite()).optional()
+    .describe('可变字体的变化轴数值：{轴标签: 数值}，如 {"wght": 650, "wdth": 90}。只对可变字体生效，非可变字体忽略；没填的轴取所选样式的坐标，填了的覆盖它；超出字体轴范围时按范围夹取。轴标签与范围见字体（font）的 axes。'),
   fontSize: z.number().finite().min(1).default(72).describe('作品空间字号；栅格输出按宿主的瓦片或纹理预算处理。'),
   fauxBold: z.boolean().default(false), fauxItalic: z.boolean().default(false), allCaps: z.boolean().default(false), smallCaps: z.boolean().default(false),
   superscript: z.boolean().default(false), subscript: z.boolean().default(false), underline: z.boolean().default(false),
