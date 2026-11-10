@@ -1,6 +1,5 @@
 import type { MarkOrientation, MarkRotation, MarkCropRect } from '../types';
 import { MIN_IMAGE_EDIT_CROP_SIZE_PX } from '../constraints';
-export { MIN_IMAGE_EDIT_CROP_SIZE_PX } from '../constraints';
 export function clamp(value: number, min: number, max: number): number { return Math.min(max, Math.max(min, value)); }
 export type OrientationOp = 'rotate-cw' | 'rotate-ccw' | 'flip-h' | 'flip-v';
 
@@ -29,17 +28,6 @@ export function composeOrientation(orientation: MarkOrientation, op: Orientation
       // Fv = R(180) ∘ Fh
       return { rotate: normalizeRotation(180 - rotate), mirrored: !mirrored };
   }
-}
-
-export function orientedSize(
-  width: number,
-  height: number,
-  orientation: MarkOrientation
-): { width: number; height: number } {
-  if (orientation.rotate === 90 || orientation.rotate === 270) {
-    return { width: height, height: width };
-  }
-  return { width, height };
 }
 
 export function clampCropRect(

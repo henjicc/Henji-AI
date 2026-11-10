@@ -2,7 +2,6 @@ import path from 'node:path'
 
 import type { LocationContext } from '../../../src/core/storage/locationCodec'
 import { createDatabaseLocations, type DatabaseLocations } from './db-locations'
-export { identityDatabaseLocations } from './db-locations-identity.test-support'
 
 /*
  * 数据库测试夹具（只给测试用）：位置换算上下文与不做换算的替身。

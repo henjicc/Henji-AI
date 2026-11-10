@@ -4,8 +4,6 @@ import { useTranslation } from 'react-i18next'
 import { UiIconButton } from '@/components/ui'
 import { BLACK_HEX, WHITE_HEX } from '@/core/theme/colorTokens'
 
-const IMAGE_REFERENCE_MARKER_REGEX = /@(?:图片|图)(\d+)/g
-
 export const STORYBOARD_NODE_HORIZONTAL_PADDING_PX = 24
 export const STORYBOARD_GRID_GAP_PX = 2
 export const STORYBOARD_GRID_BASE_CELL_HEIGHT_PX = 78
@@ -109,29 +107,6 @@ export function GridStepperControl({
       </UiIconButton>
     </div>
   )
-}
-
-export function resolveReferenceIndexFromDescription(
-  description: string,
-  maxImageCount: number
-): number | null {
-  IMAGE_REFERENCE_MARKER_REGEX.lastIndex = 0
-  const match = IMAGE_REFERENCE_MARKER_REGEX.exec(description)
-  if (!match) {
-    return null
-  }
-
-  const rawIndex = Number(match[1])
-  if (!Number.isFinite(rawIndex)) {
-    return null
-  }
-
-  const zeroBasedIndex = rawIndex - 1
-  if (zeroBasedIndex < 0 || zeroBasedIndex >= maxImageCount) {
-    return null
-  }
-
-  return zeroBasedIndex
 }
 
 export function buildFrameDescriptionDrafts(

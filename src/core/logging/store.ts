@@ -33,10 +33,3 @@ export function clearLogEvents(): void {
   emit()
 }
 
-export function subscribeLogEvents(listener: Listener): () => void {
-  listeners.add(listener)
-  listener(getLogEvents())
-  return () => {
-    listeners.delete(listener)
-  }
-}

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { applicationRefSchema } from '../application-control/identifiers'
 import { idSchema, safeClockSchema, finiteSchema, digestSchema, poseSchema, motionPropertySchema, monoSpanSchema, dualClockShape, clockSegmentsSchema, refKey } from '../captureLog/clock'
-export { idSchema, safeClockSchema, finiteSchema, digestSchema, pointSchema, affineSchema, poseSchema, motionPropertySchema, monoSpanSchema, timelineSchema, dualClockShape, dualClockSchema, clockAnchorSchema, clockSegmentSchema, clockSegmentsSchema, clockEventIssue, timelineSpanSchema, refKey, type Pose, type MotionProperty, type Timeline, type ClockAnchor, type ClockSegment, type TimelineSpan } from '../captureLog/clock'
+export { idSchema, safeClockSchema, finiteSchema, digestSchema, pointSchema, affineSchema, poseSchema, monoSpanSchema, dualClockShape, dualClockSchema, clockSegmentSchema, clockSegmentsSchema, clockEventIssue, timelineSpanSchema, refKey, type Pose, type MotionProperty, type Timeline, type ClockSegment, type TimelineSpan } from '../captureLog/clock'
 
 /** Proposed pure contract. Not a registered persistence format until P1 storage wiring. */
 const CREATIVE_INTENT_VERSION = 1 as const
@@ -12,14 +12,12 @@ export const sampleSchema = z.object({ ...dualClockShape, sampleId: idSchema, ta
 export type MotionSample = z.infer<typeof sampleSchema>
 export const resourceRefSchema = z.object({ resourceId: idSchema, digest: digestSchema, bytes: safeClockSchema }).strict()
 export const pageRefSchema = resourceRefSchema.extend({ kind: z.enum(['samples', 'timeline', 'control', 'pointer', 'command', 'delta', 'transcript', 'annotation', 'geometry', 'audio', 'clock']), count: safeClockSchema, monoSpanUs: monoSpanSchema, seqSpan: z.tuple([safeClockSchema, safeClockSchema]) }).strict().refine(v => v.seqSpan[1] >= v.seqSpan[0], '页序号区间倒置')
-export type CreativeIntentResourceRef = z.infer<typeof resourceRefSchema>
 export type CreativeIntentPageRef = z.infer<typeof pageRefSchema>
 export const pinSchema = z.object({ id: idSchema, sampleId: idSchema, targetRef: applicationRefSchema, properties: z.array(motionPropertySchema).min(1), timeLocked: z.boolean(), valueLocked: z.boolean() }).strict().refine(v => new Set(v.properties).size === v.properties.length && (v.timeLocked || v.valueLocked), 'pin 属性重复或没有锁定任何维度')
 export type MotionPin = z.infer<typeof pinSchema>
 const targetSchema = z.object({ ref: applicationRefSchema, ownerRef: applicationRefSchema, editable: z.array(motionPropertySchema), basePose: poseSchema, baseDigest: digestSchema, geometryDigest: digestSchema, compositionSize: z.tuple([finiteSchema.positive(), finiteSchema.positive()]) }).strict()
 export type MotionTarget = z.infer<typeof targetSchema>
 export const takeSchema = z.object({ id: idSchema, intent: z.enum(['navigate', 'demonstrate']), pathDemonstration: z.boolean(), placement: z.literal(true).optional(), monoSpanUs: monoSpanSchema, direction: z.union([z.literal(-1), z.literal(0), z.literal(1)]), visitRef: idSchema.nullable(), timelineRange: z.tuple([safeClockSchema, safeClockSchema]).nullable(), samplePages: z.array(pageRefSchema), geometryDigest: digestSchema }).strict()
-export type MotionTake = z.infer<typeof takeSchema>
 export const candidateIdentitySchema = z.object({ sourceDraftDigest: digestSchema, algorithmVersion: idSchema, requestKey: idSchema, ownerRef: applicationRefSchema, targetBases: z.array(z.object({ targetRef: applicationRefSchema, baseDigest: digestSchema, geometryDigest: digestSchema }).strict()) }).strict()
 export type CandidateIdentity = z.infer<typeof candidateIdentitySchema>
 const constraintBase = { id: idSchema, strength: z.enum(['hard', 'soft']), sourceRefs: z.array(applicationRefSchema) }

@@ -267,30 +267,6 @@ const DEFAULT_THEME_COLOR_SCHEME_HEX = {
  */
 export const APP_WINDOW_BACKGROUND_HEX = '#1B1B1B';
 
-const LEGACY_DEFAULT_THEME_COLOR_SCHEME_HEX = {
-  bg: '#0F0F0F',
-  surface: '#1A1A1A',
-  border: '#2A2A2A',
-  text: '#FFFFFF',
-  textMuted: '#888888',
-  app: '#0A0B0D',
-  canvas: '#0B0C10',
-  panel: '#131313',
-  layer: '#1B1C21',
-} as const;
-
-const LEGACY_NEUTRAL_THEME_COLOR_SCHEME_HEX = {
-  bg: '#0F0F0F',
-  surface: '#1A1A1A',
-  border: '#2A2A2A',
-  text: '#FFFFFF',
-  textMuted: '#888888',
-  app: '#0A0A0A',
-  canvas: '#0B0B0B',
-  panel: '#131313',
-  layer: '#1B1B1B',
-} as const;
-
 export const ACCENT_PRESET_HEX = [
   '#3B82F6',
   '#2563EB',
@@ -351,59 +327,6 @@ export const THEME_PALETTE_PRESET_HEX = [
       canvas: '#262626',
       panel: '#404040',
       layer: '#525252',
-    },
-  },
-] as const;
-
-export const LEGACY_THEME_PALETTE_PRESET_HEX = [
-  {
-    id: 'default',
-    colors: LEGACY_DEFAULT_THEME_COLOR_SCHEME_HEX,
-  },
-  {
-    id: 'default',
-    colors: LEGACY_NEUTRAL_THEME_COLOR_SCHEME_HEX,
-  },
-  {
-    id: 'slate-night',
-    colors: {
-      bg: '#0B1020',
-      surface: '#121A2C',
-      border: '#22304A',
-      text: '#EAF0FF',
-      textMuted: '#9BA8C8',
-      app: '#090E1A',
-      canvas: '#0A1222',
-      panel: '#10182A',
-      layer: '#1A243A',
-    },
-  },
-  {
-    id: 'graphite-pro',
-    colors: {
-      bg: '#111214',
-      surface: '#1C1E22',
-      border: '#333842',
-      text: '#F5F7FB',
-      textMuted: '#A3AAB6',
-      app: '#0D0E10',
-      canvas: '#101217',
-      panel: '#171A1F',
-      layer: '#242A33',
-    },
-  },
-  {
-    id: 'warm-film',
-    colors: {
-      bg: '#17120F',
-      surface: '#241B16',
-      border: '#3C2F25',
-      text: '#F5E9DE',
-      textMuted: '#C0A893',
-      app: '#120F0D',
-      canvas: '#17120D',
-      panel: '#1F1712',
-      layer: '#2C221A',
     },
   },
 ] as const;

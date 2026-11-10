@@ -13,7 +13,6 @@ export const agentTraceCaptureModeSchema = z.enum(['summary', 'detailed'])
 export type AgentTraceCaptureMode = z.infer<typeof agentTraceCaptureModeSchema>
 
 const agentTraceStepKindSchema = z.enum(['router', 'primary', 'summarizer', 'fallback', 'observer', 'other'])
-export type AgentTraceStepKind = z.infer<typeof agentTraceStepKindSchema>
 
 const agentTraceStatusSchema = z.enum(['running', 'completed', 'failed', 'cancelled', 'interrupted'])
 export type AgentTraceStatus = z.infer<typeof agentTraceStatusSchema>
@@ -25,7 +24,6 @@ const agentTraceLayerReportSchema = z.object({
   truncated: z.boolean(),
   reason: z.string().max(500),
 }).strict()
-export type AgentTraceLayerReport = z.infer<typeof agentTraceLayerReportSchema>
 
 const agentTraceContextMetadataSchema = z.object({
   kind: agentTraceStepKindSchema.optional(),
@@ -42,7 +40,6 @@ const agentTraceContextMetadataSchema = z.object({
   activeToolNames: z.array(z.string().min(1).max(200)).max(64).optional(),
   inputModalities: z.array(modelInputModalitySchema).max(3).optional(),
 }).strict()
-export type AgentTraceContextMetadata = z.infer<typeof agentTraceContextMetadataSchema>
 
 const agentTraceHttpRequestSchema = z.object({
   method: z.string().min(1).max(20),
@@ -69,7 +66,6 @@ const agentTraceStreamSummarySchema = z.object({
   textCharacters: z.number().int().nonnegative(),
   reasoningCharacters: z.number().int().nonnegative(),
 }).strict()
-export type AgentTraceStreamSummary = z.infer<typeof agentTraceStreamSummarySchema>
 
 const agentTraceResponseSchema = z.object({
   text: z.string(),
@@ -82,14 +78,12 @@ const agentTraceResponseSchema = z.object({
   providerMetadataSummary: z.record(z.string(), z.array(z.string())),
   warnings: z.array(z.string()),
 }).strict()
-export type AgentTraceResponse = z.infer<typeof agentTraceResponseSchema>
 
 const agentTraceErrorSchema = z.object({
   name: z.string().max(200).optional(),
   message: z.string().max(4_000),
   code: z.string().max(200).optional(),
 }).strict()
-export type AgentTraceError = z.infer<typeof agentTraceErrorSchema>
 
 export const agentTraceDetailSchema = z.object({
   schemaVersion: z.literal(AGENT_TRACE_SCHEMA_VERSION),

@@ -18,7 +18,6 @@ export function captureNativeTemplateContent(sequence: VideoEditSequence, clips:
 export function nativeTemplateTexts(clips: ReadonlyArray<Pick<VideoEditNativeTemplateClip, 'kind' | 'text' | 'graphic'>>): string[] {
   return clips.flatMap(clip => clip.kind === 'text' ? [clip.text] : (clip.graphic?.objects ?? []).filter(object => object.kind === 'text').map(object => String(object.parameters.text ?? '')))
 }
-export function nativeTemplateDurationSeconds(content: VideoEditNativeTemplateContent): number { return Math.max(...content.clips.map(clip => clip.start + clip.duration)) / content.fps }
 /** 展开成目标序列里的片段快照（start/track 仍相对组合起点）。texts 按文字槽替换，未给的槽保留模板原文。 */
 export function instantiateNativeTemplate(content: VideoEditNativeTemplateContent, sequence: VideoEditSequence, options: { durationSeconds?: number; texts?: readonly string[] } = {}): VideoEditNativeTemplateClip[] {
   const checked = videoEditNativeTemplateContentSchema.parse(content); const fps = videoEditFps(sequence.frameRate)

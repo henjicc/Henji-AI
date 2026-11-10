@@ -44,10 +44,6 @@ export function openLocalModelFolder(id: LocalModelId | null): Promise<void> {
   return getPlatform().localModels.openFolder(id)
 }
 
-export function getLocalModelDownloadSource(): Promise<LocalModelDownloadSource> {
-  return getPlatform().localModels.getDownloadSource()
-}
-
 export function setLocalModelDownloadSource(source: LocalModelDownloadSource): Promise<void> {
   return getPlatform().localModels.setDownloadSource(source)
 }

@@ -23,7 +23,6 @@ export interface GeneratedCameraPath {
 
 export type StageSpatialPathSampler = (progress: number) => StageVec3
 
-export { getSpatialPathAnchors } from './arcLengthCurve'
 export { sampleSpatialMotion } from './spatialMotionEngine'
 
 export function defaultSpatialPath(from: StageVec3, to: StageVec3): StageSpatialPath {

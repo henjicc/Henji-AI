@@ -160,13 +160,6 @@ export function restoreEncryptedKeySnapshot(snapshot: EncryptedKeySnapshot): voi
   if (snapshot.encrypted !== null) decryptStoredKey(snapshot.encrypted, snapshot.storeKey)
 }
 
-export function removeKey(namespace: KeyNamespace, providerId: string): void {
-  const data = readKeystoreFile()
-  delete data.keys[buildKey(namespace, providerId)]
-  writeKeystoreFile(data)
-  unregisterLogSecret(buildKey(namespace, providerId))
-}
-
 /**
  * 解不开的条目按"没有这个密钥"处理，不抛。
  *

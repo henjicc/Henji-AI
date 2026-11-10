@@ -30,34 +30,24 @@ export type {
   ComposeLocalRedrawResult,
   LocalRedrawContext,
   LocalRedrawSettings,
-  PanoramaMetadataEmbedResult,
-  PanoramaMetadataReadResult,
-  PersistImageSourceTrackedResult,
 } from '@/platform/contracts/image'
 export type {
   CropImageSourcePayload,
   ImageInfoResult,
-  MergeStoryboardImagesPayload,
   MergeStoryboardImagesResult,
   PrepareNodeImageSourceResult,
-  StoryboardImageMetadata,
 } from './imageCommandTypes'
 export {
-  embedPanoramaImageMetadata,
   embedStoryboardImageMetadata,
   mergeStoryboardImages,
-  readPanoramaImageMetadata,
   readStoryboardImageMetadata,
 } from './imageStoryboardCommands'
 export {
   copyImageSourceToClipboard,
   loadImage,
-  persistImageBinary,
   persistImageSource,
   persistImageSourceTracked,
-  saveImageSourceToAppDebugDir,
   saveImageSourceToDirectory,
-  saveImageSourceToDownloads,
   saveImageSourceToPath,
   savePanoramaImageSourceToDirectory,
   savePanoramaImageSourceToPath,
@@ -132,42 +122,6 @@ async function localSplitImage(
   }
 
   return outputs;
-}
-
-export async function splitImage(
-  imageBase64: string,
-  rows: number,
-  cols: number,
-  lineThickness = 0
-): Promise<string[]> {
-  const startedAt = performance.now();
-  const runtime = isNativeImageRuntime() ? 'desktop' : 'web';
-  imageCmdInfo('splitImage start', {
-    runtime,
-    rows,
-    cols,
-    lineThickness,
-  });
-
-  if (!isNativeImageRuntime()) {
-    const fallback = await localSplitImage(imageBase64, rows, cols, lineThickness);
-    imageCmdInfo('splitImage fallback(web)', {
-      frames: fallback.length,
-      totalMs: Math.round(performance.now() - startedAt),
-    });
-    return fallback;
-  }
-
-  try {
-    const rustResult = await getPlatform().image.splitImage(imageBase64, rows, cols, lineThickness);
-    imageCmdInfo('splitImage rust', {
-      frames: rustResult.length,
-      totalMs: Math.round(performance.now() - startedAt),
-    });
-    return rustResult;
-  } catch (error) {
-    throwNativeImageFailure('splitImage', startedAt, error, { rows, cols, lineThickness });
-  }
 }
 
 export async function splitImageSource(

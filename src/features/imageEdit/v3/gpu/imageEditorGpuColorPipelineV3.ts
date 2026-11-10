@@ -72,13 +72,3 @@ export function packImageEditorGpuColorMatrixRowsV3(
   ]
 }
 
-export function applyImageEditorGpuColorMatrixForTestV3(
-  matrix: ImageEditColorMatrix3V3,
-  value: readonly [number, number, number],
-): readonly [number, number, number] {
-  return [
-    matrix[0] * value[0] + matrix[1] * value[1] + matrix[2] * value[2],
-    matrix[3] * value[0] + matrix[4] * value[1] + matrix[5] * value[2],
-    matrix[6] * value[0] + matrix[7] * value[1] + matrix[8] * value[2],
-  ]
-}

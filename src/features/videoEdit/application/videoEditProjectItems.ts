@@ -1,7 +1,7 @@
 import { getVideoEditSequenceDefaults } from './videoEditSequenceDefaults'
 import type { VideoEditLabel } from '@/core/videoEdit/labels'
 import { videoEditBinSchema, videoEditItemSchema, type VideoEditItem } from '@/core/videoEdit/document'
-import { placeVideoEditItems, makeVideoEditItemSequence, removeVideoEditBins, removeVideoEditItems, videoEditItemUsage, type VideoEditSequenceSettings } from '@/core/videoEdit/projectItems'
+import { placeVideoEditItems, makeVideoEditItemSequence, removeVideoEditBins, removeVideoEditItems, type VideoEditSequenceSettings } from '@/core/videoEdit/projectItems'
 import { editVideoProject, editVideoSequence, requireVideoEditInstance, setVideoEditView, switchVideoEditSequence } from './videoEditService'
 import { assertVideoEditClipsEditable } from '@/core/videoEdit/lockedTracks'
 import { videoEditAudioMappingSchema, videoEditAudioLayoutSchema, type VideoEditAudioMapping } from '@/core/videoEdit/audioChannels'
@@ -9,7 +9,6 @@ import { readVideoEditCodeMetadata } from './videoEditCodeState'
 import { createVideoEditGraphic } from '@/core/videoEdit/graphics'
 import { withDefaultVideoEditStyle } from './videoEditStyles'
 
-export { videoEditItemUsage }
 export type { VideoEditSequenceSettings }
 export interface VideoEditGraphicItemInput { kind: 'solid' | 'rect' | 'ellipse' | 'text'; width?: number; height?: number; name?: string; binId?: string }
 export function makeVideoEditGraphicItem(input: VideoEditGraphicItemInput, dimensions: { width: number; height: number }, documentId?: string): VideoEditItem {

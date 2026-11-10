@@ -1,12 +1,6 @@
 import { readFile } from '@/platform/desktopApi'
 import { inferMimeFromPath as inferMimeFromPathShared } from '@/utils/mime'
 
-export async function fileToBlobSrc(fullPath: string, mimeHint?: string): Promise<string> {
-  const bytes = await readFile(fullPath)
-  const blob = new Blob([bytes], { type: mimeHint || inferMimeFromPathShared(fullPath) })
-  return URL.createObjectURL(blob)
-}
-
 export async function fileToDataUrl(fullPath: string, mimeHint?: string): Promise<string> {
   const bytes = await readFile(fullPath)
   const blob = new Blob([bytes], { type: mimeHint || inferMimeFromPathShared(fullPath) })

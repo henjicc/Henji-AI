@@ -91,29 +91,3 @@ export type EndpointConfig =
       routes?: Record<string, { path: string; method?: string }>
     }
 
-/**
- * 路由定义（用于 Adapter 内部路由系统）
- *
- * @deprecated 新架构中使用 EndpointConfig 替代
- */
-export interface RouteDefinition {
-  /**
-   * 匹配模型 ID 的函数
-   */
-  matches: (modelId: string) => boolean
-
-  /**
-   * 构建图片请求
-   */
-  buildImageRequest?: (params: DynamicValue) => { endpoint: string; requestData: DynamicValue }
-
-  /**
-   * 构建视频请求
-   */
-  buildVideoRequest?: (params: DynamicValue) => { endpoint: string; requestData: DynamicValue }
-
-  /**
-   * 构建音频请求
-   */
-  buildAudioRequest?: (params: DynamicValue) => { endpoint: string; requestData: DynamicValue }
-}

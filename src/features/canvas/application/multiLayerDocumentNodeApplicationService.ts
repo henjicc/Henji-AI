@@ -24,11 +24,8 @@ export {
   MultiLayerDocumentNodeApplicationError,
 } from './multiLayerDocumentNodeApplicationContracts'
 export type {
-  MultiLayerDocumentExportRaster,
-  MultiLayerDocumentNodeApplicationErrorCode,
   MultiLayerDocumentNodeApplicationService,
   MultiLayerDocumentNodeCanvasPort,
-  MultiLayerDocumentNodeMaterialization,
   MultiLayerDocumentNodePort,
   MultiLayerDocumentNodeProjection,
 } from './multiLayerDocumentNodeApplicationContracts'

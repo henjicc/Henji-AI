@@ -1,6 +1,4 @@
-import type { SpatialFrame, SpatialOutput, SpatialPropagationRequest, PlanSpatialPropagation, SpatialSnapshot, SpatialLayoutIntent, SpatialPatch } from '@/core/videoEdit/spatialTypes'
-import type { VideoEditComposition } from '@/core/videoEdit/document'
-import type { EffectQuality } from '@/core/imaging/effects/descriptor'
+import type { SpatialOutput, SpatialPropagationRequest, PlanSpatialPropagation, SpatialSnapshot, SpatialLayoutIntent, SpatialPatch } from '@/core/videoEdit/spatialTypes'
 import type { MotionCandidate, MotionCandidateResult, OptimizeMotionInput } from '@/core/creativeIntent/candidates'
 import { CreativeIntentError } from '@/core/creativeIntent/sampling'
 import type { MotionSample } from '@/core/creativeIntent/contracts'
@@ -78,11 +76,6 @@ function spatialOffThread(ownerId: string, request: Extract<MotionWorkerRequest,
     if (signal.aborted) { abort(); return }
     try { worker.postMessage(request) } catch (error) { finish(false); reject(error) }
   })
-}
-export async function evaluateVideoEditSpatialFrameOffThread(composition: VideoEditComposition, frame: number, output: SpatialOutput, quality: EffectQuality, signal: AbortSignal): Promise<SpatialFrame> {
-  const result = await spatialOffThread(composition.id, { kind: 'spatial-evaluate', composition, frame, output, quality }, signal)
-  if (result.kind !== 'spatial-frame') throw new Error('空间求值返回了不匹配的结果。')
-  return result.frame
 }
 export async function planVideoEditSpatialPropagationOffThread(request: SpatialPropagationRequest): ReturnType<PlanSpatialPropagation> {
   const { signal, ...input } = request

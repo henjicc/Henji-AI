@@ -86,26 +86,6 @@ export function analyzeVgpuImpulseReadback(input: {
 }
 
 /**
- * 从真实 VGPU target 读取 HDR 浮点像素并计算 impulse 指标。
- * 官方将 `readFloats()` 定位为测试/诊断能力，禁止放进逐帧渲染热路径。
- */
-export async function readAndAnalyzeVgpuImpulseTarget(input: {
-  readonly source: Target;
-  readonly expectedCenter?: readonly [number, number];
-}): Promise<VgpuImpulseAnalysis> {
-  if (input.source.format !== 'rgba16float') {
-    throw new Error(`VGPU impulse probe 需要 rgba16float target，实际为 ${input.source.format}`);
-  }
-  const pixels = await input.source.readFloats();
-  return analyzeVgpuImpulseReadback({
-    pixels,
-    width: input.source.size[0],
-    height: input.source.size[1],
-    expectedCenter: input.expectedCenter,
-  });
-}
-
-/**
  * 最小真实 VGPU HDR readback 探针。
  *
  * 调用方拥有 `gpu` 生命周期；本函数只销毁自己创建的 target。它刻意不接入任何生产入口，

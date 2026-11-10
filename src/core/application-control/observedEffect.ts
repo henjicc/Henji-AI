@@ -44,17 +44,6 @@ export function isMutatingEffect(effect: { effect: ApplicationObservedEffectKind
   return MUTATING_EFFECT_KINDS.has(effect.effect)
 }
 
-/** 能力的动作类别。只用于能力发现的排序与可达性门禁，不参与任何执行判定。 */
-const applicationCapabilityKindSchema = z.enum([
-  'observe',
-  'query',
-  'plan',
-  'mutate',
-  'navigate',
-  'execute',
-])
-export type ApplicationCapabilityKind = z.infer<typeof applicationCapabilityKindSchema>
-
 const applicationEffectTargetSchema = z.object({
   kind: z.string().min(1).max(128),
   id: z.string().min(1).max(500),

@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { BrowserWindow } from 'electron'
 import { readSoundLibraryFolders, writeSoundLibraryFolders, onSoundLibraryFoldersRestored } from './registry'
-export { SOUND_LIBRARY_FOLDERS_CONTRACT } from './registry'
 import { SOUND_LIBRARY_IPC_CHANNELS, type SoundLibraryState } from '../../../../src/platform/contracts/soundLibrary'
 import { getProgramStoreDir } from '../appPaths'
 import { createMainLogger } from '../logging'

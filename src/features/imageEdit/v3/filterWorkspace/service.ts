@@ -1,7 +1,7 @@
 import { createImageEditAdjustmentLayerV3, createImageEditEffectLayerV3, createImageEditIdV3 } from '@/core/imageEdit/v3/documentFactory';
 import { imageEditLayerFilterSchemaV3, imageEditLayerFiltersSchemaV3 } from '@/core/imageEdit/v3/layerModel/semantics';
 import { filterStackCacheIdentity, moveFilter, removeFilter, updateFilter } from '@/core/imaging/filterStack';
-import type { ImageEditLayerFilterV3, ImageEditJsonObjectV3 } from '@/core/imageEdit/v3/layerTypes';
+import type { ImageEditLayerFilterV3 } from '@/core/imageEdit/v3/layerTypes';
 import { createLogger } from '@/core/logging';
 import { ImageEditorV3CommandRepository } from '@/commands/imageEditorV3';
 import { collectImageEditJsonResourceIdsV3 } from '@/core/imageEdit/v3/resourceReferences';
@@ -93,10 +93,6 @@ export async function addImageEditFilterV3(bus: ImageEditCommandBusV3, layerId: 
     }
     throw error;
   } finally { for (const source of signals) source.removeEventListener('abort', cancel); }
-}
-
-export function imageEditFilterParametersV3(bus: ImageEditCommandBusV3, layerId: string, filterId: string, params: ImageEditJsonObjectV3): void {
-  changeImageEditFilterV3(bus, layerId, filterId, { kind: 'update', patch: { params } });
 }
 
 /** Read-only plan shown by the confirmation UI; the same plan is committed atomically. */

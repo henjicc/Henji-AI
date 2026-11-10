@@ -1,5 +1,2 @@
-export { detectShell, isDesktopRuntime, getPlatform } from './runtime'
-export type { ShellKind } from './types'
-export { PlatformNotImplementedError } from './types'
-export type { PlatformRuntime } from './contracts'
+export { isDesktopRuntime, getPlatform } from './runtime'
 export * from './contracts'

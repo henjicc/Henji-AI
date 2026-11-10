@@ -26,7 +26,6 @@ import { StoryboardGenNode } from './StoryboardGenNode';
 import { StoryboardNode } from './StoryboardNode';
 import { TextAnnotationNode } from './TextAnnotationNode';
 import { TextProcessingNode } from './TextProcessingNode';
-import { UploadNode } from './UploadNode';
 import { UniversalUploadNode } from './UniversalUploadNode';
 import { VideoGenNode } from './VideoGenNode';
 import { CameraStageNode } from './CameraStageNode';
@@ -105,6 +104,3 @@ export const nodeTypes: NodeTypes = {
   cameraStageNode: withNodePaintFrame(CameraStageNode),
 };
 
-export {
-  UploadNode,
-};

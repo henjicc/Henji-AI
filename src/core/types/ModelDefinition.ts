@@ -510,10 +510,3 @@ export interface ModelDefinition {
   pricing: PricingConfig
 }
 
-/**
- * 模型定义映射表
- *
- * 键：模型 ID
- * 值：模型定义
- */
-export type ModelDefinitionMap = Record<string, ModelDefinition>

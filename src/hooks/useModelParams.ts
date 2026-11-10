@@ -7,7 +7,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { registry } from '@/core/ModelRegistry'
 import type { ParamDef } from '@/core/types'
-import { extractDefaults, validateParamValue, getParamDisplayName } from './utils/defaultExtractor'
+import { extractDefaults, validateParamValue } from './utils/defaultExtractor'
 import { setNestedValue, getNestedValue, batchSetNestedValues } from './utils/paramUtils'
 import { ParamFlowTracker } from '@/core/debug/ParamFlowTracker'
 import type { ParamFlowRecord } from '@/core/debug/types'
@@ -358,33 +358,3 @@ export function useModelParams(modelId: string, enableTracking = false): UseMode
   }
 }
 
-/**
- * 获取参数显示名称的 Hook
- *
- * @param modelId - 模型 ID
- * @param paramId - 参数 ID
- * @param locale - 语言
- * @returns 显示名称
- *
- * @example
- * ```tsx
- * const displayName = useParamDisplayName('wan-2.6', 'duration', 'zh')
- * // "视频时长"
- * ```
- */
-export function useParamDisplayName(
-  modelId: string,
-  paramId: string,
-  locale: 'zh' | 'en' = 'zh'
-): string {
-  return useMemo(() => {
-    const schema = registry.getSchema(modelId)
-    const paramDef = schema.find((p) => p.id === paramId)
-
-    if (!paramDef) {
-      return paramId
-    }
-
-    return getParamDisplayName(paramDef, locale)
-  }, [modelId, paramId, locale])
-}

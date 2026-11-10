@@ -96,8 +96,3 @@ function pickFrameStep(pxPerSecond: number, fps: number): number {
   return steps[steps.length - 1]
 }
 
-/** 秒 → 「秒 / 帧」显示串（播放控制条时间展示用） */
-export function formatTimecode(time: number, mode: TimeRulerMode, fps: number): string {
-  if (mode === 'frames') return `${Math.round(time * fps)}f`
-  return `${time.toFixed(2)}s`
-}

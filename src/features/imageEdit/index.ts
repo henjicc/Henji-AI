@@ -3,8 +3,4 @@ export * from './v3/application/imageEditManagedSessionV3';
 export * from './v3/application/imageEditMaterializationV3';
 export { createImageDocument } from './documents/imageDocumentRuntime';
 export { prepareImageEditSourceLocatorV3 } from './v3/application/imageEditSourceV3';
-export { getImageEditLayoutDraftV3 } from './v3/application/imageEditLayoutOperations';
-export { ImageEditorShell } from './shell/ImageEditorShell';
-export type { ImageEditorShellProps } from './shell/ImageEditorShell';
 export * from './store/imageEditorUiStore';
-export * from './tools';

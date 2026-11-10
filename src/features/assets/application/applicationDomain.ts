@@ -8,7 +8,6 @@ import { registerAssetCapabilityHandlers } from './registerAssetCapabilityHandle
 import { dependencies } from './assetControlDependencies'
 import { RecyclableCollectionExecutor } from '@/features/application-control'
 import { assetApplicationService } from './assetApplicationService'
-export { configureAssetMutationDependencies } from './assetControlDependencies'
 
 export const assetsApplicationDomain: ApplicationDomainModule = {
   id: 'assets',

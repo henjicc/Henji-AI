@@ -60,10 +60,6 @@ export function imageEditV3ResourceRef(documentId: string, resourceId: string): 
 }
 
 
-export function isImageEditV3Ref(ref: ApplicationRef): boolean {
-  return ref.id.startsWith(V3_REF_PREFIX)
-}
-
 export function splitImageEditV3DocumentRef(ref: ApplicationRef): { documentId: string } {
   const [documentId] = parts(ref, 'image_edit.document', 1)
   return { documentId }

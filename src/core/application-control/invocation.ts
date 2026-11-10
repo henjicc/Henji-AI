@@ -1,15 +1,5 @@
-import type { ApplicationCallerGrant } from './callerContext'
 import type { ApplicationObservedEffect } from './observedEffect'
 import type { ApplicationOperationState } from './userConfirmation'
-
-/** 仅可信宿主构建，授权不属于能力参数。 */
-export interface ApplicationInvocationContext {
-  readonly callerGrant: ApplicationCallerGrant
-  readonly requestId: string
-  readonly operationId?: string
-  readonly target?: { kind: string; id: string }
-  readonly signal: AbortSignal
-}
 
 export interface ApplicationResult<T = Record<string, unknown>> {
   ok: boolean

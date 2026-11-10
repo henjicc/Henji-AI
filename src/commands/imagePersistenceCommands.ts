@@ -1,7 +1,5 @@
 import { getPlatform } from '@/platform/runtime'
 import {
-  appLocalDataDir,
-  downloadDir,
   join,
   mkdir,
   writeFile,
@@ -14,7 +12,6 @@ import {
 } from './imageStoryboardCommands'
 import {
   ensurePathWritable,
-  extensionToMime,
   isDataUrl,
   isLikelyLocalPath,
   isNativeImageRuntime,
@@ -86,50 +83,6 @@ export async function persistImageSourceTracked(
   return {
     imagePath: await persistImageSource(source),
     createdFilePaths: [],
-  }
-}
-
-export async function persistImageBinary(
-  bytes: Uint8Array,
-  extension = 'png'
-): Promise<string> {
-  const startedAt = performance.now();
-  if (isNativeImageRuntime()) {
-    try {
-      return await getPlatform().image.persistImageBinary(bytes, extension);
-    } catch (error) {
-      throwNativeImageFailure('persistImageBinary', startedAt, error, {
-        byteLength: bytes.byteLength,
-        extension,
-      });
-    }
-  }
-  return await persistBytes(bytes, extensionToMime(extension));
-}
-
-export async function saveImageSourceToDownloads(
-  source: string,
-  suggestedFileName?: string
-): Promise<string> {
-  const startedAt = performance.now();
-  if (isNativeImageRuntime()) {
-    try {
-      return await getPlatform().image.saveImageSourceToDownloads(source, suggestedFileName);
-    } catch (error) {
-      throwNativeImageFailure('saveImageSourceToDownloads', startedAt, error, {
-        sourceKind: sourceKindForLog(source),
-        suggestedFileName,
-      });
-    }
-  }
-
-  try {
-    const dir = await downloadDir();
-    return await saveImageSourceToDirectory(source, dir, suggestedFileName);
-  } catch {
-    const appDir = await appLocalDataDir();
-    const fallbackDir = await join(appDir, 'Henji-AI', 'Downloads');
-    return await saveImageSourceToDirectory(source, fallbackDir, suggestedFileName);
   }
 }
 
@@ -229,29 +182,6 @@ export async function savePanoramaImageSourceToDirectory(
   }
   const embedded = await embedPanoramaImageMetadata(source);
   return await saveImageSourceToDirectory(embedded.imagePath, targetDir, suggestedFileName);
-}
-
-export async function saveImageSourceToAppDebugDir(
-  source: string,
-  category = 'grid',
-  suggestedFileName?: string
-): Promise<string> {
-  const startedAt = performance.now();
-  if (isNativeImageRuntime()) {
-    try {
-      return await getPlatform().image.saveImageSourceToAppDebugDir(source, category, suggestedFileName);
-    } catch (error) {
-      throwNativeImageFailure('saveImageSourceToAppDebugDir', startedAt, error, {
-        sourceKind: sourceKindForLog(source),
-        category,
-        suggestedFileName,
-      });
-    }
-  }
-
-  const appDir = await appLocalDataDir();
-  const debugDir = await join(appDir, 'Henji-AI', 'debug', category || 'grid');
-  return await saveImageSourceToDirectory(source, debugDir, suggestedFileName);
 }
 
 export async function copyImageSourceToClipboard(source: string): Promise<void> {

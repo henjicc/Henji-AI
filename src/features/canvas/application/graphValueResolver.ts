@@ -1,13 +1,7 @@
-export type {
-  ParamConnectionValidationResult,
-  VisibleMediaInputPort,
-} from './graphMediaPortResolver';
 export {
-  getDeclaredSourceMediaKind,
   resolveConnectionSourceMediaKind,
   resolveMediaRowTargetHandles,
   resolveVisibleMediaInputPorts,
-  sourceEmitsMediaKind,
 } from './graphMediaPortResolver';
 export {
   collectInputValues,
@@ -20,7 +14,6 @@ export {
   resolveCompatibleTargetHandleForSource,
   validateParamConnection,
 } from './graphConnectionValidation';
-export type { VisibleSchemaParamRows } from './graphValueSchema';
 export {
   findParamForTargetNode,
   getSchemaMediaParamKind,

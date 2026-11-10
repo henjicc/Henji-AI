@@ -2,7 +2,6 @@ import { getLogCaptureMode, type LogCaptureMode } from './capture-config'
 import type { MainLogEvent } from './types'
 import type { JsonObject, JsonValue } from '@henjicc/ai-sdk'
 import { isSensitiveKey, redactRegisteredSecretText } from '../../../../src/core/logging/sanitize'
-export { isSensitiveKey } from '../../../../src/core/logging/sanitize'
 
 /**
  * 请求/响应体脱敏 + 截断工具。

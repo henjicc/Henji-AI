@@ -190,6 +190,3 @@ export const useImageEditorSessionStoreV3 = create<ImageEditorSessionStoreV3>((s
   }),
 }))
 
-export function getImageEditorSessionV3(sessionId: string): ImageEditorSessionStateV3 | undefined {
-  return useImageEditorSessionStoreV3.getState().sessions[sessionId]
-}

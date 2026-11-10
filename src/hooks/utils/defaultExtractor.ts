@@ -139,16 +139,3 @@ export function validateParamValue(paramDef: ParamDef, value: DynamicValue): boo
   return true
 }
 
-/**
- * 获取参数的显示名称
- *
- * @param paramDef - 参数定义
- * @param locale - 语言
- * @returns 显示名称
- */
-export function getParamDisplayName(
-  paramDef: ParamDef,
-  locale: 'zh' | 'en' = 'zh'
-): string {
-  return getI18nText(paramDef.name, locale) || paramDef.id
-}

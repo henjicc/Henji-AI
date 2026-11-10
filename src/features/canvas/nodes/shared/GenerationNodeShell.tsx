@@ -66,12 +66,6 @@ import { useGenerationNodeExecution } from './useGenerationNodeExecution';
 import type { GenerationNodeShellProps } from './generationNodeShellTypes';
 
 export type { GenerationNodeShellData } from './useGenerationPromptDocument';
-export type {
-  GenerationNodeRequestPreparation,
-  GenerationNodeResultCommitContext,
-  GenerationNodeResultCommitResult,
-  GenerationNodeRuntimePreparationContext,
-} from './generationNodeExecutionTypes';
 export type { GenerationNodeShellProps, GenerationNodeWorkbenchContext } from './generationNodeShellTypes';
 
 /**

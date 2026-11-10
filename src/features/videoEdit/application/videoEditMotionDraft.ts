@@ -15,16 +15,11 @@ import { motionDigest, motionSamplePage, motionPageRef, readMotionPages, readMot
 import { optimizeVideoEditMotionOffThread } from './videoEditMotionWorkerClient'
 import { captureVideoMotionReference, readVideoIntentAnnotation, sampleVideoMotionReference, videoMotionConstraintOptionsSchema, type VideoMotionConstraintOptions } from './videoEditIntentAnnotationAdapter'
 import { reviewedMovementChanges, type IntentDifferencePlan } from '@/core/creativeIntent/intentPlan'
-import { staggerMotion, hasStaggerMotion } from '@/core/creativeIntent/stagger'
+import { staggerMotion } from '@/core/creativeIntent/stagger'
 import { classifyMotionCapture, superKeyframeSessionId } from '@/core/creativeIntent/captureIntent'
 
 const logger = createLogger('features.videoEdit.motionDraft')
 const PAGE_SAMPLE_BUDGET = 256
-export function videoStaggerSource(owner: VideoEditInstance): VideoEditClip | undefined {
-  const selected = getActiveVideoEditSequence(owner).clips.filter(clip => owner.selectedClipIds.includes(clip.id) && clip.kind !== 'audio' && clip.kind !== 'adjustment')
-  if (selected.length < 2) return undefined
-  return selected.find(clip => clip.id === owner.selection && hasStaggerMotion(clip)) ?? selected.find(hasStaggerMotion)
-}
 
 export function staggerVideoMotion(id: string, sequenceId: string, sourceId: string, targetIds: readonly string[], range: readonly [number, number], stepFrames = 4): string[] {
   logger.info('错峰复制开始', { event: 'video_edit.motion.stagger.start', context: { documentId: id, sourceId, targetCount: targetIds.length } })

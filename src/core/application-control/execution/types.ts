@@ -5,7 +5,6 @@ import type {
   ApplicationEffectKind,
   ApplicationEffectReceipt,
   ApplicationPlannedStep,
-  ApplicationPropertyMutation,
   ApplicationTransactionMode,
   ApplicationTransactionResult,
   ApplicationUndoRequest,
@@ -204,7 +203,3 @@ export interface ApplicationControlExecutionApi {
   undo(request: ApplicationUndoRequest, context: ApplicationExecutionContext): Promise<ApplicationTransactionResult>
 }
 
-export interface PreparedMutationValue {
-  mutation: ApplicationPropertyMutation
-  resultingValue: JsonValue
-}

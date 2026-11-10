@@ -114,7 +114,7 @@ function getCurrentDerivedOption(
   return spec.options[0] ?? null
 }
 
-export const AspectResolutionPanel: React.FC<AspectResolutionPanelProps> = ({
+const AspectResolutionPanel: React.FC<AspectResolutionPanelProps> = ({
   aspectParam,
   resolutionParam,
   values,

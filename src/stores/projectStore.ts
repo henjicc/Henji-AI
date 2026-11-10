@@ -15,7 +15,7 @@ import {
 } from '@/features/canvas/application/canvasProjectInstances'
 import type { Project } from '@/features/canvas/application/canvasDocumentContent'
 
-export type { Project, ProjectSummary } from '@/features/canvas/application/canvasDocumentContent'
+export type { Project } from '@/features/canvas/application/canvasDocumentContent'
 
 /*
  * 画布页的界面状态（3.4 起画布是 `.hjcvs` 文档）：当前显示哪份画布、正在打开、打开失败与保存失败提示。

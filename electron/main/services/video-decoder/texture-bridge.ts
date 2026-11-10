@@ -36,7 +36,6 @@ export type {
   VideoFrameBridgeStreamStats,
   VideoFrameDecoderInfo,
   VideoFrameDecoderRequest,
-  VideoFrameMeta,
   VideoFrameScheduleAck,
   VideoFrameScheduleRequest,
   VideoFrameStreamEndedPayload,

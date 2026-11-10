@@ -9,12 +9,6 @@ export function hasStaggerMotion(clip: VideoEditClip): boolean {
   return KEYS.some(key => (clip.curves?.[key]?.length ?? 0) > 1)
 }
 
-export function staggerMotionRange(clip: VideoEditClip): [number, number] | undefined {
-  let start = Infinity, end = -Infinity
-  for (const key of KEYS) for (const point of clip.curves?.[key] ?? []) { start = Math.min(start, point.time); end = Math.max(end, point.time) }
-  return end > start ? [start, end] : undefined
-}
-
 /** Source-local interval; the first destination is delayed by one step, in caller-supplied order. */
 export function staggerMotion(source: VideoEditClip, targets: readonly VideoEditClip[], range: readonly [number, number], stepFrames: number): VideoEditClip[] {
   const [start, end] = range

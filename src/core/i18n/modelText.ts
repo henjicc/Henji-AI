@@ -120,16 +120,11 @@ var SHARED_MODES = {
   videoReference: 'Video Reference',
 } as const
 
-var SHARED_TEXTS = {
-  'tips.numberOfImagesLimit': 'Set to 1 to generate a single image; greater than 1 will generate multiple images. Total reference + generated images cannot exceed 15.',
-  'tips.promptOptimization': 'When enabled, the model will automatically optimize prompts for better generation results. Currently only supports standard mode.',
-} as const
 /* eslint-enable no-var */
 
 export type SharedFieldKey = keyof typeof SHARED_FIELDS
 export type SharedOptionKey = keyof typeof SHARED_OPTIONS
 export type SharedModeKey = keyof typeof SHARED_MODES
-type SharedTextPath = keyof typeof SHARED_TEXTS
 
 function resolveSharedFallback<K extends string>(
   dictionary: Record<K, string> | undefined,
@@ -175,17 +170,6 @@ export function sharedModeText(
     key: `params.modes.${mode}`,
     absolute: true,
     fallback: resolveSharedFallback(SHARED_MODES, mode, fallback),
-  }
-}
-
-export function sharedText(
-  path: SharedTextPath,
-  fallback?: string
-): I18nText {
-  return {
-    key: `params.${path}`,
-    absolute: true,
-    fallback: resolveSharedFallback(SHARED_TEXTS, path, fallback),
   }
 }
 

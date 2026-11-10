@@ -1,7 +1,6 @@
 import type { ImageEditDocumentV3 } from './documentTypes';
 import type { ImageEditCommandHistorySnapshotV3 } from './commandHistoryCodec';
 import type { ImageEditHistoryResourceReferenceV3 } from './commandTypes';
-import type { ImageEditRect, ImageEditSize, ImageEditTileCoordinate } from './tileGeometry';
 
 export interface ImageEditDocumentReferenceV3 {
   documentId: string;
@@ -46,72 +45,3 @@ export interface ImageEditDocumentRepositoryV3 {
   collectGarbage(documentId: string, retainedResourceIds: readonly string[]): Promise<void>;
 }
 
-interface ImageEditSourceMetadataV3 extends ImageEditSize {
-  format: string;
-  bitDepth: number | null;
-  channels: number;
-  hasAlpha: boolean;
-  orientation: number | null;
-  iccProfileResourceId: string | null;
-  cicp: {
-    colorPrimaries: number;
-    transferCharacteristics: number;
-    matrixCoefficients: number;
-    fullRange: boolean;
-  } | null;
-  hdr: boolean;
-}
-
-interface ImageEditSourceTileV3 {
-  coordinate: ImageEditTileCoordinate;
-  region: ImageEditRect;
-  width: number;
-  height: number;
-  channels: number;
-  bitDepth: 8 | 16 | 32;
-  data: ArrayBuffer;
-}
-
-export interface ImageEditSourceProviderV3 {
-  readMetadata(sourceResourceId: string, signal?: AbortSignal): Promise<ImageEditSourceMetadataV3>;
-  readFastProxy(
-    sourceResourceId: string,
-    maxEdge: number,
-    signal?: AbortSignal,
-  ): Promise<{ resourceId: string; size: ImageEditSize }>;
-  ensurePyramid(sourceResourceId: string, signal?: AbortSignal): Promise<number>;
-  readTile(
-    sourceResourceId: string,
-    coordinate: ImageEditTileCoordinate,
-    halo: number,
-    signal?: AbortSignal,
-  ): Promise<ImageEditSourceTileV3>;
-}
-
-interface ImageEditTileOutputDescriptorV3 {
-  width: number;
-  height: number;
-  channels: 3 | 4;
-  bitDepth: 8 | 16 | 32;
-  format: 'png' | 'jpeg' | 'webp' | 'tiff' | 'bigtiff' | 'avif';
-  hdr: boolean;
-  metadata: Readonly<Record<string, string | number | boolean>>;
-}
-
-export interface ImageEditTileOutputSinkV3 {
-  begin(descriptor: ImageEditTileOutputDescriptorV3, signal?: AbortSignal): Promise<void>;
-  writeTile(
-    coordinate: ImageEditTileCoordinate,
-    region: ImageEditRect,
-    data: ArrayBuffer,
-    signal?: AbortSignal,
-  ): Promise<void>;
-  writeStrip(
-    y: number,
-    height: number,
-    data: ArrayBuffer,
-    signal?: AbortSignal,
-  ): Promise<void>;
-  complete(signal?: AbortSignal): Promise<{ outputRef: string }>;
-  cancel(): Promise<void>;
-}

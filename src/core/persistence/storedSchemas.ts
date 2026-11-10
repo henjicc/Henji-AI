@@ -39,4 +39,3 @@ export const assetRecordSchema = z.object({
   thumbnail_name: z.string().nullable(), inspection_status: z.enum(['pending', 'ready', 'missing', 'failed']), inspection_error: z.string().nullable(),
   file_modified_at: z.number().nullable(), content_identity: z.string().nullable(), last_used_at: z.number().nullable(), created_at: z.number(), updated_at: z.number(),
 })
-export const persistenceMetadataSchema = z.object({ version: z.number().int().positive() }).strict()

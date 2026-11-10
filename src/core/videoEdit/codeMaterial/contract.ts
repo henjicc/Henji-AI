@@ -1,7 +1,7 @@
 import type { AudioContentAnalysis } from '../../audioAnalysis/contentAnalysis'
 /** Host safety bounds for structured graphics, component graphs and glyph requests; author JS has no language budget. */
 export const CODE_MATERIAL_LIMITS = Object.freeze({ stringLength: 4096, textCharacters: 8192, pathPoints: 4096 })
-export type { CodeColor, CodeImageReference, CodeVideoSpan, CodeAudioReference, CodeSceneReference, CodePoint, CodeGrade, CodeGradientStop, CodeRange, CodeBasicParameterValue, CodeParameterObject, CodeParameterValue, CodeParameterValues, CodeParameterVisibility, CodeBasicParameterDeclaration, CodeParameterTypeDefinition, CodeParameterDeclaration } from '../../imaging/parameterTypes'
+export type { CodeColor, CodeImageReference, CodeVideoSpan, CodeAudioReference, CodeSceneReference, CodePoint, CodeBasicParameterValue, CodeParameterObject, CodeParameterValue, CodeParameterValues, CodeParameterVisibility, CodeBasicParameterDeclaration, CodeParameterTypeDefinition, CodeParameterDeclaration } from '../../imaging/parameterTypes'
 import type { CodeColor, CodeImageReference, CodeVideoSpan, CodeWebLayer, CodeWebReference } from '../../imaging/parameterTypes'
 import { CODE_VIDEO_SPAN_LIMIT, codeVideoSpansIssue } from './videoSpans'
 import { codeWebBoxesIssue, codeWebFolderOf, codeWebLayerIssue, codeWebViewIssue } from './webSource'

@@ -37,10 +37,6 @@ export const DIFFUSION_QUALITY_CHARTS: readonly DiffusionChartDefinition[] = [
   { id: 'noise-detail', title: '噪声细节', coverage: ['微扩散', '高频细节'], width: CHART_WIDTH, height: CHART_HEIGHT },
 ];
 
-export function listDiffusionQualityCharts(): readonly DiffusionChartDefinition[] {
-  return DIFFUSION_QUALITY_CHARTS;
-}
-
 export function renderDiffusionQualityChart(chartId: DiffusionChartId): DiffusionChartRaster {
   const chart = DIFFUSION_QUALITY_CHARTS.find((candidate) => candidate.id === chartId);
   if (!chart) throw new Error(`未知柔光质量测试图：${chartId}`);

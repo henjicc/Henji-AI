@@ -12,7 +12,7 @@ import { StereoWidth } from './processors/stereo'
 import { Distortion, vocalEnhancerDesign } from './processors/special'
 
 /** 兼容旧引用：双二阶系数与压缩曲线在处理器公共模块。 */
-export { audioBiquadCoefficients, audioCompressorCurve } from './processors/shared'
+export { audioCompressorCurve } from './processors/shared'
 
 /** 效果链里的一个效果：内置效果 id 与参数、效果强度（干湿比 0–1）。剪辑片段的效果与音频编辑的效果组都是这个形状。 */
 export interface AudioEffectInstance { readonly id: string; readonly builtin: { readonly id: string; readonly params: Readonly<Record<string, unknown>>; readonly identityAliases?: AudioIdentityAliases }; readonly amount: number }

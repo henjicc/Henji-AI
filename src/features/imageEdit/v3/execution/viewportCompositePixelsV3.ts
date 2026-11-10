@@ -313,25 +313,3 @@ export function rasterizeImageEditorViewportVectorImageV3(
 }
 
 
-export function cropImageEditorViewportTileV3(
-  tile: Float32PremultipliedRgbaTile,
-  sourceRegion: ImageEditRect,
-  outputRect: ImageEditRect,
-): Float32PremultipliedRgbaTile {
-  const data = new Float32Array(outputRect.width * outputRect.height * 4)
-  const offsetX = outputRect.x - sourceRegion.x
-  const offsetY = outputRect.y - sourceRegion.y
-  for (let y = 0; y < outputRect.height; y += 1) {
-    const start = ((offsetY + y) * tile.width + offsetX) * 4
-    data.set(tile.data.subarray(start, start + outputRect.width * 4), y * outputRect.width * 4)
-  }
-  return createFloat32PremultipliedRgbaTile(
-    outputRect.width,
-    outputRect.height,
-    tile.colorDomain,
-    data,
-    tile.workingSpace,
-    tile.transferFunction,
-    tile.referenceWhiteNits,
-  )
-}

@@ -34,18 +34,6 @@ export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-export function toCssAspectRatio(aspectRatio: string): string {
-  const [rawWidth = '1', rawHeight = '1'] = aspectRatio.split(':');
-  const width = Number(rawWidth);
-  const height = Number(rawHeight);
-
-  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
-    return '1 / 1';
-  }
-
-  return `${width} / ${height}`;
-}
-
 function createDefaultExportOptions(): StoryboardExportOptions {
   return {
     showFrameIndex: false,

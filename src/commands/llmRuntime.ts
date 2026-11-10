@@ -1,7 +1,6 @@
 import { createLogger } from '@/core/logging'
 import { registerLogSecret, unregisterLogSecret } from '../core/logging/sanitize'
 import type { LlmChatRequest, LlmConfigState, LlmStreamEvent } from '@henjicc/ai-sdk'
-import type { ModelStepEvent, ModelStepInput, ModelStepResult } from '@henjicc/ai-sdk'
 import type { ModelCapabilitySmokeRequest, ModelCapabilitySmokeResult } from '@/core/llm/capabilitySmoke'
 import type {
   CommitLlmProviderSettingsDto,
@@ -104,25 +103,6 @@ export async function llmChatStream(
   } finally {
     paidContext.signal?.removeEventListener('abort', abort)
     if (paidRequests.get(requestId) === pending) paidRequests.delete(requestId)
-  }
-}
-
-export async function llmModelStep(
-  input: ModelStepInput,
-  onEvent: (event: ModelStepEvent) => void
-): Promise<ModelStepResult> {
-  ensureDesktopRuntime()
-  try {
-    return await withPaidOperation({ category: 'generation', titleKey: 'paidApproval.generateReply' }, () => getPlatform().llmRuntime.modelStep(input, onEvent))
-  } catch (error) {
-    logger.error('模型单步 IPC 调用失败', error, {
-      event: 'llm_model_step.invoke.failed',
-      requestId: input.runId,
-      taskId: input.stepId,
-      providerId: input.providerId,
-      modelId: input.modelId,
-    })
-    throw error
   }
 }
 

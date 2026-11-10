@@ -92,13 +92,6 @@ export async function renamePreset(id: string, newName: string): Promise<void> {
     await presetService.updatePreset(id, { name: newName })
 }
 
-export async function updatePreset(id: string, updates: Partial<Preset>): Promise<void> {
-    const stored = await presetService.getPresetById(id)
-    if (!stored) return
-    const { id: _id, name, createdAt: _createdAt, updatedAt: _updatedAt, ...params } = { ...toPanelPreset(stored), ...updates }
-    await presetService.updatePreset(id, { name, params })
-}
-
 // 格式化时间为 "刚刚"、"5分钟前" 等
 export function formatTimeAgo(timestamp: number): string {
     const now = Date.now()
@@ -118,14 +111,3 @@ export function formatTimeAgo(timestamp: number): string {
     return `${date.getMonth() + 1}-${date.getDate()}`
 }
 
-// 格式化完整日期
-export function formatDate(timestamp: number): string {
-    const date = new Date(timestamp)
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
-    const hours = String(date.getHours()).padStart(2, '0')
-    const minutes = String(date.getMinutes()).padStart(2, '0')
-
-    return `${year}-${month}-${day} ${hours}:${minutes}`
-}

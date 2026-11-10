@@ -10,16 +10,3 @@ export interface MediaResult {
   createdAt: Date
 }
 
-export interface Provider {
-  id: string
-  name: string
-  type: string
-  models: Model[]
-}
-
-interface Model {
-  id: string
-  name: string
-  type: 'image' | 'video' | 'audio'
-  description: string
-}

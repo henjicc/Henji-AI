@@ -128,13 +128,6 @@ export function deleteImageEditorV3DocumentIfRevision(
   )
 }
 
-export function importImageEditorV3Source(
-  request: Parameters<ImageEditorV3Platform['importSource']>[0],
-  signal?: AbortSignal,
-): ReturnType<ImageEditorV3Platform['importSource']> {
-  return runCancellable(request.requestId, signal, (platform) => platform.importSource(request))
-}
-
 export function ingestImageEditorV3Source(
   request: Parameters<ImageEditorV3Platform['ingestSource']>[0],
   signal?: AbortSignal,
@@ -317,10 +310,6 @@ export function commitImageEditorV3ImageDocument(
   request: Parameters<ImageEditorV3Platform['commitImageDocument']>[0],
 ): ReturnType<ImageEditorV3Platform['commitImageDocument']> {
   return getPlatform().imageEditorV3.commitImageDocument(request)
-}
-
-export function cancelImageEditorV3Request(requestId: string): Promise<{ cancelled: boolean }> {
-  return getPlatform().imageEditorV3.cancelRequest(requestId)
 }
 
 export async function repairImageEditorV3Raster(request: import('@/platform/contracts/imageEditorV3').ImageEditorV3RepairRequest, signal: AbortSignal, progress?: (value: import('@/platform/contracts/imageEditorV3').ImageEditorV3RepairProgress) => void): Promise<{ patch: import('@/platform/contracts/imageEditorV3').ImageEditorV3ResourceDescriptor; durationMs: number }> {

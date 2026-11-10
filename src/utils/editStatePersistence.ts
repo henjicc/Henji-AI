@@ -1,6 +1,5 @@
 import { createLogger } from '@/core/logging'
 import { appLocalDataDir, exists, join, mkdir, readFile, writeFile } from '@/platform/desktopApi'
-import { getPlatform } from '@/platform'
 
 const logger = createLogger('utils.editStatePersistence')
 
@@ -68,25 +67,6 @@ export async function loadEditState(taskIdOrFilename: string): Promise<DynamicVa
     } catch (error) {
         logger.error('[EditState] Failed to load edit state', error)
         return null
-    }
-}
-
-/**
- * Delete edit state file
- */
-export async function deleteEditState(taskIdOrFilename: string): Promise<void> {
-    try {
-        const dir = await getEditStateDir()
-        const filename = taskIdOrFilename.endsWith('.json') ? taskIdOrFilename : `${taskIdOrFilename}.json`
-        const filePath = await join(dir, filename)
-
-        const fileExists = await exists(filePath)
-        if (fileExists) {
-            await getPlatform().media.enqueueRecycle([filePath])
-            logger.info('[EditState] Queued edit state reclamation', filePath)
-        }
-    } catch (error) {
-        logger.error('[EditState] Failed to delete edit state', error)
     }
 }
 

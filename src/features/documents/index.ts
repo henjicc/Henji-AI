@@ -3,70 +3,19 @@
  * docs/task/项目体系与数据目录/任务/第二阶段-存储底座/2.4-文档会话与草稿.md。
  */
 
-export { DocumentSession, DEFAULT_DOCUMENT_SESSION_TIMING, type DocumentSessionTiming } from './documentSession'
 export {
-  DocumentSessionRegistry,
   getDocumentSessionRegistry,
-  parentFolderOf,
-  type DocumentSessionRegistryOptions,
-  type LeaveDocumentOptions,
-  type LeaveProjectRequest,
-  type LeftoverDraftQuery,
-  type OpenDocumentOptions,
 } from './documentSessionRegistry'
-export { resolveDocumentPersistence } from './documentPersistence'
-export {
-  DocumentSessionBusyError,
-  DocumentSessionClosedError,
-  DocumentSessionConflictError,
-  DocumentSessionUnsupportedError,
-  isDocumentServiceError,
-  type DocumentServiceErrorName,
-} from './documentErrors'
 export type * from './documentSessionTypes'
-export { useDocumentSessionState } from './useDocumentSessionState'
-export { DocumentSessionDialogs } from './DocumentSessionDialogs'
-export { useLeftoverDocumentDrafts, useLeftoverDraftProjects, type LeftoverDrafts } from './useLeftoverDrafts'
 
 // 通用文档操作与项目页通用数据源（存储底座 2.5）
 export {
   DocumentOperations,
-  DocumentInUseError,
-  DocumentNotOpenableError,
-  DocumentStandaloneNotAllowedError,
-  ProjectInUseError,
   getDocumentOperations,
-  isDocumentNameConflict,
-  registerDocumentCreator,
   registerDocumentOpener,
   registerDocumentBusyCheck,
-  registerDocumentReleaser,
-  type CreateNamedDocumentRequest,
-  type DocumentCreateOptions,
-  type DocumentCreator,
-  type DocumentOpenOptions,
-  type DocumentOpener,
-  type OpenDocumentWithOptions,
-  type DocumentReleaser,
-  type DocumentOperationCommands,
-  type DocumentOperationsOptions,
 } from './documentOperations'
-export { documentKindPresentation, type DocumentKindPresentation } from './documentKindPresentation'
-export {
-  ALL_DOCUMENTS_FILTER,
-  toDocumentCardItems,
-  toProjectCardItems,
-  useDocumentLibrary,
-  useProjectLibrary,
-  type DocumentCardItem,
-  type DocumentLibraryFilter,
-  type DocumentLibraryState,
-  type ProjectCardItem,
-  type ProjectLibraryState,
-} from './useDocumentLibrary'
-export { DocumentLibraryPage, type DocumentLibraryPageProps } from './DocumentLibraryPage'
-export { MoveToProjectDialog, type MoveToProjectChoice } from './MoveToProjectDialog'
-export { getEmbeddedHost, returnFromEmbedded, setEmbeddedHost, useEmbeddedHost, type EmbeddedHost } from './embeddedDocuments'
+export { documentKindPresentation } from './documentKindPresentation'
 export { registerDocumentCoverProvider, invalidateDocumentHoverRead } from './documentCovers'
 export { defaultDocumentOperationChanges, markSessionDocumentOpened } from './documentOperationChanges'
 

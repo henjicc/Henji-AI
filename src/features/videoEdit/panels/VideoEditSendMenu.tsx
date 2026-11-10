@@ -7,7 +7,6 @@ import { VIDEO_EDIT_SEND_MODES as MODES, runVideoEditSend as runSend, type Video
 import { createVideoEditCreativeTransfer, runVideoEditCreativeTransfer } from '../application/videoEditCreativeTransfer'
 import type { VideoEditResultReceipt, VideoEditResultTarget } from '../application/videoEditResultTarget'
 
-export type { VideoEditBoundTarget } from './videoEditSendActions'
 /** One send entry for every creative workspace; targets are frozen at the click, before any export work. */
 export function VideoEditSendMenu({ mediaKind, resolveSource, notify, disabled, boundTarget }: { mediaKind: VideoEditSendMediaKind; resolveSource: SourceResolver; notify: Notify; disabled?: boolean; boundTarget?: { target: VideoEditResultTarget; label: string } }): React.ReactElement {
   const [running, setRunning] = useState<AbortController | null>(null)

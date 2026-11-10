@@ -7,7 +7,6 @@ import type {
 } from './imageCommandTypes'
 import type {
   PanoramaMetadataEmbedResult,
-  PanoramaMetadataReadResult,
 } from '@/platform/contracts/image'
 import {
   drawImageWithFit,
@@ -205,26 +204,6 @@ export async function embedStoryboardImageMetadata(
     frameNotes: Array.isArray(metadata.frameNotes) ? metadata.frameNotes : [],
   });
   return source;
-}
-
-export async function readPanoramaImageMetadata(
-  source: string
-): Promise<PanoramaMetadataReadResult> {
-  const startedAt = performance.now();
-  if (isNativeImageRuntime()) {
-    try {
-      return await getPlatform().image.readPanoramaImageMetadata(source);
-    } catch (error) {
-      throwNativeImageFailure('readPanoramaImageMetadata', startedAt, error, {
-        sourceKind: sourceKindForLog(source),
-      });
-    }
-  }
-  return panoramaMetadataStore.get(normalizeSourceKey(source)) ?? {
-    format: 'unsupported',
-    status: 'unsupported',
-    metadata: null,
-  };
 }
 
 export async function embedPanoramaImageMetadata(

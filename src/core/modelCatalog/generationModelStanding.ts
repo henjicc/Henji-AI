@@ -1,15 +1,3 @@
-/**
- * 助手选生成模型时的推荐程度，按通用模型标识登记，所有供应商共用。
- *
- * - preferred：现在新、流行、效果好或性价比突出，用户没指定时优先用。
- * - legacy：已被同系或同类的新版本取代，或同价位明显更差；用户没点名就别用。
- * - 没登记的就是一般可用。
- *
- * 依据盲测榜（Artificial Analysis、Arena）、厂商发布记录与社区评测综合判断，新的不一定更好。
- * 调研原文与出处见 docs/task/模型真实请求验收/模型推荐调研.md；模型更新换代后要重新核对。
- */
-export const GENERATION_MODEL_STANDING_REVIEWED_AT = '2026-11-08'
-
 export type GenerationModelStanding = 'preferred' | 'standard' | 'legacy'
 
 const preferred = (reason: string) => ({ standing: 'preferred' as const, reason })

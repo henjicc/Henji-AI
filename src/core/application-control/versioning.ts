@@ -13,5 +13,4 @@ export const applicationCatalogMigrationPolicySchema = z.object({
   (policy) => policy.fromVersion !== policy.toVersion,
   { message: '目录迁移的起止版本不能相同' }
 )
-export type ApplicationCatalogMigrationPolicy = z.infer<typeof applicationCatalogMigrationPolicySchema>
 

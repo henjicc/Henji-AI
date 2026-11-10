@@ -64,8 +64,6 @@ export type AudioEditChainItem = z.infer<typeof audioEditChainItemSchema>
 type AudioEditBuiltinChainItem = z.infer<typeof builtinItemSchema>
 export type AudioEditMouthDeclickItem = z.infer<typeof mouthDeclickItemSchema>
 export type AudioEditBreathItem = z.infer<typeof breathItemSchema>
-export type AudioEditSeparationItem = z.infer<typeof separationItemSchema>
-export type AudioEditPluginItem = z.infer<typeof pluginItemSchema>
 export type AudioEditOutput = z.infer<typeof audioEditOutputSchema>
 
 interface ChainOwner { effectChain?: readonly AudioEditChainItem[]; chainBypassed?: boolean; output?: AudioEditOutput }

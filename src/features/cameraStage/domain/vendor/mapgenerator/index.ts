@@ -10,12 +10,12 @@
 
 import { RK4Integrator } from './integrator'
 import StreamlineGenerator, { type StreamlineParams } from './streamlines'
-import TensorField, { type NoiseParams } from './tensor_field'
+import TensorField from './tensor_field'
 import Vector from './vector'
 import WaterGenerator, { type WaterParams } from './water_generator'
 
 export { TensorField, Vector }
-export type { NoiseParams, StreamlineParams }
+export type { StreamlineParams }
 
 export interface RoadNetworkParams {
   main: StreamlineParams

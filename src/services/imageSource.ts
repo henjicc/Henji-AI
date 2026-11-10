@@ -138,16 +138,6 @@ export async function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
-export async function readFileAsDataUrl(file: File): Promise<string> {
-  const reader = new FileReader();
-
-  return await new Promise((resolve, reject) => {
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(new Error('文件读取失败'));
-    reader.readAsDataURL(file);
-  });
-}
-
 export function canvasToDataUrl(canvas: HTMLCanvasElement): string {
   return canvas.toDataURL('image/png');
 }

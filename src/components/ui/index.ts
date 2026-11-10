@@ -13,7 +13,6 @@ export * from './UiDatePicker';
 export * from './fileUploader/MediaStripUploader';
 export * from './TaskHistoryFilterBar';
 export { default as AlertDialog } from './AlertDialog';
-export type { AlertDialogAction } from './AlertDialog';
 export * from './GlobalAlertDialog';
 export * from './UiErrorBoundary';
 export * from './UiOverflowRow';
@@ -27,20 +26,14 @@ export * from './UiCurveEditor';
 export * from './UiEasingEditor';
 export * from './UiSeedInput';
 export * from './UiSegmented';
-export type { GestureProps, ParameterControlProps } from './parameterControl';
 export * from './UiFontPicker';
 export * from './UiToast';
 export * from './UiVirtualList';
 export * from './UiSpecialPanel';
 export * from './specialPanelLayout';
 export * from './booleanAppearance';
-export { resolveOverflowHiddenIds, type OverflowLayoutItem } from './overflowLayout';
 export {
   UiOverlayLayerProvider,
-  useUiOverlayLayer,
-  resolveUiOverlayTarget,
-  isTopmostUiOverlay,
-  type UiOverlayTargetRelation,
 } from './overlayOwnership';
 
 export { ParamList } from './params/ParamList'

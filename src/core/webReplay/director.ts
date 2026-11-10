@@ -79,7 +79,6 @@ const actionSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('drag'), ...action, to: directorTargetSchema.describe('拖到哪里'), duration: z.number().min(0.05).max(10).default(0.6).describe('拖动用多少秒') }).strict(),
   z.object({ kind: z.literal('zoom'), ...action, steps: z.number().int().min(-50).max(50).refine(value => value !== 0, '缩放步数不能为 0').describe('在目标处按住 Ctrl 滚轮的格数：正数放大，负数缩小'), duration: z.number().min(0).max(10).default(0.4).describe('缩放用多少秒') }).strict(),
 ])
-export type DirectorAction = z.infer<typeof actionSchema>
 
 export const webReplayDirectorSchema = z.object({
   version: z.literal(WEB_REPLAY_DIRECTOR_VERSION),
@@ -108,7 +107,6 @@ export const webReplayDirectorSchema = z.object({
   })
 })
 export type WebReplayDirector = z.infer<typeof webReplayDirectorSchema>
-export type WebReplayDirectorInput = z.input<typeof webReplayDirectorSchema>
 
 /** 导演稿校验失败：每条都点名字段路径，如 timeline.segments[2].to。 */
 export class WebReplayDirectorError extends Error {

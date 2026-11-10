@@ -24,6 +24,6 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-export type { SelectionPixels, SelectionPixelSource, SelectionAlgorithm, SelectionModification, SelectionAlgorithmOptions, SelectionAlgorithmResult, SelectionCoverageSource } from './contracts';
+export type { SelectionPixels, SelectionPixelSource, SelectionAlgorithm, SelectionModification } from './contracts';
 export { solveSelection } from './select';
 export { modifySelection } from './modify';

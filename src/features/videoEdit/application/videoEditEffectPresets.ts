@@ -21,7 +21,7 @@ import { mergeRecycledMembers } from '@/core/localRecords/recycle'
 import { jsonEqual } from '@/core/jsonEqual'
 import { nextVideoEditHistoryOrder, registerVideoEditLibraryHistory } from './videoEditLibraryHistory'
 const logger = createLogger('features.videoEdit.presets')
-export { videoEditEffectPresetSchema, type VideoEditEffectPreset } from '@/core/videoEdit/effectPresets'
+export { type VideoEditEffectPreset } from '@/core/videoEdit/effectPresets'
 export interface LibraryData { favorites: string[]; presets: VideoEditEffectPreset[] }
 interface LibraryState extends LibraryData {
   restoreLibrary(value: LibraryData, expected?: LibraryData): void

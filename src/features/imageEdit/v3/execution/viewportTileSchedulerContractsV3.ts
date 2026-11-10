@@ -10,9 +10,6 @@ import type {
   ImageEditorViewportTileCacheV3,
 } from './viewportTileCacheV3'
 import type {
-  ImageEditorViewportTileRequestV3,
-} from './viewportTilePlannerV3'
-import type {
   ImageEditorViewportFrameV3,
   ImageEditorViewportRenderRequestV3,
 } from './viewportTileSchedulerV3'
@@ -76,4 +73,3 @@ export interface ScheduledViewportJobV3 {
   preparedFrame: ImageEditorViewportFrameV3 | null
 }
 
-export type ImageEditorViewportTileRequestListV3 = readonly ImageEditorViewportTileRequestV3[]

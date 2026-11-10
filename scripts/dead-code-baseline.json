@@ -675,15 +675,7 @@
       },
       {
         "file": "electron/main/ipc/image-editor-v3.ts",
-        "name": "parseImageEditorV3PersistBrushTilesPayload"
-      },
-      {
-        "file": "electron/main/ipc/image-editor-v3.ts",
         "name": "parseImageEditorV3PyramidPrewarmPayload"
-      },
-      {
-        "file": "electron/main/ipc/image-editor-v3.ts",
-        "name": "parseImageEditorV3ReadBrushTilesPayload"
       },
       {
         "file": "electron/main/ipc/image-editor-v3.ts",
@@ -879,10 +871,6 @@
       },
       {
         "file": "src/commands/imageEditorV3.ts",
-        "name": "cancelImageEditorV3Request"
-      },
-      {
-        "file": "src/commands/imageEditorV3.ts",
         "name": "collectImageEditorV3ResourceRefs"
       },
       {
@@ -920,10 +908,6 @@
       {
         "file": "src/commands/imageEditorV3.ts",
         "name": "importImageEditorColorLutV3"
-      },
-      {
-        "file": "src/commands/imageEditorV3.ts",
-        "name": "importImageEditorV3Source"
       },
       {
         "file": "src/commands/imageEditorV3.ts",
@@ -1028,14 +1012,6 @@
       {
         "file": "src/components/Settings/sections/providerCenterModel.ts",
         "name": "migrateLegacyTypeVisibility"
-      },
-      {
-        "file": "src/core/documents/kinds/index.ts",
-        "name": "usesLegacyDocumentExtension"
-      },
-      {
-        "file": "src/core/documents/kinds/registry.ts",
-        "name": "usesLegacyDocumentExtension"
       },
       {
         "file": "src/core/fileExtensions.ts",
@@ -2171,27 +2147,11 @@
       },
       {
         "file": "src/core/imageEdit/v3/layerTypes.ts",
-        "name": "ImageEditPathLayerV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/layerTypes.ts",
         "name": "ImageEditRasterLayerV3"
       },
       {
         "file": "src/core/imageEdit/v3/layerTypes.ts",
-        "name": "ImageEditShapeLayerV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/layerTypes.ts",
-        "name": "ImageEditSmartContentV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/layerTypes.ts",
         "name": "ImageEditSmartLayerV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/layerTypes.ts",
-        "name": "ImageEditSmartOriginV3"
       },
       {
         "file": "src/core/imageEdit/v3/layerTypes.ts",
@@ -2228,14 +2188,6 @@
       {
         "file": "src/core/imageEdit/v3/layerTypes.ts",
         "name": "createImageEditSparseMaskReferenceV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/layerTypes.ts",
-        "name": "getImageEditMaskIdentityV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/layerTypes.ts",
-        "name": "isImageEditGroupLayerV3"
       },
       {
         "file": "src/core/imageEdit/v3/layerTypes.ts",
@@ -2431,10 +2383,6 @@
       },
       {
         "file": "src/core/imageEdit/v3/selection/contracts.ts",
-        "name": "IMAGE_EDIT_SELECTION_AA_SAMPLES_PER_AXIS_V3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/selection/contracts.ts",
         "name": "IMAGE_EDIT_SELECTION_TILE_SIZE_V3"
       },
       {
@@ -2443,15 +2391,7 @@
       },
       {
         "file": "src/core/imageEdit/v3/selection/contracts.ts",
-        "name": "ImageEditSelectionEllipseV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/selection/contracts.ts",
         "name": "ImageEditSelectionExistingMaskTileV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/selection/contracts.ts",
-        "name": "ImageEditSelectionLassoV3"
       },
       {
         "file": "src/core/imageEdit/v3/selection/contracts.ts",
@@ -2475,10 +2415,6 @@
       },
       {
         "file": "src/core/imageEdit/v3/selection/contracts.ts",
-        "name": "ImageEditSelectionRectV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/selection/contracts.ts",
         "name": "ImageEditSelectionShapeV3"
       },
       {
@@ -2496,10 +2432,6 @@
       {
         "file": "src/core/imageEdit/v3/selection/contracts.ts",
         "name": "RasterizeImageEditSelectionMaskOptionsV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/selection/geometry.ts",
-        "name": "NormalizedImageEditSelectionBoundsV3"
       },
       {
         "file": "src/core/imageEdit/v3/selection/geometry.ts",
@@ -2592,14 +2524,6 @@
       {
         "file": "src/core/imageEdit/v3/serviceContracts.ts",
         "name": "ImageEditSaveDocumentOptionsV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/serviceContracts.ts",
-        "name": "ImageEditSourceProviderV3"
-      },
-      {
-        "file": "src/core/imageEdit/v3/serviceContracts.ts",
-        "name": "ImageEditTileOutputSinkV3"
       },
       {
         "file": "src/core/imageEdit/v3/sessionReference.ts",
@@ -2758,16 +2682,8 @@
         "name": "ImageEditorDiagnosticHostV3"
       },
       {
-        "file": "src/core/logging/index.ts",
-        "name": "ImageEditorDiagnosticHostV3"
-      },
-      {
         "file": "src/core/persistence/mcpConnectionSchema.ts",
         "name": "migrateMcpConnectionStorageV1"
-      },
-      {
-        "file": "src/core/theme/colorTokens.ts",
-        "name": "LEGACY_THEME_PALETTE_PRESET_HEX"
       },
       {
         "file": "src/core/theme/themeMigration.ts",
@@ -2936,10 +2852,6 @@
       {
         "file": "src/features/canvas/ui/tool-editors/splitStoryboard/shared.ts",
         "name": "LEGACY_DEFAULT_LINE_THICKNESS_PX"
-      },
-      {
-        "file": "src/features/imageEdit/index.ts",
-        "name": "getImageEditLayoutDraftV3"
       },
       {
         "file": "src/features/imageEdit/index.ts",
@@ -3155,10 +3067,6 @@
       },
       {
         "file": "src/features/imageEdit/v3/application/imageEditDocumentRefs.ts",
-        "name": "isImageEditV3Ref"
-      },
-      {
-        "file": "src/features/imageEdit/v3/application/imageEditDocumentRefs.ts",
         "name": "splitImageEditV3DocumentRef"
       },
       {
@@ -3204,10 +3112,6 @@
       {
         "file": "src/features/imageEdit/v3/application/imageEditLayerFilterEntityV3.ts",
         "name": "imageEditLayerFilterRegistrationV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/application/imageEditLayoutOperations.ts",
-        "name": "getImageEditLayoutDraftV3"
       },
       {
         "file": "src/features/imageEdit/v3/application/imageEditManagedSessionV3.ts",
@@ -3435,15 +3339,7 @@
       },
       {
         "file": "src/features/imageEdit/v3/application/imageEditSelectionServiceV3.ts",
-        "name": "commitAdvancedImageEditSelectionV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/application/imageEditSelectionServiceV3.ts",
         "name": "materializeImageEditSelectionMaskV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/application/imageEditSelectionServiceV3.ts",
-        "name": "previewAdvancedImageEditSelectionV3"
       },
       {
         "file": "src/features/imageEdit/v3/application/imageEditSourceV3.ts",
@@ -3600,10 +3496,6 @@
       {
         "file": "src/features/imageEdit/v3/application/imageEditorHostProfiles.ts",
         "name": "ImageEditorLayerKindV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/application/imageEditorHostProfiles.ts",
-        "name": "ImageEditorReadinessErrorV3"
       },
       {
         "file": "src/features/imageEdit/v3/application/imageEditorHostProfiles.ts",
@@ -3870,18 +3762,6 @@
         "name": "ImageEditorV3"
       },
       {
-        "file": "src/features/imageEdit/v3/editor/index.ts",
-        "name": "ImageEditorV3PreviewOutput"
-      },
-      {
-        "file": "src/features/imageEdit/v3/editor/index.ts",
-        "name": "ImageEditorV3PreviewRenderer"
-      },
-      {
-        "file": "src/features/imageEdit/v3/editor/index.ts",
-        "name": "ImageEditorV3Props"
-      },
-      {
         "file": "src/features/imageEdit/v3/editor/layerControlsPresentationV3.ts",
         "name": "ImageEditorLayerControlsFrameV3"
       },
@@ -4012,10 +3892,6 @@
       {
         "file": "src/features/imageEdit/v3/editor/layerTreeV3.ts",
         "name": "flattenImageEditLayerTreeV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/editor/layerTreeV3.ts",
-        "name": "getImageEditLayerContainerV3"
       },
       {
         "file": "src/features/imageEdit/v3/editor/layerTreeV3.ts",
@@ -5091,10 +4967,6 @@
       },
       {
         "file": "src/features/imageEdit/v3/execution/viewportCompositePixelsV3.ts",
-        "name": "cropImageEditorViewportTileV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/execution/viewportCompositePixelsV3.ts",
         "name": "decodeImageEditorViewportSourceTileV3"
       },
       {
@@ -5324,10 +5196,6 @@
       {
         "file": "src/features/imageEdit/v3/execution/viewportTileSchedulerContractsV3.ts",
         "name": "ImageEditorViewportSourceTileReaderV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/execution/viewportTileSchedulerContractsV3.ts",
-        "name": "ImageEditorViewportTileRequestListV3"
       },
       {
         "file": "src/features/imageEdit/v3/execution/viewportTileSchedulerContractsV3.ts",
@@ -5659,10 +5527,6 @@
       },
       {
         "file": "src/features/imageEdit/v3/filterWorkspace/service.ts",
-        "name": "imageEditFilterParametersV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/filterWorkspace/service.ts",
         "name": "prepareImageEditFilterConversionV3"
       },
       {
@@ -5684,10 +5548,6 @@
       {
         "file": "src/features/imageEdit/v3/gpu/imageEditorGpuColorPipelineV3.ts",
         "name": "ImageEditorGpuSourceColorUniformV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/gpu/imageEditorGpuColorPipelineV3.ts",
-        "name": "applyImageEditorGpuColorMatrixForTestV3"
       },
       {
         "file": "src/features/imageEdit/v3/gpu/imageEditorGpuColorPipelineV3.ts",
@@ -5839,23 +5699,11 @@
       },
       {
         "file": "src/features/imageEdit/v3/gpu/imageEditorGpuRasterCompositorV3.ts",
-        "name": "ImageEditorGpuRasterCompositorOptionsV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/gpu/imageEditorGpuRasterCompositorV3.ts",
-        "name": "ImageEditorGpuRasterCompositorStatsV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/gpu/imageEditorGpuRasterCompositorV3.ts",
         "name": "ImageEditorGpuRasterCompositorV3"
       },
       {
         "file": "src/features/imageEdit/v3/gpu/imageEditorGpuRasterCompositorV3.ts",
         "name": "ImageEditorGpuRasterCompositorV3Like"
-      },
-      {
-        "file": "src/features/imageEdit/v3/gpu/imageEditorGpuRasterCompositorV3.ts",
-        "name": "ImageEditorGpuRasterFrameV3"
       },
       {
         "file": "src/features/imageEdit/v3/gpu/imageEditorGpuRasterCompositorV3.ts",
@@ -5900,10 +5748,6 @@
       {
         "file": "src/features/imageEdit/v3/gpu/imageEditorGpuRasterPipelineV3.ts",
         "name": "ImageEditorGpuRasterPipelineV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/gpu/imageEditorGpuRasterPresentationV3.ts",
-        "name": "ImageEditorGpuPresentationResultV3"
       },
       {
         "file": "src/features/imageEdit/v3/gpu/imageEditorGpuRasterPresentationV3.ts",
@@ -6435,10 +6279,6 @@
       },
       {
         "file": "src/features/imageEdit/v3/store/imageEditorSessionStoreV3.ts",
-        "name": "getImageEditorSessionV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/store/imageEditorSessionStoreV3.ts",
         "name": "useImageEditorSessionStoreV3"
       },
       {
@@ -6580,22 +6420,6 @@
       {
         "file": "src/features/imageEdit/v3/tools/vector/service.ts",
         "name": "setImageEditVectorContentV3"
-      },
-      {
-        "file": "src/features/maskEditor/document.ts",
-        "name": "MaskEditorV3Result"
-      },
-      {
-        "file": "src/features/maskEditor/index.ts",
-        "name": "MaskEditorV3Host"
-      },
-      {
-        "file": "src/features/maskEditor/index.ts",
-        "name": "MaskEditorV3HostHandle"
-      },
-      {
-        "file": "src/features/maskEditor/index.ts",
-        "name": "MaskEditorV3HostProps"
       },
       {
         "file": "src/features/maskEditor/types.ts",

@@ -1,7 +1,7 @@
 import { pointerEventSchema } from '../captureLog/pointer'
 import { z } from 'zod'
 import { applicationRefSchema } from '../application-control/identifiers'
-import { affineSchema, clockEventIssue, clockSegmentsSchema, digestSchema, dualClockShape, finiteSchema, idSchema, monoSpanSchema, pageRefSchema, pointSchema, poseSchema, resourceRefSchema, safeClockSchema, timelineSchema, timelineSpanSchema } from './contracts'
+import { affineSchema, clockEventIssue, clockSegmentsSchema, digestSchema, dualClockShape, finiteSchema, idSchema, monoSpanSchema, pageRefSchema, pointSchema, poseSchema, resourceRefSchema, safeClockSchema, timelineSpanSchema } from './contracts'
 
 const eventBase = { ...dualClockShape, eventId: idSchema }
 export const timelineEventSchema = z.object({ ...eventBase, kind: z.literal('timeline'), intent: z.enum(['navigate', 'demonstrate']), requestedFrame: safeClockSchema.nullable(), action: z.enum(['play', 'pause', 'scrub', 'seek', 'rate', 'present']), playbackRate: finiteSchema.positive() }).strict()
@@ -69,5 +69,3 @@ export type ExplanationSession = z.infer<typeof explanationSessionSchema>
 export type VisualEvidence = z.infer<typeof visualEvidenceSchema>
 export type TranscriptEntry = z.infer<typeof transcriptEventSchema>
 export type AudioClockSegment = z.infer<typeof audioEventSchema>
-export type GeometrySnapshot = z.infer<typeof geometryEventSchema>
-export { timelineSchema }

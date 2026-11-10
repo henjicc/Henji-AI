@@ -146,9 +146,6 @@ const applicationCollectionOperationAvailabilitySchema = z.object({
   requiredPermissions: z.array(z.string().min(1).max(120)).max(12),
   recoveries: z.array(applicationAvailabilityRecoverySchema).max(8),
 }).strict()
-export type ApplicationCollectionOperationAvailability = z.infer<
-  typeof applicationCollectionOperationAvailabilitySchema
->
 
 /**
  * 某个父实体当前能否增删指定子实体。静态 collectionWrite 表示结构能力，这里表示此刻状态。
@@ -194,10 +191,3 @@ export const applicationEntitySnapshotSchema = z.object({
 }).strict()
 export type ApplicationEntitySnapshot = z.infer<typeof applicationEntitySnapshotSchema>
 
-const applicationSchemaQuerySchema = z.object({
-  entityTypes: z.array(applicationEntityTypeIdSchema).max(64),
-  propertyIds: z.array(applicationPropertyIdSchema).max(256),
-  includeUnavailable: z.boolean().default(false),
-  catalogVersion: z.string().regex(/^application-capabilities\/v[1-9][0-9]*$/),
-}).strict()
-export type ApplicationSchemaQuery = z.infer<typeof applicationSchemaQuerySchema>

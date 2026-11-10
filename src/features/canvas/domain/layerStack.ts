@@ -1,5 +1,3 @@
-export const LAYER_STACK_VERSION = 1 as const;
-
 type LayerStackStatus = 'ready' | 'degraded';
 type LayerStackResourceStatus = 'ready' | 'missing';
 

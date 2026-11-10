@@ -6,11 +6,9 @@ import { VideoFrameBridge } from './texture-bridge'
 import { VideoAudioSessions } from './audio-sessions'
 
 export { VideoDecoderService } from './client'
-export type { VideoDecoderServiceState, VideoDecoderRequestOptions, VideoDecoderLifecycleEvent } from './client'
 export { VideoDecoderError } from './protocol'
 export {
   VideoFrameBridge,
-  VIDEO_FRAMES_STREAM_ENDED_CHANNEL,
   parseVideoFrameAtCancelRequest,
   parseVideoFrameAtRequest,
   parseVideoFrameCancelRequest,
@@ -28,17 +26,8 @@ export type {
   VideoFrameScheduleRequest,
   VideoFrameStreamInfo,
   VideoFrameTarget,
-  VideoFrameTestStreamRequest,
 } from './texture-bridge'
 export { VideoAudioSessions, parseVideoAudioCloseRequest, parseVideoAudioOpenRequest, parseVideoAudioReadRequest } from './audio-sessions'
-export type {
-  VideoDecoderErrorCode,
-  VideoDecoderEvent,
-  VideoDecoderHello,
-  VideoDecoderProbeResult,
-  VideoDecoderStats,
-  VideoDecoderStreamStarted,
-} from './protocol'
 
 let service: VideoDecoderService | null = null
 

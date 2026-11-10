@@ -117,24 +117,6 @@ export const PERSISTENCE_FORMATS: readonly PersistenceFormat[] = [
   format('sqlite', '应用数据库', SQLITE_SCHEMA_VERSION, 'SCHEMA_MIGRATIONS / schema_migrations', 'electron/main/services/db-migrations.ts::runSchemaMigrations', z.object({ version: z.number().int().positive(), name: z.string(), applied_at: z.number() }), 'sqlite-ledger', { operationOrigin: operationOriginSchema.optional(), operationState: applicationOperationStateSchema, userConfirmation: applicationUserConfirmationSchema, paidGenerationEstimateKind: z.enum(['upper-bound', 'estimate']).optional(), paidReservation: paidReservationSchema, paidApproval: paidApprovalReceiptSchema }),
 ]
 
-/** Deliberate scope boundary: rebuildable projections and external formats are not user-project migrations. */
-export const PERSISTENCE_EXCLUSIONS = [
-  { id: 'document-hover-frames', readEntry: 'electron/main/services/documents/covers.ts::getHoverFrames', reason: '程序目录中的低清合成序列帧及其索引可从剪辑重建；只添加可选缓存，不改变通用静态封面或作品文件。' },
-  { id: 'assistant-skill-source', readEntry: 'electron/main/services/assistant/skills/frontmatter.ts::parseSkillFrontmatter', reason: 'SKILL.md 是外部 Agent Skills 标准文本；安装只添加可选的 henji-foreign 标记，旧文件没有标记即为本机内容，不改写正文或其他字段。' },
-  { id: 'web-replay-take-outputs', readEntry: 'electron/main/services/web-replay/takes.ts', reason: '录制文件夹 takes/<名字>/ 下的视频、boxes.jsonl、text.jsonl、behavior.json、timemap.json、take.json 与 edit-events 都由同目录已登记的 director.json（web-replay-director）和录制本身重演生成，可用 render_web_app_replay 原样重建；不保存用户编辑，录制原件不受影响。读不了的版本只是不列出。' },
-  { id: 'web-recording-boxes-track', readEntry: 'electron/main/services/web-replay/boxTrackReader.ts', reason: 'boxes.jsonl 是重演从已登记网页录制的前端资源、数据与行为生成的可选位置投影，可用 render_web_app_replay（含 textOnly）重建；不保存用户编辑，不改变 recording.json 或原始轨道。旧录制缺少此文件仍可读，不提高录制格式版本或最低可读版本。' },
-  { id: 'screen-recording-standard-exports', readEntry: 'src/features/screenRecording/application/recordingProductService.ts', reason: 'Markdown/HTML 与 PNG/GIF 是面向用户交付的外部标准文件，回读只验证发布字节，不作为项目数据解释；可编辑产物复用已登记的 image-edit-v3 与 image-document-package。运行期导出记录不落盘。' },
-  { id: 'session-state', readEntry: 'electron/main/services/documents/session-state.ts', reason: '明示可丢弃的撤销/视口缓存；文档仍能从权威文件完整打开。' },
-  { id: 'working-copy-links', readEntry: 'electron/main/services/image-editor-v3/image-document/working-copy-links.ts / canvas-layers/canvas-layer-packages.ts', reason: '可由权威包与工作副本重建的同步投影，业务文档和未保存工作副本在 image-working-copy 中受保护。' },
-  { id: 'video-edit-render-cache', readEntry: 'electron/main/services/video/render-cache.ts / src/features/videoEdit/application/videoEditRenderPerformance.ts', reason: '预览文件及按内容指纹保存的本机播放性能样本均可重建；版本变化直接失效并回收，不改变工程文件或用户设置。' },
-  { id: 'web-time-cache', readEntry: 'electron/main/services/web-source/publication.ts::readWebTimeSegment', reason: '网页时间段视频、几何和清单都是由原网页可重建的本机缓存，不写入工程，缓存契约变化直接失效。' },
-  { id: 'derived-media', readEntry: 'electron/main/services/audio/ / audio-edit/speech-energy-service.ts / video/ / fonts/scanner.ts / local-inference/', reason: '波形、声音低谷、缩略帧、字体目录缓存、区域检测/跟踪缓存可从原媒体重算；不是独立用户内容，人工校对仍由作品文档保存。' },
-  { id: 'standard-git-object-database', readEntry: 'electron/main/services/documents/code-git.ts', reason: '代码/.git 是 isomorphic-git 读写的标准 Git 对象、索引和引用格式；位置方案由 code-git-location 登记，素材归属 .definition 继续存定义 ID，旧源码备份保留原字节。' },
-  { id: 'external-media-and-fonts', readEntry: '项目素材/生成结果/字体目录/代码/*.ts', reason: '图片、视频、音频、字体和作者源码的字节保持原样；来源格式属于外部编码协议，代码的API/语言版本由code-version固定。' },
-  { id: 'project-progress-markdown', readEntry: 'src/commands/documents.ts::readProjectProgress', reason: '项目根目录的制作进度是用户与助手共写的自由 Markdown，整份读写、不解析结构；属于外部标准文本，不作为项目数据迁移。' },
-  { id: 'sqlite-owned-content', readEntry: 'electron/main/services/db-migrations.ts', reason: '生成历史、自定义模型、素材库/标签/文件夹关系、助手记忆与调用账本统一由既有SQLite账本负责；不另建迁移账本。' },
-] as const
-
 export function persistenceFormat(id: string): PersistenceFormat {
   const value = PERSISTENCE_FORMATS.find(format => format.id === id)
   if (!value) throw new Error(`持久格式未登记：${id}`)

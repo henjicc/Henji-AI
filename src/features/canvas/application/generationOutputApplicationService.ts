@@ -83,7 +83,6 @@ export async function commitCanvasGenerationOutputsInProject(projectId: string, 
   return withCanvasProjectRuntime(projectId, runtime => commitCanvasGenerationOutputs(input, { projectId, runtime }));
 }
 
-export { GenerationOutputApplicationError } from './generationOutputApplicationContracts';
 export type {
   CommitCanvasGenerationOutputsInput,
   CommitCanvasGenerationOutputsResult,

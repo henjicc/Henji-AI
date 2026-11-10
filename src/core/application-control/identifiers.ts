@@ -1,6 +1,5 @@
 import { z } from 'zod'
 
-export const APPLICATION_CONTROL_CONTRACT_VERSION = 'application-control/v2' as const
 const APPLICATION_CAPABILITY_CATALOG_VERSION_PATTERN = /^application-capabilities\/v[1-9][0-9]*$/
 
 const stableIdPattern = /^[a-z][a-z0-9_.-]{1,127}$/
@@ -19,7 +18,6 @@ export const applicationExposureSchema = z.enum(['ui', 'assistant', 'local_adapt
 export const applicationMediaModalitySchema = z.enum(['image', 'video', 'audio'])
 export type ApplicationDataClass = z.infer<typeof applicationDataClassSchema>
 export type ApplicationExposure = z.infer<typeof applicationExposureSchema>
-export type ApplicationMediaModality = z.infer<typeof applicationMediaModalitySchema>
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | {
   [key: string]: JsonValue
@@ -78,7 +76,6 @@ export function normalizeApplicationRefLabel<T extends object>(ref: T): T {
 export const applicationMediaRefSchema = applicationRefSchema.extend({
   kind: z.enum(['media.image', 'media.video', 'media.audio', 'generation.result']),
 }).strict()
-export type ApplicationMediaRef = z.infer<typeof applicationMediaRefSchema>
 
 export const applicationSchemaRefSchema = z.object({
   catalogVersion: applicationCapabilityCatalogVersionSchema,
@@ -93,7 +90,6 @@ export const applicationRevisionSetSchema = z.record(
   applicationScopeIdSchema,
   z.number().int().nonnegative()
 )
-export type ApplicationRevisionSet = z.infer<typeof applicationRevisionSetSchema>
 
 export const applicationOpaqueRefSchema = z.string()
   .regex(/^[a-z][a-z0-9_-]{1,31}:[A-Za-z0-9_-]{16,256}$/)

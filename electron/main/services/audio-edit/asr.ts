@@ -172,6 +172,3 @@ async function transcribeRegisteredProject(request: AudioEditTranscriptionReques
   }
 }
 
-export function cancelAudioEditTranscription(requestId: string): void {
-  controllers.get(requestId)?.abort()
-}

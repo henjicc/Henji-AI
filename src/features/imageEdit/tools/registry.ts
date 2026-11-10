@@ -55,6 +55,3 @@ export function getImageEditorTools(): ImageEditorToolDefinition[] {
   return imageEditorToolRegistry.list();
 }
 
-export function getImageEditorTool(toolId: string): ImageEditorToolDefinition | null {
-  return imageEditorToolRegistry.get(toolId);
-}

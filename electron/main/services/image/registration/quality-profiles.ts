@@ -85,8 +85,3 @@ export function resolveRegistrationQuality(
     : REGISTRATION_QUALITY_PROFILES.precise;
 }
 
-export function getRegistrationQualityProfile(
-  quality: RegistrationQuality,
-): RegistrationQualityProfile {
-  return REGISTRATION_QUALITY_PROFILES[quality];
-}

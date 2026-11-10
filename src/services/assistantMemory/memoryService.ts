@@ -5,7 +5,7 @@ import { shouldOrganizeMemory, type MemoryEntry, type MemoryTarget,  type Memory
 import { styleMemoryStorage } from './styleMemoryStorage'
 
 import { refreshMemory } from './memoryState'
-export { refreshMemory, cachedMemory, subscribeMemory } from './memoryState'
+export { refreshMemory, subscribeMemory } from './memoryState'
 const queues = new Map<string, Promise<unknown>>()
 export async function readMemory(target: MemoryTarget): Promise<MemoryEntry[]> {
   const state = await refreshMemory()

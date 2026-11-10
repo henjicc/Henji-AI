@@ -1,7 +1,6 @@
 import { initializeVideoEditCodeSourceRuntime } from './videoEditCodeSourceRuntime'
 import { codeMaterialFilesKey, normalizeCodeMaterialFiles, codeVersionContentKey, loadCodeSourceReferences, codeSourceReferencesLoaded, CODE_SOURCE_REVERIFY_MS, type CodeMaterialFiles } from '@/core/videoEdit/codeMaterial/sources'
 import { prepareVideoEditAuthorBundle, releaseSharedVideoEditCompiler } from '../engine/videoEditSharedCompiler'
-export { prepareVideoEditAuthorBundle } from '../engine/videoEditSharedCompiler'
 import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
 import { codeParameterMetadata } from '@/core/videoEdit/codeMaterial/parameterTypes'
 import type { CodeAuthorProgram as CodeMaterialProgram } from '@/core/videoEdit/codeAuthorProgram'

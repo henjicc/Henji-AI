@@ -1,5 +1,3 @@
-import type { EvaluationContext } from '../evaluation';
-
 export interface PaintPoint {
   x: number;
   y: number;
@@ -46,10 +44,3 @@ export interface PaintSurface {
   clip?: Float32Array;
 }
 
-/** Hosts resolve time/animation/tracking before evaluating; static pictures use static time. */
-export interface PaintReplay {
-  brush: PaintBrush;
-  points: readonly PaintPoint[];
-  tool: 'brush' | 'eraser';
-  context?: EvaluationContext;
-}

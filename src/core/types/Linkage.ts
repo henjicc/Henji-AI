@@ -427,7 +427,3 @@ export type Linkage =
   | HideLinkage
   | CustomLinkage
 
-/**
- * 联动配置数组
- */
-export type LinkageArray = Linkage[]

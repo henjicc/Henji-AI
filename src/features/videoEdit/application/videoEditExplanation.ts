@@ -567,15 +567,6 @@ export async function retainVideoExplanationAudio(id: string): Promise<void> {
     state.collector.session.audio = { resourceId: resource.resourceId, bytes: resource.bytes, digest: resource.digest }; state.collector.session.consent!.keepAudio = true; state.collector.session.retentionStatus = 'retained'; installHead(owner, state, resource); await saveVideoEdit(id)
   } finally { if (archived) await getPlatform().system.fs.remove(archived.path); state.busy = false; publish() }
 }
-export async function readVideoExplanationAudio(id: string, entry: TranscriptEntry): Promise<{ bytes: Uint8Array; startSeconds: number; endSeconds: number }> {
-  const owner = requireVideoEditInstance(id); const state = videoExplanationState(owner); if (!state || state.erased || state.collector.session.retentionStatus === 'deleted') throw new Error('原音已删除，不能回听。')
-  if (state.collector.session.retentionStatus === 'retained') await restoreRetainedAudio(owner, state.collector.session)
-  for await (const page of pages(owner, state.collector.session, 'audio')) if (page.kind === 'audio') {
-    const audio = page.entries.find(a => a.audioSegmentRef === entry.audioSegmentRef)
-    if (audio) return { bytes: await getPlatform().audioEdit.recording.read(state.collector.session.id, audio.audioSegmentRef), startSeconds: (entry.startSample-audio.startSample)/audio.sampleRate, endSeconds: (entry.endSample-audio.startSample)/audio.sampleRate }
-  }
-  throw new Error('词稿对应的录音块缺失。')
-}
 export async function retryVideoExplanationSave(id: string): Promise<void> {
   const owner = requireVideoEditInstance(id); const runtime = states.get(owner); if (!runtime || runtime.state.busy) throw new Error('请等待当前处理结束。')
   await flushWrites(runtime); await runtime.state.collector.flush(); installHead(owner, runtime.state); await saveVideoEdit(id); runtime.state.message = undefined; publish()

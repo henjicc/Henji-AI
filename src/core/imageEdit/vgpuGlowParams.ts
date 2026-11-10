@@ -77,10 +77,6 @@ export function applyVgpuGlowLook(look: VgpuGlowLook): VgpuGlowOperationParams {
   return { ...PRESETS[look] };
 }
 
-export function hasVgpuGlowEffect(params: VgpuGlowOperationParams): boolean {
-  return params.intensity > 0;
-}
-
 /**
  * 替换一侧色光；如果新颜色已被另一侧占用，则原子交换两侧，避免产生无效同色状态。
  */

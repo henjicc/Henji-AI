@@ -6,9 +6,6 @@ export {
   ImageEditorGpuRasterPipelineV3 as ImageEditorGpuRasterCompositorV3,
 } from './imageEditorGpuRasterPipelineV3'
 export type {
-  ImageEditorGpuRasterCompositorOptionsV3,
-  ImageEditorGpuRasterCompositorStatsV3,
   ImageEditorGpuRasterCompositorV3Like,
-  ImageEditorGpuRasterFrameV3,
   ImageEditorGpuRasterTextureV3,
 } from './imageEditorGpuRasterPipelineContractsV3'

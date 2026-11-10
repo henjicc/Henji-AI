@@ -88,5 +88,4 @@ export const llmModelConfigSchema = z.object({
   reasoning: llmReasoningSchema.optional(),
   enabled: z.boolean(),
 }).strict()
-export type LlmModelConfig = z.infer<typeof llmModelConfigSchema>
 

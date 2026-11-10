@@ -19,14 +19,6 @@ export function transactionFailureFacts(result: Extract<ApplicationTransactionRe
     effects, undoRef, partial, persistence, verification, recoveryVerification, receiptTruncation, replayMutation: false })
 }
 
-/** 类型化的传输错误；只允许合法的有界事实跨越既有进程边界。 */
-export class ApplicationTransactionFactsError extends Error {
-  constructor(message: string, readonly transaction: ApplicationTransactionFailureFacts) {
-    super(message)
-    this.name = 'ApplicationTransactionFactsError'
-  }
-}
-
 /** 未通过最终验收的实际变化不能标记 verified；共用同一账本形状。 */
 export function failureObservedEffects(facts: ApplicationTransactionFailureFacts): ApplicationObservedEffect[] {
   const chunks = <T>(items: T[]): T[][] => items.length ? Array.from({ length: Math.ceil(items.length / 128) },

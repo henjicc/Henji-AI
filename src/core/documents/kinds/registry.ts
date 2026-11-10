@@ -71,11 +71,6 @@ export function documentNameForKind(kind: Pick<DocumentKindDescriptor, 'extensio
   return null
 }
 
-/** 文件用的是旧扩展名（保存时应换成当前扩展名）。 */
-export function usesLegacyDocumentExtension(kind: Pick<DocumentKindDescriptor, 'extension' | 'legacyExtensions'>, fileName: string): boolean {
-  return documentNameFromFileName(fileName, kind.extension) === null && documentNameForKind(kind, fileName) !== null
-}
-
 class DocumentKindError extends Error {
   constructor(message: string) {
     super(message)

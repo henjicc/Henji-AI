@@ -10,7 +10,6 @@ import { readVideoEditData, splitVideoEditRef } from '@/features/videoEdit/appli
 import { selectVideoEditSubtitle } from '@/features/videoEdit'
 import type { CapabilityExecutionContext } from '@/features/application-control/capabilities/handlerTypes'
 
-export type { ApplicationSurfaceDefinition } from '@/features/navigation/application/index'
 export { listApplicationSurfaces }
 
 type SurfaceLogContext = Pick<CapabilityExecutionContext, 'requestId' | 'taskId'>

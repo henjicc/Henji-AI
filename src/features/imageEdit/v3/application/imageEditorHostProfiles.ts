@@ -38,14 +38,6 @@ export interface ImageEditorCapabilityReadinessV3 {
   reason?: string;
 }
 
-/** Carries a structured host limitation across non-React preparation code. */
-export class ImageEditorReadinessErrorV3 extends Error {
-  constructor(readonly readiness: ImageEditorCapabilityReadinessV3) {
-    super(readiness.reason ?? readiness.reasonKey ?? readiness.state);
-    this.name = 'ImageEditorReadinessErrorV3';
-  }
-}
-
 interface ImageEditorCapabilityV3<TId extends string> {
   id: TId;
   readiness: ImageEditorCapabilityReadinessV3;

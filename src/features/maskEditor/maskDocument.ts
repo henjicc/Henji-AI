@@ -2,7 +2,6 @@ import type {
   MaskEditorDocument,
   MaskMark,
   MaskPoint,
-  MaskShape,
   MaskShapeKind,
   MaskStroke,
 } from './types';
@@ -99,10 +98,6 @@ function isValidShapePoints(kind: MaskShapeKind, points: MaskPoint[]): boolean {
 
 export function isMaskStroke(mark: MaskMark): mark is MaskStroke {
   return mark.kind === undefined || mark.kind === 'stroke';
-}
-
-export function isMaskShape(mark: MaskMark): mark is MaskShape {
-  return !isMaskStroke(mark);
 }
 
 export interface MaskShapeBounds {

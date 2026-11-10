@@ -14,7 +14,6 @@ import { CameraStageSetCollectionExecutor, CameraStageSetGenerateOperationExecut
 import { registerCameraStageCapabilityHandlers } from './registerCameraStageCapabilityHandlers'
 
 import { dependencies } from './cameraStageControlDependencies'
-export { configureCameraStageControlDependencies } from './cameraStageControlDependencies'
 
 export const cameraStageApplicationDomain: ApplicationDomainModule = {
   id: 'cameraStage',

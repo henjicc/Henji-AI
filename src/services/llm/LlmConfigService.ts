@@ -1,4 +1,3 @@
-import { createLogger } from '@/core/logging'
 import { subscribeRestored } from '@/services/recycle'
 import {
   DEFAULT_DEEPSEEK_BASE_URL,
@@ -47,8 +46,6 @@ import {
   normalizePromptProfileWithBuiltInMigration,
   normalizeTextProcessingPromptTemplates,
 } from './promptConfigurationNormalization'
-
-const logger = createLogger('services.llm.LlmConfigService')
 
 function normalizeBaseUrl(baseUrl?: string): string | undefined {
   const trimmed = baseUrl?.trim()
@@ -507,9 +504,3 @@ function getLlmConfigService(): LlmConfigService {
 
 export const llmConfigService = getLlmConfigService()
 
-export function getErrorMessage(error: DynamicValue): string {
-  if (error instanceof Error) return error.message
-  if (typeof error === 'string') return error
-  logger.error('[LlmConfigService] Unknown error', error)
-  return 'Unknown error'
-}

@@ -15,7 +15,7 @@ import { codeMaterialVersion } from '@/core/videoEdit/codeMaterialDocument'
 import { openVideoEditCodeProjectFile } from './videoEditCodeProjectView'
 import { editVideoEditCodeElementClip as edit, readVideoEditCodeElementEdit, resolveVideoEditCodeElementClip as resolve, videoEditCodeElementEffectStates, videoEditCodeElementKind, writeVideoEditCodeElementGroups, type VideoEditCodeElementGroups, type VideoEditCodeElementTarget } from './videoEditCodeElementWrites'
 
-export { readVideoEditCodeElementEdit, videoEditCodeElementKind, videoEditCodeElementEffectStates, validateVideoEditElementEffectWrite, writeVideoEditCodeElementGroups, videoEditClipEditsBase, type VideoEditCodeElementTarget, type VideoEditCodeElementGroups } from './videoEditCodeElementWrites'
+export { readVideoEditCodeElementEdit, videoEditCodeElementKind, videoEditCodeElementEffectStates, type VideoEditCodeElementTarget, type VideoEditCodeElementGroups } from './videoEditCodeElementWrites'
 
 function effectOverrides(override: CodeElementOverride): Record<string, CodeElementEffectOverride> {
   return Object.assign(Object.create(null) as Record<string, CodeElementEffectOverride>, structuredClone(override.effects ?? {}))

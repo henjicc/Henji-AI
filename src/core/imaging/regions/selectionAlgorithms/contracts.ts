@@ -1,4 +1,4 @@
-import type { Coverage, RegionEvaluationContext, RegionGrid, RegionPoint, RegionRect, RegionSnapshot } from '../contracts';
+import type { Coverage, RegionEvaluationContext, RegionGrid, RegionPoint, RegionRect } from '../contracts';
 
 /** Straight linear-light working-space RGBA. Matching never clips HDR values. */
 export interface SelectionPixels extends RegionRect { data: Float32Array }
@@ -21,4 +21,3 @@ export interface SelectionCoverageSource {
   grid: RegionGrid;
   read(region: RegionRect, context: RegionEvaluationContext): Coverage | Promise<Coverage>;
 }
-export type SelectionAlgorithmResult = RegionSnapshot;

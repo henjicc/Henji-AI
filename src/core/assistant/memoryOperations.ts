@@ -1,6 +1,5 @@
 import { z } from 'zod'
 import { assertMemoryContentSafe } from './memoryPolicy'
-export { assertMemoryContentSafe } from './memoryPolicy'
 import { memoryEntriesSchema, memoryEntryInputSchema, memoryTargetSchema, type MemoryEntry, type MemoryHistoryEntry, type MemoryLayer } from './memoryEntries'
 
 export const memoryWriteSchema = z.object({

@@ -7,12 +7,9 @@
 
 import type { CanvasNodeType } from './canvasNodes'
 import { getCanvasNodeDefinition } from './nodeRegistry'
-export { mediaSourcePortId, parseMediaSourcePortId } from './nodePorts'
 
 export type { SocketType } from '@/core/types/SocketType'
 export {
-  deriveSocketType,
-  isSocketCompatible,
   getSocketColor,
 } from '@/core/types/SocketType'
 

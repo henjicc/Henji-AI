@@ -18,7 +18,6 @@ export const recordingDirectorRunSchema = z.object({
   takes: z.array(z.object({ stepId: z.string(), identity: z.string(), taskId: z.string().optional(), path: z.string().optional(), durationUs: z.number().int().positive().optional() }).strict()).max(40).default([]),
   redubs: z.array(z.object({ clipId: z.string(), documentId: z.string(), identity: z.string(), taskId: z.string().optional(), path: z.string().optional(), durationUs: z.number().int().positive().optional() }).strict()).max(1000).optional(),
 }).strict()
-export type RecordingDirector = z.infer<typeof recordingDirectorSchema>
 export type RecordingVoice = z.infer<typeof recordingVoiceSchema>
 export const recordingDirectorPlanSchema = z.object({ director: recordingDirectorSchema, operationScript: recordingScriptSchema }).strict().superRefine((value, ctx) => {
   const steps = value.operationScript.steps

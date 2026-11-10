@@ -5,6 +5,4 @@
  */
 
 export { LinkageEngine } from './LinkageEngine'
-export { AutoSwitchManager } from './AutoSwitchManager'
-export * from './smartMatch'
 export * from './effects'

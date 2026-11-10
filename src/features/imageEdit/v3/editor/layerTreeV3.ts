@@ -133,15 +133,6 @@ export function flattenImageEditLayerTreeV3(
   return rows
 }
 
-export function getImageEditLayerContainerV3(
-  layers: readonly ImageEditLayerV3[],
-  parentId: string | null,
-): readonly ImageEditLayerV3[] | null {
-  if (parentId === null) return layers
-  const location = findImageEditLayerLocationV3(layers, parentId)
-  return location?.layer.type === 'group' ? location.layer.children : null
-}
-
 export function canGroupImageEditLayersV3(
   layers: readonly ImageEditLayerV3[],
   layerIds: readonly string[],

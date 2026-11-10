@@ -11,8 +11,6 @@ import { ImageEditSelectionRasterClientV3 } from '../execution/selectionRasterCl
 import { findImageEditV3LiveLayer } from './imageEditDocumentRefs'
 import type { ImageEditCommandBusV3 } from './imageEditCommandBus'
 
-export { previewAdvancedImageEditSelectionV3, commitAdvancedImageEditSelectionV3 } from '../tools/selectionAdvanced/service'
-export type { AdvancedSelectionOperation, AdvancedSelectionOptions, AdvancedSelectionPreview } from '../tools/selectionAdvanced/service'
 
 const logger = createLogger('features.image_edit_v3.selection')
 

@@ -12,7 +12,6 @@ export {
   defineSkeletonDocumentKind,
   documentNameForKind,
   readableDocumentExtensions,
-  usesLegacyDocumentExtension,
   type DocumentKindDescriptor,
   type DocumentKindRegistry,
 } from './registry'

@@ -5,17 +5,14 @@ import { renderImagePreviewDataUrl, type ImagePreviewMime } from '@/core/imageEd
 const logger = createLogger('features.canvas.application.imageData')
 
 import {
-  prepareNodeImageBinary,
   prepareNodeImageSource,
 } from '@/commands/image';
 import {
   blobToDataUrl,
   canvasToDataUrl,
   imageUrlToDataUrl,
-  isLikelyLocalImagePath,
   loadImageElement,
   persistImageLocally,
-  readFileAsDataUrl,
   resolveImageDisplayUrl,
 } from '@/services/imageSource';
 
@@ -76,72 +73,6 @@ function isNativeImageRuntime(): boolean {
 
 export function shouldUseOriginalImageByZoom(zoom: number): boolean {
   return Number.isFinite(zoom) && zoom >= ORIGINAL_IMAGE_ZOOM_THRESHOLD;
-}
-
-function resolveFileExtension(file: File): string {
-  const mime = file.type.toLowerCase();
-  if (mime === 'image/png') return 'png';
-  if (mime === 'image/jpeg' || mime === 'image/jpg') return 'jpg';
-  if (mime === 'image/webp') return 'webp';
-  if (mime === 'image/gif') return 'gif';
-  if (mime === 'image/bmp') return 'bmp';
-  if (mime === 'image/tiff') return 'tiff';
-  if (mime === 'image/avif') return 'avif';
-
-  const name = file.name.trim();
-  const dot = name.lastIndexOf('.');
-  if (dot >= 0 && dot < name.length - 1) {
-    return name.slice(dot + 1).toLowerCase();
-  }
-  return 'png';
-}
-
-export async function prepareNodeImageFromFile(
-  file: File,
-  maxPreviewDimension = DEFAULT_PREVIEW_MAX_DIMENSION
-): Promise<PreparedNodeImage> {
-  const started = performance.now();
-  const nativeFilePath = (file as File & { path?: string }).path;
-  const normalizedPath = typeof nativeFilePath === 'string' ? nativeFilePath.trim() : '';
-  const canUseLocalPath =
-    normalizedPath.length > 0
-    && (isLikelyLocalImagePath(normalizedPath) || normalizedPath.toLowerCase().startsWith('file://'));
-  if (canUseLocalPath) {
-    const prepared = await prepareNodeImage(normalizedPath, maxPreviewDimension);
-    logger.info(
-      `[upload-perf][imageData] prepareNodeImageFromFile path-mode name="${file.name}" size=${file.size}B elapsed=${Math.round(performance.now() - started)}ms`
-    );
-    return prepared;
-  }
-
-  if (isNativeImageRuntime()) {
-    const safeMaxDimension = Math.max(64, Math.floor(maxPreviewDimension));
-    const readStarted = performance.now();
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const readElapsed = Math.round(performance.now() - readStarted);
-    const extension = resolveFileExtension(file);
-    const nativeStarted = performance.now();
-    const prepared = await prepareNodeImageBinary(bytes, extension, safeMaxDimension);
-    const nativeElapsed = Math.round(performance.now() - nativeStarted);
-    logger.info(
-      `[upload-perf][imageData] prepareNodeImageFromFile binary-mode name="${file.name}" size=${file.size}B readArrayBuffer=${readElapsed}ms nativePrepare=${nativeElapsed}ms total=${Math.round(performance.now() - started)}ms`
-    );
-    return {
-      imageUrl: prepared.imagePath,
-      previewImageUrl: prepared.previewImagePath,
-      aspectRatio: prepared.aspectRatio,
-      createdFilePaths: prepared.createdFilePaths,
-    };
-  }
-
-  const dataUrlStarted = performance.now();
-  const source = await readFileAsDataUrl(file);
-  const dataUrlElapsed = Math.round(performance.now() - dataUrlStarted);
-  const prepared = await prepareNodeImage(source, maxPreviewDimension);
-  logger.info(
-    `[upload-perf][imageData] prepareNodeImageFromFile dataurl-fallback name="${file.name}" size=${file.size}B readDataUrl=${dataUrlElapsed}ms total=${Math.round(performance.now() - started)}ms`
-  );
-  return prepared;
 }
 
 export async function detectAspectRatio(imageUrl: string): Promise<string> {

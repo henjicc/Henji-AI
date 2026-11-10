@@ -34,7 +34,6 @@ function checkComponentCycles(value: unknown, context: z.RefinementCtx): unknown
   }
   return value
 }
-export const codeComponentPinSchema: z.ZodType<CodeComponentPin> = z.preprocess(checkComponentCycles, rawComponentPinSchema)
 export const codeComponentPinsSchema = z.preprocess(checkComponentCycles, z.array(rawComponentPinSchema))
 export const codeFilePathSchema = z.string().min(1).refine(value => /^[a-zA-Z0-9_\-.\u3400-\u9fff/]+\.(?:[cm]?[jt]sx?|json|wgsl|glsl)$/.test(value) && value.split('/').every(part => part !== '.' && part !== '..' && part.length > 0), '文件路径须为版本内的相对 JS、TS、JSON 或着色器路径，只能使用字母、数字、中文、_、-、. 和 /。')
 export const codeSourceHashSchema = z.string().regex(/^[a-f0-9]{64}$/)

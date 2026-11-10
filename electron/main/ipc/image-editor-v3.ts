@@ -76,10 +76,6 @@ export {
   parseImageEditorV3PyramidPrewarmPayload,
   parseImageEditorV3TileBatchPayload,
 } from './image-editor-v3-tile-payloads'
-export {
-  parseImageEditorV3PersistBrushTilesPayload,
-  parseImageEditorV3ReadBrushTilesPayload,
-} from './image-editor-v3-payloads'
 
 const logger = createMainLogger('main.image_editor_v3.ipc')
 interface ImageEditorV3Runtime {

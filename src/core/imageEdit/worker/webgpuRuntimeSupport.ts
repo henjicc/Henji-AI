@@ -204,9 +204,3 @@ export function unavailableCapabilities(
   }
 }
 
-export function assertNotCancelled(isCancelled: () => boolean): void {
-  if (isCancelled()) {
-    throw new DOMException('图片编辑任务已取消', 'AbortError')
-  }
-}
-

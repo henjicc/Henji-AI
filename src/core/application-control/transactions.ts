@@ -79,7 +79,6 @@ export const applicationOperationProgressSchema = z.object({
   cancelable: z.boolean(),
   updatedAt: z.string().datetime(),
 }).strict()
-export type ApplicationOperationProgress = z.infer<typeof applicationOperationProgressSchema>
 
 const applicationPropertyMutationSchema = z.object({
   propertyId: applicationPropertyIdSchema,
@@ -224,7 +223,6 @@ export const applicationReceiptTruncationSchema = z.object({
   omitted: z.record(z.string(), z.number().int().positive()),
   note: z.string().min(1).max(500),
 }).strict()
-export type ApplicationReceiptTruncation = z.infer<typeof applicationReceiptTruncationSchema>
 
 export const applicationTransactionResultSchema = z.discriminatedUnion('status', [
   z.object({

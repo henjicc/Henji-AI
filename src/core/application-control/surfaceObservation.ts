@@ -40,29 +40,3 @@ export const surfaceCaptureResultSchema = z.object({
 }).strict()
 export type SurfaceCaptureResult = z.infer<typeof surfaceCaptureResultSchema>
 
-const surfaceObservationVerificationSchema = z.enum([
-  'structured',
-  'visual_pending_model',
-  'visual_verified_by_primary',
-  'visual_verified_by_observer',
-  'unverified',
-])
-export type SurfaceObservationVerification = z.infer<typeof surfaceObservationVerificationSchema>
-
-/**
- * 待模型读取的视觉观察结果的判定契约。
- *
- * Runner 用它决定哪些工具结果要转成真实媒体送进下一轮请求。以契约而不是工具名
- * 判定：任何观察能力只要返回 `verificationKind: 'visual_pending_model'` 加一个
- * 合法附件，像素就一定会进模型；反过来，产不出附件的能力也就不会让模型误以为
- * “已经看过画面”。
- */
-const pendingVisualObservationSchema = z.object({
-  verificationKind: z.literal('visual_pending_model'),
-  attachment: z.unknown(),
-})
-
-export function readPendingVisualObservation(output: unknown): unknown | null {
-  const parsed = pendingVisualObservationSchema.safeParse(output)
-  return parsed.success ? parsed.data.attachment : null
-}

@@ -1,9 +1,9 @@
 import type {VectorPathOperand} from '../../imaging/vectorContent';
 import type { Deformation } from '../../imaging/transforms';
 import type { ImageEditVectorLayerV3 } from './layerEntries/vector';
-export type { ImageEditVectorLayerV3, ImageEditTextLayerV3, ImageEditShapeLayerV3, ImageEditPathLayerV3 } from './layerEntries/vector';
+export type { ImageEditVectorLayerV3, ImageEditTextLayerV3 } from './layerEntries/vector';
 import type { ImageEditSmartLayerV3 } from './smartContent/types';
-export type { ImageEditSmartLayerV3, ImageEditSmartContentV3, ImageEditSmartOriginV3 } from './smartContent/types';
+export type { ImageEditSmartLayerV3 } from './smartContent/types';
 
 export type ImageEditBlendModeV3 =
   | 'normal'
@@ -155,10 +155,6 @@ export function createImageEditLayerCommonV3(
   };
 }
 
-export function isImageEditGroupLayerV3(layer: ImageEditLayerV3): layer is ImageEditGroupLayerV3 {
-  return layer.type === 'group';
-}
-
 export function isImageEditSparseMaskReferenceV3(
   mask: ImageEditMaskReferenceV3,
 ): mask is ImageEditSparseMaskReferenceV3 {
@@ -209,11 +205,6 @@ export function collectImageEditMaskResourceIdsV3(
   mask: ImageEditMaskReferenceV3,
 ): string[] {
   return [...new Set(Object.values(mask.tiles))];
-}
-
-/** 用于会话/实体稳定寻址，禁止把返回值当成像素资源引用。 */
-export function getImageEditMaskIdentityV3(mask: ImageEditMaskReferenceV3): string {
-  return mask.maskId;
 }
 
 export function cloneImageEditMaskReferenceV3(

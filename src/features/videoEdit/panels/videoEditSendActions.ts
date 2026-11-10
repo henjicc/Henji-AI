@@ -2,12 +2,10 @@ import { notificationText } from '@/i18n/notifications'
 import type { VideoEditCreativeSourceRequest } from '@/core/videoEdit/creativeResult'
 import type { MenuItem } from '@/hooks/useContextMenu'
 import { planVideoEditSend, sendCreativeResultToVideoEdit, type VideoEditSendMediaKind, type VideoEditSendMode } from '../application/videoEditResultSend'
-import type { VideoEditResultReceipt, VideoEditResultTarget } from '../application/videoEditResultTarget'
+import type { VideoEditResultReceipt } from '../application/videoEditResultTarget'
 
 export type VideoEditSendNotify = (message: string, type?: 'success' | 'error') => void
 export type VideoEditSendSourceResolver = () => VideoEditCreativeSourceRequest | Promise<VideoEditCreativeSourceRequest>
-/** A target frozen by the workspace that started the round trip (e.g. an edited program frame). */
-export interface VideoEditBoundTarget { target: VideoEditResultTarget; label: string }
 
 export const VIDEO_EDIT_SEND_MODES: Array<{ mode: VideoEditSendMode; title: string }> = [{ mode: 'library', title: '加入素材面板' }, { mode: 'overwrite', title: '播放头处覆盖' }, { mode: 'insert', title: '播放头处插入' }, { mode: 'add', title: '加入播放头' }, { mode: 'replace', title: '替换所选片段' }]
 const errorMessage = (error: unknown): string => error instanceof Error ? error.message : String(error)

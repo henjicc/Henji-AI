@@ -78,8 +78,5 @@ export async function resolvePriceEstimateMediaContext(
 }
 
 export type {
-  PricingAudioMetadata,
-  PricingImageMetadata,
   PricingMediaMetadataReaders,
-  PricingVideoMetadata,
 }

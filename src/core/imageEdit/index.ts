@@ -9,7 +9,6 @@ export {
   InvalidVgpuGlowOperationParamsError,
   applyVgpuGlowLook,
   createDefaultVgpuGlowOperationParams,
-  hasVgpuGlowEffect,
   parseVgpuGlowOperationParams,
   replaceVgpuGlowChromaticChannel,
 } from './vgpuGlowParams';

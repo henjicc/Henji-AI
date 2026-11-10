@@ -2,7 +2,6 @@ import { z } from 'zod'
 
 import {
   applicationDataClassSchema,
-  applicationExposureSchema,
   applicationMediaModalitySchema,
   applicationMediaRefSchema,
   applicationRefSchema,
@@ -25,20 +24,6 @@ const applicationObservationTargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('media'), ref: applicationMediaRefSchema }).strict(),
   z.object({ kind: z.literal('surface'), surfaceId: applicationSurfaceIdSchema }).strict(),
 ])
-export type ApplicationObservationTarget = z.infer<typeof applicationObservationTargetSchema>
-
-const applicationObservationProviderDescriptorSchema = z.object({
-  id: applicationStableIdSchema,
-  version: z.number().int().positive(),
-  targetKinds: z.array(z.enum(['entity', 'media', 'surface'])).min(1).max(3),
-  modalities: z.array(applicationMediaModalitySchema).min(1).max(3),
-  dataClasses: z.array(applicationDataClassSchema).min(1).max(4),
-  exposures: z.array(applicationExposureSchema).min(1).max(3),
-  captureScope: z.string().min(1).max(500),
-  maskPolicyId: applicationStableIdSchema,
-  requiresApplicationWindow: z.boolean(),
-}).strict()
-export type ApplicationObservationProviderDescriptor = z.infer<typeof applicationObservationProviderDescriptorSchema>
 
 export const applicationObservationRequestSchema = z.object({
   requestId: z.string().min(1).max(200),
@@ -49,7 +34,6 @@ export const applicationObservationRequestSchema = z.object({
   maxBytes: z.number().int().positive().max(100 * 1024 * 1024),
   maxDurationMs: z.number().int().positive().max(60 * 60 * 1_000).optional(),
 }).strict()
-export type ApplicationObservationRequest = z.infer<typeof applicationObservationRequestSchema>
 
 export const applicationObservationResultSchema = z.object({
   requestId: z.string().min(1).max(200),
@@ -70,5 +54,4 @@ export const applicationObservationResultSchema = z.object({
   )).max(128),
   capturedAt: z.string().datetime(),
 }).strict()
-export type ApplicationObservationResult = z.infer<typeof applicationObservationResultSchema>
 

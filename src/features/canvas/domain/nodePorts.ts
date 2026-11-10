@@ -18,17 +18,6 @@ export function mediaSourcePortId(kind: MediaPortKind): string {
   return `${MEDIA_SOURCE_PORT_PREFIX}${kind}`;
 }
 
-/** 从类型化输出端口反查媒体类型，普通 source 端口返回 null。 */
-export function parseMediaSourcePortId(
-  handleId: string | null | undefined
-): MediaPortKind | null {
-  if (typeof handleId !== 'string' || !handleId.startsWith(MEDIA_SOURCE_PORT_PREFIX)) {
-    return null;
-  }
-  const kind = handleId.slice(MEDIA_SOURCE_PORT_PREFIX.length);
-  return kind === 'image' || kind === 'video' || kind === 'audio' ? kind : null;
-}
-
 export interface NodePorts {
   /** 输出端口（右侧 source handle）产出的媒体类型 */
   source?: {
@@ -78,19 +67,6 @@ export function getSourcePortMediaKind(
 export interface NodeValueOutput {
   socketType: SocketType;
   value: DynamicValue;
-}
-
-/**
- * 上游媒体 → 生成参数协议键的注入规则。
- * 协议键与对话模式 useTaskGeneration 完全一致，由 Electron runtime 统一消费。
- */
-export interface InputInjectionRule {
-  accepts: MediaKind;
-  paramKeys: {
-    list: string;
-    pathList: string;
-  };
-  maxCount?: number;
 }
 
 export function arePortsCompatible(

@@ -7,12 +7,9 @@ import { readUserDataRootSettings, writePersistedDefaultUserDataRoot } from './d
 import { createMainLogger, type MainLogger } from './logging/main-logger'
 
 export {
-  APP_IDENTIFIER,
-  getAppBaseDir,
   getProgramDataDir,
   getProgramFilePath,
   getProgramStoreDir,
-  type ProgramStoreKey,
 } from './appBasePaths'
 
 /*

@@ -11,7 +11,7 @@ import type { VideoEditBuiltinParam, VideoEditBuiltinParams } from '../builtinEf
 import { GL_TRANSITION_CATALOG, GL_TRANSITION_KINDS, type GlTransitionCatalogEntry, type GlTransitionCatalogParam } from './catalog.generated'
 import data from './zh.json'
 
-export { GL_TRANSITION_KINDS, GL_TRANSITIONS_PACKAGE } from './catalog.generated'
+export { GL_TRANSITION_KINDS } from './catalog.generated'
 export type GlTransitionKind = typeof GL_TRANSITION_KINDS[number]
 const GL_TRANSITION_PREFIX = 'gl.'
 

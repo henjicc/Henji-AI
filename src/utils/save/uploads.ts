@@ -215,22 +215,6 @@ export async function saveBytesToUploads(
   return { fullPath: full, displaySrc, relativePath: name }
 }
 
-/**
- * 判断一个路径是否落在本应用托管的 Uploads 目录内。
- *
- * saveUploadVideo 现在可能直接复用用户磁盘上的原始文件路径（见 getPathForFile 快路径），
- * 不再保证"凡是出现在 uploadedXxxFilePaths 里的路径都是 Uploads 目录下的自有副本"。
- * 任何要"删除已上传文件"的清理逻辑（如删除历史任务时清理上传源文件）必须先用这个函数确认
- * 路径在托管目录内，否则可能把用户自己磁盘上的原始文件删掉。
- */
-export async function isWithinUploadsDir(filePath: string): Promise<boolean> {
-  const uploadsPath = await getUploadsPath()
-  const normalize = (p: string): string => p.replace(/\\/g, '/').toLowerCase()
-  const normalizedUploads = normalize(uploadsPath).replace(/\/$/, '')
-  const normalizedTarget = normalize(filePath)
-  return normalizedTarget === normalizedUploads || normalizedTarget.startsWith(`${normalizedUploads}/`)
-}
-
 export async function deleteUploads(paths: string[]): Promise<void> {
   const { getPlatform } = await import('@/platform')
   await getPlatform().media.enqueueRecycle(paths)

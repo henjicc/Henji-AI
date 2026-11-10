@@ -18,7 +18,6 @@ import type {
   CanvasNodeData,
   CanvasNodeType,
   ExportImageNodeResultKind,
-  NodeToolType,
   StoryboardFrameItem,
   UploadPlaceholderResolution,
 } from '@/features/canvas/domain/canvasNodes';
@@ -34,7 +33,6 @@ export type {
   CanvasEdge,
   CanvasNode,
   CanvasNodeData,
-  NodeToolType,
 };
 
 export interface CanvasHistorySnapshot {

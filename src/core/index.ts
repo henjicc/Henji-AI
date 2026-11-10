@@ -8,13 +8,8 @@
 export * from './types'
 
 // 模型注册中心
-export { ModelRegistry, registry } from './ModelRegistry'
+export { registry } from './ModelRegistry'
 
-// 模型验证器
-export { validateModel } from './validators/modelValidator'
-
-// 模型定义辅助函数
-export { defineModel } from './defineModel'
 export * from './modelCatalog/generationModelDescriptions'
 export * from './modelCatalog/applicationModelProfile'
 
@@ -24,9 +19,6 @@ export * from './linkage'
 
 // 模型加载器
 export * from './loaders'
-
-// 国际化辅助
-export * from './i18n'
 
 // 请求构建系统
 export * from './request'
