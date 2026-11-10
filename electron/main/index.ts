@@ -183,7 +183,8 @@ app.whenReady().then(async () => {
   if (dataLocationSetupDir) {
     const chosen = await runDataLocationSetup()
     try { fs.rmSync(dataLocationSetupDir, { recursive: true, force: true }) } catch { /* 临时文件夹留给系统清理。 */ }
-    if (chosen) app.relaunch()
+    // 开发版由启动脚本托管窗口与开发服务器，主进程一退它们就跟着停，自己重启只会得到连不上服务器的白屏。
+    if (chosen && app.isPackaged) app.relaunch()
     app.exit(0)
     return
   }

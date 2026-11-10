@@ -204,6 +204,8 @@ async function runWorkRootRestart({ launch, userDataDir, outDir }) {
     assert.ok(inside(project.path, projectImage.path), `复制进项目的素材应在项目“素材”里：${projectImage.path}`)
     await stubOpenDialog(app, [externalImage, projectImage.path])
     await button(page, '导入').click()
+    // “导入”点开是菜单（导入文件 / 导入文件夹）
+    await page.getByText('导入文件', { exact: true }).click()
     await waitUntil(() => fs.existsSync(edit.path) && readVideoEditFile(edit.path).media.length >= 2, '导入的素材自动保存进剪辑文件', 30000)
     await button(page, '关闭项目').click()
     await button(page, '新建项目').waitFor({ state: 'visible', timeout: 30000 })
@@ -223,7 +225,7 @@ async function runWorkRootRestart({ launch, userDataDir, outDir }) {
     await shot('graphite-settings-before')
     await stubOpenDialog(app, [newRoot])
     await button(page, '更换位置…').click()
-    const confirm = page.getByRole('dialog', { name: '更换作品目录' })
+    const confirm = page.getByRole('dialog', { name: '更换数据目录' })
     await confirm.waitFor({ state: 'visible', timeout: 10000 })
     await confirm.getByText(newRoot, { exact: false }).first().waitFor({ state: 'visible', timeout: 5000 })
     await shot('graphite-confirm')
@@ -294,9 +296,7 @@ async function runWorkRootRestart({ launch, userDataDir, outDir }) {
 
     step('verify-settings')
     await openWorkRootSettings(second)
-    const shown = second.locator('input[data-observation-sensitive]:visible').first()
-    await shown.waitFor({ state: 'visible', timeout: 8000 })
-    assert.equal(await shown.inputValue(), newRoot, '设置里应显示新的作品目录')
+    await waitUntil(() => second.evaluate((root) => [...document.querySelectorAll('input')].some((input) => input.offsetParent !== null && input.value === root), newRoot), '设置里应显示新的数据目录', 8000)
     await button(second, '恢复默认位置').waitFor({ state: 'visible', timeout: 5000 })
     await shot('paper-settings-after')
     await second.keyboard.press('Escape')

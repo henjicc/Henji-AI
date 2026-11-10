@@ -23,7 +23,7 @@
     "workspace-canvas": "Canvas",
     "workspace-video-edit": "Edit",
     "workspace-assets": "Assets",
-    "files-storage": "Works Folder",
+    "files-storage": "Data Folder",
     "files-cache": "Cache",
     "files-upload": "Uploads",
     "files-download": "Downloads",
@@ -265,15 +265,15 @@
   "alerts": {
     "unknownError": "Unknown error",
     "workRoot": {
-      "nested": "The new location cannot be inside the current works folder or contain it. Choose another folder.",
-      "notEmpty": "The selected location is not empty. The works folder must go into an empty or new folder. Choose another folder.",
+      "nested": "The new location cannot be inside the current data folder or contain it. Choose another folder.",
+      "notEmpty": "The selected location is not empty. The data folder must go into an empty or new folder. Choose another folder.",
       "notDirectory": "The selected location is a file, not a folder. Choose another folder.",
-      "insufficientSpace": "There is not enough disk space at the new location. The works folder was not changed.",
-      "inUse": "Some files in the works folder are in use by another program. Close it and try again. The works folder was not changed.",
-      "busy": "Something is still in progress (such as saving generated results or exporting a video or image). Wait for it to finish and try again. The works folder was not changed.",
-      "cancelled": "Cancelled. The works folder was not changed.",
-      "failed": "The works folder was not changed: {{message}}",
-      "openFailed": "Could not open the works folder: {{message}}"
+      "insufficientSpace": "There is not enough disk space at the new location. The data folder was not changed.",
+      "inUse": "Some files in the data folder are in use by another program. Close it and try again. The data folder was not changed.",
+      "busy": "Something is still in progress (such as saving generated results or exporting a video or image). Wait for it to finish and try again. The data folder was not changed.",
+      "cancelled": "Cancelled. The data folder was not changed.",
+      "failed": "The data folder was not changed: {{message}}",
+      "openFailed": "Could not open the data folder: {{message}}"
     }
   },
   "tabs": {
@@ -315,7 +315,7 @@
     },
     "mediaCache": {
       "usageLabel": "Current Usage",
-      "usageInfo": "Render previews, proxies, analysis and other caches live in the hidden \".Henji AI Cache\" folder inside your works folder, on the same disk as your projects. Anything deleted is rebuilt automatically when needed; your work is not affected.",
+      "usageInfo": "Render previews, proxies, analysis and other caches live in the hidden \".cache\" folder inside your data folder. Anything deleted is rebuilt automatically when needed; your work is not affected.",
       "usageValue": "{{used}} of {{budget}}",
       "clearAll": "Clear All",
       "clear": "Clear",
@@ -358,9 +358,9 @@
       }
     },
     "dataPath": {
-      "title": "Works Folder",
-      "pathLabel": "Works folder",
-      "pathHint": "Projects, documents, generated results, uploads, exports, and assistant skills live here. Changing the location moves all of them and restarts the app; program data is stored elsewhere and does not move."
+      "title": "Data Folder",
+      "pathLabel": "Data folder",
+      "pathHint": "Projects, generated results, uploads, exports, plus settings, keys and assistant data all live here. Changing the location moves everything and restarts the app."
     },
     "concurrency": {
       "title": "Concurrency",
@@ -475,7 +475,7 @@
       "failure": {
         "network": "Download failed: couldn't reach the source. Try another download source",
         "checksum": "Download failed: the file was incomplete or modified. Please retry",
-        "disk": "Download failed: couldn't write to the works folder. Check disk space and permissions",
+        "disk": "Download failed: couldn't write to the data folder. Check disk space and permissions",
         "unavailable": "No downloadable files yet"
       }
     },
@@ -640,11 +640,11 @@
     },
     "largeUpload": {
       "title": "Large File Handling",
-      "description": "When uploading local video/audio, files up to 100 MB are always copied into the works folder; larger files follow this strategy.",
+      "description": "When uploading local video/audio, files up to 100 MB are always copied into the data folder; larger files follow this strategy.",
       "strategyLabel": "Large files (over 100 MB)",
       "options": {
         "ask": "Ask every time",
-        "copy": "Copy into works folder",
+        "copy": "Copy into data folder",
         "reference": "Reference the original file"
       },
       "hint": "Referencing skips the copy and is faster, but moving or deleting the original file will break media on the canvas."
@@ -666,17 +666,17 @@
       "confirm": "OK"
     },
     "workRootAlert": {
-      "title": "Works folder"
+      "title": "Data folder"
     },
     "workRootConfirm": {
       "adoptTitle": "Use Existing Data Folder",
       "adoptMessage": "This folder already contains Henji AI data. Henji AI will restart and use the data there; your current data stays where it is and is not moved or deleted.",
-      "title": "Change Works Folder",
+      "title": "Change Data Folder",
       "resetTitle": "Restore Default Location",
-      "message": "Everything open will be saved first, then the whole works folder moves to the location below and Henji AI restarts automatically. This may take a while if you have many works."
+      "message": "Everything open will be saved first, then the whole data folder moves to the location below and Henji AI restarts automatically. This may take a while if you have many works."
     },
     "workRootMove": {
-      "title": "Moving works folder",
+      "title": "Moving data folder",
       "hint": "The app restarts when done. If cancelled or failed, your works stay where they are.",
       "phases": {
         "saving": "Saving open content…",

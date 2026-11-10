@@ -1,4 +1,5 @@
 import { app, session, shell } from 'electron'
+import Database from 'better-sqlite3'
 import path from 'node:path'
 
 import { hasActiveGenerationWork } from '../ai-runtime/runtime'
@@ -6,6 +7,8 @@ import { getProgramDataDir, getUserDataLayout, USER_ROOT_FOLDER_NAMES } from '..
 import { hasDataAt, readDataLocation, SYSTEM_FOLDER, writeDataLocation } from '../appBasePaths'
 import { getDocumentService } from '../documents/runtime'
 import { createMainLogger } from '../logging/main-logger'
+import { assertDatabaseVersionSupported } from '../db-migrations'
+import { PersistenceError } from '../../../../src/core/persistence/migrations'
 import { MEDIA_CACHE_FOLDER_NAMES } from '../media/media-cache'
 import { findWorkRootBusyReason, registerWorkRootBusyProbe } from './busy-probes'
 import { createWorkRootService, type WorkRootService } from './service'
@@ -45,7 +48,22 @@ export function getWorkRootService(): WorkRootService {
     },
     // 上次更换数据目录后程序资料还留在原处时，位置文件是唯一记着“作品在哪、程序资料在哪”的地方：
     // 这时再切换会把当前数据拆成认不出来的两半，先重启让它搬完。
-    adoptBlockedReason: () => readDataLocation().systemDir ? '上一次更换数据目录还没有收尾，请重新启动痕迹AI 后再试' : null,
+    adoptBlockedReason: (root) => {
+      if (readDataLocation().systemDir) return '上一次更换数据目录还没有收尾，请重新启动痕迹AI 后再试'
+      // 切过去之后才发现打不开就回不来了（重启后进不了设置）：先看那份数据是不是更新版本的痕迹AI 建的。
+      let target: Database.Database | null = null
+      try {
+        target = new Database(path.join(root, SYSTEM_FOLDER, 'henji.db'), { readonly: true, fileMustExist: true })
+        assertDatabaseVersionSupported(target)
+        return null
+      } catch (error) {
+        if (error instanceof PersistenceError && error.code === 'newer-version') return '那份数据由更新版本的痕迹AI 创建，请先升级痕迹AI 再切换'
+        logger.warn('无法检查目标数据目录的数据库', { event: 'work_root.adopt.inspect_failed', error })
+        return '那份数据的数据库无法读取，没有切换'
+      } finally {
+        target?.close()
+      }
+    },
     ensureFolders: () => { getUserDataLayout() },
     refreshIndex: () => getDocumentService().refreshIndex(),
     busyReason: findWorkRootBusyReason,
