@@ -79,7 +79,7 @@ import {
 } from './assistant-cli/arguments'
 import { runAssistantCli } from './assistant-cli/runner'
 import { runAssistantModelVerification } from './assistant-cli/verify-model'
-import { runMediaRecycle } from './services/media-recycle/runtime'
+import { readMediaRecycleHorizon, runMediaRecycle } from './services/media-recycle/runtime'
 import { mediaRecycleLifecycle } from './services/media-recycle/lifecycle'
 import { configureCacheDeletionBoundary } from './services/media-recycle/cache-deletion'
 import { managedMediaRoots } from './services/media-recycle/queue'
@@ -268,16 +268,14 @@ app.whenReady().then(async () => {
     return
   }
 
+  let mediaRecycleHorizon = 0
   let releaseStartup!: () => void
   const startupReady = new Promise<void>(resolve => { releaseStartup = resolve })
   const mainWindow = createWindow({
     presentation: resolveWindowPresentationMode(),
     beforeRendererLoad: async () => {
       try {
-        // 回收失败时什么都没删，跳过本次即可；不能因此让应用打不开。
-        await mediaRecycleLifecycle.startup(runMediaRecycle).catch(error => {
-          createMainLogger('main.media_recycle').error('启动媒体回收失败，本次跳过', { event: 'media_recycle.startup.failed', error })
-        })
+        mediaRecycleHorizon = readMediaRecycleHorizon()
         // External clients and document indexing share the renderer admission gate.
         registerMcpIpc({ resident: true })
         scheduleStartupDocumentIndexScan()
@@ -291,8 +289,18 @@ app.whenReady().then(async () => {
     },
   })
   watchApplicationHostRenderer(mainWindow.webContents)
-  // 压缩会同步占住主进程约一秒，放在首屏加载完成之后。
-  mainWindow.webContents.once('did-finish-load', () => { if (!isCommandLineProcessRunning()) compactDatabaseIfFragmented() })
+  // 压缩会同步占住主进程约一秒，放在首屏加载完成之后。媒体回收按行号分页读候选，排在压缩之后。
+  // 命令行进程的隐藏界面里可能有未保存的引用，它在运行时两件都不做。
+  mainWindow.webContents.once('did-finish-load', () => {
+    if (isCommandLineProcessRunning()) {
+      createMainLogger('main.media_recycle').info('命令行进程在运行，本次不回收媒体', { event: 'media_recycle.sweep.skipped', context: { reason: 'command-line-process' } })
+      return
+    }
+    compactDatabaseIfFragmented()
+    void mediaRecycleLifecycle.runInBackground(signal => runMediaRecycle(signal, mediaRecycleHorizon)).catch(error => {
+      createMainLogger('main.media_recycle').warn('后台媒体回收失败，下次启动再试', { event: 'media_recycle.sweep.failed', error })
+    })
+  })
   app.on('second-instance', () => {
     const window = mainWindow.isDestroyed() ? BrowserWindow.getAllWindows()[0] : mainWindow
     if (!window) return
@@ -326,11 +334,6 @@ app.on('window-all-closed', () => {
 bindApplicationShutdown(app, [disposeFonts, closeRecordingControl, stopWebReplayService, disposeWorkRootChange, disposeTracking, disposeSmartRegions, disposeLocalModels, disposeEmbeddedAgent, disposeMcp, disposeImageEditorV3Ipc], (error) => {
   createMainLogger('application.shutdown').error('应用服务退出清理失败', { event: 'application.shutdown.failed', error })
 }, async () => {
-  try {
-    if (isAssistantCliMode() || process.argv.includes('--verify-model')) return
-    const outcome = await mediaRecycleLifecycle.exit(runMediaRecycle)
-    createMainLogger('main.media_recycle').info('退出媒体回收结束', { event: 'media_recycle.exit.completed', context: { outcome } })
-  } finally {
-    closeDb()
-  }
+  mediaRecycleLifecycle.stop()
+  closeDb()
 })

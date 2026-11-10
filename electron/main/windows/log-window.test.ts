@@ -7,7 +7,7 @@ type LogWindowMock = EventEmitter & {
   close(): void
   webContents: EventEmitter & { send: ReturnType<typeof vi.fn>; setWindowOpenHandler: ReturnType<typeof vi.fn> }
 }
-const state = vi.hoisted(() => ({ opened: vi.fn(), closed: vi.fn(), saved: vi.fn(), windows: [] as LogWindowMock[] }))
+const state = vi.hoisted(() => ({ windows: [] as LogWindowMock[] }))
 vi.mock('electron', async () => {
   const { EventEmitter } = await import('node:events')
   class MockWindow extends EventEmitter {
@@ -35,7 +35,6 @@ vi.mock('electron', async () => {
   }
   return { BrowserWindow: MockWindow, screen: { getPrimaryDisplay: () => ({ workArea: {} }) } }
 })
-vi.mock('../services/media-recycle/lifecycle', () => ({ mediaRecycleLifecycle: state }))
 vi.mock('../services/window-appearance', () => ({ windowAppearance: { getBackgroundColor: () => '' } }))
 vi.mock('../services/logging/main-logger', () => ({ createMainLogger: () => ({ warn: vi.fn() }) }))
 vi.mock('../app-icon', () => ({ resolveAppIconPath: () => undefined }))
@@ -45,7 +44,7 @@ import { closeLogWindow, openLogWindow } from './log-window'
 
 afterEach(() => { closeLogWindow(); vi.clearAllMocks(); vi.unstubAllEnvs() })
 describe('独立日志窗口', () => {
-  it.each(['直接关闭', '主窗口联动关闭'])('%s 保留状态广播，不经过保存屏障、不参与媒体回收会话', (mode) => {
+  it.each(['直接关闭', '主窗口联动关闭'])('%s 保留状态广播，不经过保存屏障', (mode) => {
     openLogWindow()
     const win = state.windows.at(-1)!
     win.emit('resize')
@@ -54,9 +53,6 @@ describe('独立日志窗口', () => {
     else closeLogWindow()
     expect(win.prevented).not.toHaveBeenCalled()
     expect(win.destroyed).toBe(true)
-    expect(state.opened).not.toHaveBeenCalled()
-    expect(state.closed).not.toHaveBeenCalled()
-    expect(state.saved).not.toHaveBeenCalled()
     openLogWindow()
     expect(state.windows.at(-1)).not.toBe(win)
   })

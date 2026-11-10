@@ -12,7 +12,7 @@ vi.mock('../image-editor-v3/resource-media-url', () => ({ resolveImageEditorV3Re
 import { collectDocumentReferences, decodeReferenceValues, recordReferences, releaseDocumentSubmissionReferences } from './providers'
 import { databaseLocationContext } from '../db-locations'
 import * as scanner from './file-scanner'
-import { MediaRecycleDeadline } from './lifecycle'
+import { MediaRecycleStopped } from './lifecycle'
 import { collectUnreferencedMedia } from './collector'
 import { canonicalPath, fileIdentity } from './paths'
 import { buildProjectManifest } from '../../../../src/core/documents/projectManifest'
@@ -26,7 +26,7 @@ it('项目已从索引移除后，回收副本仍按原项目解码相对媒体�
   vi.mocked(databaseLocationContext).mockReturnValue({ style: process.platform === 'win32' ? 'win32' : 'posix', userRoot: path.join(root, 'user'), projects: [] })
   vi.spyOn(scanner, 'scanReferenceFiles').mockImplementationOnce(async (_roots, _extensions, _signal, consume) => {
     await consume(path.join(backup, '剪辑.hjvideo'), ['henji:/素材/旁白.wav'])
-    return { skippedLinks: [], unreadableLinks: [] }
+    return { skippedLinks: [], unreadableLinks: [], missingRoots: [] }
   })
   expect((await collectDocumentReferences(new AbortController().signal)).references).toEqual([path.join(target, '素材', '旁白.wav')])
 })
@@ -52,7 +52,7 @@ it('没有待交接的生成回执时不对所有文档引用做文件查询', a
 
 it('最后一个引用解析期间截止后不再查询数据库上下文', async () => {
   mocks.getDb.mockReturnValue({ prepare: () => ({ get: () => ({ pending: true }) }) })
-  const controller = new AbortController(); const error = new MediaRecycleDeadline()
+  const controller = new AbortController(); const error = new MediaRecycleStopped()
   vi.spyOn(fs, 'realpath').mockImplementationOnce(async () => { controller.abort(error); return path.resolve('held.png') })
   await expect(releaseDocumentSubmissionReferences([path.resolve('held.png')], controller.signal)).rejects.toBe(error)
   expect(databaseLocationContext).not.toHaveBeenCalled()
@@ -62,8 +62,8 @@ it('链接目标不可读时继续其他普查，但保护全部已登记媒体'
   const held = 'D:/user/generated/held.png'
   mocks.getDb.mockReturnValue({ prepare: (sql: string) => ({ all: () => sql.includes('media_recycle_owned') ? [{ path: held }] : [] }) })
   vi.mocked(databaseLocationContext).mockReturnValue(context)
-  vi.spyOn(scanner, 'scanReferenceFiles').mockResolvedValue({ skippedLinks: ['D:/unreadable'], unreadableLinks: ['D:/unreadable'] })
-  expect(await collectDocumentReferences(new AbortController().signal)).toEqual({ references: [], protection: [held] })
+  vi.spyOn(scanner, 'scanReferenceFiles').mockResolvedValue({ skippedLinks: ['D:/unreadable'], unreadableLinks: ['D:/unreadable'], missingRoots: [] })
+  expect(await collectDocumentReferences(new AbortController().signal)).toEqual({ references: [], protection: [held], missingRoots: [] })
   expect(mocks.warn).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ event: 'media_recycle.references.link_skipped', context: expect.objectContaining({ protectOwnedMedia: true }) }))
 })
 
@@ -86,7 +86,7 @@ it('悬空链接后有作品时，本轮不回收任何已登记媒体', async (
   expect(mocks.warn).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ event: 'media_recycle.references.link_skipped', context: { paths: [link], protectOwnedMedia: true } }))
   const trashItem = vi.fn(); const forget = vi.fn()
   const identity = fileIdentity(await fs.stat(held))
-  const result = await collectUnreferencedMedia({ roots: async () => [generated], revision: () => 'stable', log: vi.fn(), trashItem,
+  const result = await collectUnreferencedMedia({ roots: async () => [generated], log: vi.fn(), trashItem,
     providers: [{ id: 'documents', collect: async () => [...documents.references, ...documents.protection] }],
     store: { candidates: async function* () { yield { id: 1, paths: [held] }; yield { id: 2, paths: [unused] } }, identity: () => identity, forget },
   }, signal)
@@ -110,7 +110,7 @@ it('残留项目素材不妨碍无关无人引用的托管候选回收', async (
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-provider-')); directories.push(root)
   const file = path.join(root, 'unused.png'); await fs.writeFile(file, 'unused')
   const key = await canonicalPath(file); const identity = fileIdentity(await fs.stat(file)); const forget = vi.fn()
-  const result = await collectUnreferencedMedia({ roots: async () => [root], revision: () => 'stable', log: vi.fn(), trashItem: file => fs.rename(file, `${file}.trashed`),
+  const result = await collectUnreferencedMedia({ roots: async () => [root], log: vi.fn(), trashItem: file => fs.rename(file, `${file}.trashed`),
     providers: [{ id: 'assets', collect: async () => recordReferences('assets', { id: 'a', file_path: 'henji://project/gone/a.png' }, context) }],
     store: { candidates: async function* () { yield { id: 1, paths: [file] } }, identity: value => value === key ? identity : undefined, forget },
   }, new AbortController().signal)

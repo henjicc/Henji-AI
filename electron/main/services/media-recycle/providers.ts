@@ -111,7 +111,7 @@ export async function collectSqlReferences(source: keyof typeof MEDIA_REFERENCE_
 }
 
 /** Enumerate disk roots as well as the index: index refresh can be stale or partial. */
-export async function collectDocumentReferences(signal: AbortSignal, onlyRoot?: string): Promise<{ references: string[]; protection: string[] }> {
+export async function collectDocumentReferences(signal: AbortSignal, onlyRoot?: string): Promise<{ references: string[]; protection: string[]; missingRoots: string[] }> {
   signal.throwIfAborted()
   const db = getDb()
   const context = databaseLocationContext(db)
@@ -152,5 +152,6 @@ export async function collectDocumentReferences(signal: AbortSignal, onlyRoot?: 
   // 无法判断可读性的真实链接可能仍保护任意托管媒体；普查继续，但本轮保守保护全部已登记文件。
   const protection = scan.unreadableLinks.length ? (db.prepare('SELECT path FROM media_recycle_owned').all() as Array<{ path: string }>).map(row => row.path) : []
   if (scan.skippedLinks.length) logger.warn('媒体引用普查跳过无法跟随的链接', { event: 'media_recycle.references.link_skipped', context: { paths: scan.skippedLinks, protectOwnedMedia: scan.unreadableLinks.length > 0 } })
-  return { references: [...refs], protection }
+  if (scan.missingRoots.length) logger.info('媒体引用普查跳过已不存在的位置', { event: 'media_recycle.references.root_missing', context: { paths: scan.missingRoots } })
+  return { references: [...refs], protection, missingRoots: scan.missingRoots }
 }

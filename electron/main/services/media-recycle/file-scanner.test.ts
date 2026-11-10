@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -100,4 +101,15 @@ it.each(['stat', 'opendir', 'open'])('真实链接的元数据、目录或后代
   const report = await scanReferenceFiles([{ path: root, exclude: [target] }], ['.hjcvs'], new AbortController().signal, async () => undefined)
   expect(report.skippedLinks).toEqual([link])
   expect(report.unreadableLinks).toEqual([link])
+})
+it('卷还在而位置已不存在时跳过并报告；整个卷不在时读取失败', async () => {
+  const gone = path.join(root, 'removed-project')
+  const document = path.join(root, 'saved.hjcvs'); await fs.writeFile(document, JSON.stringify({ image: 'D:/held.png' }))
+  const refs: string[] = []
+  const report = await scanReferenceFiles([{ path: gone }, { path: document }], ['.hjcvs'], new AbortController().signal, async (_file, values) => { refs.push(...values) })
+  expect(report.missingRoots).toEqual([gone])
+  expect(refs).toEqual(['D:/held.png'])
+  const offline = process.platform === 'win32' ? 'ZYXWVUTSRQPONMLKJIHGFE'.split('').find(letter => !existsSync(`${letter}:\\`)) : undefined
+  if (!offline) return
+  await expect(scanReferenceFiles([{ path: `${offline}:\\作品\\a.hjcvs` }], ['.hjcvs'], new AbortController().signal, async () => undefined)).rejects.toThrow('ENOENT')
 })

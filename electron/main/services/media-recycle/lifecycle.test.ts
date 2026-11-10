@@ -1,44 +1,30 @@
-import { describe, expect, it, vi } from 'vitest'
-import { MediaRecycleLifecycle } from './lifecycle'
+import { expect, it, vi } from 'vitest'
+import { MediaRecycleLifecycle, MediaRecycleStopped } from './lifecycle'
 
-describe('quiescent media recycle windows', () => {
-  it('启动扫描超时后取消扫描并允许打开窗口', async () => {
-    vi.useFakeTimers()
-    try {
-      const lifecycle = new MediaRecycleLifecycle()
-      let signal: AbortSignal | undefined
-      let finished = false
-      const startup = lifecycle.startup(async value => { signal = value; await new Promise(() => undefined) }).then(() => { finished = true })
-      await vi.advanceTimersByTimeAsync(3_001)
-      expect(signal?.aborted).toBe(true)
-      expect(finished).toBe(true)
-      await startup
-      expect(() => lifecycle.opened(1)).not.toThrow()
-    } finally { vi.useRealTimers() }
-  })
-  it('skips exit while a document remains unsaved, or the window was force-closed', async () => {
+it('一次运行只跑一轮，到总时限中止', async () => {
+  vi.useFakeTimers()
+  try {
     const lifecycle = new MediaRecycleLifecycle()
-    const sweep = vi.fn(async () => undefined)
-    lifecycle.opened(1)
-    expect(await lifecycle.exit(sweep)).toBe('skipped')
-    lifecycle.closed(1)
-    expect(await lifecycle.exit(sweep)).toBe('skipped')
-    expect(sweep).not.toHaveBeenCalled()
-  })
-
-  it('waits for startup before allowing windows; runs exit only after saved windows close and cancels at deadline', async () => {
-    const lifecycle = new MediaRecycleLifecycle()
-    let finish!: () => void
-    const starting = lifecycle.startup(() => new Promise(resolve => { finish = resolve }))
-    expect(() => lifecycle.opened(1)).toThrow('during media reclamation')
-    finish(); await starting
-    lifecycle.opened(1); lifecycle.saved(1)
-    const sweep = vi.fn(async () => undefined)
-    expect(await lifecycle.exit(sweep)).toBe('skipped')
-    lifecycle.closed(1)
     let signal: AbortSignal | undefined
-    expect(await lifecycle.exit(async value => { signal = value; await new Promise(() => undefined) }, 10)).toBe('timeout')
-    expect(signal?.aborted).toBe(true)
-    expect(() => lifecycle.opened(2)).toThrow('during media reclamation')
-  })
+    const sweep = vi.fn(async (value: AbortSignal) => { signal = value; await new Promise(resolve => value.addEventListener('abort', resolve)) })
+    const running = lifecycle.runInBackground(sweep, 1_000)
+    await vi.advanceTimersByTimeAsync(1_001)
+    await running
+    expect(signal?.reason).toBeInstanceOf(MediaRecycleStopped)
+    await lifecycle.runInBackground(sweep)
+    expect(sweep).toHaveBeenCalledOnce()
+  } finally { vi.useRealTimers() }
+})
+
+it('退出时立即中止后台轮，退出后不再开始', async () => {
+  const lifecycle = new MediaRecycleLifecycle()
+  let signal: AbortSignal | undefined
+  void lifecycle.runInBackground(async value => { signal = value; await new Promise(() => undefined) })
+  lifecycle.stop()
+  expect(signal?.aborted).toBe(true)
+  const late = new MediaRecycleLifecycle()
+  late.stop()
+  const sweep = vi.fn(async () => undefined)
+  await late.runInBackground(sweep)
+  expect(sweep).not.toHaveBeenCalled()
 })

@@ -5,7 +5,7 @@ import { setImmediate as yieldToIO } from 'node:timers/promises'
 import { getProgramStoreDir, getUserFolderDir, getUserRootDir } from '../appPaths'
 import { createMainLogger } from '../logging'
 import { releaseManagedMediaFileLease } from './managed-media-leases'
-import { enqueueMediaCandidates, registerOwnedMedia } from '../media-recycle/queue'
+import { claimManagedMedia, enqueueMediaCandidates, registerOwnedMedia } from '../media-recycle/queue'
 
 const uploadImageLeaseCounts = new Map<string, number>()
 const imagePathLocks = new Map<string, Promise<void>>()
@@ -146,7 +146,7 @@ async function persistContentAddressedImage(
       await writeReservedImage({ filePath, handle }, bytes)
       await registerOwnedMedia(filePath)
       created = true
-    }
+    } else claimManagedMedia(filePath)
     const currentLeaseCount = uploadImageLeaseCounts.get(filePath) ?? 0
     if (tracked && (created || currentLeaseCount > 0)) {
       uploadImageLeaseCounts.set(filePath, currentLeaseCount + 1)

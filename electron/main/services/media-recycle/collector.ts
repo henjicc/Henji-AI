@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises'
 import { setImmediate as yieldToIO } from 'node:timers/promises'
 import { canonicalPath, createPathCanonicalizer, fileIdentity, localMediaPath, within } from './paths'
-import { MediaRecycleDeadline } from './lifecycle'
+import { MediaRecycleStopped } from './lifecycle'
 
 export interface MediaReferenceProvider {
   id: string
@@ -13,7 +13,6 @@ export interface RecycleStore {
   candidates(): AsyncIterable<RecycleCandidate>
   identity(path: string): string | undefined
   protector?(path: string): string | undefined
-  referenced?(id: number): void
   forget(id: number): void
 }
 export interface RecycleSummary {
@@ -26,8 +25,8 @@ export interface MediaCollectorOptions {
   store: RecycleStore
   roots(): Promise<string[]>
   providers: readonly MediaReferenceProvider[]
-  /** 回收前再次核验，持久状态写入会使本轮普查失效。 */
-  revision(): string
+  /** 普查之后本次运行里主进程刚写出或交出去的文件，界面可能正拿着还没存盘。 */
+  claimed?(file: string): boolean
   trashItem(file: string): Promise<void>
   log(phase: 'start' | 'completed' | 'deferred' | 'failed', summary: RecycleSummary, error?: unknown): void
   providerTimeoutMs?: number
@@ -41,7 +40,6 @@ export async function collectUnreferencedMedia(options: MediaCollectorOptions, s
   options.log('start', summary)
   try {
     if (!options.providers.length) throw new Error('No media reference providers')
-    let revision = options.revision()
     const references = new Set<string>()
     const canonicalize = createPathCanonicalizer()
     const trashed = new Set<string>()
@@ -76,12 +74,11 @@ export async function collectUnreferencedMedia(options: MediaCollectorOptions, s
       signal.throwIfAborted()
       if (!options.store.count) summary.candidates++
       const protectors = await Promise.all((candidate.protectedBy ?? []).map(canonicalPath))
-      if (protectors.some(key => key && references.has(key))) { retain('referenced'); options.store.referenced?.(candidate.id); continue }
+      if (protectors.some(key => key && references.has(key))) { retain('referenced'); continue }
+      // 有任何一个文件留下，整条候选原地不动，下次启动重新普查。
       let kept = false
-      let retry = false
       for (const value of candidate.paths) {
         signal.throwIfAborted()
-        if (revision !== options.revision()) { retain('changed-during-scan'); kept = true; retry = true; break }
         try {
           const local = localMediaPath(value)
           const key = await canonicalize(value)
@@ -94,33 +91,27 @@ export async function collectUnreferencedMedia(options: MediaCollectorOptions, s
           // 缓存只加速候选筛选，真正回收前重新解析别名和派生源，避免目录链接变化导致误删。
           const currentKey = await canonicalPath(value)
           const currentSources = await Promise.all((candidate.derivedFrom?.[value] ?? []).map(canonicalPath))
-          if (currentKey !== key) { retain('identity-changed'); kept = true; retry = true; continue }
+          if (currentKey !== key) { retain('identity-changed'); kept = true; continue }
           if (currentSources.some(source => source && references.has(source))) { retain('referenced'); kept = true; continue }
           const stat = await fs.lstat(local)
-          if (!stat.isFile() || stat.isSymbolicLink() || fileIdentity(stat) !== expected) { retain('identity-changed'); kept = true; retry = true; continue }
+          if (!stat.isFile() || stat.isSymbolicLink() || fileIdentity(stat) !== expected) { retain('identity-changed'); kept = true; continue }
           signal.throwIfAborted()
-          // 最后一次状态核验后立即提交回收站操作，用户仍可从系统回收站恢复。
-          if (revision !== options.revision()) { retain('changed-during-scan'); kept = true; retry = true; break }
+          if (options.claimed?.(local) || options.claimed?.(key)) { retain('claimed'); kept = true; continue }
           await options.trashItem(local)
           trashed.add(key)
           summary.deleted++
           summary.recycledBytes += stat.size
         } catch (error) {
           if (signal.aborted) throw signal.reason
-          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') { kept = true; retry = true; retain('delete-failed') }
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') { kept = true; retain('delete-failed') }
         }
       }
       signal.throwIfAborted()
-      if (kept && !retry) options.store.referenced?.(candidate.id)
-      if (!kept) {
-        if (revision !== options.revision()) { retain('changed-during-scan'); continue }
-        options.store.forget(candidate.id)
-        revision = options.revision()
-      }
+      if (!kept) options.store.forget(candidate.id)
     }
     options.log('completed', summary)
   } catch (error) {
-    if (error === signal.reason && error instanceof MediaRecycleDeadline) options.log('deferred', summary)
+    if (error === signal.reason && error instanceof MediaRecycleStopped) options.log('deferred', summary)
     else options.log('failed', summary, error)
   }
   return summary

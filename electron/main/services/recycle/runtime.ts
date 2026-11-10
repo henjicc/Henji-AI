@@ -46,7 +46,7 @@ export async function* readRecycledJsonContents(onUnreadable?: (file: string) =>
 
 const warnLink = (file: string, error: unknown): void => logger.warn('链接以目标声明保留', { event: 'recycle.link.preserved', context: { file }, error })
 /** 文件和目录共用字节备份；系统回收站负责原件，应用入口负责原位置恢复。 */
-async function preserveFile(target: string, name = path.basename(target), source = target, capturePlacement?: AudioCapturePlacement, onPreserved?: () => void): Promise<void> {
+async function preserveFile(target: string, name = path.basename(target), source = target, capturePlacement?: AudioCapturePlacement): Promise<void> {
   try { await fs.lstat(source) } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return; throw error }
   const id = randomUUID()
   const backup = path.join(recycleBackupRoot(), `${id}-${path.basename(target)}`)
@@ -56,14 +56,13 @@ async function preserveFile(target: string, name = path.basename(target), source
     const links = await copyRecycledFile(source, backup, warnLink)
     if (links.some(link => !link.relativePath)) await fs.mkdir(backup)
     store().snapshot('file', target, name, JSON.stringify({ backup, ...(links.length ? { links } : {}), ...(capturePlacement ? { capturePlacement } : {}) }), id)
-    onPreserved?.()
     logger.info('内容副本已保留', { event: 'recycle.preserve.completed', context: { id, name } })
   } catch (error) { logger.error('保留内容副本失败', { event: 'recycle.preserve.failed', context: { id, name }, error }); throw error }
 }
 export const preserveUserFile = (target: string, name?: string, source?: string): Promise<void> => serial(() => preserveFile(target, name, source))
 
-export const trashUserFile = (target: string, name?: string, capturePlacement?: AudioCapturePlacement, onPreserved?: () => void): Promise<void> => serial(async () => {
-  await preserveFile(target, name, target, capturePlacement, onPreserved)
+export const trashUserFile = (target: string, name?: string, capturePlacement?: AudioCapturePlacement): Promise<void> => serial(async () => {
+  await preserveFile(target, name, target, capturePlacement)
   await shell.trashItem(target)
 })
 

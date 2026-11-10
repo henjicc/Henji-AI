@@ -1,54 +1,22 @@
-/** 静默窗口只提供有限处理时间，未完成的候选留在持久队列，下一次静默窗口继续。 */
-export class MediaRecycleDeadline extends Error {
-  constructor() { super('Media reclamation time slice ended'); this.name = 'MediaRecycleDeadline' }
+/** 后台一轮到了总时限或应用正在退出：未处理的候选原样留在持久队列，下次启动再来。 */
+export class MediaRecycleStopped extends Error {
+  constructor() { super('Media reclamation stopped'); this.name = 'MediaRecycleStopped' }
 }
 
-/** A window is a possible unsaved session until the existing save/close guard succeeds.
- * No renderer reference snapshots participate in reclamation. */
+/** 每次运行只在主界面加载完成后跑一轮后台回收。退出时直接中止，不为它拖住退出。 */
 export class MediaRecycleLifecycle {
-  private phase: 'initial' | 'starting' | 'active' | 'exiting' = 'initial'
-  private readonly windows = new Map<number, boolean>()
-  private unsafeClose = false
+  private started = false
+  private controller: AbortController | undefined
 
-  opened(id: number): void {
-    if (this.phase === 'starting' || this.phase === 'exiting') throw new Error('Cannot open a document window during media reclamation')
-    this.phase = 'active'
-    this.windows.set(id, false)
+  async runInBackground(sweep: (signal: AbortSignal) => Promise<void>, timeoutMs = 10 * 60_000): Promise<void> {
+    if (this.started) return
+    this.started = true
+    const controller = this.controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(new MediaRecycleStopped()), timeoutMs)
+    try { await sweep(controller.signal) } finally { clearTimeout(timer); this.controller = undefined }
   }
 
-  saved(id: number): void { if (this.windows.has(id)) this.windows.set(id, true) }
-  closed(id: number): void {
-    if (this.windows.get(id) !== true) this.unsafeClose = true
-    this.windows.delete(id)
-  }
-
-  async startup(sweep: (signal: AbortSignal) => Promise<void>): Promise<void> {
-    if (this.phase !== 'initial') throw new Error('Startup reclamation requires unopened sessions')
-    this.phase = 'starting'
-    const controller = new AbortController()
-    let timer: ReturnType<typeof setTimeout> | undefined
-    try {
-      await Promise.race([
-        sweep(controller.signal),
-        new Promise<void>(resolve => { timer = setTimeout(() => { controller.abort(new MediaRecycleDeadline()); resolve() }, 3_000) }),
-      ])
-    } finally { clearTimeout(timer); controller.abort(); this.phase = 'active' }
-  }
-
-  async exit(sweep: (signal: AbortSignal) => Promise<void>, timeoutMs = 3_000): Promise<'completed' | 'skipped' | 'timeout'> {
-    if (this.phase !== 'active' || this.windows.size || this.unsafeClose) return 'skipped'
-    this.phase = 'exiting'
-    const controller = new AbortController()
-    let timer: ReturnType<typeof setTimeout> | undefined
-    try {
-      return await Promise.race([
-        sweep(controller.signal).then(() => 'completed' as const),
-        new Promise<'timeout'>(resolve => {
-          timer = setTimeout(() => { controller.abort(new MediaRecycleDeadline()); resolve('timeout') }, timeoutMs)
-        }),
-      ])
-    } finally { clearTimeout(timer); controller.abort() }
-  }
+  stop(): void { this.started = true; this.controller?.abort(new MediaRecycleStopped()) }
 }
 
 export const mediaRecycleLifecycle = new MediaRecycleLifecycle()

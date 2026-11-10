@@ -10,7 +10,7 @@ import {
   releaseManagedMediaFileLease,
 } from '../image/managed-media-leases'
 import { getGeneratedMediaDir } from '../image/path-utils'
-import { enqueueMediaCandidates, registerOwnedMedia } from '../media-recycle/queue'
+import { claimManagedMedia, enqueueMediaCandidates, registerOwnedMedia } from '../media-recycle/queue'
 import { createMainLogger } from '../logging'
 
 const logger = createMainLogger('main.ai_runtime.media_download')
@@ -139,6 +139,7 @@ export async function saveMediaFromUrlTracked(
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
         await validateOrRepair()
+        claimManagedMedia(filePath)
         return false
       }
       throw error

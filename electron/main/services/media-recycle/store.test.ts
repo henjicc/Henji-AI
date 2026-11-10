@@ -6,57 +6,38 @@ const { DatabaseSync } = createRequire(__filename)('node:sqlite') as typeof impo
 
 function fixture() {
   const db = new DatabaseSync(':memory:')
-  const connection = {
-    prepare: db.prepare.bind(db),
-    get open() { return db.isOpen },
-    transaction<T>(action: () => T) { return () => {
-      db.exec('BEGIN')
-      try { const result = action(); db.exec('COMMIT'); return result }
-      catch (error) { db.exec('ROLLBACK'); throw error }
-    } },
-  }
   db.exec('CREATE TABLE media_recycle_candidates (id INTEGER PRIMARY KEY AUTOINCREMENT, source TEXT, payload TEXT); CREATE TABLE media_recycle_owned (path TEXT, identity TEXT, source_path TEXT)')
   for (let index = 1; index <= 5; index++) db.prepare('INSERT INTO media_recycle_candidates(source, payload) VALUES (?, ?)').run('paths', String(index))
-  const open = (signal = new AbortController().signal) => createRecycleStore(connection as unknown as Database.Database, signal, row => ({ id: row.id, paths: [row.payload] }))
-  return { db, open }
+  const open = (horizon: number, signal = new AbortController().signal) => createRecycleStore(db as unknown as Database.Database, signal, horizon, row => ({ id: row.id, paths: [row.payload] }))
+  const rows = () => (db.prepare('SELECT id, payload FROM media_recycle_candidates ORDER BY id').all() as Array<{ id: number; payload: string }>)
+  return { db, open, rows }
 }
 
-it('保留的队首原子轮换到队尾，新一轮覆盖尾部；单轮不重复追逐已轮换的候选', async () => {
-  const { db, open } = fixture()
+it('只处理本轮开始前入队的候选；留下的候选原地不动，回收的删除', async () => {
+  const { db, open, rows } = fixture()
   try {
-    const first = open(); const revision = first.revision()
+    const queue = open(4)
     const seen: string[] = []
-    for await (const candidate of first.store.candidates()) { seen.push(candidate.paths[0]); if (seen.length === 2) break }
-    expect(first.revision()).toBe(revision)
-    expect(seen).toEqual(['1', '2'])
-    const second = open()
-    const rest: string[] = []
-    for await (const candidate of second.store.candidates()) rest.push(candidate.paths[0])
-    expect(rest).toEqual(['3', '4', '5', '1', '2'])
-    expect(second.remaining()).toBe(5)
+    for await (const candidate of queue.store.candidates()) {
+      seen.push(candidate.paths[0])
+      if (candidate.id % 2) queue.store.forget(candidate.id)
+    }
+    expect(seen).toEqual(['1', '2', '3', '4'])
+    expect(rows()).toEqual([{ id: 2, payload: '2' }, { id: 4, payload: '4' }, { id: 5, payload: '5' }])
+    expect(queue.remaining()).toBe(3)
   } finally { db.close() }
 })
 
-it('已引用候选在同一引用集合下休眠，引用移除后重新检查，取消后不访问已关闭数据库', async () => {
+it('中止后不再访问数据库', async () => {
   const { db, open } = fixture()
   const controller = new AbortController()
   try {
-    const first = open()
-    first.referencesReady(new Set(['held']))
-    for await (const candidate of first.store.candidates()) first.store.referenced?.(candidate.id)
-    const same = open()
-    same.referencesReady(new Set(['held']))
-    const sleeping: unknown[] = []
-    for await (const candidate of same.store.candidates()) sleeping.push(candidate)
-    expect(sleeping).toEqual([])
-    const changed = open(controller.signal)
-    changed.referencesReady(new Set())
-    const ready = changed.store.candidates()[Symbol.asyncIterator]()
-    expect((await ready.next()).value?.paths).toEqual(['1'])
-    controller.abort(new Error('deadline'))
-    expect(db.prepare('SELECT payload FROM media_recycle_candidates ORDER BY id LIMIT 1').get()?.payload).toBe('2')
+    const queue = open(5, controller.signal)
+    const iterator = queue.store.candidates()[Symbol.asyncIterator]()
+    const first = (await iterator.next()).value!
+    controller.abort(new Error('stopped'))
     db.close()
-    await expect(ready.next()).rejects.toThrow('deadline')
-    expect(changed.remaining()).toBe(5)
+    expect(() => queue.store.forget(first.id)).toThrow('stopped')
+    await expect(iterator.next()).rejects.toThrow('stopped')
   } finally { if (db.isOpen) db.close() }
 })

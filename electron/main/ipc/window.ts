@@ -4,7 +4,6 @@ import { parseWindowAppearance, windowAppearance } from '../services/window-appe
 import { parseRecord, parseVoid, registerIpcHandler } from './registry'
 import { controlVideoEditPopout } from '../windows/video-edit-popout'
 import { parseVideoEditPopoutControl } from '../windows/video-edit-popout-policy'
-import { mediaRecycleLifecycle } from '../services/media-recycle/lifecycle'
 
 const WINDOW_MINIMIZE = 'window:minimize'
 const WINDOW_TOGGLE_MAXIMIZE = 'window:toggleMaximize'
@@ -82,17 +81,14 @@ export function bindWindowStateEvents(win: BrowserWindow, deferSession = false):
   let sessionOpened = false
   const openSession = (): void => {
     if (sessionOpened || win.isDestroyed()) return
-    mediaRecycleLifecycle.opened(win.id)
     sessionOpened = true
   }
   if (!deferSession) openSession()
-  win.once('closed', () => { if (sessionOpened) mediaRecycleLifecycle.closed(win.id) })
   win.on('close', (event) => {
     // The startup shell has no renderer or document state to save yet.
     if (!sessionOpened) return
     if (approvedCloseWindows.has(win)) {
       approvedCloseWindows.delete(win)
-      mediaRecycleLifecycle.saved(win.id)
       return
     }
     event.preventDefault()

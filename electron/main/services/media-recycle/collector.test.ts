@@ -6,7 +6,7 @@ vi.mock('../image-editor-v3/resource-media-url', () => ({ resolveImageEditorV3Re
 import { collectUnreferencedMedia, type MediaReferenceProvider, type RecycleCandidate } from './collector'
 import { canonicalPath, fileIdentity } from './paths'
 import { scanReferenceFiles } from './file-scanner'
-import { MediaRecycleDeadline } from './lifecycle'
+import { MediaRecycleStopped } from './lifecycle'
 
 const directories: string[] = []
 afterEach(async () => { for (const directory of directories.splice(0)) await fs.rm(directory, { recursive: true, force: true }) })
@@ -16,8 +16,8 @@ async function fixture() {
   const key = (await canonicalPath(file))!
   const identity = fileIdentity(await fs.stat(file))
   const pending = new Map<number, RecycleCandidate>([[1, { id: 1, paths: [file] }]])
-  const sweep = (providers: MediaReferenceProvider[], timeout = 1000) => collectUnreferencedMedia({
-    providers, providerTimeoutMs: timeout, roots: async () => [root], revision: () => 'stable', log: vi.fn(),
+  const sweep = (providers: MediaReferenceProvider[], timeout = 1000, claimed?: (file: string) => boolean) => collectUnreferencedMedia({
+    providers, providerTimeoutMs: timeout, claimed, roots: async () => [root], log: vi.fn(),
     trashItem: file => fs.rename(file, `${file}.trashed`),
     store: { candidates: async function* () { yield* pending.values() }, identity: candidate => candidate === key ? identity : undefined, forget: id => { pending.delete(id) } },
   }, new AbortController().signal)
@@ -31,11 +31,11 @@ describe('global media reclamation', () => {
     const controller = new AbortController(); const log = vi.fn(); const trashItem = vi.fn()
     const original = fs.realpath.bind(fs); let reads = 0
     const realpath = vi.spyOn(fs, 'realpath').mockImplementation(async target => {
-      if (target === file && ++reads === 2) controller.abort(new MediaRecycleDeadline())
+      if (target === file && ++reads === 2) controller.abort(new MediaRecycleStopped())
       return original(target)
     })
     try {
-      const summary = await collectUnreferencedMedia({ roots: async () => [root], revision: () => 'stable', log, trashItem,
+      const summary = await collectUnreferencedMedia({ roots: async () => [root], log, trashItem,
         providers: [{ id: 'documents', collect: async () => [] }],
         store: { candidates: async function* () { yield* pending.values() }, identity: candidate => candidate === key ? identity : undefined, forget: id => { pending.delete(id) } },
       }, controller.signal)
@@ -55,9 +55,9 @@ describe('global media reclamation', () => {
     const trashItem = vi.fn(async (target: string) => { await fs.rename(target, `${target}.trashed`) })
     const identities = new Map(await Promise.all([file, next].map(async target => [(await canonicalPath(target))!, fileIdentity(await fs.stat(target))] as const)))
     const options = {
-      roots: async () => [root], revision: () => 'stable', log, trashItem,
+      roots: async () => [root], log, trashItem,
       providers: [{ id: 'documents', collect: async () => [] }],
-      store: { candidates: async function* () { yield* pending.values() }, identity: (key: string) => identities.get(key), forget: (id: number) => { pending.delete(id); if (id === 1) controller.abort(new MediaRecycleDeadline()) } },
+      store: { candidates: async function* () { yield* pending.values() }, identity: (key: string) => identities.get(key), forget: (id: number) => { pending.delete(id); if (id === 1) controller.abort(new MediaRecycleStopped()) } },
     }
     const first = await collectUnreferencedMedia(options, controller.signal)
     expect(first.deleted).toBe(1)
@@ -84,7 +84,7 @@ describe('global media reclamation', () => {
     })
     const trashItem = vi.fn()
     try {
-      const summary = await collectUnreferencedMedia({ roots: async () => [root], revision: () => 'stable', log: vi.fn(), trashItem,
+      const summary = await collectUnreferencedMedia({ roots: async () => [root], log: vi.fn(), trashItem,
         providers: [{ id: 'documents', collect: async () => [] }],
         store: { candidates: async function* () { yield* pending.values() }, identity: candidate => candidate === key ? identity : undefined, forget: id => { pending.delete(id) } },
       }, new AbortController().signal)
@@ -110,6 +110,13 @@ describe('global media reclamation', () => {
     pending.set(1, { id: 1, paths: [file], derivedFrom: { [file]: [source] } })
     expect((await sweep([{ id: 'document', collect: async () => [source] }])).deleted).toBe(0)
     expect((await sweep([{ id: 'document', collect: async () => [] }])).deleted).toBe(1)
+  })
+  it('本次运行里主进程刚交出去的文件不删，候选原地留到下次', async () => {
+    const { file, pending, sweep } = await fixture()
+    const summary = await sweep([{ id: 'empty', collect: async () => [] }], 1000, target => target === file)
+    expect(summary).toMatchObject({ deleted: 0, retained: { claimed: 1 } })
+    expect(pending.size).toBe(1)
+    expect(await fs.readFile(file, 'utf8')).toBe('generated')
   })
   it('retains all candidates when any provider fails or times out', async () => {
     const { file, pending, sweep } = await fixture()

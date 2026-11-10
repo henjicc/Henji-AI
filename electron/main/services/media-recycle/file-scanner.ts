@@ -12,6 +12,12 @@ const visited = new Set();
 const files = new Set();
 const skippedLinks = [];
 const unreadableLinks = [];
+const missingRoots = [];
+// macOS 外接盘挂在 /Volumes/<名称> 下，拔掉后整个卷目录消失。
+function volumeRoot(target) {
+  const mounted = process.platform === 'darwin' && /^\/Volumes\/[^/]+/.exec(target);
+  return mounted ? mounted[0] : path.parse(path.resolve(target)).root;
+}
 function skipLink(target, error) {
   skippedLinks.push(target);
   // 离线磁盘和共享目录也会返回不存在，只有循环链接能确定无需读取目标作品。
@@ -66,7 +72,13 @@ async function scan(target, optional, extensions, exclusions, entry, resolved) {
   if (excluded(target, exclusions)) return;
   let stat = entry;
   if (!stat) {
-    try { stat = await fs.lstat(target); } catch (error) { if (optional && error.code === 'ENOENT') return; throw error; }
+    try { stat = await fs.lstat(target); } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+      if (optional) return;
+      // 卷还在而位置不在：已被删除或移走，里面不再有作品。整个卷都不在是离线，读不到不等于没有引用。
+      if (await fs.stat(volumeRoot(target)).then(() => true, () => false)) { missingRoots.push(target); return; }
+      throw error;
+    }
   }
   // Windows 目录项也把云占位与去重重解析点标成链接，先用 lstat 区分普通文件和真正的链接。
   if (entry && stat.isSymbolicLink()) {
@@ -110,28 +122,29 @@ async function scanContent(target, stat, canonical, extensions, exclusions) {
     } finally { await handle.close(); }
   }
 }
-(async () => { for (const root of workerData.roots) await scan(root.path, root.optional, root.extensions || workerData.extensions, root.exclude || []); parentPort.postMessage({ done: true, skippedLinks, unreadableLinks }); })()
+(async () => { for (const root of workerData.roots) await scan(root.path, root.optional, root.extensions || workerData.extensions, root.exclude || []); parentPort.postMessage({ done: true, skippedLinks, unreadableLinks, missingRoots }); })()
   .catch(error => { parentPort.postMessage({ error: String(error.stack || error) }); });
 `
 
+export interface ReferenceScanResult { skippedLinks: string[]; unreadableLinks: string[]; missingRoots: string[] }
 export interface ReferenceScanRoot { path: string; optional?: boolean; extensions?: readonly string[]; exclude?: readonly string[] }
 export async function scanReferenceFiles(
   roots: readonly ReferenceScanRoot[], extensions: readonly string[], signal: AbortSignal,
   accept: (file: string, paths: string[]) => Promise<void>,
-): Promise<{ skippedLinks: string[]; unreadableLinks: string[] }> {
+): Promise<ReferenceScanResult> {
   signal.throwIfAborted()
   const resolver = createRequire(__filename)
   const worker = new Worker(SOURCE, { eval: true, workerData: { roots, extensions, yauzl: resolver.resolve('yauzl') } })
   try {
-    return await new Promise<{ skippedLinks: string[]; unreadableLinks: string[] }>((resolve, reject) => {
+    return await new Promise<ReferenceScanResult>((resolve, reject) => {
       const abort = (): void => reject(signal.reason ?? new Error('Reference scan cancelled'))
       signal.addEventListener('abort', abort, { once: true })
       worker.once('error', reject)
       worker.once('exit', code => { signal.removeEventListener('abort', abort); if (code !== 0) reject(new Error(`Reference worker exited: ${code}`)) })
-      worker.on('message', (message: { done?: boolean; error?: string; file?: string; paths?: string[]; skippedLinks?: string[]; unreadableLinks?: string[] }) => {
+      worker.on('message', (message: { done?: boolean; error?: string; file?: string; paths?: string[]; skippedLinks?: string[]; unreadableLinks?: string[]; missingRoots?: string[] }) => {
         if (signal.aborted) return
         if (message.error) reject(new Error(message.error))
-        else if (message.done) { signal.removeEventListener('abort', abort); resolve({ skippedLinks: message.skippedLinks ?? [], unreadableLinks: message.unreadableLinks ?? [] }) }
+        else if (message.done) { signal.removeEventListener('abort', abort); resolve({ skippedLinks: message.skippedLinks ?? [], unreadableLinks: message.unreadableLinks ?? [], missingRoots: message.missingRoots ?? [] }) }
         else if (message.file && message.paths) {
           void accept(message.file, message.paths).then(() => worker.postMessage('next'), reject)
         }

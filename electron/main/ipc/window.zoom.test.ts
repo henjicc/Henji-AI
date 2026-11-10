@@ -11,7 +11,6 @@ vi.mock('electron', () => ({
 }))
 vi.mock('../services/window-appearance', () => ({ parseWindowAppearance: vi.fn(), windowAppearance: { update: vi.fn() } }))
 vi.mock('../windows/video-edit-popout', () => ({ controlVideoEditPopout: vi.fn() }))
-vi.mock('../services/media-recycle/lifecycle', () => ({ mediaRecycleLifecycle: {} }))
 
 import { registerWindowIpc } from './window'
 

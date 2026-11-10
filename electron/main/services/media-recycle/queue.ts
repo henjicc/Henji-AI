@@ -19,8 +19,20 @@ export function overlapsManagedMediaRoot(value: string): boolean {
   return managedMediaRoots().some(root => pathKey(root) === pathKey(value) || within(value, root) || within(root, value))
 }
 
+const claimed = new Set<string>()
+
+/**
+ * 主进程在本次运行里写出或交给界面的受管文件。界面可能正拿着它而还没存盘，普查看不到这份引用，
+ * 所以后台回收这次不删它；下次启动时引用只看持久状态。
+ */
+export function claimManagedMedia(filePath: string): void { claimed.add(pathKey(filePath)) }
+export function isManagedMediaClaimed(filePath: string): boolean { return claimed.has(pathKey(filePath)) }
+/** 测试在同一进程里模拟重启。 */
+export function resetManagedMediaClaimsForTest(): void { claimed.clear() }
+
 /** Called only by application writers after creating a file, never by import-as-reference. */
 export async function registerOwnedMedia(filePath: string, sourcePath?: string, newlyCreated = true): Promise<void> {
+  claimManagedMedia(filePath)
   if (!isManagedMediaPath(filePath)) return
   const canonical = await canonicalPath(filePath)
   const roots = await Promise.all(managedMediaRoots().map(canonicalPath))
@@ -29,6 +41,7 @@ export async function registerOwnedMedia(filePath: string, sourcePath?: string, 
   if (!newlyCreated && !getDb().prepare('SELECT 1 FROM media_recycle_owned WHERE path = ?').get(canonical)) return
   const stat = await fs.lstat(filePath)
   if (!stat.isFile() || stat.isSymbolicLink()) return
+  claimManagedMedia(canonical)
   getDb().prepare('INSERT OR REPLACE INTO media_recycle_owned(path, identity, source_path) VALUES (?, ?, ?)').run(canonical, fileIdentity(stat), sourcePath ? await canonicalPath(sourcePath) : null)
 }
 

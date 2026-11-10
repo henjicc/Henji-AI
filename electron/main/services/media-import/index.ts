@@ -1,6 +1,6 @@
 import { mediaErrorDetails, redactMediaError } from '../../../../src/core/media/localMediaImportSafety'
 import crypto from 'node:crypto'
-import { registerOwnedMedia } from '../media-recycle/queue'
+import { claimManagedMedia, registerOwnedMedia } from '../media-recycle/queue'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import { performance } from 'node:perf_hooks'
@@ -150,7 +150,8 @@ async function storePathManaged(sourcePath: string, format: DetectedMediaFormat)
     const digest = hash.digest('hex')
     const targetPath = path.join(uploadsDir, `${digest}.${format.extension}`)
     const cacheHit = await moveTempIntoPlace(tempPath, targetPath)
-    if (!cacheHit) await registerOwnedMedia(targetPath)
+    if (cacheHit) claimManagedMedia(targetPath)
+    else await registerOwnedMedia(targetPath)
     return { fullPath: targetPath, sizeBytes, cacheKey: digest, cacheHit }
   } catch (error) {
     // media-recycle-allow: failed unpublished import staging file only.
@@ -166,6 +167,7 @@ async function storeBytesManaged(bytes: Uint8Array, format: DetectedMediaFormat)
   const targetPath = path.join(uploadsDir, `${digest}.${format.extension}`)
   try {
     await fsp.access(targetPath)
+    claimManagedMedia(targetPath)
     return { fullPath: targetPath, sizeBytes: bytes.byteLength, cacheKey: digest, cacheHit: true }
   } catch {
     // Write the new content-addressed file below.
@@ -174,7 +176,8 @@ async function storeBytesManaged(bytes: Uint8Array, format: DetectedMediaFormat)
   try {
     await fsp.writeFile(tempPath, bytes, { flag: 'wx' })
     const cacheHit = await moveTempIntoPlace(tempPath, targetPath)
-    if (!cacheHit) await registerOwnedMedia(targetPath)
+    if (cacheHit) claimManagedMedia(targetPath)
+    else await registerOwnedMedia(targetPath)
     return { fullPath: targetPath, sizeBytes: bytes.byteLength, cacheKey: digest, cacheHit }
   } catch (error) {
     // media-recycle-allow: failed unpublished import staging file only.
@@ -354,6 +357,8 @@ export async function importMediaFromPath(request: ImportMediaFromPathRequest): 
         : { ...await validateSourcePath(request.sourcePath, request.expectedKind), sourcePath: request.sourcePath, realPath: request.sourcePath }
       const validationMs = roundMs(performance.now() - validationStarted)
       const persistenceStarted = performance.now()
+      // 以引用方式导入的可能正是受管目录里的文件（例如从资源管理器拖进来的生成结果）。
+      if (request.ownership === 'referenced') claimManagedMedia(validated.sourcePath)
       const stored = request.ownership === 'referenced'
         ? { fullPath: validated.sourcePath, sizeBytes: validated.sizeBytes,
             cacheKey: referencedCacheKey(validated.sourcePath, validated.sizeBytes, validated.mtimeMs), cacheHit: true }

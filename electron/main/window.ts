@@ -220,8 +220,7 @@ export function createWindow(options: CreateWindowOptions = {}): BrowserWindow {
 
   if (options.beforeRendererLoad) {
     if (!headless) presentWindow(win, presentation)
-    // Yield to the native window before starting the census. No renderer can
-    // create unsaved media references while this gate is closed.
+    // 先让原生窗口显示出来，再做加载界面之前必须完成的启动准备。
     setImmediate(() => {
       void options.beforeRendererLoad!().then(() => {
         if (win.isDestroyed()) return

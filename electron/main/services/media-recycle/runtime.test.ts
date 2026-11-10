@@ -12,19 +12,19 @@ vi.mock('../appPaths', () => ({ getProgramStoreDir: (key: string) => `D:/program
 vi.mock('../logging/main-logger', () => ({ createMainLogger: () => ({ info: mocks.info, warn: mocks.warn }) }))
 vi.mock('../image/managed-media-leases', () => ({ listManagedMediaFileLeases: () => [] }))
 vi.mock('../image/path-utils', () => ({ listUploadImageLeases: () => [] }))
-vi.mock('./queue', () => ({ managedMediaRoots: () => [] }))
+vi.mock('./queue', () => ({ managedMediaRoots: () => [], isManagedMediaClaimed: () => false }))
 vi.mock('./schema', () => ({ assertMediaStorageCoverage: mocks.coverage, MEDIA_REFERENCE_TABLES: {} }))
 vi.mock('./providers', () => ({ collectDocumentReferences: mocks.documents, collectSqlReferences: vi.fn(), decodeReferenceValues: vi.fn(), recordReferences: vi.fn(), releaseDocumentSubmissionReferences: mocks.handoff }))
 vi.mock('./collector', () => ({ collectUnreferencedMedia: mocks.collect }))
-vi.mock('./store', () => ({ createRecycleStore: () => ({ store: {}, revision: () => 'stable', acknowledgeBackup: vi.fn(), referencesReady: () => {}, remaining: () => 11_263, checkpointError: () => undefined, dispose: () => {} }) }))
+vi.mock('./store', () => ({ createRecycleStore: () => ({ store: {}, remaining: () => 11_263 }) }))
 import { runMediaRecycle } from './runtime'
-import { MediaRecycleDeadline } from './lifecycle'
+import { MediaRecycleStopped } from './lifecycle'
 
 afterEach(() => { vi.resetAllMocks(); mocks.closed = false })
 
 it.each([true, false])('引用普查未完成时保留全部候选，区分时间片结束与真实失败：%s', async deadline => {
   const controller = new AbortController()
-  const error = deadline ? new MediaRecycleDeadline() : new Error('Unreadable document')
+  const error = deadline ? new MediaRecycleStopped() : new Error('Unreadable document')
   if (deadline) controller.abort(error)
   mocks.documents.mockRejectedValue(error)
   await runMediaRecycle(controller.signal)
@@ -40,7 +40,7 @@ it('完整引用普查后交给回收器，删除适配器使用系统回收站'
   await runMediaRecycle(new AbortController().signal)
   const options = mocks.collect.mock.calls[0][0] as MediaCollectorOptions
   await options.trashItem('owned-media.png')
-  expect(mocks.trash).toHaveBeenCalledWith('owned-media.png', undefined, undefined, expect.any(Function))
+  expect(mocks.trash).toHaveBeenCalledWith('owned-media.png')
 })
 
 it('退出关闭数据库后的延期日志只读内存计数，不重新取得数据库连接', async () => {

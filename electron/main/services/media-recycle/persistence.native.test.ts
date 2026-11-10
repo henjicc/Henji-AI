@@ -21,9 +21,8 @@ vi.mock('../image/path-utils', () => ({ listUploadImageLeases: () => [] }))
 vi.mock('../image/managed-media-leases', () => ({ listManagedMediaFileLeases: () => [] }))
 import { runSchemaMigrations, SCHEMA_MIGRATIONS } from '../db-migrations'
 import { assertMediaStorageCoverage, MEDIA_REFERENCE_TABLES } from './schema'
-import { registerOwnedMedia } from './queue'
+import { registerOwnedMedia, resetManagedMediaClaimsForTest } from './queue'
 import { runMediaRecycle } from './runtime'
-import { MediaRecycleLifecycle } from './lifecycle'
 import { recordDocumentMediaPublished } from './providers'
 import { DocumentIndexStore } from '../documents/index-store'
 
@@ -48,7 +47,11 @@ describe.skipIf(!process.versions.electron)('SQLite 21 media retirement', () => 
       for (const file of [unused, held]) { await fs.writeFile(file, 'owned'); await registerOwnedMedia(file) }
       insert.run('held', '引用', held)
       db.prepare("INSERT INTO media_recycle_candidates(source,payload) VALUES ('paths',?)").run(JSON.stringify({ paths: [unused, held], protectedBy: [] }))
+      // 已移除位置里的作品被删掉了（卷还在）：退出登记，不再挡住整轮回收。
+      db.prepare('INSERT INTO media_recycle_retained(owner) VALUES (?)').run(path.join(root, 'deleted.hjcvs'))
+      resetManagedMediaClaimsForTest()
       await runMediaRecycle(new AbortController().signal)
+      expect(db.prepare('SELECT count(*) AS n FROM media_recycle_retained').get()).toEqual({ n: 0 })
       await expect(fs.stat(unused)).rejects.toMatchObject({ code: 'ENOENT' })
       expect(await fs.readFile(held, 'utf8')).toBe('owned')
       catalog.upsertProject(project)
@@ -62,7 +65,8 @@ describe.skipIf(!process.versions.electron)('SQLite 21 media retirement', () => 
     state.db = new Database(location)
     const startup = async (): Promise<void> => {
       state.db!.close(); state.db = new Database(location)
-      await new MediaRecycleLifecycle().startup(runMediaRecycle)
+      resetManagedMediaClaimsForTest()
+      await runMediaRecycle(new AbortController().signal)
     }
     try {
       const db = state.db
