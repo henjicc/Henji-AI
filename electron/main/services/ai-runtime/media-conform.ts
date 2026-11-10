@@ -33,6 +33,7 @@ async function scaleImageToDimensions(localPath: string, width: number, height: 
     await fs.promises.rename(temporaryPath, outputPath)
   } catch (error) {
     // 并发生成同一张图时另一份已经写好，用它即可
+    // media-recycle-allow: 删的是本次写出、改名前失败的唯一临时文件，没有调用方拿到过这个路径
     await fs.promises.rm(temporaryPath, { force: true })
     if (!fs.existsSync(outputPath)) throw error
   }

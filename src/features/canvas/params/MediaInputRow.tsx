@@ -533,7 +533,7 @@ function MediaKindItems({ source, upstream, isConnected, localPreviewMapRef, onD
               )}
             </>
           ) : (
-            // 素材小块在节点卡片里：只用更暗的底、不描边（同一层纵深只画一次边框，重要记录 020）。
+            // 素材小块在节点卡片里：只用更暗的底、不描边（同一层纵深只画一次边框）。
             // 文字小块的裁剪、移除放在名称后面、常驻占位（悬停才显现）：此前按角标叠在角上，盖住图标与“视频 1”
             <span
               className={`flex h-7 items-center gap-1 rounded-md bg-gap/60 pl-1.5 text-2xs text-text2 ${isConnected ? 'pr-1.5' : 'pr-0.5'}`}

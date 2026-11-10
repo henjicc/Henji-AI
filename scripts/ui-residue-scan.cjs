@@ -1,7 +1,7 @@
 /**
- * 旧界面代码残留扫描（任务 5.2 建立，5.8 接入门禁）。
+ * 旧界面代码残留扫描。
  *
- * 按 skill henji-ui-surface references/review.md 第 3 节“代码残留”逐类统计，按文件与 5.1 盘点的区域、界面编号出报告：
+ * 按 skill henji-ui-surface references/review.md 第 3 节“代码残留”逐类统计，按文件与盘点的区域、界面编号出报告：
  *   npm run ui:residue                         # 写 .ui-tour/residue/residue-report.{md,json}
  *   npm run ui:residue -- --out .ui-tour/residue-after-4.2
  *   npm run ui:residue -- --region 5.3         # 只看一个区域

@@ -116,7 +116,7 @@ export const THEME_COLOR_TOKEN_NAMES = [
   'raised',
   // 浮层（菜单、下拉、弹出面板）是界面里最高的一层：深色比抬起底再亮半级，四周一圈 lineOverlay 亮描边，
   // 不加投影（深色底上投影要么厚重立体、要么摊成色带）。浮层里的格子、悬停、选中改用
-  // overlayRaised / overlayHover / overlaySelected，跟着浮层一起上移，层次不倒（重要记录 021）
+  // overlayRaised / overlayHover / overlaySelected，跟着浮层一起上移，层次不倒
   'overlay',
   'overlayHover',
   'overlayRaised',

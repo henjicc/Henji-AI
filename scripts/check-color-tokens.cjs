@@ -9,10 +9,10 @@ const { extractCssClassNames } = require('./lib/uiResidueRules.cjs');
  * 一、硬性规则（全部 .ts/.tsx/.css，任何新增都失败，不可登记）：
  *   - 十六进制颜色字面量、Tailwind 任意十六进制颜色类；
  *   - 纯 CSS 里的 rgb()/rgba() 字面量（只能写 rgb(var(--xxx-rgb) / a) 或引用令牌变量）；
- *   - 已删除的旧 CSS 变量别名（--app-rgb、--text-muted-rgb、--ui-surface-panel …，界面重设计 4.2），
+ *   - 已删除的旧 CSS 变量别名（--app-rgb、--text-muted-rgb、--ui-surface-panel …），
  *     令牌定义处 index.css 也查。
  *
- * 二、语义令牌规则（ts/tsx，非测试文件；界面重设计 1.3 新增，4.2 收紧）：
+ * 二、语义令牌规则（ts/tsx，非测试文件）：
  *   - palette：固定调色板类（bg-red-500、text-emerald-300 …），不随主题；
  *   - mono：黑白类（text-white、bg-black/40、border-white/10 …），浅色主题下失效；
  *   - rgba：rgb()/rgba() 数字字面量；
@@ -21,7 +21,7 @@ const { extractCssClassNames } = require('./lib/uiResidueRules.cjs');
  *   界面色改用语义令牌类（bg-panel、text-text2、text-on-accent、bg-danger-solid、border-media-line …，
  *   见 tailwind.config.js）；内容色（标注默认色、导出图配色、算法遮罩等）在 colorTokens.ts 登记常量。
  *
- * 三、未定义颜色类（ts/tsx，非测试文件；任务 5.8，不可登记）：
+ * 三、未定义颜色类（ts/tsx，非测试文件；不可登记）：
  *   `bg-popover`、`text-error`、`bg-selected-accent/50`（自带透明度的令牌加透明度修饰）这类 Tailwind 不生成样式的颜色类。
  *   按 tailwind.config.js 实际配置用 Tailwind 自己的生成器判定，样式表里定义的同名类算已定义；
  *   只看类名语境里的字符串（className= / *Class = / 多数词是有效类的类名列表），见 scripts/lib/undefinedColorClasses.cjs。

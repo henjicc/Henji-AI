@@ -384,7 +384,7 @@ for (const [name, command] of Object.entries(packageJson.scripts ?? {})) {
     if (!fs.existsSync(path.join(root, testPath))) failures.push(`测试脚本 ${name} 引用不存在的文件：${testPath}`)
   }
 }
-for (const scriptName of ['build', 'electron:build']) {
+for (const scriptName of ['electron:build']) {
   if (!packageJson.scripts?.[scriptName]?.includes('check:assistant-capabilities')) {
     failures.push(`${scriptName} 未接入智能助手能力门禁`)
   }

@@ -8266,11 +8266,6 @@
       },
       {
         "file": "scripts/check-color-tokens.cjs",
-        "fingerprint": "4e80646f09090e253d2cc378dfaa3a21f63c1af2f0af1bee4c9c95f51619c8a2",
-        "count": 1
-      },
-      {
-        "file": "scripts/check-color-tokens.cjs",
         "fingerprint": "ac0d6b0e21082a3e6e79845cc0521e92c42fb64b87d8e05ea348e7a50cccebb6",
         "count": 1
       },
@@ -8877,11 +8872,6 @@
       {
         "file": "scripts/mcp-restart-check.cjs",
         "fingerprint": "5018b9c684d69c336251049e8d99d9160242faa5fbbb66232062f1ca3437b72d",
-        "count": 1
-      },
-      {
-        "file": "scripts/ui-residue-scan.cjs",
-        "fingerprint": "6d6eb29965d1ea9c26b99a1f09dd2b1a95dff23e85f045d4cc72a156028c6647",
         "count": 1
       },
       {
@@ -9966,11 +9956,6 @@
       },
       {
         "file": "src/core/theme/themeEngine.ts",
-        "fingerprint": "60a4f018c7cd0595ade83e988acb83040cfba19b696506e843a174183e4a3bb3",
-        "count": 1
-      },
-      {
-        "file": "src/core/theme/themeEngine.ts",
         "fingerprint": "8f01faebce85a063a13f2abaf23227fe7a92dc2cb0f94934f9743fe4159ce23e",
         "count": 1
       },
@@ -10740,11 +10725,6 @@
         "count": 1
       },
       {
-        "file": "src/features/canvas/params/MediaInputRow.tsx",
-        "fingerprint": "327cdd0337155f0e9b16da490441e6e7cb5b82ae7875a8e34f08c97fba7fdb66",
-        "count": 1
-      },
-      {
         "file": "src/features/canvas/params/ModelPickerList.tsx",
         "fingerprint": "81da029ad7d221cce911f6343fe41857d4d1d4336f9ae9d29e4fdd0197a683db",
         "count": 1
@@ -10752,11 +10732,6 @@
       {
         "file": "src/features/canvas/params/NodeModelParamsControls.tsx",
         "fingerprint": "4619a2389fd21d48b25c9e1dabc829db41b413481c0e4b20585d091e30d5fe97",
-        "count": 1
-      },
-      {
-        "file": "src/features/canvas/params/NodeModelParamsControls.tsx",
-        "fingerprint": "f5395d7cded3b680e385980a20fc4703930ac111bca283c2f41c66a57196e00e",
         "count": 1
       },
       {
@@ -10792,11 +10767,6 @@
       {
         "file": "src/features/canvas/ui/NodeToolDialog.tsx",
         "fingerprint": "d2726ac47de0835862dfcf90345c3d1bb715b3dc4f46398ed3dde8bede4619a7",
-        "count": 1
-      },
-      {
-        "file": "src/features/canvas/ui/nodeControlStyles.ts",
-        "fingerprint": "7fa08693783d167538d092580ae3148585d203365a8ec12cce21e274c483a24e",
         "count": 1
       },
       {
@@ -12052,11 +12022,6 @@
       {
         "file": "src/workspaces/GenerationWorkspace/components/GenerationHistoryToolbar.tsx",
         "fingerprint": "8b92b6102141cdacee0db071ee4c9ee406f5cadf60de35c653aa61da9e31a3ff",
-        "count": 1
-      },
-      {
-        "file": "src/workspaces/GenerationWorkspace/components/TaskCard.tsx",
-        "fingerprint": "c841333256656da9e8f3625858d12eecc8a6a3c6276320e9ee7c2b4d5fac6fd5",
         "count": 1
       },
       {
