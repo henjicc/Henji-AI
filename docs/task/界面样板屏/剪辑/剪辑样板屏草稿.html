@@ -159,7 +159,8 @@ body.single.pairmode .tag { display:block; font-size:20px; line-height:28px; mar
 .th.target { background:#242424; }
 .th.target .id { color:var(--text1); }
 .lane { position:relative; border-bottom:1px solid #232323; background:var(--window); }
-.lane.dimmed .clip { opacity:.45; }
+.lane.st-hidden::after, .lane.st-muted::after { content:""; position:absolute; inset:0; background:rgba(0,0,0,.55); z-index:4; }
+.lane.st-locked::after { content:""; position:absolute; inset:0; background:repeating-linear-gradient(135deg, rgba(255,255,255,.11) 0 1px, transparent 1px 7px); z-index:4; }
 .clip { position:absolute; top:2px; bottom:2px; border-radius:4px; overflow:hidden; }
 .clip .strip { position:absolute; left:0; right:0; top:0; height:16px; display:flex; align-items:center; padding:0 6px; gap:4px; font-size:11px; line-height:16px; font-weight:var(--w-medium); color:#E2E2E2; }
 .clip .strip span { overflow:hidden; text-overflow:ellipsis; min-width:0; }
@@ -171,7 +172,7 @@ body.single.pairmode .tag { display:block; font-size:20px; line-height:28px; mar
 .clip.text { background:var(--clip-text); } .clip.text .strip { background:var(--clip-text-strip); }
 .clip.caption { background:var(--clip-caption); }
 .clip.caption .strip { font-weight:var(--w-normal); color:#EDE6D6; }
-.clip.sel { box-shadow:inset 0 0 0 1px var(--text1); }
+.clip.sel::after { content:""; position:absolute; inset:0; border-radius:4px; box-shadow:inset 0 0 0 1px var(--text1); z-index:3; pointer-events:none; }
 .clip.video.sel { background:var(--clip-video-sel); } .clip.video.sel .strip { background:#333C61; }
 .clip.audio.sel { background:var(--clip-audio-sel); } .clip.audio.sel .strip { background:#274A41; }
 .clip.text.sel { background:var(--clip-text-sel); } .clip.text.sel .strip { background:#513858; }
@@ -187,7 +188,12 @@ body.single.pairmode .tag { display:block; font-size:20px; line-height:28px; mar
 .clip .hatch { position:absolute; inset:0; background:repeating-linear-gradient(135deg, rgba(0,0,0,.2) 0 4px, transparent 4px 8px); }
 .clip .msg { position:absolute; left:6px; top:0; bottom:0; display:flex; align-items:center; gap:5px; font-size:11px; color:var(--text2); --s:12px; }
 .clip .msg svg, .clip .st.err { color:var(--danger-text); }
-.clip.offline { background:#2C2C2C !important; } .clip.offline .strip { background:#262626 !important; color:var(--text3); }
+.clip.failed .body { background:rgba(215,62,63,.30); }
+.clip.failed .hatch, .clip.offline .hatch { background:repeating-linear-gradient(135deg, rgba(215,62,63,.34) 0 4px, transparent 4px 8px); }
+.clip.failed .msg, .clip.offline .msg { color:#FFD9D6; font-weight:var(--w-medium); }
+.clip.failed.narrow .strip, .clip.offline.narrow .strip { background:#6A2529 !important; }
+.clip.failed .st.err, .clip.offline .st.err { color:#FFB4AE; }
+.clip.offline { background:#5A2227 !important; } .clip.offline .strip { background:#481A1F !important; color:#F6D5D2; }
 .clip .vol { position:absolute; left:0; right:0; height:1px; background:rgba(255,255,255,.35); }
 .playhead { position:absolute; top:0; bottom:0; width:1px; background:var(--accent-ring); z-index:5; pointer-events:none; }
 .playhead::before { content:''; position:absolute; left:-5px; top:0; width:11px; height:13px; background:var(--accent-ring); clip-path:polygon(0 0,100% 0,100% 62%,50% 100%,0 62%); border-radius:2px; }
@@ -263,14 +269,19 @@ body.single.pairmode .tag { display:block; font-size:20px; line-height:28px; mar
 
 /* 浮层 */
 .ovl { position:absolute; background:var(--overlay); border:1px solid var(--line-overlay); z-index:20; }
-.menu { border-radius:8px; padding:4px; min-width:208px; font-size:13px; }
+.menu { border-radius:8px; padding:4px; min-width:232px; font-size:13px; }
 .menu .mi { height:28px; display:flex; align-items:center; padding:0 8px 0 6px; border-radius:6px; gap:8px; color:var(--text1); --s:14px; }
 .menu .mi .ck { width:14px; color:var(--accent-text); display:flex; }
-.menu .mi .k { margin-left:auto; padding-left:24px; font-size:11px; color:var(--icon-rest); }
+.menu .mi .k { margin-left:auto; padding-left:32px; font-size:12px; color:var(--text3); }
 .menu .mi .k svg { color:var(--icon-rest); }
 .menu .mi.hov { background:#353535; }
 .menu .mi.dis { color:var(--text-disabled); }
 .menu .ms { height:1px; background:var(--line-overlay); margin:4px 6px; }
+.frame .ferr { position:absolute; inset:0; background:#241214 repeating-linear-gradient(135deg, rgba(215,62,63,.10) 0 10px, transparent 10px 20px); display:flex; flex-direction:column; align-items:center; justify-content:center; white-space:normal; text-align:center; }
+.frame .ferr .fi { color:var(--danger-text); --s:36px; margin-bottom:12px; } .frame .ferr .fi svg { stroke-width:1.5; }
+.frame .ferr .ft { font-size:20px; line-height:28px; font-weight:560; color:var(--text1); }
+.frame .ferr .fm { font-size:13px; line-height:20px; color:var(--text2); margin:4px 0 16px; }
+.frame .ferr .fa { display:flex; gap:8px; } .frame .ferr .fa .btn { height:32px; padding:0 14px; }
 .errbar { left:12px; bottom:12px; border-radius:8px; padding:8px 8px 8px 12px; display:flex; align-items:center; gap:10px; max-width:520px; }
 .errbar .ei { color:var(--danger-text); --s:16px; }
 .errbar .et { font-size:13px; line-height:18px; font-weight:var(--w-medium); }
@@ -322,7 +333,7 @@ const wave = (seed, n, env) => `<div class="wave"><svg viewBox="0 0 100 100" pre
 const PX = 48; // 每秒像素
 function clip(c){
   const x = c.x!==undefined ? c.x : c.s*PX, w = c.w!==undefined ? c.w : c.d*PX - 1;
-  const cls = ['clip', c.t, c.sel?'sel':'', c.flat?'flat':'', c.offline?'offline':''].join(' ');
+  const cls = ['clip', c.t, c.sel?'sel':'', c.flat?'flat':'', c.offline?'offline':'', c.fail?'failed':'', ((c.fail&&w<=110)||(c.offline&&w<=90))?'narrow':''].join(' ');
   let body = '';
   if(c.thumb) body += `<div class="thumb" style="width:${c.thumbW||46}px;background-image:url('素材/${c.thumb}')"></div>`;
   if(c.thumbEnd) body += `<div class="thumb" style="left:auto;right:0;width:${c.thumbW||46}px;background-image:url('素材/${c.thumbEnd}')"></div>`;
@@ -418,10 +429,11 @@ function project(){
 function program(o){
   let ticks=''; for(let i=0;i<=46;i++){ ticks += `<i class="tick ${i%4===0?'maj':''}" style="left:${12+i*17.6}px"></i>`; if(i%8===0) ticks += `<span class="lab num" style="left:${12+i*17.6+4}px">00:${String(i/4).padStart(2,'0')}</span>`; }
   const selbox = o.sel==='text' ? `<div class="selbox" style="left:7%;top:27%;width:50%;height:22%"><i style="left:-4px;top:-4px"></i><i style="right:-4px;top:-4px"></i><i style="left:-4px;bottom:-4px"></i><i style="right:-4px;bottom:-4px"></i></div>` : '';
-  const err = o.err ? `<div class="ovl errbar"><span class="ei">${I('triangle-alert')}</span><div><div class="et">这段视频解不出画面</div><div class="em">换一个文件，或在素材上右键重新链接</div></div><div class="acts"><span class="btn sm" style="color:var(--text2)">详情</span><span class="btn sm secondary">重新链接</span></div></div>` : '';
+  const err = o.warn ? `<div class="ovl errbar"><span class="ei" style="color:var(--warning-text)">${I('triangle-alert')}</span><div><div class="et">有 1 个效果先没显示</div><div class="em">“人声降噪”出错了，其余照常</div></div><div class="acts"><span class="btn sm secondary">详情</span></div></div>` : '';
+  const ferr = `<div class="ferr"><span class="fi">${I('file-x')}</span><div class="ft">这段视频解不出画面</div><div class="fm">口播_A机.mp4　换一个文件，或重新链接到原来的文件</div><div class="fa"><span class="btn secondary">重新链接</span><span class="btn">详情</span></div></div>`;
   return `<div class="panel" style="flex:1">
     <div class="tabs"><span class="tab cur">节目画面</span><span class="tab">源监视器</span></div>
-    <div class="viewer"><div class="frame" style="width:592px;height:333px;background-image:${o.err?'none':"url('素材/画面-山林.jpg')"}">${o.err?'':`<div class="ttl"><small>新品开箱</small>三分钟看懂新功能</div><div class="cap">今天聊一个新功能</div>${selbox}`}</div>${err}</div>
+    <div class="viewer"><div class="frame" style="width:592px;height:333px;background-image:${o.err?'none':"url('素材/画面-山林.jpg')"}">${o.err?ferr:`<div class="ttl"><small>新品开箱</small>三分钟看懂新功能</div><div class="cap">今天聊一个新功能</div>${selbox}`}</div>${err}</div>
     <div class="scrub">${ticks}<i class="ph" style="left:${12+3.2*70.4}px"></i></div>
     <div class="transport"><span class="tc num">00:00:03:12<small>/ 00:00:11:36</small></span>
       <div class="mid">
@@ -545,7 +557,7 @@ function inspColor(o){
   <div class="foot"><span class="status">已调整 4 项</span><span class="btn sm" style="color:var(--text2);--s:14px">${I('wand-sparkles')}自动</span>${ib('square-split-horizontal','rest')}${ib('file-output','rest')}${ib('rotate-ccw','rest')}</div></div>`; }
 
 function ctxMenu(x,y){ const mi=(t,k,o={})=>`<div class="mi ${o.hov?'hov':''} ${o.dis?'dis':''}"><span class="ck">${o.ck?I('check'):''}</span>${t}<span class="k num">${o.sub?I('chevron-right',12):(k||'')}</span></div>`;
-  return `<div class="ovl menu" style="left:${x}px;top:${y}px">${mi('剪切','Ctrl+X')}${mi('复制','Ctrl+C')}${mi('粘贴属性…','Ctrl+Alt+V',{dis:1})}<div class="ms"></div>${mi('速度与时长…','Ctrl+R',{hov:1})}${mi('定格帧','',{sub:1})}${mi('嵌套…')}${mi('发送到','',{sub:1})}<div class="ms"></div>${mi('启用','Shift+E',{ck:1})}${mi('取消链接','Ctrl+L')}<div class="ms"></div>${mi('波纹删除','Shift+Delete')}</div>`; }
+  return `<div class="ovl menu" style="left:${x}px;top:${y}px">${mi('剪切','Ctrl+X')}${mi('复制','Ctrl+C')}${mi('粘贴属性','Ctrl+Alt+V',{dis:1})}<div class="ms"></div>${mi('速度与时长','Ctrl+R',{hov:1})}${mi('定格帧','',{sub:1})}${mi('嵌套')}${mi('发送到','',{sub:1})}<div class="ms"></div>${mi('启用','Shift+E',{ck:1})}${mi('取消链接','Ctrl+L')}<div class="ms"></div>${mi('波纹删除','Shift+Delete')}</div>`; }
 function dialog(){ return `<div class="scrim"><div class="ovl dialog"><span class="di">${I('trash-2')}</span><div><div class="dt">删除素材箱“04_场景”？</div><div class="dm">箱里的 12 个素材会一起移到回收区。时间线上用到它们的 5 个片段会显示为离线，从回收区恢复后自动接回。</div><div class="da"><span class="btn secondary">取消</span><span class="btn danger-solid">删除</span></div></div></div></div>`; }
 
 function app(o){
@@ -576,9 +588,9 @@ function sheetTimeline(){
         ${th({id:'C1',nm:'字幕',kind:'c'})}<div class="lane" style="height:28px">${clip({t:'caption',flat:1,x:0,w:60,n:'大家好'})}${clip({t:'caption',flat:1,x:64,w:112,n:'今天聊一个新功能'})}</div>
         ${th({id:'V3',nm:'花字',kind:'v',h:32})}<div class="lane" style="height:32px">${clip({t:'text',flat:1,x:16,w:120,n:'片头标题'})}</div>
         ${th({id:'V1',nm:'口播',kind:'v',h:44})}<div class="lane" style="height:44px">${clip({t:'video',x:0,w:176,n:'口播_A机.mp4',thumb:'缩略-山林近.jpg'})}</div>
-        ${th({id:'A1',nm:'口播声',kind:'a',h:44})}<div class="lane" style="height:44px">${clip({t:'audio',x:0,w:176,n:'口播_A机.mp4',wave:7})}</div>
+        ${th({id:'A1',nm:'人声',kind:'a',h:44})}<div class="lane" style="height:44px">${clip({t:'audio',x:0,w:176,n:'口播_A机.mp4',wave:7})}</div>
       </div></div></div>
-    <div class="ex"><h3>读取失败与素材离线</h3><p>片段名始终在名条里，不会再和状态叠在一起。内容区换成斜纹，够宽时写一句“波形读取失败”，点它重试；窄片段只在名条右端留一个警示图标，悬停说明。素材文件找不到时整块变灰。</p>
+    <div class="ex"><h3>读取失败与素材离线</h3><p>片段名始终在名条里，不会再和状态叠在一起。出问题的片段叠一层红：波形读不出来时内容区变红斜纹并写明原因，点它重试；窄片段名条变红、留一个警示图标；素材文件找不到时整块变红。</p>
       <div class="z"><div class="rows" style="position:relative;padding-bottom:18px">
         ${lane(44,[{t:'audio',x:0,w:150,n:'口播_A机.mp4',fail:'波形读取失败'},{t:'audio',x:152,w:64,n:'音效_提示.wav',fail:'波形读取失败'},{t:'video',x:218,w:110,n:'录屏_备用.mp4',offline:1}])}
         <div class="ovl tip" style="left:150px;top:50px;font-size:6px;line-height:9px;padding:2px 4px;border-radius:3px">波形读取失败，点击重试</div>
@@ -588,9 +600,12 @@ function sheetTimeline(){
         ${cap('A　顶部名条')}${lane(44,[{t:'video',x:0,w:160,n:'口播_A机.mp4',thumb:'缩略-山林近.jpg'},{t:'audio',x:164,w:164,n:'配乐_轻快.wav',wave:23}])}
         ${cap('B　压在内容上')}${lane(44,[{t:'video',x:0,w:160,n:'口播_A机.mp4',thumb:'缩略-山林近.jpg',thumbW:62,nameOver:1},{t:'audio',x:164,w:164,n:'配乐_轻快.wav',wave:23,nameOver:1}])}
       </div></div></div>
-    <div class="ex"><h3>轨道头：默认是暗的，动过的才亮</h3><p>三个按钮各占固定的一列，画面轨和声音轨上下对齐。保持默认的（没锁、看得见、没静音）用暗灰，一眼扫过去是安静的；锁上、隐藏、静音、独听之后图标变成亮白，轨道上的片段同时变淡。</p>
-      <div class="z"><div style="width:232px">
-        ${th({id:'V2',nm:'录屏',kind:'v'})}${th({id:'V1',nm:'口播（已隐藏）',kind:'v',hidden:1})}${th({id:'A1',nm:'口播声（已锁定）',kind:'a',locked:1})}${th({id:'A2',nm:'配乐（已静音）',kind:'a',muted:1})}
+    <div class="ex"><h3>轨道头：默认是暗的，动过的才亮</h3><p>三个按钮各占固定的一列，画面轨和声音轨上下对齐。保持默认的用暗灰；动过的图标变亮白，同时整条轨道换样子：隐藏和静音是压一层半透明的黑，锁定是叠一层细斜线。不靠文字说明状态。</p>
+      <div class="z"><div class="minitl">
+        ${th({id:'V2',nm:'录屏',kind:'v',h:32})}<div class="lane" style="height:32px">${clip({t:'video',flat:1,x:0,w:120,n:'录屏_搜索演示.mp4'})}</div>
+        ${th({id:'V1',nm:'口播',kind:'v',hidden:1,h:32})}<div class="lane st-hidden" style="height:32px">${clip({t:'video',flat:1,x:0,w:176,n:'口播_A机.mp4'})}</div>
+        ${th({id:'A1',nm:'人声',kind:'a',locked:1,h:32})}<div class="lane st-locked" style="height:32px">${clip({t:'audio',flat:1,x:0,w:176,n:'口播_A机.mp4'})}</div>
+        ${th({id:'A2',nm:'配乐',kind:'a',muted:1,h:32})}<div class="lane st-muted" style="height:32px">${clip({t:'audio',flat:1,x:0,w:176,n:'配乐_轻快.wav'})}</div>
       </div></div></div>
   </div>`;
 }
@@ -615,9 +630,9 @@ const SCREENS = [
     note:'示波器有自己的内边距，亮度曲线只描线；读数并成一行，只有超标的那一项用警告色。改过的值亮、默认值暗。三个说不清用途的图标搬到底栏并恢复正常亮度：前后对比、导出 LUT、重置。色轮完整显示，不会被切掉。',
     html: () => app({sel:'v2', insp:'color', focus:'insp'}) },
   { id:4, title:'④ 时间线细节（放大 2 倍）', before:null, note:'', html: sheetTimeline },
-  { id:5, title:'⑤ 状态与反馈：画面出错的浮条、右键菜单压在面板上、片段读取失败', before:'现状/05-菜单压在面板上.png',
-    note:'浮层一律实底加一圈描边，不用投影。报错只有图标是红的，标题说发生了什么，下面一行说能做什么。',
-    html: () => app({sel:'v2', insp:'video', focus:'timeline', err:1, fail:1, menu:[708,538]}) },
+  { id:5, title:'⑤ 状态与反馈：画面里的报错、右键菜单压在面板上、片段读取失败', before:'现状/05-菜单压在面板上.png',
+    note:'画面解不出来时，报错直接占满节目画面（像素材脱机的提示那样醒目）。不影响出画面的小问题才用左下角的小条。浮层一律实底加一圈描边，不用投影。',
+    html: () => app({sel:'v2', insp:'video', focus:'timeline', err:1, fail:1, menu:[708,530]}) },
   { id:6, title:'⑥ 确认弹窗', before:null, note:'图标单独在左，标题和正文在右边同一列，按钮靠右。只有“删除”是红色实底。', html: () => app({sel:'v1', focus:'timeline', dialog:1}) },
   { id:7, title:'⑦ 备选：属性行的数值放哪', before:null, note:'', html: sheetRows },
 ];
