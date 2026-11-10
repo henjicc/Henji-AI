@@ -1,4 +1,4 @@
-import type { VideoEditClip, VideoEditDocument, VideoEditSequence } from './document'
+import type { VideoEditSequence } from './document'
 import { retimeVideoEditContent } from './timedContent'
 
 /**
@@ -22,20 +22,4 @@ export function removeVideoEditSequenceClips(sequence: VideoEditSequence, ids: r
   if (cameras.length < 2) throw new Error(`多机位序列“${sequence.name}”至少需要两个机位，删除会去掉机位${lost.map(camera => `“${camera.name}”`).join('、')}。请先删除引用这条多机位序列的素材项，或保留这些机位片段。`)
   const audioCameraId = sequence.multicam.audioCameraId && cameras.some(camera => camera.id === sequence.multicam!.audioCameraId) ? sequence.multicam.audioCameraId : undefined
   return { ...next, multicam: { cameras, ...(audioCameraId ? { audioCameraId } : {}) } }
-}
-
-/** 多机位源序列去掉了机位后，各序列里选了这些机位的多机位片段回到第一个机位。 */
-export function resetVideoEditLostMulticamSelections(before: VideoEditDocument, after: VideoEditDocument): VideoEditDocument {
-  const lostBySequence = new Map<string, Set<string>>()
-  for (const sequence of after.sequences) {
-    const previous = before.sequences.find(value => value.id === sequence.id)?.multicam
-    const lost = previous?.cameras.filter(camera => !sequence.multicam?.cameras.some(value => value.id === camera.id)).map(camera => camera.id)
-    if (lost?.length) lostBySequence.set(sequence.id, new Set(lost))
-  }
-  if (!lostBySequence.size) return after
-  const lostOf = new Map(after.items.filter(item => item.kind === 'sequence' && item.sequenceId && lostBySequence.has(item.sequenceId)).map(item => [item.id, lostBySequence.get(item.sequenceId!)!]))
-  const isLost = (clip: VideoEditClip): boolean => Boolean(clip.multicamCameraId && lostOf.get(clip.itemId)?.has(clip.multicamCameraId))
-  if (!after.sequences.some(sequence => sequence.clips.some(isLost))) return after
-  const firstCamera = (clip: VideoEditClip): VideoEditClip => { const next = { ...clip }; delete next.multicamCameraId; return next }
-  return { ...after, sequences: after.sequences.map(sequence => sequence.clips.some(isLost) ? { ...sequence, clips: sequence.clips.map(clip => isLost(clip) ? firstCamera(clip) : clip) } : sequence) }
 }

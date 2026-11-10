@@ -12,7 +12,6 @@ import { subtitleGraphic, videoEditSubtitleStyleSchema } from './subtitleStyle'
 import type { VideoEditGraphic } from './graphics'
 import { videoEditCaptionSpeechSchema, videoEditCaptionReviewSchema, createVideoEditSpeechCaptionRetimer } from './captionSpeech'
 import { retimeVideoEditContentClips } from './contentAnchors'
-import { resetVideoEditLostMulticamSelections } from './clipRemoval'
 
 const id = z.string().min(1).max(100)
 const frame = z.number().int().nonnegative().max(VIDEO_EDIT_MAX_SEQUENCE_FRAMES)
@@ -160,4 +159,20 @@ export function videoEditCaptionClips(sequence: VideoEditSequence, frame: number
 export function videoEditCaptionTextClip(rendered: VideoEditClip, sequence: Pick<VideoEditSequence, 'width' | 'height'>): VideoEditClip {
   const object = rendered.graphic?.objects[0]
   return object ? { ...rendered, kind: 'text', graphic: undefined, textStyle: object.textStyle, x: rendered.x + Number(object.parameters.x) / sequence.width - .5, y: rendered.y + Number(object.parameters.y) / sequence.height - .5 } : rendered
+}
+
+/** 多机位源序列去掉了机位后，各序列里选了这些机位的多机位片段回到第一个机位。 */
+function resetVideoEditLostMulticamSelections(before: VideoEditDocument, after: VideoEditDocument): VideoEditDocument {
+  const lostBySequence = new Map<string, Set<string>>()
+  for (const sequence of after.sequences) {
+    const previous = before.sequences.find(value => value.id === sequence.id)?.multicam
+    const lost = previous?.cameras.filter(camera => !sequence.multicam?.cameras.some(value => value.id === camera.id)).map(camera => camera.id)
+    if (lost?.length) lostBySequence.set(sequence.id, new Set(lost))
+  }
+  if (!lostBySequence.size) return after
+  const lostOf = new Map(after.items.filter(item => item.kind === 'sequence' && item.sequenceId && lostBySequence.has(item.sequenceId)).map(item => [item.id, lostBySequence.get(item.sequenceId!)!]))
+  const isLost = (clip: VideoEditClip): boolean => Boolean(clip.multicamCameraId && lostOf.get(clip.itemId)?.has(clip.multicamCameraId))
+  if (!after.sequences.some(sequence => sequence.clips.some(isLost))) return after
+  const firstCamera = (clip: VideoEditClip): VideoEditClip => { const next = { ...clip }; delete next.multicamCameraId; return next }
+  return { ...after, sequences: after.sequences.map(sequence => sequence.clips.some(isLost) ? { ...sequence, clips: sequence.clips.map(clip => isLost(clip) ? firstCamera(clip) : clip) } : sequence) }
 }

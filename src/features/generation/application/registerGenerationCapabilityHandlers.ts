@@ -22,7 +22,7 @@ import { modelDefaultsManager } from '@/features/settings/modelDefaultsManager'
 
 import type { ApplicationCapabilityHandlerRegistrar } from '@/features/application-control/capabilities/handlerTypes'
 import { parseCapabilityInput, throwIfCapabilityAborted } from '@/features/application-control/capabilities/handlerUtils'
-import { normalizeCanvasDocumentNodeIds } from '@/features/canvas/application/canvasNodeIdNormalization'
+import { normalizeCanvasDocumentNodeIds } from '@/features/canvas'
 
 interface SearchModelsInput {
   query: string

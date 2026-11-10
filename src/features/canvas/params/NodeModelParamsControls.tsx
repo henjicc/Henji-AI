@@ -8,8 +8,7 @@ import type { CanvasModelMediaType } from '@/features/canvas/domain/defaultModel
 import type { CanvasImageCapabilityModelPolicy } from '@/features/canvas/capabilities/types';
 import { getProviderDisplayName } from '@/utils/modelHelpers';
 import ModelSelectorPanel from '@/components/MediaGenerator/components/ModelSelectorPanel';
-import type { GenerationModelFilterType } from '@/features/generation/domain/generationDraft';
-import { useGenerationDraftStore } from '@/features/generation/store/generationDraftStore';
+import { useGenerationDraftStore, type GenerationModelFilterType } from '@/features/generation';
 import { collectInputMediaByKind } from '@/features/canvas/application/graphMediaResolver';
 import { inferModelFunctionFilter } from '@/features/canvas/domain/modelFunctionFilter';
 import { canvasViewStore } from '@/stores/canvasStore';

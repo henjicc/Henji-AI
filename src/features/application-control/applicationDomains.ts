@@ -19,13 +19,15 @@ import { soundLibraryApplicationDomain } from '@/features/soundLibrary'
 import { creativeIntentApplicationDomain } from './creativeIntentDomain'
 import type { ApplicationDomainModule } from './domainModule'
 import { configureImageEditDocumentProjectionResolverV3 } from '@/features/imageEdit/v3/application/imageEditDocumentBindings'
-import { resolveCanvasImageEditDocumentProjection } from '@/features/canvas/application/imageEditDocumentProjectionBinding'
+import { findCanvasImageEditDocumentTarget, resolveCanvasImageEditDocumentProjection } from '@/features/canvas/application/imageEditDocumentProjectionBinding'
+import { configurePaidApprovalImageDocumentResolver } from '@/services/paidApproval'
 
 /** 由应用注册/反射装配点调用；仅导入领域目录不配置跨域绑定。 */
 export function initializeApplicationDomainBindings(): void {
   registerCreativeIntentHost(videoCreativeIntentProvider)
   registerCreativeIntentHost(imageCreativeIntentProvider)
   configureImageEditDocumentProjectionResolverV3(resolveCanvasImageEditDocumentProjection)
+  configurePaidApprovalImageDocumentResolver(findCanvasImageEditDocumentTarget)
 }
 
 export const APPLICATION_DOMAINS: readonly ApplicationDomainModule[] = [

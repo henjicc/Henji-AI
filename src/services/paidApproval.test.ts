@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { applicationPaidRequest, withPaidOperation, prepareGenerationPaidApproval, isUserCancellation } from './paidApproval'
+import { applicationPaidRequest, configurePaidApprovalImageDocumentResolver, withPaidOperation, prepareGenerationPaidApproval, isUserCancellation } from './paidApproval'
 import { registry } from '@/core/ModelRegistry'
 import type { ModelDefinition } from '@/core/types'
 import { readPriceEstimateDisplaySettings } from '@/core/pricing/priceDisplay'
@@ -14,9 +14,9 @@ const ports = vi.hoisted(() => ({ findDocument: vi.fn(), findProject: vi.fn(), t
 vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ applicationControl: { complete: ports.complete } }) }))
 vi.mock('@/contexts/NotificationContext', () => ({ notifyUser: vi.fn() }))
 vi.mock('@/features/documents/documentOperations', () => ({ getDocumentOperations: () => ports }))
-vi.mock('@/features/canvas/application/imageEditDocumentProjectionBinding', () => ({ findCanvasImageEditDocumentTarget: ports.target }))
 const probes = vi.hoisted(() => ({ readVideoInfo: vi.fn() }))
 vi.mock('@/commands/video', () => probes)
+configurePaidApprovalImageDocumentResolver(documentId => ports.target(documentId))
 beforeEach(() => {
   vi.resetAllMocks()
   ports.findProject.mockResolvedValue({ id: 'project', name: '测试项目' })

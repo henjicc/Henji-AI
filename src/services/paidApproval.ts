@@ -15,6 +15,12 @@ import type { LocalHostReply } from '@/core/application-control/localHostContrac
 import type { ApplicationRef } from '@/core/application-control'
 import { splitImageEditV3DocumentRef } from '@/features/imageEdit/v3/application/imageEditDocumentRefs'
 
+type ImageEditDocumentProjectResolver = (documentId: string) => Promise<{ projectId: string } | undefined>
+let resolveImageEditDocumentProject: ImageEditDocumentProjectResolver | undefined
+
+/** 画布节点里的图片文档不在文档目录登记，由根应用装配注入它所在的画布工程；付费审批不导入画布实现。 */
+export function configurePaidApprovalImageDocumentResolver(resolver: ImageEditDocumentProjectResolver): void { resolveImageEditDocumentProject = resolver }
+
 /** Resolve the actual project container; a toolbox document does not grant a fictitious project. */
 export async function applicationPaidRequest(category: PaidOperationCategory, documentId: string | ApplicationRef | undefined, signal?: AbortSignal, estimatedCny: number | null = null): Promise<PaidApprovalRequest> {
   signal?.throwIfAborted()
@@ -28,8 +34,7 @@ async function paidRequestForDocument(category: PaidOperationCategory, documentR
   let document
   try { document = await operations.findDocument(documentId) } catch (error) {
     if (!imageRef || !(error instanceof Error) || error.name !== 'DocumentNotFoundError') throw error
-    const { findCanvasImageEditDocumentTarget } = await import('@/features/canvas/application/imageEditDocumentProjectionBinding')
-    const target = await findCanvasImageEditDocumentTarget(documentId)
+    const target = await resolveImageEditDocumentProject?.(documentId)
     if (!target) return { category, estimatedCny }
     document = await operations.findDocument(target.projectId)
   }

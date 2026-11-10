@@ -1,6 +1,6 @@
 import type { ApplicationRef } from '@/core/application-control'
 import { createLogger } from '@/core/logging'
-import { openApplicationSurface } from '@/features/navigation/application'
+import { openApplicationSurface } from '@/features/navigation'
 import { useCanvasStore } from '@/stores/canvasStore'
 
 import { isCameraStageNode, isEditableLayerStackResultNode } from '../domain/canvasNodeGuards'
