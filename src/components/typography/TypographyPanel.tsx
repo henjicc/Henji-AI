@@ -55,7 +55,7 @@ export function TypographyPanel({ style, onChange, onError, onBegin, onEnd, onFo
   const iconRow = (label: string, children: ReactNode): React.ReactElement => <div key={label} role="group" aria-label={label} className={`flex min-h-control-sm min-w-0 flex-wrap items-center gap-0.5 ${propertyLayout ? UI_PROPERTY_INSET_CLASS : ''}`}>{children}</div>
   const color = (label: string, value: string, change: (value: string) => void): React.ReactElement => <span className="flex items-center gap-1">
     <UiColorInput aria-label={label} value={value} onPointerDown={onBegin} onFocus={onBegin} onBlur={() => onEnd?.(true)} onChange={event => change(event.target.value)} />
-    <UiIconButton size="lg" aria-label={`吸取${label}`} tooltip={`吸取${label}`} onClick={() => {
+    <UiIconButton size="xs" tone="rest" aria-label={`吸取${label}`} tooltip={`吸取${label}`} onClick={() => {
       const Constructor = (globalThis as typeof globalThis & { EyeDropper?: new () => { open: () => Promise<{ sRGBHex: string }> } }).EyeDropper
       if (!Constructor) { onError(new Error('此窗口无法取色，请使用颜色选择器。')); return }
       onEnd?.(true)
@@ -108,7 +108,7 @@ export function TypographyPanel({ style, onChange, onError, onBegin, onEnd, onFo
         const step = axis.max - axis.min > 20 ? 1 : .1
         const change = (next: number): void => { if (!axisKeyframes?.write(axis.tag, next)) write({ fontVariations: { ...styleRef.current.fontVariations, [axis.tag]: next } }) }
         const controls = axisKeyframes?.controls(axis, value)
-        // 秒表进属性行的秒表列、关键帧导航叠在名称后（悬停本行出现），与运动属性行同一排布。
+        // 秒表进属性行的秒表列、关键帧导航浮在行尾（悬停本行出现），与运动属性行同一排布。
         return <UiFormRow key={`axis:${axis.tag}`} label={label} info={`${axis.tag}：${axis.min}–${axis.max}`} density="compact" leading={controls?.stopwatch} labelTrailing={controls?.navigator}>
           <span className="flex min-w-0 items-center gap-2">
             <UiRangeInput aria-label={`${label}滑杆`} min={axis.min} max={axis.max} step={step} value={value} onPointerDown={onBegin} onPointerUp={() => onEnd?.(true)} onPointerCancel={() => onEnd?.(false)} onBlur={() => onEnd?.(true)} onChange={event => change(Number(event.target.value))} />

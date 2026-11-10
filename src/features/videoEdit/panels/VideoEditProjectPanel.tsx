@@ -48,13 +48,13 @@ const GridItem = forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>
 GridItem.displayName = 'VideoEditProjectGridItem'
 const gridComponents = { List: GridList, Item: GridItem }
 const SORT_OPTIONS = [{ value: 'name', label: '名称' }, { value: 'kind', label: '类型' }, { value: 'duration', label: '时长' }] as const
-/** 列表视图的列（PR 素材面板：名称、帧速率、媒体开始、媒体结束、媒体持续时间），点表头排序。 */
+/** 列表视图的列，点表头排序。时长排在名称后面：默认宽度的面板里一眼看得到，其余列（帧速率、媒体开始与结束、代理）加宽面板或横向滚动才出现。 */
 const LIST_COLUMNS: Array<{ key: Exclude<VideoEditProjectSortKey, 'kind' | 'name'> | 'proxy'; label: string }> = [
-  { key: 'frameRate', label: '帧速率' }, { key: 'mediaStart', label: '媒体开始' }, { key: 'mediaEnd', label: '媒体结束' }, { key: 'duration', label: '持续时间' }, { key: 'proxy', label: '代理' },
+  { key: 'duration', label: '时长' }, { key: 'frameRate', label: '帧速率' }, { key: 'mediaStart', label: '媒体开始' }, { key: 'mediaEnd', label: '媒体结束' }, { key: 'proxy', label: '代理' },
 ]
 /** 列宽（PR：拖表头之间的分隔线调整），本机记住；列宽总和超过面板宽时左右滚动。 */
 type ListColumnKey = 'name' | (typeof LIST_COLUMNS)[number]['key']
-const DEFAULT_COLUMN_WIDTHS: Record<ListColumnKey, number> = { name: 220, frameRate: 72, mediaStart: 96, mediaEnd: 96, duration: 96, proxy: 88 }
+const DEFAULT_COLUMN_WIDTHS: Record<ListColumnKey, number> = { name: 152, frameRate: 72, mediaStart: 96, mediaEnd: 96, duration: 84, proxy: 88 }
 const COLUMN_WIDTHS_KEY = 'henji.videoEdit.projectColumns'
 const MIN_COLUMN_WIDTH = 48
 function readColumnWidths(): Record<ListColumnKey, number> {

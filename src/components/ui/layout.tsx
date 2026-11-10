@@ -131,7 +131,7 @@ interface UiFormRowProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
   trailing?: ReactNode;
   /** 属性面板排布（`UiFieldLayoutContext` = `property`）的秒表列：动画开关一类，一行至多一个。 */
   leading?: ReactNode;
-  /** 属性面板排布里名称后的悬停内容（关键帧导航）：叠在名称列右端、不占宽度，自己铺底并用 `UI_PROPERTY_REVEAL_CLASS` 默认藏起。 */
+  /** 属性面板排布里悬停才出现的内容（关键帧导航）：浮在行尾、不占宽度，自己铺底并用 `UI_PROPERTY_REVEAL_CLASS` 默认藏起。 */
   labelTrailing?: ReactNode;
   /** 属性面板排布里控件需要整行宽度（曲线、色轮、点位板、多行文本）：名称一行，控件在下一行占满名称列与数值列。 */
   wide?: boolean;
@@ -467,12 +467,11 @@ export function UiFormRow({
     return <div data-ui-form-row="property" className={`${UI_PROPERTY_ROW_CLASS} ${className}`} {...props}>
       {modified ? <Tooltip asChild content={typeof modified === 'string' ? modified : '已改'}><span role="img" aria-label={typeof modified === 'string' ? modified : '已改'} data-ui-form-row-modified className="flex h-full items-center justify-center"><span className="h-1.5 w-1.5 rounded-full bg-text3" /></span></Tooltip> : <span aria-hidden="true" />}
       <span className="flex items-center justify-center">{leading}</span>
-      {/* 名称后的悬停内容（关键帧导航）叠在名称列右端、不占宽度：占宽时窄面板里名称只剩一个字（重要记录 020） */}
-      <div className="relative flex min-w-0 items-center">
-        <div id={labelId} className="min-w-0 truncate text-xs text-text3">{propertyLabelNode}</div>
-        {labelTrailing ? <span className="absolute inset-y-0 right-0 flex items-center">{labelTrailing}</span> : null}
-      </div>
-      {wide ? <span aria-hidden="true" /> : <div data-ui-form-control className="flex min-w-0 items-center justify-start gap-1 pr-2">{control}{trailing}</div>}
+      <div id={labelId} className="min-w-0 truncate text-xs text-text3">{propertyLabelNode}</div>
+      {/* 悬停才出现的内容（关键帧导航）浮在行尾、不占宽度：数值紧跟名称，行尾通常是空的；占宽会把窄面板里的滑杆和成对数值挤出去 */}
+      {wide
+        ? <span className="flex min-w-0 items-center justify-end pr-2">{labelTrailing}</span>
+        : <div data-ui-form-control className="relative flex min-w-0 items-center justify-start gap-1 pr-2">{control}{trailing}<span className="absolute inset-y-0 right-2 flex items-center">{labelTrailing}</span></div>}
       {wide ? <div data-ui-form-control className="col-span-2 col-start-3 min-w-0 pb-2 pr-2">{control}{trailing}</div> : null}
       {notes}
     </div>;

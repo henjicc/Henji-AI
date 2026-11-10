@@ -17,7 +17,7 @@ export interface ParamListProps {
   contextKey?: string
   renderControl: (field: ParamFieldSpec, value: CodeParameterValue) => ReactNode
   /**
-   * 参数的动画控件。属性面板排布里返回 `{ leading, labelTrailing }`：秒表进秒表列、关键帧导航跟在名称后；
+   * 参数的动画控件。属性面板排布里返回 `{ leading, labelTrailing }`：秒表进秒表列、关键帧导航浮在行尾；
    * 返回普通节点时整块放在这一行下方（代码参数的关键帧列表）。
    */
   renderAnimation?: (field: ParamFieldSpec, value: CodeParameterValue) => ReactNode | ParamAnimationSlots

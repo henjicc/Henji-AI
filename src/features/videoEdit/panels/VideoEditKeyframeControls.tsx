@@ -40,7 +40,7 @@ export function VideoEditKeyframeStopwatch(props: VideoEditKeyframeControlProps)
 }
 
 /**
- * 开了动画的一行在名称后跟着关键帧导航：上一个 / 在播放头添加或删除 / 下一个，以及关键帧轨与插值浮层。
+ * 开了动画的一行在行尾浮着关键帧导航：上一个 / 在播放头添加或删除 / 下一个，以及关键帧轨与插值浮层。
  * 悬停或聚焦本行才出现；完整的关键帧在时间线展开轨道里看和改。
  */
 export function VideoEditKeyframeNavigator(props: VideoEditKeyframeControlProps): React.ReactElement | null {
@@ -50,7 +50,7 @@ export function VideoEditKeyframeNavigator(props: VideoEditKeyframeControlProps)
   if (!animated) return null
   const current = atTime[0]?.point
   const remove = (): void => onChange(Object.fromEntries(channels.filter(channel => channel.points?.length).map(channel => [channel.key, channel.points!.filter(point => point.time !== time)])))
-  // 属性排布里叠在名称右端（UiFormRow 的 labelTrailing 不占宽）：铺面板底盖住名称尾部，随悬停一起淡入
+  // 属性排布里浮在行尾（UiFormRow 的 labelTrailing，不占宽）：铺面板底盖住下面的内容，随悬停一起淡入
   return <span className={`flex shrink-0 items-center ${reveal ? `rounded-control bg-panel ${UI_PROPERTY_REVEAL_CLASS}` : ''}`}>
     <UiIconButton size="2xs" tooltip={`上一个${label}关键帧`} aria-label={`上一个${label}关键帧`} disabled={previous === undefined} onClick={() => previous !== undefined && onSeek(previous)}><ChevronLeft /></UiIconButton>
     <UiIconButton size="2xs" on={Boolean(current)} tooltip={`${current ? '删除' : '添加'}${label}关键帧`} aria-label={`${current ? '删除' : '添加'}${label}关键帧`} disabled={!inside} onClick={() => current ? remove() : addKeyframes(props)}><Diamond fill={current ? 'currentColor' : 'none'} /></UiIconButton>
