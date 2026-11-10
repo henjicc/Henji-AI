@@ -20,9 +20,11 @@ test('遮挡裁切的正式实现可整体序列化执行，并与 auditUiDom �
   const layout = await audit('<section id="sample-a" data-gallery-rule-sample="controlClipped"><div style="overflow-x:hidden;overflow-y:hidden" data-rect="0 0 100 40"><button aria-label="被裁" data-rect="80 10 140 30"></button></div></section>')
   assert.equal(layout.controlClipped.length, 1)
   assert.match(layout.controlClipped[0].element, /^#sample-a \/ button/)
-  const rules = { notes: ['扫描可见元素 3'], gallerySamples: [{ id: 'sample-a', rule: 'controlClipped', expectHit: true, passed: false, issues: [] }] }
+  const rules = { notes: ['扫描可见元素 3'], gallerySamples: [{ id: 'sample-a', rule: 'controlClipped', expectHit: true, passed: false, issues: [] }], galleryExpectedHits: [{ id: 'sample-a', rule: 'controlClipped' }] }
   const merged = mergeLayoutAudit(rules, layout)
   assert.equal(merged.gallerySamples[0].passed, true)
   assert.equal(merged.controlClipped.length, 0, '反例的预期命中在普通审计里移除')
   assert.equal(mergeLayoutAudit(rules, layout, { includeGallerySamples: true }).controlClipped.length, 1)
+  const scrolledOut = { ...rules, gallerySamples: [] }
+  assert.equal(mergeLayoutAudit(scrolledOut, layout).controlClipped.length, 0, '反例滚出视口时也不进命中表')
 })

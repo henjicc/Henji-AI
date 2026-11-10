@@ -82,8 +82,11 @@ export interface PromptEditorHandle {
    * 带 change 时把这次外部变化（如素材进参考条）与插入并成一步撤销。
    */
   insertMediaReferences: (position: number, references: readonly PromptReferenceItem[], change?: PromptEditorExternalChange) => void
-  /** 把编辑器以外已经发生的一次变化记进编辑器的撤销栈，与文字编辑按顺序一起撤销、重做。 */
-  recordExternalChange: (change: PromptEditorExternalChange) => void
+  /**
+   * 把编辑器以外已经发生的一次变化记进编辑器的撤销栈，与文字编辑按顺序一起撤销、重做。
+   * 带 rebind（旧资源 → 新资源）时，指向旧资源的素材引用在同一步里改指新资源（删掉素材后引用跟着位置走）。
+   */
+  recordExternalChange: (change: PromptEditorExternalChange, rebind?: ReadonlyMap<string, string>) => void
   undo: () => void
   redo: () => void
 }

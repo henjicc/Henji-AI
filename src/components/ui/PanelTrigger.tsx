@@ -11,6 +11,7 @@ import {
 } from './overlayOwnership'
 import {
   resolveFloatingPanelPosition,
+  resolvePopoverMotionStyle,
   type FloatingPanelAnchorRect,
   type FloatingPanelPosition,
 } from './floatingPanelPosition'
@@ -479,6 +480,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
           aria-hidden={closing || undefined}
           {...(closing ? { inert: '' } : {})}
           style={{
+            ...(anchorRectRef.current ? resolvePopoverMotionStyle(anchorRectRef.current, pos.left, pos.width, pos.placement) : {}),
             position: 'fixed',
             top: pos.placement === 'above' ? undefined : pos.top,
             bottom: pos.bottom,
@@ -497,6 +499,8 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
             visibility: ready && !yieldToModal ? 'visible' : 'hidden'
           }}
           data-panel-placement={pos.placement}
+          // 定位时的触发器（左、上、宽、高）：布局检查据此判断浮层是否贴着触发器（popoverDetached）
+          data-anchor-rect={anchorRectRef.current ? [anchorRectRef.current.left, anchorRectRef.current.top, anchorRectRef.current.width, anchorRectRef.current.bottom - anchorRectRef.current.top].map(Math.round).join(',') : undefined}
           {...overlay.layerProps}
         >
           <div

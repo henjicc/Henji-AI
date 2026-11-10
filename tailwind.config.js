@@ -337,14 +337,19 @@ export default {
           cut: withOpacity('--wave-cut-rgb'),
         },
       },
+      // 浮层从触发器那一侧长出来：起点稍小并朝触发器错开几像素（--ui-pop-shift），缩放中心在触发器上
+      // （浮层在 transform-origin 写触发器中心）；大面板缩 5% 会整块飘，只缩 3%。
+      scale: {
+        97: '0.97',
+      },
       keyframes: {
         'ui-scale-in': {
-          '0%': { opacity: '0', transform: 'scale(0.95)' },
-          '100%': { opacity: '1', transform: 'scale(1)' }
+          '0%': { opacity: '0', transform: 'translateY(var(--ui-pop-shift, 0px)) scale(0.97)' },
+          '100%': { opacity: '1', transform: 'none' }
         },
         'ui-scale-out': {
-          '0%': { opacity: '1', transform: 'scale(1)' },
-          '100%': { opacity: '0', transform: 'scale(0.95)' }
+          '0%': { opacity: '1', transform: 'none' },
+          '100%': { opacity: '0', transform: 'translateY(var(--ui-pop-shift, 0px)) scale(0.97)' }
         },
         'ui-fade-in': {
           '0%': { opacity: '0' },

@@ -40,6 +40,37 @@ export interface UiTaskHistoryFilterBarProps {
   onClose?: () => void
 }
 
+interface UiTaskHistoryDateRangeProps {
+  startDate: string
+  endDate: string
+  onStartDateChange: (startDate: string) => void
+  onEndDateChange: (endDate: string) => void
+}
+
+/** 筛选选了“自定义时间”时的起止日期。 */
+export function UiTaskHistoryDateRange({ startDate, endDate, onStartDateChange, onEndDateChange }: UiTaskHistoryDateRangeProps): JSX.Element {
+  const { t, i18n } = useI18n('ui')
+  const picker = (value: string, onChange: (value: string) => void, ariaLabel: string): JSX.Element => (
+    <UiDatePicker
+      value={value}
+      onChange={onChange}
+      locale={i18n.language}
+      placeholder={t('workspaceFilters.time.datePlaceholder')}
+      ariaLabel={ariaLabel}
+      clearLabel={t('workspaceFilters.time.clear')}
+      todayLabel={t('workspaceFilters.time.today')}
+      className="w-[120px]"
+    />
+  )
+  return (
+    <div className={`flex items-center gap-1 ${UI_TEXT_META_CLASS}`}>
+      {picker(startDate, onStartDateChange, t('workspaceFilters.time.startDate'))}
+      <span>-</span>
+      {picker(endDate, onEndDateChange, t('workspaceFilters.time.endDate'))}
+    </div>
+  )
+}
+
 export function UiTaskHistoryFilterBar({
   mode = 'collapsible',
   showCloseButton = false,
@@ -63,7 +94,7 @@ export function UiTaskHistoryFilterBar({
   onEndDateChange,
   onClose,
 }: UiTaskHistoryFilterBarProps): JSX.Element {
-  const { t, i18n } = useI18n('ui')
+  const { t } = useI18n('ui')
   const isAlwaysVisible = mode === 'always'
   const [isExpanded, setIsExpanded] = useState<boolean>(false)
   const panelVisible = isAlwaysVisible || isExpanded
@@ -165,41 +196,25 @@ export function UiTaskHistoryFilterBar({
     }
   }, [isAlwaysVisible, isExpanded, modelOptions.length, providerOptions.length, mediaOptions?.length, timePreset, keyword])
 
+  // 常驻模式随宿主展开而挂载：淡入，不从无到有地跳出来
   const panelContainerClassName = isAlwaysVisible
-    ? 'relative z-dropdown'
+    ? 'relative min-w-0 animate-fade-in'
     : `absolute right-0 top-0 z-dropdown origin-right will-change-transform transition-[opacity,transform] duration-240 ease-out ${
       panelVisible ? 'opacity-100 scale-x-100 translate-x-0' : 'pointer-events-none opacity-0 scale-x-[0.35] translate-x-2'
     }`
 
-  // 自定义时间的起止日期：常驻的从属筛选带里与时间下拉同一行（单行，不折到第二行，任务 5.3）；折叠面板里仍放在下方
-  const customDateRange = timePreset === 'custom' ? (
-    <div className={`flex items-center gap-1 ${UI_TEXT_META_CLASS}`}>
-      <UiDatePicker
-        value={startDate}
-        onChange={onStartDateChange}
-        locale={i18n.language}
-        placeholder={t('workspaceFilters.time.datePlaceholder')}
-        ariaLabel={t('workspaceFilters.time.startDate')}
-        clearLabel={t('workspaceFilters.time.clear')}
-        todayLabel={t('workspaceFilters.time.today')}
-        className="w-[120px]"
-      />
-      <span>-</span>
-      <UiDatePicker
-        value={endDate}
-        onChange={onEndDateChange}
-        locale={i18n.language}
-        placeholder={t('workspaceFilters.time.datePlaceholder')}
-        ariaLabel={t('workspaceFilters.time.endDate')}
-        clearLabel={t('workspaceFilters.time.clear')}
-        todayLabel={t('workspaceFilters.time.today')}
-        className="w-[120px]"
-      />
-    </div>
+  // 常驻模式与命令带同一行：窄了下拉先截断（点开能看到全称），不撑破这一行
+  const dropdownLayout = isAlwaysVisible
+    ? { className: 'min-w-16 max-w-32 shrink', buttonClassName: 'w-auto max-w-full', minWidthStrategy: 'none' as const }
+    : { className: 'shrink-0', buttonClassName: 'w-auto', minWidthStrategy: 'display' as const }
+
+  // 折叠面板里起止日期放在筛选下方；常驻模式由宿主放进从属带（命令带一行放不下）
+  const customDateRange = !isAlwaysVisible && timePreset === 'custom' ? (
+    <UiTaskHistoryDateRange startDate={startDate} endDate={endDate} onStartDateChange={onStartDateChange} onEndDateChange={onEndDateChange} />
   ) : null
 
   return (
-    <div className={`relative flex items-start ${isAlwaysVisible ? 'justify-start' : 'justify-end'}`}>
+    <div className={`relative flex ${isAlwaysVisible ? 'min-w-0 items-center justify-start' : 'items-start justify-end'}`}>
       {!isAlwaysVisible && (
         <div ref={triggerRef}>
           <UiIconButton size="md"
@@ -225,16 +240,16 @@ export function UiTaskHistoryFilterBar({
         ref={panelRef}
         className={panelContainerClassName}
       >
-        {/* 常驻模式是宿主命令带下方的从属筛选带：不自带底色与边框；折叠模式是浮起的筛选面板 */}
+        {/* 常驻模式嵌在宿主命令带的同一行里：不自带底色与边框、不折行，搜索框先收窄；折叠模式是浮起的筛选面板 */}
         <div className={isAlwaysVisible
-          ? 'relative flex flex-col items-start gap-1'
+          ? 'relative flex min-w-0 items-center'
           : 'relative flex flex-col items-end gap-1 rounded-lg border border-line-strong bg-panel px-2 py-1.5'}
         >
-          <div className={`relative flex flex-wrap items-center gap-1 ${isAlwaysVisible ? 'justify-start' : 'justify-end'}`}>
+          <div className={`relative flex items-center gap-1 ${isAlwaysVisible ? 'min-w-0 flex-nowrap justify-start' : 'flex-wrap justify-end'}`}>
             <UiSearchInput
               ref={inputRef}
               iconRef={iconAnchorRef}
-              className="w-72 shrink-0"
+              className={isAlwaysVisible ? 'w-60 min-w-24 shrink' : 'w-72 shrink-0'}
               value={keyword}
               onChange={(event) => onKeywordChange(event.target.value)}
               placeholder={t('workspaceFilters.searchPlaceholder')}
@@ -251,14 +266,10 @@ export function UiTaskHistoryFilterBar({
               display={selectedTimeLabel}
               options={timeOptions}
               onSelect={onTimePresetChange}
-              portal={false}
-              className="shrink-0"
-              buttonClassName="w-auto"
-              minWidthStrategy="display"
+              portal={isAlwaysVisible}
+              {...dropdownLayout}
               panelWidthStrategy="options"
             />
-
-            {isAlwaysVisible && customDateRange}
 
             {showMediaType && (
               <Dropdown
@@ -266,10 +277,8 @@ export function UiTaskHistoryFilterBar({
                 display={selectedMediaLabel}
                 options={resolvedMediaOptions}
                 onSelect={onMediaTypeChange}
-                portal={false}
-                className="shrink-0"
-                buttonClassName="w-auto"
-                minWidthStrategy="display"
+                portal={isAlwaysVisible}
+                {...dropdownLayout}
                 panelWidthStrategy="options"
               />
             )}
@@ -279,10 +288,8 @@ export function UiTaskHistoryFilterBar({
               display={selectedProviderLabel}
               options={providerSelectOptions}
               onSelect={onProviderChange}
-              portal={false}
-              className="shrink-0"
-              buttonClassName="w-auto"
-              minWidthStrategy="display"
+              portal={isAlwaysVisible}
+              {...dropdownLayout}
               panelWidthStrategy="options"
             />
 
@@ -291,10 +298,8 @@ export function UiTaskHistoryFilterBar({
               display={selectedModelLabel}
               options={modelSelectOptions}
               onSelect={onModelChange}
-              portal={false}
-              className="shrink-0"
-              buttonClassName="w-auto"
-              minWidthStrategy="display"
+              portal={isAlwaysVisible}
+              {...dropdownLayout}
               panelWidthStrategy="options"
             />
 
@@ -309,7 +314,7 @@ export function UiTaskHistoryFilterBar({
             )}
           </div>
 
-          {!isAlwaysVisible && customDateRange}
+          {customDateRange}
         </div>
       </div>
     </div>

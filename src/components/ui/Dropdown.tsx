@@ -16,6 +16,7 @@ import { UiFieldTrigger, UiOptionButton } from './primitives'
 import { UI_POPOVER_TRANSITION_MS } from './motion'
 import { useDialogTransition } from './useDialogTransition'
 import { resolveDropdownDisplay, resolveDropdownMenuWidth } from './dropdownUtils'
+import { resolvePopoverMotionStyle } from './floatingPanelPosition'
 import { UiBooleanAppearanceContext } from './booleanAppearance'
 import { hasOpenModalUiOverlayAbove, resolveUiOverlayTarget, UiOverlayLayerProvider, useHasOpenModalUiOverlayDescendant, useUiOverlayLayer } from './overlayOwnership'
 import { measureElementTextWidth } from './textMeasurement'
@@ -153,6 +154,8 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     left: number
     width: number
     placement: 'above' | 'below'
+    /** 触发器的左缘与宽度：进出场的缩放中心落在触发器中线上 */
+    anchor: { left: number; top: number; width: number; height: number }
   } | null>(null)
   const [buttonMinWidthPx, setButtonMinWidthPx] = useState<number | null>(null)
   const [panelMinWidthPx, setPanelMinWidthPx] = useState<number | null>(null)
@@ -358,7 +361,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
         Math.max(viewportPadding, preferredLeft),
         Math.max(viewportPadding, viewport.innerWidth - panelWidth - viewportPadding)
       )
-      setFixedPos({ top, left, width: rect.width, placement })
+      setFixedPos({ top, left, width: rect.width, placement, anchor: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } })
     }
     if (open) {
       updatePos()
@@ -476,6 +479,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
               aria-hidden={closing || undefined}
               {...(closing ? { inert: '' } : {})}
               style={{
+                ...resolvePopoverMotionStyle(fixedPos.anchor, fixedPos.left, optionsPanelWidth !== null ? Math.max(fixedPos.width, optionsPanelWidth) : fixedPos.width, fixedPos.placement),
                 position: 'fixed',
                 top: fixedPos.top,
                 left: fixedPos.left,
@@ -488,6 +492,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
               }}
               data-dropdown-portal="true"
               data-dropdown-placement={fixedPos.placement}
+              data-anchor-rect={[fixedPos.anchor.left, fixedPos.anchor.top, fixedPos.anchor.width, fixedPos.anchor.height].map(Math.round).join(',')}
               {...overlay.layerProps}
             >
               {menuContent}

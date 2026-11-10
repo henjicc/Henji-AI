@@ -1,4 +1,5 @@
 import type { PromptEditorExternalChange, PromptEditorHandle } from '@/components/ui'
+import { remapRemovedPromptImages } from '../promptState'
 import {
   generationMediaSnapshotsEqual,
   readGenerationMediaSnapshot,
@@ -23,13 +24,14 @@ export function mediaChangeSince(before: GenerationMediaSnapshot): PromptEditorE
 /**
  * 执行一次参考素材操作（上传、删除、替换、排序、粘贴），落定后把素材变化记进提示词编辑器的撤销栈，
  * 与打字按顺序一起撤销。操作同步执行（粘贴要在事件当下决定是否接管），异步部分结束后再比对前后快照。
+ * 删掉的图被提示词引用着时，引用在同一步里改指同一位置的新图（换掉的图沿用原身份，引用本来就跟着走）。
  */
 export function trackMediaChange<T>(getEditor: () => PromptEditorHandle | null | undefined, operation: () => T): T {
   const before = readGenerationMediaSnapshot()
   const result = operation()
   void Promise.resolve(result).catch(() => undefined).then(() => {
     const change = mediaChangeSince(before)
-    if (change) getEditor()?.recordExternalChange(change)
+    if (change) getEditor()?.recordExternalChange(change, remapRemovedPromptImages(before.uploadedPromptImages, readGenerationMediaSnapshot().uploadedPromptImages))
   })
   return result
 }

@@ -391,6 +391,31 @@ describe('PromptEditor', () => {
     expect(media.undo).toHaveBeenCalledTimes(1)
   })
 
+  it('删掉被引用的素材时引用在同一步改指新资源；撤销后引用与素材一起回去，重做再一起改回来', () => {
+    const ref = createRef<PromptEditorHandle>()
+    const references = [
+      { resourceId: 'asset:a', mediaType: 'image' as const, label: '图片1' },
+      { resourceId: 'asset:b', mediaType: 'image' as const, label: '图片2' },
+    ]
+    render(
+      <PromptEditor ref={ref} value={createPlainTextPromptDocument('左右')} onChange={vi.fn()} ariaLabel="改指" preset="media-references" references={references} />,
+    )
+    const document = (): string => JSON.stringify(ref.current?.getDocument())
+    act(() => ref.current?.insertMediaReferences(2, [references[0]], { undo: vi.fn(), redo: vi.fn() }))
+    const removal = { undo: vi.fn(), redo: vi.fn() }
+    act(() => ref.current?.recordExternalChange(removal, new Map([['asset:a', 'asset:b']])))
+    expect(document()).toContain('asset:b')
+    expect(document()).not.toContain('asset:a')
+
+    act(() => ref.current?.undo())
+    expect(removal.undo).toHaveBeenCalledTimes(1)
+    expect(document()).toContain('asset:a')
+    act(() => ref.current?.redo())
+    expect(removal.redo).toHaveBeenCalledTimes(1)
+    expect(document()).toContain('asset:b')
+    expect(document()).not.toContain('asset:a')
+  })
+
   it('提交快捷键避开 composition 并吞掉当前事件', () => {
     const onSubmit = vi.fn()
     const rendered = render(

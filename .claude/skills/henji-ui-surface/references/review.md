@@ -252,6 +252,7 @@ npm run ui:tour -- --steps scripts/ui-review/ui-gallery.json --matrix review --a
 | UiDisclosurePanel | 正式折叠过渡，不自行拼另一套开合时长 |
 | UiMarqueeText | 长用户文本的受控展示，不用于藏起短操作标签 |
 | UiTaskHistoryFilterBar | 任务历史筛选组合，复用字段与标签控件 |
+| UiTaskHistoryDateRange | 任务历史筛选的自定义起止日期；常驻筛选条在宿主从属带里放它 |
 | UiNumberStepper | 复合数值字段的步进列，不当作独立数值框 |
 | PromptDocumentStatic | 提示词文档只读视图，与 PromptEditor 共用文档语义 |
 | UiDatePicker | 日期字段与选择面板，不以裸输入重做 |
@@ -289,8 +290,13 @@ npm run ui:tour -- --steps scripts/ui-review/ui-gallery.json --matrix review --a
 |---|---|---|
 | `controlClipped` | 控件或带文字的元素外框超出某个 `overflow: hidden / clip` 祖先（或窗口）> 1.5px，且仍有一部分可见 | 整块看不见（折叠、移出）；被滚动容器（含 `data-layout-scroll-region`）滚出去；绝对定位元素越过的中间祖先不是它的包含块；有理由的 `clip` 声明 |
 | `controlOccluded` | 控件可见范围的中心，或五个取样点中 ≥ 3 个，命中的最上层元素不是它自己、子元素或祖先；圆形、胶囊控件的角点按圆角内缩取样 | 盖在上面的是在它之上打开的另一层浮层（菜单、弹窗及其遮罩、查看器、提示、`z-index ≥ 30` 的定位层；同一个浮层内部互相压着仍算）、吸顶行、分隔条；同一字段控件的组成部分；有理由的 `occlude` 声明 |
+| `labelOffCenter` | 面板表单行（`data-control-lines="single"`）参数名**文字墨迹**（Range）的中线与控件**本体**（开关、分段、滑块、输入框、按钮）的中线差 > 1.5px | 多行控件（比例格、多行文本）：标签贴顶，不判 |
+| `popoverDetached` | 浮层（`data-anchor-rect` 记着定位时的触发器）离触发器 > 12px，或触发器中线落在浮层左右范围之外 | 触发器已不在原处（滚动后浮层跟着重新定位前的一瞬） |
+| `iconToneMismatch` | 同一父级里 ≥ 3 个静息图标按钮（`default` / `rest` / `restDanger` / `danger`），颜色不是多数派的那几个 | 开着的（`aria-pressed`、`on`）、悬停或键盘聚焦中的、禁用的；组上写了有理由的 `data-layout-allow="tone"`（同组本来就分“动作”与“默认状态的开关”） |
 
-- 巡检：`scripts/lib/uiLayoutAudit.cjs` 用 Node 类型剥离加载同一份源码，序列化进渲染进程执行，与 `auditUiDom` 合并成同一份规则结果（`check:ui-visual`、`ui:tour --audit`、`test:ui-visual-rules`）。断牙：`test:ui-dom-rules` 的 jsdom 夹具 + 中心页规范区 Do/Don't（真实 Electron 22 个样例）。
+量对齐一律量**看得见的东西**：文字量墨迹（`document.createRange().selectNodeContents(el)`），控件量本体，不量外层盒子。盒子居中而字不在盒子正中（组件自带外边距、行内块多撑出的行高）是 2026-11-11 漏到用户手里的那一类问题。
+
+- 巡检：`scripts/lib/uiLayoutAudit.cjs` 用 Node 类型剥离加载同一份源码，序列化进渲染进程执行，与 `auditUiDom` 合并成同一份规则结果（`check:ui-visual`、`ui:tour --audit`、`test:ui-visual-rules`）。断牙：`test:ui-dom-rules` 的 jsdom 夹具 + 中心页规范区 Do/Don't（真实 Electron 26 个样例；`popoverDetached` 只有 jsdom 夹具，常开的浮层会压住样张页别的样例）。
 - 运行时布局守卫（`src/core/uiAudit/layoutGuard.ts`）：界面安静 0.7 秒后在空闲时检查（按住鼠标、窗口隐藏时不查），同一问题每次运行只记一次。默认不运行，开发运行与正式版一致（整页扫描会打断跟手交互，2026-10-26 用户确认）；`--dev-checks` 时描边 + 日志，`--dev-layout-guard=log` 只记日志。界面改动收尾前至少开一次。日志用 `npm run logs:query -- --event ui.layout_issue.detected` 查。
 
 ### 9.3 快速检查（改完停靠面板或做全面检查时）

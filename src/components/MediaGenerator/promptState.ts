@@ -47,16 +47,26 @@ export function reconcileMediaGeneratorPromptImages(
   nextUrls: readonly string[],
   createResourceId: ResourceIdFactory = defaultResourceIdFactory,
 ): MediaGeneratorPromptImage[] {
+  // 先认同一位置、同一网址的图，再按网址认挪了位置的图（同一文件导入过两次时不把位置认错）
+  const kept: Array<MediaGeneratorPromptImage | undefined> = nextUrls.map((url, index) => (current[index]?.url === url ? current[index] : undefined))
+  const keptSet = new Set(kept.filter((image): image is MediaGeneratorPromptImage => Boolean(image)))
   const availableByUrl = new Map<string, MediaGeneratorPromptImage[]>()
   current.forEach((image) => {
+    if (keptSet.has(image)) return
     const available = availableByUrl.get(image.url) ?? []
     available.push(image)
     availableByUrl.set(image.url, available)
   })
-
-  return nextUrls.map((url) => {
-    const available = availableByUrl.get(url)
-    return available?.shift() ?? createPromptImage(url, createResourceId)
+  nextUrls.forEach((url, index) => { kept[index] ??= availableByUrl.get(url)?.shift() })
+  const dropped = new Set(Array.from(availableByUrl.values()).flat())
+  // 同一位置换了新图（素材条替换、查看器编辑后保存、生成前把临时图存盘）沿用原图身份，
+  // 提示词里引用它的地方跟着指向新图，不因网址变了而失效
+  return nextUrls.map((url, index) => {
+    const image = kept[index]
+    if (image) return image
+    const replaced = current[index]
+    if (replaced && dropped.delete(replaced)) return { resourceId: replaced.resourceId, url }
+    return createPromptImage(url, createResourceId)
   })
 }
 
@@ -70,6 +80,25 @@ export function createMediaGeneratorPromptReferences(
     legacyLabels: createLegacyPromptMediaLabels('image', index + 1),
     thumbnailSrc: image.url,
   }))
+}
+
+/**
+ * 参考图删掉后，提示词里指向它的引用改指现在排在同一位置的那张图：“图片1”删掉后引用落到新的图片1上。
+ * 同一文件导入过两次、删掉其中一张时，引用指向留下的那张（两张是同一个文件，只按网址分不出删的是哪张）。
+ * 同一位置已经没有图（删的是最后一张）时不改，引用标成失效。
+ */
+export function remapRemovedPromptImages(
+  before: readonly MediaGeneratorPromptImage[],
+  after: readonly MediaGeneratorPromptImage[],
+): Map<string, string> {
+  const remaining = new Set(after.map((image) => image.resourceId))
+  const remap = new Map<string, string>()
+  before.forEach((image, index) => {
+    if (remaining.has(image.resourceId)) return
+    const successor = after.find((candidate) => candidate.url === image.url) ?? after[index]
+    if (successor) remap.set(image.resourceId, successor.resourceId)
+  })
+  return remap
 }
 
 export function createMediaGeneratorPromptBindings(

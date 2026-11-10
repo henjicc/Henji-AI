@@ -189,7 +189,7 @@ describe('UiModal 收起（任务 5.8，同 VE-06）', () => {
       // 收起中不再声明模态：画布快捷键等按 [aria-modal="true"] 判断“有没有弹窗”，关闭动画期间不能吞掉按键
       expect(document.body.querySelector('[aria-modal="true"]')).toBeNull();
       expect(document.body.querySelector('[data-dialog="true"]')).toBeNull();
-      const panel = root.querySelector('.transition-opacity.duration-180:not(.ui-glass-scrim)') as HTMLElement;
+      const panel = root.querySelector('.duration-180:not(.ui-glass-scrim)') as HTMLElement;
       fireEvent.transitionEnd(panel);
       expect(document.body.querySelector('[role="dialog"]')).toBeNull();
     } finally {

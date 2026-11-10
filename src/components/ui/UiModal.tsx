@@ -146,10 +146,11 @@ export function UiModal({
         className={`ui-glass-scrim ${isGlass ? 'ui-glass-scrim-soft' : ''} absolute inset-0 transition-opacity duration-180 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
         onClick={requestClose}
       />
+      {/* 打开后不留 transform（scale-100 也算）：留着会让面板成为 fixed 后代的定位基准 */}
       <UiPanel
         variant={isGlass ? 'glass' : 'panel'}
         floating
-        className={`relative flex ${inContainer ? 'max-h-full' : 'max-h-[calc(100vh-2rem)]'} flex-col overflow-hidden transition-opacity duration-180 ${isVisible ? 'opacity-100' : 'opacity-0'} ${UI_MODAL_SIZE_CLASS[size]} ${panelClassName}`}
+        className={`relative flex ${inContainer ? 'max-h-full' : 'max-h-[calc(100vh-2rem)]'} flex-col overflow-hidden transition-[opacity,transform] duration-180 ${isVisible ? 'opacity-100' : 'opacity-0 scale-97'} ${UI_MODAL_SIZE_CLASS[size]} ${panelClassName}`}
         onTransitionEnd={onTransitionEnd}
       >
         {!hideHeader && (

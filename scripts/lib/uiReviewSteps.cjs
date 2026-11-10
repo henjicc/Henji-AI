@@ -461,9 +461,11 @@ async function waitForStable(page, settlePage, { target = null, timeout = 8000 }
         return timing && timing.iterations !== Infinity
       })
       if (running.length) return `动画进行中 ${running.length}`
+      // 只等视口里的：懒加载的图片在视口外永远不会开始加载
       const pendingImages = [...document.images].filter((image) => {
         const rect = image.getBoundingClientRect()
-        return rect.width > 0 && rect.height > 0 && !image.complete
+        const inView = rect.bottom > 0 && rect.right > 0 && rect.top < window.innerHeight && rect.left < window.innerWidth
+        return rect.width > 0 && rect.height > 0 && inView && !image.complete
       })
       return pendingImages.length ? `图片加载中 ${pendingImages.length}` : ''
     })

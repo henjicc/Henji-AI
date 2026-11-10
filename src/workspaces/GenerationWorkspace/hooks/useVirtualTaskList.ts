@@ -49,6 +49,9 @@ export function useVirtualTaskList(tasks: GenerationTask[], scrollContainerRef: 
     const observer = new ResizeObserver(measure)
     observer.observe(scroller)
     if (list.parentElement) observer.observe(list.parentElement)
+    // 列表上方的吸顶命令带变高（自定义时间的日期另起一行）也会把列表往下推
+    const toolbar = scroller.querySelector(':scope > [data-generation-history-toolbar]')
+    if (toolbar) observer.observe(toolbar)
     return () => observer.disconnect()
   }, [hasTasks, scrollElement])
   const getItemKey = useCallback((index: number) => ids[index], [ids])

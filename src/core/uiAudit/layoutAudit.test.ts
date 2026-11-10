@@ -101,3 +101,38 @@ it('省略号截断不算裁切；滚动容器里伸出去的部分按可见范�
   expect(result.controlClipped).toEqual([])
   expect(result.controlOccluded).toEqual([])
 })
+
+it('面板行参数名的文字中线与单行控件本体中线差超过 1.5px 算不居中；多行控件不判', () => {
+  document.body.innerHTML = `
+    <div data-ui-form-row="panel" data-control-lines="single" data-rect="0 0 400 28"><div data-rect="0 0 96 28"><span>偏高的</span></div><div data-ui-form-control data-rect="108 0 400 28"><button role="switch" aria-label="开关一" data-rect="108 2 144 26"></button></div></div>
+    <div data-ui-form-row="panel" data-control-lines="single" data-rect="0 100 400 128"><div data-rect="0 100 96 128"><span>居中的</span></div><div data-ui-form-control data-rect="108 100 400 128"><button role="switch" aria-label="开关二" data-rect="108 102 144 126"></button></div></div>
+    <div data-ui-form-row="panel" data-control-lines="multiple" data-rect="0 200 400 300"><div data-rect="0 200 96 216"><span>多行的</span></div><div data-ui-form-control data-rect="108 200 400 300"><button aria-label="格子" data-rect="108 200 160 250"></button></div></div>`
+  // 文字墨迹：第一行的字被顶高 6px，第二行与控件同一中线
+  const ink: Record<string, [number, number]> = { 偏高的: [2, 18], 居中的: [106, 122], 多行的: [200, 216] }
+  // jsdom 的 Range 没有布局方法：只在这条用例里补一个按文字查表的实现
+  Object.defineProperty(Range.prototype, 'getBoundingClientRect', { configurable: true, value: function (this: Range) {
+    const [top, bottom] = ink[(this.startContainer.textContent ?? '').trim()] ?? [0, 0]
+    return { left: 0, right: 40, top, bottom, width: 40, height: bottom - top, x: 0, y: top, toJSON: () => ({}) } as DOMRect
+  } })
+  const result = auditLayoutIssues()
+  delete (Range.prototype as { getBoundingClientRect?: unknown }).getBoundingClientRect
+  expect(result.labelOffCenter.map(issue => [issue.element, issue.detail])).toEqual([['div「偏高的」', '文字中线比控件高 4px']])
+})
+
+it('浮层离触发器超过 12px 或触发器中线落在浮层外算脱离；贴着的不算', () => {
+  document.body.innerHTML = `
+    <div role="menu" aria-label="贴着的" data-anchor-rect="100,100,80,32" data-rect="60 140 260 300"></div>
+    <div role="menu" aria-label="离得远的" data-anchor-rect="400,400,80,32" data-rect="360 345 560 355"></div>
+    <div role="menu" aria-label="错开的" data-anchor-rect="700,100,80,32" data-rect="800 140 1000 300"></div>`
+  const result = auditLayoutIssues()
+  expect(result.popoverDetached.map(issue => [issue.element, issue.detail])).toEqual([['div「离得远的」', '离触发器 45px'], ['div「错开的」', '触发器中线落在浮层外']])
+})
+
+it('同组静息图标按钮颜色不一时报少数的那个；开着的、不可用的、写明理由的组不算', () => {
+  document.body.innerHTML = `
+    <div class="tools">${['a', 'b', 'c'].map(name => `<button class="ui-btn" data-tone="rest" aria-label="${name}" style="color: rgb(100, 100, 100)" data-rect="0 0 28 28"><svg></svg></button>`).join('')}<button class="ui-btn" data-tone="danger" aria-label="删除" style="color: rgb(200, 200, 200)" data-rect="0 0 28 28"><svg></svg></button></div>
+    <div class="tools-on">${['d', 'e', 'f'].map(name => `<button class="ui-btn" data-tone="rest" aria-label="${name}" style="color: rgb(100, 100, 100)" data-rect="0 100 28 128"><svg></svg></button>`).join('')}<button class="ui-btn ui-btn-rest-on" data-tone="rest" aria-label="开着的" style="color: rgb(240, 240, 240)" data-rect="0 100 28 128"><svg></svg></button><button class="ui-btn" data-tone="rest" aria-disabled="true" aria-label="不可用的" style="color: rgb(60, 60, 60)" data-rect="0 100 28 128"><svg></svg></button></div>
+    <div data-layout-allow="tone" data-layout-allow-reason="动作与默认开关分两档">${['g', 'h', 'i'].map(name => `<button class="ui-btn" data-tone="rest" aria-label="${name}" style="color: rgb(100, 100, 100)" data-rect="0 200 28 228"><svg></svg></button>`).join('')}<button class="ui-btn" data-tone="default" aria-label="动作" style="color: rgb(200, 200, 200)" data-rect="0 200 28 228"><svg></svg></button></div>`
+  const result = auditLayoutIssues()
+  expect(result.iconToneMismatch.map(issue => issue.element)).toEqual(['button.ui-btn「删除」'])
+})

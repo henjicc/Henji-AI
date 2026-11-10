@@ -31,6 +31,10 @@ const UI_AUDIT_RULES = Object.freeze([
   //（运行时布局守卫共用），由 uiLayoutAudit.cjs 与 auditUiDom 的结果合并。
   Object.freeze({ key: 'controlClipped', label: '控件或文字被容器裁掉一截' }),
   Object.freeze({ key: 'controlOccluded', label: '控件被别的元素盖住' }),
+  // 2026-11-11：量文字墨迹与控件本体的中线、浮层与触发器的距离、同组静息图标颜色。实现同在 layoutAudit.ts
+  Object.freeze({ key: 'labelOffCenter', label: '面板行参数名与单行控件中线不齐' }),
+  Object.freeze({ key: 'popoverDetached', label: '浮层离触发器太远或横向错开' }),
+  Object.freeze({ key: 'iconToneMismatch', label: '同组静息图标颜色不一' }),
 ])
 
 /** 5.8 新规则的判定阈值（auditUiDom 内有同值副本，精确测试比对；改动同步 references/review.md 第 7 节）。 */
@@ -909,11 +913,14 @@ function auditUiDom(context = {}) {
   out.notes.push(`扫描可见元素 ${all.length}`)
   // 反例只属于开发样张；普通审计先对账再移除预期命中，规则失败不得被样张豁免吞掉。
   out.gallerySamples = []
+  // 看得见的反例全部列出（不论是否整块在视口里），遮挡裁切那几条规则合并时按同一口径移除预期命中
+  out.galleryExpectedHits = []
   for (const sample of document.querySelectorAll('[data-gallery-rule-sample]')) {
     if (!isVisible(sample)) continue
     const rule = sample.getAttribute('data-gallery-rule-sample')
     const issues = (out[rule] || []).filter(issue => JSON.stringify(issue).includes(`#${sample.id} / `))
     const expectHit = sample.hasAttribute('data-gallery-expect-hit')
+    if (expectHit) out.galleryExpectedHits.push({ id: sample.id, rule })
     // 只对账整块可见的样张（含定位出去的浮层，且在目录滚动区的可见范围内）
     if (sampleFullyInView(sample)) out.gallerySamples.push({ id: sample.id, rule, expectHit, passed: expectHit === (issues.length > 0), issues })
     if (!context.includeGallerySamples && expectHit) out[rule] = (out[rule] || []).filter(issue => !JSON.stringify(issue).includes(`#${sample.id} / `))

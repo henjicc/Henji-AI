@@ -21,13 +21,18 @@ export interface GenerationHistoryToolbarProps {
   /** 列表是否也显示画布节点发起的生成（默认只显示生成页自己的） */
   includeCanvas: boolean
   onIncludeCanvasChange: (includeCanvas: boolean) => void
-  /** 命令带右端、搜索之前的状态入口（开发用的测试模式徽标，任务 5.7：原为浮在右上角的固定定位，窄窗口下压住搜索按钮）。 */
+  /** 命令带右端的状态入口（开发用的测试模式徽标）：放在带内，窄窗口下不压住搜索按钮。 */
   trailingStatus?: ReactNode
+  /** 搜索展开时占据搜索按钮位置的搜索框与筛选（同一行，不另起一条带）。 */
+  searchField?: ReactNode
+  /** 从属带：只随当前筛选出现的参数（自定义时间的起止日期），紧贴命令带下方。 */
+  subordinate?: ReactNode
 }
 
 /**
- * 生成记录的命令带（设计稿 Generation）：左侧“全部/图片/视频/音频”静默分段，
- * 右侧搜索与“更多”（清除历史收进更多菜单）。搜索展开或筛选生效时在右侧显示命中数。
+ * 生成记录的命令带（设计稿 Generation）：一行。左侧“全部/图片/视频/音频”分段，紧跟搜索与“更多”
+ * （清除历史收进更多菜单）；搜索展开时搜索按钮原地换成搜索框与筛选，不另起一行。
+ * 右端只放只读状态：搜索展开或筛选生效时的命中数。
  */
 export function GenerationHistoryToolbar({
   mediaType,
@@ -42,29 +47,28 @@ export function GenerationHistoryToolbar({
   includeCanvas,
   onIncludeCanvasChange,
   trailingStatus,
+  searchField,
+  subordinate,
 }: GenerationHistoryToolbarProps): JSX.Element {
   const { t } = useI18n()
   const filtering = searchOpen || hasActiveFilters
 
   return (
-    <div className="flex h-10 items-center justify-between gap-3">
-      <div className="min-w-0">{mediaOptions.length > 1 && <UiSegmented ariaLabel={t('ui:workspaceFilters.typeTabs')} value={mediaType} onChange={onMediaTypeChange} options={mediaOptions} />}</div>
-      <div className="flex shrink-0 items-center gap-0.5">
-        {trailingStatus ? <span className="mr-1.5 flex items-center">{trailingStatus}</span> : null}
-        {filtering && (
-          <span className={`mr-1.5 tabular-nums ${UI_TEXT_META_CLASS}`}>
-            {t('ui:workspaceFilters.resultsCount', { matched: matchedCount, total: totalCount })}
-          </span>
+    <div className="flex min-w-0 flex-col">
+    <div className="flex h-10 min-w-0 items-center gap-3">
+      {mediaOptions.length > 1 && <div className="shrink-0"><UiSegmented ariaLabel={t('ui:workspaceFilters.typeTabs')} value={mediaType} onChange={onMediaTypeChange} options={mediaOptions} /></div>}
+      <div className="flex min-w-0 items-center gap-1">
+        {searchOpen && searchField ? searchField : (
+          <UiIconButton
+            type="button"
+            on={filtering}
+            aria-expanded={searchOpen}
+            onClick={onToggleSearch}
+            tooltip={t('ui:workspaceFilters.searchHistory')}
+          >
+            <Search  />
+          </UiIconButton>
         )}
-        <UiIconButton
-          type="button"
-          on={filtering}
-          aria-expanded={searchOpen}
-          onClick={onToggleSearch}
-          tooltip={t('ui:workspaceFilters.searchHistory')}
-        >
-          <Search  />
-        </UiIconButton>
         <PanelTrigger
           panelSize="menu"
           panelPadding="menu"
@@ -107,6 +111,16 @@ export function GenerationHistoryToolbar({
           )}
         </PanelTrigger>
       </div>
+      <div className="ml-auto flex shrink-0 items-center gap-1.5">
+        {filtering && (
+          <span className={`tabular-nums ${UI_TEXT_META_CLASS}`}>
+            {t('ui:workspaceFilters.resultsCount', { matched: matchedCount, total: totalCount })}
+          </span>
+        )}
+        {trailingStatus ? <span className="flex items-center">{trailingStatus}</span> : null}
+      </div>
+    </div>
+    {subordinate ? <div className="flex h-10 min-w-0 items-center">{subordinate}</div> : null}
     </div>
   )
 }

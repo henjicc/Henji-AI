@@ -37,6 +37,21 @@ export interface FloatingPanelPosition {
   maxHeight: number
 }
 
+/** 浮层朝触发器错开的距离：进场从这里滑回原位，退场滑回这里。 */
+const POPOVER_SHIFT_PX = 4
+
+/**
+ * 浮层进出场的缩放中心与错开方向：中心落在触发器中线与浮层贴着触发器的那条边上，浮层像是从按钮里长出来；
+ * 在上方展开时从下往上，在下方展开时从上往下。配合 `animate-scale-in` / `animate-scale-out`。
+ */
+export function resolvePopoverMotionStyle(anchor: Pick<FloatingPanelAnchorRect, 'left' | 'width'>, panelLeft: number, panelWidth: number, placement: FloatingPanelPlacement): Record<string, string> {
+  const originX = Math.min(Math.max(anchor.left + anchor.width / 2 - panelLeft, 0), Math.max(0, panelWidth))
+  return {
+    transformOrigin: `${Math.round(originX)}px ${placement === 'above' ? '100%' : '0%'}`,
+    '--ui-pop-shift': `${placement === 'above' ? POPOVER_SHIFT_PX : -POPOVER_SHIFT_PX}px`,
+  }
+}
+
 /**
  * 为 portal 浮层选择完整可见的一侧，并将尺寸限制在可用视口内。
  * 桌面端顶部有固定标题栏，因此顶部安全区可以大于普通 viewport gutter。

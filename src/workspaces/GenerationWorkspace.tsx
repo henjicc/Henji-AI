@@ -8,7 +8,7 @@ import ContextMenu from '@/components/ContextMenu'
 import UpdateDialog from '@/components/UpdateDialog'
 import TestModeIndicator from '@/components/TestModeIndicator'
 import TestModePanel from '@/components/TestModePanel'
-import { UiTaskHistoryFilterBar } from '@/components/ui'
+import { UiTaskHistoryDateRange, UiTaskHistoryFilterBar } from '@/components/ui'
 import { useContextMenu } from '@/hooks/useContextMenu'
 import { useI18n } from '@/hooks/useI18n'
 import { useOnboardingState } from '@/features/onboarding/application/useOnboardingState'
@@ -242,6 +242,8 @@ const GenerationWorkspace: React.FC = () => {
     resetHistoryFilters()
     setIsSearchOpen(false)
   }, [resetHistoryFilters])
+  // 自定义时间的起止日期放在命令带下方的从属带：与搜索、筛选挤一行在窄窗口下放不下
+  const customDateBand = isSearchOpen && filterTimePreset === 'custom'
   const openVideoViewer = (url?: string, filePath?: string, trimRange?: { start: number; end: number }) => {
     const rawUrl = typeof url === 'string' ? url : ''
     const normalizedFilePath = filePath || undefined
@@ -319,8 +321,17 @@ const GenerationWorkspace: React.FC = () => {
         className="relative z-raised flex min-h-0 flex-1 flex-col"
         style={sideDocked ? { paddingLeft: sideWidth + SIDE_PANEL_GUTTER_PX } : undefined}
       >
-        {/* 命令带：类型分段 + 搜索 + 更多；搜索展开时筛选条作为从属带紧贴其下（不另画底色与边框） */}
-        <div className={`mx-auto w-full ${GENERATION_COLUMN_MAX_WIDTH_CLASS} shrink-0 px-6 pt-3`}>
+        <div
+          ref={listContainerRef}
+          // 滚动条与其他主滚动区同一套（全局细滚动条，任务 5.8）；关闭滚动锚定，虚拟列表测高后不跳动
+          data-generation-history-scroll
+          className="relative isolate min-h-0 flex-1 overflow-y-auto overscroll-contain scroll-auto [overflow-anchor:none] [scrollbar-gutter:stable]"
+          style={{ paddingBottom: inputPadding }}
+        >
+          {/* 命令带一行：类型分段、搜索（展开后原地换成搜索框与筛选）、更多；右端只读命中数。
+              放在记录的滚动区里吸顶：与记录同一个宽度（含滚动条预留），列居中在同一条线上、左缘对齐 */}
+          <div data-generation-history-toolbar className="sticky top-0 z-sticky bg-window">
+          <div className={`mx-auto w-full ${GENERATION_COLUMN_MAX_WIDTH_CLASS} px-6 pt-3`}>
           <GenerationHistoryToolbar
             mediaType={filterMediaType}
             mediaOptions={mediaFilterOptions}
@@ -334,43 +345,40 @@ const GenerationWorkspace: React.FC = () => {
             includeCanvas={includeCanvas}
             onIncludeCanvasChange={useGenerationHistoryFilterStore.getState().setIncludeCanvas}
             trailingStatus={<TestModeIndicator onOpenPanel={() => setIsTestPanelOpen(true)} />}
+            subordinate={customDateBand ? (
+              <UiTaskHistoryDateRange startDate={filterStartDate} endDate={filterEndDate} onStartDateChange={setFilterStartDate} onEndDateChange={setFilterEndDate} />
+            ) : undefined}
+            searchField={(
+              <div ref={searchStripRef} className="flex min-w-0">
+                <UiTaskHistoryFilterBar
+                  mode="always"
+                  showCloseButton
+                  showMediaType={false}
+                  keyword={filterKeyword}
+                  providerId={filterProviderId}
+                  modelId={filterModelId}
+                  mediaType={filterMediaType}
+                  timePreset={filterTimePreset}
+                  startDate={filterStartDate}
+                  endDate={filterEndDate}
+                  providerOptions={providerFilterOptions}
+                  modelOptions={modelFilterOptions}
+                  mediaOptions={mediaFilterOptions}
+                  onKeywordChange={setFilterKeyword}
+                  onProviderChange={handleProviderFilterChange}
+                  onModelChange={setFilterModelId}
+                  onMediaTypeChange={setFilterMediaType}
+                  onTimePresetChange={setFilterTimePreset}
+                  onStartDateChange={setFilterStartDate}
+                  onEndDateChange={setFilterEndDate}
+                  onClose={handleCloseSearch}
+                />
+              </div>
+            )}
           />
-          {isSearchOpen && (
-            <div ref={searchStripRef} className="pb-1 pt-1">
-              <UiTaskHistoryFilterBar
-                mode="always"
-                showCloseButton
-                showMediaType={false}
-                keyword={filterKeyword}
-                providerId={filterProviderId}
-                modelId={filterModelId}
-                mediaType={filterMediaType}
-                timePreset={filterTimePreset}
-                startDate={filterStartDate}
-                endDate={filterEndDate}
-                providerOptions={providerFilterOptions}
-                modelOptions={modelFilterOptions}
-                mediaOptions={mediaFilterOptions}
-                onKeywordChange={setFilterKeyword}
-                onProviderChange={handleProviderFilterChange}
-                onModelChange={setFilterModelId}
-                onMediaTypeChange={setFilterMediaType}
-                onTimePresetChange={setFilterTimePreset}
-                onStartDateChange={setFilterStartDate}
-                onEndDateChange={setFilterEndDate}
-                onClose={handleCloseSearch}
-              />
-            </div>
-          )}
-        </div>
-        <div
-          ref={listContainerRef}
-          // 滚动条与其他主滚动区同一套（全局细滚动条，任务 5.8）；关闭滚动锚定，虚拟列表测高后不跳动
-          data-generation-history-scroll
-          className="relative isolate min-h-0 flex-1 overflow-y-auto overscroll-contain scroll-auto [overflow-anchor:none] [scrollbar-gutter:stable] pt-4"
-          style={{ paddingBottom: inputPadding }}
-        >
-          <div ref={contentRef}>
+          </div>
+          </div>
+          <div ref={contentRef} className="pt-4">
             <TaskList
               scrollContainerRef={listContainerRef}
               tasks={displayedTasks}

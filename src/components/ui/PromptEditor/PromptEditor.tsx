@@ -413,9 +413,16 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
           },
         }))).run()
       },
-      recordExternalChange: (change): void => {
+      recordExternalChange: (change, rebind): void => {
         if (!editor) return
-        editor.view.dispatch(addExternalChange(editor.state.tr, change, externalEpoch(editor)))
+        const tr = addExternalChange(editor.state.tr, change, externalEpoch(editor))
+        if (rebind?.size) {
+          editor.state.doc.descendants((node, position) => {
+            const target = node.type.name === 'mediaReference' ? rebind.get(node.attrs.resourceId as string) : undefined
+            if (target) tr.setNodeMarkup(position, undefined, { ...node.attrs, resourceId: target })
+          })
+        }
+        editor.view.dispatch(tr)
       },
       undo: (): void => { editor?.commands.undo() },
       redo: (): void => { editor?.commands.redo() },

@@ -7,13 +7,20 @@
  *   盖在上面的是另一层浮层（菜单、弹窗及其遮罩、提示、z-index ≥ 30 的定位层）或吸顶行时不算：前者是在它上面打开的浮层，
  *   后者是滚动内容滑到吸顶行下面；同一个浮层内部互相压着仍算。圆形、胶囊控件的四角按圆角内缩取样。
  *
+ * - `labelOffCenter`：面板表单行里控件只有一行高时，参数名文字（量文字本身，不量标签格）与控件本体的中线差超过 1.5px。
+ * - `popoverDetached`：浮层离触发器太远（超过 12px），或横向整个错开、触发器中线落在浮层外。
+ * - `iconToneMismatch`：同一组里的静息图标按钮颜色不一样（比如一排图标灰里夹着一个更亮的删除）；开着的、悬停中的、
+ *   禁用的不算。确属有意（同组里本来就分“动作”与“默认状态的开关”）时在组上写 `data-layout-allow="tone"` 加理由。
+ *
  * 有意的裁切 / 覆盖在最近的容器上写 `data-layout-allow="clip"` / `"occlude"`（空格分隔）并在
  * `data-layout-allow-reason` 写明理由；没有理由的声明不生效。自绘滚动的区域（如时间线轨道区）标 `data-layout-scroll-region`。
  *
  * 函数会被 Playwright 整体序列化，所有辅助函数与常量必须写在函数体内，不能引用模块级变量或导入。
  */
+export type LayoutAuditRule = 'controlClipped' | 'controlOccluded' | 'labelOffCenter' | 'popoverDetached' | 'iconToneMismatch'
+
 export interface LayoutAuditIssue {
-  rule: 'controlClipped' | 'controlOccluded'
+  rule: LayoutAuditRule
   /** 元素的可读标签（标签名、类名摘要、可访问名称），也是去重与日志的签名 */
   element: string
   /** 裁掉它的祖先，或盖住它的元素 */
@@ -28,6 +35,9 @@ export interface LayoutAuditIssue {
 export interface LayoutAuditResult {
   controlClipped: LayoutAuditIssue[]
   controlOccluded: LayoutAuditIssue[]
+  labelOffCenter: LayoutAuditIssue[]
+  popoverDetached: LayoutAuditIssue[]
+  iconToneMismatch: LayoutAuditIssue[]
   scanned: number
   /** 只在运行时守卫里使用（collectElements）：每条问题与它的元素；巡检序列化时不返回 */
   targets?: Array<{ issue: LayoutAuditIssue; element: Element }>
@@ -38,7 +48,7 @@ export function auditLayoutIssues(options: { collectElements?: boolean; root?: s
   const OVERLAY = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [role="tooltip"], [data-panel-scroll-region], [data-dropdown-portal="true"]'
   const SKIP = '.react-flow__viewport, [data-layout-guard-layer], [data-ui-drag-ghost]'
   const TOLERANCE = 1.5
-  const result: LayoutAuditResult = { controlClipped: [], controlOccluded: [], scanned: 0 }
+  const result: LayoutAuditResult = { controlClipped: [], controlOccluded: [], labelOffCenter: [], popoverDetached: [], iconToneMismatch: [], scanned: 0 }
   const targets: Array<{ issue: LayoutAuditIssue; element: Element }> = []
   const report = (issue: LayoutAuditIssue, element: Element): void => {
     result[issue.rule].push(issue)
@@ -64,7 +74,7 @@ export function auditLayoutIssues(options: { collectElements?: boolean; root?: s
     const sample = element.closest('[data-gallery-rule-sample]')
     return `${sample ? `#${sample.id} / ` : ''}${element.tagName.toLowerCase()}${classes ? `.${classes}` : ''}${data ? `[${data}]` : ''}${name ? `「${name.replace(/\s+/g, ' ')}」` : ''}`
   }
-  const allowed = (element: Element, kind: 'clip' | 'occlude'): boolean => {
+  const allowed = (element: Element, kind: 'clip' | 'occlude' | 'tone'): boolean => {
     let node: Element | null = element
     while (node) {
       const allow = node.getAttribute('data-layout-allow')
@@ -212,6 +222,56 @@ export function auditLayoutIssues(options: { collectElements?: boolean; root?: s
       report({ rule: 'controlOccluded', element: label(element), by: label(occluder), detail: `${blocked}/5 个取样点被盖住`, bounds: bounds(own), surface: surface(element) }, element)
     }
   }
+  // 标签与控件的中线：量文字墨迹（Range），不量标签格；控件量本体（开关、滑块、分段、输入框、按钮），不量外层容器
+  const inkRect = (element: Element): DOMRect => { const range = document.createRange(); range.selectNodeContents(element); return range.getBoundingClientRect() }
+  for (const row of Array.from(root.querySelectorAll('[data-ui-form-row="panel"][data-control-lines="single"]'))) {
+    if (row.closest(SKIP) || hidden(row)) continue
+    const labelCell = row.firstElementChild
+    const control = row.querySelector('[data-ui-form-control]')
+    const leaf = control?.querySelector('[role="switch"], [role="radiogroup"], [role="slider"], input:not([type="hidden"]), textarea, [contenteditable="true"], button')
+    if (!labelCell || !leaf || hidden(leaf) || !(labelCell.textContent || '').trim()) continue
+    const text = inkRect(labelCell); const box = leaf.getBoundingClientRect()
+    if (text.height < 2 || box.height < 2) continue
+    const offset = (text.top + text.bottom) / 2 - (box.top + box.bottom) / 2
+    if (Math.abs(offset) > TOLERANCE) report({ rule: 'labelOffCenter', element: label(labelCell), by: label(leaf), detail: `文字中线比控件${offset < 0 ? '高' : '低'} ${Math.abs(Math.round(offset * 10) / 10)}px`, bounds: bounds(labelCell.getBoundingClientRect()), surface: surface(row) }, labelCell)
+  }
+  // 浮层与触发器：浮层在 data-anchor-rect 记下定位时的触发器（左、上、宽、高）
+  const POPOVER_MAX_GAP = 12
+  for (const panel of Array.from(root.querySelectorAll('[data-anchor-rect]'))) {
+    if (hidden(panel)) continue
+    const [left, top, width, height] = (panel.getAttribute('data-anchor-rect') || '').split(',').map(Number)
+    if (![left, top, width, height].every(Number.isFinite)) continue
+    const box = panel.getBoundingClientRect()
+    const gap = box.top >= top + height - TOLERANCE ? box.top - (top + height) : top - box.bottom
+    const center = left + width / 2
+    const apart = center < box.left - TOLERANCE || center > box.right + TOLERANCE
+    if (gap > POPOVER_MAX_GAP || apart) report({ rule: 'popoverDetached', element: label(panel), by: `触发器 ${Math.round(left)},${Math.round(top)}`, detail: apart ? '触发器中线落在浮层外' : `离触发器 ${Math.round(gap)}px`, bounds: bounds(box), surface: surface(panel) }, panel)
+  }
+  // 同组静息图标按钮的颜色：按直接父级分组（Tooltip 包一层时取外一层），多数派之外的算不一致
+  const ON_CLASSES = ['ui-btn-on', 'ui-btn-rest-on', 'ui-btn-mode-on', 'ui-btn-media-on']
+  const groups = new Map<Element, Element[]>()
+  for (const button of Array.from(root.querySelectorAll('button.ui-btn[data-tone]'))) {
+    const tone = button.getAttribute('data-tone')
+    if (!tone || !['default', 'rest', 'restDanger', 'danger'].includes(tone) || button.getAttribute('aria-pressed') === 'true') continue
+    if ((button.textContent || '').trim() || !button.querySelector('svg') || (button as HTMLButtonElement).disabled || button.getAttribute('aria-disabled') === 'true' || button.matches(':hover, :focus-visible')) continue
+    if (ON_CLASSES.some(name => button.classList.contains(name)) || button.closest(SKIP) || hidden(button)) continue
+    const wrapper = button.parentElement
+    const parent = wrapper?.hasAttribute('data-ui-tooltip') ? wrapper.parentElement : wrapper
+    if (!parent) continue
+    groups.set(parent, [...(groups.get(parent) ?? []), button])
+  }
+  for (const [group, buttons] of groups) {
+    if (buttons.length < 3 || allowed(group, 'tone')) continue
+    const colors = buttons.map(button => style(button).color)
+    const counts = new Map<string, number>()
+    colors.forEach(color => counts.set(color, (counts.get(color) ?? 0) + 1))
+    if (counts.size < 2) continue
+    const majority = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0]
+    buttons.forEach((button, index) => {
+      if (colors[index] !== majority) report({ rule: 'iconToneMismatch', element: label(button), by: label(group), detail: `静息颜色 ${colors[index]}，同组多数是 ${majority}`, bounds: bounds(button.getBoundingClientRect()), surface: surface(button) }, button)
+    })
+  }
+
   const dedupe = (items: LayoutAuditIssue[], limit = 40): LayoutAuditIssue[] => {
     const keys = new Set<string>()
     return items.filter(item => { const key = `${item.element}|${item.by}`; if (keys.has(key)) return false; keys.add(key); return true }).slice(0, limit)
@@ -219,6 +279,9 @@ export function auditLayoutIssues(options: { collectElements?: boolean; root?: s
   if (!options.collectElements) {
     result.controlClipped = dedupe(result.controlClipped)
     result.controlOccluded = dedupe(result.controlOccluded)
+    result.labelOffCenter = dedupe(result.labelOffCenter)
+    result.popoverDetached = dedupe(result.popoverDetached)
+    result.iconToneMismatch = dedupe(result.iconToneMismatch)
   } else result.targets = targets
   return result
 }

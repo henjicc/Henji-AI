@@ -16,7 +16,7 @@ const logger = createLogger('app.ui.layoutGuard')
 const SETTLE_MS = 700
 const PERIOD_MS = 4000
 const MAX_LOGGED = 120
-const RULE_LABELS: Record<LayoutAuditIssue['rule'], string> = { controlClipped: '裁切', controlOccluded: '遮挡' }
+const RULE_LABELS: Record<LayoutAuditIssue['rule'], string> = { controlClipped: '裁切', controlOccluded: '遮挡', labelOffCenter: '标签不居中', popoverDetached: '浮层离按钮', iconToneMismatch: '图标颜色不一' }
 
 export function startLayoutGuard(mode: LayoutGuardMode, target: Window = window): () => void {
   const document = target.document

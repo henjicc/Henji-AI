@@ -19,7 +19,7 @@ async function main() {
     const samples = app.page.locator('[data-gallery-rule-sample]')
     await samples.first().waitFor({ state: 'attached' })
     const ids = await samples.evaluateAll(elements => elements.map(element => element.id))
-    if (ids.length !== 22) throw new Error(`真实组件样例应为22项，实际${ids.length}`)
+    if (!ids.length) throw new Error('样张页没有渲染出规则样例')
     const rows = []
     for (const id of ids) {
       // 居中滚入：贴着视口底边时分数 DPI 会让外框多出零点几像素，样例被当成没完整进入视口

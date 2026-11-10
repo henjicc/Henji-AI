@@ -627,6 +627,17 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 头部按钮落在同类按钮的同一列上（同名按钮同列、缺的列留空），外观复用同一组件与 props。
 返工现场：C1 字幕轨道第一版钉在标尺下、与 V1 隔着空白，按钮顺序“眼睛、锁”且与 V1 不对齐。
 
+### 4b. 子组件不自带外边距，对齐与间距归父级（2026-11-11 起强制）
+
+会被放进不同排法的组件（参数名、标签、读数、图标按钮组）只出内容，**不自带外边距、不自定字号颜色去配合某一种排法**：
+外边距、对齐、字号档由放它的那一行或那个容器给。参数名组件曾带着“标签在上”排法的 6px 下边距与 13 号字，放进左右排的行里，
+字被顶高 3px、和同面板其他行标签不一样大。共享组件的默认值只适合某一种排布时（浮层默认离按钮 45px、下拉只会左对齐、
+危险档只有一种静息颜色），**修组件，不在调用点补**。新加一种排布（左侧面板、浮层、画布节点）时，把会放进去的组件在这种排布下各看一遍。
+
+一排同组按钮里改一个成员的档位（图标灰、字号、对齐），整组每个成员都要跟着核对：样板屏把记录工具条改成图标灰时漏了删除（危险档静息更亮），
+同组的删除类动作用 `tone="restDanger"`。对齐、间距、同组颜色三类已进布局检查（`labelOffCenter`、`popoverDetached`、`iconToneMismatch`，
+判据见 `references/review.md` 第 9.2 节），开发版 `--dev-checks` 会直接描红。
+
 ### 5. 不可用就不出现，出现就说明为什么
 
 - 与当前模式无关的控件**隐藏**（如“速度”只在“录制轨迹”时出现），不要整排灰着。
@@ -702,7 +713,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 颜色输入、多行字段外壳、数值步进列 | `UiColorInput` / `UiTextArea` / `UiNumberStepper`（步进列组合到数值字段中） | 重写颜色输入、叠第二层字段框、把步进列当独立数值框 |
 | 日期选择 | `UiDatePicker` | 裸输入重做日期字段与选择面板 |
 | 折叠内容与长用户文本 | `UiDisclosurePanel`（正式开合过渡）/ `UiMarqueeText`（受控长文本） | 自写折叠时长；用跑马灯隐藏短操作标签 |
-| 任务历史筛选 | `UiTaskHistoryFilterBar` | 另造同义字段与标签组合 |
+| 任务历史筛选 | `UiTaskHistoryFilterBar`；常驻模式（`mode="always"`）选了自定义时间时，起止日期用 `UiTaskHistoryDateRange` 放进宿主命令带的从属带 | 另造同义字段与标签组合；常驻模式忘了放日期 |
 | 渲染错误兜底、全局确认 | `UiErrorBoundary`（保留正式日志域）/ `GlobalAlertDialog`（App 根宿主，调用 `alertDialogStore`） | 吞掉渲染错误；在业务页重复挂载全局确认宿主 |
 | 搜索框 | `UiSearchInput`（前置放大镜、`size`、可选 `onClear` + `clearLabel` 清除按钮；`className` 落在外层只放宽度） | 自己摆一个绝对定位的放大镜再给 `UiInput` 补 `pl-8` |
 | 下拉 / 面板触发器 | `Dropdown` / `PanelTrigger`（按钮是 `UiFieldTrigger`：`appearance` field/quiet、`size`；浮层 `surface` solid/glass、`panelPadding`、`panelSize` menu/compact/wide/workspace/special）；一行参数条用 `UiFieldLayoutContext` = `toolbar` | 自己写触发器按钮或浮层外壳；`buttonClassName` 里改外观 |

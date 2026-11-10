@@ -105,10 +105,14 @@ export function useBottomPanel({ listContainerRef, sideDocked = false }: UseBott
     const inputEl = inputContainerRef.current
     const listEl = listContainerRef.current
     if (!inputEl || !listEl) return
+    const stickyToolbar = listEl.querySelector<HTMLElement>(':scope > [data-generation-history-toolbar]')
 
     const update = () => {
       const h = inputEl.offsetHeight || 0
-      const availableHeight = listEl.clientHeight
+      // 吸顶命令带在滚动区里，但不属于记录可用的高度；焦点滚进来的卡片也要停在它下面
+      const toolbarHeight = stickyToolbar?.offsetHeight ?? 0
+      const availableHeight = listEl.clientHeight - toolbarHeight
+      listEl.style.scrollPaddingTop = `${toolbarHeight}px`
       const availableWidth = listEl.clientWidth
       setIsCompactLayout(shouldUseCompactGenerationLayout(availableWidth, availableHeight))
       const actualHeight = (isPanelCollapsed && !isCollapsing) ? 60 : h
@@ -135,6 +139,8 @@ export function useBottomPanel({ listContainerRef, sideDocked = false }: UseBott
     const ro = new ResizeObserver(update)
     ro.observe(inputEl)
     ro.observe(listEl)
+    // 命令带会变高（搜索时选了自定义时间，日期另起一行）
+    if (stickyToolbar) ro.observe(stickyToolbar)
     return () => ro.disconnect()
   }, [isPanelCollapsed, isCollapsing, listContainerRef, sideDocked])
 

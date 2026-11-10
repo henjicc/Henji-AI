@@ -4,6 +4,7 @@ import { toModelPromptText } from '@/core/inputs/promptDocument'
 import {
   createMediaGeneratorPromptReferences,
   reconcileMediaGeneratorPromptImages,
+  remapRemovedPromptImages,
   resolveMediaGeneratorPromptCarrier,
 } from './promptState'
 
@@ -31,15 +32,23 @@ describe('MediaGenerator prompt state', () => {
     expect(toModelPromptText(parsed.document, { references })).toBe('图片2 跟随 图片1')
   })
 
-  it('creates a new identity for replacement while retaining duplicate occurrences', () => {
+  it('keeps the identity of an image replaced in place, new images get a new identity', () => {
     const createId = createIdFactory()
     const initial = reconcileMediaGeneratorPromptImages([], ['same', 'same'], createId)
     const replaced = reconcileMediaGeneratorPromptImages(initial, ['same', 'new'], createId)
-
     expect(replaced).toEqual([
       { resourceId: 'resource-1', url: 'same' },
-      { resourceId: 'resource-3', url: 'new' },
+      { resourceId: 'resource-2', url: 'new' },
     ])
+
+    const appended = reconcileMediaGeneratorPromptImages(initial, ['same', 'same', 'other'], createId)
+    expect(appended.map((image) => image.resourceId)).toEqual(['resource-1', 'resource-2', 'resource-3'])
+    const shifted = reconcileMediaGeneratorPromptImages(replaced, ['new', 'other'], createId)
+    expect(shifted.map((image) => image.resourceId)).toEqual(['resource-2', 'resource-4'])
+
+    // 同一文件导入过两次，替换第一张：新图沿用第一张的身份，第二张不动
+    const firstReplaced = reconcileMediaGeneratorPromptImages(initial, ['fresh', 'same'], createId)
+    expect(firstReplaced.map((image) => image.resourceId)).toEqual(['resource-1', 'resource-2'])
   })
 
   it('prefers a valid structured preset and restores its persisted bindings', () => {
@@ -101,5 +110,16 @@ describe('MediaGenerator prompt state', () => {
     ])
     expect(toModelPromptText(resolved.document, { references }))
       .toBe('参考 图片1 然后修改')
+  })
+  it('删掉的参考图，引用改指同一位置的新图；同一文件的另一张还在就指向它；同一位置没有图时不改', () => {
+    const createId = createIdFactory()
+    const [a, b, c] = reconcileMediaGeneratorPromptImages([], ['a', 'b', 'c'], createId)
+    expect(remapRemovedPromptImages([a, b, c], [b, c])).toEqual(new Map([[a.resourceId, b.resourceId]]))
+    expect(remapRemovedPromptImages([a, b, c], [a, b]).size).toBe(0)
+    expect(remapRemovedPromptImages([a, b, c], [c, b, a]).size).toBe(0)
+
+    const [first, second] = reconcileMediaGeneratorPromptImages([], ['same', 'same'], createId)
+    const afterDelete = reconcileMediaGeneratorPromptImages([first, second], ['same'], createId)
+    expect(remapRemovedPromptImages([first, second], afterDelete)).toEqual(new Map([[second.resourceId, first.resourceId]]))
   })
 })
