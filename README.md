@@ -104,7 +104,7 @@ npm run electron:dev
 npm run electron:dev -- --background
 ```
 
-该模式会在窗口启动后最小化，并保持后台渲染。`npm run dev` 只启动 Vite 渲染层，不包含完整桌面能力。
+该模式会在窗口启动后最小化，并保持后台渲染。
 
 ### 构建与验证
 

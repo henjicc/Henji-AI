@@ -1,7 +1,7 @@
 {
   "version": 1,
   "description": [
-    "ui:residue 门禁（npm run check:ui-residue，build / electron:build / CI）的例外登记。口径见 skill henji-ui-surface references/review.md 第 3 节。",
+    "ui:residue 门禁（npm run check:ui-residue，electron:build / CI）的例外登记。口径见 skill henji-ui-surface references/review.md 第 3 节。",
     "只有判定为“待登记”的命中可以登记：固定几何尺寸的任意值类、字面量内联尺寸、私有 CSS 变量与写死值、私有 CSS 类。违规（视觉档位写死、与标准档等值、任意颜色、调用点覆盖外观、旧别名、旧文案、零引用）不可登记。",
     "entries：{ file, category, values[], reason }，按文件 + 类别 + 值放行；cssClasses：{ definedIn, names[], reason }，按类名放行。",
     "理由至少 8 个字，写清为什么不能用令牌或标准类；登记的值在代码里消失后必须删掉这条（过期登记会让门禁失败）。"

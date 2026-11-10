@@ -52,7 +52,6 @@ function isRuntimeFile(file) {
     || file.startsWith('.github/workflows/')
     || file.startsWith('tsconfig')
     || file.startsWith('electron.vite.config.')
-    || file.startsWith('vite.config.')
 }
 
 function requiresL3(file) {
@@ -61,7 +60,6 @@ function requiresL3(file) {
     || file.startsWith('.github/workflows/')
     || file.startsWith('tsconfig')
     || file.startsWith('electron.vite.config.')
-    || file.startsWith('vite.config.')
     || file.startsWith('vitest.config.')
 }
 

@@ -62,7 +62,7 @@ lucide 引入即可——lucide 的名字本身就是单一真源，再包一层
 
 ```bash
 npm run check:icons          # 告警式
-npm run check:icons:strict   # 门禁式，已接入 build / electron:build 与 CI
+npm run check:icons:strict   # 门禁式，已接入 electron:build 与 CI
 ```
 
 三条规则：`[A]` 业务组件手写 `<svg>`；`[B]` 跨界面业务概念图标绕过 `icons.ts` 登记表；`[C]` 界面可见文字（`src`、`electron`

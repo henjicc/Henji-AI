@@ -6,7 +6,7 @@
  *   npm run ui:residue -- --out .ui-tour/residue-after-4.2
  *   npm run ui:residue -- --region 5.3         # 只看一个区域
  *   npm run ui:residue -- --files src/a.tsx,src/b.tsx
- *   npm run check:ui-residue                   # 门禁：--strict --no-report，build / electron:build / CI
+ *   npm run check:ui-residue                   # 门禁：--strict --no-report，electron:build / CI
  *
  * 每条命中按门禁口径（uiResidueRules.cjs 的 RESIDUE_CATEGORIES）判定为违规 / 待登记 / 合规 / 报告视图；
  * 待登记的只有在 scripts/ui-residue.allowlist.json 写了理由才放行。--strict 下有违规、未登记或过期登记即退出 1。

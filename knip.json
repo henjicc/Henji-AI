@@ -40,7 +40,6 @@
   ],
   "ignoreIssues": {
     "electron.vite.config.ts": ["exports"],
-    "vite.config.ts": ["exports"],
     "vitest.config.ts": ["exports"],
     "postcss.config.js": ["exports"],
     "scripts/electron-builder-after-pack.cjs": ["exports"]

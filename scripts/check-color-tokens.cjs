@@ -4,7 +4,7 @@ const { createTailwindClassProbe, extractColorClassCandidates } = require('./lib
 const { extractCssClassNames } = require('./lib/uiResidueRules.cjs');
 
 /*
- * 颜色令牌检查（npm run check:colors，build / electron:build / CI 门禁）。
+ * 颜色令牌检查（npm run check:colors，electron:build / CI 门禁）。
  *
  * 一、硬性规则（全部 .ts/.tsx/.css，任何新增都失败，不可登记）：
  *   - 十六进制颜色字面量、Tailwind 任意十六进制颜色类；

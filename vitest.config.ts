@@ -25,7 +25,7 @@ if (!process.env.CI) {
 /**
  * Vitest 配置覆盖 domain 纯函数与按文件声明 jsdom 的 React 组件测试。
  * 默认仍使用 Node 环境，只有带 `@vitest-environment jsdom` 的用例才加载 DOM。
- * alias 对齐 vite.config.ts 的 `@/` -> `src/`，供被测代码间接依赖的模块解析使用。
+ * alias 与 electron.vite.config.ts 的 renderer 块一致（`@/` -> `src/`），供被测代码间接依赖的模块解析使用。
  */
 export default defineConfig(({ mode }) => {
   const suite = testSuites.testSuiteOptions(mode, configDefaults.exclude)

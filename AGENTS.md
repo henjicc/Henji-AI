@@ -60,7 +60,6 @@ npm install                    # 安装依赖
 npm run electron:dev -- --background  # Electron 开发模式（热更新，行为贴近正式版）：窗口启动后最小化，禁用后台节流并持续渲染（测试优先）；交给用户查看去掉 --background
 npm run electron:prod -- --background  # 本机正式构建：生产产物 + 真实资料目录，行为与安装包一致；验收性能结论与发版前用它
 npm run electron:dev                 # 仅在必须验证启动聚焦行为时使用普通前台启动
-npm run dev                    # 裸 Vite 渲染层（不含主进程能力，不能作桌面验收依据）
 npm run lint                   # 渲染层 lint
 npm run test                   # 全量单元测试（仅 L3 / CI；日常改动按 testing.md 跑精确或相关测试）
 npm run verify:changed -- --level L1 <本次文件...>  # 显式文件清单的局部验证；禁止省略路径扫描整个脏工作区

@@ -4,7 +4,7 @@
 
 ## 验收必须看真实 Electron 窗口
 
-裸浏览器 Vite 页面（`npm run dev`）不能作为桌面能力的最终依据。以下能力全部依赖 Electron 容器：
+裸浏览器页面不能作为桌面能力的最终依据。以下能力全部依赖 Electron 容器：
 
 自定义标题栏、窗口控制、preload bridge、SQLite、safeStorage、`henji-media://` 媒体协议、自动更新、原生拖拽/剪贴板。
 
