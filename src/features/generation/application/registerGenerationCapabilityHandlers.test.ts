@@ -238,11 +238,6 @@ describe('generation capability handlers（5.4：放宽提交）', () => {
   })
 
   it('草稿没有选中模型且未显式传 modelId 时拒绝', async () => {
-    // createEmptyGenerationDraft() 会自动选中注册表里第一个可用模型（见 5.1 执行记录），
-    // 这里显式清空才是真正的"未选中"状态。
-    useGenerationDraftStore.getState().patchField('selectedModel', '')
-    useGenerationDraftStore.getState().patchField('selectedProvider', '')
-
     const handler = registeredHandlers().get('create_visible_generation_task')
     if (!handler) throw new Error('HANDLER_NOT_FOUND')
     await expect(handler({}, context)).rejects.toThrow(/INVALID_INPUT/)

@@ -1,28 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { registry } from '@/core/ModelRegistry'
-import type { ModelDefinition } from '@/core/types'
-
 import { createEmptyGenerationDraft } from '../domain/generationDraft'
 import { useGenerationDraftStore } from './generationDraftStore'
-
-const testModel: ModelDefinition = {
-  meta: {
-    id: 'generation-draft-store-test-model',
-    canonicalModelId: 'nano-banana',
-    provider: 'draft-store-test-provider',
-    type: 'image',
-    name: { zh: '草稿 store 测试模型', en: 'Draft store test model' },
-    tags: [],
-  },
-  inputLimits: { images: { max: 1 }, videos: { max: 0 }, audios: { max: 0 } },
-  params: [],
-  linkages: [],
-  endpoints: '/test',
-  request: { builder: (params) => params },
-  pricing: { currency: '$', fixed: 0.5, description: '测试模型基础价格' },
-}
 
 function resetStore(): void {
   useGenerationDraftStore.setState({ draft: createEmptyGenerationDraft() })
@@ -30,13 +10,10 @@ function resetStore(): void {
 
 describe('generationDraftStore（5.3）', () => {
   beforeEach(() => {
-    registry.clear()
-    registry.register(testModel)
     resetStore()
   })
 
   afterEach(() => {
-    registry.clear()
     resetStore()
   })
 
@@ -74,7 +51,7 @@ describe('generationDraftStore（5.3）', () => {
     useGenerationDraftStore.getState().patch({ selectedModel: 'other-model', uploadedFilePaths: ['/a.png'] })
     useGenerationDraftStore.getState().reset()
     const draft = useGenerationDraftStore.getState().draft
-    expect(draft.selectedModel).toBe('generation-draft-store-test-model')
+    expect(draft.selectedModel).toBe('')
     expect(draft.uploadedFilePaths).toEqual([])
   })
 

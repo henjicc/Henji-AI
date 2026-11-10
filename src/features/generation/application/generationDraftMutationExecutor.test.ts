@@ -63,11 +63,6 @@ describe('generation.draft 属性写入执行器（5.4）', () => {
   })
 
   it('助手写提示词、换模型，草稿真的变了，且可撤销', async () => {
-    // createEmptyGenerationDraft() 会自动选中注册表里第一个可用模型（见 5.1 执行记录），
-    // 这里显式清空才能验证"换模型"这个动作本身，而不是巧合地写回同一个值。
-    useGenerationDraftStore.getState().patchField('selectedModel', '')
-    useGenerationDraftStore.getState().patchField('selectedProvider', '')
-
     const engine = getApplicationControlExecutionEngine()
     const revision = useGenerationDraftStore.getState().revision
     const plan = await engine.plan({

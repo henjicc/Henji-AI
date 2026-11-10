@@ -1,7 +1,6 @@
 import type { FileOrderItem } from '@/components/MediaGenerator/components/InputArea'
 import type { MediaGeneratorPromptImage } from '@/components/MediaGenerator/promptState'
 import { parseLegacyPromptString, type PromptDocumentV1 } from '@/core/inputs/promptDocument'
-import { getAvailableProviders } from '@/utils/modelHelpers'
 
 /*
  * 生成页输入态的纯领域层（5.1）。这里只有类型和纯函数，不 import React——
@@ -36,20 +35,15 @@ export interface GenerationDraft {
 }
 
 /**
- * 默认选中项与原实现一致：取模型注册中心里第一个供应商的第一个模型。
- * 依赖 getAvailableProviders() 而不是纯常量，是为了不改变原来"打开生成页就选中
- * 第一个可用模型"的行为——这不是严格意义上的纯函数，但迁移前 useUIState 的
- * useState 初始值本来就是这样算出来的，行为等价性优先于教科书式的纯度。
+ * 空草稿不选模型。模型目录在应用启动后才异步加载，而草稿 store 在模块加载时就要初值，
+ * 此时读注册表只会拿到空表，还会让每个导入生成入口的模块都被迫备好注册表；
+ * “默认选中第一个可用模型”由生成页 useUIState 在模型目录就绪后补上。
  */
 export function createEmptyGenerationDraft(): GenerationDraft {
-  const providers = getAvailableProviders()
-  const defaultProvider = providers[0]
-  const defaultModel = defaultProvider?.models[0]
-
   return {
     promptDocument: parseLegacyPromptString(''),
-    selectedProvider: defaultModel ? defaultProvider.id : '',
-    selectedModel: defaultModel ? defaultModel.id : '',
+    selectedProvider: '',
+    selectedModel: '',
     uploadedPromptImages: [],
     uploadedFilePaths: [],
     uploadedVideos: [],
