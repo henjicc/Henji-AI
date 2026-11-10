@@ -85,7 +85,7 @@ interface InputAreaProps {
   sideHeader?: React.ReactNode
   /** 左侧排布：提示词标题行右侧的预设与优化 */
   promptTools?: React.ReactNode
-  /** 左侧排布：生成按钮右下角的预计费用 */
+  /** 左侧排布：生成按钮里紧跟在“生成”后面的预计费用 */
   price?: React.ReactNode
 }
 
@@ -602,19 +602,18 @@ const InputArea: React.FC<InputAreaProps> = ({
           {footerStart}
         </div>
         <div data-flip-key="footer" className="flex shrink-0 border-t border-line px-3.5 py-3">
-          {/* 这块面板唯一的主动作：通栏宽按钮，预估费用作角标放在按钮里的右下角 */}
+          {/* 这块面板唯一的主动作：通栏宽按钮，预估费用紧跟在“生成”后面，作为同一组读出 */}
           <UiButton
             variant="primary"
             size="lg"
-            className="relative flex-1"
+            className="flex-1"
             data-onboarding-target="generate"
             onClick={onGenerate}
             loading={isLoading}
             disabled={generateBlocked}
           >
             {isGenerating ? t('inputArea.button.queue') : t('inputArea.sideGenerate')}
-            {isGenerating ? <Plus /> : <ArrowUp />}
-            {price ? <span className="pointer-events-none absolute bottom-1.5 right-2.5">{price}</span> : null}
+            {price}
           </UiButton>
         </div>
       </div>

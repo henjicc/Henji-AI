@@ -348,7 +348,8 @@ const AspectResolutionPanel: React.FC<AspectResolutionPanelProps> = ({
           <UiFormRow label={aspectLabel} density="compact">
             <ParamChoiceGrid
               ariaLabel={aspectLabel}
-              options={tileOptions.map((option, index) => ({ value: index, label: option.label, icon: <AspectRatioGlyph option={option} max={14} /> }))}
+              cellLayout="stacked"
+              options={tileOptions.map((option, index) => ({ value: index, label: option.label, icon: <AspectRatioGlyph option={option} max={18} /> }))}
               value={activeTile}
               onChange={(index) => { const option = tileOptions[Number(index)]; if (option) void selectAspect(option) }}
             />

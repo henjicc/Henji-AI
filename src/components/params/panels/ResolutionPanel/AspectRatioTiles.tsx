@@ -26,12 +26,12 @@ const RATIO_ICON_MAX = 20
 
 /** 比例示意：按比例缩放的描边矩形，智能是闪电。比例格与左侧输入面板的比例小格共用。 */
 export function AspectRatioGlyph({ option, max = RATIO_ICON_MAX }: { option: AspectRatioTileOption; max?: number }): JSX.Element | null {
-  if (option.smart) return <Zap className={max <= 14 ? UI_ICON_SIZE_CLASS.sm : UI_ICON_SIZE_CLASS.md} />
+  if (option.smart) return <Zap className={UI_ICON_SIZE_CLASS.md} />
   if (!option.ratio) return null
   const scale = max / Math.max(option.ratio.width, option.ratio.height)
   const width = Math.max(3, Math.round(option.ratio.width * scale))
   const height = Math.max(3, Math.round(option.ratio.height * scale))
-  return <span className={`rounded-sm border-current ${max <= 14 ? 'border' : 'border-2'}`} style={{ width, height }} />
+  return <span className="rounded-sm border-2 border-current" style={{ width, height }} />
 }
 
 export function AspectRatioTiles({ options, isActive, onSelect, tiers, isTierActive, onTierSelect }: AspectRatioTilesProps): JSX.Element {

@@ -12,7 +12,7 @@ interface PriceEstimateProps {
     providerId: string
     modelId: string
     params: DynamicValueMap
-    /** panel：输入区里的一段辅助文字；badge：小徽标；onAccent：压在主动作按钮实底上的角标 */
+    /** panel：输入区里的一段辅助文字；badge：小徽标；onAccent：主动作按钮里跟在动作名后面的费用 */
     variant?: 'panel' | 'badge' | 'onAccent'
     /** 相同计价参数的请求次数；单位参考价仍按单位展示。 */
     requestCount?: number
@@ -84,7 +84,7 @@ const PriceEstimate: React.FC<PriceEstimateProps> = ({ modelId, params, variant 
 
     if (variant === 'onAccent') {
         return (
-            <span className="whitespace-nowrap text-2xs leading-none tabular-nums text-on-accent/75" title={title}>
+            <span className="whitespace-nowrap text-xs font-normal tabular-nums text-on-accent/75" title={title}>
                 {isUpperBound ? `${label} ${priceDisplayWithUnit}` : priceDisplayWithUnit}
             </span>
         )
