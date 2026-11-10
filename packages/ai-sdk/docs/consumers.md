@@ -5,6 +5,12 @@
 
 最后核对日期：2026-11-10
 
+`0.13.0` 已发布（2026-11-10）：实时语音识别事件契约写进 `SpeechRecognitionEvent`（partial `text` = 所有未定稿文字，final `text` = 刚定稿一句且每句只发一次，同一批结果先 final 后 partial）；火山 SeedASR 2.0 实时修正 partial 为未定稿 utterance 拼接（此前是整场累计全文）、同一帧先发 final 再发 partial、已定稿句后续修订不再重发 final；另含未发布的可选 `PromptOptimizationProfile.reasoning`。改变了火山 partial 的含义，0.x 阶段升 minor。用户明确下令发布；发布源码 `7ab8f2d47` 经 [运行 42790508500](https://github.com/henjicc/Henji-AI/actions/runs/42790508500) 受信任发布，CI 内 prepublishOnly 全量门禁通过。同提交的应用侧 CI（界面组件静态值环、媒体回收与设置搜索等应用单测）失败，不涉及 SDK 包内容，另行修复。隔离配置与缓存的仓外匿名安装通过：235 个根导出可导入，lockfile 解析到公共 tarball、integrity 与 registry 一致，发布的火山实时模块先 final 后 partial。外部 `say-it` 从公共 npm 精确升级到 `0.13.0`（提交 `95f4a91`），lockfile resolved / integrity 与 registry 一致，bundle 版本、integrity 校验更新，删除为 0.12.0 加的 partial 绕行，改回直接读 `partial.text`；Rust 793 项（另 overlay 97 项）测试通过。Henji-AI workspace 使用 `0.13.0`。
+
+- `0.13.0` tarball：[公共 npm 包](https://registry.npmjs.org/@henjicc/ai-sdk/-/ai-sdk-0.13.0.tgz)
+- `0.13.0` shasum：`d3fc32e486f9db781ee295e94e0275cd9210161a`
+- `0.13.0` integrity：`sha512-8Q+/kheBhOblID0ECztrjyFBcCZhCLmwXO1TcpoFH0bMZr3iL7ktQykkHnuezszjWfXJoQDWNEUe9e7n/65LyA==`
+
 `0.12.0` 已发布（2026-11-10）：火山 SeedASR 2.0 实时识别支持热词直传（供应商选项 `hotwords`），修复真实服务握手帧不带 `result.text` 时会话在握手即报 `invalid_response`；GPT Image 2.6 新增动图 / 矢量图输出。本地 prepublishOnly 门禁通过（SDK 106 文件 / 1518 项测试、仓外 Node ESM / 严格 TS / 56 个 Vite 入口 / 受限宿主），发布源码 `341bfcc64` 经 [运行 42660262100](https://github.com/henjicc/Henji-AI/actions/runs/42660262100) 受信任发布。热词与握手修复经授权真实请求验证（`bigmodel_async`，合成语音，热词使「说把」纠正为「说吧」，5999 个填充热词后仍生效、无报错）。外部 `say-it` 从公共 npm 精确升级到 `0.12.0`（提交 `8b063d5`），lockfile resolved / integrity 与 registry 一致，manifest 与 bundle 版本、integrity 校验更新；Rust 785 项、前端 233 项测试与类型检查通过，火山 SeedASR 标为支持热词并下发全局热词。Henji-AI workspace 使用 `0.12.0`。
 
 - `0.12.0` tarball：[公共 npm 包](https://registry.npmjs.org/@henjicc/ai-sdk/-/ai-sdk-0.12.0.tgz)
