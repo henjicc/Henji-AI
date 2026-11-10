@@ -27,7 +27,7 @@ describe('开发启动主题预设', () => {
     resetWindowAppearanceSyncForTests()
     const paper = { seed: THEME_PRESETS.paper.seed, overrides: {} }
     const startup = { seed: DEFAULT_THEME_SEED, overrides: {} }
-    const changed = { seed: THEME_PRESETS.film.seed, overrides: {} }
+    const changed = { seed: { ...DEFAULT_THEME_SEED, hue: 70 }, overrides: {} }
     expect(selectAppliedTheme(startup, paper)).toBe(paper)
     expect(selectAppliedTheme(changed, paper)).toBe(changed)
     expect(selectAppliedTheme({ seed: { ...DEFAULT_THEME_SEED }, overrides: {} }, paper)).toBe(paper)
@@ -56,7 +56,7 @@ describe('syncWindowAppearance', () => {
 
   it('同步失败写结构化错误日志，且下次仍会重试', async () => {
     setAppearance.mockRejectedValueOnce(new Error('ipc down'))
-    const tokens = deriveThemeTokens(THEME_PRESETS.ocean.seed)
+    const tokens = deriveThemeTokens({ ...DEFAULT_THEME_SEED, hue: 245 })
     await syncWindowAppearance(tokens)
     expect(loggerError).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ event: 'theme.window_appearance.sync.failed' }))
     await syncWindowAppearance(tokens)

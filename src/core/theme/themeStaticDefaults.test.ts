@@ -50,7 +50,8 @@ describe('首帧静态默认值（防闪色）', () => {
     }
   })
 
-  it('index.html 去掉了 class="dark" 与废弃的 localStorage.theme 脚本', () => {
+  it('index.html 去掉了 class="dark" 与废弃的 localStorage.theme 脚本；毛玻璃首帧即关闭', () => {
+    expect(indexHtml).toMatch(/<html[^>]*data-ui-blur="off"/)
     expect(indexHtml).not.toMatch(/<html[^>]*class=/)
     expect(indexHtml).not.toContain("getItem('theme')")
   })
@@ -64,24 +65,21 @@ describe('index.html 首帧主题脚本', () => {
   afterEach(() => {
     localStorage.clear()
     root.removeAttribute('style')
-    root.removeAttribute('data-ui-radius')
-    root.removeAttribute('data-ui-blur')
   })
 
-  it('读取 themeFirstFrame 写入的缓存，把变量、color-scheme 与圆角/毛玻璃属性写回根节点', () => {
+  it('读取 themeFirstFrame 写入的缓存，把变量（含圆角）与 color-scheme 写回根节点', () => {
     expect(inlineScript).toContain(`'${THEME_FIRST_FRAME_STORAGE_KEY}'`)
     const paper = deriveThemeTokens(THEME_PRESETS.paper.seed)
-    const vars = buildThemeCssVariables(paper)
+    const vars: Record<string, string> = { ...buildThemeCssVariables(paper), '--radius-base': '8px' }
     localStorage.setItem(
       THEME_FIRST_FRAME_STORAGE_KEY,
-      JSON.stringify(createThemeFirstFrame(paper, vars, { uiRadiusPreset: 'large', uiBlurEnabled: false }))
+      JSON.stringify(createThemeFirstFrame(paper, vars))
     )
     run()
     expect(root.style.getPropertyValue('--window')).toBe(paper.colors.window)
     expect(root.style.getPropertyValue('--text1-rgb')).toBe(vars['--text1-rgb'])
     expect(root.style.colorScheme).toBe('light')
-    expect(root.dataset.uiRadius).toBe('large')
-    expect(root.dataset.uiBlur).toBe('off')
+    expect(root.style.getPropertyValue('--radius-base')).toBe('8px')
   })
 
   it('无缓存、缓存损坏或格式不符时不抛错也不写任何东西', () => {

@@ -99,7 +99,8 @@ it('渲染失败显示可重试的失败状态并记日志，重试创建新会�
   expect(view.queryByText('正在准备预览…')).toBeNull()
   expect(view.getByLabelText('导出画面预览')).toHaveProperty('hidden', true)
   expect(renderer.warn).toHaveBeenCalledWith('渲染导出预览失败', expect.objectContaining({ event: 'video_edit.export.preview_failed', error: reason }))
-  expect(view.queryByText(reason.message)).toBeNull()
+  // 原始原因不当正文，只在默认收起的详情里
+  expect(view.getByText(reason.message).closest('[aria-hidden]')?.getAttribute('aria-hidden')).toBe('true')
   fireEvent.click(view.getByRole('button', { name: /^(重试|Retry)$/ }))
   await waitFor(() => expect(drawImage).toHaveBeenCalledOnce())
   expect(renderer.create).toHaveBeenCalledTimes(2)
@@ -127,7 +128,7 @@ it('渲染一直不返回时超时结束加载、释放会话；迟到画面被�
   renderer.renderBitmap.mockReturnValue(pending.promise)
   const view = render(<VideoEditExportPreview {...fixture()} />)
   await act(async () => { await vi.advanceTimersByTimeAsync(30_000) })
-  expect(view.getByText('预览等待时间过长，请重试。')).toBeTruthy()
+  expect(view.getByText('画面准备得太久，可再试一次。')).toBeTruthy()
   expect(view.queryByText('正在准备预览…')).toBeNull()
   expect(renderer.dispose).toHaveBeenCalledOnce()
   expect(renderer.warn).toHaveBeenCalledWith('导出预览等待超时', expect.objectContaining({ event: 'video_edit.export.preview_failed' }))

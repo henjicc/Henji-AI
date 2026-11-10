@@ -8,9 +8,9 @@ import { createThemePayloadV2, findThemePresetId, parseThemePayload } from './th
 describe('themeMigration payload v2', () => {
   it('导出 → JSON → 导入往返一致（含 overrides）', () => {
     for (const payload of [
-      createThemePayloadV2({ seed: THEME_PRESETS.film.seed, overrides: { window: normalizeHex('2a2f36')!, text1: 'rgba(240,240,240,0.9)' }, uiRadiusPreset: 'large' }),
+      createThemePayloadV2({ seed: { ...THEME_PRESETS.graphite.seed, hue: 70 }, overrides: { window: normalizeHex('2a2f36')!, text1: 'rgba(240,240,240,0.9)' }, uiRadius: 'large' }),
       createThemePayloadV2({ seed: { ...THEME_PRESETS.paper.seed, contrast: 1.35 } }),
-      createThemePayloadV2({ seed: THEME_PRESETS.ocean.seed, overrides: { mediaScrim: 'rgba(0, 0, 0, 0.4)' }, uiRadiusPreset: 'compact' }),
+      createThemePayloadV2({ seed: THEME_PRESETS.graphite.seed, overrides: { mediaScrim: 'rgba(0, 0, 0, 0.4)' }, uiRadius: 'compact' }),
     ]) {
       const imported = parseThemePayload(JSON.parse(JSON.stringify(payload)))
       expect(imported).toEqual(payload)
@@ -40,7 +40,13 @@ describe('themeMigration payload v2', () => {
   })
 
   it('按底色识别预设（强调色、对比度可不同）', () => {
-    expect(findThemePresetId({ ...THEME_PRESETS.film.seed, contrast: 1.35, accent: ACCENT_PRESET_HEX[0] })).toBe('film')
-    expect(findThemePresetId({ ...THEME_PRESETS.film.seed, hue: 71 })).toBeNull()
+    expect(findThemePresetId({ ...THEME_PRESETS.paper.seed, contrast: 1.35, accent: ACCENT_PRESET_HEX[0] })).toBe('paper')
+    expect(findThemePresetId({ ...THEME_PRESETS.paper.seed, hue: 71 })).toBeNull()
+  })
+
+  it('圆角像素值写成最接近的三档，导入按档位换算回像素值', () => {
+    expect(createThemePayloadV2({ seed: DEFAULT_THEME_SEED, uiRadius: 6 }).uiRadiusPreset).toBe('default')
+    expect(createThemePayloadV2({ seed: DEFAULT_THEME_SEED, uiRadius: 0 }).uiRadiusPreset).toBe('compact')
+    expect(createThemePayloadV2({ seed: DEFAULT_THEME_SEED, uiRadius: 12 }).uiRadiusPreset).toBe('large')
   })
 })

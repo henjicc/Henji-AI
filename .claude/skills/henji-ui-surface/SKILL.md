@@ -47,11 +47,11 @@ description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧
 
 | 维度 | 规则 | 细则 |
 |---|---|---|
-| 颜色 | 三层：**种子**（模式、底色色相/倾向、窗口亮度、层级对比度、强调色）→ 主题引擎推导的**语义令牌**（CSS 变量 + Tailwind 类）→ 组件内部令牌。**界面只引用语义令牌**；预设石墨/深海/胶片/纸白只是种子组合，文字三档按对比度 ≥ 4.5:1 求解 | `references/color-and-material.md` |
+| 颜色 | 三层：**种子**（模式、底色色相/倾向、窗口亮度、层级对比度、强调色）→ 主题引擎推导的**语义令牌**（CSS 变量 + Tailwind 类）→ 组件内部令牌。**界面只引用语义令牌**；预设只有石墨（深色）与纸白（浅色），文字三档按对比度 ≥ 4.5:1 求解。**只打磨深色与默认蓝强调色**，纸白由引擎推导、开发中不看不截图（2026-11-10） | `references/color-and-material.md` |
 | 按钮 | `UiButton` 五档 `primary`/`secondary`/`quiet`（默认）/`danger`/`dangerSolid` + `link` + `media`；`UiIconButton` 默认静默，`on`/`tone`/`shape`/`size`。外观只由枚举决定，调用点 className 只放布局 | 本文「动作层级」 |
 | 选中 | 注意力优先（重要记录 019 修订 012）：选中用**中性底 + 主要文字**，靠勾或强调文字区分，导航不画指示条（2026-11-08 用户确认，参照 Linear/Figma）；分段 `UiSegmented` / 双段开关是中性抬起底 + 强文字；强调色只给唯一主动作、播放头与时间码、键盘焦点、面板标签细线、选项格（`grid`/`card`）的压低一档实底（多选标签保留淡强调底）；带小样的格 `tile`（主题预设）只是一个当前值，用中性选中底 + 强调色勾；悬停只用中性抬升，悬停与选中不得同色 | 本文「选中态词汇表」 |
 | 尺寸 | 控件高 28/32/36（`size` sm/md/lg）；字号 20/16/14/13/12/11（正文 13）；圆角 6 控件 / 8 输入与菜单 / 12 浮层；间距 2/4/6/8/12/16/20/24/32；动效 120/180/240（查看器 500） | `references/typography-and-tokens.md`、`references/motion.md` |
-| 材质 | **按钮扁平**：纯色实底，不用渐变、顶部高光、内描边、投影或按下位移，层次只靠颜色（静息 → 悬停 → 按下逐档加深）；“质感”来自配色、留白与对齐，不来自写实光影（重要记录 016）；**常驻表面的玻璃只压在图片、视频、画布上**（`ui-glass`、`UiPanel variant="glass"`、浮层 `surface="glass"`）；菜单、右键菜单、下拉、弹出面板这类实底浮层（`ui-overlay-surface`）在设置开启毛玻璃时自动换成同一块玻璃、关闭时为 overlay 实底（2026-10-22 用户确认），调用点不用判断 | `references/color-and-material.md` |
+| 材质 | **按钮扁平**：纯色实底，不用渐变、顶部高光、内描边、投影或按下位移，层次只靠颜色（静息 → 悬停 → 按下逐档加深）；“质感”来自配色、留白与对齐，不来自写实光影（重要记录 016）；**常驻表面的玻璃只压在图片、视频、画布上**（`ui-glass`、`UiPanel variant="glass"`、浮层 `surface="glass"`）；**毛玻璃暂不开放（2026-11-10）**：根节点固定 `data-ui-blur='off'`，菜单、下拉、弹出面板（`ui-overlay-surface`）与玻璃件一律 overlay 实底加 `line-overlay` 描边；玻璃样式与参数保留供以后只在画布上恢复，调用点不用判断 | `references/color-and-material.md` |
 | 骨架 | 一个视图一条命令带：`UiToolbar variant="command"`（左端 / `center` / `trailing` / `subordinate`），一个表面一个主动作 | 本文「页面骨架」 |
 | 字体 | 拉丁与数字 Geist，时间码与数值 Geist Mono（`UI_TEXT_TIMECODE_CLASS`），中文系统字体 | `references/typography-and-tokens.md` |
 
@@ -382,12 +382,24 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 ```tsx
 <UiEmpty title="还没有供应商" description="先添加一个吧。" />
 <UiLoading message="生成中…"><ProgressBar progress={p} /></UiLoading>
-<UiError message={err} onRetry={retry} />            {/* 不传 title 时缺省标题“操作未完成”；有更具体的说法就传 title */}
+<UiError title="素材读取失败" message="重新链接后即可继续。" detail={error.message} onRetry={retry} />
+<UiError appearance="overlay" tone="warning" title="部分效果已跳过" message="出错的效果先不显示。" detail={raw} />  {/* 压在画面/画布上 */}
+<UiInlineStatus>保存未完成</UiInlineStatus>         {/* 行内一句话 */}
 <UiEmpty size="node" icon={<ImageIcon className="h-7 w-7" />} title="等待结果" />  {/* 画布节点内容区的空占位 */}
 ```
 
-状态块**不画卡片**——它已经在某个容器里了。失败必须一眼可辨：`UiError` 总有一行危险色标题（任务 5.8），
-标题已经是完整说法时传 `title={…} message=""`；不是失败的提示（“请先选择片段”）用 `UiEmpty`，不要借 `UiError`。
+状态块**不画卡片**——它已经在某个容器里了。报错按场合三选一，调用点不写样式：
+
+| 场合 | 写法 | 样子 |
+|---|---|---|
+| 面板、内容区中央（默认） | `UiError`（`appearance="block"`；列表行内靠左用 `align="start"`） | 上方警示图标，标题、正文、动作依次居中 |
+| 压在画面、画布上 | `UiError appearance="overlay"` | 实底 + 浮起描边小条：左图标、中间标题与一行正文、右侧 `secondary` 小按钮；剪辑节目画面的状态一律叠在左下角 |
+| 行内一句话 | `UiInlineStatus` | 只有一行状态色文字，不另起标题 |
+
+- **危险色只给图标**：标题主要文字色、正文次要文字色；`tone`（`error` 默认 / `warning` 可能不完整 / `notice` 普通提示）只换图标与颜色，非失败的语气读作 `status` 而不是 `alert`。
+- **原始错误信息不当正文**：`title` 说发生了什么，`message` 说用户能做什么，`error.message` 这类技术信息放 `detail`（默认收起、可复制）。标题已经说全时省略 `message`。
+- 不是失败、也不需要用户处理的空结果（“请先选择片段”）用 `UiEmpty`。
+- 确认弹窗 `AlertDialog`：图标单独在左列，标题与正文在右侧同一列左对齐，按钮行靠右；有 `tone: 'danger'` 的动作时图标自动换危险色，主动作写 `variant: 'primary', tone: 'danger'` 得到 `dangerSolid`。
 
 按钮悬停说明统一传 `tooltip`，内部复用 `Tooltip` 的 300ms 延迟与主题皮肤，键盘聚焦立即显示。`UiIconButton` 可用 `label` / `aria-label` 命名；无显式名称时回退 tooltip。原生 `title` 不作悬停说明，只允许不可见的无障碍名称场景。`Tooltip asChild` 保留触发器 DOM、布局和 ref。状态组件已登记规则 E；S8 阻断手写 spin/pulse 与按钮原生 title，非纯 busy/loading 的禁用缺少 disabledReason 时告警。
 
@@ -576,7 +588,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 - 标签列取能放下最长标签的最小档（短标签一律 72）；**数值与滑杆同一行**（“端点说明 · 滑杆 · 端点说明 · 读数”）。
 - 动作按钮用 `secondary` 占满控件列或按内容排开，**禁止空标签行里放 quiet 整行按钮**（看起来是悬空文字）。
 - 候选、版本这类单选列表用 `UiOptionButton variant="menu"` 加统一的勾槽，各项文字左缘对齐，不给个别项单独加图标。
-- 表面：普通界面上的弹出面板用默认实底档（开启毛玻璃时自动换成**浮层玻璃** `--ui-glass-overlay-tint`，比面板高一级）；
+- 表面：普通界面上的弹出面板用默认实底档（毛玻璃暂不开放，一律实底加描边）；
   `surface="glass"` 只给压在画面上的小工具条与菜单，表单型面板不用。贴在画面上的玻璃条（视频控制条）才用黑纱 `--ui-glass-tint`。
 
 ### 2. 分段选择（2~5 个短选项的单选）
@@ -711,7 +723,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 音频波形（任何位置：口播剪辑、剪辑时间线与源监视器、画布音频节点、资产卡、音频播放器、生成记录） | `WaveformView`（`@/components/waveform/WaveformView`，`tier` mini/standard、`tone` neutral/clip）+ `useWaveformData` / `useWaveformDataList`（`@/hooks/useWaveformData`，多精度峰值、磁盘缓存，放大到采样点） | 自己解码音频、自写峰值缓存或 Canvas 波形绘制 |
 | 剪辑片段的视频缩略帧条 | `useFilmstripFrames` + `src/services/videoFilmstrip/filmstripFrameService.ts`（主进程 `electron/main/services/video/filmstrip.ts` 成批取帧、磁盘缓存） | 逐帧走原生解码或另建缩略图通道 |
 | 参数帮助说明 | 参数名称文本本身的 hover / focus tooltip | 加 Info 等额外图标、把 `description` 渲染成控件下方正文，或用 Tooltip 包住整个控件 |
-| 空/加载/错误 | `UiEmpty` / `UiLoading` / `UiError`（节点内容区的空占位用 `UiEmpty size="node"`） | 内联手写状态块 |
+| 空/加载/错误 | `UiEmpty` / `UiLoading` / `UiError`（`appearance` block/overlay、`tone` error/warning/notice、`detail` 折叠可复制的原始信息；节点内容区的空占位用 `UiEmpty size="node"`；行内一句话用 `UiInlineStatus`） | 内联手写状态块；把原始错误当正文；在画面上用 `UiPanel` 包 `UiError` |
 | 按钮/输入/开关等 | `@/components/ui` 的 `Ui*` | 原生 `<button>/<input>` |
 | 提示词编辑 | `PromptEditor` | 自己拼 textarea |
 | 提示词只读展示 | `PromptDocumentStatic`（与 `PromptEditor` 共用文档语义） | 另造提示词文档格式或手写文本解析 |
@@ -791,7 +803,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 - [ ] 有没有固定调色板、黑白类、rgba、命名色或旧别名类（`bg-app`、`text-text-muted`…）？换主题预设时它们不会跟着动，一律改语义令牌
 - [ ] 用 `accent` 当文字色了吗？文字用 `text-accent-text`（`UI_COLOR_ACCENT_TEXT_CLASS`）；字压在强调实底上用 `bg-accent text-on-accent`（黑白由引擎按对比度决定）
 - [ ] 分段是否中性抬起底 + 强文字，其他选中/当前值是否中性选中底（多选标签淡强调底）且与悬停可辨？强调色实底只属于唯一主动作；悬停/选中的容器里行内控件仍可辨
-- [ ] 本次涉及跨主题外观且升级截图时，至少看过“石墨”“纸白”吗？浅色模式下黑白类、媒体叠层令牌放错位置最容易露馅
+- [ ] 截图只看深色“石墨”（纸白由引擎推导，开发中不截图验收）；黑白类、媒体叠层令牌放错位置靠 `check:colors` 拦
 - [ ] 破坏性动作（删除/清空）是不是 `variant="primary"`？那会抢走主动作的视觉权重，应该用 `danger`（静息中性、hover 才出危险色），确认弹窗里用 `dangerSolid`
 - [ ] 改了 `.css` 文件吗？里面不能有 `#hex` 与 `rgba(数字…)`，只能 `rgb(var(--xxx-rgb) / a)`
 - [ ] 新加的全局样式/变量放对文件了吗？懒加载的样式表里不能放全局主题变量

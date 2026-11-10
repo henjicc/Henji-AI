@@ -3,7 +3,7 @@ import { useLayoutEffect, useRef, useState, type ComponentType } from 'react'
 import { Dropdown, UiButton, UiEmpty, UiFormRow, UiNavButton, UiSearchInput, UiSegmented, UiSwitch, UiToolbar } from '@/components/ui'
 import { THEME_PRESET_IDS, THEME_PRESETS, type ThemeMode, type ThemePresetId } from '@/core/theme/themeEngine'
 import { UI_SCALE_MODES } from '@/core/theme/uiScale'
-import type { UiRadiusPreset } from '@/core/theme/runtimeTheme'
+import { DEFAULT_UI_RADIUS, UI_RADIUS_CSS_VAR, normalizeUiRadius } from '@/core/theme/uiRadius'
 import { DEVELOPMENT_LAUNCH_QUERY_KEYS, DEVELOPMENT_GALLERY_QUERY_KEYS } from '@/core/development/developmentLaunchContract'
 import { installForcedPseudoStates } from './forcedPseudoStates'
 import { previewGalleryTheme, searchGallery } from './galleryIndex'
@@ -30,10 +30,7 @@ function GalleryContent(): JSX.Element {
   const initialPreset = params.get(DEVELOPMENT_LAUNCH_QUERY_KEYS.themePreset)
   const [preset, setPreset] = useState<ThemePresetId>(THEME_PRESET_IDS.includes(initialPreset as ThemePresetId) ? initialPreset as ThemePresetId : 'graphite')
   const [mode, setMode] = useState<ThemeMode>(THEME_PRESETS[preset].seed.mode)
-  const [radius, setRadius] = useState<UiRadiusPreset>(() => {
-    const value = document.documentElement.dataset.uiRadius
-    return value === 'compact' || value === 'large' ? value : 'default'
-  })
+  const [radius, setRadius] = useState(() => normalizeUiRadius(Number.parseFloat(document.documentElement.style.getPropertyValue(UI_RADIUS_CSS_VAR)) || DEFAULT_UI_RADIUS))
   const [blur, setBlur] = useState(document.documentElement.dataset.uiBlur !== 'off')
   const [scale, setScale] = useState('100')
   const [previewChanged, setPreviewChanged] = useState(false)
@@ -67,7 +64,7 @@ function GalleryContent(): JSX.Element {
   return <div data-application-surface-id="dev.ui_gallery" className="flex min-h-0 flex-1 flex-col overflow-clip bg-window pt-10">
     <UiToolbar variant="command" center={<UiSearchInput aria-label="搜索设计系统" placeholder="组件、令牌、规范" value={query} onChange={event => setQuery(event.target.value)} onClear={() => setQuery('')} clearLabel="清除搜索" className="w-full" />} trailing={<UiButton onClick={leave}>返回工作台</UiButton>} subordinate={<div className="flex min-w-0 items-center gap-4 overflow-x-auto">
       <UiFormRow label="模式" inline><UiSegmented ariaLabel="主题深浅" size="sm" value={mode} onChange={next => { setMode(next); setPreviewChanged(true) }} options={[{ value: 'dark', label: '深色' }, { value: 'light', label: '浅色' }]} /></UiFormRow>
-      <UiFormRow label="圆角" inline><UiSegmented ariaLabel="圆角预设" size="sm" value={radius} onChange={next => { setRadius(next); setPreviewChanged(true) }} options={[{ value: 'compact', label: '紧凑' }, { value: 'default', label: '标准' }, { value: 'large', label: '大' }]} /></UiFormRow>
+      <UiFormRow label="圆角" inline><UiSegmented ariaLabel="圆角" size="sm" value={radius} onChange={next => { setRadius(next); setPreviewChanged(true) }} options={[...new Set([0, 4, DEFAULT_UI_RADIUS, 8, 12, radius])].sort((a, b) => a - b).map(value => ({ value, label: String(value) }))} /></UiFormRow>
       <UiFormRow label="样张缩放" inline><Dropdown size="sm" ariaLabel="样张缩放" value={scale} options={UI_SCALE_MODES.filter(value => value !== 'auto').map(value => ({ value, label: `${value}%` }))} onSelect={setScale} /></UiFormRow>
       <UiFormRow label="玻璃" inline><UiSwitch aria-label="毛玻璃预览" checked={blur} onCheckedChange={next => { setBlur(next); setPreviewChanged(true) }} /></UiFormRow>
       <UiFormRow label="只看问题" inline><UiSwitch aria-label="只看登记问题" checked={issuesOnly} onCheckedChange={setIssuesOnly} /></UiFormRow>

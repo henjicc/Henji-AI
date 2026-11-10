@@ -151,12 +151,6 @@ describe('themeEngine 对比度（重要记录 010）', () => {
     const tokens = (id: keyof typeof THEME_PRESETS) => deriveThemeTokens(THEME_PRESETS[id].seed).colors
     expect(tokens('graphite').onAccent).toBe(WHITE)
     expect(tokens('paper').onAccent).toBe(WHITE)
-    // 深海、胶片：白字需要压暗超过 0.04 → 墨水，实底与文字都回到设计稿推导
-    for (const id of ['ocean', 'film'] as const) {
-      const reference = referenceDerive(REFERENCE_PRESETS[id])
-      expect(tokens(id).onAccent).toBe(reference.onAccent)
-      expect(tokens(id).accent).toBe(reference.accent)
-    }
     for (const id of THEME_PRESET_IDS) {
       const t = tokens(id)
       const referenceL = hexToOklch(referenceDerive(REFERENCE_PRESETS[id]).accent).L

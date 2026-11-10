@@ -39,7 +39,8 @@ export interface ThemeSeed {
   accent: string;
 }
 
-export type ThemePresetId = 'graphite' | 'ocean' | 'film' | 'paper';
+/** 只打磨深色石墨；纸白由同一引擎推导，不单独调校。 */
+export type ThemePresetId = 'graphite' | 'paper';
 
 export interface ThemePreset {
   id: ThemePresetId;
@@ -69,16 +70,6 @@ export const THEME_PRESETS: Record<ThemePresetId, ThemePreset> = {
     id: 'graphite',
     name: { zh: '石墨', en: 'Graphite' },
     seed: { mode: 'dark', hue: 260, tint: 0, base: 0.2238, contrast: 1, accent: SEED_ACCENT_HEX.blue },
-  },
-  ocean: {
-    id: 'ocean',
-    name: { zh: '深海', en: 'Ocean' },
-    seed: { mode: 'dark', hue: 245, tint: 0.024, base: 0.165, contrast: 1, accent: SEED_ACCENT_HEX.oceanBlue },
-  },
-  film: {
-    id: 'film',
-    name: { zh: '胶片', en: 'Film' },
-    seed: { mode: 'dark', hue: 70, tint: 0.013, base: 0.172, contrast: 1, accent: SEED_ACCENT_HEX.orange },
   },
   paper: {
     id: 'paper',

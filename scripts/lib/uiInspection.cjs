@@ -51,19 +51,16 @@ function readOptionValue(argv, index, name) {
 }
 
 /** 与 src/core/theme/themeEngine.ts THEME_PRESET_IDS 一致；应用侧（--dev-theme-preset）同样校验。 */
-const UI_INSPECTION_THEME_PRESETS = ['graphite', 'ocean', 'film', 'paper']
+const UI_INSPECTION_THEME_PRESETS = ['graphite', 'paper']
 
 /**
  * 核对矩阵（skill henji-ui-surface references/review.md 第 4 节第 5 条）：
- * - review：石墨 1440×900 + 960×640，深海、胶片、纸白 1440×900（每个界面的标准五张）；
+ * - review：石墨 1440×900 + 960×640。只打磨深色：纸白由主题引擎推导，开发中不截图验收（2026-11-10 用户确认）；
  * - screen：石墨 1440×900 + 960×640（数据变体多时先全量筛查，再对可疑项与代表项跑 review）。
  */
 const UI_REVIEW_MATRICES = Object.freeze({
   review: Object.freeze([
     { themePreset: 'graphite', sizes: ['1440x900', '960x640'] },
-    { themePreset: 'ocean', sizes: ['1440x900'] },
-    { themePreset: 'film', sizes: ['1440x900'] },
-    { themePreset: 'paper', sizes: ['1440x900'] },
   ]),
   screen: Object.freeze([
     { themePreset: 'graphite', sizes: ['1440x900', '960x640'] },

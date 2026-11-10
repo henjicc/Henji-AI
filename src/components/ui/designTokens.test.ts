@@ -9,6 +9,7 @@ import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { describe, expect, it } from 'vitest'
 
 import { THEME_COLOR_TOKEN_NAMES } from '@/core/theme/themeEngine'
+import { DEFAULT_UI_RADIUS } from '@/core/theme/uiRadius'
 import { themeTokenCssVar } from '@/core/theme/themeCssVars'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import { UI_DURATION, UI_DURATION_CLASS } from './motion'
@@ -42,14 +43,6 @@ function rootDeclarations(css: string): Map<string, string> {
   const block = css.slice(css.indexOf(':root {'), css.indexOf('\n}', css.indexOf(':root {')))
   const declarations = new Map<string, string>()
   for (const match of block.matchAll(/^\s*(--[\w-]+):\s*([^;]+);/gm)) declarations.set(match[1], match[2].trim())
-  return declarations
-}
-
-function presetBlock(css: string, preset: string): Map<string, string> {
-  const start = css.indexOf(`:root[data-ui-radius='${preset}'] {`)
-  const block = css.slice(start, css.indexOf('}', start))
-  const declarations = new Map<string, string>()
-  for (const match of block.matchAll(/(--[\w-]+):\s*([^;]+);/g)) declarations.set(match[1], match[2].trim())
   return declarations
 }
 
@@ -173,13 +166,11 @@ describe('设计令牌：尺寸、圆角、动效、层级', () => {
     expect(tokens).not.toContain('rounded')
   })
 
-  it('控件高度 28/32/36 与圆角 6/8/12 是 CSS 变量，Tailwind 类指向它们', () => {
+  it('控件高度 28/32/36 与圆角是 CSS 变量，Tailwind 类指向它们', () => {
     expect(rootVars.get('--size-control-sm')).toBe('28px')
     expect(rootVars.get('--size-control-md')).toBe('32px')
     expect(rootVars.get('--size-control-lg')).toBe('36px')
-    expect(rootVars.get('--radius-control')).toBe('6px')
-    expect(rootVars.get('--radius-field')).toBe('8px')
-    expect(rootVars.get('--radius-overlay')).toBe('12px')
+    expect(rootVars.get('--radius-base')).toBe(`${DEFAULT_UI_RADIUS}px`)
     expect(UI_CONTROL_HEIGHT_CLASS).toEqual({ sm: 'h-control-sm', md: 'h-control-md', lg: 'h-control-lg' })
     expect(UI_RADIUS_CLASS).toEqual({ control: 'rounded-control', field: 'rounded-field', overlay: 'rounded-overlay' })
     // rounded-md/lg/xl 改指同一组变量：「界面圆角」设置才能作用到存量控件
@@ -188,15 +179,13 @@ describe('设计令牌：尺寸、圆角、动效、层级', () => {
     expect(tailwindConfig).toMatch(/xl: 'var\(--radius-overlay\)'/)
   })
 
-  it('圆角预设同时缩放界面控件与画布节点，且内层不大于外层', () => {
-    for (const preset of ['compact', 'large']) {
-      const values = presetBlock(indexCss, preset)
-      const px = (name: string) => Number.parseFloat(values.get(name) ?? 'NaN')
-      expect(px('--radius-control')).toBeLessThan(px('--radius-field'))
-      expect(px('--radius-field')).toBeLessThan(px('--radius-overlay'))
-      expect(values.has('--node-radius')).toBe(false)
-    }
+  it('三档圆角都由 --radius-base 推导（默认 6 → 6/8/12），画布节点跟随浮层档', () => {
+    // 设置只改 --radius-base 一个值；任何一档写成固定像素，圆角滑块就管不到它
+    expect(rootVars.get('--radius-control')).toBe('var(--radius-base)')
+    expect(rootVars.get('--radius-field')).toBe('calc(var(--radius-base) * 4 / 3)')
+    expect(rootVars.get('--radius-overlay')).toBe('calc(var(--radius-base) * 2)')
     expect(rootVars.get('--node-radius')).toBe('var(--radius-overlay)')
+    expect(indexCss).not.toContain('data-ui-radius')
   })
 
   it('tailwind.config.js 登记了 120/180/240 时长档（Tailwind 默认没有，漏登记不生成 CSS）', () => {

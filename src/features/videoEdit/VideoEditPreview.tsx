@@ -19,7 +19,7 @@ import { ICON_VIDEO_EDIT_PROXY } from '@/core/theme/icons'
 import { autoSwitchVideoEditMulticam, switchVideoEditMulticam, videoEditProgramMulticam } from './application/videoEditMulticam'
 import { getVideoEditProxyPreference, setVideoEditProxyPreference, videoEditProxySignature } from './application/videoEditProxy'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { Dropdown, PanelTrigger, UiButton, UiEmpty, UiError, UiIconButton, UiLoading, UiOptionButton, UiOverflowRow, UiPanel } from '@/components/ui'
+import { Dropdown, PanelTrigger, UiButton, UiEmpty, UiError, UiIconButton, UiLoading, UiOptionButton, UiOverflowRow } from '@/components/ui'
 import { ArrowRightFromLine, ArrowRightToLine, ArrowUpFromLine, BookmarkPlus, Camera, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eraser, FastForward, Gauge, FoldHorizontal, ImagePlus, ImageUp, MoreHorizontal, Pause, PenLine, Play, Rewind, RotateCcw, Scan, SkipBack, SkipForward, Square, StepBack, StepForward, type LucideIcon } from 'lucide-react'
 import Tooltip from '@/components/ui/Tooltip'
 import { Z_LAYERS } from '@/core/theme/zLayers'
@@ -1045,6 +1045,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
     }),
     { id: 'export_frame', title: '导出帧', tooltip: '导出帧：把当前画面加入资产库', Icon: Camera, enabled: !busy, onClick: captureFrame },
   ]
+  const reloadPreview = (): void => { recovery.current.reset(); recoveryPending.current = false; setRetry(value => value + 1) }
   const programButtonOf = new Map(programButtons.map(spec => [spec.id, spec]))
   const barButtons = buttonIds.flatMap(id => { const spec = programButtonOf.get(id); return spec ? [spec] : [] })
   const menuButtons = (hiddenIds: readonly string[]) => barButtons.filter(spec => hiddenIds.includes(spec.id))
@@ -1114,20 +1115,35 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         <div className="ui-glass rounded-xl px-4"><UiLoading size="sm" message="正在准备画面…" /></div>
       </div>}
       {!spaceSimplified && !preparing && !collecting && <SpaceProgressBadge store={spaceProgress} />}
-      {spaceSimplified && !preparing && !collecting && <Tooltip asChild content="播放跟不上，三维暂时按实体或线框显示；暂停后恢复。可在“更多”里固定三维显示方式。"><div className="absolute left-2 top-2 whitespace-nowrap rounded-lg bg-media-scrim px-2 py-1 text-xs text-on-media" data-video-edit-space-simplified>预览已简化</div></Tooltip>}
       {(preparing || collecting) && <div className="absolute left-2 top-2 flex max-w-full items-center gap-2 rounded-lg bg-media-scrim p-1 text-xs text-on-media">
         {preparing && <><span className="whitespace-nowrap px-1">正在准备流畅预览…</span><UiButton variant="media" size="sm" onClick={() => { stopPreview.current(); setPreparing(false) }}>取消准备</UiButton></>}
         {collecting && !preparing && <span className="whitespace-nowrap px-1">正在处理当前帧…</span>}
       </div>}
       {visible && !motionRecording && <VideoEditUserEditReviewButton instance={instance} hidden={!pictureReady || Boolean(renderFailure || effectFailure)} onError={onError} />}
-      {(renderFailure || effectFailure) && <div className="pointer-events-none absolute inset-x-6 bottom-3 flex justify-center">
-        <UiPanel className="pointer-events-auto max-w-md px-3 py-2">
-          {renderFailure ? <UiError title="节目画面无法显示" message={renderFailure} /> : <UiError title={isVideoEditGpuFrameFailureText(effectFailure ?? '') ? '画面可能不完整' : '部分效果已跳过'} message={effectFailure ?? ''} />}
-          {!!trustFailure?.records.length && <UiButton variant="quiet" disabled={trustPending} onClick={() => {
-            setTrustPending(true)
-            void runForeignContent(trustFailure.records).catch(onError).finally(() => setTrustPending(false))
-          }}>运行</UiButton>}
-        </UiPanel>
+      {/* 画面上的状态条统一叠在左下角：失败、可能不完整、已简化，各自一条，原始信息收进详情 */}
+      {(renderFailure || effectFailure || (spaceSimplified && !preparing && !collecting)) && <div className="pointer-events-none absolute inset-x-3 bottom-3 flex flex-col items-start gap-2" data-video-edit-program-status>
+        {(renderFailure || effectFailure) && <div className="pointer-events-auto w-full max-w-sm">
+          {(() => {
+            // 标题始终按实际失败说；外来代码待确认时正文与动作换成“运行”，其余情况给重新加载
+            const gpuFrame = !renderFailure && isVideoEditGpuFrameFailureText(effectFailure ?? '')
+            const failure = renderFailure
+              ? { tone: 'error' as const, title: '节目画面无法显示', message: '重新加载预览试试；仍不显示就重启软件。', reload: true }
+              : gpuFrame
+                ? { tone: 'warning' as const, title: '画面可能不完整', message: '这一帧有内容没画出来，可重新加载预览。', reload: true }
+                : { tone: 'warning' as const, title: '部分效果已跳过', message: '出错的效果先不显示，其余画面照常。', reload: false }
+            const trustRecords = trustFailure?.records.length ? trustFailure.records : null
+            return <UiError appearance="overlay" tone={failure.tone} title={failure.title} detail={renderFailure ?? effectFailure ?? undefined}
+              message={trustRecords ? '用到了外来内容里的代码，确认运行后才会显示。' : failure.message}
+              onRetry={!trustRecords && failure.reload ? reloadPreview : undefined} retryLabel="重新加载"
+              actions={trustRecords ? <UiButton variant="secondary" size="sm" loading={trustPending} onClick={() => {
+                setTrustPending(true)
+                void runForeignContent(trustRecords).catch(onError).finally(() => setTrustPending(false))
+              }}>运行</UiButton> : undefined} />
+          })()}
+        </div>}
+        {spaceSimplified && !preparing && !collecting && <div className="pointer-events-auto w-full max-w-sm" data-video-edit-space-simplified>
+          <UiError appearance="overlay" tone="notice" title="预览已简化" message="播放跟不上，三维暂按实体或线框显示，暂停后恢复。" />
+        </div>}
       </div>}
     </div>
     <VideoEditProgramRuler instance={instance} />
@@ -1164,7 +1180,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         <UiOptionButton variant="menu" size="sm" active={multicamView} onClick={() => setMulticamView(value => !value)}>多机位视图（1–9 切换）</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" disabled={!multicam || instance.playing} onClick={() => { if (multicam) void autoSwitchVideoEditMulticam({ projectId: instance.document.id, sequenceId: instance.activeSequenceId, clipId: multicam.clip.id }).catch(onError) }}>建议机位切换</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" className="gap-2" active={!playbackResolution.fullWhenPaused} disabled={playbackResolution.resolution === 'full'} tooltip="默认暂停时回到完整分辨率以便看清细节；打开后暂停时也保持所选回放分辨率" onClick={() => changePlaybackResolution({ fullWhenPaused: !playbackResolution.fullWhenPaused })}><Gauge size={UI_ICON_SIZE.sm} />暂停时也用此分辨率</UiOptionButton>
-        <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={preparing} onClick={() => { recovery.current.reset(); recoveryPending.current = false; setRetry(value => value + 1) }}><RotateCcw size={UI_ICON_SIZE.sm} />重新加载预览</UiOptionButton>
+        <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={preparing} onClick={reloadPreview}><RotateCcw size={UI_ICON_SIZE.sm} />重新加载预览</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={busy} onClick={captureFrame}><ImagePlus size={UI_ICON_SIZE.sm} />选帧加入资产库</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={busy} onClick={() => setCanvasSend({ projectId: instance.document.id, sequenceId: instance.activeSequenceId, source: { kind: 'frame', frame: instance.frame } })}><ICON_WORKSPACE_CANVAS size={UI_ICON_SIZE.sm} />发送当前帧到画布</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" className="gap-2" disabled={busy} tooltip="把当前画面作为项目列表里的封面" onClick={setPosterFrame}><ImageUp size={UI_ICON_SIZE.sm} />设为项目封面</UiOptionButton>

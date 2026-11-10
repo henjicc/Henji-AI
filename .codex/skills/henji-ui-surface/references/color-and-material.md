@@ -8,9 +8,9 @@
 
 | 层 | 内容 | 入口 |
 |---|---|---|
-| 种子 | 模式（深/浅）、底色色相、底色倾向（彩度）、窗口亮度、层级对比度、强调色。预设石墨（默认）/深海/胶片/纸白只是种子组合；设置里开放预设、强调色、层级对比三项 | `src/core/theme/themeEngine.ts`（`THEME_PRESETS`、`deriveThemeTokens`）、`themeSelection.ts` |
+| 种子 | 模式（深/浅）、底色色相、底色倾向（彩度）、窗口亮度、层级对比度、强调色。预设只有石墨（深色，默认）与纸白（浅色），只是种子组合；设置里开放外观（深色 / 浅色）、强调色、层级对比与圆角。**只打磨深色石墨与默认蓝强调色**：纸白与其他强调色由引擎自动推导，开发中不单独调校、不截图验收（2026-11-10 用户确认） | `src/core/theme/themeEngine.ts`（`THEME_PRESETS`、`deriveThemeTokens`）、`themeSelection.ts` |
 | 语义令牌 | OKLCH 推导：表面按“窗口 ± n 级”，`text2`/`text3` 按目标对比度 ≥ 4.5:1 求解，强调色亮度夹紧，实底上的字按对比度自动黑白；输出为 CSS 变量 `--{token}` 与不透明令牌的 `--{token}-rgb` | `themeCssVars.ts` → `runtimeTheme.ts` 写到根节点；`index.css` 的 `theme-tokens` 块是石墨静态默认值（首帧防闪色，测试保证与引擎一致） |
-| 组件 | 组件内部把语义令牌组合成皮肤（`.ui-btn-*`、`.ui-glass*`、`styleTokens.ts` 的常量）；玻璃的 `--ui-glass-*` 组件层变量静态写在 `index.css`，毛玻璃关闭时整组改指实底 | `src/index.css`、`src/components/ui/styleTokens.ts` |
+| 组件 | 组件内部把语义令牌组合成皮肤（`.ui-btn-*`、`.ui-glass*`、`styleTokens.ts` 的常量）；玻璃的 `--ui-glass-*` 组件层变量静态写在 `index.css`，`data-ui-blur='off'` 时整组改指实底 | `src/index.css`、`src/components/ui/styleTokens.ts` |
 
 Tailwind 类名规则：**类名里的颜色名 = CSS 变量名去掉 `--`**（`--control-hover` → `bg-control-hover`，`--text2` → `text-text2`），
 唯一例外是文字片段 `--clip-text` 的类叫 `clip-title`（避开 `bg-clip-text`）。常用：
@@ -51,9 +51,10 @@ palette / mono / named 已清零、不可再登记，其余规则总数不得超
 
 ### 全局主题变量不能放懒加载的样式表里
 
-`data-theme-tone` / `data-ui-radius` 的取值规则曾写在
+色调与圆角的取值规则曾写在
 `src/features/canvas/storyboard.css`——那个文件由 `CanvasWorkspace.tsx` 懒加载，
 结果「设置 → 界面 → 圆角尺寸 / 色调」在用户没打开过画布之前完全不生效。
+现在圆角只有一个种子 `--radius-base`（设置里的圆角滑块，0–12，默认 6），`--radius-control/field/overlay` 在 `index.css` 按 1、4/3、2 倍推导。
 **全局主题变量只能放 `src/index.css`**（它在 `main.tsx` 里全局引入）。
 
 ⚠️ 另外：全仓没有 `dark:` 变体，深浅色由主题引擎改变量完成（Tailwind `darkMode: 'class'` 只是为了让误写的 `dark:` 永不生效）。
@@ -76,6 +77,9 @@ padding、flex 收缩与助手插入量也会被静默绕开。
 以及它以哪个父级作为包含块。
 
 ## 毛玻璃是一个「材质」，不是一个 blur 值
+
+> **2026-11-10 起毛玻璃暂不开放**：设置里没有开关，`index.html` 与 `applyRuntimeTheme` 固定写 `data-ui-blur='off'`，所有浮层按实底加描边呈现。
+> 下面的玻璃样式、`surface="glass"` 等组件参数保留，供以后只在画布上恢复；新界面按无玻璃设计，分层靠描边不靠投影。
 
 > **只写 `backdrop-filter: blur()` 得到的是「模糊 + 降不透明度」，看起来廉价。**
 
@@ -168,7 +172,7 @@ padding、flex 收缩与助手插入量也会被静默绕开。
 - **文字选区随主题**：全局 `::selection` 用 `selected-accent-hover` 底、不改文字色（引擎求解三档文字时已把这层合成底计入）。
 - **禁用态**：`UI_FIELD_DISABLED_CLASS` 同时认 `disabled` 与 `aria-disabled="true"`；为保留可聚焦与原因说明只写 `aria-disabled` 的菜单项不在调用点补 `opacity-50`。
 - **全屏查看器（图片 / 视频 / 音频）**：背景是不随主题的媒体底。浮在画面上的**单个**控件（关闭、翻页、重置视图、页码与缩放读数）
-  一律媒体档（`UiIconButton tone="media"` / `bg-media-control text-on-media`，固定深色、四个预设一样）；
+  一律媒体档（`UiIconButton tone="media"` / `bg-media-control text-on-media`，固定深色、不随预设变）；
   需要多项并排的**控件组**（视频控制条、图片对比分段、音频播放条）一律玻璃面板（`UiPanel variant="glass"` / `ui-glass`，随主题，
   里面的控件靠 `ui-glass-adaptive-*` 自适应）。两种可以同排，但同一排外框同高（40）。不要把控件组拆成一颗颗媒体按钮，
   也不要给单个按钮套玻璃（5.7-25 的统一规则）。
@@ -180,7 +184,7 @@ padding、flex 收缩与助手插入量也会被静默绕开。
 1. **令牌层求解**（重要记录 010）：`text2`/`text3` 按目标对比度求解亮度，基准取它实际会压上的最亮表面
    （`selected`/`raised`/`hover`）；对比度档位只拉开表面层级，文字不得因此变暗；强调实底上的字（`on-accent`）与
    主按钮静息与悬停实底都按 ≥ 4.5:1 自动取黑或白；选中淡底的透明度按“与悬停、静息可辨”（`SELECTION_MIN_DELTA`）求解。
-   `themeEngine.test.ts` 对四个预设 × 三档对比度逐项断言；`themeCombination.test.ts`（任务 5.11）用固定随机种子对
+   `themeEngine.test.ts` 对预设 × 三档对比度逐项断言；`themeCombination.test.ts`（任务 5.11）用固定随机种子对
    “预设 × 任意强调色 × 对比度全范围”与预设附近的自定义深浅底色做属性测试，失败时输出收缩后的最小反例。
 2. **渲染后审计**：`npm run check:ui-visual`（正式 Electron 场景）的 `lowContrast` 规则——隐藏全部文字与 lucide 图标截一张
    “只有背景”的图，在每个候选区域网格取样、按 alpha × 祖先 opacity 合成前景后算 WCAG 对比度，取最差 10% 分位
@@ -191,8 +195,8 @@ padding、flex 收缩与助手插入量也会被静默绕开。
 **三条规则：**
 
 1. **`accent` 不能作文字色**，文字用 `text-accent-text`（`UI_COLOR_ACCENT_TEXT_CLASS`）。`accent` 只用于填充与描边。
-2. **字压在强调实底上用 `bg-accent text-on-accent`**，不要写死白字——深海、胶片等预设
-   的强调色上应是深色字，由引擎按对比度决定。危险/成功/警示实底同理用 `text-on-danger` 等。
+2. **字压在强调实底上用 `bg-accent text-on-accent`**，不要写死白字——用户自选的浅强调色
+   上应是深色字，由引擎按对比度决定。危险/成功/警示实底同理用 `text-on-danger` 等。
 3. **界面色不达标改令牌或改用法，不登记例外**；只有装饰、品牌或用户内容色（素材本身）才登记例外。
    改主题引擎推导后选受影响的精确主题测试（含组合属性测试）；是否升级样张页由 testing.md 判级。需要截图时一次 `ui:tour --audit`，不叠加同矩阵 `check:ui-visual`（见 review 第8节）。
    组合测试找到不达标组合时修引擎求解，不放宽门槛、不缩小取值范围。

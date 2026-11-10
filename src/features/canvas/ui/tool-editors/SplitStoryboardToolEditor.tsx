@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import {
   UI_TEXT_META_CLASS,
   UI_TEXT_NUMERIC_CLASS,
-  UiError,
+  UiInlineStatus,
   UiFormRow,
   UiGroup,
   UiPanel,
@@ -313,7 +313,7 @@ export function SplitStoryboardToolEditor({ sourceImageUrl, options, onOptionsCh
 
         {hasLayoutError && (
           // 没有分割线也切不出来时，原因是图片太小、格数太多，不能再说“分割线过粗”
-          <UiError size="xs" align="start" title={t(lineThicknessPercent > 0 ? 'toolDialog.split.layoutError' : 'toolDialog.split.layoutTooSmall')} message="" />
+          <UiInlineStatus className="block">{t(lineThicknessPercent > 0 ? 'toolDialog.split.layoutError' : 'toolDialog.split.layoutTooSmall')}</UiInlineStatus>
         )}
       </UiGroup>
     </div>

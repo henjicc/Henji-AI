@@ -7,6 +7,7 @@ import {
   type ThemeSelectionPreset,
 } from '@/core/theme/themeSelection'
 import { DEFAULT_UI_SCALE_MODE, UI_SCALE_MODES } from '@/core/theme/uiScale'
+import { DEFAULT_UI_RADIUS, UI_RADIUS_RANGE } from '@/core/theme/uiRadius'
 import {
   COLLAPSE_SETTING_CHANGED_EVENT,
   COLLAPSE_SETTING_SPECS,
@@ -31,7 +32,7 @@ const themeContrastSchema = z.enum(THEME_CONTRAST_LEVEL_IDS as [ThemeContrastLev
 function writeThemePreset(preset: ThemeSelectionPreset): void {
   const store = useSettingsStore.getState()
   if (preset === THEME_CUSTOM_PRESET && !store.themeSelection.custom) {
-    throw new Error('当前没有自定义配色：自定义配色只来自旧版自定义颜色或导入的非预设主题文件，可选 graphite、ocean、film、paper。')
+    throw new Error('当前没有自定义配色：自定义配色只来自导入的非预设主题文件，可选 graphite（深色）或 paper（浅色）。')
   }
   store.setThemePreset(preset)
 }
@@ -126,12 +127,6 @@ export const INTERFACE_APPLICATION_SETTING_DEFINITIONS: ApplicationSettingDefini
   }, () => useSettingsStore.getState().uiScaleMode,
   (value) => useSettingsStore.getState().setUiScaleMode(value)),
   storeSetting({
-    id: 'interface.blur_enabled', title: '毛玻璃效果', description: '控制图片、视频和画布上浮层的毛玻璃材质。',
-    aliases: ['毛玻璃', '模糊', '玻璃效果', 'blur', 'glass'], schema: z.boolean(), defaultValue: true,
-    target: settingsTarget('general-appearance'), requiresReload: false, requiresRestart: false, sensitive: false,
-  }, () => useSettingsStore.getState().uiBlurEnabled,
-  (value) => useSettingsStore.getState().setUiBlurEnabled(value)),
-  storeSetting({
     id: 'experimental.web_app_recording', title: '网页应用录制（实验）',
     description: '开启后痕迹在本机端口 47831 等待接入了痕迹探针的网页应用连接，录屏页出现网页应用模式，助手可用 start_web_app_recording 等能力录制并离线重演。默认关闭。',
     aliases: ['实验性功能', '网页录制', '网页应用录制', '重演', 'experimental', 'web app recording'], schema: z.boolean(), defaultValue: false,
@@ -139,16 +134,17 @@ export const INTERFACE_APPLICATION_SETTING_DEFINITIONS: ApplicationSettingDefini
   }, () => useSettingsStore.getState().experimentalWebAppRecording,
   (value) => useSettingsStore.getState().setExperimentalWebAppRecording(value)),
   storeSetting({
-    id: 'interface.radius', title: '界面圆角', description: '设置全局界面圆角的紧凑、默认或宽松档位。',
-    aliases: ['圆角', '紧凑', 'radius'], schema: z.enum(['compact', 'default', 'large']), defaultValue: 'default',
+    id: 'interface.radius', title: '界面圆角',
+    description: `设置全局界面圆角：控件圆角的像素值，${UI_RADIUS_RANGE.min}–${UI_RADIUS_RANGE.max} 的整数，默认 ${DEFAULT_UI_RADIUS}；输入框与浮层圆角按比例跟着变（默认 6 → 控件 6、输入框 8、浮层 12）。0 为直角。`,
+    aliases: ['圆角', '直角', '圆润', 'radius', 'corner'], schema: z.number().int().min(UI_RADIUS_RANGE.min).max(UI_RADIUS_RANGE.max), defaultValue: DEFAULT_UI_RADIUS,
     target: settingsTarget('general-appearance'), requiresReload: false, requiresRestart: false, sensitive: false,
-  }, () => useSettingsStore.getState().uiRadiusPreset,
-  (value) => useSettingsStore.getState().setUiRadiusPreset(value)),
+  }, () => useSettingsStore.getState().uiRadius,
+  (value) => useSettingsStore.getState().setUiRadius(value)),
   storeSetting({
-    id: 'interface.theme_preset', title: '主题预设',
-    description: '切换界面配色预设：graphite 石墨（深色，默认）、ocean 深海（深色偏蓝）、film 胶片（深色偏暖）、paper 纸白（浅色）；'
-      + 'custom 是用户从旧版自定义颜色或主题文件导入的配色，只有存在时才能切回。切换预设保留当前强调色选择与层级对比度。',
-    aliases: ['主题', '配色', '深色', '浅色', '暗色', '亮色', '石墨', '深海', '胶片', '纸白', 'theme', 'dark mode', 'light mode'],
+    id: 'interface.theme_preset', title: '外观（深色 / 浅色）',
+    description: '切换界面深浅：graphite 深色石墨（默认）、paper 浅色纸白；'
+      + 'custom 是用户从主题文件导入的配色，只有存在时才能切回。切换保留当前强调色选择与层级对比度。',
+    aliases: ['主题', '外观', '配色', '深色', '浅色', '暗色', '亮色', '石墨', '纸白', 'theme', 'dark mode', 'light mode'],
     schema: themePresetSchema, defaultValue: 'graphite',
     target: settingsTarget('general-appearance'), requiresReload: false, requiresRestart: false, sensitive: false,
   }, () => useSettingsStore.getState().themeSelection.preset,

@@ -75,12 +75,11 @@ export function resetWindowAppearanceSyncForTests(): void {
 export function useApplyRuntimeTheme(): void {
   const seed = useSettingsStore((state) => state.themeSeed);
   const overrides = useSettingsStore((state) => state.themeOverrides);
-  const uiRadiusPreset = useSettingsStore((state) => state.uiRadiusPreset);
-  const uiBlurEnabled = useSettingsStore((state) => state.uiBlurEnabled);
+  const uiRadius = useSettingsStore((state) => state.uiRadius);
 
   useEffect(() => {
     const theme = selectAppliedTheme({ seed, overrides });
-    const tokens = applyRuntimeTheme({ seed: theme.seed, overrides: theme.overrides, uiRadiusPreset, uiBlurEnabled });
+    const tokens = applyRuntimeTheme({ seed: theme.seed, overrides: theme.overrides, uiRadius });
     void syncWindowAppearance(tokens);
-  }, [seed, overrides, uiRadiusPreset, uiBlurEnabled]);
+  }, [seed, overrides, uiRadius]);
 }

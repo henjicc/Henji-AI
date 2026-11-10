@@ -28,22 +28,25 @@ describe('外观选择 → 种子', () => {
 
   it('种子 → 选择 → 种子往返不变（预设与自定义两条路）', () => {
     const seeds = [
-      { ...THEME_PRESETS.film.seed, contrast: 1.35, accent: THEME_SEED_ACCENT_HEX.teal },
-      THEME_PRESETS.ocean.seed,
+      { ...THEME_PRESETS.graphite.seed, contrast: 1.35, accent: THEME_SEED_ACCENT_HEX.teal },
+      THEME_PRESETS.paper.seed,
       { ...THEME_PRESETS.paper.seed, base: 0.9 },
       { ...THEME_PRESETS.graphite.seed, contrast: 2 },
     ]
     for (const seed of seeds) {
       expect(resolveThemeSelection(selectionFromThemeSeed(seed)).seed).toEqual(seed)
     }
-    expect(selectionFromThemeSeed(THEME_PRESETS.ocean.seed).accent).toBeNull()
+    expect(selectionFromThemeSeed(THEME_PRESETS.paper.seed).accent).toBeNull()
     expect(selectionFromThemeSeed({ ...THEME_PRESETS.paper.seed, base: 0.9 }).preset).toBe('custom')
     expect(selectionFromThemeSeed(THEME_PRESETS.graphite.seed, { line: THEME_SEED_ACCENT_HEX.violet }).preset).toBe('custom')
   })
 
   it('持久化规范化：非法值回落，“自定义”缺底色时回到默认预设', () => {
     expect(normalizeThemeSelection(null)).toBeNull()
-    expect(normalizeThemeSelection({ preset: 'sepia' })).toBeNull()
+    expect(normalizeThemeSelection({ preset: 5 })).toBeNull()
+    // 已撤下的预设（深海、胶片）回落到石墨，强调色与对比度保留
+    expect(normalizeThemeSelection({ preset: 'ocean', accent: THEME_SEED_ACCENT_HEX.rose, contrast: 'soft' }))
+      .toEqual({ preset: 'graphite', accent: THEME_SEED_ACCENT_HEX.rose, contrast: 'soft', custom: null })
     expect(normalizeThemeSelection({ preset: 'custom', accent: THEME_SEED_ACCENT_HEX.rose.toLowerCase(), contrast: 'strong' }))
       .toEqual({ preset: 'graphite', accent: THEME_SEED_ACCENT_HEX.rose, contrast: 'strong', custom: null })
   })

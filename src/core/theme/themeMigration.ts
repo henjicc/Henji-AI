@@ -1,9 +1,10 @@
 /**
  * 可分享主题数据格式 v2（纯函数）：`{ version: 2, seed, overrides?, uiRadiusPreset }`。
- * 毛玻璃开关仍是本机观感偏好，不进可分享的 payload。
  *
  * 2026-10-21 起持久格式正式向后兼容，兼容起点即 v2；此前的 v1 手填颜色主题与其转换已按用户决定清除，
  * 导入 v1 文件按格式不对返回 null，由设置页走现有失败提示。
+ *
+ * 界面圆角是连续像素值，主题文件只记三档：导出写最接近的档位，导入按档位换算成像素值（见 `uiRadius.ts`）。
  */
 import { normalizeHex, parseColor, rgbaString } from './themeColor';
 import {
@@ -16,21 +17,16 @@ import {
   type ThemeSeed,
   type ThemeTokenOverrides,
 } from './themeEngine';
-
-export type ThemeUiRadiusPreset = 'compact' | 'default' | 'large';
+import { isUiRadiusPreset, nearestUiRadiusPreset, normalizeUiRadius, type UiRadiusPreset } from './uiRadius';
 
 export interface ThemePayloadV2 {
   version: 2;
   seed: ThemeSeed;
   overrides?: ThemeTokenOverrides;
-  uiRadiusPreset: ThemeUiRadiusPreset;
+  uiRadiusPreset: UiRadiusPreset;
 }
 
 const OVERRIDABLE_TOKENS = new Set<string>(THEME_COLOR_TOKEN_NAMES);
-
-function isUiRadiusPreset(value: unknown): value is ThemeUiRadiusPreset {
-  return value === 'compact' || value === 'default' || value === 'large';
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -68,12 +64,13 @@ export function normalizeThemeOverrides(input: unknown): ThemeTokenOverrides | u
 export function createThemePayloadV2(input: {
   seed: Partial<ThemeSeed>;
   overrides?: ThemeTokenOverrides;
-  uiRadiusPreset?: ThemeUiRadiusPreset;
+  /** 像素值或三档名称 */
+  uiRadius?: number | UiRadiusPreset;
 }): ThemePayloadV2 {
   const payload: ThemePayloadV2 = {
     version: 2,
     seed: normalizeThemeSeed(input.seed),
-    uiRadiusPreset: isUiRadiusPreset(input.uiRadiusPreset) ? input.uiRadiusPreset : 'default',
+    uiRadiusPreset: nearestUiRadiusPreset(normalizeUiRadius(input.uiRadius)),
   };
   const overrides = normalizeThemeOverrides(input.overrides);
   if (overrides) {
@@ -93,7 +90,7 @@ function parseV2(input: Record<string, unknown>): ThemePayloadV2 | null {
   return createThemePayloadV2({
     seed: seed as Partial<ThemeSeed>,
     overrides: normalizeThemeOverrides(input.overrides),
-    uiRadiusPreset: input.uiRadiusPreset,
+    uiRadius: input.uiRadiusPreset,
   });
 }
 

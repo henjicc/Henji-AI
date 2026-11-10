@@ -35,7 +35,7 @@ describe('assistant settings registry', () => {
   })
   beforeEach(() => {
     useSettingsStore.getState().setVideoEditShortcuts({})
-    useSettingsStore.getState().setUiBlurEnabled(true)
+    useSettingsStore.getState().setVideoEditTimelineAutoScroll(true)
     useSettingsStore.getState().setThemeContrast('standard')
   })
   it('剪辑键位封闭对象由正式设置提交，冲突不写入，空配置恢复默认', () => {
@@ -51,26 +51,26 @@ describe('assistant settings registry', () => {
   })
 
   it('搜索、规划并应用可逆设置', () => {
-    expect(searchApplicationSettings('毛玻璃', 10).map((item) => item.id))
-      .toContain('interface.blur_enabled')
+    expect(searchApplicationSettings('时间线自动滚动', 10).map((item) => item.id))
+      .toContain('video_edit.timeline_auto_scroll')
     const plan = planApplicationSettingsChange([
-      { id: 'interface.blur_enabled', value: false },
+      { id: 'video_edit.timeline_auto_scroll', value: false },
     ])
     expect(plan.changes[0]).toMatchObject({ before: true, after: false })
     const result = applyApplicationSettingsChange(plan.planRef)
     expect(result.applied).toEqual([
-      expect.objectContaining({ id: 'interface.blur_enabled', value: false }),
+      expect.objectContaining({ id: 'video_edit.timeline_auto_scroll', value: false }),
     ])
-    expect(useSettingsStore.getState().uiBlurEnabled).toBe(false)
+    expect(useSettingsStore.getState().videoEditTimelineAutoScroll).toBe(false)
   })
 
   it('revision 冲突时不写入', () => {
     const plan = planApplicationSettingsChange([
-      { id: 'interface.blur_enabled', value: false },
+      { id: 'video_edit.timeline_auto_scroll', value: false },
     ])
     useSettingsStore.getState().setThemeContrast('soft')
     expect(() => applyApplicationSettingsChange(plan.planRef)).toThrow('CONFLICT')
-    expect(useSettingsStore.getState().uiBlurEnabled).toBe(true)
+    expect(useSettingsStore.getState().videoEditTimelineAutoScroll).toBe(true)
   })
 
   it('密钥只返回状态；下载目录按路径直接读写', () => {

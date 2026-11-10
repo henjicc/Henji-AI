@@ -2,9 +2,8 @@
  * 画布（含分镜）专属样式。
  *
  * ⚠️ 这个文件是**懒加载**的（`CanvasWorkspace.tsx` 里 import），
- * 所以任何全局生效的东西都不能放在这里。原先主题色调（`data-theme-tone`）
- * 与圆角预设（`data-ui-radius`）的规则写在这儿，导致用户没打开过画布工作区时
- * 这两个设置项完全不生效——已全部迁到 `src/index.css`。
+ * 所以任何全局生效的东西（主题变量、圆角）都不能放在这里，否则用户没打开过画布工作区时
+ * 对应设置完全不生效；它们在 `src/index.css`。
  */
 
 /* 节点绘制隔离：透明 padding 扩展 paint containment 的裁剪框，等量负 margin

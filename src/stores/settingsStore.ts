@@ -15,7 +15,7 @@ export const DOWNLOAD_PRESET_PATH_LIMIT = 8;
 
 import { setLogCaptureMode as syncLogCaptureMode, type LogCaptureMode } from '@/commands/logging';
 import { API_KEY_PROVIDER_IDS, type UploadProvider } from '@/core/config/providers';
-import type { UiRadiusPreset } from '@/core/theme/runtimeTheme';
+import { DEFAULT_UI_RADIUS, normalizeUiRadius } from '@/core/theme/uiRadius';
 import { normalizeHex } from '@/core/theme/themeColor';
 import {
   type ThemeContrastLevel,
@@ -79,9 +79,8 @@ interface SettingsState {
   logCaptureMode: LogCaptureMode;
   /** 整个可见应用窗口的界面缩放；auto 按窗口逻辑尺寸在 90%/100% 间选择。 */
   uiScaleMode: UiScaleMode;
-  uiRadiusPreset: UiRadiusPreset;
-  /** 界面毛玻璃效果。关闭后 `--ui-blur` 置 0，所有走该令牌的浮层一起变成不模糊 */
-  uiBlurEnabled: boolean;
+  /** 控件圆角像素值（见 core/theme/uiRadius.ts）；输入框与浮层圆角按比例推导 */
+  uiRadius: number;
   /** 实验性功能：网页应用录制与重演（默认关闭） */
   experimentalWebAppRecording: boolean;
   /** 外观选择（预设 / 强调色 / 层级对比度 / 自定义底色）：主题颜色的唯一可写来源。 */
@@ -142,8 +141,7 @@ interface SettingsState {
   setAutoInsertTextDisplayNode: (enabled: boolean) => void;
   setLogCaptureMode: (mode: LogCaptureMode) => void;
   setUiScaleMode: (mode: UiScaleMode) => void;
-  setUiRadiusPreset: (preset: UiRadiusPreset) => void;
-  setUiBlurEnabled: (enabled: boolean) => void;
+  setUiRadius: (radius: number) => void;
   setExperimentalWebAppRecording: (enabled: boolean) => void;
   /** 切换主题预设；`custom` 只在存在自定义底色时生效。保留当前强调色选择与对比度档位。 */
   setThemePreset: (preset: ThemeSelectionPreset) => void;
@@ -217,8 +215,7 @@ export const useSettingsStore = create<SettingsState>()(
       autoInsertTextDisplayNode: false,
       logCaptureMode: 'standard',
       uiScaleMode: DEFAULT_UI_SCALE_MODE,
-      uiRadiusPreset: 'default',
-      uiBlurEnabled: true,
+      uiRadius: DEFAULT_UI_RADIUS,
       experimentalWebAppRecording: false,
       ...DEFAULT_THEME_STATE,
       startupWorkspace: 'generation',
@@ -294,8 +291,7 @@ export const useSettingsStore = create<SettingsState>()(
         void syncLogCaptureMode(mode).catch(() => undefined);
       },
       setUiScaleMode: (uiScaleMode) => set({ uiScaleMode }),
-      setUiRadiusPreset: (uiRadiusPreset) => set({ uiRadiusPreset }),
-      setUiBlurEnabled: (uiBlurEnabled) => set({ uiBlurEnabled }),
+      setUiRadius: (radius) => set({ uiRadius: normalizeUiRadius(radius) }),
       setExperimentalWebAppRecording: (experimentalWebAppRecording) => set({ experimentalWebAppRecording }),
       setThemePreset: (preset) =>
         set((state) => {
@@ -315,7 +311,7 @@ export const useSettingsStore = create<SettingsState>()(
           const colors = mode === 'radiusOnly'
             ? {}
             : themeSelectionState(selectionFromThemeSeed(payload.seed, payload.overrides, state.themeSelection.custom));
-          const radius = mode === 'colorsOnly' ? {} : { uiRadiusPreset: payload.uiRadiusPreset };
+          const radius = mode === 'colorsOnly' ? {} : { uiRadius: normalizeUiRadius(payload.uiRadiusPreset) };
           return { ...colors, ...radius };
         }),
       setStartupWorkspace: (startupWorkspace) => set({ startupWorkspace }),
@@ -347,11 +343,12 @@ export const useSettingsStore = create<SettingsState>()(
       // "完整捕获" 导致日志长期膨胀。
       // 剪辑快捷键：默认键位随版本对齐 PR 时，旧改键里不认识或与新默认冲突的部分在恢复时让出，避免读设置失败。
       merge: (persistedState, currentState) => {
-        const persisted = (persistedState ?? {}) as Partial<SettingsState>;
+        // 早期设置的三档圆角（uiRadiusPreset）换成对应数值；毛玻璃开关（uiBlurEnabled）已撤下，读到就丢掉。
+        const { uiRadiusPreset, uiBlurEnabled: _uiBlurEnabled, ...persisted } = (persistedState ?? {}) as Partial<SettingsState> & { uiRadiusPreset?: unknown; uiBlurEnabled?: unknown };
         // 生效种子与覆盖只由选择推导：预设调整后，旧设置里存下的种子不能继续压过预设。
         // 两者仍照常写出，供尚未包含此推导的旧版本读取。
         const themeSelection = normalizeThemeSelection(persisted.themeSelection) ?? DEFAULT_THEME_SELECTION;
-        return { ...currentState, ...persisted, ...themeSelectionState(themeSelection), videoEditSequenceDefaults: videoEditSequenceDefaultsSchema.parse(persisted.videoEditSequenceDefaults ?? VIDEO_EDIT_SEQUENCE_DEFAULTS), videoEditShortcuts: sanitizeVideoEditShortcutOverrides(persisted.videoEditShortcuts), videoEditMonitorButtons: sanitizeVideoEditMonitorButtons(persisted.videoEditMonitorButtons), videoEditTrackHeaderButtons: sanitizeVideoEditTrackHeaderButtons(persisted.videoEditTrackHeaderButtons), videoEditDefaultTransitions: sanitizeVideoEditDefaultTransitions(persisted.videoEditDefaultTransitions) };
+        return { ...currentState, ...persisted, uiRadius: normalizeUiRadius(persisted.uiRadius ?? uiRadiusPreset), ...themeSelectionState(themeSelection), videoEditSequenceDefaults: videoEditSequenceDefaultsSchema.parse(persisted.videoEditSequenceDefaults ?? VIDEO_EDIT_SEQUENCE_DEFAULTS), videoEditShortcuts: sanitizeVideoEditShortcutOverrides(persisted.videoEditShortcuts), videoEditMonitorButtons: sanitizeVideoEditMonitorButtons(persisted.videoEditMonitorButtons), videoEditTrackHeaderButtons: sanitizeVideoEditTrackHeaderButtons(persisted.videoEditTrackHeaderButtons), videoEditDefaultTransitions: sanitizeVideoEditDefaultTransitions(persisted.videoEditDefaultTransitions) };
       },
       partialize: (state) => {
         const { logCaptureMode: _logCaptureMode, ...persisted } = state;

@@ -2,7 +2,7 @@ import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type ReactNode } from 'react'
 import { ArrowUp, AudioLines, Paperclip, Square, X } from 'lucide-react'
 
-import { PromptEditor, UI_FIELD_FOCUS_WITHIN_CLASS, UI_FIELD_SURFACE_CLASS, UI_TEXT_META_CLASS, UiButton, UiError, UiIconButton, UiInput } from '@/components/ui'
+import { PromptEditor, UI_FIELD_FOCUS_WITHIN_CLASS, UI_FIELD_SURFACE_CLASS, UI_TEXT_META_CLASS, UiButton, UiError, UiIconButton, UiInlineStatus, UiInput } from '@/components/ui'
 import { AGENT_ATTACHMENT_MAX_COUNT, AGENT_ATTACHMENT_FORMATS, type AgentAttachment, type AgentMediaAttachment } from '@/core/assistant/attachments'
 import { SuperKeyframeReferenceCard } from './SuperKeyframeReferenceCard'
 import {
@@ -169,7 +169,7 @@ export function AssistantComposer({
           event.target.value = ''
         }}
       /> : null}
-      {attachmentError ? <UiError size="xs" align="start" message={attachmentError} /> : null}
+      {attachmentError ? <UiInlineStatus className="block">{attachmentError}</UiInlineStatus> : null}
       {unavailable ? <UiError size="xs" align="start" title="当前模型无法读取部分附件" message="请移除这些附件或切换模型。" /> : null}
       <div data-assistant-composer-field className={`rounded-lg ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_WITHIN_CLASS} ${submitting ? 'opacity-70' : ''}`}>
         {attachments.length > 0 ? (

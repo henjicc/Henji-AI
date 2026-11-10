@@ -188,13 +188,12 @@ test('编译场景：变体逐个执行并加前缀，单个变体失败不中�
   assert.deepEqual(metrics, [])
 })
 
-test('核对矩阵：review = 石墨 1440+960 与其余三个预设 1440；与 --size/--theme-preset 互斥', () => {
+test('核对矩阵：review = 石墨 1440+960；与 --size/--theme-preset 互斥', () => {
   const options = parseUiInspectionArgs(['--matrix', 'review'], '.ui-tour')
   const runs = resolveInspectionRuns(options, path.resolve(path.sep, 'out'))
   assert.deepEqual(runs.map((run) => [run.themePreset, run.sizes.map((size) => `${size.width}x${size.height}`)]), [
-    ['graphite', ['1440x900', '960x640']], ['ocean', ['1440x900']], ['film', ['1440x900']], ['paper', ['1440x900']],
+    ['graphite', ['1440x900', '960x640']],
   ])
-  assert.equal(runs[1].outDir, path.join(path.resolve(path.sep, 'out'), 'ocean'))
   const screen = resolveInspectionRuns(parseUiInspectionArgs(['--matrix=screen'], '.ui-tour'), 'o')
   assert.deepEqual(screen.map((run) => [run.themePreset, run.outDir, run.sizes.length]), [['graphite', 'o', 2]])
   assert.throws(() => parseUiInspectionArgs(['--matrix', 'review', '--size', '960x640'], '.ui-tour'), /不能再同时传/)

@@ -55,13 +55,13 @@ function printHelp() {
   --out <目录>    输出目录，默认 .ui-tour
   --profile <模式> temporary（默认，隔离临时数据）或 real（复用真实工程、配置与密钥）
   --real-data     --profile real 的别名
-  --theme-preset <预设> 本次启动临时使用主题预设（graphite/ocean/film/paper，或 all），经开发启动参数传给应用，
+  --theme-preset <预设> 本次启动临时使用主题预设（graphite/paper，或 all），经开发启动参数传给应用，
                   不写入设置；可重复或逗号分隔，多个预设时逐个启动应用，截图写到 <输出目录>/<预设>/，
                   输出目录下另有汇总 index.md
   --allow-writes  real 模式下允许运行会写业务数据的场景；不传则自动跳过
   --steps <文件>  改为运行步骤描述（JSON / cjs，可重复或逗号分隔），格式见 skill henji-ui-surface
                   references/review.md 第 6 节，样例在 scripts/ui-review/
-  --matrix <名>   核对矩阵：review = 石墨 1440+960、深海/胶片/纸白 1440；screen = 石墨 1440+960。
+  --matrix <名>   核对矩阵：review = 石墨 1440+960（只磨深色）；screen = 石墨 1440+960。
                   与 --size / --theme-preset 互斥
   --audit         同一次巡检产出 audit.json、截图及运行时证据，规则命中时失败
   --rules         快速检查：每张截图只跑 DOM 规则（遮挡、裁切、截断、折行……），不做像素对比度；命中同样让巡检失败

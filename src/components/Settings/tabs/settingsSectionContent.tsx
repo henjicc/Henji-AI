@@ -19,10 +19,10 @@ import { UiGroup, UiLoading } from '@/components/ui'
 
 const logger = createLogger('components.Settings.tabs.GeneralTab')
 
-/** 导出 v2 主题文件：生效的种子、覆盖与圆角（毛玻璃是本机偏好，不进文件）。 */
+/** 导出 v2 主题文件：生效的种子、覆盖与最接近的圆角档位。 */
 function exportTheme(): void {
-  const { themeSeed, themeOverrides, uiRadiusPreset } = useSettingsStore.getState()
-  const payload = createThemePayloadV2({ seed: themeSeed, overrides: themeOverrides, uiRadiusPreset })
+  const { themeSeed, themeOverrides, uiRadius } = useSettingsStore.getState()
+  const payload = createThemePayloadV2({ seed: themeSeed, overrides: themeOverrides, uiRadius })
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')

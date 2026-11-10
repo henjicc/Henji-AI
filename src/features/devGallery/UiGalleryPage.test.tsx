@@ -48,14 +48,14 @@ it('生产构建拒绝挂载设计系统内容', () => {
 })
 
 it('进入时圆角与玻璃控件读当前主题属性，不把关闭状态显示为开启', () => {
-  document.documentElement.dataset.uiRadius = 'compact'
+  document.documentElement.style.setProperty('--radius-base', '4px')
   document.documentElement.dataset.uiBlur = 'off'
   try {
     const view = render(<UiGalleryPage />)
-    expect(view.getByRole('radio', { name: '紧凑' }).getAttribute('aria-checked')).toBe('true')
+    expect(view.getByRole('radio', { name: '4' }).getAttribute('aria-checked')).toBe('true')
     expect(view.getByRole('switch', { name: '毛玻璃预览' }).getAttribute('aria-checked')).toBe('false')
   } finally {
-    delete document.documentElement.dataset.uiRadius
+    document.documentElement.style.removeProperty('--radius-base')
     delete document.documentElement.dataset.uiBlur
   }
 })

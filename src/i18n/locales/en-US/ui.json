@@ -697,6 +697,9 @@
   "errorState": {
     "title": "Couldn't complete this",
     "details": "View details",
+    "hideDetails": "Hide details",
+    "copyDetails": "Copy details",
+    "detailsCopied": "Copied",
     "retry": "Retry"
   },
   "workspace": {

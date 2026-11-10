@@ -19,7 +19,7 @@ describe('端口类型色按明暗模式派生（4.1）', () => {
   })
 
   it('深色预设用原色、纸白用浅色值，端口与画布/节点面都 ≥ 3:1', () => {
-    for (const preset of ['graphite', 'ocean', 'film'] as const) {
+    for (const preset of ['graphite'] as const) {
       for (const [type, color] of Object.entries(SOCKET_TYPE_COLOR_HEX)) {
         for (const surface of surfacesOf(preset)) {
           expect(contrastRatio(color, surface), `${preset} ${type}`).toBeGreaterThanOrEqual(3)

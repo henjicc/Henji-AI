@@ -237,11 +237,15 @@
   --node-radius: var(--radius-overlay);
   /*
    * 尺寸令牌（重要记录 004）。Tailwind 的 rounded-control/field/overlay（以及改指同一组变量的
-   * rounded-md/lg/xl）与 h-control-sm/md/lg 读取这里；圆角随下方 data-ui-radius 预设整体缩放。
+   * rounded-md/lg/xl）与 h-control-sm/md/lg 读取这里。
+   * 圆角只有一个种子 `--radius-base`（设置 → 外观 → 圆角，`applyRuntimeTheme` 写在根节点内联样式），
+   * 输入框与浮层按 4/3、2 倍推导，默认 6 → 6 / 8 / 12；界面控件与画布节点（--node-radius）一起缩放。
+   * 必须留在这个全局加载的文件里：曾写在懒加载的 storyboard.css，导致没进过画布时圆角设置不生效。
    */
-  --radius-control: 6px;
-  --radius-field: 8px;
-  --radius-overlay: 12px;
+  --radius-base: 6px;
+  --radius-control: var(--radius-base);
+  --radius-field: calc(var(--radius-base) * 4 / 3);
+  --radius-overlay: calc(var(--radius-base) * 2);
   --size-control-2xs: 20px;
   --size-control-xs: 24px;
   --size-control-xl: 40px;
@@ -256,30 +260,6 @@
   --size-textarea-short: 92px;
   --size-textarea-medium: 120px;
   --size-textarea-tall: 240px;
-}
-
-/*
- * 圆角预设：同时缩放界面控件（--radius-*，Tailwind rounded-md/lg/xl 与 rounded-control/field/overlay）
- * 与画布节点（--node-radius）。标准档不写属性，取 :root 默认值。
- *
- * ⚠️ 这组规则原先写在 `src/features/canvas/storyboard.css` 里，而那个文件是
- * `CanvasWorkspace.tsx` 懒加载的——结果「设置 → 界面 → 圆角尺寸」在用户
- * 没打开过画布工作区之前完全不生效，进过画布之后才突然应用。
- * 全局主题变量必须待在这个全局加载的文件里。
- *
- * `runtimeTheme.applyRuntimeTheme` 负责往 documentElement 写 `data-ui-radius`，这里只负责取值。
- * （原 `data-theme-tone` 色调预设从未生效——总被内联变量覆盖——已随主题引擎删除。）
- */
-:root[data-ui-radius='compact'] {
-  --radius-control: 4px;
-  --radius-field: 6px;
-  --radius-overlay: 10px;
-}
-
-:root[data-ui-radius='large'] {
-  --radius-control: 8px;
-  --radius-field: 10px;
-  --radius-overlay: 16px;
 }
 
 /*

@@ -16,12 +16,12 @@ describe('applyRuntimeTheme', () => {
     root.removeAttribute('data-ui-blur')
     root.removeAttribute('data-theme-tone')
     localStorage.clear()
-    applyRuntimeTheme({ seed: DEFAULT_THEME_SEED, uiRadiusPreset: 'default', uiBlurEnabled: true }, root)
+    applyRuntimeTheme({ seed: DEFAULT_THEME_SEED, uiRadius: 6 }, root)
   })
 
   it('种子 + 覆盖 → 令牌 → 根节点语义变量与 color-scheme；不写组件层变量', () => {
     const overrides = { canvas: deriveThemeTokens(THEME_PRESETS.paper.seed).colors.panel }
-    const tokens = applyRuntimeTheme({ seed: THEME_PRESETS.paper.seed, overrides, uiRadiusPreset: 'default', uiBlurEnabled: true }, root)
+    const tokens = applyRuntimeTheme({ seed: THEME_PRESETS.paper.seed, overrides, uiRadius: 6 }, root)
     expect(tokens.colors.canvas).toBe(overrides.canvas)
     const expected = buildThemeCssVariables(deriveThemeTokens(THEME_PRESETS.paper.seed, overrides))
     for (const [name, value] of Object.entries(expected)) {
@@ -36,29 +36,31 @@ describe('applyRuntimeTheme', () => {
   it('清掉旧版本运行时残留的内联组件层变量与 data-theme-tone', () => {
     root.style.setProperty('--ui-glass-tint', 'red')
     root.dataset.themeTone = 'warm'
-    applyRuntimeTheme({ seed: DEFAULT_THEME_SEED, uiRadiusPreset: 'default', uiBlurEnabled: true }, root)
+    applyRuntimeTheme({ seed: DEFAULT_THEME_SEED, uiRadius: 6 }, root)
     expect(root.style.getPropertyValue('--ui-glass-tint')).toBe('')
     expect(root.dataset.themeTone).toBeUndefined()
   })
 
-  it('同步圆角与毛玻璃属性', () => {
-    applyRuntimeTheme({ seed: DEFAULT_THEME_SEED, uiRadiusPreset: 'compact', uiBlurEnabled: false }, root)
-    expect(root.dataset.uiRadius).toBe('compact')
-    expect(root.dataset.uiBlur).toBe('off')
-    applyRuntimeTheme({ seed: DEFAULT_THEME_SEED, uiRadiusPreset: 'default', uiBlurEnabled: true }, root)
+  it('圆角写成根节点变量（越界夹取），毛玻璃固定关闭', () => {
+    root.dataset.uiRadius = 'large'
+    applyRuntimeTheme({ seed: DEFAULT_THEME_SEED, uiRadius: 4 }, root)
+    expect(root.style.getPropertyValue('--radius-base')).toBe('4px')
     expect(root.dataset.uiRadius).toBeUndefined()
-    expect(root.dataset.uiBlur).toBeUndefined()
+    expect(root.dataset.uiBlur).toBe('off')
+    applyRuntimeTheme({ seed: DEFAULT_THEME_SEED, uiRadius: 99 }, root)
+    expect(root.style.getPropertyValue('--radius-base')).toBe('12px')
   })
 
   it('发布令牌给非 DOM 渲染面，并写首帧缓存', () => {
     const seen: string[] = []
     const unsubscribe = subscribeThemeTokens((tokens) => seen.push(tokens.colors.window))
-    const ocean = applyRuntimeTheme({ seed: THEME_PRESETS.ocean.seed, uiRadiusPreset: 'large', uiBlurEnabled: true }, root)
+    const paper = applyRuntimeTheme({ seed: THEME_PRESETS.paper.seed, uiRadius: 8 }, root)
     unsubscribe()
-    expect(getThemeTokens().colors.window).toBe(ocean.colors.window)
-    expect(seen).toEqual([ocean.colors.window])
+    expect(getThemeTokens().colors.window).toBe(paper.colors.window)
+    expect(seen).toEqual([paper.colors.window])
     const cached = JSON.parse(localStorage.getItem(THEME_FIRST_FRAME_STORAGE_KEY) ?? 'null')
-    expect(cached).toMatchObject({ version: 1, colorScheme: 'dark', uiRadius: 'large' })
-    expect(cached.vars['--window']).toBe(ocean.colors.window)
+    expect(cached).toMatchObject({ version: 1, colorScheme: 'light' })
+    expect(cached.vars['--window']).toBe(paper.colors.window)
+    expect(cached.vars['--radius-base']).toBe('8px')
   })
 })

@@ -2,7 +2,7 @@ import { UiSpinner } from '@/components/ui'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import React, { useEffect, useMemo, useState } from 'react'
 import { Folder, Tags, Trash2 } from 'lucide-react'
-import { Dropdown, UI_GLASS_ADAPTIVE_DIVIDER_CLASS, UI_TEXT_META_CLASS, UiButton, UiChipButton, UiError, UiGroup, UiInput } from '@/components/ui'
+import { Dropdown, UI_GLASS_ADAPTIVE_DIVIDER_CLASS, UI_TEXT_META_CLASS, UiButton, UiChipButton, UiGroup, UiInlineStatus, UiInput } from '@/components/ui'
 import type { AssetLibraryRecord } from '@/platform/contracts/assetLibrary'
 import { useI18n } from '@/hooks/useI18n'
 
@@ -92,7 +92,7 @@ export const AssetBatchManager: React.FC<Props> = ({
         </UiGroup>
 
         <UiGroup divided className="mt-5">
-          {error ? <UiError size="xs" align="start" className="pt-0" title={error} message="" /> : null}
+          {error ? <UiInlineStatus className="block">{error}</UiInlineStatus> : null}
           <UiButton variant="danger"
             className="w-full"
             disabled={disabled}

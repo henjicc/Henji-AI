@@ -6,8 +6,14 @@ import { useDialogTransition } from './useDialogTransition'
 import { UI_CONTENT_OVERLAY_INSET_CLASS, UI_DIALOG_TRANSITION_MS, uiTransition } from './motion'
 import { useDialogFocusTrap } from './useDialogFocusTrap'
 import { UiOverlayLayerProvider, useUiOverlayLayer } from './overlayOwnership'
-import { UI_MODAL_SIZE_CLASS, UI_TEXT_BODY_CLASS, UI_TEXT_TITLE_CLASS } from './styleTokens'
-import { CircleAlert, Info, TriangleAlert } from 'lucide-react'
+import { UI_MODAL_SIZE_CLASS, UI_TEXT_SECTION_CLASS } from './styleTokens'
+import { CircleAlert, Info, TriangleAlert, type LucideIcon } from 'lucide-react'
+
+const ALERT_TYPE_ICON: Record<'info' | 'warning' | 'error', { Icon: LucideIcon; color: string }> = {
+  error: { Icon: CircleAlert, color: 'text-danger-text' },
+  warning: { Icon: TriangleAlert, color: 'text-warning-text' },
+  info: { Icon: Info, color: 'text-accent-text' },
+}
 
 /** 弹窗底部的一个动作按钮 */
 export interface AlertDialogAction {
@@ -105,35 +111,9 @@ export default function AlertDialog({
 
   if (!shouldRender || (closeImmediately && closeRequested)) return null
 
-  // 根据类型选择图标和颜色
-  const getIconAndColor = () => {
-    switch (type) {
-      case 'error':
-        return {
-          icon: (
-            <CircleAlert className={`${UI_ICON_SIZE_CLASS.lg}`} />
-          ),
-          color: 'text-danger-text'
-        }
-      case 'info':
-        return {
-          icon: (
-            <Info className={`${UI_ICON_SIZE_CLASS.lg}`} />
-          ),
-          color: 'text-accent-text'
-        }
-      case 'warning':
-      default:
-        return {
-          icon: (
-            <TriangleAlert className={`${UI_ICON_SIZE_CLASS.lg}`} />
-          ),
-          color: 'text-warning-text'
-        }
-    }
-  }
-
-  const { icon, color } = getIconAndColor()
+  // 破坏性确认（有危险动作）一律危险色图标，和底部的危险实底按钮呼应
+  const destructive = (actions ?? []).some((action) => action.tone === 'danger')
+  const { Icon, color } = destructive ? ALERT_TYPE_ICON.error : ALERT_TYPE_ICON[type]
   const rootClassName = scope === 'container'
     ? 'absolute inset-0 z-modal flex items-center justify-center'
     : `fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} z-modal flex items-center justify-center`
@@ -171,19 +151,19 @@ export default function AlertDialog({
         }}
         onTransitionEnd={onTransitionEnd}
       >
-        {/* 标题 */}
-        <div className="flex items-center gap-2">
-          <div className={color}>{icon}</div>
-          <div id={titleId} className={UI_TEXT_TITLE_CLASS}>{title}</div>
+        {/* 图标单独占左列，标题与正文在右侧同一列左对齐：多行正文不会绕到图标下面 */}
+        <div className="flex items-start gap-3">
+          <Icon aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.lg} mt-0.5 shrink-0 ${color}`} />
+          <div className="min-w-0 flex-1">
+            <div id={titleId} className={UI_TEXT_SECTION_CLASS}>{title}</div>
+            <div id={messageId} className={`mt-1.5 max-h-72 overflow-y-auto whitespace-pre-line break-words text-13 leading-5 text-text2`}>
+              {message}
+            </div>
+          </div>
         </div>
 
-        {/* 消息内容 */}
-        <div id={messageId} className={`mt-2 max-h-72 overflow-y-auto whitespace-pre-line break-words ${UI_TEXT_BODY_CLASS}`}>
-          {message}
-        </div>
-
-        {/* 动作按钮：与 UiModal 底部同一顺序——关闭/取消在左，其余动作在右，主动作固定在最右（任务 5.7） */}
-        <div className="mt-4 flex flex-wrap justify-end gap-2">
+        {/* 动作按钮：与 UiModal 底部同一顺序——关闭/取消在左，其余动作在右，主动作固定在最右 */}
+        <div className="mt-5 flex flex-wrap justify-end gap-2">
           {actionLayout === 'standard' && <UiButton
             type="button"
             variant={closeVariant}

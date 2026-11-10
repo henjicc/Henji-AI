@@ -69,7 +69,7 @@ export default {
       'field-focus': '0 0 0 3px rgb(var(--accent-rgb) / 0.22)',
     },
     // 圆角令牌（重要记录 004）：控件 6 / 输入与菜单 8 / 浮层 12，全部由 CSS 变量驱动，
-    // 「设置 → 界面 → 圆角」通过 data-ui-radius 一处改值，界面控件与画布节点一起生效。
+    // 「设置 → 外观 → 圆角」改 --radius-base 一处，界面控件与画布节点一起生效。
     // rounded-md/lg/xl 改指同一组变量：标准档像素与 Tailwind 默认值相同（6/8/12），存量调用点不变。
     borderRadius: {
       none: '0',

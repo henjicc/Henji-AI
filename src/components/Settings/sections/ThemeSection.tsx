@@ -1,6 +1,4 @@
 import React from 'react';
-import { Check } from 'lucide-react';
-import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens';
 import {
   UiButton,
   UiColorInput,
@@ -8,16 +6,15 @@ import {
   UiGroup,
   UiInput,
   UiOptionButton,
-  UiSwitch,
+  UiRangeInput,
 } from '@/components/ui';
 import SettingsSegmented from '../components/SettingsSegmented';
+import { SETTINGS_INLINE_CONTROL_CLASS } from '../settingsLayout';
 import UiScaleSection from './UiScaleSection';
 import { useI18n } from '@/hooks/useI18n';
-import type { UiRadiusPreset } from '@/core/theme/runtimeTheme';
+import { UI_RADIUS_RANGE } from '@/core/theme/uiRadius';
 import {
   THEME_ACCENT_CHOICES,
-  THEME_PRESETS,
-  THEME_PRESET_IDS,
   deriveThemeTokens,
   type ThemeContrastLevel,
   type ThemeSeed,
@@ -27,7 +24,6 @@ import {
   THEME_CUSTOM_PRESET,
   resolveThemeBaseSeed,
   resolveThemeSelection,
-  type ThemeSelection,
   type ThemeSelectionPreset,
 } from '@/core/theme/themeSelection';
 import { useSettingsStore, type ThemeImportMode } from '@/stores/settingsStore';
@@ -40,15 +36,6 @@ interface ThemeSectionProps {
 
 type LocalizedName = { zh: string; en: string };
 
-interface PresetSample {
-  id: ThemeSelectionPreset;
-  name: LocalizedName | null;
-  /** 推导后的窗口底色与强调实底（不是种子原值） */
-  window: string;
-  accent: string;
-  edge: string;
-}
-
 interface AccentSwatch {
   id: string;
   name: LocalizedName;
@@ -57,38 +44,18 @@ interface AccentSwatch {
   fill: string;
 }
 
-/** 预设格小样：窗口底色与强调实底沿对角线各占一半（设计稿“主题引擎”预设卡）。 */
-function presetSampleStyle(sample: PresetSample): React.CSSProperties {
-  return {
-    background: `linear-gradient(135deg, ${sample.window} 0 50%, ${sample.accent} 50% 100%)`,
-    boxShadow: `inset 0 0 0 1px ${sample.edge}`,
-  };
-}
-
 function derivedAccent(seed: ThemeSeed): string {
   return deriveThemeTokens(seed).colors.accent;
-}
-
-function samplePreset(
-  id: ThemeSelectionPreset,
-  name: LocalizedName | null,
-  selection: ThemeSelection
-): PresetSample {
-  const { seed, overrides } = resolveThemeSelection({ ...selection, preset: id });
-  const colors = deriveThemeTokens(seed, overrides).colors;
-  return { id, name, window: colors.window, accent: colors.accent, edge: colors.lineStrong };
 }
 
 const ThemeSection: React.FC<ThemeSectionProps> = ({ onExportTheme, onImportTheme }) => {
   const { t, i18n } = useI18n('settings');
   const selection = useSettingsStore((state) => state.themeSelection);
-  const uiRadiusPreset = useSettingsStore((state) => state.uiRadiusPreset);
-  const uiBlurEnabled = useSettingsStore((state) => state.uiBlurEnabled);
+  const uiRadius = useSettingsStore((state) => state.uiRadius);
   const setThemePreset = useSettingsStore((state) => state.setThemePreset);
   const setThemeAccent = useSettingsStore((state) => state.setThemeAccent);
   const setThemeContrast = useSettingsStore((state) => state.setThemeContrast);
-  const setUiRadiusPreset = useSettingsStore((state) => state.setUiRadiusPreset);
-  const setUiBlurEnabled = useSettingsStore((state) => state.setUiBlurEnabled);
+  const setUiRadius = useSettingsStore((state) => state.setUiRadius);
 
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
   const [importing, setImporting] = React.useState(false);
@@ -101,13 +68,14 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({ onExportTheme, onImportThem
 
   const localize = (name: LocalizedName): string => (i18n.language.startsWith('zh') ? name.zh : name.en);
 
-  // 小样与色样都显示推导后的令牌色：引擎会按对比度微调强调实底，种子原值与按钮实际颜色不一定相同。
-  const presetSamples = React.useMemo<PresetSample[]>(() => {
-    const samples = THEME_PRESET_IDS.map((id) => samplePreset(id, THEME_PRESETS[id].name, selection));
-    if (selection.custom) samples.push(samplePreset(THEME_CUSTOM_PRESET, null, selection));
-    return samples;
-  }, [selection]);
+  // 只有深色（石墨）与浅色（纸白）；自定义底色只来自导入的主题文件，存在时才出现。
+  const presetOptions: Array<{ value: ThemeSelectionPreset; label: string }> = [
+    { value: 'graphite', label: t('sections.theme.preset.dark') },
+    { value: 'paper', label: t('sections.theme.preset.light') },
+    ...(selection.custom ? [{ value: THEME_CUSTOM_PRESET, label: t('sections.theme.preset.custom') }] : []),
+  ];
 
+  // 色样显示推导后的令牌色：引擎会按对比度微调强调实底，种子原值与按钮实际颜色不一定相同。
   const accentSwatches = React.useMemo<AccentSwatch[]>(() => {
     const base = resolveThemeBaseSeed(selection);
     return THEME_ACCENT_CHOICES.map((choice) => ({
@@ -141,12 +109,6 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({ onExportTheme, onImportThem
     });
   };
 
-  const radiusOptions: Array<{ value: UiRadiusPreset; label: string }> = [
-    { value: 'compact', label: t('sections.theme.radius.compact') },
-    { value: 'default', label: t('sections.theme.radius.default') },
-    { value: 'large', label: t('sections.theme.radius.large') },
-  ];
-
   const contrastLabels: Record<ThemeContrastLevel, string> = {
     soft: t('sections.theme.contrast.soft'),
     standard: t('sections.theme.contrast.standard'),
@@ -155,29 +117,15 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({ onExportTheme, onImportThem
 
   return (
     <>
-      <UiGroup title={t('sections.theme.preset.label')} titleTone="overline">
-        <div role="radiogroup" aria-label={t('sections.theme.preset.label')} className="grid grid-cols-2 gap-2 md:grid-cols-4">
-          {presetSamples.map((sample) => {
-            const label = sample.name ? localize(sample.name) : t('sections.theme.preset.custom');
-            const active = selection.preset === sample.id;
-            return (
-              <UiOptionButton
-                key={sample.id}
-                data-recording-theme={sample.id}
-                type="button"
-                variant="tile"
-                role="radio"
-                aria-checked={active}
-                active={active}
-                onClick={() => setThemePreset(sample.id)}
-              >
-                <span aria-hidden="true" className="h-5 w-5 shrink-0 rounded-md" style={presetSampleStyle(sample)} />
-                <span className="min-w-0 flex-1 truncate text-left">{label}</span>
-                {active ? <Check aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.sm} shrink-0 text-accent-text`} /> : null}
-              </UiOptionButton>
-            );
-          })}
-        </div>
+      <UiGroup>
+        <UiFormRow label={t('sections.theme.preset.label')} inline>
+          <SettingsSegmented<ThemeSelectionPreset>
+            value={selection.preset}
+            options={presetOptions}
+            onChange={setThemePreset}
+            ariaLabel={t('sections.theme.preset.label')}
+          />
+        </UiFormRow>
       </UiGroup>
 
       <UiGroup title={t('sections.theme.accent.label')} titleTone="overline">
@@ -235,25 +183,19 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({ onExportTheme, onImportThem
           />
         </UiFormRow>
 
-        <UiFormRow label={t('sections.theme.radius.label')} inline>
-          <SettingsSegmented<UiRadiusPreset>
-            value={uiRadiusPreset}
-            options={radiusOptions}
-            onChange={setUiRadiusPreset}
-            ariaLabel={t('sections.theme.radius.label')}
+        <UiFormRow label={t('sections.theme.radius.label', { value: uiRadius })} inline>
+          <UiRangeInput
+            min={UI_RADIUS_RANGE.min}
+            max={UI_RADIUS_RANGE.max}
+            step={UI_RADIUS_RANGE.step}
+            value={uiRadius}
+            onChange={(event) => setUiRadius(Number(event.target.value))}
+            aria-label={t('sections.theme.radius.aria')}
+            className={SETTINGS_INLINE_CONTROL_CLASS}
           />
         </UiFormRow>
 
         <UiScaleSection />
-
-        {/* 常驻说明：关掉不只是"没模糊"，还会少一层合成开销，是有取舍的选择 */}
-        <UiFormRow
-          label={t('sections.theme.blur.label')}
-          hint={t('sections.theme.blur.hint')}
-          inline
-        >
-          <UiSwitch checked={uiBlurEnabled} onCheckedChange={setUiBlurEnabled} />
-        </UiFormRow>
       </UiGroup>
 
       <UiGroup>

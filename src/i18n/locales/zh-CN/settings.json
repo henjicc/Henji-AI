@@ -602,7 +602,9 @@
       "title": "主题外观",
       "description": "选择预设、强调色与层级对比，界面颜色会自动推导并即时生效。",
       "preset": {
-        "label": "主题预设",
+        "label": "模式",
+        "dark": "深色",
+        "light": "浅色",
         "custom": "自定义"
       },
       "accent": {
@@ -618,14 +620,8 @@
         "strong": "更强"
       },
       "radius": {
-        "label": "圆角尺寸",
-        "compact": "紧凑",
-        "default": "默认",
-        "large": "舒展"
-      },
-      "blur": {
-        "label": "毛玻璃效果",
-        "hint": "浮层压在图片、视频、画布之上时虚化背景。关闭后统一改用不透明底色，可减少合成开销。"
+        "label": "圆角（{{value}} 像素）",
+        "aria": "界面圆角"
       },
       "portable": {
         "label": "主题配置文件",

@@ -12,6 +12,7 @@ import { videoEditTrackResults } from '../application/videoEditTracking'
 const logger = createLogger('features.videoEdit.exportPreview')
 // A single preview frame must settle even if worker initialization or decoding never answers.
 const PREVIEW_WAIT_MS = 30_000
+const reasonText = (reason: unknown): string => reason instanceof Error ? reason.message : String(reason)
 
 /** Reuses the program renderer. The single drain keeps fast slider changes from queuing stale GPU work. */
 export function VideoEditExportPreview({ composition, settings, frame, projectId }: { composition: VideoEditComposition; settings: VideoEditExportSettings; frame: number; projectId: string }): React.ReactElement {
@@ -20,7 +21,9 @@ export function VideoEditExportPreview({ composition, settings, frame, projectId
   const requested = useRef({ composition, pictures, settings, frame })
   requested.current = useMemo(() => ({ composition, pictures, settings, frame }), [composition, pictures, settings, frame])
   const drain = useRef<() => void>(() => undefined)
+  // 失败时：正文给用户能做的事，原始原因进详情
   const [error, setError] = useState('')
+  const [errorDetail, setErrorDetail] = useState<string>()
   const [loading, setLoading] = useState(true)
   const [attempt, setAttempt] = useState(0)
   const recovery = useRef(new VideoEditRenderRecovery())
@@ -32,20 +35,20 @@ export function VideoEditExportPreview({ composition, settings, frame, projectId
     let timer: ReturnType<typeof setTimeout> | undefined
     let applied: VideoEditComposition = pictures
     let renderer: VideoEditRenderSession
-    try { renderer = new VideoEditRenderSession(pictures, { previewWidth: 640, proxyProjectId: settings.useProxies ? projectId : undefined, exportProxies: settings.useProxies }) } catch (reason) { setError('无法生成导出预览，请重试。'); setLoading(false); logger.warn('创建导出预览失败', { event: 'video_edit.export.preview_failed', error: reason, context: { projectId, frame: requested.current.frame } }); return }
+    try { renderer = new VideoEditRenderSession(pictures, { previewWidth: 640, proxyProjectId: settings.useProxies ? projectId : undefined, exportProxies: settings.useProxies }) } catch (reason) { setError('再试一次；仍不行就关闭导出面板后重新打开。'); setErrorDetail(reasonText(reason)); setLoading(false); logger.warn('创建导出预览失败', { event: 'video_edit.export.preview_failed', error: reason, context: { projectId, frame: requested.current.frame } }); return }
     let disposing: Promise<void> | undefined
     const dispose = (): Promise<void> => disposing ??= renderer.dispose().catch(reason => logger.warn('释放导出预览失败', { event: 'video_edit.export.preview_cleanup_failed', error: reason }))
     const render = async (): Promise<void> => {
       if (running || stopped) return
       running = true
-      setLoading(true); setError('')
+      setLoading(true); setError(''); setErrorDetail(undefined)
       logger.debug('开始准备导出预览', { event: 'video_edit.export.preview_start', context: { projectId, frame: requested.current.frame } })
       try {
         while (!stopped) {
           const request = requested.current
           timer = setTimeout(() => {
             stopped = true
-            setError('预览等待时间过长，请重试。'); setLoading(false)
+            setError('画面准备得太久，可再试一次。'); setErrorDetail(undefined); setLoading(false)
             logger.warn('导出预览等待超时', { event: 'video_edit.export.preview_failed', error: new Error('导出预览等待超时'), context: { projectId, frame: request.frame, timeoutMs: PREVIEW_WAIT_MS } })
             void dispose()
           }, PREVIEW_WAIT_MS)
@@ -84,7 +87,7 @@ export function VideoEditExportPreview({ composition, settings, frame, projectId
               return
             }
           }
-          setError('无法生成导出预览，请重试。'); setLoading(false)
+          setError('再试一次；仍不行就关闭导出面板后重新打开。'); setErrorDetail(reasonText(reason)); setLoading(false)
         }
       }
       finally { clearTimeout(timer); running = false }
@@ -99,6 +102,6 @@ export function VideoEditExportPreview({ composition, settings, frame, projectId
   return <div aria-busy={loading} className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-media">
     <canvas ref={canvas} aria-label="导出画面预览" hidden={Boolean(error)} className="max-h-full max-w-full object-contain" style={{ aspectRatio: settings.width / settings.height }} />
     {loading && <div className="absolute inset-0 flex items-center justify-center"><UiLoading message="正在准备预览…" /></div>}
-    {error && <div className="absolute inset-0 flex items-center justify-center bg-panel"><UiError title="预览未能生成" message={error} onRetry={() => { recovery.current.reset(); setAttempt(value => value + 1) }} /></div>}
+    {error && <div className="absolute inset-0 flex items-center justify-center bg-panel"><UiError title="预览未能生成" message={error} detail={errorDetail} onRetry={() => { recovery.current.reset(); setAttempt(value => value + 1) }} /></div>}
   </div>
 }

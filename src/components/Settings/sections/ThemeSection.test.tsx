@@ -17,6 +17,7 @@ function resetTheme(): void {
     themeSelection: initial.themeSelection,
     themeSeed: initial.themeSeed,
     themeOverrides: initial.themeOverrides,
+    uiRadius: initial.uiRadius,
   })
 }
 
@@ -39,11 +40,12 @@ describe('外观设置（种子式）', () => {
   beforeEach(resetTheme)
   afterEach(() => { cleanup(); resetTheme() })
 
-  it('预设、强调色、对比度都以单选呈现，默认石墨 / 跟随预设 / 标准', () => {
+  it('外观、强调色、对比度都以单选呈现，默认深色 / 跟随预设 / 标准；没有毛玻璃开关', () => {
     renderSection()
-    const presets = within(screen.getByRole('radiogroup', { name: '主题预设' })).getAllByRole('radio')
-    expect(presets.map((item) => item.textContent)).toEqual(Object.values(THEME_PRESETS).map((preset) => preset.name.zh))
-    expect(screen.getByRole('radio', { name: '石墨' })).toHaveProperty('ariaChecked', 'true')
+    const presets = within(screen.getByRole('radiogroup', { name: '模式' })).getAllByRole('radio')
+    expect(presets.map((item) => item.textContent)).toEqual(['深色', '浅色'])
+    expect(screen.getByRole('radio', { name: '深色' })).toHaveProperty('ariaChecked', 'true')
+    expect(screen.queryByText(/毛玻璃/)).toBeNull()
     const accents = within(screen.getByRole('radiogroup', { name: '强调色' })).getAllByRole('radio')
     expect(accents.map((item) => item.getAttribute('aria-label'))).toEqual(THEME_ACCENT_CHOICES.map((choice) => choice.name.zh))
     expect(screen.getByRole('radio', { name: '跟随预设' })).toHaveProperty('ariaChecked', 'true')
@@ -65,20 +67,23 @@ describe('外观设置（种子式）', () => {
     expect(screen.getByRole('radio', { name: '蓝' }).style.backgroundColor).toBe(hexToRgb(derived))
   })
 
-  it('点击预设、强调色、对比度即时写入设置', () => {
+  it('点击外观、强调色、对比度与拖圆角即时写入设置', () => {
     renderSection()
-    fireEvent.click(screen.getByRole('radio', { name: '纸白' }))
+    fireEvent.click(screen.getByRole('radio', { name: '浅色' }))
     fireEvent.click(screen.getByRole('radio', { name: '玫红' }))
     fireEvent.click(screen.getByRole('radio', { name: '更强' }))
     const rose = THEME_ACCENT_CHOICES.find((choice) => choice.id === 'rose')!.hex
     expect(useSettingsStore.getState().themeSelection).toMatchObject({ preset: 'paper', accent: rose, contrast: 'strong' })
     expect(useSettingsStore.getState().themeSeed.mode).toBe('light')
-    expect(screen.getByRole('radio', { name: '纸白' })).toHaveProperty('ariaChecked', 'true')
+    expect(screen.getByRole('radio', { name: '浅色' })).toHaveProperty('ariaChecked', 'true')
+    fireEvent.change(screen.getByRole('slider', { name: '界面圆角' }), { target: { value: '9' } })
+    expect(useSettingsStore.getState().uiRadius).toBe(9)
+    expect(screen.getByText('圆角（9 像素）')).toBeTruthy()
   })
 
   it('自定义取色后出现选中的“自定义颜色”色样；存在自定义底色时多出“自定义”预设', () => {
     useSettingsStore.getState().importThemePayload(
-      createThemePayloadV2({ seed: { ...THEME_PRESETS.ocean.seed, hue: 200 }, uiRadiusPreset: 'default' }),
+      createThemePayloadV2({ seed: { ...THEME_PRESETS.graphite.seed, hue: 200 } }),
       'colorsOnly',
     )
     useSettingsStore.getState().setThemeAccent(SETTINGS_ACCENT_HEX)

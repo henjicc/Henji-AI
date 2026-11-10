@@ -17,7 +17,7 @@ const context: ApplicationExecutionContext = {
 
 describe('settings application control adapter', () => {
   beforeEach(() => {
-    useSettingsStore.getState().setUiBlurEnabled(true)
+    useSettingsStore.getState().setVideoEditTimelineAutoScroll(true)
   })
 
   it('通过统一计划提交和撤销协议复用正式设置写入', async () => {
@@ -25,21 +25,21 @@ describe('settings application control adapter', () => {
     const registry = getApplicationReflectionRegistry()
     const snapshot = await registry.readEntity(
       { kind: 'settings.registry', id: 'singleton' },
-      ['interface.blur_enabled'],
+      ['video_edit.timeline_auto_scroll'],
       context
     )
-    expect(snapshot.properties['interface.blur_enabled']).toBe(true)
+    expect(snapshot.properties['video_edit.timeline_auto_scroll']).toBe(true)
 
     const engine = getApplicationControlExecutionEngine()
     const plan = await engine.plan({
-      summary: '关闭毛玻璃效果',
+      summary: '关闭播放时时间线自动滚动',
       transactionMode: 'atomic',
       steps: [{
         kind: 'mutation',
         target: { kind: 'settings.registry', id: 'singleton' },
         entityType: 'settings.registry',
         expectedRevisions: { settings: revision },
-        mutations: [{ propertyId: 'interface.blur_enabled', operation: 'set', value: false }],
+        mutations: [{ propertyId: 'video_edit.timeline_auto_scroll', operation: 'set', value: false }],
       }],
     }, context)
     const committed = await engine.commit({
@@ -48,7 +48,7 @@ describe('settings application control adapter', () => {
       idempotencyKey: `settings-commit-${String(revision).padStart(16, '0')}`,
     }, context)
     expect(committed.status, JSON.stringify(committed)).toBe('completed')
-    expect(useSettingsStore.getState().uiBlurEnabled).toBe(false)
+    expect(useSettingsStore.getState().videoEditTimelineAutoScroll).toBe(false)
     if (committed.status !== 'completed' || !committed.undoRef) throw new Error('UNDO_REF_MISSING')
 
     const undone = await engine.undo({
@@ -57,7 +57,7 @@ describe('settings application control adapter', () => {
       idempotencyKey: `settings-undo-${String(revision).padStart(18, '0')}`,
     }, context)
     expect(undone.status).toBe('completed')
-    expect(useSettingsStore.getState().uiBlurEnabled).toBe(true)
+    expect(useSettingsStore.getState().videoEditTimelineAutoScroll).toBe(true)
   })
 
   it('4.4：updates.enabled 已松绑为正规可写设置，值真的落到 localStorage', async () => {

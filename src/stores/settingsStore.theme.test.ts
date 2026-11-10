@@ -17,7 +17,7 @@ function resetTheme(): void {
     themeSelection: initial.themeSelection,
     themeSeed: initial.themeSeed,
     themeOverrides: initial.themeOverrides,
-    uiRadiusPreset: 'default',
+    uiRadius: 6,
   })
 }
 
@@ -42,9 +42,9 @@ describe('settingsStore 外观选择（v14）', () => {
     expect(state.themeSeed).toEqual({ ...THEME_PRESETS.paper.seed, accent: violet, contrast: THEME_CONTRAST_LEVELS.strong })
 
     setThemeAccent(null)
-    setThemePreset('ocean')
+    setThemePreset('graphite')
     state = useSettingsStore.getState()
-    expect(state.themeSeed).toEqual({ ...THEME_PRESETS.ocean.seed, contrast: THEME_CONTRAST_LEVELS.strong })
+    expect(state.themeSeed).toEqual({ ...THEME_PRESETS.graphite.seed, contrast: THEME_CONTRAST_LEVELS.strong })
 
     setThemeAccent('not-a-color')
     expect(useSettingsStore.getState().themeSelection.accent).toBeNull()
@@ -65,6 +65,17 @@ describe('settingsStore 外观选择（v14）', () => {
     expect(custom.themeOverrides).toEqual({ window: violet })
   })
 
+  it('恢复设置：撤下的预设回落石墨，三档圆角换成像素值，毛玻璃开关丢弃', () => {
+    const { merge } = useSettingsStore.persist.getOptions()
+    const initial = useSettingsStore.getInitialState()
+    const restored = merge!({ themeSelection: { preset: 'film', accent: violet, contrast: 'soft', custom: null }, uiRadiusPreset: 'large', uiBlurEnabled: true }, initial)
+    expect(restored.themeSelection).toEqual({ preset: 'graphite', accent: violet, contrast: 'soft', custom: null })
+    expect(restored.uiRadius).toBe(8)
+    expect(restored).not.toHaveProperty('uiRadiusPreset')
+    expect(restored).not.toHaveProperty('uiBlurEnabled')
+    expect(merge!({ uiRadius: 3, uiRadiusPreset: 'large' }, initial).uiRadius).toBe(3)
+  })
+
   it('没有自定义底色时不能切到“自定义”', () => {
     useSettingsStore.getState().setThemePreset('custom')
     expect(useSettingsStore.getState().themeSelection.preset).toBe('graphite')
@@ -72,28 +83,28 @@ describe('settingsStore 外观选择（v14）', () => {
 
   it('导入：预设主题落到预设；非预设种子成为可切回的自定义底色；三种范围各管各的', () => {
     const { importThemePayload, setThemePreset } = useSettingsStore.getState()
-    importThemePayload(createThemePayloadV2({ seed: { ...THEME_PRESETS.film.seed, contrast: THEME_CONTRAST_LEVELS.soft }, uiRadiusPreset: 'large' }), 'colorsOnly')
+    importThemePayload(createThemePayloadV2({ seed: { ...THEME_PRESETS.paper.seed, contrast: THEME_CONTRAST_LEVELS.soft }, uiRadius: 'large' }), 'colorsOnly')
     let state = useSettingsStore.getState()
-    expect(state.themeSelection).toMatchObject({ preset: 'film', accent: null, contrast: 'soft', custom: null })
-    expect(state.uiRadiusPreset).toBe('default')
+    expect(state.themeSelection).toMatchObject({ preset: 'paper', accent: null, contrast: 'soft', custom: null })
+    expect(state.uiRadius).toBe(6)
 
-    const custom = { ...THEME_PRESETS.ocean.seed, hue: 200, contrast: 1.6 }
-    importThemePayload(createThemePayloadV2({ seed: custom, overrides: { line: THEME_SEED_ACCENT_HEX.orange }, uiRadiusPreset: 'compact' }), 'all')
+    const custom = { ...THEME_PRESETS.graphite.seed, hue: 200, contrast: 1.6 }
+    importThemePayload(createThemePayloadV2({ seed: custom, overrides: { line: THEME_SEED_ACCENT_HEX.orange }, uiRadius: 'compact' }), 'all')
     state = useSettingsStore.getState()
     expect(state.themeSelection.preset).toBe('custom')
     expect(state.themeSeed).toEqual(custom)
     expect(state.themeOverrides).toEqual({ line: THEME_SEED_ACCENT_HEX.orange })
-    expect(state.uiRadiusPreset).toBe('compact')
+    expect(state.uiRadius).toBe(4)
 
     setThemePreset('graphite')
     expect(useSettingsStore.getState().themeOverrides).toEqual({})
     setThemePreset('custom')
     expect(useSettingsStore.getState().themeSeed).toEqual(custom)
 
-    importThemePayload(createThemePayloadV2({ seed: THEME_PRESETS.paper.seed, uiRadiusPreset: 'large' }), 'radiusOnly')
+    importThemePayload(createThemePayloadV2({ seed: THEME_PRESETS.paper.seed, uiRadius: 'large' }), 'radiusOnly')
     state = useSettingsStore.getState()
     expect(state.themeSelection.preset).toBe('custom')
-    expect(state.uiRadiusPreset).toBe('large')
+    expect(state.uiRadius).toBe(8)
   })
 })
 

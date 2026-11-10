@@ -81,9 +81,10 @@ export class UiErrorBoundary extends React.Component<UiErrorBoundaryProps, UiErr
       // 走共享错误状态块（任务 5.7）：原来的原因文字叠了 70% 透明度，对比度不足
       <div className="flex h-full w-full items-center justify-center bg-window p-6">
         <UiError
-          title={`${this.props.title}，错误详情已写入日志`}
-          // 崩溃信息直接显示出来：黑屏加一句"出错了"仍然等于无从追查
-          message={this.state.error.message}
+          title={this.props.title}
+          message="错误已写入日志，可以先重新加载界面。"
+          // 崩溃信息放进可复制的详情：黑屏加一句"出错了"仍然等于无从追查，但原始信息不当正文
+          detail={this.state.error.message}
           onRetry={this.retry}
           retryLabel="重新加载界面"
         />

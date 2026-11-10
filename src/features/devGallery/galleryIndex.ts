@@ -9,7 +9,7 @@ import type { Config } from 'tailwindcss'
 import tailwindConfig from '../../../tailwind.config.js'
 import { deriveThemeTokens, type ThemeSeed } from '@/core/theme/themeEngine'
 import { getThemeTokens, publishThemeTokens } from '@/core/theme/themeTokenStore'
-import type { UiRadiusPreset } from '@/core/theme/runtimeTheme'
+import { UI_RADIUS_CSS_VAR, uiRadiusCssValue } from '@/core/theme/uiRadius'
 
 // 尺寸定义是只读源码资产，不作为 JS 模块执行；Vite 正式 raw glob 与依赖图的代码语义一致。
 const enumSources = import.meta.glob<string>([
@@ -142,27 +142,24 @@ export function searchGallery(query: string, issuesOnly = false): readonly Galle
 }
 
 /** 临时预览复用正式引擎与变量映射；不调用会写首帧缓存的 applyRuntimeTheme。 */
-export function previewGalleryTheme(root: HTMLElement, seed: ThemeSeed, radius: UiRadiusPreset, blur: boolean): () => void {
+export function previewGalleryTheme(root: HTMLElement, seed: ThemeSeed, radius: number, blur: boolean): () => void {
   const tokensBefore = getThemeTokens()
   const tokens = deriveThemeTokens(seed)
-  const vars = buildThemeCssVariables(tokens)
+  const vars = { ...buildThemeCssVariables(tokens), [UI_RADIUS_CSS_VAR]: uiRadiusCssValue(radius) }
   const names = [...Object.keys(vars), ...THEME_COMPONENT_CSS_VARS.map(item => item.name)]
   const previous = names.map(name => [name, root.style.getPropertyValue(name), root.style.getPropertyPriority(name)] as const)
   const colorScheme = root.style.colorScheme
-  const radiusBefore = root.getAttribute('data-ui-radius')
   const blurBefore = root.getAttribute('data-ui-blur')
   THEME_COMPONENT_CSS_VARS.forEach(item => root.style.removeProperty(item.name))
   Object.entries(vars).forEach(([name, value]) => root.style.setProperty(name, value))
   root.style.colorScheme = tokens.colorScheme
-  if (radius === 'default') root.removeAttribute('data-ui-radius')
-  else root.setAttribute('data-ui-radius', radius)
+  // 毛玻璃对用户不开放；这里保留开关，只供以后在画布上恢复玻璃时对照
   if (blur) root.removeAttribute('data-ui-blur')
   else root.setAttribute('data-ui-blur', 'off')
   publishThemeTokens(tokens)
   return () => {
     previous.forEach(([name, value, priority]) => value ? root.style.setProperty(name, value, priority) : root.style.removeProperty(name))
     root.style.colorScheme = colorScheme
-    if (radiusBefore === null) root.removeAttribute('data-ui-radius'); else root.setAttribute('data-ui-radius', radiusBefore)
     if (blurBefore === null) root.removeAttribute('data-ui-blur'); else root.setAttribute('data-ui-blur', blurBefore)
     publishThemeTokens(tokensBefore)
   }

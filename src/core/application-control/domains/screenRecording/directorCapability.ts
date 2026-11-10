@@ -12,7 +12,7 @@ export const planDirectorInputSchema = z.object({
 }).strict()
 export const planRecordingDirectorCapability = defineApplicationCapability({ ...common,
   id: 'plan_screen_recording_director', title: '规划导演录制',
-  description: '把用户教程目标编排为分步操作、旁白及预计画面，保存为可审阅的录制会话。助手先按目标与当前应用状态填写 steps，再提交本能力；只支持声明中的有限免费操作，不接受代码或任意鼠标宏。剪辑操作会保存起始快照并在临时副本执行；settings.registry 只支持 interface.theme_preset 四个预设，执行时打开设置，结束恢复。voice 从生成模型目录选择语音模型及其参数，已复刻音色使用该模型的正式音色参数。用 screen_recording.understanding.result 通用写入修改 director.narration/voice 与 operationScript，保存后可直接执行。规划不调用付费服务。',
+  description: '把用户教程目标编排为分步操作、旁白及预计画面，保存为可审阅的录制会话。助手先按目标与当前应用状态填写 steps，再提交本能力；只支持声明中的有限免费操作，不接受代码或任意鼠标宏。剪辑操作会保存起始快照并在临时副本执行；settings.registry 只支持 interface.theme_preset 的 graphite（深色）与 paper（浅色）两个预设，执行时打开设置，结束恢复。voice 从生成模型目录选择语音模型及其参数，已复刻音色使用该模型的正式音色参数。用 screen_recording.understanding.result 通用写入修改 director.narration/voice 与 operationScript，保存后可直接执行。规划不调用付费服务。',
   aliases: ['AI导演', '制作操作教程', '规划录屏'], inputSchema: planDirectorInputSchema,
   outputSchema: z.object({ resultRef: sessionRef, verified: z.boolean() }).strict(),
   acceptsRefs: ['video_edit.clip', 'video_edit.sequence'], producesRefs: ['screen_recording.session'],

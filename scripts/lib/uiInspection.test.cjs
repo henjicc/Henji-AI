@@ -308,7 +308,7 @@ test('一次巡检多个预设：重复/逗号/all 展开为登记顺序并去�
   assert.deepEqual(resolveThemePresetRuns(['paper'], root), [{ themePreset: 'paper', outDir: root }], '单个预设沿用原目录')
   assert.deepEqual(resolveThemePresetRuns(['graphite', 'paper'], root).map((run) => [run.themePreset, run.outDir]),
     [['graphite', path.join(root, 'graphite')], ['paper', path.join(root, 'paper')]])
-  assert.deepEqual(themePresetLaunchArgs('ocean'), ['--dev-theme-preset=ocean'])
+  assert.deepEqual(themePresetLaunchArgs('paper'), ['--dev-theme-preset=paper'])
   assert.deepEqual(themePresetLaunchArgs(null), [])
 })
 

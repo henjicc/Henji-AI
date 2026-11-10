@@ -602,7 +602,9 @@
       "title": "Theme Appearance",
       "description": "Pick a preset, accent color, and layer contrast; all interface colors are derived and applied instantly.",
       "preset": {
-        "label": "Preset",
+        "label": "Mode",
+        "dark": "Dark",
+        "light": "Light",
         "custom": "Custom"
       },
       "accent": {
@@ -618,14 +620,8 @@
         "strong": "Strong"
       },
       "radius": {
-        "label": "Corner Radius",
-        "compact": "Compact",
-        "default": "Default",
-        "large": "Large"
-      },
-      "blur": {
-        "label": "Frosted Glass",
-        "hint": "Blur the backdrop when a panel sits over images, video, or the canvas. Turning it off uses solid backgrounds and lowers compositing cost."
+        "label": "Corner Radius ({{value}} px)",
+        "aria": "Interface corner radius"
       },
       "portable": {
         "label": "Theme Profile",

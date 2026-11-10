@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<!-- 毛玻璃暂不开放：所有浮层按实底加描边呈现，玻璃样式保留在 index.css 供以后在画布上恢复 -->
+<html lang="zh-CN" data-ui-blur="off">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" href="data:," />
@@ -20,8 +21,6 @@
             if (name.indexOf('--') === 0 && typeof value === 'string') root.style.setProperty(name, value)
           }
           if (frame.colorScheme === 'dark' || frame.colorScheme === 'light') root.style.colorScheme = frame.colorScheme
-          if (frame.uiRadius === 'compact' || frame.uiRadius === 'large') root.setAttribute('data-ui-radius', frame.uiRadius)
-          if (frame.uiBlur === 'off') root.setAttribute('data-ui-blur', 'off')
         } catch (error) {
           // 缓存缺失或损坏时使用 index.css 的静态默认主题
         }

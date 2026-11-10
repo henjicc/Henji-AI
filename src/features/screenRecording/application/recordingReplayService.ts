@@ -3,7 +3,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { getPlatform } from '@/platform'
 import { createLogger } from '@/core/logging'
 import { ApplicationPersistenceFailure } from '@/core/application-control/execution/persistence'
-import { replayRecordingSteps, recordingScriptSchema, type RecordingOperation, type RecordingScript, type RecordingReplayHost } from '@/core/screenRecording/script'
+import { playableOperationProperties, replayRecordingSteps, recordingScriptSchema, type RecordingOperation, type RecordingScript, type RecordingReplayHost } from '@/core/screenRecording/script'
 import { replaceRecordingSteps } from '@/core/screenRecording/replacement'
 import { videoEditDocumentSchema } from '@/core/videoEdit/document'
 import type { CapabilityExecutionContext } from '@/features/application-control'
@@ -104,7 +104,7 @@ export async function replaySession(id: string, options: ReplayOptions, context:
     const execute = async (operations: RecordingOperation[]): Promise<void> => {
       await current()
       const changes = operations.map(operation => {
-        if (operation.target.kind === 'settings.registry') return { kind: 'set_properties', entityType: operation.target.kind, target: operation.target, properties: operation.properties }
+        if (operation.target.kind === 'settings.registry') return { kind: 'set_properties', entityType: operation.target.kind, target: operation.target, properties: playableOperationProperties(operation) }
         const [oldId, ...rest] = operation.target.id.split(':'), newId = mapping.get(oldId)
         if (!newId || !rest.length) throw new Error('步骤目标不属于隔离快照。')
         return { kind: 'set_properties', entityType: operation.target.kind, target: { kind: operation.target.kind, id: `${newId}:${rest.join(':')}` }, properties: operation.properties }

@@ -1,4 +1,4 @@
-import type { RecordingOperation } from '@/core/screenRecording/script'
+import { playableThemePreset, type RecordingOperation } from '@/core/screenRecording/script'
 import { UI_DURATION } from '@/components/ui/motion'
 import { waitRecordingStep } from './recordingWait'
 
@@ -10,7 +10,8 @@ function publish(value: typeof state) { state = value; for (const listener of li
 export function clearDirectorCursor(): void { publish(null) }
 export async function pointDirectorCursor(operation: RecordingOperation, signal: AbortSignal): Promise<void> {
   const preset = operation.properties['interface.theme_preset']
-  const selector = preset ? `[data-recording-theme="${preset}"]` : '[aria-label="剪辑画面"]'
+  // 外观设置里预设是一组分段，按分段取值定位
+  const selector = preset ? `[data-segment-value="${playableThemePreset(preset)}"]` : '[aria-label="剪辑画面"]'
   const deadline = performance.now() + 5000
   let target = document.querySelector(selector)
   while (!target && performance.now() < deadline) { await waitRecordingStep(50, signal); target = document.querySelector(selector) }

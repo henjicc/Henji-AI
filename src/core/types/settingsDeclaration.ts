@@ -71,12 +71,11 @@ export const SETTINGS_DECLARATION = {
         surfaceOrder: 4, schemaOrder: 4,
         search: [
           ...searchRows(3, [
-            ['sections.theme.preset.label', ['主题', '深色', '浅色', 'dark', 'light', 'theme']],
+            ['sections.theme.preset.label', ['主题', '深色', '浅色', '石墨', '纸白', 'dark', 'light', 'theme']],
             ['sections.theme.accent.label', ['颜色', 'color']],
             'sections.theme.contrast.label',
-            'sections.theme.radius.label',
+            ['sections.theme.radius.aria', ['圆角', 'radius']],
             ['sections.interface.uiScaleLabel', ['缩放', '字号', 'zoom', 'scale']],
-            ['sections.theme.blur.label', ['模糊', 'blur']],
             ['sections.theme.portable.label', ['导入', '导出', 'import', 'export']],
           ]),
         ],

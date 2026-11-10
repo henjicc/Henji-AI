@@ -501,8 +501,27 @@ export function StateSection(): JSX.Element {
         <UiEmpty size="node" icon={<ImageIcon className={`${UI_ICON_SIZE_CLASS.xl}`} />} title="等待结果" />
       </div>
       <ProgressBar progress={64} appearance="hairline" />
+      <ErrorAppearanceSamples />
     </GallerySection>
   )
+}
+
+const LONG_ERROR_DETAIL = 'VideoEditRenderWorkerError: GPUDevice lost (reason: unknown)\n    at VideoEditRenderSession.renderBitmap (videoEditRenderSession.ts:412)\n    at async step (VideoEditPreview.tsx:917)'
+
+/** UiError 两种外观 × 有无正文、详情、两个动作、长文案。 */
+function ErrorAppearanceSamples(): JSX.Element {
+  const twoActions = <><UiButton variant="secondary" size="sm" onClick={noop}>打开日志</UiButton><UiButton variant="secondary" size="sm" onClick={noop}>重新加载</UiButton></>
+  return <>
+    <div data-gallery-error-block className="grid grid-cols-2 gap-3">
+      <UiError appearance="block" tone="error" size="sm" title="素材读取失败" message="文件可能被移动或删除，重新链接后即可继续。" detail={LONG_ERROR_DETAIL} onRetry={noop} />
+      <UiError size="sm" align="start" title="这一段口播没有识别出文字，可能是音量过低或者整段都是背景音乐，换一段素材再试" message="识别只处理人声；先在音频编辑里提高音量，或者手动粘贴稿子，字幕会按稿子对齐到时间线上，不需要重新识别。" actions={twoActions} />
+    </div>
+    <div data-gallery-error-overlay className="flex flex-col items-start gap-2 rounded-overlay bg-media p-4">
+      <div className="w-full max-w-sm"><UiError appearance="overlay" title="节目画面无法显示" message="重新加载预览试试；仍不显示就重启软件。" detail={LONG_ERROR_DETAIL} onRetry={noop} retryLabel="重新加载" /></div>
+      <div className="w-full max-w-sm"><UiError appearance="overlay" tone="warning" title="部分效果已跳过：发光、色差与胶片颗粒三个效果在这一帧执行失败" message="出错的效果先不显示，其余画面照常；修改参数或移除这些效果后会重新尝试，导出前请确认画面。" actions={twoActions} /></div>
+      <div className="w-full max-w-sm"><UiError appearance="overlay" tone="notice" title="预览已简化" /></div>
+    </div>
+  </>
 }
 
 export function DialogSection(): JSX.Element {
@@ -516,10 +535,22 @@ export function DialogSection(): JSX.Element {
           scope="container"
           type="warning"
           title="删除这个画布？"
-          message="删除后无法恢复。"
+          message="画布会移到“最近删除”，30 天内可以恢复。"
           onClose={noop}
           closeLabel="取消"
-          actions={[{ label: '删除', onClick: noop, tone: 'danger' }]}
+          actions={[{ label: '删除', onClick: noop, variant: 'primary', tone: 'danger' }]}
+ />
+      </div>
+      {/* 普通提示：多行正文与图标分列，不绕到图标下面 */}
+      <div className="relative h-56 overflow-hidden rounded-overlay" data-gallery-ignore-rules="overlayClipped" data-gallery-ignore-reason="容器内常开的提示弹窗示意随目录滚动，滚到目录边缘被滚动区裁掉是滚动，不是浮层越界">
+        <AlertDialog
+          isOpen
+          scope="container"
+          type="error"
+          title="导出没有完成"
+          message={'第 3 段素材读取失败，已导出的部分保留在输出文件夹里。\n重新链接该素材后再导出一次即可。'}
+          onClose={noop}
+          actions={[{ label: '打开文件夹', onClick: noop }, { label: '重新导出', onClick: noop, variant: 'primary' }]}
  />
       </div>
       <div className="relative h-12">

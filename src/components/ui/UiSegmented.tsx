@@ -94,7 +94,7 @@ export function UiSegmented<T extends string | number>({ ariaLabel, options, val
     {/* ui-surface-allow: S1 u5 统一分段组件内部使用原语渲染选项，调用方必须用 UiSegmented。 */}
     {options.map(option => <UiOptionButton key={option.value} type="button" variant="segment" size={size}
       ref={button => { if (button) buttons.current.set(option.value, button); else buttons.current.delete(option.value) }}
-      role="radio" aria-checked={value === option.value} tabIndex={!disabled && option.value === tabValue ? 0 : -1}
+      role="radio" aria-checked={value === option.value} data-segment-value={option.value} tabIndex={!disabled && option.value === tabValue ? 0 : -1}
       active={value === option.value} disabled={disabled || option.disabled} disabledReason={disabled ? disabledReason : option.disabledReason} tooltip={option.title} aria-label={option.ariaLabel}
       onMouseEnter={() => { if (!disabled && !option.disabled) onPreview?.(option.value) }} onMouseLeave={() => onPreview?.(undefined)}
       onFocus={() => { if (!disabled && !option.disabled) onPreview?.(option.value) }} onBlur={() => onPreview?.(undefined)}

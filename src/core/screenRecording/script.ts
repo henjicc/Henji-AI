@@ -17,6 +17,13 @@ export const recordingOperationSchema = z.object({
   }).strict().refine(v => Object.keys(v).length > 0),
 }).strict().refine(v => Object.keys(v.properties).every(key => v.target.kind === 'settings.registry' ? v.target.id === 'singleton' && key === 'interface.theme_preset' : key.startsWith(`${v.target.kind}.`)))
 export type RecordingOperation = z.infer<typeof recordingOperationSchema>
+/** 会话格式仍接受已撤下的深海、胶片（旧会话要能读）；执行时按深色石墨演示。 */
+export function playableThemePreset(preset: string): 'graphite' | 'paper' { return preset === 'paper' ? 'paper' : 'graphite' }
+/** 执行前把设置操作里的主题预设换成当前存在的预设。 */
+export function playableOperationProperties(operation: RecordingOperation): RecordingOperation['properties'] {
+  const preset = operation.properties['interface.theme_preset']
+  return preset ? { ...operation.properties, 'interface.theme_preset': playableThemePreset(preset) } : operation.properties
+}
 export const recordingCallSchema = z.object({ callId: z.string().uuid(), operations: z.array(recordingOperationSchema).min(1).max(64) }).strict()
 export const recordingBaselineSchema = z.object({ documentId: z.string().min(1), content: videoEditDocumentSchema }).strict().refine(v => v.documentId === v.content.id, '快照归属不符')
 const recordingScriptStepSchema = z.object({

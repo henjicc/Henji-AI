@@ -119,11 +119,15 @@ function normalizeCustomBase(input: unknown): ThemeCustomBase | null {
   return { seed: normalizeThemeSeed(seed), overrides: normalizeThemeOverrides(input.overrides) ?? {} };
 }
 
-/** 持久化值规范化；结构不对返回 null（调用方回落到默认选择）。 */
+/**
+ * 持久化值规范化；结构不对返回 null（调用方回落到默认选择）。
+ * 已撤下的预设（深海、胶片）回落到默认预设，强调色与对比度照旧保留。
+ */
 export function normalizeThemeSelection(input: unknown): ThemeSelection | null {
-  if (!isRecord(input) || !isThemeSelectionPreset(input.preset)) return null;
+  if (!isRecord(input) || typeof input.preset !== 'string') return null;
   const custom = normalizeCustomBase(input.custom);
-  const preset = input.preset === THEME_CUSTOM_PRESET && !custom ? DEFAULT_THEME_PRESET_ID : input.preset;
+  const known = isThemeSelectionPreset(input.preset) ? input.preset : DEFAULT_THEME_PRESET_ID;
+  const preset = known === THEME_CUSTOM_PRESET && !custom ? DEFAULT_THEME_PRESET_ID : known;
   const accent = typeof input.accent === 'string' ? normalizeHex(input.accent) : null;
   return {
     preset,

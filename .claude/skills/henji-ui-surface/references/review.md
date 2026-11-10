@@ -55,7 +55,7 @@
 2. 默认临时资料目录 + 仓库夹具；要看真实模型列表或供应商配置时用 `--profile real` 只读，不带 `--allow-writes`。不触发真实付费生成：“生成中 / 完成 / 失败”等状态用夹具或场景内模拟结果；确需付费调用先问用户或主控。
 3. 用已登记的开发导航参数、正式应用能力或界面点击进入，不猜 ID、不建无关工程；入口缺失就记为问题或补开发导航参数。
 4. 按可访问名称与角色定位元素，不写死坐标；每步后等动画、字体、图片、浮层定位稳定再截图。
-5. 用正式截屏（Electron `capturePage`），不在窗口缩放下用 CDP 裁剪。每个界面：石墨、深海、胶片、纸白 × 1440×900，加石墨 × 960×640（`--matrix review`）；数据变体多的（如全部模型）先在石墨 1440 + 960 全量跑（`--matrix screen`）并用自动指标（行数、溢出、截断）筛出可疑项，可疑项与代表项再跑 `--matrix review`。
+5. 用正式截屏（Electron `capturePage`），不在窗口缩放下用 CDP 裁剪。每个界面：石墨 × 1440×900 与 960×640（`--matrix review`；只磨深色，纸白不截图验收）；数据变体多的（如全部模型）先在石墨 1440 + 960 全量跑（`--matrix screen`）并用自动指标（行数、溢出、截断）筛出可疑项，可疑项与代表项再跑 `--matrix review`。
 6. Agent 必须打开每张截图看，配合像素对比度审计（`--contrast`）；DOM 断言与自动指标通过不等于视觉通过。
 7. 每个区域任务里维护“核对清单”（每行一个界面 × 状态，逐项打勾）和“问题记录”（编号、级别、界面/状态、截图路径、现象、违反的核对项、根因、修复、复验截图）。截图放 `.ui-tour/` 下，不进仓库。
 8. 问题分级：P0 不可用或有数据风险；P1 看不清、点错、错位、折行、截断、顺序错、状态不可辨、对比度不达标；P2 一致性与细节。P0、P1 必须修复复验；P2 同区域顺手修，跨区域的统一问题集中处理。
@@ -218,7 +218,7 @@ E 同时检查 UiModal.contentClassName 的 padding/overflow、PromptEditor.edit
 
 `scripts/ui-review/ui-gallery.json` 按目录逐区进入，每区先截顶部，再以 360 DIP 滚动并截中段，最后截底部；不再把首屏当成整页。当前有 32 个分区、每个矩阵变体 238 次 capture（允许重叠，用于排除漏截）。新增栏目必须补对应 click/capture/scroll 步骤，覆盖测试会提醒；栏目增高后需核对中段预算，最后一张 bottom 不代表中间已完整覆盖。
 
-`review` 矩阵是石墨/深海/胶片/纸白 1440×900 + 石墨 960×640，每种尺寸都有整套分区截图。一次 `ui:tour --audit` 同时生成截图、像素对比度、DOM 规则与运行时证据，不再叠加同矩阵的 `check:ui-visual`。
+`review` 矩阵是石墨 1440×900 + 960×640，每种尺寸都有整套分区截图。一次 `ui:tour --audit` 同时生成截图、像素对比度、DOM 规则与运行时证据，不再叠加同矩阵的 `check:ui-visual`。
 
 中心页仅开发构建显示，可用 `--dev-surface=dev.ui_gallery` 直接进入，或在主窗口按 `Ctrl+Shift+F8` 打开/返回。正式构建在应用壳裁掉中心页与加载引用；带开发页参数时继续正常工作区启动流程。总管理者在互斥构建安全边界中准备**开发巡检产物**后运行。`electron-vite build` 总把 `NODE_ENV` 固定为 production，`import.meta.env.DEV` 在任何 bundle 里都为 false；中心页守卫因此同时接受 `import.meta.env.MODE === 'development'`，由 `HENJI_BUNDLE_MODE=development` 让构建传 `--mode development`（正式 `electron:build`/`electron:dist` 不设，页面与 chunk 仍被裁掉）：
 

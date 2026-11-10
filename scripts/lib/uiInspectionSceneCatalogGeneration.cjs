@@ -13,7 +13,6 @@ function createGenerationSettingsScenes(context) {
     setupSettings,
   } = context
 
-  const ALT_THEME_MARKER = '__henjiUiTourAboutAltTheme'
 
   /** 外观设置里的单选（预设 / 强调色 / 层级对比）按无障碍名称点击，并等它成为选中项。 */
   async function chooseThemeRadio(page, name) {
@@ -25,24 +24,6 @@ function createGenerationSettingsScenes(context) {
   async function assertThemeRadioChecked(page, name) {
     const radio = page.getByRole('radio', { name, exact: true }).filter({ visible: true }).first()
     assert.equal(await radio.getAttribute('aria-checked'), 'true', `外观选项“${name}”应为选中`)
-  }
-
-  async function setAboutAppearance(page, { preset, blur }) {
-    await clickNamedButton(page, /^(外观|Appearance)$/i)
-    await chooseThemeRadio(page, preset)
-    const blurRow = page.getByText('毛玻璃效果', { exact: true }).locator('xpath=ancestor::div[contains(@class, "justify-between")][1]')
-    const blurSwitch = blurRow.getByRole('switch')
-    if ((await blurSwitch.getAttribute('aria-checked') === 'true') !== blur) await blurSwitch.click()
-  }
-
-  /**
-   * 巡检实例的资料在场景与尺寸之间共享且没有收尾钩子：对比主题场景留下标记，
-   * 默认外观场景据此先恢复“石墨 + 毛玻璃”。没有标记时什么都不写。
-   */
-  async function restoreDefaultAboutAppearance(page) {
-    if (!await page.evaluate((key) => localStorage.getItem(key) === '1', ALT_THEME_MARKER)) return
-    await setAboutAppearance(page, { preset: '石墨', blur: true })
-    await page.evaluate((key) => localStorage.removeItem(key), ALT_THEME_MARKER)
   }
 
   /**
@@ -324,20 +305,6 @@ function createGenerationSettingsScenes(context) {
       name: '设置-关于',
       setup: async (page) => {
         await setupSettings(page)
-        await restoreDefaultAboutAppearance(page)
-        await openAboutSection(page)
-      },
-    },
-    {
-      // 对比截图：在隔离实例里切到另一主题预设并关闭毛玻璃
-      id: 'settings-about-alt-theme',
-      surface: '设置',
-      name: '设置-关于-胶片无毛玻璃',
-      writesUserData: true,
-      setup: async (page) => {
-        await setupSettings(page)
-        await page.evaluate((key) => localStorage.setItem(key, '1'), ALT_THEME_MARKER)
-        await setAboutAppearance(page, { preset: '胶片', blur: false })
         await openAboutSection(page)
       },
     },
@@ -347,7 +314,6 @@ function createGenerationSettingsScenes(context) {
       name: '设置-关于-第三方许可',
       setup: async (page) => {
         await setupSettings(page)
-        await restoreDefaultAboutAppearance(page)
         await clickNamedButton(page, /^(关于与更新|About & Updates)$/i)
         await page.locator('#general-about').getByRole('button', { name: /FFmpeg/ }).click({ timeout: 8000 })
         await page.getByRole('dialog', { name: /第三方开源组件|Third-party open source components/ })
@@ -369,8 +335,8 @@ function createGenerationSettingsScenes(context) {
         await setupSettings(page)
         await clickNamedButton(page, /^(外观|Appearance)$/i)
         const runPreset = await page.evaluate(() => new URLSearchParams(location.search).get('henjiDevThemePreset') ?? 'graphite')
-        const presetName = { graphite: '石墨', ocean: '深海', film: '胶片', paper: '纸白' }
-        const otherPreset = runPreset === 'paper' ? 'film' : 'paper'
+        const presetName = { graphite: '深色', paper: '浅色' }
+        const otherPreset = runPreset === 'paper' ? 'graphite' : 'paper'
         await showThemeSection(page)
         try {
           await chooseThemeRadio(page, presetName[runPreset])
@@ -395,7 +361,7 @@ function createGenerationSettingsScenes(context) {
           await settlePage(page)
           await capture('switched-preset')
         } finally {
-          await chooseThemeRadio(page, '石墨')
+          await chooseThemeRadio(page, '深色')
           await chooseThemeRadio(page, '跟随预设')
           await chooseThemeRadio(page, '标准')
         }
