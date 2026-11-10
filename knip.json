@@ -19,7 +19,6 @@
         "src/tests/setup.ts",
         "scripts/**/*.{cjs,mjs,js,ts}",
         "*.config.{ts,js,cjs}",
-        "src/core/examples/*.ts",
         "src/**/index.{ts,tsx}",
         "src/features/documents/application/documentPromptStoreLedger.ts",
         "src/features/videoEdit/engine/videoEditColorGradeShader.ts",
