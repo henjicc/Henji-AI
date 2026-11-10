@@ -84,8 +84,10 @@ describe('正式读入口打开黄金归档与源码', () => {
   })
   it.each(supported('project-package'))('真实项目包 v%s 导入后剪辑内容和代码文件可读，保留效果、字幕与调色', async version => {
     environment = createTestEnvironment()
-    // The archive envelope and its editable documents have independent format versions.
-    const source = fixture('project-package', `v${version}.henjipack`)
+    // 归档外壳与其中可编辑文档的格式版本相互独立。
+    // 旧版归档导入时会在原件旁写迁移备份（.henji/backups）；在临时副本上导入，样本目录不被写入。
+    const source = path.join(environment.outside, `v${version}.henjipack`)
+    await fsp.copyFile(fixture('project-package', `v${version}.henjipack`), source)
     const original = await fsp.readFile(source)
     const imported = await environment.services.service.importPackage({ source })
     if (imported.type !== 'project') throw new Error('应为项目包')
