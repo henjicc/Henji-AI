@@ -1,0 +1,638 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>剪辑样板屏草稿</title>
+<style>
+@font-face { font-family: 'HarmonyOS Sans SC UI'; src: url('../../../../src/assets/fonts/HarmonyOS_Sans_SC.ttf') format('truetype'); font-weight: 100 900; font-display: block; }
+:root {
+  /* 以下数值取自 src/index.css 的石墨主题令牌 */
+  --gap:#181818; --window:#1B1B1B; --panel:#212121; --raised:#272727; --overlay:#292929;
+  --line-overlay:#393939; --control:#2B2B2B; --control-hover:#313131; --hover:#2A2A2A; --selected:#333333;
+  --line:#282828; --line-strong:#313131; --media:#191919;
+  --text1:#EEEEEE; --text2:#CACACA; --text3:#A5A5A5; --text-disabled:#4E4E4E;
+  --accent:#3A6FDF; --accent-text:#9CBEFF; --accent-ring:#6A9BFE; --on-accent:#FFFFFF;
+  --danger-solid:#D73E3F; --danger-text:#FB817A; --warning-text:#F5AE39; --success-text:#52CD86;
+  /* 草稿新增（见设计说明“突破的规则”） */
+  --icon-rest:#737373;
+  --clip-video:#2E3654; --clip-video-strip:#262D47; --clip-video-sel:#3B4570;
+  --clip-audio:#23423A; --clip-audio-strip:#1C362F; --clip-audio-sel:#2E574C; --clip-wave:#86BFAB;
+  --clip-text:#49324F; --clip-text-strip:#3C2941; --clip-text-sel:#5E4166;
+  --clip-caption:#473C24; --clip-caption-sel:#5E4F2E;
+  --w-normal:400; --w-medium:460; --w-semibold:580;
+}
+* { box-sizing: border-box; }
+html, body { margin:0; background:#101010; color:var(--text1); font-family:'HarmonyOS Sans SC UI','Microsoft YaHei UI',sans-serif; font-size:13px; line-height:20px; font-weight:var(--w-normal); -webkit-font-smoothing:antialiased; font-synthesis:style; }
+.num { font-variant-numeric: tabular-nums; }
+svg.i { width:var(--s,16px); height:var(--s,16px); flex:none; stroke:currentColor; fill:none; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round; display:block; }
+svg.i.fill { fill:currentColor; }
+
+/* ───────── 页面外框（不属于软件界面） ───────── */
+.page { padding:40px 40px 80px; }
+.page h1 { font-size:20px; line-height:28px; font-weight:560; margin:0 0 6px; }
+.page .lead { color:var(--text3); margin:0 0 36px; max-width:900px; }
+.block { margin-bottom:72px; }
+.block h2 { font-size:16px; line-height:24px; font-weight:var(--w-semibold); margin:0 0 4px; }
+.block .note { color:var(--text3); font-size:12px; line-height:18px; margin:0 0 16px; max-width:1100px; white-space:pre-line; }
+.pair { display:flex; gap:40px; align-items:flex-start; transform-origin:0 0; }
+.side { flex:none; }
+.side .tag { font-size:12px; color:var(--text3); margin-bottom:8px; }
+.side .tag b { color:var(--text1); font-weight:var(--w-medium); }
+.shot { width:1440px; height:900px; display:block; }
+.shot.before { object-fit:cover; object-position:0 0; }
+body.single { background:var(--gap); }
+body.single .page { padding:0; }
+body.single .page > h1, body.single .lead, body.single .block { display:none; }
+body.single .block.show { display:block; margin:0; }
+body.single .block.show h2, body.single .block.show .note, body.single .tag { display:none; }
+body.single.draft .side.before-side { display:none; }
+body.single .pair { gap:24px; transform:none !important; }
+body.single.pairmode { background:#101010; }
+body.single.pairmode .page { padding:24px; }
+body.single.pairmode .tag { display:block; font-size:20px; line-height:28px; margin-bottom:12px; }
+
+/* ───────── 软件界面 ───────── */
+.app { width:1440px; height:900px; position:relative; overflow:hidden; background:var(--gap); display:flex; flex-direction:column; font-size:13px; color:var(--text1); white-space:nowrap; }
+.ib { width:28px; height:28px; flex:none; display:inline-flex; align-items:center; justify-content:center; border-radius:6px; color:var(--text2); }
+.ib.s24 { width:24px; height:24px; --s:14px; }
+.ib.s20 { width:20px; height:20px; --s:12px; border-radius:4px; }
+.ib.s32 { width:32px; height:32px; --s:18px; }
+.ib.rest { color:var(--icon-rest); }
+.ib.strong { color:var(--text1); }
+.ib.mode { background:var(--selected); color:var(--text1); }
+.ib.on { color:var(--accent-text); }
+.ib.hover { background:var(--hover); color:var(--text1); }
+.btn { height:28px; padding:0 10px; display:inline-flex; align-items:center; gap:6px; border-radius:6px; font-size:13px; font-weight:var(--w-medium); color:var(--text2); --s:14px; flex:none; }
+.btn.primary { background:var(--accent); color:var(--on-accent); height:32px; padding:0 14px; }
+.btn.secondary { background:var(--control); color:var(--text1); }
+.btn.danger-solid { background:var(--danger-solid); color:#fff; }
+.btn.sm { height:24px; padding:0 8px; font-size:12px; }
+
+/* 标题栏 40 */
+.titlebar { height:40px; flex:none; background:var(--window); display:flex; align-items:center; padding:0 0 0 14px; position:relative; }
+.titlebar .brand { font-size:13px; font-weight:var(--w-semibold); margin-right:14px; }
+.titlebar .menu { display:flex; gap:2px; }
+.titlebar .menu span { font-size:12px; color:var(--text3); padding:0 7px; height:24px; display:flex; align-items:center; border-radius:6px; }
+.titlebar .nav { position:absolute; left:50%; transform:translateX(-50%); display:flex; gap:2px; }
+.titlebar .nav span { height:28px; padding:0 12px; display:flex; align-items:center; border-radius:6px; font-size:13px; color:var(--text2); font-weight:var(--w-medium); }
+.titlebar .nav span.cur { background:var(--selected); color:var(--text1); }
+.titlebar .right { margin-left:auto; display:flex; align-items:center; height:100%; }
+.titlebar .wc { width:44px; height:100%; display:flex; align-items:center; justify-content:center; color:var(--text3); --s:14px; }
+.titlebar .wc svg { stroke-width:1.5; }
+
+/* 命令带 44 */
+.cmd { height:44px; flex:none; background:var(--panel); display:flex; align-items:center; padding:0 10px; gap:2px; }
+.cmd .proj { height:28px; padding:0 8px; display:flex; align-items:center; gap:6px; font-size:13px; font-weight:var(--w-medium); border-radius:6px; --s:14px; }
+.cmd .proj svg { color:var(--text3); }
+.cmd .sep { width:1px; height:16px; background:var(--line-strong); margin:0 10px; }
+.cmd .tools { display:flex; gap:2px; }
+.cmd .right { margin-left:auto; display:flex; align-items:center; gap:2px; }
+.cmd .layout { height:28px; padding:0 8px; display:flex; align-items:center; gap:6px; font-size:13px; color:var(--text2); border-radius:6px; --s:16px; }
+
+/* 停靠区 */
+.dock { flex:1; min-height:0; display:flex; gap:2px; padding-top:2px; }
+.col { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.rowx { display:flex; gap:2px; min-height:0; }
+.panel { background:var(--panel); display:flex; flex-direction:column; min-width:0; min-height:0; position:relative; }
+.tabs { height:32px; flex:none; display:flex; align-items:stretch; padding:0 6px; border-bottom:1px solid var(--line); }
+.tab { padding:0 8px; display:flex; align-items:center; gap:4px; font-size:12px; color:var(--text3); font-weight:var(--w-medium); position:relative; --s:14px; }
+.tab.cur { color:var(--text1); }
+.tab.cur.focus::after { content:''; position:absolute; left:8px; right:8px; bottom:-1px; height:2px; background:var(--accent-ring); border-radius:1px; }
+.tab .pm { color:var(--icon-rest); margin-left:2px; --s:12px; }
+.tabs .more { margin-left:auto; display:flex; align-items:center; }
+.foot { height:32px; flex:none; border-top:1px solid var(--line); display:flex; align-items:center; padding:0 6px 0 12px; gap:2px; }
+.foot .status { font-size:12px; color:var(--text3); margin-right:auto; }
+
+/* 素材面板 */
+.search { margin:8px 8px 4px; height:28px; border-radius:8px; background:var(--raised); display:flex; align-items:center; gap:6px; padding:0 8px; color:var(--text3); font-size:12px; --s:14px; }
+.lhead { height:24px; display:flex; align-items:center; padding:0 12px 0 34px; font-size:11px; color:var(--text3); gap:4px; --s:12px; }
+.lhead .dur { margin-left:auto; }
+.item { height:28px; display:flex; align-items:center; padding:0 12px 0 6px; margin:0 4px; border-radius:6px; font-size:13px; gap:8px; }
+.item .tw { width:14px; color:var(--icon-rest); --s:12px; display:flex; justify-content:center; }
+.item .chip { width:8px; height:8px; border-radius:2px; flex:none; }
+.item .ic { color:var(--text3); --s:14px; }
+.item .nm { overflow:hidden; text-overflow:ellipsis; }
+.item .meta { margin-left:auto; font-size:11px; color:var(--text3); }
+.item.sel { background:var(--selected); }
+.item.child { padding-left:28px; }
+
+/* 节目画面 */
+.viewer { flex:1; min-height:0; background:var(--media); display:flex; align-items:center; justify-content:center; position:relative; }
+.frame { position:relative; background:#000 center/cover; overflow:hidden; }
+.frame .ttl { position:absolute; left:8.5%; top:30%; font-size:34px; line-height:44px; font-weight:700; color:#fff; letter-spacing:1px; }
+.frame .ttl small { display:block; font-size:12px; line-height:18px; font-weight:400; letter-spacing:3px; color:rgba(255,255,255,.78); margin-bottom:6px; }
+.frame .cap { position:absolute; left:0; right:0; bottom:7%; text-align:center; font-size:17px; font-weight:500; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.7); }
+.frame .selbox { position:absolute; border:1px solid var(--text1); }
+.frame .selbox i { position:absolute; width:7px; height:7px; background:var(--media); border:1px solid var(--text1); }
+.scrub { height:20px; flex:none; background:var(--panel); position:relative; border-top:1px solid var(--line); }
+.scrub .tick { position:absolute; bottom:0; width:1px; height:5px; background:var(--line-strong); }
+.scrub .tick.maj { height:9px; background:#3d3d3d; }
+.scrub .lab { position:absolute; top:2px; font-size:10px; line-height:14px; color:var(--icon-rest); }
+.scrub .ph { position:absolute; top:0; bottom:0; width:1px; background:var(--accent-ring); }
+.scrub .ph::before { content:''; position:absolute; left:-4px; top:0; width:9px; height:8px; background:var(--accent-ring); clip-path:polygon(0 0,100% 0,100% 55%,50% 100%,0 55%); }
+.transport { height:44px; flex:none; display:flex; align-items:center; padding:0 10px 0 12px; position:relative; }
+.transport .tc { font-size:14px; font-weight:var(--w-medium); color:var(--text1); }
+.transport .tc small { font-size:12px; color:var(--text3); font-weight:var(--w-normal); margin-left:6px; }
+.transport .mid { position:absolute; left:50%; transform:translateX(-50%); display:flex; align-items:center; }
+.transport .grp { display:flex; align-items:center; gap:2px; }
+.transport .grp + .grp { margin-left:20px; }
+.transport .right { margin-left:auto; display:flex; align-items:center; gap:2px; }
+.transport .drop { height:28px; padding:0 6px 0 8px; display:flex; align-items:center; gap:4px; font-size:12px; color:var(--text2); --s:12px; border-radius:6px; }
+.transport .drop svg { color:var(--icon-rest); }
+
+/* 时间线 */
+.tl { flex:1; min-height:0; display:flex; flex-direction:column; position:relative; }
+.tl .corner { height:28px; display:flex; align-items:center; padding:0 4px 0 12px; border-bottom:1px solid var(--line); border-right:1px solid var(--line); }
+.tl .corner .tc { font-size:15px; line-height:22px; font-weight:var(--w-medium); color:var(--accent-text); margin-right:auto; }
+.tl .grid { display:grid; grid-template-columns:232px minmax(0,1fr); flex:1; min-height:0; align-content:start; }
+.ruler { height:28px; position:relative; border-bottom:1px solid var(--line); overflow:hidden; background:var(--panel); }
+.ruler .tick { position:absolute; bottom:0; width:1px; height:4px; background:var(--line-strong); }
+.ruler .tick.maj { height:10px; background:#444; }
+.ruler .lab { position:absolute; bottom:1px; font-size:10px; line-height:14px; color:var(--text3); }
+.ruler .mk { position:absolute; top:2px; width:8px; height:9px; clip-path:polygon(0 0,100% 0,100% 100%,50% 70%,0 100%); }
+.th { display:flex; align-items:center; padding:0 6px 0 4px; border-bottom:1px solid var(--line); border-right:1px solid var(--line); background:var(--panel); }
+.th .tw { width:16px; display:flex; justify-content:center; color:var(--icon-rest); --s:12px; }
+.th .id { width:22px; font-size:11px; font-weight:var(--w-semibold); color:var(--text3); }
+.th .nm { flex:1; min-width:0; font-size:12px; color:var(--text2); overflow:hidden; text-overflow:ellipsis; }
+.th .slot { width:24px; height:24px; display:flex; align-items:center; justify-content:center; color:var(--icon-rest); --s:14px; border-radius:6px; }
+.th .slot.off { color:var(--text1); }
+.th.target { background:#242424; }
+.th.target .id { color:var(--text1); }
+.lane { position:relative; border-bottom:1px solid #232323; background:var(--window); }
+.lane.dimmed .clip { opacity:.45; }
+.clip { position:absolute; top:2px; bottom:2px; border-radius:4px; overflow:hidden; }
+.clip .strip { position:absolute; left:0; right:0; top:0; height:16px; display:flex; align-items:center; padding:0 6px; gap:4px; font-size:11px; line-height:16px; font-weight:var(--w-medium); color:#E2E2E2; }
+.clip .strip span { overflow:hidden; text-overflow:ellipsis; min-width:0; }
+.clip .strip .st { margin-left:auto; flex:none; --s:11px; display:flex; }
+.clip .body { position:absolute; left:0; right:0; top:16px; bottom:0; }
+.clip.flat .strip { height:100%; background:none !important; }
+.clip.video { background:var(--clip-video); } .clip.video .strip { background:var(--clip-video-strip); }
+.clip.audio { background:var(--clip-audio); } .clip.audio .strip { background:var(--clip-audio-strip); }
+.clip.text { background:var(--clip-text); } .clip.text .strip { background:var(--clip-text-strip); }
+.clip.caption { background:var(--clip-caption); }
+.clip.caption .strip { font-weight:var(--w-normal); color:#EDE6D6; }
+.clip.sel { box-shadow:inset 0 0 0 1px var(--text1); }
+.clip.video.sel { background:var(--clip-video-sel); } .clip.video.sel .strip { background:#333C61; }
+.clip.audio.sel { background:var(--clip-audio-sel); } .clip.audio.sel .strip { background:#274A41; }
+.clip.text.sel { background:var(--clip-text-sel); } .clip.text.sel .strip { background:#513858; }
+.clip.caption.sel { background:var(--clip-caption-sel); }
+.clip .thumb { position:absolute; left:0; top:0; bottom:0; background:center/cover; }
+.clip .wave { position:absolute; left:0; right:0; bottom:0; top:2px; color:var(--clip-wave); }
+.clip .wave svg { width:100%; height:100%; display:block; }
+.clip .kf { position:absolute; bottom:3px; width:5px; height:5px; background:#D8D8D8; transform:rotate(45deg); margin-left:-2.5px; }
+.clip .handle { position:absolute; top:3px; bottom:3px; width:3px; border-radius:2px; background:var(--text1); }
+.clip .handle.l { left:2px; } .clip .handle.r { right:2px; }
+.clip .fade { position:absolute; left:0; top:0; bottom:0; background:linear-gradient(to bottom right, rgba(0,0,0,.42) 49.5%, transparent 50.5%); }
+.clip .fadedot { position:absolute; top:-3px; width:7px; height:7px; border-radius:50%; background:var(--panel); border:1.5px solid var(--text1); margin-left:-3.5px; }
+.clip .hatch { position:absolute; inset:0; background:repeating-linear-gradient(135deg, rgba(0,0,0,.2) 0 4px, transparent 4px 8px); }
+.clip .msg { position:absolute; left:6px; top:0; bottom:0; display:flex; align-items:center; gap:5px; font-size:11px; color:var(--text2); --s:12px; }
+.clip .msg svg, .clip .st.err { color:var(--danger-text); }
+.clip.offline { background:#2C2C2C !important; } .clip.offline .strip { background:#262626 !important; color:var(--text3); }
+.clip .vol { position:absolute; left:0; right:0; height:1px; background:rgba(255,255,255,.35); }
+.playhead { position:absolute; top:0; bottom:0; width:1px; background:var(--accent-ring); z-index:5; pointer-events:none; }
+.playhead::before { content:''; position:absolute; left:-5px; top:0; width:11px; height:13px; background:var(--accent-ring); clip-path:polygon(0 0,100% 0,100% 62%,50% 100%,0 62%); border-radius:2px; }
+.hscroll { height:10px; flex:none; position:relative; margin-left:232px; }
+.hscroll i { position:absolute; top:3px; height:4px; border-radius:2px; background:#3A3A3A; }
+.zoom { display:flex; align-items:center; gap:6px; color:var(--icon-rest); --s:14px; padding-right:4px; }
+.zoom .track { width:88px; height:2px; background:var(--line-strong); border-radius:1px; position:relative; }
+.zoom .track i { position:absolute; left:42%; top:-4px; width:10px; height:10px; border-radius:50%; background:var(--text3); }
+
+/* 音频电平 */
+.meters { flex:1; display:flex; gap:6px; padding:14px 8px 14px 6px; min-height:0; }
+.meters .scale { width:20px; position:relative; font-size:10px; line-height:12px; color:var(--icon-rest); text-align:right; }
+.meters .scale span { position:absolute; right:0; transform:translateY(-50%); }
+.meters .bar { width:6px; border-radius:2px; background:var(--window); position:relative; overflow:hidden; }
+.meters .bar i { position:absolute; left:0; right:0; bottom:0; background:linear-gradient(to top, #3F9E68 0 70%, #C9A23A 70% 88%, #D0524E 88%); background-size:100% 240px; background-position:bottom; }
+.meters .bar b { position:absolute; left:0; right:0; height:1px; background:var(--text2); }
+
+/* 属性面板（效果控件 / 调色） */
+.insp { flex:1; min-height:0; overflow:hidden; }
+.ihead { padding:10px 12px 8px; display:flex; align-items:flex-start; }
+.ihead .t { font-size:13px; font-weight:var(--w-medium); line-height:20px; }
+.ihead .m { font-size:11px; line-height:16px; color:var(--text3); }
+.ihead .ib { margin-left:auto; margin-top:-2px; }
+.sec { border-top:1px solid var(--line); padding:4px 0 6px; }
+.sh { height:28px; display:flex; align-items:center; padding:0 12px 0 8px; font-size:12px; font-weight:var(--w-semibold); color:var(--text1); gap:2px; }
+.sh .tw { width:16px; display:flex; justify-content:center; color:var(--icon-rest); --s:12px; }
+.sh .fx { font-size:11px; font-style:italic; color:var(--text3); font-weight:var(--w-normal); width:18px; }
+.sh .fx.off { color:var(--text-disabled); text-decoration:line-through; }
+.sh .r { margin-left:auto; display:flex; gap:2px; align-items:center; font-weight:var(--w-normal); }
+.pr { height:28px; display:flex; align-items:center; padding:0 12px 0 8px; font-size:12px; }
+.pr .sw { width:20px; display:flex; justify-content:center; color:var(--icon-rest); --s:12px; flex:none; }
+.pr .sw.on { color:var(--accent-text); }
+.pr .nm { width:76px; flex:none; color:var(--text3); overflow:hidden; text-overflow:ellipsis; }
+.pr .val { flex:1; min-width:0; display:flex; align-items:center; gap:4px; }
+.pr .n { color:var(--text2); min-width:40px; }
+.pr .n.mod { color:var(--text1); font-weight:var(--w-medium); }
+.pr .n u { text-decoration:none; color:var(--text3); margin-left:3px; font-weight:var(--w-normal); }
+.pr .n.w56 { width:56px; }
+.pr .kfnav { margin-left:auto; display:flex; align-items:center; color:var(--icon-rest); --s:12px; gap:2px; }
+.pr .kfnav .d { width:7px; height:7px; background:var(--accent-text); transform:rotate(45deg); margin:0 4px; }
+.pr.rightval .val { justify-content:flex-end; }
+.pr.rightval .n { text-align:right; min-width:0; }
+.fld { height:24px; flex:1; min-width:0; border-radius:6px; background:var(--raised); display:flex; align-items:center; padding:0 6px 0 8px; font-size:12px; color:var(--text1); --s:12px; }
+.fld svg { margin-left:auto; color:var(--icon-rest); }
+.seg { height:24px; border-radius:6px; background:var(--raised); display:flex; padding:2px; gap:2px; font-size:12px; color:var(--text3); }
+.seg span { height:20px; padding:0 9px; display:flex; align-items:center; justify-content:center; border-radius:4px; --s:14px; }
+.seg span.cur { background:var(--line-overlay); color:var(--text1); font-weight:var(--w-medium); }
+.seg.icons span { padding:0; width:26px; }
+.slider { flex:1; height:2px; background:var(--line-strong); border-radius:1px; position:relative; margin:0 10px 0 2px; }
+.slider i { position:absolute; left:0; top:0; height:2px; background:var(--text3); border-radius:1px; }
+.slider b { position:absolute; top:-4px; width:10px; height:10px; margin-left:-5px; border-radius:50%; background:var(--text2); }
+.cb { width:14px; height:14px; border-radius:4px; border:1px solid #4a4a4a; display:flex; align-items:center; justify-content:center; --s:10px; color:var(--text1); flex:none; }
+.cb svg { stroke-width:2.5; }
+.swatch { width:28px; height:16px; border-radius:4px; border:1px solid var(--line-overlay); flex:none; margin-left:4px; }
+.txtarea { margin:2px 12px 4px 28px; border-radius:8px; background:var(--raised); padding:6px 8px; font-size:13px; line-height:20px; height:52px; color:var(--text1); white-space:normal; }
+.disc { height:28px; display:flex; align-items:center; padding:0 12px 0 28px; font-size:12px; color:var(--text3); gap:4px; --s:12px; }
+.empty { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; color:var(--text3); font-size:12px; }
+
+/* 示波器与色轮 */
+.scope { margin:4px 12px 0; height:104px; border-radius:6px; background:var(--media); position:relative; overflow:hidden; }
+.scope svg { position:absolute; left:8px; right:8px; top:8px; bottom:8px; width:calc(100% - 16px); height:calc(100% - 16px); }
+.readout { margin:6px 12px 4px; display:flex; align-items:center; gap:10px; font-size:11px; line-height:16px; color:var(--text3); }
+.readout b { color:var(--text2); font-weight:var(--w-normal); }
+.readout .warn { color:var(--warning-text); display:flex; align-items:center; gap:4px; --s:11px; margin-left:auto; }
+.wheels { display:flex; justify-content:space-between; padding:6px 20px 2px 28px; }
+.wheel { width:80px; text-align:center; font-size:11px; line-height:16px; color:var(--text3); }
+.wheel .w { width:76px; height:76px; margin:0 auto 6px; border-radius:50%; position:relative; background:conic-gradient(from 90deg, #b06a6a, #b0a26a, #7fb06a, #6ab0a2, #6a86b0, #9a6ab0, #b06a8c, #b06a6a); }
+.wheel .w::before { content:''; position:absolute; inset:4px; border-radius:50%; background:var(--window); }
+.wheel .w::after { content:''; position:absolute; left:50%; top:12px; bottom:12px; width:1px; background:var(--line-strong); box-shadow:0 0 0 0 transparent; }
+.wheel .w .hz { position:absolute; top:50%; left:12px; right:12px; height:1px; background:var(--line-strong); }
+.wheel .w .puck { position:absolute; width:9px; height:9px; border-radius:50%; border:1.5px solid var(--text1); background:var(--window); margin:-4.5px; z-index:1; }
+.wheel b { color:var(--text2); font-weight:var(--w-normal); }
+
+/* 浮层 */
+.ovl { position:absolute; background:var(--overlay); border:1px solid var(--line-overlay); z-index:20; }
+.menu { border-radius:8px; padding:4px; min-width:208px; font-size:13px; }
+.menu .mi { height:28px; display:flex; align-items:center; padding:0 8px 0 6px; border-radius:6px; gap:8px; color:var(--text1); --s:14px; }
+.menu .mi .ck { width:14px; color:var(--accent-text); display:flex; }
+.menu .mi .k { margin-left:auto; padding-left:24px; font-size:11px; color:var(--icon-rest); }
+.menu .mi .k svg { color:var(--icon-rest); }
+.menu .mi.hov { background:#353535; }
+.menu .mi.dis { color:var(--text-disabled); }
+.menu .ms { height:1px; background:var(--line-overlay); margin:4px 6px; }
+.errbar { left:12px; bottom:12px; border-radius:8px; padding:8px 8px 8px 12px; display:flex; align-items:center; gap:10px; max-width:520px; }
+.errbar .ei { color:var(--danger-text); --s:16px; }
+.errbar .et { font-size:13px; line-height:18px; font-weight:var(--w-medium); }
+.errbar .em { font-size:12px; line-height:16px; color:var(--text2); }
+.errbar .acts { display:flex; gap:4px; margin-left:8px; }
+.scrim { position:absolute; inset:0; background:rgba(0,0,0,.5); z-index:30; display:flex; align-items:center; justify-content:center; }
+.dialog { position:relative; width:420px; border-radius:12px; padding:20px; display:flex; gap:14px; white-space:normal; }
+.dialog .di { width:32px; height:32px; border-radius:8px; background:rgba(215,62,63,.16); color:var(--danger-text); display:flex; align-items:center; justify-content:center; flex:none; --s:16px; }
+.dialog .dt { font-size:14px; line-height:20px; font-weight:var(--w-semibold); margin:5px 0 6px; }
+.dialog .dm { font-size:13px; line-height:20px; color:var(--text2); margin-bottom:20px; }
+.dialog .da { display:flex; justify-content:flex-end; gap:8px; }
+.dialog .da .btn { height:32px; padding:0 14px; }
+.tip { border-radius:6px; padding:4px 8px; font-size:12px; line-height:16px; color:var(--text1); }
+
+/* 细节放大图 */
+.sheet { width:1440px; background:var(--window); padding:28px 32px; display:grid; grid-template-columns:1fr 1fr; gap:28px 40px; align-content:start; white-space:nowrap; }
+.sheet.h900 { height:900px; }
+.ex h3 { margin:0 0 2px; font-size:13px; line-height:20px; font-weight:var(--w-medium); color:var(--text1); }
+.ex p { margin:0 0 10px; font-size:12px; line-height:18px; color:var(--text3); white-space:normal; }
+.ex .z { zoom:2; }
+.ex .rows { width:330px; }
+.ex .cap { font-size:5.5px; line-height:9px; color:var(--text3); margin:3px 0 1px; }
+.crop { width:660px; height:150px; background-repeat:no-repeat; border-radius:4px; }
+.minitl { display:grid; grid-template-columns:152px 1fr; width:332px; }
+.minitl .th { padding-left:2px; }
+.minitl .lane, .solo-lane { position:relative; background:var(--window); border-bottom:1px solid #232323; }
+.reco { display:inline-block; font-size:11px; line-height:16px; padding:0 6px; border-radius:4px; background:var(--selected); color:var(--text1); margin-left:6px; font-weight:var(--w-normal); vertical-align:1px; }
+</style>
+</head>
+<body>
+<div class="page" id="page">
+  <h1>剪辑工作区 · 样板屏设计草稿</h1>
+  <p class="lead">每一屏左边是现在的真实截图，右边是草稿。草稿按 1440×900 原尺寸画，用的是软件里真实的颜色、字体和图标。这是静态画面，不能点。</p>
+</div>
+
+<script>
+const ICONS = /*ICONS_START*/{"triangle-alert":"<path d=\"m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3\"/><path d=\"M12 9v4\"/><path d=\"M12 17h.01\"/>","file-x":"<path d=\"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z\"/><path d=\"M14 2v5a1 1 0 0 0 1 1h5\"/><path d=\"m14.5 12.5-5 5\"/><path d=\"m9.5 12.5 5 5\"/>","video":"<path d=\"m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5\"/><rect x=\"2\" y=\"6\" width=\"14\" height=\"12\" rx=\"2\"/>","lock-open":"<rect width=\"18\" height=\"11\" x=\"3\" y=\"11\" rx=\"2\" ry=\"2\"/><path d=\"M7 11V7a5 5 0 0 1 9.9-1\"/>","eye":"<path d=\"M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/>","link-2":"<path d=\"M9 17H7A5 5 0 0 1 7 7h2\"/><path d=\"M15 7h2a5 5 0 1 1 0 10h-2\"/><line x1=\"8\" x2=\"16\" y1=\"12\" y2=\"12\"/>","eye-off":"<path d=\"M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49\"/><path d=\"M14.084 14.158a3 3 0 0 1-4.242-4.242\"/><path d=\"M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143\"/><path d=\"m2 2 20 20\"/>","lock":"<rect width=\"18\" height=\"11\" x=\"3\" y=\"11\" rx=\"2\" ry=\"2\"/><path d=\"M7 11V7a5 5 0 0 1 10 0v4\"/>","headphones":"<path d=\"M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3\"/>","volume-x":"<path d=\"M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z\"/><line x1=\"22\" x2=\"16\" y1=\"9\" y2=\"15\"/><line x1=\"16\" x2=\"22\" y1=\"9\" y2=\"15\"/>","volume-2":"<path d=\"M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z\"/><path d=\"M16 9a5 5 0 0 1 0 6\"/><path d=\"M19.364 18.364a9 9 0 0 0 0-12.728\"/>","target":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><circle cx=\"12\" cy=\"12\" r=\"6\"/><circle cx=\"12\" cy=\"12\" r=\"2\"/>","chevron-right":"<path d=\"m9 18 6-6-6-6\"/>","focus":"<circle cx=\"12\" cy=\"12\" r=\"3\"/><path d=\"M3 7V5a2 2 0 0 1 2-2h2\"/><path d=\"M17 3h2a2 2 0 0 1 2 2v2\"/><path d=\"M21 17v2a2 2 0 0 1-2 2h-2\"/><path d=\"M7 21H5a2 2 0 0 1-2-2v-2\"/>","menu":"<path d=\"M4 5h16\"/><path d=\"M4 12h16\"/><path d=\"M4 19h16\"/>","magnet":"<path d=\"m12 15 4 4\"/><path d=\"M2.352 10.648a1.205 1.205 0 0 0 0 1.704l2.296 2.296a1.205 1.205 0 0 0 1.704 0l6.029-6.029a1 1 0 1 1 3 3l-6.029 6.029a1.205 1.205 0 0 0 0 1.704l2.296 2.296a1.205 1.205 0 0 0 1.704 0l6.365-6.367A1 1 0 0 0 8.716 4.282z\"/><path d=\"m5 8 4 4\"/>","wind":"<path d=\"M12.8 19.6A2 2 0 1 0 14 16H2\"/><path d=\"M17.5 8a2.5 2.5 0 1 1 2 4H2\"/><path d=\"M9.8 4.4A2 2 0 1 1 11 8H2\"/>","layers":"<path d=\"M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z\"/><path d=\"M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12\"/><path d=\"M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17\"/>","sliders-horizontal":"<path d=\"M10 5H3\"/><path d=\"M12 19H3\"/><path d=\"M14 3v4\"/><path d=\"M16 17v4\"/><path d=\"M21 12h-9\"/><path d=\"M21 19h-5\"/><path d=\"M21 5h-7\"/><path d=\"M8 10v4\"/><path d=\"M8 12H3\"/>","minus":"<path d=\"M5 12h14\"/>","plus":"<path d=\"M5 12h14\"/><path d=\"M12 5v14\"/>","sparkles":"<path d=\"M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z\"/><path d=\"M20 2v4\"/><path d=\"M22 4h-4\"/><circle cx=\"4\" cy=\"20\" r=\"2\"/>","settings":"<path d=\"M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/>","square":"<rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"/>","x":"<path d=\"M18 6 6 18\"/><path d=\"m6 6 12 12\"/>","chevron-left":"<path d=\"m15 18-6-6 6-6\"/>","chevron-down":"<path d=\"m6 9 6 6 6-6\"/>","mouse-pointer-2":"<path d=\"M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z\"/>","arrow-right":"<path d=\"M5 12h14\"/><path d=\"m12 5 7 7-7 7\"/>","square-split-horizontal":"<path d=\"M8 19H5c-1 0-2-1-2-2V7c0-1 1-2 2-2h3\"/><path d=\"M16 5h3c1 0 2 1 2 2v10c0 1-1 2-2 2h-3\"/><line x1=\"12\" x2=\"12\" y1=\"4\" y2=\"20\"/>","scissors":"<circle cx=\"6\" cy=\"6\" r=\"3\"/><path d=\"M8.12 8.12 12 12\"/><path d=\"M20 4 8.12 15.88\"/><circle cx=\"6\" cy=\"18\" r=\"3\"/><path d=\"M14.8 14.8 20 20\"/>","code":"<path d=\"m16 18 6-6-6-6\"/><path d=\"m8 6-6 6 6 6\"/>","pen-tool":"<path d=\"M15.707 21.293a1 1 0 0 1-1.414 0l-1.586-1.586a1 1 0 0 1 0-1.414l5.586-5.586a1 1 0 0 1 1.414 0l1.586 1.586a1 1 0 0 1 0 1.414z\"/><path d=\"m18 13-1.375-6.874a1 1 0 0 0-.746-.776L3.235 2.028a1 1 0 0 0-1.207 1.207L5.35 15.879a1 1 0 0 0 .776.746L13 18\"/><path d=\"m2.3 2.3 7.286 7.286\"/><circle cx=\"11\" cy=\"11\" r=\"2\"/>","hand":"<path d=\"M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2\"/><path d=\"M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2\"/><path d=\"M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8\"/><path d=\"M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15\"/>","type":"<path d=\"M12 4v16\"/><path d=\"M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2\"/><path d=\"M9 20h6\"/>","highlighter":"<path d=\"m9 11-6 6v3h9l3-3\"/><path d=\"m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4\"/>","undo-2":"<path d=\"M9 14 4 9l5-5\"/><path d=\"M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11\"/>","redo-2":"<path d=\"m15 14 5-5-5-5\"/><path d=\"M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13\"/>","layout-panel-left":"<rect width=\"7\" height=\"18\" x=\"3\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"7\" x=\"14\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"7\" x=\"14\" y=\"14\" rx=\"1\"/>","monitor-play":"<path d=\"M15.033 9.44a.647.647 0 0 1 0 1.12l-4.065 2.352a.645.645 0 0 1-.968-.56V7.648a.645.645 0 0 1 .967-.56z\"/><path d=\"M12 17v4\"/><path d=\"M8 21h8\"/><rect x=\"2\" y=\"3\" width=\"20\" height=\"14\" rx=\"2\"/>","download":"<path d=\"M12 15V3\"/><path d=\"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\"/><path d=\"m7 10 5 5 5-5\"/>","search":"<path d=\"m21 21-4.34-4.34\"/><circle cx=\"11\" cy=\"11\" r=\"8\"/>","chevron-up":"<path d=\"m18 15-6-6-6 6\"/>","folder":"<path d=\"M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z\"/>","clapperboard":"<path d=\"M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z\"/><path d=\"m6.2 5.3 3.1 3.9\"/><path d=\"m12.4 3.4 3.1 4\"/><path d=\"M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z\"/>","audio-lines":"<path d=\"M2 10v3\"/><path d=\"M6 6v11\"/><path d=\"M10 3v18\"/><path d=\"M14 8v7\"/><path d=\"M18 5v13\"/><path d=\"M22 10v3\"/>","list":"<path d=\"M3 5h.01\"/><path d=\"M3 12h.01\"/><path d=\"M3 19h.01\"/><path d=\"M8 5h13\"/><path d=\"M8 12h13\"/><path d=\"M8 19h13\"/>","folder-plus":"<path d=\"M12 10v6\"/><path d=\"M9 13h6\"/><path d=\"M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z\"/>","file-down":"<path d=\"M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z\"/><path d=\"M14 2v5a1 1 0 0 0 1 1h5\"/><path d=\"M12 18v-6\"/><path d=\"m9 15 3 3 3-3\"/>","bookmark":"<path d=\"m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z\"/>","arrow-left-to-line":"<path d=\"M3 19V5\"/><path d=\"m13 6-6 6 6 6\"/><path d=\"M7 12h14\"/>","arrow-right-to-line":"<path d=\"M17 12H3\"/><path d=\"m11 18 6-6-6-6\"/><path d=\"M21 5v14\"/>","skip-back":"<path d=\"M17.971 4.285A2 2 0 0 1 21 6v12a2 2 0 0 1-3.029 1.715l-9.997-5.998a2 2 0 0 1-.003-3.432z\"/><path d=\"M3 20V4\"/>","step-back":"<path d=\"M13.971 4.285A2 2 0 0 1 17 6v12a2 2 0 0 1-3.029 1.715l-9.997-5.998a2 2 0 0 1-.003-3.432z\"/><path d=\"M21 20V4\"/>","play":"<path d=\"M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z\"/>","step-forward":"<path d=\"M10.029 4.285A2 2 0 0 0 7 6v12a2 2 0 0 0 3.029 1.715l9.997-5.998a2 2 0 0 0 .003-3.432z\"/><path d=\"M3 4v16\"/>","camera":"<path d=\"M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z\"/><circle cx=\"12\" cy=\"13\" r=\"3\"/>","maximize":"<path d=\"M8 3H5a2 2 0 0 0-2 2v3\"/><path d=\"M21 8V5a2 2 0 0 0-2-2h-3\"/><path d=\"M3 16v3a2 2 0 0 0 2 2h3\"/><path d=\"M16 21h3a2 2 0 0 0 2-2v-3\"/>","ellipsis":"<circle cx=\"12\" cy=\"12\" r=\"1\"/><circle cx=\"19\" cy=\"12\" r=\"1\"/><circle cx=\"5\" cy=\"12\" r=\"1\"/>","timer":"<line x1=\"10\" x2=\"14\" y1=\"2\" y2=\"2\"/><line x1=\"12\" x2=\"15\" y1=\"14\" y2=\"11\"/><circle cx=\"12\" cy=\"14\" r=\"8\"/>","check":"<path d=\"M20 6 9 17l-5-5\"/>","copy":"<rect width=\"14\" height=\"14\" x=\"8\" y=\"8\" rx=\"2\" ry=\"2\"/><path d=\"M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2\"/>","save":"<path d=\"M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z\"/><path d=\"M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7\"/><path d=\"M7 3v4a1 1 0 0 0 1 1h7\"/>","pipette":"<path d=\"m12 9-8.414 8.414A2 2 0 0 0 3 18.828v1.344a2 2 0 0 1-.586 1.414A2 2 0 0 1 3.828 21h1.344a2 2 0 0 0 1.414-.586L15 12\"/><path d=\"m18 9 .4.4a1 1 0 1 1-3 3l-3.8-3.8a1 1 0 1 1 3-3l.4.4 3.4-3.4a1 1 0 1 1 3 3z\"/><path d=\"m2 22 .414-.414\"/>","italic":"<line x1=\"19\" x2=\"10\" y1=\"4\" y2=\"4\"/><line x1=\"14\" x2=\"5\" y1=\"20\" y2=\"20\"/><line x1=\"15\" x2=\"9\" y1=\"4\" y2=\"20\"/>","underline":"<path d=\"M6 4v6a6 6 0 0 0 12 0V4\"/><line x1=\"4\" x2=\"20\" y1=\"20\" y2=\"20\"/>","case-upper":"<path d=\"M15 11h4.5a1 1 0 0 1 0 5h-4a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5h3a1 1 0 0 1 0 5\"/><path d=\"m2 16 4.039-9.69a.5.5 0 0 1 .923 0L11 16\"/><path d=\"M3.304 13h6.392\"/>","superscript":"<path d=\"m4 19 8-8\"/><path d=\"m12 19-8-8\"/><path d=\"M20 12h-4c0-1.5.442-2 1.5-2.5S20 8.334 20 7.002c0-.472-.17-.93-.484-1.29a2.105 2.105 0 0 0-2.617-.436c-.42.239-.738.614-.899 1.06\"/>","subscript":"<path d=\"m4 5 8 8\"/><path d=\"m12 5-8 8\"/><path d=\"M20 19h-4c0-1.5.44-2 1.5-2.5S20 15.33 20 14c0-.47-.17-.93-.48-1.29a2.11 2.11 0 0 0-2.62-.44c-.42.24-.74.62-.9 1.07\"/>","text-align-start":"<path d=\"M21 5H3\"/><path d=\"M15 12H3\"/><path d=\"M17 19H3\"/>","text-align-center":"<path d=\"M21 5H3\"/><path d=\"M17 12H7\"/><path d=\"M19 19H5\"/>","text-align-end":"<path d=\"M21 5H3\"/><path d=\"M21 12H9\"/><path d=\"M21 19H7\"/>","text-align-justify":"<path d=\"M3 5h18\"/><path d=\"M3 12h18\"/><path d=\"M3 19h18\"/>","align-vertical-justify-start":"<rect width=\"14\" height=\"6\" x=\"5\" y=\"16\" rx=\"2\"/><rect width=\"10\" height=\"6\" x=\"7\" y=\"6\" rx=\"2\"/><path d=\"M2 2h20\"/>","align-vertical-justify-center":"<rect width=\"14\" height=\"6\" x=\"5\" y=\"16\" rx=\"2\"/><rect width=\"10\" height=\"6\" x=\"7\" y=\"2\" rx=\"2\"/><path d=\"M2 12h20\"/>","align-vertical-justify-end":"<rect width=\"14\" height=\"6\" x=\"5\" y=\"12\" rx=\"2\"/><rect width=\"10\" height=\"6\" x=\"7\" y=\"2\" rx=\"2\"/><path d=\"M2 22h20\"/>","wand-sparkles":"<path d=\"m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72\"/><path d=\"m14 7 3 3\"/><path d=\"M5 6v4\"/><path d=\"M19 14v4\"/><path d=\"M10 2v2\"/><path d=\"M7 8H3\"/><path d=\"M21 16h-4\"/><path d=\"M11 3H9\"/>","file-output":"<path d=\"M4.226 20.925A2 2 0 0 0 6 22h12a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v3.127\"/><path d=\"M14 2v5a1 1 0 0 0 1 1h5\"/><path d=\"m5 11-3 3\"/><path d=\"m5 17-3-3h10\"/>","rotate-ccw":"<path d=\"M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8\"/><path d=\"M3 3v5h5\"/>","trash-2":"<path d=\"M10 11v6\"/><path d=\"M14 11v6\"/><path d=\"M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6\"/><path d=\"M3 6h18\"/><path d=\"M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2\"/>","section":"<path d=\"M16 5a4 3 0 0 0-8 0c0 4 8 3 8 7a4 3 0 0 1-8 0\"/><path d=\"M8 19a4 3 0 0 0 8 0c0-4-8-3-8-7a4 3 0 0 1 8 0\"/>"}/*ICONS_END*/;
+const I = (n, s, cls) => `<svg class="i ${cls||''}" viewBox="0 0 24 24" ${s?`style="--s:${s}px"`:''}>${ICONS[n]||''}</svg>`;
+const ib = (n, cls, s) => `<span class="ib ${cls||''}">${I(n, s)}</span>`;
+
+/* 伪随机，保证每次渲染一致 */
+function rng(seed){ let x = seed*9301+49297; return () => (x = (x*9301+49297)%233280)/233280; }
+function wavePath(seed, n, env){ const r = rng(seed); let d = `M0 100`; let v=.4;
+  for(let i=0;i<=n;i++){ v = Math.max(.05, Math.min(1, v + (r()-.5)*.55)); const e = env?env(i/n):1; const burst = (Math.sin(i/n*40+seed)>.2?1:.35); d += ` L${(i/n*100).toFixed(2)} ${(100 - v*e*burst*86).toFixed(1)}`; }
+  return d + ` L100 100 Z`; }
+const wave = (seed, n, env) => `<div class="wave"><svg viewBox="0 0 100 100" preserveAspectRatio="none"><path d="${wavePath(seed,n||120,env)}" fill="currentColor" opacity=".8"/></svg></div>`;
+
+/* ───── 片段 ───── */
+const PX = 48; // 每秒像素
+function clip(c){
+  const x = c.x!==undefined ? c.x : c.s*PX, w = c.w!==undefined ? c.w : c.d*PX - 1;
+  const cls = ['clip', c.t, c.sel?'sel':'', c.flat?'flat':'', c.offline?'offline':''].join(' ');
+  let body = '';
+  if(c.thumb) body += `<div class="thumb" style="width:${c.thumbW||46}px;background-image:url('素材/${c.thumb}')"></div>`;
+  if(c.thumbEnd) body += `<div class="thumb" style="left:auto;right:0;width:${c.thumbW||46}px;background-image:url('素材/${c.thumbEnd}')"></div>`;
+  if(c.wave && !c.fail) body += wave(c.wave, Math.round(w/2.2), c.env);
+  if(c.vol) body += `<div class="vol" style="top:${c.vol}%"></div>`;
+  if(c.fail) body += `<div class="hatch"></div>` + (w>110 ? `<div class="msg">${I('triangle-alert')}${c.fail}</div>` : '');
+  if(c.offline) body += `<div class="hatch"></div>` + (w>90 ? `<div class="msg">${I('file-x')}素材离线</div>` : '');
+  if(c.fadeIn) body += `<div class="fade" style="width:${c.fadeIn}px"></div>`;
+  (c.kf||[]).forEach(k => body += `<div class="kf" style="left:${k}px"></div>`);
+  const st = (c.fail && w<=110) || (c.offline && w<=90) ? `<span class="st err">${I(c.offline?'file-x':'triangle-alert')}</span>` : '';
+  const extra = (c.handles?`<i class="handle l"></i><i class="handle r"></i>`:'') + (c.fadeDot!==undefined?`<i class="fadedot" style="left:${c.fadeDot}px;top:17px"></i>`:'');
+  const nameB = c.nameOver ? `<div class="strip" style="background:linear-gradient(90deg,rgba(0,0,0,.55),rgba(0,0,0,0) 85%);width:${Math.min(w,130)}px;right:auto"><span>${c.n}</span></div>` : '';
+  return `<div class="${cls}" style="left:${x}px;width:${w}px;${c.op?`opacity:${c.op}`:''}">`
+    + (c.nameOver ? `<div class="body" style="top:0">${body}</div>${nameB}` : `<div class="strip"><span>${c.n}</span>${st}</div>${c.flat?'':`<div class="body">${body}</div>`}`)
+    + extra + `</div>`;
+}
+
+/* ───── 轨道数据 ───── */
+function tracks(o){
+  const sel = o.sel;
+  return [
+    { id:'C1', nm:'字幕', h:28, kind:'c', clips:[
+      {t:'caption',flat:1,s:.3,d:1.9,n:'大家好'},{t:'caption',flat:1,s:2.3,d:2.2,n:'今天聊一个新功能'},{t:'caption',flat:1,s:4.6,d:2.1,n:'先看搜索'},{t:'caption',flat:1,s:6.8,d:2.4,n:'结果直接进时间线'},{t:'caption',flat:1,s:9.3,d:2.2,n:'再看调色'}]},
+    { id:'V3', nm:'花字', h:32, kind:'v', clips:[
+      {t:'text',flat:1,s:.5,d:3.6,n:'片头标题',sel:sel==='text',handles:sel==='text'},{t:'text',flat:1,s:6.8,d:2.4,n:'要点 · 搜索结果'}]},
+    { id:'V2', nm:'录屏', h:44, kind:'v', clips:[
+      {t:'video',s:4.6,d:4.4,n:'录屏_搜索演示.mp4',thumb:'缩略-山雾.jpg',kf:[40,96,150],sel:sel==='v2',handles:sel==='v2'}]},
+    { id:'V1', nm:'口播', h:44, kind:'v', target:1, clips:[
+      {t:'video',s:0,d:4.6,n:'口播_A机.mp4',thumb:'缩略-山林近.jpg',sel:sel==='v1',handles:sel==='v1'},{t:'video',s:9,d:2.6,n:'口播_A机.mp4',thumb:'缩略-山林近.jpg'}]},
+    { id:'A1', nm:'口播声', h:44, kind:'a', clips:[
+      {t:'audio',s:0,d:4.6,n:'口播_A机.mp4',wave:7,sel:sel==='v1'},{t:'audio',s:9,d:2.6,n:'口播_A机.mp4',wave:11,fail:o.fail?'波形读取失败':null}]},
+    { id:'A2', nm:'配乐', h:44, kind:'a', clips:[
+      {t:'audio',s:0,d:11.6,n:'配乐_轻快.wav',wave:23,env:t=>.55+.3*Math.sin(t*9),fadeIn:40,vol:38}]},
+  ];
+}
+function trackHead(t){
+  const v = t.kind!=='a';
+  const slots = t.kind==='c' ? `<span class="slot"></span><span class="slot">${I('lock-open')}</span><span class="slot">${I('eye')}</span>`
+    : v ? `<span class="slot">${I('lock-open')}</span><span class="slot">${I('link-2')}</span><span class="slot ${t.hidden?'off':''}">${I(t.hidden?'eye-off':'eye')}</span>`
+        : `<span class="slot ${t.locked?'off':''}">${I(t.locked?'lock':'lock-open')}</span><span class="slot ${t.solo?'off':''}">${I('headphones')}</span><span class="slot ${t.muted?'off':''}">${I(t.muted?'volume-x':'volume-2')}</span>`;
+  return `<div class="th ${t.target?'target':''}" style="height:${t.h}px"><span class="tw">${t.kind==='c'?'':I('chevron-right')}</span><span class="id">${t.id}</span><span class="nm">${t.nm}</span>${slots}</div>`;
+}
+function timeline(o){
+  const ts = tracks(o); const ph = 3.2*PX;
+  let ticks=''; for(let s=0;s<=11;s++){ ticks += `<i class="tick ${s%2===0?'maj':''}" style="left:${s*PX}px"></i>`; if(s%2===0) ticks += `<span class="lab num" style="left:${s*PX+4}px">00:${String(s).padStart(2,'0')}</span>`; }
+  const marks = `<i class="mk" style="left:${2.3*PX-4}px;background:#5FAE7E"></i><i class="mk" style="left:${6.8*PX-4}px;background:#5FAE7E"></i>`;
+  let rows = ts.map(t => trackHead(t) + `<div class="lane" style="height:${t.h}px">${t.clips.map(clip).join('')}</div>`).join('');
+  const lanesH = ts.reduce((a,t)=>a+t.h,0);
+  return `<div class="panel" style="flex:1">
+    <div class="tabs"><span class="tab cur ${o.focus==='timeline'?'focus':''}">主序列${o.focus==='timeline'?I('menu',12,'pm'):''}</span><span class="tab">备用序列</span></div>
+    <div class="tl">
+      <div class="grid">
+        <div class="corner"><span class="tc num">00:00:03:12</span>${ib('link-2','s24 on')}${ib('magnet','s24 on')}${ib('wind','s24 rest')}${ib('layers','s24 rest')}${ib('sliders-horizontal','s24 rest')}</div>
+        <div class="ruler">${ticks}${marks}</div>
+        ${rows}
+      </div>
+      <div class="playhead" style="left:${232+ph}px;height:${28+lanesH}px"></div>
+      <div style="flex:1"></div>
+      <div class="hscroll"><i style="left:2px;width:420px"></i></div>
+    </div>
+    <div class="foot"><span class="status num">6 条轨道 · 总长 00:00:11:36</span><span class="zoom">${I('minus')}<span class="track"><i></i></span>${I('plus')}</span></div>
+  </div>`;
+}
+
+/* ───── 各面板 ───── */
+function titlebar(){ return `<div class="titlebar"><span class="brand">痕迹AI</span>
+  <div class="menu">${['文件','编辑','序列','剪辑','标记','批注','视图','窗口','帮助'].map(m=>`<span>${m}</span>`).join('')}</div>
+  <div class="nav">${['生成','画布','剪辑','工具','资产'].map(m=>`<span class="${m==='剪辑'?'cur':''}">${m}</span>`).join('')}</div>
+  <div class="right">${ib('sparkles')}${ib('settings')}<span style="width:8px"></span><span class="wc">${I('minus')}</span><span class="wc">${I('square',12)}</span><span class="wc">${I('x')}</span></div></div>`; }
+function cmd(){ return `<div class="cmd">${ib('chevron-left')}<span class="proj">新品开箱讲解${I('chevron-down')}</span><span class="sep"></span>
+  <div class="tools">${ib('mouse-pointer-2','mode')}${ib('arrow-right')}${ib('square-split-horizontal')}${ib('scissors')}${ib('code')}${ib('pen-tool')}${ib('hand')}${ib('type')}${ib('highlighter')}</div>
+  <div class="right">${ib('undo-2')}${ib('redo-2','rest')}<span style="width:8px"></span><span class="layout">${I('layout-panel-left')}编辑</span>${ib('monitor-play')}<span style="width:8px"></span><span class="btn primary">${I('download')}导出</span></div></div>`; }
+function project(){
+  const it = (o) => `<div class="item ${o.sel?'sel':''} ${o.child?'child':''}"><span class="tw">${o.bin?I(o.open?'chevron-down':'chevron-right'):''}</span><span class="chip" style="background:${o.c}"></span><span class="ic">${I(o.ic)}</span><span class="nm">${o.n}</span><span class="meta num">${o.m||''}</span></div>`;
+  return `<div class="panel" style="width:264px;flex:none">
+    <div class="tabs"><span class="tab cur">素材</span></div>
+    <div class="search">${I('search')}搜索素材</div>
+    <div class="lhead">名称${I('chevron-up')}<span class="dur">时长</span></div>
+    ${it({bin:1,open:1,c:'#6FAE5C',ic:'folder',n:'01_序列',m:'2'})}
+    ${it({child:1,c:'#6FAE5C',ic:'clapperboard',n:'主序列',m:'00:11:36',sel:0})}
+    ${it({child:1,c:'#6FAE5C',ic:'clapperboard',n:'备用序列',m:'00:08:12'})}
+    ${it({bin:1,open:1,c:'#8E8FE0',ic:'folder',n:'02_口播',m:'1'})}
+    ${it({child:1,c:'#8E8FE0',ic:'video',n:'口播_A机.mp4',m:'03:42:18',sel:1})}
+    ${it({bin:1,c:'#5FA9D8',ic:'folder',n:'03_录屏',m:'4'})}
+    ${it({bin:1,c:'#D8A657',ic:'folder',n:'04_场景',m:'12'})}
+    ${it({bin:1,open:1,c:'#57B8A0',ic:'folder',n:'05_音频',m:'2'})}
+    ${it({child:1,c:'#57B8A0',ic:'audio-lines',n:'配乐_轻快.wav',m:'02:36:00'})}
+    ${it({child:1,c:'#57B8A0',ic:'audio-lines',n:'音效_提示.wav',m:'00:00:48'})}
+    ${it({c:'#D97A93',ic:'type',n:'片头标题',m:''})}
+    <div style="flex:1"></div>
+    <div class="foot"><span class="status">21 项 · 已选 1</span>${ib('list','rest')}${ib('folder-plus','rest')}${ib('plus','rest')}${ib('file-down','rest')}</div>
+  </div>`; }
+function program(o){
+  let ticks=''; for(let i=0;i<=46;i++){ ticks += `<i class="tick ${i%4===0?'maj':''}" style="left:${12+i*17.6}px"></i>`; if(i%8===0) ticks += `<span class="lab num" style="left:${12+i*17.6+4}px">00:${String(i/4).padStart(2,'0')}</span>`; }
+  const selbox = o.sel==='text' ? `<div class="selbox" style="left:7%;top:27%;width:50%;height:22%"><i style="left:-4px;top:-4px"></i><i style="right:-4px;top:-4px"></i><i style="left:-4px;bottom:-4px"></i><i style="right:-4px;bottom:-4px"></i></div>` : '';
+  const err = o.err ? `<div class="ovl errbar"><span class="ei">${I('triangle-alert')}</span><div><div class="et">这段视频解不出画面</div><div class="em">换一个文件，或在素材上右键重新链接</div></div><div class="acts"><span class="btn sm" style="color:var(--text2)">详情</span><span class="btn sm secondary">重新链接</span></div></div>` : '';
+  return `<div class="panel" style="flex:1">
+    <div class="tabs"><span class="tab cur">节目画面</span><span class="tab">源监视器</span></div>
+    <div class="viewer"><div class="frame" style="width:592px;height:333px;background-image:${o.err?'none':"url('素材/画面-山林.jpg')"}">${o.err?'':`<div class="ttl"><small>新品开箱</small>三分钟看懂新功能</div><div class="cap">今天聊一个新功能</div>${selbox}`}</div>${err}</div>
+    <div class="scrub">${ticks}<i class="ph" style="left:${12+3.2*70.4}px"></i></div>
+    <div class="transport"><span class="tc num">00:00:03:12<small>/ 00:00:11:36</small></span>
+      <div class="mid">
+        <div class="grp">${ib('bookmark')}${ib('arrow-left-to-line')}${ib('arrow-right-to-line')}</div>
+        <div class="grp">${ib('skip-back')}${ib('step-back')}<span class="ib s32 strong">${I('play',18)}</span>${ib('step-forward')}</div>
+        <div class="grp">${ib('camera')}${ib('maximize')}</div>
+      </div>
+      <div class="right"><span class="drop">超级关键帧${I('chevron-down')}</span><span class="drop">适合${I('chevron-down')}</span>${ib('ellipsis')}</div>
+    </div>
+  </div>`; }
+function meters(){ const marks=[0,6,12,18,24,36,48];
+  return `<div class="panel" style="width:56px;flex:none"><div class="tabs" style="justify-content:center;padding:0"><span class="tab cur" style="padding:0">${I('volume-2',14)}</span></div>
+  <div class="meters"><div class="scale num">${marks.map((m,i)=>`<span style="top:${i/(marks.length-1)*100}%">${m}</span>`).join('')}</div><div class="bar"><b style="top:31%"></b></div><div class="bar"><b style="top:36%"></b></div></div></div>`; }
+
+/* 属性行 */
+const sw = (on) => `<span class="sw ${on?'on':''}">${I('timer')}</span>`;
+const nosw = `<span class="sw"></span>`;
+const N = (v,u,mod,cls) => `<span class="n num ${mod?'mod':''} ${cls||''}">${v}${u?`<u>${u}</u>`:''}</span>`;
+const row = (s, name, val, tail) => `<div class="pr">${s}<span class="nm">${name}</span><span class="val">${val}</span>${tail||''}</div>`;
+const fld = (t) => `<span class="fld">${t}${I('chevron-down')}</span>`;
+const sh = (name, o={}) => `<div class="sh"><span class="tw">${I(o.closed?'chevron-right':'chevron-down')}</span>${o.fx?`<span class="fx">fx</span>`:''}${name}${o.r?`<span class="r">${o.r}</span>`:''}</div>`;
+const kfnav = `<span class="kfnav">${I('chevron-left')}<i class="d"></i>${I('chevron-right')}</span>`;
+const cb = (on) => `<span class="cb">${on?I('check'):''}</span>`;
+
+function inspTabs(cur, focus){ return `<div class="tabs">${['效果控件','效果','风格','全能调色'].map(t=>`<span class="tab ${t===cur?'cur':''} ${t===cur&&focus?'focus':''}">${t}${t===cur&&focus?I('menu',12,'pm'):''}</span>`).join('')}</div>`; }
+function inspVideo(o){ return `<div class="panel" style="width:336px;flex:none">${inspTabs('效果控件', o.focus==='insp')}
+  <div class="insp">
+    <div class="ihead"><div><div class="t">口播_A机.mp4</div><div class="m num">V1 · 00:00:00:00 – 00:00:04:36</div></div>${ib('ellipsis','rest')}</div>
+    <div class="sec">${sh('运动',{fx:1})}
+      ${row(sw(), '位置', N('1920','',0,'w56')+N('1080'))}
+      ${row(sw(1), '缩放', N('112','%',1,'w56')+`<span style="color:var(--icon-rest);--s:12px;display:flex">${I('link-2')}</span>`, kfnav)}
+      ${row(sw(), '旋转', N('0','°'))}
+      ${row(sw(), '锚点', N('50','%',0,'w56')+N('50','%'))}
+      ${row(nosw, '运动模糊', `<span class="seg"><span class="cur">自动</span><span>开</span><span>关</span></span>`)}
+    </div>
+    <div class="sec">${sh('不透明度',{fx:1})}
+      ${row(sw(), '不透明度', N('100','%'))}
+      ${row(nosw, '混合模式', fld('正常'))}
+    </div>
+    <div class="sec">${sh('速度')}
+      ${row(sw(), '速度', N('100','%'))}
+      ${row(nosw, '倒放', cb(0))}
+      ${row(nosw, '补帧', fld('帧混合'))}
+    </div>
+    <div class="sec">${sh('声音')}
+      ${row(sw(), '音量', N('-3.0','dB',1))}
+      ${row(sw(), '声像', N('0'))}
+    </div>
+    <div class="sec">${sh('人声降噪',{fx:1})}
+      ${row(sw(), '强度', N('40','%',1))}
+      ${row(nosw, '保留呼吸', cb(1))}
+    </div>
+  </div>
+  <div class="foot"><span class="status">1 个附加效果</span>${ib('plus','rest')}${ib('copy','rest')}${ib('save','rest')}</div></div>`; }
+function inspText(o){ return `<div class="panel" style="width:336px;flex:none">${inspTabs('效果控件', 1)}
+  <div class="insp">
+    <div class="ihead"><div><div class="t">片头标题</div><div class="m num">V3 · 00:00:00:30 – 00:00:04:06</div></div>${ib('ellipsis','rest')}</div>
+    <div class="sec">${sh('文字')}
+      <div class="txtarea">三分钟看懂新功能</div>
+    </div>
+    <div class="sec">${sh('文字样式',{r:ib('pipette','s24 rest')})}
+      ${row(nosw, '字体', fld('HarmonyOS Sans SC'))}
+      ${row(sw(1), '字重', `<span class="slider"><i style="width:72%"></i><b style="left:72%"></b></span>`+N('700','',1), '')}
+      ${row(sw(), '字号', N('96','',1))}
+      ${row(nosw, '样式', `<span class="seg icons"><span>${I('italic')}</span><span>${I('underline')}</span><span>${I('case-upper')}</span><span>${I('superscript')}</span><span>${I('subscript')}</span></span>`)}
+      ${row(nosw, '对齐', `<span class="seg icons"><span class="cur">${I('text-align-start')}</span><span>${I('text-align-center')}</span><span>${I('text-align-end')}</span><span>${I('text-align-justify')}</span></span><span class="seg icons" style="margin-left:4px"><span>${I('align-vertical-justify-start')}</span><span class="cur">${I('align-vertical-justify-center')}</span><span>${I('align-vertical-justify-end')}</span></span>`)}
+      ${row(sw(), '字距', N('2','',1))}
+      ${row(sw(), '行距', N('0'))}
+      <div class="disc">${I('chevron-right')}更多：基线偏移、文字框、字偶间距</div>
+    </div>
+    <div class="sec">${sh('外观')}
+      ${row(nosw, '填充', cb(1)+`<span class="swatch" style="background:#fff"></span><span class="n num" style="margin-left:4px">FFFFFF</span>`)}
+      ${row(nosw, '描边', cb(0)+`<span class="swatch" style="background:#1B1B1B"></span>`)}
+      ${row(nosw, '背景', cb(0)+`<span class="swatch" style="background:#000"></span>`)}
+      ${row(nosw, '阴影', cb(1)+`<span class="swatch" style="background:#000"></span><span class="n num" style="margin-left:4px">40<u>%</u></span>`)}
+    </div>
+    <div class="sec">${sh('运动',{fx:1})}
+      ${row(sw(1), '位置', N('420','',1,'w56')+N('540','',1), kfnav)}
+      ${row(sw(), '缩放', N('100','%',0,'w56')+`<span style="color:var(--icon-rest);--s:12px;display:flex">${I('link-2')}</span>`)}
+      ${row(sw(), '旋转', N('0','°'))}
+      ${row(sw(), '不透明度', N('100','%'))}
+    </div>
+  </div>
+  <div class="foot"><span class="status">没有附加效果</span>${ib('plus','rest')}${ib('copy','rest')}${ib('save','rest')}</div></div>`; }
+function histo(){
+  const g = (mu,sg,a) => x => a*Math.exp(-((x-mu)**2)/(2*sg*sg));
+  const mk = (fs, seed) => { const r = rng(seed); let d='M0 100'; for(let i=0;i<=120;i++){ const x=i/120; let y = fs.reduce((s,f)=>s+f(x),0) * (0.9+r()*.2); d += ` L${(x*100).toFixed(2)} ${(100-Math.min(96,y*100)).toFixed(1)}`; } return d; };
+  const R = mk([g(.22,.06,.5),g(.62,.1,.45),g(.9,.03,.25)],3), G = mk([g(.3,.08,.75),g(.55,.12,.4),g(.86,.04,.3)],5), B = mk([g(.18,.05,.4),g(.7,.09,.62),g(.93,.025,.5)],8);
+  const L = mk([g(.27,.08,.55),g(.6,.12,.42),g(.88,.04,.33)],13);
+  const grid = [25,50,75].map(x=>`<line x1="${x}" x2="${x}" y1="0" y2="100" stroke="#262626" stroke-width="1" vector-effect="non-scaling-stroke"/>`).join('');
+  const f = (d,c) => `<path d="${d} L100 100 Z" fill="${c}" fill-opacity=".22" stroke="${c}" stroke-opacity=".8" stroke-width="1" vector-effect="non-scaling-stroke"/>`;
+  return `<svg viewBox="0 0 100 100" preserveAspectRatio="none">${grid}${f(R,'#C86B66')}${f(G,'#5FA873')}${f(B,'#6A8BD0')}<path d="${L}" fill="none" stroke="#D6D6D6" stroke-width="1" vector-effect="non-scaling-stroke"/></svg>`;
+}
+function inspColor(o){
+  const wheel = (n, v, x, y) => `<div class="wheel"><div class="w"><i class="hz"></i><i class="puck" style="left:${x}%;top:${y}%"></i></div>${n} <b class="num">${v}</b></div>`;
+  return `<div class="panel" style="width:336px;flex:none">${inspTabs('全能调色', 1)}
+  <div class="insp">
+    <div class="ihead" style="padding-bottom:6px"><div><div class="t">录屏_搜索演示.mp4</div><div class="m num">V2 · 00:00:04:36 – 00:00:09:00</div></div></div>
+    <div class="sec">${sh('示波器',{r:`<span class="seg"><span class="cur">直方图</span><span>波形</span><span>矢量</span></span>`})}
+      <div class="scope">${histo()}</div>
+      <div class="readout num"><span>曝光 <b>+0.65 EV</b></span><span>光源 <b>约 5600 K</b></span><span class="warn">${I('triangle-alert')}高光溢出 6.4%</span></div>
+    </div>
+    <div class="sec">${sh('基本')}
+      ${row(nosw, '校色参考', fld('自动校色'))}
+      ${row(sw(), '色温', N('5600','K',1))}
+      ${row(sw(), '色调', N('+4','',1))}
+      ${row(sw(), '曝光', N('+0.25','档',1))}
+      ${row(sw(), '对比度', N('0'))}
+      ${row(sw(), '高光', N('-12','',1))}
+      ${row(sw(), '阴影', N('0'))}
+      ${row(sw(), '白色', N('0'))}
+      ${row(sw(), '黑色', N('0'))}
+      ${row(sw(), '饱和度', N('0'))}
+      ${row(sw(), '自然饱和度', N('0'))}
+    </div>
+    <div class="sec">${sh('色彩分级')}
+      <div class="wheels">${wheel('阴影','0.00',50,50)}${wheel('中间调','0.08',58,42)}${wheel('高光','0.00',50,50)}</div>
+    </div>
+    <div class="sec">${sh('曲线',{closed:1})}</div>
+  </div>
+  <div class="foot"><span class="status">已调整 4 项</span><span class="btn sm" style="color:var(--text2);--s:14px">${I('wand-sparkles')}自动</span>${ib('square-split-horizontal','rest')}${ib('file-output','rest')}${ib('rotate-ccw','rest')}</div></div>`; }
+
+function ctxMenu(x,y){ const mi=(t,k,o={})=>`<div class="mi ${o.hov?'hov':''} ${o.dis?'dis':''}"><span class="ck">${o.ck?I('check'):''}</span>${t}<span class="k num">${o.sub?I('chevron-right',12):(k||'')}</span></div>`;
+  return `<div class="ovl menu" style="left:${x}px;top:${y}px">${mi('剪切','Ctrl+X')}${mi('复制','Ctrl+C')}${mi('粘贴属性…','Ctrl+Alt+V',{dis:1})}<div class="ms"></div>${mi('速度与时长…','Ctrl+R',{hov:1})}${mi('定格帧','',{sub:1})}${mi('嵌套…')}${mi('发送到','',{sub:1})}<div class="ms"></div>${mi('启用','Shift+E',{ck:1})}${mi('取消链接','Ctrl+L')}<div class="ms"></div>${mi('波纹删除','Shift+Delete')}</div>`; }
+function dialog(){ return `<div class="scrim"><div class="ovl dialog"><span class="di">${I('trash-2')}</span><div><div class="dt">删除素材箱“04_场景”？</div><div class="dm">箱里的 12 个素材会一起移到回收区。时间线上用到它们的 5 个片段会显示为离线，从回收区恢复后自动接回。</div><div class="da"><span class="btn secondary">取消</span><span class="btn danger-solid">删除</span></div></div></div></div>`; }
+
+function app(o){
+  const insp = o.insp==='text' ? inspText(o) : o.insp==='color' ? inspColor(o) : inspVideo(o);
+  return `<div class="app shot">${titlebar()}${cmd()}
+    <div class="dock">${project()}
+      <div class="col" style="flex:1"><div class="rowx" style="height:462px;flex:none">${program(o)}</div><div class="rowx" style="flex:1">${timeline(o)}${meters()}</div></div>
+      ${insp}</div>
+    ${o.menu?ctxMenu(o.menu[0],o.menu[1]):''}${o.dialog?dialog():''}
+  </div>`; }
+
+/* ───── 细节放大图 ───── */
+function sheetTimeline(){
+  const lane = (h, clips, w) => `<div class="solo-lane" style="height:${h}px;width:${w||330}px">${clips.map(clip).join('')}</div>`;
+  const cap = t => `<div class="cap">${t}</div>`;
+  const th = (t) => trackHead(Object.assign({h:28},t));
+  return `<div class="sheet shot" style="height:auto">
+    <div class="ex"><h3>现状（放大 2 倍）</h3><p>三种画法：字幕是带图标的琥珀色胶囊，只露一个字；文字片段名字被裁掉上半截；画面片段名字垫黑色小标签；“重试”和片段名叠在一起；选中后两端出现黑白三角。</p>
+      <div class="crop" style="background-image:url('现状/03-全能调色.png');background-size:1920px auto;background-position:-624px -908px"></div>
+      <div class="crop" style="margin-top:8px;height:84px;background-image:url('现状/04-波形读取失败.png');background-size:1920px auto;background-position:-624px -1022px"></div></div>
+    <div class="ex"><h3>选中、修剪、淡入淡出、关键帧</h3><p>选中：整块提亮一档，加一圈 1 像素的白线，不用蓝色（蓝色留给播放头）。两端各一根白色短柱就是修剪手柄，只在选中或鼠标靠近时出现。淡入淡出画成一片斜向压暗，拖顶上的小圆点改长度，替代原来的黑白三角。关键帧是底边的小菱形。</p>
+      <div class="z"><div class="rows">
+        ${lane(44,[{t:'video',x:0,w:150,n:'口播_A机.mp4',thumb:'缩略-山林近.jpg',sel:1,handles:1,kf:[70,118]},{t:'video',x:152,w:176,n:'录屏_搜索演示.mp4',thumb:'缩略-山雾.jpg'}])}
+        ${lane(44,[{t:'audio',x:0,w:150,n:'口播_A机.mp4',wave:7,sel:1},{t:'audio',x:152,w:176,n:'配乐_轻快.wav',wave:23,fadeIn:46,fadeDot:46,vol:36}])}
+      </div></div></div>
+    <div class="ex"><h3>草稿：三种片段一套画法</h3><p>同样的 4 像素圆角、不描边、上下各留 2 像素。颜色跟素材面板里的标签色走，只是压暗。够高的轨道（44）顶上有一条 16 像素的名条，下面才是缩略图或波形；矮轨道（28、32）只有名字，垂直居中。字幕直接显示这句话本身，不再放图标。</p>
+      <div class="z"><div class="minitl">
+        ${th({id:'C1',nm:'字幕',kind:'c'})}<div class="lane" style="height:28px">${clip({t:'caption',flat:1,x:0,w:60,n:'大家好'})}${clip({t:'caption',flat:1,x:64,w:112,n:'今天聊一个新功能'})}</div>
+        ${th({id:'V3',nm:'花字',kind:'v',h:32})}<div class="lane" style="height:32px">${clip({t:'text',flat:1,x:16,w:120,n:'片头标题'})}</div>
+        ${th({id:'V1',nm:'口播',kind:'v',h:44})}<div class="lane" style="height:44px">${clip({t:'video',x:0,w:176,n:'口播_A机.mp4',thumb:'缩略-山林近.jpg'})}</div>
+        ${th({id:'A1',nm:'口播声',kind:'a',h:44})}<div class="lane" style="height:44px">${clip({t:'audio',x:0,w:176,n:'口播_A机.mp4',wave:7})}</div>
+      </div></div></div>
+    <div class="ex"><h3>读取失败与素材离线</h3><p>片段名始终在名条里，不会再和状态叠在一起。内容区换成斜纹，够宽时写一句“波形读取失败”，点它重试；窄片段只在名条右端留一个警示图标，悬停说明。素材文件找不到时整块变灰。</p>
+      <div class="z"><div class="rows" style="position:relative;padding-bottom:18px">
+        ${lane(44,[{t:'audio',x:0,w:150,n:'口播_A机.mp4',fail:'波形读取失败'},{t:'audio',x:152,w:64,n:'音效_提示.wav',fail:'波形读取失败'},{t:'video',x:218,w:110,n:'录屏_备用.mp4',offline:1}])}
+        <div class="ovl tip" style="left:150px;top:50px;font-size:6px;line-height:9px;padding:2px 4px;border-radius:3px">波形读取失败，点击重试</div>
+      </div></div></div>
+    <div class="ex"><h3>名字放哪：两个方向</h3><p><b style="color:var(--text1);font-weight:460">A 顶部名条</b><span class="reco">推荐</span>　名字有自己的一条，永远不和缩略图、波形抢地方，状态图标也有固定位置。<br><b style="color:var(--text1);font-weight:460">B 压在内容上</b>　缩略图和波形能占满整个片段，更“满”，但名字下面要垫一层渐变，波形高的地方仍然会和名字打架。</p>
+      <div class="z"><div class="rows">
+        ${cap('A　顶部名条')}${lane(44,[{t:'video',x:0,w:160,n:'口播_A机.mp4',thumb:'缩略-山林近.jpg'},{t:'audio',x:164,w:164,n:'配乐_轻快.wav',wave:23}])}
+        ${cap('B　压在内容上')}${lane(44,[{t:'video',x:0,w:160,n:'口播_A机.mp4',thumb:'缩略-山林近.jpg',thumbW:62,nameOver:1},{t:'audio',x:164,w:164,n:'配乐_轻快.wav',wave:23,nameOver:1}])}
+      </div></div></div>
+    <div class="ex"><h3>轨道头：默认是暗的，动过的才亮</h3><p>三个按钮各占固定的一列，画面轨和声音轨上下对齐。保持默认的（没锁、看得见、没静音）用暗灰，一眼扫过去是安静的；锁上、隐藏、静音、独听之后图标变成亮白，轨道上的片段同时变淡。</p>
+      <div class="z"><div style="width:232px">
+        ${th({id:'V2',nm:'录屏',kind:'v'})}${th({id:'V1',nm:'口播（已隐藏）',kind:'v',hidden:1})}${th({id:'A1',nm:'口播声（已锁定）',kind:'a',locked:1})}${th({id:'A2',nm:'配乐（已静音）',kind:'a',muted:1})}
+      </div></div></div>
+  </div>`;
+}
+function sheetRows(){
+  const A = `<div style="width:300px;background:var(--panel);padding:4px 0">${sh('运动',{fx:1})}${row(sw(),'位置',N('1920','',0,'w56')+N('1080'))}${row(sw(1),'缩放',N('112','%',1))}${row(sw(),'旋转',N('0','°'))}${row(nosw,'混合模式',fld('正常'))}</div>`;
+  const B = `<div style="width:300px;background:var(--panel);padding:4px 0">${sh('运动',{fx:1})}<div class="pr rightval">${sw()}<span class="nm">位置</span><span class="val">${N('1920')}<span style="width:12px"></span>${N('1080')}<span style="width:16px"></span></span></div><div class="pr rightval">${sw(1)}<span class="nm">缩放</span><span class="val">${N('112','',1)}<span style="width:16px;color:var(--text3);padding-left:4px">%</span></span></div><div class="pr rightval">${sw()}<span class="nm">旋转</span><span class="val">${N('0')}<span style="width:16px;color:var(--text3);padding-left:4px">°</span></span></div><div class="pr rightval">${nosw}<span class="nm">混合模式</span><span class="val"><span style="width:110px;display:flex">${fld('正常')}</span><span style="width:16px"></span></span></div></div>`;
+  return `<div class="sheet shot" style="height:440px">
+    <div class="ex"><h3>A　数值紧跟在名字后面<span class="reco">推荐</span></h3><p>名字一列、数值一列，两列挨着，眼睛不用横跨整个面板去对应。单位直接跟在数字后面。下拉、分段、滑杆都从数值列的同一条竖线开始。Premiere 和 After Effects 的效果控件就是这种排法。整套草稿按这个画。</p><div class="z">${A}</div></div>
+    <div class="ex"><h3>B　数值靠右（现在的规则）</h3><p>数值贴右边、单位进固定的一列。数字位数能对齐，但名字和数值之间空一大片，这正是现在调色面板“像没填完的表格”的原因。把默认值调暗只能缓解，不能解决。</p><div class="z">${B}</div></div>
+  </div>`;
+}
+
+/* ───── 页面 ───── */
+const SCREENS = [
+  { id:1, title:'① 默认布局全貌', before:'现状/01-默认布局.png',
+    note:'画面最亮，其余都退后：菜单栏、图标、默认状态的开关一律暗一档；蓝色只剩“导出”、播放头、时间线时间码三处。\n右侧面板组默认 4 个标签（原来 9 个）。播放控制条分成“标记与入出点 / 播放 / 画面”三段，用不了的收进“更多”。时间线的时间码和开关并成一行，轨道更高。',
+    html: () => app({sel:'v1', focus:'timeline'}) },
+  { id:2, title:'② 选中文字片段：效果控件', before:'现状/02-选中文字.png',
+    note:'所有行共用两条竖线：名字一列、数值一列。“字重”一行同时取代原来重复的“字形样式”下拉：可变字体是滑杆（可打关键帧），普通字体就是一个下拉。低频的基线偏移、文字框等收进“更多”。颜色是一个小色块加色号，不再是彩虹圈。',
+    html: () => app({sel:'text', insp:'text', focus:'insp'}) },
+  { id:3, title:'③ 全能调色', before:'现状/03-全能调色.png',
+    note:'示波器有自己的内边距，亮度曲线只描线；读数并成一行，只有超标的那一项用警告色。改过的值亮、默认值暗。三个说不清用途的图标搬到底栏并恢复正常亮度：前后对比、导出 LUT、重置。色轮完整显示，不会被切掉。',
+    html: () => app({sel:'v2', insp:'color', focus:'insp'}) },
+  { id:4, title:'④ 时间线细节（放大 2 倍）', before:null, note:'', html: sheetTimeline },
+  { id:5, title:'⑤ 状态与反馈：画面出错的浮条、右键菜单压在面板上、片段读取失败', before:'现状/05-菜单压在面板上.png',
+    note:'浮层一律实底加一圈描边，不用投影。报错只有图标是红的，标题说发生了什么，下面一行说能做什么。',
+    html: () => app({sel:'v2', insp:'video', focus:'timeline', err:1, fail:1, menu:[708,538]}) },
+  { id:6, title:'⑥ 确认弹窗', before:null, note:'图标单独在左，标题和正文在右边同一列，按钮靠右。只有“删除”是红色实底。', html: () => app({sel:'v1', focus:'timeline', dialog:1}) },
+  { id:7, title:'⑦ 备选：属性行的数值放哪', before:null, note:'', html: sheetRows },
+];
+const page = document.getElementById('page');
+SCREENS.forEach(s => {
+  const el = document.createElement('section'); el.className = 'block'; el.dataset.id = s.id;
+  el.innerHTML = `<h2>${s.title}</h2><p class="note">${s.note}</p><div class="pair">`
+    + (s.before ? `<div class="side before-side"><div class="tag"><b>现状</b>（真实截图）</div><img class="shot before" src="${s.before}"></div>` : '')
+    + `<div class="side"><div class="tag"><b>草稿</b></div>${s.html()}</div></div>`;
+  page.appendChild(el);
+});
+/* ?s=编号 只看一屏；&v=pair 带现状并排；不带参数时把并排的两屏缩到窗口宽度 */
+const q = new URLSearchParams(location.search);
+if (q.get('s')) { document.body.classList.add('single', q.get('v')==='pair'?'pairmode':'draft'); document.querySelector(`.block[data-id="${q.get('s')}"]`).classList.add('show'); }
+else { const fit = () => document.querySelectorAll('.pair').forEach(p => { const w = p.scrollWidth, a = innerWidth - 80; const z = Math.min(1, a / w); p.style.zoom = z; }); fit(); addEventListener('resize', fit); }
+</script>
+</body>
+</html>
