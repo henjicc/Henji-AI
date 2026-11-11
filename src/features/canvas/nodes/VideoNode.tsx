@@ -3,7 +3,6 @@ import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useNodeHandlesSync } from '../hooks/useNodeHandlesSync';
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { Play } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import {
@@ -43,11 +42,11 @@ import { useMediaMicroLod } from '@/features/canvas/nodes/shared/useCanvasConten
 import { useMicroThumbnail } from '@/features/canvas/nodes/shared/useMicroThumbnail';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useSettingsStore } from '@/stores/settingsStore';
-import { UiEmpty, UiIconButton, UiInput } from '@/components/ui';
+import { UiEmpty, UiInput } from '@/components/ui';
 import { VideoViewerModal } from '@/components/mediaViewer/VideoViewerModal';
 import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
 import { CanvasVideoPlayer } from './video/CanvasVideoPlayer';
-import { formatVideoTime } from './video/formatVideoTime';
+import { VideoIdleMarks } from './video/VideoIdleMarks';
 import { uiTransition } from '@/components/ui/motion';
 
 const VideoUploadIcon = ICON_NODE_VIDEO_UPLOAD;
@@ -230,26 +229,8 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
               failure="none"
               draggable={false}
             />
-            {/* 与播放器同一套：静息只看画面和右上角时长，悬停才出无底的播放键 */}
-            <span className="pointer-events-none absolute right-1.5 top-1.5 flex h-4 items-center rounded bg-media-scrim px-1 text-3xs tabular-nums text-on-media transition-opacity duration-120 group-hover/poster:opacity-0">
-              {typeof data.durationSec === 'number' && data.durationSec > 0
-                ? formatVideoTime(data.durationSec)
-                : <VideoGenerationIcon aria-hidden className={UI_ICON_SIZE_CLASS.xs} />}
-            </span>
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center px-2 pb-1.5 pt-8 opacity-0 transition-opacity duration-120 group-hover/poster:opacity-100 focus-within:opacity-100">
-              <div className="absolute inset-0 bg-gradient-to-t from-media-scrim via-media-scrim to-transparent" />
-              <UiIconButton size="xs" tone="mediaBare"
-                aria-label={t('node.videoNode.play')}
-                className="nodrag nowheel pointer-events-auto relative"
-                onPointerDown={(event) => event.stopPropagation()}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setIsPlayerActive(true);
-                }}
-              >
-                <Play />
-              </UiIconButton>
-            </div>
+            {/* 与播放器同一套：中央播放键 + 右下时长，点播放键在节点里播放 */}
+            <VideoIdleMarks durationSec={data.durationSec} onPlay={() => setIsPlayerActive(true)} />
           </div>
         ) : isUploadVariant ? (
           <label

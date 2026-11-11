@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { UiIconButton, UiRangeInput } from '@/components/ui';
 import { readVideoInfo } from '@/commands/video';
 import { formatVideoTime } from './formatVideoTime';
+import { VideoIdleMarks } from './VideoIdleMarks';
 
 interface CanvasVideoPlayerProps {
   src: string;
@@ -130,12 +131,8 @@ export function CanvasVideoPlayer({
         }}
       />
 
-      {/* 静息时右上角留时长，一眼看出这是视频 */}
-      {duration > 0 && (
-        <span className="pointer-events-none absolute right-1.5 top-1.5 rounded bg-media-scrim px-1 text-3xs leading-4 tabular-nums text-on-media transition-opacity duration-120 group-hover/player:opacity-0">
-          {formatVideoTime(duration)}
-        </span>
-      )}
+      {/* 没在播放时与未载入的视频节点同一套记号：中央播放键 + 右下时长（悬停时时长让给底栏） */}
+      {!playing && <VideoIdleMarks durationSec={duration} onPlay={togglePlayback} hideDurationOnHover />}
       {/* 静息只看画面：底栏悬停才出现，控件无底，只靠底部一层压暗保证看得清 */}
       <div
         className="nodrag nowheel absolute inset-x-0 bottom-0 px-2 pb-1.5 pt-9 opacity-0 transition-opacity duration-120 group-hover/player:opacity-100 focus-within:opacity-100"

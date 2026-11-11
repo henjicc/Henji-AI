@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>画布视频节点草稿</title>
+<style>
+@font-face { font-family: 'HarmonyOS Sans SC UI'; src: url('../../../../src/assets/fonts/HarmonyOS_Sans_SC.ttf') format('truetype'); font-weight: 100 900; font-display: block; }
+:root {
+  /* 数值取自 src/index.css 的石墨主题令牌；媒体叠层不随主题 */
+  --gap:#181818; --window:#1B1B1B; --panel:#212121;
+  --text1:#EEEEEE; --text2:#CACACA; --text3:#A5A5A5;
+  --media-scrim: rgba(0,0,0,.55); --media-control: rgba(0,0,0,.45); --on-media:#FFFFFF;
+  --idle-border: rgba(165,165,165,.3);
+}
+* { box-sizing: border-box; margin: 0; }
+body { background: var(--gap); color: var(--text1); font: 13px/1.4 'HarmonyOS Sans SC UI', sans-serif; padding: 24px; }
+.block { width: 1180px; margin-bottom: 36px; }
+.label { color: var(--text1); font-size: 14px; font-weight: 580; margin: 0 0 4px; }
+.note { color: var(--text3); font-size: 12px; margin: 0 0 12px; line-height: 1.7; }
+.canvas { display: flex; gap: 48px; padding: 36px 40px 40px; border-radius: 8px; background-color: var(--window); background-image: radial-gradient(#2c2c2c 1px, transparent 1px); background-size: 16px 16px; }
+.cell { display: flex; flex-direction: column; gap: 6px; }
+.cap { color: var(--text3); font-size: 12px; margin-bottom: 4px; }
+.title { display: flex; align-items: center; gap: 6px; color: var(--text3); font-size: 12px; }
+.title svg { width: 14px; height: 14px; }
+svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.node { position: relative; width: 320px; height: 180px; border-radius: 12px; overflow: hidden; background: url('素材/樱花-人像.jpg') center / cover; }
+.node::after { content: ''; position: absolute; inset: 0; border-radius: 12px; border: 1px solid var(--idle-border); pointer-events: none; }
+.badge { position: absolute; right: 6px; top: 6px; height: 16px; padding: 0 4px; border-radius: 4px; background: var(--media-scrim); color: var(--on-media); font-size: 10px; display: flex; align-items: center; font-variant-numeric: tabular-nums; }
+/* A：中央播放键 */
+.play { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); width: 40px; height: 40px; border-radius: 50%; background: var(--media-control); color: var(--on-media); display: flex; align-items: center; justify-content: center; }
+.play svg { width: 18px; height: 18px; fill: currentColor; stroke: none; margin-left: 2px; }
+.play.hover { width: 44px; height: 44px; background: rgba(0,0,0,.6); }
+.dur-br { position: absolute; right: 8px; bottom: 8px; height: 18px; padding: 0 5px; border-radius: 4px; background: var(--media-scrim); color: var(--on-media); font-size: 11px; display: flex; align-items: center; font-variant-numeric: tabular-nums; }
+/* B：左下胶囊 */
+.pill { position: absolute; left: 8px; bottom: 8px; height: 22px; padding: 0 8px 0 6px; border-radius: 11px; background: var(--media-scrim); color: var(--on-media); font-size: 11px; display: flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
+.pill svg { width: 11px; height: 11px; fill: currentColor; stroke: none; }
+/* C：底部时间轨 */
+.rail { position: absolute; left: 0; right: 0; bottom: 0; height: 30px; background: linear-gradient(to top, rgba(0,0,0,.55), transparent); }
+.rail .track { position: absolute; left: 10px; right: 52px; bottom: 11px; height: 3px; border-radius: 2px; background: rgba(255,255,255,.35); }
+.rail .track i { position: absolute; left: 0; top: -2px; width: 7px; height: 7px; border-radius: 50%; background: #fff; }
+.rail .t { position: absolute; right: 10px; bottom: 6px; color: var(--on-media); font-size: 11px; font-variant-numeric: tabular-nums; }
+.rail .pl { position: absolute; left: 10px; bottom: 6px; color: var(--on-media); }
+/* D：胶片齿孔 */
+.film { position: absolute; left: 0; right: 0; height: 14px; background: rgba(0,0,0,.6); display: flex; justify-content: space-around; align-items: center; padding: 0 6px; }
+.film i { width: 8px; height: 5px; border-radius: 1.5px; background: rgba(255,255,255,.55); }
+.film.top { top: 0; } .film.bottom { bottom: 0; }
+.hoverbar { position: absolute; left: 0; right: 0; bottom: 0; height: 40px; background: linear-gradient(to top, rgba(0,0,0,.6), transparent); }
+.hoverbar .p { position: absolute; left: 8px; bottom: 8px; color: #fff; }
+.hoverbar .p svg { fill: currentColor; stroke: none; }
+.hoverbar .t { position: absolute; right: 10px; bottom: 9px; color: #fff; font-size: 11px; font-variant-numeric: tabular-nums; }
+.img-node { position: relative; width: 320px; height: 180px; border-radius: 12px; overflow: hidden; background: url('素材/樱花-人像.jpg') center / cover; }
+.img-node::after { content: ''; position: absolute; inset: 0; border-radius: 12px; border: 1px solid var(--idle-border); }
+.tag { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 4px; background: #2a2a2a; color: var(--text2); font-size: 11px; }
+.rec { color: #6fcf97; }
+</style>
+</head>
+<body>
+<script>
+const ICONS = /*ICONS_START*/{"film":"<rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"/><path d=\"M7 3v18\"/><path d=\"M3 7.5h4\"/><path d=\"M3 12h18\"/><path d=\"M3 16.5h4\"/><path d=\"M17 3v18\"/><path d=\"M17 7.5h4\"/><path d=\"M17 16.5h4\"/>","image":"<rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\" ry=\"2\"/><circle cx=\"9\" cy=\"9\" r=\"2\"/><path d=\"m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21\"/>","play":"<path d=\"M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z\"/>"}/*ICONS_END*/;
+const i = (n) => `<svg viewBox="0 0 24 24">${ICONS[n] || ''}</svg>`;
+const titleVideo = `<div class="title">${i('film')}参考图与参考视频：人物、发型妆容…</div>`;
+const titleImage = `<div class="title">${i('image')}梦幻朦胧的写实人像摄影…</div>`;
+const imageNode = `<div class="cell"><div class="cap">对照：图片节点</div>${titleImage}<div class="img-node"></div></div>`;
+const variants = {
+  now: `<div class="node"><span class="badge">0:10</span></div>`,
+  a: `<div class="node"><span class="play">${i('play')}</span><span class="dur-br">0:10</span></div>`,
+  aHover: `<div class="node"><span class="play hover">${i('play')}</span><span class="dur-br">0:10</span></div>`,
+  b: `<div class="node"><span class="pill">${i('play')}0:10</span></div>`,
+  c: `<div class="node"><div class="rail"><div class="track"><i></i></div><span class="t">0:10</span></div></div>`,
+  d: `<div class="node"><div class="film top">${'<i></i>'.repeat(18)}</div><div class="film bottom">${'<i></i>'.repeat(18)}</div><span class="dur-br" style="bottom:20px">0:10</span></div>`,
+}
+const cell = (cap, html) => `<div class="cell"><div class="cap">${cap}</div>${titleVideo}${html}</div>`;
+const blocks = [
+  { id: 1, label: '现状：静息只有右上角一个很小的时长，和图片节点几乎分不出来',
+    note: '标题前的胶片图标与图片图标都是 14px 灰色，时长角标 16px 高、10px 字，缩小画布时最先消失。视频与图片的区别全靠这两处，所以一眼认不出。',
+    html: `<div class="canvas">${cell('现状：视频节点', variants.now)}${imageNode}</div>` },
+  { id: 2, label: '方案 A（推荐）：画面中央一个播放键 + 右下角时长，和生成页的视频结果同一套',
+    note: '“中间一个圆形播放键”是全世界通用的视频记号，缩到很小也认得出。生成页的视频结果已经是这个样子（中央播放键、右下时长），画布跟它统一后，用户在两个工作区看到的视频长一个样。悬停时播放键略放大加深，点它在节点里播放；画面本身不加遮罩，挡住的面积很小。',
+    html: `<div class="canvas">${cell('A · 静息', variants.a)}${cell('A · 悬停', variants.aHover)}${imageNode}</div>` },
+  { id: 3, label: '方案 B：左下角“▶ 0:10”胶囊',
+    note: '播放记号和时长合成一个胶囊，放在左下角，不挡画面中央，最安静。缺点是仍然偏小，画布缩小后不如 A 好认；和生成页的样子也不一样。',
+    html: `<div class="canvas">${cell('B · 静息', variants.b)}${imageNode}</div>` },
+  { id: 4, label: '方案 C：底部一条时间轨',
+    note: '底部渐暗加一条细时间轨和时长，直接告诉人“这东西有时间长度”，也能顺势变成悬停时的拖动预览。缺点是常驻占住画面底部一条，底部是人物、字幕常在的位置。',
+    html: `<div class="canvas">${cell('C · 静息', variants.c)}${imageNode}</div>` },
+  { id: 5, label: '方案 D：上下胶片齿孔边（不推荐，只作对比）',
+    note: '最醒目，但它是装饰：上下各盖住一条画面，和“质感不立体、不加装饰”的口味相反，放进来只为对比。',
+    html: `<div class="canvas">${cell('D · 静息', variants.d)}${imageNode}</div>` },
+];
+document.body.innerHTML = blocks.map((b) => `<div class="block" data-id="${b.id}"><p class="label">${b.label}</p><p class="note">${b.note}</p>${b.html}</div>`).join('');
+</script>
+</body>
+</html>
