@@ -113,7 +113,8 @@ export type CanvasImageCapabilityModelPolicy =
     }
   | {
       mode: 'verified-families';
-      allowedCanonicalFamilies: readonly string[];
+      /** 允许的模型家族：写规范模型 ID 是只认这一个；写系列规则是这个系列够版本的都算，新版本上架自动出现。 */
+      allowedFamilies: readonly CanvasModelFamilyRule[];
       requiredTags: readonly ModelTag[];
       providerCompatibility: 'verified-combinations-only';
       allowedProviderConfigurations: readonly CanvasImageCapabilityProviderConfiguration[];
@@ -121,6 +122,13 @@ export type CanvasImageCapabilityModelPolicy =
       /** 新建、迁移或模型切换时采用；不得覆盖用户已经保存的合法选择。 */
       semanticDefaults?: CanvasImageCapabilityModelSemanticDefaults;
     };
+
+/**
+ * 系列规则：规范模型 ID 形如“系列-版本-变体”（gpt-image-2.6、nano-banana-2-lite、nano-banana-pro）。
+ * 版本不低于 minVersion 的都算（同版本的 lite 等变体一起算）；不带版本号的变体（pro）要在 variants 里点名。
+ * 新版本照样要过能力的标签、平台组合与参数语义核验，不满足的仍会被挡下。
+ */
+export type CanvasModelFamilyRule = string | { series: string; minVersion?: number; variants?: readonly string[] };
 
 /** 已核验的平台组合。渠道值通过 schema 的 `role: channel` 查找，不泄漏参数 ID 到 UI。 */
 export interface CanvasImageCapabilityProviderConfiguration {
@@ -137,8 +145,11 @@ interface CanvasImageCapabilityReferenceImageRequirement {
 
 /** 产品能力使用的跨供应商语义；执行前会映射成候选模型自己的参数 ID 与合法值。 */
 export interface CanvasImageCapabilityModelSemanticRequirements {
-  /** 按优先级列出可接受比例；模型会采用它支持的第一个精确值。 */
-  aspectRatio?: string | readonly string[];
+  /**
+   * 按优先级列出可接受比例；模型会采用它支持的第一个精确值。
+   * 带 families 的候选只对这些家族的模型有效（例如只给 Nano Banana 开的 21:9 实验退路）。
+   */
+  aspectRatio?: string | readonly (string | { value: string; families: readonly CanvasModelFamilyRule[] })[];
   resolution?: string;
   referenceImages?: CanvasImageCapabilityReferenceImageRequirement;
   outputCount?: number;

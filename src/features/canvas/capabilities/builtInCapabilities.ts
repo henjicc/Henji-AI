@@ -167,7 +167,7 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
     },
     modelPolicy: {
       mode: 'verified-families',
-      allowedCanonicalFamilies: [
+      allowedFamilies: [
         'qwen-image-edit-2511-multiple-angles',
         'perspective-change',
       ],

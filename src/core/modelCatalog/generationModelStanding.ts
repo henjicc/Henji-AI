@@ -1,3 +1,5 @@
+import type { ModelDefinition } from '@/core/types'
+
 export type GenerationModelStanding = 'preferred' | 'standard' | 'legacy'
 
 const preferred = (reason: string) => ({ standing: 'preferred' as const, reason })
@@ -75,4 +77,28 @@ export function getGenerationModelStanding(canonicalModelId: string): { standing
 
 export function listGenerationModelStandingIds(): string[] {
   return Object.keys(STANDINGS)
+}
+
+/**
+ * 按偏好挑默认模型：先挑指定系列（规范模型 ID 以它开头），再按推荐表（首选在前、已被取代在后），
+ * 再挑偏好的供应商，其余保持原顺序。新版本上架后只需更新推荐表，默认模型自动跟上，不在调用处写死模型 ID。
+ */
+export function pickPreferredModel<T extends Pick<ModelDefinition, 'meta'>>(
+  models: readonly T[],
+  preference: { series?: string; provider?: string } = {},
+): T | null {
+  const score = (model: T): number[] => [
+    preference.series && (model.meta.canonicalModelId === preference.series || model.meta.canonicalModelId.startsWith(`${preference.series}-`)) ? 1 : 0,
+    generationModelStandingRank(model.meta.canonicalModelId),
+    preference.provider && model.meta.provider === preference.provider ? 1 : 0,
+  ]
+  let best: T | null = null
+  let bestScore: number[] = []
+  for (const model of models) {
+    const current = score(model)
+    // 逐项比较，前一项分出高下就不看后面；完全相同时保留先出现的
+    const difference = current.map((value, index) => value - (bestScore[index] ?? 0)).find((value) => value !== 0) ?? 0
+    if (best === null || difference > 0) { best = model; bestScore = current }
+  }
+  return best
 }

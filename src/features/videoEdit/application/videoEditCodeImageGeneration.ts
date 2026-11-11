@@ -1,3 +1,4 @@
+import { pickPreferredModel } from '@/core/modelCatalog/generationModelStanding'
 import { codeMaterialSource } from '@/core/videoEdit/codeMaterialDocument'
 import { codeMaterialSize } from '@/core/videoEdit/codeMaterialTiming'
 import { videoEditCodeElementFrames } from './videoEditCodeElements'
@@ -16,7 +17,10 @@ import { placeVideoEditFileInProject } from './videoEditResultTarget'
 import { importVideoEditSources } from './videoEditMedia'
 import { holdVideoEditActivity, requireVideoEditInstance, saveVideoEdit } from './videoEditService'
 
-export const VIDEO_EDIT_CODE_IMAGE_DEFAULT_MODEL = 'kie-gpt-image-2'
+/** 代码图片的默认模型：GPT Image 系列里推荐表最靠前的版本，供应商优先 kie；新版本上架自动跟上。 */
+export function defaultCodeImageModelId(): string {
+  return pickPreferredModel(registry.getModelsByType('image'), { series: 'gpt-image', provider: 'kie' })?.meta.id ?? 'kie-gpt-image-2.6'
+}
 const logger = createLogger('features.videoEdit.codeImageGeneration')
 export interface CodeImageGenerationContext { prompt: string; width: number; height: number }
 export interface CodeImageGenerationRequest {
@@ -129,7 +133,7 @@ async function run(job: CodeImageGenerationJob, submit: boolean, controller: Abo
   } finally { release(); if (controllers.get(job.id) === controller) controllers.delete(job.id) }
 }
 export async function startCodeImageGeneration(request: CodeImageGenerationRequest): Promise<CodeImageGenerationJob> {
-  const modelId = request.modelId ?? VIDEO_EDIT_CODE_IMAGE_DEFAULT_MODEL
+  const modelId = request.modelId ?? defaultCodeImageModelId()
   const model = registry.getModel(modelId)
   if (!model || model.meta.type !== 'image') throw new Error('请选择图片生成模型。')
   if (!await codeImageGenerationProviderConfigured(modelId)) throw new Error('所选供应商尚未配置密钥，请到设置中的“供应商与模型”配置后重试。')

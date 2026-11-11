@@ -1,10 +1,12 @@
+import { pickPreferredModel } from '@/core/modelCatalog/generationModelStanding'
 import type { ModelDefinition } from '@/core/types'
 import { hasPaintedMask, parseMaskEditorDocument, type MaskEditorDocument } from '@/features/maskEditor/document'
 import type { LocalRedrawSettings } from '@/platform/contracts/image'
 import type { CanvasImageCapabilityModelPolicy } from './types'
 
 export const ELEMENT_EDIT_PROMPT_TEMPLATE_VERSION = 'local-redraw-crop-v2'
-export const ELEMENT_EDIT_DEFAULT_MODEL_ID = 'apimart-gpt-image-2'
+/** 模型目录里一个兼容模型都没有时的兜底；平时由 selectDefaultElementEditModel 按推荐表挑。 */
+export const ELEMENT_EDIT_DEFAULT_MODEL_ID = 'apimart-gpt-image-2.6'
 export const ELEMENT_EDIT_MODEL_POLICY: Extract<CanvasImageCapabilityModelPolicy, { mode: 'node-schema' }> = {
   mode: 'node-schema', requiredTags: ['image-to-image'],
 }
@@ -34,8 +36,9 @@ export function normalizeLocalRedrawSettings(value: unknown): LocalRedrawSetting
   }
 }
 
+/** 默认用 GPT Image 系列里推荐表最靠前的版本，供应商优先 apimart；新版本上架自动跟上。 */
 export function selectDefaultElementEditModel(models: readonly ModelDefinition[]): ModelDefinition | null {
-  return models.find((model) => model.meta.id === ELEMENT_EDIT_DEFAULT_MODEL_ID) ?? models[0] ?? null
+  return pickPreferredModel(models, { series: 'gpt-image', provider: 'apimart' })
 }
 
 export interface ElementEditRuntimeInput { images: readonly string[]; maskSource: unknown; maskDocument: unknown }

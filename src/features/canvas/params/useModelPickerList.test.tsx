@@ -31,7 +31,7 @@ const models = [
 
 const policy: CanvasImageCapabilityModelPolicy = {
   mode: 'verified-families',
-  allowedCanonicalFamilies: ['family-a'],
+  allowedFamilies: ['family-a'],
   requiredTags: ['text-to-image'],
   providerCompatibility: 'verified-combinations-only',
   allowedProviderConfigurations: [{ providerId: 'provider-a' }],

@@ -18,7 +18,7 @@ describe('migrateElementEditGenerationData', () => {
       fixedSemanticParams: { legacy: true },
       modelId: 'missing-image-edit-model',
       params: {
-        apimartGptImage2Resolution: '4K',
+        gpt26Resolution: '4K',
         unsupported: 'drop-me',
       },
       mediaInputs: {
@@ -46,8 +46,8 @@ describe('migrateElementEditGenerationData', () => {
         maskEncoding: 'alpha',
         maskPaintMeaning: 'transparent-edit',
       },
-      modelId: 'apimart-gpt-image-2',
-      params: { apimartGptImage2Resolution: '4K' },
+      modelId: 'apimart-gpt-image-2.6',
+      params: { gpt26Resolution: '4K' },
       mediaInputs: {
         image: ['first.png'],
         video: ['keep-video.mp4'],

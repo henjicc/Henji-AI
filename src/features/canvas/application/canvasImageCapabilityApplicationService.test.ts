@@ -412,7 +412,7 @@ describe('画布图片能力应用服务', () => {
     expect(elementNode?.data).toMatchObject({
       displayName: '局部重绘',
       capabilityId: 'image.element-edit',
-      modelId: 'apimart-gpt-image-2',
+      modelId: 'apimart-gpt-image-2.6',
       promptTemplateVersion: 'local-redraw-crop-v2',
       fixedSemanticParams: {
         referenceImageCount: 1,

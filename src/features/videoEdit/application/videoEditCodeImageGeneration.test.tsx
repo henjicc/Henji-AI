@@ -107,7 +107,8 @@ afterEach(async () => { cleanup(); images.resetCodeImageGenerationForTest(); awa
 it('默认KIE GPT image，未声明图层的作者效果使用画布画幅；提交前只准备不付费', async () => {
   const context = await images.prepareCodeImageGenerationContext(target(), 'photo')
   expect(context).toEqual({ prompt: '为「产品画面」创作「产品图」图片素材', width: 640, height: 360 })
-  expect(images.codeImageGenerationDefaultParams(images.VIDEO_EDIT_CODE_IMAGE_DEFAULT_MODEL, context)).toMatchObject({ kieGptImage2AspectRatio: '16:9' })
+  expect(images.defaultCodeImageModelId()).toMatch(/^kie-gpt-image-/)
+  expect(images.codeImageGenerationDefaultParams('kie-gpt-image-2', context)).toMatchObject({ kieGptImage2AspectRatio: '16:9' })
   expect(submit).not.toHaveBeenCalled()
   const job = await images.startCodeImageGeneration(request())
   expect(job.modelId).toBe('kie-gpt-image-2'); expect(submit).toHaveBeenCalledWith(expect.objectContaining({ modelId: 'kie-gpt-image-2', mediaType: 'image', options: expect.objectContaining({ kieGptImage2AspectRatio: '16:9' }) }), job.taskId)

@@ -13,12 +13,12 @@ import { getModelInfo } from '@/utils/modelHelpers'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { openSettingsPanel, useUiStore } from '@/stores/uiStore'
 import type { VideoEditCodeTarget } from '../application/videoEditCodeParameters'
-import { VIDEO_EDIT_CODE_IMAGE_DEFAULT_MODEL, codeImageGenerationDefaultParams, codeImageGenerationProviderConfigured, prepareCodeImageGenerationContext, startCodeImageGeneration, type CodeImageGenerationContext } from '../application/videoEditCodeImageGeneration'
+import { defaultCodeImageModelId, codeImageGenerationDefaultParams, codeImageGenerationProviderConfigured, prepareCodeImageGenerationContext, startCodeImageGeneration, type CodeImageGenerationContext } from '../application/videoEditCodeImageGeneration'
 
 /** 表单浮层由 PanelTrigger 持有，关掉浮层不取消正式后台任务。 */
 export function CodeImageGenerationPanel({ target, parameterKey, title, onClose }: { target: VideoEditCodeTarget; parameterKey: string; title: string; onClose: () => void }): React.ReactElement {
   const [prompt, setPrompt] = useState<PromptDocumentV1>(() => parseLegacyPromptString(''))
-  const [modelId, setModelId] = useState(VIDEO_EDIT_CODE_IMAGE_DEFAULT_MODEL)
+  const [modelId, setModelId] = useState(defaultCodeImageModelId)
   const [context, setContext] = useState<CodeImageGenerationContext | null>(null)
   const [params, setParams] = useState<Record<string, unknown>>({})
   const [configured, setConfigured] = useState<boolean | null>(null)

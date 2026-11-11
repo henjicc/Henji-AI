@@ -1,5 +1,6 @@
 import { analyzeRatioResolutionParams } from '@/core/params/ratioResolution';
 import { registry } from '@/core/ModelRegistry';
+import { LinkageEngine } from '@/core/linkage/LinkageEngine';
 import type { ModelDefinition, ParamDef } from '@/core/types';
 import { getI18nText } from '@/core/types';
 import type {
@@ -7,6 +8,7 @@ import type {
   CanvasImageCapabilityPromptPolicy,
   CanvasImageCapabilityModelSemanticRequirements,
   CanvasImageCapabilityProviderConfiguration,
+  CanvasModelFamilyRule,
 } from './types';
 
 type CanvasModelCompatibilityReasonCode =
@@ -52,9 +54,46 @@ function choiceOptions(param: ParamDef | undefined): Array<string | number> {
   return [];
 }
 
-function findExactChoice(param: ParamDef | undefined, semanticValue: string): string | number | null {
+/**
+ * 在当前参数下真正能选的值：按模型的 filterOptions 联动过滤（与界面同一套规则）。
+ * 例如 apimart GPT Image 2.6 的 Ext 渠道不开放 2:1：只看全量选项会判成能出 2:1，请求时才报错。
+ */
+function availableChoices(model: ModelDefinition, param: ParamDef | undefined, params: DynamicValueMap): Array<string | number> {
+  if (!param) return [];
+  if (!model.linkages?.some((linkage) => linkage.effect === 'filterOptions' && linkage.target === param.id)) return choiceOptions(param);
+  return new LinkageEngine(model.linkages).getFilteredOptions(param.id, params, model.params)
+    .flatMap((option) => (option && typeof option === 'object' && 'value' in option ? [option.value as string | number] : []));
+}
+
+function findExactChoice(param: ParamDef | undefined, semanticValue: string, values: Array<string | number> = choiceOptions(param)): string | number | null {
   const normalized = semanticValue.trim().toLowerCase();
-  return choiceOptions(param).find((value) => String(value).trim().toLowerCase() === normalized) ?? null;
+  return values.find((value) => String(value).trim().toLowerCase() === normalized) ?? null;
+}
+
+/** 这个模型适用的比例候选：带家族限定的只给对应家族。 */
+function aspectCandidates(model: ModelDefinition, requirement: CanvasImageCapabilityModelSemanticRequirements['aspectRatio']): string[] {
+  if (!requirement) return [];
+  const entries = typeof requirement === 'string' ? [requirement] : requirement;
+  return entries.flatMap((entry) => (typeof entry === 'string'
+    ? [entry]
+    : matchesModelFamily(model.meta.canonicalModelId, entry.families) ? [entry.value] : []));
+}
+
+function aspectParamOf(model: ModelDefinition): ParamDef | undefined {
+  const ratioResolution = analyzeRatioResolutionParams(model.params, []);
+  return model.params.find((param) => param.id === ratioResolution?.aspectParam?.id);
+}
+
+/** 规范模型 ID 是否属于这些家族：精确 ID 只认自己；系列规则按版本与点名的变体。 */
+export function matchesModelFamily(canonicalModelId: string, families: readonly CanvasModelFamilyRule[]): boolean {
+  return families.some((rule) => {
+    if (typeof rule === 'string') return rule === canonicalModelId;
+    if (canonicalModelId !== rule.series && !canonicalModelId.startsWith(`${rule.series}-`)) return false;
+    const rest = canonicalModelId.slice(rule.series.length + 1);
+    const version = /^(\d+(?:\.\d+)?)(?:-|$)/.exec(rest);
+    if (version) return rule.minVersion === undefined || Number(version[1]) >= rule.minVersion;
+    return Boolean(rule.variants?.includes(rest));
+  });
 }
 
 function findExactValue(
@@ -190,11 +229,13 @@ function applySemanticDefaults(
   }
 }
 
+/** 出图张数参数：按名称语义找；动图的帧数（FrameCount）也带 count，不是张数，排除。 */
 function findOutputCountParam(model: ModelDefinition): NumberParam | undefined {
-  return model.params.find((param): param is NumberParam => (
-    param.type === 'number'
-    && /(count|quantity|num.*image|number.*image|输出数量|生成数量|图片数量)/i.test(paramSearchText(param))
-  ));
+  return model.params.find((param): param is NumberParam => {
+    if (param.type !== 'number') return false;
+    const text = paramSearchText(param);
+    return /(count|quantity|num.*image|number.*image|输出数量|生成数量|图片数量)/i.test(text) && !/(frame|帧)/i.test(text);
+  });
 }
 
 function getModelDefaults(model: ModelDefinition): DynamicValueMap {
@@ -211,6 +252,8 @@ function resolveImageLimits(model: ModelDefinition, params: DynamicValueMap): { 
 function mapChannel(
   model: ModelDefinition,
   configuration: CanvasImageCapabilityProviderConfiguration,
+  requirements: CanvasImageCapabilityModelSemanticRequirements,
+  currentParams: DynamicValueMap,
   params: DynamicValueMap,
   reasons: CanvasModelCompatibilityReason[],
 ): void {
@@ -227,7 +270,17 @@ function mapChannel(
     return;
   }
   const current = String(params[channelParam.id] ?? '');
-  params[channelParam.id] = allowed.includes(current) ? current : allowed[0];
+  // 用户选过的渠道不替他换：价格按所选渠道显示，悄悄换渠道会让实际扣费与显示不一致；
+  // 所选渠道给不出要求的比例时，由比例核验报出不兼容原因
+  if (hasOwnValue(currentParams, channelParam.id) && allowed.includes(current)) return;
+  const aspectParam = aspectParamOf(model);
+  const candidates = aspectCandidates(model, requirements.aspectRatio);
+  const fits = (channel: string): boolean => !aspectParam || candidates.length === 0
+    || candidates.some((candidate) => findExactChoice(aspectParam, candidate, availableChoices(model, aspectParam, { ...params, [channelParam.id]: channel })) !== null);
+  // 模型默认渠道优先，它给不出比例再按能力列出的顺序挑
+  const preferred = String(channelParam.default ?? '');
+  const ordered = allowed.includes(preferred) ? [preferred, ...allowed.filter((channel) => channel !== preferred)] : allowed;
+  params[channelParam.id] = ordered.find(fits) ?? ordered[0];
 }
 
 function mapChoiceRequirement(
@@ -237,11 +290,16 @@ function mapChoiceRequirement(
   label: string,
   params: DynamicValueMap,
   reasons: CanvasModelCompatibilityReason[],
+  values?: Array<string | number>,
 ): void {
   if (!semanticValue) return;
   const candidates = typeof semanticValue === 'string' ? [semanticValue] : semanticValue;
+  if (candidates.length === 0) {
+    reasons.push({ code, message: `模型不支持要求的${label}` });
+    return;
+  }
   const value = candidates.reduce<string | number | null>(
-    (match, candidate) => match ?? findExactChoice(param, candidate),
+    (match, candidate) => match ?? findExactChoice(param, candidate, values),
     null,
   );
   if (!param || value === null) {
@@ -288,13 +346,15 @@ function mapSemanticRequirements(
     reasons.push({ code: 'parameter-value', message: `模型参数 ${transferKey} 无法映射固定能力值` });
   }
   const ratioResolution = analyzeRatioResolutionParams(model.params, []);
+  const aspectParam = model.params.find((param) => param.id === ratioResolution?.aspectParam?.id);
   mapChoiceRequirement(
-    model.params.find((param) => param.id === ratioResolution?.aspectParam?.id),
-    requirements.aspectRatio,
+    aspectParam,
+    requirements.aspectRatio === undefined ? undefined : aspectCandidates(model, requirements.aspectRatio),
     'aspect-ratio',
     '比例',
     params,
     reasons,
+    availableChoices(model, aspectParam, params),
   );
   mapChoiceRequirement(
     model.params.find((param) => param.id === ratioResolution?.resolutionParam?.id),
@@ -376,7 +436,7 @@ export function mapCanvasCapabilityModelParams(
 
   const reasons: CanvasModelCompatibilityReason[] = [];
   const params = { ...getModelDefaults(model), ...currentParams };
-  if (!policy.allowedCanonicalFamilies.includes(model.meta.canonicalModelId)) {
+  if (!matchesModelFamily(model.meta.canonicalModelId, policy.allowedFamilies)) {
     reasons.push({ code: 'canonical-family', message: '模型不属于能力允许的规范模型家族' });
   }
   for (const tag of policy.requiredTags) {
@@ -388,7 +448,7 @@ export function mapCanvasCapabilityModelParams(
   if (!configuration) {
     reasons.push({ code: 'provider-configuration', message: '供应商组合尚未通过能力核验' });
   } else {
-    mapChannel(model, configuration, params, reasons);
+    mapChannel(model, configuration, policy.semanticRequirements, currentParams, params, reasons);
   }
   mapSemanticRequirements(model, policy.semanticRequirements, params, reasons);
   applySemanticDefaults(model, policy, configuration, currentParams, params, reasons);

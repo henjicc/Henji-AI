@@ -8,7 +8,7 @@ const LAYER_SEPARATION_PROVIDER_PRIORITY = ['volcengine', 'apimart', 'kie'] as c
 
 export const LAYER_SEPARATION_MODEL_POLICY = {
   mode: 'verified-families',
-  allowedCanonicalFamilies: ['seedream-5.0-pro'],
+  allowedFamilies: ['seedream-5.0-pro'],
   requiredTags: ['layer-decomposition'],
   providerCompatibility: 'verified-combinations-only',
   allowedProviderConfigurations: LAYER_SEPARATION_PROVIDER_PRIORITY.map((providerId) => ({ providerId })),

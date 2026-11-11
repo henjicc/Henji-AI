@@ -9,11 +9,15 @@ import { falGptImage2Model as falRuntime } from '../../../../packages/ai-sdk/src
 import { kieNanoBanana2LiteModel } from '../../../../packages/ai-sdk/src/catalog/kie/nano-banana-2-lite.model';
 import { kieNanoBanana2Model } from '../../../../packages/ai-sdk/src/catalog/kie/nano-banana-2.model';
 import { kieNanoBananaProModel } from '../../../../packages/ai-sdk/src/catalog/kie/nano-banana-pro.model';
+import { apimartGptImage26Model } from '../../../../packages/ai-sdk/src/catalog/apimart/gpt-image-2.6.model';
+import { kieGptImage25Model } from '../../../../packages/ai-sdk/src/catalog/kie/gpt-image-2.5.model';
+import { PANORAMA_MODEL_POLICY } from './panoramaPolicy';
 import type { ModelDefinition } from '@/core/types';
 import { CANVAS_IMAGE_CAPABILITY_IDS } from './types';
 import { builtInCanvasImageCapabilities } from './builtInCapabilities';
 import {
   mapCanvasCapabilityModelParams,
+  matchesModelFamily,
   resolveCanvasCapabilityModelCandidates,
   resolveCanvasCapabilityVisibleParamIds,
 } from './modelCompatibility';
@@ -230,5 +234,40 @@ describe('画布能力模型约束与语义参数映射', () => {
     const falSelector = fal.endpoints as { selector: (params: DynamicValueMap) => Promise<string> };
     expect(await falSelector.selector({})).toBe('openai/gpt-image-2');
     expect(await falSelector.selector({ images: ['reference.png'] })).toBe('openai/gpt-image-2/edit');
+  });
+});
+
+describe('模型家族规则', () => {
+  it('系列规则按版本收新版本（含同版本变体），不带版本号的变体要点名；精确 ID 只认自己', () => {
+    const gpt = [{ series: 'gpt-image', minVersion: 2 }] as const;
+    expect(['gpt-image-2', 'gpt-image-2.5', 'gpt-image-2.6', 'gpt-image-3'].every((id) => matchesModelFamily(id, gpt))).toBe(true);
+    expect(matchesModelFamily('gpt-image-1', gpt)).toBe(false);
+    const nano = [{ series: 'nano-banana', minVersion: 2, variants: ['pro'] }] as const;
+    expect(['nano-banana-2', 'nano-banana-2-lite', 'nano-banana-2.1', 'nano-banana-pro'].every((id) => matchesModelFamily(id, nano))).toBe(true);
+    expect(matchesModelFamily('nano-banana', nano)).toBe(false);
+    expect(matchesModelFamily('nano-banana-ultra', nano)).toBe(false);
+    expect(matchesModelFamily('seedream-5.0-pro', ['seedream-5.0-pro'])).toBe(true);
+    expect(matchesModelFamily('seedream-5.0', ['seedream-5.0-pro'])).toBe(false);
+  });
+});
+
+describe('全景按渠道与家族核验比例', () => {
+  it('apimart GPT Image 2.6 的 Ext 渠道没有 2:1：没选过渠道时默认用能出 2:1 的官方渠道', () => {
+    const result = mapCanvasCapabilityModelParams(compose(apimartGptImage26Model), PANORAMA_MODEL_POLICY);
+    expect(result.compatible).toBe(true);
+    expect(result.params).toMatchObject({ gpt26Channel: 'official', gpt26AspectRatio: '2:1' });
+  });
+
+  it('用户选了 Ext 渠道就保留，报出不支持 2:1，不悄悄换成按另一套价格计费的官方渠道', () => {
+    const result = mapCanvasCapabilityModelParams(compose(apimartGptImage26Model), PANORAMA_MODEL_POLICY, { gpt26Channel: 'ext' });
+    expect(result.compatible).toBe(false);
+    expect(result.params.gpt26Channel).toBe('ext');
+    expect(result.reasons.map((reason) => reason.code)).toContain('aspect-ratio');
+  });
+
+  it('21:9 只是 Nano Banana 的退路：没有 2:1 的 GPT Image 模型不兼容，不退到 21:9', () => {
+    const result = mapCanvasCapabilityModelParams(compose(kieGptImage25Model), PANORAMA_MODEL_POLICY);
+    expect(result.compatible).toBe(false);
+    expect(result.reasons.map((reason) => reason.code)).toContain('aspect-ratio');
   });
 });

@@ -83,7 +83,7 @@ export const DEFAULT_RELIGHT_SETTINGS: RelightSettingsV1 = {
 
 export const RELIGHT_MANUAL_MODEL_POLICY = {
   mode: 'verified-families',
-  allowedCanonicalFamilies: ['ic-light-v2'],
+  allowedFamilies: ['ic-light-v2'],
   requiredTags: ['relighting'],
   providerCompatibility: 'verified-combinations-only',
   allowedProviderConfigurations: [{ providerId: 'fal' }],
@@ -93,9 +93,10 @@ export const RELIGHT_MANUAL_MODEL_POLICY = {
   },
 } as const satisfies CanvasImageCapabilityModelPolicy
 
-const RELIGHT_SMART_MODEL_POLICY = {
+export const RELIGHT_SMART_MODEL_POLICY = {
   mode: 'verified-families',
-  allowedCanonicalFamilies: ['gpt-image-2'],
+  // 智能打光每次执行按平台顺序重选模型、不存所选模型；放开系列会让已有节点悄悄换版本与价格，模板也只核验过 GPT Image 2
+  allowedFamilies: ['gpt-image-2'],
   requiredTags: ['image-to-image'],
   providerCompatibility: 'verified-combinations-only',
   allowedProviderConfigurations: [
