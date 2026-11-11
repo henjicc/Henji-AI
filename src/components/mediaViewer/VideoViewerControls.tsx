@@ -83,7 +83,7 @@ function VolumePopover({ value, onChange, label }: { value: number; onChange: (n
         <div className="absolute inset-y-0 left-1/2 w-1 -translate-x-1/2 rounded-full bg-text1/20">
           <div className="absolute inset-x-0 bottom-0 rounded-full bg-accent" style={{ height: `${value * 100}%` }} />
         </div>
-        <span aria-hidden="true" className="absolute left-1/2 h-3 w-3 -translate-x-1/2 translate-y-1/2 rounded-full bg-text1 shadow-thumb-sm" style={{ bottom: `${value * 100}%` }} />
+        <span aria-hidden="true" className="absolute left-1/2 h-3 w-3 -translate-x-1/2 translate-y-1/2 rounded-full bg-text1 shadow-thumb-ring" style={{ bottom: `${value * 100}%` }} />
       </div>
     </div>
   )
@@ -199,7 +199,7 @@ export function VideoViewerControls({
             <div ref={progressFillRef} className="relative h-full w-0 rounded-full bg-accent">
               <span
                 aria-hidden="true"
-                className="absolute right-0 top-1/2 h-3 w-3 -translate-y-1/2 translate-x-1/2 rounded-full bg-text1 opacity-0 shadow-thumb-sm transition-opacity duration-180 group-hover/progress:opacity-100"
+                className="absolute right-0 top-1/2 h-3 w-3 -translate-y-1/2 translate-x-1/2 rounded-full bg-text1 opacity-0 shadow-thumb-ring transition-opacity duration-180 group-hover/progress:opacity-100"
               />
             </div>
             {trimRange && videoDuration > 0 && (

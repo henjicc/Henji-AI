@@ -317,7 +317,7 @@ export default function FileUploader({
                         onMouseDown={(e) => handleMouseDown(index, e)}
                         onMouseUp={(e) => !dragState.isDragging && handleCustomPreviewDrop(e, index)}
                     >
-                        <div className={`relative ${itemFrameClass} rounded-lg shadow-thumb-sm ${isDraggingThis ? 'ring-2 ring-accent shadow-thumb' : ''} ${isCustomDragging ? 'ring-2 ring-accent' : ''}`}>
+                        <div className={`relative ${itemFrameClass} rounded-lg ${isDraggingThis ? 'ring-2 ring-accent' : ''} ${isCustomDragging ? 'ring-2 ring-accent' : ''}`}>
                             {(() => {
                                 // 判断当前文件是视频还是图片
                                 // 优先使用 fileTypes 数组（精确），回退到 videoCount（位置判断）
@@ -377,7 +377,7 @@ export default function FileUploader({
                 <UiButton
                     type="button"
                     variant="secondary"
-                    className={`${itemFrameClass} border-2 border-dashed p-0 shadow-thumb ${isDragging ? 'border-accent bg-hover/90' : 'border-line/50 bg-hover/80 hover:border-line/50'} flex-shrink-0`}
+                    className={`${itemFrameClass} border-2 border-dashed p-0 ${isDragging ? 'border-accent bg-hover/90' : 'border-line/50 bg-hover/80 hover:border-line/50'} flex-shrink-0`}
                     onClick={() => !disabled && inputRef.current?.click()}
                 >
                     <Plus className={`${isDragging ? 'text-accent' : 'text-text2'}`} />

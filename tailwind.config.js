@@ -3,9 +3,6 @@
 const withOpacity = (variable) => `rgb(var(${variable}) / <alpha-value>)`
 // 自带透明度的令牌（浅底、遮罩、媒体叠层等）：直接取完整颜色，不支持透明度修饰。
 const cssVar = (variable) => `var(${variable})`
-// 阴影颜色按主题的 `shade` 令牌取比例：深色 shade = 黑 50%，浅色 = 冷灰 18%。
-// 比例按原深色数值反推（如 0.25 = shade 50%），深色观感不变、浅色自动变浅。
-const shade = (percent) => `color-mix(in srgb, var(--shade) ${percent}%, transparent)`
 
 export default {
   // 测试文件里的类名不进样式表；少扫约三分之一源码，开发服务器首次加载样式快两秒（2026-10-26）
@@ -46,8 +43,8 @@ export default {
     },
     // 浮层阴影唯一档位，取 index.css 的 --shadow-overlay（当前为空投影：浮层靠描边分层）。内容区一律不用阴影。
     //
-    // 其余档位是「登记过的特效阴影」：它们不是层次装饰，而是有具体功能语义
-    // （选中描边 / 失败描边 / 堆叠缩略图立体感），不可用 shadow-panel 替代。
+    // 其余档位是「登记过的特效描边」：贴边、不偏移、不模糊，只勾轮廓（选中描边 / 失败描边 / 内容色滑块轮廓 / 字段边与聚焦光），
+    // 不可用 shadow-panel 替代。任何档位都不带偏移模糊的投影：深色底上投影显得厚重立体（2026-11-09 用户确认）。
     // 新增特效阴影必须在此登记具名档位，禁止在业务组件写 shadow-[...]。
     boxShadow: {
       none: 'none',
@@ -57,12 +54,9 @@ export default {
       'node-selected': '0 0 0 1px rgb(var(--accent-rgb) / 0.32)',
       // 画布节点生成失败描边（配合 NodeGenerationError 覆盖层），走危险实底令牌
       'node-error': '0 0 0 1px color-mix(in srgb, var(--danger) 28%, transparent)',
-      // 堆叠媒体缩略图的立体感
-      thumb: `0 8px 16px ${shade(90)}`,
       // 内容色滑杆（打光亮度/色调）的滑块：白边之外再描 1px 固定深色细线。滑块与轨道都是灯光内容色、
       // 不随主题，纯白滑块停在白端时只靠这圈深线与白边的双色轮廓辨认（4.1：纸白下白端几乎不可见）。
-      'thumb-ring': `0 0 0 1px var(--media-scrim), 0 8px 16px ${shade(90)}`,
-      'thumb-sm': `0 6px 14px ${shade(84)}`,
+      'thumb-ring': '0 0 0 1px var(--media-scrim)',
       // 字段的发丝边与聚焦淡光（重要记录 019）：静息一道 --edge 内描边让边缘清楚；聚焦时外加一圈淡强调光，
       // 与 ring-1 的强调细边叠加（ring 与 shadow 在 Tailwind 里组合，不互相覆盖）。
       field: 'inset 0 0 0 1px var(--edge)',

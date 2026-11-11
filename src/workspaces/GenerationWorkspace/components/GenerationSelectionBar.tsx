@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { ChevronDown, FileArchive, Folder, FolderOpen, FolderPlus, MoreHorizontal, Trash2, X } from 'lucide-react'
-import { Dropdown, UiButton, UiError, UiIconButton, UiModal, UiOptionButton, UiOverflowRow, UI_TEXT_META_CLASS } from '@/components/ui'
+import { Dropdown, UiButton, UiError, UiIconButton, UiModal, UiOptionButton, UiOverflowRow, UI_FIELD_PADDING_CLASS, UI_TEXT_META_CLASS } from '@/components/ui'
 import PanelTrigger from '@/components/ui/PanelTrigger'
 import { ICON_DOWNLOAD, ICON_WORKSPACE_CANVAS, ICON_WORKSPACE_VIDEO_EDIT, UI_ICON_SIZE } from '@/core/theme/icons'
 import { useI18n } from '@/hooks/useI18n'
@@ -100,11 +100,11 @@ export function GenerationSelectionBar({ count, allSelected, onExit, onSelectAll
         <MenuItem icon={FolderOpen} label={t('ui:generationSelection.toFolder')} onSelect={() => void actions.exportToFolder()} />
         <MenuItem icon={FileArchive} label={t('ui:generationSelection.toZip')} onSelect={() => void actions.exportToZip()} />
         {quickPath && <>
-          <span className={`px-2.5 pb-0.5 pt-1.5 ${UI_TEXT_META_CLASS}`}>{t('ui:generationSelection.quickFolder')}</span>
+          <span className={`${UI_FIELD_PADDING_CLASS.sm} pb-0.5 pt-1.5 ${UI_TEXT_META_CLASS}`}>{t('ui:generationSelection.quickFolder')}</span>
           <MenuItem icon={Folder} label={quickPath} title={quickPath} onSelect={() => void actions.exportToFolder(quickPath)} />
         </>}
         {presets.length > 0 && <>
-          <span className={`px-2.5 pb-0.5 pt-1.5 ${UI_TEXT_META_CLASS}`}>{t('ui:generationSelection.presetFolders')}</span>
+          <span className={`${UI_FIELD_PADDING_CLASS.sm} pb-0.5 pt-1.5 ${UI_TEXT_META_CLASS}`}>{t('ui:generationSelection.presetFolders')}</span>
           {presets.map(path => <MenuItem key={path} icon={Folder} label={path} title={path} onSelect={() => void actions.exportToFolder(path)} />)}
         </>}
       </div>

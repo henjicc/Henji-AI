@@ -277,7 +277,6 @@ export const MediaStripUploader = forwardRef<MediaStripUploaderHandle, MediaStri
         {files.map((file, index) => {
           const type = typeOf(index)
           const reordering = (dragState.isDragging || dragState.isDropping) && dragState.fromIndex !== null && dragState.toIndex !== null
-          const draggingThis = reordering && dragState.fromIndex === index
           // 拖动排序时收起悬停按钮，免得跟着卡片一起飘
           const actionsHidden = reordering ? 'invisible' : ''
           return (
@@ -295,7 +294,7 @@ export const MediaStripUploader = forwardRef<MediaStripUploaderHandle, MediaStri
                 className={`${UI_COVER_GROUP_CLASS} shrink-0`}
                 // 鼠标点击由拖动排序的钩子判定（没拖动才算点开）；键盘回车、以及提交中拖动被停用时在这里打开预览
                 onClick={(event) => { if (event.detail === 0 || disabled) onFileClick?.(file, files) }}>
-                <span className={`${UI_COVER_FRAME_CLASS} ${CARD_FRAME_CLASS} rounded-lg ${draggingThis ? 'shadow-thumb' : ''}`}>
+                <span className={`${UI_COVER_FRAME_CLASS} ${CARD_FRAME_CLASS} rounded-lg`}>
                 {type === 'audio' ? (
                   <span className="absolute inset-0 flex items-center justify-center bg-raised">
                     <AudioLines aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.lg} text-text2`} />
