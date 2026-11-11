@@ -786,7 +786,6 @@
   "workspaceFilters": {
     "typeTabs": "Filter by type",
     "searchHistory": "Search history",
-    "includeCanvas": "Show generations from canvases",
     "moreActions": "More actions",
     "searchPlaceholder": "Search prompt / model / provider / error",
     "clearSearch": "Clear search",

@@ -28,8 +28,6 @@ function setup(overrides: Partial<GenerationHistoryToolbarProps> = {}) {
     matchedCount: 3,
     totalCount: 10,
     onOpenClearHistory: vi.fn(),
-    includeCanvas: false,
-    onIncludeCanvasChange: vi.fn(),
     ...overrides,
   }
   render(<GenerationHistoryToolbar {...props} />)
@@ -62,12 +60,11 @@ it('搜索按钮是开关，搜索展开或筛选生效时显示命中数，都�
   expect(screen.queryByText(/显示 \d+ \/ \d+ 条/)).toBeNull()
 })
 
-it('清除历史收进“更多”菜单，且是危险档动作', () => {
+it('清除历史收进“更多”菜单', () => {
   const props = setup()
   expect(screen.queryByText('清除历史')).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: '更多操作' }))
-  const clear = screen.getByRole('button', { name: '清除历史' })
-  expect(clear.getAttribute('data-variant')).toBe('danger')
+  const clear = screen.getByRole('menuitem', { name: '清除历史' })
   fireEvent.click(clear)
   expect(props.onOpenClearHistory).toHaveBeenCalledTimes(1)
 })

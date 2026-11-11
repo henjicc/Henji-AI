@@ -30,7 +30,6 @@ import { useGenerationTaskProgressStore } from '@/stores/generationTaskProgressS
 import { useTestModeShortcuts } from './GenerationWorkspace/hooks/useTestModeShortcuts'
 import { useUpdateCheck } from './GenerationWorkspace/hooks/useUpdateCheck'
 import { useGenerationHistoryFiltering } from './GenerationWorkspace/hooks/useGenerationHistoryFiltering'
-import { useGenerationHistoryFilterStore } from '@/stores/generationHistoryFilterStore'
 import { useGenerationAutoScroll } from './GenerationWorkspace/hooks/useGenerationAutoScroll'
 import { useGenerationImageViewer } from './GenerationWorkspace/hooks/useGenerationImageViewer'
 import { GENERATION_COLUMN_MAX_WIDTH_CLASS, GENERATION_COLUMN_MAX_WIDTH_PX } from './GenerationWorkspace/generationColumn'
@@ -77,8 +76,8 @@ const GenerationWorkspace: React.FC = () => {
   const { tasks, setTasks, rememberResultImageDimensions, isTasksLoaded, isGenerating,
     handleGenerate, handleContinuePolling, imageEditStatesRef, setUploadedImagesRef,
     setUploadedFilePathsRef, notification, notificationVisible, notify } = useGenerationLifecycleContext()
-  const includeCanvas = useGenerationHistoryFilterStore((state) => state.includeCanvas)
-  const listedTasks = useMemo(() => includeCanvas ? tasks : tasks.filter((task) => !task.options?.__canvasGeneration), [includeCanvas, tasks])
+  // 画布节点发起的生成归画布管，生成页只列自己发起的
+  const listedTasks = useMemo(() => tasks.filter((task) => !task.options?.__canvasGeneration), [tasks])
   const {
     filterKeyword,
     filterProviderId,
@@ -342,8 +341,6 @@ const GenerationWorkspace: React.FC = () => {
             matchedCount={matchedCount}
             totalCount={listedTasks.length}
             onOpenClearHistory={() => setIsClearDialogOpen(true)}
-            includeCanvas={includeCanvas}
-            onIncludeCanvasChange={useGenerationHistoryFilterStore.getState().setIncludeCanvas}
             trailingStatus={<TestModeIndicator onOpenPanel={() => setIsTestPanelOpen(true)} />}
             subordinate={customDateBand ? (
               <UiTaskHistoryDateRange startDate={filterStartDate} endDate={filterEndDate} onStartDateChange={setFilterStartDate} onEndDateChange={setFilterEndDate} />

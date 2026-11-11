@@ -3,7 +3,8 @@ import type { ReactNode } from 'react'
 import { MoreHorizontal, Search, Trash2 } from 'lucide-react'
 import { useI18n } from '@/hooks/useI18n'
 import PanelTrigger from '@/components/ui/PanelTrigger'
-import { UI_TEXT_META_CLASS, UiButton, UiIconButton, UiOptionButton } from '@/components/ui'
+import { UI_TEXT_META_CLASS, UiIconButton, UiOptionButton } from '@/components/ui'
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import type { GenerationHistoryMediaType } from '@/stores/generationHistoryFilterStore'
 
 export interface GenerationHistoryToolbarProps {
@@ -18,9 +19,6 @@ export interface GenerationHistoryToolbarProps {
   matchedCount: number
   totalCount: number
   onOpenClearHistory: () => void
-  /** 列表是否也显示画布节点发起的生成（默认只显示生成页自己的） */
-  includeCanvas: boolean
-  onIncludeCanvasChange: (includeCanvas: boolean) => void
   /** 命令带右端的状态入口（开发用的测试模式徽标）：放在带内，窄窗口下不压住搜索按钮。 */
   trailingStatus?: ReactNode
   /** 搜索展开时占据搜索按钮位置的搜索框与筛选（同一行，不另起一条带）。 */
@@ -44,8 +42,6 @@ export function GenerationHistoryToolbar({
   matchedCount,
   totalCount,
   onOpenClearHistory,
-  includeCanvas,
-  onIncludeCanvasChange,
   trailingStatus,
   searchField,
   subordinate,
@@ -74,27 +70,9 @@ export function GenerationHistoryToolbar({
           panelPadding="menu"
           closeOnPanelClick
           renderPanel={() => (
-            <>
-            <UiOptionButton
-              type="button"
-              variant="menu"
-              active={includeCanvas}
-              onClick={() => onIncludeCanvasChange(!includeCanvas)}
-              className="w-full justify-start"
-            >
-              {t('ui:workspaceFilters.includeCanvas')}
+            <UiOptionButton type="button" variant="menu" size="sm" role="menuitem" className="w-full gap-2" onClick={onOpenClearHistory}>
+              <span className="flex min-w-0 flex-1 items-center gap-2 text-danger-text"><Trash2 size={UI_ICON_SIZE.sm} /><span className="min-w-0 flex-1 truncate">{t('ui:actions.clearHistory')}</span></span>
             </UiOptionButton>
-            <UiButton
-              type="button"
-              variant="danger"
-              size="sm"
-              className="w-full justify-start"
-              onClick={onOpenClearHistory}
-            >
-              <Trash2  />
-              {t('ui:actions.clearHistory')}
-            </UiButton>
-            </>
           )}
         >
           {({ open, togglePanel }) => (

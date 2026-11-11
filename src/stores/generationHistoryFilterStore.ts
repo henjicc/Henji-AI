@@ -11,9 +11,6 @@ export interface GenerationHistoryFilterState {
   timePreset: GenerationHistoryTimePreset
   startDate: string
   endDate: string
-  /** 画布节点发起的生成归画布这个项目容器管；生成页默认只列自己发起的，需要跨工作区找时再打开 */
-  includeCanvas: boolean
-  setIncludeCanvas: (includeCanvas: boolean) => void
   setKeyword: (keyword: string) => void
   setProviderId: (providerId: string) => void
   setModelId: (modelId: string) => void
@@ -39,8 +36,6 @@ const DEFAULT_FILTER_STATE: Pick<
 
 export const useGenerationHistoryFilterStore = create<GenerationHistoryFilterState>((set) => ({
   ...DEFAULT_FILTER_STATE,
-  includeCanvas: false,
-  setIncludeCanvas: (includeCanvas) => set({ includeCanvas }),
   setKeyword: (keyword) => set({ keyword }),
   setProviderId: (providerId) => set({ providerId }),
   setModelId: (modelId) => set({ modelId }),
