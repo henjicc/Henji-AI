@@ -4,8 +4,8 @@ import type { DocumentSession } from './documentSession'
 import { useDocumentSessionState } from './useDocumentSessionState'
 
 /**
- * 编辑器左上角文件名后面的保存状态：还没保存到位置的草稿写“未保存”（提示色），
- * 写入失败与文件被别处改过用危险色，其余是第三档的“已保存 / 保存中…”。
+ * 编辑器左上角文件名后面的保存状态。改动一律自动保存，正常的“已保存 / 保存中”不显示；
+ * 只在需要用户处理时出现：写入失败、文件被别处改过（危险色），草稿还没保存到位置（提示色）。
  * 失败的原因与重试由各编辑器的报错入口负责，这里只说明状态。
  */
 export function DocumentSaveStatus({ session }: { session: DocumentSession | null | undefined }): JSX.Element | null {
@@ -18,8 +18,7 @@ export function DocumentSaveStatus({ session }: { session: DocumentSession | nul
       ? [t('documentSession.status.conflict'), 'text-danger-text']
       : state.meta.draft
         ? [t('documentSession.status.draft'), 'text-warning-text']
-        : state.status === 'saved'
-          ? [t('documentSession.status.saved'), 'text-text3']
-          : [t('documentSession.status.saving'), 'text-text3']
+        : [null, '']
+  if (!label) return null
   return <span data-document-save-status={state.status} className={`shrink-0 whitespace-nowrap text-xs ${tone}`}>{label}</span>
 }

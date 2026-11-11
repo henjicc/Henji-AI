@@ -1796,8 +1796,6 @@
   },
   "documentSession": {
     "status": {
-      "saved": "Saved",
-      "saving": "Saving…",
       "draft": "Unsaved",
       "failed": "Save failed",
       "conflict": "Changed elsewhere"

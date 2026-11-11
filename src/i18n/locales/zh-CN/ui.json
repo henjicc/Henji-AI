@@ -1796,8 +1796,6 @@
   },
   "documentSession": {
     "status": {
-      "saved": "已保存",
-      "saving": "保存中…",
       "draft": "未保存",
       "failed": "保存失败",
       "conflict": "文件已在别处被修改"
