@@ -47,6 +47,12 @@ const mediaIcons = { image: ImageIcon, video: Film, audio: FileAudio, code: ICON
  * 悬停、单选与批量选中都只画在封面框上（`UI_COVER_FRAME_CLASS`）；下方名称一行 + 辅助信息一行
  * （类型 · 首个标签 +N · 尺寸）。根元素是可拖拽的 div（内部还有菜单、播放与复选框按钮，不能整体做成 button）。
  */
+function formatAssetDuration(seconds: number): string {
+  const total = Math.round(seconds)
+  const minutes = Math.floor(total / 60)
+  return `${minutes}:${String(total % 60).padStart(2, '0')}`
+}
+
 export const AssetCard: React.FC<AssetCardProps> = ({ asset, selected, eager = false, menuOpen = false, batchMode = false, batchSelected = false, batchDisabled = false, onSelect, onMenu, onToggleBatch, onPreview, onRename, thumbnailFit, onGlass = false }) => {
   const { t } = useI18n('ui')
   const [editing, setEditing] = useState(false)
@@ -57,6 +63,9 @@ export const AssetCard: React.FC<AssetCardProps> = ({ asset, selected, eager = f
   const waveformSource = isAudio ? asset.filePath?.trim() || asset.displayUrl : ''
   const waveform = useWaveformData(waveformSource ? { source: waveformSource, channels: 1 } : null)
   useEffect(() => { if (batchMode) setEditing(false) }, [batchMode])
+  const extent = asset.width && asset.height
+    ? `${asset.width}×${asset.height}`
+    : asset.durationSeconds ? formatAssetDuration(asset.durationSeconds) : null
   const submitRename = async (): Promise<void> => {
     const name = draft.trim()
     if (name && name !== asset.displayName) await onRename(asset, name)
@@ -116,10 +125,11 @@ export const AssetCard: React.FC<AssetCardProps> = ({ asset, selected, eager = f
       <div className="flex min-w-0 flex-col gap-0.5 px-0.5">
         {editing ? <UiInput autoFocus size="sm" value={draft} aria-label={t('assetLibrary.renameAsset')} onChange={(event) => setDraft(event.target.value)} onBlur={() => void submitRename()} onKeyDown={(event) => { if (event.key === 'Enter') void submitRename(); if (event.key === 'Escape') { setDraft(asset.displayName); setEditing(false) } }} onClick={(event) => event.stopPropagation()} /> : <div className="truncate text-13 font-medium text-text1" title={asset.displayName} onDoubleClick={(event) => { if (batchMode) return; event.stopPropagation(); setDraft(asset.displayName); setEditing(true) }}>{asset.displayName}</div>}
         <div className={`flex min-w-0 items-center gap-1 text-xs ${onGlass ? 'text-text2' : 'text-text3'}`}>
+          {/* 类型 · 尺寸（音视频是时长）· 首个标签，一行第三档 */}
           <span className="shrink-0">{t(`assetLibrary.${asset.mediaType}`)}</span>
+          {extent ? <><span aria-hidden="true">·</span><span className="shrink-0 tabular-nums">{extent}</span></> : null}
           {asset.tags[0] && <><span aria-hidden="true">·</span><span className="min-w-0 truncate">{asset.tags[0]}</span></>}
           {asset.tags.length > 1 && <span className="shrink-0">+{asset.tags.length - 1}</span>}
-          {asset.width && asset.height ? <span className="ml-auto shrink-0 pl-1 tabular-nums">{asset.width}×{asset.height}</span> : null}
         </div>
       </div>
     </div>

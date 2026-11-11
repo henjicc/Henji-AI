@@ -1,8 +1,9 @@
 import { ApplicationOperationReviewBanner } from '@/features/application-control'
 import { useCallback, useState } from 'react';
+import { ArrowLeft } from 'lucide-react';
 import { ReactFlowProvider } from '@xyflow/react';
 import { useTranslation } from 'react-i18next';
-import { UiButton, UiError, UiLoading, UiPanel } from '@/components/ui';
+import { UiButton, UiError, UiIconButton, UiLoading, UiPanel } from '@/components/ui';
 import { Canvas } from '@/features/canvas/Canvas';
 import { updateCanvasProjectCover } from '@/features/canvas/application/canvasProjectCover';
 import { useCanvasProjectCoverAutosave } from '@/features/canvas/application/useCanvasProjectCoverAutosave';
@@ -12,11 +13,15 @@ import '@/features/canvas/storyboard.css';
 import { isUiInspectionReadOnly } from '@/platform/runtime';
 import { confirmCanvasPersistence } from '@/features/canvas/application/canvasPersistenceService';
 import { returnFromEmbedded, useEmbeddedHost } from '@/features/documents/embeddedDocuments';
+import { DocumentSaveStatus } from '@/features/documents/DocumentSaveStatus';
+import { useDocumentSessionState } from '@/features/documents/useDocumentSessionState';
+import { findCanvasProjectInstance } from '@/features/canvas/application/canvasProjectInstances';
 
 /**
  * 画布工作区：“画布列表 ↔ 画布”两级视图（3.4 起画布是 `.hjcvs` 文档）。
  * 返回列表走通用离开流程：已保存的写完关闭，草稿询问“保存 / 不保存 / 取消”，取消留在画布上。
  * 从剪辑里打开的画布（4.1 嵌入模式）返回按钮是“返回剪辑 · 项目名”：离开后回到剪辑原来的位置。
+ * 画布没有命令带，左上角浮一条返回条：返回箭头、画布名、保存状态，与其他编辑器命令带左端是同一组信息。
  */
 const CanvasWorkspace = (): JSX.Element => {
   const { t } = useTranslation();
@@ -28,6 +33,9 @@ const CanvasWorkspace = (): JSX.Element => {
   const [isLeavingProject, setIsLeavingProject] = useState(false);
   const embeddedHost = useEmbeddedHost(currentProjectId);
   const inspectionReadOnly = isUiInspectionReadOnly();
+  const session = currentProjectId ? findCanvasProjectInstance(currentProjectId)?.session ?? null : null;
+  const sessionState = useDocumentSessionState(session);
+  const backLabel = embeddedHost ? t('ui:documentLibrary.embedded.returnTo', { name: embeddedHost.label }) : t('canvas.backToProjects');
 
   useCanvasProjectCoverAutosave(currentProjectId);
 
@@ -63,16 +71,34 @@ const CanvasWorkspace = (): JSX.Element => {
           <div className="relative min-h-0 w-full flex-1 bg-canvas" aria-busy={isOpeningProject}>
             {/* 截封面期间隐藏自己：它悬在画布上，留着会被一起截进节点区域封面里 */}
             {!isLeavingProject && (
-              /* 没有命令带的全屏工作面：返回入口浮在画布上，走随主题的玻璃（纸白下为浅色玻璃 + 深色字），
-                 一块玻璃包住静默按钮；media 档是压在图片/视频上的固定深色叠层，不跟主题。 */
-              <div className="ui-glass absolute left-3 top-3 z-sticky rounded-lg p-0.5">
-                <UiButton
-                  onClick={() => void handleBackToProjects()}
-                  disabled={isOpeningProject && Boolean(currentProjectId)}
-                  size="sm"
-                >
-                  {embeddedHost ? t('ui:documentLibrary.embedded.returnTo', { name: embeddedHost.label }) : t('canvas.backToProjects')}
-                </UiButton>
+              <div className="ui-glass absolute left-3 top-3 z-sticky flex max-w-md items-center gap-2 rounded-lg p-0.5 pr-3">
+                {/* 从剪辑里打开时写明回到哪（与其他编辑器嵌入时的返回一致）；平常只放返回箭头 */}
+                {embeddedHost ? (
+                  <UiButton
+                    size="sm"
+                    onClick={() => void handleBackToProjects()}
+                    disabled={isOpeningProject && Boolean(currentProjectId)}
+                  >
+                    <ArrowLeft />
+                    {backLabel}
+                  </UiButton>
+                ) : (
+                  <UiIconButton
+                    size="sm"
+                    aria-label={backLabel}
+                    tooltip={backLabel}
+                    onClick={() => void handleBackToProjects()}
+                    disabled={isOpeningProject && Boolean(currentProjectId)}
+                  >
+                    <ArrowLeft />
+                  </UiIconButton>
+                )}
+                {sessionState ? (
+                  <>
+                    <span className="min-w-0 truncate text-13 text-text1" title={sessionState.meta.name}>{sessionState.meta.name}</span>
+                    <DocumentSaveStatus session={session} />
+                  </>
+                ) : null}
               </div>
             )}
             {(persistenceError || openError) && (

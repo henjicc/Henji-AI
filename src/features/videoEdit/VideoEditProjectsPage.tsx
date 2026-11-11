@@ -188,7 +188,7 @@ export function VideoEditProjectsPage({ busy = false, onCreate, onOpenFolder, on
 
   const labels = useMemo((): ProjectLibraryLabels => ({
     createAction: t('projectLibrary.create'),
-    count: (count) => t('projectLibrary.count', { count }),
+    moreActions: t('documentLibrary.card.more'),
     searchPlaceholder: t('projectLibrary.searchPlaceholder'),
     noResults: t('projectLibrary.noResults'),
     sortLabel: t('documentLibrary.sortLabel'),

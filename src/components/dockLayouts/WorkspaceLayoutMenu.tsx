@@ -2,7 +2,7 @@ import { useAppMenuVisibility } from '@/components/appMenu/appMenuVisibility'
 import { useEffect, useState } from 'react'
 import type { DockviewApi } from 'dockview-react'
 import { Check, LayoutPanelLeft, Pencil, RotateCcw, Save, SaveAll, Trash2 } from 'lucide-react'
-import { PanelTrigger, UiButton, UiInlineStatus, UiInput, UiOptionButton } from '@/components/ui'
+import { PanelTrigger, UiButton, UiIconButton, UiInlineStatus, UiInput, UiOptionButton } from '@/components/ui'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { useWorkspaceLayoutPresets } from './useWorkspaceLayoutPresets'
 import { contributeAppMenus } from '@/core/appMenu/appMenu'
@@ -77,8 +77,9 @@ export function WorkspaceLayoutMenu({ workspaceId, dockApi }: { workspaceId: str
       {(error || layouts.error) && <UiInlineStatus role="alert" className="mt-1 px-2">{error || layouts.error}</UiInlineStatus>}
     </div>
   )}>
-    {({ togglePanel }) => <UiButton size="md" aria-haspopup="menu" aria-expanded={open} onClick={togglePanel} data-panel-trigger-button tooltip={layouts.dirty ? `布局“${active?.name ?? '默认'}”已调整，点开可重置或保存` : '切换或保存面板布局'}>
-      <LayoutPanelLeft className="mr-1" />{active?.name ?? '工作区'}
-    </UiButton>}
+    {/* 只放图标（通用动作）：当前布局名在悬停说明与菜单的勾里 */}
+    {({ togglePanel }) => <UiIconButton size="md" aria-label={`工作区布局：${active?.name ?? '默认'}`} aria-haspopup="menu" aria-expanded={open} onClick={togglePanel} data-panel-trigger-button tooltip={layouts.dirty ? `布局“${active?.name ?? '默认'}”已调整，点开可重置或保存` : `工作区布局：${active?.name ?? '默认'}`}>
+      <LayoutPanelLeft />
+    </UiIconButton>}
   </PanelTrigger>
 }

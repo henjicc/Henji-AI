@@ -64,12 +64,19 @@ function documentLocationLabel(document: DocumentSummary, t: TFunction): string 
   return t('documentLibrary.location.standalone')
 }
 
+/** 卡片上的日期：今年的只写月日，往年的带上年份。 */
+function formatCardDate(time: number): string {
+  const date = new Date(time)
+  const thisYear = date.getFullYear() === new Date().getFullYear()
+  return date.toLocaleDateString(undefined, thisYear ? { month: 'long', day: 'numeric' } : { year: 'numeric', month: 'long', day: 'numeric' })
+}
+
 /**
  * 文档摘要 → 卡片项。卡片标出所属项目；同名（不分大小写）的文档都显示所在位置以便区分；
  * 文件找不到时以危险色显示“文件不存在”。
  */
 export function toDocumentCardItems(documents: readonly DocumentSummary[], options: DocumentCardFormatOptions): DocumentCardItem[] {
-  const formatTime = options.formatTime ?? ((time: number) => new Date(time).toLocaleDateString())
+  const formatTime = options.formatTime ?? formatCardDate
   const nameCounts = new Map<string, number>()
   for (const document of documents) {
     const key = entryNameKey(document.name)
@@ -108,6 +115,8 @@ export interface UseDocumentLibraryOptions {
 
 export interface DocumentLibraryState {
   items: DocumentCardItem[]
+  /** `items` 是按哪个筛选读出来的（筛选刚切换、重读还没回来时与 `filter` 不同） */
+  itemsFilter: DocumentLibraryFilter
   total: number
   loadingMore: boolean
   /** 可选作筛选与“移到项目”目标的项目（已保存、文件夹在）。 */
@@ -125,6 +134,7 @@ export function useDocumentLibrary({ kind, describe, operations: provided }: Use
   const { t } = useTranslation('ui')
   const operations = provided ?? getDocumentOperations()
   const [documents, setDocuments] = useState<DocumentSummary[]>([])
+  const [itemsFilterKey, setItemsFilterKey] = useState(documentLibraryFilterValue(ALL_DOCUMENTS_FILTER))
   const [projects, setProjects] = useState<ProjectSummary[]>([])
   const [filter, setFilter] = useState<DocumentLibraryFilter>(ALL_DOCUMENTS_FILTER)
   const [total, setTotal] = useState(0)
@@ -153,7 +163,7 @@ export function useDocumentLibrary({ kind, describe, operations: provided }: Use
             const page = await operations.listDocumentsPage({ ...query, cursor })
             if (seq !== sequence.current) return
             for (const row of page.items) listed.set(row.id, row)
-            setDocuments([...listed.values()]); setTotal(page.total); setLoading(false); setError(null)
+            setDocuments([...listed.values()]); setItemsFilterKey(filterKey); setTotal(page.total); setLoading(false); setError(null)
             cursor = page.nextCursor ?? undefined
           } while (cursor)
         })(),
@@ -198,7 +208,8 @@ export function useDocumentLibrary({ kind, describe, operations: provided }: Use
   }, [filter, projects, loading, loadingMore, error])
 
   const items = useMemo(() => toDocumentCardItems(documents, { t, describe }), [documents, t, describe])
-  return { items, total, loadingMore, projects, filter, setFilter, loading, error, reload }
+  const itemsFilter = useMemo(() => parseDocumentLibraryFilter(itemsFilterKey), [itemsFilterKey])
+  return { items, itemsFilter, total, loadingMore, projects, filter, setFilter, loading, error, reload }
 }
 
 /** 项目卡片项。 */

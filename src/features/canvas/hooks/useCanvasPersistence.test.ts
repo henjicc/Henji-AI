@@ -6,11 +6,11 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { useCanvasStore, type CanvasEdge, type CanvasNode } from '@/stores/canvasStore'
 import { useProjectStore, type Project } from '@/stores/projectStore'
 import { findCanvasProjectInstance } from '@/features/canvas/application/canvasProjectInstances'
-import { useCanvasPersistence } from './useCanvasPersistence'
+import { nodesMostlyInView, useCanvasPersistence } from './useCanvasPersistence'
 
 vi.mock('@/platform/runtime', () => ({ isUiInspectionReadOnly: () => false, isDesktopRuntime: () => false }))
 const liveViewport = vi.hoisted(() => ({ current: undefined as Viewport | undefined }))
-const flowStore = { getState: () => ({ panZoom: liveViewport.current ? { getViewport: () => liveViewport.current } : undefined }) }
+const flowStore = { getState: () => ({ nodeLookup: new Map(), width: 0, height: 0, panZoom: liveViewport.current ? { getViewport: () => liveViewport.current } : undefined }) }
 vi.mock('@xyflow/react', async importOriginal => ({
   ...await importOriginal<typeof import('@xyflow/react')>(),
   useStoreApi: () => flowStore,
@@ -73,4 +73,14 @@ it('恢复的视口还没应用到画布时卸载（或效果重跑），不把�
   const { unmount } = renderHook(() => useCanvasPersistence({ current: null }, flow))
   unmount()
   expect(useCanvasStore.getState().currentViewport).toEqual(a.viewport)
+})
+
+it('打开时的视野：节点大半在视野外才对准；放大在局部干活（节点铺满视口）不动', () => {
+  const node = (x: number, y: number, width: number, height: number) => ({ hidden: false, internals: { positionAbsolute: { x, y } }, measured: { width, height } })
+  const state = (nodes: ReturnType<typeof node>[]) => ({ width: 1000, height: 800, nodeLookup: new Map(nodes.map((item, index) => [String(index), item])) }) as unknown as Parameters<typeof nodesMostlyInView>[0]
+  const spread = state([node(0, 0, 400, 300), node(1600, 1200, 400, 300)])
+  expect(nodesMostlyInView(spread, { x: 0, y: 0, zoom: 0.5 })).toBe(true)
+  expect(nodesMostlyInView(spread, { x: -300, y: -200, zoom: 1 })).toBe(true)
+  expect(nodesMostlyInView(spread, { x: 700, y: 500, zoom: 1 })).toBe(false)
+  expect(nodesMostlyInView(spread, { x: 5000, y: 5000, zoom: 1 })).toBe(false)
 })

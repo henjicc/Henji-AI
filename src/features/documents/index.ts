@@ -19,3 +19,8 @@ export { registerDocumentCoverProvider, invalidateDocumentHoverRead } from './do
 export { defaultDocumentOperationChanges, markSessionDocumentOpened } from './documentOperationChanges'
 
 export { currentDocumentContext, registerCurrentDocumentProvider } from './currentDocumentContext'
+
+// 编辑器左端文件名后的保存状态（各工具与画布共用）
+export { DocumentSaveStatus } from './DocumentSaveStatus'
+export { useDocumentSessionState } from './useDocumentSessionState'
+export type { DocumentSession } from './documentSession'

@@ -24,6 +24,7 @@ export const imageEditToolPlugin: CanvasToolPlugin = {
   type: NODE_TOOL_TYPES.edit,
   label: '编辑',
   icon: 'edit',
+  display: 'icon',
   editor: 'edit',
   dialog: {
     size: 'workspace',

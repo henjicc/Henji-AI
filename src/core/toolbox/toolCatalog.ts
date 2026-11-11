@@ -6,7 +6,10 @@ export interface ToolDescriptor {
   readonly id: string
   readonly surfaceId: `tool.${string}`
   readonly titleKey: string
+  /** 完整说明：助手列出工具时读它 */
   readonly descriptionKey: string
+  /** 工具首页卡片上的一行说明 */
+  readonly summaryKey: string
   readonly icon: `ICON_${string}`
   readonly entryId: string
   readonly actions: readonly ('open' | 'recent_files')[]
@@ -18,13 +21,13 @@ export interface ToolDescriptor {
 export const TOOL_DESCRIPTORS = [
   {
     id: 'screenRecording', surfaceId: 'tool.screen_recording', entryId: 'screenRecording',
-    titleKey: 'ui:toolbox.screenRecording.title', descriptionKey: 'ui:toolbox.screenRecording.description',
+    titleKey: 'ui:toolbox.screenRecording.title', descriptionKey: 'ui:toolbox.screenRecording.description', summaryKey: 'ui:toolbox.screenRecording.summary',
     icon: 'ICON_TOOL_SCREEN_RECORDING', actions: ['open', 'recent_files'], recentFiles: { documentKind: 'screen_recording' },
     acceptedRefKinds: ['screen_recording.session'], capabilities: ['record', 'pause', 'mark', 'preview', 'video_edit_import'],
   },
   {
     id: 'audioEdit', surfaceId: 'tool.audio_edit', entryId: 'audioEdit',
-    titleKey: 'ui:toolbox.audioEdit.title', descriptionKey: 'ui:toolbox.audioEdit.description',
+    titleKey: 'ui:toolbox.audioEdit.title', descriptionKey: 'ui:toolbox.audioEdit.description', summaryKey: 'ui:toolbox.audioEdit.summary',
     icon: 'ICON_TOOL_AUDIO_EDIT', actions: ['open', 'recent_files'],
     recentFiles: { documentKind: 'audio_edit' },
     acceptedRefKinds: ['audio_edit.document', 'audio_edit.transcript_block', 'audio_edit.suggestion', 'audio_edit.render'],
@@ -32,7 +35,7 @@ export const TOOL_DESCRIPTORS = [
   },
   {
     id: 'imageMark', surfaceId: 'tool.image_edit', entryId: 'imageMark',
-    titleKey: 'ui:toolbox.imageMark.title', descriptionKey: 'ui:toolbox.imageMark.description',
+    titleKey: 'ui:toolbox.imageMark.title', descriptionKey: 'ui:toolbox.imageMark.description', summaryKey: 'ui:toolbox.imageMark.summary',
     icon: 'ICON_TOOL_IMAGE_EDIT', actions: ['open', 'recent_files'],
     recentFiles: { documentKind: 'image_document' },
     acceptedRefKinds: ['image_edit.document', 'image_edit.layer', 'generation.result', 'asset'],
@@ -40,7 +43,7 @@ export const TOOL_DESCRIPTORS = [
   },
   {
     id: 'cameraStage', surfaceId: 'tool.camera_stage', entryId: 'cameraStage',
-    titleKey: 'ui:toolbox.cameraStage.title', descriptionKey: 'ui:toolbox.cameraStage.description',
+    titleKey: 'ui:toolbox.cameraStage.title', descriptionKey: 'ui:toolbox.cameraStage.description', summaryKey: 'ui:toolbox.cameraStage.summary',
     icon: 'ICON_TOOL_CAMERA_STAGE', actions: ['open', 'recent_files'],
     recentFiles: { documentKind: 'camera_stage' },
     acceptedRefKinds: ['camera_stage.document', 'camera_stage.scene', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.state_keyframe', 'camera_stage.trajectory'],

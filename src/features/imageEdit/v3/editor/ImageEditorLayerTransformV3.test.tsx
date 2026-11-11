@@ -231,8 +231,8 @@ describe('图片编辑 V3 图层变换交互', () => {
 
     const scaleX = screen.getByRole('spinbutton', { name: '水平缩放 (%)' })
     fireEvent.change(scaleX, { target: { value: '0' } })
-    expect(screen.getByText(/缩放不能为零/)).toBeTruthy()
     fireEvent.blur(scaleX)
+    expect(screen.getByText(/缩放不能为零/)).toBeTruthy()
     expect(changes).toHaveLength(1)
   })
 

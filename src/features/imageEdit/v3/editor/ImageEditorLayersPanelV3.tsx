@@ -8,14 +8,13 @@ import {
   FolderPlus,
   Ungroup,
   CornerUpLeft,
-  MoreHorizontal,
 } from 'lucide-react'
 import type { MouseEvent } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
 
-import { PanelTrigger, UiButton, UiEmpty, UiError, UiIconButton, UiOptionButton } from '@/components/ui'
+import { UiButton, UiEmpty, UiError, UiOptionButton, UiToolbar } from '@/components/ui'
 import { useReorderDrag } from '@/components/ui/fileUploader/useReorderDrag'
 import { collectImageEditLayerIdsV3, type ImageEditLayerV3 } from '@/core/imageEdit/v3/layerTypes'
 import type { ImageEditorCapabilityReadinessV3 } from '../application/imageEditorHostProfiles'
@@ -157,10 +156,6 @@ export function ImageEditorLayersPanelV3({
     () => getCreationChoices(controller, t),
     [controller, t],
   )
-  const creationChoiceLabels = useMemo(
-    () => creationChoices.map(({ choice }) => choice.name),
-    [creationChoices],
-  )
   const reorderRows = useCallback((fromIndex: number, toIndex: number): void => {
     const moves = resolveImageEditLayerMovesV3(rows, fromIndex, toIndex, selectedLayerIds, allRows)
     if (!moves) return
@@ -283,150 +278,13 @@ export function ImageEditorLayersPanelV3({
     <section data-layers-panel className="flex min-h-0 flex-1 flex-col">
       {creationError ? <UiError size="xs" message={creationError} /> : null}
       {creating ? <div className="flex items-center gap-2 px-3 text-xs text-text2" role="status">{t('imageEditor.v3.selection.progress', { percent: creationProgress })}<UiButton size="sm" onClick={() => creationAbort.current?.abort()}>{t('imageEditor.v3.selection.cancel-task')}</UiButton></div> : null}
-      <div className="flex h-10 shrink-0 items-center gap-1 px-3">
-        {embedded ? <div className="min-w-0 flex-1" /> : (
+      {embedded ? null : (
+        <div className="flex h-10 shrink-0 items-center px-3">
           <h2 className="min-w-0 flex-1 truncate text-xs font-semibold text-text2">
             {t('imageEditor.v3.layers.title')}
           </h2>
-        )}
-        <PanelTrigger
-          panelWidthLabels={creationChoiceLabels}
-          panelPadding="none"
-          closeOnPanelClick
-          renderPanel={() => (
-            <div
-              data-layer-add-menu
-              className="flex flex-col gap-0.5 p-1"
-              role="menu"
-              aria-label={t('imageEditor.v3.layers.addLayer')}
-            >
-              {creationChoices.map(({ choice, readiness }) => {
-                const key = `${choice.kind}:${choice.subtype ?? ''}`
-                const disabled = creating || readiness.state !== 'ready'
-                const reason = resolveImageEditorReadinessReasonV3(readiness, t)
-                const unavailableLabel = reason
-                  ? t('imageEditor.v3.readiness.unavailableWithReason', {
-                      label: choice.name,
-                      reason,
-                    })
-                  : t('imageEditor.v3.readiness.unavailable', { label: choice.name })
-                return (
-                  <UiOptionButton
-                    key={key}
-                    type="button"
-                    role="menuitem"
-                    variant="menu"
-                    size="sm" className="w-full text-left"
-                    disabled={disabled}
-                    aria-label={disabled ? unavailableLabel : choice.name}
-                    disabledReason={disabled ? unavailableLabel : undefined}
-                    onClick={() => addChoice(choice)}
-                  >
-                    <span className="whitespace-nowrap">{choice.name}</span>
-                  </UiOptionButton>
-                )
-              })}
-            </div>
-          )}
-        >
-          {({ togglePanel, open }) => (
-            <UiIconButton
-              data-panel-trigger-button
-              on={open}
-              aria-label={t('imageEditor.v3.layers.addLayer')}
-              tooltip={t('imageEditor.v3.layers.addLayer')}
-              aria-expanded={open}
-              onClick={togglePanel}
-            >
-              <Plus  />
-            </UiIconButton>
-          )}
-        </PanelTrigger>
-        <UiIconButton
-          disabled={!primaryEditable || !primaryLocation
-            || primaryLocation.index >= primaryLocation.container.length - 1}
-          aria-label={t('imageEditor.v3.layers.moveUp')}
-          tooltip={t('imageEditor.v3.layers.moveUp')}
-          onClick={() => {
-            if (!primaryLocation || !primaryEditable) return
-            runAction(() => controller.moveLayer(
-              primaryLocation.layer.id,
-              primaryLocation.parentId,
-              primaryLocation.index + 1,
-            ))
-          }}
-        >
-          <ArrowUp  />
-        </UiIconButton>
-        <UiIconButton
-          disabled={!primaryEditable || !primaryLocation || primaryLocation.index <= 0}
-          aria-label={t('imageEditor.v3.layers.moveDown')}
-          tooltip={t('imageEditor.v3.layers.moveDown')}
-          onClick={() => {
-            if (!primaryLocation || !primaryEditable) return
-            runAction(() => controller.moveLayer(
-              primaryLocation.layer.id,
-              primaryLocation.parentId,
-              primaryLocation.index - 1,
-            ))
-          }}
-        >
-          <ArrowDown  />
-        </UiIconButton>
-        <UiIconButton
-          disabled={!primaryEditable || !primaryLocation}
-          aria-label={t('imageEditor.v3.layers.duplicate')}
-          tooltip={t('imageEditor.v3.layers.duplicate')}
-          onClick={() => {
-            if (!primaryLocation || !primaryEditable) return
-            const duplicateId = controller.duplicateLayer(
-              primaryLocation.layer.id,
-              primaryLocation.parentId,
-              primaryLocation.index + 1,
-            )
-            if (duplicateId) setSelectedLayerIds(controller.sessionId, [duplicateId])
-          }}
-        >
-          <Copy  />
-        </UiIconButton>
-        <UiIconButton tone="danger"
-          disabled={!canDelete}
-          aria-label={t('imageEditor.v3.layers.delete')}
-          tooltip={t('imageEditor.v3.layers.delete')}
-          onClick={() => {
-            if (!canDelete) return
-            effectiveSelectedIds.forEach(controller.deleteLayer)
-          }}
-        >
-          <Trash2  />
-        </UiIconButton>
-      {controller.profile.layerKinds.includes('group') ? <PanelTrigger panelSize="menu" panelPadding="menu" closeOnPanelClick
-        renderPanel={() => <div role="menu" className="flex flex-col gap-1">
-        <UiOptionButton variant="menu" size="sm" role="menuitem" aria-label={t('imageEditor.v3.workflow.group')}
-          disabled={!canGroupImageEditLayersV3(controller.document.layers, effectiveSelectedIds)}
-          onClick={() => {
-            try { const id = controller.groupLayers(effectiveSelectedIds, t('imageEditor.v3.workflow.groupName')); setSelectedLayerIds(controller.sessionId, [id]); toggleGroupExpanded(controller.sessionId, id); setCreationError(null) }
-            catch (error) { setCreationError(error instanceof Error ? error.message : String(error)) }
-          }}><FolderPlus className={`${UI_ICON_SIZE_CLASS.md}`} />{t('imageEditor.v3.workflow.group')}</UiOptionButton>
-        <UiOptionButton variant="menu" size="sm" role="menuitem" aria-label={t('imageEditor.v3.workflow.ungroup')} disabled={!canUngroupImageEditLayerV3(primaryLocation)}
-          onClick={() => {
-            if (!primaryLocation || primaryLocation.layer.type !== 'group') return
-            try { const ids = primaryLocation.layer.children.map(layer => layer.id); controller.ungroupLayer(primaryLocation.layer.id); setSelectedLayerIds(controller.sessionId, ids); setCreationError(null) }
-            catch (error) { setCreationError(error instanceof Error ? error.message : String(error)) }
-          }}><Ungroup className={`${UI_ICON_SIZE_CLASS.md}`} />{t('imageEditor.v3.workflow.ungroup')}</UiOptionButton>
-        <UiOptionButton variant="menu" size="sm" role="menuitem" aria-label={t('imageEditor.v3.workflow.outGroup')} disabled={!primaryEditable || !primaryLocation?.parentId}
-          onClick={() => {
-            if (!primaryLocation?.parentId) return
-            const parent = findImageEditLayerLocationV3(controller.document.layers, primaryLocation.parentId)
-            if (!parent) return
-            try { controller.moveLayer(primaryLocation.layer.id, parent.parentId, parent.index + 1); setCreationError(null) }
-            catch (error) { setCreationError(error instanceof Error ? error.message : String(error)) }
-          }}><CornerUpLeft className={`${UI_ICON_SIZE_CLASS.md}`} />{t('imageEditor.v3.workflow.outGroup')}</UiOptionButton>
-        </div>}>
-        {({ open, togglePanel }) => <UiIconButton on={open} aria-haspopup="menu" aria-expanded={open}
-          aria-label={t('imageEditor.v3.filterWorkspace.moreLayerActions', { defaultValue: '更多图层操作' })} onClick={togglePanel}><MoreHorizontal  /></UiIconButton>}
-      </PanelTrigger> : null}
-      </div>
+        </div>
+      )}
 
       <div
         role="tree"
@@ -462,6 +320,110 @@ export function ImageEditorLayersPanelV3({
           />
         )}
       </div>
+
+      {/* 面板工具在底栏：左端图层数，右端新建、复制、删除；上移下移、编组这类低频操作在“更多”里 */}
+      <UiToolbar
+        variant="footer"
+        moreLabel={t('imageEditor.v3.filterWorkspace.moreLayerActions', { defaultValue: '更多图层操作' })}
+        tools={[
+          {
+            kind: 'menu',
+            id: 'add',
+            label: t('imageEditor.v3.layers.addLayer'),
+            icon: Plus,
+            menu: () => (
+              <div data-layer-add-menu className="flex flex-col gap-0.5" role="menu" aria-label={t('imageEditor.v3.layers.addLayer')}>
+                {creationChoices.map(({ choice, readiness }) => {
+                  const disabled = creating || readiness.state !== 'ready'
+                  const reason = resolveImageEditorReadinessReasonV3(readiness, t)
+                  const unavailableLabel = reason
+                    ? t('imageEditor.v3.readiness.unavailableWithReason', { label: choice.name, reason })
+                    : t('imageEditor.v3.readiness.unavailable', { label: choice.name })
+                  return (
+                    <UiOptionButton
+                      key={`${choice.kind}:${choice.subtype ?? ''}`}
+                      type="button"
+                      role="menuitem"
+                      variant="menu"
+                      size="sm" className="w-full text-left"
+                      disabled={disabled}
+                      aria-label={disabled ? unavailableLabel : choice.name}
+                      disabledReason={disabled ? unavailableLabel : undefined}
+                      onClick={() => addChoice(choice)}
+                    >
+                      <span className="whitespace-nowrap">{choice.name}</span>
+                    </UiOptionButton>
+                  )
+                })}
+              </div>
+            ),
+          },
+          {
+            kind: 'action',
+            id: 'duplicate',
+            label: t('imageEditor.v3.layers.duplicate'),
+            icon: Copy,
+            disabled: !primaryEditable || !primaryLocation,
+            onSelect: () => {
+              if (!primaryLocation || !primaryEditable) return
+              const duplicateId = controller.duplicateLayer(primaryLocation.layer.id, primaryLocation.parentId, primaryLocation.index + 1)
+              if (duplicateId) setSelectedLayerIds(controller.sessionId, [duplicateId])
+            },
+          },
+          {
+            kind: 'action',
+            id: 'delete',
+            label: t('imageEditor.v3.layers.delete'),
+            icon: Trash2,
+            tone: 'danger',
+            disabled: !canDelete,
+            onSelect: () => {
+              if (!canDelete) return
+              effectiveSelectedIds.forEach(controller.deleteLayer)
+            },
+          },
+        ]}
+        more={(
+          <>
+            <UiOptionButton variant="menu" size="sm" role="menuitem"
+              disabled={!primaryEditable || !primaryLocation || primaryLocation.index >= primaryLocation.container.length - 1}
+              onClick={() => {
+                if (!primaryLocation || !primaryEditable) return
+                runAction(() => controller.moveLayer(primaryLocation.layer.id, primaryLocation.parentId, primaryLocation.index + 1))
+              }}><ArrowUp className={`${UI_ICON_SIZE_CLASS.md}`} />{t('imageEditor.v3.layers.moveUp')}</UiOptionButton>
+            <UiOptionButton variant="menu" size="sm" role="menuitem"
+              disabled={!primaryEditable || !primaryLocation || primaryLocation.index <= 0}
+              onClick={() => {
+                if (!primaryLocation || !primaryEditable) return
+                runAction(() => controller.moveLayer(primaryLocation.layer.id, primaryLocation.parentId, primaryLocation.index - 1))
+              }}><ArrowDown className={`${UI_ICON_SIZE_CLASS.md}`} />{t('imageEditor.v3.layers.moveDown')}</UiOptionButton>
+            {controller.profile.layerKinds.includes('group') ? <>
+              <UiOptionButton variant="menu" size="sm" role="menuitem" aria-label={t('imageEditor.v3.workflow.group')}
+                disabled={!canGroupImageEditLayersV3(controller.document.layers, effectiveSelectedIds)}
+                onClick={() => {
+                  try { const id = controller.groupLayers(effectiveSelectedIds, t('imageEditor.v3.workflow.groupName')); setSelectedLayerIds(controller.sessionId, [id]); toggleGroupExpanded(controller.sessionId, id); setCreationError(null) }
+                  catch (error) { setCreationError(error instanceof Error ? error.message : String(error)) }
+                }}><FolderPlus className={`${UI_ICON_SIZE_CLASS.md}`} />{t('imageEditor.v3.workflow.group')}</UiOptionButton>
+              <UiOptionButton variant="menu" size="sm" role="menuitem" aria-label={t('imageEditor.v3.workflow.ungroup')} disabled={!canUngroupImageEditLayerV3(primaryLocation)}
+                onClick={() => {
+                  if (!primaryLocation || primaryLocation.layer.type !== 'group') return
+                  try { const ids = primaryLocation.layer.children.map(layer => layer.id); controller.ungroupLayer(primaryLocation.layer.id); setSelectedLayerIds(controller.sessionId, ids); setCreationError(null) }
+                  catch (error) { setCreationError(error instanceof Error ? error.message : String(error)) }
+                }}><Ungroup className={`${UI_ICON_SIZE_CLASS.md}`} />{t('imageEditor.v3.workflow.ungroup')}</UiOptionButton>
+              <UiOptionButton variant="menu" size="sm" role="menuitem" aria-label={t('imageEditor.v3.workflow.outGroup')} disabled={!primaryEditable || !primaryLocation?.parentId}
+                onClick={() => {
+                  if (!primaryLocation?.parentId) return
+                  const parent = findImageEditLayerLocationV3(controller.document.layers, primaryLocation.parentId)
+                  if (!parent) return
+                  try { controller.moveLayer(primaryLocation.layer.id, parent.parentId, parent.index + 1); setCreationError(null) }
+                  catch (error) { setCreationError(error instanceof Error ? error.message : String(error)) }
+                }}><CornerUpLeft className={`${UI_ICON_SIZE_CLASS.md}`} />{t('imageEditor.v3.workflow.outGroup')}</UiOptionButton>
+            </> : null}
+          </>
+        )}
+      >
+        {t('imageEditor.v3.layers.count', { count: collectImageEditLayerIdsV3(controller.document.layers).length })}
+      </UiToolbar>
     </section>
   )
 }

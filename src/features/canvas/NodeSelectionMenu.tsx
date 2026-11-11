@@ -16,8 +16,10 @@ import {
   PanelTrigger,
   UI_GLASS_ADAPTIVE_DIVIDER_CLASS,
   UI_TEXT_META_CLASS,
+  UiEmpty,
   UiInput,
   UiOptionButton,
+  UiSearchInput,
 } from '@/components/ui'
 import type { FloatingPanelAnchorRect } from '@/components/ui/floatingPanelPosition'
 import {
@@ -102,18 +104,31 @@ interface NodeMenuListProps {
   onChoose: (item: CanvasNodeDefinition, file?: File) => void
 }
 
-/** 菜单正文：分区标题 + 菜单项；方向键 / Home / End 移动焦点，Enter 执行（Escape 由共享浮层处理）。 */
+/**
+ * 菜单正文：顶部搜索节点，其下分区标题 + 菜单项。打开即可打字筛选；方向键 / Home / End 在菜单项间移动焦点，
+ * 搜索框里按 Enter 添加第一个匹配项（Escape 由共享浮层处理）。
+ */
 function NodeMenuList({ sections, allowedTypes, uploadKinds, onChoose }: NodeMenuListProps): JSX.Element {
   const { t } = useTranslation()
   const listRef = useRef<HTMLDivElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
   const uploadInputRef = useRef<HTMLInputElement>(null)
+  const [query, setQuery] = useState('')
 
-  // 浮层定位完成才可见，隐藏态的元素拿不到焦点：等两帧再聚焦首项
+  const visibleSections = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    if (!needle) return sections
+    return sections
+      .map((entry) => ({ ...entry, items: entry.items.filter((item) => t(item.menuLabelKey).toLowerCase().includes(needle)) }))
+      .filter((entry) => entry.items.length > 0)
+  }, [query, sections, t])
+
+  // 浮层定位完成才可见，隐藏态的元素拿不到焦点：等两帧再聚焦搜索框
   useEffect(() => {
     let second = 0
     const first = requestAnimationFrame(() => {
       second = requestAnimationFrame(() => {
-        listRef.current?.querySelector<HTMLButtonElement>(MENU_ITEM_SELECTOR)?.focus({ preventScroll: true })
+        searchRef.current?.focus({ preventScroll: true })
       })
     })
     return () => {
@@ -124,16 +139,22 @@ function NodeMenuList({ sections, allowedTypes, uploadKinds, onChoose }: NodeMen
 
   const handleKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Enter') {
+      if (event.nativeEvent.isComposing) return
       const activeItem = document.activeElement as HTMLButtonElement | null
-      if (activeItem?.getAttribute('role') === 'menuitem') {
+      const target = activeItem === searchRef.current
+        ? listRef.current?.querySelector<HTMLButtonElement>(MENU_ITEM_SELECTOR)
+        : activeItem?.getAttribute('role') === 'menuitem' ? activeItem : null
+      if (target) {
         event.preventDefault()
-        activeItem.click()
+        target.click()
       }
       return
     }
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'Home' && event.key !== 'End') {
       return
     }
+    // 搜索框里 Home / End 照常移动光标
+    if (document.activeElement === searchRef.current && (event.key === 'Home' || event.key === 'End')) return
     const items = Array.from(listRef.current?.querySelectorAll<HTMLButtonElement>(MENU_ITEM_SELECTOR) ?? [])
     if (items.length === 0) {
       return
@@ -144,7 +165,9 @@ function NodeMenuList({ sections, allowedTypes, uploadKinds, onChoose }: NodeMen
       ? 0
       : event.key === 'End'
         ? items.length - 1
-        : (currentIndex + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
+        : currentIndex < 0
+          ? (event.key === 'ArrowDown' ? 0 : items.length - 1)
+          : (currentIndex + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
     items[nextIndex]?.focus()
   }, [])
 
@@ -165,10 +188,20 @@ function NodeMenuList({ sections, allowedTypes, uploadKinds, onChoose }: NodeMen
       role="menu"
       aria-label={t('node.menuTitle')}
       tabIndex={-1}
-      className="flex min-w-32 max-w-sm flex-col outline-none"
+      className="flex min-w-56 max-w-sm flex-col outline-none"
       onKeyDown={handleKeyDown}
     >
-      {sections.map(({ section, items }, sectionIndex) => (
+      <UiSearchInput
+        ref={searchRef}
+        size="sm"
+        className="mb-1 w-full"
+        value={query}
+        placeholder={t('node.menuSearch')}
+        aria-label={t('node.menuSearch')}
+        onChange={(event) => setQuery(event.target.value)}
+      />
+      {visibleSections.length === 0 ? <UiEmpty size="xs" title={t('node.menuNoMatch')} /> : null}
+      {visibleSections.map(({ section, items }, sectionIndex) => (
         <Fragment key={section}>
           {sectionIndex > 0 && (
             <div role="separator" className={`my-1 border-t ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS}`} />

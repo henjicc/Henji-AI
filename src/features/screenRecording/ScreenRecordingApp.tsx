@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
-import { ChevronLeft, Pause, Play, Square } from 'lucide-react'
+import { ArrowLeft, Pause, Play, Square } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { UiButton, UiError, UiIconButton, UiLoading, UiSegmented, UiToolbar } from '@/components/ui'
 import { UI_TEXT_TIMECODE_CLASS } from '@/components/ui/styleTokens'
@@ -124,7 +124,7 @@ export default function ScreenRecordingApp({ onBack }: { onBack: () => void }): 
 
   return <div className="flex h-full min-h-0 flex-col" data-application-surface="tool.screen_recording" data-testid="screen-recording-page">
     <UiToolbar variant="command" center={center} centerLayout="fit" trailing={trailing}>
-      <UiIconButton aria-label={t('recording.back')} onClick={back}><ChevronLeft /></UiIconButton>{leading}
+      <UiIconButton aria-label={t('recording.back')} tooltip={t('recording.back')} onClick={back}><ArrowLeft /></UiIconButton>{leading}
     </UiToolbar>
     {(error || state.error || snapshot?.error) && <div className="px-4 pt-3"><UiError message={error || state.error || snapshot?.error || ''} /></div>}
     {planned && state.documentId && state.content ? <RecordingDirectorScript sessionId={state.documentId} recording={state.content} />

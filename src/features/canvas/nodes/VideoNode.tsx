@@ -226,6 +226,7 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
               alt={resolvedTitle}
               className="pointer-events-none h-full w-full select-none object-contain"
               disableViewer
+              failure="none"
               draggable={false}
             />
             {/* 与播放器同一套：静息只看画面和右上角时长，悬停才出无底的播放键 */}

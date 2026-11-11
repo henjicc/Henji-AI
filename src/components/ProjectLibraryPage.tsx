@@ -1,6 +1,6 @@
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Clock3, FilePen, Folder, Layers, LayoutGrid, List, Plus } from 'lucide-react';
+import { Clock3, FilePen, Folder, Layers, LayoutGrid, List, MoreHorizontal, Plus } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import ContextMenu from '@/components/ContextMenu';
 import {
@@ -42,10 +42,10 @@ import { useContextMenu } from '@/hooks/useContextMenu';
 import { useMultiSelect } from '@/hooks/useMultiSelect';
 
 export interface ProjectLibraryLabels {
-  /** 左栏唯一主按钮「新建…」的文案（多来源时是打开来源菜单的按钮文案） */
+  /** 页头右端唯一主按钮「新建…」的文案（多来源时是打开来源菜单的按钮文案） */
   createAction: string;
-  /** 标题旁的数量，如「12 个项目」 */
-  count: (count: number) => string;
+  /** 页头「更多」按钮的名称 */
+  moreActions: string;
   searchPlaceholder: string;
   /** 搜索没有命中时的空状态标题 */
   noResults: string;
@@ -82,7 +82,7 @@ export interface ProjectLibraryLabels {
   selection?: ProjectSelectionToolbarLabels;
 }
 
-/** 新建来源菜单里的一项（如“打开图片”“新建空白图片”“粘贴剪贴板图片”）。 */
+/** 新建来源里的一项（如“打开图片”“新建空白图片”“粘贴剪贴板图片”）。 */
 interface ProjectLibraryCreateOption {
   id: string;
   label: string;
@@ -94,7 +94,7 @@ interface ProjectLibraryCreateOption {
  * 新建方式（有限三种）：
  * - `named`：先弹起名对话框，确认后用名称新建；
  * - `direct`：不起名，直接交给调用方（口播“导入音频或视频”、剪辑“新建项目”）；
- * - `menu`：多个来源。左栏主按钮带下拉，点开选来源。
+ * - `menu`：多个来源。第一个来源是页头主按钮，其余收进它左边的「更多」；Ctrl+N 弹出全部来源。
  */
 export type ProjectLibraryCreate =
   | { kind: 'named'; onCreate: (name: string) => void }
@@ -115,7 +115,7 @@ interface ProjectLibraryFilter {
   onChange: (value: string) => void;
 }
 
-/** 左栏主按钮下方的次要动作（如“打开项目文件夹…”“导入单个文件…”）。 */
+/** 页头「更多」里的次要动作（如“打开文件…”“导入单个文件…”）。 */
 export interface ProjectLibrarySecondaryAction {
   label: string;
   icon: LucideIcon;
@@ -147,7 +147,7 @@ interface ProjectLibraryPageProps {
   busy?: boolean;
   labels: ProjectLibraryLabels;
   create: ProjectLibraryCreate;
-  /** 一个或多个次要动作，同档排在左栏主按钮下方。 */
+  /** 一个或多个次要动作，收进页头主按钮左边的「更多」。 */
   secondaryAction?: ProjectLibrarySecondaryAction | readonly ProjectLibrarySecondaryAction[];
   /** 传入即接受把文件拖到页面上（如图片编辑拖入图片） */
   onDropFiles?: (files: File[]) => void;
@@ -185,20 +185,19 @@ function isTypingTarget(target: EventTarget | null): boolean {
  * 项目页：画布、3D 镜头参考、口播、剪辑、图片编辑五个模块共用的完整页面外壳（参照 Premiere 主页：左栏 + 最近项目）。
  *
  * 骨架是左右两栏：
- * - **左栏**（约 208 宽，读取中、出错、没有项目时都在）：顶部是这一页唯一的主按钮「新建…」（按新建方式起名、
- *   直接新建或弹出来源菜单），下面是同档的次要动作（打开项目文件夹…、导入单个文件…等）；
- *   一条分隔线之后是分类导航：全部（数量）/ 最近打开 / 未保存草稿（数量，警示色，只在有草稿时出现），
- *   文档页的位置筛选在其下作为「按所属项目」一组导航。
- * - **主区**铺满剩余宽度：页头一行——标题 + 数量 ｜ 搜索、排序、网格/列表切换；多选时动作整组换成多选工具条。
+ * - **左栏**（约 208 宽，只放导航；没有项目、读取失败时不出现）：全部（数量）/ 最近打开 /
+ *   未保存草稿（数量，警示色，只在有草稿时出现），文档页的位置筛选在其下作为「按所属项目」一组导航。
+ * - **主区**铺满剩余宽度：页头一行——标题 + 数量 ｜ 搜索、排序、网格/列表切换、「更多」（其余新建来源与次要动作）、
+ *   这一页唯一的主按钮「新建…」（没有项目时页头只留后两样）；多选时动作整组换成多选工具条。
  *   网格按 auto-fill 排列，宽屏自动多排几列；列表按列显示名称、位置、修改时间、大小，点表头排序。
  *   网格/列表的选择按页面记在本机（`persistKey`）；“最近打开”用作品索引记的打开时间（`openedAt`），
  *   任何入口打开过的都算，按打开时间倒序。
  *
  * 状态：读取中 / 读取失败时主区只有加载或错误；没有项目时主区只有一句邀请（支持拖入时加拖放提示），
- * 不重复放新建按钮。草稿排在列表最前，带“草稿”标记，单击继续编辑，菜单里可以移到回收站。
+ * 不重复放新建按钮。草稿排在列表最前，元信息开头写“未保存”，单击继续编辑，菜单里可以移到回收站。
  * 键盘：Enter 打开焦点所在项，Delete 移到回收站（多选时针对所选），F2 重命名，Ctrl+N 新建。
  *
- * 收口的是**页面骨架加接线**：滚动容器、左栏、页头、视图切换、多选、新建/重命名对话框、删除、右键菜单、快捷键。
+ * 收口的是**页面骨架加接线**：滚动容器、左栏、页头、视图切换、多选、新建/重命名对话框、删除、菜单、快捷键。
  * 调用方只提供数据来源、能力（新建方式、是否可重命名/删除）与场景专属动作，不开放样式覆盖口子。
  */
 export function ProjectLibraryPage({
@@ -266,6 +265,7 @@ export function ProjectLibraryPage({
   // 多选的「全选」只覆盖当前看得见的已保存项目，草稿不参与
   const selectableIds = useMemo(() => visibleItems.filter((item) => !item.draft).map((item) => item.id), [visibleItems]);
   const selection = useMultiSelect(selectableIds);
+  const selectionActive = selection.active;
   const searching = query.trim().length > 0;
   const settled = !loading && !loadError;
   // 筛选下没有结果不是“还没有任何项目”：保留页头，列表里说明没有符合条件的
@@ -362,7 +362,8 @@ export function ProjectLibraryPage({
     const onKey = (event: KeyboardEvent): void => {
       if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey || event.key.toLowerCase() !== 'n') return;
       const root = rootRef.current;
-      if (!root || dialogOpen || busy || event.defaultPrevented) return;
+      // 多选时页头是多选工具条，没有新建
+      if (!root || dialogOpen || busy || selectionActive || event.defaultPrevented) return;
       // 工作区切走后页面仍挂载但被隐藏（display: none）：这时不响应
       if (typeof root.checkVisibility === 'function' && !root.checkVisibility()) return;
       if (isTypingTarget(event.target) || document.querySelector('[role="dialog"][aria-modal="true"]')) return;
@@ -371,13 +372,13 @@ export function ProjectLibraryPage({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [dialogOpen, busy, startCreate]);
+  }, [dialogOpen, busy, selectionActive, startCreate]);
 
-  // 多来源新建：左栏常驻，第一个来源当主按钮，其余来源平铺在它下面，一次点击直达（不再先弹菜单）；Ctrl+N 仍弹来源菜单。
+  // 多来源新建：第一个来源当主按钮，其余来源与次要动作收进「更多」；Ctrl+N 弹出全部来源。
   const primarySource = create.kind === 'menu' ? create.options[0] : undefined;
   const CreateIcon = primarySource ? primarySource.icon : create.kind === 'direct' && create.icon ? create.icon : Plus;
   const secondaryActions: readonly ProjectLibrarySecondaryAction[] = secondaryAction === undefined ? [] : Array.isArray(secondaryAction) ? secondaryAction : [secondaryAction as ProjectLibrarySecondaryAction];
-  const railActions: readonly ProjectLibrarySecondaryAction[] = [
+  const moreActions: readonly ProjectLibrarySecondaryAction[] = [
     ...(create.kind === 'menu' ? create.options.slice(1).map((option) => ({ label: option.label, icon: option.icon, onClick: option.onSelect })) : []),
     ...secondaryActions,
   ];
@@ -409,34 +410,10 @@ export function ProjectLibraryPage({
     <span className={`ml-auto shrink-0 text-xs tabular-nums ${warning ? 'text-warning-text' : 'text-text3'}`}>{count}</span>
   );
 
-  const rail = (
-    <aside className="flex w-52 shrink-0 flex-col overflow-y-auto border-r border-gap bg-panel px-3 py-4">
-      <UiButton
-        ref={createButtonRef}
-        className="w-full"
-        variant="primary"
-        disabled={busy}
-        aria-keyshortcuts="Control+N"
-        onClick={(event) => (primarySource ? primarySource.onSelect() : startCreate(event.currentTarget))}
-      >
-        <CreateIcon  />
-        {primarySource ? primarySource.label : labels.createAction}
-      </UiButton>
-      {railActions.length ? (
-        <div className="mt-2 flex flex-col gap-0.5">
-          {railActions.map((action) => (
-            // 与下方分类同一种行：左对齐，图标落在同一列（UiButton 固定居中，会让长短不一的文案参差不齐）
-            <UiNavButton key={action.label} size="md" onClick={action.onClick} disabled={busy || action.disabled} tooltip={action.label}>
-              <action.icon className="h-4 w-4 shrink-0" />
-              <span className="truncate">{action.label}</span>
-            </UiNavButton>
-          ))}
-        </div>
-      ) : null}
-
-      {/* 动作（新建、打开、导入）与导航（看哪一类）语义不同：左栏唯一的分隔线 */}
-      {settled && !empty ? (
-        <nav className="mt-4 flex flex-col gap-0.5 border-t border-line pt-4">
+  const rail = empty || loadError ? null : (
+    <aside className="flex w-52 shrink-0 flex-col overflow-y-auto border-r border-line bg-window px-3 py-6">
+      {settled ? (
+        <nav className="flex flex-col gap-0.5">
           <UiNavButton size="md" active={activeCategory === 'all' && !filtering} onClick={() => chooseCategory('all')}>
             <Layers className={`${UI_ICON_SIZE_CLASS.md} shrink-0`} />
             <span className="truncate">{labels.nav.all}</span>
@@ -448,7 +425,7 @@ export function ProjectLibraryPage({
           </UiNavButton>
           {drafts.length ? (
             <UiNavButton size="md" active={activeCategory === 'drafts'} onClick={() => chooseCategory('drafts')}>
-              <FilePen className={`${UI_ICON_SIZE_CLASS.md} shrink-0 text-warning-text`} />
+              <FilePen className={`${UI_ICON_SIZE_CLASS.md} shrink-0`} />
               <span className="truncate">{labels.nav.drafts}</span>
               {navCount(drafts.length, true)}
             </UiNavButton>
@@ -475,7 +452,40 @@ export function ProjectLibraryPage({
   );
 
   const showTools = settled && !empty;
-  const headerActions = !showTools ? undefined : selection.active && labels.selection ? (
+  // 「更多」紧挨主按钮：同属新建与打开这一组，与左边查看列表的工具隔开
+  const createGroup = (
+    <div className="ml-2 flex items-center gap-1">
+      {moreActions.length ? (
+        <UiIconButton
+          size="md"
+          aria-haspopup="menu"
+          tooltip={labels.moreActions}
+          aria-label={labels.moreActions}
+          disabled={busy}
+          onClick={(event) => showMenuAt(event.currentTarget, moreActions.map((action) => ({
+            id: action.label,
+            label: action.label,
+            icon: <action.icon className={UI_ICON_SIZE_CLASS.md} />,
+            disabled: action.disabled,
+            onClick: action.onClick,
+          })))}
+        >
+          <MoreHorizontal />
+        </UiIconButton>
+      ) : null}
+      <UiButton
+        ref={createButtonRef}
+        variant="primary"
+        disabled={busy}
+        aria-keyshortcuts="Control+N"
+        onClick={(event) => (primarySource ? primarySource.onSelect() : startCreate(event.currentTarget))}
+      >
+        <CreateIcon />
+        {primarySource ? primarySource.label : labels.createAction}
+      </UiButton>
+    </div>
+  );
+  const headerActions = showTools && selection.active && labels.selection ? (
     <ProjectSelectionToolbar
       selection={selection}
       labels={labels.selection}
@@ -483,35 +493,40 @@ export function ProjectLibraryPage({
     />
   ) : (
     <>
-      <UiSearchInput
-        className="w-56"
-        value={query}
-        aria-label={labels.searchPlaceholder}
-        placeholder={labels.searchPlaceholder}
-        onChange={(event) => setQuery(event.target.value)}
-        onKeyDown={(event) => { if (event.key === 'Escape') setQuery('') }}
-      />
-      {activeCategory !== 'recent' ? (
-        <Dropdown<ProjectLibrarySort>
-          appearance="text"
-          value={sort}
-          ariaLabel={labels.sortLabel}
-          options={PROJECT_LIBRARY_SORT_ORDER.map((value) => ({ value, label: labels.sortOptions[value] }))}
-          onSelect={setSort}
-          className="shrink-0"
-          buttonClassName="w-auto"
-          minWidthStrategy="options"
-          panelWidthStrategy="options"
-        />
+      {showTools ? (
+        <>
+          <UiSearchInput
+            className="w-56"
+            value={query}
+            aria-label={labels.searchPlaceholder}
+            placeholder={labels.searchPlaceholder}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => { if (event.key === 'Escape') setQuery('') }}
+          />
+          {activeCategory !== 'recent' ? (
+            <Dropdown<ProjectLibrarySort>
+              appearance="text"
+              value={sort}
+              ariaLabel={labels.sortLabel}
+              options={PROJECT_LIBRARY_SORT_ORDER.map((value) => ({ value, label: labels.sortOptions[value] }))}
+              onSelect={setSort}
+              className="shrink-0"
+              buttonClassName="w-auto"
+              minWidthStrategy="options"
+              panelWidthStrategy="options"
+            />
+          ) : null}
+          <div role="group" aria-label={`${labels.view.grid} / ${labels.view.list}`} className="flex items-center">
+            <UiIconButton size="md" selection="mode" on={view === 'grid'} tooltip={labels.view.grid} aria-label={labels.view.grid} onClick={() => changeView('grid')}>
+              <LayoutGrid />
+            </UiIconButton>
+            <UiIconButton size="md" selection="mode" on={view === 'list'} tooltip={labels.view.list} aria-label={labels.view.list} onClick={() => changeView('list')}>
+              <List />
+            </UiIconButton>
+          </div>
+        </>
       ) : null}
-      <div role="group" aria-label={`${labels.view.grid} / ${labels.view.list}`} className="flex items-center">
-        <UiIconButton size="md" selection="mode" on={view === 'grid'} tooltip={labels.view.grid} aria-label={labels.view.grid} onClick={() => changeView('grid')}>
-          <LayoutGrid  />
-        </UiIconButton>
-        <UiIconButton size="md" selection="mode" on={view === 'list'} tooltip={labels.view.list} aria-label={labels.view.list} onClick={() => changeView('list')}>
-          <List  />
-        </UiIconButton>
-      </div>
+      {createGroup}
     </>
   );
 
@@ -532,7 +547,7 @@ export function ProjectLibraryPage({
         <UiPageHeader
           className="mb-6"
           title={description ? <UiTooltipText tooltip={description}>{title}</UiTooltipText> : title}
-          meta={showTools ? labels.count(activeCategory === 'all' && !searching ? total + drafts.length : visibleItems.length) : undefined}
+          meta={showTools ? String(activeCategory === 'all' && !searching ? total + drafts.length : visibleItems.length) : undefined}
           onBack={onBack}
           backLabel={backLabel}
           actions={headerActions}

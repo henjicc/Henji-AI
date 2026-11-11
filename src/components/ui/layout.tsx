@@ -508,7 +508,8 @@ export function UiFormRow({
         {/* 弹性布局：带悬停说明的名称包在行内块里，留在普通行里会多撑出几像素行高，字就不在正中 */}
         <div id={labelId} className={`flex min-w-0 break-words ${multilineControl ? 'leading-4' : ''} ${labelClass}`}>{labelNode}</div>
       </div>
-      <div ref={controlBodyRef} data-ui-form-control className="min-w-0 text-left">
+      {/* 单行控件比标签矮（24 高的开关）时也与标签同一条中线 */}
+      <div ref={controlBodyRef} data-ui-form-control className={`min-w-0 text-left ${multilineControl ? '' : 'self-center'}`}>
         <UiFormRowLabelContext.Provider value={labelling}>{children}</UiFormRowLabelContext.Provider>
       </div>
       {trailing !== undefined ? <div data-ui-form-trailing className={`flex min-h-control-sm w-control-sm items-center justify-center ${multilineControl ? 'self-start' : 'self-center'}`}>{trailing}</div> : null}

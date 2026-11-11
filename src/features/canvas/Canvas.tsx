@@ -48,6 +48,7 @@ import { NodeToolDialogRouter } from './ui/NodeToolDialogRouter';
 import { CameraStageNodeDialog } from './nodes/cameraStage/CameraStageNodeDialog';
 import { CanvasOverlays } from './ui/CanvasOverlays';
 import { CanvasMiniMap } from './ui/CanvasMiniMap';
+import { CanvasZoomBar } from './ui/CanvasZoomBar';
 import { useCanvasAssetDrop } from './hooks/useCanvasAssetDrop';
 import { useCanvasGlassPerformance } from './hooks/useCanvasGlassPerformance';
 import { AssetGroupFocusOverlay } from './ui/AssetGroupFocusOverlay';
@@ -458,6 +459,7 @@ export function Canvas() {
       >
         <CanvasGridBackground />
         <CanvasMiniMap />
+        <CanvasZoomBar />
 
         <SelectedNodeOverlay
           onTidy={() => { void tidy.start(); }}

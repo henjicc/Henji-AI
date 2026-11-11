@@ -152,7 +152,7 @@ const UI_NAV_SIZE_CLASS = {
 } as const;
 
 /**
- * 导航项（“正在看哪里”）：静息无底 text2、悬停出底；选中为中性选中底 + 主要文字。
+ * 导航项（“正在看哪里”）：静息无底 text2、图标退到图标灰，悬停出底；选中为中性选中底 + 主要文字（图标同色）。
  * 外观只由 active / size 决定，className 只放布局（check:surface 规则 E）。
  */
 export const UiNavButton = forwardRef<HTMLButtonElement, UiNavButtonProps>(
@@ -163,7 +163,7 @@ export const UiNavButton = forwardRef<HTMLButtonElement, UiNavButtonProps>(
       className={`relative inline-flex w-full items-center border-0 text-left text-13 transition-colors ${UI_RADIUS_CLASS.control} ${UI_NAV_SIZE_CLASS[size]} ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${UI_ITEM_FOCUS_RING_CLASS} ${
         active
           ? UI_NAV_ITEM_ACTIVE_CLASS
-          : `${UI_GLASS_ADAPTIVE_NAV_CLASS} text-text2 hover:text-text1`
+          : `${UI_GLASS_ADAPTIVE_NAV_CLASS} text-text2 hover:text-text1 [&>svg:not([class*=text-])]:text-icon-rest`
       } ${className}`}
       {...props}
  />
@@ -284,10 +284,9 @@ export const UiTextToken = forwardRef<HTMLButtonElement, UiTextTokenProps>(
     ...props
   }, ref) => {
     const chip = appearance === 'chip';
+    // 删掉的词只用删除线加第三档文字退后，不铺红底：一段里删得多时整片红底比内容还抢眼
     const fillClass = excluded
-      ? chip
-        ? 'bg-danger-tint text-danger-text line-through'
-        : `${current ? 'bg-selected' : 'bg-danger-tint'} text-text3 line-through decoration-danger-text`
+      ? `${current ? 'bg-selected' : ''} text-text3 line-through`
       : current
         ? 'bg-selected text-text1'
         : selected

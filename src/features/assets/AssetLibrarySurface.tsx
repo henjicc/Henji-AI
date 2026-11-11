@@ -4,7 +4,7 @@ import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { UiSegmented } from '@/components/ui'
 import { VirtuosoGrid } from 'react-virtuoso'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { FolderPlus, Settings2, X } from 'lucide-react'
+import { FolderPlus, Maximize2, Settings2, X } from 'lucide-react'
 import { Dropdown, PanelTrigger, UI_FIELD_LABEL_CLASS, UI_GLASS_ADAPTIVE_REGION_CLASS, UI_TEXT_META_CLASS, UiButton, UiEmpty, UiError, UiIconButton, UiSearchInput, UiPageHeader, UiRangeInput, UiResizeHandle } from '@/components/ui'
 import type { AssetLibraryRecord, AssetMediaType, AssetPage, AssetRecord } from '@/platform/contracts/assetLibrary'
 import { addAssetToLibrary, createAssetLibrary, deleteAsset, deleteAssetLibrary, inspectAssets, listAssetLibraries, listAssetTags, queryAssets, removeAssetFromLibrary, renameAssetLibrary, setAssetTags, updateAsset } from '@/commands/assetLibrary'
@@ -303,7 +303,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
         <UiPageHeader
           divider
           className="h-14 shrink-0 px-4"
-          title={t('assetLibrary.categories')}
+          title={t('assetLibrary.title')}
           meta={t('assetLibrary.count', { count: page.total })}
           onBack={onClose}
           backLabel={t('assetLibrary.back')}
@@ -337,7 +337,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
           {mode === 'floating' && (
             <header className="flex h-12 shrink-0 items-center gap-2 px-3">
               {viewControls}
-              <UiButton className="shrink-0" onClick={onOpenWorkspace}>{t('assetLibrary.manage')}</UiButton>
+              <UiIconButton className="shrink-0" tooltip={t('assetLibrary.manage')} aria-label={t('assetLibrary.manage')} onClick={onOpenWorkspace}><Maximize2 /></UiIconButton>
               {onClose && <UiIconButton className="shrink-0" tooltip={t('assetLibrary.close')} aria-label={t('assetLibrary.close')} onClick={onClose}><X  /></UiIconButton>}
             </header>
           )}

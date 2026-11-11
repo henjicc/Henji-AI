@@ -27,13 +27,13 @@ export function ImageEditorToolRailV3({ controller }: { controller: ImageEditorV
       const current = tools.find(tool => tool.id === session?.activeTool)
         ?? tools[0]
       const CurrentIcon = current.icon
-      return <div key={group.id} role="toolbar" aria-orientation="vertical" className={`flex flex-col gap-1 ${index > 0 ? 'mt-2 pt-2' : ''}`}>
+      return <div key={group.id} role="toolbar" aria-orientation="vertical" className={`flex flex-col gap-1 ${index > 0 ? 'mt-2 border-t border-line pt-2' : ''}`}>
         {collapsed ? <PanelTrigger menuSelection="single" panelPadding="menu" panelWidthLabels={tools.map(tool => t(tool.labelKey))} closeOnPanelClick renderPanel={() =>
           <div role="menu" aria-label={t(group.labelKey ?? current.labelKey)} className="flex flex-col gap-0.5 p-1">
             {tools.map(tool => <UiOptionButton key={tool.id} variant="menu" role="menuitem" active={tool.id === session?.activeTool} disabled={!available(tool.id)} onClick={() => setActiveTool(controller.sessionId, tool.id)}>{t(tool.labelKey)}</UiOptionButton>)}
           </div>}>
           {({ togglePanel, open }) => <Tooltip content={t(group.labelKey ?? current.labelKey)} delay={180} anchor="pointer-start">
-            <UiIconButton size="md" selection="mode" data-panel-trigger-button data-tool-id={group.triggerId ?? current.id} on={tools.some(tool => tool.id === session?.activeTool)} aria-label={t(group.labelKey ?? current.labelKey)} aria-expanded={open} aria-pressed={tools.some(tool => tool.id === session?.activeTool)} onClick={() => { if (available(current.id)) setActiveTool(controller.sessionId, current.id); togglePanel() }}><CurrentIcon className="h-4 w-4" /></UiIconButton>
+            <UiIconButton size="md" tone="rest" selection="mode" data-panel-trigger-button data-tool-id={group.triggerId ?? current.id} on={tools.some(tool => tool.id === session?.activeTool)} aria-label={t(group.labelKey ?? current.labelKey)} aria-expanded={open} aria-pressed={tools.some(tool => tool.id === session?.activeTool)} onClick={() => { if (available(current.id)) setActiveTool(controller.sessionId, current.id); togglePanel() }}><CurrentIcon className="h-4 w-4" /></UiIconButton>
           </Tooltip>}
         </PanelTrigger> : tools.map(tool => {
           const Icon = tool.icon
@@ -43,7 +43,7 @@ export function ImageEditorToolRailV3({ controller }: { controller: ImageEditorV
           const reason = resolveImageEditorReadinessReasonV3(readiness, t)
           const text = disabled ? (reason ? t('imageEditor.v3.readiness.unavailableWithReason', { label, reason }) : t('imageEditor.v3.readiness.unavailable', { label })) : label
           return <Tooltip key={tool.id} content={tool.shortcut && !disabled ? `${text} (${tool.shortcut.replace('Key', '')})` : text} delay={180} anchor="pointer-start">
-            <UiIconButton size="md" selection="mode" data-tool-id={tool.id} data-tool-readiness={disabled ? 'disabled' : readiness.state} on={session?.activeTool === tool.id} disabled={disabled} aria-label={text} aria-pressed={session?.activeTool === tool.id} onClick={() => setActiveTool(controller.sessionId, tool.id)}><Icon className="h-4 w-4" /></UiIconButton>
+            <UiIconButton size="md" tone="rest" selection="mode" data-tool-id={tool.id} data-tool-readiness={disabled ? 'disabled' : readiness.state} on={session?.activeTool === tool.id} disabled={disabled} aria-label={text} aria-pressed={session?.activeTool === tool.id} onClick={() => setActiveTool(controller.sessionId, tool.id)}><Icon className="h-4 w-4" /></UiIconButton>
           </Tooltip>
         })}
       </div>

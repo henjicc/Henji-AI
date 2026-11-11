@@ -24,11 +24,11 @@ export function AudioEditEffectLibrary(): React.ReactElement {
     const open = searching || !collapsed.has(key)
     const Chevron = open ? ChevronDown : ChevronRight
     return <UiButton size="sm" className="w-full justify-start" aria-expanded={open} onClick={() => toggle(key)}>
-      <Chevron size={UI_ICON_SIZE.sm} className="shrink-0 text-text3" /><span className={depth ? 'text-xs text-text2' : 'text-xs font-semibold text-text1'}>{label}</span><span className="ml-auto text-2xs tabular-nums text-text3">{count}</span>
+      <Chevron size={UI_ICON_SIZE.sm} className="shrink-0 text-text3" /><span className={depth ? 'text-xs text-text2' : 'text-xs text-text1'}>{label}</span><span className="ml-auto text-2xs tabular-nums text-text3">{count}</span>
     </UiButton>
   }
   const entry = (item: AudioEditEffectCatalogEntry) => <UiOptionButton key={item.key} variant="menu" size="sm" className="w-full" draggable={!item.disabledReason}
-    disabled={workspace.disabled || Boolean(item.disabledReason)} disabledReason={item.disabledReason ?? '正在处理，请稍候'} tooltip={item.tooltip}
+    disabled={workspace.disabled || Boolean(item.disabledReason)} disabledReason={item.disabledReason ?? '正在处理，请稍候'} tooltip={`${(item.tooltip ?? item.name).replace(/。$/, '')}。双击加到效果控件，或拖到效果控件里的位置`}
     onDragStart={event => { event.dataTransfer.setData(AUDIO_EDIT_EFFECT_DRAG_TYPE, item.key); event.dataTransfer.effectAllowed = 'copy' }}
     onDoubleClick={() => insertAudioEditEffect(workspace, item)}>{item.name}</UiOptionButton>
   return <div className="flex h-full min-h-0 flex-col bg-panel" data-audio-edit-panel="library">
@@ -53,7 +53,6 @@ export function AudioEditEffectLibrary(): React.ReactElement {
           })}
         </div>
       })}
-      {!searching && <p className="m-0 px-2 pt-2 text-2xs text-text3">双击加到效果控件，或拖到效果控件里的位置。</p>}
     </div>
   </div>
 }

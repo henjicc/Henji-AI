@@ -60,6 +60,8 @@ export interface CanvasToolPlugin {
   type: NodeToolType;
   label: string;
   icon: ToolIconKey;
+  /** 工具条上的样子：通用、图标认得的动作（编辑）只放图标，悬停给名称；不写时图标加文字（这个节点特有的事） */
+  display?: 'icon';
   editor: ToolEditorKind;
   dialog: CanvasToolDialogDefinition;
   operationIds?: string[];

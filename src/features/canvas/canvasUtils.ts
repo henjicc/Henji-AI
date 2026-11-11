@@ -21,6 +21,9 @@ export const DEFAULT_VIEWPORT: Viewport = { x: 0, y: 0, zoom: 1 }
 /** minimap 需要盖住包括 Alt 拖拽副本在内的所有画布内元素 */
 export const CANVAS_MINIMAP_Z_INDEX = 10000
 
+/** 适应画布：全部节点留两成边距，不放大到超过 100%（节点少时不会被放得很大）。 */
+export const CANVAS_FIT_VIEW_OPTIONS = { padding: 0.2, maxZoom: 1 } as const
+
 export interface PendingConnectStart {
   nodeId: string
   handleType: HandleType

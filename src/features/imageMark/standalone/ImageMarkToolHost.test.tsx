@@ -122,7 +122,7 @@ function fakeOpenDocument(): FakeOpenDocument {
   const fake: FakeOpenDocument = {
     id: DOCUMENT_ID,
     hooks: null,
-    session: { documentMeta: { name: 'source' } } as unknown as OpenImageDocument['session'],
+    session: { documentMeta: { name: 'source' }, getState: () => null, subscribe: () => () => undefined } as unknown as OpenImageDocument['session'],
     persistence: { onWorkingReplaced: () => () => undefined } as unknown as OpenImageDocument['persistence'],
     working: () => ({ documentRef: `image-edit-v3:${DOCUMENT_ID}`, revision: persistedDocument?.revision ?? 0, previewRef: null, sourceUrl: SOURCE_URL }),
     attachEditor: (hooks) => {

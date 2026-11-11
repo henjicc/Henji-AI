@@ -1,8 +1,6 @@
-import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { isImageEditorInputBlockedV3 } from './imageEditorInputScopeV3'
-import { Clipboard, Copy, Layers } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { PanelTrigger, UiButton, UiIconButton, UiOptionButton } from '@/components/ui'
+import { UiButton } from '@/components/ui'
 import { createLogger } from '@/core/logging'
 import { copyImageEditClipboardV3, pasteImageEditClipboardV3 } from '../application/imageEditClipboardV3'
 import type { ImageEditCommandBusV3 } from '../application/imageEditCommandBus'
@@ -49,13 +47,6 @@ export function ImageEditorClipboardV3({ bus, controller, disabled }: { bus: Ima
   }, [bus, controller.sessionId])
   return <div ref={anchor} className="flex min-w-0 items-center gap-1">
     <ImageEditorAppMenusV3 controller={controller} clipboard={execute} busy={busy} disabled={disabled} />
-    <PanelTrigger panelPadding="menu" panelSize="menu" closeOnPanelClick renderPanel={() => <div role="menu" aria-label="图片剪贴板" className="flex flex-col gap-1">
-      <UiOptionButton variant="menu" role="menuitem" disabled={busy} onClick={() => { void execute('copy') }}><Copy className={`${UI_ICON_SIZE_CLASS.md}`} />复制图层或选区 Ctrl+C</UiOptionButton>
-      <UiOptionButton variant="menu" role="menuitem" disabled={busy} onClick={() => { void execute('merged') }}><Layers className={`${UI_ICON_SIZE_CLASS.md}`} />复制合成结果 Ctrl+Shift+C</UiOptionButton>
-      <UiOptionButton variant="menu" role="menuitem" disabled={busy} onClick={() => { void execute('paste') }}><Clipboard className={`${UI_ICON_SIZE_CLASS.md}`} />粘贴图片 Ctrl+V</UiOptionButton>
-    </div>}>
-      {({ togglePanel, open }) => <UiIconButton onClick={togglePanel} aria-haspopup="menu" aria-expanded={open} aria-label="图片剪贴板" tooltip="图片剪贴板" size="md"><Clipboard  /></UiIconButton>}
-    </PanelTrigger>
     {busy && <UiButton size="md" onClick={() => operation.current?.abort()}>取消</UiButton>}
       {error && <span data-image-edit-clipboard-error role="alert" className="max-w-48 truncate text-xs text-text2" title={error}>{error}</span>}
   </div>

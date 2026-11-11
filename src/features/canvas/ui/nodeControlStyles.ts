@@ -29,7 +29,7 @@ export const NODE_ROW_CLASS =
   'group/row relative flex min-h-10 items-center gap-3 px-2';
 
 export const NODE_ROW_LABEL_CLASS =
-  'min-w-16 max-w-[45%] shrink-0 truncate whitespace-nowrap text-left text-xs font-medium text-text2';
+  'min-w-16 max-w-[45%] shrink-0 truncate whitespace-nowrap text-left text-xs font-normal text-text3';
 
 export const NODE_ROW_CONTROL_SLOT_CLASS = 'ml-auto flex min-w-0 items-center justify-end';
 

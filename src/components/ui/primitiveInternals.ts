@@ -58,6 +58,7 @@ export type IconButtonSize = '2xs' | 'xs' | UiControlSize | 'xl'
 /**
  * - `default`：静默，静息无底、悬停出底（工具栏、行内）；
  * - `rest`：保持默认状态的开关（轨道头的锁、眼睛、喇叭）与折叠箭头：静息退到图标灰，`on`（偏离默认）是主要文字色，不着强调色；
+ *   配 `selection="mode"` 是一列工具（图片编辑左侧工具栏）：其余工具图标灰，当前工具中性抬起底 + 主要文字；
  * - `media`：压在图片/视频/画布画面上（半透明深底 + 白色图标，不随主题）；
  * - `accent`：圆形材质主动作（如生成），一个表面最多一个；
  * - `danger`：静息静默、悬停显红（删除、移除）。
@@ -342,7 +343,7 @@ export function resolveIconButtonClass({
     : tone === 'mediaBare'
     ? 'border-0 bg-transparent text-on-media/80 hover:text-on-media disabled:opacity-50'
     : tone === 'rest'
-    ? `${UI_BUTTON_VARIANT_CLASS.quiet} ${on ? 'ui-btn-rest-on' : 'ui-btn-rest'}`
+    ? on && selection === 'mode' ? 'ui-btn-mode-on' : `${UI_BUTTON_VARIANT_CLASS.quiet} ${on ? 'ui-btn-rest-on' : 'ui-btn-rest'}`
     : tone === 'accent'
     ? UI_BUTTON_VARIANT_CLASS.primary
     : tone === 'media'

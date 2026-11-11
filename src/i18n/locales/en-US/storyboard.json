@@ -68,6 +68,18 @@
     },
     "backToProjects": "Back to Canvases",
     "minimap": "Canvas minimap",
+    "mediaMissing": "Media not found",
+    "relink": "Relink",
+    "zoom": {
+      "bar": "Zoom",
+      "in": "Zoom in",
+      "out": "Zoom out",
+      "actual": "Zoom to 100%",
+      "fit": "Fit to canvas",
+      "noNodes": "The canvas has no nodes",
+      "atMax": "Already at maximum zoom",
+      "atMin": "Already at minimum zoom"
+    },
     "edge": {
       "disconnect": "Disconnect",
       "disconnectAssetGroup": "Unbind asset group",
@@ -358,6 +370,8 @@
     "cameraStageLoading": "Loading 3D camera reference…",
     "missingDescription": "This feature or model is unavailable. Its data and connections are preserved. Delete this node or replace it with another.",
     "menuTitle": "Add Node",
+    "menuSearch": "Search nodes",
+    "menuNoMatch": "No matching nodes",
     "menuSections": {
       "media": "Media & Generation",
       "textTools": "Text & Tools",

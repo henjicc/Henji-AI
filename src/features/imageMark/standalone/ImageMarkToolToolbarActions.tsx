@@ -21,6 +21,8 @@ interface ImageMarkToolToolbarActionsProps extends Pick<
   'onOpenFile' | 'onPasteFromClipboard' | 'onCreateBlank' | 'onSave' | 'onSaveAs' | 'videoEditReturn'
 > {
   host: ImageMarkToolHostController
+  /** 命令带上的哪一组：文件动作（打开、保存、另存为）在中间，交付（加入剪辑、导出）在最右 */
+  group: 'file' | 'delivery'
 }
 
 function rasterExportFormatLabel(
@@ -48,6 +50,7 @@ export function ImageMarkToolToolbarActions({
   onSave,
   onSaveAs,
   videoEditReturn,
+  group,
 }: ImageMarkToolToolbarActionsProps): JSX.Element {
   const { t } = useTranslation('ui')
   const { showNotification } = useNotification()
@@ -65,7 +68,7 @@ export function ImageMarkToolToolbarActions({
       : resolveImageEditorReadinessReasonV3(readiness, t) ?? t('imageEditor.v3.host.export.defaultUnavailable'),
   }))
 
-  return (
+  if (group === 'file') return (
     <>
       <ImageEditorFileAppMenus host={host} onSave={onSave} onSaveAs={onSaveAs} exportOptions={exportOptions} />
       <ImageMarkSourceMenu
@@ -76,6 +79,7 @@ export function ImageMarkToolToolbarActions({
       />
       {/* 保存 / 另存为：写回图片文档（草稿先起名）；与“打开”同属文件类动作，同为图标按钮，悬停给名称 */}
       <UiIconButton
+        tone="rest"
         aria-label={t('imageEditor.v3.host.toolbar.save')}
         tooltip={t('imageEditor.v3.host.toolbar.save')}
         disabled={host.isHostBusy}
@@ -84,6 +88,7 @@ export function ImageMarkToolToolbarActions({
         <Save />
       </UiIconButton>
       <UiIconButton
+        tone="rest"
         aria-label={t('imageEditor.v3.host.toolbar.saveAs')}
         tooltip={t('imageEditor.v3.host.toolbar.saveAs')}
         disabled={host.isHostBusy}
@@ -100,6 +105,11 @@ export function ImageMarkToolToolbarActions({
           {t('imageEditor.v3.host.toolbar.retrySave')}
         </UiButton>
       ) : null}
+    </>
+  )
+
+  return (
+    <>
       <VideoEditSendMenu
         mediaKind="image"
         disabled={host.isHostBusy || saveFailed}

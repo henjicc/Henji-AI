@@ -8,7 +8,7 @@ import type { ProjectCardGridItem } from './ProjectCardGrid';
 
 const labels: ProjectLibraryLabels = {
   createAction: '新建项目',
-  count: (count) => `${count} 个项目`,
+  moreActions: '更多',
   searchPlaceholder: '搜索项目',
   noResults: '没有符合条件的项目',
   sortLabel: '排序',
@@ -61,9 +61,9 @@ describe('ProjectLibraryPage', () => {
     window.localStorage.clear();
   });
 
-  it('左栏新建是唯一主按钮，页头标题旁数量，网格里没有新建卡片', () => {
+  it('页头右端新建是唯一主按钮，标题旁数量，网格里没有新建卡片', () => {
     renderPage();
-    expect(screen.getByText('2 个项目')).toBeTruthy();
+    expect(document.querySelector('[data-ui-page-title]')?.nextElementSibling?.textContent).toBe('2');
     const primaries = document.querySelectorAll('[data-variant="primary"]');
     expect(primaries).toHaveLength(1);
     expect(primaries[0].textContent).toBe('新建项目');
@@ -77,15 +77,16 @@ describe('ProjectLibraryPage', () => {
     expect(screen.getByText(longName).getAttribute('title')).toBe(longName);
   });
 
-  it('没有项目时主区只有邀请，左栏保留新建与次要动作，没有数量、搜索、排序、分类', () => {
+  it('没有项目时主区只有邀请，页头保留新建与“更多”，没有左栏、数量、搜索、排序', () => {
     renderPage([]);
     expect(screen.getByText('暂无项目')).toBeTruthy();
     expect(screen.queryByRole('button', { name: '全部' })).toBeNull();
     expect(screen.getAllByRole('button', { name: '新建项目' })).toHaveLength(1);
     expect(document.querySelectorAll('[data-variant="primary"]')).toHaveLength(1);
-    expect(screen.getByRole('button', { name: '导入' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '更多' }));
+    expect(within(document.querySelector('[data-context-menu]') as HTMLElement).getByText('导入')).toBeTruthy();
     expect(screen.queryByRole('textbox', { name: '搜索项目' })).toBeNull();
-    expect(screen.queryByText('0 个项目')).toBeNull();
+    expect(screen.queryByText('0')).toBeNull();
     expect(screen.queryByRole('button', { name: '排序' })).toBeNull();
   });
 
@@ -125,19 +126,17 @@ describe('ProjectLibraryPage', () => {
     expect(screen.getByRole('button', { name: '新建项目' })).toBeTruthy();
   });
 
-  it('多选时页头动作换成多选工具条，删除为危险档，主按钮仍只有左栏新建', async () => {
+  it('多选时页头动作整组换成多选工具条，删除为危险档', async () => {
     renderPage();
     fireEvent.contextMenu(document.querySelector('[data-project-id="p2"]')!);
     fireEvent.click(within(document.querySelector('[data-context-menu]') as HTMLElement).getByText('多选'));
     expect(await screen.findByText('已选择 1 项')).toBeTruthy();
     expect(document.querySelector('[data-project-id="p2"]')?.getAttribute('data-selected')).toBe('true');
     expect(screen.getByRole('button', { name: '删除所选' }).getAttribute('data-variant')).toBe('danger');
-    const primaries = document.querySelectorAll('[data-variant="primary"]');
-    expect(primaries).toHaveLength(1);
-    expect(primaries[0].textContent).toBe('新建项目');
+    expect(screen.queryByRole('button', { name: '新建项目' })).toBeNull();
   });
 
-  it('多来源新建：第一个来源是左栏主按钮，其余来源平铺在左栏，一次点击直达', async () => {
+  it('多来源新建：第一个来源是页头主按钮，其余来源收进“更多”', async () => {
     const open = vi.fn();
     const blank = vi.fn();
     const options = [
@@ -149,9 +148,10 @@ describe('ProjectLibraryPage', () => {
     expect(document.querySelectorAll('[data-variant="primary"]')).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: '打开图片' }));
     expect(open).toHaveBeenCalledOnce();
-    fireEvent.click(screen.getByRole('button', { name: '新建空白图片' }));
-    expect(blank).toHaveBeenCalledOnce();
     expect(document.querySelector('[data-context-menu]')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '更多' }));
+    fireEvent.click(within(document.querySelector('[data-context-menu]') as HTMLElement).getByText('新建空白图片'));
+    await waitFor(() => expect(blank).toHaveBeenCalledOnce());
   });
 
   it('不起名直接新建：点击即交给调用方，不弹起名对话框', () => {

@@ -100,7 +100,7 @@ describe('NodeSelectionMenu', () => {
     )).toBe(false)
   })
 
-  it('打开后聚焦首项，支持方向键、Enter 与 Esc', async () => {
+  it('打开后聚焦搜索框，方向键进入菜单项，支持 Enter 与 Esc；输入能筛选、回车添加第一个匹配', async () => {
     const onSelect = vi.fn()
     const onClose = vi.fn()
     const { getByRole, getAllByRole, rerender } = render(
@@ -114,7 +114,10 @@ describe('NodeSelectionMenu', () => {
     )
     const menu = getByRole('menu')
     const items = getAllByRole('menuitem')
-    await waitFor(() => expect(document.activeElement).toBe(items[0]))
+    const search = getByRole('textbox')
+    await waitFor(() => expect(document.activeElement).toBe(search))
+    fireEvent.keyDown(menu, { key: 'ArrowDown' })
+    expect(document.activeElement).toBe(items[0])
     fireEvent.keyDown(menu, { key: 'ArrowDown' })
     expect(document.activeElement).toBe(items[1])
     fireEvent.keyDown(menu, { key: 'Enter' })

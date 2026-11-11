@@ -20,22 +20,27 @@ interface ImageEditorCommandBarV3Props {
   controller: ImageEditorV3Controller
   bus: ImageEditCommandBusV3
   toolbarLeading?: React.ReactNode
+  toolbarTitle?: React.ReactNode
   toolbarActions?: React.ReactNode
+  toolbarDelivery?: React.ReactNode
   panelActions?: React.ReactNode
   contentDisabled?: boolean
 }
 
 /**
  * 图片编辑器的单条命令带（工具页统一骨架 `UiToolbar variant="command"`）：
- * 左端 = 宿主注入的返回 + 编辑器名 + 撤销/重做；中间 = 随当前工具变化的参数；
- * 右端 = 宿主注入的打开/发送/导出等动作。参数默认留在同一行；中间放不下时（960、展开助手侧栏）
- * 整组移到紧贴命令带的从属带（共用底色与下边框），宽度够了再移回，不再横向滚动藏参数（5.5 IE-08）。
+ * 左端 = 宿主注入的返回 + 文件名与保存状态（没有文档时写编辑器名）+ 撤销/重做；
+ * 右端依次 = 随当前工具变化的参数、宿主的文件动作、讲解与随手摆和布局、交付动作（加入剪辑、导出）。
+ * 参数默认留在同一行；放不下时（960、展开助手侧栏）整组移到紧贴命令带的从属带（共用底色与下边框），
+ * 宽度够了再移回，不横向滚动藏参数。复制、粘贴走编辑菜单与快捷键，命令带只显示剪贴板处理中的取消与出错原因。
  */
 export function ImageEditorCommandBarV3({
   controller,
   bus,
   toolbarLeading,
+  toolbarTitle,
   toolbarActions,
+  toolbarDelivery,
   panelActions,
   contentDisabled,
 }: ImageEditorCommandBarV3Props): JSX.Element {
@@ -104,25 +109,31 @@ export function ImageEditorCommandBarV3({
     <UiToolbar
       variant="command"
       barProps={{ 'data-document-revision': controller.document.revision }}
-      center={stacked ? <div ref={centerSlotRef} aria-hidden="true" className="h-10 w-full" /> : parameters}
+      // 参数靠右，紧挨着右端动作：它们都是“对当前画面做什么”，与左端的文件信息分开
+      center={stacked ? <div ref={centerSlotRef} aria-hidden="true" className="h-10 w-full" /> : <div className="flex w-full min-w-0 justify-end">{parameters}</div>}
       subordinate={stacked ? parameters : undefined}
       trailing={(
         <div
           data-command-bar-actions
           className="flex min-w-0 shrink-0 items-center gap-1.5"
         >
-          <UiPrimaryActionContext.Provider value={!pendingConfirmation}>{toolbarActions}</UiPrimaryActionContext.Provider>
-          {!contentDisabled && (controller.profile.id === 'full' || controller.profile.id === 'canvas-edit') && <ImageEditorExplanationControlsV3 bus={bus} controller={controller} onGenerated={() => setLayoutOpenRequest(value => value + 1)} />}
-          {!contentDisabled && (controller.profile.id === 'full' || controller.profile.id === 'canvas-edit') && <ImageEditorLayoutControlsV3 bus={bus} controller={controller} openRequest={layoutOpenRequest} />}
-          {!contentDisabled && panelActions}
+          <UiPrimaryActionContext.Provider value={!pendingConfirmation}>
+            {toolbarActions}
+            {!contentDisabled && (controller.profile.id === 'full' || controller.profile.id === 'canvas-edit') && <ImageEditorExplanationControlsV3 bus={bus} controller={controller} onGenerated={() => setLayoutOpenRequest(value => value + 1)} />}
+            {!contentDisabled && (controller.profile.id === 'full' || controller.profile.id === 'canvas-edit') && <ImageEditorLayoutControlsV3 bus={bus} controller={controller} openRequest={layoutOpenRequest} />}
+            {!contentDisabled && panelActions}
+            {toolbarDelivery}
+          </UiPrimaryActionContext.Provider>
         </div>
       )}
     >
       {toolbarLeading}
-      {/* 窄窗口（< 1024）先让出标题：它是固定文案，截成“图片…”不如不显示（重要记录 020，尺寸扫描发现） */}
-      <span className="hidden truncate text-13 font-medium text-text1 lg:inline">
-        {t('imageEditor.v3.title')}
-      </span>
+      {toolbarTitle ?? (
+        // 窄窗口（< 1024）先让出编辑器名：它是固定文案，截成“图片…”不如不显示
+        <span className="hidden truncate text-13 font-medium text-text1 lg:inline">
+          {t('imageEditor.v3.title')}
+        </span>
+      )}
       <UiIconButton size="md"
         className="ml-1 shrink-0"
         disabled={contentDisabled || !controller.canUndo}
@@ -132,7 +143,6 @@ export function ImageEditorCommandBarV3({
       >
         <Undo2  />
       </UiIconButton>
-      <div {...(contentDisabled ? { inert: '' } : {})}><ImageEditorClipboardV3 bus={bus} controller={controller} disabled={contentDisabled} /></div>
       <UiIconButton size="md"
         className="shrink-0"
         disabled={contentDisabled || !controller.canRedo}
@@ -142,6 +152,8 @@ export function ImageEditorCommandBarV3({
       >
         <Redo2  />
       </UiIconButton>
+      {/* 剪贴板：编辑菜单里的复制、粘贴与 Ctrl+C / Ctrl+V；这里只在处理中显示取消与出错原因 */}
+      <div {...(contentDisabled ? { inert: '' } : {})}><ImageEditorClipboardV3 bus={bus} controller={controller} disabled={contentDisabled} /></div>
     </UiToolbar>
   )
 }

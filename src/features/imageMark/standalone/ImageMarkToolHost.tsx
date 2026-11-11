@@ -12,6 +12,7 @@ import {
 } from '@/components/ui'
 import { ImageEditorV3 } from '@/features/imageEdit/v3/editor'
 import { useEmbeddedHost } from '@/features/documents/embeddedDocuments'
+import { DocumentSaveStatus, useDocumentSessionState } from '@/features/documents'
 import { ImageMarkToolToolbarActions } from './ImageMarkToolToolbarActions'
 import {
   useImageMarkToolHost,
@@ -23,6 +24,7 @@ export type { ImageMarkToolHostProps } from './useImageMarkToolHost'
 export function ImageMarkToolHost(props: ImageMarkToolHostProps): JSX.Element {
   const { t } = useTranslation('ui')
   const host = useImageMarkToolHost(props)
+  const sessionState = useDocumentSessionState(props.document.session)
   // 嵌入文档的返回动作需要携带剪辑名称，避免混淆导航目标。
   const embeddedHost = useEmbeddedHost(props.document.id)
   const {
@@ -99,8 +101,27 @@ export function ImageMarkToolHost(props: ImageMarkToolHostProps): JSX.Element {
       onReloadEditor={host.retryBootstrap}
       recoveryKey={props.document.id}
       toolbarLeading={backButton}
+      toolbarTitle={sessionState ? (
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="min-w-0 truncate text-13 font-medium text-text1" title={sessionState.meta.name}>{sessionState.meta.name}</span>
+          <DocumentSaveStatus session={props.document.session} />
+        </span>
+      ) : undefined}
       toolbarActions={(
         <ImageMarkToolToolbarActions
+          group="file"
+          host={host}
+          onOpenFile={onOpenFile}
+          onPasteFromClipboard={onPasteFromClipboard}
+          onCreateBlank={onCreateBlank}
+          onSave={onSave}
+          onSaveAs={onSaveAs}
+          videoEditReturn={props.videoEditReturn}
+        />
+      )}
+      toolbarDelivery={(
+        <ImageMarkToolToolbarActions
+          group="delivery"
           host={host}
           onOpenFile={onOpenFile}
           onPasteFromClipboard={onPasteFromClipboard}

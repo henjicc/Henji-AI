@@ -578,7 +578,7 @@ describe('ImageEditorV3 professional shell', () => {
       createDocument([createImageEditRasterLayerV3('raster', '底图')]),
     )
     const preview = rendered.container.querySelector('[data-preview-surface]')
-    await screen.findByRole('button', { name: '关闭图层面板' })
+    await waitFor(() => expect(rendered.container.querySelector('[data-dock-tab="layers"]')).toBeTruthy())
     const defaultPanelCount = rendered.container.querySelectorAll('[data-editor-panel-id]').length
     for (let remaining = defaultPanelCount; remaining > 0; remaining -= 1) {
       fireEvent.click(screen.getByRole('button', { name: '面板' }))
@@ -589,7 +589,7 @@ describe('ImageEditorV3 professional shell', () => {
     expect(rendered.container.querySelectorAll('[data-editor-panel-id]')).toHaveLength(0)
     fireEvent.click(screen.getByRole('button', { name: '面板' }))
     fireEvent.click(await screen.findByRole('menuitem', { name: '显示图层面板' }))
-    await screen.findByRole('button', { name: '关闭图层面板' })
+    await waitFor(() => expect(rendered.container.querySelector('[data-dock-tab="layers"]')).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: '面板' }))
     fireEvent.click(await screen.findByRole('menuitem', { name: '恢复默认布局' }))
     await waitFor(() => expect(rendered.container.querySelectorAll('[data-editor-panel-id]')).toHaveLength(defaultPanelCount))

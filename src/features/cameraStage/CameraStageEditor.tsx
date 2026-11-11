@@ -1,9 +1,8 @@
 import { CameraStageAppMenus } from './CameraStageAppMenus'
 import { WorkspaceLayoutMenu } from '@/components/dockLayouts/WorkspaceLayoutMenu'
-import { UiInlineStatus } from '@/components/ui'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Camera, Clipboard, Film, LayoutDashboard, Save, Undo2, X } from 'lucide-react'
+import { ArrowLeft, Camera, Clipboard, Film, LayoutDashboard, Redo2, Save, Undo2, X } from 'lucide-react'
 import { Dropdown, PanelTrigger, UiButton, UiCheckbox, UiIconButton, UiOptionButton, UiToolbar } from '@/components/ui'
 import { ICON_ASSET_LIBRARY as AssetLibraryIcon } from '@/core/theme/icons'
 import { createLogger } from '@/core/logging'
@@ -28,6 +27,7 @@ import {
   type CameraStageVideoResolutionPreset,
 } from './export/cameraStageVideo'
 import { useCameraStageAutosave } from './hooks/useCameraStageAutosave'
+import { DocumentSaveStatus } from '@/features/documents'
 import { updateCameraStageProjectCover } from './projects/cameraStageProjectCover'
 import { useCameraStageShortcuts } from './hooks/useCameraStageShortcuts'
 import CameraStageDock from './layout/CameraStageDock'
@@ -96,8 +96,8 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
   const cameras = getCameraObjects(objects)
   const activeCamera = cameras.find((item) => item.id === activeCameraId) ?? cameras[0]
 
-  const { canUndo, undo, redo } = useCameraStageHistory()
-  const { saveState } = useCameraStageAutosave()
+  const { canUndo, canRedo, undo, redo } = useCameraStageHistory()
+  const { session: autosaveSession } = useCameraStageAutosave()
 
   const [stateKeyframeHint, setStateKeyframeHint] = useState<string | null>(null)
   const [stateKeyframeAction, setStateKeyframeAction] = useState<'save' | 'copy' | null>(null)
@@ -370,7 +370,6 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
     await onBackToList?.()
   }, [onBackToList])
 
-  const autosaveErrorLabel = saveState?.status === 'failed' ? '自动保存失败' : null
   const videoProgressLabel = videoProgress
     ? videoProgress.phase === 'encoding'
       ? `编码 ${videoProgress.doneFrames}/${videoProgress.totalFrames}`
@@ -505,11 +504,6 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
               </span>
             )}
             {stateKeyframeHint && <span role="status" className="max-w-64 truncate text-xs text-text2" title={stateKeyframeHint}>{stateKeyframeHint}</span>}
-            {autosaveErrorLabel && (
-              <UiInlineStatus role="alert" className="max-w-28 truncate" tooltip={autosaveErrorLabel}>
-                {autosaveErrorLabel}
-              </UiInlineStatus>
-            )}
             <PanelTrigger
               panelSize="menu"
               panelPadding="content"
@@ -586,6 +580,8 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
         <span className="min-w-0 max-w-40 truncate text-13 font-medium text-text1" title={projectName} data-user-content>
           {projectName}
         </span>
+        {/* 文件名后是保存状态（失败也在这里显示）与撤销重做，与其他编辑器命令带左端同一组信息 */}
+        <DocumentSaveStatus session={autosaveSession} />
         <UiIconButton
           size="md"
           disabledReason="还没有可撤销的修改" disabled={!canUndo}
@@ -594,6 +590,15 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
           onClick={() => undo()}
         >
           <Undo2  />
+        </UiIconButton>
+        <UiIconButton
+          size="md"
+          disabledReason="还没有可重做的修改" disabled={!canRedo}
+          aria-label="重做"
+          tooltip="重做 (Ctrl+Shift+Z)"
+          onClick={() => redo()}
+        >
+          <Redo2  />
         </UiIconButton>
         <QuickAddGroup />
         {/* 一条带只有这一条分隔线：左侧是“立刻添加”的动作，右侧是“接下来怎么操作”的变换模式 */}

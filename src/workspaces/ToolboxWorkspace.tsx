@@ -1,14 +1,12 @@
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { notificationMessage } from '@/i18n/notifications'
 import React, { Suspense, useEffect, useMemo, useState } from 'react'
-import type { LucideIcon } from 'lucide-react'
+import { Clock3, type LucideIcon } from 'lucide-react'
 import { ICON_TOOL_AUDIO_EDIT, ICON_TOOL_DEVELOPER } from '@/core/theme/icons'
 import { TOOLBOX_RUNTIME } from './toolboxRuntime'
 import { useTranslation } from 'react-i18next'
 import {
   UI_TEXT_PANEL_TITLE_CLASS,
-  UI_TEXT_META_CLASS,
-  UI_TEXT_SECONDARY_CLASS,
   UiLoading,
   UiOptionButton,
   UiPageHeader,
@@ -47,16 +45,20 @@ function useToolboxRecentFiles(): ToolboxRecentFile[] | null {
   return files
 }
 
-const ToolCard: React.FC<{ icon: LucideIcon; title: string; description: string; meta?: string; onSelect: () => void; 'data-developer-tool'?: string }> = ({ icon: Icon, title, description, meta, onSelect, ...props }) => (
-  <UiOptionButton variant="card" className="h-full flex-col !items-start gap-4 text-left" onClick={onSelect} {...props}>
-    <span aria-hidden="true" className="flex h-9 w-9 items-center justify-center rounded-lg bg-control text-text1">
-      <Icon size={UI_ICON_SIZE.lg} />
-    </span>
-    <span className="flex flex-col gap-1.5">
+/** 工具卡：图标、名称、一行说明（第三档，放不下截断、悬停看全），最近打开的文件带时钟图标放在底部。 */
+const ToolCard: React.FC<{ icon: LucideIcon; title: string; description: string; recent?: string; onSelect: () => void; 'data-developer-tool'?: string }> = ({ icon: Icon, title, description, recent, onSelect, ...props }) => (
+  <UiOptionButton variant="card" className="h-full min-w-0 flex-col !items-start gap-3 text-left" onClick={onSelect} {...props}>
+    <Icon size={UI_ICON_SIZE.lg} aria-hidden="true" className="shrink-0 text-text2" />
+    <span className="flex w-full min-w-0 flex-col gap-1">
       <span className={UI_TEXT_PANEL_TITLE_CLASS}>{title}</span>
-      <span className={`break-words leading-normal [text-wrap:pretty] ${UI_TEXT_SECONDARY_CLASS}`}>{description}</span>
+      <span className="truncate text-xs text-text3" title={description}>{description}</span>
+      {recent ? (
+        <span className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-text3">
+          <Clock3 size={UI_ICON_SIZE.sm} aria-hidden="true" className="shrink-0 text-icon-rest" />
+          <span className="truncate" title={recent}>{recent}</span>
+        </span>
+      ) : null}
     </span>
-    {meta ? <span className={`mt-auto w-full truncate ${UI_TEXT_META_CLASS}`}>{meta}</span> : null}
   </UiOptionButton>
 )
 
@@ -82,16 +84,16 @@ const ToolboxHome: React.FC = () => {
 
   return (
     <div className="h-full overflow-y-auto bg-window">
-      <UiRegion maxWidthClassName="max-w-5xl" className="mx-auto flex flex-col gap-8 p-8">
-        <UiPageHeader title="工具" description="不依赖生成和画布、可以单独打开的处理工具" />
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <UiRegion maxWidthClassName="max-w-6xl" className="mx-auto flex flex-col gap-8 p-8">
+        <UiPageHeader title="工具" />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {TOOLS.map((tool) => (
             <ToolCard
               key={tool.id}
               icon={tool.icon}
               title={t(tool.descriptor.titleKey)}
-              description={t(tool.descriptor.descriptionKey)}
-              meta={latestNameByTool.get(tool.id) ? `最近：${latestNameByTool.get(tool.id)}` : undefined}
+              description={t(tool.descriptor.summaryKey)}
+              recent={latestNameByTool.get(tool.id)}
               onSelect={() => selectToolboxTool(tool.id)}
             />
           ))}
@@ -100,15 +102,14 @@ const ToolboxHome: React.FC = () => {
               icon={ICON_TOOL_DEVELOPER}
               title="开发者"
               description="SDK 适配的全部模型：筛选、离线构建请求、转到生成页实测"
-              meta="仅开发版"
               onSelect={() => setDeveloperPanelOpen(true)}
               data-developer-tool=""
             />
           ) : null}
         </div>
         {listed.length > 0 ? (
-          <section aria-label="最近文件" className="flex flex-col gap-3">
-            <h3 className={UI_TEXT_PANEL_TITLE_CLASS}>最近文件</h3>
+          <section aria-label="最近文件" className="flex flex-col gap-2">
+            <h3 className="text-13 text-text2">最近文件</h3>
             <div className="-mx-3 flex flex-col">
               {listed.map((file) => {
                 const tool = TOOL_BY_ID.get(file.toolId)
@@ -117,14 +118,14 @@ const ToolboxHome: React.FC = () => {
                   <UiOptionButton
                     key={file.key}
                     variant="menu"
-                    className="grid min-h-11 w-full grid-cols-[28px_minmax(0,1fr)_140px_120px] items-center gap-3"
+                    className="grid min-h-9 w-full grid-cols-[28px_minmax(0,1fr)_140px_120px] items-center gap-3"
                     tooltip={`在${tool ? t(tool.descriptor.titleKey) : '工具'}中打开`}
                     onClick={() => openRecent(file)}
                   >
-                    <Icon size={UI_ICON_SIZE.md} aria-hidden="true" className="text-text3" />
-                    <span className="truncate">{file.name}</span>
-                    <span className={UI_TEXT_SECONDARY_CLASS}>{tool ? t(tool.descriptor.titleKey) : null}</span>
-                    <span className={`text-right tabular-nums ${UI_TEXT_META_CLASS}`}>{formatTaskCreatedAt(new Date(file.updatedAt), locale)}</span>
+                    <Icon size={UI_ICON_SIZE.md} aria-hidden="true" className="text-icon-rest" />
+                    <span className="truncate text-text1">{file.name}</span>
+                    <span className="truncate text-xs text-text3">{tool ? t(tool.descriptor.titleKey) : null}</span>
+                    <span className="text-right text-xs tabular-nums text-text3">{formatTaskCreatedAt(new Date(file.updatedAt), locale)}</span>
                   </UiOptionButton>
                 )
               })}

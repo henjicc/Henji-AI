@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { UiFormRow, UiGroup, UiInput } from '@/components/ui'
+import { UiFieldLayoutContext, UiFormRow, UiGroup } from '@/components/ui'
+import NumberInput from '@/components/ui/NumberInput'
 import type { ImageEditLayerV3 } from '@/core/imageEdit/v3'
 
 import {
@@ -13,9 +14,8 @@ import type { ImageEditorV3Controller } from './types'
 
 type TransformFieldV3 = Exclude<keyof ImageEditTransformFieldsV3, 'shear'>
 
-const FIELD_KEYS: readonly TransformFieldV3[] = [
-  'x', 'y', 'scaleXPercent', 'scaleYPercent', 'rotationDegrees',
-]
+const TRANSFORM_PRECISION = 2
+
 
 export function ImageEditorLayerTransformPropertiesV3({
   controller,
@@ -33,6 +33,7 @@ export function ImageEditorLayerTransformPropertiesV3({
   const activeRef = useRef(false)
   const layerIdRef = useRef(layer.id)
   const draftRef = useRef(draft)
+  const scrubbingRef = useRef(false)
 
   useEffect(() => {
     if (activeRef.current && layerIdRef.current === layer.id) return
@@ -97,32 +98,52 @@ export function ImageEditorLayerTransformPropertiesV3({
     rotationDegrees: t('imageEditor.v3.properties.rotation'),
   }
 
+  // 组不成变换（缩放为零）：读数回到原值，提示留着说明为什么没生效
+  const commitOrReject = (): void => {
+    if (composeImageEditTransformV3(draftRef.current)) commit()
+    else { cancel(); setInvalid(true) }
+  }
+
+  // 拖动读数时逐帧预览、松手才提交（一次拖动一步撤销）；键入的值回车或失焦即提交。
+  // 读数保留两位小数；失焦时值没变（只是点进去又离开）不提交，不把自由变换的值取整、也不多记一步撤销
+  const field = (key: TransformFieldV3, unit: string): ReactNode => (
+    <>
+      <NumberInput
+        ariaLabel={labels[key]}
+        size="sm"
+        value={Number(draft[key].toFixed(TRANSFORM_PRECISION))}
+        step={key === 'rotationDegrees' ? 0.1 : 1}
+        precision={TRANSFORM_PRECISION}
+        disabled={disabled}
+        onChange={(value) => {
+          if (!scrubbingRef.current && value === Number(draftRef.current[key].toFixed(TRANSFORM_PRECISION))) {
+            setInvalid(false)
+            return
+          }
+          update(key, value)
+          if (!scrubbingRef.current) commitOrReject()
+        }}
+        onScrubStart={() => { scrubbingRef.current = true }}
+        onScrubEnd={(cancelled) => {
+          scrubbingRef.current = false
+          if (cancelled) cancel()
+          else commitOrReject()
+        }}
+      />
+      <span className="text-xs text-text3">{unit}</span>
+    </>
+  )
+
   return (
     <UiGroup titleTone="compact" divided title={t('imageEditor.v3.properties.transform')} gap="stack">
-      <div className="grid grid-cols-2 gap-x-3 gap-y-2">
-        {FIELD_KEYS.map((field) => (
-          <UiFormRow density="compact" labelColumn={field === 'rotationDegrees' ? 'panel' : 'auto'} className={field === 'rotationDegrees' ? 'col-span-2' : undefined} key={field} label={labels[field]}>
-            <UiInput
-              type="number"
-              step={field === 'rotationDegrees' ? 0.1 : 1}
-              aria-label={labels[field]}
-              aria-invalid={invalid || undefined}
-              value={Number(draft[field].toFixed(4))}
-              disabled={disabled}
-              onChange={(event) => update(field, Number(event.currentTarget.value))}
-              onBlur={commit}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') event.currentTarget.blur()
-                if (event.key === 'Escape') {
-                  event.preventDefault()
-                  cancel()
-                  event.currentTarget.blur()
-                }
-              }}
-            />
-          </UiFormRow>
-        ))}
-      </div>
+      {/* 与剪辑效果控件同一种属性行：名称一列，数值紧跟名称、不画框，单位跟在数字后面 */}
+      <UiFieldLayoutContext.Provider value="property">
+        <div className="flex flex-col">
+          <UiFormRow label={t('imageEditor.v3.properties.position')}>{field('x', 'X')}{field('y', 'Y')}</UiFormRow>
+          <UiFormRow label={t('imageEditor.v3.properties.scale')}>{field('scaleXPercent', '%')}{field('scaleYPercent', '%')}</UiFormRow>
+          <UiFormRow label={t('imageEditor.v3.properties.rotationName')}>{field('rotationDegrees', '°')}</UiFormRow>
+        </div>
+      </UiFieldLayoutContext.Provider>
       {invalid ? (
         <p role="status" className="text-xs text-warning-text">
           {t('imageEditor.v3.properties.transformSingular')}

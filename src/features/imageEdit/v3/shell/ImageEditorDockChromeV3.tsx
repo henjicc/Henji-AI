@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, LayoutPanelLeft, Maximize2, Minimize2, X } from 'lucide-react'
+import { ChevronDown, ChevronUp, LayoutPanelLeft, Maximize2, Minimize2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { IDockviewHeaderActionsProps, IDockviewPanelHeaderProps } from 'dockview-react'
@@ -8,23 +8,16 @@ import { PanelTrigger, UiIconButton, UiOptionButton } from '@/components/ui'
 import { showImageEditorPanelV3 } from '../panelFramework/layout'
 import { useImageEditorShellV3 } from './ImageEditorShellContextV3'
 
+/** 面板标签只写标题：面板的开关在窗口菜单与面板菜单里，标签上不放关闭叉（与剪辑、镜头参考的面板一致）。 */
 export function ImageEditorDockTabV3({ api }: IDockviewPanelHeaderProps): JSX.Element {
-  const { t } = useTranslation('ui')
   const [title, setTitle] = useState(api.title ?? '')
-  const [active, setActive] = useState(api.isVisible)
   useEffect(() => {
-    const events = [api.onDidTitleChange(value => setTitle(value.title)), api.onDidVisibilityChange(value => setActive(value.isVisible))]
-    setActive(api.isVisible)
-    return () => events.forEach(event => event.dispose())
+    const event = api.onDidTitleChange(value => setTitle(value.title))
+    return () => event.dispose()
   }, [api])
   return (
-    <span className="flex h-full items-center gap-1 text-xs" data-dock-tab={api.id}>
+    <span className="flex h-full items-center px-1 text-xs" data-dock-tab={api.id}>
       <span>{title}</span>
-      {active && <UiIconButton size="xs"
-        aria-label={t('imageEditor.v3.panels.close', { defaultValue: '关闭{{title}}面板', title })}
-        onPointerDown={event => event.stopPropagation()}
-        onClick={event => { event.stopPropagation(); api.close() }}
-      ><X  /></UiIconButton>}
     </span>
   )
 }
@@ -49,11 +42,11 @@ export function ImageEditorDockHeaderActionsV3({ group, containerApi }: IDockvie
   const isCollapsed = group.panels.some(panel => collapsed.has(panel.id))
   const groupTitle = group.activePanel?.title ?? ''
   return <div className="flex h-full items-center pr-1">
-    <UiIconButton size="xs" aria-label={t(isCollapsed ? 'imageEditor.v3.panels.expand' : 'imageEditor.v3.panels.collapse', { title: groupTitle })}
+    <UiIconButton size="xs" tone="rest" aria-label={t(isCollapsed ? 'imageEditor.v3.panels.expand' : 'imageEditor.v3.panels.collapse', { title: groupTitle })}
       aria-expanded={!isCollapsed} onClick={() => {
         for (const panel of group.panels) if (collapsed.has(panel.id) === isCollapsed) toggleCollapsed(panel.id)
       }}>{isCollapsed ? <ChevronDown  /> : <ChevronUp  />}</UiIconButton>
-    <UiIconButton size="xs" aria-label={title} tooltip={title}
+    <UiIconButton size="xs" tone="rest" aria-label={title} tooltip={title}
       onClick={() => toggleDockGroupMaximized(containerApi, undefined, group)}>
       {maximized ? <Minimize2  /> : <Maximize2  />}
     </UiIconButton>

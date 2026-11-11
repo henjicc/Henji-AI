@@ -22,8 +22,8 @@ import type { CanvasEdge, CanvasNode } from '@/features/canvas/domain/canvasNode
 import { CANVAS_MINIMAP_Z_INDEX } from '@/features/canvas/canvasUtils';
 import { UI_FLOATING_EDGE_CLASS } from '@/components/ui/styleTokens'
 
-const MINI_MAP_WIDTH = 200;
-const MINI_MAP_HEIGHT = 150;
+const MINI_MAP_WIDTH = 176;
+const MINI_MAP_HEIGHT = 112;
 const MINI_MAP_OFFSET_SCALE = 5;
 
 interface MiniMapRect {
@@ -235,7 +235,7 @@ export function CanvasMiniMap(): JSX.Element {
   return (
     <Panel
       position="bottom-right"
-      className={`canvas-minimap react-flow__minimap nopan nowheel !bg-panel ${UI_FLOATING_EDGE_CLASS}`}
+      className={`canvas-minimap react-flow__minimap nopan nowheel !m-3 !bg-panel/90 ${UI_FLOATING_EDGE_CLASS}`}
       style={{ pointerEvents: 'all', zIndex: CANVAS_MINIMAP_Z_INDEX }}
       data-testid="rf__minimap"
     >

@@ -113,7 +113,7 @@ describe('资产库命令带（界面重设计 3.3）', () => {
     render(<AssetLibrarySurface mode="workspace" onClose={onClose} />)
     await screen.findByText('库中代码')
     const header = document.querySelector('[data-ui-page-header]') as HTMLElement
-    expect(header.querySelector('[data-ui-page-title]')?.textContent).toBe('assetLibrary.categories')
+    expect(header.querySelector('[data-ui-page-title]')?.textContent).toBe('assetLibrary.title')
     expect(screen.getByRole('textbox', { name: 'assetLibrary.search' }).closest('[data-ui-page-header]')).toBe(header)
     expect(screen.getByRole('button', { name: 'assetLibrary.viewSettings' }).closest('[data-ui-page-header]')).toBe(header)
     expect(screen.getByRole('button', { name: 'assetLibrary.batchManage' }).getAttribute('data-variant')).toBe('quiet')
@@ -215,7 +215,8 @@ describe('资产库空态与失败态（5.6 第二批）', () => {
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toContain('assetLibrary.error')
     expect(alert.textContent).toContain('磁盘不可读')
-    expect(alert.querySelector('.text-danger-text')?.textContent).toBe('assetLibrary.error')
+    // 危险色只给图标，标题用主要文字色
+    expect(alert.querySelector('svg.text-danger-text')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'assetLibrary.retry' }))
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
   })

@@ -10,6 +10,7 @@ vi.mock('@/features/canvas/application/canvasProjectCover', () => ({ updateCanva
 vi.mock('@/features/canvas/application/useCanvasProjectCoverAutosave', () => ({ useCanvasProjectCoverAutosave: vi.fn() }));
 vi.mock('@/platform/runtime', async (importOriginal) => ({ ...await importOriginal<typeof import('@/platform/runtime')>(), isUiInspectionReadOnly: () => false }));
 vi.mock('@/components/ui', () => ({
+  UiIconButton: ({ size: _size, tooltip: _tooltip, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { size?: string; tooltip?: string }) => <button {...props} />,
   UiButton: ({ variant: _variant, size: _size, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: string; size?: string }) => <button {...props} />,
   UiLoading: ({ message }: { message: string }) => <div role="status">{message}</div>,
   UiError: ({ message }: { message: string }) => <div role="alert">{message}</div>,
@@ -67,7 +68,7 @@ describe('画布打开反馈', () => {
     render(<CanvasWorkspace />);
     fireEvent.click(screen.getByText('open'));
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
-    await act(async () => { fireEvent.click(screen.getByText('canvas.backToProjects')); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'canvas.backToProjects' })); });
     expect(screen.getByTestId('projects')).toBeTruthy();
     await act(async () => { release(); await new Promise((resolve) => setTimeout(resolve, 0)); });
     expect(screen.queryByTestId('canvas')).toBeNull();
@@ -96,7 +97,7 @@ describe('画布打开反馈', () => {
     const { commands } = canvasTestRegistry();
     const read = vi.spyOn(commands, 'readDocument');
     fireEvent.click(screen.getByText('open'));
-    await act(async () => { fireEvent.click(screen.getByText('canvas.backToProjects')); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'canvas.backToProjects' })); });
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 120)); });
     expect(read).not.toHaveBeenCalled();
     expect(screen.getByTestId('projects')).toBeTruthy();

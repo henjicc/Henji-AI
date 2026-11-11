@@ -474,7 +474,7 @@ function MediaKindItems({ source, upstream, isConnected, localPreviewMapRef, onD
               }}
             >
               {previewUrlByUrl.get(url)
-                ? <CanvasNodeImage src={resolveImageDisplayUrl(previewUrlByUrl.get(url)!)} alt="" disableViewer className="h-7 w-7 rounded-md border border-line object-cover" draggable={false} />
+                ? <CanvasNodeImage src={resolveImageDisplayUrl(previewUrlByUrl.get(url)!)} alt="" disableViewer failure="icon" className="h-7 w-7 rounded-md border border-line object-cover" draggable={false} />
                 : <video src={`${resolveImageDisplayUrl(url)}#t=0.1`} preload="metadata" muted playsInline className="h-7 w-7 rounded-md border border-line bg-media object-cover" />}
               <Video aria-hidden className={`pointer-events-none absolute bottom-0.5 left-0.5 ${UI_ICON_SIZE_CLASS.xs} text-on-media`} />
               {!isConnected && videoTrimMaxClipSeconds && (
@@ -514,6 +514,7 @@ function MediaKindItems({ source, upstream, isConnected, localPreviewMapRef, onD
                 viewerImageList={displayUrls.map((item) => resolveImageDisplayUrl(item))}
                 alt=""
                 className="h-7 w-7 rounded-md border border-line object-cover"
+                failure="icon"
                 draggable={false}
               />
               {/* 缩略图上是画面：移除按钮按角标叠在角上 */}

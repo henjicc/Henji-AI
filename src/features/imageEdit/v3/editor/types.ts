@@ -74,7 +74,11 @@ export interface ImageEditorV3Props {
     document: ImageEditDocumentV3
   } | null) => void
   toolbarLeading?: ReactNode
+  /** 命令带左端的文件名（宿主有文档时给出，带保存状态）；不给时写编辑器名 */
+  toolbarTitle?: ReactNode
   toolbarActions?: ReactNode
+  /** 命令带最右端的交付动作（加入剪辑、导出），排在讲解、随手摆之后 */
+  toolbarDelivery?: ReactNode
   /** 宿主保存期间冻结内容，命令带的返回与重试入口仍可用。 */
   contentDisabled?: boolean
   previewRenderer?: ImageEditorV3PreviewRenderer

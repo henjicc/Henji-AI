@@ -1,7 +1,7 @@
 import { UiInlineStatus } from '@/components/ui'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Copy, File as FileIcon, FileInput, FolderInput, FolderOpen, FolderOutput, ListX, PackageCheck, PackageOpen, PackagePlus } from 'lucide-react'
@@ -290,7 +290,7 @@ export function DocumentLibraryPage({
 
   const pageLabels = useMemo((): ProjectLibraryLabels => ({
     createAction: t('documentLibrary.create', { kind: kindName }),
-    count: (count) => t('documentLibrary.count', { count, kind: kindName }),
+    moreActions: t('documentLibrary.card.more'),
     searchPlaceholder: t('documentLibrary.searchPlaceholder', { kind: kindName }),
     noResults: t('documentLibrary.noResults', { kind: kindName }),
     sortLabel: t('documentLibrary.sortLabel'),
@@ -348,11 +348,23 @@ export function DocumentLibraryPage({
     ...labelOverrides,
   }), [t, kindName, labelOverrides])
 
-  const filterOptions = useMemo(() => [
+  // “按所属项目”只列放着这类文档的项目：按“全部”读完时统计一次，筛到某个项目时沿用
+  const placementRef = useRef<{ projectIds: ReadonlySet<string>; standalone: boolean } | null>(null)
+  if (library.filter.kind === 'all' && library.itemsFilter.kind === 'all' && !library.loading && !library.loadingMore && !library.error) {
+    placementRef.current = {
+      projectIds: new Set(library.items.flatMap((item) => (item.document.container.kind === 'project' ? [item.document.container.projectId] : []))),
+      standalone: library.items.some((item) => item.document.container.kind !== 'project'),
+    }
+  }
+  const placement = placementRef.current
+  const selectedProjectId = library.filter.kind === 'project' ? library.filter.projectId : null
+  const filterProjects = library.projects.filter((project) => project.id === selectedProjectId || placement?.projectIds.has(project.id))
+  const filterOptions = [
     { value: documentLibraryFilterValue(ALL_DOCUMENTS_FILTER), label: t('documentLibrary.filter.all') },
-    ...(canStandalone ? [{ value: 'standalone', label: t('documentLibrary.filter.standalone'), icon: FileIcon }] : []),
-    ...library.projects.map((project) => ({ value: documentLibraryFilterValue({ kind: 'project', projectId: project.id }), label: project.name })),
-  ], [t, canStandalone, library.projects])
+    // 都不在项目里或都在项目里时，“不在项目里”与“全部”或空列表无异
+    ...(canStandalone && (placement?.standalone || library.filter.kind === 'standalone') ? [{ value: 'standalone', label: t('documentLibrary.filter.standalone'), icon: FileIcon }] : []),
+    ...filterProjects.map((project) => ({ value: documentLibraryFilterValue({ kind: 'project', projectId: project.id }), label: project.name })),
+  ]
 
   const loadError = library.error && library.items.length === 0
     ? { title: t('documentLibrary.loadFailed', { kind: kindName }), message: library.error.message, onRetry: () => { void library.reload() } }
@@ -400,8 +412,8 @@ export function DocumentLibraryPage({
             {banner}
           </>
         )}
-        // 只有存在项目时才有“按所属项目”可选（否则全部就是不在项目里）
-        filter={library.projects.length > 0 ? {
+        // 停在某个筛选上时组一直在，才回得去“全部”
+        filter={filterProjects.length > 0 || library.filter.kind !== 'all' ? {
           value: documentLibraryFilterValue(library.filter),
           defaultValue: documentLibraryFilterValue(ALL_DOCUMENTS_FILTER),
           options: filterOptions,

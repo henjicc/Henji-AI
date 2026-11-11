@@ -366,6 +366,7 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
             alt={t('node.upload.uploadedAlt')}
             className="h-full w-full object-contain"
             onLoad={handleImageLoad}
+            onRelink={() => canvasEventBus.publish('upload-node/reupload', { nodeId: id })}
           />
         </div>
       ) : (

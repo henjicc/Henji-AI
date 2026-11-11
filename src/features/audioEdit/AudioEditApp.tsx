@@ -41,6 +41,7 @@ import { AudioEditWorkspaceContext, type AudioEditDeliveryFormat, type AudioEdit
 
 import { adjustAudioEditRangeMode, applyAudioEditSuggestion, audioEditSuggestionStates, DEFAULT_AUDIO_EDIT_VIEW_SETTINGS, dismissAudioEditSuggestion, editAudioEditRange, setAudioEditBlocks } from '@/core/audioEdit/edits'
 import { editAudioEditProject, flushAudioEditProject, getAudioEditProjectInstance } from './application/audioEditProjectInstances'
+import { DocumentSaveStatus } from '@/features/documents'
 import { AudioEditLeaveCancelledError, createAudioEditRecording, importAudioEditMedia, leaveAudioEditEditor, openAudioEditDocument, pickAudioEditMedia, renameAudioEditDocument } from './application/audioEditDocumentService'
 import { VideoEditSendMenu } from '@/features/videoEdit/panels/VideoEditSendMenu'
 import { videoEditDocumentRef } from '@/features/videoEdit/application/videoEditSourceRefs'
@@ -308,8 +309,6 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
           <UiButton size="md" disabled={disabled} onClick={() => void relinkSource()}>重新定位</UiButton>
         </span>}
         <UiIconButton size="md" aria-label="查找与替换" on={textSearch.isOpen} aria-expanded={textSearch.isOpen} tooltip={textSearch.isOpen ? '关闭查找替换' : '查找与替换 · Ctrl+F'} onClick={() => { if (textSearch.isOpen) textSearch.close(); else { textSearch.open(); dockApi?.getPanel('transcript')?.api.setActive() } }}><Search /></UiIconButton>
-        <AudioEditUndoButton key={project.id} project={project} canUndo={Boolean(state.past.length)} disabled={disabled} onUndo={state.undo} onError={notifyError} onRestored={() => { state.setSelectedBlockIds([]); setWaveSelection(null); showNotification(notificationMessage('audioUndoAll')) }} />
-        <UiIconButton size="md" disabled={disabled || !state.future.length} onClick={state.redo} aria-label="重做" tooltip="重做"><Redo2 /></UiIconButton>
         <WorkspaceLayoutMenu workspaceId={AUDIO_EDIT_WORKSPACE_ID} />
         {/* 一条带只有这一条分隔线：左侧是编辑工具，右侧是交付动作 */}
         <span aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-line" />
@@ -321,8 +320,12 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
         ? <UiButton onClick={() => void leave()}><ArrowLeft />{`返回剪辑 · ${embeddedHost.label}`}</UiButton>
         : <UiIconButton size="md" onClick={() => void leave()} aria-label="返回音频列表" tooltip="返回音频列表"><ArrowLeft /></UiIconButton>}
       <AudioEditFileMenu key={project.id} name={project.name} disabled={disabled} onRename={(name) => void run(() => renameAudioEditDocument(project.id, name))} onRelink={() => void relinkSource()} />
+      {/* 文件名后紧跟保存状态与撤销重做：与其他编辑器命令带左端同一组信息 */}
+      <DocumentSaveStatus session={getAudioEditProjectInstance(project.id)?.session} />
+      <AudioEditUndoButton key={`undo-${project.id}`} project={project} canUndo={Boolean(state.past.length)} disabled={disabled} onUndo={state.undo} onError={notifyError} onRestored={() => { state.setSelectedBlockIds([]); setWaveSelection(null); showNotification(notificationMessage('audioUndoAll')) }} />
+      <UiIconButton size="md" disabled={disabled || !state.future.length} onClick={state.redo} aria-label="重做" tooltip="重做"><Redo2 /></UiIconButton>
       {/* 参照 Audition 的“波形 | 多轨”：多轨就是剪辑的序列（音频布局），这份作品以动态链接放在里面；从剪辑进来时直接回去。 */}
-      <UiSegmented ariaLabel="编辑视图" size="sm" value="waveform" disabled={disabled || Boolean(sourceError) || (!embeddedHost && !audioEditMultitrackAvailable())}
+      <UiSegmented ariaLabel="编辑视图" value="waveform" disabled={disabled || Boolean(sourceError) || (!embeddedHost && !audioEditMultitrackAvailable())}
         options={[{ value: 'waveform', label: '波形', title: '编辑这一份声音' }, { value: 'multitrack', label: '多轨', title: embeddedHost ? `回到${embeddedHost.label}` : '放进多轨混音：多条音轨、音轨混合器、轨道效果',
           ...(!embeddedHost && getAudioEditProjectInstance(project.id)?.session.documentMeta.container.kind !== 'project' ? { disabled: true, disabledReason: '多轨剪辑只能放在项目里，先把这份作品移到项目中' } : {}) }]}
         onChange={(view) => { if (view === 'multitrack') void (embeddedHost ? leave() : run(() => openAudioEditMultitrack(project.id))) }} />

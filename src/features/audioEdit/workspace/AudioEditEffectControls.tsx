@@ -264,7 +264,6 @@ function PluginBody({ item, plugin, projectId, onChange }: { item: Extract<Audio
   })
   return <UiFieldLayoutContext.Provider value="property"><div className="flex flex-col">
     {fields.length > 0 && <ParamList fields={fields} values={values} renderControl={(spec, value) => <ParamField field={spec} value={value} gesture={gestureFor(parameters.find(parameter => `p${parameter.id}` === spec.key)!.name)} />} />}
-    <p className={`m-0 py-1 ${UI_TEXT_META_CLASS} ${UI_PROPERTY_INSET_CLASS}`}>{plugin.vendor} · 插件整段处理，改动后在后台重新处理。</p>
   </div></UiFieldLayoutContext.Provider>
 }
 

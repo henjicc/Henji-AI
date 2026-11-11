@@ -32,7 +32,7 @@ beforeEach(async () => {
 afterEach(cleanup)
 
 describe('ToolboxWorkspace 登记驱动', () => {
-  it('首页按登记顺序使用原有中文标题与描述', async () => {
+  it('首页按登记顺序使用中文标题与一行说明', async () => {
     render(<ToolboxWorkspace />)
     // 开发版另有一张只在开发版出现的开发者卡片，不属于工具登记。
     const cards = screen.getAllByRole('button').filter((card) => !card.hasAttribute('data-developer-tool'))
@@ -40,7 +40,7 @@ describe('ToolboxWorkspace 登记驱动', () => {
     TOOL_DESCRIPTORS.forEach((tool, index) => {
       const text = ui.toolbox[tool.id]
       expect(cards[index].textContent).toContain(text.title)
-      expect(cards[index].textContent).toContain(text.description)
+      expect(cards[index].textContent).toContain(text.summary)
     })
     fireEvent.click(cards[0])
     expect(useNavigationStore.getState().activeToolId).toBe(TOOL_DESCRIPTORS[0].id)

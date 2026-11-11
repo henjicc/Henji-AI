@@ -59,6 +59,7 @@ export function ImageMarkSourceMenu({
     >
       {({ togglePanel }) => (
         <UiIconButton
+          tone="rest"
           aria-label={t('imageEditor.v3.host.sourceMenu.trigger')}
           aria-haspopup="menu"
           disabled={disabled}

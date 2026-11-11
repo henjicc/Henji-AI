@@ -141,31 +141,34 @@ const StageViewportPane: React.FC<StageViewportPaneProps> = ({ viewportId, captu
         * 它决定的是这台机位的成片长什么样，自由透视与固定视图仍是彩色的编辑视角。
         */}
       {overlayCameraId && (
-        <div className="pointer-events-auto absolute right-2 top-2 z-sticky">
+        <div className="ui-glass pointer-events-auto absolute right-2 top-2 z-sticky rounded-md">
           <Dropdown<StageRenderStyle>
             surface="glass"
+            appearance="text"
             value={renderStyle}
             display={STAGE_RENDER_STYLE_LABELS[renderStyle]}
             options={STAGE_RENDER_STYLE_OPTIONS}
             onSelect={setRenderStyle}
             ariaLabel="渲染方式"
-            className="min-w-20"
+            buttonClassName="w-auto"
             size="sm"
-            minWidthStrategy="options"
+            minWidthStrategy="display"
             panelWidthStrategy="options"
           />
         </div>
       )}
-      <div className="pointer-events-auto absolute left-2 top-2 z-sticky">
+      {/* 视口标签压在画面上：按当前名称定宽的小标签，不占一整块下拉框 */}
+      <div className="ui-glass pointer-events-auto absolute left-2 top-2 z-sticky rounded-md">
         <Dropdown<string>
           surface="glass"
+          appearance="text"
           value={sourceValue(source)}
           display={options.find((option) => option.value === sourceValue(source))?.label ?? '自由透视'}
           options={options}
           onSelect={handleSourceChange}
-          className="min-w-24"
+          buttonClassName="w-auto"
           size="sm"
-          minWidthStrategy="options"
+          minWidthStrategy="display"
           panelWidthStrategy="options"
         />
       </div>

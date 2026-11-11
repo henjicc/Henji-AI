@@ -190,7 +190,7 @@ export function AudioEditHistoryPanel() {
   }
   return <PanelScroll label="历史记录">
     {entries.length <= 1
-      ? <UiEmpty size="node" icon={<History className="h-6 w-6" />} title="还没有修改" description="每次编辑都会出现在这里，点一下就能回到那一步。" />
+      ? <UiEmpty size="node" icon={<History className="h-6 w-6" />} title="还没有修改" />
       : <div role="list" className="flex flex-col gap-0.5">
         {entries.map((entry, index) => <UiOptionButton key={index} role="listitem" variant="menu" size="sm" active={entry.state === 'current'} disabled={workspace.disabled}
           onClick={() => jump(entry.steps)} aria-current={entry.state === 'current' ? 'step' : undefined}>

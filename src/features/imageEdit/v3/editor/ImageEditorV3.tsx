@@ -83,7 +83,9 @@ function ImageEditorWorkspaceV3(props: ImageEditorV3Props): JSX.Element {
             controller={controller}
             bus={bus}
             toolbarLeading={props.toolbarLeading}
+            toolbarTitle={props.toolbarTitle}
             toolbarActions={props.toolbarActions}
+            toolbarDelivery={props.toolbarDelivery}
             contentDisabled={props.contentDisabled}
             panelActions={panelActions}
           />

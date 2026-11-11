@@ -54,7 +54,8 @@ export const NODE_HEADER_ICON_TITLE_ADJUST: HeaderAdjust = { x: -8, y: 8, scale:
 // 只改这一处数值即可同时影响全部节点；x/y 单位为 px，scale 为缩放比例。
 const NODE_HEADER_PRICE_ADJUST: HeaderAdjust = NODE_HEADER_ICON_TITLE_ADJUST;
 
-// 浮动标题压在画布底上（不在节点卡片内），取辅助文字色：两种模式都保证 ≥ 4.5:1，深色下与原 55% 白观感一致。
+// 浮动标题压在画布底上（不在节点卡片内），取辅助文字色：两种模式都保证 ≥ 4.5:1，深色下与原 55% 白观感一致；
+// 标题前的类型图标用静息图标灰，比标题再退一档。
 const NODE_HEADER_TONE_CLASS = 'text-text3';
 const NODE_HEADER_TITLE_CLASS = 'text-sm font-normal';
 const NODE_HEADER_META_CLASS = 'text-xs text-text2';
@@ -389,7 +390,7 @@ export function NodeHeader({
           <div className={joinClasses('flex w-full items-center gap-1', titleRowClassName)}>
             {icon ? (
               <span
-                className={joinClasses('inline-flex shrink-0 items-center justify-center', tone, iconClassName)}
+                className={joinClasses('inline-flex shrink-0 items-center justify-center', toneClassName ?? 'text-icon-rest', iconClassName)}
                 style={composeTransformStyle(iconAdjust)}
               >
                 {icon}

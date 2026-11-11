@@ -42,7 +42,7 @@ const ObjectNameButton = memo(function ObjectNameButton({ id, name, type, select
       className="min-w-0 flex-1 gap-2"
       tooltip={`${name}（双击可改名）`}
     >
-      <span aria-hidden="true" className="shrink-0 text-text2">
+      <span aria-hidden="true" className="shrink-0 text-icon-rest">
         <TypeIcon type={type} />
       </span>
       <span className="truncate">{name}</span>
@@ -67,6 +67,8 @@ const ObjectRowActions = memo(function ObjectRowActions({ id, name, visible, onU
     <>
       <UiIconButton
         size="xs"
+        tone="rest"
+        on={!visible}
         tooltip={visible ? '隐藏' : '显示'}
         aria-label={visible ? `隐藏${name}` : `显示${name}`}
         onClick={() => onUpdate(id, { visible: !visible })}
@@ -75,6 +77,7 @@ const ObjectRowActions = memo(function ObjectRowActions({ id, name, visible, onU
       </UiIconButton>
       <UiIconButton
         size="xs"
+        tone="rest"
         tooltip="复制 (Ctrl+D)"
         aria-label={`复制${name}`}
         onClick={() => onDuplicate(id)}
@@ -83,7 +86,7 @@ const ObjectRowActions = memo(function ObjectRowActions({ id, name, visible, onU
       </UiIconButton>
       <UiIconButton
         size="xs"
-        tone="danger"
+        tone="restDanger"
         tooltip="删除"
         aria-label={`删除${name}`}
         onClick={() => onRemove(id)}
@@ -151,11 +154,11 @@ const ObjectListPanel: React.FC = () => {
     const isFramingCamera = object.type === 'camera' && object.id === activeCameraId
 
     return (
-      <div role="listitem" className="flex items-center gap-0.5 px-2">
+      <div role="listitem" className="group/object flex items-center gap-0.5 px-2">
         {isEditing ? (
           // 改名直接把名称换成输入框，不再给输入框外面套一圈强调色描边的框
           <div className="flex min-w-0 flex-1 items-center gap-2 pl-3">
-            <span aria-hidden="true" className="shrink-0 text-text2">
+            <span aria-hidden="true" className="shrink-0 text-icon-rest">
               <TypeIcon type={object.type} />
             </span>
             <UiInput
@@ -190,6 +193,8 @@ const ObjectListPanel: React.FC = () => {
             onBeginRename={beginRename}
           />
         )}
+        {/* 行内操作只在悬停、聚焦或选中的行出现；隐藏着的对象一直露出“显示”（偏离默认） */}
+        <span className={`flex items-center transition-opacity duration-120 group-hover/object:opacity-100 focus-within:opacity-100 ${isSelected || !object.visible ? 'opacity-100' : 'opacity-0'}`}>
         <ObjectRowActions
           id={object.id}
           name={object.name}
@@ -198,6 +203,7 @@ const ObjectListPanel: React.FC = () => {
           onDuplicate={duplicateObject}
           onRemove={removeObject}
         />
+        </span>
       </div>
     )
   }

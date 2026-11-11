@@ -71,10 +71,11 @@ const PriceEstimate: React.FC<PriceEstimateProps> = ({ modelId, params, variant 
     const label = t(isUpperBound ? 'priceEstimate.upperBound' : 'priceEstimate.label')
     const title = `${label}: ${priceDisplayWithUnit}${isUpperBound ? ` — ${t('priceEstimate.upperBoundHint')}` : ''}`
 
+    // 画布节点标题行右端：与标题同一档的第三档文字，不画框（节点内容才是主角）
     if (variant === 'badge') {
         return (
             <span
-                className="inline-flex shrink-0 items-center whitespace-nowrap rounded-md border border-line/60 bg-gap/65 px-1.5 py-1 text-2xs leading-none text-text2"
+                className="inline-flex shrink-0 items-center whitespace-nowrap text-xs leading-none tabular-nums text-text3"
                 title={title}
             >
                 {isUpperBound ? `${label} ${priceDisplayWithUnit}` : priceDisplayWithUnit}

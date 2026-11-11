@@ -68,6 +68,18 @@
     },
     "backToProjects": "返回画布列表",
     "minimap": "画布小地图",
+    "mediaMissing": "素材找不到",
+    "relink": "重新链接",
+    "zoom": {
+      "bar": "缩放",
+      "in": "放大",
+      "out": "缩小",
+      "actual": "缩放到 100%",
+      "fit": "适应画布",
+      "noNodes": "画布中没有节点",
+      "atMax": "已放到最大",
+      "atMin": "已缩到最小"
+    },
     "edge": {
       "disconnect": "断开连线",
       "disconnectAssetGroup": "解除素材组绑定",
@@ -358,6 +370,8 @@
     "cameraStageLoading": "加载 3D 镜头参考…",
     "missingDescription": "此功能或模型已不可用。原节点和连线已保留，可删除此节点或用其他节点替换。",
     "menuTitle": "添加节点",
+    "menuSearch": "搜索节点",
+    "menuNoMatch": "没有匹配的节点",
     "menuSections": {
       "media": "媒体与生成",
       "textTools": "文本与工具",

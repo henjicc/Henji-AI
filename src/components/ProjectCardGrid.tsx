@@ -444,8 +444,6 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
               {item.hoverPreview
                 ? <ProjectCardHoverScrub load={item.hoverPreview}><ProjectCardCover coverPath={item.coverPath} icon={item.icon ?? Icon} alt={item.name} /></ProjectCardHoverScrub>
                 : <ProjectCardCover coverPath={item.coverPath} icon={item.icon ?? Icon} alt={item.name} />}
-              {/* 草稿：封面照常显示，左上角一个小标签（PR 式），不再整圈虚线 */}
-              {item.draft && labels.draft ? <span className="absolute left-2 top-2 rounded-full bg-warning-solid px-1.5 py-0.5 text-xs font-medium text-on-warning">{labels.draft.marker}</span> : null}
             </span>
             <span className="flex min-w-0 flex-col gap-0.5 px-0.5">
               {/* 长名称会截断：悬停名称看全名（A01.7） */}
@@ -453,7 +451,11 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
               {item.status ? (
                 <UiInlineStatus className="truncate" tooltip={item.status}>{item.status}</UiInlineStatus>
               ) : (
-                <span className="min-h-4 truncate text-xs text-text3" title={item.metaLine}>{item.metaLine}</span>
+                <span className="min-h-4 truncate text-xs text-text3" title={item.metaLine}>
+                  {/* 草稿不在封面上压标签：元信息开头写“未保存”，提示色 */}
+                  {item.draft && labels.draft ? <><span className="text-warning-text">{labels.draft.marker}</span>{item.metaLine ? ' · ' : null}</> : null}
+                  {item.metaLine}
+                </span>
               )}
             </span>
           </UiOptionButton>

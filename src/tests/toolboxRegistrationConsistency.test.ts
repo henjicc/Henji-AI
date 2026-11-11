@@ -42,7 +42,7 @@ describe('工具箱登记 → 派生入口', () => {
   it('临时登记探针，真实加载组件并打开最近文件；移除后所有派生入口消失', async () => {
     const probe = {
       id: 'registrationProbe', surfaceId: 'tool.registration_probe', entryId: 'registrationProbe',
-      titleKey: 'ui:probe.title', descriptionKey: 'ui:probe.description', icon: 'ICON_TOOL_IMAGE_EDIT',
+      titleKey: 'ui:probe.title', descriptionKey: 'ui:probe.description', summaryKey: 'ui:probe.summary', icon: 'ICON_TOOL_IMAGE_EDIT',
       actions: ['open', 'recent_files'], recentFiles: { documentKind: 'image_document' },
       acceptedRefKinds: ['probe.document'], capabilities: [],
     } as const satisfies ToolDescriptor
