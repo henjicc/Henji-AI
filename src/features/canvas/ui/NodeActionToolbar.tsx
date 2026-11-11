@@ -363,7 +363,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
 
           const open = () => canvasEventBus.publish('tool-dialog/open', { nodeId: node.id, toolType: tool.type });
           return tool.display === 'icon' ? (
-            <UiIconButton key={tool.type} tone="rest" aria-label={tool.label} tooltip={tool.label} onClick={open}>
+            <UiIconButton key={tool.type} aria-label={tool.label} tooltip={tool.label} onClick={open}>
               <Icon />
             </UiIconButton>
           ) : (
@@ -373,12 +373,11 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
             </UiButton>
           );
         })}
-        {/* 通用动作（编辑、重新上传、复制、收进资产库、下载、解组、删除）只放图标，静息是图标灰、悬停给名称；
-            生成、能力与特有的工具是这个节点特有的事，保留文字 */}
+        {/* 通用动作（编辑、重新上传、复制、收进资产库、加入剪辑、下载、解组、删除）只放图标、悬停给名称，
+            和左边的文字按钮同为次亮（可点的动作），删除悬停才变红；生成、能力与特有的工具是这个节点特有的事，保留文字 */}
         {!isImageEdit && canReupload && (
           <UiIconButton
             key="upload-reupload"
-            tone="rest"
             aria-label={t('nodeToolbar.reupload')}
             tooltip={t('nodeToolbar.reupload')}
             onClick={() =>
@@ -393,7 +392,6 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
         {!isImageEdit && canHandleImage && (
           <UiIconButton
             key="image-copy"
-            tone="rest"
             aria-label={isCopySuccess ? t('ui:workspace.toast.copySuccess') : t('nodeToolbar.copy')}
             tooltip={isCopySuccess ? t('ui:workspace.toast.copySuccess') : t('nodeToolbar.copy')}
             onClick={() => {
@@ -406,7 +404,6 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
         {assetMedia && (
           <UiIconButton
             key="asset-collect"
-            tone="rest"
             aria-label={t('ui:assetLibrary.assetShort')}
             tooltip={t('ui:assetLibrary.collect')}
             disabled={collecting}
@@ -419,14 +416,13 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
           </UiIconButton>
         )}
         {videoEditSource && (
-          <VideoEditSendMenu key="video-edit-send" mediaKind={videoEditSource.mediaKind}
+          <VideoEditSendMenu key="video-edit-send" trigger="icon" mediaKind={videoEditSource.mediaKind}
             resolveSource={async () => ({ type: 'document', docRef: await videoEditDocumentRef(videoEditSource.canvasId), part: node.id })}
             notify={(message, type) => canvasEventBus.publish('canvas/toast', { message, type })} />
         )}
         {!isImageEdit && canCopyStoryboardText && (
           <UiIconButton
             key="storyboard-text-copy"
-            tone="rest"
             aria-label={isCopyTextSuccess ? t('ui:workspace.toast.copySuccess') : t('nodeToolbar.copyText')}
             tooltip={isCopyTextSuccess ? t('ui:workspace.toast.copySuccess') : t('nodeToolbar.copyText')}
             onClick={() => {
@@ -439,7 +435,6 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
         {canDownload && (
           <UiIconButton
             key="media-download"
-            tone="rest"
             aria-label={t('nodeToolbar.download')}
             tooltip={t('nodeToolbar.download')}
             onClick={handleDownloadClick}
@@ -450,7 +445,6 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
         {!isImageEdit && (isGroupNode(node) || isAssetGroupNode(node)) && (
           <UiIconButton
             key="group-ungroup"
-            tone="rest"
             aria-label={t('nodeToolbar.ungroup')}
             tooltip={t('nodeToolbar.ungroup')}
             onClick={(event) => {
@@ -465,7 +459,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
         )}
         <UiIconButton
           key="node-delete"
-          tone="restDanger"
+          tone="danger"
           aria-label={t('common.delete')}
           tooltip={t('common.delete')}
           onClick={(event) => {

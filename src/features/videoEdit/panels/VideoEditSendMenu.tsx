@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
-import { Dropdown, PanelTrigger, UI_TEXT_META_CLASS, UiButton, UiError, UiModal, UiOptionButton } from '@/components/ui'
+import { Dropdown, PanelTrigger, UI_TEXT_META_CLASS, UiButton, UiError, UiIconButton, UiModal, UiOptionButton } from '@/components/ui'
 import { ICON_WORKSPACE_VIDEO_EDIT } from '@/core/theme/icons'
 import { listVideoEditSendDestinations, prepareVideoEditSendDestination, planVideoEditSend, sendCreativeResultToVideoEdit, type VideoEditSendMediaKind, type VideoEditSendMode } from '../application/videoEditResultSend'
 import { VIDEO_EDIT_SEND_MODES as MODES, runVideoEditSend as runSend, type VideoEditSendNotify as Notify, type VideoEditSendSourceResolver as SourceResolver } from './videoEditSendActions'
@@ -8,7 +8,11 @@ import { createVideoEditCreativeTransfer, runVideoEditCreativeTransfer } from '.
 import type { VideoEditResultReceipt, VideoEditResultTarget } from '../application/videoEditResultTarget'
 
 /** One send entry for every creative workspace; targets are frozen at the click, before any export work. */
-export function VideoEditSendMenu({ mediaKind, resolveSource, notify, disabled, boundTarget }: { mediaKind: VideoEditSendMediaKind; resolveSource: SourceResolver; notify: Notify; disabled?: boolean; boundTarget?: { target: VideoEditResultTarget; label: string } }): React.ReactElement {
+/**
+ * `trigger="icon"`：放进一排通用图标动作（复制、收进资产库、下载）时只用剪辑图标，名称进悬停提示；
+ * 默认是带文字的按钮，用在交付动作那一组。
+ */
+export function VideoEditSendMenu({ mediaKind, resolveSource, notify, disabled, boundTarget, trigger = 'button' }: { mediaKind: VideoEditSendMediaKind; resolveSource: SourceResolver; notify: Notify; disabled?: boolean; boundTarget?: { target: VideoEditResultTarget; label: string }; trigger?: 'button' | 'icon' }): React.ReactElement {
   const [running, setRunning] = useState<AbortController | null>(null)
   const operation = useRef<AbortController | null>(null)
   useEffect(() => () => operation.current?.abort(), [])
@@ -20,15 +24,19 @@ export function VideoEditSendMenu({ mediaKind, resolveSource, notify, disabled, 
   if (running) return <UiButton variant="secondary" onClick={() => running.abort()}>正在加入剪辑… 取消</UiButton>
   return <PanelTrigger disabled={disabled} panelSize="compact" panelPadding="menu" renderPanel={() => (
     <VideoEditSendOptions mediaKind={mediaKind} send={(mode, projectId) => start(async signal => sendCreativeResultToVideoEdit(resolveSource, { mediaKind, mode, ...(projectId ? { projectId } : {}) }, signal))}>
-      {boundTarget && <UiOptionButton type="button" role="menuitem" variant="menu" size="md" className="w-full flex-col items-start gap-0.5 text-left"
+      {boundTarget && <UiOptionButton type="button" role="menuitem" variant="menu" size="md" className="w-full"
         onClick={() => start(async signal => runVideoEditCreativeTransfer(createVideoEditCreativeTransfer(boundTarget.target, await resolveSource()), signal))}>
-        <span>替换回剪辑（原位置一帧）</span><span className={UI_TEXT_META_CLASS}>{boundTarget.label}</span>
+        <MenuItemText title="替换回剪辑（原位置一帧）" detail={boundTarget.label} />
       </UiOptionButton>}
     </VideoEditSendOptions>
   )}>
-    {({ open, togglePanel }) => <UiButton type="button" variant="secondary" disabled={disabled} aria-expanded={open} aria-haspopup="menu" onClick={event => { event.stopPropagation(); togglePanel() }}>
-      <ICON_WORKSPACE_VIDEO_EDIT  className="mr-1.5" />加入剪辑<ChevronDown  className="ml-1.5" />
-    </UiButton>}
+    {({ open, togglePanel }) => trigger === 'icon'
+      ? <UiIconButton type="button" disabled={disabled} tooltip="加入剪辑" aria-expanded={open} aria-haspopup="menu" onClick={event => { event.stopPropagation(); togglePanel() }}>
+        <ICON_WORKSPACE_VIDEO_EDIT />
+      </UiIconButton>
+      : <UiButton type="button" variant="secondary" disabled={disabled} aria-expanded={open} aria-haspopup="menu" onClick={event => { event.stopPropagation(); togglePanel() }}>
+        <ICON_WORKSPACE_VIDEO_EDIT  className="mr-1.5" />加入剪辑<ChevronDown  className="ml-1.5" />
+      </UiButton>}
   </PanelTrigger>
 }
 
@@ -48,6 +56,11 @@ export function VideoEditSendDialog({ mediaKind, resolveSource, notify, onClose 
   return <UiModal isOpen title="发送到剪辑" onClose={() => { if (!running) onClose() }} footer={<UiButton onClick={() => { running?.abort(); if (!running) onClose() }}>{running ? '取消发送' : '取消'}</UiButton>}>
     {running ? <span className={UI_TEXT_META_CLASS}>正在加入剪辑…</span> : <VideoEditSendOptions mediaKind={mediaKind} send={send}>{null}</VideoEditSendOptions>}
   </UiModal>
+}
+
+/** 两行菜单项（名称 + 落点说明）：靠左排，和菜单里其他项同一条左边。 */
+function MenuItemText({ title, detail }: { title: string; detail: string }): React.ReactElement {
+  return <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5 text-left"><span>{title}</span><span className={UI_TEXT_META_CLASS}>{detail}</span></span>
 }
 
 function VideoEditSendOptions({ mediaKind, send, children }: { mediaKind: VideoEditSendMediaKind; send: (mode: VideoEditSendMode, projectId?: string) => void; children: React.ReactNode }): React.ReactElement {
@@ -72,9 +85,9 @@ function VideoEditSendOptions({ mediaKind, send, children }: { mediaKind: VideoE
     {children}
     {MODES.map(({ mode, title }) => {
       const plan = planVideoEditSend({ mediaKind, mode, ...(selected ? { projectId: selected } : {}) })
-      return <UiOptionButton key={mode} role="menuitem" variant="menu" disabled={loading || Boolean(error) || !plan.available} size="md" className="w-full flex-col items-start gap-0.5 text-left"
+      return <UiOptionButton key={mode} role="menuitem" variant="menu" disabled={loading || Boolean(error) || !plan.available} size="md" className="w-full"
         onClick={() => send(mode, selected || undefined)}>
-        <span>{title}</span><span className={UI_TEXT_META_CLASS}>{plan.available ? plan.label : plan.reason}</span>
+        <MenuItemText title={title} detail={plan.available ? plan.label : plan.reason} />
       </UiOptionButton>
     })}
   </div>

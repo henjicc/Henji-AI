@@ -44,6 +44,18 @@ import type { InputLimits } from './types/InputLimits'
 import type { GenerationRequirement } from './types/GenerationRequirements'
 import type { ModelPresentation, ParamPresentationEntry } from './types/ModelPresentation'
 
+/** 分辨率写法统一大写：480p → 480P、4k → 4K。取值原样发给供应商，只改界面上显示的名称。 */
+function upperResolution(text: string): string {
+  return text.replace(/\b(\d{3,4})p\b/g, '$1P').replace(/\b(\d)k\b/g, '$1K')
+}
+
+export function displayResolutionText(text: I18nText): I18nText {
+  if (typeof text === 'string') return upperResolution(text)
+  // 文案键对象：键本身不动，只改兜底文字
+  if ('key' in text) return typeof text.fallback === 'string' ? { ...text, fallback: upperResolution(text.fallback) } : text
+  return Object.fromEntries(Object.entries(text).map(([lang, value]) => [lang, typeof value === 'string' ? upperResolution(value) : value])) as I18nText
+}
+
 function composeOptions(
   options: RuntimeSelectOption[],
   labels: Record<string, { label: I18nText; description?: I18nText }> | undefined
@@ -53,7 +65,7 @@ function composeOptions(
     const presented = labels?.[key]
     return {
       value: option.value,
-      label: presented?.label ?? String(option.value),
+      label: displayResolutionText(presented?.label ?? String(option.value)),
       description: presented?.description,
       disabled: option.disabled,
     }
@@ -66,7 +78,7 @@ function composePresets(
 ) {
   return presets.map((preset) => ({
     value: preset.value,
-    label: labels?.[preset.value] ?? preset.value,
+    label: displayResolutionText(labels?.[preset.value] ?? preset.value),
   }))
 }
 

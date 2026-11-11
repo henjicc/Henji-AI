@@ -151,11 +151,11 @@ export function NodeInputRows({
         />
       )}
 
-      {/* 图片、视频、音频合成一行“参考素材”：一个端口、一个上传入口，进来后仍按类型分开存放与编号 */}
+      {/* 图片、视频、音频合成一行，所有节点一律叫“参考素材”：一个端口、一个上传入口，进来后仍按类型分开存放与编号 */}
       {mediaSources.length > 0 && (
         <MediaInputsRow
           nodeId={nodeId}
-          label={mediaSources.length > 1 ? t('node.mediaRow.reference') : t(`node.mediaRow.${mediaSources[0].kind}`)}
+          label={t('node.mediaRow.reference')}
           sources={mediaSources}
           onSourcesChange={onMediaInputsChange}
           handleKinds={mediaSources.map((source) => source.kind).filter((kind) => kind !== externalMediaHandle)}

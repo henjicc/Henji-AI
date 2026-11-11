@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>画布节点工具条草稿</title>
+<style>
+@font-face { font-family: 'HarmonyOS Sans SC UI'; src: url('../../../../src/assets/fonts/HarmonyOS_Sans_SC.ttf') format('truetype'); font-weight: 100 900; font-display: block; }
+:root {
+  /* 数值取自 src/index.css 的石墨主题令牌 */
+  --gap:#181818; --window:#1B1B1B; --panel:#212121; --raised:#272727; --overlay:#292929;
+  --line-overlay:#393939; --control:#2B2B2B; --hover:#2A2A2A; --overlay-hover:#323232; --selected:#333333;
+  --line:#282828; --line-strong:#313131;
+  --text1:#EEEEEE; --text2:#CACACA; --text3:#A5A5A5; --icon-rest:#737373;
+  --accent:#3A6FDF; --accent-ring:#6A9BFE; --danger-text:#FB817A;
+}
+* { box-sizing: border-box; margin: 0; }
+body { background: var(--gap); color: var(--text1); font: 13px/1.4 'HarmonyOS Sans SC UI', sans-serif; padding: 24px; }
+.block { width: 1180px; margin-bottom: 36px; }
+.label { color: var(--text1); font-size: 14px; font-weight: 580; margin: 0 0 4px; }
+.note { color: var(--text3); font-size: 12px; margin: 0 0 10px; line-height: 1.7; }
+.pair { display: flex; flex-direction: column; gap: 16px; }
+.side { flex: 1; }
+.cap { color: var(--text2); font-size: 12px; margin-bottom: 6px; }
+.canvas { position: relative; height: 310px; border-radius: 8px; background-color: var(--window); background-image: radial-gradient(#2c2c2c 1px, transparent 1px); background-size: 16px 16px; overflow: hidden; }
+svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.bar { position: absolute; left: 50%; transform: translateX(-50%); top: 36px; display: flex; align-items: center; gap: 4px; padding: 4px; background: var(--overlay); border: 1px solid var(--line-overlay); border-radius: 12px; white-space: nowrap; }
+.btn { height: 32px; padding: 0 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px; color: var(--text2); }
+.btn svg { color: var(--text2); }
+.btn.secondary { background: var(--control); color: var(--text1); }
+.btn.secondary svg { color: var(--text1); }
+.ib { width: 32px; height: 32px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; color: var(--text2); }
+.ib.rest { color: var(--icon-rest); }
+.ib.hover { background: var(--overlay-hover); color: var(--text1); }
+.ib.danger-hover { background: var(--overlay-hover); color: var(--danger-text); }
+.chev { width: 14px; height: 14px; color: var(--text3); }
+.sep { width: 1px; height: 20px; background: var(--line-overlay); margin: 0 2px; }
+.node-title { position: absolute; left: 50%; transform: translateX(-50%); top: 94px; width: 300px; color: var(--text3); font-size: 12px; display: flex; gap: 6px; align-items: center; }
+.node-title svg { width: 14px; height: 14px; }
+.img { position: absolute; left: 50%; transform: translateX(-50%); top: 116px; width: 300px; height: 170px; border-radius: 10px; border: 1.5px solid var(--accent); background: linear-gradient(160deg,#f2c6d3,#c9a3c0 45%,#8b93b8); }
+.menu { position: absolute; background: var(--overlay); border: 1px solid var(--line-overlay); border-radius: 12px; padding: 4px; min-width: 220px; }
+.mi { min-height: 32px; display: flex; flex-direction: column; justify-content: center; padding: 4px 10px; border-radius: 6px; color: var(--text1); }
+.mi small { color: var(--text3); font-size: 11px; }
+.mi.hover { background: var(--selected); }
+.tip { position: absolute; background: var(--overlay); border: 1px solid var(--line-overlay); border-radius: 8px; padding: 4px 8px; font-size: 12px; color: var(--text1); white-space: nowrap; }
+.dd { margin: 4px 6px 6px; height: 32px; border-radius: 8px; background: var(--control); display: flex; align-items: center; justify-content: space-between; padding: 0 10px; color: var(--text1); }
+/* 节点参数区 */
+.node { width: 520px; background: var(--panel); border: 1px solid var(--line-strong); border-radius: 12px; padding: 6px 8px; }
+.row { position: relative; min-height: 40px; display: flex; align-items: center; padding: 0 8px; gap: 12px; }
+.row .k { font-size: 12px; min-width: 64px; }
+.row .v { margin-left: auto; display: flex; align-items: center; gap: 6px; color: var(--text2); }
+.row .v b { color: var(--text1); font-weight: 460; }
+.row .v i { font-style: normal; color: var(--text3); }
+.thumb { width: 30px; height: 30px; border-radius: 6px; background: linear-gradient(160deg,#f5d5dc,#c78a9a); }
+.div { height: 1px; background: var(--line); margin: 4px 8px; }
+.t2 { color: var(--text2); } .t3 { color: var(--text3); }
+.dot { position: absolute; left: -12px; top: 50%; transform: translateY(-50%); width: 8px; height: 8px; border-radius: 50%; background: #5fc4a8; }
+.swatches { display: flex; gap: 10px; margin-top: 10px; font-size: 12px; color: var(--text3); }
+.swatches span { display: inline-flex; align-items: center; gap: 6px; }
+.swatches i { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+.sw { width: 52px; height: 32px; border-radius: 4px; display: inline-block; vertical-align: middle; }
+</style>
+</head>
+<body>
+<script>
+const ICONS = /*ICONS_START*/{"square-pen":"<path d=\"M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7\"/><path d=\"M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z\"/>","scan-search":"<path d=\"M3 7V5a2 2 0 0 1 2-2h2\"/><path d=\"M17 3h2a2 2 0 0 1 2 2v2\"/><path d=\"M21 17v2a2 2 0 0 1-2 2h-2\"/><path d=\"M7 21H5a2 2 0 0 1-2-2v-2\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/><path d=\"m16 16-1.9-1.9\"/>","sun":"<circle cx=\"12\" cy=\"12\" r=\"4\"/><path d=\"M12 2v2\"/><path d=\"M12 20v2\"/><path d=\"m4.93 4.93 1.41 1.41\"/><path d=\"m17.66 17.66 1.41 1.41\"/><path d=\"M2 12h2\"/><path d=\"M20 12h2\"/><path d=\"m6.34 17.66-1.41 1.41\"/><path d=\"m19.07 4.93-1.41 1.41\"/>","image":"<rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\" ry=\"2\"/><circle cx=\"9\" cy=\"9\" r=\"2\"/><path d=\"m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21\"/>","ellipsis":"<circle cx=\"12\" cy=\"12\" r=\"1\"/><circle cx=\"19\" cy=\"12\" r=\"1\"/><circle cx=\"5\" cy=\"12\" r=\"1\"/>","chevron-down":"<path d=\"m6 9 6 6 6-6\"/>","pencil":"<path d=\"M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z\"/><path d=\"m15 5 4 4\"/>","copy":"<rect width=\"14\" height=\"14\" x=\"8\" y=\"8\" rx=\"2\" ry=\"2\"/><path d=\"M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2\"/>","folder-plus":"<path d=\"M12 10v6\"/><path d=\"M9 13h6\"/><path d=\"M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z\"/>","clapperboard":"<path d=\"M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z\"/><path d=\"m6.2 5.3 3.1 3.9\"/><path d=\"m12.4 3.4 3.1 4\"/><path d=\"M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z\"/>","download":"<path d=\"M12 15V3\"/><path d=\"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\"/><path d=\"m7 10 5 5 5-5\"/>","trash-2":"<path d=\"M10 11v6\"/><path d=\"M14 11v6\"/><path d=\"M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6\"/><path d=\"M3 6h18\"/><path d=\"M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2\"/>","delete":"<path d=\"M10 5a2 2 0 0 0-1.344.519l-6.328 5.74a1 1 0 0 0 0 1.481l6.328 5.741A2 2 0 0 0 10 19h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2z\"/><path d=\"m12 9 6 6\"/><path d=\"m18 9-6 6\"/>"}/*ICONS_END*/;
+const i = (n, cls = '') => `<svg viewBox="0 0 24 24" class="${cls}">${ICONS[n] || ''}</svg>`;
+const caps = `<span class="btn">${i('square-pen')}局部重绘</span><span class="btn">${i('scan-search')}高清放大</span><span class="btn">${i('sun')}打光</span><span class="btn">${i('image')}720°全景</span>`;
+const nodeBelow = `<div class="node-title">${i('image')}梦幻朦胧的写实人像摄影。一位年…</div><div class="img"></div>`;
+const before = `<div class="bar">${caps}<span class="btn">${i('ellipsis')}更多${i('chevron-down', 'chev')}</span><span class="sep"></span>
+  <span class="ib rest">${i('pencil')}</span><span class="ib rest">${i('copy')}</span><span class="ib rest">${i('folder-plus')}</span>
+  <span class="btn secondary">${i('clapperboard')}加入剪辑${i('chevron-down', 'chev')}</span><span class="ib rest">${i('download')}</span><span class="ib rest">${i('trash-2')}</span></div>${nodeBelow}`;
+const after = (state = '') => `<div class="bar">${caps}<span class="btn">更多${i('chevron-down', 'chev')}</span><span class="sep"></span>
+  <span class="ib">${i('pencil')}</span><span class="ib">${i('copy')}</span><span class="ib">${i('folder-plus')}</span>
+  <span class="ib ${state === 'edit' ? 'hover' : ''}">${i('clapperboard')}</span><span class="ib">${i('download')}</span><span class="ib ${state === 'delete' ? 'danger-hover' : ''}">${i('trash-2')}</span></div>${nodeBelow}`;
+const row = (k, v, kc) => `<div class="row"><span class="k ${kc}">${k}</span><span class="v">${v}</span></div>`;
+const chev = i('chevron-down', 'chev');
+const nodeRows = (labelModel, labelMedia, labelParam, mediaName) => `<div class="node">
+  ${row('模型', `<b>GPT Image 2.6</b><i>Grsai</i>${chev}`, labelModel)}
+  <div class="row"><span class="dot"></span><span class="k ${labelMedia}">${mediaName}</span><span class="v"><span class="thumb"></span></span></div>
+  <div class="div"></div>
+  ${row('宽高比', `智能${chev}`, labelParam)}
+  ${row('分辨率', `480p${chev}`, labelParam)}
+  ${row('时长', `10`, labelParam)}
+</div>`;
+
+const blocks = [
+  { id: 1, label: '① 节点工具条：所有动作同一档亮度，“加入剪辑”改成图标，和复制、收资产库、下载一组',
+    note: '现状有三处不一致：①“加入剪辑”用的是弹窗里那一档“次级实底”，所以单独有底色；②右边几个通用图标用了“图标灰”（只该给保持默认的开关、底栏工具和折叠箭头），比左边按钮上的图标暗一截；③“更多”同时有“…”图标和下箭头，表达了两遍。改成：左边是这个节点特有的能力（文字按钮），竖线右边是通用动作（只放图标，悬停给名称），全部用“次亮”，删除静息同色、悬停才变红。“加入剪辑”点开仍是原来那份菜单（目标剪辑 + 放法），只是入口换成剪辑图标。',
+    html: `<div class="pair"><div class="side"><div class="cap">现状</div><div class="canvas">${before}</div></div><div class="side"><div class="cap">草稿</div><div class="canvas">${after()}</div></div></div>` },
+  { id: 2, label: '② 工具条底色：保持比节点亮一档（浮层底 + 一圈浮层描边），这是有意的',
+    note: '工具条是“浮起来的表面”，和菜单、下拉、提示同一类：规范里浮层一律比它下面的东西亮一档，再加一圈描边，不加投影。它压在节点边缘、连线和画布点阵上，和节点同色就会粘成一块，看不出是浮在上面的。左：草稿（浮层底 #292929 + 描边 #393939）；右：如果做成和节点同色（#212121）的样子，对比看。',
+    html: `<div class="pair"><div class="side"><div class="cap">草稿：浮层底（推荐）</div><div class="canvas">${after()}</div></div><div class="side"><div class="cap">对照：和节点同色</div><div class="canvas">${after().replace('class="bar"', 'class="bar" style="background:#212121;border-color:#313131"')}</div></div></div>` },
+  { id: 3, label: '③ 悬停与菜单：悬停只出中性底；“加入剪辑”点开是原来那份菜单；删除悬停才变红',
+    note: '图标按钮悬停出中性底并提亮到最亮，名称进悬停提示。“加入剪辑”菜单内容不变：先选目标剪辑，再选放法（加入素材面板 / 播放头处覆盖 / 插入…）。',
+    html: `<div class="pair"><div class="side"><div class="cap">悬停“加入剪辑”并点开</div><div class="canvas">${after('edit')}<div class="tip" data-anchor>加入剪辑</div><div class="menu" data-anchor-menu><div class="dd"><span>当前剪辑</span>${chev}</div><div class="mi hover">加入素材面板<small>放进“生成结果”箱</small></div><div class="mi">播放头处覆盖<small>加入 序列 1 · V2 · 00:00:12:08</small></div><div class="mi">播放头处插入<small>后面的片段整体后移</small></div></div></div></div>
+      <div class="side"><div class="cap">悬停删除</div><div class="canvas">${after('delete')}<div class="tip" data-anchor>删除</div></div></div></div>` },
+  { id: 4, label: '④ 节点参数区：参数名统一用第三档（text3），“图片 / 视频 / 音频”行统一叫“参考素材”',
+    note: '现状：模型、参考素材两行的名字是第三档 #A5A5A5；下面的参数行单独被改成了次亮 #CACACA，所以看起来上面两行淡。规范是“内容最亮，名字退后，默认值再退后”：参数名一律第三档，取值是次亮，模型名这种内容是最亮。统一后整列名字同一亮度，取值更跳出来。素材行：现在只有一种素材时写“图片”，多种时写“参考素材”；改成一律“参考素材”，各个节点叫法一致，进来的素材仍按图片、视频、音频分开编号（@图片1、@视频1）。',
+    html: `<div class="pair"><div class="side"><div class="cap">现状（参数名两种亮度，素材行叫“图片”）</div>${nodeRows('t3', 't3', 't2', '图片')}</div><div class="side"><div class="cap">草稿（参数名统一第三档，素材行叫“参考素材”）</div>${nodeRows('t3', 't3', 't3', '参考素材')}</div></div>
+      <div class="swatches"><span><i class="sw" style="background:#EEEEEE"></i>最亮 text1 #EEEEEE · 内容（模型名、改过的值）</span><span><i class="sw" style="background:#CACACA"></i>次亮 text2 #CACACA · 取值、可点的动作</span><span><i class="sw" style="background:#A5A5A5"></i>第三档 text3 #A5A5A5 · 参数名</span><span><i class="sw" style="background:#737373"></i>图标灰 #737373 · 默认状态的开关、折叠箭头</span></div>` },
+];
+document.body.innerHTML = blocks.map((b) => `<div class="block" data-id="${b.id}"><p class="label">${b.label}</p><p class="note">${b.note}</p>${b.html}</div>`).join('');
+// 提示与菜单贴着悬停的那个图标摆
+for (const canvas of document.querySelectorAll('.canvas')) {
+  const hovered = canvas.querySelector('.ib.hover, .ib.danger-hover')
+  if (!hovered) continue
+  const box = canvas.getBoundingClientRect(), r = hovered.getBoundingClientRect()
+  const tip = canvas.querySelector('[data-anchor]'), menu = canvas.querySelector('[data-anchor-menu]')
+  if (tip) { tip.style.left = `${r.left - box.left + r.width / 2 - tip.offsetWidth / 2}px`; tip.style.top = `${r.top - box.top - tip.offsetHeight - 6}px` }
+  if (menu) { menu.style.left = `${r.right - box.left - menu.offsetWidth}px`; menu.style.top = `${r.bottom - box.top + 8}px` }
+}
+</script>
+</body>
+</html>

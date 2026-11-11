@@ -316,7 +316,7 @@ export const TextProcessingNode = memo(({
           {acceptedMediaKinds.length > 0 && (
             <MediaInputsRow
               nodeId={id}
-              label={acceptedMediaKinds.length > 1 ? t('node.mediaRow.reference') : t(`node.mediaRow.${acceptedMediaKinds[0]}`)}
+              label={t('node.mediaRow.reference')}
               sources={acceptedMediaKinds.map((kind) => ({
                 kind,
                 maxCount: MEDIA_LIMITS[kind],

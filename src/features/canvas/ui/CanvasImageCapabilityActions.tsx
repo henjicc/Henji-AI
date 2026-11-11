@@ -1,7 +1,6 @@
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import {
   ChevronDown,
-  MoreHorizontal,
   type LucideIcon,
 } from 'lucide-react'
 import {
@@ -266,7 +265,6 @@ export function CanvasImageCapabilityActions({
                 togglePanel()
               }}
             >
-              <MoreHorizontal  />
               {t('nodeToolbar.more')}
               <ChevronDown className={`transition-transform duration-180 ${open ? 'rotate-180' : ''}`} />
             </UiButton>
