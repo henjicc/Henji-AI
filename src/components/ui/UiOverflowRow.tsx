@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 
 import { ownerWindowOf } from '@/utils/crossRealmDom'
-import { measureParentSlack } from './measureParentSlack'
+import { layoutWidth, measureParentSlack } from './measureParentSlack'
 import { resolveOverflowHiddenIds, UI_OVERFLOW_TRIGGER_FALLBACK_WIDTH, type OverflowLayoutItem } from './overflowLayout'
 
 /**
@@ -82,9 +82,9 @@ export function UiOverflowRow({
       }
       // 被压缩的 pinned 项保留压缩前的自然宽度
       if (item?.pinned && compressPinned) continue
-      widths.current.set(id, element.getBoundingClientRect().width)
+      widths.current.set(id, layoutWidth(element, container))
     }
-    if (overflowRef.current) overflowWidth.current = overflowRef.current.getBoundingClientRect().width
+    if (overflowRef.current) overflowWidth.current = layoutWidth(overflowRef.current, container)
     const style = ownerWindowOf(container).getComputedStyle(container)
     const gap = Number.parseFloat(style.columnGap || '0') || 0
     const available = container.clientWidth + (growIntoParent ? measureParentSlack(container) : 0)

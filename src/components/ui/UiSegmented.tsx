@@ -5,7 +5,7 @@ import { UiOptionButton } from './primitives'
 import { UI_CONTROL_HEIGHT_CLASS } from './styleTokens'
 import { useUiFormRowLabelling } from './formRowLabel'
 import Dropdown from './Dropdown'
-import { measureParentSlack } from './measureParentSlack'
+import { layoutWidth, measureParentSlack } from './measureParentSlack'
 
 export interface UiSegmentedOption<T extends string | number> {
   value: T
@@ -65,7 +65,7 @@ export function UiSegmented<T extends string | number>({ ariaLabel, options, val
       const group = wrapper.firstElementChild
       const optionButtons = [...buttons.current.values()]
       if (!group || optionButtons.length === 0) return
-      const groupWidth = group.getBoundingClientRect().width
+      const groupWidth = layoutWidth(group, wrapper)
       const spill = optionButtons.some((button) => button.scrollWidth > button.clientWidth + 1) || groupWidth > wrapper.clientWidth + 1
       if (!spill) return
       const groupStyle = view.getComputedStyle(group)

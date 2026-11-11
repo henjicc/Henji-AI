@@ -428,7 +428,8 @@ function useControlBodyHeight(ref: RefObject<HTMLElement>, enabled: boolean): nu
   useLayoutEffect(() => {
     const element = ref.current;
     if (!enabled || !element) return;
-    const measure = (): void => setHeight(Math.round(element.getBoundingClientRect().height));
+    // 按布局高度量：放在画布节点里会随画布缩放，屏幕高度和 40px 的布局门槛不是一个口径
+    const measure = (): void => setHeight(Math.round(element.offsetHeight || element.getBoundingClientRect().height));
     measure();
     const ResizeObserverClass = element.ownerDocument.defaultView?.ResizeObserver;
     if (!ResizeObserverClass) return;
