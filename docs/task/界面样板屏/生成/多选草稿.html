@@ -113,7 +113,7 @@ const record = (n, results, opts = {}) => `<div class="rec"><div class="head">${
 const normalBand = (hoverSelect) => `<div class="band"><span class="tab on">全部</span><span class="tab">图片</span><span class="tab">视频</span><span class="vsep"></span><span class="icon">${i('search')}</span><span class="icon ${hoverSelect ? 'hover' : ''}">${i('list-checks')}</span><span class="icon">${i('ellipsis')}</span></div>`;
 const selBand = (count, opts = {}) => `<div class="band"><span class="icon hover" style="background:none">${i('x')}</span><span class="count">已选 ${count}</span><span class="btn">全选</span><span class="btn">${opts.none ? '' : '取消选择'}</span>
   <span class="ml"></span>
-  <span class="btn secondary ${opts.dlOpen ? 'open' : ''}">${i('download')}下载${i('chevron-down')}</span>
+  <span class="btn ${opts.dlOpen ? 'open' : ''}">${i('download')}下载${i('chevron-down')}</span>
   <span class="btn">${i('folder-plus')}收进资产库</span>
   <span class="btn">${i('workflow')}放到画布</span>
   <span class="btn">${i('clapperboard')}发到剪辑</span>
@@ -127,7 +127,7 @@ const blocks = [
     note: '还是一条带，不另起一行：左端“× 退出 · 已选 5 · 全选 / 取消选择”，右端是批量动作。单位是“一个结果”（一条记录里可能有 4 张），记录前面的勾选框一次选中这条记录的全部结果，选了一部分时显示横杠。多选时点结果只切换选中，不再打开大图；Shift 点选连续一段，Ctrl+A 全选当前筛选出的结果，Esc 退出。选中的结果描强调色边 + 实心勾，单条记录的悬停工具条在多选时隐藏。“全选”只选当前筛选和类型下能看到的结果，先筛选再全选就能一次挑出某天、某模型的全部图。',
     html: `${selBand(5)}<div class="list">${record(0, res(0, { check: true }) + res(1, { check: true }) + res(2, { check: true }), { cb: 'on' })}${record(1, res(3, { check: true }) + res(4, { check: false }), { cb: 'part' })}${record(2, res(5, { check: true, w: 200, dur: '0:05' }), { cb: 'on' })}</div>` },
   { id: 3, label: '③ 下载：一次选目录，全部放进去，或打包成一个 ZIP',
-    note: '“下载”是最常用的批量动作，所以用次级实底排在最前。菜单里只有两种做法：放进一个文件夹（选文件夹，或用设置里已有的快速下载目录、预设目录，和画布批量下载同一套），或打包成 ZIP（选保存位置）。文件名统一成“日期_模型_提示词前几个字_序号”，同名自动加序号，不弹逐个确认。',
+    note: '“下载”是最常用的批量动作，排在最前；和其他批量动作同档，都是静默按钮（命令带里只有唯一主动作才铺底）。菜单里只有两种做法：放进一个文件夹（选文件夹，或用设置里已有的快速下载目录、预设目录，和画布批量下载同一套），或打包成 ZIP（选保存位置）。文件名统一成“日期_模型_提示词前几个字_序号”，同名自动加序号，不弹逐个确认。',
     html: `${selBand(5, { dlOpen: true })}<div class="menu" style="left:452px;top:44px"><div class="mi hover">${i('folder-open')}放进文件夹…</div><div class="mi">${i('file-archive')}打包成 ZIP…</div><div class="msep"></div><div class="mh">快速下载目录</div><div class="mi">${i('folder')}D:\\下载\\痕迹AI</div><div class="mh">预设目录</div><div class="mi">${i('folder')}E:\\素材\\宋制汉服</div><div class="mi">${i('folder')}E:\\项目\\元宝搜索\\生成</div></div><div class="list" style="opacity:.55">${record(0, res(0, { check: true }) + res(1, { check: true }) + res(2, { check: true }), { cb: 'on' })}${record(1, res(3, { check: true }) + res(4, { check: false }), { cb: 'part' })}</div>` },
   { id: 4, label: '④ 进行中与完成：右下角一条通知，能打开文件夹，失败的能重试',
     note: '导出在后台跑，期间可以继续生成、继续选。完成后通知里给“打开文件夹”；有失败（原文件被删、网络结果过期）时写清几个失败，“重试失败的”只重做那几个。退出多选不影响正在进行的导出。',

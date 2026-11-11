@@ -72,7 +72,8 @@ function MenuItem({ icon: Icon, label, title, danger, disabled, disabledReason, 
 
 /**
  * 多选时的命令带：同一条带原地换内容，不另起一行（设计稿“生成历史多选”）。
- * 左端退出与计数，右端批量动作；“下载”最常用，用次级实底排第一，其余静默，放不下从右往左收进“更多”。
+ * 左端退出与计数，右端批量动作：同一组动作同档，全部静默（命令带里只有唯一主动作才铺底）；
+ * “下载”最常用所以排第一，放不下从右往左收进“更多”。
  */
 export function GenerationSelectionBar({ count, allSelected, onExit, onSelectAll, onClear, actions }: {
   count: number
@@ -132,7 +133,7 @@ export function GenerationSelectionBar({ count, allSelected, onExit, onSelectAll
             node: (
               <PanelTrigger panelSize="menu" panelPadding="menu" closeOnPanelClick disabled={Boolean(emptyReason)} renderPanel={renderDownloadMenu}>
                 {({ open, togglePanel }) => (
-                  <UiButton variant="secondary" aria-haspopup="menu" aria-expanded={open} disabled={Boolean(emptyReason)} disabledReason={emptyReason} loading={actions.running === 'export'} onClick={togglePanel}>
+                  <UiButton aria-haspopup="menu" aria-expanded={open} disabled={Boolean(emptyReason)} disabledReason={emptyReason} loading={actions.running === 'export'} onClick={togglePanel}>
                     <ICON_DOWNLOAD />{t('ui:generationSelection.download')}<ChevronDown />
                   </UiButton>
                 )}
