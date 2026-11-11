@@ -2,7 +2,7 @@ import { Camera } from 'lucide-react';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { Dropdown, UiButton, UiChipButton } from '@/components/ui';
+import { Dropdown, UiButton, UiSegmented } from '@/components/ui';
 import {
   PANORAMA_VIEWPORT_ASPECT_RATIOS,
   type PanoramaViewMode,
@@ -42,24 +42,16 @@ export function PanoramaViewerControls({
       onPointerDown={(event) => event.stopPropagation()}
       onWheel={(event) => event.stopPropagation()}
     >
-      <div className="flex items-center gap-1" role="group" aria-label={t('viewer.panorama.displayMode')}>
-        <UiChipButton
-          selectionRole="navigation"
-          active={viewMode === 'sphere'}
-          size="md"
-          onClick={() => onViewModeChange('sphere')}
-        >
-          {t('viewer.panorama.spherical')}
-        </UiChipButton>
-        <UiChipButton
-          selectionRole="navigation"
-          active={viewMode === 'flat'}
-          size="md"
-          onClick={() => onViewModeChange('flat')}
-        >
-          {t('viewer.panorama.flat')}
-        </UiChipButton>
-      </div>
+      {/* 球面 / 平面是模式切换，和全景弹窗、打光手动 / 智能同一种分段控件 */}
+      <UiSegmented<PanoramaViewMode>
+        ariaLabel={t('viewer.panorama.displayMode')}
+        value={viewMode}
+        onChange={onViewModeChange}
+        options={[
+          { value: 'sphere', label: t('viewer.panorama.spherical') },
+          { value: 'flat', label: t('viewer.panorama.flat') },
+        ]}
+      />
 
       <Dropdown<PanoramaViewportAspectRatio>
         surface="glass"
