@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { Copy, FolderInput, FolderOutput, Link2, Pencil, RefreshCw, Sparkles, Star, Trash2, Wand2 } from 'lucide-react'
 import ContextMenu from '@/components/ContextMenu'
 import { useContextMenu, type MenuItem } from '@/hooks/useContextMenu'
-import { UI_COVER_FRAME_CLASS, UI_TEXT_META_CLASS, UiButton, UiEmpty, UiError, UiFormRow, UiGroup, UiIconButton, UiInput, UiModal, UiOptionButton, UiRecordItem, UiRecordList, UiSearchInput } from '@/components/ui'
+import { UI_COVER_FRAME_CLASS, UI_DROP_TARGET_OVERLAY_CLASS, UI_TEXT_META_CLASS, useFileDropTarget, UiButton, UiEmpty, UiError, UiFormRow, UiGroup, UiIconButton, UiInput, UiModal, UiOptionButton, UiRecordItem, UiRecordList, UiSearchInput } from '@/components/ui'
 import { useNotification } from '@/contexts/NotificationContext'
 import { openDialog, saveDialog, toDisplaySrc } from '@/platform/desktopApi'
 import { parseStyleGuide } from '@/core/videoEdit/styles/styleGuide'
@@ -118,12 +118,21 @@ function Panel({ instance, onError, visible = true }: { instance: VideoEditInsta
   ]
   const importFile = async (): Promise<void> => {
     const selected = await openDialog({ multiple: false, filters: OPEN_FILTERS }); const path = Array.isArray(selected) ? selected[0] : selected; if (!path) return
+    await importPath(path)
+  }
+  // 风格包拖进面板就导入，和“导入”同一件事
+  const styleDrop = useFileDropTarget({
+    accept: ({ name }) => OPEN_FILTERS[0].extensions.some(extension => name.toLowerCase().endsWith(`.${extension.toLowerCase()}`)),
+    onDropFiles: ([item]) => { void importPath(item.path) },
+  })
+  async function importPath(path: string): Promise<void> {
     await run('import', async () => {
       const result = await importVideoEditStylePackage(path)
       showNotification(`已导入风格“${result.style.name}” v${result.style.version}${result.templates.length ? `和 ${result.templates.length} 个模板` : ''}。`); setOpen(result.style.id)
     })
   }
-  return <div className="flex h-full min-h-0 flex-col gap-2 px-3 py-3" aria-label="风格" data-video-edit-styles>
+  return <div className="relative flex h-full min-h-0 flex-col gap-2 px-3 py-3" aria-label="风格" data-video-edit-styles {...styleDrop.dropProps}>
+    {styleDrop.isDragOver ? <div aria-hidden="true" className={UI_DROP_TARGET_OVERLAY_CLASS} /> : null}
     <div className="flex items-center gap-1">
       <UiSearchInput size="sm" className="min-w-0 flex-1" aria-label="搜索风格" placeholder="搜索风格" value={query} onChange={event => setQuery(event.target.value)} onClear={() => setQuery('')} clearLabel="清除搜索" />
       <UiIconButton size="sm" label="导入风格包" loading={busy === 'import'} onClick={() => { void importFile() }}><FolderInput /></UiIconButton>

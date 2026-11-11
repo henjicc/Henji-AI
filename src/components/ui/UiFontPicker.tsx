@@ -1,14 +1,15 @@
 import type { UiControlSize } from './primitiveInternals'
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Star, Trash2, Upload, Variable } from 'lucide-react'
-import { UI_ICON_SIZE_CLASS } from './styleTokens'
+import { UI_DROP_TARGET_OVERLAY_CLASS, UI_ICON_SIZE_CLASS } from './styleTokens'
+import { useFileDropTarget } from './fileDrop/useFileDropTarget'
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
 import PanelTrigger from './PanelTrigger'
 import Dropdown from './Dropdown'
 import { UiButton, UiFieldTrigger, UiIconButton, UiOptionButton, UiSearchInput } from './primitives'
 import { UiEmpty, UiError, UiLoading } from './states'
 import { cssFontFamily, filterFonts, type FontFaceInfo, type FontFilter } from '@/core/fonts/catalog'
-import { favoriteFont, fontLibrarySnapshot, importFonts, loadFontLibrary, readFontPayload, rememberFont, removeFont, resolveFont, subscribeFontLibrary } from '@/platform/fonts'
+import { favoriteFont, fontLibrarySnapshot, importFonts, isFontFilePath, loadFontLibrary, readFontPayload, rememberFont, removeFont, resolveFont, subscribeFontLibrary } from '@/platform/fonts'
 import { loadDocumentFont, retainDocumentFonts, pinDocumentFonts, releaseDocumentFonts } from '@/platform/fontFaces'
 
 export interface UiFontPickerProps {
@@ -107,8 +108,10 @@ export function UiFontPicker({ value, ariaLabel = '选择字体', size = 'md', d
     }).catch(report)
   }
   const perform = async (operation: () => Promise<void>): Promise<void> => { setBusy(true); setError(''); restore(); try { await operation() } catch (reason) { report(reason) } finally { setBusy(false) } }
+  // 字体文件拖进字体面板就导入，和“导入字体”同一件事
+  const fontDrop = useFileDropTarget({ multiple: true, disabled: busy, accept: ({ name }) => isFontFilePath(name), onDropFiles: items => { void perform(() => importFonts(items.map(item => item.path))) } })
   return <div className="flex min-w-0 flex-col gap-1" data-ui-font-picker>
-    <PanelTrigger size={size} panelSize="compact" panelPadding="content" open={open} onOpenChange={next => { if (!next) restore(); else void loadFontLibrary(true).catch(report); setOpen(next) }} renderPanel={() => <div className="flex min-w-0 flex-col gap-2" onKeyDown={event => {
+    <PanelTrigger size={size} panelSize="compact" panelPadding="content" open={open} onOpenChange={next => { if (!next) restore(); else void loadFontLibrary(true).catch(report); setOpen(next) }} renderPanel={() => <div className="relative flex min-w-0 flex-col gap-2" {...fontDrop.dropProps} onKeyDown={event => {
       if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); restore(); setOpen(false) }
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         event.preventDefault(); event.stopPropagation()
@@ -117,6 +120,7 @@ export function UiFontPicker({ value, ariaLabel = '选择字体', size = 'md', d
       }
       if (event.key === 'Enter' && familyRows[active]) { event.preventDefault(); event.stopPropagation(); choose(familyRows[active]) }
     }}>
+      {fontDrop.isDragOver ? <div aria-hidden="true" className={UI_DROP_TARGET_OVERLAY_CLASS} /> : null}
       <div className="flex items-center gap-2"><UiSearchInput ref={search} aria-label="搜索字体" placeholder="搜索中文名或英文名" value={query} onChange={event => setQuery(event.target.value)} onClear={() => setQuery('')} clearLabel="清除字体搜索" /><UiIconButton aria-label="导入字体" disabled={busy} onClick={() => { void perform(importFonts) }}><Upload  /></UiIconButton></div>
       <Dropdown<FontFilter> ariaLabel="字体分类" size="sm" value={filter} options={FILTERS} onSelect={setFilter} />
       {(error || library.error) && <UiError size="xs" message={error || library.error} onRetry={() => { setError(''); void loadFontLibrary(true).catch(report) }} />}

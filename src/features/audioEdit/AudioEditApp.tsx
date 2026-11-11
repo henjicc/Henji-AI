@@ -1,9 +1,9 @@
-import { UiInlineStatus } from '@/components/ui'
+import { UI_DROP_TARGET_OVERLAY_CLASS, UiInlineStatus, useFileDropTarget } from '@/components/ui'
 import { UI_INLINE_GAP_CLASS } from '@/components/ui/styleTokens'
 import { notificationMessage } from '@/i18n/notifications'
 import { ApplicationOperationReviewBanner } from '@/features/application-control'
 import { useShallow } from 'zustand/react/shallow'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { DockviewApi } from 'dockview-react'
 import { ArrowLeft, Mic, Redo2, Search, Upload } from 'lucide-react'
 import { useStore } from 'zustand'
@@ -42,7 +42,7 @@ import { AudioEditWorkspaceContext, type AudioEditDeliveryFormat, type AudioEdit
 import { adjustAudioEditRangeMode, applyAudioEditSuggestion, audioEditSuggestionStates, DEFAULT_AUDIO_EDIT_VIEW_SETTINGS, dismissAudioEditSuggestion, editAudioEditRange, setAudioEditBlocks } from '@/core/audioEdit/edits'
 import { editAudioEditProject, flushAudioEditProject, getAudioEditProjectInstance } from './application/audioEditProjectInstances'
 import { DocumentSaveStatus } from '@/features/documents'
-import { AudioEditLeaveCancelledError, createAudioEditRecording, importAudioEditMedia, leaveAudioEditEditor, openAudioEditDocument, pickAudioEditMedia, renameAudioEditDocument } from './application/audioEditDocumentService'
+import { AudioEditLeaveCancelledError, createAudioEditRecording, importAudioEditMedia, isAudioEditMediaPath, leaveAudioEditEditor, openAudioEditDocument, pickAudioEditMedia, renameAudioEditDocument } from './application/audioEditDocumentService'
 import { VideoEditSendMenu } from '@/features/videoEdit/panels/VideoEditSendMenu'
 import { videoEditDocumentRef } from '@/features/videoEdit/application/videoEditSourceRefs'
 import { exportAudioEdit, relinkAudioEdit } from './application/audioEditApplicationService'
@@ -226,6 +226,10 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
           { id: 'record', label: '录音', icon: Mic, onSelect: () => { void createAudioEditRecording().catch(notifyError) } },
         ] }}
         banner={<AudioCaptureRecoveryBanner />}
+        onDropFiles={(files) => {
+          const path = files.map((file) => getPlatform().media.getPathForFile(file)).find(isAudioEditMediaPath)
+          if (path) void run(() => importAudioEditMedia(path))
+        }}
         onOpen={(document) => openDocument({ id: document.id, path: document.path })}
       />
     )
@@ -267,8 +271,8 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     try { editAudioEditProject(project.id, (current) => adjustAudioEditRangeMode(current, next, mode, action)) } catch (error) { notifyError(error) }
   }
   const waveActions = audioWaveActions(project, (action) => void run(action))
-  const relinkSource = () => run(async () => {
-    const path = await pickAudioEditMedia('原始素材')
+  const relinkSource = (droppedPath?: string) => run(async () => {
+    const path = droppedPath ?? await pickAudioEditMedia('原始素材')
     if (path) { await relinkAudioEdit(project.id, path); setSourceError(''); showNotification(notificationMessage('audioRelinked')) }
   })
   const runningTasks = tasks.filter((task) => task.state === 'running' && (task.kind !== 'silence' || state.busy))
@@ -306,7 +310,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
         </span>}
         {!state.saveError && sourceError && <span className="flex items-center gap-1">
           <UiInlineStatus role="alert" className="max-w-48 truncate" tooltip={sourceError}>{sourceError}</UiInlineStatus>
-          <UiButton size="md" disabled={disabled} onClick={() => void relinkSource()}>重新定位</UiButton>
+          <FileDropButton disabled={disabled} accept={isAudioEditMediaPath} onDropPath={(path) => void relinkSource(path)} onClick={() => void relinkSource()}>重新定位</FileDropButton>
         </span>}
         <UiIconButton size="md" aria-label="查找与替换" on={textSearch.isOpen} aria-expanded={textSearch.isOpen} tooltip={textSearch.isOpen ? '关闭查找替换' : '查找与替换 · Ctrl+F'} onClick={() => { if (textSearch.isOpen) textSearch.close(); else { textSearch.open(); dockApi?.getPanel('transcript')?.api.setActive() } }}><Search /></UiIconButton>
         <WorkspaceLayoutMenu workspaceId={AUDIO_EDIT_WORKSPACE_ID} />
@@ -340,4 +344,13 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
       try { editAudioEditProject(project.id, (current) => ({ ...current, transcript: current.transcript.map((block) => block.id === editingBlock.id ? { ...block, text } : block) })); setEditingBlockId(null) } catch (error) { notifyError(error) }
     }} />}
   </div>
+}
+
+/** 找回原始素材的按钮：点它选文件，也可以直接把文件拖到按钮上。 */
+function FileDropButton({ disabled, accept, onDropPath, onClick, children }: { disabled: boolean; accept: (path: string) => boolean; onDropPath: (path: string) => void; onClick: () => void; children: ReactNode }): JSX.Element {
+  const drop = useFileDropTarget({ disabled, accept: ({ name }) => accept(name), onDropFiles: ([item]) => onDropPath(item.path) })
+  return <span className="relative inline-flex rounded-md" {...drop.dropProps}>
+    {drop.isDragOver ? <span aria-hidden="true" className={UI_DROP_TARGET_OVERLAY_CLASS} /> : null}
+    <UiButton size="md" disabled={disabled} onClick={onClick}>{children}</UiButton>
+  </span>
 }

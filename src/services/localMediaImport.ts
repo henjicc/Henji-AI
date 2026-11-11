@@ -33,6 +33,25 @@ const EXTENSION_KINDS: Record<string, LocalMediaKind> = {
   mp3: 'audio', wav: 'audio', flac: 'audio', ogg: 'audio', m4a: 'audio', aac: 'audio', opus: 'audio', pcm: 'audio',
 }
 
+/**
+ * 按 `<input accept>` 的写法判断拖进来的文件收不收（如 `image/*`、`audio/mpeg,.json`），
+ * 让拖放与点选上传共用同一份格式表。从资产库拖来的项没有 MIME，按扩展名推断类别。
+ */
+export function acceptsFileAttribute(accept: string): (item: { name: string; mimeType: string }) => boolean {
+  const tokens = accept.split(',').map((token) => token.trim().toLowerCase()).filter(Boolean)
+  return ({ name, mimeType }) => {
+    if (tokens.length === 0) return true
+    const extension = `.${name.split('.').pop()?.toLowerCase() ?? ''}`
+    const type = mimeType.toLowerCase()
+    const kind = inferLocalMediaKind({ name, type })
+    return tokens.some((token) => token.startsWith('.')
+      ? token === extension
+      : token.endsWith('/*')
+        ? token.slice(0, -2) === (type.split('/')[0] || kind)
+        : token === type)
+  }
+}
+
 /** 助手路径导入还支持由原生解析器识别的专业容器，不改变界面上传端口的格式选择。 */
 export function inferLocalMediaImportKind(path: string): LocalMediaKind | null {
   const extension = path.split('.').at(-1)?.toLowerCase() ?? ''
@@ -124,4 +143,13 @@ export async function importLocalMedia(
     })
     throw error
   }
+}
+
+/**
+ * 拖进来的一项落成本机素材路径：系统文件照常导入（复制进素材目录、生成预览）；
+ * 从资产库、生成记录拖来的本来就是本机文件，直接用它的路径。
+ */
+export async function importDroppedMedia(item: { file?: File; path: string }, expectedKind?: LocalMediaKind): Promise<string> {
+  if (!item.file) return item.path
+  return (await importLocalMedia(item.file, expectedKind)).fullPath
 }

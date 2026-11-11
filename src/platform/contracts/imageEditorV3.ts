@@ -366,7 +366,8 @@ export interface ImageEditorV3Platform {
     expectedRevision: number
     targetDocumentRef: ImageEditorV3DocumentRef
   }): Promise<ImageEditorV3DocumentReference>
-  importColorLut?(request: { requestId: string }): Promise<ImageEditorV3DialogResult<{ resourceRef: ImageEditorV3ResourceRef; name: string }>>
+  /** 带 path 时直接导入这个文件（拖进来的），不带时弹出选择框。 */
+  importColorLut?(request: { requestId: string; path?: string }): Promise<ImageEditorV3DialogResult<{ resourceRef: ImageEditorV3ResourceRef; name: string }>>
   importSource(request: {
     requestId: string
   }): Promise<ImageEditorV3DialogResult<ImageEditorV3ManagedSource>>

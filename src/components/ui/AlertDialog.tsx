@@ -6,7 +6,8 @@ import { useDialogTransition } from './useDialogTransition'
 import { UI_CONTENT_OVERLAY_INSET_CLASS, UI_DIALOG_TRANSITION_MS, uiTransition } from './motion'
 import { useDialogFocusTrap } from './useDialogFocusTrap'
 import { UiOverlayLayerProvider, useUiOverlayLayer } from './overlayOwnership'
-import { UI_MODAL_SIZE_CLASS, UI_TEXT_SECTION_CLASS } from './styleTokens'
+import { UI_DROP_TARGET_OVERLAY_CLASS, UI_MODAL_SIZE_CLASS, UI_TEXT_SECTION_CLASS } from './styleTokens'
+import { useFileDropTarget, type FileDropTargetOptions } from './fileDrop/useFileDropTarget'
 import { CircleAlert, Info, TriangleAlert, type LucideIcon } from 'lucide-react'
 
 const ALERT_TYPE_ICON: Record<'info' | 'warning' | 'error', { Icon: LucideIcon; color: string }> = {
@@ -54,7 +55,11 @@ interface AlertDialogProps {
   closeImmediately?: boolean
   /** 核对面板保留两个结果按钮顺序，“稍后处理”在最后。 */
   actionLayout?: 'standard' | 'review'
+  /** 弹窗在等用户找一个文件（如重新定位）时：把文件拖到弹窗上，和点选文件同一件事。 */
+  fileDrop?: FileDropTargetOptions
 }
+
+const NO_FILE_DROP: FileDropTargetOptions = { disabled: true, onDropFiles: () => undefined }
 
 /**
  * 统一的提示/报错弹窗组件。
@@ -72,7 +77,9 @@ export default function AlertDialog({
   closeVariant = 'secondary',
   closeImmediately = false,
   actionLayout = 'standard',
+  fileDrop,
 }: AlertDialogProps): JSX.Element | null {
+  const drop = useFileDropTarget(fileDrop ?? NO_FILE_DROP)
   const { t } = useI18n('common')
   const [closeRequested, setCloseRequested] = useState(false)
   const closeNotifiedRef = useRef(false)
@@ -150,7 +157,9 @@ export default function AlertDialog({
           transition: uiTransition(['opacity', 'transform'], UI_DIALOG_TRANSITION_MS)
         }}
         onTransitionEnd={onTransitionEnd}
+        {...drop.dropProps}
       >
+        {drop.isDragOver ? <div aria-hidden="true" className={UI_DROP_TARGET_OVERLAY_CLASS} /> : null}
         {/* 图标单独占左列，标题与正文在右侧同一列左对齐：多行正文不会绕到图标下面 */}
         <div className="flex items-start gap-3">
           <Icon aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.lg} mt-0.5 shrink-0 ${color}`} />

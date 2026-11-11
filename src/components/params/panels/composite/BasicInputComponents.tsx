@@ -3,7 +3,7 @@ import React from 'react'
 import { useTranslation } from 'react-i18next'
 import Dropdown from '@/components/ui/Dropdown'
 import { UiSwitch } from '@/components/ui'
-import { UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS, UiButton, UiInput, UiOptionButton } from '@/components/ui'
+import { UI_DROP_TARGET_OVERLAY_CLASS, UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS, UiButton, UiInput, UiOptionButton, useFileDropTarget } from '@/components/ui'
 import { getI18nText, type I18nText } from '@/core/types'
 
 interface CompositeComponentProps<TConfig> {
@@ -253,9 +253,27 @@ export const CompositeFileInput: React.FC<CompositeComponentProps<FileInputConfi
     ? getI18nText(config.buttonText, i18n.language)
     : '选择文件'
   const hintText = config.hint ? getI18nText(config.hint, i18n.language) : ''
+  const acceptFile = (file: File): void => {
+    if (!validateFileByAccept(file, acceptList)) {
+      setErrorText('文件类型不支持')
+      return
+    }
+    if (typeof config.maxSizeMb === 'number' && config.maxSizeMb > 0 && file.size > config.maxSizeMb * 1024 * 1024) {
+      setErrorText(`文件大小不能超过 ${config.maxSizeMb}MB`)
+      return
+    }
+    setErrorText('')
+    onChange(file)
+  }
+  const fileDrop = useFileDropTarget({
+    filesOnly: true,
+    disabled,
+    onDropFiles: ([item]) => { if (item.file) acceptFile(item.file) },
+  })
 
   return (
-    <div className="flex w-full flex-col gap-2">
+    <div className="relative flex w-full flex-col gap-2" {...fileDrop.dropProps}>
+      {fileDrop.isDragOver ? <div aria-hidden="true" className={UI_DROP_TARGET_OVERLAY_CLASS} /> : null}
       <UiInput
         ref={inputRef}
         type="file"
@@ -264,31 +282,8 @@ export const CompositeFileInput: React.FC<CompositeComponentProps<FileInputConfi
         disabled={disabled}
         onChange={(event) => {
           const file = event.target.files?.[0]
-          if (!file) {
-            return
-          }
-          if (!validateFileByAccept(file, acceptList)) {
-            setErrorText('文件类型不支持')
-            if (inputRef.current) {
-              inputRef.current.value = ''
-            }
-            return
-          }
-          if (typeof config.maxSizeMb === 'number' && config.maxSizeMb > 0) {
-            const maxSize = config.maxSizeMb * 1024 * 1024
-            if (file.size > maxSize) {
-              setErrorText(`文件大小不能超过 ${config.maxSizeMb}MB`)
-              if (inputRef.current) {
-                inputRef.current.value = ''
-              }
-              return
-            }
-          }
-          setErrorText('')
-          onChange(file)
-          if (inputRef.current) {
-            inputRef.current.value = ''
-          }
+          event.target.value = ''
+          if (file) acceptFile(file)
         }}
       />
 

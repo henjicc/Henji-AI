@@ -18,12 +18,12 @@ import { AlertDialog, UI_TEXT_META_CLASS } from '@/components/ui'
 import { documentKindRegistry, readableDocumentExtensions } from '@/core/documents/kinds'
 import { MAX_ENTRY_NAME_LENGTH, normalizeEntryName } from '@/core/documents/naming'
 import type { DocumentContainerRef, DocumentKindId, DocumentSummary, NameCheckResult } from '@/core/documents/types'
-import { openDialog } from '@/platform/desktopApi'
+import { getPathForFile, openDialog } from '@/platform/desktopApi'
 
 import { ensureDocumentCover, hasDocumentCoverProvider, hasDocumentHoverPreview, loadDocumentHoverPreview, subscribeDocumentCoverChanged } from './documentCovers'
 import { toError } from './documentErrors'
 import { documentKindPresentation } from './documentKindPresentation'
-import { exportDocumentPackageInteractive, importPackageInteractive, packageFileName } from './documentPackageActions'
+import { describePackageImport, exportDocumentPackageInteractive, importPackageInteractive, packageFileName, routeDroppedDocumentFiles } from './documentPackageActions'
 import { getDocumentOperations, isDocumentNameConflict, type DocumentOperations } from './documentOperations'
 import type { DocumentSessionRegistry } from './documentSessionRegistry'
 import { MoveToProjectDialog, type MoveToProjectChoice } from './MoveToProjectDialog'
@@ -60,6 +60,7 @@ export interface DocumentLibraryPageProps {
   /** 新建方式；文案默认“新建<类型>”。 */
   create: ProjectLibraryCreate
   secondaryAction?: ProjectLibrarySecondaryAction
+  /** 拖进本类文档与单文件包之外的文件时调用（如音频编辑把音视频当作新建导入）；本类文档与包由列表页自己打开、导入。 */
   onDropFiles?: (files: File[]) => void
   onBack?: () => void
   backLabel?: string
@@ -265,28 +266,43 @@ export function DocumentLibraryPage({
     ]
   }, [t, canStandalone, run, moveWithConflictPrompt, operations, documentActions])
 
+  const documentExtensions = useMemo(
+    () => readableDocumentExtensions(documentKindRegistry.require(kind)).map((extension) => extension.slice(1)),
+    [kind],
+  )
+  const openExternalPath = useCallback(async (filePath: string): Promise<void> => {
+    const document = await operations.registerExternalDocument(filePath)
+    await (onOpen ? onOpen(document) : operations.openDocument(document))
+  }, [operations, onOpen])
+
   // 打开别处的文档（4.4）：选文件后登记所在项目或文件夹为外部位置，再按本页的打开方式打开
   const openExternalFile = useCallback((): void => {
     void run('openFile', async () => {
-      const extensions = readableDocumentExtensions(documentKindRegistry.require(kind)).map((extension) => extension.slice(1))
-      const selected = await openDialog({ multiple: false, filters: [{ name: kindName, extensions }] })
+      const selected = await openDialog({ multiple: false, filters: [{ name: kindName, extensions: documentExtensions }] })
       const filePath = typeof selected === 'string' ? selected : Array.isArray(selected) ? selected[0] : null
-      if (!filePath) return
-      const document = await operations.registerExternalDocument(filePath)
-      await (onOpen ? onOpen(document) : operations.openDocument(document))
+      if (filePath) await openExternalPath(filePath)
     })
-  }, [run, kind, kindName, operations, onOpen])
+  }, [run, kindName, documentExtensions, openExternalPath])
+
+  const reportPackageImport = useCallback(async (importing: () => Promise<Awaited<ReturnType<typeof importPackageInteractive>>>): Promise<void> => {
+    setPackageStatus(t('documentLibrary.package.importing'))
+    const result = await importing()
+    setPackageStatus(result ? describePackageImport(result, t) : null)
+  }, [t])
 
   const importPackage = useCallback((): void => {
-    void run('importPackage', async () => {
-      setPackageStatus(t('documentLibrary.package.importing'))
-      const result = await importPackageInteractive(undefined, operations)
-      if (!result) { setPackageStatus(null); return }
-      setPackageStatus(result.type === 'project'
-        ? t('documentLibrary.package.importedProject', { name: result.project.name })
-        : t('documentLibrary.package.importedDocument', { name: result.meta.name }))
-    })
-  }, [run, operations, t])
+    void run('importPackage', () => reportPackageImport(() => importPackageInteractive(undefined, operations)))
+  }, [run, operations, reportPackageImport])
+
+  // 拖进来的文件：本类文档直接打开、单文件包导入，其余交给页面（例如把音视频当新建导入）
+  const dropFiles = useCallback((files: File[]): void => {
+    const { documentPath, packagePath, rest } = routeDroppedDocumentFiles(files, documentExtensions, getPathForFile)
+    if (documentPath) void run('openFile', () => openExternalPath(documentPath))
+    if (packagePath) void run('importPackage', () => reportPackageImport(() => operations.importPackage(packagePath)))
+    if (rest.length === 0) return
+    if (onDropFiles) onDropFiles(rest)
+    else if (!documentPath && !packagePath) setPackageStatus(t('documentLibrary.dropUnsupported', { kind: kindName }))
+  }, [documentExtensions, kindName, onDropFiles, openExternalPath, operations, reportPackageImport, run, t])
 
   const pageLabels = useMemo((): ProjectLibraryLabels => ({
     createAction: t('documentLibrary.create', { kind: kindName }),
@@ -402,7 +418,7 @@ export function DocumentLibraryPage({
           { label: t('documentLibrary.openFile'), icon: FileInput, onClick: openExternalFile },
           { label: t('documentLibrary.importPackage'), icon: PackageOpen, onClick: importPackage },
         ]}
-        onDropFiles={onDropFiles}
+        onDropFiles={dropFiles}
         onBack={onBack}
         backLabel={backLabel}
         banner={(

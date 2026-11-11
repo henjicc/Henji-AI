@@ -544,10 +544,10 @@ export function commitImageEditorV3CanvasLayers(
   return getPlatform().imageEditorV3.commitCanvasLayers(request)
 }
 
-export async function importImageEditorColorLutV3(requestId: string): Promise<{ resourceRef: string; name: string } | null> {
+export async function importImageEditorColorLutV3(requestId: string, path?: string): Promise<{ resourceRef: string; name: string } | null> {
   const method = getPlatform().imageEditorV3.importColorLut
   if (!method) throw new Error("颜色查找表导入不可用")
-  const result = await method({ requestId })
+  const result = await method(path ? { requestId, path } : { requestId })
   return result.status === "completed" ? result.value : null
 }
 

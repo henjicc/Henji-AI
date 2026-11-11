@@ -1,4 +1,4 @@
-import { UiFormRow } from '@/components/ui'
+import { UI_DROP_TARGET_OVERLAY_CLASS, UiFormRow, useFileDropTarget } from '@/components/ui'
 import { ColorGradeSections } from '@/components/colorGrade/ColorGradeSections'
 import { ColorGradeScopes } from '@/components/colorGrade/ColorGradeScopes'
 import { ColorGradeExportButton } from '@/components/colorGrade/ColorGradeExportButton'
@@ -42,14 +42,14 @@ function ColorGradeEditor({ target, clip, selectedId, onError, footer }: { targe
   const [reference, setReference] = useState('')
   const [matchMethod, setMatchMethod] = useState<'mkl' | 'moments' | 'histogram'>('mkl')
   const luts = requireVideoEditInstance(target.projectId).document.colorLuts ?? []
-  const upload = async (stage: string): Promise<void> => {
+  const upload = async (stage: string, droppedPath?: string): Promise<void> => {
     if (busy || gesture.active()) return
     const controller = new AbortController(); request.current = controller; setBusy(true)
-    try { const asset = await importVideoEditColorLut(target.projectId, controller.signal); controller.signal.throwIfAborted(); if (asset) gesture.commit({ params: { [`${stage}_lut`]: asset.id } }) }
+    try { const asset = await importVideoEditColorLut(target.projectId, controller.signal, droppedPath); controller.signal.throwIfAborted(); if (asset) gesture.commit({ params: { [`${stage}_lut`]: asset.id } }) }
     catch (error) { if (!controller.signal.aborted) onError(error) }
     finally { if (!controller.signal.aborted) setBusy(false) }
   }
-  const lutControl = (stage: 'input' | 'look'): ReactNode => <UiFormRow label={t(stage === 'input' ? 'surfaceGrammar.inputLut' : 'surfaceGrammar.creativeLook')} density="compact"><div className="flex items-center gap-1"><div className="min-w-0 flex-1"><Dropdown size="sm" ariaLabel={stage === 'input' ? '输入 LUT' : '创意 Look'} value={values[`${stage}_lut`] as string} options={[{ value: '', label: '无' }, ...luts.map(asset => ({ value: asset.id, label: asset.name }))]} onSelect={id => gesture.commit({ params: { [`${stage}_lut`]: id } })} /></div><UiIconButton size="xs" aria-label="导入 LUT" tooltip="导入 .cube 颜色查找表" disabled={busy} onClick={() => { void upload(stage) }}><Upload  /></UiIconButton></div></UiFormRow>
+  const lutControl = (stage: 'input' | 'look'): ReactNode => <UiFormRow label={t(stage === 'input' ? 'surfaceGrammar.inputLut' : 'surfaceGrammar.creativeLook')} density="compact"><LutDropZone disabled={busy} onDropPath={path => { void upload(stage, path) }}><div className="min-w-0 flex-1"><Dropdown size="sm" ariaLabel={stage === 'input' ? '输入 LUT' : '创意 Look'} value={values[`${stage}_lut`] as string} options={[{ value: '', label: '无' }, ...luts.map(asset => ({ value: asset.id, label: asset.name }))]} onSelect={id => gesture.commit({ params: { [`${stage}_lut`]: id } })} /></div><UiIconButton size="xs" aria-label="导入 LUT" tooltip="导入 .cube 颜色查找表" disabled={busy} onClick={() => { void upload(stage) }}><Upload  /></UiIconButton></LutDropZone></UiFormRow>
   const [exporting, setExporting] = useState(false)
   const exportGrade = async (format: ColorGradeExportFormat, lutSize?: ColorGradeLutSize): Promise<void> => {
     if (!effect || exporting) return
@@ -158,4 +158,10 @@ function VideoEditColorGradePanelContent({ instance, onError, visible = true }: 
 
 export function VideoEditColorGradePanel(props: Parameters<typeof VideoEditColorGradePanelContent>[0]): React.ReactElement {
   return props.instance.activeSequenceId ? <VideoEditColorGradePanelContent {...props} /> : <UiEmpty className="h-full" title="没有序列" />
+}
+
+/** .cube 文件拖到 LUT 这一行就导入并选上，和点导入按钮同一件事。 */
+function LutDropZone({ disabled, onDropPath, children }: { disabled: boolean; onDropPath: (path: string) => void; children: ReactNode }): JSX.Element {
+  const drop = useFileDropTarget({ disabled, accept: ({ name }) => name.toLowerCase().endsWith('.cube'), onDropFiles: ([item]) => onDropPath(item.path) })
+  return <div className="relative flex items-center gap-1" {...drop.dropProps}>{drop.isDragOver ? <div aria-hidden="true" className={UI_DROP_TARGET_OVERLAY_CLASS} /> : null}{children}</div>
 }

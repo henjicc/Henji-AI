@@ -32,6 +32,11 @@ export class AudioEditLeaveCancelledError extends Error {
   }
 }
 
+/** 拖进来的文件能不能当音频编辑的原始素材（与选择文件同一份格式表）。 */
+export function isAudioEditMediaPath(path: string): boolean {
+  return AUDIO_EDIT_MEDIA_EXTENSIONS.includes(path.split('.').pop()?.toLowerCase() ?? '')
+}
+
 /** 选择一个音频或视频文件；取消返回 null。 */
 export async function pickAudioEditMedia(title = '音频或视频'): Promise<string | null> {
   const selected = await openDialog({ multiple: false, filters: [{ name: title, extensions: AUDIO_EDIT_MEDIA_EXTENSIONS }] })

@@ -14,12 +14,12 @@ async function read(path: string, signal?: AbortSignal): Promise<{ lut: CubeLut;
   const result = await decodeVideoEditLutOffThread(bytes, signal); signal?.throwIfAborted()
   return result
 }
-/** Project-local source reference; existing dialog grants file access and document paths own relocation/collection. */
-export async function importVideoEditColorLut(projectId: string, signal?: AbortSignal): Promise<ColorLutAsset | null> {
+/** 以文件路径登记为本剪辑的 LUT（之后的重新定位与收集按文档路径处理）。不传 droppedPath 时弹出选择文件，拖进来的 .cube 直接给路径。 */
+export async function importVideoEditColorLut(projectId: string, signal?: AbortSignal, droppedPath?: string): Promise<ColorLutAsset | null> {
   const owner = requireVideoEditInstance(projectId); const snapshot = owner.document; const contentVersion = owner.contentVersion
   logger.info('LUT 导入开始', { event: 'video_edit.color_grade.lut.import.start', context: { projectId } })
   try {
-    const selected = await getPlatform().system.dialog.open({ multiple: false, filters: [{ name: '颜色查找表', extensions: ['cube'] }] })
+    const selected = droppedPath ?? await getPlatform().system.dialog.open({ multiple: false, filters: [{ name: '颜色查找表', extensions: ['cube'] }] })
     signal?.throwIfAborted(); const path = Array.isArray(selected) ? selected[0] : selected
     if (!path) return null
     const { contentIdentity } = await read(path, signal)

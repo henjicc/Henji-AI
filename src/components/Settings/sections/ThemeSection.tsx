@@ -7,6 +7,8 @@ import {
   UiInput,
   UiOptionButton,
   UiRangeInput,
+  UI_DROP_TARGET_OVERLAY_CLASS,
+  useFileDropTarget,
 } from '@/components/ui';
 import SettingsSegmented from '../components/SettingsSegmented';
 import { SETTINGS_INLINE_CONTROL_CLASS } from '../settingsLayout';
@@ -61,6 +63,16 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({ onExportTheme, onImportThem
   const [importing, setImporting] = React.useState(false);
   const [pendingImportFile, setPendingImportFile] = React.useState<File | null>(null);
   const [modeDialogOpen, setModeDialogOpen] = React.useState(false);
+  const chooseImportFile = (file: File): void => {
+    setPendingImportFile(file);
+    setModeDialogOpen(true);
+  };
+  const themeDrop = useFileDropTarget({
+    filesOnly: true,
+    disabled: importing,
+    accept: ({ name }) => name.toLowerCase().endsWith('.json'),
+    onDropFiles: ([item]) => { if (item.file) chooseImportFile(item.file); },
+  });
   const [feedbackDialog, setFeedbackDialog] = React.useState<{ open: boolean; message: string }>({
     open: false,
     message: '',
@@ -200,7 +212,8 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({ onExportTheme, onImportThem
 
       <UiGroup>
         <UiFormRow label={t('sections.theme.portable.label')} inline>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex flex-wrap items-center gap-2" {...themeDrop.dropProps}>
+          {themeDrop.isDragOver ? <div aria-hidden="true" className={UI_DROP_TARGET_OVERLAY_CLASS} /> : null}
           <UiButton variant="secondary" onClick={onExportTheme}>
             {t('sections.theme.portable.export')}
           </UiButton>
@@ -219,11 +232,7 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({ onExportTheme, onImportThem
             onChange={async (event) => {
               const file = event.target.files?.[0];
               event.currentTarget.value = '';
-              if (!file) {
-                return;
-              }
-              setPendingImportFile(file);
-              setModeDialogOpen(true);
+              if (file) chooseImportFile(file);
             }}
           />
         </div>

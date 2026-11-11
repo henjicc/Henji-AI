@@ -1,8 +1,8 @@
 import type { FontCatalog, FontFaceInfo, FontFileSource, FixedFontCatalog } from '../../core/fonts/catalog'
 export interface FontsPlatform {
   list(fixed?: boolean): Promise<FontCatalog & Partial<Pick<FixedFontCatalog, 'sources'>>>
-  /** Native picker only; callers cannot supply a filesystem path. */
-  importFiles(): Promise<FontCatalog>
+  /** 不传路径时弹出系统选择框；拖进来的字体文件直接给路径。 */
+  importFiles(paths?: readonly string[]): Promise<FontCatalog>
   remove(id: string): Promise<FontCatalog>
   readFace(id: string, source?: FontFileSource): Promise<{ face: FontFaceInfo; bytes: Uint8Array }>
   onChanged(handler: () => void): () => void

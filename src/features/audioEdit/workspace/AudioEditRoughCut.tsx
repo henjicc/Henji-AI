@@ -1,5 +1,5 @@
 import { Sparkles } from 'lucide-react'
-import { PanelTrigger, UiButton, UiChipButton, UiFormRow, UiGroup, UiRangeInput, UiSwitch, UiTextArea, UI_TEXT_META_CLASS, UI_TEXT_SECONDARY_CLASS } from '@/components/ui'
+import { PanelTrigger, UI_DROP_TARGET_OVERLAY_CLASS, UiButton, useFileDropTarget, UiChipButton, UiFormRow, UiGroup, UiRangeInput, UiSwitch, UiTextArea, UI_TEXT_META_CLASS, UI_TEXT_SECONDARY_CLASS } from '@/components/ui'
 import { UI_PANEL_BODY_HEIGHT_CLASS } from '@/components/ui/styleTokens'
 import { DEFAULT_AUDIO_EDIT_SETTINGS } from '@/core/audioEdit/edits'
 import { notificationMessage } from '@/i18n/notifications'
@@ -33,6 +33,12 @@ export function AudioEditRoughCutMenu(): React.ReactElement {
 function RoughCutPanel(): React.ReactElement {
   const workspace = useAudioEditWorkspace()
   const { project, run, notify, update, processRange: range } = workspace
+  // 文本文件拖到参考稿区域就导入，和“导入参考稿”同一件事
+  const scriptDrop = useFileDropTarget({
+    disabled: workspace.disabled,
+    accept: ({ name }) => /\.(txt|md)$/i.test(name),
+    onDropFiles: ([item]) => { void run(async () => workspace.setReferenceScript(await readTextFile(item.path))) },
+  })
   const settings = project.batchSettings ?? DEFAULT_AUDIO_EDIT_SETTINGS
   const enabledCuts = (project.cuts ?? []).filter((cut) => cut.enabled)
   const blocked = Boolean(workspace.sourceError)
@@ -68,8 +74,11 @@ function RoughCutPanel(): React.ReactElement {
         </AudioEditDisclosure>}
         <AudioEditSuggestions project={project} onSeek={workspace.navigateToFrame} onResolve={workspace.resolveSuggestions} />
         <AudioEditDisclosure title="参考逐字稿" value={project.referenceScript?.trim() ? '已填写' : '未使用'}>
-          <UiTextArea rows={4} placeholder="用于对齐内容，不替代真实识别文本" value={project.referenceScript} onChange={(event) => workspace.setReferenceScript(event.target.value)} />
-          <UiButton className="self-start" onClick={() => void run(async () => { const value = await openDialog({ multiple: false, filters: [{ name: '文本', extensions: ['txt', 'md'] }] }); const path = Array.isArray(value) ? value[0] : value; if (path) workspace.setReferenceScript(await readTextFile(path)) })}>导入参考稿</UiButton>
+          <div className="relative flex flex-col gap-2" {...scriptDrop.dropProps}>
+            {scriptDrop.isDragOver ? <div aria-hidden="true" className={UI_DROP_TARGET_OVERLAY_CLASS} /> : null}
+            <UiTextArea rows={4} placeholder="用于对齐内容，不替代真实识别文本" value={project.referenceScript} onChange={(event) => workspace.setReferenceScript(event.target.value)} />
+            <UiButton className="self-start" onClick={() => void run(async () => { const value = await openDialog({ multiple: false, filters: [{ name: '文本', extensions: ['txt', 'md'] }] }); const path = Array.isArray(value) ? value[0] : value; if (path) workspace.setReferenceScript(await readTextFile(path)) })}>导入参考稿</UiButton>
+          </div>
         </AudioEditDisclosure>
       </UiGroup>
     </fieldset>

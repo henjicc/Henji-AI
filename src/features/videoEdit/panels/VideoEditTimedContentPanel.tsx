@@ -8,7 +8,7 @@ import { VideoEditTextPanel } from './VideoEditTextPanel'
 import { splitVideoEditSubtitle, mergeVideoEditSubtitles } from '../application/videoEditAutoSubtitles'
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
 import { FileInput, FileOutput, MoreHorizontal, Plus } from 'lucide-react'
-import { Dropdown, UiButton, UiChipButton, UiEmpty, UiError, UiFormRow, UiGroup, UiLoading, UiSearchInput, UiOptionButton, UiTextArea, UiToolbar, type UiPanelFooterTool } from '@/components/ui'
+import { Dropdown, UI_DROP_TARGET_OVERLAY_CLASS, UiButton, UiChipButton, UiEmpty, UiError, UiFormRow, UiGroup, UiLoading, UiSearchInput, UiOptionButton, UiTextArea, UiToolbar, useFileDropTarget, type UiPanelFooterTool } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
 import { UI_TEXT_PANEL_TITLE_CLASS, UI_TEXT_SECONDARY_CLASS } from '@/components/ui/styleTokens'
 import type { VideoEditClip, VideoEditSequence } from '@/core/videoEdit/document'
@@ -131,6 +131,16 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
     pending.current?.abort(); const controller = new AbortController(); pending.current = controller; setBusy(true); setError('')
     void operation(controller.signal).then(() => { if (mounted.current && !controller.signal.aborted) setDraft(null) }, reason => { if (!controller.signal.aborted) report(reason) }).finally(() => { if (mounted.current && pending.current === controller) { pending.current = undefined; setBusy(false) } })
   }
+  // .srt / .vtt 拖进字幕面板就导入；正在填“导入字幕”时按填好的偏移与跟随片段导入
+  const captionDrop = useFileDropTarget({
+    // 和点选导入同条件：字幕列表可见、没在忙、轨道没锁；正在改某条字幕时不接，免得丢掉没保存的修改
+    disabled: kind !== 'caption' || showText || busy || sequence.captionTrackLocked === true || (draft !== null && draft.kind !== 'import'),
+    accept: ({ name }) => /\.(srt|vtt)$/i.test(name),
+    onDropFiles: ([item]) => {
+      const options = draft?.kind === 'import' ? { offset: draft.start, ...(draft.clipId ? { clipId: draft.clipId } : {}) } : {}
+      asyncFile(signal => importVideoEditCaptionFile(projectId, sequence.id, options, signal, item.path))
+    },
+  })
   const selected = entries.find(entry => entry.value.id === selectedId)
   const busyReason = '正在处理字幕文件，请稍候。'
   const lockedReason = '字幕轨道已锁定，请先解锁。'
@@ -148,7 +158,8 @@ function ContentWorkspace({ instance, sequence, onError }: { instance: VideoEdit
     ] satisfies UiPanelFooterTool[] : []),
   ]
   const total = kind === 'caption' ? sequence.captions?.length ?? 0 : sequence.markers?.length ?? 0
-  return <div className="flex h-full min-h-0 flex-col overflow-hidden" aria-label="字幕与标记" data-video-edit-timed-content-sequence={sequence.id} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); cancel() } }}>
+  return <div className="relative flex h-full min-h-0 flex-col overflow-hidden" aria-label="字幕与标记" data-video-edit-timed-content-sequence={sequence.id} onKeyDown={event => { if (event.key === 'Escape') { event.stopPropagation(); cancel() } }} {...captionDrop.dropProps}>
+    {captionDrop.isDragOver ? <div aria-hidden="true" className={UI_DROP_TARGET_OVERLAY_CLASS} /> : null}
     {/* 顶上只放三个标签；新增、自动字幕、样式与导入导出在底栏右侧（重要记录 018）。 */}
     <div role="tablist" aria-label="字幕或标记" className="flex shrink-0 items-center px-2 pt-1">
       {(['caption', 'marker'] as const).map(value => <UiChipButton key={value} role="tab" selectionRole="navigation" selectionAppearance="subtle" active={!showText && kind === value} aria-selected={!showText && kind === value} disabled={busy}

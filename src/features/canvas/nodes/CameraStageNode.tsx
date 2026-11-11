@@ -33,6 +33,10 @@ import { createLogger } from '@/core/logging';
 import { applyProjectEnvironmentImage } from '@/features/cameraStage/projects/cameraStageProjectService';
 import { CameraStagePreviewPanel } from './cameraStage/CameraStagePreviewPanel';
 import { CameraStageEnvironmentChip } from './cameraStage/CameraStageEnvironmentChip';
+import { UI_DROP_TARGET_OVERLAY_CLASS, useFileDropTarget } from '@/components/ui';
+import { acceptsFileAttribute, importDroppedMedia } from '@/services/localMediaImport';
+
+const ACCEPT_IMAGE = acceptsFileAttribute('image/*');
 
 type CameraStageNodeProps = NodeProps & {
   id: string;
@@ -113,6 +117,17 @@ export const CameraStageNode = memo(({ id, data, selected, width }: CameraStageN
 
   useNodeHandlesSync(id, `${resolvedHeight}:${resolvedWidth}`);
 
+  // 图片拖到节点上任意位置就设为环境图；环境图来自连线时由上游决定，不接收拖放
+  const environmentDrop = useFileDropTarget({
+    accept: ACCEPT_IMAGE,
+    disabled: environmentLinked || upstreamImages.length > 0,
+    onDropFiles: ([item]) => {
+      void importDroppedMedia(item, 'image').then(handleEnvironmentChange).catch((error: unknown) => {
+        logger.error('镜头参考环境图拖入失败', error, { event: 'canvas.camera_stage.environment_drop.failed', context: { nodeId: id } });
+      });
+    },
+  });
+
   const openEditor = useCallback(() => {
     if (renderProgress) {
       logger.warn('3D 渲染期间已阻止打开编辑器', {
@@ -135,6 +150,7 @@ export const CameraStageNode = memo(({ id, data, selected, width }: CameraStageN
       style={{ width: resolvedWidth, height: resolvedHeight }}
       onClick={() => setSelectedNode(id)}
       onDoubleClick={openEditor}
+      {...environmentDrop.dropProps}
     >
       <NodeHeader
         className={NODE_HEADER_FLOATING_POSITION_CLASS}
@@ -161,6 +177,7 @@ export const CameraStageNode = memo(({ id, data, selected, width }: CameraStageN
           pinned={Boolean(selected)}
           onChange={handleEnvironmentChange}
         />
+        {environmentDrop.isDragOver ? <div aria-hidden="true" className={UI_DROP_TARGET_OVERLAY_CLASS} /> : null}
       </div>
 
       <Handle

@@ -61,10 +61,11 @@ export function appendVideoEditCaptionText(projectId: string, sequenceId: string
   editVideoSequence(projectId, sequenceId, sequence => ({ ...sequence, captions: [...(sequence.captions ?? []), ...captions] }))
   return captions.map(caption => caption.id)
 }
-export async function importVideoEditCaptionFile(projectId: string, sequenceId: string, options: { offset?: number; clipId?: string } = {}, signal?: AbortSignal): Promise<string[]> {
+/** 不传 droppedPath 时弹出选择文件；拖进来的字幕文件直接给路径。 */
+export async function importVideoEditCaptionFile(projectId: string, sequenceId: string, options: { offset?: number; clipId?: string } = {}, signal?: AbortSignal, droppedPath?: string): Promise<string[]> {
   signal?.throwIfAborted()
   const owner = requireVideoEditInstance(projectId); const contentVersion = owner.contentVersion
-  const chosen = await getPlatform().system.dialog.open({ multiple: false, filters: [{ name: '字幕', extensions: ['srt', 'vtt'] }] })
+  const chosen = droppedPath ?? await getPlatform().system.dialog.open({ multiple: false, filters: [{ name: '字幕', extensions: ['srt', 'vtt'] }] })
   signal?.throwIfAborted()
   const path = Array.isArray(chosen) ? chosen[0] : chosen
   if (!path) return []

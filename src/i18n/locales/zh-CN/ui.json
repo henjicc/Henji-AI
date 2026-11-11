@@ -1857,6 +1857,7 @@
     "create": "新建{{kind}}",
     "searchPlaceholder": "搜索{{kind}}",
     "noResults": "没有符合条件的{{kind}}",
+    "dropUnsupported": "这里只能打开{{kind}}或导入单文件包",
     "emptyTitle": "还没有{{kind}}",
     "loading": "正在读取…",
     "loadFailed": "没能读取{{kind}}列表",

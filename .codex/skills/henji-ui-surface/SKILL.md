@@ -748,6 +748,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 提示词编辑 | `PromptEditor` | 自己拼 textarea |
 | 提示词只读展示 | `PromptDocumentStatic`（与 `PromptEditor` 共用文档语义） | 另造提示词文档格式或手写文本解析 |
 | 文件上传/排序 | `FileUploader` / `useReorderDrag` | 重写拖拽 |
+| 拖文件进来（能上传的地方都能拖：点选上传、选文件、导入、重新定位） | `useFileDropTarget`（系统文件与资产库、生成记录拖来的素材同一入口；`accept` 用 `acceptsFileAttribute` 或扩展名判断，要 File 对象设 `filesOnly`）+ 落点高亮 `UI_DROP_TARGET_OVERLAY_CLASS`；拖进来的媒体落成本机路径用 `importDroppedMedia` | 只做点选不做拖放；另写 dragenter 计数与高亮 |
 | 参考素材条（生成输入区等多素材上传） | `MediaStripUploader`（横排缩略图，编号与提示词引用一致，拖动排序复用 `useReorderDrag`；增删补位配 `useFlipTransition`） | 另写媒体上传或排序链路 |
 | 费用估算 | `PriceEstimate`（已注册模型计价，遵循用户币种与费用显示偏好） | 固定价格、触发真实生成来展示价格 |
 | 文字与矢量外观编辑 | `@/components/typography/TypographyPanel`（领域组合面板，共用字体、排版、填充、描边、阴影；author-text 用于绑定图层的文字样式参数，开放字体/字号/字重/字距/行距/填充/多层描边；宿主提供布局与预设 footer） | 图片、字幕、标题、代码文字另写同义参数与外观面板 |

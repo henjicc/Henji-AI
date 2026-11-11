@@ -3,7 +3,7 @@ import { FileText, Upload, X } from 'lucide-react'
 import { useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { UI_FIELD_INLINE_ROW_CLASS, UiButton, UiIconButton, UiInput, useUiFieldLayout } from '@/components/ui'
+import { UI_DROP_TARGET_OVERLAY_CLASS, UI_FIELD_INLINE_ROW_CLASS, UiButton, UiIconButton, UiInput, useFileDropTarget, useUiFieldLayout } from '@/components/ui'
 import type { FileUploadParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types/I18nText'
 import { useNotification } from '@/contexts/NotificationContext'
@@ -44,10 +44,9 @@ export function FileUpload({
   const maxSize = param.maxSize ?? 15 * 1024 * 1024
   const buttonText = getI18nText(param.uploadButtonText ?? { zh: '上传文件', en: 'Upload File' }, i18n.language)
 
-  const handleFiles = async (files: FileList | null): Promise<void> => {
-    if (!files) return
+  const handleFiles = async (files: readonly File[]): Promise<void> => {
     const next = [...safeValue]
-    for (const file of Array.from(files).slice(0, maxCount - safeValue.length)) {
+    for (const file of files.slice(0, maxCount - safeValue.length)) {
       if (!accept.includes(file.type)) {
         showNotification(t('uploadArea.unsupportedType', { type: file.type }), 'error')
         continue
@@ -62,12 +61,20 @@ export function FileUpload({
     onChange(next)
   }
 
+  const fileDrop = useFileDropTarget({
+    filesOnly: true,
+    multiple: true,
+    disabled: disabled || safeValue.length >= maxCount,
+    onDropFiles: (items) => { void handleFiles(items.flatMap((item) => (item.file ? [item.file] : []))) },
+  })
+
   return (
     <div className={toolbar ? UI_FIELD_INLINE_ROW_CLASS : 'flex min-w-0 flex-col gap-1.5'}>
       {showLabel && (
         <ParamLabel param={param} language={i18n.language} />
       )}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="relative flex flex-wrap items-center gap-2" {...fileDrop.dropProps}>
+        {fileDrop.isDragOver ? <div aria-hidden="true" className={UI_DROP_TARGET_OVERLAY_CLASS} /> : null}
         {safeValue.map((source, index) => (
           <div key={`${source}-${index}`} className={`flex ${toolbar ? 'h-8' : 'h-9'} min-w-0 items-center gap-1.5 rounded-lg bg-window/40 px-2`}>
             <FileText className={`${UI_ICON_SIZE_CLASS.md} shrink-0 text-text2`} />
@@ -102,7 +109,7 @@ export function FileUpload({
           className="hidden"
           disabled={disabled}
           onChange={(event) => {
-            void handleFiles(event.target.files)
+            void handleFiles(Array.from(event.target.files ?? []))
             event.target.value = ''
           }}
         />

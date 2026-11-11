@@ -224,6 +224,13 @@ export function parseImageEditorV3BasePayload(input: unknown): BasePayload {
   return { requestId: readRequestId(parseRecord(input)) }
 }
 
+/** LUT 导入：带 path 时直接读这个文件（拖进来的），不带时弹选择框。 */
+export function parseImageEditorV3LutImportPayload(input: unknown): BasePayload & { path?: string } {
+  const record = parseRecord(input)
+  if (record.path !== undefined && (typeof record.path !== 'string' || !path.isAbsolute(record.path))) throw new Error('Invalid LUT path')
+  return { requestId: readRequestId(record), ...(typeof record.path === 'string' ? { path: record.path } : {}) }
+}
+
 export function parseImageEditorV3ListPayload(input: unknown): BasePayload & { cursor?: string; limit: number } {
   const record = parseRecord(input)
   const limit = record.limit === undefined ? 100 : record.limit

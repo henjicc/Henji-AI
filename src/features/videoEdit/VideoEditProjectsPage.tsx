@@ -11,11 +11,11 @@ import { ICON_WORKSPACE_VIDEO_EDIT } from '@/core/theme/icons'
 import { MAX_ENTRY_NAME_LENGTH, normalizeEntryName } from '@/core/documents/naming'
 import type { DocumentSummary, NameCheckResult, ProjectSummary } from '@/core/documents/types'
 import { documentKindRegistry, readableDocumentExtensions } from '@/core/documents/kinds'
-import { openDialog } from '@/platform/desktopApi'
+import { getPathForFile, openDialog } from '@/platform/desktopApi'
 import { documentKindPresentation } from '@/features/documents'
 import { toError } from '@/features/documents/documentErrors'
 import { getDocumentOperations, type DocumentOperations } from '@/features/documents/documentOperations'
-import { exportProjectPackageInteractive, importPackageInteractive, packageFileName } from '@/features/documents/documentPackageActions'
+import { describePackageImport, exportProjectPackageInteractive, importPackageInteractive, packageFileName, routeDroppedDocumentFiles } from '@/features/documents/documentPackageActions'
 import type { DocumentSessionRegistry } from '@/features/documents/documentSessionRegistry'
 import { toProjectCardItems, useProjectLibrary, type ProjectCardItem } from '@/features/documents/useDocumentLibrary'
 import { useLeftoverDraftProjects } from '@/features/documents/useLeftoverDrafts'
@@ -165,26 +165,39 @@ export function VideoEditProjectsPage({ busy = false, onCreate, onOpenFolder, on
     }]
   }, [t, run, operations])
 
+  const documentExtensions = useMemo(
+    () => readableDocumentExtensions(documentKindRegistry.require('video_edit')).map(extension => extension.slice(1)),
+    [],
+  )
   const openFile = useCallback((): void => {
     void run('openFile', async () => {
-      const extensions = readableDocumentExtensions(documentKindRegistry.require('video_edit')).map(extension => extension.slice(1))
-      const selected = await openDialog({ multiple: false, filters: [{ name: t(documentKindPresentation('video_edit').nameKey), extensions }] })
+      const selected = await openDialog({ multiple: false, filters: [{ name: t(documentKindPresentation('video_edit').nameKey), extensions: documentExtensions }] })
       const filePath = typeof selected === 'string' ? selected : Array.isArray(selected) ? selected[0] : null
       if (!filePath) return
       onOpenFile(await operations.registerExternalDocument(filePath))
     })
-  }, [run, operations, onOpenFile, t])
+  }, [run, operations, onOpenFile, t, documentExtensions])
+
+  const reportPackageImport = useCallback(async (importing: () => Promise<Awaited<ReturnType<typeof importPackageInteractive>>>): Promise<void> => {
+    setPackageStatus(t('documentLibrary.package.importing'))
+    const result = await importing()
+    setPackageStatus(result ? describePackageImport(result, t) : null)
+  }, [t])
 
   const importPackage = useCallback((): void => {
-    void run('importPackage', async () => {
-      setPackageStatus(t('documentLibrary.package.importing'))
-      const result = await importPackageInteractive(undefined, operations)
-      if (!result) { setPackageStatus(null); return }
-      setPackageStatus(result.type === 'project'
-        ? t('documentLibrary.package.importedProject', { name: result.project.name })
-        : t('documentLibrary.package.importedDocument', { name: result.meta.name }))
-    })
-  }, [run, operations, t])
+    void run('importPackage', () => reportPackageImport(() => importPackageInteractive(undefined, operations)))
+  }, [run, operations, reportPackageImport])
+
+  // 拖进来的剪辑工程直接打开、单文件包导入，和“打开文件”“导入包”同一件事
+  const dropFiles = useCallback((files: File[]): void => {
+    const { documentPath, packagePath } = routeDroppedDocumentFiles(files, documentExtensions, getPathForFile)
+    if (!documentPath && !packagePath) {
+      setPackageStatus(t('documentLibrary.dropUnsupported', { kind: t(documentKindPresentation('video_edit').nameKey) }))
+      return
+    }
+    if (documentPath) void run('openFile', async () => { onOpenFile(await operations.registerExternalDocument(documentPath)) })
+    if (packagePath) void run('importPackage', () => reportPackageImport(() => operations.importPackage(packagePath)))
+  }, [documentExtensions, onOpenFile, operations, reportPackageImport, run, t])
 
   const labels = useMemo((): ProjectLibraryLabels => ({
     createAction: t('projectLibrary.create'),
@@ -249,6 +262,7 @@ export function VideoEditProjectsPage({ busy = false, onCreate, onOpenFolder, on
 
   return (
     <ProjectLibraryPage
+      onDropFiles={dropFiles}
       title={t('projectLibrary.title')}
       description={t('projectLibrary.description')}
       persistKey="projects.videoEdit"

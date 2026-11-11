@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FolderOpen, Pencil, Trash2 } from 'lucide-react'
-import { PanelTrigger, UI_FIELD_LABEL_CLASS, UI_TEXT_META_CLASS, UI_TEXT_PANEL_TITLE_CLASS, UiButton, UiChipButton, UiIconButton, UiInlineStatus, UiInput, UiSearchInput } from '@/components/ui'
+import { PanelTrigger, UI_DROP_TARGET_OVERLAY_CLASS, UI_FIELD_LABEL_CLASS, useFileDropTarget, UI_TEXT_META_CLASS, UI_TEXT_PANEL_TITLE_CLASS, UiButton, UiChipButton, UiIconButton, UiInlineStatus, UiInput, UiSearchInput } from '@/components/ui'
 import { ICON_MULTI_SELECT } from '@/core/theme/icons'
 import type { AssetLibraryRecord, AssetRecord } from '@/platform/contracts/assetLibrary'
 import { useI18n } from '@/hooks/useI18n'
@@ -104,15 +104,22 @@ export const AssetCardMenu: React.FC<Props> = ({ asset, anchor, libraries, avail
   const deleteCurrentAsset = async (): Promise<void> => {
     if (await runAction('delete', onDelete)) requestClose()
   }
-  const relocateCurrentAsset = async (): Promise<void> => {
+  const relocateCurrentAsset = async (droppedPath?: string): Promise<void> => {
     await runAction('relocate', async () => {
-      const selected = await openDialog({ multiple: false })
+      const selected = droppedPath ?? await openDialog({ multiple: false })
       const filePath = Array.isArray(selected) ? selected[0] : selected
       if (!filePath) return
       await onRelocate(filePath)
       requestClose()
     })
   }
+  // 找到的文件直接拖到“重新定位”上，和选文件同一件事
+  // 只收系统文件：把另一张资产卡拖上来会让两条资产共用一个文件，删掉一条另一条就断了
+  const relocateDrop = useFileDropTarget({
+    filesOnly: true,
+    disabled: pendingAction !== null,
+    onDropFiles: ([item]) => { if (item.path) void relocateCurrentAsset(item.path) },
+  })
   const applyName = async (): Promise<void> => {
     const nextName = nameDraft.trim()
     if (!nextName || nextName === name) { setEditingName(false); setNameDraft(name); return }
@@ -152,7 +159,10 @@ export const AssetCardMenu: React.FC<Props> = ({ asset, anchor, libraries, avail
       {actionError ? <UiInlineStatus className="block">{actionError}</UiInlineStatus> : null}
       {/* 菜单里的动作同为辅助档：批量管理是进入一种模式，删除是危险档（静息中性、悬停显红） */}
       <div className="mt-4 flex flex-wrap justify-between gap-2">
-        <UiButton disabled={pendingAction !== null} onClick={() => void relocateCurrentAsset()}><FolderOpen  />{t('assetLibrary.relocate')}</UiButton>
+        <span className="relative inline-flex rounded-md" {...relocateDrop.dropProps}>
+          {relocateDrop.isDragOver ? <span aria-hidden="true" className={UI_DROP_TARGET_OVERLAY_CLASS} /> : null}
+          <UiButton disabled={pendingAction !== null} onClick={() => void relocateCurrentAsset()}><FolderOpen  />{t('assetLibrary.relocate')}</UiButton>
+        </span>
         {asset.mediaType !== 'code' && <VideoEditSendMenu mediaKind={asset.mediaType} disabled={pendingAction !== null || asset.inspectionStatus !== 'ready'} resolveSource={() => ({ type: 'asset', assetId: asset.id })} notify={(message, type) => { if (type === 'error') setActionError(message); else setSendMessage(message) }} />}
         <UiButton disabled={pendingAction !== null} onClick={() => { requestClose(); onOpenBatchManagement() }}><ICON_MULTI_SELECT  />{t('assetLibrary.batchManage')}</UiButton>
         <UiButton variant="danger" disabled={pendingAction !== null} onClick={() => void deleteCurrentAsset()}><Trash2  />{t('assetLibrary.deleteAsset')}</UiButton>

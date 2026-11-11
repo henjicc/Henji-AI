@@ -12,6 +12,7 @@ export * from './fieldLayout';
 export * from './UiMarqueeText';
 export * from './UiDatePicker';
 export * from './fileUploader/MediaStripUploader';
+export * from './fileDrop/useFileDropTarget';
 export * from './TaskHistoryFilterBar';
 export { default as AlertDialog } from './AlertDialog';
 export * from './GlobalAlertDialog';

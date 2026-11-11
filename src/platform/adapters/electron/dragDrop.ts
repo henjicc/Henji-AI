@@ -56,11 +56,14 @@ export function createElectronDragDrop(): DragDropPlatform {
       }
       document.addEventListener('dragenter', enterListener)
       document.addEventListener('dragleave', leaveListener)
-      document.addEventListener('drop', dropListener)
+      // 放下在捕获阶段收：落点区接住文件后会拦冒泡，冒泡阶段收不到就一直停在“正在拖”
+      document.addEventListener('drop', dropListener, true)
+      document.addEventListener('dragend', dropListener, true)
       return () => {
         document.removeEventListener('dragenter', enterListener)
         document.removeEventListener('dragleave', leaveListener)
-        document.removeEventListener('drop', dropListener)
+        document.removeEventListener('drop', dropListener, true)
+        document.removeEventListener('dragend', dropListener, true)
       }
     },
   }

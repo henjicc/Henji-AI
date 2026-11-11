@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Image as ImageIcon, SquareSplitHorizontal, Upload, Wand, X } from 'lucide-react'
-import { ParamField, ParamList, UiButton, UiFormRow, UiGroup, UiError, UiCheckbox, UiIconButton, type ParamFieldSpec, type ParamGesture } from '@/components/ui'
+import { ParamField, ParamList, UI_DROP_TARGET_OVERLAY_CLASS, UiButton, UiFormRow, UiGroup, UiError, UiCheckbox, UiIconButton, useFileDropTarget, type ParamFieldSpec, type ParamGesture } from '@/components/ui'
 import { builtinParameterFields, readBuiltinField, writeBuiltinField } from '@/components/ui/params/fieldSpec'
 import { ColorGradeSections } from '@/components/colorGrade/ColorGradeSections'
 import { ColorGradeScopes } from '@/components/colorGrade/ColorGradeScopes'
@@ -22,6 +22,8 @@ import { readImageEditColorPixelsV3, suggestImageEditColorV3 } from '../applicat
 import { readImageEditColorReferencePixelsV3 } from '../application/imageEditColorReferenceV3'
 import { exportImageEditColorGradeV3 } from '../application/imageEditColorGradeExportV3'
 import type { ImageEditorV3Controller } from './types'
+
+const REFERENCE_IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'avif', 'tif', 'tiff']
 
 const IMAGE_KEYS = new Set(COLOR_GRADE_PARAMETERS.map(param => param.key))
 /** Image layers have no keyframes: numeric controls are sliders; section structure is shared with the video panel. */
@@ -65,11 +67,11 @@ export function ImageEditorColorGradeParametersV3({ controller, layer, disabled 
   }
   const gesture = (field: ParamFieldSpec): ParamGesture => ({ begin: () => { if (!disabled) active.current = true }, active: () => active.current, write: value => { active.current = true; write(field, value) }, finish, cancel,
     atomic: value => { if (disabled) return; active.current = true; write(field, value); finish() } })
-  const upload = async (field: ParamFieldSpec): Promise<void> => {
+  const upload = async (field: ParamFieldSpec, droppedPath?: string): Promise<void> => {
     if (disabled || importing) return
     const startParams = paramsRef.current
     setImporting(true); setError('')
-    try { const asset = await importImageEditorColorLutV3(`${previewId}:lut`); if (asset && live.current && currentPreviewId.current === previewId && paramsRef.current === startParams && !disabledRef.current) { setNames(current => ({ ...current, [asset.resourceRef]: asset.name })); gesture(field).atomic(asset.resourceRef) } }
+    try { const asset = await importImageEditorColorLutV3(`${previewId}:lut`, droppedPath); if (asset && live.current && currentPreviewId.current === previewId && paramsRef.current === startParams && !disabledRef.current) { setNames(current => ({ ...current, [asset.resourceRef]: asset.name })); gesture(field).atomic(asset.resourceRef) } }
     catch (reason) { if (live.current && currentPreviewId.current === previewId) setError(reason instanceof Error ? reason.message : String(reason)) }
     finally { if (live.current && currentPreviewId.current === previewId) setImporting(false) }
   }
@@ -81,10 +83,10 @@ export function ImageEditorColorGradeParametersV3({ controller, layer, disabled 
     return <ParamList fields={fields} values={values} contextKey={previewId}
       extras={Object.fromEntries(fields.map(field => [field.key, [disabled, field.key === 'hsl_invert' ? showMask : null, field.type === 'lut' ? [importing, names] : null]]))}
       resetDisabled={() => disabled} onReset={field => gesture(field).atomic(field.default)}
-      renderControl={(field, value) => <UiGroup gap="row"><ParamField field={field} value={value} gesture={gesture(field)} disabled={disabled} resource={field.type === 'lut' ? <div className="flex flex-wrap items-center gap-1">
+      renderControl={(field, value) => <UiGroup gap="row"><ParamField field={field} value={value} gesture={gesture(field)} disabled={disabled} resource={field.type === 'lut' ? <CubeDropZone disabled={disabled || importing} onDropPath={path => { void upload(field, path) }}>
         <UiButton size="sm" disabled={disabled || importing} onClick={() => { void upload(field) }}><Upload  />{typeof value === 'string' && value ? names[value] ?? '更换查找表' : '导入 .cube'}</UiButton>
         {value && <UiButton size="sm" disabled={disabled} onClick={() => gesture(field).atomic('')}>移除</UiButton>}
-      </div> : undefined} />{field.key === 'hsl_invert' && <UiCheckbox checked={showMask} disabled={disabled} aria-label="查看 HSL 选区" onCheckedChange={value => {
+      </CubeDropZone> : undefined} />{field.key === 'hsl_invert' && <UiCheckbox checked={showMask} disabled={disabled} aria-label="查看 HSL 选区" onCheckedChange={value => {
       observing.current = value; setShowMask(value)
       if (value) coalescer.update(latest.current)
       else { coalescer.cancel(); controllerRef.current.clearParameterPreview(previewId) }
@@ -104,9 +106,14 @@ export function ImageEditorColorGradeParametersV3({ controller, layer, disabled 
   }
   const [analyzing, setAnalyzing] = useState(false)
   const [reference, setReference] = useState<{ path: string; name: string } | null>(null)
+  const referenceDrop = useFileDropTarget({
+    disabled,
+    accept: ({ name }) => REFERENCE_IMAGE_EXTENSIONS.includes(name.split('.').pop()?.toLowerCase() ?? ''),
+    onDropFiles: ([item]) => { if (item.path) setReference({ path: item.path, name: item.name }) },
+  })
   const chooseReference = async (): Promise<void> => {
     try {
-      const selected = await openDialog({ multiple: false, filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'avif', 'tif', 'tiff'] }] })
+      const selected = await openDialog({ multiple: false, filters: [{ name: '图片', extensions: REFERENCE_IMAGE_EXTENSIONS }] })
       const path = Array.isArray(selected) ? selected[0] : selected
       if (path && live.current) setReference({ path, name: path.split(/[\\/]/).at(-1) ?? path })
     } catch (reason) { if (live.current) setError(reason instanceof Error ? reason.message : String(reason)) }
@@ -148,7 +155,8 @@ export function ImageEditorColorGradeParametersV3({ controller, layer, disabled 
         onKeyDown={event => { if (event.key === ' ' || event.key === 'Enter') { event.preventDefault(); compare(true) } }} onKeyUp={() => compare(false)} onBlur={() => compare(false)}><SquareSplitHorizontal /></UiIconButton>
       <ColorGradeExportButton busy={exporting} onExport={(format, lutSize) => { void exportGrade(format, lutSize) }} />
     </div>
-    <UiFormRow label="校色参考" density="compact"><div className="flex min-w-0 items-center gap-1">
+    <UiFormRow label="校色参考" density="compact"><div className="relative flex min-w-0 items-center gap-1" {...referenceDrop.dropProps}>
+      {referenceDrop.isDragOver ? <div aria-hidden="true" className={UI_DROP_TARGET_OVERLAY_CLASS} /> : null}
       <UiButton size="sm" className="min-w-0" disabled={disabled} disabledReason="当前图层不可编辑" tooltip={reference ? reference.path : '选另一张图片，让这张图的颜色向它靠拢'} onClick={() => { void chooseReference() }}><ImageIcon /><span className="truncate">{reference ? reference.name : '选择参考图片'}</span></UiButton>
       {reference && <UiIconButton size="xs" tooltip="不用参考，改回自动校色" aria-label="清除校色参考" onClick={() => setReference(null)}><X /></UiIconButton>}
     </div></UiFormRow>
@@ -180,4 +188,10 @@ function ImageEditorColorScopesV3({ document, resources }: { document: ImageEdit
     return () => { window.clearTimeout(timer); controller.abort() }
   }, [document.revision, manual])
   return <ColorGradeScopes statistics={statistics} busy={busy} error={error} onRefresh={() => setManual(value => value + 1)} />
+}
+
+/** .cube 文件拖到查找表这一行就导入并选上，和点“导入 .cube”同一件事。 */
+function CubeDropZone({ disabled, onDropPath, children }: { disabled: boolean; onDropPath: (path: string) => void; children: React.ReactNode }): JSX.Element {
+  const drop = useFileDropTarget({ disabled, accept: ({ name }) => name.toLowerCase().endsWith('.cube'), onDropFiles: ([item]) => onDropPath(item.path) })
+  return <div className="relative flex flex-wrap items-center gap-1" {...drop.dropProps}>{drop.isDragOver ? <div aria-hidden="true" className={UI_DROP_TARGET_OVERLAY_CLASS} /> : null}{children}</div>
 }

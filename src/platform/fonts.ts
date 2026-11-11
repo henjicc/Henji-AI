@@ -49,7 +49,13 @@ export function loadFontLibrary(refresh = false): Promise<FontLibrarySnapshot> {
   })().catch(error => { publish({ loading: false, error: error instanceof Error ? error.message : '无法读取字体库，请重试。' }); logger.error('字体库读取失败', { event: 'fonts.catalog.failed', error }); throw error }).finally(() => { loading = undefined; if (refreshPending) { refreshPending = false; void loadFontLibrary(true).catch(() => undefined) } })
   return loading
 }
-export async function importFonts(): Promise<void> { adopt(await getPlatform().fonts.importFiles()) }
+/** 能导入的字体格式（拖放与选择框同一份）。 */
+export const FONT_FILE_EXTENSIONS = ['ttf', 'otf', 'ttc', 'woff2'] as const
+export function isFontFilePath(path: string): boolean {
+  return (FONT_FILE_EXTENSIONS as readonly string[]).includes(path.split('.').pop()?.toLowerCase() ?? '')
+}
+/** 不传路径时弹出选择框；拖进来的字体文件直接给路径。 */
+export async function importFonts(paths?: readonly string[]): Promise<void> { adopt(await getPlatform().fonts.importFiles(paths)) }
 export async function removeFont(id: string): Promise<void> { adopt(await getPlatform().fonts.remove(id)) }
 function writePreferences(preferences: FontPreferences): void {
   publish({ preferences })

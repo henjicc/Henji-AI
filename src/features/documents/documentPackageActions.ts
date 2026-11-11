@@ -1,5 +1,5 @@
 import { DOCUMENT_PACKAGE_EXTENSION, type DocumentContainerRef, type DocumentTarget, type PackageExportResult, type PackageImportResult } from '@/core/documents/types'
-import { henjiDialogExtensions } from '@/core/fileExtensions'
+import { henjiDialogExtensions, matchHenjiExtension } from '@/core/fileExtensions'
 import { appDirectories, join, openDialog, saveDialog } from '@/platform/desktopApi'
 
 import { getDocumentOperations, type DocumentOperations } from './documentOperations'
@@ -55,7 +55,38 @@ export async function importPackageInteractive(
   return await operations.importPackage(source, container)
 }
 
+/** 拖进来的文件是不是单文件包（拖放与“导入包”走同一条导入）。 */
+export function isDocumentPackagePath(path: string): boolean {
+  return matchHenjiExtension('document_package', path) !== null
+}
+
 /** 包文件名（不含文件夹），界面提示“已导出”时用。 */
 export function packageFileName(result: PackageExportResult): string {
   return result.path.slice(Math.max(result.path.lastIndexOf('/'), result.path.lastIndexOf('\\')) + 1)
+}
+
+/** 拖进文档列表的文件分三路：本类文档（打开）、单文件包（导入）、其他文件（交给页面）。 */
+export function routeDroppedDocumentFiles(
+  files: readonly File[],
+  documentExtensions: readonly string[],
+  pathOf: (file: File) => string,
+): { documentPath?: string; packagePath?: string; rest: File[] } {
+  const entries = files.map((file) => ({ file, path: pathOf(file) }))
+  const isDocument = (path: string): boolean => documentExtensions.some((extension) => path.toLowerCase().endsWith(`.${extension.toLowerCase()}`))
+  // 一次只打开一个文档、导入一个包；多拖进来的同类文件不当作“其他文件”交给页面
+  return {
+    documentPath: entries.find(({ path }) => isDocument(path))?.path,
+    packagePath: entries.find(({ path }) => isDocumentPackagePath(path))?.path,
+    rest: entries.filter(({ path }) => !isDocument(path) && !isDocumentPackagePath(path)).map(({ file }) => file),
+  }
+}
+
+/** 包导入完成后的状态文案（文档列表页与剪辑项目页共用）。 */
+export function describePackageImport(
+  result: PackageImportResult,
+  t: (key: string, options: { name: string }) => string,
+): string {
+  return result.type === 'project'
+    ? t('documentLibrary.package.importedProject', { name: result.project.name })
+    : t('documentLibrary.package.importedDocument', { name: result.meta.name })
 }

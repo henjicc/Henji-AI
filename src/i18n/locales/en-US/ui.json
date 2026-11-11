@@ -1857,6 +1857,7 @@
     "create": "New {{kind}}",
     "searchPlaceholder": "Search",
     "noResults": "Nothing matches",
+    "dropUnsupported": "Only {{kind}} files or single-file packages can be opened here",
     "emptyTitle": "No {{kind}} yet",
     "loading": "Loading…",
     "loadFailed": "Couldn't load the list",

@@ -1,6 +1,6 @@
 import { useMemo, useState, useSyncExternalStore } from 'react'
 import { FolderInput, FolderOutput, Star } from 'lucide-react'
-import { UI_COVER_FRAME_CLASS, UI_TEXT_META_CLASS, UiButton, UiEmpty, UiFormRow, UiGroup, UiIconButton, UiModal, UiOptionButton, UiSearchInput, UiSegmented, UiSwitch } from '@/components/ui'
+import { UI_COVER_FRAME_CLASS, UI_DROP_TARGET_OVERLAY_CLASS, UI_TEXT_META_CLASS, useFileDropTarget, UiButton, UiEmpty, UiFormRow, UiGroup, UiIconButton, UiModal, UiOptionButton, UiSearchInput, UiSegmented, UiSwitch } from '@/components/ui'
 import { useNotification } from '@/contexts/NotificationContext'
 import { openDialog, readTextFile, saveDialog, writeTextFile } from '@/platform/desktopApi'
 import { henjiDialogExtensions } from '@/core/fileExtensions'
@@ -96,21 +96,33 @@ function Content({ instance, onError, visible = true }: { instance: VideoEditIns
   const personal = listVideoEditPresets(category).filter(entry => !entry.builtin && videoEditPresetExportable(entry.category, entry.id))
   const detail = open ? listVideoEditPresets(category).find(entry => `${entry.category}:${entry.id}` === open) : undefined
   const apply = (entry: VideoEditPresetEntry): void => { if (!sequence) return; void applyVideoEditPreset(instance.document.id, sequence.id, entry.category, entry.id).then(text => showNotification(text), onError) }
-  const importFiles = async (): Promise<void> => {
+  const importPaths = async (paths: readonly string[]): Promise<void> => {
     try {
-      const selected = await openDialog({ multiple: true, filters: OPEN_FILTERS }); const paths = selected === null ? [] : Array.isArray(selected) ? selected : [selected]
       let count = 0
       for (const path of paths) count += (await importVideoEditPresetPackage(await readTextFile(path))).length
       if (count) showNotification(`已导入 ${count} 个预设。`)
     } catch (reason) { onError(reason) }
   }
+  const importFiles = async (): Promise<void> => {
+    try {
+      const selected = await openDialog({ multiple: true, filters: OPEN_FILTERS })
+      await importPaths(selected === null ? [] : Array.isArray(selected) ? selected : [selected])
+    } catch (reason) { onError(reason) }
+  }
+  // 预设包拖进面板就导入，和“导入”同一件事
+  const presetDrop = useFileDropTarget({
+    multiple: true,
+    accept: ({ name }) => OPEN_FILTERS[0].extensions.some(extension => name.toLowerCase().endsWith(`.${extension.toLowerCase()}`)),
+    onDropFiles: items => { void importPaths(items.map(item => item.path)) },
+  })
   const exportPersonal = async (): Promise<void> => {
     try {
       const path = await saveDialog({ defaultPath: `${VIDEO_EDIT_PRESET_CATEGORY_LABELS[category]}预设.${VIDEO_EDIT_PRESET_PACKAGE_EXTENSION}`, filters: FILTERS }); if (!path) return
       await writeTextFile(path, exportVideoEditPresetPackage(personal)); showNotification(`已导出 ${personal.length} 个${VIDEO_EDIT_PRESET_CATEGORY_LABELS[category]}预设。`)
     } catch (reason) { onError(reason) }
   }
-  return <div className="flex h-full min-h-0 flex-col gap-2 px-3 py-3" aria-label="预设" data-video-edit-presets>
+  return <div className="relative flex h-full min-h-0 flex-col gap-2 px-3 py-3" aria-label="预设" data-video-edit-presets {...presetDrop.dropProps}>
+    {presetDrop.isDragOver ? <div aria-hidden="true" className={UI_DROP_TARGET_OVERLAY_CLASS} /> : null}
     <UiSegmented ariaLabel="预设类别" size="sm" fullWidth value={category} onChange={value => { setCategory(value); setOpen(null) }} options={VIDEO_EDIT_PRESET_PANEL_CATEGORIES.map(value => ({ value, label: VIDEO_EDIT_PRESET_CATEGORY_LABELS[value] }))} />
     <div className="flex items-center gap-1">
       <UiSearchInput size="sm" className="min-w-0 flex-1" aria-label="搜索预设" placeholder="搜索预设" value={query} onChange={event => setQuery(event.target.value)} onClear={() => setQuery('')} clearLabel="清除搜索" />

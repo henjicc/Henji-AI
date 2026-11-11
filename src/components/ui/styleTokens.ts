@@ -571,3 +571,6 @@ export const UI_INPUT_PANEL_MAX_HEIGHT_CLASS = 'max-h-[min(70vh,40rem)]';
 
 /** 悬停看大图（Tooltip appearance="media"）里图片、视频的尺寸：按原比例放进 256 见方。 */
 export const UI_TOOLTIP_MEDIA_CLASS = 'block max-h-64 max-w-64 object-contain';
+
+/** 拖着文件停在可上传区域上方时的落点高亮：铺满所在容器、跟随容器圆角，不接收指针。 */
+export const UI_DROP_TARGET_OVERLAY_CLASS = 'pointer-events-none absolute inset-0 z-raised rounded-[inherit] bg-selected-accent ring-1 ring-inset ring-accent';

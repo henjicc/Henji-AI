@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { FONTS_IPC } from '../../../src/platform/contracts/fonts'
 import { getFontService } from '../services/fonts/service'
 import { assertTrustedApplicationSender } from './application-control'
-import { parseVoid, registerIpcHandler } from './registry'
+import { registerIpcHandler } from './registry'
 import { showOpenDialog } from '../services/dialogs'
 const id = (value: unknown): string => z.object({ id: z.string().regex(/^[a-f0-9]{64}$/) }).strict().parse(value).id
 export function registerFontsIpc(): void {
@@ -15,7 +15,8 @@ export function registerFontsIpc(): void {
   registerIpcHandler(FONTS_IPC.list, value => z.object({ fixed: z.boolean().optional() }).strict().optional().parse(value), value => value?.fixed ? getFontService().captureSnapshot() : getFontService().list(), assertTrustedApplicationSender)
   registerIpcHandler(FONTS_IPC.readFace, value => z.object({ id: z.string().regex(/^[a-f0-9]{64}$/), source: source.optional() }).strict().parse(value), value => getFontService().readFace(value.id, value.source), assertTrustedApplicationSender)
   registerIpcHandler(FONTS_IPC.remove, id, value => getFontService().remove(value), assertTrustedApplicationSender)
-  registerIpcHandler(FONTS_IPC.importFiles, parseVoid, async (_value, event) => {
+  registerIpcHandler(FONTS_IPC.importFiles, value => z.object({ paths: z.array(z.string().min(1)).min(1) }).strict().optional().parse(value), async (value, event) => {
+    if (value?.paths) return getFontService().importFiles(value.paths)
     const window = BrowserWindow.fromWebContents(event.sender)
     const options: Electron.OpenDialogOptions = { title: '导入字体', properties: ['openFile', 'multiSelections'], filters: [{ name: '字体', extensions: ['ttf', 'otf', 'ttc', 'woff2'] }] }
     const selected = await showOpenDialog(window, options)
