@@ -30,12 +30,16 @@ export function quickMaskRegionProgram(document: MaskEditorDocument): QuickMaskP
   return { grid: { width: document.width, height: document.height }, operations };
 }
 
+/** 把按文档像素生成的笔触换算到求值网格；Worker 整张求值与画布上的实时绘制共用。 */
+export function scaleDabsToGrid(dabs: readonly PaintDab[], sx: number, sy: number): PaintDab[] {
+  return dabs.map(d => ({ ...d, x: d.x * sx, y: d.y * sy, radius: d.radius * sx, roundness: d.roundness * sy / sx }))
+}
+
 export function evaluateQuickMaskProgram(program: QuickMaskPaintProgram, region: RegionRect, grid: RegionGrid = program.grid): Float32Array {
   const data = new Float32Array(region.width * region.height);
   for (const operation of program.operations) {
     if (operation.kind === 'brush') {
-      const sx = grid.width / program.grid.width, sy = grid.height / program.grid.height;
-      const dabs = operation.dabs.map(d => ({ ...d, x: d.x * sx, y: d.y * sy, radius: d.radius * sx, roundness: d.roundness * sy / sx }));
+      const dabs = scaleDabsToGrid(operation.dabs, grid.width / program.grid.width, grid.height / program.grid.height);
       rasterizePaintDabs({ width: region.width, height: region.height, originX: region.x, originY: region.y,
         before: new Float32Array(data), output: data, coverage: new Float32Array(data.length) }, dabs, operation.brush,
         { kind: 'mask', value: 1 }, operation.erase ? 'eraser' : 'brush');

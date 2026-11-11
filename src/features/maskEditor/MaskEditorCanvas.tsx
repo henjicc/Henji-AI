@@ -7,11 +7,9 @@ import type { ViewportPan } from '@/core/viewport/zoomPan';
 import { useZoomPanViewport } from '@/hooks/useZoomPanViewport';
 import {
   Circle,
-  Ellipse,
   Group,
   Image as KonvaImage,
   Layer,
-  Line,
   Rect,
   Stage,
 } from 'react-konva';
@@ -28,8 +26,8 @@ import {
   clampMaskPoint,
   fitMaskStage,
   isMaskStroke,
-  resolveMaskShapeBounds,
 } from './maskDocument';
+import { MaskLiveRaster } from './maskLiveRaster';
 import type {
   MaskEditorDocument,
   MaskMark,
@@ -53,8 +51,9 @@ const logger = createLogger('features.maskEditor.preview');
 /** 相对“适合”最多放大 8 倍，不缩得比“适合”更小（再小没有用处）。 */
 const ZOOM_LIMITS = { min: 1, max: 8 };
 
-/** 遮罩叠在画面上的不透明度：Worker 算出的预览与正在画的一笔用同一个值。 */
+/** 遮罩叠在画面上的颜色与不透明度。 */
 const MASK_PREVIEW_OPACITY = 0.55;
+const MASK_COLOR = [0, 2, 4].map(offset => Number.parseInt(ANNOTATION_DEFAULT_STROKE_HEX.slice(1 + offset, 3 + offset), 16)) as [number, number, number];
 
 function createMarkId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -118,8 +117,7 @@ export const MaskEditorCanvas = memo(function MaskEditorCanvas({
   const draftRef = useRef<MaskMark | null>(null);
   const renderFrameRef = useRef<number | null>(null);
   const cursorRef = useRef<Konva.Group>(null);
-  // 正在画的这一笔直接用形状画出来；松手提交后继续留着，等遮罩预览算出包含它的结果再撤掉，中间不闪
-  const [draft, setDraft] = useState<MaskMark | null>(null);
+  const maskImageRef = useRef<Konva.Image>(null);
   const [viewportSize, setViewportSize] = useState({ width: 1, height: 1 });
 
   useEffect(() => {
@@ -146,7 +144,7 @@ export const MaskEditorCanvas = memo(function MaskEditorCanvas({
       renderFrameRef.current = null;
     }
     draftRef.current = null;
-    setDraft(null);
+    rasterRef.current?.cancel();
   }, [document.sourceRef, mode, tool]);
 
   useEffect(() => () => {
@@ -181,18 +179,16 @@ export const MaskEditorCanvas = memo(function MaskEditorCanvas({
       gridHeight: Math.max(1, Math.round(height)),
     };
   }, [displayScale, document.height, document.width, view.pan.x, view.pan.y, viewportSize.height, viewportSize.width]);
-  // 遮罩只算视口里看得见的那一块，按屏幕分辨率求值：放大后边缘清楚，算量也不随放大倍数增长
-  const visible = useMemo(() => {
-    const x = Math.max(0, Math.floor(-placed.x));
-    const y = Math.max(0, Math.floor(-placed.y));
-    const right = Math.min(placed.gridWidth, Math.ceil(viewportSize.width - placed.x));
-    const bottom = Math.min(placed.gridHeight, Math.ceil(viewportSize.height - placed.y));
-    return { x, y, width: Math.max(1, right - x), height: Math.max(1, bottom - y) };
-  }, [placed, viewportSize.height, viewportSize.width]);
+  // 整张遮罩的显示栅格：缩放、平移只是换尺度显示它，不重算；正在画的一笔直接合进它（见 MaskLiveRaster）
+  const raster = useMemo(() => new MaskLiveRaster(document.width, document.height, MASK_COLOR, MASK_PREVIEW_OPACITY),
+    // sourceRef 换了就是另一张图的遮罩
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [document.sourceRef, document.width, document.height]);
+  const rasterRef = useRef(raster);
+  rasterRef.current = raster;
+  const redrawMask = useCallback(() => { maskImageRef.current?.getLayer()?.batchDraw(); }, []);
 
   const rasterizerRef = useRef<MaskRegionRasterizer | null>(null);
-  // 预览记下自己算出时的画面尺度：缩放、平移时先把旧预览按新尺度摆到对的位置，新的算好再替换，不会闪
-  const [preview, setPreview] = useState<{ canvas: HTMLCanvasElement; region: { x: number; y: number; width: number; height: number }; gridWidth: number } | null>(null);
   const [previewFailed, setPreviewFailed] = useState(false);
   const [previewAttempt, setPreviewAttempt] = useState(0);
   useEffect(() => {
@@ -202,40 +198,27 @@ export const MaskEditorCanvas = memo(function MaskEditorCanvas({
     return () => { rasterizer.dispose(); rasterizerRef.current = null; };
   }, [document.sourceRef, document.width, document.height, previewAttempt]);
 
-  // 像素求值在 Worker 里，只按已提交的遮罩算；正在画的那一笔不进求值，笔画再多拖动也不变慢
+  // 文档变了（提交一笔、撤销、重做、清空）才由 Worker 按文档求整张遮罩；缩放平移不求值。
+  // 正在画下一笔时到达的结果不覆盖（它不含这一笔），这一笔提交后会再求一次。
   useEffect(() => {
     const rasterizer = rasterizerRef.current;
     if (!rasterizer) return;
     let cancelled = false;
     setPreviewFailed(false);
-    logger.debug('遮罩预览求值开始', { event: 'mask_editor.preview.start' });
-    const region = visible;
-    const gridWidth = placed.gridWidth;
-    void rasterizer.readLatest(document, region, { width: gridWidth, height: placed.gridHeight })
+    logger.debug('遮罩求值开始', { event: 'mask_editor.preview.start' });
+    void rasterizer.readLatest(document, { x: 0, y: 0, ...raster.grid }, raster.grid)
       .then(coverage => {
-        if (cancelled) return;
-        const canvas = window.document.createElement('canvas');
-        canvas.width = region.width; canvas.height = region.height;
-        const context = canvas.getContext('2d');
-        if (!context) throw new Error('无法初始化遮罩预览');
-        const pixels = context.createImageData(region.width, region.height);
-        const color = ANNOTATION_DEFAULT_STROKE_HEX.slice(1);
-        const channels = [0, 2, 4].map(offset => Number.parseInt(color.slice(offset, offset + 2), 16));
-        for (let i = 0; i < coverage.length; i++) {
-          for (let c = 0; c < 3; c++) pixels.data[i * 4 + c] = channels[c];
-          pixels.data[i * 4 + 3] = Math.round(coverage[i] * MASK_PREVIEW_OPACITY * 255);
-        }
-        context.putImageData(pixels, 0, 0);
-        setPreview({ canvas, region, gridWidth });
-        if (!draftRef.current) setDraft(null);
-        logger.debug('遮罩预览求值完成', { event: 'mask_editor.preview.completed' });
+        if (cancelled || raster.drawing) return;
+        raster.setCoverage(coverage);
+        redrawMask();
+        logger.debug('遮罩求值完成', { event: 'mask_editor.preview.completed' });
       }).catch((error: unknown) => {
         if (cancelled) return;
-        setPreview(null); setPreviewFailed(true);
-        logger.error('遮罩预览求值失败', error, { event: 'mask_editor.preview.failed' });
+        setPreviewFailed(true);
+        logger.error('遮罩求值失败', error, { event: 'mask_editor.preview.failed' });
       });
     return () => { cancelled = true; };
-  }, [document, placed.gridWidth, placed.gridHeight, visible, previewAttempt]);
+  }, [document, raster, redrawMask, previewAttempt]);
 
   /** 指针在画面里的位置（文档像素，不夹到画面边缘）；画面外返回的点超出 0…宽高。 */
   const rawPoint = useCallback((event: KonvaEventObject<MouseEvent | TouchEvent>): MaskPoint | null => {
@@ -265,22 +248,28 @@ export const MaskEditorCanvas = memo(function MaskEditorCanvas({
     if (container) container.style.cursor = panReadyRef.current ? '' : !inside ? 'default' : tool === 'brush' ? 'none' : 'crosshair';
   }, [insideImage, tool]);
 
+  // 一帧合并一次：指针事件比刷新快时只按最后一个点算这一帧扫过的那块
   const scheduleDraftRender = useCallback(() => {
     if (renderFrameRef.current !== null) return;
     renderFrameRef.current = window.requestAnimationFrame(() => {
       renderFrameRef.current = null;
-      setDraft(draftRef.current);
+      const current = draftRef.current;
+      if (!current) return;
+      rasterRef.current.update(current);
+      redrawMask();
     });
-  }, []);
+  }, [redrawMask]);
 
   const handlePointerDown = useCallback((event: KonvaEventObject<MouseEvent | TouchEvent>) => {
     event.evt.preventDefault();
     if (view.panReady) return;
     const point = rawPoint(event);
     if (!point || !insideImage(point)) return;
-    draftRef.current = createDraft(tool, mode, point, brushSize, brushHardness);
-    scheduleDraftRender();
-  }, [brushHardness, brushSize, insideImage, mode, rawPoint, scheduleDraftRender, tool, view.panReady]);
+    const mark = createDraft(tool, mode, point, brushSize, brushHardness);
+    draftRef.current = mark;
+    rasterRef.current.begin(mark);
+    redrawMask();
+  }, [brushHardness, brushSize, insideImage, mode, rawPoint, redrawMask, tool, view.panReady]);
 
   const handlePointerMove = useCallback((event: KonvaEventObject<MouseEvent | TouchEvent>) => {
     const point = rawPoint(event);
@@ -298,13 +287,21 @@ export const MaskEditorCanvas = memo(function MaskEditorCanvas({
     const current = draftRef.current;
     if (!current) return;
     draftRef.current = null;
+    if (renderFrameRef.current !== null) {
+      window.cancelAnimationFrame(renderFrameRef.current);
+      renderFrameRef.current = null;
+    }
+    const raster = rasterRef.current;
+    // 提交的这一笔已经画在遮罩上：留着它，直到 Worker 按新文档求出的结果替换进来
     if (isMeaningfulMark(current)) {
-      setDraft(current);
+      raster.update(current);
+      raster.end();
       onMarkComplete(current);
     } else {
-      setDraft(null);
+      raster.cancel();
     }
-  }, [onMarkComplete]);
+    redrawMask();
+  }, [onMarkComplete, redrawMask]);
 
   const handleMouseLeave = useCallback((event: KonvaEventObject<MouseEvent>) => {
     handlePointerUp();
@@ -314,7 +311,6 @@ export const MaskEditorCanvas = memo(function MaskEditorCanvas({
   const cursorClass = view.panning ? 'cursor-grabbing' : view.panReady ? 'cursor-grab' : '';
   const zoomLabel = view.zoom === 1 ? t('viewportZoom.fit') : `${Math.round(view.zoom * 100)}%`;
   const normalizedHardness = normalizeMaskBrushHardness(brushHardness);
-  const previewScale = preview ? placed.gridWidth / preview.gridWidth : 1;
 
   return (
     <div
@@ -339,20 +335,7 @@ export const MaskEditorCanvas = memo(function MaskEditorCanvas({
           <KonvaImage image={image} x={placed.x} y={placed.y} width={document.width * displayScale} height={document.height * displayScale} />
         </Layer>
         <Layer listening={false}>
-          {preview ? (
-            <KonvaImage
-              image={preview.canvas}
-              x={placed.x + preview.region.x * previewScale}
-              y={placed.y + preview.region.y * previewScale}
-              width={preview.region.width * previewScale}
-              height={preview.region.height * previewScale}
-            />
-          ) : null}
-          {draft ? (
-            <Group x={placed.x} y={placed.y} scaleX={displayScale} scaleY={displayScale}>
-              <DraftMark mark={draft} />
-            </Group>
-          ) : null}
+          <KonvaImage ref={maskImageRef} image={raster.canvas} x={placed.x} y={placed.y} width={document.width * displayScale} height={document.height * displayScale} />
         </Layer>
         <Layer>
           <Rect name="mask-editor-background" width={viewportSize.width} height={viewportSize.height} fill="transparent" />
@@ -384,25 +367,3 @@ export const MaskEditorCanvas = memo(function MaskEditorCanvas({
     </div>
   );
 });
-
-/**
- * 正在画的一笔的即时形状（文档坐标）：涂抹用遮罩同色半透明，擦除在遮罩层上直接挖掉。
- * 软边笔刷的边缘以松手后 Worker 算出的结果为准，这里只求跟手。
- */
-function DraftMark({ mark }: { mark: MaskMark }): JSX.Element | null {
-  const erase = mark.mode === 'erase';
-  const paint = erase
-    ? { globalCompositeOperation: 'destination-out' as const, opacity: 1 }
-    : { opacity: MASK_PREVIEW_OPACITY };
-  if (isMaskStroke(mark)) {
-    const points = mark.points.length === 1 ? [mark.points[0], mark.points[0]] : mark.points;
-    return <Line points={points.flatMap((point) => [point.x, point.y])} stroke={ANNOTATION_DEFAULT_STROKE_HEX} strokeWidth={mark.size} lineCap="round" lineJoin="round" {...paint} />;
-  }
-  if (mark.kind === 'lasso') {
-    return <Line points={mark.points.flatMap((point) => [point.x, point.y])} closed fill={ANNOTATION_DEFAULT_STROKE_HEX} {...paint} />;
-  }
-  const bounds = resolveMaskShapeBounds(mark.kind, mark.points[0], mark.points[1]);
-  return mark.kind === 'circle'
-    ? <Ellipse x={bounds.x + bounds.width / 2} y={bounds.y + bounds.height / 2} radiusX={bounds.width / 2} radiusY={bounds.height / 2} fill={ANNOTATION_DEFAULT_STROKE_HEX} {...paint} />
-    : <Rect x={bounds.x} y={bounds.y} width={bounds.width} height={bounds.height} fill={ANNOTATION_DEFAULT_STROKE_HEX} {...paint} />;
-}
