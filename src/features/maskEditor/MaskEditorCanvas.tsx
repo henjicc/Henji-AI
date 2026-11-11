@@ -292,7 +292,7 @@ export const MaskEditorCanvas = memo(function MaskEditorCanvas({
 
   const showBrushCursor = cursorPoint && tool === 'brush' && !view.panReady;
   const cursorClass = view.panning ? 'cursor-grabbing' : view.panReady ? 'cursor-grab' : tool === 'brush' ? 'cursor-none' : 'cursor-crosshair';
-  const zoomLabel = view.zoom === 1 ? t('viewportZoom.fit') : `${Math.round(displayScale * 100)}%`;
+  const zoomLabel = view.zoom === 1 ? t('viewportZoom.fit') : `${Math.round(view.zoom * 100)}%`;
   const normalizedHardness = normalizeMaskBrushHardness(brushHardness);
 
   return (

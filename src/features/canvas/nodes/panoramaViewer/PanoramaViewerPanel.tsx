@@ -1,7 +1,9 @@
 import { useLayoutEffect, useRef, useState, type MutableRefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { UiEmpty, UiError, UiErrorBoundary, UiLoading } from '@/components/ui';
+import { UiButton, UiEmpty, UiError, UiErrorBoundary, UiLoading } from '@/components/ui';
+import { viewportTransform, type ViewportPan } from '@/core/viewport/zoomPan';
+import { useZoomPanViewport } from '@/hooks/useZoomPanViewport';
 import type {
   PanoramaCameraView,
   PanoramaViewMode,
@@ -168,12 +170,7 @@ export function PanoramaViewerPanel({
         ) : null}
 
         {showStaticResource && resource.displayUrl ? (
-          <img
-            src={resource.displayUrl}
-            alt={t('viewer.panorama.flatAlt')}
-            className="h-full w-full select-none object-contain"
-            draggable={false}
-          />
+          <PanoramaFlatImage src={resource.displayUrl} alt={t('viewer.panorama.flatAlt')} fitLabel={t('ui:viewportZoom.fit')} hint={t('ui:viewportZoom.hint')} />
         ) : null}
 
         {showFrozenPreview && frozenPreviewUrl ? (
@@ -259,6 +256,35 @@ export function PanoramaViewerPanel({
         onViewportAspectRatioChange={onViewportAspectRatioChange}
         onCapture={onCapture}
       />
+    </div>
+  );
+}
+
+const FLAT_ZOOM_LIMITS = { min: 1, max: 8 };
+
+/** 平面查看全景原图：滚轮缩放、空格或中键拖动平移，左下角读数点一下回到适合（球面模式的缩放是改视野，在三维画布里）。 */
+function PanoramaFlatImage({ src, alt, fitLabel, hint }: { src: string; alt: string; fitLabel: string; hint: string }): JSX.Element {
+  const frameRef = useRef<HTMLDivElement>(null);
+  // 平面图是整张放进框里（object-contain），放大后边缘不拖进框里
+  const clampPan = (pan: ViewportPan, zoom: number): ViewportPan => {
+    const frame = frameRef.current;
+    const maxX = frame ? (frame.offsetWidth * (zoom - 1)) / 2 : 0;
+    const maxY = frame ? (frame.offsetHeight * (zoom - 1)) / 2 : 0;
+    return { x: Math.min(maxX, Math.max(-maxX, pan.x)), y: Math.min(maxY, Math.max(-maxY, pan.y)) };
+  };
+  const view = useZoomPanViewport(frameRef, { limits: FLAT_ZOOM_LIMITS, clampPan, resetKey: src });
+  return (
+    <div ref={frameRef} className={`absolute inset-0 overflow-hidden ${view.panning ? 'cursor-grabbing' : view.panReady ? 'cursor-grab' : ''}`}>
+      <img
+        src={src}
+        alt={alt}
+        className="h-full w-full select-none object-contain"
+        style={{ transform: viewportTransform(view.zoom, view.pan, FLAT_ZOOM_LIMITS) }}
+        draggable={false}
+      />
+      <UiButton variant="media" size="sm" className="absolute bottom-2 left-2 tabular-nums" tooltip={hint} onClick={view.reset}>
+        {view.zoom === 1 ? fitLabel : `${Math.round(view.zoom * 100)}%`}
+      </UiButton>
     </div>
   );
 }
