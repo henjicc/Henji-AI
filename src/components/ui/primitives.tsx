@@ -788,9 +788,9 @@ export const UiSelect = forwardRef<HTMLSelectElement, UiSelectProps>(({ classNam
 UiSelect.displayName = 'UiSelect';
 
 /** 字段触发器的外观：`field` = raised 字段表面；`quiet` = 静默按钮皮肤（标题栏、工具栏里的弱化入口）。 */
-function resolveFieldTriggerClass(size: UiControlSize, appearance: 'field' | 'quiet'): string {
+function resolveFieldTriggerClass(size: UiControlSize, appearance: 'field' | 'quiet', changed: boolean): string {
   if (appearance === 'quiet') {
-    return `ui-btn ui-btn-quiet ${UI_FIELD_SIZE_CLASS[size]} px-2`;
+    return `ui-btn ui-btn-quiet ${UI_FIELD_SIZE_CLASS[size]} px-2 ${changed ? 'text-text1' : ''}`;
   }
   // 悬停取 control-hover 而不是 hover：raised 与 hover 只差 0.012–0.017，且与悬停容器同色时触发器边界消失（4.3）
   return `${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_SIZE_CLASS[size]} ${UI_FIELD_PADDING_CLASS[size]} hover:bg-control-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-ring`;
@@ -801,7 +801,7 @@ function resolveFieldTriggerClass(size: UiControlSize, appearance: 'field' | 'qu
  * 高度与字号只由 `size` 决定（与 UiInput 同档），外观只由 `appearance` 决定；className 只放宽度等布局。
  */
 export const UiFieldTrigger = forwardRef<HTMLButtonElement, UiFieldTriggerProps>(
-  ({ className = '', size = 'md', appearance = 'field', open = false, children, type = 'button', ...props }, ref) => {
+  ({ className = '', size = 'md', appearance = 'field', open = false, changed = false, children, type = 'button', ...props }, ref) => {
     const rowLabelling = resolveFormRowLabelling(useUiFormRowLabelling(), props);
     return (
     <FeedbackButton
@@ -809,7 +809,7 @@ export const UiFieldTrigger = forwardRef<HTMLButtonElement, UiFieldTriggerProps>
       type={type}
       data-size={size}
       data-appearance={appearance}
-      className={`inline-flex min-w-0 select-none items-center justify-between gap-1.5 whitespace-nowrap font-normal transition-colors duration-120 ${resolveFieldTriggerClass(size, appearance)} ${UI_FIELD_DISABLED_CLASS} ${className}`}
+      className={`inline-flex min-w-0 select-none items-center justify-between gap-1.5 whitespace-nowrap font-normal transition-colors duration-120 ${resolveFieldTriggerClass(size, appearance, changed)} ${UI_FIELD_DISABLED_CLASS} ${className}`}
       {...props}
       {...rowLabelling}
  >

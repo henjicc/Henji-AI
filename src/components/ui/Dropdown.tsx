@@ -72,6 +72,8 @@ type DropdownProps<T extends string | number | boolean> = {
    * 不传时随字段排布：`UiFieldLayoutContext` 为 `toolbar` 时取 `text`，否则 `field`。
    */
   appearance?: 'field' | 'text'
+  /** `text` 外观下取值偏离默认（筛选已生效）时传 true，文字提亮；`field` 外观不受影响。 */
+  changed?: boolean
   /** 菜单开合通知（宿主需要在菜单打开期间保持自身可见时用，如视频查看器的控制条）。 */
   onOpenChange?: (open: boolean) => void
 }
@@ -101,6 +103,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     minWidthStrategy: minWidthStrategyOverride = 'display',
     panelWidthStrategy = 'options',
     appearance: appearanceOverride,
+    changed = false,
     onOpenChange,
   } = props
   const { t } = useTranslation('ui')
@@ -445,6 +448,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
         disabled={disabled}
         size={size}
         appearance={appearance === 'text' ? 'quiet' : 'field'}
+        changed={changed}
         open={menuShown}
         onClick={() => {
           if (disabled) return

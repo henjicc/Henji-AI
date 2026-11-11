@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>生成历史筛选条草稿</title>
+<style>
+@font-face { font-family: 'HarmonyOS Sans SC UI'; src: url('../../../../src/assets/fonts/HarmonyOS_Sans_SC.ttf') format('truetype'); font-weight: 100 900; font-display: block; }
+:root {
+  /* 数值取自 src/index.css 的石墨主题令牌 */
+  --gap:#181818; --window:#1B1B1B; --panel:#212121; --raised:#272727; --overlay:#292929;
+  --line-overlay:#393939; --control:#2B2B2B; --control-hover:#323232; --hover:#2A2A2A; --selected:#333333;
+  --line:#282828; --line-strong:#313131;
+  --text1:#EEEEEE; --text2:#CACACA; --text3:#A5A5A5; --icon-rest:#737373;
+  --accent:#3A6FDF; --accent-text:#9CBEFF; --accent-ring:#6A9BFE;
+}
+* { box-sizing: border-box; margin: 0; }
+body { background: var(--gap); color: var(--text1); font: 13px/1.4 'HarmonyOS Sans SC UI', sans-serif; padding: 24px; }
+.block { width: 1200px; margin-bottom: 28px; }
+.label { color: var(--text2); font-size: 13px; font-weight: 580; margin: 0 0 4px; }
+.note { color: var(--text3); font-size: 12px; margin: 0 0 10px; line-height: 1.6; }
+.shot { background: var(--window); }
+.band { height: 52px; display: flex; align-items: center; gap: 4px; padding: 0 10px; background: var(--panel); border-bottom: 1px solid var(--gap); }
+.sub { height: 40px; display: flex; align-items: center; gap: 4px; padding: 0 10px; background: var(--panel); border-bottom: 1px solid var(--gap); }
+.list { height: 70px; display: flex; gap: 10px; padding: 12px 10px; }
+.thumb { width: 56px; height: 56px; border-radius: 6px; background: #3a3330; }
+.lines div:first-child { color: var(--text1); }
+.lines div:last-child { color: var(--text3); font-size: 12px; margin-top: 6px; }
+svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.sm svg { width: 14px; height: 14px; }
+.tab { height: 32px; padding: 0 10px; border-radius: 6px; display: inline-flex; align-items: center; color: var(--text2); }
+.tab.on { background: var(--selected); color: var(--text1); }
+.search { height: 32px; width: 240px; border-radius: 8px; display: flex; align-items: center; gap: 6px; padding: 0 10px; color: var(--text3); }
+.search.field { background: var(--control); border: 1px solid var(--line-strong); }
+.search.quiet { color: var(--text3); }
+.search.quiet:hover, .search.quiet.focus { background: var(--control); }
+.search .val { color: var(--text1); }
+.dd { height: 32px; padding: 0 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px; color: var(--text2); white-space: nowrap; }
+.dd svg { width: 14px; height: 14px; color: var(--icon-rest); }
+.dd.field { background: var(--control); border: 1px solid var(--line-strong); color: var(--text1); padding: 0 10px; }
+.dd.set { color: var(--text1); }
+.dd.set svg { color: var(--text2); }
+.dd.hover { background: var(--hover); }
+.icon { width: 32px; height: 32px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; color: var(--icon-rest); }
+.sep { width: 8px; }
+.cmp { display: flex; gap: 8px; align-items: center; color: var(--text3); font-size: 12px; }
+.date { height: 28px; width: 120px; border-radius: 8px; background: var(--control); border: 1px solid var(--line-strong); display: inline-flex; align-items: center; padding: 0 8px; color: var(--text3); font-size: 12px; }
+</style>
+</head>
+<body>
+<script>
+const ICONS = /*ICONS_START*/{"chevron-down":"<path d=\"m6 9 6 6 6-6\"/>","x":"<path d=\"M18 6 6 18\"/><path d=\"m6 6 12 12\"/>","ellipsis":"<circle cx=\"12\" cy=\"12\" r=\"1\"/><circle cx=\"19\" cy=\"12\" r=\"1\"/><circle cx=\"5\" cy=\"12\" r=\"1\"/>","search":"<path d=\"m21 21-4.34-4.34\"/><circle cx=\"11\" cy=\"11\" r=\"8\"/>"}/*ICONS_END*/;
+const i = (n) => `<svg viewBox="0 0 24 24">${ICONS[n] || ''}</svg>`;
+const tabs = `<span class="tab on">全部类型</span><span class="tab">图片</span><span class="sep"></span>`;
+const list = `<div class="list"><div class="thumb"></div><div class="lines"><div>以 图片1 为人物身份参考，只参考她的脸型、五官比例和面部特征……</div><div>图片 · KIE：GPT Image 2.6 · 今天 03:01</div></div></div>`;
+const dd = (text, cls = '') => `<span class="dd ${cls}">${text}${i('chevron-down')}</span>`;
+const tail = `<span class="icon">${i('x')}</span><span class="icon">${i('ellipsis')}</span>`;
+const blocks = [
+  { id: 1, label: '现状：搜索框和三个下拉都是字段框', note: '五个控件都有框，像一排表单；下拉框比左边的类型标签还重，第一眼会先落在这排筛选上，而不是下面的结果。',
+    html: `<div class="band">${tabs}<span class="search field">${i('search')}搜索提示词、模型或错误信息</span>${dd('全部时间', 'field')}${dd('全部来源', 'field')}${dd('全部模型', 'field')}${tail}</div>${list}` },
+  { id: 2, label: '方案 A（推荐）：只有搜索框保留框，下拉改成静默文字', note: '输入框要有框才知道往哪打字；下拉在命令带里是“改条件的按钮”，静息不铺底，悬停才出底。资产库、模型选择面板的“搜索 + 筛选”已经是这个组合，生成这里是唯一一处下拉带框的。没筛选时写维度名（时间 / 来源 / 模型，次要文字），选了以后写取值并提亮成主要文字。这样一眼就能看出筛了什么，也不会连着出现三个“全部”。',
+    html: `<div class="band">${tabs}<span class="search field">${i('search')}搜索提示词、模型或错误信息</span>${dd('时间')}${dd('来源')}${dd('模型')}${tail}</div>${list}` },
+  { id: 3, label: '方案 A · 已筛选、鼠标悬停在“来源”上', note: '筛过的条件是主要文字（近 7 天、GPT Image 2.6），没筛的仍是次要文字的维度名；悬停只出中性底。',
+    html: `<div class="band">${tabs}<span class="search field">${i('search')}<span class="val">宋代</span></span>${dd('近 7 天', 'set')}${dd('来源', 'hover')}${dd('GPT Image 2.6', 'set')}${tail}</div>${list}` },
+  { id: 4, label: '方案 A · 自定义时间', note: '起止日期仍放在紧贴命令带的从属带里；日期是要输入的字段，所以保留框。',
+    html: `<div class="band">${tabs}<span class="search field">${i('search')}搜索提示词、模型或错误信息</span>${dd('自定义', 'set')}${dd('来源')}${dd('模型')}${tail}</div><div class="sub"><span class="cmp"><span class="date">2026-11-01</span>-<span class="date">2026-11-11</span></span></div>${list}` },
+  { id: 5, label: '方案 B（备选）：全部静默，搜索框也不铺底，悬停或聚焦才出框', note: '最安静，但静息时搜索只剩一个放大镜加一行灰字，不容易看出能输入；而且和资产库、模型选择的搜索框不一样，会出现第二种搜索框样子。所以不推荐。',
+    html: `<div class="band">${tabs}<span class="search quiet">${i('search')}搜索提示词、模型或错误信息</span>${dd('时间')}${dd('来源')}${dd('模型')}${tail}</div>${list}` },
+];
+document.body.innerHTML = blocks.map((b) => `<div class="block" data-id="${b.id}"><p class="label">${b.label}</p><p class="note">${b.note}</p><div class="shot">${b.html}</div></div>`).join('');
+</script>
+</body>
+</html>

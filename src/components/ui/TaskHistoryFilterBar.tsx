@@ -205,8 +205,13 @@ export function UiTaskHistoryFilterBar({
 
   // 常驻模式与命令带同一行：窄了下拉先截断（点开能看到全称），不撑破这一行
   const dropdownLayout = isAlwaysVisible
-    ? { className: 'min-w-16 max-w-32 shrink', buttonClassName: 'w-auto max-w-full', minWidthStrategy: 'none' as const }
+    ? { className: 'min-w-16 max-w-32 shrink', buttonClassName: 'w-auto max-w-full', minWidthStrategy: 'none' as const, appearance: 'text' as const }
     : { className: 'shrink-0', buttonClassName: 'w-auto', minWidthStrategy: 'display' as const }
+
+  // 常驻模式是命令带里的一排条件按钮：没筛时写维度名，筛了写取值并提亮，一眼看出哪些条件在起作用
+  const filterTrigger = (dimension: string, active: boolean, selectedLabel: string): { display: string; ariaLabel: string; changed: boolean } | { display: string } => (
+    isAlwaysVisible ? { display: active ? selectedLabel : dimension, ariaLabel: dimension, changed: active } : { display: selectedLabel }
+  )
 
   // 折叠面板里起止日期放在筛选下方；常驻模式由宿主放进从属带（命令带一行放不下）
   const customDateRange = !isAlwaysVisible && timePreset === 'custom' ? (
@@ -263,7 +268,7 @@ export function UiTaskHistoryFilterBar({
 
             <Dropdown
               value={timePreset}
-              display={selectedTimeLabel}
+              {...filterTrigger(t('workspaceFilters.time.label'), timePreset !== 'all', selectedTimeLabel)}
               options={timeOptions}
               onSelect={onTimePresetChange}
               portal={isAlwaysVisible}
@@ -274,7 +279,7 @@ export function UiTaskHistoryFilterBar({
             {showMediaType && (
               <Dropdown
                 value={mediaType}
-                display={selectedMediaLabel}
+                {...filterTrigger(t('workspaceFilters.media.label'), mediaType !== 'all', selectedMediaLabel)}
                 options={resolvedMediaOptions}
                 onSelect={onMediaTypeChange}
                 portal={isAlwaysVisible}
@@ -285,7 +290,7 @@ export function UiTaskHistoryFilterBar({
 
             <Dropdown
               value={providerId}
-              display={selectedProviderLabel}
+              {...filterTrigger(t('workspaceFilters.provider.label'), providerId !== 'all', selectedProviderLabel)}
               options={providerSelectOptions}
               onSelect={onProviderChange}
               portal={isAlwaysVisible}
@@ -295,7 +300,7 @@ export function UiTaskHistoryFilterBar({
 
             <Dropdown
               value={modelId}
-              display={selectedModelLabel}
+              {...filterTrigger(t('workspaceFilters.model.label'), modelId !== 'all', selectedModelLabel)}
               options={modelSelectOptions}
               onSelect={onModelChange}
               portal={isAlwaysVisible}

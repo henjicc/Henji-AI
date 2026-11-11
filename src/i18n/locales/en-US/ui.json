@@ -796,13 +796,19 @@
     "close": "Clear and close filters",
     "resultsCount": "Showing {{matched}} / {{total}}",
     "emptyFiltered": "No matching results. Try clearing filters.",
+    "media": {
+      "label": "Type"
+    },
     "provider": {
+      "label": "Source",
       "all": "All sources"
     },
     "model": {
+      "label": "Model",
       "all": "All models"
     },
     "time": {
+      "label": "Time",
       "all": "All time",
       "last7Days": "Last 7 days",
       "last30Days": "Last 30 days",

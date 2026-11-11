@@ -152,6 +152,8 @@ export interface UiFieldTriggerProps extends UiButtonFeedbackProps {
   appearance?: 'field' | 'quiet'
   /** 浮层是否展开（箭头翻转）。 */
   open?: boolean
+  /** 静默触发器的取值偏离了默认（筛选已生效）：文字提到主要文字色，一眼看出哪些条件在起作用。 */
+  changed?: boolean
 }
 
 export interface UiCheckboxProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onChange'> {

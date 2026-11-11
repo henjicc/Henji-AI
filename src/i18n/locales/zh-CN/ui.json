@@ -796,13 +796,19 @@
     "close": "关闭并清空筛选",
     "resultsCount": "显示 {{matched}} / {{total}} 条",
     "emptyFiltered": "未找到匹配结果，可清空筛选后重试",
+    "media": {
+      "label": "类型"
+    },
     "provider": {
+      "label": "来源",
       "all": "全部来源"
     },
     "model": {
+      "label": "模型",
       "all": "全部模型"
     },
     "time": {
+      "label": "时间",
       "all": "全部时间",
       "last7Days": "最近一周",
       "last30Days": "最近一个月",
