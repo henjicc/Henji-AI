@@ -200,6 +200,11 @@ describe('设计令牌：尺寸、圆角、动效、层级', () => {
     const fromConfig = Object.fromEntries([...block.matchAll(/(\w+): '(\d+)'/g)].map((m) => [m[1], Number(m[2])]))
     expect(fromConfig).toEqual(Z_LAYERS)
   })
+
+  it('从触发器旁长出的浮层与提示压在标题栏之上：贴近窗口顶部时伸进标题栏那一条也不被截掉', () => {
+    expect(Z_LAYERS.popover).toBeGreaterThan(Z_LAYERS.titlebar)
+    expect(Z_LAYERS.tooltip).toBeGreaterThan(Z_LAYERS.popover)
+  })
 })
 
 describe('设计令牌：字体与字号', () => {
