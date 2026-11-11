@@ -95,7 +95,6 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
 
   const gridCols = Math.max(1, data.gridCols);
   const gridRows = Math.max(1, data.gridRows);
-  const totalFrames = orderedFrames.length;
   const baseLayout = useMemo(
     () => computeStoryboardSplitBaseLayout(frameAspectRatio, gridCols, gridRows),
     [frameAspectRatio, gridCols, gridRows]
@@ -328,10 +327,6 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
               </UiChipButton>
             )}
           </PanelTrigger>
-
-          <div className="truncate text-2xs text-text2">
-            {t('canvas.storyboardGrid.summary', { rows: gridRows, cols: gridCols, count: totalFrames })}
-          </div>
         </div>
 
         <UiButton loading={isExporting}
@@ -345,7 +340,7 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
           disabled={isExporting}
         >
           <ICON_DOWNLOAD className={NODE_CONTROL_ICON_CLASS} />
-          {'合并导出'}
+          {t('canvas.storyboardExport.merge')}
         </UiButton>
       </div>
 

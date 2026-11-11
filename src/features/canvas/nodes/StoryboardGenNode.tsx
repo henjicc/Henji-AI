@@ -273,7 +273,6 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
         nodeId={id}
         selected={Boolean(selected)}
         nodeData={nodeData}
-        totalFrames={totalFrames}
         frameLayout={frameLayout}
         frameDocuments={frameDocuments}
         references={promptReferences}
@@ -299,7 +298,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
           <MediaInputRow
             nodeId={id}
             mediaKind="image"
-            label={t('node.mediaRow.image')}
+            label={t('node.mediaRow.reference')}
             maxCount={imageRowMax}
             inlineValue={mediaInputs.image ?? []}
             onInlineChange={handleImageInputChange}

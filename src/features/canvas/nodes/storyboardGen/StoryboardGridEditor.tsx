@@ -5,14 +5,13 @@ import type { PromptDocumentV1 } from '@/core/inputs/promptDocument'
 import type { StoryboardGenNodeData } from '@/features/canvas/domain/canvasNodes'
 import { useCanvasEditHistory, createCanvasTextHistoryGroup } from '@/features/canvas/hooks/useCanvasTextHistory'
 import { CanvasPromptEditor } from '@/features/canvas/nodes/shared/CanvasPromptEditor'
-import { GridStepperControl, GRID_SUMMARY_CLASS } from './shared'
+import { GridStepperControl } from './shared'
 import type { StoryboardFrameLayout } from './layout'
 
 interface StoryboardGridEditorProps {
   nodeId: string
   selected: boolean
   nodeData: StoryboardGenNodeData
-  totalFrames: number
   frameLayout: StoryboardFrameLayout
   frameDocuments: Readonly<Record<string, PromptDocumentV1>>
   references: readonly PromptReferenceItem[]
@@ -72,7 +71,6 @@ export const StoryboardGridEditor = memo(({
   nodeId,
   selected,
   nodeData,
-  totalFrames,
   frameLayout,
   frameDocuments,
   references,
@@ -111,12 +109,6 @@ export const StoryboardGridEditor = memo(({
             onDecrease={() => onColChange(-1)}
             onIncrease={() => onColChange(1)}
           />
-        </div>
-
-        <div className={GRID_SUMMARY_CLASS}>
-          {gridLocked
-            ? t('canvas.storyboardGrid.fixed', { rows: nodeData.gridRows, cols: nodeData.gridCols })
-            : t('canvas.storyboardGrid.count', { count: totalFrames })}
         </div>
       </div>
 

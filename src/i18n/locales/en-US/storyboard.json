@@ -36,6 +36,7 @@
     "emptyHintTitle": "Double-click or right-click to add a node",
     "emptyHintSubtitle": "You can also drop image, video or audio files onto the canvas",
     "storyboardExport": {
+      "merge": "Export merged",
       "open": "Export settings",
       "showIndex": "Show frame numbers",
       "showNote": "Show frame descriptions",
@@ -55,10 +56,7 @@
       "rows": "Rows",
       "cols": "Columns",
       "decrease": "Fewer {{label}}",
-      "increase": "More {{label}}",
-      "summary": "{{rows}} × {{cols}} · {{count}} frames",
-      "count": "{{count}} frames",
-      "fixed": "Fixed {{rows}} × {{cols}}"
+      "increase": "More {{label}}"
     },
     "storyboardFrame": {
       "empty": "Empty frame",
