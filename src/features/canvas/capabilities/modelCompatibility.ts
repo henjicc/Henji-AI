@@ -15,7 +15,6 @@ type CanvasModelCompatibilityReasonCode =
   | 'canonical-family'
   | 'required-tag'
   | 'provider-configuration'
-  | 'channel'
   | 'aspect-ratio'
   | 'resolution'
   | 'reference-images'
@@ -249,38 +248,27 @@ function resolveImageLimits(model: ModelDefinition, params: DynamicValueMap): { 
   return { min: limit?.min ?? 0, max: limit?.max ?? 6 };
 }
 
+/**
+ * 有多条线路（渠道）的模型：用户没选过时，挑一条能给出要求比例的，模型默认渠道优先。
+ * 用户选过的渠道不替他换：价格按所选渠道显示，悄悄换渠道会让实际扣费与显示不一致；
+ * 所选渠道给不出要求的比例时，由比例核验报出不兼容原因。
+ */
 function mapChannel(
   model: ModelDefinition,
-  configuration: CanvasImageCapabilityProviderConfiguration,
   requirements: CanvasImageCapabilityModelSemanticRequirements,
   currentParams: DynamicValueMap,
   params: DynamicValueMap,
-  reasons: CanvasModelCompatibilityReason[],
 ): void {
-  if (!configuration.allowedChannels || configuration.allowedChannels.length === 0) return;
   const channelParam = findChannelParam(model);
-  if (!channelParam) {
-    reasons.push({ code: 'channel', message: '模型没有可验证的渠道参数' });
-    return;
-  }
-  const supported = new Set(choiceOptions(channelParam).map(String));
-  const allowed = configuration.allowedChannels.filter((channel) => supported.has(channel));
-  if (allowed.length === 0) {
-    reasons.push({ code: 'channel', message: '模型不包含能力允许的渠道' });
-    return;
-  }
-  const current = String(params[channelParam.id] ?? '');
-  // 用户选过的渠道不替他换：价格按所选渠道显示，悄悄换渠道会让实际扣费与显示不一致；
-  // 所选渠道给不出要求的比例时，由比例核验报出不兼容原因
-  if (hasOwnValue(currentParams, channelParam.id) && allowed.includes(current)) return;
+  if (!channelParam || hasOwnValue(currentParams, channelParam.id)) return;
+  const channels = choiceOptions(channelParam).map(String);
   const aspectParam = aspectParamOf(model);
   const candidates = aspectCandidates(model, requirements.aspectRatio);
   const fits = (channel: string): boolean => !aspectParam || candidates.length === 0
     || candidates.some((candidate) => findExactChoice(aspectParam, candidate, availableChoices(model, aspectParam, { ...params, [channelParam.id]: channel })) !== null);
-  // 模型默认渠道优先，它给不出比例再按能力列出的顺序挑
   const preferred = String(channelParam.default ?? '');
-  const ordered = allowed.includes(preferred) ? [preferred, ...allowed.filter((channel) => channel !== preferred)] : allowed;
-  params[channelParam.id] = ordered.find(fits) ?? ordered[0];
+  const ordered = channels.includes(preferred) ? [preferred, ...channels.filter((channel) => channel !== preferred)] : channels;
+  params[channelParam.id] = ordered.find(fits) ?? params[channelParam.id];
 }
 
 function mapChoiceRequirement(
@@ -447,9 +435,8 @@ export function mapCanvasCapabilityModelParams(
   const configuration = findProviderConfiguration(model, policy);
   if (!configuration) {
     reasons.push({ code: 'provider-configuration', message: '供应商组合尚未通过能力核验' });
-  } else {
-    mapChannel(model, configuration, policy.semanticRequirements, currentParams, params, reasons);
   }
+  mapChannel(model, policy.semanticRequirements, currentParams, params);
   mapSemanticRequirements(model, policy.semanticRequirements, params, reasons);
   applySemanticDefaults(model, policy, configuration, currentParams, params, reasons);
 
@@ -478,7 +465,7 @@ export function resolveCanvasCapabilityVisibleParamIds(
   for (const semantic of promptPolicy.visibleParameterSemantics ?? []) {
     if (semantic === 'channel') {
       const channel = findChannelParam(model);
-      if (channel && (configuration?.allowedChannels?.length ?? choiceOptions(channel).length) > 1) {
+      if (channel && choiceOptions(channel).length > 1) {
         ids.add(channel.id);
       }
       continue;

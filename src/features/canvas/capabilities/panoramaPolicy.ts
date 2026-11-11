@@ -23,9 +23,9 @@ export const PANORAMA_MODEL_POLICY = {
   requiredTags: ['text-to-image', 'image-to-image'],
   providerCompatibility: 'verified-combinations-only',
   allowedProviderConfigurations: [
-    { providerId: 'apimart', allowedChannels: ['ext', 'official'] },
+    { providerId: 'apimart' },
     { providerId: 'kie' },
-    { providerId: 'grsai', allowedChannels: ['vip'] },
+    { providerId: 'grsai' },
     {
       providerId: 'fal',
       // provider / 1MP 当前会落到约 1456×736，不是严格 2:1；只保留已核验的 2K。

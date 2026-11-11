@@ -115,7 +115,7 @@ describe('画布能力模型约束与语义参数映射', () => {
       kieGptImage2Resolution: '2K',
     }],
     ['grsai-gpt-image-2', {
-      grsaiGptImage2Channel: 'vip',
+      grsaiGptImage2Channel: 'standard',
       grsaiGptImage2AspectRatio: '2:1',
       grsaiGptImage2Resolution: '2K',
     }],
@@ -190,7 +190,7 @@ describe('画布能力模型约束与语义参数映射', () => {
       grsai,
       panorama.modelPolicy,
       panorama.promptPolicy,
-    )).toEqual(['prompt', 'grsaiGptImage2Resolution']);
+    )).toEqual(['prompt', 'grsaiGptImage2Channel', 'grsaiGptImage2Resolution']);
     expect(resolveCanvasCapabilityVisibleParamIds(
       fal,
       panorama.modelPolicy,

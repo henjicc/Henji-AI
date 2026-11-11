@@ -1,3 +1,4 @@
+import { pickPreferredModel } from '@/core/modelCatalog/generationModelStanding';
 import { GENERATION_NODE_LAYOUT_SIZE, fixedLayoutSize } from './nodeLayoutSize';
 import { createPlainTextPromptDocument } from '@/core/inputs/promptDocument';
 import { registry } from '@/core/ModelRegistry';
@@ -201,7 +202,9 @@ function createPanoramaGenerationDefaultData(): PanoramaGenerationNodeData {
     registry.getModelsByType('image'),
     PANORAMA_MODEL_POLICY,
   ).candidates;
-  const modelId = compatibleModels[0]?.model.meta.id ?? getDefaultModelId('image');
+  // 默认用 GPT Image 系列里推荐表最新的版本，新版本上架自动跟上
+  const modelId = pickPreferredModel(compatibleModels.map((candidate) => candidate.model), { series: 'gpt-image' })?.meta.id
+    ?? getDefaultModelId('image');
   const model = registry.getModel(modelId);
   const params = model
     ? mapCanvasCapabilityModelParams(model, PANORAMA_MODEL_POLICY).params

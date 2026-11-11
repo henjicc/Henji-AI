@@ -130,10 +130,9 @@ export type CanvasImageCapabilityModelPolicy =
  */
 export type CanvasModelFamilyRule = string | { series: string; minVersion?: number; variants?: readonly string[] };
 
-/** 已核验的平台组合。渠道值通过 schema 的 `role: channel` 查找，不泄漏参数 ID 到 UI。 */
+/** 已核验的平台组合。 */
 export interface CanvasImageCapabilityProviderConfiguration {
   providerId: string;
-  allowedChannels?: readonly string[];
   /** 当前能力在该供应商上经过核验的可编辑语义值。 */
   allowedSemanticValues?: Readonly<Partial<Record<'resolution' | 'quality', readonly string[]>>>;
 }

@@ -1,3 +1,4 @@
+import { generationModelStandingRank, pickPreferredModel } from '@/core/modelCatalog/generationModelStanding'
 import type { ModelDefinition } from '@/core/types'
 
 import {
@@ -95,15 +96,14 @@ export const RELIGHT_MANUAL_MODEL_POLICY = {
 
 export const RELIGHT_SMART_MODEL_POLICY = {
   mode: 'verified-families',
-  // 智能打光每次执行按平台顺序重选模型、不存所选模型；放开系列会让已有节点悄悄换版本与价格，模板也只核验过 GPT Image 2
-  allowedFamilies: ['gpt-image-2'],
+  allowedFamilies: [{ series: 'gpt-image', minVersion: 2 }],
   requiredTags: ['image-to-image'],
   providerCompatibility: 'verified-combinations-only',
   allowedProviderConfigurations: [
     { providerId: 'fal' },
-    { providerId: 'apimart', allowedChannels: ['ext', 'official'] },
+    { providerId: 'apimart' },
     { providerId: 'kie' },
-    { providerId: 'grsai', allowedChannels: ['vip'] },
+    { providerId: 'grsai' },
   ],
   semanticRequirements: {
     referenceImages: { min: 1, max: 2 },
@@ -248,17 +248,21 @@ export function prepareRelightRoute(
     ? RELIGHT_MANUAL_MODEL_POLICY
     : RELIGHT_SMART_MODEL_POLICY
   const candidates = resolveCanvasCapabilityModelCandidates(imageModels, policy).candidates
+  // 智能打光用 GPT Image 系列里推荐表最新的版本，同版本按平台顺序挑
   const preferred = settings.lightingMode === 'smart'
-    ? ['fal', 'apimart', 'kie', 'grsai']
-        .map((provider) => candidates.find((candidate) => candidate.model.meta.provider === provider))
-        .find(Boolean)
+    ? ['fal', 'apimart', 'kie', 'grsai'].reduce<typeof candidates[number] | undefined>((best, provider) => {
+        const model = pickPreferredModel(candidates.filter((candidate) => candidate.model.meta.provider === provider).map((candidate) => candidate.model))
+        if (!model) return best
+        const candidate = candidates.find((entry) => entry.model === model)
+        return !best || generationModelStandingRank(model.meta.canonicalModelId) > generationModelStandingRank(best.model.meta.canonicalModelId) ? candidate : best
+      }, undefined)
     : candidates[0]
   if (!preferred) {
     return {
       compatible: false,
       reasons: [settings.lightingMode === 'manual'
         ? 'Fal IC-Light v2 当前不可用，请配置 Fal 或显式切换到智能模式'
-        : '当前没有已配置的 GPT Image 2 编辑模型'],
+        : '当前没有已配置的 GPT Image 编辑模型'],
       mode: settings.lightingMode,
       model: null,
       params: {},
