@@ -1,6 +1,7 @@
 import { parseImageEditDocumentV3 } from './documentCodec';
 import { parseImageEditSharedEffectParametersV3 } from './operationCatalog';
 import { parseImageColorGradeParams } from '../../imaging/adjustments/schema';
+import { hasColorGradeV1Keys, migrateColorGradeParamsV1 } from '../../imaging/adjustments/colorGradeMigration';
 import {
   cloneImageEditMaskReferenceV3,
   collectImageEditLayerIdsV3,
@@ -432,10 +433,13 @@ function applyLayerContentCommand(
     if (!location.layer.renderable) {
       throw new ImageEditCommandValidationErrorV3('不可渲染的兼容图层不能修改参数');
     }
-    const params = cloneImageEditJsonObjectV3(command.params);
+    let params = cloneImageEditJsonObjectV3(command.params);
     if (!params) throw new ImageEditCommandValidationErrorV3('图层参数不是安全 JSON 对象');
     if (location.layer.type === 'effect') parseImageEditSharedEffectParametersV3(location.layer.effectId, params);
     if (location.layer.type === 'adjustment' && location.layer.adjustmentId === 'color_grade') {
+      // 回放旧历史时：2026-10-21 之前写下的改参数命令可能只带部分旧版键（如只有 temperature），
+      // 读历史时不知道目标图层类型、没法换算；到这里确定是全能调色，再换成新版参数
+      if (allowLegacyResourceMetadata && hasColorGradeV1Keys(params)) params = migrateColorGradeParamsV1(params) as typeof params;
       parseImageColorGradeParams(params);
     }
     return {

@@ -7,7 +7,7 @@ import { migrateMcpConnectionStorageV1, migrateMcpConnectionIdentity } from './m
 import type { PersistenceMigrations } from './migrations'
 import { WEB_RECORDING_MIGRATIONS } from '../webReplay/schema'
 import { migrateEmbeddedVideoColorGradesV1 } from '../videoEdit/colorGradeMigration'
-import { migrateColorGradeParamsV1 } from '../imaging/adjustments/colorGradeMigration'
+import { migrateImageColorGradeParamSetsV1 } from '../imaging/adjustments/colorGradeMigration'
 import { migrateVideoEditExportEntries } from '../videoEdit/exportEncodingMigration'
 import { stripVideoEditClipFades } from '../videoEdit/fadeTransitionMigration'
 import { migrateLlmConfigSmartPromptProfile } from '../llm/smartPromptProfileMigration'
@@ -269,17 +269,9 @@ export const FORMAT_MIGRATIONS: Readonly<Record<string, PersistenceMigrations>> 
   // 文字样式新增可选 fontVariations（可变字体轴数值）：只新增可选内容，旧内容原样有效；旧程序只在内容真的用到轴数值时拒绝，最低可读版本不变。
   'subtitle-manifest': { 34: value => ({ ...structuredClone(value) as object, version: 35 }), 33: value => ({ ...stripVideoEditClipFades(value) as object, version: 34 }), 32: value => ({ ...structuredClone(value) as object, version: 33 }), 31: value => ({ ...structuredClone(value) as object, version: 32 }), 30: value => ({ ...structuredClone(value) as object, version: 31 }), 29: value => ({ ...structuredClone(value) as object, version: 30 }), 28: value => ({ ...structuredClone(value) as object, version: 29 }), 27: value => ({ ...structuredClone(value) as object, version: 28 }), 26: value => ({ ...structuredClone(value) as object, version: 27 }), 25: value => ({ ...structuredClone(value) as object, version: 26 }), 24: value => ({ ...migrateAudioEqualizerModes(migrateAudioMergedEffects(value)) as object, version: 25 }), 23: value => ({ ...migrateVideoEditCaptionCollection(value) as object, version: 24 }), 22: value => ({ ...value as object, version: 23 }), 21: value => ({ ...value as object, version: 22 }), 20: value => ({ ...value as object, version: 21 }), 19: value => ({ ...value as object, version: 20 }), 18: value => ({ ...value as object, version: 19 }), 17: value => ({ ...value as object, version: 18 }), 16: value => ({ ...value as object, version: 17 }), 15: value => ({ ...value as object, version: 16 }), 11: value => ({ ...value as object, version: 12 }), 12: value => ({ ...value as object, version: 13 }), 13: value => ({ ...value as object, version: 14 }), 14: value => ({ ...value as object, version: 15 }) },
 }
-/** Image layers (any depth, including smart-object documents): every `color_grade` adjustment layer's params. */
-function migrateImageColorGradeLayers(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(migrateImageColorGradeLayers)
-  if (!value || typeof value !== 'object') return value
-  const record = value as Record<string, unknown>
-  const result = Object.fromEntries(Object.entries(record).map(([key, child]) => [key, migrateImageColorGradeLayers(child)]))
-  if (record.type === 'adjustment' && record.adjustmentId === 'color_grade' && record.params && typeof record.params === 'object' && !Array.isArray(record.params)) result.params = migrateColorGradeParamsV1(record.params as Record<string, unknown>)
-  return result
-}
+/** 工作副本 14 → 15、图片包 12 → 13：文件整体是 v1，全能调色调整图层与全能调色图层滤镜的参数全部换算。 */
 function migrateImageWorkingCopyColorGrades(value: unknown, formatVersion: number): unknown {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return value
-  return { ...migrateImageColorGradeLayers(value) as object, formatVersion }
+  return { ...migrateImageColorGradeParamSetsV1(structuredClone(value)) as object, formatVersion }
 }
 export function formatMigrations(id: string): PersistenceMigrations { return FORMAT_MIGRATIONS[id] ?? {} }

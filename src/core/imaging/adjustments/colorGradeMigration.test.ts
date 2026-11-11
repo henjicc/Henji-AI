@@ -34,12 +34,18 @@ describe('color grade v1 → v2 migration', () => {
   })
   it('migrates color grade layers at any depth of image working copies and packages', () => {
     const layer = (params: Record<string, unknown>) => ({ type: 'adjustment', adjustmentId: 'color_grade', params })
-    const working = { format: 'henji-image-edit', formatVersion: 14, document: { layers: [layer({ temperature: 30 }), { type: 'group', children: [layer({ creative_highlight_hue: 50, creative_highlight_strength: 10 })] }, { type: 'adjustment', adjustmentId: 'hsl', params: { temperature: 3 } }] } }
+    const gradeFilter = { operationType: 'adjustment', effectId: 'color_grade', params: { temperature: -20, creative_shadow_hue: 0, creative_shadow_strength: 0 } }
+    const working = { format: 'henji-image-edit', formatVersion: 14, document: { layers: [layer({ temperature: 30 }), { type: 'group', children: [layer({ creative_highlight_hue: 50, creative_highlight_strength: 10 })] }, { type: 'adjustment', adjustmentId: 'hsl', params: { temperature: 3 } }, { type: 'raster', filters: [gradeFilter] }] } }
     const next = FORMAT_MIGRATIONS['image-working-copy'][14](working) as typeof working
     expect(next.formatVersion).toBe(15)
     expect((next.document.layers[0] as unknown as { params: { temperature_kelvin: number } }).params.temperature_kelvin).toBeCloseTo(legacyWhiteBalanceToKelvin(30, 0).temperature_kelvin, 2)
     expect((next.document.layers[1] as { children: Array<{ params: Record<string, unknown> }> }).children[0].params).toMatchObject({ highlight_hue: 50, highlight_strength: 10 })
     expect(next.document.layers[2]).toEqual(working.document.layers[2])
+    // 全能调色也能作为图层滤镜，参数同样要换算。
+    const filterParams = (next.document.layers[3] as { filters: Array<{ params: Record<string, unknown> }> }).filters[0].params
+    expect(imageColorGradeParamsSchema.safeParse(filterParams).success).toBe(true)
+    expect(filterParams.temperature_kelvin).toBeCloseTo(legacyWhiteBalanceToKelvin(-20, 0).temperature_kelvin, 2)
+    expect(gradeFilter.params).toHaveProperty('temperature', -20)
     const pack = FORMAT_MIGRATIONS['image-package'][12]({ packageVersion: 12, document: working }) as { packageVersion: number; document: { formatVersion: number } }
     expect(pack.packageVersion).toBe(13); expect(pack.document.formatVersion).toBe(15)
   })

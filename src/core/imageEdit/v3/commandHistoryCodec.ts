@@ -12,6 +12,7 @@ import {
 import { cloneImageEditJsonObjectV3, decodeImageEditDocumentV3 } from './documentCodec';
 import { createImageEditDocumentV3 } from './documentFactory';
 import { getImageEditHistoryMaskValidationErrorV3 } from './commandHistoryMaskCodec';
+import { migrateImageEditHistoryCommandColorGradeV1 } from './commandHistoryColorGradeMigration';
 import {
   decodeImageEditMaskResourceDescriptorsForMaskV3,
   decodeImageEditMaskResourceDescriptorsV3,
@@ -405,7 +406,7 @@ function validateCommand(value: unknown, strictResources: boolean): ImageEditCom
   return command as unknown as ImageEditCommandV3;
 }
 
-function metadataBytes(forward: ImageEditCommandV3, inverse: ImageEditCommandV3): number {
+function metadataBytes(forward: unknown, inverse: unknown): number {
   return new TextEncoder().encode(JSON.stringify([forward, inverse])).byteLength;
 }
 function resourcesFor(forward: ImageEditCommandV3, inverse: ImageEditCommandV3): ImageEditHistoryResourceReferenceV3[] {
@@ -422,16 +423,19 @@ function resourcesFor(forward: ImageEditCommandV3, inverse: ImageEditCommandV3):
 function parseEntry(value: unknown, strictResources: boolean): ImageEditHistoryEntrySnapshotV3 {
   if (!isRecord(value)) fail('历史条目无效');
   exactKeys(value, ['forward', 'inverse', 'metadataBytes', 'resources'], '历史条目');
-  const forward = validateCommand(value.forward, strictResources);
-  const inverse = validateCommand(value.inverse, strictResources);
+  const forward = validateCommand(migrateImageEditHistoryCommandColorGradeV1(value.forward), strictResources);
+  const inverse = validateCommand(migrateImageEditHistoryCommandColorGradeV1(value.inverse), strictResources);
   try {
     assertImageEditHistoryInversePairV3(forward, inverse);
   } catch (error) {
     if (error instanceof ImageEditHistoryInversePairErrorV3) fail(error.message);
     throw error;
   }
-  const expectedMetadataBytes = metadataBytes(forward, inverse);
-  if (safeInteger(value.metadataBytes, '历史元数据字节数') !== expectedMetadataBytes) fail('历史元数据字节数不匹配');
+  // 记录的字节数对应写入时的原样命令；旧参数换算后按换算结果重新计。
+  const storedMetadataBytes = metadataBytes(value.forward, value.inverse);
+  if (safeInteger(value.metadataBytes, '历史元数据字节数') !== storedMetadataBytes) fail('历史元数据字节数不匹配');
+  const expectedMetadataBytes = forward === value.forward && inverse === value.inverse
+    ? storedMetadataBytes : metadataBytes(forward, inverse);
   if (!Array.isArray(value.resources)) fail('历史资源列表无效');
   const declared = value.resources.map((resource) => {
     if (!isRecord(resource)) return fail('历史资源引用无效');

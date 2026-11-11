@@ -71,6 +71,33 @@ export function migrateColorGradeParamsV1(params: Readonly<Params>): Params {
   }
   return result
 }
+const V1_ONLY_KEYS = new Set<string>(COLOR_GRADE_V1_REMOVED_KEYS)
+/** v2 的严格 schema 拒绝这些键，带着它们的全能调色参数只可能是 v1；`tint` 两版同名但含义不同，不能作为判据。 */
+export function hasColorGradeV1Keys(params: unknown): params is Params {
+  return isParams(params) && Object.keys(params).some(key => V1_ONLY_KEYS.has(key))
+}
+const isParams = (value: unknown): value is Params => Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+const isImageColorGradeOwner = (record: Params): boolean => isParams(record.params)
+  && ((record.type === 'adjustment' && record.adjustmentId === 'color_grade') || (record.operationType === 'adjustment' && record.effectId === 'color_grade'))
+/**
+ * 图片图层树里任意深度的每一份全能调色参数：调整图层、图层滤镜、图层组与智能对象内容文档都在内。
+ * `select` 决定换算哪些：整份文件已知是 v1 时全部换算；没有版本戳的数据只换算带 v1 独有键的。
+ * 未变化的分支保持原引用，不改输入。
+ */
+export function migrateImageColorGradeParamSetsV1(value: unknown, select: (params: Readonly<Params>) => boolean = () => true): unknown {
+  if (Array.isArray(value)) {
+    const items = value.map(item => migrateImageColorGradeParamSetsV1(item, select))
+    return items.some((item, index) => item !== value[index]) ? items : value
+  }
+  if (!isParams(value)) return value
+  let result: Params | undefined
+  for (const [key, child] of Object.entries(value)) {
+    const migrated = migrateImageColorGradeParamSetsV1(child, select)
+    if (migrated !== child) (result ??= { ...value })[key] = migrated
+  }
+  if (isImageColorGradeOwner(value) && select(value.params as Params)) (result ??= { ...value }).params = migrateColorGradeParamsV1(value.params as Params)
+  return result ?? value
+}
 function roundWhiteBalance(value: { temperature_kelvin: number; tint: number }): { temperature_kelvin: number; tint: number } {
   // Six significant decimals keep the closed-form solution while staying readable in documents.
   return { temperature_kelvin: Math.round(value.temperature_kelvin * 1e3) / 1e3, tint: Math.round(value.tint * 1e4) / 1e4 }
