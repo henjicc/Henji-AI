@@ -155,7 +155,7 @@ export const CameraStageNode = memo(({ id, data, selected, width, height }: Came
           <MediaInputRow
             nodeId={id}
             mediaKind="image"
-            label={t('node.mediaRow.image')}
+            label={t('node.mediaRow.reference')}
             maxCount={1}
             inlineValue={inlineImages}
             onInlineChange={handleInlineImagesChange}

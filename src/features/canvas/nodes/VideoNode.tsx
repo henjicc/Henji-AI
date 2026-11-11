@@ -1,3 +1,4 @@
+import { NodeMediaFrame } from '@/features/canvas/ui/NodeMediaFrame'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useNodeHandlesSync } from '../hooks/useNodeHandlesSync';
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
@@ -204,7 +205,7 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
         onTitleChange={(nextTitle) => updateNodeData(id, { displayName: nextTitle })}
       />
 
-      <div className="relative h-full w-full overflow-hidden rounded-[var(--node-radius)] bg-gap">
+      <NodeMediaFrame>
         {generationError ? null : videoSource && shouldMountPlayer ? (
           <CanvasVideoPlayer
             src={videoSource}
@@ -274,7 +275,7 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
         )}
 
         {generationError && <NodeGenerationError message={generationError} />}
-      </div>
+      </NodeMediaFrame>
 
       {isUploadVariant && (
         <UiInput

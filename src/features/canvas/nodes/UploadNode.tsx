@@ -1,3 +1,4 @@
+import { NodeMediaFrame } from '@/features/canvas/ui/NodeMediaFrame'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useNodeHandlesSync } from '../hooks/useNodeHandlesSync';
 import { createLogger } from '@/core/logging'
@@ -357,9 +358,7 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
       />
 
       {data.imageUrl || transientPreviewUrl ? (
-        <div
-          className="block h-full w-full overflow-hidden rounded-[var(--node-radius)] bg-gap"
-        >
+        <NodeMediaFrame>
           <CanvasNodeImage
             src={imageSource ?? ''}
             viewerSourceUrl={data.imageUrl ? resolveImageDisplayUrl(data.imageUrl) : null}
@@ -368,7 +367,7 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
             onLoad={handleImageLoad}
             onRelink={() => canvasEventBus.publish('upload-node/reupload', { nodeId: id })}
           />
-        </div>
+        </NodeMediaFrame>
       ) : (
         <label
           className="block h-full w-full overflow-hidden rounded-[var(--node-radius)] bg-gap"

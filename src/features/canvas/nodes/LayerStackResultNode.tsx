@@ -1,3 +1,4 @@
+import { NodeMediaFrame } from '@/features/canvas/ui/NodeMediaFrame'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { memo, useMemo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
@@ -111,7 +112,7 @@ export const LayerStackResultNode = memo(({ id, data, selected, width, height }:
         editable
         onTitleChange={(displayName) => updateNodeData(id, { displayName })}
       />
-      <div className="relative h-full w-full overflow-hidden rounded-[var(--node-radius)] bg-gap">
+      <NodeMediaFrame>
         {generationError ? (
           <UiError
             title={t('node.layerStackView.loadFailed')}
@@ -144,7 +145,7 @@ export const LayerStackResultNode = memo(({ id, data, selected, width, height }:
             编辑
           </UiButton>
         )}
-      </div>
+      </NodeMediaFrame>
       <Handle type="target" id="target" position={Position.Left} className={`${NODE_PORT_NODE_CLASS} ${hasTargetConnections ? NODE_PORT_VISIBLE_CLASS : ''}`} style={{ background: getSocketColor('IMAGE'), left: 0, top: '50%', transform: 'translate(-50%, -50%)' }} />
       <Handle type="source" id="source" position={Position.Right} className={`${NODE_PORT_NODE_CLASS} ${hasSourceConnections ? NODE_PORT_VISIBLE_CLASS : ''}`} style={{ background: getSocketColor('IMAGE'), right: 0, top: '50%', transform: 'translate(50%, -50%)' }} />
       <NodeResizeHandle minWidth={240} minHeight={180} maxWidth={1200} maxHeight={1000} />

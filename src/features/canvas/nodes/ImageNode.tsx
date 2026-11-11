@@ -1,3 +1,4 @@
+import { NodeMediaFrame } from '@/features/canvas/ui/NodeMediaFrame'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { useNodeHandlesSync } from '../hooks/useNodeHandlesSync';
 import { memo, useMemo } from 'react';
@@ -131,9 +132,7 @@ export const ImageNode = memo(({ id, data, selected, type, width, height }: Imag
         onTitleChange={(nextTitle) => updateNodeData(id, { displayName: nextTitle })}
       />
 
-      <div
-        className="relative h-full w-full overflow-hidden rounded-[var(--node-radius)] bg-gap"
-      >
+      <NodeMediaFrame>
         {generationError ? null : data.imageUrl ? (
           <CanvasNodeImage
             src={imageSource ?? ''}
@@ -163,7 +162,7 @@ export const ImageNode = memo(({ id, data, selected, type, width, height }: Imag
 
         {generationError && <NodeGenerationError message={generationError} />}
 
-      </div>
+      </NodeMediaFrame>
 
       <Handle
         type="target"
