@@ -1794,6 +1794,10 @@
       "unknown": "Unlabeled"
     }
   },
+  "viewportZoom": {
+    "fit": "Fit",
+    "hint": "Scroll to zoom · Hold Space or middle-drag to pan · Click to fit"
+  },
   "documentSession": {
     "status": {
       "draft": "Unsaved",

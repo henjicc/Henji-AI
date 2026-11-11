@@ -678,10 +678,7 @@
         "erase": "Erase"
       },
       "autosave": {
-        "saving": "Saving…",
-        "saved": "Saved automatically",
-        "failed": "Autosave failed. Retrying",
-        "idle": "Saves automatically after drawing"
+        "failed": "Autosave failed. Retrying"
       }
     },
     "layerSeparationGeneration": {

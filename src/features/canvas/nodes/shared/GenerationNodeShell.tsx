@@ -28,6 +28,7 @@ import {
   NODE_ROW_GAP_CLASS,
   NODE_SELECTED_BORDER_CLASS,
   NODE_SURFACE_CLASS,
+  NODE_STAGE_SURFACE_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles';
 import {
   areMediaOutputListsEqual,
@@ -378,7 +379,7 @@ export const GenerationNodeShell = memo(({
       data-generation-node-model-id={effectiveModelId}
       data-generation-node-layout={resolvedLayoutMode}
       className={`
-        canvas-node-dynamic-min-height group relative flex flex-col overflow-visible rounded-[var(--node-radius)] border ${NODE_SURFACE_CLASS} p-2 transition-colors duration-120
+        canvas-node-dynamic-min-height group relative flex flex-col overflow-visible rounded-[var(--node-radius)] border ${NODE_SURFACE_CLASS} ${resolvedLayoutMode === 'workbench' ? 'p-0' : 'p-2'} transition-colors duration-120
         ${selected
           ? NODE_SELECTED_BORDER_CLASS
           : NODE_IDLE_BORDER_CLASS}
@@ -413,14 +414,14 @@ export const GenerationNodeShell = memo(({
       <NodeLodPlaceholder title={resolvedTitle} icon={icon ?? <Sparkles className={`${UI_ICON_SIZE_CLASS.xl}`} />} />
 
       {resolvedLayoutMode === 'workbench' ? (
-        <div className="canvas-node-lod-detail grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1.35fr)_minmax(240px,0.65fr)] overflow-hidden rounded-lg bg-gap/45"
+        <div className={`canvas-node-lod-detail grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1.35fr)_minmax(240px,0.65fr)] overflow-hidden rounded-[var(--node-radius)]`}
           style={workbenchStageAspectRatio
-            ? { gridTemplateColumns: `${Math.max(1, resolvedHeight - 18) * workbenchStageAspectRatio}px minmax(0,1fr)` }
+            ? { gridTemplateColumns: `${Math.max(1, resolvedHeight - 2) * workbenchStageAspectRatio}px minmax(0,1fr)` }
             : workbenchInspectorWidth ? { gridTemplateColumns: `minmax(0,1fr) ${workbenchInspectorWidth}px` } : undefined}>
-          <main className="nodrag nowheel flex min-h-0 min-w-0 overflow-hidden">
+          <main className={`nodrag nowheel flex min-h-0 min-w-0 overflow-hidden ${NODE_STAGE_SURFACE_CLASS}`}>
             {resolvedWorkbenchStage}
           </main>
-          <aside className="nodrag nowheel flex min-h-0 min-w-0 flex-col gap-1.5 overflow-y-auto border-l border-line p-2">
+          <aside className="nodrag nowheel flex min-h-0 min-w-0 flex-col gap-1.5 overflow-y-auto p-2">
             {workbenchPromptLast ? inputRows : promptEditor}
             {workbenchPromptLast ? promptEditor : inputRows}
           </aside>

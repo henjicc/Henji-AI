@@ -4,7 +4,7 @@ import { Brush, Circle, Eraser, Lasso, Redo2, Square, Trash2, Undo2 } from 'luci
 import { memo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { UI_GLASS_ADAPTIVE_DIVIDER_CLASS, UiChipButton, UiError, UiIconButton, UiLoading, UiRangeInput } from '@/components/ui';
+import { UiChipButton, UiError, UiIconButton, UiLoading, UiRangeInput } from '@/components/ui';
 import { MaskEditorCanvas } from '@/features/maskEditor/MaskEditorCanvas';
 import { hasPaintedMask } from '@/features/maskEditor/maskDocument';
 import type { MaskEditorDocument, MaskTool } from '@/features/maskEditor/types';
@@ -55,31 +55,10 @@ export const LocalRedrawWorkbenchStage = memo(function LocalRedrawWorkbenchStage
     <div
       ref={keyboardScope}
       data-local-redraw-workbench="true"
-      className="nodrag nowheel relative flex min-h-0 min-w-0 flex-1 overflow-hidden"
+      className="nodrag nowheel flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
     >
-      {editor.readyImage ? (
-        <MaskEditorCanvas
-          image={editor.readyImage}
-          document={editor.history.document}
-          tool={editor.tool}
-          mode={editor.mode}
-          brushSize={editor.brushSize}
-          brushHardness={editor.brushHardness}
-          onMarkComplete={editor.commitMark}
-        />
-      ) : editor.loadState.status === 'failed' ? (
-        <UiError
-          title={t('node.elementEditGeneration.sourceLoadFailed')}
-          message={editor.loadState.message}
-          onRetry={editor.retryLoad}
-          className="flex-1"
-        />
-      ) : (
-        <UiLoading message={t('node.elementEditGeneration.loadingMask')} className="flex-1" />
-      )}
-
-      {/* 工具条压在待编辑图片上：一块玻璃包住整排静默控件（原 bg-overlay 不是已登记颜色，实际没有底） */}
-      <div className="ui-glass absolute left-2 right-2 top-2 flex min-w-0 items-center gap-1 rounded-lg p-1.5">
+      {/* 工具行直接放在画面区的底上，不另起一块框；笔刷大小是画笔的属性，跟在工具后面，只在画笔时出现 */}
+      <div className="flex h-10 min-w-0 shrink-0 items-center gap-0.5 px-1.5">
         {TOOLS.map(({ value, labelKey, icon: Icon }) => {
           const label = t(labelKey);
           return (
@@ -108,59 +87,76 @@ export const LocalRedrawWorkbenchStage = memo(function LocalRedrawWorkbenchStage
         >
           <Eraser className={`${UI_ICON_SIZE_CLASS.sm}`} />
         </UiChipButton>
-        <div className={`ml-1 flex items-center gap-1 border-l pl-1.5 ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS}`}>
-          <UiIconButton size="md"
-            type="button"
-            aria-label={t('node.elementEditGeneration.undoMask')}
-            disabled={editor.history.undoStack.length === 0}
-            onClick={() => editor.dispatchHistory({ type: 'undo' })}
-          >
-            <Undo2  />
-          </UiIconButton>
-          <UiIconButton size="md"
-            type="button"
-            aria-label={t('node.elementEditGeneration.redoMask')}
-            disabled={editor.history.redoStack.length === 0}
-            onClick={() => editor.dispatchHistory({ type: 'redo' })}
-          >
-            <Redo2  />
-          </UiIconButton>
-          <UiIconButton size="md" tone="danger"
-            type="button"
-            aria-label={t('node.elementEditGeneration.clearMask')}
-            disabled={!painted}
-            onClick={editor.clearDocument}
-          >
-            <Trash2  />
-          </UiIconButton>
-        </div>
+        {editor.tool === 'brush' && (
+          <>
+            <span aria-hidden="true" className="mx-1.5 h-4 w-px shrink-0 bg-line-strong" />
+            <UiRangeInput
+              min={4}
+              max={brushMax}
+              step={1}
+              value={editor.brushSize}
+              aria-label={t('node.elementEditGeneration.brushSize', { size: Math.round(editor.brushSize) })}
+              onChange={(event) => editor.setBrushSize(Number(event.currentTarget.value))}
+              className="min-w-10 max-w-28 flex-1"
+            />
+            <span className="w-7 shrink-0 text-right text-xs tabular-nums text-text2">{Math.round(editor.brushSize)}</span>
+          </>
+        )}
+        <span className="min-w-0 flex-1" />
+        <UiIconButton
+          type="button"
+          tooltip={t('node.elementEditGeneration.undoMask')}
+          disabled={editor.history.undoStack.length === 0}
+          onClick={() => editor.dispatchHistory({ type: 'undo' })}
+        >
+          <Undo2 />
+        </UiIconButton>
+        <UiIconButton
+          type="button"
+          tooltip={t('node.elementEditGeneration.redoMask')}
+          disabled={editor.history.redoStack.length === 0}
+          onClick={() => editor.dispatchHistory({ type: 'redo' })}
+        >
+          <Redo2 />
+        </UiIconButton>
+        <UiIconButton
+          tone="danger"
+          type="button"
+          tooltip={t('node.elementEditGeneration.clearMask')}
+          disabled={!painted}
+          onClick={editor.clearDocument}
+        >
+          <Trash2 />
+        </UiIconButton>
       </div>
 
-      <div className="absolute bottom-2 left-2 right-2 flex items-center gap-2 ui-glass rounded-lg p-2">
-        <span className="shrink-0 text-2xs text-text2">
-          {t('node.elementEditGeneration.brushSize', { size: Math.round(editor.brushSize) })}
-        </span>
-        <UiRangeInput
-          min={4}
-          max={brushMax}
-          step={1}
-          value={editor.brushSize}
-          onChange={(event) => editor.setBrushSize(Number(event.currentTarget.value))}
-          className="min-w-0 flex-1"
+      {editor.readyImage ? (
+        <MaskEditorCanvas
+          image={editor.readyImage}
+          document={editor.history.document}
+          tool={editor.tool}
+          mode={editor.mode}
+          brushSize={editor.brushSize}
+          brushHardness={editor.brushHardness}
+          onMarkComplete={editor.commitMark}
         />
-        <UiFieldMessage
-          data-local-redraw-autosave-status={autosave.status}
-          tone={autosave.status === 'failed' ? 'error' : 'hint'} className="shrink-0"
-        >
-          {autosave.status === 'saving'
-            ? t('node.elementEditGeneration.autosave.saving')
-            : autosave.status === 'saved'
-              ? t('node.elementEditGeneration.autosave.saved')
-              : autosave.status === 'failed'
-                ? t('node.elementEditGeneration.autosave.failed')
-                : t('node.elementEditGeneration.autosave.idle')}
+      ) : editor.loadState.status === 'failed' ? (
+        <UiError
+          title={t('node.elementEditGeneration.sourceLoadFailed')}
+          message={editor.loadState.message}
+          onRetry={editor.retryLoad}
+          className="flex-1"
+        />
+      ) : (
+        <UiLoading message={t('node.elementEditGeneration.loadingMask')} className="flex-1" />
+      )}
+
+      {/* 蒙版改了就自动存，正常时不提示；只有保存失败（会自动重试）才说一声 */}
+      {autosave.status === 'failed' && (
+        <UiFieldMessage data-local-redraw-autosave-status={autosave.status} tone="error" className="shrink-0 px-3 pb-2">
+          {t('node.elementEditGeneration.autosave.failed')}
         </UiFieldMessage>
-      </div>
+      )}
     </div>
   );
 });

@@ -1,7 +1,10 @@
 import { MaskRegionRasterizer } from './regionWorkerClient';
-import { UiError } from '@/components/ui';
+import { UiButton, UiError } from '@/components/ui';
 import { createLogger } from '@/core/logging';
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { ViewportPan } from '@/core/viewport/zoomPan';
+import { useZoomPanViewport } from '@/hooks/useZoomPanViewport';
 import {
   Circle,
   Group,
@@ -42,6 +45,9 @@ interface MaskEditorCanvasProps {
 }
 
 const logger = createLogger('features.maskEditor.preview');
+
+/** 相对“适合”最多放大 8 倍，不缩得比“适合”更小（再小没有用处）。 */
+const ZOOM_LIMITS = { min: 1, max: 8 };
 
 function createMarkId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -142,15 +148,43 @@ export const MaskEditorCanvas = memo(function MaskEditorCanvas({
     if (renderFrameRef.current !== null) window.cancelAnimationFrame(renderFrameRef.current);
   }, []);
 
+  const { t } = useTranslation('ui');
   const fit = fitMaskStage(
     viewportSize.width,
     viewportSize.height,
     document.width,
     document.height
   );
+  // 放大后画面比视口大时，边缘不拖进视口里；比视口小时保持居中
+  const clampPan = useCallback((pan: ViewportPan, zoom: number): ViewportPan => {
+    const maxX = Math.max(0, (document.width * fit.scale * zoom - viewportSize.width) / 2);
+    const maxY = Math.max(0, (document.height * fit.scale * zoom - viewportSize.height) / 2);
+    return { x: Math.min(maxX, Math.max(-maxX, pan.x)), y: Math.min(maxY, Math.max(-maxY, pan.y)) };
+  }, [document.height, document.width, fit.scale, viewportSize.height, viewportSize.width]);
+  const view = useZoomPanViewport(viewportRef, { limits: ZOOM_LIMITS, clampPan, resetKey: document.sourceRef });
+  // 画面在舞台上的像素尺度与左上角位置：舞台铺满视口，画面按“适合 × 缩放”居中再加平移
+  const displayScale = fit.scale * view.zoom;
+  const placed = useMemo(() => {
+    const width = document.width * displayScale;
+    const height = document.height * displayScale;
+    return {
+      x: (viewportSize.width - width) / 2 + view.pan.x,
+      y: (viewportSize.height - height) / 2 + view.pan.y,
+      gridWidth: Math.max(1, Math.round(width)),
+      gridHeight: Math.max(1, Math.round(height)),
+    };
+  }, [displayScale, document.height, document.width, view.pan.x, view.pan.y, viewportSize.height, viewportSize.width]);
+  // 遮罩只算视口里看得见的那一块，按屏幕分辨率求值：放大后边缘清楚，算量也不随放大倍数增长
+  const visible = useMemo(() => {
+    const x = Math.max(0, Math.floor(-placed.x));
+    const y = Math.max(0, Math.floor(-placed.y));
+    const right = Math.min(placed.gridWidth, Math.ceil(viewportSize.width - placed.x));
+    const bottom = Math.min(placed.gridHeight, Math.ceil(viewportSize.height - placed.y));
+    return { x, y, width: Math.max(1, right - x), height: Math.max(1, bottom - y) };
+  }, [placed, viewportSize.height, viewportSize.width]);
 
   const rasterizerRef = useRef<MaskRegionRasterizer | null>(null);
-  const [preview, setPreview] = useState<HTMLCanvasElement | null>(null);
+  const [preview, setPreview] = useState<{ canvas: HTMLCanvasElement; region: { x: number; y: number; width: number; height: number } } | null>(null);
   const [previewFailed, setPreviewFailed] = useState(false);
   const [previewAttempt, setPreviewAttempt] = useState(0);
   useEffect(() => {
@@ -167,15 +201,16 @@ export const MaskEditorCanvas = memo(function MaskEditorCanvas({
     let cancelled = false;
     setPreviewFailed(false);
     logger.debug('遮罩预览求值开始', { event: 'mask_editor.preview.start' });
+    const region = visible;
     void rasterizer.readLatest(draft ? { ...document, strokes: [...document.strokes, draft] } : document,
-      { x: 0, y: 0, width: fit.width, height: fit.height }, { width: fit.width, height: fit.height })
+      region, { width: placed.gridWidth, height: placed.gridHeight })
       .then(coverage => {
         if (cancelled) return;
         const canvas = window.document.createElement('canvas');
-        canvas.width = fit.width; canvas.height = fit.height;
+        canvas.width = region.width; canvas.height = region.height;
         const context = canvas.getContext('2d');
         if (!context) throw new Error('无法初始化遮罩预览');
-        const pixels = context.createImageData(fit.width, fit.height);
+        const pixels = context.createImageData(region.width, region.height);
         const color = ANNOTATION_DEFAULT_STROKE_HEX.slice(1);
         const channels = [0, 2, 4].map(offset => Number.parseInt(color.slice(offset, offset + 2), 16));
         for (let i = 0; i < coverage.length; i++) {
@@ -183,7 +218,7 @@ export const MaskEditorCanvas = memo(function MaskEditorCanvas({
           pixels.data[i * 4 + 3] = Math.round(coverage[i] * 0.55 * 255);
         }
         context.putImageData(pixels, 0, 0);
-        setPreview(canvas);
+        setPreview({ canvas, region });
         logger.debug('遮罩预览求值完成', { event: 'mask_editor.preview.completed' });
       }).catch((error: unknown) => {
         if (cancelled) return;
@@ -191,18 +226,18 @@ export const MaskEditorCanvas = memo(function MaskEditorCanvas({
         logger.error('遮罩预览求值失败', error, { event: 'mask_editor.preview.failed' });
       });
     return () => { cancelled = true; };
-  }, [document, draft, fit.width, fit.height, previewAttempt]);
+  }, [document, draft, placed.gridWidth, placed.gridHeight, visible, previewAttempt]);
 
   const resolvePoint = useCallback((event: KonvaEventObject<MouseEvent | TouchEvent>): MaskPoint | null => {
     const stage = event.target.getStage();
     const pointer = stage?.getPointerPosition();
     if (!pointer) return null;
     return clampMaskPoint(
-      { x: pointer.x / fit.scale, y: pointer.y / fit.scale },
+      { x: (pointer.x - placed.x) / displayScale, y: (pointer.y - placed.y) / displayScale },
       document.width,
       document.height
     );
-  }, [document.height, document.width, fit.scale]);
+  }, [displayScale, document.height, document.width, placed.x, placed.y]);
 
   const scheduleInteractiveRender = useCallback(() => {
     if (renderFrameRef.current !== null) return;
@@ -220,11 +255,12 @@ export const MaskEditorCanvas = memo(function MaskEditorCanvas({
 
   const handlePointerDown = useCallback((event: KonvaEventObject<MouseEvent | TouchEvent>) => {
     event.evt.preventDefault();
+    if (view.panReady) return;
     const point = resolvePoint(event);
     if (!point) return;
     if (event.evt instanceof MouseEvent) cursorPointRef.current = point;
     updateDraft(createDraft(tool, mode, point, brushSize, brushHardness));
-  }, [brushHardness, brushSize, mode, resolvePoint, tool, updateDraft]);
+  }, [brushHardness, brushSize, mode, resolvePoint, tool, updateDraft, view.panReady]);
 
   const handlePointerMove = useCallback((event: KonvaEventObject<MouseEvent | TouchEvent>) => {
     const point = resolvePoint(event);
@@ -254,19 +290,21 @@ export const MaskEditorCanvas = memo(function MaskEditorCanvas({
     setCursorPoint(null);
   }, [handlePointerUp]);
 
-  const showBrushCursor = cursorPoint && tool === 'brush';
+  const showBrushCursor = cursorPoint && tool === 'brush' && !view.panReady;
+  const cursorClass = view.panning ? 'cursor-grabbing' : view.panReady ? 'cursor-grab' : tool === 'brush' ? 'cursor-none' : 'cursor-crosshair';
+  const zoomLabel = view.zoom === 1 ? t('viewportZoom.fit') : `${Math.round(displayScale * 100)}%`;
   const normalizedHardness = normalizeMaskBrushHardness(brushHardness);
 
   return (
     <div
       ref={viewportRef}
-      className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-gap/85 p-3"
+      className="nopan nowheel relative min-h-0 flex-1 overflow-hidden"
       data-application-observation-region="mask_editor.canvas"
     >
       {previewFailed ? <div className="absolute inset-0 z-raised bg-gap/85"><UiError className="h-full" title="遮罩预览失败" message="请重试，或关闭后重新打开参考图。" onRetry={() => setPreviewAttempt(value => value + 1)} /></div> : null}
       <Stage
-        width={fit.width}
-        height={fit.height}
+        width={viewportSize.width}
+        height={viewportSize.height}
         onMouseDown={handlePointerDown}
         onTouchStart={handlePointerDown}
         onMouseMove={handlePointerMove}
@@ -274,20 +312,15 @@ export const MaskEditorCanvas = memo(function MaskEditorCanvas({
         onMouseUp={handlePointerUp}
         onTouchEnd={handlePointerUp}
         onMouseLeave={handleMouseLeave}
-        className={tool === 'brush' ? 'cursor-none' : 'cursor-crosshair'}
+        className={cursorClass}
       >
         <Layer listening={false}>
-          <KonvaImage image={image} width={fit.width} height={fit.height} />
+          <KonvaImage image={image} x={placed.x} y={placed.y} width={document.width * displayScale} height={document.height * displayScale} />
+          {preview ? <KonvaImage image={preview.canvas} x={placed.x + preview.region.x} y={placed.y + preview.region.y} width={preview.region.width} height={preview.region.height} /> : null}
         </Layer>
         <Layer>
-          <Group scaleX={fit.scale} scaleY={fit.scale}>
-            <Rect
-              name="mask-editor-background"
-              width={document.width}
-              height={document.height}
-              fill="transparent"
-            />
-            {preview ? <KonvaImage image={preview} width={document.width} height={document.height} listening={false} /> : null}
+          <Rect name="mask-editor-background" width={viewportSize.width} height={viewportSize.height} fill="transparent" />
+          <Group x={placed.x} y={placed.y} scaleX={displayScale} scaleY={displayScale} listening={false}>
             {showBrushCursor ? (
               <>
                 <Circle
@@ -295,7 +328,7 @@ export const MaskEditorCanvas = memo(function MaskEditorCanvas({
                   y={cursorPoint.y}
                   radius={brushSize / 2}
                   stroke={BLACK_HEX}
-                  strokeWidth={3 / fit.scale}
+                  strokeWidth={3 / displayScale}
                   listening={false}
                 />
                 <Circle
@@ -303,7 +336,7 @@ export const MaskEditorCanvas = memo(function MaskEditorCanvas({
                   y={cursorPoint.y}
                   radius={brushSize / 2}
                   stroke={WHITE_HEX}
-                  strokeWidth={1 / fit.scale}
+                  strokeWidth={1 / displayScale}
                   listening={false}
                 />
                 {normalizedHardness < 0.999 ? (
@@ -312,8 +345,8 @@ export const MaskEditorCanvas = memo(function MaskEditorCanvas({
                     y={cursorPoint.y}
                     radius={(brushSize * normalizedHardness) / 2}
                     stroke={mode === 'paint' ? ANNOTATION_DEFAULT_STROKE_HEX : BLACK_HEX}
-                    strokeWidth={1 / fit.scale}
-                    dash={[4 / fit.scale, 3 / fit.scale]}
+                    strokeWidth={1 / displayScale}
+                    dash={[4 / displayScale, 3 / displayScale]}
                     listening={false}
                   />
                 ) : null}
@@ -322,6 +355,15 @@ export const MaskEditorCanvas = memo(function MaskEditorCanvas({
           </Group>
         </Layer>
       </Stage>
+      <UiButton
+        variant="media"
+        size="sm"
+        className="absolute bottom-2 left-2 tabular-nums"
+        tooltip={t('viewportZoom.hint')}
+        onClick={view.reset}
+      >
+        {zoomLabel}
+      </UiButton>
     </div>
   );
 });

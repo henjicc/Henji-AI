@@ -1794,6 +1794,10 @@
       "unknown": "未标注"
     }
   },
+  "viewportZoom": {
+    "fit": "适合",
+    "hint": "滚轮缩放 · 按住空格或中键拖动平移 · 点这里回到适合"
+  },
   "documentSession": {
     "status": {
       "draft": "未保存",

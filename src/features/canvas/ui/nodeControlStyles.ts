@@ -75,3 +75,9 @@ export const NODE_IDLE_BORDER_STATIC_CLASS = 'border-text3/30';
  * 点阵不再透进节点，纸白下节点为白色卡片、深色下比画布底亮一级。
  */
 export const NODE_SURFACE_CLASS = 'bg-panel';
+
+/**
+ * 工作台节点（局部重绘、扩图、打光、多角度）的左侧画面区：一整块比节点稍深的底，铺满到节点边缘。
+ * 工具、画面、视角切换都直接放在这块底上，各自不再带框；右侧参数区就是节点本身的底，两块靠底色区分、不加分隔线。
+ */
+export const NODE_STAGE_SURFACE_CLASS = 'bg-gap/45';

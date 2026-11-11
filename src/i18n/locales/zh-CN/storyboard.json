@@ -678,10 +678,7 @@
         "erase": "擦除"
       },
       "autosave": {
-        "saving": "自动保存中…",
-        "saved": "已自动保存",
-        "failed": "自动保存失败，正在重试",
-        "idle": "绘制后自动保存"
+        "failed": "自动保存失败，正在重试"
       }
     },
     "layerSeparationGeneration": {
