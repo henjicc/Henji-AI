@@ -32,6 +32,7 @@ import {
 } from '@/features/canvas/domain/nodeMigrations';
 import { nodeCatalog } from '@/features/canvas/application/nodeCatalog';
 import { normalizeRelightNodeLayout } from '@/features/canvas/domain/relightNodeLayout';
+import { fitCameraStageNodeToAspect } from '@/features/canvas/domain/cameraStageNodeLayout';
 import type {
   CanvasHistorySnapshot,
   CanvasHistoryState,
@@ -226,7 +227,7 @@ export function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
         type: normalizedType,
         data: mergedData,
       };
-      return normalizeRelightNodeLayout(normalizedNode);
+      return fitCameraStageNodeToAspect(normalizeRelightNodeLayout(normalizedNode));
     })
     .filter((node): node is CanvasNode => Boolean(node));
 }

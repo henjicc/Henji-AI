@@ -49,8 +49,6 @@ import { usePanoramaInlineViewerStore } from '@/stores/panoramaInlineViewerStore
 const logger = createLogger('features.canvas.panoramaViewerNode');
 const DEFAULT_NODE_WIDTH = 448;
 const MIN_NODE_WIDTH = 320;
-/** 拖完视角停顿这么久才截冻结帧：连续拖动时不重复截。 */
-const PREVIEW_CAPTURE_IDLE_MS = 300;
 /** 默认宽 448 的节点在两倍像素比、75° 视野下用到的贴图约 4300 宽，4K 看不出差别；要看细节进全屏查看器，那里用原图。 */
 const INLINE_TEXTURE_MAX_WIDTH = 4096;
 
@@ -87,7 +85,6 @@ export const PanoramaViewerNode = memo(({
   const captureRef = useRef<PanoramaCaptureCurrentView | null>(null);
   const currentViewRef = useRef<PanoramaCameraView | null>(null);
   const lastSourceRef = useRef<string | null>(null);
-  const previewCaptureTimerRef = useRef<number | null>(null);
   const previewPersistRevisionRef = useRef(0);
   const [retryRevision, setRetryRevision] = useState(0);
   const [isCapturing, setIsCapturing] = useState(false);
@@ -145,10 +142,9 @@ export const PanoramaViewerNode = memo(({
     }
   }, [data.imageUrl, id, updateNodeData, upstreamImages, upstreamSource]);
 
-  // 节点数据里只存落盘后的文件地址：整段图片数据串进节点会让每次更新、保存和撤销快照都拖着几百 KB
-  const persistPanoramaPreview = useCallback((previewDataUrl: string): void => {
-    const revision = previewPersistRevisionRef.current + 1;
-    previewPersistRevisionRef.current = revision;
+  // 节点数据里只存落盘后的文件地址：整段图片数据串进节点会让每次更新、保存和撤销快照都拖着几百 KB。
+  // 序号只认最新一次截图：换图源、更晚的截图都会让还在编码或落盘的旧预览作废
+  const persistPanoramaPreview = useCallback((previewDataUrl: string, revision: number): void => {
     logger.debug('全景节点视角预览开始落盘', {
       event: 'panorama.viewer_preview.persist.start',
       nodeId: id,
@@ -165,7 +161,7 @@ export const PanoramaViewerNode = memo(({
       });
     }).catch((error: unknown) => {
       if (previewPersistRevisionRef.current !== revision) return;
-      logger.warn('全景节点视角预览落盘失败，保留内嵌预览', {
+      logger.warn('全景节点视角预览落盘失败，预览只在本次打开期间显示', {
         event: 'panorama.viewer_preview.persist.failed',
         nodeId: id,
         error: error instanceof Error ? error.message : String(error),
@@ -185,12 +181,6 @@ export const PanoramaViewerNode = memo(({
     updateNodeData(id, { cameraView: normalized });
   }, [data.cameraView, id, updateNodeData]);
 
-  const cancelPreviewCapture = useCallback((): void => {
-    if (previewCaptureTimerRef.current === null) return;
-    window.clearTimeout(previewCaptureTimerRef.current);
-    previewCaptureTimerRef.current = null;
-  }, []);
-
   /**
    * 截一帧当前视角作冻结预览：别的全景节点接走实时画面、节点缩小或重开画布时显示它。
    * 像素同步读出，编码与落盘都在后台，节点里只记文件地址。
@@ -198,20 +188,14 @@ export const PanoramaViewerNode = memo(({
   const capturePreview = useCallback((view?: PanoramaCameraView): void => {
     const capture = captureRef.current;
     if (!capture) return;
+    const revision = previewPersistRevisionRef.current + 1;
+    previewPersistRevisionRef.current = revision;
     void capture(undefined, view ?? currentViewRef.current ?? undefined).then((previewUrl) => {
-      if (!previewUrl) return;
+      if (!previewUrl || previewPersistRevisionRef.current !== revision) return;
       setFrozenPreviewUrl(previewUrl);
-      persistPanoramaPreview(previewUrl);
+      persistPanoramaPreview(previewUrl, revision);
     });
   }, [persistPanoramaPreview]);
-
-  const schedulePreviewCapture = useCallback((view: PanoramaCameraView): void => {
-    cancelPreviewCapture();
-    previewCaptureTimerRef.current = window.setTimeout(() => {
-      previewCaptureTimerRef.current = null;
-      capturePreview(view);
-    }, PREVIEW_CAPTURE_IDLE_MS);
-  }, [cancelPreviewCapture, capturePreview]);
 
   // 实时球面一旦建立就一直保留，直到别的全景节点接走、切到平面、节点缩到看不清或卸载：
   // 每次重建都要新开 WebGL 上下文并把整张全景图重新传给显卡，跟着鼠标进出反复重建会让整个画布一顿一顿
@@ -232,15 +216,20 @@ export const PanoramaViewerNode = memo(({
 
   useEffect(() => {
     if (lastSourceRef.current === source) return;
+    const isFirstSource = lastSourceRef.current === null;
     lastSourceRef.current = source;
+    // 换了图源：还在编码、落盘的旧视角预览一律作废；旧预览属于旧图，不再显示
+    previewPersistRevisionRef.current += 1;
     setHasWebglFailure(false);
-    setFrozenPreviewUrl(persistedPanoramaPreview);
+    setFrozenPreviewUrl(isFirstSource ? persistedPanoramaPreview : null);
   }, [persistedPanoramaPreview, source]);
 
   // 旧版本把预览以图片数据串存在节点里：打开时补落盘，换成文件地址
   useEffect(() => {
     if (!persistedPanoramaPreview?.startsWith('data:image/')) return;
-    persistPanoramaPreview(persistedPanoramaPreview);
+    const revision = previewPersistRevisionRef.current + 1;
+    previewPersistRevisionRef.current = revision;
+    persistPanoramaPreview(persistedPanoramaPreview, revision);
   }, [persistPanoramaPreview, persistedPanoramaPreview]);
 
   // 选中一个还没有冻结预览的节点时建立实时球面，首帧出来后截一帧作预览
@@ -267,27 +256,24 @@ export const PanoramaViewerNode = memo(({
   ]);
 
   useEffect(() => () => {
-    cancelPreviewCapture();
     previewPersistRevisionRef.current += 1;
     releaseInlineLease(id);
-  }, [cancelPreviewCapture, id, releaseInlineLease]);
+  }, [id, releaseInlineLease]);
 
   useNodeHandlesSync(id, `${resolvedHeight}:${resolvedWidth}`);
 
   const handleViewModeChange = useCallback((viewMode: PanoramaViewMode) => {
-    cancelPreviewCapture();
     if (viewMode === 'sphere') setHasWebglFailure(false);
     updateNodeData(id, { viewMode });
     if (viewMode === 'flat') releaseInlineLease(id);
     else if (!isContentLodLow) claimInlineLease(id);
-  }, [cancelPreviewCapture, claimInlineLease, id, isContentLodLow, releaseInlineLease, updateNodeData]);
+  }, [claimInlineLease, id, isContentLodLow, releaseInlineLease, updateNodeData]);
 
   const handleContextLost = useCallback(() => {
-    cancelPreviewCapture();
     setHasWebglFailure(true);
     setFrozenPreviewUrl(persistedPanoramaPreview);
     releaseInlineLease(id);
-  }, [cancelPreviewCapture, id, persistedPanoramaPreview, releaseInlineLease]);
+  }, [id, persistedPanoramaPreview, releaseInlineLease]);
 
   const handleViewportAspectRatioChange = useCallback((
     viewportAspectRatio: PanoramaViewportAspectRatio,
@@ -295,10 +281,22 @@ export const PanoramaViewerNode = memo(({
     updateNodeData(id, { viewportAspectRatio });
   }, [id, updateNodeData]);
 
+  // 改了视口比例：等画布按新尺寸画好（两帧）再重截冻结帧，否则被接走后显示的还是旧比例
+  useEffect(() => {
+    if (!hasInlineLease) return undefined;
+    let frame = window.requestAnimationFrame(() => {
+      frame = window.requestAnimationFrame(() => capturePreview());
+    });
+    return () => window.cancelAnimationFrame(frame);
+    // 只跟着比例变化重截；租约与截图函数变化不需要重截
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.viewportAspectRatio]);
+
   const handleCameraViewChangeEnd = useCallback((view: PanoramaCameraView) => {
     commitCameraView(view);
-    schedulePreviewCapture(view);
-  }, [commitCameraView, schedulePreviewCapture]);
+    // 拖完立即截：读像素很快、编码在后台；等停顿再截的话，紧接着被别的全景节点接走时预览会停在上一个视角
+    capturePreview(view);
+  }, [capturePreview, commitCameraView]);
 
   const handleSphereFramePresented = useCallback(() => {
     if (persistedPanoramaPreview) return;

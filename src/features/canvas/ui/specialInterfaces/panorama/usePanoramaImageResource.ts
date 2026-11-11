@@ -69,7 +69,7 @@ export function usePanoramaImageResource(
         const height = image.naturalHeight;
         const isEquirectangular = isEquirectangularPanoramaDimensions(width, height, projectionMode);
         if (textureMaxWidth && width > textureMaxWidth && typeof createImageBitmap === 'function') {
-          // 在解码线程里缩小；位图贴图不认 WebGL 的上下翻转开关，所以在这里先翻好
+          // 只在图片加载时缩一次，之后每次建立球面都直接用这张位图；位图贴图不认 WebGL 的上下翻转开关，所以在这里先翻好
           bitmap = await createImageBitmap(image, {
             resizeWidth: textureMaxWidth,
             resizeHeight: Math.round((height * textureMaxWidth) / width),

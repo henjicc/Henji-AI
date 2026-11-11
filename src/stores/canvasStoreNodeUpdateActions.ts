@@ -1,3 +1,4 @@
+import { fitCameraStageNodeToAspect } from '@/features/canvas/domain/cameraStageNodeLayout';
 import { collectInputMediaByKind } from '@/features/canvas/application/graphMediaResolver';
 import { createCanvasOutputPromptResourceId } from '@/features/canvas/application/generationPromptDocument';
 import { createLegacyPromptMediaLabels, createPromptMediaLabel } from '@/core/inputs/promptDocument';
@@ -66,7 +67,7 @@ export function createCanvasNodeUpdateActions(
         const resizedNode = maybeApplyMediaAutoResize(node, mergedData, data);
 
         changed = true;
-        return applyOutpaintSourceLayout(node, applyRelightModeLayout(node, resizedNode));
+        return fitCameraStageNodeToAspect(applyOutpaintSourceLayout(node, applyRelightModeLayout(node, resizedNode)));
       });
 
       if (!changed) {

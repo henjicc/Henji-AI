@@ -140,8 +140,13 @@ function PanoramaCameraControls({
       pitchRef.current = nextView.pitch;
       perspectiveCamera.fov = nextView.fov;
       applyView();
-      onViewChangeEnd?.(nextView);
-      onInteractionEnd?.();
+      // 按住方向键会连发：和滚轮一样停下来才算一次视角改变，不每按一下就截图落盘
+      if (wheelCommitTimerRef.current !== null) window.clearTimeout(wheelCommitTimerRef.current);
+      wheelCommitTimerRef.current = window.setTimeout(() => {
+        wheelCommitTimerRef.current = null;
+        onViewChangeEnd?.(readView());
+        onInteractionEnd?.();
+      }, 150);
     };
 
     element.style.cursor = 'grab';
@@ -301,10 +306,10 @@ function capturePanoramaView(
     outputPass.render(renderer, outputTarget, sceneTarget, 0, false);
     renderer.readRenderTargetPixels(outputTarget, 0, 0, options.width, options.height, pixels);
   });
-  // 像素缓冲按尺寸复用，下一次截取会覆盖它；编码异步进行，所以先拷一份
+  // 像素缓冲按尺寸复用；编码函数在第一次等待前就同步翻转出一份新数组，之后的截取覆盖缓冲也不影响这一张
   return preserveCameraProjection
-    ? webglRgbaToDataUrlAsync(pixels.slice(), options.width, options.height, 'image/webp', 0.9)
-    : webglRgbaToDataUrlAsync(pixels.slice(), options.width, options.height, 'image/png');
+    ? webglRgbaToDataUrlAsync(pixels, options.width, options.height, 'image/webp', 0.9)
+    : webglRgbaToDataUrlAsync(pixels, options.width, options.height, 'image/png');
 }
 
 function PanoramaCaptureBridge({
