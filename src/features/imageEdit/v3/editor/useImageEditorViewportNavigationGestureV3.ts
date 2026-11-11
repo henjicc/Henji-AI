@@ -3,15 +3,11 @@ import type { PointerEvent as ReactPointerEvent, RefObject } from 'react'
 
 import type { ImageEditorToolIdV3 } from '../application/imageEditorHostProfiles'
 import { useImageEditorInteractionStoreV3 } from '../store'
-import {
-  imageEditorViewportTransformV3,
-  zoomImageEditorViewportAroundPointV3,
-  type ImageEditorNavigationGestureV3,
-  type ImageEditorViewportPanV3,
-} from './viewportNavigationV3'
+import { viewportTransform, zoomViewportAroundPoint, type ViewportPan } from '@/core/viewport/zoomPan'
+import { type ImageEditorNavigationGestureV3 } from './viewportNavigationV3'
 import { useImageEditorViewportWheelV3 } from './useImageEditorViewportWheelV3'
 
-const ZERO_PAN: ImageEditorViewportPanV3 = { x: 0, y: 0 }
+const ZERO_PAN: ViewportPan = { x: 0, y: 0 }
 
 export function useImageEditorViewportNavigationGestureV3(
   sessionId: string,
@@ -19,10 +15,10 @@ export function useImageEditorViewportNavigationGestureV3(
   surfaceRef: RefObject<HTMLElement>,
   viewportContentRef: RefObject<HTMLDivElement>,
   zoom: number,
-  pan: ImageEditorViewportPanV3,
+  pan: ViewportPan,
   onViewportTransform?: (
     zoom: number,
-    pan: ImageEditorViewportPanV3,
+    pan: ViewportPan,
     interacting: boolean,
   ) => void,
 ) {
@@ -33,11 +29,11 @@ export function useImageEditorViewportNavigationGestureV3(
 
   const applyViewportTransform = useCallback((
     nextZoom: number,
-    nextPan: ImageEditorViewportPanV3,
+    nextPan: ViewportPan,
     interacting = false,
   ): void => {
     const content = viewportContentRef.current
-    if (content) content.style.transform = imageEditorViewportTransformV3(nextZoom, nextPan)
+    if (content) content.style.transform = viewportTransform(nextZoom, nextPan)
     onViewportTransform?.(nextZoom, nextPan, interacting)
   }, [onViewportTransform, viewportContentRef])
 
@@ -59,7 +55,7 @@ export function useImageEditorViewportNavigationGestureV3(
   ): void => {
     const rect = surfaceRef.current?.getBoundingClientRect()
     if (!rect || rect.width <= 0 || rect.height <= 0) return
-    const next = zoomImageEditorViewportAroundPointV3(zoom, pan, requestedZoom, {
+    const next = zoomViewportAroundPoint(zoom, pan, requestedZoom, {
       x: clientX - (rect.left + rect.width / 2),
       y: clientY - (rect.top + rect.height / 2),
     })
@@ -132,7 +128,7 @@ export function useImageEditorViewportNavigationGestureV3(
       applyViewportTransform(gesture.startZoom, gesture.pendingPan, true)
       return
     }
-    const next = zoomImageEditorViewportAroundPointV3(
+    const next = zoomViewportAroundPoint(
       gesture.startZoom,
       gesture.startPan,
       gesture.startZoom * (2 ** (deltaX / 180)),

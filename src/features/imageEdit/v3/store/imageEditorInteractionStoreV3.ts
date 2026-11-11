@@ -1,10 +1,6 @@
 import { create } from 'zustand'
 
-import {
-  clampImageEditorViewportZoomV3,
-  normalizeImageEditorViewportPanV3,
-  type ImageEditorViewportPanV3,
-} from '../editor/viewportNavigationV3'
+import { clampViewportZoom, normalizeViewportPan, type ViewportPan } from '@/core/viewport/zoomPan'
 
 interface ImageEditorLayerDragStateV3 {
   layerId: string
@@ -14,15 +10,15 @@ interface ImageEditorLayerDragStateV3 {
 interface ImageEditorInteractionStoreV3 {
   layerDragBySession: Record<string, ImageEditorLayerDragStateV3 | undefined>
   viewportZoomBySession: Record<string, number | undefined>
-  viewportPanBySession: Record<string, ImageEditorViewportPanV3 | undefined>
+  viewportPanBySession: Record<string, ViewportPan | undefined>
   beginLayerDrag: (sessionId: string, layerId: string) => void
   setLayerDragTarget: (sessionId: string, overLayerId: string | null) => void
   endLayerDrag: (sessionId: string) => void
   setViewportZoom: (sessionId: string, zoom: number) => void
-  setViewportPan: (sessionId: string, pan: ImageEditorViewportPanV3) => void
+  setViewportPan: (sessionId: string, pan: ViewportPan) => void
   setViewportTransform: (
     sessionId: string,
-    transform: { zoom: number; pan: ImageEditorViewportPanV3 },
+    transform: { zoom: number; pan: ViewportPan },
   ) => void
   clearViewport: (sessionId: string) => void
 }
@@ -58,7 +54,7 @@ export const useImageEditorInteractionStoreV3 = create<ImageEditorInteractionSto
   }),
 
   setViewportZoom: (sessionId, zoom) => set((state) => {
-    const normalized = clampImageEditorViewportZoomV3(zoom)
+    const normalized = clampViewportZoom(zoom)
     if (state.viewportZoomBySession[sessionId] === normalized) return state
     return {
       viewportZoomBySession: {
@@ -69,7 +65,7 @@ export const useImageEditorInteractionStoreV3 = create<ImageEditorInteractionSto
   }),
 
   setViewportPan: (sessionId, pan) => set((state) => {
-    const normalized = normalizeImageEditorViewportPanV3(pan)
+    const normalized = normalizeViewportPan(pan)
     const current = state.viewportPanBySession[sessionId]
     if (current?.x === normalized.x && current.y === normalized.y) return state
     return {
@@ -81,8 +77,8 @@ export const useImageEditorInteractionStoreV3 = create<ImageEditorInteractionSto
   }),
 
   setViewportTransform: (sessionId, transform) => set((state) => {
-    const zoom = clampImageEditorViewportZoomV3(transform.zoom)
-    const pan = normalizeImageEditorViewportPanV3(transform.pan)
+    const zoom = clampViewportZoom(transform.zoom)
+    const pan = normalizeViewportPan(transform.pan)
     const currentPan = state.viewportPanBySession[sessionId]
     if (
       state.viewportZoomBySession[sessionId] === zoom

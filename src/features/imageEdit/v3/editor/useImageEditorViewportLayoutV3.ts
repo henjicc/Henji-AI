@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type RefObject } from 'react'
 
 import type { ImageEditorViewportTransformV3 } from '../execution/viewportTilePlannerV3'
-import type { ImageEditorViewportPanV3 } from './viewportNavigationV3'
+import type { ViewportPan } from '@/core/viewport/zoomPan'
 
 const PREVIEW_PADDING_CSS_PIXELS = 48
 
@@ -64,7 +64,7 @@ export function calculateImageEditorViewportLayoutV3(
   surfaceSize: ImageEditorViewportSurfaceSizeV3,
   documentSize: { width: number; height: number },
   zoom: number,
-  pan: ImageEditorViewportPanV3,
+  pan: ViewportPan,
   options: { devicePixelRatio?: number; interacting?: boolean } = {},
 ): ImageEditorViewportLayoutV3 | null {
   if (
@@ -122,7 +122,7 @@ export function useImageEditorViewportLayoutV3(
   surfaceRef: RefObject<HTMLElement>,
   documentSize: { width: number; height: number },
   zoom: number,
-  pan: ImageEditorViewportPanV3,
+  pan: ViewportPan,
 ): ImageEditorViewportLayoutV3 | null {
   const [surfaceSize, setSurfaceSize] = useState<ImageEditorViewportSurfaceSizeV3 | null>(null)
 

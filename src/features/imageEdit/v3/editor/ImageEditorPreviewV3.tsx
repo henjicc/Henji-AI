@@ -36,7 +36,7 @@ import {
   useImageEditorViewportLayoutV3,
 } from './useImageEditorViewportLayoutV3'
 import { useImageEditorLayerMoveGestureV3 } from './useImageEditorLayerMoveGestureV3'
-import { imageEditorViewportTransformV3, type ImageEditorViewportPanV3 } from './viewportNavigationV3'
+import { viewportTransform, type ViewportPan } from '@/core/viewport/zoomPan'
 import { useImageEditorViewportNavigationGestureV3 } from './useImageEditorViewportNavigationGestureV3'
 import { useImageEditorRasterPasteboardPresentationV3 } from './useImageEditorRasterPasteboardPresentationV3'
 import {
@@ -58,7 +58,7 @@ interface ImageEditorPreviewV3Props extends Pick<
 }
 
 const logger = createLogger('imageEditor.preview')
-const ZERO_VIEWPORT_PAN_V3: ImageEditorViewportPanV3 = { x: 0, y: 0 }
+const ZERO_VIEWPORT_PAN_V3: ViewportPan = { x: 0, y: 0 }
 const EMPTY_PREVIEW_OVERRIDES_V3: ImageEditCommandBusSnapshotV3['previewOverrides'] = Object.freeze({})
 const EMPTY_SELECTED_LAYERS_V3: readonly string[] = []
 
@@ -313,7 +313,7 @@ export function ImageEditorPreviewV3({
 
   const updatePresentationViewport = useCallback((
     nextZoom: number,
-    nextPan: ImageEditorViewportPanV3,
+    nextPan: ViewportPan,
     interacting: boolean,
   ): void => {
     const rect = surfaceRef.current?.getBoundingClientRect()
@@ -473,7 +473,7 @@ export function ImageEditorPreviewV3({
           data-viewport-content
           className="relative flex max-h-full max-w-full items-center justify-center origin-center"
           style={{
-            transform: imageEditorViewportTransformV3(zoom, pan),
+            transform: viewportTransform(zoom, pan),
             ...(!previewRenderer && viewportLayout
               ? { width: viewportLayout.stageWidth, height: viewportLayout.stageHeight }
               : {}),

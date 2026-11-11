@@ -1,5 +1,7 @@
 import { useEffect, type RefObject } from 'react'
 
+import { wheelZoomFactor } from '@/core/viewport/zoomPan'
+
 import type { ImageEditorToolIdV3 } from '../application/imageEditorHostProfiles'
 
 export function useImageEditorViewportWheelV3(
@@ -15,8 +17,7 @@ export function useImageEditorViewportWheelV3(
       if (activeTool !== 'zoom' && !event.ctrlKey && !event.metaKey) return
       if (event.deltaY === 0) return
       event.preventDefault()
-      const factor = event.deltaY < 0 ? 1.15 : 1 / 1.15
-      zoomAroundClientPoint(event.clientX, event.clientY, zoom * factor)
+      zoomAroundClientPoint(event.clientX, event.clientY, zoom * wheelZoomFactor(event.deltaY))
     }
     surface.addEventListener('wheel', handleWheel, { passive: false })
     return () => surface.removeEventListener('wheel', handleWheel)
