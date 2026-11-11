@@ -38,6 +38,7 @@ export interface HenjiFsApi {
   readDir(path: string): Promise<HenjiFsDirEntry[]>
   readDirPage(path: string, options?: FsDirPageOptions): Promise<FsDirPage>
   copyFile(src: string, dest: string): Promise<void>
+  writeZip(target: string, entries: Array<{ source: string; name: string }>): Promise<void>
   remove(path: string, options?: { recursive?: boolean }): Promise<void>
 }
 
@@ -48,6 +49,7 @@ export interface HenjiDialogApi {
 
 export interface HenjiShellApi {
   openExternal(url: string): Promise<void>
+  showItemInFolder(path: string): Promise<void>
 }
 
 export type HenjiUserFolderKey = 'projects' | 'generated' | 'uploads' | 'exports' | 'skills'

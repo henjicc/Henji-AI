@@ -50,6 +50,7 @@ import {
   type UiButtonProps,
   type UiButtonFeedbackProps,
   type UiCheckboxProps,
+  type UiMediaCheckProps,
   type UiChipButtonProps,
   type UiControlSize,
   type UiFieldTriggerProps,
@@ -633,9 +634,9 @@ UiColorInput.displayName = 'UiColorInput';
 const UI_BOOLEAN_HIT_CLASS = `group/boolean inline-flex h-6 w-6 shrink-0 items-center justify-center border-0 bg-transparent ${UI_RADIUS_CLASS.control} ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-ring`;
 
 /** 复选框与开关共用的方框（重要记录 019）：中性描边，勾选只多一枚主要文字色的勾。 */
-function UiBooleanBox({ checked }: { checked: boolean | undefined }): JSX.Element {
+function UiBooleanBox({ checked }: { checked: boolean | 'mixed' | undefined }): JSX.Element {
   return <span aria-hidden="true" className={`${UI_BOOLEAN_BOX_CLASS} ${checked ? UI_BOOLEAN_BOX_STATE_CLASS.on : UI_BOOLEAN_BOX_STATE_CLASS.off}`}>
-    <Check className={UI_ICON_SIZE_CLASS.xs} />
+    {checked === 'mixed' ? <Minus className={UI_ICON_SIZE_CLASS.xs} /> : <Check className={UI_ICON_SIZE_CLASS.xs} />}
   </span>;
 }
 
@@ -653,7 +654,7 @@ export const UiCheckbox = forwardRef<HTMLButtonElement, UiCheckboxProps>(
       onClick={(event) => {
         onClick?.(event);
         if (!event.defaultPrevented) {
-          onCheckedChange?.(!checked);
+          onCheckedChange?.(checked !== true);
         }
       }}
       {...props}
@@ -666,6 +667,35 @@ export const UiCheckbox = forwardRef<HTMLButtonElement, UiCheckboxProps>(
 );
 
 UiCheckbox.displayName = 'UiCheckbox';
+
+/**
+ * 压在图片、视频上的选择圈：媒体叠层的白圈（不随主题），选中是强调色实心圈加白勾。
+ * 位置由调用方用 className 摆（通常是画面左上角）；可点范围比圈大一圈，方便点中。
+ */
+export const UiMediaCheck = forwardRef<HTMLButtonElement, UiMediaCheckProps>(
+  ({ className = '', checked, onCheckedChange, onClick, ...props }, ref) => (
+    <button
+      ref={ref}
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
+      className={`group/media-check flex h-7 w-7 items-center justify-center rounded-full focus-visible:outline-none ${className}`}
+      onClick={(event) => {
+        onClick?.(event);
+        if (!event.defaultPrevented) onCheckedChange?.(!checked);
+      }}
+      {...props}
+ >
+      <span aria-hidden="true" className={`flex h-5 w-5 items-center justify-center rounded-full border-2 transition-colors duration-120 group-focus-visible/media-check:ring-2 group-focus-visible/media-check:ring-accent-ring ${checked
+        ? 'border-accent bg-accent text-on-accent'
+        : 'border-on-media bg-media-scrim text-transparent group-hover/media-check:bg-media-control'}`}>
+        <Check className={UI_ICON_SIZE_CLASS.xs} />
+      </span>
+    </button>
+  )
+);
+
+UiMediaCheck.displayName = 'UiMediaCheck';
 
 /**
  * 开关（role=switch），两种外观随所在区域走（重要记录 022）：`pill` 滑块开关是默认；剪辑那类停靠面板里

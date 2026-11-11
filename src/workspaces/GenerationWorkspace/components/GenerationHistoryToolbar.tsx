@@ -4,7 +4,7 @@ import { MoreHorizontal, Search, Trash2 } from 'lucide-react'
 import { useI18n } from '@/hooks/useI18n'
 import PanelTrigger from '@/components/ui/PanelTrigger'
 import { UI_TEXT_META_CLASS, UiIconButton, UiOptionButton } from '@/components/ui'
-import { UI_ICON_SIZE } from '@/core/theme/icons'
+import { ICON_MULTI_SELECT, UI_ICON_SIZE } from '@/core/theme/icons'
 import type { GenerationHistoryMediaType } from '@/stores/generationHistoryFilterStore'
 
 export interface GenerationHistoryToolbarProps {
@@ -25,6 +25,10 @@ export interface GenerationHistoryToolbarProps {
   searchField?: ReactNode
   /** 从属带：只随当前筛选出现的参数（自定义时间的起止日期），紧贴命令带下方。 */
   subordinate?: ReactNode
+  /** 进入多选。 */
+  onEnterSelection?: () => void
+  /** 多选时整条命令带换成选择带（退出、计数、批量动作），不另起一行。 */
+  selectionBar?: ReactNode
 }
 
 /**
@@ -45,12 +49,15 @@ export function GenerationHistoryToolbar({
   trailingStatus,
   searchField,
   subordinate,
+  onEnterSelection,
+  selectionBar,
 }: GenerationHistoryToolbarProps): JSX.Element {
   const { t } = useI18n()
   const filtering = searchOpen || hasActiveFilters
 
   return (
     <div className="flex min-w-0 flex-col">
+    {selectionBar ? <div className="flex h-10 min-w-0 items-center">{selectionBar}</div> : (
     <div className="flex h-10 min-w-0 items-center gap-3">
       {mediaOptions.length > 1 && <div className="shrink-0"><UiSegmented ariaLabel={t('ui:workspaceFilters.typeTabs')} value={mediaType} onChange={onMediaTypeChange} options={mediaOptions} /></div>}
       <div className="flex min-w-0 items-center gap-1">
@@ -63,6 +70,11 @@ export function GenerationHistoryToolbar({
             tooltip={t('ui:workspaceFilters.searchHistory')}
           >
             <Search  />
+          </UiIconButton>
+        )}
+        {onEnterSelection && (
+          <UiIconButton type="button" onClick={onEnterSelection} tooltip={t('ui:generationSelection.enter')}>
+            <ICON_MULTI_SELECT />
           </UiIconButton>
         )}
         <PanelTrigger
@@ -98,6 +110,7 @@ export function GenerationHistoryToolbar({
         {trailingStatus ? <span className="flex items-center">{trailingStatus}</span> : null}
       </div>
     </div>
+    )}
     {subordinate ? <div className="flex h-10 min-w-0 items-center">{subordinate}</div> : null}
     </div>
   )

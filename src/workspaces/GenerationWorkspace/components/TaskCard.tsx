@@ -9,7 +9,9 @@ import { getProgressTransitionDurationMs } from "@/core/progress/progressTracker
 import { useGenerationTaskProgressStore } from "@/stores/generationTaskProgressStore"
 import {
   UiButton,
+  UiCheckbox,
   UiError,
+  UiMediaCheck,
   UiSkeleton,
   UI_TEXT_BODY_CLASS,
   UI_TEXT_META_CLASS,
@@ -33,6 +35,7 @@ import { videoEditSendMenuItems } from '@/features/videoEdit/panels/videoEditSen
 import { ICON_DOWNLOAD, ICON_WORKSPACE_VIDEO_EDIT } from '@/core/theme/icons'
 import { VideoEditSendDialog } from '@/features/videoEdit/panels/VideoEditSendMenu'
 import { listGenerationContinuations } from '@/core/services/generationContinuations'
+import { listSelectableResults, resultSelectionKey, useResultSelectionStore, useTaskSelectionSignature } from '../hooks/resultSelection'
 
 /** 结果与生成中占位共用的行高：宽度随画面比例，竖图不会撑成整屏大图。 */
 const RESULT_ROW_HEIGHT_CLASS = 'h-64'
@@ -111,6 +114,40 @@ const TaskCard = React.memo(function TaskCard({
   }
   // Only saved local outputs can enter an edit; each output keeps its own index.
   const [videoEditSend, setVideoEditSend] = React.useState<{ mediaKind: 'image' | 'video' | 'audio'; outputIndex: number } | null>(null)
+  // 多选：选中状态在工作区的选择 store 里；这张卡只订阅自己那几项，别的卡勾选时不重渲染
+  const selectionActive = useResultSelectionStore((state) => state.active)
+  const toggleSelection = useResultSelectionStore((state) => state.toggle)
+  const setManySelection = useResultSelectionStore((state) => state.setMany)
+  const selectionSignature = useTaskSelectionSignature(task.id)
+  const selectedIndices = React.useMemo(() => new Set(selectionSignature ? selectionSignature.split(',').map(Number) : []), [selectionSignature])
+  const selectableKeys = React.useMemo(() => listSelectableResults([task]).map(result => result.key), [task])
+  const isSelectable = (outputIndex: number): boolean => selectableKeys.includes(resultSelectionKey(task.id, outputIndex))
+  /** 多选中、或按住 Ctrl / Shift 点结果时切换选中；否则照常打开查看。 */
+  const handleResultClick = (event: React.MouseEvent, outputIndex: number, open: () => void): void => {
+    if (shouldIgnoreClick()) return
+    if (selectionActive || event.ctrlKey || event.metaKey || event.shiftKey) {
+      if (isSelectable(outputIndex)) toggleSelection(resultSelectionKey(task.id, outputIndex), event.shiftKey)
+      return
+    }
+    open()
+  }
+  const renderResultSelection = (outputIndex: number): React.ReactNode => {
+    if (!isSelectable(outputIndex)) return null
+    const selected = selectedIndices.has(outputIndex)
+    return (
+      <>
+        {selected && <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-lg ring-2 ring-inset ring-accent" />}
+        <UiMediaCheck
+          checked={selected}
+          aria-label={t('ui:generationSelection.selectResult')}
+          className={`absolute left-1 top-1 ${selectionActive || selected ? '' : 'opacity-0 focus-visible:opacity-100 group-hover/result:opacity-100'}`}
+          onMouseDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
+          onCheckedChange={() => toggleSelection(resultSelectionKey(task.id, outputIndex))}
+        />
+      </>
+    )
+  }
   const videoEditItems = (mediaKind: 'image' | 'video' | 'audio', outputIndex: number, filePath: string | undefined): MenuItem[] => filePath
     ? videoEditSendMenuItems(mediaKind, () => ({ type: 'generation', recordId: task.id, outputIndex }), notify, <ICON_WORKSPACE_VIDEO_EDIT className={`${UI_ICON_SIZE_CLASS.md}`} />, () => setVideoEditSend({ mediaKind, outputIndex }))
     : []
@@ -274,9 +311,9 @@ const TaskCard = React.memo(function TaskCard({
               <div
                 key={`${task.id}-img-${index}`}
                 data-generation-result={task.id}
-                className={`relative max-w-full shrink-0 overflow-hidden rounded-lg bg-media ${RESULT_ROW_HEIGHT_CLASS}`}
+                className={`group/result relative max-w-full shrink-0 overflow-hidden rounded-lg bg-media ${RESULT_ROW_HEIGHT_CLASS}`}
                 style={{ aspectRatio: resolveResultAspectRatio(task, index) }}
-                onClick={() => handleImageClick(url, urls, filePaths)}
+                onClick={(event) => handleResultClick(event, index, () => handleImageClick(url, urls, filePaths))}
                 onContextMenu={(e) =>
                   showMenu(e, [
                     {
@@ -304,12 +341,12 @@ const TaskCard = React.memo(function TaskCard({
                   ])
                 }
                 onMouseDown={(e) => {
-                  if (e.button !== 0) return
+                  if (e.button !== 0 || selectionActive) return
                   if (!filePath) return
                   e.stopPropagation()
                   startImageDrag(e, url, filePath)
                 }}
-                draggable={isNativeFileDragEnabled && Boolean(filePath)}
+                draggable={isNativeFileDragEnabled && Boolean(filePath) && !selectionActive}
                 onDragStart={(e) => startImageNativeDrag(e, url, filePath)}
                 onDragEnd={endNativeDrag}
                 onContextMenuCapture={() => markContextMenu()}
@@ -333,6 +370,7 @@ const TaskCard = React.memo(function TaskCard({
                     })
                   }}
                 />
+                {renderResultSelection(index)}
               </div>
             )
           })}
@@ -347,9 +385,9 @@ const TaskCard = React.memo(function TaskCard({
       const durationBadge = videoDurationSeconds !== null ? formatMediaDuration(videoDurationSeconds) : ''
       return (
         <div
-          className={`relative max-w-full shrink-0 cursor-pointer overflow-hidden rounded-lg bg-media ${RESULT_ROW_HEIGHT_CLASS}`}
+          className={`group/result relative max-w-full shrink-0 cursor-pointer overflow-hidden rounded-lg bg-media ${RESULT_ROW_HEIGHT_CLASS}`}
           style={{ aspectRatio: videoAspectRatio ?? resolveResultAspectRatio(task, 0) }}
-          onClick={() => handleVideoClick(videoUrl, filePath)}
+          onClick={(event) => handleResultClick(event, 0, () => handleVideoClick(videoUrl, filePath))}
           onContextMenu={(e) =>
             showMenu(e, [
               {
@@ -370,12 +408,12 @@ const TaskCard = React.memo(function TaskCard({
             ])
           }
           onMouseDown={(e) => {
-            if (e.button !== 0) return
+            if (e.button !== 0 || selectionActive) return
             if (!filePath) return
             e.stopPropagation()
             startVideoDrag(e, videoUrl, filePath)
           }}
-          draggable={isNativeFileDragEnabled && Boolean(filePath)}
+          draggable={isNativeFileDragEnabled && Boolean(filePath) && !selectionActive}
           onDragStart={(e) => startVideoNativeDrag(e, videoUrl, filePath)}
           onDragEnd={endNativeDrag}
           onContextMenuCapture={() => markContextMenu()}
@@ -403,6 +441,7 @@ const TaskCard = React.memo(function TaskCard({
               {durationBadge}
             </span>
           )}
+          {renderResultSelection(0)}
         </div>
       )
     }
@@ -410,7 +449,16 @@ const TaskCard = React.memo(function TaskCard({
     if (task.result.type === "audio") {
       const filePath = task.result.filePaths[0]
       const audioUrl = task.result.urls[0] ?? ''
+      const audioSelectable = selectionActive && isSelectable(0)
       return (
+        <div className="flex items-center gap-2">
+        {audioSelectable && (
+          <UiCheckbox
+            checked={selectedIndices.has(0)}
+            aria-label={t('ui:generationSelection.selectResult')}
+            onCheckedChange={() => toggleSelection(resultSelectionKey(task.id, 0))}
+          />
+        )}
         <AudioPlayer
           layout="inline"
           surface="plain"
@@ -438,6 +486,7 @@ const TaskCard = React.memo(function TaskCard({
             ])
           }
        />
+        </div>
       )
     }
 
@@ -463,6 +512,15 @@ const TaskCard = React.memo(function TaskCard({
     >
       {/* 左侧是参考素材堆，右侧是提示词与信息；素材点开后在本行铺开，盖住右侧 */}
       <div className="relative flex items-start gap-3">
+        {/* 放在列左侧的留白里：参考素材堆是绝对定位的，放进行内会被它盖住；进多选时这一行也不跳动 */}
+        {selectionActive && selectableKeys.length > 0 && (
+          <UiCheckbox
+            className="absolute -left-8 top-0.5"
+            checked={selectedIndices.size === 0 ? false : selectedIndices.size >= selectableKeys.length ? true : 'mixed'}
+            aria-label={t('ui:generationSelection.selectRecord')}
+            onCheckedChange={(checked) => setManySelection(selectableKeys, checked)}
+          />
+        )}
         <TaskInputPreview
           taskId={task.id}
           inputImages={inputImages}
@@ -486,8 +544,8 @@ const TaskCard = React.memo(function TaskCard({
           <TaskPrompt prompt={task.prompt} />
           <div className="truncate text-xs leading-tight text-text3" title={metaLine}>{metaLine}</div>
         </div>
-        {/* 按钮中线对齐提示词首行 */}
-        <div className="-mt-2">
+        {/* 按钮中线对齐提示词首行；多选时单条记录的工具让位给选择带上的批量动作 */}
+        <div className={`-mt-2 ${selectionActive ? 'hidden' : ''}`}>
           <TaskCardToolbar
             task={task}
             collecting={collecting}

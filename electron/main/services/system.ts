@@ -1,8 +1,11 @@
 import { app, shell } from 'electron'
+import { ZipArchive } from 'archiver'
+import { randomUUID } from 'node:crypto'
+import { createWriteStream } from 'node:fs'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { writeBufferAtomically } from './fs/atomic-file'
+import { replaceFileAtomically, writeBufferAtomically } from './fs/atomic-file'
 import { getAppBaseDir } from './appBasePaths'
 import { enqueueMediaCandidates, isManagedMediaPath, overlapsManagedMediaRoot, registerOwnedMedia } from './media-recycle/queue'
 import { removeUnmanagedCachePath } from './media-recycle/cache-deletion'
@@ -137,6 +140,58 @@ export async function readDirectory(targetPath: string): Promise<FsDirEntryDto[]
     name: entry.name,
     isDirectory: entry.isDirectory(),
   }))
+}
+
+export interface ZipEntryDto {
+  source: string
+  name: string
+}
+
+/**
+ * 把一组本机文件按给定条目名写成 ZIP：先写同目录的隐藏暂存文件，落盘后再原子替换，失败时目标不变。
+ * 媒体本身已压缩，按存储方式写入。任一条目读失败就中止整个包，等写入流关闭后再清理暂存文件。
+ */
+export async function writeZipArchive(target: string, entries: readonly ZipEntryDto[]): Promise<void> {
+  ensureValidPath(target)
+  if (!path.isAbsolute(target)) throw new Error('ZIP target must be an absolute path')
+  for (const entry of entries) ensureValidPath(entry.source)
+  await fs.mkdir(path.dirname(target), { recursive: true })
+  const staged = path.join(path.dirname(target), `.${path.basename(target)}.${randomUUID()}.tmp`)
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const output = createWriteStream(staged, { flags: 'wx' })
+      const archive = new ZipArchive({ zlib: { level: 0 } })
+      let failure: unknown
+      const fail = (error: unknown): void => {
+        failure ??= error
+        archive.abort()
+        output.destroy()
+      }
+      output.once('close', () => (failure ? reject(failure) : resolve()))
+      output.once('error', fail)
+      archive.on('error', fail)
+      archive.on('warning', fail)
+      archive.pipe(output)
+      // zip-stream 支持按条目 store（archiver 类型没写这个字段）
+      for (const entry of entries) archive.file(entry.source, { name: entry.name, store: true } as Parameters<ZipArchive['file']>[1])
+      archive.finalize().catch(fail)
+    })
+    const handle = await fs.open(staged, 'r+')
+    try {
+      await handle.sync()
+    } finally {
+      await handle.close()
+    }
+    await replaceFileAtomically(staged, target)
+  } catch (error) {
+    await fs.rm(staged, { force: true }).catch(() => undefined)
+    throw error
+  }
+}
+
+export function showItemInFolder(targetPath: string): void {
+  ensureValidPath(targetPath)
+  shell.showItemInFolder(path.resolve(targetPath))
 }
 
 export async function copyFilePath(src: string, dest: string): Promise<void> {

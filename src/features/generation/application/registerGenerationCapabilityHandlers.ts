@@ -5,6 +5,7 @@ import { registry } from '@/core/ModelRegistry'
 import { createMediaGeneratorPromptReferences } from '@/components/MediaGenerator/promptState'
 import { toLegacyPromptString } from '@/core/inputs/promptDocument/index'
 import { generationApplicationService } from '@/features/generation/application/generationApplicationService'
+import { exportGenerationResults, type GenerationExportDestination } from '@/features/generation/application/generationResultExport'
 import { assertGenerationMediaDimensions, estimateGenerationPrice } from '@/features/generation/application/generationPreparationService'
 import { generationService } from '@/core/services/GenerationService'
 import { transferGenerationPaidApproval } from '@/core/services/generationSubmissionConfirmation'
@@ -310,6 +311,20 @@ export function registerGenerationCapabilityHandlers(
     }
     return await generationApplicationService.submit(resolved, taskId)
     } catch (error) { releaseApproval(); throw error }
+  })
+
+  registrar.registerHandler('export_generation_results', async (input, context) => {
+    throwIfCapabilityAborted(context.signal)
+    const parsed = parseCapabilityInput<{
+      results: Array<{ resultRef: { kind: 'generation.result'; id: string }; outputIndex: number }>
+      destination: GenerationExportDestination
+    }>('export_generation_results', input)
+    const report = await exportGenerationResults(parsed.results.map(result => ({ recordId: result.resultRef.id, outputIndex: result.outputIndex })), parsed.destination)
+    return {
+      destination: report.destination,
+      savedFiles: report.savedFiles,
+      failed: report.failed.map(failure => ({ resultRef: { kind: 'generation.result' as const, id: failure.recordId }, outputIndex: failure.outputIndex, reason: failure.reason })),
+    }
   })
 
   registrar.registerHandler('get_generation_task', async (input) => {

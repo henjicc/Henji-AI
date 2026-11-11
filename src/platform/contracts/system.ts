@@ -17,6 +17,8 @@ export interface FsPlatform {
   readDir(path: string): Promise<FsDirEntry[]>
   readDirPage(path: string, options?: FsDirPageOptions): Promise<FsDirPage>
   copyFile(src: string, dest: string): Promise<void>
+  /** 把本机文件按条目名打成 ZIP（媒体按存储方式写入）；写完才替换目标，失败时目标不变。 */
+  writeZip(target: string, entries: Array<{ source: string; name: string }>): Promise<void>
   remove(path: string, options?: { recursive?: boolean }): Promise<void>
 }
 
@@ -39,6 +41,8 @@ export interface DialogPlatform {
 
 export interface ShellPlatform {
   openExternal(url: string): Promise<void>
+  /** 在系统文件管理器里打开所在文件夹并选中它。 */
+  showItemInFolder(path: string): Promise<void>
 }
 
 type UserFolderKey = 'projects' | 'generated' | 'uploads' | 'exports' | 'skills'

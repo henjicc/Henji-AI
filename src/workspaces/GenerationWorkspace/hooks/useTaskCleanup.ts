@@ -10,6 +10,7 @@ export interface UseTaskCleanupParams {
 
 export interface UseTaskCleanupReturn {
   deleteTask: (taskId: string) => Promise<void>
+  deleteTasks: (taskIds: readonly string[]) => Promise<void>
   clearFailedTasks: () => Promise<void>
   clearAllTasks: () => Promise<void>
 }
@@ -27,5 +28,5 @@ export function useTaskCleanup({ tasks, setTasks, clearTaskProgress }: UseTaskCl
   const clearAllTasks = useCallback((): Promise<void> =>
     removeRecords(tasks.map(task => task.id)), [removeRecords, tasks])
 
-  return { deleteTask, clearFailedTasks, clearAllTasks }
+  return { deleteTask, deleteTasks: removeRecords, clearFailedTasks, clearAllTasks }
 }

@@ -136,6 +136,7 @@ const successData: Record<string, Record<string, unknown>> = {
   add_asset_to_canvas: { documentId: 'canvas', assetId: 'asset', mediaType: 'image', nodeId: 'node', nodeType: 'image', nodeRef, undoRef: 'undo', verification: { verified: true, condition: message }, ...revisions },
   add_generation_result_to_canvas: { documentId: 'canvas', resultRef: ref('generation.result', 'task'), mediaType: 'image', nodeId: 'node', nodeType: 'image', nodeRef, undoRef: 'undo', verification: { verified: true, condition: message }, ...revisions },
   download_canvas_media: { documentId: 'canvas', savedNodeIds: ['node'], failedNodeIds: [], requestedCount: 1, destinationMode: 'quick', directory: 'E:/下载', ...revisions },
+  export_generation_results: { destination: { mode: 'zip', path: 'E:/下载/生成结果.zip' }, savedFiles: ['2026-11-11_GPT Image 2.6_宋代女子.png'], failed: [{ resultRef: ref('generation.result', 'task'), outputIndex: 1, reason: '结果文件已被移动或删除' }], ...revisions },
   submit_canvas_node_generation: { taskId: 'task', status: 'submitted', ...revisions },
   resume_canvas_generation_task: { taskId: 'task', status: 'success', task: { status: 'success' }, ...revisions },
   retry_layer_stack_result: { nodeRef: ref('canvas.node', 'canvas:layers'), status: 'retrieving', resultRefs: [nodeRef], ...revisions },

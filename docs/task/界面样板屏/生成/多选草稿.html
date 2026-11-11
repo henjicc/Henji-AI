@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>生成历史多选草稿</title>
+<style>
+@font-face { font-family: 'HarmonyOS Sans SC UI'; src: url('../../../../src/assets/fonts/HarmonyOS_Sans_SC.ttf') format('truetype'); font-weight: 100 900; font-display: block; }
+:root {
+  /* 数值取自 src/index.css 的石墨主题令牌 */
+  --gap:#181818; --window:#1B1B1B; --panel:#212121; --raised:#272727; --overlay:#292929;
+  --line-overlay:#393939; --control:#2B2B2B; --hover:#2A2A2A; --selected:#333333;
+  --line:#282828; --line-strong:#313131; --media:#191919;
+  --text1:#EEEEEE; --text2:#CACACA; --text3:#A5A5A5; --icon-rest:#737373;
+  --accent:#3A6FDF; --accent-text:#9CBEFF; --accent-ring:#6A9BFE; --on-accent:#FFFFFF;
+  --danger-text:#FB817A; --success-text:#6FCF97;
+}
+* { box-sizing: border-box; margin: 0; }
+body { background: var(--gap); color: var(--text1); font: 13px/1.4 'HarmonyOS Sans SC UI', sans-serif; padding: 24px; }
+.block { width: 900px; margin-bottom: 36px; }
+.label { color: var(--text1); font-size: 14px; font-weight: 580; margin: 0 0 4px; }
+.note { color: var(--text3); font-size: 12px; margin: 0 0 10px; line-height: 1.7; }
+.shot { background: var(--window); position: relative; overflow: hidden; }
+svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.band { height: 48px; display: flex; align-items: center; gap: 4px; padding: 0 16px; }
+.tab { height: 28px; padding: 0 10px; border-radius: 6px; display: inline-flex; align-items: center; color: var(--text2); }
+.tab.on { background: var(--selected); color: var(--text1); }
+.icon { width: 32px; height: 32px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; color: var(--icon-rest); position: relative; }
+.icon.hover { background: var(--hover); color: var(--text1); }
+.btn { height: 32px; padding: 0 10px; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px; color: var(--text2); white-space: nowrap; }
+.btn svg { color: var(--text2); }
+.btn.secondary { background: var(--control); color: var(--text1); }
+.btn.secondary svg { color: var(--text1); }
+.btn.danger { color: var(--text2); }
+.btn.open { background: var(--selected); color: var(--text1); }
+.count { color: var(--text1); font-weight: 460; margin: 0 8px 0 2px; white-space: nowrap; }
+.meta { color: var(--text3); font-size: 12px; white-space: nowrap; }
+.ml { margin-left: auto; }
+.vsep { width: 1px; height: 16px; background: var(--line-strong); margin: 0 6px; }
+.list { padding: 4px 16px 20px; display: flex; flex-direction: column; gap: 22px; }
+.rec { display: flex; flex-direction: column; gap: 10px; }
+.head { display: flex; gap: 10px; align-items: flex-start; }
+.ref { width: 34px; height: 34px; border-radius: 6px; background: linear-gradient(160deg,#6d4a52,#c9a39a); flex: none; }
+.ptxt { flex: 1; min-width: 0; }
+.ptxt .p { color: var(--text1); font-weight: 460; line-height: 1.45; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.ptxt .m { color: var(--text3); font-size: 12px; margin-top: 4px; }
+.tools { display: flex; gap: 2px; color: var(--icon-rest); }
+.tools .icon { width: 28px; height: 28px; }
+.results { display: flex; gap: 8px; }
+.res { position: relative; height: 150px; border-radius: 8px; background: var(--media); overflow: hidden; flex: none; }
+.res .img { position: absolute; inset: 0; }
+.res.sel { box-shadow: inset 0 0 0 2px var(--accent-ring); }
+.res.sel .img { inset: 5px; border-radius: 4px; }
+/* 结果左上角的勾选圈：压在画面上，用媒体叠层的白圈；选中是强调色实心圈 + 白勾 */
+.ck { position: absolute; left: 8px; top: 8px; width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,.85); background: rgba(0,0,0,.28); display: flex; align-items: center; justify-content: center; }
+.ck svg { width: 12px; height: 12px; stroke-width: 3; color: #fff; display: none; }
+.ck.on { background: var(--accent); border-color: var(--accent); }
+.ck.on svg { display: block; }
+.ck.ghost { opacity: .9; }
+/* 记录行的三态勾选框（中性框；全选 = 主要文字色勾，部分 = 横杠） */
+.cb { width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid var(--text3); flex: none; margin-top: 2px; display: flex; align-items: center; justify-content: center; }
+.cb svg { width: 12px; height: 12px; stroke-width: 3; color: var(--window); }
+.cb.on, .cb.part { background: var(--text1); border-color: var(--text1); }
+.dur { position: absolute; right: 6px; bottom: 6px; font-size: 11px; color: #fff; background: rgba(0,0,0,.55); border-radius: 4px; padding: 0 4px; }
+.menu { position: absolute; background: var(--overlay); border: 1px solid var(--line-overlay); border-radius: 12px; padding: 4px; min-width: 230px; z-index: 5; }
+.mi { height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-radius: 6px; color: var(--text1); white-space: nowrap; }
+.mi svg { color: var(--text2); }
+.mi.hover { background: var(--selected); }
+.mi .sub { margin-left: auto; color: var(--text3); font-size: 12px; padding-left: 16px; }
+.mh { color: var(--text3); font-size: 12px; padding: 6px 10px 2px; }
+.msep { height: 1px; background: var(--line-overlay); margin: 4px 6px; }
+.toast { position: absolute; right: 16px; bottom: 16px; width: 360px; background: var(--overlay); border: 1px solid var(--line-overlay); border-radius: 12px; padding: 12px 14px; display: flex; gap: 10px; align-items: flex-start; }
+.toast .t { color: var(--text1); font-weight: 460; }
+.toast .d { color: var(--text2); font-size: 12px; margin-top: 3px; word-break: break-all; }
+.toast .acts { display: flex; gap: 4px; margin-top: 8px; }
+.toast .acts .btn { height: 28px; font-size: 12px; }
+.bar { height: 4px; border-radius: 2px; background: var(--control); margin-top: 8px; overflow: hidden; }
+.bar i { display: block; height: 100%; width: 58%; background: var(--accent); }
+.tip { position: absolute; background: var(--overlay); border: 1px solid var(--line-overlay); border-radius: 8px; padding: 4px 8px; font-size: 12px; color: var(--text1); white-space: nowrap; }
+.dialog { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); width: 420px; background: var(--panel); border: 1px solid var(--line-overlay); border-radius: 12px; padding: 18px 20px 16px; z-index: 6; }
+.dim { position: absolute; inset: 0; background: rgba(0,0,0,.45); z-index: 5; }
+.dialog h3 { font-size: 15px; font-weight: 580; margin-bottom: 14px; }
+.row { display: flex; align-items: center; min-height: 36px; gap: 12px; }
+.row .k { width: 64px; color: var(--text2); flex: none; }
+.field { flex: 1; height: 32px; border-radius: 8px; background: var(--control); border: 1px solid var(--line-strong); display: flex; align-items: center; justify-content: space-between; padding: 0 10px; }
+.field svg { width: 14px; height: 14px; color: var(--text3); }
+.seg { display: flex; background: var(--gap); border-radius: 8px; padding: 2px; gap: 2px; flex: 1; }
+.seg span { flex: 1; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 6px; color: var(--text2); }
+.seg span.on { background: var(--selected); color: var(--text1); }
+.foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.btn.primary { background: var(--accent); color: var(--on-accent); }
+.hint { color: var(--text3); font-size: 12px; margin: 2px 0 0 76px; }
+</style>
+</head>
+<body>
+<script>
+const ICONS = /*ICONS_START*/{"check":"<path d=\"M20 6 9 17l-5-5\"/>","refresh-cw":"<path d=\"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8\"/><path d=\"M21 3v5h-5\"/><path d=\"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16\"/><path d=\"M8 16H3v5\"/>","square-pen":"<path d=\"M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7\"/><path d=\"M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z\"/>","download":"<path d=\"M12 15V3\"/><path d=\"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\"/><path d=\"m7 10 5 5 5-5\"/>","folder-plus":"<path d=\"M12 10v6\"/><path d=\"M9 13h6\"/><path d=\"M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z\"/>","text-cursor-input":"<path d=\"M12 20h-1a2 2 0 0 1-2-2 2 2 0 0 1-2 2H6\"/><path d=\"M13 8h7a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-7\"/><path d=\"M5 16H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h1\"/><path d=\"M6 4h1a2 2 0 0 1 2 2 2 2 0 0 1 2-2h1\"/><path d=\"M9 6v12\"/>","trash-2":"<path d=\"M10 11v6\"/><path d=\"M14 11v6\"/><path d=\"M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6\"/><path d=\"M3 6h18\"/><path d=\"M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2\"/>","minus":"<path d=\"M5 12h14\"/>","search":"<path d=\"m21 21-4.34-4.34\"/><circle cx=\"11\" cy=\"11\" r=\"8\"/>","list-checks":"<path d=\"M13 5h8\"/><path d=\"M13 12h8\"/><path d=\"M13 19h8\"/><path d=\"m3 17 2 2 4-4\"/><path d=\"m3 7 2 2 4-4\"/>","ellipsis":"<circle cx=\"12\" cy=\"12\" r=\"1\"/><circle cx=\"19\" cy=\"12\" r=\"1\"/><circle cx=\"5\" cy=\"12\" r=\"1\"/>","x":"<path d=\"M18 6 6 18\"/><path d=\"m6 6 12 12\"/>","chevron-down":"<path d=\"m6 9 6 6 6-6\"/>","workflow":"<rect width=\"8\" height=\"8\" x=\"3\" y=\"3\" rx=\"2\"/><path d=\"M7 11v4a2 2 0 0 0 2 2h4\"/><rect width=\"8\" height=\"8\" x=\"13\" y=\"13\" rx=\"2\"/>","clapperboard":"<path d=\"M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z\"/><path d=\"m6.2 5.3 3.1 3.9\"/><path d=\"m12.4 3.4 3.1 4\"/><path d=\"M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z\"/>","folder-open":"<path d=\"m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2\"/>","file-archive":"<path d=\"M13.659 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v11.5\"/><path d=\"M14 2v5a1 1 0 0 0 1 1h5\"/><path d=\"M8 12v-1\"/><path d=\"M8 18v-2\"/><path d=\"M8 7V6\"/><circle cx=\"8\" cy=\"20\" r=\"2\"/>","folder":"<path d=\"M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z\"/>","circle-check":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"m9 12 2 2 4-4\"/>"}/*ICONS_END*/;
+const i = (n) => `<svg viewBox="0 0 24 24">${ICONS[n] || ''}</svg>`;
+// 结果画面：用渐变色块代替真实图片
+const PALETTE = ['#9fb3a6,#e8e1d1', '#a8b8c4,#efe9dd', '#c5b7a0,#ebe2d0', '#8fa0a8,#d9d4c8', '#b49a8c,#e5d6c6', '#a7a39a,#e9e4da'];
+const res = (k, opts = {}) => {
+  const [a, b] = PALETTE[k % PALETTE.length].split(',');
+  const ck = opts.check === undefined ? '' : `<span class="ck ${opts.check ? 'on' : ''}">${i('check')}</span>`;
+  return `<div class="res ${opts.check ? 'sel' : ''}" style="width:${opts.w || 112}px"><div class="img" style="background:linear-gradient(170deg,${a},${b})"></div>${ck}${opts.dur ? `<span class="dur">${opts.dur}</span>` : ''}</div>`;
+};
+const PROMPTS = [
+  '以 图片1 为人物身份参考，只参考她的脸型、五官比例和面部特征，不沿用 图片1 中的黑长直齐刘海、细圆框眼镜、粉色贝雷帽、针织毛衣和纯白背景。画面是写实人像摄影：宋代女子梳宋制低盘发……',
+  '图片1 提供人物身份与面部特征：脸型、五官、黑长直发与齐刘海，保留她的细圆框眼镜；生成一张写实摄影：这位女子身穿宋制夏季汉服，坐在古代房间的矮桌旁吃饭……',
+  '镜头缓慢推近，女子抬头看向窗外，风吹动竹帘，暖色午后光线，电影感，24fps',
+];
+const META = ['图片 · KIE：GPT Image 2.6 · 今天 03:01', '图片 · KIE：GPT Image 2.6 · 今天 02:52', '视频 · 可灵 2.5 · 今天 01:30'];
+const toolsRow = `<div class="tools">${['refresh-cw', 'square-pen', 'download', 'folder-plus', 'text-cursor-input', 'trash-2'].map((n) => `<span class="icon">${i(n)}</span>`).join('')}</div>`;
+const record = (n, results, opts = {}) => `<div class="rec"><div class="head">${opts.cb !== undefined ? `<span class="cb ${opts.cb}">${opts.cb === 'on' ? i('check') : opts.cb === 'part' ? i('minus') : ''}</span>` : ''}<span class="ref"></span><div class="ptxt"><div class="p">${PROMPTS[n]}</div><div class="m">${META[n]}</div></div>${opts.tools ? toolsRow : ''}</div><div class="results" style="padding-left:${opts.cb !== undefined ? 26 : 0}px">${results}</div></div>`;
+const normalBand = (hoverSelect) => `<div class="band"><span class="tab on">全部</span><span class="tab">图片</span><span class="tab">视频</span><span class="vsep"></span><span class="icon">${i('search')}</span><span class="icon ${hoverSelect ? 'hover' : ''}">${i('list-checks')}</span><span class="icon">${i('ellipsis')}</span></div>`;
+const selBand = (count, opts = {}) => `<div class="band"><span class="icon hover" style="background:none">${i('x')}</span><span class="count">已选 ${count}</span><span class="btn">全选</span><span class="btn">${opts.none ? '' : '取消选择'}</span>
+  <span class="ml"></span>
+  <span class="btn secondary ${opts.dlOpen ? 'open' : ''}">${i('download')}下载${i('chevron-down')}</span>
+  <span class="btn">${i('folder-plus')}收进资产库</span>
+  <span class="btn">${i('workflow')}放到画布</span>
+  <span class="btn">${i('clapperboard')}发到剪辑</span>
+  <span class="icon">${i('trash-2')}</span></div>`;
+
+const blocks = [
+  { id: 1, label: '① 平时：命令带多一个“选择”，结果悬停时左上角浮出勾选圈',
+    note: '两个入口进多选：点命令带上的“选择”；或者直接点任意结果左上角的圈（悬停才出现），点了就进多选并选中它。按住 Ctrl / Shift 点结果也直接进多选。平时什么都不多，列表照旧安静。',
+    html: `${normalBand(true)}<div class="tip" style="left:142px;top:44px">选择多个结果 · Ctrl / Shift 点结果</div><div class="list" style="margin-top:12px">${record(0, res(0, { check: false }) + res(1) + res(2), { tools: true })}${record(1, res(3) + res(4))}</div>` },
+  { id: 2, label: '② 多选模式：命令带原地换成选择带，结果点一下就选中',
+    note: '还是一条带，不另起一行：左端“× 退出 · 已选 5 · 全选 / 取消选择”，右端是批量动作。单位是“一个结果”（一条记录里可能有 4 张），记录前面的勾选框一次选中这条记录的全部结果，选了一部分时显示横杠。多选时点结果只切换选中，不再打开大图；Shift 点选连续一段，Ctrl+A 全选当前筛选出的结果，Esc 退出。选中的结果描强调色边 + 实心勾，单条记录的悬停工具条在多选时隐藏。“全选”只选当前筛选和类型下能看到的结果，先筛选再全选就能一次挑出某天、某模型的全部图。',
+    html: `${selBand(5)}<div class="list">${record(0, res(0, { check: true }) + res(1, { check: true }) + res(2, { check: true }), { cb: 'on' })}${record(1, res(3, { check: true }) + res(4, { check: false }), { cb: 'part' })}${record(2, res(5, { check: true, w: 200, dur: '0:05' }), { cb: 'on' })}</div>` },
+  { id: 3, label: '③ 下载：一次选目录，全部放进去，或打包成一个 ZIP',
+    note: '“下载”是最常用的批量动作，所以用次级实底排在最前。菜单里只有两种做法：放进一个文件夹（选文件夹，或用设置里已有的快速下载目录、预设目录，和画布批量下载同一套），或打包成 ZIP（选保存位置）。文件名统一成“日期_模型_提示词前几个字_序号”，同名自动加序号，不弹逐个确认。',
+    html: `${selBand(5, { dlOpen: true })}<div class="menu" style="left:452px;top:44px"><div class="mi hover">${i('folder-open')}放进文件夹…</div><div class="mi">${i('file-archive')}打包成 ZIP…</div><div class="msep"></div><div class="mh">快速下载目录</div><div class="mi">${i('folder')}D:\\下载\\痕迹AI</div><div class="mh">预设目录</div><div class="mi">${i('folder')}E:\\素材\\宋制汉服</div><div class="mi">${i('folder')}E:\\项目\\元宝搜索\\生成</div></div><div class="list" style="opacity:.55">${record(0, res(0, { check: true }) + res(1, { check: true }) + res(2, { check: true }), { cb: 'on' })}${record(1, res(3, { check: true }) + res(4, { check: false }), { cb: 'part' })}</div>` },
+  { id: 4, label: '④ 进行中与完成：右下角一条通知，能打开文件夹，失败的能重试',
+    note: '导出在后台跑，期间可以继续生成、继续选。完成后通知里给“打开文件夹”；有失败（原文件被删、网络结果过期）时写清几个失败，“重试失败的”只重做那几个。退出多选不影响正在进行的导出。',
+    html: `${selBand(5)}<div class="list">${record(0, res(0, { check: true }) + res(1, { check: true }) + res(2, { check: true }), { cb: 'on' })}${record(1, res(3, { check: true }) + res(4, { check: false }), { cb: 'part' })}</div>
+      <div class="toast" style="bottom:118px"><span style="color:var(--text2)">${i('file-archive')}</span><div style="flex:1"><div class="t">正在打包 3 / 5</div><div class="d">宋制汉服_2026-11-11.zip</div><div class="bar"><i></i></div></div></div>
+      <div class="toast"><span style="color:var(--success-text)">${i('circle-check')}</span><div style="flex:1"><div class="t">已保存 4 个，1 个失败</div><div class="d">D:\\下载\\痕迹AI\\2026-11-11_GPT Image 2.6_宋代女子…</div><div class="acts"><span class="btn secondary">打开文件夹</span><span class="btn">重试失败的</span></div></div></div>` },
+  { id: 5, label: '⑤ 发到剪辑 / 放到画布：一个确认框选去哪、怎么放',
+    note: '发到剪辑：选剪辑项目，再选“只进素材箱”（默认，进“生成结果”箱）或“按顺序接到时间线末尾”。放到画布：选画布（默认当前打开的或最近一个，也能新建），按网格摆成一组节点并保留来源，能回到生成记录。收进资产库直接执行，已收过的跳过，不弹框。删除直接进回收区、通知里带“撤销”，不再二次确认。',
+    html: `${selBand(5)}<div class="list">${record(0, res(0, { check: true }) + res(1, { check: true }) + res(2, { check: true }), { cb: 'on' })}${record(1, res(3, { check: true }) + res(4, { check: false }), { cb: 'part' })}</div><div class="dim"></div>
+      <div class="dialog"><h3>发到剪辑 · 5 个结果</h3>
+        <div class="row"><span class="k">剪辑项目</span><span class="field"><span>元宝搜索实战</span>${i('chevron-down')}</span></div>
+        <div class="row"><span class="k">放到</span><div class="seg"><span class="on">只进素材箱</span><span>接到时间线末尾</span></div></div>
+        <div class="hint">按生成时间先后排列；图片每张 3 秒</div>
+        <div class="foot"><span class="btn secondary">取消</span><span class="btn primary">发送</span></div></div>` },
+];
+document.body.innerHTML = blocks.map((b) => `<div class="block" data-id="${b.id}"><p class="label">${b.label}</p><p class="note">${b.note}</p><div class="shot" style="height:${b.id === 1 ? 420 : 560}px">${b.html}</div></div>`).join('');
+</script>
+</body>
+</html>

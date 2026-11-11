@@ -726,6 +726,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 分段 / 网格 / 小样 / 色样选择 | `UiSegmented` / `UiOptionButton variant="grid"` / `tile` / `swatch`；网格格子要等大时用 `gridCell`（`ratio` 78×92、`tier` 78×42、`tier-detail` 78×52、`preset` 120×52） | 手写 `bg-veil-faint` 格子、强调色实底的分段；用内联 `style={{ height }}` 定格子高度 |
 | 工具栏只读数值 | `UiReadout size="sm" / "md" / "lg" tone="default" / "media"`；外框与同行控件等高，等宽数字 | 自写 h-7/h-8 读数仿控件 |
 | 开关、复选框、图标开关 | `UiSwitch`（外观随区域：`UiBooleanAppearanceContext`，`DockviewHost` 提供复选框外观、`UiModal` 重置回滑块）/ `UiCheckbox` / `UiIconButton on` | 用整行实底或强调色文字表达“已开启”；调用点按页面自己判断画滑块还是方框 |
+| 多选结果的勾选（图片、视频缩略图上） | `UiMediaCheck`（压在画面左上角的白圈，选中为强调色实心圈；平时悬停才出现，进多选后常显）；一组里部分选中用 `UiCheckbox checked="mixed"` | 在画面上手写圆圈、用 `UiCheckbox` 方框压在图片上 |
 | 带标签字段 | `UiFormRow inline` + `UiSwitch` / `UiInput`；多行表单不传 inline | 重新创建 Toggle / TextInput 平行包装 |
 | 标签栏、导航 | `UiNavButton`（侧栏）/ `UiChipButton selectionRole="navigation"`（`selectionAppearance` default / `subtle` 面板标签 / `workspace` 标题栏工作区，后者同栏浮层开关用 `on`） | 手写指示条、选中底 |
 | 无边框窗口的最小化/最大化/还原/关闭 | `UiWindowControl`（`action`、`platform` windows/mac；主窗口与日志窗口共用） | 用 `UiIconButton` 加覆盖拼交通灯或关闭红底 |

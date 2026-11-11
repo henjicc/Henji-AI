@@ -15,15 +15,18 @@ import {
   readFileBytes,
   readTextFile,
   removePath,
+  showItemInFolder,
   showOpenDialog,
   showSaveDialog,
   writeFileBytes,
+  writeZipArchive,
   writeTextFile,
   type DialogOpenOptionsDto,
   type DialogSaveOptionsDto,
   type FsDirEntryDto,
   type NativeFetchRequestDto,
   type NativeFetchResponseDto,
+  type ZipEntryDto,
 } from '../services/system'
 import { getAppDirectories, setUserFolderLanguageHint, type AppDirectoriesDto } from '../services/appPaths'
 import { parseOptionalStringField, parseRecord, parseStringField, parseVoid, registerIpcHandler } from './registry'
@@ -66,6 +69,19 @@ interface MkdirPayload extends PathPayload {
 interface CopyFilePayload {
   src: string
   dest: string
+}
+
+interface WriteZipPayload {
+  target: string
+  entries: ZipEntryDto[]
+}
+
+function parseWriteZipPayload(input: unknown): WriteZipPayload {
+  const record = parseRecord(input)
+  const target = parseStringField(input, 'target')
+  if (!Array.isArray(record.entries) || record.entries.length === 0) throw new Error('Expected non-empty array field "entries"')
+  const entries = record.entries.map((entry) => ({ source: parseStringField(entry, 'source'), name: parseStringField(entry, 'name') }))
+  return { target, entries }
 }
 
 interface RemovePayload extends PathPayload {
@@ -245,11 +261,13 @@ export function registerSystemIpc(): void {
     return readDirectoryPage(input.path, input, event.sender.id)
   })
   registerIpcHandler<CopyFilePayload, void>('fs:copyFile', parseCopyFilePayload, ({ src, dest }) => copyFilePath(src, dest))
+  registerIpcHandler<WriteZipPayload, void>('fs:writeZip', parseWriteZipPayload, ({ target, entries }) => writeZipArchive(target, entries))
   registerIpcHandler<RemovePayload, void>('fs:remove', parseRemovePayload, ({ path, recursive }) => removePath(path, recursive))
 
   registerIpcHandler<DialogSaveOptionsDto | undefined, string | null>('dialog:save', parseDialogSaveOptions, (options) => showSaveDialog(options))
   registerIpcHandler<DialogOpenOptionsDto | undefined, string | string[] | null>('dialog:open', parseDialogOpenOptions, (options) => showOpenDialog(options))
   registerIpcHandler<string, void>('shell:openExternal', (input) => parseStringField(input, 'url'), (url) => openExternalUrl(url))
+  registerIpcHandler<string, void>('shell:showItemInFolder', (input) => parseStringField(input, 'path'), (target) => showItemInFolder(target))
 
   registerIpcHandler('paths:appLocalDataDir', parseVoid, () => getAppLocalDataDir())
   registerIpcHandler<string | undefined, AppDirectoriesDto>(

@@ -276,6 +276,7 @@ const fsApi: HenjiFsApi = {
   readDir: (path) => nativeInvoke('fs:readDir', { path }),
   readDirPage: (path, options) => nativeInvoke('fs:readDir', { path, ...options, paged: true }),
   copyFile: (src, dest) => nativeInvoke('fs:copyFile', { src, dest }),
+  writeZip: (target, entries) => nativeInvoke('fs:writeZip', { target, entries }),
   remove: (path, options) => nativeInvoke('fs:remove', { path, recursive: options?.recursive }),
 }
 
@@ -286,6 +287,7 @@ const dialogApi: HenjiDialogApi = {
 
 const shellApi: HenjiShellApi = {
   openExternal: (url) => nativeInvoke('shell:openExternal', { url }),
+  showItemInFolder: (path) => nativeInvoke('shell:showItemInFolder', { path }),
 }
 
 const pathsApi: HenjiPathsApi = {

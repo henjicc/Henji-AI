@@ -157,6 +157,12 @@ export interface UiFieldTriggerProps extends UiButtonFeedbackProps {
 }
 
 export interface UiCheckboxProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onChange'> {
+  /** `mixed`：一组里只勾了一部分（显示横杠），点一下变成全勾。 */
+  checked: boolean | 'mixed'
+  onCheckedChange?: (checked: boolean) => void
+}
+
+export interface UiMediaCheckProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onChange'> {
   checked: boolean
   onCheckedChange?: (checked: boolean) => void
 }

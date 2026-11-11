@@ -81,6 +81,10 @@ export async function copyFile(src: string, dest: string): Promise<void> {
   await getPlatform().system.fs.copyFile(src, dest)
 }
 
+export async function writeZip(target: string, entries: Array<{ source: string; name: string }>): Promise<void> {
+  await getPlatform().system.fs.writeZip(target, entries)
+}
+
 export async function remove(path: string, options?: { recursive?: boolean }): Promise<void> {
   await getPlatform().system.fs.remove(path, options)
 }
@@ -123,6 +127,10 @@ export function extname(path: string): string {
 
 export async function openExternal(url: string): Promise<void> {
   await getPlatform().system.shell.openExternal(url)
+}
+
+export async function showItemInFolder(path: string): Promise<void> {
+  await getPlatform().system.shell.showItemInFolder(path)
 }
 
 export async function openDialog(options?: DialogOpenOptions): Promise<string | string[] | null> {

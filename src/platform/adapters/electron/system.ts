@@ -44,6 +44,9 @@ function createFs(): FsPlatform {
     copyFile: async (src, dest) => {
       await getNative().fs.copyFile(src, dest)
     },
+    writeZip: async (target, entries) => {
+      await getNative().fs.writeZip(target, entries)
+    },
     remove: async (path, options) => {
       await getNative().fs.remove(path, options)
     },
@@ -65,6 +68,9 @@ function createShell(): ShellPlatform {
   return {
     openExternal: async (url) => {
       await getNative().shell.openExternal(url)
+    },
+    showItemInFolder: async (path) => {
+      await getNative().shell.showItemInFolder(path)
     },
   }
 }

@@ -15,6 +15,10 @@ import { useOnboardingState } from '@/features/onboarding/application/useOnboard
 import { getModelDisplayName } from '@/utils/modelHelpers'
 import { FloatingInputPanel } from './GenerationWorkspace/components/FloatingInputPanel'
 import { GenerationHistoryToolbar } from './GenerationWorkspace/components/GenerationHistoryToolbar'
+import { GenerationSelectionBar } from './GenerationWorkspace/components/GenerationSelectionBar'
+import { useAppMenuVisibility } from '@/components/appMenu/appMenuVisibility'
+import { listSelectableResults, useResultSelectionStore } from './GenerationWorkspace/hooks/resultSelection'
+import { useResultBatchActions } from './GenerationWorkspace/hooks/useResultBatchActions'
 import { UiToast } from '@/components/ui/UiToast'
 import { ClearHistoryDialog } from './GenerationWorkspace/components/ClearHistoryDialog'
 import { ImageViewerModal } from '@/components/mediaViewer/ImageViewerModal'
@@ -117,7 +121,7 @@ const GenerationWorkspace: React.FC = () => {
   })
 
   // 清除只作用于列表里看得到的记录，不悄悄删掉被隐藏的画布生成记录
-  const { deleteTask, clearFailedTasks, clearAllTasks } = useTaskCleanup({
+  const { deleteTask, deleteTasks, clearFailedTasks, clearAllTasks } = useTaskCleanup({
     tasks: listedTasks,
     setTasks,
     clearTaskProgress: clearGenerationTaskProgress,
@@ -149,6 +153,33 @@ const GenerationWorkspace: React.FC = () => {
   const newestFirst = resolveNewestFirst(historyOrder, sideDocked)
   const { listContainerRef, contentRef, isAtNewestEdge } = useGenerationAutoScroll(isTasksLoaded, filteredTasks.length, filteredTasks.at(-1)?.id, newestFirst)
   const displayedTasks = useMemo(() => newestFirst ? [...filteredTasks].reverse() : filteredTasks, [filteredTasks, newestFirst])
+
+  // 多选：只对列表里看得到的结果操作；筛选或删除后列表变了，选择跟着收窄
+  const selectableResults = useMemo(() => listSelectableResults(displayedTasks), [displayedTasks])
+  const selectionActive = useResultSelectionStore((state) => state.active)
+  const selectedCount = useResultSelectionStore((state) => state.selected.size)
+  const enterSelection = useResultSelectionStore((state) => state.enter)
+  const exitSelection = useResultSelectionStore((state) => state.exit)
+  const setManySelection = useResultSelectionStore((state) => state.setMany)
+  const syncSelectionOrder = useResultSelectionStore((state) => state.syncOrder)
+  useEffect(() => { syncSelectionOrder(selectableResults.map(result => result.key)) }, [selectableResults, syncSelectionOrder])
+  // 切到别的工作区时生成页只是隐藏不卸载：退出多选，Esc 与 Ctrl+A 也不再被这里接走
+  const workspaceVisible = useAppMenuVisibility()
+  useEffect(() => { if (!workspaceVisible) exitSelection() }, [exitSelection, workspaceVisible])
+  useEffect(() => () => exitSelection(), [exitSelection])
+  const selectAllResults = useCallback(() => setManySelection(selectableResults.map(result => result.key), true), [selectableResults, setManySelection])
+  useEffect(() => {
+    if (!selectionActive) return
+    const onKeyDown = (event: KeyboardEvent): void => {
+      const target = event.target as HTMLElement | null
+      if (target?.closest('input, textarea, [contenteditable="true"], [role="dialog"]')) return
+      if (event.key === 'Escape') { event.preventDefault(); exitSelection() }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') { event.preventDefault(); selectAllResults() }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [exitSelection, selectAllResults, selectionActive])
+  const batchActions = useResultBatchActions({ selectable: selectableResults, deleteRecords: deleteTasks })
   const [storedSideWidth, setStoredSideWidth] = useState(readGenerationSidePanelWidth)
   const sideMaxWidth = resolveGenerationSidePanelMaxWidth(mainWidth, SIDE_PANEL_GUTTER_PX, GENERATION_COLUMN_MAX_WIDTH_PX)
   // 窗口变窄时只按当前上限显示，记住的宽度不改，变宽后回到原宽度
@@ -341,6 +372,17 @@ const GenerationWorkspace: React.FC = () => {
             matchedCount={matchedCount}
             totalCount={listedTasks.length}
             onOpenClearHistory={() => setIsClearDialogOpen(true)}
+            onEnterSelection={selectableResults.length > 0 ? enterSelection : undefined}
+            selectionBar={selectionActive ? (
+              <GenerationSelectionBar
+                count={selectedCount}
+                allSelected={selectableResults.length > 0 && selectedCount >= selectableResults.length}
+                onExit={exitSelection}
+                onSelectAll={selectAllResults}
+                onClear={() => setManySelection(selectableResults.map(result => result.key), false)}
+                actions={batchActions}
+              />
+            ) : undefined}
             trailingStatus={<TestModeIndicator onOpenPanel={() => setIsTestPanelOpen(true)} />}
             subordinate={customDateBand ? (
               <UiTaskHistoryDateRange startDate={filterStartDate} endDate={filterEndDate} onStartDateChange={setFilterStartDate} onEndDateChange={setFilterEndDate} />

@@ -474,7 +474,64 @@ const submitCanvasNodeGeneration = defineApplicationCapability({
   summarize: output => `原节点任务 ${output.taskId} 已提交，完成情况请查询任务。`,
 })
 
+const generationResultSelectionSchema = z.object({
+  resultRef: z.object({ kind: z.literal('generation.result'), id: z.string().min(1) }).strict(),
+  outputIndex: z.number().int().nonnegative(),
+}).strict()
+
+export const generationExportDestinationSchema = z.discriminatedUnion('mode', [
+  z.object({ mode: z.literal('folder'), directory: z.string().min(1) }).strict(),
+  z.object({ mode: z.literal('zip'), path: z.string().min(1).regex(/\.zip$/i, 'ZIP 路径要以 .zip 结尾') }).strict(),
+])
+
+const exportGenerationResults = defineApplicationCapability({
+  id: 'export_generation_results',
+  resolveOperationTargets: (input) => input.results.map(result => result.resultRef),
+  resolveOperationWriteTargets: (input) => [{ kind: 'generation.export', id: input.destination.mode === 'folder' ? input.destination.directory : input.destination.path }],
+  version: 1,
+  title: '导出生成结果',
+  description: '把多个生成结果复制进一个本机文件夹，或打包成一个 ZIP（路径都要写完整的本机路径）。文件按“日期_模型_提示词开头_序号”命名，与已有文件或同名 ZIP 重名时顺延编号，从不覆盖；输出的 destination 是实际写出的位置。只导出已保存在本机的结果，找不到的逐个列进 failed、其余照常导出。outputIndex 是这条记录的第几个结果（从 0 起）。',
+  domain: 'generation',
+  aliases: ['批量下载生成结果', '打包下载', '导出到文件夹', 'export generation results', 'download as zip'],
+  readOnly: false,
+  control: capabilityControl('execute', ['generation.result'], { verificationRequired: false }),
+  dataClasses: ['C1'],
+  idempotent: false,
+  destructive: false,
+  timeoutMs: 600_000,
+  supportsPreview: true,
+  supportsUndo: false,
+  requiredScopes: ['generation'],
+  acceptsRefs: ['generation.result'],
+  producesRefs: [],
+  inputSchema: z.object({
+    results: z.array(generationResultSelectionSchema).min(1),
+    destination: generationExportDestinationSchema,
+  }).strict(),
+  outputSchema: capabilityOutputSchema({
+    destination: generationExportDestinationSchema,
+    savedFiles: z.array(z.string()),
+    failed: z.array(z.object({ resultRef: generationResultSelectionSchema.shape.resultRef, outputIndex: z.number().int().nonnegative(), reason: z.string() }).strict()),
+  }),
+  concurrencyKey: 'generation_export',
+  resolveConcurrencyKey: (input) => `generation_export:${input.destination.mode === 'folder' ? input.destination.directory : input.destination.path}`,
+  resolveTargetIds: (input) => ({ mode: input.destination.mode, count: String(input.results.length) }),
+  preview: (input) => ({
+    title: '导出生成结果',
+    summary: input.destination.mode === 'folder'
+      ? `把 ${input.results.length} 个结果复制到 ${input.destination.directory}。`
+      : `把 ${input.results.length} 个结果打包成 ${input.destination.path}。`,
+    targetIds: { mode: input.destination.mode, count: String(input.results.length) },
+    reversible: false,
+    dataClasses: ['C1'],
+  }),
+  successEvidence: ['返回实际写出的文件路径（文件夹）或包内条目名（ZIP），以及逐个失败原因。'],
+  failureRecovery: ['只把 failed 里的结果再导出一次；结果没有保存在本机时先等原任务保存完成。'],
+  summarize: (output) => `已导出 ${output.savedFiles.length} 个生成结果，${output.failed.length} 个失败。`,
+})
+
 export const GENERATION_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
+  exportGenerationResults,
   switchWorkspace,
   searchModels,
   getModelSchema,

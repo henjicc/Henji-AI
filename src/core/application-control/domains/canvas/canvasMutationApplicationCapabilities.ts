@@ -222,7 +222,7 @@ const addGenerationResultToCanvas = defineApplicationCapability({
   resolveOperationAppendTargets: (input) => [{ kind: 'canvas.document', id: input.documentId }],
   version: 1,
   title: '把生成或编辑结果放入画布',
-  description: '按 generation.result 或 image_edit.preview 引用把生成媒体或实际合成后的编辑图片放入原画布，不要求先导入素材库。优先使用用户发起任务时的画布和选中节点；有原选中节点时传 right_of_node，明确指定的位置优先。省略 placement 时，在目标为当前画布的情况下默认放到当前选中节点右侧，否则放到视口中心。',
+  description: '按 generation.result 或 image_edit.preview 引用把生成媒体或实际合成后的编辑图片放入原画布，不要求先导入素材库。一条生成记录有多个结果时用 outputIndex（从 0 起）指定第几个，省略时取最后一个。优先使用用户发起任务时的画布和选中节点；有原选中节点时传 right_of_node，明确指定的位置优先。省略 placement 时，在目标为当前画布的情况下默认放到当前选中节点右侧，否则放到视口中心。',
   domain: 'canvas',
   aliases: ['把生成或编辑结果放入画布', '生成图片加入画布', 'add generation result to canvas'],
   readOnly: false,
@@ -243,6 +243,7 @@ const addGenerationResultToCanvas = defineApplicationCapability({
       kind: z.enum(['generation.result', 'image_edit.preview']),
       id: z.string().min(1),
     }).strict(),
+    outputIndex: z.number().int().nonnegative().optional(),
     placement: canvasNodePlacementSchema.optional(),
   }).strict(),
   outputSchema: capabilityOutputSchema({
