@@ -1,8 +1,8 @@
 import { Camera } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, type MouseEvent, type PointerEvent, type WheelEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { Dropdown, UiButton, UiSegmented } from '@/components/ui';
+import { Dropdown, UiIconButton, UiSegmented } from '@/components/ui';
 import {
   PANORAMA_VIEWPORT_ASPECT_RATIOS,
   type PanoramaViewMode,
@@ -14,15 +14,20 @@ interface PanoramaViewerControlsProps {
   viewportAspectRatio: PanoramaViewportAspectRatio;
   canCapture: boolean;
   isCapturing: boolean;
+  /** 选中节点时常显；否则只在悬停或键盘聚焦时出现，平时画面上什么都不压。 */
+  pinned: boolean;
   onViewModeChange: (mode: PanoramaViewMode) => void;
   onViewportAspectRatioChange: (ratio: PanoramaViewportAspectRatio) => void;
   onCapture: () => void;
 }
+
+/** 叠在画面底边的两组控件：左下显示方式与视口比例，右下截取视角。 */
 export function PanoramaViewerControls({
   viewMode,
   viewportAspectRatio,
   canCapture,
   isCapturing,
+  pinned,
   onViewModeChange,
   onViewportAspectRatioChange,
   onCapture,
@@ -33,50 +38,55 @@ export function PanoramaViewerControls({
     [],
   );
   const captureTitle = canCapture
-    ? t('viewer.panorama.captureView')
+    ? t(isCapturing ? 'viewer.panorama.capturing' : 'viewer.panorama.captureView')
     : t('viewer.panorama.captureUnavailableFlat');
+  const reveal = `transition-opacity duration-120 ${pinned ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100'}`;
+  const stopCanvasGesture = {
+    onPointerDown: (event: PointerEvent) => event.stopPropagation(),
+    onDoubleClick: (event: MouseEvent) => event.stopPropagation(),
+    onWheel: (event: WheelEvent) => event.stopPropagation(),
+  };
 
   return (
-    <div
-      className="nodrag nopan nowheel relative z-raised flex min-h-12 items-center gap-2 border-t border-line px-2 py-1.5"
-      onPointerDown={(event) => event.stopPropagation()}
-      onWheel={(event) => event.stopPropagation()}
-    >
-      {/* 球面 / 平面是模式切换，和全景弹窗、打光手动 / 智能同一种分段控件 */}
-      <UiSegmented<PanoramaViewMode>
-        ariaLabel={t('viewer.panorama.displayMode')}
-        value={viewMode}
-        onChange={onViewModeChange}
-        options={[
-          { value: 'sphere', label: t('viewer.panorama.spherical') },
-          { value: 'flat', label: t('viewer.panorama.flat') },
-        ]}
-      />
-
-      <Dropdown<PanoramaViewportAspectRatio>
-        surface="glass"
-        value={viewportAspectRatio}
-        options={ratioOptions}
-        onSelect={onViewportAspectRatioChange}
-        ariaLabel={t('viewer.panorama.viewportRatio')}
-        appearance="text"
-        minWidthStrategy="display"
-        className="nodrag nopan nowheel"
-        size="md"
-      />
-
-      <UiButton
-        type="button"
-        variant="secondary"
-        className="ml-auto"
-        disabled={!canCapture || isCapturing}
-        tooltip={captureTitle}
-        aria-label={captureTitle}
-        onClick={onCapture}
+    <>
+      <div
+        className={`ui-glass nodrag nopan nowheel absolute bottom-2 left-2 z-raised flex items-center gap-0.5 rounded-lg p-0.5 ${reveal}`}
+        {...stopCanvasGesture}
       >
-        <Camera  />
-        {t(isCapturing ? 'viewer.panorama.capturing' : 'viewer.panorama.captureView')}
-      </UiButton>
-    </div>
+        <UiSegmented<PanoramaViewMode>
+          ariaLabel={t('viewer.panorama.displayMode')}
+          value={viewMode}
+          onChange={onViewModeChange}
+          size="sm"
+          options={[
+            { value: 'sphere', label: t('viewer.panorama.spherical') },
+            { value: 'flat', label: t('viewer.panorama.flat') },
+          ]}
+        />
+        <Dropdown<PanoramaViewportAspectRatio>
+          surface="glass"
+          value={viewportAspectRatio}
+          options={ratioOptions}
+          onSelect={onViewportAspectRatioChange}
+          ariaLabel={t('viewer.panorama.viewportRatio')}
+          appearance="text"
+          minWidthStrategy="display"
+          className="nodrag nopan nowheel"
+          size="sm"
+        />
+      </div>
+      <div className={`nodrag nopan nowheel absolute bottom-2 right-2 z-raised ${reveal}`} {...stopCanvasGesture}>
+        <UiIconButton
+          tone="media"
+          size="sm"
+          disabled={!canCapture || isCapturing}
+          tooltip={captureTitle}
+          aria-label={captureTitle}
+          onClick={onCapture}
+        >
+          <Camera />
+        </UiIconButton>
+      </div>
+    </>
   );
 }

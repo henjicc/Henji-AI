@@ -48,14 +48,13 @@ describe('PanoramaViewerPanel', () => {
         onRetry={vi.fn()}
         onRequestSphere={onRequestSphere}
         onInteractionStart={vi.fn()}
-        onInteractionEnd={vi.fn()}
+        controlsPinned={false}
         onOpenImmersiveViewer={vi.fn()}
         onViewModeChange={vi.fn()}
         onViewportAspectRatioChange={vi.fn()}
         onCameraViewChangeEnd={vi.fn()}
         onSphereFramePresented={vi.fn()}
         onCapture={vi.fn()}
-        onFrozenPreviewReady={vi.fn()}
         onContextLost={vi.fn()}
       />,
     );
@@ -82,14 +81,13 @@ describe('PanoramaViewerPanel', () => {
         onRetry={vi.fn()}
         onRequestSphere={vi.fn()}
         onInteractionStart={vi.fn()}
-        onInteractionEnd={vi.fn()}
+        controlsPinned={false}
         onOpenImmersiveViewer={vi.fn()}
         onViewModeChange={vi.fn()}
         onViewportAspectRatioChange={vi.fn()}
         onCameraViewChangeEnd={vi.fn()}
         onSphereFramePresented={vi.fn()}
         onCapture={vi.fn()}
-        onFrozenPreviewReady={vi.fn()}
         onContextLost={vi.fn()}
       />,
     );
@@ -124,14 +122,13 @@ describe('PanoramaViewerPanel', () => {
         onRetry={vi.fn()}
         onRequestSphere={vi.fn()}
         onInteractionStart={vi.fn()}
-        onInteractionEnd={vi.fn()}
+        controlsPinned={false}
         onOpenImmersiveViewer={vi.fn()}
         onViewModeChange={vi.fn()}
         onViewportAspectRatioChange={vi.fn()}
         onCameraViewChangeEnd={vi.fn()}
         onSphereFramePresented={vi.fn()}
         onCapture={vi.fn()}
-        onFrozenPreviewReady={vi.fn()}
         onContextLost={vi.fn()}
       />,
     );
@@ -167,14 +164,13 @@ describe('PanoramaViewerPanel', () => {
       onRetry: vi.fn(),
       onRequestSphere: vi.fn(),
       onInteractionStart: vi.fn(),
-      onInteractionEnd: vi.fn(),
+      controlsPinned: false,
       onOpenImmersiveViewer: vi.fn(),
       onViewModeChange: vi.fn(),
       onViewportAspectRatioChange: vi.fn(),
       onCameraViewChangeEnd: vi.fn(),
       onSphereFramePresented: vi.fn(),
       onCapture: vi.fn(),
-      onFrozenPreviewReady: vi.fn(),
       onContextLost: vi.fn(),
     };
     const { rerender } = render(

@@ -14,7 +14,8 @@ export type PanoramaImageResource =
   | {
       status: 'ready';
       displayUrl: string;
-      image: HTMLImageElement;
+      /** 传给球面的贴图源：超过 textureMaxWidth 时是在后台缩小、已上下翻转的位图。 */
+      image: HTMLImageElement | ImageBitmap;
       width: number;
       height: number;
       isEquirectangular: boolean;
@@ -31,6 +32,11 @@ export function usePanoramaImageResource(
   retryRevision: number,
   sourceNodeId?: string | null,
   projectionMode: PanoramaProjectionMode = 'strict-2:1',
+  /**
+   * 球面贴图的最大宽度。画布节点里的小视口用不到 8K 原图的细节，整张传给显卡却要卡一下；
+   * 全屏查看器不传，保留原图清晰度。
+   */
+  textureMaxWidth?: number,
 ): PanoramaImageResource {
   const displayUrl = useMemo(() => resolveImageDisplayUrl(imageUrl), [imageUrl]);
   const [resource, setResource] = useState<PanoramaImageResource>({
@@ -45,6 +51,7 @@ export function usePanoramaImageResource(
     }
 
     let cancelled = false;
+    let bitmap: ImageBitmap | null = null;
     const image = new Image();
     image.decoding = 'async';
     if (shouldUseAnonymousCors(displayUrl)) image.crossOrigin = 'anonymous';
@@ -61,7 +68,20 @@ export function usePanoramaImageResource(
         const width = image.naturalWidth;
         const height = image.naturalHeight;
         const isEquirectangular = isEquirectangularPanoramaDimensions(width, height, projectionMode);
-        setResource({ status: 'ready', displayUrl, image, width, height, isEquirectangular });
+        if (textureMaxWidth && width > textureMaxWidth && typeof createImageBitmap === 'function') {
+          // 在解码线程里缩小；位图贴图不认 WebGL 的上下翻转开关，所以在这里先翻好
+          bitmap = await createImageBitmap(image, {
+            resizeWidth: textureMaxWidth,
+            resizeHeight: Math.round((height * textureMaxWidth) / width),
+            resizeQuality: 'high',
+            imageOrientation: 'flipY',
+          });
+          if (cancelled) {
+            bitmap.close();
+            return;
+          }
+        }
+        setResource({ status: 'ready', displayUrl, image: bitmap ?? image, width, height, isEquirectangular });
         logger.info('全景图片加载完成', {
           event: 'panorama.viewer.load.completed',
           sourceNodeId: sourceNodeId ?? null,
@@ -96,11 +116,12 @@ export function usePanoramaImageResource(
 
     return () => {
       cancelled = true;
+      bitmap?.close();
       image.removeEventListener('load', handleLoad);
       image.removeEventListener('error', handleError);
       image.src = '';
     };
-  }, [active, displayUrl, projectionMode, retryRevision, sourceNodeId]);
+  }, [active, displayUrl, projectionMode, retryRevision, sourceNodeId, textureMaxWidth]);
 
   return resource;
 }

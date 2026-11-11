@@ -5,7 +5,6 @@ import { useNodeHandlesSync } from '../hooks/useNodeHandlesSync';
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { ICON_TOOL_CAMERA_STAGE } from '@/core/theme/icons';
-import { useTranslation } from 'react-i18next';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
 
 import {
@@ -23,17 +22,17 @@ import {
   resolveMinEdgeFittedSize,
   resolveResizeMinConstraintsByAspect,
 } from '@/features/canvas/application/imageNodeSizing';
-import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
+import { parseAspectRatio, resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
 import { resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
 import { NODE_IDLE_BORDER_CLASS, NODE_PORT_NODE_CLASS, NODE_PORT_VISIBLE_CLASS, NODE_SELECTED_BORDER_CLASS, NODE_SURFACE_CLASS } from '@/features/canvas/ui/nodeControlStyles';
-import { getSocketColor } from '@/features/canvas/domain/socketTypes';
+import { getSocketColor, mediaPortId } from '@/features/canvas/domain/socketTypes';
 import { canvasViewStore, useCanvasStore } from '@/stores/canvasStore';
 import { createLogger } from '@/core/logging';
-import { MediaInputRow } from '@/features/canvas/params/MediaInputRow';
 import { applyProjectEnvironmentImage } from '@/features/cameraStage/projects/cameraStageProjectService';
 import { CameraStagePreviewPanel } from './cameraStage/CameraStagePreviewPanel';
+import { CameraStageEnvironmentChip } from './cameraStage/CameraStageEnvironmentChip';
 
 type CameraStageNodeProps = NodeProps & {
   id: string;
@@ -49,8 +48,7 @@ function resolveNodeDimension(value: number | undefined, fallback: number): numb
     : fallback;
 }
 
-export const CameraStageNode = memo(({ id, data, selected, width, height }: CameraStageNodeProps) => {
-  const { t } = useTranslation();
+export const CameraStageNode = memo(({ id, data, selected, width }: CameraStageNodeProps) => {
   const canvasProjectId = useProjectStore((state) => state.currentProjectId);
   const renderProgress = useCameraStageNodeRenderProgress(canvasProjectId, id);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
@@ -65,6 +63,11 @@ export const CameraStageNode = memo(({ id, data, selected, width, height }: Came
     () => new Set(edges.filter((edge) => edge.source === id).map((edge) => edge.sourceHandle ?? 'source')),
     [edges, id],
   );
+  const environmentPortId = mediaPortId('image');
+  const environmentLinked = useMemo(
+    () => edges.some((edge) => edge.target === id && edge.targetHandle === environmentPortId),
+    [edges, environmentPortId, id],
+  );
   const resolvedAspectRatio = data.aspectRatio || '16:9';
   const compactSize = resolveMinEdgeFittedSize(resolvedAspectRatio, {
     minWidth: EXPORT_RESULT_NODE_MIN_WIDTH,
@@ -75,7 +78,8 @@ export const CameraStageNode = memo(({ id, data, selected, width, height }: Came
     minHeight: EXPORT_RESULT_NODE_MIN_HEIGHT,
   });
   const resolvedWidth = resolveNodeDimension(width, compactSize.width);
-  const resolvedHeight = resolveNodeDimension(height, compactSize.height);
+  // 节点就是画面：高按宽和画面比例算，不用存下的高（旧版节点的高里还算着底下一行，会留黑边）
+  const resolvedHeight = Math.round(resolvedWidth / Math.max(0.1, parseAspectRatio(resolvedAspectRatio)));
   const imageSource = data.previewImageUrl || data.imageUrl;
   const inlineImages = data.mediaInputs?.image ?? [];
   const environmentImageUrl = upstreamImages[0]?.url ?? inlineImages[0] ?? null;
@@ -100,10 +104,10 @@ export const CameraStageNode = memo(({ id, data, selected, width, height }: Came
     });
   }, [data.projectId, environmentImageUrl, id]);
 
-  const handleInlineImagesChange = useCallback((images: string[]): void => {
+  const handleEnvironmentChange = useCallback((imageUrl: string | null): void => {
     updateNodeData(id, {
-      mediaInputs: { ...data.mediaInputs, image: images },
-      environmentImageUrl: images[0] ?? null,
+      mediaInputs: { ...data.mediaInputs, image: imageUrl ? [imageUrl] : [] },
+      environmentImageUrl: imageUrl,
     });
   }, [data.mediaInputs, id, updateNodeData]);
 
@@ -140,28 +144,32 @@ export const CameraStageNode = memo(({ id, data, selected, width, height }: Came
         onTitleChange={(displayName) => updateNodeData(id, { displayName })}
       />
 
-      <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[inherit]">
-        <div className="min-h-0 flex-1">
-          <CameraStagePreviewPanel
-            imageSource={imageSource ? resolveImageDisplayUrl(imageSource) : null}
-            imageViewerSource={data.imageUrl ? resolveImageDisplayUrl(data.imageUrl) : null}
-            rendering={renderProgress !== null}
-            renderProgress={renderProgress?.progress ?? null}
-            renderPhase={renderProgress?.phase ?? null}
-            renderError={data.imageRenderError ?? data.videoRenderError ?? null}
-          />
-        </div>
-        <div className="shrink-0 px-2 py-1">
-          <MediaInputRow
-            nodeId={id}
-            mediaKind="image"
-            label={t('node.mediaRow.reference')}
-            maxCount={1}
-            inlineValue={inlineImages}
-            onInlineChange={handleInlineImagesChange}
-          />
-        </div>
+      {/* 节点就是画面：大小按画面比例算，环境图与“打开”叠在画面上 */}
+      <div className="relative h-full overflow-hidden rounded-[inherit]">
+        <CameraStagePreviewPanel
+          imageSource={imageSource ? resolveImageDisplayUrl(imageSource) : null}
+          imageViewerSource={data.imageUrl ? resolveImageDisplayUrl(data.imageUrl) : null}
+          rendering={renderProgress !== null}
+          renderProgress={renderProgress?.progress ?? null}
+          renderPhase={renderProgress?.phase ?? null}
+          renderError={data.imageRenderError ?? data.videoRenderError ?? null}
+          onOpen={openEditor}
+        />
+        <CameraStageEnvironmentChip
+          imageUrl={environmentImageUrl}
+          linked={environmentLinked || upstreamImages.length > 0}
+          pinned={Boolean(selected)}
+          onChange={handleEnvironmentChange}
+        />
       </div>
+
+      <Handle
+        type="target"
+        id={environmentPortId}
+        position={Position.Left}
+        className={`${NODE_PORT_NODE_CLASS} ${environmentLinked ? NODE_PORT_VISIBLE_CLASS : ''}`}
+        style={{ background: getSocketColor('IMAGE'), left: 0, top: '50%', transform: 'translate(-50%, -50%)' }}
+      />
 
       <Handle
         type="source"
@@ -176,6 +184,7 @@ export const CameraStageNode = memo(({ id, data, selected, width, height }: Came
         minHeight={resizeConstraints.minHeight}
         maxWidth={1600}
         maxHeight={1600}
+        keepAspectRatio
       />
     </div>
   );

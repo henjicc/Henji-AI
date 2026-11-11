@@ -11,7 +11,7 @@ import {
 } from 'three';
 import type { PerspectiveCamera, Scene, WebGLRenderer } from 'three';
 
-import { webglRgbaToPngDataUrl } from '@/core/media/webglCaptureImage';
+import { webglRgbaToDataUrlAsync } from '@/core/media/webglCaptureImage';
 import {
   normalizePanoramaCameraView,
   type PanoramaCameraView,
@@ -202,11 +202,14 @@ interface PanoramaCaptureOptions {
   height: number;
 }
 
-/** 不传尺寸时严格沿用当前 WebGL 视口与相机投影，用于所见即所得的节点冻结帧。 */
+/**
+ * 不传尺寸时严格沿用当前 WebGL 视口与相机投影，用于所见即所得的节点冻结帧（WebP，体积小）；
+ * 传尺寸是导出截图（PNG）。像素在调用时同步读出（之后画面怎么变都不影响），编码在后台异步完成。
+ */
 export type PanoramaCaptureCurrentView = (
   options?: PanoramaCaptureOptions,
   view?: PanoramaCameraView,
-) => string | null;
+) => Promise<string | null>;
 
 interface PanoramaCaptureResources {
   sceneTarget: WebGLRenderTarget;
@@ -271,7 +274,7 @@ function capturePanoramaView(
   options: PanoramaCaptureOptions,
   preserveCameraProjection: boolean,
   view?: PanoramaCameraView,
-): string {
+): Promise<string> {
   const captureCamera = camera.clone();
   if (view) {
     const normalizedView = normalizePanoramaCameraView(view);
@@ -291,14 +294,17 @@ function capturePanoramaView(
   // （4.1：冻结预览比实时球面偏下约 1px）。指定尺寸导出时仍铺满目标。
   if (preserveCameraProjection) renderer.getCurrentViewport(sceneTarget.viewport);
   else sceneTarget.viewport.set(0, 0, options.width, options.height);
-  return withPanoramaRendererState(renderer, () => {
+  withPanoramaRendererState(renderer, () => {
     renderer.setRenderTarget(sceneTarget);
     renderer.clear();
     renderer.render(scene, captureCamera);
     outputPass.render(renderer, outputTarget, sceneTarget, 0, false);
     renderer.readRenderTargetPixels(outputTarget, 0, 0, options.width, options.height, pixels);
-    return webglRgbaToPngDataUrl(pixels, options.width, options.height);
   });
+  // 像素缓冲按尺寸复用，下一次截取会覆盖它；编码异步进行，所以先拷一份
+  return preserveCameraProjection
+    ? webglRgbaToDataUrlAsync(pixels.slice(), options.width, options.height, 'image/webp', 0.9)
+    : webglRgbaToDataUrlAsync(pixels.slice(), options.width, options.height, 'image/png');
 }
 
 function PanoramaCaptureBridge({
@@ -311,7 +317,7 @@ function PanoramaCaptureBridge({
   useEffect(() => {
     if (!captureRef) return;
     let resources: PanoramaCaptureResources | null = null;
-    const capture: PanoramaCaptureCurrentView = (options, view) => {
+    const capture: PanoramaCaptureCurrentView = async (options, view) => {
       try {
         const viewportSize = options ?? (() => {
           const size = gl.getDrawingBufferSize(new Vector2());
@@ -321,7 +327,7 @@ function PanoramaCaptureBridge({
           };
         })();
         resources = getPanoramaCaptureResources(resources, viewportSize);
-        return capturePanoramaView(
+        return await capturePanoramaView(
           resources,
           gl,
           scene,
@@ -345,7 +351,7 @@ function PanoramaCaptureBridge({
   return null;
 }
 
-function PanoramaSphere({ image }: { image: HTMLImageElement }): JSX.Element {
+function PanoramaSphere({ image }: { image: HTMLImageElement | ImageBitmap }): JSX.Element {
   const resources = useMemo(() => createPanoramaRenderResources(image), [image]);
 
   useEffect(() => () => disposePanoramaRenderResources(resources), [resources]);
@@ -402,7 +408,7 @@ function PanoramaFramePresentedBridge({
 }
 
 interface PanoramaSphereCanvasProps {
-  image: HTMLImageElement;
+  image: HTMLImageElement | ImageBitmap;
   resetRevision: number;
   interactionLabel: string;
   initialView?: PanoramaCameraView;

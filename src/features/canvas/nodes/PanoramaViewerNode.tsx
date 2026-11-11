@@ -5,7 +5,6 @@ import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useTranslation } from 'react-i18next';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
 
-import { UI_DURATION } from '@/components/ui/motion';
 import { createLogger } from '@/core/logging';
 import { ICON_PANORAMA } from '@/core/theme/icons';
 import { commitPanoramaViewSnapshot } from '@/features/canvas/application/panoramaSnapshotApplicationService';
@@ -50,7 +49,10 @@ import { usePanoramaInlineViewerStore } from '@/stores/panoramaInlineViewerStore
 const logger = createLogger('features.canvas.panoramaViewerNode');
 const DEFAULT_NODE_WIDTH = 448;
 const MIN_NODE_WIDTH = 320;
-const CONTROL_AREA_HEIGHT = 48;
+/** 拖完视角停顿这么久才截冻结帧：连续拖动时不重复截。 */
+const PREVIEW_CAPTURE_IDLE_MS = 300;
+/** 默认宽 448 的节点在两倍像素比、75° 视野下用到的贴图约 4300 宽，4K 看不出差别；要看细节进全屏查看器，那里用原图。 */
+const INLINE_TEXTURE_MAX_WIDTH = 4096;
 
 function resolvePersistedPanoramaPreview(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value : null;
@@ -84,14 +86,9 @@ export const PanoramaViewerNode = memo(({
   const releaseInlineLease = usePanoramaInlineViewerStore((state) => state.release);
   const captureRef = useRef<PanoramaCaptureCurrentView | null>(null);
   const currentViewRef = useRef<PanoramaCameraView | null>(null);
-  const autoPreviewCaptureRef = useRef(false);
-  const freezeDelayTimerRef = useRef<number | null>(null);
-  const interactionActiveRef = useRef(false);
   const lastSourceRef = useRef<string | null>(null);
-  const pointerInsideNodeRef = useRef(false);
-  const previewCaptureFrameRef = useRef<number | null>(null);
+  const previewCaptureTimerRef = useRef<number | null>(null);
   const previewPersistRevisionRef = useRef(0);
-  const pendingFreezeReleaseRef = useRef(false);
   const [retryRevision, setRetryRevision] = useState(0);
   const [isCapturing, setIsCapturing] = useState(false);
   const [hasWebglFailure, setHasWebglFailure] = useState(false);
@@ -115,11 +112,12 @@ export const PanoramaViewerNode = memo(({
     retryRevision,
     id,
     data.panoramaProjectionMode,
+    INLINE_TEXTURE_MAX_WIDTH,
   );
   const resolvedWidth = Math.max(MIN_NODE_WIDTH, typeof width === 'number' ? width : DEFAULT_NODE_WIDTH);
   const viewportRatio = parsePanoramaViewportAspectRatio(data.viewportAspectRatio);
   const viewportHeight = Math.round(resolvedWidth / viewportRatio);
-  const resolvedHeight = viewportHeight + CONTROL_AREA_HEIGHT;
+  const resolvedHeight = viewportHeight;
   const generationError = typeof data.generationError === 'string' ? data.generationError : null;
   const title = useMemo(
     () => resolveNodeDisplayName(CANVAS_NODE_TYPES.panoramaViewer, data),
@@ -147,6 +145,7 @@ export const PanoramaViewerNode = memo(({
     }
   }, [data.imageUrl, id, updateNodeData, upstreamImages, upstreamSource]);
 
+  // 节点数据里只存落盘后的文件地址：整段图片数据串进节点会让每次更新、保存和撤销快照都拖着几百 KB
   const persistPanoramaPreview = useCallback((previewDataUrl: string): void => {
     const revision = previewPersistRevisionRef.current + 1;
     previewPersistRevisionRef.current = revision;
@@ -158,11 +157,7 @@ export const PanoramaViewerNode = memo(({
       if (previewPersistRevisionRef.current !== revision) return;
       const canvas = useCanvasStore.getState();
       const currentNode = canvas.nodes.find((node) => node.id === id);
-      if (
-        !currentNode
-        || currentNode.type !== CANVAS_NODE_TYPES.panoramaViewer
-        || currentNode.data.panoramaPreviewImageUrl !== previewDataUrl
-      ) return;
+      if (!currentNode || currentNode.type !== CANVAS_NODE_TYPES.panoramaViewer) return;
       canvas.updateNodeData(id, { panoramaPreviewImageUrl: persistedUrl }, { skipHistory: true });
       logger.debug('全景节点视角预览已落盘', {
         event: 'panorama.viewer_preview.persist.completed',
@@ -178,13 +173,6 @@ export const PanoramaViewerNode = memo(({
     });
   }, [id]);
 
-  const storePanoramaPreview = useCallback((previewDataUrl: string): void => {
-    updateNodeData(
-      id,
-      { panoramaPreviewImageUrl: previewDataUrl },
-      { skipHistory: true },
-    );
-  }, [id, updateNodeData]);
 
   const commitCameraView = useCallback((view: PanoramaCameraView): void => {
     const normalized = normalizePanoramaCameraView(view);
@@ -197,21 +185,41 @@ export const PanoramaViewerNode = memo(({
     updateNodeData(id, { cameraView: normalized });
   }, [data.cameraView, id, updateNodeData]);
 
-  const cancelScheduledFreeze = useCallback((): void => {
-    if (freezeDelayTimerRef.current === null) return;
-    window.clearTimeout(freezeDelayTimerRef.current);
-    freezeDelayTimerRef.current = null;
+  const cancelPreviewCapture = useCallback((): void => {
+    if (previewCaptureTimerRef.current === null) return;
+    window.clearTimeout(previewCaptureTimerRef.current);
+    previewCaptureTimerRef.current = null;
   }, []);
 
+  /**
+   * 截一帧当前视角作冻结预览：别的全景节点接走实时画面、节点缩小或重开画布时显示它。
+   * 像素同步读出，编码与落盘都在后台，节点里只记文件地址。
+   */
+  const capturePreview = useCallback((view?: PanoramaCameraView): void => {
+    const capture = captureRef.current;
+    if (!capture) return;
+    void capture(undefined, view ?? currentViewRef.current ?? undefined).then((previewUrl) => {
+      if (!previewUrl) return;
+      setFrozenPreviewUrl(previewUrl);
+      persistPanoramaPreview(previewUrl);
+    });
+  }, [persistPanoramaPreview]);
+
+  const schedulePreviewCapture = useCallback((view: PanoramaCameraView): void => {
+    cancelPreviewCapture();
+    previewCaptureTimerRef.current = window.setTimeout(() => {
+      previewCaptureTimerRef.current = null;
+      capturePreview(view);
+    }, PREVIEW_CAPTURE_IDLE_MS);
+  }, [cancelPreviewCapture, capturePreview]);
+
+  // 实时球面一旦建立就一直保留，直到别的全景节点接走、切到平面、节点缩到看不清或卸载：
+  // 每次重建都要新开 WebGL 上下文并把整张全景图重新传给显卡，跟着鼠标进出反复重建会让整个画布一顿一顿
   const requestSphere = useCallback(() => {
-    cancelScheduledFreeze();
-    autoPreviewCaptureRef.current = false;
-    pendingFreezeReleaseRef.current = false;
     if (!hasWebglFailure && !isContentLodLow && data.viewMode === 'sphere') claimInlineLease(id);
-  }, [cancelScheduledFreeze, claimInlineLease, data.viewMode, hasWebglFailure, id, isContentLodLow]);
+  }, [claimInlineLease, data.viewMode, hasWebglFailure, id, isContentLodLow]);
 
   const activateSphere = useCallback(() => {
-    interactionActiveRef.current = true;
     setSelectedNode(id);
     requestSphere();
   }, [id, requestSphere, setSelectedNode]);
@@ -219,24 +227,23 @@ export const PanoramaViewerNode = memo(({
   useEffect(() => {
     const sphereUnavailable = hasWebglFailure || isContentLodLow || data.viewMode !== 'sphere';
     if (!sphereUnavailable) return;
-    cancelScheduledFreeze();
     releaseInlineLease(id);
-  }, [cancelScheduledFreeze, data.viewMode, hasWebglFailure, id, isContentLodLow, releaseInlineLease]);
+  }, [data.viewMode, hasWebglFailure, id, isContentLodLow, releaseInlineLease]);
 
   useEffect(() => {
     if (lastSourceRef.current === source) return;
     lastSourceRef.current = source;
-    autoPreviewCaptureRef.current = false;
-    pendingFreezeReleaseRef.current = false;
     setHasWebglFailure(false);
     setFrozenPreviewUrl(persistedPanoramaPreview);
   }, [persistedPanoramaPreview, source]);
 
+  // 旧版本把预览以图片数据串存在节点里：打开时补落盘，换成文件地址
   useEffect(() => {
     if (!persistedPanoramaPreview?.startsWith('data:image/')) return;
     persistPanoramaPreview(persistedPanoramaPreview);
   }, [persistPanoramaPreview, persistedPanoramaPreview]);
 
+  // 选中一个还没有冻结预览的节点时建立实时球面，首帧出来后截一帧作预览
   useEffect(() => {
     if (
       !isActive
@@ -247,7 +254,6 @@ export const PanoramaViewerNode = memo(({
       || resource.status !== 'ready'
       || !resource.isEquirectangular
     ) return;
-    autoPreviewCaptureRef.current = true;
     claimInlineLease(id);
   }, [
     claimInlineLease,
@@ -261,37 +267,27 @@ export const PanoramaViewerNode = memo(({
   ]);
 
   useEffect(() => () => {
-    cancelScheduledFreeze();
-    if (previewCaptureFrameRef.current !== null) {
-      window.cancelAnimationFrame(previewCaptureFrameRef.current);
-      previewCaptureFrameRef.current = null;
-    }
+    cancelPreviewCapture();
     previewPersistRevisionRef.current += 1;
-    pendingFreezeReleaseRef.current = false;
     releaseInlineLease(id);
-  }, [cancelScheduledFreeze, id, releaseInlineLease]);
+  }, [cancelPreviewCapture, id, releaseInlineLease]);
 
   useNodeHandlesSync(id, `${resolvedHeight}:${resolvedWidth}`);
 
   const handleViewModeChange = useCallback((viewMode: PanoramaViewMode) => {
-    cancelScheduledFreeze();
-    interactionActiveRef.current = false;
-    pendingFreezeReleaseRef.current = false;
+    cancelPreviewCapture();
     if (viewMode === 'sphere') setHasWebglFailure(false);
     updateNodeData(id, { viewMode });
     if (viewMode === 'flat') releaseInlineLease(id);
     else if (!isContentLodLow) claimInlineLease(id);
-  }, [cancelScheduledFreeze, claimInlineLease, id, isContentLodLow, releaseInlineLease, updateNodeData]);
+  }, [cancelPreviewCapture, claimInlineLease, id, isContentLodLow, releaseInlineLease, updateNodeData]);
 
   const handleContextLost = useCallback(() => {
-    cancelScheduledFreeze();
-    interactionActiveRef.current = false;
-    autoPreviewCaptureRef.current = false;
-    pendingFreezeReleaseRef.current = false;
+    cancelPreviewCapture();
     setHasWebglFailure(true);
     setFrozenPreviewUrl(persistedPanoramaPreview);
     releaseInlineLease(id);
-  }, [cancelScheduledFreeze, id, persistedPanoramaPreview, releaseInlineLease]);
+  }, [cancelPreviewCapture, id, persistedPanoramaPreview, releaseInlineLease]);
 
   const handleViewportAspectRatioChange = useCallback((
     viewportAspectRatio: PanoramaViewportAspectRatio,
@@ -301,74 +297,13 @@ export const PanoramaViewerNode = memo(({
 
   const handleCameraViewChangeEnd = useCallback((view: PanoramaCameraView) => {
     commitCameraView(view);
-    if (previewCaptureFrameRef.current !== null) {
-      window.cancelAnimationFrame(previewCaptureFrameRef.current);
-    }
-    previewCaptureFrameRef.current = window.requestAnimationFrame(() => {
-      previewCaptureFrameRef.current = null;
-      const previewUrl = captureRef.current?.(undefined, view);
-      if (previewUrl) storePanoramaPreview(previewUrl);
-    });
-  }, [commitCameraView, storePanoramaPreview]);
+    schedulePreviewCapture(view);
+  }, [commitCameraView, schedulePreviewCapture]);
 
   const handleSphereFramePresented = useCallback(() => {
     if (persistedPanoramaPreview) return;
-    const previewUrl = captureRef.current?.(undefined, currentViewRef.current ?? undefined);
-    if (!previewUrl) return;
-    storePanoramaPreview(previewUrl);
-    if (!autoPreviewCaptureRef.current) return;
-    autoPreviewCaptureRef.current = false;
-    pendingFreezeReleaseRef.current = true;
-    setFrozenPreviewUrl(previewUrl);
-  }, [persistedPanoramaPreview, storePanoramaPreview]);
-
-  const freezeInlineView = useCallback(() => {
-    if (!hasInlineLease) return;
-    if (previewCaptureFrameRef.current !== null) {
-      window.cancelAnimationFrame(previewCaptureFrameRef.current);
-      previewCaptureFrameRef.current = null;
-    }
-    const currentView = currentViewRef.current;
-    if (currentView) commitCameraView(currentView);
-    const capture = captureRef.current;
-    if (capture) {
-      const previewUrl = capture(undefined, currentView ?? undefined);
-      if (previewUrl) storePanoramaPreview(previewUrl);
-      if (previewUrl && previewUrl !== frozenPreviewUrl) {
-        pendingFreezeReleaseRef.current = true;
-        setFrozenPreviewUrl(previewUrl);
-        return;
-      }
-    }
-    releaseInlineLease(id);
-  }, [
-    commitCameraView,
-    frozenPreviewUrl,
-    hasInlineLease,
-    id,
-    releaseInlineLease,
-    storePanoramaPreview,
-  ]);
-
-  const scheduleFreezeInlineView = useCallback((): void => {
-    cancelScheduledFreeze();
-    if (interactionActiveRef.current) return;
-    freezeDelayTimerRef.current = window.setTimeout(() => {
-      freezeDelayTimerRef.current = null;
-      freezeInlineView();
-    }, UI_DURATION.viewer);
-  }, [cancelScheduledFreeze, freezeInlineView]);
-
-  const finishSphereInteraction = useCallback((): void => {
-    interactionActiveRef.current = false;
-    if (!pointerInsideNodeRef.current) scheduleFreezeInlineView();
-  }, [scheduleFreezeInlineView]);
-
-  const handleFrozenPreviewReady = useCallback(() => {
-    if (!pendingFreezeReleaseRef.current) return;
-    pendingFreezeReleaseRef.current = false;
-    releaseInlineLease(id);
-  }, [id, releaseInlineLease]);
+    capturePreview();
+  }, [capturePreview, persistedPanoramaPreview]);
 
   const handleCapture = useCallback(async (): Promise<void> => {
     if (isCapturing) return;
@@ -390,7 +325,7 @@ export const PanoramaViewerNode = memo(({
       }
       const capture = captureRef.current;
       if (!capture) throw new Error('未能恢复全景视角渲染');
-      const dataUrl = capture(
+      const dataUrl = await capture(
         resolvePanoramaCaptureSize(data.viewportAspectRatio),
         currentViewRef.current ?? undefined,
       );
@@ -444,23 +379,6 @@ export const PanoramaViewerNode = memo(({
       }`}
       style={{ width: resolvedWidth, height: resolvedHeight }}
       onClick={() => setSelectedNode(id)}
-      onPointerEnter={() => {
-        pointerInsideNodeRef.current = true;
-        cancelScheduledFreeze();
-      }}
-      onPointerLeave={() => {
-        pointerInsideNodeRef.current = false;
-        scheduleFreezeInlineView();
-      }}
-      onBlurCapture={(event) => {
-        const focusStayedInside = event.currentTarget.contains(
-          event.relatedTarget as globalThis.Node | null,
-        );
-        const windowLostFocus = !document.hasFocus();
-        if (!focusStayedInside && (!pointerInsideNodeRef.current || windowLostFocus)) {
-          scheduleFreezeInlineView();
-        }
-      }}
     >
       <NodeHeader
         className={NODE_HEADER_FLOATING_POSITION_CLASS}
@@ -482,19 +400,18 @@ export const PanoramaViewerNode = memo(({
           isGenerating={data.isGenerating === true}
           generationError={generationError}
           isCapturing={isCapturing}
+          controlsPinned={isActive}
           hasWebglFailure={hasWebglFailure}
           captureRef={captureRef}
           onRetry={() => setRetryRevision((revision) => revision + 1)}
           onRequestSphere={requestSphere}
           onInteractionStart={activateSphere}
-          onInteractionEnd={finishSphereInteraction}
           onOpenImmersiveViewer={openImmersiveViewer}
           onViewModeChange={handleViewModeChange}
           onViewportAspectRatioChange={handleViewportAspectRatioChange}
           onCameraViewChangeEnd={handleCameraViewChangeEnd}
           onSphereFramePresented={handleSphereFramePresented}
           onCapture={() => void handleCapture()}
-          onFrozenPreviewReady={handleFrozenPreviewReady}
           onContextLost={handleContextLost}
         />
       </div>

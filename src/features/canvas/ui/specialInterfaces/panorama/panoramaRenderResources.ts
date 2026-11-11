@@ -64,8 +64,10 @@ export function applyPanoramaDragDelta(
   };
 }
 
-export function createPanoramaRenderResources(image: HTMLImageElement): PanoramaRenderResources {
+export function createPanoramaRenderResources(image: HTMLImageElement | ImageBitmap): PanoramaRenderResources {
   const texture = new Texture(image);
+  // 位图在创建时已上下翻转（WebGL 的翻转开关对位图无效）
+  if (typeof ImageBitmap !== 'undefined' && image instanceof ImageBitmap) texture.flipY = false;
   texture.colorSpace = SRGBColorSpace;
   texture.needsUpdate = true;
 
