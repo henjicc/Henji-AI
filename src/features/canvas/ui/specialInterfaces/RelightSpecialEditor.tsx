@@ -3,11 +3,12 @@ import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import Dropdown from '@/components/ui/Dropdown'
+import { NODE_STAGE_SURFACE_CLASS } from '@/features/canvas/ui/nodeControlStyles'
 import FileUploader from '@/components/ui/FileUploader'
 import { UiTooltipText } from '@/components/ui/layout'
 import { UiButton, UiSwitch, UiTextArea } from '@/components/ui/primitives'
 import { UiModal } from '@/components/ui/UiModal'
-import { UI_GLASS_ADAPTIVE_DIVIDER_CLASS, UI_GLASS_ADAPTIVE_REGION_CLASS, UI_TEXT_LABEL_CLASS, UI_TEXT_META_CLASS } from '@/components/ui/styleTokens'
+import { UI_GLASS_ADAPTIVE_DIVIDER_CLASS, UI_GLASS_ADAPTIVE_REGION_CLASS, UI_FIELD_LABEL_INLINE_CLASS, UI_TEXT_META_CLASS } from '@/components/ui/styleTokens'
 import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData'
 import {
   RELIGHT_SMART_PRESETS,
@@ -48,7 +49,7 @@ function readSettings(state: Readonly<DynamicValueMap>): RelightSettingsV1 {
 
 function FieldTitle({ children, tooltip }: { children: string; tooltip: string }): JSX.Element {
   return (
-    <div className={UI_TEXT_LABEL_CLASS}>
+    <div className={UI_FIELD_LABEL_INLINE_CLASS}>
       <UiTooltipText tooltip={tooltip}>{children}</UiTooltipText>
     </div>
   )
@@ -104,7 +105,7 @@ export function RelightWorkbench({
         className={`grid min-h-0 min-w-0 flex-1 ${settings.lightingMode === 'manual' ? 'grid-cols-[minmax(0,1fr)_280px]' : 'grid-cols-1'}`}
       >
         {settings.lightingMode === 'manual' && (
-          <div className={`flex min-h-0 ${embedded ? 'p-2' : 'p-4'}`}>
+          <div className={`flex min-h-0 ${embedded ? `${NODE_STAGE_SURFACE_CLASS} px-3 pb-3 pt-1.5` : 'p-4'}`}>
             <RelightDirectionVisualizer
               direction={settings.manual.keyDirection}
               brightness={lighting.brightness}
@@ -119,7 +120,7 @@ export function RelightWorkbench({
           </div>
         )}
 
-        <div data-relight-inspector="true" className={`min-h-0 min-w-0 overflow-y-auto ${settings.lightingMode === 'manual' ? `border-l ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS}` : ''} ${embedded ? 'p-3' : `p-5 ${UI_GLASS_ADAPTIVE_REGION_CLASS}`}`}>
+        <div data-relight-inspector="true" className={`min-h-0 min-w-0 overflow-y-auto ${!embedded && settings.lightingMode === 'manual' ? `border-l ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS}` : ''} ${embedded ? 'p-3' : `p-5 ${UI_GLASS_ADAPTIVE_REGION_CLASS}`}`}>
           <div className="flex min-h-full flex-col">
           {sourceControl ? <div className="mb-3">{sourceControl}</div> : null}
           {/* 二选一模式用分段选择（淡强调底选中），不是两颗菜单项（任务 5.4） */}
@@ -163,6 +164,7 @@ export function RelightWorkbench({
               <div className="flex items-center justify-between gap-3">
                 <FieldTitle tooltip={t('node.relightGeneration.editor.presetTip')}>{t('node.relightGeneration.editor.preset')}</FieldTitle>
                 <Dropdown
+                  appearance="text"
                   ariaLabel={t('node.relightGeneration.editor.preset')}
                   className="w-36"
                   value={settings.smart.preset}

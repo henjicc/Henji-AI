@@ -91,7 +91,7 @@ export const RelightGenerationNode = memo(({
               showHandle={false}
               nodeId={id}
               mediaKind="image"
-              label={t('node.relightGeneration.sourceImage')}
+              label={t('node.mediaRow.reference')}
               maxCount={1}
               inlineValue={data.mediaInputs?.image ?? []}
               onInlineChange={(images) => updateNodeData(id, {

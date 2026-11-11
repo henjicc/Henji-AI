@@ -524,13 +524,11 @@
       },
       "apiKeyRequired": "请先配置当前打光模式所需的供应商 API Key",
       "resultTitle": "打光结果",
-      "sourceImage": "源图",
       "sourceAlt": "待打光源图",
       "sourceRequired": "请连接一张源图"
     },
     "multiAngleGeneration": {
       "title": "多角度视图",
-      "sourceImage": "源图",
       "adjustAngles": "调整角度",
       "executionHint": "每个视图独立生成，并发 2；全部成功后一次性创建结果组。",
       "apiKeyRequired": "请先配置 Fal API Key",

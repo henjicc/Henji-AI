@@ -524,13 +524,11 @@
       },
       "apiKeyRequired": "Configure the provider API key required by the current relighting mode",
       "resultTitle": "Relighting Result",
-      "sourceImage": "Source image",
       "sourceAlt": "Source image to relight",
       "sourceRequired": "Connect one source image"
     },
     "multiAngleGeneration": {
       "title": "Multi-angle Views",
-      "sourceImage": "Source image",
       "adjustAngles": "Adjust angles",
       "executionHint": "Each view is generated independently with concurrency 2; the result group is created only after all views succeed.",
       "apiKeyRequired": "Configure your Fal API key first",

@@ -69,7 +69,7 @@ export function ToolWorkbenchNodeFrame({
     <div
       {...dataAttributes}
       data-tool-workbench-node-id={nodeId}
-      className={`group relative flex overflow-visible rounded-[var(--node-radius)] border ${NODE_SURFACE_CLASS} p-2 transition-colors duration-120 ${
+      className={`group relative flex overflow-visible rounded-[var(--node-radius)] border ${NODE_SURFACE_CLASS} transition-colors duration-120 ${
         selected ? NODE_SELECTED_BORDER_CLASS : NODE_IDLE_BORDER_CLASS
       }`}
       style={{ width: resolvedWidth, height: resolvedHeight }}
@@ -84,7 +84,8 @@ export function ToolWorkbenchNodeFrame({
         rightSlot={rightSlot}
       />
       <NodeLodPlaceholder title={title} icon={icon} />
-      <div className="canvas-node-lod-detail nodrag nowheel flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg bg-gap/45">
+      {/* 内容铺满节点：左侧画面区自己铺 NODE_STAGE_SURFACE_CLASS 的底，右侧参数区就是节点的底，不再整块套一层沉底 */}
+      <div className="canvas-node-lod-detail nodrag nowheel flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-[var(--node-radius)]">
         {children}
       </div>
       {/* 图片输入属于节点外壳，不随内部编辑器的选中状态或模式卸载。 */}

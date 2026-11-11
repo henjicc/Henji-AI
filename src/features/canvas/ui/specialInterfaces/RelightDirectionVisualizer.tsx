@@ -1,8 +1,8 @@
-import { UiSegmented } from '@/components/ui'
+import { Dropdown } from '@/components/ui'
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { UI_LIGHTING_COLORS, UI_TEXT_LABEL_CLASS } from '@/components/ui/styleTokens'
+import { UI_LIGHTING_COLORS, UI_TEXT_PANEL_TITLE_CLASS } from '@/components/ui/styleTokens'
 import type { RelightBrightness, RelightColorPreset, RelightKeyDirection, RelightRimDirection } from '@/features/canvas/capabilities/relightPolicy'
 import { RELIGHT_DIRECTION_LABELS, RELIGHT_DIRECTION_ORDER, type RelightVisualizerView } from './relightDirectionVisualizerState'
 import { RIM_DIRECTION_LABELS, RIM_DIRECTION_ORDER } from './relightRimLightState'
@@ -117,9 +117,9 @@ export function RelightDirectionVisualizer({ direction, brightness = 0, colorPre
   }
   return <section className="flex min-h-0 min-w-0 w-full flex-col gap-2">
     <div className="flex shrink-0 items-center justify-between gap-2">
-      <h3 className={UI_TEXT_LABEL_CLASS}>{t('node.relightDirection.key')}</h3>
-      {/* 两种视角二选一：分段选择（淡强调底选中），不在调用点改按钮内边距（任务 5.4） */}
-      <UiSegmented ariaLabel={t('node.relightDirection.view')} value={view} onChange={setView} options={(['perspective', 'front'] as const).map(value => ({ value, label: t(`node.relightDirection.${value}`) }))} />
+      <h3 className={UI_TEXT_PANEL_TITLE_CLASS}>{t('node.relightDirection.key')}</h3>
+      {/* 画面视角切换不是参数：静默的“文字 + 箭头”，放在分区标题行右端，不带底槽或字段框 */}
+      <Dropdown appearance="text" ariaLabel={t('node.relightDirection.view')} value={view} onSelect={setView} buttonClassName="w-auto" className="shrink-0" options={(['perspective', 'front'] as const).map(value => ({ value, label: t(`node.relightDirection.${value}`) }))} />
     </div>
     <div className="flex min-h-0 flex-1 items-center justify-center [container-type:size]">
       <div ref={stageRef} style={{ width: 'min(100cqw, 100cqh)', height: 'min(100cqw, 100cqh)' }}

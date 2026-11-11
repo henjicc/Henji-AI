@@ -1,3 +1,4 @@
+import { NODE_STAGE_SURFACE_CLASS } from '@/features/canvas/ui/nodeControlStyles'
 import { useMemo, useState, type ReactNode } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -13,7 +14,7 @@ import {
   UI_GLASS_ADAPTIVE_DIVIDER_CLASS,
   UI_GLASS_ADAPTIVE_REGION_CLASS,
   UI_GLASS_ADAPTIVE_SURFACE_CLASS,
-  UI_TEXT_LABEL_CLASS,
+  UI_FIELD_LABEL_INLINE_CLASS,
   UI_TEXT_META_CLASS,
   UI_TEXT_PANEL_TITLE_CLASS,
 } from '@/components/ui/styleTokens'
@@ -108,7 +109,7 @@ function RangeField({
   return (
     <label className="block space-y-1.5">
       <span className="flex items-center justify-between gap-3">
-        <span className={UI_TEXT_LABEL_CLASS}>{label}</span>
+        <span className={UI_FIELD_LABEL_INLINE_CLASS}>{label}</span>
         <span className={UI_TEXT_META_CLASS}>{valueText ?? `${value}${suffix}`}</span>
       </span>
       <UiRangeInput
@@ -199,8 +200,9 @@ export function MultiAngleWorkbench({
         data-multi-angle-workbench="true"
         className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1.5fr)_minmax(320px,1fr)]"
       >
-        <div className={`flex min-h-0 items-center justify-center ${embedded ? 'p-2' : 'p-4'}`}>
-          <div className={`relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl ${embedded ? 'bg-gap/45' : `border ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS} ${UI_GLASS_ADAPTIVE_SURFACE_CLASS}`}`}>
+        {/* 节点里左栏就是画面区的底，铺满到节点边缘，不再在里面另套一块沉底；弹窗里保留独立的画面框 */}
+        <div className={`flex min-h-0 items-center justify-center ${embedded ? NODE_STAGE_SURFACE_CLASS : 'p-4'}`}>
+          <div className={`relative flex h-full w-full items-center justify-center overflow-hidden ${embedded ? '' : `rounded-lg border ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS} ${UI_GLASS_ADAPTIVE_SURFACE_CLASS}`}`}>
             <MultiAngleOrbitPreview
               sourceImage={sourceImage ? resolveImageDisplayUrl(sourceImage) : null}
               sourceAlt={t('node.multiAngleEditor.sourceAlt')}
@@ -213,7 +215,7 @@ export function MultiAngleWorkbench({
           </div>
         </div>
 
-        <div className={`min-h-0 overflow-y-auto border-l ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS} ${embedded ? 'p-3' : `p-4 ${UI_GLASS_ADAPTIVE_REGION_CLASS}`}`}>
+        <div className={`min-h-0 overflow-y-auto ${embedded ? 'p-3' : `border-l ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS} p-4 ${UI_GLASS_ADAPTIVE_REGION_CLASS}`}`}>
           {sourceControl ? <div className="mb-3">{sourceControl}</div> : null}
           <section className="space-y-3">
             <h3 className={UI_TEXT_PANEL_TITLE_CLASS}>{t('node.multiAngleEditor.controlMode')}</h3>

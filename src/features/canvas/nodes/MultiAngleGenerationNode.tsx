@@ -74,7 +74,7 @@ export const MultiAngleGenerationNode = memo(({
               showHandle={false}
               nodeId={id}
               mediaKind="image"
-              label={t('node.multiAngleGeneration.sourceImage')}
+              label={t('node.mediaRow.reference')}
               maxCount={1}
               inlineValue={data.mediaInputs?.image ?? []}
               onInlineChange={(images) => updateNodeData(id, {
