@@ -9,7 +9,21 @@ import { isAgentAuthoredStep } from '@/features/application-control'
 const enabledCount = <T extends { enabled: boolean }>(items: readonly T[] | undefined) => (items ?? []).filter(item => item.enabled).length
 const same = (a: unknown, b: unknown) => a === b || JSON.stringify(a) === JSON.stringify(b)
 
+/**
+ * 快照是不可变的：同一对相邻快照的步骤名只算一次。每次编辑只多出一对新快照，
+ * 历史面板重新列出整条历史时不再对每一步重新比较整段转写。
+ */
+const labels = new WeakMap<AudioEditProjectDocument, WeakMap<AudioEditProjectDocument, string>>()
+
 export function describeAudioEditStep(before: AudioEditProjectDocument, after: AudioEditProjectDocument): string {
+  let byBefore = labels.get(after)
+  if (!byBefore) labels.set(after, byBefore = new WeakMap())
+  let label = byBefore.get(before)
+  if (label === undefined) byBefore.set(before, label = compareAudioEditStep(before, after))
+  return label
+}
+
+function compareAudioEditStep(before: AudioEditProjectDocument, after: AudioEditProjectDocument): string {
   const cutsBefore = (before.cuts ?? []).filter(cut => cut.enabled)
   const cutsAfter = (after.cuts ?? []).filter(cut => cut.enabled)
   if (cutsAfter.length > cutsBefore.length) {

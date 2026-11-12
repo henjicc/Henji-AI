@@ -15,7 +15,7 @@ import { audioEditEssentialItemSettings, setAudioEditMouthClicksSkipped, type Au
 import { useAudioEditPlaybackStore } from '../store/audioEditPlaybackStore'
 import { audioEditChainItemName, audioEditEffectCatalog, filterAudioEditEffectCatalog, AUDIO_EDIT_EFFECT_FOLDER_NAMES, type AudioEditEffectCatalogEntry } from '@/core/audioEdit/effectCatalog'
 import type { AudioEditProcessorDescriptor } from '@/core/audioEdit/types'
-import { beginAudioEditGesture } from '../application/audioEditProjectInstances'
+import { useAudioEditGestures } from './useAudioEditGestures'
 import { matchProjectAudioEditLoudness } from '../application/audioEditApplicationService'
 import { useAudioEditWorkspace, type AudioEditWorkspace } from './audioEditWorkspaceContext'
 import { analyzeAudioEditEffect, AUDIO_EDIT_EFFECT_DRAG_TYPE, insertAudioEditEffect, useAudioEditEffectSelection } from './audioEditEffectInsert'
@@ -146,15 +146,16 @@ function resetItem(item: AudioEditChainItem): AudioEditChainItem {
 
 /** 一个数值参数的手势：连续拖动合成一步撤销，松手时 onCommit（检测类的参数在松手时重新检测）。 */
 function useValueGesture(projectId: string, write: (value: number) => void, onCommit?: (value: number) => void): ParamGesture {
+  const beginGesture = useAudioEditGestures(projectId)
   const active = useRef<{ finish: () => void; cancel: () => void } | null>(null)
   const last = useRef<number | null>(null)
   return {
-    begin: () => { if (!active.current) active.current = beginAudioEditGesture(projectId) },
+    begin: () => { if (!active.current) active.current = beginGesture() },
     finish: () => { active.current?.finish(); active.current = null; if (last.current !== null) onCommit?.(last.current); last.current = null },
     cancel: () => { active.current?.cancel(); active.current = null; last.current = null },
     active: () => !!active.current,
     write: next => { last.current = Number(next); write(Number(next)) },
-    atomic: next => { const handle = beginAudioEditGesture(projectId); write(Number(next)); handle.finish(); onCommit?.(Number(next)) },
+    atomic: next => { const handle = beginGesture(); write(Number(next)); handle.finish(); onCommit?.(Number(next)) },
   }
 }
 
@@ -164,8 +165,9 @@ const slider = (key: string, title: string, tooltip: string, min: number, max: n
 /** 一项效果展开后的参数（按种类）。 */
 function EffectItemBody({ item, workspace, onChange }: { item: AudioEditChainItem; workspace: AudioEditWorkspace; onChange: (next: AudioEditChainItem) => void }): React.ReactElement {
   const projectId = workspace.project.id
-  if (item.kind === 'builtin') return <AudioEffectParams effect={item} gesture={() => beginAudioEditGesture(projectId)} onChange={next => onChange({ ...next, kind: 'builtin' })} />
-  if (item.kind === 'essential') return <EssentialSoundControls scope="chain" value={item.settings} disabled={workspace.disabled} gesture={() => beginAudioEditGesture(projectId)}
+  const beginGesture = useAudioEditGestures(projectId)
+  if (item.kind === 'builtin') return <AudioEffectParams effect={item} gesture={beginGesture} onChange={next => onChange({ ...next, kind: 'builtin' })} />
+  if (item.kind === 'essential') return <EssentialSoundControls scope="chain" value={item.settings} disabled={workspace.disabled} gesture={beginGesture}
     onChange={next => { if (next) onChange({ ...item, settings: audioEditEssentialItemSettings(next) }) }} />
   if (item.kind === 'mouth_declick') return <MouthDeclickBody item={item} workspace={workspace} onChange={onChange} />
   if (item.kind === 'breath') return <BreathBody item={item} workspace={workspace} onChange={onChange} />
@@ -252,15 +254,16 @@ function SeparationBody({ item, projectId, onChange }: { item: Extract<AudioEdit
 function PluginBody({ item, plugin, projectId, onChange }: { item: Extract<AudioEditChainItem, { kind: 'plugin' }>; plugin: AudioEditProcessorDescriptor | undefined; projectId: string; onChange: (next: AudioEditChainItem) => void }): React.ReactElement {
   const latest = useRef(item); latest.current = item
   const active = useRef<{ finish: () => void; cancel: () => void } | null>(null)
+  const beginGesture = useAudioEditGestures(projectId)
   if (!plugin?.available) return <p className={`m-0 py-1 ${UI_TEXT_META_CLASS} ${UI_PROPERTY_INSET_CLASS}`}>{plugin ? plugin.reason ?? '这个插件现在还不能加载。' : '这台电脑上找不到这个插件，处理时先跳过它；设置都保留，装好插件后会照常生效。'}</p>
   const parameters = plugin.parameters ?? []
   const fields = parameters.map(parameter => slider(`p${parameter.id}`, parameter.name, `${parameter.name}（插件参数，0–1）`, 0, 1, 0.01, '', parameter.normalizedValue))
   const values = Object.fromEntries(parameters.map(parameter => [`p${parameter.id}`, item.parameters[parameter.name] ?? parameter.normalizedValue]))
   const gestureFor = (name: string): ParamGesture => ({
-    begin: () => { if (!active.current) active.current = beginAudioEditGesture(projectId) },
+    begin: () => { if (!active.current) active.current = beginGesture() },
     finish: () => { active.current?.finish(); active.current = null }, cancel: () => { active.current?.cancel(); active.current = null }, active: () => !!active.current,
     write: next => onChange({ ...latest.current, parameters: { ...latest.current.parameters, [name]: Number(next) } }),
-    atomic: next => { const handle = beginAudioEditGesture(projectId); onChange({ ...latest.current, parameters: { ...latest.current.parameters, [name]: Number(next) } }); handle.finish() },
+    atomic: next => { const handle = beginGesture(); onChange({ ...latest.current, parameters: { ...latest.current.parameters, [name]: Number(next) } }); handle.finish() },
   })
   return <UiFieldLayoutContext.Provider value="property"><div className="flex flex-col">
     {fields.length > 0 && <ParamList fields={fields} values={values} renderControl={(spec, value) => <ParamField field={spec} value={value} gesture={gestureFor(parameters.find(parameter => `p${parameter.id}` === spec.key)!.name)} />} />}

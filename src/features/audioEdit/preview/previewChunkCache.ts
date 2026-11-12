@@ -1,15 +1,24 @@
 import type { AudioEditPreviewChunk, AudioEditPreviewMode, AudioEditProjectDocument, AudioEditTimelineSpan } from '@/core/audioEdit/types'
 import { AudioEditSpliceRenderer } from '@/core/audioEdit/spliceCrossfade'
 import { getPlatform } from '@/platform/runtime'
+import { loadAudioDisplayCacheBudget, waveformMemoryBudgetBytes } from '@/services/waveform/audioDisplayCacheBudget'
 import { flushAudioEditProject } from '../application/audioEditProjectInstances'
+
+/** 每份声音（原素材、剪后各一份）留多少字节的一秒块：音频显示缓存预算的一半，64 GB 机器约 512 MB（立体声约 45 分钟）。 */
+function soundBlockBudgetBytes(): number {
+  loadAudioDisplayCacheBudget()
+  return Math.floor(waveformMemoryBudgetBytes() / 2)
+}
 
 /**
  * 一份声音（原素材，或修复、整段效果、区间音量之后的剪后声音；都按源时间）的一秒块。
  * 删除、静音只改拼接表，不改这里的声音：换拼接表时把同一份接着交给新的 PreviewChunkCache，剪完马上播放不必重新向主进程要一遍。
- * 一秒对齐的 LRU；只保留 30 秒 PCM，传给 worklet 的始终是副本，缓存不会被 transfer 摘走。
+ * 一秒对齐的 LRU，按内存预算淘汰最久没用的；传给 worklet 的始终是副本，缓存不会被 transfer 摘走。
  */
 export class PreviewSoundBlocks {
-  private readonly blocks = new Map<number, Promise<AudioEditPreviewChunk>>()
+  /** 每块记下请求的字节数（主进程按请求帧数返回），按它累计预算。 */
+  private readonly blocks = new Map<number, { pending: Promise<AudioEditPreviewChunk>; bytes: number }>()
+  private bytes = 0
   private flushed: Promise<void> | undefined
 
   constructor(private readonly project: Pick<AudioEditProjectDocument, 'id' | 'source'>, private readonly kind: 'source' | 'edited') {}
@@ -29,22 +38,33 @@ export class PreviewSoundBlocks {
   }
 
   block(frame: number): Promise<AudioEditPreviewChunk> {
-    const { sampleRate, durationFrames } = this.project.source
+    const { sampleRate, durationFrames, channels } = this.project.source
     const start = Math.floor(frame / sampleRate) * sampleRate
     const existing = this.blocks.get(start)
-    if (existing) { this.blocks.delete(start); this.blocks.set(start, existing); return existing }
+    if (existing) { this.blocks.delete(start); this.blocks.set(start, existing); return existing.pending }
+    const frameCount = Math.min(sampleRate, durationFrames - start)
     const pending = (async () => {
       // 剪后声音由主进程按文件里的作品计算：这份声音第一次取块前先保存一次，之后同一份声音不再重复保存。
       if (this.kind !== 'source') {
         this.flushed ??= flushAudioEditProject(this.project.id)
         await this.flushed
       }
-      return getPlatform().audioEdit.preparePreviewChunk({ projectId: this.project.id, sourceStartFrame: start, frameCount: Math.min(sampleRate, durationFrames - start), mode: this.kind })
+      return getPlatform().audioEdit.preparePreviewChunk({ projectId: this.project.id, sourceStartFrame: start, frameCount, mode: this.kind })
     })()
-    this.blocks.set(start, pending)
-    if (this.blocks.size > 30) this.blocks.delete(this.blocks.keys().next().value!)
-    void pending.catch(() => { if (this.blocks.get(start) === pending) this.blocks.delete(start); this.flushed = undefined })
+    const entry = { pending, bytes: Math.max(0, frameCount) * channels * 4 }
+    this.blocks.set(start, entry)
+    this.bytes += entry.bytes
+    const budget = soundBlockBudgetBytes()
+    while (this.bytes > budget && this.blocks.size > 1) this.remove(this.blocks.keys().next().value!)
+    void pending.catch(() => { if (this.blocks.get(start) === entry) this.remove(start); this.flushed = undefined })
     return pending
+  }
+
+  private remove(start: number): void {
+    const entry = this.blocks.get(start)
+    if (!entry) return
+    this.blocks.delete(start)
+    this.bytes -= entry.bytes
   }
 }
 

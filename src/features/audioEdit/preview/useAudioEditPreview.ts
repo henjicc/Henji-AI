@@ -83,12 +83,17 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
   // 声音本身（修复、效果链里整段处理的那一段、区间音量；只换 id 不算）变了才丢掉已读出的一秒块。
   // 删除、静音只换拼接表：已读出的声音接着用，从当前位置按新拼接表重来，不再向主进程重新要一遍、也不再先保存一次。
   const soundKind = mode === 'source' ? 'source' : 'edited'
-  const soundKey = JSON.stringify([project?.id, project?.source, soundKind, project && mode !== 'source' ? audioEditSourceRecipe(project) : undefined])
-  const planKey = JSON.stringify([soundKey, mode, activeSpans])
-  const soundRef = useRef<{ key: string; value: PreviewSoundBlocks } | null>(null)
-  if (project && soundRef.current?.key !== soundKey) soundRef.current = { key: soundKey, value: new PreviewSoundBlocks(project, soundKind) }
+  // 原素材与剪后声音各留一份：来回切换试听模式不必重新向主进程要块
+  const soundKey = useMemo(() => JSON.stringify([project?.id, project?.source, soundKind, project && mode !== 'source' ? audioEditSourceRecipe(project) : undefined]), [mode, project, soundKind])
+  const planKey = useMemo(() => JSON.stringify([soundKey, mode, activeSpans]), [activeSpans, mode, soundKey])
+  const soundsRef = useRef(new Map<'source' | 'edited', { key: string; projectId: string; value: PreviewSoundBlocks }>())
+  if (project) {
+    const sounds = soundsRef.current
+    for (const [kind, entry] of sounds) if (entry.projectId !== project.id) sounds.delete(kind)
+    if (sounds.get(soundKind)?.key !== soundKey) sounds.set(soundKind, { key: soundKey, projectId: project.id, value: new PreviewSoundBlocks(project, soundKind) })
+  }
   const cacheRef = useRef<{ key: string; value: PreviewChunkCache } | null>(null)
-  if (project && cacheRef.current?.key !== planKey) cacheRef.current = { key: planKey, value: new PreviewChunkCache(project, mode, activeSpans, soundRef.current!.value) }
+  if (project && cacheRef.current?.key !== planKey) cacheRef.current = { key: planKey, value: new PreviewChunkCache(project, mode, activeSpans, soundsRef.current.get(soundKind)!.value) }
   const cache = project ? cacheRef.current!.value : null
   // 边播边算的部分（效果链末尾的实时效果 + 输出）：“原始”试听不加效果（用来对比）；结构变了（增删、换序、开关）就清空排队的声音
   // 从当前位置重来，只改参数时原地生效。

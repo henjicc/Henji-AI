@@ -23,6 +23,10 @@ describe('32 位浮点 WAV 读写', () => {
     expect(edge.slice(0, 4)).toEqual(pcm.slice(1996, 2000))
     expect(edge.slice(4)).toEqual(new Float32Array(4))
     expect(await reader!.read(-2, 3)).toEqual(Float32Array.from([0, 0, 0, 0, pcm[0], pcm[1]]))
+    // 复用缓冲：上一次留下的内容在越界部分清零
+    const reused = new Float32Array(8).fill(9)
+    expect(await reader!.read(998, 4, reused)).toBe(reused)
+    expect(reused).toEqual(Float32Array.from([...pcm.slice(1996, 2000), 0, 0, 0, 0]))
     await reader!.close()
   })
 

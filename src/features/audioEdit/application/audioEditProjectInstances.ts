@@ -13,6 +13,7 @@ import { assertApplicationWritesAllowed } from '@/core/applicationLifecycle/appl
 import { ApplicationPersistenceFailure, type ApplicationPersistenceParticipant, type ApplicationPersistenceResolver } from '@/core/application-control/execution/persistence'
 import type { DocumentContainerRef, DocumentTarget } from '@/core/documents/types'
 import { createLogger } from '@/core/logging'
+import { notifyUser } from '@/contexts/NotificationContext'
 import { isDocumentServiceError, toError } from '@/features/documents/documentErrors'
 import type { DocumentSession } from '@/features/documents/documentSession'
 import { getDocumentSessionRegistry, type DocumentSessionRegistry } from '@/features/documents/documentSessionRegistry'
@@ -53,6 +54,15 @@ export interface AudioEditProjectInstance {
 
 interface InstanceRecord {
   instance: AudioEditProjectInstance
+  /**
+   * 进行中的连续拖动数。拖动中的中间状态只校验改到的字段、不通知会话（不落盘、主进程读不到），
+   * 界面与试听照常经 publish 跟着变；松手整份校验通过后通知会话一次。
+   */
+  gestures: number
+  /** 拖动期间会话保存时看到的内容：拖动开始前的作品。 */
+  persisted: AudioEditProjectDocument | null
+  /** 拖动期间有内容变化还没通知会话。 */
+  contentPending: boolean
   contentListeners: Set<() => void>
   dispose: () => void
 }
@@ -115,6 +125,8 @@ export function hasActiveAudioEditProjectWork(): boolean {
 }
 
 function notifyContent(record: InstanceRecord): void {
+  if (record.gestures > 0) { record.contentPending = true; return }
+  record.contentPending = false
   for (const listener of record.contentListeners) listener()
 }
 
@@ -148,9 +160,9 @@ function bindAudioEditSession(session: DocumentSession): AudioEditProjectInstanc
     document: project, past: [], future: [], dirty: session.dirty, error: null, version: 0,
     persistedRevision: meta.revision, batchDepth: 0, busy: 0, session, extras,
   }
-  const record: InstanceRecord = { instance, contentListeners: new Set(), dispose: () => undefined }
+  const record: InstanceRecord = { instance, gestures: 0, persisted: null, contentPending: false, contentListeners: new Set(), dispose: () => undefined }
   const adapter: DocumentContentAdapter = {
-    getContent: () => audioEditProjectToDocumentContent(instance.document, instance.extras),
+    getContent: () => audioEditProjectToDocumentContent(record.persisted ?? instance.document, instance.extras),
     receiveContent: (content) => {
       // 冲突后“重新载入”、换位置后引用被改写：按新内容重建，撤销历史不跨版本
       const next = audioEditProjectFromDocument(session.documentMeta, content, true)
@@ -262,13 +274,34 @@ export async function abandonAudioEditDocument(id: string): Promise<void> {
   await documentRegistry().leave(id)
 }
 
-function sameJson(left: unknown, right: unknown): boolean {
-  return JSON.stringify(left) === JSON.stringify(right)
+/**
+ * 两份作品哪些顶层字段内容不同。编辑都是不可变更新，没改的字段引用不变直接跳过，只对换了引用的字段做深比较：
+ * 一小时逐字转写的作品，拖一下效果滑杆只比较效果链，不再把整份作品序列化。
+ */
+function changedFields(before: AudioEditProjectDocument, after: AudioEditProjectDocument, ignored?: ReadonlySet<string>): string[] {
+  const left = before as unknown as Record<string, unknown>, right = after as unknown as Record<string, unknown>
+  const changed: string[] = []
+  for (const key of new Set([...Object.keys(left), ...Object.keys(right)])) {
+    if (ignored?.has(key) || left[key] === right[key]) continue
+    if (JSON.stringify(left[key]) !== JSON.stringify(right[key])) changed.push(key)
+  }
+  return changed
 }
 
+/** 显示设置、修订号与更新时间不进撤销。 */
+const NOT_UNDOABLE = new Set(['viewSettings', 'revision', 'updatedAt'])
 function hasUndoableChanges(before: AudioEditProjectDocument, after: AudioEditProjectDocument): boolean {
-  const content = (document: AudioEditProjectDocument) => JSON.stringify({ ...document, viewSettings: undefined, revision: 0, updatedAt: 0 })
-  return content(before) !== content(after)
+  return changedFields(before, after, NOT_UNDOABLE).length > 0
+}
+
+/** 只校验改到的顶层字段（跨字段的范围与引用检查留给整份校验）。 */
+function validateChangedFields(document: AudioEditProjectDocument, fields: readonly string[]): void {
+  const shape = audioEditProjectSchema.shape as Record<string, { parse(value: unknown): unknown } | undefined>
+  for (const field of fields) {
+    const schema = shape[field]
+    if (!schema) { audioEditProjectSchema.parse(document); return }
+    schema.parse((document as unknown as Record<string, unknown>)[field])
+  }
 }
 
 function requireRecord(id: string): InstanceRecord {
@@ -290,14 +323,26 @@ export function beginAudioEditGesture(id: string): { finish: () => void; cancel:
   const { instance } = record
   const initial = instance.document, initialVersion = instance.version
   instance.batchDepth += 1
+  if (record.gestures++ === 0) record.persisted = instance.document
   let ended = false
-  const end = (restore: boolean): void => {
+  const end = (cancelled: boolean): void => {
     if (ended) return
     ended = true
     if (records.get(id) !== record) return
+    let restore = cancelled
+    if (!restore && instance.version !== initialVersion) {
+      // 拖动中只校验了改到的字段，松手时整份校验一次；不通过就回到拖动前并提示（不把错误抛进指针事件）
+      try { audioEditProjectSchema.parse(instance.document) } catch (error) {
+        restore = true
+        logger.error('拖动后的口播设置没有通过检查，已回到拖动前', { event: 'audio_edit.gesture.validation.failed', error: toError(error), context: { docId: id } })
+        notifyUser('拖动后的设置没有通过检查，已回到拖动前的状态，请换个数值再试。', 'error')
+      }
+    }
+    if (--record.gestures === 0) record.persisted = null
     if (restore && instance.version !== initialVersion) commitEdit(record, { ...initial, revision: instance.document.revision })
     instance.batchDepth -= 1
     if (!restore && instance.version !== initialVersion && !instance.batchDepth && hasUndoableChanges(initial, instance.document)) { instance.past = [...instance.past.slice(-49), initial]; instance.future = []; publish(instance) }
+    if (!record.gestures && record.contentPending) notifyContent(record)
   }
   return { finish: () => end(false), cancel: () => end(true) }
 }
@@ -320,11 +365,14 @@ function updateAudioEditProject(id: string, update: (document: AudioEditProjectD
   const { instance } = record
   if (instance.busy) throw new Error('请等待当前处理完成或取消后再修改。')
   const next = update(instance.document)
-  if (next === instance.document || sameJson(next, instance.document)) return instance.document
-  if (!sameJson(next.source, instance.document.source)) throw new Error('IMMUTABLE_SOURCE：原素材不能通过编辑修改，请用“重新定位原素材”。')
+  if (next === instance.document) return instance.document
   // 名称就是文件名，改名走通用文档改名（documents.document.name）
   const normalized = { ...next, id: instance.document.id, name: instance.document.name, editBaseline: instance.document.editBaseline }
-  audioEditProjectSchema.parse(normalized)
+  const changed = changedFields(instance.document, normalized)
+  if (!changed.length) return instance.document
+  if (changed.includes('source')) throw new Error('IMMUTABLE_SOURCE：原素材不能通过编辑修改，请用“重新定位原素材”。')
+  if (record.gestures > 0) validateChangedFields(normalized, changed)
+  else audioEditProjectSchema.parse(normalized)
   if (!restoring) assertAudioEditLocks(instance.document, normalized)
   return commitEdit(record, normalized)
 }

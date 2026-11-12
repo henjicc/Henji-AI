@@ -5,6 +5,8 @@ import { PreviewChunkCache } from './previewChunkCache'
 const { prepare, flush } = vi.hoisted(() => ({ prepare: vi.fn(), flush: vi.fn(async () => undefined) }))
 vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ audioEdit: { preparePreviewChunk: prepare } }) }))
 vi.mock('../application/audioEditProjectInstances', () => ({ flushAudioEditProject: flush }))
+// 每份声音的块预算是音频显示缓存预算的一半；这里给到正好 30 秒双声道
+vi.mock('@/services/waveform/audioDisplayCacheBudget', () => ({ loadAudioDisplayCacheBudget: () => undefined, waveformMemoryBudgetBytes: () => 2 * 30 * 48000 * 2 * 4 }))
 const project: AudioEditProjectDocument = {
   id: 'cache', name: '缓存', referenceScript: '', suggestions: [], transcript: [], createdAt: 1, updatedAt: 1, revision: 1,
   source: { mediaType: 'audio', sourcePath: 'fixture.wav', audioPath: 'fixture.wav', durationFrames: 48000 * 100, sampleRate: 48000, channels: 2 },
@@ -18,7 +20,7 @@ beforeEach(() => {
   }))
 })
 
-it('按秒对齐并合并并发读取，transfer 不损坏缓存，LRU 最多保留 30 秒', async () => {
+it('按秒对齐并合并并发读取，transfer 不损坏缓存，超出内存预算时淘汰最久没用的块', async () => {
   const cache = new PreviewChunkCache(project, 'source', [span(0, project.source.durationFrames)])
   const [first, second] = await Promise.all([cache.read(123, 80), cache.read(456, 80)])
   expect(prepare.mock.calls).toEqual([[expect.objectContaining({ sourceStartFrame: 0, frameCount: 48000 })]])

@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { audioEditProjectSchema } from '@/core/audioEdit/schema'
+import { renderHook } from '@testing-library/react'
+import { useAudioEditGestures } from '../workspace/useAudioEditGestures'
 import { documentKindRegistry } from '@/core/documents/kinds'
 import { audioEditProjectToDocumentContent } from '@/core/audioEdit/documentContent'
 import type { AudioEditProjectDocument, AudioEditSourceMetadata } from '@/core/audioEdit/types'
@@ -9,7 +12,7 @@ import { AUDIO_EDIT_ENTITY_TYPES } from './audioEditFields'
 import { DocumentSessionRegistry } from '@/features/documents/documentSessionRegistry'
 import { createScriptedPrompter, FakeDocumentCommands, type ScriptedPrompter } from '@/features/documents/documentSessionTestKit'
 import {
-  acceptAudioEditNativeResult, lockAudioEditRecording, assignAudioEditSource, createAudioEditDraft, editAudioEditProject, flushAudioEditProject, getAudioEditProjectInstance,
+  acceptAudioEditNativeResult, beginAudioEditGesture, lockAudioEditRecording, assignAudioEditSource, createAudioEditDraft, editAudioEditProject, flushAudioEditProject, getAudioEditProjectInstance,
   leaveAudioEditProject, loadAudioEditProject, markAudioEditDocumentShown, releaseAudioEditProject, resetAudioEditProjectInstancesForTests,
   setAudioEditDocumentRegistryForTests, undoAudioEditProject, withAudioEditProjectOperation,
 } from './audioEditProjectInstances'
@@ -237,4 +240,62 @@ it('空草稿首段录音立即持久化、暂停编辑、后续录音一步撤�
   undoAudioEditProject(id); undoAudioEditProject(id)
   await flushAudioEditProject(id)
   expect(stored(id).source).toBeNull()
+})
+
+it('拖动滑杆的中间更新不整份序列化、不整份校验；松手时整份校验一次并合成一步撤销', async () => {
+  const instance = await loadAudioEditProject('instance-test')
+  const transcript = instance.document.transcript
+  const parse = vi.spyOn(audioEditProjectSchema, 'parse')
+  const stringify = vi.spyOn(JSON, 'stringify')
+  try {
+    const gesture = beginAudioEditGesture('instance-test')
+    for (let step = 1; step <= 5; step++) editAudioEditProject('instance-test', document => ({ ...document, output: { volumeDb: step } }))
+    expect(parse).not.toHaveBeenCalled()
+    // 拖动中的中间状态不落盘
+    await flushAudioEditProject('instance-test')
+    expect(stored().output).toBeUndefined()
+    expect(stringify.mock.calls.some(([value]) => value === transcript || (value as AudioEditProjectDocument | undefined)?.transcript === transcript)).toBe(false)
+    // 中间状态仍校验改到的字段
+    expect(() => editAudioEditProject('instance-test', document => ({ ...document, output: { volumeDb: 99 } }))).toThrow()
+    gesture.finish()
+    expect(parse).toHaveBeenCalledTimes(1)
+  } finally { parse.mockRestore(); stringify.mockRestore() }
+  expect(instance.document.output).toEqual({ volumeDb: 5 })
+  await flushAudioEditProject('instance-test')
+  expect(stored().output).toEqual({ volumeDb: 5 })
+  expect(instance.past).toHaveLength(1)
+  undoAudioEditProject('instance-test')
+  expect(instance.document.output).toBeUndefined()
+})
+
+it('松手时整份校验不通过：回到拖动前、不抛错，之后的拖动仍合成一步撤销', async () => {
+  const instance = await loadAudioEditProject('instance-test')
+  const failing = beginAudioEditGesture('instance-test')
+  // 音量区域超出音频时长只有整份校验能发现
+  editAudioEditProject('instance-test', document => ({ ...document, gainRegions: [{ id: 'g', startFrame: 0, endFrame: 9000, gainDb: -3, fadeInFrames: 0, fadeOutFrames: 0, enabled: true }] }))
+  expect(() => failing.finish()).not.toThrow()
+  expect(instance.document.gainRegions).toBeUndefined()
+  expect(instance.batchDepth).toBe(0)
+  expect(instance.past).toHaveLength(0)
+  const next = beginAudioEditGesture('instance-test')
+  editAudioEditProject('instance-test', document => ({ ...document, output: { volumeDb: 2 } }))
+  next.finish()
+  expect(instance.past).toHaveLength(1)
+})
+
+it('拖动中组件卸载时取消拖动，之后的编辑恢复整份校验并照常保存', async () => {
+  const instance = await loadAudioEditProject('instance-test')
+  const { result, unmount } = renderHook(() => useAudioEditGestures('instance-test'))
+  result.current()
+  editAudioEditProject('instance-test', document => ({ ...document, output: { volumeDb: 3 } }))
+  unmount()
+  expect(instance.batchDepth).toBe(0)
+  expect(instance.document.output).toBeUndefined()
+  const parse = vi.spyOn(audioEditProjectSchema, 'parse')
+  try {
+    editAudioEditProject('instance-test', document => ({ ...document, output: { volumeDb: 4 } }))
+    expect(parse).toHaveBeenCalledTimes(1)
+  } finally { parse.mockRestore() }
+  await flushAudioEditProject('instance-test')
+  expect(stored().output).toEqual({ volumeDb: 4 })
 })

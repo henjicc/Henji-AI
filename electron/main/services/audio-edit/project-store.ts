@@ -32,12 +32,23 @@ async function fileStamp(path: string): Promise<{ mtimeMs: number; size: number 
   }
 }
 
-/** 按文档 ID 读口播；找不到、不是口播或内容读不懂时抛错（消息给用户看）。 */
+/** 按文档 ID 读口播；找不到、不是口播或内容读不懂时抛错（消息给用户看）。返回可修改的副本。 */
 export async function requireAudioEditProject(documentId: string): Promise<AudioEditProjectDocument> {
+  return structuredClone(await readAudioEditProjectSnapshot(documentId))
+}
+
+/**
+ * 只读读取：文件没变时每次返回同一个已冻结的对象，不复制。试听、擦洗取块这类高频只读路径用它，
+ * 下游可以按对象身份缓存“作品 → 渲染源”（文件一改就换成新对象）。要修改请用 requireAudioEditProject。
+ */
+export async function readAudioEditProjectSnapshot(documentId: string): Promise<Readonly<AudioEditProjectDocument>> {
   const cached = cache.get(documentId)
   if (cached) {
     const stamp = await fileStamp(cached.path)
-    if (stamp && stamp.mtimeMs === cached.mtimeMs && stamp.size === cached.size) return structuredClone(cached.project)
+    if (stamp && stamp.mtimeMs === cached.mtimeMs && stamp.size === cached.size) {
+      cache.delete(documentId); cache.set(documentId, cached)
+      return cached.project
+    }
     cache.delete(documentId)
   }
   let read
@@ -48,13 +59,21 @@ export async function requireAudioEditProject(documentId: string): Promise<Audio
     throw error
   }
   if (read.meta.kind !== 'audio_edit') throw new Error('NOT_FOUND：需要处理的文档不是口播。')
-  const { project } = audioEditProjectFromDocument(read.meta, read.content)
+  const project = deepFreeze(audioEditProjectFromDocument(read.meta, read.content).project)
   const stamp = await fileStamp(read.meta.path)
   if (stamp) {
     cache.set(documentId, { path: read.meta.path, ...stamp, project })
     while (cache.size > CACHE_LIMIT) cache.delete(cache.keys().next().value as string)
   }
-  return structuredClone(project)
+  return project
+}
+
+function deepFreeze<T>(value: T): T {
+  if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+    Object.freeze(value)
+    for (const child of Object.values(value)) deepFreeze(child)
+  }
+  return value
 }
 
 /** 仅供测试：清空读取缓存。 */

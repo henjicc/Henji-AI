@@ -3,14 +3,19 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type { AudioEditProjectDocument } from '../../../../src/core/audioEdit/types'
-const state = vi.hoisted(() => ({ dir: '', calls: [] as string[] }))
+const state = vi.hoisted(() => ({ dir: '', calls: [] as string[], pcmJobs: [] as string[] }))
+// 整段 PCM 处理在效果工作线程里跑；测试里同进程执行同一份实现，并记下派了哪些活
+vi.mock('./effects-worker-client', async () => {
+  const { runAudioEditPcmJob } = await import('./pcm-jobs')
+  return { runAudioEditEffectsWorker: async (job: import('./pcm-jobs').AudioEditPcmJob) => { state.pcmJobs.push(job.kind); await runAudioEditPcmJob(job) } }
+})
 vi.mock('../audio-separation/runtime', () => ({ separateAudioFile: vi.fn() }))
 vi.mock('./media', () => ({ audioEditCacheDirectory: () => state.dir, verifyAudioEditSource: vi.fn(), prepareAudioEditAudio: async () => path.join(state.dir, 'source.wav'), identifyAudioEditSource: async () => ({ digest: 'a' }), validateAudioEditAudio: vi.fn() }))
 vi.mock('./dsp-adapter', () => ({ runAudioRepair: async (_input: string, output: string) => { state.calls.push('repair'); await fs.writeFile(output, 'repaired') } }))
 vi.mock('./processors', () => ({ listAudioEditProcessors: async () => [{ id: 'rx', available: true }], audioEditProcessorCacheIdentity: async () => 'v1', processAudioEditVstChain: async (input: string, dir: string) => { state.calls.push('processor'); expect(path.basename(input)).toMatch(/^repair-/); const outputPath = path.join(dir, 'vst.wav'); await fs.writeFile(outputPath, 'processed'); return { outputPath, temporaryPaths: [outputPath] } } }))
 vi.mock('../video/ffmpeg-loader', () => ({ loadFfmpegPath: async () => 'ffmpeg' }))
 vi.mock('./process', () => ({ runAudioEditProcess: async (_bin: string, args: string[]) => {
-  // 不是浮点 WAV 的渲染源先转一份（这里写出一段 48000 帧的真 WAV）；音量区域在主进程直接乘，不再调用 FFmpeg
+  // 不是浮点 WAV 的渲染源先转一份（这里写出一段 48000 帧的真 WAV）；音量区域在工作线程里直接乘，不再调用 FFmpeg
   state.calls.push('decode'); await writeWav(args.at(-1)!, new Float32Array(48000).fill(0.25))
 } }))
 import { renderAudioEditProject } from './render'
@@ -24,7 +29,7 @@ async function writeWav(file: string, samples: Float32Array): Promise<void> {
 }
 let project: AudioEditProjectDocument
 beforeEach(async () => {
-  state.dir = await fs.mkdtemp(path.join(os.tmpdir(), 'audio-render-')); state.calls = []
+  state.dir = await fs.mkdtemp(path.join(os.tmpdir(), 'audio-render-')); state.calls = []; state.pcmJobs = []
   await writeWav(path.join(state.dir, 'source.wav'), Float32Array.from({ length: 48000 }, (_, i) => (i < 24000 ? 0.5 : -0.5)))
   project = { id: 'test', name: '声音', source: { mediaType: 'audio', sourcePath: '/source.wav', audioPath: '/source.wav', durationFrames: 48000, sampleRate: 48000, channels: 1 }, referenceScript: '', transcript: [], suggestions: [], revision: 1, createdAt: 1, updatedAt: 1,
     gainRegions: [{ id: 'g', startFrame: 0, endFrame: 24000, gainDb: -6, fadeInFrames: 0, fadeOutFrames: 0, enabled: true }],
@@ -37,6 +42,8 @@ it('orders shared stages and reuses unaffected caches on cut/gain edits; revisio
   expect(first.durationFrames).toBe(24000)
   // 顺序：修复 → 效果链（插件）→ 区间音量；插件输出不是浮点 WAV 时先转一份再乘音量
   expect(state.calls).toEqual(['repair', 'processor', 'decode'])
+  // 整段读写 PCM 的两步都派给工作线程，主进程只协调
+  expect(state.pcmJobs).toEqual(['gains', 'splices'])
   const gained = (await openF32Wav(path.join(state.dir, (await fs.readdir(state.dir)).find(name => name.startsWith('gain-'))!)))!
   const pcm = await gained.read(0, 48000); await gained.close()
   expect(pcm[0]).toBeCloseTo(0.25 * 10 ** (-6 / 20), 6); expect(pcm[23999]).toBeCloseTo(0.25 * 10 ** (-6 / 20), 6); expect(pcm[24000]).toBe(0.25)
@@ -60,7 +67,7 @@ it('failed and cancelled cache builds never publish, and simultaneous readers sh
   expect((await fs.readdir(state.dir)).sort()).toEqual(['ok.wav', 'source.wav'])
 })
 
-it('成品在主进程逐段拼接并交叉淡化：浮点 WAV 渲染源直接读，拼接点不再硬跳，旧成品缓存不再命中', async () => {
+it('成品逐段拼接并交叉淡化（区间音量与拼接都派给工作线程）：浮点 WAV 渲染源直接读，拼接点不再硬跳，旧成品缓存不再命中', async () => {
   project.effectChain = []
   project.repairs = []
   project.gainRegions = []
@@ -70,6 +77,7 @@ it('成品在主进程逐段拼接并交叉淡化：浮点 WAV 渲染源直接�
   const result = await renderAudioEditProject(project)
   expect(result.durationFrames).toBe(30000)
   expect(state.calls).toEqual([])
+  expect(state.pcmJobs).toEqual(['splices'])
   expect(result.audioPath).not.toBe(path.join(state.dir, `finished-${oldKey}.wav`))
   const reader = (await openF32Wav(result.audioPath))!
   expect(reader.frames).toBe(30000)

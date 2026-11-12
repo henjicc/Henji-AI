@@ -1,10 +1,10 @@
 import path from 'node:path'
-import { Worker } from 'node:worker_threads'
 import { audioEditRealtimeEffects } from '../../../../src/core/audioEdit/effects'
 import type { AudioEffectInstance } from '../../../../src/core/audio/effects/audioEffectChain'
 import type { AudioEditProjectDocument } from '../../../../src/core/audioEdit/types'
 import { audioEditCacheDirectory } from './media'
 import { audioRenderKey, cachedAudioFile } from './render-cache'
+import { runAudioEditEffectsWorker } from './effects-worker-client'
 import { AUDIO_IDENTITY_PHASES, audioEffectsIdentity } from '../../../../src/core/audio/effects/audioIdentity'
 
 /**
@@ -19,29 +19,5 @@ export async function applyAudioEditRealtimeEffects(project: AudioEditProjectDoc
 export async function applyAudioEffectInstancesToFile(projectId: string, input: string, effects: readonly AudioEffectInstance[], signal?: AbortSignal, onProgress?: (value: number) => void): Promise<string> {
   if (!effects.length) return input
   const keys = AUDIO_IDENTITY_PHASES.map(phase => `fx-${audioRenderKey(['effects-v1', path.basename(input), audioEffectsIdentity(effects, phase)])}`)
-  return cachedAudioFile(audioEditCacheDirectory(projectId), keys[0], 'wav', output => runEffectsWorker(input, output, effects, signal, onProgress), signal, keys.slice(1))
-}
-
-function runEffectsWorker(input: string, output: string, effects: readonly AudioEffectInstance[], signal?: AbortSignal, onProgress?: (value: number) => void): Promise<void> {
-  signal?.throwIfAborted()
-  const worker = new Worker(path.join(__dirname, 'audio-edit-effects-worker.cjs'), { workerData: { input, output, effects } })
-  return new Promise<void>((resolve, reject) => {
-    let settled = false
-    const finish = (error?: unknown): void => {
-      if (settled) return
-      settled = true
-      signal?.removeEventListener('abort', abort)
-      void worker.terminate()
-      if (error) reject(error); else resolve()
-    }
-    const abort = (): void => finish(signal?.reason ?? new Error('效果处理已取消'))
-    signal?.addEventListener('abort', abort, { once: true })
-    worker.on('message', (message: { type: 'progress'; value: number } | { type: 'done' } | { type: 'error'; message: string }) => {
-      if (message.type === 'progress') onProgress?.(message.value)
-      else if (message.type === 'done') finish()
-      else finish(new Error(`效果处理失败：${message.message}`))
-    })
-    worker.once('error', error => finish(error))
-    worker.once('exit', code => { if (code !== 0) finish(new Error(`效果处理未完成：${code}`)) })
-  })
+  return cachedAudioFile(audioEditCacheDirectory(projectId), keys[0], 'wav', output => runAudioEditEffectsWorker({ kind: 'effects', input, output, effects: [...effects] }, signal, onProgress), signal, keys.slice(1))
 }

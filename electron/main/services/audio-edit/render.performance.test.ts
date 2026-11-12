@@ -7,6 +7,10 @@ import { promisify } from 'node:util'
 import type { AudioEditProjectDocument } from '../../../../src/core/audioEdit/types'
 const state = vi.hoisted(() => ({ dir: '', source: '', binary: process.env.HENJI_AUDIO_RENDER_FFMPEG ?? '' }))
 vi.mock('./media', () => ({ audioEditCacheDirectory: () => state.dir, verifyAudioEditSource: vi.fn(), prepareAudioEditAudio: async () => state.source, identifyAudioEditSource: async () => ({ digest: 'synthetic-pcm' }), validateAudioEditAudio: vi.fn() }))
+vi.mock('./effects-worker-client', async () => {
+  const { runAudioEditPcmJob } = await import('./pcm-jobs')
+  return { runAudioEditEffectsWorker: (job: import('./pcm-jobs').AudioEditPcmJob) => runAudioEditPcmJob(job) }
+})
 vi.mock('../video/ffmpeg-loader', async original => ({ ...await original<Record<string, unknown>>(), loadFfmpegPath: async () => state.binary }))
 import { renderAudioEditProject } from './render'
 const exec = promisify(execFile)

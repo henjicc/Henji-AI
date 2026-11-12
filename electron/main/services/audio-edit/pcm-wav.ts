@@ -9,8 +9,8 @@ export interface F32WavReader {
   sampleRate: number
   channels: number
   frames: number
-  /** 越界部分补零 */
-  read(startFrame: number, frameCount: number): Promise<Float32Array>
+  /** 越界部分补零。传入 into（长度须为 frameCount × 声道数）时读进它并返回它，整段处理可复用同一块缓冲。 */
+  read(startFrame: number, frameCount: number, into?: Float32Array): Promise<Float32Array>
   close(): Promise<void>
 }
 
@@ -51,13 +51,22 @@ export async function openF32Wav(path: string): Promise<F32WavReader | null> {
     const frames = Math.floor(dataSize / (4 * channels))
     return {
       sampleRate, channels, frames,
-      async read(startFrame, frameCount) {
-        const output = new Float32Array(Math.max(0, frameCount) * channels)
+      async read(startFrame, frameCount, into) {
+        const length = Math.max(0, frameCount) * channels
+        if (into && into.length !== length) throw new Error('读取缓冲长度与帧数不符')
+        const output = into ?? new Float32Array(length)
         const from = Math.max(0, startFrame), to = Math.min(frames, startFrame + frameCount)
-        if (to > from) {
-          const bytes = Buffer.alloc((to - from) * channels * 4)
-          await handle.read(bytes, 0, bytes.length, dataOffset + from * channels * 4)
-          output.set(new Float32Array(bytes.buffer, bytes.byteOffset, bytes.length / 4), (from - startFrame) * channels)
+        const at = Math.max(0, (from - startFrame) * channels), filled = Math.max(0, to - from) * channels
+        // 直接读进输出缓冲，不经中间 Buffer；复用的缓冲把读不到的部分清零。
+        if (into) { output.fill(0, 0, Math.min(at, length)); output.fill(0, Math.min(length, at + filled)) }
+        if (filled > 0) {
+          const bytes = new Uint8Array(output.buffer, output.byteOffset + at * 4, filled * 4)
+          let done = 0
+          while (done < bytes.length) {
+            const { bytesRead } = await handle.read(bytes, done, bytes.length - done, dataOffset + from * channels * 4 + done)
+            if (!bytesRead) { bytes.fill(0, done); break }
+            done += bytesRead
+          }
         }
         return output
       },

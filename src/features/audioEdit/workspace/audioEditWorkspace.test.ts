@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
 import { audioEditHistoryEntries, describeAudioEditStep } from './audioEditHistory'
 import { markAgentAuthoredStep } from '@/features/application-control/agentEditing'
@@ -26,6 +26,17 @@ describe('音频编辑历史记录', () => {
     expect(entries.map(entry => [entry.label, entry.state, entry.steps])).toEqual([
       ['起点', 'done', 2], ['重命名', 'done', 1], ['重命名', 'current', 0], ['重命名', 'undone', -1],
     ])
+  })
+
+  it('同一对快照只比较一次：每次编辑重列整条历史时不再重新比较整段转写', () => {
+    const before = { ...base, transcript: [{ id: 'w', text: '你好', startFrame: 0, endFrame: 100, included: true, locked: false, granularity: 'word' as const }] }
+    const after = { ...before, transcript: [{ ...before.transcript[0], text: '您好' }] }
+    expect(describeAudioEditStep(before, after)).toBe('修改文字')
+    const stringify = vi.spyOn(JSON, 'stringify')
+    try {
+      expect(audioEditHistoryEntries([before], after, []).map(entry => entry.label)).toEqual(['起点', '修改文字'])
+      expect(stringify).not.toHaveBeenCalled()
+    } finally { stringify.mockRestore() }
   })
 
   it('助手做的步骤在名字前标出“助手”，撤销时知道撤的是谁的', () => {

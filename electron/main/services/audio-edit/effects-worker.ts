@@ -1,10 +1,13 @@
 import { parentPort, workerData } from 'node:worker_threads'
-import { AudioEffectChain, type AudioEffectInstance } from '../../../../src/core/audio/effects/audioEffectChain'
+import { AudioEffectChain } from '../../../../src/core/audio/effects/audioEffectChain'
 import { createF32WavWriter, openF32Wav } from './pcm-wav'
+import { runAudioEditPcmJob } from './pcm-jobs'
+import type { AudioEditEffectsWorkerJob } from './effects-worker-client'
 
 /**
  * 音频编辑导出时离线跑效果链（与试听同一份实现，src/core/audio/effects）：整条声音按块顺序处理，状态连续；
  * 效果链的固定延迟用尾部补零冲出、开头丢掉同样长度，输出与输入逐样本对齐、等长。
+ * 同一个线程入口也跑区间音量与成片拼接（pcm-jobs.ts），整段 PCM 都不在主进程里搬。
  */
 
 // RNNoise 的 WebAssembly 只认浏览器窗口或 Web Worker 环境；Node 工作线程补上同名全局后照常加载（模型内嵌在包里，不联网）。
@@ -12,10 +15,10 @@ const scope = globalThis as unknown as Record<string, unknown>
 scope.WorkerGlobalScope ??= class {}
 scope.self ??= globalThis
 
-interface Job { input: string; output: string; effects: AudioEffectInstance[] }
 const BLOCK = 8192
 
-async function run(job: Job): Promise<void> {
+async function run(job: AudioEditEffectsWorkerJob): Promise<void> {
+  if (job.kind !== 'effects') return runAudioEditPcmJob(job, value => parentPort?.postMessage({ type: 'progress', value }))
   const reader = await openF32Wav(job.input)
   if (!reader) throw new Error('效果处理只接受 32 位浮点 WAV。')
   const { sampleRate, channels, frames } = reader
@@ -52,4 +55,4 @@ async function run(job: Job): Promise<void> {
   }
 }
 
-run(workerData as Job).then(() => parentPort?.postMessage({ type: 'done' }), (error: unknown) => parentPort?.postMessage({ type: 'error', message: error instanceof Error ? error.message : String(error) }))
+run(workerData as AudioEditEffectsWorkerJob).then(() => parentPort?.postMessage({ type: 'done' }), (error: unknown) => parentPort?.postMessage({ type: 'error', message: error instanceof Error ? error.message : String(error) }))

@@ -9,7 +9,10 @@ import { flushAudioEditProject } from '../application/audioEditProjectInstances'
 const logger = createLogger('features.audioEdit.silencePreview')
 
 export function useAudioEditSilencePreview(project: AudioEditProjectDocument | null, range: AudioEditRange | undefined, enabled: boolean) {
-  const key = JSON.stringify(project ? [project.id, project.source, project.transcript, project.cuts, project.suggestions, project.batchSettings, range] : null)
+  // 只在这几个字段换了引用时重新序列化：拖效果滑杆等无关修改不再每次把整段转写转成字符串
+  const key = useMemo(() => JSON.stringify(project ? [project.id, project.source, project.transcript, project.cuts, project.suggestions, project.batchSettings, range] : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only these fields decide the preview
+    [project?.id, project?.source, project?.transcript, project?.cuts, project?.suggestions, project?.batchSettings, range?.startFrame, range?.endFrame, project === null])
   const latest = useRef({ project, range })
   latest.current = { project, range }
   const [result, setResult] = useState<{ key: string; suggestions: AudioEditSuggestion[]; error?: string } | null>(null)

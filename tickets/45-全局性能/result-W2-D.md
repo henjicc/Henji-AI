@@ -52,3 +52,28 @@
 3. 拖动播放头试听：听感与改前一致（不变调、不黏糊、干脆）。擦洗算法没动，只换了取数据的路径；对比 `audio_scrub.session.completed` 的 meanReadMs、slowestReadMs。
 4. 在这份作品上拖“输出音量”或效果参数滑杆：应跟手。松手后历史面板只多一步。
 5. 加一处区间音量后导出 WAV：导出期间界面其他操作（滚动、点选）不卡；与改前导出的 WAV 应逐样本一致。
+
+## 审查返工（第 1 轮）
+1. **缓存文件被删后自愈**（`preview.ts`）：读取失败（包括打开报 ENOENT、FFmpeg 兜底失败）时关掉句柄，删掉这条渲染源记录，重新推一遍渲染源后再读一次；第二次仍失败才报错，并记 `audio_edit.preview.source.retry`。测试“渲染源缓存文件被清理掉后……”：句柄闲置关闭、文件删除后，下一块正常读出，只多推一次渲染源，之后照常命中。
+2. **插件清单进缓存键，记录有上限**：效果链里有插件时，`listAudioEditProcessors` 的“id:是否可用”清单并进缓存键；没有插件的作品不扫描插件，首块不变慢。`renderSources` 按最近使用淘汰，最多 8 条。
+3. **拖动中不落盘、不发给主进程**（`audioEditProjectInstances.ts`）：
+   - 拖动期间 `notifyContent` 只记一个待通知标记；会话保存时读到的是拖动开始前的作品（`record.persisted`）。
+   - 松手、整份校验通过后通知会话一次。测试中拖动期间 flush 后，文件里没有中间值；松手后 flush，文件里是最终值。
+   - 保留了 `publish(instance)`：界面和试听靠它跟着滑杆变化，渲染层边播边算的实时效果和输出在这条路上能实时听到。
+   - 代价：效果链里需要整段处理的效果（人声分离量、插件参数等），拖动中试听仍是拖动前的声音，松手保存后才更新。这些效果本来就要主进程整段重算，拖动中途算出来的结果也用不上。
+4. **松手校验失败不抛错**：
+   - 回滚到手势开始时的状态，计数和 batchDepth 归零。
+   - 记一条 `audio_edit.gesture.validation.failed` 错误日志，用现有的全局提示 `notifyUser` 告诉用户“已回到拖动前的状态，请换个数值再试”。
+   - `finish` 不再抛错，调用方的 `active` 一定会被清空。测试中失败后，下一次拖动仍合成一步撤销。
+5. **组件卸载结束手势**：新增 `workspace/useAudioEditGestures.ts`，`AudioEditEffectControls.tsx` 里的拖动入口全部经过它，包括传给 `AudioEffectParams`、`EssentialSoundControls` 的 gesture 工厂。卸载时取消没结束的拖动。测试中卸载后 batchDepth 为 0，下一次编辑恢复整份校验并照常保存。
+6. **合并线程入口**：
+   - `effects-worker-client.ts` 的 `runAudioEditEffectsWorker` 是效果链、区间音量、成片拼接三种活的唯一入口；`effects-render.ts` 的 `runEffectsWorker` 和上一版的 `pcm-worker-client.ts` 都已删除。
+   - 线程没说完成就以 0 退出，现在算失败；原来会一直挂着。
+7. **补测试**：
+   - `effects-worker-client.test.ts` 用真实的 .cjs 小线程脚本，覆盖完成与进度、报错、非零退出、无声退出、取消。
+   - `preview.test.ts` 补了非浮点 WAV 走 FFmpeg 兜底，核对 seek 与时长参数。
+
+验证：
+- 两套 tsc 通过（渲染层用 12288）。
+- 11 个受影响的测试文件全过（性能用例按环境变量跳过）。
+- 改动文件 eslint 0 问题；check:surface 0 处错误，告警都在其他文件。
