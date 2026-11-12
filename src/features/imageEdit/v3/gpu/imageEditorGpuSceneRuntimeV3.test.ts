@@ -463,4 +463,70 @@ describe('ImageEditorGpuSceneRuntimeV3', () => {
     runtime.dispose()
   })
 
+  it('预热的设备直接交给会话；归还后再领用不带上一个会话的场景、资源与 Surface', async () => {
+    const events: ImageEditorGpuSceneWorkerEventV3[] = []
+    const acquire = vi.fn(async () => managedDevice({} as GpuDevice, 1))
+    const destroyTexture = vi.fn()
+    const compositors: ImageEditorGpuRasterCompositorV3Like[] = []
+    const runtime = new ImageEditorGpuSceneRuntimeV3((event) => events.push(event), {
+      deviceManager: {
+        onDeviceLost: vi.fn(), acquire,
+        getRecoveryStatus: () => ({ generation: 1, retryAfterMs: 0 }), destroy: vi.fn(),
+      },
+      contextFactory: async () => ({ onError: () => vi.fn(), dispose: vi.fn() }),
+      compositorFactory: () => {
+        const compositor = fakeCompositor({ uploadTile: vi.fn(() => ({ destroy: destroyTexture }) as never) })
+        compositors.push(compositor)
+        return compositor
+      },
+    })
+    const resourceRef = `sha256:${'d'.repeat(64)}` as const
+    const key = { resourceRef, mip: 0, tileX: 0, tileY: 0, contentVersion: `${resourceRef}:4` }
+    const document = createImageEditDocumentV3({ width: 1, height: 1 })
+    document.layers = [createImageEditRasterLayerV3('layer', '图层', resourceRef)]
+    const openSession = (sessionId: string, sceneGeneration: number) => {
+      runtime.handle({ ...initializeRequest(), sessionId })
+      runtime.handle({ type: 'sync-scene', quality: 'stable', sceneGeneration, document,
+        resourceDescriptors: [{ resourceRef, byteLength: 4, mediaType: 'image/png' }] })
+    }
+    const uploadTile = (sceneGeneration: number) => runtime.handle({
+      type: 'upload-tiles', sceneGeneration, tiles: [{ key, estimatedGpuBytes: 4, tile: {
+        resourceRef, mip: 0, tileX: 0, tileY: 0, halo: 0, width: 1, height: 1, channels: 4, bitDepth: 8,
+        sampleFormat: 'uint', numericRange: 'unorm8', byteOrder: 'little-endian', rowStride: 4,
+        colorSpace: 'srgb', transferFunction: 'srgb', alphaMode: 'straight', orientationApplied: true,
+        originX: 0, originY: 0, pixels: new Uint8Array([255, 0, 0, 255]).buffer,
+      } }],
+    })
+
+    runtime.handle({
+      type: 'warm', protocolVersion: IMAGE_EDITOR_GPU_SCENE_PROTOCOL_VERSION_V3,
+      memoryBudgetBytes: IMAGE_EDITOR_GPU_SCENE_DEFAULT_BUDGET_BYTES_V3,
+    })
+    await vi.waitFor(() => expect(events.at(-1)).toEqual({ type: 'warmed', sceneGeneration: 0, deviceGeneration: 1 }))
+    expect(compositors).toHaveLength(1)
+    openSession('first', 5)
+    runtime.handle({ type: 'attach-presentation-surface', surfaceGeneration: 1, canvas: {} as OffscreenCanvas })
+    await vi.waitFor(() => expect(runtime.getStatus()).toBe('ready'))
+    uploadTile(5)
+    expect(acquire).toHaveBeenCalledOnce()
+    expect(compositors).toHaveLength(1)
+
+    runtime.handle({ type: 'release' })
+    expect(events.at(-1)).toEqual({
+      type: 'released', sceneGeneration: 0, deviceGeneration: 1, deviceReady: true, deviceLossHistory: false,
+    })
+    expect(runtime.getStatus()).toBe('idle')
+    expect(destroyTexture).toHaveBeenCalledOnce()
+    expect(compositors[0]?.dispose).toHaveBeenCalledOnce()
+
+    // 新会话的场景代际从 1 开始，比上一个会话小也必须被接受。
+    openSession('second', 1)
+    await vi.waitFor(() => expect(events.at(-1)).toMatchObject({ type: 'ready', sceneGeneration: 1, recovered: false }))
+    uploadTile(1)
+    expect(acquire).toHaveBeenCalledOnce()
+    expect(compositors).toHaveLength(2)
+    expect(compositors[1]?.attachPresentationSurface).not.toHaveBeenCalled()
+    expect(compositors[1]?.uploadTile).toHaveBeenCalledOnce()
+    runtime.dispose()
+  })
 })

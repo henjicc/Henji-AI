@@ -29,6 +29,9 @@ function now(): number {
   return typeof performance === 'undefined' ? Date.now() : performance.now()
 }
 
+// 领到已预热的 GPU 线程时首帧一般在这之内到达；到点还没有 GPU 帧就照常排 CPU 草稿兜底。
+const WARM_GPU_FIRST_FRAME_WAIT_MS = 300
+
 export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessionV3 {
   private readonly clients: ImageEditorRenderSessionClientLanesV3
   private readonly gpuBridge: ImageEditorRenderSessionGpuBridgeV3
@@ -53,6 +56,10 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
   private readonly unsubscribeRuntime: () => void
   private visible = true
   private disposed = false
+  private awaitingWarmGpu: boolean
+  private warmGpuTimer: ReturnType<typeof setTimeout> | null = null
+  /** GPU 已回退但 CPU 还没有帧：GPU 画布暂留最后一帧，第一张 CPU 帧画好后再撤。 */
+  private handBackToCpuAfterFrame = false
 
   constructor(
     options: ImageEditorViewportCompositeClientOptionsV3,
@@ -90,6 +97,7 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
       },
       () => this.resumeCpuFallback(),
     )
+    this.awaitingWarmGpu = this.gpuBridge.startsWarm()
     this.work = new ImageEditorRenderSessionWorkV3({
       clients: this.clients,
       getStable: () => this.stable,
@@ -110,7 +118,7 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
     this.assertUsable()
     const gpuSurface = this.compositor.attach(elements)
     if (gpuSurface) {
-      this.gpuPresentation.fallback(() => this.present())
+      this.handBackToCpu(() => this.present())
       this.gpuBridge.attachPresentationSurface(gpuSurface)
       if (this.snapshot) this.gpuBridge.requestFrame(this.snapshot.quality)
     }
@@ -137,7 +145,7 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
       this.releaseResults()
       this.candidateFrames.clear(); this.cacheCandidates = false
       if (!this.cpu.resume()) this.cpu.cancel()
-      this.gpuPresentation.fallback(() => this.compositor.resetDocumentFrame())
+      this.handBackToCpu(() => this.compositor.resetDocumentFrame())
     }
     if (snapshot.cacheable) this.cacheCandidates = true
     this.schedule.reset()
@@ -265,6 +273,7 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
     this.cpu.dispose()
     if (this.cameraFrame !== null) cancelAnimationFrame(this.cameraFrame)
     this.cameraFrame = null
+    this.clearWarmGpuWait()
     this.pendingLayout = null
     this.unsubscribeRuntime()
     this.gpuBridge.dispose()
@@ -278,6 +287,7 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
 
   private scheduleCurrentWork(): void {
     if (this.cpu.suspended || !this.visible || !this.snapshot || !this.layout) return
+    if (this.waitForWarmGpu()) return
     const snapshot = this.snapshot
     const layout = this.layout
     if (this.cacheCandidates && snapshot.quality === 'stable'
@@ -373,7 +383,7 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
 
   private present(): void {
     if (!this.layout || !this.snapshot) return
-    if (this.gpuPresentation.isActive()) return
+    if (this.gpuPresentation.isActive() && !this.handBackToCpuAfterFrame) return
     const presented = presentImageEditorRenderSessionFrameV3({
       compositor: this.compositor,
       snapshot: this.snapshot,
@@ -383,6 +393,8 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
       backdrop: this.backdrop,
     })
     if (!presented) return
+    // 第一张 CPU 帧已画进（仍被 GPU 画布盖着的）稳定表面，这时再撤下 GPU 画布，交接没有空白。
+    if (this.handBackToCpuAfterFrame) this.handBackToCpu(() => undefined)
     this.publish({
       ...presented,
       eventToPresentMs: this.snapshot.eventTimestamp === undefined
@@ -391,25 +403,69 @@ export class DefaultImageEditorRenderSessionV3 implements ImageEditorRenderSessi
     })
   }
 
+  /**
+   * 领到已预热的 GPU 线程时先不排 CPU 草稿：它和 GPU 首帧抢主进程读瓦片与 CPU，做完也会被 GPU 帧取代。
+   * 看门狗到点、GPU 帧呈现或 GPU 回退，三者先到哪个就结束等待。
+   */
+  private waitForWarmGpu(): boolean {
+    if (!this.awaitingWarmGpu) return false
+    this.warmGpuTimer ??= setTimeout(() => {
+      this.warmGpuTimer = null
+      this.stopWaitingForWarmGpu()
+    }, WARM_GPU_FIRST_FRAME_WAIT_MS)
+    return true
+  }
+
+  private stopWaitingForWarmGpu(): void {
+    if (!this.awaitingWarmGpu) return
+    this.clearWarmGpuWait()
+    if (!this.disposed) this.scheduleCurrentWork()
+  }
+
+  private clearWarmGpuWait(): void {
+    this.awaitingWarmGpu = false
+    if (this.warmGpuTimer !== null) clearTimeout(this.warmGpuTimer)
+    this.warmGpuTimer = null
+  }
+
   private suspendCpuAfterGpuPresentation(): void {
+    this.clearWarmGpuWait()
+    this.handBackToCpuAfterFrame = false
     if (this.cpu.suspend()) {
       this.schedule.reset()
       this.publish({ rendering: false })
     }
     if (!this.snapshot || !this.layout) return
     const documentId = this.snapshot.document.id
-    this.cpu.captureSafetyOnce(this.snapshot, this.layout, this.backdrop,
+    this.cpu.captureSafetyOnce(documentId,
+      () => this.snapshot && this.layout
+        ? { snapshot: this.snapshot, layout: this.layout, safetyFrame: this.backdrop }
+        : null,
       (result) => {
         if (this.snapshot?.document.id !== documentId) { result.release(); return }
         this.replaceBackdrop(result)
       })
   }
 
+  /**
+   * GPU 交给 CPU。若 GPU 画布正显示着而 CPU 手里还没有任何帧（领到预热线程时不排 CPU 草稿、
+   * 安全帧也推迟了），先保留 GPU 画布上的最后一帧，等第一张 CPU 帧画好再撤，回退瞬间不出现空白。
+   */
   private resumeCpuFallback(): void {
     if (this.disposed) return
+    this.clearWarmGpuWait()
     if (this.cpu.resume()) this.schedule.reset()
-    this.gpuPresentation.fallback(() => this.present())
+    if (this.gpuPresentation.isActive() && !this.stable && !this.draft && !this.backdrop) {
+      this.handBackToCpuAfterFrame = true
+    } else {
+      this.handBackToCpu(() => this.present())
+    }
     this.scheduleCurrentWork()
+  }
+
+  private handBackToCpu(resumeCpuPresentation: () => void): void {
+    this.handBackToCpuAfterFrame = false
+    this.gpuPresentation.fallback(resumeCpuPresentation)
   }
 
   private handleFailure(

@@ -75,6 +75,9 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
   } | null = null
   private disposed = false
   private readonly exportSession: ImageEditorGpuExportSessionV3
+  /** 会话建立（预览区出现）的时间，用来记打开到 GPU 首帧的耗时。 */
+  private readonly createdAt = performance.now()
+  private firstFramePresented = false
   constructor(
     sessionId: string,
     injectedClient: ImageEditorGpuSceneClientV3Like | null | undefined,
@@ -146,6 +149,11 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
     if (this.layout) {
       this.requestFrame(snapshot.quality)
     }
+  }
+
+  /** 领到已预热好设备的渲染线程：GPU 首帧通常很快就到，会话可以先不排 CPU 草稿。 */
+  startsWarm(): boolean {
+    return this.client?.startupTiming?.().warmth === 'ready'
   }
 
   renderExport(request: RenderImageEditorV3ExportTilesRequest): ImageEditorV3ExportTileStream | null {
@@ -251,6 +259,16 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
       if (this.diagnosticRenderingEnabled) logger.info('图片编辑 GPU Scene 帧完成', frameLog)
       else logger.debug('图片编辑 GPU Scene 帧完成', frameLog)
       if (presented) {
+        if (!this.firstFramePresented) {
+          this.firstFramePresented = true
+          logger.info('图片编辑 GPU 首帧已呈现', {
+            event: 'image_editor_v3.gpu_scene.first_frame',
+            context: {
+              ...this.client?.startupTiming?.(),
+              firstFrameMs: Math.round(performance.now() - this.createdAt),
+            },
+          })
+        }
         if (this.document) traceImageEditorStageV3(this.document.id, this.inFlightTrace, 'present', { backend: 'gpu', quality: event.quality, renderGeneration: event.sceneGeneration })
         this.publish({
           deviceStatus: 'ready',
@@ -301,6 +319,12 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
     if (event.type === 'failed') {
       if (this.document) traceImageEditorStageV3(this.document.id, this.inFlightTrace, 'gpu-failed', { code: event.code, message: event.message, loading: this.loadingTiles.size })
       this.frameInFlight = false
+      if (event.code === 'frame-failed') {
+        // 只丢了这一帧：设备与已上传资源都在，接着请求下一帧；运行时反复失败才会改报 gpu-fallback。
+        this.pendingFrame = true
+        this.dispatchFrame()
+        return
+      }
       if (event.code === 'scene-resources-failed') {
         this.sceneResourcesReady = false
         this.pendingFrame = true
@@ -308,8 +332,9 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
         this.fallback(event.message)
         return
       }
-      // 初始化失败后 Worker 没有可用设备；后续文档发布不能把资源就绪当成设备恢复。
-      if (event.code === 'initialization-failed') {
+      // 初始化失败、或运行时已释放合成状态交给 CPU：Worker 暂时没有可用设备，
+      // 后续文档发布不能把资源就绪当成设备恢复，等运行时重试成功发来 ready 才重新启用。
+      if (event.code === 'initialization-failed' || event.code === 'gpu-fallback') {
         this.deviceReady = false
         this.clearTileRetry()
         this.tileLoadAbortController.abort()

@@ -66,6 +66,18 @@ interface ImageEditorGpuSceneInitializeRequestV3 {
   diagnosticInitializationFailure?: boolean
 }
 
+/** 待命线程提前申请设备并建好合成器；不属于任何会话，领用后由 initialize 绑定会话。 */
+interface ImageEditorGpuSceneWarmRequestV3 {
+  type: 'warm'
+  protocolVersion: typeof IMAGE_EDITOR_GPU_SCENE_PROTOCOL_VERSION_V3
+  memoryBudgetBytes: number
+}
+
+/** 结束当前会话但保留设备：清掉场景代际、资源登记表与呈现 Surface，处理完回 released。 */
+interface ImageEditorGpuSceneReleaseRequestV3 {
+  type: 'release'
+}
+
 interface ImageEditorGpuSceneSyncRequestV3 extends ImageEditorGpuSceneSequencedRequestV3 {
   type: 'sync-scene'
   quality: ImageEditRenderQuality
@@ -161,6 +173,8 @@ interface ImageEditorGpuSceneDiagnosticDeviceLossRequestV3 {
 
 export type ImageEditorGpuSceneWorkerRequestV3 =
   | ImageEditorGpuSceneInitializeRequestV3
+  | ImageEditorGpuSceneWarmRequestV3
+  | ImageEditorGpuSceneReleaseRequestV3
   | ImageEditorGpuSceneSyncRequestV3
   | ImageEditorGpuSceneUploadTilesRequestV3
   | ImageEditorGpuSceneTransformRequestV3
@@ -263,18 +277,41 @@ interface ImageEditorGpuSceneDeviceLostEventV3 extends ImageEditorGpuSceneEventB
   retryAfterMs: number
 }
 
+/** release 已处理完：此前发出的事件都属于上一个会话。deviceReady 表示设备与合成器仍留着，下一个会话可直接用。 */
+interface ImageEditorGpuSceneReleasedEventV3 extends ImageEditorGpuSceneEventBaseV3 {
+  type: 'released'
+  deviceReady: boolean
+  /** 设备近期丢失过或处于恢复冷却期：待命池不应把这个线程留给下一个会话。 */
+  deviceLossHistory: boolean
+}
+
+/** warm 处理完：设备与合成器已建好；error 存在表示预热失败，领用后 initialize 会重新申请。 */
+interface ImageEditorGpuSceneWarmedEvent extends ImageEditorGpuSceneEventBaseV3 {
+  type: 'warmed'
+  error?: string
+}
+
 export interface ImageEditorGpuSceneFailedEventV3 extends ImageEditorGpuSceneEventBaseV3 {
   type: 'failed'
   requestId: string | null
+  /**
+   * frame-failed：这一帧（或这批瓦片）失败，设备、合成器与已上传资源都保留，客户端重新请求下一帧即可。
+   * gpu-fallback：短时间内反复失败或恢复失败，运行时已释放合成状态交给 CPU，稍后自动重新尝试 GPU。
+   */
   code: 'initialization-failed' | 'scene-resources-failed' | 'composition-not-ready' | 'export-not-ready'
+    | 'frame-failed' | 'gpu-fallback'
   message: string
   recoverable: boolean
+  /** 设备报显存不足；运行时已让出缓存并降低预览档位。 */
+  outOfMemory?: boolean
   diagnostic?: boolean
   diagnostics?: { deviceAcquireCount: number; surfaceFrameCount: number }
 }
 
 export type ImageEditorGpuSceneWorkerEventV3 =
   | ImageEditorGpuSceneReadyEventV3
+  | ImageEditorGpuSceneReleasedEventV3
+  | ImageEditorGpuSceneWarmedEvent
   | ImageEditorGpuSceneResourcesReadyEventV3
   | ImageEditorGpuSceneTilesNeededEventV3
   | ImageEditorGpuSceneFrameReadyEventV3
@@ -288,7 +325,13 @@ export interface ImageEditorGpuSceneWorkerPortV3 {
   onerror: ((event: ErrorEvent) => void) | null
   postMessage(message: ImageEditorGpuSceneWorkerRequestV3, transfer?: Transferable[]): void
   terminate(): void
+  /** 来自待命池的线程：会话结束时归还待命，代替 dispose 与 terminate。 */
+  release?(): void
+  /** 领用时线程的状态：ready 表示设备与合成器已建好，打开文档不用再申请设备。 */
+  readonly warmth?: ImageEditorGpuSceneWorkerWarmth
 }
+
+export type ImageEditorGpuSceneWorkerWarmth = 'ready' | 'warming' | 'failed' | 'cold'
 
 export type ImageEditorGpuSceneWorkerFactoryV3 = () => ImageEditorGpuSceneWorkerPortV3
 

@@ -73,7 +73,8 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
   private readonly presentation: ImageEditorGpuRasterPresentationV3
   private readonly cameraBuffer: NativeGpuBufferV3
   private readonly atlas: ImageEditorGpuTileAtlasV3
-  private readonly memoryBudgetBytes: number
+  /** 缓存淘汰与预览降档的目标；设备报显存不足时 reducePreviewMemory 会把它压低。 */
+  private memoryBudgetBytes: number
   private readonly maxTextureDimension2D: number
   private reservedOutputBytes = LINEAR_AND_PRESENT_BYTES_PER_PIXEL
   private cameraBindGroup: NativeGpuBindGroupV3 | null = null
@@ -89,6 +90,8 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
   /** 预览请求的屏幕视口；合成用的 layout 可能按显存预算降低了分辨率。 */
   private previewLayout: ImageEditorViewportLayoutV3 | null = null
   private previewScaleIndex = 0
+  /** 上一次选档时的输入；场景、视口与预算都没变时不必重新选档。 */
+  private fittedPreviewKey: { scene: ImageEditorGpuRasterSceneV3 | null; viewport: string; budgetBytes: number } | null = null
   private expandEffects = true
   private gaussianEnvelope: { key: string; input: GaussianRegion } | null = null
   private workingEffectViewport: ReturnType<typeof resolveImageEditorGpuEffectViewportV3> | null = null
@@ -154,7 +157,7 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
     this.graph.syncScene(scene)
     this.transientTransforms.clear()
     this.previousMips.clear()
-    if (this.previewLayout) this.fitPreviewViewport()
+    if (this.previewLayout) this.fitPreviewViewport(true)
     else if (this.layout) this.setViewport(this.layout, this.expandEffects, this.effectRecipeSize)
     else this.replanTiles()
     pruneImageEditorGpuRetainedStatesV3(this.layers, new Set())
@@ -175,19 +178,47 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
   }
   updateViewport(layout: ImageEditorViewportLayoutV3): void {
     this.previewLayout = layout
-    this.fitPreviewViewport()
+    this.fitPreviewViewport(false)
+  }
+  /**
+   * 设备报显存不足时调用：预算逐次减半并重新选档，直到预览至少降一档。
+   * 返回 false 表示还没有预览视口或已在最低一档，无法再靠降档让出显存。
+   */
+  reducePreviewMemory(): boolean {
+    this.assertUsable()
+    const last = PREVIEW_RENDER_SCALES.length - 1
+    const before = this.previewScaleIndex
+    // 还没有预览视口就无档可降，不能凭空压低预算。
+    if (!this.previewLayout) return false
+    if (before >= last) {
+      this.memoryBudgetBytes = Math.max(1, Math.floor(this.memoryBudgetBytes / 2))
+      return false
+    }
+    while (this.previewScaleIndex <= before) {
+      this.memoryBudgetBytes = Math.max(1, Math.floor(this.memoryBudgetBytes / 2))
+      this.fitPreviewViewport(true)
+    }
+    return true
   }
   /**
    * 合成目标加上当前视口需要的瓦片超过预算时，逐档降低预览的内部分辨率，呈现时再放大。
    * 最低一档无条件接受：显存再紧张也留在 GPU 上，只有设备真的报错才交给上层处理。
    * 每次从上一次的档位往清晰方向退一档起试：压力消失后逐步恢复，持续紧张时不必每帧从头试。
+   * 视口、场景与预算都没变时直接沿用上次结果（每次同步场景后宿主会再发一次同一视口）。
    */
-  private fitPreviewViewport(): void {
+  private fitPreviewViewport(sceneChanged: boolean): void {
     const layout = this.previewLayout!
+    const viewport = `${layout.viewportKey}:${layout.viewport.interacting === true}:${layout.stageWidth}:${layout.stageHeight}`
+    const fitted = this.fittedPreviewKey
+    if (!sceneChanged && fitted?.scene === this.scene && fitted.viewport === viewport
+      && fitted.budgetBytes === this.memoryBudgetBytes) return
     const last = PREVIEW_RENDER_SCALES.length - 1
+    // 试探更清晰一档失败时，回到原档位要沿用原档位的高斯包络；否则降档时拖高斯参数每帧都会换工作窗口尺寸、重建纹理。
+    const envelope = this.gaussianEnvelope
     for (let index = Math.max(0, this.previewScaleIndex - 1); index <= last; index += 1) {
       const scale = PREVIEW_RENDER_SCALES[index]
       this.previewScaleIndex = index
+      this.gaussianEnvelope = envelope
       this.setViewport(scale === 1 ? layout : {
         ...layout,
         viewportKey: `${layout.viewportKey}:render-scale:${scale}`,
@@ -198,14 +229,16 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
       ), 0)
       const [width, height] = imageEditorGpuOutputPixelSizeV3(this.workingEffectViewport?.layout ?? this.layout!)
       if (this.reservedOutputBytes + tileBytes <= this.memoryBudgetBytes
-        && width <= this.maxTextureDimension2D && height <= this.maxTextureDimension2D) return
+        && width <= this.maxTextureDimension2D && height <= this.maxTextureDimension2D) break
     }
+    this.fittedPreviewKey = { scene: this.scene, viewport, budgetBytes: this.memoryBudgetBytes }
   }
   updateExportViewport(
     layout: ImageEditorViewportLayoutV3,
     effectRecipeSize?: readonly [number, number],
   ): void {
     this.previewLayout = null
+    this.fittedPreviewKey = null
     this.setViewport(layout, !!this.scene?.graph.some(node => node.kind === 'effect' && node.definitionId === 'effect.gaussian_blur'), effectRecipeSize ?? null)
   }
   private setViewport(

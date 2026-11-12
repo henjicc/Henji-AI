@@ -96,3 +96,22 @@
 - **验证**：渲染层 tsc 通过；18 个测试文件通过（池、运行时、运行时回退、客户端、源几何、桥接、桥接瓦片、资源恢复、变换交接、导出诊断、GPU/CPU 预算、会话、会话排程、表面重挂、视口合成 hook、显示管线、工具箱工作区、工具箱登记一致性）；12 个改动文件 eslint 通过；依赖图门禁通过。
   - 测试改动：GPU/CPU 预算测试里 8 处“首帧后立即有安全帧请求”的断言改为推进 2 秒后再断言，并加一条“首帧时还没有安全帧”；新增一条“领到预热线程先等 GPU 首帧、300ms 看门狗兜底”；池测试改写为两条（预热完成→ready、使用中不预热；归还丢旧事件→再领用为 ready）；运行时测试补 `warmed` 与 `deviceReady` 断言。
 - **请主会话实测**：重载 → 等 3 秒以上 → 打开。日志应依次有 `prewarm.start`、`prewarm.completed`、`worker_acquired {warm:true}`、`first_frame {warmth:'ready'}`，目标 `firstFrameMs ≤ 300`。冷路径对比：`first_frame {warmth:'cold'}` 的 `initializeMs`，要避开开发版重载后第 15、20 秒的预取窗口。
+
+## 第三轮（审查意见：1 条重要 + 8 条小问题）
+- **重要 1 退避清零过早**：失败计数与退避统一收进 `gpu/imageEditorGpuSceneRecoveryV3.ts`（`recordFrame` / `recordFailure` / `noteError` / `resetFailures`）。退避只有在 GPU 持续 10 秒且 30 帧都没有新错误时才清零；任何错误（包括只请求重绘、不计数的异步错误）都会打断稳定计时。新增 `imageEditorGpuSceneRecoveryV3.test.ts`，覆盖 2 秒窗口计数（成功帧夹在中间、滑出窗口不算）、连续 3 帧、退避 10/20/40/80/160/300/300 秒，以及“头几帧成功不清零、帧数够时间不够不清零、15 秒 31 帧才清零”。
+- **2 同一错误计两次**：运行时监听到的 vGPU 异步错误不再计数，只请求重绘一帧；计数只来自渲染抛出。直呈 Surface 失效由呈现器自己降到 ImageBitmap，不计数；ImageBitmap 提交时抛出的才算一次。显存不足错误按对象去重，监听与渲染抛出两条路只降一次档。
+- **3 迟到错误**：记录最近一次发起渲染时的会话代际，异步错误只归到已发起过渲染的当前会话。
+- **4 继承丢失历史与首次失败**：没有改设备管理器（`src/core/imageEdit/webgpu/deviceManager.ts` 不在所有权内，且正被别人改着）。改为 `released` 带 `deviceLossHistory`（近期丢失过或在冷却期），待命池不留这种线程、换一个新线程预热。设备丢失恢复成功和每次重新初始化成功后，失败计数清零。首次 initialize 失败也报 `gpu-fallback` 并按退避重试（不用 `initialization-failed`：它会让客户端把设备代际标为丢失，设备仍在时重试成功的 ready 会被挡掉）。Reality 注入的失败路径不变。
+- **5 待命设备丢失**：待命线程收到 device-lost 就重新预热（warmth 回到 warming，完成后才是 ready）。
+- **6 回退空白**：`execution/imageEditorRenderSessionV3.ts` 在 GPU 画布正显示、而 CPU 还没有任何帧时，回退先不撤 GPU 画布：CPU 帧照常画进被盖住的稳定表面，第一张画好再撤 GPU 画布。GPU 回来、换文档、换表面都会清掉这个状态。
+- **7**：`reducePreviewMemory` 没有预览视口时直接返回 false，不动预算（真实 WebGPU 测试已补断言）。
+- **8**：待命池加 `import.meta.hot.dispose`，热更新时结束旧池的待命线程；仍在用的线程归还到旧池时直接结束。
+- **9**：保留一条真实 WebGPU 的双线性测试：半分辨率黑白两像素放大到 4 像素，与 0/0.25/0.75/1 线性插值的 sRGB 编码相差不超过 1。
+- **预热触发收紧**：首屏后不再无条件预热，只在“近 7 天用过图片编辑”时预热（领用线程时把时间写进 localStorage `henji.imageEditor.gpuScene.lastUsedAt`）；进入图片工具页照常立即预热。
+  - 取舍：没用过图片编辑的人启动后不再常驻渲染线程和 GPU 设备。代价是这类人第一次从画布打开图片走冷路径（工具页入口不受影响）；用过的人启动后常驻一个线程和一份设备。
+- **验证**：
+  - 测试：19 个文件通过（新增 `RecoveryV3.test`；池、运行时、运行时回退、客户端、源几何、真实 WebGPU 合成器与色彩、桥接、桥接瓦片、资源恢复、变换交接、导出诊断、GPU/CPU 预算、会话、排程、表面重挂、视口合成 hook、工具箱工作区）。
+  - eslint：17 个改动文件通过。
+  - 渲染层 tsc：本任务文件无报错；只剩 `src/features/videoEdit/engine/videoEditEncodedVideo.test.ts` 的 2 条（别的执行者的文件）。
+  - 待真实窗口确认：预热路径首帧后人为触发回退（Reality 设备丢失注入），画面不应空白；Reality 的 recovery failure 场景在 1.2 秒时检查 GPU 画布已隐藏——那时若还没有任何 CPU 帧，GPU 画布会继续显示到第一张 CPU 帧画好，需要跑一次确认。
+  - 新增用例：退避与窗口 3 条；异步错误不计数与迟到错误 1 条；首次初始化失败重试 1 条；待命设备丢失与带丢失历史的归还 1 条；回退保留 GPU 最后一帧 1 条；双线性 1 条。

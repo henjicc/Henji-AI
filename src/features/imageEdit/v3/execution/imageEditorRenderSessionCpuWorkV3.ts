@@ -10,6 +10,38 @@ import { resolveImageEditorCoarsePreviewMipV3 } from './previewFallbackMipV3'
 
 const registry = createBuiltInImageEditRenderNodeRegistry()
 const logger = createLogger('image_editor_v3.cpu_safety')
+const SAFETY_DELAY_MS = 2_000
+const SAFETY_IDLE_TIMEOUT_MS = 3_000
+
+interface ImageEditorCpuSafetyInput {
+  snapshot: ImageEditorRenderSnapshotV3
+  layout: ImageEditorRenderSessionWorkLayoutV3
+  safetyFrame: ImageEditorManagedViewportCompositeV3 | null
+}
+
+/** 先等一段时间再挑主线程空闲时执行；返回取消函数。 */
+function scheduleAfterDelayWhenIdle(run: () => void): () => void {
+  let idleHandle: number | null = null
+  const timer = setTimeout(() => {
+    if (typeof requestIdleCallback !== 'function') {
+      run()
+      return
+    }
+    idleHandle = requestIdleCallback(() => {
+      idleHandle = null
+      run()
+    }, { timeout: SAFETY_IDLE_TIMEOUT_MS })
+  }, SAFETY_DELAY_MS)
+  return () => {
+    clearTimeout(timer)
+    if (idleHandle !== null) cancelIdleCallback(idleHandle)
+  }
+}
+
+function reusableSafetyFrame({ snapshot, safetyFrame }: ImageEditorCpuSafetyInput): boolean {
+  return safetyFrame?.documentId === snapshot.document.id && safetyFrame.coverage === 'document'
+    && safetyFrame.mip >= resolveImageEditorCoarsePreviewMipV3({ width: safetyFrame.documentWidth, height: safetyFrame.documentHeight })
+}
 
 /** CPU 队列只在初始化/回退期间追随权威状态；GPU 接管后不再准备并丢弃 CPU 成品。 */
 export class ImageEditorRenderSessionCpuWorkV3 {
@@ -23,6 +55,7 @@ export class ImageEditorRenderSessionCpuWorkV3 {
   private readonly tasks = new Set<string>()
   private safetyDocument: string | null = null
   private safetyPending = false
+  private cancelSafetySchedule: (() => void) | null = null
   private disposed = false
 
   constructor(
@@ -45,6 +78,8 @@ export class ImageEditorRenderSessionCpuWorkV3 {
 
   cancel(): void {
     this.epoch += 1
+    this.cancelSafetySchedule?.()
+    this.cancelSafetySchedule = null
     if (this.safetyPending) { this.safetyDocument = null; this.safetyPending = false }
     this.clients.cancelAll()
     this.tasks.clear()
@@ -87,19 +122,38 @@ export class ImageEditorRenderSessionCpuWorkV3 {
     })
   }
 
-  /** 不回读 GPU；只生成一次有界 CPU 检查点，后续编辑不得把旧检查点当最新成品。 */
+  /**
+   * 不回读 GPU；只生成一次有界 CPU 检查点，后续编辑不得把旧检查点当最新成品。
+   * GPU 首帧后先等 2 秒再挑空闲时做：它要占 CPU 和主进程读瓦片，不能挤在首帧与紧接着的操作里。
+   * 开做时读当前快照与视口，等待期间的编辑也会反映进去。
+   */
   captureSafetyOnce(
-    snapshot: ImageEditorRenderSnapshotV3,
-    layout: ImageEditorRenderSessionWorkLayoutV3,
-    safetyFrame: ImageEditorManagedViewportCompositeV3 | null,
+    documentId: string,
+    read: () => ImageEditorCpuSafetyInput | null,
     accept: (result: ImageEditorManagedViewportCompositeV3) => void,
   ): void {
-    const reusable = safetyFrame?.documentId === snapshot.document.id && safetyFrame.coverage === 'document'
-      && safetyFrame.mip >= resolveImageEditorCoarsePreviewMipV3({ width: safetyFrame.documentWidth, height: safetyFrame.documentHeight })
-    if (this.safetyDocument === snapshot.document.id || reusable) return
-    this.safetyDocument = snapshot.document.id
+    const initial = read()
+    if (this.safetyDocument === documentId || !initial || reusableSafetyFrame(initial)) return
+    this.safetyDocument = documentId
     this.safetyPending = true
     const epoch = this.epoch
+    this.cancelSafetySchedule = scheduleAfterDelayWhenIdle(() => {
+      this.cancelSafetySchedule = null
+      const current = read()
+      if (this.disposed || epoch !== this.epoch || !this.suspended) return
+      if (!current || current.snapshot.document.id !== documentId || reusableSafetyFrame(current)) {
+        this.safetyPending = false
+        return
+      }
+      this.startSafety(epoch, current, accept)
+    })
+  }
+
+  private startSafety(
+    epoch: number,
+    { snapshot, layout }: ImageEditorCpuSafetyInput,
+    accept: (result: ImageEditorManagedViewportCompositeV3) => void,
+  ): void {
     this.startTask(`safety:${epoch}`, async () => {
       try {
         const request = createImageEditorBackdropRequestV3(snapshot, layout)

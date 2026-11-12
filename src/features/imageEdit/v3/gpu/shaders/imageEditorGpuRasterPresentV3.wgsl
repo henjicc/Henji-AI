@@ -34,11 +34,36 @@ fn vs_main(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4f 
   return vec4f(positions[vertexIndex], 0.0, 1.0);
 }
 
+// options.y 是合成分辨率相对呈现分辨率的比例：显存紧张时合成分辨率低于屏幕，在这里放大铺满。
+// 放大用双线性：合成结果是预乘 alpha，直接插值不会在透明边缘带出黑边。原分辨率时逐像素读取，结果与合成完全一致。
+fn sampleSource(position: vec2f) -> vec4f {
+  let scale = color.options.y;
+  let maxTexel = vec2i(textureDimensions(sourceTexture)) - vec2i(1);
+  if (scale >= 1.0) {
+    return textureLoad(sourceTexture, min(vec2i(position), maxTexel), 0);
+  }
+  // 呈现像素中心换算到源像素坐标，再减半个像素落到四个相邻源像素中心之间。
+  let coordinate = position * scale - vec2f(0.5);
+  let base = floor(coordinate);
+  let weight = coordinate - base;
+  let first = clamp(vec2i(base), vec2i(0), maxTexel);
+  let second = clamp(vec2i(base) + vec2i(1), vec2i(0), maxTexel);
+  let top = mix(
+    textureLoad(sourceTexture, first, 0),
+    textureLoad(sourceTexture, vec2i(second.x, first.y), 0),
+    weight.x,
+  );
+  let bottom = mix(
+    textureLoad(sourceTexture, vec2i(first.x, second.y), 0),
+    textureLoad(sourceTexture, second, 0),
+    weight.x,
+  );
+  return mix(top, bottom, weight.y);
+}
+
 @fragment
 fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
-  // options.y 是合成分辨率相对呈现分辨率的比例：显存紧张时合成分辨率低于屏幕，在这里放大铺满。
-  let sourceSize = vec2i(textureDimensions(sourceTexture));
-  let linear = textureLoad(sourceTexture, min(vec2i(position.xy * color.options.y), sourceSize - vec2i(1)), 0);
+  let linear = sampleSource(position.xy);
   if (linear.a <= 0.0) { return vec4f(0.0); }
   let straight = linear.rgb / linear.a;
   var srgbLinear = vec3f(

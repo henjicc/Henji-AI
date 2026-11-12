@@ -52,3 +52,16 @@
 3. 结果核对：`ffprobe -v error -select_streams v -count_frames -show_entries stream=nb_read_frames,r_frame_rate,color_range,color_space,color_primaries,color_transfer -of compact 文件` 两份一致；`ffprobe -select_streams v -show_entries frame=pts_time,key_frame -of csv 文件` 时间戳与关键帧位置一致；`ffmpeg -i 旧.mp4 -i 新.mp4 -lavfi "[0:v][1:v]ssim;[0:v][1:v]psnr" -f null -` 人眼对比一致（硬件编码同输入常为逐位相同，至少 SSIM > 0.99）。再导一段画幅不同的（如 4K 序列导 1080×1920 留边），日志 `capture: 'scaled'`，画面与改动前一致。
 4. 取消与失败：导出中途取消，任务显示已取消、半成品删除、无 `video_edit.export.failed`；再导出一次正常。
 5. 预渲染：渲染条上对吃力段“渲染入点到出点”，`video_edit.render_cache.completed` 正常、节目播放该段取预览文件（不掉帧）；自动预渲染期间起播，`video_edit.render_cache.preempted` 后会话立即释放、节目不卡。
+
+# 审查返工（第 2 轮）
+1. 首包类型校正（必须改）：`videoEditEncodedVideo.ts` 移植 mediabunny 1.61.0 `determineVideoPacketType` 的 AVC/HEVC 判定（`videoEditVideoPacketType`，MPL-2.0 署名），首包标成 delta 且带解码配置时按码流 NAL 类型校正：AVC 1–4 为 delta、5（IDR）为 key；HEVC <16 为 delta、16–23（IRAP）为 key。只移植长度前缀布局（编码器按 avc/hevc 格式配置，输出必带配置记录）；H.264 恢复点 SEI 分支 mediabunny 在 Chromium 上本就跳过，未移植。测试：误标成 delta 的 HEVC 关键帧包（VPS+IDR_W_RADL）封装为 key，后续包原样；AVC SEI+IDR 判 key、非 IDR 判 delta。
+2. 编码器卡住：Worker 编码器在手里有帧时 30 秒（`VIDEO_EDIT_ENCODER_STALL_MS`，短于 60 秒看门狗）既不取帧也不交结果，就判定卡住、关闭编码器并以 `VideoEditEncoderFailure('stalled')` 失败；送帧背压与收尾都受它约束，新送一帧时重新计时。看门狗因此只会碰到合成卡住。测试：假时钟下 29 秒不失败、31 秒失败并关闭编码器、帧全部释放；收尾卡住同样。
+3. 编码失败的用户文案：Worker 抛 `VideoEditEncoderFailure(reason, 诊断细节)`，答复带 `encoderFailure: { reason, detail }`，界面线程还原后由 `VideoEditEncodedVideo` 换成 i18n 文案 `errors:videoEditEncoder.unsupported|stalled|failed`（改用软件编码或 H.264、降低分辨率、更新显卡驱动），codec 等细节只进日志 `video_edit.export.encoder_failed` / `video_edit.render_cache.encoder_failed`（同一条轨记一次）。新增文案在 `src/i18n/locales/{zh-CN,en-US}/errors.json`（所有权外，加 i18n 必需）。测试覆盖三种原因的文案、跨线程保留原因。
+4. 注释里相对旧版本的说法已改（四处及顺带的两处“不再”）。
+5. 日志按用途区分：`encoderOpen` 带 `purpose`；导出记 info `video_edit.export.encoder.opened` / `video_edit.export.encoder_config`，预渲染记 debug `video_edit.render_cache.encoder.opened` / `video_edit.render_cache.encoder_config`。
+6. 请求上限改由在途数推导：`VIDEO_EDIT_ENCODE_FRAMES_IN_FLIGHT = 3`，`VIDEO_EDIT_RENDER_QUEUE_LIMIT = 在途 + 2 = 5`。注释写清：发第 K 帧前 K−1 帧 + 一个准备请求（降噪权重、字体、文字预检，依次发出）+ 一份混音预取 = K+1，发出后 K 帧 + 混音预取也是 K+1；余量 1 给跟随字体库的预渲染会话在字体库变化时追加的字体同步。注意：节目预览的兜底上限随之由 4 变 5（预览另有自己的在途限流）；会话测试“请求排满”改为从源头读上限。
+7. 导出队列测试“CBR 软件关键帧”：替身逐次记录关键帧标记，内容加长到 150 帧（4K60），断言默认（未指定，2 秒）关键帧在第 0、120 帧，1 秒间隔在第 0、60、120 帧。
+- 另：Worker 编码器的等待唤醒由单槽改为等待集合（收尾与送帧背压同时等待时不会互相覆盖）；取消导致的收尾 AbortError 不再记成编码器出错。
+
+验证（第 2 轮，均已执行）：渲染层 tsc（12GB）零错误；vitest 全部通过——videoEditFrameEncoder（5）、videoEditEncodedVideo（5）、videoEditWorker（44）、videoEditRenderSession（42）、videoEditExportEncoderConfig（32）、videoEditExportEncoder（16）、videoEditExportFrame（3）、videoEditRenderCache（39）、videoEditExportQueue（60）、videoEditLoudness（14）、videoEditOutputs（25）；改动的 19 个文件 eslint 通过；`check:surface` 通过（350 条启发式告警均为原有 tsx，本任务未动 tsx）；`check:dependency-graph` 通过。
+主会话验证补充：导出 HEVC（有 AMD 显卡机器时优先在那台上），日志无 “First packet must be a key packet”，成片首帧可解码。“不支持”文案只在渲染线程与提交前探测判断不一致时出现（平时设备不支持的设置在提交前就被拦下），难以人为复现，由单测覆盖。

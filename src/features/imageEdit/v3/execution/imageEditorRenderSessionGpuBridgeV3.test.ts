@@ -141,6 +141,31 @@ describe('ImageEditorRenderSessionGpuBridgeV3', () => {
     bridge.dispose()
   })
 
+  it('单帧失败只重新请求下一帧；运行时交给 CPU 后等重试成功的 ready 才回到 GPU', () => {
+    const harness = clientHarness()
+    const publish = vi.fn()
+    const bridge = new ImageEditorRenderSessionGpuBridgeV3('frame-retry', harness.client, publish, false)
+    bridge.updateViewport(1, layout)
+    bridge.syncSnapshot({ document: createImageEditDocumentV3({ width: 320, height: 240 }), renderGeneration: 1,
+      geometryHash: 'geometry', quality: 'stable', resourceDescriptors: [] })
+    harness.listener({ type: 'ready', sceneGeneration: 1, deviceGeneration: 1, recovered: false })
+    expect(harness.client.requestFrame).toHaveBeenCalledTimes(1)
+
+    harness.listener({ type: 'failed', sceneGeneration: 1, deviceGeneration: 1, requestId: 'frame-1',
+      code: 'frame-failed', message: 'effect target failed', recoverable: true })
+    expect(harness.client.requestFrame).toHaveBeenCalledTimes(2)
+    expect(publish).not.toHaveBeenCalledWith(expect.objectContaining({ compositionBackend: 'cpu' }))
+
+    harness.listener({ type: 'failed', sceneGeneration: 1, deviceGeneration: 1, requestId: 'frame-2',
+      code: 'gpu-fallback', message: 'effect target failed', recoverable: true })
+    expect(publish).toHaveBeenCalledWith(expect.objectContaining({ compositionBackend: 'cpu', deviceStatus: 'fallback' }))
+    bridge.requestFrame('stable')
+    expect(harness.client.requestFrame).toHaveBeenCalledTimes(2)
+    harness.listener({ type: 'ready', sceneGeneration: 1, deviceGeneration: 1, recovered: true })
+    expect(harness.client.requestFrame).toHaveBeenCalledTimes(3)
+    bridge.dispose()
+  })
+
   it('拒绝把旧整图蒙版当作源图片读取', async () => {
     const harness = clientHarness()
     const resourceRef = `sha256:${'9'.repeat(64)}` as const

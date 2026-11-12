@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
 import type { ImageEditorGpuSceneClientV3Like } from '../gpu/imageEditorGpuSceneClientV3'
-import type { ImageEditorGpuSceneWorkerEventV3 } from '../gpu/imageEditorGpuSceneProtocolV3'
+import type { ImageEditorGpuSceneWorkerEventV3, ImageEditorGpuSceneWorkerWarmth } from '../gpu/imageEditorGpuSceneProtocolV3'
 import type { ImageEditorViewportCompositeRuntimeEventV3 } from './viewportCompositeProtocolV3'
 import type { ImageEditorManagedViewportCompositeV3, ImageEditorViewportCompositeRequestV3 } from './viewportCompositeTypesV3'
 import { DefaultImageEditorRenderSessionV3, type ImageEditorRenderSessionStateV3, type ImageEditorRenderSnapshotV3 } from './imageEditorRenderSessionV3'
@@ -14,7 +14,13 @@ vi.mock('@/core/logging', async (importOriginal) => {
   return { ...actual, createLogger: (...args: Parameters<typeof actual.createLogger>) => ({ ...actual.createLogger(...args), warn }) }
 })
 
-function harness(onSync?: (snapshot: ImageEditorRenderSnapshotV3, emit: (event: ImageEditorGpuSceneWorkerEventV3) => void) => void): {
+// 安全帧在 GPU 首帧后等这么久再挑空闲时做（jsdom 没有 requestIdleCallback，到点直接开始）。
+const SAFETY_DELAY_MS = 2_000
+
+function harness(
+  onSync?: (snapshot: ImageEditorRenderSnapshotV3, emit: (event: ImageEditorGpuSceneWorkerEventV3) => void) => void,
+  warmth: ImageEditorGpuSceneWorkerWarmth = 'cold',
+): {
   session: DefaultImageEditorRenderSessionV3
   front: HTMLCanvasElement
   safety: HTMLCanvasElement
@@ -35,6 +41,7 @@ function harness(onSync?: (snapshot: ImageEditorRenderSnapshotV3, emit: (event: 
     syncScene: (snapshot) => onSync?.(snapshot, emit), uploadTiles: vi.fn(), updateTransientLayerTransform: vi.fn(), clearTransientLayerTransform: vi.fn(),
     updateViewport: vi.fn(), requestFrame: requestedFrames, dispose: vi.fn(),
     subscribe: (listener) => { emit = listener; return vi.fn() },
+    startupTiming: () => ({ warmth, acquireMs: 0, initializeMs: null }),
   }
   const client = {
     render: (request: ImageEditorViewportCompositeRequestV3) => new Promise<ImageEditorManagedViewportCompositeV3>((resolve, reject) => {
@@ -71,6 +78,7 @@ describe('GPU 正常会话的 CPU 工作预算与恢复', () => {
     h.emit({ type: 'ready', sceneGeneration: 1, deviceGeneration: 1, recovered: false })
     expect(h.state().compositionBackend).toBe('cpu')
     h.frame(1)
+    await vi.advanceTimersByTimeAsync(SAFETY_DELAY_MS)
     expect(h.pending).toHaveLength(3) // 原初始化两条任务 + 唯一整文档安全帧。
     const initialPlans = h.front.dataset.renderPlanCompileCount
     const initialTasks = h.front.dataset.cpuTaskStartCount
@@ -100,6 +108,8 @@ describe('GPU 正常会话的 CPU 工作预算与恢复', () => {
   it('安全帧只做一次 ≤1024 全文档检查点；它迟到不覆盖新GPU，丢失后启动最新文档与相机', async () => {
     const h = harness()
     h.session.updateSnapshot(h.snapshot(1)); h.frame(1)
+    expect(h.pending).toHaveLength(2) // 安全帧不挤在首帧附近。
+    await vi.advanceTimersByTimeAsync(SAFETY_DELAY_MS)
     const checkpoint = h.pending[2]
     expect(checkpoint.request).toMatchObject({ coverage: 'document', preferredMip: 1, minimumMip: 1, quality: 'draft', analysisRequested: true })
     expect(Math.max(checkpoint.request.document.geometry.width, checkpoint.request.document.geometry.height) / 2 ** checkpoint.request.preferredMip!).toBeLessThanOrEqual(1024)
@@ -137,6 +147,7 @@ describe('GPU 正常会话的 CPU 工作预算与恢复', () => {
   it('切换documentId清空旧图像安全表面并释放迟到旧结果，新文档有独立检查点', async () => {
     const h = harness()
     h.session.updateSnapshot(h.snapshot(1, 'first')); h.frame(1)
+    await vi.advanceTimersByTimeAsync(SAFETY_DELAY_MS)
     const oldCheckpoint = h.pending[2]
     const clear = vi.mocked(h.front.getContext('2d')!.clearRect)
     const clearsBefore = clear.mock.calls.length
@@ -148,6 +159,7 @@ describe('GPU 正常会话的 CPU 工作预算与恢复', () => {
     await vi.advanceTimersByTimeAsync(0)
     expect(release).toHaveBeenCalledOnce()
     h.frame(2)
+    await vi.advanceTimersByTimeAsync(SAFETY_DELAY_MS)
     expect(h.pending.filter(({ request }) => request.coverage === 'document').map(({ request }) => request.document.id))
       .toEqual(['first', 'second'])
     expect(h.state().result).toBeNull()
@@ -161,6 +173,7 @@ describe('GPU 正常会话的 CPU 工作预算与恢复', () => {
   it('安全帧失败不污染 GPU，真正初始化失败/设备丢失仍能按当前权威状态使用 CPU', async () => {
     const h = harness()
     h.session.updateSnapshot(h.snapshot(1)); h.frame(1)
+    await vi.advanceTimersByTimeAsync(SAFETY_DELAY_MS)
     h.pending[2].reject(new Error('一次安全帧失败'))
     await vi.advanceTimersByTimeAsync(0)
     expect(h.state()).toMatchObject({ compositionBackend: 'gpu', diagnostic: null, coverage: 1 })
@@ -179,6 +192,7 @@ describe('GPU 正常会话的 CPU 工作预算与恢复', () => {
   it('隐藏时取消安全帧，旧完成不覆盖表面，重新显示后的当前 GPU 帧可重新建立一次安全帧', async () => {
     const h = harness()
     h.session.updateSnapshot(h.snapshot(1)); h.frame(1)
+    await vi.advanceTimersByTimeAsync(SAFETY_DELAY_MS)
     const old = h.pending[2], release = vi.fn()
     h.session.setVisibility(false)
     h.session.updateSnapshot(h.snapshot(2))
@@ -188,6 +202,7 @@ describe('GPU 正常会话的 CPU 工作预算与恢复', () => {
     expect(h.pending).toHaveLength(3)
     h.session.setVisibility(true)
     h.frame(2)
+    await vi.advanceTimersByTimeAsync(SAFETY_DELAY_MS)
     expect(h.pending).toHaveLength(4)
     expect(h.pending[3].request).toMatchObject({ renderGeneration: 2, coverage: 'document' })
     const count = h.pending.length
@@ -247,16 +262,52 @@ describe('GPU 正常会话的 CPU 工作预算与恢复', () => {
     h.session.dispose()
   })
 
-  it('安全帧硬下界按最终裁剪/方向输出而不是原文档尺寸计算，普通 CPU 请求不继承该约束', () => {
+  it('安全帧硬下界按最终裁剪/方向输出而不是原文档尺寸计算，普通 CPU 请求不继承该约束', async () => {
     const h = harness()
     const snapshot = h.snapshot(1)
     snapshot.document.geometry = { width: 8192, height: 8192, crop: { x: 0, y: 0, width: 2048, height: 512 },
       orientation: { rotate: 90, mirrored: false } }
     h.session.updateSnapshot(snapshot)
     h.frame(1)
+    await vi.advanceTimersByTimeAsync(SAFETY_DELAY_MS)
     expect(h.pending[2].request).toMatchObject({ preferredMip: 1, minimumMip: 1, coverage: 'document' })
     expect(h.pending[0].request.minimumMip).toBeUndefined()
     expect(h.pending[1].request.minimumMip).toBeUndefined()
+    h.session.dispose()
+  })
+
+  it('领到已预热的 GPU 线程时先等 GPU 首帧，不排 CPU 草稿；首帧迟迟不到时看门狗兜底', async () => {
+    const warm = harness(undefined, 'ready')
+    warm.session.updateSnapshot(warm.snapshot(1))
+    expect(warm.pending).toHaveLength(0)
+    warm.frame(1)
+    await vi.advanceTimersByTimeAsync(300)
+    expect(warm.pending).toHaveLength(0)
+    expect(warm.state()).toMatchObject({ compositionBackend: 'gpu' })
+    warm.session.dispose()
+
+    const late = harness(undefined, 'ready')
+    late.session.updateSnapshot(late.snapshot(1))
+    await vi.advanceTimersByTimeAsync(299)
+    expect(late.pending).toHaveLength(0)
+    await vi.advanceTimersByTimeAsync(1)
+    expect(late.pending).toHaveLength(2)
+    late.session.dispose()
+  })
+
+  it('预热路径首帧后 GPU 回退、CPU 还没有帧时，GPU 画布留着最后一帧，第一张 CPU 帧画好才撤', async () => {
+    const h = harness(undefined, 'ready')
+    h.session.updateSnapshot(h.snapshot(1))
+    h.frame(1)
+    expect(h.gpu.style.visibility).toBe('visible')
+    h.emit({ type: 'device-lost', sceneGeneration: 1, deviceGeneration: 1, reason: 'device lost', retryAfterMs: 1000 })
+    expect(h.state().compositionBackend).toBe('cpu')
+    expect(h.gpu.style.visibility).toBe('visible')
+    expect(h.pending).toHaveLength(2)
+    h.pending[0].resolve()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(h.gpu.style.visibility).toBe('hidden')
+    expect(h.front.style.visibility).toBe('visible')
     h.session.dispose()
   })
 
@@ -270,6 +321,7 @@ describe('GPU 正常会话的 CPU 工作预算与恢复', () => {
     await vi.advanceTimersByTimeAsync(0)
     const before = h.pending.length
     h.frame(1)
+    await vi.advanceTimersByTimeAsync(SAFETY_DELAY_MS)
     expect(h.pending.length).toBe(before + (mip === 0 ? 1 : 0))
     if (mip === 0) expect(h.pending.at(-1)!.request.minimumMip).toBe(1)
     h.session.dispose()

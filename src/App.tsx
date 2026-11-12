@@ -89,6 +89,18 @@ const UiGalleryPage = (import.meta.env.DEV || import.meta.env.MODE === 'developm
 const overlayPrefetchOrder = [loadAssistantSidebar, loadSettingsModal, loadAssetLibraryFloatingPanel]
 
 /*
+ * 图片编辑的 GPU 渲染线程要加载模块、申请设备，冷启动一秒多。最近用过图片编辑的，首屏后空闲时就预热一个，
+ * 最多等 2 秒：不能排进上面的浮层预取（开发版推迟 20 秒、无超时的空闲回调会被启动期的持续活动一直推后），
+ * 否则刚启动就打开图片时还没开始预热。没用过的不预热，进入图片工具页时再预热。
+ */
+const IMAGE_EDITOR_GPU_PREWARM_IDLE_TIMEOUT_MS = 2000
+const prewarmImageEditorGpuScene = (): void => {
+  void import('@/features/imageEdit/v3/gpu/imageEditorGpuScenePool')
+    .then((module) => module.prewarmImageEditorGpuSceneIfRecentlyUsed())
+    .catch(() => undefined)
+}
+
+/*
  * dev 下 Vite 是收到请求才逐个转译的，预取会往队列里压几百个模块。工作区的预取排在
  * 15s（见 TabContainer），浮层再往后让一档，免得把用户正在等的那次切 Tab 挤到队尾。
  * 生产态是现成的 chunk，没有这个问题，直接等第一个空闲帧。
@@ -323,6 +335,15 @@ const App: React.FC = () => {
     strategy: 'idle',
     startDelayMs: import.meta.env.DEV ? OVERLAY_PREFETCH_DEV_DELAY_MS : 0,
   }), [])
+
+  useEffect(() => {
+    if (typeof window.requestIdleCallback !== 'function') {
+      const timer = window.setTimeout(prewarmImageEditorGpuScene, IMAGE_EDITOR_GPU_PREWARM_IDLE_TIMEOUT_MS)
+      return () => window.clearTimeout(timer)
+    }
+    const handle = window.requestIdleCallback(prewarmImageEditorGpuScene, { timeout: IMAGE_EDITOR_GPU_PREWARM_IDLE_TIMEOUT_MS })
+    return () => window.cancelIdleCallback(handle)
+  }, [])
 
   return (
     <NotificationProvider>

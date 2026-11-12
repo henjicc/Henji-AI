@@ -1,9 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { init } from 'vgpu/node'
 import type { Gpu } from 'vgpu'
-import { frame, target } from 'vgpu'
+import { draw, frame, target } from 'vgpu'
 import { createDefaultImageEditColorModeV3 } from '@/core/imageEdit/v3/colorTypes'
 import { ImageEditorGpuRasterPresentationV3 } from './imageEditorGpuDirectPresentationV3'
+import { imageEditorGpuPresentColorUniformV3, packImageEditorGpuColorMatrixRowsV3 } from './imageEditorGpuColorPipelineV3'
+import { float32ToFloat16 } from './imageEditorGpuTileAtlasV3'
+import presentShaderSource from './shaders/imageEditorGpuRasterPresentV3.wgsl?raw'
 
 import {
   compileImageEditRenderPlanV3,
@@ -327,6 +330,57 @@ describe('ImageEditorGpuRasterCompositorV3（真实 WebGPU）', () => {
     // 512² 的合成目标要 3 MiB，1 MiB 预算下降到一半分辨率。
     expect(await compositor.readLinearPixelsForTest(() => null)).toHaveLength(256 * 256 * 4)
     compositor.dispose()
+  })
+
+  it('降档呈现用双线性放大：半分辨率的黑白两像素放大到四像素是平滑过渡', async () => {
+    const source = gpu.device.createTexture({ size: [2, 1], format: 'rgba16float', usage: ['copy_dst', 'texture_binding'] })
+    gpu.gpu.queue.writeTexture({ texture: source.gpu }, new Uint16Array([0, 0, 0, 1, 1, 1, 1, 1].map(float32ToFloat16)),
+      { bytesPerRow: 16, rowsPerImage: 1 }, { width: 2, height: 1, depthOrArrayLayers: 1 })
+    const output = target(gpu, { size: [4, 1], format: 'rgba8unorm', clearColor: [0, 0, 0, 0] })
+    const present = draw(gpu, { shader: presentShaderSource, vertices: 3 })
+    const uniform = gpu.gpu.createBuffer({ size: 64, usage: 0x40 | 0x08 })
+    try {
+      await present.compile(output)
+      const color = imageEditorGpuPresentColorUniformV3(createDefaultImageEditColorModeV3())
+      gpu.gpu.queue.writeBuffer(uniform, 0, new Float32Array([
+        ...packImageEditorGpuColorMatrixRowsV3(color.workingToSrgb), color.toneMapToSdr ? 1 : 0, 0.5, 0, 0,
+      ]))
+      present.group(0, gpu.gpu.createBindGroup({ layout: present.layout(0), entries: [
+        { binding: 0, resource: source.view }, { binding: 1, resource: { buffer: uniform } },
+      ] }))
+      await frame(gpu, (current) => current.pass({ target: output, clear: [0, 0, 0, 0] }, present)).done
+      const red = [...await output.read()].filter((_, index) => index % 4 === 0)
+      // 呈现像素中心映射回源像素坐标后的线性插值：0、0.25、0.75、1，再按 sRGB 编码。
+      const expected = [0, 0.25, 0.75, 1].map((value) => Math.round(255 * (value <= 0.0031308
+        ? value * 12.92 : 1.055 * value ** (1 / 2.4) - 0.055)))
+      red.forEach((value, index) => expect(Math.abs(value - expected[index]!)).toBeLessThanOrEqual(1))
+    } finally {
+      uniform.destroy()
+      source.destroy()
+      output.color.destroy()
+    }
+  })
+
+  it('设备报显存不足后预算减半重新选档，每次至少降一档，最低一档时如实返回', async () => {
+    const compilation = compileImageEditorGpuRasterSceneV3(createImageEditDocumentV3({ width: 512, height: 512 }), [])
+    if (!compilation.supported) throw new Error(compilation.reason)
+    const compositor = new ImageEditorGpuRasterCompositorV3(gpu)
+    compositor.syncScene(compilation.scene)
+    // 还没有预览视口时无档可降，也不能把预算压低。
+    expect(compositor.reducePreviewMemory()).toBe(false)
+    compositor.updateViewport({
+      stageWidth: 512, stageHeight: 512, viewportKey: 'out-of-memory',
+      viewport: { documentX: 0, documentY: 0, width: 512, height: 512, zoom: 1, devicePixelRatio: 1 },
+    })
+    try {
+      expect(await compositor.readLinearPixelsForTest(() => null)).toHaveLength(512 * 512 * 4)
+      expect(compositor.reducePreviewMemory()).toBe(true)
+      expect(await compositor.readLinearPixelsForTest(() => null)).toHaveLength(384 * 384 * 4)
+      while (compositor.reducePreviewMemory()) continue
+      expect(await compositor.readLinearPixelsForTest(() => null)).toHaveLength(64 * 64 * 4)
+    } finally {
+      compositor.dispose()
+    }
   })
 
   it('复杂图source共用scratch后按实际存活target计预算，不再双计source节点', () => {

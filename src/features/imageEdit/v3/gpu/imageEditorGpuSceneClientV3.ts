@@ -21,8 +21,10 @@ import {
   type ImageEditorGpuSceneWorkerFactoryV3,
   type ImageEditorGpuSceneWorkerPortV3,
   type ImageEditorGpuSceneWorkerRequestV3,
+  type ImageEditorGpuSceneWorkerWarmth,
 } from './imageEditorGpuSceneProtocolV3'
 import { ImageEditorGpuSceneSequenceGateV3 } from './imageEditorGpuSceneSequenceV3'
+import { acquireImageEditorGpuSceneWorker } from './imageEditorGpuScenePool'
 
 const logger = createLogger('features.image_edit.v3.gpu_scene')
 export const IMAGE_EDITOR_GPU_SCENE_DIAGNOSTIC_EVENT_V3 = 'henji:image-editor-gpu-scene-diagnostic'
@@ -71,14 +73,16 @@ export interface ImageEditorGpuSceneClientV3Like {
     quality: ImageEditRenderQuality,
   ): void
   subscribe(listener: (event: ImageEditorGpuSceneWorkerEventV3) => void): () => void
+  /** 打开文档的启动计时：领用的线程是否已预热、领用与初始化各用了多久。 */
+  startupTiming?(): ImageEditorGpuSceneStartupTiming
   dispose(): void
 }
 
-function createDefaultWorker(): ImageEditorGpuSceneWorkerPortV3 {
-  return new Worker(
-    new URL('./imageEditorGpuScene.worker.ts', import.meta.url),
-    { type: 'module', name: 'image-editor-gpu-scene-v3' },
-  )
+export interface ImageEditorGpuSceneStartupTiming {
+  warmth: ImageEditorGpuSceneWorkerWarmth
+  acquireMs: number
+  /** 发出 initialize 到收到 ready；还没就绪时为 null。 */
+  initializeMs: number | null
 }
 
 export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3Like {
@@ -98,10 +102,18 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
   private sceneResourcesReady = false
   private latestSnapshot: ImageEditorRenderSnapshotV3 | null = null
   private resourceRetryTimer: ReturnType<typeof setTimeout> | null = null
+  private readonly timing: ImageEditorGpuSceneStartupTiming
+  private initializeStartedAt = 0
 
   constructor(private readonly options: ImageEditorGpuSceneClientOptionsV3) {
     if (!options.sessionId.trim()) throw new Error('GPU Scene 会话 ID 不能为空')
-    this.worker = (options.workerFactory ?? createDefaultWorker)()
+    const acquireStartedAt = performance.now()
+    this.worker = (options.workerFactory ?? acquireImageEditorGpuSceneWorker)()
+    this.timing = {
+      warmth: this.worker.warmth ?? 'cold',
+      acquireMs: Math.round(performance.now() - acquireStartedAt),
+      initializeMs: null,
+    }
     this.renderingEnabled = options.renderingEnabled !== false
     this.worker.onmessage = (message) => this.handleEvent(message.data)
     this.worker.onerror = (event) => this.handleWorkerError(event)
@@ -121,8 +133,9 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
     }
     logger.info('开始初始化图片编辑 GPU Scene', {
       event: 'image_editor_v3.gpu_scene.initialize.start',
-      context: { sessionId: options.sessionId },
+      context: { sessionId: options.sessionId, warmth: this.timing.warmth },
     })
+    this.initializeStartedAt = performance.now()
     this.worker.postMessage({
       type: 'initialize',
       protocolVersion: IMAGE_EDITOR_GPU_SCENE_PROTOCOL_VERSION_V3,
@@ -325,16 +338,25 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
     return () => this.listeners.delete(listener)
   }
 
+  startupTiming(): ImageEditorGpuSceneStartupTiming {
+    return { ...this.timing }
+  }
+
   dispose(): void {
     if (this.disposed) return
     this.disposed = true
     this.preparingScene?.abort()
     this.clearResourceRetry()
     this.pendingSceneMessages = []
-    this.worker.postMessage({ type: 'dispose' })
-    this.worker.terminate()
-    this.worker.onmessage = null
-    this.worker.onerror = null
+    if (this.worker.release) {
+      // 待命池的线程归还待命：线程清掉本会话状态，保留设备给下一个会话。
+      this.worker.release()
+    } else {
+      this.worker.postMessage({ type: 'dispose' })
+      this.worker.terminate()
+      this.worker.onmessage = null
+      this.worker.onerror = null
+    }
     if (this.diagnosticEventListener) {
       window.removeEventListener(IMAGE_EDITOR_GPU_SCENE_DIAGNOSTIC_EVENT_V3, this.diagnosticEventListener)
     }
@@ -342,7 +364,7 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
   }
 
   private handleEvent(event: ImageEditorGpuSceneWorkerEventV3): void {
-    if (this.disposed) {
+    if (this.disposed || event.type === 'released' || event.type === 'warmed') {
       if (event.type === 'frame-ready') event.bitmap.close()
       return
     }
@@ -366,6 +388,8 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
       this.deviceGeneration = event.deviceGeneration
       event = { ...event, sceneGeneration: this.sequence.snapshot().sceneGeneration }
     }
+    // 运行时交给 CPU 时设备本身可能还在，稍后重试会以同一设备代际再发 ready，不能被去重挡掉。
+    if (event.type === 'failed' && event.code === 'gpu-fallback') this.readyDeviceGeneration = -1
     if (event.type === 'device-lost'
       || (event.type === 'failed' && event.code === 'initialization-failed')) {
       this.lostDeviceGeneration = event.deviceGeneration
@@ -388,12 +412,14 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
       return
     }
     if (event.type === 'ready') {
+      this.timing.initializeMs ??= Math.round(performance.now() - this.initializeStartedAt)
       logger.info('完成初始化图片编辑 GPU Scene', {
         event: 'image_editor_v3.gpu_scene.initialize.completed',
         context: {
           sessionId: this.options.sessionId,
           deviceGeneration: event.deviceGeneration,
           recovered: event.recovered,
+          durationMs: this.timing.initializeMs,
         },
       })
     } else if (event.type === 'device-lost') {
@@ -412,19 +438,24 @@ export class ImageEditorGpuSceneClientV3 implements ImageEditorGpuSceneClientV3L
           ? 'image_editor_v3.gpu_scene.resources.failed'
           : event.code === 'composition-not-ready' && event.recoverable
             ? 'image_editor_v3.gpu_scene.composition_deferred'
-            : 'image_editor_v3.gpu_scene.failed',
+            : event.code === 'frame-failed'
+              ? 'image_editor_v3.gpu_scene.frame_failed'
+              : 'image_editor_v3.gpu_scene.failed',
         requestId: event.requestId ?? undefined,
         context: {
           sessionId: this.options.sessionId,
-            code: event.code,
-            reason: event.message,
-            recoverable: event.recoverable,
+          code: event.code,
+          reason: event.message,
+          recoverable: event.recoverable,
+          outOfMemory: event.outOfMemory,
           diagnosticDeviceAcquireCount: event.diagnostics?.deviceAcquireCount,
           diagnosticSurfaceFrameCount: event.diagnostics?.surfaceFrameCount,
         },
       }
       if (event.code === 'composition-not-ready' && event.recoverable) {
         logger.debug('图片编辑 GPU Scene 等待场景或源纹理', metadata)
+      } else if (event.code === 'frame-failed') {
+        logger.warn('图片编辑 GPU Scene 丢弃一帧，保留设备重试', metadata)
       } else if (event.diagnostic) {
         logger.warn('Reality 已注入图片编辑 GPU Scene 失败', metadata)
       } else {
