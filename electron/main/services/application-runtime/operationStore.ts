@@ -13,6 +13,8 @@ const uiPaidReceiptSql = `coalesce(json_extract(record_json, '$.origin.actor') =
   AND coalesce(json_array_length(record_json, '$.targetRefs'), 0) = 0, 0)`
 
 type OperationState = import('../../../../src/core/application-control/userConfirmation').ApplicationOperationState
+/** 账本里尚未结束的状态。 */
+export const UNRESOLVED_OPERATION_STATES: readonly OperationState[] = ['preparing', 'awaiting_user_confirmation', 'executing', 'unknown', 'partial']
 export interface OperationRecord {
   operationId: string
   callerId: string
@@ -38,6 +40,11 @@ export interface OperationRecord {
   atomicPlacement?: boolean
   confirmation?: import('../../../../src/core/application-control/userConfirmation').ApplicationUserConfirmation
   result?: Record<string, unknown>
+  /**
+   * 启动或页面重载后自动复核读完的记号：读完时的状态，以及目标所在文档的已保存修订号。
+   * 只用来省掉重复的自动复核，不参与结账、付费与幂等；丢失或被旧版本忽略只会多复核一次。
+   */
+  autoReview?: { state: OperationState; documentRevisions: Record<string, number> }
 }
 export interface ReadBaseline {
   id: string
@@ -112,7 +119,7 @@ export class ApplicationOperationStore {
     return row ? JSON.parse(row.record_json) as OperationRecord : undefined
   }
   unresolved(): OperationRecord[] {
-    return (this.db.prepare(`SELECT record_json FROM application_invocations WHERE state IN ('preparing','awaiting_user_confirmation','executing','unknown','partial') AND NOT (${uiPaidReceiptSql})`).all(...uiPaidCapabilities) as Array<{ record_json: string }>).map((row) => JSON.parse(row.record_json) as OperationRecord)
+    return (this.db.prepare(`SELECT record_json FROM application_invocations WHERE state IN (${UNRESOLVED_OPERATION_STATES.map(state => `'${state}'`).join(',')}) AND NOT (${uiPaidReceiptSql})`).all(...uiPaidCapabilities) as Array<{ record_json: string }>).map((row) => JSON.parse(row.record_json) as OperationRecord)
   }
   /** 自然日预算过后只清理无业务恢复用途的 UI 终态收据；助手事实与在途请求永久保留原语义。 */
   private pruneUiPaidReceipts(): void {

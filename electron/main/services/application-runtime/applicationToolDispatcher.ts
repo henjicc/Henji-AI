@@ -242,12 +242,15 @@ export class ApplicationToolDispatcher {
         return applicationFailure(this.inputError(callerId, name, error, args ?? {}) ?? (error instanceof Error ? error.message : '应用读取失败，请稍后重试。'))
       }
   }
-  async reconcileVerification(callerId: string, record: import('./operationStore').OperationRecord, signal: AbortSignal): Promise<void> {
+  /** 返回发出的核对读取是否都拿到了宿主的成功回复（重读验证还要带回验证结果）；没有可核对的读取时为 true。 */
+  async reconcileVerification(callerId: string, record: import('./operationStore').OperationRecord, signal: AbortSignal): Promise<boolean> {
+    let completed = true
     await this.operations?.reconcileReceipt(record, async original => {
       const result = await this.host.execute(callerId, 'get_current_application_context', {}, signal,
         { recoveryOperation: original })
       this.connections.assertActive(callerId)
       if (signal.aborted) throw new Error('核实已取消。')
+      if (result.ok !== true) completed = false
       return result
     })
     record = this.operations?.store.get(record.operationId, record.callerId) ?? record
@@ -256,8 +259,11 @@ export class ApplicationToolDispatcher {
         { recoveryVerification: proof })
       this.connections.assertActive(callerId)
       if (signal.aborted) throw new Error('核实已取消。')
-      logger.info('原事务最终状态已重新核对', { event: 'application.operation.verification_rechecked', context: { verified: (result.data as { verification?: { verified?: boolean } } | undefined)?.verification?.verified === true } })
+      const verification = (result.data as { verification?: { verified?: boolean } } | undefined)?.verification
+      if (result.ok !== true || !verification) completed = false
+      logger.info('原事务最终状态已重新核对', { event: 'application.operation.verification_rechecked', context: { verified: verification?.verified === true } })
       return result
     })
+    return completed
   }
 }

@@ -42,7 +42,7 @@ export function registerApplicationControlIpc(): void {
     if (command.action === 'decide' || command.action === 'set-policy') void resumeContentTrustConfirmations().catch(error => logger.warn('外来内容确认续接失败', { event: 'content_trust.resume.failed', error }))
     return result
   }, trusted)
-  const { host, operations, reviewOperation } = initializeApplicationRuntime()
+  const { host, operations, reviewOperation, autoReviewOperations } = initializeApplicationRuntime()
   registerIpcHandler('application:host:context', value => hostContextSnapshotSchema.parse(value), input => host.publishContext(input), trusted)
   registerIpcHandler('application:host:register', (value) => localHostRegistrationSchema.parse(value), (input, event) => {
     watchApplicationHostRenderer(event.sender)
@@ -57,13 +57,8 @@ export function registerApplicationControlIpc(): void {
     if (recovering && host.ready) logger.info('应用界面恢复，宿主重新就绪', { event: 'application.host.recovered', context: { reason: recovering } })
     if (input.ready) {
       host.publishReviews()
-      // 一次注册串行核验原记录，避免同时读取许多大型文档；不重放任何写入。
-      void (async () => {
-        for (const record of operations.store.unresolved()) {
-          if (!host.ready || host.rendererEpoch !== input.rendererEpoch) break
-          await reviewOperation(record, false)
-        }
-      })().catch(error => logger.warn('恢复核对未完成', { event: 'application.confirmation.restore_failed', error }))
+      // 首屏和文档恢复先用 IPC 与磁盘；界面空闲后再串行复核，只复核没复核过或目标文档改动过的记录，不重放任何写入。
+      void autoReviewOperations(input.rendererEpoch)
     }
   }, trusted)
   registerIpcHandler('application:host:complete', (value) => localHostReplySchema.parse(value), (input) => host.complete(input), trusted)

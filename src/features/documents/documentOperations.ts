@@ -478,7 +478,7 @@ export class DocumentOperations {
   async trashDocument(target: DocumentTarget & { name?: string }): Promise<void> {
     await this.write('trash', target.id, async () => {
       const session = this.registry().get(target.id)
-      if (session && !await this.release(session.documentMeta.kind, target.id)) throw new DocumentInUseError(session.documentMeta.name)
+      if (session && !await this.releaseBackground(session.documentMeta.kind, target.id)) throw new DocumentInUseError(session.documentMeta.name)
       await this.commands.trashDocument({ id: target.id, ...(target.path ? { path: target.path } : {}) })
     })
   }
@@ -664,7 +664,7 @@ export class DocumentOperations {
       for (const session of this.registry().list()) {
         const container = session.documentMeta.container
         if (container.kind !== 'project' || container.projectId !== project.id) continue
-        if (await this.release(session.documentMeta.kind, session.id)) continue
+        if (await this.releaseBackground(session.documentMeta.kind, session.id)) continue
         const busy = this.busyChecks.get(session.documentMeta.kind)?.(session.id)
         open.push(`${session.kind.untitledNames.zh.replace(/^未命名/, '')}“${session.documentMeta.name}”${busy ? `（${busy.replace(/。$/, '')}）` : ''}`)
       }
@@ -680,8 +680,11 @@ export class DocumentOperations {
     })
   }
 
-  /** 请工具释放后台持有的会话；没有登记释放方式或释放失败时按“仍在使用”处理。 */
-  private async release(kind: DocumentKindId, id: string): Promise<boolean> {
+  /**
+   * 请工具释放后台持有的会话（移到回收站前、核对读取后）：界面正在显示、有租约或进行中的任务时工具拒绝。
+   * 没有登记释放方式或释放失败时按“仍在使用”处理。
+   */
+  async releaseBackground(kind: DocumentKindId, id: string): Promise<boolean> {
     const releaser = this.releasers.get(kind)
     if (!releaser) return false
     try {

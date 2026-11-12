@@ -12,13 +12,15 @@ import { getAudioEditStoredTask } from '../audio-edit/task-store'
 import { getDb } from '../db'
 import { getGenerationHistoryStore } from '../generation-history/store'
 import { configureContentTrustConfirmations } from '../content-trust/confirmation'
+import { DocumentIndexStore } from '../documents/index-store'
+import { createOperationAutoReview } from './operationAutoReview'
 
 const embeddedCallers = new Set<string>()
 const attachedEmbeddedCallers = new Set<string>()
 const retainedCallers = new Map<string, () => void>()
 let externalAuthority: ((id: string) => void) | undefined
 let externalName: ((id: string) => string | undefined) | undefined
-let runtime: { host: ApplicationHostBridge; operations: ApplicationOperationCoordinator; embedded: ApplicationToolDispatcher; reviewOperation(record: OperationRecord, open?: boolean): Promise<void> } | undefined
+let runtime: { host: ApplicationHostBridge; operations: ApplicationOperationCoordinator; embedded: ApplicationToolDispatcher; reviewOperation(record: OperationRecord, open?: boolean): Promise<boolean>; autoReviewOperations(rendererEpoch: string): Promise<void> } | undefined
 
 /** 应用生命周期持有账本和宿主；协议适配器只提供调用者授权。 */
 export function initializeApplicationRuntime() {
@@ -51,9 +53,12 @@ export function initializeApplicationRuntime() {
   // 本地用户的只读核验身份由宿主生成，不依赖已经结束的外部连接，也不准许写入或计费。
   const reviewCaller = randomUUID()
   embeddedCallers.add(reviewCaller)
-  const reviewOperation = async (record: OperationRecord, open = true): Promise<void> => {
+  /** 返回回执与重读验证是否真正读完：没有异常、宿主都回复成功、期间没换渲染会话。open 时再读目标请用户核对。 */
+  const reviewOperation = async (record: OperationRecord, open = true): Promise<boolean> => {
     const signal = AbortSignal.timeout(30_000)
-    try { await embedded.reconcileVerification(reviewCaller, record, signal) }
+    const reconciledEpoch = host.rendererEpoch
+    let completed = false
+    try { completed = await embedded.reconcileVerification(reviewCaller, record, signal) && host.rendererEpoch === reconciledEpoch }
     catch (error) { createMainLogger('main.application_runtime').warn('自动核对暂不可用，保留待处理项', { event: 'application.confirmation.verify_failed', error }) }
     if (open) {
       const epoch = host.rendererEpoch
@@ -61,6 +66,7 @@ export function initializeApplicationRuntime() {
         ref => host.execute(reviewCaller, 'read_application_entity', { ref }, signal, { reviewTarget: true }),
         () => { if (!host.ready || host.rendererEpoch !== epoch) throw new Error('应用正在重新连接，请稍后重试。') })
     }
+    return completed
   }
   operations.onChange(() => host.publishReviews())
   // 网页重演在主进程跑，渲染层重载只断了回执：重载后（账本变化时）把仍在跑的标回执行中，重演结束时用登记的
@@ -84,7 +90,15 @@ export function initializeApplicationRuntime() {
   webReplayRenderJobs.onSettled(job => { unsettledReplayJobs.add(job.jobId); settleWebReplay(new Set([job.jobId])); host.publishReviews() })
   host.onChange(kind => { if (kind === 'context' && unsettledReplayJobs.size) settleWebReplay(new Set(unsettledReplayJobs)) })
   webReplayRenderJobs.setOwnerResolver(jobId => operations.store.unresolved().find(record => record.capabilityId === 'render_web_app_replay' && webReplayJobIdOf(record) === jobId)?.operationId)
-  runtime = { host, operations, embedded, reviewOperation }
+  // 文档修订号取作品索引里的已保存值：渲染层的作用域修订号每次重载从头计，跨启动比较不了。
+  // 找不到文件的文档（所在的盘没接上等）按不在处理，重新找到时修订号集合变了，会再复核一次。
+  let documentIndex: DocumentIndexStore | undefined
+  const autoReview = createOperationAutoReview({ host, store: operations.store, review: record => reviewOperation(record, false),
+    documentRevision: id => {
+      const document = (documentIndex ??= new DocumentIndexStore(getDb(), process.platform === 'win32' ? 'win32' : 'posix')).getDocument(id)
+      return document && !document.missing ? document.revision : undefined
+    } })
+  runtime = { host, operations, embedded, reviewOperation, autoReviewOperations: rendererEpoch => autoReview.schedule(rendererEpoch) }
   configureContentTrustConfirmations(operations)
   return runtime
 }

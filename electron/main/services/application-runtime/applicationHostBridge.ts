@@ -50,8 +50,11 @@ export class ApplicationHostBridge {
   /** 渲染进程异常退出后到新页面注册就绪之前一直保留，外部调用据此立刻拒绝，而不是等到超时。 */
   private unavailable?: ApplicationHostUnavailable
   private listeners = new Set<(kind: 'context' | 'catalog') => void>()
+  private activityAt = Date.now()
+  /** 最近一次宿主注册、界面发布上下文或请求进出的时间；后台自动复核据此等界面空闲。 */
+  get lastActivityAt(): number { return this.activityAt }
   getContext(): HostContextSnapshot | undefined { return this.context }
-  publishContext(context: HostContextSnapshot): void { this.context = context; this.changed('context') }
+  publishContext(context: HostContextSnapshot): void { this.context = context; this.activityAt = Date.now(); this.changed('context') }
   onChange(listener: (kind: 'context' | 'catalog') => void): () => void { this.listeners.add(listener); return () => { this.listeners.delete(listener) } }
   private changed(kind: 'context' | 'catalog' = 'catalog'): void { for (const listener of this.listeners) listener(kind) }
   private waitUntilReady(callerId: string, signal: AbortSignal, deadline: number): Promise<void> {
@@ -94,6 +97,7 @@ export class ApplicationHostBridge {
     if (input.attachmentSequence < this.attachmentSequence) return
     const registration = input
     this.attachmentSequence = registration.attachmentSequence
+    this.activityAt = Date.now()
     // 注册与上下文发布走不同通道、到达顺序不定：渲染进程异步加载宿主模块后才首次注册，冷启动时上下文常常先到。
     // 页面导航与销毁已由 IPC 层断开并清空上下文，这里只在“已有另一渲染进程的宿主”时才清，
     // 否则先到的新上下文会被清掉，之后界面没有变化就不会再发布，调用方一直等不到就绪。
@@ -149,6 +153,7 @@ export class ApplicationHostBridge {
     }
   }
   complete(reply: LocalHostReply): void | PaidApprovalDecision {
+    this.activityAt = Date.now()
     if (reply.uiPaidApproval) {
       if (this.rendererEpoch !== reply.rendererEpoch || !this.operations) throw new Error('应用付费授权会话已结束。')
       return handleUiPaidApproval(this.operations.store, reply)
@@ -228,6 +233,7 @@ export class ApplicationHostBridge {
     if (signal.aborted) return Promise.reject(new Error('请求已取消。'))
     const host = this.host
     const requestId = randomUUID()
+    this.activityAt = Date.now()
     return new Promise((resolve, reject) => {
       const cancel = (): void => {
         this.pending.get(requestId)?.cleanup()

@@ -157,6 +157,14 @@ describe.skipIf(!process.versions.electron)('应用原生操作记录与恢复',
     const current = f.store.baseline(f.callerId, [], {}, randomUUID())
     expect(f.store.readBaseline(current.id, f.callerId)).toEqual(current)
   })
+  it('自动复核记号随账本记录写回读出，未结查询照常带回', () => {
+    const f = fixture()
+    const original = f.coordinator.prepare(f.callerId, input(f.baseline), f.rendererEpoch)
+    const autoReview = { state: 'unknown' as const, documentRevisions: { 文档: 3 } }
+    f.store.save({ ...original, state: 'unknown', autoReview })
+    expect(new ApplicationOperationStore(f.db).get(original.operationId, f.callerId)?.autoReview).toEqual(autoReview)
+    expect(f.store.unresolved().find(record => record.operationId === original.operationId)?.autoReview).toEqual(autoReview)
+  })
   it('open_document 加载前被拒，统一写回执落原生账本为 not_executed / verified', async () => {
     const f = fixture()
     const record = f.coordinator.prepare(f.callerId, { operationId: randomUUID(), documentId: 'rejected-document' }, f.rendererEpoch, 'open_document')
