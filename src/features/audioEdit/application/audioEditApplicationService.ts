@@ -147,7 +147,8 @@ export async function compressAudioEditSilence(projectId: string, range?: AudioE
       const suggestions = detected.suggestions.filter((item) => !existing.has(item.id))
       draft = { ...draft, batchSettings: settings, suggestions: [...draft.suggestions.filter((item) => item.kind !== 'long_silence' || item.status !== 'pending'), ...suggestions] }
       for (const suggestion of suggestions) draft = applyAudioEditSuggestion(draft, suggestion.id)
-      if (includeFillers) draft = cleanAudioEditFillers(draft, settings.fillers, range)
+      // 快速处理只删自成一段的语气词；没有声音能量证据时无从判断，按词清理
+      if (includeFillers) draft = cleanAudioEditFillers(draft, settings.fillers, range, detected.energy ? [...detected.energy.pauses, ...(breaths ?? [])] : undefined)
       if (breaths) {
         const levels = energyLevels(detected.energy)
         const processed = applyAudioEditBreathPolicy(draft, breaths, 'delete', range, detected.energy?.pauses, levels); draft = processed.document; breathCounts = processed.counts

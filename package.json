@@ -71,6 +71,7 @@
     "check:node-test-ownership": "node scripts/run-node-tests.cjs --check",
     "test:performance": "vitest run --mode performance",
     "benchmark:speech-alignment": "node scripts/benchmark-speech-alignment.cjs",
+    "eval:rough-cut": "node scripts/audio-edit-rough-cut-eval.cjs",
     "bench:video-edit": "node scripts/bench-video-edit.cjs",
     "test:reality": "node scripts/run-reality-tests.cjs",
     "test:assistant-persistence": "node scripts/test-assistant-persistence.cjs",

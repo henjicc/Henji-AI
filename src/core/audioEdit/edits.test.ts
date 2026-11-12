@@ -90,6 +90,13 @@ describe('audio edit shared decisions and interchange', () => {
     value.transcript[0].granularity = 'segment'
     expect(cleanAudioEditFillers(value, ['嗯'])).toBe(value)
   })
+  it('给了声音低谷时只删前后都停了一下的语气词，连着念的留下', () => {
+    const word = (id: string, text: string, startFrame: number, endFrame: number) => ({ id, text, startFrame, endFrame, included: true, locked: false, granularity: 'word' as const })
+    const value = { ...project(), transcript: [word('a', '习惯性的', 0, 400), word('b', '呃', 400, 600), word('c', '翻到', 600, 900), word('d', '呃', 1200, 1400), word('e', '底部', 1700, 2000)] }
+    const quiet = [{ startMs: 900, endMs: 1200 }, { startMs: 1400, endMs: 1700 }]
+    expect(cleanAudioEditFillers(value, ['呃'], undefined, quiet).transcript.filter((block) => !block.included).map((block) => block.id)).toEqual(['d'])
+    expect(cleanAudioEditFillers(value, ['呃']).transcript.filter((block) => !block.included).map((block) => block.id)).toEqual(['b', 'd'])
+  })
   it('rounds outward once, produces consecutive linked clips and escapes XML', () => {
     const value = applyAudioEditSuggestion(project(), 'silence')
     const timeline = compileAudioEditXmlTimeline(value)

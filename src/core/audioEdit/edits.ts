@@ -206,8 +206,33 @@ export function audioEditFillerBlockIds(blocks: readonly AudioEditTranscriptBloc
     && (!range || (block.startFrame >= range.startFrame && block.endFrame <= range.endFrame))
     && fillers.has(normalizeAudioEditFiller(block.text))).map((block) => block.id)
 }
-export function cleanAudioEditFillers(project: AudioEditProjectDocument, words: readonly string[], range?: AudioEditRange): AudioEditProjectDocument {
-  const ids = audioEditFillerBlockIds(project.transcript, words, range)
+/** 语气词前后各要有这么长的安静（毫秒），才算自成一段的迟疑 */
+const ISOLATED_FILLER_QUIET_MS = 80
+
+/**
+ * 清理语气词。给了 quiet（声音低谷与呼吸，毫秒）时只删自成一段的：前后都停了一下的“嗯、呃”是迟疑，
+ * 连着前后的字一口气念出来的（“习惯性的呃快速翻到”）是说话的语气，删掉反而要在语音中间下刀。
+ * 不给 quiet 时按词清理全部（用户点名清理语气词）。
+ */
+export function cleanAudioEditFillers(
+  project: AudioEditProjectDocument, words: readonly string[], range?: AudioEditRange, quiet?: readonly { startMs: number; endMs: number }[],
+): AudioEditProjectDocument {
+  let ids = audioEditFillerBlockIds(project.transcript, words, range)
+  if (quiet && ids.length) {
+    const { sampleRate } = project.source
+    const ms = (frame: number): number => frame * 1000 / sampleRate
+    const heard = project.transcript.filter((block) => block.included || block.locked).sort((a, b) => a.startFrame - b.startFrame)
+    const order = new Map(heard.map((block, index) => [block.id, index]))
+    const longest = (fromMs: number, toMs: number): number => Math.max(0, ...quiet.filter((item) => item.endMs > fromMs && item.startMs < toMs)
+      .map((item) => Math.min(toMs, item.endMs) - Math.max(fromMs, item.startMs)))
+    const middle = (block: AudioEditTranscriptBlock): number => ms((block.startFrame + block.endFrame) / 2)
+    ids = ids.filter((id) => {
+      const at = order.get(id)!, block = heard[at], previous = heard[at - 1], next = heard[at + 1]
+      const before = previous ? longest(middle(previous), ms(block.startFrame) + 60) : Infinity
+      const after = next ? longest(ms(block.endFrame) - 60, middle(next)) : Infinity
+      return before >= ISOLATED_FILLER_QUIET_MS && after >= ISOLATED_FILLER_QUIET_MS
+    })
+  }
   return ids.length ? setAudioEditBlocks(project, ids, false) : project
 }
 

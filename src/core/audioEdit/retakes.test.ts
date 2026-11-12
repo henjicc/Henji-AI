@@ -64,6 +64,11 @@ describe('口播重念检测', () => {
     expect(keptText(spoken, retakes)).toBe('所以我就接入它错了这么一个小工具啊。')
   })
 
+  it('念坏那遍前面的“哎”跟着那一遍一起删', () => {
+    const spoken = speak('这个 就叫 少即是多 吧。', { pause: 300 }, '哎，', { pause: 150 }, '不过 呢 为了 做到 答案 的 简单，', { pause: 600 }, '不过 呢 为了 做到 答案 的 简单 且 准确，')
+    expect(keptText(spoken, detect(spoken))).toBe('这个就叫少即是多吧。不过呢为了做到答案的简单且准确，')
+  })
+
   it('A B A B 交错重念收敛到最后一遍', () => {
     const spoken = speak('那 它 具体 是 怎么 查的 呢？', { pause: 300 }, '首先 大模型 呢，', { pause: 400 }, '那 它 具体 是 怎么 查的 呢？', { pause: 300 }, '首先 大模型 会 先 把 问题 拆开')
     expect(keptText(spoken, detect(spoken))).toBe('那它具体是怎么查的呢？首先大模型会先把问题拆开')

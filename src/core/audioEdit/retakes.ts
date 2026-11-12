@@ -713,6 +713,9 @@ export function detectAudioEditRetakes(blocks: readonly AudioEditTranscriptBlock
   const detector = new RetakeDetector(words, options)
   const accepted = detector.run()
   const removed = words.map((word, index) => word.block.included && !detector.kept[index])
+  const isRestartMarker = (word: Word): boolean => RESTART_MARKERS.has(normalizeAudioEditFiller(word.block.text))
+  const markerRemovable = (block: AudioEditTranscriptBlock): boolean => block.included && !block.locked
+    && (!options.range || (block.startFrame >= options.range.startFrame && block.endFrame <= options.range.endFrame))
   const retakes: AudioEditRetake[] = []
   const describe = (first: number, k: number, items: readonly Candidate[], review: boolean): AudioEditRetake => {
     const levels = items.map(confidenceOf)
@@ -736,8 +739,10 @@ export function detectAudioEditRetakes(blocks: readonly AudioEditTranscriptBlock
   }
   for (let k = 0; k < words.length;) {
     if (!removed[k]) { k++; continue }
-    const first = k
+    let first = k
     while (k < words.length && (removed[k] || (words[k].filler && words[k].block.included && removed[k + 1]))) k++
+    // 删除段前面紧挨着的“哎”是念坏那遍的起头（“…吧。哎，不过呢…且。｜哎，不过”），跟着那一遍一起删
+    while (first > 0 && isRestartMarker(words[first - 1]) && markerRemovable(words[first - 1].block)) first--
     retakes.push(describe(first, k, accepted.filter((candidate) => candidate.first >= first && candidate.first < k), false))
   }
   for (const candidate of detector.review) retakes.push(describe(candidate.first, candidate.last, [candidate], true))
