@@ -641,3 +641,48 @@ it('Worker 普通与快路回执保留实际来源，像素读取强制精确', 
   expect(await send({ ...request, scrubbing: true, precision: 'web-cache' })).toMatchObject({ provenance: 'web-cache' })
   expect(state.jump.mock.lastCall?.[4]).toBe('web-cache')
 })
+
+it('导出帧在 Worker 里直接送进编码流：先回执提交、位图不交回，GPU 完成后带编码耗时答复；编码流关闭后的帧不合成', async () => {
+  const encoded: Array<{ source: unknown; timestamp: number; keyFrame?: boolean }> = []
+  const frames: Array<{ close: ReturnType<typeof vi.fn> }> = []
+  vi.stubGlobal('VideoFrame', class { close = vi.fn(); constructor(readonly source: unknown, readonly init: { timestamp: number }) { frames.push(this) } })
+  vi.stubGlobal('VideoEncoder', class extends EventTarget {
+    static async isConfigSupported() { return { supported: true } }
+    state = 'configured'; encodeQueueSize = 0; private last = 0
+    constructor(private readonly init: VideoEncoderInit) { super() }
+    configure() {}
+    encode(frame: { source: unknown; init: { timestamp: number } }, options: VideoEncoderEncodeOptions) { encoded.push({ source: frame.source, timestamp: frame.init.timestamp, keyFrame: options.keyFrame }); this.last = frame.init.timestamp; this.encodeQueueSize++ }
+    async flush() { this.encodeQueueSize = 0; this.init.output({ byteLength: 1, type: 'key', timestamp: this.last, duration: 16666, copyTo: () => {} } as unknown as EncodedVideoChunk) }
+    close() { this.state = 'closed' }
+  })
+  const open = ++nextId
+  worker.onmessage({ data: { id: open, kind: 'encoderOpen', stream: 7, purpose: 'export', config: { codec: 'avc1.640033', width: 1920, height: 1080 } } })
+  await vi.waitFor(() => expect(messages.some(message => message.id === open)).toBe(true))
+  let complete!: () => void
+  const pixels = bitmap(); render(pixels, new Promise<void>(resolve => { complete = resolve }))
+  const id = ++nextId
+  worker.onmessage({ data: { id, kind: 'render', frame: 3, sequential: true, quality: 'final', encode: { stream: 7, timestamp: .05, duration: 1 / 60, keyFrame: true } } })
+  await vi.waitFor(() => expect(messages.some(message => message.id === id && message.phase === 'submitted')).toBe(true))
+  expect(encoded).toEqual([{ source: pixels, timestamp: 50000, keyFrame: true }])
+  expect(pixels.close).toHaveBeenCalledOnce(); expect(frames[0].close).toHaveBeenCalledOnce()
+  expect(messages.some(message => message.id === id && !message.phase)).toBe(false)
+  complete()
+  await vi.waitFor(() => expect(messages.some(message => message.id === id && !message.phase)).toBe(true))
+  const result = messages.find(message => message.id === id && !message.phase)!
+  expect(result.error).toBeUndefined(); expect(result.bitmap).toBeUndefined(); expect(result.encoded).toMatchObject({ encodeQueue: 1 })
+  // 收尾：编码结果的消息排在收尾答复之前，之后编码流已关闭。
+  const flush = ++nextId
+  worker.onmessage({ data: { id: flush, kind: 'encoderFlush', stream: 7 } })
+  await vi.waitFor(() => expect(messages.some(message => message.id === flush)).toBe(true))
+  const chunkAt = messages.findIndex(message => (message as unknown as { kind?: string }).kind === 'encoder.chunk')
+  expect(chunkAt).toBeGreaterThanOrEqual(0); expect(chunkAt).toBeLessThan(messages.findIndex(message => message.id === flush))
+  state.render.mockClear()
+  const after = await send({ kind: 'render', frame: 4, sequential: true, encode: { stream: 7, timestamp: .1, duration: 1 / 60, keyFrame: false } })
+  expect(after.error).toContain('视频编码已停止'); expect(after.encoderFailure).toBeUndefined(); expect(state.render).not.toHaveBeenCalled()
+  // 不支持的设置：答复带编码失败原因，界面线程据此换成可行动的提示。
+  vi.spyOn(VideoEncoder, 'isConfigSupported').mockResolvedValue({ supported: false })
+  const rejected = ++nextId
+  worker.onmessage({ data: { id: rejected, kind: 'encoderOpen', stream: 8, purpose: 'renderCache', config: { codec: 'hev1.1.6.L186.B0', width: 7680, height: 4320 } } })
+  await vi.waitFor(() => expect(messages.some(message => message.id === rejected)).toBe(true))
+  expect(messages.find(message => message.id === rejected)?.encoderFailure).toMatchObject({ reason: 'unsupported', detail: expect.stringContaining('hev1.1.6.L186.B0') })
+})

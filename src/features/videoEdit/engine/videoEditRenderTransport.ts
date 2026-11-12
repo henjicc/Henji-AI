@@ -19,7 +19,8 @@ import { getPlatform } from '@/platform/runtime'
 import { getHardwareCapabilities } from '@/services/mediaCache/hardwareCapabilities'
 import type { VideoEditDeviceMemory } from './videoEditGpuBudget'
 import { createLogger } from '@/core/logging'
-import type { NativeFramesRequest, RenderDecodeOptions, RenderLogMessage, RenderRequest, RenderResponse } from './videoEditWorker'
+import type { NativeFramesRequest, RenderDecodeOptions, RenderLogMessage, RenderRequest, RenderResponse, VideoEditEncodedChunkMessage } from './videoEditWorker'
+import { VideoEditEncoderFailure, type VideoEditEncodedChunk, type VideoEditEncodeGeometry, type VideoEditEncodePurpose, type VideoEditEncodeSample, type VideoEditFrameEncodeTiming } from './videoEditFrameEncoder'
 import { VideoEditMediaContentVerifier } from '../videoEditMediaContent'
 import type { VideoEditTrackResults } from './videoEditTrackResults'
 import type { VideoEditSmartRegionSegments } from './videoEditSmartRegionMasks'
@@ -54,8 +55,26 @@ function videoEditDeviceMemory(): Promise<VideoEditDeviceMemory> {
   })()
   return pending
 }
-/** 一个渲染会话同时排着的请求上限（Worker 串行执行，排得越多停止与跳转越慢）。 */
-const VIDEO_EDIT_RENDER_QUEUE_LIMIT = 4
+/** 导出与预渲染同时在途的编码帧数：一帧在合成、上一帧等 GPU 完成、再上一帧等回执。 */
+export const VIDEO_EDIT_ENCODE_FRAMES_IN_FLIGHT = 3
+/**
+ * 一个渲染会话同时排着的请求上限（Worker 串行执行，排得越多停止与跳转越慢；节目预览另按自己的在途数限流）。
+ * 由编码流水的峰值推导（在途 K 帧）：发第 K 帧之前有 K−1 帧未完成，加这一帧的一个准备请求（降噪权重、字体、文字预检，
+ * 依次发出、同时只有一个）和一份混音预取，共 K+1；第 K 帧发出后是 K 帧加混音预取，也是 K+1。另留 1 个余量：
+ * 跟随字体库的会话（预渲染）在字体库变化时会再排一次字体同步，可能与这一帧的准备请求同时在途。
+ */
+export const VIDEO_EDIT_RENDER_QUEUE_LIMIT = VIDEO_EDIT_ENCODE_FRAMES_IN_FLIGHT + 2
+/** 一帧送进 Worker 编码流后的结果：合成来源与各段耗时（`renderMs` 是合成到 GPU 完成，不含送进编码器的时间）。 */
+export interface VideoEditEncodedFrame extends VideoEditFrameEncodeTiming { provenance: WebSourceProvenance; singleFrameReads: number; renderCached: boolean; renderMs: number }
+/** Worker 里的一条视频编码流。 */
+export interface VideoEditVideoEncoderStream {
+  /** 渲染一帧并送进编码器：画面交给编码器后调 `submitted`（可以发下一帧），这一帧 GPU 完成后返回。 */
+  encode(frame: number, sample: VideoEditEncodeSample, precision: VideoEditRenderPrecision, submitted: () => void): Promise<VideoEditEncodedFrame>
+  /** 等全部编码结果经 `onChunk` 交出后关闭编码流。 */
+  flush(): Promise<void>
+  /** 立即停止编码（取消、失败）；已关闭时什么也不做。 */
+  close(): void
+}
 const activeTransports = new Set<VideoEditRenderTransport>()
 subscribeContentTrust(command => { if (command.action === 'set-policy' && !command.allow) for (const transport of activeTransports) transport.denyForeignContent() })
 // 整页刷新由窗口负责；页面确实离开后统一关闭会话，释放还在主进程持有的帧通道。
@@ -119,6 +138,9 @@ export class VideoEditRenderTransport {
   onPresentation?: (frame: number, source: import('./videoEditRenderer').VideoEditPresentedSource, authorElements?: RenderResponse['authorElements'], provenance?: WebSourceProvenance) => void
   private readonly backgroundTimers = new Map<number, ReturnType<typeof setTimeout>>()
   onRefinement?: (result: RenderResponse, error?: Error) => void
+  /** 打开着的编码流收编码结果的回调。 */
+  private readonly encoderOutputs = new Map<number, (chunk: VideoEditEncodedChunk) => void>()
+  private nextEncoderStream = 0
   private nextId = 0
   private preopenVersion = 0
   private disposed = false
@@ -275,12 +297,13 @@ export class VideoEditRenderTransport {
     if (this.timing) videoEditTimingEvent(this.timing, 'render.session.start')
     // Preview owns the transferred full-size surface; reserve the export scratch lazily.
     this.canvas = new OffscreenCanvas(previewWidth ? 1 : document.width, previewWidth ? 1 : document.height)
-    this.worker.onmessage = (event: MessageEvent<RenderResponse | RenderLogMessage | SharedCompilationRequest>) => {
+    this.worker.onmessage = (event: MessageEvent<RenderResponse | RenderLogMessage | SharedCompilationRequest | VideoEditEncodedChunkMessage>) => {
       // 终止之后已排队的消息仍可能送达，不能重新打开模块、源码或任何请求通道。
       if (this.disposed && ('kind' in event.data ? event.data.kind !== 'log' : !this.pending.has(event.data.id))) {
         if (!('kind' in event.data)) { event.data.bitmap?.close(); event.data.history?.close() }
         return
       }
+      if ('kind' in event.data && event.data.kind === 'encoder.chunk') { this.encoderOutputs.get(event.data.stream)?.(event.data.chunk); return }
       if ('kind' in event.data && event.data.kind === 'code.releaseModules') {
         this.moduleGraphs.get(event.data.token)?.dispose(); this.moduleGraphs.delete(event.data.token); return
       }
@@ -350,7 +373,7 @@ export class VideoEditRenderTransport {
         return
       }
       const value = event.data; const pending = this.pending.get(value.id)
-      const failure = value.error ? value.gpuDeviceLost !== undefined ? new VideoEditGpuDeviceLostError(value.gpuDeviceLost) : value.gpuFrame ? new VideoEditGpuFrameError(value.gpuFrame.source, value.gpuFrame.faults) : restoreContentTrustError(new Error(value.error), value.contentTrust) : undefined
+      const failure = value.error ? value.gpuDeviceLost !== undefined ? new VideoEditGpuDeviceLostError(value.gpuDeviceLost) : value.gpuFrame ? new VideoEditGpuFrameError(value.gpuFrame.source, value.gpuFrame.faults) : value.encoderFailure ? new VideoEditEncoderFailure(value.encoderFailure.reason, value.encoderFailure.detail) : restoreContentTrustError(new Error(value.error), value.contentTrust) : undefined
       if (value.phase === 'refined') {
         clearTimeout(this.backgroundTimers.get(value.id)); this.backgroundTimers.delete(value.id)
         if (failure instanceof VideoEditGpuDeviceLostError) this.fail(failure)
@@ -423,6 +446,7 @@ export class VideoEditRenderTransport {
     this.failure = error; this.disposed = true
     activeTransports.delete(this)
     this.worker.terminate()
+    this.encoderOutputs.clear()
     for (const modules of this.moduleGraphs.values()) modules.dispose()
     this.moduleGraphs.clear()
     for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(error) }
@@ -560,7 +584,7 @@ export class VideoEditRenderTransport {
   }
   setTracks(tracks: VideoEditTrackResults): void { if (!this.disposed) this.worker.postMessage({ kind: 'tracks', tracks, id: 0 } satisfies RenderRequest) }
   invalidateDocument(revision: number): void { if (!this.disposed) this.worker.postMessage({ kind: 'invalidate', revision, id: 0 } satisfies RenderRequest) }
-  async present(frame: number, sequential = false, scrubbing: import('./videoEditRenderer').VideoEditScrubMode = false, deadline?: number, submitted?: () => void, readRgb?: { width: number; height: number }, quality: EffectQuality = 'interactive', history = false, observeElements = false, requireLive = false, precision: VideoEditRenderPrecision = 'exact'): Promise<RenderResponse> {
+  async present(frame: number, sequential = false, scrubbing: import('./videoEditRenderer').VideoEditScrubMode = false, deadline?: number, submitted?: () => void, readRgb?: { width: number; height: number }, quality: EffectQuality = 'interactive', history = false, observeElements = false, requireLive = false, precision: VideoEditRenderPrecision = 'exact', encode?: { stream: number } & VideoEditEncodeSample): Promise<RenderResponse> {
     if (this.disposed) throw this.failure ?? new Error('剪辑渲染已关闭。')
     // 路径追踪成片（导出、选帧、封面）每帧都要降噪：先等权重交给 Worker，成片各帧一致。
     if (quality === 'final' && this.document.spaceRender?.finalRenderer === 'pathTrace') await this.ensureDenoiser().catch(() => undefined)
@@ -586,7 +610,7 @@ export class VideoEditRenderTransport {
       if (previousSubmission) await previousSubmission
       // 等待期间内容在新旧文字接口之间切换时，入口的预检判断已不适用当前文档，按过期帧跳过，调用方会按最新内容重新请求。
       if (contentEpoch !== this.contentEpoch || preflight !== this.needsTextPreflight || deadline !== undefined && playbackEpoch !== this.playbackEpoch) return { id: 0, skipped: true, presented: false }
-      const rendering = this.request({ kind: 'render', precision: readRgb || history ? 'exact' : precision, frame, sequential, scrubbing, deadline, quality, ...(requireLive ? { requireLive: true } : {}), ...(observeElements ? { observeElements: true } : {}), ...(readRgb ? { readRgb } : {}), ...(history ? { history: true } : {}) }, [], submitted)
+      const rendering = this.request({ kind: 'render', precision: readRgb || history ? 'exact' : precision, frame, sequential, scrubbing, deadline, quality, ...(requireLive ? { requireLive: true } : {}), ...(observeElements ? { observeElements: true } : {}), ...(readRgb ? { readRgb } : {}), ...(history ? { history: true } : {}), ...(encode ? { encode } : {}) }, [], submitted)
       submittedInOrder()
       const result = await rendering
       const at = result.presented ? this.host.maskUpdateTime(document.id, document.revision) : undefined
@@ -637,6 +661,29 @@ export class VideoEditRenderTransport {
     } finally { result.bitmap.close() }
     return { provenance: result.provenance ?? 'live', canvas: this.canvas, sourceTimestamps: result.sourceTimestamps ?? [], singleFrameReads: result.singleFrameReads ?? 0, renderCached: result.renderCached === true }
   }
+  /**
+   * 导出与预渲染：在 Worker 里打开视频编码，之后各帧的合成结果在 Worker 里直接编码，界面线程只收压缩结果。
+   * `output` 给出时（成片画幅与合成画面不同）按它缩放；编码结果按编码器输出顺序交给 `onChunk`。
+   */
+  async openVideoEncoder(config: VideoEncoderConfig, options: { purpose: VideoEditEncodePurpose; output?: VideoEditEncodeGeometry }, onChunk: (chunk: VideoEditEncodedChunk) => void): Promise<VideoEditVideoEncoderStream> {
+    await this.ready
+    const stream = ++this.nextEncoderStream
+    this.encoderOutputs.set(stream, onChunk)
+    try { await this.request({ kind: 'encoderOpen', stream, purpose: options.purpose, config, ...(options.output ? { output: options.output } : {}) }) }
+    catch (error) { this.encoderOutputs.delete(stream); throw error }
+    return {
+      encode: async (frame, sample, precision, submitted) => {
+        const result = await this.present(frame, true, false, undefined, submitted, undefined, 'final', false, false, false, precision, { stream, ...sample })
+        if (!result.encoded) throw new Error('剪辑渲染没有返回画面。')
+        return { ...result.encoded, provenance: result.provenance ?? 'live', singleFrameReads: result.singleFrameReads ?? 0, renderCached: result.renderCached === true, renderMs: result.renderElapsedMs ?? 0 }
+      },
+      flush: async () => { await this.request({ kind: 'encoderFlush', stream }); this.encoderOutputs.delete(stream) },
+      close: () => {
+        if (!this.encoderOutputs.delete(stream) || this.disposed) return
+        this.worker.postMessage({ kind: 'encoderClose', id: 0, stream } satisfies RenderRequest)
+      },
+    }
+  }
   /** `retainIdle`：拖动播放头的声音颗粒，保留最近用过的空闲声音来源，避免每个颗粒重开会话。 */
   async mixAudio(start: number, duration: number, retainIdle = false): Promise<AudioBuffer> {
     await this.ready
@@ -650,6 +697,7 @@ export class VideoEditRenderTransport {
     if (this.disposed) return
     this.disposed = true
     activeTransports.delete(this)
+    this.encoderOutputs.clear()
     for (const controller of this.compilations.values()) controller.abort()
     this.compilations.clear()
     this.stopFonts?.(); this.stopTextFonts?.(); this.releaseFontSnapshot()

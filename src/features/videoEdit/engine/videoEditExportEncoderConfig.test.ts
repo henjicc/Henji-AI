@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { AudioSample, AudioSampleSource, BufferTarget, Mp4OutputFormat, Output, VideoSample, VideoSampleSource } from 'mediabunny'
 import { videoEditSequenceExportSettings } from '@/core/videoEdit/exportPresets'
 import { adaptVideoEditExportPreset, assertVideoEditExportSupported, canEncodeVideoEditExport, canEncodeVideoEditExportAudio, probeVideoEditExport, videoEditExportAudioOptions, videoEditExportVideoOptions } from './videoEditExportEncoder'
-import { videoEditExportVideoEncoderConfig } from './videoEditExportEncoderConfig'
+import { videoEditExportVideoEncoderConfig, videoEditExportVideoStream } from './videoEditExportEncoderConfig'
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 it.each([24, 30, 60, 120])('硬件省略帧率时按 Chromium 的30fps默认值保持 %ifps 每帧码率预算', frameRate => {
@@ -75,6 +75,10 @@ it.each([
     expect(nativeProbe.mock.calls[1][0]).toStrictEqual(probed)
     expect(configure).toHaveBeenCalledOnce()
     expect(configure.mock.calls[0][0]).toStrictEqual(probed)
+    // 渲染 Worker 里编码用的配置与 mediabunny 实际交给编码器的逐字段相同，关键帧节奏也相同（未指定时 2 秒）。
+    const stream = videoEditExportVideoStream(settings)
+    expect(stream.config).toStrictEqual(configure.mock.calls[0][0])
+    expect(stream.keyFrameInterval).toBe(keyframeInterval === 'auto' ? 2 : keyframeInterval)
     expect(probed).toMatchObject({ bitrate: encoderPreference === 'hardware' ? 6_061_729 : 12_123_457, latencyMode: 'quality', displayWidth: 3840, displayHeight: 2160 })
     if (encoderPreference === 'hardware') expect(probed).not.toHaveProperty('framerate')
     else expect(probed.framerate).toBe(60)

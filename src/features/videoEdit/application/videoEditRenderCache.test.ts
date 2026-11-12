@@ -21,12 +21,12 @@ const state = vi.hoisted(() => ({
 }))
 vi.mock('./videoEditRenderFingerprints', () => ({ videoEditRenderFingerprints: (...args: unknown[]) => state.fingerprints(...args), subscribeVideoEditRenderFingerprints: (listener: () => void) => { state.fingerprintListeners.add(listener); return () => state.fingerprintListeners.delete(listener) } }))
 vi.mock('mediabunny', () => ({
-  CanvasSource: class { add = state.add }, Mp4OutputFormat: class {}, StreamTarget: class {},
+  EncodedVideoPacketSource: class { async add() {} }, EncodedPacket: class {}, Mp4OutputFormat: class {}, StreamTarget: class {},
   Output: class { addVideoTrack() {} async start() {} async finalize() {} cancel = state.cancel },
 }))
 vi.mock('@/core/logging', () => ({ createLogger: () => {
   const record = (_message: string, entry?: { event?: string }): void => { if (entry?.event) state.events.push(entry.event) }
-  return { info: vi.fn(record), warn: vi.fn(record) }
+  return { info: vi.fn(record), warn: vi.fn(record), debug: vi.fn(record) }
 } }))
 vi.mock('@/services/mediaCache/mediaCacheSettings', () => ({ getMediaCacheSettings: () => ({}), subscribeMediaCacheSettings: () => () => {} }))
 vi.mock('@/services/mediaCache/hardwareCapabilities', () => ({ resolveRenderCacheCodec: () => 'h264' }))
@@ -36,8 +36,19 @@ vi.mock('@/platform/fonts', () => ({ fontLibrarySnapshot: () => ({ revision: sta
 vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ videoFrames: { webCacheForeground: state.webCacheForeground }, settings: { get: async () => undefined, set: async () => {} }, mediaCache: {
   renderList: state.list, renderRemove: state.remove, renderBegin: async () => 'temporary', renderCommit: state.commit, renderDiscard: state.discard,
 } }) }))
-vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class { canvas = {}; async render(...args: unknown[]) { return { provenance: 'live', ...await state.render(...args) } } dispose = state.dispose; setSmartRegions() {} setTracks() {} constructor() { state.sessions++ } } }))
-vi.mock('../engine/videoEditExportEncoder', () => ({ videoEditExportVideoOptions: () => ({}) }))
+// Worker 编码流的替身：渲染一帧（state.render）、送进编码器（state.add，参数与成片时间一致），然后回执提交。
+vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
+  async openVideoEncoder() {
+    return { close() {}, async flush() {},
+      async encode(frame: number, sample: { timestamp: number; duration: number; keyFrame: boolean }, precision: string, submitted: () => void) {
+        const rendered = { provenance: 'live', ...await state.render(frame, true, precision) }
+        await state.add(sample.timestamp, sample.duration, { keyFrame: sample.keyFrame }); submitted()
+        return rendered
+      } }
+  }
+  dispose = state.dispose; setSmartRegions() {} setTracks() {} constructor() { state.sessions++ }
+} }))
+vi.mock('../engine/videoEditExportEncoder', () => ({ videoEditExportVideoStream: () => ({ codec: 'avc', config: {}, keyFrameInterval: 0 }) }))
 vi.mock('./videoEditTracking', () => ({ subscribeVideoEditTracking: (listener: () => void) => { state.trackingListeners.add(listener); return () => state.trackingListeners.delete(listener) }, videoEditTrackResults: () => state.tracks, waitVideoEditTracking: async () => {} }))
 vi.mock('./videoEditSmartRegions', () => ({ subscribeVideoEditSmartRegions: (listener: () => void) => { state.smartRegionListeners.add(listener); return () => state.smartRegionListeners.delete(listener) }, videoEditSmartRegionSegments: () => state.smartRegions, waitVideoEditSmartRegions: async () => ({}) }))
 vi.mock('./videoEditService', () => ({
@@ -449,7 +460,8 @@ it('删除先取消在途编码并禁止插入新渲染，不会有迟到窗口�
   const clear = clearVideoEditRenderCache(owner.document.id)
   await expect(renderVideoEditRenderCache(owner.document.id, { scope: 'all' })).rejects.toThrow('正在删除')
   await vi.advanceTimersByTimeAsync(30)
-  expect(state.remove).not.toHaveBeenCalled()
+  // 在途的一帧不拖住删除：任务随取消立即停编码、丢弃临时文件并退出，之后才删除，没有半成品登记。
+  expect(state.discard).toHaveBeenCalledOnce(); expect(state.commit).not.toHaveBeenCalled()
   gate.resolve()
   await vi.advanceTimersByTimeAsync(30)
   await render; await clear

@@ -26,12 +26,20 @@ const boundary = vi.hoisted(() => ({ mixes: vi.fn(), encoded: [] as number[], no
 vi.mock('mediabunny', () => ({
   ALL_FORMATS: [], Input: class {}, UrlSource: class {}, Mp4OutputFormat: class {}, StreamTarget: class {},
   Output: class { addVideoTrack() {} addAudioTrack() {} async start() {} async finalize() {} async cancel() {} },
-  CanvasSource: class { async add() {} }, AudioBufferSource: class { async add(buffer: AudioBuffer) { boundary.encoded.push(buffer.getChannelData(0)[0]) } },
+  EncodedPacket: class { constructor(readonly data: Uint8Array) {} }, EncodedVideoPacketSource: class { async add() {} }, AudioBufferSource: class { async add(buffer: AudioBuffer) { boundary.encoded.push(buffer.getChannelData(0)[0]) } },
 }))
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   canvas = {}; constructor(private composition: VideoEditComposition) { assertVideoEditSequenceGraph({ items: composition.items, sequences: composition.sequences ?? [] }) }
   setOutputScale() {} setSmartRegions() {} setTracks() {} setRenderCache() {} async dispose() {}
   async render() { return { singleFrameReads: 0 } }
+  // Worker 编码流的替身：逐帧渲染后交回一份编码结果。
+  async openVideoEncoder(_config: unknown, _output: unknown, onChunk: (chunk: { data: ArrayBuffer; type: 'key' | 'delta'; timestamp: number }) => void) {
+    return { close() {}, async flush() {}, encode: async (_frame: number, sample: { timestamp: number }, _precision: string, submitted: () => void) => {
+      const result = await this.render(); submitted()
+      onChunk({ data: new Uint8Array([0, 0, 0, 1, 1]).buffer, type: 'key', timestamp: Math.trunc(sample.timestamp * 1e6) })
+      return { provenance: 'live', renderCached: false, renderMs: 0, copyMs: 0, encodeMs: 0, encodeWaitMs: 0, encodeQueue: 0, ...result }
+    } }
+  }
   async mixAudio(_start: number, duration: number) {
     boundary.mixes()
     const planes = Array.from({ length: this.composition.channels }, () => new Float32Array(Math.round(duration * this.composition.sampleRate)).fill((this.composition.clips[0]?.volume ?? 0) * 10 ** ((this.composition.clips[0]?.gainDb ?? 0) / 20)))

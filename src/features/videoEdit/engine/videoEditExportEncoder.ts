@@ -4,8 +4,8 @@ import { videoEditExportAudioEncoderConfig, videoEditExportVideoEncoderConfig, t
 import { applyVideoEditExportQuality, videoEditExportQualityOf, videoEditExportIntermediateSettings, videoEditExportEncoderSupportsSize } from '@/core/videoEdit/exportEncoding'
 import { getPlatform } from '@/platform/runtime'
 import { notifyUser } from '@/contexts/NotificationContext'
-export { videoEditExportAudioOptions, videoEditExportVideoOptions } from './videoEditExportEncoderConfig'
-export type { VideoEditExportAudioEncoderSpec, VideoEditExportEncoderSpec } from './videoEditExportEncoderConfig'
+export { videoEditExportAudioOptions, videoEditExportVideoOptions, videoEditExportVideoStream } from './videoEditExportEncoderConfig'
+export type { VideoEditExportAudioEncoderSpec, VideoEditExportEncoderSpec, VideoEditExportVideoStream } from './videoEditExportEncoderConfig'
 
 const logger = createLogger('features.videoEdit.exportEncoder')
 export const VIDEO_EDIT_EXPORT_AUDIO_BITRATES = [320, 256, 192, 160, 128, 96, 64] as const

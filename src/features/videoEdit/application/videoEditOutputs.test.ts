@@ -31,12 +31,21 @@ const encoder = vi.hoisted(() => ({ finalize: vi.fn(), cancel: vi.fn(), render: 
 vi.mock('mediabunny', () => ({
   ALL_FORMATS: [], UrlSource: class {}, Input: class {}, Mp4OutputFormat: class {}, StreamTarget: class {},
   Output: class { addVideoTrack() {} addAudioTrack() {} async start() {} finalize = encoder.finalize; cancel = encoder.cancel },
-  CanvasSource: class { async add(timestamp: number) { encoder.videoTimestamps.push(timestamp) } }, AudioBufferSource: class { async add() {} },
+  EncodedPacket: class { constructor(readonly data: Uint8Array, readonly type: string, readonly timestamp: number) {} },
+  EncodedVideoPacketSource: class { async add(packet: { timestamp: number }) { encoder.videoTimestamps.push(packet.timestamp) } }, AudioBufferSource: class { async add() {} },
 }))
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   setTracks() {} setOutputScale() {} setRenderCache() {}
   canvas = {}; constructor() { if (encoder.failConstructor) throw new Error('GPU unavailable') }
   render = encoder.render; dispose = encoder.dispose; mixAudio = encoder.mix; setSmartRegions = vi.fn()
+  // Worker 编码流的替身：逐帧渲染后交回一份编码结果。
+  async openVideoEncoder(_config: unknown, _output: unknown, onChunk: (chunk: { data: ArrayBuffer; type: 'key' | 'delta'; timestamp: number }) => void) {
+    return { close() {}, async flush() {}, encode: async (frame: number, sample: { timestamp: number }, precision: string, submitted: () => void) => {
+      const result = await this.render(frame, true, precision); submitted()
+      onChunk({ data: new Uint8Array([0, 0, 0, 1, 1]).buffer, type: 'key', timestamp: Math.trunc(sample.timestamp * 1e6) })
+      return { provenance: 'live', singleFrameReads: 0, renderCached: false, renderMs: 0, copyMs: 0, encodeMs: 0, encodeWaitMs: 0, encodeQueue: 0, ...result }
+    } }
+  }
 } }))
 const files = new Map<string, string>(); const media = new Map<string, Uint8Array>(); const assets = new Map<string, AssetRecord>()
 const hash = 'a'.repeat(64)

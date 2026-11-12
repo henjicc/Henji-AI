@@ -2,7 +2,7 @@ import type { VideoEditRenderPrecision } from '../engine/videoEditRenderer'
 import { videoEditRenderFingerprints, subscribeVideoEditRenderFingerprints } from './videoEditRenderFingerprints'
 import { videoEditCodeInputParameters } from '@/core/videoEdit/codeInputParameters'
 import { isCodeImageReference } from '@/core/videoEdit/codeMaterial/contract'
-import { CanvasSource, Mp4OutputFormat, Output, StreamTarget } from 'mediabunny'
+import { Mp4OutputFormat, Output, StreamTarget } from 'mediabunny'
 import { z } from 'zod'
 import { videoEditRenderWindowRanges, videoEditRenderWindowSet, type VideoEditRenderWindow, type VideoEditRenderWindowSet } from '@/core/videoEdit/renderCache'
 import { videoEditRenderEncoding, type VideoEditRenderEncoding } from '@/core/videoEdit/renderBitrate'
@@ -15,7 +15,9 @@ import { getPlatform } from '@/platform/runtime'
 import { fontLibrarySnapshot } from '@/platform/fonts'
 import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
 import { videoEditFirstFramePending } from '../engine/videoEditFirstFrameTiming'
-import { videoEditExportVideoOptions } from '../engine/videoEditExportEncoder'
+import { videoEditExportVideoStream } from '../engine/videoEditExportEncoder'
+import { VIDEO_EDIT_ENCODE_FRAMES_IN_FLIGHT } from '../engine/videoEditRenderTransport'
+import { VideoEditEncodedVideo, runVideoEditEncodePipeline } from '../engine/videoEditEncodedVideo'
 import { findActiveVideoEditSequence, getActiveVideoEditSequence, listVideoEditInstances, publishVideoEdit, requireVideoEditInstance, subscribeVideoEditDomain, subscribeVideoEditView, type VideoEditInstance } from './videoEditService'
 import { videoEditTrackResults, waitVideoEditTracking, subscribeVideoEditTracking } from './videoEditTracking'
 import { videoEditSmartRegionSegments, waitVideoEditSmartRegions, subscribeVideoEditSmartRegions } from './videoEditSmartRegions'
@@ -608,30 +610,41 @@ export async function renderVideoEditRenderCache(projectId: string, request: Vid
   /** 一个窗口完整编码后才登记；中途让出、取消或失败都丢弃临时文件，缓存里不会有半成品。 */
   async function renderWindow(window: VideoEditRenderWindow, renderer: VideoEditRenderSession, attemptSignal: AbortSignal): Promise<void> {
     job.current = window.key; publishVideoEdit()
+    // 每帧都是关键帧，节目可以从窗口内任一帧起播。
+    const video = new VideoEditEncodedVideo(videoEditExportVideoStream({ codec: encoding.codec, width: composition.width, height: composition.height, fps: composition.fps, videoBitrateMbps: encoding.bitrateMbps, bitrateMode: encoding.bitrateMode, encoderPreference: encoding.encoderPreference, keyframeInterval: encoding.keyframeInterval }), 'renderCache', true)
     const path = await platform.mediaCache.renderBegin({ projectId, windowKey: window.key, profile: encoding.profile })
     const output = new Output({ format: new Mp4OutputFormat(), target: new StreamTarget(new WritableStream({ write: async chunk => { await platform.system.fs.writeFile(path, chunk.data, { position: chunk.position }) } }), { chunked: true, chunkSize: 4 * 1024 * 1024 }) })
     try {
-      const video = new CanvasSource(renderer.canvas, videoEditExportVideoOptions({ codec: encoding.codec, width: composition.width, height: composition.height, fps: composition.fps, videoBitrateMbps: encoding.bitrateMbps, bitrateMode: encoding.bitrateMode, encoderPreference: encoding.encoderPreference, keyframeInterval: encoding.keyframeInterval }))
-      output.addVideoTrack(video, { frameRate: composition.fps })
+      output.addVideoTrack(video.source, video.trackMetadata(composition.fps))
       await output.start()
+      await video.open(renderer)
       let provenance: VideoRenderCacheStoredEntry['provenance'] = 'live'
-      for (let frame = window.startFrame; frame < window.endFrame; frame++) {
-        // 每帧核对原实例；重开后的新实例不能让旧任务继续占用同一显卡。
-        assertOwner()
-        attemptSignal.throwIfAborted()
-        if (attempt) attempt.frame = frame
-        const frameStarted = performance.now()
-        // 让出时会话随即释放，不再等在途这一帧算完。
-        const rendered = await abortable(renderer.render(frame, true, precision), attemptSignal)
-        if (rendered.provenance === 'web-cache') provenance = 'web-cache'
-        await video.add((frame - window.startFrame) / composition.fps, 1 / composition.fps, { keyFrame: true })
-        if (job.auto) await rest((performance.now() - frameStarted) * AUTO_RENDER_REST_RATIO, attemptSignal)
-      }
+      let frameStarted = 0
+      // 让出时流水随信号立即结束、会话随即释放，不等在途的帧算完。
+      await runVideoEditEncodePipeline({
+        frames: window.endFrame - window.startFrame,
+        // 自动预渲染按占空比歇着，一次只在途一帧；用户或助手发起的预渲染多帧流水。
+        inFlight: job.auto ? 1 : VIDEO_EDIT_ENCODE_FRAMES_IN_FLIGHT,
+        signal: attemptSignal,
+        before: index => {
+          // 每帧核对原实例；重开后的新实例不能让旧任务继续占用同一显卡。
+          assertOwner()
+          if (attempt) attempt.frame = window.startFrame + index
+          frameStarted = performance.now()
+        },
+        send: (index, submitted) => video.encode(window.startFrame + index, index / composition.fps, 1 / composition.fps, precision, submitted),
+        finished: async (_index, rendered) => {
+          if (rendered.provenance === 'web-cache') provenance = 'web-cache'
+          if (job.auto) await rest((performance.now() - frameStarted) * AUTO_RENDER_REST_RATIO, attemptSignal)
+        },
+      })
+      await abortable(video.finish(), attemptSignal)
       await output.finalize()
       assertOwner()
       const stored = await platform.mediaCache.renderCommit({ temporaryPath: path, entry: { provenance, projectId, sequenceId: composition.id, windowKey: window.key, profile: encoding.profile, startFrame: window.startFrame, endFrame: window.endFrame, width: composition.width, height: composition.height, fps: composition.fps } })
       cache.entries.set(entryIdentity(stored), stored)
     } catch (error) {
+      video.close()
       await output.cancel().catch(() => undefined)
       await platform.mediaCache.renderDiscard(path).catch(() => undefined)
       throw error

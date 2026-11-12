@@ -82,6 +82,29 @@ export function videoEditExportVideoOptions(settings: Pick<VideoEditExportSettin
     },
     ...(settings.keyframeInterval === 'auto' ? {} : { keyFrameInterval: settings.keyframeInterval }) }
 }
+/** mediabunny 编码时未指定关键帧间隔取 2 秒（1.61.0 media-source.ts）。 */
+const MEDIABUNNY_KEY_FRAME_INTERVAL = 2
+/** 剪辑渲染线程里编码一条视频轨的规格。 */
+export interface VideoEditExportVideoStream {
+  codec: 'avc' | 'hevc'
+  /** 交给 VideoEncoder 的原生配置。 */
+  config: VideoEncoderConfig
+  /** 关键帧间隔（秒），0 为每帧都是关键帧。 */
+  keyFrameInterval: number
+  /** 封装前修正编码结果（AVC 级别），与 mediabunny 编码时的同名回调相同。 */
+  onEncodedPacket?: VideoEncodingConfig['onEncodedPacket']
+}
+/**
+ * 渲染 Worker 编码与 mediabunny 自己编码的结果一致：原生配置就是 `videoEditExportVideoOptions` 的 `onEncoderConfig`
+ * 最终交给 VideoEncoder 的那一份（整体覆盖候选配置，未给帧率时去掉帧率），关键帧节奏与 AVC 级别修正也相同。
+ */
+export function videoEditExportVideoStream(settings: Parameters<typeof videoEditExportVideoOptions>[0]): VideoEditExportVideoStream {
+  const options = videoEditExportVideoOptions(settings)
+  const config = videoEditExportVideoEncoderConfig({ ...settings, frameRate: settings.fps!, bitrate: Math.round(settings.videoBitrateMbps * 1_000_000) })
+  if (settings.latencyMode) config.latencyMode = settings.latencyMode
+  if (config.framerate === undefined) delete config.framerate
+  return { codec: settings.codec, config, keyFrameInterval: options.keyFrameInterval ?? MEDIABUNNY_KEY_FRAME_INTERVAL, ...(options.onEncodedPacket ? { onEncodedPacket: options.onEncodedPacket } : {}) }
+}
 export function videoEditExportAudioOptions(settings: Pick<VideoEditExportSettings, 'audioCodec' | 'audioBitrateKbps' | 'sampleRate' | 'channels'>): AudioEncodingConfig {
   const codec = settings.audioCodec === 'wav' ? 'pcm-s24' : 'aac'
   const config = videoEditExportAudioEncoderConfig({ codec, sampleRate: settings.sampleRate, numberOfChannels: settings.channels, bitrate: settings.audioBitrateKbps * 1000 })

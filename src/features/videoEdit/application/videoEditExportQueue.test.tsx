@@ -30,7 +30,7 @@ import type { VideoEditSmartRegionSegments } from '../engine/videoEditSmartRegio
 import { videoEditExportMemory } from './videoEditExportMemory'
 import type { VideoEditExportCapabilities } from '@/core/videoEdit/exportEncoding'
 
-const encoding = vi.hoisted(() => ({ rendered: [] as Array<[string, number]>, precisions: [] as Array<[string, string | undefined]>, videoTimes: [] as number[], audio: [] as number[], finalize: vi.fn(), draw: vi.fn(), webScale: vi.fn(), formats: [] as string[], videoOptions: [] as unknown[], audioOptions: [] as unknown[], pictures: [] as VideoEditComposition[], rendererOptions: [] as unknown[][], smartRegions: [] as VideoEditSmartRegionSegments[] }))
+const encoding = vi.hoisted(() => ({ rendered: [] as Array<[string, number]>, precisions: [] as Array<[string, string | undefined]>, videoTimes: [] as number[], audio: [] as number[], finalize: vi.fn(), draw: vi.fn(), webScale: vi.fn(), formats: [] as string[], videoOptions: [] as unknown[], geometries: [] as unknown[], keyFrames: [] as boolean[][], audioOptions: [] as unknown[], pictures: [] as VideoEditComposition[], rendererOptions: [] as unknown[][], smartRegions: [] as VideoEditSmartRegionSegments[] }))
 // 此组覆盖没有 encoding 的既有直出设置；两段编码在独立契约与 FFmpeg 测试中验证。
 vi.mock('@/core/videoEdit/exportPresets', async importOriginal => {
   const actual = await importOriginal<typeof import('@/core/videoEdit/exportPresets')>()
@@ -42,7 +42,8 @@ vi.mock('mediabunny', () => ({
   ALL_FORMATS: [], Input: class { dispose() {} async getPrimaryVideoTrack() { return { codec: 'avc', displayWidth: 1920, displayHeight: 1080, canDecode: async () => true, computeFrameRateMetrics: async () => ({ probedPacketCount: 4, bestGuessFrameRate: 30, frameRateIsConstant: true }) } } async getPrimaryAudioTrack() { return { codec: 'aac', numberOfChannels: 2, sampleRate: 48000, canDecode: async () => true } } async getAudioTracks() { return [await this.getPrimaryAudioTrack()] } async computeDuration() { return .2 } }, UrlSource: class {},
   Mp4OutputFormat: class { constructor() { encoding.formats.push('mp4') } }, AdtsOutputFormat: class { constructor() { encoding.formats.push('aac') } }, WavOutputFormat: class { constructor() { encoding.formats.push('wav') } }, StreamTarget: class {},
   Output: class { addVideoTrack() {} addAudioTrack() {} async start() {} finalize = encoding.finalize; async cancel() {} },
-  CanvasSource: class { constructor(_canvas: unknown, options: unknown) { encoding.videoOptions.push(options) } async add(time: number) { encoding.videoTimes.push(time) } },
+  EncodedPacket: class { constructor(readonly data: Uint8Array, readonly type: string, readonly timestamp: number, readonly duration: number) {} },
+  EncodedVideoPacketSource: class { async add(packet: { timestamp: number }) { encoding.videoTimes.push(packet.timestamp) } },
   AudioBufferSource: class { constructor(options: unknown) { encoding.audioOptions.push(options) } async add(buffer: AudioBuffer) { encoding.audio.push(buffer.length) } },
 }))
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
@@ -53,6 +54,15 @@ vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: cla
   setSmartRegions(segments: VideoEditSmartRegionSegments) { encoding.smartRegions.push(segments) } setTracks() {} setRenderCache() {} async dispose() {}
   async render(frame: number, _sequential?: boolean, precision?: string) { encoding.rendered.push([this.composition.name, frame]); encoding.precisions.push([this.composition.id, precision]); return { singleFrameReads: 0 } }
   async mixAudio(_time: number, duration: number) { return new AudioBuffer({ numberOfChannels: this.composition.channels, sampleRate: this.composition.sampleRate, length: Math.round(duration * this.composition.sampleRate) }) }
+  // Worker 编码流的替身：记录原生编码配置与成片几何，逐帧渲染后交回一份编码结果。
+  async openVideoEncoder(config: VideoEncoderConfig, options: { output?: unknown }, onChunk: (chunk: { data: ArrayBuffer; type: 'key' | 'delta'; timestamp: number }) => void) {
+    encoding.videoOptions.push(config); if (options.output) encoding.geometries.push(options.output); encoding.keyFrames.push([])
+    return { close() {}, async flush() {}, encode: async (frame: number, sample: { timestamp: number; keyFrame: boolean }, precision: string, submitted: () => void) => {
+      const result = await this.render(frame, true, precision); encoding.keyFrames.at(-1)!.push(sample.keyFrame); submitted()
+      onChunk({ data: new Uint8Array([0, 0, 0, 1, 1]).buffer, type: sample.keyFrame ? 'key' : 'delta', timestamp: Math.trunc(sample.timestamp * 1e6) })
+      return { provenance: 'live', renderCached: false, renderMs: 0, copyMs: 0, encodeMs: 0, encodeWaitMs: 0, encodeQueue: 0, ...result }
+    } }
+  }
 } }))
 const file = (name: string): string => path.resolve(path.sep, 'fixture', name)
 function deferred<T>() { let resolve!: (value: T) => void; let reject!: (error: Error) => void; const promise = new Promise<T>((ok, fail) => { resolve = ok; reject = fail }); return { promise, resolve, reject } }
@@ -63,7 +73,7 @@ beforeEach(() => {
   vi.stubGlobal('AudioEncoder', { isConfigSupported: async (config: AudioEncoderConfig) => ({ config, supported: await canEncodeAudio(config) }) })
   vi.mocked(canEncodeVideo).mockReset().mockResolvedValue(true)
   vi.mocked(canEncodeAudio).mockReset().mockResolvedValue(true)
-  installHarnessNativeStorage(); encoding.rendered = []; encoding.precisions = []; encoding.videoTimes = []; encoding.audio = []; encoding.formats = []; encoding.videoOptions = []; encoding.audioOptions = []; encoding.pictures = []; encoding.rendererOptions = []; encoding.draw.mockClear(); encoding.finalize.mockReset().mockResolvedValue(undefined)
+  installHarnessNativeStorage(); encoding.rendered = []; encoding.precisions = []; encoding.videoTimes = []; encoding.audio = []; encoding.formats = []; encoding.videoOptions = []; encoding.geometries = []; encoding.keyFrames = []; encoding.audioOptions = []; encoding.pictures = []; encoding.rendererOptions = []; encoding.draw.mockClear(); encoding.finalize.mockReset().mockResolvedValue(undefined)
   encoding.webScale.mockClear()
   videoEditExportQueue.clearFinished(); videoEditExportPresetLibrary.replace([])
   const platform = getPlatform()
@@ -229,7 +239,7 @@ it('正式编码固定序列快照；输出帧率只影响画面；历史队列�
   expect(encoding.rendered.map(([, frame]) => frame)).toEqual([1, 1, 2, 2]); expect(encoding.rendered.every(([name]) => name !== '后续修改')).toBe(true)
   expect(encoding.videoTimes).toEqual([0, 1 / 60, 2 / 60, 3 / 60]); expect(encoding.audio.reduce((sum, value) => sum + value, 0)).toBe(.2 * getActiveVideoEditSequence(owner).sampleRate)
   expect(encoding.formats).toEqual(['mp4', 'wav']); expect(jobs[1].task?.output?.kind).toBe('audio'); expect(videoEditQueuedExportTask(projectId, jobs[0].id)).toBe(jobs[0].task)
-  expect(encoding.draw).toHaveBeenCalledWith({}, 0, 0, 1080, 608, 0, 656.25, 1080, 607.5)
+  expect(encoding.geometries).toEqual([{ width: 1080, height: 1920, source: { x: 0, y: 0, width: 1080, height: 608 }, destination: { x: 0, y: 656.25, width: 1080, height: 607.5 } }])
   expect(encoding.webScale).toHaveBeenCalledWith(1080 / 1920, true)
 })
 it('1080p 序列导出 4K 不提高网页声明倍率', async () => {
@@ -417,7 +427,7 @@ it('8K120帧母版导出实际选HEVC并保持120帧时钟', async () => {
   const jobs = await enqueueVideoEditExports([{ projectId: owner.document.id, presetId: 'builtin:master', path: file('8k.mp4') }])
   const job = await videoEditExportQueue.wait(jobs[0].id)
   expect(job.state).toBe('completed')
-  expect(encoding.videoOptions).toEqual([{ codec: 'hevc', bitrate: 20_000_000, bitrateMode: 'variable', hardwareAcceleration: 'prefer-hardware', fullCodecString: 'hev1.1.6.L186.B0', latencyMode: 'quality', alpha: 'discard', onEncoderConfig: expect.any(Function) }])
+  expect(encoding.videoOptions).toEqual([expect.objectContaining({ codec: 'hev1.1.6.L186.B0', bitrate: 20_000_000, bitrateMode: 'variable', hardwareAcceleration: 'prefer-hardware', latencyMode: 'quality', alpha: 'discard' })])
   expect(encoding.videoTimes).toEqual([0, 1 / 120, 2 / 120, 3 / 120])
 })
 it('导出面板对设备不支持的8K120帧禁用动作并给出降低规格的恢复方式', async () => {
@@ -440,12 +450,16 @@ it('导出队列接纳300项，仍串行处理而不按128项拒绝', async () =
 })
 
 it('4K60默认提交跟随序列；真实编码收到CBR软件关键帧与重采样声道参数', async () => {
-  const owner = await project(); editVideoSequence(owner.document.id, owner.activeSequenceId, sequence => ({ ...sequence, width: 3840, height: 2160, frameRate: { numerator: 60, denominator: 1 } }))
+  // 2.5 秒内容：默认关键帧间隔（未指定，2 秒）与 1 秒间隔的节奏可以区分。
+  const owner = await project(); editVideoSequence(owner.document.id, owner.activeSequenceId, sequence => ({ ...sequence, width: 3840, height: 2160, frameRate: { numerator: 60, denominator: 1 }, clips: sequence.clips.map(clip => ({ ...clip, duration: 150 })) }))
   const [defaultJob] = await enqueueVideoEditExports([{ projectId: owner.document.id, path: file('4k.mp4') }]); await videoEditExportQueue.wait(defaultJob.id)
   expect(defaultJob.presetName).toBe('与序列一致'); expect(defaultJob.settings).toMatchObject({ width: 3840, height: 2160, fps: 60, videoBitrateMbps: 50 }); expect(defaultJob.task?.assetRef?.kind).toBe('asset')
   const settings = { ...defaultJob.settings, loudness: null, encoderPreference: 'software' as const, bitrateMode: 'cbr' as const, keyframeInterval: 1 as const, sampleRate: 44100 as const, channels: 1 as const, followSequence: { ...defaultJob.settings.followSequence, sampleRate: false, channels: false } }
   const [job] = await enqueueVideoEditExports([{ projectId: owner.document.id, path: file('cbr.mp4'), settings }]); await videoEditExportQueue.wait(job.id)
-  expect(job.state).toBe('completed'); expect(encoding.videoOptions.at(-1)).toMatchObject({ bitrateMode: 'constant', hardwareAcceleration: 'prefer-software', keyFrameInterval: 1 })
+  expect(job.state).toBe('completed'); expect(encoding.videoOptions.at(-1)).toMatchObject({ bitrateMode: 'constant', hardwareAcceleration: 'prefer-software', framerate: 60 })
+  const keyFrameIndexes = (flags: boolean[]): number[] => flags.flatMap((key, index) => key ? [index] : [])
+  expect(encoding.keyFrames.map(flags => flags.length)).toEqual([150, 150])
+  expect(keyFrameIndexes(encoding.keyFrames[0])).toEqual([0, 120]); expect(keyFrameIndexes(encoding.keyFrames[1])).toEqual([0, 60, 120])
   expect(encoding.audioOptions.at(-1)).toMatchObject({ codec: 'aac', transform: { sampleRate: 44100, numberOfChannels: 1 } })
 })
 it.each(['burn', 'srt', 'vtt'] as const)('字幕%s进入正式画面或同名独立文件；关闭音频不混音不标准化', async captionMode => {
@@ -510,7 +524,7 @@ it('4K60硬件拒绝：面板禁用硬件并说明原因，AAC禁用64/256/320�
     expect(job.error).toBeUndefined()
     expect(job.state).toBe('completed')
     expect(job.settings).toMatchObject({ codec: 'avc', encoderPreference: 'software', width: 3840, height: 2160, fps: 60, sampleRate: 44100, channels: 1, audioBitrateKbps: 192 })
-    expect(encoding.videoOptions.at(-1)).toMatchObject({ codec: 'avc', hardwareAcceleration: 'prefer-software', latencyMode: 'quality' })
+    expect(encoding.videoOptions.at(-1)).toMatchObject({ codec: expect.stringMatching(/^avc1./), hardwareAcceleration: 'prefer-software', latencyMode: 'quality' })
   } finally { app.dispose() }
 })
 
@@ -643,7 +657,7 @@ it('4K60面板默认回落HEVC且保留与序列一致，提交的完整配置�
   expect(job.state).toBe('completed'); expect(onClose).toHaveBeenCalledOnce()
   expect(job.settings).toMatchObject({ codec: 'hevc', width: 3840, height: 2160, fps: 60, videoBitrateMbps: 50 })
   expect(canEncodeVideo).toHaveBeenCalledWith(expect.objectContaining(panelConfig))
-  expect(encoding.videoOptions.at(-1)).toMatchObject({ codec: 'hevc', bitrate: 25_000_000, bitrateMode: 'variable', hardwareAcceleration: 'prefer-hardware' })
+  expect(encoding.videoOptions.at(-1)).toMatchObject({ codec: expect.stringMatching(/^hev1./), bitrate: 25_000_000, bitrateMode: 'variable', hardwareAcceleration: 'prefer-hardware' })
 })
 it('序列从1080p变为4K60会重新适配；手动把码率调到不可用时禁用导出且不静默替换', async () => {
   const owner = await project()
@@ -702,7 +716,7 @@ it('本机4K60约束：format-only走软件适配；内置预设完整settings�
     const job = await videoEditExportQueue.wait(videoEditExportQueue.list()[0].id)
     expect(job.state, job.error).toBe('completed')
     expect(job.settings).toMatchObject({ codec: 'avc', encoderPreference: 'software', fps: 60, videoBitrateMbps: 50, sampleRate: 44100, channels: 1 })
-    expect(encoding.videoOptions.at(-1)).toMatchObject({ codec: 'avc', fullCodecString: 'avc1.640034', bitrate: 50_000_000, hardwareAcceleration: 'prefer-software' })
+    expect(encoding.videoOptions.at(-1)).toMatchObject({ codec: 'avc1.640034', bitrate: 50_000_000, hardwareAcceleration: 'prefer-software' })
   } finally { app.dispose() }
 })
 

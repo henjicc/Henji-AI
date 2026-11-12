@@ -12,7 +12,7 @@ import { recordVideoEditMaskUpdate } from '../application/videoEditMaskEditing'
 import { createVideoEditSequence, videoEditClipSchema, videoEditComposition } from '@/core/videoEdit/document'
 import { addLegacyVideoEditTracks, createVideoEditTestDocument } from '@/core/videoEdit/testFixtures'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
-import { VideoEditRenderTransport } from './videoEditRenderTransport'
+import { VIDEO_EDIT_RENDER_QUEUE_LIMIT, VideoEditRenderTransport } from './videoEditRenderTransport'
 import { VideoEditTextPreflight } from './videoEditTextPreflight'
 import { VideoEditGpuDeviceLostError, VideoEditRenderBusyError, VideoEditRenderWorkerError } from './videoEditGpuFailure'
 import { GENERIC_FONT_FACES } from '@/core/fonts/catalog'
@@ -27,7 +27,7 @@ const platform = vi.hoisted(() => ({
   dirname: vi.fn(async (path: string) => path.slice(0, path.lastIndexOf('/'))),
   logs: [] as Array<{ level: string; message: string; meta: unknown }>,
 }))
-vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => ({ fonts: { list: platform.fontCatalog, onChanged: () => () => undefined }, settings: { get: async () => null }, videoDecoder: { status: platform.status }, videoFrames: { connect: platform.connect, disconnect: platform.disconnect }, system: { paths: { dirname: platform.dirname } } }) }))
+vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => ({ fonts: { list: platform.fontCatalog, onChanged: () => () => undefined }, settings: { get: async () => null }, videoDecoder: { status: platform.status }, videoFrames: { connect: platform.connect, disconnect: platform.disconnect }, mediaCache: { hardwareCapabilities: async () => ({ report: null }) }, system: { memoryInfo: async () => ({ totalBytes: 16 * 1024 ** 3 }), paths: { dirname: platform.dirname } } }) }))
 vi.mock('@/services/imageSource', () => ({ toFetchableMediaUrl: (path: string) => `url:${path}`, isLikelyLocalImagePath: (path: string) => /^[A-Z]:/.test(path) }))
 vi.mock('../videoEditMediaContent', () => ({ VideoEditMediaContentVerifier: class { async check() {} dispose() {} } }))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: (message: string, meta: unknown) => platform.logs.push({ level: 'debug', message, meta }), info: (message: string, meta: unknown) => platform.logs.push({ level: 'info', message, meta }), warn: (message: string, meta: unknown) => platform.logs.push({ level: 'warn', message, meta }) }) }))
@@ -315,7 +315,7 @@ it('未处理的 Promise 拒绝只记日志，不终止会话或打断在途画�
   worker.onmessage!({ data: { id: request.id, presented: true } } as MessageEvent)
   expect(await pending).toMatchObject({ presented: true })
   worker.respond = true
-  await expect(session.present(5)).resolves.toMatchObject({ presented: true })
+  await expect(session.present(VIDEO_EDIT_RENDER_QUEUE_LIMIT + 1)).resolves.toMatchObject({ presented: true })
   await session.dispose()
 })
 
@@ -338,9 +338,9 @@ it('请求排满时按背压拒绝（可识别的忙碌错误），不终止会�
   const session = new VideoEditRenderSession(composition())
   await session.prepareGpu()
   const worker = workers[0]; worker.respond = false
-  const queued = [0, 1, 2, 3].map(frame => session.present(frame))
+  const queued = Array.from({ length: VIDEO_EDIT_RENDER_QUEUE_LIMIT }, (_, frame) => session.present(frame))
   await Promise.resolve(); await Promise.resolve()
-  const busy = await session.present(4).catch((error: unknown) => error)
+  const busy = await session.present(VIDEO_EDIT_RENDER_QUEUE_LIMIT).catch((error: unknown) => error)
   expect(busy).toBeInstanceOf(VideoEditRenderBusyError)
   expect(worker.terminate).not.toHaveBeenCalled()
   const first = worker.messages.find(entry => entry.message.kind === 'render')!.message as Extract<RenderRequest, { kind: 'render' }>
@@ -372,6 +372,37 @@ it('预览请求 interactive，正式导出入口请求 final，复用同一 Wor
     expect.objectContaining({ kind: 'render', frame: 1, sequential: true, quality: 'final' }),
   ])
   await session.dispose()
+})
+
+it('导出编码流经同一 Worker 链路：帧请求带编码目标与 final，提交回执放行下一帧，编码结果只交给本流，关闭只发一次', async () => {
+  const session = new VideoEditRenderSession(composition())
+  const chunks: unknown[] = []
+  const stream = await session.openVideoEncoder({ codec: 'avc1.640033', width: 1920, height: 1080 }, { purpose: 'export' }, chunk => chunks.push(chunk))
+  const worker = workers[0]; worker.respond = false
+  const opened = worker.messages.map(value => value.message).find(value => value.kind === 'encoderOpen') as Extract<RenderRequest, { kind: 'encoderOpen' }>
+  expect(opened.purpose).toBe('export')
+  const submitted = vi.fn()
+  const encoding = stream.encode(5, { timestamp: .1, duration: 1 / 60, keyFrame: true }, 'exact', submitted)
+  await vi.waitFor(() => expect(worker.messages.some(value => value.message.kind === 'render')).toBe(true))
+  const request = worker.messages.map(value => value.message).find(value => value.kind === 'render') as Extract<RenderRequest, { kind: 'render' }>
+  expect(request).toMatchObject({ frame: 5, sequential: true, quality: 'final', encode: { stream: opened.stream, timestamp: .1, duration: 1 / 60, keyFrame: true } })
+  worker.onmessage?.({ data: { id: request.id, phase: 'submitted' } } as MessageEvent)
+  expect(submitted).toHaveBeenCalledOnce()
+  worker.onmessage?.({ data: { kind: 'encoder.chunk', stream: opened.stream, chunk: { type: 'key', timestamp: 100000 } } } as MessageEvent)
+  worker.onmessage?.({ data: { kind: 'encoder.chunk', stream: opened.stream + 1, chunk: { type: 'key', timestamp: 0 } } } as MessageEvent)
+  worker.onmessage?.({ data: { id: request.id, presented: true, provenance: 'live', renderElapsedMs: 7, encoded: { copyMs: 0, encodeMs: 1, encodeWaitMs: 2, encodeQueue: 1 } } } as MessageEvent)
+  await expect(encoding).resolves.toMatchObject({ provenance: 'live', renderMs: 7, encodeWaitMs: 2, renderCached: false })
+  expect(chunks).toEqual([{ type: 'key', timestamp: 100000 }])
+  stream.close(); stream.close()
+  expect(worker.messages.filter(value => value.message.kind === 'encoderClose')).toHaveLength(1)
+  // 编码器的失败原因跨线程保留，界面线程据此给编码相关的提示。
+  const rejected = session.openVideoEncoder({ codec: 'hev1.1.6.L186.B0', width: 7680, height: 4320 }, { purpose: 'renderCache' }, () => {})
+  await vi.waitFor(() => expect(worker.messages.filter(value => value.message.kind === 'encoderOpen')).toHaveLength(2))
+  const second = worker.messages.map(value => value.message).filter(value => value.kind === 'encoderOpen').at(-1) as Extract<RenderRequest, { kind: 'encoderOpen' }>
+  expect(second.purpose).toBe('renderCache')
+  worker.onmessage?.({ data: { id: second.id, error: '不支持', encoderFailure: { reason: 'unsupported', detail: '不支持' } } } as MessageEvent)
+  await expect(rejected).rejects.toMatchObject({ name: 'VideoEditEncoderFailure', reason: 'unsupported' })
+  worker.respond = true; await session.dispose()
 })
 
 it('60 effect moves send only effect deltas, without media/source/font payloads; structural edits resync', async () => {

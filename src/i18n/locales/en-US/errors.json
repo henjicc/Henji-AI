@@ -1,4 +1,9 @@
 {
+  "videoEditEncoder": {
+    "unsupported": "This device can't encode video with the selected settings. Switch to software encoding or H.264, or lower the resolution, then try again.",
+    "stalled": "The video encoder stopped making progress and was stopped. Switch to software encoding or H.264 and try again; if it keeps happening, update your graphics driver.",
+    "failed": "The video encoder failed and was stopped. Switch to software encoding or H.264 and try again; if it keeps happening, update your graphics driver."
+  },
   "persistence": {
     "newer-version": "This {{format}} was created by a newer Henji AI. Update the app to open it.",
     "unsupported-version": "This {{format}} predates the oldest format this version can read and cannot be opened. The original file was not changed.",

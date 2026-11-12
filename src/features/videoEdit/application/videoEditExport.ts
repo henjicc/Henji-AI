@@ -1,4 +1,4 @@
-import { AdtsOutputFormat, AudioBufferSource, CanvasSource, Mp4OutputFormat, WavOutputFormat, Output, StreamTarget } from 'mediabunny'
+import { AdtsOutputFormat, AudioBufferSource, Mp4OutputFormat, WavOutputFormat, Output, StreamTarget } from 'mediabunny'
 import { videoEditExportEncoding, resolveVideoEditExportSettings, videoEditSequenceExportSettings, videoEditExportPaths, videoEditExportEstimatedBytes, type VideoEditExportSettings } from '@/core/videoEdit/exportPresets'
 import { exportVideoEditCaptions } from '@/core/videoEdit/timedContent'
 import type { VideoEditComposition } from '@/core/videoEdit/document'
@@ -8,7 +8,9 @@ import { videoEditFrameTimecode } from '@/core/videoEdit/timecode'
 import { videoEditLoudnessSettingsSchema, type VideoEditLoudnessSettings, type VideoEditLoudnessMeasurement } from '@/core/videoEdit/loudness'
 import { spoolVideoEditAudio } from './videoEditLoudness'
 import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
-import { resolveVideoEditExportIntermediateSettings, adaptVideoEditExportPreset, assertVideoEditExportSupported, videoEditExportAudioUserError, videoEditExportVideoOptions, videoEditExportAudioOptions } from '../engine/videoEditExportEncoder'
+import { VIDEO_EDIT_ENCODE_FRAMES_IN_FLIGHT } from '../engine/videoEditRenderTransport'
+import { VideoEditEncodedVideo, runVideoEditEncodePipeline } from '../engine/videoEditEncodedVideo'
+import { resolveVideoEditExportIntermediateSettings, adaptVideoEditExportPreset, assertVideoEditExportSupported, videoEditExportAudioUserError, videoEditExportVideoStream, videoEditExportAudioOptions } from '../engine/videoEditExportEncoder'
 import { recordVideoEditExport, getActiveVideoEditSequence, listVideoEditInstances, videoEditExportRange, publishVideoEdit, requireVideoEditInstance, saveVideoEdit, type VideoEditInstance } from './videoEditService'
 import { collectVideoEditOutput, publishVideoEditOutput, type VideoEditOutputReceipt } from './videoEditOutputs'
 import { importVideoEditSources } from './videoEditMedia'
@@ -88,6 +90,7 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
   let compression: { id: string; intermediatePath: string } | undefined
   let writePath = path
   let renderer: VideoEditRenderSession | undefined
+  let video: VideoEditEncodedVideo | undefined
   let soundSession: string | undefined
   const loudnessApi = platform.audioEdit.loudness
   const cancelSound = (): void => { if (soundSession) void loudnessApi.close(soundSession).catch(() => undefined) }
@@ -103,7 +106,9 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
   let failedFrame: number | undefined
   const started = performance.now()
   // webCache* 按网页画面来源计，与预览文件/现场合成两类相交（取自含网页缓存的预览文件的帧两边都算）。
-  const phases = { audioMs: 0, renderMs: 0, copyMs: 0, encodeMs: 0, frames: 0, previewFrames: 0, previewMs: 0, compositeFrames: 0, compositeMs: 0, webCacheFrames: 0, webCacheMs: 0 }
+  // 画面在渲染 Worker 里多帧流水编码：renderMs 是各帧合成到 GPU 完成之和（各帧互相重叠，可大于总耗时），copyMs 是构造编码帧
+  // （含缩放），encodeMs 是提交编码，encodeQueueWaitMs 是等编码器队列空出；framesInFlight 是送出未编完的最多帧数。
+  const phases = { audioMs: 0, renderMs: 0, copyMs: 0, encodeMs: 0, encodeQueueWaitMs: 0, maxEncodeQueue: 0, framesInFlight: 0, frames: 0, previewFrames: 0, previewMs: 0, compositeFrames: 0, compositeMs: 0, webCacheFrames: 0, webCacheMs: 0 }
   let measuredAt = started
   logger.info('开始导出剪辑', { event: 'video_edit.export.start', context: { projectId, taskId: task.id, ...range } })
   try {
@@ -125,7 +130,7 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
     // changes LUFS; the shared mixer already resamples and maps mono/stereo correctly.
     const renderDocument = { ...pictures, sampleRate: settings.sampleRate, channels: settings.channels }
     renderer = new VideoEditRenderSession(renderDocument, { proxyProjectId: settings.useProxies ? projectId : undefined, exportProxies: settings.useProxies, fixedTextFonts: true, ...(settings.videoEnabled ? { cacheWebOutput: true } : {}) })
-    const picture = settings.videoEnabled ? await prepareVideoEditExportFrame(renderer, document, settings) : undefined
+    const outputGeometry = settings.videoEnabled ? await prepareVideoEditExportFrame(renderer, document, settings) : undefined
     renderer.setSmartRegions(smartRegions)
     renderer.setTracks(videoEditTrackResults(document))
     try { renderer.setRenderCache(await videoEditExportPreviews(projectId, document, settings, task.controller.signal)) }
@@ -152,71 +157,94 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
     if (!created) { await outputs.create(path); created = true }
     output = new Output({ format: format === 'wav' ? new WavOutputFormat() : format === 'aac' ? new AdtsOutputFormat() : new Mp4OutputFormat(), target: new StreamTarget(new WritableStream({ write: async chunk => { task.controller.signal.throwIfAborted(); await platform.system.fs.writeFile(writePath, chunk.data, { position: chunk.position }) } }), { chunked: true, chunkSize: 1024 * 1024 }) })
     task.controller.signal.throwIfAborted()
-    const video = videoCodec ? new CanvasSource(picture!.canvas, videoEditExportVideoOptions(intermediateSettings)) : undefined
+    video = videoCodec ? new VideoEditEncodedVideo(videoEditExportVideoStream(intermediateSettings), 'export') : undefined
     const audio = settings.audioEnabled ? new AudioBufferSource(videoEditExportAudioOptions(settings)) : undefined
-    if (video) output.addVideoTrack(video, { frameRate: encoding.fps })
+    if (video) output.addVideoTrack(video.source, video.trackMetadata(encoding.fps))
     if (audio) output.addAudioTrack(audio)
     await output.start()
     const { startFrame, endFrame } = range; const frames = endFrame - startFrame
     const videoFrames = Math.ceil(frames / document.fps * encoding.fps - 1e-7)
     /** This frame's pictures or sound, exact, or the export stops here with the position in the message. */
     const exact = async <T>(frame: number, work: Promise<T>): Promise<T> => {
-      try { return await work } catch (error) { failedFrame = frame; throw task.controller.signal.aborted ? error : videoEditExportFrameError(frame, document.fps, error) }
+      // 多帧在途时先失败的那帧是原因，之后在途帧随编码流停止而失败，不改写它。
+      try { return await work } catch (error) { failedFrame ??= frame; throw task.controller.signal.aborted ? error : videoEditExportFrameError(frame, document.fps, error) }
     }
     // Audio advances by sequence time independently from output FPS. This prevents
     // duplicated or missing sound when converting fractional/high frame rates.
     let audioFrame = startFrame
+    const mixSound = (frame: number): { frame: number; end: number; buffer: Promise<AudioBuffer> } => {
+      const end = Math.min(endFrame, frame + Math.max(1, Math.round(document.fps)))
+      const buffer = (async (): Promise<AudioBuffer> => {
+        if (!soundSession) return renderer!.mixAudio(frame / document.fps, (end - frame) / document.fps)
+        const first = Math.ceil(frame / document.fps * settings.sampleRate - 1e-7)
+        const last = Math.ceil(end / document.fps * settings.sampleRate - 1e-7)
+        const origin = Math.ceil(startFrame / document.fps * settings.sampleRate - 1e-7)
+        const channels = await loudnessApi.read(soundSession, first - origin, last - first)
+        const buffer = new AudioBuffer({ numberOfChannels: settings.channels, sampleRate: settings.sampleRate, length: last - first })
+        channels.forEach((channel, index) => buffer.getChannelData(index).set(channel)); return buffer
+      })()
+      buffer.catch(() => undefined)
+      return { frame, end, buffer }
+    }
+    // 下一秒的声音在这一秒的画面合成期间先混好，与画面并行；同时只有一份混音在途。
+    let nextSound: ReturnType<typeof mixSound> | undefined
     const addSoundUntil = async (limit: number): Promise<void> => {
       if (!audio) return
       while (audioFrame < limit) {
-      const frame = audioFrame
-      task.controller.signal.throwIfAborted()
-        const end = Math.min(endFrame, frame + Math.max(1, Math.round(document.fps)))
-        const mix = async (): Promise<AudioBuffer> => {
-          if (!soundSession) return renderer!.mixAudio(frame / document.fps, (end - frame) / document.fps)
-          const first = Math.ceil(frame / document.fps * settings.sampleRate - 1e-7)
-          const last = Math.ceil(end / document.fps * settings.sampleRate - 1e-7)
-          const origin = Math.ceil(startFrame / document.fps * settings.sampleRate - 1e-7)
-          const channels = await loudnessApi.read(soundSession, first - origin, last - first)
-          const buffer = new AudioBuffer({ numberOfChannels: settings.channels, sampleRate: settings.sampleRate, length: last - first })
-          channels.forEach((channel, index) => buffer.getChannelData(index).set(channel)); return buffer
-        }
-        await audio.add(await exact(frame, mix())); audioFrame = end
+        task.controller.signal.throwIfAborted()
+        const block = nextSound?.frame === audioFrame ? nextSound : mixSound(audioFrame)
+        const buffer = await exact(block.frame, block.buffer)
+        nextSound = video && block.end < endFrame ? mixSound(block.end) : undefined
+        await audio.add(buffer); audioFrame = block.end
       }
     }
     const steps = video ? videoFrames : Math.ceil(frames / Math.max(1, Math.round(document.fps)))
     const publishProgress = videoEditExportProgress(publishVideoEdit)
-    for (let index = 0; index < steps; index++) {
-      const frame = video ? Math.min(endFrame - 1, startFrame + Math.floor(index * document.fps / encoding.fps + 1e-7)) : audioFrame
-      task.controller.signal.throwIfAborted()
-      const audioStarted = performance.now()
-      await addSoundUntil(Math.min(endFrame, frame + 1))
-      phases.audioMs += performance.now() - audioStarted
-      if (video) {
-        const renderStarted = performance.now()
-        const result = await exact(frame, renderer.render(frame, true, settings.useWebCache === true ? 'web-cache' : 'exact'))
-        singleFrameReads += result.singleFrameReads ?? 0
-        const renderMs = performance.now() - renderStarted
-        phases.renderMs += renderMs
-        if (result.renderCached) { phases.previewFrames++; phases.previewMs += renderMs }
-        else { phases.compositeFrames++; phases.compositeMs += renderMs }
-        if (result.provenance === 'web-cache') { phases.webCacheFrames++; phases.webCacheMs += renderMs }
-        const copyStarted = performance.now()
-        picture!.copy()
-        phases.copyMs += performance.now() - copyStarted
-        const encodeStarted = performance.now()
-        await video.add(index / encoding.fps, Math.min(1 / encoding.fps, frames / document.fps - index / encoding.fps))
-        phases.encodeMs += performance.now() - encodeStarted; phases.frames++
-      }
+    const stepFinished = async (index: number): Promise<void> => {
       if (performance.now() - measuredAt >= 10_000 || index === steps - 1) {
         measuredAt = performance.now()
-        logger.info('剪辑导出阶段耗时', { event: 'video_edit.export.performance', context: { projectId, taskId: task.id, ...phases, elapsedMs: measuredAt - started } })
+        logger.info('剪辑导出阶段耗时', { event: 'video_edit.export.performance', context: { projectId, taskId: task.id, ...phases, capture: outputGeometry ? 'scaled' : 'gpu-bitmap', elapsedMs: measuredAt - started } })
       }
       task.compositionProgress = (loudness ? .1 : 0) + (index + 1) / steps * (loudness ? .9 : 1)
       task.progress = task.compositionProgress * (compression ? .8 : 1)
       await publishProgress()
     }
+    if (video) {
+      const encoder = video
+      const frameAt = (index: number): number => Math.min(endFrame - 1, startFrame + Math.floor(index * document.fps / encoding.fps + 1e-7))
+      const precision = settings.useWebCache === true ? 'web-cache' : 'exact'
+      await encoder.open(renderer, outputGeometry)
+      await runVideoEditEncodePipeline({
+        frames: steps, inFlight: VIDEO_EDIT_ENCODE_FRAMES_IN_FLIGHT, signal: task.controller.signal,
+        before: async index => {
+          const audioStarted = performance.now()
+          await addSoundUntil(Math.min(endFrame, frameAt(index) + 1))
+          phases.audioMs += performance.now() - audioStarted
+        },
+        send: (index, submitted) => { const frame = frameAt(index); return exact(frame, encoder.encode(frame, index / encoding.fps, Math.min(1 / encoding.fps, frames / document.fps - index / encoding.fps), precision, submitted)) },
+        finished: async (index, result) => {
+          singleFrameReads += result.singleFrameReads
+          phases.renderMs += result.renderMs; phases.copyMs += result.copyMs; phases.encodeMs += result.encodeMs; phases.encodeQueueWaitMs += result.encodeWaitMs
+          phases.maxEncodeQueue = Math.max(phases.maxEncodeQueue, result.encodeQueue); phases.framesInFlight = encoder.maxInFlight
+          if (result.renderCached) { phases.previewFrames++; phases.previewMs += result.renderMs }
+          else { phases.compositeFrames++; phases.compositeMs += result.renderMs }
+          if (result.provenance === 'web-cache') { phases.webCacheFrames++; phases.webCacheMs += result.renderMs }
+          phases.frames++
+          await stepFinished(index)
+        },
+      })
+    } else {
+      for (let index = 0; index < steps; index++) {
+        task.controller.signal.throwIfAborted()
+        const audioStarted = performance.now()
+        await addSoundUntil(Math.min(endFrame, audioFrame + 1))
+        phases.audioMs += performance.now() - audioStarted
+        await stepFinished(index)
+      }
+    }
     await addSoundUntil(endFrame)
+    task.controller.signal.throwIfAborted()
+    await video?.finish()
     task.controller.signal.throwIfAborted()
     publishVideoEdit()
     await output.finalize()
@@ -267,6 +295,8 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
       logger.warn('成片已发布，来源核验未完成，保留输出文件', { event: 'video_edit.export.receipt_failed', error, context: { projectId, taskId: task.id } })
       throw new Error(task.error)
     }
+    // 先停下 Worker 里的编码，在途帧随编码流丢弃，再撤掉未完成的文件。
+    video?.close()
     await output?.cancel().catch(() => undefined)
     if (created) await platform.system.fs.remove(path).catch(cleanupError => { leftover = true; logger.warn('清理未完成导出失败', { event: 'video_edit.export.cleanup_failed', error: cleanupError }) })
     if (captionCreated && captionPath) await platform.system.fs.remove(captionPath).catch(cleanupError => { leftover = true; logger.warn('清理未完成字幕失败', { event: 'video_edit.export.cleanup_failed', error: cleanupError }) })
