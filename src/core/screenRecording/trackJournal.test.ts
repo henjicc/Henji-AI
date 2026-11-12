@@ -18,6 +18,15 @@ it('界面重新接上前后的分段之间记为缺数据空档；断开前开�
   expect(state.tracks(id(9), 0).tracks[0].gaps).toEqual([{ monoSpanUs: [5_800_000, 8_000_000], reason: 'missing-data' }])
 })
 
+it('主进程录的系统声跨界面断开照样首尾相接：只差设备时钟漂移的零点几毫秒，不记缺数据空档', () => {
+  const state = new RecordingTrackState(['systemAudio'])
+  state.apply({ type: 'open', kind: 'systemAudio', segment: { id: id(1), file: `${id(1)}.wav`, monoStartUs: 0, sampleRate: 48000, channels: 2, latencyCompensationUs: 0, anchor: anchor(0, id(1)) } })
+  state.apply({ type: 'detach', atUs: 2_000_000 })
+  state.apply({ type: 'seal', kind: 'systemAudio', segment: sealed(1, 0, 5_000_000) })
+  state.apply({ type: 'seal', kind: 'systemAudio', segment: sealed(2, 5_000_500, 10_000_500) })
+  expect(state.tracks(id(9), 0).tracks[0].gaps).toEqual([])
+})
+
 it('分段按真实时钟整理：漂移造成的一个量子重叠以下一段起点为界', () => {
   const state = new RecordingTrackState(['systemAudio'])
   state.apply({ type: 'seal', kind: 'systemAudio', segment: sealed(1, 0, 5_000_200) })

@@ -26,6 +26,11 @@ export function recordingTrackJournalLine(sessionId: string, record: RecordingTr
 }
 
 interface TrackData { segments: Array<{ segment: RecordingTrackSegment; generation: number }>; gaps: RecordingTrackGap[]; warnings: RecordingTrackWarning[] }
+/**
+ * 界面断开前后的两段之间要真有一段没覆盖的时间才算缺数据。主进程录的系统声跨断开照样首尾相接，
+ * 两段只差设备时钟漂移的几十微秒；界面写的轨道跨断开至少空出重载的那一两秒。与拼接时“同一路连续声音”的容差一致。
+ */
+const DETACH_GAP_MIN_US = 20_000
 
 /**
  * 轨道记录的唯一归并规则：录制中界面进程按它维护本地状态，主进程按它维护权威状态，崩溃后重放 tracks.journal 也按它。
@@ -67,7 +72,7 @@ export class RecordingTrackState {
         }
         // 界面进程重新接上之前的这段时间没有采到数据，它不是静音。
         const [from, to] = [previous.monoSpanUs[1], next.monoSpanUs[0]]
-        if (ordered[index].generation > ordered[index - 1].generation && to > from && !gaps.some(gap => gap.monoSpanUs[0] <= from && gap.monoSpanUs[1] >= to)) gaps.push({ monoSpanUs: [from, to], reason: 'missing-data' })
+        if (ordered[index].generation > ordered[index - 1].generation && to - from > DETACH_GAP_MIN_US && !gaps.some(gap => gap.monoSpanUs[0] <= from && gap.monoSpanUs[1] >= to)) gaps.push({ monoSpanUs: [from, to], reason: 'missing-data' })
       }
       gaps.sort((a, b) => a.monoSpanUs[0] - b.monoSpanUs[0])
       return { kind, segments: ordered.map(item => item.segment), gaps, warnings: [...track.warnings] }

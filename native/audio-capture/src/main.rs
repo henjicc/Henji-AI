@@ -1,4 +1,7 @@
 mod ffi;
+mod system_audio;
+#[cfg(windows)]
+mod wasapi;
 mod wav;
 use crossbeam_queue::ArrayQueue;
 use serde::Deserialize;
@@ -15,7 +18,20 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+use system_audio::SystemSession;
 use wav::Wav;
+
+/// 协议 3：系统声会话（startSystemAudio、segment/device/systemHealth 事件）。新旧程序不配套时在握手就失败。
+const PROTOCOL: u32 = 3;
+/// PortAudio 只在第一次用到麦克风时初始化：只录系统声的进程从不加载 ASIO 等驱动，不会与另一进程里的麦克风抢驱动。
+static PORTAUDIO: AtomicBool = AtomicBool::new(false);
+fn portaudio() -> Result<(), String> {
+    if !PORTAUDIO.load(Ordering::Acquire) {
+        ffi::check(unsafe { ffi::hc_init() }, false)?;
+        PORTAUDIO.store(true, Ordering::Release);
+    }
+    Ok(())
+}
 
 // stdout: u32 LE JSON 长度 + UTF-8 JSON + binaryBytes 字节的交错 float32 LE PCM。
 static OUTPUT: Mutex<()> = Mutex::new(());
@@ -529,7 +545,11 @@ fn write_audio(
     }
     result.and(saved)
 }
-fn command(v: &Value, session: &mut Option<Session>) -> Result<Value, String> {
+fn command(
+    v: &Value,
+    session: &mut Option<Session>,
+    systems: &mut Vec<SystemSession>,
+) -> Result<Value, String> {
     let text = |key: &str| -> Result<String, String> {
         v[key]
             .as_str()
@@ -537,25 +557,46 @@ fn command(v: &Value, session: &mut Option<Session>) -> Result<Value, String> {
             .map(str::to_string)
             .ok_or_else(|| format!("INVALID_ARGUMENT|缺少参数 {key}"))
     };
-    match text("type")?.as_str() {
+    let kind = text("type")?;
+    // 系统声会话与麦克风会话互不影响，停止、查询按会话号分开。
+    if matches!(kind.as_str(), "pause" | "resume" | "stop" | "status") {
+        let id = text("sessionId")?;
+        if let Some(index) = systems.iter().position(|s| s.id == id) {
+            return match kind.as_str() {
+                "stop" => systems.remove(index).close(),
+                "status" => Ok(systems[index].status()),
+                _ => Err("INVALID_ARGUMENT|系统声音不支持暂停，请停止后重新开始".into()),
+            };
+        }
+    }
+    match kind.as_str() {
         "hello" => Ok(
-            json!({"protocol":2,"nativeMonoUs":ffi::clock(),"asioCompiled":unsafe{ffi::hc_asio()}!=0,"monitoringSupported":false}),
+            json!({"protocol":PROTOCOL,"nativeMonoUs":ffi::clock(),"asioCompiled":unsafe{ffi::hc_asio()}!=0,"monitoringSupported":false,"systemAudio":cfg!(windows)}),
         ),
         "clock" => Ok(json!({"nativeMonoUs":ffi::clock()})),
+        "startSystemAudio" => {
+            let s = SystemSession::start(text("sessionId")?, text("directory")?)?;
+            let status = s.status();
+            systems.push(s);
+            Ok(status)
+        }
         "enumerate" => {
             if session.is_some() {
                 return Err("RECORDING_ACTIVE|请停止录音后刷新设备列表".into());
             }
-            unsafe {
-                ffi::hc_terminate();
+            if PORTAUDIO.swap(false, Ordering::AcqRel) {
+                unsafe {
+                    ffi::hc_terminate();
+                }
             }
-            ffi::check(unsafe { ffi::hc_init() }, false)?;
+            portaudio()?;
             ffi::enumerate()
         }
         "probe" => {
             if session.is_some() {
                 return Err("RECORDING_ACTIVE|请停止录音后探测设备格式".into());
             }
+            portaudio()?;
             let settings: Settings = serde_json::from_value(v["settings"].clone())
                 .map_err(|e| format!("INVALID_ARGUMENT|{e}"))?;
             let mut options = settings.options()?;
@@ -573,6 +614,7 @@ fn command(v: &Value, session: &mut Option<Session>) -> Result<Value, String> {
             if session.is_some() {
                 return Err("RECORDING_ACTIVE|已有录音，请先停止".into());
             }
+            portaudio()?;
             let settings: Settings = serde_json::from_value(v["settings"].clone())
                 .map_err(|e| format!("INVALID_ARGUMENT|{e}"))?;
             let s = Session::start(
@@ -616,6 +658,7 @@ fn command(v: &Value, session: &mut Option<Session>) -> Result<Value, String> {
             if session.is_some() {
                 return Err("RECORDING_ACTIVE|请停止录音后打开驱动设置".into());
             }
+            portaudio()?;
             let device = v["device"]
                 .as_i64()
                 .filter(|d| *d >= 0 && *d <= i32::MAX as i64)
@@ -638,10 +681,6 @@ fn command(v: &Value, session: &mut Option<Session>) -> Result<Value, String> {
     }
 }
 fn main() {
-    if let Err(e) = ffi::check(unsafe { ffi::hc_init() }, false) {
-        eprintln!("{e}");
-        std::process::exit(1);
-    }
     let (tx, rx) = mpsc::sync_channel(32);
     thread::spawn(move || {
         for line in io::stdin().lock().lines() {
@@ -656,12 +695,13 @@ fn main() {
         }
     });
     let mut session: Option<Session> = None;
+    let mut systems: Vec<SystemSession> = Vec::new();
     loop {
         match rx.recv_timeout(Duration::from_millis(100)) {
             Ok(line) => match serde_json::from_str::<Value>(&line) {
                 Ok(v) => {
                     let id = v["id"].clone();
-                    match command(&v, &mut session) {
+                    match command(&v, &mut session, &mut systems) {
                         Ok(result) => emit(json!({"id":id,"ok":true,"result":result}), &[]),
                         Err(e) => emit(json!({"id":id,"ok":false,"error":failure(&e)}), &[]),
                     }
@@ -694,10 +734,31 @@ fn main() {
                 );
             }
         }
+        // 系统声只有写盘失败（磁盘满、文件出错）才结束；设备没了、换了都补静音继续。
+        for s in systems.iter_mut() {
+            s.report_health();
+        }
+        while let Some(index) = systems
+            .iter()
+            .position(|s| s.shared.failed.load(Ordering::Acquire))
+        {
+            let mut s = systems.remove(index);
+            let error = s
+                .close()
+                .err()
+                .unwrap_or("FILE_ERROR|系统声音写入失败，已录部分保留".into());
+            emit(
+                json!({"event":"interrupted","sessionId":s.id,"outputPath":s.directory(),"error":failure(&error),"writtenBytes":s.shared.bytes.load(Ordering::Acquire)}),
+                &[],
+            );
+        }
     }
     drop(session);
-    unsafe {
-        ffi::hc_terminate();
+    drop(systems);
+    if PORTAUDIO.load(Ordering::Acquire) {
+        unsafe {
+            ffi::hc_terminate();
+        }
     }
 }
 

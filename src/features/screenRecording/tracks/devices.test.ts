@@ -23,7 +23,7 @@ it('摄像头停机等待正在编码的帧并释放reader与流；迟到帧不�
   const video = vi.fn(async () => new Promise<void>(resolve => { encoded = resolve }))
   const failed = vi.fn()
   const clock = new RecordingTracksClock(0, async () => 0, failed); vi.spyOn(clock, 'nowUs').mockReturnValue(1_000_000)
-  const capture = await openTrackDevice('camera', { systemAudio: false, camera: { width: 640, height: 480, frameRate: 30 } }, clock, { audio: vi.fn(), video, state: vi.fn(), failed }, new AbortController().signal)
+  const capture = await openTrackDevice('camera', { systemAudio: false, camera: { width: 640, height: 480, frameRate: 30 } }, clock, { audio: vi.fn(), video, state: vi.fn(), failed }, new AbortController().signal, { directory: 'isolated' })
   read({ value: frame, done: false })
   await vi.waitFor(() => { expect(failed).not.toHaveBeenCalled(); expect(video).toHaveBeenCalledTimes(1) })
   let stopped = false; const stop = capture.stop().then(() => { stopped = true })
@@ -37,7 +37,7 @@ it('摄像头权限等待中取消，迟到流必释放且不创建reader', asyn
   const track = { stop: vi.fn() }
   vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: vi.fn(async () => new Promise(value => { resolve = value })) } })
   const abort = new AbortController(); const failed = vi.fn()
-  const capture = openTrackDevice('camera', { systemAudio: false, camera: { width: 640, height: 480, frameRate: 30 } }, new RecordingTracksClock(0, async () => 0, failed), { audio: vi.fn(), video: vi.fn(), state: vi.fn(), failed }, abort.signal)
+  const capture = openTrackDevice('camera', { systemAudio: false, camera: { width: 640, height: 480, frameRate: 30 } }, new RecordingTracksClock(0, async () => 0, failed), { audio: vi.fn(), video: vi.fn(), state: vi.fn(), failed }, abort.signal, { directory: 'isolated' })
   abort.abort(); resolve({ getTracks: () => [track] })
   await expect(capture).rejects.toThrow(); expect(track.stop).toHaveBeenCalledTimes(1)
 })

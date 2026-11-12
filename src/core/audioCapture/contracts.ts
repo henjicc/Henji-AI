@@ -43,6 +43,15 @@ export type AudioCaptureEvent = AudioCaptureLevel | AudioCaptureSamples
   | { event: 'interrupted'; sessionId: string; outputPath: string; writtenBytes: number; error: AudioCaptureFailure; health?: AudioCaptureHealth }
   | { event: 'health'; sessionId: string; durationSeconds: number; health: AudioCaptureHealth }
   | { event: 'devicesChanged'; inventory: AudioCaptureInventory }
+
+/** 系统声采集健康计数：补的静音（没声音播放）、设备不可用补的静音、去掉的重叠、驱动报的数据不连续、写盘跟不上丢的帧（已补静音）、设备切换、写盘峰值。 */
+export const systemAudioHealthSchema = z.object({ segments: z.number(), silenceSeconds: z.number(), unavailableSeconds: z.number(), trimmedFrames: z.number(), discontinuities: z.number(), droppedFrames: z.number(), deviceSwitches: z.number(), maxWriteMs: z.number() })
+export type SystemAudioHealth = z.infer<typeof systemAudioHealthSchema>
+/** 原生系统声会话的事件；只在主进程内流转，不推给界面。时间已换算到主进程单调时钟（monoUs）。 */
+export type SystemAudioNativeEvent =
+  | { event: 'segment'; sessionId: string; phase: 'open' | 'seal'; segmentId: string; file: string; firstFrame: number; frames?: number; sampleRate: number; channels: number; nativeMonoUs: number; monoUs: number; uncertaintyUs: number }
+  | { event: 'device'; sessionId: string; state: 'capturing' | 'unavailable'; name: string; reason: string | null; atSeconds: number }
+  | { event: 'systemHealth'; sessionId: string; durationSeconds: number; health: SystemAudioHealth }
 const audioCaptureStartSchema = z.object({ outputPath: z.string().min(1).max(4096), settings: audioCaptureSettingsSchema.optional(), streamSamples: z.boolean().default(false), shared: z.boolean().optional(), monitor: z.literal(false).optional() }).strict()
 export type AudioCaptureStart = z.input<typeof audioCaptureStartSchema>
 /** 作品目录内尚未交给编辑器的录音；相对文件名让作品目录迁移后仍可恢复。 */
@@ -67,5 +76,8 @@ export const audioCaptureRequestSchema = z.discriminatedUnion('action', [
   z.object({ action: z.enum(['pause', 'resume', 'stop', 'status']), sessionId: z.string().uuid() }).strict(),
   z.object({ action: z.literal('asioPanel'), settings: audioCaptureSettingsSchema }).strict(),
   z.object({ action: z.literal('recover'), outputPath: z.string().min(1).max(4096) }).strict(),
+  /** 界面自己的录制（网页录制的备份声音）要系统声：原生写进 directory，停止时交回这段的轨道记录；时间相对 originUs（主进程单调微秒）。 */
+  z.object({ action: z.literal('systemAudioStart'), directory: z.string().min(1).max(4096), originUs: z.number().int().nonnegative() }).strict(),
+  z.object({ action: z.literal('systemAudioStop'), sessionId: z.string().uuid() }).strict(),
 ])
 export const AUDIO_CAPTURE_CONTROL_EXCLUSION = '原生录音生命周期由音频编辑、录屏和讲解的所属会话维护；本期不单独向助手开放开始/停止，避免无作品归属、无结果撤销的后台录音。设备和参数可通过通用属性读写。'

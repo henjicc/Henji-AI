@@ -86,6 +86,30 @@ it('交给主进程的记录按发生顺序送达，主进程重放得到与界�
   expect(records.filter(record => record.type === 'seal')).toHaveLength(3)
   expect(records.filter(record => record.type === 'gap').map(record => record.kind).sort()).toEqual(['microphone', 'systemAudio'])
 })
+it('原生录的系统声（Windows）：设备停止时交回的段并入轨道，暂停空档从上一段终点记到下一段的真实起点', async () => {
+  let now = 0, run = 0
+  const clock = new RecordingTracksClock(0, async () => 0, () => {})
+  vi.spyOn(clock, 'start').mockResolvedValue(); vi.spyOn(clock, 'nowUs').mockImplementation(() => now)
+  vi.stubGlobal('navigator', { mediaDevices: new EventTarget() })
+  const native = (startUs: number, frames: number): RecordingTrackRecord[] => {
+    const id = crypto.randomUUID(), file = `${id}.wav`
+    const anchor = { monoUs: startUs, presentedFrame: null, requestedFrame: null, sequenceRef: null, visitRef: null, playbackDirection: 0 as const, playbackRate: 1, playing: false, epoch: 0, uncertaintyUs: 0, audioSample: 0, audioSegmentRef: id, audioRate: 48000 }
+    return [{ type: 'open', kind: 'systemAudio', segment: { id, file, sampleRate: 48000, channels: 2, latencyCompensationUs: 0, monoStartUs: startUs, anchor } },
+      { type: 'seal', kind: 'systemAudio', segment: { id, file, monoSpanUs: [startUs, startUs + frames / 48 * 1000], sampleRate: 48000, channels: 2, units: frames, latencyCompensationUs: 0, anchors: [anchor] } }]
+  }
+  const session = new RecordingTracksSession({ sessionId: crypto.randomUUID(), originUs: 0, directory: 'isolated', tracks: { systemAudio: true }, onFailure: vi.fn() }, {
+    clock, output: () => ({ audio: async () => {}, video: async () => {}, close: async () => {}, cancel: async () => {} }),
+    openDevice: async (_kind, _options, _clock, callbacks) => { const index = run++; return { stop: async () => callbacks.records?.(index === 0 ? native(100_000, 48_000) : native(3_000_000, 24_000)) } },
+  })
+  const signal = new AbortController().signal
+  await session.start(signal)
+  now = 1_500_000; await session.pause(signal)
+  now = 2_900_000; await session.resume(signal)
+  now = 4_000_000; await session.stop(signal)
+  const track = session.snapshot().tracks[0]
+  expect(track.segments.map(segment => segment.monoSpanUs)).toEqual([[100_000, 1_100_000], [3_000_000, 3_500_000]])
+  expect(track.gaps).toEqual([{ monoSpanUs: [1_100_000, 3_000_000], reason: 'pause' }])
+})
 it('设备断开仅停对应轨，恢复与声卡缺样本各记空档；其他轨继续', async () => {
   const f = setup(); const signal = new AbortController().signal
   await f.session.start(signal); f.send('microphone', 100_000); await f.tick()

@@ -11,7 +11,7 @@ class Child extends EventEmitter {
   received: string[] = []; dead = false; hang = new Set(['hang']); hung = new Map<string, string>()
   /** 原生读到输入结束后正常收尾退出；设成 false 模拟它还在写完队列。 */
   exitOnEnd = true
-  protocol = 2
+  protocol = 3
   exitCode: number | null = null; signalCode: string | null = null
   constructor() {
     super()
@@ -80,8 +80,22 @@ describe('录音进程生命周期', () => {
     await expect(pending).resolves.toEqual({ success: true })
     now.mockRestore()
   })
+  it('系统声段事件的原生时钟换算到主进程时钟：与画面、事件同一个时间轴', async () => {
+    const child = new Child(); mocks.spawn.mockReturnValue(child)
+    const events: Array<{ event: string; monoUs?: number }> = []
+    const client = new AudioCaptureClient(() => 'native.exe', event => events.push(event as { event: string; monoUs?: number }), () => {}); clients.push(client)
+    const before = Number(process.hrtime.bigint() / 1000n)
+    await client.request('enumerate')
+    const after = Number(process.hrtime.bigint() / 1000n)
+    const json = Buffer.from(JSON.stringify({ event: 'segment', sessionId: 's', phase: 'open', segmentId: '6f1f0d2c-0d6b-4b7e-9a1b-4e1f7c2f3a10', file: '6f1f0d2c-0d6b-4b7e-9a1b-4e1f7c2f3a10.wav', firstFrame: 0, sampleRate: 48000, channels: 2, nativeMonoUs: 5000, binaryBytes: 0 }))
+    const header = Buffer.alloc(4); header.writeUInt32LE(json.length); child.stdout.write(Buffer.concat([header, json]))
+    await vi.waitFor(() => expect(events).toHaveLength(1))
+    // 替身原生时钟回答 1000：原生 5000 微秒就是校准时刻之后 4000 微秒。
+    expect(events[0].monoUs).toBeGreaterThanOrEqual(before + 4000)
+    expect(events[0].monoUs).toBeLessThanOrEqual(after + 4000)
+  })
   it('原生程序协议版本不配套时握手就失败', async () => {
-    const child = new Child(); child.protocol = 1; mocks.spawn.mockReturnValue(child)
+    const child = new Child(); child.protocol = 2; mocks.spawn.mockReturnValue(child)
     const client = new AudioCaptureClient(() => 'native.exe', () => {}, () => {}); clients.push(client)
     await expect(client.request('enumerate')).rejects.toThrow()
     expect(child.dead).toBe(true)

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { z } from 'zod'
-import { audioCaptureInventorySchema, audioCaptureStatusSchema, type AudioCaptureEvent, type AudioCaptureHealth, type AudioCaptureInventory, type AudioCaptureSettings, type AudioCaptureSettingsState, type AudioCaptureStart, type AudioCaptureStatus } from '../../../../src/core/audioCapture/contracts'
+import { audioCaptureInventorySchema, audioCaptureStatusSchema, type AudioCaptureEvent, type AudioCaptureHealth, type AudioCaptureInventory, type AudioCaptureSettings, type AudioCaptureSettingsState, type AudioCaptureStart, type AudioCaptureStatus, type SystemAudioNativeEvent } from '../../../../src/core/audioCapture/contracts'
 import { AudioCaptureClient } from './client'
 import { AudioCaptureError } from './protocol'
 import { AudioCaptureSettingsService, captureSettingsState, resolveCaptureSettings } from './settings'
@@ -76,9 +76,10 @@ export class AudioCaptureService {
   /** 所有状态写入串行；一次开始占有设备，后来的调用不能抢走或停止它。 */
   run<T>(task: () => Promise<T>): Promise<T> { const result = this.queue.then(task); this.queue = result.catch(() => undefined); return result }
   isRecordingPath(outputPath: string): boolean { return this.active?.outputPath === outputPath }
-  private event(event: AudioCaptureEvent): void {
+  private event(event: AudioCaptureEvent | SystemAudioNativeEvent): void {
     const active = this.active
-    if (!active || event.event === 'devicesChanged' || event.sessionId !== active.sessionId) return
+    // 系统声在另一个原生进程里（system-audio.ts），麦克风进程不会发它的事件。
+    if (!active || event.event === 'devicesChanged' || event.event === 'segment' || event.event === 'device' || event.event === 'systemHealth' || event.sessionId !== active.sessionId) return
     if (event.event === 'samples') {
       const sequence = event.sequence + active.sequenceBase
       active.lastSequence = Math.max(active.lastSequence, sequence)

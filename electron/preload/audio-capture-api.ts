@@ -1,4 +1,4 @@
-import { AUDIO_CAPTURE_CHANNEL, AUDIO_CAPTURE_EVENT_CHANNEL, type AudioCapturePlatform } from '../../src/platform/contracts/audioCapture'
+import { AUDIO_CAPTURE_CHANNEL, AUDIO_CAPTURE_EVENT_CHANNEL, nativeSystemAudioSupported, type AudioCapturePlatform } from '../../src/platform/contracts/audioCapture'
 import type { AudioCaptureEvent } from '../../src/core/audioCapture/contracts'
 type Invoke = <T>(channel: string, payload?: unknown) => Promise<T>
 type Subscribe = (channel: string, listener: (payload: unknown) => void) => () => void
@@ -34,6 +34,9 @@ export function createAudioCaptureApi(invoke: Invoke, subscribe: Subscribe): Aud
     clock: () => invoke(AUDIO_CAPTURE_CHANNEL, { action: 'clock' }),
     recover: outputPath => invoke(AUDIO_CAPTURE_CHANNEL, { action: 'recover', outputPath }),
     openAsioPanel: settings => invoke(AUDIO_CAPTURE_CHANNEL, { action: 'asioPanel', settings }),
+    nativeSystemAudio: nativeSystemAudioSupported(process.platform),
+    startSystemAudio: (directory, originUs) => invoke(AUDIO_CAPTURE_CHANNEL, { action: 'systemAudioStart', directory, originUs }),
+    stopSystemAudio: sessionId => invoke(AUDIO_CAPTURE_CHANNEL, { action: 'systemAudioStop', sessionId }),
     onEvent: handler => watch(handler, true),
     onLevel: handler => watch(event => { if (event.event === 'level') handler(event) }, false),
     onSamples: handler => watch(event => { if (event.event === 'samples') handler(event) }, true),

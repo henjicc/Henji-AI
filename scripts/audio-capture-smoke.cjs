@@ -49,7 +49,7 @@ function call(type, payload = {}) {
 }
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 async function main() {
-  const hello = await call('hello'); assert.equal(hello.protocol, 1)
+  const hello = await call('hello'); assert.equal(hello.protocol, 3)
   const inventory = await call('enumerate')
   console.log(JSON.stringify({ hostApis: inventory.hostApis, deviceCount: inventory.devices.length, asioCompiled: inventory.asioCompiled, asioInputs: inventory.devices.filter(d => d.hostApi === 'ASIO' && d.maxInputChannels).map(d => d.name) }, null, 2))
   if (!inventory.devices.some(d => d.hostApi === 'ASIO' && d.maxInputChannels)) console.log('ASIO 已编译，但没有可用 ASIO 输入驱动，未验证驱动录音和控制面板。')

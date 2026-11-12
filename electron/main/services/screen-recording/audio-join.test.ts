@@ -53,6 +53,16 @@ it('设备时钟快 100 ppm、两小时级漂移：拼成一条后每段仍在�
   expect((await pcm(joined[1].path)).length).toBe(48_000)
 })
 
+it('两次采集首尾重叠（失联的旧进程还在写）：前一条只写到被截短的终点，同一段声音不出现两遍', async () => {
+  const state = new RecordingTrackState(['microphone'])
+  await segment(state, 1_000_000, 0, 5 * RATE, -1)
+  state.apply({ type: 'gap', kind: 'microphone', gap: { monoSpanUs: [4_000_000, 4_000_000], reason: 'missing-data' } })
+  await segment(state, 4_000_000, 10 * RATE, RATE, -1)
+  const { audio } = await joinRecordingAudio(directory, state.tracks(randomUUID(), 0))
+  expect(audio.map(item => [item.monoUs, item.durationUs])).toEqual([[1_000_000, 3_000_000], [4_000_000, 1_000_000]])
+  expect((await pcm(audio[0].path)).length).toBe(3 * RATE)
+})
+
 it('写到一半的 WAV 按实际写到的完整帧补齐头部长度，采样不动', async () => {
   const file = path.join(directory, 'partial.wav'), data = Buffer.alloc(1001)
   const header = wavHeader(LAYOUT, 0)

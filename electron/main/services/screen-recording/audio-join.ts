@@ -115,6 +115,9 @@ async function fillFromNative(directory: string, parts: Part[], gaps: RecordingT
  */
 async function writeRun(directory: string, kind: JoinedRecordingAudio['kind'], index: number, parts: Part[]): Promise<JoinedRecordingAudio> {
   const { layout } = parts[0], rate = layout.sampleRate, startUs = parts[0].startUs
+  // 一条的最后一段只写到它记录的终点：区间被下一段的真实起点截短过（两次采集首尾重叠）时，多出的采样不能叠进下一条。
+  const last = parts[parts.length - 1], span = Math.max(1, Math.round((last.endUs - last.startUs) * rate / 1_000_000))
+  if (span < last.frames) last.frames = span
   const starts = parts.map(part => Math.round((part.startUs - startUs) * rate / 1_000_000))
   for (const [i, part] of parts.entries()) part.outFrames = i + 1 < parts.length ? Math.max(1, starts[i + 1] - starts[i]) : part.frames
   const totalFrames = parts.reduce((sum, part) => sum + part.outFrames, 0)

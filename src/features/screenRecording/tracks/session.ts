@@ -23,7 +23,7 @@ export interface RecordingTracksSessionOptions {
   directory: string
   tracks: RecordingTrackOptions
   onFailure(error: unknown): void
-  /** Clone audio from the screen fallback to avoid opening a second display stream. Ownership transfers here. */
+  /** 兼容采集已开着屏幕共享时从它克隆系统声（只在系统声由界面采集的平台上），不再开第二路；所有权交给这里。 */
   displayAudio?: () => Promise<MediaStream>
   /** 每开一段、封一段、记一个空档或警告都按发生顺序交出去；录屏把它交给主进程登记。 */
   onRecord?(record: RecordingTrackRecord): Promise<void>
@@ -124,7 +124,8 @@ export class RecordingTracksSession {
         audio: block => this.audio(slot, block),
         video: (frame, monoUs, uncertaintyUs, compensationUs) => this.video(slot, frame, monoUs, uncertaintyUs, compensationUs),
         state: state => this.deviceState(slot, state), failed: error => this.fail(error),
-      }, this.abort.signal, this.options.displayAudio, this.options.microphoneCopyDirectory)
+        records: records => this.nativeRecords(slot, records),
+      }, this.abort.signal, { directory: this.options.directory, ...(this.options.displayAudio ? { displayAudio: this.options.displayAudio } : {}), ...(this.options.microphoneCopyDirectory ? { microphoneCopyDirectory: this.options.microphoneCopyDirectory } : {}) })
       if (this.abort.signal.aborted || this.phase !== 'recording') { await device.stop(); return }
       slot.device = device; slot.disconnected = false
     })().finally(() => { slot.opening = undefined })
@@ -144,6 +145,14 @@ export class RecordingTracksSession {
     })
     slot.queue = task.catch(error => { if (error !== this.abort.signal.reason) this.fail(error) })
     return task
+  }
+  /** 原生录音服务自己落盘的一段（Windows 系统声）：把它交回的记录并入轨道，暂停空档照常按真实起点记。 */
+  private nativeRecords(slot: Slot, records: RecordingTrackRecord[]): void {
+    for (const record of records) {
+      if (record.type === 'open') this.beginData(slot, record.segment.monoStartUs)
+      this.record(record)
+      if (record.type === 'seal') slot.lastEnd = Math.max(slot.lastEnd ?? 0, record.segment.monoSpanUs[1])
+    }
   }
   private beginData(slot: Slot, monoUs: number): void {
     if (slot.gap) {

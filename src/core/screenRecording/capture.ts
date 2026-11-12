@@ -42,8 +42,11 @@ export const captureManifestSchema = z.object({
 }).strict()
 export type CaptureManifest = z.infer<typeof captureManifestSchema>
 export type CaptureSpan = z.infer<typeof captureSpanSchema>
-/** Pass this exact main-process monotonic origin to event and audio/camera capture. */
-export interface CapturePrepared { sessionId: string; originUs: number; backend: CaptureBackendKind; cursorEmbedded: boolean; options: ScreenCaptureOptions; directory?: string }
+/**
+ * Pass this exact main-process monotonic origin to event and audio/camera capture.
+ * `hostTracks`：由主进程（原生录音服务）录的轨道，界面不再采集它们；界面重载或崩溃时这些轨道不断。
+ */
+export interface CapturePrepared { sessionId: string; originUs: number; backend: CaptureBackendKind; cursorEmbedded: boolean; options: ScreenCaptureOptions; directory?: string; hostTracks?: Array<'systemAudio'> }
 /** 停止后界面接着做什么；主进程只代为保管，界面重载后接回进行中的录制时原样交还。 */
 export const captureFollowUpSchema = z.object({
   handoff: z.boolean(),

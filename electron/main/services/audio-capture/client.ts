@@ -1,6 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { z } from 'zod'
-import { audioCaptureHealthSchema, type AudioCaptureEvent } from '../../../../src/core/audioCapture/contracts'
+import { audioCaptureHealthSchema, systemAudioHealthSchema, type AudioCaptureEvent, type SystemAudioNativeEvent } from '../../../../src/core/audioCapture/contracts'
 import { createMainLogger } from '../logging'
 import { AudioCaptureError, AudioCaptureFrameReader, correlateNativeClock, type NativeAudioMessage } from './protocol'
 
@@ -26,6 +26,11 @@ const sampleSchema = z.object({ event: z.literal('samples'), sessionId: z.string
 const levelSchema = z.object({ event: z.literal('level'), sessionId: z.string(), peak: z.array(z.number()).max(2), rms: z.array(z.number()).max(2), clipped: z.array(z.boolean()).max(2), durationSeconds: z.number(), writtenBytes: z.number() })
 const interruptedSchema = z.object({ event: z.literal('interrupted'), sessionId: z.string(), outputPath: z.string(), writtenBytes: z.number(), error: z.object({ code: z.string(), message: z.string(), recoverable: z.boolean() }), health: audioCaptureHealthSchema.optional() })
 const healthSchema = z.object({ event: z.literal('health'), sessionId: z.string(), durationSeconds: z.number(), health: audioCaptureHealthSchema })
+const segmentSchema = z.object({ event: z.literal('segment'), sessionId: z.string(), phase: z.enum(['open', 'seal']), segmentId: z.string().uuid(), file: z.string().regex(/^[a-f0-9-]+\.wav$/), firstFrame: z.number().int().nonnegative(), frames: z.number().int().nonnegative().optional(), sampleRate: z.number().int().positive(), channels: z.number().int().min(1).max(2), nativeMonoUs: z.number() })
+const deviceSchema = z.object({ event: z.literal('device'), sessionId: z.string(), state: z.enum(['capturing', 'unavailable']), name: z.string(), reason: z.string().nullable(), atSeconds: z.number() })
+const systemHealthSchema = z.object({ event: z.literal('systemHealth'), sessionId: z.string(), durationSeconds: z.number(), health: systemAudioHealthSchema })
+/** 协议 3：系统声会话（段事件、设备事件、系统声健康计数）。新旧程序不配套时在握手就失败，不在录音中途才报协议错误。 */
+export const AUDIO_CAPTURE_PROTOCOL = 3
 
 export class AudioCaptureClient {
   private child: ChildProcessWithoutNullStreams | undefined
@@ -42,7 +47,7 @@ export class AudioCaptureClient {
   private active = false
   private disposed = false
   private panelOpen = false
-  constructor(private readonly executable: () => string, private readonly onEvent: (event: AudioCaptureEvent) => void, private readonly onCrash: (loss: AudioCaptureLoss) => void) {}
+  constructor(private readonly executable: () => string, private readonly onEvent: (event: AudioCaptureEvent | SystemAudioNativeEvent) => void, private readonly onCrash: (loss: AudioCaptureLoss) => void) {}
 
   async request(type: string, payload: Record<string, unknown> = {}): Promise<unknown> {
     await this.ensureStarted()
@@ -78,9 +83,7 @@ export class AudioCaptureClient {
     child.stderr.on('data', (data: Buffer) => logger.debug('原生录音诊断', { event: 'audio_capture.native.diagnostic', context: { message: data.toString('utf8').slice(0, 4000) } }))
     const lost = (): void => this.lost(child, EXITED)
     child.once('error', lost); child.once('exit', lost); child.stdin.once('error', lost)
-    // 协议 2：采样与写盘分离、健康计数事件。新旧程序不配套时在握手就失败，不在录音中途才报协议错误。
-    const hello = z.object({ protocol: z.literal(2) }).parse(await this.send('hello'))
-    void hello
+    z.object({ protocol: z.literal(AUDIO_CAPTURE_PROTOCOL) }).parse(await this.send('hello'))
     await this.syncClock()
     this.calibration = setInterval(() => { if (!this.panelOpen && !this.pending.size) void this.syncClock().catch(() => this.retire(child, NOT_RESPONDING)) }, 5000)
     this.calibration.unref(); this.touch()
@@ -156,14 +159,19 @@ export class AudioCaptureClient {
     }
     this.clock = best!; this.lastCalibration = mainClockUs()
   }
+  /** 原生单调时钟误差：校准本身的误差，加上距上次校准按 100 ppm 估的漂移。 */
+  private clockUncertaintyUs(): number { return this.clock.uncertaintyUs + Math.max(0, mainClockUs() - this.lastCalibration) * .0001 }
   private receive(message: NativeAudioMessage, binary: Buffer): void {
     if (message.event === 'samples') {
       const block = sampleSchema.parse(message)
       if (binary.length !== block.frames * block.channels * 4) throw new AudioCaptureError('PROTOCOL_ERROR', '录音采样字节数不匹配')
-      this.onEvent({ ...block, monoUs: block.nativeMonoUs + this.clock.offsetUs, uncertaintyUs: block.uncertaintyUs + this.clock.uncertaintyUs + Math.max(0, mainClockUs() - this.lastCalibration) * .0001, pcm: new Uint8Array(binary) })
+      this.onEvent({ ...block, monoUs: block.nativeMonoUs + this.clock.offsetUs, uncertaintyUs: block.uncertaintyUs + this.clockUncertaintyUs(), pcm: new Uint8Array(binary) })
     } else if (message.event === 'level') this.onEvent(levelSchema.parse(message))
     else if (message.event === 'interrupted') this.onEvent(interruptedSchema.parse(message))
     else if (message.event === 'health') this.onEvent(healthSchema.parse(message))
+    else if (message.event === 'segment') { const segment = segmentSchema.parse(message); this.onEvent({ ...segment, monoUs: segment.nativeMonoUs + this.clock.offsetUs, uncertaintyUs: this.clockUncertaintyUs() }) }
+    else if (message.event === 'device') this.onEvent(deviceSchema.parse(message))
+    else if (message.event === 'systemHealth') this.onEvent(systemHealthSchema.parse(message))
     else if (message.id) {
       const p = this.pending.get(message.id); if (!p) return
       this.pending.delete(message.id); clearTimeout(p.timer)

@@ -18,6 +18,8 @@ import { resolveNativeCaptureSource } from './source'
 import { createCaptureBounds, createCaptureGeometry } from './geometry'
 import { RecordingSessionDocument, readRecordingEvents, recoverRecordingSession } from '../session-document'
 import { exportQuickRecording, quickExportPath } from '../quick-export'
+import { systemAudioCapture, type SystemAudioRecorder } from '../../audio-capture/system-audio'
+import { nativeSystemAudioSupported } from '../../../../../src/platform/contracts/audioCapture'
 
 const logger = createMainLogger('main.screen_recording.capture')
 interface Active {
@@ -33,6 +35,8 @@ interface Active {
   prepared: CapturePrepared
   /** 停止与取消都会走到收尾（失败后关控制条还会再取消一次），只收一次。 */
   finishing?: Promise<void>
+  /** Windows 上系统声由原生录音服务在主进程这边录：与画面、事件一样不依赖界面。开始后才有录制器。 */
+  systemAudio?: { recorder?: SystemAudioRecorder }
 }
 let active: Active | null = null
 /** 正在准备的会话：文档已建、还没成为 active，启动恢复不能把它当成上次崩溃留下的。 */
@@ -76,6 +80,26 @@ function ownerLost(session: Active): void {
   session.rpc.clear()
   void session.document.track({ type: 'detach', atUs: now() - session.originUs })
   logger.warn('界面进程断开，画面继续录制，声音等待界面重新接上', { event: 'recording.host.detached', context: { sessionId: session.prepared.sessionId } })
+}
+
+/** 系统声跟着画面开始、暂停、恢复、停止；轨道记录直接进录制文档的轨道记录，与界面写的麦克风、摄像头同一份。 */
+async function systemAudioStep(session: Active, operation: Exclude<CaptureOperation, 'cancel'>, signal: AbortSignal): Promise<void> {
+  const host = session.systemAudio, document = session.document
+  if (!host || !document) return
+  const sessionId = session.prepared.sessionId
+  if (operation === 'start') {
+    const recorder = await systemAudioCapture().start({
+      directory: session.storage.directory, originUs: session.originUs,
+      record: record => { void document.track(record) },
+      failed: error => { void fail(session, error).catch(failure => logger.error('系统声失败后收尾失败', { event: 'recording.system_audio.cleanup.failed', error: failure })) },
+      available: available => recordingControl.setHostTrackWarning(sessionId, 'device-disconnected', !available),
+    })
+    // 开始途中录制已被取消：这一路随即收尾，不留在后台录。
+    if (active !== session || signal.aborted) { await recorder.stop(); signal.throwIfAborted(); return }
+    host.recorder = recorder
+  } else if (operation === 'pause') await host.recorder?.pause()
+  else if (operation === 'resume') await host.recorder?.resume()
+  else await host.recorder?.stop(now() - session.originUs)
 }
 
 function grantKinds(options: RecordingSessionOptions | undefined): CaptureKind[] {
@@ -160,8 +184,9 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
       const storage = new CaptureStorage(sessionDirectory(request.sessionId), manifest, async value => { await document?.capture(value) })
       await storage.prepare()
       const originUs = now()
-      const prepared: CapturePrepared = { sessionId: request.sessionId, originUs, backend, cursorEmbedded: manifest.cursorEmbedded, options: request.options, ...(request.session ? { directory: storage.directory } : {}) }
-      const session: Active = { owner, storage, originUs, rpc: new Map(), backend: null!, tracksAttached: true, failed: false, prepared, ...(request.session ? { session: request.session } : {}), ...(request.followUp ? { followUp: request.followUp } : {}) }
+      const hostSystemAudio = Boolean(request.session?.tracks.systemAudio) && nativeSystemAudioSupported(process.platform)
+      const prepared: CapturePrepared = { sessionId: request.sessionId, originUs, backend, cursorEmbedded: manifest.cursorEmbedded, options: request.options, ...(request.session ? { directory: storage.directory } : {}), ...(hostSystemAudio ? { hostTracks: ['systemAudio' as const] } : {}) }
+      const session: Active = { owner, storage, originUs, rpc: new Map(), backend: null!, tracksAttached: true, failed: false, prepared, ...(request.session ? { session: request.session } : {}), ...(request.followUp ? { followUp: request.followUp } : {}), ...(hostSystemAudio ? { systemAudio: {} } : {}) }
       const geometry = request.session ? createCaptureGeometry(source, request.options) : undefined
       geometry?.()
       if (request.session) {
@@ -189,7 +214,7 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
             // 界面重载期间页面的授权随导航撤掉；同一会话已经由用户确认过来源，接着录不再重新核对。
             if ((operation === 'start' || operation === 'resume') && session.tracksAttached) mediaPermissions.assertSelection(owner, request.sessionId, request.options.sourceId)
             // Both capture paths cross the renderer barrier: native screen capture must also control audio/camera.
-            const results = await Promise.allSettled([session.backend[operation](signal), ...(request.session && backend !== 'chromium' ? [remote(session, operation)] : [])])
+            const results = await Promise.allSettled([session.backend[operation](signal), ...(request.session && backend !== 'chromium' ? [remote(session, operation)] : []), systemAudioStep(session, operation, signal)])
             const failure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')
             if (failure) throw failure.reason
             if (manifest.status !== 'failed') { manifest.status = status; await storage.save() }
@@ -207,7 +232,7 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
           } : {}),
           cancel: async () => {
             try {
-              const results = await Promise.allSettled([session.backend.cancel(), ...(request.session && backend !== 'chromium' && !owner.isDestroyed() ? [remote(session, 'cancel')] : [])])
+              const results = await Promise.allSettled([session.backend.cancel(), ...(request.session && backend !== 'chromium' && !owner.isDestroyed() ? [remote(session, 'cancel')] : []), ...(session.systemAudio?.recorder ? [session.systemAudio.recorder.stop()] : [])])
               const failure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')
               if (failure) throw failure.reason
             } finally {

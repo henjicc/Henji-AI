@@ -27,7 +27,7 @@ export async function prepareScreenCapture(sessionId: string, options: ScreenCap
         write: async (index, position, data) => { await api.capture({ operation: 'write', sessionId, index, position, data: new Uint8Array(data) }) },
         seal: async (index, durationUs) => { await api.capture({ operation: 'seal-span', sessionId, index, durationUs }) },
         failed: error => { void api.capture({ operation: 'failed', sessionId, error: error.message }).catch(failure => logger.error('录制失败状态同步失败', { event: 'recording.capture.sync.failed', error: failure })) },
-      }, undefined, session?.tracks.systemAudio)
+      }, undefined, session?.tracks.systemAudio && !prepared.hostTracks?.includes('systemAudio'))
     }
     host = hostCapture(prepared, session, browser)
     await browser?.prepare()
@@ -56,9 +56,11 @@ function hostCapture(prepared: CapturePrepared, session: RecordingSessionOptions
   let tracks: RecordingTracksSession | undefined
   if (session) {
     if (!prepared.directory) throw new Error('录制素材目录未准备完成')
-    tracks = new RecordingTracksSession({ sessionId, originUs: prepared.originUs, directory: prepared.directory, microphoneCopyDirectory: prepared.directory, tracks: session.tracks,
+    // 主进程录的轨道（Windows 的系统声）界面不再采集。
+    const systemAudio = session.tracks.systemAudio && !prepared.hostTracks?.includes('systemAudio')
+    tracks = new RecordingTracksSession({ sessionId, originUs: prepared.originUs, directory: prepared.directory, microphoneCopyDirectory: prepared.directory, tracks: { ...session.tracks, systemAudio },
       onRecord: async record => { await api.capture({ operation: 'track', sessionId, record }) },
-      ...(browser && session.tracks.systemAudio ? { displayAudio: () => browser!.cloneAudio() } : {}),
+      ...(browser && systemAudio ? { displayAudio: () => browser!.cloneAudio() } : {}),
       onFailure: error => { void api.capture({ operation: 'failed', sessionId, error: String(error).slice(0, 1000) }).catch(failure => logger.error('录制轨道失败同步失败', { event: 'recording.tracks.sync.failed', error: failure })) },
     })
   }
