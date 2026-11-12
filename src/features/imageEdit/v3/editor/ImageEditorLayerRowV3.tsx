@@ -182,7 +182,8 @@ export function ImageEditorLayerRowV3({
           : avoidanceDirection !== 0
             ? 'avoiding'
             : undefined}
-      className="relative flex h-11 min-w-0 items-center gap-1 px-1.5"
+      // 选中底铺满整行（含眼睛与锁那一列），读起来是“这一行被选中”而不是只有名字
+      className={`relative flex h-11 min-w-0 items-center gap-1 px-1.5 ${selected ? 'bg-selected' : ''}`}
       onMouseDown={(event) => {
         if (renaming || !(event.target as HTMLElement).closest('[data-layer-select]')) return
         onDragMouseDown(event)

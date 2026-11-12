@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { UiFieldLayoutContext, UiFormRow, UiGroup } from '@/components/ui'
+import { UiFieldLayoutContext, UiFormRow, UiPropertyUnit } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
 import type { ImageEditLayerV3 } from '@/core/imageEdit/v3'
 
@@ -15,6 +15,8 @@ import type { ImageEditorV3Controller } from './types'
 type TransformFieldV3 = Exclude<keyof ImageEditTransformFieldsV3, 'shear'>
 
 const TRANSFORM_PRECISION = 2
+/** 没动过时的读数，用来让默认值退后一档 */
+const DEFAULTS: Record<TransformFieldV3, number> = { x: 0, y: 0, scaleXPercent: 100, scaleYPercent: 100, rotationDegrees: 0 }
 
 
 export function ImageEditorLayerTransformPropertiesV3({
@@ -106,7 +108,7 @@ export function ImageEditorLayerTransformPropertiesV3({
 
   // 拖动读数时逐帧预览、松手才提交（一次拖动一步撤销）；键入的值回车或失焦即提交。
   // 读数保留两位小数；失焦时值没变（只是点进去又离开）不提交，不把自由变换的值取整、也不多记一步撤销
-  const field = (key: TransformFieldV3, unit: string): ReactNode => (
+  const field = (key: TransformFieldV3, unit?: string, hanging = true): ReactNode => (
     <>
       <NumberInput
         ariaLabel={labels[key]}
@@ -114,6 +116,7 @@ export function ImageEditorLayerTransformPropertiesV3({
         value={Number(draft[key].toFixed(TRANSFORM_PRECISION))}
         step={key === 'rotationDegrees' ? 0.1 : 1}
         precision={TRANSFORM_PRECISION}
+        defaultValue={DEFAULTS[key]}
         disabled={disabled}
         onChange={(value) => {
           if (!scrubbingRef.current && value === Number(draftRef.current[key].toFixed(TRANSFORM_PRECISION))) {
@@ -130,25 +133,21 @@ export function ImageEditorLayerTransformPropertiesV3({
           else commitOrReject()
         }}
       />
-      <span className="text-xs text-text3">{unit}</span>
+      <UiPropertyUnit hanging={hanging}>{unit}</UiPropertyUnit>
     </>
   )
 
+  // 与剪辑效果控件同一种属性行：名称一列，数值紧跟名称、不画框，单位跟在数字后面；成对的两个数就是 X、Y（悬停说明写全称）
   return (
-    <UiGroup titleTone="compact" divided title={t('imageEditor.v3.properties.transform')} gap="stack">
-      {/* 与剪辑效果控件同一种属性行：名称一列，数值紧跟名称、不画框，单位跟在数字后面 */}
-      <UiFieldLayoutContext.Provider value="property">
-        <div className="flex flex-col">
-          <UiFormRow label={t('imageEditor.v3.properties.position')}>{field('x', 'X')}{field('y', 'Y')}</UiFormRow>
-          <UiFormRow label={t('imageEditor.v3.properties.scale')}>{field('scaleXPercent', '%')}{field('scaleYPercent', '%')}</UiFormRow>
-          <UiFormRow label={t('imageEditor.v3.properties.rotationName')}>{field('rotationDegrees', '°')}</UiFormRow>
-        </div>
-      </UiFieldLayoutContext.Provider>
+    <UiFieldLayoutContext.Provider value="property">
+      <UiFormRow label={t('imageEditor.v3.properties.position')}>{field('x', undefined, false)}{field('y')}</UiFormRow>
+      <UiFormRow label={t('imageEditor.v3.properties.scale')}>{field('scaleXPercent', '%', false)}{field('scaleYPercent', '%')}</UiFormRow>
+      <UiFormRow label={t('imageEditor.v3.properties.rotationName')}>{field('rotationDegrees', '°')}</UiFormRow>
       {invalid ? (
-        <p role="status" className="text-xs text-warning-text">
+        <p role="status" className="px-3 py-1 text-xs text-warning-text">
           {t('imageEditor.v3.properties.transformSingular')}
         </p>
       ) : null}
-    </UiGroup>
+    </UiFieldLayoutContext.Provider>
   )
 }

@@ -111,6 +111,7 @@ export function ImageMarkToolToolbarActions({
   return (
     <>
       <VideoEditSendMenu
+        trigger="command"
         mediaKind="image"
         disabled={host.isHostBusy || saveFailed}
         notify={showNotification}

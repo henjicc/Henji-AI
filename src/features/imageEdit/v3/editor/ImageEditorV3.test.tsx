@@ -4,7 +4,8 @@ import { expectButtonDisabled, expectButtonEnabled } from '@/tests/buttonAsserti
 import '@/tests/imageEditDocumentFixture'
 import { useState } from 'react'
 import { VirtuosoMockContext } from 'react-virtuoso'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { findAppMenuCommand } from '@/core/appMenu/appMenu'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import i18n from '@/i18n/config'
@@ -249,7 +250,6 @@ describe('ImageEditorV3 professional shell', () => {
       { onDocumentChange: (next) => changes.push(next) },
     )
 
-    fireEvent.click(await screen.findByRole('tab', { name: '基础' }))
     const opacity = await screen.findByRole('slider', { name: '不透明度滑杆' })
     fireEvent.change(opacity, { target: { value: '80' } })
     fireEvent.change(opacity, { target: { value: '55.00000000000001' } })
@@ -354,13 +354,17 @@ describe('ImageEditorV3 professional shell', () => {
     if (layer.type === 'effect') expect(layer.params.radius).toBe(48)
   })
 
-  it('发布宿主可以读取旧组但不再暴露组隔离编辑入口', async () => {
+  it('选中图层组时隔离合成开关在合成分组里，切换只提交一次持久命令', async () => {
+    const changes: ImageEditDocumentV3[] = []
     renderEditor(
       createDocument([createImageEditGroupLayerV3('group', '图层组')]),
+      { onDocumentChange: (next) => changes.push(next) },
     )
 
-    await waitFor(() => expect(screen.getByText('图层组')).toBeTruthy())
-    expect(screen.queryByRole('switch', { name: '隔离合成' })).toBeNull()
+    const isolation = await screen.findByRole('switch', { name: '隔离合成' })
+    expect(isolation.closest('[data-properties-section="合成"]')).toBeTruthy()
+    fireEvent.click(isolation)
+    await waitFor(() => expect(changes).toHaveLength(1))
   })
 
   it('受控宿主可以同步接收文档更新而不会在渲染阶段重入', async () => {
@@ -373,8 +377,7 @@ describe('ImageEditorV3 professional shell', () => {
       />,
     )
 
-    fireEvent.click(await screen.findByRole('tab', { name: '基础' }))
-    fireEvent.click(await screen.findByRole('switch', { name: '可见' }))
+    fireEvent.click(await screen.findByRole('button', { name: '隐藏“底图”' }))
     await waitFor(() => expect(changes).toHaveLength(1))
 
     expect(consoleError.mock.calls.flat().join(' ')).not.toContain(
@@ -465,6 +468,14 @@ describe('ImageEditorV3 professional shell', () => {
 
     await waitFor(() => expect(changes).toHaveLength(1))
     expect(changes[0].layers[0].name).toBe('背景照片')
+
+    // Esc 放弃这次改名，不提交
+    fireEvent.doubleClick(rendered.container.querySelector<HTMLElement>('[data-layer-name]') as HTMLElement)
+    const again = await screen.findByRole('textbox', { name: '名称' })
+    fireEvent.change(again, { target: { value: '不要的名字' } })
+    fireEvent.keyDown(again, { key: 'Escape' })
+    await waitFor(() => expect(rendered.container.querySelector('[data-layer-name-input]')).toBeNull())
+    expect(changes).toHaveLength(1)
   })
 
   it('拖动图层项重排，松手后的点击不改变选择', async () => {
@@ -558,41 +569,33 @@ describe('ImageEditorV3 professional shell', () => {
     expect(Object.values(useImageEditorSessionStoreV3.getState().sessions)[0].activeTool).toBe('vector-rectangle')
   })
 
-  it('属性默认打开参数 Tab，基础 Tab 单独承载名称与通用开关', async () => {
+  it('属性面板一页列出效果参数与合成，不分页签', async () => {
     renderEditor(createDocument([createImageEditEffectLayerV3(
       'blur', '模糊', 'image.fast-blur-v3', { radius: 12 },
     )]))
-    const parametersTab = await screen.findByRole('tab', { name: '参数' })
-    expect(parametersTab.getAttribute('aria-selected')).toBe('true')
-    expect(screen.getByRole('slider', { name: '半径' })).toBeTruthy()
-    expect(screen.queryByRole('textbox', { name: '名称' })).toBeNull()
-
-    fireEvent.click(screen.getByRole('tab', { name: '基础' }))
-    expect(screen.getByRole('textbox', { name: '名称' })).toBeTruthy()
-    expect(screen.getByRole('switch', { name: '可见' })).toBeTruthy()
-    expect(screen.queryByRole('slider', { name: '半径' })).toBeNull()
+    expect(await screen.findByRole('slider', { name: '半径' })).toBeTruthy()
+    expect(screen.getByRole('slider', { name: '不透明度滑杆' })).toBeTruthy()
+    expect(screen.queryByRole('tab', { name: '基础' })).toBeNull()
   })
 
-  it('面板关闭后仍可从同一命令带重开并恢复默认布局', async () => {
+  it('面板关闭后仍可从窗口菜单重开，命令带不再另放面板按钮', async () => {
     const rendered = renderEditor(
       createDocument([createImageEditRasterLayerV3('raster', '底图')]),
     )
     const preview = rendered.container.querySelector('[data-preview-surface]')
     await waitFor(() => expect(rendered.container.querySelector('[data-dock-tab="layers"]')).toBeTruthy())
     const defaultPanelCount = rendered.container.querySelectorAll('[data-editor-panel-id]').length
-    for (let remaining = defaultPanelCount; remaining > 0; remaining -= 1) {
-      fireEvent.click(screen.getByRole('button', { name: '面板' }))
-      const menu = await screen.findByRole('menu', { name: '面板' })
-      fireEvent.click(within(menu).getAllByRole('menuitem', { name: /^关闭.+面板$/ })[0])
-      await waitFor(() => expect(screen.queryByRole('menu', { name: '面板' })).toBeNull())
+    expect(defaultPanelCount).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: '面板' })).toBeNull()
+    const panelIds = Array.from(rendered.container.querySelectorAll('[data-editor-panel-id]'), element => element.getAttribute('data-editor-panel-id'))
+    for (const id of panelIds) {
+      act(() => { findAppMenuCommand(`imageEdit.panel.${id}`)?.run() })
+      await waitFor(() => expect(rendered.container.querySelector(`[data-editor-panel-id="${id}"]`)).toBeNull())
     }
     expect(rendered.container.querySelectorAll('[data-editor-panel-id]')).toHaveLength(0)
-    fireEvent.click(screen.getByRole('button', { name: '面板' }))
-    fireEvent.click(await screen.findByRole('menuitem', { name: '显示图层面板' }))
+    await waitFor(() => expect(findAppMenuCommand('imageEdit.panel.layers')?.checked).toBe(false))
+    act(() => { findAppMenuCommand('imageEdit.panel.layers')?.run() })
     await waitFor(() => expect(rendered.container.querySelector('[data-dock-tab="layers"]')).toBeTruthy())
-    fireEvent.click(screen.getByRole('button', { name: '面板' }))
-    fireEvent.click(await screen.findByRole('menuitem', { name: '恢复默认布局' }))
-    await waitFor(() => expect(rendered.container.querySelectorAll('[data-editor-panel-id]')).toHaveLength(defaultPanelCount))
     expect(rendered.container.querySelector('[data-preview-surface]')).toBe(preview)
     expect(rendered.container.querySelectorAll('[data-command-bar]')).toHaveLength(1)
     expectButtonDisabled(screen.getByRole('button', { name: '撤销' }))

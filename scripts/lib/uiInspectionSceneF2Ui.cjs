@@ -104,8 +104,9 @@ function createF2UiScenes(context) {
         assert.equal(await page.locator('[data-smart-content-editor] [data-command-bar]').count(), 1)
         assert.equal(await host().locator('[data-command-bar-actions] button[data-export-readiness]').count(), 0)
         await capture('smart-content-single-command')
-        await host().locator('[data-dock-tab="properties"] > span').first().click()
-        await host().getByRole('tab', { name: '基础', exact: true }).click()
+        // 改名在图层行上双击（属性面板不再放名称框）；图层与属性同组时先切到图层页签
+        await host().locator('[data-dock-tab="layers"] > span').first().click()
+        await host().locator('[role="treeitem"][aria-selected="true"] [data-layer-name]').first().dblclick()
         const name = host().getByRole('textbox', { name: '名称', exact: true })
         await name.fill('编辑内容验收'); await name.press('Enter')
         await app.evaluate(({ ipcMain }) => {

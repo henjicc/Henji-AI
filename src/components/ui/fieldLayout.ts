@@ -21,6 +21,16 @@ export function useUiFieldLayout(): UiFieldLayout {
 }
 
 /**
+ * 属性面板有没有关键帧：有（剪辑、音频效果）时每行前面是“已改”与秒表两列；没有（图片编辑）时去掉这两列，
+ * 名称从折叠箭头后面起笔，不留两列空位。由宿主在属性面板容器上提供。
+ */
+export const UiPropertyKeyframesContext = createContext(true)
+
+export function useUiPropertyKeyframes(): boolean {
+  return useContext(UiPropertyKeyframesContext)
+}
+
+/**
  * 属性面板排布里一行的右键菜单（重要记录 019）：属性面板没有行尾重置列，“重置”等低频动作放在名称上的右键菜单。
  * 宿主（效果控件）提供一个面板级菜单；没有宿主时调用方退回行尾按钮。
  */

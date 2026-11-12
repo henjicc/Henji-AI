@@ -724,12 +724,6 @@
         "escape": {}
       },
       {
-        "click": {
-          "selector": "[data-properties-tab=\"basics\"]"
-        },
-        "optional": true
-      },
-      {
         "open": {
           "trigger": {
             "role": "button",

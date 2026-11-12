@@ -164,11 +164,7 @@ async function startRasterExport(formatLabel = 'PNG（8 位）'): Promise<void> 
   fireEvent.click(await screen.findByRole('menuitem', { name: formatLabel }))
 }
 
-async function findLayerOpacity(
-  opacityLabel = '不透明度滑杆',
-  basicsLabel = '基础',
-): Promise<HTMLElement> {
-  fireEvent.click(await screen.findByRole('tab', { name: basicsLabel }))
+async function findLayerOpacity(opacityLabel = '不透明度滑杆'): Promise<HTMLElement> {
   return screen.findByRole('slider', { name: opacityLabel })
 }
 
@@ -423,7 +419,7 @@ describe('ImageMarkToolHost', () => {
     })
     renderHost()
 
-    expect(await findLayerOpacity('Opacity滑杆', 'Basics')).toBeTruthy()
+    expect(await findLayerOpacity('Opacity滑杆')).toBeTruthy()
     const exportButton = screen.getByRole('button', {
       name: /Export unavailable: This version cannot preserve HDR metadata reliably/,
     }) as HTMLButtonElement

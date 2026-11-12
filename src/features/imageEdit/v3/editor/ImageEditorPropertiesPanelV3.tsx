@@ -1,19 +1,20 @@
 import { defaultTextStyle, vectorPathContentSchema } from '@/core/imaging/vectorContent'
-import { Plus, X } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { FileImage, SquareDashed, SquareX } from 'lucide-react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
-  UiButton,
   UiEmpty,
-  UiChipButton,
+  UiFieldLayoutContext,
+  UiPropertyKeyframesContext,
   UiFormRow,
   UiSegmented,
-  UiGroup,
-  UiInput,
+  UiToolbar,
   Dropdown,
   UiSwitch,
+  type UiPanelFooterAction,
 } from '@/components/ui'
+import { PropertyHeading } from '@/components/ui/params/ParamList'
 import {
   IMAGE_EDIT_BLEND_MODES_V3,
   cloneImageEditMaskReferenceV3,
@@ -33,6 +34,7 @@ import type { ImageEditorV3Controller } from './types'
 import { ImageEditorLayerScalarsV3 } from '../panels/properties/ImageEditorLayerScalarsV3'
 import { selectImageEditTargetV3 } from '../panels/layers/editTarget'
 import { SmartContentPropertiesV3 } from '../smartContent/SmartContentProperties'
+import { useSmartContentV3 } from '../smartContent/SmartContentContext'
 
 interface ImageEditorPropertiesPanelV3Props {
   controller: ImageEditorV3Controller
@@ -50,42 +52,22 @@ function MaskTransformProperties({ controller, layer, disabled }: { controller: 
 }
 
 const EMPTY_LAYER_IDS: readonly string[] = []
-type ImageEditorPropertiesTabV3 = 'parameters' | 'basics'
 
-function LayerNameField({ controller, layer, disabled }: {
-  controller: ImageEditorV3Controller
-  layer: ImageEditLayerV3
-  disabled: boolean
-}): JSX.Element {
+/** 可折叠的属性分组：小标题与参数行同一套列，分组之间一条发丝线。 */
+function PropertySection({ title, children }: { title: string; children: ReactNode }): JSX.Element {
   const { t } = useTranslation('ui')
-  const [name, setName] = useState(layer.name)
-  const cancelled = useRef(false)
-  useEffect(() => setName(layer.name), [layer.id, layer.name])
-  const commit = (): void => {
-    if (disabled || cancelled.current) { cancelled.current = false; return }
-    const trimmed = name.trim()
-    if (trimmed && trimmed !== layer.name) controller.updateLayerCommon(layer.id, { name: trimmed })
-    else setName(layer.name)
-  }
+  const [open, setOpen] = useState(true)
   return (
-    <UiFormRow density="compact" label={t('imageEditor.v3.properties.name')}>
-      <UiInput
-        aria-label={t('imageEditor.v3.properties.name')}
-        value={name}
-        disabled={disabled}
-        onChange={(event) => setName(event.currentTarget.value)}
-        onBlur={commit}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter') event.currentTarget.blur()
-          if (event.key === 'Escape') {
-            cancelled.current = true
-            setName(layer.name)
-            event.currentTarget.blur()
-          }
-        }}
-      />
-    </UiFormRow>
+    <div data-properties-section={title} className="flex flex-col border-b border-line py-1 last:border-b-0">
+      <PropertyHeading label={title} name={t(open ? 'imageEditor.v3.panels.collapse' : 'imageEditor.v3.panels.expand', { title })} open={open} onToggle={() => setOpen(value => !value)} />
+      {open ? children : null}
+    </div>
   )
+}
+
+/** 效果、矢量、智能对象这类自带表单排布的参数照旧按表单排，左右与属性行对齐留白。 */
+function FormSection({ children }: { children: ReactNode }): JSX.Element {
+  return <UiFieldLayoutContext.Provider value="form"><div className="flex flex-col gap-3 px-3 py-2">{children}</div></UiFieldLayoutContext.Provider>
 }
 
 export function ImageEditorPropertiesPanelV3({
@@ -101,10 +83,9 @@ export function ImageEditorPropertiesPanelV3({
     : undefined
   const selected = selectedLocation?.layer
   const editTarget = useImageEditorSessionStoreV3(state => state.sessions[controller.sessionId]?.editTarget ?? 'pixels')
-  const [activeTab, setActiveTab] = useState<ImageEditorPropertiesTabV3>('parameters')
-  useEffect(() => {
-    if (selected?.id) setActiveTab('parameters')
-  }, [selected?.id, editTarget])
+  const smart = useSmartContentV3()
+  // 智能对象的进行中与失败状态是整个编辑器共用的一份：只在从底栏发起转换的那一层上显示
+  const [convertingLayerId, setConvertingLayerId] = useState<string | null>(null)
   const effectReadiness = selected?.type === 'effect'
     ? controller.profile.effects.find(({ id }) => id === selected.effectId)?.readiness
     : undefined
@@ -129,6 +110,9 @@ export function ImageEditorPropertiesPanelV3({
     selectedLocation?.ancestors.some((ancestor) => ancestor.locked),
   )
   const contentLocked = selected.locked || ancestorLocked
+  const lockedReason = t('imageEditor.v3.properties.lockedReason')
+  const maskEnabled = controller.profile.layerControls.includes('mask')
+  const editingMask = editTarget === 'mask'
 
   const addMask = (): void => {
     if (contentLocked) return
@@ -137,6 +121,33 @@ export function ImageEditorPropertiesPanelV3({
       createImageEditSparseMaskReferenceV3(createImageEditIdV3('mask')),
     )
     selectImageEditTargetV3(controller, selected.id, 'mask')
+  }
+  const removeMask = (): void => {
+    if (contentLocked) return
+    controller.setLayerMask(selected.id, null)
+    selectImageEditTargetV3(controller, selected.id, 'pixels')
+  }
+
+  const size = selected.type === 'raster' ? selected.rasterCanvasSize ?? controller.document.geometry : undefined
+  const meta = [
+    t(`imageEditor.v3.layerType.${selected.type}`, { defaultValue: '' }),
+    size ? `${size.width} × ${size.height}` : '',
+  ].filter(Boolean).join(' · ')
+
+  // 蒙版与智能对象的入口在底栏：不常用、图标说得清，不占属性行
+  const tools: UiPanelFooterAction[] = []
+  if (maskEnabled) {
+    tools.push(selected.mask
+      ? { kind: 'action', id: 'remove-mask', label: t('imageEditor.v3.properties.removeMask'), icon: SquareX, onSelect: removeMask, disabled: contentLocked, disabledReason: lockedReason }
+      : { kind: 'action', id: 'add-mask', label: t('imageEditor.v3.properties.addMask'), icon: SquareDashed, onSelect: addMask, disabled: contentLocked, disabledReason: lockedReason })
+  }
+  if (smart && controller.profile.layerKinds.includes('smart') && selected.type === 'raster' && !editingMask) {
+    tools.push({
+      kind: 'action', id: 'convert-smart', label: t('imageEditor.v3.properties.convertToSmart'), icon: FileImage,
+      onSelect: () => { setConvertingLayerId(selected.id); void smart.convert(selected.id, 'smart') },
+      disabled: contentLocked || smart.busy,
+      disabledReason: smart.busy ? t('imageEditor.v3.properties.smartBusy') : lockedReason,
+    })
   }
 
   return (
@@ -149,188 +160,140 @@ export function ImageEditorPropertiesPanelV3({
           {t('imageEditor.v3.properties.title')}
         </h2>
       ) : null}
-      <div
-        role="tablist"
-        aria-label={t('imageEditor.v3.properties.tabsLabel')}
-        className="grid shrink-0 grid-cols-2 border-b border-line/60 px-2"
-      >
-        {(['parameters', 'basics'] as const).map((tab) => (
-          <UiChipButton
-            key={tab}
-            role="tab"
-            selectionRole="navigation"
-            selectionAppearance="subtle"
-            data-properties-tab={tab}
-            size="lg" className="justify-center"
-            active={activeTab === tab}
-            aria-selected={activeTab === tab}
-            aria-controls={`image-editor-properties-${tab}`}
-            onClick={() => setActiveTab(tab)}
-          >
-            {t(`imageEditor.v3.properties.${tab}Tab`)}
-          </UiChipButton>
-        ))}
-      </div>
+      {/* 选中的是哪一层：名字最亮，类型与尺寸退后。名称、显示、锁定在图层行上，改名在图层行上双击 */}
+      <header data-properties-object className="shrink-0 border-b border-line px-3 py-2">
+        <div className="truncate text-13 font-medium text-text1">{selected.name}</div>
+        {meta ? <div className="truncate text-xs tabular-nums text-text3">{meta}</div> : null}
+      </header>
 
-      <div
-        id={`image-editor-properties-${activeTab}`}
-        role="tabpanel"
-        data-properties-tab-panel={activeTab}
-        className={`min-h-0 flex-1 overflow-y-auto ${embedded ? 'px-3 py-3' : 'px-4 py-3'}`}
-      >
-      <UiGroup labelWidth={96} gap="section">
-      {activeTab === 'basics' ? (
-      <UiGroup titleTone="compact" gap="stack">
-        <LayerNameField controller={controller} layer={selected} disabled={contentLocked} />
-        <UiFormRow density="compact" label={t('imageEditor.v3.properties.visible')} inline>
-          <UiSwitch
-            aria-label={t('imageEditor.v3.properties.visible')}
-            checked={selected.visible}
-            disabled={contentLocked}
-            onCheckedChange={(visible) => {
-              if (!contentLocked) controller.updateLayerCommon(selected.id, { visible })
-            }}
-          />
-        </UiFormRow>
-        <UiFormRow density="compact" label={t('imageEditor.v3.properties.locked')} inline>
-          <UiSwitch
-            aria-label={t('imageEditor.v3.properties.locked')}
-            checked={selected.locked}
-            disabled={ancestorLocked}
-            onCheckedChange={(locked) => {
-              if (!ancestorLocked) controller.updateLayerCommon(selected.id, { locked })
-            }}
-          />
-        </UiFormRow>
-        <ImageEditorLayerScalarsV3 controller={controller} layer={selected} disabled={contentLocked} />
-        {selectedLocation.index > 0 ? <UiFormRow density="compact" label={t('imageEditor.v3.workflow.clipping')} inline><UiSwitch aria-label={t('imageEditor.v3.workflow.clipping')} checked={selected.clipping} disabled={contentLocked} onCheckedChange={clipping => controller.updateLayerCommon(selected.id, { clipping })} /></UiFormRow> : null}
-        {controller.profile.layerControls.includes('blend-mode') ? (
-          <UiFormRow density="compact" label={t('imageEditor.v3.properties.blendMode')}>
-            <Dropdown<ImageEditLayerV3['blendMode']>
-              ariaLabel={t('imageEditor.v3.properties.blendMode')}
-              className="w-full"
-              minWidthStrategy="none"
-              value={selected.blendMode}
-              disabled={contentLocked}
-              display={t(`imageEditor.v3.blendMode.${selected.blendMode}`)}
-              options={IMAGE_EDIT_BLEND_MODES_V3.map((mode) => ({ label: t(`imageEditor.v3.blendMode.${mode}`), value: mode }))}
-              onSelect={(blendMode) => {
-                if (!contentLocked) controller.updateLayerCommon(selected.id, { blendMode })
-              }}
-            />
-          </UiFormRow>
-        ) : null}
-        {selected.type === 'group' && controller.profile.layerKinds.includes('group') ? (
-          <UiFormRow density="compact"
-            label={t('imageEditor.v3.properties.groupIsolation')}
-            info={t('imageEditor.v3.properties.groupIsolationInfo')}
-            inline
-          >
-            <UiSwitch
-              aria-label={t('imageEditor.v3.properties.groupIsolation')}
-              checked={selected.isolated}
-              disabled={contentLocked}
-              onCheckedChange={(isolated) => {
-                if (!contentLocked) controller.updateGroupIsolation(selected.id, isolated)
-              }}
-            />
-          </UiFormRow>
-        ) : null}
-      </UiGroup>
-      ) : (
-      <>
-        {editTarget !== 'mask' && (selected.type === 'raster' || selected.type === 'smart' || isImageEditVectorLayerV3(selected) || selected.type === 'group') ? (
-          <ImageEditorLayerTransformPropertiesV3
-            controller={controller}
-            layer={selected}
-            disabled={!isImageEditLayerTransformableV3(selectedLocation ?? null)}
-          />
-        ) : null}
+      <div data-properties-body className="min-h-0 flex-1 overflow-y-auto">
+        {/* 图片编辑没有关键帧：属性行不留“已改”与秒表两列，名称从折叠箭头后面起笔 */}
+        <UiPropertyKeyframesContext.Provider value={false}>
+        <UiFieldLayoutContext.Provider value="property">
+          {!editingMask && (selected.type === 'raster' || selected.type === 'smart' || isImageEditVectorLayerV3(selected) || selected.type === 'group') ? (
+            <PropertySection title={t('imageEditor.v3.properties.transform')}>
+              <ImageEditorLayerTransformPropertiesV3
+                controller={controller}
+                layer={selected}
+                disabled={!isImageEditLayerTransformableV3(selectedLocation ?? null)}
+              />
+            </PropertySection>
+          ) : null}
 
-        {editTarget !== 'mask' && controller.profile.layerKinds.includes('smart') ? <SmartContentPropertiesV3 layer={selected} disabled={contentLocked} /> : null}
-
-        {editTarget !== 'mask' && (selected.type === 'effect' || selected.type === 'adjustment') ? (
-          <div>
-            {!selected.renderable ? (
-              <p className="mb-3 text-xs text-warning-text">{t('imageEditor.v3.properties.unrenderable')}</p>
+          <PropertySection title={t('imageEditor.v3.properties.composite')}>
+            <ImageEditorLayerScalarsV3 controller={controller} layer={selected} disabled={contentLocked} />
+            {controller.profile.layerControls.includes('blend-mode') ? (
+              <UiFormRow label={t('imageEditor.v3.properties.blendMode')}>
+                <Dropdown<ImageEditLayerV3['blendMode']>
+                  ariaLabel={t('imageEditor.v3.properties.blendMode')}
+                  size="sm"
+                  minWidthStrategy="none"
+                  value={selected.blendMode}
+                  disabled={contentLocked}
+                  display={t(`imageEditor.v3.blendMode.${selected.blendMode}`)}
+                  options={IMAGE_EDIT_BLEND_MODES_V3.map((mode) => ({ label: t(`imageEditor.v3.blendMode.${mode}`), value: mode }))}
+                  onSelect={(blendMode) => {
+                    if (!contentLocked) controller.updateLayerCommon(selected.id, { blendMode })
+                  }}
+                />
+              </UiFormRow>
             ) : null}
-            {effectReadiness?.state !== 'ready' && effectReadinessReason ? (
-              <p role="status" className="mb-3 text-xs text-warning-text">{effectReadinessReason}</p>
+            {selectedLocation.index > 0 ? (
+              <UiFormRow label={t('imageEditor.v3.workflow.clipping')}>
+                <UiSwitch aria-label={t('imageEditor.v3.workflow.clipping')} checked={selected.clipping} disabled={contentLocked} onCheckedChange={clipping => controller.updateLayerCommon(selected.id, { clipping })} />
+              </UiFormRow>
             ) : null}
-            <ImageEditorEffectParametersV3
-              controller={controller}
-              layer={selected}
-              disabled={contentLocked || !selected.renderable}
-            />
-          </div>
-        ) : null}
+            {selected.type === 'group' && controller.profile.layerKinds.includes('group') ? (
+              <UiFormRow label={t('imageEditor.v3.properties.groupIsolation')} info={t('imageEditor.v3.properties.groupIsolationInfo')}>
+                <UiSwitch
+                  aria-label={t('imageEditor.v3.properties.groupIsolation')}
+                  checked={selected.isolated}
+                  disabled={contentLocked}
+                  onCheckedChange={(isolated) => {
+                    if (!contentLocked) controller.updateGroupIsolation(selected.id, isolated)
+                  }}
+                />
+              </UiFormRow>
+            ) : null}
+          </PropertySection>
 
-        {editTarget !== 'mask' && isImageEditVectorLayerV3(selected) ? (
-          <VectorProperties
-            controller={controller}
-            layer={selected}
-            locked={contentLocked}
-          />
-        ) : null}
+          {/* 从底栏转换为智能对象时，进行中与失败原因在这里显示 */}
+          {!editingMask && selected.type === 'raster' && smart && selected.id === convertingLayerId && (smart.busy || smart.error) ? (
+            <FormSection><SmartContentPropertiesV3 layer={selected} disabled={contentLocked} /></FormSection>
+          ) : null}
 
-        {controller.profile.layerControls.includes('mask') ? (
-          <UiGroup titleTone="compact" divided className="mt-5" title={t('imageEditor.v3.properties.mask')} gap="stack">
-          {selected.mask ? (
-            <>
-              <UiFormRow density="compact" label={t('surfaceGrammar.editTarget')}>
+          {!editingMask && selected.type === 'smart' && controller.profile.layerKinds.includes('smart') ? (
+            <PropertySection title={t('imageEditor.v3.layerType.smart')}>
+              <FormSection><SmartContentPropertiesV3 layer={selected} disabled={contentLocked} /></FormSection>
+            </PropertySection>
+          ) : null}
+
+          {!editingMask && (selected.type === 'effect' || selected.type === 'adjustment') ? (
+            <PropertySection title={t(`imageEditor.v3.layerType.${selected.type}`)}>
+              <FormSection>
+                {!selected.renderable ? (
+                  <p className="text-xs text-warning-text">{t('imageEditor.v3.properties.unrenderable')}</p>
+                ) : null}
+                {effectReadiness?.state !== 'ready' && effectReadinessReason ? (
+                  <p role="status" className="text-xs text-warning-text">{effectReadinessReason}</p>
+                ) : null}
+                <ImageEditorEffectParametersV3
+                  controller={controller}
+                  layer={selected}
+                  disabled={contentLocked || !selected.renderable}
+                />
+              </FormSection>
+            </PropertySection>
+          ) : null}
+
+          {!editingMask && isImageEditVectorLayerV3(selected) ? (
+            <PropertySection title={t(`imageEditor.v3.layerType.${selected.type}`)}>
+              <FormSection>
+                <VectorProperties controller={controller} layer={selected} locked={contentLocked} />
+              </FormSection>
+            </PropertySection>
+          ) : null}
+
+          {maskEnabled && selected.mask ? (
+            <PropertySection title={t('imageEditor.v3.properties.mask')}>
+              <UiFormRow label={t('imageEditor.v3.properties.maskEditTarget')}>
                 <UiSegmented size="sm" ariaLabel={t('surfaceGrammar.editTarget')} value={editTarget}
-                  options={[{ value: 'pixels', label: t('imageEditor.v3.workflow.content') }, { value: 'mask', label: t('imageEditor.v3.workflow.mask') }]}
+                  options={[{ value: 'pixels', label: t('imageEditor.v3.properties.maskTargetContent') }, { value: 'mask', label: t('imageEditor.v3.workflow.mask') }]}
                   onChange={target => selectImageEditTargetV3(controller, selected.id, target)} />
               </UiFormRow>
-              <UiFormRow density="compact" label={t('imageEditor.v3.workflow.maskEnabled')} inline><UiSwitch aria-label={t('imageEditor.v3.workflow.maskEnabled')} checked={selected.maskAttachment.enabled} disabled={contentLocked} onCheckedChange={enabled => controller.updateLayerCommon(selected.id, { maskAttachment: { ...selected.maskAttachment, enabled } })} /></UiFormRow>
-              <UiFormRow density="compact" label={t('imageEditor.v3.workflow.maskLinked')} inline><UiSwitch aria-label={t('imageEditor.v3.workflow.maskLinked')} checked={selected.maskAttachment.linked} disabled={contentLocked} onCheckedChange={linked => controller.updateLayerCommon(selected.id, { maskAttachment: { ...selected.maskAttachment, linked } })} /></UiFormRow>
               <ImageEditorLayerScalarsV3 controller={controller} layer={selected} disabled={contentLocked} mask />
-              {editTarget === 'mask' && selected.mask.kind === 'sparse-mask' && selected.mask.vectorPaths && <VectorProperties controller={controller} locked={contentLocked} maskOnly layer={{ ...selected, type:'path', content:{ operands:selected.mask.vectorPaths, paint:{fill:defaultTextStyle(controller.document.geometry.height).fill,strokes:[],shadows:[]} } }} onContentChange={content => { if(selected.mask?.kind !== 'sparse-mask') return; controller.setLayerMask(selected.id, { ...selected.mask, vectorPaths:vectorPathContentSchema.parse(content).operands }) }} />}
-              {editTarget === 'mask' ? <MaskTransformProperties layer={selected} disabled={contentLocked} controller={controller} /> : null}
-              <UiFormRow density="compact" label={t('imageEditor.v3.properties.maskInverted')} inline>
+              <UiFormRow label={t('imageEditor.v3.properties.maskEnabledShort')}>
+                <UiSwitch aria-label={t('imageEditor.v3.workflow.maskEnabled')} checked={selected.maskAttachment.enabled} disabled={contentLocked} onCheckedChange={enabled => controller.updateLayerCommon(selected.id, { maskAttachment: { ...selected.maskAttachment, enabled } })} />
+              </UiFormRow>
+              <UiFormRow label={t('imageEditor.v3.properties.maskLinkedShort')}>
+                <UiSwitch aria-label={t('imageEditor.v3.workflow.maskLinked')} checked={selected.maskAttachment.linked} disabled={contentLocked} onCheckedChange={linked => controller.updateLayerCommon(selected.id, { maskAttachment: { ...selected.maskAttachment, linked } })} />
+              </UiFormRow>
+              <UiFormRow label={t('imageEditor.v3.properties.maskInvertedShort')}>
                 <UiSwitch
                   aria-label={t('imageEditor.v3.properties.maskInverted')}
                   checked={selected.mask.inverted}
                   disabled={contentLocked}
                   onCheckedChange={(inverted) => {
-                    if (!contentLocked) {
-                      const currentMask = selected.mask
-                      if (!currentMask) return
-                      const mask = cloneImageEditMaskReferenceV3(currentMask)
-                      mask.inverted = inverted
-                      controller.setLayerMask(selected.id, mask)
-                    }
+                    if (contentLocked || !selected.mask) return
+                    const mask = cloneImageEditMaskReferenceV3(selected.mask)
+                    mask.inverted = inverted
+                    controller.setLayerMask(selected.id, mask)
                   }}
                 />
               </UiFormRow>
-              <UiButton
-                className="justify-start"
-                disabled={contentLocked}
-                onClick={() => {
-                  if (!contentLocked) { controller.setLayerMask(selected.id, null); selectImageEditTargetV3(controller, selected.id, 'pixels') }
-                }}
-              >
-                <X  />
-                {t('imageEditor.v3.properties.removeMask')}
-              </UiButton>
-            </>
-          ) : (
-            <UiButton
-              variant="secondary"
-              className="justify-start"
-              disabled={contentLocked}
-              onClick={addMask}
-            >
-              <Plus  />
-              {t('imageEditor.v3.properties.addMask')}
-            </UiButton>
-          )}
-          </UiGroup>
-        ) : null}
-      </>
-      )}
-      </UiGroup>
+              {editingMask ? <MaskTransformProperties layer={selected} disabled={contentLocked} controller={controller} /> : null}
+              {editingMask && selected.mask.kind === 'sparse-mask' && selected.mask.vectorPaths ? (
+                <FormSection>
+                  <VectorProperties controller={controller} locked={contentLocked} maskOnly layer={{ ...selected, type: 'path', content: { operands: selected.mask.vectorPaths, paint: { fill: defaultTextStyle(controller.document.geometry.height).fill, strokes: [], shadows: [] } } }} onContentChange={content => { if (selected.mask?.kind !== 'sparse-mask') return; controller.setLayerMask(selected.id, { ...selected.mask, vectorPaths: vectorPathContentSchema.parse(content).operands }) }} />
+                </FormSection>
+              ) : null}
+            </PropertySection>
+          ) : null}
+        </UiFieldLayoutContext.Provider>
+        </UiPropertyKeyframesContext.Provider>
       </div>
+
+      {tools.length ? <UiToolbar variant="footer" tools={tools} /> : null}
     </section>
   )
 }

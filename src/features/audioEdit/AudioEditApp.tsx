@@ -316,7 +316,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
         <WorkspaceLayoutMenu workspaceId={AUDIO_EDIT_WORKSPACE_ID} />
         {/* 一条带只有这一条分隔线：左侧是编辑工具，右侧是交付动作 */}
         <span aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-line" />
-        <VideoEditSendMenu mediaKind="audio" disabled={disabled || Boolean(sourceError)} notify={showNotification} resolveSource={async () => ({ type: 'document', docRef: await videoEditDocumentRef(project.id) })} />
+        <VideoEditSendMenu trigger="command" mediaKind="audio" disabled={disabled || Boolean(sourceError)} notify={showNotification} resolveSource={async () => ({ type: 'document', docRef: await videoEditDocumentRef(project.id) })} />
         <UiButton variant="primary" disabled={disabled || Boolean(sourceError)} onClick={() => void exportProject()}><ICON_DOWNLOAD className="mr-1.5" />导出</UiButton>
       </>}
     >

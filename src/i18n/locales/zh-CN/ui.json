@@ -1084,11 +1084,7 @@
       "panels": {
         "expand": "展开{{title}}",
         "collapse": "收起{{title}}",
-        "menu": "面板",
-        "show": "显示{{title}}面板",
-        "close": "关闭{{title}}面板",
-        "float": "浮动{{title}}面板",
-        "dock": "停靠{{title}}面板",
+        "floatMenu": "浮动面板",
         "defaultLayout": "恢复默认布局",
         "layoutFailed": "面板布局无法恢复，已使用默认布局",
         "layoutFailedMessage": "图片编辑内容不受影响。你可以继续编辑或恢复默认布局。",
@@ -1493,13 +1489,8 @@
       },
       "properties": {
         "title": "属性",
-        "tabsLabel": "属性分类",
-        "parametersTab": "参数",
-        "basicsTab": "基础",
         "selectOne": "请选择一个图层来编辑属性",
         "name": "名称",
-        "visible": "可见",
-        "locked": "锁定",
         "opacity": "不透明度",
         "blendMode": "混合模式",
         "transform": "变换",
@@ -1520,7 +1511,16 @@
         "removeMask": "移除蒙版",
         "maskUnavailable": "蒙版像素创建与编辑尚未接通，当前只能保留已有蒙版。",
         "maskError": "创建蒙版失败，请重试",
-        "unrenderable": "该旧效果当前不可渲染，但会原样保留。"
+        "unrenderable": "该旧效果当前不可渲染，但会原样保留。",
+        "composite": "合成",
+        "lockedReason": "图层已锁定",
+        "convertToSmart": "转换为智能对象",
+        "smartBusy": "正在处理智能对象",
+        "maskEditTarget": "编辑",
+        "maskTargetContent": "内容",
+        "maskEnabledShort": "启用",
+        "maskLinkedShort": "跟随图层",
+        "maskInvertedShort": "反相"
       },
       "blendMode": {
         "normal": "正常",
@@ -1800,7 +1800,6 @@
   },
   "documentSession": {
     "status": {
-      "draft": "未保存",
       "failed": "保存失败",
       "conflict": "文件已在别处被修改"
     },

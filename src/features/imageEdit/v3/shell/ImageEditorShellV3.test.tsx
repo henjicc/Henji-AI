@@ -8,7 +8,7 @@ import type { DockviewApi } from 'dockview-react'
 
 import i18n from '@/i18n/config'
 import { UiEmpty, UiToolbar } from '@/components/ui'
-import { Z_LAYERS } from '@/core/theme/zLayers'
+import { findAppMenuCommand } from '@/core/appMenu/appMenu'
 import { createImageEditDocumentV3 } from '@/core/imageEdit/v3/documentFactory'
 import { useImageEditorControllerV3 } from '../editor/useImageEditorControllerV3'
 import { ImageEditorPanelRegistryV3, type ImageEditorPanelContextV3 } from '../panelFramework/panelRegistry'
@@ -72,7 +72,7 @@ describe('图片 Shell 与面板可见生命周期', () => {
   it('同帧重建面板后内容真正可见且预览保持同一实例', async () => {
     let api: DockviewApi | null = null
     const rendered = render(<Harness onApi={value => { api = value; value?.layout(1200, 800) }} />)
-    await screen.findByRole('button', { name: '面板' })
+    await waitFor(() => expect(findAppMenuCommand('imageEdit.panel.layers')).toBeTruthy())
     const dock = api as DockviewApi | null
     if (!dock) throw new Error('Dockview 未就绪')
     const preview = dock.getPanel('preview')
@@ -101,17 +101,13 @@ describe('图片 Shell 与面板可见生命周期', () => {
     fireEvent.click(screen.getByRole('button', { name: '展开图层' }))
     await waitFor(() => expect(visibility.mock.calls.at(-1)?.[0].visible).toBe(true))
     expect(dock.getPanel('layers')!.group.maximumHeight).toBe(800)
-    // 面板标签不放关闭叉：关闭走命令带的“面板”菜单
-    fireEvent.click(screen.getByRole('button', { name: '面板' }))
-    fireEvent.click(await screen.findByRole('menuitem', { name: '关闭图层面板' }))
+    // 面板标签不放关闭叉：关闭与重开走标题栏“窗口”菜单
+    expect(screen.queryByRole('button', { name: '面板' })).toBeNull()
+    act(() => { findAppMenuCommand('imageEdit.panel.layers')?.run() })
     await waitFor(() => expect(dock.getPanel('layers')).toBeUndefined())
-    fireEvent.click(screen.getByRole('button', { name: '面板' }))
-    const reopen = await screen.findByRole('menuitem', { name: '显示图层面板' })
-    expect(Number((reopen.closest('[data-ui-overlay-id]') as HTMLElement).style.zIndex)).toBeGreaterThan(Z_LAYERS.modal)
-    fireEvent.click(reopen)
+    await waitFor(() => expect(findAppMenuCommand('imageEdit.panel.layers')?.checked).toBe(false))
+    act(() => { findAppMenuCommand('imageEdit.panel.layers')?.run() })
     await waitFor(() => expect(document.querySelector('[data-dock-tab="layers"]')).toBeTruthy())
-    fireEvent.click(screen.getByRole('button', { name: '面板' }))
-    fireEvent.click(await screen.findByRole('menuitem', { name: '恢复默认布局' }))
     expect(dock.panels.map(({ id }) => id).sort()).toEqual(['layers', 'preview', 'properties'])
     expect(previewMount).toHaveBeenCalledTimes(1)
     expect(documentFixture.revision).toBe(0)

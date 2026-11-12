@@ -1084,11 +1084,7 @@
       "panels": {
         "expand": "Expand {{title}}",
         "collapse": "Collapse {{title}}",
-        "menu": "Panels",
-        "show": "Show {{title}} panel",
-        "close": "Close {{title}} panel",
-        "float": "Float {{title}} panel",
-        "dock": "Dock {{title}} panel",
+        "floatMenu": "Float panel",
         "defaultLayout": "Restore default layout",
         "layoutFailed": "The panel layout could not be restored. The default layout is ready.",
         "layoutFailedMessage": "Your edits are safe. Keep editing or restore the default layout.",
@@ -1493,13 +1489,8 @@
       },
       "properties": {
         "title": "Properties",
-        "tabsLabel": "Property categories",
-        "parametersTab": "Parameters",
-        "basicsTab": "Basics",
         "selectOne": "Select one layer to edit its properties",
         "name": "Name",
-        "visible": "Visible",
-        "locked": "Locked",
         "opacity": "Opacity",
         "blendMode": "Blend mode",
         "transform": "Transform",
@@ -1520,7 +1511,16 @@
         "removeMask": "Remove mask",
         "maskUnavailable": "Mask pixel creation and editing are not connected yet; existing masks are preserved.",
         "maskError": "Could not create the mask. Try again.",
-        "unrenderable": "This legacy effect cannot render here, but remains preserved."
+        "unrenderable": "This legacy effect cannot render here, but remains preserved.",
+        "composite": "Compositing",
+        "lockedReason": "The layer is locked",
+        "convertToSmart": "Convert to smart object",
+        "smartBusy": "Smart object is busy",
+        "maskEditTarget": "Edit",
+        "maskTargetContent": "Content",
+        "maskEnabledShort": "Enabled",
+        "maskLinkedShort": "Follow layer",
+        "maskInvertedShort": "Invert"
       },
       "blendMode": {
         "normal": "Normal",
@@ -1800,7 +1800,6 @@
   },
   "documentSession": {
     "status": {
-      "draft": "Unsaved",
       "failed": "Save failed",
       "conflict": "Changed elsewhere"
     },

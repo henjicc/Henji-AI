@@ -204,8 +204,7 @@ describe('图片编辑 V3 图层变换交互', () => {
     fireEvent.pointerUp(surface, { pointerId: 6, clientX: 10, clientY: 10 })
     expect(changes).toHaveLength(0)
 
-    fireEvent.click(await screen.findByRole('tab', { name: '基础' }))
-    fireEvent.click(screen.getByRole('switch', { name: '锁定' }))
+    fireEvent.click(screen.getAllByRole('button', { name: /^锁定“/ })[0])
     await waitFor(() => expect(changes).toHaveLength(1))
     fireEvent.pointerDown(surface, {
       pointerId: 7, isPrimary: true, button: 0, clientX: 10, clientY: 10,

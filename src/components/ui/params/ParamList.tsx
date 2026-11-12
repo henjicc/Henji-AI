@@ -5,7 +5,7 @@ import { UiFormRow, UiGroup, UiTooltipText } from '../layout'
 import type { CodeParameterValue } from '@/core/imaging/parameterTypes'
 import { parameterVisible } from '@/core/imaging/parameterVisibility'
 import type { ParamFieldSpec } from './fieldSpec'
-import { useUiFieldLayout, useUiPropertyMenu } from '../fieldLayout'
+import { useUiFieldLayout, useUiPropertyKeyframes, useUiPropertyMenu } from '../fieldLayout'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 
 export interface ParamListProps {
@@ -103,9 +103,11 @@ function FieldGroup({ title, fields, store }: { title: string; fields: readonly 
 /** 属性面板里的一行可折叠小标题，与参数行同一套四列（箭头在秒表列）；属性排布里的其他分组（如基本声音）也用它。 */
 export function PropertyHeading({ label, name, open, onToggle }: { label: string; name: string; open: boolean; onToggle: () => void }) {
   const Chevron = open ? ChevronDown : ChevronRight
-  return <div className="relative mx-1 grid h-control-sm grid-cols-property-row items-center gap-x-1 pr-2">
+  // 有关键帧的面板箭头落在秒表列；没有关键帧时箭头占第一格，标题文字与下面的名称同一条竖线
+  const keyframes = useUiPropertyKeyframes()
+  return <div className={`relative mx-1 grid h-control-sm ${keyframes ? 'grid-cols-property-row' : 'grid-cols-property-row-plain'} items-center gap-x-1 pr-2`}>
     <UiButton size="sm" className="absolute inset-0 w-full" aria-expanded={open} aria-label={name} onClick={onToggle} />
-    <span aria-hidden="true" />
+    {keyframes ? <span aria-hidden="true" /> : null}
     <span aria-hidden="true" className="pointer-events-none relative flex justify-center text-text3"><Chevron size={UI_ICON_SIZE.sm} /></span>
     <span className="pointer-events-none relative min-w-0 truncate text-xs text-text2">{label}</span>
   </div>

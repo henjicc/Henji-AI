@@ -88,7 +88,8 @@ function createImageEditSmartContentScene(context) {
         await tab('layers'); await host().getByRole('button', { name: '复制图层', exact: true }).click(); await tab('properties')
         await host().getByRole('button', { name: '打开内容', exact: true }).click()
         await page.locator('[data-smart-content-editor]:visible').waitFor(); await shoot('nested-content-open')
-        await tab('properties'); await host().getByRole('tab', { name: '基础', exact: true }).click()
+        // 改名在图层行上双击（属性面板不再放名称框）
+        await tab('layers'); await host().locator('[role="treeitem"][aria-selected="true"] [data-layer-name]').first().dblclick()
         const name = host().getByRole('textbox', { name: '名称', exact: true }); await name.fill('已编辑的智能内容'); await name.press('Enter')
         await app.evaluate(({ ipcMain }) => {
           const channel = 'imageEditorV3:document:save'; globalThis.__smartContentHandlers ??= {}; globalThis.__smartContentHandlers[channel] = ipcMain._invokeHandlers.get(channel)

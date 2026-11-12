@@ -55,7 +55,7 @@ describe('通道与属性的共同文档工作流', () => {
     fireEvent.click(screen.getByRole('button', { name: '测试撤销' }))
     expect(bus.getSnapshot().document.namedRegions[0].name).toBe('人像区域')
   })
-  it('蒙版焦点切换启用唯一蒙版工具；通用移除与撤销保持有效目标，Esc 取消名称', async () => {
+  it('蒙版焦点切换启用唯一蒙版工具；通用移除与撤销保持有效目标', async () => {
     render(<Host />)
     const bus = requireImageEditDocumentInstanceV3(document.id).bus
     fireEvent.click(screen.getByRole('button', { name: '测试蒙版目标' }))
@@ -67,15 +67,11 @@ describe('通道与属性的共同文档工作流', () => {
     session = Object.values(useImageEditorSessionStoreV3.getState().sessions)[0]
     expect(session.activeTool).toBe('raster-brush')
     fireEvent.click(screen.getByRole('button', { name: '测试撤销' }))
-    fireEvent.click(screen.getByRole('tab', { name: '基础' }))
-    const name = screen.getByRole('textbox', { name: '名称' })
-    fireEvent.focus(name); fireEvent.change(name, { target: { value: '取消名称' } }); fireEvent.keyDown(name, { key: 'Escape' }); fireEvent.blur(name)
     expect(bus.getSnapshot().document.layers[0].name).toBe('内容')
   })
   it('填充滑杆丢失捕获取消预览，连续修改只提交一次命令', async () => {
     render(<Host />)
     const bus = requireImageEditDocumentInstanceV3(document.id).bus
-    fireEvent.click(screen.getByRole('tab', { name: '基础' }))
     const slider = screen.getByRole('slider', { name: '填充滑杆' })
     fireEvent.pointerDown(slider); fireEvent.change(slider, { target: { value: '40' } }); fireEvent.lostPointerCapture(slider)
     expect(bus.getSnapshot().previewOverrides).toEqual({})

@@ -147,6 +147,8 @@ export default {
       // 面板窄时名称列不变，数值列跟着收窄。
       gridTemplateColumns: {
         'property-row': '0.875rem 1.375rem 5.5rem minmax(0, 1fr)',
+        // 没有关键帧的属性面板（图片编辑）：去掉“已改”与秒表两列，只留折叠箭头一格，名称与分组标题文字对齐
+        'property-row-plain': '1rem 5.5rem minmax(0, 1fr)',
       },
       // 控件高度令牌（重要记录 004）：28 紧凑 / 32 默认 / 36 醒目，由 CSS 变量驱动。
       // 新控件用 h-control-sm/md/lg（或 styleTokens 的 UI_CONTROL_HEIGHT_CLASS），不写 h-7/h-8/h-9。

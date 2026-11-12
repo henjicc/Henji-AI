@@ -11,7 +11,7 @@ import adjustmentPanels from '../panelEntries/adjustments'
 import { ImageEditorPanelRegistryV3, type ImageEditorPanelDefinitionV3 } from '../panelFramework/panelRegistry'
 import { type ImageEditorLayoutStoreV3 } from '../panelFramework/layout'
 import { ImageEditorDockV3 } from './ImageEditorDockV3'
-import { ImageEditorPanelMenuV3 } from './ImageEditorDockChromeV3'
+import { ImageEditorPanelWindowMenuV3 } from './ImageEditorDockChromeV3'
 import { ImageEditorShellContextV3 } from './ImageEditorShellContextV3'
 
 // 每个面板任务只需新增自己的登记条目；不再改中央 union/switch/内容分派。
@@ -52,7 +52,8 @@ export function ImageEditorShellV3({ controller, commandBar, toolRail, preview, 
     void layouts.resetActive().catch(() => undefined)
   }, [api, layouts])
   return <ImageEditorShellContextV3.Provider value={{ controller, preview, panels, api, collapsed, toggleCollapsed, restoreDefault }}>
-    {commandBar(<><ImageEditorPanelMenuV3 /><WorkspaceLayoutMenu workspaceId={workspaceId} /></>)}
+    <ImageEditorPanelWindowMenuV3 />
+    {commandBar(<WorkspaceLayoutMenu workspaceId={workspaceId} />)}
     <div className="relative flex min-h-0 min-w-0 flex-1" {...(contentDisabled ? { inert: '' } : {})}>
       {toolRail}
       <ImageEditorDockV3 key={workspaceId} workspaceId={workspaceId}

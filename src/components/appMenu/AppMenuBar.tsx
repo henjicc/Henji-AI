@@ -2,6 +2,7 @@ import React, { useRef, useState, useSyncExternalStore, type KeyboardEvent } fro
 import { Check, ChevronRight } from 'lucide-react'
 import PanelTrigger from '@/components/ui/PanelTrigger'
 import { UiButton, UiOptionButton } from '@/components/ui'
+import { UI_MODAL_INDEPENDENT_ATTRIBUTE } from '@/components/ui/useDialogFocusTrap'
 import { UiOverflowRow } from '@/components/ui/UiOverflowRow'
 import { UI_GLASS_ADAPTIVE_DIVIDER_CLASS } from '@/components/ui/styleTokens'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
@@ -38,7 +39,8 @@ export function AppMenuBar(): React.ReactElement | null {
 }
 
 function AppMenuButton({ menu, open, onOpenChange, onHover, onMove }: { menu: Pick<AppMenu, 'label' | 'items'> & { id: string }; open: boolean; onOpenChange: (open: boolean) => void; onHover: () => void; onMove: (step: number) => void }): React.ReactElement {
-  return <PanelTrigger open={open} onOpenChange={onOpenChange} panelSize="menu" panelPadding="menu" zIndex={Z_LAYERS.dropdown}
+  // 菜单栏在标题栏层，弹窗、查看器打开时仍可点；展开的菜单要压在它们上面（弹窗里的编辑器也靠窗口菜单重开面板）
+  return <PanelTrigger open={open} onOpenChange={onOpenChange} panelSize="menu" panelPadding="menu" zIndex={Z_LAYERS.popover}
     renderPanel={() => <AppMenuList items={menu.items} label={menu.label} onClose={() => onOpenChange(false)} onMove={onMove} />}>
     {({ togglePanel }) => <UiButton size="sm" role="menuitem" aria-haspopup="menu" aria-expanded={open} data-panel-trigger-button data-app-menu={menu.id}
       onPointerEnter={onHover} onClick={togglePanel}
@@ -77,7 +79,8 @@ function AppMenuList({ items, label, onClose, onMove }: { items: readonly AppMen
   }
   // 菜单按最长一项定宽；有可勾选的项才给每一行留勾的位置（重要记录 021）
   const checkSlot = items.some(item => item.kind === 'action' && item.checked !== undefined)
-  return <div ref={listRef} role="menu" aria-label={label} tabIndex={-1} className="flex flex-col outline-none" onKeyDown={keyDown}>
+  // 菜单挂在页面根上、不在弹窗里：标为独立于弹窗，菜单里的 Esc、Tab 只管菜单，不关掉也不抢回底下弹窗的焦点
+  return <div ref={listRef} role="menu" aria-label={label} tabIndex={-1} className="flex flex-col outline-none" onKeyDown={keyDown} {...{ [UI_MODAL_INDEPENDENT_ATTRIBUTE]: '' }}>
     {items.map((item, index) => {
       if (item.kind === 'separator') return <div key={`separator-${index}`} role="separator" className={`my-1 border-t ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS}`} />
       if (item.kind === 'submenu') {
@@ -90,7 +93,7 @@ function AppMenuList({ items, label, onClose, onMove }: { items: readonly AppMen
             <span className={`min-w-0 flex-1 truncate ${item.disabledReason ? 'text-text3' : ''}`}>{item.label}</span>
             <ChevronRight size={UI_ICON_SIZE.sm} className="shrink-0 text-text3" aria-hidden="true" />
           </UiOptionButton>
-          {opened && <PanelTrigger anchor={submenu.anchor} open onOpenChange={next => { if (!next) setSubmenu(null) }} panelSize="menu" panelPadding="menu" zIndex={Z_LAYERS.dropdown}
+          {opened && <PanelTrigger anchor={submenu.anchor} open onOpenChange={next => { if (!next) setSubmenu(null) }} panelSize="menu" panelPadding="menu" zIndex={Z_LAYERS.popover}
             renderPanel={() => <AppMenuList items={item.items} label={item.label} onClose={() => { setSubmenu(null); onClose() }} />} />}
         </React.Fragment>
       }

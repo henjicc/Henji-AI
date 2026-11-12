@@ -186,7 +186,6 @@ function createImageEditCommonWorkflowsScene(context, canvas = false, large = fa
         await host.getByRole('button', { name: '下移图层', exact: true }).click(); await shot('layer-reordered')
         await tab('properties')
         await host.getByRole('button', { name: '添加蒙版', exact: true }).click(); await shot('layer-mask-added')
-        await host.locator('[data-properties-tab="basics"]').click()
         await host.getByRole('button', { name: '混合模式', exact: true }).click()
         await page.getByRole('option', { name: '正片叠底', exact: true }).click(); await shot('layer-blend-mode')
         await tab('layers')

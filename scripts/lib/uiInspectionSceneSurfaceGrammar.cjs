@@ -106,15 +106,15 @@ function createSurfaceGrammarScenes(context) {
             const fieldBox = await editor.getByRole('button', { name: field, exact: true }).boundingBox()
             assert.ok(actionBox && fieldBox && Math.abs(actionBox.x - fieldBox.x) <= 1, `${action}必须从控件列左缘起头`)
           }
-          await select(title.id); await assertFormColumns(editor.locator('[data-properties-tab-panel]'))
+          await select(title.id); await assertFormColumns(editor.locator('[data-properties-body]'))
           await assertActionColumn('删除段落', '编辑段落'); await capture('text-rows')
           await select(shape.id)
-          await assertFormColumns(editor.locator('[data-properties-tab-panel]'))
+          await assertFormColumns(editor.locator('[data-properties-body]'))
           await assertActionColumn('删除路径', '编辑路径')
           await capture('path-rows')
           await editor.getByRole('button', { name: '恢复面板大小', exact: true }).last().click()
           await context.settlePage(page, 400)
-          await assertFormColumns(editor.locator('[data-properties-tab-panel]'))
+          await assertFormColumns(editor.locator('[data-properties-body]'))
         } finally { await restore() }
       } },
     { id: 'u5-video-form', surface: '剪辑', name: '剪辑-批注与调色参数', writesUserData: true,
@@ -171,21 +171,20 @@ function createUiPolishScenes(context) {
           await editor.locator('[data-dock-tab="layers"] > span').first().click()
           await editor.locator('[data-layer-id="reality-gpu-source-layer"] [data-layer-select]').click()
           await editor.locator('[data-tool-id="move"]').click()
-          await editor.locator('[data-dock-tab="properties"] > span').first().click()
-          await editor.locator('[data-properties-tab="basics"]').click()
-          await editor.getByRole('switch', { name: '锁定', exact: true }).click()
-          await editor.locator('[data-dock-tab="layers"] > span').first().click()
+          // 锁定在图层行上
+          await editor.locator('[data-layer-id="reality-gpu-source-layer"]').getByRole('button', { name: /^锁定“/ }).click()
           await editor.locator(`[data-layer-id="${shape.id}"] [data-layer-select]`).click()
           await editor.locator('[data-dock-tab="properties"] > span').first().click()
-          const panel = editor.locator('[data-properties-tab-panel]')
+          const panel = editor.locator('[data-properties-body]')
           await context.settlePage(page, 500)
-          const gap = await panel.evaluate(element => {
+          // 变换与路径各在自己的属性分组里，分组之间一条发丝线
+          const separated = await panel.evaluate(element => {
             const rotation = element.querySelector('input[aria-label^="旋转"]')
-            const pathTitle = [...element.querySelectorAll('div')].find(item => item.textContent === '路径与组合')?.closest('[data-ui-group]')
-            if (!rotation || !pathTitle) throw new Error('分组间距目标未找到')
-            return pathTitle.getBoundingClientRect().top - rotation.getBoundingClientRect().bottom
+            const pathTitle = [...element.querySelectorAll('div')].find(item => item.textContent === '路径与组合')
+            if (!rotation || !pathTitle) throw new Error('分组目标未找到')
+            return rotation.closest('[data-properties-section]') !== pathTitle.closest('[data-properties-section]')
           })
-          assert.ok(Math.round(gap) >= 32, `变换和路径组间距须为 32px 分区档（DIP 取整），实际 ${gap}`)
+          assert.ok(separated, '变换和路径须分在不同的属性分组')
           await capture('group-spacing')
           assert.equal(await editor.getByRole('button', { name: '蒙版目标图层', exact: true }).count(), 0)
           assert.equal(await editor.getByRole('button', { name: '用路径作为蒙版', exact: true }).count(), 0)

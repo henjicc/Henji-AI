@@ -166,7 +166,7 @@ function createToolboxScenes(context) {
             await page.getByRole('menuitem', { name: '辉光 Pro' }).click()
           }
           await page.getByRole('slider', { name: '辉光强度' }).waitFor({ state: 'visible', timeout: 8000 })
-          const parameterPanel = surface.locator('[data-properties-tab-panel="parameters"]')
+          const parameterPanel = surface.locator('[data-properties-body]')
           await parameterPanel.waitFor({ state: 'visible', timeout: 8000 })
           const glowControls = await parameterPanel.evaluate((panel) => ({
             sliders: [...panel.querySelectorAll('input[type="range"]')]
@@ -596,16 +596,18 @@ function createToolboxScenes(context) {
         await settlePage(page)
         const after = await preview.boundingBox()
         if (!after || Math.abs(after.width - before.width) < 12) throw new Error(`分隔条没有调整真实预览宽度：${JSON.stringify({ before, after, sashHit })}`)
-        const panelMenu = async label => {
-          await editor.getByRole('button', { name: /^(面板|Panels)$/i }).click()
-          await page.getByRole('menuitem', { name: label }).click()
+        // 面板的浮动与停靠在标题栏“窗口”菜单的“浮动面板”里（勾上是浮动，再点一次停靠回来）
+        const floatProperties = async () => {
+          await page.getByRole('menuitem', { name: /^(窗口|Window)$/i }).click()
+          await page.getByRole('menuitem', { name: /^(浮动面板|Float panel)$/i }).click()
+          await page.getByRole('menuitem', { name: /^(属性|Properties)$/i }).last().click()
           await settlePage(page)
         }
-        await panelMenu(/^(浮动属性面板|Float Properties panel)$/i)
+        await floatProperties()
         await editor.locator('[data-editor-panel-id="properties"][data-panel-mode="floating"]').waitFor({ state: 'visible' })
         if (capture) await capture('properties-floating')
-        await panelMenu(/^(停靠属性面板|Dock Properties panel)$/i)
-        await panelMenu(/^(恢复默认布局|Restore default layout)$/i)
+        await floatProperties()
+        await editor.locator('[data-editor-panel-id="properties"]:not([data-panel-mode="floating"])').waitFor({ state: 'visible' })
 
         const annotationTool = editor.locator('[data-tool-id="annotation"]')
         const annotationToolBox = await annotationTool.boundingBox()

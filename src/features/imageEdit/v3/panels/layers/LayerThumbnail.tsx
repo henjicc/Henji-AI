@@ -15,7 +15,8 @@ export function LayerThumbnailV3({ document, layer, thumbnails, fallback }: { do
   const key = useMemo(() => createImageEditRenderHash(JSON.parse(JSON.stringify(snapshot)) as ImageEditHashValue), [snapshot])
   useEffect(() => {
     setUrl(null)
-    if (!thumbnails || (layer.type === 'raster' && layer.source.kind === 'empty' && Object.keys(layer.tiles).length === 0)) return
+    // 调整与效果图层没有自己的像素，单独渲染出来永远是空的：显示图层类型图标
+    if (!thumbnails || layer.type === 'adjustment' || layer.type === 'effect' || (layer.type === 'raster' && layer.source.kind === 'empty' && Object.keys(layer.tiles).length === 0)) return
     const abort = new AbortController()
     // 单层快照取消剪贴，保留自己的内容、蒙版与滤镜；不修改作品。
     void thumbnails.readDocument(snapshot, key, abort.signal)

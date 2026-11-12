@@ -21,7 +21,7 @@ import PanelTrigger from './PanelTrigger';
 import { UiOverflowRow, type UiOverflowRowItem } from './UiOverflowRow';
 import Tooltip, { type TooltipPlacement } from './Tooltip';
 import { UiFormRowLabelContext } from './formRowLabel';
-import { useUiFieldLayout } from './fieldLayout';
+import { useUiFieldLayout, useUiPropertyKeyframes } from './fieldLayout';
 import { UiFieldMessage } from './states';
 import { UiButton, UiIconButton, UiOptionButton } from './primitives';
 import { actionGroupContext, useUiPrimaryBudget } from './actionPriority';
@@ -30,6 +30,7 @@ import {
   UI_DIVIDER_CLASS,
   UI_FORM_ROW_MIN_HEIGHT_CLASS,
   UI_PROPERTY_ROW_CLASS,
+  UI_PROPERTY_ROW_PLAIN_CLASS,
   UI_GROUP_SIBLING_GAP_CLASS,
   UI_GROUP_SIBLING_GAP_COMPACT_CLASS,
   UI_SECTION_STACK_CLASS,
@@ -469,6 +470,7 @@ export function UiFormRow({
 }: UiFormRowProps): JSX.Element {
   const panelLabelWidth = useContext(FormLabelWidthContext);
   const fieldLayout = useUiFieldLayout();
+  const propertyKeyframes = useUiPropertyKeyframes();
   const fixedColumn = labelColumn === 'panel' || (labelColumn === undefined && (labelWidth !== undefined || (panelLabelWidth !== undefined && fieldLayout !== 'toolbar')));
   const baseId = useId();
   const labelId = `${baseId}-label`;
@@ -486,16 +488,18 @@ export function UiFormRow({
     // 名称列定宽，放不下的名称截断；没有另写说明时悬停显示完整名称
     const propertyLabelNode = <UiTooltipText tooltip={info ?? (typeof label === 'string' && label.length > 7 ? label : undefined)} delay={infoDelay}>{label}</UiTooltipText>;
     const control = <UiFormRowLabelContext.Provider value={labelling}>{children}</UiFormRowLabelContext.Provider>;
-    const notes = hint || errorNode ? <div className="col-span-2 col-start-3 pb-1">{hint ? <p id={hintId} className={UI_TEXT_META_CLASS}>{hint}</p> : null}{errorNode}</div> : null;
-    return <div data-ui-form-row="property" className={`${UI_PROPERTY_ROW_CLASS} ${className}`} {...props}>
-      {modified ? <Tooltip asChild content={typeof modified === 'string' ? modified : '已改'}><span role="img" aria-label={typeof modified === 'string' ? modified : '已改'} data-ui-form-row-modified className="flex h-full items-center justify-center"><span className="h-1.5 w-1.5 rounded-full bg-text3" /></span></Tooltip> : <span aria-hidden="true" />}
-      <span className="flex items-center justify-center">{leading}</span>
+    // 没有关键帧的面板少两列：折叠箭头一格之后就是名称
+    const valueStart = propertyKeyframes ? 'col-start-3' : 'col-start-2';
+    const notes = hint || errorNode ? <div className={`col-span-2 ${valueStart} pb-1`}>{hint ? <p id={hintId} className={UI_TEXT_META_CLASS}>{hint}</p> : null}{errorNode}</div> : null;
+    return <div data-ui-form-row="property" className={`${propertyKeyframes ? UI_PROPERTY_ROW_CLASS : UI_PROPERTY_ROW_PLAIN_CLASS} ${className}`} {...props}>
+      {!propertyKeyframes ? <span aria-hidden="true" /> : modified ? <Tooltip asChild content={typeof modified === 'string' ? modified : '已改'}><span role="img" aria-label={typeof modified === 'string' ? modified : '已改'} data-ui-form-row-modified className="flex h-full items-center justify-center"><span className="h-1.5 w-1.5 rounded-full bg-text3" /></span></Tooltip> : <span aria-hidden="true" />}
+      {propertyKeyframes ? <span className="flex items-center justify-center">{leading}</span> : null}
       <div id={labelId} className="min-w-0 truncate text-xs text-text3">{propertyLabelNode}</div>
       {/* 悬停才出现的内容（关键帧导航）浮在行尾、不占宽度：数值紧跟名称，行尾通常是空的；占宽会把窄面板里的滑杆和成对数值挤出去 */}
       {wide
         ? <span className="flex min-w-0 items-center justify-end pr-2">{labelTrailing}</span>
         : <div data-ui-form-control className="relative flex min-w-0 items-center justify-start gap-1 pr-2">{control}{trailing}<span className="absolute inset-y-0 right-2 flex items-center">{labelTrailing}</span></div>}
-      {wide ? <div data-ui-form-control className="col-span-2 col-start-3 min-w-0 pb-2 pr-2">{control}{trailing}</div> : null}
+      {wide ? <div data-ui-form-control className={`col-span-2 ${valueStart} min-w-0 pb-2 pr-2`}>{control}{trailing}</div> : null}
       {notes}
     </div>;
   }

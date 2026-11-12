@@ -1,10 +1,12 @@
-import { ChevronDown, ChevronUp, LayoutPanelLeft, Maximize2, Minimize2 } from 'lucide-react'
+import { ChevronDown, ChevronUp, Maximize2, Minimize2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { IDockviewHeaderActionsProps, IDockviewPanelHeaderProps } from 'dockview-react'
 
 import { toggleDockGroupMaximized } from '@/components/dockviewDocking'
-import { PanelTrigger, UiIconButton, UiOptionButton } from '@/components/ui'
+import { UiIconButton } from '@/components/ui'
+import { useAppMenuVisibility } from '@/components/appMenu/appMenuVisibility'
+import { contributeAppMenus } from '@/core/appMenu/appMenu'
 import { showImageEditorPanelV3 } from '../panelFramework/layout'
 import { useImageEditorShellV3 } from './ImageEditorShellContextV3'
 
@@ -53,56 +55,41 @@ export function ImageEditorDockHeaderActionsV3({ group, containerApi }: IDockvie
   </div>
 }
 
-/** 命令带内的持久入口：即使所有面板关闭，仍可重开或重置。 */
-export function ImageEditorPanelMenuV3(): JSX.Element | null {
+/**
+ * 面板的显示与关闭进标题栏“窗口”菜单（与剪辑一致），不在命令带上另放一个和布局菜单长得一样的按钮。
+ * 所有面板都关掉时仍能从这里重开；恢复默认布局在“工作区布局”里。
+ */
+export function ImageEditorPanelWindowMenuV3(): null {
   const { t } = useTranslation('ui')
-  const { api, panels, restoreDefault } = useImageEditorShellV3()
-  const [, refresh] = useState(0)
+  const visible = useAppMenuVisibility()
+  const { api, panels } = useImageEditorShellV3()
+  const [revision, refresh] = useState(0)
   useEffect(() => {
     if (!api) return
     const events = [api.onDidLayoutChange(() => refresh(value => value + 1))]
     return () => events.forEach(event => event.dispose())
   }, [api])
-  if (!panels.length) return null
-  const label = t('imageEditor.v3.panels.menu', { defaultValue: '面板' })
-  return <PanelTrigger panelSize="menu" panelPadding="menu" closeOnPanelClick
-    renderPanel={() => <div className="flex flex-col gap-1" role="menu" aria-label={label}>
-      {panels.map(definition => {
-        const title = t(definition.titleKey, { defaultValue: definition.title })
-        const panel = api?.getPanel(definition.id)
-        return <div key={definition.id} className="flex flex-col gap-1">
-          <UiOptionButton variant="menu" size="sm" role="menuitem" disabled={!api}
-            onClick={() => {
-              if (!api) return
-              if (panel) panel.api.close()
-              else showImageEditorPanelV3(api, definition, title)
-            }}>
-            {t(panel ? 'imageEditor.v3.panels.close' : 'imageEditor.v3.panels.show', {
-              defaultValue: panel ? '关闭{{title}}面板' : '显示{{title}}面板', title,
-            })}
-          </UiOptionButton>
-          {panel && <UiOptionButton variant="menu" size="sm" role="menuitem" onClick={() => {
-            if (!api) return
-            if (panel.group.api.location.type === 'floating') {
-              panel.api.moveTo({ group: api.getPanel('preview')?.group, position: 'right' })
-            } else {
-              api.addFloatingGroup(panel, {
-                width: api.width > 0 ? Math.min(400, api.width * 0.6) : 400,
-                height: api.height > 0 ? Math.min(480, api.height * 0.8) : 480,
-              })
-            }
-          }}>
-            {t(panel.group.api.location.type === 'floating' ? 'imageEditor.v3.panels.dock' : 'imageEditor.v3.panels.float', {
-              defaultValue: panel.group.api.location.type === 'floating' ? '停靠{{title}}面板' : '浮动{{title}}面板', title,
-            })}
-          </UiOptionButton>}
-        </div>
-      })}
-      <UiOptionButton variant="menu" size="sm" role="menuitem" disabled={!api} onClick={restoreDefault}>
-        {t('imageEditor.v3.panels.defaultLayout', { defaultValue: '恢复默认布局' })}
-      </UiOptionButton>
-    </div>}>
-    {({ open, togglePanel }) => <UiIconButton size="md" aria-label={label} tooltip={label} aria-haspopup="menu" aria-expanded={open} on={open}
-      onClick={togglePanel}><LayoutPanelLeft  /></UiIconButton>}
-  </PanelTrigger>
+  useEffect(() => {
+    if (!visible || !api || !panels.length) return undefined
+    const title = (definition: typeof panels[number]): string => t(definition.titleKey, { defaultValue: definition.title })
+    const open = panels.filter(definition => api.getPanel(definition.id))
+    return contributeAppMenus('imageEdit.panels', [
+      { menu: 'window', order: 110, items: panels.map(definition => ({
+        kind: 'action' as const, id: `imageEdit.panel.${definition.id}`, label: title(definition), checked: Boolean(api.getPanel(definition.id)),
+        run: () => { const panel = api.getPanel(definition.id); if (panel) panel.api.close(); else showImageEditorPanelV3(api, definition, title(definition)) },
+      })) },
+      ...(open.length ? [{ menu: 'window' as const, order: 111, items: [{
+        kind: 'submenu' as const, id: 'imageEdit.panel.float', label: t('imageEditor.v3.panels.floatMenu', { defaultValue: '浮动面板' }),
+        items: open.map(definition => {
+          const panel = api.getPanel(definition.id)!
+          const floating = panel.group.api.location.type === 'floating'
+          return { kind: 'action' as const, id: `imageEdit.panel.float.${definition.id}`, label: title(definition), checked: floating, run: () => {
+            if (floating) panel.api.moveTo({ group: api.getPanel('preview')?.group, position: 'right' })
+            else api.addFloatingGroup(panel, { width: api.width > 0 ? Math.min(400, api.width * 0.6) : 400, height: api.height > 0 ? Math.min(480, api.height * 0.8) : 480 })
+          } }
+        }),
+      }] }] : []),
+    ])
+  }, [visible, api, panels, revision, t])
+  return null
 }

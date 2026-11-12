@@ -20,8 +20,9 @@ export function SmartContentPropertiesV3({ layer, disabled }: { layer: ImageEdit
     return () => { alive = false; };
   }, [layer.type]);
   if (!view || (layer.type !== 'raster' && layer.type !== 'smart')) return null;
-  return <UiGroup title="智能对象" titleTone="compact" gap="stack">
-    {layer.type === 'raster' ? <UiButton variant="secondary" disabled={disabled || view.busy} onClick={() => { void view.convert(layer.id, 'smart'); }}><FileImage  />转换为智能对象</UiButton> : <>
+  // 栅格图层转换为智能对象的入口在属性面板底栏，这里只显示转换进行中与失败原因
+  return <UiGroup gap="stack">
+    {layer.type === 'smart' && <>
       <p className="text-xs leading-relaxed text-text2">{layer.content.origin ? '受管理来源 · 更新时同步本图片中的关联实例' : '嵌入内容 · 保存时与原图片一起保存'}</p>
       <UiActionGroup tier="secondary"><UiButton disabled={disabled || view.busy} onClick={() => view.open(layer.id)}><Layers  />打开内容</UiButton>
       {layer.content.origin ? <UiButton disabled={disabled || view.busy} onClick={() => { void view.refresh(layer.id); }}><RefreshCw  />从来源刷新</UiButton> : null}</UiActionGroup>

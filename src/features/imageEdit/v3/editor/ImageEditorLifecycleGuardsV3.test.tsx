@@ -129,7 +129,6 @@ describe('ImageEditorV3 lifecycle guards', () => {
         onDocumentChange={changes}
       />,
     )
-    fireEvent.click(await screen.findByRole('tab', { name: '基础' }))
     const opacity = await screen.findByRole('slider', { name: '不透明度滑杆' }) as HTMLInputElement
     fireEvent.change(opacity, { target: { value: '35' } })
     expect(opacity.value).toBe('35')
@@ -166,10 +165,10 @@ describe('ImageEditorV3 lifecycle guards', () => {
     ).find((button) => button.textContent?.includes(name))
     await waitFor(() => expect(layerButton('锁定组子层')).toBeDefined())
     fireEvent.click(layerButton('锁定组子层') as HTMLButtonElement)
-    fireEvent.click(screen.getByRole('tab', { name: '基础' }))
 
-    expect(screen.getByRole('switch', { name: '可见' })).toHaveProperty('disabled', true)
-    expect(screen.getByRole('switch', { name: '锁定' })).toHaveProperty('disabled', true)
+    // 名称、显示、锁定只在图层行上：祖先锁定时都不能改
+    expectButtonDisabled(screen.getByRole('button', { name: '隐藏“锁定组子层”' }))
+    expectButtonDisabled(screen.getByRole('button', { name: '锁定“锁定组子层”' }))
     expect((screen.getByRole('slider', { name: '不透明度滑杆' }) as HTMLInputElement).matches(':disabled')).toBe(true)
     expect(screen.queryByRole('combobox', { name: '混合模式' })).toBeNull()
     expectButtonDisabled(screen.getByRole('button', { name: '删除所选图层' }))
