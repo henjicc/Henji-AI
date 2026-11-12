@@ -27,9 +27,14 @@ export class PiToolDisclosure {
           data.names.filter((name): name is string => typeof name === 'string'))
       }
     }
-    const domains = [...new Set(this.deferred.map(domainOf).filter((domain): domain is string => Boolean(domain)))]
+    const domains = [...new Set(this.deferred.map(domainOf).filter((domain): domain is string => Boolean(domain)))].sort()
+    // 列出各领域的工具名，模型才能按名精确加载：整领域加载剪辑约 90 个工具、近十万 token，
+    // 每次请求都要带上，而且工具定义排在历史之前，加载一次就让此前对话的上下文缓存全部失效。
+    const ungrouped = this.deferred.filter(name => !domainOf(name)).sort()
+    const namesByDomain = [...domains.map(domain => `${domain}：${this.deferred.filter(name => domainOf(name) === domain).sort().join(',')}`),
+      ...(ungrouped.length ? [`其他：${ungrouped.join(',')}`] : [])].join('；')
     const loader: ToolDefinition = { name: 'load_application_tools', label: '加载应用工具',
-      description: `按任务一次加载相关工具，或按领域/工具名加载。任务：canvas_generation（画布生成）、canvas_nodes（节点详情）、generation（生成页）。领域：${domains.join('、')}。返回流程说明，下一轮即可调用。只加载已授权工具；无参数兼容图片编辑。`,
+      description: `按任务一次加载相关工具，或按领域/工具名加载。任务：canvas_generation（画布生成）、canvas_nodes（节点详情）、generation（生成页）。只需要其中几个工具时用 names 一次列齐本步要用的，不要为一两个工具加载整个领域（剪辑等大领域整领域加载会让每次请求变长、变慢）。各领域工具名：${namesByDomain}。返回流程说明，下一轮即可调用。只加载已授权工具；无参数兼容图片编辑。`,
       parameters: { type: 'object', properties: {
         task: { type: 'string', enum: Object.keys(taskProfiles) },
         domains: { type: 'array', items: { type: 'string', enum: domains }, maxItems: 16 },

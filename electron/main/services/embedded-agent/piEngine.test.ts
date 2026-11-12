@@ -8,6 +8,7 @@ import { PiEngine } from './piEngine'
 import { PiToolDisclosure } from './toolDisclosure'
 import { videoEditCreativeTools } from './toolDisclosureProfiles'
 import { contextReader } from './contextReader'
+import { embeddedThinkingLevelMap } from './modelOptions'
 import { SessionManager, type AgentSession, type ToolDefinition } from '@earendil-works/pi-coding-agent'
 import type { EngineEvent } from './contracts'
 import { z } from 'zod'
@@ -46,6 +47,8 @@ async function fixture(capabilities: Partial<LlmModelConfig['capabilities']> = {
   let mode: 'tool' | 'error' | 'wait' = 'tool'
   let usage: Record<string, unknown> | undefined
   let toolPlan = [{ name: 'read_project', arguments: { id: 'project' } as Record<string, unknown> }]
+  // Responses 默认直接回答；需要工具往返的用例自己设定
+  let responsesToolPlan: typeof toolPlan = []
   const server: Server = createServer(async (request, response) => {
     const chunks: Buffer[] = []
     for await (const chunk of request) chunks.push(Buffer.from(chunk))
@@ -57,6 +60,24 @@ async function fixture(capabilities: Partial<LlmModelConfig['capabilities']> = {
     response.flushHeaders()
     if (mode === 'wait') return
     if (api === 'openai-responses') {
+      const outputs = (body.input ?? []).filter(item => (item as { type?: string }).type === 'function_call_output').length
+      const planned = responsesToolPlan[outputs]
+      if (planned) {
+        const call = { type: 'function_call', id: `fc_${outputs}`, call_id: `call_${outputs}`, name: planned.name, arguments: JSON.stringify(planned.arguments), status: 'completed' }
+        const events = [
+          { type: 'response.created', response: { id: `resp_${outputs}`, model: 'fixture', created_at: 1 } },
+          { type: 'response.output_item.added', output_index: 0, item: { ...call, arguments: '' } },
+          { type: 'response.function_call_arguments.delta', output_index: 0, item_id: call.id, delta: call.arguments },
+          { type: 'response.output_item.done', output_index: 0, item: call },
+          { type: 'response.completed', response: { id: `resp_${outputs}`, model: 'fixture', status: 'completed', output: [call], usage: { input_tokens: 100, output_tokens: 10, total_tokens: 110 } } },
+        ]
+        for (const event of events) response.write(`event: ${event.type}
+data: ${JSON.stringify(event)}
+
+`)
+        response.end()
+        return
+      }
       const item = { type: 'message', id: 'msg_fixture', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: '已经读取图片。', annotations: [] }] }
       const events = [
         { type: 'response.created', response: { id: 'resp_fixture', model: 'fixture', created_at: 1 } },
@@ -92,7 +113,7 @@ async function fixture(capabilities: Partial<LlmModelConfig['capabilities']> = {
     instructions: '你是测试中的痕迹助手。', tools: [{ name: 'read_project', description: '读取项目', inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'], additionalProperties: false } }] }
   await engine.command({ action: 'configure', input: configuration })
   return { engine, requests, headers, events, tool, directory, configuration, setUsage: (value: Record<string, unknown>) => { usage = value }, setMode: (value: typeof mode) => { mode = value },
-    setToolPlan: (value: typeof toolPlan) => { toolPlan = value } }
+    setToolPlan: (value: typeof toolPlan) => { toolPlan = value }, setResponsesToolPlan: (value: typeof toolPlan) => { responsesToolPlan = value } }
 }
 function applicationCatalog() {
     const tools = APPLICATION_CAPABILITY_IDS.map(id => {
@@ -439,13 +460,85 @@ describe('Pi official SDK engine', () => {
         expect.objectContaining({ phase: 'start' }),
         expect.objectContaining({ phase: 'model_requested', requestMetrics: expect.objectContaining({ toolCount: 2, toolBytes: expect.any(Number) }) }),
         expect.objectContaining({ phase: 'model_completed', modelId: 'fixture', providerId: 'test', durationMs: expect.any(Number),
-          metrics: { input: 70, output: 10, cacheRead: 30, cacheWrite: 0, totalTokens: 110 } }),
+          metrics: { input: 70, output: 10, cacheRead: 30, cacheWrite: 0, totalTokens: 110, cacheHitRate: 0.3, reasoning: 0, firstTokenMs: expect.any(Number) } }),
         expect.objectContaining({ phase: 'completed', durationMs: expect.any(Number) }),
         expect.objectContaining({ phase: 'usage_summary', summary: expect.objectContaining({ requests: 1, cacheHitRate: 0.3 }) }),
       ])
       expect(JSON.stringify(logs)).not.toContain('fixture-key')
       expect(JSON.stringify(logs)).not.toContain('第一轮')
     }
+  })
+  it('上下文缓存按前缀命中：同样输入新开对话首个请求逐字节一致，多轮与工具往返只在末尾追加', async () => {
+    const f = await fixture()
+    const context = '{"workspace":{"id":"videoEdit"},"capturedAt":"2026-11-13T00:00:00.000Z"}'
+    await f.engine.command({ action: 'prompt', input: { text: '读取项目', context } })
+    // 每轮都会重新 configure（侧栏每条消息都重建会话），历史与系统设定都不能因此改写
+    await f.engine.command({ action: 'configure', input: f.configuration })
+    await f.engine.command({ action: 'prompt', input: { text: '继续', context: context.replace('00:00:00', '00:05:00') } })
+    expect(f.requests).toHaveLength(3)
+    for (let index = 1; index < f.requests.length; index++) {
+      const [previous, next] = [f.requests[index - 1], f.requests[index]]
+      expect(JSON.stringify(next.tools)).toBe(JSON.stringify(previous.tools))
+      expect(JSON.stringify(next.messages.slice(0, previous.messages.length))).toBe(JSON.stringify(previous.messages))
+    }
+    // 只差采集时间的宿主快照不重复发送，易变内容只出现在最后一条之后
+    expect(JSON.stringify(f.requests[2]).split('当前应用上下文').length - 1).toBe(1)
+    const first = f.requests[0]
+    await f.engine.command({ action: 'new' })
+    await f.engine.command({ action: 'prompt', input: { text: '读取项目', context } })
+    const reopened = f.requests[3]
+    expect(JSON.stringify({ tools: reopened.tools, messages: reopened.messages })).toBe(JSON.stringify({ tools: first.tools, messages: first.messages }))
+  })
+  it('正式 Responses 路径：中途按名加载领域工具后，输入只在末尾追加，工具接在原有工具之后，新开对话首个请求逐字节一致', async () => {
+    const f = await fixture({ contextWindow: 128000 }, 'openai-responses')
+    await f.engine.command({ action: 'configure', input: { ...f.configuration, tools: applicationCatalog().tools } })
+    const context = JSON.stringify({ surface: { id: 'workspace.video_edit' } })
+    f.setResponsesToolPlan([{ name: 'load_application_tools', arguments: { names: ['export_video_edit'] } }])
+    await f.engine.command({ action: 'prompt', input: { text: '导出前先看看', context } })
+    f.setResponsesToolPlan([])
+    await f.engine.command({ action: 'configure', input: { ...f.configuration, tools: applicationCatalog().tools } })
+    await f.engine.command({ action: 'prompt', input: { text: '继续', context } })
+    type ResponsesBody = { input: unknown[]; tools: Array<{ name: string; description?: string }> }
+    const requests = f.requests as unknown as ResponsesBody[]
+    expect(requests).toHaveLength(3)
+    const names = (request: ResponsesBody) => request.tools.map(tool => tool.name)
+    expect(names(requests[0])).not.toContain('export_video_edit')
+    expect(names(requests[1])).toContain('export_video_edit')
+    // 各领域工具名写在加载工具的说明里，模型不必整领域加载
+    expect(requests[0].tools.find(tool => tool.name === 'load_application_tools')?.description).toContain('export_video_edit')
+    expectStableToolOrder(names(requests[0]), names(requests[1]))
+    expect(JSON.stringify(requests[1].tools.slice(0, requests[0].tools.length))).toBe(JSON.stringify(requests[0].tools))
+    expect(JSON.stringify(requests[2].tools)).toBe(JSON.stringify(requests[1].tools))
+    for (let index = 1; index < requests.length; index++) {
+      expect(JSON.stringify(requests[index].input.slice(0, requests[index - 1].input.length))).toBe(JSON.stringify(requests[index - 1].input))
+    }
+    await f.engine.command({ action: 'new' })
+    f.setResponsesToolPlan([{ name: 'load_application_tools', arguments: { names: ['export_video_edit'] } }])
+    await f.engine.command({ action: 'prompt', input: { text: '导出前先看看', context } })
+    expect(JSON.stringify({ input: requests[3].input, tools: requests[3].tools })).toBe(JSON.stringify({ input: requests[0].input, tools: requests[0].tools }))
+  }, 30000)
+  it('只给有登记写法的模型声明最高两档；落到通用兜底的模型保持原行为', () => {
+    const selected = (providerId: string, adapter: string, modelId: string) => ({ providerId, baseUrl: '', api: 'openai-responses' as const, apiKey: '',
+      model: { ...model, providerId, adapter, modelId, capabilities: { ...model.capabilities, reasoning: true } } })
+    expect(embeddedThinkingLevelMap(selected('kimi', 'kimi', 'kimi-k3'), 'kimi')).toEqual({ xhigh: 'high', max: 'max' })
+    expect(embeddedThinkingLevelMap(selected('minimax', 'minimax', 'MiniMax-M3'), 'minimax')).toBeUndefined()
+    expect(embeddedThinkingLevelMap(selected('custom', 'openai-compatible', 'any'), 'custom')).toBeUndefined()
+  })
+  it('用户选“低”思考档时仍原样发低，不被换算成别的档位', async () => {
+    const f = await fixture({ reasoning: true }, 'openai-responses')
+    const deepseek = { ...f.configuration.model, providerId: 'deepseek', reasoning: { enabled: true, effort: 'low' as const },
+      model: { ...f.configuration.model.model, providerId: 'deepseek', adapter: 'deepseek' } }
+    await f.engine.command({ action: 'configure', input: { ...f.configuration, model: deepseek } })
+    await f.engine.command({ action: 'prompt', input: { text: '回答', context: '' } })
+    expect((f.requests[0] as unknown as { reasoning?: { effort?: string } }).reasoning?.effort).toBe('low')
+  })
+  it('用户选“最高”思考档时按供应商登记的写法发出 max，不被 Pi 静默降成 high', async () => {
+    const f = await fixture({ reasoning: true }, 'openai-responses')
+    const deepseek = { ...f.configuration.model, providerId: 'deepseek', reasoning: { enabled: true, effort: 'max' as const },
+      model: { ...f.configuration.model.model, providerId: 'deepseek', adapter: 'deepseek' } }
+    await f.engine.command({ action: 'configure', input: { ...f.configuration, model: deepseek } })
+    await f.engine.command({ action: 'prompt', input: { text: '回答', context: '' } })
+    expect((f.requests[0] as unknown as { reasoning?: { effort?: string } }).reasoning?.effort).toBe('max')
   })
   it('MCP 拒绝写入被官方 SDK 保存为工具错误，模型收到单份恢复事实', async () => {
     const f = await fixture()

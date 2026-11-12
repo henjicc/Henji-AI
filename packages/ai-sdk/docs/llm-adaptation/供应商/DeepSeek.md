@@ -1,6 +1,33 @@
 # DeepSeek
 
-> 核对时间：2026-09-24。以中文官方文档为准，英文页面尚有更新滞后。
+> 核对时间：2026-11-13。以中文官方文档为准，英文页面尚有更新滞后。
+
+## 2026-11-13 复核：内置助手相关要点（覆盖下方旧资料中冲突的部分）
+
+采集来源（均无需登录，2026-11-13 读取）：[上下文硬盘缓存](https://api-docs.deepseek.com/zh-cn/guides/kv_cache)、[图片理解](https://api-docs.deepseek.com/zh-cn/guides/vision)、[思考模式](https://api-docs.deepseek.com/zh-cn/guides/thinking_mode)、[工具调用](https://api-docs.deepseek.com/zh-cn/guides/tool_calls)、[Responses API 指南](https://api-docs.deepseek.com/zh-cn/guides/responses_api)、[Responses API 参考](https://api-docs.deepseek.com/zh-cn/api/create-response/)、[模型与价格](https://api-docs.deepseek.com/zh-cn/quick_start/pricing)、[错误码](https://api-docs.deepseek.com/zh-cn/quick_start/error_codes)、[限速与隔离](https://api-docs.deepseek.com/zh-cn/quick_start/rate_limit)。
+
+**模型与价格**：`deepseek-flash`（DeepSeek-V4.1-Flash-1017，唯一支持图片）与 `deepseek-v4-pro`（V4-Pro-0813，无图片）；均 1M 上下文、最大输出 384K，支持 JSON 输出、工具调用、Responses、Anthropic、对话前缀续写（Beta），FIM 仅非思考模式。Flash 元/百万 token（闲时 / 高峰）：缓存命中 0.02 / 0.04，未命中 1 / 2，输出 4 / 8；Pro 0.15 / 0.30、4.5 / 9、13.5 / 27。高峰为北京时间周一至周五（不含法定节假日）9:00–12:00、14:00–18:00。旧名 `deepseek-v4-flash`、`deepseek-v4-flash-vision-exp` 已下线并按 Flash 计费。
+
+**上下文缓存**（对助手成本影响最大）：
+- 默认对所有用户开启，无需参数；`prompt_cache_key` / `prompt_cache_retention` 在 Responses 中被忽略，缓存不可人为控制。
+- 按**请求前缀**命中，且以“缓存前缀单元”为整体匹配，部分匹配不算（受 Sliding Window Attention 影响）。单元在三处落盘：每次请求的用户输入结束处与模型输出结束处、系统检测到的多次请求公共前缀、长输入/长输出按固定 token 间隔截取（间隔未公布）。
+- 落盘为秒级，尽力而为不保证命中；不再使用后几小时到几天清空。
+- 用量字段：Chat Completions 为 `usage.prompt_cache_hit_tokens` / `prompt_cache_miss_tokens`；Responses 为 `usage.input_tokens_details.cached_tokens`（`input_tokens` 含命中部分），另有 `output_tokens_details.reasoning_tokens`。
+- 官方页未说明 tools 定义在前缀中的位置。2026-11-13 实测（见 `tickets/46-正式使用链路/result-助手DeepSeek适配.md`）：对话中途加载工具后，命中只剩系统设定和最初那批工具，此后的历史全部按未命中重算，说明工具定义位于历史消息之前。
+
+**思考模式**：默认开启、默认 high。OpenAI 格式 Chat 用 `thinking: {type}` + `reasoning_effort`；Responses 用 `reasoning.effort`，取值 `none`（关闭）/`low`/`high`/`max`，`minimal`→low，`medium`、`xhigh`→high，`ultra`→max。思考时 temperature、presence/frequency penalty 无效（不报错）；Flash 的 top_p 仅思考时生效且下限 0.95。Chat 带 tools 的多轮必须回传此前所有轮的 `reasoning_content`（含未调用工具的轮），缺失返回 400；Responses 的 `reasoning` 输入项以 `reasoning_text` 并入相邻 assistant 消息，`summary` 与 `encrypted_content` 不支持。`max_output_tokens` 计入可见输出与思考 token，页面未给默认值。
+
+**角色**：Responses 的 `instructions` 作为首条 system；消息角色 `developer` **按 user 处理**。系统设定应使用 `system` 角色或 `instructions`。Responses 与 Anthropic 接口支持在对话中间插入 system 与工具调用消息；Chat 只支持插入 system。
+
+**工具调用**：Responses 并行工具调用始终开启（`parallel_tool_calls` 被忽略）；`tool_choice` 为 none / auto / required / 指定函数；函数名 ≤128 字符、`^[a-zA-Z0-9_-]+$`、不可重名；`web_search` 仅 `deepseek-v4-pro`，Flash 忽略。strict 模式只在 `https://api.deepseek.com/beta`，要求所有属性 required、`additionalProperties:false`，不支持 minLength/maxLength/minItems/maxItems。不支持的顶层参数静默忽略，唯一例外是输入超出上下文窗口返回 400。
+
+**图片**：仅 `deepseek-flash` 处理；Chat、Responses、Anthropic 均可。Base64 data URL（计入 48 MiB 请求体）、公网 URL（≤8192 字符、≤32 MiB、60 秒内可下载）或 Files API `file_id`（≤64 MiB）。JPEG/PNG/GIF/WebP，按内容判格式；单请求最多 600 张，不含 file_id 时总 ≤64 MiB；单边 ≤8192 像素，15 张及以上时 ≤4096。Chat 中图片只能在 user 消息；Responses 可在 user/developer 消息与 `function_call_output`/`custom_tool_call_output` 的 output 中，system/assistant 中返回 400。`detail`：low 缩到 512×512，high/original/auto 保留原图。计费：小于约 544×544 放大、大于约 1300×1300 缩小，每张最多 1024 token。
+
+**错误与限速**：400 格式错误、401 认证失败、402 余额不足、422 参数错误、429 速率或并发达到上限、500 服务器故障、503 服务器繁忙。并发按账号计（Flash 2500、Pro 500），超出返回 429；等待期间流式持续返回 `: keep-alive` 注释，10 分钟仍未开始推理即断开。
+
+**本项目落点**（2026-11-13，只做了与供应商无关的部分）：内置助手经 Pi 走 Responses；“最高”思考档按 SDK 已登记的供应商写法发出（此前 Pi 未声明 xhigh / max 档位，对所有供应商都静默降为 high）；每轮与每次运行的缓存命中、首字等待、思考 token 与参考费用进入 `embedded_agent.turn.model_completed` / `usage_summary` 日志与助手追踪。
+
+**以后再做（DeepSeek 专项，尚未实现）**：Pi 对推理模型默认把系统设定发成 `developer` 角色，DeepSeek 按 user 处理，宜对该端点声明 `supportsDeveloperRole: false` 改发 system；SDK 的 Chat 思考映射仍是旧的 high / max 两档，应改为官方 low / high / max（medium、xhigh 归 high）；DeepSeek 支持对话中途插入 system 消息，可声明 `supportsMidConvoSystemMessages` 让系统设定变化时追加而不是改写首条；48 MiB 请求体上限低于宿主现有的 128 MiB 附件预算；422 参数错误尚无专门提示。
 
 ## 2026-09-24 复核（含 2026-09-11 更新）（覆盖下方历史资料中的旧模型和能力说明）
 

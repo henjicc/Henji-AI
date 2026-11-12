@@ -152,8 +152,10 @@ export function buildAssistantChain(runId: string, input: AssistantChainLogEvent
       : settled ? status === 'completed' ? 'completed' : status : 'running'
     const input = number(metrics.input)
     const cacheRead = number(metrics.cacheRead)
+    const promptTokens = (input ?? 0) + (cacheRead ?? 0) + (number(metrics.cacheWrite) ?? 0)
+    const firstToken = number(metrics.firstTokenMs)
     return { id: `model-${turn}`, kind: 'model', title: `第 ${turn} 轮模型请求`, traceId: `${runId}:${turn}`,
-      summary: done ? `输入 ${formatChainTokens((input ?? 0) + (cacheRead ?? 0) + (number(metrics.cacheWrite) ?? 0))}（缓存 ${formatChainTokens(cacheRead)}）· 输出 ${formatChainTokens(number(metrics.output))} · ${STOP_REASONS[stopReason ?? ''] ?? stopReason ?? '已返回'}`
+      summary: done ? `输入 ${formatChainTokens(promptTokens)}（缓存 ${formatChainTokens(cacheRead)}${promptTokens > 0 && cacheRead !== undefined ? ` · 命中 ${Math.round(cacheRead / promptTokens * 100)}%` : ''}）· 输出 ${formatChainTokens(number(metrics.output))}${firstToken !== undefined ? ` · 首字 ${firstToken}ms` : ''} · ${STOP_REASONS[stopReason ?? ''] ?? stopReason ?? '已返回'}`
         : `${request.providerId ?? ''}/${request.modelId ?? ''}`,
       status: roundStatus, startedAt: request.timestamp, durationMs: number(doneFacts.durationMs),
       data: { turn, providerId: request.providerId, modelId: request.modelId, request: facts(request).requestMetrics, usage: metrics, stopReason,
@@ -239,6 +241,17 @@ export function buildAssistantChain(runId: string, input: AssistantChainLogEvent
 /** 可读摘要 + 结构化 JSON；命令行输出与界面“复制完整链路”都用它。 */
 export function formatAssistantChainReport(chain: AssistantChain): string {
   const lines = [`助手运行 ${chain.runId} · ${STATUS_LABEL[chain.status]}${chain.durationMs !== undefined ? ` · ${formatChainDuration(chain.durationMs)}` : ''}${chain.sessionId ? ` · 会话 ${chain.sessionId}` : ''}`]
+  // 整次运行的缓存命中、首字等待与参考费用放在开头，回归比较只看这一行
+  const usage = record(chain.steps.find(step => step.kind === 'reply')?.data.usage)
+  const requests = number(usage.requests)
+  if (requests) {
+    const prompt = (number(usage.input) ?? 0) + (number(usage.cacheRead) ?? 0) + (number(usage.cacheWrite) ?? 0)
+    const rate = number(usage.cacheHitRate)
+    const firstToken = number(usage.firstTokenMsAverage)
+    const cost = number(usage.cost)
+    lines.push(`用量：${requests} 次请求 · 输入 ${formatChainTokens(prompt)}${rate !== undefined ? `（缓存命中 ${Math.round(rate * 100)}%）` : ''} · 输出 ${formatChainTokens(number(usage.output))}`
+      + `${firstToken !== undefined ? ` · 首字平均 ${firstToken}ms` : ''}${cost !== undefined && typeof usage.costCurrency === 'string' ? ` · 估算费用 ${usage.costCurrency === 'CNY' ? '¥' : '$'}${cost.toFixed(4)}` : ''}`)
+  }
   let position = 0
   for (const step of chain.steps) {
     const marks = [`[${STATUS_LABEL[step.status]}]`, step.paid ? '[付费]' : ''].join('')

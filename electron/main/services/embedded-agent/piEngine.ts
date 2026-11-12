@@ -10,7 +10,7 @@ import { PiAttachments } from './piAttachments'
 import { PiToolDisclosure } from './toolDisclosure'
 import { budgetContext, contextPageTokenLimit, estimateContextTokens, projectText, PROJECTED_EXCERPT_TOKENS, singleResultTokenLimit } from './contextBudget'
 import { archiveToolResult, contextReader, selectionSummary } from './contextReader'
-import { embeddedModelLimits, embeddedThinkingLevel } from './modelOptions'
+import { embeddedModelLimits, embeddedModelPricing, embeddedThinkingLevel, embeddedThinkingLevelMap } from './modelOptions'
 import { deduplicateHostContexts, prepareHostContext } from './hostContext'
 import { applyProviderRequestBodyQuirks, resolveProviderExtraAuthHeaders, resolveLlmEndpointIdentity } from '@henjicc/ai-sdk'
 
@@ -43,7 +43,11 @@ export class PiEngine implements EmbeddedAgentEngine {
   private requestId = ''
   private modelStartedAt = 0
   private usageTotals = this.emptyUsage()
-  private emptyUsage() { return { requests: 0, usageResponses: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, toolResults: 0, toolTextBytes: 0, largestToolTextBytes: 0, toolTextByName: {} as Record<string, { calls: number; bytes: number; maxBytes: number }> } }
+  private firstTokenAt = 0
+  private costCurrency: 'CNY' | 'USD' | null = null
+  private emptyUsage() { return { requests: 0, usageResponses: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, cost: 0,
+    firstTokenMsTotal: 0, firstTokenSamples: 0, firstTokenMsMax: 0,
+    toolResults: 0, toolTextBytes: 0, largestToolTextBytes: 0, toolTextByName: {} as Record<string, { calls: number; bytes: number; maxBytes: number }> } }
   private contextMetrics = { contextCount: 0, contextBytes: 0 }
   private disclosure?: PiToolDisclosure
   private toolTitles = new Map<string, string>()
@@ -75,13 +79,16 @@ export class PiEngine implements EmbeddedAgentEngine {
     // 配置值解释器支持执行命令；密钥只经过运行时凭据接口，不能作为配置表达式传入。
     const provider = 'henji-selected'
     const identity = resolveLlmEndpointIdentity({ ...model, baseUrl: selected.baseUrl })
+    const pricing = embeddedModelPricing(selected)
+    this.costCurrency = pricing.currency
+    const thinkingLevelMap = embeddedThinkingLevelMap(selected, identity.providerFamilyId)
     runtime.registerProvider(provider, { baseUrl: selected.baseUrl, api: selected.api, headers: resolveProviderExtraAuthHeaders(identity.providerFamilyId, selected.apiKey), models: [{
       id: model.modelId, name: model.displayName, reasoning: model.capabilities.reasoning,
       input: model.capabilities.image ? ['text', 'image'] : ['text'],
       contextWindow: limits.contextWindow,
       maxTokens: limits.maxOutputTokens,
-      cost: { input: model.pricing?.inputPerMillionTokens ?? 0, output: model.pricing?.outputPerMillionTokens ?? 0,
-        cacheRead: model.pricing?.cacheReadPerMillionTokens ?? 0, cacheWrite: model.pricing?.cacheWritePerMillionTokens ?? 0 },
+      cost: pricing.cost,
+      ...(thinkingLevelMap ? { thinkingLevelMap } : {}),
     }] })
     await runtime.setRuntimeApiKey(provider, selected.apiKey)
     const resolved = runtime.getModel(provider, model.modelId)
@@ -136,6 +143,7 @@ export class PiEngine implements EmbeddedAgentEngine {
     const onPayload = session.agent.onPayload
     session.agent.onPayload = async (payload, currentModel) => {
       this.modelStartedAt = Date.now()
+      this.firstTokenAt = 0
       this.usageTotals.requests++
       const base = await onPayload?.(payload, currentModel) ?? payload
       const next = await this.attachments.apply(base, selected)
@@ -157,18 +165,31 @@ export class PiEngine implements EmbeddedAgentEngine {
     }
     let lastTextEmission = 0
     this.unsubscribe = session.subscribe((event) => {
+      if (event.type === 'message_update' && event.message.role === 'assistant' && !this.firstTokenAt) this.firstTokenAt = Date.now()
       if (event.type === 'message_end' && event.message.role === 'assistant') {
-        const { input, output, cacheRead, cacheWrite, totalTokens } = event.message.usage
-        if (totalTokens > 0) this.usageTotals.usageResponses++
-        this.usageTotals.input += input
-        this.usageTotals.output += output
-        this.usageTotals.cacheRead += cacheRead
-        this.usageTotals.cacheWrite += cacheWrite
+        const { input, output, cacheRead, cacheWrite, totalTokens, reasoning, cost } = event.message.usage
+        // 首个流式增量（思考、正文或工具参数）距请求发出的时间；没有增量（请求直接失败）时不记
+        const firstTokenMs = this.firstTokenAt ? Math.max(0, this.firstTokenAt - this.modelStartedAt) : undefined
+        const totals = this.usageTotals
+        if (totalTokens > 0) totals.usageResponses++
+        totals.input += input
+        totals.output += output
+        totals.cacheRead += cacheRead
+        totals.cacheWrite += cacheWrite
+        totals.reasoning += reasoning ?? 0
+        totals.cost += cost?.total ?? 0
+        if (firstTokenMs !== undefined) {
+          totals.firstTokenMsTotal += firstTokenMs; totals.firstTokenSamples++
+          totals.firstTokenMsMax = Math.max(totals.firstTokenMsMax, firstTokenMs)
+        }
+        const promptTokens = input + cacheRead + cacheWrite
         this.emit({ type: 'log', phase: 'model_completed', requestId: this.requestId, sessionId: this.manager.getSessionId(),
           modelId: model.modelId, providerId: selected.providerId, durationMs: Math.max(0, Date.now() - this.modelStartedAt),
-          turn: this.usageTotals.requests, stopReason: event.message.stopReason,
+          turn: totals.requests, stopReason: event.message.stopReason,
           ...(event.message.stopReason === 'error' ? { message: event.message.errorMessage ?? '模型请求失败' } : {}),
-          metrics: { input, output, cacheRead, cacheWrite, totalTokens } })
+          metrics: { input, output, cacheRead, cacheWrite, totalTokens, cacheHitRate: promptTokens > 0 ? cacheRead / promptTokens : null,
+            ...(reasoning !== undefined ? { reasoning } : {}), ...(firstTokenMs !== undefined ? { firstTokenMs } : {}),
+            ...(this.costCurrency && cost ? { cost: cost.total, costCurrency: this.costCurrency } : {}) } })
       }
       if (event.type === 'tool_execution_start') { this.state.activity = '正在操作应用…'; this.toolArgs.set(event.toolCallId, event.args) }
       if (event.type === 'tool_execution_end') {
@@ -281,10 +302,13 @@ export class PiEngine implements EmbeddedAgentEngine {
           this.emit({ type: 'log', phase: 'completed', requestId: this.requestId, sessionId: this.manager.getSessionId(), message: '模型未完成，已使用本地整理。' })
         } catch { this.state.error = '模型和本地整理未完成，请保留原稿后重试。' }
       }
-      const totalInput = this.usageTotals.input + this.usageTotals.cacheRead + this.usageTotals.cacheWrite
+      const { firstTokenMsTotal, firstTokenSamples, firstTokenMsMax, cost, ...totals } = this.usageTotals
+      const totalInput = totals.input + totals.cacheRead + totals.cacheWrite
       this.emit({ type: 'log', phase: 'usage_summary', requestId: this.requestId, sessionId: this.manager.getSessionId(),
         providerId: this.configuration?.model.providerId, modelId: this.configuration?.model.model.modelId,
-        summary: { ...this.usageTotals, cacheHitRate: totalInput > 0 ? this.usageTotals.cacheRead / totalInput : null } })
+        summary: { ...totals, cacheHitRate: totalInput > 0 ? totals.cacheRead / totalInput : null,
+          ...(firstTokenSamples ? { firstTokenMsAverage: Math.round(firstTokenMsTotal / firstTokenSamples), firstTokenMsMax } : {}),
+          ...(this.costCurrency ? { cost, costCurrency: this.costCurrency } : {}) } })
       this.state.busy = false; this.state.activity = null; this.publish() }
   }
   async dispose(): Promise<void> { await this.session?.abort(); this.unsubscribe?.(); this.session?.dispose() }

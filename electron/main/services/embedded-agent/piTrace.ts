@@ -15,7 +15,7 @@ function usageFrom(metrics: EngineLog['metrics']): ModelStepUsage {
   if (!metrics) return EMPTY_USAGE
   return { inputTokens: metrics.input + metrics.cacheRead + metrics.cacheWrite, inputNoCacheTokens: metrics.input,
     cacheReadTokens: metrics.cacheRead, cacheWriteTokens: metrics.cacheWrite, outputTokens: metrics.output,
-    textTokens: null, reasoningTokens: null, totalTokens: metrics.totalTokens }
+    textTokens: null, reasoningTokens: metrics.reasoning ?? null, totalTokens: metrics.totalTokens }
 }
 
 /**

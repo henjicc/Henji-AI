@@ -4,7 +4,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-11-08 |
+| 最后更新 | 2026-11-13 |
 | 覆盖供应商 | 火山引擎（Doubao）、Kimi（Moonshot）、智谱 GLM、DeepSeek、小米 MiMo、阿里云百炼（Qwen）、MiniMax |
 | 覆盖模型 | 7 家供应商的当前旗舰文本/多模态系列；供应商专属模型见各自文档内的“模型清单” |
 
@@ -150,7 +150,7 @@ Responses 请求统一下发 `store: false`：助手自己的会话存储仍是�
 | 火山引擎 | `reasoning_effort` | `none`/`minimal`/`low`/`medium`/`high`/`xhigh`/`max`（7 档） | `high` | 可以（`thinking` 开关） |
 | Kimi | `reasoning_effort` | `low`/`high`/`max` | `max` | **不可以**，K3 始终思考 |
 | 智谱 GLM | `reasoning_effort` + `thinking` | `low`/`high`/`max`（`glm-5.3`、`glm-5.3-flash`） | `max` | GLM-5.3 / Flash 不可以；GLM-5V-Turbo 可以 |
-| DeepSeek | `reasoning_effort` + `thinking.type` | 字符串透传，无固定枚举 | — | 可以 |
+| DeepSeek | `reasoning_effort` + `thinking.type` | 代码按 high / max 两档发送；官方 2026-11-13 已列 low / high / max，见供应商文档“以后再做” | `high` | 可以 |
 | 小米 MiMo | Chat `thinking.type`；Responses `reasoning.effort` | 开 / 关，无强度分级 | 开启 | 可以；Chat disabled / Responses none |
 | 百炼 Qwen | `enable_thinking`（布尔） | `true`/`false` | 视模型而定 | 可以 |
 | MiniMax | 仅 Anthropic 协议下确认为原生 `thinking` 内容块；Chat/Responses 路径的思考强度字段未在公开文档中找到，接入 Responses API 时需要单独实测确认 | — | — | 视协议而定 |
