@@ -377,6 +377,7 @@ const NAMESPACES: Record<string, object> = {
   settings: {
     async listDeleted() { return wire([...recycledFiles.values()].map(value => value.item)) },
     async restoreDeleted(id: string) { const value = recycledFiles.get(id); if (!value) throw new Error('回收项不存在'); await value.restore(); recycledFiles.delete(id) },
+    async trashFile(file: string, name?: string) { registerHarnessRecycledFile(file, name ?? file.split(/[\\/]/).pop() ?? file, async () => undefined) },
     async get(key: string) { return settings.has(key) ? wire(settings.get(key)!) : null },
     async set(key: string, value: string, type: SettingValueType = 'string') { settings.set(key, { key, value, type }) },
     async delete(key: string) { settings.delete(key) },

@@ -252,6 +252,8 @@ export interface ImportFileRequest {
   subfolder?: string
   /** 默认复用同内容文件；false 时同名始终加序号。 */
   reuseIdentical?: boolean
+  /** 同一磁盘时用硬链接代替复制，不额外占空间；来源必须是写完就不再改动的文件（如按内容命名的渲染成品）。跨盘或不支持时照常复制。 */
+  link?: boolean
 }
 
 export interface ImportFileResult {

@@ -21,6 +21,7 @@ import { videoEditExportPreviews } from './videoEditExportPreviews'
 import { prepareVideoEditExportFrame, videoEditExportProgress } from './videoEditExportFrame'
 import { videoEditExportMemory } from './videoEditExportMemory'
 import { compressVideoEditExport } from './videoEditExportCompression'
+import { prepareVideoEditAudioLinksForExport } from './videoEditAudioLinks'
 
 const logger = createLogger('features.videoEdit.export')
 /**
@@ -49,12 +50,16 @@ export interface VideoEditExportOptions {
   loudnessRequested?: boolean
   /** 用户请求的文件名，记进上次导出；自动取名补上的编号不在其中。 */
   requestedFileName?: string
+  /** 取快照前口播最新改动没能更新进剪辑时给用户的提示。 */
+  audioLinkNotice?: string
   /** 输出文件由导出登记独占创建；省略时按单次导出临时登记，界面重载后只清理未完成文件。 */
   outputs?: VideoEditExportOutputs
 }
 export async function exportVideoEdit(projectId: string, requestedPath?: string, background = false, submissionSignal?: AbortSignal, loudnessSettings?: VideoEditLoudnessSettings, options?: VideoEditExportOptions): Promise<string | null> {
   submissionSignal?.throwIfAborted()
   const instance = requireVideoEditInstance(projectId)
+  // 口播里还没更新进剪辑的改动先更新，成片用的是最新声音与字幕；排队导出在取快照前已经做过
+  const audioLinkNotice = options?.snapshot ? options.audioLinkNotice : await prepareVideoEditAudioLinksForExport(projectId, submissionSignal)
   const snapshot = structuredClone(options?.snapshot ?? getActiveVideoEditSequence(instance))
   const range = options?.range ?? videoEditExportRange(instance)
   const rangeSource = options?.rangeSource ?? (options ? 'explicit' : instance.inFrame !== null || instance.outFrame !== null ? 'in-out' : 'content')
@@ -80,6 +85,7 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
   const document = snapshot
   const task: VideoEditExportTask = { id: crypto.randomUUID(), projectId, sequenceId: document.id, revision: document.revision, ...range, state: 'running', phase: 'composition', compositionProgress: 0, progress: 0, controller: new AbortController() }
   task.loudness = loudness
+  if (audioLinkNotice) task.notice = audioLinkNotice
   tasks.set(instance, task); instance.busy = true; publishVideoEdit()
   const abort = (): void => task.controller.abort()
   options?.signal?.addEventListener('abort', abort, { once: true })
@@ -145,7 +151,7 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
       const measured = await loudnessApi.measure(soundSession)
       if (measured.integratedLufs === null) {
         if (options?.loudnessRequested ?? loudnessSettings !== undefined) throw new Error('当前导出范围没有可测量的声音（静音、低于测量门限或不足 400 毫秒），无法按要求标准化响度。请添加可听声音、扩大范围，或关闭响度标准化后重新导出。')
-        task.notice = '当前导出范围没有可测量的声音，已跳过默认响度标准化并保留原声音。'
+        task.notice = [task.notice, '当前导出范围没有可测量的声音，已跳过默认响度标准化并保留原声音。'].filter(Boolean).join(' ')
         task.loudness = undefined
         // 测量会话只交出标准化后的声音；跳过标准化就关掉它，按未标准化的原混音写入。
         const skipped = soundSession; soundSession = undefined

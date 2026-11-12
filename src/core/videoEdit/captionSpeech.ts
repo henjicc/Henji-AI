@@ -20,7 +20,7 @@ export function videoEditCaptionClipIds(caption: VideoEditCaption): string[] {
 const join = (words: readonly { text: string }[]): string => words.reduce((text, word) => joinAudioEditText(text, word.text), '')
 
 /** Keep the caption's authored punctuation and line breaks when retaining whole source words. */
-function retainedCaptionText(text: string, words: readonly VideoEditCaptionSpeechWord[], indices: readonly number[]): string | undefined {
+export function retainedCaptionText(text: string, words: readonly VideoEditCaptionSpeechWord[], indices: readonly number[]): string | undefined {
   const points = Array.from(text); const positions: number[] = []; const parts: string[] = []
   points.forEach((point, index) => {
     const normalized = normalizeTranscriptSearch(point); parts.push(normalized)

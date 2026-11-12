@@ -192,6 +192,7 @@ export const importFileRequestSchema: z.ZodType<ImportFileRequest> = z.object({
     return checked.ok && checked.name === value
   }, '素材分类必须是单个有效文件夹名。').optional(),
   reuseIdentical: z.boolean().optional(),
+  link: z.boolean().optional(),
 }).strict()
 
 /** 逐条判断放在主进程：空串、绝对路径与 `..` 不在这里拒绝，返回时按条点名原因。 */

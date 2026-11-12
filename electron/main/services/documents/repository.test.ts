@@ -413,4 +413,14 @@ describe('文档仓库：收集素材与放进容器（3.1）', () => {
     expect(await service.importFile({ container: { kind: 'user' }, sourcePath: source, folder: 'materials' })).toEqual({ path: path.join(env.workRoot, '上传素材', '结果.png'), copied: true })
     await expect(service.importFile({ container: { kind: 'project', projectId: project.id }, sourcePath: path.join(env.outside, '没有.png'), folder: 'generated' })).rejects.toMatchObject({ name: 'DocumentLocationError' })
   })
+
+  it('放进容器时按要求硬链接：同一磁盘不再复制一份，同名同内容照样复用', async () => {
+    const { service } = env.services
+    const project = await service.createProject({ name: '口播' })
+    const source = write(path.join(env.outside, 'finished-key.wav'), 'pcm')
+    const linked = await service.importFile({ container: { kind: 'project', projectId: project.id }, sourcePath: source, folder: 'generated', link: true })
+    expect(linked).toEqual({ path: path.join(project.path, '生成结果', 'finished-key.wav'), copied: true })
+    expect(fs.statSync(linked.path).ino).toBe(fs.statSync(source).ino)
+    expect(await service.importFile({ container: { kind: 'project', projectId: project.id }, sourcePath: source, folder: 'generated', link: true })).toEqual({ path: linked.path, copied: false })
+  })
 })

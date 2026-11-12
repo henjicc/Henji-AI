@@ -204,7 +204,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
         const target = splitVideoEditRef(input.clipRef)
         if (target.projectId !== input.documentRef.id || !target.childId) throw new Error('片段必须属于目标剪辑')
         const result = await sendVideoEditClipToAudioEdit(input.documentRef.id, target.childId, false)
-        return { resultRef: input.documentRef, created: result.created, audioDocumentRef: { kind: 'audio_edit.document', id: result.documentId }, clipRef: { kind: 'video_edit.clip', id: `${input.documentRef.id}:${result.clipId}` }, verified: await verifyVideoEditSaved(input.documentRef.id), message: '已建立音频编辑链接，保存声音后自动更新，可在剪辑中一步撤销链接。' }
+        return { resultRef: input.documentRef, created: result.created, audioDocumentRef: { kind: 'audio_edit.document', id: result.documentId }, clipRef: { kind: 'video_edit.clip', id: `${input.documentRef.id}:${result.clipId}` }, verified: await verifyVideoEditSaved(input.documentRef.id), message: result.created ? '已建立音频编辑链接，保存声音后自动更新，可在剪辑中一步撤销链接。' : '链接已存在，已把音频作品最新保存的版本更新进剪辑；结果见 audioLinkNotices。' }
       }
       if (definition.id === videoEditStaggerCapability.id) {
         context.signal.throwIfAborted()

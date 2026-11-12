@@ -31,6 +31,7 @@ export function VideoEditExportQueueList(): React.ReactElement | null {
             {job.restored && <UiTooltipText tooltip="按界面重新加载前提交时的内容导出">已恢复</UiTooltipText>}
             {job.notRetained && <UiTooltipText tooltip={VIDEO_EDIT_EXPORT_NOT_RETAINED_REASONS[job.notRetained]}>重载后不会保留</UiTooltipText>}
           </p>}
+          {(job.task?.notice ?? job.audioLinkNotice) && <p className="break-words text-xs text-text2">{job.task?.notice ?? job.audioLinkNotice}</p>}
           {job.error && <UiError size="xs" align="start" message={job.error} />}</div>
         {['queued', 'running'].includes(job.state) && <UiButton size="sm" onClick={() => videoEditExportQueue.cancel(job.id)}>取消</UiButton>}
         {retryableVideoEditExportJob(job) && <UiButton size="sm" onClick={() => { try { void retryVideoEditExportJob(job.id).then(() => setError('')).catch(reason => setError(videoEditUserErrorMessage(reason))) } catch (reason) { setError(videoEditUserErrorMessage(reason)) } }}>重试</UiButton>}

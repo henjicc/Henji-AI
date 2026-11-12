@@ -57,6 +57,18 @@ function sourceToOutput(timeline: VideoEditLinkedTimeline, frame: number, edge: 
   return output
 }
 
+/** 新成品里整段是这次才恢复的字幕段（每个词对应的源录音都不在旧成品里），用来给恢复的句子补回字幕。 */
+export function videoEditRestoredCues(cues: readonly AudioEditSubtitleCue[], before: VideoEditLinkedTimeline, after: VideoEditLinkedTimeline): AudioEditSubtitleCue[] {
+  const inBefore = (frame: number): boolean => before.spans.some((start, index) => index % 2 === 0 && frame >= start && frame < before.spans[index + 1])
+  return cues.filter(cue => cue.words.length && cue.words.every(word => !inBefore(Math.round(outputToSource(after, Math.round((word.startFrame + word.endFrame) / 2)) / after.sampleRate * before.sampleRate))))
+}
+
+/** 旧成品里的时刻（秒）在新成品里的位置；落在剪掉的地方时，开头取后面第一个保留处，结尾取前面最后一个保留处。 */
+export function remapVideoEditLinkedSeconds(seconds: number, before: VideoEditLinkedTimeline, after: VideoEditLinkedTimeline, edge: 'start' | 'end'): number {
+  const source = outputToSource(before, Math.round(seconds * before.sampleRate), edge)
+  return sourceToOutput(after, Math.round(source / before.sampleRate * after.sampleRate), edge) / after.sampleRate
+}
+
 /**
  * 音频编辑重新剪辑后，一段链接声音片段在新成品里的源范围：按它原来对应的源录音位置对回去。
  * 变速、倒放、速度曲线、定格的片段不处理（返回 undefined，按原来的规则只截短尾部）；整段被剪掉时返回 null。

@@ -625,7 +625,7 @@ export class DocumentRepository {
       if (!isPathInside(this.workspace.style, await fsp.realpath(container.root), await fsp.realpath(folder))) {
         throw new DocumentLocationError('素材分类文件夹指向项目外部，请移除该目录链接后重试。')
       }
-      const result = await copyKeepingBoth(source, path.join(folder, path.basename(source)), request.reuseIdentical)
+      const result = await copyKeepingBoth(source, path.join(folder, path.basename(source)), request.reuseIdentical, request.link)
       return result
     })
   }

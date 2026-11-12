@@ -64,18 +64,19 @@ describe('重新剪辑后按词对回', () => {
     expect(remapVideoEditLinkedSpeechWord({ ...point, startUs: 1500000, endUs: 1500000 }, before, after)).toBeUndefined()
   })
 
-  it('更新文档：对回片段、换成新成品，保留剪辑字幕与后续片段', () => {
+  it('更新文档：对回片段、换成新成品，片段上的字幕跟着声音缩短，独立字幕与后续片段不动', () => {
     const sequence = { id: 's', name: '序列', frameRate: { numerator: FPS, denominator: 1 }, tracks: [], annotations: [], clips: [clipOf({ sourceInUs: 1000000, duration: 20 }), clipOf({ id: 'later', kind: 'video', itemId: 'video', start: 40, duration: 10, creativeSource: undefined })],
       captions: [{ id: 'mine', start: 0, duration: 5, text: '手动字幕' }, { id: 'audio-caption', clipId: 'voice', start: 0, duration: 10, text: '旧文字', translation: 'kept' }] } as unknown as VideoEditSequence
     const document = { id: 'v', sequences: [sequence], items: [{ id: 'item-old', mediaId: 'media-old' }], media: [{ id: 'media-old', linkedTimeline: before }] } as unknown as VideoEditDocument
     const result = updateVideoEditAudioLinks(document, 'audio-doc', 'item-new', { type: 'document', docRef: { docId: 'audio-doc', path: 'D:/a.hjaud' }, revision: 2 }, 3, after)
     const next = result.document.sequences[0]
     expect(next.clips.map(clip => [clip.id, clip.itemId, clip.start, clip.duration, clip.sourceInUs])).toEqual([['voice', 'item-new', 0, 15, 1500000], ['later', 'video', 40, 10, 0]])
-    expect(next.captions?.map(caption => [caption.id, caption.text, caption.start, caption.duration])).toEqual([['mine', '手动字幕', 0, 5], ['audio-caption', '旧文字', 0, 10]])
+    // 片段上的手动字幕原来盖住源 [2000,3000)，其中 [2500,3000) 被删：跟着缩到一半，没有逐词依据所以请用户复核时间
+    expect(next.captions?.map(caption => [caption.id, caption.text, caption.start, caption.duration, caption.reviewReasons, caption.translation])).toEqual([['mine', '手动字幕', 0, 5, undefined, undefined], ['audio-caption', '旧文字', 0, 5, ['timing'], 'kept']])
     expect(result.notices.map(notice => notice.clipId)).toEqual(['voice'])
   })
 
-  it('剪短后保留字幕成品、对回逐词参考，移动时仍跟随片段', () => {
+  it('删掉中间一个词：没手改的文字按剩下的词重写，首尾跟着声音前移并保留余量，样式和译文保留，之后仍跟随片段', () => {
     const clip = clipOf({ start: 10, sourceInUs: 1000000, duration: 20 })
     const [caption] = videoEditCaptionsFromAudioEdit(clip, FPS, [cue('words', 1000, 3000, ['开场', '删掉', '留下', '结束'])], 1000, () => 'caption')
     caption.duration = 15
@@ -86,16 +87,17 @@ describe('重新剪辑后按词对回', () => {
     const refreshed = updateVideoEditAudioLinks(document, 'audio-doc', 'item-new', { type: 'document', docRef: { docId: 'audio-doc', path: 'D:/a.hjaud' }, revision: 2 }, 3, after).document
     const next = reconcileVideoEditTimedContent(document, refreshed, [], true).sequences[0]
     expect(next.captions).toHaveLength(1)
-    expect(next.captions![0]).toMatchObject({ id: caption.id, start: caption.start, duration: caption.duration, text: caption.text, style: caption.style, translation: caption.translation, reviewReasons: ['timing'] })
+    // 字幕原来止于成品 2.5 秒（源 3500）；删掉源 [2500,3000) 后止于新成品 2.5 秒，即节目第 20 帧
+    expect(next.captions![0]).toMatchObject({ id: caption.id, start: 10, duration: 10, text: '开场留下结束', style: caption.style, translation: caption.translation, reviewReasons: ['translation'] })
     expect(next.captions![0].speech?.words.map(word => [word.text, word.startUs, word.endUs])).toEqual([
       ['开场', 1500000, 2000000], ['留下', 2000000, 2500000], ['结束', 2500000, 3000000],
     ])
     const moved = retimeVideoEditContent(next, { ...next, clips: next.clips.map(value => ({ ...value, start: value.start + 30 })) })
     expect(moved.captions).toHaveLength(1)
-    expect(moved.captions![0]).toMatchObject({ id: caption.id, start: caption.start + 30, duration: caption.duration, text: caption.text, speech: next.captions![0].speech })
+    expect(moved.captions![0]).toMatchObject({ id: caption.id, start: 40, duration: 10, text: '开场留下结束', speech: next.captions![0].speech })
   })
 
-  it('中间剪掉后解除尾部字幕归属，随后移动和修剪片段都保留字幕成品并标 timing', () => {
+  it('中间剪掉一段后，后面的字幕整体前移，逐词参考与手改标记照旧，之后仍跟随片段移动', () => {
     const clip = clipOf()
     const before = videoEditLinkedTimeline([{ sourceStartFrame: 0, sourceEndFrame: 3000, outputStartFrame: 0, outputEndFrame: 3000 }], 1000)
     const after = videoEditLinkedTimeline([{ sourceStartFrame: 0, sourceEndFrame: 1000, outputStartFrame: 0, outputEndFrame: 1000 }, { sourceStartFrame: 1500, sourceEndFrame: 3000, outputStartFrame: 1000, outputEndFrame: 2500 }], 1000)
@@ -106,12 +108,12 @@ describe('重新剪辑后按词对回', () => {
     const refreshed = updateVideoEditAudioLinks(document, 'audio-doc', 'item-new', { type: 'document', docRef: { docId: 'audio-doc', path: 'D:/a.hjaud' }, revision: 2 }, 2.5, after).document
     const next = reconcileVideoEditTimedContent(document, refreshed, [], true).sequences[0]
     expect(next.clips[0].duration).toBe(25)
-    const expected = captions.map(({ clipId: _clipId, speech: _speech, ...caption }) => ({ ...caption, reviewReasons: [...(caption.reviewReasons ?? []), 'timing'] }))
+    // 源 [1000,1500) 被删：后面的字幕都前移 5 帧，词也跟着移，不需要复核
+    const shift = (us: number): number => us - 500000
+    const expected = captions.map(caption => ({ ...caption, start: caption.start - 5, ...(caption.speech ? { speech: { ...caption.speech, words: caption.speech.words.map(word => ({ ...word, startUs: shift(word.startUs), endUs: shift(word.endUs) })) } } : {}) }))
     expect(next.captions).toEqual(expected)
     const moved = retimeVideoEditContent(next, { ...next, clips: [{ ...next.clips[0], start: 30 }] })
-    const trimmed = retimeVideoEditContent(next, { ...next, clips: [{ ...next.clips[0], duration: 23 }] })
-    expect(moved.captions).toEqual(expected)
-    expect(trimmed.captions).toEqual(expected)
+    expect(moved.captions?.map(caption => caption.start)).toEqual(expected.map(caption => caption.start + 30))
   })
 
   it('删除片段与缩短同时发生时，跨片段字幕复用普通删除规则再更新参考', () => {
@@ -126,8 +128,62 @@ describe('重新剪辑后按词对回', () => {
     const refreshed = updateVideoEditAudioLinks(document, 'audio-doc', 'item-new', { type: 'document', docRef: { docId: 'audio-doc', path: 'D:/a.hjaud' }, revision: 2 }, 3, after).document
     const next = reconcileVideoEditTimedContent(document, refreshed, [], true).sequences[0]
     expect(next.captions).toHaveLength(1)
-    expect(next.captions![0]).toMatchObject({ text: deleted.text, start: deleted.start, duration: deleted.duration, reviewReasons: ['timing'] })
-    expect(next.captions![0].clipId).toBeUndefined()
-    expect(next.captions![0].speech).toBeUndefined()
+    // 删除片段那一侧按普通删除规则只剩“后句”；后句所在片段按词对回后，字幕跟着缩短，词被剪掉一半所以复核时间
+    expect(next.captions![0]).toMatchObject({ text: deleted.text, start: 10, duration: 15, reviewReasons: ['timing'], clipId: 'second' })
+    expect(next.captions![0].speech?.words.map(word => [word.text, word.startUs, word.endUs, word.precision])).toEqual([['后句', 1500000, 3000000, 'estimated']])
+  })
+})
+
+describe('口播删句与恢复后剪辑字幕跟着更新', () => {
+  // 原成品 = 源 [0,3000)，三句各 1 秒；新成品删掉第二句（源 [1000,2000)）
+  const whole = videoEditLinkedTimeline([{ sourceStartFrame: 0, sourceEndFrame: 3000, outputStartFrame: 0, outputEndFrame: 3000 }], 1000)
+  const cut = videoEditLinkedTimeline([{ sourceStartFrame: 0, sourceEndFrame: 1000, outputStartFrame: 0, outputEndFrame: 1000 }, { sourceStartFrame: 2000, sourceEndFrame: 3000, outputStartFrame: 1000, outputEndFrame: 2000 }], 1000)
+  const source = (revision: number) => ({ type: 'document' as const, docRef: { docId: 'audio-doc', path: 'D:/a.hjaud' }, revision })
+  const documentOf = (captions: VideoEditSequence['captions'], timeline: typeof whole, clip = clipOf()) => ({ sequences: [{ id: 's', frameRate: { numerator: FPS, denominator: 1 }, tracks: [], annotations: [], clips: [clip], captions }], items: [{ id: 'item-old', mediaId: 'm' }], media: [{ id: 'm', linkedTimeline: timeline }] }) as unknown as VideoEditDocument
+  const cues = [cue('a', 0, 1000, ['第一', '句']), cue('b', 1000, 2000, ['第二', '句']), cue('c', 2000, 3000, ['第三', '句'])]
+
+  it('删掉的句子字幕移除，后面的前移；手改的文字和样式保留，不标待复核', () => {
+    const captions = videoEditCaptionsFromAudioEdit(clipOf(), FPS, cues, 1000)
+    captions[2] = { ...captions[2], text: '剪辑里改过的第三句', style: '' }
+    const next = updateVideoEditAudioLinks(documentOf(captions, whole), 'audio-doc', 'item-old', source(2), 2, cut).document.sequences[0]
+    expect(next.clips[0].duration).toBe(20)
+    expect(next.captions?.map(caption => [caption.id, caption.text, caption.start, caption.duration, caption.reviewReasons])).toEqual([
+      [captions[0].id, '第一句', 0, 10, undefined], [captions[2].id, '剪辑里改过的第三句', 10, 10, undefined],
+    ])
+    expect(next.captions![1].style).toBe('')
+  })
+
+  it('同一句里删掉一个词：手改过的文字不重写，标正文待复核', () => {
+    const [caption] = videoEditCaptionsFromAudioEdit(clipOf(), FPS, [cue('all', 0, 3000, ['甲', '乙', '丙'])], 1000)
+    const next = updateVideoEditAudioLinks(documentOf([{ ...caption, text: '手改的整句' }], whole), 'audio-doc', 'item-old', source(2), 2, cut).document.sequences[0]
+    expect(next.captions).toHaveLength(1)
+    expect(next.captions![0]).toMatchObject({ text: '手改的整句', start: 0, duration: 20, reviewReasons: ['text'] })
+    expect(next.captions![0].speech?.words.map(word => word.text)).toEqual(['甲', '丙'])
+  })
+
+  it('恢复删掉的句子时按口播字幕段补回；片段上原来没有口播字幕的不补', () => {
+    const clip = clipOf({ duration: 20 })
+    const kept = videoEditCaptionsFromAudioEdit(clip, FPS, [cue('a', 0, 1000, ['第一', '句']), cue('c', 1000, 2000, ['第三', '句'])], 1000)
+    const restored = updateVideoEditAudioLinks(documentOf(kept, cut, clip), 'audio-doc', 'item-old', source(3), 3, whole, cues).document.sequences[0]
+    expect(restored.clips[0].duration).toBe(30)
+    expect(restored.captions?.map(caption => [caption.text, caption.start, caption.duration])).toEqual([['第一句', 0, 10], ['第二句', 10, 10], ['第三句', 20, 10]])
+    const bare = updateVideoEditAudioLinks(documentOf([], cut, clip), 'audio-doc', 'item-old', source(3), 3, whole, cues).document.sequences[0]
+    expect(bare.captions).toEqual([])
+  })
+
+  it('恢复中间删掉的句子后片段被同轨后面的片段挡住：补回恢复的句子，句尾落到片段外的字幕（含手改）移到新位置并标时间待复核，不删也不与补回的重叠', () => {
+    const clip = clipOf({ duration: 20 })
+    const blocker = clipOf({ id: 'next', itemId: 'other', start: 25, duration: 10, creativeSource: undefined })
+    const kept = videoEditCaptionsFromAudioEdit(clip, FPS, [cue('a', 0, 1000, ['第一', '句']), cue('c', 1000, 2000, ['第三', '句'])], 1000)
+    kept[1] = { ...kept[1], text: '手改的第三句' }
+    const document = { sequences: [{ id: 's', frameRate: { numerator: FPS, denominator: 1 }, tracks: [], annotations: [], clips: [clip, blocker], captions: kept }], items: [{ id: 'item-old', mediaId: 'm' }], media: [{ id: 'm', linkedTimeline: cut }] } as unknown as VideoEditDocument
+    const next = updateVideoEditAudioLinks(document, 'audio-doc', 'item-old', source(3), 3, whole, cues).document.sequences[0]
+    expect(next.clips.find(value => value.id === 'voice')?.duration).toBe(25)
+    expect(next.captions?.map(caption => [caption.text, caption.start, caption.duration])).toEqual([['第一句', 0, 10], ['第二句', 10, 10], ['手改的第三句', 20, 5]])
+    const tail = next.captions!.find(caption => caption.id === kept[1].id)!
+    expect(tail.reviewReasons).toEqual(['timing'])
+    expect(tail.speech).toBeUndefined()
+    const sorted = [...next.captions!].sort((a, b) => a.start - b.start)
+    expect(sorted.every((caption, index) => index === 0 || sorted[index - 1].start + sorted[index - 1].duration <= caption.start)).toBe(true)
   })
 })

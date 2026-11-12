@@ -67,6 +67,22 @@ export async function copyFileNoOverwrite(source: string, target: string): Promi
 }
 
 /**
+ * 不覆盖地放一份同内容的文件：同一磁盘用硬链接（不额外占空间），跨盘或文件系统不支持硬链接时复制。
+ * 只用于写完就不再改动的来源，否则两处会一起变化。
+ */
+export async function linkOrCopyFileNoOverwrite(source: string, target: string): Promise<void> {
+  await fsp.mkdir(path.dirname(target), { recursive: true })
+  try {
+    await fsp.link(source, target)
+    return
+  } catch (error) {
+    // 只有“目标已存在”有业务含义；其余失败（跨盘、FAT32/exFAT 上的 EISDIR、占用、权限）都退回复制。
+    if (errorCode(error) === 'EEXIST') throw new EntryExistsError(target)
+  }
+  await copyFileNoOverwrite(source, target)
+}
+
+/**
  * 不覆盖地移动文件：同一磁盘用硬链接 + 删除原文件（原子占位）；不支持硬链接的文件系统先确认目标不存在再改名；
  * 跨磁盘时复制后删除原文件。只改大小写时原地改名。
  */
@@ -81,14 +97,18 @@ export async function moveFileNoOverwrite(source: string, target: string): Promi
   } catch (error) {
     const code = errorCode(error)
     if (code === 'EEXIST') throw new EntryExistsError(target)
-    if (code === 'EXDEV') {
-      await copyFileNoOverwrite(source, target)
-      await fsp.rm(source, { force: true })
-      return
+    // 硬链接不可用（跨盘、FAT32/exFAT 上的 EISDIR、占用、权限等）：同盘先确认目标不存在再改名，跨盘复制后删除原文件。
+    if (code !== 'EXDEV') {
+      if (await exists(target)) throw new EntryExistsError(target)
+      try {
+        await fsp.rename(source, target)
+        return
+      } catch (renameError) {
+        if (errorCode(renameError) !== 'EXDEV') throw renameError
+      }
     }
-    if (code !== 'EPERM' && code !== 'ENOTSUP' && code !== 'EOPNOTSUPP' && code !== 'ENOSYS') throw error
-    if (await exists(target)) throw new EntryExistsError(target)
-    await fsp.rename(source, target)
+    await copyFileNoOverwrite(source, target)
+    await fsp.rm(source, { force: true })
     return
   }
   try {

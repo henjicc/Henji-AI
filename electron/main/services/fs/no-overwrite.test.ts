@@ -12,6 +12,7 @@ import {
   createDirectoryExclusively,
   createFileExclusively,
   EntryExistsError,
+  linkOrCopyFileNoOverwrite,
   moveDirectoryNoOverwrite,
   moveFileNoOverwrite,
 } from './no-overwrite'
@@ -117,6 +118,27 @@ describe('不覆盖的文件操作', () => {
     await moveDirectoryNoOverwrite(first, target)
     expect(fs.existsSync(first)).toBe(false)
     expect(fs.readFileSync(path.join(target, 'doc.txt'), 'utf8')).toBe('x')
+  })
+})
+
+describe('硬链接不可用时退回', () => {
+  const failLink = (code: string): void => { vi.spyOn(fsp, 'link').mockRejectedValue(Object.assign(new Error(code), { code })) }
+  it.each(['EISDIR', 'EBUSY', 'EACCES', 'EXDEV', 'EPERM'])('硬链接报 %s 时放入改为复制，移动改为改名', async code => {
+    const source = path.join(root, 'a.wav'); fs.writeFileSync(source, 'pcm')
+    failLink(code)
+    await linkOrCopyFileNoOverwrite(source, path.join(root, 'out', 'a.wav'))
+    expect(fs.readFileSync(path.join(root, 'out', 'a.wav'), 'utf8')).toBe('pcm')
+    await moveFileNoOverwrite(source, path.join(root, 'moved', 'a.wav'))
+    expect(fs.readFileSync(path.join(root, 'moved', 'a.wav'), 'utf8')).toBe('pcm')
+    expect(fs.existsSync(source)).toBe(false)
+  })
+  it('目标已存在仍报 EntryExistsError，不覆盖', async () => {
+    const source = path.join(root, 'a.wav'); fs.writeFileSync(source, 'new')
+    const target = path.join(root, 'b.wav'); fs.writeFileSync(target, 'old')
+    await expect(linkOrCopyFileNoOverwrite(source, target)).rejects.toBeInstanceOf(EntryExistsError)
+    failLink('EISDIR')
+    await expect(moveFileNoOverwrite(source, target)).rejects.toBeInstanceOf(EntryExistsError)
+    expect(fs.readFileSync(target, 'utf8')).toBe('old')
   })
 })
 

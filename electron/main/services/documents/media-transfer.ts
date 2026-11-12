@@ -7,7 +7,7 @@ import { sameEntryName } from '../../../../src/core/documents/naming'
 import { INTERNAL_FOLDER_NAME } from '../../../../src/core/documents/projectManifest'
 import { mapContentStrings, type LocationReference } from '../../../../src/core/storage/locationCodec'
 import { parseAbsolutePath, pathKey, relativeSegments, type PathStyle } from '../../../../src/core/storage/pathSyntax'
-import { copyFileNoOverwrite, EntryExistsError } from '../fs/no-overwrite'
+import { copyFileNoOverwrite, EntryExistsError, linkOrCopyFileNoOverwrite } from '../fs/no-overwrite'
 import type { ResolvedContainer } from './workspace'
 import { ensureCodeCollectionTarget } from './code-paths'
 import { parseGitCodeLocation } from '../../../../src/core/storage/gitCodeLocation'
@@ -66,6 +66,8 @@ async function fileDigest(filePath: string): Promise<string> {
 export async function sameFileContent(left: string, right: string): Promise<boolean> {
   const [a, b] = await Promise.all([fsp.stat(left).catch(() => null), fsp.stat(right).catch(() => null)])
   if (!a?.isFile() || !b?.isFile() || a.size !== b.size) return false
+  // 硬链接是同一份数据，不必整份读两遍比对
+  if (a.ino && a.dev === b.dev && a.ino === b.ino) return true
   const [leftDigest, rightDigest] = await Promise.all([fileDigest(left), fileDigest(right)])
   return leftDigest === rightDigest
 }
@@ -82,14 +84,14 @@ function targetFor(rest: readonly string[], from: ResolvedContainer, to: Resolve
 }
 
 /** 复制到目标位置；重名且内容不同时依次改用“名称 (2)”。返回最终位置与是否真的复制了。 */
-export async function copyKeepingBoth(source: string, desired: string, reuseIdentical = true): Promise<{ path: string; copied: boolean }> {
+export async function copyKeepingBoth(source: string, desired: string, reuseIdentical = true, link = false): Promise<{ path: string; copied: boolean }> {
   const directory = path.dirname(desired)
   const extension = path.extname(desired)
   const stem = path.basename(desired, extension)
   for (let attempt = 1; attempt <= MAX_KEEP_BOTH_ATTEMPTS; attempt += 1) {
     const candidate = attempt === 1 ? desired : path.join(directory, `${stem} (${attempt})${extension}`)
     try {
-      await copyFileNoOverwrite(source, candidate)
+      await (link ? linkOrCopyFileNoOverwrite : copyFileNoOverwrite)(source, candidate)
       return { path: candidate, copied: true }
     } catch (error) {
       if (!(error instanceof EntryExistsError)) throw error
