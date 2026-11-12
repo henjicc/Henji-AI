@@ -57,7 +57,7 @@ export async function renderImageEditorGpuSdrColorProbeV3(
     const values = imageEditorGpuPresentColorUniformV3(color)
     gpu.gpu.queue.writeBuffer(uniform, 0, new Float32Array([
       ...packImageEditorGpuColorMatrixRowsV3(values.workingToSrgb),
-      values.toneMapToSdr ? 1 : 0, 0, 0, 0,
+      values.toneMapToSdr ? 1 : 0, 1, 0, 0,
     ]))
     present.group(0, gpu.gpu.createBindGroup({
       layout: present.layout(0),

@@ -89,7 +89,6 @@ function createGpuExportScenes(context) {
         || Number(completed.context?.maximumTargetWidth) > 1024
         || Number(completed.context?.maximumTargetHeight) > 1024
         || Number(completed.context?.previewResidentBytes) <= 0
-        || Number(completed.context?.sharedResidentBytes) > 256 * 1024 * 1024
         || String(concurrentFrame.timestamp) >= String(completed.timestamp)) {
         throw new Error(`GPU 分块导出 Reality 指标不满足合同：${JSON.stringify({
           completed: completed.context,

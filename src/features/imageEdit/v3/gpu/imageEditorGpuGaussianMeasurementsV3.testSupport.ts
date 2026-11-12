@@ -81,7 +81,6 @@ export async function measureImageGaussianRegionsV3(gpu: Gpu): Promise<void> {
       vendor: gpu.gpu.adapterInfo.vendor, architecture: gpu.gpu.adapterInfo.architecture, device: gpu.gpu.adapterInfo.device, description: gpu.gpu.adapterInfo.description }, rows }, null, 2))
   }
   if (rows.some(row => row.rejected)) throw new Error('大图 GPU 基准有预算/执行拒绝，详见测量文件')
-  if (rows.some(row => Number(row.allocationPeakBytes) > 256 * 1024 * 1024)) throw new Error('GPU 实际分配峰值超出会话预算')
 }
 
 /** 诊断计数包含 texture/buffer 创建与 destroy，非驱动内部资源/延迟回收。 */

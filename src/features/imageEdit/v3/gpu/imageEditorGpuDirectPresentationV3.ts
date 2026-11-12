@@ -104,9 +104,11 @@ export class ImageEditorGpuRasterPresentationV3 {
     color: ImageEditColorModeV3,
     surfaceGeneration: number,
     acceptsSurfaceSubmit: () => boolean,
+    presentSize: readonly [number, number] = output.size,
+    sourceScale = 1,
   ): Promise<ImageEditorGpuPresentationResultV3> {
     this.assertUsable()
-    this.writeColor(color)
+    this.writeColor(color, sourceScale)
     this.bind(output)
     let surfaceFailureReason = surfaceGeneration === this.attachedSurfaceGeneration
       ? this.surfaceFailureReason ?? undefined
@@ -126,12 +128,12 @@ export class ImageEditorGpuRasterPresentationV3 {
       && this.failedSurfaceGeneration !== surfaceGeneration) {
       if (!acceptsSurfaceSubmit()) throw new ImageEditorGpuSurfaceFrameSupersededV3()
       try {
-        await this.renderToSurface(direct.surface, output.size, acceptsSurfaceSubmit)
+        await this.renderToSurface(direct.surface, presentSize, acceptsSurfaceSubmit)
         return {
           kind: 'webgpu-surface',
           surfaceGeneration,
-          width: output.size[0],
-          height: output.size[1],
+          width: presentSize[0],
+          height: presentSize[1],
         }
       } catch (error) {
         if (error instanceof ImageEditorGpuSurfaceFrameSupersededV3) throw error
@@ -142,14 +144,14 @@ export class ImageEditorGpuRasterPresentationV3 {
         if (this.direct === direct) this.direct = null
       }
     }
-    const bitmapSurface = await this.ensureBitmapSurface(output.size)
+    const bitmapSurface = await this.ensureBitmapSurface(presentSize)
     await this.submit(bitmapSurface)
     if (surfaceFailureReason) this.surfaceFailureReason = null
     return {
       kind: 'gpu-image-bitmap',
       surfaceGeneration,
-      width: output.size[0],
-      height: output.size[1],
+      width: presentSize[0],
+      height: presentSize[1],
       bitmap: this.bitmapCanvas!.transferToImageBitmap(),
       ...(surfaceFailureReason ? { surfaceFailureReason } : {}),
     }
@@ -253,12 +255,13 @@ export class ImageEditorGpuRasterPresentationV3 {
     })
   }
 
-  private writeColor(color: ImageEditColorModeV3): void {
+  /** sourceScale 是合成分辨率相对呈现分辨率的比例；小于 1 时着色器把低分辨率结果放大铺满。 */
+  private writeColor(color: ImageEditColorModeV3, sourceScale = 1): void {
     const present = imageEditorGpuPresentColorUniformV3(color)
     this.gpu.gpu.queue.writeBuffer(this.colorBuffer, 0, new Float32Array([
       ...packImageEditorGpuColorMatrixRowsV3(present.workingToSrgb),
       present.toneMapToSdr ? 1 : 0,
-      0,
+      sourceScale,
       0,
       0,
     ]))

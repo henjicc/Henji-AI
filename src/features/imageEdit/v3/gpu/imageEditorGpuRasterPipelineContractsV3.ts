@@ -11,6 +11,8 @@ export interface ImageEditorGpuRasterCompositorStatsV3 {
   compositionMs?: number
   presentationMs?: number
   previewFallback?: boolean
+  /** 预览合成分辨率相对屏幕的比例；小于 1 表示正按显存预算降档。 */
+  previewRenderScale?: number
   uploadCount: number
   pipelineCompileCount: number
   frameCount: number

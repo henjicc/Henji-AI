@@ -11,7 +11,13 @@ import type {
 import type { ImageEditorViewportLayoutV3 } from '../editor/useImageEditorViewportLayoutV3'
 
 export const IMAGE_EDITOR_GPU_SCENE_PROTOCOL_VERSION_V3 = 2 as const
-export const IMAGE_EDITOR_GPU_SCENE_DEFAULT_BUDGET_BYTES_V3 = 256 * 1024 * 1024
+const GIBIBYTE_V3 = 1024 * 1024 * 1024
+/**
+ * WebGPU 不公开显存大小，按系统内存的四分之一估算（集成显卡与系统共用内存，独立显卡通常不小于这个值）。
+ * 它是缓存淘汰目标和预览降分辨率的阈值，不是拒绝渲染的上限。
+ */
+export const IMAGE_EDITOR_GPU_SCENE_DEFAULT_BUDGET_BYTES_V3 = Math.round(Math.min(2, Math.max(0.5,
+  ((globalThis.navigator as { deviceMemory?: number } | undefined)?.deviceMemory ?? 8) / 4)) * GIBIBYTE_V3)
 
 export interface ImageEditorGpuSceneTileKeyV3 {
   resourceRef: ImageEditorV3ResourceRef
@@ -199,6 +205,7 @@ export interface ImageEditorGpuSceneFrameReadyEventV3 extends ImageEditorGpuScen
   bitmap: ImageBitmap
   surfaceFailureReason?: string
   diagnostics?: {
+    previewRenderScale?: number
     uploadCount: number
     pipelineCompileCount: number
     frameCount: number
@@ -259,7 +266,7 @@ interface ImageEditorGpuSceneDeviceLostEventV3 extends ImageEditorGpuSceneEventB
 export interface ImageEditorGpuSceneFailedEventV3 extends ImageEditorGpuSceneEventBaseV3 {
   type: 'failed'
   requestId: string | null
-  code: 'initialization-failed' | 'scene-resources-failed' | 'resource-budget-exceeded' | 'composition-not-ready' | 'export-not-ready'
+  code: 'initialization-failed' | 'scene-resources-failed' | 'composition-not-ready' | 'export-not-ready'
   message: string
   recoverable: boolean
   diagnostic?: boolean

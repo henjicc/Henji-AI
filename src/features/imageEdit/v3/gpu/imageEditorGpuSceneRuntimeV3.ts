@@ -151,12 +151,7 @@ export class ImageEditorGpuSceneRuntimeV3 {
           const compositor = this.states.peek()?.compositor
           compositor?.updateViewport(request.layout)
           refreshImageEditorGpuSceneViewportProtectionsV3(this.resources, compositor ?? null)
-          if (compositor && !this.trimMemoryPressure(compositor)) {
-            this.enterFallback(
-              'resource-budget-exceeded', null,
-              'GPU Scene 当前视口与受保护资源超过会话显存预算', true,
-            )
-          }
+          if (compositor) this.trimMemoryPressure(compositor)
         }
         return
       case 'attach-presentation-surface':
@@ -297,9 +292,7 @@ export class ImageEditorGpuSceneRuntimeV3 {
       }
       if (this.layout) {
         state.compositor.updateViewport(this.layout)
-        if (!this.trimMemoryPressure(state.compositor)) {
-          throw new Error('GPU Scene 当前视口与受保护资源超过会话显存预算')
-        }
+        this.trimMemoryPressure(state.compositor)
       }
       for (const [layerId, transform] of this.transientTransforms) {
         state.compositor.updateTransientTransform(layerId, transform)
@@ -359,8 +352,8 @@ export class ImageEditorGpuSceneRuntimeV3 {
     }
   }
 
-  private trimMemoryPressure(compositor: ImageEditorGpuRasterCompositorV3Like): boolean {
-    return trimImageEditorGpuSceneMemoryV3({ resources: this.resources, preview: compositor,
+  private trimMemoryPressure(compositor: ImageEditorGpuRasterCompositorV3Like): void {
+    trimImageEditorGpuSceneMemoryV3({ resources: this.resources, preview: compositor,
       exportResidentBytes: this.exportRuntime?.activeResidentGpuBytes() ?? 0,
       includeCompositorPressure: true })
   }

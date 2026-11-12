@@ -54,8 +54,9 @@ export class ImageEditorGpuSceneResourceRegistryV3<T> {
 
   constructor(options: ImageEditorGpuSceneResourceRegistryOptionsV3<T> = {}) {
     this.budgetBytes = normalizeBudget(options.memoryBudgetBytes)
+    // 预算只决定何时淘汰未受保护的缓存；当前帧需要的资源总能登记，真实显存耗尽由设备报错反映。
     this.budget = new ImageEditResourceBudget({
-      totalBytes: this.budgetBytes,
+      totalBytes: Number.MAX_SAFE_INTEGER,
       cpuCacheTargetBytes: 0,
       gpuTargetBytes: this.budgetBytes,
     })
@@ -78,16 +79,7 @@ export class ImageEditorGpuSceneResourceRegistryV3<T> {
       return { admitted: true, reused: true, evicted: [] }
     }
     const normalizedBytes = normalizeBytes(bytes)
-    const evicted: ImageEditorGpuSceneTileKeyV3[] = []
-    while (!this.budget.admission('gpu', normalizedBytes).admitted) {
-      const victim = this.oldestEvictable()
-      if (!victim) {
-        this.disposePayload(payload)
-        return { admitted: false, reused: false, evicted }
-      }
-      evicted.push(victim.key)
-      this.remove(victim)
-    }
+    const evicted = this.evictToFit(normalizedBytes)
     const lease = this.budget.acquire('gpu', normalizedBytes)
     if (!lease) {
       this.disposePayload(payload)
@@ -103,18 +95,10 @@ export class ImageEditorGpuSceneResourceRegistryV3<T> {
     return { admitted: true, reused: false, evicted }
   }
 
-  /** 在创建真实 GPU 负载前先执行保护型 LRU，避免 atlas 为注定失败的资源先分配。 */
+  /** 在创建真实 GPU 负载前先淘汰未受保护的旧缓存，为新资源腾出预算。 */
   prepareAdmission(bytes: number): ImageEditorGpuSceneResourceAdmissionV3 {
     this.assertUsable()
-    const normalizedBytes = normalizeBytes(bytes)
-    const evicted: ImageEditorGpuSceneTileKeyV3[] = []
-    while (!this.budget.admission('gpu', normalizedBytes).admitted) {
-      const victim = this.oldestEvictable()
-      if (!victim) return { admitted: false, evicted }
-      evicted.push(victim.key)
-      this.remove(victim)
-    }
-    return { admitted: true, evicted }
+    return { admitted: true, evicted: this.evictToFit(normalizeBytes(bytes)) }
   }
 
   evictOldestUnprotected(): ImageEditorGpuSceneTileKeyV3 | null {
@@ -172,6 +156,17 @@ export class ImageEditorGpuSceneResourceRegistryV3<T> {
     if (this.disposed) return
     for (const entry of [...this.entries.values()]) this.remove(entry)
     this.disposed = true
+  }
+
+  private evictToFit(bytes: number): ImageEditorGpuSceneTileKeyV3[] {
+    const evicted: ImageEditorGpuSceneTileKeyV3[] = []
+    while (this.budget.snapshot().byCategory.gpu + bytes > this.budgetBytes) {
+      const victim = this.oldestEvictable()
+      if (!victim) break
+      evicted.push(victim.key)
+      this.remove(victim)
+    }
+    return evicted
   }
 
   private oldestEvictable(): ImageEditorGpuSceneResourceEntryV3<T> | null {

@@ -326,13 +326,10 @@ function createToolboxScenes(context) {
             })
             return {
               errors: result.events.filter((event) => event.level === 'error'),
-              budgetFallbacks: result.events.filter((event) => (
-                event.event === 'image_editor_v3.gpu_scene.resource_budget_fallback'
-              )),
             }
           }, benchmarkStartedAt)
-          if (runtimeEvidence.errors.length > 0 || runtimeEvidence.budgetFallbacks.length !== 0) {
-            throw new Error(`test01 效果GPU/超预算后备证据异常：${JSON.stringify(runtimeEvidence)}`)
+          if (runtimeEvidence.errors.length > 0) {
+            throw new Error(`test01 效果GPU证据异常：${JSON.stringify(runtimeEvidence)}`)
           }
         }
       },

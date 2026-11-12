@@ -38,7 +38,7 @@ function tile(tileX: number, value = 128): ImageEditorV3SourceTile {
 describe('GPU tile atlas', () => {
   it('多瓦片使用同一 array texture 的不同 layer，局部上传不分配整图', () => {
     const { gpu, textures, writeTexture } = fakeGpu()
-    const atlas = new ImageEditorGpuTileAtlasV3(gpu, { memoryBudgetBytes: 64 * 1024 * 1024 })
+    const atlas = new ImageEditorGpuTileAtlasV3(gpu)
     const first = atlas.upload({
       resourceRef: RESOURCE, mip: 0, tileX: 0, tileY: 0, contentVersion: 'v1',
     }, tile(0))
@@ -58,38 +58,28 @@ describe('GPU tile atlas', () => {
     atlas.dispose()
   })
 
-  it('设备 limit 或页预算不足时明确拒绝，供 runtime 回退 CPU', () => {
+  it('设备纹理尺寸放不下瓦片槽时明确拒绝', () => {
     const { gpu } = fakeGpu()
-    expect(() => new ImageEditorGpuTileAtlasV3(gpu, {
-      memoryBudgetBytes: 4 * 1024 * 1024,
-      maxTextureDimension2D: 512,
-    })).toThrow('maxTextureDimension2D')
-    const atlas = new ImageEditorGpuTileAtlasV3(gpu, { memoryBudgetBytes: 512 * 1024 })
-    expect(() => atlas.upload({
-      resourceRef: RESOURCE, mip: 0, tileX: 0, tileY: 0, contentVersion: 'v1',
-    }, tile(0))).toThrow('超出会话显存预算')
-    atlas.dispose()
+    expect(() => new ImageEditorGpuTileAtlasV3(gpu, { maxTextureDimension2D: 512 }))
+      .toThrow('maxTextureDimension2D')
   })
 
-  it('默认256MiB压力下只允许254个rgba8槽，释放页后可重新上传', () => {
+  it('一页的瓦片全部释放后销毁该页纹理，之后可重新上传', () => {
     const { gpu, textures } = fakeGpu()
-    const atlas = new ImageEditorGpuTileAtlasV3(gpu, { memoryBudgetBytes: 256 * 1024 * 1024 })
-    const allocations = Array.from({ length: 254 }, (_, index) => atlas.upload({
-      resourceRef: RESOURCE, mip: 0, tileX: index, tileY: 0, contentVersion: 'pressure-v1',
+    const atlas = new ImageEditorGpuTileAtlasV3(gpu)
+    const allocations = Array.from({ length: 32 }, (_, index) => atlas.upload({
+      resourceRef: RESOURCE, mip: 0, tileX: index, tileY: 0, contentVersion: 'v1',
     }, tile(index)))
 
-    expect(atlas.snapshot()).toMatchObject({ allocations: 254, pages: 16 })
-    expect(() => atlas.upload({
-      resourceRef: RESOURCE, mip: 0, tileX: 254, tileY: 0, contentVersion: 'pressure-v1',
-    }, tile(254))).toThrow('超出会话显存预算')
-    for (const allocation of allocations.slice(240)) allocation.destroy()
+    expect(atlas.snapshot()).toMatchObject({ allocations: 32, pages: 2 })
+    for (const allocation of allocations.slice(16)) allocation.destroy()
     expect(textures.at(-1)?.destroy).toHaveBeenCalledOnce()
     const rebound = atlas.upload({
-      resourceRef: RESOURCE, mip: 0, tileX: 254, tileY: 0, contentVersion: 'pressure-v2',
-    }, tile(254))
+      resourceRef: RESOURCE, mip: 0, tileX: 32, tileY: 0, contentVersion: 'v2',
+    }, tile(32))
     expect(rebound.atlasLayer).toBeGreaterThanOrEqual(0)
     rebound.destroy()
-    for (const allocation of allocations.slice(0, 240)) allocation.destroy()
+    for (const allocation of allocations.slice(0, 16)) allocation.destroy()
     atlas.dispose()
   })
 

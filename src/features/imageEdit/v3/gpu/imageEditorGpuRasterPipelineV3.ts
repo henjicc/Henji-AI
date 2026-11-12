@@ -55,6 +55,9 @@ const BUFFER_COPY_DST = 0x08
 const BUFFER_UNIFORM = 0x40
 const CLEAR = [0, 0, 0, 0] as const
 const LINEAR_AND_PRESENT_BYTES_PER_PIXEL = 12
+const PREVIEW_RENDER_SCALES = [1, 0.75, 0.5, 0.375, 0.25, 0.125] as const
+// 与 atlas 的槽位一致：512 瓦片加 1px halo。
+const ATLAS_SLOT_PIXELS = 514 * 514
 type NativeGpuBufferV3 = ReturnType<Gpu['gpu']['createBuffer']>
 type NativeGpuBindGroupV3 = ReturnType<Gpu['gpu']['createBindGroup']>
 interface RetainedLayerStateV3 {
@@ -83,6 +86,9 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
   private readonly previousMips = new Map<string, number>()
   private scene: ImageEditorGpuRasterSceneV3 | null = null
   private layout: ImageEditorViewportLayoutV3 | null = null
+  /** 预览请求的屏幕视口；合成用的 layout 可能按显存预算降低了分辨率。 */
+  private previewLayout: ImageEditorViewportLayoutV3 | null = null
+  private previewScaleIndex = 0
   private expandEffects = true
   private gaussianEnvelope: { key: string; input: GaussianRegion } | null = null
   private workingEffectViewport: ReturnType<typeof resolveImageEditorGpuEffectViewportV3> | null = null
@@ -114,9 +120,7 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
     this.memoryBudgetBytes = options.memoryBudgetBytes
       ?? IMAGE_EDITOR_GPU_SCENE_DEFAULT_BUDGET_BYTES_V3
     this.maxTextureDimension2D = gpu.gpu.limits.maxTextureDimension2D
-    this.atlas = new ImageEditorGpuTileAtlasV3(gpu, {
-      memoryBudgetBytes: this.memoryBudgetBytes,
-    })
+    this.atlas = new ImageEditorGpuTileAtlasV3(gpu)
     this.output = target(gpu, {
       size: [1, 1],
       format: 'rgba16float',
@@ -150,7 +154,8 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
     this.graph.syncScene(scene)
     this.transientTransforms.clear()
     this.previousMips.clear()
-    if (this.layout) this.setViewport(this.layout, this.expandEffects, this.effectRecipeSize)
+    if (this.previewLayout) this.fitPreviewViewport()
+    else if (this.layout) this.setViewport(this.layout, this.expandEffects, this.effectRecipeSize)
     else this.replanTiles()
     pruneImageEditorGpuRetainedStatesV3(this.layers, new Set())
   }
@@ -169,12 +174,38 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
     this.stats.transientUniformUpdateCount += 1
   }
   updateViewport(layout: ImageEditorViewportLayoutV3): void {
-    this.setViewport(layout, true, null)
+    this.previewLayout = layout
+    this.fitPreviewViewport()
+  }
+  /**
+   * 合成目标加上当前视口需要的瓦片超过预算时，逐档降低预览的内部分辨率，呈现时再放大。
+   * 最低一档无条件接受：显存再紧张也留在 GPU 上，只有设备真的报错才交给上层处理。
+   * 每次从上一次的档位往清晰方向退一档起试：压力消失后逐步恢复，持续紧张时不必每帧从头试。
+   */
+  private fitPreviewViewport(): void {
+    const layout = this.previewLayout!
+    const last = PREVIEW_RENDER_SCALES.length - 1
+    for (let index = Math.max(0, this.previewScaleIndex - 1); index <= last; index += 1) {
+      const scale = PREVIEW_RENDER_SCALES[index]
+      this.previewScaleIndex = index
+      this.setViewport(scale === 1 ? layout : {
+        ...layout,
+        viewportKey: `${layout.viewportKey}:render-scale:${scale}`,
+        viewport: { ...layout.viewport, devicePixelRatio: layout.viewport.devicePixelRatio * scale },
+      }, true, null)
+      const tileBytes = this.requiredResourceKeys().reduce((sum, key) => (
+        sum + ATLAS_SLOT_PIXELS * (key.format === 'rgba16float' ? 8 : 4)
+      ), 0)
+      const [width, height] = imageEditorGpuOutputPixelSizeV3(this.workingEffectViewport?.layout ?? this.layout!)
+      if (this.reservedOutputBytes + tileBytes <= this.memoryBudgetBytes
+        && width <= this.maxTextureDimension2D && height <= this.maxTextureDimension2D) return
+    }
   }
   updateExportViewport(
     layout: ImageEditorViewportLayoutV3,
     effectRecipeSize?: readonly [number, number],
   ): void {
+    this.previewLayout = null
     this.setViewport(layout, !!this.scene?.graph.some(node => node.kind === 'effect' && node.definitionId === 'effect.gaussian_blur'), effectRecipeSize ?? null)
   }
   private setViewport(
@@ -222,7 +253,6 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
         ? planImageEditorGpuGaussianRegionsV3(this.scene, layout, effectRecipeSize ?? undefined) : undefined,
         workingLayout.viewport.zoom * workingLayout.viewport.devicePixelRatio) + cropBytes
       : width * height * LINEAR_AND_PRESENT_BYTES_PER_PIXEL
-    this.atlas.setMemoryBudgetBytes(Math.max(0, this.memoryBudgetBytes - this.reservedOutputBytes))
     this.replanTiles()
   }
   attachPresentationSurface(canvas: OffscreenCanvas, surfaceGeneration: number): void {
@@ -282,6 +312,8 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
         this.scene!.color,
         surfaceGeneration,
         acceptsSurfaceSubmit,
+        this.previewLayout ? imageEditorGpuOutputPixelSizeV3(this.previewLayout) : undefined,
+        this.previewLayout ? PREVIEW_RENDER_SCALES[this.previewScaleIndex] : 1,
       )
       // 呈现器已分别等待并收口 direct / bitmap pass 的异步错误；direct 失败后允许
       // 同一帧进入 ImageBitmap，不能让已处理的 Surface 错误污染成功降级结果。
@@ -291,7 +323,7 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
         this.stats.imageBitmapFrameCount += 1
         if (presentation.surfaceFailureReason) this.stats.directSurfaceFailureCount += 1
       }
-      const stats = { ...this.snapshotStats(), previewFallback: this.previewFallback, compositionMs, presentationMs: performance.now() - presentationStarted }
+      const stats = { ...this.snapshotStats(), previewFallback: this.previewFallback, previewRenderScale: this.previewLayout ? PREVIEW_RENDER_SCALES[this.previewScaleIndex] : 1, compositionMs, presentationMs: performance.now() - presentationStarted }
       const usedResourceKeys = this.requiredResourceKeys()
       return presentation.kind === 'webgpu-surface'
         ? { presentation, stats, usedResourceKeys }
@@ -367,9 +399,6 @@ export class ImageEditorGpuRasterPipelineV3 implements ImageEditorGpuRasterCompo
     const [width, height] = imageEditorGpuOutputPixelSizeV3(effectViewport.layout)
     if (width > this.maxTextureDimension2D || height > this.maxTextureDimension2D) {
       throw new Error(`GPU Scene 输出 ${width}×${height} 超过设备 2D 纹理限制`)
-    }
-    if (this.memoryPressureBytes() > 0) {
-      throw new Error('GPU Scene 合成目标与 atlas 超出会话显存预算')
     }
     if (this.scene.requiresRenderGraph) {
       pruneImageEditorGpuRetainedStatesV3(this.layers, new Set())

@@ -400,7 +400,7 @@ export class ImageEditorGpuSceneExportRuntimeV3 {
     const exportBytes = job.compositor.estimatedResidentGpuBytes?.() ?? 0
     if (this.previewResidentBytes() + exportBytes + job.extraResidentBytes + additionalBytes > total
       || job.compositor.memoryPressureBytes() > 0) {
-      throw new Error('GPU Scene 预览与导出常驻资源超过共享 256 MiB 会话预算')
+      throw new Error('GPU Scene 预览与导出常驻资源超过共享会话预算')
     }
   }
 
@@ -412,7 +412,7 @@ export class ImageEditorGpuSceneExportRuntimeV3 {
     const used = compositor.estimatedResidentGpuBytes?.() ?? 0
     if (this.previewResidentBytes() + used + reservedBytes > this.totalBudgetBytes()
       || compositor.memoryPressureBytes() > 0) {
-      throw new Error('GPU Scene 全局分析超过共享 256 MiB 会话预算')
+      throw new Error('GPU Scene 全局分析超过共享会话预算')
     }
     this.assertCurrent(job)
   }

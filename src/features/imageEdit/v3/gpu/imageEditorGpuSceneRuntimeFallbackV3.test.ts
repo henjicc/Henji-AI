@@ -91,7 +91,7 @@ describe('ImageEditorGpuSceneRuntimeV3 fallback', () => {
     expect(compositor.dispose).toHaveBeenCalledOnce()
   })
 
-  it('视口真实常驻target超预算时只降级一次并立即释放GPU状态', async () => {
+  it('视口常驻目标超出预算时仍留在 GPU 上，不进入回退', async () => {
     const compositor = fakeCompositor({ memoryPressureBytes: vi.fn(() => 8) })
     const contextDispose = vi.fn()
     const events: ImageEditorGpuSceneWorkerEventV3[] = []
@@ -116,12 +116,10 @@ describe('ImageEditorGpuSceneRuntimeV3 fallback', () => {
     updateViewport(1)
     updateViewport(2)
 
-    expect(runtime.getStatus()).toBe('fallback')
-    expect(events.filter((event) => event.type === 'failed')).toEqual([
-      expect.objectContaining({ type: 'failed', code: 'resource-budget-exceeded', recoverable: true }),
-    ])
-    expect(compositor.dispose).toHaveBeenCalledOnce()
-    expect(contextDispose).toHaveBeenCalledOnce()
+    expect(runtime.getStatus()).toBe('ready')
+    expect(events.filter((event) => event.type === 'failed')).toEqual([])
+    expect(compositor.dispose).not.toHaveBeenCalled()
+    expect(contextDispose).not.toHaveBeenCalled()
     runtime.dispose()
   })
 })

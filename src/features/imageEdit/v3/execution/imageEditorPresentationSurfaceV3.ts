@@ -480,6 +480,7 @@ export class ImageEditorPresentationSurfaceV3 {
     canvas.dataset.gpuUploadCount = String(diagnostics.uploadCount)
     canvas.dataset.gpuPipelineCompileCount = String(diagnostics.pipelineCompileCount)
     canvas.dataset.gpuFrameCount = String(diagnostics.frameCount)
+    canvas.dataset.gpuPreviewRenderScale = String(diagnostics.previewRenderScale ?? 1)
     canvas.dataset.gpuReadbackCount = String(diagnostics.diagnosticReadbackCount)
     canvas.dataset.gpuUniformUpdateCount = String(diagnostics.transientUniformUpdateCount)
     canvas.dataset.gpuSurfaceFrameCount = String(diagnostics.surfaceFrameCount)

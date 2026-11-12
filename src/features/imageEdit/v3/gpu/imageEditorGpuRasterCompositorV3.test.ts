@@ -309,7 +309,7 @@ describe('ImageEditorGpuRasterCompositorV3（真实 WebGPU）', () => {
     compositor.dispose()
   })
 
-  it('合成目标与呈现背板也计入256MiB总预算，超额时在分配前拒绝', async () => {
+  it('合成目标超出预算时降低预览的内部分辨率继续合成，不拒绝', async () => {
     const document = createImageEditDocumentV3({ width: 512, height: 512 })
     const compilation = compileImageEditorGpuRasterSceneV3(document, [])
     expect(compilation.supported).toBe(true)
@@ -324,8 +324,8 @@ describe('ImageEditorGpuRasterCompositorV3（真实 WebGPU）', () => {
       },
     })
 
-    await expect(compositor.readLinearPixelsForTest(() => null))
-      .rejects.toThrow('合成目标与 atlas 超出会话显存预算')
+    // 512² 的合成目标要 3 MiB，1 MiB 预算下降到一半分辨率。
+    expect(await compositor.readLinearPixelsForTest(() => null)).toHaveLength(256 * 256 * 4)
     compositor.dispose()
   })
 

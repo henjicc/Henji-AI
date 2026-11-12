@@ -121,7 +121,7 @@ describe('ImageEditorRenderSessionGpuBridgeV3', () => {
     } finally {bridge.dispose()}
   })
 
-  it('显存回退后新文档发布不再向失效设备发帧，设备恢复事件才重新启用', () => {
+  it('初始化失败后新文档发布不再向失效设备发帧，设备恢复事件才重新启用', () => {
     const harness = clientHarness()
     const bridge = new ImageEditorRenderSessionGpuBridgeV3('budget-fallback', harness.client, vi.fn(), false)
     const snapshot = { document: createImageEditDocumentV3({ width: 320, height: 240 }), renderGeneration: 1,
@@ -131,7 +131,7 @@ describe('ImageEditorRenderSessionGpuBridgeV3', () => {
     harness.listener({ type: 'ready', sceneGeneration: 1, deviceGeneration: 1, recovered: false })
     expect(harness.client.requestFrame).toHaveBeenCalledOnce()
     harness.listener({ type: 'failed', sceneGeneration: 1, deviceGeneration: 1, requestId: null,
-      code: 'resource-budget-exceeded', message: 'GPU Scene 当前视口与受保护资源超过会话显存预算', recoverable: true })
+      code: 'initialization-failed', message: 'GPU 设备不可用', recoverable: true })
     vi.mocked(harness.client.requestFrame).mockClear()
     bridge.syncSnapshot({ ...snapshot, renderGeneration: 2 })
     bridge.requestFrame('stable')

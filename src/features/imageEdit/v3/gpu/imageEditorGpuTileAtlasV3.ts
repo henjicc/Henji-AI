@@ -31,26 +31,21 @@ export interface ImageEditorGpuTileAtlasAllocationV3 {
 }
 
 export interface ImageEditorGpuTileAtlasOptionsV3 {
-  memoryBudgetBytes: number
   maxTextureDimension2D?: number
   maxTextureArrayLayers?: number
 }
 
-export class ImageEditorGpuTileAtlasBudgetErrorV3 extends Error {}
-
 /**
- * 有界的 2D-array atlas。每个 array layer 是一个带 1px halo 的 512 瓦片槽；
+ * 分页的 2D-array atlas；占用多少由会话资源登记表的淘汰决定，atlas 自己不设上限。每个 array layer 是一个带 1px halo 的 512 瓦片槽；
  * 不将 8192² 资源物化为单纹理，局部 writeTexture 只更新实际到达的槽。
  */
 export class ImageEditorGpuTileAtlasV3 {
   private readonly pages: AtlasPageV3[] = []
-  private memoryBudgetBytes: number
   private readonly maxArrayLayers: number
   private allocatedBytes = 0
   private disposed = false
 
-  constructor(private readonly gpu: Gpu, options: ImageEditorGpuTileAtlasOptionsV3) {
-    this.memoryBudgetBytes = positiveInteger(options.memoryBudgetBytes, 'GPU atlas 预算')
+  constructor(private readonly gpu: Gpu, options: ImageEditorGpuTileAtlasOptionsV3 = {}) {
     const maxDimension = positiveInteger(
       options.maxTextureDimension2D ?? gpu.gpu.limits.maxTextureDimension2D,
       'maxTextureDimension2D',
@@ -67,10 +62,6 @@ export class ImageEditorGpuTileAtlasV3 {
   estimateTileBytes(tile: ImageEditorV3SourceTile): number {
     return GPU_TILE_ATLAS_MAX_EXTENT_V3 * GPU_TILE_ATLAS_MAX_EXTENT_V3
       * bytesPerTexel(atlasFormat(tile))
-  }
-
-  setMemoryBudgetBytes(memoryBudgetBytes: number): void {
-    this.memoryBudgetBytes = nonNegativeInteger(memoryBudgetBytes, 'GPU atlas 预算')
   }
 
   upload(
@@ -128,12 +119,11 @@ export class ImageEditorGpuTileAtlasV3 {
     }
   }
 
-  snapshot(): { pages: number; allocations: number; allocatedBytes: number; budgetBytes: number } {
+  snapshot(): { pages: number; allocations: number; allocatedBytes: number } {
     return {
       pages: this.pages.length,
       allocations: this.pages.reduce((total, page) => total + page.liveAllocations, 0),
       allocatedBytes: this.allocatedBytes,
-      budgetBytes: this.memoryBudgetBytes,
     }
   }
 
@@ -152,9 +142,7 @@ export class ImageEditorGpuTileAtlasV3 {
   private allocatePage(format: AtlasFormatV3): AtlasPageV3 {
     const slotBytes = GPU_TILE_ATLAS_MAX_EXTENT_V3 * GPU_TILE_ATLAS_MAX_EXTENT_V3
       * bytesPerTexel(format)
-    const availableLayers = Math.floor((this.memoryBudgetBytes - this.allocatedBytes) / slotBytes)
-    const layers = Math.min(GPU_TILE_ATLAS_PAGE_LAYERS_V3, this.maxArrayLayers, availableLayers)
-    if (layers < 1) throw new ImageEditorGpuTileAtlasBudgetErrorV3('GPU atlas 超出会话显存预算')
+    const layers = Math.min(GPU_TILE_ATLAS_PAGE_LAYERS_V3, this.maxArrayLayers)
     const texture = this.gpu.device.createTexture({
       size: [GPU_TILE_ATLAS_MAX_EXTENT_V3, GPU_TILE_ATLAS_MAX_EXTENT_V3, layers],
       format,
@@ -244,11 +232,6 @@ function bytesPerTexel(format: AtlasFormatV3): number {
 
 function positiveInteger(value: number, name: string): number {
   if (!Number.isSafeInteger(value) || value <= 0) throw new Error(`${name} 必须是正整数`)
-  return value
-}
-
-function nonNegativeInteger(value: number, name: string): number {
-  if (!Number.isSafeInteger(value) || value < 0) throw new Error(`${name} 必须是非负整数`)
   return value
 }
 

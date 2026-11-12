@@ -308,8 +308,8 @@ export class ImageEditorRenderSessionGpuBridgeV3 {
         this.fallback(event.message)
         return
       }
-      // 显存回退会销毁 Worker 当前设备状态；后续文档发布不能把资源就绪当成设备恢复。
-      if (event.code === 'initialization-failed' || event.code === 'resource-budget-exceeded') {
+      // 初始化失败后 Worker 没有可用设备；后续文档发布不能把资源就绪当成设备恢复。
+      if (event.code === 'initialization-failed') {
         this.deviceReady = false
         this.clearTileRetry()
         this.tileLoadAbortController.abort()

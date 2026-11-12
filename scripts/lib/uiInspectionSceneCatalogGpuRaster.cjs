@@ -213,7 +213,6 @@ function createGpuRasterScenes(context) {
         || Number(latest?.context?.residentTileCount) < 1
         || Number(latest?.context?.atlasPageCount) < 1
         || Number(latest?.context?.allocatedAtlasBytes) >= 8192 * 8192 * 4
-        || Number(latest?.context?.allocatedAtlasBytes) > 256 * 1024 * 1024
         || Number(latest?.context?.pipelineCompileCount) !== 2
         || Number(latest?.context?.frameCount) <= Number(zoomFrameEvent?.context?.frameCount)
         || Number(latest?.context?.minimumPlannedMip) === Number(initial?.context?.minimumPlannedMip)

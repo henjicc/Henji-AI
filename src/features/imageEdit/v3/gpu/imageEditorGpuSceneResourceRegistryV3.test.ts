@@ -30,18 +30,19 @@ describe('ImageEditorGpuSceneResourceRegistryV3', () => {
     registry.dispose()
   })
 
-  it('视口、交互和稳定帧保护资源均不可被压力淘汰', () => {
+  it('受保护资源不被淘汰，超出预算的新资源照样登记，解除保护后才让位', () => {
     const registry = new ImageEditorGpuSceneResourceRegistryV3<string>({ memoryBudgetBytes: 10 })
     registry.register(key('protected'), 'protected', 8, ['viewport', 'interaction', 'stable-frame'])
 
     expect(registry.register(key('candidate'), 'candidate', 8)).toMatchObject({
-      admitted: false,
+      admitted: true,
       evicted: [],
     })
+    expect(registry.get(key('protected'))).toBe('protected')
     registry.releaseProtection('viewport')
     registry.releaseProtection('interaction')
     registry.releaseProtection('stable-frame')
-    expect(registry.register(key('candidate'), 'candidate', 8).admitted).toBe(true)
+    expect(registry.register(key('next'), 'next', 8).evicted).toHaveLength(2)
     registry.dispose()
   })
 

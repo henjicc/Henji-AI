@@ -36,7 +36,9 @@ fn vs_main(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4f 
 
 @fragment
 fn fs_main(@builtin(position) position: vec4f) -> @location(0) vec4f {
-  let linear = textureLoad(sourceTexture, vec2i(position.xy), 0);
+  // options.y 是合成分辨率相对呈现分辨率的比例：显存紧张时合成分辨率低于屏幕，在这里放大铺满。
+  let sourceSize = vec2i(textureDimensions(sourceTexture));
+  let linear = textureLoad(sourceTexture, min(vec2i(position.xy * color.options.y), sourceSize - vec2i(1)), 0);
   if (linear.a <= 0.0) { return vec4f(0.0); }
   let straight = linear.rgb / linear.a;
   var srgbLinear = vec3f(
