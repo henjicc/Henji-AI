@@ -126,6 +126,53 @@ async function sceneChanges(file, startSeconds, windowSeconds, threshold = 0.02)
   return { ok: true, times: [...result.stderr.matchAll(/pts_time:([\d.]+)/g)].map(match => Number(match[1])) }
 }
 
+/**
+ * 声音电平与静音段：ffmpeg volumedetect 给峰值与平均值，silencedetect 找出长于 minSilence 的静音。
+ * startSeconds/windowSeconds 省略时测整个文件。
+ */
+async function audioLevel(file, { startSeconds, windowSeconds, silenceDb = -70, minSilence = 0.2 } = {}) {
+  const range = Number.isFinite(startSeconds) ? ['-ss', String(Math.max(0, startSeconds)), '-t', String(windowSeconds)] : []
+  const result = await run(mediaBinaries().ffmpegPath, ['-hide_banner', '-nostats', '-threads', '2', ...range, '-i', file, '-vn',
+    '-af', `silencedetect=n=${silenceDb}dB:d=${minSilence},volumedetect`, '-f', 'null', '-'], { timeoutMs: 600_000 })
+  if (result.code !== 0) return { ok: false, error: result.stderr.trim().split('\n').slice(-3).join(' ').slice(0, 400) }
+  const number = pattern => { const match = pattern.exec(result.stderr); return match ? Number(match[1]) : null }
+  const starts = [...result.stderr.matchAll(/silence_start: (-?[\d.]+)/g)].map(match => Number(match[1]))
+  const ends = [...result.stderr.matchAll(/silence_end: ([\d.]+) \| silence_duration: ([\d.]+)/g)].map(match => ({ end: Number(match[1]), duration: Number(match[2]) }))
+  // 静音一直持续到窗口末尾时只有 silence_start，没有对应的 end。
+  const silences = starts.map((start, index) => ({ startSeconds: start, durationSeconds: ends[index]?.duration ?? (Number.isFinite(windowSeconds) ? windowSeconds - start : null) }))
+  return { ok: true, maxVolumeDb: number(/max_volume: (-?[\d.]+|-inf) dB/), meanVolumeDb: number(/mean_volume: (-?[\d.]+|-inf) dB/), silences }
+}
+
+/**
+ * 被录显示器上的运动源：系统 PATH 上的 ffplay 播放 lavfi 合成源——testsrc2 高运动测试图（按显示器像素、60 帧）
+ * 加约 -30 dBFS 峰值的粉噪，无边框置顶铺满该显示器，一直播到 stop()。完全静止的画面说明不了问题。
+ * display 是录制来源的 DIP 布局（x/y/width/height/scaleFactor）；ffplay 不感知 DPI，按 DIP 摆放窗口。
+ */
+async function startMotion({ display, fps = 60 }) {
+  const version = await run('ffplay', ['-hide_banner', '-version'], { timeoutMs: 15_000 })
+  if (version.code !== 0) return { ok: false, reason: `系统 PATH 上找不到可用的 ffplay（${(version.error ?? '').slice(0, 120)}）` }
+  if (!display) return { ok: false, reason: '录制来源没有显示器布局（单窗口录制时运动源无法放进被录画面）' }
+  const even = value => Math.max(2, Math.round(value / 2) * 2)
+  const scale = display.scaleFactor ?? 1
+  const graph = `testsrc2=size=${even(display.width * scale)}x${even(display.height * scale)}:rate=${fps}[out0];anoisesrc=color=pink:amplitude=0.0316:sample_rate=48000[out1]`
+  const args = ['-hide_banner', '-loglevel', 'error', '-noborder', '-alwaysontop', '-window_title', '长录测试运动源',
+    '-left', String(Math.round(display.x)), '-top', String(Math.round(display.y)), '-x', String(Math.round(display.width)), '-y', String(Math.round(display.height)), '-f', 'lavfi', '-i', graph]
+  const { spawn } = require('node:child_process')
+  const child = spawn('ffplay', args, { stdio: ['ignore', 'ignore', 'pipe'], windowsHide: false })
+  const state = { ok: true, source: 'ffplay', audio: true, pid: child.pid, args, startedAtMs: Date.now(), exitedAtMs: null, exitCode: null, stderr: '' }
+  child.stderr.on('data', chunk => { state.stderr = (state.stderr + chunk).slice(-2000) })
+  child.on('exit', code => { state.exitedAtMs = Date.now(); state.exitCode = code })
+  child.on('error', error => { state.exitedAtMs ??= Date.now(); state.stderr += String(error.message) })
+  await new Promise(resolve => setTimeout(resolve, 3000))
+  if (state.exitedAtMs) return { ok: false, reason: `ffplay 启动后立刻退出（${state.exitCode}）：${state.stderr.trim().slice(0, 300)}` }
+  return {
+    state,
+    running: () => !state.exitedAtMs,
+    // 只结束自己启动的这棵进程树（scoop 的 ffplay 是转发外壳，真正的播放器是它的子进程）。
+    stop: async () => { if (!state.exitedAtMs) await run('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { timeoutMs: 15_000 }) },
+  }
+}
+
 async function directorySize(target) {
   let total = 0
   const walk = async (entry) => {
@@ -349,4 +396,4 @@ class AppDriver {
   }
 }
 
-module.exports = { AppDriver, directorySize, MCP_CONNECTION_NAME, os, probe, sceneChanges }
+module.exports = { AppDriver, audioLevel, directorySize, MCP_CONNECTION_NAME, os, probe, sceneChanges, startMotion }

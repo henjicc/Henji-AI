@@ -5,9 +5,12 @@
  * 无人值守长录测试：接管已经在运行的痕迹AI，自己开始录制、按墙钟时间表施压、停止、核对，
  * 把结论写进 tickets/46-正式使用链路/长录结果/<时间戳>-<场景>/（result.json、summary.md、soak.log）。
  *
- * 先启动正式构建并打开调试端口（另一个终端，PowerShell）：
- *   npm run build:audio-capture; npm run electron:bundle      # 需要新产物时
+ * 先启动正式构建并打开调试端口（另一个终端，PowerShell）。首次真跑前、以及录音或录屏代码改过之后，必须按顺序重建：
+ *   npm run build:audio-capture        # 先重建原生录音程序（henji-audio-capture，麦克风与系统声共用）
+ *   npm run electron:bundle            # 再生成主进程与界面产物
  *   $env:HENJI_ELECTRON_REMOTE_DEBUGGING_PORT=9334; npm run electron:prod -- --dev-skip-onboarding --skip-build
+ * 原生程序与主进程按协议号握手（现在是 3），两者不是同一次构建时握手失败：音频编辑录音、录屏麦克风和系统声都开不了，
+ * 脚本会在开始录制那一步失败。看到 audio_capture.* 或 system_audio.start.failed 报协议不匹配时，按上面顺序重建。
  *
  * 再运行（耗时等于录制时长，建议后台跑）：
  *   npm run test:recording-soak -- --scenario audio            # 录音，默认 60 分钟
@@ -25,18 +28,20 @@
  *   --no-microphone / --no-system-audio   默认带麦克风与系统声
  *   --kill-encoder          中途结束一次画面编码进程，验证自动续录
  *   --no-cursor             不移动鼠标做事件对齐抽查（默认会在几个时刻把光标移到主屏中心附近再放回）
+ *   --no-motion             不放运动源。默认在被录显示器上用系统 PATH 上的 ffplay 无边框置顶播放 testsrc2 测试图
+ *                           （显示器像素、60 帧）和约 -30 dBFS 的粉噪，录制结束后关掉；放不出来时结论是“未达测试条件”
  *   通用：
  *   --crash-renderer        另外让界面渲染进程崩溃一次（CDP Page.crash），验证崩溃后接管
  *   --load-seconds <20>     主进程加压时长（冒烟档按时长缩短）
  *
- * 时间表见 scripts/lib/recordingSoak.cjs 的 PLANS；退出码 0 = 通过，1 = 有问题，2 = 没能开始。
+ * 时间表见 scripts/lib/recordingSoak.cjs 的 PLANS；退出码 0 = 通过，1 = 有问题，2 = 没能开始，3 = 未达测试条件（如没有运动画面）。
  * 产物不自动删除，占用大小与路径写在结果里。Ctrl+C 会先停止录制、写完结果再退出。
  */
 
 const fs = require('node:fs')
 const path = require('node:path')
 const lib = require('./lib/recordingSoak.cjs')
-const { AppDriver, directorySize, MCP_CONNECTION_NAME, os, probe, sceneChanges } = require('./lib/recordingSoakDriver.cjs')
+const { AppDriver, audioLevel, directorySize, MCP_CONNECTION_NAME, os, probe, sceneChanges, startMotion } = require('./lib/recordingSoakDriver.cjs')
 
 const ROOT = path.resolve(__dirname, '..')
 const RESULTS = path.join(ROOT, 'tickets', '46-正式使用链路', '长录结果')
@@ -112,7 +117,8 @@ async function main() {
       plan: result.plan, startedAtMs: result.recording.startedAtMs, now: Date.now, sleep, shouldAbort: ctx.aborted,
       periodic: [
         { name: 'heartbeat', everySec: intervals.heartbeatSec, run: async () => {
-          const state = { atMs: Date.now(), ...await scenario.alive() }
+          const state = { atMs: Date.now(), ...await scenario.alive(), ...(ctx.motion ? { motionRunning: ctx.motion.running() } : {}) }
+          if (ctx.motion && !state.motionRunning && !ctx.motionLost) { ctx.motionLost = true; log(`运动源已退出（退出码 ${ctx.motion.state.exitCode}）：${ctx.motion.state.stderr.trim().slice(0, 200)}`) }
           if (previous?.alive && state.alive && state.atMs - previous.atMs > 5000 && !(state.durationSeconds > previous.durationSeconds)) state.stalled = true
           result.heartbeats.push(state); previous = state
           if (!state.alive || state.stalled) log(`存活检查：录制${state.alive ? '时长没有前进' : `不在进行（${state.reason ?? ''}）`}`)
@@ -148,6 +154,8 @@ async function finish(ctx) {
   const { result, log, driver, options } = ctx
   const attempt = async (label, fn) => { try { await fn() } catch (error) { log(`${label}失败：${error?.message ?? error}`); (result.collectionErrors ??= []).push(`${label}：${String(error?.message ?? error)}`) } }
   if (ctx.recordingActive && !ctx.stopped && ctx.scenario) await attempt('补停录制', () => ctx.scenario.stop())
+  // 录制停下（或失败）后才关运动源，退出时刻晚于停止请求即表示全程在跑。
+  if (ctx.motion) await attempt('关闭运动源', async () => { const early = !ctx.motion.running(); await ctx.motion.stop(); if (!early) result.motion.stoppedByScript = true })
   if (result.recording.stoppedAtMs) {
     await sleep(5000)
     await attempt('结束后防睡眠检查', async () => { result.power.after = await powerCheck(ctx) })
@@ -161,10 +169,11 @@ async function finish(ctx) {
   ctx.persist()
   fs.writeFileSync(path.join(ctx.dir, 'summary.md'), lib.renderSoakMarkdown(result))
   await driver.close()
-  log(`结论：${result.verdict.passed ? '通过' : `有问题（${result.verdict.problems.length} 项）`}；结果在 ${ctx.dir}`)
-  if (!result.verdict.passed) for (const problem of result.verdict.problems) log(`  - ${problem}`)
+  const verdict = result.verdict
+  log(`结论：${!verdict.conditionMet ? '未达测试条件' : verdict.passed ? '通过' : `有问题（${verdict.problems.length} 项）`}；结果在 ${ctx.dir}`)
+  for (const item of [...verdict.unmetConditions, ...verdict.problems]) log(`  - ${item}`)
   if (options.scenario && result.mcp?.connectionId && driver.connectionId) log(`外部连接「${MCP_CONNECTION_NAME}」没能撤销，请在设置 › 外部连接里手动撤销`)
-  process.exitCode = result.verdict.passed ? 0 : 1
+  process.exitCode = !verdict.conditionMet ? 3 : verdict.passed ? 0 : 1
 }
 
 async function sampleMemory(ctx, label) {
@@ -283,14 +292,19 @@ function commonActions(ctx, scenario) {
       log(`主进程加压 ${seconds} 秒：查询 ${load.queries} 次，ping p50 ${Math.round(load.loadPingMs.p50 ?? 0)} ms、最长 ${Math.round(load.loadPingMs.max ?? 0)} ms（平时 ${Math.round(load.baselinePingMs.p50 ?? 0)} ms）`)
       return { load, notes }
     }),
-    reload: () => around(async () => {
+    reload: (_params, item) => around(async () => {
+      // 录屏先打标记：之后把重载时刻换到系统声文件里的位置，核对那几秒不是静音。
+      const mark = await scenario.mark?.('reload')
       const atMs = Date.now()
+      ;(ctx.reloads ??= []).push({ scheduledSec: item.atSec, atMs, mark })
       await driver.reloadPage()
       const reattach = await scenario.afterReload?.(atMs) ?? {}
       return { reloadedInMs: Date.now() - atMs, ...reattach }
     }, 5000),
-    'crash-renderer': () => around(async () => {
+    'crash-renderer': (_params, item) => around(async () => {
+      const mark = await scenario.mark?.('crash')
       const atMs = Date.now()
+      ;(ctx.reloads ??= []).push({ scheduledSec: item.atSec, atMs, mark })
       await driver.crashRenderer()
       await sleep(3000)
       let autoReloaded = true
@@ -479,6 +493,16 @@ function screenScenario(ctx) {
       const existing = await snapshot()
       if (existing && !['stopped', 'failed'].includes(existing.phase)) throw new Error(`已经有一段录屏在进行（${existing.phase}），先结束它再跑`)
       state.projectId = projectId
+      if (options.motion) {
+        const motion = await startMotion({ display: source.display, fps: 60 })
+        if (motion.state) { ctx.motion = motion; result.motion = motion.state; log(`运动源已在被录显示器上播放（ffplay，进程 ${motion.state.pid}）`) }
+        else {
+          // 退回让应用自己循环播放一段视频需要“循环播放”的正式能力，现在没有，只记录。
+          result.motion = { ok: false, reason: `${motion.reason}；应用内没有可循环播放测试视频的正式能力，未退回` }
+          result.missingInterfaces.push('运动源退路：没有让应用循环播放一段测试视频的正式能力（剪辑源预览只有 video_edit.source.playing，不循环）')
+          log(`未能提供运动画面：${result.motion.reason}`)
+        }
+      }
     },
     async start() {
       result.recording.prepareAtMs = Date.now()
@@ -603,9 +627,47 @@ function screenScenario(ctx) {
       result.checks.leftoverNativeCopies = mediaDirs.flatMap(dir => (fs.existsSync(dir) ? fs.readdirSync(dir) : []).filter(file => /^microphone-native-.*\.wav$/.test(file)).map(file => path.join(dir, file)))
       result.checks.markers = content?.markers ?? []
       await checkCursor(content)
-      await checkPicture(content, media)
+      // 运动源铺满屏幕时画面每一帧都在变，切工作区的画面抽查没有意义，改为确认录到的画面确实在动。
+      if (result.motion?.ok) await checkMotionPicture(media)
+      else await checkPicture(content, media)
+      if (options.systemAudio) await checkSystemAudio(content, media, since, dates)
       ctx.persist()
     },
+  }
+
+  async function checkMotionPicture(media) {
+    const spans = media.filter(item => item.kind === 'screen' && item.durationUs > 4_000_000)
+    const span = spans[Math.floor(spans.length / 2)]
+    if (!span) { result.checks.motionPicture = { changed: false, error: '没有长于 4 秒的画面分片' }; return }
+    const at = span.durationUs / 2e6
+    const scene = await sceneChanges(span.path, at, 2, 0.002)
+    result.checks.motionPicture = { file: span.path, atSeconds: at, changed: scene.ok && scene.times.length > 0, changes: scene.ok ? scene.times.length : null, ...(scene.ok ? {} : { error: scene.error }) }
+  }
+
+  /** 系统声：结束汇总与相关事件、拼好的文件时长、整体电平，以及每次界面重载前后那几秒有没有静音。 */
+  async function checkSystemAudio(content, media, since, dates) {
+    const events = (await driver.queryLogs({ sinceIso: since, dates, keyword: 'audio_capture.system_audio' })).events.filter(event => event.event?.startsWith('audio_capture.system_audio.'))
+    const eventCounts = {}
+    for (const event of events) eventCounts[event.event] = (eventCounts[event.event] ?? 0) + 1
+    const summary = events.filter(event => event.event === 'audio_capture.system_audio.summary').sort((a, b) => a.timestamp.localeCompare(b.timestamp)).at(-1)?.context ?? null
+    const system = { summary, eventCounts, events: events.filter(event => event.event !== 'audio_capture.system_audio.summary').slice(0, 200) }
+    result.checks.systemAudio = system
+    const item = media.find(entry => entry.kind === 'systemAudio')
+    if (!item) return
+    const probed = result.checks.files.find(file => file.path === item.path)?.probe
+    system.file = { path: item.path, durationSeconds: probed?.durationSeconds ?? null }
+    if (!result.motion?.ok) return
+    const level = await audioLevel(item.path)
+    system.level = level.ok ? { maxVolumeDb: level.maxVolumeDb, meanVolumeDb: level.meanVolumeDb, silenceCount: level.silences.length, longestSilenceSeconds: Math.max(0, ...level.silences.map(entry => entry.durationSeconds ?? 0)) } : null
+    if (!level.ok) system.levelError = level.error
+    system.reloadWindows = []
+    for (const reload of ctx.reloads ?? []) {
+      const atUs = reload.mark ? monoAt(content, reload.mark, reload.atMs) : null
+      if (atUs === null) { system.reloadWindows.push({ scheduledSec: reload.scheduledSec, error: '重载前的标记没有进入录制', silences: [] }); continue }
+      const offset = (atUs - item.monoUs) / 1e6
+      const window = await audioLevel(item.path, { startSeconds: offset - 2, windowSeconds: 15 })
+      system.reloadWindows.push({ scheduledSec: reload.scheduledSec, offsetSeconds: offset, silences: window.ok ? window.silences : [], ...(window.ok ? { maxVolumeDb: window.maxVolumeDb } : { error: window.error }) })
+    }
   }
 
   /** 标记与光标移动都在事件时钟上：用标记把墙钟换成 monoUs，再到事件里找移动。 */

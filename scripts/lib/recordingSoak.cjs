@@ -11,7 +11,7 @@ const SMOKE_MINUTES = 3
 const MAX_MINUTES = 120
 
 function parseSoakArgs(argv) {
-  const flags = new Set(['smoke', 'kill-encoder', 'crash-renderer', 'no-cursor', 'no-system-audio', 'no-microphone', 'help'])
+  const flags = new Set(['smoke', 'kill-encoder', 'crash-renderer', 'no-cursor', 'no-system-audio', 'no-microphone', 'no-motion', 'help'])
   const values = {}
   for (let index = 0; index < argv.length; index++) {
     const token = argv[index]
@@ -48,6 +48,7 @@ function parseSoakArgs(argv) {
     killEncoder: Boolean(values['kill-encoder']),
     crashRenderer: Boolean(values['crash-renderer']),
     cursor: !values['no-cursor'],
+    motion: scenario === 'screen' && !values['no-motion'],
     loadSeconds: number('load-seconds', 20, 1, 300),
   }
 }
@@ -284,7 +285,7 @@ function analyzeCursorMove(events, { aUs, bUs, holdUs, direction, earlyUs = 80_0
 const FORBIDDEN_EVENTS = {
   audio: ['audio_capture.recording.failed', 'audio_edit.splice.failed', 'audio_capture.owner.failed'],
   screen: ['recording.capture.failed', 'recording.capture.finish.failed', 'recording.events.backlog', 'recording.events.capture.failed', 'recording.tracks.journal.failed',
-    'recording.audio.join.failed', 'recording.document.save.failed', 'recording.session.events.failed', 'audio_capture.recording.failed'],
+    'recording.audio.join.failed', 'recording.document.save.failed', 'recording.session.events.failed', 'audio_capture.recording.failed', 'audio_capture.system_audio.failed'],
 }
 
 function summarizeLogs(events) {
@@ -343,7 +344,14 @@ function evaluateSoak(result) {
   if (result.scenario === 'audio') evaluateAudio(result, wall, problems, notes)
   else evaluateScreen(result, wall, problems, notes)
   for (const missing of result.missingInterfaces ?? []) notes.push(`需要补的接口：${missing}`)
-  return { passed: problems.length === 0, problems: [...new Set(problems)], notes: [...new Set(notes)], memoryTrend: trend }
+  // 录静止画面说明不了问题：没有运动源，或运动源中途停了，结论是“未达测试条件”，不算通过。
+  const unmet = []
+  if (result.options?.motion) {
+    const motion = result.motion
+    if (!motion?.ok) unmet.push(`未能提供运动画面：${motion?.reason ?? '没有启动'}`)
+    else if (motion.exitedAtMs && (!result.recording?.stopRequestedAtMs || motion.exitedAtMs < result.recording.stopRequestedAtMs)) unmet.push(`运动源在录制结束前退出（退出码 ${motion.exitCode ?? '—'}）`)
+  }
+  return { passed: problems.length === 0 && unmet.length === 0, conditionMet: unmet.length === 0, unmetConditions: unmet, problems: [...new Set(problems)], notes: [...new Set(notes)], memoryTrend: trend }
 }
 
 function evaluateAudio(result, wall, problems, notes) {
@@ -384,20 +392,57 @@ function evaluateScreen(result, wall, problems, notes) {
   const gaps = result.checks?.gaps ?? []
   for (const [kind, count] of Object.entries(result.checks?.audioFiles ?? {})) {
     if (count === 1) continue
-    // 拼接在真实空档处分条；界面重载留下、副本补不回来的缺数据空档属已知限制。
+    // 麦克风仍由界面写，界面重载留下、副本补不回来的缺数据空档属已知限制；系统声由原生进程录，必须是一条。
     const missing = gaps.filter(gap => gap.kind === kind && gap.reason === 'missing-data').length
-    if (missing && count === missing + 1) notes.push(`${kind} 在 ${missing} 处缺数据空档分成了 ${count} 条`)
+    if (kind === 'microphone' && missing && count === missing + 1) notes.push(`${kind} 在 ${missing} 处缺数据空档分成了 ${count} 条`)
     else problems.push(`${kind} 拼成了 ${count} 条声音（预期每路一条）`)
   }
   for (const kind of result.checks?.expectedAudioKinds ?? []) if (!(kind in (result.checks?.audioFiles ?? {}))) problems.push(`没有 ${kind} 声音`)
   for (const file of result.checks?.files ?? []) if (!file.probe?.ok) problems.push(`读不出 ${file.role}：${file.path}（${file.probe?.error ?? '不存在'}）`)
   if (result.checks?.leftoverNativeCopies?.length) problems.push(`录制目录残留 ${result.checks.leftoverNativeCopies.length} 个麦克风副本`)
-  for (const gap of result.checks?.gaps ?? []) if (gap.reason !== 'pause' && gap.reason !== 'missing-data') problems.push(`${gap.kind} 有 ${gap.reason} 空档 ${(gap.durationUs / 1e6).toFixed(2)} 秒`)
-  const missing = (result.checks?.gaps ?? []).filter(gap => gap.reason === 'missing-data')
-  if (missing.length) notes.push(`缺数据空档 ${missing.length} 段，共 ${(missing.reduce((sum, gap) => sum + gap.durationUs, 0) / 1e6).toFixed(2)} 秒（界面重载期间声音由界面写，属已知限制）`)
+  for (const gap of gaps) if (gap.reason !== 'pause' && gap.reason !== 'missing-data') problems.push(`${gap.kind} 有 ${gap.reason} 空档 ${(gap.durationUs / 1e6).toFixed(2)} 秒`)
+  const systemMissing = gaps.filter(gap => gap.kind === 'systemAudio' && gap.reason === 'missing-data')
+  if (systemMissing.length) problems.push(`系统声有 ${systemMissing.length} 段缺数据空档，共 ${(systemMissing.reduce((sum, gap) => sum + gap.durationUs, 0) / 1e6).toFixed(2)} 秒（系统声由原生进程录，界面重载不应留空档）`)
+  const micMissing = gaps.filter(gap => gap.kind === 'microphone' && gap.reason === 'missing-data')
+  if (micMissing.length) notes.push(`麦克风缺数据空档 ${micMissing.length} 段，共 ${(micMissing.reduce((sum, gap) => sum + gap.durationUs, 0) / 1e6).toFixed(2)} 秒（界面重载期间麦克风轨由界面写，属已知限制）`)
+  evaluateSystemAudio(result, durationSeconds, problems, notes)
   for (const check of result.checks?.cursor ?? []) if (!check.ok) problems.push(`光标对齐抽查失败（第 ${Math.round(check.scheduledSec)} 秒）：${check.reason}`)
   for (const check of result.checks?.picture ?? []) if (!check.changed) notes.push(`切工作区后 ${check.windowSeconds} 秒内画面没有可见变化（被录来源可能没有显示应用窗口）`)
+  const motionPicture = result.checks?.motionPicture
+  if (motionPicture && !motionPicture.changed) problems.push(`运动源在跑，但录到的画面${motionPicture.error ? `读不出（${motionPicture.error}）` : '在抽查的几秒内没有变化'}`)
   checkReload(result, ['recording.host.detached', 'recording.host.attached', 'recording.session.attach.completed'], problems)
+}
+
+/**
+ * 系统声由原生录音进程按时间轴录：结束汇总要在、时长等于录制时长（无声时补静音），
+ * 不应重连或写盘失败；运动源出声时文件里要有信号，界面重载那几秒也不能是静音。
+ */
+function evaluateSystemAudio(result, recordingSeconds, problems, notes) {
+  if (!result.checks?.expectedAudioKinds?.includes('systemAudio')) return
+  const system = result.checks.systemAudio ?? {}
+  const summary = system.summary
+  if (!summary) { problems.push('没有找到 audio_capture.system_audio.summary'); return }
+  if (summary.outcome && summary.outcome !== 'completed') problems.push(`系统声结束结果是 ${summary.outcome}`)
+  if (Number.isFinite(recordingSeconds) && !near(summary.durationSeconds, recordingSeconds, durationTolerance(recordingSeconds))) problems.push(`系统声时长 ${summary.durationSeconds} 秒与录制时长 ${recordingSeconds.toFixed(1)} 秒不符（无声时应按时间轴补静音）`)
+  if (summary.droppedFrames > 0) problems.push(`系统声写盘跟不上丢了 ${summary.droppedFrames} 帧（已补静音）`)
+  if (summary.reconnects > 0) problems.push(`系统声原生服务失联重连 ${summary.reconnects} 次`)
+  if (summary.discontinuities > 0) notes.push(`系统声数据不连续 ${summary.discontinuities} 次（已按时间戳补齐）`)
+  if (summary.deviceSwitches > 0) notes.push(`系统声输出设备切换 ${summary.deviceSwitches} 次`)
+  if (summary.unavailableSeconds > 0) notes.push(`系统声输出设备不可用共 ${summary.unavailableSeconds} 秒（文件里是静音）`)
+  notes.push(`系统声补静音 ${summary.silenceSeconds ?? '—'} 秒、写盘峰值 ${summary.maxWriteMs ?? '—'} ms`)
+  for (const name of ['audio_capture.system_audio.failed', 'audio_capture.system_audio.reconnect.start', 'audio_capture.system_audio.start.failed', 'audio_capture.system_audio.stop.failed']) {
+    if (system.eventCounts?.[name]) problems.push(`出现 ${name} ×${system.eventCounts[name]}`)
+  }
+  const file = system.file
+  if (file && Number.isFinite(recordingSeconds) && !near(file.durationSeconds, recordingSeconds, durationTolerance(recordingSeconds))) problems.push(`拼好的系统声文件 ${file.durationSeconds?.toFixed(1)} 秒，与录制时长 ${recordingSeconds.toFixed(1)} 秒不符`)
+  if (result.motion?.ok && result.motion.audio) {
+    if (!system.level) problems.push('没能测量系统声电平')
+    else if (!(system.level.maxVolumeDb > -60)) problems.push(`运动源在出声，录到的系统声却几乎没有信号（峰值 ${system.level.maxVolumeDb ?? '—'} dB）`)
+    for (const window of system.reloadWindows ?? []) {
+      if (window.error) notes.push(`界面重载处系统声电平没测成：${window.error}`)
+      else if (window.silences.length) problems.push(`界面重载（第 ${Math.round(window.scheduledSec)} 秒）前后系统声有 ${window.silences.map(item => `${(item.durationSeconds ?? 0).toFixed(2)} 秒`).join('、')}的静音`)
+    }
+  }
 }
 
 /** 每次界面重载或崩溃之后，日志里应依次出现断开、接回、接管完成。 */
@@ -422,7 +467,8 @@ function renderSoakMarkdown(result) {
   const lines = []
   const name = result.scenario === 'audio' ? '录音' : '录屏'
   lines.push(`# 长录结果：${name} ${result.options?.minutes ?? ''} 分钟`, '')
-  lines.push(`**结论：${verdict.passed ? '通过' : '有问题'}**`, '')
+  lines.push(`**结论：${verdict.conditionMet === false ? '未达测试条件' : verdict.passed ? '通过' : '有问题'}**`, '')
+  if (verdict.unmetConditions?.length) { lines.push('## 未达测试条件', ''); for (const item of verdict.unmetConditions) lines.push(`- ${item}`); lines.push('') }
   if (verdict.problems.length) { lines.push('## 问题', ''); for (const item of verdict.problems) lines.push(`- ${item}`); lines.push('') }
   if (verdict.notes.length) { lines.push('## 提示', ''); for (const item of verdict.notes) lines.push(`- ${item}`); lines.push('') }
   lines.push('## 概况', '')
@@ -439,6 +485,11 @@ function renderSoakMarkdown(result) {
     lines.push(`- 录制汇总：时长 ${seconds(summary.durationUs / 1e6)}、画面分片 ${summary.screenSpans}（补齐 ${summary.repairedSpans}、弃用 ${summary.rejectedSpans}）、丢帧 ${summary.droppedFrames ?? '—'}、重复帧 ${summary.duplicatedFrames ?? '—'}、续录 ${summary.encoderRestarts ?? '—'}、编码器 ${summary.encoder ?? '—'}`)
     lines.push(`- 事件：${summary.eventPages} 页、${summary.events} 条；单页写盘最长 ${summary.maxPageWriteMs} ms；轨道记录最长 ${summary.maxTrackWriteMs} ms；界面断开 ${summary.detaches} 次`)
     lines.push(`- 声音：${Object.entries(result.checks?.audioFiles ?? {}).map(([kind, count]) => `${kind} ${count} 条`).join('、') || '无'}`)
+    const system = result.checks?.systemAudio
+    if (system?.summary) lines.push(`- 系统声：时长 ${system.summary.durationSeconds} 秒、${system.summary.segments} 段、补静音 ${system.summary.silenceSeconds} 秒、设备不可用 ${system.summary.unavailableSeconds} 秒、丢帧 ${system.summary.droppedFrames}、不连续 ${system.summary.discontinuities}、设备切换 ${system.summary.deviceSwitches}、重连 ${system.summary.reconnects}；电平峰值 ${system.level?.maxVolumeDb ?? '—'} dB、平均 ${system.level?.meanVolumeDb ?? '—'} dB`)
+    const motion = result.motion
+    const early = motion?.exitedAtMs && !(motion.exitedAtMs >= result.recording?.stopRequestedAtMs)
+    if (motion) lines.push(`- 运动源：${motion.ok ? `${motion.source}${motion.audio ? '（带测试音）' : ''}，${early ? `${new Date(motion.exitedAtMs).toISOString()} 提前退出` : '全程在跑'}` : `未能提供（${motion.reason}）`}`)
   }
   for (const file of result.checks?.files ?? []) lines.push(`- ${file.role}：${file.path}（${file.probe?.ok ? `${seconds(file.probe.durationSeconds)}${file.probe.sampleRate ? `、${file.probe.sampleRate} Hz` : ''}${file.probe.channels ? `、${file.probe.channels} 声道` : ''}` : file.probe?.error ?? '不存在'}）`)
   lines.push('', '## 施压步骤', '', '| 计划 | 动作 | 迟到 | 结果 | 前 | 后 |', '|---|---|---|---|---|---|')
