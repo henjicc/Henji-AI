@@ -161,7 +161,7 @@ macOS 用同一份菜单模型生成**系统菜单栏**，窗口内不画菜单�
 停靠工作区（剪辑、音频编辑、3D 镜头参考、图片编辑）里，每个面板分三区：标签行、内容、底栏（重要记录 018）。
 - **标签行只放标签**：面板标签、当前标签旁的面板菜单、面板组最大化。面板工具不进标签行：工具和标签抢同一行时，面板组一窄，标签就被挤进「+N」。
 - **面板专属工具放底栏右侧**（视图切换、新建、导入、选区操作等）：底栏 32 高、上边一条 `border-line` 发丝线、静默 `UiIconButton`；底栏左端只放只读计数或状态（如“8 项 · 已选 1”）。放不下时从右往左收进「更多」，不折行、不另起一行。
-  - 写法：`UiToolbar variant="footer"` 的 `tools` 传工具描述，不要自己拼按钮放进 `trailing`。`kind: 'action'`（立刻执行或开关：`label` `icon` `onSelect` `disabled` `disabledReason`；偏离默认才着色的开关用 `on`，默认就开着的开关用不着色的 `pressed`）由底栏画成图标按钮（对象特有、图标说不清的整组动作加 `display: 'text'` 画成“图标 + 文字”，外观不为收纳改），收起后是同名同图标的菜单项，禁用原因照旧；`kind: 'menu'`（`menu: () => 菜单项`）底栏里点开弹出菜单，收起后同一份菜单作为“图标 + 名称”下的一节列出；`kind: 'custom'` 是自己画的控件，给 `overflow` 才能收起，不给就永不收起——自带进行中任务或对话框状态的组件（自动字幕、文档按钮）卸载会丢状态，必须不给。
+  - 写法：`UiToolbar variant="footer"` 的 `tools` 传工具描述，不要自己拼按钮放进 `trailing`。`kind: 'action'`（立刻执行或开关：`label` `icon` `onSelect` `disabled` `disabledReason`；偏离默认才着色的开关用 `on`，默认就开着的开关用不着色的 `pressed`）由底栏画成静息次亮的图标按钮（对象特有、图标说不清的整组动作加 `display: 'text'` 画成“图标 + 文字”，外观不为收纳改），收起后是同名同图标的菜单项，禁用原因照旧；`kind: 'menu'`（`menu: () => 菜单项`）底栏里点开弹出菜单，收起后同一份菜单作为“图标 + 名称”下的一节列出；`kind: 'custom'` 是自己画的控件，给 `overflow` 才能收起，不给就永不收起——自带进行中任务或对话框状态的组件（自动字幕、文档按钮）卸载会丢状态，必须不给。
   - 收纳顺序：面板变窄时左端状态先截断到下限（约 64px），再把工具按位置从右往左收（`priority` 越大越晚收）；变宽时按相反顺序放回。面板自己的低频操作传 `more`（加 `moreLabel` 命名），和收起的工具共用同一个“更多”，不要再自己放一个“更多”按钮。底栏不接受 `trailing`（类型上禁止）。
 - 面板内容区不再单开工具行；面板专属工具也不塞进工作区命令带。
 - 时间线：时间码和吸附、链接等开关放轨道头上方的角落格（轨道头列 × 标尺行），缩放放底栏右侧，不再单占一条工具行。
@@ -270,8 +270,8 @@ prominent/bordered/plain、Fluent 的 primary/default/subtle）。本项目（�
 | 危险 | `danger`（静息同 quiet，悬停显红）/ `dangerSolid`（只用于确认弹窗） | `tone="danger"` | 删除、清空、移除 |
 | 链接 | `link`（强调文字、悬停下划线、行内高度） | —— | 行内跳转/说明链接，不计入动作层级 |
 | 画面上 | `media` | `tone="media"` | 压在图片/视频/画布上的控件（固定媒体叠层令牌） |
-| 静息退后 | —— | `tone="rest"` | 保持默认状态的开关（轨道头的锁、眼睛、喇叭）与折叠箭头：静息是图标灰（`--icon-rest`，只给图标不给文字），偏离默认（`on`）是主要文字色，不着强调色（剪辑样板屏，2026-11-10） |
-| 静息退后的删除 | —— | `tone="restDanger"` | 和一排 `rest` 图标放在一起的删除、移除：静息同为图标灰，悬停显红（`danger` 静息是次要文字色，夹在图标灰里会亮一截） |
+| 静息退后 | —— | `tone="rest"` | **只给**一组保持默认状态的开关（轨道头的锁、眼睛、喇叭）与树里的折叠箭头：静息是图标灰（`--icon-rest`，只给图标不给文字），偏离默认（`on`）是主要文字色，不着强调色（剪辑样板屏，2026-11-10）。**能点了就会发生事情的按钮一律不用它**：工具栏里没选中的工具、命令带与面板底栏的动作、导航、行内动作都是默认档（次亮）；图标灰看起来像禁用（2026-11-12 用户确认） |
+| 静息退后的删除 | —— | `tone="restDanger"` | 只用于夹在一排 `rest` 开关里的删除（少见）：静息同为图标灰，悬停显红；和普通动作放在一起的删除用 `danger` |
 | 行内无底 | —— | `tone="bare"` | 压在已有底色的行内，不增加悬停底；仍保留焦点与可访问名称 |
 | 窗口控件 | —— | `UiWindowControl action platform` | 只用于无边框窗口标题栏的最小化/最大化/还原/关闭（Windows 36×28 静默、关闭悬停危险实底；macOS 交通灯取状态实底令牌） |
 
@@ -639,8 +639,8 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 字被顶高 3px、和同面板其他行标签不一样大。共享组件的默认值只适合某一种排布时（浮层默认离按钮 45px、下拉只会左对齐、
 危险档只有一种静息颜色），**修组件，不在调用点补**。新加一种排布（左侧面板、浮层、画布节点）时，把会放进去的组件在这种排布下各看一遍。
 
-一排同组按钮里改一个成员的档位（图标灰、字号、对齐），整组每个成员都要跟着核对：样板屏把记录工具条改成图标灰时漏了删除（危险档静息更亮），
-同组的删除类动作用 `tone="restDanger"`。对齐、间距、同组颜色三类已进布局检查（`labelOffCenter`、`popoverDetached`、`iconToneMismatch`，
+一排同组按钮里改一个成员的档位（亮度、字号、对齐），整组每个成员都要跟着核对：同组静息颜色要一致，和动作放在一起的删除用 `danger`
+（静息同默认档），只有夹在一排 `rest` 开关里的删除才用 `restDanger`。对齐、间距、同组颜色三类已进布局检查（`labelOffCenter`、`popoverDetached`、`iconToneMismatch`，
 判据见 `references/review.md` 第 9.2 节），开发版 `--dev-checks` 会直接描红。
 
 ### 5. 不可用就不出现，出现就说明为什么
@@ -712,7 +712,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 同组同档内容动作 | `UiActionGroup tier="secondary" / "quiet" size="sm" / "md" / "lg"`；组内 UiButton 继承档位和尺寸 | 子按钮逐个写 variant/size；S7 阻断，开发态冲突告警 |
 | 同质记录列表 | `UiRecordList` / `UiRecordItem`（density page/panel/compact；全局 index 决定分隔；支持测量 ref） | 手写 py-5 + border-t、divide-y 或 first: 边界；规则 E / S4 已接入 |
 | 全屏媒体查看器 | `useUiViewerShell(open, onClose, options)` + `UiViewerShell viewer={viewer}`；surface media/canvas、inset window/content、presentation fill/centered、controls 插槽 | 复制淡入淡出、inert、滚动锁、Escape 与 overlay ownership；业务不再加查看器壳豁免 |
-| 属性面板（效果控件这类竖向属性列表：每行 箭头 / 秒表 / 名称 / 紧跟名称左对齐的数值，剪辑样板屏 2026-11-10 修订重要记录 019 的右对齐） | 宿主提供 `UiFieldLayoutContext` = `property` 与 `UiPropertyMenuContext`（面板级右键菜单，`useContextMenu().showMenu`）；行就是 `UiFormRow`（`leading` 秒表列、`labelTrailing` 悬停出现的关键帧导航、`wide` 曲线/色轮等整行控件；重置放右键菜单，没有宿主菜单时才退回 `trailing`）；数值后的单位用 `UiPropertyUnit`（直接跟在数字后面，成对数值中间的传 `hanging={false}` 占住 16px）；名称列定宽 88，放不下截断并悬停看全；知道默认值的读数（`NumberInput defaultValue`）没改时退到次要文字色；行外内容用 `UI_PROPERTY_INSET_CLASS` 对齐名称列，默认藏起、悬停或聚焦本行才出现的用 `UI_PROPERTY_REVEAL_CLASS`；`ParamList` / `ParamField` 在这个排布下自动变成同一套行；分组的可折叠小标题用 `PropertyHeading`（`@/components/ui/params/ParamList`，与参数行同一套四列、箭头落在秒表列；基本声音等非参数分组同样用它） | 行尾再放一列重置按钮；调用点自排四列网格、手写单位占位或数字右对齐 |
+| 属性面板（效果控件这类竖向属性列表：每行 箭头 / 秒表 / 名称 / 紧跟名称左对齐的数值，剪辑样板屏 2026-11-10 修订重要记录 019 的右对齐） | 宿主提供 `UiFieldLayoutContext` = `property` 与 `UiPropertyMenuContext`（面板级右键菜单，`useContextMenu().showMenu`）；没有关键帧的面板（图片编辑）再提供 `UiPropertyKeyframesContext` = `false`，去掉“已改”与秒表两列，名称从折叠箭头后起笔；行就是 `UiFormRow`（`leading` 秒表列、`labelTrailing` 悬停出现的关键帧导航、`wide` 曲线/色轮等整行控件；重置放右键菜单，没有宿主菜单时才退回 `trailing`）；数值后的单位用 `UiPropertyUnit`（直接跟在数字后面，成对数值中间的传 `hanging={false}` 占住 16px）；名称列定宽 88，放不下截断并悬停看全；知道默认值的读数（`NumberInput defaultValue`）没改时退到次要文字色；行外内容用 `UI_PROPERTY_INSET_CLASS` 对齐名称列，默认藏起、悬停或聚焦本行才出现的用 `UI_PROPERTY_REVEAL_CLASS`；`ParamList` / `ParamField` 在这个排布下自动变成同一套行；分组的可折叠小标题用 `PropertyHeading`（`@/components/ui/params/ParamList`，与参数行同一套四列、箭头落在秒表列；基本声音等非参数分组同样用它） | 行尾再放一列重置按钮；调用点自排四列网格、手写单位占位或数字右对齐 |
 | 表单行 | `UiFormRow`（窄停靠面板 `density="compact"`，配 `UiGroup titleTone="compact"`）；行内的 `Ui*` 控件没有自己的名称时自动 `aria-labelledby` 行标签、`aria-describedby` 说明（下拉读作“标签 + 当前值”，任务 5.8） | 手写 label + 间距；调用点改标签字号；给行内控件再手写一遍同样的 `aria-label` |
 | 字段 | `UiInput` / `UiSelect` / `UiTextArea` / `NumberInput`（数值拖动：读数或标签上左右拖，Shift 精细、Alt 粗调，单击编辑）；高度只用 `size`；直接落在所在表面上编辑的多行文本用 `UiTextArea frame="none"`；复合字段（表面与焦点环画在外壳上）的内层输入用 `UiInput frame="inner"` | 手写数值拖动、自绘步进器；调用点改高度；调用点给文本框去边框去底（`!bg-transparent !ring-0`） |
 | 颜色输入、多行字段外壳、数值步进列 | `UiColorInput` / `UiTextArea` / `UiNumberStepper`（步进列组合到数值字段中） | 重写颜色输入、叠第二层字段框、把步进列当独立数值框 |

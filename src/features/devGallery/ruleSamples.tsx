@@ -1,5 +1,5 @@
 import { UiActionGroup, UiButton, UiFormRow, UiGroup, UiIconButton, UiInput, UiPanel, UiSwitch, UiToolbar } from '@/components/ui'
-import { Download, Pencil, RefreshCw, Trash2 } from 'lucide-react'
+import { Eye, Lock, Trash2, Volume2 } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 const RULES = ['multiplePrimary', 'rowHeightMismatch', 'formControlMisaligned', 'actionStartsAtLabelColumn', 'toolbarWrap', 'shortTextTruncated', 'selectedStateWeak', 'overlayClipped', 'stackedBands', 'controlClipped', 'controlOccluded', 'labelOffCenter', 'iconToneMismatch'] as const
@@ -23,8 +23,8 @@ function Example({ rule, bad }: { rule: typeof RULES[number]; bad: boolean }): J
     case 'controlOccluded': content = <div className="relative w-fit"><UiButton>打开内容</UiButton><div className={`absolute inset-0 ${bad ? '' : 'pointer-events-none'}`} /></div>; break
     // 参数名自带外边距（给“标签在上”排法用的）放进左右排的行里，字被顶高；名称只出文字，对齐交给行
     case 'labelOffCenter': content = <UiGroup labelWidth={96}><UiFormRow label={<span className={bad ? 'mb-3 block' : ''}>提示词增强</span>}><UiSwitch checked onCheckedChange={noop} aria-label="提示词增强" /></UiFormRow></UiGroup>; break
-    // 一排退到图标灰的工具里，删除也要静息同灰、悬停才显红（restDanger），不能用静息更亮的 danger
-    case 'iconToneMismatch': content = <div className="flex gap-0.5">{[RefreshCw, Pencil, Download].map((Icon, index) => <UiIconButton key={index} tone="rest" aria-label={`工具 ${index + 1}`}><Icon /></UiIconButton>)}<UiIconButton tone={bad ? 'danger' : 'restDanger'} aria-label="删除"><Trash2 /></UiIconButton></div>; break
+    // 一排退到图标灰的默认状态开关（锁、眼睛、喇叭）里夹着删除：删除也要静息同灰、悬停才显红（restDanger），不能用静息更亮的 danger
+    case 'iconToneMismatch': content = <div className="flex gap-0.5">{[Lock, Eye, Volume2].map((Icon, index) => <UiIconButton key={index} tone="rest" aria-label={`开关 ${index + 1}`}><Icon /></UiIconButton>)}<UiIconButton tone={bad ? 'danger' : 'restDanger'} aria-label="删除"><Trash2 /></UiIconButton></div>; break
   }
   const id = `gallery-rule-${rule}-${bad ? 'bad' : 'good'}`
   return <section id={id} data-gallery-rule-sample={rule} data-gallery-expect-hit={bad ? rule : undefined} data-gallery-expect-clean={bad ? undefined : rule} className="flex flex-col gap-3">

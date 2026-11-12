@@ -35,7 +35,7 @@
 | 最亮 `text1` | 内容本身：片段名、素材名、文件名、改过的数值、当前标签、分区名 |
 | 次亮 `text2` | 没改过的数值、轨道名、工具按钮上的字、可点的动作图标 |
 | 第三档 `text3` | 参数名、菜单栏、未选中的标签、时间与数量、单位 |
-| 图标灰 `--icon-rest` | 只给图标：保持默认状态的开关、面板底栏工具、折叠箭头（`UiIconButton tone="rest"`） |
+| 图标灰 `--icon-rest` | 只给图标：一组保持默认状态的开关（锁、眼睛、喇叭）与树里的折叠箭头（`UiIconButton tone="rest"`）。能点的工具与动作不用它，看起来像禁用（2026-11-12 用户确认） |
 
 规律：**内容最亮，名字退后，默认值再退后**。粗体只给分区名和主时间码；层级靠亮度差，不靠加粗。
 
@@ -44,8 +44,8 @@
 | 状态 | 画法 |
 |---|---|
 | 当前工具 / 当前视图 | 最亮 + 中性底（`on selection="mode"`） |
-| 可点的动作 | 次亮 |
-| 保持默认的开关、底栏工具 | 图标灰（`tone="rest"`） |
+| 可点的工具与动作（工具栏、命令带、面板底栏、导航） | 次亮（默认档） |
+| 保持默认的开关（锁、眼睛、喇叭） | 图标灰（`tone="rest"`） |
 | 偏离默认（锁上、隐藏、静音） | 最亮，不着强调色（`tone="rest" on`） |
 | 开着的功能开关（吸附、链接、秒表） | 强调色（`on`） |
 
@@ -105,7 +105,7 @@
 
 | 要做的事 | 用什么 |
 |---|---|
-| 默认状态的图标按钮 | `UiIconButton tone="rest"`；面板底栏走 `UiToolbar variant="footer" tools`，已自动处理 |
+| 保持默认状态的开关 | `UiIconButton tone="rest"`；面板底栏走 `UiToolbar variant="footer" tools`，工具是默认档次亮 |
 | 属性行 | 宿主给 `UiFieldLayoutContext = 'property'`，行用 `UiFormRow`，读数 `NumberInput`（给 `restValue` 或 `defaultValue` 才会“没改时变暗”） |
 | 出问题的斜纹 | `ui-hatch-danger`（局部）、`ui-fault-surface`（占满内容区）、`ui-hatch-locked`（锁定） |
 | 时间线片段 | `clipLabelSurface.ts` 的底色与名条、`TIMELINE_SELECTED_RING_CLASS` |

@@ -648,8 +648,8 @@ function footerToolButton(tool: UiPanelFooterAction | UiPanelFooterMenu, extra: 
       size="sm"
       aria-label={tool.label}
       tooltip={tool.tooltip ?? tool.label}
-      // 面板底栏的工具静息时一律退到图标灰（删除类也是，悬停才显红），开着（偏离默认）的照常着色
-      tone={isAction && tool.tone === 'danger' ? 'restDanger' : isAction && tool.on ? 'default' : 'rest'}
+      // 底栏工具都是能点的动作：静息是正常的次亮色（图标灰只给保持默认状态的开关，会被看成不可用）；删除类悬停才显红
+      tone={isAction && tool.tone === 'danger' ? 'danger' : 'default'}
       on={isAction ? tool.on : undefined}
       aria-pressed={isAction && tool.on === undefined ? tool.pressed : undefined}
       selection={isAction ? tool.selection : undefined}

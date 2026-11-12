@@ -44,11 +44,12 @@ export function ImageEditorDockHeaderActionsV3({ group, containerApi }: IDockvie
   const isCollapsed = group.panels.some(panel => collapsed.has(panel.id))
   const groupTitle = group.activePanel?.title ?? ''
   return <div className="flex h-full items-center pr-1">
-    <UiIconButton size="xs" tone="rest" aria-label={t(isCollapsed ? 'imageEditor.v3.panels.expand' : 'imageEditor.v3.panels.collapse', { title: groupTitle })}
+    <UiIconButton size="xs" aria-label={t(isCollapsed ? 'imageEditor.v3.panels.expand' : 'imageEditor.v3.panels.collapse', { title: groupTitle })}
+      tooltip={t(isCollapsed ? 'imageEditor.v3.panels.expand' : 'imageEditor.v3.panels.collapse', { title: groupTitle })}
       aria-expanded={!isCollapsed} onClick={() => {
         for (const panel of group.panels) if (collapsed.has(panel.id) === isCollapsed) toggleCollapsed(panel.id)
       }}>{isCollapsed ? <ChevronDown  /> : <ChevronUp  />}</UiIconButton>
-    <UiIconButton size="xs" tone="rest" aria-label={title} tooltip={title}
+    <UiIconButton size="xs" aria-label={title} tooltip={title}
       onClick={() => toggleDockGroupMaximized(containerApi, undefined, group)}>
       {maximized ? <Minimize2  /> : <Maximize2  />}
     </UiIconButton>

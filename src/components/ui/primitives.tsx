@@ -164,7 +164,7 @@ export const UiNavButton = forwardRef<HTMLButtonElement, UiNavButtonProps>(
       className={`relative inline-flex w-full items-center border-0 text-left text-13 transition-colors ${UI_RADIUS_CLASS.control} ${UI_NAV_SIZE_CLASS[size]} ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${UI_ITEM_FOCUS_RING_CLASS} ${
         active
           ? UI_NAV_ITEM_ACTIVE_CLASS
-          : `${UI_GLASS_ADAPTIVE_NAV_CLASS} text-text2 hover:text-text1 [&>svg:not([class*=text-])]:text-icon-rest`
+          : `${UI_GLASS_ADAPTIVE_NAV_CLASS} text-text2 hover:text-text1`
       } ${className}`}
       {...props}
  />

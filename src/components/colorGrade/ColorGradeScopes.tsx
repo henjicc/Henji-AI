@@ -73,7 +73,7 @@ export function ColorGradeScopes({ statistics, busy, error, onRefresh }: { stati
         <ReadoutLine warning={readout.clipping.highlightsPercent > .5 || readout.clipping.shadowsPercent > .5} text={`高光溢出 ${readout.clipping.highlightsPercent}% · 暗部死黑 ${readout.clipping.shadowsPercent}%`} />
         <div className="flex flex-1 items-center justify-between gap-2">
           <ReadoutLine warning={readout.whiteBalance.confidence >= .4 && Math.abs(readout.whiteBalance.kelvin - 6500) > 600} text={`光源约 ${readout.whiteBalance.kelvin} K`} />
-          <UiIconButton size="xs" tone="rest" tooltip="重新读取" aria-label="重新读取示波器" loading={busy} onClick={onRefresh}><RefreshCw /></UiIconButton>
+          <UiIconButton size="xs" tooltip="重新读取" aria-label="重新读取示波器" loading={busy} onClick={onRefresh}><RefreshCw /></UiIconButton>
         </div>
       </div>}
     </>}

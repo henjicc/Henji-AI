@@ -47,7 +47,7 @@ function DisplayMap({ screens, sourceId, label, onSelect }: { screens: CaptureSo
             {source.thumbnailUrl && <img src={source.thumbnailUrl} alt="" className="h-full w-full object-cover" data-recording-source-thumbnail />}
           </div>
           <span className="flex w-full min-w-0 items-center gap-2 pt-2 text-13" data-recording-source-caption>
-            <Monitor className={`${UI_ICON_SIZE_CLASS.sm} shrink-0 text-icon-rest`} aria-hidden />
+            <Monitor className={`${UI_ICON_SIZE_CLASS.sm} shrink-0 text-text2`} aria-hidden />
             <span className="truncate" data-recording-source-title>{label(source)}{rect.primary ? ` · ${t('recording.primaryScreen')}` : ''}</span>
             <span className={`${UI_TEXT_TIMECODE_CLASS} shrink-0 text-xs text-text3`}>{Math.round(rect.width * rect.scaleFactor)}×{Math.round(rect.height * rect.scaleFactor)}</span>
           </span>

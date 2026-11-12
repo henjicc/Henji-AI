@@ -144,7 +144,7 @@ export function GenerationSelectionBar({ count, allSelected, onExit, onSelectAll
             id: action.id,
             priority: secondary.length - index,
             node: action.danger
-              ? <UiIconButton tone="restDanger" tooltip={action.label} disabled={Boolean(action.reason)} disabledReason={action.reason} onClick={action.onSelect}><action.icon /></UiIconButton>
+              ? <UiIconButton tone="danger" tooltip={action.label} disabled={Boolean(action.reason)} disabledReason={action.reason} onClick={action.onSelect}><action.icon /></UiIconButton>
               : <UiButton disabled={Boolean(action.reason)} disabledReason={action.reason} loading={actions.running === action.id} onClick={action.onSelect}><action.icon />{action.label}</UiButton>,
           })),
         ]}

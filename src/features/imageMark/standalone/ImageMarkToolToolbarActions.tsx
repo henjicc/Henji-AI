@@ -79,7 +79,6 @@ export function ImageMarkToolToolbarActions({
       />
       {/* 保存 / 另存为：写回图片文档（草稿先起名）；与“打开”同属文件类动作，同为图标按钮，悬停给名称 */}
       <UiIconButton
-        tone="rest"
         aria-label={t('imageEditor.v3.host.toolbar.save')}
         tooltip={t('imageEditor.v3.host.toolbar.save')}
         disabled={host.isHostBusy}
@@ -88,7 +87,6 @@ export function ImageMarkToolToolbarActions({
         <Save />
       </UiIconButton>
       <UiIconButton
-        tone="rest"
         aria-label={t('imageEditor.v3.host.toolbar.saveAs')}
         tooltip={t('imageEditor.v3.host.toolbar.saveAs')}
         disabled={host.isHostBusy}

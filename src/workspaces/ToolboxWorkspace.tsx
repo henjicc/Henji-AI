@@ -122,7 +122,7 @@ const ToolboxHome: React.FC = () => {
                     tooltip={`在${tool ? t(tool.descriptor.titleKey) : '工具'}中打开`}
                     onClick={() => openRecent(file)}
                   >
-                    <Icon size={UI_ICON_SIZE.md} aria-hidden="true" className="text-icon-rest" />
+                    <Icon size={UI_ICON_SIZE.md} aria-hidden="true" className="text-text2" />
                     <span className="truncate text-text1">{file.name}</span>
                     <span className="truncate text-xs text-text3">{tool ? t(tool.descriptor.titleKey) : null}</span>
                     <span className="text-right text-xs tabular-nums text-text3">{formatTaskCreatedAt(new Date(file.updatedAt), locale)}</span>
