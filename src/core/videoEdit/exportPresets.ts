@@ -42,16 +42,18 @@ export const videoEditExportSettingsSchema = z.object({
 export type VideoEditExportSettings = z.infer<typeof videoEditExportSettingsSchema>
 export const videoEditExportPresetSchema = z.object({ id: z.string().min(1).max(100), name: z.string().trim().min(1).max(200), settings: videoEditExportSettingsSchema }).strict()
 export type VideoEditExportPreset = z.infer<typeof videoEditExportPresetSchema>
-// 内置视频预设默认把字幕烧录进画面（2026-10-28 用户：导出默认打开字幕）；仅音频的预设不输出字幕
-const preset = (id: string, name: string, width: number, height: number, videoBitrateMbps = 12, format: VideoEditExportSettings['format'] = 'mp4', fps: number | null = 30): VideoEditExportPreset => ({
-  id: `builtin:${id}`, name, settings: videoEditExportSettingsSchema.parse({ format, width, height, fps, videoBitrateMbps, audioBitrateKbps: 192, fit: 'fit', loudness: { targetLufs: -14, truePeakDbtp: -1 }, videoEnabled: format === 'mp4', audioCodec: format === 'wav' ? 'wav' : 'aac', captionMode: format === 'mp4' ? 'burn' : 'none', usePreviews: false, useWebCache: false, ...(format === 'mp4' ? { encoding: videoEditExportQualityEncoding('avc', 'visually_lossless') } : {}) }),
+// 内置视频预设默认把字幕烧录进画面（2026-10-28 用户：导出默认打开字幕）；仅音频的预设不输出字幕。
+// 帧率一律跟随序列（名字里写明帧率的预设除外）：平台预设只规定画幅，不该把 60 帧的片子悄悄降成 30 帧。
+// 投稿用的预设默认“高画质”：平台会二次压缩，视觉无损只让文件更大、上传更慢；母版预设另设。
+const preset = (id: string, name: string, width: number, height: number, videoBitrateMbps = 12, format: VideoEditExportSettings['format'] = 'mp4', fps: number | null = null): VideoEditExportPreset => ({
+  id: `builtin:${id}`, name, settings: videoEditExportSettingsSchema.parse({ format, width, height, fps, videoBitrateMbps, audioBitrateKbps: 192, fit: 'fit', loudness: { targetLufs: -14, truePeakDbtp: -1 }, videoEnabled: format === 'mp4', audioCodec: format === 'wav' ? 'wav' : 'aac', captionMode: format === 'mp4' ? 'burn' : 'none', usePreviews: false, useWebCache: false, ...(format === 'mp4' ? { encoding: videoEditExportQualityEncoding('avc', 'high') } : {}) }),
 })
 export const VIDEO_EDIT_DEFAULT_EXPORT_PRESET_ID = 'builtin:sequence'
 export const VIDEO_EDIT_EXPORT_PRESETS: readonly VideoEditExportPreset[] = [
   { ...preset('sequence', '与序列一致', 1920, 1080, 12, 'mp4', null), settings: { ...preset('sequence', '', 1920, 1080).settings, fps: null, followSequence: { resolution: true, fps: true, sampleRate: true, channels: true } } },
-  preset('douyin', '抖音 · 竖版 1080p', 1080, 1920), preset('channels', '视频号 · 竖版 1080p', 1080, 1920),
-  preset('bilibili', 'B 站 · 横版 1080p', 1920, 1080), preset('bilibili-4k', 'B 站 · 横版 4K', 3840, 2160, 45),
-  preset('youtube', 'YouTube · 横版 1080p', 1920, 1080), preset('youtube-4k', 'YouTube · 横版 4K', 3840, 2160, 45),
+  preset('douyin', '抖音 · 竖版 1080P', 1080, 1920), preset('channels', '视频号 · 竖版 1080P', 1080, 1920),
+  preset('bilibili', 'B 站 · 横版 1080P', 1920, 1080), preset('bilibili-4k', 'B 站 · 横版 4K', 3840, 2160, 45),
+  preset('youtube', 'YouTube · 横版 1080P', 1920, 1080), preset('youtube-4k', 'YouTube · 横版 4K', 3840, 2160, 45),
   preset('instagram', 'Instagram · 方形', 1080, 1080), preset('aac', '仅音频 · AAC', 1920, 1080, 12, 'aac', null),
   { ...preset('wav', '仅音频 · WAV 无损', 1920, 1080, 12, 'wav', null), settings: { ...preset('wav', '', 1920, 1080, 12, 'wav', null).settings, loudness: null } },
   { ...preset('master', '高质量母版 · 原画幅', 1920, 1080, 80, 'mp4', null), settings: { ...preset('master', '', 1920, 1080, 80, 'mp4', null).settings, codec: 'hevc', encoding: undefined, loudness: null, followSequence: { resolution: true, fps: true, sampleRate: true, channels: true } } },

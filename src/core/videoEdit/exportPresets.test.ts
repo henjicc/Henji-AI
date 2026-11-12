@@ -46,7 +46,7 @@ it('平台预设包含画幅、帧率、码率与响度；编码单位准确，�
     expect(videoEditExportSettingsSchema.safeParse(value.settings).success).toBe(true)
     expect(value.settings.audioBitrateKbps).toBe(192)
   }
-  expect(videoEditExportEncoding(VIDEO_EDIT_EXPORT_PRESETS.find(value => value.id === 'builtin:douyin')!.settings, 60)).toEqual({ fps: 30, videoBitrate: 12000000, audioBitrate: 192000, audioCodec: 'aac' })
+  expect(videoEditExportEncoding(VIDEO_EDIT_EXPORT_PRESETS.find(value => value.id === 'builtin:douyin')!.settings, 60)).toEqual({ fps: 60, videoBitrate: 12000000, audioBitrate: 192000, audioCodec: 'aac' })
   const master = VIDEO_EDIT_EXPORT_PRESETS.find(value => value.id === 'builtin:master')!.settings
   expect(master).toMatchObject({ followSequence: { resolution: true, fps: true }, fps: null, loudness: null })
   expect(videoEditExportEncoding(master, 30000 / 1001).fps).toBe(30000 / 1001)
