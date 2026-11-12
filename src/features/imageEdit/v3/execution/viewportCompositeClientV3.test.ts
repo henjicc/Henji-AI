@@ -11,12 +11,12 @@ import {
   ImageEditorViewportCompositeClientV3,
   ImageEditorViewportCompositeSupersededErrorV3,
 } from './viewportCompositeClientV3'
-import { ImageEditorResourcePressureErrorV3 } from './imageEditorResourcePressureV3'
 import {
   estimateImageEditorViewportWorkingRegionPixelsV3,
   prepareImageEditorViewportCompositeV3,
 } from './viewportCompositeDocumentV3'
 import type { ImageEditorViewportCompositeWorkerRequestV3 } from './viewportCompositeProtocolV3'
+import type { ImageEditorPreviewBrushTileLoaderV3 } from './previewBrushTileLoaderV3'
 import type { ImageEditorViewportFrameV3 } from './viewportTileSchedulerV3'
 import {
   bitmap,
@@ -222,32 +222,31 @@ describe('图片编辑 V3 视口成品客户端', () => {
     client.dispose()
   })
 
-  it('成品 GPU 预算不足时不调用 Worker，并要求降低 mip 而不是切换整图预览', async () => {
-    const frame = createFrame()
-    const scheduler = {
-      render: vi.fn(async () => frame),
-      cancel: vi.fn(),
-      dispose: vi.fn(),
-    }
+  it('Worker 渲染前出错时归还源帧与传输、工作集、成品三份租约', async () => {
     const worker = new FakeViewportWorker()
-    const document = createImageEditDocumentV3({
-      width: 20_000,
-      height: 10_000,
-      documentId: 'viewport-pressure',
-      sourceResourceId: RESOURCE,
-      idFactory: () => 'source',
-    })
-    const { transferBytes, workingBytes, outputBytes } = frameBudgetBytes(frame, document)
-    const budget = new ImageEditResourceBudget({
-      totalBytes: transferBytes + workingBytes + outputBytes - 1,
-      cpuCacheTargetBytes: 0,
-      gpuTargetBytes: 0,
-    })
+    const frame = createFrame()
+    const scheduler = { render: vi.fn(async () => frame), cancel: vi.fn(), dispose: vi.fn() }
+    const budget = new ImageEditResourceBudget({ totalBytes: 2 ** 40, cpuCacheTargetBytes: 0, gpuTargetBytes: 0 })
+    const brushTileLoader = {
+      load: vi.fn(async () => {
+        expect(budget.snapshot().leaseCount).toBe(3)
+        throw new Error('画笔瓦片读取失败')
+      }),
+      dispose: vi.fn(),
+    } as unknown as ImageEditorPreviewBrushTileLoaderV3
     const client = new ImageEditorViewportCompositeClientV3({
-      sessionId: 'viewport-pressure',
+      sessionId: 'viewport-early-failure',
       scheduler,
       workerFactory: () => worker,
       resourceBudget: budget,
+      brushTileLoader,
+    })
+    const document = createImageEditDocumentV3({
+      width: 20_000,
+      height: 10_000,
+      documentId: 'viewport-early-failure',
+      sourceResourceId: RESOURCE,
+      idFactory: () => 'source',
     })
 
     const error = await client.render({
@@ -256,15 +255,10 @@ describe('图片编辑 V3 视口成品客户端', () => {
       quality: 'stable',
       resourceDescriptors: [],
       viewport: { documentX: 0, documentY: 0, width: 1_440, height: 900, zoom: 1_440 / 20_000, devicePixelRatio: 1 },
-      viewportKey: 'pressure',
+      viewportKey: 'early-failure',
     }).catch((caught: unknown) => caught)
-    expect(error).toBeInstanceOf(ImageEditorResourcePressureErrorV3)
-    expect(error).toMatchObject({
-      scope: 'viewport-composite',
-      category: 'gpu',
-      requestedBytes: outputBytes,
-      recovery: 'lower-mip',
-    })
+    expect(error).toMatchObject({ message: '画笔瓦片读取失败' })
+    expect(brushTileLoader.load).toHaveBeenCalledTimes(1)
     expect(worker.messages.some((message) => message.type === 'render')).toBe(false)
     expect(frame.release).toHaveBeenCalledTimes(1)
     expect(budget.snapshot()).toMatchObject({ totalBytes: 0, leaseCount: 0 })

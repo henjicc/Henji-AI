@@ -2,12 +2,15 @@ import type { RegionGrid, RegionRect } from '@/core/imaging/regions';
 import type { ImageEditSelectionSessionV3 } from '@/core/imageEdit/v3/selection/session';
 import type { ImageEditSelectionMaskShapeV3 } from '@/core/imageEdit/v3/subjectSelection';
 import type { GeometryWorkerClient } from './workerClient';
+import { scaleImageEditCacheBytes } from '@/core/imageEdit/v3/resourceBudget';
+
+const selectionReadSplitBytes = (): number => scaleImageEditCacheBytes(8 * 1024 * 1024);
 
 /** Coverage shares the image displacement, including nonuniform brush radii and feather. */
 export async function mapGeometrySelectionsV3(worker: GeometryWorkerClient, selections: readonly ImageEditSelectionSessionV3[], source: RegionGrid, output: RegionGrid, signal: AbortSignal): Promise<ImageEditSelectionSessionV3[]> {
   const sample = async (selection: ImageEditSelectionSessionV3, region: RegionRect): Promise<Float32Array> => {
     const sourceRect = await worker.run<RegionRect>({ kind: 'bounds', source, output, region }, signal);
-    if (sourceRect.width * sourceRect.height * 4 > 8 * 1024 * 1024 && region.width * region.height > 1) {
+    if (sourceRect.width * sourceRect.height * 4 > selectionReadSplitBytes() && region.width * region.height > 1) {
       const horizontal = region.width >= region.height, split = Math.floor((horizontal ? region.width : region.height) / 2);
       const first = { ...region, ...(horizontal ? { width: split } : { height: split }) }, second = { ...region, ...(horizontal ? { x: region.x + split, width: region.width - split } : { y: region.y + split, height: region.height - split }) };
       const result = new Float32Array(region.width * region.height);

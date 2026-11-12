@@ -137,7 +137,7 @@ describe('图片编辑 V3 视口 CPU 瓦片缓存', () => {
     })
   })
 
-  it('全局资源账本的其他在途内存会参与 admission', () => {
+  it('全局账本吃紧只让 admission 建议降档，插入照样成功', () => {
     const resourceBudget = budget(tileBytes * 2)
     const inFlight = resourceBudget.acquire('in-flight', tileBytes + 1)
     const cache = new ImageEditorViewportTileCacheV3({
@@ -147,11 +147,11 @@ describe('图片编辑 V3 视口 CPU 瓦片缓存', () => {
 
     const first = request(0)
     expect(cache.admission([first])).toMatchObject({ admitted: false })
-    expect(cache.insertAndLease(first, tile(0))).toBeNull()
-    inFlight?.release()
-    const admitted = cache.insertAndLease(first, tile(0))
-    expect(admitted).not.toBeNull()
-    admitted?.release()
+    const lease = cache.insertAndLease(first, tile(0))
+    expect(lease).not.toBeNull()
+    expect(resourceBudget.snapshot().totalBytes).toBe(tileBytes * 2 + 1)
+    lease?.release()
+    inFlight.release()
   })
 
   it('dispose 立即释放空闲项，仍被租用的项在 lease 归还时释放', () => {

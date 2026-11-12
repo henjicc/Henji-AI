@@ -30,7 +30,6 @@ import type {
   ImageEditorV3ExportRenderDependencies,
   ImageEditorV3ExportRenderRegion,
 } from './contracts'
-import { ImageEditorV3ExportCapabilityError } from './contracts'
 import type { ImageEditorV3VgpuGlowAnalysisSet } from './vgpuGlowAnalysis'
 import {
   loadImageEditorV3SourceRegion,
@@ -144,12 +143,6 @@ export async function buildImageEditorV3FastBlurAnalyses(
       const prefix = dependencyPlan(plan, inputNodeId, mip)
       const peakBytes = size.width * size.height * 16 * Math.max(4, prefix.nodes.length + 4)
       const peakLease = budget.acquire('in-flight', peakBytes)
-      if (!peakLease) {
-        throw new ImageEditorV3ExportCapabilityError(
-          'WORKING_SET_EXCEEDED',
-          `模糊共享分析需要 ${Math.ceil(peakBytes / 1024 / 1024)}MiB 工作集，资源账本已拒绝`,
-        )
-      }
       try {
         const sourceCache = new Map<string, Promise<Float32PremultipliedRgbaTile>>()
         const loadSource = (
@@ -270,12 +263,6 @@ export async function buildImageEditorV3FastBlurAnalyses(
           mip,
         })
         const cacheLease = budget.acquire('cpu-cache', blurred.data.byteLength)
-        if (!cacheLease) {
-          throw new ImageEditorV3ExportCapabilityError(
-            'WORKING_SET_EXCEEDED',
-            '模糊共享分析缓存超过统一资源账本上限',
-          )
-        }
         cacheLeases.push(cacheLease)
         analyses.set(blurNode.id, {
           tile: blurred,

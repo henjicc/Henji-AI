@@ -4,6 +4,7 @@ import type { PaintBrush, PaintDab, PaintSurface, PaintTarget } from '@/core/ima
 import type { ImageEditSize } from '@/core/imageEdit/v3/tileGeometry';
 import { PaintWorkerClient } from '../paint/workerClient';
 import { LeasedLruCache } from '@/core/imageEdit/v3/leasedLruCache';
+import { scaleImageEditCacheBytes } from '@/core/imageEdit/v3/resourceBudget';
 
 /** Reads the immutable loader snapshot, never the preview or previous dab's output. */
 export async function readRetouchRegion(load: ImageEditBrushTileLoaderV3, size: ImageEditSize, rect: { x: number; y: number; width: number; height: number }, signal: AbortSignal): Promise<RetouchPixels> {
@@ -25,8 +26,8 @@ export async function readRetouchRegion(load: ImageEditBrushTileLoaderV3, size: 
 /** A stroke owns one compute client; source tiles are read from the fixed original document. */
 export class RetouchStrokeCompute {
   private readonly worker = new PaintWorkerClient();
-  private readonly cache = new LeasedLruCache<Awaited<ReturnType<ImageEditBrushTileLoaderV3>>>({ maxBytes: 64 * 1024 * 1024 });
-  private readonly coverageCache = new LeasedLruCache<Float32Array>({ maxBytes: 16 * 1024 * 1024 });
+  private readonly cache = new LeasedLruCache<Awaited<ReturnType<ImageEditBrushTileLoaderV3>>>({ maxBytes: scaleImageEditCacheBytes(64 * 1024 * 1024) });
+  private readonly coverageCache = new LeasedLruCache<Float32Array>({ maxBytes: scaleImageEditCacheBytes(16 * 1024 * 1024) });
   private readonly cachedLoad: ImageEditBrushTileLoaderV3 = async (coordinate, signal) => {
     signal.throwIfAborted(); const key = `${coordinate.mip}/${coordinate.x}/${coordinate.y}`, lease = this.cache.lease(key);
     if (lease) { const value = lease.value; lease.release(); return value; }

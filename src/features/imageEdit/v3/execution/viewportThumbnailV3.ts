@@ -1,10 +1,9 @@
-import { imageEditOutputSizeV3, createImageEditIdV3, type ImageEditDocumentV3, type ImageEditLayerV3 } from '@/core/imageEdit/v3'
+import { imageEditOutputSizeV3, createImageEditIdV3, type ImageEditDocumentV3, type ImageEditLayerV3, type ImageEditMemoryLease } from '@/core/imageEdit/v3'
 import type { ImageEditorV3ResourceDescriptor } from '@/platform/contracts/imageEditorV3'
 import type { ImageEditorV3PackageThumbnailSnapshot } from '../editor/types'
 import type { ImageEditorViewportCompositeClientV3 } from './viewportCompositeClientV3'
 import type { ImageEditorPreviewClientV3 } from './imageEditorPreviewClientV3'
 import { acquireImageEditorSessionResourceBudgetV3 } from './imageEditorSessionResourceBudgetV3'
-import { acquireImageEditorResourceLeaseV3 } from './imageEditorResourcePressureV3'
 
 export async function renderImageEditorThumbnailV3(
   client: Pick<ImageEditorViewportCompositeClientV3, 'render'>,
@@ -55,11 +54,11 @@ export async function renderImageEditorViewportThumbnailV3(
     overscanViewports: 0, forwardPrefetchViewports: 0,
   })
   const sessionBudget = acquireImageEditorSessionResourceBudgetV3(sessionId, { consumerId: createImageEditIdV3('thumbnail-encoding') })
-  let encodingLease: ReturnType<typeof acquireImageEditorResourceLeaseV3> | undefined
+  let encodingLease: ImageEditMemoryLease | undefined
   try {
     signal.throwIfAborted()
     // 成品位图由 viewport 持有；另外登记受限 Canvas2D、编码与 ArrayBuffer 的峰值。
-    encodingLease = acquireImageEditorResourceLeaseV3(sessionBudget.budget, 'viewport-composite', 'in-flight', width * height * 4 * 3, 'lower-mip')
+    encodingLease = sessionBudget.budget.acquire('in-flight', width * height * 4 * 3)
     const surface = new OffscreenCanvas(width, height)
     const context = surface.getContext('2d')
     if (!context) throw new Error('无法生成图片缩略图')

@@ -19,7 +19,6 @@ import type {
   ImageEditorV3ResourceDescriptor,
 } from '@/platform/contracts/imageEditorV3'
 import {
-  ImageEditorV3ExportCapabilityError,
   type ImageEditorV3ExportRenderDependencies,
   type ImageEditorV3ExportRenderRegion,
 } from './contracts'
@@ -202,12 +201,7 @@ function acquireDecodedLease(
   budget: ImageEditResourceBudget,
   bytes: number,
 ): ImageEditMemoryLease {
-  const lease = budget.acquire('in-flight', bytes)
-  if (lease) return lease
-  throw new ImageEditorV3ExportCapabilityError(
-    'WORKING_SET_EXCEEDED',
-    `图片导出资源账本无法预留 ${Math.ceil(bytes / 1024 / 1024)}MiB 画笔解码空间`,
-  )
+  return budget.acquire('in-flight', bytes)
 }
 
 function validateBrushTile(

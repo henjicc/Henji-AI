@@ -3,7 +3,7 @@ import type { ImageEditorV3Controller } from '../editor/types'
 import { ImageEditorPreviewClientV3 } from '../execution/imageEditorPreviewClientV3'
 import { acquireImageEditorSessionResourceBudgetV3 } from '../execution/imageEditorSessionResourceBudgetV3'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
-import type { ImageEditMemoryLease } from '@/core/imageEdit/v3/resourceBudget'
+import { imageEditMemoryScale, type ImageEditMemoryLease } from '@/core/imageEdit/v3/resourceBudget'
 import { reconcileImageEditorV3ResourceDescriptors } from '../application/imageEditorResourceDescriptorsV3'
 
 /** 缩略图复用正式合成 Worker，串行调度；有界缓存只淘汰派生图片，不裁图层或历史。 */
@@ -62,13 +62,13 @@ export class ImageEditThumbnailsV3 {
         signal.throwIfAborted()
         if (this.disposed) throw new Error('缩略图会话已关闭')
         const bytes = blob.size + result.width * result.height * 4
-        while (this.cache.size && (this.cache.size >= 64 || !this.budgetLease.budget.admission('cpu-cache', bytes).admitted)) {
+        while (this.cache.size && (this.cache.size >= 64 * imageEditMemoryScale()
+          || this.budgetLease.budget.admission('cpu-cache', bytes).pressure === 'hard')) {
           const oldest = this.cache.keys().next().value as string
           const entry = this.cache.get(oldest)!
           URL.revokeObjectURL(entry.url); entry.lease.release(); this.cache.delete(oldest)
         }
         const lease = this.budgetLease.budget.acquire('cpu-cache', bytes)
-        if (!lease) throw new Error('暂时没有足够内存生成缩略图')
         const url = URL.createObjectURL(blob)
         this.cache.set(key, { url, lease })
         return url

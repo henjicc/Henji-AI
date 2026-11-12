@@ -16,7 +16,6 @@ import {
   ImageEditorPreviewClientV3,
   ImageEditorPreviewSupersededErrorV3,
 } from './imageEditorPreviewClientV3'
-import { ImageEditorResourcePressureErrorV3 } from './imageEditorResourcePressureV3'
 
 
 class RecordingRenderScheduler extends ImageEditRenderScheduler {
@@ -389,36 +388,6 @@ describe('ImageEditorPreviewClientV3 调度与资源所有权', () => {
     expect(budget.snapshot().totalBytes).toBe(8)
     client.dispose()
     expect(budget.snapshot()).toMatchObject({ totalBytes: 0, leaseCount: 0 })
-  })
-
-  it('预算不足时在启动 Worker 前返回降低预览尺寸信号并归还预留', async () => {
-    const worker = new FakePreviewWorker()
-    const budget = new ImageEditResourceBudget({
-      totalBytes: 2_000_000,
-      cpuCacheTargetBytes: 0,
-      gpuTargetBytes: 2_000_000,
-    })
-    const client = new ImageEditorPreviewClientV3({
-      sessionId: 'preview-pressure',
-      resourceBudget: budget,
-      workerFactory: () => worker,
-    })
-
-    const error = await client.render({
-      document: createDocument(1),
-      quality: 'stable',
-      maxDimension: 1_600,
-      resourceDescriptors: [],
-    }).catch((caught: unknown) => caught)
-    expect(error).toBeInstanceOf(ImageEditorResourcePressureErrorV3)
-    expect(error).toMatchObject({
-      scope: 'managed-preview',
-      category: 'in-flight',
-      recovery: 'lower-mip',
-    })
-    expect(worker.renders()).toHaveLength(0)
-    expect(budget.snapshot()).toMatchObject({ totalBytes: 0, leaseCount: 0 })
-    client.dispose()
   })
 
   it('代理 LRU 有明确字节上限，超限条目不会在会话内无限滞留', async () => {

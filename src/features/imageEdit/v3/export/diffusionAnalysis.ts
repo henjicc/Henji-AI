@@ -27,7 +27,6 @@ import type {
   ImageEditorV3ExportRenderDependencies,
   ImageEditorV3ExportRenderRegion,
 } from './contracts'
-import { ImageEditorV3ExportCapabilityError } from './contracts'
 import {
   loadImageEditorV3SourceRegion,
 } from './sourceRegion'
@@ -132,12 +131,6 @@ export async function buildImageEditorV3DiffusionAnalyses(
       const prefix = dependencyPlan(plan, inputNodeId, mip)
       const peakBytes = size.width * size.height * 16 * Math.max(4, prefix.nodes.length + 4)
       const peakLease = budget.acquire('in-flight', peakBytes)
-      if (!peakLease) {
-        throw new ImageEditorV3ExportCapabilityError(
-          'WORKING_SET_EXCEEDED',
-          `柔光共享散射分析需要 ${Math.ceil(peakBytes / 1024 / 1024)}MiB 工作集，资源账本已拒绝`,
-        )
-      }
       try {
         const sourceCache = new Map<string, Promise<Float32PremultipliedRgbaTile>>()
         const loadSource = (
@@ -222,12 +215,6 @@ export async function buildImageEditorV3DiffusionAnalyses(
         })
         const scatter = buildDiffusionScatterV4(linear, recipe)
         const cacheLease = budget.acquire('cpu-cache', scatter.data.byteLength)
-        if (!cacheLease) {
-          throw new ImageEditorV3ExportCapabilityError(
-            'WORKING_SET_EXCEEDED',
-            '柔光共享散射缓存超过统一资源账本上限',
-          )
-        }
         cacheLeases.push(cacheLease)
         analyses.set(diffusionNode.id, {
           scatter,

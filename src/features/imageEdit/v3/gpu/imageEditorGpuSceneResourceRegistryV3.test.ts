@@ -20,10 +20,10 @@ describe('ImageEditorGpuSceneResourceRegistryV3', () => {
       disposePayload,
     })
 
-    expect(registry.register(key('a'), 'a', 6).admitted).toBe(true)
+    registry.register(key('a'), 'a', 6)
     const second = registry.register(key('b'), 'b', 6)
 
-    expect(second).toMatchObject({ admitted: true, reused: false, evicted: [key('a')] })
+    expect(second).toMatchObject({ reused: false, evicted: [key('a')] })
     expect(registry.get(key('a'))).toBeNull()
     expect(registry.get(key('b'))).toBe('b')
     expect(disposePayload).toHaveBeenCalledWith('a')
@@ -34,10 +34,8 @@ describe('ImageEditorGpuSceneResourceRegistryV3', () => {
     const registry = new ImageEditorGpuSceneResourceRegistryV3<string>({ memoryBudgetBytes: 10 })
     registry.register(key('protected'), 'protected', 8, ['viewport', 'interaction', 'stable-frame'])
 
-    expect(registry.register(key('candidate'), 'candidate', 8)).toMatchObject({
-      admitted: true,
-      evicted: [],
-    })
+    expect(registry.register(key('candidate'), 'candidate', 8)).toMatchObject({ evicted: [] })
+    expect(registry.get(key('candidate'))).toBe('candidate')
     expect(registry.get(key('protected'))).toBe('protected')
     registry.releaseProtection('viewport')
     registry.releaseProtection('interaction')
@@ -55,7 +53,6 @@ describe('ImageEditorGpuSceneResourceRegistryV3', () => {
     registry.register(key('same'), 'first', 6)
 
     expect(registry.register(key('same'), 'duplicate', 6)).toMatchObject({
-      admitted: true,
       reused: true,
       evicted: [],
     })
@@ -76,7 +73,7 @@ describe('ImageEditorGpuSceneResourceRegistryV3', () => {
     registry.register(key('old-revision'), 'old-revision', 4)
     registry.register(key('offscreen'), 'offscreen', 4)
 
-    expect(registry.prepareAdmission(4)).toEqual({ admitted: true, evicted: [key('old-revision')] })
+    expect(registry.prepareAdmission(4)).toEqual({ evicted: [key('old-revision')] })
     expect(registry.get(key('viewport'))).toBe('viewport')
     expect(registry.get(key('interaction'))).toBe('interaction')
     expect(registry.get(key('stable'))).toBe('stable')

@@ -5,10 +5,29 @@ import { createImageEditorV3RequestId, readImageEditorV3SourceMetadata, readImag
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import type { ImageEditLayerV3 } from '@/core/imageEdit/v3/layerTypes'
 import { createLogger } from '@/core/logging'
+import { scaleImageEditCacheBytes } from '@/core/imageEdit/v3/resourceBudget'
 import type { ImageEditorV3ResourceDescriptor, ImageEditorV3ResourceRef } from '@/platform/contracts/imageEditorV3'
 import { createLayerAlphaMapV3, type LayerAlphaMapV3, type LayerAlphaMapsV3 } from './layerPickingV3'
 
 const logger = createLogger('features.image_edit.v3.layer_picking')
+// 命中缓存目标按机器内存放大；超出后新图层改用更粗的命中图，所有图层仍可点选。
+const layerPickingCacheTargetBytes = (): number => scaleImageEditCacheBytes(64 * 1024 * 1024)
+const COARSE_PICKING_FACTOR = 4
+
+/** 按块取最大 Alpha，保证粗命中图不会漏掉细小的不透明内容。 */
+function coarsenLayerAlphaMapV3(map: LayerAlphaMapV3): LayerAlphaMapV3 {
+  const width = Math.max(1, Math.ceil(map.width / COARSE_PICKING_FACTOR))
+  const height = Math.max(1, Math.ceil(map.height / COARSE_PICKING_FACTOR))
+  const alpha = new Uint8Array(width * height)
+  for (let y = 0; y < map.height; y += 1) {
+    const row = Math.floor(y / COARSE_PICKING_FACTOR) * width
+    for (let x = 0; x < map.width; x += 1) {
+      const index = row + Math.floor(x / COARSE_PICKING_FACTOR)
+      alpha[index] = Math.max(alpha[index], map.alpha[y * map.width + x])
+    }
+  }
+  return createLayerAlphaMapV3(width, height, map.sourceWidth, map.sourceHeight, alpha)
+}
 interface PickResourceV3 { id: string; key: string; sparse: boolean; byteSize: number; vector?:Pick<ImageEditVectorLayerV3, 'type' | 'content'>; width?:number; height?:number }
 
 /** 一个会话一份有界 Alpha 缓存；内容寻址不随 transform/revision 改变。 */
@@ -94,10 +113,12 @@ export function useImageEditorLayerPickingV3(document: ImageEditDocumentV3,
         if (abort.signal.aborted) return
         if (cache.current.has(resource.key)) continue
         try {
-          const map = await load(resource)
+          const loaded = await load(resource)
           if (abort.signal.aborted) return
           const bytes = [...cache.current.values()].reduce((sum, entry) => sum + entry.alpha.byteLength, 0)
-          if (bytes + map.alpha.byteLength > 64 * 1024 * 1024) throw new Error('图层命中缓存达到预算，未加载的图层请从面板选择')
+          const map = bytes + loaded.alpha.byteLength > layerPickingCacheTargetBytes()
+            ? coarsenLayerAlphaMapV3(loaded)
+            : loaded
           cache.current.set(resource.key, map)
           fingerprints.current.set(resource.key, nextFingerprints.get(resource.key)!)
           setMaps(new Map(cache.current))

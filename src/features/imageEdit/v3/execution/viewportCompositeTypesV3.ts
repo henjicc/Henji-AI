@@ -90,7 +90,6 @@ export interface ImageEditorViewportCompositeClientOptionsV3 {
   scheduler?: Pick<ImageEditorViewportTileSchedulerV3, 'render' | 'cancel' | 'dispose'>
   resourceBudget?: ImageEditResourceBudget
   brushTileLoader?: ImageEditorPreviewBrushTileLoaderV3
-  transferMaxBytes?: number
   resourceBudgetConsumerId?: string
   renderScheduler?: ImageEditRenderScheduler
 }

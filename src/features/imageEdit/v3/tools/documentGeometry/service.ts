@@ -1,5 +1,6 @@
 import { mapGeometrySelectionsV3 } from './mapSelections';
 import { z } from 'zod';
+import { scaleImageEditCacheBytes } from '@/core/imageEdit/v3/resourceBudget';
 import { canvasAnchorSchemaV3, canvasSizeTransformV3, createDocumentGeometryCommandV3, documentNeedsGeometryAppearanceV3, documentSizeSchemaV3 } from '@/core/imageEdit/v3/documentGeometry';
 import { createImageEditIdV3, createImageEditDocumentV3, createImageEditRasterLayerV3 } from '@/core/imageEdit/v3/documentFactory';
 import { createImageEditLayerCommonV3, type ImageEditSmartLayerV3 } from '@/core/imageEdit/v3/layerTypes';
@@ -29,7 +30,9 @@ export type GeometryRequestV3 = z.input<typeof geometryRequestSchemaV3>;
 export interface GeometryDraftV3 { original: ImageEditDocumentV3; selectionVersion: number; command: ImageEditCommandV3; document: ImageEditDocumentV3; selection: ImageEditSelectionSessionV3 | null; bytes: Readonly<Record<string, number>>; release: () => Promise<void>; mode: 'canvas' | 'resample' | 'content-aware' }
 export interface GeometryServiceOptionsV3 { signal?: AbortSignal; time?: RegionSampleTime; onProgress?: (value: number) => void }
 const logger = createLogger('features.imageEdit.v3.document_geometry');
-const SOURCE_READ_BUDGET = 32 * 1024 * 1024;
+// 单次读取的分块阈值与源瓦片缓存目标都按机器内存放大；只影响分块与淘汰，不拒绝。
+const sourceReadBudget = (): number => scaleImageEditCacheBytes(32 * 1024 * 1024);
+const sourceTileCacheBytes = (): number => scaleImageEditCacheBytes(64 * 1024 * 1024);
 
 export async function prepareDocumentGeometryV3(bus: ImageEditCommandBusV3, request: GeometryRequestV3, options: GeometryServiceOptionsV3 = {}): Promise<GeometryDraftV3> {
   const parsed = geometryRequestSchemaV3.safeParse(request);
@@ -69,7 +72,7 @@ export async function prepareDocumentGeometryV3(bus: ImageEditCommandBusV3, requ
           for (let ty = Math.floor(rect.y / 512); ty <= Math.floor((rect.y + rect.height - 1) / 512); ty++) for (let tx = Math.floor(rect.x / 512); tx <= Math.floor((rect.x + rect.width - 1) / 512); tx++) {
             signal.throwIfAborted(); const key = `${tx}/${ty}`; let tile = cache.get(key);
             if (!tile) { const value = await loader({ mip: 0, x: tx, y: ty }, signal); if (value.tile.storage !== 'rgba-float32') throw new Error('像素来源不是浮点图像'); tile = value.tile;
-              while (cacheBytes + tile.data.byteLength > 64 * 1024 * 1024 && cache.size) { const first = cache.keys().next().value!; cacheBytes -= cache.get(first)!.data.byteLength; cache.delete(first); }
+              while (cacheBytes + tile.data.byteLength > sourceTileCacheBytes() && cache.size) { const first = cache.keys().next().value!; cacheBytes -= cache.get(first)!.data.byteLength; cache.delete(first); }
               cache.set(key, tile); cacheBytes += tile.data.byteLength;
             }
             const x = Math.max(rect.x, tx * 512), y = Math.max(rect.y, ty * 512), right = Math.min(rect.x + rect.width, tx * 512 + tile.width), bottom = Math.min(rect.y + rect.height, ty * 512 + tile.height);
@@ -91,7 +94,7 @@ export async function prepareDocumentGeometryV3(bus: ImageEditCommandBusV3, requ
             roi: { x: 0, y: 0, ...source }, color: { workingSpace: original.color.workingSpace, transferFunction: 'linear', alpha: 'premultiplied', precision: 'float32' }, quality: 'final' } }, signal, (done, total) => options.onProgress?.(45 + done / Math.max(1, total) * 20));
         const map = async (region: RegionRect, selection?: ImageEditSelectionSessionV3): Promise<Float32Array> => {
           const sourceRect = await worker.run<RegionRect>({ kind: 'bounds', output, source, region }, signal);
-          if (sourceRect.width * sourceRect.height * 16 > SOURCE_READ_BUDGET && region.width * region.height > 1) {
+          if (sourceRect.width * sourceRect.height * 16 > sourceReadBudget() && region.width * region.height > 1) {
             const horizontal = region.width >= region.height, split = Math.floor((horizontal ? region.width : region.height) / 2);
             const first = { ...region, ...(horizontal ? { width: split } : { height: split }) }, second = { ...region, ...(horizontal ? { x: region.x + split, width: region.width - split } : { y: region.y + split, height: region.height - split }) };
             const a = await map(first, selection), b = await map(second, selection), channels = selection ? 1 : 4, result = new Float32Array(region.width * region.height * channels);

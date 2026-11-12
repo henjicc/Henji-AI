@@ -192,11 +192,12 @@ describe('ImageEditorGpuSceneExportRuntimeV3', () => {
     expect(exported.readExportLinearPixels).not.toHaveBeenCalled()
   })
 
-  it('预览与导出合计超过共享256MiB时在readback前失败并释放job', async () => {
+  it('预览与导出合计超过共享预算时先让预览淘汰缓存，仍超出也照样导出', async () => {
     const events: ImageEditorGpuSceneWorkerEventV3[] = []
     const mib = 1024 * 1024
-    const exported = compositor({ estimatedResidentGpuBytes: () => 80 * mib })
+    const exported = compositor({ estimatedResidentGpuBytes: () => 80 * mib, memoryPressureBytes: () => 16 * mib })
     const preview = compositor({ estimatedResidentGpuBytes: () => 192 * mib })
+    const trimPreviewMemory = vi.fn()
     const runtime = new ImageEditorGpuSceneExportRuntimeV3({
       emit: (event) => events.push(event),
       createCompositor: () => exported,
@@ -205,6 +206,7 @@ describe('ImageEditorGpuSceneExportRuntimeV3', () => {
       currentSceneGeneration: () => 1,
       deviceGeneration: () => 1,
       sessionBudgetBytes: 256 * mib,
+      trimPreviewMemory,
     })
     runtime.start({ type: 'export', requestId: 'over-budget', sceneGeneration: 1,
       quality: 'export', description: { width: 1, height: 1, bitDepth: 8,
@@ -212,12 +214,11 @@ describe('ImageEditorGpuSceneExportRuntimeV3', () => {
         alphaMode: 'straight' }, outputTiles: [{ tileX: 0, tileY: 0, x: 0, y: 0,
         width: 1, height: 1, renderX: 0, renderY: 0, renderWidth: 1, renderHeight: 1,
         coreOffsetX: 0, coreOffsetY: 0 }] }, scene())
-    await vi.waitFor(() => expect(events.some((event) => event.type === 'failed')).toBe(true))
-    expect(events.find((event) => event.type === 'failed')).toMatchObject({
-      code: 'export-not-ready', requestId: 'over-budget',
-    })
-    expect(exported.readExportLinearPixels).not.toHaveBeenCalled()
-    expect(exported.dispose).toHaveBeenCalledOnce()
+    expect(trimPreviewMemory).toHaveBeenCalledWith(0)
+    await vi.waitFor(() => expect(events.some((event) => event.type === 'export-tile')).toBe(true))
+    expect(events.some((event) => event.type === 'failed')).toBe(false)
+    runtime.acknowledge('over-budget', 0, 0)
+    await vi.waitFor(() => expect(exported.dispose).toHaveBeenCalledOnce())
   })
 
   it('极端support走2048全局分析+有界局部残差，最终仍仅一次readback', async () => {

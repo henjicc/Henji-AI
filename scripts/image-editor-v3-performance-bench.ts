@@ -7,10 +7,8 @@ import {
   type ImageEditPerformanceSampleV3,
 } from '../src/core/imageEdit/v3/performanceMetrics';
 import {
-  IMAGE_EDIT_DEFAULT_CPU_CACHE_TARGET_BYTES,
-  IMAGE_EDIT_DEFAULT_GPU_TARGET_BYTES,
-  IMAGE_EDIT_DEFAULT_TOTAL_BUDGET_BYTES,
   ImageEditResourceBudget,
+  imageEditDefaultBudgetBytes,
   type ImageEditMemoryLease,
 } from '../src/core/imageEdit/v3/resourceBudget';
 import {
@@ -124,30 +122,30 @@ function measurePlannerAcceptance(): PlannerAcceptanceResult {
 function measureBudgetAcceptance() {
   const rssBefore = process.memoryUsage().rss;
   const budget = new ImageEditResourceBudget();
-  const remainingBytes = IMAGE_EDIT_DEFAULT_TOTAL_BUDGET_BYTES
-    - IMAGE_EDIT_DEFAULT_CPU_CACHE_TARGET_BYTES
-    - IMAGE_EDIT_DEFAULT_GPU_TARGET_BYTES;
+  const defaults = imageEditDefaultBudgetBytes();
+  const remainingBytes = defaults.totalBytes
+    - defaults.cpuCacheTargetBytes
+    - defaults.gpuTargetBytes;
   const leases: ImageEditMemoryLease[] = [];
   for (const [category, bytes] of [
-    ['cpu-cache', IMAGE_EDIT_DEFAULT_CPU_CACHE_TARGET_BYTES],
-    ['gpu', IMAGE_EDIT_DEFAULT_GPU_TARGET_BYTES],
+    ['cpu-cache', defaults.cpuCacheTargetBytes],
+    ['gpu', defaults.gpuTargetBytes],
     ['transfer', remainingBytes],
   ] as const) {
-    const lease = budget.acquire(category, bytes);
-    assert.ok(lease, `${category} 的参考预算应可被接纳`);
-    leases.push(lease);
+    leases.push(budget.acquire(category, bytes));
   }
   const saturated = budget.snapshot();
-  const rejection = budget.admission('encode', 1);
-  assert.equal(saturated.totalBytes, IMAGE_EDIT_DEFAULT_TOTAL_BUDGET_BYTES);
+  const pressure = budget.admission('encode', 1);
+  assert.equal(saturated.totalBytes, defaults.totalBytes);
   assert.equal(saturated.leaseCount, 3);
-  assert.deepEqual(rejection, {
-    admitted: false,
+  assert.deepEqual(pressure, {
     availableBytes: 0,
     pressure: 'hard',
     recommendation: 'lower-mip',
   });
-  assert.equal(budget.acquire('in-flight', 1), null);
+  // 总账只是淘汰目标：满账后仍照样分配并记账。
+  leases.push(budget.acquire('in-flight', 1));
+  assert.equal(budget.snapshot().totalBytes, defaults.totalBytes + 1);
   for (const lease of leases) lease.release();
   assert.deepEqual(budget.snapshot(), {
     totalBytes: 0,
@@ -166,7 +164,7 @@ function measureBudgetAcceptance() {
     rssDeltaBytes <= MAX_HARNESS_RSS_DELTA_BYTES,
     `资源账本不得按声明预算分配真实内存，RSS 增量为 ${rssDeltaBytes}`,
   );
-  return { saturated, rejection, rssDeltaBytes };
+  return { saturated, pressure, rssDeltaBytes };
 }
 
 function measureResourceDriftAcceptance() {
@@ -291,7 +289,7 @@ async function main(): Promise<void> {
     status: 'passed',
     referenceImage: TWO_HUNDRED_MEGAPIXELS,
     limits: {
-      totalResourceBytes: IMAGE_EDIT_DEFAULT_TOTAL_BUDGET_BYTES,
+      totalResourceBytes: imageEditDefaultBudgetBytes().totalBytes,
       plannerP95Ms: PLANNER_P95_LIMIT_MS,
       enqueueP95Ms: IMAGE_EDIT_PERFORMANCE_TARGETS_V3.interactionMainThreadP95Ms,
       maxPendingPreviewPerSession: 1,
@@ -314,7 +312,7 @@ async function main(): Promise<void> {
       },
       budget: {
         saturatedBytes: budget.saturated.totalBytes,
-        hardRejectionAvailableBytes: budget.rejection.availableBytes,
+        hardPressureAvailableBytes: budget.pressure.availableBytes,
         rssDeltaBytes: budget.rssDeltaBytes,
       },
       resourceDrift,

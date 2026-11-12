@@ -28,10 +28,6 @@ import {
   imageEditorViewportSourceTransferBytesV3,
 } from './viewportCompositeTransferV3'
 import {
-  acquireImageEditorResourceLeaseV3,
-  ImageEditorResourcePressureErrorV3,
-} from './imageEditorResourcePressureV3'
-import {
   acquireImageEditorSessionResourceBudgetV3,
   type ImageEditorSessionResourceBudgetLeaseV3,
 } from './imageEditorSessionResourceBudgetV3'
@@ -54,7 +50,6 @@ import {
 } from './viewportCompositeTypesV3'
 import {
   IMAGE_EDITOR_VIEWPORT_CANCEL_ACK_TIMEOUT_MS_V3,
-  IMAGE_EDITOR_VIEWPORT_MAX_TRANSFER_BYTES_V3,
   imageEditorViewportErrorV3,
 } from './viewportCompositeClientSupportV3'
 import { imageEditorViewportCompositeCandidateFitsBudgetV3 } from './viewportCompositeAdmissionV3'
@@ -88,7 +83,6 @@ export class ImageEditorViewportCompositeClientV3 {
   private readonly brushLoader: ImageEditorPreviewBrushTileLoaderV3
   private readonly workerFactory: ImageEditorViewportCompositeWorkerFactoryV3
   private readonly renderScheduler: ImageEditRenderScheduler
-  private readonly transferMaxBytes: number
   private readonly sessionBudgetLease: ImageEditorSessionResourceBudgetLeaseV3 | null
   private readonly resultOwner = new ImageEditorViewportCompositeResultOwnerV3()
   private readonly runtimeListeners = new Set<ImageEditorViewportRuntimeListenerV3>()
@@ -107,11 +101,7 @@ export class ImageEditorViewportCompositeClientV3 {
 
   constructor(private readonly options: ImageEditorViewportCompositeClientOptionsV3) {
     if (!options.sessionId.trim()) throw new Error('视口合成会话 ID 不能为空')
-    this.transferMaxBytes = options.transferMaxBytes ?? IMAGE_EDITOR_VIEWPORT_MAX_TRANSFER_BYTES_V3
     this.renderScheduler = options.renderScheduler ?? getImageEditorGlobalRenderSchedulerV3()
-    if (!Number.isSafeInteger(this.transferMaxBytes) || this.transferMaxBytes < 0) {
-      throw new Error('视口合成传输上限必须是非负整数')
-    }
     this.sessionBudgetLease = options.resourceBudget
       ? null
       : acquireImageEditorSessionResourceBudgetV3(options.sessionId, {
@@ -253,16 +243,8 @@ export class ImageEditorViewportCompositeClientV3 {
     )
     const transferBytes = imageEditorViewportSourceTransferBytesV3(frame)
       + imageEditorViewportBrushTransferBytesV3(brushRequests)
-    if (!Number.isSafeInteger(transferBytes) || transferBytes > this.transferMaxBytes) {
-      throw new Error('视口合成超过单帧受控传输上限')
-    }
-    job.transferLease = acquireImageEditorResourceLeaseV3(
-      this.budget,
-      'viewport-composite',
-      'transfer',
-      transferBytes,
-      'lower-mip',
-    )
+    if (!Number.isSafeInteger(transferBytes)) throw new Error('视口合成传输字节数超出安全范围')
+    job.transferLease = this.budget.acquire('transfer', transferBytes)
     const maxRegionPixels = estimateImageEditorViewportWorkingRegionPixelsV3(
       prepared, frame.plan, wholeSource, frame.resourceSizes, frame.sourceMipLevels,
       [...frame.resourceTiles.values()].flat().reduce(
@@ -273,13 +255,7 @@ export class ImageEditorViewportCompositeClientV3 {
     const workingBytes = maxRegionPixels * 4 * Float32Array.BYTES_PER_ELEMENT
       * Math.max(3, prepared.plan.nodes.length + 2)
     if (!Number.isSafeInteger(workingBytes)) throw new Error('视口合成工作集超出安全范围')
-    job.workingLease = acquireImageEditorResourceLeaseV3(
-      this.budget,
-      'viewport-composite',
-      'in-flight',
-      workingBytes,
-      'lower-mip',
-    )
+    job.workingLease = this.budget.acquire('in-flight', workingBytes)
     const outputBytes = frame.plan.tiles.reduce((total, tile) => {
       const output = createTileRegion(
         imageEditOutputSizeV3(job.document.geometry),
@@ -291,13 +267,7 @@ export class ImageEditorViewportCompositeClientV3 {
       return next
     }, 0)
     // Worker 创建 ImageBitmap 前先占住成品额度，避免先分配后 admission 失败。
-    job.outputLease = acquireImageEditorResourceLeaseV3(
-      this.budget,
-      'viewport-composite',
-      'gpu',
-      outputBytes,
-      'lower-mip',
-    )
+    job.outputLease = this.budget.acquire('gpu', outputBytes)
     const brushTiles = await this.brushLoader.load(
       brushRequests,
       job.document,
@@ -449,7 +419,6 @@ export class ImageEditorViewportCompositeClientV3 {
       !(error instanceof ImageEditorViewportCompositeSupersededErrorV3)
       && !(error instanceof ImageEditorViewportCompositeDisposedErrorV3)
       && !(error instanceof ImageEditorViewportCompositeUnsupportedErrorV3)
-      && !(error instanceof ImageEditorResourcePressureErrorV3)
     ) {
       logImageEditorViewportCompositeFailedV3(imageEditorViewportCompositeTimingV3(job), error)
     }

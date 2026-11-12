@@ -88,19 +88,12 @@ export interface ImageEditorViewportTilePlanOptionsV3 {
   /** 安全输出的最小 mip；预算只能在此基础上继续变粗。 */
   minimumMip?: number
   coverage?: 'viewport' | 'document'
-  /** 返回 false 时尝试更粗一级 mip；所有 mip 均拒绝则抛出明确错误。 */
+  /** 返回 false 时尝试更粗一级 mip；所有 mip 都超出时使用最粗一级。 */
   admit?: (candidate: ImageEditorViewportTileCandidateV3) => boolean
 }
 
 /** 与主进程 source-provider 的单瓦片 halo 硬上限保持一致。 */
 const IMAGE_EDITOR_VIEWPORT_MAX_TILE_HALO_V3 = 2_048
-
-export class ImageEditorViewportAdmissionErrorV3 extends Error {
-  constructor() {
-    super('CPU 瓦片预算不足，最粗 mip 仍无法容纳当前视口')
-    this.name = 'ImageEditorViewportAdmissionErrorV3'
-  }
-}
 
 function positiveFinite(value: number, name: string): number {
   if (!Number.isFinite(value) || value <= 0) throw new Error(`${name} 必须是正数`)
@@ -379,7 +372,8 @@ export function planImageEditorViewportTilesV3(
       bitDepth,
       haloDocumentPixels,
     )
-    if (options.admit && !options.admit(candidate)) continue
+    const coarsest = index === levels.length - 1
+    if (!coarsest && options.admit && !options.admit(candidate)) continue
     return {
       ...candidate,
       idealMip,
@@ -389,7 +383,7 @@ export function planImageEditorViewportTilesV3(
       physicalPixelsPerMipPixel: viewport.zoom * viewport.devicePixelRatio * (2 ** candidate.mip),
     }
   }
-  throw new ImageEditorViewportAdmissionErrorV3()
+  throw new Error('图片源金字塔没有可用 mip')
 }
 
 function positiveOrZeroFinite(value: number, name: string): number {

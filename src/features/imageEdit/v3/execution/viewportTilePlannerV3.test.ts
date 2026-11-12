@@ -1,10 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import type { ImageEditorV3PyramidDescriptor } from '@/platform/contracts/imageEditorV3'
-import {
-  ImageEditorViewportAdmissionErrorV3,
-  planImageEditorViewportTilesV3,
-} from './viewportTilePlannerV3'
+import { planImageEditorViewportTilesV3 } from './viewportTilePlannerV3'
 
 function pyramid(width: number, height: number): ImageEditorV3PyramidDescriptor {
   const levels: ImageEditorV3PyramidDescriptor['levels'] = []
@@ -184,7 +181,7 @@ describe('图片编辑 V3 视口瓦片规划', () => {
     })).toThrow('不能超过 2048')
   })
 
-  it('admission 拒绝时逐级降画质，最粗层仍超预算则明确失败', () => {
+  it('admission 拒绝时逐级降画质，最粗层仍超预算也照样出图', () => {
     const admit = vi.fn((candidate: { mip: number }) => candidate.mip >= 1)
     const plan = planImageEditorViewportTilesV3({
       documentSize: { width: 2_048, height: 2_048 },
@@ -206,7 +203,8 @@ describe('图片编辑 V3 视口瓦片规划', () => {
     expect(plan.physicalPixelsPerMipPixel).toBe(2)
     expect(admit.mock.calls.map(([candidate]) => candidate.mip)).toEqual([0, 1])
 
-    expect(() => planImageEditorViewportTilesV3({
+    // 预算只决定降档：最粗一级仍超出时照样出图，不抛错。
+    const coarsest = planImageEditorViewportTilesV3({
       documentSize: { width: 2_048, height: 2_048 },
       pyramid: pyramid(2_048, 2_048),
       bitDepth: 8,
@@ -219,7 +217,11 @@ describe('图片编辑 V3 视口瓦片规划', () => {
         devicePixelRatio: 1,
       },
       admit: () => false,
-    })).toThrow(ImageEditorViewportAdmissionErrorV3)
+    })
+    expect(coarsest).toMatchObject({
+      mip: pyramid(2_048, 2_048).levels.at(-1)?.mip,
+      degradedForBudget: true,
+    })
   })
 
   it('视口完全位于图片外时不请求瓦片，非法金字塔会被拒绝', () => {

@@ -58,7 +58,6 @@ export class ImageEditRenderCaches<T = unknown> {
 
   set(tier: ImageEditRenderCacheTier, key: string, entry: ImageEditRenderCacheEntry<T>): boolean {
     const lease = this.budget.acquire(entry.category, entry.bytes);
-    if (!lease) return false;
     const cached = this.caches[tier].set(key, { ...entry, budgetLease: lease }, entry.bytes);
     if (!cached) lease.release();
     return cached;

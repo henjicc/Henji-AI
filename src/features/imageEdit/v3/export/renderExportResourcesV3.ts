@@ -1,4 +1,4 @@
-import { createFloat32PremultipliedRgbaTile, type Float32PremultipliedRgbaTile, type ImageEditMemoryLease, type ImageEditResourceBudget } from '@/core/imageEdit/v3'
+import { createFloat32PremultipliedRgbaTile, type Float32PremultipliedRgbaTile } from '@/core/imageEdit/v3'
 import { ImageEditorV3ExportCapabilityError, type ImageEditorV3ExportRenderRegion } from './contracts'
 import type { ImageEditCpuRegionRequirementsV3 } from '@/core/imageEdit/v3/execution/cpuRenderRegionExecutor'
 
@@ -44,18 +44,4 @@ export function safeWorkingSetBytes(
     )
   }
   return bytes
-}
-
-export function acquireOrThrow(
-  budget: ImageEditResourceBudget,
-  category: 'in-flight' | 'transfer',
-  bytes: number,
-): ImageEditMemoryLease {
-  const lease = budget.acquire(category, bytes)
-  if (lease) return lease
-  const snapshot = budget.snapshot()
-  throw new ImageEditorV3ExportCapabilityError(
-    'WORKING_SET_EXCEEDED',
-    `图片导出资源账本拒绝 ${Math.ceil(bytes / 1024 / 1024)}MiB ${category} 工作集；当前已使用 ${Math.ceil(snapshot.totalBytes / 1024 / 1024)}MiB`,
-  )
 }

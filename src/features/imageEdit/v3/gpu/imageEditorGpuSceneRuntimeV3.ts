@@ -282,6 +282,11 @@ export class ImageEditorGpuSceneRuntimeV3 {
         deviceGeneration: () => this.states.peek()?.managed.generation
           ?? this.deviceManager.getRecoveryStatus().generation,
         sessionBudgetBytes: this.resources?.snapshot().budgetBytes,
+        trimPreviewMemory: (exportResidentBytes) => trimImageEditorGpuSceneMemoryV3({
+          resources: this.resources,
+          preview: this.states.peek()?.compositor ?? null,
+          exportResidentBytes,
+        }),
       })
       state.compositor.syncScene(this.scene)
       if (this.presentationSurface) {

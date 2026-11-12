@@ -1,6 +1,36 @@
-export const IMAGE_EDIT_DEFAULT_TOTAL_BUDGET_BYTES = 1_342_177_280;
-export const IMAGE_EDIT_DEFAULT_CPU_CACHE_TARGET_BYTES = 536_870_912;
-export const IMAGE_EDIT_DEFAULT_GPU_TARGET_BYTES = 335_544_320;
+const GIBIBYTE = 1024 * 1024 * 1024;
+
+/**
+ * 机器内存系数：基准值是早年按小内存机器定的，按物理内存每 16 GiB 放大一倍，夹在 1–8 倍
+ * （64 GiB 机器为 4 倍）。渲染层拿到真实物理内存前，以及 Worker、主进程等拿不到的环境，
+ * 退回 navigator.deviceMemory：浏览器把它封顶在 8，因此 8 GiB 及以上都按 4 倍估算。
+ */
+const deviceMemoryScale = Math.max(1, Math.min(8,
+  (globalThis as { navigator?: { deviceMemory?: number } }).navigator?.deviceMemory ?? 8) / 2);
+let memoryScale = deviceMemoryScale;
+
+export function imageEditMemoryScale(): number {
+  return memoryScale;
+}
+
+/** 渲染层读到物理内存后调用；此后新建的缓存与账本按真实内存取目标值。 */
+export function setImageEditSystemMemoryBytes(totalBytes: number): void {
+  if (!(totalBytes > 0)) return;
+  memoryScale = Math.max(1, Math.min(8, totalBytes / (16 * GIBIBYTE)));
+}
+
+/** 把基准缓存字节数按机器内存放大；结果只作淘汰目标，不作拒绝门槛。 */
+export function scaleImageEditCacheBytes(baseBytes: number): number {
+  return Math.round(baseBytes * memoryScale);
+}
+
+export function imageEditDefaultBudgetBytes(): Required<ImageEditResourceBudgetOptions> {
+  return {
+    totalBytes: scaleImageEditCacheBytes(1_342_177_280),
+    cpuCacheTargetBytes: scaleImageEditCacheBytes(536_870_912),
+    gpuTargetBytes: scaleImageEditCacheBytes(335_544_320),
+  };
+}
 
 export type ImageEditMemoryCategory =
   | 'cpu-cache'
@@ -16,8 +46,11 @@ export interface ImageEditMemorySnapshot {
   deviceGeneration: number;
 }
 
+/**
+ * 预算压力只用来决定淘汰缓存和降预览画质：'hard' 表示申请后会超过总账，
+ * 'soft' 表示超过该类别的缓存目标。申请本身永远放行。
+ */
 export interface ImageEditAdmissionResult {
-  admitted: boolean;
   availableBytes: number;
   pressure: 'normal' | 'soft' | 'hard';
   recommendation?: 'evict-cache' | 'lower-mip' | 'reduce-concurrency';
@@ -51,49 +84,44 @@ function normalizeBytes(value: number, name: string): number {
 }
 
 export class ImageEditResourceBudget {
-  private readonly totalBytes: number;
-  private readonly cpuCacheTargetBytes: number;
-  private readonly gpuTargetBytes: number;
+  private readonly options: ImageEditResourceBudgetOptions;
   private readonly usage = { ...EMPTY_USAGE };
   private readonly leases = new Map<string, { category: ImageEditMemoryCategory; bytes: number }>();
   private leaseSequence = 0;
   private generation = 0;
 
+  /** 省略的目标值随机器内存系数取值，物理内存晚于账本到达时也会生效。 */
   constructor(options: ImageEditResourceBudgetOptions = {}) {
-    this.totalBytes = normalizeBytes(
-      options.totalBytes ?? IMAGE_EDIT_DEFAULT_TOTAL_BUDGET_BYTES,
-      '总资源预算',
-    );
-    this.cpuCacheTargetBytes = normalizeBytes(
-      options.cpuCacheTargetBytes ?? IMAGE_EDIT_DEFAULT_CPU_CACHE_TARGET_BYTES,
-      'CPU 缓存目标',
-    );
-    this.gpuTargetBytes = normalizeBytes(
-      options.gpuTargetBytes ?? IMAGE_EDIT_DEFAULT_GPU_TARGET_BYTES,
-      'GPU 目标',
-    );
-    if (this.cpuCacheTargetBytes + this.gpuTargetBytes > this.totalBytes) {
+    this.options = { ...options };
+    const limits = this.limits();
+    normalizeBytes(limits.totalBytes, '总资源预算');
+    normalizeBytes(limits.cpuCacheTargetBytes, 'CPU 缓存目标');
+    normalizeBytes(limits.gpuTargetBytes, 'GPU 目标');
+    if (limits.cpuCacheTargetBytes + limits.gpuTargetBytes > limits.totalBytes) {
       throw new Error('CPU 与 GPU 目标不能超过总资源预算');
     }
+  }
+
+  limits(): Required<ImageEditResourceBudgetOptions> {
+    return { ...imageEditDefaultBudgetBytes(), ...this.options };
   }
 
   admission(category: ImageEditMemoryCategory, bytes: number): ImageEditAdmissionResult {
     const requested = normalizeBytes(bytes, '申请字节数');
     const snapshot = this.snapshot();
-    const availableBytes = Math.max(0, this.totalBytes - snapshot.totalBytes);
+    const limits = this.limits();
+    const availableBytes = Math.max(0, limits.totalBytes - snapshot.totalBytes);
     if (requested > availableBytes) {
       return {
-        admitted: false,
         availableBytes,
         pressure: 'hard',
         recommendation: category === 'cpu-cache' ? 'evict-cache' : 'lower-mip',
       };
     }
     const categoryNext = snapshot.byCategory[category] + requested;
-    const exceedsSoftTarget = (category === 'cpu-cache' && categoryNext > this.cpuCacheTargetBytes)
-      || (category === 'gpu' && categoryNext > this.gpuTargetBytes);
+    const exceedsSoftTarget = (category === 'cpu-cache' && categoryNext > limits.cpuCacheTargetBytes)
+      || (category === 'gpu' && categoryNext > limits.gpuTargetBytes);
     return {
-      admitted: true,
       availableBytes,
       pressure: exceedsSoftTarget ? 'soft' : 'normal',
       ...(exceedsSoftTarget
@@ -102,9 +130,9 @@ export class ImageEditResourceBudget {
     };
   }
 
-  acquire(category: ImageEditMemoryCategory, bytes: number): ImageEditMemoryLease | null {
-    const result = this.admission(category, bytes);
-    if (!result.admitted) return null;
+  /** 只记账，不拒绝：调用方应先按 admission 的压力淘汰自己的缓存，淘汰完仍超出也照样分配。 */
+  acquire(category: ImageEditMemoryCategory, bytes: number): ImageEditMemoryLease {
+    normalizeBytes(bytes, '申请字节数');
     const id = `memory-${++this.leaseSequence}`;
     this.usage[category] += bytes;
     this.leases.set(id, { category, bytes });

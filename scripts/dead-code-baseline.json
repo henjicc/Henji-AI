@@ -243,7 +243,6 @@
       "src/features/imageEdit/v3/execution/imageEditorRenderSessionV3.test.ts",
       "src/features/imageEdit/v3/execution/imageEditorRenderSessionV3.ts",
       "src/features/imageEdit/v3/execution/imageEditorRenderSessionWorkV3.ts",
-      "src/features/imageEdit/v3/execution/imageEditorResourcePressureV3.ts",
       "src/features/imageEdit/v3/execution/imageEditorSessionResourceBudgetV3.test.ts",
       "src/features/imageEdit/v3/execution/imageEditorSessionResourceBudgetV3.ts",
       "src/features/imageEdit/v3/execution/imageEditorSourcePyramidWarmupV3.test.ts",
@@ -4487,18 +4486,6 @@
         "name": "ImageEditorRenderSessionWorkV3"
       },
       {
-        "file": "src/features/imageEdit/v3/execution/imageEditorResourcePressureV3.ts",
-        "name": "ImageEditorResourcePressureErrorV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/execution/imageEditorResourcePressureV3.ts",
-        "name": "ImageEditorResourcePressureRecoveryV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/execution/imageEditorResourcePressureV3.ts",
-        "name": "acquireImageEditorResourceLeaseV3"
-      },
-      {
         "file": "src/features/imageEdit/v3/execution/imageEditorSessionResourceBudgetV3.ts",
         "name": "AcquireImageEditorSessionResourceBudgetOptionsV3"
       },
@@ -4872,10 +4859,6 @@
       },
       {
         "file": "src/features/imageEdit/v3/execution/viewportCompositeClientSupportV3.ts",
-        "name": "IMAGE_EDITOR_VIEWPORT_MAX_TRANSFER_BYTES_V3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/execution/viewportCompositeClientSupportV3.ts",
         "name": "imageEditorViewportErrorV3"
       },
       {
@@ -5141,10 +5124,6 @@
       {
         "file": "src/features/imageEdit/v3/execution/viewportTileCacheV3.ts",
         "name": "ImageEditorViewportTileReadReservationV3"
-      },
-      {
-        "file": "src/features/imageEdit/v3/execution/viewportTilePlannerV3.ts",
-        "name": "ImageEditorViewportAdmissionErrorV3"
       },
       {
         "file": "src/features/imageEdit/v3/execution/viewportTilePlannerV3.ts",

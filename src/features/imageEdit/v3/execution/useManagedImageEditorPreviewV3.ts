@@ -9,7 +9,6 @@ import {
   ImageEditorPreviewSupersededErrorV3,
   type ImageEditorManagedPreviewResultV3,
 } from './imageEditorPreviewClientV3'
-import { ImageEditorResourcePressureErrorV3 } from './imageEditorResourcePressureV3'
 import {
   IMAGE_EDITOR_PREVIEW_DRAFT_MAX_EDGE_V3,
   IMAGE_EDITOR_PREVIEW_STABLE_MAX_EDGE_V3,
@@ -95,34 +94,15 @@ export function useManagedImageEditorPreviewV3(
         maxDimension,
       },
     })
-    let pressureDiagnostic: string | null = null
     queueMicrotask(() => {
       if (!acceptsResult) return
-      void client.render({ document, quality, maxDimension, resourceDescriptors }).catch((error: unknown) => {
-        if (
-          error instanceof ImageEditorResourcePressureErrorV3
-          && error.recovery === 'lower-mip'
-          && maxDimension > IMAGE_EDITOR_PREVIEW_DRAFT_MAX_EDGE_V3
-        ) {
-          pressureDiagnostic = error.message
-          return client.render({
-            document,
-            quality: 'draft',
-            maxDimension: IMAGE_EDITOR_PREVIEW_DRAFT_MAX_EDGE_V3,
-            resourceDescriptors,
-          })
-        }
-        throw error
-      }).then((result) => {
+      void client.render({ document, quality, maxDimension, resourceDescriptors }).then((result) => {
         if (!acceptsResult) {
           result.release()
           return
         }
         setState(() => {
-          const diagnostics = [
-            ...(pressureDiagnostic ? [pressureDiagnostic] : []),
-            ...result.diagnostics,
-          ]
+          const diagnostics = result.diagnostics
           return {
             result,
             resultDocumentId: snapshot.document.id,

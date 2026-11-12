@@ -42,7 +42,7 @@ describe('图片编辑 V3 会话资源账本', () => {
     expect(inspectImageEditorSessionResourceBudgetV3('shared-session')).toBeNull()
   })
 
-  it('不同会话共享同一全局硬预算', () => {
+  it('不同会话的用量记到同一个全局账本，释放后清零', () => {
     const left = acquireImageEditorSessionResourceBudgetV3('left-session', {
       consumerId: 'preview',
       budgetOptions: {
@@ -55,16 +55,16 @@ describe('图片编辑 V3 会话资源账本', () => {
       consumerId: 'preview',
     })
     expect(left.budget).toBe(right.budget)
-    const heldLease = left.budget.acquire('gpu', 700)
-    expect(heldLease).not.toBeNull()
-    expect(right.budget.acquire('in-flight', 301)).toBeNull()
+    const leftLease = left.budget.acquire('gpu', 700)
+    const rightLease = right.budget.acquire('in-flight', 301)
     expect(inspectImageEditorGlobalResourceBudgetV3()).toMatchObject({
       consumers: 2,
       activeSessions: 2,
-      memory: { totalBytes: 700, leaseCount: 1 },
+      memory: { totalBytes: 1_001, leaseCount: 2 },
     })
-    expect(left.budget.snapshot().totalBytes).toBe(700)
-    heldLease?.release()
+    leftLease.release()
+    rightLease.release()
+    expect(inspectImageEditorGlobalResourceBudgetV3()?.memory).toMatchObject({ totalBytes: 0, leaseCount: 0 })
     left.release()
     right.release()
     expect(inspectImageEditorGlobalResourceBudgetV3()).toBeNull()

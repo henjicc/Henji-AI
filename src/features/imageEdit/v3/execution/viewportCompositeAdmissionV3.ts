@@ -73,6 +73,7 @@ export function imageEditorViewportCompositeCandidateFitsBudgetV3(options: {
   }, 0)
   const totalBytes = transferBytes + workingBytes + outputBytes
   if (!Number.isSafeInteger(totalBytes)) throw new Error('视口候选总工作集超出安全范围')
-  return options.budget.admission('in-flight', totalBytes).admitted
-    && options.budget.admission('gpu', outputBytes).admitted
+  // 只决定是否换更粗的 mip；最粗一级仍超出时规划器照样使用它。
+  return options.budget.admission('in-flight', totalBytes).pressure !== 'hard'
+    && options.budget.admission('gpu', outputBytes).pressure !== 'hard'
 }

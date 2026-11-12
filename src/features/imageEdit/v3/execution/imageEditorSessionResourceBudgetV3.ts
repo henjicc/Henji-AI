@@ -1,5 +1,7 @@
+import { getPlatform } from '@/platform/runtime'
 import {
   ImageEditResourceBudget,
+  setImageEditSystemMemoryBytes,
   type ImageEditMemorySnapshot,
   type ImageEditResourceBudgetOptions,
 } from '@/core/imageEdit/v3/resourceBudget'
@@ -29,6 +31,17 @@ export interface ImageEditorGlobalResourceBudgetSnapshotV3 {
 }
 
 let globalBudgetEntry: ImageEditorGlobalResourceBudgetEntryV3 | null = null
+let systemMemoryRequested = false
+
+/** 第一次打开编辑资源时读一次物理内存；到达前按 deviceMemory 估算，账本目标随后自动跟上。 */
+function loadImageEditSystemMemoryV3(): void {
+  if (systemMemoryRequested) return
+  systemMemoryRequested = true
+  void Promise.resolve()
+    .then(() => getPlatform().system.memoryInfo())
+    .then(({ totalBytes }) => setImageEditSystemMemoryBytes(totalBytes))
+    .catch(() => { systemMemoryRequested = false })
+}
 
 function normalizeSessionId(sessionId: string): string {
   const normalized = sessionId.trim()
@@ -58,6 +71,7 @@ export function acquireImageEditorSessionResourceBudgetV3(
 ): ImageEditorSessionResourceBudgetLeaseV3 {
   const normalized = normalizeSessionId(sessionId)
   const consumerId = normalizeConsumerId(options.consumerId)
+  loadImageEditSystemMemoryV3()
   if (
     globalBudgetEntry
     && globalBudgetEntry.sessions.size === 0

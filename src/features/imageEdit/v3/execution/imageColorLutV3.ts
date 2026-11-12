@@ -1,10 +1,12 @@
 import { parseCubeLut, CUBE_LUT_MAX_BYTES, type CubeLut } from '@/core/imaging/lut/cube'
 import { toFetchableMediaUrl } from '@/services/imageSource'
+import { scaleImageEditCacheBytes } from '@/core/imageEdit/v3/resourceBudget'
 
 // Immutable resources are cached by content, in the render worker that consumes them.
 const cache = new Map<string, Promise<CubeLut>>()
 const sizes = new Map<string, number>()
-const CACHE_BYTES = 64 * 1024 * 1024 // Per-worker decoded LUT memory budget, never a product count limit.
+// 每个渲染 Worker 的已解析查找表缓存目标，按机器内存放大；只淘汰，不限制查找表数量。
+const CACHE_BYTES = scaleImageEditCacheBytes(64 * 1024 * 1024)
 function retain(ref: string, lut: CubeLut): CubeLut {
   sizes.set(ref, lut.data.byteLength)
   let bytes = [...sizes.values()].reduce((sum, size) => sum + size, 0)

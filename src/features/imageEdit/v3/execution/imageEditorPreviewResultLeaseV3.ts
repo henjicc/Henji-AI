@@ -2,7 +2,6 @@ import type {
   ImageEditMemoryLease,
   ImageEditResourceBudget,
 } from '@/core/imageEdit/v3/resourceBudget'
-import { acquireImageEditorResourceLeaseV3 } from './imageEditorResourcePressureV3'
 import type { ImageEditorPreviewBlobEventV3 } from './previewProtocolV3'
 
 export interface ImageEditorManagedPreviewThumbnailV3 {
@@ -61,13 +60,7 @@ export class ImageEditorPreviewResultOwnerV3 {
     let thumbnailLease: ImageEditMemoryLease | null = null
     try {
       thumbnailLease = thumbnail
-        ? acquireImageEditorResourceLeaseV3(
-            this.budget,
-            'managed-preview',
-            'cpu-cache',
-            thumbnail.bytes.byteLength,
-            'lower-mip',
-          )
+        ? this.budget.acquire('cpu-cache', thumbnail.bytes.byteLength)
         : null
       const release = this.createLease(() => {
         bitmap.close()
@@ -91,21 +84,9 @@ export class ImageEditorPreviewResultOwnerV3 {
     let thumbnailLease: ImageEditMemoryLease | null = null
     let url: string
     try {
-      blobLease = acquireImageEditorResourceLeaseV3(
-        this.budget,
-        'managed-preview',
-        'cpu-cache',
-        event.bytes.byteLength,
-        'lower-mip',
-      )
+      blobLease = this.budget.acquire('cpu-cache', event.bytes.byteLength)
       thumbnailLease = event.thumbnail
-        ? acquireImageEditorResourceLeaseV3(
-            this.budget,
-            'managed-preview',
-            'cpu-cache',
-            event.thumbnail.bytes.byteLength,
-            'lower-mip',
-          )
+        ? this.budget.acquire('cpu-cache', event.thumbnail.bytes.byteLength)
         : null
       url = this.urlFactory.create(event.bytes, event.mediaType)
     } catch (error) {

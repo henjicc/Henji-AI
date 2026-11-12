@@ -13,6 +13,7 @@ import {
   createFloat32PremultipliedRgbaTile,
   mixCustomEffectMaskV3,
   resolveFastBlurV3Geometry,
+  scaleImageEditCacheBytes,
   type Float32MaskTile,
   type Float32PremultipliedRgbaTile,
   type ImageEditDocumentV3,
@@ -23,7 +24,7 @@ import {
 } from '@/core/imageEdit/v3'
 
 const MEBIBYTE = 1024 * 1024
-const ANALYSIS_CACHE_BYTES = 160 * MEBIBYTE
+const ANALYSIS_CACHE_BYTES = scaleImageEditCacheBytes(160 * MEBIBYTE)
 const INTERACTIVE_ANALYSIS_MAX_EDGE = 640
 const registry = createBuiltInImageEditRenderNodeRegistry()
 
@@ -205,10 +206,11 @@ export function resolveImageEditorViewportAnalysisMipV3(
 
 export class ImageEditorViewportGlobalAnalysisCacheV3 {
   private readonly budget = new ImageEditResourceBudget({
-    totalBytes: 192 * MEBIBYTE,
+    totalBytes: ANALYSIS_CACHE_BYTES + scaleImageEditCacheBytes(32 * MEBIBYTE),
     cpuCacheTargetBytes: ANALYSIS_CACHE_BYTES,
     gpuTargetBytes: 0,
   })
+  private prepared = new Map<string, ViewportGlobalAnalysisEntryV3>()
   private readonly caches = new ImageEditRenderCaches<ViewportGlobalAnalysisEntryV3>({
     budget: this.budget,
     tierBudgets: {
@@ -234,6 +236,9 @@ export class ImageEditorViewportGlobalAnalysisCacheV3 {
       const originalNode = originalById.get(node.id)
       return originalNode ? isSharedAnalysisNode(originalNode) : false
     })
+    // 本帧要用的分析结果直接持有到下一次 prepare，缓存放不下或被 LRU 淘汰都不影响出图。
+    const prepared = new Map<string, ViewportGlobalAnalysisEntryV3>()
+    this.prepared = prepared
     for (const node of sharedNodes) {
       await yieldToAnalysisEventLoop()
       if (options.signal.aborted) throw options.signal.reason
@@ -244,6 +249,7 @@ export class ImageEditorViewportGlobalAnalysisCacheV3 {
       const existing = this.caches.lease('global-analysis', key)
       if (existing) {
         this.keyByIdentity.set(identity, key)
+        prepared.set(identity, existing.value)
         existing.release()
         continue
       }
@@ -257,21 +263,24 @@ export class ImageEditorViewportGlobalAnalysisCacheV3 {
       const entry = await this.buildEntry(node, linear, options)
       await yieldToAnalysisEventLoop()
       if (options.signal.aborted) throw options.signal.reason
-      if (!this.caches.set('global-analysis', key, {
+      this.caches.set('global-analysis', key, {
         value: entry,
         bytes: entry.tile.data.byteLength,
         category: 'cpu-cache',
         deviceGeneration: this.budget.snapshot().deviceGeneration,
-      })) throw new Error('全局分析缓存超过 Worker 资源预算')
+      })
+      prepared.set(identity, entry)
       this.keyByIdentity.set(identity, key)
     }
   }
 
   async execute(options: ExecuteViewportGlobalAnalysisV3): Promise<Float32PremultipliedRgbaTile> {
     const identity = analysisIdentity(options.originalNode, options.document, options.quality)
+    const preparedAnalysis = this.prepared.get(identity)
     const key = this.keyByIdentity.get(identity)
-    const lease = key ? this.caches.lease('global-analysis', key) : null
-    if (!lease) {
+    const lease = !preparedAnalysis && key ? this.caches.lease('global-analysis', key) : null
+    const analysis = preparedAnalysis ?? lease?.value
+    if (!analysis) {
       if (isSharedAnalysisNode(options.originalNode)) {
         const phase = options.required ? '目标视口' : '全局效果预览'
         throw new Error(`${phase}缺少共享全局分析：${options.originalNode.id}`)
@@ -279,7 +288,6 @@ export class ImageEditorViewportGlobalAnalysisCacheV3 {
       return options.fallback()
     }
     try {
-      const analysis = lease.value
       const scale = 2 ** options.mip
       const sourceRegion = {
         x: options.region.x * scale,
@@ -331,12 +339,13 @@ export class ImageEditorViewportGlobalAnalysisCacheV3 {
         } },
       )
     } finally {
-      lease.release()
+      lease?.release()
     }
   }
 
   dispose(): void {
     this.keyByIdentity.clear()
+    this.prepared = new Map()
     this.caches.clearTier('global-analysis')
   }
 

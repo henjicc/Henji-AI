@@ -8,12 +8,11 @@ import type {
 } from '@/core/imageEdit/v3/brush/contracts'
 import type { ImageEditDocumentV3 } from '@/core/imageEdit/v3/documentTypes'
 import { IMAGE_EDIT_HDR_REFERENCE_WHITE_NITS_V3 } from '@/core/imageEdit/v3/colorTypes'
+import { scaleImageEditCacheBytes } from '@/core/imageEdit/v3/resourceBudget'
 import type { ImageEditorPreviewBrushResourceRequestV3 } from './previewDocumentV3'
 import type { ImageEditorPreviewBrushTileV3 } from './previewProtocolV3'
 import { readImageEditorBrushTilesWithAdmissionV3 } from './imageEditorGpuBrushTileReaderV3'
 
-const IMAGE_EDITOR_PREVIEW_BRUSH_CACHE_MAX_BYTES_V3 = 64 * 1024 * 1024
-const IMAGE_EDITOR_PREVIEW_BRUSH_TRANSFER_MAX_BYTES_V3 = 128 * 1024 * 1024
 const BRUSH_TILE_BATCH_MAX_BYTES = 32 * 1024 * 1024
 const BRUSH_TILE_BATCH_MAX_COUNT = 16
 
@@ -38,7 +37,6 @@ interface CachedPreviewBrushTileV3 {
 interface ImageEditorPreviewBrushTileLoaderOptionsV3 {
   reader?: ImageEditorPreviewBrushTileReaderV3
   cacheMaxBytes?: number
-  transferMaxBytes?: number
 }
 
 function abortError(signal: AbortSignal): Error {
@@ -171,18 +169,12 @@ export class ImageEditorPreviewBrushTileLoaderV3 {
   private cacheBytes = 0
   private readonly reader: ImageEditorPreviewBrushTileReaderV3
   private readonly cacheMaxBytes: number
-  private readonly transferMaxBytes: number
 
   constructor(options: ImageEditorPreviewBrushTileLoaderOptionsV3 = {}) {
     this.reader = options.reader ?? readImageEditorV3BrushTiles
-    this.cacheMaxBytes = options.cacheMaxBytes ?? IMAGE_EDITOR_PREVIEW_BRUSH_CACHE_MAX_BYTES_V3
-    this.transferMaxBytes = options.transferMaxBytes
-      ?? IMAGE_EDITOR_PREVIEW_BRUSH_TRANSFER_MAX_BYTES_V3
+    this.cacheMaxBytes = options.cacheMaxBytes ?? scaleImageEditCacheBytes(64 * 1024 * 1024)
     if (!Number.isSafeInteger(this.cacheMaxBytes) || this.cacheMaxBytes < 0) {
       throw new Error('图片预览画笔缓存上限必须是非负整数')
-    }
-    if (!Number.isSafeInteger(this.transferMaxBytes) || this.transferMaxBytes < 0) {
-      throw new Error('图片预览画笔传输上限必须是非负整数')
     }
   }
 
@@ -192,9 +184,7 @@ export class ImageEditorPreviewBrushTileLoaderV3 {
     signal: AbortSignal,
   ): Promise<ImageEditorPreviewBrushTileV3[]> {
     const transferBytes = requests.reduce((total, request) => total + decodedBytes(request), 0)
-    if (!Number.isSafeInteger(transferBytes) || transferBytes > this.transferMaxBytes) {
-      throw new Error('图片预览画笔瓦片超过单帧受控传输上限')
-    }
+    if (!Number.isSafeInteger(transferBytes)) throw new Error('图片预览画笔瓦片字节数超出安全范围')
     const resolved = new Map<string, CachedPreviewBrushTileV3>()
     const missing: ImageEditorPreviewBrushResourceRequestV3[] = []
     for (const request of requests) {

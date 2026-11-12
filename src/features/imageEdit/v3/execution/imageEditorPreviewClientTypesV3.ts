@@ -26,7 +26,6 @@ export interface ImageEditorPreviewClientOptionsV3 {
   urlFactory?: ImageEditorPreviewUrlFactoryV3
   proxyCacheMaxBytes?: number
   brushCacheMaxBytes?: number
-  brushTransferMaxBytes?: number
   resourceBudget?: ImageEditResourceBudget
   resourceBudgetConsumerId?: string
   renderScheduler?: ImageEditRenderScheduler

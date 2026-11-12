@@ -23,13 +23,11 @@ export interface ImageEditorGpuSceneResourceRegistryOptionsV3<T> {
 }
 
 export interface ImageEditorGpuSceneResourceRegistrationV3 {
-  admitted: boolean
   reused: boolean
   evicted: readonly ImageEditorGpuSceneTileKeyV3[]
 }
 
 export interface ImageEditorGpuSceneResourceAdmissionV3 {
-  admitted: boolean
   evicted: readonly ImageEditorGpuSceneTileKeyV3[]
 }
 
@@ -76,15 +74,11 @@ export class ImageEditorGpuSceneResourceRegistryV3<T> {
       existing.lastUsed = ++this.clock
       for (const protection of protections) existing.protections.add(protection)
       this.disposePayload(payload)
-      return { admitted: true, reused: true, evicted: [] }
+      return { reused: true, evicted: [] }
     }
     const normalizedBytes = normalizeBytes(bytes)
     const evicted = this.evictToFit(normalizedBytes)
     const lease = this.budget.acquire('gpu', normalizedBytes)
-    if (!lease) {
-      this.disposePayload(payload)
-      return { admitted: false, reused: false, evicted }
-    }
     this.entries.set(id, {
       key: { ...key },
       payload,
@@ -92,13 +86,13 @@ export class ImageEditorGpuSceneResourceRegistryV3<T> {
       protections: new Set(protections),
       lastUsed: ++this.clock,
     })
-    return { admitted: true, reused: false, evicted }
+    return { reused: false, evicted }
   }
 
   /** 在创建真实 GPU 负载前先淘汰未受保护的旧缓存，为新资源腾出预算。 */
   prepareAdmission(bytes: number): ImageEditorGpuSceneResourceAdmissionV3 {
     this.assertUsable()
-    return { admitted: true, evicted: this.evictToFit(normalizeBytes(bytes)) }
+    return { evicted: this.evictToFit(normalizeBytes(bytes)) }
   }
 
   evictOldestUnprotected(): ImageEditorGpuSceneTileKeyV3 | null {

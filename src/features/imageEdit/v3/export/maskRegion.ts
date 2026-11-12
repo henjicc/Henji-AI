@@ -112,7 +112,6 @@ export async function loadImageEditorV3SparseMaskRegion(
     0,
   )
   const lease = budget.acquire('in-flight', decodedBytes)
-  if (!lease) throw new Error('图片导出资源账本无法预留蒙版解码空间')
   try {
     const tiles = await loadMaskTiles(references, signal, dependencies)
     const output = reference.vectorPaths ? rasterizeVectorCoverage(reference.vectorPaths,region,2**(-mip),2**(-mip),signal) : new Float32Array(region.width * region.height)

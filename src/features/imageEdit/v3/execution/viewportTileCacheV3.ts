@@ -1,5 +1,5 @@
 import {
-  IMAGE_EDIT_DEFAULT_CPU_CACHE_TARGET_BYTES,
+  imageEditDefaultBudgetBytes,
   ImageEditResourceBudget,
   type ImageEditMemoryLease,
 } from '@/core/imageEdit/v3/resourceBudget'
@@ -140,7 +140,7 @@ export class ImageEditorViewportTileCacheV3 {
 
   constructor(options: ImageEditorViewportTileCacheOptionsV3 = {}) {
     this.maxBytes = normalizeBytes(
-      options.maxBytes ?? IMAGE_EDIT_DEFAULT_CPU_CACHE_TARGET_BYTES,
+      options.maxBytes ?? imageEditDefaultBudgetBytes().cpuCacheTargetBytes,
       'CPU 瓦片缓存上限',
     )
     this.budget = options.resourceBudget ?? new ImageEditResourceBudget()
@@ -213,14 +213,13 @@ export class ImageEditorViewportTileCacheV3 {
   ): ImageEditorViewportTileReadReservationV3 | null {
     if (this.disposed) return null
     const bytes = validateRequest(request)
-    if (bytes > this.maxBytes) return null
-    while (!this.budget.admission('in-flight', bytes).admitted) {
+    // 读取工作集超出总账时先淘汰未租用的缓存，淘汰完仍超出也照样读取。
+    while (this.budget.admission('in-flight', bytes).pressure === 'hard') {
       const candidate = this.oldestEvictable()
-      if (!candidate) return null
+      if (!candidate) break
       this.removeEntry(candidate[0], candidate[1])
     }
     const budgetLease = this.budget.acquire('in-flight', bytes)
-    if (!budgetLease) return null
     let active = true
     const release = (): void => {
       if (!active) return
@@ -257,12 +256,10 @@ export class ImageEditorViewportTileCacheV3 {
     const bytes = validateTile(request, tile)
     const existingLease = this.lease(request)
     if (existingLease) return existingLease
-    if (bytes > this.maxBytes) return null
     const existing = this.entries.get(request.key)
     if (existing) return null
-    if (!this.makeRoom(bytes)) return null
+    this.makeRoom(bytes)
     const budgetLease = this.budget.acquire('cpu-cache', bytes)
-    if (!budgetLease) return null
     const entry: ViewportTileCacheEntryV3 = {
       tile,
       bytes,
@@ -315,16 +312,16 @@ export class ImageEditorViewportTileCacheV3 {
     }
   }
 
-  private makeRoom(bytes: number): boolean {
+  /** 本地上限与总账都只是淘汰目标：淘汰完仍超出时由调用方照样插入，下次插入时再淘汰回落。 */
+  private makeRoom(bytes: number): void {
     while (
       this.usedBytes > this.maxBytes - bytes
-      || !this.budget.admission('cpu-cache', bytes).admitted
+      || this.budget.admission('cpu-cache', bytes).pressure === 'hard'
     ) {
       const candidate = this.oldestEvictable()
-      if (!candidate) return false
+      if (!candidate) return
       this.removeEntry(candidate[0], candidate[1])
     }
-    return true
   }
 
   private oldestEvictable(): [string, ViewportTileCacheEntryV3] | null {

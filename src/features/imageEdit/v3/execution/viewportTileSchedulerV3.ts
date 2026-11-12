@@ -265,7 +265,7 @@ export class ImageEditorViewportTileSchedulerV3 {
       for (const tileRequest of tileRequests) {
         if (job.tileLeases.has(tileRequest.key)) continue
         const reservation = this.cache.reserveInFlight(tileRequest)
-        if (!reservation) throw new Error('视口瓦片读取前未通过 in-flight 资源预算')
+        if (!reservation) throw new Error('视口瓦片缓存已释放')
         job.readReservations.set(tileRequest.key, reservation)
       }
       const misses = tileRequests.filter((tileRequest) => !job.tileLeases.has(tileRequest.key))
@@ -387,7 +387,7 @@ export class ImageEditorViewportTileSchedulerV3 {
     } finally {
       job.readReservations.delete(request.key)
     }
-    if (!lease) throw new Error('视口瓦片在读取后未通过 CPU 缓存 admission')
+    if (!lease) throw new Error('视口瓦片缓存已释放，或同一瓦片的旧条目仍在等待回收')
     job.tileLeases.set(request.key, lease)
   }
 

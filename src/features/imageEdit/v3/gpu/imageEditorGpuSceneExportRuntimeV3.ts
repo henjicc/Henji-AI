@@ -68,11 +68,14 @@ interface ImageEditorGpuSceneExportRuntimeOptionsV3 {
   currentSceneGeneration: () => number
   deviceGeneration: () => number
   sessionBudgetBytes?: number
+  /** 让预览把未受保护的缓存淘汰到预算以内，给导出腾出显存；参数是导出当前常驻字节数。 */
+  trimPreviewMemory?: (exportResidentBytes: number) => void
 }
 
 /**
- * 同一 Scene Worker/vGPU Context 内的导出 job。导出 compositor 与预览状态隔离，但
- * admission 始终扣除预览真实常驻量；命中的 source key 直接复用预览 atlas allocation。
+ * 同一 Scene Worker/vGPU Context 内的导出 job。导出 compositor 与预览状态隔离；命中的
+ * source key 直接复用预览 atlas allocation。共享预算只是淘汰目标：导出开始和上传时先让
+ * 预览淘汰未受保护的缓存，淘汰完仍超出也照样导出，不因预算失败。
  */
 export class ImageEditorGpuSceneExportRuntimeV3 {
   private active: ExportJobV3 | null = null
@@ -81,10 +84,8 @@ export class ImageEditorGpuSceneExportRuntimeV3 {
 
   start(request: ImageEditorGpuSceneExportRequestV3, scene: ImageEditorGpuRasterSceneV3): void {
     this.cancelAll()
-    const previewBytes = this.previewResidentBytes()
-    const total = this.options.sessionBudgetBytes ?? IMAGE_EDITOR_GPU_SCENE_DEFAULT_BUDGET_BYTES_V3
-    const available = Math.max(1, total - previewBytes)
-    const compositor = this.options.createCompositor(available)
+    this.options.trimPreviewMemory?.(0)
+    const compositor = this.options.createCompositor(this.availableBudgetBytes(0))
     const finalScene: ImageEditorGpuRasterSceneV3 = { ...scene, graph: scene.graph.map(node => node.kind === 'effect'
       ? { ...node, fingerprint: `${node.fingerprint}:final`, parameters: { ...node.parameters, effectQuality: 'final' } } : node) }
     compositor.syncScene(finalScene)
@@ -125,15 +126,9 @@ export class ImageEditorGpuSceneExportRuntimeV3 {
       for (const entry of tiles) {
         const id = imageEditorGpuSceneTileKeyV3(entry.key)
         if (job.resources.has(id) || this.options.previewResource(entry.key)) continue
-        const payload = job.compositor.uploadTile(entry.key, entry.tile)
-        job.resources.set(id, payload)
-        try {
-          this.assertSharedBudget(job)
-        } catch (error) {
-          job.resources.delete(id)
-          payload.destroy()
-          throw error
-        }
+        this.options.trimPreviewMemory?.(this.activeResidentGpuBytes()
+          + job.compositor.estimateTileGpuBytes(entry.tile))
+        job.resources.set(id, job.compositor.uploadTile(entry.key, entry.tile))
       }
     } catch (error) {
       this.options.emit({
@@ -194,7 +189,6 @@ export class ImageEditorGpuSceneExportRuntimeV3 {
         [job.request.description.width, job.request.description.height],
       )
       await this.waitForResources(job, job.compositor)
-      this.assertSharedBudget(job)
       const core = globalLow
         ? await this.renderMultiscaleTile(job, scene, plan, globalLow)
         : cropCore(await this.readDirectTile(job), plan)
@@ -285,21 +279,20 @@ export class ImageEditorGpuSceneExportRuntimeV3 {
     if (!analysis) return null
     if (!residual) throw new Error('GPU Scene 缺少有界多尺度残差合成器')
     const bytes = analysis.width * analysis.height * 8
-    const available = Math.max(1, this.totalBudgetBytes() - this.previewResidentBytes()
-      - (job.compositor.estimatedResidentGpuBytes?.() ?? 0) - bytes)
-    const compositor = this.options.createCompositor(available)
+    this.options.trimPreviewMemory?.(this.activeResidentGpuBytes() + bytes)
+    const compositor = this.options.createCompositor(
+      this.availableBudgetBytes((job.compositor.estimatedResidentGpuBytes?.() ?? 0) + bytes))
     try {
       const finalScene: ImageEditorGpuRasterSceneV3 = { ...scene, graph: scene.graph.map(node => node.kind === 'effect'
       ? { ...node, fingerprint: `${node.fingerprint}:final`, parameters: { ...node.parameters, effectQuality: 'final' } } : node) }
     compositor.syncScene(finalScene)
       compositor.updateExportViewport?.(fullAnalysisLayout(job.request.requestId, analysis, scene))
       await this.waitForResources(job, compositor)
-      this.assertCompositorBudget(job, compositor, bytes)
+      this.assertCurrent(job)
       const target = await this.renderTarget(compositor, job)
       const cloned = await residual.clone(target, 'image-editor-export-global-analysis')
       job.retainedTargets.add(cloned)
       job.extraResidentBytes += bytes
-      this.assertSharedBudget(job)
       return cloned
     } finally {
       compositor.dispose()
@@ -318,7 +311,6 @@ export class ImageEditorGpuSceneExportRuntimeV3 {
     const tileSize = maximumTileDimensions(job.request.outputTiles)
     const residualBytes = plan.width * plan.height * 16 * 2
     if (residualBytes > job.residualTargetBytes) {
-      this.assertSharedBudget(job, residualBytes - job.residualTargetBytes)
       job.extraResidentBytes += residualBytes - job.residualTargetBytes
       job.residualTargetBytes = residualBytes
     }
@@ -352,7 +344,6 @@ export class ImageEditorGpuSceneExportRuntimeV3 {
     await this.waitForResources(job, job.compositor)
     const highTarget = await this.renderTarget(job.compositor, job)
     const highBytes = highTarget.size[0] * highTarget.size[1] * 8
-    this.assertSharedBudget(job, highBytes * 2)
     const high = await residual.clone(highTarget, 'image-editor-export-overlap-full')
     job.extraResidentBytes += highBytes
     const lowPlan = scaleTilePlan(patch, job.request.description, analysis)
@@ -363,7 +354,6 @@ export class ImageEditorGpuSceneExportRuntimeV3 {
     await this.waitForResources(job, job.compositor)
     const lowTarget = await this.renderTarget(job.compositor, job)
     const lowBytes = lowTarget.size[0] * lowTarget.size[1] * 8
-    this.assertSharedBudget(job, lowBytes)
     const low = await residual.clone(lowTarget, 'image-editor-export-overlap-analysis')
     job.extraResidentBytes += lowBytes
     try {
@@ -395,30 +385,10 @@ export class ImageEditorGpuSceneExportRuntimeV3 {
       ?? null
   }
 
-  private assertSharedBudget(job: ExportJobV3, additionalBytes = 0): void {
-    const total = this.totalBudgetBytes()
-    const exportBytes = job.compositor.estimatedResidentGpuBytes?.() ?? 0
-    if (this.previewResidentBytes() + exportBytes + job.extraResidentBytes + additionalBytes > total
-      || job.compositor.memoryPressureBytes() > 0) {
-      throw new Error('GPU Scene 预览与导出常驻资源超过共享会话预算')
-    }
-  }
-
-  private assertCompositorBudget(
-    job: ExportJobV3,
-    compositor: ImageEditorGpuRasterCompositorV3Like,
-    reservedBytes: number,
-  ): void {
-    const used = compositor.estimatedResidentGpuBytes?.() ?? 0
-    if (this.previewResidentBytes() + used + reservedBytes > this.totalBudgetBytes()
-      || compositor.memoryPressureBytes() > 0) {
-      throw new Error('GPU Scene 全局分析超过共享会话预算')
-    }
-    this.assertCurrent(job)
-  }
-
-  private totalBudgetBytes(): number {
-    return this.options.sessionBudgetBytes ?? IMAGE_EDITOR_GPU_SCENE_DEFAULT_BUDGET_BYTES_V3
+  /** 导出 compositor 的内存目标：共享预算扣除预览与已占用部分，只影响其压力统计，不影响导出像素。 */
+  private availableBudgetBytes(reservedBytes: number): number {
+    const total = this.options.sessionBudgetBytes ?? IMAGE_EDITOR_GPU_SCENE_DEFAULT_BUDGET_BYTES_V3
+    return Math.max(1, total - this.previewResidentBytes() - reservedBytes)
   }
 
   private previewResidentBytes(): number {

@@ -5,9 +5,10 @@ import {
 } from '@/commands/imageEditorV3'
 import { createLogger } from '@/core/logging'
 import { readSharedImageEditorSourcePyramidV3 } from './imageEditorSourcePyramidsV3'
-import type {
-  ImageEditMemoryLease,
-  ImageEditResourceBudget,
+import {
+  scaleImageEditCacheBytes,
+  type ImageEditMemoryLease,
+  type ImageEditResourceBudget,
 } from '@/core/imageEdit/v3/resourceBudget'
 import type {
   ImageEditorV3FastProxy,
@@ -15,7 +16,6 @@ import type {
   ImageEditorV3PyramidPrewarmResult,
   ImageEditorV3ResourceRef,
 } from '@/platform/contracts/imageEditorV3'
-import { acquireImageEditorResourceLeaseV3 } from './imageEditorResourcePressureV3'
 import type { ImageEditorPreviewProxyResourceRequestV3 } from './previewDocumentV3'
 
 export type ImageEditorPreviewProxyReaderV3 = (
@@ -81,7 +81,6 @@ export interface ImageEditorLoadedProxyResourcesV3 {
   transientLeases: ImageEditMemoryLease[]
 }
 
-const IMAGE_EDITOR_PREVIEW_PROXY_CACHE_MAX_BYTES_V3 = 128 * 1024 * 1024
 export const IMAGE_EDITOR_PREVIEW_PYRAMID_PREWARM_TILE_BUDGET_V3 = 64
 
 const logger = createLogger('image_editor_v3.preview_client')
@@ -127,7 +126,7 @@ export class ImageEditorPreviewResourceLoaderV3 {
       ?? readSharedImageEditorSourcePyramidV3
     this.pyramidPrewarmer = options.pyramidPrewarmer ?? prewarmImageEditorV3SourcePyramid
     this.proxyCacheMaxBytes = options.proxyCacheMaxBytes
-      ?? IMAGE_EDITOR_PREVIEW_PROXY_CACHE_MAX_BYTES_V3
+      ?? scaleImageEditCacheBytes(128 * 1024 * 1024)
     if (!Number.isSafeInteger(this.proxyCacheMaxBytes) || this.proxyCacheMaxBytes < 0) {
       throw new Error('图片预览代理缓存上限必须是非负整数')
     }
@@ -163,13 +162,7 @@ export class ImageEditorPreviewResourceLoaderV3 {
         const proxy = loaded.proxy
         if (this.disposed || signal.aborted) throw abortError(signal)
         if (!loaded.cached) {
-          transientLeases.push(acquireImageEditorResourceLeaseV3(
-            this.options.budget,
-            'managed-preview',
-            'in-flight',
-            proxy.bytes.byteLength,
-            'lower-mip',
-          ))
+          transientLeases.push(this.options.budget.acquire('in-flight', proxy.bytes.byteLength))
         }
         return proxy
       }))
@@ -198,14 +191,13 @@ export class ImageEditorPreviewResourceLoaderV3 {
     this.removeProxyCacheEntry(key)
     while (
       this.proxyCacheBytes + bytes > this.proxyCacheMaxBytes
-      || !this.options.budget.admission('cpu-cache', bytes).admitted
+      || this.options.budget.admission('cpu-cache', bytes).pressure === 'hard'
     ) {
       const oldestKey = this.proxyCache.keys().next().value as string | undefined
-      if (!oldestKey) return false
+      if (!oldestKey) break
       this.removeProxyCacheEntry(oldestKey)
     }
     const lease = this.options.budget.acquire('cpu-cache', bytes)
-    if (!lease) return false
     this.proxyCache.set(key, { proxy, lease })
     this.proxyCacheBytes += bytes
     return true

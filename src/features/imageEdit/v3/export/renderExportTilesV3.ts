@@ -3,7 +3,7 @@ import { ImageEditCpuRegionWorkerClientV3 } from '../../../../core/imageEdit/v3/
 import type { ImageEditCpuRegionRenderContextV3 } from '../../../../core/imageEdit/v3/execution/cpuRenderRegionExecutor'
 import { loadImageColorLutV3 } from '../execution/imageColorLutV3'
 import { loadImageEditorRasterRegionV3 } from './rasterRegion'
-import { transparentRegion, safeWorkingSetBytes, acquireOrThrow } from './renderExportResourcesV3'
+import { transparentRegion, safeWorkingSetBytes } from './renderExportResourcesV3'
 import {
   DIFFUSION_V4_RECIPE_ADAPTER,
   IMAGE_EDIT_RENDER_PRIORITY,
@@ -14,7 +14,6 @@ import {
   createTileRegion,
   collectImageEditCpuRegionRequirementsV3,
   executeImageEditCpuRenderRegionPlanV3,
-  planTileExecution,
   tileGridSize,
   type Float32PremultipliedRgbaTile,
   type ImageEditMemoryLease,
@@ -73,13 +72,27 @@ import {
 const logger = createLogger('features.image_edit.v3.export')
 const registry = createBuiltInImageEditRenderNodeRegistry()
 const DEFAULT_TILE_SIZE = 512
-const TOTAL_BUDGET_BYTES = 1_342_177_280
+/**
+ * 一个带 halo 的 Float32 RGBA 工作面是一次连续的类型化数组分配。超过 2 GiB 时 V8 可能直接
+ * 分配失败甚至让渲染进程崩溃，这是物理限制，不是预算，所以只在这一处提前给出明确失败。
+ */
+const MAX_RELIABLE_TYPED_ARRAY_BYTES = 2 * 1024 * 1024 * 1024
 
 function throwIfAborted(signal: AbortSignal): void {
   if (!signal.aborted) return
   const error = signal.reason instanceof Error ? signal.reason : new Error('图片分块导出已取消')
   if (error.name === 'Error') error.name = 'AbortError'
   throw error
+}
+
+function assertExportSurfaceAllocatable(tileSize: number, halo: number): void {
+  const edge = tileSize + halo * 2
+  const bytes = edge * edge * 4 * Float32Array.BYTES_PER_ELEMENT
+  if (bytes <= MAX_RELIABLE_TYPED_ARRAY_BYTES) return
+  throw new ImageEditorV3ExportCapabilityError(
+    'WORKING_SET_EXCEEDED',
+    `当前效果的采样范围过大，单个导出瓦片需要 ${(bytes / 1024 ** 3).toFixed(1)}GiB 连续内存，超过单次分配的物理上限，请减小模糊或辉光半径后再导出`,
+  )
 }
 
 function validateTileSize(value = DEFAULT_TILE_SIZE): number {
@@ -128,8 +141,8 @@ async function* renderTiles(
   const { document, plan } = prepared
   const sourceBitDepth = resolveImageEditorV3ExportSourceBitDepth(document)
   const referenceWhiteNits = resolveImageEditorV3ExportReferenceWhiteNits(document)
-  const neighborhood = resolveImageEditorV3ExportNeighborhood(plan)
   const tileSize = validateTileSize(request.tileSize)
+  assertExportSurfaceAllocatable(tileSize, resolveImageEditorV3ExportNeighborhood(plan).halo)
   const scheduler = dependencies.scheduler ?? getImageEditorGlobalRenderSchedulerV3()
   const currentSessionId = createSessionId(request.sessionId)
   let globalBudgetLease: ImageEditorSessionResourceBudgetLeaseV3 | null = null
@@ -227,27 +240,6 @@ async function* renderTiles(
       diffusionAnalyses,
       glowAnalysisSet,
     )
-    if (tileSize === DEFAULT_TILE_SIZE) {
-      try {
-        planTileExecution(
-          { width: geometry.sourceWidth, height: geometry.sourceHeight },
-          0,
-          {
-            halo: neighborhood.halo,
-            bytesPerPixel: 16,
-            workingSurfaceCount: Math.max(3, plan.nodes.length + 2),
-            maxWorkingSetBytes: TOTAL_BUDGET_BYTES,
-            preferSupertile: false,
-          },
-        )
-      } catch (error) {
-        throw new ImageEditorV3ExportCapabilityError(
-          'WORKING_SET_EXCEEDED',
-          '当前效果 halo 无法在 1.25GiB 资源上限内完成一个 512 瓦片',
-          { cause: error },
-        )
-      }
-    }
     for (let tileY = 0; tileY < grid.height; tileY += 1) {
       for (let tileX = 0; tileX < grid.width; tileX += 1) {
         throwIfAborted(controller.signal)
@@ -275,14 +267,14 @@ async function* renderTiles(
             const workingBytes = () => parts.reduce((bytes, part) => bytes + safeWorkingSetBytes(
               collectImageEditCpuRegionRequirementsV3(plan, [part.region], samplingContext), part.region,
             ), 0) * (useCpuWorkers ? 2 : 1)
-            // 并发仅消耗预算，不限制产品数量；压力下减少到两个或一个区域。
-            if (!budget.admission('in-flight', workingBytes()).admitted && parts.length > 1) {
+            // 并发仅消耗预算，不限制产品数量；压力下减少到两个或一个区域，仍超出也照样执行。
+            if (budget.admission('in-flight', workingBytes()).pressure === 'hard' && parts.length > 1) {
               parts = splitImageEditCpuOutputV3(workerOutput, 2)
             }
-            if (!budget.admission('in-flight', workingBytes()).admitted && parts.length > 1) {
+            if (budget.admission('in-flight', workingBytes()).pressure === 'hard' && parts.length > 1) {
               parts = splitImageEditCpuOutputV3(workerOutput, 1)
             }
-            const workingLease = acquireOrThrow(budget, 'in-flight', workingBytes())
+            const workingLease = budget.acquire('in-flight', workingBytes())
             const decodedTiles = new ImageEditorDecodedSourceTilesV3(budget)
             try {
               const sourceCache = new Map<string, Promise<Float32PremultipliedRgbaTile>>()
@@ -430,7 +422,7 @@ async function* renderTiles(
                 outputRect,
                 request.description,
               )
-              const transferLease = acquireOrThrow(budget, 'transfer', tile.pixels.byteLength)
+              const transferLease = budget.acquire('transfer', tile.pixels.byteLength)
               try {
                 await taskContext.yieldAfterAtomicUnit()
                 throwIfAborted(taskContext.signal)

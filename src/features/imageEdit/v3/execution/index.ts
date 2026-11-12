@@ -1,6 +1,5 @@
 export * from './imageEditorPreviewClientV3'
 export * from './imageEditorGlobalRenderSchedulerV3'
-export * from './imageEditorResourcePressureV3'
 export * from './imageEditorSessionResourceBudgetV3'
 export * from './imageEditorRenderSessionV3'
 export * from './previewDocumentV3'

@@ -23,9 +23,6 @@ import {
   type ImageEditorPreviewProxyResourceRequestV3,
 } from './previewDocumentV3'
 import {
-  acquireImageEditorResourceLeaseV3,
-} from './imageEditorResourcePressureV3'
-import {
   ImageEditorPreviewResultOwnerV3,
   type ImageEditorManagedPreviewResultV3,
 } from './imageEditorPreviewResultLeaseV3'
@@ -122,7 +119,6 @@ export class ImageEditorPreviewClientV3 {
     this.brushTileLoader = new ImageEditorPreviewBrushTileLoaderV3({
       reader: options.readBrushTiles,
       cacheMaxBytes: options.brushCacheMaxBytes,
-      transferMaxBytes: options.brushTransferMaxBytes,
     })
     this.sessionBudgetLease = options.resourceBudget
       ? null
@@ -225,20 +221,8 @@ export class ImageEditorPreviewClientV3 {
 
   private async prepareAndPost(job: ScheduledJobV3): Promise<void> {
     const memory = estimateImageEditorPreviewMemoryV3(job.document, job.maxDimension)
-    job.outputLease = acquireImageEditorResourceLeaseV3(
-      this.budget,
-      'managed-preview',
-      'gpu',
-      memory.outputBytes,
-      'lower-mip',
-    )
-    job.workingLease = acquireImageEditorResourceLeaseV3(
-      this.budget,
-      'managed-preview',
-      'in-flight',
-      memory.workingBytes,
-      'lower-mip',
-    )
+    job.outputLease = this.budget.acquire('gpu', memory.outputBytes)
+    job.workingLease = this.budget.acquire('in-flight', memory.workingBytes)
     const sourceSizes = await readImageEditorPreviewBrushSourceSizesV3(job.document, job.abortController.signal, this.options.describePyramid)
     const requests = collectImageEditorPreviewResourceRequestsV3(
       job.document,
@@ -268,13 +252,7 @@ export class ImageEditorPreviewClientV3 {
     if (!Number.isSafeInteger(transferBytes)) {
       throw new Error('图片预览 Worker 传输字节数超出安全整数范围')
     }
-    job.transferLease = acquireImageEditorResourceLeaseV3(
-      this.budget,
-      'managed-preview',
-      'transfer',
-      transferBytes,
-      'lower-mip',
-    )
+    job.transferLease = this.budget.acquire('transfer', transferBytes)
     const [proxies, brushTiles] = await Promise.all([
       Promise.resolve(sourceProxies.map((proxy) => ({
         resourceId: proxy.resourceRef,

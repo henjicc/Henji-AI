@@ -18,7 +18,7 @@ import type {
   ImageEditorV3ExportSourceTileRequest,
 } from './contracts'
 import { readImageEditorExportSourcePyramidV3 } from './sourceGeometry'
-import type { ImageEditResourceBudget, ImageEditMemoryLease } from '@/core/imageEdit/v3'
+import { scaleImageEditCacheBytes, type ImageEditResourceBudget, type ImageEditMemoryLease } from '@/core/imageEdit/v3'
 
 /** 一次调度瓦片内共享解码；不跨任务保留，不 detach 借出的源数据。 */
 export class ImageEditorDecodedSourceTilesV3 {
@@ -30,9 +30,9 @@ export class ImageEditorDecodedSourceTilesV3 {
   read(key: string, bytes: number, load: () => Promise<Float32PremultipliedRgbaTile>): Promise<Float32PremultipliedRgbaTile> {
     const cached = this.tiles.get(key)
     if (cached) return cached
-    // 32MiB 是解码缓存预算；超出时沿已计入工作集的单块暂存路径，不拒绝图层或素材。
-    const lease = this.bytes + bytes <= 32 * 1024 * 1024 ? this.budget.acquire('in-flight', bytes) : null
-    if (!lease) return load()
+    // 解码缓存预算按机器内存放大；超出时沿已计入工作集的单块暂存路径，不拒绝图层或素材。
+    if (this.bytes + bytes > scaleImageEditCacheBytes(32 * 1024 * 1024)) return load()
+    const lease = this.budget.acquire('in-flight', bytes)
     this.bytes += bytes
     this.leases.push(lease)
     const pending = load()

@@ -236,12 +236,6 @@ export async function buildImageEditorV3VgpuGlowAnalyses(
       const prefix = dependencyPlan(plan, inputNodeId, mip)
       const peakBytes = size.width * size.height * 16 * Math.max(4, prefix.nodes.length + 4)
       const peakLease = budget.acquire('in-flight', peakBytes)
-      if (!peakLease) {
-        throw new ImageEditorV3ExportCapabilityError(
-          'WORKING_SET_EXCEEDED',
-          `辉光 Pro 全局分析需要 ${Math.ceil(peakBytes / 1024 / 1024)}MiB 工作集，资源账本已拒绝`,
-        )
-      }
       try {
         const sourceCache = new Map<string, Promise<Float32PremultipliedRgbaTile>>()
         const loadSource = (
@@ -349,13 +343,6 @@ export async function buildImageEditorV3VgpuGlowAnalyses(
         if (!input) throw new Error(`辉光 Pro 全局分析无法求值输入：${node.id}`)
         const analysis = await runtime.buildAnalysis({ node, source: input, document, signal })
         const cacheLease = budget.acquire('gpu', size.width * size.height * 16)
-        if (!cacheLease) {
-          analysis.release()
-          throw new ImageEditorV3ExportCapabilityError(
-            'WORKING_SET_EXCEEDED',
-            '辉光 Pro 全局分析缓存超过统一资源账本上限',
-          )
-        }
         analyses.set(node.id, analysis)
         cacheLeases.push(cacheLease)
       } finally {

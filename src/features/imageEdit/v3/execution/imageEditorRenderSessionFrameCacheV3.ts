@@ -1,5 +1,6 @@
 import { createImageEditRenderHash, type ImageEditHashValue } from '@/core/imageEdit/v3/renderHash'
 import { collectImageEditJsonResourceIdsV3 } from '@/core/imageEdit/v3/resourceReferences'
+import { scaleImageEditCacheBytes } from '@/core/imageEdit/v3/resourceBudget'
 import type { ImageEditorRenderSnapshotV3 } from './imageEditorRenderSessionContractsV3'
 import type { ImageEditorManagedViewportCompositeV3 } from './viewportCompositeTypesV3'
 
@@ -10,11 +11,11 @@ interface Entry {
   retained: boolean
 }
 
-/** 候选的清晰 CPU 成品复用原额度租约；32 MiB 是额外缓存预算，不限制图层或候选数量。 */
+/** 候选的清晰 CPU 成品复用原额度租约；额外缓存预算按机器内存放大，只淘汰、不限制图层或候选数量。 */
 export class ImageEditorRenderSessionFrameCacheV3 {
   private readonly entries = new Map<string, Entry>()
   private bytes = 0
-  constructor(private readonly maxBytes = 32 * 1024 * 1024) {}
+  constructor(private readonly maxBytes = scaleImageEditCacheBytes(32 * 1024 * 1024)) {}
 
   key(snapshot: ImageEditorRenderSnapshotV3, viewportKey: string): string {
     const { document } = snapshot
