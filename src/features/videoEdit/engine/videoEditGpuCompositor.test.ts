@@ -624,6 +624,21 @@ it('多源同时等待复制名额时逐次重查，单个完成不能唤醒后�
   await tick(); expect(closed).toHaveBeenCalledTimes(4)
   copies.forEach(copy => copy.close()); await compositor.dispose()
 })
+it('多层原生画面同一帧的复制不受解码器帧的两份预算限制，一起提交，各自借到复制完成', async () => {
+  const finish: Array<() => void> = []
+  const { compositor, device } = copyFixture(() => new Promise<void>(resolve => { finish.push(resolve) }))
+  const releases = Array.from({ length: 4 }, () => vi.fn())
+  const pictures = releases.map((release, index) => new VideoEditNativePicture({ frame: { codedWidth: 3840, codedHeight: 2160, visibleRect: { width: 3840, height: 2160 }, format: 'NV12', close: vi.fn() }, meta: { route: 'r', streamId: `s${index}`, frameIndex: 0, timestampUs: 0, ptsUs: 0, durationUs: 16_683 }, receivedAt: 0, release } as unknown as NativeVideoFrame, 0, 1 / 60, { bitDepth: 8, hasAlpha: false }))
+  const copies = await Promise.all(pictures.map(picture => compositor.snapshot(picture, true, true)))
+  expect(device.submit).toHaveBeenCalledTimes(4)
+  pictures.forEach(picture => picture.close())
+  for (let index = 0; index < 10; index++) await Promise.resolve()
+  expect(releases.every(release => release.mock.calls.length === 0)).toBe(true)
+  finish.forEach(resolve => resolve())
+  for (let index = 0; index < 20; index++) await Promise.resolve()
+  expect(releases.every(release => release.mock.calls.length === 1)).toBe(true)
+  copies.forEach(copy => copy.close()); await compositor.dispose()
+})
 describe('合成器共享图片候选生命周期', () => {
   it('文字/字幕/标题共享局部纹理，动画仅改变GPU几何，离屏导出写相同几何', async () => {
     vi.stubGlobal('OffscreenCanvas', class { constructor(public width: number, public height: number) {} getContext() { return { save() {}, restore() {}, scale() {}, beginPath() {}, fill() {}, clearRect() {}, drawImage() {}, fillRect() {}, fillText() {}, strokeText() {}, measureText(text: string) { return { width: text.length * 70 } } } } })

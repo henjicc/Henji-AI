@@ -186,6 +186,12 @@ export class VideoEditGpuCompositor {
   private readonly uploads = new Set<Promise<void>>()
   private fences?: VideoEditGpuFrameFences
   private readonly copies = new Set<Promise<void>>()
+  /**
+   * 其中借着浏览器解码器帧的复制：解码器的输出帧池很小，复制完成前同时借出两幅以上会让它停住，所以最多两份在途。
+   * 原生画面不算在内：它借的是原生纹理池的槽位（池子按播放深度建），多层同一帧的复制互相等待只会把各层串起来，
+   * 每层多等一次队列完成通知。
+   */
+  private readonly decoderCopies = new Set<Promise<void>>()
   private disposed = false
   private readonly pool: Array<{ width: number; height: number; format: string; texture: GpuTexture; chroma?: GpuTexture; bytes: number }> = []
   private readonly blankReleases = new Set<() => void>()
@@ -343,8 +349,9 @@ export class VideoEditGpuCompositor {
     await this.ready
     if (this.disposed) throw new Error('剪辑预览已关闭。')
     this.assertDevice()
-    while (this.copies.size >= 2) {
-      await Promise.race(this.copies)
+    const borrowed = sample instanceof VideoEditNativePicture
+    while (!borrowed && this.decoderCopies.size >= 2) {
+      await Promise.race(this.decoderCopies)
       if (this.disposed) throw new Error('剪辑预览已关闭。')
       this.assertDevice()
     }
@@ -358,7 +365,6 @@ export class VideoEditGpuCompositor {
     let reduced = divisor === 1 ? undefined : await this.downscalePipelines(divisor)
     if (this.disposed) throw new Error('剪辑预览已关闭。')
     // Copy on the compositor's device; no Skia canvas or cross-context fences.
-    const borrowed = sample instanceof VideoEditNativePicture
     const frame = borrowed ? sample.frame : sample.toVideoFrame()
     const closeFrame = (): void => { if (!borrowed) frame.close() }
     const decodedWidth = frame.visibleRect?.width ?? sample.codedWidth; const decodedHeight = frame.visibleRect?.height ?? sample.codedHeight
@@ -392,8 +398,9 @@ export class VideoEditGpuCompositor {
       }
       this.device.queue.submit([encoder.finish()])
       copying?.end()
-      const completion = this.device.queue.onSubmittedWorkDone().finally(() => { closeFrame(); this.copies.delete(completion) })
+      const completion = this.device.queue.onSubmittedWorkDone().finally(() => { closeFrame(); this.copies.delete(completion); this.decoderCopies.delete(completion) })
       if (borrowed) sample.holdUntil(completion)
+      else this.decoderCopies.add(completion)
       this.copies.add(completion); retained = true
       void completion.catch(() => {})
       if (!deferCompletion) await completion

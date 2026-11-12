@@ -1,0 +1,25 @@
+{
+ "t0": "2026-11-12T16:55:12.081Z",
+ "t1": "2026-11-12T16:55:22.180Z",
+ "tcStart": "00:00:00:04 NDF",
+ "tcEnd": "00:00:09:59 NDF",
+ "bad": [],
+ "delta": [
+  {
+   "id": "vf-23",
+   "w": 3840,
+   "produced": 571,
+   "decoded": 571,
+   "held": 24,
+   "missing": 0,
+   "released": 571,
+   "outstanding": 8,
+   "waitUsTotal": 9329734,
+   "decodeUsTotal": 226907,
+   "paces": 571,
+   "paceUsTotal": 2167736,
+   "settles": 0,
+   "settleUsTotal": 0
+  }
+ ]
+}

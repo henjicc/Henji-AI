@@ -1,0 +1,155 @@
+{
+ "t0": "2026-11-12T17:36:07.647Z",
+ "t1": "2026-11-12T17:36:18.016Z",
+ "tcStart": "00:00:00:04 NDF",
+ "tcEnd": "00:00:10:15 NDF",
+ "bad": [],
+ "delta": [
+  {
+   "id": "vf-29",
+   "w": 3840,
+   "produced": 517,
+   "decoded": 516,
+   "held": 96,
+   "missing": 0,
+   "released": 522,
+   "outstanding": 3,
+   "waitUsTotal": 5371499,
+   "decodeUsTotal": 308145,
+   "paces": 516,
+   "paceUsTotal": 6346398,
+   "settles": 0,
+   "settleUsTotal": 0
+  },
+  {
+   "id": "vf-31",
+   "w": 3840,
+   "produced": 514,
+   "decoded": 513,
+   "held": 94,
+   "missing": 0,
+   "released": 519,
+   "outstanding": 3,
+   "waitUsTotal": 5262431,
+   "decodeUsTotal": 308636,
+   "paces": 513,
+   "paceUsTotal": 6499376,
+   "settles": 0,
+   "settleUsTotal": 0
+  },
+  {
+   "id": "vf-30",
+   "w": 3840,
+   "produced": 518,
+   "decoded": 517,
+   "held": 95,
+   "missing": 0,
+   "released": 523,
+   "outstanding": 3,
+   "waitUsTotal": 5261081,
+   "decodeUsTotal": 321668,
+   "paces": 517,
+   "paceUsTotal": 6458960,
+   "settles": 0,
+   "settleUsTotal": 0
+  },
+  {
+   "id": "vf-13",
+   "w": 3840,
+   "produced": 514,
+   "decoded": 513,
+   "held": 99,
+   "missing": 0,
+   "released": 519,
+   "outstanding": 3,
+   "waitUsTotal": 5349886,
+   "decodeUsTotal": 310407,
+   "paces": 513,
+   "paceUsTotal": 6410502,
+   "settles": 0,
+   "settleUsTotal": 0
+  }
+ ],
+ "samples": [
+  {
+   "ms": 11,
+   "streams": "vf-29:held0/out8/prod17 vf-26:held0/out0/prod4 vf-27:held0/out0/prod4 vf-28:held0/out0/prod4 vf-31:held0/out8/prod17 vf-30:held0/out8/prod17 vf-13:held0/out8/prod639 vf-25:held0/out0/prod4"
+  },
+  {
+   "ms": 520,
+   "streams": "vf-29:held0/out2/prod34 vf-31:held0/out2/prod34 vf-30:held0/out2/prod34 vf-13:held0/out2/prod656"
+  },
+  {
+   "ms": 1037,
+   "streams": "vf-29:held0/out2/prod64 vf-31:held0/out2/prod64 vf-30:held0/out2/prod64 vf-13:held0/out2/prod686"
+  },
+  {
+   "ms": 1542,
+   "streams": "vf-29:held22/out6/prod89 vf-31:held25/out7/prod89 vf-30:held22/out6/prod89 vf-13:held25/out7/prod711"
+  },
+  {
+   "ms": 2051,
+   "streams": "vf-29:held26/out8/prod106 vf-31:held27/out8/prod105 vf-30:held26/out8/prod106 vf-13:held27/out8/prod727"
+  },
+  {
+   "ms": 2558,
+   "streams": "vf-29:held26/out7/prod136 vf-31:held27/out7/prod135 vf-30:held26/out7/prod136 vf-13:held27/out7/prod757"
+  },
+  {
+   "ms": 3062,
+   "streams": "vf-29:held26/out5/prod164 vf-31:held27/out5/prod163 vf-30:held26/out5/prod164 vf-13:held27/out5/prod785"
+  },
+  {
+   "ms": 3568,
+   "streams": "vf-29:held26/out4/prod193 vf-31:held27/out4/prod192 vf-30:held26/out4/prod193 vf-13:held27/out4/prod814"
+  },
+  {
+   "ms": 4071,
+   "streams": "vf-29:held47/out8/prod219 vf-31:held40/out4/prod218 vf-30:held47/out8/prod219 vf-13:held40/out4/prod840"
+  },
+  {
+   "ms": 4583,
+   "streams": "vf-29:held47/out8/prod237 vf-31:held50/out8/prod234 vf-30:held47/out8/prod237 vf-13:held50/out8/prod856"
+  },
+  {
+   "ms": 5256,
+   "streams": "vf-29:held47/out6/prod275 vf-31:held50/out6/prod272 vf-30:held47/out6/prod275 vf-13:held50/out6/prod894"
+  },
+  {
+   "ms": 5761,
+   "streams": "vf-29:held68/out8/prod297 vf-31:held71/out8/prod294 vf-30:held67/out8/prod302 vf-13:held71/out8/prod916"
+  },
+  {
+   "ms": 6273,
+   "streams": "vf-29:held68/out8/prod318 vf-31:held71/out8/prod315 vf-30:held67/out8/prod319 vf-13:held71/out8/prod937"
+  },
+  {
+   "ms": 6778,
+   "streams": "vf-29:held68/out7/prod347 vf-31:held71/out7/prod344 vf-30:held67/out7/prod348 vf-13:held71/out7/prod966"
+  },
+  {
+   "ms": 7285,
+   "streams": "vf-29:held68/out6/prod376 vf-31:held71/out6/prod373 vf-30:held67/out6/prod377 vf-13:held71/out6/prod995"
+  },
+  {
+   "ms": 7803,
+   "streams": "vf-29:held68/out4/prod405 vf-31:held71/out4/prod402 vf-30:held67/out4/prod406 vf-13:held71/out4/prod1024"
+  },
+  {
+   "ms": 8320,
+   "streams": "vf-29:held91/out8/prod431 vf-31:held94/out8/prod428 vf-30:held90/out8/prod432 vf-13:held94/out8/prod1050"
+  },
+  {
+   "ms": 8828,
+   "streams": "vf-29:held91/out8/prod448 vf-31:held94/out8/prod445 vf-30:held90/out8/prod449 vf-13:held94/out8/prod1067"
+  },
+  {
+   "ms": 9335,
+   "streams": "vf-29:held91/out8/prod477 vf-31:held94/out8/prod474 vf-30:held90/out8/prod478 vf-13:held94/out8/prod1096"
+  },
+  {
+   "ms": 9853,
+   "streams": "vf-29:held91/out5/prod506 vf-31:held94/out5/prod503 vf-30:held90/out5/prod507 vf-13:held94/out5/prod1125"
+  }
+ ]
+}

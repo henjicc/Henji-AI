@@ -80,10 +80,6 @@ const REDUCED_POOL_SIZE: u32 = 2;
 const RETAINED_RELEASE_WAIT: Duration = Duration::from_millis(60);
 /// 送入这么多包仍无输出视为解码器卡死。
 const STALL_PACKETS: u32 = 600;
-/// 时间点计划交出、消费方还没交回的帧少于这么多时，解码跟不上播放：送包时跳过非参考帧（只解 I/P 帧，B 帧那几项沿用
-/// 上一幅），解码追到纹理池快满后恢复逐帧精确（`DropState`）。多路 4K 长 GOP 叠放时显卡解码器的总吞吐不够逐帧解（4090
-/// 解 4K60 H.264 约合 3.5 路实时），只解参考帧约合 8 路，各层按约三分之一帧率平稳更新，而不是整体落后、反复重新定位。
-const DROP_CUSHION: usize = 2;
 pub const MAX_SCHEDULE_TIMES: usize = 200_000;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -267,7 +263,7 @@ mod imp {
         decode_error_count: u64,
         /// 上次交出帧时本会话已解出（含丢弃）的帧数；交出前按差值判断是否先等显卡完成（3.8）。
         decoded_at_handoff: u64,
-        /// 正在执行有终点的区间取帧（拖动的解码窗口）：每帧交出前等上一帧的显卡工作完成（3.8）。
+        /// 正在执行时间点计划（播放）或有终点的区间取帧（拖动的解码窗口）：每帧交出前等上一帧的显卡工作完成（3.8）。
         paced: bool,
         settle_logged: bool,
         /// 单帧定位走向目标时，呈现时间早于它的包跳过非参考帧：这些帧既不显示也不被参考，4 秒 GOP 的 4K 录屏
@@ -276,6 +272,8 @@ mod imp {
         skip_before: Option<i64>,
         /// 时间点计划推进期间的解码跟不上判断（`DropState`）：判为跟不上时送包跳过非参考帧。
         drop: Option<DropState>,
+        /// 时间点计划开始取帧后多久内不判跟不上（`plan::DROP_GRACE`）。
+        drop_grace: Duration,
         /// 当前段里按 `skip_before` 标记跳过、呈现时间晚于候选帧的包（开新段时清空，每次单帧取帧后去掉不晚于候选帧的）。
         /// 解码器送包领先于出帧，半途停下（近似取帧、被取消）时这里会留下候选帧之后跳过的包；之后的取帧若有落在
         /// 候选帧与目标之间的，那里可能缺被跳过的帧：单帧取帧不跳过重解，播放计划与区间取帧先重新定位（`force_seek`）。
@@ -530,6 +528,7 @@ mod imp {
                 settle_logged: false,
                 skip_before: None,
                 drop: None,
+                drop_grace: plan::DROP_GRACE,
                 run_skipped: Vec::new(),
                 force_seek: false,
                 cancel: None,
@@ -1444,8 +1443,9 @@ mod imp {
             let delivered_before = self.delivered;
             let cuts_before = self.control.counters.cuts.load(Ordering::Relaxed);
             let prefed_before = self.control.counters.prefed_cuts.load(Ordering::Relaxed);
-            // 有终点的区间是拖动的解码窗口；无终点的区间是顺序读取（导出、预滚），照常流水。
-            self.paced = matches!(plan, SchedulePlan::Range { to: Some(_), .. });
+            // 播放（时间点计划）与拖动的解码窗口（有终点的区间）交出前等上一帧解完（`handoff_wait`）；无终点的区间是
+            // 顺序读取（导出、预滚），照常流水。
+            self.paced = !matches!(plan, SchedulePlan::Range { to: None, .. });
             let result = match &plan {
                 SchedulePlan::Times(times) => self.schedule_times(&schedule_id, times),
                 SchedulePlan::Range { from, to } => self.schedule_range(&schedule_id, *from, *to),
@@ -1474,13 +1474,14 @@ mod imp {
         }
 
         /// 每项交出不晚于该时间的最后一幅已解出的画面。各项推进时跳过本项之前用不到的非参考帧；开头填满纹理池之后，
-        /// 判为跟不上（`DropState`）时连本项附近的非参考帧也跳过（解码跟不上播放时只解参考帧）。
-        /// 画面与上一项交出的相同（被跳过的项、重复的时间）答 `held`，不再复制一份。
+        /// 判为跟不上（`DropState`）时连本项附近的非参考帧也跳过：多路高码率素材叠放时显卡解码单元的总吞吐不够逐帧解
+        /// （4090 叠放 4 路 4K59.94 H.264 150Mbps 满载约合 3.75 路实时），只解参考帧的那几项沿用上一幅，画面按时出，
+        /// 而不是整体落后、被时钟反复跳过。画面与上一项交出的相同（被跳过的项、重复的时间）答 `held`，不再复制一份。
         fn schedule_times(&mut self, schedule_id: &str, times: &[f64]) -> Result<(), Abort> {
             let cuts: Vec<usize> = times.windows(2).enumerate().filter(|(_, pair)| is_cut(pair[0], pair[1])).map(|(index, _)| index).collect();
             let mut next_cut = 0;
             let startup = self.control.slots.count();
-            let mut drop = DropState::new(DROP_CUSHION, startup);
+            let mut drop = DropState::new(startup, self.drop_grace);
             let mut answered: Option<i64> = None;
             for (index, time) in times.iter().enumerate() {
                 if self.stopped() {
@@ -1651,8 +1652,8 @@ mod imp {
                     } else if let (Some(dts), Some(pts)) = (packet.dts(), packet.pts()) {
                         keys.insert(dts, pts);
                     }
-                    // 消费方已用完交出的帧、正等着下一幅：解码是瓶颈，这个包是非参考帧就不解（关键包本来就是参考帧）。
-                    let behind = !packet.is_key() && drop.as_mut().is_some_and(|state| state.update(control.slots.outstanding()));
+                    // 消费方前面已没有排着的帧：解码是瓶颈，这个包是非参考帧就不解（关键包本来就是参考帧）。
+                    let behind = !packet.is_key() && drop.as_mut().is_some_and(|state| state.update(control.slots.outstanding(), Instant::now()));
                     let skip_pts = packet.pts().filter(|&pts| behind || skip_before.is_some_and(|limit| pts < limit));
                     if let Some(pts) = skip_pts {
                         skipped.push(pts);
@@ -1862,8 +1863,12 @@ mod imp {
         }
 
         fn open_with_commands(path: &str) -> (std::sync::mpsc::Sender<SessionCommand>, Session) {
+            open_with_pool(path, None)
+        }
+
+        fn open_with_pool(path: &str, pool_size: Option<u32>) -> (std::sync::mpsc::Sender<SessionCommand>, Session) {
             let (commands, receiver) = std::sync::mpsc::channel();
-            let options = DecodeOptions { stream_id: "cancel-test".into(), path: path.into(), stream_index: None, purpose: Purpose::Seek, pool_size: None, hardware: false, format: None, transfer: None };
+            let options = DecodeOptions { stream_id: "cancel-test".into(), path: path.into(), stream_index: None, purpose: Purpose::Seek, pool_size, hardware: false, format: None, transfer: None };
             let budget = crate::budget::Budget::new(crate::budget::Limits::for_adapter(None));
             (commands, Session::open(Arc::new(SoftwareOnly { max_slots: u32::MAX }), &options, Arc::new(StreamControl::new(0)), receiver, &budget).map(|(session, _)| session).expect("打开测试视频"))
         }
@@ -2180,8 +2185,9 @@ mod imp {
             let _ = std::fs::remove_file(path);
         }
 
-        /// 逐帧的时间点计划：消费方手里留着两帧以上（解码在前面）时每项交出各自的画面；消费方一交出就用完、
-        /// 等着下一幅（解码是瓶颈）时，填满纹理池的开头几项之后不解非参考帧，那几项答 held（沿用上一幅）。
+        /// 逐帧的时间点计划：消费方前面排着帧（解码在前面）时每项交出各自的画面；消费方一交出就用完、等着下一幅
+        /// （解码是瓶颈）时，填满纹理池的开头几项之后不解非参考帧，那几项答 held（沿用上一幅）。第一帧之后的每一帧
+        /// 都等上一帧解完才交出，客户端最多只等刚交出的这一帧自己的解码。
         #[test]
         fn a_schedule_its_consumer_waits_on_decodes_reference_pictures_only() {
             let Some(path) = generate("behind") else {
@@ -2189,9 +2195,13 @@ mod imp {
                 return;
             };
             let times: Vec<f64> = (0..90).map(|frame| (frame as f64 + 0.25) / 30.0).collect();
-            let run = |kept: usize| {
-                let (commands, mut session) = open_with_commands(&path);
+            let run = |ahead: bool| {
+                // 播放会话的纹理池大小（8 槽）：消费方一交出就用完时交出未还的帧只剩零到一幅。
+                let (commands, mut session) = open_with_pool(&path, Some(8));
                 let control = session.control.clone();
+                // 测试里的消费方从第一项起就一交出就用完，没有起播时解码变慢的那一阵。
+                session.drop_grace = Duration::ZERO;
+                let kept = if ahead { DropState::new(control.slots.count(), Duration::ZERO).low } else { 0 };
                 let done = Arc::new(std::sync::atomic::AtomicBool::new(false));
                 let consumer = {
                     let (control, done) = (control.clone(), done.clone());
@@ -2206,17 +2216,18 @@ mod imp {
                         }
                     })
                 };
-                session.schedule = Some("plan".into());
-                assert!(session.schedule_times("plan", &times).is_ok());
+                session.run_schedule("plan".into(), SchedulePlan::Times(times.clone()));
                 done.store(true, Ordering::Relaxed);
                 consumer.join().unwrap();
                 drop(commands);
                 let load = |value: &std::sync::atomic::AtomicU64| value.load(Ordering::Relaxed);
-                (load(&control.counters.produced), load(&control.counters.held), load(&control.counters.decoded))
+                let counters = &control.counters;
+                assert_eq!(load(&counters.paces) + load(&counters.settles), load(&counters.produced), "每一帧交出前都等过显卡");
+                (load(&counters.produced), load(&counters.held), load(&counters.decoded))
             };
-            let (produced, held, _) = run(DROP_CUSHION);
+            let (produced, held, _) = run(true);
             assert_eq!((produced, held), (90, 0), "解码在消费方前面：逐帧精确");
-            let (produced, held, decoded) = run(0);
+            let (produced, held, decoded) = run(false);
             assert!(held > 0, "跟不上：B 帧那几项沿用上一幅");
             assert_eq!(produced + held, 90, "每项恰好一个答复");
             assert!(decoded < 90, "非参考帧没有解码：{decoded}");

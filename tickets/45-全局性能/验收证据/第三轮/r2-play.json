@@ -1,0 +1,73 @@
+{
+ "t0": "2026-11-12T16:34:03.760Z",
+ "t1": "2026-11-12T16:34:13.836Z",
+ "tcStart": "00:00:00:04 NDF",
+ "tcEnd": "00:00:09:53 NDF",
+ "errs": [],
+ "delta": [
+  {
+   "id": "vf-73",
+   "w": 3840,
+   "produced": 566,
+   "decoded": 565,
+   "held": 26,
+   "missing": 0,
+   "released": 567,
+   "outstanding": 7,
+   "waitUsTotal": 7224673,
+   "decodeUsTotal": 3164745,
+   "paces": 0,
+   "paceUsTotal": 0,
+   "settles": 0,
+   "settleUsTotal": 0
+  },
+  {
+   "id": "vf-76",
+   "w": 3840,
+   "produced": 554,
+   "decoded": 553,
+   "held": 37,
+   "missing": 0,
+   "released": 556,
+   "outstanding": 6,
+   "waitUsTotal": 6576228,
+   "decodeUsTotal": 3894116,
+   "paces": 0,
+   "paceUsTotal": 0,
+   "settles": 0,
+   "settleUsTotal": 0
+  },
+  {
+   "id": "vf-75",
+   "w": 3840,
+   "produced": 554,
+   "decoded": 553,
+   "held": 37,
+   "missing": 0,
+   "released": 556,
+   "outstanding": 6,
+   "waitUsTotal": 6761834,
+   "decodeUsTotal": 3309833,
+   "paces": 0,
+   "paceUsTotal": 0,
+   "settles": 0,
+   "settleUsTotal": 0
+  },
+  {
+   "id": "vf-74",
+   "w": 3840,
+   "produced": 568,
+   "decoded": 567,
+   "held": 23,
+   "missing": 0,
+   "released": 570,
+   "outstanding": 6,
+   "waitUsTotal": 6971410,
+   "decodeUsTotal": 3394915,
+   "paces": 0,
+   "paceUsTotal": 0,
+   "settles": 0,
+   "settleUsTotal": 0
+  }
+ ]
+}

@@ -167,7 +167,8 @@ impl WindowsFrameOutput {
             {
                 // 立即上下文不是线程安全的：每次查询都取锁，等待期间不占锁，其他会话照常提交。
                 let context = self.pool.gpu.lock();
-                let _ = unsafe { context.GetData(query, Some(&mut done as *mut _ as *mut _), std::mem::size_of::<windows::core::BOOL>() as u32, D3D11_ASYNC_GETDATA_DONOTFLUSH.0 as u32) };
+                // 未完成是成功码（S_FALSE）；返回错误多半是设备已丢失，查询永远不会完成，不空等到超时。
+                unsafe { context.GetData(query, Some(&mut done as *mut _ as *mut _), std::mem::size_of::<windows::core::BOOL>() as u32, D3D11_ASYNC_GETDATA_DONOTFLUSH.0 as u32) }.map_err(|error| format!("等待显卡完成失败：{error}"))?;
             }
             if done.as_bool() {
                 return Ok(());

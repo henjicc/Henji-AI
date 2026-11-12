@@ -1,0 +1,147 @@
+{
+ "t0": "2026-11-12T17:09:36.277Z",
+ "t1": "2026-11-12T17:09:46.628Z",
+ "tcStart": "00:00:00:00 NDF",
+ "tcEnd": "00:00:08:43 NDF",
+ "bad": [],
+ "delta": [
+  {
+   "id": "vf-44",
+   "w": 3840,
+   "produced": 225,
+   "decoded": 227,
+   "held": 0,
+   "missing": 0,
+   "released": 224,
+   "outstanding": 2,
+   "waitUsTotal": 8,
+   "decodeUsTotal": 175904,
+   "paces": 224,
+   "paceUsTotal": 4076418,
+   "settles": 1,
+   "settleUsTotal": 46214
+  },
+  {
+   "id": "vf-41",
+   "w": 3840,
+   "produced": 289,
+   "decoded": 292,
+   "held": 248,
+   "missing": 0,
+   "released": 282,
+   "outstanding": 7,
+   "waitUsTotal": 3573095,
+   "decodeUsTotal": 369155,
+   "paces": 288,
+   "paceUsTotal": 5412983,
+   "settles": 1,
+   "settleUsTotal": 88516
+  },
+  {
+   "id": "vf-42",
+   "w": 3840,
+   "produced": 283,
+   "decoded": 286,
+   "held": 254,
+   "missing": 0,
+   "released": 276,
+   "outstanding": 7,
+   "waitUsTotal": 3511770,
+   "decodeUsTotal": 380009,
+   "paces": 282,
+   "paceUsTotal": 5464690,
+   "settles": 1,
+   "settleUsTotal": 89776
+  },
+  {
+   "id": "vf-39",
+   "w": 3840,
+   "produced": 294,
+   "decoded": 296,
+   "held": 0,
+   "missing": 0,
+   "released": 278,
+   "outstanding": 16,
+   "waitUsTotal": 13,
+   "decodeUsTotal": 307938,
+   "paces": 293,
+   "paceUsTotal": 5605672,
+   "settles": 1,
+   "settleUsTotal": 4478
+  },
+  {
+   "id": "vf-43",
+   "w": 3840,
+   "produced": 287,
+   "decoded": 290,
+   "held": 250,
+   "missing": 0,
+   "released": 280,
+   "outstanding": 7,
+   "waitUsTotal": 3536749,
+   "decodeUsTotal": 380676,
+   "paces": 286,
+   "paceUsTotal": 5467837,
+   "settles": 1,
+   "settleUsTotal": 57126
+  },
+  {
+   "id": "vf-40",
+   "w": 3840,
+   "produced": 291,
+   "decoded": 294,
+   "held": 246,
+   "missing": 0,
+   "released": 284,
+   "outstanding": 7,
+   "waitUsTotal": 3486361,
+   "decodeUsTotal": 410937,
+   "paces": 290,
+   "paceUsTotal": 5450314,
+   "settles": 1,
+   "settleUsTotal": 90033
+  }
+ ],
+ "samples": [
+  {
+   "ms": 28,
+   "streams": "vf-36:held0/out0/prod0 vf-29:held0/out0/prod0 vf-30:held0/out8/prod1197 vf-31:held0/out0/prod0 vf-35:held0/out0/prod0 vf-34:held0/out0/prod0 vf-37:held0/out0/prod0"
+  },
+  {
+   "ms": 1047,
+   "streams": "vf-36:held0/out0/prod0 vf-41:held0/out2/prod23 vf-42:held0/out2/prod23 vf-39:held0/out2/prod42 vf-35:held0/out0/prod0 vf-43:held0/out2/prod23 vf-34:held0/out0/prod0 vf-40:held0/out2/prod23 vf-37:held0/out0/prod0"
+  },
+  {
+   "ms": 2054,
+   "streams": "vf-36:held0/out0/prod0 vf-41:held20/out2/prod66 vf-42:held20/out2/prod66 vf-39:held0/out2/prod85 vf-35:held0/out0/prod0 vf-43:held20/out2/prod66 vf-34:held0/out0/prod0 vf-40:held20/out2/prod66 vf-37:held0/out0/prod0"
+  },
+  {
+   "ms": 3070,
+   "streams": "vf-41:held58/out7/prod97 vf-42:held58/out7/prod97 vf-39:held0/out2/prod136 vf-43:held58/out8/prod98 vf-40:held58/out7/prod97"
+  },
+  {
+   "ms": 4079,
+   "streams": "vf-41:held81/out8/prod135 vf-42:held82/out8/prod132 vf-39:held0/out3/prod185 vf-43:held82/out8/prod132 vf-40:held81/out8/prod135"
+  },
+  {
+   "ms": 5262,
+   "streams": "vf-41:held117/out8/prod161 vf-42:held121/out8/prod159 vf-39:held0/out8/prod249 vf-43:held121/out8/prod159 vf-40:held117/out8/prod161"
+  },
+  {
+   "ms": 6271,
+   "streams": "vf-44:held0/out2/prod15 vf-41:held133/out8/prod199 vf-42:held139/out8/prod193 vf-39:held0/out16/prod294 vf-43:held135/out7/prod196 vf-40:held131/out8/prod201"
+  },
+  {
+   "ms": 7288,
+   "streams": "vf-44:held0/out3/prod64 vf-41:held156/out8/prod232 vf-42:held162/out8/prod226 vf-39:held0/out16/prod294 vf-43:held158/out8/prod230 vf-40:held154/out8/prod234"
+  },
+  {
+   "ms": 8311,
+   "streams": "vf-44:held0/out2/prod117 vf-41:held190/out2/prod253 vf-42:held196/out2/prod247 vf-39:held0/out16/prod294 vf-43:held192/out2/prod251 vf-40:held188/out2/prod255"
+  },
+  {
+   "ms": 9316,
+   "streams": "vf-44:held0/out2/prod170 vf-41:held224/out2/prod273 vf-42:held230/out2/prod267 vf-39:held0/out16/prod294 vf-43:held226/out2/prod271 vf-40:held222/out2/prod275"
+  }
+ ]
+}

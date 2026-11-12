@@ -1,0 +1,73 @@
+{
+ "t0": "2026-11-12T16:48:13.652Z",
+ "t1": "2026-11-12T16:48:23.760Z",
+ "tcStart": "00:00:00:04 NDF",
+ "tcEnd": "00:00:09:59 NDF",
+ "bad": [],
+ "delta": [
+  {
+   "id": "vf-7",
+   "w": 3840,
+   "produced": 483,
+   "decoded": 482,
+   "held": 112,
+   "missing": 0,
+   "released": 483,
+   "outstanding": 8,
+   "waitUsTotal": 5368236,
+   "decodeUsTotal": 294528,
+   "paces": 482,
+   "paceUsTotal": 5998116,
+   "settles": 0,
+   "settleUsTotal": 0
+  },
+  {
+   "id": "vf-6",
+   "w": 3840,
+   "produced": 482,
+   "decoded": 481,
+   "held": 113,
+   "missing": 0,
+   "released": 482,
+   "outstanding": 8,
+   "waitUsTotal": 5413350,
+   "decodeUsTotal": 310808,
+   "paces": 481,
+   "paceUsTotal": 5934619,
+   "settles": 0,
+   "settleUsTotal": 0
+  },
+  {
+   "id": "vf-5",
+   "w": 3840,
+   "produced": 483,
+   "decoded": 482,
+   "held": 112,
+   "missing": 0,
+   "released": 483,
+   "outstanding": 8,
+   "waitUsTotal": 5450034,
+   "decodeUsTotal": 319607,
+   "paces": 482,
+   "paceUsTotal": 5907259,
+   "settles": 0,
+   "settleUsTotal": 0
+  },
+  {
+   "id": "vf-8",
+   "w": 3840,
+   "produced": 481,
+   "decoded": 480,
+   "held": 114,
+   "missing": 0,
+   "released": 481,
+   "outstanding": 8,
+   "waitUsTotal": 5432400,
+   "decodeUsTotal": 278343,
+   "paces": 480,
+   "paceUsTotal": 5987964,
+   "settles": 0,
+   "settleUsTotal": 0
+  }
+ ]
+}

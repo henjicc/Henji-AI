@@ -10,6 +10,7 @@
 //!   （`Claim::Queued`），计划走到剪辑点时 `activate_queued` 切换。
 
 use std::collections::{HashMap, VecDeque};
+use std::time::{Duration, Instant};
 
 #[derive(Debug)]
 struct Run {
@@ -228,10 +229,17 @@ pub enum HandoffWait {
 /// 队列）一读，整条队列连同界面上其他画面一起等待（composite-pressure 拖动中预取窗口的第一帧停顿 110–185ms）。
 /// 这类帧在本进程里等完再交出（`Full`），客户端只承担它本来就要等的那一帧。
 ///
-/// `paced`：有终点的区间取帧（拖动的一秒解码窗口，含预取）。窗口不服务播放时钟，却会一口气解完整个窗口，连发的
-/// 解码与客户端的合成在显卡上争用（只等第一帧时合成仍多停约 33ms）。这类帧交出前等上一帧的工作完成（`Lagged`），
-/// 显卡上始终只压一两帧，CPU 与显卡仍然重叠（逐帧等全部完成会让窗口变慢，拖动首帧多 140–290ms）。
-/// 连续播放（时间点计划）、顺序读取（无终点区间）与单帧取帧照常流水。
+/// `paced`：交出前等上一帧的工作完成（`Lagged`），显卡上始终只压一两帧，CPU 与显卡仍然重叠（逐帧等全部完成会让
+/// 拖动窗口变慢，首帧多 140–290ms）。用于：
+/// - 有终点的区间取帧（拖动的一秒解码窗口，含预取）：窗口不服务播放时钟，却会一口气解完整个窗口，连发的解码与
+///   客户端的合成在显卡上争用（只等第一帧时合成仍多停约 33ms）。
+/// - 时间点计划（播放）：几路高码率素材叠放时显卡解码单元满载（4090 叠放 4 路 4K59.94 H.264 150Mbps 实测 100%），
+///   不等就交帧的话 CPU 侧领先显卡整整一个纹理池，客户端读每幅刚交出的帧都要在自己的队列上等完它前面全部积压的
+///   解码，所有图层连同合成一起停住；画面时钟一落后，消费方取的总是最新交出、排在积压最后的那几幅，越等越落后。
+///   交出前等上一帧完成：客户端最多只等刚交出的这一帧自己的解码，积压留在本会话线程里，纹理池占用也大致反映
+///   解码领先多少（`DropState`）。
+///
+/// 顺序读取（无终点区间：导出、预滚）与单帧取帧照常流水。
 /// - `delivered`：本会话已交出的帧数；
 /// - `backlog`：上次交出之后本会话解出（含丢弃）的帧数。
 pub fn handoff_wait(delivered: u64, backlog: u64, paced: bool) -> HandoffWait {
@@ -244,27 +252,73 @@ pub fn handoff_wait(delivered: u64, backlog: u64, paced: bool) -> HandoffWait {
     }
 }
 
-/// 时间点计划（播放）的解码跟不上判断。消费方手里交出未还的帧少于 `low`（它已用完、正等下一幅）就开始只解参考帧；
+/// 时间点计划（播放）的解码跟不上判断。开始只解参考帧的条件（缓冲期过后）：
+/// - 交出未还的帧少于 `low`，且最近 `DROP_TREND_WINDOW` 里还在往下掉（交还的比解出的多，至少差 2 幅）；
+/// - 或者交出未还的只剩一幅（`starved`）：消费方前面已没有排着的帧，在等下一幅。
+///
 /// 直到交出未还的帧到 `high`（纹理池快满，解码已远在消费方前面）才恢复逐帧解。消费方按画面时钟成批取帧（合成一帧取
 /// 一批、跳过其间的项），只看“此刻是否在等”会在两批之间误判为领先、把解码花在随后就被跳过的非参考帧上。
+///
+/// 下界取固定的 4 幅：消费方等着下一幅时自己手里照样借着两三幅——正在复制的那幅要借到复制完成，交还要经渲染进程主线程
+/// 与主进程转一圈，时钟跳过的项里最近一幅真实画面还留作沿用的画面。下界只取 2 时交出未还的帧几乎不会低于它，解码跟不上
+/// 也从不只解参考帧。只看低于下界不看走向会误判：单路起播后解码有一阵只够刚好跟上播放，池子停在两三幅既不涨也不跌，
+/// 渲染层提前准备的帧撑得过去；剪辑点没能预先接续时池子也会被抽空一下，定位完马上回升。掉一两幅的抖动不算往下掉。
+///
+/// 消费方开始取帧（池子第一次不满）后的 `grace` 内不开始跳：起播头半秒解码只有每秒三四十帧，池子必然先掉下去。
+/// 起播前的预备（暂停时提前排好的计划）会先把池子填满等着，从那时起算缓冲期就早已过完。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DropState {
     pub dropping: bool,
     pub low: usize,
     pub high: usize,
+    starved: usize,
+    slots: usize,
+    grace: Duration,
+    since: Option<Instant>,
+    /// 交出未还帧数的采样（至少隔 `DROP_TREND_STEP`），环形保存，判断是否在往下掉。
+    history: [Option<(Instant, usize)>; DROP_TREND_SAMPLES],
+    next: usize,
 }
 
+/// 时间点计划开始取帧后不判跟不上的时长（`DropState`）。
+pub const DROP_GRACE: Duration = Duration::from_secs(1);
+/// 判断池子是否在往下掉时回看多久。
+const DROP_TREND_WINDOW: Duration = Duration::from_millis(250);
+const DROP_TREND_STEP: Duration = Duration::from_millis(50);
+const DROP_TREND_SAMPLES: usize = 8;
+/// 消费方前面排着的帧固定按这么多算“还够”（见 `DropState`）。
+const DROP_LOW: usize = 4;
+
 impl DropState {
-    pub fn new(low: usize, slots: usize) -> Self {
+    pub fn new(slots: usize, grace: Duration) -> Self {
         // 纹理池只有两三个槽（显存不足时的最小池）时，消费方每还回一幅，交出未还的帧就回到 1：下界必须低于池子
         // 装得下的数量，否则解码完全跟得上也会一直判为跟不上。
-        let low = low.min(slots.saturating_sub(1)).max(1);
-        Self { dropping: false, low, high: slots.saturating_sub(1).max(low) }
+        let low = DROP_LOW.min(slots.saturating_sub(1)).max(1);
+        Self { dropping: false, low, high: slots.saturating_sub(1).max(low), starved: low.min(2), slots, grace, since: None, history: [None; DROP_TREND_SAMPLES], next: 0 }
+    }
+
+    /// 回看窗口那头的采样比此刻多出至少 2 幅：交还的比解出的多，池子在变空。
+    fn falling(&self, outstanding: usize, now: Instant) -> bool {
+        self.history.iter().flatten().filter(|(at, _)| now.saturating_duration_since(*at) >= DROP_TREND_WINDOW).max_by_key(|(at, _)| *at).is_some_and(|&(_, then)| then >= outstanding + 2)
+    }
+
+    fn record(&mut self, outstanding: usize, now: Instant) {
+        let last = self.history[(self.next + DROP_TREND_SAMPLES - 1) % DROP_TREND_SAMPLES];
+        if last.is_none_or(|(at, _)| now.saturating_duration_since(at) >= DROP_TREND_STEP) {
+            self.history[self.next] = Some((now, outstanding));
+            self.next = (self.next + 1) % DROP_TREND_SAMPLES;
+        }
     }
 
     /// 按此刻交出未还的帧数更新，返回这个包是否只在是参考帧时才解。
-    pub fn update(&mut self, outstanding: usize) -> bool {
-        if outstanding < self.low {
+    pub fn update(&mut self, outstanding: usize, now: Instant) -> bool {
+        if self.since.is_none() && outstanding < self.slots {
+            self.since = Some(now);
+        }
+        let warmed = self.since.is_some_and(|since| now.saturating_duration_since(since) >= self.grace);
+        let falling = self.falling(outstanding, now);
+        self.record(outstanding, now);
+        if warmed && (outstanding < self.starved || outstanding < self.low && falling) {
             self.dropping = true;
         } else if outstanding >= self.high {
             self.dropping = false;
@@ -279,32 +333,60 @@ mod tests {
 
     #[test]
     fn drops_from_an_empty_cushion_until_the_pool_is_nearly_full() {
-        let mut state = DropState::new(2, 8);
-        assert!(!state.update(4), "开头不丢");
-        assert!(state.update(1), "消费方已用完：只解参考帧");
-        assert!(state.update(5), "两批之间池子渐满仍只解参考帧");
-        assert!(!state.update(7), "池子快满：解码远在前面，恢复逐帧");
-        assert!(!state.update(3));
-        assert_eq!(DropState::new(2, 3).high, 2, "小池子的上界不低于下界");
+        let start = Instant::now();
+        let at = |ms: u64| start + Duration::from_millis(ms);
+        let mut state = DropState::new(8, Duration::ZERO);
+        assert!(!state.update(7, at(0)), "开头不丢");
+        assert!(!state.update(6, at(100)));
+        assert!(state.update(3, at(260)), "低于下界且在往下掉（交还的比解出的多）：只解参考帧");
+        assert!(state.update(5, at(300)), "两批之间池子渐满仍只解参考帧");
+        assert!(!state.update(7, at(350)), "池子快满：解码远在前面，恢复逐帧");
+        assert!(!state.update(4, at(400)));
+        assert_eq!(DropState::new(3, Duration::ZERO).high, 2, "小池子的上界不低于下界");
+        assert_eq!((DropState::new(6, Duration::ZERO).low, DropState::new(16, Duration::ZERO).low), (4, 4), "下界按消费方手里借着的帧数取固定值，不随池子大小变");
+    }
+
+    #[test]
+    fn keeps_decoding_every_frame_while_the_pool_refills_below_the_low_mark() {
+        let start = Instant::now();
+        let at = |ms: u64| start + Duration::from_millis(ms);
+        let mut state = DropState::new(8, Duration::ZERO);
+        assert!(!state.update(2, at(0)));
+        assert!(!state.update(3, at(100)));
+        assert!(!state.update(3, at(260)), "低于下界但在回升：解码已快过播放，不跳");
+        assert!(!state.update(2, at(520)), "停在两三幅上下抖一幅：解码刚好跟上，不算往下掉");
+        assert!(state.update(1, at(600)), "只剩一幅：消费方在等下一幅，不论走向都只解参考帧");
+    }
+
+    #[test]
+    fn does_not_drop_while_decoding_warms_up_after_playback_starts() {
+        let armed = Instant::now();
+        let mut state = DropState::new(8, DROP_GRACE);
+        assert!(!state.update(8, armed), "起播前的预备：池子填满等着");
+        let start = armed + DROP_GRACE * 3;
+        assert!(!state.update(7, start), "消费方开始取帧：从这时起算");
+        assert!(!state.update(1, start + DROP_GRACE / 2), "起播头一阵解码慢于播放：渲染层提前准备的帧撑得过去，不跳");
+        assert!(state.update(1, start + DROP_GRACE), "之后仍跟不上就只解参考帧");
     }
 
     #[test]
     fn a_two_slot_pool_keeps_decoding_every_frame_while_the_consumer_holds_one() {
-        let mut state = DropState::new(2, 2);
-        assert!(!state.update(1), "消费方手里有一幅：解码跟得上");
-        assert!(state.update(0), "消费方已用完");
-        assert!(!state.update(1));
+        let now = Instant::now();
+        let mut state = DropState::new(2, Duration::ZERO);
+        assert!(!state.update(1, now), "消费方手里有一幅：解码跟得上");
+        assert!(state.update(0, now), "消费方已用完");
+        assert!(!state.update(1, now));
     }
 
     #[test]
     fn waits_for_first_backlogged_and_paced_frames() {
         assert_eq!(handoff_wait(0, 0, false), HandoffWait::Full, "会话第一帧：解码器刚建立");
         assert_eq!(handoff_wait(0, 1, true), HandoffWait::Full);
-        assert_eq!(handoff_wait(5, 1, false), HandoffWait::None, "连续播放：每交出一帧多解一帧");
-        assert_eq!(handoff_wait(5, 2, false), HandoffWait::None, "二倍速：每交出一帧跳过一帧");
+        assert_eq!(handoff_wait(5, 1, false), HandoffWait::None, "顺序读取（导出）：每交出一帧多解一帧");
+        assert_eq!(handoff_wait(5, 2, false), HandoffWait::None, "每交出一帧跳过一帧");
         assert_eq!(handoff_wait(5, SETTLE_BACKLOG_FRAMES, false), HandoffWait::Full, "定位后从关键帧解到目标");
         assert_eq!(handoff_wait(5, 60, true), HandoffWait::Full, "长 GOP 中段定位，窗口内也等全部");
-        assert_eq!(handoff_wait(5, 1, true), HandoffWait::Lagged, "拖动的解码窗口：只压一两帧");
+        assert_eq!(handoff_wait(5, 1, true), HandoffWait::Lagged, "播放与拖动的解码窗口：只压一两帧");
     }
 
     #[test]
