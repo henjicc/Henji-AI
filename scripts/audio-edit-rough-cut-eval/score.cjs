@@ -72,22 +72,34 @@ function scoreWords(blocks, sampleRate, finalDeleted, algoDeleted, reviews = [])
   const result = {
     wholeMiss: { count: 0, words: 0, seconds: 0, items: [] }, wholeFalse: { count: 0, words: 0, seconds: 0, items: [] },
     wrongTake: { count: 0, items: [] }, seamShift: { count: 0, words: [], ms: [], items: [] }, fillerMiss: 0, fillerFalse: 0, fillerItems: [],
-    review: { count: reviews.length, hit: 0 },
+    review: { count: reviews.length, hit: 0 }, uncovered: 0,
   }
+  const index = new Map(blocks.map((block, i) => [block.id, i]))
+  const listed = new Uint8Array(count)
+  for (const ids of reviews) for (const id of ids) listed[index.get(id)] = 1
+  // 清单外的漏删：整处漏删或留错遍里，没有被任何待确认线索碰到的——用户只能自己听出来
+  const unlisted = (run) => !listed.subarray(run[0], run[1]).some(Boolean)
   for (const diff of diffs) {
     const size = diff.run[1] - diff.run[0]
     if (diff.filler) { if (diff.kind === 'miss') result.fillerMiss++; else result.fillerFalse++; result.fillerItems.push(`${diff.kind === 'miss' ? '少删' : '多删'} ${describe(diff.run)}`); continue }
-    if (diff.pair) { if (diff.kind === 'miss') { result.wrongTake.count++; result.wrongTake.items.push(`${describe(diff.run)} ⇄ 【${text(diff.pair.run)}】`) } continue }
+    if (diff.pair) { if (diff.kind === 'miss') { result.wrongTake.count++; if (unlisted(diff.run) && unlisted(diff.pair.run)) result.uncovered++; result.wrongTake.items.push(`${describe(diff.run)} ⇄ 【${text(diff.pair.run)}】`) } continue }
     if (diff.atSeam && size <= 3) {
       result.seamShift.count++; result.seamShift.words.push(size); result.seamShift.ms.push(Math.round(seconds(diff.run) * 1000))
       result.seamShift.items.push(`${diff.kind === 'miss' ? '少删' : '多删'} ${describe(diff.run)}`)
       continue
     }
     const bucket = diff.kind === 'miss' ? result.wholeMiss : result.wholeFalse
-    bucket.count++; bucket.words += size; bucket.seconds += seconds(diff.run); bucket.items.push(describe(diff.run))
+    if (diff.kind === 'miss' && unlisted(diff.run)) result.uncovered++
+    bucket.count++; bucket.words += size; bucket.seconds += seconds(diff.run); bucket.items.push(`${diff.kind === 'miss' && unlisted(diff.run) ? '（清单外）' : ''}${describe(diff.run)}`)
   }
-  const index = new Map(blocks.map((block, i) => [block.id, i]))
-  for (const ids of reviews) if (ids.length && ids.every((id) => finalDeleted[index.get(id)])) result.review.hit++
+  // 命中：这条线索要删的词，定稿里过半确实删了
+  result.review.items = []
+  for (const ids of reviews) {
+    if (!ids.length) continue
+    const hit = ids.filter((id) => finalDeleted[index.get(id)]).length * 2 > ids.length
+    if (hit) result.review.hit++
+    result.review.items.push(`${hit ? '定稿删了' : '定稿留着'} ${describe([index.get(ids[0]), index.get(ids.at(-1)) + 1])}`)
+  }
   return result
 }
 

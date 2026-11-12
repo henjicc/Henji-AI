@@ -284,7 +284,7 @@ npm run check:model-i18n
 
 ### 口播粗剪算法
 
-改去重念、停顿、语气词、呼吸、字间气口的判断（`src/core/audioEdit/` 的 `retakes.ts`、`silence.ts`、`breaths.ts`、`gaps.ts`、`levels.ts`，以及 `edits.ts` 里的语气词清理）时，除精确测试外再跑评估台（约十秒、单线程）：`npm run eval:rough-cut`。它给出当前工作区在定稿用例、扰动条件和合成重念上的分数并与基线对比；`-- --ref <提交>` 对照某个版本，`-- --verbose` 列出每一处差异。任何一项“变差”都要说明原因；只在定稿用例上变好、扰动或合成样本上变差，说明是在贴着样本调。确认是想要的变化后用 `-- --update-baseline` 更新基线并随改动提交。只改界面、字幕排版等与粗剪判断无关的代码不跑。
+改去重念、停顿、语气词、呼吸、字间气口的判断（`src/core/audioEdit/` 的 `retakes.ts`、`retakeSelfCheck.ts`、`silence.ts`、`breaths.ts`、`gaps.ts`、`levels.ts`，以及 `edits.ts` 里的语气词清理）时，除精确测试外再跑评估台（约十秒、单线程）：`npm run eval:rough-cut`。它给出当前工作区在定稿用例、扰动条件和合成重念上的分数并与基线对比；`-- --ref <提交>` 对照某个版本，`-- --verbose` 列出每一处差异。任何一项“变差”都要说明原因；只在定稿用例上变好、扰动或合成样本上变差，说明是在贴着样本调。确认是想要的变化后用 `-- --update-baseline` 更新基线并随改动提交。只改界面、字幕排版等与粗剪判断无关的代码不跑。
 
 ### 应用能力与智能助手
 

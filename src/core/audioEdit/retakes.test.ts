@@ -222,3 +222,17 @@ describe('真实口播的去重念回归', () => {
     }
   })
 })
+
+describe('成片自检', () => {
+  it('前一段从句子中间起、后面换了说法又没有稿子：不删，列为待确认', () => {
+    const spoken = speak('我 这里 用的 是 元宝 搜索 腾讯 的 元宝 艾玛 都 用它，', { pause: 700 }, '腾讯 的 很多 产品 啊 背后 用 的 都是 它。')
+    const retakes = detect(spoken)
+    expect(retakes.filter((retake) => !retake.review)).toEqual([])
+    expect(retakes.map((retake) => textOf(spoken, retake.blockIds))).toEqual(['腾讯的元宝艾玛都用它，'])
+  })
+
+  it('稿子里本来就有的排比不提', () => {
+    const spoken = speak('你会 发现 它 回答 得 很 快，', { pause: 300 }, '你会 发现 它 来源 也 很 新，', { pause: 300 }, '所以 我 很 喜欢。')
+    expect(detect(spoken, { referenceScript: '你会发现它回答得很快，你会发现它来源也很新，所以我很喜欢。' })).toEqual([])
+  })
+})

@@ -80,7 +80,7 @@ const PERTURBATIONS = {
 
 const wordSummary = (score) => ({
   整处漏删: score.wholeMiss.count, 整处漏删秒: Number(score.wholeMiss.seconds.toFixed(1)), 整处误删: score.wholeFalse.count, 整处误删秒: Number(score.wholeFalse.seconds.toFixed(1)),
-  留错遍: score.wrongTake.count, 接缝偏移: score.seamShift.count, 语气词漏删: score.fillerMiss, 语气词误删: score.fillerFalse, 待确认: score.review.count, 待确认命中: score.review.hit,
+  留错遍: score.wrongTake.count, 接缝偏移: score.seamShift.count, 语气词漏删: score.fillerMiss, 语气词误删: score.fillerFalse, 待确认: score.review.count, 待确认命中: score.review.hit, 清单外的漏删: score.uncovered,
 })
 
 function evaluate(pipeline) {
@@ -189,6 +189,7 @@ function print(label, scores, details, baseline) {
       for (const item of words.wrongTake.items) console.log(`  留错遍   ${item}`)
       for (const item of words.seamShift.items) console.log(`  接缝偏移 ${item}`)
       for (const item of words.fillerItems) console.log(`  语气词   ${item}`)
+      for (const item of words.review.items) console.log(`  待确认   ${item}`)
     }
   }
 }

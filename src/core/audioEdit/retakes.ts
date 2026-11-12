@@ -2,6 +2,7 @@ import { pinyin } from 'pinyin-pro'
 import { normalizeAudioEditFiller } from './analysis'
 import type { SpeechEnergyPause } from './speechEnergy'
 import type { AudioEditRange, AudioEditSuggestion, AudioEditTranscriptBlock } from './types'
+import { findResidualRetakes } from './retakeSelfCheck'
 
 /*
  * 口播重念检测：照稿念时，念坏了（口误、没念好、在不该断的地方断开）会马上从某处重新念。
@@ -45,6 +46,8 @@ const MAX_REPHRASE_UNITS = 24
 const SCRIPT_LOOKBACK = 60
 /** 切点离后一句开头保留的气口（毫秒） */
 const BREATH_MS = 120
+/** 成片自检每 10 分钟录音最多提这么多条：多了没人逐条看 */
+const SELF_CHECK_PER_TEN_MINUTES = 8
 
 type AudioEditRetakeKind = 'restart' | 'lead_in' | 'broken_start'
 
@@ -217,7 +220,7 @@ class RetakeDetector {
   private readonly alignments = new Map<string, Alignment>()
   private readonly locations = new Map<string, { pos: number; ratio: number } | undefined>()
   private readonly accepted: Candidate[] = []
-  private readonly script: string[]
+  readonly script: string[]
   private readonly scriptIndex = new Map<string, number[]>()
 
   constructor(private readonly words: readonly Word[], private readonly options: AudioEditRetakeOptions) {
@@ -249,7 +252,7 @@ class RetakeDetector {
   }
 
   /** 第 k 个词之前的真实停顿：上一个保留实词的后半到本词开头之间最长的安静段。 */
-  private pauseBefore(k: number): number {
+  pauseBefore(k: number): number {
     const prev = this.previousKept(k)
     if (prev < 0) return 1000
     const a = this.words[prev], b = this.words[k]
@@ -270,7 +273,7 @@ class RetakeDetector {
     return this.words[first].block.startFrame >= range.startFrame && this.words[last - 1].block.endFrame <= range.endFrame
   }
 
-  private removable(first: number, last: number): boolean {
+  removable(first: number, last: number): boolean {
     for (let k = first; k < last; k++) if (this.words[k].block.locked) return false
     return this.inRange(first, last)
   }
@@ -291,7 +294,7 @@ class RetakeDetector {
    * 一段读音在参考稿 [from, to) 起点范围里最像的位置与命中率。候选起点要求开头三个字里有两个对得上（容忍多、少、错一个字），
    * 常见字（的、是）在长稿子里出现上千次，只按一个字找起点会让整段比对慢上百倍。
    */
-  private locate(units: readonly string[], from = 0, to = this.script.length): { pos: number; ratio: number } | undefined {
+  locate(units: readonly string[], from = 0, to = this.script.length): { pos: number; ratio: number } | undefined {
     if (!this.script.length || units.length < 2) return undefined
     const key = `${units.join(' ')}|${from}|${to}`
     if (this.locations.has(key)) return this.locations.get(key)
@@ -746,6 +749,15 @@ export function detectAudioEditRetakes(blocks: readonly AudioEditTranscriptBlock
     retakes.push(describe(first, k, accepted.filter((candidate) => candidate.first >= first && candidate.first < k), false))
   }
   for (const candidate of detector.review) retakes.push(describe(candidate.first, candidate.last, [candidate], true))
+  // 成片自检：保留内容里还留着的重念只作待确认。清单要短：每 10 分钟录音最多 SELF_CHECK_PER_TEN_MINUTES 条，证据强的优先
+  const budget = Math.ceil((words.at(-1)!.endMs - words[0].startMs) / 600_000 * SELF_CHECK_PER_TEN_MINUTES)
+  const residual = findResidualRetakes({
+    words: words.map((word, index) => ({ units: word.units, filler: word.filler, kept: detector.kept[index], restartMarker: isRestartMarker(word) })),
+    pauseBefore: (k) => detector.pauseBefore(k),
+    removable: (first, last) => detector.removable(first, last),
+    ...(detector.script.length ? { locate: (units: readonly string[], from?: number) => detector.locate(units, from) } : {}),
+  }).filter((finding) => !detector.review.some((candidate) => finding.first < candidate.last && candidate.first < finding.last))
+  for (const finding of residual.slice(0, Math.max(0, budget))) retakes.push(describe(finding.first, finding.last, [], true))
   return retakes.sort((a, b) => a.startFrame - b.startFrame)
 }
 
