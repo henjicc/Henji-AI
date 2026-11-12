@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest'
 import { createVideoEditTestDocument } from '@/core/videoEdit/testFixtures'
-import { videoEditComposition, type VideoEditClip } from '@/core/videoEdit/document'
+import { videoEditComposition, type VideoEditClip, type VideoEditComposition } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS } from '@/core/videoEdit/builtinEffects'
 import { applyVideoEditParameterUpdate, videoEditParameterUpdate, videoEditParameterNeedsFonts, videoEditParameterAffectsAudio } from './videoEditParameterUpdate'
@@ -50,6 +50,23 @@ it('structural changes fall back; cancellation and latest skipped revisions pres
   expect(videoEditParameterUpdate(before, { ...next, clips: [{ ...next.clips[0], start: 2 }] })).toBeUndefined()
   expect(videoEditParameterUpdate(before, { ...next, clips: [{ ...next.clips[0], effects: [] }] })).toBeUndefined()
   expect(videoEditParameterUpdate(before, { ...next, clips: [{ ...next.clips[0], effects: [{ ...next.clips[0].effects[0], builtin: { id: 'glow', params: {} } }] }] })).toBeUndefined()
+})
+it('annotation edits keep the parameter path with no patches, so the Worker keeps its decoders and nested renderers; markers change sequence duration and take the full update', () => {
+  const before = fixture()
+  const annotation = { id: 'note', frame: 0, text: '这里改一下' } as unknown as VideoEditComposition['annotations'][number]
+  const marker = { id: 'mark', frame: 0, name: '标记' } as unknown as NonNullable<VideoEditComposition['markers']>[number]
+  expect(before.sequences?.length).toBeGreaterThan(0)
+  const reviewed: VideoEditComposition = { ...before, revision: 2, annotations: [annotation], sequences: before.sequences!.map(sequence => ({ ...sequence, annotations: [annotation] })) }
+  const update = videoEditParameterUpdate(before, reviewed)!
+  expect(update).toBeDefined()
+  expect(update.patches).toEqual([])
+  expect(videoEditParameterAffectsAudio(before, update)).toBe(false)
+  expect(videoEditParameterNeedsFonts(before, update)).toBe(false)
+  // 同时动了画面的改动仍走完整更新
+  expect(videoEditParameterUpdate(before, { ...reviewed, clips: [{ ...reviewed.clips[0], start: 3 }] })).toBeUndefined()
+  expect(videoEditParameterUpdate(before, { ...reviewed, markers: [marker] })).toBeUndefined()
+  expect(videoEditParameterUpdate(before, { ...reviewed, sequences: reviewed.sequences!.map(sequence => ({ ...sequence, markers: [marker] })) })).toBeUndefined()
+  expect(videoEditParameterUpdate(before, { ...reviewed, width: before.width + 2 })).toBeUndefined()
 })
 it('numeric code parameters skip font preparation; text/graphic font changes retain preparation', () => {
   const before = fixture(); before.clips[0].code = { definitionId: 'code', versionId: 'v', parameters: { gain: 0, font: 'sans-serif' } }

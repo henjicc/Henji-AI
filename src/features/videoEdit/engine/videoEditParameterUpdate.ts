@@ -36,9 +36,15 @@ function unchanged(left: object, right: object, omit: readonly string[]): boolea
   return [...new Set([...Object.keys(a), ...Object.keys(b)])].every(key => omit.includes(key) || same(a[key], b[key]))
 }
 
+/**
+ * 批注是审片记录，不进画面、声音与序列时长。只改它们时走参数通道的空补丁：完整更新会在 Worker 里释放并
+ * 重建嵌套序列与代码视频输入的渲染器、解码会话和借用的原生帧，助手一次改几十条批注就是几十轮无谓的原生
+ * 资源重建。时间标记不在此列：标记落在内容末尾之后会改变序列时长，嵌套序列的余量帧与声音都按时长计算。
+ */
+const REVIEW_ONLY_FIELDS = ['annotations'] as const
 /** Parameter-only changes use the same domain values as export; structural edits always use the full update. */
 export function videoEditParameterUpdate(before: VideoEditComposition, next: VideoEditComposition): VideoEditParameterUpdate | undefined {
-  if (before === next || !unchanged(before, next, ['revision', 'clips', 'sequences'])) return undefined
+  if (before === next || !unchanged(before, next, ['revision', 'clips', 'sequences', ...REVIEW_ONLY_FIELDS])) return undefined
   const patches: VideoEditParameterPatch[] = []
   const collect = (a: Pick<VideoEditSequence, 'id' | 'clips'>, b: Pick<VideoEditSequence, 'id' | 'clips'>): boolean => {
     if (a.clips === b.clips) return true
@@ -75,7 +81,7 @@ export function videoEditParameterUpdate(before: VideoEditComposition, next: Vid
   if (a.length !== b.length) return undefined
   for (let i = 0; i < a.length; i++) {
     if (a[i] === b[i]) continue
-    if (!unchanged(a[i], b[i], ['clips']) || (a[i].id !== next.id && !collect(a[i], b[i]))) return undefined
+    if (!unchanged(a[i], b[i], ['clips', ...REVIEW_ONLY_FIELDS]) || (a[i].id !== next.id && !collect(a[i], b[i]))) return undefined
   }
   return { baseRevision: before.revision, revision: next.revision, patches }
 }
