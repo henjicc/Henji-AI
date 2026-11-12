@@ -437,14 +437,14 @@ export async function leaveCanvasProject(id: string): Promise<DocumentLeaveOutco
 }
 
 /**
- * 释放只为后台读写持有的实例（通用文档操作移到回收站前调用，见 registerDocumentReleaser）：
- * 界面正在显示、有进行中的操作、正在打开或离开时拒绝；其余写完并关闭会话。
+ * 释放后台持有的实例（通用文档操作移到回收站前调用，见 registerDocumentReleaser）：
+ * 有进行中的操作、正在打开或离开时拒绝；其余写完并关闭会话。前台编辑由通用层先拒绝；画布页已切走、
+ * 但仍附着着这份时照样释放，会话结束时拆掉附着，画布页回到列表（projectStore 订阅）。
  */
 export async function releaseCanvasProjectInstance(id: string): Promise<boolean> {
   const instance = instances.get(id)
   if (!instance || instance.session.isEnded) return true
   if (instance.leases || instance.closing || loading.has(id) || leaving.has(id)) return false
-  if (canvasStoreAttachment.getStore() === instance.store) return false
   await instance.session.close()
   await instance.sessionState.flush()
   instance.dispose()

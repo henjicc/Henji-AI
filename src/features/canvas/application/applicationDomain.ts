@@ -1,5 +1,7 @@
-import { registerCurrentDocumentProvider } from '@/features/documents'
+import { registerCurrentDocumentProvider, registerEmbeddedDocumentEditor } from '@/features/documents'
+import { subscribeCameraStageProjectDisposal } from '@/features/cameraStage/application/cameraStageProjectRuntime'
 import { useProjectStore } from '@/stores/projectStore'
+import { registerCameraStageNodeEditorDocument } from './cameraStageNodeEditor'
 import { CanvasPersistenceError, CanvasTransactionRolledBackError } from './canvasPersistenceService'
 import { CanvasApplicationError } from './canvasApplicationService'
 import { MultiLayerDocumentNodeApplicationError } from './multiLayerDocumentNodeApplicationService'
@@ -20,6 +22,7 @@ export const canvasApplicationDomain: ApplicationDomainModule = {
   },
   registerCapabilities(registrar) {
     registerCurrentDocumentProvider('canvas', host => host.activeWorkspace === 'nodes' ? useProjectStore.getState().currentProjectId ?? undefined : undefined)
+    registerCameraStageNodeEditorDocument(registerEmbeddedDocumentEditor, subscribeCameraStageProjectDisposal)
     registerCanvasCapabilityHandlers(registrar)
   },
   failure(error, normalize) {

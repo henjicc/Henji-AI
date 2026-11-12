@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
 import { applyAudioEditSuggestion, dismissAudioEditSuggestion, setAudioEditBlocks } from '@/core/audioEdit/edits'
-import { editAudioEditProject, getAudioEditProjectInstance, markAudioEditDocumentShown, subscribeAudioEditInstances, undoAudioEditProject } from '../application/audioEditProjectInstances'
+import { editAudioEditProject, getAudioEditProjectInstance, subscribeAudioEditInstances, undoAudioEditProject } from '../application/audioEditProjectInstances'
 
 interface AudioEditState {
   project: AudioEditProjectDocument | null
@@ -33,7 +33,6 @@ export const useAudioEditStore = create<AudioEditState>((set, get) => {
     setProject: (project) => {
       const instance = project ? getAudioEditProjectInstance(project.id) ?? null : null
       if (project && !instance) throw new Error('口播尚未载入。')
-      markAudioEditDocumentShown(instance?.document.id ?? null)
       set({ project: instance?.document ?? null, past: instance?.past ?? [], future: instance?.future ?? [], selectedBlockIds: [], saveError: instance?.error ?? null, busy: Boolean(instance?.busy) })
     },
     toggleBlock: (id) => mutate((project) => setAudioEditBlocks(project, [id], !project.transcript.find((block) => block.id === id)?.included)),
@@ -50,6 +49,6 @@ export const useAudioEditStore = create<AudioEditState>((set, get) => {
 subscribeAudioEditInstances((instance) => {
   if (useAudioEditStore.getState().project?.id !== instance.document.id) return
   // 会话结束（移到回收站、被别处关闭）：界面回到列表
-  if (instance.session.isEnded) { markAudioEditDocumentShown(null); useAudioEditStore.setState({ project: null, past: [], future: [], selectedBlockIds: [], saveError: null, busy: false }); return }
+  if (instance.session.isEnded) { useAudioEditStore.setState({ project: null, past: [], future: [], selectedBlockIds: [], saveError: null, busy: false }); return }
   useAudioEditStore.setState({ project: instance.document, past: instance.past, future: instance.future, saveError: instance.error, busy: Boolean(instance.busy) })
 })

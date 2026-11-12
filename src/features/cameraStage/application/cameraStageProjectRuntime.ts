@@ -25,6 +25,7 @@ import {
   createCameraStageStore,
   type CameraStageOwnedStore,
 } from '../store/cameraStageStore'
+import { useCameraStageSessionStore } from '../store/cameraStageSessionStore'
 
 /*
  * 镜头参考文档实例（3.2 镜头参考接入，工具接入通用文档会话的样板）。
@@ -64,6 +65,13 @@ const instances = new Map<string, CameraStageProjectInstance>()
 const loading = new Map<string, Promise<CameraStageProjectInstance>>()
 const leaving = new Map<string, Promise<DocumentLeaveOutcome>>()
 let registryOverride: DocumentSessionRegistry | null = null
+const disposalListeners = new Set<(id: string) => void>()
+
+/** 文档实例拆掉（会话结束）时通知；嵌在别处的编辑器据此关掉，不留一个没有会话的场景。 */
+export function subscribeCameraStageProjectDisposal(listener: (id: string) => void): () => void {
+  disposalListeners.add(listener)
+  return () => { disposalListeners.delete(listener) }
+}
 
 /** 仅供测试：换成内存替身的会话登记表；传 null 恢复应用唯一的那一个。 */
 export function setCameraStageDocumentRegistryForTests(registry: DocumentSessionRegistry | null): void {
@@ -164,6 +172,7 @@ export function bindCameraStageSession(session: DocumentSession): CameraStagePro
     detach()
     if (instances.get(id) === instance) instances.delete(id)
     if (cameraStageStoreAttachment.getStore() === store) attachCameraStageStore(createCameraStageStore())
+    for (const listener of disposalListeners) listener(id)
     for (const listener of instance.idle) listener()
     instance.idle.clear()
     notifyApplicationDomainChanged('camera_stage')
@@ -300,16 +309,21 @@ export async function leaveCameraStageProject(projectId: string): Promise<Docume
 }
 
 /**
- * 释放只为后台读写持有的实例（通用文档操作移到回收站前调用，见 registerDocumentReleaser）：
- * 界面正在显示、有进行中的操作、正在打开或离开时拒绝；其余写完并关闭会话。
+ * 释放后台持有的实例（通用文档操作移到回收站前调用，见 registerDocumentReleaser）：
+ * 有进行中的操作、正在打开或离开时拒绝；其余写完并关闭会话。前台编辑（工具页、画布节点编辑器）由通用层先拒绝；
+ * 页面已切走但仍附着着这份时照样释放：拆掉时换上空场景、工具页记录退回列表，嵌入的节点编辑器随之关闭。
  */
 export async function releaseCameraStageProjectInstance(projectId: string): Promise<boolean> {
   const instance = instances.get(projectId)
   if (!instance || instance.session.isEnded) return true
   if (instance.leases || loading.has(projectId) || leaving.has(projectId)) return false
-  if (cameraStageStoreAttachment.getStore() === instance.store) return false
   await instance.session.close()
   instance.dispose()
+  // 工具页隐藏但仍挂载时恢复逻辑不会重跑：被释放的若是编辑器记着的那份，就把记录退回列表，
+  // 否则回到工具页看到的是没绑定文档的空场景，在里面的修改无处可写。界面自己离开（返回、切换文档）
+  // 由界面设置去向，不在这里处理，切换文档时才不会先闪回列表。
+  const editor = useCameraStageSessionStore.getState()
+  if (editor.lastDocumentId === projectId) { editor.setLastDocumentId(null); editor.setAppView('list') }
   return true
 }
 

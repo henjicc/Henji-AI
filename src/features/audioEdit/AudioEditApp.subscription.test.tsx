@@ -16,7 +16,7 @@ vi.mock('./AudioEditTextTools', () => ({ AudioEditFileMenu: () => null, AudioEdi
 vi.mock('./AudioEditUndoButton', () => ({ AudioEditUndoButton: () => null }))
 vi.mock('./AudioEditViewSettings', () => ({ AudioEditViewSettings: () => null }))
 vi.mock('@/features/videoEdit/panels/VideoEditSendMenu', () => ({ VideoEditSendMenu: () => null }))
-vi.mock('./application/audioEditProjectInstances', () => ({ lockAudioEditRecording: vi.fn(), subscribeAudioEditInstances: () => () => undefined, editAudioEditProject: vi.fn(), flushAudioEditProject: vi.fn(), getAudioEditProjectInstance: vi.fn(), markAudioEditDocumentShown: vi.fn(), undoAudioEditProject: vi.fn() }))
+vi.mock('./application/audioEditProjectInstances', () => ({ lockAudioEditRecording: vi.fn(), subscribeAudioEditInstances: () => () => undefined, editAudioEditProject: vi.fn(), flushAudioEditProject: vi.fn(async () => undefined), getAudioEditProjectInstance: vi.fn(), undoAudioEditProject: vi.fn() }))
 vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => ({ audioCapture: { pendingFiles: async () => [] }, audioEdit: {
   listAsrModels: async () => [], listProcessors: async () => [], listTasks: async () => [],
   verifySource: async () => undefined, extractWaveform: async () => ({ peak: [] }),

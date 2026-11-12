@@ -13,9 +13,14 @@ import { DocumentSessionRegistry } from '@/features/documents/documentSessionReg
 import { createScriptedPrompter, FakeDocumentCommands, type ScriptedPrompter } from '@/features/documents/documentSessionTestKit'
 import {
   acceptAudioEditNativeResult, beginAudioEditGesture, lockAudioEditRecording, assignAudioEditSource, createAudioEditDraft, editAudioEditProject, flushAudioEditProject, getAudioEditProjectInstance,
-  leaveAudioEditProject, loadAudioEditProject, markAudioEditDocumentShown, releaseAudioEditProject, resetAudioEditProjectInstancesForTests,
+  leaveAudioEditProject, loadAudioEditProject, releaseAudioEditProject, resetAudioEditProjectInstancesForTests,
   setAudioEditDocumentRegistryForTests, undoAudioEditProject, withAudioEditProjectOperation,
 } from './audioEditProjectInstances'
+import { DocumentOperations } from '@/features/documents/documentOperations'
+import { registerCurrentDocumentProvider } from '@/features/documents/currentDocumentContext'
+import { useNavigationStore } from '@/stores/navigationStore'
+import { useAudioEditStore } from '../store/audioEditStore'
+import { audioEditCurrentDocument } from './applicationDomain'
 
 /*
  * 口播文档实例（3.3）：同一份文档全局一个实例，保存全部交给通用文档会话（失败保留修改、处理前先写完），
@@ -28,11 +33,13 @@ const fixture = (): AudioEditProjectDocument => ({ id: 'instance-test', name: '�
 
 let commands: FakeDocumentCommands
 let prompter: ScriptedPrompter
+let registry: DocumentSessionRegistry
 
 beforeEach(() => {
   commands = new FakeDocumentCommands()
   prompter = createScriptedPrompter()
-  setAudioEditDocumentRegistryForTests(new DocumentSessionRegistry({ commands, prompter, kinds: documentKindRegistry }))
+  registry = new DocumentSessionRegistry({ commands, prompter, kinds: documentKindRegistry })
+  setAudioEditDocumentRegistryForTests(registry)
   commands.seed({ kind: 'audio_edit', id: 'instance-test', name: '录音', content: audioEditProjectToDocumentContent(fixture()) })
 })
 afterEach(async () => { await resetAudioEditProjectInstancesForTests(); setAudioEditDocumentRegistryForTests(null) })
@@ -198,11 +205,8 @@ describe('口播草稿', () => {
     expect((stored('empty').source as AudioEditSourceMetadata).sourcePath).toBe(source.sourcePath)
   })
 
-  it('后台持有的实例可释放；界面正在显示或正在处理时拒绝', async () => {
+  it('后台持有的实例可释放；正在处理时拒绝', async () => {
     const instance = await loadAudioEditProject('instance-test')
-    markAudioEditDocumentShown('instance-test')
-    expect(await releaseAudioEditProject('instance-test')).toBe(false)
-    markAudioEditDocumentShown(null)
     instance.busy += 1
     expect(await releaseAudioEditProject('instance-test')).toBe(false)
     instance.busy -= 1
@@ -211,6 +215,33 @@ describe('口播草稿', () => {
     expect(stored().referenceScript).toBe('释放前写完')
     expect(instance.session.isEnded).toBe(true)
     expect(getAudioEditProjectInstance('instance-test')).toBeUndefined()
+  })
+
+  // 编辑器切到工具首页后，口播状态里仍记着这份文档：页面已关、没有任何入口能再关它，删除必须直接成功
+  it('编辑器已切走、只剩后台持有时移到回收站：先写完并释放实例再删，编辑器回到列表；前台编辑时拒绝', async () => {
+    const operations = new DocumentOperations({ commands, registry, kinds: documentKindRegistry })
+    operations.registerReleaser('audio_edit', releaseAudioEditProject)
+    const unregister = registerCurrentDocumentProvider('audioEdit', audioEditCurrentDocument)
+    try {
+      const instance = await loadAudioEditProject('instance-test')
+      useAudioEditStore.getState().setProject({ id: 'instance-test' })
+      editAudioEditProject('instance-test', (document) => ({ ...document, referenceScript: '删除前写完' }))
+      useNavigationStore.setState({ activeWorkspace: 'tools', activeToolId: 'audioEdit' })
+      await expect(operations.trashDocument({ id: 'instance-test' })).rejects.toMatchObject({ name: 'DocumentInUseError' })
+      expect(instance.session.isEnded).toBe(false)
+
+      useNavigationStore.setState({ activeToolId: null })
+      const writes = commands.writes
+      await operations.trashDocument({ id: 'instance-test' })
+      expect(commands.writes).toBe(writes + 1)
+      expect(commands.trashed).toEqual(['instance-test'])
+      expect(instance.session.isEnded).toBe(true)
+      expect(getAudioEditProjectInstance('instance-test')).toBeUndefined()
+      expect(useAudioEditStore.getState().project).toBeNull()
+    } finally {
+      unregister()
+      useAudioEditStore.setState({ project: null })
+    }
   })
 })
 

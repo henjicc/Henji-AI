@@ -48,7 +48,7 @@ export async function createCanvasDocumentIn(container: DocumentContainerRef): P
   return instance ? instance.session.documentMeta : null
 }
 
-/** 通用文档操作移到回收站前的后台释放（界面正在显示、有进行中的任务时拒绝）。 */
+/** 通用文档操作移到回收站前的后台释放（前台编辑由通用层先拒绝；有进行中的任务时拒绝）。 */
 export async function releaseCanvasDocument(id: string): Promise<boolean> {
   return await releaseCanvasProjectInstance(id)
 }

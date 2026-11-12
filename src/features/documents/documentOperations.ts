@@ -38,6 +38,7 @@ import { applicationWritePreflight, type ApplicationWriteExecution } from '@/cor
 import { isDocumentServiceError, toError } from './documentErrors'
 import { setEmbeddedHost, type EmbeddedHost } from './embeddedDocuments'
 import { getDocumentSessionRegistry, type DocumentSessionRegistry } from './documentSessionRegistry'
+import { isForegroundDocument } from './currentDocumentContext'
 import type { DocumentSessionCommands } from './documentSessionTypes'
 import { createDocumentOperationChanges, defaultDocumentOperationChanges } from './documentOperationChanges'
 
@@ -51,7 +52,7 @@ import { createDocumentOperationChanges, defaultDocumentOperationChanges } from 
  * - 打开方式由各工具登记（`registerDocumentOpener`，3.x 接入时登记）；没有登记的类型打开时报
  *   DocumentNotOpenableError，说明该类型还不能从通用入口打开。
  * - 后台释放由各工具登记（`registerDocumentReleaser`，3.2 补）：工具可能为助手的后台读写持有会话
- *   （没有界面在用），移到回收站前先请工具释放；界面正在编辑或有进行中的任务时工具拒绝，照旧报正在编辑。
+ *   （没有界面在用，或编辑器页面已切走），移到回收站前先请工具释放；文档在前台编辑或有进行中的任务时拒绝，报正在编辑。
  * - 找不到文件的文档可以“从列表移除”（`forgetDocument`，3.2 补齐 2.5 遗留），只改作品索引。
  */
 
@@ -109,7 +110,8 @@ export interface OpenDocumentWithOptions extends DocumentOpenOptions {
 }
 
 /**
- * 释放工具在后台持有的文档会话（界面没有在编辑、没有进行中的任务时写完并关闭）。
+ * 释放工具在后台持有的文档会话：写完并关闭。前台编辑由通用层先判断并拒绝，工具只在有进行中的任务、
+ * 正在打开或离开时拒绝；文档只是留在已切走的编辑器状态里时照常释放，编辑器随会话结束回到列表。
  * 返回 true 表示会话已关闭；返回 false 表示仍在使用，不能释放。
  */
 export type DocumentReleaser = (documentId: string) => Promise<boolean>
@@ -681,10 +683,12 @@ export class DocumentOperations {
   }
 
   /**
-   * 请工具释放后台持有的会话（移到回收站前、核对读取后）：界面正在显示、有租约或进行中的任务时工具拒绝。
-   * 没有登记释放方式或释放失败时按“仍在使用”处理。
+   * 请工具释放后台持有的会话（移到回收站前、核对读取后）：文档在前台编辑时拒绝（currentDocumentContext 统一判断）；
+   * 有租约或进行中的任务时工具拒绝。没有登记释放方式或释放失败时按“仍在使用”处理。
    */
   async releaseBackground(kind: DocumentKindId, id: string): Promise<boolean> {
+    // “正在编辑”只认前台：各工具状态里还记着、但页面已切走的文档没有任何入口能再关掉，必须能直接释放
+    if (isForegroundDocument(id)) return false
     const releaser = this.releasers.get(kind)
     if (!releaser) return false
     try {

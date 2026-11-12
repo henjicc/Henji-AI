@@ -15,6 +15,12 @@ import { registerCameraStageCapabilityHandlers } from './registerCameraStageCapa
 
 import { dependencies } from './cameraStageControlDependencies'
 
+/** 只有镜头参考工具页真的显示着编辑器才算当前文档；页面切走后记录仍在，那时它只是后台持有，可以被释放。 */
+export function cameraStageCurrentDocument(host: { activeWorkspace: string; activeToolId: string | null }): string | undefined {
+  const editor = useCameraStageSessionStore.getState()
+  return host.activeWorkspace === 'tools' && host.activeToolId === 'cameraStage' && editor.appView === 'editor' ? editor.lastDocumentId ?? undefined : undefined
+}
+
 export const cameraStageApplicationDomain: ApplicationDomainModule = {
   id: 'cameraStage',
   entities: () => createCameraStageReflectionRegistrations(() => dependencies.readRevision()),
@@ -34,7 +40,7 @@ export const cameraStageApplicationDomain: ApplicationDomainModule = {
     engine.registerCollectionExecutor(new CameraStageSetCollectionExecutor(current))
   },
   registerCapabilities(registrar) {
-    registerCurrentDocumentProvider('cameraStage', host => host.activeWorkspace === 'tools' && host.activeToolId === 'cameraStage' && useCameraStageSessionStore.getState().appView === 'editor' ? useCameraStageSessionStore.getState().lastDocumentId ?? undefined : undefined)
+    registerCurrentDocumentProvider('cameraStage', cameraStageCurrentDocument)
     registerCameraStageCapabilityHandlers(registrar)
   },
 }

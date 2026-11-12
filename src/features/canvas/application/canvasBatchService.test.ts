@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { addTrustedMediaCanvasNode } from './canvasApplicationService';
 import { runCanvasMutationStage } from './canvasPersistenceService';
+import { releaseCanvasProjectInstance } from './canvasProjectInstances';
 
 import { CANVAS_BATCH_APPLICATION_CAPABILITIES, type CanvasBatchOperation } from '@/core/application-control/domains/canvas/canvasBatchApplicationCapabilities';
 import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes';
@@ -218,6 +219,20 @@ describe('canvas batch service', () => {
       displayName: '原节点',
       content: '原内容',
     })
+  })
+
+  // 界面批次不带 runtime：等异步步骤时用户可能切走页面，释放不能在批次中途关掉会话
+  it('界面批次进行中占着租约，释放被拒；批次出错后租约归零，可以释放', async () => {
+    let resume: (() => void) | undefined
+    const running = runCanvasTransaction(projectId, 1, async options => {
+      await new Promise<void>(resolve => { resume = resolve })
+      return runCanvasMutationStage(options, () => { throw new Error('中途失败') })
+    })
+    await vi.waitFor(() => expect(resume).toBeDefined())
+    expect(await releaseCanvasProjectInstance(projectId)).toBe(false)
+    resume!()
+    await expect(running).rejects.toThrow('中途失败')
+    expect(await releaseCanvasProjectInstance(projectId)).toBe(true)
   })
 })
 

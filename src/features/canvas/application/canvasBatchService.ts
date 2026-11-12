@@ -1,5 +1,5 @@
 import { createSnapshot, hasCanvasContentChanged, MAX_HISTORY_STEPS, restoreCanvasSnapshot } from '@/stores/canvasStoreHelpers';
-import { findCanvasProjectInstance, getCanvasProjectInstance, requireCanvasProjectInstance } from './canvasProjectInstances';
+import { findCanvasProjectInstance, getCanvasProjectInstance, leaseCanvasProject, requireCanvasProjectInstance } from './canvasProjectInstances';
 import { v4 as uuidv4 } from 'uuid';
 import { ZodError } from 'zod';
 import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure';
@@ -165,6 +165,26 @@ export async function runCanvasTransaction(
   operationCount: number,
   execute: CanvasAtomicExecutor,
   logContext: Record<string, unknown> = {},
+  runtime?: CanvasTransactionRuntime,
+): Promise<{ appliedOperations: Record<string, unknown>[]; undoRef: string }> {
+  if (runtime) return await executeCanvasTransaction(projectId, operationCount, execute, logContext, runtime)
+  // 界面直接写入不带 runtime（调用方没占租约）：批次含异步步骤时用户可能中途切走页面，
+  // 后台释放或离开不能在批次中途关闭会话，所以整批期间占一份租约。
+  // 画布正在离开时拿不到租约：界面卸载时发出的收尾写入（全景快照、图层回写等）仍要照常落到这次离开里，不拒绝。
+  const instance = findCanvasProjectInstance(projectId) ?? await getCanvasProjectInstance(projectId)
+  let releaseLease: () => void
+  try { releaseLease = leaseCanvasProject(instance) } catch {
+    return await executeCanvasTransaction(projectId, operationCount, execute, logContext)
+  }
+  try { return await executeCanvasTransaction(projectId, operationCount, execute, logContext) }
+  finally { releaseLease() }
+}
+
+async function executeCanvasTransaction(
+  projectId: string,
+  operationCount: number,
+  execute: CanvasAtomicExecutor,
+  logContext: Record<string, unknown>,
   runtime?: CanvasTransactionRuntime,
 ): Promise<{ appliedOperations: Record<string, unknown>[]; undoRef: string }> {
   if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId)

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { DocumentKindDescriptor } from '@/core/documents/kinds'
 
 import { DocumentOperations } from './documentOperations'
+import { registerCurrentDocumentProvider } from './currentDocumentContext'
 import { applicationWriteChannel } from '@/core/application-control/execution/writeExecution'
 import { getEmbeddedHost, setEmbeddedHost } from './embeddedDocuments'
 import { createTestRegistry, testDocumentKind, TestToolInstance, type TestContent } from './documentSessionTestKit'
@@ -157,6 +158,17 @@ describe('与打开的文档会话配合', () => {
     await kit.operations.trashDocument({ id: meta.id, path: meta.path })
     expect(session.isEnded).toBe(true)
     expect(kit.commands.trashed).toEqual([meta.id])
+  })
+
+  it('前台正在编辑的文档即使工具肯释放也拒绝移到回收站', async () => {
+    const kit = setup()
+    const { meta, session } = await openEdited(kit)
+    kit.operations.registerReleaser('canvas', async (id) => { await kit.registry.get(id)?.close(); return true })
+    const unregister = registerCurrentDocumentProvider('foreground-test', () => meta.id)
+    try {
+      await expect(kit.operations.trashDocument({ id: meta.id, path: meta.path })).rejects.toMatchObject({ name: 'DocumentInUseError' })
+      expect(session.isEnded).toBe(false)
+    } finally { unregister() }
   })
 
   it('项目里有释放不了的文档时拒绝移到回收站，并点名是哪几份、为什么', async () => {

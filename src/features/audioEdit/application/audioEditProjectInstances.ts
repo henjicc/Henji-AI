@@ -80,7 +80,6 @@ export function subscribeAudioEditProjectDisposal(listener: (id: string) => void
   disposalListeners.add(listener)
   return () => { disposalListeners.delete(listener) }
 }
-let shownDocumentId: string | null = null
 let registryOverride: DocumentSessionRegistry | null = null
 
 /** 仅供测试：换成内存替身的会话登记表；传 null 恢复应用唯一的那一个。 */
@@ -112,11 +111,6 @@ export function lockAudioEditRecording(id: string, expectedRevision?: number): (
   publish(instance)
   let released = false
   return () => { if (!released) { released = true; instance.busy -= 1; publish(instance) } }
-}
-
-/** 界面正在显示哪份口播（由界面状态登记）；正在显示的不会被后台释放。 */
-export function markAudioEditDocumentShown(id: string | null): void {
-  shownDocumentId = id
 }
 
 /** 有正在打开、离开或处理中的口播（应用关闭前检查）。 */
@@ -497,8 +491,9 @@ export async function leaveAudioEditProject(id: string): Promise<DocumentLeaveOu
 }
 
 /**
- * 释放只为后台读写持有的实例（通用文档操作移到回收站前调用，见 registerDocumentReleaser）：
- * 界面正在显示、正在处理、正在打开或离开时拒绝；其余写完并关闭会话。
+ * 释放后台持有的实例（通用文档操作移到回收站前调用，见 registerDocumentReleaser）：
+ * 正在处理、正在打开或离开时拒绝；其余写完并关闭会话。前台编辑由通用层先拒绝；编辑器状态里还记着
+ * 这份（页面已切走）时照样释放，界面状态随会话结束回到列表。
  */
 export async function releaseAudioEditProject(id: string): Promise<boolean> {
   const record = records.get(id)
@@ -508,7 +503,7 @@ export async function releaseAudioEditProject(id: string): Promise<boolean> {
     if (session && !session.isEnded) await session.close()
     return true
   }
-  if (record.instance.busy || loads.has(id) || leaving.has(id) || shownDocumentId === id) return false
+  if (record.instance.busy || loads.has(id) || leaving.has(id)) return false
   await record.instance.session.close()
   record.dispose()
   return true
@@ -521,7 +516,6 @@ export async function resetAudioEditProjectInstancesForTests(): Promise<void> {
   loads.clear()
   leaving.clear()
   participants.clear()
-  shownDocumentId = null
   for (const record of all) {
     record.dispose()
     await record.instance.session.discard()

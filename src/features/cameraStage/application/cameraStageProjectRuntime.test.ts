@@ -6,6 +6,14 @@ import '@/tests/cameraStageProjectFixture'
 import { cameraStageDocumentKind } from '@/core/documents/kinds/cameraStage'
 import { documentKindRegistry } from '@/core/documents/kinds'
 import { DocumentOperations } from '@/features/documents/documentOperations'
+import { registerCurrentDocumentProvider, registerEmbeddedDocumentEditor } from '@/features/documents/currentDocumentContext'
+import { useNavigationStore } from '@/stores/navigationStore'
+import {
+  closeCameraStageNodeEditorDialog, markCameraStageNodeEditorLoaded, openCameraStageNodeEditorDialog,
+  registerCameraStageNodeEditorDocument, useCameraStageNodeEditor,
+} from '@/features/canvas/application/cameraStageNodeEditor'
+import { useCameraStageSessionStore } from '../store/cameraStageSessionStore'
+import { cameraStageCurrentDocument } from './applicationDomain'
 import { DocumentSessionRegistry } from '@/features/documents/documentSessionRegistry'
 import { createScriptedPrompter, FakeDocumentCommands, type ScriptedPrompter } from '@/features/documents/documentSessionTestKit'
 import { createDefaultCameraStageSceneSnapshot } from '../domain/defaultSceneSnapshot'
@@ -16,7 +24,7 @@ import { loadProjectIntoScene } from '../projects/cameraStageProjectService'
 import {
   cameraStageProjectStore, createCameraStageDraftRuntime, ensureCameraStageProjectRuntime, findCameraStageProjectInstance,
   leaseCameraStageProjectRuntime, leaveCameraStageProject, releaseCameraStageProjectInstance, saveCameraStageProjectRuntime,
-  setCameraStageDocumentRegistryForTests,
+  setCameraStageDocumentRegistryForTests, subscribeCameraStageProjectDisposal,
 } from './cameraStageProjectRuntime'
 import { captureCameraStageUndo, restoreCameraStageUndo } from './cameraStageUndo'
 import { cameraStageApplicationService } from './cameraStageApplicationService'
@@ -193,12 +201,11 @@ describe('镜头参考文档唯一实例', () => {
 })
 
 describe('保存交给通用文档会话', () => {
-  it('页面解除附着后自动保存仍执行；被租用和正在展示的实例不可释放，释放时写完并关闭会话', async () => {
+  it('页面解除附着后自动保存仍执行；被租用的实例不可释放，释放时写完并关闭会话', async () => {
     vi.useFakeTimers()
     seed('autosave')
     await loadProjectIntoScene('autosave')
     const instance = findCameraStageProjectInstance('autosave')!
-    expect(await releaseCameraStageProjectInstance('autosave')).toBe(false)
     instance.store.getState().addPrimitive('box')
     attachCameraStageStore(createCameraStageStore())
     await vi.advanceTimersByTimeAsync(900)
@@ -287,17 +294,65 @@ describe('离开与回收站', () => {
     expect(findCameraStageProjectInstance(instance.id)).toBeUndefined()
   })
 
-  it('移到回收站：只为后台持有的实例先释放（写完再删）；界面正在显示的拒绝', async () => {
+  it('移到回收站：只为后台持有的实例先释放（写完再删）；前台正在编辑的拒绝', async () => {
     seed('shown'); seed('background')
     const operations = new DocumentOperations({ commands, registry, kinds: documentKindRegistry })
     operations.registerReleaser('camera_stage', releaseCameraStageProjectInstance)
     await loadProjectIntoScene('shown')
-    await expect(operations.trashDocument({ id: 'shown' })).rejects.toMatchObject({ name: 'DocumentInUseError' })
+    const unregister = registerCurrentDocumentProvider('cameraStage-test', () => 'shown')
+    try {
+      await expect(operations.trashDocument({ id: 'shown' })).rejects.toMatchObject({ name: 'DocumentInUseError' })
+    } finally { unregister() }
     const background = await ensureCameraStageProjectRuntime('background')
     background.store.getState().addPrimitive('box')
     await operations.trashDocument({ id: 'background' })
     expect(commands.trashed).toEqual(['background'])
     expect(findCameraStageProjectInstance('background')).toBeUndefined()
     expect(commands.writes).toBe(1)
+  })
+
+  // 工具区隐藏时镜头参考页仍挂载、恢复逻辑不会重跑：释放后编辑器记录必须自己退回列表，否则回去看到的是没有文档的空场景
+  it('工具区切走、镜头参考页仍停在编辑器时移到回收站：释放后编辑器记录退回列表，不再算前台', async () => {
+    seed('hidden-tool')
+    const operations = new DocumentOperations({ commands, registry, kinds: documentKindRegistry })
+    operations.registerReleaser('camera_stage', releaseCameraStageProjectInstance)
+    const unregister = registerCurrentDocumentProvider('cameraStage', cameraStageCurrentDocument)
+    try {
+      await loadProjectIntoScene('hidden-tool')
+      useCameraStageSessionStore.getState().setAppView('editor')
+      useNavigationStore.setState({ activeWorkspace: 'tools', activeToolId: 'cameraStage' })
+      await expect(operations.trashDocument({ id: 'hidden-tool' })).rejects.toMatchObject({ name: 'DocumentInUseError' })
+
+      useNavigationStore.setState({ activeWorkspace: 'nodes' })
+      await operations.trashDocument({ id: 'hidden-tool' })
+      expect(commands.trashed).toEqual(['hidden-tool'])
+      expect(useCameraStageSessionStore.getState()).toMatchObject({ lastDocumentId: null, appView: 'list' })
+      useNavigationStore.setState({ activeWorkspace: 'tools' })
+      expect(cameraStageCurrentDocument(useNavigationStore.getState())).toBeUndefined()
+    } finally { unregister() }
+  })
+
+  // 画布节点的全屏编辑器载入的镜头参考不是工具页的当前文档，也必须算前台；画布页切走后释放则编辑器跟着关
+  it('画布节点编辑器正在编辑的文档：画布页显示时拒绝删除，切走后删除并关掉编辑器', async () => {
+    seed('node-stage')
+    const operations = new DocumentOperations({ commands, registry, kinds: documentKindRegistry })
+    operations.registerReleaser('camera_stage', releaseCameraStageProjectInstance)
+    const unregister = registerCameraStageNodeEditorDocument(registerEmbeddedDocumentEditor, subscribeCameraStageProjectDisposal)
+    try {
+      openCameraStageNodeEditorDialog('node-1')
+      await loadProjectIntoScene('node-stage')
+      markCameraStageNodeEditorLoaded('node-1', 'node-stage')
+      useNavigationStore.setState({ activeWorkspace: 'nodes' })
+      await expect(operations.trashDocument({ id: 'node-stage' })).rejects.toMatchObject({ name: 'DocumentInUseError' })
+      expect(findCameraStageProjectInstance('node-stage')).toBeDefined()
+
+      useNavigationStore.setState({ activeWorkspace: 'generation' })
+      await operations.trashDocument({ id: 'node-stage' })
+      expect(commands.trashed).toEqual(['node-stage'])
+      expect(useCameraStageNodeEditor.getState()).toMatchObject({ nodeId: null, documentId: null })
+    } finally {
+      unregister()
+      closeCameraStageNodeEditorDialog()
+    }
   })
 })
