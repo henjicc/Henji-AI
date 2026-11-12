@@ -1,6 +1,6 @@
 import { buildAudioEditSubtitleGroups, joinAudioEditText } from './captions'
 import { alignAudioEditToScript, audioEditScriptTextFor } from './scriptCaptions'
-import { buildProjectAudioEditSubtitleCues } from './subtitles'
+import { buildProjectAudioEditSubtitleCues, removeAudioEditSubtitleSpacing } from './subtitles'
 import type { AudioEditProjectDocument } from './types'
 
 /*
@@ -64,7 +64,7 @@ export function setAudioEditCaptionText(project: AudioEditProjectDocument, capti
   const byId = new Map(project.transcript.map(block => [block.id, block]))
   const blocks = cue.words.map(word => byId.get(word.blockId)!)
   if (blocks.some(block => block.locked)) throw new Error('这段字幕里有锁定的词块')
-  const target = [...text.trim().replace(/(\p{Script=Han})[ \u3000]+(?=[A-Za-z0-9])/gu, '$1').replace(/([A-Za-z0-9])[ \u3000]+(?=\p{Script=Han})/gu, '$1').replace(/[ \u3000]+/gu, ' ')]
+  const target = [...removeAudioEditSubtitleSpacing(text.trim()).replace(/[ \u3000]+/gu, ' ')]
   if (!target.some(char => /[\p{L}\p{N}]/u.test(char))) throw new Error('字幕文字不能为空；不想要这段字幕请删掉对应的词')
   const base: string[] = [], owner: number[] = []
   let joined = ''

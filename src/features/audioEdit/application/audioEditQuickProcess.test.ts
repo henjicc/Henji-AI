@@ -69,6 +69,33 @@ it('去掉重念：删掉前一遍和其间停顿，只留最后一遍，一步�
   expect(editedDurationFrames(buildProjectAudioEditTimeline(instance.document))).toBe(4000)
 })
 
+it('换了说法、没有参考稿佐证的重念只留作待确认的线索，不删；有稿子佐证时直接删', async () => {
+  installHarnessNativeStorage()
+  const commands = new FakeDocumentCommands()
+  setAudioEditDocumentRegistryForTests(new DocumentSessionRegistry({ commands, prompter: createScriptedPrompter(), kinds: documentKindRegistry }))
+  // “这样一来呢，｜这样下来啊，你看到的内容是少的”：[500,1100) 停 [1100,1700) 后一遍
+  const words: AudioEditTranscriptBlock[] = []
+  let at = 500
+  for (const [index, text] of ['这样', '一来', '呢，', '这样', '下来', '啊，', '你', '看到的', '内容', '是', '少的'].entries()) {
+    if (index === 3) at = 1700
+    const length = text.replace('，', '').length * 100
+    words.push({ id: `w${index}`, text, startFrame: at, endFrame: at + length, included: true, locked: false, granularity: 'word' })
+    at += length
+  }
+  const pauses = { resolutionMs: 10, thresholdDb: -60, highThresholdDb: -70, pauses: [{ startMs: 0, endMs: 500, cutMs: 250 }, { startMs: 1000, endMs: 1700, cutMs: 1350 }] }
+  for (const [id, referenceScript] of [['no-script', ''], ['scripted', '这样下来，你看到的内容是少的，但是你知道的信息反而是多的。']] as const) {
+    commands.seed({ kind: 'audio_edit', id, name: '录音', content: audioEditProjectToDocumentContent({ id, name: '录音', source: { mediaType: 'audio', sourcePath: 'a.wav', audioPath: 'a.wav', sampleRate: 1000, channels: 1, durationFrames: 4000 }, transcript: words, referenceScript, suggestions: [], revision: 1, createdAt: 1, updatedAt: 1 }) })
+    const instance = await loadAudioEditProject(id)
+    vi.spyOn(getPlatform().audioEdit, 'detectSilence').mockImplementation(async () => ({ revision: instance.session.documentMeta.revision, suggestions: [], energy: pauses }))
+    const result = await cleanProjectAudioEditRetakes(id)
+    const removed = instance.document.transcript.filter((block) => !block.included).map((block) => block.text).join('')
+    if (id === 'no-script') {
+      expect([result.count, result.reviewCount, removed]).toEqual([0, 1, ''])
+      expect(instance.document.suggestions.map((item) => [item.kind, item.status, item.confidence])).toEqual([['retake', 'pending', 'low']])
+    } else expect([result.count, removed]).toEqual([1, '这样一来呢，'])
+  }
+})
+
 it('快速处理在有逐词转写时先去掉重念，再压缩停顿，整批一个撤销步骤', async () => {
   installHarnessNativeStorage()
   const commands = new FakeDocumentCommands()

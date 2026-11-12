@@ -3,6 +3,7 @@ import { isAudioEditBreathEdit } from './breaths'
 import { audioEditWordGaps, buildProjectAudioEditTimeline } from './timeline'
 import { sliceAudioEditRanges, subtractRanges } from './edits'
 import type { AudioEditCut, AudioEditProjectDocument, AudioEditRange } from './types'
+import { AUDIO_EDIT_ONSET_SEARCH_MS, audibleCells, levelPercentile, type AudioEditLevels } from './levels'
 
 /*
  * 字间气口清理：前一个字说完后常留一点没发完的气声、呼吸尾巴，留着就是听感上的“呲呲”。
@@ -14,7 +15,9 @@ import type { AudioEditCut, AudioEditProjectDocument, AudioEditRange } from './t
  * - 检测到的呼吸算残留，但呼吸起止常与字的余音重叠一两格，其中仍明显偏响的（比常见音量低不到 LOUD_IN_BREATH_DB）
  *   按有声处理，不切字尾；为凑气口留下的减弱呼吸一律算残留；
  * - 保护：前一个字的余音留 TAIL_GUARD_MS、后一个字之前留 ONSET_GUARD_MS（另有 5 ms 淡变），不切到字；
- *   后一个字开头的送气、擦音（t、k、s…）很轻，往前最多 ONSET_SEARCH_MS 把高于底噪的部分算作字头；
+ *   后一个字开头的送气、擦音、浊音（t、k、s、z…）很轻，把气口末尾连续高于底噪的部分算作字头：识别起点之后的都属于这个字，
+ *   起点之前的最多 AUDIO_EDIT_ONSET_SEARCH_MS；呼吸检测常把紧贴字头的弱音也划进呼吸，被标成呼吸的格照样算；
+ * - 两段删除（或删除与静音）之间剩下不到 FRAGMENT_MS、又没有保留的字的残片，并进删除；
  * - 本来就不长（不用删）、里面只有房间底噪、没有呼吸的停顿不动：清成纯静音反而像门限切了一刀；
  * - 要删的气口两头各留一点静音、中间整段删除，不和已有的删除穿插成一条条；
  * - 气口长度：句间与重念接缝处 SENTENCE_GAP_MS，句中 CLAUSE_GAP_MS；本来就更短的只静音不删；
@@ -26,8 +29,7 @@ import type { AudioEditCut, AudioEditProjectDocument, AudioEditRange } from './t
 const AUDIO_EDIT_GAP_ID_PREFIX = 'gap:'
 const isAudioEditGapEdit = (item: { id: string; reason?: string }): boolean => item.reason !== 'manual' && item.id.startsWith(AUDIO_EDIT_GAP_ID_PREFIX)
 
-/** 逐帧全频与高频电平（dBFS），与停顿压缩、去重念同一分析 */
-export interface AudioEditLevels { resolutionMs: number; wideDb: readonly number[]; highDb?: readonly number[] }
+export type { AudioEditLevels } from './levels'
 
 const RESIDUE_BELOW_SPEECH_DB = 16
 const SENTENCE_GAP_MS = 200
@@ -36,13 +38,16 @@ const TAIL_GUARD_MS = 10
 const ONSET_GUARD_MS = 10
 const MIN_QUIET_MS = 40
 const UNMARKED_PAUSE_MS = 150
-const ONSET_SEARCH_MS = 80
 const SHORT_PAUSE_MS = 100
-const ABOVE_FLOOR_DB = 6
-const HIGH_ABOVE_FLOOR_DB = 15
 const CLICK_MS = 30
 const EDGE_MS = 150
 const LOUD_IN_BREATH_DB = 8
+/**
+ * 两段删除（或删除与静音）之间留下的声音短于这么长、又不含任何保留的字，就并进删除（毫秒）。
+ * 普通话最短的音节也有 80–100 毫秒，几十毫秒的残片听不出是字，只会像接缝处“咔”地一碎；
+ * 取 60 毫秒，比最短的音节短一截，又比接缝两侧的淡变（各 5 毫秒）长得多。
+ */
+const FRAGMENT_MS = 60
 
 type Part = [number, number]
 interface Run { quiet: boolean; parts: Part[]; length: number }
@@ -51,11 +56,6 @@ interface Run { quiet: boolean; parts: Part[]; length: number }
 function sliceParts(parts: readonly Part[], from: number, to: number): Part[] {
   return sliceAudioEditRanges(parts.map(([startFrame, endFrame]) => ({ startFrame, endFrame })), from, to)
     .map(({ startFrame, endFrame }) => [startFrame, endFrame])
-}
-
-function percentile(values: readonly number[], ratio: number): number {
-  const sorted = values.filter((value) => Number.isFinite(value) && value > -120).sort((a, b) => a - b)
-  return sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * ratio))] : -120
 }
 
 const within = (range: AudioEditRange | undefined, item: { startFrame: number; endFrame: number }): boolean => !range || (item.startFrame >= range.startFrame && item.endFrame <= range.endFrame)
@@ -72,7 +72,7 @@ export function cleanAudioEditGaps(
   const base = document
   const frames = (ms: number): number => Math.round(ms * sampleRate / 1000)
   const cellFrames = levels.resolutionMs * sampleRate / 1000
-  const speech = percentile(levels.wideDb, 0.8)
+  const speech = levelPercentile(levels.wideDb, 0.8)
   const threshold = speech - RESIDUE_BELOW_SPEECH_DB
   const quietCells = new Uint8Array(levels.wideDb.length)
   levels.wideDb.forEach((db, index) => { quietCells[index] = db < threshold ? 1 : 0 })
@@ -87,12 +87,15 @@ export function cleanAudioEditGaps(
   const cellAt = (frame: number): number => Math.min(quietCells.length - 1, Math.floor(frame / cellFrames))
   const quietAt = (frame: number): boolean => quietCells[cellAt(frame)] === 1
   const breathCells = new Uint8Array(quietCells.length)
+  const leftoverBreathCells = new Uint8Array(quietCells.length)
   for (const breath of breaths) breathCells.fill(1, cellOf(breath.startMs), cellOf(breath.endMs))
-  for (const region of base.gainRegions ?? []) if (region.enabled && isAudioEditBreathEdit(region)) breathCells.fill(1, cellOf(region.startFrame * 1000 / sampleRate), cellOf(region.endFrame * 1000 / sampleRate))
-  const wideFloor = percentile(levels.wideDb, 0.1)
-  const highFloor = levels.highDb ? percentile(levels.highDb, 0.1) : Infinity
+  for (const region of base.gainRegions ?? []) {
+    if (!region.enabled || !isAudioEditBreathEdit(region)) continue
+    breathCells.fill(1, cellOf(region.startFrame * 1000 / sampleRate), cellOf(region.endFrame * 1000 / sampleRate))
+    leftoverBreathCells.fill(1, cellOf(region.startFrame * 1000 / sampleRate), cellOf(region.endFrame * 1000 / sampleRate))
+  }
   // 高于底噪的轻声（送气、擦音）：全频高出几 dB，或高频明显高出
-  const audible = (cell: number): boolean => levels.wideDb[cell] >= wideFloor + ABOVE_FLOOR_DB || (levels.highDb?.[cell] ?? -Infinity) >= highFloor + HIGH_ABOVE_FLOOR_DB
+  const audible = audibleCells(levels)
   const spans = buildProjectAudioEditTimeline(base)
   const locked = base.transcript.filter((block) => block.locked)
   const cuts: AudioEditCut[] = []
@@ -133,17 +136,26 @@ export function cleanAudioEditGaps(
     if (!gap) continue
     const touches = (range: { startFrame: number; endFrame: number }): boolean => gap.parts.some(([start, end]) => range.startFrame < end && range.endFrame > start)
     if (locked.some(touches) || restored.some(touches)) continue
-    // 后一个字开头很轻的送气、擦音算作字头：从气口末尾往前找，最多 ONSET_SEARCH_MS
-    let lead = 0
+    // 后一个字开头很轻的送气、擦音、浊音算作字头：从气口末尾往前找连续高于底噪的格。识别起点之后的都属于这个字；
+    // 起点之前的最多 AUDIO_EDIT_ONSET_SEARCH_MS。检测到的呼吸不中断（“再”字主体前那一小团浊音常被划进呼吸），
+    // 为凑气口留下的那截减弱呼吸才中断：它是有意留的气口，照样清成静音
+    // 电平按 10 毫秒一格，字头里偶尔有一格略低于底噪线（“那”的鼻音起头），单独一格不算断开
+    let lead = 0, beforeStart = 0
     search: for (let p = gap.parts.length - 1; p >= 0; p--) {
       const [start, end] = gap.parts[p]
       for (let frame = end - 1; frame >= start; frame -= cellFrames) {
         const cell = cellAt(frame)
-        if (lead >= frames(ONSET_SEARCH_MS) || breathCells[cell] || !audible(cell)) break search
-        lead += Math.min(cellFrames, frame - start + 1)
+        if (leftoverBreathCells[cell]) break search
+        if (!audible(cell) && !(frame - cellFrames >= start && audible(cell - 1) && !leftoverBreathCells[cell - 1])) break search
+        const step = Math.min(cellFrames, frame - start + 1)
+        if (frame < next.startFrame) {
+          if (beforeStart >= frames(AUDIO_EDIT_ONSET_SEARCH_MS)) break search
+          beforeStart += step
+        }
+        lead += step
       }
     }
-    const tail = frames(TAIL_GUARD_MS), onset = frames(ONSET_GUARD_MS) + Math.round(Math.min(lead, frames(ONSET_SEARCH_MS)))
+    const tail = frames(TAIL_GUARD_MS), onset = frames(ONSET_GUARD_MS) + Math.round(lead)
     const muteLength = gap.length - tail - onset
     if (muteLength <= 0) continue
     const sentence = /[。？！；…!?;]$/.test(previous.text.trim())
@@ -182,7 +194,33 @@ export function cleanAudioEditGaps(
     } else add(sliceParts(gap.parts, tail, gap.length - onset), 'mute')
     if (piece) count++
   }
-  return { document: { ...base, cuts: [...(base.cuts ?? []), ...cuts] }, count }
+  const cleaned = { ...base, cuts: [...(base.cuts ?? []), ...cuts] }
+  return { document: { ...cleaned, cuts: [...cleaned.cuts, ...fragmentCuts(cleaned, restored, range)] }, count }
+}
+
+/**
+ * 两段删除（或删除与静音）之间夹着的残片并进删除：去重念、停顿、呼吸、气口各自下刀，交界处常剩下十几到几十毫秒的声音，
+ * 里面没有完整的字，听着是一下“咔”。短于 FRAGMENT_MS、不含保留词的主体（过半）、不碰锁定内容的才并；开头结尾不动。
+ * 落成 gap: 剪切，和气口清理一样可逐处恢复，恢复过的不再提。
+ */
+function fragmentCuts(document: AudioEditProjectDocument, restored: readonly AudioEditCut[], range: AudioEditRange | undefined): AudioEditCut[] {
+  const spans = buildProjectAudioEditTimeline(document)
+  const limit = Math.round(FRAGMENT_MS * document.source.sampleRate / 1000)
+  const cuts: AudioEditCut[] = []
+  for (let index = 1; index + 1 < spans.length; index++) {
+    const span = spans[index], previous = spans[index - 1], next = spans[index + 1]
+    const startFrame = span.sourceStartFrame, endFrame = span.sourceEndFrame
+    if (span.muted || endFrame - startFrame >= limit || !within(range, { startFrame, endFrame })) continue
+    const cutBefore = previous.muted || previous.sourceEndFrame < startFrame
+    const cutAfter = next.muted || next.sourceStartFrame > endFrame
+    if (!cutBefore || !cutAfter) continue
+    const touches = (block: { startFrame: number; endFrame: number }): number => Math.max(0, Math.min(endFrame, block.endFrame) - Math.max(startFrame, block.startFrame))
+    if (document.transcript.some((block) => (block.included && touches(block) * 2 > block.endFrame - block.startFrame) || (block.locked && touches(block) > 0))) continue
+    const id = `${AUDIO_EDIT_GAP_ID_PREFIX}fragment:${startFrame}`
+    if (restored.some((cut) => cut.id === id)) continue
+    cuts.push({ id, startFrame, endFrame, reason: 'silence', enabled: true })
+  }
+  return cuts
 }
 
 /**
@@ -190,7 +228,7 @@ export function cleanAudioEditGaps(
  * 供拖动区间边缘时吸附。
  */
 export function audioEditSpeechEdges(levels: AudioEditLevels, sampleRate: number): number[] {
-  const threshold = percentile(levels.wideDb, 0.8) - RESIDUE_BELOW_SPEECH_DB
+  const threshold = levelPercentile(levels.wideDb, 0.8) - RESIDUE_BELOW_SPEECH_DB
   const minCells = Math.max(1, Math.round(CLICK_MS / levels.resolutionMs))
   const runs: Array<{ quiet: boolean; start: number; end: number }> = []
   levels.wideDb.forEach((db, cell) => {

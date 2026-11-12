@@ -2,6 +2,7 @@ import type { AudioBreath } from '../audioAnalysis/breath/respiro'
 import type { AudioEditGainRegion } from './regions'
 import { buildProjectAudioEditTimeline, retainedAudioEditWords } from './timeline'
 import type { AudioEditCut, AudioEditProjectDocument, AudioEditRange, AudioEditTimelineSpan, AudioEditTranscriptBlock } from './types'
+import { audibleCells, audioEditOnsetStart, type AudioEditLevels } from './levels'
 
 /*
  * 呼吸声的处理：按上下文逐处决定删、减弱、静音还是保留，落成普通的剪切与音量区域（标识以 breath: 开头），
@@ -76,12 +77,14 @@ interface PlacementState {
   removedWords: AudioEditTranscriptBlock[]
   /** 真正安静的源区间（能量低谷 ∪ 呼吸），有序不重叠；没有能量证据时为空，按词之间的空当算 */
   quiet?: FrameRange[]
+  /** 有逐帧电平时：后一个字前紧挨着的轻声起头从哪儿开始，删呼吸不下刀到这里之后 */
+  onsetStart?: (startFrame: number) => number
 }
 
-function placementState(document: AudioEditProjectDocument, quiet?: FrameRange[]): PlacementState {
+function placementState(document: AudioEditProjectDocument, quiet?: FrameRange[], onsetStart?: (startFrame: number) => number): PlacementState {
   const heard = buildProjectAudioEditTimeline(document)
   return {
-    document, heard, quiet,
+    document, heard, quiet, onsetStart,
     words: retainedAudioEditWords(document.transcript, heard),
     removedWords: document.transcript.filter((block) => !block.included && !block.locked),
   }
@@ -127,10 +130,12 @@ function placeBreath(state: PlacementState, breath: AudioBreath): Placement {
   const previous = words.filter((word) => (word.startFrame + word.endFrame) / 2 < middle).at(-1)
   const next = words.find((word) => (word.startFrame + word.endFrame) / 2 >= middle)
   const gapStart = previous?.endFrame ?? 0, gapEnd = next?.startFrame ?? durationFrames
+  // 呼吸检测常把后一个字主体前的轻声（浊音、擦音起头）也划进呼吸：删到这段轻声之前为止
+  const cutEnd = next && state.onsetStart ? state.onsetStart(next.startFrame) : gapEnd
   // 还保留着的那一段（被重念、停顿剪掉的部分不再处理），再限制在两侧词之间
   let region: Placement['region'] = null
   for (const span of spans) {
-    const from = Math.max(startFrame, span.sourceStartFrame, gapStart), to = Math.min(endFrame, span.sourceEndFrame, gapEnd)
+    const from = Math.max(startFrame, span.sourceStartFrame, gapStart), to = Math.min(endFrame, span.sourceEndFrame, gapEnd, cutEnd)
     if (to > from && (!region || to - from > region.endFrame - region.startFrame)) region = { startFrame: from, endFrame: to }
   }
   const keptInBreath = overlap(spans, startFrame, endFrame)
@@ -212,10 +217,11 @@ function overlapsLocked(document: AudioEditProjectDocument, range: { startFrame:
 
 /**
  * 按策略处理呼吸声：删除沿当前成片补充，切换策略才撤回自动处理；用户逐处恢复过的不动。
- * range 只处理落在其中的呼吸；pauses 是声音能量检测到的安静区间，给了就只把真正安静的部分算作气口。
+ * range 只处理落在其中的呼吸；pauses 是声音能量检测到的安静区间，给了就只把真正安静的部分算作气口；
+ * levels 是逐帧电平，给了就不把下刀范围伸进后一个字的轻声起头。
  */
 export function applyAudioEditBreathPolicy(
-  document: AudioEditProjectDocument, breaths: readonly AudioBreath[], policy: AudioEditBreathPolicy, range?: AudioEditRange, pauses?: readonly AudioEditQuietRange[],
+  document: AudioEditProjectDocument, breaths: readonly AudioBreath[], policy: AudioEditBreathPolicy, range?: AudioEditRange, pauses?: readonly AudioEditQuietRange[], levels?: AudioEditLevels,
 ): { document: AudioEditProjectDocument; counts: Record<'deleted' | 'attenuated' | 'muted' | 'kept', number> } {
   const { sampleRate } = document.source
   const inRange = (item: { startFrame: number; endFrame: number }): boolean => !range || (item.startFrame >= range.startFrame && item.endFrame <= range.endFrame)
@@ -232,7 +238,9 @@ export function applyAudioEditBreathPolicy(
   // 按时间逐口处理，每删一口就按新的剪辑重算：同一处空当里的后一口气看得到前一口已经删掉
   const quiet = pauses ? quietRanges(document, breaths, pauses) : undefined
   let working = base
-  let state = placementState(working, quiet)
+  const audible = levels ? audibleCells(levels) : undefined
+  const onsetStart = levels && audible ? (startFrame: number): number => audioEditOnsetStart(levels, audible, startFrame, document.source.sampleRate) : undefined
+  let state = placementState(working, quiet, onsetStart)
   for (const breath of [...breaths].sort((a, b) => a.startMs - b.startMs)) {
     const placement = placeBreath(state, breath)
     if (!inRange(placement) || restored.has(placement.id) || processed.has(placement.id)) continue
@@ -243,7 +251,7 @@ export function applyAudioEditBreathPolicy(
     counts[edits.handling]++
     working = { ...working, cuts: [...(working.cuts ?? []), ...edits.cuts],
       gainRegions: [...(working.gainRegions ?? []).filter((item) => item.id !== placement.id), ...edits.gains] }
-    if (edits.cuts.length) state = placementState(working, quiet)
+    if (edits.cuts.length) state = placementState(working, quiet, onsetStart)
   }
   return { document: working, counts }
 }

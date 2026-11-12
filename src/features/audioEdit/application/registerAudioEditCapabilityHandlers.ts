@@ -21,6 +21,11 @@ import { loadAudioEditProject, flushAudioEditProject, releaseAudioEditProject, a
 import { importAudioEditMedia, openAudioEditDocument, pickAudioEditMedia } from './audioEditDocumentService'
 import { compressAudioEditSilence, cleanProjectAudioEditFillers, cleanProjectAudioEditRetakes, detectProjectAudioEditMouthClicks, matchProjectAudioEditLoudness, processProjectAudioEditBreaths, transcribeAudioEdit, exportAudioEdit, prepareAudioEditProcessing, quickProcessAudioEdit, undoAllAudioEditChanges, formatProjectAudioEditCaptions } from './audioEditApplicationService'
 
+/** 拿不准、没有自动删的重念：留在剪辑线索里，交给助手逐处试听后决定。 */
+const retakeReviewText = (count: number): string => count
+  ? `另有 ${count} 处像是换了说法的重念，没有参考稿佐证，没有自动删：用 list_application_entities 读 audio_edit.suggestion（kind=retake、status=pending）逐处判断，确认是念坏重来再把对应词块 included 设为 false。`
+  : ''
+
 /** 剪后时长的变化：重新处理呼吸声时比上次删得少，时长会变长。 */
 const lengthChange = (shortenedMs: number): string => {
   const seconds = (Math.abs(shortenedMs) / 1000).toFixed(1)
@@ -107,10 +112,10 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
           break
         }
         case 'quick_process_audio_edit': {
-          const { retakeCount, breaths, gaps, ...processed } = await quickProcessAudioEdit(id, input.range, requestId)
+          const { retakeCount, retakeReviewCount, breaths, gaps, ...processed } = await quickProcessAudioEdit(id, input.range, requestId)
           Object.assign(result, processed)
           const breathText = breaths ? `处理呼吸声（删除 ${breaths.deleted}、减弱 ${breaths.attenuated} 处）、${gaps ? `把 ${gaps} 处字间气口清成静音、` : ''}` : ''
-          result.message = `已${retakeCount ? `去掉 ${retakeCount} 处重念、` : ''}${breathText}压缩停顿并清理所选语气词，${lengthChange(processed.shortenedMs)}，可整批撤销。这只是起点：请逐处复核接缝、呼吸与语气词。`; break
+          result.message = `已${retakeCount ? `去掉 ${retakeCount} 处重念、` : ''}${breathText}压缩停顿并清理所选语气词，${lengthChange(processed.shortenedMs)}，可整批撤销。${retakeReviewText(retakeReviewCount)}这只是起点：请逐处复核接缝、呼吸与语气词。`; break
         }
         case 'compress_audio_edit_silence': { const { count, shortenedMs } = await compressAudioEditSilence(id, input.range, requestId); Object.assign(result, { count, shortenedMs }) } result.message = `处理 ${result.count} 处停顿，缩短 ${result.shortenedMs} 毫秒。`; break
         case 'clean_audio_edit_fillers': result.count = await cleanProjectAudioEditFillers(id, input.range); result.message = `清理 ${result.count} 处语气词。`; break
@@ -126,9 +131,9 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
           break
         }
         case 'clean_audio_edit_retakes': {
-          const cleaned = await cleanProjectAudioEditRetakes(id, input.range, requestId)
+          const { reviewCount, ...cleaned } = await cleanProjectAudioEditRetakes(id, input.range, requestId)
           Object.assign(result, cleaned)
-          result.message = cleaned.count ? `去掉 ${cleaned.count} 处重念，缩短 ${(cleaned.shortenedMs / 1000).toFixed(1)} 秒，每处只保留最后一遍；可在剪辑线索与文字里逐处恢复。` : '没有发现重念。'
+          result.message = `${cleaned.count ? `去掉 ${cleaned.count} 处重念，缩短 ${(cleaned.shortenedMs / 1000).toFixed(1)} 秒，每处只保留最后一遍；可在剪辑线索与文字里逐处恢复。` : '没有发现确定的重念。'}${retakeReviewText(reviewCount)}`
           break
         }
         case 'process_audio_edit_breaths': {

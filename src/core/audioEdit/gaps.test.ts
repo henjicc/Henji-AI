@@ -130,6 +130,33 @@ describe('字间气口清理', () => {
     expect(cleanAudioEditGaps(next, [], levelsOf([[0, 1000], [1300, 3000]], [[1000, 1080, -60]])).document.cuts).toEqual(next.cuts)
   })
 
+  it('字头的弱浊音被呼吸检测划进呼吸时仍算字头：删呼吸、清气口都不剪到它（“再”字主体前那一小团浊音）', () => {
+    // 了。 0–1000 | 呼吸检测 1050–1380 | 1330–1400 很轻的浊音起头（-62 dB）| 再 1400–
+    const document = documentOf([['了。', 0, 1000], ['再', 1400, 3000]])
+    const levels = levelsOf([[0, 1000], [1400, 3000]], [[1050, 1330, -66], [1330, 1400, -62]])
+    const breaths = [{ startMs: 1050, endMs: 1380, peak: 1 }]
+    const deleted = applyAudioEditBreathPolicy(document, breaths, 'delete', undefined, [], levels).document
+    expect(deleted.cuts?.every((cut) => cut.endFrame <= 1330)).toBe(true)
+    const cleaned = cleanAudioEditGaps(deleted, breaths, levels).document
+    expect(heardBetween(cleaned, 1330, 1400)).toEqual({ heard: 70, silent: 0 })
+  })
+
+  it('两段删除之间剩下不到 60 毫秒、没有保留字的残片并进删除；更长的、含保留字的、恢复过的不动', () => {
+    // 删除 1000–1400 | 残片 1400–1430 | 删除 1430–1800；另一处残片 2400–2500 有 100 毫秒，不并
+    const document = documentOf([['一件事，', 0, 1000], ['每个', 1800, 2400], ['回答', 2500, 3500]], { cuts: [
+      { id: 'retake', startFrame: 1000, endFrame: 1400, reason: 'manual', enabled: true },
+      { id: 'breath:1430', startFrame: 1430, endFrame: 1800, reason: 'silence', enabled: true },
+      { id: 'other', startFrame: 2300, endFrame: 2400, reason: 'manual', enabled: true },
+      { id: 'other2', startFrame: 2500, endFrame: 2550, reason: 'manual', enabled: true },
+    ] })
+    const levels = levelsOf([[0, 1000], [1800, 3500]])
+    const { document: next } = cleanAudioEditGaps(document, [], levels)
+    expect(next.cuts!.filter((cut) => cut.id.startsWith('gap:fragment:'))).toEqual([{ id: 'gap:fragment:1400', startFrame: 1400, endFrame: 1430, reason: 'silence', enabled: true }])
+    expect(cleanAudioEditGaps(next, [], levels).document.cuts).toEqual(next.cuts)
+    const restored = { ...next, cuts: next.cuts!.map((cut) => cut.id === 'gap:fragment:1400' ? { ...cut, enabled: false } : cut) }
+    expect(cleanAudioEditGaps(restored, [], levels).document.cuts!.filter((cut) => cut.id.startsWith('gap:fragment:') && cut.enabled)).toEqual([])
+  })
+
   it('夹在残留里的几十毫秒声响一并静音；重跑替换上一次；逐处恢复过的不动；锁定的不动', () => {
     const document = documentOf([['一件事，', 0, 1000], ['每个', 1400, 3000]])
     const levels = levelsOf([[0, 1020], [1400, 3000], [1200, 1220]])

@@ -73,9 +73,9 @@ async function detectProjectBreaths(document: AudioEditProjectDocument, required
 
 /**
  * 检测重念：读取实际声音的停顿证据（与停顿图、字幕断句共用的全频/高频能量分析），在 Worker 里比对转写，
- * 返回待应用的“重念”剪辑线索。参考稿只用来排除稿子里本来就有的重复。
+ * 返回“重念”剪辑线索。参考稿用来排除稿子里本来就有的重复，也用来确认换了说法的重念。
  */
-async function detectRetakeSuggestions(instance: AudioEditProjectInstance, range: AudioEditRange | undefined, requestId: string): Promise<AudioEditSuggestion[]> {
+async function detectRetakeSuggestions(instance: AudioEditProjectInstance, range: AudioEditRange | undefined, requestId: string): Promise<DetectedRetake[]> {
   const document = instance.document
   if (!document.transcript.length) throw new Error('这份口播还没有转写，请先识别口播。')
   if (!hasWordTranscript(document)) throw new Error('这份转写只有整句时间，无法逐词去掉重念；请用支持逐词时间的识别模型重新识别。')
@@ -87,15 +87,20 @@ async function detectRetakeSuggestions(instance: AudioEditProjectInstance, range
   const retakes = await detectAudioEditRetakesOffThread(document.transcript, {
     sampleRate: document.source.sampleRate, pauses: detected.energy.pauses, referenceScript: document.referenceScript, ...(range ? { range } : {}), ...(breaths ? { breaths } : {}),
   })
-  return retakes.map(audioEditRetakeSuggestion)
+  return retakes.map((retake) => ({ suggestion: audioEditRetakeSuggestion(retake), review: retake.review }))
 }
 
-/** 把检测到的重念并入线索并逐条应用；已处理或已隐藏的同一处不重复提出。 */
-function applyRetakeSuggestions(document: AudioEditProjectDocument, detected: readonly AudioEditSuggestion[]): AudioEditProjectDocument {
+interface DetectedRetake { suggestion: AudioEditSuggestion; review: boolean }
+
+/**
+ * 把检测到的重念并入线索并逐条应用；已处理或已隐藏的同一处不重复提出。
+ * 拿不准的（换了说法又没有参考稿佐证）只留作待确认的线索，不删，在“剪辑线索”里由人或助手决定。
+ */
+function applyRetakeSuggestions(document: AudioEditProjectDocument, detected: readonly DetectedRetake[]): AudioEditProjectDocument {
   const existing = new Set(document.suggestions.filter((item) => item.status !== 'pending').map((item) => item.id))
-  const fresh = detected.filter((item) => !existing.has(item.id))
-  let draft: AudioEditProjectDocument = { ...document, suggestions: [...document.suggestions.filter((item) => item.kind !== 'retake' || item.status !== 'pending'), ...fresh] }
-  for (const suggestion of fresh) draft = applyAudioEditSuggestion(draft, suggestion.id)
+  const fresh = detected.filter((item) => !existing.has(item.suggestion.id))
+  let draft: AudioEditProjectDocument = { ...document, suggestions: [...document.suggestions.filter((item) => item.kind !== 'retake' || item.status !== 'pending'), ...fresh.map((item) => item.suggestion)] }
+  for (const item of fresh) if (!item.review) draft = applyAudioEditSuggestion(draft, item.suggestion.id)
   return draft
 }
 
@@ -104,7 +109,7 @@ const appliedCount = (detected: readonly AudioEditSuggestion[], before: AudioEdi
   return detected.filter((item) => !applied.has(item.id) && after.suggestions.some((entry) => entry.id === item.id && entry.status === 'applied')).length
 }
 
-export async function cleanProjectAudioEditRetakes(projectId: string, range?: AudioEditRange, requestId: string = crypto.randomUUID()): Promise<{ count: number; shortenedMs: number }> {
+export async function cleanProjectAudioEditRetakes(projectId: string, range?: AudioEditRange, requestId: string = crypto.randomUUID()): Promise<{ count: number; reviewCount: number; shortenedMs: number }> {
   logger.info('audio_edit.retakes.start', { requestId, context: { projectId, range: Boolean(range) } })
   try {
     const result = await withAudioEditProjectOperation(projectId, async (instance, commit) => {
@@ -113,7 +118,7 @@ export async function cleanProjectAudioEditRetakes(projectId: string, range?: Au
       const detected = await detectRetakeSuggestions(instance, range, requestId)
       const next = commit((document) => applyRetakeSuggestions(document, detected))
       await flushAudioEditProject(projectId)
-      return { count: appliedCount(detected, original, next), shortenedMs: Math.round((before - editedDurationFrames(buildProjectAudioEditTimeline(next))) * 1000 / next.source.sampleRate) }
+      return { count: appliedCount(detected.map((item) => item.suggestion), original, next), reviewCount: detected.filter((item) => item.review).length, shortenedMs: Math.round((before - editedDurationFrames(buildProjectAudioEditTimeline(next))) * 1000 / next.source.sampleRate) }
     })
     logger.info('audio_edit.retakes.completed', { requestId, context: { projectId, ...result } })
     return result
@@ -123,7 +128,7 @@ export async function cleanProjectAudioEditRetakes(projectId: string, range?: Au
   }
 }
 
-export async function compressAudioEditSilence(projectId: string, range?: AudioEditRange, requestId: string = crypto.randomUUID(), includeFillers = false): Promise<{ count: number; shortenedMs: number; retakeCount: number; breaths?: Record<'deleted' | 'attenuated' | 'muted' | 'kept', number>; gaps?: number }> {
+export async function compressAudioEditSilence(projectId: string, range?: AudioEditRange, requestId: string = crypto.randomUUID(), includeFillers = false): Promise<{ count: number; shortenedMs: number; retakeCount: number; retakeReviewCount: number; breaths?: Record<'deleted' | 'attenuated' | 'muted' | 'kept', number>; gaps?: number }> {
   return withAudioEditProjectOperation(projectId, async (instance, commit) => {
     const settings = instance.document.batchSettings ?? DEFAULT_AUDIO_EDIT_SETTINGS
     const before = editedDurationFrames(buildProjectAudioEditTimeline(instance.document))
@@ -144,8 +149,8 @@ export async function compressAudioEditSilence(projectId: string, range?: AudioE
       for (const suggestion of suggestions) draft = applyAudioEditSuggestion(draft, suggestion.id)
       if (includeFillers) draft = cleanAudioEditFillers(draft, settings.fillers, range)
       if (breaths) {
-        const processed = applyAudioEditBreathPolicy(draft, breaths, 'delete', range, detected.energy?.pauses); draft = processed.document; breathCounts = processed.counts
         const levels = energyLevels(detected.energy)
+        const processed = applyAudioEditBreathPolicy(draft, breaths, 'delete', range, detected.energy?.pauses, levels); draft = processed.document; breathCounts = processed.counts
         if (levels) { const cleaned = cleanAudioEditGaps(draft, breaths, levels, range); draft = cleaned.document; gapCount = cleaned.count }
       }
       return draft
@@ -153,7 +158,8 @@ export async function compressAudioEditSilence(projectId: string, range?: AudioE
     await flushAudioEditProject(projectId)
     return { count: detected.suggestions.filter((item) => !appliedIds.has(item.id) && next.suggestions.some((entry) => entry.id === item.id && entry.status === 'applied')).length,
       shortenedMs: Math.round((before - editedDurationFrames(buildProjectAudioEditTimeline(next))) * 1000 / next.source.sampleRate),
-      retakeCount: retakes.filter((item) => !appliedIds.has(item.id) && next.suggestions.some((entry) => entry.id === item.id && entry.status === 'applied')).length,
+      retakeCount: retakes.filter((item) => !appliedIds.has(item.suggestion.id) && next.suggestions.some((entry) => entry.id === item.suggestion.id && entry.status === 'applied')).length,
+      retakeReviewCount: retakes.filter((item) => item.review).length,
       ...(breathCounts ? { breaths: breathCounts } : {}), ...(gapCount !== undefined ? { gaps: gapCount } : {}) }
   })
 }
@@ -187,7 +193,7 @@ export async function processProjectAudioEditBreaths(projectId: string, policy: 
       let gaps = 0
       const next = commit((document) => {
         const base = policy === 'delete' ? document : clearAudioEditGaps(document, range)
-        const processed = applyAudioEditBreathPolicy(base, breaths, policy, range, energy?.pauses); counts = processed.counts
+        const processed = applyAudioEditBreathPolicy(base, breaths, policy, range, energy?.pauses, energy?.levels); counts = processed.counts
         // 快节奏删除时连带把字间气口清成静音；改为减弱、静音或保留时撤掉此前的清理，不把保留的呼吸静音掉
         if (policy !== 'delete' || !energy?.levels) return processed.document
         const cleaned = cleanAudioEditGaps(processed.document, breaths, energy.levels, range); gaps = cleaned.count

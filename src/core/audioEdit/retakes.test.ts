@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import realTakes from './__fixtures__/retake-takes.json'
 import type { SpeechEnergyPause } from './speechEnergy'
 import type { AudioEditTranscriptBlock } from './types'
 import { audioEditRetakeSuggestion, detectAudioEditRetakes, type AudioEditRetakeOptions } from './retakes'
@@ -159,8 +160,60 @@ describe('口播重念检测', () => {
     expect(retakes[0].endFrame).toBe(spoken.blocks[5].startFrame)
   })
 
+  it('不该删的正常重复：排比、承上启下、拆开的叠词不自动删；拿不准的只留作线索', () => {
+    // 同一个开头的并列（没有参考稿）：只提线索，不删
+    const parallel = speak('比如说 你 要 查 天气，', { pause: 300 }, '比如说 你 要 查 新闻， 它 都 能 找 到')
+    const found = detect(parallel)
+    expect(found.filter((retake) => !retake.review)).toEqual([])
+    expect(found.every((retake) => retake.confidence === 'low')).toBe(true)
+    // 稿子里两句都有：连线索都不提
+    expect(detect(parallel, { referenceScript: '比如说你要查天气，比如说你要查新闻，它都能找到。' })).toEqual([])
+    // “要等到2027年，那2027年到底什么时候买”：前一句的末尾被下一句承接，不是重念
+    expect(detect(speak('要 等到 2 0 2 7 年，', { pause: 140 }, '那 2 0 2 7 年 到底 什么 时候 买 合适 呢'))).toEqual([])
+    // “清清楚楚”被识别拆成“清｜清楚楚”，不当口吃
+    expect(detect(speak('写 得 清', '清楚楚 的'))).toEqual([])
+    // 临场加的一句话与稿子下一句同一个开头，稿子里没有这句：留作线索，不自动删
+    const adlib = speak('但是 并不代表 它 处理 的 内容 就 很少 嘛。', { pause: 540 }, '但是 呢， 如果 你 觉得 这个 答案 太 短 了')
+    expect(detect(adlib, { referenceScript: '回答虽然很短。但是呢，如果你觉得这个答案太短了，还可以点开。' }).filter((retake) => !retake.review)).toEqual([])
+  })
+
   it('句级转写不做逐词检测', () => {
     const spoken = speak('所以 综合 来看', { pause: 500 }, '所以 综合 来看 很好')
     expect(detect({ ...spoken, blocks: spoken.blocks.map((block) => ({ ...block, granularity: 'segment' as const })) })).toEqual([])
+  })
+})
+
+/*
+ * 上一支片子第二版口播（12:45）的真实样本：识别原文、本机能量分析的停顿、呼吸检测结果，各取一段时间窗（从窗口开头计时），
+ * 加上附近的参考稿。每条写明必须删掉的前一遍（含夹在两遍之间的碎话）与必须留下的最后一遍开头，取自用户精修后的成片。
+ */
+interface RealTakeWindow { name: string; remove: string; keep: string; words: Array<[string, number, number]>; pauses: Array<[number, number]>; breaths: Array<[number, number]>; script: string }
+const fixture = realTakes as unknown as { sampleRate: number; windows: RealTakeWindow[] }
+
+describe('真实口播的去重念回归', () => {
+  it.each(fixture.windows.map((window) => [window.name, window] as const))('%s', (_name, window) => {
+    const blocks: AudioEditTranscriptBlock[] = window.words.map(([text, startFrame, endFrame], index) => ({ id: `w${index}`, text, startFrame, endFrame, included: true, locked: false, granularity: 'word' }))
+    const retakes = detectAudioEditRetakes(blocks, {
+      sampleRate: fixture.sampleRate, referenceScript: window.script,
+      pauses: window.pauses.map(([startMs, endMs]) => ({ startMs, endMs, cutMs: (startMs + endMs) / 2 })),
+      breaths: window.breaths.map(([startMs, endMs]) => ({ startMs, endMs, peak: 1 })),
+    })
+    const removed = new Set(retakes.filter((retake) => !retake.review).flatMap((retake) => retake.blockIds))
+    // 按文字定位：把窗口里的词连成一串，找到要核对的那一段，看它覆盖的词是删还是留
+    const plain = (text: string): string => [...text].filter((char) => /[\p{L}\p{N}]/u.test(char)).join('')
+    const owners: number[] = []
+    blocks.forEach((block, index) => { for (const _ of plain(block.text)) owners.push(index) })
+    const all = blocks.map((block) => plain(block.text)).join('')
+    const wordsOf = (text: string, from = 0): number[] => {
+      const at = all.indexOf(plain(text), from)
+      expect(at, text).toBeGreaterThanOrEqual(0)
+      return [...new Set(owners.slice(at, at + plain(text).length))]
+    }
+    const target = wordsOf(window.remove)
+    expect(target.filter((index) => !removed.has(blocks[index].id)).map((index) => blocks[index].text), '应删未删').toEqual([])
+    if (window.keep) {
+      const kept = wordsOf(window.keep, owners.indexOf(target.at(-1)!) + 1)
+      expect(kept.filter((index) => removed.has(blocks[index].id)).map((index) => blocks[index].text), '应留被删').toEqual([])
+    }
   })
 })

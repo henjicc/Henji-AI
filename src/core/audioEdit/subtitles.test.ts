@@ -55,6 +55,21 @@ describe('成片字幕排版与时间', () => {
     expect(formatAudioEditSubtitleText('关键是呢，它还会搜 php.net。也就 0.3 秒')).toBe('关键是呢 它还会搜 php.net 也就 0.3 秒')
   })
 
+  it('百分号等跟在数字后的单位与数字一起留空格；配不上对的引号去掉，成对的保留', () => {
+    expect(formatAudioEditSubtitleText('比如说，AI占掉了全球约70%的先进存储产能，')).toBe('比如说 AI 占掉了全球约 70% 的先进存储产能')
+    // 开头的引号随删掉的重念一起没了，只剩后半个
+    expect(formatAudioEditSubtitleText('国产存储产量能不能让价格提前降”，')).toBe('国产存储产量能不能让价格提前降')
+    expect(formatAudioEditSubtitleText('管它叫“知多少”。')).toBe('管它叫“知多少”')
+    expect(formatAudioEditSubtitleText('他说“我们出去玩。”然后')).toBe('他说“我们出去玩”然后')
+    expect(formatAudioEditSubtitleText('他说：“今天天气')).toBe('他说：今天天气')
+  })
+
+  it('有参考稿时识别加的书名号以稿子为准；稿子里本来有的保留，没有稿子时不动', () => {
+    const blocks = blocksOf(['像', '什么', '《', '人民日报', '》、', '《', '央', '广', '网', '》、', '《', '三体', '》，'])
+    expect(buildProjectAudioEditSubtitleCues(projectOf(blocks, '像人民日报、央广网，还有《三体》。')).map(cue => cue.text)).toEqual(['像什么人民日报、央广网、《三体》'])
+    expect(buildProjectAudioEditSubtitleCues(projectOf(blocks, '')).map(cue => cue.text)).toEqual(['像什么《人民日报》、《央广网》、《三体》'])
+  })
+
   it('换遍拼接时只剩一丝的字头不上字幕；稿子里 php.net 的点不算断句', () => {
     const blocks = blocksOf(['但', '结果', '说的', '还挺对的'])
     // “但”只留下 10 毫秒（拼接点贴着字头）
@@ -98,6 +113,14 @@ describe('逐段核对与改字', () => {
     const whole = setAudioEditCaptionText(fixed, views[0].id, '还有 ima、WorkBuddy')
     expect(whole).toEqual(fixed)
     expect(() => setAudioEditCaptionText(project, views[0].id, '  ')).toThrow()
+  })
+
+  it('照显示的样子写回（“70% 的”带空格）不改变显示：回读与写入一致', () => {
+    const project = projectOf(blocksOf(['全球', '约', '7', '0', '%', '的', '先进']), '')
+    const [view] = describeAudioEditCaptions(project)
+    expect(view.text).toBe('全球约 70% 的先进')
+    const written = setAudioEditCaptionText(project, view.id, '全球约 70% 的先进产能')
+    expect(describeAudioEditCaptions(written)[0].text).toBe('全球约 70% 的先进产能')
   })
 
   it('改字只落在听得到的词上：声音被剪掉的重念词块不动，改空的词块留在原段里', () => {

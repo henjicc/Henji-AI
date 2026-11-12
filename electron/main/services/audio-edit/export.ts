@@ -76,7 +76,7 @@ export async function exportAudioEditProject(request: AudioEditExportRequest): P
         exportedAudioPath = path.join(path.dirname(target), `${path.basename(target, path.extname(target))}-RX-${randomUUID().slice(0, 8)}.wav`)
         await fs.copyFile(processedPath, await stage(exportedAudioPath))
       }
-      if (subtitleTarget) await fs.writeFile(await stage(subtitleTarget), buildAudioEditSrt(project.transcript, spans, project.source.sampleRate), 'utf8')
+      if (subtitleTarget) await fs.writeFile(await stage(subtitleTarget), buildAudioEditSrt(project.transcript, spans, project.source.sampleRate, project.referenceScript), 'utf8')
       // The XML is published last, after every referenced derivative is durable.
       const temporary = await stage(target)
       if (format === 'xml' && timeline) {
