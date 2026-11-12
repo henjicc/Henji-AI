@@ -4,7 +4,7 @@ import path from 'node:path'
 import os from 'node:os'
 import { loadFfmpegPath, loadFfprobePath } from './ffmpeg-loader'
 import { runLoudnessFfmpeg } from '../audio/loudness'
-import { assertVideoProxyAlignment, transcodeVideoProxy, videoProxyTimestamps } from './proxy'
+import { assertVideoProxyAlignment, probeHardwareDecode, transcodeVideoProxy, videoProxyTimestamps } from './proxy'
 
 const directories: string[] = []
 afterEach(async () => { for (const directory of directories.splice(0)) await fs.rm(directory, { recursive: true, force: true }) })
@@ -20,7 +20,7 @@ it.each(['随包', '6.1'].flatMap(label => ['30', '30000/1001', 'vfr'].map(rate 
   const original = await videoProxyTimestamps(source, signal, binaries.ffprobe); const proxy = await videoProxyTimestamps(output, signal, binaries.ffprobe)
   expect(original[0]).toBeGreaterThan(.5); expect(proxy).toHaveLength(original.length)
   assertVideoProxyAlignment(original, proxy)
-  expect(result).toEqual({ width: 960, height: 540 }); expect(progress.length).toBeGreaterThan(0)
+  expect(result).toMatchObject({ width: 960, height: 540, hardwareDecode: false }); expect(progress.length).toBeGreaterThan(0)
 }, 30000)
 
 /** ffprobe 逐帧读取：关键帧位置、帧类型、像素格式与色彩标记。 */
@@ -43,10 +43,33 @@ it.each(['cpu', 'h264_nvenc'] as const)('%s：10 位 4:2:2 BT.709 原片转成 8
   await runLoudnessFfmpeg(['-y', '-f', 'lavfi', '-i', 'testsrc2=s=1920x1080:r=60:d=2', '-vf', 'setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv,format=yuv422p10le',
     '-c:v', 'libx264', '-preset', 'ultrafast', '-bf', '2', '-g', '120', '-output_ts_offset', '0.25', source], signal, binaries.ffmpeg)
   const result = await transcodeVideoProxy({ source, requestId: 'params', preset: 'auto' }, output, signal, () => undefined, binaries, { encoder, onFallback: error => { throw error } })
-  expect(result).toEqual({ width: 960, height: 540 })
+  expect(result).toMatchObject({ width: 960, height: 540 })
   assertVideoProxyAlignment(await videoProxyTimestamps(source, signal, binaries.ffprobe), await videoProxyTimestamps(output, signal, binaries.ffprobe))
   const probed = await probeFrames(output, binaries.ffprobe)
   expect(probed.keyFrames).toEqual([0, 30, 60, 90])
   expect(probed.pictTypes).not.toContain('B'); expect(probed.stream.has_b_frames).toBe(0)
   expect(probed.stream).toMatchObject({ pix_fmt: 'yuv420p', color_primaries: 'bt709', color_transfer: 'bt709', color_space: 'bt709', color_range: 'tv' })
+}, 60000)
+
+it('CUDA 硬解：10 位 HLG 原片在显存缩放直送 NVENC，色彩标记与时间戳不变；超出硬解尺寸的原片回退软解仍得到对齐的代理', async () => {
+  const binaries = { ffmpeg: await loadFfmpegPath(), ffprobe: await loadFfprobePath() }
+  if (await probeHardwareDecode(binaries.ffmpeg) !== 'cuda' || !await encoderWorks(binaries.ffmpeg, 'hevc_nvenc')) return
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-proxy-cuda-')); directories.push(root)
+  const signal = new AbortController().signal
+  const hlg = path.join(root, 'hlg.mp4'); const wide = path.join(root, 'wide.mp4')
+  await runLoudnessFfmpeg(['-y', '-f', 'lavfi', '-i', 'testsrc2=s=1920x1080:r=60:d=1', '-vf', 'format=p010le,setparams=color_primaries=bt2020:color_trc=arib-std-b67:colorspace=bt2020nc:range=tv',
+    '-c:v', 'hevc_nvenc', '-preset', 'p1', '-bf', '2', '-g', '60', '-output_ts_offset', '0.25', hlg], signal, binaries.ffmpeg)
+  // NVDEC 的 HEVC 高度下限是 144：这一段一定硬解失败，而缩小后的画面 NVENC 仍能编码。
+  await runLoudnessFfmpeg(['-y', '-f', 'lavfi', '-i', 'testsrc2=s=1024x128:r=30:d=0.5', '-c:v', 'libx265', '-preset', 'ultrafast', '-x265-params', 'log-level=error', wide], signal, binaries.ffmpeg)
+  const fallbacks: string[] = []
+  const encoding = { encoder: 'h264_nvenc' as const, hardwareDecode: 'cuda' as const, onFallback: (_error: unknown, stage: string) => { fallbacks.push(stage) } }
+  const output = path.join(root, 'hlg-proxy.mp4')
+  expect(await transcodeVideoProxy({ source: hlg, requestId: 'cuda', preset: 'auto' }, output, signal, () => undefined, binaries, encoding)).toMatchObject({ width: 960, height: 540, hardwareDecode: true, encoder: 'h264_nvenc', sourceWidth: 1920, sourceHeight: 1080 })
+  expect(fallbacks).toEqual([])
+  assertVideoProxyAlignment(await videoProxyTimestamps(hlg, signal, binaries.ffprobe), await videoProxyTimestamps(output, signal, binaries.ffprobe))
+  expect((await probeFrames(output, binaries.ffprobe)).stream).toMatchObject({ pix_fmt: 'yuv420p', color_primaries: 'bt2020', color_transfer: 'arib-std-b67', color_space: 'bt2020nc', color_range: 'tv' })
+  const wideOutput = path.join(root, 'wide-proxy.mp4')
+  expect(await transcodeVideoProxy({ source: wide, requestId: 'wide', preset: 'auto' }, wideOutput, signal, () => undefined, binaries, encoding)).toMatchObject({ hardwareDecode: false, encoder: 'h264_nvenc' })
+  expect(fallbacks).toEqual(['decode'])
+  assertVideoProxyAlignment(await videoProxyTimestamps(wide, signal, binaries.ffprobe), await videoProxyTimestamps(wideOutput, signal, binaries.ffprobe))
 }, 60000)

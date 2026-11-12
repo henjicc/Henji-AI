@@ -2014,6 +2014,7 @@
     }
   },
   "videoEditProject": {
+    "proxyState": { "queued": "Queued", "generating": "Generating {{percent}}%", "ready": "Ready", "failed": "None (failed)", "none": "None" },
     "back": "Close Project",
     "menu": "Project {{name}}",
     "shortcuts": "Edit Shortcuts…",

@@ -7,7 +7,8 @@ export const videoProxyRequestSchema = z.object({ requestId: z.string().min(1).m
 export type VideoProxyRequest = z.infer<typeof videoProxyRequestSchema>
 export const videoProxyResultSchema = z.object({ path: z.string().min(1), key: z.string().regex(/^[a-f0-9]{64}$/), contentIdentity: z.string().regex(/^[a-f0-9]{64}$/), preset: videoProxyPresetSchema, width: z.number().int().positive(), height: z.number().int().positive(), bytes: z.number().int().positive() }).strict()
 export type VideoProxyResult = z.infer<typeof videoProxyResultSchema>
-export interface VideoEditProxyState { status: 'none' | 'generating' | 'ready'; progress: number; error: string }
+/** queued：已提交、还在等前面的代理生成完（只在 generating 时出现）。 */
+export interface VideoEditProxyState { status: 'none' | 'generating' | 'ready'; progress: number; error: string; queued?: boolean }
 export interface VideoEditProxyPreference { enabled: boolean; autoCreate: boolean }
 
 /** Proxy pictures retain container presentation times; clip time mapping is deliberately unchanged. */

@@ -51,10 +51,11 @@ it('取消转发、进度可读、换源拒绝迟到代理、关闭拒绝迟到�
   const { id, mediaId } = await fixture()
   let finish: (value: VideoProxyResult) => void = () => undefined
   vi.mocked(getPlatform().videoProxy.create).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
-  const pending = createVideoEditProxy(id, mediaId, '720p'); expect(readVideoEditProxyState(id, mediaId).status).toBe('generating')
+  const pending = createVideoEditProxy(id, mediaId, '720p'); expect(readVideoEditProxyState(id, mediaId)).toMatchObject({ status: 'generating', queued: true })
   const listener = vi.mocked(getPlatform().videoProxy.onProgress).mock.calls.at(-1)![0]
+  // 主进程排队期间不发进度；第一条进度表示已开始转码。
   const request = vi.mocked(getPlatform().videoProxy.create).mock.calls.at(-1)![0]; listener({ requestId: request.requestId, progress: .4 })
-  expect(readVideoEditProxyState(id, mediaId).progress).toBe(.4)
+  expect(readVideoEditProxyState(id, mediaId)).toEqual({ status: 'generating', progress: .4, error: '' })
   cancelVideoEditProxy(id, mediaId); finish(result); await expect(pending).rejects.toThrow('已取消')
   expect(getPlatform().videoProxy.cancel).toHaveBeenCalledWith(request.requestId)
   vi.mocked(getPlatform().videoProxy.create).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))

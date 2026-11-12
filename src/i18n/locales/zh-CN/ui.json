@@ -2014,6 +2014,7 @@
     }
   },
   "videoEditProject": {
+    "proxyState": { "queued": "排队中", "generating": "生成中 {{percent}}%", "ready": "已有", "failed": "无（创建失败）", "none": "无" },
     "back": "关闭项目",
     "menu": "项目 {{name}}",
     "shortcuts": "剪辑快捷键…",

@@ -9,6 +9,8 @@ import { getMediaCacheManager } from '../media/media-cache-runtime'
 import { identifyMediaContent, type MediaContentIdentity } from '../media/content-identity'
 import { loadFfmpegPath, loadFfprobePath } from './ffmpeg-loader'
 import { FILMSTRIP_FORMAT_VERSION, type FilmstripHeight } from '../../../../src/core/media/filmstripFrames'
+import { withMediaHeavyTask } from '../media-import/concurrency'
+import { hardwareDecodeEligible, probeHardwareDecode, type VideoDecodeStream, type VideoHardwareDecode } from './proxy'
 
 /**
  * 剪辑时间线片段缩略图条的取帧服务（任务 2.4）。
@@ -19,7 +21,12 @@ import { FILMSTRIP_FORMAT_VERSION, type FilmstripHeight } from '../../../../src/
  * 写入 `userData/HenjiCache/Filmstrip/<sha256>.webp`，渲染层按路径显示，二次打开直接命中。
  *
  * 调度：相同帧的请求共享一次生成；无人等待的帧在排队时直接移除，整批都无人等待时结束进程；
- * 并发进程数与每批帧数受限，每个进程的解码线程受限且以低于正常的系统优先级运行。
+ * 并发进程数与每批帧数受限，每个进程以低于正常的系统优先级运行，并占一个后台媒体重型槽（与导入缩略图、代理共用 CPU 预算）。
+ *
+ * 解码：本机探测到硬解时每路输入加 `-hwaccel cuda`（macOS 为 videotoolbox），解出的帧自动下载到内存，
+ * 后面的旋转、area 缩放与编码和软解完全相同；只对硬解稳定支持的格式开启（与代理同一判断）。不在显存里缩放：
+ * scale_cuda 的固定核做几十倍缩小会混叠，而定位取帧只有最后一帧进滤镜。硬解进程失败时缺帧改用软解重取。
+ * 不论硬解软解，每路输入解码 1 线程、每进程最多 2 路，加滤镜 1 线程，与重型槽按每任务 3 线程计的预算一致。
  */
 
 export interface FilmstripFrameRequest {
@@ -43,8 +50,10 @@ export interface FilmstripServiceDependencies {
   /** 素材容器起点（秒，绝对时钟）与画面尺寸；默认用 ffprobe 读 format.start_time 与第一路画面的宽高。 */
   probe?: (sourcePath: string) => Promise<FilmstripSourceProbe>
   identity?: (source: string) => Promise<MediaContentIdentity>
-  /** 缩略帧磁盘缓存；默认 userData/HenjiCache/Filmstrip，上限 256MB。 */
+  /** 缩略帧磁盘缓存；默认放在全局媒体缓存的预览类下，只受全局总容量与保留天数约束。 */
   cache?: ContentDiskCache
+  /** 本机可用的硬解方式；默认与代理共用同一次探测。 */
+  hardwareDecode?: () => Promise<VideoHardwareDecode | null>
   spawnProcess?: (binary: string, args: string[]) => ChildLike
   /** 同时运行的取帧进程数。 */
   concurrency?: number
@@ -53,11 +62,12 @@ export interface FilmstripServiceDependencies {
   /** 收集同一批请求的等待时间（毫秒）：一屏的请求成批到达，每个请求先做授权、身份与缓存查询。 */
   gatherMs?: number
   timeoutMs?: number
-  /** 每一路输入的解码线程数。 */
-  decodeThreads?: number
 }
 
-interface FilmstripSourceProbe { startSeconds: number; width: number; height: number }
+/**
+ * hardwareEligible：画面格式在硬解稳定支持的范围内（与代理同一判断）。
+ */
+interface FilmstripSourceProbe { startSeconds: number; width: number; height: number; durationSeconds?: number; hardwareEligible?: boolean }
 
 export interface FilmstripStatistics { hits: number; generated: number; failed: number; batches: number; batchMs: number; pending: number; running: number }
 
@@ -74,7 +84,7 @@ interface Tile {
   resolve: (path: string) => void
   reject: (error: unknown) => void
 }
-interface Batch { tiles: Tile[]; child?: ChildLike; cancelled: boolean }
+interface Batch { tiles: Tile[]; child?: ChildLike; cancelled: boolean; abort: AbortController }
 
 const logger = createMainLogger('main.video.filmstrip')
 const STDERR_LIMIT = 4096
@@ -96,13 +106,15 @@ function filmstripScaleFilter(height: FilmstripHeight): string {
  * - `marginUs`（重试）：输入侧先定位到目标前 `marginUs`，再用输出侧 `-ss` 解码丢弃到目标。用于 MPEG-TS 这类按字节定位、
  *   直接定位会落在非关键帧上而解不出画面的素材（实测长 GOP H.264 TS 直接定位整段无输出）。
  */
-export function filmstripBatchArgs(sourcePath: string, height: FilmstripHeight, times: readonly number[], outputs: readonly string[], options: { decodeThreads?: number; containerStartUs?: number; marginUs?: number } = {}): string[] {
-  const { decodeThreads = 2, containerStartUs = 0, marginUs = 0 } = options
+export function filmstripBatchArgs(sourcePath: string, height: FilmstripHeight, times: readonly number[], outputs: readonly string[], options: { containerStartUs?: number; marginUs?: number; hardwareDecode?: VideoHardwareDecode } = {}): string[] {
+  const { containerStartUs = 0, marginUs = 0, hardwareDecode } = options
   const seconds = (us: number): string => (us / 1_000_000).toFixed(6)
-  const args = ['-hide_banner', '-nostdin', '-v', 'error', '-filter_threads', '1']
+  // 同一进程的各路输入共用一个 CUDA 设备，不各自建上下文。
+  const args = ['-hide_banner', '-nostdin', '-v', 'error', ...(hardwareDecode === 'cuda' ? ['-init_hw_device', 'cuda=gpu'] : []), '-filter_threads', '1']
+  const decode = hardwareDecode === 'cuda' ? ['-hwaccel', 'cuda', '-hwaccel_device', 'gpu'] : hardwareDecode === 'videotoolbox' ? ['-hwaccel', 'videotoolbox'] : []
   const relative = times.map(timeUs => Math.max(0, timeUs - containerStartUs))
   const inputSeek = relative.map(us => Math.max(0, us - marginUs))
-  for (const seek of inputSeek) args.push('-threads', String(decodeThreads), '-ss', seconds(seek), '-i', sourcePath)
+  for (const seek of inputSeek) args.push(...decode, '-threads', '1', '-ss', seconds(seek), '-i', sourcePath)
   outputs.forEach((output, index) => {
     const trim = relative[index] - inputSeek[index]
     args.push('-map', `${index}:v:0`, ...(trim > 0 ? ['-ss', seconds(trim)] : []), '-frames:v', '1', '-vf', filmstripScaleFilter(height), '-c:v', 'libwebp', '-quality', '75', '-f', 'webp', '-y', output)
@@ -120,8 +132,8 @@ function defaultSpawn(binary: string, args: string[]): ChildLike {
 function defaultCache(): ContentDiskCache {
   return getMediaCacheManager().createCache('preview', 'filmstrip', {
     extension: '.webp',
-    budgetBytes: 256 * 1024 * 1024,
-    pruneIntervalMs: 60_000,
+    // 不另设单类上限：与代理、预渲染一样只受全局媒体缓存的总容量（自动按磁盘取值或用户设定）与保留天数约束。
+    budgetBytes: Number.POSITIVE_INFINITY,
     onError: (event, error) => logger.warn('缩略帧磁盘缓存失败', { event: `video.filmstrip.cache.${event}_failed`, error }),
   })
 }
@@ -129,12 +141,13 @@ function defaultCache(): ContentDiskCache {
 async function probeSource(sourcePath: string): Promise<FilmstripSourceProbe> {
   const binary = await loadFfprobePath()
   const stdout = await new Promise<string>((resolve, reject) => {
-    execFile(binary, ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'format=start_time:stream=width,height', '-of', 'json', sourcePath], { windowsHide: true, timeout: 15_000 }, (error, out) => error ? reject(error) : resolve(String(out)))
+    execFile(binary, ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'format=start_time,duration:stream=width,height,codec_name,pix_fmt,color_range,field_order', '-of', 'json', sourcePath], { windowsHide: true, timeout: 15_000 }, (error, out) => error ? reject(error) : resolve(String(out)))
   })
-  const parsed = JSON.parse(stdout) as { format?: { start_time?: string }; streams?: Array<{ width?: number; height?: number }> }
+  const parsed = JSON.parse(stdout) as { format?: { start_time?: string; duration?: string }; streams?: Array<VideoDecodeStream & { width?: number; height?: number }> }
   const startSeconds = Number.parseFloat(parsed.format?.start_time ?? '')
+  const durationSeconds = Number.parseFloat(parsed.format?.duration ?? '')
   const stream = parsed.streams?.[0]
-  return { startSeconds: Number.isFinite(startSeconds) ? startSeconds : 0, width: stream?.width ?? 0, height: stream?.height ?? 0 }
+  return { startSeconds: Number.isFinite(startSeconds) ? startSeconds : 0, width: stream?.width ?? 0, height: stream?.height ?? 0, hardwareEligible: !!stream && hardwareDecodeEligible(stream), ...(Number.isFinite(durationSeconds) ? { durationSeconds } : {}) }
 }
 
 /**
@@ -142,9 +155,15 @@ async function probeSource(sourcePath: string): Promise<FilmstripSourceProbe> {
  * 每进程 1800 万像素即 4K 两路、1440p 四路、1080p 八路；两个进程合计 4K 不超过约 1GB。
  */
 const PROCESS_INPUT_PIXELS = 18_000_000
+/**
+ * 每进程最多 2 路输入（每路解码 1 线程）：一个进程守住一个重型槽的线程数。硬解也同样限制——
+ * 某路 NVDEC 初始化失败时 FFmpeg 会自动改软解，那时每路仍只有 1 线程。
+ */
+const INPUTS_PER_PROCESS = 2
 export function filmstripInputsPerProcess(width: number, height: number, batchSize: number): number {
+  const limit = Math.min(batchSize, INPUTS_PER_PROCESS)
   const pixels = width * height
-  return pixels > 0 ? Math.max(1, Math.min(batchSize, Math.floor(PROCESS_INPUT_PIXELS / pixels))) : batchSize
+  return pixels > 0 ? Math.max(1, Math.min(limit, Math.floor(PROCESS_INPUT_PIXELS / pixels))) : limit
 }
 
 export function createFilmstripService(dependencies: FilmstripServiceDependencies = {}): {
@@ -161,7 +180,7 @@ export function createFilmstripService(dependencies: FilmstripServiceDependencie
   const batchSize = dependencies.batchSize ?? 8
   const gatherMs = dependencies.gatherMs ?? 16
   const timeoutMs = dependencies.timeoutMs ?? 30_000
-  const decodeThreads = dependencies.decodeThreads ?? 2
+  const hardwareDecode = dependencies.hardwareDecode ?? (() => probeHardwareDecode())
   const tiles = new Map<string, Tile>()
   /** 每个“素材 + 高度”一组待生成的帧；组按首次排队的先后轮转，组内按时间。 */
   const groups = new Map<string, Tile[]>()
@@ -197,6 +216,8 @@ export function createFilmstripService(dependencies: FilmstripServiceDependencie
   }
 
   const settle = (tile: Tile): void => { if (tiles.get(tile.key) === tile) tiles.delete(tile.key) }
+  /** 结束进程，也让还在等重型槽的批次退出排队。 */
+  const cancel = (batch: Batch): void => { batch.cancelled = true; batch.child?.kill(); batch.abort.abort(abortError()) }
   const removePending = (tile: Tile): void => {
     const group = groups.get(tile.groupKey)
     if (!group) return
@@ -213,10 +234,9 @@ export function createFilmstripService(dependencies: FilmstripServiceDependencie
     }
     const batch = tile.batch
     if (batch && !batch.cancelled && batch.tiles.every(item => item.users <= 0)) {
-      batch.cancelled = true
+      cancel(batch)
       // Later requests for these frames start a fresh generation instead of joining the cancelled one.
       for (const item of batch.tiles) settle(item)
-      batch.child?.kill()
     }
   }
 
@@ -232,24 +252,24 @@ export function createFilmstripService(dependencies: FilmstripServiceDependencie
       const taken = group.splice(0, batchSize)
       // Remaining frames of this source rotate behind the other sources so one long clip cannot starve the rest.
       if (group.length) groups.set(groupKey, group)
-      const batch: Batch = { tiles: taken, cancelled: false }
+      const batch: Batch = { tiles: taken, cancelled: false, abort: new AbortController() }
       for (const tile of taken) { tile.state = 'running'; tile.batch = batch }
       running.add(batch)
       void runBatch(batch).finally(() => { running.delete(batch); pump() })
     }
   }
 
-  /** 运行一个取帧进程，返回退出码。 */
+  /** 运行一个取帧进程（占一个后台媒体重型槽，排队可被取消），返回退出码。 */
   async function execute(batch: Batch, binary: string, args: string[], log: { stderr: string }): Promise<number | null> {
-    return new Promise<number | null>((resolve, reject) => {
+    return withMediaHeavyTask(() => new Promise<number | null>((resolve, reject) => {
       const child = spawnProcess(binary, args)
       batch.child = child
-      const timer = setTimeout(() => { batch.cancelled = true; child.kill(); reject(new Error('生成缩略帧超时。')) }, timeoutMs)
+      const timer = setTimeout(() => { cancel(batch); reject(new Error('生成缩略帧超时。')) }, timeoutMs)
       child.stderr?.on('data', (chunk: Buffer | string) => { if (log.stderr.length < STDERR_LIMIT) log.stderr += chunk.toString() })
       child.once('error', error => { clearTimeout(timer); reject(error) })
       child.once('close', exit => { clearTimeout(timer); resolve(exit) })
       if (batch.cancelled) child.kill()
-    })
+    }), batch.abort.signal)
   }
   const outputSize = (output: string): Promise<number> => fs.stat(output).then(stat => stat.size, () => 0)
 
@@ -263,24 +283,38 @@ export function createFilmstripService(dependencies: FilmstripServiceDependencie
       const binary = await ffmpegPath()
       const probed = await probeOf(first.source)
       const containerStartUs = Math.round(probed.startSeconds * 1_000_000)
-      const perProcess = filmstripInputsPerProcess(probed.width, probed.height, batchSize)
+      const hardware = probed.hardwareEligible ? await hardwareDecode() ?? undefined : undefined
       for (const tile of batch.tiles) outputs.push(await cache.prepareTemporary(tile.key))
       if (outputs.some(output => !output)) throw new Error('缩略帧缓存目录不可用。')
       if (batch.cancelled) throw abortError()
-      logger.debug('开始生成缩略帧', { event: 'video.filmstrip.batch.started', context: { frames: batch.tiles.length, height: first.height } })
+      logger.debug('开始生成缩略帧', { event: 'video.filmstrip.batch.started', context: { frames: batch.tiles.length, height: first.height, hardwareDecode: !!hardware } })
       // Large pictures run in consecutive smaller processes so the decoders' reference frames stay within the memory budget.
       let code: number | null = 0
-      const run = async (indices: number[], marginUs: number): Promise<void> => {
+      const run = async (indices: number[], marginUs: number, decode?: VideoHardwareDecode): Promise<void> => {
+        const perProcess = filmstripInputsPerProcess(probed.width, probed.height, batchSize)
         for (let from = 0; from < indices.length; from += perProcess) {
           const chunk = indices.slice(from, from + perProcess)
-          code = await execute(batch, binary, filmstripBatchArgs(first.source.path, first.height, chunk.map(index => batch.tiles[index].timeUs), chunk.map(index => outputs[index]!), { decodeThreads, containerStartUs, marginUs }), log)
+          const exit = await execute(batch, binary, filmstripBatchArgs(first.source.path, first.height, chunk.map(index => batch.tiles[index].timeUs), chunk.map(index => outputs[index]!), { containerStartUs, marginUs, hardwareDecode: decode }), log)
+          if (exit !== 0) code = exit
           if (batch.cancelled) throw abortError()
         }
       }
-      await run(batch.tiles.map((_tile, index) => index), 0)
+      const missingFrames = async (): Promise<number[]> => {
+        const sizes = await Promise.all(outputs.map(output => outputSize(output!)))
+        return batch.tiles.flatMap((_tile, index) => sizes[index] > 0 ? [] : [index])
+      }
+      await run(batch.tiles.map((_tile, index) => index), 0, hardware)
+      let missing = await missingFrames()
+      // A failed hardware process (driver error, out of video memory) retries its missing frames with software decoding.
+      const hardwareFailed = !!hardware && code !== 0 && missing.length > 0
+      if (hardwareFailed) {
+        logger.warn('缩略帧硬解失败，改用处理器解码', { event: 'video.filmstrip.hardware_fallback', context: { frames: missing.length, code, hardwareDecode: hardware, stderr: log.stderr.slice(0, 1024) } })
+        code = 0
+        await run(missing, 0)
+        missing = await missingFrames()
+      }
+      const retried = missing.length
       // Frames a direct seek could not decode (byte-seeking containers landing between key frames) retry once from a margin earlier.
-      const sizes = await Promise.all(outputs.map(output => outputSize(output!)))
-      const missing = batch.tiles.flatMap((_tile, index) => sizes[index] > 0 ? [] : [index])
       if (missing.length) await run(missing, RETRY_MARGIN_US)
       // The source must still be the content the cache key names; a replaced file would publish wrong frames.
       const after = await identity(first.source.path)
@@ -297,7 +331,10 @@ export function createFilmstripService(dependencies: FilmstripServiceDependencie
         settle(tile)
       }
       stats.batches++; stats.batchMs += Date.now() - started
-      logger.debug('缩略帧生成完成', { event: 'video.filmstrip.batch.completed', context: { frames: batch.tiles.length, produced, retried: missing.length, height: first.height, durationMs: Date.now() - started } })
+      logger.debug('缩略帧生成完成', { event: 'video.filmstrip.batch.completed', context: {
+        frames: batch.tiles.length, produced, retried, height: first.height, durationMs: Date.now() - started,
+        hardwareDecode: !!hardware && !hardwareFailed, sourceWidth: probed.width, sourceHeight: probed.height, sourceDurationSeconds: probed.durationSeconds,
+      } })
       if (produced < batch.tiles.length) logger.warn('部分缩略帧未能生成', { event: 'video.filmstrip.batch.partial', context: { frames: batch.tiles.length, produced, code, stderr: log.stderr.slice(0, 1024) } })
     } catch (error) {
       const cancelled = batch.cancelled && error instanceof DOMException && error.name === 'AbortError'
@@ -356,7 +393,7 @@ export function createFilmstripService(dependencies: FilmstripServiceDependencie
     dispose() {
       disposed = true
       if (gatherTimer) clearTimeout(gatherTimer)
-      for (const batch of running) { batch.cancelled = true; batch.child?.kill() }
+      for (const batch of running) cancel(batch)
       for (const tile of tiles.values()) if (tile.state === 'pending') tile.reject(abortError())
       tiles.clear(); groups.clear()
     },

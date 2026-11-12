@@ -55,7 +55,7 @@
 修法（已实现）：
 - `DocumentOperations.releaseBackground(kind, id)`：原私有 `release` 公开。各工具登记的释放函数会拒绝界面正在显示、有租约、导出或其他任务进行中、正在打开或离开的实例；释放后会话仍在也按“仍在使用”处理。
 - `localApplicationHost.ts`：只读请求带 `recoveryVerification`、`recoveryOperation` 或 `reviewTarget` 时，开始前记下已登记的会话 ID。读取期间只要有别的请求开始或已在执行，就标为“共享”，不释放（分不清是谁打开的，助手写入后台打开的文档要留着，撤销还归它）。读取结束、没被共享、宿主没卸下时，对读取期间新登记的会话逐个 `releaseBackground`，记 `documents.session.review_release.completed`（`opened`、`released`）；出错记 `documents.session.review_release.failed`。
-- 用户开着的文档：开始前就登记过的不在释放范围；读取期间用户恰好打开的，正在显示的由工具拒绝。剩余风险：读取那一两秒内，用户先后打开两份同类文档、第一份已经不在前台，这份可能被当成核对读取打开的而关掉（修改会先写完，不丢内容）；自动复核本身只在界面安静 5 秒后才发读取，实际很难碰上。
+- 用户开着的文档：开始前就登记过的不在释放范围；读取期间用户在界面上打开的别的文档也不算（第二轮加固，见第 11 节）。
 
 ## 6. 第一轮审查返工
 
@@ -112,5 +112,18 @@
 - 空闲判断是启发式：界面若一直在发布上下文（长时间播放、持续拖动、长时间生成进度），自动复核会一直推迟到停下为止；不影响用户手动核对，也不影响下一次启动。
 - 目标文档在作品索引里、但这次就是读不出来（例如被别的程序锁着）时，渲染层验证器只返回 `verified: false`，和“读到了但值不对”区分不开（区分要改 `src/core/application-control/execution/verifier.ts` 的结果结构，或靠匹配报错文字），现在按“读完”处理；该文档下次保存过、被删或找不到再找到时会再复核一次，用户核对随时可做。
 - 复核打开文档时如果触发了延迟保存（例如去掉失效的素材库关联后写回），修订号会在记号写完后才变，下一次启动会对那条再复核一次，之后稳定。
-- 第 5 节的剩余风险：核对读取那一两秒内用户先后打开两份同类文档、第一份已不在前台时，可能被当作核对读取打开的而写完关闭。
+- 第 11 节的剩余风险：核对读取期间用户恰好打开的正是这次读取的目标文档、而且还没显示出来（图片文档加载中）时，仍可能被当作读取打开的写完关闭；要彻底排除得在各领域后台打开处带上打开者，涉及 `documentSessionRegistry.ts` 与各领域实例文件，不在本任务所有权内。
 - `agentEditDocumentIds`（`src/features/application-control/agentEditing.ts`）同样按第一段取文档 ID，对图片编辑引用会取到 `v3`，编辑提示标不到图片文档；不在本次范围，未改。
+
+## 11. 第二轮复审加固（`localApplicationHost.ts`）
+
+1. 只释放这次核对读取自己会去打开的文档。读取开始时记下请求自己的目标：重读验证各条件的 `target`、读目标核对的 `input.ref`、回执核对的 `atomicPlacement.documentId`（自定义验证条件读什么看不出来，不算）。读完只释放“开始时没打开、且文档 ID 正是某个目标里那份文档”的会话（目标引用 ID 逐段解码后与会话 ID 相同）；用户同时在界面上打开的别的文档不再被算进去。
+   - 没做成“在打开处打标记”：后台打开发生在各领域实例代码里（`openVideoEditDocument`、画布实例、图片文档 `ensureImageDocumentOpenInBackground` 等），最终都走 `documentSessionRegistry.ts`，这些文件都不在本任务所有权内；按读取目标归属是所有权内能做到的最窄范围。剩余风险见第 10 节。
+2. 逐个释放前先查：宿主已卸下，或当前有别的请求在执行，就停下，剩下的会话留着（只读取后台打开的，不影响内容；下次用到时直接复用）。
+
+测试（`localApplicationHostReviewRelease.test.ts` 新增 2 条，共 3 条）：
+- 核对读取回复送出前，用户打开另一份还没显示的剪辑 → 只释放读取目标那份，用户那份留着。
+- 两份目标文档，释放第一份时来了一个新的宿主读取（回复压住、仍在执行）→ 只释放第一份，第二份留着。
+- 红→绿：把“只认读取目标”换回“读取期间新登记的全部会话”→ 第 1 条红（两份都被释放）；去掉释放前的检查 → 第 2 条红（两份都被释放）；恢复后 3 条全绿。
+
+验证（经 heavy.sh）：`localApplicationHostReviewRelease.test.ts`、`videoEditRuntimeRegression.test.ts`、`documentOperations.test.ts` → 27 用例通过；`node --max-old-space-size=12288 node_modules/typescript/bin/tsc -p tsconfig.json --noEmit` 通过（中途一次报错在别的执行者正改的 `video/filmstrip.ts`、`video/proxy.ts`，以及本测试辅助函数的类型，已改，重跑全过）；两个改动文件 eslint 通过。

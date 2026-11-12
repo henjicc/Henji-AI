@@ -49,7 +49,8 @@ function service(overrides: Partial<Parameters<typeof createFilmstripService>[0]
   return createFilmstripService({
     identity: async source => ({ path: source, identity: identity.value }),
     cache: createContentDiskCache({ directory: () => root, extension: '.webp' }),
-    probe: async () => ({ startSeconds: 0, width: 1920, height: 1080 }),
+    probe: async () => ({ startSeconds: 0, width: 1920, height: 1080, hardwareEligible: true }),
+    hardwareDecode: async () => 'cuda',
     spawnProcess, gatherMs: 2, ...overrides,
   })
 }
@@ -63,12 +64,17 @@ afterEach(async () => { await Promise.all(directories.splice(0).map(value => fs.
 
 describe('filmstrip frame service', () => {
   it('builds one input per time point relative to the container start, with display-aspect scaling to the height bucket', () => {
-    const args = filmstripBatchArgs('D:/clip.mov', 48, [1_000_000, 2_500_000], ['a.tmp', 'b.tmp'], { decodeThreads: 2, containerStartUs: 1_200_000 })
-    expect(args.join(' ')).toContain('-threads 2 -ss 0.000000 -i D:/clip.mov -threads 2 -ss 1.300000 -i D:/clip.mov')
+    const args = filmstripBatchArgs('D:/clip.mov', 48, [1_000_000, 2_500_000], ['a.tmp', 'b.tmp'], { containerStartUs: 1_200_000 })
+    expect(args.join(' ')).toContain('-threads 1 -ss 0.000000 -i D:/clip.mov -threads 1 -ss 1.300000 -i D:/clip.mov')
+    expect(args).not.toContain('-hwaccel')
     expect(args.join(' ')).toContain("-map 1:v:0 -frames:v 1 -vf scale=w='max(2,trunc(48*dar/2)*2)':h=48:flags=area -c:v libwebp -quality 75 -f webp -y b.tmp")
+    // Hardware decoding shares one CUDA device across the inputs; frames download to memory and keep the same software scaling.
+    const hardware = filmstripBatchArgs('D:/clip.mov', 48, [1_000_000], ['a.tmp'], { hardwareDecode: 'cuda' }).join(' ')
+    expect(hardware).toContain('-init_hw_device cuda=gpu -filter_threads 1 -hwaccel cuda -hwaccel_device gpu -threads 1 -ss 1.000000 -i D:/clip.mov')
+    expect(hardware).toContain(":flags=area -c:v libwebp")
     // The retry decodes from a margin earlier and discards up to the target on the output side.
     const retry = filmstripBatchArgs('D:/clip.ts', 48, [3_000_000, 20_000_000], ['a.tmp', 'b.tmp'], { containerStartUs: 0, marginUs: 10_000_000 }).join(' ')
-    expect(retry).toContain('-ss 0.000000 -i D:/clip.ts -threads 2 -ss 10.000000 -i D:/clip.ts')
+    expect(retry).toContain('-ss 0.000000 -i D:/clip.ts -threads 1 -ss 10.000000 -i D:/clip.ts')
     expect(retry).toContain('-map 0:v:0 -ss 3.000000 -frames:v 1')
     expect(retry).toContain('-map 1:v:0 -ss 10.000000 -frames:v 1')
   })
@@ -77,20 +83,20 @@ describe('filmstrip frame service', () => {
     // 四个请求经异步内容识别后才入队；慢机器上 2ms 收集窗口可能把它们拆成两批
     const frames = service({ gatherMs: 50 })
     const results = await Promise.all([2, 0.5, 1, 2].map(seconds => frames.frame({ source: 'D:/clip.mp4', timeUs: seconds * 1_000_000, height: 48 })))
-    expect(spawned).toHaveLength(1)
-    expect(outputsOf(spawned[0].args).map(item => item.time)).toEqual([0.5, 1, 2])
+    // Two inputs per process: the batch runs as consecutive processes.
+    expect(spawned.map(child => outputsOf(child.args).map(item => item.time))).toEqual([[0.5, 1], [2]])
     expect(results[0]).toBe(results[3])
     expect(await fs.readFile(results[1], 'utf8')).toBe('frame@0.5')
     expect((await fs.readdir(root)).filter(name => name.endsWith('.tmp'))).toEqual([])
     const again = service()
     expect(await again.frame({ source: 'D:/clip.mp4', timeUs: 500_000, height: 48 })).toBe(results[1])
-    expect(spawned).toHaveLength(1)
+    expect(spawned).toHaveLength(2)
     expect(again.statistics()).toMatchObject({ hits: 1, generated: 0 })
     // Another height or another content identity is another frame.
     await frames.frame({ source: 'D:/clip.mp4', timeUs: 500_000, height: 96 })
     identity.value = 'b'.repeat(64)
     await frames.frame({ source: 'D:/copy.mp4', timeUs: 500_000, height: 48 })
-    expect(spawned).toHaveLength(3)
+    expect(spawned).toHaveLength(4)
   })
 
   it('limits running processes and frames per process, rotating sources so one long clip cannot starve another', async () => {
@@ -104,7 +110,7 @@ describe('filmstrip frame service', () => {
     const long = spawned.find(child => child.args.includes('D:/long.mp4'))!
     const short = spawned.find(child => child.args.includes('D:/short.mp4'))!
     // The second slot goes to the other source, not to the long clip's next four frames.
-    expect(outputsOf(long.args)).toHaveLength(4)
+    expect(outputsOf(long.args)).toHaveLength(2)
     expect(short).toBeDefined()
     expect(frames.statistics()).toMatchObject({ running: 2, pending: 6 })
     await finish(short)
@@ -112,7 +118,7 @@ describe('filmstrip frame service', () => {
     autoFinish = true
     await finish(long); await finish(spawned[2])
     await Promise.all(pending)
-    expect(spawned.map(child => outputsOf(child.args).length).sort()).toEqual([1, 2, 4, 4])
+    expect(spawned.map(child => outputsOf(child.args).length).sort()).toEqual([1, 2, 2, 2, 2, 2])
   })
 
   it('drops cancelled queued frames, kills a process once every frame in it lost its waiters, and restarts later requests', async () => {
@@ -160,25 +166,44 @@ describe('filmstrip frame service', () => {
     expect(inside.status).toBe('fulfilled')
     expect(seekFailed.status).toBe('fulfilled')
     expect(beyond).toMatchObject({ status: 'rejected', reason: expect.objectContaining({ message: expect.stringContaining('未能取得') }) })
-    expect(spawned).toHaveLength(2)
-    expect(outputsOf(spawned[1].args)).toHaveLength(2)
-    expect(spawned[1].args.join(' ')).toContain('-map 0:v:0 -ss 3.000000')
+    // Two direct-seek processes (two inputs each at most), then one margin retry for both missing frames.
+    expect(spawned).toHaveLength(3)
+    expect(outputsOf(spawned[2].args)).toHaveLength(2)
+    expect(spawned[2].args.join(' ')).toContain('-map 0:v:0 -ss 3.000000')
     autoFinish = false
     const changed = frames.frame({ source: 'D:/clip.mp4', timeUs: 2_000_000, height: 48 })
-    await vi.waitFor(() => expect(spawned).toHaveLength(3))
+    await vi.waitFor(() => expect(spawned).toHaveLength(4))
     identity.value = 'c'.repeat(64)
-    await finish(spawned[2])
+    await finish(spawned[3])
     await expect(changed).rejects.toThrow('变化')
     expect((await fs.readdir(root)).filter(name => name.endsWith('.webp'))).toHaveLength(2)
     expect((await fs.readdir(root)).filter(name => name.endsWith('.tmp'))).toEqual([])
   })
 
   it('splits a batch of large pictures into consecutive processes within the decoder memory budget', async () => {
-    expect([filmstripInputsPerProcess(3840, 2160, 8), filmstripInputsPerProcess(2560, 1440, 8), filmstripInputsPerProcess(1920, 1080, 8), filmstripInputsPerProcess(7680, 4320, 8), filmstripInputsPerProcess(0, 0, 8)]).toEqual([2, 4, 8, 1, 8])
+    // At most two single-threaded inputs per process keeps one process within one background media slot, hardware or not.
+    expect([filmstripInputsPerProcess(3840, 2160, 8), filmstripInputsPerProcess(1920, 1080, 8), filmstripInputsPerProcess(7680, 4320, 8), filmstripInputsPerProcess(0, 0, 8)]).toEqual([2, 2, 1, 2])
     const frames = service({ probe: async () => ({ startSeconds: 0, width: 3840, height: 2160 }), concurrency: 1, gatherMs: 50 })
     await Promise.all([0, 1, 2, 3, 4].map(seconds => frames.frame({ source: 'D:/uhd.mp4', timeUs: seconds * 1_000_000, height: 48 })))
     expect(spawned.map(child => outputsOf(child.args).length)).toEqual([2, 2, 1])
     expect(frames.statistics()).toMatchObject({ batches: 1, generated: 5 })
+  })
+
+  it('decodes eligible sources on the GPU only when the probe found it, and retries a failed hardware process with software decoding', async () => {
+    const plain = service({ hardwareDecode: async () => null, gatherMs: 50 })
+    await plain.frame({ source: 'D:/clip.mp4', timeUs: 0, height: 48 })
+    expect(spawned[0].args).not.toContain('-hwaccel')
+    autoFinish = false
+    const frames = service({ gatherMs: 50 })
+    const pending = Promise.all([1, 2, 3].map(seconds => frames.frame({ source: 'D:/clip.mp4', timeUs: seconds * 1_000_000, height: 48 })))
+    await vi.waitFor(() => expect(spawned).toHaveLength(2))
+    expect(spawned[1].args).toContain('-hwaccel')
+    expect(outputsOf(spawned[1].args)).toHaveLength(2)
+    // The driver fails before any frame is written; the next hardware process succeeds, the failed frames retry with software decoding.
+    autoFinish = true
+    spawned[1].emit('close', 1)
+    await pending
+    expect(spawned.slice(2).map(child => [child.args.includes('-hwaccel'), outputsOf(child.args).length])).toEqual([[true, 1], [false, 2]])
   })
 
   it('kills a process that exceeds the time limit', async () => {

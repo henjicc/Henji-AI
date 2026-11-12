@@ -3,6 +3,7 @@ import { VideoEditMulticamDialog } from './VideoEditMulticamDialog'
 import { cancelVideoEditProxy, createVideoEditProxies, getVideoEditProxyPreference, readVideoEditProxyState, refreshVideoEditProxies, setVideoEditProxyPreference } from '../application/videoEditProxy'
 import { forwardRef, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useTranslation } from 'react-i18next'
 import { Virtuoso, VirtuosoGrid, type VirtuosoGridHandle, type VirtuosoHandle } from 'react-virtuoso'
 import { ArrowUp, ChevronDown, ChevronRight, ChevronUp, FolderInput, FolderOpen, FolderPlus, Import, List, Grid2X2, Plus, Pencil, Trash2, RefreshCw, Play, Settings2, Code2, AudioLines, Tag } from 'lucide-react'
 import { ICON_WORKSPACE_VIDEO_EDIT as SequenceIcon, ICON_ASSET_LIBRARY as AssetLibraryIcon, ICON_VIDEO_EDIT_GRAPHIC as GraphicIcon, ICON_VIDEO_EDIT_PROXY as ProxyIcon } from '@/core/theme/icons'
@@ -72,6 +73,7 @@ type SequenceDialog = { kind: 'create' | 'edit' | 'fromItem'; settings: VideoEdi
 
 
 export function VideoEditProjectPanel({ instance, onError, visible = true }: { instance: VideoEditInstance; onError: (reason: unknown) => void; visible?: boolean }): React.ReactElement {
+  const { t } = useTranslation('ui')
   const [keyword, setKeyword] = useState('')
   const binsFirst = useSettingsStore(state => state.videoEditBinsFirst)
   const [sort, setSort] = useState<VideoEditProjectSort>({ key: 'name', direction: 'asc' })
@@ -295,7 +297,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
   const renderRow = (_index: number, row: VideoEditProjectRow): React.ReactElement => {
     const { entry } = row; const selected = isSelected(entry); const kind = kindOf(entry); const Icon = videoEditKindIcon(kind)
     const columns = videoEditProjectColumns(instance.document, entry, fallbackFps)
-    const cells: Record<(typeof LIST_COLUMNS)[number]['key'], string> = { frameRate: columns.frameRateText, mediaStart: columns.mediaStart, mediaEnd: columns.mediaEnd, duration: columns.durationText, proxy: entry.kind === 'item' && entry.value.kind === 'video' && entry.value.mediaId ? (() => { const state = readVideoEditProxyState(projectId, entry.value.mediaId!); return state.status === 'generating' ? `生成中 ${Math.round(state.progress * 100)}%` : state.status === 'ready' ? '已有' : state.error ? '无（创建失败）' : '无' })() : '' }
+    const cells: Record<(typeof LIST_COLUMNS)[number]['key'], string> = { frameRate: columns.frameRateText, mediaStart: columns.mediaStart, mediaEnd: columns.mediaEnd, duration: columns.durationText, proxy: entry.kind === 'item' && entry.value.kind === 'video' && entry.value.mediaId ? (() => { const state = readVideoEditProxyState(projectId, entry.value.mediaId!); return state.status === 'generating' ? state.queued ? t('videoEditProject.proxyState.queued') : t('videoEditProject.proxyState.generating', { percent: Math.round(state.progress * 100) }) : t(state.status === 'ready' ? 'videoEditProject.proxyState.ready' : state.error ? 'videoEditProject.proxyState.failed' : 'videoEditProject.proxyState.none') })() : '' }
     return <div className="flex min-w-0 items-center" role="treeitem" aria-level={row.depth + 1} aria-expanded={row.expandable ? row.expanded : undefined} aria-selected={selected} style={{ paddingLeft: Math.min(row.depth, 8) * INDENT_PX }}>
       {row.expandable ? <UiIconButton size="2xs" className="shrink-0" aria-label={`${row.expanded ? '折叠' : '展开'}素材箱 ${entry.value.name}`} onClick={() => toggleBin(entry.value.id)}>{row.expanded ? <ChevronDown /> : <ChevronRight />}</UiIconButton> : <span className="w-5 shrink-0" aria-hidden="true" />}
       <UiOptionButton variant="menu" size="sm" active={selected} selection={entry.kind === 'item' ? 'multiple' : 'single'} className="min-h-7 min-w-0 flex-1 gap-2 " data-entry-kind={kind} {...entryHandlers(entry, selected)}>

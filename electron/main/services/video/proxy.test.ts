@@ -4,7 +4,8 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { createContentDiskCache } from '../media/content-disk-cache'
-import { assertVideoProxyAlignment, videoProxyArguments, videoProxyEncoderArguments, videoProxyFilter, videoProxyKey, videoProxySize, VideoProxyService } from './proxy'
+import type { withMediaHeavyTask } from '../media-import/concurrency'
+import { assertVideoProxyAlignment, createVideoProxySoftwareRunner, hardwareDecodeEligible, videoProxyArguments, videoProxyEncoderArguments, videoProxyFilter, videoProxyKey, videoProxySize, VideoProxyService } from './proxy'
 
 const directories: string[] = []
 afterEach(async () => { for (const directory of directories.splice(0)) await fs.rm(directory, { recursive: true, force: true }) })
@@ -39,6 +40,50 @@ it('取消与生成期间原片变化不发布代理，残留临时文件清理'
   await expect(service.create({ source, requestId: 'change', preset: '540p' }, new AbortController().signal, () => undefined)).rejects.toThrow('原片已改变')
   expect((await fs.readdir(path.join(root, 'cache'))).filter(name => name.endsWith('.tmp'))).toEqual([])
 })
+it('超过同时生成段数的请求排队并最终完成，取消排队中的请求不会开始转码', async () => {
+  const { root, transcode } = await fixture()
+  const cache = createContentDiskCache({ directory: () => path.join(root, 'cache'), extension: '.mp4' })
+  const metadata = createContentDiskCache({ directory: () => path.join(root, 'cache'), extension: '.json' })
+  const service = new VideoProxyService(cache, metadata, transcode, 2)
+  const gates = new Map<string, () => void>()
+  transcode.mockImplementation(async (request: VideoProxyRequest, file: string) => { await new Promise<void>(resolve => gates.set(path.basename(request.source), resolve)); await fs.writeFile(file, 'proxy'); return { width: 960, height: 540 } })
+  const sources = await Promise.all(['a', 'b', 'c', 'd'].map(async name => { const file = path.join(root, `${name}.mov`); await fs.writeFile(file, name); return file }))
+  const queued = vi.fn(); const progress: Record<string, number[]> = {}
+  const start = (source: string, signal = new AbortController().signal): Promise<unknown> => service.create({ source, requestId: path.basename(source), preset: 'auto' }, signal, value => { (progress[path.basename(source)] ??= []).push(value) }, { queued })
+  const [a, b] = sources.slice(0, 2).map(source => start(source))
+  await vi.waitFor(() => expect([...gates.keys()].sort()).toEqual(['a.mov', 'b.mov']))
+  const c = start(sources[2]); const cancelled = new AbortController(); const d = start(sources[3], cancelled.signal)
+  await vi.waitFor(() => expect(queued).toHaveBeenCalledTimes(2))
+  expect(service.queueState()).toEqual({ running: 2, queued: 2 })
+  // 排队中不报进度；取消排队的请求直接退出，不占后续位置。
+  expect(progress['c.mov']).toBeUndefined()
+  cancelled.abort(new Error('代理创建已取消。')); await expect(d).rejects.toThrow('已取消')
+  gates.get('a.mov')!()
+  await vi.waitFor(() => expect(gates.has('c.mov')).toBe(true))
+  gates.get('b.mov')!(); gates.get('c.mov')!()
+  await Promise.all([a, b, c])
+  expect(progress['c.mov']).toEqual([1])
+  expect(transcode.mock.calls.map(([request]) => path.basename(request.source)).sort()).toEqual(['a.mov', 'b.mov', 'c.mov'])
+  expect(service.queueState()).toEqual({ running: 0, queued: 0 })
+})
+it('硬解参数只在给出硬解方式时出现：CUDA 在显存缩放后直送 NVENC，不再要求下载像素格式；不稳妥的格式不走 CUDA', () => {
+  const plan = { width: 1920, height: 1080, fps: 60, encoder: 'h264_nvenc' as const, color: { primaries: 'bt2020', transfer: 'arib-std-b67' } }
+  const software = videoProxyArguments('in.mov', 'out.tmp', plan)
+  expect(software).not.toContain('-hwaccel'); expect(software).toContain('-pix_fmt')
+  const cuda = videoProxyArguments('in.mov', 'out.tmp', { ...plan, decode: 'cuda' })
+  // 硬解与 reduced 档解码只给 1 线程；标准软解按重型槽的 2 线程。
+  expect(cuda.join(' ')).toContain('-filter_threads 1 -threads 1 -hwaccel cuda -hwaccel_output_format cuda -i in.mov')
+  expect(software.join(' ')).toContain('-filter_threads 1 -threads 2 -i in.mov')
+  expect(videoProxyArguments('in.mov', 'out.tmp', { ...plan, threads: 'reduced' }).join(' ')).toContain('-filter_threads 1 -threads 1 -i in.mov')
+  expect(cuda).not.toContain('-pix_fmt')
+  expect(videoProxyFilter({ ...plan, decode: 'cuda' })).toBe('scale_cuda=w=1920:h=1080:interp_algo=bilinear:format=nv12,setparams=color_primaries=bt2020:color_trc=arib-std-b67')
+  expect(videoProxyArguments('in.mov', 'out.tmp', { ...plan, decode: 'videotoolbox' }).join(' ')).toContain('-hwaccel videotoolbox -i in.mov')
+  expect([
+    { codec_name: 'hevc', pix_fmt: 'yuv420p10le', field_order: 'progressive' }, { codec_name: 'h264', pix_fmt: 'yuv420p' },
+    { codec_name: 'h264', pix_fmt: 'yuv420p10le' }, { codec_name: 'hevc', pix_fmt: 'yuv422p10le' }, { codec_name: 'h264', pix_fmt: 'yuvj420p' },
+    { codec_name: 'h264', pix_fmt: 'yuv420p', color_range: 'pc' }, { codec_name: 'h264', pix_fmt: 'yuv420p', field_order: 'tt' }, { codec_name: 'prores', pix_fmt: 'yuv422p10le' },
+  ].map(hardwareDecodeEligible)).toEqual([true, true, false, false, false, false, false, false])
+})
 it('FFmpeg不变帧率或归零时间戳，auto 取源的一半（短边最高1080）、短关键帧间隔、无B帧无声音，显卡编码与时间错位拒绝', () => {
   expect(videoProxySize(3840, 2160, 'auto')).toEqual({ width: 1920, height: 1080 })
   expect(videoProxySize(7680, 4320, 'auto')).toEqual({ width: 1920, height: 1080 })
@@ -66,4 +111,30 @@ it('编码参数：显卡 p4+hq、半秒 GOP、无 B 帧、闭合 GOP、VBR 目�
   expect(() => assertVideoProxyAlignment([.523, .556367, .623], [.523, .556367, .623])).not.toThrow()
   expect(() => assertVideoProxyAlignment([.523], [0])).toThrow('时间戳')
   expect(() => assertVideoProxyAlignment([0, 1], [0])).toThrow('帧数')
+})
+
+/** 只有 1 个位置的公共重型槽。 */
+function oneHeavySlot(): typeof withMediaHeavyTask {
+  let busy = false; const waiting: Array<() => void> = []
+  return async <T>(task: () => Promise<T>): Promise<T> => {
+    while (busy) await new Promise<void>(resolve => waiting.push(resolve))
+    busy = true
+    try { return await task() } finally { busy = false; waiting.shift()?.() }
+  }
+}
+it('公共重型槽只有 1 个时软解代理不占它，代理进行中缩略帧任务仍能执行；槽多于 1 个时软解占槽，等槽时报告排队', async () => {
+  const heavy = oneHeavySlot(); const signal = new AbortController().signal; const threads: string[] = []
+  let finishProxy: () => void = () => undefined
+  const proxy = createVideoProxySoftwareRunner(1, heavy)(async level => { threads.push(level); await new Promise<void>(resolve => { finishProxy = resolve }) }, signal)
+  await vi.waitFor(() => expect(threads).toEqual(['reduced']))
+  await expect(heavy(async () => 'filmstrip')).resolves.toBe('filmstrip')
+  finishProxy(); await proxy
+  let release: () => void = () => undefined
+  const holder = heavy(() => new Promise<void>(resolve => { release = resolve }))
+  const onWait = vi.fn()
+  const shared = createVideoProxySoftwareRunner(2, heavy)(async level => { threads.push(level) }, signal, onWait)
+  await vi.waitFor(() => expect(onWait).toHaveBeenCalledTimes(1))
+  expect(threads).toEqual(['reduced'])
+  release(); await holder; await shared
+  expect(threads).toEqual(['reduced', 'standard'])
 })

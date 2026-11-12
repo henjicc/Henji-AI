@@ -154,16 +154,19 @@ it('素材右键创建代理进入后台，列表显示进度与已有，保留�
   const view = render(<View />)
   await waitFor(() => expect(getPlatform().videoProxy.lookup).toHaveBeenCalled())
   const column = (): Element => view.getByRole('button', { name: 'A原视频' }).querySelector('[data-video-edit-project-column="proxy"]')!
-  expect(column().textContent).toBe('无')
+  expect(column().textContent).toBe('None')
   const before = instance.document; const history = instance.past.length
   fireEvent.contextMenu(view.getByRole('button', { name: 'A原视频' }))
   fireEvent.click(await view.findByText('为选中素材生成代理'))
-  await waitFor(() => expect(column().textContent).toBe('生成中 0%'))
+  // 主进程开始转码前没有进度：显示排队中。
+  await waitFor(() => expect(column().textContent).toBe('Queued'))
   const request = vi.mocked(getPlatform().videoProxy.create).mock.calls[0][0]
+  act(() => progress.mock.calls[0][0]({ requestId: request.requestId, progress: 0 }))
+  expect(column().textContent).toBe('Generating 0%')
   act(() => progress.mock.calls[0][0]({ requestId: request.requestId, progress: .5 }))
-  expect(column().textContent).toBe('生成中 50%')
+  expect(column().textContent).toBe('Generating 50%')
   await act(async () => finish(result))
-  await waitFor(() => expect(column().textContent).toBe('已有'))
+  await waitFor(() => expect(column().textContent).toBe('Ready'))
   expect(instance.document).toBe(before); expect(instance.past).toHaveLength(history)
   expect(request).toMatchObject({ source: 'D:/sourceA.mp4', preset: 'auto' })
   expect(onError).not.toHaveBeenCalled()

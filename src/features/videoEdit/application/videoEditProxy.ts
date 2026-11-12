@@ -111,12 +111,13 @@ export async function createVideoEditProxy(projectId: string, mediaId: string, p
   const controller = new AbortController(); const requestId = crypto.randomUUID()
   let values = entries.get(owner); if (!values) { values = new Map(); entries.set(owner, values) }
   const previous = entry(projectId, mediaId)
-  const current: Entry = { media, ...(previous?.result ? { result: previous.result } : {}), controller, state: { status: 'generating', progress: 0, error: '' } }
+  // 主进程排队期间不发进度；收到第一条进度（开始转码时的 0）才算开始。
+  const current: Entry = { media, ...(previous?.result ? { result: previous.result } : {}), controller, state: { status: 'generating', progress: 0, error: '', queued: true } }
   values.set(mediaId, current)
   const task = { owner, controller }; tasks.add(task)
   const cancel = (): void => { void getPlatform().videoProxy.cancel(requestId).catch(error => logger.warn('代理取消未确认', { event: 'video_edit.proxy.cancel_failed', error })) }
   const abort = (): void => controller.abort(signal?.reason ?? new Error('代理创建已取消。'))
-  const unsubscribe = getPlatform().videoProxy.onProgress(event => { if (event.requestId === requestId && !controller.signal.aborted) { current.state.progress = event.progress; publishVideoEdit() } })
+  const unsubscribe = getPlatform().videoProxy.onProgress(event => { if (event.requestId === requestId && !controller.signal.aborted) { current.state = { status: 'generating', progress: event.progress, error: '' }; publishVideoEdit() } })
   controller.signal.addEventListener('abort', cancel, { once: true }); signal?.addEventListener('abort', abort, { once: true })
   publishVideoEdit()
   logger.info('创建素材代理', { event: 'video_edit.proxy.start', context: { projectId, mediaId, preset } })
