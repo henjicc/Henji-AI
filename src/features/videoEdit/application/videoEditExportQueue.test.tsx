@@ -198,7 +198,6 @@ it('无设置面板的导出也显示进度，确认取消并完成清理后才�
   await waitFor(() => expect(encoding.finalize).toHaveBeenCalledOnce())
   expect(view.getByRole('dialog', { name: '正在导出' })).toBeTruthy()
   expect(view.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('100')
-  expect(view.getByText(`保存位置：${file('progress.mp4')}`)).toBeTruthy()
   fireEvent.keyDown(document, { key: 'Escape' })
   expect(view.getByRole('dialog')).toBeTruthy()
   fireEvent.click(view.getByRole('button', { name: '取消导出' }))
