@@ -1,0 +1,15 @@
+// 接管窗口并打开节目监视器的多机位视图，等待 WAIT 毫秒后截图 <TAG>-open.jpg。
+const path = require('path')
+const { connect, wait } = require('./rawcdp.cjs')
+;(async () => {
+  const page = await connect()
+  await page.evaluate(`[...document.querySelectorAll('button')].filter(b => b.innerText.trim() === '接管').forEach(b => b.click()); true`)
+  await wait(500)
+  const at = await page.evaluate(`(() => { const r = [...document.querySelectorAll('button')].find(b => b.getAttribute('aria-label') === '更多节目操作').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2] })()`)
+  await page.click(at[0], at[1]); await wait(700)
+  const opened = await page.evaluate(`(() => { const item = [...document.querySelectorAll('[role="menuitem"],button')].find(e => /多机位视图/.test(e.innerText || '')); if (!item) return [...document.querySelectorAll('[role="menuitem"]')].map(e => e.innerText).join('|'); item.click(); return true })()`)
+  console.log('opened', opened)
+  await wait(Number(process.env.WAIT || 6000))
+  await page.shot(path.join(__dirname, `${process.env.TAG || 'mc'}-open.jpg`))
+  page.close(); process.exit(0)
+})().catch(e => { console.error(e); process.exit(1) })

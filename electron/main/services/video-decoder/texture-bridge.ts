@@ -263,11 +263,14 @@ export function parseVideoFrameScheduleRequest(input: unknown): VideoFrameSchedu
   const streamId = parseId(record, 'streamId')
   const scheduleId = parseId(record, 'scheduleId')
   if (Array.isArray(record.times) === (record.range !== undefined)) throw new Error('计划需要 times 或 range 之一')
+  if (record.referenceOnly !== undefined && typeof record.referenceOnly !== 'boolean') throw new Error('计划参数 referenceOnly 无效')
   if (Array.isArray(record.times)) {
     if (record.times.length > MAX_SCHEDULE_TIMES) throw new Error('计划时间点过多')
     if (!record.times.every((value) => typeof value === 'number' && Number.isFinite(value))) throw new Error('计划时间点无效')
-    return { streamId, scheduleId, times: record.times as number[] }
+    return { streamId, scheduleId, times: record.times as number[], ...(record.referenceOnly ? { referenceOnly: true } : {}) }
   }
+  // 区间计划是导出与预滚的顺序读取，必须逐帧。
+  if (record.referenceOnly) throw new Error('只要参考帧只用于时间点计划')
   const range = parseRecord(record.range, '计划区间')
   if (typeof range.from !== 'number' || !Number.isFinite(range.from) || (range.to !== undefined && (typeof range.to !== 'number' || !Number.isFinite(range.to)))) throw new Error('计划区间无效')
   return { streamId, scheduleId, range: { from: range.from, ...(range.to !== undefined ? { to: range.to as number } : {}) } }
@@ -405,8 +408,8 @@ export class VideoFrameBridge {
 
   async schedule(targetId: number, request: VideoFrameScheduleRequest): Promise<VideoFrameScheduleAck> {
     this.ownedDecoder(request.streamId, targetId)
-    const { streamId, scheduleId, times, range } = request
-    return this.options.service.schedule({ streamId, scheduleId, ...(times ? { times } : {}), ...(range ? { range } : {}) })
+    const { streamId, scheduleId, times, range, referenceOnly } = request
+    return this.options.service.schedule({ streamId, scheduleId, ...(times ? { times } : {}), ...(range ? { range } : {}), ...(referenceOnly ? { referenceOnly } : {}) })
   }
 
   async cancelSchedule(targetId: number, streamId: string, scheduleId: string): Promise<boolean> {

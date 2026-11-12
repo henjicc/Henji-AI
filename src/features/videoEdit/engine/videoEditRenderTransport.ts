@@ -585,6 +585,8 @@ export class VideoEditRenderTransport {
     if (this.disposed) return
     this.worker.postMessage({ kind: 'renderCache', id: 0, windows: windows.map(({ path, ...window }) => ({ ...window, url: toFetchableMediaUrl(path) })), localPaths: Object.fromEntries(windows.map(window => [toFetchableMediaUrl(window.path), window.path])) } satisfies RenderRequest)
   }
+  /** 这些素材的播放计划只解参考帧（多机位格子带不动时的预览）；下一个播放计划生效。 */
+  setReferenceOnly(mediaIds: readonly string[]): void { if (!this.disposed) this.worker.postMessage({ kind: 'referenceOnly', mediaIds: [...mediaIds], id: 0 } satisfies RenderRequest) }
   setTracks(tracks: VideoEditTrackResults): void { if (!this.disposed) this.worker.postMessage({ kind: 'tracks', tracks, id: 0 } satisfies RenderRequest) }
   invalidateDocument(revision: number): void { if (!this.disposed) this.worker.postMessage({ kind: 'invalidate', revision, id: 0 } satisfies RenderRequest) }
   async present(frame: number, sequential = false, scrubbing: import('./videoEditRenderer').VideoEditScrubMode = false, deadline?: number, submitted?: () => void, readRgb?: { width: number; height: number }, quality: EffectQuality = 'interactive', history = false, observeElements = false, requireLive = false, precision: VideoEditRenderPrecision = 'exact', encode?: { stream: number } & VideoEditEncodeSample): Promise<RenderResponse> {

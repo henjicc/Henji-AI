@@ -19,6 +19,7 @@ import type { ApplicationControlAccessContext } from '@/core/application-control
 import { ensureVideoEditCodeParameterMetadata, readVideoEditCodeParameterMetadata } from './videoEditCodeState'
 import { videoEditSelectedCodeElementContext } from './videoEditCodeElements'
 import { ensureVideoEditProxyState, getVideoEditProxyPreference, readVideoEditProxyState } from './videoEditProxy'
+import { ensureVideoEditMulticamPlayback, readVideoEditMulticamPlayback } from './videoEditMulticamPlayback'
 import { fieldDescriptors, fieldReadValues, unrestrictedCollectionAvailability, type ApplicationEntityProvider, type ApplicationEntityRegistration, type ApplicationRef } from '@/core/application-control'
 import { videoEditClipMedia, type VideoEditDocument } from '@/core/videoEdit/document'
 import { videoEditClipSpeedData } from './videoEditClipSpeed'
@@ -121,6 +122,10 @@ export function readVideoEditData(ref: ApplicationRef, codeMetadata = false, pro
     data.motionBlur ??= false
     data.frameBlend ??= false
     data.multicam ??= null
+    if (!propertyIds?.length || propertyIds.includes('video_edit.sequence.multicam_playback')) {
+      const playback = (found as { multicam?: unknown }).multicam ? readVideoEditMulticamPlayback(projectId, childId) : undefined
+      data.multicamPlayback = playback ? { realtime: playback.realtime, mediaWithoutProxy: playback.withoutProxy.map(id => `${projectId}:${id}`) } : null
+    }
     const spaceRender = (found as typeof found & { spaceRender?: import('@/core/videoEdit/document').VideoEditSpaceRender }).spaceRender
     delete data.spaceRender
     data.finalRenderer = spaceRender?.finalRenderer ?? 'realtime'
@@ -170,6 +175,10 @@ class VideoEditProvider implements ApplicationEntityProvider {
     if (!listVideoEditInstances().some(owner => owner.document.id === splitVideoEditRef(ref).projectId)) await openVideoEditDocument({ id: splitVideoEditRef(ref).projectId }, { focus: false })
     if (request.propertyIds?.length === 0) { assertVideoEditEntityExists(ref); return { ref, entityType: this.entityType, revisions: { video_edit: videoEditRevision() }, properties: {}, capturedAt: new Date().toISOString() } }
     if (this.entityType === 'video_edit.media' && (!request.propertyIds?.length || request.propertyIds.includes('video_edit.media.proxy_state'))) { const target = splitVideoEditRef(ref); await ensureVideoEditProxyState(target.projectId, target.childId) }
+    if (this.entityType === 'video_edit.sequence' && (!request.propertyIds?.length || request.propertyIds.includes('video_edit.sequence.multicam_playback'))) {
+      const target = splitVideoEditRef(ref)
+      if (requireVideoEditInstance(target.projectId).document.sequences?.some(sequence => sequence.id === target.childId && sequence.multicam)) await ensureVideoEditMulticamPlayback(target.projectId, target.childId)
+    }
     const needsMetadata = ['video_edit.code_material', 'video_edit.code_version'].includes(this.entityType)
     if (needsMetadata) {
       const { projectId, childId } = splitVideoEditRef(ref); const owner = requireVideoEditInstance(projectId)

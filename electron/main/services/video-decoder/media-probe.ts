@@ -45,6 +45,7 @@ function toNativeMediaProbe(result: VideoDecoderProbeResult, hello: VideoDecoder
       startTimeSeconds: stream.startTimeSeconds,
       durationSeconds: stream.durationSeconds,
       isAttachedPicture: stream.isAttachedPicture,
+      bitRate: stream.bitRate ?? result.container.bitRate,
       decodable: nativeStreamDecodable(stream.codec, stream.kind, hello),
       ...(stream.video ? {
         video: {

@@ -21,7 +21,8 @@ use std::io::{self, Read, Write};
 ///    hello 的 `limits` 只剩显存预算；`stats.budget` 去掉会话数与硬解上限，增加 `vramRetainedBytes`。
 /// 7：时间点计划画面与上一项相同的项答 `frame_missing { reason: held }`（消费方沿用上一幅）；解码跟不上播放时只解参考帧；
 ///    帧流计数增加 `held`。
-pub const PROTOCOL_VERSION: u32 = 7;
+/// 8：时间点计划可带 `referenceOnly`：从第一项起只解参考帧（多机位格子预览），非参考帧的项答 `held`；区间计划不接受。
+pub const PROTOCOL_VERSION: u32 = 8;
 /// 单条控制消息上限。控制消息只含元数据，超过即视为协议错误，防止异常长度导致巨量分配。
 pub const MAX_MESSAGE_BYTES: usize = 16 * 1024 * 1024;
 
@@ -107,7 +108,7 @@ pub enum Command {
         #[serde(default)]
         prefetch: bool,
     },
-    /// 连续计划取帧：`times`（每项恰好一帧或缺帧）或 `range`（区间内每一帧）。
+    /// 连续计划取帧：`times`（每项恰好一帧或缺帧）或 `range`（区间内每一帧）。`referenceOnly` 见协议 8。
     Schedule {
         stream_id: String,
         schedule_id: String,
@@ -115,6 +116,8 @@ pub enum Command {
         times: Option<Vec<f64>>,
         #[serde(default)]
         range: Option<ScheduleRange>,
+        #[serde(default)]
+        reference_only: bool,
     },
     CancelSchedule { stream_id: String, schedule_id: String },
     /// 打开声音会话（2.3）：`audioStream` 只数声音流（从 0 起），`sampleRate` 为输出采样率（缺省为流自身采样率）。
@@ -302,9 +305,11 @@ mod tests {
         let prefetch = parse_request(br#"{"id":"15","type":"frame_at","streamId":"vf-1","time":1.5,"ticket":"t3","retain":true,"prefetch":true}"#).unwrap();
         assert_eq!(prefetch.command, Command::FrameAt { stream_id: "vf-1".into(), time: 1.5, ticket: "t3".into(), key_only: false, retain: true, prefetch: true });
         let schedule = parse_request(br#"{"id":"11","type":"schedule","streamId":"vf-1","scheduleId":"s1","times":[0,0.0166]}"#).unwrap();
-        assert_eq!(schedule.command, Command::Schedule { stream_id: "vf-1".into(), schedule_id: "s1".into(), times: Some(vec![0.0, 0.0166]), range: None });
+        assert_eq!(schedule.command, Command::Schedule { stream_id: "vf-1".into(), schedule_id: "s1".into(), times: Some(vec![0.0, 0.0166]), range: None, reference_only: false });
+        let reference = parse_request(br#"{"id":"16","type":"schedule","streamId":"vf-1","scheduleId":"s3","times":[0],"referenceOnly":true}"#).unwrap();
+        assert_eq!(reference.command, Command::Schedule { stream_id: "vf-1".into(), schedule_id: "s3".into(), times: Some(vec![0.0]), range: None, reference_only: true });
         let range = parse_request(br#"{"id":"12","type":"schedule","streamId":"vf-1","scheduleId":"s2","range":{"from":2}}"#).unwrap();
-        assert_eq!(range.command, Command::Schedule { stream_id: "vf-1".into(), schedule_id: "s2".into(), times: None, range: Some(ScheduleRange { from: 2.0, to: None }) });
+        assert_eq!(range.command, Command::Schedule { stream_id: "vf-1".into(), schedule_id: "s2".into(), times: None, range: Some(ScheduleRange { from: 2.0, to: None }), reference_only: false });
         assert!(parse_request(br#"{"id":"13","type":"open_decoder","streamId":"a","path":"x","purpose":"export"}"#).is_err());
     }
 

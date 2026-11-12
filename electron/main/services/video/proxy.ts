@@ -2,7 +2,7 @@ import { execFile, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import fs from 'node:fs/promises'
 import os from 'node:os'
-import { videoProxyRequestSchema, videoProxyResultSchema, type VideoProxyRequest, type VideoProxyResult, type VideoProxyPreset } from '../../../../src/core/videoEdit/proxy'
+import { videoProxyRequestSchema, videoProxyResultSchema, videoProxySize, type VideoProxyRequest, type VideoProxyResult, type VideoProxyPreset } from '../../../../src/core/videoEdit/proxy'
 import { identifyMediaContent } from '../media/content-identity'
 import type { ContentDiskCache } from '../media/content-disk-cache'
 import { renderBitrateMbps } from '../../../../src/core/videoEdit/renderBitrate'
@@ -82,14 +82,7 @@ export function probeHardwareDecode(ffmpeg?: string, platform: NodeJS.Platform =
   return probe
 }
 
-/** 代理尺寸：auto 为源的一半、短边最高 1080；旧预设 720p/540p 按高度上限。宽高取偶数。 */
-export function videoProxySize(sourceWidth: number, sourceHeight: number, preset: VideoProxyPreset): { width: number; height: number } {
-  const even = (value: number): number => Math.max(2, Math.floor(value / 2) * 2)
-  const scale = preset === 'auto'
-    ? Math.min(0.5, 1080 / Math.min(sourceWidth, sourceHeight))
-    : Math.min(1, (preset === '720p' ? 720 : 540) / sourceHeight)
-  return { width: even(sourceWidth * scale), height: even(sourceHeight * scale) }
-}
+export { videoProxySize }
 
 const KNOWN_COLOR = /^[a-z0-9_-]{1,32}$/
 /**

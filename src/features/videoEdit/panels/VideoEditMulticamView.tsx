@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { UiEmpty, UiError, UiOptionButton } from '@/components/ui'
-import { subscribeVideoEditDomain, subscribeVideoEditView, videoEditDomainRevision, videoEditViewRevision, type VideoEditInstance } from '../application/videoEditService'
+import { UiEmpty, UiError, UiOptionButton, UiToast } from '@/components/ui'
+import { notificationMessage } from '@/i18n/notifications'
+import type { VideoProxyPreset } from '@/core/videoEdit/proxy'
+import { createVideoEditMulticamProxies, dismissVideoEditMulticamProxyPrompt, readVideoEditMulticamPlayback, videoEditMulticamProxyPromptVisible } from '../application/videoEditMulticamPlayback'
+import { listVideoEditInstances, subscribeVideoEditDomain, subscribeVideoEditView, videoEditDomainRevision, videoEditViewRevision, type VideoEditInstance } from '../application/videoEditService'
 import { switchVideoEditMulticam, videoEditProgramMulticam } from '../application/videoEditMulticam'
 import { VideoEditGpuDeviceLostError, VideoEditRenderWorkerError, VideoEditRenderRecovery } from '../engine/videoEditGpuFailure'
 import { VideoEditMulticamMonitor } from './videoEditMulticamMonitor'
@@ -14,6 +17,7 @@ export function VideoEditMulticamView({ instance, onError }: { instance: VideoEd
   useSyncExternalStore(subscribeVideoEditDomain, videoEditDomainRevision)
   const target = videoEditProgramMulticam(instance)
   const [failure, setFailure] = useState('')
+  const [proxyPreset, setProxyPreset] = useState<VideoProxyPreset>('auto')
   // 画布交给 Worker 后不能再交第二次：每个新会话（换源序列、恢复、重试）都换一批新画布。
   const [generation, setGeneration] = useState(0)
   const recovery = useRef(new VideoEditRenderRecovery())
@@ -55,6 +59,11 @@ export function VideoEditMulticamView({ instance, onError }: { instance: VideoEd
     try { switchVideoEditMulticam({ projectId: instance.document.id, sequenceId: instance.activeSequenceId, clipId: current.clip.id }, camera.id, instance.playing ? instance.frame : undefined) } catch (error) { onError(error) }
   }
   if (!target) return <UiEmpty title="播放头处没有多机位片段" />
+  const projectId = instance.document.id
+  // 剪辑关闭时视图可能先于父级卸载重渲染一次：此时不再判断。
+  const playback = listVideoEditInstances().includes(instance) ? readVideoEditMulticamPlayback(projectId, target.source.id) : undefined
+  // 选过的档位已不在选项里（较大的原片先建好代理后只剩一档）时按第一档提交。
+  const preset = playback?.proxyChoices.some(choice => choice.value === proxyPreset) ? proxyPreset : playback?.proxyChoices[0]?.value ?? 'auto'
   return <div className="flex min-h-0 flex-1 flex-col gap-2" tabIndex={0} role="group" aria-label="多机位监视器" onKeyDown={event => {
     if (event.ctrlKey || event.altKey || event.metaKey || event.shiftKey || !/^[1-9]$/.test(event.key) || (event.target as HTMLElement).closest('input,textarea,[contenteditable="true"],[role="textbox"]')) return
     event.preventDefault(); event.stopPropagation(); choose(Number(event.key) - 1)
@@ -65,6 +74,10 @@ export function VideoEditMulticamView({ instance, onError }: { instance: VideoEd
         <span className="w-full truncate text-xs" title={`${camera.name}${camera.speaker ? ` · ${camera.speaker}` : ''}`}>{index + 1} · {camera.name}{camera.speaker ? ` · ${camera.speaker}` : ''}</span>
       </UiOptionButton>)}
     </div>
+    {playback && videoEditMulticamProxyPromptVisible(projectId, target.source.id, playback) && <UiToast placement="inline" tone="warning" message={notificationMessage('multicamPlaybackHeavy')}
+      {...(playback.proxyChoices.length > 1 ? { choice: { label: '代理分辨率', options: playback.proxyChoices, value: preset, onChange: (value: string) => setProxyPreset(value as VideoProxyPreset) } } : {})}
+      action={{ label: '创建代理', emphasis: 'primary', onClick: () => { void createVideoEditMulticamProxies(projectId, target.source.id, preset).catch(error => logger.warn('多机位代理未全部创建', { event: 'video_edit.multicam.proxy_prompt.failed', error, context: { sourceId: target.source.id } })) } }}
+      onClose={() => dismissVideoEditMulticamProxyPrompt(projectId, target.source.id, playback)} />}
     {failure && <UiError message={failure} onRetry={() => { recovery.current.reset(); setGeneration(value => value + 1) }} />}
   </div>
 }

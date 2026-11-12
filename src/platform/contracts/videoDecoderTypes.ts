@@ -18,6 +18,8 @@ export interface NativeMediaStream {
   startTimeSeconds: number | null
   durationSeconds: number | null
   isAttachedPicture: boolean
+  /** 流的码率（比特/秒）；容器没写时为容器总码率，都没有为 null。估算实时播放的解码负载用。 */
+  bitRate?: number | null
   /** 原生服务带有该编码的解码器。 */
   decodable: boolean
   video?: {

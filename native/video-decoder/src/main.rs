@@ -330,10 +330,12 @@ fn main() {
                     respond(&request.id, Err(error));
                 }
             }
-            Command::Schedule { stream_id, schedule_id, times, range } => {
+            Command::Schedule { stream_id, schedule_id, times, range, reference_only } => {
                 let plan = match (times, range) {
-                    (Some(times), None) if times.len() <= decode::MAX_SCHEDULE_TIMES => Ok(decode::SchedulePlan::Times(times)),
+                    (Some(times), None) if times.len() <= decode::MAX_SCHEDULE_TIMES => Ok(decode::SchedulePlan::Times { times, reference_only }),
                     (Some(_), None) => Err(ServiceError::new("INVALID_REQUEST", "计划时间点过多")),
+                    // 区间计划是导出与预滚的顺序读取，必须逐帧。
+                    (None, Some(_)) if reference_only => Err(ServiceError::new("INVALID_REQUEST", "只要参考帧只用于时间点计划")),
                     (None, Some(range)) => Ok(decode::SchedulePlan::Range { from: range.from, to: range.to }),
                     _ => Err(ServiceError::new("INVALID_REQUEST", "计划需要 times 或 range 之一")),
                 };
@@ -342,7 +344,7 @@ fn main() {
                     Ok(_) if !service.streams.is_decoder(&stream_id) => respond(&request.id, Err(ServiceError::new("INVALID_REQUEST", format!("解码会话 {stream_id} 不存在")))),
                     Ok(plan) => {
                         let count = match &plan {
-                            decode::SchedulePlan::Times(times) => json!(times.len()),
+                            decode::SchedulePlan::Times { times, .. } => json!(times.len()),
                             decode::SchedulePlan::Range { .. } => Value::Null,
                         };
                         // 先确认再交给会话线程：客户端收到确认前不会看到本计划的帧。

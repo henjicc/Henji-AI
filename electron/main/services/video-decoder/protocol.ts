@@ -28,8 +28,10 @@ import type {
  *    增加 `vramRetainedBytes`。旧服务程序握手即失败，不会把它的预算拒绝误当成服务故障。
  * 7：时间点计划画面与上一项相同的项答 `frame_missing { reason: 'held' }`（消费方沿用上一幅）；解码跟不上播放时只解
  *    参考帧；帧流计数增加 `held`。不认识 `held` 的渲染层会把这些项当成缺画面另行精确读取，新旧版本握手即失败。
+ * 8：时间点计划可带 `referenceOnly`（多机位格子预览）：从第一项起只解参考帧，非参考帧的项答 `held`；区间计划不接受。
+ *    旧服务会忽略这个字段照常逐帧解，正好就是要避免的满载，所以按协议版本拒绝旧服务。
  */
-export const VIDEO_DECODER_PROTOCOL_VERSION = 7
+export const VIDEO_DECODER_PROTOCOL_VERSION = 8
 export const VIDEO_DECODER_MAX_MESSAGE_BYTES = 16 * 1024 * 1024
 
 export type VideoDecoderErrorCode =
@@ -371,7 +373,7 @@ export type VideoDecoderCommand =
   | ({ type: 'open_decoder' } & VideoDecoderOpenRequest)
   | { type: 'set_decoder_segment'; streamId: string; path: string }
   | { type: 'frame_at'; streamId: string; time: number; ticket: string }
-  | { type: 'schedule'; streamId: string; scheduleId: string; times?: number[]; range?: { from: number; to?: number } }
+  | { type: 'schedule'; streamId: string; scheduleId: string; times?: number[]; range?: { from: number; to?: number }; referenceOnly?: boolean }
   | { type: 'cancel_schedule'; streamId: string; scheduleId: string }
   | ({ type: 'open_audio' } & VideoDecoderAudioOpenRequest)
   | { type: 'read_audio'; audioId: string; startFrame: number; frames: number }

@@ -5,6 +5,7 @@ import { videoEditNestedFrame } from '@/core/videoEdit/nestedSequences'
 import { getActiveVideoEditSequence, listVideoEditInstances, subscribeVideoEditDomain, subscribeVideoEditView, videoEditProgramCommandIdentity, type VideoEditInstance } from '../application/videoEditService'
 import { videoEditProgramMulticam } from '../application/videoEditMulticam'
 import { getVideoEditProxySources } from '../application/videoEditProxy'
+import { ensureVideoEditMulticamPlayback, readVideoEditMulticamPlayback, reportVideoEditMulticamPlayback } from '../application/videoEditMulticamPlayback'
 import { VideoEditPlaybackCollector } from '../application/videoEditPlaybackStats'
 import { videoEditPlaybackTarget } from '../engine/videoEditDisplayClock'
 import { VideoEditRenderBusyError } from '../engine/videoEditGpuFailure'
@@ -29,7 +30,11 @@ const CLOCK_FOLLOW = .1
  */
 interface ProgramClock { command: object; rate: number; frame: number; zero?: number }
 /** 一次连续正向播放：网格各帧按节目时钟的呈现时刻排进同一套顺序解码。 */
-interface PlaybackRun { command: object; lastFrame: number; lastGrid: number; collector?: VideoEditPlaybackCollector; shownAt?: number }
+/**
+ * `referenceOnly`：这次播放里只解参考帧的机位数（0 为逐帧解，只有逐帧解的播放能说明本机解码能力）。
+ * `load`：这次播放的解码负载；播放中有代理建好、负载变了为 NaN，这次的丢帧不再对应某个负载。
+ */
+interface PlaybackRun { command: object; lastFrame: number; lastGrid: number; referenceOnly: number; load: number; collector?: VideoEditPlaybackCollector; shownAt?: number }
 
 export interface VideoEditMulticamMonitorEvents {
   /** 这个会话的第一帧网格画面已呈现。 */
@@ -59,6 +64,10 @@ export class VideoEditMulticamMonitor {
   private stopped = false
   private release?: Promise<unknown>
   private shown = false
+  /** 已交给会话的只解参考帧的机位素材（逗号连接，比对用）。 */
+  private referenceOnly = ''
+  private referenceOnlyCount = 0
+  private load = 0
   private readonly startedAt = performance.now()
   private readonly unsubscribe: Array<() => void> = []
   private readonly resize?: ResizeObserver
@@ -74,6 +83,8 @@ export class VideoEditMulticamMonitor {
     this.watchResolution()
     this.measure()
     this.observeClock()
+    // 读到各机位的编码、码率与代理状态后才知道带不带得动；读到时发视图通知，监视器随之唤醒。
+    void ensureVideoEditMulticamPlayback(instance.document.id, sourceId).catch(error => logger.debug('多机位播放负载未能判断', { event: 'video_edit.multicam.decode_load.unavailable', error, context: { sourceId } }))
   }
   /** 停止出帧并释放会话；返回的承诺在 Worker 与解码会话都关闭后完成（下一个监视器等它，不重叠占用设备）。 */
   dispose(): Promise<unknown> {
@@ -184,7 +195,24 @@ export class VideoEditMulticamMonitor {
       this.divisor = divisor; this.pausedGrid = -1
       if (this.stopped) return undefined
     }
+    this.applyReferenceOnly(session)
     return { session, grid }
+  }
+  /**
+   * 判为带不动时，格子里还在解原片的机位只解参考帧（每格帧率降下来但平稳），把解码余量留给节目画面；带得动时照常逐帧。
+   * 只影响网格会话的播放计划，暂停与拖动的单帧读取照常精确。变化时结束当前这次播放，下一个播放计划按新方式解。
+   */
+  private applyReferenceOnly(session: VideoEditRenderSession): void {
+    const playback = readVideoEditMulticamPlayback(this.instance.document.id, this.sourceId)
+    if (this.run && this.run.load !== playback.load) this.run.load = NaN
+    this.load = playback.load
+    const ids = playback.realtime === 'may_stutter' ? playback.originals : []
+    const key = ids.join(',')
+    if (key === this.referenceOnly) return
+    session.setReferenceOnly(ids)
+    this.referenceOnly = key; this.referenceOnlyCount = ids.length
+    logger.info('多机位格子解码方式', { event: 'video_edit.multicam.reference_only.changed', context: { projectId: this.instance.document.id, sourceId: this.sourceId, referenceOnly: ids.length, load: playback.load, capacity: playback.capacity } })
+    if (this.run) this.endRun('restarted')
   }
   private proxyCount(grid: VideoEditMulticamGrid): number { return (JSON.parse(grid.proxyKey) as Array<string | null>).filter(Boolean).length }
   /** 播放头 `frame` 处这个源序列的多机位片段（与节目选同一个：同轨优先，再取最上层）。 */
@@ -196,7 +224,7 @@ export class VideoEditMulticamMonitor {
     if (this.inFlight >= FRAMES_IN_FLIGHT || this.unsubmitted >= UNSUBMITTED_FRAMES) return
     // 播放过后格子上是播放帧：停下时按精确方式重画暂停帧。
     if (!this.run) this.pausedGrid = -1
-    const run = this.run ??= { command: clock.command, lastFrame: -1, lastGrid: -1 }
+    const run = this.run ??= { command: clock.command, lastFrame: -1, lastGrid: -1, referenceOnly: this.referenceOnlyCount, load: this.load }
     const rate = parent.fps * clock.rate, duration = videoEditDuration(parent)
     const due = Math.floor((performance.now() - zero) * rate / 1000 + 1e-6)
     const track = videoEditProgramMulticam(this.instance)?.clip.track ?? 0
@@ -271,7 +299,8 @@ export class VideoEditMulticamMonitor {
     logger.info('多机位播放统计', { event: 'video_edit.multicam.playback.stats', context: {
       projectId: this.instance.document.id, sourceId: this.sourceId, reason, cameras: this.canvases.length, fps: this.grid.composition.fps,
       actualFps: summary.durationMs > 0 ? Math.round((summary.presentedFrames - 1) / summary.durationMs * 1e5) / 100 : 0,
-      divisor: this.divisor, width: this.grid.composition.width, height: this.grid.composition.height, proxies: this.proxyCount(this.grid), ...summary,
+      divisor: this.divisor, width: this.grid.composition.width, height: this.grid.composition.height, proxies: this.proxyCount(this.grid), referenceOnly: run.referenceOnly, ...summary,
     } })
+    if (!run.referenceOnly && run.load > 0) reportVideoEditMulticamPlayback(this.instance.document.id, this.sourceId, { load: run.load, droppedRatio: summary.droppedRatio, expectedFrames: summary.expectedFrames })
   }
 }

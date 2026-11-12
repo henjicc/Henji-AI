@@ -95,7 +95,8 @@ export function videoEditNativeScheduleSegments(times: readonly number[]): numbe
   return [0, ...cuts.filter((cut, index) => (cuts[index + 1] ?? times.length) - cut >= MIN_SEGMENT_ITEMS)]
 }
 
-type Plan = { times: readonly number[] } | { range: { from: number; to?: number } }
+/** `referenceOnly`：只解参考帧（只随时间点计划，见 `VideoEditNativeFramesOptions.referenceOnly`）。 */
+type Plan = { times: readonly number[]; referenceOnly?: boolean } | { range: { from: number; to?: number } }
 /** `held`：服务答复沿用上一幅画面的项（`VIDEO_EDIT_PICTURE_HELD`）。 */
 interface Consumer { frames: Map<number, NativeVideoFrame>; missing: Set<number>; held: Set<number>; highest: number; done?: { reason: string; delivered?: number; at: number }; wake?: () => void }
 interface Ticket { deliver: (frame: NativeVideoFrame) => void; fail: (error: Error) => void }
@@ -271,7 +272,7 @@ export class VideoEditNativeDecoderSession {
    * (the previous answer's picture again).
    */
   run(plan: { range: { from: number; to?: number } }, signal?: AbortSignal, outcome?: { completed: boolean }): AsyncGenerator<VideoEditNativePicture | null, void, unknown>
-  run(plan: { times: readonly number[] }, signal?: AbortSignal, outcome?: { completed: boolean }): AsyncGenerator<VideoEditScheduledPicture<VideoEditNativePicture>, void, unknown>
+  run(plan: { times: readonly number[]; referenceOnly?: boolean }, signal?: AbortSignal, outcome?: { completed: boolean }): AsyncGenerator<VideoEditScheduledPicture<VideoEditNativePicture>, void, unknown>
   async *run(plan: Plan, signal?: AbortSignal, outcome?: { completed: boolean }): AsyncGenerator<VideoEditScheduledPicture<VideoEditNativePicture>, void, unknown> {
     if (this.closing || this.ended) throw this.ended ?? closedFailure()
     const scheduleId = `s${++this.next}`
@@ -281,7 +282,7 @@ export class VideoEditNativeDecoderSession {
     signal?.addEventListener('abort', abort)
     const times = 'times' in plan ? plan.times.slice(0, MAX_SCHEDULE_TIMES) : undefined
     try {
-      await this.channel.call('schedule', { streamId: this.info.streamId, scheduleId, ...(times ? { times: [...times] } : { range: { ...('range' in plan ? plan.range : { from: 0 }) } }) })
+      await this.channel.call('schedule', { streamId: this.info.streamId, scheduleId, ...(times ? { times: [...times], ...('referenceOnly' in plan && plan.referenceOnly ? { referenceOnly: true } : {}) } : { range: { ...('range' in plan ? plan.range : { from: 0 }) } }) })
         .catch(error => { throw decodeFailure(this.name, error) })
       for (let index = 0; times === undefined || index < times.length; index++) {
         const item = await this.take(consumer, index, times !== undefined, signal)
@@ -628,6 +629,7 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
     // session), so this one runs on a playback session of its own, closed with the plan. Without video memory room for
     // one it takes the shared session as before.
     const concurrent = this.activePlayback > 0
+    const referenceOnly = this.owner.referenceOnly(this.media)
     this.active++; this.activePlayback++; this.reading('playback'); this.owner.cancelSpeculative(); this.owner.stopUnclaimed()
     let own: VideoEditNativeDecoderSession | undefined
     try {
@@ -641,7 +643,7 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
         })
         if (own) this.owner.log('debug', '同一素材同时播放，第二个计划使用独立会话', 'video_edit.decode.schedule.concurrent', { mediaId: this.media.id })
       }
-      if (!signal?.aborted) yield* own ? own.run({ times: timestamps }, signal) : this.segmented(timestamps, signal)
+      if (!signal?.aborted) yield* own ? own.run({ times: timestamps, referenceOnly }, signal) : this.segmented(timestamps, referenceOnly, signal)
     } finally {
       this.active--; this.activePlayback--; this.lastUsed = performance.now()
       if (own) this.owner.track(own.close())
@@ -654,10 +656,10 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
    * 另一个会话只在显存留有前台余量时按提前打开的方式开；开不成，这个计划余下的段都接在同一会话上（剪辑点照常现场定位）。
    * 全帧内素材不分段：服务在计划内自己预先接续下一段（`decode/mod.rs` 3.6）。
    */
-  private async *segmented(timestamps: readonly number[], signal?: AbortSignal): AsyncGenerator<VideoEditScheduledPicture<VideoEditNativePicture>, void, unknown> {
+  private async *segmented(timestamps: readonly number[], referenceOnly: boolean, signal?: AbortSignal): AsyncGenerator<VideoEditScheduledPicture<VideoEditNativePicture>, void, unknown> {
     const shared = await this.session('playback')
     const starts = shared.intraOnly ? [0] : videoEditNativeScheduleSegments(timestamps)
-    if (starts.length === 1) { yield* shared.run({ times: timestamps }, signal); return }
+    if (starts.length === 1) { yield* shared.run({ times: timestamps, referenceOnly }, signal); return }
     const stop = new AbortController()
     const plan = eitherSignal(stop.signal, signal)
     interface Segment { iterator: AsyncGenerator<VideoEditScheduledPicture<VideoEditNativePicture>, void, unknown>; first: Promise<IteratorResult<VideoEditScheduledPicture<VideoEditNativePicture>, void>> }
@@ -669,7 +671,7 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
     const run = (use: 'playback' | 'alternate', index: number): Promise<Segment> => this.session(use).then(session => {
       if (plan.aborted) throw readAbandoned()
       uses.set(index, use)
-      const iterator = session.run({ times: timestamps.slice(starts[index], starts[index + 1] ?? timestamps.length) }, plan)
+      const iterator = session.run({ times: timestamps.slice(starts[index], starts[index + 1] ?? timestamps.length), referenceOnly }, plan)
       const first = iterator.next(); void first.catch(() => undefined)
       return { iterator, first }
     })
@@ -750,6 +752,11 @@ export interface VideoEditNativeFramesOptions {
   sound?: boolean
   /** 预览 Worker 统一管理闲置会话；导出和独立读取保持立即释放。 */
   retainIdle?: boolean
+  /**
+   * 这个素材的播放计划只解参考帧（多机位格子在显卡解码带不动全部机位时的预览）。只作用于播放计划（`schedule`）：
+   * 单帧读取、顺序读取（导出、预滚）与预热照常逐帧。缺省都逐帧。
+   */
+  referenceOnly?: (media: VideoEditMedia) => boolean
   log?: (level: 'debug' | 'info', message: string, event: string, context: Record<string, unknown>) => void
 }
 
@@ -767,6 +774,7 @@ export class VideoEditNativeFrames implements VideoEditFrameBackend {
   get managesIdleSessions(): boolean { return this.options.retainIdle === true }
 
   log(level: 'debug' | 'info', message: string, event: string, context: Record<string, unknown>): void { this.options.log?.(level, message, event, context) }
+  referenceOnly(media: VideoEditMedia): boolean { return this.options.referenceOnly?.(media) === true }
 
   cancelSpeculative(): void { for (const { source } of this.files.values()) source.cancelWarm() }
   /**

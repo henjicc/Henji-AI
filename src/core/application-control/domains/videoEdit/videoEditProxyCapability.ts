@@ -5,7 +5,7 @@ import { videoProxyPresetSchema } from '../../../videoEdit/proxy'
 
 const documentRef = applicationRefSchema.extend({ kind: z.literal('video_edit.document') }).strict()
 const mediaRef = applicationRefSchema.extend({ kind: z.literal('video_edit.media') }).strict()
-const input = z.object({ documentRef, mediaRef, preset: videoProxyPresetSchema.default('auto').describe('auto（默认）为原片的一半、短边最高 1080；720p/540p 只为兼容旧代理保留。') }).strict()
+const input = z.object({ documentRef, mediaRef, preset: videoProxyPresetSchema.default('auto').describe('auto（默认）为原片的一半、短边最高 1080；720p 短边 720，更小更快（多机位多路原片时可选）；540p 只为兼容旧代理保留。') }).strict()
 const output = z.object({ resultRef: mediaRef, preset: videoProxyPresetSchema, verified: z.boolean(), message: z.string() }).strict()
 export const generateVideoEditProxyCapability = defineApplicationCapability({
   id: 'generate_video_edit_proxy', title: '生成视频素材的剪辑代理',

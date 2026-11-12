@@ -152,6 +152,8 @@ export interface VideoFrameScheduleRequest {
   scheduleId: string
   times?: number[]
   range?: { from: number; to?: number }
+  /** 只解参考帧（只随 `times`）：多机位格子在硬件解不过来时的预览，非参考帧的项沿用上一幅。 */
+  referenceOnly?: boolean
 }
 
 export interface VideoFrameScheduleAck {

@@ -576,7 +576,9 @@ describe('texture bridge helpers', () => {
       expect(() => parseVideoFrameAtRequest(invalid)).toThrow()
     }
     expect(parseVideoFrameScheduleRequest({ streamId: 'vf-1', scheduleId: 's', range: { from: 2 } })).toEqual({ streamId: 'vf-1', scheduleId: 's', range: { from: 2 } })
-    for (const invalid of [{ streamId: 'vf-1', scheduleId: 's' }, { streamId: 'vf-1', scheduleId: 's', times: [0], range: { from: 0 } }, { streamId: 'vf-1', scheduleId: 's', times: [0, Number.POSITIVE_INFINITY] }, { streamId: 'vf-1', scheduleId: 's', range: { from: 'a' } }]) {
+    expect(parseVideoFrameScheduleRequest({ streamId: 'vf-1', scheduleId: 's', times: [0], referenceOnly: true })).toEqual({ streamId: 'vf-1', scheduleId: 's', times: [0], referenceOnly: true })
+    // 区间计划是导出与预滚的顺序读取：只要参考帧不能漏进去。
+    for (const invalid of [{ streamId: 'vf-1', scheduleId: 's', range: { from: 0 }, referenceOnly: true }, { streamId: 'vf-1', scheduleId: 's', times: [0], referenceOnly: 'yes' }, { streamId: 'vf-1', scheduleId: 's' }, { streamId: 'vf-1', scheduleId: 's', times: [0], range: { from: 0 } }, { streamId: 'vf-1', scheduleId: 's', times: [0, Number.POSITIVE_INFINITY] }, { streamId: 'vf-1', scheduleId: 's', range: { from: 'a' } }]) {
       expect(() => parseVideoFrameScheduleRequest(invalid)).toThrow()
     }
   })

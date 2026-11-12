@@ -117,7 +117,9 @@ impl DecodeOptions {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SchedulePlan {
-    Times(Vec<f64>),
+    /// `reference_only`：从第一项起只解参考帧（多机位格子在硬件解不过来时的预览），非参考帧那几项沿用上一幅；
+    /// 只用于播放预览，导出与精确取帧不会带它（区间计划没有这一项）。
+    Times { times: Vec<f64>, reference_only: bool },
     Range { from: f64, to: Option<f64> },
 }
 
@@ -1447,7 +1449,7 @@ mod imp {
             // 顺序读取（导出、预滚），照常流水。
             self.paced = !matches!(plan, SchedulePlan::Range { to: None, .. });
             let result = match &plan {
-                SchedulePlan::Times(times) => self.schedule_times(&schedule_id, times),
+                SchedulePlan::Times { times, reference_only } => self.schedule_times(&schedule_id, times, *reference_only),
                 SchedulePlan::Range { from, to } => self.schedule_range(&schedule_id, *from, *to),
             };
             self.paced = false;
@@ -1477,11 +1479,13 @@ mod imp {
         /// 判为跟不上（`DropState`）时连本项附近的非参考帧也跳过：多路高码率素材叠放时显卡解码单元的总吞吐不够逐帧解
         /// （4090 叠放 4 路 4K59.94 H.264 150Mbps 满载约合 3.75 路实时），只解参考帧的那几项沿用上一幅，画面按时出，
         /// 而不是整体落后、被时钟反复跳过。画面与上一项交出的相同（被跳过的项、重复的时间）答 `held`，不再复制一份。
-        fn schedule_times(&mut self, schedule_id: &str, times: &[f64]) -> Result<(), Abort> {
+        ///
+        /// `reference_only`：从第一项起一律只解参考帧（`DropState::reference_only`），不等判为跟不上。
+        fn schedule_times(&mut self, schedule_id: &str, times: &[f64], reference_only: bool) -> Result<(), Abort> {
             let cuts: Vec<usize> = times.windows(2).enumerate().filter(|(_, pair)| is_cut(pair[0], pair[1])).map(|(index, _)| index).collect();
             let mut next_cut = 0;
             let startup = self.control.slots.count();
-            let mut drop = DropState::new(startup, self.drop_grace);
+            let mut drop = if reference_only { DropState::reference_only(startup) } else { DropState::new(startup, self.drop_grace) };
             let mut answered: Option<i64> = None;
             for (index, time) in times.iter().enumerate() {
                 if self.stopped() {
@@ -1502,7 +1506,7 @@ mod imp {
                 }
                 let ticks = seconds_to_ticks(*time, self.time_base);
                 self.skip_before = Some(self.skip_limit(ticks));
-                self.drop = (index >= startup).then_some(drop);
+                self.drop = (reference_only || index >= startup).then_some(drop);
                 let located = self.locate(ticks, false);
                 self.skip_before = None;
                 drop = self.drop.take().unwrap_or(drop);
@@ -2195,7 +2199,7 @@ mod imp {
                 return;
             };
             let times: Vec<f64> = (0..90).map(|frame| (frame as f64 + 0.25) / 30.0).collect();
-            let run = |ahead: bool| {
+            let run = |ahead: bool, reference_only: bool| {
                 // 播放会话的纹理池大小（8 槽）：消费方一交出就用完时交出未还的帧只剩零到一幅。
                 let (commands, mut session) = open_with_pool(&path, Some(8));
                 let control = session.control.clone();
@@ -2216,7 +2220,7 @@ mod imp {
                         }
                     })
                 };
-                session.run_schedule("plan".into(), SchedulePlan::Times(times.clone()));
+                session.run_schedule("plan".into(), SchedulePlan::Times { times: times.clone(), reference_only });
                 done.store(true, Ordering::Relaxed);
                 consumer.join().unwrap();
                 drop(commands);
@@ -2225,9 +2229,12 @@ mod imp {
                 assert_eq!(load(&counters.paces) + load(&counters.settles), load(&counters.produced), "每一帧交出前都等过显卡");
                 (load(&counters.produced), load(&counters.held), load(&counters.decoded))
             };
-            let (produced, held, _) = run(true);
+            let (produced, held, _) = run(true, false);
             assert_eq!((produced, held), (90, 0), "解码在消费方前面：逐帧精确");
-            let (produced, held, decoded) = run(false);
+            let (produced, held, decoded) = run(true, true);
+            assert!(held > 0 && decoded < 90, "要求只解参考帧：解码在前面也不解非参考帧（{held} 项沿用，解了 {decoded} 帧）");
+            assert_eq!(produced + held, 90, "每项恰好一个答复");
+            let (produced, held, decoded) = run(false, false);
             assert!(held > 0, "跟不上：B 帧那几项沿用上一幅");
             assert_eq!(produced + held, 90, "每项恰好一个答复");
             assert!(decoded < 90, "非参考帧没有解码：{decoded}");

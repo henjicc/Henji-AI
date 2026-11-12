@@ -73,6 +73,8 @@ export type RenderRequest = { id: number } & (
   | { kind: 'preopen'; document: VideoEditComposition; frame: number; localPaths: Record<string, string>; timing?: VideoEditTimingContext }
   /** 已分析好的智能区域段落（4.7d），按素材地址与分析种类；不进渲染队列，下一次渲染即生效。 */
   | { kind: 'tracks'; tracks: VideoEditTrackResults }
+  /** 播放计划只解参考帧的素材（多机位格子带不动时）；不进渲染队列，下一个播放计划即生效。 */
+  | { kind: 'referenceOnly'; mediaIds: string[] }
   | { kind: 'regions'; regions: VideoEditSmartRegionSegments }
   /** 已就绪的预渲染窗口与它们的本地文件；不进渲染队列，下一次正向播放的渲染即使用。 */
   | { kind: 'renderCache'; windows: import('./videoEditRenderer').VideoEditRenderCacheWindow[]; localPaths: Record<string, string> }
@@ -177,6 +179,8 @@ function setProxies(values: Record<string, VideoProxyResult> | undefined): void 
 const localPaths = new Map<string, string>()
 const renderCachePaths = new Map<string, string>()
 let renderCacheWindows: import('./videoEditRenderer').VideoEditRenderCacheWindow[] = []
+/** 播放时只解参考帧的素材 ID（`referenceOnly` 消息）：只作用于本会话的播放计划，单帧读取与顺序读取照常逐帧。 */
+const referenceOnlyMedia = new Set<string>()
 function setLocalPaths(paths: Record<string, string> | undefined): void { if (!paths) return; localPaths.clear(); for (const [url, path] of Object.entries(paths)) localPaths.set(url, path) }
 const log = (level: RenderLogMessage['level'], message: string, event: string, context: Record<string, unknown>): void => {
   if (event === 'video_edit.decode.lookahead.scan') { lookaheadStats.scans++; const ms = Number(context.durationMs); lookaheadStats.scanMs += ms; lookaheadStats.maxScanMs = Math.max(lookaheadStats.maxScanMs, ms) }
@@ -193,7 +197,7 @@ function frameBackend(decode: RenderDecodeOptions | undefined): VideoEditProxyFr
   setLocalPaths(decode?.localPaths)
   const channel = decode?.nativeAvailable && decode.forced !== 'browser' ? nativeFrames : undefined
   // Runtime native failures are recovered per read by the router (task 3.1).
-  nativeBackend = channel ? new VideoEditNativeFrames({ channel, localPath: media => localPaths.get(media.path) ?? renderCachePaths.get(media.path), retainIdle: direct, log }) : undefined
+  nativeBackend = channel ? new VideoEditNativeFrames({ channel, localPath: media => localPaths.get(media.path) ?? renderCachePaths.get(media.path), retainIdle: direct, referenceOnly: media => referenceOnlyMedia.has(media.id), log }) : undefined
   decodeLookahead = direct ? new VideoEditDecodeLookahead(nativeBackend, media => videoEditDecodeSource(media, proxies.get(media.id), true, 'playback'), { idle: () => foregroundFrames === 0 || renderer?.waitingForPresentation === true, prepare: (target, signal) => renderer?.prepareLookahead(target, signal) ?? Promise.resolve(false), retain: targets => renderer?.retainLookahead(targets), declarations: instance => renderer?.codeDeclarations(instance) }) : undefined
   router = new VideoEditFrameRouter(new VideoEditBrowserFrames(), nativeBackend, { nativeAvailable: !!nativeBackend, ...(decode?.forced ? { forced: decode.forced } : {}) }, log)
   return new VideoEditProxyFrames(router, proxies)
@@ -334,6 +338,7 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
     // 缓存成功即完成请求；暂停帧的现场合成在队列内继续，后续缓存请求仍可在队列外上屏。
   }
   if (request.kind === 'tracks') { setVideoEditTrackResults(request.tracks); renderer?.cancelPresentation(); return }
+  if (request.kind === 'referenceOnly') { referenceOnlyMedia.clear(); for (const id of request.mediaIds) referenceOnlyMedia.add(id); return }
   if (request.kind === 'regions') { setVideoEditSmartRegionSegments(request.regions); renderer?.cancelPresentation(); return }
   if (request.kind === 'renderCache') { renderCachePaths.clear(); for (const [url, path] of Object.entries(request.localPaths)) renderCachePaths.set(url, path); renderCacheWindows = request.windows; renderer?.setRenderCache(renderCacheWindows); if (renderer) decodeLookahead?.windowsChanged(renderer.document, renderCacheWindows); else releasePreopened(); return }
   if (request.kind === 'invalidate') { if (revision !== request.revision) { revision = request.revision; renderer?.cancelPresentation() } return }

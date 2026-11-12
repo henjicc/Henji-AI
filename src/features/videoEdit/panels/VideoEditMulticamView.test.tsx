@@ -11,11 +11,11 @@ import { VideoEditRenderWorkerError } from '../engine/videoEditGpuFailure'
 import { VideoEditMulticamView } from './VideoEditMulticamView'
 import { UI_OPTION_ITEM_ACTIVE_CLASS } from '@/components/ui/styleTokens'
 
-interface FakeSession { document: VideoEditComposition; options: VideoEditRenderTransportOptions; updateDocument: ReturnType<typeof vi.fn>; setRenderDivisor: ReturnType<typeof vi.fn>; stopPlayback: ReturnType<typeof vi.fn> }
-const boundary = vi.hoisted(() => ({ sessions: [] as unknown[], present: vi.fn(), dispose: vi.fn(async () => undefined), switched: vi.fn(), info: vi.fn(), view: new Set<() => void>(), domain: new Set<() => void>(), revision: 0, command: {} as object, proxies: {} as Record<string, { key: string }>, instances: [] as unknown[] }))
+interface FakeSession { document: VideoEditComposition; options: VideoEditRenderTransportOptions; updateDocument: ReturnType<typeof vi.fn>; setRenderDivisor: ReturnType<typeof vi.fn>; stopPlayback: ReturnType<typeof vi.fn>; setReferenceOnly: ReturnType<typeof vi.fn> }
+const boundary = vi.hoisted(() => ({ playback: { realtime: 'smooth', cameras: [] as string[], originals: [] as string[], withoutProxy: [] as string[], proxyChoices: [] as Array<{ value: string; label: string }>, load: 0, capacity: 3 }, prompt: false, createProxies: vi.fn(async () => undefined), dismissPrompt: vi.fn(), reported: vi.fn(), sessions: [] as unknown[], present: vi.fn(), dispose: vi.fn(async () => undefined), switched: vi.fn(), info: vi.fn(), view: new Set<() => void>(), domain: new Set<() => void>(), revision: 0, command: {} as object, proxies: {} as Record<string, { key: string }>, instances: [] as unknown[] }))
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   terminalError = undefined; terminated = false
-  updateDocument = vi.fn(async () => undefined); setRenderDivisor = vi.fn(async () => undefined); stopPlayback = vi.fn()
+  updateDocument = vi.fn(async () => undefined); setRenderDivisor = vi.fn(async () => undefined); stopPlayback = vi.fn(); setReferenceOnly = vi.fn()
   present = (...args: unknown[]) => boundary.present(...args)
   dispose = boundary.dispose
   constructor(readonly document: unknown, readonly options: unknown) { boundary.sessions.push(this) }
@@ -36,6 +36,10 @@ vi.mock('../application/videoEditMulticam', async () => {
   } }
 })
 vi.mock('../application/videoEditProxy', () => ({ getVideoEditProxySources: () => boundary.proxies }))
+vi.mock('../application/videoEditMulticamPlayback', () => ({
+  readVideoEditMulticamPlayback: () => boundary.playback, ensureVideoEditMulticamPlayback: async () => boundary.playback, reportVideoEditMulticamPlayback: boundary.reported,
+  videoEditMulticamProxyPromptVisible: () => boundary.prompt, dismissVideoEditMulticamProxyPrompt: boundary.dismissPrompt, createVideoEditMulticamProxies: boundary.createProxies,
+}))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: vi.fn(), info: boundary.info, warn: vi.fn(), error: vi.fn() }) }))
 
 const presented = { presented: true, renderCached: false, renderElapsedMs: 5 }
@@ -61,6 +65,7 @@ beforeEach(() => {
   vi.useFakeTimers(); now = 1000
   vi.spyOn(performance, 'now').mockImplementation(() => now)
   boundary.sessions = []; boundary.present.mockReset().mockResolvedValue(presented); boundary.dispose.mockReset().mockResolvedValue(undefined); boundary.switched.mockReset(); boundary.info.mockReset(); boundary.command = {}; boundary.proxies = {}
+  boundary.playback = { realtime: 'smooth', cameras: [], originals: [], withoutProxy: [], proxyChoices: [], load: 0, capacity: 3 }; boundary.prompt = false; boundary.createProxies.mockClear(); boundary.dismissPrompt.mockClear(); boundary.reported.mockClear()
   Object.defineProperty(HTMLCanvasElement.prototype, 'transferControlToOffscreen', { configurable: true, value() { return { from: this } } })
   vi.spyOn(HTMLCanvasElement.prototype, 'getBoundingClientRect').mockReturnValue({ width: 960, height: 540 } as DOMRect)
 })
@@ -218,4 +223,25 @@ it('格子尺寸为 0 时不建会话、不出帧；有了尺寸再开始；换�
   vi.stubGlobal('devicePixelRatio', 2)
   await act(async () => { for (const listener of [...resolution]) listener(); for (let index = 0; index < 50; index++) await Promise.resolve() })
   expect(session().setRenderDivisor).toHaveBeenLastCalledWith(2)
+})
+
+it('带得动时格子逐帧解、不提示；判为带不动时还在解原片的机位只解参考帧，并给出建代理的提示（默认 1080P，可选 720P）', async () => {
+  const instance = fixture()
+  const view = render(<VideoEditMulticamView instance={instance} onError={vi.fn()} />)
+  await settle()
+  expect(session().setReferenceOnly).not.toHaveBeenCalled()
+  expect(view.queryByRole('button', { name: '创建代理' })).toBeNull()
+  boundary.playback = { realtime: 'may_stutter', cameras: ['media-0', 'media-1', 'media-2', 'media-3'], originals: ['media-1', 'media-2'], withoutProxy: ['media-1', 'media-2'], proxyChoices: [{ value: 'auto', label: '1080P' }, { value: '720p', label: '720P' }], load: 5, capacity: 3 }; boundary.prompt = true
+  await notify(boundary.view)
+  expect(session().setReferenceOnly).toHaveBeenLastCalledWith(['media-1', 'media-2'])
+  fireEvent.click(view.getByRole('button', { name: '创建代理' }))
+  expect(boundary.createProxies).toHaveBeenLastCalledWith(instance.document.id, expect.any(String), 'auto')
+  fireEvent.click(view.getByRole('radio', { name: '720P' }))
+  fireEvent.click(view.getByRole('button', { name: '创建代理' }))
+  expect(boundary.createProxies).toHaveBeenLastCalledWith(instance.document.id, expect.any(String), '720p')
+  // 代理都建好：恢复逐帧解。
+  boundary.playback = { realtime: 'smooth', cameras: ['media-0', 'media-1', 'media-2', 'media-3'], originals: [], withoutProxy: [], proxyChoices: [], load: 2, capacity: 3 }; boundary.prompt = false
+  await notify(boundary.view)
+  expect(session().setReferenceOnly).toHaveBeenLastCalledWith([])
+  expect(view.queryByRole('button', { name: '创建代理' })).toBeNull()
 })

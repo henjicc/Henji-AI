@@ -735,7 +735,7 @@ xl 40 只给全屏查看器、画面中央播放键。开关开启用 `UiIconBut
 | 带标签字段 | `UiFormRow inline` + `UiSwitch` / `UiInput`；多行表单不传 inline | 重新创建 Toggle / TextInput 平行包装 |
 | 标签栏、导航 | `UiNavButton`（侧栏）/ `UiChipButton selectionRole="navigation"`（`selectionAppearance` default / `subtle` 面板标签 / `workspace` 标题栏工作区，后者同栏浮层开关用 `on`） | 手写指示条、选中底 |
 | 无边框窗口的最小化/最大化/还原/关闭 | `UiWindowControl`（`action`、`platform` windows/mac；主窗口与日志窗口共用） | 用 `UiIconButton` 加覆盖拼交通灯或关闭红底 |
-| 通知提示（操作反馈的短暂提示） | `UiToast`（`tone` success/error/warning，状态只进图标颜色；可选 `action` 复用 quiet 按钮提供可访问恢复动作；`surface` solid 默认 / 压在画布与媒体上用 `glass`；`placement` window 标题栏下居中 / container 画布内）；全局用 `useNotification().showNotification`，停留与淡出时长用 `motion.ts` 的 `UI_TOAST_DISPLAY_MS` / `UI_TOAST_EXIT_MS`（任务 5.7 把三套实现收敛到这里） | 自己画 `fixed top-*` 浮条、用危险实底或成功实底铺满通知、各写一份显示时长 |
+| 通知提示（操作反馈的短暂提示） | `UiToast`（`tone` success/error/warning，状态只进图标颜色；可选 `action` 复用 quiet 按钮提供可访问恢复动作；`surface` solid 默认 / 压在画布与媒体上用 `glass`；`placement` window 标题栏下居中 / container 画布内 / inline 留在面板文档流里的常驻提示（不盖画面与操作，正文单行截断，可带一个短选项 `choice`、`action.emphasis="primary"` 的唯一建议动作与 `onClose` 关闭，如多机位建代理提示））；全局用 `useNotification().showNotification`，停留与淡出时长用 `motion.ts` 的 `UI_TOAST_DISPLAY_MS` / `UI_TOAST_EXIT_MS`（任务 5.7 把三套实现收敛到这里） | 自己画 `fixed top-*` 浮条、用危险实底或成功实底铺满通知、各写一份显示时长 |
 | 弹窗/浮层/查看器/提示/缩略图进出场 | `useDialogTransition(open, durationMs, appear, { onExited, exitRef, enterKey })`；默认 base 档，结束事件挂根元素或 exitRef（CSS animation 用 onAnimationEnd、transition 用 onTransitionEnd），减少动效时直接显示/卸载 | 各入口手写 shouldRender/visible 的 rAF 与退出计时器；时长不匹配 CSS 档位 |
 | 临时通知生命周期 | `useTimedToast<T>()`（与 useDialogTransition 同文件）+ 正式 `UiToast`；停留 `UI_TOAST_DISPLAY_MS`、退出 `UI_TOAST_EXIT_MS` | 全局/生成页各写通知计时、进入延迟与卸载分支 |
 | 循环进行中反馈 | `UI_LOOP_MS.spin/pulse/executing` 及对应根变量，正式样本在设计系统中心 | 把循环周期当成进出场档；业务写裸秒数或永久合成层 |

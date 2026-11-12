@@ -137,10 +137,10 @@ export async function createVideoEditProxy(projectId: string, mediaId: string, p
   } finally { current.controller = undefined; tasks.delete(task); unsubscribe(); signal?.removeEventListener('abort', abort); controller.signal.removeEventListener('abort', cancel); publishVideoEdit() }
 }
 /** “为选中素材生成代理”：逐个后台生成（避免多段同时转码争抢编码器）；失败留在各素材的代理状态里，最后抛出第一个错误。 */
-export async function createVideoEditProxies(projectId: string, mediaIds: readonly string[]): Promise<void> {
+export async function createVideoEditProxies(projectId: string, mediaIds: readonly string[], preset: VideoProxyPreset = 'auto'): Promise<void> {
   let first: unknown
   for (const mediaId of new Set(mediaIds)) {
-    try { await createVideoEditProxy(projectId, mediaId, 'auto') } catch (error) {
+    try { await createVideoEditProxy(projectId, mediaId, preset) } catch (error) {
       if (error instanceof Error && /已取消|已关闭/.test(error.message)) return
       first ??= error
     }

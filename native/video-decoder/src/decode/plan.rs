@@ -275,6 +275,8 @@ pub struct DropState {
     slots: usize,
     grace: Duration,
     since: Option<Instant>,
+    /// 一直只解参考帧（`reference_only`），不看池子。
+    forced: bool,
     /// 交出未还帧数的采样（至少隔 `DROP_TREND_STEP`），环形保存，判断是否在往下掉。
     history: [Option<(Instant, usize)>; DROP_TREND_SAMPLES],
     next: usize,
@@ -294,7 +296,13 @@ impl DropState {
         // 纹理池只有两三个槽（显存不足时的最小池）时，消费方每还回一幅，交出未还的帧就回到 1：下界必须低于池子
         // 装得下的数量，否则解码完全跟得上也会一直判为跟不上。
         let low = DROP_LOW.min(slots.saturating_sub(1)).max(1);
-        Self { dropping: false, low, high: slots.saturating_sub(1).max(low), starved: low.min(2), slots, grace, since: None, history: [None; DROP_TREND_SAMPLES], next: 0 }
+        Self { dropping: false, low, high: slots.saturating_sub(1).max(low), starved: low.min(2), slots, grace, since: None, forced: false, history: [None; DROP_TREND_SAMPLES], next: 0 }
+    }
+
+    /// 从第一项起一直只解参考帧：多机位格子在显卡解码单元带不动全部机位时这样预览，每格帧率降下来但平稳，
+    /// 把解码余量留给节目画面。由消费方明确要求，不随池子走向退出。
+    pub fn reference_only(slots: usize) -> Self {
+        Self { dropping: true, forced: true, ..Self::new(slots, Duration::ZERO) }
     }
 
     /// 回看窗口那头的采样比此刻多出至少 2 幅：交还的比解出的多，池子在变空。
@@ -312,6 +320,9 @@ impl DropState {
 
     /// 按此刻交出未还的帧数更新，返回这个包是否只在是参考帧时才解。
     pub fn update(&mut self, outstanding: usize, now: Instant) -> bool {
+        if self.forced {
+            return true;
+        }
         if self.since.is_none() && outstanding < self.slots {
             self.since = Some(now);
         }
@@ -367,6 +378,15 @@ mod tests {
         assert!(!state.update(7, start), "消费方开始取帧：从这时起算");
         assert!(!state.update(1, start + DROP_GRACE / 2), "起播头一阵解码慢于播放：渲染层提前准备的帧撑得过去，不跳");
         assert!(state.update(1, start + DROP_GRACE), "之后仍跟不上就只解参考帧");
+    }
+
+    #[test]
+    fn reference_only_skips_from_the_first_packet_even_with_a_full_pool() {
+        let now = Instant::now();
+        let mut state = DropState::reference_only(8);
+        assert!(state.update(8, now), "池子满着（解码远在前面）也只解参考帧");
+        assert!(state.update(7, now + Duration::from_secs(5)));
+        assert!(!DropState::new(8, Duration::ZERO).update(8, now), "普通计划池子满时逐帧解");
     }
 
     #[test]

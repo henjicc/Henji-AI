@@ -565,6 +565,8 @@ export function DialogSection(): JSX.Element {
         <UiToast placement="container" tone="error" message={notificationMessage('exportFailed')} />
       </div>
       <div className="relative h-20"><UiToast placement="container" tone="warning" action={{ label: '重试', onClick: noop }} message="需要重试" /></div>
+      {/* 常驻提示留在面板文档流里：选项 + 唯一建议动作 + 关闭 */}
+      <UiToast placement="inline" tone="warning" message="这组机位实时播放可能卡顿，建议创建代理" choice={{ label: '代理分辨率', options: [{ value: 'auto', label: '1080P' }, { value: '720p', label: '720P' }], value: 'auto', onChange: noop }} action={{ label: '创建代理', emphasis: 'primary', onClick: noop }} onClose={noop} />
       <UiGroup title="测试夹具：仅核对付费确认弹窗，不提交生成" titleTone="compact" data-gallery-fixture="paid-approval">
         <UiButton data-paid-approval-fixture onClick={() => { void requestAlertConfirmation({
           title: t('paidApproval.sendExplanation'), message: t('paidApproval.explanationContent', { count: 2, modelName: 'Example model' }),

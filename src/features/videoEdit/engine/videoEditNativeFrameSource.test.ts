@@ -294,6 +294,23 @@ describe('原生帧源：连续计划', () => {
     expect(channel.released.sort((a, b) => a - b)).toEqual([0, 99, 33_333, 50_000])
   })
 
+  it('只解参考帧只带进指定素材的播放计划，不漏进单帧读取与顺序读取（导出、预滚）', async () => {
+    const channel = new FakeChannel()
+    const frames = new VideoEditNativeFrames({ channel, localPath: item => item.path, referenceOnly: item => item.id === 'grid' })
+    const grid = await frames.open(media({ id: 'grid', path: 'grid.mp4' })).ready
+    const other = await frames.open(media({ id: 'other', path: 'other.mp4' })).ready
+    const schedules = (): Array<Record<string, unknown>> => channel.calls.filter(call => call.method === 'schedule').map(call => call.params)
+    const plan = grid.schedule([0, 1 / 60]); void plan.next(); await flush()
+    expect(schedules().at(-1)).toMatchObject({ times: [0, 1 / 60], referenceOnly: true })
+    const plain = other.schedule([0]); void plain.next(); await flush()
+    expect(schedules().at(-1)).not.toHaveProperty('referenceOnly')
+    await grid.clipFrames()!.frameAt(0)
+    expect(channel.last('frameAt')).not.toHaveProperty('referenceOnly')
+    const sequential = grid.clipFrames()!.frames(0); void sequential.next(); await flush()
+    expect(schedules().at(-1)).toMatchObject({ range: { from: 0 } })
+    expect(schedules().at(-1)).not.toHaveProperty('referenceOnly')
+  })
+
   it('服务答复沿用上一幅的项（解码跟不上、重复的时间）交出沿用标记，不占画面、不另读', async () => {
     const channel = new FakeChannel()
     const source = await backend(channel).open(media()).ready

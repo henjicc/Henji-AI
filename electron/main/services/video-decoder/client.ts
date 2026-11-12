@@ -274,7 +274,7 @@ export class VideoDecoderService {
     return this.call<VideoDecoderFrameAtResult>({ type: 'frame_at', streamId, time, ticket, ...(read.keyOnly ? { keyOnly: true } : {}), ...(read.retain ? { retain: true } : {}), ...(read.prefetch ? { prefetch: true } : {}) }, options)
   }
 
-  async schedule(request: { streamId: string; scheduleId: string; times?: number[]; range?: { from: number; to?: number } }, options: VideoDecoderRequestOptions = {}): Promise<VideoDecoderScheduleAck> {
+  async schedule(request: { streamId: string; scheduleId: string; times?: number[]; range?: { from: number; to?: number }; referenceOnly?: boolean }, options: VideoDecoderRequestOptions = {}): Promise<VideoDecoderScheduleAck> {
     return this.call<VideoDecoderScheduleAck>({ type: 'schedule', ...request }, options)
   }
 

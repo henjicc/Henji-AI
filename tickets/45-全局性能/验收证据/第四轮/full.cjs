@@ -1,0 +1,15 @@
+// 打开多机位视图 → 播放头点到约 4 秒 → 等 WAIT 毫秒 → 截图；之后由 play.cjs 播放
+const path = require('path')
+const { connect, wait } = require('./rawcdp.cjs')
+;(async () => {
+  const page = await connect()
+  const k = 1.92 / await page.evaluate('devicePixelRatio')
+  const at = await page.evaluate(`(() => { const r = [...document.querySelectorAll('button')].find(b => b.getAttribute('aria-label') === '更多节目操作').getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2] })()`)
+  await page.click(at[0], at[1]); await wait(700)
+  console.log('open', await page.evaluate(`(() => { const item = [...document.querySelectorAll('[role="menuitem"],button')].find(e => /多机位视图/.test(e.innerText || '')); if (!item) return false; item.click(); return true })()`))
+  await wait(2000)
+  await page.click(700 * k, 770 * k)
+  await wait(Number(process.env.WAIT || 6000))
+  await page.shot(path.join(__dirname, `${process.env.TAG || 'x'}-ready.jpg`))
+  page.close(); process.exit(0)
+})().catch(e => { console.error(e); process.exit(1) })
