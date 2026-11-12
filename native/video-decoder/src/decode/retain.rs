@@ -184,6 +184,14 @@ impl RetainedFrames {
         self.break_chain();
     }
 
+    /// 放掉全部留存帧与纹理（显存预算收回）：纹理号随之作废，容量归零，之后按重新登记的容量新建。
+    pub fn release_all(&mut self) {
+        self.entries.clear();
+        self.free.clear();
+        self.capacity = 0;
+        self.break_chain();
+    }
+
     /// 纹理 `handle` 的内容不再可信（写入或交出失败）：丢掉它上面的帧。
     pub fn forget(&mut self, handle: u32) {
         if let Some((&pts, _)) = self.entries.iter().find(|(_, entry)| entry.handle == handle) {

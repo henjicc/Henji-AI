@@ -3,7 +3,7 @@
 //! 控制面：stdin/stdout 交换长度前缀 JSON（见 protocol.rs）；stderr 输出一行一 JSON 的结构化日志，
 //! 由主进程转入统一日志。stdin 关闭即退出，父进程异常结束时服务不会残留。
 //!
-//! 命令：hello（版本、FFmpeg 信息、D3D11 设备、登记客户端 PID、资源上限）、ping（心跳）、probe（流信息）、
+//! 命令：hello（版本、FFmpeg 信息、D3D11 设备、登记客户端 PID、显存预算）、ping（心跳）、probe（流信息）、
 //! cancel（取消探测或单帧取帧，见 cancel.rs）、shutdown；
 //! 帧流（1.2）：start_test_stream、stop_stream、release_frame（通知）、stats、close_client_handles；
 //! 解码会话（1.3，协议见 decode/mod.rs）：open_decoder、frame_at、schedule、cancel_schedule；
@@ -85,7 +85,7 @@ impl Service {
                 (None, platform::unavailable_summary(&reason))
             }
         };
-        // Resource limits follow the selected adapter's dedicated memory (3.1); the main process may override them.
+        // 显存预算按所选显卡的专用显存确定（3.1，只作淘汰目标）；主进程只在诊断时覆盖。
         let budget = budget::Budget::new(budget::Limits::for_adapter(platform_summary["adapter"]["dedicatedVideoMemoryMiB"].as_u64()));
         Self { platform, platform_summary, ffmpeg: ffmpeg_info::ffmpeg_info(), cancels: Arc::default(), streams: streams::StreamManager::new(), audio: audio::AudioManager::default(), budget }
     }

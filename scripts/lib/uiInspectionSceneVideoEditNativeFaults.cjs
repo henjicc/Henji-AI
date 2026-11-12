@@ -16,11 +16,16 @@ const { adoptNewVideoEditProject, leaveVideoEditProject, openVideoEditFile, read
  * - 坏文件：截断的 ProRes 文件就地提示（用户语言），无画面；文件修复后自动重试出画。
  * - 缺失：主进程诊断变量指向不存在的服务可执行文件后结束服务进程（重启时找不到服务）。H.264 工程全程走后备解码且
  *   画面正确；ProRes 就地提示“格式当前无法播放”；恢复可执行文件后重新加载预览即回到原生。
- * 另含超预算：同时显示 11 个视频素材（每个渲染器最多 10 个原生会话）时就地提示且不崩溃。
+ * 另含超预算：显存预算经诊断变量压到约三路会话后同时显示并播放 11 个视频素材。预算只作淘汰目标：每层画面照常、
+ *   逐帧精确，不出现就地提示；日志里有会话超出预算照常打开、剪辑点放弃另开会话改在同一播放会话上定位的降级事件。
+ *   诊断变量只在服务握手时读取，所以借缺失阶段恢复时的那次启动生效；场景结束后已运行的服务保留压小的预算直到下次启动
+ *   （不为恢复再结束一次服务：一分钟内第四次异常退出会停止自动重启）。
  * 证据：`.ui-tour/cache/video-edit-native-faults/evidence.json`。
  */
 const ROOT = path.resolve('.ui-tour/cache/video-edit-native-faults')
 const FPS = 30
+/** 超预算阶段的解码显存预算（MiB）：1080p H.264 一路会话按原生估算约 70–90MiB，11 层远超出，提前打开也没有余量。 */
+const BUDGET_MB = 256
 /** Each source file: 8s at 30fps. The fault project repeats it three times per track (24s of timeline). */
 const FRAMES = 240
 const REPEATS = 3
@@ -142,7 +147,8 @@ function createVideoEditNativeFaultsScene() {
       fs.writeFileSync(brokenFile, JSON.stringify(project('native-faults-broken', '坏文件', [media('broken', broken)], [clip('broken-clip', 'broken', 1)])))
       const copies = Array.from({ length: 11 }, (_, index) => { const file = path.join(ROOT, `copy-${index}.mp4`); fs.copyFileSync(h264, file); return file })
       const budgetFile = path.join(ROOT, 'budget.hjvid')
-      fs.writeFileSync(budgetFile, JSON.stringify(project('native-faults-budget', '同时显示 11 个视频', copies.map((file, index) => media(`copy-${index}`, file)), copies.map((_, index) => clip(`copy-clip-${index}`, `copy-${index}`, index + 1, { x: (index % 4) / 4 - .375, y: Math.floor(index / 4) / 3 - .33, scale: .24 })), 4)))
+      // 每层同一文件首尾相接三次：播放跨过 8 秒处的剪辑点时，播放计划会尝试在另一个会话上提前定位下一段。
+      fs.writeFileSync(budgetFile, JSON.stringify(project('native-faults-budget', '同时显示 11 个视频', copies.map((file, index) => media(`copy-${index}`, file)), copies.flatMap((_, index) => repeated(`copy-clip-${index}`, `copy-${index}`, index + 1, { x: (index % 4) / 4 - .375, y: Math.floor(index / 4) / 3 - .33, scale: .24 })), 4)))
 
       const evidence = { startedAt: new Date().toISOString(), phases: {} }
       const store = () => fs.writeFileSync(path.join(ROOT, 'evidence.json'), JSON.stringify(evidence, null, 2))
@@ -261,22 +267,6 @@ function createVideoEditNativeFaultsScene() {
         store()
         assert.equal(evidence.phases.brokenFile.timestamps, '0')
 
-        // ---- 超出预算：同时显示 11 个视频素材 ----
-        since = new Date().toISOString()
-        const budgetPid = await servicePid(page)
-        await openProject(page, app, budgetFile)
-        await waitPrompt(page, '同时读取的视频素材过多')
-        evidence.phases.budget = { prompt: await promptText(page), samePid: (await servicePid(page)) === budgetPid, rendererResponsive: await page.evaluate(() => document.readyState) }
-        await capture('native-faults-budget')
-        assert.ok(evidence.phases.budget.samePid, '超出预算不能让服务崩溃')
-        await button(page, '关闭项目').click()
-        await page.waitForFunction(() => !document.querySelector('canvas[aria-label="剪辑画面"]'), null, { timeout: 30000 })
-        await sleep(2000)
-        evidence.phases.budget.afterClose = await nativeStats(page)
-        store()
-        assert.equal(evidence.phases.budget.afterClose.streams, 0, '关闭工程后帧流没有归零')
-        assert.equal(evidence.phases.budget.afterClose.nativeStreams, 0, '关闭工程后原生会话没有归零')
-
         // ---- 缺失：服务可执行文件不存在 ----
         since = new Date().toISOString()
         await app.evaluate((_electron, file) => { process.env.HENJI_VIDEO_DECODER_EXECUTABLE = file }, missingExecutable)
@@ -297,11 +287,43 @@ function createVideoEditNativeFaultsScene() {
         await waitPrompt(page, '素材「prores.mov」的格式当前无法播放')
         evidence.phases.missing.prompt = await promptText(page)
         await capture('native-faults-missing')
-        await app.evaluate(() => { delete process.env.HENJI_VIDEO_DECODER_EXECUTABLE })
+        // 恢复后的这次启动同时带上压小的显存预算，供下面的超预算阶段使用（预算只在握手时读取）。
+        await app.evaluate((_electron, mb) => { delete process.env.HENJI_VIDEO_DECODER_EXECUTABLE; process.env.HENJI_VIDEO_DECODER_VRAM_BUDGET_MB = mb }, String(BUDGET_MB))
         await button(page, '更多节目操作').click(); await button(page, '重新加载预览').click()
         await presented(page, 0); await waitNoPrompt(page)
         evidence.phases.missing.recovered = { timestamps: await page.evaluate(() => document.querySelector('canvas[aria-label="剪辑画面"]').dataset.sourceTimestamps), pid: await servicePid(page) }
         assert.deepEqual(evidence.phases.missing.recovered.timestamps.split(',').map(Number), [0, 0])
+        // 先关掉这个工程、等会话归零：账本回到预算内，下面 11 层越过预算时才会再记一次“超出预算照常打开”。
+        await button(page, '关闭项目').click()
+        await page.waitForFunction(() => !document.querySelector('canvas[aria-label="剪辑画面"]'), null, { timeout: 30000 })
+        await sleep(2000)
+        assert.equal((await nativeStats(page))?.nativeStreams, 0, '关闭工程后原生会话没有归零')
+
+        // ---- 超出预算：显存预算压到约三路会话，同时显示并播放 11 个视频 ----
+        since = new Date().toISOString()
+        const budgetNative = async () => page.evaluate(() => window.henjiNative.videoFrames.stats().then(stats => stats.native?.budget ?? null).catch(() => null))
+        assert.equal((await budgetNative())?.vramLimitBytes, BUDGET_MB * 1024 * 1024, '压小的显存预算没有生效')
+        await openProject(page, app, budgetFile); await presented(page, 0)
+        const budgetFirst = await page.evaluate(() => document.querySelector('canvas[aria-label="剪辑画面"]').dataset.sourceTimestamps)
+        await observe(page)
+        await button(page, '播放／暂停').click()
+        // 跨过 8 秒处的剪辑点（每层的播放计划在剪辑点前 60 帧尝试另开会话）。
+        await sleep(10000)
+        await button(page, '播放／暂停').click()
+        observed = await collect(page)
+        const budgetLogs = await logsSince(page, since)
+        evidence.phases.budget = {
+          firstFrame: budgetFirst, frames: checkFrames(observed.frames, 11, '超预算'), promptPolls: observed.prompts, prompt: await promptText(page), ledger: await budgetNative(),
+          events: budgetLogs.filter(entry => /video_decoder\.native\.decode\.(budget|retain)\.|video_edit\.decode\.(schedule\.(shared|cut_shared)|exclusive\.shared|idle\.evicted)/.test(entry.event)).map(entry => ({ event: entry.event, mediaId: entry.context.mediaId, reason: entry.context.reason, reservedBytes: entry.context.reservedBytes })),
+        }
+        store()
+        await capture('native-faults-budget')
+        assert.deepEqual(budgetFirst.split(',').map(Number), Array(11).fill(0), '压小预算后首帧没有画出全部 11 层')
+        assert.ok(evidence.phases.budget.frames.presented > 30, `压小预算后 11 层没有播放（只呈现 ${evidence.phases.budget.frames.presented} 次）`)
+        assert.equal(observed.prompts, 0, '压小预算后出现了就地提示')
+        assert.equal(await page.getByText('节目画面无法显示').count(), 0, '压小预算后仍有就地提示')
+        assert.ok(budgetLogs.some(entry => entry.event === 'video_decoder.native.decode.budget.over_target'), '缺少“会话超出预算照常打开”的日志')
+        assert.ok(budgetLogs.some(entry => entry.event === 'video_edit.decode.schedule.cut_shared'), '缺少“显存没有余量，剪辑点改在同一播放会话上定位”的降级日志')
         await button(page, '关闭项目').click()
         await page.waitForFunction(() => !document.querySelector('canvas[aria-label="剪辑画面"]'), null, { timeout: 30000 })
         await sleep(2000)
@@ -316,6 +338,7 @@ function createVideoEditNativeFaultsScene() {
       } finally {
         await app.evaluate(({ sharedTexture }) => {
           delete process.env.HENJI_VIDEO_DECODER_EXECUTABLE
+          delete process.env.HENJI_VIDEO_DECODER_VRAM_BUDGET_MB
           if (globalThis.__henjiFaultImport) { sharedTexture.importSharedTexture = globalThis.__henjiFaultImport; delete globalThis.__henjiFaultImport }
         }).catch(() => {})
         await page.evaluate(() => { window.__faultObserver?.disconnect(); clearInterval(window.__faultPromptTimer) }).catch(() => {})

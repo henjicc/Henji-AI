@@ -15,16 +15,18 @@ use std::io::{self, Read, Write};
 /// 3：解码会话（1.3）：`open_decoder`/`frame_at`/`schedule`/`cancel_schedule`，`frame` 带 `ptsUs`/`request`，
 ///    新事件 `frame_missing`/`schedule_done`。
 /// 4：声音会话（2.3）：`open_audio`/`read_audio`/`close_audio`，读取结果以二进制附件返回 PCM。
-/// 5：故障与资源治理（3.1）：`ping`（主进程心跳，判定主循环卡死）；hello 携带资源上限 `limits`；
-///    超出预算的打开返回 `BUDGET_EXCEEDED`；`stats` 增加进程内存与预算占用。
-pub const PROTOCOL_VERSION: u32 = 5;
+/// 5：故障与资源治理（3.1）：`ping`（主进程心跳，判定主循环卡死）；hello 可带资源上限覆盖 `limits`；
+///    `stats` 增加进程内存与预算占用。
+/// 6：显存预算只作淘汰目标（budget.rs）：打开会话不再因预算失败（不再返回 `BUDGET_EXCEEDED`），不限会话数与硬解路数；
+///    hello 的 `limits` 只剩显存预算；`stats.budget` 去掉会话数与硬解上限，增加 `vramRetainedBytes`。
+pub const PROTOCOL_VERSION: u32 = 6;
 /// 单条控制消息上限。控制消息只含元数据，超过即视为协议错误，防止异常长度导致巨量分配。
 pub const MAX_MESSAGE_BYTES: usize = 16 * 1024 * 1024;
 
 #[derive(Debug, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case", rename_all_fields = "camelCase")]
 pub enum Command {
-    /// `clientPid`：客户端（Electron 主进程）PID，纹理句柄复制到该进程；`limits`：资源上限（3.1，缺省见 budget.rs）。
+    /// `clientPid`：客户端（Electron 主进程）PID，纹理句柄复制到该进程；`limits`：显存预算覆盖（诊断，缺省见 budget.rs）。
     Hello {
         #[serde(default)]
         client_pid: Option<u32>,
@@ -268,8 +270,8 @@ mod tests {
         let hello = parse_request(br#"{"id":"1","type":"hello"}"#).unwrap();
         assert_eq!(hello.id, "1");
         assert_eq!(hello.command, Command::Hello { client_pid: None, limits: None });
-        let hello = parse_request(br#"{"id":"1","type":"hello","clientPid":4242,"limits":{"vramBytes":1073741824,"hardwareSessions":4,"decoderSessions":8}}"#).unwrap();
-        assert_eq!(hello.command, Command::Hello { client_pid: Some(4242), limits: Some(crate::budget::LimitOverrides { vram_bytes: Some(1 << 30), hardware_sessions: Some(4), decoder_sessions: Some(8) }) });
+        let hello = parse_request(br#"{"id":"1","type":"hello","clientPid":4242,"limits":{"vramBytes":1073741824}}"#).unwrap();
+        assert_eq!(hello.command, Command::Hello { client_pid: Some(4242), limits: Some(crate::budget::LimitOverrides { vram_bytes: Some(1 << 30) }) });
         assert_eq!(parse_request(br#"{"id":"0","type":"ping"}"#).unwrap().command, Command::Ping);
         let probe = parse_request(r#"{"id":"2","type":"probe","path":"C:\\a b\\视频.mp4"}"#.as_bytes()).unwrap();
         assert_eq!(probe.command, Command::Probe { path: "C:\\a b\\视频.mp4".into() });

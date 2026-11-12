@@ -37,7 +37,7 @@ let service: VideoDecoderService | null = null
  *
  * 开发诊断（未打包时才读，每次启动服务时重新读取，故障注入场景据此在运行中切换，3.1）：
  * `HENJI_VIDEO_DECODER_EXECUTABLE` 指定服务可执行文件（不存在即“服务缺失”）；
- * `HENJI_VIDEO_DECODER_VRAM_BUDGET_MB` 缩小解码显存预算（验证超出预算的提示）。
+ * `HENJI_VIDEO_DECODER_VRAM_BUDGET_MB` 缩小解码显存预算（验证超出时先降级、不报错）。
  */
 export function getVideoDecoderService(): VideoDecoderService {
   if (service) return service

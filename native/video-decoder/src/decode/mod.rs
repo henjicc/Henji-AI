@@ -69,14 +69,14 @@ const SKIP_NONREF_MARGIN_SECONDS: f64 = 0.1;
 const KEY_ONLY_FORWARD_FRAMES: u32 = 2;
 /// 交出前等显卡完成的上限（3.8）：超时照常交出。
 const SETTLE_TIMEOUT: Duration = Duration::from_secs(2);
-/// 一个会话拖动留存帧的上限（字节与帧数取小）：4K NV12 约 165 帧，盖住一个 2 秒 GOP 加上倒拖时预解的上一个 GOP 的大半；
-/// 实际还受解码显存预算限制（`Budget::extend_vram` 给前台留余量）。
-const RETAIN_MAX_BYTES: u64 = 2 << 30;
-const RETAIN_MAX_FRAMES: u64 = 300;
 /// 读取位置没走过的一侧这么远（秒）以内的留存帧不让位（`RetainedFrames::far`）：盖住当前段与预解的上一段，长 GOP 录屏也够。
 const RETAIN_KEEP_SECONDS: f64 = 10.0;
 /// 预算没有余量时，隔这么久才再试着登记留存显存。
 const RETAIN_RETRY: Duration = Duration::from_secs(2);
+/// 显存分配失败后重建纹理池用的槽数（协议允许的最小值）：交帧时多等槽位，但会话照常可用。
+const REDUCED_POOL_SIZE: u32 = 2;
+/// 收回留存帧后等其他会话放掉纹理的时间：空闲会话线程每 50ms 检查一次收回。
+const RETAINED_RELEASE_WAIT: Duration = Duration::from_millis(60);
 /// 送入这么多包仍无输出视为解码器卡死。
 const STALL_PACKETS: u32 = 600;
 pub const MAX_SCHEDULE_TIMES: usize = 200_000;
@@ -220,7 +220,7 @@ mod imp {
 
     struct Session {
         stream_id: String,
-        /// 显存登记与硬解名额（3.1 预算）：随会话结束归还。
+        /// 显存登记与硬解计数（3.1 预算）：随会话结束归还。
         _vram: crate::budget::VramTicket,
         _hardware: Option<crate::budget::HardwareTicket>,
         platform: Arc<dyn VideoPlatform>,
@@ -280,7 +280,7 @@ mod imp {
         budget: crate::budget::Budget,
         /// 共享纹理池尺寸（留存纹理同尺寸）。
         pool: (u32, u32),
-        /// 拖动留存帧（`retain.rs`）；容量在第一次拖动读取时按预算登记。
+        /// 拖动留存帧（`retain.rs`）；容量在第一次拖动读取时按预算登记，别的会话打开时可能被预算收回（`drop_revoked_retention`）。
         retained: RetainedFrames,
         /// 按预算登记到的留存帧数（登记一次，随会话归还）。
         retain_granted: usize,
@@ -340,11 +340,8 @@ mod imp {
             let stream = input.stream();
             let parameters = input.parameters();
             let has_alpha_tag = crate::probe::stream_has_alpha(stream, parameters);
-            // Hardware decoders are a bounded resource (3.1): past the limit this session decodes in software.
-            let mut hardware_ticket = if options.hardware { budget.hardware() } else { None };
-            if options.hardware && hardware_ticket.is_none() {
-                logging::warn("decode.budget.software_fallback", "硬件解码会话已达上限，本会话改用软解", json!({ "streamId": options.stream_id, "limits": budget.stats() }));
-            }
+            // 硬解路数不设上限：驱动拒绝新的硬件解码器时 `get_format` 改用软解。
+            let mut hardware_ticket = options.hardware.then(|| budget.hardware());
             let hardware = if hardware_ticket.is_some() {
                 match platform.hardware_device(parameters.codec_id, parameters.format) {
                     Ok(device) => Some(device),
@@ -409,19 +406,38 @@ mod imp {
                 (Purpose::Playback, SharedFormat::Nv12) => 8,
                 (Purpose::Playback, _) => 6,
             };
-            let pool_size = options.pool_size.unwrap_or(default_pool);
+            let mut pool_size = options.pool_size.unwrap_or(default_pool);
             let hardware_active = first.is_hardware();
             if !hardware_active {
-                // Software decode after all (no hardware profile, or the device refused): the slot goes back.
+                // 最终是软解（没有对应的硬解配置，或设备拒绝）：不计入硬解会话。
                 hardware_ticket = None;
             }
-            // Video memory budget (3.1): the pool, this path's intermediates and the hardware surface pool.
+            // 显存登记（3.1）：纹理池、该写入路径的中间资源与硬解表面池。只作淘汰目标，当前帧需要的会话一律打开。
             let surface = (hardware_active && path != crate::convert::WritePath::CudaPlanar).then(|| if first.hardware_sw_format().and_then(format_info).is_some_and(|info| info.depth > 8) { SharedFormat::P010le } else { SharedFormat::Nv12 });
             let hardware_surfaces = session_parts.decoder.hardware_surfaces().unwrap_or(crate::budget::HARDWARE_SURFACES);
-            let memory_bytes = crate::budget::session_bytes(output, pool_dimensions, pool_size, path, surface, hardware_surfaces);
-            let vram = budget.reserve_vram(&options.stream_id, memory_bytes)?;
+            let session_memory = |slots: u32| crate::budget::session_bytes(output, pool_dimensions, slots, path, surface, hardware_surfaces);
+            let mut memory_bytes = session_memory(pool_size);
+            let mut vram = budget.reserve_vram(&options.stream_id, memory_bytes);
             let first_ms = opening.elapsed().as_secs_f64() * 1000.0;
-            let frames = platform.create_frame_output(output, pool_dimensions, (width, height), pool_size).map_err(|message| ServiceError::new("GPU_FAILED", message))?;
+            let frames = match platform.create_frame_output(output, pool_dimensions, (width, height), pool_size) {
+                Ok(frames) => frames,
+                // 设备没丢、纹理池却建不出来：显存真的分配失败。收回全部拖动留存帧并等它们归还，按最小纹理池重试一次，
+                // 仍失败才报错（渲染层对能共享的读取退回共享会话，必须打开的按服务故障重试一次）。
+                Err(reason) if pool_size > REDUCED_POOL_SIZE && platform.device_lost().is_none() => {
+                    let reclaimed = budget.revoke_all_retained();
+                    if reclaimed > 0 {
+                        std::thread::sleep(RETAINED_RELEASE_WAIT);
+                    }
+                    drop(vram);
+                    pool_size = REDUCED_POOL_SIZE;
+                    memory_bytes = session_memory(pool_size);
+                    vram = budget.reserve_vram(&options.stream_id, memory_bytes);
+                    let frames = platform.create_frame_output(output, pool_dimensions, (width, height), pool_size).map_err(|message| ServiceError::new("GPU_FAILED", message))?;
+                    logging::warn("decode.session.pool_reduced", "显存分配失败，按最小纹理池重新建立", json!({ "streamId": options.stream_id, "poolSize": pool_size, "reclaimedBytes": reclaimed, "reason": reason }));
+                    frames
+                }
+                Err(reason) => return Err(ServiceError::new("GPU_FAILED", reason)),
+            };
             let output_ms = opening.elapsed().as_secs_f64() * 1000.0;
             control.slots.resize(pool_size as usize);
             control.set_info(output, pool_dimensions.0, pool_dimensions.1);
@@ -535,6 +551,7 @@ mod imp {
                 if self.stopped() {
                     break;
                 }
+                self.drop_revoked_retention();
                 let command = match self.deferred.take() {
                     Some(command) => command,
                     None => match self.commands.recv_timeout(Duration::from_millis(50)) {
@@ -917,6 +934,7 @@ mod imp {
 
         /// 处理排队的命令（计划进行中）。返回 true 表示当前计划应中止。
         fn poll_interrupt(&mut self) -> bool {
+            self.drop_revoked_retention();
             loop {
                 match self.commands.try_recv() {
                     Ok(SessionCommand::Cancel { schedule_id }) => {
@@ -1061,6 +1079,7 @@ mod imp {
                 return Err(ServiceError::new("INVALID_REQUEST", "时间无效"));
             }
             let ticks = seconds_to_ticks(time, self.time_base);
+            self.drop_revoked_retention();
             if retain != RetainMode::Prefetch {
                 self.retained.focus(ticks);
             }
@@ -1116,7 +1135,9 @@ mod imp {
 
         /// 第一次拖动读取时按预算登记留存显存（没登记到时隔 `RETAIN_RETRY` 再试）。帧内编码每帧独立解码，不留存。
         fn ensure_retention(&mut self) -> bool {
+            self.drop_revoked_retention();
             if self.retained.capacity() > 0 {
+                self.budget.touch_retained(&self.stream_id);
                 return true;
             }
             if self.decoder.all_frames_key || self.retain_attempted.is_some_and(|at| at.elapsed() < RETAIN_RETRY) {
@@ -1126,7 +1147,7 @@ mod imp {
             // 已登记过（写入失败后暂停留存）就按原登记恢复，不再追加预算。
             let capacity = if self.retain_granted > 0 { self.retain_granted } else {
                 let each = crate::budget::frame_bytes(self.output, self.pool).max(1);
-                let granted = self.budget.extend_vram(&self.stream_id, RETAIN_MAX_BYTES.min(RETAIN_MAX_FRAMES * each));
+                let granted = self.budget.extend_vram(&self.stream_id);
                 self.retain_granted = (granted / each) as usize;
                 self.retain_granted
             };
@@ -1135,8 +1156,27 @@ mod imp {
             capacity > 0
         }
 
+        /// 留存帧被预算收回（别的会话打开时让位，`Budget::reserve_vram`）：放掉留存纹理，之后的拖动读取隔 `RETAIN_RETRY`
+        /// 按当时的余量重新登记。正在留存的取帧随之停止留存，取帧本身照常。
+        fn drop_revoked_retention(&mut self) {
+            if !self.budget.take_revoked(&self.stream_id) {
+                return;
+            }
+            let frames = self.retained.capacity();
+            self.retained.release_all();
+            self.frames.release_retained();
+            self.retain_granted = 0;
+            self.retain_attempted = Some(Instant::now());
+            self.retaining = false;
+            logging::info("decode.retain.reclaimed", "拖动留存帧让出显存", json!({ "streamId": self.stream_id, "frames": frames }));
+        }
+
         /// 留下刚解出的一帧（`retain.rs`）。尺寸变了、写入失败都只是不留，取帧照常。
         fn retain_frame(&mut self, frame: &Frame) {
+            self.drop_revoked_retention();
+            if !self.retaining {
+                return;
+            }
             let pts = frame_ts(frame);
             // 这一段里送解码器时跳过的非参考帧不会出现：跨过它们相连会让前一幅盖住它们的时间。
             if self.retained.previous().is_some_and(|previous| self.run_skipped.iter().any(|&skipped| skipped > previous && skipped < pts)) {
@@ -1184,6 +1224,7 @@ mod imp {
         /// 单帧取帧命中留存帧时的答复（`deliver_retained` 失败时为 None）。
         fn answer_retained(&mut self, entry: Retained, ticket: &str, started: Instant) -> Result<Option<Value>, ServiceError> {
             let Some(mut value) = self.deliver_retained(entry, ticket)? else { return Ok(None) };
+            self.budget.touch_retained(&self.stream_id);
             value["ticket"] = json!(ticket);
             value["found"] = json!(true);
             value["seeked"] = json!(false);
@@ -1302,7 +1343,7 @@ mod imp {
                 self.start_run(ticks, true)?;
             }
             let key = self.tracker.active_key_pts().unwrap_or(ticks);
-            while !self.retain_full && !self.retained.covers_from_key(key, self.near_key, ticks) {
+            while self.retaining && !self.retain_full && !self.retained.covers_from_key(key, self.near_key, ticks) {
                 if self.serve_retained_between() || self.advance_within(ticks, Some(1))? {
                     break;
                 }
@@ -1709,6 +1750,9 @@ mod imp {
             fn write_retained(&mut self, _: u32, _: u32) -> Result<WriteStats, String> {
                 Ok(WriteStats::default())
             }
+            fn release_retained(&mut self) {
+                self.1 = 0;
+            }
             unsafe fn write(&mut self, _: *const ffmpeg_sys_next::AVFrame, _: u32, _: WritePath, _: &ColorInfo, _: bool) -> Result<WriteStats, String> {
                 Ok(WriteStats::default())
             }
@@ -1726,7 +1770,10 @@ mod imp {
             }
         }
 
-        struct SoftwareOnly;
+        /// 只能软解的测试平台；纹理池超过 `max_slots` 时建不出来（模拟显存分配失败）。
+        struct SoftwareOnly {
+            max_slots: u32,
+        }
         impl VideoPlatform for SoftwareOnly {
             fn summary(&self) -> Value {
                 json!({})
@@ -1753,6 +1800,9 @@ mod imp {
                 false
             }
             fn create_frame_output(&self, _: SharedFormat, _: (u32, u32), _: (u32, u32), count: u32) -> Result<Box<dyn FrameOutput>, String> {
+                if count > self.max_slots {
+                    return Err("显存不足（测试）".into());
+                }
                 Ok(Box::new(NoOutput(count, 0)))
             }
             fn start_test_stream(&self, _: &crate::streams::TestStreamOptions, _: Arc<StreamControl>) -> Result<TestStream, String> {
@@ -1775,7 +1825,7 @@ mod imp {
             let (commands, receiver) = std::sync::mpsc::channel();
             let options = DecodeOptions { stream_id: "cancel-test".into(), path: path.into(), stream_index: None, purpose: Purpose::Seek, pool_size: None, hardware: false, format: None, transfer: None };
             let budget = crate::budget::Budget::new(crate::budget::Limits::for_adapter(None));
-            (commands, Session::open(Arc::new(SoftwareOnly), &options, Arc::new(StreamControl::new(0)), receiver, &budget).map(|(session, _)| session).expect("打开测试视频"))
+            (commands, Session::open(Arc::new(SoftwareOnly { max_slots: u32::MAX }), &options, Arc::new(StreamControl::new(0)), receiver, &budget).map(|(session, _)| session).expect("打开测试视频"))
         }
 
         fn open(path: &str) -> Session {
@@ -1955,6 +2005,75 @@ mod imp {
                 assert_eq!(value["ptsUs"], json!(exact_us(seconds)));
                 assert_eq!(value["keySeconds"], json!(0.0));
             }
+            let _ = std::fs::remove_file(path);
+        }
+
+        /// 别的会话打开时预算收回本会话的留存帧：会话放掉留存纹理、不再交出作废的留存帧，之后的拖动读取照常解出精确画面，
+        /// 隔一阵再按当时的余量重新登记。
+        #[test]
+        fn reclaimed_retention_is_released_and_reads_stay_exact() {
+            let Some(path) = generate("reclaim") else {
+                eprintln!("跳过：没有 ffmpeg");
+                return;
+            };
+            let table = CancelMap::default();
+            let mut session = open(&path);
+            let control = session.control.clone();
+            let read = |session: &mut Session, seconds: f64| {
+                let value = session.answer_frame_at(seconds, "r".into(), false, RetainMode::Retain, CancelToken::register(&table, "r")).expect("取帧");
+                for slot in 0..3 {
+                    control.slots.release(slot);
+                }
+                value
+            };
+            read(&mut session, 3.9);
+            assert_eq!(read(&mut session, 3.5)["retained"], json!(true));
+            let limit = session.budget.stats()["vramLimitBytes"].as_u64().unwrap();
+            let other = session.budget.reserve_vram("other", limit);
+            assert_eq!(session.budget.stats()["vramRetainedBytes"], 0, "账本立即收回");
+            let value = read(&mut session, 3.4);
+            assert_eq!(value["retained"], Value::Null, "收回后不交出留存帧");
+            assert_eq!(session.retained.capacity(), 0);
+            let mut fresh = open(&path);
+            let ticks = exact(&mut fresh, 3.4);
+            assert_eq!(value["ptsUs"], json!(pts_to_us(ticks, fresh.time_base)));
+            drop(other);
+            let _ = std::fs::remove_file(path);
+        }
+
+        /// 驱动拒绝硬件解码器（平台给不出硬解设备）时会话改用软解照常打开，不计入硬解会话。
+        #[test]
+        fn a_refused_hardware_decoder_falls_back_to_software() {
+            let Some(path) = generate("refused") else {
+                eprintln!("跳过：没有 ffmpeg");
+                return;
+            };
+            let (_commands, receiver) = std::sync::mpsc::channel();
+            let options = DecodeOptions { stream_id: "refused".into(), path: path.clone(), stream_index: None, purpose: Purpose::Seek, pool_size: None, hardware: true, format: None, transfer: None };
+            let budget = crate::budget::Budget::new(crate::budget::Limits::for_adapter(None));
+            let (session, info) = Session::open(Arc::new(SoftwareOnly { max_slots: u32::MAX }), &options, Arc::new(StreamControl::new(0)), receiver, &budget).expect("软解打开");
+            assert_eq!(info["decoder"]["hardware"], json!(false));
+            assert_eq!(info["decoder"]["hardwareRequested"], json!(false));
+            assert_eq!(budget.stats()["hardwareSessions"], 0, "软解会话不计入硬解");
+            drop(session);
+            let _ = std::fs::remove_file(path);
+        }
+
+        /// 显存真的分配失败（纹理池建不出来）时按最小纹理池重试一次，会话照常打开，登记按实际的池大小。
+        #[test]
+        fn a_pool_that_cannot_be_allocated_is_retried_at_the_minimum() {
+            let Some(path) = generate("tight") else {
+                eprintln!("跳过：没有 ffmpeg");
+                return;
+            };
+            let (_commands, receiver) = std::sync::mpsc::channel();
+            let options = DecodeOptions { stream_id: "tight".into(), path: path.clone(), stream_index: None, purpose: Purpose::Playback, pool_size: None, hardware: false, format: None, transfer: None };
+            let budget = crate::budget::Budget::new(crate::budget::Limits::for_adapter(None));
+            let (session, info) = Session::open(Arc::new(SoftwareOnly { max_slots: REDUCED_POOL_SIZE }), &options, Arc::new(StreamControl::new(0)), receiver, &budget).expect("缩小纹理池后打开");
+            assert_eq!(info["slots"].as_array().map(Vec::len), Some(REDUCED_POOL_SIZE as usize));
+            assert_eq!(budget.stats()["vramReservedBytes"], info["memoryBytes"]);
+            drop(session);
+            assert_eq!(budget.stats()["vramReservedBytes"], 0);
             let _ = std::fs::remove_file(path);
         }
 

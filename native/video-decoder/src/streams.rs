@@ -354,13 +354,12 @@ impl StreamManager {
         self.streams.values().filter(|stream| stream.commands.is_some() && !stream.control.open_failed.load(Ordering::Acquire)).count()
     }
 
-    /// 启动解码会话：会话线程打开文件后自行响应 `request_id`。会话数、显存与硬解名额按预算（3.1）。
+    /// 启动解码会话：会话线程打开文件后自行响应 `request_id`，并在显存账本登记（3.1，只作淘汰目标，不限会话数）。
     pub fn start_decoder(&mut self, request_id: String, platform: &Arc<dyn crate::platform::VideoPlatform>, options: crate::decode::DecodeOptions, budget: &crate::budget::Budget) -> Result<(), ServiceError> {
         options.validate()?;
         if self.streams.contains_key(&options.stream_id) {
             return Err(ServiceError::new("INVALID_REQUEST", format!("流 {} 已存在", options.stream_id)));
         }
-        budget.admit_session(self.decoder_count())?;
         let control = Arc::new(StreamControl::new(0));
         let (sender, receiver) = std::sync::mpsc::channel();
         let stream_id = options.stream_id.clone();

@@ -45,7 +45,10 @@ export function videoDecoderExecutableOverride(isPackaged: boolean, env: NodeJS.
   return { path: path.isAbsolute(value) && exists(value) ? value : null }
 }
 
-/** 开发诊断：`HENJI_VIDEO_DECODER_VRAM_BUDGET_MB` 缩小解码显存预算。安装包不读取；无效值忽略。 */
+/**
+ * 开发诊断：`HENJI_VIDEO_DECODER_VRAM_BUDGET_MB` 缩小解码显存预算，验证超出时先收回留存帧、淘汰闲置会话、能共享的读取
+ * 退回共享会话，而当前帧照常打开、不报错。安装包不读取；无效值忽略。
+ */
 export function videoDecoderDiagnosticLimits(isPackaged: boolean, env: NodeJS.ProcessEnv): { vramBytes: number } | undefined {
   const value = Number(env.HENJI_VIDEO_DECODER_VRAM_BUDGET_MB)
   if (isPackaged || !Number.isInteger(value) || value < 1 || value > 1_048_576) return undefined

@@ -9,7 +9,7 @@ import { VideoEditNativePicture, videoEditNativeRotation } from './videoEditNati
 import type { NativeVideoFrame, VideoEditNativeFrameReceiver } from './videoEditNativeFrames'
 import { videoEditSourceReadError } from './videoEditSourceErrors'
 import { recordVideoEditPreparation } from './videoEditPreparationTiming'
-import { VideoEditNativeFailure, videoEditNativeClosed, videoEditNativeFailureKind, videoEditNativeFailureKindOf, videoEditNativeFailureMessage, videoEditNativeOpenFailure, videoEditNativeReadFailure } from './videoEditNativeFailure'
+import { VideoEditNativeCallError, VideoEditNativeFailure, videoEditNativeClosed, videoEditNativeFailureKind, videoEditNativeFailureKindOf, videoEditNativeFailureMessage, videoEditNativeOpenFailure, videoEditNativeReadFailure } from './videoEditNativeFailure'
 
 /**
  * The native frame backend (task 2.2): pictures decoded by the native decoder service arrive as borrowed shared GPU
@@ -23,24 +23,31 @@ import { VideoEditNativeFailure, videoEditNativeClosed, videoEditNativeFailureKi
  *   first single-frame read and closed with the reader;
  * - one `playback` session per sequential reader (`frames(start)`), closed with the reader;
  * - one sound session per clip sound reader (`clipAudio()`, task 2.3), opened on its first read at the mix's sample
- *   rate and closed with the reader. Sound sessions carry no textures and do not count against the session limit.
+ *   rate and closed with the reader. Sound sessions carry no textures and are not in the video memory ledger.
+ *
+ * 会话数不设上限，显存由原生服务的账本作淘汰目标（`native/video-decoder/src/budget.rs`）。按读取对当前画面的必要性分三种
+ * 打开方式（`VideoEditNativeAdmission`）：文件的共享会话一律打开，超出预算后在后台淘汰不在当前画面的闲置会话，淘汰不动就
+ * 照常超出（驱动把显存换出到内存，变慢而不失败）；能退回共享会话的读取（独占读取者、同一素材的第二个播放计划、拖动图层
+ * 自己的会话）只在有余量时另开会话，从不为此淘汰别的会话；提前打开只在留有前台余量时进行。显存不够时变慢（共用一个
+ * 解码器来回定位、不提前打开），不让任何一帧失败。
  */
 
 /** Worker-side access to native decoder sessions: port requests and borrowed frames over one frame channel. */
 export type VideoEditNativeChannel = Pick<VideoEditNativeFrameReceiver, 'call' | 'subscribe' | 'subscribeSchedule' | 'subscribeEnded'>
 
 /**
- * Native decoder sessions per renderer (task 3.1 budget): below the frame bridge's 16 streams per window, so a window's
- * program and source monitor together stay within the service's 32 sessions; the service also budgets video memory
- * and hardware decoders across all windows (`native/video-decoder/src/budget.rs`). Beyond it reads fail in place.
+ * 打开解码会话的方式：`required` 当前画面要读的文件共享会话（与顺序读取），一律打开；`optional` 能退回共享会话的读取，
+ * 没有余量时以 `budget` 失败让调用方退回（不为它淘汰别的会话）；`speculative` 提前打开，调用方先确认留有前台余量
+ * （`canPreopen`、`makeRoomAhead`）。
  */
-const VIDEO_EDIT_NATIVE_MAX_SESSIONS = 10
+type VideoEditNativeAdmission = 'required' | 'optional' | 'speculative'
 /**
- * Exclusive sessions (code video inputs, one per reference) leave this many of the renderer's sessions to shared ones
- * (playback schedules, the shared single-frame session a reference falls back to); a reference beyond that shares its
- * file's session as all references did before, slower when they interleave but never a failed frame.
+ * 这么久（毫秒）以内前台读过的会话算当前画面在用，按预算淘汰时不动：读完的一瞬间会话就算闲置，淘汰了下一帧又要重开。
+ * 前瞻给出距离 0 的用途（暂停时当前画面要读的）同样不动（`VideoEditNativeFileSource.inUse`）。
  */
-const VIDEO_EDIT_NATIVE_EXCLUSIVE_RESERVE = 3
+const VIDEO_EDIT_NATIVE_IN_USE_MS = 1000
+type VideoEditNativePurpose = 'playback' | 'seek'
+const VIDEO_EDIT_NATIVE_PURPOSES: ReadonlySet<VideoEditNativePurpose> = new Set(['playback', 'seek'])
 /** The native service accepts at most this many times per schedule; later frames use the regular path. */
 const MAX_SCHEDULE_TIMES = 200_000
 /**
@@ -53,7 +60,7 @@ const LOST_FRAME_GRACE_MS = 1000
 const FRAME_ARRIVAL_TIMEOUT_MS = 5000
 /** How long a file failure of a seek window answers further reads before they try the file again (task 3.1). */
 const FILE_FAILURE_HOLD_MS = 2000
-/** How long an exclusive reader the budget refused an own session reads on the file's shared session before trying again. */
+/** How long an exclusive reader denied an own session (no video memory room) reads on the file's shared session before trying again. */
 const EXCLUSIVE_RETRY_MS = 2000
 /** Seek windows of long-GOP material: decoded once into the shared frame cache, like the browser's GOP ranges. */
 const VIDEO_EDIT_NATIVE_SEEK_WINDOW_SECONDS = 1
@@ -94,6 +101,8 @@ interface Ticket { deliver: (frame: NativeVideoFrame) => void; fail: (error: Err
 
 const decodeFailure = videoEditNativeReadFailure
 const closedFailure = (): VideoEditNativeFailure => videoEditNativeClosed()
+/** 显存没有余量给一个能退回共享会话的读取或提前打开：调用方退回共享会话或放弃提前打开（`VideoEditNativeAdmission`）。 */
+const noRoom = (name: string): VideoEditNativeFailure => new VideoEditNativeFailure(videoEditNativeFailureMessage(name, 'budget'), 'budget', 'BUDGET_EXCEEDED')
 /** A read its caller abandoned (`VideoEditFrameReadOptions.signal`); not a decoding failure. */
 const readAbandoned = (): DOMException => new DOMException('取帧已取消。', 'AbortError')
 const isAbandoned = (error: unknown): boolean => (error as { name?: unknown } | null)?.name === 'AbortError'
@@ -379,7 +388,12 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
   private activeSeek = 0
   private activePlayback = 0
   lastUsed = performance.now()
+  /** 每种会话最近一次前台读取的时刻（`reading`）；提前打开与推测读取不算。 */
+  private readonly readAt: Record<VideoEditNativePurpose, number> = { playback: -Infinity, seek: -Infinity }
+  /** 离播放头的时间距离（`maintain` 按前瞻目标给出）；淘汰闲置会话时远的先走。 */
   distance = Infinity
+  /** 距离 0 时前瞻要读的用途（`maintain` 给出）；没给出时距离 0 的文件全部用途都算在用。 */
+  current?: ReadonlySet<VideoEditNativePurpose>
   private warming?: { abort: AbortController; done: Promise<void> }
   private warmed = new Set<'playback' | 'seek'>()
 
@@ -390,11 +404,26 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
   private get hasAlternate(): boolean { return !!this.alternate }
 
   cancelWarm(): void { this.warming?.abort.abort() }
-  async settleWarm(): Promise<void> { await this.warming?.done.catch(() => undefined) }
+  private reading(purpose: VideoEditNativePurpose): void { this.lastUsed = this.readAt[purpose] = performance.now() }
+  /**
+   * 当前画面在用的会话用途：最近一帧前台读过的，或前瞻给出距离 0 的。按预算淘汰时不动，不然必须打开的会话超出预算后的
+   * 回收（`relieve`）会淘汰本帧刚读完的会话，下一帧又重开。
+   */
+  inUse(): Set<VideoEditNativePurpose> {
+    const now = performance.now(), atPlayhead = this.distance === 0 ? this.current ?? VIDEO_EDIT_NATIVE_PURPOSES : undefined
+    return new Set([...VIDEO_EDIT_NATIVE_PURPOSES].filter(purpose => now - this.readAt[purpose] < VIDEO_EDIT_NATIVE_IN_USE_MS || atPlayhead?.has(purpose)))
+  }
+  /** 有当前画面不用的闲置会话（可按预算淘汰）。 */
+  get evictable(): boolean {
+    if (this.warming) return false
+    const keep = this.inUse()
+    return !keep.has('playback') && !this.activePlayback && [this.playback, this.alternate].some(pending => !!pending && !this.opening.has(pending))
+      || !keep.has('seek') && !this.activeSeek && !!this.seekSession && !this.opening.has(this.seekSession)
+  }
 
   /** 前台先取消推测读取；同文件等待取消收束，避免旧计划取消新计划。 */
   async use<T>(operation: () => Promise<T>): Promise<T> {
-    this.active++; this.activeSeek++; this.lastUsed = performance.now()
+    this.active++; this.activeSeek++; this.reading('seek')
     this.owner.cancelSpeculative(); this.owner.stopUnclaimed(this)
     try { await this.warming?.done.catch(() => undefined); return await operation() }
     finally { this.active--; this.activeSeek--; this.lastUsed = performance.now() }
@@ -431,7 +460,7 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
 
   constructor(private readonly owner: VideoEditNativeFrames, readonly media: VideoEditMedia, private readonly path: string) {}
 
-  /** `alternate` 按提前打开的方式开（`openSession` 的 speculative）：名额不足直接失败，不挤掉别的会话。 */
+  /** `alternate` 按提前打开的方式开（调用方已确认余量）；预打开期间按提前打开，前台读取按必须打开。 */
   private session(use: 'playback' | 'seek' | 'alternate'): Promise<VideoEditNativeDecoderSession> {
     if (this.closed) return Promise.reject(closedFailure())
     const field = use === 'seek' ? 'seekSession' : use
@@ -440,7 +469,7 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
     if (pending && this.active && use !== 'alternate' && this.warmed.delete(purpose)) this.owner.log('debug', '命中提前定位的解码会话', 'video_edit.decode.preopen.hit', { mediaId: this.media.id, purpose, durationMs: 0 })
     if (!pending) {
       if (this.active && use !== 'alternate') this.owner.log('debug', '关键路径打开解码会话', 'video_edit.decode.preopen.miss', { mediaId: this.media.id, mediaName: this.media.name, purpose })
-      const opening = this.owner.openSession(this.media, this.path, purpose, use === 'alternate' || !!this.warming && !this.active)
+      const opening = this.owner.openSession(this.media, this.path, purpose, use === 'alternate' || !!this.warming && !this.active ? 'speculative' : 'required')
       this.opening.add(opening)
       // A failed open is not kept (a restored file is read again), nor is a session whose stream ended: the next
       // read opens a new one on the restarted service (task 3.1).
@@ -453,8 +482,8 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
   /** The shared single-frame session (also used by the seeker); opened on first use. */
   seek(): Promise<VideoEditNativeDecoderSession> { return this.session('seek') }
 
-  /** 拖动中另一个图层自己的定位会话（`VideoEditNativeSeeker` 管理，随图层停读或定位器释放关闭）。 */
-  openScrubSession(): Promise<VideoEditNativeDecoderSession> { return this.owner.openSession(this.media, this.path, 'seek') }
+  /** 拖动中另一个图层自己的定位会话（`VideoEditNativeSeeker` 管理，随图层停读或定位器释放关闭）；没有余量时以 `budget` 失败。 */
+  openScrubSession(): Promise<VideoEditNativeDecoderSession> { return this.owner.openSession(this.media, this.path, 'seek', 'optional') }
 
   /**
    * Drops this file's shared sessions after a failure (task 3.1): reads waiting on them fail as retryable, and the
@@ -468,7 +497,7 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
     for (const pending of sessions) void pending?.then(session => session.close('service'), () => undefined)
   }
 
-  async retire(keep: ReadonlySet<'playback' | 'seek'> = new Set()): Promise<void> {
+  async retire(keep: ReadonlySet<VideoEditNativePurpose> = new Set()): Promise<void> {
     const sessions: Array<Promise<VideoEditNativeDecoderSession> | undefined> = []
     // 同文件正在播放时仍可让出闲置定位会话，反之亦然；不能把整个文件都当成忙碌。
     if (!keep.has('playback') && !this.activePlayback && (!this.playback || !this.opening.has(this.playback))) { sessions.push(this.playback); this.playback = undefined; this.warmed.delete('playback') }
@@ -493,10 +522,10 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
    * is dropped, so the next read (the router's retry) opens a new one. The shared sessions and their speculative
    * warm-ups are untouched: this session competes with nothing.
    *
-   * When the renderer's decoder budget has no room left for another session (many references showing at once), a
-   * foreground read falls back to the file's shared single-frame session, as every reference read before: slower when
-   * references interleave, never a failed frame. A speculative read (`VideoEditFrameReadOptions`) opens only with
-   * headroom left for the foreground and otherwise fails.
+   * When video memory has no room left for another session even after idle sessions are freed (many references showing
+   * at once), a foreground read falls back to the file's shared single-frame session, as every reference read before:
+   * slower when references interleave, never a failed frame. A speculative read (`VideoEditFrameReadOptions`) opens only
+   * with room left for the foreground and otherwise fails.
    */
   private exclusiveFrames(): VideoEditClipFrames {
     let session: Promise<VideoEditNativeDecoderSession> | undefined
@@ -513,7 +542,7 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
     const open = (speculative: boolean): Promise<VideoEditNativeDecoderSession> => {
       if (session) return session
       const started = performance.now()
-      const opening = this.owner.openSession(this.media, this.path, 'seek', speculative, true)
+      const opening = this.owner.openSession(this.media, this.path, 'seek', speculative ? 'speculative' : 'optional')
       session = opening
       opening.then(value => {
         this.owner.log('debug', '独占解码会话已打开', 'video_edit.decode.exclusive.opened', { mediaId: this.media.id, speculative, durationMs: performance.now() - started })
@@ -538,22 +567,25 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
         const read = tail.catch(() => undefined).then(async () => {
           if (closed || this.closed) throw closedFailure()
           if (signal?.aborted) throw readAbandoned()
-          this.lastUsed = performance.now()
+          if (speculative) this.lastUsed = performance.now(); else this.reading('seek')
           recordVideoEditPreparation('nativeFrameAt', 0)
-          if (!session && performance.now() < sharingUntil) { if (speculative) throw new VideoEditNativeFailure(videoEditNativeFailureMessage(this.media.name, 'budget'), 'budget', 'BUDGET_EXCEEDED'); return shared(seconds, options?.keyFrame === true, signal) }
+          if (!session && performance.now() < sharingUntil) { if (speculative) throw noRoom(this.media.name); return shared(seconds, options?.keyFrame === true, signal) }
           let pending: Promise<VideoEditNativeDecoderSession> | undefined
           try {
-            if (!session && speculative && !await this.owner.makeRoomAhead()) throw new VideoEditNativeFailure(videoEditNativeFailureMessage(this.media.name, 'budget'), 'budget', 'BUDGET_EXCEEDED')
-            if (closed) throw closedFailure()
+            const room = !!session || !speculative || await this.owner.makeRoomAhead()
+            if (closed || this.closed) throw closedFailure()
+            if (!room) throw noRoom(this.media.name)
             pending = open(speculative)
             return await (await pending).frameAt(seconds, options?.keyFrame === true, speculative, signal)
           } catch (error) {
             // An abandoned read keeps the session: the next read continues where the native decode stopped.
             if (keepsSession(error)) throw error
+            // Closed while waiting for room or opening: nothing to recover, and no budget failure reaches a picture.
+            if (closed || this.closed) throw closedFailure()
             const kind = videoEditNativeFailureKind(error)
-            if (kind === 'budget' && !speculative && !closed) {
+            if (kind === 'budget' && !speculative) {
               sharingUntil = performance.now() + EXCLUSIVE_RETRY_MS
-              this.owner.log('info', '解码会话已满，此视频输入暂时改用素材共享的定位会话', 'video_edit.decode.exclusive.shared', { mediaId: this.media.id, sessions: this.owner.openSessions, retryInMs: EXCLUSIVE_RETRY_MS })
+              this.owner.log('info', '显存余量不足，此视频输入暂时改用素材共享的定位会话', 'video_edit.decode.exclusive.shared', { mediaId: this.media.id, sessions: this.owner.openSessions, retryInMs: EXCLUSIVE_RETRY_MS })
               return shared(seconds, options?.keyFrame === true, signal)
             }
             // A hung or lost session must not answer the retry: close it so the next read opens a fresh one.
@@ -587,18 +619,18 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
     if (this.media.kind !== 'video') return
     // Another plan of this file is running (another renderer: a nested sequence, a second instance of one, the
     // program beside it): a second plan on the shared session would cancel it (the service runs one plan per
-    // session), so this one runs on a playback session of its own, closed with the plan. Without room for one it
-    // takes the shared session as before.
+    // session), so this one runs on a playback session of its own, closed with the plan. Without video memory room for
+    // one it takes the shared session as before.
     const concurrent = this.activePlayback > 0
-    this.active++; this.activePlayback++; this.lastUsed = performance.now(); this.owner.cancelSpeculative(); this.owner.stopUnclaimed()
+    this.active++; this.activePlayback++; this.reading('playback'); this.owner.cancelSpeculative(); this.owner.stopUnclaimed()
     let own: VideoEditNativeDecoderSession | undefined
     try {
       await this.warming?.done.catch(() => undefined)
       if (signal?.aborted) return
       if (concurrent) {
-        own = await this.owner.openSession(this.media, this.path, 'playback').catch(error => {
+        own = await this.owner.openSession(this.media, this.path, 'playback', 'optional').catch(error => {
           if (videoEditNativeFailureKind(error) !== 'budget') throw error
-          this.owner.log('info', '解码会话已满，同一素材的第二个播放计划改用共享会话', 'video_edit.decode.schedule.shared', { mediaId: this.media.id, sessions: this.owner.openSessions })
+          this.owner.log('info', '显存余量不足，同一素材的第二个播放计划改用共享会话', 'video_edit.decode.schedule.shared', { mediaId: this.media.id, sessions: this.owner.openSessions })
           return undefined
         })
         if (own) this.owner.log('debug', '同一素材同时播放，第二个计划使用独立会话', 'video_edit.decode.schedule.concurrent', { mediaId: this.media.id })
@@ -613,7 +645,7 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
   /**
    * 播放计划按剪辑点分段，相邻两段交替用文件的两个播放会话：一段还剩 `VIDEO_EDIT_NATIVE_NEXT_SEGMENT_LEAD` 项时，下一段
    * 已在另一个会话上定位并解出开头几帧，剪辑点直接接上。一个会话一次只跑一个计划，所以再下一段要等这一段交完才开始。
-   * 另一个会话只在原生预算有余量时按提前打开的方式开；开不成，这个计划余下的段都接在同一会话上（剪辑点照常现场定位）。
+   * 另一个会话只在显存留有前台余量时按提前打开的方式开；开不成，这个计划余下的段都接在同一会话上（剪辑点照常现场定位）。
    * 全帧内素材不分段：服务在计划内自己预先接续下一段（`decode/mod.rs` 3.6）。
    */
   private async *segmented(timestamps: readonly number[], signal?: AbortSignal): AsyncGenerator<VideoEditNativePicture | null, void, unknown> {
@@ -635,15 +667,15 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
       const first = iterator.next(); void first.catch(() => undefined)
       return { iterator, first }
     })
-    /** 奇数段在另一个会话上；名额不足时得到 undefined，并且这个计划余下的段都留在共享会话上。 */
+    /** 奇数段在另一个会话上；余量不足时得到 undefined，并且这个计划余下的段都留在共享会话上。 */
     const alternate = async (index: number): Promise<Segment | undefined> => {
       try {
-        if (!this.hasAlternate && !await this.owner.canPreopen()) throw new VideoEditNativeFailure(videoEditNativeFailureMessage(this.media.name, 'budget'), 'budget', 'BUDGET_EXCEEDED')
+        if (!this.hasAlternate && !await this.owner.canPreopen()) throw noRoom(this.media.name)
         return await run('alternate', index)
       } catch (error) {
         if (videoEditNativeFailureKind(error) !== 'budget') throw error
         single = true
-        this.owner.log('info', '解码会话名额不足，剪辑点改在同一播放会话上现场定位', 'video_edit.decode.schedule.cut_shared', { mediaId: this.media.id, sessions: this.owner.openSessions })
+        this.owner.log('info', '显存余量不足，剪辑点改在同一播放会话上现场定位', 'video_edit.decode.schedule.cut_shared', { mediaId: this.media.id, sessions: this.owner.openSessions })
         return undefined
       }
     }
@@ -708,7 +740,6 @@ export interface VideoEditNativeFramesOptions {
   channel: VideoEditNativeChannel
   /** The local file the native service reads for a media item (its path in the worker is a fetchable URL). */
   localPath(media: VideoEditMedia): string | undefined
-  maxSessions?: number
   /** Whether sound is decoded natively (default `VIDEO_EDIT_NATIVE_SOUND_READY`). */
   sound?: boolean
   /** 预览 Worker 统一管理闲置会话；导出和独立读取保持立即释放。 */
@@ -721,9 +752,10 @@ export class VideoEditNativeFrames implements VideoEditFrameBackend {
   private readonly files = new Map<string, { users: number; source: VideoEditNativeFileSource }>()
   private readonly closing = new Set<Promise<void>>()
   private sessions = 0
-  private exclusiveSessions = 0
   private budgetUnavailable = false
   private budgetSnapshot?: { stats: VideoFrameNativeStats; at: number; sessions: number }
+  /** 必须打开的会话使登记超出预算后，在后台淘汰闲置会话（`relieve`）。 */
+  private relieving?: Promise<void>
 
   constructor(private readonly options: VideoEditNativeFramesOptions) {}
   get managesIdleSessions(): boolean { return this.options.retainIdle === true }
@@ -737,18 +769,18 @@ export class VideoEditNativeFrames implements VideoEditFrameBackend {
    * file being read keeps its own, for a read continuing them.
    */
   stopUnclaimed(keep?: VideoEditNativeFileSource): void { for (const { source } of this.files.values()) if (source !== keep) source.lane.stopUnclaimed() }
-  private async settleSpeculative(): Promise<void> { await Promise.all([...this.files.values()].map(entry => entry.source.settleWarm())) }
 
-  /** 余量完全由服务端给出（实测最大会话或冷启动保留量）；旧服务缺字段时不做推测打开。 */
+  /**
+   * 显存预算里是否还有 `extra` 个会话的余量。每个会话的估算由服务端给出（实测最大会话或冷启动保留量），快照之后本地新开
+   * 的会话同样扣除；拖动留存帧不算占用（会话越过预算时服务先收回它们）。缺字段时当作没有余量（只影响能退回共享会话的
+   * 读取与提前打开）。
+   */
   private headroom(stats: VideoFrameNativeStats | null | undefined, extra: number): boolean {
     const budget = stats?.budget
     const reserve = budget?.foregroundReserveBytes ?? budget?.largestSessionBytes
     if (!budget || !reserve) return false
     const pending = Math.max(0, this.sessions - (this.budgetSnapshot?.sessions ?? this.sessions))
-    return budget.vramLimitBytes - budget.vramReservedBytes >= reserve * (extra + pending)
-      && budget.hardwareSessionLimit - budget.hardwareSessions >= extra + pending
-      && budget.decoderSessionLimit - stats.streams.filter(stream => stream.kind === 'decoder').length >= extra + pending
-      && (this.options.maxSessions ?? VIDEO_EDIT_NATIVE_MAX_SESSIONS) - this.sessions >= extra
+    return budget.vramLimitBytes - (budget.vramReservedBytes - budget.vramRetainedBytes) >= reserve * (extra + pending)
   }
 
   private async budgetStats(refresh = false): Promise<VideoFrameNativeStats | undefined> {
@@ -757,27 +789,25 @@ export class VideoEditNativeFrames implements VideoEditFrameBackend {
       const stats = (await this.options.channel.call('stats', {})).native ?? undefined
       if (!stats?.budget?.foregroundReserveBytes && !stats?.budget?.largestSessionBytes) throw new Error('原生服务未提供前台预算保留量。')
       this.budgetUnavailable = false
-      // 预算 IPC 不占用每个短暂空档；快照之后新增的本地会话仍扣除保留量，服务端负责最终原子准入。
+      // 预算 IPC 不占用每个短暂空档；快照之后新增的本地会话仍按保留量扣除（`headroom`）。
       this.budgetSnapshot = { stats, at: performance.now(), sessions: this.sessions }
       return stats
     } catch (error) {
-      if (!this.budgetUnavailable) this.log('info', '无法读取前瞻预算，保留当前会话并暂停推测打开', 'video_edit.decode.lookahead.budget_failed', { reason: String(error) })
+      if (!this.budgetUnavailable) this.log('info', '无法读取解码显存预算，暂停提前打开，可共享的读取改用共享会话', 'video_edit.decode.lookahead.budget_failed', { reason: String(error) })
       this.budgetUnavailable = true; this.budgetSnapshot = undefined
       return undefined
     }
   }
   /**
-   * Room for one decoder needed within seconds (a code video input opened ahead of its clip): with the service's
-   * budget for it plus the foreground's reserve, freeing idle sessions (farthest first) when that is what lacks.
-   * Never more: sessions in use are untouched, and without room the caller gives up instead of taking the last one.
+   * 提前打开一个片段开始前要用的会话（代码视频输入）所需的余量：自己加前台保留共 2 个会话，按服务当前的账本（各窗口、
+   * 各渲染器共用）。不够时淘汰不在当前画面的闲置会话（远的、久未用的先）；仍不够返回 false，调用方放弃提前打开。
    */
   async makeRoomAhead(): Promise<boolean> {
-    for (let attempt = 0; attempt < (this.options.maxSessions ?? VIDEO_EDIT_NATIVE_MAX_SESSIONS); attempt++) {
+    for (;;) {
       const stats = await this.budgetStats(true)
       if (this.headroom(stats, 2)) return true
       if (!stats || !this.options.retainIdle || !await this.evictOne('ahead')) return false
     }
-    return false
   }
 
   async canPreopen(): Promise<boolean> {
@@ -791,15 +821,18 @@ export class VideoEditNativeFrames implements VideoEditFrameBackend {
     return !source || (source.idle && !source.hasSession(purpose))
   }
 
-  /** 最远且最久未用的文件先回收；引用本身可继续存在，下次读取会重新打开会话。 */
+  /**
+   * 最远且最久未用的文件先回收；当前画面在用的会话（`inUse`）不动。引用本身可继续存在，下次读取会重新打开会话。
+   */
   private async evictOne(reason = 'budget'): Promise<boolean> {
-    const entries = [...this.files.entries()].filter(([, entry]) => entry.source.hasIdleSessions)
+    const entries = [...this.files.entries()].filter(([, entry]) => entry.source.evictable)
       .sort((a, b) => (b[1].source.distance - a[1].source.distance || a[1].source.lastUsed - b[1].source.lastUsed))
     const entry = entries[0]
     if (!entry) return false
     const [key, { source, users }] = entry, started = performance.now()
-    if (users === 0 && source.idle) this.files.delete(key)
-    const closing = users === 0 && source.idle ? source.close() : source.retire()
+    const keep = source.inUse(), whole = users === 0 && source.idle && keep.size === 0
+    if (whole) this.files.delete(key)
+    const closing = whole ? source.close() : source.retire(keep)
     this.closing.add(closing)
     try { await closing } finally { this.closing.delete(closing) }
     this.log('debug', '闲置解码会话已释放', 'video_edit.decode.idle.evicted', { mediaId: source.media.id, reason, distanceSeconds: Number.isFinite(source.distance) ? source.distance : undefined, durationMs: performance.now() - started })
@@ -808,7 +841,10 @@ export class VideoEditNativeFrames implements VideoEditFrameBackend {
 
   async maintain(distances: ReadonlyMap<string, number>, wanted?: ReadonlyMap<string, boolean>): Promise<void> {
     if (!this.options.retainIdle) return
-    for (const { source } of this.files.values()) source.distance = distances.get(source.media.path) ?? Infinity
+    for (const [key, { source }] of this.files) {
+      source.distance = distances.get(source.media.path) ?? Infinity
+      source.current = wanted && source.distance === 0 ? new Set([...VIDEO_EDIT_NATIVE_PURPOSES].filter(purpose => wanted.has(`${key}\0${purpose}`))) : undefined
+    }
     // 窗口外会话即使显存足够也不无限保留，防止重开后积累硬件解码器及定位队列。
     if (wanted) for (const [key, entry] of this.files) {
       const keep = new Set((['playback', 'seek'] as const).filter(purpose => wanted.has(`${key}\0${purpose}`)))
@@ -820,6 +856,20 @@ export class VideoEditNativeFrames implements VideoEditFrameBackend {
       const stats = await this.budgetStats(true)
       if (!stats || this.headroom(stats, 1) || !await this.evictOne('budget')) return
     }
+  }
+
+  /**
+   * 必须打开的会话使登记超出预算时，在后台淘汰不在当前画面的闲置会话，直到回到预算内或没有可淘汰的；淘汰不动就照常
+   * 超出。不挡住正在读的画面。
+   */
+  private relieve(): void {
+    if (!this.options.retainIdle || this.relieving) return
+    this.relieving = (async () => {
+      for (;;) {
+        const stats = await this.budgetStats(true)
+        if (!stats || this.headroom(stats, 0) || !await this.evictOne('over-budget')) return
+      }
+    })().finally(() => { this.relieving = undefined })
   }
 
   async disposeIdle(): Promise<void> {
@@ -837,37 +887,34 @@ export class VideoEditNativeFrames implements VideoEditFrameBackend {
   }
 
   /**
-   * Opens a native decoder session, counted against the per-renderer limit (an exceeded budget is a `budget` failure).
-   * `exclusive`: an exclusive reader's own session, also counted against `VIDEO_EDIT_NATIVE_EXCLUSIVE_RESERVE`.
+   * Opens a native decoder session (see `VideoEditNativeAdmission`): `required` always opens and frees idle sessions in
+   * the background when the ledger went past the budget; `optional` opens only with room for itself and otherwise fails
+   * as `budget`, so its caller reads on the shared session; `speculative` relies on its caller having checked the room.
+   * A pool the service could not allocate even at its smallest (`GPU_FAILED` with the device intact) is a missing room
+   * for the latter two, so their callers fall back instead of reporting a failure.
    */
-  async openSession(media: VideoEditMedia, path: string, purpose: 'playback' | 'seek', speculative = false, exclusive = false): Promise<VideoEditNativeDecoderSession> {
-    const limit = this.options.maxSessions ?? VIDEO_EDIT_NATIVE_MAX_SESSIONS
-    if (exclusive && this.exclusiveSessions >= limit - VIDEO_EDIT_NATIVE_EXCLUSIVE_RESERVE) throw new VideoEditNativeFailure(videoEditNativeFailureMessage(media.name, 'budget'), 'budget', 'BUDGET_EXCEEDED')
-    if (this.options.retainIdle && !speculative && this.sessions >= limit) { this.cancelSpeculative(); await this.settleSpeculative(); await this.settled() }
-    if (this.options.retainIdle && !speculative) while (this.sessions >= limit && await this.evictOne('foreground')) { /* 当前帧优先腾出名额。 */ }
-    if (this.sessions >= limit) throw new VideoEditNativeFailure(videoEditNativeFailureMessage(media.name, 'budget'), 'budget', 'BUDGET_EXCEEDED')
+  async openSession(media: VideoEditMedia, path: string, purpose: 'playback' | 'seek', admission: VideoEditNativeAdmission = 'required'): Promise<VideoEditNativeDecoderSession> {
+    if (admission === 'optional' && !this.headroom(await this.budgetStats(true), 1)) throw noRoom(media.name)
     this.sessions++
-    if (exclusive) this.exclusiveSessions++
     try {
       // Pre-rendered preview files (8-bit H.264, NV12 slots) keep a deeper decoded queue: opening the next file's decoder
       // briefly stalls decoding, and 16 ready pictures (267ms at 60fps) cover it without a dropped frame.
       const deep = purpose === 'playback' && media.id.startsWith('render-cache:')
       const started = performance.now()
-      const open = () => this.options.channel.call('openDecoder', { path, purpose, ...(deep ? { poolSize: 16 } : {}) })
-      let info: VideoFrameDecoderInfo
-      for (;;) {
-        try { info = await open(); break } catch (error) {
-          if (speculative || !this.options.retainIdle || videoEditNativeFailureKind(videoEditNativeOpenFailure(media.name, error)) !== 'budget') throw error
-          const before = this.sessions
-          this.cancelSpeculative(); await this.settleSpeculative(); await this.settled()
-          if (await this.evictOne('foreground') || this.sessions < before) continue
-          throw error
-        }
-      }
+      const info: VideoFrameDecoderInfo = await this.options.channel.call('openDecoder', { path, purpose, ...(deep ? { poolSize: 16 } : {}) })
+      const speculative = admission === 'speculative'
       if (speculative) this.log('debug', '前瞻原生会话打开完成', 'video_edit.decode.preopen.opened', { mediaId: media.id, purpose, durationMs: performance.now() - started })
       recordVideoEditPreparation(speculative ? 'lookaheadNativeOpen' : purpose === 'playback' ? 'nativeOpenPlayback' : 'nativeOpenSeek', performance.now() - started)
-      return new VideoEditNativeDecoderSession(this.options.channel, info, media.name, () => { this.sessions--; if (exclusive) this.exclusiveSessions--; recordVideoEditPreparation(purpose === 'playback' ? 'nativeClosedPlayback' : 'nativeClosedSeek', 0) })
-    } catch (error) { this.sessions--; if (exclusive) this.exclusiveSessions--; throw videoEditNativeOpenFailure(media.name, error) }
+      if (admission === 'required') this.relieve()
+      return new VideoEditNativeDecoderSession(this.options.channel, info, media.name, () => { this.sessions--; recordVideoEditPreparation(purpose === 'playback' ? 'nativeClosedPlayback' : 'nativeClosedSeek', 0) })
+    } catch (error) {
+      this.sessions--
+      if (admission !== 'required' && error instanceof VideoEditNativeCallError && error.code === 'GPU_FAILED') {
+        this.log('info', '显存分配失败，这次读取改用共享会话或不提前打开', 'video_edit.decode.open.no_memory', { mediaId: media.id, admission, reason: error.message })
+        throw noRoom(media.name)
+      }
+      throw videoEditNativeOpenFailure(media.name, error)
+    }
   }
 
   /** Drops the shared sessions of a file after a failure so the next read opens new ones (router recovery, 3.1). */
@@ -943,13 +990,13 @@ interface SeekWindow { start: number; speculative: boolean; waiters: Set<SeekWai
 
 /**
  * 拖动读取的一个图层。第一个读的图层用文件的共享定位会话与队列；同时在读的其他图层各开一个会话与队列，各自顺序续解，
- * 不在两个源时间之间来回定位（同一文件的两层相差一秒时，共用一个解码器让正拖六成读取都要回到关键帧）。名额不足时共用。
+ * 不在两个源时间之间来回定位（同一文件的两层相差一秒时，共用一个解码器让正拖六成读取都要回到关键帧）。显存没有余量时共用。
  * `key`：最近一次原生读取所在段的关键帧时间；`prefetch`：在途的预解（`scrubAhead`），`prefetched` 是已解完的预解目标。
  */
 interface ScrubReader {
   /** 读取时现取会话：共享会话可能已被回收或重置（下次读取由文件源重开），自己开的会话结束后读取者随之丢弃。 */
   session(): Promise<VideoEditNativeDecoderSession>
-  /** 图层自己开的会话（名额不足时没有，用共享会话）；停读或定位器释放时关闭。 */
+  /** 图层自己开的会话（显存没有余量时没有，用共享会话）；停读或定位器释放时关闭。 */
   own?: Promise<VideoEditNativeDecoderSession>
   lane: NativeSeekLane; lastRead: number; key?: number; prefetched?: number; prefetch?: { abort: AbortController }
 }
@@ -1100,11 +1147,11 @@ class VideoEditNativeSeeker implements VideoEditFrameSeeker {
       const created: ScrubReader = { session: shared, lane: new NativeSeekLane(), lastRead: performance.now() }
       const own = source.openScrubSession()
       created.own = own
-      // 名额不足时这次读取也落到共享会话，不让这一帧失败。
+      // 显存没有余量时这次读取也落到共享会话，不让这一帧失败。
       created.session = () => own.catch(error => videoEditNativeFailureKind(error) === 'budget' ? shared() : Promise.reject(error))
       void own.then(session => session.whenEnded(() => this.dropReader(id, created)), error => {
         if (videoEditNativeFailureKind(error) !== 'budget') { this.dropReader(id, created); return }
-        // 名额不足：与第一个图层共用文件的定位会话（与原先相同）。
+        // 显存没有余量：与第一个图层共用文件的定位会话。
         if (created.own === own) { created.own = undefined; created.session = shared; created.lane = source.lane }
       })
       reader = created

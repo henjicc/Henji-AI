@@ -65,6 +65,9 @@ pub trait FrameOutput: Send {
         Err("本平台不留存解码帧".into())
     }
 
+    /// 放掉全部留存纹理（显存预算收回），纹理号作废；之后 `retain(None)` 重新新建。
+    fn release_retained(&mut self) {}
+
     /// 会话结束：释放转换资源，交回纹理池（`stop_stream` 时关闭客户端句柄）。
     fn into_resources(self: Box<Self>) -> Box<dyn StreamResources>;
 }

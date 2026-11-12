@@ -87,7 +87,6 @@ export interface VideoFrameBridgeOptions {
   releaseOverdueMs?: number
   /** 逾期检查间隔；0 关闭（测试手动调用 checkOverdue）。 */
   overdueCheckIntervalMs?: number
-  maxStreamsPerTarget?: number
   /** 放行实测不可用的格式（仅诊断复测）。 */
   allowUnsupportedFormats?: boolean
 }
@@ -301,13 +300,11 @@ export class VideoFrameBridge {
   private overdueTimer: ReturnType<typeof setInterval> | null = null
   private readonly now: () => number
   private readonly releaseOverdueMs: number
-  private readonly maxStreamsPerTarget: number
   private readonly unsubscribe: Array<() => void>
 
   constructor(private readonly options: VideoFrameBridgeOptions) {
     this.now = options.now ?? (() => performance.now())
     this.releaseOverdueMs = options.releaseOverdueMs ?? 3_000
-    this.maxStreamsPerTarget = options.maxStreamsPerTarget ?? 16
     this.unsubscribe = [
       options.service.onEvent((event) => this.handleEvent(event)),
       options.service.onLifecycle((event) => this.handleLifecycle(event)),
@@ -442,14 +439,12 @@ export class VideoFrameBridge {
     }
   }
 
-  /** 两种流共用的打开流程：分配流号、登记首帧缓冲、编码句柄、窗口失效清理。 */
+  /**
+   * 两种流共用的打开流程：分配流号、登记首帧缓冲、编码句柄、窗口失效清理。不限每窗口的流数：显存由原生服务的账本
+   * 作淘汰目标管理（native/video-decoder/src/budget.rs），渲染层据此淘汰闲置会话。
+   */
   private async openStream(target: VideoFrameTarget | null, kind: BridgeStream['kind'], route: string, context: Record<string, unknown>, start: (streamId: string) => Promise<VideoDecoderStreamStarted>): Promise<{ stream: BridgeStream; info: VideoDecoderStreamStarted }> {
     if (target?.isDestroyed()) throw new VideoDecoderError('TARGET_GONE', '目标窗口已关闭')
-    const owned = [...this.streams.values()].filter((stream) => target && stream.target?.id === target.id).length
-    if (target && owned >= this.maxStreamsPerTarget) {
-      this.options.logger.warn('窗口帧流数达到上限', { event: 'video_frames.budget.window_limit', context: { targetId: target.id, limit: this.maxStreamsPerTarget } })
-      throw new VideoDecoderError('BUDGET_EXCEEDED', `同一窗口最多 ${this.maxStreamsPerTarget} 路帧流`)
-    }
     const nextStreamId = (streamIds.get(this.options.service) ?? 0) + 1
     streamIds.set(this.options.service, nextStreamId)
     const streamId = `vf-${nextStreamId}`

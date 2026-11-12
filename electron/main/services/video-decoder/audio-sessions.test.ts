@@ -17,7 +17,7 @@ function target(id: number) {
   return value
 }
 
-function harness(options: { channels?: number; found?: boolean; maxSessionsPerTarget?: number } = {}) {
+function harness(options: { channels?: number; found?: boolean } = {}) {
   const lifecycle = new Set<(event: VideoDecoderLifecycleEvent) => void>()
   const closed: string[] = []
   const service = {
@@ -29,7 +29,7 @@ function harness(options: { channels?: number; found?: boolean; maxSessionsPerTa
     onLifecycle: (listener: (event: VideoDecoderLifecycleEvent) => void) => { lifecycle.add(listener); return () => lifecycle.delete(listener) },
   } satisfies VideoAudioSessionService
   const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
-  const sessions = new VideoAudioSessions({ service, logger, maxSessionsPerTarget: options.maxSessionsPerTarget })
+  const sessions = new VideoAudioSessions({ service, logger })
   return { sessions, service, closed, logger, exit: () => { for (const listener of lifecycle) listener({ type: 'exited', pid: 1 }) } }
 }
 
@@ -66,13 +66,12 @@ describe('VideoAudioSessions', () => {
     expect(silent.sessions.size).toBe(0)
   })
 
-  it('通道断开、窗口失效、服务退出都清理会话；每个窗口只登记一个失效监听；超出上限拒绝', async () => {
-    const { sessions, closed, exit } = harness({ maxSessionsPerTarget: 3 })
+  it('通道断开、窗口失效、服务退出都清理会话；每个窗口只登记一个失效监听', async () => {
+    const { sessions, closed, exit } = harness()
     const window = target(1)
     const ids: string[] = []
     for (const route of ['r1', 'r1', 'r2']) { const info = await sessions.open(window, { route, path: 'D:\\a.mov' }); if (info.found) ids.push(info.audioId) }
     expect(window.onGone).toHaveBeenCalledTimes(1)
-    await expect(sessions.open(window, { route: 'r2', path: 'D:\\a.mov' })).rejects.toThrow('最多 3 路')
     expect(await sessions.closeRoute(1, 'r1')).toBe(2)
     expect(closed).toEqual(ids.slice(0, 2))
     window.gone('destroyed')

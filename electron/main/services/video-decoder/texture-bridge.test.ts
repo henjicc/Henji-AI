@@ -261,16 +261,6 @@ describe('VideoFrameBridge', () => {
     }
   })
 
-  it('窗口帧流数达到上限时以超出预算拒绝（错误码 BUDGET_EXCEEDED，记日志）', async () => {
-    const native = createService()
-    const { logger, entries } = createLogger()
-    const bridge = new VideoFrameBridge({ service: native.service, sharedTexture: createSharedTexture().api, logger, overdueCheckIntervalMs: 0, maxStreamsPerTarget: 1 })
-    const { target } = createTarget()
-    await bridge.openDecoder(target, { route: 'vf-route-1', path: 'D:\\a.mov', purpose: 'seek' })
-    await expect(bridge.openDecoder(target, { route: 'vf-route-1', path: 'D:\\b.mov', purpose: 'seek' })).rejects.toMatchObject({ code: 'BUDGET_EXCEEDED' })
-    expect(entries.some((entry) => entry.event === 'video_frames.budget.window_limit')).toBe(true)
-  })
-
   it('stops importing a closing stream, stops it natively and does not hand slots back for the closed pool', async () => {
     const native = createService()
     const shared = createSharedTexture()

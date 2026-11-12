@@ -15,8 +15,6 @@ export type VideoAudioSessionService = Pick<VideoDecoderService, 'openAudio' | '
 export interface VideoAudioSessionsOptions {
   service: VideoAudioSessionService
   logger: Pick<MainLogger, 'debug' | 'info' | 'warn' | 'error'>
-  /** 每个窗口同时打开的声音会话上限（每个可闻片段一个，不占显存）。 */
-  maxSessionsPerTarget?: number
 }
 
 interface AudioSession {
@@ -73,11 +71,9 @@ export class VideoAudioSessions {
   /** 每个窗口只登记一次失效监听（会话可多达数十个），最后一个会话关闭时取消。 */
   private readonly watched = new Map<number, () => void>()
   private nextId = 1
-  private readonly maxSessionsPerTarget: number
   private readonly unsubscribe: () => void
 
   constructor(private readonly options: VideoAudioSessionsOptions) {
-    this.maxSessionsPerTarget = options.maxSessionsPerTarget ?? 64
     // 服务进程退出时它的声音会话随之消失：只清理登记，之后的读取得到“会话不存在”，渲染层重新打开。
     this.unsubscribe = options.service.onLifecycle((event) => {
       if (event.type !== 'exited' || this.sessions.size === 0) return
@@ -95,11 +91,6 @@ export class VideoAudioSessions {
 
   async open(target: VideoFrameTarget, request: VideoAudioOpenRequest): Promise<VideoAudioSessionInfo> {
     if (target.isDestroyed()) throw new VideoDecoderError('TARGET_GONE', '目标窗口已关闭')
-    const owned = [...this.sessions.values()].filter((session) => session.target.id === target.id).length
-    if (owned >= this.maxSessionsPerTarget) {
-      this.options.logger.warn('窗口声音会话数达到上限', { event: 'video_audio.budget.window_limit', context: { targetId: target.id, limit: this.maxSessionsPerTarget } })
-      throw new VideoDecoderError('BUDGET_EXCEEDED', `同一窗口最多 ${this.maxSessionsPerTarget} 路声音会话`)
-    }
     const audioId = `va-${this.nextId++}`
     const { route, ...rest } = request
     let opened: Awaited<ReturnType<VideoAudioSessionService['openAudio']>>

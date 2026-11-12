@@ -1,56 +1,56 @@
-//! 资源预算（3.1）：解码会话数、显存与硬件解码器并发的统一上限。
+//! 资源预算（3.1）：解码显存账本。
 //!
-//! - 显存：每个解码会话在建纹理池之前按“共享纹理池 + 转换中间纹理 + 硬解表面”估算并登记，所有会话的登记总和
-//!   超过上限时拒绝打开（`BUDGET_EXCEEDED`，渲染层就地提示），会话结束时归还。用估算而不是系统报告的实际占用：
-//!   结果确定、可测，且不受同一时刻其他会话正在分配的影响。估算口径见 `session_bytes`。
-//! - 硬解并发：同时使用硬件解码器的会话达到上限后，之后的会话改用软解（只多占 CPU，不失败）。
-//! - 会话数：所有窗口合计的解码会话上限（每窗口另有主进程的上限）。
+//! - 登记：每个解码会话在建纹理池之前按“共享纹理池 + 转换中间纹理 + 硬解表面”估算并登记，会话结束时归还。用估算而不是
+//!   系统报告的实际占用：结果确定、可测，且不受同一时刻其他会话正在分配的影响。估算口径见 `session_bytes`。
+//! - 预算只是淘汰目标，不是准入门槛（参照 PR / 达芬奇：资源不够时淘汰缓存、降回放，不让某一帧报错）：打开会话一律登记
+//!   成功。拖动留存帧（`extend_vram` 追加的部分）只在“预算 − 前台保留”之内登记，前台保留留给新会话直接用；登记总和
+//!   超过预算本身时才收回最久没用的留存帧（会话线程随后放掉纹理）。会话本身超出预算时只记日志，由渲染层淘汰不在当前
+//!   画面的闲置会话，能共享的读取（独占读取者、同一素材的第二个播放计划、拖动图层自己的会话、提前打开）不再另开会话
+//!   （`videoEditNativeFrameSource.ts`）；淘汰不动就照常超出，驱动把显存换出到内存，变慢而不失败。
+//! - 不限会话数与硬解路数：驱动拒绝新的硬件解码器时 FFmpeg 改用软解（`codec.rs` 的 `get_format`），只有拿不到显卡
+//!   解码器才软解。硬解会话只计数供诊断。
 //!
-//! 上限按所选显卡的专用显存确定（`Limits::for_adapter`）；主进程只在诊断时覆盖（`hello.limits`）。
-//! 参数依据记在 3.1 执行记录。
+//! 预算按所选显卡的专用显存确定（`Limits::for_adapter`）；主进程只在诊断时覆盖（`hello.limits`）。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::convert::WritePath;
-use crate::protocol::ServiceError;
+use crate::logging;
 use crate::test_pattern::SharedFormat;
 
 /// 硬解会话的表面池：参考帧（H.264/HEVC 最多 16）+ FFmpeg 额外帧（`extra_hw_frames = 4`）。
 pub const HARDWARE_SURFACES: u64 = 20;
 const GIB: u64 = 1024 * 1024 * 1024;
-/// 解码显存占专用显存的比例与上下限：其余留给剪辑帧缓存（节目 8GiB、源监视器 3GiB 是上限而不是常驻）与合成。
-pub const VRAM_SHARE: f64 = 0.4;
+/// 解码显存预算占专用显存的比例。其余留给合成与剪辑帧缓存；它们与本预算一样只是淘汰目标，偶尔叠加超出时驱动把显存
+/// 换出到内存，变慢而不失败。
+pub const VRAM_SHARE: f64 = 0.75;
+/// 集成显卡报告的专用显存只有几百 MiB（画面实际放在共享内存），按这个下限取。
 pub const MIN_VRAM_BYTES: u64 = 3 * GIB / 2;
-pub const MAX_VRAM_BYTES: u64 = 8 * GIB;
-pub const DEFAULT_HARDWARE_SESSIONS: usize = 16;
-pub const DEFAULT_DECODER_SESSIONS: usize = 32;
-/// 拖动留存帧追加显存时给前台保留的会话数：正在拖的文件旁边还要能预打开下一个镜头、起播，留出三个最大会话。
+/// 读不到显卡时的取值：这时也打不开解码会话，只影响诊断显示。
+pub const UNKNOWN_ADAPTER_VRAM_BYTES: u64 = 8 * GIB;
+/// 一个会话的拖动留存帧至多占预算的几分之一：RTX 4090（18GiB 预算）为 4.5GiB，约 68 帧 4K rgbaf16 或 370 帧 4K nv12。
+const RETAIN_SHARE: u64 = 4;
+/// 留存帧之外给前台留出的最大会话数：正在拖的文件旁边还要能预打开下一个镜头、起播。
 const FOREGROUND_SESSIONS_KEPT: u64 = 3;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Limits {
     pub vram_bytes: u64,
-    pub hardware_sessions: usize,
-    pub decoder_sessions: usize,
 }
 
 impl Limits {
-    /// 按显卡专用显存（MiB）确定上限；读不到时取上限值（设备不可用时本来也打不开会话）。
+    /// 按显卡专用显存（MiB）确定预算。
     pub fn for_adapter(dedicated_mib: Option<u64>) -> Self {
-        let vram_bytes = dedicated_mib.map_or(MAX_VRAM_BYTES, |mib| ((mib as f64 * VRAM_SHARE) as u64 * 1024 * 1024).clamp(MIN_VRAM_BYTES, MAX_VRAM_BYTES));
-        Self { vram_bytes, hardware_sessions: DEFAULT_HARDWARE_SESSIONS, decoder_sessions: DEFAULT_DECODER_SESSIONS }
+        let vram_bytes = dedicated_mib.map_or(UNKNOWN_ADAPTER_VRAM_BYTES, |mib| ((mib as f64 * VRAM_SHARE) as u64 * 1024 * 1024).max(MIN_VRAM_BYTES));
+        Self { vram_bytes }
     }
 
     pub fn with(self, overrides: LimitOverrides) -> Self {
-        Self {
-            vram_bytes: overrides.vram_bytes.unwrap_or(self.vram_bytes),
-            hardware_sessions: overrides.hardware_sessions.unwrap_or(self.hardware_sessions),
-            decoder_sessions: overrides.decoder_sessions.unwrap_or(self.decoder_sessions),
-        }
+        Self { vram_bytes: overrides.vram_bytes.unwrap_or(self.vram_bytes) }
     }
 }
 
@@ -60,16 +60,12 @@ impl Default for Limits {
     }
 }
 
-/// 握手里的上限覆盖（诊断：缩小预算以验证超限提示）；缺省项保持按显卡确定的值。
+/// 握手里的预算覆盖（诊断：把预算压小，验证先收回留存帧、渲染层先退回共享会话而不报错）；缺省保持按显卡确定的值。
 #[derive(Debug, Clone, Copy, PartialEq, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LimitOverrides {
     #[serde(default)]
     pub vram_bytes: Option<u64>,
-    #[serde(default)]
-    pub hardware_sessions: Option<usize>,
-    #[serde(default)]
-    pub decoder_sessions: Option<usize>,
 }
 
 /// 一帧共享纹理的字节数。
@@ -101,15 +97,66 @@ pub fn session_bytes(output: SharedFormat, pool: (u32, u32), slots: u32, path: W
     slots as u64 * frame_bytes(output, pool) + intermediate + surfaces
 }
 
+/// 一个会话的登记：会话本身与拖动留存帧分开记，留存帧可被收回。
+struct Entry {
+    session: u64,
+    retained: u64,
+    /// 最近一次用到留存帧的序号（`Usage::clock`）：收回时最久没用的先收。
+    used: u64,
+}
+
 #[derive(Default)]
 struct Usage {
     limits: Limits,
-    /// 会话 → 登记的显存字节数。
-    reserved: HashMap<String, u64>,
+    entries: HashMap<String, Entry>,
+    /// 留存帧已被收回、会话线程还没放掉纹理的会话（`Budget::take_revoked`）。
+    revoked: HashSet<String>,
     hardware: usize,
     peak_reserved: u64,
-    /// 已实际登记过的最大单会话，用于预打开给前台保留余量；不由渲染层估算。
+    /// 已实际登记过的最大单会话，用于给前台保留余量；不由渲染层估算。
     largest_session: u64,
+    clock: u64,
+    /// 会话本身的登记已超出预算（只在越过时记一次日志）。
+    over: bool,
+}
+
+impl Usage {
+    fn reserved(&self) -> u64 {
+        self.entries.values().map(|entry| entry.session + entry.retained).sum()
+    }
+
+    fn retained(&self) -> u64 {
+        self.entries.values().map(|entry| entry.retained).sum()
+    }
+
+    /// 留存帧不占用的前台余量。
+    fn keep(&self) -> u64 {
+        self.largest_session.max(self.limits.vram_bytes / 8) * FOREGROUND_SESSIONS_KEPT
+    }
+
+    fn tick(&mut self) -> u64 {
+        self.clock += 1;
+        self.clock
+    }
+
+    /// 收回留存帧（最久没用的先收），直到登记总和不超过 `ceiling` 或没有可收的；返回被收回的（会话，字节）。
+    fn reclaim(&mut self, ceiling: u64) -> Vec<(String, u64)> {
+        let mut total = self.reserved();
+        let mut holders: Vec<(u64, String)> = self.entries.iter().filter(|(_, entry)| entry.retained > 0).map(|(id, entry)| (entry.used, id.clone())).collect();
+        holders.sort();
+        let mut reclaimed = Vec::new();
+        for (_, id) in holders {
+            if total <= ceiling {
+                break;
+            }
+            let Some(entry) = self.entries.get_mut(&id) else { continue };
+            total -= entry.retained;
+            reclaimed.push((id.clone(), entry.retained));
+            entry.retained = 0;
+            self.revoked.insert(id);
+        }
+        reclaimed
+    }
 }
 
 /// 全服务共享的预算账本。
@@ -118,7 +165,7 @@ pub struct Budget {
     usage: Arc<Mutex<Usage>>,
 }
 
-/// 硬解名额：会话实际用上硬件解码器时保留，结束时归还。
+/// 硬解会话计数（诊断）：会话实际用上硬件解码器时持有，结束时归还。
 pub struct HardwareTicket {
     usage: Arc<Mutex<Usage>>,
 }
@@ -138,7 +185,12 @@ pub struct VramTicket {
 
 impl Drop for VramTicket {
     fn drop(&mut self) {
-        self.usage.lock().unwrap().reserved.remove(&self.stream_id);
+        let mut usage = self.usage.lock().unwrap();
+        usage.entries.remove(&self.stream_id);
+        usage.revoked.remove(&self.stream_id);
+        if usage.over && usage.reserved() <= usage.limits.vram_bytes {
+            usage.over = false;
+        }
     }
 }
 
@@ -158,67 +210,87 @@ impl Budget {
         usage.limits = usage.limits.with(overrides);
     }
 
-    /// 还能再开一个解码会话吗（`open` 是包括正在打开的全部会话数）。
-    pub fn admit_session(&self, open: usize) -> Result<(), ServiceError> {
-        let limit = self.usage.lock().unwrap().limits.decoder_sessions;
-        if open >= limit {
-            return Err(ServiceError::new("BUDGET_EXCEEDED", format!("同时打开的解码会话已达上限（{limit}）")));
-        }
-        Ok(())
+    /// 硬解会话计数。
+    pub fn hardware(&self) -> HardwareTicket {
+        self.usage.lock().unwrap().hardware += 1;
+        HardwareTicket { usage: self.usage.clone() }
     }
 
-    /// 申请一个硬解名额；已达上限返回 None（该会话改用软解）。
-    pub fn hardware(&self) -> Option<HardwareTicket> {
-        let mut usage = self.usage.lock().unwrap();
-        if usage.hardware >= usage.limits.hardware_sessions {
-            return None;
+    /// 为会话登记显存。总是成功：登记总和超过预算时先收回最久没用的留存帧（前台保留之内的新会话不收回）；会话本身
+    /// 超出预算时记一次日志，由渲染层淘汰闲置会话、能共享的读取不再另开会话。
+    pub fn reserve_vram(&self, stream_id: &str, bytes: u64) -> VramTicket {
+        let (reclaimed, over) = {
+            let mut usage = self.usage.lock().unwrap();
+            usage.entries.insert(stream_id.to_string(), Entry { session: bytes, retained: 0, used: 0 });
+            usage.largest_session = usage.largest_session.max(bytes);
+            let ceiling = usage.limits.vram_bytes;
+            let reclaimed = usage.reclaim(ceiling);
+            let reserved = usage.reserved();
+            usage.peak_reserved = usage.peak_reserved.max(reserved);
+            let crossed = reserved > usage.limits.vram_bytes && !usage.over;
+            if crossed {
+                usage.over = true;
+            }
+            (reclaimed, crossed.then(|| json!({ "streamId": stream_id, "sessionBytes": bytes, "reservedBytes": reserved, "limitBytes": usage.limits.vram_bytes })))
+        };
+        if !reclaimed.is_empty() {
+            let bytes: u64 = reclaimed.iter().map(|(_, bytes)| bytes).sum();
+            logging::info("decode.budget.retain_reclaimed", "打开解码会话时收回拖动留存帧", json!({ "streamId": stream_id, "from": reclaimed.iter().map(|(id, _)| id).collect::<Vec<_>>(), "bytes": bytes }));
         }
-        usage.hardware += 1;
-        Some(HardwareTicket { usage: self.usage.clone() })
+        if let Some(context) = over {
+            logging::warn("decode.budget.over_target", "解码会话登记超出显存预算，照常打开并由渲染层淘汰闲置会话", context);
+        }
+        VramTicket { usage: self.usage.clone(), stream_id: stream_id.to_string() }
     }
 
-    /// 为会话登记显存；总和超过上限时拒绝。
-    pub fn reserve_vram(&self, stream_id: &str, bytes: u64) -> Result<VramTicket, ServiceError> {
+    /// 给已登记的会话追加拖动留存帧的显存，返回追加的字节数：至多预算的 `1/RETAIN_SHARE`，且不占前台保留
+    /// （`FOREGROUND_SESSIONS_KEPT` 个最大会话）。追加部分随会话归还，或在之后打开会话时被收回（`take_revoked`）。
+    pub fn extend_vram(&self, stream_id: &str) -> u64 {
         let mut usage = self.usage.lock().unwrap();
-        let reserved: u64 = usage.reserved.values().sum();
-        let limit = usage.limits.vram_bytes;
-        if reserved + bytes > limit {
-            return Err(ServiceError::new(
-                "BUDGET_EXCEEDED",
-                format!("解码显存预算不足：已用 {} MiB，本会话需 {} MiB，上限 {} MiB", reserved >> 20, bytes >> 20, limit >> 20),
-            ));
-        }
-        usage.reserved.insert(stream_id.to_string(), bytes);
-        usage.peak_reserved = usage.peak_reserved.max(reserved + bytes);
-        usage.largest_session = usage.largest_session.max(bytes);
-        Ok(VramTicket { usage: self.usage.clone(), stream_id: stream_id.to_string() })
-    }
-
-    /// 给已登记的会话追加至多 `bytes` 的显存（拖动留存帧），返回实际追加的字节数：总预算里始终给前台留出
-    /// `FOREGROUND_SESSIONS_KEPT` 个最大会话的余量，留存帧不挤掉正要打开的会话。追加部分随会话一起归还。
-    pub fn extend_vram(&self, stream_id: &str, bytes: u64) -> u64 {
-        let mut usage = self.usage.lock().unwrap();
-        let reserved: u64 = usage.reserved.values().sum();
-        let keep = usage.largest_session.max(usage.limits.vram_bytes / 8) * FOREGROUND_SESSIONS_KEPT;
-        let granted = bytes.min(usage.limits.vram_bytes.saturating_sub(reserved).saturating_sub(keep));
-        let Some(entry) = usage.reserved.get_mut(stream_id) else { return 0 };
-        *entry += granted;
+        let reserved = usage.reserved();
+        let room = usage.limits.vram_bytes.saturating_sub(reserved).saturating_sub(usage.keep());
+        let granted = (usage.limits.vram_bytes / RETAIN_SHARE).min(room);
+        let clock = usage.tick();
+        let Some(entry) = usage.entries.get_mut(stream_id) else { return 0 };
+        entry.retained += granted;
+        entry.used = clock;
         usage.peak_reserved = usage.peak_reserved.max(reserved + granted);
         granted
+    }
+
+    /// 显存真的分配失败时收回全部留存帧（`decode/mod.rs` 打开会话的重试），返回收回的字节数。
+    pub fn revoke_all_retained(&self) -> u64 {
+        let mut usage = self.usage.lock().unwrap();
+        let retained = usage.retained();
+        usage.reclaim(0);
+        retained
+    }
+
+    /// 会话用到了它的留存帧：收回时排到后面。
+    pub fn touch_retained(&self, stream_id: &str) {
+        let mut usage = self.usage.lock().unwrap();
+        let clock = usage.tick();
+        if let Some(entry) = usage.entries.get_mut(stream_id) {
+            entry.used = clock;
+        }
+    }
+
+    /// 会话的留存帧是否已被收回（取出即清除）：会话线程据此放掉留存纹理，之后按当时的余量重新登记。
+    pub fn take_revoked(&self, stream_id: &str) -> bool {
+        self.usage.lock().unwrap().revoked.remove(stream_id)
     }
 
     pub fn stats(&self) -> Value {
         let usage = self.usage.lock().unwrap();
         json!({
             "vramLimitBytes": usage.limits.vram_bytes,
-            "vramReservedBytes": usage.reserved.values().sum::<u64>(),
+            "vramReservedBytes": usage.reserved(),
+            "vramRetainedBytes": usage.retained(),
             "vramPeakReservedBytes": usage.peak_reserved,
             "largestSessionBytes": usage.largest_session,
             // 尚无实测会话时先为前台留一半额度，允许空白起点预打开首个文件；后续用实测最大值。
             "foregroundReserveBytes": if usage.largest_session == 0 { usage.limits.vram_bytes.div_ceil(2) } else { usage.largest_session },
             "hardwareSessions": usage.hardware,
-            "hardwareSessionLimit": usage.limits.hardware_sessions,
-            "decoderSessionLimit": usage.limits.decoder_sessions,
         })
     }
 }
@@ -241,17 +313,16 @@ mod tests {
     }
 
     #[test]
-    fn vram_reservations_are_bounded_and_returned() {
-        let budget = Budget::default();
-        budget.set_limits(Limits { vram_bytes: 1000, hardware_sessions: 1, decoder_sessions: 2 });
+    fn sessions_past_the_budget_are_admitted_and_returned() {
+        let budget = Budget::new(Limits { vram_bytes: 1000 });
         assert_eq!(budget.stats()["foregroundReserveBytes"], 500);
-        let first = budget.reserve_vram("a", 600).unwrap();
-        let error = budget.reserve_vram("b", 500).err().unwrap();
-        assert_eq!(error.code, "BUDGET_EXCEEDED");
+        let first = budget.reserve_vram("a", 600);
+        // 预算只是淘汰目标：超出照常登记，不拒绝当前帧需要的会话。
+        let second = budget.reserve_vram("b", 500);
+        assert_eq!(budget.stats()["vramReservedBytes"], 1100);
         drop(first);
-        let second = budget.reserve_vram("b", 500).unwrap();
         assert_eq!(budget.stats()["vramReservedBytes"], 500);
-        assert_eq!(budget.stats()["vramPeakReservedBytes"], 600);
+        assert_eq!(budget.stats()["vramPeakReservedBytes"], 1100);
         drop(second);
         assert_eq!(budget.stats()["vramReservedBytes"], 0);
         assert_eq!(budget.stats()["largestSessionBytes"], 600);
@@ -259,42 +330,45 @@ mod tests {
     }
 
     #[test]
-    fn retained_frames_extend_a_session_but_leave_room_for_the_foreground() {
-        let budget = Budget::default();
-        budget.set_limits(Limits { vram_bytes: 8000, hardware_sessions: 4, decoder_sessions: 4 });
-        let session = budget.reserve_vram("a", 1000).unwrap();
-        // 保留 3 × 最大会话（1000）：8000 − 1000 − 3000 = 4000 可追加。
-        assert_eq!(budget.extend_vram("a", 10_000), 4000);
-        assert_eq!(budget.extend_vram("a", 10), 0, "余量已到前台保留线");
-        assert_eq!(budget.stats()["vramReservedBytes"], 5000);
+    fn retained_frames_leave_room_for_the_foreground_and_give_way_only_past_the_budget() {
+        let budget = Budget::new(Limits { vram_bytes: 16_000 });
+        let a = budget.reserve_vram("a", 1000);
+        let b = budget.reserve_vram("b", 1000);
+        // 每个会话至多预算的 1/4；前台保留 3 × max(最大会话, 预算/8) = 6000。
+        assert_eq!(budget.extend_vram("a"), 4000);
+        assert_eq!(budget.extend_vram("b"), 4000, "16000 − 2000 − 4000 − 6000 = 4000");
+        assert_eq!(budget.extend_vram("a"), 0, "余量已到前台保留线");
+        assert_eq!(budget.stats()["vramRetainedBytes"], 8000);
         assert_eq!(budget.stats()["foregroundReserveBytes"], 1000, "追加部分不算会话大小");
-        let foreground = budget.reserve_vram("b", 3000).expect("前台仍能打开会话");
-        assert_eq!(budget.extend_vram("missing", 10), 0);
-        drop(session);
-        assert_eq!(budget.stats()["vramReservedBytes"], 3000, "追加部分随会话归还");
-        drop(foreground);
+        budget.touch_retained("a");
+        // 前台保留之内的新会话（含提前打开）直接用余量，不收回留存帧。
+        let c = budget.reserve_vram("c", 1000);
+        let d = budget.reserve_vram("d", 1000);
+        assert!(!budget.take_revoked("a") && !budget.take_revoked("b"));
+        assert_eq!(budget.stats()["vramReservedBytes"], 12_000);
+        // 越过预算本身才收回，最久没用的（b）先收，a 刚用过留着。
+        let e = budget.reserve_vram("e", 5000);
+        assert!(budget.take_revoked("b"));
+        assert!(!budget.take_revoked("b"), "取出即清除");
+        assert!(!budget.take_revoked("a"));
+        assert_eq!(budget.stats()["vramRetainedBytes"], 4000);
+        assert_eq!(budget.stats()["vramReservedBytes"], 13_000);
+        // 被收回的会话之后按当时的余量重新登记：前台保留之外已没有余量。
+        assert_eq!(budget.extend_vram("b"), 0);
+        assert_eq!(budget.extend_vram("missing"), 0);
+        drop(a);
+        assert_eq!(budget.stats()["vramReservedBytes"], 8000, "追加部分随会话归还");
+        drop((b, c, d, e));
     }
 
     #[test]
-    fn hardware_slots_fall_back_to_software_and_sessions_are_limited() {
-        let budget = Budget::default();
-        budget.set_limits(Limits { vram_bytes: u64::MAX, hardware_sessions: 1, decoder_sessions: 2 });
-        let ticket = budget.hardware().expect("第一个会话可以硬解");
-        assert!(budget.hardware().is_none(), "达到上限后改用软解");
-        drop(ticket);
-        assert!(budget.hardware().is_some());
-        assert!(budget.admit_session(1).is_ok());
-        assert_eq!(budget.admit_session(2).unwrap_err().code, "BUDGET_EXCEEDED");
-    }
-
-    #[test]
-    fn limits_follow_the_adapter_and_accept_partial_overrides() {
-        // 24GiB（RTX 4090）→ 封顶 8GiB；8GiB → 3.2GiB；3GiB → 保底 1.5GiB。
-        assert_eq!(Limits::for_adapter(Some(24_138)).vram_bytes, MAX_VRAM_BYTES);
-        assert_eq!(Limits::for_adapter(Some(8_192)).vram_bytes >> 20, 3276);
-        assert_eq!(Limits::for_adapter(Some(3_072)).vram_bytes, MIN_VRAM_BYTES);
-        let overrides: LimitOverrides = serde_json::from_str(r#"{"vramBytes":629145600}"#).unwrap();
-        let limits = Limits::for_adapter(Some(24_138)).with(overrides);
-        assert_eq!(limits, Limits { vram_bytes: 600 << 20, hardware_sessions: DEFAULT_HARDWARE_SESSIONS, decoder_sessions: DEFAULT_DECODER_SESSIONS });
+    fn limits_follow_the_adapter_and_accept_overrides() {
+        // 24GiB（RTX 4090）→ 75% 不封顶；8GiB → 6GiB；集成显卡 512MiB → 下限 1.5GiB。
+        assert_eq!(Limits::for_adapter(Some(24_138)).vram_bytes >> 20, 18_103);
+        assert_eq!(Limits::for_adapter(Some(8_192)).vram_bytes >> 20, 6_144);
+        assert_eq!(Limits::for_adapter(Some(512)).vram_bytes, MIN_VRAM_BYTES);
+        // 旧握手里的会话数覆盖字段已无含义，忽略。
+        let overrides: LimitOverrides = serde_json::from_str(r#"{"vramBytes":629145600,"decoderSessions":8}"#).unwrap();
+        assert_eq!(Limits::for_adapter(Some(24_138)).with(overrides), Limits { vram_bytes: 600 << 20 });
     }
 }

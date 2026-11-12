@@ -34,6 +34,7 @@ class FakeChannel implements VideoEditNativeChannel {
     if (method === 'openDecoder') return this.info(`vf-${++this.nextStream}`)
     if (method === 'frameAt') return { ticket: params.ticket, found: false, seeked: false, decodeMs: 1 }
     if (method === 'schedule') return { scheduleId: params.scheduleId, count: null }
+    if (method === 'stats') return { native: { streams: [], budget: { vramLimitBytes: 1e12, vramReservedBytes: 0, vramRetainedBytes: 0, largestSessionBytes: 1 } } }
     return true
   }) as VideoEditNativeChannel['call']
 
@@ -69,7 +70,7 @@ class FakeChannel implements VideoEditNativeChannel {
 
 const media = (overrides: Partial<VideoEditMedia> = {}): VideoEditMedia => ({ id: 'm', name: '专业素材', path: 'henji-media://local/D%3A%2Fa.mov', kind: 'video', width: 3840, height: 2160, durationSeconds: 7, ...overrides })
 const flush = async (rounds = 10): Promise<void> => { for (let index = 0; index < rounds; index++) await Promise.resolve() }
-function backend(channel: FakeChannel, options: { maxSessions?: number; sound?: boolean } = {}): VideoEditNativeFrames {
+function backend(channel: FakeChannel, options: { sound?: boolean } = {}): VideoEditNativeFrames {
   return new VideoEditNativeFrames({ channel, localPath: item => item.path.includes('remote') ? undefined : 'D:/a.mov', ...options })
 }
 
@@ -80,11 +81,11 @@ describe('前瞻与原生预算', () => {
     const log = vi.fn()
     const frames = new VideoEditNativeFrames({ channel, localPath: item => item.path, retainIdle: true, log })
     let limit = 10_000
-    channel.answers.stats = () => ({ native: { streams: Array.from({ length: frames.openSessions }, () => ({ kind: 'decoder' })), budget: { vramLimitBytes: limit, vramReservedBytes: frames.openSessions * 1000, largestSessionBytes: 1000, hardwareSessionLimit: 10, hardwareSessions: frames.openSessions, decoderSessionLimit: 10 } } })
+    channel.answers.stats = () => ({ native: { streams: Array.from({ length: frames.openSessions }, () => ({ kind: 'decoder' })), budget: { vramLimitBytes: limit, vramReservedBytes: frames.openSessions * 1000, vramRetainedBytes: 0, largestSessionBytes: 1000 } } })
     return { frames, log, setLimit: (bytes: number) => { limit = bytes } }
   }
 
-  it('提前打开代码视频输入时可回收闲置会话腾出余量（远的先回收），正在用的不动；没有可回收的就放弃，不占最后的余量', async () => {
+  it('提前打开代码视频输入时可回收闲置会话腾出余量（远的先回收），播放头上的与正在用的不动；没有可回收的就放弃，不占最后的余量', async () => {
     const channel = new FakeChannel(), { frames, log, setLimit } = managed(channel)
     for (let index = 0; index < 3; index++) { const warm = frames.preopen(media({ path: `${index}.mp4` })); await warm.ready; warm.release() }
     await frames.maintain(new Map([['0.mp4', 0], ['1.mp4', 5], ['2.mp4', 1]]))
@@ -96,12 +97,12 @@ describe('前瞻与原生预算', () => {
     await ahead.frameAt(9, { speculative: true })
     expect(log).toHaveBeenCalledWith('debug', expect.any(String), 'video_edit.decode.idle.evicted', expect.objectContaining({ reason: 'ahead', distanceSeconds: 5 }))
     expect(channel.calls.filter(call => call.method === 'closeStream')).toHaveLength(1)
-    // Too little even after freeing every idle session: refused rather than taking the last room; the input session in
-    // use stays open.
+    // Too little even after freeing every idle session off the playhead: refused rather than taking the last room; the
+    // file at the playhead (0.mp4) and the input session in use stay open.
     const next = shown.clipFrames({ exclusive: true })!
     setLimit(2500)
     await expect(next.frameAt(9, { speculative: true })).rejects.toMatchObject({ kind: 'budget' })
-    expect(channel.calls.filter(call => call.method === 'closeStream')).toHaveLength(3); expect(frames.openSessions).toBe(1)
+    expect(channel.calls.filter(call => call.method === 'closeStream')).toHaveLength(2); expect(frames.openSessions).toBe(2)
     ahead.close?.(); next.close?.(); await frames.settled()
   })
 
@@ -109,13 +110,13 @@ describe('前瞻与原生预算', () => {
     const channel = new FakeChannel(), { frames, setLimit } = managed(channel)
     setLimit(2500)
     expect(await frames.canPreopen()).toBe(true)
-    const warm = frames.preopen(media()); await warm.ready; warm.release()
+    const warm = frames.preopen(media(), { time: 0, purpose: 'seek', signal: new AbortController().signal, openOnly: true }); await warm.ready; warm.release()
     expect(await frames.canPreopen()).toBe(false)
     expect(channel.calls.filter(call => call.method === 'stats')).toHaveLength(1)
     await frames.disposeIdle()
   })
 
-  it('余量足够保留超过四个，紧张时按时间距离回收；前台预算拒绝后继续回收重试', async () => {
+  it('余量足够保留超过四个，紧张时按时间距离回收，播放头上的文件不动', async () => {
     const channel = new FakeChannel(), { frames, log, setLimit } = managed(channel)
     for (let index = 0; index < 6; index++) { const warm = frames.preopen(media({ path: `${index}.mp4` })); await warm.ready; warm.release() }
     const distances = new Map(Array.from({ length: 6 }, (_, index) => [`${index}.mp4`, index]))
@@ -127,14 +128,27 @@ describe('前瞻与原生预算', () => {
     const reuse = frames.preopen(media({ path: '0.mp4' })); await reuse.ready; reuse.release()
     expect(channel.calls.filter(call => call.method === 'openDecoder')).toHaveLength(6)
     expect(await frames.canPreopen()).toBe(false)
-    let rejected = false
-    channel.answers.openDecoder = () => { if (!rejected) { rejected = true; throw new VideoEditNativeCallError('预算不足', 'BUDGET_EXCEEDED') } return channel.info('current') }
-    const current = frames.open(media({ path: 'current.mp4' }))
-    await (await current.ready).clipFrames()!.frameAt(0)
-    expect(frames.openSessions).toBe(1)
-    expect(log).toHaveBeenCalledWith('debug', expect.any(String), 'video_edit.decode.idle.evicted', expect.objectContaining({ reason: 'foreground' }))
-    frames.release(current.key); await frames.disposeIdle(); await frames.settled()
+    expect(log).toHaveBeenCalledWith('debug', expect.any(String), 'video_edit.decode.idle.evicted', expect.objectContaining({ reason: 'budget', distanceSeconds: 5 }))
+    await frames.disposeIdle(); await frames.settled()
     expect(frames.openSessions).toBe(0)
+  })
+
+  it('预算小于一个会话：当前画面要读的会话照常打开，读完不被自己的回收淘汰、连续多帧不重开；不在当前画面的闲置会话被回收', async () => {
+    const channel = new FakeChannel(), { frames, log, setLimit } = managed(channel)
+    const far = frames.preopen(media({ path: 'far.mp4' }), { time: 0, purpose: 'seek', signal: new AbortController().signal, openOnly: true, distance: 9 })
+    await far.ready; far.release()
+    setLimit(500)
+    const opened = frames.open(media({ path: 'current.mp4' })), source = await opened.ready
+    for (let index = 0; index < 5; index++) { await source.clipFrames()!.frameAt(index / 30); await flush(20) }
+    await frames.maintain(new Map([['current.mp4', 0]]))
+    await vi.waitFor(() => expect(channel.calls.filter(call => call.method === 'closeStream').map(call => call.params.streamId)).toEqual(['vf-1']))
+    await frames.maintain(new Map([['current.mp4', 0]])); await frames.settled()
+    expect(channel.calls.filter(call => call.method === 'openDecoder').map(call => call.params.path)).toEqual(['far.mp4', 'current.mp4'])
+    expect(channel.calls.filter(call => call.method === 'closeStream')).toHaveLength(1)
+    expect(new Set(channel.calls.filter(call => call.method === 'frameAt').map(call => call.params.streamId))).toEqual(new Set(['vf-2']))
+    expect(frames.openSessions).toBe(1)
+    expect(log).toHaveBeenCalledWith('debug', expect.any(String), 'video_edit.decode.idle.evicted', expect.objectContaining({ reason: 'over-budget', distanceSeconds: 9 }))
+    frames.release(opened.key); await frames.disposeIdle(); await frames.settled()
   })
 
   it('入点首帧完成后播放复用同一会话；取消打开中的任务不再发定位命令且归还预算', async () => {
@@ -231,7 +245,7 @@ describe('前瞻与原生预算', () => {
 
   it('空白起点尚无已开会话时，使用原生冷启动保留量预打开首个文件', async () => {
     const channel = new FakeChannel(), { frames } = managed(channel)
-    channel.answers.stats = () => ({ native: { streams: [], budget: { vramLimitBytes: 10000, vramReservedBytes: 0, largestSessionBytes: 0, foregroundReserveBytes: 5000, hardwareSessionLimit: 10, hardwareSessions: 0, decoderSessionLimit: 10 } } })
+    channel.answers.stats = () => ({ native: { streams: [], budget: { vramLimitBytes: 10000, vramReservedBytes: 0, vramRetainedBytes: 0, largestSessionBytes: 0, foregroundReserveBytes: 5000 } } })
     expect(await frames.canPreopen()).toBe(true)
   })
 
@@ -245,50 +259,12 @@ describe('前瞻与原生预算', () => {
     channel.frame(params.streamId, { kind: 'schedule', id: params.scheduleId, index: 0 }, 0)
     ;(await first).value?.close()
     expect(frames.openSessions).toBe(2)
-    setLimit(2500); await frames.maintain(new Map([[media().path, 0]]))
+    // 播放中前瞻只要播放会话：定位会话不在当前画面使用，可以回收。
+    setLimit(2500); await frames.maintain(new Map([[media().path, 0]]), new Map([[`${media().path}\0\0playback`, true]]))
     expect(frames.openSessions).toBe(1)
     expect(channel.calls.filter(call => call.method === 'cancelSchedule')).toHaveLength(0)
     expect(channel.last('closeStream').streamId).not.toBe(params.streamId)
     await playback.return(); frames.release(opened.key); await frames.disposeIdle()
-  })
-
-  it('前台遇到预算拒绝先等待被取消的后台打开归还名额，再重试；不把预算错误交给当前帧', async () => {
-    const channel = new FakeChannel(), { frames } = managed(channel)
-    let finish!: (value: VideoFrameDecoderInfo) => void
-    channel.answers.openDecoder = params => {
-      if (params.path === 'future.mp4') return new Promise(resolve => { finish = resolve })
-      if (frames.openSessions > 1) throw new VideoEditNativeCallError('预算不足', 'BUDGET_EXCEEDED')
-      return channel.info('foreground')
-    }
-    const warm = frames.preopen(media({ path: 'future.mp4' }), { time: 2, purpose: 'playback', signal: new AbortController().signal })
-    const cancelled = expect(warm.ready).rejects.toMatchObject({ name: 'AbortError' })
-    await flush()
-    const opened = frames.open(media({ path: 'current.mp4' })), source = await opened.ready
-    const current = source.clipFrames()!.frameAt(0)
-    await flush(); finish(channel.info('future'))
-    await cancelled; await current; warm.release()
-    expect(frames.openSessions).toBe(1)
-    expect(channel.last('frameAt')).toMatchObject({ streamId: 'foreground' })
-    frames.release(opened.key); await frames.disposeIdle()
-  })
-
-  it('闲置回收尚未完成时前台等待关闭屏障，不把正在归还的会话算作不可回收占用', async () => {
-    const channel = new FakeChannel()
-    const frames = new VideoEditNativeFrames({ channel, localPath: item => item.path, retainIdle: true, maxSessions: 1 })
-    const warm = frames.preopen(media()); await warm.ready; warm.release()
-    let close!: () => void
-    channel.answers.closeStream = () => new Promise<void>(resolve => { close = resolve })
-    channel.answers.stats = () => ({ native: { streams: [{ kind: 'decoder' }], budget: { vramLimitBytes: 1000, vramReservedBytes: 1000, largestSessionBytes: 1000, hardwareSessionLimit: 1, hardwareSessions: 1, decoderSessionLimit: 1 } } })
-    const maintaining = frames.maintain(new Map())
-    await flush()
-    const current = frames.open(media({ path: 'current.mp4' }))
-    const read = (await current.ready).clipFrames()!.frameAt(0)
-    await flush()
-    expect(channel.calls.filter(call => call.method === 'openDecoder')).toHaveLength(1)
-    delete channel.answers.closeStream; close()
-    await maintaining; await read
-    expect(channel.calls.filter(call => call.method === 'openDecoder')).toHaveLength(2)
-    frames.release(current.key); await frames.disposeIdle()
   })
 })
 
@@ -317,9 +293,9 @@ describe('原生帧源：连续计划', () => {
     expect(channel.released.sort((a, b) => a - b)).toEqual([0, 99, 33_333, 50_000])
   })
 
-  /** 原生服务的预算答复：上限 `limit` 个会话，每个 1000 字节。 */
+  /** 原生服务的预算答复：预算 `limit` 个会话，每个 1000 字节。 */
   const budget = (channel: FakeChannel, frames: VideoEditNativeFrames, limit: number): void => {
-    channel.answers.stats = () => ({ native: { streams: Array.from({ length: frames.openSessions }, () => ({ kind: 'decoder' })), budget: { vramLimitBytes: limit * 1000, vramReservedBytes: frames.openSessions * 1000, largestSessionBytes: 1000, hardwareSessionLimit: limit, hardwareSessions: frames.openSessions, decoderSessionLimit: limit } } })
+    channel.answers.stats = () => ({ native: { streams: Array.from({ length: frames.openSessions }, () => ({ kind: 'decoder' })), budget: { vramLimitBytes: limit * 1000, vramReservedBytes: frames.openSessions * 1000, vramRetainedBytes: 0, largestSessionBytes: 1000 } } })
   }
   /** 从 `from` 秒起连续 `count` 帧（60fps）。 */
   const run = (from: number, count: number): number[] => Array.from({ length: count }, (_, index) => from + index / 60)
@@ -419,7 +395,7 @@ describe('原生帧源：连续计划', () => {
     await again.return()
   })
 
-  it('同一文件同时有两个播放计划（嵌套序列与节目、同一序列的两个实例）：第二个用独立播放会话，不取消正在运行的计划，结束即关闭；名额不足时退回共享会话', async () => {
+  it('同一文件同时有两个播放计划（嵌套序列与节目、同一序列的两个实例）：第二个用独立播放会话，不取消正在运行的计划，结束即关闭；显存没有余量时退回共享会话', async () => {
     const channel = new FakeChannel(); const frames = backend(channel)
     const source = await frames.open(media()).ready
     const a = new AbortController(), b = new AbortController()
@@ -435,7 +411,8 @@ describe('原生帧源：连续计划', () => {
     expect(channel.last('schedule')).toMatchObject({ streamId: 'vf-1' })
     channel.frame('vf-1', { kind: 'schedule', id: channel.last('schedule').scheduleId as string, index: 0 }, 2_000_000)
     ;(await thirdNext).value?.close(); await third.return(undefined)
-    const log = vi.fn(), full = new VideoEditNativeFrames({ channel, localPath: () => 'D:/a.mov', maxSessions: 1, log })
+    const log = vi.fn(), full = new VideoEditNativeFrames({ channel, localPath: () => 'D:/a.mov', log })
+    channel.answers.stats = () => ({ native: { streams: [], budget: { vramLimitBytes: 1000, vramReservedBytes: full.openSessions * 1000, vramRetainedBytes: 0, largestSessionBytes: 1000 } } })
     const only = await full.open(media({ sourceRevision: 'full' })).ready
     const c = new AbortController(), d = new AbortController()
     const held = only.schedule([0], c.signal), heldNext = held.next(); await flush()
@@ -572,13 +549,11 @@ describe('原生帧源：单帧与会话', () => {
     await expect(frames.open(media({ path: 'remote' })).ready).rejects.toThrow('重新定位源文件')
   })
 
-  it('会话数达到上限时给出用户语言提示（预算故障）；打开失败按错误码转为可操作提示，失败不占用会话名额', async () => {
+  it('会话数不设上限，当前帧要读的会话照常打开；打开失败按错误码转为可操作提示，失败不占用会话', async () => {
     const channel = new FakeChannel()
-    const frames = backend(channel, { maxSessions: 1 })
-    const source = await frames.open(media()).ready
-    await source.clipFrames()!.frameAt(0)
-    await expect(source.clipFrames()!.frames(0).next()).rejects.toMatchObject({ kind: 'budget', message: expect.stringContaining('同时读取的视频素材过多') })
-    const other = await frames.open(media({ path: 'henji-media://local/b', sourceRevision: 'r2' })).ready
+    const frames = backend(channel)
+    for (let index = 0; index < 12; index++) await (await frames.open(media({ sourceRevision: `r${index}` })).ready).clipFrames()!.frameAt(0)
+    expect(frames.openSessions).toBe(12)
     channel.answers.openDecoder = () => { throw new VideoEditNativeCallError('无法打开文件', 'OPEN_FAILED') }
     const relaxed = backend(channel)
     await expect((await relaxed.open(media()).ready).clipFrames()!.frameAt(0)).rejects.toMatchObject({ kind: 'file', message: expect.stringContaining('素材「专业素材」无法读取') })
@@ -586,13 +561,9 @@ describe('原生帧源：单帧与会话', () => {
     // A moved or deleted file gets the same relink hint as on the browser backend.
     channel.answers.openDecoder = () => { throw new VideoEditNativeCallError('无法打开文件：No such file or directory', 'OPEN_FAILED') }
     await expect((await backend(channel).open(media({ sourceRevision: 'moved' })).ready).clipFrames()!.frameAt(0)).rejects.toThrow('找不到素材「专业素材」的源文件')
-    // The service's own budget answer is a budget failure too; an exited service is a retryable service failure.
-    channel.answers.openDecoder = () => { throw new VideoEditNativeCallError('解码显存预算不足', 'BUDGET_EXCEEDED') }
-    await expect((await backend(channel).open(media({ sourceRevision: 'big' })).ready).clipFrames()!.frameAt(0)).rejects.toMatchObject({ kind: 'budget' })
+    // An exited service is a retryable service failure.
     channel.answers.openDecoder = () => { throw new VideoEditNativeCallError('原生视频解码服务异常退出', 'PROCESS_EXITED') }
     await expect((await backend(channel).open(media({ sourceRevision: 'gone' })).ready).clipFrames()!.frameAt(0)).rejects.toMatchObject({ kind: 'service', message: expect.stringContaining('解码暂时中断') })
-    // Sound sessions are separate from picture sessions: the limit does not apply to them.
-    expect(other.clipAudio()).toBeDefined()
   })
 
   it('独占读取器（代码视频输入）各用自己的定位会话：同一文件两个引用交替取帧互不移动对方，共享定位会话不受影响；服务故障丢弃会话、下一次读取重新打开；关闭时关掉自己的会话', async () => {
@@ -620,33 +591,53 @@ describe('原生帧源：单帧与会话', () => {
     frames.release(opened.key); await frames.settled(); expect(frames.openSessions).toBe(0)
   })
 
-  it('独占会话超出保留额度时前台读取暂时退回素材共享的定位会话，画面不失败，过后再试自己的会话；推测读取只在留有余量时打开、从不借用共享会话', async () => {
+  it('显存没有余量给独占会话时前台读取暂时退回素材共享的定位会话，画面不失败，过后再试自己的会话；推测读取只在留有余量时打开、从不借用共享会话', async () => {
     vi.useFakeTimers({ toFake: ['performance'] })
     const channel = new FakeChannel(), log = vi.fn()
-    // Four sessions with three reserved for shared ones: one exclusive session at a time.
-    const frames = new VideoEditNativeFrames({ channel, localPath: () => 'D:/a.mov', maxSessions: 4, log })
+    const frames = new VideoEditNativeFrames({ channel, localPath: () => 'D:/a.mov', log })
+    // 预算只够一个半会话（HENJI_VIDEO_DECODER_VRAM_BUDGET_MB 压小时的情形）：第一个引用有自己的会话，第二个退回共享会话。
+    let limit = 1500
+    channel.answers.stats = () => ({ native: { streams: [], budget: { vramLimitBytes: limit, vramReservedBytes: frames.openSessions * 1000, vramRetainedBytes: 0, largestSessionBytes: 1000 } } })
     const source = await frames.open(media()).ready
     const first = source.clipFrames({ exclusive: true })!, second = source.clipFrames({ exclusive: true })!
     await first.frameAt(1); await second.frameAt(5)
     expect(channel.calls.filter(call => call.method === 'frameAt').map(call => call.params.streamId)).toEqual(['vf-1', 'vf-2'])
     expect(log).toHaveBeenCalledWith('info', expect.any(String), 'video_edit.decode.exclusive.shared', expect.objectContaining({ retryInMs: 2000 }))
-    // The speculative read of a third reference neither opens past the reserve nor borrows the shared session.
+    // The speculative read of a third reference neither opens without room nor borrows the shared session.
     const third = source.clipFrames({ exclusive: true })!
-    channel.answers.stats = () => ({ native: { streams: [], budget: { vramLimitBytes: 1e12, vramReservedBytes: 0, largestSessionBytes: 1, hardwareSessionLimit: 10, hardwareSessions: 0, decoderSessionLimit: 10 } } })
     await expect(third.frameAt(9, { speculative: true })).rejects.toMatchObject({ kind: 'budget' })
     expect(channel.calls.filter(call => call.method === 'frameAt')).toHaveLength(2)
-    first.close?.(); await frames.settled()
+    first.close?.(); await frames.settled(); limit = 2500
     // Within the retry window the second reference stays on the shared session; afterwards it opens its own.
     await second.frameAt(5 + 1 / 60); expect(channel.last('frameAt')).toMatchObject({ streamId: 'vf-2' })
     vi.advanceTimersByTime(2001)
     await second.frameAt(5 + 2 / 60); expect(channel.last('frameAt')).toMatchObject({ streamId: 'vf-3' })
     expect(channel.calls.filter(call => call.method === 'openDecoder').map(call => call.params.purpose)).toEqual(['seek', 'seek', 'seek'])
     second.close?.(); third.close?.()
+    // 等余量时读取者被关闭：以 closed 结束，不把预算失败交给画面。
+    let answer!: (value: unknown) => void
+    channel.answers.stats = () => new Promise(resolve => { answer = resolve })
+    const closing = source.clipFrames({ exclusive: true })!
+    const pending = closing.frameAt(3, { speculative: true })
+    await flush(); closing.close?.()
+    answer({ native: { streams: [], budget: { vramLimitBytes: 0, vramReservedBytes: 0, vramRetainedBytes: 0, largestSessionBytes: 1000 } } })
+    await expect(pending).rejects.toMatchObject({ kind: 'closed' })
+  })
+
+  it('显存真的分配失败（服务按最小纹理池也建不出）时，能退回的读取改用共享会话，不把故障交给画面', async () => {
+    const channel = new FakeChannel(), log = vi.fn()
+    const frames = new VideoEditNativeFrames({ channel, localPath: () => 'D:/a.mov', log })
+    const source = await frames.open(media()).ready
+    let refused = true
+    channel.answers.openDecoder = () => { if (refused) { refused = false; throw new VideoEditNativeCallError('无法创建共享纹理池', 'GPU_FAILED') } return channel.info('shared') }
+    await source.clipFrames({ exclusive: true })!.frameAt(1)
+    expect(channel.last('frameAt')).toMatchObject({ streamId: 'shared' })
+    expect(log).toHaveBeenCalledWith('info', expect.any(String), 'video_edit.decode.open.no_memory', expect.objectContaining({ admission: 'optional' }))
+    expect(frames.openSessions).toBe(1)
   })
 
   it('独占读取器可只定位到关键帧（keyOnly）、交回解码会话后继续可用（下次读取重开），并声明连续读取', async () => {
     const channel = new FakeChannel(); const frames = backend(channel)
-    channel.answers.stats = () => ({ native: { streams: [], budget: { vramLimitBytes: 1e12, vramReservedBytes: 0, largestSessionBytes: 1, hardwareSessionLimit: 10, hardwareSessions: 0, decoderSessionLimit: 10 } } })
     const source = await frames.open(media()).ready
     const reader = source.clipFrames({ exclusive: true })!
     expect(reader.continues).toBe(true); expect(source.clipFrames()!.continues).toBeUndefined()
@@ -989,11 +980,11 @@ describe('原生定位器', () => {
 })
 
 describe('原生声音', () => {
-  it('片段声音读取器经同一通道打开声音会话（按混音采样率），读完关闭；不占画面会话名额', async () => {
+  it('片段声音读取器经同一通道打开声音会话（按混音采样率），读完关闭；不计入画面会话', async () => {
     const channel = new FakeChannel()
     channel.answers.openAudio = () => ({ found: true, audioId: 'va-1', route: 'r', audioStream: 0, streamIndex: 1, codec: 'pcm_s24le', decoderName: 'pcm_s24le', sampleRate: 48000, sourceSampleRate: 48000, channels: 1, channelLayout: 'mono', resampler: 'none', startSeconds: 0, endSeconds: 3 })
     channel.answers.readAudio = params => ({ audioId: 'va-1', startFrame: params.startFrame, frames: params.frames, channels: 1, data: new Float32Array(params.frames as number).fill(.5).buffer, seeked: false, decodeMs: 0 })
-    const frames = backend(channel, { sound: true, maxSessions: 1 })
+    const frames = backend(channel, { sound: true })
     const { key, ready } = frames.open(media({ kind: 'audio' }))
     const source = await ready
     expect(source.clipFrames()).toBeUndefined()

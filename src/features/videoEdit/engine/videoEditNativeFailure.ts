@@ -8,18 +8,19 @@ import { videoEditSourceReadError } from './videoEditSourceErrors'
  *   one only native decodes is retried on a new session, which waits for the restarted service.
  * - `file`: native cannot read or decode this file. The browser is tried when it decodes the file; otherwise the
  *   failure is shown in place and the next request tries again (a relinked or restored file).
- * - `budget`: the decoding resource budget is full (sessions, video memory): shown in place, never retried in a loop.
+ * - `budget`: no video memory room for a read that can share its file's session, or for opening ahead of need. Only the
+ *   renderer decides this (`VideoEditNativeAdmission` in `videoEditNativeFrameSource.ts`), and every caller falls back
+ *   to the shared session or skips the early open; it never reaches a picture. The native service never refuses a
+ *   session for its budget: the budget only drives eviction (`native/video-decoder/src/budget.rs`).
  * - `closed`: the preview itself is closing; nothing to recover.
  */
 export type VideoEditNativeFailureKind = 'service' | 'file' | 'budget' | 'closed'
 
 const FILE_CODES = new Set(['OPEN_FAILED', 'STREAM_INFO_FAILED', 'DECODE_FAILED', 'UNSUPPORTED_FORMAT', 'FORMAT_CHANGED', 'INVALID_REQUEST', 'UNAUTHORIZED'])
-const BUDGET_CODES = new Set(['BUDGET_EXCEEDED'])
 const CLOSED_CODES = new Set(['CHANNEL_CLOSED', 'TARGET_GONE'])
 
 export function videoEditNativeFailureKindOf(code: string | undefined): VideoEditNativeFailureKind {
   if (code && FILE_CODES.has(code)) return 'file'
-  if (code && BUDGET_CODES.has(code)) return 'budget'
   if (code && CLOSED_CODES.has(code)) return 'closed'
   // Process exits, timeouts, lost sessions, texture import/delivery failures and unknown causes are transient.
   return 'service'
@@ -55,7 +56,7 @@ export function videoEditNativeFailureCode(error: unknown): string | undefined {
 /** The user-language message of a native failure reading one file, by kind. No decoder or service names. */
 export function videoEditNativeFailureMessage(name: string, kind: VideoEditNativeFailureKind): string {
   if (kind === 'service') return `素材「${name}」的解码暂时中断，请稍后重试；如果一直出现，请重启软件。`
-  if (kind === 'budget') return '同时读取的视频素材过多，请减少同时显示的视频后重试。'
+  if (kind === 'budget') return `显存紧张，素材「${name}」的画面稍后显示。`
   if (kind === 'closed') return '预览解码已关闭。'
   return `素材「${name}」解码失败，请确认文件可用，或在素材面板中重新定位源文件。`
 }

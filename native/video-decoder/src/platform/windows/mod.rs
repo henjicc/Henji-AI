@@ -243,6 +243,15 @@ impl FrameOutput for WindowsFrameOutput {
         self.converter.copy_texture(&source.texture, target)
     }
 
+    fn release_retained(&mut self) {
+        if self.retained.is_empty() {
+            return;
+        }
+        self.retained.clear();
+        // D3D11 延迟销毁：释放的纹理要等立即上下文下一次 Flush 才真正归还显存。
+        self.pool.gpu.flush();
+    }
+
     fn into_resources(self: Box<Self>) -> Box<dyn StreamResources> {
         let WindowsFrameOutput { converter, pool, queries, retained, .. } = *self;
         drop(queries);

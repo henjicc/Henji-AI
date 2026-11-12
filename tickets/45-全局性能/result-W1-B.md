@@ -59,3 +59,28 @@
   - 11 个视频每层同一文件首尾相接三次，播放 10 秒跨过 8 秒处的剪辑点。断言：stats 里的 `vramLimitBytes` 等于 256MiB（压小生效）；首帧 11 层都是源时间 0；播放中每次呈现都是 11 层、逐帧精确，且多于 30 次；全程没有“节目画面无法显示”；日志里有 `video_decoder.native.decode.budget.over_target`（会话超出预算照常打开）和 `video_edit.decode.schedule.cut_shared`（显存没有余量，剪辑点不另开会话、改在同一播放会话上定位）。证据记账本快照和降级、淘汰、收回事件。
   - finally 里删掉预算变量；已运行的服务保留压小的预算直到下次启动，这一点写在场景注释里（该场景写用户数据，单独运行）。
 - 验证：`node --check` 通过；`node --test scripts/lib/uiInspection.test.cjs` 里本场景的登记用例通过（`expectedLogEvents` 不变）；两套 tsc 重跑通过；`videoFrameTypes.ts` eslint 通过。场景本身要真实 Electron 才能跑，按约束未运行，交主会话（先 `build:video-decoder` 和 `electron:bundle`）。
+
+# 返工（审查意见）
+必须改：
+1. 渲染层淘汰区分“当前画面在用”与“真正闲置”（`videoEditNativeFrameSource.ts`）。
+   - 文件源按用途记最近一次前台读取（`reading('seek'|'playback')`）。`inUse()` 是这一秒内读过的用途，加上前瞻给出距离 0 的用途；`maintain` 带 `wanted` 时只认那些用途，不带时距离 0 的全部用途都算在用。
+   - `evictOne` 只淘汰不在用的闲置会话，部分在用时用 `retire(keep)` 只放掉不在用的那种。
+   - `relieve`、`maintain` 回收循环、提前打开的 `makeRoomAhead` 都走这条：淘汰不动就照常超出。
+   - `reading()` 不再改 `distance`（上一轮那样会让读过的文件在 release 后不关）。
+   - 能退回的读取（`optional`）只看余量、从不淘汰任何会话，没有余量就退回共享会话。原 `makeRoom(1)` 删除，`makeRoomAhead` 只服务代码输入的提前打开。
+   - 已打开的可退回会话不会被必须打开的会话主动收回，随读取者关闭或拖动停读 10 秒关闭。
+   - 新用例：预算 500、会话 1000（小于一个会话），当前文件连读 5 帧只开一次、不被关，远处闲置会话以 `over-budget` 被回收。原“一个会话以下”实为 1.5 会话的标题与收尾已改回它实际验证的内容；“同文件播放时回收闲置定位会话”用例改为带前瞻用途（播放中只要播放会话）。
+2. 原生留存帧只在越过预算本身时收回（`budget.rs` 的 `reserve_vram` 门槛由“预算 − 前台保留”改为预算）；前台保留只限制留存帧登记，新会话（含提前打开）直接用。渲染层 `headroom` 把 `vramRetainedBytes` 当可收回、不算占用。单测改为：保留内的新会话不收回，越过预算才收回最久没用的。
+
+顺手修：
+3. 协议升到 6（`protocol.rs`、`protocol.ts` 一起改），旧服务程序握手直接失败。
+4. `vramRetainedBytes` 在主进程协议类型与 `videoFrameTypes.ts` 都是必填。
+5. 纹理池分配失败（设备未丢）：原生收回全部留存帧、等 60ms，按最小池（2 槽）重试一次，并记 `decode.session.pool_reduced`；仍失败才返回 `GPU_FAILED`。渲染层对 `optional`/`speculative` 收到 `GPU_FAILED` 当作没有余量（退回共享会话或放弃提前打开，记 `video_edit.decode.open.no_memory`），`required` 仍按服务故障由路由重试一次。新增原生与渲染层测试各一条。
+6. 新增 `a_refused_hardware_decoder_falls_back_to_software`：平台给不出硬解设备时会话软解打开，不计入硬解会话。
+7. 独占读取者在等余量或打开期间被关闭，以 `closed` 结束（补在独占会话用例末尾）。
+- 文档：`3.1-故障回退与资源治理.md` 的错误分类、运行中回退、资源预算三条、超预算验收与遗留一条改为现状（注明 2026-11-12 起）。
+
+验证（返工后实跑）：
+- 原生：`video-decoder-ffmpeg.cjs test --locked --target-dir <scratch>/vd-target`，88 通过、1 忽略、0 失败、无编译警告。
+- 单测：帧源、纹理桥、声音会话、服务客户端、路径五个直接相关测试文件共 101 通过。
+- 两套 tsc 通过；改动的 5 个 TS 文件 eslint 通过；故障场景此前 `node --check` 通过，本轮未改。

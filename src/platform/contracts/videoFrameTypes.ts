@@ -460,8 +460,11 @@ export interface VideoFrameNativeStats {
   gpuNonLocalUsageBytes?: number | null
   streams: Array<{ streamId: string; kind?: 'test' | 'decoder'; format: VideoSharedFormat | null; width: number; height: number; running: boolean; counters: VideoFrameNativeStreamCounters }>
   audioSessions?: number
-  /** 资源预算的上限与占用（3.1）。 */
-  budget?: { vramLimitBytes: number; vramReservedBytes: number; vramPeakReservedBytes: number; hardwareSessions: number; hardwareSessionLimit: number; decoderSessionLimit: number; largestSessionBytes?: number; foregroundReserveBytes?: number }
+  /**
+   * 解码显存账本（3.1）：预算只作淘汰目标；登记含拖动留存帧（`vramRetainedBytes`，可被收回）；硬解会话只计数。
+   * 不限会话数与硬解路数（native/video-decoder/src/budget.rs）。
+   */
+  budget?: { vramLimitBytes: number; vramReservedBytes: number; vramRetainedBytes: number; vramPeakReservedBytes: number; hardwareSessions: number; largestSessionBytes?: number; foregroundReserveBytes?: number }
 }
 
 export interface VideoFrameBridgeStats {
