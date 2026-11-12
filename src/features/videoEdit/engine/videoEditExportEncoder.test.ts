@@ -63,7 +63,7 @@ it('普通规格H264优先，不支持才试HEVC；显式编码不静默替换',
 })
 it('两种编码都不支持时说明规格与恢复方式；奇数尺寸拒绝', async () => {
   video.mockResolvedValue(false)
-  await expect(selectVideoEditExportEncoder(spec)).rejects.toThrow('当前设备无法导出 7680 × 4320 · 120 帧视频。请降低导出分辨率或帧率后重试。')
+  await expect(selectVideoEditExportEncoder(spec)).rejects.toThrow('当前设备无法导出 7680 × 4320 · 120fps 的视频。请降低导出分辨率或帧率后重试。')
   expect(await canEncodeVideoEditExport({ ...spec, width: 1921, codec: 'avc' })).toBe(false)
 })
 it('硬件不支持、软件支持时4K60预设回落H264软件，严格校验与实际选项一致', async () => {

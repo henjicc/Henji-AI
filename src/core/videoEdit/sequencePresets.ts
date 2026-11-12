@@ -3,8 +3,8 @@ import { VIDEO_EDIT_SEQUENCE_LIMITS, type VideoEditSequenceSize } from './sequen
 export const VIDEO_EDIT_SEQUENCE_RATIOS = ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'] as const
 export type VideoEditSequenceRatio = typeof VIDEO_EDIT_SEQUENCE_RATIOS[number]
 export const VIDEO_EDIT_SEQUENCE_TIERS = [
-  { label: '480p', pixels: 854 * 480 }, { label: '720p', pixels: 1280 * 720 },
-  { label: '1080p', pixels: 1920 * 1080 }, { label: '2K', pixels: 2560 * 1440 },
+  { label: '480P', pixels: 854 * 480 }, { label: '720P', pixels: 1280 * 720 },
+  { label: '1080P', pixels: 1920 * 1080 }, { label: '2K', pixels: 2560 * 1440 },
   { label: '4K', pixels: 3840 * 2160 }, { label: '8K', pixels: 7680 * 4320 },
 ] as const
 export type VideoEditSequenceTier = typeof VIDEO_EDIT_SEQUENCE_TIERS[number]['label']
@@ -34,10 +34,10 @@ export function videoEditSequenceSizeForPixels(pixels: number, aspect: number): 
  * 改取 8K 满宽 7680 的宽银幕裁切 7680×3200（2.4:1，与超宽屏同一观感）。自定义比例才走总像素公式。
  */
 const LANDSCAPE: Record<'16:9' | '1:1' | '4:3' | '21:9', Record<VideoEditSequenceTier, readonly [number, number]>> = {
-  '16:9': { '480p': [854, 480], '720p': [1280, 720], '1080p': [1920, 1080], '2K': [2560, 1440], '4K': [3840, 2160], '8K': [7680, 4320] },
-  '1:1': { '480p': [480, 480], '720p': [720, 720], '1080p': [1080, 1080], '2K': [1440, 1440], '4K': [2160, 2160], '8K': [4320, 4320] },
-  '4:3': { '480p': [640, 480], '720p': [960, 720], '1080p': [1440, 1080], '2K': [1920, 1440], '4K': [2880, 2160], '8K': [5760, 4320] },
-  '21:9': { '480p': [1120, 480], '720p': [1680, 720], '1080p': [2560, 1080], '2K': [3440, 1440], '4K': [5120, 2160], '8K': [7680, 3200] },
+  '16:9': { '480P': [854, 480], '720P': [1280, 720], '1080P': [1920, 1080], '2K': [2560, 1440], '4K': [3840, 2160], '8K': [7680, 4320] },
+  '1:1': { '480P': [480, 480], '720P': [720, 720], '1080P': [1080, 1080], '2K': [1440, 1440], '4K': [2160, 2160], '8K': [4320, 4320] },
+  '4:3': { '480P': [640, 480], '720P': [960, 720], '1080P': [1440, 1080], '2K': [1920, 1440], '4K': [2880, 2160], '8K': [5760, 4320] },
+  '21:9': { '480P': [1120, 480], '720P': [1680, 720], '1080P': [2560, 1080], '2K': [3440, 1440], '4K': [5120, 2160], '8K': [7680, 3200] },
 }
 const PORTRAIT = { '9:16': '16:9', '3:4': '4:3' } as const
 function standardVideoEditSequenceSize(ratio: VideoEditSequenceRatio, tier: VideoEditSequenceTier): VideoEditSequenceSize {

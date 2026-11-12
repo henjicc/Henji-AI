@@ -19,7 +19,7 @@ it('预设比例与档位取行业常用尺寸（按短边定档，21:9 用超�
     const [width, height] = sizes[i][j]
     expect(videoEditSequencePresetSize(ratio, label), `${ratio} ${label}`).toEqual({ width, height })
   }))
-  expect(videoEditSequenceTierSize(12 / 5, '1080p')).toEqual({ width: 2230, height: 930 })
+  expect(videoEditSequenceTierSize(12 / 5, '1080P')).toEqual({ width: 2230, height: 930 })
 })
 it('反推精确组合优先；仅比例误差小于0.5%时保留比例，档位为自定义', () => {
   for (const ratio of VIDEO_EDIT_SEQUENCE_RATIOS) for (const { label: tier } of VIDEO_EDIT_SEQUENCE_TIERS) {

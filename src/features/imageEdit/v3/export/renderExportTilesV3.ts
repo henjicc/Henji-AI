@@ -1,3 +1,4 @@
+import { formatFileSize } from '../../../../core/format/specFormat'
 import { splitImageEditCpuOutputV3, assembleImageEditCpuOutputV3 } from '../../../../core/imageEdit/v3/execution/cpuOutputParts'
 import { ImageEditCpuRegionWorkerClientV3 } from '../../../../core/imageEdit/v3/execution/cpuRegionWorkerClient'
 import type { ImageEditCpuRegionRenderContextV3 } from '../../../../core/imageEdit/v3/execution/cpuRenderRegionExecutor'
@@ -91,7 +92,7 @@ function assertExportSurfaceAllocatable(tileSize: number, halo: number): void {
   if (bytes <= MAX_RELIABLE_TYPED_ARRAY_BYTES) return
   throw new ImageEditorV3ExportCapabilityError(
     'WORKING_SET_EXCEEDED',
-    `当前效果的采样范围过大，单个导出瓦片需要 ${(bytes / 1024 ** 3).toFixed(1)}GiB 连续内存，超过单次分配的物理上限，请减小模糊或辉光半径后再导出`,
+    `当前效果的采样范围过大，单个导出瓦片需要 ${formatFileSize(bytes)} 连续内存，超过单次分配的物理上限，请减小模糊或辉光半径后再导出`,
   )
 }
 

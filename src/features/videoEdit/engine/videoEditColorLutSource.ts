@@ -3,7 +3,7 @@ import type { ColorLutAsset } from '@/core/videoEdit/colorLutAsset'
 
 /** Worker-safe: no PAL/window imports. The render-session boundary supplies an authorized URL. */
 export async function decodeVideoEditLut(bytes: Uint8Array): Promise<{ lut: CubeLut; contentIdentity: string }> {
-  if (bytes.byteLength > CUBE_LUT_MAX_BYTES) throw new Error('LUT 文件过大，最多24MiB。')
+  if (bytes.byteLength > CUBE_LUT_MAX_BYTES) throw new Error('LUT 文件过大，最多 24 MB。')
   const contentIdentity = [...new Uint8Array(await crypto.subtle.digest('SHA-256', Uint8Array.from(bytes)))].map(value => value.toString(16).padStart(2, '0')).join('')
   return { lut: parseCubeLut(new TextDecoder('utf-8', { fatal: true }).decode(bytes)), contentIdentity }
 }
@@ -18,7 +18,7 @@ export async function fetchVideoEditColorLut(asset: ColorLutAsset): Promise<Cube
       let result = await reader.read()
       while (!result.done) {
         size += result.value.byteLength
-        if (size > CUBE_LUT_MAX_BYTES) throw new Error('LUT 文件过大，最多24MiB。')
+        if (size > CUBE_LUT_MAX_BYTES) throw new Error('LUT 文件过大，最多 24 MB。')
         chunks.push(result.value)
         result = await reader.read()
       }

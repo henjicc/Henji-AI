@@ -1,5 +1,6 @@
 import { videoEditSequenceExportSettings, type VideoEditExportSettings } from '@/core/videoEdit/exportPresets'
 import { createLogger } from '@/core/logging'
+import { formatFrameRate, formatKbps, formatSampleRate, videoCodecLabel } from '@/core/format/specFormat'
 import { videoEditExportAudioEncoderConfig, videoEditExportVideoEncoderConfig, type VideoEditExportAudioEncoderSpec, type VideoEditExportEncoderSpec } from './videoEditExportEncoderConfig'
 import { applyVideoEditExportQuality, videoEditExportQualityOf, videoEditExportIntermediateSettings, videoEditExportEncoderSupportsSize } from '@/core/videoEdit/exportEncoding'
 import { getPlatform } from '@/platform/runtime'
@@ -52,7 +53,7 @@ export async function probeVideoEditExportAudioBitrates(settings: AudioSettings)
 }
 function videoEditExportAudioUnsupportedMessage(settings: AudioSettings, supported: Record<number, boolean>): string {
   const lower = Object.keys(supported).map(Number).filter(value => supported[value] && value < settings.audioBitrateKbps)
-  return `此设备的 AAC 编码不支持 ${settings.audioBitrateKbps} kbps（${settings.sampleRate / 1000} kHz，${settings.channels === 2 ? '立体声' : '单声道'}），${lower.length ? `请改用 ${Math.max(...lower)} kbps 或更低。` : '请调整采样率、声道或改用 WAV。'}`
+  return `此设备的 AAC 编码不支持 ${formatKbps(settings.audioBitrateKbps)}（${formatSampleRate(settings.sampleRate)}，${settings.channels === 2 ? '立体声' : '单声道'}），${lower.length ? `请改用 ${formatKbps(Math.max(...lower))} 或更低。` : '请调整采样率、声道或改用 WAV。'}`
 }
 /** Shared submission check for the panel, queue, assistant and workspace transfer. */
 export async function assertVideoEditExportAudioSupported(settings: AudioSettings): Promise<void> {
@@ -118,7 +119,7 @@ export async function probeVideoEditExport(settings: VideoEditExportSettings, ph
       bitrate: Math.round(intermediate.videoBitrateMbps * 1_000_000), codec: intermediate.codec, bitrateMode: intermediate.bitrateMode, encoderPreference: intermediate.encoderPreference, keyframeInterval: intermediate.keyframeInterval }, trace)
     const audioSupported = !settings.audioEnabled || await canEncodeVideoEditExportAudio({ codec: settings.audioCodec === 'wav' ? 'pcm-s24' : 'aac',
       sampleRate: settings.sampleRate, numberOfChannels: settings.channels, ...(settings.audioCodec === 'aac' ? { bitrate: settings.audioBitrateKbps * 1000 } : {}) }, trace)
-    const reason = !finalSupported ? !sizeSupported ? '所选硬件编码器不支持此分辨率，请使用软件编码器。' : encoder && encoder.reason || '此设备不支持所选编码器或输出位深。' : !videoSupported ? `当前设备不支持所选编码设置（${settings.codec === 'avc' ? 'H.264' : 'HEVC'} · ${settings.width} × ${settings.height} · ${Number(settings.fps.toFixed(3))} 帧）。请尝试其他编码、性能或码率模式，或降低规格。`
+    const reason = !finalSupported ? !sizeSupported ? '所选硬件编码器不支持此分辨率，请使用软件编码器。' : encoder && encoder.reason || '此设备不支持所选编码器或输出位深。' : !videoSupported ? `当前设备不支持所选编码设置（${videoCodecLabel(settings.codec)} · ${settings.width} × ${settings.height} · ${formatFrameRate(settings.fps, 'compact')}）。请尝试其他编码、性能或码率模式，或降低规格。`
       : !audioSupported ? settings.audioCodec === 'aac' ? videoEditExportAudioUnsupportedMessage(settings, await probeVideoEditExportAudioBitrates(settings)) : '此设备不支持所选 WAV 声音设置，请调整采样率或声道。' : ''
     const result = { supported: videoSupported && audioSupported, videoSupported, audioSupported, reason }
     logger.debug('导出候选编码探测完成', { event: 'video_edit.export.probe', context: { ...trace, ...result } })
@@ -185,6 +186,6 @@ export async function adaptVideoEditExportPreset(settings: VideoEditExportSettin
 export async function selectVideoEditExportEncoder(spec: VideoEditExportEncoderSpec): Promise<'avc' | 'hevc'> {
   const codecs = spec.codec ? [spec.codec] : Math.max(spec.width, spec.height) > 4096 ? ['hevc', 'avc'] as const : ['avc', 'hevc'] as const
   for (const codec of codecs) if (await canEncodeVideoEditExport({ ...spec, codec })) return codec
-  if (spec.codec) throw new Error(`当前设备不支持 ${spec.codec === 'avc' ? 'H.264' : 'HEVC'} · ${spec.width} × ${spec.height} · ${Number(spec.frameRate.toFixed(3))} 帧的所选编码设置。${spec.codec === 'avc' ? '请尝试 HEVC，或' : '请'}降低规格、切换性能或码率模式。`)
-  throw new Error(`当前设备无法导出 ${spec.width} × ${spec.height} · ${Number(spec.frameRate.toFixed(3))} 帧视频。请降低导出分辨率或帧率后重试。`)
+  if (spec.codec) throw new Error(`当前设备不支持 ${videoCodecLabel(spec.codec)} · ${spec.width} × ${spec.height} · ${formatFrameRate(spec.frameRate, 'compact')} 的所选编码设置。${spec.codec === 'avc' ? '请尝试 H.265，或' : '请'}降低规格、切换性能或码率模式。`)
+  throw new Error(`当前设备无法导出 ${spec.width} × ${spec.height} · ${formatFrameRate(spec.frameRate, 'compact')} 的视频。请降低导出分辨率或帧率后重试。`)
 }

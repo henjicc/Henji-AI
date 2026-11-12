@@ -59,7 +59,7 @@ export interface SdkModelRow {
 /** 语音识别的特性是协议层面的另一套描述，不属于模型能力标签，在这里起中文名；不在表里的不显示。 */
 const ASR_FEATURE_LABEL: Readonly<Record<string, string>> = {
   timestamps: '时间戳', 'short-audio': '短音频', 'file-transcription': '文件转写', 'async-polling': '异步任务',
-  'remote-url': '网址输入', realtime: '实时', streaming: '流式', 'partial-results': '中间结果', 'pcm-s16le-16khz-mono': '16kHz PCM 输入',
+  'remote-url': '网址输入', realtime: '实时', streaming: '流式', 'partial-results': '中间结果', 'pcm-s16le-16khz-mono': '16 kHz PCM 输入',
 }
 
 const DEPRECATED_TAG = '已过时'

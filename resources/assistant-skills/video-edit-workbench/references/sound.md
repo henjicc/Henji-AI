@@ -6,12 +6,12 @@
 
 1. 优先复用用户音乐、已有声音资产或口播结果，确认用途与使用权；缺音乐可用 cross-workspace 的原地生成流程，遵守付费审批。
 2. 可独立调整的对白、音乐、音效与环境声分轨摆放。通用写 `video_edit.clip.audio_role` 为 dialogue/music/sound_effect/ambience，角色取决于内容，不由轨道位置猜测。
-3. `video_edit.clip.volume` 是线性振幅0–2：1为0dB，0为静音，约0.5为−6dB，约2为+6.02dB；不是分贝参数。需要手动曲线时先发现 `video_edit.clip.volume.keyframes` 的帧时钟与点结构。
-4. 常用混音起点是音乐比对白低约12–20dB，再按人声清晰度调整；音乐主导短片、无对白纪录环境声无需套此比例。短声音切点可试2–4帧淡化，音乐可试0.3–1秒；淡入淡出就是片段一端的单侧过渡：在序列下创建 `video_edit.transition`，声音片段 kind 为 constant_power，画面片段为 cross_dissolve；只写 `video_edit.transition.right_clip_id`（入点淡入）或 `video_edit.transition.left_clip_id`（出点淡出），`video_edit.transition.duration_frames` 至少 2。自带声音的视频片段声音随画面一起淡。
+3. `video_edit.clip.volume` 是线性振幅0–2：1为0 dB，0为静音，约0.5为−6 dB，约2为+6.02 dB；不是分贝参数。需要手动曲线时先发现 `video_edit.clip.volume.keyframes` 的帧时钟与点结构。
+4. 常用混音起点是音乐比对白低约12–20 dB，再按人声清晰度调整；音乐主导短片、无对白纪录环境声无需套此比例。短声音切点可试2–4帧淡化，音乐可试0.3–1秒；淡入淡出就是片段一端的单侧过渡：在序列下创建 `video_edit.transition`，声音片段 kind 为 constant_power，画面片段为 cross_dissolve；只写 `video_edit.transition.right_clip_id`（入点淡入）或 `video_edit.transition.left_clip_id`（出点淡出），`video_edit.transition.duration_frames` 至少 2。自带声音的视频片段声音随画面一起淡。
 
 ## 自动回避：候选先做，听感校正
 
-`generate_video_edit_audio_ducking` 给 documentRef、musicClipRefs、settings。settings.targetRole=dialogue 或 sound_effect，reductionDb 降低分贝、sensitivity 检测灵敏度、fadeSeconds 压低和恢复的缓冲秒数。12dB、50、0.3秒是可试起点；轻音乐可减小幅度，强节拍可更快，长对白可更平缓。
+`generate_video_edit_audio_ducking` 给 documentRef、musicClipRefs、settings。settings.targetRole=dialogue 或 sound_effect，reductionDb 降低分贝、sensitivity 检测灵敏度、fadeSeconds 压低和恢复的缓冲秒数。12 dB、50、0.3秒是可试起点；轻音乐可减小幅度，强节拍可更快，长对白可更平缓。
 
 先读角色与曲线再调用；它检测非静音活动，不理解语义，残留噪声或音乐会触发。重新生成替换自动回避点，保留手动点且同帧手动优先；无重叠可听目标时清除旧自动点。核对曲线，再在有音频模态时试听，没试听不能说“声音自然”。
 

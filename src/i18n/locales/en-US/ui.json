@@ -135,7 +135,7 @@
     "product_gif": "Step animation (GIF)",
     "product_bug_report": "Bug report",
     "product_image_document": "Editable image documents",
-    "gifLimit": "First continuous segment per step, up to 15 seconds, 640 pixels wide at 10 fps.",
+    "gifLimit": "First continuous segment per step, up to 15 seconds, 640 pixels wide at 10fps.",
     "imageDocumentHint": "Each step becomes an image document with separate screenshot, title and description layers.",
     "productHint": "Includes zoom, cursor and confirmed redactions. Export up to 100 steps to a new folder in your chosen directory.",
     "productProgress": "Exporting, {{count}} steps completed",
@@ -1713,10 +1713,10 @@
         "proof": "Display and proofing",
         "proofBoundary": "Preview converts to sRGB; HDR uses an SDR display mapping. Print soft proofing, CMYK, Lab and custom ICC are unavailable. Screenshots do not prove monitor calibration.",
         "depths": {
-          "8": "8 bit",
-          "16": "16 bit",
+          "8": "8-bit",
+          "16": "16-bit",
           "float16": "Half float",
-          "float32": "32 bit float"
+          "float32": "32-bit float"
         }
       },
       "smartContentEditing": {

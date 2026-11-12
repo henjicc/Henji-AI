@@ -7,7 +7,7 @@ type ActionName = {
   [K in keyof State]-?: State[K] extends (...args: never[]) => unknown ? K : never
 }[keyof State]
 
-const REASON = '大文件（>100MB）处理询问弹窗队列，只在用户策略为"每次询问"且本地磁盘文件超过'
+const REASON = '大文件（>100 MB）处理询问弹窗队列，只在用户策略为"每次询问"且本地磁盘文件超过'
   + '阈值时才会入队；enqueue 由 resolveLargeUploadAction 在真正遇到大文件时触发，'
   + 'settleCurrent 是用户在弹窗里点击"复制"/"引用"。这是与 alertDialogStore 同类的系统弹窗'
   + '队列，不是可配置的应用状态；策略本身已经通过 generation.large_upload_strategy 属性对'

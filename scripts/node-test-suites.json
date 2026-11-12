@@ -4,6 +4,7 @@
     "scripts/lib/uiInspectionAuthorSources.test.cjs",
     "scripts/lib/premiereMigration.test.cjs",
     "scripts/lib/uiInspectionMcpClient.test.cjs",
+    "scripts/lib/recordingSoak.test.cjs",
     "scripts/lib/uiAuditDom.test.cjs",
     "scripts/lib/uiLayoutAudit.test.cjs",
     "scripts/lib/uiDesignRules.test.cjs",

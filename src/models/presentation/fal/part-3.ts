@@ -1,6 +1,7 @@
 /** fal 模型展示补丁（第 3/7 组）。 */
 
 import { sharedFieldText, sharedModeText, sharedOptionText } from '@/core/i18n/modelText'
+import { frameRateText } from '@/core/format/specFormat'
 import type { I18nText } from '@/core/types/I18nText'
 import type { ModelPresentation } from '@/core/types/ModelPresentation'
 
@@ -67,8 +68,8 @@ export const falPresentationPart3: Record<string, ModelPresentation> = {
         name: sharedFieldText('fps'),
         optionLabels: Object.fromEntries((
           [
-        { value: 25, label: '25 FPS' },
-        { value: 50, label: '50 FPS' }
+        { value: 25, label: frameRateText(25) },
+        { value: 50, label: frameRateText(50) }
       ]
         ).map((rawOption) => {
           const option = rawOption as { value: string | number; label?: I18nText; description?: I18nText }

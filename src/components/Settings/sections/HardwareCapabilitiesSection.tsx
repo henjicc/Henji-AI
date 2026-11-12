@@ -1,10 +1,9 @@
 import React, { useSyncExternalStore } from 'react'
 import { UI_TEXT_META_CLASS, UiFormRow, UiGroup } from '@/components/ui'
 import { useI18n } from '@/hooks/useI18n'
+import { videoCodecLabel } from '@/core/format/specFormat'
 import { HARDWARE_DECODE_CODECS, type HardwareCapabilitiesReport, type HardwareDecodeCodec } from '@/core/media/hardwareCapabilities'
 import { getHardwareCapabilities, subscribeHardwareCapabilities } from '@/services/mediaCache/hardwareCapabilities'
-
-const CODEC_LABELS: Record<HardwareDecodeCodec, string> = { h264: 'H.264', hevc: 'HEVC', av1: 'AV1', vp9: 'VP9' }
 
 /** 一种编码的解码情况：哪些规格由显卡解码，哪些只能由处理器解码（更慢、更占 CPU）。 */
 function decodeSummary(report: HardwareCapabilitiesReport, codec: HardwareDecodeCodec, t: (key: string, values?: Record<string, unknown>) => string): string {
@@ -33,12 +32,12 @@ const HardwareCapabilitiesSection: React.FC = () => {
             <span className={UI_TEXT_META_CLASS}>{report.gpus.length ? report.gpus.map(gpu => gpu.decodes && report.gpus.length > 1 ? t('sections.hardware.decodingGpu', { name: gpu.name }) : gpu.name).join('、') : t('sections.hardware.noGpu')}</span>
           </UiFormRow>
           {HARDWARE_DECODE_CODECS.map(codec => (
-            <UiFormRow key={codec} label={t('sections.hardware.decodeLabel', { codec: CODEC_LABELS[codec] })} inline>
+            <UiFormRow key={codec} label={t('sections.hardware.decodeLabel', { codec: videoCodecLabel(codec) })} inline>
               <span className={UI_TEXT_META_CLASS}>{decodeSummary(report, codec, t)}</span>
             </UiFormRow>
           ))}
           <UiFormRow label={t('sections.hardware.encodeLabel')} info={t('sections.hardware.encodeInfo')} inline>
-            <span className={UI_TEXT_META_CLASS}>{report.encode.filter(item => item.hardware).map(item => CODEC_LABELS[item.codec]).join('、') || t('sections.hardware.noHardwareEncode')}</span>
+            <span className={UI_TEXT_META_CLASS}>{report.encode.filter(item => item.hardware).map(item => videoCodecLabel(item.codec)).join('、') || t('sections.hardware.noHardwareEncode')}</span>
           </UiFormRow>
         </>
       ) : (

@@ -585,7 +585,7 @@
       "timelineAutoScrollLabel": "播放时时间线自动滚动",
       "timelineAutoScrollInfo": "播放头走到时间线中间后保持在中间，时间线跟着滚动；暂停或拖动播放头时不滚动。",
       "renderFormatLabel": "预渲染格式",
-      "renderFormatInfo": "自动：使用 H.264，播放最流畅。HEVC 同画质文件约小 30%，需要省空间时可手动选择。分辨率始终跟随序列。",
+      "renderFormatInfo": "自动：使用 H.264，播放最流畅。H.265 同画质文件约小 30%，需要省空间时可手动选择。分辨率始终跟随序列。",
       "renderFormatAuto": "自动",
       "renderQualityLabel": "预渲染画质",
       "renderQualityInfo": "高画质的码率是标准的 1.3 倍，文件也相应变大。改动后已渲染的段落会在空闲时按新设置重新渲染。",
@@ -647,8 +647,8 @@
     },
     "largeUpload": {
       "title": "大文件处理",
-      "description": "上传本地视频/音频时，100MB 及以下的文件总是复制到数据目录；超过 100MB 的文件按此策略处理。",
-      "strategyLabel": "大文件（超过 100MB）",
+      "description": "上传本地视频/音频时，100 MB 及以下的文件总是复制到数据目录；超过 100 MB 的文件按此策略处理。",
+      "strategyLabel": "大文件（超过 100 MB）",
       "options": {
         "ask": "每次询问",
         "copy": "复制到数据目录",

@@ -7,6 +7,7 @@ import { VIDEO_EDIT_DEFAULT_EXPORT_PRESET_ID, applyVideoEditExportQuality, patch
 import type { VideoEditExportCapabilities, VideoEditExportQuality } from '@/core/videoEdit/exportEncoding'
 import { createLogger } from '@/core/logging'
 import { videoEditFrameTimecode } from '@/core/videoEdit/timecode'
+import { formatFileSize, formatFrameRate, formatKbps, formatMbps, formatSampleRate, videoCodecLabel } from '@/core/format/specFormat'
 import { getPlatform } from '@/platform/runtime'
 import { enqueueVideoEditExports, videoEditExportQueue } from '../application/videoEditExportQueue'
 import { videoEditExportPresetLibrary } from '../application/videoEditExportPresets'
@@ -236,11 +237,11 @@ function VideoEditSequenceExportDialog({ projectId, sequenceId, onClose }: { pro
   const hasProxies = composition.clips.some(clip => { const mediaId = composition.items.find(item => item.id === clip.itemId)?.mediaId; return mediaId && readVideoEditProxyState(projectId, mediaId).status === 'ready' })
   const seconds = (range.endFrame - range.startFrame) / composition.fps
   const bytes = videoEditExportEstimatedBytes(settings, seconds)
-  const estimated = bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1)} GB` : `${(bytes / 1e6).toFixed(1)} MB`
+  const estimated = formatFileSize(bytes)
   // 按画质压制的码率随画面内容变化，按码率估算的大小没有参考价值，不显示。
   const qualityMode = settings.videoEnabled && settings.encoding?.rateControl === 'quality'
   const tier = videoEditExportQualityOf(settings)
-  const videoRate = qualityMode ? tier === 'custom' ? `画质 ${settings.encoding!.quality}` : VIDEO_EDIT_EXPORT_QUALITY_LABELS[tier] : `${settings.videoBitrateMbps} Mbps`
+  const videoRate = qualityMode ? tier === 'custom' ? `画质 ${settings.encoding!.quality}` : VIDEO_EDIT_EXPORT_QUALITY_LABELS[tier] : formatMbps(settings.videoBitrateMbps)
   return <>
     <UiModal isOpen title="导出" size="editor" contentPadding="none" contentScroll="none" onClose={onClose} footer={<>{(settingsError || encoderError) && <p role="alert" className="mr-auto self-center text-xs text-text2">{settingsError || encoderError}</p>}<UiButton variant="secondary" disabledReason={settingsError || encoderError || (!canExport ? '请先设置导出位置和有效的导出范围' : undefined)} disabled={busy || !canExport} onClick={() => void submit(false)}>加入队列</UiButton><UiButton loading={busy} variant="primary" disabledReason={settingsError || encoderError || (!canExport ? '请先设置导出位置和有效的导出范围' : undefined)} disabled={busy || !canExport} onClick={() => void submit(true)}>{'导出'}</UiButton></>}>
       <div className="flex min-h-0 flex-1">
@@ -250,7 +251,7 @@ function VideoEditSequenceExportDialog({ projectId, sequenceId, onClose }: { pro
             <VideoEditExportField label="位置"><UiButton variant="link" disabled={busy} aria-label="选择导出目录" className="max-w-full" onClick={() => void chooseDirectory()}><span className="truncate" title={directory}>{directory || '选择目录…'}</span></UiButton></VideoEditExportField>
             <VideoEditExportField label="预设"><VideoEditExportPresetMenu presets={presets} presetId={presetId} modified={modified} actions={presetActions} disabled={busy} onSelect={selectPreset} /></VideoEditExportField>
             <VideoEditExportField label="格式"><Dropdown size="sm" className="w-full" ariaLabel="导出格式" value={settings.videoEnabled ? settings.codec : settings.format} minWidthStrategy="none" disabled={busy} options={[
-              ...(['avc', 'hevc'] as const).map(codec => ({ value: codec, label: codec === 'avc' ? 'MP4 · H.264' : 'MP4 · HEVC (H.265)', disabled: probing || !codecChoice(codec), tooltip: !codecChoice(codec) ? codec === 'avc' ? '当前规格不支持 H.264；8K 请尝试 HEVC，或降低规格。' : hardwareEncodeLimitation('hevc', settings.width, settings.height) ?? '当前规格不支持 HEVC；请降低规格。' : !support(codec, settings.encoderPreference, settings.bitrateMode) ? '选择后使用本机可用的性能与码率模式，请检查编码分区。' : undefined })),
+              ...(['avc', 'hevc'] as const).map(codec => ({ value: codec, label: codec === 'avc' ? 'MP4 · H.264' : 'MP4 · H.265', disabled: probing || !codecChoice(codec), tooltip: !codecChoice(codec) ? codec === 'avc' ? '当前规格不支持 H.264；8K 请尝试 H.265，或降低规格。' : hardwareEncodeLimitation('hevc', settings.width, settings.height) ?? '当前规格不支持 H.265；请降低规格。' : !support(codec, settings.encoderPreference, settings.bitrateMode) ? '选择后使用本机可用的性能与码率模式，请检查编码分区。' : undefined })),
               { value: 'aac', label: '音频 · AAC' }, { value: 'wav', label: '音频 · WAV' },
             ]} onSelect={value => value === 'avc' || value === 'hevc' ? selectCodec(value) : patch({ format: value as 'aac' | 'wav' })} /></VideoEditExportField>
           </UiGroup>
@@ -270,8 +271,8 @@ function VideoEditSequenceExportDialog({ projectId, sequenceId, onClose }: { pro
           <div className="flex items-center gap-2"><span className="text-xs text-text2">范围</span><Dropdown size="sm" ariaLabel="导出范围" value={shownRange} className="w-36" disabled={busy} options={[{ value: 'sequence', label: '整个序列' }, { value: 'marks', label: '入点到出点', disabled: !hasMarks, tooltip: !hasMarks ? '请先在时间线设置有效的入点和出点。' : undefined },
             ...(rememberedRange ? [{ value: 'remembered', label: '上次导出的范围', tooltip: `${videoEditFrameTimecode(rememberedRange.startFrame, composition.fps)} – ${videoEditFrameTimecode(rememberedRange.endFrame, composition.fps)}` }] : [])]} onSelect={setRangeMode} /><span aria-label="导出时长" className="ml-auto tabular-nums text-xs text-text2">{videoEditFrameTimecode(range.endFrame - range.startFrame, composition.fps)}</span></div>
           <div className="grid grid-cols-2 gap-3 border-t border-line pt-3 text-xs text-text2">
-            <div className="min-w-0"><p className="mb-1 font-medium text-text1">来源</p><p>{composition.width} × {composition.height} · {Number(composition.fps.toFixed(3))} 帧 · {composition.sampleRate / 1000} kHz {composition.channels === 2 ? '立体声' : '单声道'}</p></div>
-            <div className="min-w-0"><p className="mb-1 font-medium text-text1">输出</p><p>{settings.videoEnabled ? `${settings.codec === 'avc' ? 'H.264' : 'HEVC'} · ${settings.width} × ${settings.height} · ${Number(settings.fps!.toFixed(3))} 帧 · ${videoRate}` : ''}{settings.audioEnabled ? `${settings.videoEnabled ? ' · ' : ''}${settings.audioCodec === 'aac' ? `AAC ${settings.audioBitrateKbps} kbps` : 'WAV 24 位 PCM'} · ${settings.sampleRate / 1000} kHz ${settings.channels === 2 ? '立体声' : '单声道'}` : ' · 无声'}</p>{!qualityMode && <p className="mt-1">预计大小约 {estimated}</p>}</div>
+            <div className="min-w-0"><p className="mb-1 font-medium text-text1">来源</p><p>{composition.width} × {composition.height} · {formatFrameRate(composition.fps, 'compact')} · {formatSampleRate(composition.sampleRate)} {composition.channels === 2 ? '立体声' : '单声道'}</p></div>
+            <div className="min-w-0"><p className="mb-1 font-medium text-text1">输出</p><p>{settings.videoEnabled ? `${videoCodecLabel(settings.codec)} · ${settings.width} × ${settings.height} · ${formatFrameRate(settings.fps!, 'compact')} · ${videoRate}` : ''}{settings.audioEnabled ? `${settings.videoEnabled ? ' · ' : ''}${settings.audioCodec === 'aac' ? `AAC ${formatKbps(settings.audioBitrateKbps)}` : 'WAV 24 位 PCM'} · ${formatSampleRate(settings.sampleRate)}${settings.channels === 2 ? '立体声' : '单声道'}` : ' · 无声'}</p>{!qualityMode && <p className="mt-1">预计大小约 {estimated}</p>}</div>
           </div>
         </div>
       </div>

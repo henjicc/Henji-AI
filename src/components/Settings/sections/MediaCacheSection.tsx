@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useState, useSyncExternalStore } from 'r
 import { Dropdown, UI_TEXT_META_CLASS, UiButton, UiFormRow, UiInlineStatus } from '@/components/ui'
 import { useI18n } from '@/hooks/useI18n'
 import { createLogger } from '@/core/logging'
-import { formatMediaCacheBytes, MEDIA_CACHE_CATEGORIES, MEDIA_CACHE_RETENTION_DAYS, type MediaCacheCategory, type MediaCacheRetentionDays, type MediaCacheUsage } from '@/core/media/mediaCache'
+import { formatFileSize } from '@/core/format/specFormat'
+import { MEDIA_CACHE_CATEGORIES, MEDIA_CACHE_RETENTION_DAYS, type MediaCacheCategory, type MediaCacheRetentionDays, type MediaCacheUsage } from '@/core/media/mediaCache'
 import { getPlatform } from '@/platform/runtime'
 import { getMediaCacheSettings, subscribeMediaCacheSettings, updateMediaCacheSettings } from '@/services/mediaCache/mediaCacheSettings'
 import SettingsSegmented from '../components/SettingsSegmented'
@@ -47,7 +48,7 @@ const MediaCacheSection: React.FC = () => {
 
   const budgetValue = settings.budgetGb === null ? 'auto' : String(settings.budgetGb)
   const budgetOptions = [
-    { value: 'auto', label: usage ? t('sections.mediaCache.budgetAutoWithSize', { size: formatMediaCacheBytes(usage.autoBudgetBytes) }) : t('sections.mediaCache.budgetAuto') },
+    { value: 'auto', label: usage ? t('sections.mediaCache.budgetAutoWithSize', { size: formatFileSize(usage.autoBudgetBytes) }) : t('sections.mediaCache.budgetAuto') },
     ...[...new Set<number>([...BUDGET_CHOICES, ...(settings.budgetGb === null ? [] : [settings.budgetGb])])].sort((a, b) => a - b).map(value => ({ value: String(value), label: `${value} GB` })),
   ]
 
@@ -55,7 +56,7 @@ const MediaCacheSection: React.FC = () => {
     <>
       <UiFormRow label={t('sections.mediaCache.usageLabel')} info={t('sections.mediaCache.usageInfo')} inline>
         <div className="flex items-center gap-2">
-          <span className={UI_TEXT_META_CLASS}>{usage ? t('sections.mediaCache.usageValue', { used: formatMediaCacheBytes(usage.totalBytes), budget: formatMediaCacheBytes(usage.budgetBytes) }) : '—'}</span>
+          <span className={UI_TEXT_META_CLASS}>{usage ? t('sections.mediaCache.usageValue', { used: formatFileSize(usage.totalBytes), budget: formatFileSize(usage.budgetBytes) }) : '—'}</span>
           <UiButton variant="danger" size="sm" loading={busy === 'all'} disabled={!usage?.totalBytes || busy !== null} onClick={() => { void clear('all') }}>{t('sections.mediaCache.clearAll')}</UiButton>
         </div>
       </UiFormRow>
@@ -64,7 +65,7 @@ const MediaCacheSection: React.FC = () => {
         return (
           <UiFormRow key={category} label={t(`sections.mediaCache.category.${category}`)} info={t(`sections.mediaCache.categoryInfo.${category}`)} inline>
             <div className="flex items-center gap-2">
-              <span className={UI_TEXT_META_CLASS}>{item ? formatMediaCacheBytes(item.bytes) : '—'}</span>
+              <span className={UI_TEXT_META_CLASS}>{item ? formatFileSize(item.bytes) : '—'}</span>
               <UiButton variant="danger" size="sm" loading={busy === category} disabled={!item?.bytes || busy !== null} onClick={() => { void clear(category) }}>{t('sections.mediaCache.clear')}</UiButton>
             </div>
           </UiFormRow>

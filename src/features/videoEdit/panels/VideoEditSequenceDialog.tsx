@@ -13,6 +13,7 @@ import { Dropdown, UiButton, UiError, UiFormRow, UiGroup, UiIconButton, UiInput,
 import { VIDEO_EDIT_DEFAULT_BLOOM_RADIUS, VIDEO_EDIT_DEFAULT_BLOOM_THRESHOLD, VIDEO_EDIT_DEFAULT_PATH_TRACE_SAMPLES, VIDEO_EDIT_SPACE_ENVIRONMENTS, type VideoEditSpaceEnvironment, type VideoEditBin, type VideoEditSequence, type VideoEditSpaceRender } from '@/core/videoEdit/document'
 import { videoEditCompositionHasSpace } from '@/core/videoEdit/spaceDisplay'
 import { VIDEO_EDIT_FRAME_RATES, videoEditFps } from '@/core/videoEdit/time'
+import { formatFrameRate } from '@/core/format/specFormat'
 import type { VideoEditSequenceSettings } from '../application/videoEditProjectItems'
 
 const PREVIEW_HINT = '预览可能较吃力，可在节目监视器降低回放分辨率'
@@ -146,14 +147,14 @@ export function VideoEditSequenceDialog({ title, initial, bins, requireFrameRate
             </div>
             {sizeError && <div id={sizeErrorId} className="mt-1"><UiError size="xs" align="start" title={sizeError} message="" /></div>}
           </div></UiFormRow>
-          <UiFormRow label="帧率" inline><Dropdown ariaLabel="帧率" className="w-full" disabled={busy} value={rateKey} display={`${Number(videoEditFps(values.frameRate).toFixed(3))} 帧`} options={VIDEO_EDIT_FRAME_RATES.map(rate => {
+          <UiFormRow label="帧率" inline><Dropdown ariaLabel="帧率" className="w-full" disabled={busy} value={rateKey} display={formatFrameRate(videoEditFps(values.frameRate))} options={VIDEO_EDIT_FRAME_RATES.map(rate => {
             const fps = videoEditFps(rate)
-            return { label: `${Number(fps.toFixed(3))} 帧`, value: `${rate.numerator}/${rate.denominator}`, tooltip: fps > 60 ? PREVIEW_HINT : undefined }
+            return { label: formatFrameRate(fps), value: `${rate.numerator}/${rate.denominator}`, tooltip: fps > 60 ? PREVIEW_HINT : undefined }
           })} onSelect={value => { const [numerator, denominator] = value.split('/').map(Number); setValues({ ...values, frameRate: { numerator, denominator } }) }} /></UiFormRow>
           <UiFormRow label="运动模糊" inline info="整条序列的总开关：在动的片段与图层沿运动方向模糊。关掉后默认都不模糊，单独打开的片段或元素除外。"><UiSwitch aria-label="运动模糊" disabled={busy} checked={values.motionBlur} onCheckedChange={checked => setValues({ ...values, motionBlur: checked })} /></UiFormRow>
         </UiGroup>
       {hasSpace && <UiGroup title="三维" divided>
-        <UiFormRow label="成片渲染" inline info="导出、选帧和封面用哪种渲染。路径追踪有真实的光影、反射和景深，1080p 每帧要几秒到几十秒，不做运动模糊；节目监视器看片另在“更多 → 三维”里切换。">
+        <UiFormRow label="成片渲染" inline info="导出、选帧和封面用哪种渲染。路径追踪有真实的光影、反射和景深，1080P 每帧要几秒到几十秒，不做运动模糊；节目监视器看片另在“更多 → 三维”里切换。">
           <UiSegmented ariaLabel="成片渲染" disabled={busy} value={space.finalRenderer ?? 'realtime'} options={[{ value: 'realtime', label: '实时' }, { value: 'pathTrace', label: '路径追踪' }]} onChange={finalRenderer => setSpace({ finalRenderer })} />
         </UiFormRow>
         {space.finalRenderer === 'pathTrace' && <UiFormRow label="采样数" inline info="每像素采样数。越多噪点越少，渲染时间大致与它成正比。">

@@ -14,7 +14,7 @@ export type TitleGraphicKind = typeof TITLE_GRAPHIC_KINDS[number]
 export const titleGraphicParametersSchema = z.object({
   text: z.string().min(1).max(2000).default('标题'), subtitle: z.string().max(2000).default(''),
   color: z.string().regex(/^#[\da-f]{6}$/i).default(APP_ACCENT_HEX),
-  textStyle: videoEditTextStyleSchema.describe(VIDEO_EDIT_TEXT_STYLE_DESCRIPTION + '标题参数空间量以1080p为基准，应用时按目标画幅换算。').default(videoEditTextStyleSchema.parse({ fontSize: 60 })),
+  textStyle: videoEditTextStyleSchema.describe(VIDEO_EDIT_TEXT_STYLE_DESCRIPTION + '标题参数空间量以 1080P 为基准，应用时按目标画幅换算。').default(videoEditTextStyleSchema.parse({ fontSize: 60 })),
   durationSeconds: z.number().finite().min(.5).max(60).default(5), entrance: z.enum(['left', 'up', 'fade']).default('left'),
   countFrom: z.number().int().min(-999999).max(999999).default(0), countTo: z.number().int().min(-999999).max(999999).default(100),
 }).strict()

@@ -42,8 +42,8 @@ it('列表是可展开的树：当前素材箱里素材箱优先排序，展开�
 it('列内容按素材帧率给出时间码，音频显示采样率；颜色标签自己设的优先，否则按类型默认；点列排序且空值排最后', () => {
   const document = project()
   const entry = (id: string) => videoEditProjectRows(document, '', '', byName, new Set()).find(row => row.entry.value.id === id)!.entry
-  expect(videoEditProjectColumns(document, entry('first'), 30)).toMatchObject({ label: 'iris', frameRateText: '25 fps', mediaStart: '00:00:00:00', mediaEnd: '00:00:01:24', durationText: '00:00:02:00' })
-  expect(videoEditProjectColumns(document, entry('sound'), 30)).toMatchObject({ label: 'yellow', frameRateText: '48000 Hz', durationText: '00:00:01:00' })
+  expect(videoEditProjectColumns(document, entry('first'), 30)).toMatchObject({ label: 'iris', frameRateText: '25fps', mediaStart: '00:00:00:00', mediaEnd: '00:00:01:24', durationText: '00:00:02:00' })
+  expect(videoEditProjectColumns(document, entry('sound'), 30)).toMatchObject({ label: 'yellow', frameRateText: '48 kHz', durationText: '00:00:01:00' })
   expect(videoEditProjectColumns(document, entry('a'), 30)).toMatchObject({ label: 'rose', durationText: '' })
   expect(videoEditProjectColumns(document, entry('b'), 30).label).toBe('mango')
   expect(videoEditProjectRows(document, '', '', { key: 'duration', direction: 'desc' }, new Set()).map(row => row.entry.value.id).slice(0, 2)).toEqual(['first', 'sound'])

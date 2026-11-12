@@ -72,7 +72,7 @@ export function videoEditFieldsFromNativeProbe(probe: VideoEditNativeProbe): Vid
 }
 
 const CODEC_NAMES: Record<string, string> = {
-  h264: 'H.264', avc: 'H.264', hevc: 'HEVC', av1: 'AV1', vp9: 'VP9', vp8: 'VP8', prores: 'Apple ProRes', cfhd: 'GoPro CineForm',
+  h264: 'H.264', avc: 'H.264', hevc: 'H.265', av1: 'AV1', vp9: 'VP9', vp8: 'VP8', prores: 'Apple ProRes', cfhd: 'GoPro CineForm',
   mpeg2video: 'MPEG-2', mpeg1video: 'MPEG-1', mpeg4: 'MPEG-4 Part 2', mjpeg: 'Motion JPEG', dvvideo: 'DV',
   aac: 'AAC', mp3: 'MP3', mp2: 'MPEG 音频', ac3: 'AC-3', eac3: 'E-AC-3', dts: 'DTS', truehd: 'Dolby TrueHD', flac: 'FLAC', opus: 'Opus', vorbis: 'Vorbis', alac: 'ALAC',
 }

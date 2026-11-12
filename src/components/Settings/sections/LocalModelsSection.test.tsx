@@ -58,7 +58,7 @@ describe('设置 › 本地模型', () => {
   it('列出模型的大小、许可证与状态，按状态给出对应动作', async () => {
     render(<LocalModelsSection />)
     expect(await screen.findByText('人脸检测 YuNet')).toBeTruthy()
-    expect(screen.getAllByText('7.5 MB · MIT').length).toBe(3)
+    expect(screen.getAllByText('7.2 MB · MIT').length).toBe(3)
     expect(screen.getByText('暂不可下载')).toBeTruthy()
     expect(screen.getByText('已下载')).toBeTruthy()
     expect(screen.getByRole('button', { name: '删除 人物抠像 RVM' })).toBeTruthy()

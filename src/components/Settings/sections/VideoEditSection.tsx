@@ -45,7 +45,7 @@ const VideoEditSection: React.FC = () => {
     </UiFormRow>
     <UiFormRow label={t('sections.videoEdit.renderFormatLabel')} info={t('sections.videoEdit.renderFormatInfo')} inline>
       <SettingsSegmented<VideoRenderCacheFormat> ariaLabel={t('sections.videoEdit.renderFormatLabel')} value={cache.renderFormat} onChange={renderFormat => { void updateMediaCacheSettings({ renderFormat }).catch(() => undefined) }}
-        options={[{ value: 'auto', label: t('sections.videoEdit.renderFormatAuto') }, { value: 'avc', label: 'H.264' }, { value: 'hevc', label: 'HEVC' }]} />
+        options={[{ value: 'auto', label: t('sections.videoEdit.renderFormatAuto') }, { value: 'avc', label: 'H.264' }, { value: 'hevc', label: 'H.265' }]} />
     </UiFormRow>
     <UiFormRow label={t('sections.videoEdit.renderQualityLabel')} info={t('sections.videoEdit.renderQualityInfo')} inline>
       <SettingsSegmented<VideoRenderCacheQuality> ariaLabel={t('sections.videoEdit.renderQualityLabel')} value={cache.renderQuality} onChange={renderQuality => { void updateMediaCacheSettings({ renderQuality }).catch(() => undefined) }}

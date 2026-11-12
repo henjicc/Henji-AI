@@ -2,7 +2,8 @@ import { UiSegmented } from '@/components/ui'
 import { useTranslation } from 'react-i18next'
 import { UiButton, UiError, UiRangeInput } from '@/components/ui'
 import { ProgressBar } from '@/components/ui/ProgressBar'
-import { useLocalModels, formatLocalModelSize } from '@/components/Settings/hooks/useLocalModels'
+import { formatFileSize } from '@/core/format/specFormat'
+import { useLocalModels } from '@/components/Settings/hooks/useLocalModels'
 import type { ImageEditCommandBusV3 } from '../application/imageEditCommandBus'
 import { useImageEditorSessionStoreV3 } from '../store'
 import { useImageEditorRepairV3 } from './ImageEditorRepairContextV3'
@@ -29,7 +30,7 @@ export function ImageEditorRepairParametersV3({ bus, controller }: { bus: ImageE
       <UiSegmented ariaLabel={t('imageEditor.v3.repair.quality')} value={view.quality} disabled={view.busy} onChange={view.setQuality} options={(['auto', 'fast', 'fine'] as const).map(value => ({ value, label: t(`imageEditor.v3.repair.${value}`) }))} />
       <UiButton size="sm" disabled={!bus.getSnapshot().selection || view.busy} onClick={() => void view.run({ action: 'remove' })}>{t('imageEditor.v3.repair.remove-selection')}</UiButton>
       {model && model.status !== 'ready' ? <>
-        <span className="text-xs text-text3">{t('imageEditor.v3.repair.download-hint', { size: formatLocalModelSize(model.sizeBytes) })}</span>
+        <span className="text-xs text-text3">{t('imageEditor.v3.repair.download-hint', { size: formatFileSize(model.sizeBytes) })}</span>
         {model.status === 'downloading' ? <><ProgressBar appearance="hairline" progress={percent} /><UiButton size="sm" onClick={() => models.cancel(model.id)}>{t('imageEditor.v3.repair.cancel-download')}</UiButton></> : <UiButton size="sm" onClick={() => models.download(model.id)}>{t('imageEditor.v3.repair.download')}</UiButton>}
       </> : null}
       {models.loadFailed ? <UiError size="xs" message={modelText('sections.localModels.loadFailed')} onRetry={models.reload} /> : null}

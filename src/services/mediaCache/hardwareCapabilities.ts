@@ -1,4 +1,5 @@
 import { createLogger } from '@/core/logging'
+import { videoCodecLabel } from '@/core/format/specFormat'
 import type { VideoRenderCacheFormat } from '@/core/media/mediaCache'
 import { type HardwareCapabilitiesReport, type HardwareEncodeResult } from '@/core/media/hardwareCapabilities'
 import { getPlatform } from '@/platform/runtime'
@@ -29,7 +30,7 @@ export function resolveRenderCacheCodec(format: VideoRenderCacheFormat): 'avc' |
  * 导出选择硬件加速却不被支持时，按本机检测结果说明原因；没有检测结果或检测认为支持时返回 null（交给通用说明）。
  */
 export function hardwareEncodeLimitation(codec: 'avc' | 'hevc', width: number, height: number): string | null {
-  const name = codec === 'avc' ? 'H.264' : 'HEVC'
+  const name = videoCodecLabel(codec)
   const result = report?.encode.find(item => item.codec === (codec === 'avc' ? 'h264' : 'hevc'))
   if (!result) return null
   if (!result.hardware) return `本机显卡不支持 ${name} 硬件编码，请改用软件编码${codec === 'hevc' ? '或 H.264' : ''}。`

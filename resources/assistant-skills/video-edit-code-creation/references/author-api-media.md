@@ -8,7 +8,7 @@
 | --- | --- |
 | `fps` / `duration` | 分析帧率与时长（秒） |
 | `levels[]` | 每分析帧 RMS，0–1 |
-| `bands.bass/mid/treble[]` | 0–250Hz、250–4000Hz、4000Hz 至 Nyquist 的频段 RMS，0–1 |
+| `bands.bass/mid/treble[]` | 0–250 Hz、250–4000 Hz、4000 Hz 至 Nyquist 的频段 RMS，0–1 |
 | `beats[]` / `onsets[]` | 升序秒数，基准为分析区间起点 |
 | `bpm` | 检测 BPM；没有稳定节拍为 0 |
 | `beatsPerBar` / `barOrigin` | 估计的分组与起点，不是真实拍号 |

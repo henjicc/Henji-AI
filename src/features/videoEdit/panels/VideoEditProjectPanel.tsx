@@ -38,6 +38,7 @@ import { VideoEditAudioChannelsDialog, type VideoEditAudioChannelsTarget } from 
 import { VideoEditProjectDocumentsButton } from './VideoEditProjectDocuments'
 import { withVideoEditCodeMetadata, readVideoEditCodeMetadata } from '../application/videoEditCodeState'
 import { selectVideoEditProjectItems, videoEditBinPath, videoEditProjectColumns, videoEditProjectRows, type VideoEditProjectEntry, type VideoEditProjectRow, type VideoEditProjectSort, type VideoEditProjectSortKey } from './videoEditProjectModel'
+import { formatFrameRate } from '@/core/format/specFormat'
 import { videoEditKindIcon } from './videoEditKindIcons'
 
 /** 透明的拖拽图（1×1）：替换浏览器默认的拖拽缩略图。 */
@@ -51,7 +52,7 @@ const gridComponents = { List: GridList, Item: GridItem }
 const SORT_OPTIONS = [{ value: 'name', label: '名称' }, { value: 'kind', label: '类型' }, { value: 'duration', label: '时长' }] as const
 /** 列表视图的列，点表头排序。时长排在名称后面：默认宽度的面板里一眼看得到，其余列（帧速率、媒体开始与结束、代理）加宽面板或横向滚动才出现。 */
 const LIST_COLUMNS: Array<{ key: Exclude<VideoEditProjectSortKey, 'kind' | 'name'> | 'proxy'; label: string }> = [
-  { key: 'duration', label: '时长' }, { key: 'frameRate', label: '帧速率' }, { key: 'mediaStart', label: '媒体开始' }, { key: 'mediaEnd', label: '媒体结束' }, { key: 'proxy', label: '代理' },
+  { key: 'duration', label: '时长' }, { key: 'frameRate', label: '帧率' }, { key: 'mediaStart', label: '媒体开始' }, { key: 'mediaEnd', label: '媒体结束' }, { key: 'proxy', label: '代理' },
 ]
 /** 列宽（PR：拖表头之间的分隔线调整），本机记住；列宽总和超过面板宽时左右滚动。 */
 type ListColumnKey = 'name' | (typeof LIST_COLUMNS)[number]['key']
@@ -251,7 +252,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
     const itemDuration = entry.kind === 'item' && entry.value.sourceRange ? (entry.value.sourceRange.outUs - entry.value.sourceRange.inUs) / 1e6 : itemMedia?.durationSeconds
     const kind = entry.kind === 'sequence' ? 'sequence' : entry.value.kind
     const graphic = entry.kind === 'item' && kind === 'graphic' ? entry.value.graphic : undefined
-    return entry.kind === 'sequence' ? `${entry.value.width} × ${entry.value.height} · ${Number((entry.value.frameRate.numerator / entry.value.frameRate.denominator).toFixed(3))} fps` : itemMedia ? `${itemMedia.kind === 'audio' ? '音频' : `${itemMedia.width} × ${itemMedia.height}`}${itemDuration ? ` · ${itemDuration.toFixed(1)} 秒` : ''}${itemMedia.assetId ? ' · 来自资产库' : ''}` : graphic ? `可编辑图形 · ${graphic.width} × ${graphic.height}` : kind === 'adjustment' ? '调整图层 · 添加到现有序列上方画面轨道' : kind === 'code' ? '原生代码素材' : '文字'
+    return entry.kind === 'sequence' ? `${entry.value.width} × ${entry.value.height} · ${formatFrameRate(entry.value.frameRate.numerator / entry.value.frameRate.denominator, 'compact')}` : itemMedia ? `${itemMedia.kind === 'audio' ? '音频' : `${itemMedia.width} × ${itemMedia.height}`}${itemDuration ? ` · ${itemDuration.toFixed(1)} 秒` : ''}${itemMedia.assetId ? ' · 来自资产库' : ''}` : graphic ? `可编辑图形 · ${graphic.width} × ${graphic.height}` : kind === 'adjustment' ? '调整图层 · 添加到现有序列上方画面轨道' : kind === 'code' ? '原生代码素材' : '文字'
   }
   /** 一项的选择、双击、右键与拖动（列表行与图标格共用）。素材箱双击进入，素材拖到素材箱上即移入。 */
   const entryHandlers = (entry: VideoEditProjectEntry, selected: boolean) => ({
@@ -391,7 +392,7 @@ export function VideoEditProjectPanel({ instance, onError, visible = true }: { i
       { kind: 'menu', id: 'import', label: '导入', icon: Import, tooltip: '导入文件或文件夹', menu: () => <>
         <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={choose}><Import size={UI_ICON_SIZE.sm} />导入文件</UiOptionButton>
         <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={chooseFolders}><FolderInput size={UI_ICON_SIZE.sm} />导入文件夹</UiOptionButton>
-        <UiFormRow label="自动创建代理" info="导入高于 1080p 的视频时，自动创建用于流畅预览的代理。" inline density="compact"><UiSwitch checked={getVideoEditProxyPreference(projectId).autoCreate} onCheckedChange={autoCreate => setVideoEditProxyPreference(projectId, { autoCreate })} /></UiFormRow>
+        <UiFormRow label="自动创建代理" info="导入高于 1080P 的视频时，自动创建用于流畅预览的代理。" inline density="compact"><UiSwitch checked={getVideoEditProxyPreference(projectId).autoCreate} onCheckedChange={autoCreate => setVideoEditProxyPreference(projectId, { autoCreate })} /></UiFormRow>
       </> },
     ]}>{footerStatus}</UiToolbar>
     <ContextMenu items={menu.menuItems} position={menu.menuPosition} visible={menu.menuVisible} onClose={menu.hideMenu} />

@@ -68,7 +68,7 @@ export function parseAudioError(file: File): string | undefined {
   }
   const maxBytes = MAX_AUDIO_SIZE_MB * 1024 * 1024
   if (file.size > maxBytes) {
-    return `音频大小不能超过 ${MAX_AUDIO_SIZE_MB}MB`
+    return `音频大小不能超过 ${MAX_AUDIO_SIZE_MB} MB`
   }
   return undefined
 }

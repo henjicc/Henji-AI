@@ -2,7 +2,7 @@ export interface SubtitleCue { startUs: number; endUs: number; text: string }
 
 /** Text-only SRT/WebVTT interchange. Cue clocks are integer microseconds. */
 export function parseSubtitleText(source: string): SubtitleCue[] {
-  if (source.length > 2 * 1024 ** 2 || new TextEncoder().encode(source).byteLength > 2 * 1024 ** 2) throw new Error('字幕文件超过2MiB。')
+  if (source.length > 2 * 1024 ** 2 || new TextEncoder().encode(source).byteLength > 2 * 1024 ** 2) throw new Error('字幕文件超过 2 MB。')
   const normalized = source.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').trim()
   const webvtt = /^WEBVTT(?:[ \t].*)?(?:\n|$)/.test(normalized)
   const body = webvtt ? normalized.replace(/^WEBVTT[^\n]*(?:\n[^\n]+)*?\n\n/, '') : normalized
@@ -22,7 +22,7 @@ export function parseSubtitleText(source: string): SubtitleCue[] {
     if (!timing) throw new Error(`字幕段${cues.length + 1}缺少有效时间。`)
     const startUs = clock(timing[1]); const endUs = clock(timing[2])
     const rawText = lines.slice(timingIndex + 1).join('\n')
-    if (rawText.length > 32768) throw new Error(`字幕段${cues.length + 1}原始文字超过32KiB。`)
+    if (rawText.length > 32768) throw new Error(`字幕段${cues.length + 1}原始文字超过 32 KB。`)
     const text = rawText.replace(/<[^<>]*>/g, '').replace(/&(amp|lt|gt|nbsp|quot);/g, (_, entity: string) => ({ amp: '&', lt: '<', gt: '>', nbsp: ' ', quot: '"' })[entity]!).trim()
     if (endUs <= startUs || !text || text.length > 2000) throw new Error(`字幕段${cues.length + 1}须有正时长及1至2000字的文字。`)
     cues.push({ startUs, endUs, text })

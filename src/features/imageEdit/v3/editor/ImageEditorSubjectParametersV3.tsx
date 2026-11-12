@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { PanelTrigger, UiButton, UiError, UiLoading, UiOptionButton } from '@/components/ui'
 import { ProgressBar } from '@/components/ui/ProgressBar'
-import { useLocalModels, formatLocalModelSize } from '@/components/Settings/hooks/useLocalModels'
+import { formatFileSize } from '@/core/format/specFormat'
+import { useLocalModels } from '@/components/Settings/hooks/useLocalModels'
 import { useImageEditorSubjectV3 } from './ImageEditorSubjectContextV3'
 
 export function ImageEditorSubjectParametersV3(): JSX.Element | null {
@@ -21,7 +22,7 @@ export function ImageEditorSubjectParametersV3(): JSX.Element | null {
     </div>}>
       {({ togglePanel, open }) => <UiButton size="sm" aria-expanded={open} onClick={togglePanel}>{t('imageEditor.v3.subject.choose')}</UiButton>}
     </PanelTrigger> : null}
-    {downloading ? <><span className="text-xs text-text3">{t('imageEditor.v3.repair.download-hint', { size: formatLocalModelSize(downloading.sizeBytes) })}</span><ProgressBar appearance="hairline" progress={percent} /><UiButton size="sm" onClick={() => { subject.cancel(); models.cancel(downloading.id) }}>{t('imageEditor.v3.repair.cancel-download')}</UiButton></> : null}
+    {downloading ? <><span className="text-xs text-text3">{t('imageEditor.v3.repair.download-hint', { size: formatFileSize(downloading.sizeBytes) })}</span><ProgressBar appearance="hairline" progress={percent} /><UiButton size="sm" onClick={() => { subject.cancel(); models.cancel(downloading.id) }}>{t('imageEditor.v3.repair.cancel-download')}</UiButton></> : null}
     {subject.busy ? <><UiLoading size="xs" message={t('imageEditor.v3.subject.processing')} /><UiButton size="sm" onClick={subject.cancel}>{t('imageEditor.v3.selection.cancel-task')}</UiButton></> : null}
     {subject.error ? <UiError size="xs" message={subject.error} /> : null}
   </>

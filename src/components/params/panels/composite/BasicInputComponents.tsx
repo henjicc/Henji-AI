@@ -259,7 +259,7 @@ export const CompositeFileInput: React.FC<CompositeComponentProps<FileInputConfi
       return
     }
     if (typeof config.maxSizeMb === 'number' && config.maxSizeMb > 0 && file.size > config.maxSizeMb * 1024 * 1024) {
-      setErrorText(`文件大小不能超过 ${config.maxSizeMb}MB`)
+      setErrorText(`文件大小不能超过 ${config.maxSizeMb} MB`)
       return
     }
     setErrorText('')

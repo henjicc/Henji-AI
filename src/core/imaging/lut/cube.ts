@@ -2,7 +2,7 @@ export const CUBE_LUT_MAX_BYTES = 24 * 1024 * 1024
 export interface CubeLut { title: string; kind: '1d' | '3d'; size: number; domainMin: [number, number, number]; domainMax: [number, number, number]; data: Float32Array }
 /** Strict Adobe .cube, red changes fastest. Float data, no 8-bit quantization. */
 export function parseCubeLut(text: string): CubeLut {
-  if (new TextEncoder().encode(text).byteLength > CUBE_LUT_MAX_BYTES) throw new Error('LUT 文件过大，最多24MiB。')
+  if (new TextEncoder().encode(text).byteLength > CUBE_LUT_MAX_BYTES) throw new Error('LUT 文件过大，最多 24 MB。')
   let title = ''; let kind: CubeLut['kind'] | undefined; let size = 0
   const domainMin: CubeLut['domainMin'] = [0, 0, 0]; const domainMax: CubeLut['domainMax'] = [1, 1, 1]
   const rows: number[] = []; const headers = new Set<string>()

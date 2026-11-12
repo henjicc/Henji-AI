@@ -116,7 +116,7 @@ export function prepareUpscalePreflight(
   }
   if (profile.maxInputFileBytes && imageInfo.fileSizeBytes > profile.maxInputFileBytes) {
     const maxMiB = profile.maxInputFileBytes / 1024 / 1024
-    throw new Error(`源图文件超过 ${maxMiB}MiB，尚未上传或创建付费任务`)
+    throw new Error(`源图文件超过 ${maxMiB} MB，尚未上传或创建付费任务`)
   }
   if (imageInfo.hasAlpha && profile.alpha === 'reject') {
     throw new Error('当前放大模型不保留透明通道，请改用 Topaz 透明图放大或 Bria')

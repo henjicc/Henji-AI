@@ -4,6 +4,7 @@ import { Info } from 'lucide-react';
 
 import { readImageInfo, type ImageInfoResult } from '@/commands/image';
 import { createLogger } from '@/core/logging';
+import { formatFileSize } from '@/core/format/specFormat';
 import { UiIconButton } from '@/components/ui';
 import { useSettingsStore } from '@/stores/settingsStore';
 
@@ -92,15 +93,8 @@ export function ImageInfoPanel({ open, imageSource }: ImageInfoPanelProps): JSX.
       return [];
     }
     const locale = i18n.language.startsWith('zh') ? 'zh-CN' : 'en-US';
-    const byteFormatter = new Intl.NumberFormat(locale, { maximumFractionDigits: 1 });
     const dateFormatter = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' });
 
-    const formatBytes = (value: number): string => {
-      if (value < 1024) return `${value} B`;
-      if (value < 1024 * 1024) return `${byteFormatter.format(value / 1024)} KB`;
-      if (value < 1024 * 1024 * 1024) return `${byteFormatter.format(value / (1024 * 1024))} MB`;
-      return `${byteFormatter.format(value / (1024 * 1024 * 1024))} GB`;
-    };
     const formatDate = (value: number | null): string =>
       typeof value === 'number' && Number.isFinite(value)
         ? dateFormatter.format(value)
@@ -108,7 +102,7 @@ export function ImageInfoPanel({ open, imageSource }: ImageInfoPanelProps): JSX.
 
     return [
       { label: t('viewer.resolution', '分辨率'), value: `${info.width} x ${info.height} px` },
-      { label: t('viewer.fileSize', '文件大小'), value: formatBytes(info.fileSizeBytes) },
+      { label: t('viewer.fileSize', '文件大小'), value: formatFileSize(info.fileSizeBytes) },
       { label: t('viewer.aspectRatio', '宽高比'), value: approximateAspectRatio(info.width, Math.max(1, info.height)) },
       { label: t('viewer.createdAt', '创建时间'), value: formatDate(info.createdAt) },
     ];

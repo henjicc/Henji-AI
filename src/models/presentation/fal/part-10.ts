@@ -30,14 +30,14 @@ export const falPresentationPart10: Record<string, ModelPresentation> = {
       falFlux3VideoVersion: {
         name: sharedFieldText('version'), role: 'mode',
         optionLabels: { standard: { label: sharedOptionText('standard') }, max: { label: 'Max' } },
-        tooltip: { zh: 'Max 是 Fal 后训练的增强版，提示词遵循和画质更好，支持首尾帧，但只能文生和图生视频，最高 1080p。', en: 'Max is Fal’s post-trained variant with better prompt adherence and quality and first-last frames, limited to text and image to video up to 1080p.' },
+        tooltip: { zh: 'Max 是 Fal 后训练的增强版，提示词遵循和画质更好，支持首尾帧，但只能文生和图生视频，最高 1080P。', en: 'Max is Fal’s post-trained variant with better prompt adherence and quality and first-last frames, limited to text and image to video up to 1080P.' },
       },
       falFlux3VideoMode: {
         name: sharedFieldText('mode'), role: 'mode',
         optionLabels: {
           'text-image-to-video': { label: sharedModeText('textImageToVideo'), description: { zh: '不传图为文生视频，1 张图作首帧', en: 'No image for text to video, one image as the first frame' } },
-          extend: { label: sharedModeText('videoExtension'), description: { zh: '接在 1 段 15 秒内的视频后继续生成，最高 1080p', en: 'Continues one clip under 15 s, up to 1080p' } },
-          edit: { label: sharedModeText('videoEdit'), description: { zh: '按提示词重绘 1 段 15 秒内的视频，保留动作与构图，720p', en: 'Re-renders one clip under 15 s from the prompt, keeping motion and framing, at 720p' } },
+          extend: { label: sharedModeText('videoExtension'), description: { zh: '接在 1 段 15 秒内的视频后继续生成，最高 1080P', en: 'Continues one clip under 15 s, up to 1080P' } },
+          edit: { label: sharedModeText('videoEdit'), description: { zh: '按提示词重绘 1 段 15 秒内的视频，保留动作与构图，720P', en: 'Re-renders one clip under 15 s from the prompt, keeping motion and framing, at 720P' } },
         },
       },
       falFlux3VideoAspectRatio: {
@@ -49,8 +49,8 @@ export const falPresentationPart10: Record<string, ModelPresentation> = {
       falFlux3VideoGenerateAudio: { name: sharedFieldText('generateAudio') },
       falFlux3VideoDraft: {
         name: { zh: '草稿', en: 'Draft' },
-        tooltip: { zh: '先以约 1/3 的价格出 720p 低质预览，满意后再转成 1080p 正片；转正片按 $0.29/秒另计。', en: 'Renders a low-quality 720p preview at about a third of the price; turn it into a 1080p final later at $0.29/s.' },
-        description: { zh: '开启后先出低价草稿，结果可一键转成 1080p 正片（沿用草稿的提示词、时长、素材与种子）', en: 'Renders a cheap draft first; the result can be finalized to 1080p, keeping its prompt, duration, media and seed' },
+        tooltip: { zh: '先以约 1/3 的价格出 720P 低质预览，满意后再转成 1080P 正片；转正片按 $0.29/秒另计。', en: 'Renders a low-quality 720P preview at about a third of the price; turn it into a 1080P final later at $0.29/s.' },
+        description: { zh: '开启后先出低价草稿，结果可一键转成 1080P 正片（沿用草稿的提示词、时长、素材与种子）', en: 'Renders a cheap draft first; the result can be finalized to 1080P, keeping its prompt, duration, media and seed' },
       },
       falFlux3VideoReasoning: {
         name: { zh: '推理强度', en: 'Reasoning' },

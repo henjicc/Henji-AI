@@ -17,6 +17,7 @@ import type {
 } from '@henjicc/ai-sdk'
 
 import type { I18nText } from './types/I18nText'
+import { formatResolutionText } from './format/specFormat'
 import type {
   ModelDefinition,
   ModelMeta,
@@ -45,15 +46,11 @@ import type { GenerationRequirement } from './types/GenerationRequirements'
 import type { ModelPresentation, ParamPresentationEntry } from './types/ModelPresentation'
 
 /** 分辨率写法统一大写：480p → 480P、4k → 4K。取值原样发给供应商，只改界面上显示的名称。 */
-function upperResolution(text: string): string {
-  return text.replace(/\b(\d{3,4})p\b/g, '$1P').replace(/\b(\d)k\b/g, '$1K')
-}
-
 export function displayResolutionText(text: I18nText): I18nText {
-  if (typeof text === 'string') return upperResolution(text)
+  if (typeof text === 'string') return formatResolutionText(text)
   // 文案键对象：键本身不动，只改兜底文字
-  if ('key' in text) return typeof text.fallback === 'string' ? { ...text, fallback: upperResolution(text.fallback) } : text
-  return Object.fromEntries(Object.entries(text).map(([lang, value]) => [lang, typeof value === 'string' ? upperResolution(value) : value])) as I18nText
+  if ('key' in text) return typeof text.fallback === 'string' ? { ...text, fallback: formatResolutionText(text.fallback) } : text
+  return Object.fromEntries(Object.entries(text).map(([lang, value]) => [lang, typeof value === 'string' ? formatResolutionText(value) : value])) as I18nText
 }
 
 function composeOptions(

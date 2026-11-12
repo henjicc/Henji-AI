@@ -1,7 +1,7 @@
 import { createVideoEditTestProject as createVideoEditProject } from '../application/videoEditDocumentTestKit'
 // @vitest-environment jsdom
 import React, { useSyncExternalStore } from 'react'
-import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react'
 import { beforeEach, afterEach, expect, it, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
@@ -88,10 +88,11 @@ it('可变帧率素材默认60帧，确认前可选择有理帧率且不会提�
   fireEvent.click(view.getByText('按此素材新建序列'))
   await waitFor(() => expect(view.getByRole('dialog')).toBeTruthy())
   const history = instance.past.length
-  expect(view.getByRole('button', { name: '帧率' }).textContent).toBe('60 帧')
+  const rate = within(view.getByRole('dialog')).getByRole('button', { name: '帧率' })
+  expect(rate.textContent).toBe('60 帧/秒')
   expect(instance.document.sequences).toHaveLength(1); expect(instance.past).toHaveLength(history)
-  fireEvent.click(view.getByRole('button', { name: '帧率' }))
-  fireEvent.click(view.getByRole('option', { name: '29.97 帧' }))
+  fireEvent.click(rate)
+  fireEvent.click(view.getByRole('option', { name: '29.97 帧/秒' }))
   await act(async () => fireEvent.click(view.getByRole('button', { name: '新建' })))
   const sequence = instance.document.sequences[1]
   expect(sequence.frameRate).toEqual({ numerator: 30000, denominator: 1001 })
@@ -130,8 +131,8 @@ it('列表视图按 PR：素材箱三角展开显示缩进的内容，表头点�
   expect(names()).toEqual(['镜头', 'B原视频', '序列 1', 'A原视频'])
   const nested = view.getByRole('button', { name: 'B原视频' }).closest('[role="treeitem"]')!
   expect(nested.getAttribute('aria-level')).toBe('2')
-  // 帧速率列：A 60 fps；B 是可变帧率没有帧率
-  expect(view.getByRole('button', { name: 'A原视频' }).querySelector('[data-video-edit-project-column="frameRate"]')!.textContent).toBe('60 fps')
+  // 帧率列：A 60fps；B 是可变帧率没有帧率
+  expect(view.getByRole('button', { name: 'A原视频' }).querySelector('[data-video-edit-project-column="frameRate"]')!.textContent).toBe('60fps')
   fireEvent.click(view.getByRole('button', { name: '名称' }))
   expect(names()[0]).toBe('镜头')
   // 颜色标签：视频默认鸢尾花色，右键设为黄色

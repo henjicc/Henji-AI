@@ -10,6 +10,7 @@ import {
 
 import { UiButton, UiEmpty, UiLoading, UI_INSET_SURFACE_CLASS } from '@/components/ui'
 import type { AgentTraceDetailResult } from '@/core/assistant/trace'
+import { formatFileSize } from '@/core/format/specFormat'
 import type { ModelStepMessage } from '@henjicc/ai-sdk'
 import { copyTextToClipboard } from '../copyFormats'
 import { buildTraceCurl, formatTraceDuration, formatTraceTokens, getTraceStepLabel } from '../assistantTraceUtils'
@@ -95,7 +96,7 @@ export function AssistantTraceDetail({
           <Metric label="总计" value={`${formatTraceTokens(summary.usage.totalTokens)} tok`} />
           <Metric label="耗时" value={formatTraceDuration(summary.elapsedMs)} />
           <Metric label="结束原因" value={summary.finishReason ?? '—'} />
-          <Metric label="详情" value={summary.hasDetail ? formatBytes(summary.detailBytes) : '仅摘要'} />
+          <Metric label="详情" value={summary.hasDetail ? formatFileSize(summary.detailBytes) : '仅摘要'} />
         </div>
         {detail && (
           <div className="mt-2 flex flex-wrap gap-1.5">
@@ -130,7 +131,7 @@ function TraceVisualDetail({ detail }: { detail: NonNullable<AgentTraceDetailRes
     <div className="space-y-2">
       {detail.capture.truncated && (
         <div className="rounded-md border border-warning-text/30 bg-warning-tint p-2 text-2xs text-warning-text">
-          该追踪已按体积限制截断：原始 {formatBytes(detail.capture.originalBytes)}，保存 {formatBytes(detail.capture.storedBytes)}；
+          该追踪已按体积限制截断：原始 {formatFileSize(detail.capture.originalBytes)}，保存 {formatFileSize(detail.capture.storedBytes)}；
           受影响区块：{detail.capture.sections.join('、') || '部分长内容'}。
         </div>
       )}
@@ -273,8 +274,3 @@ function statusLabel(status: AgentTraceDetailResult['summary']['status']): strin
   return '已中断'
 }
 
-function formatBytes(value: number): string {
-  if (value >= 1024 * 1024) return `${(value / 1024 / 1024).toFixed(2)} MiB`
-  if (value >= 1024) return `${(value / 1024).toFixed(1)} KiB`
-  return `${value} B`
-}

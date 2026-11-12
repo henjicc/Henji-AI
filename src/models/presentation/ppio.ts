@@ -1,6 +1,7 @@
 /** 派欧云（ppio）模型的展示补丁：i18n 文案、联动、面板布局。按模型 id 关联运行时定义。 */
 
 import { modelScopedText, sharedFieldText, sharedModeText, sharedOptionText } from '@/core/i18n/modelText'
+import { formatSampleRate } from '@/core/format/specFormat'
 import type { ModelPresentation } from '@/core/types/ModelPresentation'
 import type { VoiceSelectorConfig } from '@/core/types/PanelTypes'
 import type { CompositePanelConfig } from '@/core/types/CompositePanel'
@@ -110,12 +111,12 @@ const ADVANCED_PANEL_CONFIG: CompositePanelConfig = {
       label: sharedFieldText('sampleRate'),
       config: {
         options: [
-          { value: 8000, label: '8000 Hz' },
-          { value: 16000, label: '16000 Hz' },
-          { value: 22050, label: '22050 Hz' },
-          { value: 24000, label: '24000 Hz' },
-          { value: 32000, label: '32000 Hz' },
-          { value: 44100, label: '44100 Hz' },
+          { value: 8000, label: formatSampleRate(8000) },
+          { value: 16000, label: formatSampleRate(16000) },
+          { value: 22050, label: formatSampleRate(22050) },
+          { value: 24000, label: formatSampleRate(24000) },
+          { value: 32000, label: formatSampleRate(32000) },
+          { value: 44100, label: formatSampleRate(44100) },
         ],
       },
     },

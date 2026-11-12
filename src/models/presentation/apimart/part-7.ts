@@ -78,7 +78,7 @@ export const apimartPresentationPart7: Record<string, ModelPresentation> = {
       },
       apimartFlux3VideoResolution: {
         name: sharedFieldText('resolution'), optionLabels: labels(['hd', 'fhd'], { hd: '720p', fhd: '1080p' }),
-        tooltip: { zh: '开启草稿时，草稿固定 720p，这里是转正片时的分辨率。', en: 'With Draft on, the draft is always 720p and this is the resolution of the final render.' },
+        tooltip: { zh: '开启草稿时，草稿固定 720P，这里是转正片时的分辨率。', en: 'With Draft on, the draft is always 720P and this is the resolution of the final render.' },
       },
       apimartFlux3VideoDuration: { name: sharedFieldText('duration') },
       apimartFlux3VideoAudio: {
@@ -87,7 +87,7 @@ export const apimartPresentationPart7: Record<string, ModelPresentation> = {
       },
       apimartFlux3VideoDraft: {
         name: { zh: '草稿', en: 'Draft' },
-        tooltip: { zh: '先以约 1/3 的价格出 720p 低质预览，满意后再转成正片；转正片按正片全价另计，草稿费用不抵扣。', en: 'Renders a low-quality 720p preview at about a third of the price; turn it into the final video later at the full price, with the draft cost not deducted.' },
+        tooltip: { zh: '先以约 1/3 的价格出 720P 低质预览，满意后再转成正片；转正片按正片全价另计，草稿费用不抵扣。', en: 'Renders a low-quality 720P preview at about a third of the price; turn it into the final video later at the full price, with the draft cost not deducted.' },
         description: { zh: '开启后先出低价草稿，结果可一键转正片（沿用草稿的提示词、时长与素材）', en: 'Renders a cheap draft first; the result can be finalized later, keeping its prompt, duration and media' },
       },
     },

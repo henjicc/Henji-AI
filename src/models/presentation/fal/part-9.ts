@@ -1,6 +1,7 @@
 /** Fal 模型展示补丁（第 9 组：2026-11 新一代视频、图片模型）。 */
 
 import { sharedFieldText, sharedModeText, sharedOptionText } from '@/core/i18n/modelText'
+import { frameRateText } from '@/core/format/specFormat'
 import type { Linkage } from '@/core/types/Linkage'
 import type { ModelPresentation, ParamOptionPresentation, ParamPresentationEntry } from '@/core/types/ModelPresentation'
 import { falPresentationPart1 } from './part-1'
@@ -69,7 +70,7 @@ export const falPresentationPart9: Record<string, ModelPresentation> = {
       falLtx23Resolution: resolution(['1080p', '1440p', '2160p']),
       falLtx23Duration: {
         name: sharedFieldText('duration'), optionLabels: plain([6, 8, 10, 12, 14, 16, 18, 20], 's'),
-        tooltip: { zh: '超过 10 秒需要开启快速模式，并使用 1080p 与 25 FPS。', en: 'Durations over 10 seconds require Fast Mode, 1080p and 25 FPS.' },
+        tooltip: { zh: '超过 10 秒需要开启快速模式，并使用 1080P 与 25 帧/秒。', en: 'Durations over 10 seconds require Fast Mode, 1080P and 25fps.' },
       },
       falLtx23ExtendDuration: { name: { zh: '延长时长', en: 'Extension Length' } },
       falLtx23ExtendDirection: {
@@ -86,7 +87,7 @@ export const falPresentationPart9: Record<string, ModelPresentation> = {
           replace_audio: { label: sharedOptionText('replaceAudio') },
         },
       },
-      falLtx23Fps: { name: sharedFieldText('fps'), optionLabels: plain([24, 25, 48, 50], ' FPS') },
+      falLtx23Fps: { name: sharedFieldText('fps'), optionLabels: Object.fromEntries([24, 25, 48, 50].map(fps => [String(fps), { label: frameRateText(fps) }])) },
       falLtx23GenerateAudio: { name: sharedFieldText('generateAudio') },
       falLtx23FastMode: {
         name: sharedFieldText('fastMode'),
@@ -233,7 +234,7 @@ export const falPresentationPart9: Record<string, ModelPresentation> = {
         name: sharedFieldText('mode'), role: 'mode',
         optionLabels: {
           'text-image-to-video': { label: sharedModeText('textImageToVideo'), description: { zh: '不传图为文生视频，1 张图作首帧', en: 'No image for text to video, one image as the first frame' } },
-          'reference-to-video': { label: sharedModeText('referenceToVideo'), description: { zh: '1–7 张参考图，最高 720p', en: '1–7 reference images, up to 720p' } },
+          'reference-to-video': { label: sharedModeText('referenceToVideo'), description: { zh: '1–7 张参考图，最高 720P', en: '1–7 reference images, up to 720P' } },
         },
       },
       falGrokVideo15AspectRatio: aspectRatio(['16:9', '4:3', '3:2', '1:1', '2:3', '3:4', '9:16']),

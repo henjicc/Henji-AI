@@ -1,4 +1,5 @@
 import { UiInlineStatus } from '@/components/ui'
+import { formatFileSize } from '@/core/format/specFormat'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { Virtuoso, VirtuosoGrid, type VirtuosoHandle, type VirtuosoGridHandle } from 'react-virtuoso';
 import React from 'react';
@@ -129,19 +130,6 @@ const LIST_COLUMNS_CLASS = {
 function formatListTime(time: number | undefined): string {
   if (time === undefined) return '';
   return new Date(time).toLocaleString(undefined, { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
-}
-
-function formatSize(bytes: number | undefined): string {
-  if (bytes === undefined) return '';
-  if (bytes < 1024) return `${bytes} B`;
-  const units = ['KB', 'MB', 'GB', 'TB'];
-  let value = bytes / 1024;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit += 1;
-  }
-  return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
 }
 
 /**
@@ -408,7 +396,7 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
                   </span>
                   {hasLocation ? <span className="truncate text-xs text-text2" title={item.location}>{item.location ?? ''}</span> : null}
                   <span className="truncate text-xs tabular-nums text-text2">{formatListTime(time)}</span>
-                  {hasSize ? <span className="truncate text-xs tabular-nums text-text2">{formatSize(item.sizeBytes)}</span> : null}
+                  {hasSize ? <span className="truncate text-xs tabular-nums text-text2">{item.sizeBytes === undefined ? '' : formatFileSize(item.sizeBytes)}</span> : null}
                   <span aria-hidden="true" />
                 </UiOptionButton>
                 <div className={`absolute top-1/2 -translate-y-1/2 ${selection.active ? 'left-3' : 'right-2'}`}>

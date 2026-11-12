@@ -45,11 +45,6 @@ export interface MediaCacheUsage {
 }
 
 const GB = 1024 ** 3
-export function formatMediaCacheBytes(bytes: number): string {
-  if (bytes < 1024 ** 2) return `${Math.max(0, Math.round(bytes / 1024))} KB`
-  if (bytes < GB) return `${Math.round(bytes / 1024 ** 2)} MB`
-  return `${(bytes / GB).toFixed(bytes < 100 * GB ? 1 : 0)} GB`
-}
 export function autoMediaCacheBudgetBytes(availableBytes: number | null): number {
   const tenth = availableBytes === null ? MEDIA_CACHE_AUTO_BUDGET_MAX_GB * GB : availableBytes * 0.1
   return Math.max(MEDIA_CACHE_MIN_BUDGET_GB * GB, Math.min(MEDIA_CACHE_AUTO_BUDGET_MAX_GB * GB, Math.floor(tenth)))

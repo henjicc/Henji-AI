@@ -52,7 +52,7 @@ it('原生不可用或探测失败时回到浏览器；浏览器也不能解时�
   expect(resolveVideoEditMediaInspection('D:/a.mp4', probe([videoStream('h264', 'High 4:2:2', {}, false)]), browserDecodes).backend).toBe('browser')
   const messages = [
     [{ status: 'unavailable' }, browserCannot(null), 'D:/lotus.mov', '当前设备无法解码此视频（MOV 文件中的视频编码）。可重启软件后重试'],
-    [{ status: 'unavailable' }, browserCannot('hevc'), 'D:/a.mp4', '当前设备无法解码此视频（HEVC）'],
+    [{ status: 'unavailable' }, browserCannot('hevc'), 'D:/a.mp4', '当前设备无法解码此视频（H.265）'],
     [{ status: 'unavailable' }, unreadable, 'D:/a.mxf', '当前无法读取此 MXF 文件'],
     [probe([{ ...prores4444, decodable: false }]), browserCannot(null), 'D:/lotus.mov', '无法解码此视频的编码格式（Apple ProRes 4444，12 位 4:4:4，带透明）'],
     [probe([videoStream('h264', 'High'), audioStream('truehd', 1, false)]), { status: 'read', video: { codec: 'avc', decodable: true }, audio: { codec: null, decodable: false } }, 'D:/a.mkv', '无法解码此文件的声音编码（Dolby TrueHD）'],

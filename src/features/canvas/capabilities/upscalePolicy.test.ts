@@ -101,7 +101,7 @@ describe('高清放大提交前预检', () => {
       imageInfo({ fileSizeBytes: 20 * 1024 * 1024 + 1 }),
       TOPAZ_MODEL,
       {},
-    )).toThrow(/超过 20MiB.*尚未上传/)
+    )).toThrow(/超过 20 MB.*尚未上传/)
     expect(() => prepareUpscalePreflight(
       imageInfo({ hasAlpha: true }),
       SEEDVR2_MODEL,

@@ -7,7 +7,8 @@ import { ProgressBar } from '@/components/ui/ProgressBar'
 import { useI18n } from '@/hooks/useI18n'
 import { LOCAL_MODEL_DOWNLOAD_SOURCES, type LocalModelInfo } from '@/platform/contracts/localModels'
 import SettingsSegmented from '../components/SettingsSegmented'
-import { formatLocalModelSize, useLocalModels, type LocalModelsView } from '../hooks/useLocalModels'
+import { formatFileSize } from '@/core/format/specFormat'
+import { useLocalModels, type LocalModelsView } from '../hooks/useLocalModels'
 
 /**
  * 文件与下载 › 本地模型（任务 4.11）：抠像、检测、跟踪在本机运行的小模型。
@@ -52,7 +53,7 @@ const LocalModelRow: React.FC<{ model: LocalModelInfo; view: LocalModelsView }> 
     : 0
   const meta = model.status === 'unavailable'
     ? model.license
-    : `${formatLocalModelSize(model.sizeBytes)} · ${model.license}`
+    : `${formatFileSize(model.sizeBytes)} · ${model.license}`
 
   return (
     <div className="flex items-center gap-3">

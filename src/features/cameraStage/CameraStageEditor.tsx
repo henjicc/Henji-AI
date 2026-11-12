@@ -49,8 +49,8 @@ import StageViewportToolbar from './toolbar/StageViewportToolbar'
  */
 
 const VIDEO_RESOLUTION_OPTIONS: Array<{ label: string; value: CameraStageVideoResolutionPreset }> = [
-  { label: '720p', value: '720p' },
-  { label: '1080p', value: '1080p' },
+  { label: '720P', value: '720p' },
+  { label: '1080P', value: '1080p' },
 ]
 
 const logger = createLogger('cameraStage.editor')

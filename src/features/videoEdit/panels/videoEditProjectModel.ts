@@ -1,6 +1,7 @@
 import type { VideoEditBin, VideoEditDocument, VideoEditItem, VideoEditSequence, VideoEditMedia } from '@/core/videoEdit/document'
 import { videoEditBinLabel, videoEditLabelOf, type VideoEditLabel } from '@/core/videoEdit/labels'
 import { videoEditFps } from '@/core/videoEdit/time'
+import { formatFrameRate, formatSampleRate } from '@/core/format/specFormat'
 import { videoEditFrameTimecode } from '@/core/videoEdit/timecode'
 import { videoEditDuration } from '@/core/videoEdit/document'
 
@@ -23,7 +24,7 @@ export function videoEditProjectColumns(document: VideoEditDocument, entry: Vide
   const timed = (fps: number, frames: number, frameRateText: string, frameRate: number | undefined, label: VideoEditLabel, start = 0): VideoEditProjectColumns => ({
     label, frameRateText, frameRate, mediaStart: videoEditFrameTimecode(start, fps), mediaEnd: videoEditFrameTimecode(start + Math.max(0, frames - 1), fps), mediaStartSeconds: start / fps, mediaEndSeconds: (start + Math.max(0, frames - 1)) / fps, durationText: videoEditFrameTimecode(frames, fps), duration: frames / fps,
   })
-  const rateText = (fps: number): string => `${Number(fps.toFixed(3))} fps`
+  const rateText = (fps: number): string => formatFrameRate(fps, 'compact')
   if (entry.kind === 'sequence') {
     const fps = videoEditFps(entry.value.frameRate)
     return timed(fps, entry.value.clips.length || entry.value.captions?.length || entry.value.markers?.length ? videoEditDuration(entry.value) : 0, rateText(fps), fps, videoEditLabelOf('sequence', entry.value.label ?? videoEditBinLabel(document.bins, entry.value.binId)))
@@ -36,7 +37,7 @@ export function videoEditProjectColumns(document: VideoEditDocument, entry: Vide
   const durationSeconds = item.sourceRange ? (item.sourceRange.outUs - item.sourceRange.inUs) / 1e6 : media.durationSeconds
   if (media.kind === 'audio' || !media.frameRate) {
     const sampleRate = media.audioStreams?.[0]?.sampleRate
-    return timed(fallbackFps, Math.round(durationSeconds * fallbackFps), sampleRate ? `${sampleRate} Hz` : '', sampleRate, label, Math.round(startSeconds * fallbackFps))
+    return timed(fallbackFps, Math.round(durationSeconds * fallbackFps), sampleRate ? formatSampleRate(sampleRate) : '', sampleRate, label, Math.round(startSeconds * fallbackFps))
   }
   const fps = videoEditFps(media.frameRate)
   return timed(fps, Math.round(durationSeconds * fps), rateText(fps), fps, label, Math.round(startSeconds * fps))

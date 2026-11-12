@@ -297,7 +297,7 @@ const descriptions: Record<string, string> = {
   'video_edit.item.source_range': '子剪辑的原素材范围，inUs/outUs 是整数微秒、右端不含；null 恢复完整素材。新放入时间线及首次打开源预览使用此范围，不改变已经放置的片段。',
   'video_edit.clip.audio_role': '声音片段用途：dialogue 对话、music 音乐、sound_effect 音效、ambience 环境；null 清除标注。可在同一通用事务批量设置，一步撤销。自动回避会压低指定音乐片段，在同时间的对话或音效有声时生效；不会自动识别声音类型。',
   'video_edit.caption.translation': '第二语言字幕；原文保持在 text，译文显示在原文下方，并进入字幕文件导出与烧录。空字符串清除；自动生成用 translate_video_edit_subtitles（可能计费，按付费策略执行）。',
-  'video_edit.caption.style': VIDEO_EDIT_TEXT_STYLE_DESCRIPTION + '字幕空间量参考1080p；额外bottomMargin占画幅高度比例0–1。空字符串恢复默认。',
+  'video_edit.caption.style': VIDEO_EDIT_TEXT_STYLE_DESCRIPTION + '字幕空间量参考 1080P；额外bottomMargin占画幅高度比例0–1。空字符串恢复默认。',
   'video_edit.clip.text_style': VIDEO_EDIT_TEXT_STYLE_DESCRIPTION + 'null恢复默认；空间量使用当前序列像素。位置/锚点/等比缩放/旋转/不透明度沿片段通用属性和关键帧。',
   'video_edit.clip.x': '片段运动锚点相对序列中心的水平位移，以序列宽度归一化；0 居中，-.5 左缘，.5 右缘。文字片段的样式锚点也使用此运动位置。',
   'video_edit.clip.y': '片段运动锚点相对序列中心的垂直位移，以序列高度归一化；0 居中，-.5 上缘，.5 下缘。文字片段的样式锚点也使用此运动位置。',
@@ -396,7 +396,7 @@ labels.remix = '音频重构'
 labels.musicStructure = '音乐结构'
 descriptions['video_edit.clip.frame_hold'] = '是否为帧定格；定格引用源入点处的同一帧，可调整持续时间、修剪和移动。用 add_video_edit_frame_hold 在播放头切出定格，整个操作可撤销。'
 Object.assign(labels, { contentAnchor: '关联内容' })
-descriptions['video_edit.sequence.final_renderer'] = '三维成片渲染器：导出、选帧、设为封面与预渲染按它出画，节目监视器看片另用 video_edit.document.space_display。realtime 实时（默认，与看片“实时”同一画面）；pathTrace 路径追踪（全局光照、真实反射折射与景深；1080p 每帧约数秒到数十秒，导出与预渲染慢很多；不做运动模糊）。'
+descriptions['video_edit.sequence.final_renderer'] = '三维成片渲染器：导出、选帧、设为封面与预渲染按它出画，节目监视器看片另用 video_edit.document.space_display。realtime 实时（默认，与看片“实时”同一画面）；pathTrace 路径追踪（全局光照、真实反射折射与景深；1080P 每帧约数秒到数十秒，导出与预渲染慢很多；不做运动模糊）。'
 descriptions['video_edit.sequence.space_bloom'] = '三维泛光强度 0–3（0 为不开）：亮处向四周发光，发光粒子、灯、高光更有光感；节目监视器“实时”与成片实时渲染都生效。常用 0.6–1.2。'
 descriptions['video_edit.sequence.space_bloom_threshold'] = '三维泛光阈值 0–2，默认 0.75：亮度超过它的部分才发光；调低连较暗的面也泛光，调高只有灯与强高光泛光。只在泛光强度大于 0 时起作用。'
 descriptions['video_edit.sequence.space_bloom_radius'] = '三维泛光范围 0–1，默认 0.45：光晕扩散多远，越大越朦胧。只在泛光强度大于 0 时起作用。'

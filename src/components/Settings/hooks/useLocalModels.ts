@@ -99,9 +99,3 @@ export function useLocalModels(): LocalModelsView {
 
   return { models, downloadSource, loaded, loadFailed, download, cancel, remove, openFolder, changeDownloadSource, reload }
 }
-
-/** 下载大小：1 MB 以下按 KB，其余按 MB 保留一位小数。 */
-export function formatLocalModelSize(bytes: number): string {
-  if (bytes < 1_000_000) return `${Math.max(1, Math.round(bytes / 1_000))} KB`
-  return `${(bytes / 1_000_000).toFixed(1)} MB`
-}
