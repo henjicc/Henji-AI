@@ -58,3 +58,7 @@
 主题色的推导规则只改 `src/core/theme/themeEngine.ts`（改后同步 `index.css` 的 `theme-tokens` 静态默认值，`themeStaticDefaults.test.ts` 会校验）；Tailwind 映射改 `tailwind.config.js`；组件皮肤改 `src/index.css` 与 `src/components/ui/styleTokens.ts`；内容色登记 `src/core/theme/colorTokens.ts`。`npm run check:colors` 会扫 `.ts/.tsx/.css`，纯 CSS 里只能写 `rgb(var(--xxx-rgb) / a)` 或 `var(--token)`。图像处理/画布像素算法可例外，但优先复用 token。
 
 `Z_LAYERS` 与 `tailwind.config.js` 互为镜像，需同步修改。
+
+## 界面文案里的规格写法
+
+显示给用户的分辨率写法里字母一律大写：`1080P`、`720P`、`4K`、`8K`（不写 1080p、720p、4k）。只约束显示文字；代码里的枚举值、文件名、日志事件名不随之改动。新增或改动文案时顺手把同一处的旧写法改掉。
