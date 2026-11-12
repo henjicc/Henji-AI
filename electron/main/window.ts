@@ -29,6 +29,8 @@ let mainWindow: BrowserWindow | null = null
 const CRASH_WINDOW_MS = 5 * 60_000
 /** 留一点时间给正在关闭的窗口完成销毁，退出途中的异常退出不会被误当成需要恢复。 */
 const CRASH_RELOAD_DELAY_MS = 500
+/** 关窗与退出应用时，窗口会在渲染进程退出后很快销毁；等这么久窗口还在，才算界面意外没了。 */
+const CLEAN_EXIT_RECOVERY_DELAY_MS = 2_000
 /** Crashpad 写完转储比 render-process-gone 晚，稍等再找。 */
 const CRASH_DUMP_SCAN_DELAY_MS = 3000
 
@@ -146,8 +148,19 @@ export function createWindow(options: CreateWindowOptions = {}): BrowserWindow {
       context: { reason: details.reason, exitCode: details.exitCode },
     })
     void cleanupAllVideoFrameExports('renderer_process_gone')
-    // 正常退出（关窗、退出应用）不恢复。
-    if (details.reason === 'clean-exit' || win.isDestroyed()) return
+    if (win.isDestroyed()) return
+    if (details.reason === 'clean-exit') {
+      // 正常退出通常伴随关窗或退出应用；但渲染进程也可能在窗口仍开着时自行退出（没有转储、
+      // 不计入崩溃次数），那样窗口会一直空白且没有任何入口恢复。窗口还在且没有换上新的
+      // 渲染进程时重新加载界面。
+      if (options.recoverRendererCrash === false) return
+      setTimeout(() => {
+        if (win.isDestroyed() || win.webContents.isDestroyed() || win.webContents.getOSProcessId() !== 0) return
+        logger.warn('界面进程已退出但窗口仍在，重新加载', { event: 'window.render_process.recovery.start', context: { decision: 'reload', reason: 'clean-exit' } })
+        recoverRenderer(false)
+      }, CLEAN_EXIT_RECOVERY_DELAY_MS)
+      return
+    }
     // 转储文件的修改时间是墙上时间，这里也取墙上时间比对。
     const goneAt = Date.now()
     setTimeout(() => { void reportLatestCrashDump(goneAt) }, CRASH_DUMP_SCAN_DELAY_MS)

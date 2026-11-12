@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { EventEmitter } from 'node:events'
 
-const state = vi.hoisted(() => ({ launchQuery: {} as Record<string, string>, events: [] as string[], urls: [] as string[], beginSession: vi.fn(), info: vi.fn(), error: vi.fn(), showMessageBox: vi.fn() }))
+const state = vi.hoisted(() => ({ rendererPid: 0, launchQuery: {} as Record<string, string>, events: [] as string[], urls: [] as string[], beginSession: vi.fn(), info: vi.fn(), error: vi.fn(), showMessageBox: vi.fn() }))
 vi.mock('electron', () => ({
   app: { getPath: () => '/nonexistent-crash-dumps' },
   dialog: { showMessageBox: state.showMessageBox },
@@ -10,7 +10,7 @@ vi.mock('electron', () => ({
     id = 1
     destroyed = false
     visible = false
-    webContents = Object.assign(new EventEmitter(), { setWindowOpenHandler: vi.fn() })
+    webContents = Object.assign(new EventEmitter(), { setWindowOpenHandler: vi.fn(), isDestroyed: () => false, getOSProcessId: () => state.rendererPid })
     isDestroyed() { return this.destroyed }
     isVisible() { return this.visible }
     isMinimized() { return false }
@@ -125,12 +125,31 @@ describe('渲染进程崩溃后的恢复', () => {
     expect(state.urls).toHaveLength(2)
   })
 
-  it('正常退出、窗口已销毁或助手命令行不触发重载', async () => {
+  it('界面进程正常退出后窗口仍在且没有新进程时重新加载；已换上新进程则不动', async () => {
+    vi.stubEnv('ELECTRON_RENDERER_URL', 'http://127.0.0.1:5173/')
+    const win = createWindow()
+    state.urls.length = 0
+    state.rendererPid = 1234
+    crash(win, 'clean-exit')
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect(state.urls).toEqual([])
+    state.rendererPid = 0
+    crash(win, 'clean-exit')
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect(state.urls).toHaveLength(1)
+    expect(state.showMessageBox).not.toHaveBeenCalled()
+  })
+
+  it('关窗时的正常退出、窗口已销毁或助手命令行不触发重载', async () => {
     vi.stubEnv('ELECTRON_RENDERER_URL', 'http://127.0.0.1:5173/')
     const win = createWindow()
     const cli = createWindow({ recoverRendererCrash: false })
+    const closing = createWindow()
     state.urls.length = 0
-    crash(win, 'clean-exit')
+    state.rendererPid = 0
+    crash(closing, 'clean-exit')
+    closing.destroy()
+    crash(cli, 'clean-exit')
     crash(cli)
     await vi.advanceTimersByTimeAsync(5_000)
     crash(win)
