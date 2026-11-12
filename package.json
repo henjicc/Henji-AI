@@ -74,6 +74,7 @@
     "eval:rough-cut": "node scripts/audio-edit-rough-cut-eval.cjs",
     "bench:video-edit": "node scripts/bench-video-edit.cjs",
     "test:reality": "node scripts/run-reality-tests.cjs",
+    "test:recording-soak": "node scripts/recording-soak.cjs",
     "test:assistant-persistence": "node scripts/test-assistant-persistence.cjs",
     "test:assistant-model-compat": "vitest run packages/ai-sdk/tests/llm/sdk/model-step.test.ts packages/ai-sdk/tests/llm/sdk/provider-error.test.ts packages/ai-sdk/tests/llm/sdk/provider-adapter.test.ts packages/ai-sdk/tests/llm/sdk/retry-policy.test.ts src/services/llm/LlmConfigService.test.ts",
     "test:assistant-production": "node scripts/run-assistant-production-tests.cjs",
