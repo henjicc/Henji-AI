@@ -174,7 +174,8 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     let disposed = false
     setWaveformPeaks([]); setSourceError('')
     if (!projectId || !waveformPath) return
-    void getPlatform().audioEdit.verifySource(projectId).catch((error: unknown) => {
+    // 主进程按磁盘上的文档核对素材：刚导入或刚换素材时先落盘，否则它读到的还是没有素材的旧内容。
+    void flushAudioEditProject(projectId).then(() => getPlatform().audioEdit.verifySource(projectId)).catch((error: unknown) => {
       if (!disposed) setSourceError(error instanceof Error ? error.message : '素材不可用')
     })
     void getPlatform().audioEdit.extractWaveform(waveformPath, Math.max(1600, Math.min(360000, Math.ceil(waveformSeconds * 50)))).then((waveform) => {
