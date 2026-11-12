@@ -1,33 +1,25 @@
 import { createLogger } from '@/core/logging'
-import { saveDocumentCover } from '@/commands/documents'
-import { clipSourceSeconds, videoEditClipMedia, videoEditDuration, videoEditPictureFilter, type VideoEditClip, type VideoEditDocument } from '@/core/videoEdit/document'
+import { videoEditDuration, videoEditPictureFilter, type VideoEditDocument } from '@/core/videoEdit/document'
 import { videoEditFps } from '@/core/videoEdit/time'
 import { notifyDocumentCoverChanged } from '@/features/documents/documentCovers'
+import { getDocumentHoverFrames, saveDocumentCover } from '@/commands/documents'
 import type { DocumentCoverSource } from '@/core/documents/types'
+import { VIDEO_EDIT_COVER_POSITION, videoEditClipFrameSource, videoEditHoverContentKey } from './videoEditHoverPreview'
 
 /*
  * 剪辑的列表封面（项目卡片用主剪辑的封面）：
  * - 用户“设为项目封面”过：用当时节目监视器的实际画面（截图直接存成封面），之后自动更新不覆盖；
- * - 否则取第一条序列约 1/3 处最上层的画面片段（开头常是黑场或片头）；那一帧没有画面时退回最早出现的画面片段。
- * 视频由主进程按片段里的源时间取一帧，图片直接用原图，存成通用文档封面（程序目录，按文档 ID）。
- * 保存或离开剪辑时更新；剪辑开着时优先用节目面板的合成画面，最多每 10 分钟一次；
- * 原始画面没变（同一来源、同一时间）不重复生成；两种都取不到时不动，卡片保持占位图。
+ * - 否则取第一条序列正中间的画面：开头常是黑场、淡入或片头，播放头停在哪也与“这部片子长什么样”无关。
+ *   优先用后台生成的合成预览帧（代码效果、调色、字幕都在画面里），还没生成时用那一帧最上层画面片段的原始画面；
+ *   那一帧没有画面时退回最早出现的画面片段。
+ * 保存、离开剪辑以及中间的合成预览帧生成好时更新；同一来源不重复生成；都取不到时不动，卡片保持占位图。
  */
 
 const logger = createLogger('features.videoEdit.projectCover')
 /** 每份剪辑上次写封面用的来源，避免每次保存都重新生成。 */
 const lastSources = new Map<string, string>()
 
-function clipCoverSource(document: VideoEditDocument, clip: VideoEditClip, frame: number, fps: number): DocumentCoverSource | null {
-  const media = videoEditClipMedia(document, clip)
-  if (!media) return null
-  if (media.kind === 'image') return { source: media.path, sourceKind: 'image' }
-  if (media.kind !== 'video') return null
-  const at = clipSourceSeconds(clip, Math.max(clip.start, Math.min(frame, clip.start + clip.duration - 1)), fps)
-  return { source: media.path, sourceKind: 'video', atSeconds: Math.round(Math.max(0, at) * 1000) / 1000 }
-}
-
-/** 剪辑封面的来源：指定的封面帧或第一条序列约 1/3 处最上层的画面片段；没有画面时为 null。 */
+/** 剪辑封面的原始画面来源：指定的封面帧或第一条序列正中间最上层的画面片段；没有画面时为 null。 */
 export function videoEditCoverSource(document: VideoEditDocument): DocumentCoverSource | null {
   const poster = document.posterFrame
   const sequence = (poster && document.sequences.find(item => item.id === poster.sequenceId)) || document.sequences[0]
@@ -36,64 +28,34 @@ export function videoEditCoverSource(document: VideoEditDocument): DocumentCover
   const picture = videoEditPictureFilter(sequence)
   const pictures = sequence.clips.filter(clip => (clip.kind === 'video' || clip.kind === 'image') && picture.has(clip))
   if (!pictures.length) return null
-  const frame = poster && poster.sequenceId === sequence.id ? poster.frame : Math.floor(videoEditDuration(sequence) / 3)
+  const frame = poster && poster.sequenceId === sequence.id ? poster.frame : Math.floor(videoEditDuration(sequence) * VIDEO_EDIT_COVER_POSITION)
   // 同一帧上层轨道（编号大）压住下层
   const atFrame = pictures.filter(clip => frame >= clip.start && frame < clip.start + clip.duration).sort((left, right) => right.track - left.track)
-  for (const clip of atFrame) { const source = clipCoverSource(document, clip, frame, fps); if (source) return source }
+  for (const clip of atFrame) { const source = videoEditClipFrameSource(document, clip, frame, fps); if (source) return source }
   const earliest = [...pictures].sort((left, right) => left.start - right.start || right.track - left.track)
-  for (const clip of earliest) { const source = clipCoverSource(document, clip, clip.start, fps); if (source) return source }
+  for (const clip of earliest) { const source = videoEditClipFrameSource(document, clip, clip.start, fps); if (source) return source }
   return null
 }
 
-/** 没有合成预览时从已导入素材稳定取样；时间线空隙或纯代码片段也能退回素材箱。 */
-export function videoEditFrameSourceAt(document: VideoEditDocument, fraction: number): DocumentCoverSource | null {
-  const position = Math.max(0, Math.min(0.999, fraction))
-  const pictures = document.sequences.flatMap(sequence => sequence.clips
-    .filter(clip => clip.kind === 'video' || clip.kind === 'image')
-    .map(clip => ({ clip, fps: videoEditFps(sequence.frameRate) })))
-    .filter(({ clip }) => !!videoEditClipMedia(document, clip))
-  if (pictures.length) {
-    const offset = position * pictures.length, { clip, fps } = pictures[Math.floor(offset)]
-    return clipCoverSource(document, clip, clip.start + Math.floor((offset % 1) * clip.duration), fps)
-  }
-  const media = document.media.filter(item => item.kind === 'video' || item.kind === 'image')
-  const offset = position * media.length, item = media[Math.floor(offset)]
-  return item ? { source: item.path, sourceKind: item.kind as 'image' | 'video', ...(item.kind === 'video' ? { atSeconds: (offset % 1) * Math.max(0, item.durationSeconds - 0.1) } : {}) } : null
-}
-
-/** 节目面板开着时取当前合成画面（data URL）；节目没开、正在播放或画面变了时为 null。由节目选帧模块登记。 */
-type ProgramCoverCapture = (docId: string) => Promise<string | null>
-let programCoverCapture: ProgramCoverCapture | null = null
-export function registerVideoEditProgramCoverCapture(capture: ProgramCoverCapture): void { programCoverCapture = capture }
-/** 合成画面封面最多这么久更新一次：保存很频繁（含自动保存），每次都重画整帧不值得。 */
-const PROGRAM_COVER_INTERVAL_MS = 10 * 60_000
-const programCoverAt = new Map<string, number>()
-
-/** 剪辑打开时用节目面板的合成画面做封面：代码片段、调色、字幕都在画面里，纯代码做的片子也有封面。 */
-async function updateProgramCover(docId: string): Promise<boolean> {
-  if (!programCoverCapture || Date.now() - (programCoverAt.get(docId) ?? 0) < PROGRAM_COVER_INTERVAL_MS) return false
-  try {
-    const dataUrl = await programCoverCapture(docId)
-    if (!dataUrl) return false
-    await saveDocumentCover({ docId, sources: [{ source: dataUrl, sourceKind: 'image' }] })
-    programCoverAt.set(docId, Date.now())
-    lastSources.delete(docId)
-    notifyDocumentCoverChanged(docId)
-    return true
-  } catch (error) {
-    logger.debug('节目画面封面未更新', { event: 'video_edit.document.cover.program_skipped', context: { docId }, error: String(error) })
-    return false
-  }
+/** 中间位置的合成预览帧；预览帧属于旧内容或还没生成时为 null。 */
+async function compositeCoverSource(document: VideoEditDocument): Promise<DocumentCoverSource | null> {
+  const stored = await getDocumentHoverFrames(document.id)
+  const frame = stored?.frames.find(item => item.position === VIDEO_EDIT_COVER_POSITION)
+  if (!frame || stored!.contentKey !== await videoEditHoverContentKey(document)) return null
+  return { source: frame.path, sourceKind: 'image' }
 }
 
 /**
- * 按剪辑当前内容更新封面；用户指定过封面帧时不自动覆盖。剪辑开着时优先用节目的合成画面（隔一段时间更新一次），
- * 否则取最上层画面片段的原始画面。失败只记日志，不影响保存与离开。
+ * 按剪辑当前内容更新封面；用户指定过封面帧时不自动覆盖。失败只记日志，不影响保存与离开。
  */
 export async function updateVideoEditProjectCover(document: VideoEditDocument): Promise<void> {
   if (document.posterFrame) return
-  if (await updateProgramCover(document.id) || programCoverAt.has(document.id)) return
-  const source = videoEditCoverSource(document)
+  let source: DocumentCoverSource | null
+  try { source = await compositeCoverSource(document) ?? videoEditCoverSource(document) }
+  catch (error) {
+    logger.warn('读取剪辑封面画面失败', { event: 'video_edit.document.cover.source_failed', context: { docId: document.id }, error: String(error) })
+    return
+  }
   if (!source) return
   const key = `${source.sourceKind}:${source.source}@${source.atSeconds ?? 0}`
   if (lastSources.get(document.id) === key) return

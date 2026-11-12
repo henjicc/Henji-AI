@@ -3,7 +3,8 @@ import { createLogger } from '@/core/logging'
 import { videoEditComposition, videoEditDuration, type VideoEditComposition, type VideoEditDocument } from '@/core/videoEdit/document'
 import { invalidateDocumentHoverRead } from '@/features/documents'
 import { listVideoEditInstances, subscribeVideoEdit, subscribeVideoEditView, videoEditGestureActive, type VideoEditInstance } from './videoEditService'
-import { videoEditHoverContentKey, videoEditHoverPositions, VIDEO_EDIT_HOVER_LEVELS } from './videoEditHoverPreview'
+import { VIDEO_EDIT_COVER_POSITION, videoEditHoverContentKey, videoEditHoverPositions, VIDEO_EDIT_HOVER_LEVELS } from './videoEditHoverPreview'
+import { updateVideoEditProjectCover } from './videoEditProjectCover'
 
 const logger = createLogger('features.videoEdit.hoverFrames')
 interface HoverFrameHost {
@@ -68,6 +69,7 @@ export class VideoEditHoverFrameBuilder {
       await writeDocumentHoverFrame({ docId: document.id, contentKey: this.key!, frame: { position: target.position, bytes } })
       if (!current()) return
       this.positions.add(target.position)
+      if (target.position === VIDEO_EDIT_COVER_POSITION) void updateVideoEditProjectCover(document)
       this.nextAt = now + 2000
       if (samples.slice(0, VIDEO_EDIT_HOVER_LEVELS[this.level]).every(item => this.positions.has(item.position))) {
         this.nextAt = now + 10_000

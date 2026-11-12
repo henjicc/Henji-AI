@@ -29,7 +29,7 @@ const scrub = vi.hoisted(() => ({ request: vi.fn(), stop: vi.fn() }))
 vi.mock('./application/videoEditWebContent', async importOriginal => ({ ...await importOriginal<typeof import('./application/videoEditWebContent')>(), videoEditCompositionHasWeb: () => true }))
 vi.mock('./engine/videoEditAudioScrub', async importOriginal => ({ ...await importOriginal<typeof import('./engine/videoEditAudioScrub')>(), VideoEditAudioScrubber: class { request = scrub.request; stop = scrub.stop } }))
 import { requestVideoEditScrub } from './engine/videoEditAudioScrub'
-vi.mock('./application/videoEditProjectCover', () => ({ registerVideoEditProgramCoverCapture: vi.fn(), saveVideoEditPosterCover: vi.fn(async () => undefined), updateVideoEditProjectCover: vi.fn(async () => undefined) }))
+vi.mock('./application/videoEditProjectCover', () => ({ saveVideoEditPosterCover: vi.fn(async () => undefined), updateVideoEditProjectCover: vi.fn(async () => undefined) }))
 vi.mock('./engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   terminalError?: Error
   get terminated() { return !!this.terminalError }

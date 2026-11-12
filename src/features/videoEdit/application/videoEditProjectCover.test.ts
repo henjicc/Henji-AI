@@ -1,13 +1,15 @@
 import { createVideoEditTestDocument as createVideoEditDocument } from '../../../core/videoEdit/testFixtures'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { type VideoEditClip, type VideoEditDocument } from '@/core/videoEdit/document'
-import { updateVideoEditProjectCover, videoEditCoverSource, videoEditFrameSourceAt } from './videoEditProjectCover'
+import { updateVideoEditProjectCover, videoEditCoverSource } from './videoEditProjectCover'
+import { videoEditFrameSourceAt, videoEditHoverContentKey } from './videoEditHoverPreview'
 import { addLegacyVideoEditTracks } from '@/core/videoEdit/testFixtures'
 
-/* 剪辑封面：指定的封面帧或第一条序列约 1/3 处最上层的画面，那一帧没有画面时取最早的画面片段；没有画面不写；同一来源不重复生成。 */
+/* 剪辑封面：指定的封面帧或第一条序列正中间的画面（合成预览帧优先，其次最上层画面片段），那一帧没有画面时取最早的画面片段；没有画面不写；同一来源不重复生成。 */
 
 const save = vi.hoisted(() => vi.fn())
-vi.mock('@/commands/documents', () => ({ saveDocumentCover: save }))
+const hoverFrames = vi.hoisted(() => vi.fn())
+vi.mock('@/commands/documents', () => ({ saveDocumentCover: save, getDocumentHoverFrames: hoverFrames }))
 vi.mock('@/features/documents/documentCovers', () => ({ notifyDocumentCoverChanged: vi.fn() }))
 
 function clip(patch: Partial<VideoEditClip> & Pick<VideoEditClip, 'id' | 'itemId' | 'kind' | 'track' | 'start'>): VideoEditClip {
@@ -31,15 +33,15 @@ function withClips(clips: VideoEditClip[]): VideoEditDocument {
   }
 }
 
-beforeEach(() => { save.mockReset(); save.mockResolvedValue({ docId: 'x', coverPath: 'C:/covers/x.webp' }) })
+beforeEach(() => { save.mockReset(); save.mockResolvedValue({ docId: 'x', coverPath: 'C:/covers/x.webp' }); hoverFrames.mockReset(); hoverFrames.mockResolvedValue(null) })
 
-it('没有画面时为空；1/3 处没有画面时取最早的画面片段，跳过声音与关闭的轨道', () => {
+it('没有画面时为空；正中间没有画面时取最早的画面片段，跳过声音与关闭的轨道', () => {
   expect(videoEditCoverSource(withClips([]))).toBeNull()
   expect(videoEditCoverSource(withClips([clip({ id: 'a', itemId: 'i-audio', kind: 'audio', track: 0, start: 0 })]))).toBeNull()
-  // 时长 70 帧，1/3 处是第 23 帧：没有画面，退回最早的视频（第 10 帧起，取开头）
+  // 时长 90 帧，正中间是第 45 帧：没有画面，退回最早的视频（第 10 帧起，取开头）
   const document = withClips([
     clip({ id: 'a', itemId: 'i-audio', kind: 'audio', track: 0, start: 0 }),
-    clip({ id: 'img', itemId: 'i-image', kind: 'image', track: 1, start: 40 }),
+    clip({ id: 'img', itemId: 'i-image', kind: 'image', track: 1, start: 60 }),
     clip({ id: 'vid', itemId: 'i-video', kind: 'video', track: 2, start: 10, duration: 5 }),
   ])
   expect(videoEditCoverSource(document)).toEqual({ source: 'D:/素材/镜头.mp4', sourceKind: 'video', atSeconds: 0 })
@@ -47,13 +49,13 @@ it('没有画面时为空；1/3 处没有画面时取最早的画面片段，跳
   expect(videoEditCoverSource(disabled)).toEqual({ source: 'D:/素材/海报.png', sourceKind: 'image' })
 })
 
-it('取 1/3 处最上层的画面，视频按片段源时间取帧；指定封面帧时用封面帧', () => {
+it('取正中间最上层的画面，视频按片段源时间取帧；指定封面帧时用封面帧', () => {
   const document = withClips([
     clip({ id: 'low', itemId: 'i-image', kind: 'image', track: 1, start: 0, duration: 90 }),
     clip({ id: 'top', itemId: 'i-video', kind: 'video', track: 2, start: 0, duration: 90 }),
   ])
   const fps = document.sequences[0].frameRate.numerator / document.sequences[0].frameRate.denominator
-  expect(videoEditCoverSource(document)).toEqual({ source: 'D:/素材/镜头.mp4', sourceKind: 'video', atSeconds: Math.round(30 / fps * 1000) / 1000 })
+  expect(videoEditCoverSource(document)).toEqual({ source: 'D:/素材/镜头.mp4', sourceKind: 'video', atSeconds: Math.round(45 / fps * 1000) / 1000 })
   const poster = { ...document, posterFrame: { sequenceId: document.sequences[0].id, frame: 60 } }
   expect(videoEditCoverSource(poster)?.atSeconds).toBe(Math.round(60 / fps * 1000) / 1000)
 })
@@ -69,6 +71,16 @@ it('写成通用封面；画面来源没变时不重复生成，没有画面时�
   expect(save).toHaveBeenCalledTimes(1)
   await updateVideoEditProjectCover(withClips([]))
   expect(save).toHaveBeenCalledTimes(1)
+})
+
+it('中间的合成预览帧属于当前内容时用它做封面，旧内容的预览帧不用', async () => {
+  const document = withClips([clip({ id: 'img', itemId: 'i-image', kind: 'image', track: 1, start: 0 })])
+  hoverFrames.mockResolvedValue({ contentKey: 'stale', frames: [{ position: 0.5, path: 'C:/hover/old.webp' }] })
+  await updateVideoEditProjectCover(document)
+  expect(save).toHaveBeenLastCalledWith({ docId: document.id, sources: [{ source: 'D:/素材/海报.png', sourceKind: 'image' }] })
+  hoverFrames.mockResolvedValue({ contentKey: await videoEditHoverContentKey(document), frames: [{ position: 0, path: 'C:/hover/start.webp' }, { position: 0.5, path: 'C:/hover/mid.webp' }] })
+  await updateVideoEditProjectCover(document)
+  expect(save).toHaveBeenLastCalledWith({ docId: document.id, sources: [{ source: 'C:/hover/mid.webp', sourceKind: 'image' }] })
 })
 
 it('悬停回退稳定抽时间线素材，时间线没有画面时抽素材箱，两者都没有时为空', () => {
