@@ -37,7 +37,6 @@ export class SpeechEnergyService {
       signal.throwIfAborted()
       if (bytes) {
         try {
-          if (bytes.byteLength > 32 * 1024 * 1024) throw new Error('声音证据缓存超过大小上限。')
           const entry = entrySchema.parse(JSON.parse(Buffer.from(bytes).toString('utf8')))
           if (entry.key !== key) throw new Error('声音证据缓存与来源不匹配。')
           cached = entry.result

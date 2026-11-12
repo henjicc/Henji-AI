@@ -3,7 +3,7 @@ import path from 'node:path'
 
 import { getProgramStoreDir } from '../appPaths'
 import { loadFfmpegPath, loadFfprobePath } from '../video/ffmpeg-loader'
-import { withMediaHeavyTask } from './concurrency'
+import { MEDIA_HEAVY_FFMPEG_INPUT_THREADS, MEDIA_HEAVY_FFMPEG_OUTPUT_THREADS, withMediaHeavyTask } from './concurrency'
 import { writeOwnedMediaPreview } from '../asset-library/thumbnailService'
 import { redactMediaError } from '../../../../src/core/media/localMediaImportSafety'
 
@@ -87,8 +87,10 @@ export async function writeVideoPoster(
     const seekTime = Math.min(0.1, Math.max(0, durationSeconds - 0.05))
     await execText(ffmpegPath, [
       '-y',
+      ...MEDIA_HEAVY_FFMPEG_INPUT_THREADS,
       '-ss', String(seekTime),
       '-i', sourcePath,
+      ...MEDIA_HEAVY_FFMPEG_OUTPUT_THREADS,
       '-frames:v', '1',
       '-vf', 'scale=480:-1',
       '-q:v', '3',

@@ -5,6 +5,9 @@ import { removeUnmanagedCachePath } from '../media-recycle/cache-deletion'
 import type { AudioEditRepair } from '../../../../src/core/audioEdit/regions'
 import { invokeAudioWorker } from './audio-worker-client'
 
+/** 修复与去爆音要复制整条声音：worker 边处理边报进度，这里只限制无进展的时长，不限制总时长。 */
+const REPAIR_IDLE_TIMEOUT_MS = 60_000
+
 /** HJMK v1 修复掩码契约；二进制格式的改动只放在这个适配层。 */
 export function audioRepairMaskDimensions(repair: AudioEditRepair, sampleRate: number): { width: number; height: number } {
   return { width: Math.ceil((repair.endFrame - repair.startFrame) / 512), height: Math.floor(repair.highHz * 2048 / sampleRate) - Math.ceil(repair.lowHz * 2048 / sampleRate) + 1 }
@@ -38,7 +41,7 @@ export async function runAudioMouthDeclick(input: string, output: string, clicks
       signal?.throwIfAborted()
       const target = index === batches.length - 1 ? output : `${output}.part${index}.wav`
       if (target !== output) temporary.push(target)
-      await invokeAudioWorker({ type: 'declick', input_path: current, output_path: target, ranges: batch }, 10 * 60_000, signal)
+      await invokeAudioWorker({ type: 'declick', input_path: current, output_path: target, ranges: batch }, REPAIR_IDLE_TIMEOUT_MS, signal)
       current = target
     }
   } finally { await Promise.all(temporary.map(file => removeUnmanagedCachePath(file, { force: true }))) }
@@ -54,11 +57,11 @@ export async function runAudioRepair(input: string, output: string, repair: Audi
   if (repair.kind === 'declick') {
     const repaired = repair.strength < 1 ? `${output}.declick.wav` : output
     try {
-      await invokeAudioWorker({ type: 'declick', input_path: input, output_path: repaired, ranges: [{ start_frame: repair.startFrame, end_frame: repair.endFrame }] }, 120000, signal)
-      if (repaired !== output) await runAudioEditProcess(await loadFfmpegPath(), ['-v', 'error', '-y', '-i', input, '-i', repaired, '-filter_complex', `[0:a][1:a]amix=inputs=2:weights='${1 - repair.strength} ${repair.strength}':normalize=0[out]`, '-map', '[out]', '-c:a', 'pcm_f32le', output], signal)
+      await invokeAudioWorker({ type: 'declick', input_path: input, output_path: repaired, ranges: [{ start_frame: repair.startFrame, end_frame: repair.endFrame }] }, REPAIR_IDLE_TIMEOUT_MS, signal)
+      if (repaired !== output) await runAudioEditProcess(await loadFfmpegPath(), ['-v', 'error', '-y', '-i', input, '-i', repaired, '-filter_complex', `[0:a][1:a]amix=inputs=2:weights='${1 - repair.strength} ${repair.strength}':normalize=0[out]`, '-map', '[out]', '-c:a', 'pcm_f32le', '-rf64', 'auto', output], signal)
     } finally { if (repaired !== output) await removeUnmanagedCachePath(repaired, { force: true }) }
   } else {
     await invokeAudioWorker({ type: 'spectral_heal', input_path: input, output_path: output, strength: repair.strength, fft_size: 2048,
-      regions: [{ start_frame: repair.startFrame, end_frame: repair.endFrame, low_hz: repair.lowHz, high_hz: repair.highHz, ...(maskPath ? { mask_path: maskPath } : {}) }] }, 120000, signal)
+      regions: [{ start_frame: repair.startFrame, end_frame: repair.endFrame, low_hz: repair.lowHz, high_hz: repair.highHz, ...(maskPath ? { mask_path: maskPath } : {}) }] }, REPAIR_IDLE_TIMEOUT_MS, signal)
   }
 }

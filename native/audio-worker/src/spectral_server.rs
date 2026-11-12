@@ -8,6 +8,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc, Condvar, Mutex,
     },
+    time::Duration,
 };
 
 #[derive(Deserialize)]
@@ -33,6 +34,11 @@ fn send(value: Value) {
     let _ = output.flush();
 }
 const CANCELLED: &str = "频谱计算已取消";
+/// 排队或给即时块让路期间的心跳间隔：主进程按“无进展超时”计时，等待本身不能被当成卡住。
+const HEARTBEAT: Duration = Duration::from_secs(5);
+fn alive(id: &str) {
+    send(json!({"version":1,"id":id,"event":"alive"}));
+}
 
 /// 同类计算串行执行的闸门。与 Mutex 不同，排队者在取消时会被唤醒并立即退出，
 /// 不必等前面的块算完才回执“已取消”（主进程取消宽限只有 2 秒，超时会结束整个频谱进程）。
@@ -49,14 +55,21 @@ impl Drop for GateGuard<'_> {
     }
 }
 impl Gate {
-    /// 拿闸前、等待中、拿到后都检查取消；已取消返回 None，调用方直接回执“已取消”。
-    fn enter(&self, cancelled: &AtomicBool) -> Option<GateGuard<'_>> {
+    /// 拿闸前、等待中、拿到后都检查取消；已取消返回 None，调用方直接回执“已取消”。等待期间定时发心跳。
+    fn enter(&self, cancelled: &AtomicBool, beat: impl Fn()) -> Option<GateGuard<'_>> {
         if cancelled.load(Ordering::Relaxed) {
             return None;
         }
         let mut busy = self.busy.lock().unwrap_or_else(|e| e.into_inner());
         while *busy && !cancelled.load(Ordering::Relaxed) {
-            busy = self.changed.wait(busy).unwrap_or_else(|e| e.into_inner());
+            let (next, waited) = self
+                .changed
+                .wait_timeout(busy, HEARTBEAT)
+                .unwrap_or_else(|e| e.into_inner());
+            busy = next;
+            if waited.timed_out() {
+                beat();
+            }
         }
         if cancelled.load(Ordering::Relaxed) {
             return None;
@@ -126,8 +139,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             let cancelled = Arc::new(AtomicBool::new(false));
             {
                 let mut jobs = active.lock().unwrap();
-                if jobs.len() >= 64 || jobs.contains_key(&id) {
-                    reply(&id, Err("频谱请求队列已满或请求 ID 重复".into()));
+                // 请求数不设上限：主进程只为可见范围发请求，放弃时会发取消。
+                if jobs.contains_key(&id) {
+                    reply(&id, Err("频谱请求 ID 重复".into()));
                     continue;
                 }
                 jobs.insert(id.clone(), cancelled.clone());
@@ -145,14 +159,18 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             scope.spawn(move || {
                 let result = std::panic::catch_unwind(|| {
                     if immediate {
-                        let Some(_guard) = foreground.enter(&cancelled) else { return Err(CANCELLED.into()) };
+                        let Some(_guard) = foreground.enter(&cancelled, || alive(&id)) else { return Err(CANCELLED.into()) };
                         if let Command::SpectralTile(request) = command { return pyramid::tile(request, &cancelled).map_err(|e| e.to_string()); }
                     } else {
-                        let Some(_guard) = background.enter(&cancelled) else { return Err(CANCELLED.into()) };
+                        let Some(_guard) = background.enter(&cancelled, || alive(&id)) else { return Err(CANCELLED.into()) };
                         if let Command::SpectralBuild(request) = command {
                             return pyramid::build(request, &cancelled, || {
                                 let mut pending = priority.0.lock().unwrap();
-                                while *pending > 0 && !cancelled.load(Ordering::Relaxed) { pending = priority.1.wait(pending).unwrap(); }
+                                while *pending > 0 && !cancelled.load(Ordering::Relaxed) {
+                                    let (next, waited) = priority.1.wait_timeout(pending, HEARTBEAT).unwrap();
+                                    pending = next;
+                                    if waited.timed_out() { alive(&id); }
+                                }
                             }, |progress| send(json!({"version":1,"id":id,"event":"progress","progress":progress}))).map_err(|e| e.to_string());
                         }
                     }
@@ -176,19 +194,19 @@ mod tests {
     #[test]
     fn already_cancelled_request_skips_gate_immediately() {
         let gate = Gate::default();
-        let _held = gate.enter(&AtomicBool::new(false)).unwrap();
+        let _held = gate.enter(&AtomicBool::new(false), || {}).unwrap();
         // 闸被占着，已取消的请求也不排队。
-        assert!(gate.enter(&AtomicBool::new(true)).is_none());
+        assert!(gate.enter(&AtomicBool::new(true), || {}).is_none());
     }
 
     #[test]
     fn queued_request_wakes_and_exits_when_cancelled() {
         let gate = Arc::new(Gate::default());
-        let held = gate.enter(&AtomicBool::new(false)).unwrap();
+        let held = gate.enter(&AtomicBool::new(false), || {}).unwrap();
         let cancelled = Arc::new(AtomicBool::new(false));
         let (tx, rx) = mpsc::channel();
         let (g, c) = (gate.clone(), cancelled.clone());
-        let waiter = thread::spawn(move || tx.send(g.enter(&c).is_some()).unwrap());
+        let waiter = thread::spawn(move || tx.send(g.enter(&c, || {}).is_some()).unwrap());
         assert!(rx.recv_timeout(Duration::from_millis(100)).is_err(), "闸被占用时应排队");
         cancelled.store(true, Ordering::Relaxed);
         gate.wake();
@@ -196,16 +214,16 @@ mod tests {
         assert_eq!(rx.recv_timeout(Duration::from_secs(2)), Ok(false));
         waiter.join().unwrap();
         drop(held);
-        assert!(gate.enter(&AtomicBool::new(false)).is_some());
+        assert!(gate.enter(&AtomicBool::new(false), || {}).is_some());
     }
 
     #[test]
     fn queued_request_runs_after_release_and_rechecks_cancel() {
         let gate = Arc::new(Gate::default());
-        let held = gate.enter(&AtomicBool::new(false)).unwrap();
+        let held = gate.enter(&AtomicBool::new(false), || {}).unwrap();
         let (tx, rx) = mpsc::channel();
         let g = gate.clone();
-        let waiter = thread::spawn(move || tx.send(g.enter(&AtomicBool::new(false)).is_some()).unwrap());
+        let waiter = thread::spawn(move || tx.send(g.enter(&AtomicBool::new(false), || {}).is_some()).unwrap());
         assert!(rx.recv_timeout(Duration::from_millis(50)).is_err());
         drop(held);
         assert_eq!(rx.recv_timeout(Duration::from_secs(2)), Ok(true));

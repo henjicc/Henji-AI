@@ -4,10 +4,11 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { normalizeLocalSource } from '../image/source'
 import { resolveLocalMediaPath } from '../media/shared'
-import { withMediaHeavyTask } from '../media-import/concurrency'
+import { MEDIA_BACKGROUND_THREADS, withMediaHeavyTask } from '../media-import/concurrency'
 import { loadFfmpegPath, loadFfprobePath } from '../video/ffmpeg-loader'
 import { createMainLogger } from '../logging'
 import { AudioWaveformQueue } from './queue'
+import { audioMemoryBudgetBytes } from './cache-budget'
 import { AudioWaveformWorker } from './worker-client'
 import type { ContentDiskCache } from '../media/content-disk-cache'
 import { getMediaCacheManager } from '../media/media-cache-runtime'
@@ -28,6 +29,11 @@ const MAX_RANGE_US = 30 * 60 * MICROSECONDS
 const END_TOLERANCE_US = 1000
 /** Streams with at most this many channels decode once natively and serve every channel selection from one file. */
 const NATIVE_PYRAMID_CHANNELS = 2
+/** 解码长时间没有吐出数据才算卡住；与素材总长度无关，长素材只要持续有进展就不会超时。 */
+const DECODE_IDLE_TIMEOUT_MS = 60_000
+const MIB = 1024 * 1024
+/** 探测结果只有几百字节，按内容身份记住，精细回读不必每次重新起 ffprobe。 */
+const PROBE_CACHE_ENTRIES = 1024
 interface AudioMetadata {
   sampleRate: number
   channels: number
@@ -53,6 +59,8 @@ export interface AudioWaveformServiceDependencies {
   identity?: (source: string) => Promise<SourceIdentity>
   createWorker?: () => AggregationWorker
   cacheBudgetBytes?: number
+  /** 波形任务同时运行的数量；默认按逻辑核数取。 */
+  queueConcurrency?: number
   /** Disk cache of whole-source pyramids; `null` disables it. Default: userData/HenjiCache/Waveforms. */
   diskCache?: ContentDiskCache | null
   pyramidMemoryBytes?: number
@@ -62,7 +70,9 @@ export interface AudioWaveformServiceDependencies {
 interface ChannelSelection { channels: 1 | 2; audioStream: number; audioChannel?: number }
 type FileLayout = 'native' | 'mix1' | 'mix2' | `ch${number}`
 interface PyramidJobResult { readonly shared: true; data: WaveformPyramidData; layout: FileLayout }
-interface LoadedPyramid { data: WaveformPyramidData; channels: number[]; version: string }
+/** 命中内存或磁盘缓存时的分段耗时（毫秒）与字节数，供 cache_hit 日志区分读盘、解码与拷贝。 */
+interface PyramidCacheHit { from: 'memory' | 'disk'; bytes: number; readMs: number; decodeMs: number; lookupMs: number }
+interface LoadedPyramid { data: WaveformPyramidData; channels: number[]; version: string; hit?: PyramidCacheHit }
 
 
 const isRemote = (source: string): boolean => source.startsWith('http://') || source.startsWith('https://')
@@ -89,6 +99,13 @@ export function validateAudioWaveformPyramid(request: AudioWaveformPyramidReques
   validateSourceFields(request, true)
   if (request.maxBuckets !== undefined && (!Number.isSafeInteger(request.maxBuckets) || request.maxBuckets < 1)) throw new Error('无效的波形精度上限。')
   if (request.ifNoneMatch !== undefined && (typeof request.ifNoneMatch !== 'string' || !request.ifNoneMatch.length || request.ifNoneMatch.length > 128)) throw new Error('无效的波形版本。')
+}
+
+/** 无进展超时：每次有数据就续期，静默超过时限才按超时中止。 */
+function idleTimeout(controller: AbortController, message: string): { refresh(): void; clear(): void } {
+  const timer = setTimeout(() => controller.abort(new DOMException(message, 'TimeoutError')), DECODE_IDLE_TIMEOUT_MS)
+  timer.unref()
+  return { refresh: () => { timer.refresh() }, clear: () => { clearTimeout(timer) } }
 }
 
 /** Close, rather than error/exit, is the subprocess and stdio ownership barrier. */
@@ -191,7 +208,8 @@ function decodeArgs(source: string, metadata: AudioMetadata, options: { audioStr
   const pick = options.audioChannel !== undefined ? `pan=mono|c0=c${options.audioChannel},` : ''
   const seekUs = Math.max(0, options.startUs - 100_000)
   const seekArgUs = Math.max(0, seekUs - Math.round(metadata.startSeconds * MICROSECONDS))
-  return ['-nostdin', '-v', 'error', '-copyts', '-ss', String(seekArgUs / MICROSECONDS), '-t', String((options.endUs - seekUs) / MICROSECONDS + 2 / sampleRate), '-i', source, '-map', `0:a:${options.audioStream}`, '-vn', '-sn', '-dn', '-af', `${pick}aresample=${sampleRate}:async=1:first_pts=${options.first},atrim=end_sample=${options.expectedFrames},asetpts=PTS-STARTPTS`, '-ar', String(sampleRate), '-ac', String(options.channelCount), '-f', 'f32le', 'pipe:1']
+  // 每个波形任务按 2 线程计：FFmpeg 解码与滤镜各限 1 线程，另有一个聚合 Worker 线程。
+  return ['-nostdin', '-v', 'error', '-threads', '1', '-filter_threads', '1', '-copyts', '-ss', String(seekArgUs / MICROSECONDS), '-t', String((options.endUs - seekUs) / MICROSECONDS + 2 / sampleRate), '-i', source, '-map', `0:a:${options.audioStream}`, '-vn', '-sn', '-dn', '-af', `${pick}aresample=${sampleRate}:async=1:first_pts=${options.first},atrim=end_sample=${options.expectedFrames},asetpts=PTS-STARTPTS`, '-ar', String(sampleRate), '-ac', String(options.channelCount), '-f', 'f32le', 'pipe:1']
 }
 
 /** Channels of a pyramid file that answer a selection; a native file (≤2 channels) answers every selection. */
@@ -213,14 +231,26 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
   dispose(): Promise<void>
   statistics(): { active: number; queued: number; cacheBytes: number; cacheEntries: number; pyramidBytes: number; pyramidEntries: number }
 } {
-  const queue = new AudioWaveformQueue(dependencies.cacheBudgetBytes)
+  // 精细回读不占重型媒体槽，并发只由这里约束：后台媒体线程预算的一半，每个任务 2 线程。
+  // 整段金字塔同时占重型槽，按两边都计，最坏并行度只会被高估。
+  const queue = new AudioWaveformQueue(dependencies.cacheBudgetBytes ?? audioMemoryBudgetBytes(256, 64 * MIB), dependencies.queueConcurrency ?? Math.max(1, Math.floor(MEDIA_BACKGROUND_THREADS / 2 / 2)))
   const resolvePath = dependencies.resolvePath ?? resolveLocalMediaPath
   const identity = dependencies.identity ?? identifyMediaContent
   const createWorker = dependencies.createWorker ?? (() => new AudioWaveformWorker())
   const disk = dependencies.diskCache === undefined
     ? getMediaCacheManager().createCache('preview', 'waveforms', { extension: '.hwpk', onError: (event, error) => logger.error('波形磁盘缓存失败', { event: `audio.waveform.cache.${event}_failed`, error }) })
     : dependencies.diskCache
-  const memoryBudget = dependencies.pyramidMemoryBytes ?? 128 * 1024 * 1024
+  const memoryBudget = dependencies.pyramidMemoryBytes ?? audioMemoryBudgetBytes(64, 128 * MIB)
+  const probes = new Map<string, AudioMetadata>()
+  async function probe(original: SourceIdentity, signal: AbortSignal, audioStream: number): Promise<AudioMetadata> {
+    const key = `${original.identity}|${audioStream}`
+    const held = probes.get(key)
+    if (held) { probes.delete(key); probes.set(key, held); return held }
+    const metadata = await probeAudio(await (dependencies.ffprobePath ?? loadFfprobePath)(), original.path, signal, audioStream)
+    probes.set(key, metadata)
+    if (probes.size > PROBE_CACHE_ENTRIES) probes.delete(probes.keys().next().value as string)
+    return metadata
+  }
   const memory = new Map<string, { data: WaveformPyramidData; bytes: number }>()
   let memoryBytes = 0
   const remember = (key: string, data: WaveformPyramidData): void => {
@@ -235,22 +265,25 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
     memory.set(key, { data, bytes }); memoryBytes += bytes
   }
   const fileKey = (sourceIdentity: string, audioStream: number, layout: FileLayout): string => digest(['hwpk', WAVEFORM_PYRAMID_FORMAT_VERSION, sourceIdentity, audioStream, layout])
-  async function cached(key: string): Promise<{ data: WaveformPyramidData; from: 'memory' | 'disk' } | undefined> {
+  interface CacheHit { data: WaveformPyramidData; from: 'memory' | 'disk'; bytes: number; readMs: number; decodeMs: number }
+  async function cached(key: string): Promise<CacheHit | undefined> {
     const held = memory.get(key)
-    if (held) { memory.delete(key); memory.set(key, held); return { data: held.data, from: 'memory' } }
+    if (held) { memory.delete(key); memory.set(key, held); return { data: held.data, from: 'memory', bytes: held.bytes, readMs: 0, decodeMs: 0 } }
+    const readStarted = performance.now()
     const bytes = await disk?.read(key)
     if (!bytes) return undefined
+    const decodeStarted = performance.now()
     try {
       const data = decodeWaveformPyramid(bytes)
       remember(key, data)
-      return { data, from: 'disk' }
+      return { data, from: 'disk', bytes: bytes.byteLength, readMs: decodeStarted - readStarted, decodeMs: performance.now() - decodeStarted }
     } catch (error) {
       logger.error('波形缓存文件无效，已删除', { event: 'audio.waveform.cache.invalid', error })
       await disk?.remove(key).catch(() => undefined)
       return undefined
     }
   }
-  async function lookup(sourceIdentity: string, selection: ChannelSelection): Promise<{ data: WaveformPyramidData; layout: FileLayout; from: 'memory' | 'disk' } | undefined> {
+  async function lookup(sourceIdentity: string, selection: ChannelSelection): Promise<(CacheHit & { layout: FileLayout }) | undefined> {
     for (const layout of ['native', selectionLayout(selection)] as const) {
       const hit = await cached(fileKey(sourceIdentity, selection.audioStream, layout))
       if (hit) return { ...hit, layout }
@@ -259,10 +292,10 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
   }
 
   /** Decodes the whole sound stream once on the absolute clock and builds every level in the Worker. */
-  async function decodePyramid(original: SourceIdentity, selection: ChannelSelection, signal: AbortSignal, onMetadata: (metadata: AudioMetadata) => void): Promise<{ data: WaveformPyramidData; layout: FileLayout }> {
-    const [ffmpeg, ffprobe] = await Promise.all([(dependencies.ffmpegPath ?? loadFfmpegPath)(), (dependencies.ffprobePath ?? loadFfprobePath)()])
-    const metadata = await probeAudio(ffprobe, original.path, signal, selection.audioStream)
-    onMetadata(metadata)
+  async function decodePyramid(original: SourceIdentity, selection: ChannelSelection, signal: AbortSignal, onProgress: () => void): Promise<{ data: WaveformPyramidData; layout: FileLayout }> {
+    const ffmpeg = await (dependencies.ffmpegPath ?? loadFfmpegPath)()
+    const metadata = await probe(original, signal, selection.audioStream)
+    onProgress()
     if (selection.audioChannel !== undefined && selection.audioChannel >= metadata.channels) throw new Error(`声音流只有 ${metadata.channels} 个声道。`)
     const native = metadata.channels <= NATIVE_PYRAMID_CHANNELS
     const layout: FileLayout = native ? 'native' : selectionLayout(selection)
@@ -281,7 +314,7 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
         baseSamplesPerBucket: WAVEFORM_PYRAMID_BASE_SAMPLES_PER_BUCKET, levelFactor: WAVEFORM_PYRAMID_LEVEL_FACTOR, topBuckets: WAVEFORM_PYRAMID_TOP_BUCKETS,
       })
       const args = decodeArgs(original.path, metadata, { audioStream: selection.audioStream, ...(native ? {} : { audioChannel: selection.audioChannel }), channelCount, startUs: 0, endUs, first: 0, expectedFrames })
-      await runProcess(ffmpeg, args, signal, chunk => worker.push(chunk))
+      await runProcess(ffmpeg, args, signal, chunk => { onProgress(); return worker.push(chunk) })
       const { pyramid } = await worker.finishPyramid()
       signal.throwIfAborted()
       return { data: pyramid, layout }
@@ -306,8 +339,8 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
     if (known && ifNoneMatch === version) return { notModified: true, version }
     const hit = known ? await lookup(known.identity, selection) : undefined
     if (hit) {
-      logger.debug('命中多级波形缓存', { event: 'audio.waveform.pyramid.cache_hit', context: { from: hit.from, elapsedMs: performance.now() - startedAt } })
-      return { data: hit.data, channels: selectPyramidChannels(hit.data, hit.layout, selection), version }
+      const { data: _data, layout: _layout, ...timing } = hit
+      return { data: hit.data, channels: selectPyramidChannels(hit.data, hit.layout, selection), version, hit: { ...timing, lookupMs: performance.now() - startedAt } }
     }
     const jobKey = JSON.stringify(['pyramid', known?.identity ?? `remote:${createHash('sha256').update(source).digest('hex')}`, selection.audioStream, selectionLayout(selection)])
     const result = await queue.run<PyramidJobResult>(jobKey, jobSignal => withMediaHeavyTask(async () => {
@@ -316,8 +349,7 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
       if (again) return { shared: true as const, data: again.data, layout: again.layout }
       const requestId = randomUUID()
       const controller = new AbortController()
-      let timer = setTimeout(() => controller.abort(new DOMException('音频分析超时，请稍后重试。', 'TimeoutError')), 120_000)
-      timer.unref()
+      const timer = idleTimeout(controller, '音频分析长时间没有进展，请稍后重试。')
       const cancel = (): void => controller.abort(jobSignal.reason)
       jobSignal.addEventListener('abort', cancel, { once: true })
       if (jobSignal.aborted) cancel()
@@ -330,12 +362,7 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
         const original = known ?? await identity(resolved)
         const before = await identity(resolved)
         if (before.identity !== original.identity) throw new Error('音频素材已变化，请重新分析。')
-        const decoded = await decodePyramid(original, selection, controller.signal, metadata => {
-          // Long sources decode at no less than 8x realtime before the job is considered stuck.
-          clearTimeout(timer)
-          timer = setTimeout(() => controller.abort(new DOMException('音频分析超时，请稍后重试。', 'TimeoutError')), Math.max(120_000, metadata.endSeconds * 1000 / 8))
-          timer.unref()
-        })
+        const decoded = await decodePyramid(original, selection, controller.signal, timer.refresh)
         const after = await identity(resolved)
         if (after.identity !== original.identity) throw new Error('音频素材在分析期间变化，请重新分析。')
         if (known) {
@@ -351,7 +378,7 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
         else logger.error('多级波形生成失败', { event: 'audio.waveform.pyramid.failed', requestId, error })
         throw error
       } finally {
-        clearTimeout(timer)
+        timer.clear()
         jobSignal.removeEventListener('abort', cancel)
         if (temporaryPath) await fs.rm(temporaryPath, { force: true })
       }
@@ -369,12 +396,11 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
     signal?.throwIfAborted()
     const bucketCount = Math.floor(request.bucketCount)
     const key = JSON.stringify([knownIdentity.path, knownIdentity.identity, request.sourceRevision ?? null, 'range-f32-v1', request.startUs, request.endUs, bucketCount, request.channels, request.audioStream ?? 0, request.audioChannel ?? null, request.samples === true])
-    const result = await queue.run(key, jobSignal => withMediaHeavyTask(async () => {
+    const result = await queue.run(key, async jobSignal => {
       const requestId = randomUUID()
       const startedAt = performance.now()
       const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(new DOMException('音频分析超时，请缩小范围后重试。', 'TimeoutError')), 120_000)
-      timer.unref()
+      const timer = idleTimeout(controller, '音频分析长时间没有进展，请稍后重试。')
       const cancel = (): void => controller.abort(jobSignal.reason)
       jobSignal.addEventListener('abort', cancel, { once: true })
       if (jobSignal.aborted) cancel()
@@ -386,9 +412,9 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
         const original = knownIdentity
         const before = await identity(localPath)
         if (before.identity !== original.identity) throw new Error('音频素材已变化，请重新分析。')
-        const [ffmpeg, ffprobe] = await Promise.all([(dependencies.ffmpegPath ?? loadFfmpegPath)(), (dependencies.ffprobePath ?? loadFfprobePath)()])
+        const ffmpeg = await (dependencies.ffmpegPath ?? loadFfmpegPath)()
         const audioStream = request.audioStream ?? 0
-        const metadata = await probeAudio(ffprobe, original.path, controller.signal, audioStream)
+        const metadata = await probe(original, controller.signal, audioStream)
         if (request.audioChannel !== undefined && request.audioChannel >= metadata.channels) throw new Error(`声音流只有 ${metadata.channels} 个声道。`)
         const { sampleRate } = metadata
         const channelCount = request.channels === 2 && metadata.channels >= 2 ? 2 : 1
@@ -403,7 +429,7 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
         controller.signal.throwIfAborted()
         await worker.start({ channels: channelCount, bucketCount, expectedFrames, ...(request.samples ? { keepSamples: true } : {}) })
         const args = decodeArgs(original.path, metadata, { audioStream, ...(request.audioChannel !== undefined ? { audioChannel: request.audioChannel } : {}), channelCount, startUs, endUs, first, expectedFrames })
-        await runProcess(ffmpeg, args, controller.signal, chunk => worker!.push(chunk))
+        await runProcess(ffmpeg, args, controller.signal, chunk => { timer.refresh(); return worker!.push(chunk) })
         const channels = await worker.finish()
         controller.signal.throwIfAborted()
         const after = await identity(localPath)
@@ -415,12 +441,12 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
         else logger.error('音频波形分析失败', { event: 'audio.waveform.failed', requestId, error })
         throw error
       } finally {
-        clearTimeout(timer)
+        timer.clear()
         jobSignal.removeEventListener('abort', cancel)
         controller.signal.removeEventListener('abort', workerCancel)
         await worker?.dispose()
       }
-    }, jobSignal), signal)
+    }, signal)
     signal?.throwIfAborted()
     if ((await identity(localPath)).identity !== knownIdentity.identity) throw new Error('音频素材已变化，请重新分析。')
     signal?.throwIfAborted()
@@ -433,11 +459,13 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
     const loaded = await loadPyramid(source, { channels: 1, audioStream: 0 }, signal)
     if ('notModified' in loaded) throw new Error('音频波形版本状态无效。')
     const { data } = loaded
+    const aggregateStarted = performance.now()
     const count = Math.floor(bucketCount)
     const startFrame = Math.max(0, Math.round(data.startSeconds * data.sampleRate))
     const endFrame = Math.max(startFrame + 1, data.frameCount)
     const peak = new Float32Array(count); const rms = new Float32Array(count)
     aggregateWaveformLevel(selectWaveformLevel(data.levels, (endFrame - startFrame) / count), loaded.channels[0], data.amplitudeScale, startFrame, endFrame, count, peak, rms)
+    if (loaded.hit) logger.debug('命中多级波形缓存', { event: 'audio.waveform.pyramid.cache_hit', context: { ...loaded.hit, copyMs: performance.now() - aggregateStarted } })
     return { peak: Array.from(peak), rms: Array.from(rms), durationSeconds: (endFrame - startFrame) / data.sampleRate }
   }
 
@@ -447,14 +475,17 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
     const loaded = await loadPyramid(request.source, selection, signal, request.ifNoneMatch)
     if ('notModified' in loaded) return loaded
     const { data, channels, version } = loaded
+    const copyStarted = performance.now()
     const maxBuckets = request.maxBuckets ?? Number.POSITIVE_INFINITY
     const levels = data.levels.filter((level, index) => index === data.levels.length - 1 || level.bucketCount <= maxBuckets)
-    return {
+    const result: AudioWaveformPyramidResult = {
       version, sampleRate: data.sampleRate, frameCount: data.frameCount, startSeconds: data.startSeconds, endSeconds: data.endSeconds,
       amplitudeScale: data.amplitudeScale, peakMax: waveformPyramidPeakMax(data, channels), channelCount: channels.length,
       // Copies: the transfer must not carry the whole cache buffer, nor share it with the renderer.
       levels: levels.map(level => ({ samplesPerBucket: level.samplesPerBucket, bucketCount: level.bucketCount, min: channels.map(channel => level.min[channel].slice()), max: channels.map(channel => level.max[channel].slice()), rms: channels.map(channel => level.rms[channel].slice()) })),
     }
+    if (loaded.hit) logger.debug('命中多级波形缓存', { event: 'audio.waveform.pyramid.cache_hit', context: { ...loaded.hit, levels: levels.length, copyMs: performance.now() - copyStarted } })
+    return result
   }
 
   return {

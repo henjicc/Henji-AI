@@ -20,9 +20,10 @@ it('只返回真实全频和高频共同低谷，不做时间线或文档写入'
   expect(result.pauses).toEqual([{ startMs: 100, endMs: 200, cutMs: 150 }])
 })
 
-it('超过六小时的输入在解码前拒绝', async () => {
-  await expect(decodeSpeechEnergy({ ...source, durationFrames: 7 * 3600 * 16000 }, {}, new AbortController().signal, () => undefined)).rejects.toThrow('六小时')
-  expect(runAudioEditProcess).not.toHaveBeenCalled()
+it('超过六小时的长素材照常分析，不按时长拒绝', async () => {
+  const result = await decodeSpeechEnergy({ ...source, durationFrames: 7 * 3600 * 16000 }, { levels: true }, new AbortController().signal, () => undefined)
+  expect(result.pauses).toEqual([{ startMs: 100, endMs: 200, cutMs: 150 }])
+  expect(runAudioEditProcess).toHaveBeenCalledTimes(1)
 })
 
 it('提前取消不解码，缺失高频证据拒绝输出可剪切静音', async () => {

@@ -53,7 +53,8 @@ beforeEach(() => {
   })
 })
 function service(identity = async (source: string) => ({ path: source, identity: 'file-v1' })): ReturnType<typeof createAudioWaveformService> {
-  return createAudioWaveformService({ ffmpegPath: async () => 'mpeg', ffprobePath: async () => 'probe', identity, createWorker: worker })
+  // 并发固定为 2，使排队与名额断言不随测试机核数变化。
+  return createAudioWaveformService({ ffmpegPath: async () => 'mpeg', ffprobePath: async () => 'probe', identity, createWorker: worker, queueConcurrency: 2 })
 }
 function samples(values: number[]): Buffer { const bytes = Buffer.alloc(values.length * 4); values.forEach((value, index) => bytes.writeFloatLE(value, index * 4)); return bytes }
 
@@ -157,6 +158,17 @@ describe('waveform extraction lifecycle and time bounds', () => {
     expect(analyzer.statistics()).toMatchObject({ active: 0, queued: 0 })
     expect(children).toHaveLength(2)
   })
+  it('remembers the probe per content identity, so repeated fine readbacks do not respawn ffprobe', async () => {
+    const analyzer = service()
+    for (const [index, startUs] of [0, 500_000, 1_000_000].entries()) {
+      const pending = analyzer.extractRange({ ...request, startUs, endUs: startUs + 1000 })
+      await vi.waitFor(() => expect(children).toHaveLength(index + 1))
+      children[index].process.stdout.end(samples(Array(96).fill(0.5))); children[index].process.emit('close', 0)
+      await pending
+    }
+    expect(mocks.spawn.mock.calls.filter(([binary]) => binary === 'probe')).toHaveLength(1)
+    await analyzer.dispose()
+  })
   it('rejects nonfinite PCM and waits for killed process close before freeing resources', async () => {
     const analyzer = service()
     const result = analyzer.extractRange(request).catch(error => error)
@@ -186,7 +198,7 @@ describe('waveform extraction lifecycle and time bounds', () => {
     const resolvers: Array<(path: string) => void> = []
     const signals: AbortSignal[] = []
     const resolvePath = vi.fn((_source: string, signal?: AbortSignal) => { signals.push(signal!); return new Promise<string>(resolve => resolvers.push(resolve)) })
-    const analyzer = createAudioWaveformService({ resolvePath, identity: async source => ({ path: source, identity: 'temp' }), ffmpegPath: async () => 'mpeg', ffprobePath: async () => 'probe', createWorker: worker })
+    const analyzer = createAudioWaveformService({ resolvePath, identity: async source => ({ path: source, identity: 'temp' }), ffmpegPath: async () => 'mpeg', ffprobePath: async () => 'probe', createWorker: worker, queueConcurrency: 2 })
     const abort = new AbortController()
     const first = analyzer.extractSamples('https://example.test/a.wav', 16, abort.signal).catch(error => error)
     const second = analyzer.extractSamples('https://example.test/b.wav', 16).catch(error => error)

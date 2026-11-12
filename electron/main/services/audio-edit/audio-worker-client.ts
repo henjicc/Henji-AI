@@ -8,6 +8,8 @@ import { app } from 'electron'
 interface WorkerResponse<T> {
   version: number
   id: string
+  /** 处理中的进度心跳；有它就不是最终回执。 */
+  event?: 'progress'
   ok: boolean
   result?: T
   error?: string
@@ -24,7 +26,11 @@ export function audioWorkerExecutablePath(): string | null {
   return candidates.find((candidate) => fs.existsSync(candidate)) ?? null
 }
 
-export async function invokeAudioWorker<T>(command: Record<string, unknown>, timeoutMs = 20_000, signal?: AbortSignal): Promise<T> {
+/**
+ * 单次调用一个 worker 进程。idleTimeoutMs 是无进展超时：处理整条文件的命令（修复、去爆音、插件）
+ * 边算边报进度，每条进度都续期，所以长素材只要还在推进就不会超时；其余命令不报进度，超时即总时长。
+ */
+export async function invokeAudioWorker<T>(command: Record<string, unknown>, idleTimeoutMs = 20_000, signal?: AbortSignal): Promise<T> {
   signal?.throwIfAborted()
   const binary = audioWorkerExecutablePath()
   if (!binary) throw new Error('AUDIO_WORKER_UNAVAILABLE：音频 Worker 尚未安装。')
@@ -49,13 +55,15 @@ export async function invokeAudioWorker<T>(command: Record<string, unknown>, tim
       signal?.addEventListener('abort', cancel, { once: true })
       const timer = setTimeout(() => {
         child.kill()
-        finish(() => reject(new Error('AUDIO_WORKER_TIMEOUT：音频 Worker 响应超时。')))
-      }, timeoutMs)
+        finish(() => reject(new Error('AUDIO_WORKER_TIMEOUT：音频 Worker 长时间没有进展。')))
+      }, idleTimeoutMs)
       const lines = readline.createInterface({ input: child.stdout })
-      lines.once('line', (line) => {
+      lines.on('line', (line) => {
+        if (settled) return
         try {
           const response = JSON.parse(line) as WorkerResponse<T>
           if (response.id !== id || response.version !== 1) throw new Error('音频 Worker 返回了不匹配的协议响应。')
+          if (response.event === 'progress') { timer.refresh(); return }
           if (!response.ok) throw new Error(response.error ?? '音频 Worker 执行失败。')
           finish(() => resolve(response.result as T))
         } catch (error) {

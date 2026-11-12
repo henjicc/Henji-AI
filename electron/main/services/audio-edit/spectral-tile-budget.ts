@@ -4,9 +4,8 @@ import { removeUnmanagedCachePath } from '../media-recycle/cache-deletion'
 
 /**
  * 细层（level < 3）频谱块按需计算、按块落盘，每块约 5 MB；声音每改一次，看过的块就换一套。
- * 它们单独限额、按最近使用清理（读取时刷新修改时间），不靠全局的容量上限兜底。
+ * 它们单独限额、按最近使用清理（读取时刷新修改时间），限额由调用方按全局媒体缓存上限给出。
  */
-const SPECTRAL_TILE_BUDGET_BYTES = 1024 ** 3
 /** 刚用过的块不删：读取方可能正要打开它。 */
 const RECENT_MS = 60_000
 /** 只认发布后的块（内容哈希名）；计算中的临时文件是随机名，不动。 */
@@ -16,8 +15,8 @@ export async function touchSpectralTile(file: string, now = new Date()): Promise
   await fs.utimes(file, now, now).catch(() => undefined)
 }
 
-export async function trimSpectralTiles(directory: string, options: { budgetBytes?: number; nowMs?: number } = {}): Promise<{ removedFiles: number; removedBytes: number }> {
-  const budget = options.budgetBytes ?? SPECTRAL_TILE_BUDGET_BYTES, now = options.nowMs ?? Date.now()
+export async function trimSpectralTiles(directory: string, options: { budgetBytes: number; nowMs?: number }): Promise<{ removedFiles: number; removedBytes: number }> {
+  const budget = options.budgetBytes, now = options.nowMs ?? Date.now()
   const entries = await fs.readdir(directory, { withFileTypes: true }).catch(() => [])
   const tiles = (await Promise.all(entries.filter(entry => entry.isFile() && TILE_NAME.test(entry.name)).map(async entry => {
     const file = path.join(directory, entry.name)

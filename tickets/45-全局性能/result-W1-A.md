@@ -40,3 +40,28 @@
 - `scripts/dead-code-baseline.json` 里残留已删除的 `ImageEditorViewportAdmissionErrorV3` 条目，文件不归我。
 - `export/contracts.ts` 的 `WORKING_SET_EXCEEDED` 只剩安全整数溢出一处在用。
 - 没有用 8K 多图层大图做真实窗口验证。
+
+## 审查返工（第 2 轮）
+1. 已接上：`gpu/imageEditorGpuSceneRuntimeV3.ts` 创建导出运行时时传入 `trimPreviewMemory`，写法与 admitTile 一致，只改了这一处。
+2. `imageEditorSessionResourceBudgetV3.test.ts` 改为断言：两个会话的租约记到同一个全局账本（共 1001 字节、2 个租约），释放后清零，最后一个使用者离开后账本移除。
+3. `scripts/image-editor-v3-performance-bench.ts` 改为新语义：满账后 admission 只报告 hard 压力，`acquire` 照样分配并记账；输出字段 `hardRejectionAvailableBytes` 改名为 `hardPressureAvailableBytes`。
+4. 死代码：
+   - 已删：`renderCaches.ts` 的 `if (!lease) return false`；资源登记表的空租约分支，以及 `register`、`prepareAdmission` 返回值里的 `admitted` 字段（同步改了测试；Runtime 里 `result.admitted` 属于瓦片上传结果，是真实的上传失败语义，保留）。
+   - 保留：`imageEditorPreviewResourcesV3.ts` 的 `insertProxyCache` 返回值不是死代码。会话已释放或单个代理大于缓存上限时返回 false，调用方据此改记临时 in-flight 租约。
+   - `scripts/dead-code-baseline.json` 删除 6 条：已删文件 `imageEditorResourcePressureV3.ts` 及其 3 个导出，`IMAGE_EDITOR_VIEWPORT_MAX_TRANSFER_BYTES_V3`，`ImageEditorViewportAdmissionErrorV3`。
+   - `npm run check:dead-code`：knip 部分无新增；命名检查仍失败，但报出的条目里已经没有本任务的，剩下的是其他任务的（viewportNavigationV3、ImageEditorGpuTileAtlasBudgetErrorV3、ImageEditorDockChromeV3、colorGradeMigration 等）。
+5. 内存倍数改用真实物理内存。
+   - 入口：渲染层已有 `getPlatform().system.memoryInfo()`（主进程 `os.totalmem`，音频缓存已在用），没有新增 IPC。
+   - 倍数为 总内存 / 16GiB，夹在 1–8 之间：64GB 机器为 4 倍，128GB 及以上为 8 倍。
+   - 读取时机：第一次领取编辑会话账本时异步读一次，到达前按 deviceMemory 估算。账本省略的目标值随系数实时取值。
+   - 预览代理、画笔、点选、缩略图、几何工具、导出解码缓存都改为用到时才取值。
+   - Worker 内的缓存（查找表、全局分析）拿不到平台接口，仍按 deviceMemory 估算。
+   - `IMAGE_EDIT_DEFAULT_*` 常量换成 `imageEditDefaultBudgetBytes()`，`IMAGE_EDIT_MEMORY_SCALE` 换成 `imageEditMemoryScale()`。
+   - 新增一条用例，断言 64GiB 为 4 倍、512GiB 封顶 8 倍，以及已建账本的目标随之更新。
+6. `renderExportTilesV3.ts` 加回物理保护：单个带 halo 的 Float32 RGBA 工作面超过 2GiB（类型化数组单次分配的可靠上限）时，导出给出明确失败并提示减小半径。注释写明这是物理限制，不是预算；其余情况照常放行。
+7. `viewportCompositeClientV3.test.ts` 新增“Worker 渲染前出错时归还源帧与传输、工作集、成品三份租约”：让画笔瓦片读取在三份租约到手后失败，断言源帧释放一次、账本归零、未发送 Worker 渲染。
+
+验证（第 2 轮）：
+- 18 个测试文件、106 个用例通过：resourceBudget、renderCaches、资源登记表、会话账本、视口客户端、导出运行时、Runtime 及其回退、导出瓦片与生命周期、瓦片缓存与调度、预览资源与客户端、缩略图、几何工具、修复源、sourceRegion。
+- 两条 tsc 均无报错（渲染层需加 `--max-old-space-size=12288`，否则内存不够中途崩溃）。
+- 改动文件的 eslint 通过。

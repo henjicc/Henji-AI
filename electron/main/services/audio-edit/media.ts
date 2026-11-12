@@ -145,13 +145,14 @@ export async function probeAudioEditImport(sourcePath: string, requestId: string
   if (signal?.aborted) abort()
   const release = registerAudioEditTaskController(requestId, requestId, controller, true)
   logger.info('开始读取口播素材', { event: 'audio_edit.source.probe.start', requestId })
+  const startedAt = performance.now()
   try {
     const source = await probeAudioEditSource(path.resolve(await resolveLocalMediaPath(sourcePath)), controller.signal)
     controller.signal.throwIfAborted()
-    logger.info('口播素材读取完成', { event: 'audio_edit.source.probe.completed', requestId, context: { mediaType: source.mediaType } })
+    logger.info('口播素材读取完成', { event: 'audio_edit.source.probe.completed', requestId, context: { mediaType: source.mediaType, durationFrames: source.durationFrames, sampleRate: source.sampleRate, channels: source.channels, elapsedMs: performance.now() - startedAt } })
     return source
   } catch (error) {
-    logger.error('口播素材读取未完成', { event: controller.signal.aborted ? 'audio_edit.source.probe.cancelled' : 'audio_edit.source.probe.failed', requestId, error })
+    logger.error('口播素材读取未完成', { event: controller.signal.aborted ? 'audio_edit.source.probe.cancelled' : 'audio_edit.source.probe.failed', requestId, error, context: { elapsedMs: performance.now() - startedAt } })
     throw error
   } finally { release(); signal?.removeEventListener('abort', abort) }
 }
@@ -163,7 +164,7 @@ export async function prepareAudioEditAudio(project: AudioEditProjectDocument, s
   const directory = audioEditCacheDirectory(project.id)
   const digest = project.source.identity?.digest ?? (await identifyAudioEditSource(project.source.sourcePath, signal)).digest
   return cachedAudioFile(directory, `audio-f32-${digest}-${project.source.audioStreamIndex ?? 0}-${project.source.sampleRate}-${project.source.channels}`, 'wav', async temporary => {
-    await runAudioEditProcess(await loadFfmpegPath(), ['-v', 'error', '-y', '-i', project.source.sourcePath, '-map', `0:${project.source.audioStreamIndex ?? 0}`, '-vn', '-c:a', 'pcm_f32le', '-ar', String(project.source.sampleRate), '-ac', String(project.source.channels), temporary], signal)
+    await runAudioEditProcess(await loadFfmpegPath(), ['-v', 'error', '-y', '-i', project.source.sourcePath, '-map', `0:${project.source.audioStreamIndex ?? 0}`, '-vn', '-c:a', 'pcm_f32le', '-rf64', 'auto', '-ar', String(project.source.sampleRate), '-ac', String(project.source.channels), temporary], signal)
     await validateAudioEditAudio(temporary, project.source.sampleRate, project.source.channels, project.source.durationFrames, signal)
   }, signal)
 }

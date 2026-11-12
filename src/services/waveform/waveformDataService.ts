@@ -2,6 +2,7 @@ import { getPlatform } from '@/platform/runtime'
 import { createLogger } from '@/core/logging'
 import type { AudioWaveformPyramid } from '@/platform/contracts/audioWaveform'
 import { WAVEFORM_DETAIL_MAX_FRAMES, audioWaveformSampleIndex } from '@/core/media/waveformPyramid'
+import { loadAudioDisplayCacheBudget, waveformMemoryBudgetBytes } from './audioDisplayCacheBudget'
 
 /**
  * 渲染层波形数据的唯一来源（任务 2.3）：按“素材 + 声音流 + 声道选择”向主进程取整段多级峰值，
@@ -35,7 +36,6 @@ export interface WaveformDetailWindow { key: string; firstFrame: number; frameCo
 export const WAVEFORM_OVERVIEW_MAX_BUCKETS = 16384
 /** 归一化增益上限：极安静的素材最多放大到 -36 dB 满幅，避免把底噪画成满屏。 */
 const DISPLAY_FLOOR = 1 / 64
-const BUDGET_BYTES = 128 * 1024 * 1024
 const MAX_IN_FLIGHT = 4
 const REVALIDATE_MS = 10_000
 const DETAIL_ALIGN = 4096
@@ -116,10 +116,11 @@ const isAbort = (error: unknown): boolean => error instanceof DOMException && er
 function evict(): void {
   let total = 0
   for (const entry of entries.values()) total += entry.bytes
-  if (total <= BUDGET_BYTES) return
+  const budget = waveformMemoryBudgetBytes()
+  if (total <= budget) return
   const idle = [...entries.values()].filter((entry) => entry.users === 0).sort((a, b) => a.lastUsed - b.lastUsed)
   for (const entry of idle) {
-    if (total <= BUDGET_BYTES) break
+    if (total <= budget) break
     entries.delete(entry.key); total -= entry.bytes
   }
 }
@@ -189,6 +190,7 @@ export function retryWaveform(ref: WaveformSourceRef, scope: WaveformScope): voi
 
 /** 声明使用：首次使用开始加载、过期就后台校验；返回释放函数，无人使用时取消在途请求。 */
 export function acquireWaveform(ref: WaveformSourceRef, scope: WaveformScope): () => void {
+  loadAudioDisplayCacheBudget()
   if (scope === 'overview' && entries.get(waveformKey(ref, 'full'))?.state.status === 'ready') scope = 'full'
   const key = waveformKey(ref, scope)
   let entry = entries.get(key)

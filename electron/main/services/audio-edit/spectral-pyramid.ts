@@ -3,6 +3,7 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { audioEditSpectralTileRequestSchema, spectralColumnCount, spectralLowBins, spectralHighBins, spectralResolution, SPECTRAL_PERSISTED_MIN_LEVEL, SPECTRAL_TILE_COLUMNS, type AudioEditSpectralTile, type AudioEditSpectralTileRequest, type AudioEditSpectralProgress } from '../../../../src/core/audioEdit/spectralPyramid'
 import { createMainLogger } from '../logging'
+import { audioDiskBudgetBytes } from '../audio/cache-budget'
 import { removeUnmanagedCachePath } from '../media-recycle/cache-deletion'
 import { requireAudioEditProject } from './project-store'
 import { audioEditSpectralCacheDirectory, identifyAudioEditSource, prepareAudioEditAudio, verifyAudioEditSource } from './media'
@@ -44,12 +45,47 @@ function wait<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
   })
 }
 
+/**
+ * 上次没算完（超时、中断、退出）留下的目录：清单里有已算完的部分，worker 从对齐点续算。
+ * 同一键只留覆盖最多的一份，其余删掉。只能在拿到该素材唯一的启动权之后调用，否则会删掉别人刚建的目录。
+ */
+async function resumableDirectory(cache: string, key: string): Promise<string | undefined> {
+  const pattern = new RegExp(`^${key}-[a-f0-9-]+$`)
+  const entries = await fs.readdir(cache, { withFileTypes: true }).catch(() => [])
+  const candidates = await Promise.all(entries.filter(entry => entry.isDirectory() && pattern.test(entry.name)).map(async entry => {
+    const directory = path.join(cache, entry.name)
+    const manifest = await readSpectralManifest(directory).catch(() => undefined)
+    return { directory, covered: manifest && !manifest.done ? manifest.coveredFrames : -1 }
+  }))
+  candidates.sort((a, b) => b.covered - a.covered)
+  const [best, ...rest] = candidates
+  await Promise.all(rest.map(item => removeUnmanagedCachePath(item.directory, { recursive: true, force: true }).catch(() => undefined)))
+  if (best && best.covered >= 0) return best.directory
+  if (best) await removeUnmanagedCachePath(best.directory, { recursive: true, force: true }).catch(() => undefined)
+  return undefined
+}
+
+/** 同一素材同一时刻只有一个读取者在查完成指针、清理残留目录并启动计算；其余读取者等它的结果。 */
+const claims = new Map<string, Promise<string>>()
+
 async function startBackground(cache: string, key: string, input: string, request: AudioEditSpectralTileRequest, revision: number): Promise<string> {
   const identity = path.join(cache, key)
   const observer = { projectId: request.projectId, mode: request.mode, revision }
   const observerKey = JSON.stringify(observer)
-  let existing = backgrounds.get(identity)
+  const existing = backgrounds.get(identity)
   if (existing) { existing.observers.set(observerKey, observer); return existing.directory }
+  let claim = claims.get(identity)
+  if (!claim) {
+    claim = claimBackground(cache, key, identity, input, request, observer)
+    claims.set(identity, claim)
+    void claim.finally(() => { if (claims.get(identity) === claim) claims.delete(identity) }).catch(() => undefined)
+  }
+  const directory = await claim
+  backgrounds.get(identity)?.observers.set(observerKey, observer)
+  return directory
+}
+
+async function claimBackground(cache: string, key: string, identity: string, input: string, request: AudioEditSpectralTileRequest, observer: { projectId: string; mode: AudioEditSpectralTileRequest['mode']; revision: number }): Promise<string> {
   // 完成指针只在整文件任务成功后由 cachedAudioFile 原子发布。
   try {
     const name = await fs.readFile(`${identity}.pyramid`, 'utf8')
@@ -58,11 +94,9 @@ async function startBackground(cache: string, key: string, input: string, reques
     if ((await readSpectralManifest(directory))?.done) return directory
     throw new Error('频谱完成缓存缺失')
   } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error }
-  // 上面的读取可能让出事件循环，必须再次检查，保证同素材只有一遍计算。
-  existing = backgrounds.get(identity)
-  if (existing) { existing.observers.set(observerKey, observer); return existing.directory }
-  const directory = path.join(cache, `${key}-${randomUUID()}`)
-  const job: Background = { directory, operation: Promise.resolve(), observers: new Map([[observerKey, observer]]) }
+  const resumable = await resumableDirectory(cache, key)
+  const directory = resumable ?? path.join(cache, `${key}-${randomUUID()}`)
+  const job: Background = { directory, operation: Promise.resolve(), observers: new Map([[JSON.stringify(observer), observer]]) }
   backgrounds.set(identity, job)
   const began = performance.now()
   const controller = new AbortController()
@@ -75,7 +109,7 @@ async function startBackground(cache: string, key: string, input: string, reques
     for (const context of job.observers.values()) for (const listener of listeners) listener({ ...context, ...progress })
   }
   job.operation = (async () => {
-    logger.info('开始计算整段音频频谱', { event: 'audio_edit.spectral.start', context: observer })
+    logger.info('开始计算整段音频频谱', { event: 'audio_edit.spectral.start', context: { ...observer, resumed: Boolean(resumable) } })
     try {
       await cachedAudioFile(cache, key, 'pyramid', async temporary => {
         await spectralWorker.request({ type: 'spectral_build', input_path: input, output_directory: directory }, controller.signal, progress => { if (!progress.done) emit(progress) })
@@ -86,10 +120,11 @@ async function startBackground(cache: string, key: string, input: string, reques
       const completed = await readSpectralManifest(directory)
       if (!completed?.done) throw new Error('整段频谱完成清单缺失')
       emit({ coveredFrames: completed.durationFrames, durationFrames: completed.durationFrames, done: true })
-      logger.info('整段音频频谱计算完成', { event: 'audio_edit.spectral.completed', context: { ...observer, elapsedMs: performance.now() - began } })
+      logger.info('整段音频频谱计算完成', { event: 'audio_edit.spectral.completed', context: { ...observer, durationFrames: completed.durationFrames, resumed: Boolean(resumable), elapsedMs: performance.now() - began } })
     } catch (error) {
-      logger.error('整段音频频谱计算失败', { event: 'audio_edit.spectral.failed', error, context: { ...observer, elapsedMs: performance.now() - began } })
-      await removeUnmanagedCachePath(directory, { recursive: true, force: true })
+      // 已算完的部分与清单留着，下次读取从清单的覆盖位置续算，不从头再来。
+      const coveredFrames = (await readSpectralManifest(directory).catch(() => undefined))?.coveredFrames
+      logger.error('整段音频频谱计算未完成，已算部分保留待续算', { event: 'audio_edit.spectral.failed', error, context: { ...observer, coveredFrames, elapsedMs: performance.now() - began } })
       throw error
     } finally { backgrounds.delete(identity); release() }
   })()
@@ -127,12 +162,13 @@ async function immediateFile(cache: string, key: string, input: string, request:
 }
 
 let trimming = false, lastTrim = 0
-/** 细层块读写后按节流检查限额；一次只清一遍。 */
+/** 细层块读写后按节流检查限额（全局媒体缓存上限的三分之一，至少 1 GB）；一次只清一遍。 */
 function scheduleTileTrim(cache: string): void {
   if (trimming || Date.now() - lastTrim < 30_000) return
   trimming = true; lastTrim = Date.now()
-  void trimSpectralTiles(cache).then(({ removedFiles, removedBytes }) => {
-    if (removedFiles) logger.info('频谱细层块超过限额，已清掉最久没用的', { event: 'audio_edit.spectral.tiles_trimmed', context: { removedFiles, removedBytes } })
+  const budgetBytes = audioDiskBudgetBytes(3, 1024 ** 3)
+  void trimSpectralTiles(cache, { budgetBytes }).then(({ removedFiles, removedBytes }) => {
+    if (removedFiles) logger.info('频谱细层块超过限额，已清掉最久没用的', { event: 'audio_edit.spectral.tiles_trimmed', context: { removedFiles, removedBytes, budgetBytes } })
   }).catch(() => undefined).finally(() => { trimming = false })
 }
 

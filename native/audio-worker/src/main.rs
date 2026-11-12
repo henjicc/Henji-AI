@@ -13,6 +13,7 @@ use vst3_host::{
 const PROTOCOL_VERSION: u32 = 1;
 
 mod dsp;
+mod progress;
 mod speech_preprocess;
 mod pyramid;
 mod spectral_server;
@@ -94,12 +95,13 @@ fn process(
     parameters: &HashMap<String, f64>,
     bypass: bool,
 ) -> Result<Value, Box<dyn Error>> {
-    let mut reader = hound::WavReader::open(input_path)?;
-    let spec = reader.spec();
+    // 自行解析 WAV（含超过 4 GiB 的 RF64），输出超过 4 GiB 时同样写成 RF64。
+    let mut reader = dsp::audio::Audio::open(input_path)?;
+    let spec = reader.spec;
     let sample_rate = spec.sample_rate;
     let channel_count = usize::from(spec.channels);
     if channel_count == 0 { return Err("input WAV has no channels".into()); }
-    let frame_count = u64::from(reader.duration());
+    let frame_count = reader.frames;
     let mut plugin = simple::load_plugin_with_settings(plugin_path, sample_rate as f64, 4096)?;
     if plugin.find_parameter("Global bypass").is_ok() {
         plugin.set_parameter_by_name("Global bypass", if bypass { 1.0 } else { 0.0 })?;
@@ -109,22 +111,9 @@ fn process(
     }
     let latency = plugin.latency_samples();
     plugin.start_processing()?;
-    let output_spec = hound::WavSpec {
-        channels: spec.channels,
-        sample_rate,
-        bits_per_sample: 32,
-        sample_format: hound::SampleFormat::Float,
-    };
-    let mut writer = hound::WavWriter::create(output_path, output_spec)?;
-    let scale = if spec.sample_format == hound::SampleFormat::Int {
-        (1_u64 << spec.bits_per_sample.saturating_sub(1)) as f32
-    } else { 1.0 };
-    let mut samples: Box<dyn Iterator<Item = Result<f32, hound::Error>> + '_> =
-        if spec.sample_format == hound::SampleFormat::Int {
-            Box::new(reader.samples::<i32>().map(move |sample| sample.map(|value| value as f32 / scale)))
-        } else {
-            Box::new(reader.samples::<f32>())
-        };
+    let mut writer = dsp::audio::F32Writer::new(fs::File::create(output_path)?, spec.channels, sample_rate)?;
+    let mut samples = reader.samples();
+    let mut block = Vec::with_capacity(4096 * channel_count);
     let mut consumed_frames = 0_u64;
     let mut processed_frames = 0_u64;
     let mut written_frames = 0_u64;
@@ -143,17 +132,20 @@ fn process(
             consumed_frames += length as u64;
         }
         plugin.process_audio(&mut buffers)?;
+        block.clear();
         for frame in 0..block_length {
             let absolute = processed_frames + frame as u64;
             if absolute < latency as u64 || written_frames >= frame_count { continue; }
             for channel in 0..channel_count {
                 let sample = buffers.outputs[channel][frame];
                 if !sample.is_finite() { return Err("plugin returned a non-finite sample".into()); }
-                writer.write_sample(sample)?;
+                block.push(sample);
             }
             written_frames += 1;
         }
+        writer.write_samples(&block)?;
         processed_frames += block_length as u64;
+        progress::report(written_frames, frame_count);
     }
     plugin.stop_processing()?;
     writer.finalize()?;
@@ -201,10 +193,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         if line.trim().is_empty() { continue; }
         let parsed = serde_json::from_str::<Envelope>(&line);
         let response = match parsed {
-            Ok(envelope) if envelope.version == PROTOCOL_VERSION => match execute(envelope.command) {
-                Ok(result) => Response { version: PROTOCOL_VERSION, id: envelope.id.clone(), ok: true, result: Some(result), error: None },
-                Err(error) => Response { version: PROTOCOL_VERSION, id: envelope.id.clone(), ok: false, result: None, error: Some(error.to_string()) },
-            },
+            Ok(envelope) if envelope.version == PROTOCOL_VERSION => {
+                progress::begin(&envelope.id);
+                let result = execute(envelope.command);
+                progress::end();
+                match result {
+                    Ok(result) => Response { version: PROTOCOL_VERSION, id: envelope.id.clone(), ok: true, result: Some(result), error: None },
+                    Err(error) => Response { version: PROTOCOL_VERSION, id: envelope.id.clone(), ok: false, result: None, error: Some(error.to_string()) },
+                }
+            }
             Ok(envelope) => Response { version: PROTOCOL_VERSION, id: envelope.id, ok: false, result: None, error: Some("unsupported protocol version".into()) },
             Err(error) => Response { version: PROTOCOL_VERSION, id: "unknown".into(), ok: false, result: None, error: Some(error.to_string()) },
         };

@@ -7,6 +7,7 @@ import { findLocalModelSpec } from '../local-models/manifest'
 import { ensureLocalModel } from '../local-models/runtime'
 import { identifyMediaContent } from '../media/content-identity'
 import { getMediaCacheManager } from '../media/media-cache-runtime'
+import { mediaCacheBudgetBytes } from '../audio/cache-budget'
 import { getLocalInferenceHost } from '../smart-regions/runtime'
 import { loadFfmpegPath } from '../video/ffmpeg-loader'
 import { registerWorkRootBusyProbe } from '../work-root/busy-probes'
@@ -34,8 +35,8 @@ function getAudioSeparationService(): AudioSeparationService {
   if (service) return service
   const host = getLocalInferenceHost()
   const created = new AudioSeparationService({
-    // 10 分钟 44.1 kHz 立体声的一对结果约 420 MB；超过 4 GB 按最久未用清理。
-    cache: getMediaCacheManager().createCache('analysis', 'separation', { extension: '.wav', budgetBytes: 4 * 1024 ** 3, onError: (event, error) => logger.warn('人声分离缓存操作失败', { event: `audio_separation.cache.${event}`, error }) }),
+    // 一小时 48 kHz 立体声的一对结果约 2.8 GB；预算跟随全局媒体缓存上限，超出按最久未用清理，跨类总量由全局缓存管理统一执行。
+    cache: getMediaCacheManager().createCache('analysis', 'separation', { extension: '.wav', budgetBytes: mediaCacheBudgetBytes(), onError: (event, error) => logger.warn('人声分离缓存操作失败', { event: `audio_separation.cache.${event}`, error }) }),
     identify: identifyMediaContent,
     modelSha256: mode => modelFile(mode).sha256,
     ensureModel: async (mode) => {

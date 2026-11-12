@@ -9,13 +9,19 @@ vi.mock('./render', () => ({ prepareAudioEditRenderSource: async () => state.edi
 vi.mock('./project-store', () => ({ requireAudioEditProject: async (id: string) => ({ id, revision: 7, source: { sourcePath: 'source', sampleRate: 48000, channels: 2, durationFrames: 9000 } }) }))
 vi.mock('./media', () => ({ audioEditSpectralCacheDirectory: () => state.directory, verifyAudioEditSource: async () => undefined, identifyAudioEditSource: async () => ({ digest: state.digest }), prepareAudioEditAudio: async () => 'decoded.wav' }))
 vi.mock('../logging', () => ({ createMainLogger: () => ({ info: state.info, error: state.error }) }))
+vi.mock('../audio/cache-budget', () => ({ audioDiskBudgetBytes: () => 1024 ** 3 }))
 vi.mock('./task-store', () => ({ registerAudioEditTaskController: (id: string) => { state.active.add(id); return () => state.active.delete(id) }, runAudioEditTask: () => { throw new Error('频谱不得进入任务表') } }))
 vi.mock('./spectral-worker-client', () => ({ spectralWorker: { request: async (command: { type: string; output_path: string; output_directory: string; level: number; column_start: number }, signal?: AbortSignal, progress?: (p: { coveredFrames: number; durationFrames: number; done: boolean }) => void) => {
   state.calls(command, signal)
   if (command.type === 'spectral_build') {
-    await fs.mkdir(command.output_directory)
+    await fs.mkdir(command.output_directory, { recursive: true })
     if (state.holdBuild) await new Promise<void>(resolve => { state.releaseBuild = resolve })
-    if (state.failBuild) throw new Error('模拟整文件失败')
+    if (state.failBuild) {
+      // 失败前已算完一部分：清单记录覆盖位置，未完成。
+      await fs.writeFile(path.join(command.output_directory, 'manifest.json'), JSON.stringify({ format: 'spectral-pyramid-v1', sampleRate: 48000, channels: 2, durationFrames: 9000, lowBins: 205, highBins: 1025,
+        available: Array.from({ length: 16 }, () => 0), coveredFrames: 4000, done: false }))
+      throw new Error('模拟整文件失败')
+    }
     for (const coveredFrames of [1, 2, 3]) progress?.({ coveredFrames, durationFrames: 9000, done: false })
     const manifest = { format: 'spectral-pyramid-v1', sampleRate: 48000, channels: 2, durationFrames: 9000, lowBins: 205, highBins: 1025,
       available: Array.from({ length: 16 }, (_, level) => level < 3 ? 0 : spectralColumnCount(level, 9000)), coveredFrames: 9000, done: true }
@@ -126,7 +132,7 @@ it('持久层未计算时返回零列，同素材跨文档并发只启动一次�
   expect(await getAudioEditSpectralTile({ ...request, level: 3 })).toMatchObject({ columnCount: 3, complete: true })
   stop()
 })
-it('整文件失败不发布完成指针，后续请求可以重试', async () => {
+it('整文件失败不发布完成指针、保留已算部分，后续请求在同一目录续算', async () => {
   state.holdBuild = true; state.failBuild = true
   expect(await getAudioEditSpectralTile({ ...request, level: 3 })).toMatchObject({ complete: false })
   await vi.waitFor(() => expect(state.releaseBuild).toBeTypeOf('function'))
@@ -134,8 +140,31 @@ it('整文件失败不发布完成指针，后续请求可以重试', async () =
   await vi.waitFor(() => expect(state.active.size).toBe(0))
   expect(state.error).toHaveBeenCalledTimes(1)
   expect((await fs.readdir(state.directory)).filter(name => name.endsWith('.pyramid'))).toHaveLength(0)
+  const builds = (): string[] => state.calls.mock.calls.filter(call => call[0].type === 'spectral_build').map(call => call[0].output_directory)
+  expect((await fs.readdir(builds()[0])).includes('manifest.json')).toBe(true)
   state.holdBuild = false; state.failBuild = false
   await getAudioEditSpectralTile({ ...request, level: 3 })
   await vi.waitFor(() => expect(state.info.mock.calls.some(call => call[1].event === 'audio_edit.spectral.completed')).toBe(true))
   expect(await getAudioEditSpectralTile({ ...request, level: 3 })).toMatchObject({ complete: true })
+  expect(builds()).toHaveLength(2)
+  expect(builds()[1]).toBe(builds()[0])
+})
+it('同素材并发读取只由一个读取者清理残留目录：续算覆盖最多的那份，其余删除，计算目录不被误删', async () => {
+  state.holdBuild = true
+  const key = audioRenderKey(['spectral-pyramid-v1', { digest: state.digest }, undefined, 48000, 2, 9000, 'source', undefined])
+  const partial = path.join(state.directory, `${key}-11111111-1111-1111-1111-111111111111`)
+  const stale = path.join(state.directory, `${key}-22222222-2222-2222-2222-222222222222`)
+  await fs.mkdir(partial); await fs.mkdir(stale)
+  await fs.writeFile(path.join(partial, 'manifest.json'), JSON.stringify({ format: 'spectral-pyramid-v1', sampleRate: 48000, channels: 2, durationFrames: 9000, lowBins: 205, highBins: 1025,
+    available: Array.from({ length: 16 }, () => 0), coveredFrames: 4000, done: false }))
+  const reads = Array.from({ length: 4 }, (_, index) => getAudioEditSpectralTile({ ...request, level: 3, requestId: `r${index}` }))
+  await Promise.all(reads)
+  await vi.waitFor(() => expect(state.releaseBuild).toBeTypeOf('function'))
+  const builds = state.calls.mock.calls.filter(call => call[0].type === 'spectral_build')
+  expect(builds).toHaveLength(1)
+  expect(builds[0][0].output_directory).toBe(partial)
+  await expect(fs.stat(stale)).rejects.toThrow()
+  expect((await fs.stat(partial)).isDirectory()).toBe(true)
+  state.releaseBuild?.()
+  await vi.waitFor(() => expect(state.info.mock.calls.some(call => call[1].event === 'audio_edit.spectral.completed')).toBe(true))
 })

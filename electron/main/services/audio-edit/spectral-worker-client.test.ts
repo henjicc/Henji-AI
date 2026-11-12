@@ -91,3 +91,22 @@ it('请求超时先取消，无回执则关闭进程，所有等待明确失败'
   expect(process.kill).toHaveBeenCalled()
   client.dispose()
 })
+it('超时只算无进展的时间：进度与心跳持续到达时远超时限也不超时', async () => {
+  vi.useFakeTimers()
+  const process = child(); mocks.spawn.mockReturnValue(process)
+  const client = new SpectralWorkerClient()
+  const progress = vi.fn()
+  const result = client.request({ type: 'spectral_build' }, undefined, progress, 100)
+  const id = requests(process)[0].id
+  for (let step = 0; step < 20; step++) {
+    await vi.advanceTimersByTimeAsync(80)
+    const event = step % 2 ? { event: 'alive' } : { event: 'progress', progress: { coveredFrames: step, durationFrames: 100, done: false } }
+    process.stdout.write(`${JSON.stringify({ version: 1, id, ...event })}\n`)
+    await vi.advanceTimersByTimeAsync(0)
+  }
+  expect(process.stdin.read()).toBeNull()
+  respond(process, id, 'done')
+  expect(await result).toBe('done')
+  expect(progress).toHaveBeenCalledTimes(10)
+  client.dispose()
+})

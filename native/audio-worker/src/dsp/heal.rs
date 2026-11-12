@@ -1,24 +1,23 @@
 use super::{
-    audio::{self, Audio},
+    audio::{self, Audio, F32Writer},
     lpc,
     spectrum::Transform,
     validate_fft, DeclickRequest, HealRequest, Region, Result, TimeRange,
 };
-use hound::{SampleFormat, WavSpec, WavWriter};
 use rustfft::num_complex::Complex32;
 use serde_json::{json, Value};
 use std::{
     f64::consts::{PI, TAU},
     fs::File,
-    io::{BufWriter, Read},
+    io::Read,
     path::Path,
     time::Instant,
 };
 
-// Bound only local working sets, not recording duration. Groups overlapping in
-// time are solved together against original context (order independent).
-const MAX_GROUP_SAMPLES: u64 = 16_000_000;
-const MAX_MASK_BYTES: u64 = 64 * 1024 * 1024;
+// Groups overlapping in time are solved together against original context
+// (order independent). A long selection is processed in output chunks of this
+// many frames, so the working set does not grow with the selection length.
+const HEAL_CHUNK_FRAMES: u64 = 1 << 20;
 
 struct Selection {
     region: Region,
@@ -36,7 +35,7 @@ impl Selection {
     /// lowBin=ceil(lowHz*N/sampleRate), highBin=floor(highHz*N/sampleRate).
     /// x maps to center start+x*hop, y maps to bin lowBin+y. Frequency increases
     /// bottom-to-top conceptually; file row zero is LOW frequency (flip in UI).
-    fn new(region: Region, audio: &Audio, n: usize, mask_budget: &mut u64) -> Result<Self> {
+    fn new(region: Region, audio: &Audio, n: usize) -> Result<Self> {
         audio::validate_range(region.start_frame, region.end_frame, audio.frames)?;
         if !region.low_hz.is_finite()
             || !region.high_hz.is_finite()
@@ -58,10 +57,6 @@ impl Selection {
         let mask = if let Some(path) = &region.mask_path {
             let mut file = File::open(path)?;
             let expected = (width as u64) * (height as u64);
-            if expected > *mask_budget {
-                return Err("combined masks exceed 64 MiB; split the selection".into());
-            }
-            *mask_budget -= expected;
             if file.metadata()?.len() != 16 + expected {
                 return Err("mask byte length does not match region dimensions".into());
             }
@@ -123,90 +118,86 @@ fn groups(ranges: impl Iterator<Item = TimeRange>) -> Vec<TimeRange> {
     merged
 }
 
+/// 修复结果按顺序交给 emit：一次给出整段或分块给出均可，总样本数必须等于区间长度 × 声道数。
+type Emit<'a> = dyn FnMut(&[f32]) -> Result<()> + 'a;
+
 fn render(
     input_path: &Path,
     output_path: &Path,
     ranges: &[TimeRange],
-    margin: u64,
-    mut repair: impl FnMut(&[f32], usize, usize, usize, usize, &TimeRange) -> Result<Vec<f32>>,
+    mut repair: impl FnMut(&mut Audio, &TimeRange, &mut Emit) -> Result<()>,
 ) -> Result<(u64, u32, u16, u64)> {
     let mut audio = Audio::open(input_path)?;
-    let channels = usize::from(audio.spec.channels);
-    if audio.frames * channels as u64 * 4 + 68 > u32::MAX as u64 {
-        return Err("float32 output exceeds WAV RIFF 4 GiB limit; split the input".into());
-    }
-    // Check all working sets before allocating or writing any output.
-    for range in ranges {
-        if (range.end_frame - range.start_frame + 2 * margin) * channels as u64 > MAX_GROUP_SAMPLES
-        {
-            return Err("repair context exceeds 16000000 samples; split the selection".into());
-        }
-    }
+    let channels = audio.spec.channels;
+    let sample_rate = audio.spec.sample_rate;
+    let frames = audio.frames;
     let mut temp = audio::temporary(output_path)?;
-    let spec = WavSpec {
-        sample_format: SampleFormat::Float,
-        bits_per_sample: 32,
-        ..audio.spec
-    };
-    let mut writer = WavWriter::new(BufWriter::new(temp.as_file_mut()), spec)?;
+    // 超过 4 GiB 自动写成 RF64，长素材不再因 RIFF 长度字段被拒绝。
+    let mut writer = F32Writer::new(temp.as_file_mut(), channels, sample_rate)?;
+    let report = |done: u64| crate::progress::report(done, frames);
     let mut cursor = 0;
     for range in ranges {
-        audio::copy_to(&mut audio, &mut writer, cursor, range.start_frame)?;
-        let from = range.start_frame.saturating_sub(margin);
-        let to = (range.end_frame + margin).min(audio.frames);
-        let block = audio.read(from, to)?;
-        let start = (range.start_frame - from) as usize;
-        let length = (range.end_frame - range.start_frame) as usize;
-        let repaired = repair(&block, channels, start, length, from as usize, range)?;
-        if repaired.len() != length * channels {
-            return Err("internal repair length mismatch".into());
+        audio::copy_to(&mut audio, &mut writer, cursor, range.start_frame, report)?;
+        let expected = (range.end_frame - range.start_frame) * u64::from(channels);
+        let mut written = 0_u64;
+        {
+            let mut emit = |samples: &[f32]| -> Result<()> {
+                if samples.iter().any(|x| !x.is_finite()) {
+                    return Err("repair produced a non-finite sample".into());
+                }
+                written += samples.len() as u64;
+                if written > expected {
+                    return Err("internal repair length mismatch".into());
+                }
+                writer.write_samples(samples)?;
+                report(range.start_frame + written / u64::from(channels));
+                Ok(())
+            };
+            repair(&mut audio, range, &mut emit)?;
         }
-        for x in repaired {
-            if !x.is_finite() {
-                return Err("repair produced a non-finite sample".into());
-            }
-            writer.write_sample(x)?;
+        if written != expected {
+            return Err("internal repair length mismatch".into());
         }
         cursor = range.end_frame;
     }
-    let end = audio.frames;
-    audio::copy_to(&mut audio, &mut writer, cursor, end)?;
+    audio::copy_to(&mut audio, &mut writer, cursor, frames, report)?;
     writer.finalize()?;
     let bytes = audio::publish(temp, output_path)?;
-    Ok((
-        audio.frames,
-        audio.spec.sample_rate,
-        audio.spec.channels,
-        bytes,
-    ))
+    Ok((frames, sample_rate, channels, bytes))
 }
 
 pub fn declick(req: DeclickRequest) -> Result<Value> {
     let began = Instant::now();
-    let audio = Audio::open(&req.input_path)?;
+    let source = Audio::open(&req.input_path)?;
     if req.ranges.len() > 4096 {
         return Err("at most 4096 ranges per command".into());
     }
     for r in &req.ranges {
-        audio::validate_range(r.start_frame, r.end_frame, audio.frames)?;
+        audio::validate_range(r.start_frame, r.end_frame, source.frames)?;
     }
     let merged = groups(req.ranges.iter().cloned());
-    let limit = u64::from(audio.spec.sample_rate) * 128 / 1000;
+    let limit = u64::from(source.spec.sample_rate) * 128 / 1000;
     for r in &merged {
         if r.end_frame - r.start_frame > limit {
-            return Err(format!("declick selection (including overlapping/adjacent ranges) exceeds 128 ms ({limit} frames at {} Hz)",audio.spec.sample_rate).into());
+            return Err(format!("declick selection (including overlapping/adjacent ranges) exceeds 128 ms ({limit} frames at {} Hz)",source.spec.sample_rate).into());
         }
-        if r.start_frame < 32 || audio.frames - r.end_frame < 32 {
+        if r.start_frame < 32 || source.frames - r.end_frame < 32 {
             return Err("declick requires at least 32 clean context frames on each side".into());
         }
     }
+    drop(source);
     let margin = (limit * 4).clamp(512, 8192);
     let (frames, sr, channels, bytes) = render(
         &req.input_path,
         &req.output_path,
         &merged,
-        margin,
-        |block, c, start, len, from, range| {
+        |audio, range, emit| {
+            let c = usize::from(audio.spec.channels);
+            let from = range.start_frame.saturating_sub(margin);
+            let to = (range.end_frame + margin).min(audio.frames);
+            let block = audio.read(from, to)?;
+            let start = (range.start_frame - from) as usize;
+            let len = (range.end_frame - range.start_frame) as usize;
             // Stop training before other requested ranges, not merely the current one.
             let left_bound = merged
                 .iter()
@@ -214,14 +205,14 @@ pub fn declick(req: DeclickRequest) -> Result<Value> {
                 .map(|r| r.end_frame)
                 .max()
                 .unwrap_or(0)
-                .saturating_sub(from as u64) as usize;
+                .saturating_sub(from) as usize;
             let right_bound = merged
                 .iter()
                 .filter(|r| r.start_frame >= range.end_frame)
                 .map(|r| r.start_frame)
                 .min()
                 .unwrap_or(audio.frames)
-                .saturating_sub(from as u64)
+                .saturating_sub(from)
                 .min((block.len() / c) as u64) as usize;
             let mut output = vec![0.0; len * c];
             for channel in 0..c {
@@ -236,7 +227,7 @@ pub fn declick(req: DeclickRequest) -> Result<Value> {
                     output[i * c + channel] = prediction[i];
                 }
             }
-            Ok(output)
+            emit(&output)
         },
     )?;
     Ok(
@@ -278,6 +269,11 @@ fn fade(frame: u64, region: &Region, hop: usize) -> f32 {
 }
 
 pub fn spectral_heal(req: HealRequest) -> Result<Value> {
+    spectral_heal_in_chunks(req, HEAL_CHUNK_FRAMES)
+}
+
+/// chunk_frames 只影响工作集大小，不影响结果：输出逐样本与整段一次处理相同。
+pub(super) fn spectral_heal_in_chunks(req: HealRequest, chunk_frames: u64) -> Result<Value> {
     let began = Instant::now();
     validate_fft(req.fft_size)?;
     if !req.strength.is_finite() || !(0.0..=1.0).contains(&req.strength) {
@@ -295,149 +291,211 @@ pub fn spectral_heal(req: HealRequest) -> Result<Value> {
     }
     let n = req.fft_size;
     let hop = n / 4;
-    let mut mask_budget = MAX_MASK_BYTES;
     let selections = req
         .regions
         .into_iter()
-        .map(|r| Selection::new(r, &audio, n, &mut mask_budget))
+        .map(|r| Selection::new(r, &audio, n))
         .collect::<Result<Vec<_>>>()?;
+    drop(audio);
     let merged = groups(selections.iter().map(|s| TimeRange {
         start_frame: s.region.start_frame,
         end_frame: s.region.end_frame,
     }));
     let mut fft = Transform::new(n);
+    let strength = req.strength;
     let (frames, sr, channels, bytes) = render(
         &req.input_path,
         &req.output_path,
         &merged,
-        (n * 3) as u64,
-        |block, c, start, len, from, range| {
-            let local: Vec<_> = selections
-                .iter()
-                .filter(|s| {
-                    s.region.start_frame < range.end_frame && s.region.end_frame > range.start_frame
-                })
-                .collect();
-            let mut output = block[start * c..(start + len) * c].to_vec();
-            if req.strength == 0.0
-                || local
-                    .iter()
-                    .all(|s| s.mask.as_ref().is_some_and(|m| m.iter().all(|&x| x == 0)))
-            {
-                return Ok(output);
-            }
-            // Anchors must have wholly clean windows, including nearby OTHER ranges.
-            let left_end = range.start_frame;
-            let right_start = range.end_frame;
-            let previous = merged
-                .iter()
-                .filter(|r| r.end_frame <= left_end)
-                .map(|r| r.end_frame)
-                .max()
-                .unwrap_or(0);
-            let next = merged
-                .iter()
-                .filter(|r| r.start_frame >= right_start)
-                .map(|r| r.start_frame)
-                .min()
-                .unwrap_or(audio.frames);
-            let left_valid = left_end - previous >= (n + hop) as u64;
-            let right_valid = next - right_start >= (n + hop) as u64;
-            if !left_valid && !right_valid {
-                return Err("spectral_heal requires fft_size+hop clean context frames on at least one side; combine nearby selections or reduce fft_size".into());
-            }
-            let lc = start as i64 - n as i64 / 2;
-            let rc = (start + len) as i64 + n as i64 / 2;
-            for channel in 0..c {
-                let signal: Vec<_> = block.chunks_exact(c).map(|s| s[channel]).collect();
-                let left = spectrum_at(&mut fft, &signal, lc);
-                let before = spectrum_at(&mut fft, &signal, lc - hop as i64);
-                let right = spectrum_at(&mut fft, &signal, rc);
-                let after = spectrum_at(&mut fft, &signal, rc + hop as i64);
-                let mut delta = vec![0_f32; len];
-                let mut norm = vec![0_f32; len];
-                let first = start as i64 - n as i64 / 2;
-                let last = (start + len) as i64 + n as i64 / 2;
-                for center in (first..last).step_by(hop) {
-                    let original = spectrum_at(&mut fft, &signal, center);
-                    let mut difference = vec![Complex32::default(); n];
-                    for k in 0..=n / 2 {
-                        let weight = local
-                            .iter()
-                            .map(|s| s.weight(center + from as i64, k, n))
-                            .fold(0_f32, f32::max)
-                            * req.strength;
-                        if weight == 0.0 {
-                            continue;
-                        }
-                        let expected = TAU * k as f64 / n as f64;
-                        let wl = expected
-                            + wrap(
-                                (left[k] * before[k].conj()).arg() as f64 - expected * hop as f64,
-                            ) / hop as f64;
-                        let wr = expected
-                            + wrap(
-                                (after[k] * right[k].conj()).arg() as f64 - expected * hop as f64,
-                            ) / hop as f64;
-                        let t = ((center - lc) as f64 / (rc - lc) as f64).clamp(0.0, 1.0);
-                        let (magnitude, phase) = if left_valid && right_valid {
-                            let omega = (wl + wr) / 2.0;
-                            let phase_error = wrap(
-                                right[k].arg() as f64
-                                    - left[k].arg() as f64
-                                    - omega * (rc - lc) as f64,
-                            );
-                            (
-                                (1.0 - t) * left[k].norm() as f64 + t * right[k].norm() as f64,
-                                left[k].arg() as f64
-                                    + omega * (center - lc) as f64
-                                    + phase_error * t,
-                            )
-                        } else if left_valid {
-                            (
-                                left[k].norm() as f64,
-                                left[k].arg() as f64 + wl * (center - lc) as f64,
-                            )
-                        } else {
-                            (
-                                right[k].norm() as f64,
-                                right[k].arg() as f64 + wr * (center - rc) as f64,
-                            )
-                        };
-                        let mut replacement =
-                            Complex32::from_polar(magnitude as f32, wrap(phase) as f32);
-                        if k == 0 || k == n / 2 {
-                            replacement.im = 0.0;
-                        }
-                        difference[k] = (replacement - original[k]) * weight;
-                        if k > 0 && k < n / 2 {
-                            difference[n - k] = difference[k].conj();
-                        }
-                    }
-                    fft.inverse(&mut difference);
-                    for (j, value) in difference.iter().enumerate() {
-                        let pos = center - n as i64 / 2 + j as i64 - start as i64;
-                        if pos >= 0 && (pos as usize) < len {
-                            let pos = pos as usize;
-                            delta[pos] += value.re * fft.window[j] / n as f32;
-                            norm[pos] += fft.window[j] * fft.window[j];
-                        }
-                    }
-                }
-                for i in 0..len {
-                    let gate = local
-                        .iter()
-                        .map(|s| fade(range.start_frame + i as u64, &s.region, hop))
-                        .fold(0_f32, f32::max);
-                    if gate > 0.0 && norm[i] > 1e-10 {
-                        output[i * c + channel] += delta[i] / norm[i] * gate;
-                    }
-                }
-            }
-            Ok(output)
-        },
+        |audio, range, emit| heal_range(audio, range, &selections, &merged, &mut fft, strength, chunk_frames.max(1), emit),
     )?;
     Ok(
-        json!({"outputPath":req.output_path,"sampleRate":sr,"channels":channels,"frames":frames,"sampleFormat":"float32","processedRegions":selections.len(),"mergedRanges":merged.len(),"fftSize":n,"hop":hop,"strength":req.strength,"bytes":bytes,"elapsedMs":began.elapsed().as_secs_f64()*1000.0}),
+        json!({"outputPath":req.output_path,"sampleRate":sr,"channels":channels,"frames":frames,"sampleFormat":"float32","processedRegions":selections.len(),"mergedRanges":merged.len(),"fftSize":n,"hop":hop,"strength":strength,"bytes":bytes,"elapsedMs":began.elapsed().as_secs_f64()*1000.0}),
     )
+}
+
+/// 读取绝对帧区间 [start, end) 中落在文件内的部分，返回实际起点；文件外的样本由 spectrum_at 按零处理。
+fn read_window(audio: &mut Audio, start: i64, end: i64) -> Result<(i64, Vec<f32>)> {
+    let limit = audio.frames as i64;
+    let (from, to) = (start.clamp(0, limit), end.clamp(0, limit));
+    Ok((from, if to > from { audio.read(from as u64, to as u64)? } else { Vec::new() }))
+}
+
+fn channel_of(data: &[f32], channels: usize, channel: usize) -> Vec<f32> {
+    data.chunks_exact(channels).map(|s| s[channel]).collect()
+}
+
+#[allow(clippy::too_many_arguments)]
+fn heal_range(
+    audio: &mut Audio,
+    range: &TimeRange,
+    selections: &[Selection],
+    merged: &[TimeRange],
+    fft: &mut Transform,
+    strength: f32,
+    chunk_frames: u64,
+    emit: &mut Emit,
+) -> Result<()> {
+    let n = fft.n;
+    let hop = n / 4;
+    let c = usize::from(audio.spec.channels);
+    let len = range.end_frame - range.start_frame;
+    let local: Vec<_> = selections
+        .iter()
+        .filter(|s| s.region.start_frame < range.end_frame && s.region.end_frame > range.start_frame)
+        .collect();
+    if strength == 0.0
+        || local
+            .iter()
+            .all(|s| s.mask.as_ref().is_some_and(|m| m.iter().all(|&x| x == 0)))
+    {
+        let mut at = range.start_frame;
+        while at < range.end_frame {
+            let to = (at + chunk_frames).min(range.end_frame);
+            emit(&audio.read(at, to)?)?;
+            at = to;
+        }
+        return Ok(());
+    }
+    // Anchors must have wholly clean windows, including nearby OTHER ranges.
+    let left_end = range.start_frame;
+    let right_start = range.end_frame;
+    let previous = merged
+        .iter()
+        .filter(|r| r.end_frame <= left_end)
+        .map(|r| r.end_frame)
+        .max()
+        .unwrap_or(0);
+    let next = merged
+        .iter()
+        .filter(|r| r.start_frame >= right_start)
+        .map(|r| r.start_frame)
+        .min()
+        .unwrap_or(audio.frames);
+    let left_valid = left_end - previous >= (n + hop) as u64;
+    let right_valid = next - right_start >= (n + hop) as u64;
+    if !left_valid && !right_valid {
+        return Err("spectral_heal requires fft_size+hop clean context frames on at least one side; combine nearby selections or reduce fft_size".into());
+    }
+    // 下面的中心点都用绝对帧号；half 是半个窗长。
+    let half = n as i64 / 2;
+    let step = hop as i64;
+    let base = range.start_frame as i64;
+    let lc = base - half;
+    let rc = range.end_frame as i64 + half;
+    let (left_from, left_data) = read_window(audio, lc - step - half, lc + half)?;
+    let (right_from, right_data) = read_window(audio, rc - half, rc + step + half)?;
+    let anchors: Vec<_> = (0..c)
+        .map(|channel| {
+            let left = channel_of(&left_data, c, channel);
+            let right = channel_of(&right_data, c, channel);
+            [
+                spectrum_at(fft, &left, lc - left_from),
+                spectrum_at(fft, &left, lc - step - left_from),
+                spectrum_at(fft, &right, rc - right_from),
+                spectrum_at(fft, &right, rc + step - right_from),
+            ]
+        })
+        .collect();
+    // 第 k 个分析中心位于 base - half + k * hop。每块只算窗口覆盖本块输出的中心，并按 k 递增累加，
+    // 所以分块结果与整段一次处理逐样本一致。
+    let mut at = 0_u64;
+    while at < len {
+        let end = (at + chunk_frames).min(len);
+        let k_begin = (at / hop as u64) as i64;
+        let k_end = (end as i64 + n as i64).div_euclid(step) + 1;
+        let (from, data) = read_window(audio, base + k_begin * step - n as i64, base + (k_end - 1) * step)?;
+        let count = (end - at) as usize;
+        let offset = (base + at as i64 - from) as usize;
+        let mut output = data[offset * c..(offset + count) * c].to_vec();
+        for (channel, [left, before, right, after]) in anchors.iter().enumerate() {
+            let signal = channel_of(&data, c, channel);
+            let mut delta = vec![0_f32; count];
+            let mut norm = vec![0_f32; count];
+            for k in k_begin..k_end {
+                let relative = k * step - half;
+                if relative >= len as i64 + half {
+                    break;
+                }
+                let center = base + relative;
+                let original = spectrum_at(fft, &signal, center - from);
+                let mut difference = vec![Complex32::default(); n];
+                for bin in 0..=n / 2 {
+                    let weight = local
+                        .iter()
+                        .map(|s| s.weight(center, bin, n))
+                        .fold(0_f32, f32::max)
+                        * strength;
+                    if weight == 0.0 {
+                        continue;
+                    }
+                    let expected = TAU * bin as f64 / n as f64;
+                    let wl = expected
+                        + wrap(
+                            (left[bin] * before[bin].conj()).arg() as f64 - expected * hop as f64,
+                        ) / hop as f64;
+                    let wr = expected
+                        + wrap(
+                            (after[bin] * right[bin].conj()).arg() as f64 - expected * hop as f64,
+                        ) / hop as f64;
+                    let t = ((center - lc) as f64 / (rc - lc) as f64).clamp(0.0, 1.0);
+                    let (magnitude, phase) = if left_valid && right_valid {
+                        let omega = (wl + wr) / 2.0;
+                        let phase_error = wrap(
+                            right[bin].arg() as f64
+                                - left[bin].arg() as f64
+                                - omega * (rc - lc) as f64,
+                        );
+                        (
+                            (1.0 - t) * left[bin].norm() as f64 + t * right[bin].norm() as f64,
+                            left[bin].arg() as f64
+                                + omega * (center - lc) as f64
+                                + phase_error * t,
+                        )
+                    } else if left_valid {
+                        (
+                            left[bin].norm() as f64,
+                            left[bin].arg() as f64 + wl * (center - lc) as f64,
+                        )
+                    } else {
+                        (
+                            right[bin].norm() as f64,
+                            right[bin].arg() as f64 + wr * (center - rc) as f64,
+                        )
+                    };
+                    let mut replacement =
+                        Complex32::from_polar(magnitude as f32, wrap(phase) as f32);
+                    if bin == 0 || bin == n / 2 {
+                        replacement.im = 0.0;
+                    }
+                    difference[bin] = (replacement - original[bin]) * weight;
+                    if bin > 0 && bin < n / 2 {
+                        difference[n - bin] = difference[bin].conj();
+                    }
+                }
+                fft.inverse(&mut difference);
+                for (j, value) in difference.iter().enumerate() {
+                    let position = relative - half + j as i64 - at as i64;
+                    if position >= 0 && (position as usize) < count {
+                        let position = position as usize;
+                        delta[position] += value.re * fft.window[j] / n as f32;
+                        norm[position] += fft.window[j] * fft.window[j];
+                    }
+                }
+            }
+            for i in 0..count {
+                let frame = range.start_frame + at + i as u64;
+                let gate = local
+                    .iter()
+                    .map(|s| fade(frame, &s.region, hop))
+                    .fold(0_f32, f32::max);
+                if gate > 0.0 && norm[i] > 1e-10 {
+                    output[i * c + channel] += delta[i] / norm[i] * gate;
+                }
+            }
+        }
+        emit(&output)?;
+        at = end;
+    }
+    Ok(())
 }

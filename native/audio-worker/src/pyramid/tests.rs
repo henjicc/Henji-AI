@@ -429,8 +429,16 @@ fn bulk_pcm_reader_matches_hound_across_batches_and_offsets() {
             }
         }
         writer.finalize().unwrap();
-        let mut reference = Audio::open(&input).unwrap();
-        let expected = reference.read(17, 2000).unwrap();
+        // 以 hound 为独立参照，核对自行解析的 WAV 读取逐样本一致。
+        let mut reference = hound::WavReader::open(&input).unwrap();
+        reference.seek(17).unwrap();
+        let count = (2000 - 17) * 2;
+        let expected: Vec<f32> = if format == hound::SampleFormat::Float {
+            reference.samples::<f32>().take(count).map(|v| v.unwrap()).collect()
+        } else {
+            let scale = 2_f32.powi(bits as i32 - 1);
+            reference.samples::<i32>().take(count).map(|v| v.unwrap() as f32 / scale).collect()
+        };
         let mut audio = Audio::open(&input).unwrap();
         audio.seek(17).unwrap();
         let mut stream = reader::Stream::new(audio).unwrap();
@@ -439,5 +447,63 @@ fn bulk_pcm_reader_matches_hound_across_batches_and_offsets() {
             stream.append(count, &mut actual).unwrap();
         }
         assert_eq!(actual, expected);
+    }
+}
+
+#[test]
+fn interrupted_build_resumes_from_aligned_point_with_identical_output() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("long.wav");
+    // 至少越过一个续算对齐点（第 3 层 4096 列 ≈ 1677 万帧）。
+    let frames = (RESUME_ALIGN * 8 * 512 + 200_000) as usize;
+    {
+        let mut writer =
+            crate::dsp::audio::F32Writer::new(File::create(&input).unwrap(), 1, 48000).unwrap();
+        let block: Vec<f32> = (0..frames)
+            .map(|i| (TAU * 440.0 * i as f32 / 48000.0).sin() * 0.3 * ((i / 9973) % 7) as f32 / 7.0)
+            .collect();
+        writer.write_samples(&block).unwrap();
+        writer.finalize().unwrap();
+    }
+    let run = |output: &std::path::Path| {
+        build(
+            BuildRequest {
+                input_path: input.clone(),
+                output_directory: output.to_path_buf(),
+            },
+            &AtomicBool::new(false),
+            || {},
+            |_| {},
+        )
+        .unwrap()
+    };
+    let whole = dir.path().join("whole");
+    assert_eq!(run(&whole)["resumedFromFrame"], 0);
+    // 模拟中断：清单停在对齐点之后，对齐点之后的文件内容是半写的垃圾。
+    let partial = dir.path().join("partial");
+    fs::create_dir(&partial).unwrap();
+    let mut manifest: Value =
+        serde_json::from_slice(&fs::read(whole.join("manifest.json")).unwrap()).unwrap();
+    let row = (resolution(0).low_bins(48000) as u64 + 1025) * 2;
+    for level in MIN_PERSISTED..=MAX_LEVEL {
+        let name = format!("level-{level}-channel-0.rg");
+        let mut bytes = fs::read(whole.join(&name)).unwrap();
+        let keep = ((RESUME_ALIGN + 37) >> (level - MIN_PERSISTED)) * row;
+        bytes.truncate(keep as usize);
+        let aligned = ((RESUME_ALIGN >> (level - MIN_PERSISTED)) * row) as usize;
+        bytes[aligned..].fill(0xEE);
+        fs::write(partial.join(&name), bytes).unwrap();
+        manifest["available"][level] = json!((RESUME_ALIGN + 37) >> (level - MIN_PERSISTED));
+    }
+    manifest["done"] = json!(false);
+    fs::write(partial.join("manifest.json"), manifest.to_string()).unwrap();
+    assert_eq!(run(&partial)["resumedFromFrame"], RESUME_ALIGN * 8 * 512);
+    for entry in fs::read_dir(&whole).unwrap() {
+        let name = entry.unwrap().file_name();
+        assert_eq!(
+            fs::read(whole.join(&name)).unwrap(),
+            fs::read(partial.join(&name)).unwrap(),
+            "{name:?}"
+        );
     }
 }

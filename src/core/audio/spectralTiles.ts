@@ -27,13 +27,19 @@ export interface SpectralTileSet {
 export const spectralTileKey = (level: number, tile: number): string => `${level}|${tile}`
 const tileBytes = (tile: AudioEditSpectralTile): number => tile.values.byteLength
 
+let defaultTileBudgetBytes = 256 * 1024 * 1024
+/** 按机器内存设定频谱块的默认内存预算（只当淘汰目标）；已有的存储下次写入时生效。 */
+export function setSpectralTileMemoryBudget(bytes: number): void {
+  if (bytes > 0) defaultTileBudgetBytes = bytes
+}
+
 /** 按字节淘汰最久未用的块；正在需要的块（pin）不淘汰。 */
 export class SpectralTileStore implements SpectralTileSet {
   sampleRate = 0; channels = 0; durationFrames = 0; version = 0
   private readonly entries = new Map<string, AudioEditSpectralTile>()
   private pinned = new Set<string>()
   private bytes = 0
-  constructor(private readonly maxBytes = 256 * 1024 * 1024) {}
+  constructor(private readonly maxBytes?: number) {}
   get(level: number, tile: number): AudioEditSpectralTile | undefined { return this.entries.get(spectralTileKey(level, tile)) }
   has(level: number, tile: number): boolean { return this.entries.has(spectralTileKey(level, tile)) }
   pin(keys: Iterable<string>): void { this.pinned = new Set(keys) }
@@ -43,8 +49,9 @@ export class SpectralTileStore implements SpectralTileSet {
     if (previous) { this.entries.delete(key); this.bytes -= tileBytes(previous) }
     if (!this.version) Object.assign(this, { sampleRate: tile.sampleRate, channels: tile.channels, durationFrames: tile.durationFrames })
     this.entries.set(key, tile); this.bytes += tileBytes(tile); this.version++
+    const budget = this.maxBytes ?? defaultTileBudgetBytes
     for (const [oldest, value] of this.entries) {
-      if (this.bytes <= this.maxBytes) break
+      if (this.bytes <= budget) break
       if (this.pinned.has(oldest) || oldest === key) continue
       this.entries.delete(oldest); this.bytes -= tileBytes(value)
     }

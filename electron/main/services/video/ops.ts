@@ -6,7 +6,7 @@ import path from 'node:path'
 import { getUploadsDir } from '../image/path-utils'
 import { execFileAsyncBuffer, resolveLocalMediaPath } from '../media/shared'
 import { loadFfmpegPath, loadFfprobePath } from './ffmpeg-loader'
-import { withMediaHeavyTask } from '../media-import/concurrency'
+import { MEDIA_HEAVY_FFMPEG_INPUT_THREADS, MEDIA_HEAVY_FFMPEG_OUTPUT_THREADS, withMediaHeavyTask } from '../media-import/concurrency'
 import { createMainLogger } from '../logging'
 import {
   getPreferredEncoder,
@@ -385,8 +385,10 @@ export async function generateVideoThumbnailBytes(source: string, maxSize = 200,
   signal?.throwIfAborted()
   const { stdout } = await execFileAsyncBuffer(ffmpegPath, [
     // 超出时长时 ffmpeg 取不到帧：调用方给的是估计值，取不到就退回开头
+    ...MEDIA_HEAVY_FFMPEG_INPUT_THREADS,
     '-ss', String(Number.isFinite(atSeconds) && atSeconds > 0 ? Math.round(atSeconds * 1000) / 1000 : 0.1),
     '-i', localPath,
+    ...MEDIA_HEAVY_FFMPEG_OUTPUT_THREADS,
     '-frames:v', '1',
     '-vf', `scale='min(${maxSize},iw)':'min(${maxSize},ih)':force_original_aspect_ratio=decrease`,
     '-c:v', 'libwebp',

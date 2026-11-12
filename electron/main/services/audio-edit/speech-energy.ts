@@ -6,7 +6,6 @@ import { runAudioEditProcess } from './process'
 
 const FRAME_MS = 10
 const level = (value: number): number => Math.max(-120, Math.min(0, Math.round(value * 10) / 10))
-const MAX_FRAMES = 2_160_000 // Six hours; about 35 MB of numeric band data at the upper bound.
 
 /** Keep channels separate: downmixing opposite-phase stereo can manufacture silence. */
 function speechEnergyFilter(options: SpeechEnergyOptions): { filter: string; complex: boolean } {
@@ -21,7 +20,6 @@ function speechEnergyFilter(options: SpeechEnergyOptions): { filter: string; com
 /** Decode/filter in FFmpeg; the coordinator receives only two levels per 10 ms, never PCM. */
 export async function decodeSpeechEnergy(source: AudioEditSourceMetadata, raw: SpeechEnergyOptions, signal: AbortSignal, progress: (value: number) => void): Promise<SpeechEnergyAnalysis> {
   const options = speechEnergyOptionsSchema.parse(raw)
-  if (source.durationFrames / source.sampleRate * 100 > MAX_FRAMES) throw new Error('声音分析目前支持六小时以内的素材，请缩短素材后重试。')
   signal.throwIfAborted()
   const wide: number[] = []; const high: number[] = []
   const wideHistogram = new SpeechEnergyHistogram(); const highHistogram = new SpeechEnergyHistogram()
@@ -43,8 +41,8 @@ export async function decodeSpeechEnergy(source: AudioEditSourceMetadata, raw: S
       if (!match) return
       const values = match[1] === 'wide' ? wide : high
       const value = match[2].toLowerCase() === '-inf' ? -Infinity : Number(match[2])
-      if (values.length >= MAX_FRAMES || !(value === -Infinity || Number.isFinite(value))) {
-        failure = new Error('声音分析超出六小时上限或包含无效电平，请缩短素材后重试。')
+      if (!(value === -Infinity || Number.isFinite(value))) {
+        failure = new Error('声音分析得到无效电平，请重新分析。')
         decode.abort(failure)
         return
       }

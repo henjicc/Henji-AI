@@ -38,3 +38,24 @@ it.each([0, 7])('无响应 close %s 仍报告失败，非零退出保留 stderr'
   process.emit('close', code)
   await assertion
 })
+
+it('进度心跳续期无进展超时：处理总时长远超时限也能拿到最终结果', async () => {
+  vi.useFakeTimers()
+  try {
+    const process = child()
+    mocks.spawn.mockReturnValue(process)
+    const result = invokeAudioWorker<{ done: boolean }>({ type: 'spectral_heal' }, 100)
+    const settled = result.then(value => ({ value }), error => ({ error }))
+    const request = JSON.parse(process.stdin.read().toString()) as { id: string }
+    for (let step = 0; step < 20; step++) {
+      await vi.advanceTimersByTimeAsync(80)
+      process.stdout.write(`${JSON.stringify({ version: 1, id: request.id, event: 'progress', done: step, total: 20 })}\n`)
+      await vi.advanceTimersByTimeAsync(0)
+    }
+    expect(process.kill).not.toHaveBeenCalled()
+    process.stdout.end(`${JSON.stringify({ version: 1, id: request.id, ok: true, result: { done: true } })}\n`)
+    await vi.advanceTimersByTimeAsync(0)
+    process.emit('close', 0)
+    expect(await settled).toEqual({ value: { done: true } })
+  } finally { vi.useRealTimers() }
+})

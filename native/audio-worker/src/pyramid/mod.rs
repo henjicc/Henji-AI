@@ -10,8 +10,8 @@ use rayon::prelude::*;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::{
-    fs::{self, File},
-    io::{BufWriter, Write},
+    fs::{self, File, OpenOptions},
+    io::{BufWriter, Seek, SeekFrom, Write},
     path::PathBuf,
     sync::atomic::{AtomicBool, Ordering},
     time::Instant,
@@ -21,6 +21,9 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 pub const MIN_PERSISTED: usize = 3;
 pub const MAX_LEVEL: usize = 15;
 const BATCH_BASE_COLUMNS: u64 = 512;
+/// 续算只能从所有层都没有未合并列的位置开始：第 3 层列数是 2^(15-3) 的整数倍时，各层计数都是偶数。
+/// 合并用的是未量化的功率，落盘字节无法还原，所以对齐点之后的部分重算（最多约 6 分钟素材）。
+const RESUME_ALIGN: u64 = 1 << (MAX_LEVEL - MIN_PERSISTED);
 
 #[derive(Debug, Deserialize)]
 pub struct TileRequest {
@@ -175,37 +178,84 @@ struct Store {
     writers: Vec<Vec<BufWriter<File>>>,
     pending: Vec<Option<Column>>,
     available: Vec<u64>,
+    /// 已落盘（sync_data）的续算对齐点序号；清单宣称的对齐点不会超过它。
+    synced: u64,
     sample_rate: u32,
     channels: usize,
     frames: u64,
     low: usize,
 }
 impl Store {
-    fn new(directory: PathBuf, input: &Audio) -> Result<Self> {
-        // 必须新建目录，避免失败重试覆盖仍被读者持有的上一代文件。
-        fs::create_dir(&directory)?;
+    /// 目录已存在且清单与输入一致时，从对齐点续写：对齐点之前的字节保留，之后的按同样的计算原位重写。
+    /// 计算是确定的，重写的字节与原有字节相同，读者按旧清单读到的内容始终有效。返回续算起点（第 3 层列数）。
+    fn open(directory: PathBuf, input: &Audio) -> Result<(Self, u64)> {
         let channels = input.spec.channels as usize;
-        let mut writers = Vec::new();
+        let low = resolution(0).low_bins(input.spec.sample_rate);
+        let row = ((low + 1025) * 2) as u64;
+        let fresh = !directory.try_exists()?;
+        if fresh {
+            fs::create_dir(&directory)?;
+        }
+        let mut resume = if fresh {
+            0
+        } else {
+            fs::read(directory.join("manifest.json"))
+                .ok()
+                .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+                .filter(|m| {
+                    m["format"] == "spectral-pyramid-v1"
+                        && m["sampleRate"] == input.spec.sample_rate
+                        && m["channels"] == channels
+                        && m["durationFrames"] == input.frames
+                        && m["lowBins"] == low
+                        && m["highBins"] == 1025
+                })
+                .and_then(|m| m["available"][MIN_PERSISTED].as_u64())
+                .map_or(0, |columns| columns / RESUME_ALIGN * RESUME_ALIGN)
+        };
+        let file = |level: usize, channel: usize| directory.join(format!("level-{level}-channel-{channel}.rg"));
+        // 某个文件比对齐点短（被外部截断）就整遍重算。
         for level in MIN_PERSISTED..=MAX_LEVEL {
+            for channel in 0..channels {
+                let need = (resume >> (level - MIN_PERSISTED)) * row;
+                if fs::metadata(file(level, channel)).map_or(true, |m| m.len() < need) {
+                    resume = 0;
+                }
+            }
+        }
+        let mut writers = Vec::new();
+        let mut available = vec![0; MAX_LEVEL + 1];
+        for level in MIN_PERSISTED..=MAX_LEVEL {
+            available[level] = resume >> (level - MIN_PERSISTED);
+            let offset = available[level] * row;
             writers.push(
                 (0..channels)
-                    .map(|channel| {
-                        File::create(directory.join(format!("level-{level}-channel-{channel}.rg")))
-                            .map(BufWriter::new)
+                    .map(|channel| -> std::io::Result<BufWriter<File>> {
+                        let mut handle = OpenOptions::new().write(true).create(true).truncate(false).open(file(level, channel))?;
+                        // 从头重算且与清单不一致时先清空，避免残留更长的旧内容。
+                        if resume == 0 {
+                            handle.set_len(0)?;
+                        }
+                        handle.seek(SeekFrom::Start(offset))?;
+                        Ok(BufWriter::new(handle))
                     })
                     .collect::<std::io::Result<Vec<_>>>()?,
             );
         }
-        Ok(Self {
-            directory,
-            writers,
-            pending: vec![None; MAX_LEVEL + 1],
-            available: vec![0; MAX_LEVEL + 1],
-            sample_rate: input.spec.sample_rate,
-            channels,
-            frames: input.frames,
-            low: resolution(0).low_bins(input.spec.sample_rate),
-        })
+        Ok((
+            Self {
+                directory,
+                writers,
+                pending: vec![None; MAX_LEVEL + 1],
+                available,
+                synced: resume / RESUME_ALIGN,
+                sample_rate: input.spec.sample_rate,
+                channels,
+                frames: input.frames,
+                low,
+            },
+            resume,
+        ))
     }
     fn push(&mut self, mut level: usize, mut columns: Vec<Column>) -> Result<()> {
         let bins = self.low + 1025;
@@ -247,6 +297,17 @@ impl Store {
                 writer.flush()?;
             }
         }
+        // 续算信任清单里对齐点之前的字节：对齐点前进（或完成）时先把数据落盘再换清单，
+        // 断电后不会出现清单还在、数据页却没写进磁盘的情况。对齐点之间不 sync，避免每批都刷盘。
+        let aligned = self.available[MIN_PERSISTED] / RESUME_ALIGN;
+        if done || aligned > self.synced {
+            for layer in &self.writers {
+                for writer in layer {
+                    writer.get_ref().sync_data()?;
+                }
+            }
+            self.synced = aligned;
+        }
         let manifest = json!({"format":"spectral-pyramid-v1","sampleRate":self.sample_rate,"channels":self.channels,
             "durationFrames":self.frames,"lowBins":self.low,"highBins":1025,"available":self.available,
             "coveredFrames":covered,"done":done});
@@ -281,21 +342,26 @@ pub fn build(
 ) -> Result<Value> {
     let began = Instant::now();
     check(cancelled)?;
-    let input = Audio::open(&req.input_path)?;
-    let mut store = Store::new(req.output_directory, &input)?;
-    store.publish(0, false)?;
+    let mut input = Audio::open(&req.input_path)?;
+    let (mut store, resume) = Store::open(req.output_directory, &input)?;
     let total = column_count(0, input.frames);
     let frames = input.frames;
     let channels = input.spec.channels as usize;
+    // 续算起点是第 3 层列的对齐点，对应的基础列也落在批边界上；上下文从该批需要的最早样本读起。
+    let first_base = resume * 8;
+    let mut read_frame = (first_base * 512).saturating_sub(4096).min(frames);
+    if resume == 0 {
+        store.publish(0, false)?;
+    }
+    input.seek(read_frame)?;
     // 滑动上下文仅保留下一批需要的重叠窗。每个源样本只解码一次，内存不随素材长度增长。
     let mut samples = reader::Stream::new(input)?;
     let mut block = Samples {
         data: Vec::new(),
-        start: 0,
+        start: read_frame,
         channels,
     };
-    let mut read_frame = 0_u64;
-    for base in (0..total).step_by(BATCH_BASE_COLUMNS as usize) {
+    for base in (first_base..total).step_by(BATCH_BASE_COLUMNS as usize) {
         yield_to_tiles();
         check(cancelled)?;
         let limit = (base + BATCH_BASE_COLUMNS).min(total);
@@ -333,5 +399,6 @@ pub fn build(
     let mut result = store.publish(frames, true)?;
     progress(json!({"coveredFrames":frames,"durationFrames":frames,"done":true}));
     result["elapsedMs"] = json!(began.elapsed().as_secs_f64() * 1000.0);
+    result["resumedFromFrame"] = json!((first_base * 512).min(frames));
     Ok(result)
 }

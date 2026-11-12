@@ -7,6 +7,8 @@ import { audioWorkerExecutablePath } from './audio-worker-client'
 export interface SpectralWorkerProgress { coveredFrames: number; durationFrames: number; done: boolean }
 interface Pending {
   finish(error?: Error, value?: unknown): void
+  /** 收到该请求的任何进度或心跳就续期无进展计时。 */
+  alive(): void
   progress?: (value: SpectralWorkerProgress) => void
   cancellation?: Error
 }
@@ -58,6 +60,8 @@ export class SpectralWorkerClient {
         if (message.version !== 1 || typeof message.id !== 'string') throw new Error('频谱进程响应协议不匹配')
         const pending = this.pending.get(message.id)
         if (!pending) return
+        if (message.event) pending.alive()
+        if (message.event === 'alive') return
         if (message.event === 'progress') {
           const p = message.progress
           if (!p || !Number.isSafeInteger(p.coveredFrames) || !Number.isSafeInteger(p.durationFrames) || p.coveredFrames < 0 || p.coveredFrames > p.durationFrames || typeof p.done !== 'boolean') throw new Error('频谱进度无效')
@@ -70,7 +74,11 @@ export class SpectralWorkerClient {
     return child
   }
 
-  request<T>(command: Record<string, unknown>, signal?: AbortSignal, progress?: (value: SpectralWorkerProgress) => void, timeoutMs = 120_000): Promise<T> {
+  /**
+   * idleTimeoutMs 是无进展超时：worker 计算中报进度、排队或让路时发心跳，每条都续期；
+   * 静默超过时限才算卡住。长素材的整段计算因此不受总时长限制。
+   */
+  request<T>(command: Record<string, unknown>, signal?: AbortSignal, progress?: (value: SpectralWorkerProgress) => void, idleTimeoutMs = 60_000): Promise<T> {
     signal?.throwIfAborted()
     const child = this.start()
     const id = randomUUID()
@@ -87,10 +95,11 @@ export class SpectralWorkerClient {
         grace.unref()
       }
       const onAbort = (): void => cancel(new Error('频谱读取已取消'))
-      const timer = setTimeout(() => cancel(new Error('AUDIO_WORKER_TIMEOUT：频谱请求超时')), timeoutMs)
+      const timer = setTimeout(() => cancel(new Error('AUDIO_WORKER_TIMEOUT：频谱计算长时间没有进展')), idleTimeoutMs)
       timer.unref()
       const pending: Pending = {
         progress,
+        alive: () => { if (!pending.cancellation) timer.refresh() },
         finish: (error, value) => {
           if (!this.pending.delete(id)) return
           clearTimeout(timer)

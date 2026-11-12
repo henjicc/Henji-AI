@@ -775,3 +775,52 @@ fn benchmark() {
         json!({"directory":run,"quality":metrics,"spectrogram":result})
     );
 }
+
+#[test]
+fn float_writer_upgrades_to_rf64_and_reader_round_trips_both_layouts() {
+    let dir = tempfile::tempdir().unwrap();
+    let samples: Vec<f32> = (0..3001 * 2).map(|i| (i as f32 * 0.37).sin() * 0.5).collect();
+    for (name, limit) in [("riff.wav", u64::from(u32::MAX)), ("rf64.wav", 0)] {
+        let path = dir.path().join(name);
+        let mut writer =
+            audio::F32Writer::new(fs::File::create(&path).unwrap(), 2, SR).unwrap();
+        writer.write_samples(&samples).unwrap();
+        writer.finalize_with_limit(limit).unwrap();
+        let bytes = fs::read(&path).unwrap();
+        assert_eq!(&bytes[..4], if limit == 0 { b"RF64" } else { b"RIFF" });
+        let mut audio = audio::Audio::open(&path).unwrap();
+        assert_eq!((audio.frames, audio.spec.channels, audio.spec.sample_rate), (3001, 2, SR));
+        assert_eq!(audio.read(0, 3001).unwrap(), samples);
+        assert_eq!(audio.read(1000, 1002).unwrap(), samples[2000..2004]);
+    }
+    // 普通 RIFF 布局仍可被 hound 等常规读取器打开。
+    let reader = hound::WavReader::open(dir.path().join("riff.wav")).unwrap();
+    assert_eq!(reader.duration(), 3001);
+}
+
+#[test]
+fn chunked_spectral_heal_matches_whole_selection_sample_for_sample() {
+    let dir = tempfile::tempdir().unwrap();
+    let input = dir.path().join("input.wav");
+    let clean = clean_signal();
+    let mut damaged = clean.clone();
+    for i in 20000..44000 {
+        damaged[2 * i + 1] += 0.3 * (TAU * 3500.0 * i as f32 / SR as f32).sin();
+    }
+    write_wav(&input, &damaged, 2);
+    let mask = dir.path().join("mask.bin");
+    // 20000..44000 => 47 columns; bins 128..170 => 43 rows.
+    write_mask(&mask, 47, 43, |x, y| if (x + y) % 5 == 0 { 0 } else { 200 });
+    let request = |output: &Path| -> HealRequest {
+        serde_json::from_value(json!({"input_path":input,"output_path":output,"strength":0.8,
+            "regions":[{"start_frame":20000,"end_frame":44000,"low_hz":3000,"high_hz":4000,"mask_path":mask}]})).unwrap()
+    };
+    let whole = dir.path().join("whole.wav");
+    heal::spectral_heal_in_chunks(request(&whole), u64::MAX).unwrap();
+    for chunk in [333, 777, 4096] {
+        let chunked = dir.path().join(format!("chunk{chunk}.wav"));
+        heal::spectral_heal_in_chunks(request(&chunked), chunk).unwrap();
+        assert_eq!(read_wav(&chunked), read_wav(&whole), "chunk {chunk}");
+    }
+    assert!(error_power(&read_wav(&whole), &clean, 22000, 42000) < error_power(&damaged, &clean, 22000, 42000));
+}

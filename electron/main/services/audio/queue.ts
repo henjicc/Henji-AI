@@ -30,7 +30,8 @@ export class AudioWaveformQueue {
   private active = 0
   private disposed = false
   private disposePromise?: Promise<void>
-  constructor(private readonly budgetBytes = 64 * 1024 * 1024) {}
+  /** 预算只是淘汰目标；超过并发的请求排队等待，消费方放弃时自动出队，不拒绝。 */
+  constructor(private readonly budgetBytes = 64 * 1024 * 1024, private readonly concurrency = 2) {}
   get statistics(): { active: number; queued: number; cacheBytes: number; cacheEntries: number } {
     return { active: this.active, queued: this.waiting.length, cacheBytes: this.cacheBytes, cacheEntries: this.cache.size }
   }
@@ -45,7 +46,6 @@ export class AudioWaveformQueue {
     let job = this.jobs.get(key)
     if (job?.controller.signal.aborted) job = undefined
     if (!job) {
-      if (this.active >= 2 && this.waiting.length >= 32) throw new Error('音频波形排队已满，请稍后重试。')
       let resolve!: Job['resolve']; let reject!: Job['reject']
       const promise = new Promise<Result>((done, fail) => { resolve = done; reject = fail })
       // The consumer may leave before native close; keep the job rejection observed.
@@ -83,7 +83,7 @@ export class AudioWaveformQueue {
     return result
   }
   private pump(): void {
-    while (!this.disposed && this.active < 2 && this.waiting.length) {
+    while (!this.disposed && this.active < this.concurrency && this.waiting.length) {
       const job = this.waiting.shift()!
       this.active++
       this.running.add(job)
