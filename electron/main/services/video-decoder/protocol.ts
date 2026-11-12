@@ -26,8 +26,10 @@ import type {
  * 6：显存预算只作淘汰目标（native/video-decoder/src/budget.rs）：打开会话不再因预算失败（不再返回
  *    `BUDGET_EXCEEDED`），不限会话数与硬解路数；hello 的 `limits` 只剩显存预算；`stats.budget` 去掉会话数与硬解上限，
  *    增加 `vramRetainedBytes`。旧服务程序握手即失败，不会把它的预算拒绝误当成服务故障。
+ * 7：时间点计划画面与上一项相同的项答 `frame_missing { reason: 'held' }`（消费方沿用上一幅）；解码跟不上播放时只解
+ *    参考帧；帧流计数增加 `held`。不认识 `held` 的渲染层会把这些项当成缺画面另行精确读取，新旧版本握手即失败。
  */
-export const VIDEO_DECODER_PROTOCOL_VERSION = 6
+export const VIDEO_DECODER_PROTOCOL_VERSION = 7
 export const VIDEO_DECODER_MAX_MESSAGE_BYTES = 16 * 1024 * 1024
 
 export type VideoDecoderErrorCode =
@@ -234,7 +236,7 @@ interface VideoDecoderFrameMissingEvent {
   streamId: string
   scheduleId: string
   index: number
-  reason: 'no_picture' | 'decode_error' | 'superseded'
+  reason: 'no_picture' | 'decode_error' | 'superseded' | 'held'
 }
 
 interface VideoDecoderScheduleDoneEvent {

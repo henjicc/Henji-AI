@@ -17,6 +17,17 @@ import type { VideoEditNativePicture } from './videoEditNativePicture'
 export type VideoEditDecodedPicture = VideoSample | VideoEditNativePicture
 
 /**
+ * 播放计划里这一项沿用上一项的画面：解码跟不上播放时只解了参考帧（这一项的非参考帧被跳过），或同一画面被连续请求
+ * （慢放、定格）。消费方继续显示它手里的那一幅。
+ */
+export const VIDEO_EDIT_PICTURE_HELD: unique symbol = Symbol('videoEditPictureHeld')
+export type VideoEditScheduledPicture<T = VideoEditDecodedPicture> = T | null | typeof VIDEO_EDIT_PICTURE_HELD
+/** 交还计划里的一项（沿用上一幅与没有画面的项什么也不用交还）。 */
+export function closeVideoEditScheduledPicture(picture: VideoEditScheduledPicture | void): void {
+  if (picture && picture !== VIDEO_EDIT_PICTURE_HELD) picture.close()
+}
+
+/**
  * One block of decoded sound; structurally a mediabunny `AudioSample`.
  *
  * Time is the absolute source timeline in seconds (container presentation time, not rebased to the stream start), the
@@ -119,12 +130,13 @@ export interface VideoEditFrameSource {
    */
   clipAudio(audioStream?: number): VideoEditClipAudio | undefined
   /**
-   * Forward playback through one long-lived decoder: exactly one picture or null per requested source time, in
-   * request order (the picture is the last one starting at or before that time). Null makes the caller use its
-   * regular path for that frame. Ends immediately when the file has no picture stream. Aborting `signal` stops the
-   * decode at once where the backend supports it (native), instead of after the picture being decoded.
+   * Forward playback through one long-lived decoder: exactly one answer per requested source time, in request order:
+   * a picture (the last one decoded starting at or before that time; exact unless the decoder fell behind playback and
+   * decoded reference pictures only), `VIDEO_EDIT_PICTURE_HELD` (the previous answer's picture again), or null (the
+   * caller uses its regular path for that frame). Ends immediately when the file has no picture stream. Aborting
+   * `signal` stops the decode at once where the backend supports it (native), instead of after the picture being decoded.
    */
-  schedule(timestamps: readonly number[], signal?: AbortSignal): AsyncGenerator<VideoEditDecodedPicture | null, void, unknown>
+  schedule(timestamps: readonly number[], signal?: AbortSignal): AsyncGenerator<VideoEditScheduledPicture, void, unknown>
   /** Whether this backend decodes every stream of the file; only asked when choosing a backend for it. */
   decodable?(): Promise<boolean>
 }

@@ -1,0 +1,270 @@
+{
+ "total": 273,
+ "last": [
+  "2026-11-12T15:30:10.922Z",
+  "video_edit.decode.lookahead.summary"
+ ],
+ "rows": [
+  {
+   "t": "15:29:21.207",
+   "l": "info",
+   "e": "video_edit.multicam.preview.start",
+   "c": {
+    "projectId": "c68d9762-254b-4bdd-88bf-a15f7b7d85e1",
+    "sourceId": "e6601c9e-140b-4e04-9388-c509dccd7048",
+    "cameras": 4,
+    "columns": 2,
+    "rows": 2,
+    "width": 7680,
+    "height": 4320,
+    "proxies": 3
+   }
+  },
+  {
+   "t": "15:29:22.032",
+   "l": "info",
+   "e": "video_edit.multicam.preview.first_frame",
+   "c": {
+    "projectId": "c68d9762-254b-4bdd-88bf-a15f7b7d85e1",
+    "sourceId": "e6601c9e-140b-4e04-9388-c509dccd7048",
+    "cameras": 4,
+    "durationMs": 827,
+    "divisor": 4
+   }
+  },
+  {
+   "t": "15:29:55.058",
+   "l": "info",
+   "e": "video_edit.program.play_start",
+   "c": {
+    "projectId": "c68d9762-254b-4bdd-88bf-a15f7b7d85e1",
+    "sequenceId": "1143e496-d252-4215-9c5b-158cc0ee7b27",
+    "frame": 0,
+    "at": 407238.90000000596,
+    "yieldMs": 0.09999999403953552,
+    "firstFrameMs": 48.400000005960464,
+    "audioMs": 15.299999997019768,
+    "armAheadMs": 87155.40000000596,
+    "premixed": true,
+    "cacheHits": 0,
+    "leadMs": 41.649999996996485
+   }
+  },
+  {
+   "t": "15:30:05.186",
+   "l": "info",
+   "e": "video_edit.playback.stats",
+   "c": {
+    "projectId": "c68d9762-254b-4bdd-88bf-a15f7b7d85e1",
+    "sequenceId": "1143e496-d252-4215-9c5b-158cc0ee7b27",
+    "fps": 59.94005994005994,
+    "width": 3840,
+    "height": 2160,
+    "reason": "stopped",
+    "startFrame": 0,
+    "endFrame": 594,
+    "expectedFrames": 595,
+    "presentedFrames": 595,
+    "droppedFrames": 0,
+    "droppedRatio": 0,
+    "maxConsecutiveDropped": 0,
+    "cachedFrames": 594,
+    "durationMs": 10142.8,
+    "approximateFrames": 0,
+    "renderMs": {
+     "count": 0,
+     "p50": null,
+     "p95": null,
+     "max": null
+    },
+    "presentLatencyMs": {
+     "count": 594,
+     "p50": 36.51,
+     "p95": 42.78,
+     "max": 159.3
+    },
+    "stages": {
+     "composite": {
+      "count": 594,
+      "p50": 0.2,
+      "p95": 0.3,
+      "max": 8.3
+     },
+     "decode": {
+      "count": 594,
+      "p50": 0.3,
+      "p95": 0.5,
+      "max": 36
+     },
+     "lookaheadNativeOpen": {
+      "count": 594,
+      "p50": 0,
+      "p95": 0,
+      "max": 27.8
+     },
+     "nativeClose": {
+      "count": 594,
+      "p50": 0,
+      "p95": 0,
+      "max": 9.1
+     },
+     "pictureCopy": {
+      "count": 594,
+      "p50": 0.2,
+      "p95": 0.4,
+      "max": 35.6
+     },
+     "presentComplete": {
+      "count": 594,
+      "p50": 3.07,
+      "p95": 7.64,
+      "max": 51.7
+     },
+     "presentDeadline": {
+      "count": 594,
+      "p50": 15.89,
+      "p95": 31.78,
+      "max": 115.2
+     },
+     "presentInflight": {
+      "count": 594,
+      "p50": 0,
+      "p95": 0,
+      "max": 8.2
+     },
+     "queue": {
+      "count": 594,
+      "p50": 16.21,
+      "p95": 26.07,
+      "max": 115
+     },
+     "scheduleWait": {
+      "count": 594,
+      "p50": 0,
+      "p95": 0.1,
+      "max": 15.6
+     },
+     "sourceReady": {
+      "count": 594,
+      "p50": 0,
+      "p95": 0.1,
+      "max": 0.1
+     }
+    }
+   }
+  },
+  {
+   "t": "15:30:05.190",
+   "l": "info",
+   "e": "video_edit.multicam.playback.stats",
+   "c": {
+    "projectId": "c68d9762-254b-4bdd-88bf-a15f7b7d85e1",
+    "sourceId": "e6601c9e-140b-4e04-9388-c509dccd7048",
+    "reason": "stopped",
+    "cameras": 4,
+    "fps": 59.94005994005994,
+    "actualFps": 58.45,
+    "divisor": 4,
+    "width": 7680,
+    "height": 4320,
+    "proxies": 3,
+    "startFrame": 3,
+    "endFrame": 593,
+    "expectedFrames": 591,
+    "presentedFrames": 563,
+    "droppedFrames": 28,
+    "droppedRatio": 0.047377,
+    "maxConsecutiveDropped": 16,
+    "cachedFrames": 0,
+    "durationMs": 9614.4,
+    "approximateFrames": 14,
+    "renderMs": {
+     "count": 562,
+     "p50": 4.94,
+     "p95": 11.58,
+     "max": 179.3
+    },
+    "presentLatencyMs": {
+     "count": 562,
+     "p50": 35.09,
+     "p95": 41.94,
+     "max": 344.9
+    },
+    "stages": {
+     "composite": {
+      "count": 562,
+      "p50": 0.2,
+      "p95": 0.4,
+      "max": 1.1
+     },
+     "decode": {
+      "count": 562,
+      "p50": 1.1,
+      "p95": 1.51,
+      "max": 171.3
+     },
+     "nativeClose": {
+      "count": 556,
+      "p50": 0,
+      "p95": 0,
+      "max": 10.4
+     },
+     "nestedRender": {
+      "count": 562,
+      "p50": 4.3,
+      "p95": 5.35,
+      "max": 612.1
+     },
+     "pictureCopy": {
+      "count": 562,
+      "p50": 2.42,
+      "p95": 3.07,
+      "max": 5.2
+     },
+     "presentComplete": {
+      "count": 562,
+      "p50": 3.32,
+      "p95": 8.95,
+      "max": 20.2
+     },
+     "presentDeadline": {
+      "count": 562,
+      "p50": 14.98,
+      "p95": 15.58,
+      "max": 31
+     },
+     "presentInflight": {
+      "count": 562,
+      "p50": 0,
+      "p95": 0,
+      "max": 0.2
+     },
+     "queue": {
+      "count": 562,
+      "p50": 14.11,
+      "p95": 15.58,
+      "max": 310.5
+     },
+     "scheduleWait": {
+      "count": 562,
+      "p50": 0.1,
+      "p95": 0.4,
+      "max": 609.9
+     },
+     "sourceReady": {
+      "count": 562,
+      "p50": 0,
+      "p95": 0.4,
+      "max": 0.7
+     },
+     "textureAllocation": {
+      "count": 562,
+      "p50": 0,
+      "p95": 0.1,
+      "max": 0.1
+     }
+    }
+   }
+  }
+ ]
+}

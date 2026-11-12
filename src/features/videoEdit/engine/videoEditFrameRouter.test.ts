@@ -213,7 +213,7 @@ describe('运行中原生失败的恢复（3.1）', () => {
     const router = new VideoEditFrameRouter(browser, native, { nativeAvailable: true }, () => {})
     const source = await router.open(media()).ready
     const pictures = await drain(source.schedule([0, 1, 2, 3]))
-    expect(pictures.map(value => [value && (value as unknown as Picture).backend, value?.timestamp])).toEqual([['native', 0], ['native', 1], ['browser', 2], ['browser', 3]])
+    expect(pictures.map(value => [value && (value as unknown as Picture).backend, (value as Picture | null)?.timestamp])).toEqual([['native', 0], ['native', 1], ['browser', 2], ['browser', 3]])
     expect(browser.calls).toEqual(['schedule 2'])
   })
 

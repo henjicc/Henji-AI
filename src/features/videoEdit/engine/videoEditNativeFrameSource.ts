@@ -2,7 +2,7 @@ import { VideoEditGpuFrameError } from './videoEditGpuFailure'
 import type { VideoEditMedia } from '@/core/videoEdit/document'
 import type { VideoFrameDecoderInfo, VideoFrameNativeStats, VideoFrameScheduleEvent, VideoFrameStreamEndedPayload } from '@/platform/contracts/videoFrames'
 import type { VideoEditFrameCache } from './videoEditFrameCache'
-import { VIDEO_EDIT_NATIVE_SOUND_READY, type VideoEditClipAudio, type VideoEditClipFrames, type VideoEditClipFramesOptions, type VideoEditFrameBackend, type VideoEditFrameSeeker, type VideoEditFrameSource, type VideoEditScrubRead, type VideoEditSnapshot } from './videoEditFrameSource'
+import { closeVideoEditScheduledPicture, VIDEO_EDIT_NATIVE_SOUND_READY, VIDEO_EDIT_PICTURE_HELD, type VideoEditClipAudio, type VideoEditClipFrames, type VideoEditClipFramesOptions, type VideoEditFrameBackend, type VideoEditFrameSeeker, type VideoEditFrameSource, type VideoEditScheduledPicture, type VideoEditScrubRead, type VideoEditSnapshot } from './videoEditFrameSource'
 import { createVideoEditNativeClipAudio, openVideoEditNativePcm, type VideoEditPcmSession } from './videoEditNativeAudio'
 import { VideoEditGpuFrame, videoEditGpuFrameUsesChroma } from './videoEditGpuFrame'
 import { VideoEditNativePicture, videoEditNativeRotation } from './videoEditNativePicture'
@@ -96,7 +96,8 @@ export function videoEditNativeScheduleSegments(times: readonly number[]): numbe
 }
 
 type Plan = { times: readonly number[] } | { range: { from: number; to?: number } }
-interface Consumer { frames: Map<number, NativeVideoFrame>; missing: Set<number>; highest: number; done?: { reason: string; delivered?: number; at: number }; wake?: () => void }
+/** `held`：服务答复沿用上一幅画面的项（`VIDEO_EDIT_PICTURE_HELD`）。 */
+interface Consumer { frames: Map<number, NativeVideoFrame>; missing: Set<number>; held: Set<number>; highest: number; done?: { reason: string; delivered?: number; at: number }; wake?: () => void }
 interface Ticket { deliver: (frame: NativeVideoFrame) => void; fail: (error: Error) => void }
 
 const decodeFailure = videoEditNativeReadFailure
@@ -160,7 +161,7 @@ export class VideoEditNativeDecoderSession {
   private onEvent(event: VideoFrameScheduleEvent): void {
     const consumer = this.consumers.get(event.scheduleId)
     if (!consumer) return
-    if (event.type === 'frame_missing') { consumer.missing.add(event.index); consumer.highest = Math.max(consumer.highest, event.index) }
+    if (event.type === 'frame_missing') { (event.reason === 'held' ? consumer.held : consumer.missing).add(event.index); consumer.highest = Math.max(consumer.highest, event.index) }
     else consumer.done = { reason: event.reason, at: performance.now(), ...(event.delivered !== undefined ? { delivered: event.delivered } : {}) }
     consumer.wake?.()
   }
@@ -266,12 +267,15 @@ export class VideoEditNativeDecoderSession {
    * showing at `from` up to `to`, in order, with null where a decoded picture never arrived (so a reader does not
    * stretch the previous picture over it). Aborting (or returning the generator) cancels the plan. `outcome.completed`
    * tells whether the service finished the whole plan (a range reached `to` or the end of the file), as opposed to
-   * stopping early (cancelled, interrupted, failed).
+   * stopping early (cancelled, interrupted, failed). Only a `times` plan answers an item with `VIDEO_EDIT_PICTURE_HELD`
+   * (the previous answer's picture again).
    */
-  async *run(plan: Plan, signal?: AbortSignal, outcome?: { completed: boolean }): AsyncGenerator<VideoEditNativePicture | null, void, unknown> {
+  run(plan: { range: { from: number; to?: number } }, signal?: AbortSignal, outcome?: { completed: boolean }): AsyncGenerator<VideoEditNativePicture | null, void, unknown>
+  run(plan: { times: readonly number[] }, signal?: AbortSignal, outcome?: { completed: boolean }): AsyncGenerator<VideoEditScheduledPicture<VideoEditNativePicture>, void, unknown>
+  async *run(plan: Plan, signal?: AbortSignal, outcome?: { completed: boolean }): AsyncGenerator<VideoEditScheduledPicture<VideoEditNativePicture>, void, unknown> {
     if (this.closing || this.ended) throw this.ended ?? closedFailure()
     const scheduleId = `s${++this.next}`
-    const consumer: Consumer = { frames: new Map(), missing: new Set(), highest: -1 }
+    const consumer: Consumer = { frames: new Map(), missing: new Set(), held: new Set(), highest: -1 }
     this.consumers.set(scheduleId, consumer)
     const abort = (): void => consumer.wake?.()
     signal?.addEventListener('abort', abort)
@@ -283,6 +287,7 @@ export class VideoEditNativeDecoderSession {
         const item = await this.take(consumer, index, times !== undefined, signal)
         if (item === 'end') break
         if (item === 'missing') { yield null; continue }
+        if (item === 'held') { yield VIDEO_EDIT_PICTURE_HELD; continue }
         yield this.picture(item)
       }
       if (outcome) outcome.completed = consumer.done?.reason === 'completed' && !signal?.aborted && !this.ended
@@ -306,13 +311,14 @@ export class VideoEditNativeDecoderSession {
    * plan ended or a later item arrived gets a grace period (counted once from the end of the plan, so a failed plan
    * does not wait per item), then counts as missing.
    */
-  private async take(consumer: Consumer, index: number, timed: boolean, signal?: AbortSignal): Promise<NativeVideoFrame | 'missing' | 'end'> {
+  private async take(consumer: Consumer, index: number, timed: boolean, signal?: AbortSignal): Promise<NativeVideoFrame | 'missing' | 'held' | 'end'> {
     let lostSince: number | undefined
     for (;;) {
       if (signal?.aborted) return 'end'
       const frame = consumer.frames.get(index)
       if (frame) { consumer.frames.delete(index); return frame }
       if (consumer.missing.has(index)) return 'missing'
+      if (consumer.held.delete(index)) return 'held'
       // Nothing more comes from an ended stream: no grace period.
       if (this.ended) return 'end'
       const done = consumer.done
@@ -444,7 +450,7 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
       if (openOnly) { this.warmed.add(purpose); return }
       if (abort.signal.aborted) return
       let decoded = false
-      for await (const picture of session.run({ times: [time] }, abort.signal)) { if (picture) decoded = true; picture?.close() }
+      for await (const picture of session.run({ times: [time] }, abort.signal)) { if (picture) decoded = true; closeVideoEditScheduledPicture(picture) }
       if (!abort.signal.aborted && !decoded) throw decodeFailure(this.media.name, new Error('入点没有可解码画面。'), 'file')
       if (!abort.signal.aborted) this.warmed.add(purpose)
     })().finally(async () => {
@@ -615,7 +621,7 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
     return createVideoEditNativeClipAudio(sampleRate => this.owner.openSound(this.media, this.path, sampleRate, audioStream))
   }
 
-  async *schedule(timestamps: readonly number[], signal?: AbortSignal): AsyncGenerator<VideoEditNativePicture | null, void, unknown> {
+  async *schedule(timestamps: readonly number[], signal?: AbortSignal): AsyncGenerator<VideoEditScheduledPicture<VideoEditNativePicture>, void, unknown> {
     if (this.media.kind !== 'video') return
     // Another plan of this file is running (another renderer: a nested sequence, a second instance of one, the
     // program beside it): a second plan on the shared session would cancel it (the service runs one plan per
@@ -648,13 +654,13 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
    * 另一个会话只在显存留有前台余量时按提前打开的方式开；开不成，这个计划余下的段都接在同一会话上（剪辑点照常现场定位）。
    * 全帧内素材不分段：服务在计划内自己预先接续下一段（`decode/mod.rs` 3.6）。
    */
-  private async *segmented(timestamps: readonly number[], signal?: AbortSignal): AsyncGenerator<VideoEditNativePicture | null, void, unknown> {
+  private async *segmented(timestamps: readonly number[], signal?: AbortSignal): AsyncGenerator<VideoEditScheduledPicture<VideoEditNativePicture>, void, unknown> {
     const shared = await this.session('playback')
     const starts = shared.intraOnly ? [0] : videoEditNativeScheduleSegments(timestamps)
     if (starts.length === 1) { yield* shared.run({ times: timestamps }, signal); return }
     const stop = new AbortController()
     const plan = eitherSignal(stop.signal, signal)
-    interface Segment { iterator: AsyncGenerator<VideoEditNativePicture | null, void, unknown>; first: Promise<IteratorResult<VideoEditNativePicture | null, void>> }
+    interface Segment { iterator: AsyncGenerator<VideoEditScheduledPicture<VideoEditNativePicture>, void, unknown>; first: Promise<IteratorResult<VideoEditScheduledPicture<VideoEditNativePicture>, void>> }
     /** 各段实际所在的会话（拿到会话后才知道）。 */
     const uses = new Map<number, 'playback' | 'alternate'>()
     /** 另一个会话开不成后，这个计划不再尝试。 */
@@ -698,7 +704,7 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
         // 没提前开（或另一个会话开不成）的段接在共享会话上：上一段已经交完。
         const segment = await started.get(index) ?? await run('playback', index)
         started.delete(index)
-        let pending: Promise<IteratorResult<VideoEditNativePicture | null, void>> | undefined = segment.first
+        let pending: Promise<IteratorResult<VideoEditScheduledPicture<VideoEditNativePicture>, void>> | undefined = segment.first
         try {
           for (let item = starts[index]; item < end; item++) {
             ahead(index + 1, item)
@@ -714,7 +720,7 @@ export class VideoEditNativeFileSource implements VideoEditFrameSource {
       // 还在打开会话的段不等：打开后见计划已取消就不发出；已发出的计划随取消立即结束。
       for (const pending of started.values()) this.owner.track(pending.then(async segment => {
         if (!segment) return
-        ;(await segment.first.catch(() => undefined))?.value?.close()
+        closeVideoEditScheduledPicture((await segment.first.catch(() => undefined))?.value)
         await segment.iterator.return()
       }, () => undefined))
     }
@@ -872,8 +878,11 @@ export class VideoEditNativeFrames implements VideoEditFrameBackend {
     })().finally(() => { this.relieving = undefined })
   }
 
+  /** 关闭没有读取者的文件（含按前瞻距离留着的闲置会话），等它们的会话都停下。 */
   async disposeIdle(): Promise<void> {
-    for (const [key, entry] of this.files) if (entry.users === 0) { this.files.delete(key); await entry.source.close() }
+    const idle = [...this.files].filter(([, entry]) => entry.users === 0)
+    for (const [key] of idle) this.files.delete(key)
+    await Promise.allSettled(idle.map(([, entry]) => entry.source.close()))
   }
 
   /** Whether the native service can be asked to read this media item at all. */

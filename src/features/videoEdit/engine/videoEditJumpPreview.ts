@@ -241,6 +241,9 @@ export class VideoEditJumpPreview {
     reader.frames.close?.(); this.frames.release(reader.demux)
   }
 
+  /** 交还解码会话（补帧与精确画面的读取器），已解好的常驻画面留着：节目换成别的内容时调用，下一步补帧再按需打开。 */
+  releaseReaders(): void { this.closeReader(); this.closeExact() }
+
   /** Called after the last draw with these pictures was submitted; closing waits for nothing else. */
   dispose(): void {
     this.disposed = true

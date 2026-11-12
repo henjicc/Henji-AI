@@ -111,6 +111,11 @@ impl SlotTable {
     pub fn outstanding(&self) -> usize {
         self.in_use.lock().unwrap().iter().filter(|used| **used).count()
     }
+
+    /// 槽位总数（纹理池大小）。
+    pub fn count(&self) -> usize {
+        self.in_use.lock().unwrap().len()
+    }
 }
 
 #[derive(Default)]
@@ -125,6 +130,8 @@ pub struct StreamCounters {
     pub decoded: AtomicU64,
     pub discarded: AtomicU64,
     pub missing: AtomicU64,
+    /// 时间点计划里沿用上一幅画面的项（解码跟不上时跳过的非参考帧、重复的时间）。
+    pub held: AtomicU64,
     pub seeks: AtomicU64,
     /// 从拖动留存帧直接交出的帧（不解码）。
     pub retained_hits: AtomicU64,
@@ -202,6 +209,7 @@ pub fn counters_value(control: &StreamControl) -> Value {
         "decoded": load(&counters.decoded),
         "discarded": load(&counters.discarded),
         "missing": load(&counters.missing),
+        "held": load(&counters.held),
         "seeks": load(&counters.seeks),
         "retainedHits": load(&counters.retained_hits),
         "cuts": load(&counters.cuts),

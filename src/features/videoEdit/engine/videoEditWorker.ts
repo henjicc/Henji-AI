@@ -423,6 +423,9 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
         releasePreopened(); setProxies(undefined); setLocalPaths(request.localPaths)
         setVideoEditTrackResults({}); setVideoEditSmartRegionSegments({}); effectWarnings.clear()
         await renderer.replaceContent(request.document)
+        // 前瞻按旧内容留着的闲置会话（文件已没人读，靠下一帧的前瞻回收）在换内容后不会再有那一帧：当场关闭。
+        // 节目会话保留期间（换成空内容）因此不占解码会话与显存。
+        await nativeBackend?.disposeIdle()
         self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'update') {
         if (!renderer) throw new Error('剪辑渲染器尚未就绪。')

@@ -15,7 +15,7 @@ import type { CodeAuthorProgram as CodeMaterialProgram } from '@/core/videoEdit/
 import { testAuthorBundle, testAuthorProgram } from './videoEditAuthorTestFixtures'
 const compileCodeMaterial = (source: string) => testAuthorProgram(testAuthorBundle(source))
 import type { VideoSample } from 'mediabunny'
-import type { VideoEditFrameBackend, VideoEditFrameReadOptions } from './videoEditFrameSource'
+import { VIDEO_EDIT_PICTURE_HELD, type VideoEditFrameBackend, type VideoEditFrameReadOptions } from './videoEditFrameSource'
 import { createVideoEditNativeClipAudio, type VideoEditPcmSession } from './videoEditNativeAudio'
 import { VideoEditNativePicture } from './videoEditNativePicture'
 import type { NativeVideoFrame } from './videoEditNativeFrames'
@@ -2734,6 +2734,45 @@ it('原生预算管理时未来段不走旧半秒预取；停止立即回收当�
     expect(scheduled).toEqual([document.media[0].path])
     await renderer.stopPlayback()
     expect(closed).toEqual(scheduled)
+  } finally { await renderer.dispose() }
+})
+
+it('计划让一层沿用手里的画面（解码跟不上时只解参考帧）：不另读这一帧；沿用的不是这一时刻的那一幅时整帧标为近似', async () => {
+  const picture = (timestamp: number, frames = 1) => ({ timestamp, duration: frames / 30, format: 'NV12', close: () => {} }) as unknown as VideoSample
+  const backend: VideoEditFrameBackend = {
+    managesIdleSessions: true,
+    open: media => ({ key: media.path, ready: Promise.resolve({ clipFrames: () => ({ frameAt: async () => { throw new Error('沿用的项不另读。') }, frames: () => { throw new Error('沿用的项不另读。') } }), clipAudio: () => undefined,
+      // 第 1 帧沿用第 0 帧（被跳过的非参考帧）；第 3 帧沿用盖住两帧的第 2 帧（慢放式重复）。
+      async *schedule(timestamps) { yield picture(timestamps[0]); yield VIDEO_EDIT_PICTURE_HELD; yield picture(timestamps[2], 2); yield VIDEO_EDIT_PICTURE_HELD },
+    }) }), release: () => {}, seeker: () => { throw new Error('播放测试不走定位。') },
+  }
+  const renderer = new VideoEditRenderer(fixture(), { previewWidth: 3840, frames: backend })
+  try {
+    const results = []
+    for (const frame of [0, 1, 2, 3]) results.push(await renderer.render(frame, true))
+    expect(results.map(result => [result.presented, result.approximate === true])).toEqual([[true, false], [true, true], [true, false], [true, false]])
+    expect(results[1].sourceTimestamps).toEqual(results[0].sourceTimestamps)
+    expect(results[3].sourceTimestamps).toEqual(results[2].sourceTimestamps)
+  } finally { await renderer.dispose() }
+})
+
+it('画面时钟跳过几项后落在“沿用”上：沿用的是被跳过的最后一幅真实画面，不是片段手里更早的那幅', async () => {
+  const closed: number[] = []
+  const picture = (timestamp: number) => ({ timestamp, duration: 1 / 30, format: 'NV12', close: () => { closed.push(timestamp) } }) as unknown as VideoSample
+  let times: number[] = []
+  const backend: VideoEditFrameBackend = {
+    managesIdleSessions: true,
+    open: media => ({ key: media.path, ready: Promise.resolve({ clipFrames: () => ({ frameAt: async () => { throw new Error('沿用的项不另读。') }, frames: () => { throw new Error('沿用的项不另读。') } }), clipAudio: () => undefined,
+      async *schedule(timestamps) { times = [...timestamps]; yield picture(timestamps[0]); yield VIDEO_EDIT_PICTURE_HELD; yield picture(timestamps[2]); yield VIDEO_EDIT_PICTURE_HELD; yield VIDEO_EDIT_PICTURE_HELD },
+    }) }), release: () => {}, seeker: () => { throw new Error('播放测试不走定位。') },
+  }
+  const renderer = new VideoEditRenderer(fixture(), { previewWidth: 3840, frames: backend })
+  try {
+    await renderer.render(0, true)
+    const result = await renderer.render(4, true)
+    expect(result).toMatchObject({ presented: true, approximate: true })
+    expect(result.sourceTimestamps?.[0]).toBeCloseTo(times[2])
+    expect(closed).toContain(times[0])
   } finally { await renderer.dispose() }
 })
 

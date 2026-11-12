@@ -19,7 +19,9 @@ use std::io::{self, Read, Write};
 ///    `stats` 增加进程内存与预算占用。
 /// 6：显存预算只作淘汰目标（budget.rs）：打开会话不再因预算失败（不再返回 `BUDGET_EXCEEDED`），不限会话数与硬解路数；
 ///    hello 的 `limits` 只剩显存预算；`stats.budget` 去掉会话数与硬解上限，增加 `vramRetainedBytes`。
-pub const PROTOCOL_VERSION: u32 = 6;
+/// 7：时间点计划画面与上一项相同的项答 `frame_missing { reason: held }`（消费方沿用上一幅）；解码跟不上播放时只解参考帧；
+///    帧流计数增加 `held`。
+pub const PROTOCOL_VERSION: u32 = 7;
 /// 单条控制消息上限。控制消息只含元数据，超过即视为协议错误，防止异常长度导致巨量分配。
 pub const MAX_MESSAGE_BYTES: usize = 16 * 1024 * 1024;
 

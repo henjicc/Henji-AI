@@ -55,7 +55,7 @@ interface AudioMixSets { activeAudio: Set<string>; activeChains: Set<string>; ac
 import { VideoEditGpuFrame, videoEditGpuFrameUsesChroma, videoEditPictureHighPrecision } from './videoEditGpuFrame'
 import type { VideoEditCodeSources } from './videoEditCodeSources'
 import { codeMaterialImageIds } from '@/core/videoEdit/codeMaterialResources'
-import type { VideoEditClipAudio, VideoEditClipFrames, VideoEditDecodedPicture, VideoEditFrameBackend, VideoEditFrameSeeker, VideoEditFrameSource } from './videoEditFrameSource'
+import { closeVideoEditScheduledPicture, VIDEO_EDIT_PICTURE_HELD, type VideoEditClipAudio, type VideoEditClipFrames, type VideoEditDecodedPicture, type VideoEditFrameBackend, type VideoEditFrameSeeker, type VideoEditFrameSource, type VideoEditScheduledPicture } from './videoEditFrameSource'
 import { VideoEditBrowserFrames } from './videoEditBrowserFrames'
 import { videoEditSourceReadError } from './videoEditSourceErrors'
 import { videoEditAudioTransitionClipGain, videoEditClipAudioWindows, videoEditHandleFrame, videoEditTransitionMedium, videoEditTransitionPictureClips, videoEditTransitionWindow, type VideoEditTransitionWindow } from '@/core/videoEdit/transitions'
@@ -82,9 +82,9 @@ interface PlaybackStream {
   released?: boolean
   /** Initial contiguous pictures already owned by the bounded seek cache. */
   cachedUntilFrame: number
-  samples: AsyncGenerator<VideoEditDecodedPicture | null, void, unknown>
+  samples: AsyncGenerator<VideoEditScheduledPicture, void, unknown>
   /** 当前播放段的首帧；原生未来片段由 Worker 按预算预定位。 */
-  primed?: Promise<IteratorResult<VideoEditDecodedPicture | null, void>>
+  primed?: Promise<IteratorResult<VideoEditScheduledPicture, void>>
   /** Serializes pulls; one file never serves two clips at the same frame. */
   tail: Promise<unknown>
 }
@@ -923,6 +923,9 @@ export class VideoEditRenderer {
     this.cancelPresentation(); await this.disposePlayback()
     await Promise.allSettled([...this.sources.values()].map(async pending => { const source = await pending; source.current?.close(); await source.iterator?.return(); this.release(source) }))
     this.sources.clear(); this.frameCache.clear(); this.stills?.clear(); this.contentAudio.clear()
+    // 换成别的内容（节目保留时换成空内容）：悬停取帧与跳转预览按旧内容开着的读取一并交还。
+    this.jumpPreview?.releaseReaders()
+    await this.hoverRenderer?.dispose(); this.hoverRenderer = undefined
     for (const chain of this.audioChains.values()) chain.dispose()
     this.audioChains.clear(); this.stretchers.clear()
     await this.codeSources?.replaceContent(document)
@@ -1108,7 +1111,7 @@ export class VideoEditRenderer {
     await Promise.allSettled(playback.streams.map(async stream => {
       await stream.tail.catch(() => undefined)
       const primed = stream.primed; stream.primed = undefined
-      if (primed) (await primed.catch(() => undefined))?.value?.close()
+      if (primed) closeVideoEditScheduledPicture((await primed.catch(() => undefined))?.value)
       await stream.samples.return(); if (!stream.released) this.release(stream)
     }))
   }
@@ -1136,15 +1139,23 @@ export class VideoEditRenderer {
       void stream.primed.catch(() => undefined)
     }
   }
-  /** The scheduled picture for exactly this frame and clip, or undefined to use the regular path. */
-  private takeScheduled(stream: PlaybackStream, frame: number, clipId: string): Promise<VideoEditDecodedPicture | undefined> {
-    const pull = (): Promise<IteratorResult<VideoEditDecodedPicture | null, void>> => {
+  /**
+   * The scheduled answer for exactly this frame and clip: a picture, `VIDEO_EDIT_PICTURE_HELD` (keep the clip's current
+   * picture), or undefined to use the regular path. Items the playback clock skipped are released unused.
+   */
+  private takeScheduled(stream: PlaybackStream, frame: number, clipId: string, adopt: (picture: VideoEditDecodedPicture) => Promise<void>): Promise<Exclude<VideoEditScheduledPicture, null> | undefined> {
+    const pull = (): Promise<IteratorResult<VideoEditScheduledPicture, void>> => {
       const primed = stream.primed; stream.primed = undefined
       return primed ?? stream.samples.next()
     }
-    const next = stream.tail.catch(() => undefined).then(async () => {
+    const take = async (): Promise<Exclude<VideoEditScheduledPicture, null> | undefined> => {
+      // 被画面时钟跳过的项里属于这个片段的真实画面当场换成它手里的那一幅：之后的项若答“沿用”，沿用的正是最近解出的
+      // 画面。不另外留着它等下一项——纹理池最小只有两个槽，多占一个会让解码等不到空槽。
       while (stream.cursor < stream.entries.length && stream.entries[stream.cursor].frame < frame) {
-        stream.cursor++; const skipped = await pull(); skipped.value?.close()
+        const passed = stream.entries[stream.cursor++]
+        const value = (await pull()).value
+        if (value && value !== VIDEO_EDIT_PICTURE_HELD && passed.clipId === clipId) await adopt(value)
+        else closeVideoEditScheduledPicture(value)
       }
       const entry = stream.entries[stream.cursor]
       if (!entry || entry.frame !== frame || entry.clipId !== clipId) return undefined
@@ -1153,6 +1164,10 @@ export class VideoEditRenderer {
       // Finish the generator before the timeline leaves this contiguous run; its last picture belongs to the caller.
       if (stream.cursor === stream.entries.length) { await stream.samples.return(); stream.released = true; this.release(stream) }
       return result.done || !result.value ? undefined : result.value
+    }
+    const next = stream.tail.catch(() => undefined).then(async () => {
+      const waiting = performance.now()
+      try { return await take() } finally { recordVideoEditPreparation('scheduleWait', performance.now() - waiting) }
     })
     stream.tail = next
     return next
@@ -2350,7 +2365,13 @@ export class VideoEditRenderer {
       if (cachedPicture) cacheHits++
       // If an intervening allocation evicted a prefix picture, takeScheduled returns undefined for
       // this pre-schedule time and the ordinary exact-picture reader recovers it below.
-      const scheduled = cachedPicture ?? (scheduledStream ? await this.takeScheduled(scheduledStream, frame, clip.id) : undefined)
+      const scheduled = cachedPicture ?? (scheduledStream ? await this.takeScheduled(scheduledStream, frame, clip.id, async picture => {
+        await source.iterator?.return(); source.iterator = undefined
+        source.current?.close(); source.current = picture
+      }) : undefined)
+      // 计划让这一层沿用手里的画面：解码跟不上播放时这一项只解了参考帧，或同一画面被连续请求（慢放、定格）。
+      const held = scheduled === VIDEO_EDIT_PICTURE_HELD && !!source.current
+      const picked = scheduled === VIDEO_EDIT_PICTURE_HELD ? undefined : scheduled
       // A sequential reader started before the stream's first picture hands out that first picture early: it is kept
       // for its own time and nothing shows until then.
       let early = false
@@ -2361,7 +2382,7 @@ export class VideoEditRenderer {
       // caller requests continuous playback; a forward iterator would re-decode
       // the whole GOP for every preceding picture.
       // Which reader served a playback picture: the schedule, or a fallback that decodes on its own (diagnostics).
-      if (scheduledStream) recordVideoEditPreparation(scheduled ? 'pictureScheduled' : 'pictureUnscheduled', 0)
+      if (scheduledStream) recordVideoEditPreparation(held ? 'pictureHeld' : picked ? 'pictureScheduled' : 'pictureUnscheduled', 0)
       if (this.codeInput) {
         // A code video input reads its reference's own decoder (exclusive reader): consecutive frames continue it, a
         // repeated time keeps the current picture, and in preview a small step back (a restarted play command asks
@@ -2405,9 +2426,14 @@ export class VideoEditRenderer {
             }
           }
         }
-      } else if (scheduled) {
+      } else if (held) {
+        // 沿用的不是这一时刻的那一幅（被跳过的非参考帧）时这一帧是近似画面，停下后节目按精确方式重画。
+        if (!videoEditPictureCovers(source.current, time)) approximatePictures++
+      } else if (picked) {
         await source.iterator?.return(); source.iterator = undefined
-        source.current?.close(); source.current = scheduled
+        source.current?.close(); source.current = picked
+        // 跟不上播放时交出的是不晚于这一时刻的最后一幅参考帧。
+        if (!videoEditPictureCovers(picked, time)) approximatePictures++
       } else if (scheduledStream && source.current && source.current.timestamp <= time + 1e-6 && time < source.current.timestamp + source.current.duration - 1e-7) {
         // A slowed or held parent clip asks for the same source picture again: it is already the current one.
       } else if ((this.previewWidth || clip.reverse) && (!sequential || time < source.previousTime)) {
@@ -2459,7 +2485,7 @@ export class VideoEditRenderer {
         const decoded = source.current
         const copying = performance.now()
         const normalized = await this.compositor!.snapshot(decoded, videoEditGpuFrameUsesChroma(decoded, source.codec), true)
-        if (this.codeInput) recordVideoEditPreparation('codeInputCopy', performance.now() - copying)
+        recordVideoEditPreparation(this.codeInput ? 'codeInputCopy' : 'pictureCopy', performance.now() - copying)
         if (this.disposed || this.sources.get(clip.id) !== pendingSource) { normalized.close(); decoded.close(); return null }
         source.current = normalized
         // Forward pictures already have the same owned format as seeks. Retain

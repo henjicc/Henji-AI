@@ -1,6 +1,6 @@
 import type { VideoEditMedia } from '@/core/videoEdit/document'
 import type { VideoEditFrameCache } from './videoEditFrameCache'
-import { resolveVideoEditDecodeBackend, VIDEO_EDIT_NATIVE_PRIMARY, type VideoEditAudioChunk, type VideoEditClipAudio, type VideoEditClipFrames, type VideoEditClipFramesOptions, type VideoEditDecodeBackend, type VideoEditDecodeSupport, type VideoEditDecodedPicture, type VideoEditFrameBackend, type VideoEditFrameSeeker, type VideoEditFrameSource, type VideoEditSnapshot } from './videoEditFrameSource'
+import { resolveVideoEditDecodeBackend, VIDEO_EDIT_NATIVE_PRIMARY, type VideoEditAudioChunk, type VideoEditClipAudio, type VideoEditClipFrames, type VideoEditClipFramesOptions, type VideoEditDecodeBackend, type VideoEditDecodeSupport, type VideoEditDecodedPicture, type VideoEditFrameBackend, type VideoEditFrameSeeker, type VideoEditFrameSource, type VideoEditScheduledPicture, type VideoEditSnapshot } from './videoEditFrameSource'
 import { videoEditNativeClosed, videoEditNativeFailureCode, videoEditNativeFailureKind } from './videoEditNativeFailure'
 import { VideoEditGpuDeviceLostError, VideoEditGpuFrameError } from './videoEditGpuFailure'
 
@@ -371,7 +371,7 @@ class RoutedFileSource implements VideoEditFrameSource {
     }
   }
 
-  async *schedule(timestamps: readonly number[], signal?: AbortSignal): AsyncGenerator<VideoEditDecodedPicture | null, void, unknown> {
+  async *schedule(timestamps: readonly number[], signal?: AbortSignal): AsyncGenerator<VideoEditScheduledPicture, void, unknown> {
     const { router, decision, media } = this
     let backend = router.current(decision)
     // One answer per time: a recovered plan continues with the times not answered yet.

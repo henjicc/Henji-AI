@@ -244,9 +244,57 @@ pub fn handoff_wait(delivered: u64, backlog: u64, paced: bool) -> HandoffWait {
     }
 }
 
+/// 时间点计划（播放）的解码跟不上判断。消费方手里交出未还的帧少于 `low`（它已用完、正等下一幅）就开始只解参考帧；
+/// 直到交出未还的帧到 `high`（纹理池快满，解码已远在消费方前面）才恢复逐帧解。消费方按画面时钟成批取帧（合成一帧取
+/// 一批、跳过其间的项），只看“此刻是否在等”会在两批之间误判为领先、把解码花在随后就被跳过的非参考帧上。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DropState {
+    pub dropping: bool,
+    pub low: usize,
+    pub high: usize,
+}
+
+impl DropState {
+    pub fn new(low: usize, slots: usize) -> Self {
+        // 纹理池只有两三个槽（显存不足时的最小池）时，消费方每还回一幅，交出未还的帧就回到 1：下界必须低于池子
+        // 装得下的数量，否则解码完全跟得上也会一直判为跟不上。
+        let low = low.min(slots.saturating_sub(1)).max(1);
+        Self { dropping: false, low, high: slots.saturating_sub(1).max(low) }
+    }
+
+    /// 按此刻交出未还的帧数更新，返回这个包是否只在是参考帧时才解。
+    pub fn update(&mut self, outstanding: usize) -> bool {
+        if outstanding < self.low {
+            self.dropping = true;
+        } else if outstanding >= self.high {
+            self.dropping = false;
+        }
+        self.dropping
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn drops_from_an_empty_cushion_until_the_pool_is_nearly_full() {
+        let mut state = DropState::new(2, 8);
+        assert!(!state.update(4), "开头不丢");
+        assert!(state.update(1), "消费方已用完：只解参考帧");
+        assert!(state.update(5), "两批之间池子渐满仍只解参考帧");
+        assert!(!state.update(7), "池子快满：解码远在前面，恢复逐帧");
+        assert!(!state.update(3));
+        assert_eq!(DropState::new(2, 3).high, 2, "小池子的上界不低于下界");
+    }
+
+    #[test]
+    fn a_two_slot_pool_keeps_decoding_every_frame_while_the_consumer_holds_one() {
+        let mut state = DropState::new(2, 2);
+        assert!(!state.update(1), "消费方手里有一幅：解码跟得上");
+        assert!(state.update(0), "消费方已用完");
+        assert!(!state.update(1));
+    }
 
     #[test]
     fn waits_for_first_backlogged_and_paced_frames() {

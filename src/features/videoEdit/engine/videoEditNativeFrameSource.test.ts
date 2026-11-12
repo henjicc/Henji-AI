@@ -9,6 +9,7 @@ import type { VideoFrameDecoderInfo, VideoFrameRequestTag, VideoFrameScheduleEve
 import { VideoEditFrameCache } from './videoEditFrameCache'
 import { VideoEditGpuFrame } from './videoEditGpuFrame'
 import { VideoEditNativeFrames, videoEditNativeScheduleSegments, type VideoEditNativeChannel } from './videoEditNativeFrameSource'
+import { closeVideoEditScheduledPicture, VIDEO_EDIT_PICTURE_HELD } from './videoEditFrameSource'
 import { VideoEditNativePicture, videoEditNativeRotation } from './videoEditNativePicture'
 import type { NativeVideoFrame } from './videoEditNativeFrames'
 import { VideoEditNativeCallError } from './videoEditNativeFailure'
@@ -162,7 +163,7 @@ describe('前瞻与原生预算', () => {
     const warm = frames.preopen(media(), { time: 2, purpose: 'playback', signal: controller.signal })
     await warm.ready; warm.release()
     const opened = frames.open(media()), source = await opened.ready
-    for await (const picture of source.schedule([2])) picture?.close()
+    for await (const picture of source.schedule([2])) closeVideoEditScheduledPicture(picture)
     expect(channel.calls.filter(call => call.method === 'openDecoder')).toHaveLength(1)
     expect(log).toHaveBeenCalledWith('debug', expect.any(String), 'video_edit.decode.preopen.hit', expect.objectContaining({ purpose: 'playback' }))
     frames.release(opened.key)
@@ -200,7 +201,7 @@ describe('前瞻与原生预算', () => {
       return { scheduleId: params.scheduleId, count: 1 }
     }
     const proxyFrames = new VideoEditProxyFrames(frames, new Map([['m', proxy]])), opened = proxyFrames.open(document.media[0])
-    for await (const picture of (await opened.ready).schedule([target.time])) picture?.close()
+    for await (const picture of (await opened.ready).schedule([target.time])) closeVideoEditScheduledPicture(picture)
     expect(channel.calls.filter(call => call.method === 'openDecoder').map(call => call.params)).toEqual([{ path: 'proxy.mp4', purpose: 'playback' }])
     proxyFrames.release(opened.key); await frames.disposeIdle()
   })
@@ -257,7 +258,7 @@ describe('前瞻与原生预算', () => {
     const first = playback.next(); await flush()
     const params = channel.last('schedule') as { streamId: string; scheduleId: string }
     channel.frame(params.streamId, { kind: 'schedule', id: params.scheduleId, index: 0 }, 0)
-    ;(await first).value?.close()
+    closeVideoEditScheduledPicture((await first).value)
     expect(frames.openSessions).toBe(2)
     // 播放中前瞻只要播放会话：定位会话不在当前画面使用，可以回收。
     setLimit(2500); await frames.maintain(new Map([[media().path, 0]]), new Map([[`${media().path}\0\0playback`, true]]))
@@ -288,9 +289,26 @@ describe('原生帧源：连续计划', () => {
     expect(pictures.map(picture => picture instanceof VideoEditNativePicture ? picture.timestamp : picture)).toEqual([0, null, 0.033333, 0.05])
     expect((await schedule.next()).done).toBe(true)
     expect(channel.released).toEqual([99])
-    for (const picture of pictures) picture?.close()
+    for (const picture of pictures) if (picture instanceof VideoEditNativePicture) picture.close()
     await flush()
     expect(channel.released.sort((a, b) => a - b)).toEqual([0, 99, 33_333, 50_000])
+  })
+
+  it('服务答复沿用上一幅的项（解码跟不上、重复的时间）交出沿用标记，不占画面、不另读', async () => {
+    const channel = new FakeChannel()
+    const source = await backend(channel).open(media()).ready
+    const schedule = source.schedule([0, 1 / 60, 2 / 60])
+    const first = schedule.next()
+    await flush()
+    const { streamId, scheduleId } = channel.last('schedule') as { streamId: string; scheduleId: string }
+    channel.event({ type: 'frame_missing', streamId, scheduleId, index: 1, reason: 'held' })
+    channel.frame(streamId, { kind: 'schedule', id: scheduleId, index: 0 }, 0)
+    channel.frame(streamId, { kind: 'schedule', id: scheduleId, index: 2 }, 33_333)
+    channel.event({ type: 'schedule_done', streamId, scheduleId, reason: 'completed', message: null, delivered: 2 })
+    const answers = [(await first).value, (await schedule.next()).value, (await schedule.next()).value]
+    expect(answers.map(answer => answer instanceof VideoEditNativePicture ? answer.timestamp : answer)).toEqual([0, VIDEO_EDIT_PICTURE_HELD, 0.033333])
+    expect(channel.calls.filter(call => call.method === 'frameAt')).toEqual([])
+    for (const answer of answers) if (answer instanceof VideoEditNativePicture) answer.close()
   })
 
   /** 原生服务的预算答复：预算 `limit` 个会话，每个 1000 字节。 */
@@ -330,7 +348,7 @@ describe('原生帧源：连续计划', () => {
     expect(pictures.map(picture => picture instanceof VideoEditNativePicture ? Math.round(picture.timestamp * 60) : picture)).toEqual(segments.flat().map(time => Math.round(time * 60)))
     expect(channel.calls.filter(call => call.method === 'openDecoder')).toHaveLength(2)
     expect(channel.calls.filter(call => call.method === 'closeStream')).toHaveLength(0)
-    for (const picture of pictures) picture?.close()
+    for (const picture of pictures) if (picture instanceof VideoEditNativePicture) picture.close()
   })
 
   it('另一个播放会话没有预算余量时不挤占别的会话：整个计划的剪辑点都接在同一会话上，只尝试一次', async () => {
@@ -353,7 +371,7 @@ describe('原生帧源：连续计划', () => {
     expect(channel.calls.filter(call => call.method === 'openDecoder')).toHaveLength(1)
     expect(channel.calls.filter(call => call.method === 'cancelSchedule')).toHaveLength(0)
     expect(log.mock.calls.filter(call => call[2] === 'video_edit.decode.schedule.cut_shared')).toHaveLength(1)
-    for (const picture of pictures) picture?.close()
+    for (const picture of pictures) closeVideoEditScheduledPicture(picture)
   })
 
   it('分段只在需要重新定位处：向后跳或向前跳过一秒以上，太短的段并回前一段；全帧内素材整段交给服务', async () => {
@@ -380,7 +398,7 @@ describe('原生帧源：连续计划', () => {
     const { streamId, scheduleId } = channel.last('schedule') as { streamId: string; scheduleId: string }
     channel.frame(streamId, { kind: 'schedule', id: scheduleId, index: 0 }, 0)
     channel.frame(streamId, { kind: 'schedule', id: scheduleId, index: 1 }, 16_667)
-    ;(await first).value?.close()
+    closeVideoEditScheduledPicture((await first).value)
     await schedule.return()
     await flush()
     expect(channel.calls.filter(call => call.method === 'cancelSchedule')).toEqual([{ method: 'cancelSchedule', params: { streamId, scheduleId } }])
@@ -410,7 +428,7 @@ describe('原生帧源：连续计划', () => {
     const third = source.schedule([2]), thirdNext = third.next(); await flush()
     expect(channel.last('schedule')).toMatchObject({ streamId: 'vf-1' })
     channel.frame('vf-1', { kind: 'schedule', id: channel.last('schedule').scheduleId as string, index: 0 }, 2_000_000)
-    ;(await thirdNext).value?.close(); await third.return(undefined)
+    closeVideoEditScheduledPicture((await thirdNext).value); await third.return(undefined)
     const log = vi.fn(), full = new VideoEditNativeFrames({ channel, localPath: () => 'D:/a.mov', log })
     channel.answers.stats = () => ({ native: { streams: [], budget: { vramLimitBytes: 1000, vramReservedBytes: full.openSessions * 1000, vramRetainedBytes: 0, largestSessionBytes: 1000 } } })
     const only = await full.open(media({ sourceRevision: 'full' })).ready
@@ -479,7 +497,7 @@ describe('原生帧源：连续计划', () => {
     const { streamId, scheduleId } = channel.last('schedule') as { streamId: string; scheduleId: string }
     channel.frame(streamId, { kind: 'schedule', id: scheduleId, index: 0 }, 0)
     const picture = (await first).value
-    expect(picture).toBeInstanceOf(VideoEditNativePicture); picture?.close()
+    expect(picture).toBeInstanceOf(VideoEditNativePicture); closeVideoEditScheduledPicture(picture)
     channel.end(streamId, 'PROCESS_EXITED')
     await expect(schedule.next()).rejects.toMatchObject({ kind: 'service', code: 'PROCESS_EXITED' })
     const again = source.schedule([1]); const waiting = again.next(); await flush()

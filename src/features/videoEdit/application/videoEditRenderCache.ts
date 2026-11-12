@@ -340,6 +340,8 @@ export function recordVideoEditProgramRender(projectId: string, composition: Vid
   if (result.renderCached !== false || result.renderElapsedMs === undefined || !Number.isFinite(result.renderElapsedMs)) return
   const window = windowAt(frame)
   if (!window) return
+  // 有图层沿用了早于这一时刻的画面（解码跟不上，只解了参考帧）：这一帧没有按时实时出画，与跳帧一样计入。
+  if (result.approximate) { observe(projectId, composition, window, frame, null); return }
   if (result.renderElapsedMs > 1000 / composition.fps && result.renderElapsedMs > (slowSamples.get(window.key)?.elapsedMs ?? 0)) {
     slowSamples.set(window.key, { elapsedMs: result.renderElapsedMs, frame, stages: result.renderStages ?? {} })
     if (slowSamples.size > 256) slowSamples.delete(slowSamples.keys().next().value!)

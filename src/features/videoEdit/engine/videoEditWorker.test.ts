@@ -21,6 +21,7 @@ vi.mock('./videoEditRenderer', () => ({ VideoEditRenderer: class {
   captureHoverFrame = state.hover
   async dispose() {}
   async updateDocument() {}
+  async replaceContent() {}
   cancelPresentation() {}
   setRenderCache() {}
   retainLookahead() {}
@@ -37,6 +38,11 @@ vi.mock('./videoEditRenderer', () => ({ VideoEditRenderer: class {
   abandonPausedFrame = state.abandon
 } }))
 vi.mock('./videoEditTrackingPixels', () => ({ readVideoEditTrackingRgb: state.readRgb }))
+const native = vi.hoisted(() => ({ disposeIdle: vi.fn(async () => {}) }))
+vi.mock('./videoEditNativeFrameSource', async importOriginal => {
+  const actual = await importOriginal<typeof import('./videoEditNativeFrameSource')>()
+  return { ...actual, VideoEditNativeFrames: class extends actual.VideoEditNativeFrames { override disposeIdle = native.disposeIdle } }
+})
 
 const document = createVideoEditTestDocument('联系表回读')
 const composition = videoEditComposition(document, document.sequences[0].id)
@@ -709,4 +715,17 @@ it('导出帧在 Worker 里直接送进编码流：先回执提交、位图不�
   worker.onmessage({ data: { id: rejected, kind: 'encoderOpen', stream: 8, purpose: 'renderCache', config: { codec: 'hev1.1.6.L186.B0', width: 7680, height: 4320 } } })
   await vi.waitFor(() => expect(messages.some(message => message.id === rejected)).toBe(true))
   expect(messages.find(message => message.id === rejected)?.encoderFailure).toMatchObject({ reason: 'unsupported', detail: expect.stringContaining('hev1.1.6.L186.B0') })
+})
+
+it('节目保留时换成空内容：前瞻按旧内容留着的闲置解码会话当场关闭，不等再也不会来的下一帧', async () => {
+  worker.onmessage({ data: { kind: 'nativeFrames.attach', port: { postMessage: vi.fn(), start: vi.fn() } as unknown as MessagePort } as unknown as RenderRequest })
+  const opened = ++nextId
+  worker.onmessage({ data: { kind: 'init', id: opened, document: composition, surface: {} as OffscreenCanvas, decode: { nativeAvailable: true } } })
+  await vi.waitFor(() => expect(messages.some(message => message.id === opened)).toBe(true))
+  native.disposeIdle.mockClear()
+  const replaced = ++nextId
+  worker.onmessage({ data: { kind: 'replaceContent', id: replaced, document: composition, localPaths: {} } })
+  await vi.waitFor(() => expect(messages.some(message => message.id === replaced)).toBe(true))
+  expect(native.disposeIdle).toHaveBeenCalledTimes(1)
+  expect(messages.find(message => message.id === replaced)?.error).toBeUndefined()
 })

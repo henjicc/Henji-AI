@@ -8,11 +8,16 @@ const logger = createLogger('features.videoEdit.playbackStats')
 
 const round = (value: number): number => Math.round(value * 100) / 100
 
-export type VideoEditPlaybackFrame = Pick<RenderResponse, 'presented' | 'renderCached' | 'renderElapsedMs' | 'renderStages'>
+export type VideoEditPlaybackFrame = Pick<RenderResponse, 'presented' | 'renderCached' | 'renderElapsedMs' | 'renderStages' | 'approximate'>
 
 export interface VideoEditPlaybackSummary {
   startFrame: number; endFrame: number; expectedFrames: number; presentedFrames: number; droppedFrames: number; droppedRatio: number
   maxConsecutiveDropped: number; cachedFrames: number; durationMs: number
+  /**
+   * 呈现了、但有图层沿用了早于这一时刻的画面的帧：多路视频解码跟不上时各层只解参考帧（见原生服务 `schedule_times`），
+   * 画面照常逐帧出，各层按较低帧率平稳更新。这些帧不算跳帧，单独计数。
+   */
+  approximateFrames: number
   /** Worker 报告的渲染耗时（不含等刷新时刻），只计实时合成的帧。 */
   renderMs: VideoEditTimingDistribution
   /** 节目发出这一帧的请求到它上屏（回执到达）的时间。 */
@@ -32,6 +37,7 @@ export class VideoEditPlaybackCollector {
   private dropped = 0
   private maxConsecutive = 0
   private cached = 0
+  private approximate = 0
   private readonly render = new VideoEditTimingHistogram()
   private readonly latency = new VideoEditTimingHistogram()
   private readonly stages = new Map<string, VideoEditTimingHistogram>()
@@ -43,6 +49,7 @@ export class VideoEditPlaybackCollector {
     this.dropped += gap; this.maxConsecutive = Math.max(this.maxConsecutive, gap)
     this.lastFrame = frame; this.presented++
     this.latency.add(latencyMs)
+    if (result.approximate) this.approximate++
     if (result.renderCached === false && result.renderElapsedMs !== undefined) this.render.add(result.renderElapsedMs)
     else if (result.renderCached) this.cached++
     for (const [stage, ms] of Object.entries(result.renderStages ?? {})) {
@@ -55,7 +62,7 @@ export class VideoEditPlaybackCollector {
   summary(now: number): VideoEditPlaybackSummary {
     const expected = this.lastFrame - this.startFrame + 1
     return { startFrame: this.startFrame, endFrame: this.lastFrame, expectedFrames: expected, presentedFrames: this.presented, droppedFrames: this.dropped,
-      droppedRatio: Math.round(this.dropped / expected * 1e6) / 1e6, maxConsecutiveDropped: this.maxConsecutive, cachedFrames: this.cached, durationMs: round(now - this.startedAt),
+      droppedRatio: Math.round(this.dropped / expected * 1e6) / 1e6, maxConsecutiveDropped: this.maxConsecutive, cachedFrames: this.cached, durationMs: round(now - this.startedAt), approximateFrames: this.approximate,
       renderMs: this.render.distribution(), presentLatencyMs: this.latency.distribution(),
       // 渲染分段逐帧带着全部阶段名（多数为 0）；整次播放都是 0 的阶段不写进日志。
       stages: Object.fromEntries([...this.stages].filter(([, histogram]) => histogram.max > 0).sort(([a], [b]) => a.localeCompare(b)).map(([stage, histogram]) => [stage, histogram.distribution()])) }

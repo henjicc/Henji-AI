@@ -1,0 +1,433 @@
+{
+ "total": 273,
+ "last": [
+  "2026-11-12T15:30:10.922Z",
+  "video_edit.decode.lookahead.summary"
+ ],
+ "rows": [
+  {
+   "t": "15:28:15.293",
+   "l": "info",
+   "e": "video_edit.multicam.create.start",
+   "c": {
+    "projectId": "c68d9762-254b-4bdd-88bf-a15f7b7d85e1",
+    "cameras": 4,
+    "sync": "in_points"
+   }
+  },
+  {
+   "t": "15:28:15.296",
+   "l": "info",
+   "e": "video_edit.multicam.create.completed",
+   "c": {
+    "projectId": "c68d9762-254b-4bdd-88bf-a15f7b7d85e1",
+    "sequenceId": "e6601c9e-140b-4e04-9388-c509dccd7048"
+   }
+  },
+  {
+   "t": "15:28:26.935",
+   "l": "info",
+   "e": "video_edit.decode.backend.selected",
+   "c": {
+    "mediaId": "b786fd6d-cc06-46bd-b464-638d5ad112f2",
+    "backend": "native",
+    "browser": "unknown",
+    "nativeAvailable": true
+   }
+  },
+  {
+   "t": "15:28:28.079",
+   "l": "info",
+   "e": "video_edit.decode.backend.selected",
+   "c": {
+    "mediaId": "b786fd6d-cc06-46bd-b464-638d5ad112f2",
+    "backend": "native",
+    "browser": "unknown",
+    "nativeAvailable": true
+   }
+  },
+  {
+   "t": "15:28:31.340",
+   "l": "info",
+   "e": "video_edit.render_cache.start",
+   "c": {
+    "projectId": "c68d9762-254b-4bdd-88bf-a15f7b7d85e1",
+    "sequenceId": "1143e496-d252-4215-9c5b-158cc0ee7b27",
+    "windows": 4,
+    "auto": true,
+    "codec": "avc",
+    "bitrateMbps": 200
+   }
+  },
+  {
+   "t": "15:28:32.064",
+   "l": "info",
+   "e": "video_edit.decode.backend.selected",
+   "c": {
+    "mediaId": "b786fd6d-cc06-46bd-b464-638d5ad112f2",
+    "backend": "native",
+    "browser": "unknown",
+    "nativeAvailable": true
+   }
+  },
+  {
+   "t": "15:28:37.602",
+   "l": "info",
+   "e": "video_edit.jump_preview.fill.start",
+   "c": {
+    "aroundFrame": 0,
+    "windows": 1,
+    "cold": true
+   }
+  },
+  {
+   "t": "15:28:37.602",
+   "l": "info",
+   "e": "video_edit.decode.backend.selected",
+   "c": {
+    "mediaId": "render-cache:ror0if0lxwbp04xf56r2:0:[\"ror0if0lxwbp04xf56r2\",\"henji-media://local/E%3A%5C%E6%96%87%E6%A1%A3%5CHenjiAI%5C.cache%5Crender%5Cd01618f865e1d1c4b5f9bb32b10545638491ea7eff23044daccdf22210c03f7c.mp4\",\"live\"]",
+    "backend": "native",
+    "browser": "unknown",
+    "nativeAvailable": true
+   }
+  },
+  {
+   "t": "15:28:37.722",
+   "l": "info",
+   "e": "video_edit.jump_preview.filled",
+   "c": {
+    "reason": "complete",
+    "cold": true,
+    "elapsedMs": 121,
+    "workMs": 86,
+    "steps": 7,
+    "pictures": 5,
+    "megabytes": 4,
+    "windows": 1,
+    "filledWindows": 1,
+    "aroundFrame": 0,
+    "coveredFrames": 299
+   }
+  },
+  {
+   "t": "15:28:41.657",
+   "l": "info",
+   "e": "video_edit.jump_preview.fill.start",
+   "c": {
+    "aroundFrame": 0,
+    "windows": 1,
+    "cold": false
+   }
+  },
+  {
+   "t": "15:28:41.657",
+   "l": "info",
+   "e": "video_edit.decode.backend.selected",
+   "c": {
+    "mediaId": "render-cache:1vqejskz5uw6mg4vyyfuq:300:[\"1vqejskz5uw6mg4vyyfuq\",\"henji-media://local/E%3A%5C%E6%96%87%E6%A1%A3%5CHenjiAI%5C.cache%5Crender%5Ceb5c3773e312d6656f12618896b1f5fe1efe17742bc2dd0f5f6e9f484a51f717.mp4\",\"live\"]",
+    "backend": "native",
+    "browser": "unknown",
+    "nativeAvailable": true
+   }
+  },
+  {
+   "t": "15:28:41.793",
+   "l": "info",
+   "e": "video_edit.jump_preview.filled",
+   "c": {
+    "reason": "complete",
+    "cold": false,
+    "elapsedMs": 136,
+    "workMs": 102,
+    "steps": 7,
+    "pictures": 10,
+    "megabytes": 7,
+    "windows": 2,
+    "filledWindows": 2,
+    "aroundFrame": 0,
+    "coveredFrames": 599
+   }
+  },
+  {
+   "t": "15:28:45.987",
+   "l": "info",
+   "e": "video_edit.jump_preview.fill.start",
+   "c": {
+    "aroundFrame": 0,
+    "windows": 1,
+    "cold": false
+   }
+  },
+  {
+   "t": "15:28:45.987",
+   "l": "info",
+   "e": "video_edit.decode.backend.selected",
+   "c": {
+    "mediaId": "render-cache:1qkqg7v8nbe8p2obb1aep:600:[\"1qkqg7v8nbe8p2obb1aep\",\"henji-media://local/E%3A%5C%E6%96%87%E6%A1%A3%5CHenjiAI%5C.cache%5Crender%5C84cd74f46477d362bfa29af8d655162df8b9dbd0486f26e3c7236b86b8c68d52.mp4\",\"live\"]",
+    "backend": "native",
+    "browser": "unknown",
+    "nativeAvailable": true
+   }
+  },
+  {
+   "t": "15:28:46.122",
+   "l": "info",
+   "e": "video_edit.jump_preview.filled",
+   "c": {
+    "reason": "complete",
+    "cold": false,
+    "elapsedMs": 136,
+    "workMs": 102,
+    "steps": 7,
+    "pictures": 15,
+    "megabytes": 11,
+    "windows": 3,
+    "filledWindows": 3,
+    "aroundFrame": 0,
+    "coveredFrames": 899
+   }
+  },
+  {
+   "t": "15:28:49.782",
+   "l": "info",
+   "e": "video_edit.render_cache.completed",
+   "c": {
+    "projectId": "c68d9762-254b-4bdd-88bf-a15f7b7d85e1",
+    "sequenceId": "1143e496-d252-4215-9c5b-158cc0ee7b27",
+    "windows": 4,
+    "elapsedMs": 18442
+   }
+  },
+  {
+   "t": "15:28:50.280",
+   "l": "info",
+   "e": "video_edit.jump_preview.fill.start",
+   "c": {
+    "aroundFrame": 0,
+    "windows": 1,
+    "cold": false
+   }
+  },
+  {
+   "t": "15:28:50.280",
+   "l": "info",
+   "e": "video_edit.decode.backend.selected",
+   "c": {
+    "mediaId": "render-cache:21sm1jlam7tvigunuclpf:900:[\"21sm1jlam7tvigunuclpf\",\"henji-media://local/E%3A%5C%E6%96%87%E6%A1%A3%5CHenjiAI%5C.cache%5Crender%5C46fe15f05c52b0748e20e72d1e030f6d230d7ee8e1d15f1b0af1706edf2e9b43.mp4\",\"live\"]",
+    "backend": "native",
+    "browser": "unknown",
+    "nativeAvailable": true
+   }
+  },
+  {
+   "t": "15:28:50.395",
+   "l": "info",
+   "e": "video_edit.jump_preview.filled",
+   "c": {
+    "reason": "complete",
+    "cold": false,
+    "elapsedMs": 115,
+    "workMs": 79,
+    "steps": 7,
+    "pictures": 20,
+    "megabytes": 15,
+    "windows": 4,
+    "filledWindows": 4,
+    "aroundFrame": 0,
+    "coveredFrames": 1199
+   }
+  },
+  {
+   "t": "15:29:21.207",
+   "l": "info",
+   "e": "video_edit.multicam.preview.start",
+   "c": {
+    "projectId": "c68d9762-254b-4bdd-88bf-a15f7b7d85e1",
+    "sourceId": "e6601c9e-140b-4e04-9388-c509dccd7048",
+    "cameras": 4,
+    "columns": 2,
+    "rows": 2,
+    "width": 7680,
+    "height": 4320,
+    "proxies": 3
+   }
+  },
+  {
+   "t": "15:29:21.735",
+   "l": "info",
+   "e": "video_edit.decode.backend.selected",
+   "c": {
+    "mediaId": "b786fd6d-cc06-46bd-b464-638d5ad112f2",
+    "backend": "native",
+    "browser": "unknown",
+    "nativeAvailable": true
+   }
+  },
+  {
+   "t": "15:29:21.735",
+   "l": "info",
+   "e": "video_edit.decode.backend.selected",
+   "c": {
+    "mediaId": "ca2d95f6-39f1-4988-980c-9de19e35790a",
+    "backend": "native",
+    "browser": "unknown",
+    "nativeAvailable": true
+   }
+  },
+  {
+   "t": "15:29:21.735",
+   "l": "info",
+   "e": "video_edit.decode.backend.selected",
+   "c": {
+    "mediaId": "a22ab2da-365b-45a8-8e18-6b3f39097d87",
+    "backend": "native",
+    "browser": "unknown",
+    "nativeAvailable": true
+   }
+  },
+  {
+   "t": "15:29:21.735",
+   "l": "info",
+   "e": "video_edit.decode.backend.selected",
+   "c": {
+    "mediaId": "2b7430ae-fdce-47a8-b3a8-751bdce25c7d",
+    "backend": "native",
+    "browser": "unknown",
+    "nativeAvailable": true
+   }
+  },
+  {
+   "t": "15:29:22.032",
+   "l": "info",
+   "e": "video_edit.multicam.preview.first_frame",
+   "c": {
+    "projectId": "c68d9762-254b-4bdd-88bf-a15f7b7d85e1",
+    "sourceId": "e6601c9e-140b-4e04-9388-c509dccd7048",
+    "cameras": 4,
+    "durationMs": 827,
+    "divisor": 4
+   }
+  },
+  {
+   "t": "15:30:05.190",
+   "l": "info",
+   "e": "video_edit.multicam.playback.stats",
+   "c": {
+    "projectId": "c68d9762-254b-4bdd-88bf-a15f7b7d85e1",
+    "sourceId": "e6601c9e-140b-4e04-9388-c509dccd7048",
+    "reason": "stopped",
+    "cameras": 4,
+    "fps": 59.94005994005994,
+    "actualFps": 58.45,
+    "divisor": 4,
+    "width": 7680,
+    "height": 4320,
+    "proxies": 3,
+    "startFrame": 3,
+    "endFrame": 593,
+    "expectedFrames": 591,
+    "presentedFrames": 563,
+    "droppedFrames": 28,
+    "droppedRatio": 0.047377,
+    "maxConsecutiveDropped": 16,
+    "cachedFrames": 0,
+    "durationMs": 9614.4,
+    "approximateFrames": 14,
+    "renderMs": {
+     "count": 562,
+     "p50": 4.94,
+     "p95": 11.58,
+     "max": 179.3
+    },
+    "presentLatencyMs": {
+     "count": 562,
+     "p50": 35.09,
+     "p95": 41.94,
+     "max": 344.9
+    },
+    "stages": {
+     "composite": {
+      "count": 562,
+      "p50": 0.2,
+      "p95": 0.4,
+      "max": 1.1
+     },
+     "decode": {
+      "count": 562,
+      "p50": 1.1,
+      "p95": 1.51,
+      "max": 171.3
+     },
+     "nativeClose": {
+      "count": 556,
+      "p50": 0,
+      "p95": 0,
+      "max": 10.4
+     },
+     "nestedRender": {
+      "count": 562,
+      "p50": 4.3,
+      "p95": 5.35,
+      "max": 612.1
+     },
+     "pictureCopy": {
+      "count": 562,
+      "p50": 2.42,
+      "p95": 3.07,
+      "max": 5.2
+     },
+     "presentComplete": {
+      "count": 562,
+      "p50": 3.32,
+      "p95": 8.95,
+      "max": 20.2
+     },
+     "presentDeadline": {
+      "count": 562,
+      "p50": 14.98,
+      "p95": 15.58,
+      "max": 31
+     },
+     "presentInflight": {
+      "count": 562,
+      "p50": 0,
+      "p95": 0,
+      "max": 0.2
+     },
+     "queue": {
+      "count": 562,
+      "p50": 14.11,
+      "p95": 15.58,
+      "max": 310.5
+     },
+     "scheduleWait": {
+      "count": 562,
+      "p50": 0.1,
+      "p95": 0.4,
+      "max": 609.9
+     },
+     "sourceReady": {
+      "count": 562,
+      "p50": 0,
+      "p95": 0.4,
+      "max": 0.7
+     },
+     "textureAllocation": {
+      "count": 562,
+      "p50": 0,
+      "p95": 0.1,
+      "max": 0.1
+     }
+    }
+   }
+  },
+  {
+   "t": "15:30:10.915",
+   "l": "info",
+   "e": "video_edit.program.pool.parked",
+   "c": {
+    "projectId": "c68d9762-254b-4bdd-88bf-a15f7b7d85e1"
+   }
+  }
+ ]
+}

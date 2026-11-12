@@ -2,6 +2,7 @@ import type { AudioEncodingConfig, VideoEncodingConfig } from 'mediabunny'
 import type { VideoEditExportSettings } from '@/core/videoEdit/exportPresets'
 import { createLogger } from '@/core/logging'
 import { videoEditExportAvcLevel } from './videoEditExportAvcLevel'
+import { videoEditExportHevcColour } from './videoEditExportHevcColour'
 
 const logger = createLogger('features.videoEdit.exportEncoder')
 
@@ -72,7 +73,7 @@ export function videoEditExportVideoOptions(settings: Pick<VideoEditExportSettin
   if (settings.latencyMode) config.latencyMode = settings.latencyMode
   return { codec: settings.codec, bitrate: config.bitrate, bitrateMode: config.bitrateMode as 'constant' | 'variable',
     fullCodecString: config.codec, hardwareAcceleration: config.hardwareAcceleration, latencyMode: config.latencyMode, alpha: config.alpha,
-    ...(settings.codec === 'avc' ? { onEncodedPacket: videoEditExportAvcLevel(Number.parseInt(config.codec.slice(-2), 16)) } : {}),
+    onEncodedPacket: settings.codec === 'avc' ? videoEditExportAvcLevel(Number.parseInt(config.codec.slice(-2), 16)) : videoEditExportHevcColour(),
     onEncoderConfig: actual => {
       // Mediabunny adds track frameRate back before its own support probe. Apply
       // the same native config at that boundary, before both probing/configure.
@@ -91,7 +92,7 @@ export interface VideoEditExportVideoStream {
   config: VideoEncoderConfig
   /** 关键帧间隔（秒），0 为每帧都是关键帧。 */
   keyFrameInterval: number
-  /** 封装前修正编码结果（AVC 级别），与 mediabunny 编码时的同名回调相同。 */
+  /** 封装前修正编码结果（AVC 级别、HEVC 的 VUI 色彩），与 mediabunny 编码时的同名回调相同。 */
   onEncodedPacket?: VideoEncodingConfig['onEncodedPacket']
 }
 /**

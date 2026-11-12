@@ -7,6 +7,7 @@
 //!   被 `cancel` 取消（新请求取代了它）时在出队、每解出一帧、等槽位时停下，答复 CANCELLED，会话停在已解到的位置；
 //! - `schedule { streamId, scheduleId, times | range }`：主线程立即确认，会话按请求顺序每项恰好发一个 `frame`
 //!   （`request.kind = schedule, index`）或 `frame_missing`，最后发 `schedule_done`；新计划取消旧计划，计划进行中 `frame_at` 返回 BUSY；
+//!   时间点计划里画面与上一项相同的项答 `frame_missing { reason: held }`（不占槽位，消费方沿用上一幅），见 `schedule_times`；
 //! - `cancel_schedule`、`stop_stream`、`release_frame` 同 1.2。
 //!
 //! 时间口径见 `timing.rs`；续解/新段/前导帧规则见 `plan.rs`。相邻请求续解不 flush；单帧定位与排空到文件末尾后
@@ -41,7 +42,7 @@ use crate::streams::StreamControl;
 use crate::test_pattern::SharedFormat;
 use codec::{Decoder, DecoderSetup, Frame, Purpose, Received};
 use demux::{Input, Packet};
-use plan::{handoff_wait, seek_decision, Claim, Decision, HandoffWait, Position, RunTracker, FORWARD_SEEK_SECONDS, NEAR_KEY_SECONDS};
+use plan::{handoff_wait, seek_decision, Claim, Decision, DropState, HandoffWait, Position, RunTracker, FORWARD_SEEK_SECONDS, NEAR_KEY_SECONDS};
 use retain::{Admit, Retained, RetainedFrames};
 
 /// 计划里向前跳过超过这么久（秒）也算剪辑点（预先接续直接定位过去，不解中间的帧）。
@@ -79,6 +80,10 @@ const REDUCED_POOL_SIZE: u32 = 2;
 const RETAINED_RELEASE_WAIT: Duration = Duration::from_millis(60);
 /// 送入这么多包仍无输出视为解码器卡死。
 const STALL_PACKETS: u32 = 600;
+/// 时间点计划交出、消费方还没交回的帧少于这么多时，解码跟不上播放：送包时跳过非参考帧（只解 I/P 帧，B 帧那几项沿用
+/// 上一幅），解码追到纹理池快满后恢复逐帧精确（`DropState`）。多路 4K 长 GOP 叠放时显卡解码器的总吞吐不够逐帧解（4090
+/// 解 4K60 H.264 约合 3.5 路实时），只解参考帧约合 8 路，各层按约三分之一帧率平稳更新，而不是整体落后、反复重新定位。
+const DROP_CUSHION: usize = 2;
 pub const MAX_SCHEDULE_TIMES: usize = 200_000;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -266,8 +271,11 @@ mod imp {
         paced: bool,
         settle_logged: bool,
         /// 单帧定位走向目标时，呈现时间早于它的包跳过非参考帧：这些帧既不显示也不被参考，4 秒 GOP 的 4K 录屏
-        /// 定位到 GOP 末尾实测从 1.1 秒降到 0.58 秒。只在 `frame_at` 推进期间设置，播放计划与预打开不跳。
+        /// 定位到 GOP 末尾实测从 1.1 秒降到 0.58 秒。在 `frame_at` 与时间点计划的每一项推进期间设置（计划只交出所请求的
+        /// 时间，各项之间没被请求的非参考帧不必解）；区间计划逐帧交出，不跳。
         skip_before: Option<i64>,
+        /// 时间点计划推进期间的解码跟不上判断（`DropState`）：判为跟不上时送包跳过非参考帧。
+        drop: Option<DropState>,
         /// 当前段里按 `skip_before` 标记跳过、呈现时间晚于候选帧的包（开新段时清空，每次单帧取帧后去掉不晚于候选帧的）。
         /// 解码器送包领先于出帧，半途停下（近似取帧、被取消）时这里会留下候选帧之后跳过的包；之后的取帧若有落在
         /// 候选帧与目标之间的，那里可能缺被跳过的帧：单帧取帧不跳过重解，播放计划与区间取帧先重新定位（`force_seek`）。
@@ -521,6 +529,7 @@ mod imp {
                 paced: false,
                 settle_logged: false,
                 skip_before: None,
+                drop: None,
                 run_skipped: Vec::new(),
                 force_seek: false,
                 cancel: None,
@@ -746,7 +755,7 @@ mod imp {
                     return Ok(None);
                 }
                 let limit = self.prefeed_limit();
-                let feed = Feed { pending: &mut self.pending_packet, last_fed_dts: &mut self.last_fed_dts, draining: &mut self.draining, drained: &mut self.drained, fed_since_output: &mut self.fed_since_output, decode_errors: &mut self.decode_error_count, all_key: &mut self.run_all_key, skip_before: self.skip_before, skipped: &mut self.run_skipped, keys: &mut self.key_pts };
+                let feed = Feed { pending: &mut self.pending_packet, last_fed_dts: &mut self.last_fed_dts, draining: &mut self.draining, drained: &mut self.drained, fed_since_output: &mut self.fed_since_output, decode_errors: &mut self.decode_error_count, all_key: &mut self.run_all_key, skip_before: self.skip_before, drop: self.drop.as_mut(), skipped: &mut self.run_skipped, keys: &mut self.key_pts };
                 // 不留存时解出的帧不进留存，之后留下的帧不能与之前的留存帧相连（中间的帧没留下）。
                 if !self.retaining {
                     self.retained.break_chain();
@@ -1361,11 +1370,14 @@ mod imp {
         }
 
         /// 按需定位并推进到 `ticks`，候选帧即答复的画面。返回（是否定位过，是否近似）。
+        /// 走向目标的途中跳过离目标足够远的非参考帧（`skip_before`）的界限；目标附近照常全解，精确画面不变。
+        fn skip_limit(&self, ticks: i64) -> i64 {
+            ticks.saturating_sub(seconds_to_duration_ticks(SKIP_NONREF_MARGIN_SECONDS.max(if self.frame_rate > 0.0 { 3.0 / self.frame_rate } else { 0.0 }), self.time_base))
+        }
+
         fn locate_frame(&mut self, ticks: i64, key_only: bool) -> Result<(bool, bool), ServiceError> {
-            // 走向目标的途中跳过离目标足够远的非参考帧（`skip_before`）；目标附近照常全解，精确画面不变。
-            let margin = seconds_to_duration_ticks(SKIP_NONREF_MARGIN_SECONDS.max(if self.frame_rate > 0.0 { 3.0 / self.frame_rate } else { 0.0 }), self.time_base);
             // 留存时不跳：被跳过的帧留不下，倒拖正需要它们。
-            self.skip_before = (!self.retaining).then(|| ticks.saturating_sub(margin));
+            self.skip_before = (!self.retaining).then(|| self.skip_limit(ticks));
             // 近似取帧（快速拖动、远距离跳转先出的画面）：已解出的候选帧就是目标时照常给精确帧；必须重新定位时只解目标所在
             // 关键帧；同一 GOP 内向前续解最多再解 `KEY_ONLY_FORWARD_FRAMES` 帧，没到目标就交出已解到的最后一帧（不晚于目标）。
             // 会话停在已解到的位置，同一时间随后的精确请求按“续解”从这里接着向前解。
@@ -1416,7 +1428,8 @@ mod imp {
         }
 
         fn missing(&self, schedule_id: &str, index: usize, reason: &str) {
-            self.control.counters.missing.fetch_add(1, Ordering::Relaxed);
+            let counter = if reason == "held" { &self.control.counters.held } else { &self.control.counters.missing };
+            counter.fetch_add(1, Ordering::Relaxed);
             crate::send(&json!({ "event": "frame_missing", "streamId": self.stream_id, "scheduleId": schedule_id, "index": index, "reason": reason }));
         }
 
@@ -1460,9 +1473,15 @@ mod imp {
             crate::send(&json!({ "event": "schedule_done", "streamId": self.stream_id, "scheduleId": schedule_id, "reason": reason, "message": message, "counters": summary }));
         }
 
+        /// 每项交出不晚于该时间的最后一幅已解出的画面。各项推进时跳过本项之前用不到的非参考帧；开头填满纹理池之后，
+        /// 判为跟不上（`DropState`）时连本项附近的非参考帧也跳过（解码跟不上播放时只解参考帧）。
+        /// 画面与上一项交出的相同（被跳过的项、重复的时间）答 `held`，不再复制一份。
         fn schedule_times(&mut self, schedule_id: &str, times: &[f64]) -> Result<(), Abort> {
             let cuts: Vec<usize> = times.windows(2).enumerate().filter(|(_, pair)| is_cut(pair[0], pair[1])).map(|(index, _)| index).collect();
             let mut next_cut = 0;
+            let startup = self.control.slots.count();
+            let mut drop = DropState::new(DROP_CUSHION, startup);
+            let mut answered: Option<i64> = None;
             for (index, time) in times.iter().enumerate() {
                 if self.stopped() {
                     return Err(Abort::Stopped);
@@ -1477,24 +1496,41 @@ mod imp {
                 }
                 if !time.is_finite() {
                     self.missing(schedule_id, index, "no_picture");
+                    answered = None;
                     continue;
                 }
                 let ticks = seconds_to_ticks(*time, self.time_base);
-                match self.locate(ticks, false) {
+                self.skip_before = Some(self.skip_limit(ticks));
+                self.drop = (index >= startup).then_some(drop);
+                let located = self.locate(ticks, false);
+                self.skip_before = None;
+                drop = self.drop.take().unwrap_or(drop);
+                // 计划只向前推进：不晚于候选帧的跳过不影响后面的项；晚于它的（跟不上时跳过的）那几项本来就沿用上一幅。
+                if let Some(candidate) = self.candidate.as_ref().map(frame_ts) {
+                    self.run_skipped.retain(|&skipped| skipped > candidate);
+                }
+                match located {
                     Ok(_) => {}
                     Err(error) if error.code == "CANCELLED" => return Err(Abort::Stopped),
                     Err(error) => {
                         crate::platform::exit_if_device_lost(self.platform.as_ref(), "schedule");
                         logging::warn("decode.schedule.frame_failed", &error.message, json!({ "streamId": self.stream_id, "index": index }));
                         self.missing(schedule_id, index, "decode_error");
+                        answered = None;
                         continue;
                     }
                 }
-                if self.candidate.is_none() {
+                let Some(shown) = self.candidate.as_ref().map(frame_ts) else {
                     self.missing(schedule_id, index, "no_picture");
+                    answered = None;
+                    continue;
+                };
+                if answered == Some(shown) {
+                    self.missing(schedule_id, index, "held");
                     continue;
                 }
                 self.deliver(RequestTag::Schedule { id: schedule_id.to_string(), index }, None, true)?;
+                answered = Some(shown);
             }
             Ok(())
         }
@@ -1546,6 +1582,8 @@ mod imp {
         all_key: &'a mut bool,
         /// 呈现时间早于它的包跳过非参考帧（单帧定位走向目标的途中，见 `Session::skip_before`）。
         skip_before: Option<i64>,
+        /// 解码跟不上的判断（见 `Session::drop`）。
+        drop: Option<&'a mut DropState>,
         /// 按 `skip_before` 标记跳过的包的呈现时间（见 `Session::run_skipped`）。
         skipped: &'a mut Vec<i64>,
         /// 送入的关键包：解码时间 → 呈现时间（见 `Session::target_key`）。
@@ -1554,7 +1592,7 @@ mod imp {
 
     /// 送包取帧的公共实现（打开时取第一帧与会话共用）。`limit`：只送时间不晚于它的包（预先接续，3.6）。
     fn next_frame(decoder: &mut Decoder, input: &mut Input, tracker: &mut RunTracker, feed: Feed<'_>, control: &StreamControl, limit: Option<i64>) -> Result<Fetched, ServiceError> {
-        let Feed { pending, last_fed_dts, draining, drained, fed_since_output, decode_errors, all_key, skip_before, skipped, keys } = feed;
+        let Feed { pending, last_fed_dts, draining, drained, fed_since_output, decode_errors, all_key, skip_before, mut drop, skipped, keys } = feed;
         let counters = &control.counters;
         loop {
             if control.stop.load(Ordering::Relaxed) {
@@ -1613,11 +1651,13 @@ mod imp {
                     } else if let (Some(dts), Some(pts)) = (packet.dts(), packet.pts()) {
                         keys.insert(dts, pts);
                     }
-                    let skip_pts = skip_before.and_then(|limit| packet.pts().filter(|&pts| pts < limit));
+                    // 消费方已用完交出的帧、正等着下一幅：解码是瓶颈，这个包是非参考帧就不解（关键包本来就是参考帧）。
+                    let behind = !packet.is_key() && drop.as_mut().is_some_and(|state| state.update(control.slots.outstanding()));
+                    let skip_pts = packet.pts().filter(|&pts| behind || skip_before.is_some_and(|limit| pts < limit));
                     if let Some(pts) = skip_pts {
                         skipped.push(pts);
                     }
-                    let skip = skip_pts.is_some();
+                    let skip = skip_pts.is_some() || behind;
                     decoder.skip_nonref(skip);
                     let started = Instant::now();
                     match decoder.send(Some(&packet)) {
@@ -1676,7 +1716,7 @@ mod imp {
             self.tracker.begin(key.timestamp().unwrap_or(i64::MIN));
             self.pending = Some(key);
             let (mut fed, mut errors) = (0u32, 0u64);
-            let feed = Feed { pending: &mut self.pending, last_fed_dts: &mut self.last_fed_dts, draining: &mut self.draining, drained: &mut self.drained, fed_since_output: &mut fed, decode_errors: &mut errors, all_key: &mut self.all_key, skip_before: None, skipped: &mut Vec::new(), keys: &mut BTreeMap::new() };
+            let feed = Feed { pending: &mut self.pending, last_fed_dts: &mut self.last_fed_dts, draining: &mut self.draining, drained: &mut self.drained, fed_since_output: &mut fed, decode_errors: &mut errors, all_key: &mut self.all_key, skip_before: None, drop: None, skipped: &mut Vec::new(), keys: &mut BTreeMap::new() };
             match next_frame(&mut self.decoder, &mut self.input, &mut self.tracker, feed, control, None)? {
                 Fetched::Frame(frame) | Fetched::Queued(frame) => Ok(frame),
                 Fetched::End | Fetched::Limit => Err(ServiceError::new("DECODE_FAILED", "无法解出第一帧画面")),
@@ -2137,6 +2177,49 @@ mod imp {
             drop(commands);
             assert_eq!(session.unanswered_frame_ats(), ["q1", "q2"]);
             assert!(table.lock().unwrap().is_empty(), "取消标志随命令出表");
+            let _ = std::fs::remove_file(path);
+        }
+
+        /// 逐帧的时间点计划：消费方手里留着两帧以上（解码在前面）时每项交出各自的画面；消费方一交出就用完、
+        /// 等着下一幅（解码是瓶颈）时，填满纹理池的开头几项之后不解非参考帧，那几项答 held（沿用上一幅）。
+        #[test]
+        fn a_schedule_its_consumer_waits_on_decodes_reference_pictures_only() {
+            let Some(path) = generate("behind") else {
+                eprintln!("跳过：没有 ffmpeg");
+                return;
+            };
+            let times: Vec<f64> = (0..90).map(|frame| (frame as f64 + 0.25) / 30.0).collect();
+            let run = |kept: usize| {
+                let (commands, mut session) = open_with_commands(&path);
+                let control = session.control.clone();
+                let done = Arc::new(std::sync::atomic::AtomicBool::new(false));
+                let consumer = {
+                    let (control, done) = (control.clone(), done.clone());
+                    std::thread::spawn(move || {
+                        while !done.load(Ordering::Relaxed) {
+                            for slot in 0..control.slots.count() as u32 {
+                                if control.slots.outstanding() > kept {
+                                    control.slots.release(slot);
+                                }
+                            }
+                            std::thread::sleep(Duration::from_micros(100));
+                        }
+                    })
+                };
+                session.schedule = Some("plan".into());
+                assert!(session.schedule_times("plan", &times).is_ok());
+                done.store(true, Ordering::Relaxed);
+                consumer.join().unwrap();
+                drop(commands);
+                let load = |value: &std::sync::atomic::AtomicU64| value.load(Ordering::Relaxed);
+                (load(&control.counters.produced), load(&control.counters.held), load(&control.counters.decoded))
+            };
+            let (produced, held, _) = run(DROP_CUSHION);
+            assert_eq!((produced, held), (90, 0), "解码在消费方前面：逐帧精确");
+            let (produced, held, decoded) = run(0);
+            assert!(held > 0, "跟不上：B 帧那几项沿用上一幅");
+            assert_eq!(produced + held, 90, "每项恰好一个答复");
+            assert!(decoded < 90, "非参考帧没有解码：{decoded}");
             let _ = std::fs::remove_file(path);
         }
     }

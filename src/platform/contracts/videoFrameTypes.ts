@@ -161,7 +161,8 @@ export interface VideoFrameScheduleAck {
 
 /** 计划的非帧事件（经 IPC 到 preload，再投递到流所属通道的端口）。 */
 export type VideoFrameScheduleEvent =
-  | { type: 'frame_missing'; route: string; streamId: string; scheduleId: string; index: number; reason: 'no_picture' | 'decode_error' | 'superseded' }
+  /** `held`：这一项的画面与上一项交出的相同（解码跟不上时跳过的非参考帧、重复的时间），消费方沿用上一幅。 */
+  | { type: 'frame_missing'; route: string; streamId: string; scheduleId: string; index: number; reason: 'no_picture' | 'decode_error' | 'superseded' | 'held' }
   /** `delivered`：本计划发出的帧数（区间计划据此判断最后一帧；帧走另一条通道，可能晚于本事件到达）。 */
   | { type: 'schedule_done'; route: string; streamId: string; scheduleId: string; reason: 'completed' | 'cancelled' | 'error'; message: string | null; delivered?: number }
 
