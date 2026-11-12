@@ -31,7 +31,8 @@ import { isShaderGraphTransition, shaderGraphTransitionSpec } from '@/core/video
 import { isGlTransition } from '@/core/videoEdit/glTransitions/transitions'
 import type { VideoEditEffect } from '@/core/videoEdit/compositing'
 import { videoEditClipMotionBlur, VIDEO_EDIT_MOTION_BLUR_MAX_SAMPLES, VIDEO_EDIT_MOTION_BLUR_PLAYBACK_SAMPLES, videoEditMotionBlurSamples, videoEditMotionBounds, type VideoEditMotionSampledClip } from '@/core/videoEdit/motionBlur'
-import { evaluateVideoEditClip, evaluateVideoEditBuiltinParameters, videoEditClipValue } from '@/core/videoEdit/keyframes'
+import { evaluateVideoEditClip, evaluateVideoEditBuiltinParameters, videoEditClipValue, videoEditKeyframeValues } from '@/core/videoEdit/keyframes'
+import { videoEditClipScaleAspect } from '@/core/videoEdit/clipGeometry'
 import { videoEditClipMedia, videoEditNestedComposition, videoEditDuration, activeVideoEditClips, audibleVideoEditClips, clipSourceSeconds, videoEditPictureFilter, videoEditPictureTransitionsAt, type VideoEditClip, type VideoEditComposition, type VideoEditMedia, type VideoEditPictureFilter } from '@/core/videoEdit/document'
 import { videoEditNestedFrame, videoEditNestedPictureFrame, videoEditNestedPictureKey } from '@/core/videoEdit/nestedSequences'
 import { assertVideoEditSequenceGraph, VIDEO_EDIT_MAX_SEQUENCE_DEPTH } from '@/core/videoEdit/sequenceGraph'
@@ -66,7 +67,7 @@ import { readVideoEditExportPicture } from './videoEditExportPictures'
 import { isVideoEditRenderDivisor, videoEditRenderSize, videoEditOutputRenderDivisor } from '@/core/videoEdit/playbackResolution'
 import { applyVideoEditParameterUpdate, type VideoEditParameterUpdate } from './videoEditParameterUpdate'
 import { VideoEditJumpPreview, VIDEO_EDIT_JUMP_PREVIEW_DIVISOR, type VideoEditJumpPreviewLog } from './videoEditJumpPreview'
-import { VIDEO_EDIT_INPUT_BUDGET_BYTES, VIDEO_EDIT_IMAGE_BUDGET_BYTES, VIDEO_EDIT_IMAGE_BUDGET_LABEL } from './videoEditGpuBudget'
+import { configureVideoEditGpuBudget, videoEditGpuBudget, videoEditMaxTextureDimension, type VideoEditDeviceMemory } from './videoEditGpuBudget'
 import type { SpatialExposurePlan, SpatialFrameRequest } from './videoEditSpatialContracts'
 import type { SpatialAuthorInputs } from './videoEditCodeSources'
 
@@ -107,12 +108,52 @@ const VIDEO_EDIT_SCRUB_CONTINUE_SECONDS = 0.1
  * 更小的向前移动多半还在同一个 GOP 里，读完再接着追更快；每次都放弃的话一直拿不到画面。
  */
 const VIDEO_EDIT_SCRUB_RETARGET_SECONDS = 0.5
-/** 拖动播放头混音时保留的空闲声音来源（含嵌套序列的声音渲染器）上限。 */
-const VIDEO_EDIT_IDLE_AUDIO_SOURCES = 8
-/** 浏览器回退路径的闲置读取器上限；原生会话按服务端预算保留，不使用此数量。 */
-const VIDEO_EDIT_IDLE_SCRUB_RENDERERS = 4
-/** 拖动播放头时保留的空闲已解码图片上限（另受图片显存预算约束，见 videoEditGpuBudget.ts）。 */
-const VIDEO_EDIT_IDLE_SCRUB_IMAGES = 6
+/**
+ * 未显示的代码视频输入（即将进场的与前瞻预热的）最多占这么多读取；超出时最远的先让出。当前帧显示的输入不受此限，
+ * 解码会话由原生服务按显存账本淘汰。
+ */
+const CODE_INPUT_PREWARM_SESSIONS = 32
+
+/**
+ * 一张图的解码比例（相对源尺寸）：画面实际需要的像素按序列尺寸 × 输出比例（`outputFactor`，大于 1 时按更大的尺寸输出）
+ * × `clips` 整段内最大的缩放（关键帧全部取值），取不小于它的 2 的幂档，最大为源尺寸，长边不超过单张纹理上限。
+ * `clips` 是用到这张图的全部图片片段；代码引用、效果、三维空间与跟踪可能任意放大，按源尺寸（`'source'`）。
+ */
+export function videoEditImageDecodeScale(document: Pick<VideoEditComposition, 'width' | 'height' | 'spatialCamera'>, media: Pick<VideoEditMedia, 'width' | 'height'>, clips: readonly VideoEditClip[] | 'source', outputFactor = 1): number {
+  const longest = Math.max(1, media.width, media.height)
+  const limit = Math.min(1, videoEditMaxTextureDimension() / longest)
+  if (clips === 'source' || !clips.length || document.spatialCamera) return limit
+  let need = 0
+  for (const clip of clips) {
+    if (clip.spatial?.enabled || clip.follow || activeVideoEditEffects(clip).length) return limit
+    const scale = Math.max(Math.abs(clip.scale), ...(clip.curves?.scale ?? []).flatMap(point => videoEditKeyframeValues(point)).map(value => typeof value === 'number' ? Math.abs(value) : 0))
+    need = Math.max(need, Math.min(document.width / Math.max(1, media.width), document.height / Math.max(1, media.height)) * outputFactor * scale * Math.max(1, videoEditClipScaleAspect(clip)))
+  }
+  return Math.min(limit, need > 0 ? 2 ** Math.ceil(Math.log2(need) - 1e-9) : 1)
+}
+
+/**
+ * 整个序列里每张图的解码比例：按引用它的全部片段一次算定，与先渲染了哪些帧无关，所以同一份文档在预览、导出、预渲染里
+ * 用同一档，文档不变就不会换档。嵌套序列与代码输入里的图（`nested`）会被外层再缩放，按源尺寸。
+ */
+export function videoEditImageDecodeScales(document: VideoEditComposition, outputFactor = 1, nested = false): Map<string, number> {
+  const clips = new Map<string, VideoEditClip[]>(), source = new Set<string>()
+  for (const clip of document.clips) {
+    for (const id of codeMaterialImageIds(clip.code)) source.add(id)
+    for (const effect of clip.effects ?? []) for (const id of codeMaterialImageIds(effect.code)) source.add(id)
+    if (clip.kind === 'image') { const id = videoEditClipMedia(document, clip)?.id; if (id) clips.set(id, [...clips.get(id) ?? [], clip]) }
+  }
+  return new Map(document.media.filter(media => media.kind === 'image').map(media => [media.id, videoEditImageDecodeScale(document, media, nested || source.has(media.id) ? 'source' : clips.get(media.id) ?? 'source', outputFactor)]))
+}
+
+/**
+ * 本帧保留的代码视频输入：当前帧显示的一律保留；未显示的（`waiting`，即将进场的按出现先后在前、再是前瞻预热）
+ * 只占剩下的名额，超出时排在后面（最远）的让出。
+ */
+export function videoEditCodeInputsKept(showing: ReadonlySet<string>, waiting: readonly string[]): Set<string> {
+  const rest = [...new Set(waiting)].filter(key => !showing.has(key))
+  return new Set([...showing, ...rest.slice(0, Math.max(0, CODE_INPUT_PREWARM_SESSIONS - showing.size))])
+}
 
 /**
  * 按最近使用维护空闲表：`idle` 是本次未用到的键（按当前顺序），返回超出 `limit` 后应释放的最旧键，并把它们从表中移除。
@@ -232,8 +273,6 @@ const CODE_INPUT_PREWARM_MAX_STEP_SECONDS = 0.25
  * key-frame read would not seek but decode up to the target at once; such a walk steps from the start instead.
  */
 const CODE_INPUT_PREWARM_FROM_START_SECONDS = 5
-/** Decoded stills (code video inputs fixed at one time) kept for a renderer tree, shared by every reference to the picture. */
-const CODE_INPUT_STILL_BYTES = VIDEO_EDIT_IMAGE_BUDGET_BYTES
 /** Stills decoded in the background at once (each borrows a decoder session while it walks to its picture). */
 const CODE_INPUT_STILL_DECODES = 2
 /**
@@ -314,7 +353,10 @@ export interface VideoEditRendererOptions {
   jumpPreviewLog?: VideoEditJumpPreviewLog
   /** 性能对照用；正常会话默认复用所有精确输入输出。 */
   reuseCodeOutputs?: boolean
+  /** 本机专用显存与系统内存：各项缓存预算按它取值（`videoEditGpuBudget.ts`），缺省用保守默认值。 */
+  device?: VideoEditDeviceMemory
 }
+interface DecodedImage { path: string; controller: AbortController; pending: Promise<ImageBitmap>; bytes: number; ready: boolean; predecoded?: boolean; scale: number }
 export class VideoEditRenderer {
   private readonly nestedPictures = new Map<string, { renderer: VideoEditRenderer; tail: Promise<unknown> }>()
   /**
@@ -369,7 +411,10 @@ export class VideoEditRenderer {
   /** The paused frame a playback schedule was built for ahead of play (see `armPlayback`). */
   private armedFrame?: number
   private armExpiry?: ReturnType<typeof setTimeout>
-  private readonly images = new Map<string, { path: string; controller: AbortController; pending: Promise<ImageBitmap>; bytes: number; ready: boolean; predecoded?: boolean }>()
+  private readonly images = new Map<string, DecodedImage>()
+  /** 换档时的旧一份：新的一份画出一帧之后才释放（`render` 收尾），正在用旧一份的帧不受影响。 */
+  private readonly replacedImages = new Map<string, DecodedImage>()
+  private imageScaleMemo?: { document: VideoEditComposition; factor: number; limit: number; scales: Map<string, number> }
   private imageLoads = 0
   private readonly imageQueue: Array<() => void> = []
   private disposed = false
@@ -637,12 +682,15 @@ export class VideoEditRenderer {
     if (target.media && this.speculativeImageLoads > 0) { this.lookaheadMetrics.budgetSkipped++; return false }
     const renderers = this.lookaheadRenderers()
     const bytes = renderers.reduce((sum, renderer) => sum + [...renderer.images.values()].reduce((sum, image) => sum + image.bytes, 0), 0)
-    if (renderers.length >= 12 && !this.lookaheadRenderer(target.scopes, false) || target.media && bytes + target.media.width * target.media.height * 4 > VIDEO_EDIT_IMAGE_BUDGET_BYTES) { this.lookaheadMetrics.budgetSkipped++; return false }
+    const existing = this.lookaheadRenderer(target.scopes, false)
+    const scale = !target.media ? 1 : existing ? await existing.imageScale(target.media) : videoEditImageDecodeScale(target.document, target.media, 'source')
+    if (renderers.length >= 12 && !this.lookaheadRenderer(target.scopes, false) || target.media && bytes + Math.round(target.media.width * scale) * Math.round(target.media.height * scale) * 4 > videoEditGpuBudget().imageBytes) { this.lookaheadMetrics.budgetSkipped++; return false }
     const renderer = this.lookaheadRenderer(target.scopes, true)!
     if (target.media) {
       renderer.warmImages.add(target.media.id)
-      if (renderer.images.has(target.media.id)) return true
-      await renderer.image(target.media, true, signal)
+      const decodeScale = await renderer.imageScale(target.media)
+      if (renderer.images.get(target.media.id)?.scale === decodeScale) return true
+      await renderer.image(target.media, decodeScale, true, signal)
       this.lookaheadMetrics.imagePrepared++
     } else {
       const compositor = renderer.ensureCompositor()
@@ -701,7 +749,8 @@ export class VideoEditRenderer {
   private readonly cacheWebOutput: boolean
   private readonly reuseCodeOutputs: boolean
   constructor(public document: VideoEditComposition, options: VideoEditRendererOptions = {}) {
-    const { surface, cacheBudgetBytes = 8 * 1024 ** 3 } = options
+    if (options.device) configureVideoEditGpuBudget(options.device)
+    const { surface, cacheBudgetBytes = videoEditGpuBudget().frameCacheBytes } = options
     this.previewWidth = options.previewWidth
     this.frames = options.frames ?? new VideoEditBrowserFrames()
     this.nestedOwner = options.nestedOwner
@@ -711,7 +760,6 @@ export class VideoEditRenderer {
     this.cacheWebOutput = options.cacheWebOutput ?? false
     this.reuseCodeOutputs = options.reuseCodeOutputs ?? true
     if (document.sequences) assertVideoEditSequenceGraph({ items: document.items, sequences: document.sequences })
-    if (!Number.isSafeInteger(cacheBudgetBytes) || cacheBudgetBytes < 1 || cacheBudgetBytes > 8 * 1024 ** 3) throw new Error('预览缓存预算无效。')
     this.frameCache = new VideoEditFrameCache(cacheBudgetBytes)
     this.canvas = surface ?? new OffscreenCanvas(document.width, document.height)
     this.canvas.width = document.width; this.canvas.height = document.height
@@ -772,17 +820,43 @@ export class VideoEditRenderer {
     }
     return source
   }
-  private image(media: VideoEditMedia, speculative = false, signal?: AbortSignal): Promise<ImageBitmap> {
+  /** 这张图在本渲染器序列里的解码比例（`videoEditImageDecodeScales`）；等合成设备就绪、拿到纹理上限后再算。 */
+  private async imageScale(media: VideoEditMedia): Promise<number> {
+    await this.ensureCompositor().prepare()
+    const factor = Math.max(1, 1 / this.renderDivisor), limit = videoEditMaxTextureDimension()
+    let memo = this.imageScaleMemo
+    if (memo?.document !== this.document || memo.factor !== factor || memo.limit !== limit) memo = this.imageScaleMemo = { document: this.document, factor, limit, scales: videoEditImageDecodeScales(this.document, factor, !!this.nestedOwner) }
+    return memo.scales.get(media.id) ?? videoEditImageDecodeScale(this.document, media, 'source')
+  }
+  private releaseReplaced(id: string): void {
+    const image = this.replacedImages.get(id); if (!image) return
+    this.replacedImages.delete(id); image.controller.abort()
+    void image.pending.then(bitmap => bitmap.close(), () => {})
+  }
+  /** `scale`：解码比例（`imageScale`）；档位不同（文档改了缩放或输出比例）时解码新的一份，旧的一份留到新的画出一帧。 */
+  private image(media: VideoEditMedia, scale: number, speculative = false, signal?: AbortSignal): Promise<ImageBitmap> {
     signal?.throwIfAborted()
     let image = this.images.get(media.id)
+    if (image && image.scale !== scale) {
+      this.releaseReplaced(media.id); this.replacedImages.set(media.id, image)
+      this.images.delete(media.id); image = undefined
+    }
     if (!image) {
+      const width = Math.max(1, Math.round(media.width * scale)), height = Math.max(1, Math.round(media.height * scale))
       const controller = new AbortController()
       const cancel = (): void => controller.abort()
       signal?.addEventListener('abort', cancel, { once: true })
       const load = async (): Promise<ImageBitmap> => {
         const started = performance.now()
         const response = await fetch(media.path, { signal: controller.signal }); if (!response.ok) throw videoEditSourceReadError(media.name, new Error(String(response.status)))
-        const bitmap = await createImageBitmap(await response.blob())
+        const blob = await response.blob()
+        let bitmap = await (scale < 1 ? createImageBitmap(blob, { resizeWidth: width, resizeHeight: height, resizeQuality: 'high' }) : createImageBitmap(blob))
+        // 文件被换成更大的图而素材尺寸没更新时，按实际尺寸降到单张纹理上限之内。
+        const limit = videoEditMaxTextureDimension(), longest = Math.max(bitmap.width, bitmap.height)
+        if (longest > limit) {
+          const fitted = await createImageBitmap(bitmap, { resizeWidth: Math.max(1, Math.floor(bitmap.width * limit / longest)), resizeHeight: Math.max(1, Math.floor(bitmap.height * limit / longest)), resizeQuality: 'high' })
+          bitmap.close(); bitmap = fitted
+        }
         recordVideoEditPreparation(speculative ? 'lookaheadImageDecode' : 'imageDecode', performance.now() - started)
         return bitmap
       }
@@ -793,22 +867,26 @@ export class VideoEditRenderer {
         signal?.removeEventListener('abort', cancel)
         if (speculative) owner.speculativeImageLoads--
       }).then(bitmap => {
-        if (this.disposed || controller.signal.aborted || this.images.get(media.id)?.pending !== pending) { bitmap.close(); throw new DOMException('原图片已取消。', 'AbortError') }
-        if (bitmap.width < 1 || bitmap.height < 1 || bitmap.width > 8192 || bitmap.height > 8192) { bitmap.close(); throw new Error('图片边长须在1到8192像素之间。') }
+        if (this.disposed || controller.signal.aborted || this.images.get(media.id) !== entry && this.replacedImages.get(media.id) !== entry) { bitmap.close(); throw new DOMException('原图片已取消。', 'AbortError') }
         const bytes = bitmap.width * bitmap.height * 4
         const others = (): number => [...this.images].reduce((sum, [id, image]) => sum + (id === media.id ? 0 : image.bytes), 0)
-        // 超预算时先释放拖动中暂留的空闲图片（最旧的先），仍放不下才报错。
-        for (const key of [...this.idleImages.keys()]) { if (others() + bytes <= VIDEO_EDIT_IMAGE_BUDGET_BYTES) break; this.idleImages.delete(key); this.releaseImage(key) }
-        if (others() + bytes > VIDEO_EDIT_IMAGE_BUDGET_BYTES) { bitmap.close(); throw new Error(`解码图片超过${VIDEO_EDIT_IMAGE_BUDGET_LABEL}预算，请减少同时显示的图片。`) }
-        const entry = this.images.get(media.id)!; entry.bytes = bytes; entry.ready = true; entry.predecoded = speculative
+        // 预算只是淘汰目标：先释放拖动中暂留的空闲图片（最旧的先），当前帧要的再让出前瞻预解码的；当前帧的图一律保留。
+        const evictable = speculative ? [...this.idleImages.keys()] : [...this.idleImages.keys(), ...this.warmImages]
+        for (const key of evictable) {
+          if (others() + bytes <= videoEditGpuBudget().imageBytes) break
+          if (key === media.id) continue
+          this.idleImages.delete(key); this.warmImages.delete(key); this.releaseImage(key)
+        }
+        entry.bytes = bytes; entry.ready = true; entry.predecoded = speculative
         return bitmap
       })
       let abort!: () => void
       const cancelled = new Promise<never>((_, reject) => { abort = () => reject(controller.signal.reason ?? new DOMException('原图片已取消。', 'AbortError')); controller.signal.addEventListener('abort', abort, { once: true }) })
-      const pending = Promise.race([native, cancelled]).catch(error => { if (this.images.get(media.id)?.pending === pending) this.images.delete(media.id); throw error }).finally(() => controller.signal.removeEventListener('abort', abort))
+      const pending = Promise.race([native, cancelled]).catch(error => { if (this.images.get(media.id) === entry) this.images.delete(media.id); throw error }).finally(() => controller.signal.removeEventListener('abort', abort))
       // A detached asynchronous decoder may finish after the worker closes.
       void pending.catch(() => {})
-      image = { path: media.path, controller, pending, bytes: media.width * media.height * 4, ready: false }
+      const entry: DecodedImage = { path: media.path, controller, pending, bytes: width * height * 4, ready: false, scale }
+      image = entry
       this.images.set(media.id, image)
     }
     return image.pending
@@ -825,6 +903,7 @@ export class VideoEditRenderer {
     finally { const next = this.imageQueue.shift(); if (next) next(); else this.imageLoads-- }
   }
   private releaseImage(id: string): void {
+    this.releaseReplaced(id)
     const image = this.images.get(id); if (!image) return
     this.images.delete(id); image.controller.abort()
     // Successful cached bitmaps close here; a late decoder closes in image().
@@ -1352,7 +1431,7 @@ export class VideoEditRenderer {
   /** The still store of this renderer tree (owner's). */
   private get stillStore(): VideoEditFrameCache {
     const owner = this.lookaheadOwner
-    return owner.stills ??= new VideoEditFrameCache(CODE_INPUT_STILL_BYTES)
+    return owner.stills ??= new VideoEditFrameCache(videoEditGpuBudget().imageBytes)
   }
   /**
    * The kept picture of a still, or undefined to decode it here. A still the background is still decoding is waited
@@ -1499,7 +1578,7 @@ export class VideoEditRenderer {
     owner.grantBackgroundTurns(BACKGROUND_STEPS_PER_FRAME, true)
   }
   private checkInputBudget(context: NestedFrameContext): void {
-    const available = VIDEO_EDIT_INPUT_BUDGET_BYTES - context.bytes
+    const available = videoEditGpuBudget().inputBytes - context.bytes
     this.webOwner.webInputs?.checkBudget(context, available)
   }
   /** 每个滤镜前缀持有独立目标，递归取相邻帧时不能覆盖当前输入。 */
@@ -1585,8 +1664,7 @@ export class VideoEditRenderer {
     // Forward preview playback opens the inputs of clips about to start; a paused, scrubbed or exported frame keeps only its own.
     const references = sequential && this.previewWidth ? this.upcomingReferences(document, frame, context.precision) : []
     const upcoming = this.upcomingCodeInputs(document, references, showing)
-    const keep = new Set([...showing, ...upcoming.map(input => input.source.sessionKey), ...(this.nestedOwner ?? this).warmScopes])
-    if (keep.size > 32) throw new Error('同时读取的视频画面超过32份，请减少输入。')
+    const keep = videoEditCodeInputsKept(showing, [...upcoming.map(input => input.source.sessionKey), ...(this.nestedOwner ?? this).warmScopes])
     // Inputs no longer showing leave the map at once; closing their decoder sessions (a native round trip each) runs
     // beside this frame's reads instead of before them (a jump to another section waited 10-50ms for it).
     const retiring = this.disposeCodeInputs(keep)
@@ -1656,7 +1734,7 @@ export class VideoEditRenderer {
       const copy: VideoEditWebFrameCopy = (borrowed, width, height, target) => compositor.copyWebFrame(borrowed, width, height, target)
       for (const { clip, reference, first } of enteringWebs) {
         const sample = codeMediaInputSample(clip, reference, first, document.frameRate)
-        if (sample) webs.preopen(reference, sample.seconds, context, copy, this.webTrust(document, clip), { precision: context.precision, cachePolicy: context.webCacheAdaptive ? 'adaptive' : undefined, cacheGrid: codeMediaWebTimeGrid(clip, reference, first, document.frameRate), outputScale: this.webScale, availableBytes: () => VIDEO_EDIT_INPUT_BUDGET_BYTES - context.bytes })
+        if (sample) webs.preopen(reference, sample.seconds, context, copy, this.webTrust(document, clip), { precision: context.precision, cachePolicy: context.webCacheAdaptive ? 'adaptive' : undefined, cacheGrid: codeMediaWebTimeGrid(clip, reference, first, document.frameRate), outputScale: this.webScale, availableBytes: () => videoEditGpuBudget().inputBytes - context.bytes })
       }
       for (const { clip, parameter, reference, seconds } of webRequests) {
         if (!current()) throw new DOMException('网页取帧已取消。', 'AbortError')
@@ -1680,7 +1758,7 @@ export class VideoEditRenderer {
           cacheGrid: codeMediaWebTimeGrid(clip, reference, frame, document.frameRate),
           text,
           outputScale, deadline: context.webDeadline,
-          availableBytes: () => VIDEO_EDIT_INPUT_BUDGET_BYTES - context.bytes,
+          availableBytes: () => videoEditGpuBudget().inputBytes - context.bytes,
           signal: context.signal, ahead, approximate: markApproximate,
         }).then(async picture => {
           if (picture) return picture
@@ -2132,13 +2210,15 @@ export class VideoEditRenderer {
     }
     const deferredGenerators = new Set(spatial?.request.sources.map(source => source.clipId))
     const declarations = (instance: CodeMaterialInstance): readonly CodeParameterDeclaration[] | undefined => this.codeSources?.declarations(instance)
-    const imageIds = new Set(active.flatMap(clip => [...codeMaterialImageIds(clip.code && { ...clip.code, parameters: videoEditCodeInputParameters(document, clip.code, declarations) }), ...activeVideoEditEffects(clip).flatMap(effect => [...codeMaterialImageIds(effect.code)]), ...(clip.kind === 'image' ? [videoEditClipMedia(document, clip)?.id ?? ''] : [])]))
+    const codeImageIds = new Set(active.flatMap(clip => [...codeMaterialImageIds(clip.code && { ...clip.code, parameters: videoEditCodeInputParameters(document, clip.code, declarations) }), ...activeVideoEditEffects(clip).flatMap(effect => [...codeMaterialImageIds(effect.code)])]))
+    const imageIds = new Set([...codeImageIds, ...active.flatMap(clip => clip.kind === 'image' ? [videoEditClipMedia(document, clip)?.id ?? ''] : [])])
     const imageMedia = [...imageIds].map(id => {
       const media = document.media.find(media => media.id === id && ['image', 'video'].includes(media.kind))
       if (!media) throw new Error('代码图片引用或图片片段的源素材不存在。')
       return media
     }).filter(media => media.kind === 'image')
-    if (imageMedia.length > 32 || imageMedia.reduce((sum, media) => sum + media.width * media.height * 4, 0) > VIDEO_EDIT_IMAGE_BUDGET_BYTES) throw new Error(`可见图片超过32份或${VIDEO_EDIT_IMAGE_BUDGET_LABEL}预算，请减少同时显示的图片。`)
+    // 本帧代码参数（含片子数据派生的）引用到的图按源尺寸；其余按整个序列一次算定的档位。
+    const imageScales = new Map(await Promise.all(imageMedia.map(async media => [media.id, codeImageIds.has(media.id) ? videoEditImageDecodeScale(document, media, 'source') : await this.imageScale(media)] as const)))
     for (const id of imageIds) {
       this.warmImages.delete(id)
       const image = this.images.get(id)
@@ -2147,7 +2227,7 @@ export class VideoEditRenderer {
     for (const id of this.images.keys()) if (!imageIds.has(id) && !this.warmImages.has(id)) this.releaseImage(id)
     const approximateCodeInputs = new WeakSet<object>()
     const imagesReady = (async () => {
-      const inputs = new Map<string, ImageBitmap | VideoEditCodePicture>(await Promise.all(imageMedia.map(async media => [media.id, await this.image(media, false, readSignal)] as const)))
+      const inputs = new Map<string, ImageBitmap | VideoEditCodePicture>(await Promise.all(imageMedia.map(async media => [media.id, await this.image(media, imageScales.get(media.id)!, false, readSignal)] as const)))
       const codeInputs = await this.prepareCodeInputs(sourceDocument, active, frame, sequential, quality, canPresent, nestedContext, path, markApproximate, _scrubbing)
       for (const [key, picture] of codeInputs) { inputs.set(key, picture); markProvenance(picture) }
       const prepared = await this.compositor!.prepareImages(inputs, canPresent, new Set(active.filter(clip => clip.kind === 'text').map(clip => clip.id)), new Set(active.map(clip => clip.id)))
@@ -2243,7 +2323,7 @@ export class VideoEditRenderer {
         return picture
       }
       if (!media) throw new Error(`找不到素材 ${clip.name}`)
-      if (media.kind === 'image') return this.image(media, false, readSignal)
+      if (media.kind === 'image') return this.image(media, imageScales.get(media.id) ?? 1, false, readSignal)
       // 转场让片段越过源素材首尾时重复首尾帧（PR“媒体不足”）。
       const originalTime = clipSourceSeconds(clip, videoEditHandleFrame(clip, frame, document.fps, media.durationSeconds), document.fps)
       // Every picture lookup (schedule, seek, export read) uses the same picture time: the source time plus the container
@@ -2443,7 +2523,7 @@ export class VideoEditRenderer {
               const sampleContext = { ...nestedContext, inputs: new Map(), pictures: new Map() }
               const sampled = await this.prepareCodeInputs(sourceDocument, [plan.clip], plan.context.frame, false, quality, canPresent, sampleContext, path, markApproximate, false)
               const uploads = new Map<string, ImageBitmap | VideoEditCodePicture>(sampled)
-              for (const media of imageMedia) uploads.set(media.id, await this.image(media, false, signal))
+              for (const media of imageMedia) uploads.set(media.id, await this.image(media, imageScales.get(media.id)!, false, signal))
               const inputs = await gpu.prepareImages(uploads, canPresent, new Set(active.filter(clip => clip.kind === 'text').map(clip => clip.id)), new Set(active.map(clip => clip.id)))
               for (const [name, key] of plan.imageKeys) {
                 const input = inputs.get(key)
@@ -2518,13 +2598,14 @@ export class VideoEditRenderer {
     }
     const activeImages = new Set(canPresent() ? [...imageIds, ...this.warmImages] : this.images.keys())
     // 拖动时图片镜头来回进出：保留最近用过的几张已解码图片（大图解码一次要几百毫秒），非拖动时照旧立即释放。
-    for (const key of retireIdle(this.idleImages, [...this.images.keys()].filter(key => !activeImages.has(key)), _scrubbing ? VIDEO_EDIT_IDLE_SCRUB_IMAGES : 0)) this.releaseImage(key)
+    for (const key of retireIdle(this.idleImages, [...this.images.keys()].filter(key => !activeImages.has(key)), _scrubbing ? Infinity : 0)) this.releaseImage(key)
+    for (const id of [...this.replacedImages.keys()]) if (this.images.get(id)?.ready) this.releaseReplaced(id)
     // A pre-rendered frame keeps the live decoders and nested sequences of the paused picture until playback leaves the
     // cache: closing a native seek decoder held the GPU for about 100ms, a dropped frame at every start of playback.
     const keepLive = !!cachedWindow
     const activePaths = new Set(canPresent() ? active.map(clip => this.clipMedia(document, clip)?.path) : this.seekers.keys())
     // 原生文件会话由共享后端按服务端预算保留，渲染器只释放闲置读取器；浏览器仍用原有 LRU。
-    const scrubLimit = this.frames.managesIdleSessions ? 0 : _scrubbing ? VIDEO_EDIT_IDLE_SCRUB_RENDERERS : 0
+    const scrubLimit = this.frames.managesIdleSessions ? 0 : _scrubbing ? videoEditGpuBudget().idleScrubRenderers : 0
     if (!keepLive) for (const path of retireIdle(this.idleSeekers, [...this.seekers.keys()].filter(path => !activePaths.has(path)), scrubLimit)) {
       const seeker = this.seekers.get(path); this.seekers.delete(path); await seeker?.dispose()
     }
@@ -2605,10 +2686,10 @@ export class VideoEditRenderer {
     const result = mixer ? await this.mixBuses(startSeconds, durationSeconds, retainIdle, clips, mixer, sets) : await this.mixClips(startSeconds, durationSeconds, retainIdle, clips, sets)
     const { activeAudio, activeChains, activeStretchers } = sets
     // 拖动播放头的声音颗粒（retainIdle）每次落在不同位置、用到不同片段：本次没用到的来源不立即关掉，按最近使用保留至多
-    // VIDEO_EDIT_IDLE_AUDIO_SOURCES 个空闲的，否则每个颗粒都要重开解码与声音会话（复杂工程实测一次拖动约 20 次、每次约 100ms，
+    // 预算里 idleAudioSources 个空闲的，否则每个颗粒都要重开解码与声音会话（复杂工程实测一次拖动约 20 次、每次约 100ms，
     // 与节目取帧争用同一个原生解码服务）。连续播放与导出不保留，用完即关。
     const idle = [...this.sources.keys()].filter(key => key.startsWith('audio:') && !activeAudio.has(key)).concat([...this.nestedSounds.keys()].filter(id => !activeAudio.has(id)))
-    for (const key of retireIdle(this.idleAudio, idle, retainIdle ? VIDEO_EDIT_IDLE_AUDIO_SOURCES : 0)) {
+    for (const key of retireIdle(this.idleAudio, idle, retainIdle ? videoEditGpuBudget().idleAudioSources : 0)) {
       const pending = this.sources.get(key)
       if (pending) { this.sources.delete(key); this.release(await pending) }
       const renderer = this.nestedSounds.get(key)
@@ -2854,6 +2935,7 @@ export class VideoEditRenderer {
     await Promise.allSettled([...this.stillDecodes.values()].map(decode => decode.done)); this.stills?.clear()
     await Promise.allSettled([...this.sources.values()].map(async pending => { const source = await pending; source.current?.close(); await source.iterator?.return(); this.release(source) }))
     for (const key of this.images.keys()) this.releaseImage(key)
+    for (const key of [...this.replacedImages.keys()]) this.releaseReplaced(key)
     this.jumpPreview?.dispose(); this.jumpPreview = undefined
     await this.hoverRenderer?.dispose(); this.hoverRenderer = undefined
     this.contentAudio.clear(); this.sources.clear(); this.images.clear(); await this.compositor?.dispose(); this.canvas.width = 1; this.canvas.height = 1

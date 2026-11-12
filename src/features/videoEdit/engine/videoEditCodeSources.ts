@@ -68,7 +68,7 @@ const logger = createLogger('features.videoEdit.codeSources')
 const SUBJECT_MATTE: NonNullable<VideoEditEffect['mask']> = { regionId: 'person', feather: 0, expand: 0 }
 /** Soft cache budgets: the current frame's working set is pinned regardless of chain length. */
 const CACHED_PROGRAMS = 32; const CACHED_PROGRAM_BYTES = 16 * 1024 ** 2
-type CodeRuntime = Pick<VideoEditCodeGpu, 'authorGenerator' | 'inspectAuthor' | 'retainAuthorInstances' | 'observeAuthor' | 'releaseUnused'> & Partial<Pick<VideoEditCodeGpu, 'authorTextIdentity' | 'authorFrameKey' | 'stageAuthorScene' | 'draw' | 'generatorTargetCapacity' | 'spillGeneratorTarget' | 'resetFramePerformance' | 'warmAuthor' | 'protectAuthorInstances' | 'renderDivisor'>>
+type CodeRuntime = Pick<VideoEditCodeGpu, 'authorGenerator' | 'inspectAuthor' | 'retainAuthorInstances' | 'observeAuthor' | 'releaseUnused'> & Partial<Pick<VideoEditCodeGpu, 'authorTextIdentity' | 'authorFrameKey' | 'stageAuthorScene' | 'draw' | 'resetFramePerformance' | 'warmAuthor' | 'protectAuthorInstances' | 'renderDivisor'>>
 type Compiler = Pick<VideoEditCodeCompiler, 'bundle' | 'dispose'> & Partial<Pick<VideoEditCodeCompiler, 'diagnostics'>>
 interface KnownVersion { source: string; apiVersion: number; languageVersion: number; bytes: number }
 interface CodeOutputFrame { sourceTime: ReturnType<typeof videoEditClipSourceTimeAt>; info: AuthorFrameInfo; overrides: Parameters<VideoEditCodeGpu['authorGenerator']>[7]; environment: ReturnType<typeof authorEffectEnvironmentForClip> }
@@ -309,7 +309,6 @@ export class VideoEditCodeSources implements SpatialCodeSources {
   private outputTargetSequence = 0
   private readonly outputReuse = { hits: 0, misses: 0, bypasses: 0 }
   private readonly targetPictures = new Map<string, VideoEditCodePicture | ImageBitmap>()
-  private readonly spilledPictures = new Set<ImageBitmap>()
   private readonly parameters = new WeakMap<CodeMaterialInstance, { program: CodeMaterialProgram; prepared: PreparedCodeMaterialParameters }>()
   private readonly graphics = new WeakMap<VideoEditGraphic, PreparedVideoEditGraphic>()
   private runtime?: CodeRuntime
@@ -362,8 +361,7 @@ export class VideoEditCodeSources implements SpatialCodeSources {
     this.cancel(); await this.gpuWork
     this.inputFailures.clear()
     this.protectedKeys.clear(); this.releaseUnused(this.protectedKeys)
-    for (const bitmap of this.spilledPictures) bitmap.close()
-    this.spilledPictures.clear(); this.targetPictures.clear(); this.lastOutputs.clear()
+    this.targetPictures.clear(); this.lastOutputs.clear()
     // Versions belong to a document; a candidate from another owner may use the same ids.
     const previous = new Map(this.known)
     this.known.clear(); this.knownBytes = 0; this.checkVersions(document)
@@ -671,11 +669,8 @@ export class VideoEditCodeSources implements SpatialCodeSources {
           if (plan.program && plan.static && !options.observeElements) plan.key = shared.get(contentKeys.get(plan) ?? '') ?? plan.key
           keys.add(plan.key)
         }
+        // 本帧要用的目标一律留在 GPU；之后不再用到的由 releaseUnused 释放。
         this.releaseUnused(keys)
-        for (const bitmap of this.spilledPictures) bitmap.close()
-        this.spilledPictures.clear()
-        const resident = this.targetPictures
-        const capacity = Math.min(...plans.map(plan => this.runtime?.generatorTargetCapacity?.(plan.context.width, plan.context.height, (this.targetPictures.get(plan.key) as VideoEditCodePicture | undefined)?.textureFormat) ?? Infinity))
         for (const plan of plans) {
           assertCurrent()
           const contentKey = contentKeys.get(plan)
@@ -686,16 +681,6 @@ export class VideoEditCodeSources implements SpatialCodeSources {
             // 作者可能先写目标再失败；开始覆写前就撤销旧键，取消也不能把半帧登记成命中。
             this.lastOutputs.delete(plan.key)
             if (plan.program) this.outputReuse[contentKey ? 'misses' : 'bypasses']++
-            while (!resident.has(plan.key) && resident.size >= capacity && this.runtime?.spillGeneratorTarget) {
-              const candidate = [...resident].find(([, picture]) => !('highPrecision' in picture && picture.highPrecision))
-              if (!candidate) break
-              const [oldKey, oldPicture] = candidate
-              const bitmap = await this.runtime.spillGeneratorTarget(oldKey)
-              if (!bitmap) break
-              this.spilledPictures.add(bitmap); resident.delete(oldKey); this.lastOutputs.delete(oldKey)
-              for (const [id, value] of result.pictures) if (value === oldPicture) result.pictures.set(id, bitmap)
-              assertCurrent()
-            }
             if (plan.draws) {
               if (!this.runtime!.draw) throw new Error('当前GPU会话不支持结构化图形绘制。')
               picture = await this.runtime!.draw(plan.key, plan.context.width, plan.context.height, plan.draws, undefined, Math.min(document.width / plan.context.width, document.height / plan.context.height) * plan.clip.scale)
@@ -717,7 +702,7 @@ export class VideoEditCodeSources implements SpatialCodeSources {
             assertCurrent()
             if (contentKey) this.lastOutputs.set(plan.key, { key: contentKey, picture, gpuEpoch: videoEditGpuOutputEpoch(), ...(options.gpuFrame ? { gpuOutcome: options.gpuFrame.outcome } : {}) })
           }
-          resident.delete(plan.key); resident.set(plan.key, picture)
+          this.targetPictures.delete(plan.key); this.targetPictures.set(plan.key, picture)
           if (picture instanceof VideoEditCodePicture) picture.contentKey = contentKey
           result.pictures.set(plan.clip.id, picture)
         }
@@ -773,7 +758,7 @@ export class VideoEditCodeSources implements SpatialCodeSources {
     this.disposed = true; this.cursorSources.clear(); this.zoomPointers.clear(); this.cancel(); this.compiler.dispose(); this.protectedKeys.clear(); this.inputFailures.clear()
     await Promise.allSettled([this.gpuWork])
     const spatialReleases = await Promise.allSettled([...this.spatialFrames.keys()].map(prepared => this.releaseSpatialFrame(prepared)))
-    this.spilledPictures.forEach(bitmap => bitmap.close()); this.spilledPictures.clear(); this.targetPictures.clear()
+    this.targetPictures.clear()
     try { this.runtime?.releaseUnused(new Set()) }
     finally { this.programs.clear(); this.programBytes = 0; this.lastOutputs.clear(); this.known.clear(); this.knownBytes = 0 }
     const failures = spatialReleases.flatMap(result => result.status === 'rejected' ? [result.reason as unknown] : [])

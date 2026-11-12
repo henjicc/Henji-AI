@@ -31,11 +31,12 @@ export function textRasterSize(clip: TextContent, frame: { width: number; height
   const { width, height } = textRasterPlan(clip, frame).plan.rasterBounds
   return { width, height }
 }
-export function rasterizeText(clip: TextContent, frame: { width: number; height: number }, resolution = 1): TextRaster {
+/** `maxDimension`：调用方 GPU 设备的单张纹理边长上限。 */
+export function rasterizeText(clip: TextContent, frame: { width: number; height: number }, resolution = 1, maxDimension = 8192): TextRaster {
   const { origin, plan } = textRasterPlan(clip, frame)
   const { x, y, width, height } = plan.rasterBounds
   // 分配前执行 GPU 上传尺寸限制，避免先创建无法使用的临时纹理。
-  if (width * resolution > 8192 || height * resolution > 8192) throw new Error('文字栅格超过 GPU 单张纹理 8192 像素技术范围。')
+  if (width * resolution > maxDimension || height * resolution > maxDimension) throw new Error(`文字栅格超过 GPU 单张纹理 ${maxDimension} 像素技术范围。`)
   const canvas = new OffscreenCanvas(Math.ceil(width * resolution), Math.ceil(height * resolution)); const context = canvas.getContext('2d')!
   if (resolution !== 1) context.scale(resolution, resolution)
   paintTextDrawPlan(context, plan, { width, height, resolution, x: -origin.x - x, y: -origin.y - y }, paintVectorAppearance)

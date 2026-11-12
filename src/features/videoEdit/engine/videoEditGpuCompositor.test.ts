@@ -642,7 +642,7 @@ describe('合成器共享图片候选生命周期', () => {
   })
   it('代码与普通片段共享一次上传，满文字工作集切换图片先回收，不因旧预算阻塞', async () => {
     vi.stubGlobal('OffscreenCanvas', class { constructor(public width: number, public height: number) {} getContext() { return { save() {}, restore() {}, scale() {}, beginPath() {}, fill() {}, clearRect() {}, drawImage() {}, fillRect() {}, fillText() {}, strokeText() {}, measureText(text: string) { return { width: text.length * 10 } } } } })
-    for (const [width, height, count] of [[3840, 2160, 8], [16, 16, 32]]) {
+    for (const [width, height, count] of [[3840, 2160, 40], [16, 16, 32]]) {
       const { compositor, device, destroyed } = copyFixture(async () => {})
       compositor.canvas.width = width; compositor.canvas.height = height
       const document = createVideoEditDocument('满工作集'); document.sequences[0].width = width; document.sequences[0].height = height
@@ -662,7 +662,7 @@ describe('合成器共享图片候选生命周期', () => {
       await (await compositor.draw(composition, [base, { ...base, id: 'copy' }], [picture, picture], () => true)).completion
       expect(device.queue.copyExternalImageToTexture).toHaveBeenCalledTimes(count + 1)
       expect(compositor.imageDiagnostics()).toMatchObject({ textures: 1, bytes: width * height * 4, uploads: count + 1 })
-      await expect(compositor.prepareImages(new Map(Array.from({ length: 33 }, (_, index) => [`image-${index}`, { width: 1, height: 1 } as ImageBitmap])), () => true)).rejects.toThrow('32')
+      expect((await compositor.prepareImages(new Map(Array.from({ length: 33 }, (_, index) => [`image-${index}`, { width: 1, height: 1 } as ImageBitmap])), () => true)).size).toBe(33)
       await compositor.dispose(); expect(compositor.imageDiagnostics().textures).toBe(0)
     }
   })

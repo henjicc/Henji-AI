@@ -23,7 +23,7 @@ import { ImageEditWebGpuDeviceManager } from '@/core/imageEdit/webgpu/deviceMana
 import { getWebGpuContext, type GpuDevice, type GpuTexture, type GpuBuffer, type GpuRenderPipeline } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import type { VideoEditCodeGpu } from './videoEditCodeGpu'
 import { VideoEditCodePicture } from './videoEditCodePicture'
-import { VIDEO_EDIT_IMAGE_BUDGET_BYTES, VIDEO_EDIT_IMAGE_BUDGET_LABEL } from './videoEditGpuBudget'
+import { setVideoEditMaxTextureDimension, videoEditGpuBudget, videoEditMaxTextureDimension } from './videoEditGpuBudget'
 import { type AuthorFrameInfo, type AuthorParameters, type AuthorWebFrame } from './videoEditAuthorModule'
 import { VideoEditAuthorRuntime } from './videoEditAuthorRuntime'
 import type { AuthorSourceLocations } from './videoEditAuthorBundle'
@@ -219,6 +219,7 @@ export class VideoEditGpuCompositor {
     timing?.(performance.now() - deviceStarted, 'device')
     const pipelineStarted = performance.now()
     this.device = this.shared?.device ?? managed!.device as VideoGpuDevice
+    setVideoEditMaxTextureDimension((this.device as VideoGpuDevice & { limits?: { maxTextureDimension2D?: number } }).limits?.maxTextureDimension2D)
     videoEditGpuLedger(this.device)
     this.fences = new VideoEditGpuFrameFences(this.device, reason => { this.lost ??= reason })
     const format = this.shared?.canvasFormat ?? managed!.provider.getPreferredCanvasFormat()
@@ -589,12 +590,20 @@ export class VideoEditGpuCompositor {
     if (!this.imageIds.has(picture)) this.imageIds.set(picture, ++this.nextImageId)
     return `image:${this.imageIds.get(picture)}`
   }
+  /**
+   * 纹理按实际栅格尺寸记账。预算只是淘汰目标：超出时先销毁本帧不显示的图片与文字纹理，本帧要画的一律上传，不报错。
+   * 图片已按画面需要的尺寸解码（不超过单张纹理上限），文字栅格档位也在上限之内。
+   */
   private texture(id: string, key: string, source: ImageBitmap | OffscreenCanvas): GpuTexture {
     const cached = this.textures.get(id)
     if (cached?.key === key) return cached.texture
     const bytes = source.width * source.height * 4
-    const retained = [...this.textures.values()].reduce((total, entry) => total + entry.bytes, 0) - (cached?.bytes ?? 0)
-    if (source.width < 1 || source.height < 1 || source.width > 8192 || source.height > 8192 || retained + bytes > VIDEO_EDIT_IMAGE_BUDGET_BYTES) throw new Error(`图片或文字超出 GPU 单张纹理 8192 像素或驻留 ${VIDEO_EDIT_IMAGE_BUDGET_LABEL} 技术预算。`)
+    let retained = [...this.textures.values()].reduce((total, entry) => total + entry.bytes, 0) - (cached?.bytes ?? 0)
+    for (const [other, entry] of this.textures) {
+      if (retained + bytes <= videoEditGpuBudget().imageBytes) break
+      if (other === id || this.protectedImages.has(other)) continue
+      entry.texture.destroy(); this.textures.delete(other); retained -= entry.bytes
+    }
     const texture = this.device.createTexture({ size: [source.width, source.height], format: 'rgba8unorm', usage: 0x02 | 0x04 | 0x10 })
     const started = performance.now()
     // Preserve the bitmap's premultiplied pixels. Unpremultiplying on upload and
@@ -612,13 +621,8 @@ export class VideoEditGpuCompositor {
     await this.ready
     if (!shouldPresent() || this.disposed) throw new DOMException('图片画面已取消。', 'AbortError')
     this.assertDevice()
-    // 图片与文字需要上传；代码画面借用设备上的现有纹理，不重复计入上传预算。
+    // 图片与文字按实际纹理尺寸记账（`texture`）；代码画面借用设备上的现有纹理，不上传。
     const unique = new Set(pictures.values())
-    let uploadBytes = 0, uploadCount = 0
-    for (const image of unique) {
-      if (!(image instanceof VideoEditCodePicture)) { uploadBytes += image.width * image.height * 4; uploadCount++ }
-    }
-    if (uploadCount + visibleText.size > 32 || uploadBytes + visibleText.size * this.canvas.width * this.canvas.height * 4 > VIDEO_EDIT_IMAGE_BUDGET_BYTES) throw new Error(`可见图片与文字超过32份或${VIDEO_EDIT_IMAGE_BUDGET_LABEL}预算，请减少同时显示的素材。`)
     for (const image of unique) if (image instanceof VideoEditCodePicture && image.owner !== this.device) throw new Error('视频输入画面不属于当前GPU设备。')
     this.protectedImages = new Set([...unique].filter((image): image is ImageBitmap => !(image instanceof VideoEditCodePicture)).map(image => this.imageKey(image)).concat([...visibleText].map(id => `text:${id}`)))
     this.protectedUniforms = new Set(visibleClips)
@@ -721,12 +725,11 @@ export class VideoEditGpuCompositor {
           resource = picture.texture.createView(); width = picture.displayWidth; height = picture.displayHeight
         } else {
           const id = picture ? this.imageKey(picture) : `text:${clip.id}`
-          // 空间材料面按推近档位重新栅格文字，档位留在单张纹理技术范围内；一倍档沿用二维栅格。
-          const flat = videoEditTextResolution(clip.scale)
-          let resolution = flat * (viewport?.rasterTier ?? 1)
-          if (!picture && resolution > flat) {
-            const size = videoEditTextRasterSize(clip, reference)
-            while (resolution > flat && Math.max(size.width, size.height) * resolution > 8192) resolution /= 2
+          // 空间材料面按推近档位重新栅格文字；放大很多的文字逐档降到单张纹理上限之内。
+          let resolution = videoEditTextResolution(clip.scale) * (viewport?.rasterTier ?? 1)
+          if (!picture && resolution > 1) {
+            const size = videoEditTextRasterSize(clip, reference), limit = videoEditMaxTextureDimension()
+            while (resolution > 1 && Math.max(size.width, size.height) * resolution > limit) resolution /= 2
           }
           const key = picture ? id : JSON.stringify([reference.width, reference.height, clip.text, clip.textStyle, documentFontRevision(), resolution])
           let cached = this.textures.get(id)
@@ -735,7 +738,7 @@ export class VideoEditGpuCompositor {
             if (picture) source = picture
             else {
               const textClip = viewport || this.pictureDivisor === 1 ? clip : { ...clip, textStyle: scaleVideoEditTextStyle(clip.textStyle ?? defaultVideoEditTextStyle(document.height * this.pictureDivisor), 1 / this.pictureDivisor) }
-              const raster = rasterizeVideoEditText(textClip, reference, resolution)
+              const raster = rasterizeVideoEditText(textClip, reference, resolution, videoEditMaxTextureDimension())
               source = raster.canvas; textRaster = { x: raster.x, y: raster.y, width: raster.width, height: raster.height }
             }
             this.texture(id, key, source); cached = this.textures.get(id)!

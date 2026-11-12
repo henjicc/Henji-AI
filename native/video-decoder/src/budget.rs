@@ -25,14 +25,14 @@ use crate::test_pattern::SharedFormat;
 /// 硬解会话的表面池：参考帧（H.264/HEVC 最多 16）+ FFmpeg 额外帧（`extra_hw_frames = 4`）。
 pub const HARDWARE_SURFACES: u64 = 20;
 const GIB: u64 = 1024 * 1024 * 1024;
-/// 解码显存预算占专用显存的比例。其余留给合成与剪辑帧缓存；它们与本预算一样只是淘汰目标，偶尔叠加超出时驱动把显存
-/// 换出到内存，变慢而不失败。
-pub const VRAM_SHARE: f64 = 0.75;
+/// 解码显存预算占专用显存的比例。剪辑渲染侧（合成、图片、帧缓存等）另取一半，剩下一成留给系统与图片编辑器；都只是淘汰
+/// 目标，偶尔叠加超出时驱动把显存换出到内存，变慢而不失败。
+pub const VRAM_SHARE: f64 = 0.4;
 /// 集成显卡报告的专用显存只有几百 MiB（画面实际放在共享内存），按这个下限取。
 pub const MIN_VRAM_BYTES: u64 = 3 * GIB / 2;
 /// 读不到显卡时的取值：这时也打不开解码会话，只影响诊断显示。
 pub const UNKNOWN_ADAPTER_VRAM_BYTES: u64 = 8 * GIB;
-/// 一个会话的拖动留存帧至多占预算的几分之一：RTX 4090（18GiB 预算）为 4.5GiB，约 68 帧 4K rgbaf16 或 370 帧 4K nv12。
+/// 一个会话的拖动留存帧至多占预算的几分之一：RTX 4090（约 9.4GiB 预算）为约 2.4GiB，约 38 帧 4K rgbaf16 或 200 帧 4K nv12。
 const RETAIN_SHARE: u64 = 4;
 /// 留存帧之外给前台留出的最大会话数：正在拖的文件旁边还要能预打开下一个镜头、起播。
 const FOREGROUND_SESSIONS_KEPT: u64 = 3;
@@ -363,9 +363,9 @@ mod tests {
 
     #[test]
     fn limits_follow_the_adapter_and_accept_overrides() {
-        // 24GiB（RTX 4090）→ 75% 不封顶；8GiB → 6GiB；集成显卡 512MiB → 下限 1.5GiB。
-        assert_eq!(Limits::for_adapter(Some(24_138)).vram_bytes >> 20, 18_103);
-        assert_eq!(Limits::for_adapter(Some(8_192)).vram_bytes >> 20, 6_144);
+        // 24GiB（RTX 4090）→ 40% 不封顶；8GiB → 3.2GiB；集成显卡 512MiB → 下限 1.5GiB。
+        assert_eq!(Limits::for_adapter(Some(24_138)).vram_bytes >> 20, 9_655);
+        assert_eq!(Limits::for_adapter(Some(8_192)).vram_bytes >> 20, 3_276);
         assert_eq!(Limits::for_adapter(Some(512)).vram_bytes, MIN_VRAM_BYTES);
         // 旧握手里的会话数覆盖字段已无含义，忽略。
         let overrides: LimitOverrides = serde_json::from_str(r#"{"vramBytes":629145600,"decoderSessions":8}"#).unwrap();

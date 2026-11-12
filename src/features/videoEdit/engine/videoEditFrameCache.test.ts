@@ -51,3 +51,21 @@ it('超过总预算的单帧不进入工作集，立即释放', () => {
   cache.put('a', large, new Set())
   expect(cache.bytes).toBe(0); expect(large.close).toHaveBeenCalledOnce()
 })
+it('按素材分桶、桶内按时间二分查找：乱序放入的上千帧逐帧命中，帧间空隙不命中，淘汰与删除后索引同步', () => {
+  const cache = new VideoEditFrameCache(4000 * 400)
+  const times = Array.from({ length: 2000 }, (_, index) => index / 25).sort((a, b) => Math.sin(a * 97) - Math.sin(b * 97))
+  const frames = new Map(times.map(time => [time, frame(time, .03)]))
+  for (const [time, value] of frames) { cache.put('a', value, new Set()); cache.put('b', frame(time + 1000, .03), new Set()) }
+  for (const [time, value] of frames) { expect(cache.get('a', time)).toBe(value); expect(cache.get('a', time + .029)).toBe(value) }
+  expect(cache.get('a', 1 / 25 + .035)).toBeUndefined(); expect(cache.get('a', -1)).toBeUndefined()
+  cache.deleteMedia('b'); expect(cache.bytes).toBe(2000 * 400); expect(cache.get('b', 1000)).toBeUndefined()
+  const small = new VideoEditFrameCache(2 * 400); const a = frame(0); const b = frame(1); const c = frame(2)
+  small.put('m', a, new Set()); small.put('m', b, new Set()); small.get('m', 0); small.put('m', c, new Set())
+  expect(b.close).toHaveBeenCalledOnce(); expect(small.get('m', 1)).toBeUndefined(); expect(small.get('m', 0)).toBe(a); expect(small.get('m', 2)).toBe(c)
+})
+it('时间段重叠时（定格、可变帧率时长不准）较早一帧盖住的时刻仍命中，与线性查找等价', () => {
+  const cache = new VideoEditFrameCache(4000); const held = frame(1, 2); const next = frame(1.5, .1); const later = frame(3.5, .1)
+  cache.put('a', held, new Set()); cache.put('a', next, new Set()); cache.put('a', later, new Set())
+  expect(cache.get('a', 1.55)).toBe(next); expect(cache.get('a', 1.7)).toBe(held); expect(cache.get('a', 2.9)).toBe(held)
+  expect(cache.get('a', 3.2)).toBeUndefined(); expect(cache.get('a', 3.55)).toBe(later)
+})

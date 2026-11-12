@@ -159,9 +159,10 @@ export class ImageEditWebGpuDeviceManager {
       const adapter = await provider.requestAdapter({ powerPreference: 'high-performance' });
       if (!adapter) throw new Error('Worker 未找到可用 GPU adapter');
       // 兼容模式适配器默认不给顶点/片元阶段存储缓冲与存储纹理（上限 0），计算工作组也只给 128；着色器图（shaders 框架）
-      // 的部分组件要用。适配器支持多少就要多少，核心模式下这些上限本来就够，不认识的名字不写。
+      // 的部分组件要用。适配器支持多少就要多少，核心模式下这些上限本来就够，不认识的名字不写。单张纹理边长也按适配器实际上限
+      // 申请（默认只给 8192），大图与推近文字才能用满显卡。
       const supported = (adapter.limits ?? {}) as Record<string, number | undefined>;
-      const requiredLimits = Object.fromEntries(['maxStorageBuffersInVertexStage', 'maxStorageTexturesInVertexStage', 'maxStorageBuffersInFragmentStage', 'maxStorageTexturesInFragmentStage', 'maxComputeInvocationsPerWorkgroup', 'maxComputeWorkgroupSizeX', 'maxComputeWorkgroupSizeY', 'maxComputeWorkgroupStorageSize']
+      const requiredLimits = Object.fromEntries(['maxTextureDimension2D', 'maxStorageBuffersInVertexStage', 'maxStorageTexturesInVertexStage', 'maxStorageBuffersInFragmentStage', 'maxStorageTexturesInFragmentStage', 'maxComputeInvocationsPerWorkgroup', 'maxComputeWorkgroupSizeX', 'maxComputeWorkgroupSizeY', 'maxComputeWorkgroupStorageSize']
         .filter((key) => typeof supported[key] === 'number' && (supported[key] as number) > 0)
         .map((key) => [key, supported[key] as number]));
       const available = this.optionalFeatures.length ? new Set(adapter.features ?? []) : undefined;

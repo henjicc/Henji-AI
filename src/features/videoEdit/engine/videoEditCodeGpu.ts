@@ -2,12 +2,11 @@ import { codeImageInputKey } from '@/core/imaging/parameterTypes'
 import type { CodeSimulationInput } from '@/core/videoEdit/codeSimulation'
 import { videoEditEffectNeedsFloat } from './videoEditRenderPrecision'
 import type { AuthorEffectEnvironment } from '@/core/videoEdit/authorEffects'
-import { VideoEditGpuBitmapBridge } from './videoEditGpuBitmapBridge'
 import { recordVideoEditPreparation, videoEditGpuTimer } from './videoEditPreparationTiming'
 import type { CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
 import { codeLayerTotals, codeStructureCosts } from '@/core/videoEdit/codeMaterial/performance'
 import { VideoEditCodePicture } from './videoEditCodePicture'
-import { VIDEO_EDIT_CODE_RESIDENT_BUDGET_BYTES as MAX_RESIDENT_BYTES } from './videoEditGpuBudget'
+import { videoEditGpuBudget } from './videoEditGpuBudget'
 export { VideoEditCodePicture } from './videoEditCodePicture'
 import type { EffectQuality } from '@/core/imaging/effects/descriptor'
 import { paintNativeText } from '@/services/vectorContent/textRaster'
@@ -103,7 +102,6 @@ function sourceAlphaPlan(width: number, height: number): VideoEditBuiltinPlan {
 }
 
 export class VideoEditCodeGpu {
-  private bitmapBridge?: VideoEditGpuBitmapBridge
   private authorPrograms?: VideoEditAuthorPrograms
   private readonly authorWork = new Set<Promise<unknown>>()
   private closing?: Promise<void>
@@ -305,11 +303,12 @@ export class VideoEditCodeGpu {
     try { await pending }
     catch (error) { if (this.imageReady === pending) this.imageReady = undefined; throw error }
   }
+  private textureLimit(): number { return (this.device as GpuDevice & { limits?: { maxTextureDimension2D?: number } }).limits?.maxTextureDimension2D ?? 8192 }
   private texture(width: number, height: number, format = 'rgba8unorm', mipLevelCount = 1, storage = true, usage = 0): GpuTexture {
     let pixels = 0
     for (let level = 0; level < mipLevelCount; level++) pixels += Math.max(1, Math.floor(width / 2 ** level)) * Math.max(1, Math.floor(height / 2 ** level))
     const bytes = pixels * videoEditGpuBytesPerPixel(format)
-    const limit = (this.device as GpuDevice & { limits?: { maxTextureDimension2D: number } }).limits?.maxTextureDimension2D ?? 8192
+    const limit = this.textureLimit()
     if (![width, height].every(value => Number.isInteger(value) && value >= 1 && value <= limit)) throw new CodeMaterialError('BUDGET', `代码素材纹理尺寸超过设备上限 ${limit}。`)
     const textureStarted = performance.now()
     const texture = this.device.createTexture({ size: [width, height], mipLevelCount, format, usage: usage | 0x01 | 0x02 | 0x04 | 0x10 | (storage ? 0x08 : 0) })
@@ -346,6 +345,8 @@ export class VideoEditCodeGpu {
     surface.lastUsedFrame = this.surfaceFrames.get(key) ?? 0
     return surface
   }
+  /** 字形纹理按字节淘汰（最久没用的先），不限条数：文字多的画面每帧都能命中，不必重新栅格化上传。 */
+  private glyphBudget(): number { return videoEditGpuBudget().codeResidentBytes }
   private glyph(command: Extract<CodeDrawCommand, { kind: 'text' }>, protectedKeys: ReadonlySet<string>): Glyph {
     const key = JSON.stringify([command.text, command.fontSize, command.fontFamily])
     const cached = this.glyphs.get(key)
@@ -353,7 +354,7 @@ export class VideoEditCodeGpu {
     const metrics = measureVideoEditGlyph(command.text, command.fontSize, command.fontFamily)
     const { width, height } = metrics
     for (const [oldKey, old] of this.glyphs) {
-      if (this.glyphs.size < 64 && this.glyphBytes + width * height * 4 <= MAX_RESIDENT_BYTES) break
+      if (this.glyphBytes + width * height * 4 <= this.glyphBudget()) break
       if (protectedKeys.has(oldKey)) continue
       old.texture.destroy(); this.bytes -= old.bytes; this.glyphBytes -= old.bytes; this.glyphs.delete(oldKey)
     }
@@ -374,10 +375,10 @@ export class VideoEditCodeGpu {
     if (draw.command.kind !== 'text' || !draw.textStyle) throw new Error('图形文字缺少共享样式。')
     const key = this.styledGlyphKey(draw, width, height, scale); const cached = this.glyphs.get(key)
     if (cached) { this.glyphs.delete(key); this.glyphs.set(key, cached); return cached }
-    const raster = rasterizeVideoEditText({ text: draw.command.text, textStyle: draw.textStyle }, { width, height }, videoEditTextResolution((draw.scale ?? 1) * scale))
+    const raster = rasterizeVideoEditText({ text: draw.command.text, textStyle: draw.textStyle }, { width, height }, videoEditTextResolution((draw.scale ?? 1) * scale), this.textureLimit())
     const bytes = raster.canvas.width * raster.canvas.height * 4
     for (const [oldKey, old] of this.glyphs) {
-      if (this.glyphBytes + bytes <= MAX_RESIDENT_BYTES && this.glyphs.size < 64) break
+      if (this.glyphBytes + bytes <= this.glyphBudget()) break
       if (protectedKeys.has(oldKey)) continue
       old.texture.destroy(); this.bytes -= old.bytes; this.glyphBytes -= old.bytes; this.glyphs.delete(oldKey)
     }
@@ -404,7 +405,7 @@ export class VideoEditCodeGpu {
       if (!raw) throw new CodeMaterialError('CONTEXT', `代码图片输入不存在：${codeImageInputKey(command.source)}`)
       const input = { ...raw }
       this.assertInput(input.texture)
-      if (input.owner !== this.device || ![input.width, input.height].every(value => Number.isInteger(value) && value > 0 && value <= 8192) || typeof input.premultiplied !== 'boolean') throw new CodeMaterialError('CONTEXT', '代码图片输入必须属于当前设备并具有有效尺寸和alpha模式。')
+      if (input.owner !== this.device || ![input.width, input.height].every(value => Number.isInteger(value) && value > 0 && value <= this.textureLimit()) || typeof input.premultiplied !== 'boolean') throw new CodeMaterialError('CONTEXT', '代码图片输入必须属于当前设备并具有有效尺寸和alpha模式。')
       if (input.texture === this.surfaces.get(key)?.picture.texture) throw new CodeMaterialError('CONTEXT', '代码图片输入输出不能引用同一纹理。')
       inputs.set(codeImageInputKey(command.source), { input, view: input.texture.createView() })
     }
@@ -412,8 +413,8 @@ export class VideoEditCodeGpu {
     this.assertLive()
     for (const { input } of inputs.values()) this.assertInput(input.texture)
     // Preserve the higher-resolution glyph through the graphic's intermediate target when the whole clip is enlarged.
-    // The existing single-texture 8192px limit bounds this target tier; all allocations retain the resident-byte owner.
-    const outputResolution = draws.some(draw => draw.textStyle) ? Math.min(videoEditTextResolution(rasterScale), 2 ** Math.max(0, Math.floor(Math.log2(8192 / Math.max(width, height))))) : 1
+    // The device's single-texture limit bounds this target tier; all allocations retain the resident-byte owner.
+    const outputResolution = draws.some(draw => draw.textStyle) ? Math.min(videoEditTextResolution(rasterScale), 2 ** Math.max(0, Math.floor(Math.log2(this.textureLimit() / Math.max(width, height))))) : 1
     const target = this.surface(key, context.width * outputResolution, context.height * outputResolution)
     const encoder = this.device.createCommandEncoder()
     const pass = encoder.beginRenderPass({ colorAttachments: [{ view: target.picture.texture.createView(), loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } }] })
@@ -667,7 +668,7 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
       list.push({ texture, generation: this.scratchGeneration }); this.scratchPool.set(key, list)
       // 驻留计账只算在用的纹理；闲置池另按上限回收。
       this.bytes -= bytes; this.scratchIdleBytes += bytes
-      if (this.scratchIdleBytes > MAX_RESIDENT_BYTES / 4) this.evictScratch(Infinity)
+      if (this.scratchIdleBytes > videoEditGpuBudget().codeResidentBytes / 4) this.evictScratch(Infinity)
     },
   }
   private readonly scratchPool = new Map<string, Array<{ texture: GpuTexture; generation: number }>>()
@@ -683,7 +684,7 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     this.device.queue.submit([encoder.finish()])
   }
   /** 代际回收保留热纹理；预算回收按最早归还顺序物理释放，避免只在计账分类间搬字节。 */
-  private evictScratch(before: number, maximumIdleBytes = MAX_RESIDENT_BYTES / 8): void {
+  private evictScratch(before: number, maximumIdleBytes = videoEditGpuBudget().codeResidentBytes / 8): void {
     const entries = [...this.scratchPool].flatMap(([key, list]) => list.map(entry => ({ key, entry }))).sort((a, b) => a.entry.generation - b.entry.generation)
     for (const { key, entry } of entries) {
       if (before === Infinity ? this.scratchIdleBytes <= maximumIdleBytes : entry.generation >= before) break
@@ -761,27 +762,9 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
       else this.releaseIdleAlternates(key)
     }
     this.builtinRuntime?.releaseIdle(); this.graphCache?.releaseIdle()
-    this.evictScratch(++this.scratchGeneration - 2)
-  }
-  /** WebGPU exposes no available-VRAM query. Use the owned texture-byte budget,
-   * reserving half for layers/effects; resolution determines the target count. */
-  generatorTargetCapacity(width: number, height: number, format: VideoEditGpuColorFormat = 'rgba8unorm'): number {
-    return Math.max(1, Math.floor(MAX_RESIDENT_BYTES / 2 / (width * height * videoEditGpuBytesPerPixel(format))))
-  }
-  /** Spill a completed generator target before reusing its GPU budget. The caller
-   * owns the bitmap until composition completes; only this keyed surface retires. */
-  async spillGeneratorTarget(key: string): Promise<ImageBitmap | undefined> {
-    const surface = this.surfaces.get(key)
-    if (!surface) throw new CodeMaterialError('CONTEXT', '生成器缓存目标不存在。')
-    if (surface.picture.highPrecision) return undefined
-    const { width, height, texture } = surface.picture
-    this.bitmapBridge ??= new VideoEditGpuBitmapBridge(this.device)
-    const bitmap = this.bitmapBridge.copy(texture, width, height)
-    await this.device.queue.onSubmittedWorkDone()
-    this.releaseSurface(key)
-    return bitmap
-  }
+    this.evictScratch(++this.scratchGeneration - 2)
 
+  }
   /** Only evict prior nested output frames; generated/effect surfaces have their own existing owner. */
   releaseNestedFrames(keys: ReadonlySet<string>): void {
     for (const key of new Set([...this.surfaces.keys(), ...this.alternateSurfaces.keys()])) if (key.startsWith('nested:frame:')) {
@@ -833,7 +816,7 @@ struct Vertex { @builtin(position) position:vec4f, @location(0) uv:vec2f }
     const failures: unknown[] = []
     this.stopFonts()
     await Promise.allSettled([...this.authorWork])
-    this.bitmapBridge?.dispose(); this.bitmapBridge = undefined
+
     try { await this.authorPrograms?.dispose() } catch (error) { failures.push(error) }
     this.authorPrograms = undefined
     await this.ready.catch(() => {}); await this.imageReady?.catch(() => {}); await Promise.allSettled([...this.mixReady.values(), ...this.maskedMixPipelines.values()])

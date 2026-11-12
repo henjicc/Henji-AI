@@ -1,6 +1,7 @@
 import { CODE_MATERIAL_LIMITS, CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
 import type { CodeTextLayout, CodeTextMeasureRequest } from '@/core/videoEdit/codeMaterial/contract'
 import { codeFont, layoutCodeText } from '@/core/videoEdit/codeMaterial/textLayout'
+import { videoEditMaxTextureDimension } from './engine/videoEditGpuBudget'
 
 export interface VideoEditGlyphMetrics {
   readonly width: number
@@ -9,7 +10,6 @@ export interface VideoEditGlyphMetrics {
   readonly offsetX: number
 }
 
-const MAX_WIDTH = 8192
 const MAX_PIXELS = 4 * 1024 ** 2
 const MAX_CACHE_ENTRIES = 64
 const MAX_CACHE_BYTES = 1024 ** 2
@@ -39,7 +39,7 @@ export function measureVideoEditGlyph(text: string, fontSize: number, fontFamily
   if (![measured.width, measured.actualBoundingBoxLeft, measured.actualBoundingBoxRight].every(Number.isFinite) || measured.width < 0) throw new CodeMaterialError('CONTEXT', '文字字形测量结果无效，请恢复画面环境后重试。')
   const width = Math.max(1, Math.ceil(Math.max(measured.width, measured.actualBoundingBoxRight + measured.actualBoundingBoxLeft)) + 4)
   const height = Math.max(1, Math.ceil(fontSize * 1.5) + 4)
-  if (width > MAX_WIDTH || width * height > MAX_PIXELS) throw new CodeMaterialError('BUDGET', '标题字形超出8192宽或四百万像素，请缩短文字或减小字号。')
+  if (width > videoEditMaxTextureDimension() || width * height > MAX_PIXELS) throw new CodeMaterialError('BUDGET', `标题字形超出${videoEditMaxTextureDimension()}宽或四百万像素，请缩短文字或减小字号。`)
   const metrics: VideoEditGlyphMetrics = Object.freeze({ width, height, font: measure.font, offsetX: 2 + Math.max(0, measured.actualBoundingBoxLeft) })
   const bytes = key.length * 2 + 96
   while (cache.size >= MAX_CACHE_ENTRIES || cacheBytes + bytes > MAX_CACHE_BYTES) {
@@ -82,7 +82,7 @@ export function measureCodeText(request: CodeTextMeasureRequest): CodeTextLayout
   }, { alphabeticPlacement: 'font', missingFont })
   // The glyph raster cache also sees this generation, including font changes with identical advance widths.
   layout.fontGeneration = fontGeneration
-  if (layout.width > 8192 || layout.width * layout.height > MAX_PIXELS) throw new CodeMaterialError('BUDGET', '文字字形超出8192宽或四百万像素。')
+  if (layout.width > videoEditMaxTextureDimension() || layout.width * layout.height > MAX_PIXELS) throw new CodeMaterialError('BUDGET', `文字字形超出${videoEditMaxTextureDimension()}宽或四百万像素。`)
   const bytes = key.length * 2 + layout.glyphs.length * 64 + 256
   while (layouts.size && (layouts.size >= 128 || layoutBytes + bytes > MAX_CACHE_BYTES)) { const oldest = layouts.keys().next().value!; layoutBytes -= layouts.get(oldest)!.bytes; layouts.delete(oldest) }
   layouts.set(key, { layout, bytes }); layoutBytes += bytes

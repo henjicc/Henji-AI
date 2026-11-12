@@ -10,12 +10,14 @@ import { prepareVideoEditAuthorBundle } from './videoEditSharedCompiler'
 import { VideoEditGpuDeviceLostError, VideoEditGpuFrameError, VideoEditRenderBusyError, VideoEditRenderWorkerError } from './videoEditGpuFailure'
 import { CodeMaterialError } from '@/core/videoEdit/codeMaterial/contract'
 import type { SharedCompilationRequest, SharedCompilationResponse } from './videoEditSharedCompilation'
-import { videoEditTimingContext, videoEditTimingEvent, type VideoEditTimingContext } from './videoEditFirstFrameTiming'
+import { noteVideoEditWorkerTiming, videoEditTimingContext, videoEditTimingEvent, type VideoEditTimingContext } from './videoEditFirstFrameTiming'
 import type { EffectQuality } from '@/core/imaging/effects/descriptor'
 import type { VideoProxyResult } from '@/core/videoEdit/proxy'
 import { activeVideoEditClips, videoEditPictureTransitionsAt, type VideoEditComposition } from '@/core/videoEdit/document'
 import { isLikelyLocalImagePath, toFetchableMediaUrl } from '@/services/imageSource'
 import { getPlatform } from '@/platform/runtime'
+import { getHardwareCapabilities } from '@/services/mediaCache/hardwareCapabilities'
+import type { VideoEditDeviceMemory } from './videoEditGpuBudget'
 import { createLogger } from '@/core/logging'
 import type { NativeFramesRequest, RenderDecodeOptions, RenderLogMessage, RenderRequest, RenderResponse } from './videoEditWorker'
 import { VideoEditMediaContentVerifier } from '../videoEditMediaContent'
@@ -36,6 +38,22 @@ import { readContentTrustFailure, restoreContentTrustError } from '@/core/conten
 import { videoEditOutputRenderDivisor, videoEditRenderSize } from '@/core/videoEdit/playbackResolution'
 
 const logger = createLogger('features.videoEdit.render')
+/**
+ * 本机系统内存与专用显存，渲染器据此取各项缓存预算（`videoEditGpuBudget.ts`）。整个界面进程只取一次，预览、导出、预渲染
+ * 等所有渲染会话用同一份；读不全（硬件记录尚未生成）时不缓存，下一个会话再取。
+ */
+let deviceMemory: Promise<VideoEditDeviceMemory> | undefined
+function videoEditDeviceMemory(): Promise<VideoEditDeviceMemory> {
+  const pending = deviceMemory ??= (async () => {
+    const platform = getPlatform()
+    const [memory, report] = await Promise.all([platform.system.memoryInfo().catch(() => undefined), getHardwareCapabilities() ?? platform.mediaCache.hardwareCapabilities().then(state => state.report, () => null)])
+    const vram = Math.max(0, ...(report?.gpus ?? []).map(gpu => gpu.dedicatedMemoryMiB ?? 0)) * 1024 ** 2
+    const device = { ...(memory?.totalBytes ? { systemMemoryBytes: memory.totalBytes } : {}), ...(vram ? { dedicatedVideoMemoryBytes: vram } : {}) }
+    if (!device.systemMemoryBytes || !device.dedicatedVideoMemoryBytes) deviceMemory = undefined
+    return device
+  })()
+  return pending
+}
 /** 一个渲染会话同时排着的请求上限（Worker 串行执行，排得越多停止与跳转越慢）。 */
 const VIDEO_EDIT_RENDER_QUEUE_LIMIT = 4
 const activeTransports = new Set<VideoEditRenderTransport>()
@@ -324,6 +342,7 @@ export class VideoEditRenderTransport {
       if ('kind' in event.data) {
         const entry = event.data
         logger[entry.level](entry.message, { event: entry.event, context: entry.context })
+        noteVideoEditWorkerTiming(entry.event, entry.context)
         if (entry.event === 'video_edit.render.worker.uncaught_error') {
           const { message, filename, line, column } = entry.context
           this.fail(new VideoEditRenderWorkerError('剪辑画面处理已中断，请重新加载预览。', undefined, { message: typeof message === 'string' ? message : entry.message, ...(typeof filename === 'string' ? { filename } : {}), ...(typeof line === 'number' ? { line } : {}), ...(typeof column === 'number' ? { column } : {}) }))
@@ -364,8 +383,9 @@ export class VideoEditRenderTransport {
     const platform = /Macintosh|Mac OS X/.test(navigator.userAgent) ? 'darwin' : 'win32'
     this.stopTextFonts = serveFontChannel(textFonts.port1 as unknown as FontPort, () => captureTextFontSnapshot(platform, this.fixedFontSnapshot), error => logger.warn('文字字体准备失败', { event: 'video_edit.text_fonts.prepare.failed', error }))
     this.worker.postMessage({ kind: 'textFonts.attach', port: textFonts.port2 } satisfies TextFontChannelAttach, [textFonts.port2])
+    const device = videoEditDeviceMemory()
     // Verify original media before dependent code/font preparation or opening a decoder channel.
-    this.ready = this.timed('content', () => this.content.check(document)).then(() => Promise.all([this.timed('proxies', () => this.selectProxies()), this.connectNative(), this.timed('fonts', () => this.syncFonts(document))])).then(async ([, decode]) => { this.nativeDecodingValue = decode.nativeAvailable; const codeSources = await this.timed('code', () => this.codeSources(document)); return this.timed('init', () => this.request({ kind: 'init', timing: this.timing, document: this.mediaDocument(document), codeSources, previewWidth, surface, cacheBudgetBytes, cacheWebOutput: options.cacheWebOutput, decode: { ...decode, localPaths: this.localPaths(document), proxies: this.proxySources() } }, surface ? [surface] : [])) })
+    this.ready = this.timed('content', () => this.content.check(document)).then(() => Promise.all([this.timed('proxies', () => this.selectProxies()), this.connectNative(), this.timed('fonts', () => this.syncFonts(document))])).then(async ([, decode]) => { this.nativeDecodingValue = decode.nativeAvailable; const codeSources = await this.timed('code', () => this.codeSources(document)); const deviceMemory = await device; return this.timed('init', () => this.request({ kind: 'init', device: deviceMemory, timing: this.timing, document: this.mediaDocument(document), codeSources, previewWidth, surface, cacheBudgetBytes, cacheWebOutput: options.cacheWebOutput, decode: { ...decode, localPaths: this.localPaths(document), proxies: this.proxySources() } }, surface ? [surface] : [])) })
     void this.ready.then(() => { this.readySettled = true }, () => undefined)
     this.stopFonts = subscribeFontLibrary(() => {
       if (this.fixedTextFonts || this.disposed || this.fontRefresh || fontLibrarySnapshot().revision === this.fontsRevision) return

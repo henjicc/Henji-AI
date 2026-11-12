@@ -3,6 +3,7 @@ import { createLogger } from '@/core/logging'
 import type { VideoEditClipFrames, VideoEditDecodedPicture, VideoEditFrameBackend } from './videoEditFrameSource'
 import type { VideoEditGpuFrame } from './videoEditGpuFrame'
 import { recordVideoEditPreparation } from './videoEditPreparationTiming'
+import { videoEditGpuBudget } from './videoEditGpuBudget'
 
 /**
  * 跳转先出的画面（节目监视器）：从全帧内预渲染文件每秒抽一幅整帧合成结果，以四分之一尺寸常驻显存。
@@ -16,8 +17,6 @@ import { recordVideoEditPreparation } from './videoEditPreparationTiming'
 export interface VideoEditJumpPreviewWindow { key: string; startFrame: number; endFrame: number; fps: number; media: VideoEditMedia }
 export type VideoEditJumpPreviewLog = (level: 'debug' | 'info' | 'warn', message: string, event: string, context: Record<string, unknown>) => void
 
-/** 常驻画面的显存预算（字节）。 */
-const VIDEO_EDIT_JUMP_PREVIEW_BYTES = 384 * 1024 ** 2
 /** 常驻画面按序列尺寸缩小的倍数。 */
 export const VIDEO_EDIT_JUMP_PREVIEW_DIVISOR = 4
 /** 常驻画面的采样间隔（秒）；精确读取仍可直接定位预渲染文件中的任一帧。 */
@@ -48,7 +47,7 @@ export class VideoEditJumpPreview {
   /** 本实例补满过一次没有：第一次即冷启动。 */
   private filledOnce = false
 
-  constructor(private readonly frames: VideoEditFrameBackend, private readonly snapshot: (picture: VideoEditDecodedPicture) => Promise<VideoEditGpuFrame>, private readonly budgetBytes = VIDEO_EDIT_JUMP_PREVIEW_BYTES,
+  constructor(private readonly frames: VideoEditFrameBackend, private readonly snapshot: (picture: VideoEditDecodedPicture) => Promise<VideoEditGpuFrame>, private readonly budgetBytes = videoEditGpuBudget().jumpPreviewBytes,
     private readonly log: VideoEditJumpPreviewLog = (level, message, event, context) => logger[level](message, { event, context })) {}
 
   get pictureBytes(): number { return this.bytes }

@@ -34,6 +34,7 @@ import { LoadedFontFaces } from '@/platform/fontFaces'
 import { receiveCodeSourceTexts, installCodeSourceReader } from '@/core/videoEdit/codeMaterial/sources'
 import type { FontPayload } from '@/platform/fonts'
 import type { VideoEditParameterUpdate } from './videoEditParameterUpdate'
+import type { VideoEditDeviceMemory } from './videoEditGpuBudget'
 
 installVideoEditWorkerErrorReporting(self)
 // 开发版：Vite 要求整页刷新时也会在 Worker 里调用 location.reload，而 Worker 的 location 没有这个方法，抛出的未捕获异常会中止渲染会话。
@@ -52,7 +53,7 @@ export type RenderRequest = { id: number } & (
   { kind: 'fingerprint'; clipId: string; frame: number; endFrame: number; budgetMs: number; webContent: Record<string, string> } |
   { kind: 'stopPlayback'; frame: number } |
   { kind: 'fonts'; fonts: FontPayload[]; availableIds: string[]; reset: boolean; fixedTextFonts?: boolean } |
-  { kind: 'init'; cacheWebOutput?: boolean; traceFrames?: boolean; /** 渲染诊断（GPU 时间戳与事件循环迟滞探针），只供基准与排障。 */ diagnostics?: boolean; timing?: VideoEditTimingContext; document: VideoEditComposition; codeSources?: Record<string, string>; previewWidth?: number; surface?: OffscreenCanvas; cacheBudgetBytes?: number; decode?: RenderDecodeOptions } | { kind: 'update'; timing?: VideoEditTimingContext; document: VideoEditComposition; codeSources?: Record<string, string>; localPaths?: Record<string, string>; proxies?: Record<string, VideoProxyResult> }
+  { kind: 'init'; cacheWebOutput?: boolean; traceFrames?: boolean; /** 渲染诊断（GPU 时间戳与事件循环迟滞探针），只供基准与排障。 */ diagnostics?: boolean; timing?: VideoEditTimingContext; document: VideoEditComposition; codeSources?: Record<string, string>; previewWidth?: number; surface?: OffscreenCanvas; cacheBudgetBytes?: number; device?: VideoEditDeviceMemory; decode?: RenderDecodeOptions } | { kind: 'update'; timing?: VideoEditTimingContext; document: VideoEditComposition; codeSources?: Record<string, string>; localPaths?: Record<string, string>; proxies?: Record<string, VideoProxyResult> }
   | { kind: 'replaceContent'; document: VideoEditComposition; codeSources?: Record<string, string>; localPaths: Record<string, string> }
   | { kind: 'invalidate'; revision: number }
   | { kind: 'parameters'; update: VideoEditParameterUpdate }
@@ -380,7 +381,7 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
         recordVideoEditPreparation('fontLoad', performance.now() - started)
         self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'init') {
-        await disposeRenderer(); direct = !!request.surface; renderer = new VideoEditRenderer(request.document, { previewWidth: request.previewWidth, cacheWebOutput: request.cacheWebOutput, surface: request.surface, cacheBudgetBytes: request.cacheBudgetBytes, frames: frameBackend(request.decode), sequencePath: [request.document.id], timing: timingEvent, jumpPreviewLog: log })
+        await disposeRenderer(); direct = !!request.surface; renderer = new VideoEditRenderer(request.document, { previewWidth: request.previewWidth, cacheWebOutput: request.cacheWebOutput, surface: request.surface, cacheBudgetBytes: request.cacheBudgetBytes, device: request.device, frames: frameBackend(request.decode), sequencePath: [request.document.id], timing: timingEvent, jumpPreviewLog: log })
         const current = renderer
         // 顺播只在画面来源变化时通知；来源含网页画面的实际来源，节目据此判断屏幕上的画面能否直接收录。
         let playbackSource: string | undefined

@@ -812,25 +812,16 @@ it('自动缩放沿原片源时钟求值：跟随区间按块读取指针日志�
   } finally { quiet.mockRestore(); await second.sources.dispose() }
 })
 
-it('纹理预算容量2时LRU溢出为位图，同帧结果仍有效；下一帧重建并关闭旧位图', async () => {
+it('同屏 12 个生成器的目标全部留在 GPU，不溢出成位图；离开画面的目标下一帧释放', async () => {
   const document = fixture(); const boundary = boundaries(document)
-  const runtime = await boundary.acquire(); const bitmaps: ImageBitmap[] = []
-  Object.assign(runtime, { generatorTargetCapacity: () => 2, spillGeneratorTarget: vi.fn(async (key: string) => {
-    boundary.pictures.delete(key)
-    const bitmap = { width: 3840, height: 2160, close: vi.fn() } as unknown as ImageBitmap
-    bitmaps.push(bitmap); return bitmap
-  }) })
-  const clips = Array.from({ length: 4 }, (_, index) => ({ ...document.clips[0], id: `budget${index}`, code: { ...document.clips[0].code!, parameters: { amount: index / 10 } } }))
+  const clips = Array.from({ length: 12 }, (_, index) => ({ ...document.clips[0], id: `budget${index}`, code: { ...document.clips[0].code!, parameters: { amount: index / 100 } } }))
   try {
     const first = await boundary.sources.prepare(document, clips, 0, () => true)
-    expect(first.pictures.size).toBe(4); expect(boundary.pictures.size).toBe(2)
-    expect(first.pictures.get('budget0')).toBe(bitmaps[0]); expect(first.pictures.get('budget1')).toBe(bitmaps[1])
-    const old = [...bitmaps]
-    await boundary.sources.prepare(document, clips, 1, () => true)
-    old.forEach(bitmap => expect(bitmap.close).toHaveBeenCalledOnce())
-    expect(boundary.generator).toHaveBeenCalledTimes(8); expect(boundary.pictures.size).toBe(2)
+    expect(first.pictures.size).toBe(12); expect(boundary.pictures.size).toBe(12)
+    for (const picture of first.pictures.values()) expect([...boundary.pictures.values()]).toContain(picture)
+    await boundary.sources.prepare(document, clips.slice(0, 3), 1, () => true)
+    expect(boundary.pictures.size).toBe(3)
   } finally { await boundary.sources.dispose() }
-  bitmaps.forEach(bitmap => expect(bitmap.close).toHaveBeenCalledOnce())
 })
 
 it('离屏租约允许同名版本属于不同候选，清理旧画面并按源码重编译', async () => {
@@ -964,23 +955,14 @@ it('旧接口逐帧输出键不向作者运行时取文字身份', async () => {
   } finally { await boundary.sources.dispose() }
 })
 
-it('失败或取消的覆写不能恢复旧内容键；spill 的目标不得在下帧命中', async () => {
+it('失败或取消的覆写不能恢复旧内容键', async () => {
   const document = fixture(source('dynamic')), boundary = boundaries(document)
-  const runtime = await boundary.acquire()
   const prepare = (frame: number) => boundary.sources.prepare(document, document.clips, frame, () => true)
   try {
     await prepare(0)
     boundary.generator.mockRejectedValueOnce(new DOMException('已取消的半帧', 'AbortError'))
     await expect(prepare(1)).rejects.toMatchObject({ name: 'AbortError' })
     expect((await prepare(0)).cacheHits).toBe(0)
-    const close = vi.fn()
-    Object.assign(runtime, { generatorTargetCapacity: () => 1, spillGeneratorTarget: vi.fn(async (key: string) => { boundary.pictures.delete(key); return { close } as unknown as ImageBitmap }) })
-    document.clips.push({ ...document.clips[0], id: 'second' })
-    await prepare(0)
-    const previous = boundary.generator.mock.calls.length
-    expect((await prepare(0)).cacheHits).toBe(0)
-    expect(boundary.generator.mock.calls.length - previous).toBe(2)
-    expect(close).toHaveBeenCalled()
   } finally { await boundary.sources.dispose() }
 })
 

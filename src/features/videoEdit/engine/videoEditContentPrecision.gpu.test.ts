@@ -214,7 +214,6 @@ it('作者效果→层栈→片段→amount/mask→转场保持浮点，强度�
       const values = await row(transitioned.texture)
       if (first) expect(values).toEqual(first)
       first = values
-      expect(await host.spillGeneratorTarget('stack')).toBeUndefined()
     }
     expect(await device.popErrorScope()).toBeNull()
   } finally { chain.dispose(); await author.dispose(); await host.dispose() }

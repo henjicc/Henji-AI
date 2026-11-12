@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { createVideoEditGraphic, evaluateVideoEditGraphic, prepareVideoEditGraphic } from '@/core/videoEdit/graphics'
 import { VideoEditCodeGpu } from './videoEditCodeGpu'
+import { videoEditGpuBudget } from './videoEditGpuBudget'
 import type { VideoEditCodeImageInput } from './videoEditCodeGpu'
 import * as glyphMetrics from '../videoEditGlyphMetrics'
 import * as fonts from '@/platform/fonts'
@@ -45,7 +46,7 @@ it('结构化文字上传失败清理候选纹理，关闭不泄漏且可重试'
   } finally { await runtime.dispose(); vi.unstubAllGlobals() }
 })
 
-it('64份结构化文字热帧只更换一份时只上传一次，不逐出本帧随后需要的字形', async () => {
+it('64份结构化文字热帧只更换一份时只上传一次；字形按字节淘汰、不限条数，换下的旧字形仍留着', async () => {
   mockTextCanvas()
   const { device } = gpu(); const runtime = new VideoEditCodeGpu(device)
   const names = Array.from({ length: 64 }, (_, index) => `old${index}`)
@@ -53,7 +54,7 @@ it('64份结构化文字热帧只更换一份时只上传一次，不逐出本�
     await runtime.draw('clip', 3840, 2160, names.map(textDraw))
     expect(runtime.diagnostics().externalCopies).toBe(64)
     await runtime.draw('clip', 3840, 2160, ['new', ...names.slice(0,-1)].map(textDraw))
-    expect(runtime.diagnostics()).toMatchObject({ externalCopies: 65, glyphs: 64 })
+    expect(runtime.diagnostics()).toMatchObject({ externalCopies: 65, glyphs: 65 })
   } finally { await runtime.dispose(); vi.unstubAllGlobals() }
 })
 
@@ -334,7 +335,9 @@ it('作者层超过软预算不驱逐独立字形缓存，绘制层纹理无需 
 it('字形字节累计在逐出和上传失败后归还，恢复后不会过量逐出', async () => {
   mockTextCanvas()
   const { device } = gpu(), runtime = new VideoEditCodeGpu(device)
-  const measure = vi.spyOn(glyphMetrics, 'measureVideoEditGlyph').mockReturnValue({ width: 4096, height: 8192, font: '32px sans-serif', offsetX: 0 })
+  // 四个字形正好占满字形预算，第五个要逐出一个。
+  const height = Math.floor(videoEditGpuBudget().codeResidentBytes / 4 / (4096 * 4)), glyphBytes = 4096 * height * 4
+  const measure = vi.spyOn(glyphMetrics, 'measureVideoEditGlyph').mockReturnValue({ width: 4096, height, font: '32px sans-serif', offsetX: 0 })
   try {
     for (const name of ['a', 'b', 'c', 'd']) await runtime.draw('clip', 16, 16, [textDraw(name)])
     vi.mocked(device.queue.copyExternalImageToTexture).mockImplementationOnce(() => { throw new Error('上传失败') })
@@ -343,7 +346,7 @@ it('字形字节累计在逐出和上传失败后归还，恢复后不会过量�
     await runtime.draw('clip', 16, 16, [textDraw('e')])
     const copies = runtime.diagnostics().externalCopies
     await runtime.draw('clip', 16, 16, ['b', 'c', 'd', 'e'].map(textDraw))
-    expect(runtime.diagnostics()).toMatchObject({ glyphs: 4, externalCopies: copies, residentBytes: 16 * 16 * 4 + 512 * 1024 ** 2 })
+    expect(runtime.diagnostics()).toMatchObject({ glyphs: 4, externalCopies: copies, residentBytes: 16 * 16 * 4 + 4 * glyphBytes })
   } finally { measure.mockRestore(); await runtime.dispose(); vi.unstubAllGlobals() }
   expect(runtime.diagnostics().residentBytes).toBe(0)
 })

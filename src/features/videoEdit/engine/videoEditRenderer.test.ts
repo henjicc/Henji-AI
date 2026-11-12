@@ -7,7 +7,8 @@ import { createVideoEditTestDocument as createVideoEditDocument } from '../../..
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createVideoEditSequence, videoEditComposition, type VideoEditClip } from '@/core/videoEdit/document'
 import { videoEditPictureSeconds } from '@/core/videoEdit/time'
-import { VideoEditRenderer, type VideoEditRenderCacheWindow } from './videoEditRenderer'
+import { videoEditGpuBudget } from './videoEditGpuBudget'
+import { VideoEditRenderer, videoEditCodeInputsKept, videoEditImageDecodeScale, videoEditImageDecodeScales, type VideoEditRenderCacheWindow } from './videoEditRenderer'
 import { VideoEditGpuFrame } from './videoEditGpuFrame'
 import type { VideoEditFrameCache } from './videoEditFrameCache'
 import type { CodeAuthorProgram as CodeMaterialProgram } from '@/core/videoEdit/codeAuthorProgram'
@@ -109,6 +110,7 @@ vi.mock('./videoEditGpuCompositor', async () => {
     mix: async (_key: string, left: InstanceType<typeof VideoEditCodePicture>, _right: InstanceType<typeof VideoEditCodePicture>, amount: number, through?: readonly number[]) => { boundary.mixes.push(through ? [amount, ...through] : amount); return target(left.width, left.height) },
   } }
   async prepareImages(images: ReadonlyMap<string, ImageBitmap | InstanceType<typeof VideoEditCodePicture>>) { for (const [key, image] of images) (image instanceof VideoEditCodePicture ? contentInputs.borrows : contentInputs.uploads).push([key, (image as { timestamp?: number }).timestamp]); return new Map([...images].map(([key, source]) => [key, { source, ...(source instanceof VideoEditWebPicture ? { web: source.web } : {}) }])) }
+  async prepare() {}
   imageDiagnostics() { return { textures: 0, bytes: 0, uploads: 0 } }
   codeDiagnostics() { return undefined }
   async draw(document: { width: number; height: number }, clips: VideoEditClip[], pictures: Array<{ timestamp?: number } | null>, _shouldPresent: unknown, _deadline: unknown, destination?: unknown) { boundary.drawHook?.(); boundary.pictures = pictures.map(picture => picture?.timestamp as number); boundary.opacities = clips.map(clip => clip.opacity); if (destination) { boundary.evaluatedClips = clips; (destination as { timestamp?: number }).timestamp = pictures[0]?.timestamp } boundary.draws.push({ ids: clips.map(clip => clip.id), timestamps: [...boundary.pictures], offscreen: Boolean(destination), ...(boundary.divisors.length ? { size: [document.width, document.height] as [number, number] } : {}) }); if (destination && clips.some(clip => clip.id === boundary.failOffscreenClip)) throw new Error('离屏提交失败'); if (!destination) this.capture?.()?.(Promise.resolve({ width: document.width, height: document.height, timestamp: pictures[0]?.timestamp, close: () => { contentInputs.closed++ } } as unknown as ImageBitmap)); return { presented: true, completion: destination && boundary.offscreenCompletion ? boundary.offscreenCompletion : Promise.resolve() } }
@@ -350,7 +352,6 @@ it('正向预览的已呈现帧留在同一有界缓存，倒退不重新解码�
   const reverse = await renderer.render(0, true)
   expect(reverse.cacheHits).toBe(1); expect(boundary.pictures).toEqual([0]); expect(boundary.snapshotCalls).toHaveLength(2)
   await renderer.dispose(); expect(boundary.normalizedReleased).toBe(2)
-  expect(() => new VideoEditRenderer(document, { previewWidth: 3840, cacheBudgetBytes: 9 * 1024 ** 3 })).toThrow('预算')
 })
 it('关闭或替换媒体期间晚到GPU复制不能挂回已释放源或遗留纹理', async () => {
   for (const action of ['dispose', 'replace'] as const) {
@@ -1199,8 +1200,8 @@ function stillsFixture(): ReturnType<typeof fixture> {
 it('暂停时前瞻由近到远解好 60 秒内的定格帧；存储放不下时不挤掉更近的，换了位置不再需要的先让位', async () => {
   const { backend, readers } = steppingReaders()
   const document = stillsFixture()
-  // Two such pictures fill the still store (VIDEO_EDIT_IMAGE_BUDGET_BYTES, 1GiB).
-  boundary.snapshotBytes = 400 * 1024 ** 2
+  // Two such pictures fill the still store (the image budget).
+  boundary.snapshotBytes = Math.floor(videoEditGpuBudget().imageBytes * .4)
   const renderer = new VideoEditRenderer(document, { previewWidth: 3840, frames: backend })
   const decoded = (): number[] => readers.filter(reader => reader.reads.length).map(reader => Math.round(reader.reads.at(-1)!.time * 10) / 10)
   const reads = (): number => readers.reduce((sum, reader) => sum + reader.reads.length, 0)
@@ -1801,7 +1802,7 @@ it('取消图片消费者不等待原生解码，迟到旧图关闭且不能删�
   await renderer.render(1); expect(decode).toHaveBeenCalledTimes(2)
   await renderer.dispose(); await Promise.resolve(); expect(newClose).toHaveBeenCalledOnce()
 })
-it('图片原生解码最多两份，低报元数据仍按实际驻留像素拒绝超预算', async () => {
+it('图片原生解码最多两份，超过预算的同帧图片照常画出；低报元数据按实际尺寸降到纹理上限内', async () => {
   const document = imageFixture(3); const renderer = new VideoEditRenderer(document)
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob() }))
   const finish: Array<(value: { width: number; height: number; close: () => void }) => void> = []
@@ -1812,11 +1813,36 @@ it('图片原生解码最多两份，低报元数据仍按实际驻留像素拒�
   finish[0]({ width: 32, height: 32, close }); await vi.waitFor(() => expect(decode).toHaveBeenCalledTimes(3))
   finish[1]({ width: 32, height: 32, close }); finish[2]({ width: 32, height: 32, close }); await rendering
   expect(renderer.codeDiagnostics().imageDecodes).toBe(0); await renderer.dispose(); await Promise.resolve(); expect(close).toHaveBeenCalledTimes(3)
-  const sized = new VideoEditRenderer(imageFixture(5)); const oversizeClose = vi.fn()
-  vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ width: 8192, height: 8192, close: oversizeClose })))
-  await expect(sized.render(0)).rejects.toThrow('1GiB')
-  expect(sized.codeDiagnostics().decodedImageBytes).toBeLessThanOrEqual(1024 ** 3); expect(oversizeClose).toHaveBeenCalledOnce()
-  await sized.dispose(); await Promise.resolve(); expect(oversizeClose).toHaveBeenCalledTimes(5)
+  // 素材记的是 32×32，文件实际是 20000×10000：按实际尺寸降到 8192 以内；7 张共 0.9GiB 超过默认图片预算，当前帧照常全部保留。
+  const sized = new VideoEditRenderer(imageFixture(7)); const oversizeClose = vi.fn(), fittedClose = vi.fn()
+  const oversize = vi.fn(async (source: unknown, options?: ImageBitmapOptions) => options ? { width: options.resizeWidth!, height: options.resizeHeight!, close: fittedClose, source } : { width: 20000, height: 10000, close: oversizeClose })
+  vi.stubGlobal('createImageBitmap', oversize)
+  expect((await sized.render(0)).presented).toBe(true)
+  expect(oversize).toHaveBeenCalledWith(expect.objectContaining({ width: 20000 }), { resizeWidth: 8192, resizeHeight: 4096, resizeQuality: 'high' })
+  expect(sized.codeDiagnostics().decodedImages).toBe(7); expect(sized.codeDiagnostics().decodedImageBytes).toBe(7 * 8192 * 4096 * 4)
+  expect(oversizeClose).toHaveBeenCalledTimes(7); expect(fittedClose).not.toHaveBeenCalled()
+  await sized.dispose(); await Promise.resolve(); expect(fittedClose).toHaveBeenCalledTimes(7)
+})
+it('超大图片不再拒绝：按序列尺寸乘片段最大缩放取 2 的幂档解码，推近关键帧升档，长边不超过单张纹理上限', async () => {
+  const document = imageFixture(); document.width = 3840; document.height = 2160
+  document.media[0] = { ...document.media[0], width: 12000, height: 8000 }
+  expect(videoEditImageDecodeScale(document, document.media[0], document.clips)).toBe(.5)
+  expect(videoEditImageDecodeScale(document, document.media[0], 'source')).toBeCloseTo(8192 / 12000)
+  const zoomed = { ...document.clips[0], curves: { scale: [{ time: 0, value: 1, interpolation: 'linear' as const }, { time: 30, value: 3, interpolation: 'linear' as const }] } }
+  expect(videoEditImageDecodeScale(document, document.media[0], [zoomed])).toBeCloseTo(8192 / 12000)
+  expect(videoEditImageDecodeScale(document, { width: 1000, height: 1000 }, document.clips)).toBe(1)
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob() }))
+  const decode = vi.fn(async (_blob: Blob, options?: ImageBitmapOptions) => ({ width: options?.resizeWidth ?? 12000, height: options?.resizeHeight ?? 8000, close: vi.fn() }))
+  vi.stubGlobal('createImageBitmap', decode)
+  const renderer = new VideoEditRenderer(document)
+  try {
+    await renderer.render(0)
+    expect(decode).toHaveBeenLastCalledWith(expect.any(Blob), { resizeWidth: 6000, resizeHeight: 4000, resizeQuality: 'high' })
+    await renderer.render(1); expect(decode).toHaveBeenCalledOnce()
+    await renderer.updateDocument({ ...document, revision: 1, clips: [zoomed] }); await renderer.render(0)
+    expect(decode).toHaveBeenLastCalledWith(expect.any(Blob), { resizeWidth: 8192, resizeHeight: 5461, resizeQuality: 'high' })
+    expect(renderer.codeDiagnostics().decodedImageBytes).toBe(8192 * 5461 * 4)
+  } finally { await renderer.dispose() }
 })
 it('可见原视频和代码画面走同一合成，静态变换修改复用纹理且离开释放', async () => {
   const document = mixedFixture(); const renderer = new VideoEditRenderer(document)
@@ -3396,4 +3422,65 @@ it('首次网页取帧先编译静态文本声明，网页切成普通输入时�
     await renderer.render(1)
     expect(requests).toHaveLength(1)
   } finally { await renderer.dispose(); installVideoEditWebChannel(() => undefined) }
+})
+
+it('代码视频输入超过 32 份不报错：当前帧显示的全部保留，未显示的按先后占剩余名额、最远的先让出', () => {
+  const keys = (prefix: string, count: number): string[] => Array.from({ length: count }, (_, index) => `${prefix}${index}`)
+  const showing = new Set(keys('show', 40))
+  expect(videoEditCodeInputsKept(showing, keys('next', 5))).toEqual(showing)
+  const kept = videoEditCodeInputsKept(new Set(keys('show', 30)), ['show0', ...keys('next', 5)])
+  expect(kept.size).toBe(32); expect(kept.has('next0')).toBe(true); expect(kept.has('next1')).toBe(true); expect(kept.has('next2')).toBe(false)
+})
+
+it('一张图的档位按整个序列里引用它的全部片段一次算定：前瞻与当前帧同一档，不因先画哪一帧而换档', async () => {
+  const document = imageFixture(); document.width = 3840; document.height = 2160
+  document.media[0] = { ...document.media[0], width: 12000, height: 8000 }
+  const near = { ...document.clips[0], duration: 30 }, far = { ...document.clips[0], id: 'far', start: 30, duration: 30, scale: 3 }
+  document.clips = [near, far]
+  expect(videoEditImageDecodeScales(document).get(document.media[0].id)).toBeCloseTo(8192 / 12000)
+  expect(videoEditImageDecodeScales(document, 1, true).get(document.media[0].id)).toBeCloseTo(8192 / 12000)
+  expect(videoEditImageDecodeScales({ ...document, clips: [near] }).get(document.media[0].id)).toBe(.5)
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob() }))
+  const decode = vi.fn(async (_blob: Blob, options?: ImageBitmapOptions) => ({ width: options?.resizeWidth ?? 12000, height: options?.resizeHeight ?? 8000, close: vi.fn() }))
+  vi.stubGlobal('createImageBitmap', decode)
+  const renderer = new VideoEditRenderer(document)
+  try {
+    await renderer.render(0); await renderer.render(40)
+    expect(decode).toHaveBeenCalledOnce()
+    expect(decode).toHaveBeenLastCalledWith(expect.any(Blob), { resizeWidth: 8192, resizeHeight: 5461, resizeQuality: 'high' })
+  } finally { await renderer.dispose() }
+})
+it('输出比例大于 1（1080P 序列按 4K 输出）时图片按输出尺寸取档，不按序列尺寸解码再放大', async () => {
+  const document = imageFixture(); document.width = 1920; document.height = 1080
+  document.media[0] = { ...document.media[0], width: 7680, height: 4320 }
+  expect(videoEditImageDecodeScale(document, document.media[0], document.clips)).toBe(.25)
+  expect(videoEditImageDecodeScale(document, document.media[0], document.clips, 2)).toBe(.5)
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob() }))
+  const decode = vi.fn(async (_blob: Blob, options?: ImageBitmapOptions) => ({ width: options?.resizeWidth ?? 7680, height: options?.resizeHeight ?? 4320, close: vi.fn() }))
+  vi.stubGlobal('createImageBitmap', decode)
+  const renderer = new VideoEditRenderer(document)
+  try {
+    renderer.setOutputScale(2); await renderer.render(0)
+    expect(decode).toHaveBeenLastCalledWith(expect.any(Blob), { resizeWidth: 3840, resizeHeight: 2160, resizeQuality: 'high' })
+  } finally { await renderer.dispose() }
+})
+it('换档时旧的一份留到新的一份画出一帧之后才释放，正在用它的读取不被中止', async () => {
+  const document = imageFixture(); document.width = 3840; document.height = 2160
+  document.media[0] = { ...document.media[0], width: 12000, height: 8000 }
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob() }))
+  const oldClose = vi.fn(), newClose = vi.fn(); let finish!: () => void
+  const decode = vi.fn(async (_blob: Blob, options?: ImageBitmapOptions) => ({ width: options!.resizeWidth!, height: options!.resizeHeight!, close: oldClose }))
+  vi.stubGlobal('createImageBitmap', decode)
+  const renderer = new VideoEditRenderer(document)
+  try {
+    await renderer.render(0)
+    decode.mockImplementationOnce(async (_blob: Blob, options?: ImageBitmapOptions) => { await new Promise<void>(resolve => { finish = resolve }); return { width: options!.resizeWidth!, height: options!.resizeHeight!, close: newClose } })
+    await renderer.updateDocument({ ...document, revision: 1, clips: [{ ...document.clips[0], scale: 3 }] })
+    const rendering = renderer.render(0)
+    await vi.waitFor(() => expect(decode).toHaveBeenCalledTimes(2))
+    expect(oldClose).not.toHaveBeenCalled()
+    finish(); await rendering
+    expect(oldClose).toHaveBeenCalledOnce(); expect(newClose).not.toHaveBeenCalled()
+  } finally { await renderer.dispose() }
+  expect(newClose).toHaveBeenCalledOnce()
 })

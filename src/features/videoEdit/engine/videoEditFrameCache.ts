@@ -25,8 +25,22 @@ const MOTION_JUMP_SECONDS = 2
  * distance behind the direction the hot times move (playback, scrubbing, reverse) counts `BEHIND_WEIGHT` times more
  * than distance ahead, so prefetched pictures ahead survive while passed ones go.
  */
+interface Entry { mediaId: string; frame: CachedVideoEditFrame; bytes: number }
+
+/** Index of the last entry whose timestamp is at most `time` in a bucket sorted by timestamp (-1 when none). */
+function lastAtOrBefore(bucket: readonly Entry[], time: number): number {
+  let low = 0, high = bucket.length
+  while (low < high) { const middle = (low + high) >> 1; if (bucket[middle].frame.timestamp <= time) low = middle + 1; else high = middle }
+  return low - 1
+}
+
 export class VideoEditFrameCache {
-  private readonly entries = new Map<string, { mediaId: string; frame: CachedVideoEditFrame; bytes: number }>()
+  /** Every entry in least-recently-used order (eviction ties keep this order). */
+  private readonly entries = new Map<string, Entry>()
+  /** Per media, entries sorted by timestamp: every render reads each layer here, so lookups must not scan the whole cache. */
+  private readonly buckets = new Map<string, Entry[]>()
+  /** Per media, the longest duration ever cached: a lookup looks back only as far as an earlier frame could still cover. */
+  private readonly longest = new Map<string, number>()
   private used = 0
   private hot = new Map<string, number[]>()
   /** Per showing media: the mean hot time of the last render and the direction it moved (1, -1, or 0 unknown). */
@@ -48,13 +62,20 @@ export class VideoEditFrameCache {
     this.hot = next
   }
   get(mediaId: string, time: number): CachedVideoEditFrame | undefined {
-    for (const [key, entry] of this.entries) {
-      const { timestamp, duration } = entry.frame
-      if (entry.mediaId === mediaId && time >= timestamp - 1e-7 && time < timestamp + duration - 1e-7) {
-        this.entries.delete(key); this.entries.set(key, entry)
-        return entry.frame
-      }
+    const bucket = this.buckets.get(mediaId)
+    if (!bucket) return undefined
+    // Durations can overlap (a held picture, an inexact variable-rate duration): the latest start that still covers wins.
+    const reach = this.longest.get(mediaId) ?? 0
+    let entry: Entry | undefined
+    for (let index = lastAtOrBefore(bucket, time + 1e-7); index >= 0; index--) {
+      const candidate = bucket[index]
+      if (time < candidate.frame.timestamp + candidate.frame.duration - 1e-7) { entry = candidate; break }
+      if (time >= candidate.frame.timestamp + reach - 1e-7) break
     }
+    if (!entry) return undefined
+    const key = `${mediaId}:${entry.frame.timestamp}`
+    this.entries.delete(key); this.entries.set(key, entry)
+    return entry.frame
   }
   /** Eviction priority of one entry: higher goes first. Not showing: infinite (ties keep least-recently-used order). */
   private distance(mediaId: string, frame: CachedVideoEditFrame): number {
@@ -78,7 +99,12 @@ export class VideoEditFrameCache {
     // conservatively as RGBA instead of asking allocationSize() to read pixels.
     const bytes = frame.format === null && frame.codedWidth && frame.codedHeight ? frame.codedWidth * frame.codedHeight * 4 : frame.allocationSize()
     if (bytes > this.budgetBytes) { frame.close(); return }
-    this.entries.set(key, { mediaId, frame, bytes }); this.used += bytes
+    const entry = { mediaId, frame, bytes }
+    this.entries.set(key, entry); this.used += bytes
+    const bucket = this.buckets.get(mediaId)
+    if (bucket) bucket.splice(lastAtOrBefore(bucket, frame.timestamp) + 1, 0, entry)
+    else this.buckets.set(mediaId, [entry])
+    this.longest.set(mediaId, Math.max(this.longest.get(mediaId) ?? 0, frame.duration))
     while (this.used > this.budgetBytes) {
       let victim: string | undefined; let worst = -1
       // Map order is least recently used first, so a strict comparison keeps that order among equal distances.
@@ -88,8 +114,7 @@ export class VideoEditFrameCache {
         if (distance > worst) { worst = distance; victim = candidate; if (distance === Infinity) break }
       }
       if (victim === undefined) break
-      const entry = this.entries.get(victim)!
-      this.entries.delete(victim); this.used -= entry.bytes; entry.frame.close()
+      this.remove(victim, this.entries.get(victim)!)
     }
   }
   /** Whether a frame of `bytes` fits beside the `pinned` frames (every other frame may be evicted for it). */
@@ -98,10 +123,15 @@ export class VideoEditFrameCache {
     for (const entry of this.entries.values()) if (pinned.has(entry.frame)) kept += entry.bytes
     return kept + bytes <= this.budgetBytes
   }
-  deleteMedia(mediaId: string): void {
-    for (const [key, entry] of this.entries) if (entry.mediaId === mediaId) {
-      this.entries.delete(key); this.used -= entry.bytes; entry.frame.close()
-    }
+  private remove(key: string, entry: Entry): void {
+    this.entries.delete(key); this.used -= entry.bytes; entry.frame.close()
+    const bucket = this.buckets.get(entry.mediaId)!
+    bucket.splice(bucket.indexOf(entry, Math.max(0, lastAtOrBefore(bucket, entry.frame.timestamp))), 1)
+    if (!bucket.length) { this.buckets.delete(entry.mediaId); this.longest.delete(entry.mediaId) }
   }
-  clear(): void { for (const entry of this.entries.values()) entry.frame.close(); this.entries.clear(); this.used = 0 }
+  deleteMedia(mediaId: string): void {
+    for (const entry of this.buckets.get(mediaId) ?? []) { this.entries.delete(`${mediaId}:${entry.frame.timestamp}`); this.used -= entry.bytes; entry.frame.close() }
+    this.buckets.delete(mediaId); this.longest.delete(mediaId)
+  }
+  clear(): void { for (const entry of this.entries.values()) entry.frame.close(); this.entries.clear(); this.buckets.clear(); this.longest.clear(); this.used = 0 }
 }

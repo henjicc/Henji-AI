@@ -1,13 +1,13 @@
-摘要：原生解码显存预算改为专用显存 × 75%（不封顶，下限 1.5GiB），只作淘汰目标；原生服务打开会话永不因预算失败。
+摘要：原生解码显存预算改为专用显存 × 40%（不封顶，下限 1.5GiB；W2-B 时由 75% 调为 40%，剪辑渲染侧取 50%），只作淘汰目标；原生服务打开会话永不因预算失败。
 超出时依次：收回最久没用的拖动留存帧 → 渲染层后台淘汰闲置会话 → 能共享的读取退回素材共享会话、提前打开暂停；当前帧要读的会话一律打开。
 删掉了服务 32 路会话、16 路硬解、每窗口 16 路帧流、每窗口 64 路声音、每渲染器 10 路与独占保留 3 路这些固定上限；留存帧上限改为预算的 1/4。
 
 # 新的预算公式（`native/video-decoder/src/budget.rs`）
-- 显存预算 = 专用显存 × 0.75，下限 1.5GiB（集成显卡报告的专用显存只有几百 MiB），无上限；读不到显卡时 8GiB（这时也打不开会话）。
-  本机 RTX 4090（24138MiB）→ 18103MiB ≈ 17.7GiB（原来封顶 8GiB）。`HENJI_VIDEO_DECODER_VRAM_BUDGET_MB` 仍经 hello 覆盖，只在开发版生效。
+- 显存预算 = 专用显存 × 0.4，下限 1.5GiB（集成显卡报告的专用显存只有几百 MiB），无上限；读不到显卡时 8GiB（这时也打不开会话）。
+  本机 RTX 4090（24138MiB）→ 9655MiB ≈ 9.4GiB（原来封顶 8GiB）。`HENJI_VIDEO_DECODER_VRAM_BUDGET_MB` 仍经 hello 覆盖，只在开发版生效。
 - 单会话估算 `session_bytes` 口径不变（4K HEVC 10 位硬解约 941MiB 起）。
 - 前台保留 = 3 × max(实测最大会话, 预算/8)：拖动留存帧不占这部分。
-- 每个会话的拖动留存帧至多 预算/4（4090 约 4.4GiB，≈68 帧 4K rgbaf16 或 ≈370 帧 4K nv12），且只在“预算 − 已登记 − 前台保留”之内授予；原来的 2GiB / 300 帧两个常数删除（帧数由字节/每帧大小得出）。
+- 每个会话的拖动留存帧至多 预算/4（4090 约 2.4GiB，≈38 帧 4K rgbaf16 或 ≈200 帧 4K nv12），且只在“预算 − 已登记 − 前台保留”之内授予；原来的 2GiB / 300 帧两个常数删除（帧数由字节/每帧大小得出）。
 - stats 字段：`vramLimitBytes`、`vramReservedBytes`（含留存帧）、新增 `vramRetainedBytes`、`vramPeakReservedBytes`、`largestSessionBytes`、`foregroundReserveBytes`、`hardwareSessions`（只计数）；删 `hardwareSessionLimit`、`decoderSessionLimit`。
 
 # 超出预算时的顺序
@@ -28,7 +28,7 @@
 # 取舍
 - 没有做“非当前帧降输出分辨率”：原生服务没有缩放输出，加缩放要改转换着色器、纹理池尺寸与渲染层对齐，改动面大；本任务的降级用“退回共享会话 + 不提前打开”，画面精确只是变慢。代理切换不在本任务文件内。
 - 渲染层判定 optional 而不是在原生协议里加准入参数：请求类型 `VideoFrameDecoderRequest` 在 `src/platform/contracts`，不归本任务；渲染层用服务账本判定，跨渲染器的竞争最多让一个可共享会话略超目标（目标本来就可超）。
-- 选 75%：取用户给的 70–80% 中间；剪辑帧缓存、合成另有预算，都只是淘汰目标，叠加偶尔超出时按上面的风险变慢。
+- 原选 75%（取用户给的 70–80% 中间），W2-B 统一分配显存后改为 40%（渲染侧 50%，留 10% 给系统与图片编辑器）；剪辑帧缓存、合成另有预算，都只是淘汰目标，叠加偶尔超出时按上面的风险变慢。
 
 # 验证（全部本机实跑）
 - `node scripts/video-decoder-ffmpeg.cjs test --locked`（经 heavy.sh；写 target/debug，不碰开发实例使用的 target/release 可执行文件）：86 通过、1 忽略（需要本机样片的复用测量）、0 失败；含真实 D3D11 设备的着色器/D3D11VA 用例。新增 `reclaimed_retention_is_released_and_reads_stay_exact`（收回后不交出作废留存帧、读取仍是精确画面），`budget.rs` 改写为“超出照常登记”“留存帧给前台留余量并让位新会话”两条。
@@ -50,7 +50,7 @@
 - `videoEditRenderer.ts:1589` 同时读取的视频画面超过 32 份就抛错（排查表问题 1 ④），归 W2-B/下一批。
 - `videoEditFrameRouter.ts` 仍把 `budget` 当不重试；现在 `budget` 不会到达路由，可不改；若想彻底，可与 `service` 同样重试一次。
 - `docs/task/原生视频解码与专业格式支持/任务/第三阶段-稳定性与交付/3.1-故障回退与资源治理.md` 第 71–74 行记的是旧上限与依据，主会话按需更新。
-- 问题 10 的全局显存账本：剪辑帧缓存、图片/文字、代码驻留等渲染层预算若也按设备显存推导，应与本预算一起按比例分（本预算 75% 是解码服务一侧的淘汰目标）。
+- 问题 10 的全局显存账本：剪辑帧缓存、图片/文字、代码驻留等渲染层预算若也按设备显存推导，应与本预算一起按比例分（已在 W2-B 统一：解码 40%、渲染侧 50%）。
 
 # 追加：收掉两处遗留（主会话授权）
 - `src/platform/contracts/videoFrameTypes.ts` 的 `VideoFrameNativeStats.budget`：删 `hardwareSessionLimit`、`decoderSessionLimit`，加 `vramRetainedBytes?`，注释改为“只作淘汰目标、不限会话数与硬解路数”。全仓（src、electron、scripts）搜过，再没有读取这两个旧字段的地方：渲染层 `headroom` 已不读，测试替身已改，`uiInspectionSceneVideoEditNativeSoak.cjs` 只读仍存在的 `hardwareSessions`；没有诊断界面读它们。

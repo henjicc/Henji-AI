@@ -15,7 +15,7 @@ import type { SpatialExposurePlan, SpatialFrameRequest, SpatialGroupPlan, Spatia
 import type { VideoEditComposition } from '@/core/videoEdit/document'
 import { videoEditClipPictureSize } from '@/core/videoEdit/clipGeometry'
 import { videoEditTextResolution } from './videoEditTextSurface'
-import { VIDEO_EDIT_SPATIAL_WORKING_SET_BYTES, videoEditThreeTargetBytes } from './videoEditGpuBudget'
+import { VIDEO_EDIT_SPATIAL_WORKING_SET_BYTES, videoEditMaxTextureDimension, videoEditThreeTargetBytes } from './videoEditGpuBudget'
 
 export type SpatialCompositionAt = (frame: number) => Readonly<VideoEditComposition>
 
@@ -105,8 +105,6 @@ function shutterRange(request: SpatialFrameRequest): readonly [number, number] {
   for (const points of Object.values(request.composition.spatialCamera?.bindings ?? {})) for (const point of points) cut(point.time)
   return [start, end]
 }
-/** 文字栅格与代码画布共用的单张纹理技术上限。 */
-const SPATIAL_RASTER_LIMIT = 8192
 /** 放大不足 5% 不升档：插值放大看不出，也避免恒等附近的快门样本让档位来回切换。 */
 const SPATIAL_RASTER_SLACK = 1.05
 type Mat2 = readonly [number, number, number, number]
@@ -166,7 +164,7 @@ function materialRaster(cards: readonly SpatialCardGeometry[], frames: readonly 
       const perReference: Mat2 = [screen[0] * inverse[0] + screen[1] * inverse[2], screen[0] * inverse[1] + screen[1] * inverse[3],
         screen[2] * inverse[0] + screen[3] * inverse[2], screen[2] * inverse[1] + screen[3] * inverse[3]]
       const magnification = largestSingular(perReference) / base
-      if (Number.isFinite(magnification)) need = Math.max(need, Math.min(magnification, SPATIAL_RASTER_LIMIT))
+      if (Number.isFinite(magnification)) need = Math.max(need, Math.min(magnification, videoEditMaxTextureDimension()))
     }
   }
   let limit = Infinity
@@ -314,7 +312,7 @@ export function planSpatialExposure(request: SpatialFrameRequest, scenes?: reado
     const picture = videoEditClipPictureSize(composition, draft.source), [width, height] = size(draft)
     return [Math.ceil(picture.width * width / draft.logicalBounds.width), Math.ceil(picture.height * height / draft.logicalBounds.height)]
   }
-  for (const draft of drafts) while (draft.tier > 1 && Math.max(...size(draft), ...raw(draft) ?? []) > SPATIAL_RASTER_LIMIT) draft.tier /= 2
+  for (const draft of drafts) while (draft.tier > 1 && Math.max(...size(draft), ...raw(draft) ?? []) > videoEditMaxTextureDimension()) draft.tier /= 2
   const outputBytes = output.width * output.height * 8
   // 组合成、累积与整帧各一张，四样本覆盖率目标折合四张；稳定层序每项一张层图，各组结果持有到整帧合成。
   const outputs = 8 + groups.length + groups.filter(group => group.mode === 'transform').reduce((sum, group) => sum + group.itemIds.length, 0)
