@@ -6,8 +6,10 @@ import type { RecordingSessionOptions } from '@/core/screenRecording/sessionOpti
 import type { ScreenCaptureOptions } from '@/core/screenRecording/capture'
 import type { CaptureKind, RecordingControlSnapshot } from '@/core/screenRecording/contracts'
 import type { CaptureEvent } from '@/core/captureLog/events'
-import { recordingRange } from '@/core/screenRecording/range'
-import { prepareScreenCapture, type ScreenCaptureSession } from '../capture/session'
+import { recordingDurationUs, recordingRange } from '@/core/screenRecording/range'
+import { attachScreenCapture, prepareScreenCapture, type ScreenCaptureSession } from '../capture/session'
+import type { RecoveredRecording } from '@/core/screenRecording/capture'
+import { recordingTimeLabel } from '../useRecordingControlSnapshot'
 import { registerApplicationCloseGuard } from '@/core/applicationLifecycle/applicationCloseGuards'
 import { defaultDocumentOperationChanges, markSessionDocumentOpened } from '@/features/documents'
 import { notifyUser } from '@/contexts/NotificationContext'
@@ -125,14 +127,10 @@ export async function startRecording(options: ScreenCaptureOptions, session: Rec
     const kinds: CaptureKind[] = ['screen', ...(session.tracks.microphone ? ['microphone' as const] : []), ...(session.tracks.systemAudio ? ['systemAudio' as const] : []), ...(session.tracks.camera ? ['camera' as const] : [])]
     await api.grant({ sessionId: id, userReceipt: crypto.randomUUID(), kinds, selection: { sourceId: options.sourceId, excludedSourceIds: [] } })
     signal?.throwIfAborted()
-    capture = await prepareScreenCapture(id, options, { ...session, ...(projectId ? { projectId } : {}) }, quick ? 'embed' : undefined)
+    capture = await prepareScreenCapture(id, options, { ...session, ...(projectId ? { projectId } : {}) }, quick ? 'embed' : undefined, { handoff, ...(quick ? { quick } : {}), ...(destination ? { destination } : {}) })
     publish({ documentId: id, content: await readRecordingDocument(id), snapshot: await api.snapshot() })
     defaultDocumentOperationChanges.changed()
-    detach = api.onChanged(snapshot => {
-      if (snapshot && snapshot.sessionId !== id) return
-      publish({ snapshot })
-      if (snapshot?.phase === 'stopped' && !snapshot.busy) void finish(id, true).catch(() => undefined)
-    })
+    follow(id)
     signal?.throwIfAborted()
     await api.control(id, 'toggle')
     logger.info('录制会话已准备', { event: 'recording.session.start.completed', context: { sessionId: id } })
@@ -152,6 +150,79 @@ export async function controlRecording(id: string, action: 'pause' | 'resume' | 
   await api.control(id, action === 'pause' || action === 'resume' ? 'toggle' : action, note)
   if (action === 'stop') await finish(id, true)
 }
+/** 停止由主进程状态驱动：控制条、快捷键、助手哪一处按的都一样收尾。 */
+function follow(id: string): void {
+  detach?.()
+  detach = getPlatform().screenRecording.onChanged(snapshot => {
+    if (snapshot && snapshot.sessionId !== id) return
+    publish({ snapshot })
+    if (snapshot?.phase === 'stopped' && !snapshot.busy) void finish(id, true).catch(() => undefined)
+  })
+}
+
+/**
+ * 界面进程重载或崩溃重开后，接回主进程里还在进行的录制：显示时长、可以暂停和停止，停止后照原来的安排进剪辑或存成视频。
+ * 声音与摄像头在断开期间没有数据，主进程记作空档。
+ */
+export async function attachActiveRecording(): Promise<void> {
+  if (capture || view.busy) return
+  const api = getPlatform().screenRecording
+  const snapshot = await api.snapshot()
+  if (!snapshot) return
+  const id = snapshot.sessionId
+  try {
+    // 采集失败时主进程已经收尾保存，只剩控制条要关。
+    if (snapshot.phase === 'failed') { await api.capture({ operation: 'close', sessionId: id }); return }
+    const phase = snapshot.phase === 'countdown' || snapshot.phase === 'recording' || snapshot.phase === 'paused' ? snapshot.phase : 'ready'
+    const { capture: attached, attachment } = await attachScreenCapture(id, phase)
+    capture = attached
+    const followUp = attachment.followUp
+    if (followUp?.handoff) handoffSessions.add(id)
+    if (followUp?.quick) quickSessions.set(id, followUp.quick)
+    // 先订阅再做耗时的事：期间停下的录制不会漏掉“已停止”。
+    follow(id)
+    publish({ destination: followUp?.destination ?? null, error: null })
+    // 录制期间目标剪辑一直被占着，重载后的新界面重新登记。
+    if (followUp?.destination) {
+      const { openVideoEditDocument, holdVideoEditActivity } = await import('@/features/videoEdit')
+      try { await openVideoEditDocument({ id: followUp.destination.documentId }, { focus: false }); releaseTarget = holdVideoEditActivity(followUp.destination.documentId, '屏幕录制') }
+      catch (error) { logger.warn('接回录制时目标剪辑未能打开', { event: 'recording.session.attach.destination_failed', error }) }
+    }
+    const current = await api.snapshot()
+    publish({ documentId: id, content: await readRecordingDocument(id), snapshot: current })
+    logger.info('已接回进行中的录制', { event: 'recording.session.attach.completed', context: { sessionId: id, phase: current?.phase } })
+    // 界面断开期间用快捷键或控制条停下的录制：照原来的安排进剪辑或存成视频。
+    if (current?.sessionId === id && current.phase === 'stopped' && !current.busy) void finish(id, true).catch(() => undefined)
+  } catch (error) { logger.error('接回进行中的录制失败', { event: 'recording.session.attach.failed', error, context: { sessionId: id } }) }
+}
+
+/** 应用上次意外退出时没收尾的录制：主进程补齐后，在这里提示一次，可以直接进剪辑。 */
+export async function recoverUnfinishedRecordings(): Promise<RecoveredRecording[]> {
+  const recovered = await getPlatform().screenRecording.capture({ operation: 'unfinished' }) as RecoveredRecording[]
+  for (const item of recovered) {
+    logger.info('上次中断的录制已自动恢复', { event: 'recording.session.recover.notified', context: { sessionId: item.documentId, durationUs: item.durationUs } })
+    notifyUser(notificationMessage('recordingRecovered', { name: item.name, duration: recordingTimeLabel(item.durationUs / 1000) }), 'warning', { label: notificationText('recordingRecoveredOpen'), onClick: () => {
+      void import('./recordingVideoImport').then(module => module.openRecordingInEditor(item.documentId)).catch(error => notifyUser(notificationMessage('recordingEditFailed', { error: error instanceof Error ? error.message : String(error) }), 'error'))
+    } })
+  }
+  if (recovered.length) defaultDocumentOperationChanges.changed()
+  return recovered
+}
+
+/** 两周内中断、还没进过剪辑的录制；录制页据此提示可以接着用。 */
+export async function listInterruptedRecordings(): Promise<RecoveredRecording[]> {
+  const since = Date.now() - 14 * 24 * 3600 * 1000
+  const candidates = (await getPlatform().documents.listDocuments({ kind: 'screen_recording', includeMissing: false }))
+    .filter(document => document.summary.status === 'interrupted' && document.updatedAt >= since && document.id !== view.snapshot?.sessionId)
+  const found: RecoveredRecording[] = []
+  for (const document of candidates.sort((a, b) => b.updatedAt - a.updatedAt)) {
+    const content = await readRecordingDocument(document.id).catch(() => null)
+    if (!content || content.compositions.length || !content.media.some(media => media.kind === 'screen' && media.durationUs > 0)) continue
+    found.push({ documentId: document.id, name: document.name, durationUs: recordingDurationUs(content) })
+  }
+  return found
+}
+
 export async function recoverRecording(id: string): Promise<void> {
   await getPlatform().screenRecording.capture({ operation: 'recover-session', sessionId: id })
   await showRecordingDocument(id)

@@ -38,6 +38,10 @@ export const recordingDocumentSchema = z.object({
 }).strict()
 export type RecordingDocument = z.infer<typeof recordingDocumentSchema>
 export type RecordingMedia = z.infer<typeof recordingMediaSchema>
+/** 应用崩溃时停在录制中，或中断后还有没补齐时长的画面分片：导入前要先恢复。 */
+export function recordingNeedsRecovery(content: Pick<RecordingDocument, 'status' | 'media'>): boolean {
+  return ['prepared', 'recording', 'paused'].includes(content.status) || content.status === 'interrupted' && content.media.some(media => media.kind === 'screen' && media.durationUs === 0)
+}
 export function createRecordingDocument(): RecordingDocument {
   return recordingDocumentSchema.parse({ sessionId: null, originUs: 0, status: 'empty', source: null, devices: { systemAudio: false }, media: [], tracks: null, eventPages: [], markers: [], understanding: emptyRecordingUnderstanding(), scriptCapture: { baselines: [], calls: [] }, compositions: [] })
 }

@@ -96,8 +96,9 @@ static int callback(const void *input, void *output, unsigned long frames, const
             size_t index = ((offset + i) * c->input_channels + c->first + ch) * bytes;
             samples[i * c->options.channels + ch] = input ? sample((const unsigned char *)input + index, c->options.format) : 0;
         }
+        /* 溢出/欠载按回调计一次：标记只随第一段交出，拆开的后续段不重复计数。 */
         c->sink(c->user, samples, (int)count, first + offset * 1000000.0 / c->rate,
-            uncertainty, flags | (input ? 0 : paInputUnderflow), frames);
+            uncertainty, offset ? 0 : flags | (input ? 0 : paInputUnderflow), frames);
     }
     return paContinue;
 }

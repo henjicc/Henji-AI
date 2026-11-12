@@ -221,6 +221,9 @@ const App: React.FC = () => {
     reloadResumeInstalled = true
     void import('@/features/documents/rendererReloadResume').then(({ installRendererReloadResume }) => installRendererReloadResume())
       .catch(error => { logger.warn('重新加载后的位置恢复未能启用', error, { event: 'app.reload_resume.install.failed' }) })
+    // 录制在主进程里不随界面重载中断：先接回进行中的那一次，再补齐上次应用意外退出时没收尾的录制。
+    void import('@/features/screenRecording/application/recordingService').then(async ({ attachActiveRecording, recoverUnfinishedRecordings }) => { await attachActiveRecording(); await recoverUnfinishedRecordings() })
+      .catch(error => { logger.warn('录制接回与恢复未完成', error, { event: 'app.recording_resume.failed' }) })
   }, [])
 
   const openAssetFloating = React.useCallback((): void => {

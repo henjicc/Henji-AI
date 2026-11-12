@@ -3,17 +3,21 @@ import { getPlatform } from '@/platform'
 import { videoEditExportVideoOptions, videoEditExportVideoEncoderConfig } from '@/features/videoEdit'
 import type { CapturedAudioBlock } from '@/features/creativeIntent'
 import type { RecordingTrackKind, RecordingTrackSegment } from '@/core/screenRecording/tracks'
+import type { RecordingTrackOpenSegment } from '@/core/screenRecording/trackJournal'
 import type { ClockAnchor } from '@/core/captureLog/clock'
 
 /** Five second independent files keep WAV gap-free and drift corrections editable; never buffer a whole take. */
 const RECORDING_SEGMENT_US = 5_000_000
+/** 声音按 32 KiB 一块写盘（48 kHz 24 位单声道约 0.2 秒）：界面进程任何时刻退出，丢的不到半秒，文件头由主进程按实际长度补齐。 */
+const AUDIO_CHUNK_BYTES = 32 * 1024
 export interface TrackOutput {
   audio(block: CapturedAudioBlock): Promise<void>
   video(frame: VideoFrame, monoUs: number, uncertaintyUs: number, compensationUs: number): Promise<void>
   close(): Promise<void>
   cancel(): Promise<void>
 }
-export function createTrackOutput(kind: RecordingTrackKind, directory: string, frameRate: number, sealed: (segment: RecordingTrackSegment) => Promise<void>): TrackOutput {
+/** `opened` 在分段收到第一份数据、时钟与位置确定时调用一次，`sealed` 在分段完整写完后调用。 */
+export function createTrackOutput(kind: RecordingTrackKind, directory: string, frameRate: number, sealed: (segment: RecordingTrackSegment) => Promise<void>, opened: (segment: RecordingTrackOpenSegment) => void = () => undefined): TrackOutput {
   let active: { output: Output; audio?: AudioSampleSource; video?: VideoSampleSource; segment: RecordingTrackSegment } | undefined
   const anchor = (monoUs: number, uncertaintyUs: number, segment: RecordingTrackSegment): ClockAnchor => ({ monoUs, presentedFrame: null, requestedFrame: null, sequenceRef: null, visitRef: null, playbackDirection: 0, playbackRate: 1, playing: false, epoch: 0, uncertaintyUs,
     ...(segment.sampleRate ? { audioSample: segment.units, audioSegmentRef: segment.id, audioRate: segment.sampleRate } : {}) })
@@ -44,7 +48,7 @@ export function createTrackOutput(kind: RecordingTrackKind, directory: string, f
     const fs = getPlatform().system.fs
     const path = await getPlatform().system.paths.join(directory, file)
     await fs.writeFile(path, new Uint8Array(), { exclusive: true })
-    const output = new Output({ format: kind === 'camera' ? new Mp4OutputFormat({ fastStart: 'fragmented' }) : new WavOutputFormat(), target: new StreamTarget(new WritableStream({ write: chunk => fs.writeFile(path, chunk.data, { position: chunk.position }) }), { chunked: true, chunkSize: 256 * 1024 }) })
+    const output = new Output({ format: kind === 'camera' ? new Mp4OutputFormat({ fastStart: 'fragmented' }) : new WavOutputFormat(), target: new StreamTarget(new WritableStream({ write: chunk => fs.writeFile(path, chunk.data, { position: chunk.position }) }), { chunked: true, chunkSize: kind === 'camera' ? 256 * 1024 : AUDIO_CHUNK_BYTES }) })
     const segment: RecordingTrackSegment = { id, file, monoSpanUs: [monoUs, monoUs], units: 0, latencyCompensationUs: 0, anchors: [], ...(sampleRate ? { sampleRate, channels } : { width, height }) }
     const current: NonNullable<typeof active> = { output, segment }
     if (videoOptions) {
@@ -65,6 +69,7 @@ export function createTrackOutput(kind: RecordingTrackKind, directory: string, f
         segment.anchors.push(anchor(block.monoStartUs, block.uncertaintyUs, segment))
         segment.latencyCompensationUs = block.latencyCompensationUs ?? 0
         segment.sourceClockOffsetUs = block.monoStartUs - Math.round(block.firstFrame * 1_000_000 / block.sampleRate)
+        opened(openRecord(segment))
       }
       // WAV has no time gaps. Offset each real file in the session instead of padding it with silence.
       const sample = new AudioSample({ data: block.samples, format: 'f32', numberOfChannels: channels, sampleRate: block.sampleRate, timestamp: segment.units / block.sampleRate })
@@ -77,7 +82,7 @@ export function createTrackOutput(kind: RecordingTrackKind, directory: string, f
       if (active && monoUs - active.segment.monoSpanUs[0] >= RECORDING_SEGMENT_US) await close(monoUs)
       const current = active ?? await open(monoUs, undefined, undefined, frame.displayWidth, frame.displayHeight)
       const segment = current.segment
-      if (!segment.units) { segment.anchors.push(anchor(monoUs, uncertaintyUs, segment)); segment.latencyCompensationUs = 0; segment.sourceClockOffsetUs = Math.round(compensationUs) }
+      if (!segment.units) { segment.anchors.push(anchor(monoUs, uncertaintyUs, segment)); segment.latencyCompensationUs = 0; segment.sourceClockOffsetUs = Math.round(compensationUs); opened(openRecord(segment)) }
       const duration = (frame.duration ?? Math.round(1_000_000 / frameRate)) / 1_000_000
       const sample = new VideoSample(frame, { timestamp: (monoUs - segment.monoSpanUs[0]) / 1_000_000, duration })
       try { await current.video!.add(sample) } finally { sample.close() }
@@ -86,4 +91,9 @@ export function createTrackOutput(kind: RecordingTrackKind, directory: string, f
     close,
     cancel: async () => { const previous = active; active = undefined; await previous?.output.cancel() },
   }
+}
+function openRecord(segment: RecordingTrackSegment): RecordingTrackOpenSegment {
+  const { monoSpanUs, units: _units, anchors, ...rest } = segment
+  void _units
+  return structuredClone({ ...rest, monoStartUs: monoSpanUs[0], anchor: anchors[0] })
 }

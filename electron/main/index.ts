@@ -10,7 +10,7 @@ import path from 'node:path'
 import { warmApiMartEndpointPreference, warmGrsaiEndpointPreference } from '@henjicc/ai-sdk'
 import { registerAiRuntimeIpc } from './ipc/ai-runtime'
 import { registerAudioIpc } from './ipc/audio'
-import { registerAudioCaptureIpc } from './ipc/audio-capture'
+import { disposeAudioCapture, registerAudioCaptureIpc } from './ipc/audio-capture'
 import { registerScreenRecordingIpc } from './ipc/screen-recording'
 import { closeRecordingControl } from './services/screen-recording/runtime'
 import { registerWebReplayIpc } from './ipc/web-replay'
@@ -164,6 +164,8 @@ if (isAssistantCliMode()) {
  * 隔离运行的数据目录不同，锁按用户数据目录区分，天然不冲突。
  */
 if (!commandLineProcess && !app.requestSingleInstanceLock()) app.exit(0)
+// Windows 只把系统通知交给与开始菜单快捷方式同一应用 ID 的进程；安装包的快捷方式用 electron-builder.yml 的 appId。
+if (process.platform === 'win32' && app.isPackaged) app.setAppUserModelId('com.henji.ai')
 
 const errorLogger = createMainLogger('main.errors')
 // 未捕获异常用监视事件，只记录、不改变原有处理；未处理的拒绝记录后进程照常运行。
@@ -370,7 +372,7 @@ app.on('window-all-closed', () => {
   }
 })
 
-bindApplicationShutdown(app, [disposeFonts, closeRecordingControl, stopWebReplayService, disposeWorkRootChange, disposeTracking, disposeSmartRegions, disposeLocalModels, disposeEmbeddedAgent, disposeMcp, disposeImageEditorV3Ipc], (error) => {
+bindApplicationShutdown(app, [disposeFonts, disposeAudioCapture, closeRecordingControl,stopWebReplayService, disposeWorkRootChange, disposeTracking, disposeSmartRegions, disposeLocalModels, disposeEmbeddedAgent, disposeMcp, disposeImageEditorV3Ipc], (error) => {
   createMainLogger('application.shutdown').error('应用服务退出清理失败', { event: 'application.shutdown.failed', error })
 }, async () => {
   mediaRecycleLifecycle.stop()

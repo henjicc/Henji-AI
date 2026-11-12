@@ -60,16 +60,21 @@ describe('共享采集页与录制时钟', () => {
     expect(pages.flatMap(page => page.entries).filter(event => event.kind === 'control' && event.action === 'stop')).toHaveLength(1)
     expect(pages.at(-1)?.entries.at(-1)?.unavailableReason).toBe('gap')
   })
-  it('写盘失败不能报告保存成功，积压触发暂停，不能静默吞错', async () => {
+  it('写盘失败不能报告保存成功，不能静默吞错；只是写得慢时页在内存排队，不结束采集', async () => {
     const failed = fixture(async () => { throw new Error('disk full') }); failed.collector.start(10_000)
     await expect(failed.collector.stop(11_000)).rejects.toThrow('disk full')
     expect(failed.pressure).toHaveBeenCalled()
     let finish!: () => void
     let writes = 0
-    const slow = fixture(() => ++writes === 1 ? new Promise(resolve => { finish = resolve }) : Promise.resolve()); slow.collector.start(10_000)
-    for (let i = 0; i < 1024; i++) slow.collector.record(11_000 + i, { kind: 'key', category: 'typing' })
-    expect(slow.pressure).toHaveBeenCalled()
-    const flushed = slow.collector.flush(); await Promise.resolve(); finish(); await flushed
-    expect(writes).toBe(5)
+    const backlog = vi.fn()
+    const pages: CaptureLogPage[] = []
+    const slow = new CaptureLogCollector({ ownerRef: { kind: 'screen_recording.session', id: 'session' }, sourceDigest: `sha256:${'a'.repeat(64)}`, originUs: 10_000, id: () => crypto.randomUUID() },
+      async page => { if (++writes === 1) await new Promise<void>(resolve => { finish = resolve }); pages.push(page) }, vi.fn(), backlog)
+    slow.start(10_000)
+    for (let i = 0; i < 256 * 20; i++) slow.record(11_000 + i, { kind: 'key', category: 'typing' })
+    expect(backlog.mock.calls.map(call => call[0])).toEqual([8, 16])
+    expect(slow.peakBacklog).toBe(20)
+    const flushed = slow.flush(); await Promise.resolve(); finish(); await flushed
+    expect(pages.flatMap(page => page.entries)).toHaveLength(256 * 20 + 1)
   })
 })

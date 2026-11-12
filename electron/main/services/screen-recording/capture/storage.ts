@@ -92,25 +92,38 @@ export async function readCaptureManifest(directory: string): Promise<CaptureMan
   const backup = await backupBeforePersistenceUpgrade(file, contract, raw.version, text)
   return captureManifestSchema.parse(upgradePersistenceContent(contract, raw, raw.version, backup, raw.minReaderVersion))
 }
-/** Recovery produces new files; a truncated fragment never destroys the original or other spans. */
-export async function recoverCapture(directory: string): Promise<{ manifest: CaptureManifest; files: Array<{ path: string; monoUs: number; durationUs: number }>; rejected: number[] }> {
-  const manifest = await readCaptureManifest(directory)
-  const files: Array<{ path: string; monoUs: number; durationUs: number }> = [], rejected: number[] = []
-  const ffmpeg = await loadFfmpegPath(), ffprobe = await loadFfprobePath()
-  logger.info('恢复录制片段', { event: 'recording.capture.recovery.start', context: { sessionId: manifest.sessionId } })
+export async function probeMediaDurationUs(file: string): Promise<number> {
+  const duration = Number((await run(await loadFfprobePath(), ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', file])).trim())
+  if (!(duration > 0)) throw new Error('录制片段没有可恢复画面')
+  return Math.round(duration * 1_000_000)
+}
+
+/**
+ * 补齐没封口的画面分片。分片 MP4 边录边可读，先按原文件里真实写到的画面算时长、直接用原件；
+ * 原件读不出时才另存一份重新封装的副本。已封口的分片不碰，原件永远保留。
+ */
+export async function recoverCapture(directory: string, manifest?: CaptureManifest): Promise<{ manifest: CaptureManifest; files: Array<{ index: number; path: string; monoUs: number; durationUs: number }>; rejected: number[]; repaired: number }> {
+  manifest ??= await readCaptureManifest(directory)
+  const files: Array<{ index: number; path: string; monoUs: number; durationUs: number }> = [], rejected: number[] = []
+  let repaired = 0
   for (const span of manifest.spans) {
-    const output = path.join(directory, `recovered-${span.index}.mp4`)
+    const original = path.join(directory, span.file)
+    if (span.finalized && span.durationUs > 0) { files.push({ index: span.index, path: original, monoUs: span.monoUs, durationUs: span.durationUs }); continue }
     try {
-      await assertCaptureDiskSpace(directory)
-      await run(ffmpeg, ['-hide_banner', '-v', 'error', '-y', '-i', path.join(directory, span.file), '-map', '0:v:0', '-c', 'copy', '-movflags', '+faststart', output])
-      const duration = Number((await run(ffprobe, ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', output])).trim())
-      if (!(duration > 0)) throw new Error('录制片段没有可恢复画面')
-      files.push({ path: output, monoUs: span.monoUs, durationUs: Math.round(duration * 1_000_000) })
-    } catch (error) {
-      rejected.push(span.index)
-      logger.warn('录制片段未能恢复，原文件已保留', { event: 'recording.capture.recovery.segment_failed', error, context: { index: span.index } })
+      span.durationUs = await probeMediaDurationUs(original); span.finalized = true
+      files.push({ index: span.index, path: original, monoUs: span.monoUs, durationUs: span.durationUs }); repaired++
+    } catch (probeFailure) {
+      const output = path.join(directory, `recovered-${span.index}.mp4`)
+      try {
+        await assertCaptureDiskSpace(directory)
+        await run(await loadFfmpegPath(), ['-hide_banner', '-v', 'error', '-y', '-i', original, '-map', '0:v:0', '-c', 'copy', '-movflags', '+faststart', output])
+        files.push({ index: span.index, path: output, monoUs: span.monoUs, durationUs: await probeMediaDurationUs(output) }); repaired++
+      } catch (error) {
+        rejected.push(span.index)
+        logger.warn('录制片段未能恢复，原文件已保留', { event: 'recording.capture.recovery.segment_failed', error, context: { index: span.index, probe: String(probeFailure) } })
+      }
     }
   }
-  logger.info('录制恢复结束', { event: 'recording.capture.recovery.completed', context: { recovered: files.length, rejected: rejected.length } })
-  return { manifest, files, rejected }
+  if (repaired || rejected.length) logger.info('补齐未封口的画面分片', { event: 'recording.capture.recovery.completed', context: { sessionId: manifest.sessionId, repaired, rejected: rejected.length } })
+  return { manifest, files, rejected, repaired }
 }

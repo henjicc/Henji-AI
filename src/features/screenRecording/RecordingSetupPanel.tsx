@@ -9,6 +9,7 @@ import type { AudioCaptureSettingsState } from '@/core/audioCapture/contracts'
 import type { recordingDevices } from './tracks/devices'
 import type { RecordingSetup } from './recordingSetupModel'
 import { RecordingVideoParams } from './RecordingVideoParams'
+import { RecordingRecoveryBanner } from './RecordingRecoveryBanner'
 
 type RecordingDevice = Awaited<ReturnType<typeof recordingDevices>>[number]
 
@@ -26,6 +27,7 @@ export function RecordingSetupPanel({ value, devices, destination, onChange }: {
   const [microphoneName, setMicrophoneName] = useState<string>()
   const showMicrophone = (state: AudioCaptureSettingsState): void => setMicrophoneName(state.settings.deviceName || t('recording.defaultDevice'))
   return <aside className="flex w-80 shrink-0 flex-col gap-6 overflow-auto border-l border-gap bg-panel p-4" aria-label={t('recording.options')}>
+    <RecordingRecoveryBanner />
     <UiGroup title={t('recording.recordGroup')} titleTone="compact" labelWidth={96}>
       <UiFormRow label={t('recording.modeGroup')} info={t(quick ? 'recording.modeHint_quick' : 'recording.modeHint_full')} density="compact"><UiSegmented ariaLabel={t('recording.modeGroup')} size="sm" value={value.mode} onChange={mode => onChange({ mode })} options={[{ value: 'full', label: t('recording.mode_full') }, { value: 'quick', label: t('recording.mode_quick') }]} /></UiFormRow>
       {quick && <UiFormRow label={t('recording.saveTo')} density="compact">
@@ -43,7 +45,7 @@ export function RecordingSetupPanel({ value, devices, destination, onChange }: {
       {!quick && value.camera && <UiFormRow label={t('recording.cameraDevice')} density="compact"><Dropdown size="sm" value={value.cameraId} options={deviceOptions('camera', t('recording.camera'))} onSelect={cameraId => onChange({ cameraId })} /></UiFormRow>}
     </UiGroup>
     <UiGroup title={t('recording.pictureGroup')} titleTone="compact" labelWidth={96} divided>
-      <UiFormRow label={t('recording.quality')} density="compact"><UiSegmented ariaLabel={t('recording.quality')} size="sm" value={value.quality} onChange={quality => onChange({ quality })} options={[{ value: '1080p', label: '1080p' }, { value: '1440p', label: '2K' }, { value: '2160p', label: '4K' }]} /></UiFormRow>
+      <UiFormRow label={t('recording.quality')} density="compact"><UiSegmented ariaLabel={t('recording.quality')} size="sm" value={value.quality} onChange={quality => onChange({ quality })} options={[{ value: '1080p', label: '1080P' }, { value: '1440p', label: '2K' }, { value: '2160p', label: '4K' }]} /></UiFormRow>
       <UiFormRow label={t('recording.fps')} density="compact"><UiSegmented ariaLabel={t('recording.fps')} size="sm" value={value.fps} onChange={fps => onChange({ fps })} options={[{ value: 30, label: '30' }, { value: 60, label: '60' }]} /></UiFormRow>
       <RecordingVideoParams value={value} onChange={onChange} />
     </UiGroup>

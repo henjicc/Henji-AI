@@ -2,11 +2,11 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import type { CaptureCommand, CaptureRequest } from '@/core/screenRecording/capture'
 import { captureOptionsSchema } from '@/core/screenRecording/capture'
 
-const state = vi.hoisted(() => ({ command: undefined as ((command: CaptureCommand) => void) | undefined, backend: 'gfxcapture', capture: vi.fn(), detach: vi.fn(), track: { start: vi.fn(), pause: vi.fn(), resume: vi.fn(), stop: vi.fn(), cancel: vi.fn(), snapshot: vi.fn(() => ({ tracks: [] })) }, screen: { prepare: vi.fn(), start: vi.fn(), pause: vi.fn(), resume: vi.fn(), stop: vi.fn(), cancel: vi.fn() }, options: undefined as { originUs: number } | undefined }))
+const state = vi.hoisted(() => ({ command: undefined as ((command: CaptureCommand) => void) | undefined, backend: 'gfxcapture', capture: vi.fn(), detach: vi.fn(), track: { start: vi.fn(), attachPaused: vi.fn(), pause: vi.fn(), resume: vi.fn(), stop: vi.fn(), cancel: vi.fn(), snapshot: vi.fn(() => ({ tracks: [] })) }, screen: { prepare: vi.fn(), start: vi.fn(), pause: vi.fn(), resume: vi.fn(), stop: vi.fn(), cancel: vi.fn() }, options: undefined as { originUs: number } | undefined }))
 vi.mock('@/platform', () => ({ getPlatform: () => ({ screenRecording: { capture: state.capture, onCaptureCommand: (handler: typeof state.command) => { state.command = handler; return state.detach } } }) }))
 vi.mock('./chromium', () => ({ ChromiumCaptureBackend: class { constructor() { return state.screen } } }))
 vi.mock('../tracks/session', () => ({ RecordingTracksSession: class { constructor(options: { originUs: number }) { state.options = options; return state.track } } }))
-import { prepareScreenCapture } from './session'
+import { attachScreenCapture, prepareScreenCapture } from './session'
 
 const id = '00000000-0000-4000-8000-000000000001'
 const options = captureOptionsSchema.parse({ sourceId: 'screen:1:0', width: 1920, height: 1080, fps: 30, bitrate: 12000000 })
@@ -22,7 +22,10 @@ it.each(['gfxcapture', 'chromium'])('%s 等待全部轨道和文档检查点后�
   expect(state.capture).not.toHaveBeenCalledWith(expect.objectContaining({ operation: 'ack' }))
   complete()
   await vi.waitFor(() => expect(state.capture).toHaveBeenCalledWith({ operation: 'ack', sessionId: id, requestId: 'stop' }))
-  expect(state.capture.mock.calls.findIndex(([request]) => request.operation === 'tracks')).toBeLessThan(state.capture.mock.calls.findIndex(([request]) => request.operation === 'ack'))
+  // 轨道记录逐条交给主进程登记，不再整份快照。
+  const record = { type: 'detach' as const, atUs: 5 }
+  await (state.options as unknown as { onRecord(value: typeof record): Promise<void> }).onRecord(record)
+  expect(state.capture).toHaveBeenCalledWith({ operation: 'track', sessionId: id, record })
   expect(state.screen.stop).toHaveBeenCalledTimes(backend === 'chromium' ? 1 : 0)
   await session.close()
   expect(state.track.cancel).toHaveBeenCalled(); expect(state.detach).toHaveBeenCalled()
@@ -36,4 +39,17 @@ it('轨道停止失败返回错误；关闭失败仍释放所有本地设备和�
   state.capture.mockRejectedValueOnce(new Error('窗口失联'))
   await expect(session.close()).rejects.toThrow('窗口失联')
   expect(state.track.cancel).toHaveBeenCalled(); expect(state.screen.cancel).toHaveBeenCalled(); expect(state.detach).toHaveBeenCalled()
+})
+it.each([['recording', 'start'], ['paused', 'attachPaused']] as const)('界面重载后接回%s中的录制：重新开声音轨，主进程命令照常送达', async (phase, method) => {
+  const tracks = state.track
+  tracks.attachPaused.mockResolvedValue(undefined); tracks.start.mockResolvedValue(undefined)
+  state.capture.mockImplementation(async (request: CaptureRequest) => request.operation === 'attach' ? { prepared: { sessionId: id, backend: 'gfxcapture', originUs: 123456, directory: '/recording', options }, session: { name: '课程', tracks: { microphone: {}, systemAudio: true } }, followUp: { handoff: true } } : undefined)
+  const { capture, attachment } = await attachScreenCapture(id, phase)
+  expect(attachment.followUp).toEqual({ handoff: true })
+  expect(state.options?.originUs).toBe(123456)
+  await vi.waitFor(() => expect(tracks[method]).toHaveBeenCalledOnce())
+  state.command!({ sessionId: id, requestId: 'stop', operation: 'stop' })
+  await vi.waitFor(() => expect(state.capture).toHaveBeenCalledWith({ operation: 'ack', sessionId: id, requestId: 'stop' }))
+  expect(tracks.stop).toHaveBeenCalled()
+  await capture.close()
 })

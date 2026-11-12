@@ -10,7 +10,8 @@ export interface TrackDeviceCallbacks {
   state(state: 'ended' | 'muted' | 'unmuted'): void
   failed(error: unknown): void
 }
-export type OpenTrackDevice = (kind: RecordingTrackKind, options: RecordingTrackOptions, clock: RecordingTracksClock, callbacks: TrackDeviceCallbacks, signal: AbortSignal, displayAudio?: () => Promise<MediaStream>) => Promise<TrackDevice>
+/** `directory` 给了就是这次录屏自己的目录：原生麦克风的整段副本写在这里留给收尾，不落到系统临时目录。 */
+export type OpenTrackDevice = (kind: RecordingTrackKind, options: RecordingTrackOptions, clock: RecordingTracksClock, callbacks: TrackDeviceCallbacks, signal: AbortSignal, displayAudio?: () => Promise<MediaStream>, directory?: string) => Promise<TrackDevice>
 
 export { recordingDevices } from '@/features/creativeIntent'
 
@@ -21,9 +22,9 @@ export async function acquireSystemAudio(): Promise<MediaStream> {
   return display
 }
 
-export const openTrackDevice: OpenTrackDevice = async (kind, options, clock, callbacks, signal, displayAudio) => {
+export const openTrackDevice: OpenTrackDevice = async (kind, options, clock, callbacks, signal, displayAudio, directory) => {
   const audio = (block: CapturedAudioBlock): void => callbacks.audio({ ...block, uncertaintyUs: block.uncertaintyUs + clock.uncertaintyUs })
-  if (kind === 'microphone') return captureMicrophone(clock.originMs, audio, () => callbacks.state('ended'), signal, { originMs: () => clock.originMs, onDeviceState: callbacks.state })
+  if (kind === 'microphone') return captureMicrophone(clock.originMs, audio, () => callbacks.state('ended'), signal, { originMs: () => clock.originMs, onDeviceState: callbacks.state, ...(directory ? { outputDirectory: directory } : {}) })
   if (kind === 'systemAudio') return captureStreamAudio(clock.originMs, audio, () => callbacks.state('muted'), signal, { channels: 2, originMs: () => clock.originMs, onDeviceState: callbacks.state, acquireStream: displayAudio ?? acquireSystemAudio })
   const camera = options.camera!
   let stream: MediaStream | undefined

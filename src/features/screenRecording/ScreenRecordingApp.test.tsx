@@ -9,7 +9,7 @@ const fixture = vi.hoisted(() => ({
   view: { documentId: null as string | null, content: null as RecordingDocument | null, snapshot: null as RecordingControlSnapshot | null, busy: false, opening: false, error: null, destination: null },
   control: vi.fn(), start: vi.fn(async (..._args: unknown[]) => 'session'),
 }))
-vi.mock('./application/recordingService', () => ({ recordingView: () => fixture.view, subscribeRecording: () => () => {}, controlRecording: fixture.control, setRecordingDestination: vi.fn(), startRecording: fixture.start }))
+vi.mock('./application/recordingService', () => ({ recordingView: () => fixture.view, subscribeRecording: () => () => {}, controlRecording: fixture.control, setRecordingDestination: vi.fn(), startRecording: fixture.start, listInterruptedRecordings: async () => [] }))
 vi.mock('@/platform', () => { const platform = { screenRecording: { sources: async () => [
   { id: 'screen:1:0', name: '屏幕 1', kind: 'screen', thumbnailUrl: 'data:image/png;base64,AA==' },
   { id: 'window:2:0', name: '很长的窗口标题 · 痕迹AI', kind: 'window', thumbnailUrl: 'data:image/png;base64,AA==' },

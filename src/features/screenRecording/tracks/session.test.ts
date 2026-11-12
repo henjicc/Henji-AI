@@ -5,6 +5,7 @@ import { RecordingTracksClock } from './clock'
 import type { TrackDeviceCallbacks } from './devices'
 import type { CapturedAudioBlock } from '@/features/creativeIntent/recording/microphone'
 import type { RecordingTrackKind, RecordingTrackSegment } from '@/core/screenRecording/tracks'
+import { RecordingTrackState, type RecordingTrackRecord } from '@/core/screenRecording/trackJournal'
 import type { TrackOutput } from './output'
 
 const platform = vi.hoisted(() => ({ mkdir: vi.fn(async () => {}), write: vi.fn(async (_path: string, _text: string) => {}), status: vi.fn(async (_id: string, _status: { warnings: string[] }) => {}) }))
@@ -12,7 +13,7 @@ vi.mock('@/platform', () => ({ getPlatform: () => ({ system: { fs: { mkdir: plat
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.clearAllMocks() })
 
-function setup(options: { silentRisk?: boolean; failWrite?: boolean; gate?: Promise<void>; camera?: boolean } = {}) {
+function setup(options: { silentRisk?: boolean; failWrite?: boolean; gate?: Promise<void>; camera?: boolean; queueBudgetBytes?: number; onRecord?: (record: RecordingTrackRecord) => Promise<void> } = {}) {
   let now = 0
   const clock = new RecordingTracksClock(0, async () => 0, () => {})
   vi.spyOn(clock, 'start').mockResolvedValue(); vi.spyOn(clock, 'nowUs').mockImplementation(() => now)
@@ -32,8 +33,8 @@ function setup(options: { silentRisk?: boolean; failWrite?: boolean; gate?: Prom
     }, video: async () => {}, close: async () => { closes.set(_kind, (closes.get(_kind) ?? 0) + 1); if (pending) { await sealed(pending); pending = undefined } }, cancel: async () => {} }
   }
   vi.stubGlobal('navigator', { mediaDevices: new EventTarget() })
-  const session = new RecordingTracksSession({ sessionId: crypto.randomUUID(), originUs: 0, directory: 'isolated', tracks: { microphone: {}, systemAudio: true, ...(options.camera ? { camera: { width: 640, height: 480, frameRate: 30 } } : {}) }, onFailure: failed }, {
-    clock, output, silentRisk: options.silentRisk,
+  const session = new RecordingTracksSession({ sessionId: crypto.randomUUID(), originUs: 0, directory: 'isolated', tracks: { microphone: {}, systemAudio: true, ...(options.camera ? { camera: { width: 640, height: 480, frameRate: 30 } } : {}) }, onFailure: failed, ...(options.onRecord ? { onRecord: options.onRecord } : {}) }, {
+    clock, output, silentRisk: options.silentRisk, ...(options.queueBudgetBytes ? { queueBudgetBytes: options.queueBudgetBytes } : {}),
     openDevice: async (kind, _options, _clock, callback) => { callbacks.set(kind, callback); const stop = vi.fn(async () => {}); stops.push(stop); return { stop } },
   })
   const send = (kind: RecordingTrackKind, start: number, firstFrame = start / 1000 * 48, samples = new Float32Array(4800).fill(.2)): void => {
@@ -70,6 +71,21 @@ it('麦克风与系统声分轨，暂停丢弃期间数据；重开保留真实�
   expect(f.stops.every(stop => stop.mock.calls.length === 1)).toBe(true)
   expect(JSON.parse(platform.write.mock.calls[0][1] as string)).toEqual(result)
 })
+it('交给主进程的记录按发生顺序送达，主进程重放得到与界面相同的轨道', async () => {
+  const records: RecordingTrackRecord[] = []
+  const f = setup({ onRecord: async record => { await Promise.resolve(); records.push(structuredClone(record)) } }); const signal = new AbortController().signal
+  await f.session.start(signal)
+  f.send('microphone', 100_000); f.send('systemAudio', 200_000); await f.tick()
+  f.now(1_000_000); await f.session.pause(signal)
+  f.now(3_000_000); await f.session.resume(signal)
+  f.send('microphone', 3_010_000); await f.tick()
+  await f.session.stop(signal)
+  const replayed = new RecordingTrackState(['microphone', 'systemAudio'])
+  for (const record of records) replayed.apply(record)
+  expect(replayed.tracks(f.session.snapshot().sessionId, 0)).toEqual(f.session.snapshot())
+  expect(records.filter(record => record.type === 'seal')).toHaveLength(3)
+  expect(records.filter(record => record.type === 'gap').map(record => record.kind).sort()).toEqual(['microphone', 'systemAudio'])
+})
 it('设备断开仅停对应轨，恢复与声卡缺样本各记空档；其他轨继续', async () => {
   const f = setup(); const signal = new AbortController().signal
   await f.session.start(signal); f.send('microphone', 100_000); await f.tick()
@@ -105,9 +121,15 @@ it('停止后迟到的预览状态拒绝不污染已保存会话或触发第二�
   reject(new Error('owner-closed')); await f.tick()
   expect(f.failed).not.toHaveBeenCalled(); expect(platform.write).toHaveBeenCalledTimes(1)
 })
-it('背压超出4MiB立即拒绝并取消，未执行的排队样本不再写入', async () => {
+it('写盘慢时在内存里多排队也不停录；排队超出上限才拒绝并取消，未执行的排队样本不再写入', async () => {
+  let open!: () => void; const slow = new Promise<void>(resolve => { open = resolve })
+  const tolerant = setup({ gate: slow }); await tolerant.session.start(new AbortController().signal)
+  for (let i = 0; i < 12; i++) tolerant.send('microphone', i * 12_500_000, i * 600_000, new Float32Array(600_000))
+  expect(tolerant.failed).not.toHaveBeenCalled()
+  open(); await tolerant.tick(); await tolerant.session.stop(new AbortController().signal)
+  expect(tolerant.audio).toHaveLength(12)
   let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve })
-  const f = setup({ gate }); await f.session.start(new AbortController().signal)
+  const f = setup({ gate, queueBudgetBytes: 4 * 1024 * 1024 }); await f.session.start(new AbortController().signal)
   f.send('microphone', 0, 0, new Float32Array(600_000)); await Promise.resolve()
   f.send('microphone', 12_500_000, 600_000, new Float32Array(600_000))
   expect(f.failed).toHaveBeenCalledTimes(1)

@@ -1,7 +1,7 @@
 import { recordingEncodingFields } from './encoding'
 import { z } from 'zod'
-import { recordingSessionOptionsSchema } from './sessionOptions'
-import { recordingTracksSchema } from './tracks'
+import { recordingSessionOptionsSchema, type RecordingSessionOptions } from './sessionOptions'
+import { recordingTrackRecordSchema } from './trackJournal'
 import { recordingBaselineSchema, recordingCallSchema } from './script'
 
 export const captureOptionsSchema = z.object({
@@ -44,6 +44,17 @@ export type CaptureManifest = z.infer<typeof captureManifestSchema>
 export type CaptureSpan = z.infer<typeof captureSpanSchema>
 /** Pass this exact main-process monotonic origin to event and audio/camera capture. */
 export interface CapturePrepared { sessionId: string; originUs: number; backend: CaptureBackendKind; cursorEmbedded: boolean; options: ScreenCaptureOptions; directory?: string }
+/** 停止后界面接着做什么；主进程只代为保管，界面重载后接回进行中的录制时原样交还。 */
+export const captureFollowUpSchema = z.object({
+  handoff: z.boolean(),
+  quick: z.object({ directory: z.string().min(1).max(4096).optional() }).strict().optional(),
+  destination: z.object({ documentId: z.string().min(1), sequenceId: z.string().min(1).optional(), frame: z.number().int().nonnegative().optional() }).strict().optional(),
+}).strict()
+export type CaptureFollowUp = z.infer<typeof captureFollowUpSchema>
+/** 界面重新接上进行中的录制所需的全部事实。 */
+export interface CaptureAttachment { prepared: CapturePrepared; session: RecordingSessionOptions; followUp?: CaptureFollowUp }
+/** 应用崩溃后补齐的录制。 */
+export interface RecoveredRecording { documentId: string; name: string; durationUs: number }
 const sessionId = z.string().uuid()
 export const captureRequestSchema = z.discriminatedUnion('operation', [
   z.object({ operation: z.literal('application-source'), sessionId }).strict(),
@@ -51,8 +62,13 @@ export const captureRequestSchema = z.discriminatedUnion('operation', [
   z.object({ operation: z.literal('encoding'), sessionId, encoding: captureManifestSchema.shape.encoding.unwrap() }).strict(),
   z.object({ operation: z.literal('script-call'), sessionId, call: recordingCallSchema, baselines: z.array(recordingBaselineSchema).max(16) }).strict(),
   /** `cursor: 'embed'` records the system pointer into the picture (quick mode); the outcome is kept as manifest.cursorEmbedded. */
-  z.object({ operation: z.literal('prepare'), sessionId, options: captureOptionsSchema, session: recordingSessionOptionsSchema.optional(), cursor: z.enum(['redraw', 'embed']).optional() }).strict(),
-  z.object({ operation: z.literal('tracks'), sessionId, tracks: recordingTracksSchema }).strict(),
+  z.object({ operation: z.literal('prepare'), sessionId, options: captureOptionsSchema, session: recordingSessionOptionsSchema.optional(), cursor: z.enum(['redraw', 'embed']).optional(), followUp: captureFollowUpSchema.optional() }).strict(),
+  /** 声音与摄像头每开一段、封一段、记一个空档都报一条；主进程追加进 tracks.journal。 */
+  z.object({ operation: z.literal('track'), sessionId, record: recordingTrackRecordSchema }).strict(),
+  /** 界面重载或崩溃重开后接回进行中的录制。 */
+  z.object({ operation: z.literal('attach'), sessionId }).strict(),
+  /** 找出上次应用意外退出时没收尾的录制，补齐后返回。 */
+  z.object({ operation: z.literal('unfinished') }).strict(),
   z.object({ operation: z.literal('recover-session'), sessionId }).strict(),
   /** Quick mode: join spans, mix sound and write pointer facts into one MP4 in the chosen folder. */
   z.object({ operation: z.literal('quick-export'), sessionId, directory: z.string().min(1).max(4096).optional() }).strict(),

@@ -15,8 +15,13 @@ export class CaptureLogCollector {
   private writer = Promise.resolve()
   private failure: unknown
   private outstanding = 0
-  private sealing = false
-  constructor(private readonly context: { ownerRef: ApplicationRef; sourceDigest: string; originUs: number; id(): string }, private readonly write: (page: CaptureLogPage) => Promise<void>, private readonly pressure: (error: unknown) => void) {}
+  /** 同时排队等写盘的页数峰值，进录制结束汇总。 */
+  peakBacklog = 0
+  /**
+   * 写盘跟不上时页留在内存里继续排队（每页约 40 KB，排上千页也只有几十 MB），积压翻倍时通过 backlog 报一次；
+   * 只有写盘真的失败才通过 pressure 结束采集。
+   */
+  constructor(private readonly context: { ownerRef: ApplicationRef; sourceDigest: string; originUs: number; id(): string }, private readonly write: (page: CaptureLogPage) => Promise<void>, private readonly pressure: (error: unknown) => void, private readonly backlog?: (pages: number) => void) {}
   private time(monoUs: number): number {
     const relative = monoUs - this.context.originUs
     if (!Number.isSafeInteger(relative) || relative < 0) throw new Error('采集时钟无效')
@@ -81,9 +86,9 @@ export class CaptureLogCollector {
       if (this.failure) return
       try { await this.write(page) } catch (error) { this.failure = error; this.pressure(error) }
     }).finally(() => { this.outstanding-- })
-    if (this.outstanding >= 4 && !this.sealing) {
-      this.sealing = true
-      try { this.pressure(new Error('采集日志保存积压，请暂停录制')) } finally { this.sealing = false }
+    if (this.outstanding > this.peakBacklog) {
+      this.peakBacklog = this.outstanding
+      if (this.outstanding >= 8 && (this.outstanding & (this.outstanding - 1)) === 0) this.backlog?.(this.outstanding)
     }
   }
   async flush(): Promise<void> { this.seal(); await this.writer; if (this.failure) throw this.failure }

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { captureLogPageSchema } from '../captureLog/events'
 import { recordingTracksSchema } from '../screenRecording/tracks'
+import { RECORDING_TRACK_JOURNAL_VERSION, recordingTrackJournalLineSchema } from '../screenRecording/trackJournal'
 import { creativeIntentPageSchema } from '../creativeIntent/pageSchema'
 import { storedMotionCandidateSchema, MOTION_CANDIDATE_VERSION } from '../creativeIntent/persistence'
 import { imageLayoutPageSchema, imageLayoutCandidateSchema } from '../imageEdit/v3/layoutDraft'
@@ -10,6 +11,7 @@ import type { PersistenceFormat } from './formats'
 
 const resourceSchemas = {
   'screen-recording-tracks': recordingTracksSchema,
+  'screen-recording-track-journal': recordingTrackJournalLineSchema,
   'capture-log-page': captureLogPageSchema,
   'creative-intent-page': creativeIntentPageSchema,
   'creative-intent-candidate': storedMotionCandidateSchema,
@@ -19,6 +21,7 @@ const resourceSchemas = {
 export type PersistenceResourceId = keyof typeof resourceSchemas
 const resourceVersions: Readonly<Record<PersistenceResourceId, number>> = {
   'screen-recording-tracks': 1,
+  'screen-recording-track-journal': RECORDING_TRACK_JOURNAL_VERSION,
   'capture-log-page': 2,
   'creative-intent-page': 1,
   'creative-intent-candidate': MOTION_CANDIDATE_VERSION,
@@ -28,7 +31,7 @@ const resourceVersions: Readonly<Record<PersistenceResourceId, number>> = {
 
 function createResourceContract(id: PersistenceResourceId): PersistenceFormat {
   const schema = resourceSchemas[id]
-  return { id, name: id === 'screen-recording-tracks' ? '录制声音与摄像头轨道' : id.startsWith('image-layout') ? '随手摆原稿' : '创作意图原稿', version: resourceVersions[id],
+  return { id, name: id === 'screen-recording-tracks' ? '录制声音与摄像头轨道' : id === 'screen-recording-track-journal' ? '录制轨道恢复记录' : id.startsWith('image-layout') ? '随手摆原稿' : '创作意图原稿', version: resourceVersions[id],
     ...(id === 'creative-intent-candidate' ? { minReaderVersion: resourceVersions[id] } : {}),
     schema, schemas: { content: schema }, migrations: formatMigrations(id), storage: 'file',
     versionSource: 'resource.version', readEntry: 'src/core/persistence/resourceContracts.ts::decodePersistenceResource',

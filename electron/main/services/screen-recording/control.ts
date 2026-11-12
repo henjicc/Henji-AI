@@ -153,6 +153,8 @@ export class RecordingControlService {
         active.snapshot.phase = 'failed'
         active.snapshot.error = '录制操作未完成，请停止录制后重新准备。'
         active.snapshot.microphoneLevel = null
+        // 与采集失败同样放开快捷键、权限与防睡眠：录制已经停下，不必等用户关掉控制条。
+        this.releaseResources()
       }
       this.deps.log(`recording.control.${operation}.failed`, error)
       throw error

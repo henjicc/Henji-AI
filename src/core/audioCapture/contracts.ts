@@ -27,7 +27,10 @@ const audioCaptureDeviceSchema = z.object({
 export const audioCaptureInventorySchema = z.object({ hostApis: z.array(z.object({ id: z.string(), name: z.string(), defaultInputDevice: z.number().int() })), devices: z.array(audioCaptureDeviceSchema), defaultInputDevice: z.number().int(), asioCompiled: z.boolean() })
 export type AudioCaptureInventory = z.infer<typeof audioCaptureInventorySchema>
 export interface AudioCaptureSettingsState { settings: AudioCaptureSettings; effectiveSettings: AudioCaptureSettings; notice: string | null; revision: number }
-export const audioCaptureStatusSchema = z.object({ sessionId: z.string(), outputPath: z.string(), state: z.enum(['recording', 'paused', 'stopped']), sharedSubscribers: z.number().int().nonnegative().optional(), settings: audioCaptureSettingsSchema.optional(), sampleRate: z.number(), inputLatency: z.number(), callbackFrames: z.number().int().nonnegative(), frames: z.number(), writtenBytes: z.number(), durationSeconds: z.number() })
+/** 采集健康计数：驱动溢出/欠载、写盘跟不上丢的帧（已补静音）、来不及推送而丢的预览块、写盘耗时峰值。只记录，不中断录音。 */
+export const audioCaptureHealthSchema = z.object({ inputOverflows: z.number(), inputUnderflows: z.number(), droppedFrames: z.number(), droppedPreviewBlocks: z.number(), maxWriteMs: z.number(), lastGlitchSeconds: z.number() })
+export type AudioCaptureHealth = z.infer<typeof audioCaptureHealthSchema>
+export const audioCaptureStatusSchema = z.object({ sessionId: z.string(), outputPath: z.string(), state: z.enum(['recording', 'paused', 'stopped']), sharedSubscribers: z.number().int().nonnegative().optional(), settings: audioCaptureSettingsSchema.optional(), sampleRate: z.number(), inputLatency: z.number(), callbackFrames: z.number().int().nonnegative(), frames: z.number(), writtenBytes: z.number(), durationSeconds: z.number(), health: audioCaptureHealthSchema.optional() })
 export type AudioCaptureStatus = z.infer<typeof audioCaptureStatusSchema>
 interface AudioCaptureFailure { code: string; message: string; recoverable: boolean }
 export interface AudioCaptureLevel { event: 'level'; sessionId: string; peak: number[]; rms: number[]; clipped: boolean[]; durationSeconds: number; writtenBytes: number }
@@ -37,7 +40,8 @@ export interface AudioCaptureSamples {
   monoUs: number; nativeMonoUs: number; uncertaintyUs: number; format: 'float32le'; pcm: Uint8Array
 }
 export type AudioCaptureEvent = AudioCaptureLevel | AudioCaptureSamples
-  | { event: 'interrupted'; sessionId: string; outputPath: string; writtenBytes: number; error: AudioCaptureFailure }
+  | { event: 'interrupted'; sessionId: string; outputPath: string; writtenBytes: number; error: AudioCaptureFailure; health?: AudioCaptureHealth }
+  | { event: 'health'; sessionId: string; durationSeconds: number; health: AudioCaptureHealth }
   | { event: 'devicesChanged'; inventory: AudioCaptureInventory }
 const audioCaptureStartSchema = z.object({ outputPath: z.string().min(1).max(4096), settings: audioCaptureSettingsSchema.optional(), streamSamples: z.boolean().default(false), shared: z.boolean().optional(), monitor: z.literal(false).optional() }).strict()
 export type AudioCaptureStart = z.input<typeof audioCaptureStartSchema>
@@ -49,6 +53,8 @@ export type AudioCaptureFile = { outputPath: string; name: string; placement?: A
 export const audioCaptureRequestSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('prepareFile'), placement: audioCapturePlacementSchema.optional() }).strict(),
   z.object({ action: z.literal('pendingFiles') }).strict(),
+  /** 当前窗口仍在进行的音频编辑录音（界面重载后接管用）；没有时为 null。 */
+  z.object({ action: z.literal('active') }).strict(),
   z.object({ action: z.enum(['completeFile', 'trashFile']), outputPath: z.string().min(1).max(4096) }).strict(),
   z.object({ action: z.literal('enumerate') }).strict(),
   z.object({ action: z.literal('clock') }).strict(),

@@ -28,8 +28,13 @@ interface GfxDependencies {
   spawn(binary: string, args: string[]): ChildProcessWithoutNullStreams
   nowUs(): number
   failed(error: Error): void
+  /** 编码进程意外退出后已在新分片里接着录。 */
+  restarted?(info: { restarts: number; encoder: string; reason: string }): void
 }
-interface Run { process: ChildProcessWithoutNullStreams; closed: Promise<void>; ready: Promise<void>; span: CaptureSpan; expected: boolean; durationUs: number }
+interface Run { process: ChildProcessWithoutNullStreams; closed: Promise<void>; ready: Promise<void>; span: CaptureSpan; expected: boolean; durationUs: number; dropped: number; duplicated: number; stderr: string }
+export interface GfxCaptureStats { restarts: number; droppedFrames: number; duplicatedFrames: number; encoder: string }
+/** 一分钟内续录超过这么多次，说明来源或显卡已经起不来了，停下来保住已录部分。 */
+const MAX_RESTARTS_PER_MINUTE = 5
 /** WGC owns acquisition; FFmpeg owns pixel conversion/encoding. Main only coordinates I/O. */
 export class GfxCaptureBackend implements ScreenCaptureBackend {
   private run: Run | null = null
@@ -37,43 +42,60 @@ export class GfxCaptureBackend implements ScreenCaptureBackend {
   private encoder: VideoEncoderProfile<HwEncoderId | 'cpu'> | null = null
   private cancelled = false
   private pending: Promise<void> = Promise.resolve()
+  /** 开始、暂停、停止与意外退出后的续录依次执行，任何时刻最多一个编码进程。 */
+  private serial: Promise<void> = Promise.resolve()
+  private readonly lifetime = new AbortController()
+  private readonly restartTimes: number[] = []
+  private totals = { restarts: 0, droppedFrames: 0, duplicatedFrames: 0 }
   private watchdog: ReturnType<typeof setInterval> | undefined
   private readonly deps: GfxDependencies
   constructor(private readonly options: ScreenCaptureOptions, private readonly source: NativeCaptureSource, private readonly storage: CaptureStorage, deps: Partial<GfxDependencies> & Pick<GfxDependencies, 'nowUs' | 'failed'>, private readonly embedCursor = false) {
     this.deps = { binary: loadFfmpegPath, encoder: () => getRecordingEncoder(recordingEncoding(options)), spawn: spawnCaptureProcess, ...deps }
   }
+  stats(): GfxCaptureStats {
+    return { restarts: this.totals.restarts, droppedFrames: this.totals.droppedFrames + (this.run?.dropped ?? 0), duplicatedFrames: this.totals.duplicatedFrames + (this.run?.duplicated ?? 0), encoder: this.encoder?.id ?? '' }
+  }
   async prepare(): Promise<void> {
     this.binary = await this.deps.binary(); this.encoder = await this.deps.encoder()
     if (this.encoder.id === 'cpu' && this.options.encoder !== 'software') logger.warn('硬件编码不可用，已改用软件编码', { event: 'recording.capture.encoder.fallback', context: { requested: this.options.encoder ?? 'auto', codec: this.options.codec ?? 'h264' } })
   }
+  private serialize(work: () => Promise<void>): Promise<void> {
+    const next = this.serial.then(work)
+    this.serial = next.catch(() => undefined)
+    return next
+  }
   start(signal: AbortSignal): Promise<void> {
-    const work = async (): Promise<void> => {
+    this.pending = this.serialize(async () => {
       signal.throwIfAborted(); if (this.cancelled) throw new Error('录制已取消')
       await assertCaptureDiskSpace(this.storage.directory)
-      const encoder = this.encoder!
-      try { await this.launch(encoder, signal) } catch (error) {
-        await this.end(false)
-        if (signal.aborted || this.cancelled || encoder.id === 'cpu' && this.options.codec !== 'hevc') throw error
-        logger.warn('硬件录制未能启动，改用软件编码', { event: 'recording.capture.encoder.fallback', error, context: { encoder: encoder.id } })
-        void invalidateEncoderCache().catch(failure => logger.warn('编码器重新探测失败', { event: 'recording.capture.encoder.probe_failed', error: failure }))
-        this.encoder = recordingEncoderProfile(this.options.codec ?? 'h264', 'software', this.options.rateControl ?? 'quality', recordingKeyframes(recordingEncoding(this.options).keyframeFrames).sceneCut)
-        this.storage.manifest.encoding = { codec: this.options.codec ?? 'h264', encoder: 'software', softwareFallback: true, reason: '硬件编码未能启动，已改用软件编码' }
-        try { await this.launch(this.encoder, signal) }
-        catch (failure) {
-          await this.end(false)
-          if (signal.aborted || this.cancelled || this.options.codec !== 'hevc') throw failure
-          logger.warn('H.265 编码不可用，改用 H.264 软件编码', { event: 'recording.capture.codec.fallback', error: failure })
-          this.encoder = recordingEncoderProfile('h264', 'software', this.options.rateControl ?? 'quality', recordingKeyframes(recordingEncoding(this.options).keyframeFrames).sceneCut)
-          this.storage.manifest.encoding = { codec: 'h264', encoder: 'software', softwareFallback: this.options.encoder !== 'software', reason: 'H.265 编码不可用，已改用 H.264 软件编码' }
-          await this.launch(this.encoder, signal)
-        }
-      }
+      await this.launchWithFallback(signal)
       signal.throwIfAborted(); if (this.cancelled) { await this.end(false); throw new Error('录制已取消') }
-      this.watchdog = setInterval(() => { void assertCaptureDiskSpace(this.storage.directory).catch(error => this.fail(error)) }, 2000)
-      this.watchdog.unref?.()
-    }
-    this.pending = work()
+    })
     return this.pending
+  }
+  /** 硬件编码起不来就退回软件编码；H.265 软件编码也起不来再退回 H.264。 */
+  private async launchWithFallback(signal: AbortSignal): Promise<void> {
+    const encoder = this.encoder!
+    try { await this.launch(encoder, signal) } catch (error) {
+      await this.end(false)
+      if (signal.aborted || this.cancelled || encoder.id === 'cpu' && this.options.codec !== 'hevc') throw error
+      logger.warn('硬件录制未能启动，改用软件编码', { event: 'recording.capture.encoder.fallback', error, context: { encoder: encoder.id } })
+      void invalidateEncoderCache().catch(failure => logger.warn('编码器重新探测失败', { event: 'recording.capture.encoder.probe_failed', error: failure }))
+      this.encoder = recordingEncoderProfile(this.options.codec ?? 'h264', 'software', this.options.rateControl ?? 'quality', recordingKeyframes(recordingEncoding(this.options).keyframeFrames).sceneCut)
+      this.storage.manifest.encoding = { codec: this.options.codec ?? 'h264', encoder: 'software', softwareFallback: true, reason: '硬件编码未能启动，已改用软件编码' }
+      try { await this.launch(this.encoder, signal) }
+      catch (failure) {
+        await this.end(false)
+        if (signal.aborted || this.cancelled || this.options.codec !== 'hevc') throw failure
+        logger.warn('H.265 编码不可用，改用 H.264 软件编码', { event: 'recording.capture.codec.fallback', error: failure })
+        this.encoder = recordingEncoderProfile('h264', 'software', this.options.rateControl ?? 'quality', recordingKeyframes(recordingEncoding(this.options).keyframeFrames).sceneCut)
+        this.storage.manifest.encoding = { codec: 'h264', encoder: 'software', softwareFallback: this.options.encoder !== 'software', reason: 'H.265 编码不可用，已改用 H.264 软件编码' }
+        await this.launch(this.encoder, signal)
+      }
+    }
+    clearInterval(this.watchdog)
+    this.watchdog = setInterval(() => { void assertCaptureDiskSpace(this.storage.directory).catch(error => this.fail(error)) }, 2000)
+    this.watchdog.unref?.()
   }
   private async launch(encoder: VideoEncoderProfile<HwEncoderId | 'cpu'>, signal: AbortSignal): Promise<void> {
     const span = await this.storage.openSpan(this.deps.nowUs(), true)
@@ -83,17 +105,20 @@ export class GfxCaptureBackend implements ScreenCaptureBackend {
     const ready = new Promise<void>((resolve, reject) => { readyResolve = resolve; readyReject = reject })
     let closeResolve!: () => void
     const closed = new Promise<void>(resolve => { closeResolve = resolve })
-    const run: Run = { process: child, ready, closed, span, expected: false, durationUs: 0 }
+    const run: Run = { process: child, ready, closed, span, expected: false, durationUs: 0, dropped: 0, duplicated: 0, stderr: '' }
     this.run = run
-    let stdout = '', stderr = '', started = false
+    let stdout = '', started = false
     const timeout = setTimeout(() => { readyReject(new Error('屏幕采集启动超时，请检查来源或改用兼容录制')); child.kill() }, 15000)
-    child.stderr.on('data', (data: Buffer) => { stderr = (stderr + data.toString()).slice(-4096) })
+    child.stderr.on('data', (data: Buffer) => { run.stderr = (run.stderr + data.toString()).slice(-4096) })
     child.stdout.on('data', (data: Buffer) => {
       stdout += data.toString()
       let newline: number
       while ((newline = stdout.indexOf('\n')) >= 0) {
         const line = stdout.slice(0, newline).trim(); stdout = stdout.slice(newline + 1)
-        if (line.startsWith('out_time_us=')) {
+        // -progress 的帧计数在一个编码进程内累计。
+        if (line.startsWith('drop_frames=')) run.dropped = Number(line.slice(12)) || run.dropped
+        else if (line.startsWith('dup_frames=')) run.duplicated = Number(line.slice(11)) || run.duplicated
+        else if (line.startsWith('out_time_us=')) {
           const time = Number(line.slice(12))
           if (Number.isFinite(time) && time > 0) {
             run.durationUs = time
@@ -110,14 +135,38 @@ export class GfxCaptureBackend implements ScreenCaptureBackend {
     // exit only signals process termination; close is the pipe/resource release barrier.
     child.once('close', code => {
       clearTimeout(timeout); closeResolve()
-      if (!started) readyReject(new Error(`屏幕采集未能启动（${code ?? '异常退出'}）：${stderr}`))
-      else if (!run.expected) this.fail(new Error(`屏幕采集意外结束（${code ?? '异常退出'}），已写片段可以恢复。`))
+      if (!started) readyReject(new Error(`屏幕采集未能启动（${code ?? '异常退出'}）：${run.stderr}`))
+      else if (!run.expected) void this.serialize(() => this.restart(run, code)).catch(error => this.fail(error instanceof Error ? error : new Error(String(error))))
     })
     await ready
     this.storage.manifest.encoding ??= { codec: this.options.codec ?? 'h264', encoder: encoder.id === 'cpu' ? 'software' : encoder.id, softwareFallback: encoder.id === 'cpu' && this.options.encoder !== 'software', ...(encoder.id === 'cpu' && this.options.encoder !== 'software' ? { reason: '硬件编码不可用，已改用软件编码' } : {}) }
     await this.storage.save()
     logger.info('屏幕采集开始', { event: 'recording.capture.start', context: { encoder: encoder.id, width: this.options.width, height: this.options.height, fps: this.options.fps } })
   }
+  /**
+   * 编码进程意外退出（显卡驱动重置、编码会话数满等）：按原参数在新分片里接着录，硬件起不来就退回软件编码。
+   * 退出的那一片不按进度报的时长封口（最后一个没写完的片段已经丢了），留给收尾按文件里真实的画面算；
+   * 两片之间重启的那一两秒没有画面，如实留空。
+   */
+  private async restart(run: Run, code: number | null): Promise<void> {
+    if (this.cancelled || this.run !== run) return
+    this.run = null
+    clearInterval(this.watchdog)
+    this.collect(run)
+    const now = Date.now()
+    this.restartTimes.push(now)
+    while (this.restartTimes[0] < now - 60_000) this.restartTimes.shift()
+    const reason = `屏幕采集意外结束（${code ?? '异常退出'}）`
+    logger.warn('屏幕采集意外结束，自动续录', { event: 'recording.capture.restart.start', context: { code, restarts: this.totals.restarts, encoder: this.encoder?.id, stderr: run.stderr.slice(-1000) } })
+    if (this.restartTimes.length > MAX_RESTARTS_PER_MINUTE) throw new Error(`${reason}，一分钟内多次续录都没能恢复，录制已停止；已录部分可以导入。`)
+    await assertCaptureDiskSpace(this.storage.directory)
+    await this.launchWithFallback(this.lifetime.signal)
+    if (this.cancelled) { await this.end(false); return }
+    this.totals.restarts++
+    logger.info('屏幕采集已续录', { event: 'recording.capture.restart.completed', context: { restarts: this.totals.restarts, encoder: this.encoder?.id } })
+    this.deps.restarted?.({ restarts: this.totals.restarts, encoder: this.encoder?.id ?? '', reason })
+  }
+  private collect(run: Run): void { this.totals.droppedFrames += run.dropped; this.totals.duplicatedFrames += run.duplicated; run.dropped = 0; run.duplicated = 0 }
   private fail(error: Error): void {
     clearInterval(this.watchdog)
     this.deps.failed(error)
@@ -134,11 +183,14 @@ export class GfxCaptureBackend implements ScreenCaptureBackend {
     }
     const kill = setTimeout(() => run.process.kill(), 5000)
     await run.closed; clearTimeout(kill)
-    if (this.run === run) this.run = null
+    if (this.run === run) { this.run = null; this.collect(run) }
     if (finalize && run.durationUs > 0) await this.storage.seal(run.span.index, run.durationUs)
   }
-  async pause(signal: AbortSignal): Promise<void> { signal.throwIfAborted(); await this.end(true) }
+  pause(signal: AbortSignal): Promise<void> { return this.serialize(async () => { signal.throwIfAborted(); await this.end(true) }) }
   resume(signal: AbortSignal): Promise<void> { return this.start(signal) }
-  async stop(_signal: AbortSignal): Promise<void> { await this.end(true) }
-  async cancel(): Promise<void> { this.cancelled = true; await this.end(false); await this.pending.catch(() => undefined); await this.end(false) }
+  stop(_signal: AbortSignal): Promise<void> { return this.serialize(() => this.end(true)) }
+  async cancel(): Promise<void> {
+    this.cancelled = true; this.lifetime.abort()
+    await this.end(false); await this.pending.catch(() => undefined); await this.serial; await this.end(false)
+  }
 }

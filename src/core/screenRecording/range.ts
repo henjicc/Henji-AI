@@ -16,6 +16,12 @@ export function recordingRange(recording: Pick<RecordingDocument, 'media' | 'sta
   return { startUs, endUs: Math.max(startUs, endUs) }
 }
 
+/** 成品时长：共同录制区间减去暂停。 */
+export function recordingDurationUs(recording: Pick<RecordingDocument, 'media' | 'startUs' | 'endUs' | 'pauses'>): number {
+  const range = recordingRange(recording)
+  return Math.max(0, range.endUs - range.startUs - (recording.pauses ?? []).reduce((sum, pause) => sum + pause.endUs - pause.startUs, 0))
+}
+
 /**
  * Real intervals of one file inside the recorded range, minus the session's pauses and the track's own
  * pause/device gaps; nothing is ever filled in. Session pauses cut every track at the same moments: the

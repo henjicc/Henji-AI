@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "sessionId": "00000000-0000-4000-8000-000000000000",
+  "record": {
+    "type": "open",
+    "kind": "microphone",
+    "segment": {
+      "id": "00000000-0000-4000-8000-000000000001",
+      "file": "00000000-0000-4000-8000-000000000001.wav",
+      "sampleRate": 48000,
+      "channels": 1,
+      "latencyCompensationUs": 0,
+      "sourceClockOffsetUs": 100000,
+      "monoStartUs": 100000,
+      "anchor": {
+        "monoUs": 100000,
+        "audioSample": 0,
+        "audioSegmentRef": "00000000-0000-4000-8000-000000000001",
+        "audioRate": 48000,
+        "presentedFrame": null,
+        "requestedFrame": null,
+        "sequenceRef": null,
+        "visitRef": null,
+        "playbackDirection": 0,
+        "playbackRate": 1,
+        "playing": false,
+        "epoch": 0,
+        "uncertaintyUs": 2000
+      }
+    }
+  }
+}

@@ -98,6 +98,47 @@ it('覆盖录音到达末尾自动结束，启动失败释放编辑锁', async (
   expect(commit).toHaveBeenCalledTimes(1)
 })
 
+it('界面重载后接上仍在进行的录音：显示主进程给的时长，锁住作品，停止后照常拼回原位置', async () => {
+  const { api, emit, status, state } = captureFixture()
+  const placement = { projectId: 'p', startFrame: 480, endFrame: 480, revision: 3, spliceId: 'eced7817-a431-49e0-8890-5bf4b08ecb44' }
+  vi.mocked(api.active).mockResolvedValueOnce({ ...status, durationSeconds: 3600.5, settings: state.effectiveSettings })
+  vi.mocked(api.pendingFiles).mockResolvedValueOnce([{ outputPath: status.outputPath, name: '录音.wav', placement }])
+  const release = vi.fn(), lock = vi.fn(() => release), commit = vi.fn(async () => undefined), open = vi.fn(async () => undefined)
+  const session = new CaptureSession(api, vi.fn(), { lock, commit, progress: vi.fn(), rate: () => 48000, open })
+  await session.attach()
+  expect(open).toHaveBeenCalledWith('p'); expect(lock).toHaveBeenCalledWith('p')
+  expect(session.store.getState()).toMatchObject({ phase: 'recording', outputPath: status.outputPath, placement, visible: true })
+  expect(session.durationSeconds).toBe(3600.5)
+  emit({ event: 'level', sessionId: status.sessionId, durationSeconds: 3601, peak: [.2], rms: [.1], clipped: [false], writtenBytes: 1 })
+  expect(session.durationSeconds).toBe(3601)
+  expect(api.start).not.toHaveBeenCalled()
+  await session.stop()
+  expect(api.stop).toHaveBeenCalledWith(status.sessionId)
+  expect(commit).toHaveBeenCalledWith(status.outputPath, placement)
+  expect(api.completeFile).toHaveBeenCalledWith(status.outputPath)
+  expect(release).toHaveBeenCalledOnce()
+})
+
+it('接管失败可以重试；接管途中录音中断不会漏掉，也不会把作品锁住', async () => {
+  const { api, emit, status, state } = captureFixture()
+  const placement = { projectId: 'p', startFrame: 0, endFrame: 0, revision: 1, spliceId: 'eced7817-a431-49e0-8890-5bf4b08ecb44' }
+  const lock = vi.fn(() => vi.fn())
+  const session = new CaptureSession(api, vi.fn(), { lock, commit: vi.fn(async () => undefined), progress: vi.fn(), rate: () => 48000, open: vi.fn(async () => undefined) })
+  vi.mocked(api.active).mockRejectedValueOnce(new Error('录音服务暂时不可用'))
+  await session.attach()
+  expect(session.store.getState().phase).toBe('idle')
+  let deliver!: (files: import('@/core/audioCapture/contracts').AudioCaptureFile[]) => void
+  vi.mocked(api.active).mockResolvedValueOnce({ ...status, settings: state.effectiveSettings })
+  vi.mocked(api.pendingFiles).mockReturnValueOnce(new Promise(resolve => { deliver = resolve }))
+  const attaching = session.attach()
+  await vi.waitFor(() => expect(api.pendingFiles).toHaveBeenCalled())
+  emit({ event: 'interrupted', sessionId: status.sessionId, outputPath: status.outputPath, writtenBytes: 432000, error: { code: 'DEVICE_REMOVED', message: '设备拔出', recoverable: true } })
+  deliver([{ outputPath: status.outputPath, name: '录音.wav', placement }])
+  await attaching
+  expect(session.store.getState()).toMatchObject({ phase: 'interrupted', outputPath: status.outputPath, placement })
+  expect(lock).not.toHaveBeenCalled()
+})
+
 it('设备中断后离开先修复文件并提交；失败保留会话，不能删掉待恢复的空草稿', async () => {
   const { api, emit, status } = captureFixture()
   const release = vi.fn(), commit = vi.fn(async () => undefined)

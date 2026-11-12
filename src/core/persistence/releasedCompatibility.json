@@ -2246,6 +2246,23 @@
         "v17.json": "c60ddcb58cad842f54c97111289003b5a96290e454d729ece8595713ecba4dde",
         "v18.json": "b30435265d8d0b8207ba38e6edce56af356568133079cea032da684031119b8c"
       }
+    },
+    "screen-recording-track-journal": {
+      "supportedFrom": 1,
+      "requiredFixtures": [
+        {
+          "extension": "json"
+        }
+      ],
+      "versions": {
+        "1": "07f7ea0671cf64b92bea4e92dc733acc03402cdb007378f5eef003210b4a8d3b"
+      },
+      "readers": {
+        "1": 1
+      },
+      "samples": {
+        "v1.json": "1b56c5759fb07e95725f4ef82e48040956a80631d3fc4dccc20f78ec86d44801"
+      }
     }
   },
   "devBreaks": []

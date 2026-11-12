@@ -1,18 +1,22 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { createVideoEditDocument } from '../../../../src/core/videoEdit/document'
 import { captureOptionsSchema, type CaptureManifest } from '../../../../src/core/screenRecording/capture'
 import type { DocumentMeta } from '../../../../src/core/documents/types'
-import type { RecordingDocument } from '../../../../src/core/screenRecording/document'
+import { recordingDocumentSchema, type RecordingDocument } from '../../../../src/core/screenRecording/document'
+import type { CaptureLogPage } from '../../../../src/core/captureLog/events'
+import type { ClockAnchor } from '../../../../src/core/captureLog/clock'
+import { RECORDING_TRACK_JOURNAL_FILE } from '../../../../src/core/screenRecording/trackJournal'
 import { CaptureLogCollector } from '../../../../src/core/captureLog/collector'
 import { RecordingEventStore } from './event-store'
+import { wavHeader } from './wav-file'
 
 const state = vi.hoisted(() => ({ saved: undefined as { meta: DocumentMeta; content: RecordingDocument } | undefined, save: vi.fn(), recover: vi.fn() }))
 vi.mock('../logging', () => ({ createMainLogger: () => ({ info: vi.fn(), error: vi.fn(), warn: vi.fn() }) }))
-vi.mock('./capture/storage', () => ({ recoverCapture: state.recover }))
+vi.mock('./capture/storage', () => ({ recoverCapture: state.recover, probeMediaDurationUs: vi.fn() }))
 vi.mock('../documents/runtime', () => ({ getDocumentService: () => ({
   createDocument: async (input: { id: string; name: string; content: RecordingDocument }) => {
     state.saved = { meta: { id: input.id, kind: 'screen_recording', revision: 0, name: input.name } as DocumentMeta, content: structuredClone(input.content) }; return structuredClone(state.saved)
@@ -22,7 +26,8 @@ import { RecordingSessionDocument, readRecordingEvents, recoverRecordingSession 
 let directory: string, id: string, manifest: CaptureManifest
 beforeEach(async () => {
   vi.clearAllMocks(); id = randomUUID(); directory = await mkdtemp(path.join(tmpdir(), 'recording-document-'))
-  manifest = { version: 2, sessionId: id, backend: 'chromium', cursorEmbedded: true, status: 'prepared', options: captureOptionsSchema.parse({ sourceId: 'screen:1:0', width: 1920, height: 1080, fps: 30, bitrate: 12000000 }), spans: [] }
+  manifest = { version: 2, sessionId: id, backend: 'gfxcapture', cursorEmbedded: false, status: 'prepared', options: captureOptionsSchema.parse({ sourceId: 'screen:1:0', width: 1920, height: 1080, fps: 30, bitrate: 12000000 }), spans: [] }
+  state.recover.mockImplementation(async (_directory: string, value?: CaptureManifest) => ({ manifest: value ?? manifest, files: (value ?? manifest).spans.map(span => ({ index: span.index, path: path.join(directory, span.file), monoUs: span.monoUs, durationUs: span.durationUs || 4_000_000 })), rejected: [], repaired: 0 }))
   state.save.mockImplementation(async ({ expectedRevision, content }: { expectedRevision: number; content: RecordingDocument }) => {
     expect(expectedRevision).toBe(state.saved!.meta.revision)
     await new Promise(resolve => setTimeout(resolve, 1))
@@ -30,55 +35,97 @@ beforeEach(async () => {
   })
 })
 afterEach(async () => { await rm(directory, { recursive: true, force: true }) })
-async function setup() { return RecordingSessionDocument.create(id, 1000000, { name: '课程', tracks: { microphone: {}, systemAudio: false } }, '显示器', manifest, directory) }
-it('并发屏幕与音轨检查点串行保存；错误时钟拒绝，停止完成前全部引用已落盘', async () => {
+async function setup(tracks: RecordingDocument['devices'] = { microphone: {}, systemAudio: false }) { return RecordingSessionDocument.create(id, 1000000, { name: '课程', tracks }, '显示器', manifest, directory) }
+const anchor = (monoUs: number, segment: string, audioSample = 0): ClockAnchor => ({ monoUs, audioSample, audioSegmentRef: segment, audioRate: 48000, presentedFrame: null, requestedFrame: null, sequenceRef: null, visitRef: null, playbackDirection: 0, playbackRate: 1, playing: false, epoch: 0, uncertaintyUs: 0 })
+/** 与 Mediabunny 一样先写头再写数据；`finished: false` 模拟写到一半进程退出，头里的长度还是占位的 0。 */
+async function writeWav(file: string, frames: number, finished = true): Promise<void> {
+  const layout = { format: 'pcm' as const, channels: 1, sampleRate: 48000, bitsPerSample: 16, blockAlign: 2 }
+  const header = wavHeader(layout, finished ? frames * 2 : 0), data = Buffer.alloc(frames * 2)
+  for (let i = 0; i < frames; i++) data.writeInt16LE(Math.round(Math.sin(i / 10) * 8000), i * 2)
+  await writeFile(path.join(directory, file), Buffer.concat([finished ? header : Buffer.concat([header.subarray(0, 4), Buffer.alloc(4), header.subarray(8, 40), Buffer.alloc(4)]), data]))
+}
+
+it('两小时的事件页与声音分段在录制中不重写整份文档；停止时一次写全，读回顺序与内容不变', async () => {
   const document = await setup()
-  manifest.spans.push({ index: 0, file: 'screen-000000.mp4', monoUs: 3000000, durationUs: 1000000, finalized: true })
+  manifest.spans.push({ index: 0, file: 'screen-000000.mp4', monoUs: 1_000_000, durationUs: 0, finalized: false })
+  manifest.status = 'recording'
+  await document.capture(manifest)
+  const before = state.save.mock.calls.length
+  // 两小时、每页约 2 秒：3600 页；麦克风每 5 秒一段：1440 段。
+  for (let index = 0; index < 3600; index++) document.page({ seqSpan: [index * 256, index * 256 + 255], entries: index % 100 ? [] : [{ kind: 'mark', eventId: `m${index}`, monoUs: index * 2_000_000, note: '' }] } as unknown as CaptureLogPage, path.join(directory, `${index}.capture.json`), 1)
+  for (let index = 0; index < 1440; index++) {
+    const segment = randomUUID(), start = 1_000_000 + index * 5_000_000
+    await document.track({ type: 'seal', kind: 'microphone', segment: { id: segment, file: `${segment}.wav`, monoSpanUs: [start, start + 5_000_000], sampleRate: 48000, channels: 1, units: 240000, latencyCompensationUs: 0, anchors: [anchor(start, segment)] } })
+  }
+  expect(state.save.mock.calls.length).toBe(before)
+  const journal = await readFile(path.join(directory, RECORDING_TRACK_JOURNAL_FILE), 'utf8')
+  expect(journal.trim().split('\n')).toHaveLength(1440)
   manifest.status = 'stopped'
-  await Promise.all([document.capture(manifest), document.tracks({ version: 1, sessionId: id, originUs: 1000000, tracks: [] })])
-  expect(state.saved!.content).toMatchObject({ status: 'stopped', tracks: { originUs: 1000000 }, media: [{ path: path.join(directory, 'screen-000000.mp4') }] })
-  expect(() => document.tracks({ version: 1, sessionId: randomUUID(), originUs: 1000000, tracks: [] })).toThrow('归属')
-  expect(state.save).toHaveBeenCalledTimes(2)
-})
-it('分页读事件和标记校验哈希与归属；恢复只补已落盘页和可播放片段', async () => {
+  const summary = await document.finish(manifest)
+  expect(state.save.mock.calls.length).toBe(before + 1)
+  expect(summary).toMatchObject({ status: 'stopped', eventPages: 3600, tracks: { microphone: { segments: 1440 } } })
+  const content = recordingDocumentSchema.parse(state.saved!.content)
+  expect(content.eventPages).toHaveLength(3600); expect(content.eventPages.at(-1)?.firstSequence).toBe(3599 * 256)
+  expect(content.markers).toHaveLength(36)
+  expect(content.tracks?.tracks[0].segments).toHaveLength(1440)
+  expect(content.media.find(media => media.kind === 'screen')).toMatchObject({ durationUs: 4_000_000 })
+}, 120_000)
+it('录制中读事件走内存里的页索引；停止后走文档，校验哈希与归属', async () => {
   const document = await setup(), store = new RecordingEventStore(directory)
-  const collector = new CaptureLogCollector({ ownerRef: { kind: 'screen_recording.session', id }, sourceDigest: `sha256:${'b'.repeat(64)}`, originUs: 1000000, id: randomUUID }, async page => { await document.page(page, await store.write(page)) }, () => {})
-  collector.start(4000000); collector.record(4100000, { kind: 'mark', note: '重点' }); await collector.stop(4200000)
+  const collector = new CaptureLogCollector({ ownerRef: { kind: 'screen_recording.session', id }, sourceDigest: `sha256:${'b'.repeat(64)}`, originUs: 1000000, id: randomUUID }, async page => { document.page(page, await store.write(page)) }, () => {})
+  collector.start(4000000); collector.record(4100000, { kind: 'mark', note: '重点' }); await collector.flush()
+  expect((await readRecordingEvents(id, 0, 10, true, document.pageReferences())).events).toMatchObject([{ note: '重点' }])
+  await collector.stop(4200000)
+  manifest.status = 'stopped'; await document.finish(manifest)
   const first = await readRecordingEvents(id, 0, 2, false)
   expect(first.events.map(event => event.kind)).toEqual(['control', 'mark']); expect(first.nextOffset).toBe(2)
-  expect((await readRecordingEvents(id, 2, 2, false)).events).toHaveLength(1)
-  expect((await readRecordingEvents(id, 0, 10, true)).events).toMatchObject([{ note: '重点' }])
-  const mediaPath = path.join(directory, 'recovered-0.mp4')
-  state.recover.mockResolvedValue({ files: [{ path: mediaPath, monoUs: 3000000, durationUs: 200000 }] })
-  await recoverRecordingSession(id, directory)
-  expect(state.saved!.content).toMatchObject({ status: 'interrupted', media: [{ path: mediaPath }], markers: [{ note: '重点' }] })
   await writeFile(state.saved!.content.eventPages[0].path, '{}')
   await expect(readRecordingEvents(id, 0, 10, false)).rejects.toThrow('校验')
+})
+it('应用崩溃后从页文件与轨道记录重建：界面退出时没封口的声音段按文件实际长度补回，声音拼成一条', async () => {
+  const document = await setup(), store = new RecordingEventStore(directory)
+  manifest.spans.push({ index: 0, file: 'screen-000000.mp4', monoUs: 1_000_000, durationUs: 0, finalized: false }); manifest.status = 'recording'
+  await document.capture(manifest); await document.range('startUs', 1_000_000)
+  const collector = new CaptureLogCollector({ ownerRef: { kind: 'screen_recording.session', id }, sourceDigest: `sha256:${'b'.repeat(64)}`, originUs: 1000000, id: randomUUID }, async page => { document.page(page, await store.write(page)) }, () => {})
+  collector.start(2_000_000); collector.record(2_500_000, { kind: 'mark', note: '崩溃前' }); await collector.flush()
+  const sealed = randomUUID(), open = randomUUID()
+  await writeWav(`${sealed}.wav`, 48000); await writeWav(`${open}.wav`, 12000, false)
+  await document.track({ type: 'open', kind: 'microphone', segment: { id: sealed, file: `${sealed}.wav`, monoStartUs: 1_000_000, sampleRate: 48000, channels: 1, latencyCompensationUs: 0, anchor: anchor(1_000_000, sealed) } })
+  await document.track({ type: 'seal', kind: 'microphone', segment: { id: sealed, file: `${sealed}.wav`, monoSpanUs: [1_000_000, 2_000_000], sampleRate: 48000, channels: 1, units: 48000, latencyCompensationUs: 0, anchors: [anchor(1_000_000, sealed), anchor(2_000_000, sealed, 48000)] } })
+  await document.track({ type: 'open', kind: 'microphone', segment: { id: open, file: `${open}.wav`, monoStartUs: 2_000_000, sampleRate: 48000, channels: 1, latencyCompensationUs: 0, anchor: anchor(2_000_000, open) } })
+  // 半行：写到一半的最后一条记录被丢弃。
+  await writeFile(path.join(directory, RECORDING_TRACK_JOURNAL_FILE), '{"version":1,"sessi', { flag: 'a' })
+  // 停止已经写进画面清单，但收尾（补分段、拼声音）没做完就崩溃：文档不能先变成已结束，否则不会再被恢复。
+  manifest.status = 'stopped'; await document.capture(manifest)
+  expect(state.saved!.content).toMatchObject({ status: 'recording', eventPages: [], tracks: null })
+  const result = await recoverRecordingSession(id, directory)
+  const content = recordingDocumentSchema.parse(state.saved!.content)
+  expect(content.status).toBe('interrupted')
+  expect(content.markers).toMatchObject([{ note: '崩溃前' }])
+  expect(content.tracks?.tracks[0].segments.map(segment => segment.monoSpanUs)).toEqual([[1_000_000, 2_000_000], [2_000_000, 2_250_000]])
+  const audio = content.media.filter(media => media.kind === 'microphone')
+  expect(audio).toHaveLength(1); expect(audio[0]).toMatchObject({ monoUs: 1_000_000, durationUs: 1_250_000 })
+  expect(result.durationUs).toBe(4_000_000)
+  // 再恢复一次结果相同。
+  await recoverRecordingSession(id, directory)
+  expect(recordingDocumentSchema.parse(state.saved!.content).media).toEqual(content.media)
+})
+it('早于轨道记录的旧录制（文档里存着轨道、没有 tracks.journal）照常恢复，轨道沿用文档', async () => {
+  await setup()
+  const segment = randomUUID()
+  await writeWav(`${segment}.wav`, 24000)
+  const tracks = { version: 1 as const, sessionId: id, originUs: 1000000, tracks: [{ kind: 'microphone' as const, segments: [{ id: segment, file: `${segment}.wav`, monoSpanUs: [1_000_000, 1_500_000] as [number, number], sampleRate: 48000, channels: 1, units: 24000, latencyCompensationUs: 0, anchors: [anchor(1_000_000, segment)] }], gaps: [], warnings: [] }] }
+  state.saved!.content = { ...state.saved!.content, status: 'recording', tracks, media: [{ id: segment, kind: 'microphone', path: path.join(directory, `${segment}.wav`), monoUs: 1_000_000, durationUs: 500_000 }] }
+  await recoverRecordingSession(id, directory)
+  const content = recordingDocumentSchema.parse(state.saved!.content)
+  expect(content.tracks).toEqual(tracks)
+  expect(content.media).toMatchObject([{ kind: 'microphone', monoUs: 1_000_000, durationUs: 500_000 }])
 })
 it('保存失败向采集方传播，不报告成功', async () => {
   const document = await setup(); state.save.mockRejectedValueOnce(new Error('磁盘已满'))
   await expect(document.capture(manifest)).rejects.toThrow('磁盘已满')
   expect(state.saved!.meta.revision).toBe(0)
 })
-it('跨页读取跳过已消费页，目标页仍校验；标记分页不按全事件数跳过', async () => {
-  const document = await setup(), store = new RecordingEventStore(directory)
-  const collector = new CaptureLogCollector({ ownerRef: { kind: 'screen_recording.session', id }, sourceDigest: `sha256:${'b'.repeat(64)}`, originUs: 1000000, id: randomUUID }, async page => { await document.page(page, await store.write(page)) }, () => {})
-  collector.start(4000000)
-  for (let index = 0; index < 260; index++) collector.record(4000001 + index, { kind: 'mark', note: `标记${index}` })
-  await collector.stop(4100000)
-  expect(state.saved!.content.eventPages).toHaveLength(2)
-  expect((await readRecordingEvents(id, 255, 3, true)).events).toMatchObject([{ note: '标记255' }, { note: '标记256' }, { note: '标记257' }])
-  await writeFile(state.saved!.content.eventPages[0].path, '{}')
-  const tail = await readRecordingEvents(id, 256, 10, false)
-  expect(tail.events).toHaveLength(6)
-  expect(tail.events[0]).toMatchObject({ seq: 256, note: '标记255' })
-  expect(tail.nextOffset).toBeNull()
-  await expect(readRecordingEvents(id, 255, 10, false)).rejects.toThrow('校验')
-  await expect(readRecordingEvents(id, 255, 10, true)).rejects.toThrow('校验')
-  await writeFile(state.saved!.content.eventPages[1].path, '{}')
-  await expect(readRecordingEvents(id, 256, 10, false)).rejects.toThrow('校验')
-})
-
 it('脚本调用落盘串行保留第一次快照，重复调用拒绝', async () => {
   const document = await setup(), baseline = createVideoEditDocument('第一次快照')
   const call = { callId: randomUUID(), operations: [{ target: { kind: 'video_edit.sequence' as const, id: `${baseline.id}:sequence` }, properties: { 'video_edit.sequence.name': '演示' } }] }

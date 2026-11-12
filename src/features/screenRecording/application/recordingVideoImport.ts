@@ -1,4 +1,4 @@
-import { recordingDocumentSchema } from '@/core/screenRecording/document'
+import { recordingDocumentSchema, recordingNeedsRecovery } from '@/core/screenRecording/document'
 import type { RecordingDocument, RecordingMedia } from '@/core/screenRecording/document'
 import { videoEditComposition, type VideoEditDocument } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
@@ -57,10 +57,17 @@ export function placeRecordingMedia(document: VideoEditDocument, recording: Reco
   }
   return document
 }
-export async function importRecordingToVideo(id: string, target: RecordingDestination, signal?: AbortSignal): Promise<string[]> {
+/** 应用崩溃留下的录制在导入前先补齐（与助手的恢复同一实现）；正在录的那一个由主进程拒绝。 */
+async function readImportableRecording(id: string): Promise<RecordingDocument> {
   const read = await getPlatform().documents.readDocument({ id })
   if (read.meta.kind !== 'screen_recording') throw new Error('请选择录制会话')
   const recording = recordingDocumentSchema.parse(read.content)
+  if (!recordingNeedsRecovery(recording)) return recording
+  await getPlatform().screenRecording.capture({ operation: 'recover-session', sessionId: id })
+  return recordingDocumentSchema.parse((await getPlatform().documents.readDocument({ id })).content)
+}
+export async function importRecordingToVideo(id: string, target: RecordingDestination, signal?: AbortSignal): Promise<string[]> {
+  const recording = await readImportableRecording(id)
   if (!['stopped', 'interrupted'].includes(recording.status)) throw new Error('请先停止录制或恢复已中断会话')
   const media = recording.media.filter(media => media.durationUs > 0)
   if (!media.length) throw new Error('会话没有已保存的录制片段')

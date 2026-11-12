@@ -33,8 +33,37 @@ export class CaptureSession {
     commit: (path: string, placement: AudioCapturePlacement) => Promise<unknown>
     progress: (placement: AudioCapturePlacement, seconds: number) => void
     rate: (id: string) => number
+    /** 载入并在音频编辑里显示这份作品（不切换页面）；界面重载后接管录音时用。 */
+    open?: (id: string) => Promise<unknown>
   }) {}
   get active(): boolean { return ['recording', 'paused'].includes(this.store.getState().phase) }
+  /**
+   * 界面重载或崩溃后接上主进程里仍在进行的录音：录音本身在原生进程里一直没停，这里只恢复显示与收尾所需的状态，
+   * 并重新锁住作品，停止后照常拼回原位置。没有进行中的录音时什么都不做。
+   */
+  attach(): Promise<void> {
+    // 本界面自己开始的录音、或正在开始/停止时不接管；失败不缓存，下次调用重试。
+    if (this.active || this.operation || this.store.getState().outputPath) return Promise.resolve()
+    return this.run('attach', async () => {
+      const status = await this.api.active()
+      if (!status) return
+      // 先登记会话并开始收事件，再去取作品位置：这期间录音若中断，中断事件不会漏掉。
+      this.durationSeconds = status.durationSeconds
+      this.store.setState({ visible: true, outputPath: status.outputPath, status, phase: status.state === 'paused' ? 'paused' : 'recording', error: '', notice: null })
+      this.listen()
+      const [pending, settings] = await Promise.all([this.api.pendingFiles(), this.api.getSettings()])
+      const placement = pending.find(file => file.outputPath === status.outputPath)?.placement ?? null
+      this.store.setState({ placement, settings: { ...settings, effectiveSettings: status.settings } })
+      if (placement && this.editor) {
+        try {
+          await this.editor.open?.(placement.projectId)
+          // 等待期间已中断：中断处理已放开作品，恢复时再锁。
+          if (this.active) this.unlock = this.editor.lock(placement.projectId)
+        } catch (error) { logger.warn('接管录音时作品未能锁定，停止后会核对原位置', { event: 'audio_capture.session.attach.lock_failed', error }) }
+      }
+      logger.info('界面接管进行中的录音', { event: 'audio_capture.session.attach.completed', context: { durationSeconds: status.durationSeconds, placed: Boolean(placement), phase: this.store.getState().phase } })
+    }).catch(() => undefined)
+  }
   private listen(): void {
     if (this.release) return
     const samples = this.api.onSamples(event => { if (event.sessionId === this.store.getState().status?.sessionId) this.preview.push(event) })
@@ -174,7 +203,10 @@ export class CaptureSession {
       this.store.setState({ placement: null, phase: 'idle', status: null, outputPath: null })
     })
   }
-  /** 返回、工作区切换与窗口关闭共用屏障；确认后只停止并保留，首页仍可恢复。 */
+  /**
+   * 离开这份作品（编辑器里的返回）与关闭窗口时结束录音：停止并拼回原位置，失败时保留文件供恢复。
+   * 切换工作区、最小化不经过这里，录音照常在后台进行。
+   */
   leave(): Promise<boolean> {
     if (this.leaveRequest) return this.leaveRequest
     this.leaveRequest = (async () => {

@@ -25,7 +25,8 @@ export interface RecordingEventOptions {
   excludedWindowIds?: readonly string[]
   excludedRegions?(): readonly CaptureRect[]
   onFailure(error: unknown): void
-  onPage?(page: CaptureLogPage, path: string): Promise<void>
+  /** 页文件已经落盘；writeMs 是这一页的写盘耗时。 */
+  onPage?(page: CaptureLogPage, path: string, writeMs: number): void
 }
 
 /** Event capture follows the actual backend barriers, not UI timers or countdown states. */
@@ -43,8 +44,12 @@ export class RecordingEventSession {
   private failure: unknown
   constructor(private readonly options: RecordingEventOptions) {
     const store = new RecordingEventStore(options.directory)
-    this.collector = new CaptureLogCollector({ ...options, id: randomUUID }, async page => { const path = await store.write(page); await options.onPage?.(page, path) }, error => this.fail(error))
+    this.collector = new CaptureLogCollector({ ...options, id: randomUUID }, async page => {
+      const started = performance.now(), path = await store.write(page)
+      options.onPage?.(page, path, performance.now() - started)
+    }, error => this.fail(error), pages => logger.warn('事件页写盘跟不上，暂存在内存中继续录制', { event: 'recording.events.backlog', context: { pages } }))
   }
+  get peakBacklog(): number { return this.collector.peakBacklog }
   private fail(error: unknown): void {
     if (this.failure) return
     this.failure = error

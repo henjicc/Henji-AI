@@ -1,5 +1,6 @@
 import { createLogger } from '@/core/logging'
 import { AgentEditingStatus } from '@/features/application-control/AgentEditingGuard'
+import { AudioCaptureIndicator } from '@/features/audioCapture/AudioCaptureIndicator'
 import React from 'react'
 import { useI18n } from '@/hooks/useI18n'
 import { UiChipButton, UiIconButton, UiWindowControl } from '@/components/ui'
@@ -206,6 +207,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
 
       <div className="flex min-w-0 flex-1 items-center justify-end">
         <div className="flex min-w-0 items-center gap-0.5" style={noDragRegionStyle} data-window-nodrag>
+          <AudioCaptureIndicator />
           <AgentEditingStatus />
           {onAssistantClick && (
             <UiIconButton

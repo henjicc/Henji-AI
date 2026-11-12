@@ -82,10 +82,50 @@ describe('screen capture ownership and durable spans', () => {
       await pending
       expect(storage.manifest.spans[1]).toMatchObject({ finalized: true, durationUs: 1_000_000, monoUs: 1_000_000 })
       await backend.resume(new AbortController().signal)
-      children[2].emit('close', 3)
-      expect(failed).toHaveBeenCalledOnce()
       await backend.cancel()
       expect(storage.manifest.spans[2].finalized).toBe(false)
+      expect(failed).not.toHaveBeenCalled()
+    } finally { await backend.cancel(); await fs.rm(storage.directory, { recursive: true, force: true }) }
+  })
+  it('编码进程录到一半意外退出：在新分片里接着录；一分钟内反复退出才停下', async () => {
+    const storage = await fixture(), children: ChildProcessWithoutNullStreams[] = []
+    const failed = vi.fn(), restarted = vi.fn()
+    const spawn = vi.fn(() => {
+      const child = processFixture(); children.push(child)
+      setTimeout(() => child.stdout.emit('data', Buffer.from('frame=60\ndrop_frames=2\ndup_frames=1\nout_time_us=1000000\n')), 1)
+      return child
+    })
+    const backend = new GfxCaptureBackend(options, source, storage, { spawn, binary: async () => 'ffmpeg', encoder: async () => profile, nowUs: () => 2_000_000, failed, restarted })
+    try {
+      await backend.prepare(); await backend.start(new AbortController().signal)
+      // 驱动重置：进程自己退出，不是我们让它停的。
+      Object.assign(children[0], { exitCode: 1 }); children[0].emit('close', 1)
+      await vi.waitFor(() => expect(restarted).toHaveBeenCalledOnce())
+      // 退出的那片不按进度封口，留给收尾按文件里真实的画面算时长。
+      expect(storage.manifest.spans.map(span => [span.finalized, span.durationUs])).toEqual([[false, 0], [false, 0]])
+      expect(backend.stats()).toMatchObject({ restarts: 1, droppedFrames: 4, duplicatedFrames: 2 })
+      for (let i = 1; i <= 5; i++) { Object.assign(children[i], { exitCode: 1 }); children[i].emit('close', 1); await vi.waitFor(() => expect(spawn).toHaveBeenCalledTimes(Math.min(i + 2, 6))) }
+      await vi.waitFor(() => expect(failed).toHaveBeenCalledOnce())
+      expect(failed.mock.calls[0][0].message).toContain('多次')
+      expect(storage.manifest.spans).toHaveLength(6)
+      expect(failed).toHaveBeenCalledTimes(1)
+    } finally { await backend.cancel(); await fs.rm(storage.directory, { recursive: true, force: true }) }
+  })
+  it('续录期间停止：新进程起来后也会被停下，不留后台编码', async () => {
+    const storage = await fixture(), children: ChildProcessWithoutNullStreams[] = []
+    const spawn = vi.fn(() => {
+      const child = processFixture(); children.push(child)
+      setTimeout(() => child.stdout.emit('data', Buffer.from('out_time_us=500000\n')), 5)
+      return child
+    })
+    const backend = new GfxCaptureBackend(options, source, storage, { spawn, binary: async () => 'ffmpeg', encoder: async () => profile, nowUs: () => 2_000_000, failed: vi.fn() })
+    try {
+      await backend.prepare(); await backend.start(new AbortController().signal)
+      Object.assign(children[0], { exitCode: 1 }); children[0].emit('close', 1)
+      await backend.stop(new AbortController().signal)
+      expect(spawn).toHaveBeenCalledTimes(2)
+      expect(children[1].exitCode).not.toBeNull()
+      expect(storage.manifest.spans.map(span => span.finalized)).toEqual([false, true])
     } finally { await backend.cancel(); await fs.rm(storage.directory, { recursive: true, force: true }) }
   })
 })

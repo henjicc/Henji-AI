@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { clockAnchorSchema, monoSpanSchema, safeClockSchema } from '../captureLog/clock'
 
-const recordingTrackKindSchema = z.enum(['microphone', 'systemAudio', 'camera'])
+export const recordingTrackKindSchema = z.enum(['microphone', 'systemAudio', 'camera'])
 export type RecordingTrackKind = z.infer<typeof recordingTrackKindSchema>
 export const recordingTrackOptionsSchema = z.object({
   microphone: z.object({}).strict().optional(),
@@ -9,19 +9,23 @@ export const recordingTrackOptionsSchema = z.object({
   camera: z.object({ deviceId: z.string().min(1).optional(), width: z.number().int().min(160).max(3840).default(1280), height: z.number().int().min(120).max(2160).default(720), frameRate: z.number().int().min(1).max(60).default(30) }).strict().optional(),
 }).strict()
 export type RecordingTrackOptions = z.infer<typeof recordingTrackOptionsSchema>
-const recordingTrackSegmentSchema = z.object({
+export const recordingTrackSegmentSchema = z.object({
   id: z.string().uuid(), file: z.string().regex(/^[a-f0-9-]+\.(wav|mp4)$/), monoSpanUs: monoSpanSchema,
   sampleRate: z.number().int().positive().optional(), channels: z.number().int().min(1).max(2).optional(),
   width: z.number().int().positive().optional(), height: z.number().int().positive().optional(),
   units: safeClockSchema.positive(), latencyCompensationUs: z.number().int(), sourceClockOffsetUs: z.number().int().optional(), anchors: z.array(clockAnchorSchema).min(1),
 }).strict()
 export type RecordingTrackSegment = z.infer<typeof recordingTrackSegmentSchema>
+export const recordingTrackGapSchema = z.object({ monoSpanUs: monoSpanSchema, reason: z.enum(['pause', 'device', 'muted', 'missing-data']) }).strict()
+export type RecordingTrackGap = z.infer<typeof recordingTrackGapSchema>
+export const recordingTrackWarningSchema = z.enum(['system-audio-silent', 'system-audio-unavailable'])
+export type RecordingTrackWarning = z.infer<typeof recordingTrackWarningSchema>
 export const recordingTracksSchema = z.object({
   version: z.literal(1), sessionId: z.string().uuid(), originUs: safeClockSchema,
   tracks: z.array(z.object({
     kind: recordingTrackKindSchema, segments: z.array(recordingTrackSegmentSchema),
-    gaps: z.array(z.object({ monoSpanUs: monoSpanSchema, reason: z.enum(['pause', 'device', 'muted', 'missing-data']) }).strict()),
-    warnings: z.array(z.enum(['system-audio-silent', 'system-audio-unavailable'])),
+    gaps: z.array(recordingTrackGapSchema),
+    warnings: z.array(recordingTrackWarningSchema),
   }).strict()).max(3),
 }).strict().superRefine((value, ctx) => {
   if (new Set(value.tracks.map(track => track.kind)).size !== value.tracks.length) ctx.addIssue({ code: 'custom', message: '录制轨道重复' })

@@ -13,7 +13,7 @@ vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ system: { fs: { rea
 vi.mock('../../features/videoEdit/application/videoEditService', () => ({ requireVideoEditInstance: vi.fn() }))
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
-const ids: PersistenceResourceId[] = ['screen-recording-tracks', 'capture-log-page', 'creative-intent-page', 'creative-intent-candidate', 'image-layout-page', 'image-layout-candidate']
+const ids: PersistenceResourceId[] = ['screen-recording-tracks', 'screen-recording-track-journal', 'capture-log-page', 'creative-intent-page', 'creative-intent-candidate', 'image-layout-page', 'image-layout-candidate']
 const fixtureVersions = Object.fromEntries(ids.map(id => [id, resourcePersistenceContract(id).version]))
 const fixture = (id: PersistenceResourceId): Record<string, unknown> => JSON.parse(fs.readFileSync(path.resolve('tests/fixtures/persistence', id, `v${fixtureVersions[id]}.json`), 'utf8')) as Record<string, unknown>
 

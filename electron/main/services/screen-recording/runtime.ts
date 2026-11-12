@@ -1,4 +1,5 @@
 import { BrowserWindow, globalShortcut, type WebContents } from 'electron'
+import { notifyRecording } from '../recording-notice'
 import type { RecordingControlSnapshot } from '../../../../src/core/screenRecording/contracts'
 import { RecordingControlService, type RecordingControlBackend } from './control'
 import { createMainLogger } from '../logging'
@@ -12,8 +13,10 @@ import type { CapabilityCapture } from '../../../../src/core/captureLog/events'
 import type { RecordingSensitiveDom } from '../../../../src/core/screenRecording/contracts'
 import { bindCaptureCapabilitySink } from '../../../../src/core/captureLog/capability'
 import type { RecordingTrackStatus } from '../../../../src/core/screenRecording/contracts'
+import { holdRecordingWakeLock } from '../recording-power'
 
 const logger = createMainLogger('main.screen_recording')
+let releaseWakeLock: (() => void) | null = null
 let owner: WebContents | null = null
 let controlWindow: ReturnType<typeof createRecordingControlWindow> | null = null
 let frameWindow: BrowserWindow | null = null
@@ -21,7 +24,13 @@ let restoreOwnerWindow: (() => void) | null = null
 let closing: Promise<void> | null = null
 let eventSession: RecordingEventSession | null = null
 let detachCapabilitySink: (() => void) | undefined
+/** 当前会话处理宿主界面重载或崩溃的方式；没有时整次录制随宿主关闭。 */
+let ownerLostHandler: (() => void) | null = null
 const watched = new WeakSet<WebContents>()
+
+/** 录制时主窗口通常最小化着，界面里的提示看不到：与录音共用系统通知。 */
+export function notifyRecordingProblem(contents: WebContents | null, body: string): void { notifyRecording(contents, '痕迹AI 录屏', body) }
+export function recordingEventBacklog(): number { return eventSession?.peakBacklog ?? 0 }
 
 function broadcast(snapshot: RecordingControlSnapshot | null): void {
   for (const contents of [owner, controlWindow?.webContents, frameWindow?.webContents]) {
@@ -35,6 +44,8 @@ export const recordingControl = new RecordingControlService({
   unregister: key => globalShortcut.unregister(key),
   changed: broadcast,
   released: () => {
+    // 停止、失败、取消都会走到这里：录制资源已放开，系统可以睡眠了。
+    releaseWakeLock?.(); releaseWakeLock = null
     const snapshot = recordingControl.snapshot()
     if (owner && snapshot) mediaPermissions.revoke(owner, snapshot.sessionId)
   },
@@ -50,15 +61,17 @@ export function isRecordingFrameSender(contents: WebContents): boolean {
 }
 
 /** 正式采集协调器准备完资源后调用；UI/Pi/MCP 不各建状态机。1.5 负责公开会话实体。 */
-export function openRecordingControl(ownerContents: WebContents, sessionId: string, backend: RecordingControlBackend, events?: RecordingEventOptions, settled?: () => Promise<void>, frameBounds?: () => CaptureRect | undefined): RecordingControlSnapshot {
+export function openRecordingControl(ownerContents: WebContents, sessionId: string, backend: RecordingControlBackend, events?: RecordingEventOptions, settled?: () => Promise<void>, frameBounds?: () => CaptureRect | undefined, ownerLost?: () => void): RecordingControlSnapshot {
   if (!isTrustedMainRendererUrl(ownerContents.getURL())) throw new Error('录制宿主来源不可信')
   if (owner) throw new Error('已有录制会话，请先关闭当前录制')
   owner = ownerContents
+  ownerLostHandler = ownerLost ?? null
   const excludedWindowIds = [...events?.excludedWindowIds ?? []]
   eventSession = events ? new RecordingEventSession({ ...events, excludedWindowIds,
     excludedRegions: () => [...events.excludedRegions?.() ?? [], ...(controlWindow && !controlWindow.isDestroyed() ? [controlWindow.getBounds()] : [])], onFailure: error => {
-    void recordingControl.captureFailed(sessionId, error).catch(cleanup => logger.error('采集失败后清理失败', { event: 'recording.events.cancel.failed', error: cleanup }))
+    // 先让协调器记下这是采集失败，收尾时才不会当成用户取消。
     events.onFailure(error)
+    void recordingControl.captureFailed(sessionId, error).catch(cleanup => logger.error('采集失败后清理失败', { event: 'recording.events.cancel.failed', error: cleanup }))
   } }) : null
   let snapshot: RecordingControlSnapshot
   const wrapped = eventSession ? eventSession.wrap(backend) : backend
@@ -67,6 +80,7 @@ export function openRecordingControl(ownerContents: WebContents, sessionId: stri
     cancel: async () => { try { await wrapped.cancel() } finally { await settled() } },
   } : wrapped
   try { snapshot = recordingControl.create(sessionId, coordinated) } catch (error) { owner = null; eventSession = null; throw error }
+  releaseWakeLock ??= holdRecordingWakeLock('录屏')
   const capture = eventSession
   if (capture) detachCapabilitySink = bindCaptureCapabilitySink(fact => capture.capability(fact))
   try {
@@ -92,9 +106,12 @@ export function openRecordingControl(ownerContents: WebContents, sessionId: stri
     watched.add(ownerContents)
     const lost = (): void => {
       if (owner !== ownerContents) return
+      // 录制状态与数据在主进程：界面重载或崩溃只断开它写的声音轨，界面回来后重新接上。
+      if (ownerLostHandler) { ownerLostHandler(); return }
       void closeRecordingControl().catch(error => logger.error('采集宿主关闭后清理失败', { event: 'recording.control.owner_lost.failed', error }))
     }
-    ownerContents.on('did-start-navigation', (_event, _url, _inPlace, isMainFrame) => { if (isMainFrame) lost() })
+    // 同一文档内的地址变化（replaceState、锚点）不换页面，录制轨道仍在原页面里。
+    ownerContents.on('did-start-navigation', (_event, _url, inPlace, isMainFrame) => { if (isMainFrame && !inPlace) lost() })
     ownerContents.on('render-process-gone', lost)
     ownerContents.once('destroyed', lost)
   }
@@ -142,7 +159,7 @@ export function closeRecordingControl(): Promise<void> {
       detachCapabilitySink?.(); detachCapabilitySink = undefined
       if (controlWindow && !controlWindow.isDestroyed()) controlWindow.destroy()
       if (frameWindow && !frameWindow.isDestroyed()) frameWindow.destroy()
-      controlWindow = null; frameWindow = null; owner = null; eventSession = null
+      controlWindow = null; frameWindow = null; owner = null; eventSession = null; ownerLostHandler = null
       restoreOwnerWindow?.(); restoreOwnerWindow = null
     }
   }).finally(() => { closing = null })

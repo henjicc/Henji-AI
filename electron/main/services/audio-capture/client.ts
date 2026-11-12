@@ -1,20 +1,39 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { z } from 'zod'
-import type { AudioCaptureEvent } from '../../../../src/core/audioCapture/contracts'
+import { audioCaptureHealthSchema, type AudioCaptureEvent } from '../../../../src/core/audioCapture/contracts'
 import { createMainLogger } from '../logging'
 import { AudioCaptureError, AudioCaptureFrameReader, correlateNativeClock, type NativeAudioMessage } from './protocol'
 
 const logger = createMainLogger('main.audio_capture.process')
 export const mainClockUs = (): number => Number(process.hrtime.bigint() / 1000n)
+/**
+ * 应答超时（其余请求 20 秒）。停止要先排空采集队列（4096 块、每块最多 1024 帧，48 kHz 下最多约 87 秒音频，
+ * 正常磁盘不到一秒写完）和推流通道再收尾文件，磁盘慢时也不能被提前打断；驱动面板等用户操作。
+ */
+const REQUEST_TIMEOUT_MS: Partial<Record<string, number>> = { stop: 90_000, asioPanel: 300_000 }
+/** 计时器比预定晚到这么多，说明主进程刚卡过：原生的应答可能还没进管道，再宽限几秒，最多几次。 */
+const LATE_TIMER_MS = 1000
+const LATE_GRACE_MS = 5000
+const LATE_GRACES = 3
+/** 失联的原生进程关掉输入后自己写完队列、收尾 WAV 的宽限；录音中给足，空闲时很快。过了仍不退才强杀。 */
+const RETIRE_RECORDING_MS = 120_000
+const RETIRE_IDLE_MS = 3000
+/** 原生进程失联（退出、协议错误、不应答）的原因，交给崩溃回调用作中断说明。 */
+export interface AudioCaptureLoss { code: string; message: string }
+const EXITED: AudioCaptureLoss = { code: 'PROCESS_EXITED', message: '录音服务异常退出，已写文件保留，可恢复后重新录制' }
+const NOT_RESPONDING: AudioCaptureLoss = { code: 'NOT_RESPONDING', message: '录音服务没有应答，录音已结束；已采集的部分正在写完，稍后可以恢复' }
 const sampleSchema = z.object({ event: z.literal('samples'), sessionId: z.string(), sequence: z.number().int().nonnegative(), firstFrame: z.number().int().nonnegative(), frames: z.number().int().min(1).max(1024), channels: z.number().int().min(1).max(2), sampleRate: z.number().positive(), nativeMonoUs: z.number(), uncertaintyUs: z.number().nonnegative(), format: z.literal('float32le') })
 const levelSchema = z.object({ event: z.literal('level'), sessionId: z.string(), peak: z.array(z.number()).max(2), rms: z.array(z.number()).max(2), clipped: z.array(z.boolean()).max(2), durationSeconds: z.number(), writtenBytes: z.number() })
-const interruptedSchema = z.object({ event: z.literal('interrupted'), sessionId: z.string(), outputPath: z.string(), writtenBytes: z.number(), error: z.object({ code: z.string(), message: z.string(), recoverable: z.boolean() }) })
+const interruptedSchema = z.object({ event: z.literal('interrupted'), sessionId: z.string(), outputPath: z.string(), writtenBytes: z.number(), error: z.object({ code: z.string(), message: z.string(), recoverable: z.boolean() }), health: audioCaptureHealthSchema.optional() })
+const healthSchema = z.object({ event: z.literal('health'), sessionId: z.string(), durationSeconds: z.number(), health: audioCaptureHealthSchema })
 
 export class AudioCaptureClient {
   private child: ChildProcessWithoutNullStreams | undefined
   private ready: Promise<void> | undefined
   private nextId = 0
-  private pending = new Map<string, { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>()
+  private pending = new Map<string, { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> | undefined }>()
+  /** 已失联、正在自己收尾的原生进程，退出时移除。 */
+  private readonly retiring = new Map<ChildProcessWithoutNullStreams, Promise<void>>()
   private crashes: number[] = []
   private idle: ReturnType<typeof setTimeout> | undefined
   private calibration: ReturnType<typeof setInterval> | undefined
@@ -23,7 +42,7 @@ export class AudioCaptureClient {
   private active = false
   private disposed = false
   private panelOpen = false
-  constructor(private readonly executable: () => string, private readonly onEvent: (event: AudioCaptureEvent) => void, private readonly onCrash: () => void) {}
+  constructor(private readonly executable: () => string, private readonly onEvent: (event: AudioCaptureEvent) => void, private readonly onCrash: (loss: AudioCaptureLoss) => void) {}
 
   async request(type: string, payload: Record<string, unknown> = {}): Promise<unknown> {
     await this.ensureStarted()
@@ -35,7 +54,7 @@ export class AudioCaptureClient {
   setActive(active: boolean): void { this.active = active; this.touch() }
   private touch(): void {
     clearTimeout(this.idle)
-    if (!this.active) { this.idle = setTimeout(() => { if (this.pending.size) this.touch(); else this.shutdown() }, 30_000); this.idle.unref() }
+    if (!this.active) { this.idle = setTimeout(() => { if (this.pending.size) this.touch(); else void this.shutdown() }, 30_000); this.idle.unref() }
   }
   private async ensureStarted(): Promise<void> {
     if (this.disposed) throw new AudioCaptureError('SERVICE_CLOSED', '录音服务已关闭')
@@ -51,22 +70,19 @@ export class AudioCaptureClient {
     this.child = child
     const reader = new AudioCaptureFrameReader()
     child.stdout.on('data', (data: Buffer) => {
+      // 失联后仍在收尾的进程：照常读空管道，免得它写满卡住出不来；它的事件与应答不再处理。
+      if (this.child !== child) return
       try { reader.push(data, (message, binary) => this.receive(message, binary)) }
-      catch (error) { logger.error('录音协议无效', { event: 'audio_capture.protocol.failed', error }); child.kill() }
+      catch (error) { logger.error('录音协议无效', { event: 'audio_capture.protocol.failed', error }); this.retire(child, EXITED) }
     })
     child.stderr.on('data', (data: Buffer) => logger.debug('原生录音诊断', { event: 'audio_capture.native.diagnostic', context: { message: data.toString('utf8').slice(0, 4000) } }))
-    const fail = (): void => {
-      if (this.child !== child) return
-      this.child = undefined; this.ready = undefined; clearInterval(this.calibration)
-      for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(new AudioCaptureError('PROCESS_EXITED', '录音服务已退出，已写文件可恢复')) }
-      this.pending.clear(); this.crashes.push(Date.now()); this.active = false; this.onCrash()
-      logger.warn('原生录音服务异常退出；下次调用重新启动，不自动重录', { event: 'audio_capture.process.failed' })
-    }
-    child.once('error', fail); child.once('exit', fail); child.stdin.once('error', fail)
-    const hello = z.object({ protocol: z.literal(1) }).parse(await this.send('hello'))
+    const lost = (): void => this.lost(child, EXITED)
+    child.once('error', lost); child.once('exit', lost); child.stdin.once('error', lost)
+    // 协议 2：采样与写盘分离、健康计数事件。新旧程序不配套时在握手就失败，不在录音中途才报协议错误。
+    const hello = z.object({ protocol: z.literal(2) }).parse(await this.send('hello'))
     void hello
     await this.syncClock()
-    this.calibration = setInterval(() => { if (!this.panelOpen && !this.pending.size) void this.syncClock().catch(() => child.kill()) }, 5000)
+    this.calibration = setInterval(() => { if (!this.panelOpen && !this.pending.size) void this.syncClock().catch(() => this.retire(child, NOT_RESPONDING)) }, 5000)
     this.calibration.unref(); this.touch()
     logger.info('原生录音服务已就绪', { event: 'audio_capture.process.completed' })
   }
@@ -75,11 +91,61 @@ export class AudioCaptureClient {
     if (!child) return Promise.reject(new AudioCaptureError('PROCESS_EXITED', '录音服务未启动'))
     const id = String(++this.nextId)
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { this.pending.delete(id); reject(new AudioCaptureError('TIMEOUT', '录音驱动响应超时，请检查设备；已录文件可恢复')); child.kill() }, type === 'asioPanel' ? 300_000 : 20_000)
-      this.pending.set(id, { resolve, reject, timer })
-      child.stdin.write(`${JSON.stringify({ id, type, ...payload })}\n`, error => { if (error) { clearTimeout(timer); this.pending.delete(id); reject(error); child.kill() } })
+      const entry: { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> | undefined } = { resolve, reject, timer: undefined }
+      let due = Date.now() + (REQUEST_TIMEOUT_MS[type] ?? 20_000), graces = 0
+      const check = (): void => {
+        // 先让本轮已到达管道的应答处理完（计时器先于管道读取触发）。
+        setImmediate(() => {
+          if (this.pending.get(id) !== entry) return
+          if (Date.now() - due > LATE_TIMER_MS && graces < LATE_GRACES) {
+            graces += 1; due = Date.now() + LATE_GRACE_MS
+            entry.timer = setTimeout(check, LATE_GRACE_MS)
+            return
+          }
+          this.pending.delete(id)
+          reject(new AudioCaptureError('TIMEOUT', '录音驱动响应超时，请检查设备；已录文件可恢复'))
+          this.retire(child, NOT_RESPONDING)
+        })
+      }
+      entry.timer = setTimeout(check, due - Date.now())
+      this.pending.set(id, entry)
+      child.stdin.write(`${JSON.stringify({ id, type, ...payload })}\n`, error => { if (error) { clearTimeout(entry.timer); this.pending.delete(id); reject(error); this.retire(child, EXITED) } })
     })
   }
+  /**
+   * 原生进程失联：在主进程这边同步收拢状态（拒绝待定请求，崩溃回调里清会话、放睡眠阻止、通知界面），
+   * 不等它的退出事件——线程卡在驱动调用里时进程可能迟迟不退。对已失联的进程重复调用无害。
+   */
+  private lost(child: ChildProcessWithoutNullStreams, loss: AudioCaptureLoss): void {
+    if (this.child !== child) return
+    this.child = undefined; this.ready = undefined; clearInterval(this.calibration)
+    for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(new AudioCaptureError('PROCESS_EXITED', '录音服务已退出，已写文件可恢复')) }
+    this.pending.clear(); this.crashes.push(Date.now()); this.active = false
+    logger.warn('原生录音服务失联；下次调用重新启动，不自动重录', { event: 'audio_capture.process.failed', context: { code: loss.code } })
+    this.onCrash(loss)
+  }
+  /**
+   * 结束一个不应答（或协议出错）的原生进程而不丢已采集的音频：先收拢主进程状态，再关掉它的输入——
+   * 原生读到输入结束会把采集队列写完、收尾 WAV 后自己退出；宽限期过了仍不退才强杀。
+   */
+  private retire(child: ChildProcessWithoutNullStreams, loss: AudioCaptureLoss): void {
+    if (this.child !== child) return
+    const graceMs = this.active ? RETIRE_RECORDING_MS : RETIRE_IDLE_MS
+    const exited = new Promise<void>(resolve => {
+      if (child.exitCode !== null || child.signalCode !== null) { resolve(); return }
+      const timer = setTimeout(() => {
+        logger.warn('原生录音服务收尾超时，强制结束', { event: 'audio_capture.process.retire.killed', context: { graceMs } })
+        child.kill(); resolve()
+      }, graceMs)
+      child.once('exit', () => { clearTimeout(timer); resolve() })
+    })
+    this.retiring.set(child, exited)
+    void exited.then(() => { this.retiring.delete(child); logger.info('失联的原生录音服务已退出', { event: 'audio_capture.process.retire.completed' }) })
+    this.lost(child, loss)
+    child.stdin.end()
+  }
+  /** 失联的原生进程都退出后才返回：恢复、回收同一个录音文件前要等它写完。 */
+  async settled(): Promise<void> { await Promise.all([...this.retiring.values()]) }
   private async syncClock(): Promise<void> {
     let best: ReturnType<typeof correlateNativeClock> | undefined
     for (let i = 0; i < 3; i++) {
@@ -97,6 +163,7 @@ export class AudioCaptureClient {
       this.onEvent({ ...block, monoUs: block.nativeMonoUs + this.clock.offsetUs, uncertaintyUs: block.uncertaintyUs + this.clock.uncertaintyUs + Math.max(0, mainClockUs() - this.lastCalibration) * .0001, pcm: new Uint8Array(binary) })
     } else if (message.event === 'level') this.onEvent(levelSchema.parse(message))
     else if (message.event === 'interrupted') this.onEvent(interruptedSchema.parse(message))
+    else if (message.event === 'health') this.onEvent(healthSchema.parse(message))
     else if (message.id) {
       const p = this.pending.get(message.id); if (!p) return
       this.pending.delete(message.id); clearTimeout(p.timer)
@@ -104,13 +171,28 @@ export class AudioCaptureClient {
       else p.reject(new AudioCaptureError(message.error?.code ?? 'CAPTURE_FAILED', message.error?.message ?? '录音请求失败'))
     }
   }
-  private shutdown(): void {
+  /** 关闭输入让原生进程自己收尾 WAV 后退出；3 秒不退才强杀。返回进程结束。 */
+  private shutdown(): Promise<void> {
     const child = this.child; this.child = undefined; this.ready = undefined
     clearInterval(this.calibration); clearTimeout(this.idle)
     for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(new AudioCaptureError('SERVICE_CLOSED', '录音服务正在关闭，已写文件保留')) }
     this.pending.clear()
-    child?.stdin.end()
-    if (child) { const timeout = setTimeout(() => child.kill(), 3000); timeout.unref(); child.once('exit', () => clearTimeout(timeout)) }
+    if (!child) return Promise.resolve()
+    child.stdin.end()
+    return new Promise(resolve => {
+      const timeout = setTimeout(() => { child.kill(); resolve() }, 3000)
+      timeout.unref()
+      child.once('exit', () => { clearTimeout(timeout); resolve() })
+    })
   }
-  dispose(): void { this.disposed = true; this.shutdown() }
+  /** 应用退出：关掉当前进程；仍在收尾的失联进程再等一会儿，还不退就强杀，不留占着设备的孤儿进程。 */
+  async dispose(): Promise<void> {
+    this.disposed = true
+    await this.shutdown()
+    if (!this.retiring.size) return
+    let timer: ReturnType<typeof setTimeout> | undefined
+    await Promise.race([this.settled(), new Promise<void>(resolve => { timer = setTimeout(resolve, 10_000) })])
+    clearTimeout(timer)
+    for (const child of this.retiring.keys()) child.kill()
+  }
 }

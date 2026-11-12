@@ -400,6 +400,12 @@
       "fingerprint": "00c6c1737fee1c3ff0bf24eecb6ed318915f53ea03d1974976462ca4ada4855e",
       "supportedFrom": 1,
       "minReaderVersion": 17
+    },
+    "screen-recording-track-journal": {
+      "version": 1,
+      "fingerprint": "07f7ea0671cf64b92bea4e92dc733acc03402cdb007378f5eef003210b4a8d3b",
+      "supportedFrom": 1,
+      "minReaderVersion": 1
     }
   },
   "devBreaks": [],
