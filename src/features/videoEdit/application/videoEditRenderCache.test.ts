@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createVideoEditTestDocument } from '@/core/videoEdit/testFixtures'
 import { videoEditComposition } from '@/core/videoEdit/document'
-import { clearVideoEditRenderCache, renderVideoEditRenderCache, readVideoEditRenderCache, recordVideoEditProgramRender, readyVideoEditRenderWindows, peekVideoEditRenderCache, requestVideoEditRenderBarWindows, subscribeVideoEditRenderBar, videoEditRenderCacheWindows } from './videoEditRenderCache'
+import { clearVideoEditRenderCache, renderVideoEditRenderCache, videoEditRenderCacheBusy, readVideoEditRenderCache, recordVideoEditProgramRender, readyVideoEditRenderWindows, peekVideoEditRenderCache, requestVideoEditRenderBarWindows, subscribeVideoEditRenderBar, videoEditRenderCacheWindows } from './videoEditRenderCache'
 
 type TestWindow = { key: string; startFrame: number; endFrame: number; heavy: boolean; fingerprintPending?: boolean }
 const state = vi.hoisted(() => ({
@@ -51,6 +51,17 @@ vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: cla
 vi.mock('../engine/videoEditExportEncoder', () => ({ videoEditExportVideoStream: () => ({ codec: 'avc', config: {}, keyFrameInterval: 0 }) }))
 vi.mock('./videoEditTracking', () => ({ subscribeVideoEditTracking: (listener: () => void) => { state.trackingListeners.add(listener); return () => state.trackingListeners.delete(listener) }, videoEditTrackResults: () => state.tracks, waitVideoEditTracking: async () => {} }))
 vi.mock('./videoEditSmartRegions', () => ({ subscribeVideoEditSmartRegions: (listener: () => void) => { state.smartRegionListeners.add(listener); return () => state.smartRegionListeners.delete(listener) }, videoEditSmartRegionSegments: () => state.smartRegions, waitVideoEditSmartRegions: async () => ({}) }))
+const foreground = vi.hoisted(() => ({ inputAt: Number.NEGATIVE_INFINITY, task: undefined as string | undefined, focused: true, systemIdle: false, inputListeners: new Set<() => void>() }))
+vi.mock('./videoEditRenderCacheForeground', () => ({
+  videoEditUserInputIdleFor: () => performance.now() - foreground.inputAt,
+  subscribeVideoEditUserInput: (listener: () => void) => { foreground.inputListeners.add(listener); return () => { foreground.inputListeners.delete(listener) } },
+  videoEditGpuTask: () => foreground.task,
+  videoEditRecordingActive: () => foreground.task === 'recording',
+  // 与正式判断同形：全系统空闲，或有焦点且应用内 10 秒没有输入。
+  videoEditUserIdleBasis: () => foreground.systemIdle ? 'system' : foreground.focused && performance.now() - foreground.inputAt >= 10_000 ? 'app' : undefined,
+}))
+/** 与正式输入监听一样：记下时刻并同步通知。 */
+function userInput(): void { foreground.inputAt = performance.now(); for (const listener of foreground.inputListeners) listener() }
 vi.mock('./videoEditService', () => ({
   listVideoEditInstances: () => state.instances, requireVideoEditInstance: () => state.instances[0],
   getActiveVideoEditSequence: () => state.composition, findActiveVideoEditSequence: () => state.composition, publishVideoEdit: vi.fn(),
@@ -79,6 +90,7 @@ beforeEach(() => {
   state.commit.mockImplementation(async (...args: unknown[]) => ({ ...(args[0] as { entry: object }).entry, path: 'preview.mp4', bytes: 10 }))
   state.sessions = 0; state.viewListeners.clear(); state.events = []
   state.tracks = {}; state.smartRegions = {}; state.fontRevision = 0
+  foreground.inputAt = Number.NEGATIVE_INFINITY; foreground.task = undefined; foreground.inputListeners.clear(); foreground.focused = true; foreground.systemIdle = false
 })
 afterEach(() => { vi.useRealTimers() })
 
@@ -248,23 +260,156 @@ it('恢复后很快又被起播打断：下一次等待加倍；完整渲染完�
   expect(renderedFrames()).toEqual([0, 0, 0, 1, 2, 3, 4, 5])
   expect(await pending).toMatchObject({ cancelled: false, renderedWindows: 2 })
 })
-it('自动预渲染：用户停播后 10 秒内不开始，以免刚开始就撞上紧接着的起播', async () => {
+type SchedulerOwner = (typeof state.instances)[number] & { activeSequenceId?: string }
+async function useFreshScheduler(): Promise<{ fresh: typeof import('./videoEditRenderCache'); owner: SchedulerOwner }> {
   useFakeClock()
   vi.resetModules()
   const fresh = await import('./videoEditRenderCache')
-  const owner = state.instances[0] as (typeof state.instances)[number] & { activeSequenceId?: string }
+  const owner = state.instances[0] as SchedulerOwner
   owner.activeSequenceId = (state.composition as { id: string }).id
+  return { fresh, owner }
+}
+it('自动预渲染：刚打开 30 秒内不开始；用户停播后 10 秒内也不开始，以免撞上紧接着的起播；最快半速出帧', async () => {
+  const { fresh, owner } = await useFreshScheduler()
+  const started: number[] = []
+  state.render.mockImplementation(async () => { started.push(performance.now()) })
   fresh.readVideoEditRenderCache(owner.document.id)
+  await vi.advanceTimersByTimeAsync(29_000)
+  expect(state.render).not.toHaveBeenCalled()
   owner.playing = true; publishView()
   await vi.advanceTimersByTimeAsync(4000)
   owner.playing = false; publishView()
   await vi.advanceTimersByTimeAsync(9500)
   expect(state.render).not.toHaveBeenCalled()
   await vi.advanceTimersByTimeAsync(1500)
-  expect(state.render).toHaveBeenCalled()
-  await vi.advanceTimersByTimeAsync(100)
+  expect(state.events).toContain('video_edit.render_cache.auto_start')
   expect(state.commit).toHaveBeenCalledOnce()
+  // 30 帧序列半速：渲染不耗时，相邻两帧开始也至少隔 1000 / 15 ≈ 67 毫秒。
+  const gaps = started.slice(1).map((at, index) => at - started[index])
+  expect(gaps).toHaveLength(2)
+  expect(Math.min(...gaps)).toBeGreaterThanOrEqual(1000 / 15 - 1)
   state.instances = []; await vi.advanceTimersByTimeAsync(1000)
+})
+it('自动预渲染：编辑停下不到 10 秒、用户 10 秒内有过输入、有占显卡的前台任务或应用不在前台时不开始', async () => {
+  const { fresh, owner } = await useFreshScheduler()
+  fresh.readVideoEditRenderCache(owner.document.id)
+  await vi.advanceTimersByTimeAsync(25_000)
+  userInput()
+  await vi.advanceTimersByTimeAsync(8000)
+  owner.contentVersion = 1
+  await vi.advanceTimersByTimeAsync(9000)
+  expect(state.render).not.toHaveBeenCalled()
+  foreground.task = 'proxy'
+  await vi.advanceTimersByTimeAsync(20_000)
+  expect(state.render).not.toHaveBeenCalled()
+  foreground.task = undefined; foreground.focused = false
+  await vi.advanceTimersByTimeAsync(5000)
+  expect(state.render).not.toHaveBeenCalled()
+  foreground.focused = true
+  await vi.advanceTimersByTimeAsync(1100)
+  expect(state.render).toHaveBeenCalled()
+  await vi.advanceTimersByTimeAsync(300)
+  state.instances = []; await vi.advanceTimersByTimeAsync(1000)
+})
+it('自动预渲染中用户一输入就停止并释放会话、不占着任务；输入空闲后重新发起，已完成的窗口不重做', async () => {
+  const { fresh, owner } = await useFreshScheduler()
+  state.windows = [{ key: 'first', startFrame: 0, endFrame: 3, heavy: true }, { key: 'second', startFrame: 3, endFrame: 6, heavy: true }]
+  state.render.mockImplementation(() => new Promise<void>(resolve => setTimeout(resolve, 40)))
+  fresh.readVideoEditRenderCache(owner.document.id)
+  await vi.advanceTimersByTimeAsync(31_000)
+  expect(state.render).toHaveBeenCalled()
+  // 每帧 40 毫秒渲染 + 40 毫秒歇：第一个窗口约 0.24 秒完成，随后在第二个窗口途中输入。
+  await vi.advanceTimersByTimeAsync(300)
+  expect(state.commit).toHaveBeenCalledOnce()
+  userInput()
+  await vi.advanceTimersByTimeAsync(0)
+  expect(state.events).toContain('video_edit.render_cache.preempted')
+  expect(state.dispose).toHaveBeenCalledOnce(); expect(state.discard).toHaveBeenCalledOnce()
+  expect(state.events).toContain('video_edit.render_cache.cancelled')
+  expect(fresh.readVideoEditRenderCache(owner.document.id).rendering).toBeNull()
+  expect(fresh.videoEditRenderCacheBusy(owner as Parameters<typeof fresh.videoEditRenderCacheBusy>[0])).toBe(false)
+  const rendered = state.render.mock.calls.length
+  await vi.advanceTimersByTimeAsync(9000)
+  expect(state.render).toHaveBeenCalledTimes(rendered)
+  await vi.advanceTimersByTimeAsync(2000)
+  expect(state.commit).toHaveBeenCalledTimes(2)
+  expect(renderedFrames().filter(frame => (frame as number) < 3)).toEqual([0, 1, 2])
+  expect(state.events.filter(event => event === 'video_edit.render_cache.auto_start')).toHaveLength(2)
+  state.instances = []; await vi.advanceTimersByTimeAsync(1000)
+})
+it('用户请求的预渲染只为录屏暂停并给出原因，建代理与点按界面不暂停；暂停期间不算占用，录完空闲后续上', async () => {
+  useFakeClock()
+  const owner = state.instances[0]
+  state.windows = [{ key: 'request-first', startFrame: 0, endFrame: 3, heavy: true }, { key: 'request-second', startFrame: 3, endFrame: 6, heavy: true }]
+  state.render.mockImplementation(() => new Promise<void>(resolve => setTimeout(resolve, 400)))
+  const pending = renderVideoEditRenderCache(owner.document.id, { scope: 'all' })
+  await vi.advanceTimersByTimeAsync(50)
+  userInput(); foreground.task = 'proxy'
+  await vi.advanceTimersByTimeAsync(150)
+  expect(state.events).not.toContain('video_edit.render_cache.preempted')
+  foreground.task = 'recording'
+  await vi.advanceTimersByTimeAsync(150)
+  expect(state.events).toContain('video_edit.render_cache.preempted'); expect(state.dispose).toHaveBeenCalledOnce()
+  expect(readVideoEditRenderCache(owner.document.id).rendering).toMatchObject({ auto: false, paused: '正在录屏，录完后继续渲染' })
+  expect(videoEditRenderCacheBusy(owner as Parameters<typeof videoEditRenderCacheBusy>[0])).toBe(false)
+  const rendered = state.render.mock.calls.length
+  await vi.advanceTimersByTimeAsync(5000)
+  expect(state.render).toHaveBeenCalledTimes(rendered)
+  foreground.task = undefined
+  await vi.advanceTimersByTimeAsync(8000)
+  expect(readVideoEditRenderCache(owner.document.id).rendering).toBeNull()
+  expect(await pending).toMatchObject({ cancelled: false, renderedWindows: 2 })
+})
+it('多机位格子同时在解码时节目掉帧不计入实测；正常播放掉帧的普通段照常自动预渲染', async () => {
+  const { fresh, owner } = await useFreshScheduler()
+  state.windows = [{ key: 'plain-dropped', startFrame: 0, endFrame: 80, heavy: false }]
+  owner.playing = true; owner.playbackDirection = 1
+  const composition = state.composition as Parameters<typeof recordVideoEditProgramRender>[1]
+  const sample = { id: 1, presented: true, renderCached: false, renderElapsedMs: 10 }
+  fresh.noteVideoEditProgramSideLoad(owner as Parameters<typeof fresh.noteVideoEditProgramSideLoad>[0])
+  for (let frame = 0; frame < 60; frame += 2) fresh.recordVideoEditProgramRender(owner.document.id, composition, frame, sample, true)
+  expect(fresh.readVideoEditRenderCache(owner.document.id).windows[0].state).toBe('realtime')
+  // 格子停下（隐藏、收起、关闭）一秒后不再算节目旁负载。
+  await vi.advanceTimersByTimeAsync(1100)
+  for (let frame = 0; frame < 60; frame += 2) fresh.recordVideoEditProgramRender(owner.document.id, composition, frame, sample, true)
+  owner.playing = false
+  expect(fresh.readVideoEditRenderCache(owner.document.id).windows[0].state).toBe('dropped')
+  await vi.advanceTimersByTimeAsync(45_000)
+  expect(state.render).toHaveBeenCalled()
+  await vi.advanceTimersByTimeAsync(8000)
+  state.instances = []; await vi.advanceTimersByTimeAsync(1000)
+})
+it('应用不在前台时，全系统空闲达到阈值也会开始；全系统一有输入即停止', async () => {
+  const { fresh, owner } = await useFreshScheduler()
+  state.windows = [{ key: 'away-first', startFrame: 0, endFrame: 3, heavy: true }]
+  state.render.mockImplementation(() => new Promise<void>(resolve => setTimeout(resolve, 40)))
+  foreground.focused = false
+  fresh.readVideoEditRenderCache(owner.document.id)
+  await vi.advanceTimersByTimeAsync(40_000)
+  expect(state.render).not.toHaveBeenCalled()
+  foreground.systemIdle = true
+  await vi.advanceTimersByTimeAsync(1100)
+  expect(state.render).toHaveBeenCalled()
+  foreground.systemIdle = false
+  await vi.advanceTimersByTimeAsync(150)
+  expect(state.events).toContain('video_edit.render_cache.preempted'); expect(state.events).toContain('video_edit.render_cache.cancelled')
+  expect(state.commit).not.toHaveBeenCalled(); expect(state.dispose).toHaveBeenCalledOnce()
+  state.instances = []; await vi.advanceTimersByTimeAsync(1000)
+})
+it('用户请求的预渲染在会话打开前就遇到录屏：显示暂停原因，录完续上时原因清除', async () => {
+  useFakeClock()
+  const owner = state.instances[0]
+  state.windows = [{ key: 'request-before-session', startFrame: 0, endFrame: 3, heavy: true }]
+  foreground.task = 'recording'
+  const pending = renderVideoEditRenderCache(owner.document.id, { scope: 'all' })
+  await vi.advanceTimersByTimeAsync(300)
+  expect(state.sessions).toBe(0)
+  expect(readVideoEditRenderCache(owner.document.id).rendering).toMatchObject({ paused: '正在录屏，录完后继续渲染' })
+  foreground.task = undefined
+  await vi.advanceTimersByTimeAsync(3200)
+  expect(readVideoEditRenderCache(owner.document.id).rendering?.paused).toBeUndefined()
+  await vi.advanceTimersByTimeAsync(1000)
+  expect(await pending).toMatchObject({ cancelled: false, renderedWindows: 1 })
 })
 it('自动预渲染等节目首帧上屏后才开始，不和打开工程抢解码与显卡', async () => {
   useFakeClock()
@@ -273,8 +418,10 @@ it('自动预渲染等节目首帧上屏后才开始，不和打开工程抢解�
   const fresh = await import('./videoEditRenderCache')
   const owner = state.instances[0] as (typeof state.instances)[number] & { activeSequenceId?: string }
   owner.activeSequenceId = (state.composition as { id: string }).id
-  timing.beginVideoEditFirstFrame(owner.document.id, owner.activeSequenceId, 'open')
   fresh.readVideoEditRenderCache(owner.document.id)
+  // 打开后的等待已过，此时（如切换序列）又在等首帧。
+  await vi.advanceTimersByTimeAsync(25_000)
+  timing.beginVideoEditFirstFrame(owner.document.id, owner.activeSequenceId, 'open')
   await vi.advanceTimersByTimeAsync(15_000)
   expect(state.render).not.toHaveBeenCalled()
   timing.recordVideoEditFirstFrame(owner.document.id, owner.activeSequenceId, {})

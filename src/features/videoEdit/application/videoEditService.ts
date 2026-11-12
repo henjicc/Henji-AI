@@ -114,6 +114,10 @@ export function holdVideoEditActivity(id: string, label: string): () => void {
   values.add(token); activities.set(owner, values)
   return () => { values.delete(token) }
 }
+/** 正在进行的长任务名称（录屏、导出排队、转录、同步多机位等），只读；后台预渲染据此让开。 */
+export function listVideoEditActivities(owner: VideoEditInstance): string[] {
+  return [...activities.get(owner) ?? []].map(token => token.slice(0, token.lastIndexOf(':')))
+}
 const listeners = new Set<() => void>()
 const domainListeners = new Set<() => void>()
 export interface VideoEditCommandFact { operationId: string; relatedOperationId?: string; phase: 'committed' | 'cancelled' | 'failed' | 'undo' | 'redo'; before: VideoEditDocument; after: VideoEditDocument }

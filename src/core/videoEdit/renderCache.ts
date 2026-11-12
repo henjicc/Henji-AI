@@ -1,7 +1,7 @@
 import { renderFingerprintHash as hash, renderSceneRecordFingerprint as recordDigest, videoEditSpatialTargetClips, type VideoEditCodeFingerprints } from './renderFingerprint'
 import { VIDEO_EDIT_RENDER_ENGINE_VERSION } from 'virtual:video-edit-render-engine'
 import { activeVideoEditEffects, videoEditEffectCodes } from './compositing'
-import { videoEditClipRetimed } from './clipSpeed'
+import { videoEditClipRetimed, videoEditClipSpeedRange } from './clipSpeed'
 import { codeMediaInputClipSeconds } from './codeMediaInput'
 import { videoEditCodeInputs, videoEditCodeSceneKeys, type VideoEditCodeDeclarationReader } from './codeInputParameters'
 import { isCodeImageReference, type CodeSceneReference } from './codeMaterial/contract'
@@ -197,12 +197,36 @@ class DigestContext {
   }
 }
 
-/** 窗口里可能吃力的画面：代码片段与代码效果、嵌套序列、转场或三层以上画面。实际播放测得超时也算（由调用方标注）。 */
-function heavyClips(clips: readonly VideoEditClip[], transitions: number): boolean {
+/**
+ * 多机位片段实际显示的那一路：所选机位在源序列里的素材片段。节目只解这一路（见 videoEditNestedComposition），
+ * 所以它和一段普通视频一样轻；其他嵌套序列返回 undefined。
+ */
+function multicamPicture(document: VideoEditComposition, clip: VideoEditClip): VideoEditClip | undefined {
+  if (clip.kind !== 'sequence') return undefined
+  const item = document.items.find(value => value.id === clip.itemId)
+  const sequence = document.sequences?.find(value => value.id === item?.sequenceId)
+  if (!sequence?.multicam) return undefined
+  const camera = sequence.multicam.cameras.find(value => value.id === (clip.multicamCameraId ?? sequence.multicam!.cameras[0]?.id))
+  return camera && sequence.clips.find(value => value.id === camera.clipId)
+}
+/**
+ * 窗口里可能吃力的画面：代码片段与代码效果、嵌套序列（多机位按所选那一路算）、转场、三层以上画面，以及变速、倒放和时间重映射
+ * （快放跳着解、倒放逆着长 GOP 解，比顺序解一路原片重得多；慢放与定格不算）。实际播放测得掉帧也算（由调用方标注）。
+ */
+function heavyClips(document: VideoEditComposition, clips: readonly VideoEditClip[], transitions: number): boolean {
   if (transitions > 0) return true
   if (clips.filter(clip => clip.kind !== 'text').length >= 3) return true
-  return clips.some(clip => clip.kind === 'code' || clip.kind === 'graphic' || clip.kind === 'sequence' || activeVideoEditEffects(clip).some(effect => effect.code))
+  return clips.some(clip => {
+    const picture = multicamPicture(document, clip)
+    if (clip.kind === 'sequence' && !picture) return true
+    return [clip, ...(picture ? [picture] : [])].some(value => value.kind === 'code' || value.kind === 'graphic' || retimed(value) || activeVideoEditEffects(value).some(effect => effect.code))
+  })
 }
+/**
+ * 变速里吃力的只有快放与倒放：快放要跳着解（每个时间线帧解多帧源画面），倒放要逆着长 GOP 回溯；
+ * 慢放是顺序解，比原速还轻。定格（含时间重映射加定格）只解一帧，先排除。时间重映射没有负速度，倒放只看 reverse。
+ */
+const retimed = (clip: VideoEditClip): boolean => !clip.frameHold && (Boolean(clip.reverse) || videoEditClipSpeedRange(clip).max > 1 + 1e-9)
 
 /** 一条序列的窗口与输入签名：签名相同（例如只改了声音）时窗口与指纹必然相同，可直接沿用上一次的结果。 */
 export interface VideoEditRenderWindowSet { signature: string; windows: VideoEditRenderWindow[] }
@@ -300,7 +324,7 @@ export function videoEditRenderWindowSet(document: VideoEditComposition, depende
         .map(({ id: _id, clipId: _clipId, speech: _speech, ...caption }) => ({ ...caption, start: caption.start - startFrame }))
       const key = hash(JSON.stringify([base, endFrame - startFrame, pictures, transitions, captions, context.references(dependencies, fingerprinted)]))
       const fingerprintPending = dependencies.some(clip => context.codePending(clip, startFrame, endFrame))
-      windows.push({ index: windows.length, startFrame, endFrame, key: fingerprintPending ? `pending:${startFrame}:${key}` : key, heavy: heavyClips(clips, transitions.length), ...(fingerprintPending ? { fingerprintPending: true } : {}) })
+      windows.push({ index: windows.length, startFrame, endFrame, key: fingerprintPending ? `pending:${startFrame}:${key}` : key, heavy: heavyClips(document, clips, transitions.length), ...(fingerprintPending ? { fingerprintPending: true } : {}) })
   }
   return { signature, windows }
 }

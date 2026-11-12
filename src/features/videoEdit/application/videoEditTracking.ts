@@ -186,6 +186,9 @@ export function startVideoEditTracking(): () => void {
   return stop
 }
 
+/** 有跟踪（含稳定）正在后台跑：它逐帧解原片并跑本地模型，后台预渲染要让开。 */
+export function videoEditTrackingActive(): boolean { return [...entries.values()].some(entry => entry.status.state === 'tracking') }
+
 export function videoEditTrackingStatus(definition: TrackingDefinition | undefined): TrackingStatus | undefined {
   // 录屏事件跟踪没有后台任务：事件就是结果，整段都已就绪。
   if (definition?.recording) return { state: 'ready', result: { path: '', startUs: 0, endUs: Number.MAX_SAFE_INTEGER, fps: 30, summary: { tracked: 0, lost: 0 } } }

@@ -198,7 +198,7 @@ export function videoEditCommandState(context: VideoEditCommandContext, id: Vide
       const cache = readVideoEditRenderCache(owner.document.id)
       // 空闲自动渲染不算“正在渲染”：按 Enter 或渲染所选片段时由用户的请求接替它。
       const rendering = cache.rendering && !cache.rendering.auto ? cache.rendering : null
-      if (id === 'render_in_out' && rendering) return { enabled: true, title: `取消渲染（${rendering.total ? Math.round(rendering.done / rendering.total * 100) : 0}%）` }
+      if (id === 'render_in_out' && rendering) return { enabled: true, title: `取消渲染（${rendering.paused ? `${rendering.paused}，` : ''}${rendering.total ? Math.round(rendering.done / rendering.total * 100) : 0}%）` }
       const range = id === 'clear_render_cache' ? undefined : renderRange(context, id === 'render_selection')
       if (id === 'render_selection' && !range) return { enabled: false, reason: '请先选择片段。' }
       if (id === 'clear_render_cache_in_out' && !range) return { enabled: false, reason: '请先设置入点或出点。' }

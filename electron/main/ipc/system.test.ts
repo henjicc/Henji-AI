@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 const state = vi.hoisted(() => ({ parsers: new Map<string, (input: unknown) => unknown>(), handlers: new Map<string, () => unknown>() }))
-vi.mock('electron', () => ({ app: {}, dialog: {}, shell: {} }))
+vi.mock('electron', () => ({ app: {}, dialog: {}, shell: {}, powerMonitor: { getSystemIdleTime: () => 42 } }))
 vi.mock('../services/media-recycle/queue', () => ({ registerOwnedMedia: vi.fn() }))
 vi.mock('./registry', async (importOriginal) => ({
   ...await importOriginal<typeof import('./registry')>(),
@@ -17,6 +17,12 @@ describe('HTTP IPC 超时预算', () => {
   it.each([0, -1, 1.5, 300001, null, '10000', Infinity])('拒绝非法预算 %s', (timeoutMs) => {
     expect(() => state.parsers.get('http:fetch')!({ url: 'https://example.test', timeoutMs })).toThrow('timeoutMs')
   })
+})
+
+it('全系统空闲时长不接受参数，返回秒数', () => {
+  expect(state.parsers.get('system:idleSeconds')!(undefined)).toBeUndefined()
+  expect(() => state.parsers.get('system:idleSeconds')!({ any: 1 })).toThrow()
+  expect(state.handlers.get('system:idleSeconds')!()).toBe(42)
 })
 
 it('内存快照返回字节单位的系统可用内存，供空闲资源回收判断', () => {

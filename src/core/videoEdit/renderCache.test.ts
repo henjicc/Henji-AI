@@ -32,6 +32,35 @@ it('隐藏相机目标的运动使相关预渲染失效，解除绑定后不再�
   expect(keys(moved)).toEqual(keys(document))
 })
 
+it('多机位片段按所选那一路判断：不算吃力；所选那一路变速时吃力；普通嵌套序列仍算吃力', () => {
+  const document = project(), [main, source] = document.sequences
+  document.media.push({ ...document.media[0], id: 'b', path: 'D:/b.mp4' })
+  document.items.push({ id: 'item-b', name: 'b', kind: 'video', mediaId: 'b' })
+  source.clips.push({ ...source.clips[0], id: 'child-b', itemId: 'item-b', track: 2 })
+  source.multicam = { cameras: [{ id: 'cam-a', name: '机位 1', clipId: 'child-v' }, { id: 'cam-b', name: '机位 2', clipId: 'child-b' }], audioCameraId: 'cam-a' }
+  main.clips[1].multicamCameraId = 'cam-b'
+  const windows = videoEditRenderWindows(videoEditComposition(document, main.id), dependencies).filter(window => window.startFrame >= 3600)
+  expect(windows.length).toBeGreaterThan(0)
+  expect(windows.every(window => !window.heavy)).toBe(true)
+  source.clips[1].speed = { numerator: 2, denominator: 1 }
+  expect(videoEditRenderWindows(videoEditComposition(document, main.id), dependencies).filter(window => window.startFrame >= 3600).every(window => window.heavy)).toBe(true)
+  delete source.clips[1].speed
+  delete source.multicam
+  expect(videoEditRenderWindows(videoEditComposition(document, main.id), dependencies).filter(window => window.startFrame >= 3600).every(window => window.heavy)).toBe(true)
+})
+
+it('快放、倒放与超过原速的时间重映射算吃力；慢放、定格（含重映射加定格）不算', () => {
+  const document = project(), clip = document.sequences[0].clips[0]
+  const heavy = (): boolean => videoEditRenderWindows(videoEditComposition(document, document.sequences[0].id), dependencies)[0].heavy
+  expect(heavy()).toBe(false)
+  clip.speed = { numerator: 2, denominator: 1 }; expect(heavy()).toBe(true)
+  clip.speed = { numerator: 1, denominator: 2 }; expect(heavy()).toBe(false)
+  delete clip.speed; clip.reverse = true; expect(heavy()).toBe(true)
+  delete clip.reverse; clip.timeRemap = { points: [{ offsetUs: 0, speed: 0.5, interpolation: 'linear' }, { offsetUs: 2_000_000, speed: 3, interpolation: 'linear' }] }; expect(heavy()).toBe(true)
+  clip.timeRemap = { points: [{ offsetUs: 0, speed: 0.5, interpolation: 'linear' }] }; expect(heavy()).toBe(false)
+  clip.timeRemap = { points: [{ offsetUs: 0, speed: 3, interpolation: 'linear' }] }; clip.frameHold = true; expect(heavy()).toBe(false)
+})
+
 it('序列按剪辑点切分，长段等分到五秒，空隙仍可手动预渲染', () => {
   const document = project(); const windows = videoEditRenderWindows(videoEditComposition(document, document.sequences[0].id), dependencies)
   expect(windows.map(window => [window.startFrame, window.endFrame])).toEqual(Array.from({ length: 18 }, (_, index) => [index * 300, (index + 1) * 300]))

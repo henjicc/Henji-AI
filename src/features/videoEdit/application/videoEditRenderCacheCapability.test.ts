@@ -12,9 +12,14 @@ import { clearVideoEditRenderCache, cancelVideoEditRenderCache, videoEditRenderC
 const pixels = vi.hoisted(() => ({ render: vi.fn(async (..._args: unknown[]) => {}) }))
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   canvas = {}; render = pixels.render; setTracks() {} setSmartRegions() {} async dispose() {}
+  // 编码在渲染线程里完成：替身渲染一帧后回执提交，与正式会话的 openVideoEncoder 同形。
+  async openVideoEncoder() {
+    return { close() {}, async flush() {},
+      async encode(frame: number, _sample: unknown, precision: string, submitted: () => void) { await pixels.render(frame, true, precision); submitted(); return { provenance: 'live' } } }
+  }
 } }))
 vi.mock('mediabunny', () => ({
-  CanvasSource: class { async add() {} }, Mp4OutputFormat: class {}, StreamTarget: class {},
+  CanvasSource: class { async add() {} }, EncodedVideoPacketSource: class { async add() {} }, EncodedPacket: class {}, Mp4OutputFormat: class {}, StreamTarget: class {},
   Output: class { addVideoTrack() {} async start() {} async finalize() {} async cancel() {} },
 }))
 

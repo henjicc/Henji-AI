@@ -81,6 +81,8 @@ export interface HttpPlatform {
 
 export interface SystemPlatform {
   memoryInfo(): Promise<{ availableBytes: number; totalBytes: number }>
+  /** 全系统（不只本应用）距上次键盘鼠标输入的秒数。 */
+  idleSeconds(): Promise<number>
   fs: FsPlatform
   dialog: DialogPlatform
   shell: ShellPlatform

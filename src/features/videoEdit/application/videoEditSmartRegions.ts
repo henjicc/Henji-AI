@@ -134,6 +134,9 @@ export function startVideoEditSmartRegions(): () => void {
   return stop
 }
 
+/** 有智能区域正在分析：它逐帧解原片并跑分割模型，后台预渲染要让开。 */
+export function videoEditSmartRegionsActive(): boolean { return [...entries.values()].some(entry => entry.status.state === 'analyzing') }
+
 /** 片段上这个效果的区域分析状态；没有区域、或片段不是画面素材时为 undefined。 */
 export function videoEditSmartRegionStatus(document: Pick<VideoEditDocument, 'media' | 'items'>, frameRate: { numerator: number; denominator: number }, clip: VideoEditClip, effect: Pick<VideoEditEffect, 'mask'>): SmartRegionStatus | undefined {
   const request = videoEditSmartRegionRequest(document, frameRate, clip, effect)

@@ -1,4 +1,5 @@
 import { freemem, totalmem } from 'node:os'
+import { powerMonitor } from 'electron'
 import {
   copyFilePath,
   dirnamePath,
@@ -245,6 +246,8 @@ function parseNativeFetchRequest(input: unknown): NativeFetchRequestDto {
 
 export function registerSystemIpc(): void {
   registerIpcHandler('system:memoryInfo', parseVoid, () => ({ availableBytes: freemem(), totalBytes: totalmem() }))
+  // 全系统距上次键盘鼠标输入的秒数（不分哪个程序）：后台预渲染据此判断用户是不是真的走开了。
+  registerIpcHandler('system:idleSeconds', parseVoid, () => powerMonitor.getSystemIdleTime())
   registerIpcHandler<WriteFilePayload, void>('fs:writeFile', parseWriteFilePayload, ({ path, data, exclusive, position }) => writeFileBytes(path, data, { exclusive, position }))
   registerIpcHandler<WriteTextFilePayload, void>('fs:writeTextFile', parseWriteTextFilePayload, ({ path, data }) => writeTextFile(path, data))
   registerIpcHandler<ReadFilePayload, Uint8Array>('fs:readFile', parseReadFilePayload, ({ path, maxBytes }) => readFileBytes(path, maxBytes === undefined ? undefined : { maxBytes }))

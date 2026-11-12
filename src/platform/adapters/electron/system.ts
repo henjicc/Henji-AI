@@ -168,6 +168,7 @@ function createHttp(): HttpPlatform {
 export function createElectronSystem(): SystemPlatform {
   return {
     memoryInfo: () => getNative().diagnostics.memoryInfo(),
+    idleSeconds: () => getNative().diagnostics.idleSeconds(),
     fs: createFs(),
     dialog: createDialog(),
     shell: createShell(),

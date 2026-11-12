@@ -147,6 +147,8 @@ export async function createVideoEditProxies(projectId: string, mediaIds: readon
   }
   if (first) throw first
 }
+/** 是否有代理正在创建或排队（任一打开的剪辑）：转码占用显卡解码与编码，后台预渲染要让开。 */
+export function videoEditProxyGenerating(): boolean { return tasks.size > 0 }
 export function cancelVideoEditProxy(projectId: string, mediaId: string): void { entry(projectId, mediaId)?.controller?.abort(new Error('代理创建已取消。')) }
 /** Import is already committed; proxy failures are visible state, never roll back imported originals. Serial queue avoids CPU oversubscription. */
 export async function autoCreateVideoEditProxies(projectId: string, mediaIds: readonly string[]): Promise<void> {

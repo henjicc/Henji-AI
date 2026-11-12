@@ -7,6 +7,7 @@ import { videoEditProgramMulticam } from '../application/videoEditMulticam'
 import { getVideoEditProxySources } from '../application/videoEditProxy'
 import { ensureVideoEditMulticamPlayback, readVideoEditMulticamPlayback, reportVideoEditMulticamPlayback } from '../application/videoEditMulticamPlayback'
 import { VideoEditPlaybackCollector } from '../application/videoEditPlaybackStats'
+import { noteVideoEditProgramSideLoad } from '../application/videoEditRenderCache'
 import { videoEditPlaybackTarget } from '../engine/videoEditDisplayClock'
 import { VideoEditRenderBusyError } from '../engine/videoEditGpuFailure'
 import { videoEditMulticamGrid, videoEditMulticamGridDivisor, videoEditMulticamProxyKey, type VideoEditMulticamGrid } from '../engine/videoEditMulticamGrid'
@@ -255,6 +256,8 @@ export class VideoEditMulticamMonitor {
     this.request(session, grid, false, scrubbing)
   }
   private request(session: VideoEditRenderSession, grid: number, sequential: boolean, scrubbing: boolean, deadline?: number, run?: PlaybackRun): void {
+    // 格子真的在解各机位：这期间节目掉帧不计入预渲染的实测（来源是格子负载，不是节目内容）。隐藏或格子为零时不出帧，也就不登记。
+    noteVideoEditProgramSideLoad(this.instance)
     this.inFlight++
     if (run) this.unsubmitted++
     let submitted = false

@@ -28,6 +28,9 @@ export async function cachedVideoEditSceneCuts(target: VideoEditSceneTarget, sig
   signal?.throwIfAborted()
   return videoEditSceneCutFrames(clip, sequence, entry.result.cutsSeconds).map(frame => frame - clip.start)
 }
+let detecting = 0
+/** 有场景检测正在进行：它整段解码原片，后台预渲染要让开。 */
+export function videoEditSceneDetectionActive(): boolean { return detecting > 0 }
 export async function detectVideoEditScenes(target: VideoEditSceneTarget, sensitivity = 50, signal?: AbortSignal, onProgress?: (progress: number) => void): Promise<VideoEditSceneAnalysis> {
   const owner = requireVideoEditInstance(target.projectId); const baseline = owner.document; const contentVersion = owner.contentVersion
   const sequence = baseline.sequences.find(sequence => sequence.id === target.sequenceId)
@@ -41,6 +44,7 @@ export async function detectVideoEditScenes(target: VideoEditSceneTarget, sensit
   const cancel = (): void => { void api.cancel(request.requestId).catch(error => logger.warn('取消场景检测失败', { event: 'video_edit.scene_detection.cancel_failed', error })) }
   signal?.addEventListener('abort', cancel, { once: true })
   logger.info('分析视频镜头切换', { event: 'video_edit.scene_detection.start', requestId: request.requestId })
+  detecting++
   try {
     const result = sceneDetectionResultSchema.parse(await api.detect(request))
     signal?.throwIfAborted()
@@ -51,7 +55,7 @@ export async function detectVideoEditScenes(target: VideoEditSceneTarget, sensit
     logger.info('视频镜头切换分析完成', { event: 'video_edit.scene_detection.completed', requestId: request.requestId, context: { cuts: result.cutsSeconds.length } })
     return { analysisId: request.requestId, cutsSeconds: [...result.cutsSeconds], cutFrames: videoEditSceneCutFrames(clip, sequence, result.cutsSeconds) }
   } catch (error) { logger.error('视频镜头分析未完成', { event: signal?.aborted ? 'video_edit.scene_detection.cancelled' : 'video_edit.scene_detection.failed', error, requestId: request.requestId }); throw error }
-  finally { unsubscribe(); signal?.removeEventListener('abort', cancel) }
+  finally { detecting--; unsubscribe(); signal?.removeEventListener('abort', cancel) }
 }
 export async function applyVideoEditScenes(target: VideoEditSceneTarget, analysisId: string, options: SceneApplyOptions, signal?: AbortSignal): Promise<SceneEditResult> {
   const owner = requireVideoEditInstance(target.projectId); const entry = analyses.get(owner)?.get(analysisId)
