@@ -43,3 +43,23 @@
 3. 导入一个新字体（字体选择器“导入”或拖入），确认立即出现在列表、剪辑文字能用；在系统字体目录手动拷入一个字体，约 0.5 s 后出现 `fonts.scan.start` 一次。
 4. 剪辑 → 画布 → 剪辑来回切 3 次：期望出现 `video_edit.program.pool.parked` / `video_edit.program.pool.reused`，不再出现 `video_edit.program.pool.start/ready`；回来后画面正常、播放正常、回放分辨率设置保持。再把节目面板弹出到独立窗口又收回，确认画面正常（这条走“换窗口回收再新建”）。
 5. 关闭工程后 5 s 内应有 `video_edit.program.pool.released`（reason=project-closed）。
+
+# 审查返工（第 2 轮）
+1. 字体监听丢事件（必须改）：合并后的核对遇到扫描在跑时记一个“待补核对”，扫描结束（finally）再核对一次，清单变了就全量扫描、结果变了才广播。新测试：扫描停在途中时再拷入字体，结束后补核对并出现新字体、广播两次（`service.test.ts`，去掉修复会失败）。
+2. 保留会话：
+   - 设备丢失：每 5 s 的检查对保留会话做一次 `prepareGpu`（设备丢失会抛错），失败立即回收；接管前也再查一次，不等第一帧报错。
+   - 数量上限：最近使用的 2 个工程保留，更早的回收（reason=parked-limit）。
+   - 释放核实：保留时改用 `replaceContent(空内容)`（原来是 updateDocument）。Worker 的 replaceContent 会清空帧缓存、静帧、内容声音，释放全部读取源；它调用的 updateDocument 再关闭所有解码器（native 解码会话）、图片纹理、嵌套渲染器和代码输入。另外 `setRenderCache([])` 清空预渲染窗口。
+   - **没释放的**：跳转预览常驻帧（`videoEditJumpPreview` 的 pictures，上限 384 MiB）在窗口清空时只是停用、不丢弃；合成器的管线、中间纹理池按设计保留。要在保留时主动丢掉跳转预览常驻帧，得改 `videoEditRenderer.ts` / Worker（不归本任务），建议交给 W2-B 或剪辑 10 的设备预算一起做。
+3. 放下素材失败：`settled` 改为带成功与否的 `Promise<boolean>`，接管方据此丢弃（reason=park-failed）并改走新建。新测试覆盖。
+4. 接管途中面板卸载：拿到的会话放回保留池，不再直接释放。
+5. 首帧放行：新增 `releaseVideoEditFirstFrameWait`，只放行等待者，计时窗口照常等首帧。触发场景：节目面板隐藏、窗口转到后台（visibilitychange，或开窗时已经在后台）、渲染失败、初始化失败；空序列原本就直接放行。`videoEditFirstFramePending` 改为必须传工程 ID，时间线波形只等本工程。因此给 `VideoEditTimelineCanvas.tsx` 加了一个 `projectId` 属性传入（所有权外，一行）。新测试：放行只影响本工程，首帧照常记录。
+6. 测试补强：“删除唯一空序列”断言会话停播放后被保留、未释放，撤销后接回同一画布。新测试：保留期间设备丢失和内存紧张都立即回收，超出两个按最久未用回收。
+7. 回收原因按实际记录：park-failed / session-terminated / project-closed / owner-changed / native-status-changed / device-lost / parked-limit / memory-pressure / replaced。
+
+验证（第 2 轮）：
+- 测试全部通过：fonts 的 `service.test.ts`、`scanner.test.ts`，以及 `videoEditProgramPool.test.ts`、`videoEditFirstFrameTiming.test.ts`、`VideoEditPreview.test.tsx`、`videoEditRenderCache.test.ts`、`videoEditRenderFingerprints.test.ts`。
+- 主进程 tsc 通过。
+- 渲染层 tsc（12 GB 堆）：本任务文件无错；剩余错误都在 `imageEdit/v3/gpu/imageEditorGpuSceneRuntimeFallbackV3.test.ts` 与 `videoEditRenderer.test.ts`，不属于本任务。
+- 改动文件 eslint 通过。
+- 遗留验证步骤同上，另加一步：节目面板隐藏、窗口最小化时打开工程，确认 `video_edit.program.first_frame.wait_released` 出现，预渲染不再干等 30 s。

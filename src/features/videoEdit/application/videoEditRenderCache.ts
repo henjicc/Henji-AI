@@ -14,6 +14,7 @@ import { createLogger } from '@/core/logging'
 import { getPlatform } from '@/platform/runtime'
 import { fontLibrarySnapshot } from '@/platform/fonts'
 import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
+import { videoEditFirstFramePending } from '../engine/videoEditFirstFrameTiming'
 import { videoEditExportVideoOptions } from '../engine/videoEditExportEncoder'
 import { findActiveVideoEditSequence, getActiveVideoEditSequence, listVideoEditInstances, publishVideoEdit, requireVideoEditInstance, subscribeVideoEditDomain, subscribeVideoEditView, type VideoEditInstance } from './videoEditService'
 import { videoEditTrackResults, waitVideoEditTracking, subscribeVideoEditTracking } from './videoEditTracking'
@@ -132,7 +133,8 @@ function ensureAutoRender(): void {
       // An edit makes windows rendered from the old content useless: stop the automatic job and wait for quiet again.
       if (state.content !== content) { state.content = content; state.changedAt = now; state.controller?.abort(new DOMException('剪辑内容已改变。', 'AbortError')) }
       if (!getVideoEditRenderPreference(projectId).autoRender || !loaded.has(projectId) || jobs.get(instance) || planning.has(instance) || clearing.has(instance) || cancelling.has(instance) || !instance.activeSequenceId) continue
-      if (instance.playing || instance.scrubbing || instance.busy || now - state.changedAt < AUTO_RENDER_IDLE_MS || now - programInteractionAt < RENDER_AFTER_INTERACTION_MS) continue
+      // 首帧上屏前不抢解码与显卡：先出画面，后台再建缓存。
+      if (instance.playing || instance.scrubbing || instance.busy || videoEditFirstFramePending(projectId) || now - state.changedAt < AUTO_RENDER_IDLE_MS || now - programInteractionAt < RENDER_AFTER_INTERACTION_MS) continue
       let view: VideoEditRenderCacheView
       try { view = readVideoEditRenderCache(projectId) } catch { continue }
       if (!view.needsRenderFrames) continue

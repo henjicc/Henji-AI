@@ -1,17 +1,20 @@
 import { videoEditGainMultiplier } from '@/core/videoEdit/loudness'
-import { memo } from 'react'
+import { memo, useRef, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { TriangleAlert } from 'lucide-react'
 import { UiButton, UiIconButton } from '@/components/ui'
 import { WaveformView } from '@/components/waveform/WaveformView'
 import { retryWaveform, useWaveformDataList, type WaveformSourceRef } from '@/hooks/useWaveformData'
+import { subscribeVideoEditFirstFrame, videoEditFirstFramePending } from '../engine/videoEditFirstFrameTiming'
 
 /**
  * 时间线片段的波形（任务 2.3）：每个来源一份整段多级峰值，片段可见部分直接从中切片，
  * 滚动与缩放不再按区间重新解码。声道映射片段每条片段声道一个来源，自上而下各占一条。
  */
-export const VideoEditClipWaveform = memo(function VideoEditClipWaveform({ clipId, sources, startSeconds, endSeconds, gainDb, reverse, left, width, visible, lane = 'full', compact = false }: {
+export const VideoEditClipWaveform = memo(function VideoEditClipWaveform({ projectId, clipId, sources, startSeconds, endSeconds, gainDb, reverse, left, width, visible, lane = 'full', compact = false }: {
   gainDb?: number
+  /** 所属工程：只等本工程的首帧。 */
+  projectId: string
   clipId: string
   sources: readonly WaveformSourceRef[]
   /** 可见部分在素材绝对时钟上的起止秒。 */
@@ -28,7 +31,11 @@ export const VideoEditClipWaveform = memo(function VideoEditClipWaveform({ clipI
   compact?: boolean
 }) {
   const { t } = useTranslation('ui')
-  const states = useWaveformDataList(sources, 'full', visible)
+  // 打开或切换序列时先让节目出首帧，再批量读波形（精细波形要现场解码）；已经读过的不再收起，避免切换时闪烁。
+  const firstFramePending = useSyncExternalStore(subscribeVideoEditFirstFrame, () => videoEditFirstFramePending(projectId))
+  const waveformsAllowed = useRef(false)
+  if (!firstFramePending) waveformsAllowed.current = true
+  const states = useWaveformDataList(sources, 'full', visible && waveformsAllowed.current)
   const ready = states.length > 0 && states.every(state => state.data)
   const error = states.find(state => state.status === 'error')?.error
   const lanes = ready ? states.reduce((sum, state) => sum + state.data!.pyramid.channelCount, 0) : 0

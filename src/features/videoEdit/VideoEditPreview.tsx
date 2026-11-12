@@ -4,8 +4,8 @@ import { installVideoEditCodeElements } from './application/videoEditCodeElement
 import { subscribeContentTrustContext, runForeignContent } from '@/services/contentTrust'
 import { readContentTrustFailure, type ContentTrustFailure } from '@/core/contentTrust'
 import { isVideoEditGpuFrameFailureText, VideoEditGpuDeviceLostError, VideoEditGpuFrameError, VideoEditRenderBusyError, VideoEditRenderWorkerError, VideoEditRenderRecovery } from './engine/videoEditGpuFailure'
-import { createVideoEditProgramSurface as createProgramSurface, retainVideoEditProgramWarmup, takeVideoEditProgram } from './engine/videoEditProgramPool'
-import { recordVideoEditFirstFrame } from './engine/videoEditFirstFrameTiming'
+import { createVideoEditProgramSurface as createProgramSurface, parkVideoEditProgram, retainVideoEditProgramWarmup, takeVideoEditProgram } from './engine/videoEditProgramPool'
+import { recordVideoEditFirstFrame, releaseVideoEditFirstFrameWait } from './engine/videoEditFirstFrameTiming'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import ContextMenu from '@/components/ContextMenu'
 import { useContextMenu } from '@/hooks/useContextMenu'
@@ -279,23 +279,27 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
   // Worker 按新尺寸原地调整画布，切过去立刻出第一帧。以前按序列重建，每次切序列节目画面要空白约 1.5 秒。
   useEffect(() => {
     const recovering = recoveryPending.current; recoveryPending.current = false
-    if (!visible) { setVideoEditView(instance.document.id, { playing: false }, true); setPreparing(false); setLevels(EMPTY_AUDIO_LEVELS); return }
+    if (!visible) { releaseVideoEditFirstFrameWait(instance.document.id, 'hidden'); setVideoEditView(instance.document.id, { playing: false }, true); setPreparing(false); setLevels(EMPTY_AUDIO_LEVELS); return }
     const previousRelease = programReleases.get(instance) ?? Promise.resolve()
     setRenderFailure(null); setEffectFailure(null); setTrustFailure(undefined); setPictureReady(false)
     let pictureShown = false
     let stopped = false
+    /** 会话已出错要重建：卸载时直接释放，不留给下次进入复用。 */
+    let discardSession = false
     let recoveryTimer: ReturnType<typeof setTimeout> | undefined
     let stopCurrent: () => void = () => {}
     const stop = (): void => { stopped = true; stopCurrent() }
     stopPreview.current = stop
     const initialize = async (): Promise<void> => {
-    // 工作区空闲时预建的会话在这里接管。推迟一个微任务再取：开发模式（StrictMode）会把挂载、卸载、再挂载
-    // 同步连跑一遍，第一遍若同步取走，紧接着的卸载就会把它释放掉；未接管的池资源有独立退出时限。
-    const adopted = await Promise.resolve().then(() => stopped ? undefined : takeVideoEditProgram(instance.document.id, instance.activeSequenceId))
+    // 同一工程上次卸载时保留的会话，或工作区空闲时预建的会话，在这里接管。推迟一个微任务再取：开发模式（StrictMode）
+    // 会把挂载、卸载、再挂载同步连跑一遍，第一遍若同步取走，紧接着的卸载就会把它释放掉；未接管的池资源有独立退出时限。
+    const ownerDocument = host.current?.ownerDocument ?? window.document
+    const adopted = await Promise.resolve().then(() => stopped ? undefined : takeVideoEditProgram(instance.document.id, instance.activeSequenceId, ownerDocument))
     if (adopted) logger.debug('节目面板接管预热的渲染器', { event: 'video_edit.program.prewarm.adopted', context: { projectId: instance.document.id } })
     // A new renderer waits for the previous GPU/cache owner to be released; an adopted prewarmed one already owns its GPU.
     if (!adopted) await previousRelease
-    if (stopped) { void adopted?.renderer.dispose(); return }
+    // 接管途中面板又卸载了：会话放回保留池，下次进入照样能接管。
+    if (stopped) { if (adopted) parkVideoEditProgram(instance.document.id, adopted, { frame: instance.frame, ownerDocument, alive: () => listVideoEditInstances().includes(instance) && !instance.session.isEnded }); return }
     const initialDocument = adopted?.document ?? getActiveVideoEditSequence(instance)
     const surface = adopted?.surface ?? createProgramSurface(initialDocument.width, initialDocument.height)
     host.current?.replaceChildren(surface); canvas.current = surface
@@ -554,7 +558,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       if (presentedSequenceId !== composition.id) { presentedSequenceId = composition.id; firstPresentationAt = performance.now() }
       retainExplanationPixels(surface, target, result.history)
       if (result.presented === true) {
-        recordVideoEditFirstFrame(instance.document.id, composition.id, { frame: target, decodeMs: result.decodeMs, gpuMs: result.gpuMs, sourceTimestamps: result.sourceTimestamps })
+        recordVideoEditFirstFrame(instance.document.id, composition.id, { frame: target, decodeMs: result.decodeMs, gpuMs: result.gpuMs, sourceTimestamps: result.sourceTimestamps, renderStages: result.renderStages })
         // 只在首帧时改状态：逐帧调用 setState 会让整个节目面板（含工具栏）跟着每帧重渲染。
         if (!pictureShown) {
           pictureShown = true; setPictureReady(true)
@@ -962,7 +966,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         if (!recoverable && (videoMotionComposition(instance) !== requestDocument || videoEditProgramCommandIdentity(instance.document.id) !== requestCommand)) { wake(0); return }
         // 暂停通知会同步唤醒节目调度；先阻止重入，经正式入口通知其他视图暂停，再清理会话。
         const retiring = recoverable || renderer.terminated || audioRenderer?.terminated
-        if (retiring) stopped = true
+        if (retiring) { stopped = true; discardSession = true }
         setVideoEditView(instance.document.id, { playing: false }, true)
         if (retiring) stop()
         // Shown on the program monitor itself and cleared by the next presented frame.
@@ -974,11 +978,13 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
             logger.info('重新建立节目画面', { event: 'video_edit.preview.session_recover.start', context: { projectId: instance.document.id, attempt: recovery.current.attempts, delayMs } })
             recoveryTimer = setTimeout(() => { recoveryPending.current = true; setRetry(value => value + 1) }, delayMs)
           } else {
-            setRenderFailure('画面处理连续中断，请重新加载预览；如果仍无法显示，请重启软件。')
+            setRenderFailure('画面处理连续中断，请重新加载预览；如果仍无法显示，请重启软件。'); releaseVideoEditFirstFrameWait(instance.document.id, 'render-failed')
             logger.warn('节目画面自动恢复已停止', { event: 'video_edit.preview.session_recover.failed', error, context: { projectId: instance.document.id, attempts: recovery.current.attempts } })
           }
           return
         }
+        // 首帧出不来的已知情况立即放行后台任务，不等计时窗口超时。
+        releaseVideoEditFirstFrameWait(instance.document.id, 'render-failed')
         if (renderer.terminated || audioRenderer?.terminated) { stop(); setRenderFailure(error instanceof Error ? error.message : String(error)); return }
         if (error instanceof VideoEditGpuFrameError) gpuFailure = { frame: instance.frame, faults: error.faults }
         failedDocument = requestDocument; failedFrame = instance.frame; lastFrame = -1; lastRequested = -1
@@ -993,14 +999,18 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
       void flushVideoEditRenderPerformance()
       retired = true; pauseSettled.current = () => Promise.resolve(); releaseSettleWaiters(); for (const event of idleEvents) window.removeEventListener(event, interaction, true); stopHoverFrames(); displayObserver?.disconnect(); unregisterCapture(); unsubscribe(); unsubscribeView(); unsubscribeScrub(); unsubscribeMotion(); unsubscribeRegions(); unsubscribeTracks(); clearTimeout(timer); immediate.port1.close(); clearInterval(meterTimer); instance.playing = false; stopAudio(); scrubber.stop()
       const closeAudio = (): Promise<void> | undefined => { meter?.dispose(); return audio?.close() }
-      programReleases.set(instance, Promise.allSettled([meter ? finishVideoEditAudioFade().then(closeAudio) : closeAudio(), renderer.dispose(), audioRenderer?.dispose()]))
+      // 正常卸载（离开工作区、面板隐藏）只放下素材读取，Worker 与 GPU 设备留给同一工程再进入时接管。
+      const alive = (): boolean => listVideoEditInstances().includes(instance) && !instance.session.isEnded
+      const rendererReleased = discardSession || renderer.terminated || !alive() ? renderer.dispose()
+        : Promise.resolve(parkVideoEditProgram(instance.document.id, { surface, renderer }, { frame: instance.frame, ownerDocument, alive }))
+      programReleases.set(instance, Promise.allSettled([meter ? finishVideoEditAudioFade().then(closeAudio) : closeAudio(), rendererReleased, audioRenderer?.dispose()]))
       retainExplanationPixels(surface, -1)
       explanationSurface?.remove(); explanationSurface = undefined
       surface.remove(); if (canvas.current === surface) canvas.current = null
     }
     void step()
     }
-    void initialize().catch(error => { if (!stopped) { setTrustFailure(readContentTrustFailure(error)); setRenderFailure(error instanceof Error ? error.message : String(error)); onError(error) } })
+    void initialize().catch(error => { releaseVideoEditFirstFrameWait(instance.document.id, 'render-failed'); if (!stopped) { setTrustFailure(readContentTrustFailure(error)); setRenderFailure(error instanceof Error ? error.message : String(error)); onError(error) } })
     return () => { clearTimeout(recoveryTimer); stop() }
   }, [instance, onError, retry, visible, spaceProgress, setLevels])
   const busy = collecting || preparing

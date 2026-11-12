@@ -20,6 +20,8 @@ export const fontLibrarySnapshot = (): FontLibrarySnapshot => snapshot
 export function subscribeFontLibrary(listener: () => void): () => void { listeners.add(listener); return () => { listeners.delete(listener) } }
 function publish(value: Partial<FontLibrarySnapshot>): FontLibrarySnapshot { snapshot = { ...snapshot, ...value }; for (const listener of listeners) listener(); return snapshot }
 function adopt(catalog: FontCatalog): void {
+  // 主进程目录修订号没变就是同一份目录：不重建列表，免得每个订阅者跟着重算。
+  if (loaded && catalog.revision === snapshot.revision) { if (snapshot.loading || snapshot.error) publish({ loading: false, error: '' }); return }
   const available = new Set(catalog.faces.map(face => face.id))
   for (const [id] of facesLoaded) if (!available.has(id)) { facesLoaded.delete(id); payloadSizes.delete(id) }
   publish({ ...catalog, faces: [...GENERIC_FONT_FACES, ...catalog.faces.flatMap(face => normalizeFontFace(face) ?? [])], loading: false, error: '' })

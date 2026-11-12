@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-const state = vi.hoisted(() => ({ memory: vi.fn(), status: vi.fn(), created: 0, dispose: vi.fn(), prepare: vi.fn(), adopt: vi.fn(), native: true }))
+const state = vi.hoisted(() => ({ memory: vi.fn(), status: vi.fn(), created: 0, dispose: vi.fn(), prepare: vi.fn(), adopt: vi.fn(), native: true, stop: vi.fn(), update: vi.fn(async () => {}) }))
 vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ system: { memoryInfo: state.memory }, videoDecoder: { status: state.status } }) }))
 vi.mock('./videoEditRenderTransport', () => ({ videoEditNativeDecoding: (status: { available: boolean; forcedBackend: string | null }) => status.available && status.forcedBackend !== 'browser' }))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ info: vi.fn(), warn: vi.fn() }) }))
@@ -10,11 +10,19 @@ vi.mock('./videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   prepareGpu = state.prepare
   adoptProject = state.adopt
   nativeDecoding = async () => state.native
+  terminated = false
+  stopPlayback = state.stop
+  replaceContent = state.update
+  setRenderCache() {}
+  async setRenderDivisor() {}
+  async setSpaceDisplay() {}
+  async setWebDisplayScale() {}
 } }))
-import { retainVideoEditProgramWarmup, takeVideoEditProgram } from './videoEditProgramPool'
+import { parkVideoEditProgram, retainVideoEditProgramWarmup, takeVideoEditProgram } from './videoEditProgramPool'
 const releases: Array<() => void> = []
 const retain = (): (() => void) => { const release = retainVideoEditProgramWarmup(); releases.push(release); return release }
 beforeEach(() => {
+  state.stop.mockReset(); state.update.mockReset().mockResolvedValue(undefined)
   vi.useFakeTimers(); state.created = 0; state.dispose.mockReset().mockResolvedValue(undefined)
   state.prepare.mockReset().mockResolvedValue(undefined); state.adopt.mockReset(); state.native = true
   state.status.mockReset().mockResolvedValue({ available: true, forcedBackend: null })
@@ -71,4 +79,47 @@ it('预建后原生解码服务状态变了，不接管旧会话，交给节目�
   state.status.mockResolvedValue({ available: false, forcedBackend: null })
   expect(await takeVideoEditProgram('p', 's')).toBeUndefined()
   expect(state.dispose).toHaveBeenCalledOnce(); expect(state.adopt).not.toHaveBeenCalled()
+})
+
+it('离开剪辑再进入同一工程：停播放、放下素材后直接复用原会话，不重建；换窗口或工程关闭才回收', async () => {
+  retain(); await vi.advanceTimersByTimeAsync(0)
+  const entry = (await takeVideoEditProgram('project', 'sequence', document))!
+  releases.splice(0).forEach(release => release())
+  let open = true
+  parkVideoEditProgram('project', entry, { frame: 12, ownerDocument: document, alive: () => open })
+  expect(state.stop).toHaveBeenCalledWith(12); expect(state.update).toHaveBeenCalledOnce()
+  await vi.advanceTimersByTimeAsync(5001)
+  const again = await takeVideoEditProgram('project', 'sequence', document)
+  expect(again?.renderer).toBe(entry.renderer); expect(state.created).toBe(1); expect(state.dispose).not.toHaveBeenCalled()
+  parkVideoEditProgram('project', again!, { frame: 0, ownerDocument: document, alive: () => open })
+  expect(await takeVideoEditProgram('project', 'sequence', document.implementation.createHTMLDocument())).toBeUndefined()
+  expect(state.dispose).toHaveBeenCalledOnce()
+  parkVideoEditProgram('project', again!, { frame: 0, ownerDocument: document, alive: () => open })
+  open = false; await vi.advanceTimersByTimeAsync(5000)
+  expect(state.dispose).toHaveBeenCalledTimes(2); expect(await takeVideoEditProgram('project', 'sequence', document)).toBeUndefined()
+})
+
+const parkTaken = async (projectId: string, open: () => boolean = () => true) => {
+  retain(); await vi.advanceTimersByTimeAsync(0)
+  const entry = (await takeVideoEditProgram(projectId, 'sequence', document))!
+  releases.splice(0).forEach(release => release())
+  parkVideoEditProgram(projectId, entry, { frame: 0, ownerDocument: document, alive: open })
+  return entry
+}
+it('放下素材失败的会话不再接管，按原因回收后改走新建', async () => {
+  state.update.mockRejectedValueOnce(new Error('worker busy'))
+  await parkTaken('project')
+  expect(await takeVideoEditProgram('project', 'sequence', document)).toBeUndefined()
+  expect(state.dispose).toHaveBeenCalledOnce()
+})
+it('保留期间设备丢失或系统内存紧张都立即回收；最多保留最近两个工程', async () => {
+  await parkTaken('a'); await parkTaken('b'); await parkTaken('c')
+  expect(state.dispose).toHaveBeenCalledOnce()
+  state.prepare.mockRejectedValueOnce(new Error('device lost'))
+  await vi.advanceTimersByTimeAsync(5000)
+  expect(state.dispose).toHaveBeenCalledTimes(2)
+  state.memory.mockResolvedValue({ availableBytes: 128 * 1024 ** 2, totalBytes: 8 * 1024 ** 3 })
+  await vi.advanceTimersByTimeAsync(5000)
+  expect(state.dispose).toHaveBeenCalledTimes(3)
+  expect(await takeVideoEditProgram('b', 'sequence', document)).toBeUndefined(); expect(await takeVideoEditProgram('c', 'sequence', document)).toBeUndefined()
 })

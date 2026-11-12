@@ -8,35 +8,49 @@ import type { FontFaceInfo } from '../../../../src/core/fonts/catalog'
 
 export interface InternalFace { face: FontFaceInfo; path: string; index: number; signature: string }
 interface CachedFile { signature: string; parser?: number; faces: ParsedFontFace[] }
+interface FontInventory { files: string[]; imported: Set<string>; stats: Map<string, string>; failures: string[]; signature: string }
 export class FontScanner {
   private cache: Record<string, CachedFile> = {}
   private initialized = false
   constructor(private readonly library: string, private readonly discover: () => Promise<string[] | FontDiscovery> = discoverSystemFonts) {}
+  private cacheText = ''
   private async init(): Promise<void> {
     if (this.initialized) return
     await mkdir(this.library, { recursive: true })
-    try { this.cache = JSON.parse(await readFile(path.join(this.library, 'catalog-cache.json'), 'utf8')) as Record<string, CachedFile> } catch { this.cache = {} }
+    try { this.cacheText = await readFile(path.join(this.library, 'catalog-cache.json'), 'utf8'); this.cache = JSON.parse(this.cacheText) as Record<string, CachedFile> } catch { this.cache = {}; this.cacheText = '' }
     this.initialized = true
   }
-  async scan(): Promise<{ faces: InternalFace[]; failures: string[] }> {
+  /** 只做目录遍历与 stat，不解析字体；签名相同说明目录里的字体文件集合与文件身份都没变。 */
+  async inventory(): Promise<FontInventory> {
     await this.init()
     const imported = (await readdir(this.library)).filter(name => FONT_FILE_EXTENSION.test(name)).map(name => path.join(this.library, name))
     const discovery = await this.discover(); const found = Array.isArray(discovery) ? { files: discovery, failures: [] } : discovery
     const files = [...new Set([...found.files, ...imported])]
-    const importedSet = new Set(imported)
-    const next: Record<string, CachedFile> = {}; const faces: InternalFace[] = []; const failures = [...found.failures]
+    const stats = new Map<string, string>(); const failures = [...found.failures]
+    await Promise.all(files.map(async file => {
+      try { const info = await stat(file); stats.set(file, `${info.size}:${info.mtimeMs}`) }
+      catch (error) { failures.push(`${path.basename(file)}: ${error instanceof Error ? error.message : String(error)}`) }
+    }))
+    const signature = createHash('sha256').update(JSON.stringify([...stats].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0))).digest('hex')
+    return { files: files.filter(file => stats.has(file)), imported: new Set(imported), stats, failures, signature }
+  }
+  async scan(): Promise<{ faces: InternalFace[]; failures: string[]; signature: string }> {
+    const { files, imported: importedSet, stats, failures, signature: inventorySignature } = await this.inventory()
+    const next: Record<string, CachedFile> = {}; const faces: InternalFace[] = []
     for (const file of files) {
       try {
-        const info = await stat(file); const signature = `${info.size}:${info.mtimeMs}`
+        const signature = stats.get(file)!
         const cached = this.cache[file]
         const parsed = cached?.signature === signature && cached.parser === FONT_METADATA_VERSION ? cached.faces : parseFontFile(await readFile(file))
         next[file] = { signature, parser: FONT_METADATA_VERSION, faces: parsed }
         for (const value of parsed) faces.push({ face: { ...value.face, id: createHash('sha256').update(`${file}:${value.index}:${signature}:${JSON.stringify(value.face.variation ?? {})}`).digest('hex'), imported: importedSet.has(file) }, path: file, index: value.index, signature })
       } catch (error) { failures.push(`${path.basename(file)}: ${error instanceof Error ? error.message : String(error)}`) }
     }
-    await writeBufferAtomically(path.join(this.library, 'catalog-cache.json'), Buffer.from(JSON.stringify(next)))
+    // 内容没变就不重写：缓存文件在字体库目录里，重写会触发目录监听。
+    const text = JSON.stringify(next)
+    if (text !== this.cacheText) { await writeBufferAtomically(path.join(this.library, 'catalog-cache.json'), Buffer.from(text)); this.cacheText = text }
     this.cache = next
-    return { faces, failures }
+    return { faces, failures, signature: inventorySignature }
   }
   async importFile(source: string): Promise<void> {
     await this.init()

@@ -255,6 +255,22 @@ it('自动预渲染：用户停播后 10 秒内不开始，以免刚开始就撞
   expect(state.commit).toHaveBeenCalledOnce()
   state.instances = []; await vi.advanceTimersByTimeAsync(1000)
 })
+it('自动预渲染等节目首帧上屏后才开始，不和打开工程抢解码与显卡', async () => {
+  useFakeClock()
+  vi.resetModules()
+  const timing = await import('../engine/videoEditFirstFrameTiming')
+  const fresh = await import('./videoEditRenderCache')
+  const owner = state.instances[0] as (typeof state.instances)[number] & { activeSequenceId?: string }
+  owner.activeSequenceId = (state.composition as { id: string }).id
+  timing.beginVideoEditFirstFrame(owner.document.id, owner.activeSequenceId, 'open')
+  fresh.readVideoEditRenderCache(owner.document.id)
+  await vi.advanceTimersByTimeAsync(15_000)
+  expect(state.render).not.toHaveBeenCalled()
+  timing.recordVideoEditFirstFrame(owner.document.id, owner.activeSequenceId, {})
+  await vi.advanceTimersByTimeAsync(1100)
+  expect(state.render).toHaveBeenCalled()
+  timing.endVideoEditTiming(owner.document.id); state.instances = []; await vi.advanceTimersByTimeAsync(1000)
+})
 it('自动预渲染每渲完一帧歇同样长的时间；歇着时跳转播放头立即让出', async () => {
   useFakeClock()
   vi.resetModules()

@@ -105,13 +105,17 @@ it('WOFF 与 WOFF2 规范化保留完整表、可变轴、字形与轮廓，读�
   await expect(scanner.read(faces[0])).rejects.toThrow('发生变化')
 })
 
-it('缓存替换遇到临时占用会重试，发布完成后重启可读回完整目录', async () => {
+it('缓存内容不变不重写；替换遇到临时占用会重试，发布完成后重启可读回完整目录', async () => {
   const { source, library } = await setup()
   const scanner = new FontScanner(library, async () => [source])
-  const first = await scanner.scan()
-  const rename = vi.spyOn(fs, 'rename').mockRejectedValueOnce(Object.assign(new Error('暂时占用'), { code: 'EPERM' }))
-  expect((await scanner.scan()).faces).toEqual(first.faces)
+  await scanner.scan()
+  const rename = vi.spyOn(fs, 'rename')
+  // 缓存文件在被监听的字体库目录里，原样重写会让监听再触发一次扫描。
+  await scanner.scan(); expect(rename).not.toHaveBeenCalled()
+  await utimes(source, new Date(), new Date(Date.now() + 5000))
+  rename.mockRejectedValueOnce(Object.assign(new Error('暂时占用'), { code: 'EPERM' }))
+  const changed = await scanner.scan()
   expect(rename).toHaveBeenCalledTimes(2)
-  expect((await new FontScanner(library, async () => [source]).scan()).faces).toEqual(first.faces)
+  expect((await new FontScanner(library, async () => [source]).scan()).faces).toEqual(changed.faces)
   expect((await readdir(library)).filter(name => name.endsWith('.tmp'))).toEqual([])
 })

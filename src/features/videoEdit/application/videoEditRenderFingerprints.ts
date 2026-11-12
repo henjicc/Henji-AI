@@ -5,6 +5,7 @@ import { videoEditPictureTransitionWindows, videoEditPictureFilter, type VideoEd
 import { codeMaterialVersion } from '@/core/videoEdit/codeMaterialDocument'
 import { codeVersionContentKey } from '@/core/videoEdit/codeMaterial/sources'
 import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
+import { whenVideoEditFirstFrame } from '../engine/videoEditFirstFrameTiming'
 import { videoEditCodeInputs, type VideoEditCodeDeclarationReader, type VideoEditCodeInputs } from '@/core/videoEdit/codeInputParameters'
 import { isCodeImageReference } from '@/core/videoEdit/codeMaterial/contract'
 import { videoEditSceneRecordMediaIds } from '@/core/videoEdit/scene/sceneMedia'
@@ -131,6 +132,9 @@ export function videoEditRenderFingerprints(owner: VideoEditInstance, compositio
       const ahead = direction === 1 ? range.startFrame >= owner.frame : range.endFrame <= owner.frame
       return Math.min(Math.abs(range.startFrame - owner.frame), Math.abs(range.endFrame - owner.frame)) * 2 + (ahead ? 0 : composition.fps * 10)
     }
+    // 指纹计算另开渲染会话、编译全部代码版本：等节目首帧上屏后再开始，不和首帧抢。
+    await whenVideoEditFirstFrame(owner.document.id)
+    if (!alive()) { snapshot.running = false; return }
     logger.info('开始计算代码帧指纹', { event: 'video_edit.render_cache.start', context: { sequenceId: composition.id, phase: 'fingerprint', clips: entries.length } })
     try {
       while (completed.size < ranges.length) {

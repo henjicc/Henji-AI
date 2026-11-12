@@ -9,6 +9,7 @@ import { appendVideoEditClip, appendVideoEditMedia, appendVideoEditSequence, del
 import { setVideoEditAnnotationBrush } from './application/videoEditAnnotations'
 import { applyVideoEditBuiltinEffect, updateVideoEditBuiltinEffect } from './application/videoEditCompositing'
 import { VideoEditPreview } from './VideoEditPreview'
+import { releaseClosedVideoEditPrograms } from './engine/videoEditProgramPool'
 import * as renderCache from './application/videoEditRenderCache'
 import type { VideoEditPresentedSource } from './engine/videoEditRenderer'
 import type { RenderResponse } from './engine/videoEditWorker'
@@ -48,6 +49,8 @@ vi.mock('./engine/videoEditRenderSession', () => ({ VideoEditRenderSession: clas
   dispose = pixel.dispose
   mixAudio = pixel.mixAudio
   setRenderDivisor = pixel.scale
+  setSpaceDisplay = vi.fn(async () => undefined)
+  replaceContent = vi.fn(async () => undefined)
   setWebDisplayScale = pixel.webScale
   armPlayback = pixel.arm
   stopPlayback = stopNotification
@@ -63,7 +66,7 @@ beforeEach(() => {
   vi.stubGlobal('OffscreenCanvas', class {})
   HTMLCanvasElement.prototype.transferControlToOffscreen = vi.fn(() => ({} as OffscreenCanvas))
 })
-afterEach(async () => { cleanup(); await vi.advanceTimersByTimeAsync(5001); vi.useRealTimers(); for (const instance of listVideoEditInstances()) await closeVideoEditProject(instance.document.id); vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage() })
+afterEach(async () => { cleanup(); await vi.advanceTimersByTimeAsync(5001); vi.useRealTimers(); for (const instance of listVideoEditInstances()) await closeVideoEditProject(instance.document.id); await releaseClosedVideoEditPrograms(); vi.restoreAllMocks(); vi.unstubAllGlobals(); uninstallHarnessNativeStorage() })
 it('暂停时即使画面未变化或上一帧仍在解码，也立即通知 Worker 取消前瞻', async () => {
   const owner = await createVideoEditProject(); appendVideoEditClip(owner.document.id)
   const view = render(<VideoEditPreview instance={owner} onError={vi.fn()} />)
@@ -242,7 +245,7 @@ for (const late of ['cancelled', 'presented'] as const) it(`节目反向按实�
   const settled = late === 'cancelled' ? 4 : 3
   await act(async () => { pixel.requests[2].resolve(late === 'cancelled' ? { sourceTimestamps: [], presented: false, skipped: true } : { sourceTimestamps: [3 / 30], presented: true }); await vi.advanceTimersByTimeAsync(2) })
   expect(instance.frame).toBe(settled); expect(pixel.requests[3]).toMatchObject({ frame: settled, sequential: false, scrubbing: false })
-  view.unmount(); await act(async () => { pixel.requests[3].resolve({ sourceTimestamps: [settled / 30] }) }); expect(pixel.dispose).toHaveBeenCalledOnce()
+  view.unmount(); await act(async () => { pixel.requests[3].resolve({ sourceTimestamps: [settled / 30] }) }); expect(stopNotification).toHaveBeenLastCalledWith(settled); expect(pixel.dispose).not.toHaveBeenCalled()
 })
 it('连续定位呈现已完成帧并只读取最新目标，卸载后迟到响应不呈现', async () => {
   const instance = (await createVideoEditProject())!; appendVideoEditClip(instance.document.id)
@@ -258,7 +261,7 @@ it('连续定位呈现已完成帧并只读取最新目标，卸载后迟到响�
   // 跳过的一帧不触发重发，屏幕上仍是已完成的那一帧。
   expect(pixel.requests.map(request => request.frame)).toEqual([0, 7, 15]); expect(canvas.dataset.presentedFrame).toBe('0')
   view.unmount(); await act(async () => { pixel.requests[2].resolve({ sourceTimestamps: [.5] }) })
-  expect(canvas.dataset.presentedFrame).toBe('0'); expect(pixel.dispose).toHaveBeenCalledOnce()
+  expect(canvas.dataset.presentedFrame).toBe('0'); expect(pixel.dispose).not.toHaveBeenCalled()
 })
 it('参数修改更新同一渲染会话，旧文档结果不覆盖新内容且能够继续取帧', async () => {
   const instance = (await createVideoEditProject())!; appendVideoEditClip(instance.document.id)
@@ -425,16 +428,16 @@ it('没有序列时预热渲染会话，第一个序列出现时节目面板直�
   expect(onError).not.toHaveBeenCalled()
 })
 
-it('隐藏节目停止取帧并释放会话，显示后等待退休完成且迟到画面不发布', async () => {
+it('隐藏节目停止取帧、保留会话，再显示直接复用同一会话且迟到画面不发布', async () => {
   const owner = (await createVideoEditProject())!; const onError = vi.fn()
   const view = render(<VideoEditPreview instance={owner} onError={onError} />)
   await act(async () => { await Promise.resolve() }); const oldCanvas = view.getByLabelText('剪辑画面') as HTMLCanvasElement
-  let retire!: () => void; pixel.dispose.mockImplementationOnce(() => new Promise<void>(resolve => { retire = resolve }))
   act(() => view.rerender(<VideoEditPreview instance={owner} onError={onError} visible={false} />))
-  expect(pixel.dispose).toHaveBeenCalledOnce(); expect(view.queryByLabelText('剪辑画面')).toBeNull()
+  expect(pixel.dispose).not.toHaveBeenCalled(); expect(stopNotification).toHaveBeenCalled(); expect(view.queryByLabelText('剪辑画面')).toBeNull()
   act(() => view.rerender(<VideoEditPreview instance={owner} onError={onError} />))
-  await act(async () => { pixel.requests[0].resolve({ sourceTimestamps: [0] }) }); expect(oldCanvas.dataset.presentedFrame).toBeUndefined(); expect(pixel.sessions).toBe(1)
-  await act(async () => { retire() }); expect(pixel.sessions).toBe(2); expect(onError).not.toHaveBeenCalled()
+  await act(async () => { pixel.requests[0].resolve({ sourceTimestamps: [0] }); for (let index = 0; index < 5; index++) await Promise.resolve() })
+  expect(oldCanvas.dataset.presentedFrame).toBeUndefined(); expect(pixel.sessions).toBe(1); expect(pixel.dispose).not.toHaveBeenCalled()
+  expect(view.getByLabelText('剪辑画面')).toBe(oldCanvas); expect(onError).not.toHaveBeenCalled()
 })
 
 it('选择工具下直接拖画面：连续更新只写一次历史，改选区和Escape取消原手势，其他工具不拖动', async () => {
@@ -565,18 +568,14 @@ it('旧取帧失败不暂停后续节目命令', async () => {
   await act(async () => { pixel.requests[0].reject(new Error('旧解码失败')); await vi.advanceTimersByTimeAsync(1) })
   expect(owner).toMatchObject({ frame: 40, playing: true }); expect(pixel.requests[1].frame).toBe(40); expect(onError).not.toHaveBeenCalled(); view.unmount()
 })
-it('节目面板重挂载（停靠与浮窗间迁移）必须等旧渲染会话实际退场后才接入新显示面', async () => {
+it('节目面板在同一窗口重挂载（离开再进入剪辑）直接接管原会话，不新建、不释放', async () => {
   const instance = (await createVideoEditProject())!; appendVideoEditClip(instance.document.id)
-  let finishDispose!: () => void
-  pixel.dispose.mockImplementationOnce(() => new Promise<void>(resolve => { finishDispose = resolve }))
   const first = render(<VideoEditPreview instance={instance} onError={vi.fn()} />)
   await act(async () => { await Promise.resolve() }); expect(pixel.sessions).toBe(1)
   first.unmount()
   const moved = render(<VideoEditPreview instance={instance} onError={vi.fn()} />)
-  await act(async () => { await Promise.resolve(); await Promise.resolve() })
-  expect(pixel.sessions).toBe(1); expect(moved.queryByLabelText('剪辑画面')).toBeNull()
-  await act(async () => { finishDispose(); await Promise.resolve(); await Promise.resolve() })
-  expect(pixel.sessions).toBe(2); expect(moved.getByLabelText('剪辑画面')).toBeTruthy()
+  await act(async () => { for (let index = 0; index < 5; index++) await Promise.resolve() })
+  expect(pixel.sessions).toBe(1); expect(pixel.dispose).not.toHaveBeenCalled(); expect(moved.getByLabelText('剪辑画面')).toBeTruthy()
   moved.unmount()
 })
 it('GPU 丢失释放旧会话后重建；连续失效停止自动重试，避免反复占用资源', async () => {
@@ -824,12 +823,15 @@ it('删除唯一空序列时已挂载节目会话安全退出，撤销后可重�
   const owner = await createVideoEditProject(); const id = owner.document.id; const onError = vi.fn()
   const view = render(<VideoEditPreview instance={owner} onError={onError} />)
   await act(async () => { await Promise.resolve() })
+  const canvas = view.getByLabelText('剪辑画面')
   await act(async () => { deleteVideoEditSequence(id, owner.activeSequenceId); view.rerender(<VideoEditPreview instance={owner} onError={onError} />) })
   await act(async () => { await vi.advanceTimersByTimeAsync(20) })
-  expect(pixel.dispose).toHaveBeenCalled()
+  // 工程还开着：会话停播放后被保留，不释放。
+  expect(view.queryByLabelText('剪辑画面')).toBeNull(); expect(stopNotification).toHaveBeenCalled(); expect(pixel.dispose).not.toHaveBeenCalled()
   expect(onError).not.toHaveBeenCalled()
   await act(async () => { undoVideoEdit(id); view.rerender(<VideoEditPreview instance={owner} onError={onError} />) })
-  expect(view.getByLabelText('剪辑画面')).toBeTruthy()
+  await act(async () => { for (let index = 0; index < 5; index++) await Promise.resolve() })
+  expect(view.getByLabelText('剪辑画面')).toBe(canvas); expect(pixel.dispose).not.toHaveBeenCalled()
   expect(onError).not.toHaveBeenCalled()
 })
 
