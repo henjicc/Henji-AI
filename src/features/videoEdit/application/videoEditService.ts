@@ -1274,11 +1274,11 @@ export function closeVideoEditProject(id: string): Promise<void> {
   return operation
 }
 
-/** 释放只为后台读写持有的剪辑（通用文档操作移到回收站前调用）：界面正在显示、导出中或正在离开时拒绝。 */
+/** 释放只为后台读写持有的剪辑（通用文档操作移到回收站前调用）：导出等任务进行中或正在离开时拒绝。是否正在前台编辑由通用文档操作统一判断。 */
 export async function releaseVideoEditDocument(id: string): Promise<boolean> {
   const instance = instances.get(id)
   if (!instance || instance.session.isEnded) return true
-  if (instance.busy || activities.get(instance)?.size || leaving.has(id) || activeId === id) return false
+  if (instance.busy || activities.get(instance)?.size || leaving.has(id)) return false
   await closeVideoEditProject(id)
   return true
 }

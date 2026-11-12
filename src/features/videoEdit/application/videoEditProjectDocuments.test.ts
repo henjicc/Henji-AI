@@ -136,13 +136,14 @@ describe('收集素材与后台释放', () => {
     expect(stored[0].assetContent).toEqual(FRESH_CONTENT); expect(stored[1]).not.toHaveProperty('assetContent')
   })
 
-  it('界面正在显示的剪辑不能被后台释放；没在显示的写完关闭', async () => {
+  it('剪辑工作区切走后，上次停留的剪辑也能被后台释放；另一份保持打开', async () => {
     const shown = await createVideoEditProject()
-    expect(await releaseVideoEditDocument(shown.document.id)).toBe(false)
     const other = commands.seedProject({ name: '后台' })
     const { openVideoEditDocument } = await import('./videoEditService')
     const background = await openVideoEditDocument({ id: (await operations.createDocument({ kind: 'video_edit', container: { kind: 'project', projectId: other.id }, name: '后台' })).id }, { focus: false })
+    expect(await releaseVideoEditDocument(shown.document.id)).toBe(true)
+    expect(listVideoEditInstances()).toEqual([background])
     expect(await releaseVideoEditDocument(background.document.id)).toBe(true)
-    expect(listVideoEditInstances()).toEqual([shown])
+    expect(listVideoEditInstances()).toEqual([])
   })
 })
