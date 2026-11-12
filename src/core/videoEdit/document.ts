@@ -168,7 +168,7 @@ export const VIDEO_EDIT_SPACE_ENVIRONMENTS = ['none', 'studioNeutral', 'studioWa
 export type VideoEditSpaceEnvironment = typeof VIDEO_EDIT_SPACE_ENVIRONMENTS[number]
 /** 三维的成片渲染：导出、选帧、封面与预渲染按它出画；节目监视器看片的显示方式是本机查看状态，不在这里。 */
 export const videoEditSpaceRenderSchema = z.object({
-  finalRenderer: z.enum(['realtime', 'pathTrace']).optional().describe('成片的三维渲染器：realtime 实时（与节目监视器“实时”同一画面，快，默认）；pathTrace 路径追踪（全局光照、真实反射折射与景深，1080P 每帧约数秒到数十秒；不做运动模糊）。'),
+  finalRenderer: z.enum(['realtime', 'pathTrace']).optional().describe('成片的三维渲染器：realtime 实时（与节目监视器“实时”同一画面，快，默认）；pathTrace 路径追踪（全局光照、真实反射折射与景深，1080p 每帧约数秒到数十秒；不做运动模糊）。'),
   pathTraceSamples: z.number().int().min(16).max(4096).optional().describe('路径追踪每像素采样数，省略为 256；越多噪点越少、越慢，大致与采样数成正比。'),
   bloom: z.number().min(0).max(3).optional().describe('泛光强度 0–3，省略为 0（不开）：亮处向四周发光，发光粒子、灯、高光更有光感。'),
   bloomThreshold: z.number().min(0).max(2).optional().describe('泛光阈值 0–2，省略为 0.75：亮度超过它的部分才发光；调低连较暗的面也泛光，调高只有灯与强高光泛光。'),

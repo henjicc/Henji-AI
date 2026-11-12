@@ -8,7 +8,7 @@ export const videoEditSubtitleStyleSchema = videoEditTextStyleSchema.extend({
   verticalAlign: videoEditTextStyleSchema.shape.verticalAlign.default('bottom'),
   strokes: videoEditTextStyleSchema.shape.strokes.default([{ enabled: true, color: BLACK_HEX, width: 2, position: 'outside' }]),
   fontSize: videoEditTextStyleSchema.shape.fontSize.default(48),
-  bottomMargin: z.number().finite().min(0).max(1).default(.1).describe('底部安全区占画幅高度比例，0–1；字号和空间样式按 1080P 参考画幅缩放。'),
+  bottomMargin: z.number().finite().min(0).max(1).default(.1).describe('底部安全区占画幅高度比例，0–1；字号和空间样式按1080p参考画幅缩放。'),
 }).strict()
 export type VideoEditSubtitleStyle = z.infer<typeof videoEditSubtitleStyleSchema>
 const plain = videoEditSubtitleStyleSchema.parse({ strokes: [{ color: BLACK_HEX, width: 2, position: 'outside' }] })

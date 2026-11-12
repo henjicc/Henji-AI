@@ -22,7 +22,7 @@ export const videoEditCaptionSchema = z.object({ id, clipId: id.optional(), star
   reviewReasons: videoEditCaptionReviewSchema.optional().describe('剪辑后待复核的正文、译文或估算时间；确认对应内容后可清空。'),
   translation: z.string().trim().max(2000).optional().describe('第二语言字幕，显示在原文下方；空字符串清除翻译。'),
   // Reflection's shared unset-value convention is the empty string; make it a valid schema value.
-  style: z.union([videoEditSubtitleStyleSchema, z.literal('')]).optional().describe('共享文字样式，空间量以 1080P 为参考，bottomMargin为底部安全区比例0–1；空字符串恢复默认。'),
+  style: z.union([videoEditSubtitleStyleSchema, z.literal('')]).optional().describe('共享文字样式，空间量以1080p为参考，bottomMargin为底部安全区比例0–1；空字符串恢复默认。'),
 }).strict()
 export type VideoEditMarker = z.infer<typeof videoEditMarkerSchema>
 export type VideoEditCaption = z.infer<typeof videoEditCaptionSchema>
