@@ -37,10 +37,11 @@ async function runDeveloperTest(request: DeveloperTestRequest): Promise<Develope
     if (request.kind === 'asr') {
       // 与音频编辑的正式转写用同一组时间戳参数，测出来的结果才可比
       const entry = ASR_CATALOG.find((item) => item.descriptor.id === request.modelId)
-      const output = await timestampedAsrService.client.execute<unknown, SpeechRecognitionOutput>(request.modelId, {
+      // 测试台没有任务回执（付费确认在渲染层发起前完成），明确声明后才放行
+      const output = await timestampedAsrService.withoutReceipt(() => timestampedAsrService.client.execute<unknown, SpeechRecognitionOutput>(request.modelId, {
         audio: { kind: 'media-ref', ref: request.audioPath }, language: request.language ?? 'zh', punctuation: true, timestamps: true,
         ...(entry?.timestampOptions ? { options: entry.timestampOptions } : {}),
-      }, { requestId: request.requestId, signal: controller.signal })
+      }, { requestId: request.requestId, signal: controller.signal }))
       const elapsedMs = Date.now() - startedAt
       logger.info('测试台调用完成', { event: 'developer_test.completed', requestId: request.requestId, modelId: request.modelId, context: { kind: 'asr', elapsedMs, textChars: output.text.length, segments: output.segments?.length ?? 0 } })
       return { kind: 'asr', elapsedMs, output }

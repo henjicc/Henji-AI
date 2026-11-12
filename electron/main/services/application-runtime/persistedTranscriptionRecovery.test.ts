@@ -4,7 +4,7 @@ import type { OperationRecord } from './operationStore'
 import type { AudioEditStoredTask } from '../audio-edit/task-store'
 
 const record: OperationRecord = { operationId: 'operation', callerId: 'caller', inputDigest: '', input: {}, capabilityId: 'generate_video_edit_subtitles', state: 'unknown', requestId: 'request' }
-const task: AudioEditStoredTask & { document_id: string } = { request_id: 'request', document_id: 'audio', state: 'failed', provider_task_id: null, result_json: null, input_digest: '' }
+const task: AudioEditStoredTask & { document_id: string } = { request_id: 'request', document_id: 'audio', state: 'failed', provider_task_id: null, result_json: null, input_digest: '', updated_at: 1 }
 it('重载后仅凭明确的提交前错误改判未执行', () => {
   expect(recoverPersistedTranscriptionOperation(() => ({ ...task, error_message: '[native_upload_unsupported] 宿主未提供本地文件直传' }), record)).toMatchObject({ state: 'not_executed', verificationState: 'verified', result: { error: { details: { execution: { billing: 'not_charged' } } } } })
   expect(recoverPersistedTranscriptionOperation(() => undefined, record)).toBeUndefined()

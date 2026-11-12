@@ -71,6 +71,7 @@ import { getAiProviderApiKey } from './services/keystore'
 import { appendLogEvents, createMainLogger, runLogRetention } from './services/logging'
 import { getLogDir } from './services/logging/writer'
 import { holdCommandLineMarker, isCommandLineProcessRunning } from './services/command-line-marker'
+import { markInterruptedAudioEditTasks } from './services/audio-edit/task-store'
 import { bindApplicationShutdown } from './application-shutdown'
 import { initializeUpdater } from './services/updater'
 import { scheduleStartupDocumentIndexScan } from './services/documents/runtime'
@@ -218,6 +219,8 @@ app.whenReady().then(async () => {
 `)
     else void dialog.showMessageBox({ type: 'warning', title: 'Henji AI', message })
   }
+  // 命令行进程与主应用并存，不能替主应用判定哪些任务已中断；主应用只有一个实例，由它在启动时收拾上次留下的。
+  if (!commandLineProcess) markInterruptedAudioEditTasks(isCommandLineProcessRunning())
   configureMacDockIcon()
   registerMediaProtocolHandler()
   runElectronHostSelfCheck(sdkRuntimeContext)

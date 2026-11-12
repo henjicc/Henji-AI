@@ -20,7 +20,7 @@ vi.mock('./timestamped-asr', async importOriginal => ({ ...await importOriginal<
 vi.mock('./audio-worker-client', () => ({ invokeAudioWorker: vi.fn(async (command: { input_path: string; output_path: string }) => { await fs.copyFile(command.input_path, command.output_path); return { sampleRate: 48000 } }) }))
 vi.mock('./task-store', () => ({
   getAudioEditStoredTask: (id: string) => ledger.get(id),
-  createAudioEditTask: (input: { requestId:string;projectId:string;inputDigest:string }) => { if (ledger.has(input.requestId)) throw new Error('duplicate'); ledger.set(input.requestId,{request_id:input.requestId,document_id:input.projectId,input_digest:input.inputDigest,state:'queued',provider_task_id:null,result_json:null}) },
+  createAudioEditTask: (input: { requestId:string;projectId:string;inputDigest:string }) => { if (ledger.has(input.requestId)) throw new Error('duplicate'); ledger.set(input.requestId,{request_id:input.requestId,document_id:input.projectId,input_digest:input.inputDigest,state:'queued',provider_task_id:null,result_json:null,updated_at:0}) },
   updateAudioEditTask: (id:string, patch:{state?:AudioEditStoredTask['state'];providerTaskId?:string;result?:unknown}) => {
     if (patch.state === 'completed' && failures.completion) { failures.completion = false; throw new Error('receipt write failed') }
     const entry = ledger.get(id)
@@ -115,7 +115,7 @@ describe('E06/E09 零网络录音与转写生命周期',()=>{
     vi.mocked(asr.preflight).mockRejectedValueOnce(new Error('native_upload_unsupported'))
     await expect(service.preflight(preflight)).rejects.toThrow('native_upload_unsupported')
     expect(asr.execute).not.toHaveBeenCalled(); expect(ledger.size).toBe(0)
-    await service.preflight(preflight); expect(asr.preflight).toHaveBeenLastCalledWith(expect.objectContaining({sourcePath:path.join(root,sessionId,`${chunkId}.wav`),durationMs:100}))
+    await service.preflight(preflight); expect(asr.preflight).toHaveBeenLastCalledWith(expect.objectContaining({sourcePath:path.join(root,sessionId,`${chunkId}.wav`),durationMs:100}), 9644)
   })
   it('分块写入幂等；字节错误拒绝；已完成回执不重新转写',async()=>{
     const asr=fixtureAsr(); const service=new ExplanationAudioService(root,asr)
@@ -129,7 +129,7 @@ describe('E06/E09 零网络录音与转写生命周期',()=>{
   it('未知提交不重发；恢复只交给共用入口原任务身份',async()=>{
     const asr=fixtureAsr(); const service=new ExplanationAudioService(root,asr); await service.write({action:'write',sessionId,chunkId,sampleRate:48000,samples:synthetic()})
     const archived=await service.archive(sessionId);const retained=path.join(root,'private-retained.zip');await fs.copyFile(archived.path,retained)
-    vi.mocked(asr.execute).mockRejectedValueOnce(new Error('private transcript/url MUST NOT escape'))
+    vi.mocked(asr.execute).mockImplementationOnce(async (_plan, context) => { context.onSubmitting?.(); throw new Error('private transcript/url MUST NOT escape') })
     await expect(service.transcribe(request())).rejects.toThrow('讲解转写未完成')
     await service.release(sessionId);await service.restore({action:'restore',sessionId,...archived,path:retained})
     await expect(service.transcribe({...request(),resume:true})).rejects.toThrow('禁止重新发送'); expect(asr.execute).toHaveBeenCalledTimes(1)

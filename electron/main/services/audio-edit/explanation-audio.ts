@@ -7,7 +7,7 @@ import { createReadStream, createWriteStream } from 'node:fs'
 import { ZipArchive } from 'archiver'
 import { openZip, iterateEntries, readEntryBytes, isSymbolicLinkEntry } from '../zip-archive'
 import { encodeRecordingWav, recordingAudioSessionIdSchema, type RecordingAudioRequest, type RecordingAudioResult } from '../../../../src/core/audioEdit/recordingAudio'
-import { timestampedAsrService, prepareTimestampedAsrWithReceipt, executeTimestampedAsrWithReceipt, type TimestampedAsrService, type TimestampedAsrReceipt } from './timestamped-asr'
+import { timestampedAsrService, prepareTimestampedAsrWithReceipt, executeTimestampedAsrWithReceipt, timestampedAsrNeverSubmitted, type TimestampedAsrService, type TimestampedAsrReceipt } from './timestamped-asr'
 import { createAudioEditTask, updateAudioEditTask, registerAudioEditTaskController, deleteAudioEditTasks, getAudioEditStoredTask } from './task-store'
 import { createMainLogger } from '../logging'
 import { withPreprocessedSpeech } from './speech-preprocess'
@@ -123,16 +123,17 @@ export class ExplanationAudioService {
     const existing = getAudioEditStoredTask(request.requestId)
     if (existing && (existing.document_id !== projectId || existing.input_digest !== inputDigest)) throw new Error('转写任务与录音不符。')
     const prior = existing?.result_json ? JSON.parse(existing.result_json) as ExplanationTranscriptionReceipt : undefined
-    const neverSubmitted = existing?.state === 'failed' && prior?.billing === 'not_charged'
+    const neverSubmitted = existing ? timestampedAsrNeverSubmitted(existing, prior) : false
     if (existing && !prior?.output && !prior?.rawOutput && !neverSubmitted && (!request.resume || !existing.provider_task_id)) throw new Error('提交结果尚未确认，禁止重新发送收费请求。请核对原任务。')
-    return { audioPath, durationMs, projectId, inputDigest, sourceDigest: identity.digest, existing, prior, neverSubmitted }
+    return { audioPath, durationMs, projectId, inputDigest, sourceDigest: identity.digest, bytes: identity.bytes, existing, prior, neverSubmitted }
   }
   async preflight(request: Extract<RecordingAudioRequest, { action: 'preflight' }>): Promise<void> {
     if (this.active.has(request.sessionId)) throw new Error('这次讲解正在转写，请等待或取消。')
-    const { audioPath, durationMs, existing, prior, neverSubmitted } = await this.prepareRecording(request)
+    const { audioPath, durationMs, bytes, existing, prior, neverSubmitted } = await this.prepareRecording(request)
     if (prior?.output || prior?.rawOutput) return
     if (!neverSubmitted && existing?.provider_task_id) { this.asr.prepare({ modelId: request.modelId, audioPath, durationMs }); return }
-    await this.asr.preflight({ modelId: request.modelId, sourcePath: audioPath, durationMs })
+    // 上传的是同规格的预处理副本，按这段录音的实际大小核对上限
+    await this.asr.preflight({ modelId: request.modelId, sourcePath: audioPath, durationMs }, bytes)
   }
   async transcribe(request: Extract<RecordingAudioRequest, { action: 'transcribe' }>): Promise<RecordingAudioResult> {
     if (this.active.has(request.sessionId)) throw new Error('这次讲解正在转写，请等待或取消。')
@@ -148,7 +149,7 @@ export class ExplanationAudioService {
     const { audioPath: originalPath, durationMs, projectId, inputDigest, sourceDigest, existing, prior, neverSubmitted } = await this.prepareRecording(request)
     const audioPath = processedPath ?? originalPath
     if (prior?.output) return prior.output
-    if (!existing || neverSubmitted) await this.asr.preflight({ modelId: request.modelId, sourcePath: audioPath, durationMs })
+    if (!existing || neverSubmitted) await this.asr.preflight({ modelId: request.modelId, sourcePath: audioPath, durationMs }, (await fs.stat(audioPath)).size)
     const plan = prepareTimestampedAsrWithReceipt(this.asr, { modelId: request.modelId, audioPath, durationMs }, prior, sourceDigest)
     const receipt: ExplanationTranscriptionReceipt = { modelId: plan.modelId, sourceDigest, language: plan.language,
       billing: prior?.rawOutput ? 'completed' : existing && !neverSubmitted ? 'unknown' : 'not_charged', rawOutput: prior?.rawOutput }

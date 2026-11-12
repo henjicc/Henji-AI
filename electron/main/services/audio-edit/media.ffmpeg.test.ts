@@ -65,3 +65,38 @@ it.each([
     }
   } finally { await copy.close() }
 })
+
+it.each(['opus', 'pcm16'] as const)('转写副本（%s）：16 kHz 单声道，开头与结尾的声音位置与原素材对齐', async encoding => {
+  // 44.1 kHz 立体声（与上一支片子的录音同规格）：静音里放两段 40 ms 汉宁窗 440 Hz 音，比较副本解码后能量重心的位置。
+  // 用低频音而不是噪声：8 kHz 以上的能量会被 16 kHz 重采样滤掉，噪声的重心会随之随机挪动。
+  const rate = 44100, bursts = [0.5, 9.3]
+  const file = path.join(state.root, `bursts-${encoding}.wav`)
+  const expression = `(${bursts.map(start => `between(t,${start},${start + 0.04})*(0.5-0.5*cos(2*PI*(t-${start})/0.04))`).join('+')})*0.5*sin(2*PI*440*t)`
+  // 两个声道内容相同：混成单声道后能量分布与原素材成比例，重心可以直接比。
+  await runAudioEditProcess(await loadFfmpegPath(), ['-v', 'error', '-y', '-f', 'lavfi', '-i', `aevalsrc=exprs='${expression}':s=${rate}:d=10`, '-ac', '2', '-c:a', 'pcm_f32le', file])
+  const source = await media.probeAudioEditSource(file)
+  const project = { id: `asr-copy-${encoding}`, name: 'bursts', revision: 1, createdAt: 0, updatedAt: 0, referenceScript: '', transcript: [], suggestions: [], source } as AudioEditProjectDocument
+  const copy = await media.prepareAudioEditTranscriptionAudio(project, encoding)
+  const decoded = path.join(state.root, `decoded-${encoding}.wav`)
+  await runAudioEditProcess(await loadFfmpegPath(), ['-v', 'error', '-y', '-i', copy.path, '-ar', '16000', '-c:a', 'pcm_f32le', decoded])
+  // 窗口内按能量加权的平均时刻（秒）：编码和重采样只会对称地抹开边缘，重心不动。
+  const centroid = async (wav: string, start: number): Promise<number> => {
+    const reader = (await openF32Wav(wav))!
+    try {
+      const first = Math.floor((start - 0.05) * reader.sampleRate), count = Math.ceil(0.12 * reader.sampleRate)
+      const pcm = await reader.read(first, count)
+      let weight = 0, moment = 0
+      for (let frame = 0; frame < count; frame++) {
+        let energy = 0
+        for (let channel = 0; channel < reader.channels; channel++) energy += pcm[frame * reader.channels + channel] ** 2
+        weight += energy; moment += energy * (first + frame)
+      }
+      return moment / weight / reader.sampleRate
+    } finally { await reader.close() }
+  }
+  const output = (await openF32Wav(decoded))!
+  expect(output.channels).toBe(1)
+  expect(Math.abs(output.frames / 16000 - 10)).toBeLessThan(0.001)
+  await output.close()
+  for (const start of bursts) expect(Math.abs(await centroid(decoded, start) - await centroid(file, start)) * 1000).toBeLessThan(0.2)
+})

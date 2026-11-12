@@ -7,7 +7,7 @@ import { createNativeStreamFetch } from '../ai-runtime/native-stream-fetch'
 
 vi.mock('../keystore', () => ({ getAiProviderApiKey: () => undefined }))
 vi.mock('../ai-runtime/native-file-upload', () => ({ resolveUploadFile: vi.fn(async (ref: string) => ref), scopedUploadFile: vi.fn(async (ref: string) => ref) }))
-vi.mock('../logging', () => ({ createMainLogger: () => ({ info: vi.fn(), error: vi.fn() }) }))
+vi.mock('../logging', () => ({ createMainLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 vi.mock('../ai-runtime/sdk-runtime', () => ({ sdkRuntimeContext: { transport: { fetch: async () => { throw new Error('REAL_NETWORK_FORBIDDEN') } }, credentials: { get: () => undefined }, media: { read: async () => { throw new Error('REAL_MEDIA_FORBIDDEN') } } } }))
 
 import { createTimestampedAsrService } from './timestamped-asr'
@@ -58,6 +58,18 @@ describe('共用 SDK 带时间转写（零网络替身 transport）', () => {
     await expect(createTimestampedAsrService(rt, () => true, media).preflight(input)).resolves.toMatchObject({ modelId: input.modelId, cost: { status: 'estimated', currency: 'CNY', amount: input.durationMs / 1000 * .00022 } })
     expect(fetch).not.toHaveBeenCalled(); expect(rt.transport.uploadFile).not.toHaveBeenCalled()
   })
+  it('按时长估算的上传副本超过所选模型上限时，确认付费之前就给出换模型的提示', async () => {
+    const service = createTimestampedAsrService(runtime(vi.fn()), () => true, async () => 'voice.wav')
+    const minutes = (value: number): number => value * 60_000
+    // 短音频内联上限 7.5 MB：16 位 PCM 约 3.9 分钟
+    const short = 'bailian.speech-recognition.qwen-audio-3.1-asr-flash'
+    await expect(service.preflight({ sourcePath: 'voice.wav', durationMs: minutes(10), modelId: short })).rejects.toMatchObject({ code: 'media_too_large', details: { billing: 'not_charged' } })
+    await expect(service.preflight({ sourcePath: 'voice.wav', durationMs: minutes(10), modelId: short })).rejects.toThrow('换用百炼')
+    await expect(service.preflight({ sourcePath: 'voice.wav', durationMs: minutes(3), modelId: short })).resolves.toBeTruthy()
+    // Opus 一小时约 14 MB，Groq 附件 25 MB 装得下；一百分钟就超了
+    await expect(service.preflight({ sourcePath: 'voice.wav', durationMs: minutes(60), modelId: 'groq.speech-recognition.whisper-large-v3-turbo' })).resolves.toBeTruthy()
+    await expect(service.preflight({ sourcePath: 'voice.wav', durationMs: minutes(100), modelId: 'groq.speech-recognition.whisper-large-v3-turbo' })).rejects.toThrow('换用百炼')
+  })
   it('Groq 字段构造 fixture 的秒由 SDK 变为毫秒，明确同时请求 word+segment', async () => {
     const fetch = vi.fn(async (_url: string, init?: RequestInit) => {
       const form = await new Request(_url, init).formData()
@@ -97,6 +109,26 @@ describe('共用 SDK 带时间转写（零网络替身 transport）', () => {
     const output = await service.execute(plan, context())
     expect(output).toMatchObject({ text: '你好世界', words: [{ startMs: 0, endMs: 520 }, { startMs: 520, endMs: 1_080 }] })
     expect(inputRuntime.transport.uploadFile).toHaveBeenCalledTimes(1)
+  })
+  it('申请凭证与临时存储上传期间回执保持未计费，提交识别任务的写请求发出前才记为结果未知', async () => {
+    const order: string[] = []
+    const fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes('/uploads?action=getPolicy')) { order.push('policy'); return json({ data: { upload_host: 'https://oss.invalid/', upload_dir: 'tmp/fixture', policy: 'fixture', signature: 'fixture', oss_access_key_id: 'fixture', x_oss_object_acl: 'private', x_oss_forbid_overwrite: 'true', max_file_size_mb: 10 } }) }
+      if (url.endsWith('/services/audio/asr/transcription')) { order.push(`submit:${init?.method}`); return json({ output: { task_id: 'fixture-task', task_status: 'SUCCEEDED', results: [{ subtask_status: 'SUCCEEDED', transcription_url: 'https://result.invalid/' }] } }) }
+      if (url === 'https://result.invalid/') return json(fixture('bailian', 'asr-file-result.json'))
+      throw new Error(`UNEXPECTED_FIXTURE_REQUEST:${url}`)
+    })
+    const inputRuntime = runtime(fetch)
+    inputRuntime.transport.uploadFile = vi.fn(async () => { order.push('upload'); return new Response('', { status: 200 }) })
+    const service = createTimestampedAsrService(inputRuntime, (id) => id === 'bailian')
+    const plan = service.prepare({ modelId: 'bailian.speech-recognition.fun-asr', audioPath: 'recording.ogg', durationMs: 1_080 })
+    await service.execute(plan, { ...context(), onSubmitting: () => { order.push('submitting') } })
+    expect(order).toEqual(['policy', 'upload', 'submitting', 'submit:POST'])
+    // 同步识别：携带音频的那个请求本身就可能计费。
+    const groqOrder: string[] = []
+    const groq = createTimestampedAsrService(runtime(vi.fn(async () => { groqOrder.push('request'); return json(fixture('groq-asr', 'transcription-verbose.json')) })), (id) => id === 'groq')
+    await groq.execute(groq.prepare({ audioPath: 'recording.ogg', durationMs: 2_400 }), { ...context(), onSubmitting: () => { groqOrder.push('submitting') } })
+    expect(groqOrder).toEqual(['submitting', 'request'])
   })
   it('明确选择失效、仅文本或远端输入模型时拒绝，不偷偷换模型', () => {
     const fetch = vi.fn(async () => json({}))

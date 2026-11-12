@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
 import {
   AiRuntimeError,
   bailianNonRealtimeAsrPresets,
@@ -5,9 +6,9 @@ import {
   createSiliconFlowAsrModule, createVolcengineAsrModule,
   groqWhisperLargeV3, groqWhisperLargeV3Turbo,
   siliconFlowSenseVoiceSmall, volcengineSeedAsrFile,
-  type RuntimeContext, type SpeechRecognitionEvent, type SpeechRecognitionOutput,
+  type RuntimeContext, type SpeechRecognitionEvent, type SpeechRecognitionOutput, type Transport,
 } from '@henjicc/ai-sdk'
-import { ASR_CATALOG, estimateAsrCost, type AsrCostEstimate, asrProviderId, isTimestampedLocalAsr, resolveTimestampedLocalAsr } from '../../../../src/core/audioEdit/asrCatalog'
+import { ASR_CATALOG, asrUploadLimitProblem, estimateAsrCost, type AsrCostEstimate, asrProviderId, isTimestampedLocalAsr, resolveTimestampedLocalAsr } from '../../../../src/core/audioEdit/asrCatalog'
 import { normalizeTimestampedTranscript, type TimestampedTranscript } from '../../../../src/core/audioEdit/timestampedTranscript'
 import { getAiProviderApiKey } from '../keystore'
 import { sdkRuntimeContext } from '../ai-runtime/sdk-runtime'
@@ -40,9 +41,12 @@ interface TimestampedAsrModel {
 export interface TimestampedAsrService {
   client: ReturnType<typeof createCapabilityClient>
   listModels(): TimestampedAsrModel[]
-  preflight(input: TranscriptionPreflight): Promise<{ modelId: string; cost: AsrCostEstimate }>
+  /** uploadBytes：实际要上传的文件大小（已知时，比按时长估算准）。 */
+  preflight(input: TranscriptionPreflight, uploadBytes?: number): Promise<{ modelId: string; cost: AsrCostEstimate }>
   prepare(input: { modelId?: string; providerId?: string; audioPath: string; durationMs: number; language?: string }): TimestampedTranscriptionPlan
   execute(plan: TimestampedTranscriptionPlan, context: TimestampedAsrExecutionContext): Promise<TimestampedTranscript>
+  /** 明确声明不需要付费回执的调用（开发者测试台直接用 client 测模型）：只在这里面放行写请求，正式转写不走这里。 */
+  withoutReceipt<T>(work: () => Promise<T>): Promise<T>
 }
 
 export interface TimestampedAsrExecutionContext {
@@ -52,6 +56,8 @@ export interface TimestampedAsrExecutionContext {
   onEvent?: (event: SpeechRecognitionEvent) => void | Promise<void>
   /** 供应商完成后、取消与本地规范化前，由 owner 持久化已付费原始 DTO。 */
   onOutput?: (output: SpeechRecognitionOutput) => void | Promise<void>
+  /** 第一个可能计费的请求发出之前调用并等待；抛错则不发出。 */
+  onSubmitting?: () => void
 }
 
 /** 两种 owner 共用的付费事实；最终结果和任务状态仍由各自 owner 保存。 */
@@ -61,6 +67,16 @@ export interface TimestampedAsrReceipt {
   language?: string
   billing?: TranscriptionFacts['billing']
   rawOutput?: SpeechRecognitionOutput
+}
+
+/**
+ * 上一次识别是否从未把请求交给供应商：任务已经结束（失败或取消；进程退出遗留的运行中由启动或下一次转写先记为中断），
+ * 回执明确记为未计费，没有供应商任务号，也没有已付费结果。仍在运行中的一律不算：可能有别的进程正在上传或提交。
+ * 历史回执里 native_upload_unsupported 的错误同样是零提交证据。
+ */
+export function timestampedAsrNeverSubmitted(task: { state: string; provider_task_id: string | null; error_message?: string | null }, receipt: TimestampedAsrReceipt | undefined): boolean {
+  if ((task.state !== 'failed' && task.state !== 'cancelled') || task.provider_task_id || receipt?.rawOutput) return false
+  return receipt?.billing === 'not_charged' || Boolean(task.error_message?.startsWith('[native_upload_unsupported]'))
 }
 
 export function prepareTimestampedAsrWithReceipt(
@@ -94,9 +110,17 @@ export async function executeTimestampedAsrWithReceipt(
       if (!entry) throw new Error('原转写模型不在目录中，请保留已付费结果。')
       return normalizeTimestampedTranscript(receipt.rawOutput, plan.durationMs, entry.wordGranularity)
     }
-    receipt.billing = context.resumeTaskId ? 'submitted' : 'unknown'
+    // 上传期间仍记为未计费：这时取消或进程退出，下次可以放心重新提交；写请求发出前才改成结果未知。
+    receipt.billing = context.resumeTaskId ? 'submitted' : 'not_charged'
     persist({ ...receipt })
     const output = await service.execute(plan, { ...context,
+      onSubmitting: () => {
+        if (receipt.billing !== 'not_charged') return
+        // 先写成功再改内存：owner 写不进去（任务已被接管）时抛错，请求不发，这次仍是未计费
+        persist({ ...receipt, billing: 'unknown' })
+        receipt.billing = 'unknown'
+        context.onSubmitting?.()
+      },
       onOutput: async output => {
         receipt.rawOutput = output
         receipt.billing = 'completed'
@@ -117,8 +141,35 @@ export async function executeTimestampedAsrWithReceipt(
   }
 }
 
+/** 当前这次识别的提交钩子；按异步上下文找到，同一时刻可以有多份识别在跑。 */
+const submissionHook = new AsyncLocalStorage<() => void>()
+
+/**
+ * 识别前的准备都不计费：只读请求（申请临时存储凭证、查询任务）和临时存储直传（uploadFile）。
+ * 第一个写请求（提交识别任务，或携带音频的同步识别）发出前先通知 owner 把回执记为结果未知，
+ * 所以回执还是“未计费”时进程退出或取消，供应商一定没收到识别请求。
+ */
+function watchSubmission(transport: Transport): Transport {
+  const beforeWrite = (method: string): void => {
+    if (method === 'GET' || method === 'HEAD') return
+    const hook = submissionHook.getStore()
+    // 找不到这次识别的回执（异步上下文丢了）就不发：回执会一直写着“未计费”，发出去之后中断就可能重复付费
+    if (!hook) {
+      logger.warn('识别写请求不在回执上下文里，已阻止发送', { event: 'audio_edit.timestamped_asr.submission_unscoped' })
+      throw new AiRuntimeError('host_capability_unsupported', '识别请求缺少付费回执，已阻止发送；未提交、未计费。', { retryable: false, billing: 'not_charged', execution: { notExecuted: true } })
+    }
+    hook()
+  }
+  const { fetchStream } = transport
+  return {
+    ...transport,
+    fetch: async (url, init) => { beforeWrite((init?.method ?? 'GET').toUpperCase()); return transport.fetch(url, init) },
+    ...(fetchStream ? { fetchStream: async (url: string, init: Parameters<typeof fetchStream>[1]) => { beforeWrite('POST'); return fetchStream(url, init) } } : {}),
+  }
+}
+
 export function createTimestampedAsrService(runtime: RuntimeContext, isConfigured: (providerId: string) => boolean, checkMedia: (ref: string) => Promise<unknown> = resolveUploadFile): TimestampedAsrService {
-  const client = createCapabilityClient({ runtime, modules: [
+  const client = createCapabilityClient({ runtime: { ...runtime, transport: watchSubmission(runtime.transport) }, modules: [
     ...bailianNonRealtimeAsrPresets.map((preset) => createBailianAsrModule(preset)),
     createGroqAsrModule(groqWhisperLargeV3Turbo), createGroqAsrModule(groqWhisperLargeV3),
     createSiliconFlowAsrModule(siliconFlowSenseVoiceSmall),
@@ -126,9 +177,12 @@ export function createTimestampedAsrService(runtime: RuntimeContext, isConfigure
   ] })
   return {
     client,
-    async preflight(input) {
+    withoutReceipt: (work) => submissionHook.run(() => undefined, work),
+    async preflight(input, uploadBytes) {
       const selected = resolveTimestampedLocalAsr(isConfigured, input.modelId)
       assertElectronHostCapabilities(runtime, ['file-asr'])
+      const tooLarge = asrUploadLimitProblem(selected, input.durationMs, uploadBytes)
+      if (tooLarge) throw new AiRuntimeError('media_too_large', tooLarge, { retryable: false, billing: 'not_charged', execution: { notExecuted: true } })
       await checkMedia(input.sourcePath)
       return { modelId: selected.descriptor.id, cost: estimateAsrCost(selected.descriptor.id, input.durationMs) }
     },
@@ -165,10 +219,10 @@ export function createTimestampedAsrService(runtime: RuntimeContext, isConfigure
       if (!context.resumeTaskId) assertElectronHostCapabilities(runtime, ['file-asr'])
       logger.info('带时间转写开始', { event: 'audio_edit.timestamped_asr.start', requestId: context.requestId, modelId: plan.modelId, context: { costStatus: plan.cost.status } })
       try {
-        const output = await client.execute<unknown, SpeechRecognitionOutput, SpeechRecognitionEvent>(plan.modelId, {
+        const output = await submissionHook.run(context.onSubmitting ?? (() => undefined), () => client.execute<unknown, SpeechRecognitionOutput, SpeechRecognitionEvent>(plan.modelId, {
           audio: { kind: 'media-ref', ref: plan.audioPath }, language: plan.language, punctuation: true, timestamps: true,
           options: { ...entry.timestampOptions, ...(context.resumeTaskId ? { resumeTaskId: context.resumeTaskId } : {}) },
-        }, context)
+        }, context))
         await context.onOutput?.(output)
         context.signal.throwIfAborted()
         const result = normalizeTimestampedTranscript(output, plan.durationMs, entry.wordGranularity)

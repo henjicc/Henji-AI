@@ -60,7 +60,8 @@ export function recoverPersistedTranscriptionOperation(
   const task = findTask(record.requestId)
   if (!task) return undefined
   const result = task.result_json ? object(JSON.parse(task.result_json)) : {}
-  const notExecuted = !task.provider_task_id && (result.billing === 'not_charged' || task.error_message?.startsWith('[native_upload_unsupported]'))
+  // 与转写重提同一条规则：只有已经结束（失败或取消）的任务，回执里的“未计费”才是定论；运行中的可能正被别的进程上传、提交
+  const notExecuted = (task.state === 'failed' || task.state === 'cancelled') && !task.provider_task_id && (result.billing === 'not_charged' || task.error_message?.startsWith('[native_upload_unsupported]'))
   const billing = notExecuted ? 'not_charged' : result.output ? 'completed' : task.provider_task_id ? 'submitted' : 'unknown'
   const audioDocumentRef = { kind: 'audio_edit.document', id: task.document_id }
   return { ...record, state: notExecuted ? 'not_executed' : 'unknown', verificationState: notExecuted ? 'verified' : 'unresolved',

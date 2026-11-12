@@ -3,6 +3,7 @@ import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import type { AudioEditProjectDocument, AudioEditSourceMetadata } from '../../../../src/core/audioEdit/types'
+import type { AsrUploadEncoding } from '../../../../src/core/audioEdit/asrCatalog'
 import { resolveLocalMediaPath } from '../media/shared'
 import { getProgramStoreDir } from '../appPaths'
 import { getMediaCacheManager } from '../media/media-cache-runtime'
@@ -271,6 +272,41 @@ export async function prepareAudioEditAudio(project: AudioEditProjectDocument, s
   const transcoded = cachedAudioFile(directory, name, 'wav', temporary => transcodeAudioEditSource(project, temporary, path.join(directory, `${name}.wav`)))
   transcoded.catch(() => undefined)
   return waitUnless(transcoded, signal)
+}
+
+const TRANSCRIPTION_SAMPLE_RATE = 16_000
+const TRANSCRIPTION_ENCODERS: Record<AsrUploadEncoding, { extension: string; codec: string[] }> = {
+  opus: { extension: 'ogg', codec: ['-c:a', 'libopus', '-b:a', '32k'] },
+  pcm16: { extension: 'wav', codec: ['-c:a', 'pcm_s16le'] },
+}
+
+/**
+ * 转写上传用的副本：16 kHz 单声道（识别模型按 16 kHz 单声道工作），Opus（32 kbit/s）每小时不超过约 14 MB、16 位 PCM 每小时约 115 MB；
+ * 浮点副本原样上传时 60 分钟单声道约 691 MB、立体声超过百炼临时存储 1 GB 上限。
+ * 时间轴与文档帧一一对应：与浮点副本同一套按样本序号重排、裁剪补齐到文档长度，再重采样，识别回的毫秒时间戳直接换算回原素材帧。
+ * 不用 MP3、AAC：它们的编码延迟（16 kHz 下约 60–70 ms）要靠解码端读私有头才扣得掉；Ogg Opus 的编码前导写在容器里，按标准解码时扣除。
+ * 副本只为上传存在：按素材内容寻址放在本口播的缓存目录，重试直接复用。
+ */
+export async function prepareAudioEditTranscriptionAudio(project: AudioEditProjectDocument, encoding: AsrUploadEncoding, signal?: AbortSignal): Promise<{ path: string; bytes: number }> {
+  await verifyAudioEditSource(project, signal, 'quick')
+  const { sampleRate, channels, durationFrames, ownership } = project.source
+  // 应用内录音本身就是浮点 WAV；外部素材从原文件的那条音轨直接转，不必先落一份浮点副本。
+  const input = ownership === 'external' ? project.source.sourcePath : project.source.audioPath
+  const stream = ownership === 'external' ? project.source.audioStreamIndex ?? 0 : 0
+  const encoder = TRANSCRIPTION_ENCODERS[encoding]
+  const name = `asr-${encoding}-${await audioEditSourceContentKey(project.source, signal)}-${stream}`
+  // 各声道等权平均：单声道识别够用，也不会像直接相加那样削顶。
+  const downmix = channels > 1 ? `pan=mono|c0=${Array.from({ length: channels }, (_, index) => `${1 / channels}*c${index}`).join('+')},` : ''
+  const file = await cachedAudioFile(audioEditCacheDirectory(project.id), name, encoder.extension, async temporary => {
+    await runAudioEditProcess(await loadFfmpegPath(), ['-v', 'error', '-nostdin', '-y', '-i', input, '-map', `0:${stream}`, '-vn',
+      '-af', `asetpts=N/SR/TB,atrim=end_sample=${durationFrames},apad=whole_len=${durationFrames},${downmix}aresample=${TRANSCRIPTION_SAMPLE_RATE}`,
+      ...encoder.codec, temporary], signal)
+    const output = JSON.parse(await runAudioEditProcess(await loadFfprobePath(), ['-v', 'error', '-select_streams', 'a:0', '-show_streams', '-of', 'json', temporary], signal)) as { streams?: ProbeStream[] }
+    const audio = output.streams?.[0]
+    // 只拦截写坏、写短的副本；Ogg Opus 报告的时长含 6.5 ms 编码前导，对齐由容器语义保证。
+    if (!audio || audio.channels !== 1 || Math.abs(streamDuration(audio, 0) - durationFrames / sampleRate) > 0.05) throw new Error('转写用的音频副本长度不对，未上传。')
+  }, signal)
+  return { path: file, bytes: (await fs.stat(file)).size }
 }
 
 /**
