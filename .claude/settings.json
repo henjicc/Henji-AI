@@ -9,6 +9,12 @@
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-test-commands.cjs\"",
             "timeout": 10,
             "statusMessage": "检查测试命令范围"
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-git-commands.cjs\"",
+            "timeout": 10,
+            "statusMessage": "检查 git 命令是否会丢改动"
           }
         ]
       }

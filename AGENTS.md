@@ -201,6 +201,7 @@ npm run test:reality -- --suite integration
 - Git、GitHub CI 查询与 npm 等网络故障先分类：临时 TLS 握手中断/EOF、连接重置或超时，保持原配置，先按 2/5/10 秒退避重试，仍中断时延长到 30–60 秒继续尝试并定期报告进度，不得仅因达到 3 次重试就结束任务。写操作结果不确定时，先核对远端引用或已发布版本，避免重复写入。非快进按上面的同步规则处理，认证/权限拒绝、证书校验失败停止盲重试并报告。禁止关闭 TLS 校验、擅改代理或网络配置、用强推绕过失败。
 - 推送完成后检查当前分支与上游既不 ahead 也不 behind，确认本次提交已存在于远端，才算该组改动完成
 - 默认禁止 `git push --force`、`git push --force-with-lease` 及任何会改写远端历史的操作；确需改写历史时必须先获得用户明确授权
+- 禁止用 `git checkout -- <路径>` / `git checkout .`、`git restore`（只动暂存区的 `--staged` 除外）、`git reset --hard`、`git clean`、`git stash` 丢弃或搬走工作区改动：未提交的改动可能是别的会话的，丢了找不回来。撤掉自己的改动用编辑改回，临时文件直接删那个文件；用户明确同意丢弃时才执行。Claude Code 由 `.claude/hooks/guard-git-commands.cjs` 拦截（命令里带 `HENJI_ALLOW_DISCARD=1` 放行）
 
 ## 完成标准
 
