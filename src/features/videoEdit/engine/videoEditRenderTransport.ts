@@ -18,6 +18,7 @@ import { isLikelyLocalImagePath, toFetchableMediaUrl } from '@/services/imageSou
 import { getPlatform } from '@/platform/runtime'
 import { getHardwareCapabilities } from '@/services/mediaCache/hardwareCapabilities'
 import type { VideoEditDeviceMemory } from './videoEditGpuBudget'
+import type { VideoEditGridSurfaces } from './videoEditMulticamGrid'
 import { createLogger } from '@/core/logging'
 import type { NativeFramesRequest, RenderDecodeOptions, RenderLogMessage, RenderRequest, RenderResponse, VideoEditEncodedChunkMessage } from './videoEditWorker'
 import { VideoEditEncoderFailure, type VideoEditEncodedChunk, type VideoEditEncodeGeometry, type VideoEditEncodePurpose, type VideoEditEncodeSample, type VideoEditFrameEncodeTiming } from './videoEditFrameEncoder'
@@ -122,6 +123,8 @@ export interface VideoEditRenderTransportOptions {
   previewWidth?: number
   preparing?: (active: boolean) => void
   surface?: OffscreenCanvas
+  /** 多机位网格：合成画面在 Worker 里切给各格子的画布（转移所有权），与 `surface` 二选一。 */
+  gridCells?: VideoEditGridSurfaces
   cacheBudgetBytes?: number
   proxyProjectId?: string
   exportProxies?: boolean
@@ -408,7 +411,7 @@ export class VideoEditRenderTransport {
     this.worker.postMessage({ kind: 'textFonts.attach', port: textFonts.port2 } satisfies TextFontChannelAttach, [textFonts.port2])
     const device = videoEditDeviceMemory()
     // Verify original media before dependent code/font preparation or opening a decoder channel.
-    this.ready = this.timed('content', () => this.content.check(document)).then(() => Promise.all([this.timed('proxies', () => this.selectProxies()), this.connectNative(), this.timed('fonts', () => this.syncFonts(document))])).then(async ([, decode]) => { this.nativeDecodingValue = decode.nativeAvailable; const codeSources = await this.timed('code', () => this.codeSources(document)); const deviceMemory = await device; return this.timed('init', () => this.request({ kind: 'init', device: deviceMemory, timing: this.timing, document: this.mediaDocument(document), codeSources, previewWidth, surface, cacheBudgetBytes, cacheWebOutput: options.cacheWebOutput, decode: { ...decode, localPaths: this.localPaths(document), proxies: this.proxySources() } }, surface ? [surface] : [])) })
+    this.ready = this.timed('content', () => this.content.check(document)).then(() => Promise.all([this.timed('proxies', () => this.selectProxies()), this.connectNative(), this.timed('fonts', () => this.syncFonts(document))])).then(async ([, decode]) => { this.nativeDecodingValue = decode.nativeAvailable; const codeSources = await this.timed('code', () => this.codeSources(document)); const deviceMemory = await device; return this.timed('init', () => this.request({ kind: 'init', device: deviceMemory, timing: this.timing, document: this.mediaDocument(document), codeSources, previewWidth, surface, ...(options.gridCells ? { gridCells: options.gridCells } : {}), cacheBudgetBytes, cacheWebOutput: options.cacheWebOutput, decode: { ...decode, localPaths: this.localPaths(document), proxies: this.proxySources() } }, surface ? [surface] : options.gridCells?.surfaces ?? [])) })
     void this.ready.then(() => { this.readySettled = true }, () => undefined)
     this.stopFonts = subscribeFontLibrary(() => {
       if (this.fixedTextFonts || this.disposed || this.fontRefresh || fontLibrarySnapshot().revision === this.fontsRevision) return

@@ -11,9 +11,9 @@ import { VideoEditGpuDeviceLostError, VideoEditGpuFrameError } from './videoEdit
 const gpuErrors = vi.hoisted(() => ({ observe: vi.fn<[(event: string, message: string, context?: Record<string, unknown>) => void], void>() }))
 vi.mock('./videoEditGpuErrorScope', async importOriginal => ({ ...await importOriginal<typeof import('./videoEditGpuErrorScope')>(), setVideoEditGpuFaultObserver: gpuErrors.observe }))
 
-const state = vi.hoisted(() => ({ presentation: undefined as VideoEditRenderer['onPresentation'], elements: vi.fn(), hover: vi.fn(), render: vi.fn(), readRgb: vi.fn(), performance: [] as CodeFramePerformance[], jump: vi.fn(), hasJump: false, arm: vi.fn(), supersede: vi.fn(), abandon: vi.fn() }))
+const state = vi.hoisted(() => ({ options: undefined as unknown, presentation: undefined as VideoEditRenderer['onPresentation'], elements: vi.fn(), hover: vi.fn(), render: vi.fn(), readRgb: vi.fn(), performance: [] as CodeFramePerformance[], jump: vi.fn(), hasJump: false, arm: vi.fn(), supersede: vi.fn(), abandon: vi.fn() }))
 vi.mock('./videoEditRenderer', () => ({ VideoEditRenderer: class {
-  constructor(readonly document: unknown) {}
+  constructor(readonly document: unknown, options?: unknown) { state.options = options }
   set onPresentation(value: VideoEditRenderer['onPresentation']) { state.presentation = value }
   reservePresentation() { return 1 }
   observeAuthorElements = state.elements
@@ -140,6 +140,30 @@ it('直接预览不回读；历史图保持预算，离屏同时索取历史图�
   const both = await send({ ...request, history: true })
   expect(both.bitmap).toBe(pixels); expect(both.history).not.toBe(pixels)
   expect(createImageBitmap).toHaveBeenCalledWith(pixels, { resizeWidth: 1280, resizeHeight: 720, resizeQuality: 'high' })
+})
+
+it('多机位网格：整张网格在同次提交拷成 GPU 位图，切给各格子的画布，不交回界面线程；播放帧照常先回执提交，关闭时收起格子画布', async () => {
+  const draws = [vi.fn(), vi.fn()]
+  const surfaces = draws.map(drawImage => ({ width: 1, height: 1, getContext: () => ({ drawImage }) }))
+  const initId = ++nextId
+  worker.onmessage({ data: { kind: 'init', id: initId, document: composition, gridCells: { surfaces: surfaces as unknown as OffscreenCanvas[], columns: 2 } } })
+  await vi.waitFor(() => expect(messages.some(message => message.id === initId)).toBe(true))
+  expect(state.options).toMatchObject({ fitPicturesToTarget: true })
+  const pixels = bitmap(); render(pixels)
+  const id = ++nextId
+  worker.onmessage({ data: { kind: 'render', id, frame: 3, sequential: true, deadline: performance.timeOrigin + performance.now() } })
+  await vi.waitFor(() => expect(messages.some(message => message.id === id && message.phase === 'submitted')).toBe(true))
+  await vi.waitFor(() => expect(messages.some(message => message.id === id && !message.phase)).toBe(true))
+  const capture = state.render.mock.lastCall?.[7] as VideoEditPresentationCapture
+  expect(capture.gpu).toBe(true); expect(capture.maxPixels).toBe(Infinity)
+  expect(draws[0]).toHaveBeenCalledWith(pixels, 0, 0, 960, 1080, 0, 0, 960, 1080)
+  expect(draws[1]).toHaveBeenCalledWith(pixels, 960, 0, 960, 1080, 0, 0, 960, 1080)
+  expect(messages.find(message => message.id === id && !message.phase)?.bitmap).toBeUndefined(); expect(pixels.close).toHaveBeenCalledOnce()
+  expect(surfaces.map(surface => [surface.width, surface.height])).toEqual([[960, 1080], [960, 1080]])
+  const closing = ++nextId
+  worker.onmessage({ data: { kind: 'dispose', id: closing } })
+  await vi.waitFor(() => expect(messages.some(message => message.id === closing)).toBe(true))
+  expect(surfaces.map(surface => [surface.width, surface.height])).toEqual([[1, 1], [1, 1]])
 })
 
 it('RGB 分析也从稳定快照读取，并释放不向调用方移交的位图', async () => {

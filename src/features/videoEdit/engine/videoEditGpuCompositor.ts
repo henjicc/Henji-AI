@@ -303,6 +303,9 @@ export class VideoEditGpuCompositor {
   }
   /** Pictures snapshotted from now on are stored at 1/divisor of their decoded size; the layer shader samples them by UV. */
   setPictureDivisor(divisor: number): void { this.pictureDivisor = divisor; this.codeRuntime?.setRenderDivisor(divisor) }
+  /** 设了就按每幅画面自己的显示尺寸取复制时的缩小倍数（多机位网格：各路只缩到渲染目标需要的大小），代替统一的回放缩小倍数。 */
+  private pictureSizing?: (width: number, height: number) => number
+  setPictureSizing(sizing: ((width: number, height: number) => number) | undefined): void { this.pictureSizing = sizing }
   private downscalePipelines(divisor: 1 | 2 | 4 | 8, srgb = false): Promise<{ y: GpuRenderPipeline; uv: GpuRenderPipeline; rgba: Map<string, GpuRenderPipeline> }> {
     const key = `${divisor}:${srgb}`
     let ready = this.downscale.get(key)
@@ -350,7 +353,7 @@ export class VideoEditGpuCompositor {
     // display size, so placement, fit and effects are unchanged and only the stored pixels shrink. `pictureDivisor`
     // overrides it for one copy (the program's resident jump pictures, `videoEditJumpPreview.ts`).
     // 整数预览沿用 box 采样；连续比例保留源采样，由合成器已有的纹理缩放完成重采样。
-    const requestedDivisor = pictureDivisor ?? this.pictureDivisor
+    const requestedDivisor = pictureDivisor ?? this.pictureSizing?.(sample.displayWidth, sample.displayHeight) ?? this.pictureDivisor
     const divisor = isVideoEditRenderDivisor(requestedDivisor) ? requestedDivisor : 1
     let reduced = divisor === 1 ? undefined : await this.downscalePipelines(divisor)
     if (this.disposed) throw new Error('剪辑预览已关闭。')

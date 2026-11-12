@@ -36,6 +36,7 @@ import type { FontPayload } from '@/platform/fonts'
 import type { VideoEditParameterUpdate } from './videoEditParameterUpdate'
 import type { VideoEditDeviceMemory } from './videoEditGpuBudget'
 import { VideoEditEncoderFailure, VideoEditFrameEncoder, type VideoEditEncodedChunk, type VideoEditEncodeGeometry, type VideoEditEncodePurpose, type VideoEditEncodeSample, type VideoEditEncoderFailureReason, type VideoEditFrameEncodeTiming } from './videoEditFrameEncoder'
+import { VideoEditGridCells, type VideoEditGridSurfaces } from './videoEditMulticamGrid'
 
 installVideoEditWorkerErrorReporting(self)
 // 开发版：Vite 要求整页刷新时也会在 Worker 里调用 location.reload，而 Worker 的 location 没有这个方法，抛出的未捕获异常会中止渲染会话。
@@ -54,7 +55,7 @@ export type RenderRequest = { id: number } & (
   { kind: 'fingerprint'; clipId: string; frame: number; endFrame: number; budgetMs: number; webContent: Record<string, string> } |
   { kind: 'stopPlayback'; frame: number } |
   { kind: 'fonts'; fonts: FontPayload[]; availableIds: string[]; reset: boolean; fixedTextFonts?: boolean } |
-  { kind: 'init'; cacheWebOutput?: boolean; traceFrames?: boolean; /** 渲染诊断（GPU 时间戳与事件循环迟滞探针），只供基准与排障。 */ diagnostics?: boolean; timing?: VideoEditTimingContext; document: VideoEditComposition; codeSources?: Record<string, string>; previewWidth?: number; surface?: OffscreenCanvas; cacheBudgetBytes?: number; device?: VideoEditDeviceMemory; decode?: RenderDecodeOptions } | { kind: 'update'; timing?: VideoEditTimingContext; document: VideoEditComposition; codeSources?: Record<string, string>; localPaths?: Record<string, string>; proxies?: Record<string, VideoProxyResult> }
+  { kind: 'init'; cacheWebOutput?: boolean; traceFrames?: boolean; /** 渲染诊断（GPU 时间戳与事件循环迟滞探针），只供基准与排障。 */ diagnostics?: boolean; timing?: VideoEditTimingContext; document: VideoEditComposition; codeSources?: Record<string, string>; previewWidth?: number; surface?: OffscreenCanvas; /** 多机位网格：合成画面切给各格子的画布，与 `surface` 二选一。 */ gridCells?: VideoEditGridSurfaces; cacheBudgetBytes?: number; device?: VideoEditDeviceMemory; decode?: RenderDecodeOptions } | { kind: 'update'; timing?: VideoEditTimingContext; document: VideoEditComposition; codeSources?: Record<string, string>; localPaths?: Record<string, string>; proxies?: Record<string, VideoProxyResult> }
   | { kind: 'replaceContent'; document: VideoEditComposition; codeSources?: Record<string, string>; localPaths: Record<string, string> }
   | { kind: 'invalidate'; revision: number }
   | { kind: 'parameters'; update: VideoEditParameterUpdate }
@@ -116,6 +117,8 @@ let textController = new AbortController()
 let textQueue: Promise<unknown> = Promise.resolve()
 let fonts: LoadedFontFaces | undefined
 let direct = false
+/** 多机位网格会话的格子画布（见 `VideoEditGridCells`）。 */
+let gridCells: VideoEditGridCells | undefined
 let revision = 0
 let queue = Promise.resolve()
 let nativeFrames: VideoEditNativeFrameReceiver | undefined
@@ -350,6 +353,7 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
         enableVideoEditRenderDiagnostics(false)
         fonts?.dispose(); fonts = undefined
         await disposeRenderer(); const codeResources = renderer?.codeDiagnostics(); renderer = undefined
+        gridCells?.dispose(); gridCells = undefined
         // Every borrowed native frame goes back before the session may terminate this worker (record 002).
         await nativeFrames?.dispose(); nativeFrames = undefined; nativeDiagnostics = undefined
         self.postMessage({ id: request.id, codeResources } satisfies RenderResponse)
@@ -397,7 +401,8 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
         recordVideoEditPreparation('fontLoad', performance.now() - started)
         self.postMessage({ id: request.id } satisfies RenderResponse)
       } else if (request.kind === 'init') {
-        await disposeRenderer(); direct = !!request.surface; renderer = new VideoEditRenderer(request.document, { previewWidth: request.previewWidth, cacheWebOutput: request.cacheWebOutput, surface: request.surface, cacheBudgetBytes: request.cacheBudgetBytes, device: request.device, frames: frameBackend(request.decode), sequencePath: [request.document.id], timing: timingEvent, jumpPreviewLog: log })
+        await disposeRenderer(); gridCells?.dispose(); gridCells = request.gridCells ? new VideoEditGridCells(request.gridCells.surfaces, request.gridCells.columns) : undefined
+        direct = !!request.surface || !!gridCells; renderer = new VideoEditRenderer(request.document, { previewWidth: request.previewWidth, cacheWebOutput: request.cacheWebOutput, surface: request.surface, cacheBudgetBytes: request.cacheBudgetBytes, device: request.device, frames: frameBackend(request.decode), sequencePath: [request.document.id], timing: timingEvent, jumpPreviewLog: log, ...(gridCells ? { fitPicturesToTarget: true } : {}) })
         const current = renderer
         // 顺播只在画面来源变化时通知；来源含网页画面的实际来源，节目据此判断屏幕上的画面能否直接收录。
         let playbackSource: string | undefined
@@ -453,11 +458,13 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
         // A canvas texture expires across asynchronous boundaries. Copy in the draw
         // submission, before awaiting GPU completion or tearing down a trial session.
         const needsPixels = !direct || !!request.readRgb
-        const capture = request.history || needsPixels ? Object.assign((pixels: Promise<ImageBitmap>): void => {
+        // 多机位网格：整张网格在同次提交里拷成 GPU 位图，随后切给各格子的画布，不交回界面线程。
+        const cells = !request.readRgb && !request.history ? gridCells : undefined
+        const capture = request.history || needsPixels || cells ? Object.assign((pixels: Promise<ImageBitmap>): void => {
           if (snapshot) void snapshot.then(bitmap => bitmap.close(), () => {})
           snapshot = pixels
           void snapshot.catch(() => {})
-        }, { maxPixels: needsPixels ? Infinity : 1280 * 720, gpu: !direct && !request.readRgb && !request.history }) : undefined
+        }, { maxPixels: needsPixels || cells ? Infinity : 1280 * 720, gpu: (!direct || !!cells) && !request.readRgb && !request.history }) : undefined
         pixelRendering = !!capture || request.requireLive === true
         if (backgroundRender) { backgroundComposition = renderer.document; backgroundRenderId = request.id }
         backgroundElements = backgroundRender && request.observeElements ? request.frame : undefined
@@ -474,6 +481,11 @@ function receive(event: MessageEvent<RenderRequest | NativeFramesRequest | Share
         // 跳转先出的近似画面（预渲染的常驻关键帧）没有跑这一帧的代码：作者元素等随后的精确帧再读。
         const authorElements = request.observeElements && result.presented && result.presentedSource === 'live' && !result.approximate ? renderer.observeAuthorElements(request.frame, true) : undefined
         traceVideoEditFrame('worker.render', request.frame, renderStarted)
+        if (cells && snapshot) {
+          const pixels = await snapshot
+          snapshot = undefined
+          try { if (result.presented) cells.present(pixels) } finally { pixels.close() }
+        }
         // 导出与预渲染：合成设备拷出的位图在这里直接送进编码器，不交回界面线程。像素已由 GPU 同步令牌保护，
         // 不必等这一帧 GPU 完成；完成与故障仍在下面的 finish 里核对，故障时这一帧按失败答复。
         let encoded: VideoEditFrameEncodeTiming | undefined

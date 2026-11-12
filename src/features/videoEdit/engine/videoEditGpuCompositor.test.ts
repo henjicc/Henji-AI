@@ -4,6 +4,7 @@ import type { GpuDevice } from '@/core/imageEdit/worker/webgpuRuntimeSupport'
 import { videoEditComposition } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
+import { videoEditPictureDivisorForTarget } from './videoEditMulticamGrid'
 import { VideoEditGpuDeviceLostError, VideoEditGpuFrameError } from './videoEditGpuFailure'
 import { videoEditGpuLedger } from './videoEditGpuErrorScope'
 import type { VideoSample } from 'mediabunny'
@@ -595,6 +596,20 @@ it.each([1, 2, 1.5, .5] as const)('sRGB 视频在 %s 分辨率的 RGBA 与紧凑
   ;(await compositor.snapshot(picture, true)).close()
   expect(device.createRenderPipeline.mock.calls).toHaveLength(compiled)
   picture.close()
+  await compositor.dispose()
+})
+it('按画面尺寸取复制缩小倍数：设了就代替回放缩小倍数，原片与代理各自只缩到目标需要的大小', async () => {
+  const { compositor, device } = copyFixture(async () => {})
+  compositor.setPictureDivisor(4)
+  compositor.setPictureSizing((width, height) => videoEditPictureDivisorForTarget(width, height, 960, 540))
+  const picture = (width: number, height: number): VideoSample => ({ timestamp: 0, duration: 1 / 60, displayWidth: width, displayHeight: height, rotation: 0, flip: false, toVideoFrame: () => ({ visibleRect: { width, height }, close: vi.fn() }) }) as unknown as VideoSample
+  const frames: Array<{ close(): void }> = []
+  const lumaSize = async (sample: VideoSample): Promise<unknown> => { device.createTexture.mockClear(); frames.push(await compositor.snapshot(sample, true)); return (device.createTexture.mock.calls[0][0] as { size: number[] }).size }
+  expect(await lumaSize(picture(3840, 2160))).toEqual([960, 540])
+  expect(await lumaSize(picture(1920, 1080))).toEqual([960, 540])
+  compositor.setPictureSizing(undefined)
+  expect(await lumaSize(picture(1920, 1080))).toEqual([480, 270])
+  for (const frame of frames) frame.close()
   await compositor.dispose()
 })
 it('多源同时等待复制名额时逐次重查，单个完成不能唤醒后突破两份外部帧预算', async () => {

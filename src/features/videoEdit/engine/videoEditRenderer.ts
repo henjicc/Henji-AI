@@ -68,6 +68,7 @@ import { isVideoEditRenderDivisor, videoEditRenderSize, videoEditOutputRenderDiv
 import { applyVideoEditParameterUpdate, type VideoEditParameterUpdate } from './videoEditParameterUpdate'
 import { VideoEditJumpPreview, VIDEO_EDIT_JUMP_PREVIEW_DIVISOR, type VideoEditJumpPreviewLog } from './videoEditJumpPreview'
 import { configureVideoEditGpuBudget, videoEditGpuBudget, videoEditMaxTextureDimension, type VideoEditDeviceMemory } from './videoEditGpuBudget'
+import { videoEditPictureDivisorForTarget } from './videoEditMulticamGrid'
 import type { SpatialExposurePlan, SpatialFrameRequest } from './videoEditSpatialContracts'
 import type { SpatialAuthorInputs } from './videoEditCodeSources'
 
@@ -355,6 +356,8 @@ export interface VideoEditRendererOptions {
   reuseCodeOutputs?: boolean
   /** 本机专用显存与系统内存：各项缓存预算按它取值（`videoEditGpuBudget.ts`），缺省用保守默认值。 */
   device?: VideoEditDeviceMemory
+  /** 多机位网格：整棵渲染树的解码画面只缩到各自渲染目标需要的大小（`videoEditPictureDivisorForTarget`），不统一按回放缩小倍数。 */
+  fitPicturesToTarget?: boolean
 }
 interface DecodedImage { path: string; controller: AbortController; pending: Promise<ImageBitmap>; bytes: number; ready: boolean; predecoded?: boolean; scale: number }
 export class VideoEditRenderer {
@@ -518,7 +521,10 @@ export class VideoEditRenderer {
   }
   private ensureCompositor(): VideoEditGpuCompositor {
     if (this.disposed) throw new DOMException('剪辑渲染已关闭。', 'AbortError')
-    if (!this.compositor) { this.compositor = (this.sharedCompositor ?? this.nestedOwner?.compositor)?.fork(this.canvas, () => this.capturePresentation) ?? new VideoEditGpuCompositor(this.canvas, undefined, () => this.capturePresentation, (durationMs, stage = 'ready') => this.timing?.(`compositor.${stage}`, durationMs), () => this.onPlaybackIdle?.()); if (this.renderDivisor !== 1) this.compositor.setPictureDivisor(this.renderDivisor) }
+    if (!this.compositor) {
+      this.compositor = (this.sharedCompositor ?? this.nestedOwner?.compositor)?.fork(this.canvas, () => this.capturePresentation) ?? new VideoEditGpuCompositor(this.canvas, undefined, () => this.capturePresentation, (durationMs, stage = 'ready') => this.timing?.(`compositor.${stage}`, durationMs), () => this.onPlaybackIdle?.()); if (this.renderDivisor !== 1) this.compositor.setPictureDivisor(this.renderDivisor)
+      if ((this.nestedOwner ?? this).fitPicturesToTarget) this.compositor.setPictureSizing((width, height) => videoEditPictureDivisorForTarget(width, height, this.canvas.width, this.canvas.height))
+    }
     return this.compositor!
   }
   /** Image media decoded ahead for code clips about to start; kept until those clips draw them (or the warm-up expires). */
@@ -748,6 +754,7 @@ export class VideoEditRenderer {
   private readonly jumpPreviewLog?: VideoEditJumpPreviewLog
   private readonly cacheWebOutput: boolean
   private readonly reuseCodeOutputs: boolean
+  private readonly fitPicturesToTarget: boolean
   constructor(public document: VideoEditComposition, options: VideoEditRendererOptions = {}) {
     if (options.device) configureVideoEditGpuBudget(options.device)
     const { surface, cacheBudgetBytes = videoEditGpuBudget().frameCacheBytes } = options
@@ -759,6 +766,7 @@ export class VideoEditRenderer {
     this.jumpPreviewLog = options.jumpPreviewLog
     this.cacheWebOutput = options.cacheWebOutput ?? false
     this.reuseCodeOutputs = options.reuseCodeOutputs ?? true
+    this.fitPicturesToTarget = options.fitPicturesToTarget ?? false
     if (document.sequences) assertVideoEditSequenceGraph({ items: document.items, sequences: document.sequences })
     this.frameCache = new VideoEditFrameCache(cacheBudgetBytes)
     this.canvas = surface ?? new OffscreenCanvas(document.width, document.height)

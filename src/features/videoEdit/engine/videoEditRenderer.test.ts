@@ -23,6 +23,8 @@ import { addLegacyVideoEditTracks } from '@/core/videoEdit/testFixtures'
 import { videoEditParameterUpdate } from './videoEditParameterUpdate'
 import { installVideoEditWebChannel, VideoEditWebInputs } from './videoEditWebInputs'
 import type { VideoEditNativeFrameReceiver } from './videoEditNativeFrames'
+import { videoEditMulticamGrid } from './videoEditMulticamGrid'
+import { VideoEditGpuCompositor } from './videoEditGpuCompositor'
 
 const contentInputs = vi.hoisted(() => ({ uploads: [] as Array<[string, number | undefined]>, borrows: [] as Array<[string, number | undefined]>, closed: 0, web: [] as Array<import('./videoEditAuthorModule').AuthorFrameInfo['web']> }))
 const spatialBoundary = vi.hoisted(() => ({ frames: [] as Array<Parameters<typeof import('./videoEditCompositeScene').renderVideoEditThreeSpaceScene>[0]>, releases: 0 }))
@@ -87,6 +89,8 @@ vi.mock('./videoEditGpuCompositor', async () => {
   class MockCompositor {
   constructor(_canvas?: OffscreenCanvas, _shared?: MockCompositor, private readonly capture?: () => ((pixels: Promise<ImageBitmap>) => void) | undefined) {}
   fork(canvas: OffscreenCanvas, capture?: () => ((pixels: Promise<ImageBitmap>) => void) | undefined): MockCompositor { return new MockCompositor(canvas, this, capture) }
+  sizing?: (width: number, height: number) => number
+  setPictureSizing(sizing: (width: number, height: number) => number): void { this.sizing = sizing }
   async beginFrameGpu() {
     const { VideoEditFrameGpu } = await import('./videoEditGpuErrorScope')
     const window = { end() {}, settle: async () => { boundary.frameGpuSettled++; return (await boundary.frameFaults.shift()) ?? [] } }
@@ -1538,6 +1542,33 @@ it('多机位预览与导出按机位段选择画面，返回原机位且固定�
     boundary.draws = []; await exporter.render(15)
     expect(boundary.draws.filter(draw => draw.offscreen).map(draw => draw.ids)).toEqual([[base.id], ['camera-b']])
   } finally { await preview.dispose(); await exporter.dispose() }
+})
+it('多机位网格：一个渲染器、一个合成设备画出全部机位；正向播放每个机位各建一条顺序解码计划，之后逐帧不再定位', async () => {
+  boundary.scheduled = []
+  const document = nestedFixture(); const source = document.sequences![0]
+  source.clips.push({ ...source.clips[0], id: 'camera-b', itemId: 'item-B', track: 2 })
+  source.multicam = { cameras: [{ id: 'camera-a', name: '机位1', clipId: 'clip' }, { id: 'camera-b', name: '机位2', clipId: 'camera-b' }], audioCameraId: 'camera-a' }
+  const grid = videoEditMulticamGrid(document, source)
+  const fork = vi.spyOn(VideoEditGpuCompositor.prototype, 'fork')
+  const renderer = new VideoEditRenderer(grid.composition, { previewWidth: 320, fitPicturesToTarget: true })
+  try {
+    renderer.setRenderDivisor(4)
+    for (let frame = 0; frame < 6; frame++) {
+      boundary.draws = []
+      // 两个机位的画面都来自各自的播放计划（逐帧定位的读取在这里拿不到画面）。
+      const result = await renderer.render(frame, true); await result.completion
+      expect(us(result.sourceTimestamps)).toEqual(us([frame / 30, frame / 30]))
+      // 每格是自己机位的画面，整张网格一次合成。
+      expect(boundary.draws.filter(draw => draw.offscreen).map(draw => draw.ids).sort()).toEqual([['camera-b'], ['clip']])
+      expect(boundary.draws.filter(draw => !draw.offscreen).map(draw => draw.ids)).toEqual([grid.composition.clips.map(clip => clip.id)])
+    }
+    expect(boundary.scheduled.map(schedule => schedule.path).sort()).toEqual([expect.stringContaining('A'), expect.stringContaining('B')])
+    expect(fork).toHaveBeenCalledTimes(2); expect(renderer.codeDiagnostics().nestedRenderers).toBe(2)
+    // 每个机位的嵌套目标是 1920×1080 的 1/4（480×270）：原片缩 4 倍，一半大小的代理只缩 2 倍。
+    for (const nested of fork.mock.results.map(result => result.value as { sizing?: (width: number, height: number) => number })) {
+      expect(nested.sizing?.(1920, 1080)).toBe(4); expect(nested.sizing?.(960, 540)).toBe(2)
+    }
+  } finally { await renderer.dispose(); fork.mockRestore() }
 })
 it('嵌套逐帧渲染：同一子序列同一帧只合成一次，父片段变速倒放沿共享源时钟', async () => {
   const document = nestedFixture(); document.clips.push({ ...document.clips[0], id: 'duplicate', track: 2 })
