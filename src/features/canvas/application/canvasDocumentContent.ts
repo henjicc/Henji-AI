@@ -101,13 +101,19 @@ export function canvasToDocumentContent(graph: CanvasGraphContent): CanvasDocume
   return content
 }
 
-function decodeNodes(nodes: readonly CanvasNode[], pool: readonly string[]): CanvasNode[] {
+function decodeNodes(nodes: readonly CanvasNode[], pool: readonly string[], decoded?: Map<CanvasNode, CanvasNode>): CanvasNode[] {
   if (!pool.length) return [...nodes]
-  return nodes.map((node) => ({
-    ...node,
-    data: mapCanvasNodeMediaReferences(node.data as DynamicValueMap,
-      (value) => decodeCanvasImageReference(value, pool, 'nodes')) as CanvasNodeData,
-  }))
+  return nodes.map((node) => {
+    const cached = decoded?.get(node)
+    if (cached) return cached
+    const next = {
+      ...node,
+      data: mapCanvasNodeMediaReferences(node.data as DynamicValueMap,
+        (value) => decodeCanvasImageReference(value, pool, 'nodes')) as CanvasNodeData,
+    }
+    decoded?.set(node, next)
+    return next
+  })
 }
 
 /** 文档内容 → 内存画布；节点图不合法时抛 CanvasDocumentGraphError（不留半个画布）。 */
@@ -126,22 +132,72 @@ export function canvasFromDocumentContent(content: unknown): CanvasGraphContent 
   }
 }
 
-/** 撤销记录写进会话状态前：裁到上限并清理瞬时状态。 */
-export function canvasHistoryForSessionState(history: CanvasHistoryState): CanvasHistoryState {
+/**
+ * 会话状态里的撤销记录（程序目录里可随时丢弃的缓存，不是登记的持久格式）。
+ * 内存撤销是结构共享的：相邻快照共用没改动的节点与连线对象。落盘也按对象去重，节点和连线各存一份，
+ * 每步只记下标；否则 JSON 会把共享对象展开成每步一份完整画布，写入量随步数成倍增长。
+ * 旧写法（每步一份完整的 nodes/edges）仍能读。
+ */
+const POOLED_HISTORY_VERSION = 2
+
+interface PooledHistoryStep { nodes: number[]; edges: number[] }
+export interface PooledCanvasHistory {
+  version: typeof POOLED_HISTORY_VERSION
+  nodes: CanvasNode[]
+  edges: CanvasEdge[]
+  past: PooledHistoryStep[]
+  future: PooledHistoryStep[]
+}
+
+/** 撤销记录写进会话状态前：裁到上限、清理瞬时状态，并按对象去重。 */
+export function canvasHistoryForSessionState(history: CanvasHistoryState): PooledCanvasHistory {
   const clean = createNodeCleaner()
-  const snapshot = (item: CanvasHistorySnapshot): CanvasHistorySnapshot => ({ ...item, nodes: clean(createSnapshot(item.nodes, item.edges).nodes) })
-  return {
-    past: history.past.slice(-MAX_PERSISTED_CANVAS_HISTORY_STEPS).map(snapshot),
-    future: history.future.slice(-MAX_PERSISTED_CANVAS_HISTORY_STEPS).map(snapshot),
+  const nodes: CanvasNode[] = []
+  const edges: CanvasEdge[] = []
+  const nodeIndex = new Map<CanvasNode, number>()
+  const edgeIndex = new Map<CanvasEdge, number>()
+  const indexOf = <T>(item: T, index: Map<T, number>, items: T[]): number => {
+    let at = index.get(item)
+    if (at === undefined) { at = items.push(item) - 1; index.set(item, at) }
+    return at
   }
+  const step = (item: CanvasHistorySnapshot): PooledHistoryStep => ({
+    nodes: clean(createSnapshot(item.nodes, item.edges).nodes).map(node => indexOf(node, nodeIndex, nodes)),
+    edges: item.edges.map(edge => indexOf(edge, edgeIndex, edges)),
+  })
+  const past = history.past.slice(-MAX_PERSISTED_CANVAS_HISTORY_STEPS).map(step)
+  const future = history.future.slice(-MAX_PERSISTED_CANVAS_HISTORY_STEPS).map(step)
+  return { version: POOLED_HISTORY_VERSION, nodes, edges, past, future }
+}
+
+/** 去重写法还原成每步一份 nodes/edges（共用同一批对象），交给与文档相同的图校验；下标不合法时抛错。 */
+function expandPooledHistory(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || (value as { version?: unknown }).version !== POOLED_HISTORY_VERSION) return value
+  const { nodes, edges, past, future } = value as Record<string, unknown>
+  if (!Array.isArray(nodes) || !Array.isArray(edges) || !Array.isArray(past) || !Array.isArray(future)) throw new Error('invalid history')
+  const pick = (indexes: unknown, items: unknown[]): unknown[] => {
+    if (!Array.isArray(indexes)) throw new Error('invalid history')
+    return indexes.map((at) => {
+      if (!Number.isInteger(at) || (at as number) < 0 || (at as number) >= items.length) throw new Error('invalid history')
+      return items[at as number]
+    })
+  }
+  const step = (item: unknown) => {
+    if (!item || typeof item !== 'object') throw new Error('invalid history')
+    const { nodes: nodeIndexes, edges: edgeIndexes } = item as Record<string, unknown>
+    return { nodes: pick(nodeIndexes, nodes), edges: pick(edgeIndexes, edges) }
+  }
+  return { past: past.map(step), future: future.map(step) }
 }
 
 /** 会话状态里的撤销记录 → 内存；读不懂时返回 null（丢弃撤销记录，不影响打开）。 */
 export function canvasHistoryFromSessionState(value: unknown, pool: readonly string[] = []): CanvasHistoryState | null {
   try {
-    const parsed = parseCanvasHistory(value, pool, resolveCanvasNodeMediaSchema)
+    const parsed = parseCanvasHistory(expandPooledHistory(value), pool, resolveCanvasNodeMediaSchema)
+    // 同一个节点对象只解码一次，还原后各步仍共用对象，和编辑时的内存撤销一样。
+    const decoded = new Map<CanvasNode, CanvasNode>()
     const snapshot = (item: { nodes: unknown[]; edges: unknown[] }): CanvasHistorySnapshot => ({
-      nodes: decodeNodes(item.nodes as CanvasNode[], pool),
+      nodes: decodeNodes(item.nodes as CanvasNode[], pool, decoded),
       edges: item.edges as CanvasEdge[],
     })
     return { past: parsed.past.map(snapshot), future: parsed.future.map(snapshot) }

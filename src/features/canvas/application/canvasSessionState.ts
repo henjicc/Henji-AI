@@ -8,6 +8,7 @@ import {
   canvasHistoryForSessionState,
   canvasHistoryFromSessionState,
   parseCanvasViewport,
+  type PooledCanvasHistory,
 } from './canvasDocumentContent'
 import { canvasDocumentCommands } from './canvasDocumentEnvironment'
 
@@ -30,7 +31,8 @@ const logger = createLogger('features.canvas.sessionState')
 
 interface StoredHistory {
   revision: number
-  history: CanvasHistoryState
+  /** 读取时也可能是旧写法（每步一份完整画布），由 canvasHistoryFromSessionState 兼容。 */
+  history: PooledCanvasHistory
 }
 
 export interface CanvasSessionInitial {

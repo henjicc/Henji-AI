@@ -9,6 +9,7 @@ vi.mock('@/platform/desktopApi', () => ({
 }))
 vi.mock('@/utils/historyThumbnail', () => ({
   getHistoryThumbnailCachePath: vi.fn(async (path: string, dir: string) => `${dir}/${path.split('/').at(-1)}.webp`),
+  markHistoryThumbnailReady: vi.fn(),
 }))
 beforeEach(() => { vi.clearAllMocks(); vi.mocked(exists).mockResolvedValue(true) })
 

@@ -58,17 +58,21 @@ function parseCanvasGraph(
   pool: readonly string[],
   resolveSchema: CanvasMediaSchemaResolver,
   field: { nodes: CanvasGraphField; edges: CanvasGraphField } = { nodes: 'nodes', edges: 'edges' },
+  checkedNodes?: WeakSet<object>,
 ): CanvasGraph {
   if (!Array.isArray(nodes)) return invalid(field.nodes)
   if (!Array.isArray(edges)) return invalid(field.edges)
   const ids = new Set<string>()
   for (const node of nodes as unknown[]) {
-    if (!object(node) || !text(node.id) || ids.has(node.id) || !text(node.type)
-      || !object(node.position) || !finite(node.position.x) || !finite(node.position.y)
-      || !object(node.data)) return invalid(field.nodes)
+    if (!object(node) || !text(node.id) || ids.has(node.id)) return invalid(field.nodes)
     ids.add(node.id)
+    // 撤销记录的各步共用节点对象：节点本身只校验一次，ID 唯一与连线两端仍逐步检查。
+    if (checkedNodes?.has(node)) continue
+    if (!text(node.type) || !object(node.position) || !finite(node.position.x) || !finite(node.position.y)
+      || !object(node.data)) return invalid(field.nodes)
     if (node.data.params !== undefined && !object(node.data.params)) return invalid(field.nodes)
     mapCanvasNodeMediaReferences(node.data, (value) => decodeCanvasImageReference(value, pool, field.nodes), resolveSchema)
+    checkedNodes?.add(node)
   }
   const edgeIds = new Set<string>()
   for (const edge of edges as unknown[]) {
@@ -96,9 +100,10 @@ export function parseCanvasDocumentGraph(content: unknown, resolveSchema: Canvas
 export function parseCanvasHistory(value: unknown, pool: readonly string[], resolveSchema: CanvasMediaSchemaResolver): ParsedCanvasHistory {
   if (!object(value) || !Array.isArray(value.past) || !Array.isArray(value.future)) return invalid('history')
   const field = { nodes: 'history', edges: 'history' } as const
+  const checkedNodes = new WeakSet<object>()
   const snapshots = (items: unknown[]): CanvasGraph[] => items.map((snapshot) => {
     if (!object(snapshot)) return invalid('history')
-    return parseCanvasGraph(snapshot.nodes, snapshot.edges, pool, resolveSchema, field)
+    return parseCanvasGraph(snapshot.nodes, snapshot.edges, pool, resolveSchema, field, checkedNodes)
   })
   return { past: snapshots(value.past), future: snapshots(value.future) }
 }

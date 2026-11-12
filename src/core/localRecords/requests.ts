@@ -58,6 +58,7 @@ export const generationHistoryQuerySchema: z.ZodType<GenerationHistoryQuery> = z
   modelId: z.string().max(512).optional(),
   type: mediaTypeSchema.optional(),
   status: statusSchema.optional(),
+  statuses: z.array(statusSchema).min(1).max(16).optional(),
   search: z.string().max(1_000).optional(),
   idPrefix: z.string().min(1).max(512).optional(),
   limit: limitSchema.optional(),

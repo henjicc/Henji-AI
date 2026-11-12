@@ -27,6 +27,7 @@ import { analyzeRatioResolutionParams } from '@/core/params/ratioResolution';
 import { transferModelParamOverridesBetweenModels } from '@/core/params/modelParamTransfer';
 
 import { canvasViewStore, useCanvasStore } from '@/stores/canvasStore';
+import { getOutgoingEdges } from '@/features/canvas/domain/connectionIndex';
 import { showAlertDialog } from '@/stores/alertDialogStore';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import { NodeLodPlaceholder } from '@/features/canvas/ui/NodeLodPlaceholder';
@@ -64,9 +65,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
   const { t } = useTranslation()
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode)
   const updateNodeData = useCanvasStore((state) => state.updateNodeData)
-  const hasSourceConnections = useCanvasStore((state) =>
-    state.edges.some((edge) => edge.source === id)
-  )
+  const hasSourceConnections = useCanvasStore((state) => getOutgoingEdges(state.edges, id).length > 0)
 
   const nodeData = data as StoryboardGenNodeData
   const nineGridPreset = isNineGridStoryboard(nodeData)

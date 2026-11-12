@@ -5,6 +5,7 @@ import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData'
 import { getSocketColor, mediaPortId } from '@/features/canvas/domain/socketTypes';
 import { useNodeHandlesSync } from '@/features/canvas/hooks/useNodeHandlesSync';
 import { useCanvasStore } from '@/stores/canvasStore';
+import { getIncomingEdges } from '@/features/canvas/domain/connectionIndex';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import { NodeLodPlaceholder } from '@/features/canvas/ui/NodeLodPlaceholder';
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
@@ -60,8 +61,8 @@ export function ToolWorkbenchNodeFrame({
   const resolvedWidth = Math.max(minWidth, typeof width === 'number' && Number.isFinite(width) && width > 0 ? width : defaultWidth);
   const resolvedHeight = Math.max(minHeight, typeof height === 'number' && Number.isFinite(height) && height > 0 ? height : defaultHeight);
   const imageHandleId = mediaPortId('image');
-  const hasImageConnection = useCanvasStore((state) => state.edges.some(
-    (edge) => edge.target === nodeId && edge.targetHandle === imageHandleId,
+  const hasImageConnection = useCanvasStore((state) => getIncomingEdges(state.edges, nodeId).some(
+    (edge) => edge.targetHandle === imageHandleId,
   ));
   useNodeHandlesSync(nodeId, `${resolvedWidth}|${resolvedHeight}`);
 

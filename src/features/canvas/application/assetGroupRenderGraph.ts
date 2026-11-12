@@ -23,7 +23,7 @@ export function createAssetGroupRenderGraph(
   const groupIds = new Set(assetGroups.map((group) => group.id));
   const renderNodes = nodes.map((node) => {
     if (!node.parentId || !groupIds.has(node.parentId)) return node;
-    return { ...node, hidden: true };
+    return hiddenMemberProjection(node);
   });
 
   const hiddenBindingIds = new Set<string>();
@@ -53,16 +53,33 @@ export function createAssetGroupRenderGraph(
     }
   }
 
-  return {
-    nodes: renderNodes,
-    edges: [
-      ...edges.filter((edge) => {
-        const bindingId = edge.data?.managedByAssetGroup?.bindingId;
-        return !bindingId || !hiddenBindingIds.has(bindingId);
-      }),
-      ...bundleEdges,
-    ],
-  };
+  // 拖动只改 nodes：连线与各绑定的统计都没变时沿用上一帧的连线数组，ReactFlow 不必重建连线状态。
+  const bundleKey = JSON.stringify(bundleEdges.map((edge) => [edge.id, edge.target, edge.targetHandle, edge.data?.assetGroupBundle]));
+  if (lastRenderEdges && lastRenderEdges.source === edges && lastRenderEdges.bundleKey === bundleKey) {
+    return { nodes: renderNodes, edges: lastRenderEdges.value };
+  }
+  const renderEdges = [
+    ...edges.filter((edge) => {
+      const bindingId = edge.data?.managedByAssetGroup?.bindingId;
+      return !bindingId || !hiddenBindingIds.has(bindingId);
+    }),
+    ...bundleEdges,
+  ];
+  lastRenderEdges = { source: edges, bundleKey, value: renderEdges };
+  return { nodes: renderNodes, edges: renderEdges };
+}
+
+let lastRenderEdges: { source: CanvasEdge[]; bundleKey: string; value: CanvasEdge[] } | null = null;
+
+/** 组成员在画布上隐藏；同一个节点对象复用同一份投影，拖动时 ReactFlow 不会把没动的成员当成新节点重建。 */
+const hiddenMemberCache = new WeakMap<CanvasNode, CanvasNode>();
+function hiddenMemberProjection(node: CanvasNode): CanvasNode {
+  let projected = hiddenMemberCache.get(node);
+  if (!projected) {
+    projected = { ...node, hidden: true };
+    hiddenMemberCache.set(node, projected);
+  }
+  return projected;
 }
 
 const missingProjectionCache = new WeakMap<CanvasNode, CanvasNode>();

@@ -101,12 +101,15 @@ export class GenerationHistoryStore {
   ) {}
 
   list(query: GenerationHistoryQuery = {}): GenerationHistoryRecordDto[] {
-    const where: string[] = ['deleted_at IS NULL']
+    // `+` 让规划器不拿 deleted_at 索引做等值查找（几乎所有行都是 NULL），改按 created_at 索引顺序取前 N 条，
+    // 免得每次分页都把全部未删除记录排序一遍。
+    const where: string[] = ['+deleted_at IS NULL']
     const params: SqlValue[] = []
     if (query.providerId) { where.push('provider_id = ?'); params.push(query.providerId) }
     if (query.modelId) { where.push('model_id = ?'); params.push(query.modelId) }
     if (query.type) { where.push('type = ?'); params.push(query.type) }
     if (query.status) { where.push('status = ?'); params.push(query.status) }
+    if (query.statuses?.length) { where.push(`status IN (${query.statuses.map(() => '?').join(', ')})`); params.push(...query.statuses) }
     if (query.idPrefix) { where.push("id LIKE ? ESCAPE '\\'"); params.push(`${escapeLike(query.idPrefix)}%`) }
     const search = query.search?.trim()
     if (search) {
@@ -185,7 +188,12 @@ export class GenerationHistoryStore {
     if (updates.params !== undefined || updates.resultPaths !== undefined) {
       this.locations.use((scope) => {
         if (updates.params !== undefined) set('params', JSON.stringify(scope.encodeValue(updates.params)))
-        if (updates.resultPaths !== undefined) set('result_paths', encodePaths(updates.resultPaths, scope))
+        if (updates.resultPaths !== undefined) {
+          // 每次状态保存都会带上结果列；没变时不写，免得每次都触发扫描未交接回执的交接触发器（UPDATE OF result_paths）。
+          const encoded = encodePaths(updates.resultPaths, scope)
+          const current = this.database().prepare('SELECT result_paths FROM history WHERE id = ?').get(id) as Pick<HistoryRow, 'result_paths'> | undefined
+          if (current?.result_paths !== encoded) set('result_paths', encoded)
+        }
       })
     }
     if (updates.taskId !== undefined) set('task_id', updates.taskId)

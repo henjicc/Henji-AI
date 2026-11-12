@@ -65,6 +65,8 @@ export interface GenerationHistoryQuery {
   modelId?: string
   type?: GenerationHistoryMediaType
   status?: GenerationHistoryStatus
+  /** 状态属于其中之一（同义终态一起查）；与 status 同时给出时两个条件都要满足。 */
+  statuses?: GenerationHistoryStatus[]
   /** 按提示词全文检索（子串匹配，不分大小写）。 */
   search?: string
   /** 只列出 ID 以此开头的记录（测试夹具清理用）。 */

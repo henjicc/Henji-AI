@@ -22,6 +22,7 @@ import { jsonEqual } from '@/core/jsonEqual'
 import { canvasFromDocumentContent, canvasHistoryForSessionState, canvasHistoryFromSessionState, canvasToDocumentContent } from '@/features/canvas/application/canvasDocumentContent'
 import type { CanvasEdge, CanvasHistorySnapshot, CanvasNode } from '@/stores/canvasStore'
 import { createSnapshot, hasCanvasContentChanged } from '@/stores/canvasStoreHelpers'
+import { getIncomingEdges } from '@/features/canvas/domain/connectionIndex'
 
 const SCALES = (process.env.HENJI_CANVAS_SCALE ?? '500,2000,5000').split(',').map(Number)
 const ROOT = path.join(process.platform === 'win32' ? 'E:\\' : '/', 'bench-user')
@@ -143,7 +144,13 @@ it('画布规模基准', () => {
       for (const id of genIds) for (const handle of ['media-image', 'media-video']) if (edges.some(edge => edge.target === id && edge.targetHandle === handle)) hits++
       return hits
     }, 5)
-    out.dragFrame = { ...(out.dragFrame as object), nodeSelectorsSimMs: selectorMs }
+    // 修复后的写法（MediaInputRow 等改用 getIncomingEdges）：拖动时 edges 引用不变，索引只建一次，每个节点按入度取边。
+    const [indexedSelectorMs] = time(() => {
+      let hits = 0
+      for (const id of genIds) for (const handle of ['media-image', 'media-video']) if (getIncomingEdges(edges, id).some(edge => edge.targetHandle === handle)) hits++
+      return hits
+    }, 5)
+    out.dragFrame = { ...(out.dragFrame as object), nodeSelectorsSimMs: selectorMs, nodeSelectorsIndexedMs: indexedSelectorMs }
 
     // 素材组投影（assetGroupRenderGraph.ts → summarizeAssetGroupBinding）每帧都跑：
     // 每个绑定 × 每个成员一次 nodes.find + edges.some。按每 100 个节点一组、每组 20 成员 2 个绑定。

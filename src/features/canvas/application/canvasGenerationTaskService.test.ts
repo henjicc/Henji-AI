@@ -879,3 +879,32 @@ it('提交前用户修改生成参数，原任务不能按未经估价的新输�
   expect(run).not.toHaveBeenCalled()
   expect(GenerationService.getInstance().generate).not.toHaveBeenCalled()
 })
+
+it('启动对账：成功与已取消的记录不读画布，其余记录每份画布只读一次，状态照常发布', async () => {
+  const otherId = await createCanvasTestProject('另一份画布')
+  const marker = (documentId: string) => ({ __canvasGeneration: { version: 2, projectId: documentId, nodeId: 'source' } })
+  const seed = (id: string, status: HistoryRecord['status'], documentId: string, resultPaths: string[] = []) => records.set(id, {
+    id, providerId: 'fixture', modelId: 'canvas-task-fixture', type: 'image', prompt: id, params: marker(documentId), resultPaths,
+    taskId: null, status, errorMessage: null, cost: null, duration: null, createdAt: 'now', updatedAt: 'now' })
+  seed('done', 'success', projectId, ['C:/done.png'])
+  seed('stopped', 'cancelled', projectId)
+  seed('running-a', 'generating', projectId)
+  seed('running-b', 'queued', projectId)
+  seed('running-other', 'pending', otherId)
+  // 原画布里 running-a 的结果节点已取消并保存：对账要按保存的结果改写成已取消。
+  await openCanvasProject(projectId, new AbortController().signal)
+  useCanvasStore.getState().setCanvasData([{ id: 'result-a', type: CANVAS_NODE_TYPES.imageEdit, position: { x: 0, y: 0 },
+    data: { generationSourceNodeId: 'source', generationTaskId: 'running-a', generationCancelled: true } }], [])
+  await confirmCanvasPersistence(projectId)
+  const { canvasDocumentCommands } = await import('./canvasDocumentEnvironment')
+  const read = vi.spyOn(canvasDocumentCommands(), 'readDocument')
+  const { reconcileCanvasGenerationTasks } = await import('./canvasGenerationTaskService')
+  const loaded = ['done', 'stopped', 'running-a', 'running-b', 'running-other'].map(id => structuredClone(records.get(id)!))
+  await reconcileCanvasGenerationTasks(loaded)
+  expect(read.mock.calls.map(([target]) => (target as { id: string }).id).sort()).toEqual([projectId, otherId].sort())
+  expect(loaded[2].status).toBe('cancelled')
+  expect(records.get('running-a')?.status).toBe('cancelled')
+  expect(readGenerationTaskStatusSnapshot('done')).toMatchObject({ status: 'success', resultAvailable: true })
+  expect(readGenerationTaskStatusSnapshot('stopped')).toMatchObject({ status: 'cancelled' })
+  expect(readGenerationTaskStatusSnapshot('running-a')).toMatchObject({ status: 'cancelled' })
+})

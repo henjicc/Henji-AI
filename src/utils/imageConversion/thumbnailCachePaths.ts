@@ -1,16 +1,11 @@
 import { getThumbnailsPath } from '@/utils/dataPath'
-import { basename, join } from '@/platform/desktopApi'
+import { join } from '@/platform/desktopApi'
+import { thumbnailCacheFileName } from '@/core/media/thumbnailCacheName'
 
 export async function getVideoThumbnailCachePath(videoPath: string): Promise<string> {
-  const thumbnailsDir = await getThumbnailsPath()
-  const videoName = basename(videoPath)
-  const thumbName = videoName.replace(/\.[^.]+$/, '.webp')
-  return await join(thumbnailsDir, thumbName)
+  return await join(await getThumbnailsPath(), thumbnailCacheFileName(videoPath))
 }
 
 export async function getImageThumbnailCachePath(imagePath: string): Promise<string> {
-  const thumbnailsDir = await getThumbnailsPath()
-  const imageName = basename(imagePath)
-  const thumbName = imageName.replace(/\.[^.]+$/, '.webp')
-  return await join(thumbnailsDir, thumbName)
+  return await join(await getThumbnailsPath(), thumbnailCacheFileName(imagePath))
 }

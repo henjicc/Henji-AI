@@ -10,6 +10,7 @@ import { getNodeSize } from '../canvasUtils';
 import { resolveVisibleMediaInputPorts } from './graphValueResolver';
 import { planMediaConnections, resolveMediaConnectionSource } from './mediaConnectionPlanner';
 import { getCanvasNodeDefinition } from '../domain/nodeRegistry';
+import { getChildNodes, getNodeIndexById, getOutgoingEdges } from '../domain/connectionIndex';
 
 export interface AssetGroupGraph {
   nodes: CanvasNode[];
@@ -88,13 +89,15 @@ function absolutePosition(node: CanvasNode, nodeById: Map<string, CanvasNode>): 
 
 function cleanGroupData(group: CanvasNode, nodes: CanvasNode[]): AssetGroupNodeData {
   const data = group.data as AssetGroupNodeData;
-  const children = nodes.filter((node) => node.parentId === group.id && node.type !== CANVAS_NODE_TYPES.assetGroup);
+  // 素材组投影在拖动时每帧都会算：子节点与节点查找走按数组引用缓存的索引，不逐组扫全部节点。
+  const children = getChildNodes(nodes, group.id).filter((node) => node.type !== CANVAS_NODE_TYPES.assetGroup);
   const childIds = new Set(children.map((node) => node.id));
   const ordered = [...new Set((data.memberOrder ?? []).filter((id) => childIds.has(id)))];
-  for (const child of children) if (!ordered.includes(child.id)) ordered.push(child.id);
-  const nodeIds = new Set(nodes.map((node) => node.id));
+  const orderedIds = new Set(ordered);
+  for (const child of children) if (!orderedIds.has(child.id)) { ordered.push(child.id); orderedIds.add(child.id); }
+  const nodeIndex = getNodeIndexById(nodes);
   const bindings = (data.bindings ?? [])
-    .filter((binding) => binding.targetNodeId !== group.id && nodeIds.has(binding.targetNodeId))
+    .filter((binding) => binding.targetNodeId !== group.id && nodeIndex.has(binding.targetNodeId))
     .map((binding) => ({
       ...binding,
       excludedMemberIds: [...new Set(binding.excludedMemberIds.filter((id) => childIds.has(id)))],
@@ -494,10 +497,11 @@ export function ungroupAssetGroupGraph(nodes: CanvasNode[], edges: CanvasEdge[],
 export function summarizeAssetGroupBinding(
   nodes: CanvasNode[], edges: CanvasEdge[], groupId: string, binding: AssetGroupBinding,
 ): AssetGroupBindingStatus {
-  const group = nodes.find((node) => node.id === groupId && isAssetGroupNode(node));
-  if (!group) return { connected: 0, pending: 0, unsupported: 0, excluded: 0 };
+  const nodeIndex = getNodeIndexById(nodes);
+  const group = nodeIndex.get(groupId);
+  if (!group || !isAssetGroupNode(group)) return { connected: 0, pending: 0, unsupported: 0, excluded: 0 };
   const data = cleanGroupData(group, nodes);
-  const target = nodes.find((node) => node.id === binding.targetNodeId);
+  const target = nodeIndex.get(binding.targetNodeId);
   const supportedKinds = new Set(target
     ? resolveVisibleMediaInputPorts(target, nodes, edges).map((port) => port.kind)
     : []);
@@ -507,10 +511,10 @@ export function summarizeAssetGroupBinding(
   let unsupported = 0;
   for (const memberId of data.memberOrder) {
     if (excluded.has(memberId)) continue;
-    const member = nodes.find((node) => node.id === memberId);
+    const member = nodeIndex.get(memberId);
     const kind = member ? resolveAssetGroupMemberKind(member) : undefined;
     if (!kind || !supportedKinds.has(kind)) unsupported += 1;
-    else if (edges.some((edge) => edge.data?.managedByAssetGroup?.bindingId === binding.id && edge.source === memberId)) connected += 1;
+    else if (getOutgoingEdges(edges, memberId).some((edge) => edge.data?.managedByAssetGroup?.bindingId === binding.id)) connected += 1;
     else pending += 1;
   }
   return { connected, pending, unsupported, excluded: excluded.size };

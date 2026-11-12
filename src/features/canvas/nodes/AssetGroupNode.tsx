@@ -21,6 +21,7 @@ import { resolveAssetGroupMemberKind } from '@/features/canvas/application/asset
 import { resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
 import { getSocketColor } from '@/features/canvas/domain/socketTypes';
 import { useCanvasStore } from '@/stores/canvasStore';
+import { getChildNodes } from '@/features/canvas/domain/connectionIndex';
 import { NodeHeader } from '@/features/canvas/ui/NodeHeader';
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
 import { AssetGroupPreview } from '@/features/canvas/nodes/assetGroup/AssetGroupPreview';
@@ -48,7 +49,7 @@ export const AssetGroupNode = memo(({ id, data, selected }: AssetGroupNodeProps)
   // 原生 selected 不动。本节点目前没有这类控件，属于防御性的一层，别的节点都只看 selected。
   const isSelectedById = useCanvasStore((state) => state.selectedNodeId === id);
   const isActive = Boolean(selected) || isSelectedById;
-  const members = useCanvasStore(useShallow((state) => state.nodes.filter((node) => node.parentId === id)));
+  const members = useCanvasStore(useShallow((state) => getChildNodes(state.nodes, id)));
   const title = useMemo(() => resolveNodeDisplayName(CANVAS_NODE_TYPES.assetGroup, data), [data]);
   const mediaSummary = useMemo(() => {
     const counts = { image: 0, video: 0, audio: 0 };

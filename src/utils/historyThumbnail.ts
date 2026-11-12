@@ -1,10 +1,21 @@
 import { createLogger } from '@/core/logging'
-import { basename, dirname, exists, join, mkdir, toDisplaySrc, writeFile } from '@/platform/desktopApi'
+import { dirname, exists, join, mkdir, toDisplaySrc, writeFile } from '@/platform/desktopApi'
+import { thumbnailCacheFileName } from '@/core/media/thumbnailCacheName'
 
 const logger = createLogger('utils.historyThumbnail')
 const pendingThumbnails = new Map<string, Promise<string | undefined>>()
 const thumbnailWaiters = new Set<() => void>()
 let activeThumbnails = 0
+/**
+ * 本次运行里已确认存在的缩略图（按缩略图目录与原图路径）。批量准备据此跳过已有的，不再逐个跨进程查询；
+ * 缩略图只会随原图一起被回收，那时原图也不再需要它，所以不必失效。单个请求仍以磁盘为准。
+ */
+const readyThumbnails = new Set<string>()
+const readyKey = (imagePath: string, thumbnailsDir: string): string => `${thumbnailsDir}|${imagePath}`
+
+export function markHistoryThumbnailReady(imagePath: string, thumbnailsDir: string): void {
+  readyThumbnails.add(readyKey(imagePath, thumbnailsDir))
+}
 
 /**
  * Get the cache path for a history thumbnail (540px max, stored in /540/ subdirectory)
@@ -14,9 +25,7 @@ export async function getHistoryThumbnailCachePath(imagePath: string, thumbnails
     const { getThumbnailsPath } = await import('@/utils/dataPath')
     thumbnailsDir = await getThumbnailsPath()
   }
-  const imageName = basename(imagePath)
-  const thumbName = imageName.replace(/\.[^.]+$/, '.webp')
-  return await join(thumbnailsDir, '540', thumbName)
+  return await join(thumbnailsDir, '540', thumbnailCacheFileName(imagePath))
 }
 
 /**
@@ -55,7 +64,7 @@ export async function prepareHistoryThumbnails(
 ): Promise<void> {
   const { getThumbnailsPath } = await import('@/utils/dataPath')
   const thumbnailsDir = await getThumbnailsPath()
-  const iterator = new Set(paths).values()
+  const iterator = [...new Set(paths)].filter(path => !readyThumbnails.has(readyKey(path, thumbnailsDir))).values()
   const worker = async () => {
     while (!isCancelled()) {
       const next = iterator.next()
@@ -76,6 +85,7 @@ async function generateHistoryThumbnail(
     const cacheExists = await exists(cachePath)
 
     if (cacheExists) {
+      if (thumbnailsDir !== undefined) markHistoryThumbnailReady(imagePath, thumbnailsDir)
       return cachePath
     }
 
@@ -161,6 +171,7 @@ async function generateHistoryThumbnail(
       img.src = url
     })
 
+    if (thumbnailsDir !== undefined) markHistoryThumbnailReady(imagePath, thumbnailsDir)
     return cachePath
   } catch (error) {
     logger.error('[HistoryThumbnail] Generation failed:', error)

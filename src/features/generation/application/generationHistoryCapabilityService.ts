@@ -80,29 +80,33 @@ export async function listGenerationHistory(input: {
       endDate: input.endDate,
     }
     const origin = input.origin ?? 'all'
-    const needsPostFilter = Boolean(
-      input.status || input.keyword || input.providerId || input.modelId || input.timePreset || origin !== 'all',
-    )
-    const records = await databaseService.getHistory({
-      type: input.mediaType,
-      // success/completed 与 error/failed 是同义终态，且关键词/时间等维度数据库层不支持。
-      // 先按时间多读一些再在内存里归一过滤，避免模型加了筛选条件就漏掉真正最新的记录。
-      limit: needsPostFilter ? Math.min(120, input.limit * 4) : input.limit,
-    })
-    const statusGroup = input.status === 'success' || input.status === 'completed'
-      ? new Set(['success', 'completed'])
-      : input.status === 'error' || input.status === 'failed'
-        ? new Set(['error', 'failed'])
-        : null
-    // 与界面共用同一个谓词：用户能筛出来的，助手也筛得出来，且条数一致。
+    // success/completed 与 error/failed 是同义终态，一起交给数据库查。
+    const statuses: HistoryRecord['status'][] | undefined = input.status === 'success' || input.status === 'completed'
+      ? ['success', 'completed']
+      : input.status === 'error' || input.status === 'failed' ? ['error', 'failed'] : undefined
+    const query = { type: input.mediaType, providerId: input.providerId, modelId: input.modelId, statuses }
+    // 关键词（含模型显示名）、时间段与来源数据库层不支持，只能读出后在内存里筛：按时间从新到旧逐页读，
+    // 凑够条数或读完为止，更早的匹配记录也查得到。
+    const needsPostFilter = Boolean(input.keyword || input.timePreset || input.startDate || input.endDate || origin !== 'all')
     const now = Date.now()
-    const selectedRecords = needsPostFilter
-      ? records
-        .filter((record) => (statusGroup ? statusGroup.has(record.status) : true))
-        .filter((record) => origin === 'all' || (origin === 'canvas') === Boolean(record.params.__canvasGeneration))
-        .filter((record) => matchesGenerationHistoryFilter(toFilterSubject(record), criteria, now))
-        .slice(0, input.limit)
-      : records
+    const selectedRecords: HistoryRecord[] = []
+    // 翻页期间有新记录写入时整体后移，上一页末尾的记录会再出现一次。
+    const seen = new Set<string>()
+    const pageSize = needsPostFilter ? Math.max(200, input.limit * 4) : input.limit
+    for (let offset = 0; selectedRecords.length < input.limit; offset += pageSize) {
+      const page = await databaseService.getHistory({ ...query, limit: pageSize, offset })
+      // 与界面共用同一个谓词：用户能筛出来的，助手也筛得出来，且条数一致。
+      for (const record of page) {
+        if (selectedRecords.length >= input.limit) break
+        if (seen.has(record.id)) continue
+        seen.add(record.id)
+        if (needsPostFilter && (
+          (origin !== 'all' && (origin === 'canvas') !== Boolean(record.params.__canvasGeneration))
+          || !matchesGenerationHistoryFilter(toFilterSubject(record), criteria, now))) continue
+        selectedRecords.push(record)
+      }
+      if (page.length < pageSize) break
+    }
     logger.info('generation_history.list.completed', {
       event: 'assistant.generation_history.list.completed',
       count: selectedRecords.length,

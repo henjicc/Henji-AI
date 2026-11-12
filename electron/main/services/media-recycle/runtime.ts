@@ -15,6 +15,7 @@ import { assertMediaStorageCoverage, MEDIA_REFERENCE_TABLES } from './schema'
 import { MediaRecycleStopped } from './lifecycle'
 import { createRecycleStore, type RecycleRow } from './store'
 import type { LocationContext } from '../../../../src/core/storage/locationCodec'
+import { legacyThumbnailCacheFileName, thumbnailCacheFileName } from '../../../../src/core/media/thumbnailCacheName'
 
 const logger = createMainLogger('main.media_recycle')
 const providers: MediaReferenceProvider[] = [
@@ -39,11 +40,13 @@ function decodeCandidate(row: RecycleRow, context: LocationContext): RecycleCand
   const raw: unknown = JSON.parse(row.payload)
   const direct = raw as { paths: string[]; protectedBy: string[] }
   const paths = row.source === 'paths' ? decodeReferenceValues(direct.paths, context) : recordReferences(row.source, raw as Record<string, unknown>, context)
-  // 历史缩略图沿用主文件名，两个尺寸都受主文件引用保护。
+  // 缩略图按主文件命名（当前带路径哈希，旧缓存只用主文件名），两个尺寸都受主文件引用保护。
   const derivedFrom: Record<string, string[]> = {}
+  const thumbnails = getProgramStoreDir('thumbnails')
   for (const file of paths) {
-    const name = path.basename(file).replace(/\.[^.]+$/, '.webp')
-    for (const derived of [path.join(getProgramStoreDir('thumbnails'), name), path.join(getProgramStoreDir('thumbnails'), '540', name)]) (derivedFrom[derived] ??= []).push(file)
+    for (const name of new Set([thumbnailCacheFileName(file), legacyThumbnailCacheFileName(file)])) {
+      for (const derived of [path.join(thumbnails, name), path.join(thumbnails, '540', name)]) (derivedFrom[derived] ??= []).push(file)
+    }
   }
   return { id: row.id, paths: [...new Set([...paths, ...Object.keys(derivedFrom)])], derivedFrom, protectedBy: row.source === 'paths' ? decodeReferenceValues(direct.protectedBy, context) : [] }
 }

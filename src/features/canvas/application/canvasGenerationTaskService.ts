@@ -8,7 +8,8 @@ import type { GenerationPreparationInput } from '@/features/generation/applicati
 import { assertGenerationMediaDimensions, estimateGenerationPrice, GenerationPreparationError, prepareGenerationModelInput } from '@/features/generation/application/generationPreparationService'
 import i18n from '@/i18n'
 import { databaseService } from '@/services/database/DatabaseService'
-import { useCanvasStore } from '@/stores/canvasStore'
+import { useCanvasStore, type CanvasNode } from '@/stores/canvasStore'
+import type { HistoryRecord } from '@/services/database/types'
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore'
 import { CANVAS_NODE_TYPES } from '../domain/canvasNodes'
 import { stageControlledCanvasNode, stageCanvasConnection, CanvasApplicationError } from './canvasApplicationService'
@@ -213,17 +214,59 @@ async function registerCanvasGenerationTask(input: GenerationPreparationInput, d
     verification: { verified: true, condition: '生成节点、连线及任务已持久保存，后续进度在原画布中显示' } }
 }
 
-export async function getCanvasGenerationTask(taskId: string): Promise<Record<string, unknown> | null> {
-  const record = await databaseService.getHistoryById(taskId)
-  const value = record?.params[marker]
-  if (!record || !value || typeof value !== 'object' || Array.isArray(value)) return null
-  const { projectId, nodeId, version } = value as Record<string, unknown>
-  if (typeof projectId !== 'string' || typeof nodeId !== 'string') return null
+type SavedCanvasNodesReader = (projectId: string, record: HistoryRecord) => Promise<CanvasNode[]>
+
+async function readSavedCanvasNodes(projectId: string): Promise<CanvasNode[]> {
   const snapshot = await readPersistedCanvasProjectSnapshot(projectId).catch((error: unknown) => {
     if (error instanceof Error && error.message === 'PROJECT_NOT_FOUND') return null
     throw error
   })
-  const savedNodes = snapshot?.nodes ?? []
+  return snapshot?.nodes ?? []
+}
+
+export async function getCanvasGenerationTask(taskId: string): Promise<Record<string, unknown> | null> {
+  const record = await databaseService.getHistoryById(taskId)
+  return record ? await inspectCanvasGenerationTask(record, readSavedCanvasNodes) : null
+}
+
+/**
+ * 启动时对账全部画布生成记录。成功（且有结果）与已取消的记录不读画布（见 needsSavedCanvas），
+ * 其余记录按画布分组，每份画布只读一次（对账只改历史记录，不改画布文件，同一份快照对整组都成立）。
+ * 传入的是刚从数据库读出的记录，对账结果直接写回这些对象；单条失败只记日志，按已保存的记录显示。
+ */
+export async function reconcileCanvasGenerationTasks(records: readonly HistoryRecord[]): Promise<void> {
+  const savedNodes = new Map<string, Promise<CanvasNode[]>>()
+  const readGrouped: SavedCanvasNodesReader = async (projectId, record) => {
+    if (!needsSavedCanvas(record)) return []
+    let nodes = savedNodes.get(projectId)
+    if (!nodes) { nodes = readSavedCanvasNodes(projectId); savedNodes.set(projectId, nodes) }
+    return await nodes
+  }
+  for (const record of records) {
+    try {
+      await inspectCanvasGenerationTask(record, readGrouped)
+    } catch (error) {
+      logger.warn('画布生成记录对账失败，按已保存的记录显示', { event: 'canvas.generationTask.reconcile_failed', taskId: record.id, error })
+    }
+  }
+}
+
+/**
+ * 已保存的画布只用于把未完结、失败与超时的记录改写成终态。已取消、成功且已有结果的记录不会被改写，
+ * 发布的状态也不取决于已保存的节点（打开着的画布仍读内存节点），所以不读画布。
+ */
+function needsSavedCanvas(record: HistoryRecord): boolean {
+  const status = normalizeGenerationTaskStatus(record.status)
+  return !(status === 'cancelled' || (status === 'success' && record.resultPaths.length > 0))
+}
+
+async function inspectCanvasGenerationTask(record: HistoryRecord, readSavedNodes: SavedCanvasNodesReader): Promise<Record<string, unknown> | null> {
+  const taskId = record.id
+  const value = record.params[marker]
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const { projectId, nodeId, version } = value as Record<string, unknown>
+  if (typeof projectId !== 'string' || typeof nodeId !== 'string') return null
+  const savedNodes = await readSavedNodes(projectId, record)
   const nodes = findCanvasProjectInstance(projectId)?.store.getState().nodes ?? savedNodes
   const ownsResult = (node: (typeof nodes)[number]): boolean => node.data.generationSourceNodeId === nodeId
     && (version === 2 ? node.data.generationTaskId === taskId : node.data.generationTaskId === undefined)

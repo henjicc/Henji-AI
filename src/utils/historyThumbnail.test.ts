@@ -2,7 +2,8 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { exists, writeFile } from '@/platform/desktopApi'
 import { getThumbnailsPath } from '@/utils/dataPath'
-import { getOrCreateHistoryThumbnail, prepareHistoryThumbnails } from './historyThumbnail'
+import { getHistoryThumbnailCachePath, getOrCreateHistoryThumbnail, prepareHistoryThumbnails } from './historyThumbnail'
+import { thumbnailCacheFileName } from '@/core/media/thumbnailCacheName'
 
 vi.mock('@/platform/desktopApi', () => ({
   basename: (path: string) => path.split('/').at(-1),
@@ -43,11 +44,11 @@ it('并发重复请求只解码和写入一次，完成后重新检查磁盘而�
   const work = Promise.all(Array.from({ length: 1000 }, () => getOrCreateHistoryThumbnail('/a.png')))
   await vi.waitFor(() => expect(images).toHaveLength(1))
   await images[0].onload?.()
-  expect((await work).every(path => path === '/data/Thumbnails/540/a.webp')).toBe(true)
+  expect((await work).every(path => path === `/data/Thumbnails/540/${thumbnailCacheFileName('/a.png')}`)).toBe(true)
   expect(writeFile).toHaveBeenCalledTimes(1)
   expect(images[0].src).toBe('')
   vi.mocked(exists).mockResolvedValue(true)
-  expect(await getOrCreateHistoryThumbnail('/a.png')).toBe('/data/Thumbnails/540/a.webp')
+  expect(await getOrCreateHistoryThumbnail('/a.png')).toBe(`/data/Thumbnails/540/${thumbnailCacheFileName('/a.png')}`)
   expect(images).toHaveLength(1)
   expect(getThumbnailsPath).toHaveBeenCalledTimes(2)
 })
@@ -88,6 +89,23 @@ it('加载超时断开回调并释放并发名额，迟到的加载不能再写�
   await vi.waitFor(() => expect(images).toHaveLength(3))
   await lateLoad?.()
   await images[2].onload?.()
-  expect(await Promise.all(works)).toEqual([undefined, undefined, '/data/Thumbnails/540/c.webp'])
+  expect(await Promise.all(works)).toEqual([undefined, undefined, `/data/Thumbnails/540/${thumbnailCacheFileName('/c.png')}`])
   expect(writeFile).toHaveBeenCalledTimes(1)
+})
+
+it('不同目录的同名图片各有一张缩略图，同一文件的不同路径写法共用一张', async () => {
+  const left = await getHistoryThumbnailCachePath('D:\\生成\\1.png', '/data/Thumbnails')
+  const right = await getHistoryThumbnailCachePath('D:\\导入\\1.png', '/data/Thumbnails')
+  expect(left).not.toBe(right)
+  expect(await getHistoryThumbnailCachePath('d:/生成/1.PNG', '/data/Thumbnails')).toBe(left)
+  expect(thumbnailCacheFileName('D:/生成/1.png')).not.toBe(thumbnailCacheFileName('D:/生成/1.mp4'))
+})
+
+it('批量准备跳过本次运行已确认存在的缩略图，不再查询磁盘', async () => {
+  vi.mocked(exists).mockResolvedValue(true)
+  await prepareHistoryThumbnails(['/ready-1.png', '/ready-2.png'], () => false)
+  expect(exists).toHaveBeenCalledTimes(2)
+  vi.mocked(exists).mockClear()
+  await prepareHistoryThumbnails(['/ready-1.png', '/ready-2.png'], () => false)
+  expect(exists).not.toHaveBeenCalled()
 })

@@ -89,6 +89,16 @@ describe('generation application capabilities', () => {
     expect(own.records.map((record) => (record.ref as { id: string }).id)).toEqual(['history-1'])
   })
 
+  it('带条件查历史：模型与状态交给数据库筛，关键词逐页读到更早的匹配记录', async () => {
+    const rows = Array.from({ length: 450 }, (_, index) => ({ ...successfulImage, id: `history-${index}`,
+      prompt: index === 400 ? '很久以前的樱花' : `第 ${index} 条` }))
+    database.getHistory.mockImplementation(async (query: { offset?: number; limit?: number }) =>
+      rows.slice(query.offset ?? 0, (query.offset ?? 0) + (query.limit ?? rows.length)))
+    const result = await listGenerationHistory({ modelId: 'image-model', status: 'completed', keyword: '樱花', limit: 5 })
+    expect(result.records.map((record) => (record.ref as { id: string }).id)).toEqual(['history-400'])
+    expect(database.getHistory).toHaveBeenCalledWith(expect.objectContaining({ modelId: 'image-model', statuses: ['success', 'completed'] }))
+  })
+
   it('冷读取历史失败明确返回错误，不冒充没有生成结果', async () => {
     database.getHistoryById.mockRejectedValueOnce(new Error('历史数据库不可用'))
     const provider = createGenerationReflectionRegistrations().find(item => item.entity.id === GENERATION_ENTITY_TYPES.result)!.provider!

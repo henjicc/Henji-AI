@@ -15,7 +15,7 @@ vi.mock('@/services/database/DatabaseService', () => ({ databaseService: {
 vi.mock('@/utils/save', () => ({ isDesktop: () => true }))
 vi.mock('@/utils/dataPath', () => ({ getThumbnailsPath: async () => '/program/Thumbnails' }))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
-vi.mock('@/features/canvas/application/canvasGenerationTaskService', () => ({ getCanvasGenerationTask: vi.fn(async () => null) }))
+vi.mock('@/features/canvas/application/canvasGenerationTaskService', () => ({ reconcileCanvasGenerationTasks: vi.fn(async () => undefined) }))
 vi.mock('@/utils/historyThumbnail', () => ({ prepareHistoryThumbnails: vi.fn(async () => undefined) }))
 import { publishPersistedGenerationTask } from '../application/generationTaskHistory'
 import { replaceGenerationTasks } from '../application/generationTaskProjection'
@@ -31,25 +31,38 @@ function task(id = crypto.randomUUID()): GenerationTask { return { id, createdAt
 function saved(id: string) { return storage.rows.get(id) as HistoryRecord | undefined }
 afterEach(() => { cleanup(); replaceGenerationTasks([]); storage.beforeWrite = undefined; vi.useRealTimers(); vi.clearAllMocks(); storage.rows.clear(); storage.writes.length = 0 })
 
-it('后台缩略图按唯一结果路径提交，更新或卸载会取消旧批次', async () => {
+it('后台缩略图只提交变化的任务，被取消的批次留给下一轮，处理完的任务不再重复提交', async () => {
   vi.useFakeTimers()
-  const a = task()
-  a.result = { id: a.id, type: 'image', prompt: '', createdAt: a.createdAt, urls: ['/a.png'], filePaths: ['/a.png'] }
+  const withResult = (path: string): GenerationTask => {
+    const value = task()
+    value.result = { id: value.id, type: 'image', prompt: '', createdAt: value.createdAt, urls: [path], filePaths: [path] }
+    return value
+  }
+  const a = withResult('/a.png')
+  const first = gate()
+  vi.mocked(prepareHistoryThumbnails).mockImplementationOnce(() => first.promise)
   const { rerender, unmount } = renderHook(({ tasks }) => useSaveTaskHistory({
     tasks, isTasksLoaded: true, isInitialLoadRef: { current: false },
   }), { initialProps: { tasks: [a, { ...a, id: 'thumbnail-b' }] } })
   await act(async () => { await vi.advanceTimersByTimeAsync(1000); await vi.dynamicImportSettled() })
-  expect(prepareHistoryThumbnails).toHaveBeenCalledTimes(1)
   const [paths, isCancelled] = vi.mocked(prepareHistoryThumbnails).mock.calls[0]
   expect([...paths]).toEqual(['/a.png'])
-  expect(isCancelled()).toBe(false)
-  rerender({ tasks: [a] })
+  // 第一批还没处理完就来了新任务：旧批次取消，未处理的 a 和新的 c 一起进下一轮。
+  const c = withResult('/c.png')
+  rerender({ tasks: [a, c] })
   expect(isCancelled()).toBe(true)
+  first.release()
   await act(async () => { await vi.advanceTimersByTimeAsync(1000); await vi.dynamicImportSettled() })
-  const secondCancelled = vi.mocked(prepareHistoryThumbnails).mock.calls[1][1]
-  expect(secondCancelled()).toBe(false)
-  unmount()
+  const [secondPaths, secondCancelled] = vi.mocked(prepareHistoryThumbnails).mock.calls[1]
+  expect([...secondPaths]).toEqual(['/a.png', '/c.png'])
+  // 这一批完成后只改 c 的状态：只提交 c。
+  rerender({ tasks: [a, { ...c, status: 'success' }] })
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); await vi.dynamicImportSettled() })
+  expect([...vi.mocked(prepareHistoryThumbnails).mock.calls[2][0]]).toEqual(['/c.png'])
+  const thirdCancelled = vi.mocked(prepareHistoryThumbnails).mock.calls[2][1]
   expect(secondCancelled()).toBe(true)
+  unmount()
+  expect(thirdCancelled()).toBe(true)
   expect(databaseService.insertHistory).not.toHaveBeenCalled()
 })
 
@@ -67,8 +80,8 @@ it('已停止画布任务加载为非活动历史，保留说明且不重新保�
 })
 
 it('一条画布生成记录对账失败只影响这一条，其余历史照常加载（重要记录 020）', async () => {
-  const { getCanvasGenerationTask } = await import('@/features/canvas/application/canvasGenerationTaskService')
-  vi.mocked(getCanvasGenerationTask).mockRejectedValueOnce(new Error('找不到这份文档，它可能已被移动、改名或删除。'))
+  const { reconcileCanvasGenerationTasks } = await import('@/features/canvas/application/canvasGenerationTaskService')
+  vi.mocked(reconcileCanvasGenerationTasks).mockRejectedValueOnce(new Error('找不到这份文档，它可能已被移动、改名或删除。'))
   const make = (id: string, params: HistoryRecord['params']): HistoryRecord => ({ id, providerId: 'fixture', modelId: 'm', type: 'image', prompt: id,
     params, resultPaths: [], taskId: null, status: 'cancelled', errorMessage: null,
     cost: null, duration: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() })

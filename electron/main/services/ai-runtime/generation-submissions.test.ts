@@ -131,4 +131,18 @@ describe('原生生成提交事实', () => {
     expect(fresh.state).toBe('prepared')
     expect(fresh.targetRefs).not.toEqual(original.targetRefs)
   })
+
+  it('生成记录仓库：状态保存不重写没变的结果列，同义状态一起筛，分页按时间倒序', () => {
+    const history = openHistory(); state.db = history.db
+    const row = (id: string, status: 'success' | 'completed' | 'error', createdAt: string) => ({ id, providerId: 'p', modelId: 'm', type: 'image' as const,
+      prompt: id, params: {}, resultPaths: [`/out/${id}.png`], taskId: null, status, errorMessage: null, cost: null, duration: null, createdAt })
+    history.store.insertMany([row('a', 'success', '2026-01-01 00:00:01'), row('b', 'completed', '2026-01-01 00:00:02'), row('c', 'error', '2026-01-01 00:00:03')])
+    history.db.exec(`CREATE TABLE result_writes (id TEXT); CREATE TRIGGER count_result_writes AFTER UPDATE OF result_paths ON history BEGIN INSERT INTO result_writes VALUES (NEW.id); END`)
+    history.store.update('a', { status: 'success', resultPaths: ['/out/a.png'] })
+    history.store.update('b', { resultPaths: ['/out/b-2.png'] })
+    expect(history.db.prepare('SELECT id FROM result_writes').all()).toEqual([{ id: 'b' }])
+    expect(history.store.get('b')?.resultPaths).toEqual(['/out/b-2.png'])
+    expect(history.store.list({ statuses: ['success', 'completed'] }).map(item => item.id)).toEqual(['b', 'a'])
+    expect(history.store.list({ limit: 1, offset: 1 }).map(item => item.id)).toEqual(['b'])
+  })
 })

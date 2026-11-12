@@ -24,7 +24,7 @@ describe('画布文档内容换算', () => {
     const node = renderingCameraStageNode()
     const content = canvasToDocumentContent({ nodes: [node], edges: [] })
     const history = canvasHistoryForSessionState({ past: [{ nodes: [node], edges: [] }], future: [] })
-    for (const data of [content.nodes[0].data, history.past[0].nodes[0].data]) {
+    for (const data of [content.nodes[0].data, history.nodes[history.past[0].nodes[0]].data]) {
       expect(data).toMatchObject({ videoExporting: false, videoProgress: null, videoRenderPhase: null,
         videoRenderRequestId: null, videoRenderError: null, videoUrl: 'henji-media://completed.mp4' })
     }
@@ -76,6 +76,34 @@ describe('画布文档内容换算', () => {
   it('读不懂的撤销记录直接丢弃，不影响打开', () => {
     expect(canvasHistoryFromSessionState({ past: [{ nodes: [{ id: 'x' }], edges: [] }], future: [] })).toBeNull()
     expect(canvasHistoryFromSessionState('broken')).toBeNull()
+    const pooled = canvasHistoryForSessionState({ past: [{ nodes: [], edges: [] }], future: [] })
+    expect(canvasHistoryFromSessionState({ ...pooled, past: [{ nodes: [3], edges: [] }] })).toBeNull()
+  })
+
+  it('撤销记录落盘按对象去重：写入量不随步数成倍增长，读回后各步共用节点，旧写法照常能读', () => {
+    const nodes = Array.from({ length: 200 }, (_, index) => ({ id: `n${index}`, type: CANVAS_NODE_TYPES.imageEdit,
+      position: { x: index, y: 0 }, data: { imageUrl: `/media/${index}.png`, prompt: '提示词'.repeat(20) } }) as CanvasNode)
+    const steps = (count: number) => {
+      const snapshots = []
+      let current = nodes
+      for (let step = 0; step < count; step++) {
+        snapshots.push({ nodes: current, edges: [] })
+        current = current.map((node, index) => index === step ? { ...node, position: { x: node.position.x + 1, y: 0 } } : node)
+      }
+      return snapshots
+    }
+    const size = (count: number) => JSON.stringify(canvasHistoryForSessionState({ past: steps(count), future: [] })).length
+    // 12 步与 1 步相比只多出改动过的节点和下标，远不到 12 倍。
+    expect(size(12) / size(1)).toBeLessThan(1.5)
+
+    const written = JSON.parse(JSON.stringify(canvasHistoryForSessionState({ past: steps(3), future: [] })))
+    const restored = canvasHistoryFromSessionState(written)!
+    expect(restored.past).toHaveLength(3)
+    expect(restored.past[0].nodes[5]).toBe(restored.past[2].nodes[5])
+    expect(restored.past[2].nodes[1].position.x).toBe(2)
+
+    const legacy = JSON.parse(JSON.stringify({ past: steps(2), future: [] }))
+    expect(canvasHistoryFromSessionState(legacy)?.past.map(step => step.nodes.length)).toEqual([200, 200])
   })
 })
 

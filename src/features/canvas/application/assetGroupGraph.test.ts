@@ -275,4 +275,21 @@ describe('assetGroupGraph', () => {
     expect(dissolved?.nodes.some((item) => item.id === graph.groupId)).toBe(false);
     expect(dissolved?.edges.every((edge) => !edge.data?.managedByAssetGroup)).toBe(true);
   });
+
+  it('拖动别的节点时素材组投影复用上一帧：成员投影与连线数组不换新，统计变化时才重建', () => {
+    const graph = fixture();
+    const first = createAssetGroupRenderGraph(graph.nodes, graph.edges);
+    const dragged = graph.nodes.map((node) => node.id === graph.groupId || node.parentId ? node
+      : { ...node, position: { x: node.position.x + 5, y: node.position.y } });
+    const second = createAssetGroupRenderGraph(dragged, graph.edges);
+    expect(second.edges).toBe(first.edges);
+    const members = (projected: typeof first) => projected.nodes.filter((item) => item.parentId === graph.groupId)
+    expect(members(second)).toHaveLength(members(first).length)
+    members(second).forEach((member, index) => expect(member).toBe(members(first)[index]));
+
+    const withoutConnection = graph.edges.filter((edge) => edge !== graph.edges.find((item) => item.data?.managedByAssetGroup));
+    const third = createAssetGroupRenderGraph(dragged, withoutConnection);
+    expect(third.edges).not.toBe(first.edges);
+    expect(third.edges.find((edge) => edge.data?.assetGroupBundle)?.data?.assetGroupBundle).toMatchObject({ connected: 1 });
+  });
 });

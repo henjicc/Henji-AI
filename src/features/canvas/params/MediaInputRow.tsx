@@ -22,6 +22,7 @@ import {
 import { importLocalMedia, inferLocalMediaKind } from '@/services/localMediaImport';
 import { UiIconButton, UiInput } from '@/components/ui';
 import { canvasViewStore, useCanvasStore } from '@/stores/canvasStore';
+import { getIncomingEdges } from '@/features/canvas/domain/connectionIndex';
 import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
 import { isLocalVideoSource, useVideoInputThumbnail } from './useVideoInputThumbnail';
 import { VideoViewerModal } from '@/components/mediaViewer/VideoViewerModal';
@@ -156,7 +157,7 @@ export function MediaInputsRow({ nodeId, label, sources, onSourcesChange, handle
     useCanvasStore,
     (state) => kindKey.split('|').filter(Boolean).map((kind) => {
       const handleId = mediaPortId(kind as RowMediaKind);
-      return state.edges.some((edge) => edge.target === nodeId && edge.targetHandle === handleId);
+      return getIncomingEdges(state.edges, nodeId).some((edge) => edge.targetHandle === handleId);
     }),
     areFlagListsEqual,
   );

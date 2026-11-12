@@ -28,6 +28,7 @@ import {
 } from '@/features/canvas/ui/nodeControlStyles';
 import { getSocketColor, mediaPortId } from '@/features/canvas/domain/socketTypes';
 import { canvasViewStore, useCanvasStore } from '@/stores/canvasStore';
+import { getIncomingEdges, getOutgoingEdges } from '@/features/canvas/domain/connectionIndex';
 import { FrameCard } from '@/features/canvas/nodes/storyboardSplit/FrameCard';
 import { StoryboardExportSettingsPanel } from '@/features/canvas/nodes/storyboardSplit/ExportSettingsPanel';
 import { buildIncomingImagePickerItems } from '@/features/canvas/nodes/storyboardSplit/IncomingImagePicker';
@@ -63,12 +64,8 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
   const reorderStoryboardFrame = useCanvasStore((state) => state.reorderStoryboardFrame);
   const addDerivedExportNode = useCanvasStore((state) => state.addDerivedExportNode);
   const addEdge = useCanvasStore((state) => state.addEdge);
-  const hasTargetConnections = useCanvasStore((state) =>
-    state.edges.some((edge) => edge.target === id)
-  );
-  const hasSourceConnections = useCanvasStore((state) =>
-    state.edges.some((edge) => edge.source === id)
-  );
+  const hasTargetConnections = useCanvasStore((state) => getIncomingEdges(state.edges, id).length > 0);
+  const hasSourceConnections = useCanvasStore((state) => getOutgoingEdges(state.edges, id).length > 0);
   const updateStoryboardFrame = useCanvasStore((state) => state.updateStoryboardFrame);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
 

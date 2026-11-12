@@ -117,6 +117,11 @@ function getEdgesBySource(edges: CanvasEdge[]): Map<string, CanvasEdge[]> {
   return map;
 }
 
+/** 取从某节点出发的全部边（无则返回稳定的空数组引用）。 */
+export function getOutgoingEdges(edges: CanvasEdge[], nodeId: string): CanvasEdge[] {
+  return getEdgesBySource(edges).get(nodeId) ?? EMPTY_EDGES;
+}
+
 export function wouldCreateCanvasCycle(
   sourceNodeId: string,
   targetNodeId: string,
@@ -155,4 +160,27 @@ export function getNodeIndexById(nodes: CanvasNode[]): Map<string, CanvasNode> {
   nodeIndexCacheKey = nodes;
   nodeIndexCacheValue = map;
   return map;
+}
+
+let childNodesCacheKey: CanvasNode[] | null = null;
+let childNodesCacheValue: Map<string, CanvasNode[]> | null = null;
+const EMPTY_NODES: CanvasNode[] = [];
+
+/**
+ * 按 parentId 分桶索引节点。用 nodes 数组引用做单槽缓存：拖动时每帧 nodes 换新，
+ * 各组节点的选择器共用这一次 O(节点数) 建桶，而不是每个组各扫一遍全部节点。
+ */
+export function getChildNodes(nodes: CanvasNode[], parentId: string): CanvasNode[] {
+  if (childNodesCacheKey !== nodes || !childNodesCacheValue) {
+    const map = new Map<string, CanvasNode[]>();
+    for (const node of nodes) {
+      if (!node.parentId) continue;
+      const bucket = map.get(node.parentId);
+      if (bucket) bucket.push(node);
+      else map.set(node.parentId, [node]);
+    }
+    childNodesCacheKey = nodes;
+    childNodesCacheValue = map;
+  }
+  return childNodesCacheValue.get(parentId) ?? EMPTY_NODES;
 }

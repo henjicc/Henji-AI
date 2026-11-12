@@ -107,7 +107,11 @@ function bench(n) {
   const out = { n, unreleasedPct: UNRELEASED_PCT, seedMs: fmt(seedMs), dbMB: fmt(fs.statSync(file).size / 1e6) }
   out.pagePlan = db.prepare(`EXPLAIN QUERY PLAN SELECT * FROM history WHERE deleted_at IS NULL ORDER BY created_at DESC, rowid DESC LIMIT 50`).all().map((r) => r.detail).join(' | ')
 
-  const where = 'deleted_at IS NULL'
+  // STORE_WHERE=fixed：照 store.ts 修复后的写法，`+deleted_at` 让规划器不走 deleted_at 索引、改按 created_at 索引顺序取前 N 条。
+  const where = process.env.STORE_WHERE === 'fixed' ? '+deleted_at IS NULL' : 'deleted_at IS NULL'
+  out.where = where
+  out.pagePlanUsed = db.prepare(`EXPLAIN QUERY PLAN SELECT * FROM history WHERE ${where} ORDER BY created_at DESC, rowid DESC LIMIT 50`).all().map((r) => r.detail).join(' | ')
+  out.modelPlanUsed = db.prepare(`EXPLAIN QUERY PLAN SELECT * FROM history WHERE ${where} AND model_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 50`).all('veo-3').map((r) => r.detail).join(' | ')
   const all = db.prepare(`SELECT * FROM history WHERE ${where} ORDER BY created_at DESC, rowid DESC`)
   const [listAllSql, rows] = ms(() => all.all())
   const [listAllParse, records] = ms(() => rows.map(toRecord))
@@ -131,17 +135,24 @@ function bench(n) {
 
   // 新任务完成：插入一行，对应一条未交接回执 → 触发交接（NOT EXISTS 子查询扫整张 history 的 json_each）。
   const runs = 10
-  let insertTotal = 0, updatePathsTotal = 0, updateStatusTotal = 0
+  let insertTotal = 0, updatePathsTotal = 0, updateStatusTotal = 0, unchangedSaveTotal = 0
   for (let k = 0; k < runs; k++) {
     const r = row(n + k)
     sub.run(`req-new-${k}`, JSON.stringify({ filePaths: r.resultPaths }), 0)
     insertTotal += ms(() => insert.run({ ...r, id: `new-${k}` }))[0]
     updateStatusTotal += ms(() => db.prepare("UPDATE history SET status = 'success', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(`new-${k}`))[0]
     updatePathsTotal += ms(() => db.prepare('UPDATE history SET result_paths = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(r.result_paths, `new-${k}`))[0]
+    // store.update 修复后：结果列没变就不写，状态保存不再触发交接触发器（先按主键读一次旧值比对）。
+    unchangedSaveTotal += ms(() => {
+      const current = db.prepare('SELECT result_paths FROM history WHERE id = ?').get(`new-${k}`)
+      if (current.result_paths === r.result_paths) db.prepare("UPDATE history SET status = 'success', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(`new-${k}`)
+      else db.prepare("UPDATE history SET status = 'success', result_paths = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(r.result_paths, `new-${k}`)
+    })[0]
   }
   out.insertWithHandoffMs = fmt(insertTotal / runs)
   out.updateStatusMs = fmt(updateStatusTotal / runs)
   out.updateResultPathsMs = fmt(updatePathsTotal / runs)
+  out.saveWithUnchangedPathsFixedMs = fmt(unchangedSaveTotal / runs)
   const released = db.prepare("SELECT COUNT(*) c FROM generation_submissions WHERE request_id LIKE 'req-new-%' AND media_released = 1").get().c
   out.handoffReleased = `${released}/${runs}`
 

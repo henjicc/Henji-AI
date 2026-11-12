@@ -8,7 +8,7 @@ import { useStoreWithEqualityFn } from 'zustand/traditional';
 import {
   type CanvasNodeData,
 } from '@/features/canvas/domain/canvasNodes';
-import { getMainPortConnectionFlags } from '@/features/canvas/domain/connectionIndex';
+import { getIncomingEdges, getMainPortConnectionFlags } from '@/features/canvas/domain/connectionIndex';
 import { getDefaultModelId } from '@/features/canvas/domain/defaultModels';
 import { getNodeDefinition } from '@/features/canvas/domain/nodeRegistry';
 import { resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
@@ -115,7 +115,7 @@ export const GenerationNodeShell = memo(({
     ? workbenchMediaInput
     : undefined;
   const hasWorkbenchInputConnection = useCanvasStore((state) => Boolean(workbenchInputHandle
-    && state.edges.some((edge) => edge.target === id && edge.targetHandle === mediaPortId(workbenchInputHandle))));
+    && getIncomingEdges(state.edges, id).some((edge) => edge.targetHandle === mediaPortId(workbenchInputHandle))));
 
   const definition = useMemo(() => getNodeDefinition(nodeType), [nodeType]);
   const capability = useMemo(

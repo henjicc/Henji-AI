@@ -1,5 +1,5 @@
 import { exists, toDisplaySrc } from '@/platform/desktopApi'
-import { getHistoryThumbnailCachePath } from '@/utils/historyThumbnail'
+import { getHistoryThumbnailCachePath, markHistoryThumbnailReady } from '@/utils/historyThumbnail'
 
 type MediaKind = 'image' | 'video' | 'audio'
 
@@ -18,7 +18,11 @@ export function createHistoryMediaResolver(thumbnailsDir: string) {
         if (kind === 'image') {
           try {
             const cachePath = await getHistoryThumbnailCachePath(filePath, thumbnailsDir)
-            if (await exists(cachePath)) return toDisplaySrc(cachePath.replace(/\\/g, '/'))
+            if (await exists(cachePath)) {
+              // 后台缩略图准备据此跳过，不再为同一张图重复查询。
+              markHistoryThumbnailReady(filePath, thumbnailsDir)
+              return toDisplaySrc(cachePath.replace(/\\/g, '/'))
+            }
           } catch {
             // 缓存不可用仍使用原图，与原加载契约一致。
           }

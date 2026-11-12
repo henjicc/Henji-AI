@@ -1,6 +1,6 @@
 import type React from 'react'
 import { subscribeRestored } from '@/services/recycle'
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { createLogger } from '@/core/logging'
 import { databaseService } from '@/services/database/DatabaseService'
 import type { HistoryRecord } from '@/services/database/types'
@@ -37,18 +37,16 @@ export function useLoadTaskHistory({
 
     try {
       const historyRecords = await loadHistoryWithRetries()
-      // 画布结果归原文档；首次历史/实体读取先由正式任务服务对账，再读取同一持久记录。
-      for (const record of historyRecords) {
-        if (!record.params.__canvasGeneration) continue
-        // 一条记录对账失败（原画布损坏、读不到）只影响这一条：按已保存的记录显示。
-        // 此前异常冒出循环，整份历史加载失败，生成页一条历史都不显示（重要记录 020）
+      // 画布结果归原文档；首次历史/实体读取先由正式任务服务对账，对账结果直接写回这些记录。
+      // 单条对账失败（原画布损坏、读不到）只影响这一条，由对账服务记日志并按已保存的记录显示。
+      const canvasRecords = historyRecords.filter(record => record.params.__canvasGeneration)
+      if (canvasRecords.length) {
         try {
-          const { getCanvasGenerationTask } = await import('@/features/canvas/application/canvasGenerationTaskService')
-          await getCanvasGenerationTask(record.id)
-          const reconciled = await databaseService.getHistoryById(record.id)
-          if (reconciled) Object.assign(record, reconciled)
+          const { reconcileCanvasGenerationTasks } = await import('@/features/canvas/application/canvasGenerationTaskService')
+          await reconcileCanvasGenerationTasks(canvasRecords)
         } catch (error) {
-          logger.warn('[Workspace] 画布生成记录对账失败，按已保存的记录显示', { taskId: record.id, error })
+          // 对账整体不可用时其余历史照常加载（重要记录 020）。
+          logger.warn('[Workspace] 画布生成记录对账失败，按已保存的记录显示', { error })
         }
       }
       const resolveMedia = createHistoryMediaResolver(await getThumbnailsPath())
@@ -84,6 +82,8 @@ export interface UseSaveTaskHistoryParams {
 }
 
 export function useSaveTaskHistory({ tasks, isTasksLoaded, isInitialLoadRef }: UseSaveTaskHistoryParams): void {
+  // 任务对象在内容变化时才换新；已经完整处理过的对象不再进入下一轮，一次状态变化只查变了的那几条。
+  const preparedTasks = useRef(new WeakSet<GenerationTask>())
   useEffect(() => {
     if (!isTasksLoaded) return
     if (!isDesktop()) return
@@ -91,15 +91,19 @@ export function useSaveTaskHistory({ tasks, isTasksLoaded, isInitialLoadRef }: U
 
     let cancelled = false
     const timer = setTimeout(() => {
+      const changed = tasks.filter(task => !preparedTasks.current.has(task))
       const paths = new Set<string>()
-      for (const task of tasks) {
+      for (const task of changed) {
         if (task.type === 'image' && task.result) {
           for (const path of task.result.filePaths) paths.add(path)
         }
       }
-      if (paths.size === 0) return
+      const markPrepared = (): void => { for (const task of changed) preparedTasks.current.add(task) }
+      if (paths.size === 0) { markPrepared(); return }
       void import('@/utils/historyThumbnail')
         .then(({ prepareHistoryThumbnails }) => prepareHistoryThumbnails(paths, () => cancelled))
+        // 被下一轮取消时这批没处理完，留给下一轮；单张失败也算处理过，等该任务再变化时才重试。
+        .then(() => { if (!cancelled) markPrepared() })
         .catch((error: unknown) => logger.error('历史缩略图更新失败', {
           event: 'generation.history.thumbnails_failed', error,
         }))
