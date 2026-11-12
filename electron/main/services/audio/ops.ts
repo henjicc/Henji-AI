@@ -15,10 +15,14 @@ import { getMediaCacheManager } from '../media/media-cache-runtime'
 import { identifyMediaContent, type MediaContentIdentity } from '../media/content-identity'
 import {
   WAVEFORM_DETAIL_MAX_FRAMES, WAVEFORM_PYRAMID_BASE_SAMPLES_PER_BUCKET, WAVEFORM_PYRAMID_FORMAT_VERSION, WAVEFORM_PYRAMID_LEVEL_FACTOR, WAVEFORM_PYRAMID_TOP_BUCKETS,
-  aggregateWaveformLevel, audioWaveformSampleIndex, decodeWaveformPyramid, encodeWaveformPyramid, selectWaveformLevel, waveformPyramidByteSize, waveformPyramidPeakMax,
-  type WaveformPyramidData,
+  aggregateWaveformLevel, audioWaveformSampleIndex, decodeWaveformPyramid, decodeWaveformPyramidFloats, encodeWaveformPyramid, encodeWaveformPyramidFloats, selectWaveformLevel,
+  waveformPyramidByteSize, waveformPyramidFloatsByteSize, waveformPyramidPeakMax,
+  type WaveformPyramidData, type WaveformPyramidFloats,
 } from '../../../../src/core/media/waveformPyramid'
-import type { AudioWaveformChannel, AudioWaveformPyramidOutput, AudioWaveformPyramidRequest, AudioWaveformPyramidResult, AudioWaveformRangeRequest, AudioWaveformRangeResult, AudioWaveformWorkerOptions, ExtractAudioSamplesResultDto } from './types'
+import { openF32Wav } from '../audio-edit/pcm-wav'
+import { audioLineageTracked, findAudioLineageAncestor, type AudioLineageRange } from './lineage'
+import { deriveWaveformPyramid } from './waveform-worker'
+import type { AudioWaveformChannel, AudioWaveformPyramidOptions, AudioWaveformPyramidOutput, AudioWaveformPyramidRequest, AudioWaveformPyramidResult, AudioWaveformRangeRequest, AudioWaveformRangeResult, AudioWaveformWorkerOptions, ExtractAudioSamplesResultDto } from './types'
 
 export { audioWaveformSampleIndex }
 
@@ -58,6 +62,11 @@ export interface AudioWaveformServiceDependencies {
   resolvePath?: (source: string, signal?: AbortSignal) => Promise<string>
   identity?: (source: string) => Promise<SourceIdentity>
   createWorker?: () => AggregationWorker
+  /** 文件来历（编辑后声音与上一版差在哪些帧）；默认读 lineage.ts 的记录。 */
+  lineage?: {
+    tracked(file: string): Promise<boolean>
+    ancestor<T>(file: string, accept: (ancestor: string) => Promise<T | undefined>): Promise<{ ancestor: string; value: T; dirty: AudioLineageRange[]; hops: number } | undefined>
+  }
   cacheBudgetBytes?: number
   /** 波形任务同时运行的数量；默认按逻辑核数取。 */
   queueConcurrency?: number
@@ -70,6 +79,8 @@ export interface AudioWaveformServiceDependencies {
 interface ChannelSelection { channels: 1 | 2; audioStream: number; audioChannel?: number }
 type FileLayout = 'native' | 'mix1' | 'mix2' | `ch${number}`
 interface PyramidJobResult { readonly shared: true; data: WaveformPyramidData; layout: FileLayout }
+/** 按块派生的结果与重算规模（日志据此核对增量是否生效）。 */
+interface DerivedPyramid { data: WaveformPyramidData; floats: WaveformPyramidFloats; recomputedFrames: number; hops: number }
 /** 命中内存或磁盘缓存时的分段耗时（毫秒）与字节数，供 cache_hit 日志区分读盘、解码与拷贝。 */
 interface PyramidCacheHit { from: 'memory' | 'disk'; bytes: number; readMs: number; decodeMs: number; lookupMs: number }
 interface LoadedPyramid { data: WaveformPyramidData; channels: number[]; version: string; hit?: PyramidCacheHit }
@@ -231,7 +242,7 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
   dispose(): Promise<void>
   statistics(): { active: number; queued: number; cacheBytes: number; cacheEntries: number; pyramidBytes: number; pyramidEntries: number }
 } {
-  // 精细回读不占重型媒体槽，并发只由这里约束：后台媒体线程预算的一半，每个任务 2 线程。
+  // 精细回读不占重型媒体槽，并发只由这里约束：后台媒体线程预算的一半，每个任务占 2 个线程。
   // 整段金字塔同时占重型槽，按两边都计，最坏并行度只会被高估。
   const queue = new AudioWaveformQueue(dependencies.cacheBudgetBytes ?? audioMemoryBudgetBytes(256, 64 * MIB), dependencies.queueConcurrency ?? Math.max(1, Math.floor(MEDIA_BACKGROUND_THREADS / 2 / 2)))
   const resolvePath = dependencies.resolvePath ?? resolveLocalMediaPath
@@ -241,6 +252,7 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
     ? getMediaCacheManager().createCache('preview', 'waveforms', { extension: '.hwpk', onError: (event, error) => logger.error('波形磁盘缓存失败', { event: `audio.waveform.cache.${event}_failed`, error }) })
     : dependencies.diskCache
   const memoryBudget = dependencies.pyramidMemoryBytes ?? audioMemoryBudgetBytes(64, 128 * MIB)
+  const lineage = dependencies.lineage ?? { tracked: audioLineageTracked, ancestor: findAudioLineageAncestor }
   const probes = new Map<string, AudioMetadata>()
   async function probe(original: SourceIdentity, signal: AbortSignal, audioStream: number): Promise<AudioMetadata> {
     const key = `${original.identity}|${audioStream}`
@@ -251,10 +263,13 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
     if (probes.size > PROBE_CACHE_ENTRIES) probes.delete(probes.keys().next().value as string)
     return metadata
   }
-  const memory = new Map<string, { data: WaveformPyramidData; bytes: number }>()
+  type MemoryEntry = { data: WaveformPyramidData; bytes: number } | { floats: WaveformPyramidFloats; bytes: number }
+  const memory = new Map<string, MemoryEntry>()
   let memoryBytes = 0
-  const remember = (key: string, data: WaveformPyramidData): void => {
-    const bytes = waveformPyramidByteSize(data)
+  const remember = (key: string, data: WaveformPyramidData): void => keep(key, { data, bytes: waveformPyramidByteSize(data) })
+  const rememberFloats = (key: string, floats: WaveformPyramidFloats): void => keep(key, { floats, bytes: waveformPyramidFloatsByteSize(floats) })
+  const keep = (key: string, entry: MemoryEntry): void => {
+    const bytes = entry.bytes
     const previous = memory.get(key)
     if (previous) { memory.delete(key); memoryBytes -= previous.bytes }
     if (bytes > memoryBudget) return
@@ -262,13 +277,14 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
       const oldest = memory.keys().next().value as string
       memoryBytes -= memory.get(oldest)!.bytes; memory.delete(oldest)
     }
-    memory.set(key, { data, bytes }); memoryBytes += bytes
+    memory.set(key, entry); memoryBytes += bytes
   }
   const fileKey = (sourceIdentity: string, audioStream: number, layout: FileLayout): string => digest(['hwpk', WAVEFORM_PYRAMID_FORMAT_VERSION, sourceIdentity, audioStream, layout])
+  const floatsKey = (sourceIdentity: string, audioStream: number, layout: FileLayout): string => digest(['hwpf', WAVEFORM_PYRAMID_FORMAT_VERSION, sourceIdentity, audioStream, layout])
   interface CacheHit { data: WaveformPyramidData; from: 'memory' | 'disk'; bytes: number; readMs: number; decodeMs: number }
   async function cached(key: string): Promise<CacheHit | undefined> {
     const held = memory.get(key)
-    if (held) { memory.delete(key); memory.set(key, held); return { data: held.data, from: 'memory', bytes: held.bytes, readMs: 0, decodeMs: 0 } }
+    if (held && 'data' in held) { memory.delete(key); memory.set(key, held); return { data: held.data, from: 'memory', bytes: held.bytes, readMs: 0, decodeMs: 0 } }
     const readStarted = performance.now()
     const bytes = await disk?.read(key)
     if (!bytes) return undefined
@@ -283,6 +299,29 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
       return undefined
     }
   }
+  async function cachedFloats(key: string): Promise<WaveformPyramidFloats | undefined> {
+    const held = memory.get(key)
+    if (held && 'floats' in held) { memory.delete(key); memory.set(key, held); return held.floats }
+    const bytes = await disk?.read(key)
+    if (!bytes) return undefined
+    try {
+      const floats = decodeWaveformPyramidFloats(bytes)
+      rememberFloats(key, floats)
+      return floats
+    } catch (error) {
+      logger.error('波形摘要缓存文件无效，已删除', { event: 'audio.waveform.cache.invalid', error })
+      await disk?.remove(key).catch(() => undefined)
+      return undefined
+    }
+  }
+  async function store(sourceIdentity: string, audioStream: number, layout: FileLayout, data: WaveformPyramidData, floats: WaveformPyramidFloats | undefined, requestId: string): Promise<void> {
+    remember(fileKey(sourceIdentity, audioStream, layout), data)
+    if (floats) rememberFloats(floatsKey(sourceIdentity, audioStream, layout), floats)
+    try {
+      await disk?.write(fileKey(sourceIdentity, audioStream, layout), encodeWaveformPyramid(data))
+      if (floats) await disk?.write(floatsKey(sourceIdentity, audioStream, layout), encodeWaveformPyramidFloats(floats))
+    } catch (error) { logger.error('多级波形写入磁盘缓存失败', { event: 'audio.waveform.cache.write_failed', requestId, error }) }
+  }
   async function lookup(sourceIdentity: string, selection: ChannelSelection): Promise<(CacheHit & { layout: FileLayout }) | undefined> {
     for (const layout of ['native', selectionLayout(selection)] as const) {
       const hit = await cached(fileKey(sourceIdentity, selection.audioStream, layout))
@@ -292,7 +331,7 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
   }
 
   /** Decodes the whole sound stream once on the absolute clock and builds every level in the Worker. */
-  async function decodePyramid(original: SourceIdentity, selection: ChannelSelection, signal: AbortSignal, onProgress: () => void): Promise<{ data: WaveformPyramidData; layout: FileLayout }> {
+  async function decodePyramid(original: SourceIdentity, selection: ChannelSelection, signal: AbortSignal, onProgress: () => void, keepFloats: boolean): Promise<{ data: WaveformPyramidData; layout: FileLayout; floats?: WaveformPyramidFloats }> {
     const ffmpeg = await (dependencies.ffmpegPath ?? loadFfmpegPath)()
     const metadata = await probe(original, signal, selection.audioStream)
     onProgress()
@@ -312,16 +351,70 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
         kind: 'pyramid', channels: channelCount, mix: native && metadata.channels === 2, expectedFrames,
         sampleRate: metadata.sampleRate, startSeconds: metadata.startSeconds, endSeconds: metadata.endSeconds, nativeChannels: metadata.channels,
         baseSamplesPerBucket: WAVEFORM_PYRAMID_BASE_SAMPLES_PER_BUCKET, levelFactor: WAVEFORM_PYRAMID_LEVEL_FACTOR, topBuckets: WAVEFORM_PYRAMID_TOP_BUCKETS,
+        ...(keepFloats && native ? { keepFloats: true } : {}),
       })
       const args = decodeArgs(original.path, metadata, { audioStream: selection.audioStream, ...(native ? {} : { audioChannel: selection.audioChannel }), channelCount, startUs: 0, endUs, first: 0, expectedFrames })
       await runProcess(ffmpeg, args, signal, chunk => { onProgress(); return worker.push(chunk) })
-      const { pyramid } = await worker.finishPyramid()
+      const { pyramid, floats } = await worker.finishPyramid()
       signal.throwIfAborted()
-      return { data: pyramid, layout }
+      return { data: pyramid, layout, ...(floats ? { floats } : {}) }
     } finally {
       signal.removeEventListener('abort', dispose)
       await worker.dispose()
     }
+  }
+
+  /**
+   * 按来历派生：这份文件（编辑后声音）与某个祖先除几段帧外样本逐值相同，且祖先的金字塔与第 1 级摘要都在缓存里时，
+   * 只把改动所在、对齐到第 1 级桶的帧段直接从浮点 WAV 读出来重算，不起 FFmpeg 整段解码。结果与整段生成逐字节相同（金字塔只由样本决定）。
+   * 只处理原声道（≤ 2 声道）、从 0 秒开始的浮点 WAV；其余情况返回 undefined，由调用方整段生成。
+   */
+  async function derivePyramid(original: SourceIdentity, selection: ChannelSelection, signal: AbortSignal): Promise<DerivedPyramid | undefined> {
+    if (selection.audioStream !== 0) return undefined
+    const found = await lineage.ancestor(original.path, async ancestor => {
+      const parent = await identity(ancestor).catch(() => undefined)
+      if (!parent) return undefined
+      const hit = await cached(fileKey(parent.identity, 0, 'native'))
+      const floats = hit ? await cachedFloats(floatsKey(parent.identity, 0, 'native')) : undefined
+      return hit && floats ? { data: hit.data, floats } : undefined
+    })
+    if (!found) return undefined
+    const skip = (reason: string): undefined => { logger.info('波形按块派生不可用，整段生成', { event: 'audio.waveform.pyramid.derive_skipped', context: { reason } }); return undefined }
+    const metadata = await probe(original, signal, 0)
+    if (metadata.channels > NATIVE_PYRAMID_CHANNELS || metadata.startSeconds !== 0) return skip('不是从 0 秒开始的单声道或立体声')
+    const expectedFrames = Math.max(1, audioWaveformSampleIndex(Math.round(metadata.endSeconds * MICROSECONDS), metadata.sampleRate))
+    const parent = found.value.data
+    if (parent.sampleRate !== metadata.sampleRate || parent.startSeconds !== metadata.startSeconds || parent.endSeconds !== metadata.endSeconds || parent.nativeChannels !== metadata.channels) return skip('与上一版声音规格不同')
+    const options: AudioWaveformPyramidOptions = {
+      kind: 'pyramid', channels: metadata.channels, mix: metadata.channels === 2, expectedFrames, sampleRate: metadata.sampleRate, startSeconds: metadata.startSeconds, endSeconds: metadata.endSeconds,
+      nativeChannels: metadata.channels, baseSamplesPerBucket: WAVEFORM_PYRAMID_BASE_SAMPLES_PER_BUCKET, levelFactor: WAVEFORM_PYRAMID_LEVEL_FACTOR, topBuckets: WAVEFORM_PYRAMID_TOP_BUCKETS,
+    }
+    const span = WAVEFORM_PYRAMID_BASE_SAMPLES_PER_BUCKET * WAVEFORM_PYRAMID_LEVEL_FACTOR
+    const aligned: Array<[number, number]> = []
+    for (const [start, end] of found.dirty) {
+      const from = Math.floor(Math.max(0, start) / span) * span, to = Math.min(expectedFrames, Math.ceil(end / span) * span)
+      if (to <= from) continue
+      const last = aligned.at(-1)
+      if (last && from <= last[1]) last[1] = Math.max(last[1], to)
+      else aligned.push([from, to])
+    }
+    const recomputedFrames = aligned.reduce((sum, [from, to]) => sum + to - from, 0)
+    // 改动超过一半时整段解码一遍更快，也省得在主进程里算。
+    if (recomputedFrames > expectedFrames / 2) return skip('改动超过一半')
+    const reader = await openF32Wav(original.path)
+    if (!reader) return skip('不是浮点 WAV')
+    try {
+      if (reader.sampleRate !== metadata.sampleRate || reader.channels !== metadata.channels) return skip('文件头与探测结果不一致')
+      const delivered = Math.min(reader.frames, expectedFrames)
+      const spans: Array<{ startFrame: number; endFrame: number; values: Float32Array }> = []
+      for (const [from, to] of aligned) {
+        signal.throwIfAborted()
+        spans.push({ startFrame: from, endFrame: to, values: await reader.read(from, Math.max(0, Math.min(to, delivered) - from)) })
+      }
+      const derived = deriveWaveformPyramid(parent, found.value.floats, options, spans, delivered)
+      if ('reason' in derived) return skip(derived.reason)
+      return { data: derived.pyramid, floats: derived.floats, recomputedFrames, hops: found.hops }
+    } finally { await reader.close() }
   }
 
   /**
@@ -362,17 +455,22 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
         const original = known ?? await identity(resolved)
         const before = await identity(resolved)
         if (before.identity !== original.identity) throw new Error('音频素材已变化，请重新分析。')
-        const decoded = await decodePyramid(original, selection, controller.signal, timer.refresh)
+        // 编辑后声音只改了几段时按块派生；有来历记录的文件整段生成时一并留下第 1 级摘要，供下一版派生。
+        // 派生途中读缓存、读文件出错与派生不了一样处理：整段解码（取消照常抛出）。
+        const derived = known && !remote ? await derivePyramid(original, selection, controller.signal).catch((error: unknown) => {
+          if (controller.signal.aborted) throw error
+          logger.warn('波形按块派生出错，整段生成', { event: 'audio.waveform.pyramid.derive_skipped', requestId, error, context: { reason: 'error' } })
+          return undefined
+        }) : undefined
+        const tracked = Boolean(known && !remote && (derived || await lineage.tracked(original.path)))
+        const decoded = derived ? { data: derived.data, layout: 'native' as const, floats: derived.floats } : await decodePyramid(original, selection, controller.signal, timer.refresh, tracked)
         const after = await identity(resolved)
         if (after.identity !== original.identity) throw new Error('音频素材在分析期间变化，请重新分析。')
-        if (known) {
-          const key = fileKey(known.identity, selection.audioStream, decoded.layout)
-          remember(key, decoded.data)
-          try { await disk?.write(key, encodeWaveformPyramid(decoded.data)) }
-          catch (error) { logger.error('多级波形写入磁盘缓存失败', { event: 'audio.waveform.cache.write_failed', requestId, error }) }
-        }
-        logger.debug('多级波形生成完成', { event: 'audio.waveform.pyramid.completed', requestId, context: { sampleRate: decoded.data.sampleRate, frameCount: decoded.data.frameCount, channels: decoded.data.channelCount, levels: decoded.data.levels.length, bytes: waveformPyramidByteSize(decoded.data), elapsedMs: performance.now() - decodeStarted } })
-        return { shared: true as const, ...decoded }
+        if (known) await store(known.identity, selection.audioStream, decoded.layout, decoded.data, decoded.floats, requestId)
+        const context = { derived: Boolean(derived), sampleRate: decoded.data.sampleRate, frameCount: decoded.data.frameCount, recomputedFrames: derived?.recomputedFrames ?? decoded.data.frameCount, ...(derived ? { hops: derived.hops } : {}), channels: decoded.data.channelCount, levels: decoded.data.levels.length, bytes: waveformPyramidByteSize(decoded.data), elapsedMs: performance.now() - decodeStarted }
+        if (tracked) logger.info('多级波形生成完成', { event: 'audio.waveform.pyramid.completed', requestId, context })
+        else logger.debug('多级波形生成完成', { event: 'audio.waveform.pyramid.completed', requestId, context })
+        return { shared: true as const, data: decoded.data, layout: decoded.layout }
       } catch (error) {
         if (controller.signal.aborted && !(controller.signal.reason instanceof DOMException && controller.signal.reason.name === 'TimeoutError')) logger.debug('多级波形生成取消', { event: 'audio.waveform.pyramid.cancelled', requestId })
         else logger.error('多级波形生成失败', { event: 'audio.waveform.pyramid.failed', requestId, error })

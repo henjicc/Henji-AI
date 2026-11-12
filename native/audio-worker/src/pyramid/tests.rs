@@ -450,6 +450,51 @@ fn bulk_pcm_reader_matches_hound_across_batches_and_offsets() {
     }
 }
 
+/// 声音只改了几段：从上一版目录派生的结果（含第 9 层未量化列与清单）与对新声音整段计算逐字节相同，
+/// 重算的基础列只有改动波及的几组。
+#[test]
+fn derived_pyramid_matches_full_build_byte_for_byte() {
+    let dir = tempfile::tempdir().unwrap();
+    // 约 64 秒立体声：12 个第 9 层组，第 10–15 层都有要重合并的列，最后一组不满。
+    let frames = 3_070_123_usize;
+    let signal = |frame: usize, channel: usize| (TAU * (330.0 + 110.0 * channel as f32) * frame as f32 / 48000.0).sin() * 0.25 * (1.0 + ((frame / 7777) % 3) as f32) / 3.0;
+    let write = |path: &std::path::Path, change: &dyn Fn(usize, usize, f32) -> f32| {
+        let mut writer = crate::dsp::audio::F32Writer::new(File::create(path).unwrap(), 2, 48000).unwrap();
+        let block: Vec<f32> = (0..frames).flat_map(|frame| [0, 1].map(|channel| change(frame, channel, signal(frame, channel)))).collect();
+        writer.write_samples(&block).unwrap();
+        writer.finalize().unwrap();
+    };
+    let before = dir.path().join("before.wav");
+    let after = dir.path().join("after.wav");
+    let dirty = [[0_u64, 300], [1_000_000, 1_000_500], [frames as u64 - 300, frames as u64]];
+    write(&before, &|_, _, value| value);
+    write(&after, &|frame, _, value| if dirty.iter().any(|[start, end]| (*start..*end).contains(&(frame as u64))) { value * 0.5 + 0.05 } else { value });
+    let full = |input: &std::path::Path, output: &std::path::Path| {
+        build(BuildRequest { input_path: input.to_path_buf(), output_directory: output.to_path_buf() }, &AtomicBool::new(false), || {}, |_| {}).unwrap();
+    };
+    let parent = dir.path().join("parent");
+    let whole = dir.path().join("whole");
+    full(&before, &parent);
+    full(&after, &whole);
+    let derived = dir.path().join("derived");
+    let result = derive(DeriveRequest { input_path: after.clone(), parent_directory: parent.clone(), output_directory: derived.clone(), dirty: dirty.to_vec() }, &AtomicBool::new(false), || {}).unwrap();
+    let total = column_count(0, frames as u64);
+    // 三处改动（第 0 帧、中间、末帧）各落在一组里（第 9 层每组 512 个基础列，最后一组不满）
+    assert_eq!(result["recomputedBaseColumns"], json!(2 * 512 + (total - (total >> SIDECAR_LEVEL << SIDECAR_LEVEL))));
+    let mut names: Vec<_> = fs::read_dir(&whole).unwrap().map(|entry| entry.unwrap().file_name()).collect();
+    names.sort();
+    assert!(names.iter().any(|name| name == SIDECAR_FILE));
+    let mut derived_names: Vec<_> = fs::read_dir(&derived).unwrap().map(|entry| entry.unwrap().file_name()).collect();
+    derived_names.sort();
+    assert_eq!(derived_names, names);
+    for name in &names {
+        assert!(fs::read(whole.join(name)).unwrap() == fs::read(derived.join(name)).unwrap(), "{name:?}");
+    }
+    // 上一版没有未量化列（旧版本算的目录）时拒绝派生，由主进程整段计算
+    fs::remove_file(parent.join(SIDECAR_FILE)).unwrap();
+    assert!(derive(DeriveRequest { input_path: after, parent_directory: parent, output_directory: dir.path().join("refused"), dirty: dirty.to_vec() }, &AtomicBool::new(false), || {}).is_err());
+}
+
 #[test]
 fn interrupted_build_resumes_from_aligned_point_with_identical_output() {
     let dir = tempfile::tempdir().unwrap();
@@ -495,6 +540,13 @@ fn interrupted_build_resumes_from_aligned_point_with_identical_output() {
         fs::write(partial.join(&name), bytes).unwrap();
         manifest["available"][level] = json!((RESUME_ALIGN + 37) >> (level - MIN_PERSISTED));
     }
+    // 第 9 层未量化列同样停在对齐点之后、后半截是垃圾
+    let sums_row = sidecar_row(1, resolution(0).low_bins(48000));
+    let mut sums = fs::read(whole.join(SIDECAR_FILE)).unwrap();
+    sums.truncate((((RESUME_ALIGN + 37) >> (SIDECAR_LEVEL - MIN_PERSISTED)) * sums_row) as usize);
+    let aligned = ((RESUME_ALIGN >> (SIDECAR_LEVEL - MIN_PERSISTED)) * sums_row) as usize;
+    sums[aligned..].fill(0xEE);
+    fs::write(partial.join(SIDECAR_FILE), sums).unwrap();
     manifest["done"] = json!(false);
     fs::write(partial.join("manifest.json"), manifest.to_string()).unwrap();
     assert_eq!(run(&partial)["resumedFromFrame"], RESUME_ALIGN * 8 * 512);

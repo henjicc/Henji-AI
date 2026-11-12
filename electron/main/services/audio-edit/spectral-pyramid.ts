@@ -1,9 +1,10 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { audioEditSpectralTileRequestSchema, spectralColumnCount, spectralLowBins, spectralHighBins, spectralResolution, SPECTRAL_PERSISTED_MIN_LEVEL, SPECTRAL_TILE_COLUMNS, type AudioEditSpectralTile, type AudioEditSpectralTileRequest, type AudioEditSpectralProgress } from '../../../../src/core/audioEdit/spectralPyramid'
+import { audioEditSpectralTileRequestSchema, spectralColumnCount, spectralHop, spectralLowBins, spectralHighBins, spectralResolution, SPECTRAL_PERSISTED_MIN_LEVEL, SPECTRAL_TILE_COLUMNS, type AudioEditSpectralTile, type AudioEditSpectralTileRequest, type AudioEditSpectralProgress } from '../../../../src/core/audioEdit/spectralPyramid'
 import { createMainLogger } from '../logging'
 import { audioDiskBudgetBytes } from '../audio/cache-budget'
+import { findAudioLineageAncestor, type AudioLineageRange } from '../audio/lineage'
 import { removeUnmanagedCachePath } from '../media-recycle/cache-deletion'
 import { requireAudioEditProject } from './project-store'
 import { audioEditSpectralCacheDirectory, identifyAudioEditSource, prepareAudioEditAudio, verifyAudioEditSource } from './media'
@@ -68,7 +69,18 @@ async function resumableDirectory(cache: string, key: string): Promise<string | 
 /** 同一素材同一时刻只有一个读取者在查完成指针、清理残留目录并启动计算；其余读取者等它的结果。 */
 const claims = new Map<string, Promise<string>>()
 
-async function startBackground(cache: string, key: string, input: string, request: AudioEditSpectralTileRequest, revision: number): Promise<string> {
+/** 已算完的整段目录（完成指针指向、清单已完成）；没有返回 undefined。 */
+async function completedDirectory(cache: string, key: string): Promise<string | undefined> {
+  const name = await fs.readFile(path.join(cache, `${key}.pyramid`), 'utf8').catch(() => undefined)
+  if (!name || !new RegExp(`^${key}-[a-f0-9-]+$`).test(name)) return undefined
+  const directory = path.join(cache, name)
+  return (await readSpectralManifest(directory).catch(() => undefined))?.done ? directory : undefined
+}
+
+/** 编辑后声音的派生来源：沿文件来历找到第一个整段频谱已算完的上一版，以及两版之间可能不同的帧。 */
+type DeriveSource = () => Promise<{ directory: string; dirty: AudioLineageRange[]; hops: number } | undefined>
+
+async function startBackground(cache: string, key: string, input: string, request: AudioEditSpectralTileRequest, revision: number, deriveSource?: DeriveSource): Promise<string> {
   const identity = path.join(cache, key)
   const observer = { projectId: request.projectId, mode: request.mode, revision }
   const observerKey = JSON.stringify(observer)
@@ -76,7 +88,7 @@ async function startBackground(cache: string, key: string, input: string, reques
   if (existing) { existing.observers.set(observerKey, observer); return existing.directory }
   let claim = claims.get(identity)
   if (!claim) {
-    claim = claimBackground(cache, key, identity, input, request, observer)
+    claim = claimBackground(cache, key, identity, input, request, observer, deriveSource)
     claims.set(identity, claim)
     void claim.finally(() => { if (claims.get(identity) === claim) claims.delete(identity) }).catch(() => undefined)
   }
@@ -85,7 +97,7 @@ async function startBackground(cache: string, key: string, input: string, reques
   return directory
 }
 
-async function claimBackground(cache: string, key: string, identity: string, input: string, request: AudioEditSpectralTileRequest, observer: { projectId: string; mode: AudioEditSpectralTileRequest['mode']; revision: number }): Promise<string> {
+async function claimBackground(cache: string, key: string, identity: string, input: string, request: AudioEditSpectralTileRequest, observer: { projectId: string; mode: AudioEditSpectralTileRequest['mode']; revision: number }, deriveSource?: DeriveSource): Promise<string> {
   // 完成指针只在整文件任务成功后由 cachedAudioFile 原子发布。
   try {
     const name = await fs.readFile(`${identity}.pyramid`, 'utf8')
@@ -95,6 +107,8 @@ async function claimBackground(cache: string, key: string, identity: string, inp
     throw new Error('频谱完成缓存缺失')
   } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error }
   const resumable = await resumableDirectory(cache, key)
+  // 没有可续算的目录时，先找能派生的上一版：只重算改动波及的列，不整段做 STFT。
+  const parent = resumable ? undefined : await deriveSource?.().catch(() => undefined)
   const directory = resumable ?? path.join(cache, `${key}-${randomUUID()}`)
   const job: Background = { directory, operation: Promise.resolve(), observers: new Map([[JSON.stringify(observer), observer]]) }
   backgrounds.set(identity, job)
@@ -109,10 +123,22 @@ async function claimBackground(cache: string, key: string, identity: string, inp
     for (const context of job.observers.values()) for (const listener of listeners) listener({ ...context, ...progress })
   }
   job.operation = (async () => {
-    logger.info('开始计算整段音频频谱', { event: 'audio_edit.spectral.start', context: { ...observer, resumed: Boolean(resumable) } })
+    logger.info('开始计算整段音频频谱', { event: 'audio_edit.spectral.start', context: { ...observer, resumed: Boolean(resumable), derived: Boolean(parent) } })
+    let recomputedFrames: number | undefined
     try {
       await cachedAudioFile(cache, key, 'pyramid', async temporary => {
-        await spectralWorker.request({ type: 'spectral_build', input_path: input, output_directory: directory }, controller.signal, progress => { if (!progress.done) emit(progress) })
+        if (parent) {
+          try {
+            const result = await spectralWorker.request<{ recomputedFrames: number }>({ type: 'spectral_derive', input_path: input, parent_directory: parent.directory, output_directory: directory, dirty: parent.dirty }, controller.signal)
+            recomputedFrames = result.recomputedFrames
+          } catch (error) {
+            if (controller.signal.aborted) throw error
+            // 派生不成（上一版是旧版本算的、文件被清理……）就在同一目录整段计算。
+            logger.warn('频谱按列派生未完成，在同一目录整段计算', { event: 'audio_edit.spectral.derive_fallback', error, context: { ...observer, hops: parent.hops } })
+            await removeUnmanagedCachePath(directory, { recursive: true, force: true })
+          }
+        }
+        if (recomputedFrames === undefined) await spectralWorker.request({ type: 'spectral_build', input_path: input, output_directory: directory }, controller.signal, progress => { if (!progress.done) emit(progress) })
         const manifest = await readSpectralManifest(directory)
         if (!manifest?.done) throw new Error('整段频谱未完成')
         await fs.writeFile(temporary, path.basename(directory), 'utf8')
@@ -120,7 +146,10 @@ async function claimBackground(cache: string, key: string, identity: string, inp
       const completed = await readSpectralManifest(directory)
       if (!completed?.done) throw new Error('整段频谱完成清单缺失')
       emit({ coveredFrames: completed.durationFrames, durationFrames: completed.durationFrames, done: true })
-      logger.info('整段音频频谱计算完成', { event: 'audio_edit.spectral.completed', context: { ...observer, durationFrames: completed.durationFrames, resumed: Boolean(resumable), elapsedMs: performance.now() - began } })
+      logger.info('整段音频频谱计算完成', { event: 'audio_edit.spectral.completed', context: {
+        ...observer, durationFrames: completed.durationFrames, derived: recomputedFrames !== undefined, recomputedFrames: recomputedFrames ?? completed.durationFrames,
+        ...(parent && recomputedFrames !== undefined ? { hops: parent.hops } : {}), resumed: Boolean(resumable), elapsedMs: performance.now() - began,
+      } })
     } catch (error) {
       // 已算完的部分与清单留着，下次读取从清单的覆盖位置续算，不从头再来。
       const coveredFrames = (await readSpectralManifest(directory).catch(() => undefined))?.coveredFrames
@@ -161,6 +190,20 @@ async function immediateFile(cache: string, key: string, input: string, request:
   finally { if (--job.users === 0) job.controller.abort() }
 }
 
+/**
+ * 细层块的列用到哪些源采样帧 [from, to)：非负层每列汇总 2^level 个基础列（中心 i·512），负层每列一个窗（中心 c·hop）；
+ * 两侧各放宽半个最长分析窗（文件外按零，不影响判断）。
+ */
+function spectralTileFrames(level: number, columnStart: number, columnCount: number): [number, number] {
+  const half = spectralResolution(level).lowWindow / 2
+  if (level >= 0) {
+    const group = 2 ** level
+    return [columnStart * group * 512 - half, ((columnStart + columnCount) * group - 1) * 512 + half]
+  }
+  const hop = spectralHop(level)
+  return [columnStart * hop - half, (columnStart + columnCount - 1) * hop + half]
+}
+
 let trimming = false, lastTrim = 0
 /** 细层块读写后按节流检查限额（全局媒体缓存上限的三分之一，至少 1 GB）；一次只清一遍。 */
 function scheduleTileTrim(cache: string): void {
@@ -188,11 +231,29 @@ export async function getAudioEditSpectralTile(raw: AudioEditSpectralTileRequest
     const input = await wait(prepareInput(project.id, () => request.mode === 'edited' ? prepareAudioEditRenderSource(project) : prepareAudioEditAudio(project)), signal)
     const cache = audioEditSpectralCacheDirectory()
     const revision = request.mode === 'source' ? 0 : project.revision
-    const key = audioRenderKey(['spectral-pyramid-v1', identity, project.source.audioStreamIndex, project.source.sampleRate,
-      project.source.channels, project.source.durationFrames, request.mode, request.mode === 'edited' ? path.basename(input) : undefined])
+    const keyFor = (mode: AudioEditSpectralTileRequest['mode'], file?: string): string => audioRenderKey(['spectral-pyramid-v1', identity, project.source.audioStreamIndex, project.source.sampleRate,
+      project.source.channels, project.source.durationFrames, mode, mode === 'edited' ? path.basename(file!) : undefined])
+    const key = keyFor(request.mode, input)
     const metadata: SpectralMetadata = { sampleRate: project.source.sampleRate, channels: project.source.channels,
       durationFrames: project.source.durationFrames, lowBins: spectralLowBins(project.source.sampleRate, request.level), highBins: spectralHighBins(request.level) }
-    const directory = await wait(startBackground(cache, key, input, request, revision), signal)
+    // 编辑后声音的上一版可能是另一份编辑后声音，也可能是原素材的浮点副本（“什么都没改”的那一版）。
+    const original = request.mode === 'edited' ? await wait(prepareAudioEditAudio(project), signal) : input
+    const ancestorKey = (ancestor: string): string => ancestor === original ? keyFor('source') : keyFor('edited', ancestor)
+    const deriveSource: DeriveSource | undefined = request.mode === 'edited' ? async () => {
+      // 频谱进程不支持派生（可执行文件比主进程旧）就直接整段计算，不发它认不出的命令。
+      const { deriveGroupLevel } = await spectralWorker.capabilities()
+      if (!deriveGroupLevel) return undefined
+      const found = await findAudioLineageAncestor(input, ancestor => completedDirectory(cache, ancestorKey(ancestor)))
+      // 派生按组整组重算（一组的帧数即该层的 hop；改动波及两侧各半个长窗）：改动散布到一半以上的组时，整段计算一样快，还省一次复制。
+      const groupFrames = spectralHop(deriveGroupLevel), half = spectralResolution(0).lowWindow / 2
+      const groups = new Set<number>()
+      for (const [start, end] of found?.dirty ?? []) {
+        for (let group = Math.floor(Math.max(0, start - half) / groupFrames); group <= Math.floor((end + half) / groupFrames); group++) groups.add(group)
+      }
+      if (!found || groups.size * groupFrames > project.source.durationFrames / 2) return undefined
+      return { directory: found.value, dirty: found.dirty, hops: found.hops }
+    } : undefined
+    const directory = await wait(startBackground(cache, key, input, request, revision, deriveSource), signal)
     const base = { ...metadata, mode: request.mode, revision, level: request.level, tile: request.tile }
     if (request.level >= SPECTRAL_PERSISTED_MIN_LEVEL) {
       const data = await wait(readSpectralRange(directory, request.level, request.tile, metadata), signal)
@@ -202,8 +263,16 @@ export async function getAudioEditSpectralTile(raw: AudioEditSpectralTileRequest
     const columnCount = Math.min(SPECTRAL_TILE_COLUMNS, Math.max(0, spectralColumnCount(request.level, metadata.durationFrames) - columnStart))
     if (!columnCount) return { ...base, columnStart, columnCount, values: new Uint8Array(), complete: true }
     // 负层分析窗会随缩放变化，旧的固定窗块不得命中；整文件缓存与非负层保持原键。
-    const tileKey = request.level < 0 ? [key, request.level, request.tile, 'adaptive-hann-v1', spectralResolution(request.level)] : [key, request.level, request.tile]
-    const file = await immediateFile(cache, audioRenderKey(tileKey), input, request, metadata, signal)
+    const tileKeyOf = (spectral: string): string => audioRenderKey(request.level < 0 ? [spectral, request.level, request.tile, 'adaptive-hann-v1', spectralResolution(request.level)] : [spectral, request.level, request.tile])
+    // 这一块还没算过、而它用到的声音与上一版完全相同时，直接用上一版算好的块。
+    const own = (await fs.stat(path.join(cache, `${tileKeyOf(key)}.rg`)).catch(() => null))?.size
+    const reused = request.mode === 'edited' && !own ? await wait(findAudioLineageAncestor(input, async (ancestor, dirty) => {
+      const [from, to] = spectralTileFrames(request.level, columnStart, columnCount)
+      if (dirty.some(([start, end]) => start < to && end > from)) return undefined
+      const file = path.join(cache, `${tileKeyOf(ancestorKey(ancestor))}.rg`)
+      return (await fs.stat(file).catch(() => null))?.size ? file : undefined
+    }), signal) : undefined
+    const file = reused?.value ?? await immediateFile(cache, tileKeyOf(key), input, request, metadata, signal)
     const bytes = await wait(fs.readFile(file), signal)
     void touchSpectralTile(file)
     scheduleTileTrim(cache)

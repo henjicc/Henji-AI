@@ -79,3 +79,20 @@
 3. `gpu/imageEditorGpuRasterPipelineContractsV3.ts` 建议给 `ImageEditorGpuRasterCompositorV3Like` 补可选方法 `reducePreviewMemory?(): boolean`，届时去掉运行时里的类型守卫。
 4. `gpu/imageEditorGpuSceneTileAdmissionV3.ts` 失败时只回传文案、丢了错误对象，上传路径同步抛出的显存不足无法识别（实际原生显存不足是异步上报，已由设备监听覆盖，影响很小）。
 5. 降档后预算不会回升：同一会话里显存一旦报不足，预览就保持较低档位，直到关闭文档（归还时换新合成器，预算恢复默认）。
+
+## 第二轮（真实窗口反馈：预热没生效、冷路径变慢）
+- **12 秒内没预热的原因**：预热排在 App.tsx 的浮层空闲预取链末尾，开发版这条链先推迟 20 秒，且空闲回调不带超时。日志可证：11:44:53 重载，11:45:16 打开（warm:false），11:45:19 才 `prewarm.start`；11:45:47 再重载，11:45:49 打开又是 warm:false。实测流程每次都是“重载后 20 秒内打开”，所以从来领不到预热线程。
+- **之前三次 prewarm.start 没有后续**：当时只记了开始、没有完成事件（不是卡住）；那几次预热线程都被随后的页面重载结束了。现已补 `prewarm.completed {durationMs}` / `prewarm.failed {durationMs, reason}`（Worker 处理完 warm 回 `warmed` 事件；线程脚本出错也记 failed）。
+- **冷路径变慢约 0.5 秒**：日志显示那次 1.83 秒的打开正好撞上开发版 20 秒浮层预取（另一次 1.61 秒的打开撞上 15 秒的工作区预取）；离重载 2 秒、没撞上预取的那次是 1.39 秒，与改动前持平。我这边唯一可能拖慢冷路径的，是“预热在已有会话占用线程时又起第二个线程”（11:45:19 那次就是），已改成线程被使用时不预热。冷路径本身领用与初始化的步骤和改动前完全相同。
+- **改法**：
+  - `src/App.tsx`：预热从浮层预取链拿出来，首屏后 `requestIdleCallback(..., { timeout: 2000 })`，开发版不再推迟。
+  - `src/workspaces/toolboxTools/imageMark/entry.ts`（新增接入点）：进入图片工具页（工具组件首次加载）立即预热。日志里打开文档前还要花约 4 秒加载编辑器，正好把冷启动藏进去。
+  - `gpu/imageEditorGpuScenePool.ts`：线程状态 `warmth`（ready / warming / failed / cold），归还时按 `released.deviceReady` 判断是否仍是 ready；有会话正在使用线程时不预热。`worker_acquired` 带 `warm` 与 `warmth`。
+  - `execution/imageEditorRenderSessionV3.ts`：领到 warmth=ready 的线程时不排 CPU 草稿/目标，GPU 首帧呈现、GPU 回退、300ms 看门狗三者先到哪个就结束等待。
+  - `execution/imageEditorRenderSessionCpuWorkV3.ts`：安全帧改为 GPU 首帧后等 2 秒，再在空闲时做（空闲回调超时 3 秒）；开做时读当前快照与视口。取消、隐藏、换文档会撤掉排着的这一次。
+- **验证用的计时日志**：
+  - `image_editor_v3.gpu_scene.first_frame {warmth, acquireMs, initializeMs, firstFrameMs}`：每个会话第一次呈现 GPU 帧时记一条；`firstFrameMs` 从会话建立（预览区挂载）算起。
+  - `initialize.start` 带 `warmth`，`initialize.completed` 带 `durationMs`。
+- **验证**：渲染层 tsc 通过；18 个测试文件通过（池、运行时、运行时回退、客户端、源几何、桥接、桥接瓦片、资源恢复、变换交接、导出诊断、GPU/CPU 预算、会话、会话排程、表面重挂、视口合成 hook、显示管线、工具箱工作区、工具箱登记一致性）；12 个改动文件 eslint 通过；依赖图门禁通过。
+  - 测试改动：GPU/CPU 预算测试里 8 处“首帧后立即有安全帧请求”的断言改为推进 2 秒后再断言，并加一条“首帧时还没有安全帧”；新增一条“领到预热线程先等 GPU 首帧、300ms 看门狗兜底”；池测试改写为两条（预热完成→ready、使用中不预热；归还丢旧事件→再领用为 ready）；运行时测试补 `warmed` 与 `deviceReady` 断言。
+- **请主会话实测**：重载 → 等 3 秒以上 → 打开。日志应依次有 `prewarm.start`、`prewarm.completed`、`worker_acquired {warm:true}`、`first_frame {warmth:'ready'}`，目标 `firstFrameMs ≤ 300`。冷路径对比：`first_frame {warmth:'cold'}` 的 `initializeMs`，要避开开发版重载后第 15、20 秒的预取窗口。

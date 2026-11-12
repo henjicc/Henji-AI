@@ -68,9 +68,10 @@ fn persistent_protocol_streams_progress_cancels_and_accepts_next_request() {
     .unwrap();
     writeln!(stdin,"{}",json!({"version":1,"id":"tile","type":"spectral_tile","input_path":input,"output_path":dir.path().join("tile.rg"),"level":0,"column_start":1024,"column_count":4})).unwrap();
     writeln!(stdin, "{}", json!({"version":1,"id":"ping","type":"ping"})).unwrap();
+    writeln!(stdin, "{}", json!({"version":1,"id":"future","type":"spectral_future"})).unwrap();
     // 保持 stdin 打开仍须及时返回；取消后进程继续接受请求。
     let mut done = std::collections::HashMap::new();
-    while done.len() < 4 {
+    while done.len() < 5 {
         let reply = receive
             .recv_timeout(std::time::Duration::from_secs(20))
             .unwrap();
@@ -83,6 +84,9 @@ fn persistent_protocol_streams_progress_cancels_and_accepts_next_request() {
     for id in ["tile", "ping", "cancel"] {
         assert_eq!(done[id]["ok"], true);
     }
+    // 能力表报出派生命令与第 9 层组；认不出的命令带原 ID 立刻回错误
+    assert_eq!(done["ping"]["result"]["capabilities"]["spectralDerive"]["groupLevel"], 9);
+    assert_eq!(done["future"]["ok"], false);
     assert_eq!(
         std::fs::metadata(dir.path().join("tile.rg")).unwrap().len(),
         2 * 4 * 1230 * 2
@@ -120,6 +124,7 @@ fn json_lines_commands_preserve_protocol_and_continue_after_failure() {
         json!({"version":1,"id":"invalid","type":"spectrogram","input_path":input,"output_path":dir.path().join("bad.bin"),"hop":0}),
         json!({"version":2,"id":"version","type":"ping"}),
         json!({"version":1,"id":"scan","type":"scan","roots":[]}),
+        json!({"version":1,"id":"future","type":"future_command"}),
     ];
     let mut worker = Command::new(env!("CARGO_BIN_EXE_henji-audio-worker"))
         .stdin(Stdio::piped())
@@ -147,7 +152,7 @@ fn json_lines_commands_preserve_protocol_and_continue_after_failure() {
     for (index, response) in responses.iter().enumerate() {
         assert_eq!(response["version"], 1);
         assert_eq!(response["id"], requests[index]["id"]);
-        assert_eq!(response["ok"], index != 4 && index != 5);
+        assert_eq!(response["ok"], index != 4 && index != 5 && index != 7);
         if response["ok"] == true {
             assert!(response.get("error").is_none());
         } else {

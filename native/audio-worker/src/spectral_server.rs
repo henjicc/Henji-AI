@@ -1,4 +1,4 @@
-use crate::pyramid::{self, BuildRequest, TileRequest};
+use crate::pyramid::{self, BuildRequest, DeriveRequest, TileRequest};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::{
@@ -8,7 +8,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc, Condvar, Mutex,
     },
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 #[derive(Deserialize)]
@@ -16,6 +16,7 @@ use std::{
 enum Command {
     SpectralTile(TileRequest),
     SpectralBuild(BuildRequest),
+    SpectralDerive(DeriveRequest),
     Cancel { request_id: String },
     Ping,
 }
@@ -103,10 +104,16 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             if line.trim().is_empty() {
                 continue;
             }
-            let request = match serde_json::from_str::<Request>(&line) {
+            // 认不出的命令（主进程比这个可执行文件新）也带着原请求 ID 回错误，主进程立刻知道失败，不必等超时。
+            let request = match serde_json::from_str::<Value>(&line)
+                .map_err(|error| ("unknown".to_string(), error.to_string()))
+                .and_then(|value| {
+                    let id = value.get("id").and_then(Value::as_str).unwrap_or("unknown").to_string();
+                    serde_json::from_value::<Request>(value).map_err(|error| (id, error.to_string()))
+                }) {
                 Ok(request) => request,
-                Err(error) => {
-                    reply("unknown", Err(error.to_string()));
+                Err((id, error)) => {
+                    reply(&id, Err(error));
                     continue;
                 }
             };
@@ -130,9 +137,11 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 continue;
             }
             if matches!(command, Command::Ping) {
+                // 能力表：主进程据此决定要不要发派生命令（旧可执行文件没有这一项，主进程直接整段计算）。
                 reply(
                     &id,
-                    Ok(json!({"worker":"henji-audio-worker","protocolVersion":1})),
+                    Ok(json!({"worker":"henji-audio-worker","protocolVersion":1,
+                        "capabilities":{"spectralDerive":{"groupLevel":pyramid::SIDECAR_LEVEL}}})),
                 );
                 continue;
             }
@@ -163,15 +172,24 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                         if let Command::SpectralTile(request) = command { return pyramid::tile(request, &cancelled).map_err(|e| e.to_string()); }
                     } else {
                         let Some(_guard) = background.enter(&cancelled, || alive(&id)) else { return Err(CANCELLED.into()) };
+                        // 整段计算与派生都给可见块让路；让路或埋头计算期间定时发心跳，主进程按无进展计时。
+                        let last_alive = Mutex::new(Instant::now());
+                        let yield_to_tiles = || {
+                            let mut pending = priority.0.lock().unwrap();
+                            while *pending > 0 && !cancelled.load(Ordering::Relaxed) {
+                                let (next, waited) = priority.1.wait_timeout(pending, HEARTBEAT).unwrap();
+                                pending = next;
+                                if waited.timed_out() { alive(&id); }
+                            }
+                            drop(pending);
+                            let mut last = last_alive.lock().unwrap_or_else(|e| e.into_inner());
+                            if last.elapsed() >= Duration::from_secs(1) { *last = Instant::now(); alive(&id); }
+                        };
                         if let Command::SpectralBuild(request) = command {
-                            return pyramid::build(request, &cancelled, || {
-                                let mut pending = priority.0.lock().unwrap();
-                                while *pending > 0 && !cancelled.load(Ordering::Relaxed) {
-                                    let (next, waited) = priority.1.wait_timeout(pending, HEARTBEAT).unwrap();
-                                    pending = next;
-                                    if waited.timed_out() { alive(&id); }
-                                }
-                            }, |progress| send(json!({"version":1,"id":id,"event":"progress","progress":progress}))).map_err(|e| e.to_string());
+                            return pyramid::build(request, &cancelled, yield_to_tiles, |progress| send(json!({"version":1,"id":id,"event":"progress","progress":progress}))).map_err(|e| e.to_string());
+                        }
+                        if let Command::SpectralDerive(request) = command {
+                            return pyramid::derive(request, &cancelled, yield_to_tiles).map_err(|e| e.to_string());
                         }
                     }
                     Err("不支持的频谱命令".into())

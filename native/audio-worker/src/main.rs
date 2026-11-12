@@ -191,7 +191,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     for line in stdin.lock().lines() {
         let line = line?;
         if line.trim().is_empty() { continue; }
-        let parsed = serde_json::from_str::<Envelope>(&line);
+        // 认不出的命令也带着原请求 ID 回错误。
+        let parsed = serde_json::from_str::<Value>(&line).map_err(|error| ("unknown".to_string(), error)).and_then(|value| {
+            let id = value.get("id").and_then(Value::as_str).unwrap_or("unknown").to_string();
+            serde_json::from_value::<Envelope>(value).map_err(|error| (id, error))
+        });
         let response = match parsed {
             Ok(envelope) if envelope.version == PROTOCOL_VERSION => {
                 progress::begin(&envelope.id);
@@ -203,7 +207,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
             }
             Ok(envelope) => Response { version: PROTOCOL_VERSION, id: envelope.id, ok: false, result: None, error: Some("unsupported protocol version".into()) },
-            Err(error) => Response { version: PROTOCOL_VERSION, id: "unknown".into(), ok: false, result: None, error: Some(error.to_string()) },
+            Err((id, error)) => Response { version: PROTOCOL_VERSION, id, ok: false, result: None, error: Some(error.to_string()) },
         };
         serde_json::to_writer(&mut stdout, &response)?;
         stdout.write_all(b"\n")?;

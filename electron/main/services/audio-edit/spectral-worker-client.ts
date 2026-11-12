@@ -5,6 +5,8 @@ import { app } from 'electron'
 import { audioWorkerExecutablePath } from './audio-worker-client'
 
 export interface SpectralWorkerProgress { coveredFrames: number; durationFrames: number; done: boolean }
+/** 这个频谱进程支持什么：derive 为按列派生每组的层级（原生 SIDECAR_LEVEL），旧可执行文件没有。 */
+export interface SpectralWorkerCapabilities { deriveGroupLevel?: number }
 interface Pending {
   finish(error?: Error, value?: unknown): void
   /** 收到该请求的任何进度或心跳就续期无进展计时。 */
@@ -20,6 +22,7 @@ export class SpectralWorkerClient {
   private quitting = false
   private lifecycleRegistered = false
   private stop?: (error: Error) => void
+  private probe?: { child: ChildProcessWithoutNullStreams; capabilities: Promise<SpectralWorkerCapabilities> }
 
   private start(): ChildProcessWithoutNullStreams {
     if (this.quitting) throw new Error('应用正在退出')
@@ -114,6 +117,22 @@ export class SpectralWorkerClient {
       child.stdin.write(`${JSON.stringify({ ...command, version: 1, id })}\n`)
       if (signal?.aborted) onAbort()
     })
+  }
+
+  /**
+   * 当前进程的能力（每个进程问一次）：可执行文件可能比主进程旧（开发时没重编原生程序），
+   * 不支持的命令不发，免得它回不了请求 ID、只能等无进展超时。问不到按什么都不支持处理。
+   */
+  capabilities(): Promise<SpectralWorkerCapabilities> {
+    const child = this.start()
+    if (this.probe?.child !== child) {
+      const capabilities = this.request<{ capabilities?: { spectralDerive?: { groupLevel?: unknown } } }>({ type: 'ping' }, undefined, undefined, 10_000).then(result => {
+        const level = result?.capabilities?.spectralDerive?.groupLevel
+        return typeof level === 'number' && Number.isInteger(level) && level > 0 ? { deriveGroupLevel: level } : {}
+      }, () => ({}))
+      this.probe = { child, capabilities }
+    }
+    return this.probe.capabilities
   }
 
   dispose(): void {

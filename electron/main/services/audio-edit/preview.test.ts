@@ -3,17 +3,19 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { AudioEditProjectDocument } from '../../../../src/core/audioEdit/types'
+import type { AudioEditGainRegion } from '../../../../src/core/audioEdit/regions'
 
-const state = vi.hoisted(() => ({ project: null as unknown as AudioEditProjectDocument, wav: '', execFile: vi.fn(), prepareRender: vi.fn() }))
+const state = vi.hoisted(() => ({ project: null as unknown as AudioEditProjectDocument, wav: '', execFile: vi.fn(), prepareRender: vi.fn(), layers: [] as AudioEditGainRegion[][] }))
 vi.mock('node:child_process', () => ({ execFile: state.execFile }))
 vi.mock('../video/ffmpeg-loader', () => ({ loadFfmpegPath: async () => 'ffmpeg' }))
 vi.mock('./project-store', () => ({ readAudioEditProjectSnapshot: async () => state.project }))
-vi.mock('./render', () => ({ prepareAudioEditRenderSource: state.prepareRender }))
+vi.mock('./render', () => ({ prepareAudioEditRenderPlan: async (...args: unknown[]) => ({ base: await state.prepareRender(...args), layers: state.layers }) }))
 vi.mock('./media', () => ({ prepareAudioEditAudio: async () => state.wav }))
 vi.mock('./processors', () => ({ listAudioEditProcessors: async () => [] }))
 
 import { prepareAudioEditPreviewChunk, resetAudioEditPreviewForTests } from './preview'
-import { createF32WavWriter } from './pcm-wav'
+import { createF32WavWriter, openF32Wav } from './pcm-wav'
+import { runAudioEditPcmJob } from './pcm-jobs'
 
 let directory = ''
 const sampleRate = 1000, channels = 2, frames = 10_000
@@ -32,6 +34,7 @@ beforeEach(async () => {
   // 和缓存层一样：文件不在就重新生成
   state.prepareRender.mockReset().mockImplementation(async () => await fs.access(state.wav).then(() => state.wav, writeRenderSource))
   state.execFile.mockReset()
+  state.layers = []
 })
 afterEach(async () => {
   resetAudioEditPreviewForTests()
@@ -51,6 +54,20 @@ it('同一版本连续取块只推一次渲染源、直接随机读浮点 WAV，
   state.project = { ...state.project, revision: 2 }
   await prepareAudioEditPreviewChunk({ projectId: 'doc', mode: 'edited', sourceStartFrame: 0, frameCount: sampleRate })
   expect(state.prepareRender).toHaveBeenCalledTimes(2)
+})
+
+it('区间音量与呼吸在取块时乘上，与整段乘好的文件逐样本相同', async () => {
+  const region = (startFrame: number, endFrame: number, gainDb: number, fadeInFrames = 0, fadeOutFrames = 0): AudioEditGainRegion => ({ id: `${startFrame}`, startFrame, endFrame, gainDb, fadeInFrames, fadeOutFrames, enabled: true })
+  state.layers = [[region(800, 2300, -12, 100, 100), region(5000, 5200, -120, 20, 20)], [region(0, 1500, 3.5), region(1200, 6000, -6, 700, 0)]]
+  const whole = path.join(directory, 'whole.wav')
+  await runAudioEditPcmJob({ kind: 'gains', input: state.wav, output: whole, layers: state.layers })
+  const reference = (await openF32Wav(whole))!
+  for (const start of [0, 777, 1999, 4900, 9500]) {
+    const chunk = await prepareAudioEditPreviewChunk({ projectId: 'doc', mode: 'edited', sourceStartFrame: start, frameCount: 777 })
+    const expected = await reference.read(start, chunk.sourceEndFrame - start)
+    expect(new Float32Array(chunk.pcm)).toEqual(expected)
+  }
+  await reference.close()
 })
 
 it('读到结尾时只返回实际有的帧', async () => {

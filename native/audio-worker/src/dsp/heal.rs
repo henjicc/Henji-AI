@@ -19,6 +19,19 @@ use std::{
 // many frames, so the working set does not grow with the selection length.
 const HEAL_CHUNK_FRAMES: u64 = 1 << 20;
 
+// 与主进程的契约：electron/main/services/audio-edit/dsp-adapter.ts 的 AUDIO_WORKER_CONTRACT 按下面几个常量
+// 判断“修复只改写选区、只读选区两侧多少帧”（编辑后声音只重算改动的帧靠它），改了要两边一起改；dsp-adapter.test.ts 读本文件核对。
+/// 频谱修复的 hop = n / HEAL_HOP_DIVISOR；选区两侧读 n + hop 帧。
+pub(crate) const HEAL_HOP_DIVISOR: usize = 4;
+/// 去爆音一条命令最多几段。
+pub(crate) const DECLICK_MAX_RANGES: usize = 4096;
+/// 去爆音单段上限（毫秒）。
+pub(crate) const DECLICK_MAX_MS: u64 = 128;
+/// 两侧训练上下文 = 单段上限帧数 × DECLICK_MARGIN_PER_LIMIT，夹在 [DECLICK_MARGIN_MIN, DECLICK_MARGIN_MAX]。
+pub(crate) const DECLICK_MARGIN_PER_LIMIT: u64 = 4;
+pub(crate) const DECLICK_MARGIN_MIN: u64 = 512;
+pub(crate) const DECLICK_MARGIN_MAX: u64 = 8192;
+
 struct Selection {
     region: Region,
     low: usize,
@@ -52,7 +65,7 @@ impl Selection {
                 "frequency selection contains no FFT bin; widen it or increase fft_size".into(),
             );
         }
-        let width = (region.end_frame - region.start_frame).div_ceil((n / 4) as u64) as usize;
+        let width = (region.end_frame - region.start_frame).div_ceil((n / HEAL_HOP_DIVISOR) as u64) as usize;
         let height = high - low + 1;
         let mask = if let Some(path) = &region.mask_path {
             let mut file = File::open(path)?;
@@ -94,7 +107,7 @@ impl Selection {
         }
         // Extend edge columns to windows intersecting the rectangle; the final
         // time-domain delta is gated INSIDE the exact selected sample interval.
-        let x = ((center - self.region.start_frame as i64).max(0) as usize / (n / 4))
+        let x = ((center - self.region.start_frame as i64).max(0) as usize / (n / HEAL_HOP_DIVISOR))
             .min(self.width - 1);
         self.mask.as_ref().map_or(1.0, |mask| {
             mask[(bin - self.low) * self.width + x] as f32 / 255.0
@@ -169,14 +182,14 @@ fn render(
 pub fn declick(req: DeclickRequest) -> Result<Value> {
     let began = Instant::now();
     let source = Audio::open(&req.input_path)?;
-    if req.ranges.len() > 4096 {
-        return Err("at most 4096 ranges per command".into());
+    if req.ranges.len() > DECLICK_MAX_RANGES {
+        return Err(format!("at most {DECLICK_MAX_RANGES} ranges per command").into());
     }
     for r in &req.ranges {
         audio::validate_range(r.start_frame, r.end_frame, source.frames)?;
     }
     let merged = groups(req.ranges.iter().cloned());
-    let limit = u64::from(source.spec.sample_rate) * 128 / 1000;
+    let limit = u64::from(source.spec.sample_rate) * DECLICK_MAX_MS / 1000;
     for r in &merged {
         if r.end_frame - r.start_frame > limit {
             return Err(format!("declick selection (including overlapping/adjacent ranges) exceeds 128 ms ({limit} frames at {} Hz)",source.spec.sample_rate).into());
@@ -186,7 +199,7 @@ pub fn declick(req: DeclickRequest) -> Result<Value> {
         }
     }
     drop(source);
-    let margin = (limit * 4).clamp(512, 8192);
+    let margin = (limit * DECLICK_MARGIN_PER_LIMIT).clamp(DECLICK_MARGIN_MIN, DECLICK_MARGIN_MAX);
     let (frames, sr, channels, bytes) = render(
         &req.input_path,
         &req.output_path,
@@ -290,7 +303,7 @@ pub(super) fn spectral_heal_in_chunks(req: HealRequest, chunk_frames: u64) -> Re
         return Err("at most 1024 regions per command".into());
     }
     let n = req.fft_size;
-    let hop = n / 4;
+    let hop = n / HEAL_HOP_DIVISOR;
     let selections = req
         .regions
         .into_iter()
@@ -337,7 +350,7 @@ fn heal_range(
     emit: &mut Emit,
 ) -> Result<()> {
     let n = fft.n;
-    let hop = n / 4;
+    let hop = n / HEAL_HOP_DIVISOR;
     let c = usize::from(audio.spec.channels);
     let len = range.end_frame - range.start_frame;
     let local: Vec<_> = selections

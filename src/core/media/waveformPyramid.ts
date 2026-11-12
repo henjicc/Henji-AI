@@ -8,8 +8,8 @@
  * 注意：主进程经相对路径导入本文件，这里不得使用 `@/` 别名，也不得依赖 DOM 或 Node 专有 API。
  */
 
-/** 文件格式版本；变更布局或算法时递增，旧缓存自动失效。 */
-export const WAVEFORM_PYRAMID_FORMAT_VERSION = 2
+/** 文件格式版本；变更布局或算法时递增，旧缓存自动失效。3：平方和按 64 位逐帧累加，结果与解码分块无关。 */
+export const WAVEFORM_PYRAMID_FORMAT_VERSION = 3
 /** 第 0 级每桶采样数：48kHz 约 375 桶/秒、44.1kHz 约 345 桶/秒。 */
 export const WAVEFORM_PYRAMID_BASE_SAMPLES_PER_BUCKET = 128
 /** 相邻两级的倍数（128 → 1024 → 8192 → 65536 …）。 */
@@ -159,6 +159,65 @@ export function decodeWaveformPyramid(input: Uint8Array): WaveformPyramidData {
 
 export function waveformPyramidByteSize(data: WaveformPyramidData): number {
   return HEADER_BYTES + data.levels.reduce((sum, level) => sum + LEVEL_ENTRY_BYTES + level.bucketCount * data.channelCount * 6, 0)
+}
+
+/**
+ * 第 1 级的未量化摘要（只在主进程使用）：一份声音只改了几段时，按块派生新金字塔要用它重合并上面各级，
+ * 不必再整段解码。每声道每桶：平方和 64 位、最小与最大值 32 位。
+ */
+export interface WaveformPyramidFloats {
+  samplesPerBucket: number
+  bucketCount: number
+  minima: Float32Array[]
+  maxima: Float32Array[]
+  sums: Float64Array[]
+}
+
+const FLOATS_MAGIC = [0x48, 0x57, 0x50, 0x46] // "HWPF"
+const FLOATS_HEADER_BYTES = 32
+
+export function waveformPyramidFloatsByteSize(floats: WaveformPyramidFloats): number {
+  return FLOATS_HEADER_BYTES + floats.minima.length * floats.bucketCount * 16
+}
+
+export function encodeWaveformPyramidFloats(floats: WaveformPyramidFloats): Uint8Array {
+  if (!LITTLE_ENDIAN) throw new Error('波形缓存仅支持小端平台。')
+  const bytes = new Uint8Array(waveformPyramidFloatsByteSize(floats))
+  const view = new DataView(bytes.buffer)
+  FLOATS_MAGIC.forEach((value, index) => { bytes[index] = value })
+  view.setUint16(4, WAVEFORM_PYRAMID_FORMAT_VERSION, true)
+  view.setUint16(6, FLOATS_HEADER_BYTES, true)
+  view.setUint16(8, floats.minima.length, true)
+  view.setUint32(12, floats.samplesPerBucket, true)
+  view.setUint32(16, floats.bucketCount, true)
+  // 每声道先放 64 位平方和，偏移保持 8 字节对齐，解码时可以直接建视图。
+  let cursor = FLOATS_HEADER_BYTES
+  for (let output = 0; output < floats.minima.length; output++) {
+    for (const values of [floats.sums[output], floats.minima[output], floats.maxima[output]]) {
+      if (values.length !== floats.bucketCount) throw new Error('波形摘要长度不一致。')
+      bytes.set(new Uint8Array(values.buffer, values.byteOffset, values.byteLength), cursor)
+      cursor += values.byteLength
+    }
+  }
+  return bytes
+}
+
+export function decodeWaveformPyramidFloats(input: Uint8Array): WaveformPyramidFloats {
+  if (!LITTLE_ENDIAN) throw new Error('波形缓存仅支持小端平台。')
+  const bytes = input.byteOffset % 8 ? input.slice() : input
+  if (bytes.byteLength < FLOATS_HEADER_BYTES || FLOATS_MAGIC.some((value, index) => bytes[index] !== value)) throw new Error('不是波形摘要文件。')
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  if (view.getUint16(4, true) !== WAVEFORM_PYRAMID_FORMAT_VERSION || view.getUint16(6, true) !== FLOATS_HEADER_BYTES) throw new Error('波形摘要版本不符。')
+  const outputs = view.getUint16(8, true), samplesPerBucket = view.getUint32(12, true), bucketCount = view.getUint32(16, true)
+  if (!outputs || outputs > 65 || !samplesPerBucket || FLOATS_HEADER_BYTES + outputs * bucketCount * 16 !== bytes.byteLength) throw new Error('波形摘要长度不符。')
+  const floats: WaveformPyramidFloats = { samplesPerBucket, bucketCount, minima: [], maxima: [], sums: [] }
+  let cursor = bytes.byteOffset + FLOATS_HEADER_BYTES
+  for (let output = 0; output < outputs; output++) {
+    floats.sums.push(new Float64Array(bytes.buffer, cursor, bucketCount)); cursor += bucketCount * 8
+    floats.minima.push(new Float32Array(bytes.buffer, cursor, bucketCount)); cursor += bucketCount * 4
+    floats.maxima.push(new Float32Array(bytes.buffer, cursor, bucketCount)); cursor += bucketCount * 4
+  }
+  return floats
 }
 
 function validateWaveformLevel(level: WaveformPyramidLevel, channelCount: number): void {

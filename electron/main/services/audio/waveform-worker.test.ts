@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import path from 'node:path'
-import { AudioWaveformAggregator, AudioWaveformPyramidBuilder } from './waveform-worker'
+import { AudioWaveformAggregator, AudioWaveformPyramidBuilder, deriveWaveformPyramid } from './waveform-worker'
 import { AudioWaveformWorker } from './worker-client'
-import { aggregateWaveformLevel, aggregateWaveformLevelRange, aggregateWaveformSampleRange, decodeWaveformPyramid, encodeWaveformPyramid, waveformPyramidLevelPlan, WAVEFORM_PYRAMID_QUANT, WAVEFORM_PYRAMID_RANGE_QUANT } from '../../../../src/core/media/waveformPyramid'
+import { aggregateWaveformLevel, aggregateWaveformLevelRange, aggregateWaveformSampleRange, decodeWaveformPyramid, encodeWaveformPyramid, encodeWaveformPyramidFloats, waveformPyramidLevelPlan, WAVEFORM_PYRAMID_QUANT, WAVEFORM_PYRAMID_RANGE_QUANT } from '../../../../src/core/media/waveformPyramid'
 import type { AudioWaveformPyramidOptions } from './types'
 
 function pcm(values: number[]): Uint8Array {
@@ -122,6 +122,55 @@ describe('AudioWaveformPyramidBuilder (multi-resolution peaks)', () => {
       expect(top.rms[0][0] * pyramid.amplitudeScale / WAVEFORM_PYRAMID_QUANT).toBeCloseTo(Math.sqrt(expectedEnergy), 4)
       expect(top.rms[1][0] * pyramid.amplitudeScale / WAVEFORM_PYRAMID_QUANT).toBeCloseTo(Math.sqrt(supplied * 0.5 ** 2 / 11), 4)
     }
+  })
+})
+
+describe('按块派生（编辑后声音只改了几段）', () => {
+  const RATE = 48000
+  function build(samples: Float32Array, options: AudioWaveformPyramidOptions, delivered = options.expectedFrames): ReturnType<AudioWaveformPyramidBuilder['finish']> {
+    const builder = new AudioWaveformPyramidBuilder(options)
+    const bytes = new Uint8Array(samples.buffer, 0, delivered * options.channels * 4)
+    // 解码管道的分块大小不固定：结果不能随它变
+    for (let offset = 0, step = 1; offset < bytes.length; step = step * 7 % 1048573 + 4) {
+      const size = Math.min(step, 1024 * 1024)
+      builder.push(bytes.slice(offset, offset + size)); offset += size
+    }
+    return builder.finish()
+  }
+  const signal = (frames: number): Float32Array => Float32Array.from({ length: frames * 2 }, (_, index) => Math.sin(index / 53) * 0.6 * ((index >> 14) % 5) / 5 + ((index * 7919) % 997) / 20000)
+  const spansOf = (samples: Float32Array, ranges: Array<[number, number]>, frames: number, delivered = frames) => ranges.map(([start, end]) => {
+    const startFrame = Math.floor(start / 1024) * 1024, endFrame = Math.min(frames, Math.ceil(end / 1024) * 1024)
+    return { startFrame, endFrame, values: samples.slice(startFrame * 2, Math.min(endFrame, delivered) * 2) }
+  })
+  const same = (a: Uint8Array, b: Uint8Array): boolean => Buffer.from(a.buffer, a.byteOffset, a.byteLength).equals(Buffer.from(b.buffer, b.byteOffset, b.byteLength))
+
+  it('只读改动所在的帧段，结果与对新声音整段生成逐字节相同，摘要也相同（可以继续往下派生）', () => {
+    const frames = RATE * 30 + 777
+    const options = pyramidOptions({ expectedFrames: frames, endSeconds: frames / RATE, baseSamplesPerBucket: 128, levelFactor: 8, topBuckets: 512, keepFloats: true })
+    const before = signal(frames)
+    const after = before.slice()
+    const changes: Array<[number, number]> = [[0, 500], [100_000, 101_000], [900_000, 905_500], [frames - 300, frames]]
+    for (const [start, end] of changes) for (let index = start * 2; index < end * 2; index++) after[index] = after[index] * 0.5 + 0.01
+    const parent = build(before, options), full = build(after, options)
+    const spans = spansOf(after, changes, frames)
+    expect(spans.reduce((sum, part) => sum + part.endFrame - part.startFrame, 0)).toBeLessThan(frames / 100)
+    const derived = deriveWaveformPyramid(parent.pyramid, parent.floats!, options, spans, frames)
+    if ('reason' in derived) throw new Error(derived.reason)
+    expect(same(encodeWaveformPyramid(derived.pyramid), encodeWaveformPyramid(full.pyramid))).toBe(true)
+    expect(same(encodeWaveformPyramidFloats(derived.floats), encodeWaveformPyramidFloats(full.floats!))).toBe(true)
+  })
+  it('尾部缺帧按静音处理，与整段生成一致；全段峰值超过满幅且变了时交回整段生成', () => {
+    const frames = RATE * 4
+    const options = pyramidOptions({ expectedFrames: frames, endSeconds: frames / RATE, baseSamplesPerBucket: 128, levelFactor: 8, topBuckets: 64, keepFloats: true })
+    const before = signal(frames), after = before.slice()
+    after.fill(0.2, (frames - 5000) * 2, (frames - 4000) * 2)
+    const delivered = frames - 1500
+    const parent = build(before, options, delivered), full = build(after, options, delivered)
+    const derived = deriveWaveformPyramid(parent.pyramid, parent.floats!, options, spansOf(after, [[frames - 5000, frames - 4000]], frames, delivered), delivered)
+    if ('reason' in derived) throw new Error(derived.reason)
+    expect(same(encodeWaveformPyramid(derived.pyramid), encodeWaveformPyramid(full.pyramid))).toBe(true)
+    const loud = before.slice(); loud[2000 * 2] = 1.5
+    expect(deriveWaveformPyramid(parent.pyramid, parent.floats!, options, spansOf(loud, [[2000, 2001]], frames, delivered), delivered)).toMatchObject({ reason: expect.stringContaining('定点比例') })
   })
 })
 

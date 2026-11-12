@@ -7,7 +7,7 @@ import { runAudioEditEffectsWorker, type AudioEditEffectsWorkerJob } from './eff
 /* 用极小的真实线程脚本走一遍线程入口：完成与进度、报错、非零退出、取消。 */
 
 let directory = ''
-const job: AudioEditEffectsWorkerJob = { kind: 'gains', input: 'in.wav', output: 'out.wav', regions: [] }
+const job: AudioEditEffectsWorkerJob = { kind: 'gains', input: 'in.wav', output: 'out.wav', layers: [] }
 async function script(name: string, body: string): Promise<string> {
   const file = path.join(directory, `${name}.cjs`)
   await fs.writeFile(file, `const { parentPort, workerData } = require('node:worker_threads')\n${body}\n`)

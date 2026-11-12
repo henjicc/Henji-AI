@@ -824,3 +824,43 @@ fn chunked_spectral_heal_matches_whole_selection_sample_for_sample() {
     }
     assert!(error_power(&read_wav(&whole), &clean, 22000, 42000) < error_power(&damaged, &clean, 22000, 42000));
 }
+
+/// 编辑后声音只重算改动帧的前提（主进程 dsp-adapter.ts 的 AUDIO_WORKER_HEAL_CONTEXT、audioWorkerDeclickMargin）：
+/// 修复只改写选区，选区内的结果只取决于两侧固定长度的声音——频谱修复 n + hop 帧，去爆音按上限算出的训练上下文。
+/// 改动落在这之外，选区里的结果逐样本不变。
+#[test]
+fn repairs_only_read_their_declared_context() {
+    let dir = tempfile::tempdir().unwrap();
+    let clean = clean_signal();
+    let mut seed = 99;
+    let mut far = clean.clone();
+    let mut touch = |samples: &mut Vec<f32>, from: usize, to: usize| {
+        for i in from * 2..to * 2 {
+            samples[i] += 0.2 * noise(&mut seed);
+        }
+    };
+    // 频谱修复 [40000, 42000)：改动紧贴取样范围 [37440, 44560) 的外侧
+    touch(&mut far, 30000, 37440);
+    touch(&mut far, 44560, 50000);
+    // 去爆音 [70000, 70200)：改动紧贴 [61808, 78392) 的外侧
+    touch(&mut far, 55000, 61808);
+    touch(&mut far, 78392, 90000);
+    // 上面的边界按契约常量算出：2048 点修复两侧 2560 帧，48 kHz 去爆音两侧 8192 帧
+    assert_eq!(2048 + 2048 / heal::HEAL_HOP_DIVISOR, 2560);
+    assert_eq!((u64::from(SR) * heal::DECLICK_MAX_MS / 1000 * heal::DECLICK_MARGIN_PER_LIMIT).clamp(heal::DECLICK_MARGIN_MIN, heal::DECLICK_MARGIN_MAX), 8192);
+    let mut near = far.clone();
+    touch(&mut near, 37600, 37700);
+    for (name, samples) in [("clean", &clean), ("far", &far), ("near", &near)] {
+        let input = dir.path().join(format!("{name}.wav"));
+        write_wav(&input, samples, 2);
+        spectral_heal(serde_json::from_value(json!({"input_path":input,"output_path":dir.path().join(format!("{name}-heal.wav")),
+            "regions":[{"start_frame":40000,"end_frame":42000,"low_hz":100,"high_hz":4000}]})).unwrap()).unwrap();
+        declick(serde_json::from_value(json!({"input_path":input,"output_path":dir.path().join(format!("{name}-declick.wav")),
+            "ranges":[{"start_frame":70000,"end_frame":70200}]})).unwrap()).unwrap();
+    }
+    let region = |name: &str, kind: &str, from: usize, to: usize| read_wav(&dir.path().join(format!("{name}-{kind}.wav")))[from * 2..to * 2].to_vec();
+    assert_eq!(region("far", "heal", 40000, 42000), region("clean", "heal", 40000, 42000));
+    assert_eq!(region("far", "declick", 70000, 70200), region("clean", "declick", 70000, 70200));
+    // 反证：改动落进取样范围，选区结果就会变
+    assert_ne!(region("near", "heal", 40000, 42000), region("far", "heal", 40000, 42000));
+}

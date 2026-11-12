@@ -2,7 +2,7 @@ import path from 'node:path'
 import { Worker } from 'node:worker_threads'
 import type { AudioWaveformWorkerOptions, AudioWaveformWorkerRequest, AudioWaveformChannel, AudioWaveformPyramidOutput } from './types'
 
-interface WorkerReply { channels?: AudioWaveformChannel[]; pyramid?: AudioWaveformPyramidOutput['pyramid'] }
+interface WorkerReply { channels?: AudioWaveformChannel[]; pyramid?: AudioWaveformPyramidOutput['pyramid']; floats?: AudioWaveformPyramidOutput['floats'] }
 
 export class AudioWaveformWorker {
   private readonly worker: Worker
@@ -44,9 +44,9 @@ export class AudioWaveformWorker {
     return channels
   }
   async finishPyramid(): Promise<AudioWaveformPyramidOutput> {
-    const { channels, pyramid } = await this.call({ type: 'finish' })
+    const { channels, pyramid, floats } = await this.call({ type: 'finish' })
     if (!channels || !pyramid) throw new Error('音频 Worker 未返回多级波形。')
-    return { channels, pyramid }
+    return { channels, pyramid, ...(floats ? { floats } : {}) }
   }
   dispose(): Promise<void> {
     if (this.closePromise) return this.closePromise

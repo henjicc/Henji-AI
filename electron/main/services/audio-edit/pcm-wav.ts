@@ -1,8 +1,8 @@
 import fs from 'node:fs/promises'
 
 /*
- * 32 位浮点 WAV 的随机读与顺序写：口播成片在主进程逐段拼接（交叉淡化要读被删部分紧挨着的声音），
- * 不再交给 FFmpeg 的 concat 滤镜。支持 RIFF 与超过 4 GB 的 RF64；不是浮点 WAV 时由调用方先转码。
+ * 32 位浮点 WAV 的随机读、顺序写与原位改写一段：口播成片逐段拼接（交叉淡化要读被删部分紧挨着的声音）、
+ * 编辑后声音只重算改动的帧都直接读写样本，不经 FFmpeg。支持 RIFF 与超过 4 GB 的 RF64；不是浮点 WAV 时由调用方先转码。
  */
 
 export interface F32WavReader {
@@ -17,38 +17,75 @@ export interface F32WavReader {
 const WAVE_FORMAT_IEEE_FLOAT = 3
 const WAVE_FORMAT_EXTENSIBLE = 0xfffe
 
+interface F32WavLayout { sampleRate: number; channels: number; frames: number; dataOffset: number }
+
+/** 读 RIFF / RF64 头：不是 32 位浮点 WAV 时返回 null。 */
+async function readF32WavLayout(handle: fs.FileHandle): Promise<F32WavLayout | null> {
+  const head = Buffer.alloc(12)
+  await handle.read(head, 0, 12, 0)
+  const riff = head.toString('ascii', 0, 4)
+  if ((riff !== 'RIFF' && riff !== 'RF64') || head.toString('ascii', 8, 12) !== 'WAVE') return null
+  let offset = 12, format = 0, channels = 0, sampleRate = 0, bits = 0, dataOffset = -1, dataSize = 0, ds64Data = 0
+  const { size: fileSize } = await handle.stat()
+  while (offset + 8 <= fileSize) {
+    const chunk = Buffer.alloc(8)
+    await handle.read(chunk, 0, 8, offset)
+    const id = chunk.toString('ascii', 0, 4), size = chunk.readUInt32LE(4)
+    if (id === 'ds64') {
+      const body = Buffer.alloc(16)
+      await handle.read(body, 0, 16, offset + 8)
+      ds64Data = Number(body.readBigUInt64LE(8))
+    } else if (id === 'fmt ') {
+      const body = Buffer.alloc(Math.min(size, 40))
+      await handle.read(body, 0, body.length, offset + 8)
+      format = body.readUInt16LE(0); channels = body.readUInt16LE(2); sampleRate = body.readUInt32LE(4); bits = body.readUInt16LE(14)
+      if (format === WAVE_FORMAT_EXTENSIBLE && body.length >= 26) format = body.readUInt16LE(24)
+    } else if (id === 'data') {
+      dataOffset = offset + 8
+      dataSize = size === 0xffffffff && ds64Data ? ds64Data : Math.min(size, fileSize - dataOffset)
+      break
+    }
+    offset += 8 + size + (size % 2)
+  }
+  if (format !== WAVE_FORMAT_IEEE_FLOAT || bits !== 32 || !channels || !sampleRate || dataOffset < 0) return null
+  return { sampleRate, channels, frames: Math.floor(dataSize / (4 * channels)), dataOffset }
+}
+
+/**
+ * 原位改写已有 32 位浮点 WAV 的一段样本（编辑后声音只重算改动的帧时用）；不是浮点 WAV 返回 null。
+ * 只改写数据区里已有的帧，不改文件长度与头。
+ */
+export async function openF32WavForPatch(path: string): Promise<{ sampleRate: number; channels: number; frames: number; write(startFrame: number, pcm: Float32Array): Promise<void>; close(): Promise<void> } | null> {
+  const handle = await fs.open(path, 'r+')
+  try {
+    const layout = await readF32WavLayout(handle)
+    if (!layout) { await handle.close(); return null }
+    const { channels, frames, dataOffset } = layout
+    return {
+      ...layout,
+      async write(startFrame, pcm) {
+        const count = pcm.length / channels
+        if (!Number.isInteger(count) || startFrame < 0 || startFrame + count > frames) throw new Error('改写范围超出声音长度')
+        const bytes = new Uint8Array(pcm.buffer, pcm.byteOffset, pcm.byteLength)
+        let done = 0
+        while (done < bytes.length) {
+          const { bytesWritten } = await handle.write(bytes, done, bytes.length - done, dataOffset + startFrame * channels * 4 + done)
+          if (!bytesWritten) throw new Error('声音文件写入没有进展')
+          done += bytesWritten
+        }
+      },
+      close: () => handle.close(),
+    }
+  } catch (error) { await handle.close().catch(() => undefined); throw error }
+}
+
 /** 解析失败返回 null（不是 32 位浮点 WAV），不抛错。 */
 export async function openF32Wav(path: string): Promise<F32WavReader | null> {
   const handle = await fs.open(path, 'r')
   try {
-    const head = Buffer.alloc(12)
-    await handle.read(head, 0, 12, 0)
-    const riff = head.toString('ascii', 0, 4)
-    if ((riff !== 'RIFF' && riff !== 'RF64') || head.toString('ascii', 8, 12) !== 'WAVE') { await handle.close(); return null }
-    let offset = 12, format = 0, channels = 0, sampleRate = 0, bits = 0, dataOffset = -1, dataSize = 0, ds64Data = 0
-    const { size: fileSize } = await handle.stat()
-    while (offset + 8 <= fileSize) {
-      const chunk = Buffer.alloc(8)
-      await handle.read(chunk, 0, 8, offset)
-      const id = chunk.toString('ascii', 0, 4), size = chunk.readUInt32LE(4)
-      if (id === 'ds64') {
-        const body = Buffer.alloc(16)
-        await handle.read(body, 0, 16, offset + 8)
-        ds64Data = Number(body.readBigUInt64LE(8))
-      } else if (id === 'fmt ') {
-        const body = Buffer.alloc(Math.min(size, 40))
-        await handle.read(body, 0, body.length, offset + 8)
-        format = body.readUInt16LE(0); channels = body.readUInt16LE(2); sampleRate = body.readUInt32LE(4); bits = body.readUInt16LE(14)
-        if (format === WAVE_FORMAT_EXTENSIBLE && body.length >= 26) format = body.readUInt16LE(24)
-      } else if (id === 'data') {
-        dataOffset = offset + 8
-        dataSize = size === 0xffffffff && ds64Data ? ds64Data : Math.min(size, fileSize - dataOffset)
-        break
-      }
-      offset += 8 + size + (size % 2)
-    }
-    if (format !== WAVE_FORMAT_IEEE_FLOAT || bits !== 32 || !channels || !sampleRate || dataOffset < 0) { await handle.close(); return null }
-    const frames = Math.floor(dataSize / (4 * channels))
+    const layout = await readF32WavLayout(handle)
+    if (!layout) { await handle.close(); return null }
+    const { sampleRate, channels, frames, dataOffset } = layout
     return {
       sampleRate, channels, frames,
       async read(startFrame, frameCount, into) {

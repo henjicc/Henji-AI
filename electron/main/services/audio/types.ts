@@ -1,4 +1,4 @@
-import type { WaveformPyramidData } from '../../../../src/core/media/waveformPyramid'
+import type { WaveformPyramidData, WaveformPyramidFloats } from '../../../../src/core/media/waveformPyramid'
 import type { AudioWaveformChannel } from '../../../../src/platform/contracts/audioWaveform'
 
 export interface ExtractAudioSamplesResultDto {
@@ -33,6 +33,8 @@ export interface AudioWaveformPyramidOptions {
   baseSamplesPerBucket: number
   levelFactor: number
   topBuckets: number
+  /** 同时交出第 1 级的未量化摘要（这份声音之后可能只改几段、按块派生时要用）。 */
+  keepFloats?: boolean
 }
 
 export type AudioWaveformWorkerOptions = AudioWaveformAggregationOptions | AudioWaveformPyramidOptions
@@ -41,6 +43,7 @@ export interface AudioWaveformPyramidOutput {
   /** 原声道的最粗一级摘要（线性值），与区间聚合同形，便于观测。 */
   channels: AudioWaveformChannel[]
   pyramid: WaveformPyramidData
+  floats?: WaveformPyramidFloats
 }
 
 export interface AudioWaveformWorkerRequest {

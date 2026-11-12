@@ -11,7 +11,7 @@ vi.mock('./effects-worker-client', async () => {
 })
 vi.mock('../audio-separation/runtime', () => ({ separateAudioFile: vi.fn() }))
 vi.mock('./media', () => ({ audioEditCacheDirectory: () => state.dir, verifyAudioEditSource: vi.fn(), prepareAudioEditAudio: async () => path.join(state.dir, 'source.wav'), identifyAudioEditSource: async () => ({ digest: 'a' }), validateAudioEditAudio: vi.fn() }))
-vi.mock('./dsp-adapter', () => ({ runAudioRepair: async (_input: string, output: string) => { state.calls.push('repair'); await fs.writeFile(output, 'repaired') } }))
+vi.mock('./dsp-adapter', async () => ({ ...await vi.importActual<typeof import('./dsp-adapter')>('./dsp-adapter'), runAudioRepair: async (_input: string, output: string) => { state.calls.push('repair'); await fs.writeFile(output, 'repaired') } }))
 vi.mock('./processors', () => ({ listAudioEditProcessors: async () => [{ id: 'rx', available: true }], audioEditProcessorCacheIdentity: async () => 'v1', processAudioEditVstChain: async (input: string, dir: string) => { state.calls.push('processor'); expect(path.basename(input)).toMatch(/^repair-/); const outputPath = path.join(dir, 'vst.wav'); await fs.writeFile(outputPath, 'processed'); return { outputPath, temporaryPaths: [outputPath] } } }))
 vi.mock('../video/ffmpeg-loader', () => ({ loadFfmpegPath: async () => 'ffmpeg' }))
 vi.mock('./process', () => ({ runAudioEditProcess: async (_bin: string, args: string[]) => {
@@ -42,11 +42,12 @@ it('orders shared stages and reuses unaffected caches on cut/gain edits; revisio
   expect(first.durationFrames).toBe(24000)
   // 顺序：修复 → 效果链（插件）→ 区间音量；插件输出不是浮点 WAV 时先转一份再乘音量
   expect(state.calls).toEqual(['repair', 'processor', 'decode'])
-  // 整段读写 PCM 的两步都派给工作线程，主进程只协调
-  expect(state.pcmJobs).toEqual(['gains', 'splices'])
-  const gained = (await openF32Wav(path.join(state.dir, (await fs.readdir(state.dir)).find(name => name.startsWith('gain-'))!)))!
-  const pcm = await gained.read(0, 48000); await gained.close()
-  expect(pcm[0]).toBeCloseTo(0.25 * 10 ** (-6 / 20), 6); expect(pcm[23999]).toBeCloseTo(0.25 * 10 ** (-6 / 20), 6); expect(pcm[24000]).toBe(0.25)
+  // 区间音量不再整段渲染成文件：拼接这一遍读底声时乘上，整段读写在工作线程里
+  expect(state.pcmJobs).toEqual(['splices'])
+  expect((await fs.readdir(state.dir)).some(name => name.startsWith('gain-'))).toBe(false)
+  const finished = (await openF32Wav(first.audioPath))!
+  const pcm = await finished.read(0, 24000); await finished.close()
+  expect(pcm[0]).toBeCloseTo(0.25 * 10 ** (-6 / 20), 6); expect(pcm[23999]).toBeCloseTo(0.25 * 10 ** (-6 / 20), 6)
   expect((await renderAudioEditProject({ ...project, revision: 2 })).audioPath).toBe(first.audioPath); expect(state.calls).toHaveLength(3)
   // 只改剪切：上游各阶段与转码缓存都复用，只重新拼接成片
   project.cuts![0].endFrame = 36000

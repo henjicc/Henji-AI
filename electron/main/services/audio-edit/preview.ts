@@ -3,16 +3,18 @@ import type { AudioEditPreviewChunk, AudioEditPreviewChunkRequest, AudioEditProj
 import { createMainLogger } from '../logging'
 import { loadFfmpegPath } from '../video/ffmpeg-loader'
 import { readAudioEditProjectSnapshot } from './project-store'
-import { prepareAudioEditRenderSource } from './render'
+import { prepareAudioEditRenderPlan } from './render'
 import { prepareAudioEditAudio } from './media'
 import { openF32Wav, type F32WavReader } from './pcm-wav'
 import { listAudioEditProcessors } from './processors'
+import { applyAudioEditGainLayers, type AudioEditGainLayers } from './gain-layers'
 
 /*
  * 试听与拖动播放头试听的取块：一秒一次，一小时作品播放一遍几千次。
- * 作品按文件快照对象身份（加上本机插件清单）缓存“作品 → 渲染源文件”（文件一改快照就换新对象），同一版本只推一遍修复、效果链与缓存检查；
+ * 作品按文件快照对象身份（加上本机插件清单）缓存“作品 → 底声文件 + 增益层”（文件一改快照就换新对象），同一版本只推一遍修复、效果链与缓存检查；
  * 缓存文件被清理掉时读取失败，丢掉这条记录重新推一遍再读。
- * 渲染源是 32 位浮点 WAV（项目自己生成的缓存基本都是）时保持打开直接随机读，不为每块起 FFmpeg。
+ * 底声是 32 位浮点 WAV（项目自己生成的缓存基本都是）时保持打开直接随机读，不为每块起 FFmpeg。
+ * 区间音量与末尾的呼吸处理在取块时乘上（与导出同一个函数），改了马上能听到，不等整条声音重新渲染。
  */
 
 const logger = createMainLogger('main.audio_edit.preview')
@@ -23,7 +25,8 @@ const SLOW_CHUNK_MS = 200
 const RENDER_SOURCE_LIMIT = 8
 
 type SoundMode = 'source' | 'edited'
-interface RenderSourceEntry { project: Readonly<AudioEditProjectDocument>; processors: string; path: Promise<string> }
+interface RenderSource { path: string; layers: AudioEditGainLayers }
+interface RenderSourceEntry { project: Readonly<AudioEditProjectDocument>; processors: string; path: Promise<RenderSource> }
 const renderSources = new Map<string, RenderSourceEntry>()
 interface OpenReader { reader: Promise<F32WavReader | null>; timer?: ReturnType<typeof setTimeout> }
 const readers = new Map<string, OpenReader>()
@@ -34,7 +37,7 @@ async function processorIdentity(project: Readonly<AudioEditProjectDocument>, mo
   return (await listAudioEditProcessors()).map(processor => `${processor.id}:${processor.available}`).sort().join('|')
 }
 
-async function renderSourceFor(project: Readonly<AudioEditProjectDocument>, mode: SoundMode): Promise<string> {
+async function renderSourceFor(project: Readonly<AudioEditProjectDocument>, mode: SoundMode): Promise<RenderSource> {
   const key = `${project.id}:${mode}`
   const processors = await processorIdentity(project, mode)
   const cached = renderSources.get(key)
@@ -43,8 +46,11 @@ async function renderSourceFor(project: Readonly<AudioEditProjectDocument>, mode
     return cached.path
   }
   const started = performance.now()
-  const path = (mode === 'source' ? prepareAudioEditAudio(project) : prepareAudioEditRenderSource(project)).then(result => {
-    logger.info('试听声音已就绪', { event: 'audio_edit.preview.source.completed', context: { projectId: project.id, mode, revision: project.revision, durationFrames: project.source.durationFrames, sampleRate: project.source.sampleRate, channels: project.source.channels, elapsedMs: performance.now() - started } })
+  const prepared: Promise<RenderSource> = mode === 'source'
+    ? prepareAudioEditAudio(project).then(path => ({ path, layers: [] }))
+    : prepareAudioEditRenderPlan(project).then(plan => ({ path: plan.base, layers: plan.layers }))
+  const path = prepared.then(result => {
+    logger.info('试听声音已就绪', { event: 'audio_edit.preview.source.completed', context: { projectId: project.id, mode, revision: project.revision, durationFrames: project.source.durationFrames, sampleRate: project.source.sampleRate, channels: project.source.channels, gainLayers: result.layers.length, elapsedMs: performance.now() - started } })
     return result
   })
   const entry: RenderSourceEntry = { project, processors, path }
@@ -105,18 +111,22 @@ export async function prepareAudioEditPreviewChunk(request: AudioEditPreviewChun
   const mode: SoundMode = request.mode === 'source' ? 'source' : 'edited'
   let pcm: ArrayBuffer | undefined
   let direct = false
+  let gainLayers = 0
   for (let attempt = 0; !pcm; attempt++) {
-    const source = await renderSourceFor(project, mode)
+    const { path: source, layers } = await renderSourceFor(project, mode)
+    gainLayers = layers.length
     try {
       const reader = await readerFor(source, project)
       direct = Boolean(reader)
-      if (reader) pcm = (await reader.read(sourceStartFrame, Math.min(frameCount, reader.frames - sourceStartFrame))).buffer as ArrayBuffer
+      let samples: Float32Array
+      if (reader) samples = await reader.read(sourceStartFrame, Math.min(frameCount, reader.frames - sourceStartFrame))
       else {
         const decoded = await decodeWithFfmpeg(await loadFfmpegPath(), source, project, sourceStartFrame, frameCount)
-        const copied = new Uint8Array(decoded.byteLength)
-        copied.set(decoded)
-        pcm = copied.buffer
+        samples = new Float32Array(decoded.byteLength / 4)
+        new Uint8Array(samples.buffer).set(decoded.subarray(0, samples.byteLength))
       }
+      applyAudioEditGainLayers(samples, sourceStartFrame, channels, layers)
+      pcm = samples.buffer as ArrayBuffer
     } catch (error) {
       // 渲染源文件可能已被缓存清理删掉：丢掉记录和句柄，重新推一遍渲染源（会重建缓存文件）再读一次
       closeReader(source)
@@ -127,7 +137,7 @@ export async function prepareAudioEditPreviewChunk(request: AudioEditPreviewChun
   }
   const sourceEndFrame = sourceStartFrame + Math.floor(pcm.byteLength / 4 / channels)
   const elapsedMs = performance.now() - started
-  const context = { projectId: project.id, mode, sourceStartFrame, frameCount: sourceEndFrame - sourceStartFrame, durationFrames, direct, elapsedMs }
+  const context = { projectId: project.id, mode, sourceStartFrame, frameCount: sourceEndFrame - sourceStartFrame, durationFrames, direct, gainLayers, elapsedMs }
   if (elapsedMs >= SLOW_CHUNK_MS) logger.info('试听取块较慢', { event: 'audio_edit.preview.chunk.slow', context })
   else logger.debug('试听取块完成', { event: 'audio_edit.preview.chunk.completed', context })
   return { sourceStartFrame, sourceEndFrame, sampleRate, channels, pcm }

@@ -19,7 +19,7 @@ vi.mock('node:worker_threads', async () => {
   } }
 })
 vi.mock('./media', () => ({ audioEditCacheDirectory: () => state.directory, verifyAudioEditSource: vi.fn(), prepareAudioEditAudio: async () => path.join(state.directory, 'source.wav'), validateAudioEditAudio: vi.fn() }))
-vi.mock('./dsp-adapter', () => ({ runAudioMouthDeclick: async (input: string, output: string) => { state.declick++; await fs.copyFile(input, output) } }))
+vi.mock('./dsp-adapter', async () => ({ ...await vi.importActual<typeof import('./dsp-adapter')>('./dsp-adapter'), runAudioMouthDeclick: async (input: string, output: string) => { state.declick++; await fs.copyFile(input, output) } }))
 vi.mock('./processors', () => ({}))
 vi.mock('../audio-separation/runtime', () => ({}))
 vi.mock('../video/ffmpeg-loader', () => ({}))

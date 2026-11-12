@@ -1,5 +1,5 @@
 import { parentPort } from 'node:worker_threads'
-import type { WaveformPyramidData, WaveformPyramidLevel } from '../../../../src/core/media/waveformPyramid'
+import type { WaveformPyramidData, WaveformPyramidFloats, WaveformPyramidLevel } from '../../../../src/core/media/waveformPyramid'
 import type { AudioWaveformAggregationOptions, AudioWaveformPyramidOptions, AudioWaveformPyramidOutput, AudioWaveformWorkerRequest, AudioWaveformChannel } from './types'
 
 // 本文件作为独立 Worker 入口运行（测试中直接以 .ts 启动），只允许类型导入，不得有运行时导入。
@@ -82,132 +82,233 @@ export class AudioWaveformAggregator {
   }
 }
 
+/** 一级的未量化摘要：每声道每桶的最小、最大值（32 位）与平方和（64 位）。 */
+interface FloatLevel { samplesPerBucket: number; minima: Float32Array[]; maxima: Float32Array[]; sums: Float64Array[] }
+
+function emptyFloatLevel(outputs: number, samplesPerBucket: number, count: number): FloatLevel {
+  return {
+    samplesPerBucket,
+    minima: Array.from({ length: outputs }, () => new Float32Array(count).fill(Infinity)),
+    maxima: Array.from({ length: outputs }, () => new Float32Array(count).fill(-Infinity)),
+    sums: Array.from({ length: outputs }, () => new Float64Array(count)),
+  }
+}
+
+/**
+ * 第 0 级逐帧累加：values 是从绝对帧 startFrame 起的交织采样，target 的第 0 个桶是绝对桶 firstBucket，只累加到 endFrame 之前。
+ * 平方和按 64 位逐帧累加并跨调用保留，结果与解码分块、整段或按段处理无关。返回实际累加的帧数。
+ */
+function accumulateBase(target: FloatLevel, firstBucket: number, values: Float32Array, startFrame: number, channels: number, mix: boolean, endFrame: number): number {
+  const base = target.samplesPerBucket
+  const frames = values.length / channels
+  let index = 0, frame = startFrame
+  while (index < frames && frame < endFrame) {
+    const bucket = Math.floor(frame / base)
+    const local = bucket - firstBucket
+    const count = Math.min(frames - index, Math.min(endFrame, (bucket + 1) * base) - frame)
+    for (let channel = 0; channel < channels; channel++) {
+      let low = target.minima[channel][local]; let high = target.maxima[channel][local]; let sum = target.sums[channel][local]
+      for (let offset = (index * channels) + channel, end = offset + count * channels; offset < end; offset += channels) {
+        const value = values[offset]
+        assertFinite(value)
+        if (value < low) low = value
+        if (value > high) high = value
+        sum += value * value
+      }
+      target.minima[channel][local] = low; target.maxima[channel][local] = high; target.sums[channel][local] = sum
+    }
+    if (mix) {
+      let low = target.minima[channels][local]; let high = target.maxima[channels][local]; let sum = target.sums[channels][local]
+      for (let at = index; at < index + count; at++) {
+        let value = 0
+        for (let channel = 0; channel < channels; channel++) value += values[at * channels + channel]
+        value /= channels
+        if (value < low) low = value
+        if (value > high) high = value
+        sum += value * value
+      }
+      target.minima[channels][local] = low; target.maxima[channels][local] = high; target.sums[channels][local] = sum
+    }
+    index += count; frame += count
+  }
+  return frame - startFrame
+}
+
+/** 解码缺失的尾帧属于静音：从第一个缺帧的桶起把零纳入范围（只动确实缺帧的桶，单极性声音不被拉到零）。 */
+function includeMissingTail(level: FloatLevel, firstBucket: number, deliveredFrames: number): void {
+  const from = Math.max(0, Math.floor(deliveredFrames / level.samplesPerBucket) - firstBucket)
+  for (let output = 0; output < level.minima.length; output++) for (let bucket = from; bucket < level.minima[output].length; bucket++) {
+    level.minima[output][bucket] = Math.min(0, level.minima[output][bucket])
+    level.maxima[output][bucket] = Math.max(0, level.maxima[output][bucket])
+  }
+}
+
+/** 上一级：每 factor 个桶合并成一个（最小/最大取极值，平方和按桶序累加）；below 的第 0 个桶须对齐到 factor。 */
+function aggregateFloatLevel(below: FloatLevel, factor: number, count: number): FloatLevel {
+  const level = emptyFloatLevel(below.minima.length, below.samplesPerBucket * factor, count)
+  for (let output = 0; output < below.minima.length; output++) {
+    const minima = below.minima[output], maxima = below.maxima[output], sums = below.sums[output]
+    for (let bucket = 0; bucket < minima.length; bucket++) {
+      const parent = Math.floor(bucket / factor)
+      if (parent >= count) break
+      level.minima[output][parent] = Math.min(level.minima[output][parent], minima[bucket])
+      level.maxima[output][parent] = Math.max(level.maxima[output][parent], maxima[bucket])
+      level.sums[output][parent] += sums[bucket]
+    }
+  }
+  return level
+}
+
+function peakOf(level: FloatLevel): number {
+  let peak = 0
+  for (let output = 0; output < level.minima.length; output++) for (let bucket = 0; bucket < level.minima[output].length; bucket++) peak = Math.max(peak, Math.abs(level.minima[output][bucket]), Math.abs(level.maxima[output][bucket]))
+  return peak
+}
+
+/** 按全段比例定点：rms 用每桶实际帧数（最后一桶可能不满）。 */
+function quantizer(amplitudeScale: number, expectedFrames: number) {
+  const rangeOf = (value: number): number => Math.max(-RANGE_QUANT, Math.min(RANGE_QUANT, Math.round(value / amplitudeScale * RANGE_QUANT)))
+  const rmsOf = (sum: number, samplesPerBucket: number, bucket: number, buckets: number): number => {
+    const counted = bucket === buckets - 1 ? expectedFrames - bucket * samplesPerBucket : samplesPerBucket
+    return Math.min(QUANT, Math.round(Math.sqrt(sum / counted) / amplitudeScale * QUANT))
+  }
+  return { rangeOf, rmsOf }
+}
+
+/** 第 1 级往上的各级：由第 1 级的未量化摘要逐级合并、定点。整段生成与按块派生共用，结果逐字节相同。 */
+function levelsAbove(first: FloatLevel, options: AudioWaveformPyramidOptions, amplitudeScale: number): { floats: FloatLevel[]; levels: WaveformPyramidLevel[] } {
+  const { expectedFrames, levelFactor, topBuckets } = options
+  const floats = [first]
+  while (floats.at(-1)!.minima[0].length > topBuckets) {
+    const below = floats.at(-1)!
+    floats.push(aggregateFloatLevel(below, levelFactor, Math.ceil(expectedFrames / (below.samplesPerBucket * levelFactor))))
+  }
+  return { floats, levels: floats.map(level => quantizeFloatLevel(level, amplitudeScale, expectedFrames)) }
+}
+
+function quantizeFloatLevel(level: FloatLevel, amplitudeScale: number, expectedFrames: number): WaveformPyramidLevel {
+  const { rangeOf, rmsOf } = quantizer(amplitudeScale, expectedFrames)
+  const bucketCount = level.minima[0].length
+  return {
+    samplesPerBucket: level.samplesPerBucket, bucketCount,
+    min: level.minima.map((values) => Int16Array.from(values, rangeOf)),
+    max: level.maxima.map((values) => Int16Array.from(values, rangeOf)),
+    rms: level.sums.map((values) => Uint16Array.from(values, (sum, bucket) => rmsOf(sum, level.samplesPerBucket, bucket, bucketCount))),
+  }
+}
+
+function validatePyramidOptions(options: AudioWaveformPyramidOptions): void {
+  if (!Number.isInteger(options.channels) || options.channels < 1 || options.channels > 64
+    || !Number.isSafeInteger(options.expectedFrames) || options.expectedFrames < 1
+    || !Number.isInteger(options.baseSamplesPerBucket) || options.baseSamplesPerBucket < 1
+    || !Number.isInteger(options.levelFactor) || options.levelFactor < 2 || !Number.isInteger(options.topBuckets) || options.topBuckets < 1
+    || !Number.isInteger(options.sampleRate) || options.sampleRate < 1) throw new Error('无效的波形聚合规格。')
+}
+
 /**
  * 整段多级范围的唯一生成实现：第 0 级逐采样聚合，上级由下级按整数倍合并（最小/最大值与平方和），
  * 最后按全段最大峰值定点为 16 位。帧位置从 0 起与绝对时钟对齐，未到达的帧视为静音。
+ * keepFloats 时另交出第 1 级的未量化摘要：之后这份声音只改了几段时，按块派生不必再整段解码（deriveWaveformPyramid）。
  */
 export class AudioWaveformPyramidBuilder {
   private readonly options: AudioWaveformPyramidOptions
-  private readonly outputs: number
-  private readonly bucketCount: number
-  private readonly minima: Float32Array[]
-  private readonly maxima: Float32Array[]
-  private readonly sums: Float32Array[]
+  private readonly base: FloatLevel
   private readonly reader: FrameReader
   private frame = 0
   constructor(options: AudioWaveformPyramidOptions) {
+    validatePyramidOptions(options)
     this.options = options
-    if (!Number.isInteger(options.channels) || options.channels < 1 || options.channels > 64
-      || !Number.isSafeInteger(options.expectedFrames) || options.expectedFrames < 1
-      || !Number.isInteger(options.baseSamplesPerBucket) || options.baseSamplesPerBucket < 1
-      || !Number.isInteger(options.levelFactor) || options.levelFactor < 2 || !Number.isInteger(options.topBuckets) || options.topBuckets < 1
-      || !Number.isInteger(options.sampleRate) || options.sampleRate < 1) throw new Error('无效的波形聚合规格。')
-    this.outputs = options.channels + (options.mix ? 1 : 0)
-    this.bucketCount = Math.ceil(options.expectedFrames / options.baseSamplesPerBucket)
-    this.minima = Array.from({ length: this.outputs }, () => new Float32Array(this.bucketCount).fill(Infinity))
-    this.maxima = Array.from({ length: this.outputs }, () => new Float32Array(this.bucketCount).fill(-Infinity))
-    this.sums = Array.from({ length: this.outputs }, () => new Float32Array(this.bucketCount))
+    this.base = emptyFloatLevel(options.channels + (options.mix ? 1 : 0), options.baseSamplesPerBucket, Math.ceil(options.expectedFrames / options.baseSamplesPerBucket))
     this.reader = new FrameReader(4 * options.channels)
   }
   push(bytes: Uint8Array): void {
     const values = this.reader.read(bytes)
-    const { channels, expectedFrames, baseSamplesPerBucket: base, mix } = this.options
-    const frames = values.length / channels
-    let index = 0
-    while (index < frames && this.frame < expectedFrames) {
-      const bucket = Math.floor(this.frame / base)
-      const count = Math.min(frames - index, Math.min(expectedFrames, (bucket + 1) * base) - this.frame)
-      for (let channel = 0; channel < channels; channel++) {
-        let low = this.minima[channel][bucket]; let high = this.maxima[channel][bucket]; let sum = this.sums[channel][bucket]
-        for (let offset = (index * channels) + channel, end = offset + count * channels; offset < end; offset += channels) {
-          const value = values[offset]
-          assertFinite(value)
-          if (value < low) low = value
-          if (value > high) high = value
-          sum += value * value
-        }
-        this.minima[channel][bucket] = low; this.maxima[channel][bucket] = high; this.sums[channel][bucket] = sum
-      }
-      if (mix) {
-        let low = this.minima[channels][bucket]; let high = this.maxima[channels][bucket]; let sum = this.sums[channels][bucket]
-        for (let frame = index; frame < index + count; frame++) {
-          let value = 0
-          for (let channel = 0; channel < channels; channel++) value += values[frame * channels + channel]
-          value /= channels
-          if (value < low) low = value
-          if (value > high) high = value
-          sum += value * value
-        }
-        this.minima[channels][bucket] = low; this.maxima[channels][bucket] = high; this.sums[channels][bucket] = sum
-      }
-      index += count; this.frame += count
-    }
+    this.frame += accumulateBase(this.base, 0, values, this.frame, this.options.channels, this.options.mix, this.options.expectedFrames)
   }
   finish(): AudioWaveformPyramidOutput {
     if (!this.reader.complete) throw new Error('音频采样流在不完整帧处结束。')
-    const { expectedFrames, baseSamplesPerBucket: base, levelFactor, topBuckets } = this.options
-    // 解码缺失的尾帧属于静音，只有确实缺帧的桶才把零纳入范围，避免单极性声音被拉到零。
-    if (this.frame < expectedFrames) {
-      for (let channel = 0; channel < this.outputs; channel++) for (let bucket = Math.floor(this.frame / base); bucket < this.bucketCount; bucket++) {
-        this.minima[channel][bucket] = Math.min(0, this.minima[channel][bucket])
-        this.maxima[channel][bucket] = Math.max(0, this.maxima[channel][bucket])
-      }
-    }
-    let peakMax = 0
-    for (let channel = 0; channel < this.outputs; channel++) for (let bucket = 0; bucket < this.bucketCount; bucket++) peakMax = Math.max(peakMax, Math.abs(this.minima[channel][bucket]), Math.abs(this.maxima[channel][bucket]))
+    const { expectedFrames, levelFactor, topBuckets } = this.options
+    if (this.frame < expectedFrames) includeMissingTail(this.base, 0, this.frame)
+    const peakMax = peakOf(this.base)
     const amplitudeScale = Math.max(1, peakMax)
-    const quantize = (value: number): number => Math.min(QUANT, Math.round(value / amplitudeScale * QUANT))
-    const quantizeRange = (value: number): number => Math.max(-RANGE_QUANT, Math.min(RANGE_QUANT, Math.round(value / amplitudeScale * RANGE_QUANT)))
-    const floats: Array<{ samplesPerBucket: number; minima: Float32Array[]; maxima: Float32Array[]; sums: Float32Array[] }> = [{ samplesPerBucket: base, minima: this.minima, maxima: this.maxima, sums: this.sums }]
-    while (floats.at(-1)!.minima[0].length > topBuckets) {
-      const below = floats.at(-1)!
-      const samplesPerBucket = below.samplesPerBucket * levelFactor
-      const count = Math.ceil(expectedFrames / samplesPerBucket)
-      const minima = below.minima.map((source) => {
-        const target = new Float32Array(count).fill(Infinity)
-        for (let bucket = 0; bucket < source.length; bucket++) { const parent = Math.floor(bucket / levelFactor); target[parent] = Math.min(target[parent], source[bucket]) }
-        return target
-      })
-      const maxima = below.maxima.map((source) => {
-        const target = new Float32Array(count).fill(-Infinity)
-        for (let bucket = 0; bucket < source.length; bucket++) { const parent = Math.floor(bucket / levelFactor); target[parent] = Math.max(target[parent], source[bucket]) }
-        return target
-      })
-      const sums = below.sums.map((source) => {
-        const target = new Float32Array(count)
-        for (let bucket = 0; bucket < source.length; bucket++) target[Math.floor(bucket / levelFactor)] += source[bucket]
-        return target
-      })
-      floats.push({ samplesPerBucket, minima, maxima, sums })
-    }
-    const counted = (samplesPerBucket: number, bucket: number, buckets: number): number => bucket === buckets - 1 ? expectedFrames - bucket * samplesPerBucket : samplesPerBucket
-    const levels: WaveformPyramidLevel[] = floats.map(({ samplesPerBucket, minima, maxima, sums }) => {
-      const bucketCount = minima[0].length
-      return {
-        samplesPerBucket, bucketCount,
-        min: minima.map((values) => Int16Array.from(values, quantizeRange)),
-        max: maxima.map((values) => Int16Array.from(values, quantizeRange)),
-        rms: sums.map((values) => Uint16Array.from(values, (sum, bucket) => quantize(Math.sqrt(sum / counted(samplesPerBucket, bucket, bucketCount))))),
-      }
-    })
-    const top = floats.at(-1)!
+    const baseLevel = quantizeFloatLevel(this.base, amplitudeScale, expectedFrames)
+    const above = this.base.minima[0].length > topBuckets
+      ? levelsAbove(aggregateFloatLevel(this.base, levelFactor, Math.ceil(expectedFrames / (this.base.samplesPerBucket * levelFactor))), this.options, amplitudeScale)
+      : { floats: [], levels: [] }
+    const top = above.floats.at(-1) ?? this.base
     const topCount = top.minima[0].length
+    const counted = (bucket: number): number => bucket === topCount - 1 ? expectedFrames - bucket * top.samplesPerBucket : top.samplesPerBucket
     const channels = Array.from({ length: this.options.channels }, (_, channel) => ({
       peak: Array.from(top.minima[channel], (value, bucket) => Math.max(Math.abs(value), Math.abs(top.maxima[channel][bucket]))),
-      rms: Array.from(top.sums[channel], (sum, bucket) => Math.sqrt(sum / counted(top.samplesPerBucket, bucket, topCount))),
-      sampleCounts: Array.from({ length: topCount }, (_, bucket) => counted(top.samplesPerBucket, bucket, topCount)),
+      rms: Array.from(top.sums[channel], (sum, bucket) => Math.sqrt(sum / counted(bucket))),
+      sampleCounts: Array.from({ length: topCount }, (_, bucket) => counted(bucket)),
     }))
     const pyramid: WaveformPyramidData = {
       sampleRate: this.options.sampleRate, frameCount: expectedFrames, startSeconds: this.options.startSeconds, endSeconds: this.options.endSeconds,
-      amplitudeScale, peakMax, channelCount: this.outputs, nativeChannels: this.options.nativeChannels, mixChannel: this.options.mix, levels,
+      amplitudeScale, peakMax, channelCount: this.base.minima.length, nativeChannels: this.options.nativeChannels, mixChannel: this.options.mix, levels: [baseLevel, ...above.levels],
     }
-    return { channels, pyramid }
+    const first = above.floats[0]
+    return { channels, pyramid, ...(this.options.keepFloats && first ? { floats: toPyramidFloats(first) } : {}) }
+  }
+}
+
+function toPyramidFloats(level: FloatLevel): WaveformPyramidFloats {
+  return { samplesPerBucket: level.samplesPerBucket, bucketCount: level.minima[0].length, minima: level.minima, maxima: level.maxima, sums: level.sums }
+}
+
+/**
+ * 按块派生：parent 是上一版声音的金字塔、parentFloats 是它第 1 级的未量化摘要；spans 是改动所在、对齐到第 1 级桶边界的帧段，
+ * 带着新声音这些帧的采样（解码只到 deliveredFrames，之后按缺帧处理）。只重算这些桶的第 0、1 级，其余从 parent 复制，
+ * 第 1 级往上由摘要整体重合并——与对新声音整段生成逐字节相同（摘要也相同，可以继续往下派生）。
+ * 全段峰值变了（定点比例变了）时无法沿用 parent 的第 0 级，返回原因，由调用方整段生成。
+ */
+export function deriveWaveformPyramid(parent: WaveformPyramidData, parentFloats: WaveformPyramidFloats, options: AudioWaveformPyramidOptions, spans: ReadonlyArray<{ startFrame: number; endFrame: number; values: Float32Array }>, deliveredFrames: number): { pyramid: WaveformPyramidData; floats: WaveformPyramidFloats } | { reason: string } {
+  validatePyramidOptions(options)
+  const { expectedFrames, baseSamplesPerBucket: base, levelFactor, channels, mix } = options
+  const outputs = channels + (mix ? 1 : 0)
+  const span = base * levelFactor
+  if (parent.levels.length < 2 || parent.frameCount !== expectedFrames || parent.channelCount !== outputs || parent.mixChannel !== mix || parent.levels[0].samplesPerBucket !== base
+    || parentFloats.samplesPerBucket !== span || parentFloats.bucketCount !== parent.levels[1].bucketCount || parentFloats.minima.length !== outputs) return { reason: '上一版波形的规格不同' }
+  const first: FloatLevel = { samplesPerBucket: span, minima: parentFloats.minima.map(values => values.slice()), maxima: parentFloats.maxima.map(values => values.slice()), sums: parentFloats.sums.map(values => values.slice()) }
+  const changed: Array<{ firstBucket: number; level: FloatLevel }> = []
+  for (const part of spans) {
+    if (part.startFrame % span || part.endFrame <= part.startFrame || (part.endFrame % span && part.endFrame !== expectedFrames) || part.endFrame > expectedFrames) return { reason: '派生段没有对齐' }
+    const firstBucket = part.startFrame / base
+    const level = emptyFloatLevel(outputs, base, Math.ceil(part.endFrame / base) - firstBucket)
+    const delivered = Math.min(deliveredFrames, part.endFrame)
+    if (accumulateBase(level, firstBucket, part.values, part.startFrame, channels, mix, delivered) !== Math.max(0, delivered - part.startFrame)) return { reason: '派生段采样不足' }
+    if (delivered < part.endFrame) includeMissingTail(level, firstBucket, deliveredFrames)
+    const above = aggregateFloatLevel(level, levelFactor, Math.ceil((part.endFrame - part.startFrame) / span))
+    const at = part.startFrame / span
+    for (let output = 0; output < outputs; output++) {
+      first.minima[output].set(above.minima[output], at); first.maxima[output].set(above.maxima[output], at); first.sums[output].set(above.sums[output], at)
+    }
+    changed.push({ firstBucket, level })
+  }
+  const peakMax = peakOf(first)
+  const amplitudeScale = Math.max(1, peakMax)
+  if (amplitudeScale !== parent.amplitudeScale) return { reason: '全段峰值超过满幅且变了，定点比例不同' }
+  const baseLevel = parent.levels[0]
+  const patched: WaveformPyramidLevel = { ...baseLevel, min: baseLevel.min.map(values => values.slice()), max: baseLevel.max.map(values => values.slice()), rms: baseLevel.rms.map(values => values.slice()) }
+  const { rangeOf, rmsOf } = quantizer(amplitudeScale, expectedFrames)
+  for (const { firstBucket, level } of changed) for (let output = 0; output < outputs; output++) for (let local = 0; local < level.minima[output].length; local++) {
+    const bucket = firstBucket + local
+    patched.min[output][bucket] = rangeOf(level.minima[output][local])
+    patched.max[output][bucket] = rangeOf(level.maxima[output][local])
+    patched.rms[output][bucket] = rmsOf(level.sums[output][local], base, bucket, baseLevel.bucketCount)
+  }
+  const above = levelsAbove(first, options, amplitudeScale)
+  if (above.levels.length !== parent.levels.length - 1) return { reason: '上一版波形的级数不同' }
+  return {
+    pyramid: { ...parent, peakMax, amplitudeScale, levels: [patched, ...above.levels] },
+    floats: toPyramidFloats(first),
   }
 }
 
 function transferables(output: AudioWaveformChannel[] | AudioWaveformPyramidOutput): ArrayBuffer[] {
   if (Array.isArray(output)) return output.flatMap((channel) => channel.samples ? [channel.samples.buffer as ArrayBuffer] : [])
-  return output.pyramid.levels.flatMap((level) => [...level.min, ...level.max, ...level.rms].map((values) => values.buffer as ArrayBuffer))
+  const floats = output.floats ? [...output.floats.minima, ...output.floats.maxima, ...output.floats.sums].map((values) => values.buffer as ArrayBuffer) : []
+  return [...output.pyramid.levels.flatMap((level) => [...level.min, ...level.max, ...level.rms].map((values) => values.buffer as ArrayBuffer)), ...floats]
 }
 
 const port = parentPort
@@ -221,7 +322,7 @@ if (port) {
       else if (request.type !== 'finish' || !aggregator) throw new Error('无效的波形 Worker 消息。')
       if (request.type !== 'finish') { port.postMessage({ id: request.id, ok: true }); return }
       const output = aggregator.finish()
-      const reply = Array.isArray(output) ? { channels: output } : { channels: output.channels, pyramid: output.pyramid }
+      const reply = Array.isArray(output) ? { channels: output } : { channels: output.channels, pyramid: output.pyramid, ...(output.floats ? { floats: output.floats } : {}) }
       port.postMessage({ id: request.id, ok: true, ...reply }, transferables(output))
     } catch (error) {
       port.postMessage({ id: request.id, ok: false, message: error instanceof Error ? error.message : String(error) })

@@ -12,10 +12,11 @@ const mocks = vi.hoisted(() => ({ spawn: vi.fn() }))
 vi.mock('node:child_process', () => ({ spawn: mocks.spawn }))
 // 缓存通过依赖注入验证，避免纯 Node 测试启动 Electron 宿主单例。
 vi.mock('../media/media-cache-runtime', () => ({ getMediaCacheManager: () => ({ createCache: () => null }) }))
-vi.mock('../logging', () => ({ createMainLogger: () => ({ debug: vi.fn(), error: vi.fn() }) }))
+vi.mock('../logging', () => ({ createMainLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 vi.mock('../media/shared', () => ({ resolveLocalMediaPath: async (source: string) => source }))
 vi.mock('../image/source', () => ({ normalizeLocalSource: (source: string) => source }))
 import { createAudioWaveformService } from './ops'
+import { createF32WavWriter } from '../audio-edit/pcm-wav'
 
 class Process extends EventEmitter {
   readonly stdout = new PassThrough()
@@ -144,6 +145,39 @@ describe('whole-source multi-resolution waveform (task 2.3)', () => {
     finish(1, Array(960).fill(0.1))
     expect(pyramid(await mix).channelCount).toBe(2)
     await analyzer.dispose()
+  })
+  it('编辑后声音按来历派生：只读改动的帧段、不起 FFmpeg，结果与整段解码逐值相同', async () => {
+    probeWith([{ codec_type: 'audio', sample_rate: '48000', channels: 2, duration: '10' }], '10')
+    const directory = await cacheDirectory()
+    const frames = 480_000
+    const parentFile = path.join(directory, 'parent.wav'), childFile = path.join(directory, 'child.wav')
+    const parentSamples = Float32Array.from({ length: frames * 2 }, (_, index) => Math.sin(index / 41) * 0.5)
+    const childSamples = parentSamples.slice()
+    for (let index = 200_000 * 2; index < 201_000 * 2; index++) childSamples[index] *= 0.25
+    for (const [file, values] of [[parentFile, parentSamples], [childFile, childSamples]] as const) {
+      const writer = await createF32WavWriter(file, 48000, 2, frames); await writer.write(values); await writer.close()
+    }
+    const identity = async (source: string) => ({ path: source, identity: path.basename(source) })
+    const options = { ffmpegPath: async () => 'mpeg', ffprobePath: async () => 'probe', identity, createWorker: worker }
+    const analyzer = createAudioWaveformService({ ...options, diskCache: createContentDiskCache({ directory: () => directory, extension: '.hwpk' }), lineage: {
+      tracked: async () => true,
+      ancestor: async <T>(file: string, accept: (ancestor: string) => Promise<T | undefined>) => {
+        const value = file === childFile ? await accept(parentFile) : undefined
+        return value === undefined ? undefined : { ancestor: parentFile, value, dirty: [[200_000, 201_000] as [number, number]], hops: 1 }
+      },
+    } })
+    const first = analyzer.extractPyramid({ source: parentFile, channels: 2 })
+    await vi.waitFor(() => expect(children).toHaveLength(1))
+    finish(0, Array.from(parentSamples))
+    await first
+    const derived = pyramid(await analyzer.extractPyramid({ source: childFile, channels: 2 }))
+    expect(children).toHaveLength(1)
+    const reference = createAudioWaveformService({ ...options, diskCache: null, lineage: { tracked: async () => false, ancestor: async () => undefined } })
+    const full = reference.extractPyramid({ source: childFile, channels: 2 })
+    await vi.waitFor(() => expect(children).toHaveLength(2))
+    finish(1, Array.from(childSamples))
+    expect(derived).toEqual(pyramid(await full))
+    await analyzer.dispose(); await reference.dispose(); await fs.rm(directory, { recursive: true, force: true })
   })
   it('returns the signed samples of a short detail range and refuses detail ranges above the readback limit', async () => {
     probeWith([{ codec_type: 'audio', sample_rate: '48000', channels: 2 }], '1800')
