@@ -164,7 +164,7 @@ async function main(options) {
   }
   const recording = options.project ? null : ensureBenchRecording()
 
-  const launched = await launchElectronApp({ mainEntry: MAIN_ENTRY, appPath: ROOT, cwd: ROOT, isolateUserData: true, useElectronApi: true, skipOnboarding: true })
+  const launched = await launchElectronApp({ mainEntry: MAIN_ENTRY, appPath: ROOT, cwd: ROOT, useElectronApi: true, skipOnboarding: true })
   const { app, page } = launched
   let client
   let browserWindow

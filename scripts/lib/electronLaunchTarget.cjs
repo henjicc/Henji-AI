@@ -26,4 +26,15 @@ function resolveLaunchTarget({ executablePath = null, defaultExecutable, mainEnt
   return { packaged: true, executable, entryArgs: [], cwd: path.dirname(executable) }
 }
 
-module.exports = { PACKAGED_EXECUTABLE_ENV, resolveLaunchTarget }
+/**
+ * 自动化启动用哪份资料：默认新建隔离临时目录；`reuseUserDataDir` 沿用调用方持有的隔离目录；
+ * 只有显式 `realUserData: true` 才用用户真实资料（真实凭据、真实工程）。
+ * 默认值必须是隔离：压测、巡检、基准会造夹具画布、写会话状态，忘了传参数也不能落进用户作品目录。
+ */
+function resolveUserDataMode({ realUserData = false, reuseUserDataDir = null } = {}) {
+  if (realUserData === true && reuseUserDataDir) throw new Error('realUserData 与 reuseUserDataDir 不能同时使用')
+  if (reuseUserDataDir) return 'reuse'
+  return realUserData === true ? 'real' : 'isolated'
+}
+
+module.exports = { PACKAGED_EXECUTABLE_ENV, resolveLaunchTarget, resolveUserDataMode }

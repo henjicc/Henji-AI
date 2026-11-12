@@ -266,8 +266,10 @@ npm run ui:residue
 - 只有改动渲染热路径、LOD、视口裁剪或性能机制时，才运行性能基准：
 
 ```bash
-BENCH_MULT=4 npm run electron:pan-bench
+BENCH_MULT=4 BENCH_SOURCE_PACKAGE=<画布单文档包绝对路径> npm run electron:pan-bench
 ```
+
+自动化启动（压测、巡检、基准、Reality）一律默认隔离资料目录；源画布先在应用里导出成包再导入隔离目录。读写真实资料只能显式要求（`BENCH_REAL_DATA=1`、`VISUAL_REAL_DATA=1`、`--profile real`）。
 
 样式、文案或普通节点功能改动不得触发性能基准。
 

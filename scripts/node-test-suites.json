@@ -20,6 +20,7 @@
     "scripts/check-persistence-compat.test.cjs",
     "scripts/lib/assistantProductionTestPlan.test.cjs",
     "scripts/lib/canvasBulkProbe.test.cjs",
+    "scripts/lib/canvasPanBench.test.cjs",
     "scripts/lib/canvasPanDiagnostics.test.cjs",
     "scripts/lib/canvasPanInput.test.cjs",
     "scripts/lib/canvasPanSampling.test.cjs",

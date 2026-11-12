@@ -6,7 +6,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 const process = require('node:process')
-const { resolveLaunchTarget } = require('./electronLaunchTarget.cjs')
+const { resolveLaunchTarget, resolveUserDataMode } = require('./electronLaunchTarget.cjs')
 
 const ONBOARDING_STORAGE_KEY = 'henji-onboarding-state'
 const AUTOMATION_ONBOARDING_STATE = JSON.stringify({
@@ -220,6 +220,9 @@ function assertBuildFreshness(mainEntry) {
 }
 
 /**
+ * 资料目录默认隔离（新建临时目录，结束后回收），见 resolveUserDataMode。只有显式 `realUserData: true`
+ * 才用用户真实资料：需要真实凭据的付费验收，或用户用 `--profile real` 一类参数点名要真实工程时。
+ *
  * `reuseUserDataDir` 让调用方自带一个隔离资料目录，使同一份数据可以跨两次启动。
  * 「应用完整退出重启」只能这样取证：每次启动都新建临时目录的话，第二次看到的是空数据，
  * 得到的必然是一个毫无意义的绿灯。由调用方持有的目录**不由这里回收**。
@@ -239,17 +242,21 @@ async function launchElectronApp({
   mainEntry,
   cwd,
   extraEnv = {},
-  isolateUserData = false,
+  realUserData = false,
   useElectronApi = false,
   skipOnboarding = false,
   extraArgs = [],
   reuseUserDataDir = null,
   appPath = null,
   executablePath = null,
+  ...unknown
 } = {}) {
+  // 旧参数 isolateUserData 的 false 曾表示“用真实资料”；现在默认隔离，旧写法直接报错，免得调用方以为还在用真实资料。
+  if ('isolateUserData' in unknown) throw new Error('isolateUserData 已移除：默认隔离，真实资料改传 realUserData: true')
+  const userDataMode = resolveUserDataMode({ realUserData, reuseUserDataDir })
   const target = resolveLaunchTarget({ executablePath, defaultExecutable: electronExecutablePath, mainEntry, appPath, cwd })
   if (!target.packaged) assertBuildFreshness(mainEntry)
-  const userDataDir = reuseUserDataDir ?? (isolateUserData ? createIsolatedUserDataDir() : null)
+  const userDataDir = userDataMode === 'reuse' ? reuseUserDataDir : userDataMode === 'isolated' ? createIsolatedUserDataDir() : null
   const ownedUserDataDir = reuseUserDataDir ? null : userDataDir
   const launchArgs = userDataDir ? [`--user-data-dir=${userDataDir}`, ...target.entryArgs] : [...target.entryArgs]
   // Automated runs keep the whole audio pipeline (mixing, meters, audio clock, export) but never reach the

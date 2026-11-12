@@ -260,7 +260,7 @@ async function main() {
   fs.mkdirSync(outDir, { recursive: true })
   const port = 43900 + Math.floor(Math.random() * 80)
   const app = await launchElectronApp({
-    mainEntry: MAIN_ENTRY, cwd: ROOT, isolateUserData: true, useElectronApi: true, skipOnboarding: true,
+    mainEntry: MAIN_ENTRY, cwd: ROOT, useElectronApi: true, skipOnboarding: true,
   })
   const results = []
   try {

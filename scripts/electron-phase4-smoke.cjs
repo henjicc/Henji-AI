@@ -9,7 +9,7 @@ const TINY_PNG_DATA_URL =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFklEQVR42mP8z8Dwn4GBgYGJAQoAHxcCArzxVaIAAAAASUVORK5CYII='
 
 async function launchElectronApp() {
-  return launchElectronAppBase({ mainEntry: MAIN_ENTRY, cwd: ROOT, isolateUserData: true })
+  return launchElectronAppBase({ mainEntry: MAIN_ENTRY, cwd: ROOT })
 }
 
 async function checkNativeBridge(page) {

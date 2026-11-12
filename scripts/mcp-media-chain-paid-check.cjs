@@ -104,7 +104,7 @@ async function main() {
     userDataDir: 'real',
   }
   const port = 43940 + Math.floor(Math.random() * 30)
-  const app = await launchElectronApp({ mainEntry: MAIN_ENTRY, appPath: ROOT, cwd: ROOT, useElectronApi: true, extraArgs: ['--dev-skip-onboarding'] })
+  const app = await launchElectronApp({ mainEntry: MAIN_ENTRY, appPath: ROOT, cwd: ROOT, realUserData: true, useElectronApi: true, extraArgs: ['--dev-skip-onboarding'] })
   const { page } = app
   const created = { connections: [], historyIds: [], mediaPaths: [], project: false }
   let restoreMcp = null

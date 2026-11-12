@@ -124,6 +124,7 @@ async function createRealContentFixture(page, {
     projectId: created.id,
     projectName: fixtureName,
     sourceProjectId: source.id,
+    sourceProjectName: source.name,
     nodeCount: nodes.length,
     edgeCount: edges.length,
     nodeTypeCount: nodeTypes.size,
@@ -441,8 +442,38 @@ async function resetViewport(page, session, target, { tolerance = 4, maxPasses =
   }
 }
 
+/**
+ * 基准的源画布从哪来。默认在隔离资料目录里跑：源画布来自 BENCH_SOURCE_PACKAGE 指定的单文档包
+ * （在应用里把真实画布导出成包），导入隔离目录后复制成夹具，素材随包一起进来，仍是真实负载。
+ * 只有 BENCH_REAL_DATA=1 才在用户真实资料里按 BENCH_PROJECT 名称找源画布并临时写入夹具。
+ */
+function resolvePanBenchSource(env = process.env, exists = require('node:fs').existsSync) {
+  if (env.BENCH_REAL_DATA === '1') {
+    return { realUserData: true, projectName: env.BENCH_PROJECT || 'TEST', packagePath: null }
+  }
+  const packagePath = env.BENCH_SOURCE_PACKAGE?.trim()
+  if (!packagePath) {
+    throw new Error('平移基准默认在隔离资料里运行，需要源画布：在应用里把要测的画布导出成包，'
+      + '再设 BENCH_SOURCE_PACKAGE=<包文件绝对路径>。确实要读写真实资料时设 BENCH_REAL_DATA=1。')
+  }
+  if (!require('node:path').isAbsolute(packagePath)) throw new Error(`BENCH_SOURCE_PACKAGE 必须是绝对路径：${packagePath}`)
+  if (!exists(packagePath)) throw new Error(`BENCH_SOURCE_PACKAGE 指向的包不存在：${packagePath}`)
+  return { realUserData: false, projectName: null, packagePath }
+}
+
+/** 把源画布包导入当前（隔离）资料目录，返回导入后的画布名称。 */
+async function importSourcePackage(page, packagePath) {
+  const result = await page.evaluate((source) => window.henjiNative.documents.importPackage({ source }), packagePath)
+  if (result?.type !== 'document' || result.meta?.kind !== 'canvas') {
+    throw new Error(`BENCH_SOURCE_PACKAGE 不是画布的单文档包：${packagePath}`)
+  }
+  return result.meta.name
+}
+
 module.exports = {
   FIXTURE_PREFIX,
+  importSourcePackage,
+  resolvePanBenchSource,
   planSweepViewport,
   resetViewport,
   createRealContentFixture,

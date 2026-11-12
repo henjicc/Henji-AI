@@ -13,7 +13,9 @@
  *   4. 每轮自检，视口爆炸或飘出内容区的轮次判为无效。
  *
  * 环境变量：
- *   BENCH_PROJECT  源项目名称（默认 TEST），只读取不修改
+ *   BENCH_SOURCE_PACKAGE 源画布的单文档包（绝对路径）；默认隔离运行时必填，导入隔离资料目录后使用
+ *   BENCH_REAL_DATA 设 1 才在用户真实资料里运行（按 BENCH_PROJECT 找源画布，临时写入并删除夹具）
+ *   BENCH_PROJECT  BENCH_REAL_DATA=1 时的源项目名称（默认 TEST），只读取不修改
  *   BENCH_MULT     真实内容复制份数（默认 1）
  *   BENCH_ZOOM     临时基准视口缩放（默认沿用源工程，不改源工程）
  *   BENCH_SWEEP_MS 单轮扫掠时长（默认 1500）
@@ -38,6 +40,8 @@ const {
 const {
   FIXTURE_PREFIX,
   createRealContentFixture,
+  importSourcePackage,
+  resolvePanBenchSource,
   removeFixtures,
   findPanePoint,
   readCanvasState,
@@ -51,7 +55,6 @@ const ROOT = path.resolve(__dirname, '..')
 const MAIN_ENTRY = path.join(ROOT, 'out', 'main', 'index.cjs')
 const STYLE_ID = '__pan_bench_style__'
 
-const SOURCE_PROJECT = process.env.BENCH_PROJECT || 'TEST'
 const MULTIPLIER = Math.max(1, Number(process.env.BENCH_MULT || 1))
 const BENCH_ZOOM = process.env.BENCH_ZOOM === undefined ? undefined : Number(process.env.BENCH_ZOOM)
 const SWEEP_MS = Math.max(400, Number(process.env.BENCH_SWEEP_MS || 1200))
@@ -303,7 +306,8 @@ async function main() {
     throw new Error('BENCH_ZOOM 必须是正数')
   }
 
-  const app = await launchElectronApp({ mainEntry: MAIN_ENTRY, cwd: ROOT, skipOnboarding: true, useElectronApi: EDGE_FLOW_BENCH })
+  const source = resolvePanBenchSource()
+  const app = await launchElectronApp({ mainEntry: MAIN_ENTRY, cwd: ROOT, realUserData: source.realUserData, skipOnboarding: true, useElectronApi: EDGE_FLOW_BENCH })
   const page = app.page
   let fixture = null
   let session = null
@@ -322,12 +326,13 @@ async function main() {
 
     // 先清掉可能残留的历史 fixture，再生成本次的
     await removeFixtures(page, FIXTURE_PREFIX)
+    const sourceProject = source.packagePath ? await importSourcePackage(page, source.packagePath) : source.projectName
     const windowSize = await page.evaluate(() => ({
       innerWidth: window.innerWidth,
       innerHeight: window.innerHeight,
     }))
     fixture = await createRealContentFixture(page, {
-      sourceProject: SOURCE_PROJECT,
+      sourceProject,
       multiplier: MULTIPLIER,
       tempName: `${FIXTURE_PREFIX}${Date.now()}`,
       viewportPlan: { ...windowSize, zoom: BENCH_ZOOM, sweepScreenDistance: SWEEP_SCREEN_DISTANCE },
@@ -451,7 +456,8 @@ async function main() {
       generatedAt: new Date().toISOString(),
       launchMode: app.mode,
       params: {
-        sourceProject: SOURCE_PROJECT,
+        sourceProject: fixture.sourceProjectName,
+        sourcePackage: source.packagePath,
         multiplier: MULTIPLIER,
         requestedSweepMs: SWEEP_MS,
         effectiveSweepMs,

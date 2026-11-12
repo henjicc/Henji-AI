@@ -120,7 +120,7 @@ async function main() {
    * 用户真实的供应商凭据**全部解不开**——上一轮「本机 9 条凭据全坏」的误判正是这么来的。
    * 付费闭环必须用应用自己的身份与 userData 启动。
    */
-  const app = await launchElectronApp({ mainEntry: MAIN_ENTRY, appPath: ROOT, cwd: ROOT, useElectronApi: true, extraArgs: ['--dev-skip-onboarding'] })
+  const app = await launchElectronApp({ mainEntry: MAIN_ENTRY, appPath: ROOT, cwd: ROOT, realUserData: true, useElectronApi: true, extraArgs: ['--dev-skip-onboarding'] })
   const { page } = app
   const created = { connections: [], historyId: null, mediaPaths: [], project: false }
   let restoreMcp = null

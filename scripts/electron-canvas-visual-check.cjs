@@ -13,7 +13,7 @@
  * VISUAL_SKIP_ONBOARDING=0（仅在需要检查引导本身时显示）、
  * VISUAL_FILL_ALL_TYPES=1（在临时 fixture 补齐缺失类型）、
  * VISUAL_REQUIRE_ALL_TYPES=1（源项目缺少注册类型时失败）。
- * VISUAL_ISOLATED=1 使用临时资料目录，不读写用户工程。
+ * 默认用隔离临时资料目录（源项目不存在时自动造合成源画布）；VISUAL_REAL_DATA=1 才读写用户真实工程。
  * VISUAL_LAYOUT_ROUNDTRIP=1 验证屏外暂停、空闲稳定与返回后的同帧画面/几何。
  */
 
@@ -49,6 +49,7 @@ const MULTIPLIER = Math.max(1, Number(process.env.VISUAL_MULT || 1))
 const SELECTOR_STATE = process.env.VISUAL_SELECTOR_STATE || 'preserve'
 const FILL_ALL_TYPES = process.env.VISUAL_FILL_ALL_TYPES === '1'
 const SKIP_ONBOARDING = process.env.VISUAL_SKIP_ONBOARDING !== '0'
+const REAL_DATA = process.env.VISUAL_REAL_DATA === '1'
 const STYLE_ID = '__canvas_visual_check_style__'
 const CAPTURE_SETTLE_MS = 250
 
@@ -368,7 +369,7 @@ async function main() {
     mainEntry: MAIN_ENTRY,
     cwd: ROOT,
     skipOnboarding: SKIP_ONBOARDING,
-    isolateUserData: process.env.VISUAL_ISOLATED === '1',
+    realUserData: REAL_DATA,
   })
   const page = app.page
   let fixture = null

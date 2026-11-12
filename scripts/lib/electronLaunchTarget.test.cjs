@@ -1,7 +1,19 @@
 const assert = require('node:assert/strict')
 const path = require('node:path')
 const test = require('node:test')
-const { PACKAGED_EXECUTABLE_ENV, resolveLaunchTarget } = require('./electronLaunchTarget.cjs')
+const { PACKAGED_EXECUTABLE_ENV, resolveLaunchTarget, resolveUserDataMode } = require('./electronLaunchTarget.cjs')
+
+test('资料目录默认隔离，只有显式 realUserData: true 才用真实资料', () => {
+  assert.equal(resolveUserDataMode(), 'isolated')
+  assert.equal(resolveUserDataMode({}), 'isolated')
+  // 旧参数名或真值以外的写法都不算显式要求
+  assert.equal(resolveUserDataMode({ isolateUserData: false }), 'isolated')
+  assert.equal(resolveUserDataMode({ realUserData: 'true' }), 'isolated')
+  assert.equal(resolveUserDataMode({ realUserData: 1 }), 'isolated')
+  assert.equal(resolveUserDataMode({ realUserData: true }), 'real')
+  assert.equal(resolveUserDataMode({ reuseUserDataDir: '/tmp/henji-electron-test-x' }), 'reuse')
+  assert.throws(() => resolveUserDataMode({ realUserData: true, reuseUserDataDir: '/tmp/x' }))
+})
 
 const base = { defaultExecutable: '/repo/node_modules/electron/dist/electron', mainEntry: '/repo/out/main/index.cjs', cwd: '/repo' }
 

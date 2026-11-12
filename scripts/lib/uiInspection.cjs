@@ -346,7 +346,7 @@ async function launchUiInspectionApp({ root, mainEntry, extraEnv = {}, extraArgs
     mainEntry,
     appPath: root,
     cwd: root,
-    isolateUserData: profile === 'temporary',
+    realUserData: profile === 'real',
     useElectronApi: true,
     skipOnboarding: true,
     extraArgs,

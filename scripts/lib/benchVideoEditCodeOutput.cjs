@@ -19,7 +19,7 @@ async function openBenchPage(OUT) {
   await build({ configFile: false, logLevel: 'warn', root: path.join(ROOT, 'tests/fixtures/bench/video-edit/code-output'), base: './',
     plugins: [videoEditRenderEngineVersion({ root: ROOT })], resolve: { alias: { '@': path.join(ROOT, 'src') } }, worker: { format: 'es' },
     build: { outDir: path.join(OUT, 'renderer'), emptyOutDir: false, minify: false } })
-  const launched = await launchElectronApp({ mainEntry, appPath: ROOT, cwd: ROOT, isolateUserData: true, useElectronApi: true })
+  const launched = await launchElectronApp({ mainEntry, appPath: ROOT, cwd: ROOT, useElectronApi: true })
   const { app, page } = launched
   try {
     const window = await app.browserWindow(page)
