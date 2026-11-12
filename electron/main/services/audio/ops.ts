@@ -21,7 +21,7 @@ import {
 } from '../../../../src/core/media/waveformPyramid'
 import { openF32Wav } from '../audio-edit/pcm-wav'
 import { audioLineageTracked, findAudioLineageAncestor, type AudioLineageRange } from './lineage'
-import { deriveWaveformPyramid } from './waveform-worker'
+import { WaveformPyramidDerivation } from './waveform-worker'
 import type { AudioWaveformChannel, AudioWaveformPyramidOptions, AudioWaveformPyramidOutput, AudioWaveformPyramidRequest, AudioWaveformPyramidResult, AudioWaveformRangeRequest, AudioWaveformRangeResult, AudioWaveformWorkerOptions, ExtractAudioSamplesResultDto } from './types'
 
 export { audioWaveformSampleIndex }
@@ -38,6 +38,8 @@ const DECODE_IDLE_TIMEOUT_MS = 60_000
 const MIB = 1024 * 1024
 /** 探测结果只有几百字节，按内容身份记住，精细回读不必每次重新起 ffprobe。 */
 const PROBE_CACHE_ENTRIES = 1024
+/** 按块派生波形时一次读进来的帧数（第 1 级桶 1024 帧的整数倍；48 kHz 立体声约 8 MB）。 */
+const DERIVE_CHUNK_FRAMES = 1 << 20
 interface AudioMetadata {
   sampleRate: number
   channels: number
@@ -365,8 +367,9 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
   }
 
   /**
-   * 按来历派生：这份文件（编辑后声音）与某个祖先除几段帧外样本逐值相同，且祖先的金字塔与第 1 级摘要都在缓存里时，
+   * 按来历派生：这份文件（编辑后声音、补录拼接后的素材）与某个祖先除几段帧外同位置样本逐值相同，且祖先的金字塔与第 1 级摘要都在缓存里时，
    * 只把改动所在、对齐到第 1 级桶的帧段直接从浮点 WAV 读出来重算，不起 FFmpeg 整段解码。结果与整段生成逐字节相同（金字塔只由样本决定）。
+   * 长度变了（拼接）时，较短长度所在的桶到新结尾整段重算（来历的 dirty 已含这一段）。
    * 只处理原声道（≤ 2 声道）、从 0 秒开始的浮点 WAV；其余情况返回 undefined，由调用方整段生成。
    */
   async function derivePyramid(original: SourceIdentity, selection: ChannelSelection, signal: AbortSignal): Promise<DerivedPyramid | undefined> {
@@ -384,14 +387,15 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
     if (metadata.channels > NATIVE_PYRAMID_CHANNELS || metadata.startSeconds !== 0) return skip('不是从 0 秒开始的单声道或立体声')
     const expectedFrames = Math.max(1, audioWaveformSampleIndex(Math.round(metadata.endSeconds * MICROSECONDS), metadata.sampleRate))
     const parent = found.value.data
-    if (parent.sampleRate !== metadata.sampleRate || parent.startSeconds !== metadata.startSeconds || parent.endSeconds !== metadata.endSeconds || parent.nativeChannels !== metadata.channels) return skip('与上一版声音规格不同')
+    if (parent.sampleRate !== metadata.sampleRate || parent.startSeconds !== metadata.startSeconds || parent.nativeChannels !== metadata.channels) return skip('与上一版声音规格不同')
     const options: AudioWaveformPyramidOptions = {
       kind: 'pyramid', channels: metadata.channels, mix: metadata.channels === 2, expectedFrames, sampleRate: metadata.sampleRate, startSeconds: metadata.startSeconds, endSeconds: metadata.endSeconds,
       nativeChannels: metadata.channels, baseSamplesPerBucket: WAVEFORM_PYRAMID_BASE_SAMPLES_PER_BUCKET, levelFactor: WAVEFORM_PYRAMID_LEVEL_FACTOR, topBuckets: WAVEFORM_PYRAMID_TOP_BUCKETS,
     }
     const span = WAVEFORM_PYRAMID_BASE_SAMPLES_PER_BUCKET * WAVEFORM_PYRAMID_LEVEL_FACTOR
+    const dirty = parent.frameCount === expectedFrames ? found.dirty : [...found.dirty, [Math.min(parent.frameCount, expectedFrames), expectedFrames] as [number, number]]
     const aligned: Array<[number, number]> = []
-    for (const [start, end] of found.dirty) {
+    for (const [start, end] of [...dirty].sort((a, b) => a[0] - b[0])) {
       const from = Math.floor(Math.max(0, start) / span) * span, to = Math.min(expectedFrames, Math.ceil(end / span) * span)
       if (to <= from) continue
       const last = aligned.at(-1)
@@ -399,19 +403,25 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
       else aligned.push([from, to])
     }
     const recomputedFrames = aligned.reduce((sum, [from, to]) => sum + to - from, 0)
-    // 改动超过一半时整段解码一遍更快，也省得在主进程里算。
+    // 改动超过一半时整段解码一遍更快（在子进程与工作线程里，不占主进程）。
     if (recomputedFrames > expectedFrames / 2) return skip('改动超过一半')
     const reader = await openF32Wav(original.path)
     if (!reader) return skip('不是浮点 WAV')
     try {
       if (reader.sampleRate !== metadata.sampleRate || reader.channels !== metadata.channels) return skip('文件头与探测结果不一致')
       const delivered = Math.min(reader.frames, expectedFrames)
-      const spans: Array<{ startFrame: number; endFrame: number; values: Float32Array }> = []
+      const derivation = WaveformPyramidDerivation.start(parent, found.value.floats, options, delivered)
+      if ('reason' in derivation) return skip(derivation.reason)
+      // 一次读一块（对齐到第 1 级桶）：内存与重算总长无关，块与块之间让出主进程。
       for (const [from, to] of aligned) {
-        signal.throwIfAborted()
-        spans.push({ startFrame: from, endFrame: to, values: await reader.read(from, Math.max(0, Math.min(to, delivered) - from)) })
+        for (let start = from; start < to; start += DERIVE_CHUNK_FRAMES) {
+          signal.throwIfAborted()
+          const end = Math.min(to, start + DERIVE_CHUNK_FRAMES)
+          const reason = derivation.add({ startFrame: start, endFrame: end, values: await reader.read(start, Math.max(0, Math.min(end, delivered) - start)) })
+          if (reason) return skip(reason)
+        }
       }
-      const derived = deriveWaveformPyramid(parent, found.value.floats, options, spans, delivered)
+      const derived = derivation.finish()
       if ('reason' in derived) return skip(derived.reason)
       return { data: derived.pyramid, floats: derived.floats, recomputedFrames, hops: found.hops }
     } finally { await reader.close() }

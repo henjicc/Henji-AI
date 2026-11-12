@@ -1,25 +1,28 @@
 import { removeUnmanagedCachePath } from '../media-recycle/cache-deletion'
 import crypto from 'node:crypto'
-import { createReadStream } from 'node:fs'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import type { AudioEditProjectDocument, AudioEditSourceIdentity, AudioEditSourceMetadata } from '../../../../src/core/audioEdit/types'
+import type { AudioEditProjectDocument, AudioEditSourceMetadata } from '../../../../src/core/audioEdit/types'
 import { resolveLocalMediaPath } from '../media/shared'
 import { getProgramStoreDir } from '../appPaths'
 import { getMediaCacheManager } from '../media/media-cache-runtime'
 import { loadFfmpegPath, loadFfprobePath } from '../video/ffmpeg-loader'
 import { createMainLogger } from '../logging'
+import { ensureAudioLineageRoot, recordAudioLineage } from '../audio/lineage'
 import { requireAudioEditProject } from './project-store'
 import { runAudioEditProcess } from './process'
 import { cachedAudioFile } from './render-cache'
-import { assertAudioEditProjectIdle, deleteAudioEditTasks, hasActiveAudioEditTask, registerAudioEditTaskController } from './task-store'
+import { assertAudioEditProjectIdle, deleteAudioEditTasks, hasActiveAudioEditTask, registerAudioEditTaskController, runAudioEditTask } from './task-store'
 import { registerDocumentProgramStateCleaner } from '../documents/program-state-cleaners'
+import { audioEditSourceContentKey, fingerprintAudioEditSource, digestWholeAudioEditSource } from './source-identity'
 
 const logger = createMainLogger('main.audio_edit')
 // 无输出/无读取进展的退出预算，与素材总长度无关。
 const SOURCE_IDLE_TIMEOUT_MS = 30_000
+/** 抽查视频时间戳的窗口：开头、正中、结尾各这么长（秒）；更短的素材整段检查。 */
+const VIDEO_SAMPLE_SECONDS = 10
 interface ProbeStream {
-  index: number; codec_type?: string; sample_rate?: string; channels?: number; duration?: string
+  index: number; codec_type?: string; codec_name?: string; sample_rate?: string; channels?: number; duration?: string
   duration_ts?: number; time_base?: string; start_time?: string; avg_frame_rate?: string; r_frame_rate?: string
   width?: number; height?: number
 }
@@ -52,85 +55,148 @@ registerDocumentProgramStateCleaner('audio_edit', async (docId) => {
   if (removedTasks) logger.info('口播内部缓存已清理', { event: 'audio_edit.program_state.cleaned', context: { docId, removedTasks } })
 })
 
-export async function identifyAudioEditSource(sourcePath: string, signal?: AbortSignal): Promise<AudioEditSourceIdentity> {
+/**
+ * 原素材是否还是导入时那一份。quick（取块、渲染、频谱这类高频路径）：大小与修改时间一致即通过，不一致才比内容。
+ * deep（打开、拼接、转写、导出这类关口）：带采样指纹的素材总比指纹（只读几 MB）；只有整文件摘要的素材（格式 8 之前导入）整文件比对太贵，
+ * 大小与修改时间一致就不读内容，不一致才整文件比对。没有任何身份记录的素材（极早期作品）只检查文件还在。
+ */
+export async function verifyAudioEditSource(project: { source: Pick<AudioEditSourceMetadata, 'sourcePath' | 'identity' | 'fingerprint'> }, signal?: AbortSignal, depth: 'quick' | 'deep' = 'deep'): Promise<void> {
   signal?.throwIfAborted()
-  const before = await fs.stat(sourcePath)
-  const digest = crypto.createHash('sha256')
-  const stream = createReadStream(sourcePath, { signal })
-  const timer = setTimeout(() => stream.destroy(new Error('素材读取长时间没有进展，请检查文件所在磁盘后重试。')), SOURCE_IDLE_TIMEOUT_MS)
-  timer.unref()
-  try {
-    for await (const chunk of stream) {
-      signal?.throwIfAborted()
-      timer.refresh()
-      digest.update(chunk)
-    }
-  } finally { clearTimeout(timer); stream.destroy() }
-  signal?.throwIfAborted()
-  const after = await fs.stat(sourcePath)
-  if (before.size !== after.size || before.mtimeMs !== after.mtimeMs) throw new Error('素材正在被修改，请稍后重新导入。')
-  return { size: after.size, mtimeMs: after.mtimeMs, digest: digest.digest('hex') }
-}
-export async function verifyAudioEditSource(project: Pick<AudioEditProjectDocument, 'source'>, deep = true, signal?: AbortSignal): Promise<void> {
-  signal?.throwIfAborted()
+  const { sourcePath, identity, fingerprint } = project.source
   let stat
-  try { stat = await fs.stat(project.source.sourcePath) }
+  try { stat = await fs.stat(sourcePath) }
   catch { throw new Error('找不到原素材，请重新定位文件。') }
-  const identity = project.source.identity
-  if (!identity) return
-  if (!deep && identity.size === stat.size && identity.mtimeMs === stat.mtimeMs) return
-  const current = await identifyAudioEditSource(project.source.sourcePath, signal)
-  if (current.digest !== identity.digest) throw new Error('原素材内容已改变，请重新导入；旧剪辑不能用于新的录音。')
+  const recorded = fingerprint ?? identity
+  if (!recorded || (recorded.size === stat.size && recorded.mtimeMs === stat.mtimeMs && (depth === 'quick' || !fingerprint))) return
+  const same = fingerprint
+    ? (await fingerprintAudioEditSource(sourcePath, signal)).digest === fingerprint.digest
+    : (await digestWholeAudioEditSource(sourcePath, signal)).digest === identity!.digest
+  if (!same) throw new Error('原素材内容已改变，请重新导入；旧剪辑不能用于新的录音。')
 }
 
-async function verifyVideoPacketTiming(ffprobe: string, sourcePath: string, frameRate: { numerator: number; denominator: number }, signal?: AbortSignal): Promise<boolean> {
+/**
+ * 视频包时间戳是否稳定（逐帧等间隔、无缺帧、无重复）。points 为 undefined 时检查整段；
+ * 否则只读这些时刻（文件里的绝对时间戳）起的窗口，每个窗口单独对齐，窗口末尾因 B 帧解码顺序被截掉的帧不算缺帧。
+ * 抽查有窗口一个包都没读到时答不上来，返回 unknown（不当成不稳定，交给导出前的整段检查）。
+ */
+async function videoPacketTiming(ffprobe: string, sourcePath: string, frameRate: { numerator: number; denominator: number }, signal: AbortSignal | undefined, points?: readonly number[]): Promise<'stable' | 'unstable' | 'unknown'> {
   const fps = frameRate.numerator / frameRate.denominator
-  if (!(fps > 0 && Number.isFinite(fps))) return false
-  let origin: number | undefined
-  let cursor = 0
-  let count = 0
+  if (!(fps > 0 && Number.isFinite(fps))) return 'unstable'
+  const windows: number[][] = (points ?? [0]).map(() => [])
   let valid = true
-  const pending = new Set<number>()
-  await runAudioEditProcess(ffprobe, ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'packet=pts_time,duration_time', '-of', 'csv=p=0', sourcePath], signal, undefined, (line) => {
+  const intervals = points ? ['-read_intervals', points.map(point => `${point.toFixed(3)}%+${VIDEO_SAMPLE_SECONDS}`).join(',')] : []
+  await runAudioEditProcess(ffprobe, ['-v', 'error', '-select_streams', 'v:0', ...intervals, '-show_entries', 'packet=pts_time,duration_time', '-of', 'csv=p=0', sourcePath], signal, undefined, (line) => {
     if (!line.trim()) return
     const [pts, duration] = line.split(',').map(Number)
     if (!Number.isFinite(pts) || !(duration > 0) || Math.abs(duration * fps - 1) > 0.02) { valid = false; return }
-    origin ??= pts
-    const position = (pts - origin) * fps
-    const frame = Math.round(position)
-    count += 1
-    if (Math.abs(frame - position) > 0.02 || frame < cursor || frame > cursor + 256 || pending.has(frame)) { valid = false; return }
-    pending.add(frame)
-    while (pending.delete(cursor)) cursor += 1
+    // 抽查窗口相距很远（素材长于 6 个窗口才抽查）：每个包归到时间上最近的窗口，窗口内的空缺照样算缺帧。
+    let nearest = 0
+    points?.forEach((point, index) => { if (Math.abs(pts - point - VIDEO_SAMPLE_SECONDS / 2) < Math.abs(pts - points[nearest] - VIDEO_SAMPLE_SECONDS / 2)) nearest = index })
+    windows[nearest].push(pts)
   }, SOURCE_IDLE_TIMEOUT_MS)
-  return valid && count > 0 && pending.size === 0
+  if (!valid) return 'unstable'
+  if (windows.some(window => !window.length)) return points ? 'unknown' : 'unstable'
+  // 解码顺序里 B 帧可以晚于后面的参考帧出现；抽查窗口在任意一包处截断，最后这些帧之间的空缺可能只是没读到。
+  const reorderTail = points ? 32 : 0
+  for (const window of windows) {
+    const sorted = [...window].sort((a, b) => a - b)
+    const origin = sorted[0]
+    let previous = -1
+    for (const [index, pts] of sorted.entries()) {
+      const position = (pts - origin) * fps
+      const frame = Math.round(position)
+      if (Math.abs(frame - position) > 0.02 || frame === previous) return 'unstable'
+      if (frame !== previous + 1 && index < sorted.length - reorderTail) return 'unstable'
+      previous = frame
+    }
+  }
+  return 'stable'
 }
 
-export async function probeAudioEditSource(sourcePath: string, signal?: AbortSignal): Promise<AudioEditSourceMetadata> {
+const videoTimingChecks = new Map<string, Promise<boolean>>()
+/**
+ * XML 导出联动画面前的完整检查（导入时只抽查，抽查答不上来时不标不稳定）：整段读一遍视频包时间戳，同一份素材只查一次。
+ * 已标为不稳定的（抽查在窗口里实际看到缺帧或间隔不对、帧率与平均帧率不符）直接拒绝。
+ */
+export async function verifyAudioEditVideoTiming(source: AudioEditSourceMetadata, signal?: AbortSignal): Promise<boolean> {
+  if (!source.video) return true
+  if (source.video.variableFrameRate) return false
+  const key = JSON.stringify([await audioEditSourceContentKey(source, signal), source.video.frameRate])
+  let check = videoTimingChecks.get(key)
+  if (!check) {
+    const started = performance.now()
+    check = loadFfprobePath().then(ffprobe => videoPacketTiming(ffprobe, source.sourcePath, source.video!.frameRate, signal)).then(timing => {
+      const stable = timing === 'stable'
+      logger.info('视频时间戳完整检查完成', { event: 'audio_edit.source.video_timing.completed', context: { stable, durationSeconds: source.video!.durationSeconds, elapsedMs: performance.now() - started } })
+      return stable
+    })
+    videoTimingChecks.set(key, check)
+    check.catch(() => videoTimingChecks.delete(key))
+  }
+  return check
+}
+
+/**
+ * 容器直接给出精确采样数时返回它（PCM 各容器、FLAC，以及时间基等于采样率的 mov/mp4/m4a：这些容器的时长按采样计，
+ * 与逐帧解码计数一致）；mp3、ogg 等可能按码率估算的格式返回 undefined，由调用方解码计数。
+ */
+function exactContainerFrames(audio: ProbeStream, formatName: string | undefined, sampleRate: number): number | undefined {
+  const time = fraction(audio.time_base)
+  if (!Number.isSafeInteger(audio.duration_ts) || !(audio.duration_ts! > 0) || time.numerator !== 1 || time.denominator !== sampleRate) return undefined
+  const codec = audio.codec_name ?? ''
+  const containers = (formatName ?? '').split(',')
+  return codec.startsWith('pcm_') || codec === 'flac' || containers.some(name => name === 'mov' || name === 'mp4' || name === 'm4a') ? audio.duration_ts : undefined
+}
+
+async function decodedFrameCount(ffprobe: string, sourcePath: string, signal?: AbortSignal): Promise<number> {
+  let durationFrames = 0
+  await runAudioEditProcess(ffprobe, ['-v', 'error', '-select_streams', 'a:0', '-show_frames', '-show_entries', 'frame=nb_samples', '-of', 'csv=p=0', sourcePath], signal, undefined, (line) => {
+    const samples = Number(line.split(',')[0])
+    if (Number.isSafeInteger(samples) && samples > 0) durationFrames += samples
+  }, SOURCE_IDLE_TIMEOUT_MS)
+  return durationFrames
+}
+
+/** 探测各阶段的耗时与读法，供导入日志使用。 */
+export interface AudioEditProbeTimings { bytes: number; framesFrom: 'container' | 'decode'; videoTiming?: 'stable' | 'unstable' | 'unknown'; headerMs: number; framesMs: number; videoMs: number; fingerprintMs: number }
+
+/**
+ * 读素材信息：只读文件头；帧数优先取容器里的精确值，视频时间戳抽查三个窗口，指纹只读采样块，三者并行。
+ * 容器没有精确帧数时才整段解码计数。
+ */
+export async function probeAudioEditSource(sourcePath: string, signal?: AbortSignal, timings?: Partial<AudioEditProbeTimings>): Promise<AudioEditSourceMetadata> {
   signal?.throwIfAborted()
+  const started = performance.now()
   const ffprobe = await loadFfprobePath()
-  const parsed = JSON.parse(await runAudioEditProcess(ffprobe, ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', sourcePath], signal, undefined, undefined, SOURCE_IDLE_TIMEOUT_MS)) as { format?: { duration?: string }; streams?: ProbeStream[] }
+  const parsed = JSON.parse(await runAudioEditProcess(ffprobe, ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', sourcePath], signal, undefined, undefined, SOURCE_IDLE_TIMEOUT_MS)) as { format?: { duration?: string; format_name?: string }; streams?: ProbeStream[] }
+  const headerMs = performance.now() - started
   const audio = parsed.streams?.find((stream) => stream.codec_type === 'audio')
   if (!audio) throw new Error('所选文件没有可用音轨。')
   const video = parsed.streams?.find((stream) => stream.codec_type === 'video')
   const sampleRate = Number(audio.sample_rate)
   const duration = streamDuration(audio, Number(parsed.format?.duration))
   if (!(sampleRate > 0 && duration > 0 && Number.isFinite(duration))) throw new Error('无法读取音频的准确时长或采样率。')
-  let durationFrames = 0
-  await runAudioEditProcess(ffprobe, ['-v', 'error', '-select_streams', 'a:0', '-show_frames', '-show_entries', 'frame=nb_samples', '-of', 'csv=p=0', sourcePath], signal, undefined, (line) => {
-    const samples = Number(line.split(',')[0])
-    if (Number.isSafeInteger(samples) && samples > 0) durationFrames += samples
-  }, SOURCE_IDLE_TIMEOUT_MS)
-  if (!Number.isSafeInteger(durationFrames) || durationFrames <= 0) throw new Error('无法确认音频的实际采样长度。')
   const frameRate = fraction(video?.r_frame_rate)
   const averageRate = fraction(video?.avg_frame_rate)
-  const stableVideo = video ? await verifyVideoPacketTiming(ffprobe, sourcePath, frameRate, signal) : true
+  const videoSeconds = video ? streamDuration(video, Number(parsed.format?.duration)) : 0
+  const containerFrames = exactContainerFrames(audio, parsed.format?.format_name, sampleRate)
+  const timed = async <T>(work: () => Promise<T>): Promise<[T, number]> => { const at = performance.now(); const value = await work(); return [value, performance.now() - at] }
+  // 抽查点是文件里的绝对时间戳：从视频流的起点算（部分 TS/MTS 起点时间戳很大）。
+  const videoStart = Number(video?.start_time ?? 0) || 0
+  const samplePoints = videoSeconds > VIDEO_SAMPLE_SECONDS * 6 ? [0, videoSeconds / 2 - VIDEO_SAMPLE_SECONDS / 2, videoSeconds - VIDEO_SAMPLE_SECONDS].map(offset => videoStart + offset) : undefined
+  const [[durationFrames, framesMs], [videoTiming, videoMs], [fingerprint, fingerprintMs]] = await Promise.all([
+    timed(async () => containerFrames ?? decodedFrameCount(ffprobe, sourcePath, signal)),
+    timed(async () => video ? videoPacketTiming(ffprobe, sourcePath, frameRate, signal, samplePoints) : 'stable' as const),
+    timed(() => fingerprintAudioEditSource(sourcePath, signal)),
+  ])
+  if (!Number.isSafeInteger(durationFrames) || durationFrames <= 0) throw new Error('无法确认音频的实际采样长度。')
+  if (timings) Object.assign(timings, { bytes: fingerprint.size, framesFrom: containerFrames ? 'container' : 'decode', ...(video ? { videoTiming } : {}), headerMs, framesMs, videoMs, fingerprintMs } satisfies AudioEditProbeTimings)
   return {
-    sourcePath, audioPath: sourcePath, ownership: 'external', identity: await identifyAudioEditSource(sourcePath, signal),
+    sourcePath, audioPath: sourcePath, ownership: 'external', fingerprint,
     mediaType: video ? 'video' : 'audio', sampleRate, durationFrames,
     channels: audio.channels ?? 1, audioStreamIndex: audio.index, audioStartSeconds: Number(audio.start_time ?? 0),
-    ...(video ? { video: { frameRate, width: video.width ?? 0, height: video.height ?? 0, startSeconds: Number(video.start_time ?? 0), durationSeconds: streamDuration(video, Number(parsed.format?.duration)),
-      variableFrameRate: !stableVideo || !frameRate.numerator || !averageRate.numerator || Math.abs(frameRate.numerator / frameRate.denominator - averageRate.numerator / averageRate.denominator) > 0.01 } } : {}),
+    ...(video ? { video: { frameRate, width: video.width ?? 0, height: video.height ?? 0, startSeconds: Number(video.start_time ?? 0), durationSeconds: videoSeconds,
+      variableFrameRate: videoTiming === 'unstable' || !frameRate.numerator || !averageRate.numerator || Math.abs(frameRate.numerator / frameRate.denominator - averageRate.numerator / averageRate.denominator) > 0.01 } } : {}),
   }
 }
 
@@ -147,9 +213,10 @@ export async function probeAudioEditImport(sourcePath: string, requestId: string
   logger.info('开始读取口播素材', { event: 'audio_edit.source.probe.start', requestId })
   const startedAt = performance.now()
   try {
-    const source = await probeAudioEditSource(path.resolve(await resolveLocalMediaPath(sourcePath)), controller.signal)
+    const timings: Partial<AudioEditProbeTimings> = {}
+    const source = await probeAudioEditSource(path.resolve(await resolveLocalMediaPath(sourcePath)), controller.signal, timings)
     controller.signal.throwIfAborted()
-    logger.info('口播素材读取完成', { event: 'audio_edit.source.probe.completed', requestId, context: { mediaType: source.mediaType, durationFrames: source.durationFrames, sampleRate: source.sampleRate, channels: source.channels, elapsedMs: performance.now() - startedAt } })
+    logger.info('口播素材读取完成', { event: 'audio_edit.source.probe.completed', requestId, context: { mediaType: source.mediaType, durationFrames: source.durationFrames, durationSeconds: source.durationFrames / source.sampleRate, sampleRate: source.sampleRate, channels: source.channels, ...timings, elapsedMs: performance.now() - startedAt } })
     return source
   } catch (error) {
     logger.error('口播素材读取未完成', { event: controller.signal.aborted ? 'audio_edit.source.probe.cancelled' : 'audio_edit.source.probe.failed', requestId, error, context: { elapsedMs: performance.now() - startedAt } })
@@ -157,28 +224,73 @@ export async function probeAudioEditImport(sourcePath: string, requestId: string
   } finally { release(); signal?.removeEventListener('abort', abort) }
 }
 
-/** Only algorithms that require WAV request this rebuildable derivative. */
+/**
+ * 外部素材整条转成 32 位浮点 WAV：在后台作为本作品的“准备”任务运行（界面显示进度，可以取消），帧数对齐到文档里的长度。
+ * 转好的副本记为来历的根：它的波形会留增量用的摘要，之后补录拼接能从它派生。
+ */
+async function transcodeAudioEditSource(project: AudioEditProjectDocument, temporary: string, published: string): Promise<void> {
+  const { sampleRate, channels, durationFrames } = project.source
+  await runAudioEditTask(project.id, 'prepare', async (signal, progress) => {
+    const started = performance.now()
+    // 先按样本序号重排时间戳再裁剪/补齐：起点不在 0 的素材（mp3 编码延迟、视频里晚开始的音轨）也按解码出的第一个样本对齐。
+    await runAudioEditProcess(await loadFfmpegPath(), ['-v', 'error', '-nostdin', '-y', '-i', project.source.sourcePath, '-map', `0:${project.source.audioStreamIndex ?? 0}`, '-vn',
+      '-af', `asetpts=N/SR/TB,atrim=end_sample=${durationFrames},apad=whole_len=${durationFrames}`,
+      '-c:a', 'pcm_f32le', '-rf64', 'auto', '-ar', String(sampleRate), '-ac', String(channels), '-progress', 'pipe:2', temporary], signal, line => {
+      if (line.startsWith('out_time_us=')) progress(Math.min(1, Number(line.slice(12)) / 1e6 * sampleRate / durationFrames))
+    })
+    await validateAudioEditAudio(temporary, sampleRate, channels, durationFrames, signal)
+    await recordAudioLineage(published, durationFrames, undefined, { stampFrom: temporary })
+    logger.info('口播素材已转成浮点副本', { event: 'audio_edit.source.transcode.completed', context: { projectId: project.id, durationFrames, durationSeconds: durationFrames / sampleRate, bytes: (await fs.stat(temporary)).size, elapsedMs: performance.now() - started } })
+  }, crypto.randomUUID(), '', true)
+}
+
+/** 只等到 operation 完成或 signal 取消为止：取消只让这一个调用方不再等，operation 照常跑完。 */
+function waitUnless<T>(operation: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (!signal) return operation
+  signal.throwIfAborted()
+  return new Promise<T>((resolve, reject) => {
+    const abort = (): void => reject(signal.reason ?? new DOMException('已取消', 'AbortError'))
+    signal.addEventListener('abort', abort, { once: true })
+    operation.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort))
+  })
+}
+
+/**
+ * Only algorithms that require WAV request this rebuildable derivative.
+ * 转码是这份素材所有调用方（试听、频谱、转写、导出、拼接）共用的后台任务：只能由它自己的任务取消（界面上的“取消”），
+ * 任一调用方取消只是自己不再等，转好的副本照常发布给其他人。
+ */
 export async function prepareAudioEditAudio(project: AudioEditProjectDocument, signal?: AbortSignal): Promise<string> {
-  await verifyAudioEditSource(project, false, signal)
-  if (project.source.ownership !== 'external') return project.source.audioPath
+  await verifyAudioEditSource(project, signal, 'quick')
+  if (project.source.ownership !== 'external') {
+    await ensureAudioLineageRoot(project.source.audioPath, project.source.durationFrames)
+    return project.source.audioPath
+  }
   const directory = audioEditCacheDirectory(project.id)
-  const digest = project.source.identity?.digest ?? (await identifyAudioEditSource(project.source.sourcePath, signal)).digest
-  return cachedAudioFile(directory, `audio-f32-${digest}-${project.source.audioStreamIndex ?? 0}-${project.source.sampleRate}-${project.source.channels}`, 'wav', async temporary => {
-    await runAudioEditProcess(await loadFfmpegPath(), ['-v', 'error', '-y', '-i', project.source.sourcePath, '-map', `0:${project.source.audioStreamIndex ?? 0}`, '-vn', '-c:a', 'pcm_f32le', '-rf64', 'auto', '-ar', String(project.source.sampleRate), '-ac', String(project.source.channels), temporary], signal)
-    await validateAudioEditAudio(temporary, project.source.sampleRate, project.source.channels, project.source.durationFrames, signal)
-  }, signal)
+  const name = `audio-f32-${await audioEditSourceContentKey(project.source, signal)}-${project.source.audioStreamIndex ?? 0}-${project.source.sampleRate}-${project.source.channels}`
+  const transcoded = cachedAudioFile(directory, name, 'wav', temporary => transcodeAudioEditSource(project, temporary, path.join(directory, `${name}.wav`)))
+  transcoded.catch(() => undefined)
+  return waitUnless(transcoded, signal)
 }
 
 /**
  * 重新定位原素材：确认所选文件与原素材内容相同，返回新的素材信息；渲染层实例接收后经会话保存。
+ * 带采样指纹的素材比指纹与帧数；只有整文件摘要的素材按整文件摘要比对，并保留原帧数与摘要，已有派生缓存继续命中。
  */
 export async function relinkAudioEditSource(projectId: string, sourcePath: string): Promise<AudioEditSourceMetadata> {
   assertAudioEditProjectIdle(projectId)
-  const current = await requireAudioEditProject(projectId)
-  const next = await probeAudioEditSource(path.resolve(await resolveLocalMediaPath(sourcePath)))
-  const oldDigest = current.source.identity?.digest ?? (await identifyAudioEditSource(current.source.sourcePath)).digest
-  if (next.identity?.digest !== oldDigest) throw new Error('所选文件不是原素材。请将不同内容作为新口播导入。')
-  return next
+  const current = (await requireAudioEditProject(projectId)).source
+  const file = path.resolve(await resolveLocalMediaPath(sourcePath))
+  const next = await probeAudioEditSource(file)
+  const mismatch = (): Error => new Error('所选文件不是原素材。请将不同内容作为新口播导入。')
+  if (current.fingerprint) {
+    if (next.fingerprint?.digest !== current.fingerprint.digest || next.durationFrames !== current.durationFrames || next.sampleRate !== current.sampleRate || next.channels !== current.channels) throw mismatch()
+    return next
+  }
+  const oldDigest = current.identity?.digest ?? (await digestWholeAudioEditSource(current.sourcePath)).digest
+  const identity = await digestWholeAudioEditSource(file)
+  if (identity.digest !== oldDigest) throw mismatch()
+  return { ...next, identity, durationFrames: current.durationFrames }
 }
 
 /** Verify a rendered derivative before caching or publishing it. */

@@ -5,8 +5,11 @@ import { app } from 'electron'
 import { audioWorkerExecutablePath } from './audio-worker-client'
 
 export interface SpectralWorkerProgress { coveredFrames: number; durationFrames: number; done: boolean }
-/** 这个频谱进程支持什么：derive 为按列派生每组的层级（原生 SIDECAR_LEVEL），旧可执行文件没有。 */
-export interface SpectralWorkerCapabilities { deriveGroupLevel?: number }
+/**
+ * 这个频谱进程支持什么：deriveGroupLevel 为按列派生每组的层级（原生 SIDECAR_LEVEL），旧可执行文件没有；
+ * deriveLengthChange 为派生时上一版可以与新声音长度不同（补录拼接）。
+ */
+export interface SpectralWorkerCapabilities { deriveGroupLevel?: number; deriveLengthChange?: boolean }
 interface Pending {
   finish(error?: Error, value?: unknown): void
   /** 收到该请求的任何进度或心跳就续期无进展计时。 */
@@ -126,9 +129,10 @@ export class SpectralWorkerClient {
   capabilities(): Promise<SpectralWorkerCapabilities> {
     const child = this.start()
     if (this.probe?.child !== child) {
-      const capabilities = this.request<{ capabilities?: { spectralDerive?: { groupLevel?: unknown } } }>({ type: 'ping' }, undefined, undefined, 10_000).then(result => {
-        const level = result?.capabilities?.spectralDerive?.groupLevel
-        return typeof level === 'number' && Number.isInteger(level) && level > 0 ? { deriveGroupLevel: level } : {}
+      const capabilities = this.request<{ capabilities?: { spectralDerive?: { groupLevel?: unknown; lengthChange?: unknown } } }>({ type: 'ping' }, undefined, undefined, 10_000).then(result => {
+        const derive = result?.capabilities?.spectralDerive
+        const level = derive?.groupLevel
+        return typeof level === 'number' && Number.isInteger(level) && level > 0 ? { deriveGroupLevel: level, ...(derive?.lengthChange === true ? { deriveLengthChange: true } : {}) } : {}
       }, () => ({}))
       this.probe = { child, capabilities }
     }

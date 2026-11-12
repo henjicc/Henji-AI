@@ -19,5 +19,5 @@ export async function applyAudioEditRealtimeEffects(project: AudioEditProjectDoc
 export async function applyAudioEffectInstancesToFile(projectId: string, input: string, effects: readonly AudioEffectInstance[], signal?: AbortSignal, onProgress?: (value: number) => void): Promise<string> {
   if (!effects.length) return input
   const keys = AUDIO_IDENTITY_PHASES.map(phase => `fx-${audioRenderKey(['effects-v1', path.basename(input), audioEffectsIdentity(effects, phase)])}`)
-  return cachedAudioFile(audioEditCacheDirectory(projectId), keys[0], 'wav', output => runAudioEditEffectsWorker({ kind: 'effects', input, output, effects: [...effects] }, signal, onProgress), signal, keys.slice(1))
+  return cachedAudioFile(audioEditCacheDirectory(projectId), keys[0], 'wav', async output => { await runAudioEditEffectsWorker({ kind: 'effects', input, output, effects: [...effects] }, signal, onProgress) }, signal, keys.slice(1))
 }

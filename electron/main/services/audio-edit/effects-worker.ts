@@ -17,7 +17,7 @@ scope.self ??= globalThis
 
 const BLOCK = 8192
 
-async function run(job: AudioEditEffectsWorkerJob): Promise<void> {
+async function run(job: AudioEditEffectsWorkerJob): Promise<unknown> {
   if (job.kind !== 'effects') return runAudioEditPcmJob(job, value => parentPort?.postMessage({ type: 'progress', value }))
   const reader = await openF32Wav(job.input)
   if (!reader) throw new Error('效果处理只接受 32 位浮点 WAV。')
@@ -55,4 +55,4 @@ async function run(job: AudioEditEffectsWorkerJob): Promise<void> {
   }
 }
 
-run(workerData as AudioEditEffectsWorkerJob).then(() => parentPort?.postMessage({ type: 'done' }), (error: unknown) => parentPort?.postMessage({ type: 'error', message: error instanceof Error ? error.message : String(error) }))
+run(workerData as AudioEditEffectsWorkerJob).then(result => parentPort?.postMessage({ type: 'done', result }), (error: unknown) => parentPort?.postMessage({ type: 'error', message: error instanceof Error ? error.message : String(error) }))

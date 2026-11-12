@@ -172,6 +172,30 @@ describe('按块派生（编辑后声音只改了几段）', () => {
     const loud = before.slice(); loud[2000 * 2] = 1.5
     expect(deriveWaveformPyramid(parent.pyramid, parent.floats!, options, spansOf(loud, [[2000, 2001]], frames, delivered), delivered)).toMatchObject({ reason: expect.stringContaining('定点比例') })
   })
+  it('补录拼接后长度变了：拼接点之前的桶原样沿用，之后重算，与对新声音整段生成逐字节相同；末尾追加只重算录音段', () => {
+    const frames = RATE * 30 + 777
+    const before = signal(frames)
+    const take = Float32Array.from({ length: 12_345 * 2 }, (_, index) => Math.cos(index / 17) * 0.4)
+    for (const [start, end] of [[frames, frames], [400_000, 400_000], [700_000, 760_000]] as const) {
+      const length = frames - (end - start) + take.length / 2
+      const after = new Float32Array(length * 2)
+      after.set(before.subarray(0, start * 2)); after.set(take, start * 2); after.set(before.subarray(end * 2), (start + take.length / 2) * 2)
+      const options = (expectedFrames: number) => pyramidOptions({ expectedFrames, endSeconds: expectedFrames / RATE, baseSamplesPerBucket: 128, levelFactor: 8, topBuckets: 512, keepFloats: true })
+      const parent = build(before, options(frames)), full = build(after, options(length))
+      // 来历给出的不同帧是 [拼接点, 新结尾)，按块分批交进去
+      const from = Math.floor(start / 1024) * 1024
+      const spans = Array.from({ length: Math.ceil((length - from) / 65536) }, (_, index) => [from + index * 65536, Math.min(length, from + (index + 1) * 65536)] as [number, number])
+      const derived = deriveWaveformPyramid(parent.pyramid, parent.floats!, options(length), spansOf(after, spans, length), length)
+      if ('reason' in derived) throw new Error(derived.reason)
+      expect(same(encodeWaveformPyramid(derived.pyramid), encodeWaveformPyramid(full.pyramid))).toBe(true)
+      expect(same(encodeWaveformPyramidFloats(derived.floats), encodeWaveformPyramidFloats(full.floats!))).toBe(true)
+      if (start === frames) expect(length - from).toBeLessThan(take.length / 2 + 1024)
+    }
+    // 长度变了而交进来的段没盖住尾部：不能把对不上位置的旧桶当成没变
+    const parent = build(before, pyramidOptions({ expectedFrames: frames, endSeconds: frames / RATE, baseSamplesPerBucket: 128, levelFactor: 8, topBuckets: 512, keepFloats: true }))
+    const longer = pyramidOptions({ expectedFrames: frames + 5000, endSeconds: (frames + 5000) / RATE, baseSamplesPerBucket: 128, levelFactor: 8, topBuckets: 512, keepFloats: true })
+    expect(deriveWaveformPyramid(parent.pyramid, parent.floats!, longer, [], frames + 5000)).toMatchObject({ reason: expect.stringContaining('尾部') })
+  })
 })
 
 describe('real source Node Worker', () => {

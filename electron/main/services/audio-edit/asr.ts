@@ -13,6 +13,7 @@ import { createMainLogger } from '../logging'
 import { requireAudioEditProject } from './project-store'
 import { assertAudioEditProjectIdle, createAudioEditTask, findAudioEditTranscription, isAudioEditTaskActive, updateAudioEditTask, registerAudioEditTaskController } from './task-store'
 import { prepareAudioEditAudio, verifyAudioEditSource } from './media'
+import { audioEditSourceReceiptDigest } from './source-identity'
 
 const logger = createMainLogger('main.audio_edit.asr')
 const controllers = new Map<string, AbortController>()
@@ -35,7 +36,7 @@ export async function preflightAudioEditTranscription(input: TranscriptionPrefli
     if (task) {
       if (isAudioEditTaskActive(task.request_id)) throw new Error('原口播识别仍在执行，请查询原任务。')
       const prior = task.result_json ? JSON.parse(task.result_json) as TranscriptionReceipt : undefined
-      if (prior?.sourceDigest !== (project.source.identity?.digest ?? project.source.sourcePath)) throw new Error('素材已变化，不能复用旧识别任务。')
+      if (prior?.sourceDigest !== audioEditSourceReceiptDigest(project.source)) throw new Error('素材已变化，不能复用旧识别任务。')
       if (prior.output || prior.rawOutput) return { modelId: prior.modelId, requiresConfirmation: false }
       if (task.provider_task_id) {
         const plan = timestampedAsrService.prepare({ audioPath: input.sourcePath, durationMs: input.durationMs, modelId: prior.modelId })
@@ -64,17 +65,17 @@ async function transcribeRegisteredProject(request: AudioEditTranscriptionReques
   try {
   const project = await requireAudioEditProject(request.projectId)
   if (project.transcript.length) throw new Error('口播已有转写，请保留当前编辑；需要重新识别时另建口播。')
-  await verifyAudioEditSource(project, true, controller.signal)
+  await verifyAudioEditSource(project, controller.signal)
   const previous = findAudioEditTranscription(project.id)
   if (previous) billing = 'unknown'
   if (previous && previous.request_id !== request.requestId && isAudioEditTaskActive(previous.request_id)) throw new Error('该口播正在转写，请等待或取消。')
   const priorInput = previous?.result_json ? JSON.parse(previous.result_json) as TranscriptionReceipt : undefined
   if (priorInput?.rawOutput || priorInput?.output || priorInput?.billing === 'completed') billing = 'completed'
-  const sourceDigest = project.source.identity?.digest ?? project.source.sourcePath
+  const sourceDigest = audioEditSourceReceiptDigest(project.source)
   if (previous && priorInput?.sourceDigest !== sourceDigest) throw new Error('素材已变化，旧转写任务不能覆盖当前口播。')
   const neverSubmitted = previous?.state === 'failed' && !previous.provider_task_id && (priorInput?.billing === 'not_charged' || previous.error_message?.startsWith('[native_upload_unsupported]'))
   if (neverSubmitted) billing = 'not_charged'
-  if (priorInput?.output && priorInput.sourceDigest === (project.source.identity?.digest ?? project.source.sourcePath)) {
+  if (priorInput?.output && priorInput.sourceDigest === audioEditSourceReceiptDigest(project.source)) {
     const cached = priorInput.output
     return { ...cached, project: { ...project, transcript: cached.project.transcript, suggestions: cached.project.suggestions,
       selectedAsrModelId: cached.modelId, editBaseline: cached.project.editBaseline } }
@@ -149,7 +150,7 @@ async function transcribeRegisteredProject(request: AudioEditTranscriptionReques
     // Keep the paid result in the existing task receipt before IPC delivery; reload can retrieve it.
     updateAudioEditTask(requestId, { state: 'completed', result: receipt })
     controller.signal.throwIfAborted()
-    await verifyAudioEditSource(project, true, controller.signal)
+    await verifyAudioEditSource(project, controller.signal)
     return result
   } catch (error) {
     billing = receipt.billing ?? billing

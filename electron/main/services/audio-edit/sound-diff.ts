@@ -153,11 +153,74 @@ function unmatched(op: AudioEditSoundOp, dirty: FrameSet): string | undefined {
   }
 }
 
-export function diffAudioEditSound(before: AudioEditSoundDescription, after: AudioEditSoundDescription): AudioEditSoundDiff {
+/** 素材的一次补录拼接：[start, end) 换成 inserted 帧新录音。 */
+export interface AudioEditSoundSplice { start: number; end: number; inserted: number }
+
+/**
+ * 把一版声音的操作序列映射到素材补录拼接后的坐标。拼接点之前的帧原样；被替换段之后的帧平移 inserted - (end - start)。
+ * 操作的作用范围（连同它依赖的上下文）完全在拼接点之前、或在被替换段之后且平移量为 0 时原样保留；
+ * 增益区与口水音段在被替换段之后时随帧平移（逐样本运算与位置无关）；其余（跨过拼接点、修复在平移段里）不能映射，从序列里拿掉，
+ * 它们在新坐标里能落到的帧连同插入段一起作为“来源处就不同的帧”返回，比较时当作上游改动。
+ * 整段处理的操作原样保留：上游有任何改动它就整段不同，由比较处判断。
+ */
+export function mapAudioEditSoundThroughSplice(sound: AudioEditSoundDescription, splice: AudioEditSoundSplice, next: { source: string; frames: number }): { sound: AudioEditSoundDescription; dirty: AudioEditFrameRange[] } {
+  const { start, end, inserted } = splice
+  const delta = inserted - (end - start)
+  const dirty = new FrameSet()
+  dirty.add(start, start + inserted)
+  /**
+   * 一段旧区间（连同两侧 context 帧的依赖）在新坐标里的位置：完全在拼接点之前原样，完全在被替换段之后平移；
+   * 跨过被替换段时返回 undefined，并把它能落到新坐标里的两截记为不同。半开区间：止于拼接点的算之前，起于被替换段终点的算之后。
+   */
+  const map = (range: AudioEditFrameRange, context = 0): AudioEditFrameRange | undefined => {
+    if (range[1] + context <= start) return range
+    if (range[0] - context >= end) return [range[0] + delta, range[1] + delta]
+    if (range[0] < start) dirty.add(range[0], Math.min(range[1], start))
+    if (range[1] > end) dirty.add(Math.max(range[0], end) + delta, range[1] + delta)
+    return undefined
+  }
+  const ops: AudioEditSoundOp[] = []
+  for (const op of sound.ops) {
+    if (op.kind === 'global') { ops.push(op); continue }
+    if (op.kind === 'local') {
+      const mapped = map(op.write, op.context)
+      // 修复的配方里带着它的位置，平移后就是另一个配方：平移量不为 0 时在新坐标里按改写过的帧算不同。
+      if (mapped && (mapped === op.write || delta === 0)) ops.push(op)
+      else if (mapped) dirty.add(mapped[0], mapped[1])
+      continue
+    }
+    if (op.kind === 'clicks') {
+      const ranges = op.ranges.flatMap(range => { const mapped = map(range, op.margin); return mapped ? [mapped] : [] })
+      ops.push({ ...op, ranges })
+      continue
+    }
+    const regions = op.regions.flatMap(region => {
+      const mapped = map([region[0], region[1]])
+      return mapped ? [[mapped[0], mapped[1], region[2], region[3], region[4]] as AudioEditGainRecipe] : []
+    })
+    ops.push({ ...op, regions })
+  }
+  return { sound: { source: next.source, frames: next.frames, ops }, dirty: dirty.list().map(([from, to]) => [Math.max(0, from), Math.min(next.frames, to)] as AudioEditFrameRange).filter(([from, to]) => to > from) }
+}
+
+/** 一组帧区间映射到补录拼接后的坐标：拼接点之前原样，被替换段之后平移，落进被替换段的部分并入插入段（插入段本身另算不同）。 */
+export function mapAudioEditFramesThroughSplice(ranges: readonly AudioEditFrameRange[], splice: AudioEditSoundSplice): AudioEditFrameRange[] {
+  const { start, end, inserted } = splice
+  const delta = inserted - (end - start)
+  return ranges.flatMap(([from, to]) => [
+    ...(from < start ? [[from, Math.min(to, start)] as AudioEditFrameRange] : []),
+    ...(to > end ? [[Math.max(from, end) + delta, to + delta] as AudioEditFrameRange] : []),
+    ...(from < end && to > start ? [[start, start + inserted] as AudioEditFrameRange] : []),
+  ])
+}
+
+/** seed：来源处就不同的帧（补录拼接的插入段等），当作所有操作的上游改动。 */
+export function diffAudioEditSound(before: AudioEditSoundDescription, after: AudioEditSoundDescription, seed: readonly AudioEditFrameRange[] = []): AudioEditSoundDiff {
   if (before.source !== after.source || before.frames !== after.frames) return { all: '素材或声音规格不同' }
   const pairs = align(before.ops, after.ops)
   if (!pairs) return { all: '前后两版改动的操作太多' }
   const dirty = new FrameSet()
+  dirty.addAll(seed)
   for (const [old, next] of pairs) {
     if (!old || !next) {
       const reason = unmatched((old ?? next)!, dirty)

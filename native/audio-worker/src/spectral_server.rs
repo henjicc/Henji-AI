@@ -138,10 +138,11 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
             if matches!(command, Command::Ping) {
                 // 能力表：主进程据此决定要不要发派生命令（旧可执行文件没有这一项，主进程直接整段计算）。
+                // lengthChange：上一版可以与新声音长度不同（补录拼接后的素材）。
                 reply(
                     &id,
                     Ok(json!({"worker":"henji-audio-worker","protocolVersion":1,
-                        "capabilities":{"spectralDerive":{"groupLevel":pyramid::SIDECAR_LEVEL}}})),
+                        "capabilities":{"spectralDerive":{"groupLevel":pyramid::SIDECAR_LEVEL,"lengthChange":true}}})),
                 );
                 continue;
             }

@@ -5,12 +5,12 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { AudioEditProjectDocument } from '../../../../src/core/audioEdit/types'
 import type { AudioEditGainRegion } from '../../../../src/core/audioEdit/regions'
 
-const state = vi.hoisted(() => ({ project: null as unknown as AudioEditProjectDocument, wav: '', execFile: vi.fn(), prepareRender: vi.fn(), layers: [] as AudioEditGainRegion[][] }))
+const state = vi.hoisted(() => ({ project: null as unknown as AudioEditProjectDocument, wav: '', execFile: vi.fn(), prepareRender: vi.fn(), prepareAudio: vi.fn(), layers: [] as AudioEditGainRegion[][] }))
 vi.mock('node:child_process', () => ({ execFile: state.execFile }))
-vi.mock('../video/ffmpeg-loader', () => ({ loadFfmpegPath: async () => 'ffmpeg' }))
+vi.mock('../video/ffmpeg-loader', () => ({ loadFfmpegPath: async () => 'ffmpeg', loadFfprobePath: async () => 'ffprobe' }))
 vi.mock('./project-store', () => ({ readAudioEditProjectSnapshot: async () => state.project }))
 vi.mock('./render', () => ({ prepareAudioEditRenderPlan: async (...args: unknown[]) => ({ base: await state.prepareRender(...args), layers: state.layers }) }))
-vi.mock('./media', () => ({ prepareAudioEditAudio: async () => state.wav }))
+vi.mock('./media', () => ({ prepareAudioEditAudio: (...args: unknown[]) => state.prepareAudio(...args) }))
 vi.mock('./processors', () => ({ listAudioEditProcessors: async () => [] }))
 
 import { prepareAudioEditPreviewChunk, resetAudioEditPreviewForTests } from './preview'
@@ -33,6 +33,7 @@ beforeEach(async () => {
   state.project = { id: 'doc', revision: 1, source: { sampleRate, channels, durationFrames: frames } } as AudioEditProjectDocument
   // 和缓存层一样：文件不在就重新生成
   state.prepareRender.mockReset().mockImplementation(async () => await fs.access(state.wav).then(() => state.wav, writeRenderSource))
+  state.prepareAudio.mockReset().mockImplementation(async () => state.wav)
   state.execFile.mockReset()
   state.layers = []
 })
@@ -109,4 +110,47 @@ it('渲染源不是浮点 WAV 时按块交给 FFmpeg 解码', async () => {
   expect(state.execFile).toHaveBeenCalledTimes(1)
   expect(chunk).toMatchObject({ sourceStartFrame: 200, sourceEndFrame: 500 })
   expect(new Float32Array(chunk.pcm)[0]).toBe(0.25)
+})
+
+const external = (sourcePath: string): AudioEditProjectDocument => ({ id: 'doc', revision: 1, source: { mediaType: 'audio', ownership: 'external', sourcePath, audioPath: sourcePath, sampleRate, channels, durationFrames: frames, audioStreamIndex: 1, audioStartSeconds: 0.5 } }) as AudioEditProjectDocument
+/** ffprobe 回答编码与容器，ffmpeg 回答解码好的一块。 */
+function fakeTools(codec: string, container: string, decoded: Float32Array): void {
+  state.execFile.mockImplementation((binary: string, _args: string[], _options: unknown, done: (error: null, stdout: Buffer | string) => void) => {
+    done(null, binary === 'ffprobe' ? JSON.stringify({ streams: [{ codec_name: codec }], format: { format_name: container } }) : Buffer.from(decoded.buffer))
+  })
+}
+
+it('外部 PCM 素材的浮点副本还在后台转时，先从原素材按块解码（预卷、按样本时间戳裁剪），转好后改为直接读', async () => {
+  let finish!: (file: string) => void
+  state.prepareAudio.mockImplementation(() => new Promise<string>(resolve => { finish = resolve }))
+  state.project = external('/原素材.wav')
+  const decoded = Float32Array.from({ length: sampleRate * channels }, (_, index) => index)
+  fakeTools('pcm_s24le', 'wav', decoded)
+  const early = await prepareAudioEditPreviewChunk({ projectId: 'doc', mode: 'source', sourceStartFrame: 3000, frameCount: sampleRate })
+  expect(new Float32Array(early.pcm)).toEqual(decoded)
+  const args = state.execFile.mock.calls.find(call => call[0] === 'ffmpeg')![1] as string[]
+  expect(args).toEqual(expect.arrayContaining(['-noaccurate_seek', '-copyts', '-i', '/原素材.wav', '-map', '0:1']))
+  // 声音流从 0.5 秒（第 500 个采样时刻）开始：副本第 3000 帧是绝对第 3500 个样本；往前预卷一秒，容器起点就是声音流起点
+  expect(args[args.indexOf('-ss') + 1]).toBe('2.000000')
+  expect(args[args.indexOf('-af') + 1]).toBe('atrim=start_pts=3500:end_pts=4500')
+  finish(state.wav)
+  await new Promise(resolve => setTimeout(resolve, 0))
+  state.execFile.mockClear()
+  const later = await prepareAudioEditPreviewChunk({ projectId: 'doc', mode: 'source', sourceStartFrame: 3000, frameCount: sampleRate })
+  expect(state.execFile).not.toHaveBeenCalled()
+  expect(new Float32Array(later.pcm)[0]).toBeCloseTo(3000 * channels / (frames * channels), 6)
+})
+
+it('压缩音频（mp4 里的 AAC）拿不准与副本逐样本相同：不按块解码，等副本转完再给块', async () => {
+  let finish!: (file: string) => void
+  state.prepareAudio.mockImplementation(() => new Promise<string>(resolve => { finish = resolve }))
+  state.project = external('/原素材.mp4')
+  fakeTools('aac', 'mov,mp4,m4a,3gp,3g2,mj2', new Float32Array(0))
+  let delivered = false
+  const chunk = prepareAudioEditPreviewChunk({ projectId: 'doc', mode: 'source', sourceStartFrame: 3000, frameCount: sampleRate }).then(value => { delivered = true; return value })
+  await new Promise(resolve => setTimeout(resolve, 100))
+  expect(delivered).toBe(false)
+  expect(state.execFile.mock.calls.map(call => call[0])).toEqual(['ffprobe'])
+  finish(state.wav)
+  expect(new Float32Array((await chunk).pcm)[0]).toBeCloseTo(3000 * channels / (frames * channels), 6)
 })

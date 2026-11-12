@@ -118,3 +118,18 @@ it('付费结果后的源核验失败：重试复用完整结果；源身份变�
   await expect(transcribeAudioEditProject({ ...request, requestId: 'changed' })).rejects.toThrow('素材已变化')
   expect(mock.execute).toHaveBeenCalledTimes(1)
 })
+
+it('只有采样指纹的素材移动后重新定位（摘要、大小、修改时间不变）：已付费的识别结果照样复用，不再提交', async () => {
+  const fingerprint = { digest: 'f'.repeat(64), size: 9600, mtimeMs: 1_791_504_000_000 }
+  const project = await mock.project()
+  mock.project.mockResolvedValue({ ...project, source: { ...source, fingerprint } })
+  mock.verify.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('素材暂不可读'))
+  await expect(transcribeAudioEditProject(request)).rejects.toThrow('素材暂不可读')
+  const moved = { ...source, sourcePath: 'D:/新位置/voice.wav', audioPath: 'D:/新位置/voice.wav', fingerprint }
+  mock.project.mockResolvedValue({ ...project, source: moved })
+  await expect(transcribeAudioEditProject({ ...request, requestId: 'relinked' })).resolves.toMatchObject({ granularity: 'segment' })
+  expect(mock.execute).toHaveBeenCalledTimes(1)
+  // 内容记录变了（修改时间不同）仍拒绝旧结果
+  mock.project.mockResolvedValue({ ...project, source: { ...moved, fingerprint: { ...fingerprint, mtimeMs: fingerprint.mtimeMs + 1 } } })
+  await expect(transcribeAudioEditProject({ ...request, requestId: 'touched' })).rejects.toThrow('素材已变化')
+})

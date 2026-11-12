@@ -528,9 +528,19 @@ fn unquantized(level: usize, index: u64, memo: &mut HashMap<(usize, u64), Column
     Ok(column)
 }
 
+/// 只复制文件开头 bytes 个字节（上一版比新声音长或短时，只有变化处之前的列能沿用）。
+fn copy_prefix(from: &Path, to: &Path, bytes: u64) -> Result<()> {
+    let copied = std::io::copy(&mut File::open(from)?.take(bytes), &mut File::create(to)?)?;
+    if copied != bytes {
+        return Err("上一版频谱文件长度不对".into());
+    }
+    Ok(())
+}
+
 /// 由上一版声音的完整频谱派生新版本：复制上一版目录，只重算 dirty 波及的列，最后原子发布完成清单。
 /// 每个受影响的第 9 层组整组重算第 3–9 层（与整段计算同一个 fft::columns 与两两合并顺序），
 /// 第 10 层以上只重算受影响的列，由第 9 层未量化列按原合并树重合并；全部文件与整段计算逐字节相同。
+/// 两版长度不同（补录拼接）时，从较短长度往前半个长窗所在的组起到新结尾整段重算，各层文件只复制这一组之前的列。
 pub fn derive(req: DeriveRequest, cancelled: &AtomicBool, between: impl Fn()) -> Result<Value> {
     let began = Instant::now();
     check(cancelled)?;
@@ -545,11 +555,11 @@ pub fn derive(req: DeriveRequest, cancelled: &AtomicBool, between: impl Fn()) ->
     let output = &req.output_directory;
     let manifest_bytes = fs::read(parent.join("manifest.json"))?;
     let previous: Value = serde_json::from_slice(&manifest_bytes)?;
+    let parent_frames = previous["durationFrames"].as_u64().filter(|value| *value > 0).ok_or("上一版频谱清单没有长度")?;
     if previous["format"] != "spectral-pyramid-v1"
         || previous["done"] != true
         || previous["sampleRate"] != input.spec.sample_rate
         || previous["channels"] != channels
-        || previous["durationFrames"] != frames
         || previous["lowBins"] != low
         || previous["highBins"] != 1025
     {
@@ -558,27 +568,21 @@ pub fn derive(req: DeriveRequest, cancelled: &AtomicBool, between: impl Fn()) ->
     let file = |directory: &Path, level: usize, channel: usize| directory.join(format!("level-{level}-channel-{channel}.rg"));
     for level in MIN_PERSISTED..=MAX_LEVEL {
         for channel in 0..channels {
-            if fs::metadata(file(parent, level, channel))?.len() != column_count(level as i32, frames) * row {
+            if fs::metadata(file(parent, level, channel))?.len() != column_count(level as i32, parent_frames) * row {
                 return Err("上一版频谱文件长度不对".into());
             }
         }
     }
-    if fs::metadata(parent.join(SIDECAR_FILE)).map_or(true, |m| m.len() != column_count(SIDECAR_LEVEL as i32, frames) * sums_row) {
+    if fs::metadata(parent.join(SIDECAR_FILE)).map_or(true, |m| m.len() != column_count(SIDECAR_LEVEL as i32, parent_frames) * sums_row) {
         return Err("上一版频谱没有第 9 层未量化列".into());
     }
-    fs::create_dir(output)?;
-    for level in MIN_PERSISTED..=MAX_LEVEL {
-        for channel in 0..channels {
-            check(cancelled)?;
-            fs::copy(file(parent, level, channel), file(output, level, channel))?;
-            between();
-        }
-    }
-    fs::copy(parent.join(SIDECAR_FILE), output.join(SIDECAR_FILE))?;
     let total = column_count(0, frames);
     // 基础列 i 的长窗覆盖源帧 [i*512 - 半窗, i*512 + 半窗)（短窗在其内）：区间两侧各放宽半个长窗。
     // 主进程 spectral-pyramid.ts 估算要重算几组时用同一套（spectralResolution(0) 的长窗、ping 报出的 SIDECAR_LEVEL）。
     let half = resolution(0).low_window as u64 / 2;
+    // 长度不同时，较短长度之后在新声音里没有对应的旧列（窗口伸到旧结尾之外的列也不同）：
+    // 从较短长度往前半个长窗所在的组起，各层只保留这之前的列，之后全部重算。
+    let kept_groups = (parent_frames != frames).then(|| (parent_frames.min(frames).saturating_sub(half) / 512) >> SIDECAR_LEVEL);
     let mut groups = BTreeSet::new();
     for [start, end] in &req.dirty {
         let (start, end) = (*start, (*end).min(frames));
@@ -590,6 +594,32 @@ pub fn derive(req: DeriveRequest, cancelled: &AtomicBool, between: impl Fn()) ->
         for group in (first >> SIDECAR_LEVEL)..=(last >> SIDECAR_LEVEL) {
             groups.insert(group);
         }
+    }
+    if let Some(kept) = kept_groups {
+        groups.extend(kept..column_count(SIDECAR_LEVEL as i32, frames));
+    }
+    fs::create_dir(output)?;
+    for level in MIN_PERSISTED..=MAX_LEVEL {
+        for channel in 0..channels {
+            check(cancelled)?;
+            match kept_groups {
+                None => {
+                    fs::copy(file(parent, level, channel), file(output, level, channel))?;
+                }
+                // 第 9 层及以下每组 2^(9-层) 列；以上每列跨 2^(层-9) 组，只留整列都在保留组里的。
+                Some(kept) => {
+                    let columns = if level <= SIDECAR_LEVEL { kept << (SIDECAR_LEVEL - level) } else { kept >> (level - SIDECAR_LEVEL) };
+                    copy_prefix(&file(parent, level, channel), &file(output, level, channel), columns * row)?;
+                }
+            }
+            between();
+        }
+    }
+    match kept_groups {
+        None => {
+            fs::copy(parent.join(SIDECAR_FILE), output.join(SIDECAR_FILE))?;
+        }
+        Some(kept) => copy_prefix(&parent.join(SIDECAR_FILE), &output.join(SIDECAR_FILE), kept * sums_row)?,
     }
     let open = |path: PathBuf| OpenOptions::new().read(true).write(true).open(path);
     let mut files: Vec<Vec<File>> = (MIN_PERSISTED..=MAX_LEVEL)

@@ -1,6 +1,10 @@
+import fs from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 import { audioEditDocumentKind } from '../documents/kinds/audioEdit'
+import { parseDocumentText } from '../documents/envelope'
+import { PERSISTENCE_FORMATS } from '../persistence/formats'
+import { upgradePersistenceContent } from '../persistence/migrations'
 import { audioEditProjectFromDocument, audioEditProjectToDocumentContent, createAudioEditDocumentContent } from './documentContent'
 import type { AudioEditSourceMetadata } from './types'
 
@@ -50,5 +54,36 @@ describe('口播文档内容', () => {
   it('列表摘要：素材类型与时长（秒），没有素材时为空', () => {
     expect(audioEditDocumentKind.summarize(audioEditDocumentKind.contentSchema.parse(createAudioEditDocumentContent(source)))).toEqual({ mediaType: 'video', durationSeconds: 95 })
     expect(audioEditDocumentKind.summarize(audioEditDocumentKind.createEmptyContent())).toEqual({ mediaType: null, durationSeconds: null })
+  })
+})
+
+describe('素材指纹（格式 8）与旧作品', () => {
+  const read = (version: number) => parseDocumentText(fs.readFileSync(`tests/fixtures/persistence/document.audio_edit/v${version}.json`, 'utf8'))
+  const format = PERSISTENCE_FORMATS.find(value => value.id === 'document.audio_edit')!
+  it('各旧版本样本升到 8 与升到 7 的内容逐字段相同，按工具结构打开后素材与时间线不变', () => {
+    for (let version = 1; version <= 7; version++) {
+      const envelope = read(version)
+      const original = structuredClone(envelope.content)
+      const atSeven = upgradePersistenceContent({ ...format, version: 7 }, envelope.content, version)
+      const atEight = upgradePersistenceContent(format, envelope.content, version)
+      expect(envelope.content).toEqual(original)
+      expect(atEight).toEqual(atSeven)
+      const opened = audioEditProjectFromDocument(shell, atEight).project
+      expect(opened).toEqual(audioEditProjectFromDocument(shell, atSeven).project)
+      expect(opened.source).toEqual((original as { source: unknown }).source)
+      expect(opened.source.fingerprint).toBeUndefined()
+    }
+  })
+  it('source 里不认识的字段（更新版本加的可选信息）打开时保留、保存时原样写回，以后加可选字段不必再提最低可读版本', () => {
+    const content = { ...createAudioEditDocumentContent(source), source: { ...source, futureHint: { lane: 2 } } }
+    const { project } = audioEditProjectFromDocument(shell, content)
+    expect((audioEditProjectToDocumentContent(project).source as Record<string, unknown>).futureHint).toEqual({ lane: 2 })
+  })
+  it('格式 8 的样本读回采样指纹；只认识格式 7 的程序按“请升级”拒绝，不当成损坏', () => {
+    const envelope = read(8)
+    expect(envelope.kindMinReaderVersion).toBe(8)
+    const { project } = audioEditProjectFromDocument(shell, upgradePersistenceContent(format, envelope.content, 8))
+    expect(project.source.fingerprint).toEqual({ size: expect.any(Number), mtimeMs: expect.any(Number), digest: expect.stringMatching(/^[a-f0-9]{64}$/) })
+    expect(() => upgradePersistenceContent({ ...format, version: 7 }, envelope.content, 8, undefined, envelope.kindMinReaderVersion)).toThrowError(expect.objectContaining({ code: 'newer-version' }))
   })
 })

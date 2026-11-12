@@ -4,10 +4,11 @@ import path from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { spectralColumnCount, spectralHighBins, spectralLowBins } from '../../../../src/core/audioEdit/spectralPyramid'
 import { audioRenderKey } from './render-cache'
-const state = vi.hoisted(() => ({ directory: '', digest: 'one', edited: 'repair.wav', calls: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), hold: false, holdBuild: false, failBuild: false, failDerive: false, frames: 9000, capabilities: { deriveGroupLevel: 9 } as { deriveGroupLevel?: number }, active: new Set<string>(), releaseBuild: undefined as (() => void) | undefined, release: undefined as (() => void) | undefined }))
+const state = vi.hoisted(() => ({ directory: '', digest: 'one', edited: 'repair.wav', calls: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), hold: false, holdBuild: false, failBuild: false, failDerive: false, frames: 9000, capabilities: { deriveGroupLevel: 9 } as { deriveGroupLevel?: number; deriveLengthChange?: boolean }, decoded: 'decoded.wav', active: new Set<string>(), releaseBuild: undefined as (() => void) | undefined, release: undefined as (() => void) | undefined }))
 vi.mock('./render', () => ({ prepareAudioEditRenderSource: async () => state.edited }))
 vi.mock('./project-store', () => ({ requireAudioEditProject: async (id: string) => ({ id, revision: 7, source: { sourcePath: 'source', sampleRate: 48000, channels: 2, durationFrames: state.frames } }) }))
-vi.mock('./media', () => ({ audioEditSpectralCacheDirectory: () => state.directory, verifyAudioEditSource: async () => undefined, identifyAudioEditSource: async () => ({ digest: state.digest }), prepareAudioEditAudio: async () => 'decoded.wav' }))
+vi.mock('./media', () => ({ audioEditSpectralCacheDirectory: () => state.directory, verifyAudioEditSource: async () => undefined, prepareAudioEditAudio: async () => state.decoded }))
+vi.mock('./source-identity', () => ({ audioEditSourceContentKey: async () => state.digest }))
 vi.mock('../logging', () => ({ createMainLogger: () => ({ info: state.info, warn: state.warn, error: state.error }) }))
 vi.mock('../audio/cache-budget', () => ({ audioDiskBudgetBytes: () => 1024 ** 3 }))
 vi.mock('./task-store', () => ({ registerAudioEditTaskController: (id: string) => { state.active.add(id); return () => state.active.delete(id) }, runAudioEditTask: () => { throw new Error('频谱不得进入任务表') } }))
@@ -52,7 +53,7 @@ vi.mock('./spectral-worker-client', () => ({ spectralWorker: { capabilities: asy
 import { getAudioEditSpectralTile, cancelAudioEditSpectralTile, subscribeAudioEditSpectralProgress } from './spectral-pyramid'
 import { recordAudioLineage } from '../audio/lineage'
 const request = { projectId: 'p', mode: 'source' as const, level: 0, tile: 0, requestId: 'one' }
-beforeEach(async () => { state.directory = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-pyramid-service-')); state.digest = 'one'; state.edited = 'repair.wav'; state.hold = false; state.holdBuild = false; state.failBuild = false; state.failDerive = false; state.frames = 9000; state.capabilities = { deriveGroupLevel: 9 }; state.release = undefined; state.releaseBuild = undefined; vi.clearAllMocks() })
+beforeEach(async () => { state.directory = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-pyramid-service-')); state.digest = 'one'; state.edited = 'repair.wav'; state.hold = false; state.holdBuild = false; state.failBuild = false; state.failDerive = false; state.frames = 9000; state.capabilities = { deriveGroupLevel: 9 }; state.decoded = 'decoded.wav'; state.release = undefined; state.releaseBuild = undefined; vi.clearAllMocks() })
 const logged = (event: string): Array<Record<string, unknown>> => state.info.mock.calls.filter(call => call[1].event === event).map(call => call[1].context)
 afterEach(async () => {
   await vi.waitFor(() => expect(logged('audio_edit.spectral.completed').length + state.error.mock.calls.length).toBe(logged('audio_edit.spectral.start').length))
@@ -86,7 +87,7 @@ it('identity、mode、edited 渲染键隔离缓存，返回实际作品版本', 
   expect(state.calls.mock.calls.filter(call => call[0].type === 'spectral_tile')).toHaveLength(4)
 })
 it('负层忽略固定窗旧块，按实际频点返回，整文件缓存仍可复用', async () => {
-  const key = audioRenderKey(['spectral-pyramid-v1', { digest: state.digest }, undefined, 48000, 2, 9000, 'source', undefined])
+  const key = audioRenderKey(['spectral-pyramid-v1', state.digest, undefined, 48000, 2, 9000, 'source', undefined])
   const oldFile = path.join(state.directory, `${audioRenderKey([key, -5, 0])}.rg`)
   await fs.writeFile(oldFile, new Uint8Array(128).fill(99))
   const fine = await getAudioEditSpectralTile({ ...request, level: -5 })
@@ -160,7 +161,7 @@ it('整文件失败不发布完成指针、保留已算部分，后续请求在�
 })
 it('同素材并发读取只由一个读取者清理残留目录：续算覆盖最多的那份，其余删除，计算目录不被误删', async () => {
   state.holdBuild = true
-  const key = audioRenderKey(['spectral-pyramid-v1', { digest: state.digest }, undefined, 48000, 2, 9000, 'source', undefined])
+  const key = audioRenderKey(['spectral-pyramid-v1', state.digest, undefined, 48000, 2, 9000, 'source', undefined])
   const partial = path.join(state.directory, `${key}-11111111-1111-1111-1111-111111111111`)
   const stale = path.join(state.directory, `${key}-22222222-2222-2222-2222-222222222222`)
   await fs.mkdir(partial); await fs.mkdir(stale)
@@ -262,4 +263,30 @@ it('来历跨两代：中间一版的频谱没算过时从再上一版派生，�
   await vi.waitFor(() => expect(logged('audio_edit.spectral.completed')).toHaveLength(3))
   expect(state.calls.mock.calls.map(call => call[0].type).filter(type => type === 'spectral_derive')).toHaveLength(1)
   expect(logged('audio_edit.spectral.completed')[2]).toMatchObject({ derived: false })
+})
+
+it('补录拼接后的素材（长度变了）：原素材模式也按来历派生，经“文件 → 频谱键”索引找到换素材之前的目录；频谱进程不支持长度变化就整段', async () => {
+  state.frames = 48000 * 60
+  const source = { ...request, level: 3 }
+  const [before, after, again] = ['before.wav', 'after.wav', 'again.wav'].map(name => path.join(state.directory, name))
+  for (const file of [before, after, again]) await fs.writeFile(file, file)
+  state.decoded = before
+  await getAudioEditSpectralTile(source)
+  await vi.waitFor(() => expect(logged('audio_edit.spectral.completed')).toHaveLength(1))
+  // 末尾追加 3 秒：素材身份变了（频谱键跟着变），来历记着拼接点之后都不同
+  const spliceAt = state.frames
+  await recordAudioLineage(after, spliceAt + 3 * 48000, { file: before, frames: spliceAt, dirty: [[spliceAt, spliceAt + 3 * 48000]] })
+  state.capabilities = { deriveGroupLevel: 9, deriveLengthChange: true }
+  state.digest = 'two'; state.frames = spliceAt + 3 * 48000; state.decoded = after
+  await getAudioEditSpectralTile({ ...source, requestId: 'after' })
+  await vi.waitFor(() => expect(logged('audio_edit.spectral.completed')).toHaveLength(2))
+  const commands = state.calls.mock.calls.map(call => call[0])
+  expect(commands.find(command => command.type === 'spectral_derive')).toMatchObject({ input_path: after, parent_directory: commands[0].output_directory, dirty: [[spliceAt, state.frames]] })
+  // 旧可执行文件不支持长度变化：不发派生命令
+  state.capabilities = { deriveGroupLevel: 9 }
+  await recordAudioLineage(again, state.frames + 48000, { file: after, frames: state.frames, dirty: [[state.frames, state.frames + 48000]] })
+  state.digest = 'three'; state.frames += 48000; state.decoded = again
+  await getAudioEditSpectralTile({ ...source, requestId: 'again' })
+  await vi.waitFor(() => expect(logged('audio_edit.spectral.completed')).toHaveLength(3))
+  expect(state.calls.mock.calls.map(call => call[0].type).filter(type => type !== 'spectral_tile').slice(-1)).toEqual(['spectral_build'])
 })

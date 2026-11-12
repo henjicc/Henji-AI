@@ -12,7 +12,8 @@ import { prepareAudioEditRenderSource, renderAudioEditProject } from './render'
 import { applyAudioEditRealtimeEffects } from './effects-render'
 import { audioEditRealtimeEffects } from '../../../../src/core/audioEdit/effects'
 import { audioEditSourceEdited, audioEditSourceRecipe } from '../../../../src/core/audioEdit/regions'
-import { verifyAudioEditSource } from './media'
+import { verifyAudioEditSource, verifyAudioEditVideoTiming } from './media'
+import { audioEditSourceRevisionKey } from '../../../../src/core/audioEdit/sourceRevision'
 import { runAudioEditTask } from './task-store'
 
 interface StagedOutput { temporary: string; target: string; backup?: string; published?: boolean }
@@ -54,7 +55,9 @@ export async function exportAudioEditProject(request: AudioEditExportRequest): P
   const spans = timeline?.spans ?? buildProjectAudioEditTimeline(project)
   if (!spans.length) throw new Error('当前没有可导出的声音。')
   return runAudioEditTask(project.id, 'export', async (signal, progress) => {
-    await verifyAudioEditSource(project, true, signal)
+    await verifyAudioEditSource(project, signal)
+    // 导入时只抽查了视频时间戳；联动画面的 XML 要逐包核对整段才能保证剪辑点不漂。
+    if (timeline && !(await verifyAudioEditVideoTiming(project.source, signal))) throw new Error('该视频的帧率或时间戳不稳定，无法准确导出联动画面的 XML；仍可导出 WAV。')
     const outputs: StagedOutput[] = []
     const temporaryPaths: string[] = []
     const stage = async (file: string): Promise<string> => {
@@ -84,11 +87,11 @@ export async function exportAudioEditProject(request: AudioEditExportRequest): P
         exportedAudioPath = target
       }
       signal.throwIfAborted()
-      await verifyAudioEditSource(project, true, signal)
+      await verifyAudioEditSource(project, signal)
       for (const output of outputs) if (!(await fs.stat(output.temporary)).size && output.target !== subtitleTarget) throw new Error('生成的交付文件为空，未提交导出。')
       await publishOutputs(outputs)
       progress(1)
       return { audioPath: exportedAudioPath, ...(timeline ? { xmlPath: target } : {}), ...(subtitleTarget ? { subtitlePath: subtitleTarget } : {}), durationFrames: editedDurationFrames(spans) }
     } finally { await Promise.all(temporaryPaths.map((file) => removeUnmanagedCachePath(file, { force: true }))) }
-  }, request.requestId, JSON.stringify([project.revision, project.source.identity, request]))
+  }, request.requestId, JSON.stringify([project.revision, audioEditSourceRevisionKey(project.source), request]))
 }

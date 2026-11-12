@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import type { AudioEditGainRegion } from '../../../../src/core/audioEdit/regions'
 import { AudioEditSpliceRenderer } from '../../../../src/core/audioEdit/spliceCrossfade'
 import type { AudioEditTimelineSpan } from '../../../../src/core/audioEdit/types'
@@ -15,11 +16,42 @@ export type AudioEditPcmJob =
   /** output 是上一版编辑后声音的副本：只把 ranges 内的帧改写成 input × 增益层，其余帧原样保留。 */
   | { kind: 'gains-patch'; input: string; output: string; layers: AudioEditGainRegion[][]; ranges: Array<[number, number]> }
   | { kind: 'splices'; input: string; output: string; spans: AudioEditTimelineSpan[]; durationFrames: number; layers?: AudioEditGainRegion[][] }
+  /** 补录拼接：按顺序把几段浮点 WAV 的帧原样接成一个文件（样本字节不变，不经过任何计算），顺带算出整个文件的 SHA-256。 */
+  | { kind: 'concat'; output: string; sampleRate: number; channels: number; pieces: Array<{ input: string; startFrame: number; frames: number }> }
 
 /** 每块秒数：块越大轮次越少；增益与拼接都逐采样计算，分块大小不影响结果。 */
 const BLOCK_SECONDS = 8
 
-export async function runAudioEditPcmJob(job: AudioEditPcmJob, onProgress?: (value: number) => void): Promise<void> {
+/** 拼接写出的结果：digest 是写出文件全部字节的 SHA-256（与事后整文件哈希相同）。 */
+export interface AudioEditConcatResult { digest: string }
+
+async function concatF32Wavs(job: Extract<AudioEditPcmJob, { kind: 'concat' }>, onProgress?: (value: number) => void): Promise<AudioEditConcatResult> {
+  const total = job.pieces.reduce((sum, piece) => sum + piece.frames, 0)
+  const block = job.sampleRate * BLOCK_SECONDS
+  const buffer = new Float32Array(block * job.channels)
+  const hash = createHash('sha256')
+  const writer = await createF32WavWriter(job.output, job.sampleRate, job.channels, total, hash)
+  let written = 0
+  try {
+    for (const piece of job.pieces) {
+      const reader = await openF32Wav(piece.input)
+      try {
+        if (!reader || reader.sampleRate !== job.sampleRate || reader.channels !== job.channels || piece.startFrame + piece.frames > reader.frames) throw new Error('拼接的声音与作品规格不一致')
+        for (let offset = 0; offset < piece.frames; offset += block) {
+          const count = Math.min(block, piece.frames - offset)
+          await writer.write(await reader.read(piece.startFrame + offset, count, count === block ? buffer : undefined))
+          written += count
+          onProgress?.(written / Math.max(1, total))
+        }
+      } finally { await reader?.close() }
+    }
+  } finally { await writer.close() }
+  return { digest: hash.digest('hex') }
+}
+
+/** 拼接写出返回整文件摘要，其余处理没有返回值。 */
+export async function runAudioEditPcmJob(job: AudioEditPcmJob, onProgress?: (value: number) => void): Promise<AudioEditConcatResult | void> {
+  if (job.kind === 'concat') return concatF32Wavs(job, onProgress)
   const reader = await openF32Wav(job.input)
   if (!reader) throw new Error('声音处理只接受 32 位浮点 WAV。')
   const { sampleRate, channels } = reader

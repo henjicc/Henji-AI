@@ -19,7 +19,7 @@ export class SpeechEnergyService {
     const options = speechEnergyOptionsSchema.parse(raw)
     const content = await identifyMediaContent(source.sourcePath)
     const audio = source.audioPath === source.sourcePath ? content : await identifyMediaContent(source.audioPath)
-    const key = createHash('sha256').update(JSON.stringify(['speech-energy-v1', content.identity, audio.identity, source.identity?.digest, source.audioStreamIndex, source.ownership, options])).digest('hex')
+    const key = createHash('sha256').update(JSON.stringify(['speech-energy-v1', content.identity, audio.identity, source.identity?.digest ?? source.fingerprint?.digest, source.audioStreamIndex, source.ownership, options])).digest('hex')
     const assertContentCurrent = async (verificationSignal: AbortSignal, canonical = false): Promise<void> => {
       verificationSignal.throwIfAborted()
       if ((await identifyMediaContent(canonical ? content.path : source.sourcePath)).identity !== content.identity || (await identifyMediaContent(canonical ? audio.path : source.audioPath)).identity !== audio.identity) throw new Error('检测期间原素材已改变，请重新分析。')

@@ -10,7 +10,9 @@ import { createMainLogger } from '../logging'
 import { removeUnmanagedCachePath } from '../media-recycle/cache-deletion'
 import { loadFfmpegPath } from '../video/ffmpeg-loader'
 import { audioFileStamp, recordAudioLineage, writeAudioCacheRecord } from '../audio/lineage'
-import { audioEditCacheDirectory, identifyAudioEditSource, prepareAudioEditAudio, validateAudioEditAudio, verifyAudioEditSource } from './media'
+import { audioEditCacheDirectory, prepareAudioEditAudio, validateAudioEditAudio, verifyAudioEditSource } from './media'
+import { audioEditSourceContentKey } from './source-identity'
+import { findAudioEditSourceSplices } from './source-splices'
 import { listAudioEditProcessors, processAudioEditVstChain, audioEditProcessorCacheIdentity } from './processors'
 import {
   runAudioRepair, runAudioMouthDeclick, mixAudioEditProcessed, audioRepairMaskDimensions, encodeAudioRepairMask, audioEditMouthDeclickRanges,
@@ -26,7 +28,7 @@ import { openF32Wav } from './pcm-wav'
 import { runAudioEditEffectsWorker } from './effects-worker-client'
 import { AUDIO_IDENTITY_PHASES, audioEffectsIdentity } from '../../../../src/core/audio/effects/audioIdentity'
 import {
-  audioEditFrameCount, audioEditGainLayer, audioEditGainRecipes, audioEditSoundDescriptionSchema, diffAudioEditSound,
+  audioEditFrameCount, audioEditGainLayer, audioEditGainRecipes, audioEditSoundDescriptionSchema, diffAudioEditSound, mapAudioEditFramesThroughSplice, mapAudioEditSoundThroughSplice,
   type AudioEditFrameRange, type AudioEditSoundDescription, type AudioEditSoundDiff, type AudioEditSoundOp,
 } from './sound-diff'
 
@@ -70,13 +72,20 @@ interface AudioEditRenderPlan {
  * → 末尾连续的呼吸处理 → 区间音量。末尾两类只做成增益层；效果链末尾的实时效果与输出不在这里（试听边播边算，导出用同一份代码离线处理）。
  * beforeItemId：只处理到这一项之前、且不加区间音量（检测口水音等分析要听的是这一项之前的声音）。
  */
+/** 一版声音的来源身份（素材内容、声音流、采样率、声道、帧数）：编辑后声音的比较与补录拼接记录共用。 */
+export async function audioEditSoundSourceKey(project: AudioEditProjectDocument, signal?: AbortSignal): Promise<string> {
+  const { sampleRate, channels, durationFrames } = project.source
+  return audioRenderKey(['sound-source-v1', await audioEditSourceContentKey(project.source, signal), project.source.audioStreamIndex ?? 0, sampleRate, channels, durationFrames])
+}
+
 async function buildAudioEditRenderPlan(project: AudioEditProjectDocument, signal?: AbortSignal, options: { beforeItemId?: string } = {}): Promise<AudioEditRenderPlan> {
   audioEditProjectSchema.parse(project)
-  await verifyAudioEditSource(project, false, signal)
-  const identity = project.source.identity ?? await identifyAudioEditSource(project.source.sourcePath, signal)
+  await verifyAudioEditSource(project, signal, 'quick')
   const directory = audioEditCacheDirectory(project.id)
   const { sampleRate, channels, durationFrames } = project.source
-  let keys = AUDIO_IDENTITY_PHASES.map(() => audioRenderKey(['audio-render-v1', identity.digest, sampleRate, channels, project.source.audioStreamIndex]))
+  // 带整文件摘要的作品（格式 8 之前导入）内容键就是那个摘要：已有修复与效果缓存继续命中。
+  const contentKey = await audioEditSourceContentKey(project.source, signal)
+  let keys = AUDIO_IDENTITY_PHASES.map(() => audioRenderKey(['audio-render-v1', contentKey, sampleRate, channels, project.source.audioStreamIndex]))
   let input = await prepareAudioEditAudio(project, signal)
   const ops: AudioEditSoundOp[] = []
   const stage = async (recipe: unknown, prefix: string, produce: (source: string, output: string) => Promise<void>): Promise<void> => {
@@ -170,7 +179,7 @@ async function buildAudioEditRenderPlan(project: AudioEditProjectDocument, signa
     ops.push({ key: 'gains', kind: 'gain', regions: audioEditGainRecipes(gains) })
     layers.push(gains)
   }
-  const sound: AudioEditSoundDescription = { source: audioRenderKey(['sound-source-v1', identity.digest, project.source.audioStreamIndex ?? 0, sampleRate, channels, durationFrames]), frames: durationFrames, ops }
+  const sound: AudioEditSoundDescription = { source: await audioEditSoundSourceKey(project, signal), frames: durationFrames, ops }
   return { base: layers.length ? await audioEditF32Source(project, input, signal) : input, layers, sound }
 }
 
@@ -244,8 +253,8 @@ async function previousEdited(project: AudioEditProjectDocument, directory: stri
     const file = path.join(directory, record.name)
     if (await audioFileStamp(file) === record.stamp) return { path: file, sound: record.sound }
   }
-  const original = await prepareAudioEditAudio(project, signal)
-  return path.dirname(original) === directory ? { path: original, sound: { source, frames: project.source.durationFrames, ops: [] } } : undefined
+  // 原素材的浮点副本可能在作品缓存里，也可能是录音目录里的自管素材本身；来历记录不限同一目录。
+  return { path: await prepareAudioEditAudio(project, signal), sound: { source, frames: project.source.durationFrames, ops: [] } }
 }
 
 async function rememberEdited(project: AudioEditProjectDocument, directory: string, file: string, sound: AudioEditSoundDescription): Promise<void> {
@@ -261,28 +270,60 @@ async function rememberEdited(project: AudioEditProjectDocument, directory: stri
   await writeAudioCacheRecord(path.join(directory, EDITED_RECORD), record)
 }
 
-/** 与上一版比哪些帧变了；没有上一版或记录不合法时整段。 */
-function diffFromPrevious(previous: { sound: AudioEditSoundDescription } | { invalid: string } | undefined, sound: AudioEditSoundDescription): AudioEditSoundDiff {
-  if (!previous) return { all: '没有可沿用的上一版编辑后声音' }
-  if ('invalid' in previous) return { all: previous.invalid }
-  try { return diffAudioEditSound(previous.sound, sound) } catch { return { all: '上一版编辑后声音的记录读不懂' } }
+/**
+ * 与上一版比哪些帧变了；没有上一版或记录不合法时整段。上一版是按换素材（补录拼接）之前的素材算的时，
+ * 沿拼接记录把它的操作序列映射到新坐标再比较。shiftFrom：从这一帧起两版同位置的帧不对应（拼接平移了后段），
+ * 之后的帧只能重算；没有平移时为 undefined，上一版可以按位置原样沿用。
+ */
+async function diffFromPrevious(directory: string, previous: { sound: AudioEditSoundDescription } | { invalid: string } | undefined, sound: AudioEditSoundDescription): Promise<{ diff: AudioEditSoundDiff; shiftFrom?: number }> {
+  if (!previous) return { diff: { all: '没有可沿用的上一版编辑后声音' } }
+  if ('invalid' in previous) return { diff: { all: previous.invalid } }
+  let before = previous.sound
+  let seed: AudioEditFrameRange[] = []
+  let shiftFrom: number | undefined
+  if (before.source !== sound.source) {
+    const chain = await findAudioEditSourceSplices(directory, before.source, sound.source)
+    if (!chain) return { diff: { all: '素材或声音规格不同' } }
+    for (const splice of chain) {
+      const delta = splice.inserted - (splice.end - splice.start)
+      const frames = before.frames + delta
+      const mapped = mapAudioEditSoundThroughSplice(before, splice, { source: splice.to, frames })
+      seed = [...mapAudioEditFramesThroughSplice(seed, splice), ...mapped.dirty]
+      if (shiftFrom !== undefined) shiftFrom = shiftFrom <= splice.start ? shiftFrom : shiftFrom >= splice.end ? shiftFrom + delta : splice.start
+      if (delta !== 0) shiftFrom = Math.min(shiftFrom ?? splice.start, splice.start)
+      before = mapped.sound
+    }
+  }
+  try { return { diff: diffAudioEditSound(before, sound, seed), ...(shiftFrom !== undefined ? { shiftFrom } : {}) } } catch { return { diff: { all: '上一版编辑后声音的记录读不懂' } } }
 }
 
-interface EditedBuild { mode: 'incremental' | 'full'; recomputedFrames: number; parent?: string; dirty?: AudioEditFrameRange[]; reason?: string }
+interface EditedBuild { mode: 'incremental' | 'full'; recomputedFrames: number; parent?: string; parentFrames?: number; dirty?: AudioEditFrameRange[]; reason?: string }
+
+/** 平移过的后段与上一版同位置的帧不对应：派生物只能沿用 shiftFrom 之前的部分。 */
+function lineageDirty(ranges: readonly AudioEditFrameRange[], shiftFrom: number | undefined, frames: number): AudioEditFrameRange[] {
+  if (shiftFrom === undefined) return [...ranges]
+  return [...ranges.flatMap(([start, end]) => start < shiftFrom ? [[start, Math.min(end, shiftFrom)] as AudioEditFrameRange] : []), [shiftFrom, frames]]
+}
 
 /** 增益层落成文件：能与上一版比出改动的帧时复制上一版、只改写这些帧；否则整段乘一遍。 */
 async function renderGainLayerFile(project: AudioEditProjectDocument, plan: AudioEditRenderPlan, directory: string, output: string, signal?: AbortSignal): Promise<EditedBuild> {
   const frames = project.source.durationFrames
   const previous = await previousEdited(project, directory, plan.sound.source, signal)
-  const diff = diffFromPrevious(previous, plan.sound)
+  const { diff, shiftFrom } = await diffFromPrevious(directory, previous, plan.sound)
   let reason = 'all' in diff ? diff.all : undefined
   if (previous && 'path' in previous && 'ranges' in diff) {
     const recomputedFrames = audioEditFrameCount(diff.ranges)
     const reader = await openF32Wav(previous.path).catch(() => null)
     const compatible = reader?.sampleRate === project.source.sampleRate && reader.channels === project.source.channels
+    const previousFrames = reader?.frames
     await reader?.close()
+    // 补录拼接平移了后段：整段乘一遍（读写量与复制上一版相同），来历仍记“拼接点之前与上一版相同”，波形、频谱照样派生。
+    if (compatible && shiftFrom !== undefined) {
+      await runAudioEditEffectsWorker({ kind: 'gains', input: plan.base, output, layers: plan.layers }, signal)
+      return { mode: 'full', recomputedFrames: frames, parent: previous.path, parentFrames: previousFrames, dirty: lineageDirty(diff.ranges, shiftFrom, frames), reason: '素材补录拼接后长度变了' }
+    }
     if (recomputedFrames > frames / 2) reason = '改动超过一半，整段乘更快'
-    else if (!compatible) reason = '上一版不是同规格的浮点声音'
+    else if (!compatible || previousFrames !== frames) reason = '上一版不是同规格的浮点声音'
     else {
       try {
         await fs.copyFile(previous.path, output)
@@ -302,7 +343,7 @@ async function materializeAudioEditPlan(project: AudioEditProjectDocument, plan:
   const directory = audioEditCacheDirectory(project.id)
   const { sampleRate, channels, durationFrames } = project.source
   const started = performance.now()
-  const lineageOf = (build: EditedBuild): { file: string; dirty: AudioEditFrameRange[] } | undefined => build.parent && build.dirty ? { file: build.parent, dirty: build.dirty } : undefined
+  const lineageOf = (build: EditedBuild): { file: string; dirty: AudioEditFrameRange[]; frames?: number } | undefined => build.parent && build.dirty ? { file: build.parent, dirty: build.dirty, ...(build.parentFrames !== undefined ? { frames: build.parentFrames } : {}) } : undefined
   let output = plan.base
   let built: EditedBuild | undefined
   if (plan.layers.length) {
@@ -318,8 +359,11 @@ async function materializeAudioEditPlan(project: AudioEditProjectDocument, plan:
     // 没有增益层时编辑后声音就是底声文件：同样记下它与上一版差在哪，波形、频谱据此只重算改动的部分。
     const previous = await previousEdited(project, directory, plan.sound.source, signal)
     if (!(previous && 'path' in previous && previous.path === output)) {
-      const diff = diffFromPrevious(previous, plan.sound)
-      built = previous && 'path' in previous && 'ranges' in diff ? { mode: 'incremental', recomputedFrames: 0, parent: previous.path, dirty: diff.ranges } : { mode: 'full', recomputedFrames: 0, ...('all' in diff ? { reason: diff.all } : {}) }
+      const { diff, shiftFrom } = await diffFromPrevious(directory, previous, plan.sound)
+      const previousFrames = previous && 'path' in previous && shiftFrom !== undefined ? (await openF32Wav(previous.path).then(async reader => { await reader?.close(); return reader?.frames }).catch(() => undefined)) : undefined
+      built = previous && 'path' in previous && 'ranges' in diff && (shiftFrom === undefined || previousFrames !== undefined)
+        ? { mode: 'incremental', recomputedFrames: 0, parent: previous.path, dirty: lineageDirty(diff.ranges, shiftFrom, durationFrames), ...(previousFrames !== undefined ? { parentFrames: previousFrames } : {}) }
+        : { mode: 'full', recomputedFrames: 0, ...('all' in diff ? { reason: diff.all } : {}) }
       // 底声文件早已存在：在把它交给调用方（波形、频谱随后来取）之前写好来历。
       await recordAudioLineage(output, durationFrames, lineageOf(built))
     }
@@ -352,7 +396,7 @@ export async function renderAudioEditProject(project: AudioEditProjectDocument, 
     }, signal)
     // 效果链末尾的实时效果与输出作用在剪好的整条声音上（与试听一致）。
     const audioPath = await applyAudioEditRealtimeEffects(project, spliced, signal)
-    await verifyAudioEditSource(project, false, signal)
+    await verifyAudioEditSource(project, signal, 'quick')
     logger.info('音频渲染完成', { event: 'audio_edit.render.completed', context: { projectId: project.id, elapsedMs: performance.now() - started, sourceFrames: project.source.durationFrames, durationFrames, sampleRate: project.source.sampleRate, channels: project.source.channels, gainLayers: plan.layers.length } })
     return { audioPath, durationFrames, sampleRate: project.source.sampleRate, channels: project.source.channels, revision: project.revision }
   } catch (error) { logger.error('音频渲染失败', { event: 'audio_edit.render.failed', error, context: { projectId: project.id, elapsedMs: performance.now() - started, sourceFrames: project.source.durationFrames } }); throw error }

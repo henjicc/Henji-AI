@@ -23,6 +23,7 @@ import { transcriptionPreflightSchema } from '../../../src/core/audioEdit/transc
 import { exportAudioEditProject } from '../services/audio-edit/export'
 import { listAudioEditProcessors } from '../services/audio-edit/processors'
 import { prepareAudioEditPreviewChunk } from '../services/audio-edit/preview'
+import { audioEditSourceRevisionKey } from '../../../src/core/audioEdit/sourceRevision'
 import type {
   AudioEditExportRequest,
   AudioEditPreviewChunkRequest,
@@ -106,7 +107,7 @@ export function registerAudioIpc(): void {
       await verifyAudioEditSource(project)
       await prepareAudioEditRenderSource(project, signal)
       progress(1)
-    }, requestId, JSON.stringify([project.source.identity, project.effectChain ?? []]))
+    }, requestId, JSON.stringify([audioEditSourceRevisionKey(project.source), project.effectChain ?? []]))
   })
   registerIpcHandler('audioEdit:asr:transcribe', parseTranscription, transcribeAudioEditProject)
   registerIpcHandler('audioEdit:export', parseExport, exportAudioEditProject)

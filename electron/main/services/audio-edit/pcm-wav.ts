@@ -1,3 +1,4 @@
+import type { Hash } from 'node:crypto'
 import fs from 'node:fs/promises'
 
 /*
@@ -112,8 +113,11 @@ export async function openF32Wav(path: string): Promise<F32WavReader | null> {
   } catch (error) { await handle.close().catch(() => undefined); throw error }
 }
 
-/** 写 32 位浮点 WAV：帧数事先已知，头部一次写对；数据超过 4 GB 时写 RF64。 */
-export async function createF32WavWriter(path: string, sampleRate: number, channels: number, frames: number): Promise<{ write(pcm: Float32Array): Promise<void>; close(): Promise<void> }> {
+/**
+ * 写 32 位浮点 WAV：帧数事先已知，头部一次写对；数据超过 4 GB 时写 RF64。
+ * 传入 hash 时按文件字节顺序把头与数据都喂给它，写完即得整个文件的摘要，不必再读一遍。
+ */
+export async function createF32WavWriter(path: string, sampleRate: number, channels: number, frames: number, hash?: Hash): Promise<{ write(pcm: Float32Array): Promise<void>; close(): Promise<void> }> {
   const dataSize = frames * channels * 4
   const rf64 = dataSize + 80 > 0xffffffff
   const header = Buffer.alloc(rf64 ? 80 : 44)
@@ -135,10 +139,11 @@ export async function createF32WavWriter(path: string, sampleRate: number, chann
   ascii('data'); u32(rf64 ? 0xffffffff : dataSize)
   const handle = await fs.open(path, 'w')
   let position = 0
-  try { await handle.write(header, 0, header.length, 0); position = header.length } catch (error) { await handle.close(); throw error }
+  try { await handle.write(header, 0, header.length, 0); position = header.length; hash?.update(header) } catch (error) { await handle.close(); throw error }
   return {
     async write(pcm) {
       const bytes = Buffer.from(pcm.buffer, pcm.byteOffset, pcm.byteLength)
+      hash?.update(bytes)
       await handle.write(bytes, 0, bytes.length, position)
       position += bytes.length
     },

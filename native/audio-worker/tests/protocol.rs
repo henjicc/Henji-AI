@@ -86,6 +86,7 @@ fn persistent_protocol_streams_progress_cancels_and_accepts_next_request() {
     }
     // 能力表报出派生命令与第 9 层组；认不出的命令带原 ID 立刻回错误
     assert_eq!(done["ping"]["result"]["capabilities"]["spectralDerive"]["groupLevel"], 9);
+    assert_eq!(done["ping"]["result"]["capabilities"]["spectralDerive"]["lengthChange"], true);
     assert_eq!(done["future"]["ok"], false);
     assert_eq!(
         std::fs::metadata(dir.path().join("tile.rg")).unwrap().len(),

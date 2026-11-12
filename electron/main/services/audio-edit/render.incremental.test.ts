@@ -5,12 +5,13 @@ import path from 'node:path'
 import type { AudioEditProjectDocument } from '../../../../src/core/audioEdit/types'
 import type { AudioEditGainRegion } from '../../../../src/core/audioEdit/regions'
 
-const state = vi.hoisted(() => ({ dir: '', jobs: [] as Array<{ kind: string; frames: number }>, info: vi.fn() }))
+const state = vi.hoisted(() => ({ dir: '', sourceFile: undefined as string | undefined, jobs: [] as Array<{ kind: string; frames: number }>, info: vi.fn() }))
 // 整段 PCM 处理在效果工作线程里跑；测试里同进程执行同一份实现，并记下每次派活实际读写了多少帧
 vi.mock('./effects-worker-client', async () => {
   const { runAudioEditPcmJob } = await import('./pcm-jobs')
   const { openF32Wav } = await import('./pcm-wav')
   return { runAudioEditEffectsWorker: async (job: import('./pcm-jobs').AudioEditPcmJob) => {
+    if (job.kind === 'concat') return runAudioEditPcmJob(job)
     const reader = (await openF32Wav(job.input))!
     const frames = job.kind === 'gains-patch' ? job.ranges.reduce((sum, [start, end]) => sum + end - start, 0) : reader.frames
     await reader.close()
@@ -20,7 +21,7 @@ vi.mock('./effects-worker-client', async () => {
 })
 vi.mock('../logging', () => ({ createMainLogger: () => ({ info: state.info, warn: vi.fn(), error: vi.fn(), debug: vi.fn() }) }))
 vi.mock('../audio-separation/runtime', () => ({ separateAudioFile: vi.fn() }))
-vi.mock('./media', () => ({ audioEditCacheDirectory: () => state.dir, verifyAudioEditSource: vi.fn(), prepareAudioEditAudio: async () => path.join(state.dir, 'source.wav'), validateAudioEditAudio: vi.fn() }))
+vi.mock('./media', () => ({ audioEditCacheDirectory: () => state.dir, verifyAudioEditSource: vi.fn(), prepareAudioEditAudio: async () => state.sourceFile ?? path.join(state.dir, 'source.wav'), validateAudioEditAudio: vi.fn() }))
 // 修复的替身：与原生修复同样“复制整条、只改写选区”（选区内减半），用来验证上下游的增量机制。
 vi.mock('./dsp-adapter', async () => {
   const actual = await vi.importActual<typeof import('./dsp-adapter')>('./dsp-adapter')
@@ -36,7 +37,10 @@ vi.mock('./dsp-adapter', async () => {
 vi.mock('./processors', () => ({ listAudioEditProcessors: async () => [] }))
 vi.mock('../video/ffmpeg-loader', () => ({ loadFfmpegPath: async () => 'ffmpeg' }))
 
-import { prepareAudioEditRenderSource, renderAudioEditProject, resetAudioEditRenderForTests } from './render'
+import { audioEditSoundSourceKey, prepareAudioEditRenderSource, renderAudioEditProject, resetAudioEditRenderForTests } from './render'
+import { digestWholeAudioEditSource } from './source-identity'
+import { recordAudioEditSourceSplice } from './source-splices'
+import { spliceAudioEditProject } from '../../../../src/core/audioEdit/splice'
 import { createF32WavWriter, openF32Wav } from './pcm-wav'
 import { runAudioEditPcmJob } from './pcm-jobs'
 import { audioEditGainLayer } from './sound-diff'
@@ -89,7 +93,7 @@ const sourceSamples = (): Float32Array => Float32Array.from({ length: FRAMES }, 
 const editedEvents = (): Array<Record<string, unknown>> => state.info.mock.calls.filter(call => call[1]?.event === 'audio_edit.render.edited.completed').map(call => call[1].context)
 
 beforeEach(async () => {
-  state.dir = await fs.mkdtemp(path.join(os.tmpdir(), 'audio-incremental-')); state.jobs = []; state.info.mockReset()
+  state.dir = await fs.mkdtemp(path.join(os.tmpdir(), 'audio-incremental-')); state.sourceFile = undefined; state.jobs = []; state.info.mockReset()
   resetAudioEditRenderForTests(); resetAudioLineageForTests()
   const writer = await createF32WavWriter(source(), RATE, 1, FRAMES)
   await writer.write(sourceSamples())
@@ -183,4 +187,41 @@ it('导出：拼接时乘末尾的呼吸处理与区间音量，与原来“先�
   await expectSameBytes(rendered.audioPath, old)
   const reader = (await openF32Wav(rendered.audioPath))!
   expect(reader.frames).toBe(editedDurationFrames(spans)); await reader.close()
+})
+
+it('素材补录拼接后：编辑后声音沿拼接记录与上一版比较；长度变了整段乘、来历记“拼接点之前与上一版相同”，等长替换只改写录音段', async () => {
+  const first = await prepareAudioEditRenderSource(project)
+  const writeSource = async (file: string, samples: Float32Array): Promise<AudioEditProjectDocument['source']> => {
+    const writer = await createF32WavWriter(file, RATE, 1, samples.length)
+    await writer.write(samples); await writer.close()
+    return { mediaType: 'audio', sourcePath: file, audioPath: file, ownership: 'managed', durationFrames: samples.length, sampleRate: RATE, channels: 1, identity: await digestWholeAudioEditSource(file) }
+  }
+  const take = (frames: number): Float32Array => Float32Array.from({ length: frames }, (_, i) => Math.cos(i / 13) * 0.3)
+  const splice = async (current: AudioEditProjectDocument, file: string, start: number, end: number, inserted: Float32Array): Promise<AudioEditProjectDocument> => {
+    const old = (await openF32Wav(state.sourceFile ?? source()))!
+    const before = await old.read(0, old.frames); await old.close()
+    const samples = new Float32Array(before.length - (end - start) + inserted.length)
+    samples.set(before.subarray(0, start)); samples.set(inserted, start); samples.set(before.subarray(end), start + inserted.length)
+    const next = await writeSource(file, samples)
+    await recordAudioEditSourceSplice(state.dir, { from: await audioEditSoundSourceKey(current), to: await audioEditSoundSourceKey({ ...current, source: next }), start, end, inserted: inserted.length })
+    state.sourceFile = file
+    return { ...spliceAudioEditProject(current, next, start, end, inserted.length), revision: current.revision + 1 }
+  }
+  // 中间插入 3 秒，录音带一处响度匹配增益：拼接点之后平移
+  const start = 50 * RATE, inserted = take(3 * RATE)
+  let next = await splice(project, path.join(state.dir, 'spliced.wav'), start, start, inserted)
+  next = { ...next, gainRegions: [...next.gainRegions!, region('take', start, start + inserted.length, 4)] }
+  state.jobs = []
+  const second = await prepareAudioEditRenderSource(next)
+  expect(state.jobs).toEqual([{ kind: 'gains', frames: FRAMES + inserted.length }])
+  await expectSameBytes(second, await wholeGains(state.sourceFile!, [audioEditGainLayer(next.gainRegions!)]))
+  expect(JSON.parse(await fs.readFile(`${second}.lineage.json`, 'utf8')).parent).toMatchObject({ name: path.basename(first), frames: FRAMES, dirty: [[start, FRAMES + inserted.length]] })
+  // 再等长替换 2 秒：后段原位相同，复制上一版、只改写这 2 秒
+  const replaced = 80 * RATE, length = 2 * RATE
+  const third = await splice(next, path.join(state.dir, 'replaced.wav'), replaced, replaced + length, take(length).map(value => value * 0.5))
+  state.jobs = []
+  const rendered = await prepareAudioEditRenderSource(third)
+  expect(state.jobs).toEqual([{ kind: 'gains-patch', frames: length }])
+  await expectSameBytes(rendered, await wholeGains(state.sourceFile!, [audioEditGainLayer(third.gainRegions!)]))
+  expect(JSON.parse(await fs.readFile(`${rendered}.lineage.json`, 'utf8')).parent).toMatchObject({ name: path.basename(second), dirty: [[replaced, replaced + length]] })
 })

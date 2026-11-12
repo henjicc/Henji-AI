@@ -12,11 +12,13 @@ const transcriptSchema = z.array(z.object({ id: z.string().min(1), text: z.strin
 const suggestionsSchema = z.array(z.object({ id: z.string().min(1), kind: z.enum(['long_silence', 'filler', 'retake']), evidence: z.literal('audio').optional(), title: z.string(), detail: z.string(), startFrame: frame, endFrame: frame, blockIds: z.array(z.string()), confidence: z.enum(['high', 'medium', 'low']), status: z.enum(['pending', 'applied', 'dismissed']) }).strict())
 export const audioEditProjectSchema = z.object({
   id: z.string().regex(/^[\w-]+$/), name: z.string().trim().min(1).max(200),
-  source: z.object({ mediaType: z.enum(['audio', 'video']), sourcePath: z.string().min(1), audioPath: z.string().min(1), durationFrames: frame, sampleRate: z.number().int().positive().max(768000), channels: z.number().int().min(1).max(32),
+  // source 保留不认识的字段（更新版本加的可选字段原样带回去），以后给素材加可选信息不必再提最低可读版本。
+  source: z.looseObject({ mediaType: z.enum(['audio', 'video']), sourcePath: z.string().min(1), audioPath: z.string().min(1), durationFrames: frame, sampleRate: z.number().int().positive().max(768000), channels: z.number().int().min(1).max(32),
     ownership: z.enum(['external', 'managed']).optional(), identity: z.object({ size: frame, mtimeMs: z.number().finite(), digest: z.string().regex(/^[a-f\d]{64}$/) }).strict().optional(),
+    fingerprint: z.object({ size: frame, mtimeMs: z.number().finite(), digest: z.string().regex(/^[a-f\d]{64}$/) }).strict().optional(),
     audioStreamIndex: frame.optional(), audioStartSeconds: z.number().finite().optional(),
     video: z.object({ frameRate: audioEditFrameRateSchema, width: frame, height: frame, startSeconds: z.number().finite(), durationSeconds: z.number().positive(), variableFrameRate: z.boolean() }).strict().optional(),
-  }).strict(),
+  }),
   referenceScript: z.string().max(200000), transcript: transcriptSchema,
   suggestions: suggestionsSchema,
   editBaseline: z.object({ kind: z.enum(['original', 'legacy']), transcript: transcriptSchema, suggestions: suggestionsSchema }).strict().optional(),

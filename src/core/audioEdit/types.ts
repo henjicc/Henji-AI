@@ -6,7 +6,13 @@ export interface AudioEditRange { startFrame: number; endFrame: number }
 export interface AudioEditCut extends AudioEditRange { id: string; reason: 'silence' | 'manual'; enabled: boolean; mode?: 'delete' | 'mute' }
 export interface AudioEditViewSettings { textSize: number; sidePadding: number; timelineCaptions: boolean }
 export interface AudioEditFrameRate { numerator: number; denominator: number }
+/** 整文件 SHA-256 的素材身份：格式 8 之前导入的作品带它；之后导入、拼接、重新定位的素材写 AudioEditSourceFingerprint。 */
 export interface AudioEditSourceIdentity { size: number; mtimeMs: number; digest: string }
+/**
+ * 素材指纹：大小、修改时间与采样摘要（henji-audio-fingerprint-v1：16 MiB 以内整文件，更大的文件取头尾与均匀分布的定长块）。
+ * 校验先比大小与修改时间，不同才重算摘要比对；读量与文件大小无关。
+ */
+export interface AudioEditSourceFingerprint { size: number; mtimeMs: number; digest: string }
 export interface AudioEditBatchSettings {
   silenceThresholdMs: number
   retainedSilenceMs: number
@@ -72,6 +78,7 @@ export interface AudioEditSourceMetadata {
   channels: number
   ownership?: 'external' | 'managed'
   identity?: AudioEditSourceIdentity
+  fingerprint?: AudioEditSourceFingerprint
   audioStreamIndex?: number
   audioStartSeconds?: number
   video?: AudioEditVideoMetadata

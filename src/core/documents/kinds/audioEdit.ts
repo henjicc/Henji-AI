@@ -76,12 +76,18 @@ export const audioEditDocumentKind: DocumentKindDescriptor<AudioEditDocumentCont
   // 版本 5（2026-10-26 效果控件重构）= 效果组、基本声音、口水音修复、VST3 插件链合成一条有序效果链（effectChain），
   // 音量与自动匹配响度移到 output；去掉了旧程序必填的 vstEnabled，所以旧程序不能再读（minReaderVersion 5，用户已确认）。
   // 版本 6 = 去除口水音新增可选的 skipped（用户关掉、不处理的位置），只加可选字段，最低可读版本不变。
-  version: 7,
-  minReaderVersion: 7,
+  // 版本 8 = source 新增可选的采样指纹 fingerprint（外部素材导入、重新定位时写）；应用写出的拼接结果写整文件 SHA-256 的 identity。
+  // 最低可读版本提到 8：版本 7 及以前的程序按严格结构解析 source，遇到 fingerprint 会解析失败而不是忽略。
+  // 后果：被版本 8 的程序打开并保存过的 .hjaud，旧版程序打不开（提示“请升级”，不会当成损坏）。发生在 2.0 正式版之前。
+  // 同一版本起 source 保留不认识的字段（宽松结构），以后再给 source 加可选字段只升版本、不再提高最低可读版本。
+  version: 8,
+  minReaderVersion: 8,
   contentSchema: audioEditContentSchema,
   migrations: {
     // 6 → 7：音频效果合并、均衡方式拆分并保留声音身份别名；旧程序无法理解新效果，最低可读版本同步提高。
-    6: content => migrateAudioEqualizerModes(migrateAudioMergedEffects(content)), 1: (content) => structuredClone(content), 2: (content) => structuredClone(content), 3: (content) => structuredClone(content), 4: (content) => migrateAudioEditEffectsToChain(content as Record<string, unknown>) as AudioEditDocumentContent, 5: (content) => structuredClone(content) },
+    6: content => migrateAudioEqualizerModes(migrateAudioMergedEffects(content)), 1: (content) => structuredClone(content), 2: (content) => structuredClone(content), 3: (content) => structuredClone(content), 4: (content) => migrateAudioEditEffectsToChain(content as Record<string, unknown>) as AudioEditDocumentContent, 5: (content) => structuredClone(content),
+    // 7 → 8：只新增可选的 source.fingerprint；旧素材的 identity 原样保留，派生缓存键照旧计算。
+    7: (content) => structuredClone(content) },
   createEmptyContent: () => ({ source: null, referenceScript: '', transcript: [], suggestions: [] }),
   isEmptyContent: isEmptyAudioEditContent,
   summarize: (content) => ({

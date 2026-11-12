@@ -31,6 +31,7 @@ import { useAudioEditSpectral } from './useAudioEditSpectral'
 import { audioEditSpectralClient, getAudioEditEditedSource } from '../application/audioEditRegions'
 import { audioEditScrub } from '../preview/audioEditScrub'
 import { spliceAudioRanges } from '@/core/audioEdit/splice'
+import { audioEditSourceRevisionKey } from '@/core/audioEdit/sourceRevision'
 
 const TOOLS: Array<{ id: AudioEditorTool; label: string; icon: React.ReactNode }> = [
   { id: 'time', label: '时间选区 · V', icon: <TextCursor /> },
@@ -201,7 +202,7 @@ export function AudioWaveWorkspace() {
   const audioContentKey = soundKey
   const audioRevision = React.useRef({ key: audioContentKey, revision: project.revision })
   if (audioRevision.current.key !== audioContentKey) audioRevision.current = { key: audioContentKey, revision: project.revision }
-  const spectrogram = useAudioEditSpectral(audioEditSpectralClient, project.id, spectralView, columns, duration, edited ? 'edited' : 'source', audioRevision.current.revision, JSON.stringify([project.source.audioPath, project.source.identity]), soundKey)
+  const spectrogram = useAudioEditSpectral(audioEditSpectralClient, project.id, spectralView, columns, duration, edited ? 'edited' : 'source', audioRevision.current.revision, JSON.stringify([project.source.audioPath, audioEditSourceRevisionKey(project.source)]), soundKey)
   // 标记以剪后时间线为准：文字稿删掉的词和波形上删除的区间都是“删除”，相邻的合并成一段；静音按剪后片段的静音标记；停顿预览是“待处理”。
   const spans = React.useMemo(() => buildProjectAudioEditTimeline(project), [project])
   const pending = workspace.silencePreview.ranges

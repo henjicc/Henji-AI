@@ -495,6 +495,51 @@ fn derived_pyramid_matches_full_build_byte_for_byte() {
     assert!(derive(DeriveRequest { input_path: after, parent_directory: parent, output_directory: dir.path().join("refused"), dirty: dirty.to_vec() }, &AtomicBool::new(false), || {}).is_err());
 }
 
+/// 补录拼接：新声音 = 上一版 [0, start) + 新录音 + 上一版 [end, 结尾)，长度变了。从上一版目录派生（只复制拼接点之前的组）
+/// 与整段计算逐字节相同；末尾追加时重算的基础列只有末尾那一组加新录的部分。
+#[test]
+fn derived_pyramid_across_splice_matches_full_build_byte_for_byte() {
+    let dir = tempfile::tempdir().unwrap();
+    let frames = 3_070_123_usize;
+    let old = |frame: usize, channel: usize| (TAU * (330.0 + 110.0 * channel as f32) * frame as f32 / 48000.0).sin() * 0.25 * (1.0 + ((frame / 7777) % 3) as f32) / 3.0;
+    let take = |frame: usize, channel: usize| (TAU * (523.0 + 70.0 * channel as f32) * frame as f32 / 48000.0).sin() * 0.2;
+    let write = |path: &std::path::Path, length: usize, sample: &dyn Fn(usize, usize) -> f32| {
+        let mut writer = crate::dsp::audio::F32Writer::new(File::create(path).unwrap(), 2, 48000).unwrap();
+        let block: Vec<f32> = (0..length).flat_map(|frame| [0, 1].map(|channel| sample(frame, channel))).collect();
+        writer.write_samples(&block).unwrap();
+        writer.finalize().unwrap();
+    };
+    let full = |input: &std::path::Path, output: &std::path::Path| {
+        build(BuildRequest { input_path: input.to_path_buf(), output_directory: output.to_path_buf() }, &AtomicBool::new(false), || {}, |_| {}).unwrap();
+    };
+    let before = dir.path().join("before.wav");
+    write(&before, frames, &old);
+    let parent = dir.path().join("parent");
+    full(&before, &parent);
+    // 末尾追加、中间插入、替换成更短的一段
+    for (name, start, end, inserted) in [("append", frames, frames, 200_000), ("insert", 1_500_000, 1_500_000, 150_000), ("shorter", 2_000_000, 2_400_000, 100_000)] {
+        let length = frames - (end - start) + inserted;
+        let after = dir.path().join(format!("{name}.wav"));
+        write(&after, length, &|frame, channel| if frame < start { old(frame, channel) } else if frame < start + inserted { take(frame - start, channel) } else { old(frame - inserted + (end - start), channel) });
+        let whole = dir.path().join(format!("{name}-whole"));
+        full(&after, &whole);
+        let derived = dir.path().join(format!("{name}-derived"));
+        let result = derive(DeriveRequest { input_path: after, parent_directory: parent.clone(), output_directory: derived.clone(), dirty: vec![[start as u64, length as u64]] }, &AtomicBool::new(false), || {}).unwrap();
+        let mut names: Vec<_> = fs::read_dir(&whole).unwrap().map(|entry| entry.unwrap().file_name()).collect();
+        names.sort();
+        for file in &names {
+            assert!(fs::read(whole.join(file)).unwrap() == fs::read(derived.join(file)).unwrap(), "{name}: {file:?}");
+        }
+        let total = column_count(0, length as u64);
+        let first_group = ((start.min(frames) as u64).saturating_sub(4096) / 512) >> SIDECAR_LEVEL;
+        assert_eq!(result["recomputedBaseColumns"], json!(total - (first_group << SIDECAR_LEVEL)), "{name}");
+        if name == "append" {
+            // 新录的 200000 帧约 391 个基础列，加上拼接点所在那一组（至多 512 列）
+            assert!(result["recomputedBaseColumns"].as_u64().unwrap() < 391 + 512 + 1);
+        }
+    }
+}
+
 #[test]
 fn interrupted_build_resumes_from_aligned_point_with_identical_output() {
     let dir = tempfile::tempdir().unwrap();

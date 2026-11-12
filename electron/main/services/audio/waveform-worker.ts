@@ -260,48 +260,100 @@ function toPyramidFloats(level: FloatLevel): WaveformPyramidFloats {
  * 按块派生：parent 是上一版声音的金字塔、parentFloats 是它第 1 级的未量化摘要；spans 是改动所在、对齐到第 1 级桶边界的帧段，
  * 带着新声音这些帧的采样（解码只到 deliveredFrames，之后按缺帧处理）。只重算这些桶的第 0、1 级，其余从 parent 复制，
  * 第 1 级往上由摘要整体重合并——与对新声音整段生成逐字节相同（摘要也相同，可以继续往下派生）。
+ * 两版长度不同（补录拼接）时，spans 必须盖住从较短长度所在的第 1 级桶到新结尾的整段：之前的桶原样复制，之后全部重算。
  * 全段峰值变了（定点比例变了）时无法沿用 parent 的第 0 级，返回原因，由调用方整段生成。
  */
 export function deriveWaveformPyramid(parent: WaveformPyramidData, parentFloats: WaveformPyramidFloats, options: AudioWaveformPyramidOptions, spans: ReadonlyArray<{ startFrame: number; endFrame: number; values: Float32Array }>, deliveredFrames: number): { pyramid: WaveformPyramidData; floats: WaveformPyramidFloats } | { reason: string } {
-  validatePyramidOptions(options)
-  const { expectedFrames, baseSamplesPerBucket: base, levelFactor, channels, mix } = options
-  const outputs = channels + (mix ? 1 : 0)
-  const span = base * levelFactor
-  if (parent.levels.length < 2 || parent.frameCount !== expectedFrames || parent.channelCount !== outputs || parent.mixChannel !== mix || parent.levels[0].samplesPerBucket !== base
-    || parentFloats.samplesPerBucket !== span || parentFloats.bucketCount !== parent.levels[1].bucketCount || parentFloats.minima.length !== outputs) return { reason: '上一版波形的规格不同' }
-  const first: FloatLevel = { samplesPerBucket: span, minima: parentFloats.minima.map(values => values.slice()), maxima: parentFloats.maxima.map(values => values.slice()), sums: parentFloats.sums.map(values => values.slice()) }
-  const changed: Array<{ firstBucket: number; level: FloatLevel }> = []
+  const derivation = WaveformPyramidDerivation.start(parent, parentFloats, options, deliveredFrames)
+  if ('reason' in derivation) return derivation
   for (const part of spans) {
-    if (part.startFrame % span || part.endFrame <= part.startFrame || (part.endFrame % span && part.endFrame !== expectedFrames) || part.endFrame > expectedFrames) return { reason: '派生段没有对齐' }
+    const reason = derivation.add(part)
+    if (reason) return { reason }
+  }
+  return derivation.finish()
+}
+
+/**
+ * 按块派生的逐段形态：重算段可以分成多块依次交进来（每块起止对齐到第 1 级桶，最后一块可以止于结尾），
+ * 读一块算一块，内存与重算总长无关。规则与结果同 deriveWaveformPyramid。
+ */
+export class WaveformPyramidDerivation {
+  private readonly changed: Array<{ firstBucket: number; level: FloatLevel }> = []
+  private readonly covered: Array<[number, number]> = []
+  private readonly parent: WaveformPyramidData
+  private readonly options: AudioWaveformPyramidOptions
+  private readonly first: FloatLevel
+  /** 父金字塔里这一帧之前的桶原样沿用；长度不同时它之后整段都要交进来重算。 */
+  private readonly kept: number
+  private readonly deliveredFrames: number
+  // 本文件也作为 Worker 直接以 .ts 运行（只剥类型），不能用构造参数属性。
+  private constructor(parent: WaveformPyramidData, options: AudioWaveformPyramidOptions, first: FloatLevel, kept: number, deliveredFrames: number) {
+    this.parent = parent; this.options = options; this.first = first; this.kept = kept; this.deliveredFrames = deliveredFrames
+  }
+  static start(parent: WaveformPyramidData, parentFloats: WaveformPyramidFloats, options: AudioWaveformPyramidOptions, deliveredFrames: number): WaveformPyramidDerivation | { reason: string } {
+    validatePyramidOptions(options)
+    const { expectedFrames, baseSamplesPerBucket: base, levelFactor, channels, mix } = options
+    const outputs = channels + (mix ? 1 : 0)
+    const span = base * levelFactor
+    if (parent.levels.length < 2 || parent.channelCount !== outputs || parent.mixChannel !== mix || parent.levels[0].samplesPerBucket !== base
+      || parentFloats.samplesPerBucket !== span || parentFloats.bucketCount !== parent.levels[1].bucketCount || parentFloats.minima.length !== outputs) return { reason: '上一版波形的规格不同' }
+    // 整段生成在第 0 级不超过顶级桶数时不建上面各级（也不留摘要），派生不能凭空多出一级。
+    if (Math.ceil(expectedFrames / base) <= options.topBuckets) return { reason: '声音太短，没有第 1 级' }
+    const kept = parent.frameCount === expectedFrames ? expectedFrames : Math.floor(Math.min(parent.frameCount, expectedFrames) / span) * span
+    const firstCount = Math.ceil(expectedFrames / span)
+    const copy = <T extends Float32Array | Float64Array>(values: T, empty: T): T => { empty.set(values.subarray(0, Math.min(Math.ceil(kept / span), firstCount))); return empty }
+    return new WaveformPyramidDerivation(parent, options, {
+      samplesPerBucket: span,
+      minima: parentFloats.minima.map(values => copy(values, new Float32Array(firstCount).fill(Infinity))),
+      maxima: parentFloats.maxima.map(values => copy(values, new Float32Array(firstCount).fill(-Infinity))),
+      sums: parentFloats.sums.map(values => copy(values, new Float64Array(firstCount))),
+    }, kept, deliveredFrames)
+  }
+  /** 交进一块要重算的帧（带新声音这些帧的采样）；不合规时返回原因。 */
+  add(part: { startFrame: number; endFrame: number; values: Float32Array }): string | undefined {
+    const { expectedFrames, baseSamplesPerBucket: base, levelFactor, channels, mix } = this.options
+    const span = base * levelFactor
+    if (part.startFrame % span || part.endFrame <= part.startFrame || (part.endFrame % span && part.endFrame !== expectedFrames) || part.endFrame > expectedFrames) return '派生段没有对齐'
     const firstBucket = part.startFrame / base
-    const level = emptyFloatLevel(outputs, base, Math.ceil(part.endFrame / base) - firstBucket)
-    const delivered = Math.min(deliveredFrames, part.endFrame)
-    if (accumulateBase(level, firstBucket, part.values, part.startFrame, channels, mix, delivered) !== Math.max(0, delivered - part.startFrame)) return { reason: '派生段采样不足' }
-    if (delivered < part.endFrame) includeMissingTail(level, firstBucket, deliveredFrames)
+    const level = emptyFloatLevel(this.first.minima.length, base, Math.ceil(part.endFrame / base) - firstBucket)
+    const delivered = Math.min(this.deliveredFrames, part.endFrame)
+    if (accumulateBase(level, firstBucket, part.values, part.startFrame, channels, mix, delivered) !== Math.max(0, delivered - part.startFrame)) return '派生段采样不足'
+    if (delivered < part.endFrame) includeMissingTail(level, firstBucket, this.deliveredFrames)
     const above = aggregateFloatLevel(level, levelFactor, Math.ceil((part.endFrame - part.startFrame) / span))
     const at = part.startFrame / span
-    for (let output = 0; output < outputs; output++) {
-      first.minima[output].set(above.minima[output], at); first.maxima[output].set(above.maxima[output], at); first.sums[output].set(above.sums[output], at)
+    for (let output = 0; output < this.first.minima.length; output++) {
+      this.first.minima[output].set(above.minima[output], at); this.first.maxima[output].set(above.maxima[output], at); this.first.sums[output].set(above.sums[output], at)
     }
-    changed.push({ firstBucket, level })
+    this.changed.push({ firstBucket, level })
+    this.covered.push([part.startFrame, part.endFrame])
+    return undefined
   }
-  const peakMax = peakOf(first)
-  const amplitudeScale = Math.max(1, peakMax)
-  if (amplitudeScale !== parent.amplitudeScale) return { reason: '全段峰值超过满幅且变了，定点比例不同' }
-  const baseLevel = parent.levels[0]
-  const patched: WaveformPyramidLevel = { ...baseLevel, min: baseLevel.min.map(values => values.slice()), max: baseLevel.max.map(values => values.slice()), rms: baseLevel.rms.map(values => values.slice()) }
-  const { rangeOf, rmsOf } = quantizer(amplitudeScale, expectedFrames)
-  for (const { firstBucket, level } of changed) for (let output = 0; output < outputs; output++) for (let local = 0; local < level.minima[output].length; local++) {
-    const bucket = firstBucket + local
-    patched.min[output][bucket] = rangeOf(level.minima[output][local])
-    patched.max[output][bucket] = rangeOf(level.maxima[output][local])
-    patched.rms[output][bucket] = rmsOf(level.sums[output][local], base, bucket, baseLevel.bucketCount)
-  }
-  const above = levelsAbove(first, options, amplitudeScale)
-  if (above.levels.length !== parent.levels.length - 1) return { reason: '上一版波形的级数不同' }
-  return {
-    pyramid: { ...parent, peakMax, amplitudeScale, levels: [patched, ...above.levels] },
-    floats: toPyramidFloats(first),
+  finish(): { pyramid: WaveformPyramidData; floats: WaveformPyramidFloats } | { reason: string } {
+    const { expectedFrames, baseSamplesPerBucket: base } = this.options
+    let reach = this.kept
+    for (const [start, end] of [...this.covered].sort((a, b) => a[0] - b[0])) if (start <= reach) reach = Math.max(reach, end)
+    if (reach < expectedFrames) return { reason: '长度变了但派生段没有盖住尾部' }
+    const peakMax = peakOf(this.first)
+    const amplitudeScale = Math.max(1, peakMax)
+    if (amplitudeScale !== this.parent.amplitudeScale) return { reason: '全段峰值超过满幅且变了，定点比例不同' }
+    const baseLevel = this.parent.levels[0]
+    const bucketCount = Math.ceil(expectedFrames / base)
+    const keptBuckets = Math.min(Math.ceil(this.kept / base), bucketCount)
+    const copy = <T extends Int16Array | Uint16Array>(values: T, empty: T): T => { empty.set(values.subarray(0, keptBuckets)); return empty }
+    const patched: WaveformPyramidLevel = { samplesPerBucket: base, bucketCount,
+      min: baseLevel.min.map(values => copy(values, new Int16Array(bucketCount))), max: baseLevel.max.map(values => copy(values, new Int16Array(bucketCount))), rms: baseLevel.rms.map(values => copy(values, new Uint16Array(bucketCount))) }
+    const { rangeOf, rmsOf } = quantizer(amplitudeScale, expectedFrames)
+    for (const { firstBucket, level } of this.changed) for (let output = 0; output < level.minima.length; output++) for (let local = 0; local < level.minima[output].length; local++) {
+      const bucket = firstBucket + local
+      patched.min[output][bucket] = rangeOf(level.minima[output][local])
+      patched.max[output][bucket] = rangeOf(level.maxima[output][local])
+      patched.rms[output][bucket] = rmsOf(level.sums[output][local], base, bucket, bucketCount)
+    }
+    const above = levelsAbove(this.first, this.options, amplitudeScale)
+    return {
+      pyramid: { ...this.parent, frameCount: expectedFrames, startSeconds: this.options.startSeconds, endSeconds: this.options.endSeconds, peakMax, amplitudeScale, levels: [patched, ...above.levels] },
+      floats: toPyramidFloats(this.first),
+    }
   }
 }
 

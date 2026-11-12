@@ -10,7 +10,8 @@ vi.mock('./effects-worker-client', async () => {
   return { runAudioEditEffectsWorker: async (job: import('./pcm-jobs').AudioEditPcmJob) => { state.pcmJobs.push(job.kind); await runAudioEditPcmJob(job) } }
 })
 vi.mock('../audio-separation/runtime', () => ({ separateAudioFile: vi.fn() }))
-vi.mock('./media', () => ({ audioEditCacheDirectory: () => state.dir, verifyAudioEditSource: vi.fn(), prepareAudioEditAudio: async () => path.join(state.dir, 'source.wav'), identifyAudioEditSource: async () => ({ digest: 'a' }), validateAudioEditAudio: vi.fn() }))
+vi.mock('./media', () => ({ audioEditCacheDirectory: () => state.dir, verifyAudioEditSource: vi.fn(), prepareAudioEditAudio: async () => path.join(state.dir, 'source.wav'), validateAudioEditAudio: vi.fn() }))
+vi.mock('./source-identity', () => ({ audioEditSourceContentKey: async () => 'a' }))
 vi.mock('./dsp-adapter', async () => ({ ...await vi.importActual<typeof import('./dsp-adapter')>('./dsp-adapter'), runAudioRepair: async (_input: string, output: string) => { state.calls.push('repair'); await fs.writeFile(output, 'repaired') } }))
 vi.mock('./processors', () => ({ listAudioEditProcessors: async () => [{ id: 'rx', available: true }], audioEditProcessorCacheIdentity: async () => 'v1', processAudioEditVstChain: async (input: string, dir: string) => { state.calls.push('processor'); expect(path.basename(input)).toMatch(/^repair-/); const outputPath = path.join(dir, 'vst.wav'); await fs.writeFile(outputPath, 'processed'); return { outputPath, temporaryPaths: [outputPath] } } }))
 vi.mock('../video/ffmpeg-loader', () => ({ loadFfmpegPath: async () => 'ffmpeg' }))

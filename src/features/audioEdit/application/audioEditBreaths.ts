@@ -1,5 +1,6 @@
 import type { AudioBreath } from '@/core/audioAnalysis/breath/respiro'
 import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
+import { audioEditSourceRevisionKey } from '@/core/audioEdit/sourceRevision'
 import { getPlatform } from '@/platform/runtime'
 
 /*
@@ -8,7 +9,7 @@ import { getPlatform } from '@/platform/runtime'
  */
 const cache = new Map<string, Promise<AudioBreath[]>>()
 
-const keyOf = (document: AudioEditProjectDocument): string => `${document.id}\u0000${document.source.identity?.digest ?? document.source.sourcePath}\u0000${document.source.durationFrames}`
+const keyOf = (document: AudioEditProjectDocument): string => `${document.id}\u0000${audioEditSourceRevisionKey(document.source)}\u0000${document.source.durationFrames}`
 
 export function loadAudioEditBreaths(document: AudioEditProjectDocument): Promise<AudioBreath[]> {
   const key = keyOf(document)
