@@ -131,10 +131,11 @@ export class DocumentSessionRegistry {
     const pending = this.opening.get(target.id)
     if (pending) return await pending
     const operation = (async () => {
+      const startedAt = performance.now()
       const read = options.persistence?.read
         ? await options.persistence.read(target, 'open')
         : await this.commands.readDocument(target)
-      return this.adopt(read, options)
+      return this.register(read, options, Math.round(performance.now() - startedAt))
     })()
     this.opening.set(target.id, operation)
     try {
@@ -305,6 +306,10 @@ export class DocumentSessionRegistry {
    * 已有同 ID 的会话时返回原会话。
    */
   adopt(read: DocumentReadResult, options: OpenDocumentOptions = {}): DocumentSession {
+    return this.register(read, options)
+  }
+
+  private register(read: DocumentReadResult, options: OpenDocumentOptions, readDurationMs?: number): DocumentSession {
     const existing = this.sessions.get(read.meta.id)
     if (existing) return existing
     const kind = this.kinds.require(read.meta.kind)
@@ -324,7 +329,7 @@ export class DocumentSessionRegistry {
     this.sessions.set(session.id, session)
     this.logger.info('打开文档', {
       event: 'documents.session.open.completed',
-      context: { docId: session.id, kind: kind.id, draft: read.meta.draft, missing: read.missingPaths.length, unresolved: read.unresolved.length },
+      context: { docId: session.id, kind: kind.id, draft: read.meta.draft, missing: read.missingPaths.length, unresolved: read.unresolved.length, ...(readDurationMs === undefined ? {} : { durationMs: readDurationMs }) },
     })
     // 任何入口（项目页、助手、启动恢复、打开文件、文档链接）打开或新建文档都经这里：统一记最近打开时间。
     // 只是列表排序用的索引元数据，失败不影响打开。

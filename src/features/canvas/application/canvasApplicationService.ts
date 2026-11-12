@@ -91,6 +91,7 @@ export async function openCanvasProject(
   path?: string,
 ): Promise<Record<string, unknown>> {
   logger.info('画布打开开始', { event: 'canvas.document.open.start', projectId })
+  const startedAt = performance.now()
   throwIfAborted(signal)
   let opened: boolean
   try {
@@ -109,7 +110,9 @@ export async function openCanvasProject(
   if (!project || project.id !== projectId) {
     throw new CanvasApplicationError('PROJECT_NOT_FOUND', '画布无法打开', true, { projectId })
   }
-  logger.info('画布打开完成', { event: 'canvas.document.open.completed', projectId })
+  logger.info('画布打开完成', { event: 'canvas.document.open.completed', projectId, context: {
+    nodeCount: project.nodes.length, edgeCount: project.edges.length, durationMs: Math.round(performance.now() - startedAt),
+  } })
   return { projectId }
 }
 

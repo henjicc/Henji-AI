@@ -283,6 +283,7 @@ function createCanvasPersistence(): { persistence: DocumentPersistence; bind(ins
 }
 
 async function openBound(target: DocumentTarget): Promise<CanvasProjectInstance> {
+  const startedAt = performance.now()
   let session: DocumentSession
   const persistence = createCanvasPersistence()
   try {
@@ -305,6 +306,10 @@ async function openBound(target: DocumentTarget): Promise<CanvasProjectInstance>
       const remap = (snapshots: typeof state.history.past) => snapshots.map((snapshot) => ({ ...snapshot, nodes: rewriteCanvasLayerReferences(snapshot.nodes, prepared.rewrites) }))
       instance.store.setState({ nodes: prepared.nodes, history: { past: remap(state.history.past), future: remap(state.history.future) } })
     }
+    const loaded = instance.store.getState()
+    logger.info('画布内容已载入', { event: 'canvas.document.bind.completed', context: {
+      docId: target.id, nodeCount: loaded.nodes.length, edgeCount: loaded.edges.length, durationMs: Math.round(performance.now() - startedAt),
+    } })
     return instance
   } catch (error) {
     // 内容读不懂（文件被手工改坏）：不留一个没有实例附着的会话

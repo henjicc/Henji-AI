@@ -125,3 +125,12 @@ it('stat尚未完成即取消，不创建解码或写入会话', async () => {
   expect(mock.video).not.toHaveBeenCalled()
   expect(mock.mkdir).not.toHaveBeenCalled()
 })
+
+it('画布按 henji-media 地址取图片缩略图：解码成真实路径，落进程序缩略图目录', async () => {
+  const { ensureLocalImageThumbnail } = await import('./thumbnailService')
+  mock.image.mockResolvedValue(Buffer.from('thumbnail'))
+  const target = await ensureLocalImageThumbnail(`henji-media://local/${encodeURIComponent('D:/画布/原图.png')}`)
+  expect(mock.stat).toHaveBeenCalledWith('D:/画布/原图.png')
+  expect(mock.image).toHaveBeenCalledWith('D:/画布/原图.png', 320)
+  expect(target).toMatch(/^D:[\\/]test-profile[\\/]Thumbnails[\\/][0-9a-f]+\.webp$/)
+})

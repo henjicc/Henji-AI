@@ -23,6 +23,7 @@ import { importLocalMedia, inferLocalMediaKind } from '@/services/localMediaImpo
 import { UiIconButton, UiInput } from '@/components/ui';
 import { canvasViewStore, useCanvasStore } from '@/stores/canvasStore';
 import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
+import { isLocalVideoSource, useVideoInputThumbnail } from './useVideoInputThumbnail';
 import { VideoViewerModal } from '@/components/mediaViewer/VideoViewerModal';
 import { VideoTrimModal, type VideoTrimRange } from '@/components/videoTrim/VideoTrimModal';
 import { useReorderDrag } from '@/components/ui/fileUploader/useReorderDrag';
@@ -464,7 +465,7 @@ function MediaKindItems({ source, upstream, isConnected, localPreviewMapRef, onD
           }
         >
           {mediaKind === 'video' ? (
-            // 视频与图片一样给缩略图：有首帧 poster 用 poster，没有就让浏览器取第一帧，不再只写“视频 1”
+            // 视频与图片一样给缩略图：有首帧 poster 用 poster，没有就取主进程缓存的首帧图
             <span
               className="relative block h-7 w-7 cursor-pointer"
               aria-label={t('node.mediaRow.itemLabel', { kind: t('node.mediaRow.video'), index: index + 1 })}
@@ -475,7 +476,7 @@ function MediaKindItems({ source, upstream, isConnected, localPreviewMapRef, onD
             >
               {previewUrlByUrl.get(url)
                 ? <CanvasNodeImage src={resolveImageDisplayUrl(previewUrlByUrl.get(url)!)} alt="" disableViewer failure="icon" className="h-7 w-7 rounded-md border border-line object-cover" draggable={false} />
-                : <video src={`${resolveImageDisplayUrl(url)}#t=0.1`} preload="metadata" muted playsInline className="h-7 w-7 rounded-md border border-line bg-media object-cover" />}
+                : <VideoInputThumbnail url={url} />}
               <Video aria-hidden className={`pointer-events-none absolute bottom-0.5 left-0.5 ${UI_ICON_SIZE_CLASS.xs} text-on-media`} />
               {!isConnected && videoTrimMaxClipSeconds && (
                 <UiIconButton size="2xs" tone="media" shape="circle"
@@ -586,4 +587,14 @@ function MediaKindItems({ source, upstream, isConnected, localPreviewMapRef, onD
       )}
     </div>
   );
+}
+
+function VideoInputThumbnail({ url }: { url: string }) {
+  const thumbnail = useVideoInputThumbnail(url);
+  if (!isLocalVideoSource(url)) {
+    return <video src={`${resolveImageDisplayUrl(url)}#t=0.1`} preload="metadata" muted playsInline className="h-7 w-7 rounded-md border border-line bg-media object-cover" />;
+  }
+  return thumbnail
+    ? <CanvasNodeImage src={thumbnail} alt="" disableViewer failure="icon" className="h-7 w-7 rounded-md border border-line object-cover" draggable={false} />
+    : <span className="block h-7 w-7 rounded-md border border-line bg-media" />;
 }

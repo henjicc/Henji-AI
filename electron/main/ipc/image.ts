@@ -24,6 +24,7 @@ import {
   splitImageSource,
 } from '../services/image/ops'
 import { composeLayerStack } from '../services/image/layer-stack'
+import { ensureLocalImageThumbnail } from '../services/asset-library/thumbnailService'
 import {
   composeLocalRedraw,
   prepareLocalRedraw,
@@ -187,7 +188,8 @@ export function registerImageIpc(): void {
       maxDimension: payload.maxDimension,
     })
   })
-  registerIpcHandler<ThumbnailBytesPayload, { bytes: Uint8Array }>('image:generateThumbnailBytes', parseThumbnailBytesPayload, async ({ source, maxSize }) => {
+  registerIpcHandler<ThumbnailBytesPayload, { bytes: Uint8Array; cachePath?: string }>('image:generateThumbnailBytes', parseThumbnailBytesPayload, async ({ source, maxSize, cache }) => {
+    if (cache) return { bytes: new Uint8Array(), cachePath: await ensureLocalImageThumbnail(source) }
     const bytes = await generateImageThumbnailBytes(source, maxSize)
     return { bytes }
   })
@@ -427,6 +429,8 @@ function parseCompressImageSourcePayload(input: unknown): CompressImageSourcePay
 interface ThumbnailBytesPayload {
   source: string
   maxSize?: number
+  /** 落进程序缩略图目录并只返回缓存路径，不经 IPC 搬运字节。 */
+  cache?: boolean
 }
 
 function parseThumbnailBytesPayload(input: unknown): ThumbnailBytesPayload {
@@ -434,6 +438,7 @@ function parseThumbnailBytesPayload(input: unknown): ThumbnailBytesPayload {
   return {
     source: readString(record, 'source'),
     maxSize: readOptionalNumber(record, 'maxSize'),
+    cache: record.cache === true,
   }
 }
 

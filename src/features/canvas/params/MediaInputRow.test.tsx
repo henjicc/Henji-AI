@@ -18,6 +18,12 @@ vi.mock('@/services/localMediaImport', async (importOriginal) => ({
   importLocalMedia: vi.fn(async (file: File, kind: string) => ({ kind, fullPath: `D:/media/${file.name}` })),
 }))
 
+const platform = vi.hoisted(() => ({ videoThumbnail: vi.fn(async () => ({ path: 'T:/thumbs/clip.webp' })) }))
+vi.mock('@/platform', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/platform')>()
+  return { ...actual, getPlatform: () => ({ video: { getCachedThumbnail: platform.videoThumbnail } }) }
+})
+
 import { MediaInputsRow } from './MediaInputRow'
 
 afterEach(cleanup)
@@ -49,5 +55,35 @@ describe('参考素材行', () => {
       image: ['D:/media/old.png', 'D:/media/a.png'],
       video: ['D:/media/b.mp4'],
     })
+  })
+
+  it('视频缩略图用主进程缓存的首帧图，不挂常驻 video 解码器', async () => {
+    const view = render(
+      <MediaInputsRow
+        nodeId="node"
+        label="参考素材"
+        handleKinds={['video']}
+        onSourcesChange={vi.fn()}
+        sources={[{ kind: 'video', maxCount: 2, inlineValue: ['D:/media/clip.mp4'], onInlineChange: vi.fn() }]}
+      />,
+    )
+    await waitFor(() => expect(view.container.querySelector('img')?.getAttribute('src')).toContain('clip.webp'))
+    expect(platform.videoThumbnail).toHaveBeenCalledWith('D:/media/clip.mp4', expect.any(AbortSignal))
+    expect(view.container.querySelector('video')).toBeNull()
+  })
+
+  it('远程视频主进程无法抽帧，仍显示浏览器取的首帧', () => {
+    platform.videoThumbnail.mockClear()
+    const view = render(
+      <MediaInputsRow
+        nodeId="node"
+        label="参考素材"
+        handleKinds={['video']}
+        onSourcesChange={vi.fn()}
+        sources={[{ kind: 'video', maxCount: 2, inlineValue: ['https://example.com/clip.mp4'], onInlineChange: vi.fn() }]}
+      />,
+    )
+    expect(view.container.querySelector('video')?.getAttribute('src')).toBe('https://example.com/clip.mp4#t=0.1')
+    expect(platform.videoThumbnail).not.toHaveBeenCalled()
   })
 })

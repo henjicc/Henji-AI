@@ -1,29 +1,20 @@
 import { createLogger } from '@/core/logging';
-
-import { blobToDataUrl, loadImageElement } from './imageData';
+import { getPlatform } from '@/platform';
+import { isLikelyLocalImagePath, resolveImageDisplayUrl } from '@/services/imageSource';
 
 const logger = createLogger('features.canvas.application.microThumbnail');
 
 /**
- * 微缩略图最长边。取值依据：媒体节点常见宽度 ~320px，低倍率阈值 ≤0.6，
- * 屏显尺寸 ≤ 320 × 0.6 ≈ 192 CSS px，2x DPR 下 ≈ 384 设备像素；
- * 256 在"平衡"阈值（0.4 → 256 设备像素）下逐像素对齐，视觉无损。
+ * 解码与重编码由主进程在线程池里做，结果按文件身份落进程序缩略图目录（与素材库共用），
+ * 重启和换画布都直接命中；渲染层只拿 henji-media 地址。
+ * 主进程每个任务都把原图整张读进内存再解码，同时进行的任务固定为少量，不随核数放大；
+ * 排队也让离开视口的节点能撤掉还没开始的任务。
  */
-const MICRO_THUMB_MAX_DIMENSION = 256;
-/** 源图最长边不超过该值时不再降采样（重编码得不偿失），直接复用源地址 */
-const MICRO_THUMB_SKIP_DIMENSION = Math.round(MICRO_THUMB_MAX_DIMENSION * 1.25);
-/** 同时生成的微缩略图数量上限，避免跨越阈值时上百个节点同时解码造成主线程风暴 */
-const MAX_CONCURRENT_GENERATIONS = 2;
+const MAX_CONCURRENT_GENERATIONS = 4;
 
-/**
- * 用可独立持有的 data URL 缓存同一份 WebP 编码，避免永久注册 blob URL。
- * 淘汰只释放缓存引用；节点及预解码切换仍可持有旧地址，不会因淘汰变成空白。
- * 项数与字符串字节估算双重限额，防止长会话、失败源或长 data URL 持续累积。
- */
+/** 只存显示地址（短字符串），按项数淘汰最久未用的。 */
 const microThumbCache = new Map<string, string>();
 const MAX_CACHE_ENTRIES = 1024;
-const MAX_CACHE_STRING_BYTES = 32 * 1024 * 1024;
-let cachedStringBytes = 0;
 export interface MicroThumbnailRequest {
   promise: Promise<string>;
   release(): void;
@@ -40,15 +31,11 @@ interface GenerationTask {
 const pendingGenerations = new Map<string, GenerationTask>();
 
 function cacheThumbnail(src: string, url: string): void {
-  const bytes = (src.length + url.length) * 2;
-  if (bytes > MAX_CACHE_STRING_BYTES) return;
   microThumbCache.set(src, url);
-  cachedStringBytes += bytes;
-  while (microThumbCache.size > MAX_CACHE_ENTRIES || cachedStringBytes > MAX_CACHE_STRING_BYTES) {
-    const oldest = microThumbCache.entries().next().value;
-    if (!oldest) break;
-    microThumbCache.delete(oldest[0]);
-    cachedStringBytes -= (oldest[0].length + oldest[1].length) * 2;
+  while (microThumbCache.size > MAX_CACHE_ENTRIES) {
+    const oldest = microThumbCache.keys().next().value;
+    if (oldest === undefined) break;
+    microThumbCache.delete(oldest);
   }
 }
 
@@ -56,33 +43,15 @@ let activeGenerations = 0;
 // 按加入顺序调度，取消排队任务为 O(1)，避免切换大画布时逐项扫描队列。
 const generationWaiters = new Set<GenerationTask>();
 
+function isLocalMediaSource(src: string): boolean {
+  return /^(?:henji-media|file):\/\//i.test(src) || isLikelyLocalImagePath(src);
+}
+
 async function generateMicroThumbnail(src: string): Promise<string> {
-  const image = await loadImageElement(src);
-  const longestSide = Math.max(image.naturalWidth, image.naturalHeight);
-  if (!longestSide || longestSide <= MICRO_THUMB_SKIP_DIMENSION) {
-    return src;
-  }
-
-  const scale = MICRO_THUMB_MAX_DIMENSION / longestSide;
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
-  canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
-  const context = canvas.getContext('2d');
-  if (!context) {
-    return src;
-  }
-  context.imageSmoothingEnabled = true;
-  context.imageSmoothingQuality = 'high';
-  context.drawImage(image, 0, 0, canvas.width, canvas.height);
-
-  // webp 保留透明通道；跨域被污染的 canvas 会在 toBlob 抛错，走 catch 回退源图
-  const blob = await new Promise<Blob | null>((resolve) => {
-    canvas.toBlob(resolve, 'image/webp', 0.8);
-  });
-  if (!blob) {
-    return src;
-  }
-  return blobToDataUrl(blob);
+  // 远程、data、blob 地址没有可落盘的文件身份，直接用源图。
+  if (!isLocalMediaSource(src)) return src;
+  const { path } = await getPlatform().image.getCachedThumbnail(src);
+  return resolveImageDisplayUrl(path);
 }
 
 /** 命中缓存时同步返回微缩略图地址，未生成过返回 null（不触发生成） */
@@ -100,8 +69,8 @@ async function runGeneration(task: GenerationTask): Promise<void> {
     cacheThumbnail(task.src, result);
     task.resolve(result);
   } catch (error) {
+    // 失败不进缓存：本次先显示源图，下次进入视口再试。
     logger.debug('[microThumbnail] 生成失败，回退源图', { src: task.src, error: String(error) });
-    cacheThumbnail(task.src, task.src);
     task.resolve(task.src);
   } finally {
     pendingGenerations.delete(task.src);

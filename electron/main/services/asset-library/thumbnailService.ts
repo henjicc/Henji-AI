@@ -4,6 +4,8 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { getProgramStoreDir } from '../appPaths'
 import { generateImageThumbnailBytes } from '../image/ops'
+import { normalizeLocalSource } from '../image/source'
+import { IMAGE_EDITOR_V3_MEDIA_HOST, resolveImageEditorV3ResourceMediaUrl } from '../image-editor-v3/resource-media-url'
 import { generateVideoThumbnailBytes } from '../video/ops'
 import type { AssetMediaType } from './types'
 
@@ -81,6 +83,18 @@ export async function ensureAssetThumbnail(filePath: string, mediaType: AssetMed
       if (thumbnailJobs.get(target) === owned) thumbnailJobs.delete(target)
     }
   }
+}
+
+/** 按本机路径或 henji-media 地址（含图片编辑资源库地址）取图片缩略图；与素材库共用同一份磁盘缓存，文件变了才重做。 */
+export async function ensureLocalImageThumbnail(source: string, signal?: AbortSignal): Promise<string> {
+  const trimmed = source.trim()
+  const filePath = trimmed.startsWith(`henji-media://${IMAGE_EDITOR_V3_MEDIA_HOST}/`)
+    ? resolveImageEditorV3ResourceMediaUrl(new URL(trimmed)).targetPath
+    : normalizeLocalSource(trimmed)
+  const { mtimeMs } = await fs.stat(filePath)
+  const cachePath = await ensureAssetThumbnail(filePath, 'image', mtimeMs, signal)
+  if (!cachePath) throw new Error('未能生成图片缩略图。')
+  return cachePath
 }
 
 async function writeThumbnail(filePath: string, mediaType: AssetMediaType, target: string, identity: ThumbnailIdentity, signal: AbortSignal): Promise<string> {

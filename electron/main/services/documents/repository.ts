@@ -203,6 +203,7 @@ export class DocumentRepository {
   }
 
   async read(target: DocumentTarget): Promise<DocumentReadResult> {
+    const startedAt = performance.now()
     let repeated = false
     const onFailure = (_error: unknown, cached: boolean): void => { repeated = cached }
     try {
@@ -215,7 +216,10 @@ export class DocumentRepository {
       this.warnProgramReferences('read', file, decoded.report)
       this.logger.debug('文档已读取', {
         event: 'documents.read.completed',
-        context: { documentId: file.header.id, kind: file.kind.id, missing: references.missingPaths.length, unresolved: decoded.report.unresolved.length },
+        context: {
+          documentId: file.header.id, kind: file.kind.id, missing: references.missingPaths.length, unresolved: decoded.report.unresolved.length,
+          bytes: located.stat.size, durationMs: Math.round(performance.now() - startedAt),
+        },
       })
       return {
         meta: metaFromFile(file, container),
@@ -291,6 +295,7 @@ export class DocumentRepository {
   /** 保存内容：核对版本、换算位置、原子替换；内容与磁盘一致时不写文件。 */
   async save(request: SaveDocumentRequest): Promise<DocumentSaveResult> {
     return await this.exclusive(request.target.id, async () => {
+      const startedAt = performance.now()
       const context: Record<string, unknown> = { documentId: request.target.id, expectedRevision: request.expectedRevision, force: request.force === true }
       try {
         const file = await this.locate(request.target)
@@ -325,7 +330,7 @@ export class DocumentRepository {
         const saved = await describeWrittenDocument(file.kind, file.path, envelope)
         this.workspace.catalog.upsertDocument(indexedFromFile(saved, container, file.kind.summarize(content)))
         this.warnProgramReferences('save', saved, encoded.report)
-        this.logger.debug('文档已保存', { event: 'documents.save.completed', context: { ...context, revision: envelope.revision } })
+        this.logger.debug('文档已保存', { event: 'documents.save.completed', context: { ...context, revision: envelope.revision, bytes: saved.stat.size, durationMs: Math.round(performance.now() - startedAt) } })
         return { meta: metaFromFile(saved, container), unchanged: false }
       } catch (error) {
         this.logFailure('save', context, error)
@@ -1094,9 +1099,10 @@ export class DocumentRepository {
 
   private async logged<T>(action: string, context: Record<string, unknown>, operation: () => Promise<T>): Promise<T> {
     this.logger.info('开始处理文档', { event: `documents.${action}.start`, context })
+    const startedAt = performance.now()
     try {
       const result = await operation()
-      this.logger.info('文档处理完成', { event: `documents.${action}.completed`, context })
+      this.logger.info('文档处理完成', { event: `documents.${action}.completed`, context: { ...context, durationMs: Math.round(performance.now() - startedAt) } })
       return result
     } catch (error) {
       this.logFailure(action, context, error)

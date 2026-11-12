@@ -39,6 +39,11 @@ export function createElectronImage(): ImagePlatform {
     savePanoramaImageSourceToDirectory: (source, targetDir, suggestedFileName) => getNativeImage().savePanoramaImageSourceToDirectory(source, targetDir, suggestedFileName),
     saveImageSourceToAppDebugDir: (source, category, suggestedFileName) => getNativeImage().saveImageSourceToAppDebugDir(source, category, suggestedFileName),
     readImageInfo: (source) => getNativeImage().readImageInfo(source),
+    getCachedThumbnail: async (source) => {
+      const { cachePath } = await getNativeImage().generateThumbnailBytes({ source, cache: true })
+      if (!cachePath) throw new Error('图片缩略图未返回缓存位置。')
+      return { path: cachePath }
+    },
     probeDiffusionFallback: () => getNativeImage().probeDiffusionFallback(),
     renderDiffusionFallback: (request) => getNativeImage().renderDiffusionFallback(request),
     composeLayerStack: (payload) => getNativeImage().composeLayerStack(payload),
