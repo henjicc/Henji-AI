@@ -211,13 +211,59 @@ export function cleanAudioEditFillers(project: AudioEditProjectDocument, words: 
   return ids.length ? setAudioEditBlocks(project, ids, false) : project
 }
 
+/**
+ * 锁定内容不被编辑改动。每次编辑都要跑：编辑是不可变更新，剪切与词块数组没换引用就跳过，
+ * 换了也只检查换掉的剪切（同一引用的剪切内容没变），一小时口播上千条剪切不再逐条两两比较。
+ */
 export function assertAudioEditLocks(previous: AudioEditProjectDocument, next: AudioEditProjectDocument): void {
-  for (const cut of next.cuts ?? []) {
-    const before = previous.cuts?.find((item) => item.id === cut.id)
-    if (cut.enabled && JSON.stringify(before) !== JSON.stringify(cut) && previous.transcript.some((block) => block.locked && block.startFrame < cut.endFrame && block.endFrame > cut.startFrame)) throw new Error('裁切不能覆盖锁定内容。')
+  const locked = previous.transcript.filter((item) => item.locked)
+  if (!locked.length) return
+  if (next.cuts !== previous.cuts) {
+    const before = new Set(previous.cuts ?? [])
+    const byId = new Map((previous.cuts ?? []).map((item) => [item.id, item]))
+    for (const cut of next.cuts ?? []) {
+      if (!cut.enabled || before.has(cut)) continue
+      const old = byId.get(cut.id)
+      if (old && old.startFrame === cut.startFrame && old.endFrame === cut.endFrame && old.enabled === cut.enabled && old.mode === cut.mode && old.reason === cut.reason) continue
+      if (locked.some((block) => block.startFrame < cut.endFrame && block.endFrame > cut.startFrame)) throw new Error('裁切不能覆盖锁定内容。')
+    }
   }
-  for (const block of previous.transcript.filter((item) => item.locked)) {
-    const changed = next.transcript.find((item) => item.id === block.id)
+  if (next.transcript === previous.transcript) return
+  const current = new Map(next.transcript.map((item) => [item.id, item]))
+  for (const block of locked) {
+    const changed = current.get(block.id)
+    if (changed === block) continue
     if (!changed || changed.text !== block.text || changed.included !== block.included || changed.startFrame !== block.startFrame || changed.endFrame !== block.endFrame || changed.captionBreakAfter !== block.captionBreakAfter) throw new Error('锁定内容不能修改，请先解锁。')
   }
+}
+
+/** 一处剪切可单独改的部分：起止采样帧、开关与处理方式。 */
+export type AudioEditCutPatch = Partial<Pick<AudioEditCut, 'startFrame' | 'endFrame' | 'enabled' | 'mode'>>
+
+/**
+ * 只改一处剪切（按 id），其余剪切保持原引用。助手逐条修改与界面逐条修改都走这里：
+ * 两人同时改不同的剪切，各自只换掉自己那一条，不会拿旧的整组覆盖对方。
+ */
+export function updateAudioEditCut(project: AudioEditProjectDocument, id: string, patch: AudioEditCutPatch): AudioEditProjectDocument {
+  const cuts = project.cuts ?? []
+  const index = cuts.findIndex((cut) => cut.id === id)
+  if (index < 0) throw new Error(`没有这处剪切：${id}`)
+  const next = cuts.slice()
+  next[index] = { ...cuts[index], ...patch }
+  return { ...project, cuts: next }
+}
+
+/** 新加一处手动剪切；省略 mode 时删除。返回新作品与这处剪切的 id。 */
+export function addAudioEditCut(project: AudioEditProjectDocument, range: AudioEditRange, options: { mode?: 'delete' | 'mute'; enabled?: boolean } = {}): { project: AudioEditProjectDocument; id: string } {
+  const id = crypto.randomUUID()
+  const cut: AudioEditCut = { id, startFrame: range.startFrame, endFrame: range.endFrame, reason: 'manual', enabled: options.enabled ?? true, ...(options.mode ? { mode: options.mode } : {}) }
+  return { project: { ...project, cuts: [...(project.cuts ?? []), cut] }, id }
+}
+
+/** 去掉这几处剪切（按 id）；没有的 id 报错，不静默忽略。 */
+export function removeAudioEditCuts(project: AudioEditProjectDocument, ids: readonly string[]): AudioEditProjectDocument {
+  const wanted = new Set(ids)
+  const cuts = project.cuts ?? []
+  for (const id of wanted) if (!cuts.some((cut) => cut.id === id)) throw new Error(`没有这处剪切：${id}`)
+  return { ...project, cuts: cuts.filter((cut) => !wanted.has(cut.id)) }
 }

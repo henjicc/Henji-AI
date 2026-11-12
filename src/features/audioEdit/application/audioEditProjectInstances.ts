@@ -8,6 +8,8 @@ import {
   createAudioEditDocumentContent,
 } from '@/core/audioEdit/documentContent'
 import { audioEditProjectSchema } from '@/core/audioEdit/schema'
+import { createIncrementalSchemaParser } from '@/core/incrementalSchemaParse'
+import { jsonEqual } from '@/core/jsonEqual'
 import type { AudioEditProjectDocument, AudioEditSourceMetadata } from '@/core/audioEdit/types'
 import { assertApplicationWritesAllowed } from '@/core/applicationLifecycle/applicationWriteBarrier'
 import { ApplicationPersistenceFailure, type ApplicationPersistenceParticipant, type ApplicationPersistenceResolver } from '@/core/application-control/execution/persistence'
@@ -68,6 +70,14 @@ interface InstanceRecord {
 }
 
 const logger = createLogger('features.audioEdit.documentInstances')
+/**
+ * 一小时口播上万个词块、上千条剪切，每改一个词整份校验要几十毫秒。编辑都是不可变更新，作品发布前经它校验并冻结：
+ * 没换引用的词块、剪切直接沿用上次的校验结果，结果仍与整份校验相同（做法见 createIncrementalSchemaParser）。
+ */
+const projectParser = createIncrementalSchemaParser<AudioEditProjectDocument>(audioEditProjectSchema)
+function parseProject(value: AudioEditProjectDocument, base?: AudioEditProjectDocument): AudioEditProjectDocument {
+  return projectParser.parse(value, base, error => logger.warn('口播增量校验意外退回整份校验', { event: 'audio_edit.document.validation_fallback', error: toError(error) }))
+}
 let catalogRevision = 0
 export function getAudioEditRevision(): number { return catalogRevision }
 const participants = new Map<string, ApplicationPersistenceParticipant>()
@@ -151,7 +161,8 @@ function bindAudioEditSession(session: DocumentSession): AudioEditProjectInstanc
   const meta = session.documentMeta
   const { project, extras } = audioEditProjectFromDocument(meta, session.getContent(), true)
   const instance: AudioEditProjectInstance = {
-    document: project, past: [], future: [], dirty: session.dirty, error: null, version: 0,
+    // 打开时登记一次校验结果，之后的编辑只校验换掉的部分
+    document: parseProject(project), past: [], future: [], dirty: session.dirty, error: null, version: 0,
     persistedRevision: meta.revision, batchDepth: 0, busy: 0, session, extras,
   }
   const record: InstanceRecord = { instance, gestures: 0, persisted: null, contentPending: false, contentListeners: new Set(), dispose: () => undefined }
@@ -160,7 +171,7 @@ function bindAudioEditSession(session: DocumentSession): AudioEditProjectInstanc
     receiveContent: (content) => {
       // 冲突后“重新载入”、换位置后引用被改写：按新内容重建，撤销历史不跨版本
       const next = audioEditProjectFromDocument(session.documentMeta, content, true)
-      instance.document = { ...next.project, revision: instance.document.revision + 1 }
+      instance.document = { ...parseProject(next.project), revision: instance.document.revision + 1 }
       instance.extras = next.extras
       instance.past = []
       instance.future = []
@@ -269,18 +280,24 @@ export async function abandonAudioEditDocument(id: string): Promise<void> {
 }
 
 /**
- * 两份作品哪些顶层字段内容不同。编辑都是不可变更新，没改的字段引用不变直接跳过，只对换了引用的字段做深比较：
- * 一小时逐字转写的作品，拖一下效果滑杆只比较效果链，不再把整份作品序列化。
+ * 两份作品哪些顶层字段内容不同。编辑都是不可变更新，比较按引用短路：改一个词只展开换掉的那个词块，
+ * 其余上万个词块、剪切同一引用直接跳过。
  */
 function changedFields(before: AudioEditProjectDocument, after: AudioEditProjectDocument, ignored?: ReadonlySet<string>): string[] {
   const left = before as unknown as Record<string, unknown>, right = after as unknown as Record<string, unknown>
   const changed: string[] = []
   for (const key of new Set([...Object.keys(left), ...Object.keys(right)])) {
-    if (ignored?.has(key) || left[key] === right[key]) continue
-    if (JSON.stringify(left[key]) !== JSON.stringify(right[key])) changed.push(key)
+    if (ignored?.has(key) || jsonEqual(left[key], right[key])) continue
+    changed.push(key)
   }
   return changed
 }
+
+/**
+ * 撤销步数。一小时口播校对动辄几百次删词、恢复，50 步撤不回 AI 粗剪那一步。历史里的作品共享没改动的子树，
+ * 每步只多出换掉的数组与节点（改一个词约是一份词块指针数组，上万词块约 0.1 MB），500 步约几十 MB。
+ */
+const UNDO_LIMIT = 500
 
 /** 显示设置、修订号与更新时间不进撤销。 */
 const NOT_UNDOABLE = new Set(['viewSettings', 'revision', 'updatedAt'])
@@ -308,6 +325,29 @@ export function editAudioEditProject(id: string, update: (document: AudioEditPro
   return updateAudioEditProject(id, update, false)
 }
 
+/** 读到写回之间作品又变了：最多重算几次，仍在变就请调用方稍后再试。 */
+const MAX_REBASE_ATTEMPTS = 4
+class StaleRead extends Error {}
+
+/**
+ * 需要异步计算的编辑（助手写入要先等检测结果等）：在读到的作品上算出新作品再提交；提交时作品已不是读到的那份
+ * （用户同时在改）就重新读、重新算，只提交基于最新内容的结果，不拿旧快照把别人刚做的修改覆盖掉。
+ * compute 必须是作品的纯函数（不可变更新），重算不会重复产生副作用。
+ */
+export async function editAudioEditProjectAsync(id: string, compute: (current: AudioEditProjectDocument) => Promise<AudioEditProjectDocument>): Promise<{ previous: AudioEditProjectDocument; saved: AudioEditProjectDocument }> {
+  for (let attempt = 1; ; attempt++) {
+    const current = (await loadAudioEditProject(id)).document
+    const next = await compute(current)
+    try {
+      const saved = editAudioEditProject(id, latest => { if (latest !== current) throw new StaleRead(); return next })
+      return { previous: current, saved }
+    } catch (error) {
+      if (!(error instanceof StaleRead)) throw error
+      if (attempt >= MAX_REBASE_ATTEMPTS) throw new Error('CONFLICT:口播正在连续变化，请稍后重试。')
+    }
+  }
+}
+
 /**
  * 连续拖动（效果参数、滑杆）：期间每次修改照常生效、试听实时跟着变，结束时合成一步撤销；取消则回到拖动前。
  * 返回的 finish / cancel 只生效一次。
@@ -325,8 +365,9 @@ export function beginAudioEditGesture(id: string): { finish: () => void; cancel:
     if (records.get(id) !== record) return
     let restore = cancelled
     if (!restore && instance.version !== initialVersion) {
-      // 拖动中只校验了改到的字段，松手时整份校验一次；不通过就回到拖动前并提示（不把错误抛进指针事件）
-      try { audioEditProjectSchema.parse(instance.document) } catch (error) {
+      // 拖动中只校验了改到的字段，松手时整份校验一次；通过就换成校验结果（冻结、可供下次增量沿用），
+      // 不通过就回到拖动前并提示（不把错误抛进指针事件）
+      try { instance.document = { ...parseProject(instance.document, initial), revision: instance.document.revision } } catch (error) {
         restore = true
         logger.error('拖动后的口播设置没有通过检查，已回到拖动前', { event: 'audio_edit.gesture.validation.failed', error: toError(error), context: { docId: id } })
         notifyUser('拖动后的设置没有通过检查，已回到拖动前的状态，请换个数值再试。', 'error')
@@ -335,22 +376,23 @@ export function beginAudioEditGesture(id: string): { finish: () => void; cancel:
     if (--record.gestures === 0) record.persisted = null
     if (restore && instance.version !== initialVersion) commitEdit(record, { ...initial, revision: instance.document.revision })
     instance.batchDepth -= 1
-    if (!restore && instance.version !== initialVersion && !instance.batchDepth && hasUndoableChanges(initial, instance.document)) { instance.past = [...instance.past.slice(-49), initial]; instance.future = []; publish(instance) }
+    if (!restore && instance.version !== initialVersion && !instance.batchDepth && hasUndoableChanges(initial, instance.document)) { instance.past = [...instance.past.slice(1 - UNDO_LIMIT), initial]; instance.future = []; publish(instance) }
     if (!record.gestures && record.contentPending) notifyContent(record)
   }
   return { finish: () => end(false), cancel: () => end(true) }
 }
 
 /** 撤销/补偿恢复内容和锁；其余写屏障、来源不变、schema、批次和历史语义与编辑一致。 */
-export function restoreAudioEditProjectSnapshot(id: string, snapshot: AudioEditProjectDocument, expectedContent: string): AudioEditProjectDocument {
+export function restoreAudioEditProjectSnapshot(id: string, snapshot: AudioEditProjectDocument, expected: AudioEditProjectDocument): AudioEditProjectDocument {
   return updateAudioEditProject(id, current => {
-    if (audioEditProjectContent(current) !== expectedContent) throw new Error('口播已有后续修改，请使用口播撤销逐步恢复。')
+    if (!sameAudioEditProjectContent(current, expected)) throw new Error('口播已有后续修改，请使用口播撤销逐步恢复。')
     return { ...snapshot, source: current.source }
   }, true)
 }
 
-export function audioEditProjectContent(document: AudioEditProjectDocument): string {
-  return JSON.stringify({ ...document, revision: 0, updatedAt: 0 })
+/** 内容是否相同（修订号与更新时间不算内容）；共享子树按引用短路，不整份序列化。 */
+export function sameAudioEditProjectContent(left: AudioEditProjectDocument, right: AudioEditProjectDocument): boolean {
+  return jsonEqual({ ...left, revision: 0, updatedAt: 0 }, { ...right, revision: 0, updatedAt: 0 })
 }
 
 function updateAudioEditProject(id: string, update: (document: AudioEditProjectDocument) => AudioEditProjectDocument, restoring: boolean): AudioEditProjectDocument {
@@ -365,16 +407,16 @@ function updateAudioEditProject(id: string, update: (document: AudioEditProjectD
   const changed = changedFields(instance.document, normalized)
   if (!changed.length) return instance.document
   if (changed.includes('source')) throw new Error('IMMUTABLE_SOURCE：原素材不能通过编辑修改，请用“重新定位原素材”。')
-  if (record.gestures > 0) validateChangedFields(normalized, changed)
-  else audioEditProjectSchema.parse(normalized)
-  if (!restoring) assertAudioEditLocks(instance.document, normalized)
-  return commitEdit(record, normalized)
+  // 拖动中只校验改到的字段（跨字段检查留到松手）；其余编辑整份校验，没换引用的部分沿用上次结果
+  const validated = record.gestures > 0 ? (validateChangedFields(normalized, changed), normalized) : parseProject(normalized, instance.document)
+  if (!restoring) assertAudioEditLocks(instance.document, validated)
+  return commitEdit(record, validated)
 }
 
 function commitEdit(record: InstanceRecord, next: AudioEditProjectDocument): AudioEditProjectDocument {
   const { instance } = record
   if (hasUndoableChanges(instance.document, next)) {
-    if (!instance.batchDepth) instance.past = [...instance.past.slice(-49), instance.document]
+    if (!instance.batchDepth) instance.past = [...instance.past.slice(1 - UNDO_LIMIT), instance.document]
     instance.future = []
   }
   instance.document = { ...next, revision: instance.document.revision + 1 }
@@ -393,8 +435,7 @@ export function resetAudioEditProject(id: string, expectedVersion: number): Audi
   if (!record || record.instance.busy) throw new Error('请等待当前处理完成或取消后再撤销。')
   const { instance } = record
   if (instance.version !== expectedVersion) throw new Error('确认期间口播已修改，请重新确认撤销范围。')
-  const next = restoreAudioEditBaseline(instance.document)
-  audioEditProjectSchema.parse(next)
+  const next = parseProject(restoreAudioEditBaseline(instance.document), instance.document)
   if (!hasUndoableChanges(instance.document, next)) return instance.document
   return commitEdit(record, next)
 }
@@ -407,8 +448,8 @@ export function undoAudioEditProject(id: string, redo = false): void {
   const from = redo ? instance.future : instance.past
   const previous = redo ? from[0] : from.at(-1)
   if (!previous) return
-  if (redo) { instance.future = from.slice(1); instance.past = [...instance.past.slice(-49), instance.document] }
-  else { instance.past = from.slice(0, -1); instance.future = [instance.document, ...instance.future.slice(0, 49)] }
+  if (redo) { instance.future = from.slice(1); instance.past = [...instance.past.slice(1 - UNDO_LIMIT), instance.document] }
+  else { instance.past = from.slice(0, -1); instance.future = [instance.document, ...instance.future.slice(0, UNDO_LIMIT - 1)] }
   const current = instance.document
   instance.document = { ...previous, id: current.id, name: current.name, viewSettings: current.viewSettings, revision: current.revision + 1 }
   catalogRevision += 1
@@ -435,9 +476,11 @@ export function acceptAudioEditNativeResult(id: string, document: AudioEditProje
   const record = records.get(id)
   if (!record || record.instance.version !== version) throw new Error('口播已改变，处理结果没有覆盖当前编辑。')
   const { instance } = record
-  instance.past = [...instance.past.slice(-49), instance.document]
+  // 主进程送回的处理结果与编辑一样先校验再发布，并登记、冻结，之后的编辑可在它上面增量校验
+  const validated = parseProject({ ...document, id: instance.document.id, name: instance.document.name }, instance.document)
+  instance.past = [...instance.past.slice(1 - UNDO_LIMIT), instance.document]
   instance.future = []
-  instance.document = { ...document, id: instance.document.id, name: instance.document.name, revision: instance.document.revision + 1 }
+  instance.document = { ...validated, revision: instance.document.revision + 1 }
   if (isAgentWritingDocument(instance.document.id)) markAgentAuthoredStep(instance.document)
   catalogRevision += 1
   instance.version += 1
@@ -523,7 +566,9 @@ export async function resetAudioEditProjectInstancesForTests(): Promise<void> {
 }
 
 export const resolveAudioEditPersistenceParticipants: ApplicationPersistenceResolver = (steps) => {
-  const ids = new Set(steps.flatMap((step) => step.kind === 'mutation' && step.target.kind.startsWith('audio_edit.') ? [step.target.id.split(':')[0]] : []))
+  // 逐条增删剪切与属性写入同属一次修改：同一事务合成一步撤销、最后保存一次
+  const ids = new Set(steps.flatMap((step) => step.kind === 'mutation' && step.target.kind.startsWith('audio_edit.') ? [step.target.id.split(':')[0]]
+    : step.kind === 'collection' && step.parent.kind.startsWith('audio_edit.') ? [step.parent.id.split(':')[0]] : []))
   return [...ids].map((id) => {
     const existing = participants.get(id)
     if (existing) return existing
@@ -540,7 +585,7 @@ export const resolveAudioEditPersistenceParticipants: ApplicationPersistenceReso
         } },
         release() {
           instance.batchDepth -= 1
-          if (instance.version !== initialVersion && !instance.batchDepth && hasUndoableChanges(initial, instance.document)) { instance.past = [...instance.past.slice(-49), initial]; publish(instance) }
+          if (instance.version !== initialVersion && !instance.batchDepth && hasUndoableChanges(initial, instance.document)) { instance.past = [...instance.past.slice(1 - UNDO_LIMIT), initial]; publish(instance) }
         },
       }
     } }

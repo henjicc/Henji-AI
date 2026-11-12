@@ -5,6 +5,7 @@ import { getPlatform } from '@/platform/runtime'
 
 import { editedDurationFrames, buildAudioEditTimeline, buildProjectAudioEditTimeline } from '@/core/audioEdit/timeline'
 import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
+import { updateAudioEditCut } from '@/core/audioEdit/edits'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import {
   harnessDocumentStore,
@@ -91,10 +92,11 @@ it('通用属性静音与界面设置保存可回读，静音不缩短成片且�
   try {
     const ref = { kind: 'audio_edit.document', id: 'audio-result' }
     const view = { textSize: 28, sidePadding: 80, timelineCaptions: false }
-    expect((await app.change(ref, {
-      'audio_edit.document.cuts': [{ id: 'mute', startFrame: 12000, endFrame: 36000, reason: 'manual', enabled: true, mode: 'mute' }],
-      'audio_edit.document.view_settings': view,
-    })).ok).toBe(true)
+    const baseline = await app.read(ref)
+    expect((await app.call('change_application_entities', { summary: '静音一段并改界面设置', changes: [
+      { kind: 'create_items', entityType: 'audio_edit.cut', parent: ref, items: [{ properties: { start_frame: 12000, end_frame: 36000, mode: 'mute' } }] },
+      { kind: 'set_properties', entityType: ref.kind, target: ref, properties: { 'audio_edit.document.view_settings': view } },
+    ] }, baseline.revisions as Record<string, number>)).ok).toBe(true)
     expect((await app.read(ref, ['audio_edit.document.view_settings'])).properties).toMatchObject({ 'audio_edit.document.view_settings': view })
     const instance = await loadAudioEditProject('audio-result')
     const spans = buildProjectAudioEditTimeline(instance.document)
@@ -149,7 +151,12 @@ it('助手修改与手工历史共存，撤销助手操作不会抹去之前的�
     const instance = await loadAudioEditProject('audio-result')
     editAudioEditProject('audio-result', (document) => ({ ...document, referenceScript: '手工参考稿' }))
     await flushAudioEditProject('audio-result')
-    expect((await app.change({ kind: 'audio_edit.document', id: 'audio-result' }, { 'audio_edit.document.reference_script': '助手参考稿', 'audio_edit.document.cuts': [{ id: 'manual', startFrame: 1000, endFrame: 3000, reason: 'manual', enabled: true }] })).ok).toBe(true)
+    const ref = { kind: 'audio_edit.document', id: 'audio-result' }
+    const baseline = await app.read(ref)
+    expect((await app.call('change_application_entities', { summary: '改参考稿并剪一段', changes: [
+      { kind: 'set_properties', entityType: ref.kind, target: ref, properties: { 'audio_edit.document.reference_script': '助手参考稿' } },
+      { kind: 'create_items', entityType: 'audio_edit.cut', parent: ref, items: [{ properties: { start_frame: 1000, end_frame: 3000 } }] },
+    ] }, baseline.revisions as Record<string, number>)).ok).toBe(true)
     expect(instance.past).toHaveLength(2)
     undoAudioEditProject('audio-result')
     expect(instance.document.cuts).toBeUndefined()
@@ -194,4 +201,98 @@ it('区域修复公共能力渲染实际保存版本并回读，同一历史可�
     expect(await app.call('repair_audio_edit_region', { documentRef: ref, repair: { ...repair, id: 'failed' } })).toMatchObject({ ok: false })
     expect((await loadAudioEditProject(ref.id)).document.repairs?.[0].id).toBe('failed')
   } finally { render.mockRestore(); app.dispose() }
+})
+
+const cutsFixture = () => ({ ...fixture(), cuts: [
+  { id: 'gap:1', startFrame: 1000, endFrame: 2000, reason: 'silence' as const, enabled: true },
+  { id: 'gap:2', startFrame: 50000, endFrame: 51000, reason: 'silence' as const, enabled: true },
+  { id: 'mute-1', startFrame: 60000, endFrame: 62000, reason: 'manual' as const, enabled: true, mode: 'mute' as const },
+] })
+const cutRef = (id: string) => ({ kind: 'audio_edit.cut', id: `audio-result:${id}` })
+const projectRef = { kind: 'audio_edit.document', id: 'audio-result' }
+const storedCuts = () => (harnessDocumentStore().stored('audio-result')?.content as AudioEditProjectDocument).cuts
+
+it('剪切逐条改、增、删：只换改到的那一处，其余剪切原样保留，落盘回读并可一次撤销', async () => {
+  registerHarnessAudioEditProject(cutsFixture())
+  const app = createApplicationHarness()
+  try {
+    const listed = await app.requireResult('list_application_entities', { entityType: 'audio_edit.cut', where: { document_id: 'audio-result' }, propertyIds: ['start_frame', 'end_frame', 'mode', 'reason'] })
+    expect((listed as { refs: Array<{ id: string }> }).refs.map(ref => ref.id)).toEqual(['audio-result:gap:1', 'audio-result:gap:2', 'audio-result:mute-1'])
+    const instance = await loadAudioEditProject('audio-result')
+    const before = instance.document.cuts!
+    expect((await app.change(cutRef('gap:2'), { 'audio_edit.cut.end_frame': 50500, 'audio_edit.cut.enabled': false })).ok).toBe(true)
+    // 没改到的两处仍是同一个对象：没有被整组读出再写回
+    expect(instance.document.cuts![0]).toBe(before[0])
+    expect(instance.document.cuts![2]).toBe(before[2])
+    expect(storedCuts()).toEqual([before[0], { ...before[1], endFrame: 50500, enabled: false }, before[2]])
+
+    const baseline = await app.read(projectRef)
+    const changed = await app.call('change_application_entities', { summary: '去掉静音并新加一刀', changes: [
+      { kind: 'remove_items', entityType: 'audio_edit.cut', parent: projectRef, targets: [cutRef('mute-1')] },
+      { kind: 'create_items', entityType: 'audio_edit.cut', parent: projectRef, items: [{ properties: { start_frame: 70000, end_frame: 72000, mode: 'mute' } }] },
+    ] }, baseline.revisions as Record<string, number>)
+    expect(changed.ok).toBe(true)
+    const cuts = storedCuts()!
+    expect(cuts.map(cut => cut.id).slice(0, 2)).toEqual(['gap:1', 'gap:2'])
+    expect(cuts[2]).toMatchObject({ startFrame: 70000, endFrame: 72000, mode: 'mute', reason: 'manual', enabled: true })
+    expect(cuts).toHaveLength(3)
+    undoAudioEditProject('audio-result')
+    await flushAudioEditProject('audio-result')
+    expect(storedCuts()!.map(cut => cut.id)).toEqual(['gap:1', 'gap:2', 'mute-1'])
+  } finally { app.dispose() }
+})
+
+it('不合法的剪切不写入：结束早于开始、超出音频、盖住锁定词块都被拒绝，原剪切不变', async () => {
+  registerHarnessAudioEditProject({ ...cutsFixture(), transcript: fixture().transcript.map((block, index) => index === 1 ? { ...block, locked: true } : block) })
+  const app = createApplicationHarness()
+  try {
+    const original = (await loadAudioEditProject('audio-result')).document.cuts
+    expect((await app.change(cutRef('gap:1'), { 'audio_edit.cut.end_frame': 500 })).ok).toBe(false)
+    expect((await app.change(cutRef('gap:1'), { 'audio_edit.cut.end_frame': 200_000 })).ok).toBe(false)
+    const baseline = await app.read(projectRef)
+    expect((await app.call('change_application_entities', { summary: '剪进锁定内容', changes: [
+      { kind: 'create_items', entityType: 'audio_edit.cut', parent: projectRef, items: [{ properties: { start_frame: 49000, end_frame: 52000 } }] },
+    ] }, baseline.revisions as Record<string, number>)).ok).toBe(false)
+    expect((await loadAudioEditProject('audio-result')).document.cuts).toBe(original)
+  } finally { app.dispose() }
+})
+
+it('用户刚改了另一处剪切，助手改这一处：两边的修改都保留', async () => {
+  registerHarnessAudioEditProject(cutsFixture())
+  const app = createApplicationHarness()
+  try {
+    await app.read(cutRef('gap:1'), ['audio_edit.cut.end_frame'])
+    // 助手读取之后，用户在界面上改了另一处
+    editAudioEditProject('audio-result', document => updateAudioEditCut(document, 'gap:2', { endFrame: 50800 }))
+    expect((await app.call('change_application_entities', { summary: '缩短一刀', changes: [
+      { kind: 'set_properties', entityType: 'audio_edit.cut', target: cutRef('gap:1'), properties: { 'audio_edit.cut.end_frame': 1500 } },
+    ] })).ok).toBe(true)
+    await flushAudioEditProject('audio-result')
+    expect(storedCuts()!.map(cut => cut.endFrame)).toEqual([1500, 50800, 62000])
+  } finally { app.dispose() }
+})
+
+it('助手读取后用户改了同一处剪切：带着旧基线的写入被拒绝，不覆盖用户的修改', async () => {
+  registerHarnessAudioEditProject(cutsFixture())
+  const app = createApplicationHarness()
+  try {
+    const stale = await app.read(cutRef('gap:1'), ['audio_edit.cut.end_frame'])
+    editAudioEditProject('audio-result', document => updateAudioEditCut(document, 'gap:1', { endFrame: 1800 }))
+    const result = await app.call('change_application_entities', { summary: '缩短一刀', changes: [
+      { kind: 'set_properties', entityType: 'audio_edit.cut', target: cutRef('gap:1'), properties: { 'audio_edit.cut.end_frame': 1500 } },
+    ] }, stale.revisions as Record<string, number>)
+    expect(result.ok).toBe(false)
+    expect(JSON.stringify(result)).toContain('CONFLICT')
+    expect((await loadAudioEditProject('audio-result')).document.cuts![0].endFrame).toBe(1800)
+  } finally { app.dispose() }
+})
+
+it('参考稿按文档上限写入，六十分钟口播的长稿不被两万字截住', async () => {
+  const app = createApplicationHarness()
+  try {
+    const script = '这是一段很长的参考稿。'.repeat(3000)
+    expect(script.length).toBeGreaterThan(20000)
+    expect((await app.change(projectRef, { 'audio_edit.document.reference_script': script })).ok).toBe(true)
+    expect((harnessDocumentStore().stored('audio-result')?.content as AudioEditProjectDocument).referenceScript).toBe(script)
+  } finally { app.dispose() }
 })

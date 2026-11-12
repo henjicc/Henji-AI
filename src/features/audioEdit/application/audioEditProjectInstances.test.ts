@@ -276,12 +276,15 @@ it('空草稿首段录音立即持久化、暂停编辑、后续录音一步撤�
 it('拖动滑杆的中间更新不整份序列化、不整份校验；松手时整份校验一次并合成一步撤销', async () => {
   const instance = await loadAudioEditProject('instance-test')
   const transcript = instance.document.transcript
-  const parse = vi.spyOn(audioEditProjectSchema, 'parse')
   const stringify = vi.spyOn(JSON, 'stringify')
   try {
     const gesture = beginAudioEditGesture('instance-test')
     for (let step = 1; step <= 5; step++) editAudioEditProject('instance-test', document => ({ ...document, output: { volumeDb: step } }))
-    expect(parse).not.toHaveBeenCalled()
+    // 拖动中不做整份校验：只有跨字段检查才能发现的“超出音频时长”中途可以写入，松手前改回合法值
+    const outOfRange = [{ id: 'g', startFrame: 0, endFrame: 9000, gainDb: -3, fadeInFrames: 0, fadeOutFrames: 0, enabled: true }]
+    editAudioEditProject('instance-test', document => ({ ...document, gainRegions: outOfRange }))
+    expect(instance.document.gainRegions).toEqual(outOfRange)
+    editAudioEditProject('instance-test', document => ({ ...document, gainRegions: undefined }))
     // 拖动中的中间状态不落盘
     await flushAudioEditProject('instance-test')
     expect(stored().output).toBeUndefined()
@@ -289,9 +292,10 @@ it('拖动滑杆的中间更新不整份序列化、不整份校验；松手时�
     // 中间状态仍校验改到的字段
     expect(() => editAudioEditProject('instance-test', document => ({ ...document, output: { volumeDb: 99 } }))).toThrow()
     gesture.finish()
-    expect(parse).toHaveBeenCalledTimes(1)
-  } finally { parse.mockRestore(); stringify.mockRestore() }
+  } finally { stringify.mockRestore() }
   expect(instance.document.output).toEqual({ volumeDb: 5 })
+  // 松手后发布的是校验结果：已冻结，下一次编辑可以在它上面增量校验
+  expect(Object.isFrozen(instance.document.output)).toBe(true)
   await flushAudioEditProject('instance-test')
   expect(stored().output).toEqual({ volumeDb: 5 })
   expect(instance.past).toHaveLength(1)
@@ -322,11 +326,90 @@ it('拖动中组件卸载时取消拖动，之后的编辑恢复整份校验并�
   unmount()
   expect(instance.batchDepth).toBe(0)
   expect(instance.document.output).toBeUndefined()
-  const parse = vi.spyOn(audioEditProjectSchema, 'parse')
-  try {
-    editAudioEditProject('instance-test', document => ({ ...document, output: { volumeDb: 4 } }))
-    expect(parse).toHaveBeenCalledTimes(1)
-  } finally { parse.mockRestore() }
+  // 恢复整份校验：只有跨字段检查才能发现的超出音频时长照样被拒绝
+  expect(() => editAudioEditProject('instance-test', document => ({ ...document, gainRegions: [{ id: 'g', startFrame: 0, endFrame: 9000, gainDb: -3, fadeInFrames: 0, fadeOutFrames: 0, enabled: true }] }))).toThrow()
+  editAudioEditProject('instance-test', document => ({ ...document, output: { volumeDb: 4 } }))
   await flushAudioEditProject('instance-test')
   expect(stored().output).toEqual({ volumeDb: 4 })
+})
+
+describe('一小时口播的高频编辑：只校验换掉的部分', () => {
+  const words = (count: number) => Array.from({ length: count }, (_, index) => ({ id: `w${index}`, text: `词${index}`, startFrame: index * 10, endFrame: index * 10 + 8, included: true, locked: false, granularity: 'word' as const }))
+  const seedLong = () => commands.seed({ kind: 'audio_edit', id: 'long', name: '长口播', content: audioEditProjectToDocumentContent({ ...fixture(), id: 'long', name: '长口播', transcript: words(300),
+    cuts: Array.from({ length: 50 }, (_, index) => ({ id: `gap:${index}`, startFrame: index * 60 + 9, endFrame: index * 60 + 10, reason: 'silence' as const, enabled: true })) }) })
+
+  it('改一个词：没改的词块与剪切沿用原对象，结果与整份校验一致，落盘内容完整合法', async () => {
+    seedLong()
+    const instance = await loadAudioEditProject('long')
+    const before = instance.document
+    const saved = editAudioEditProject('long', document => ({ ...document, transcript: document.transcript.map(block => block.id === 'w7' ? { ...block, included: false } : block) }))
+    expect(saved.transcript[6]).toBe(before.transcript[6])
+    expect(saved.transcript[8]).toBe(before.transcript[8])
+    expect(saved.cuts).toBe(before.cuts)
+    expect(saved.transcript[7].included).toBe(false)
+    expect(saved).toEqual(audioEditProjectSchema.parse(saved))
+    await flushAudioEditProject('long')
+    const content = stored('long')
+    expect(audioEditProjectSchema.parse({ ...content, id: 'long', name: '长口播', createdAt: 1, updatedAt: 1, revision: 1 }).transcript).toHaveLength(300)
+    expect((content.transcript as Array<{ id: string; included: boolean }>).find(block => block.id === 'w7')?.included).toBe(false)
+  })
+
+  it('非法改动照样被拒绝：词块多出字段、重复引用、超出音频，作品不变', async () => {
+    seedLong()
+    const instance = await loadAudioEditProject('long')
+    const before = instance.document
+    const edit = (change: (blocks: AudioEditProjectDocument['transcript']) => unknown[]) => () => editAudioEditProject('long', document => ({ ...document, transcript: change(document.transcript) as AudioEditProjectDocument['transcript'] }))
+    expect(edit(blocks => blocks.map(block => block.id === 'w3' ? { ...block, extra: 1 } : block))).toThrow()
+    expect(edit(blocks => blocks.map(block => block.id === 'w3' ? { ...block, id: 'w4' } : block))).toThrow()
+    expect(edit(blocks => blocks.map(block => block.id === 'w3' ? { ...block, endFrame: 999_999 } : block))).toThrow()
+    expect(() => editAudioEditProject('long', document => ({ ...document, cuts: [...document.cuts!, { id: 'gap:0', startFrame: 1, endFrame: 2, reason: 'manual', enabled: true }] }))).toThrow()
+    expect(instance.document).toBe(before)
+  })
+
+  it('已发布的作品是冻结的：原地修改当场报错，不会悄悄改坏撤销历史', async () => {
+    seedLong()
+    const instance = await loadAudioEditProject('long')
+    editAudioEditProject('long', document => ({ ...document, referenceScript: '改一下' }))
+    expect(() => { (instance.past[0].transcript[0] as { text: string }).text = '偷改' }).toThrow(TypeError)
+    expect(() => { (instance.document.transcript as unknown[]).push({}) }).toThrow(TypeError)
+  })
+
+  it('异步计算期间用户又改了别处：在最新内容上重算，不拿旧快照覆盖用户的修改', async () => {
+    seedLong()
+    await loadAudioEditProject('long')
+    const { editAudioEditProjectAsync } = await import('./audioEditProjectInstances')
+    let calls = 0
+    const { saved } = await editAudioEditProjectAsync('long', async (current) => {
+      calls += 1
+      if (calls === 1) editAudioEditProject('long', document => ({ ...document, referenceScript: '用户刚改的' }))
+      return { ...current, cuts: current.cuts!.map(cut => cut.id === 'gap:3' ? { ...cut, enabled: false } : cut) }
+    })
+    expect(calls).toBe(2)
+    expect(saved.referenceScript).toBe('用户刚改的')
+    expect(saved.cuts!.find(cut => cut.id === 'gap:3')?.enabled).toBe(false)
+  })
+
+  it('撤销步数够人工校对用：AI 粗剪之后再做一百多次修改，仍能撤回 AI 那一步', async () => {
+    seedLong()
+    const instance = await loadAudioEditProject('long')
+    editAudioEditProject('long', document => ({ ...document, referenceScript: 'AI 粗剪' }))
+    for (let index = 0; index < 120; index++) editAudioEditProject('long', document => ({ ...document, transcript: document.transcript.map(block => block.id === `w${index}` ? { ...block, included: false } : block) }))
+    for (let index = 0; index < 120; index++) undoAudioEditProject('long')
+    expect(instance.document.referenceScript).toBe('AI 粗剪')
+    undoAudioEditProject('long')
+    expect(instance.document.referenceScript).toBe('')
+    await flushAudioEditProject('long')
+  })
+})
+
+it('原生处理结果与编辑一样先校验：不合法的不发布，合法的发布为冻结的校验结果', async () => {
+  const instance = await loadAudioEditProject('instance-test')
+  const before = instance.document
+  expect(() => acceptAudioEditNativeResult('instance-test', { ...before, transcript: [...before.transcript, { ...before.transcript[0] }] }, instance.version)).toThrow()
+  expect(instance.document).toBe(before)
+  expect(instance.past).toHaveLength(0)
+  acceptAudioEditNativeResult('instance-test', { ...structuredClone(before), referenceScript: '识别后的稿' }, instance.version)
+  expect(instance.document.referenceScript).toBe('识别后的稿')
+  expect(Object.isFrozen(instance.document.transcript)).toBe(true)
+  expect(instance.past).toEqual([before])
 })

@@ -1,5 +1,6 @@
 import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
 import { isAgentAuthoredStep } from '@/features/application-control'
+import { jsonEqual } from '@/core/jsonEqual'
 
 /*
  * 历史记录面板的步骤名：撤销栈只存作品快照，这里比较相邻两份快照，说出这一步改了什么。
@@ -7,7 +8,8 @@ import { isAgentAuthoredStep } from '@/features/application-control'
  */
 
 const enabledCount = <T extends { enabled: boolean }>(items: readonly T[] | undefined) => (items ?? []).filter(item => item.enabled).length
-const same = (a: unknown, b: unknown) => a === b || JSON.stringify(a) === JSON.stringify(b)
+// 相邻快照共享没改动的子树，按引用短路比较，不把整段转写序列化
+const same = jsonEqual
 
 /**
  * 快照是不可变的：同一对相邻快照的步骤名只算一次。每次编辑只多出一对新快照，

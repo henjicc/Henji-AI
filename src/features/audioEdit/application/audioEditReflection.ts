@@ -60,6 +60,7 @@ class AudioEditReflectionProvider implements ApplicationEntityProvider {
       : []
     const refs = projectScoped ? summaries.map((summary) => ({ kind: this.entityType, id: summary.id, label: summary.name })) : loaded.flatMap((document, index) => {
       if (this.entityType === AUDIO_EDIT_ENTITY_TYPES.transcriptBlock) return document.transcript.map((block) => childRef(this.entityType, document.id, block.id, block.text))
+      if (this.entityType === AUDIO_EDIT_ENTITY_TYPES.cut) return (document.cuts ?? []).map((cut) => childRef(this.entityType, document.id, cut.id, `${cut.enabled ? (cut.mode ?? 'delete') === 'mute' ? '静音' : '删除' : '停用'} ${(cut.startFrame / document.source.sampleRate).toFixed(2)}–${(cut.endFrame / document.source.sampleRate).toFixed(2)} 秒`))
       if (this.entityType === AUDIO_EDIT_ENTITY_TYPES.breath) return breathViews[index].map((view) => childRef(this.entityType, document.id, view.id, `${view.before}｜${view.after}`))
       if (this.entityType === AUDIO_EDIT_ENTITY_TYPES.caption) return describeAudioEditCaptions(document).map((view) => childRef(this.entityType, document.id, view.id, view.text.slice(0, 200)))
       return document.suggestions.map((suggestion) => childRef(this.entityType, document.id, suggestion.id, suggestion.title))
@@ -114,6 +115,7 @@ class AudioEditReflectionProvider implements ApplicationEntityProvider {
 const entityMeta: Record<EntityType, { title: string; parents: EntityType[] }> = {
   [AUDIO_EDIT_ENTITY_TYPES.project]: { title: '口播（文档内容根，id 即口播文档 ID）', parents: [] },
   [AUDIO_EDIT_ENTITY_TYPES.transcriptBlock]: { title: '转写词块', parents: [AUDIO_EDIT_ENTITY_TYPES.project] },
+  [AUDIO_EDIT_ENTITY_TYPES.cut]: { title: '声音编辑区间（删除或静音的一段原素材；逐条增删改，删掉词块不在这里）', parents: [AUDIO_EDIT_ENTITY_TYPES.project] },
   [AUDIO_EDIT_ENTITY_TYPES.caption]: { title: '成片字幕（按字幕分段，逐段对照参考稿核对、改字）', parents: [AUDIO_EDIT_ENTITY_TYPES.project] },
   [AUDIO_EDIT_ENTITY_TYPES.suggestion]: { title: '剪辑线索（辅助定位，非审批队列）', parents: [AUDIO_EDIT_ENTITY_TYPES.project] },
   [AUDIO_EDIT_ENTITY_TYPES.breath]: { title: '呼吸声（本机模型检测，第一次读取时检测并可能下载约 13 MB 模型；逐处可改处理）', parents: [AUDIO_EDIT_ENTITY_TYPES.project] },
@@ -128,6 +130,8 @@ export function createAudioEditReflectionRegistrations(): ApplicationEntityRegis
       description: `${entityMeta[entityType].title}的稳定应用实体。`, refKind: entityType,
       dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: entityMeta[entityType].parents,
       revisionScopes: ['audio_edit'], queryCapabilityIds: ['read_application_entity'], schemaRef: schemaRef('entity', entityType),
+      // 剪切逐条增删：建一处只要起止采样帧（mode 省略时删除）
+      ...(entityType === AUDIO_EDIT_ENTITY_TYPES.cut ? { collectionWrite: { creatable: true, removable: true, requiredPropertyIds: [`${entityType}.start_frame`, `${entityType}.end_frame`] } } : {}),
       ...(entityType === AUDIO_EDIT_ENTITY_TYPES.render ? { writeExclusion: { reason: '成片映射由口播剪辑时间线根据词块保留状态实时计算。' } } : {}),
       ...(entityType === AUDIO_EDIT_ENTITY_TYPES.processorChain ? { writeExclusion: { reason: '插件目录由宿主扫描本机插件得到；把插件加进声音处理请写 audio_edit.document.effect_chain（kind=plugin，pluginId 取自这里）。' } } : {}),
     },
