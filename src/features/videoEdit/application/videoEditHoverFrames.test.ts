@@ -87,17 +87,14 @@ it('普通空闲只复用帧，完全空闲才允许补渲染，空闲之外不�
   expect(captureHoverFrame.mock.lastCall?.[2]).toBe(true)
 })
 
-it('有效序列帧优先；失效后用稳定素材抽样；两者都没有时不擦洗', async () => {
+it('有效序列帧优先；失效后时间线没有画面片段时不擦洗，不拿素材箱凑数', async () => {
   const value = document()
   value.media = [{ id: 'image', name: '素材', kind: 'image', path: '/media/image.png', durationSeconds: 0, width: 320, height: 180 }]
   state.stored = { contentKey: await videoEditHoverContentKey(value), frames: [{ position: 0, path: '/covers/a.webp' }, { position: 1, path: '/covers/b.webp' }] }
   const composed = await loadVideoEditHoverPreview(value)
   expect(composed?.(0.9)?.source).toBe('/covers/b.webp')
   state.stored.contentKey = 'stale'
-  const fallback = await loadVideoEditHoverPreview(value)
-  expect(fallback?.(0.9)).toEqual({ source: '/media/image.png', sourceKind: 'image' })
-  expect(fallback?.(0.9)).toEqual(fallback?.(0.9))
-  expect(await loadVideoEditHoverPreview({ ...value, media: [] })).toBeNull()
+  expect(await loadVideoEditHoverPreview(value)).toBeNull()
 })
 
 it('播放、拖动、导出、编辑手势或宿主未就绪时都不生成，恢复空闲后才积累', async () => {

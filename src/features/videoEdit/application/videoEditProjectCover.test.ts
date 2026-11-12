@@ -83,13 +83,12 @@ it('中间的合成预览帧属于当前内容时用它做封面，旧内容的�
   expect(save).toHaveBeenLastCalledWith({ docId: document.id, sources: [{ source: 'C:/hover/mid.webp', sourceKind: 'image' }] })
 })
 
-it('悬停回退稳定抽时间线素材，时间线没有画面时抽素材箱，两者都没有时为空', () => {
+it('悬停回退按顺序抽第一条序列的画面片段，时间线没有画面时为空，不拿素材箱凑数', () => {
   const document = withClips([
     clip({ id: 'img', itemId: 'i-image', kind: 'image', track: 1, start: 0, duration: 50 }),
     clip({ id: 'vid', itemId: 'i-video', kind: 'video', track: 2, start: 50, duration: 50 }),
   ])
   expect(videoEditFrameSourceAt(document, 0.1)).toEqual({ source: 'D:/素材/海报.png', sourceKind: 'image' })
   expect(videoEditFrameSourceAt(document, 0.9)?.source).toBe('D:/素材/镜头.mp4')
-  expect(videoEditFrameSourceAt(withClips([]), 0.9)?.source).toBe('D:/素材/海报.png')
-  expect(videoEditFrameSourceAt({ ...withClips([]), media: [] }, 0.5)).toBeNull()
+  expect(videoEditFrameSourceAt(withClips([]), 0.9)).toBeNull()
 })

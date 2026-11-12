@@ -76,7 +76,7 @@ export function ProjectCardHoverScrub({ load, children }: { load: ProjectCardHov
       onPointerLeave={() => { move.cancel(); generation.current++; loading.current = false; setFraction(null); setPreview(null); setImageReady(null); release.current?.(); release.current = null; }}
     >
       {children}
-      {frame ? <img src={resolveImageDisplayUrl(frame)} alt="" aria-hidden="true" draggable={false} className="absolute inset-0 h-full w-full object-cover" /> : null}
+      {frame ? <img src={resolveImageDisplayUrl(frame)} alt="" aria-hidden="true" draggable={false} className="absolute inset-0 h-full w-full bg-panel object-cover" /> : null}
       {fraction !== null && preview ? <span aria-hidden="true" className="absolute bottom-0 h-0.5 bg-accent-ring" style={{ left: 0, width: `${fraction * 100}%` }} /> : null}
     </span>
   );

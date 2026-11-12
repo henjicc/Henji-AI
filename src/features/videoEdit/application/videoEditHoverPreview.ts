@@ -32,20 +32,20 @@ export function videoEditClipFrameSource(document: VideoEditDocument, clip: Vide
   return { source: media.path, sourceKind: 'video', atSeconds: Math.round(Math.max(0, at) * 1000) / 1000 }
 }
 
-/** 没有合成预览时从已导入素材稳定取样；时间线空隙或纯代码片段也能退回素材箱。 */
+/**
+ * 没有可用合成预览时，按第一条序列的画面片段顺序取原始画面。只认时间线上的片段：
+ * 素材箱里的素材不代表片子长什么样，纯代码做的片子没有原始画面可取，返回 null，卡片保持封面。
+ */
 export function videoEditFrameSourceAt(document: VideoEditDocument, fraction: number): DocumentCoverSource | null {
-  const position = Math.max(0, Math.min(0.999, fraction))
-  const pictures = document.sequences.flatMap(sequence => sequence.clips
-    .filter(clip => clip.kind === 'video' || clip.kind === 'image')
-    .map(clip => ({ clip, fps: videoEditFps(sequence.frameRate) })))
-    .filter(({ clip }) => !!videoEditClipMedia(document, clip))
-  if (pictures.length) {
-    const offset = position * pictures.length, { clip, fps } = pictures[Math.floor(offset)]
-    return videoEditClipFrameSource(document, clip, clip.start + Math.floor((offset % 1) * clip.duration), fps)
-  }
-  const media = document.media.filter(item => item.kind === 'video' || item.kind === 'image')
-  const offset = position * media.length, item = media[Math.floor(offset)]
-  return item ? { source: item.path, sourceKind: item.kind as 'image' | 'video', ...(item.kind === 'video' ? { atSeconds: (offset % 1) * Math.max(0, item.durationSeconds - 0.1) } : {}) } : null
+  const sequence = document.sequences[0]
+  if (!sequence) return null
+  const fps = videoEditFps(sequence.frameRate)
+  const pictures = sequence.clips
+    .filter(clip => (clip.kind === 'video' || clip.kind === 'image') && !!videoEditClipMedia(document, clip))
+    .sort((left, right) => left.start - right.start)
+  if (!pictures.length) return null
+  const offset = Math.max(0, Math.min(0.999, fraction)) * pictures.length, clip = pictures[Math.floor(offset)]
+  return videoEditClipFrameSource(document, clip, clip.start + Math.floor((offset % 1) * clip.duration), fps)
 }
 
 const keys = new WeakMap<VideoEditDocument, Promise<string>>()
