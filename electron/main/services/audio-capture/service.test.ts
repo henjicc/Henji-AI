@@ -321,4 +321,80 @@ describe('录屏的麦克风轨', () => {
       await service.dispose()
     } finally { vi.useRealTimers() }
   })
+
+  const nowUs = (): number => Number(process.hrtime.bigint() / 1000n)
+  const reasons = (records: Array<{ type: string; gap?: { reason: string } }>): string[] => records.map(record => record.type === 'gap' ? record.gap!.reason : record.type)
+
+  it('录屏暂停时麦克风原地暂停：设备不关，继续不重新枚举、不重开；暂停前排队的段照常归暂停前，暂停空档从最后一帧记到继续后的第一段', async () => {
+    const { tracks, segment, calls } = fakeTrackNative()
+    const { service } = createService()
+    const origin = nowUs() - 10_000_000
+    const records: Array<{ type: string; gap?: { reason: string; monoSpanUs: number[] } }> = []
+    const track = await service.startTrack({ directory: 'C:/Temp/screen', originUs: origin, record: record => records.push(record) })
+    const id = tracks[0].sessionId, enumerated = calls('enumerate')
+    segment('open', id, '6f1f0d2c-0d6b-4b7e-9a1b-4e1f7c2f3a10', origin + 1_000_000)
+    await track.pause()
+    expect(calls('pause')).toBe(1)
+    expect(calls('stop')).toBe(0)
+    // 暂停前排着队的采样在应答之后才落盘：跨过段界开出的那一段仍属暂停前。
+    segment('seal', id, '6f1f0d2c-0d6b-4b7e-9a1b-4e1f7c2f3a10', origin + 1_000_000, 96_000)
+    segment('open', id, '7f1f0d2c-0d6b-4b7e-9a1b-4e1f7c2f3a10', origin + 3_000_000)
+    segment('seal', id, '7f1f0d2c-0d6b-4b7e-9a1b-4e1f7c2f3a10', origin + 3_000_000, 48_000)
+    await track.resume()
+    expect(calls('resume')).toBe(1)
+    expect(tracks).toHaveLength(1)
+    expect(calls('enumerate')).toBe(enumerated)
+    segment('open', id, '8f1f0d2c-0d6b-4b7e-9a1b-4e1f7c2f3a10', origin + 20_000_000)
+    expect(reasons(records)).toEqual(['open', 'seal', 'open', 'seal', 'pause', 'open'])
+    expect(records[4].gap!.monoSpanUs).toEqual([4_000_000, 20_000_000])
+    await track.stop()
+    expect(calls('stop')).toBe(1)
+    await service.dispose()
+  })
+
+  it('旧版录音程序不支持原地暂停：退回结束这一段、继续时重开，暂停空档照常', async () => {
+    const { tracks, segment, calls } = fakeTrackNative()
+    const fallback = native.request.getMockImplementation()!
+    native.request.mockImplementation(async (type: string, payload?: Record<string, unknown>) => {
+      if (type === 'pause') throw new AudioCaptureError('INVALID_ARGUMENT', '麦克风轨不支持暂停，请停止后重新开始')
+      return fallback(type, payload)
+    })
+    const { service } = createService()
+    const origin = nowUs() - 10_000_000
+    const records: Array<{ type: string; gap?: { reason: string } }> = []
+    const track = await service.startTrack({ directory: 'C:/Temp/screen', originUs: origin, record: record => records.push(record) })
+    segment('open', tracks[0].sessionId, '6f1f0d2c-0d6b-4b7e-9a1b-4e1f7c2f3a10', origin + 1_000_000)
+    await track.pause()
+    expect(calls('stop')).toBe(1)
+    await track.resume()
+    expect(tracks).toHaveLength(2)
+    segment('open', tracks[1].sessionId, '7f1f0d2c-0d6b-4b7e-9a1b-4e1f7c2f3a10', origin + 20_000_000)
+    // 没封口的那段按文件补出封口（替身报 480 帧）。
+    expect(reasons(records)).toEqual(['open', 'seal', 'pause', 'open'])
+    await track.stop()
+    await service.dispose()
+  })
+
+  it('原地暂停中设备拔出：暂停期间不重连、不记设备空档；继续时重新开设备', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const { tracks, segment } = fakeTrackNative()
+      const { service } = createService()
+      const origin = nowUs() - 10_000_000
+      const records: Array<{ type: string; gap?: { reason: string } }> = []
+      const track = await service.startTrack({ directory: 'C:/Temp/screen', originUs: origin, record: record => records.push(record) })
+      segment('open', tracks[0].sessionId, '6f1f0d2c-0d6b-4b7e-9a1b-4e1f7c2f3a10', origin + 1_000_000)
+      await track.pause()
+      segment('seal', tracks[0].sessionId, '6f1f0d2c-0d6b-4b7e-9a1b-4e1f7c2f3a10', origin + 1_000_000, 96_000)
+      native.event!({ event: 'interrupted', sessionId: tracks[0].sessionId, outputPath: 'C:/Temp/screen', writtenBytes: 0, error: { code: 'DEVICE_REMOVED', message: '设备已停止提供采样', recoverable: true } })
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(tracks).toHaveLength(1)
+      await track.resume()
+      expect(tracks).toHaveLength(2)
+      segment('open', tracks[1].sessionId, '7f1f0d2c-0d6b-4b7e-9a1b-4e1f7c2f3a10', origin + 20_000_000)
+      expect(reasons(records)).toEqual(['open', 'seal', 'pause', 'open'])
+      expect((await track.stop()).outcome).toBe('completed')
+      await service.dispose()
+    } finally { vi.useRealTimers() }
+  })
 })

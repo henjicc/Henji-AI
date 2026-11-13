@@ -43,6 +43,43 @@ const CREATE_WAIT: Duration = Duration::from_secs(10);
 const STOP_WAIT: Duration = Duration::from_secs(80);
 /// 应答前确认段事件已发出的等待上限。
 const BARRIER_WAIT: Duration = Duration::from_secs(5);
+/// 只交给分段轨道的封段标记（高于 PortAudio 的回调标记位）：暂停后的第一块之前封住当前段，继续时另起一段。
+const SEAL_SEGMENT: u64 = 1 << 32;
+
+/// 回调时刻的放置：测得时刻与按采样数推算的时刻相差不到 `DEADBAND_US` 视为抖动，直接按采样数连续推进；
+/// 超出但不到 `REANCHOR_US` 时以 `SLEW` 的速率向测得值靠拢；更晚超过 `REANCHOR_US`（或带溢出、欠载标记，确实丢了采样）才重新对齐。
+/// 做法参照 OBS `obs-source.c` 的 TS_SMOOTHING_THRESHOLD（70 ms 内按采样数推进）与 Cap `audio_mixer.rs` 的
+/// placement_correction（2 ms 内不处理、超出后缓慢修正）。速率取 100 ppm：盖得住常见设备时钟与系统时钟的漂移；
+/// 录屏拼接把每段的偏差集中在段尾约 200 ms 里吸收，5 秒一段最多 0.5 ms，集中后约 0.25% 的变速，听不出来。
+/// 时刻永不往回跳：MME 批量回调会给出重复或偏早的时刻，比推算值早得再多也只缓慢修正。
+const DEADBAND_US: f64 = 2_000.0;
+const REANCHOR_US: f64 = 70_000.0;
+const SLEW: f64 = 1e-4;
+#[derive(Default)]
+struct Placement {
+    next_us: Option<f64>,
+}
+impl Placement {
+    /// 返回这一块第一帧放置的时刻。
+    fn place(&mut self, measured: f64, frames: usize, frame_us: f64, glitch: bool) -> f64 {
+        let duration = frames as f64 * frame_us;
+        let first = match self.next_us {
+            None => measured,
+            Some(next) => {
+                let error = measured - next;
+                if error > REANCHOR_US || (glitch && error > 0.0) {
+                    measured
+                } else if error.abs() <= DEADBAND_US {
+                    next
+                } else {
+                    next + (duration * SLEW).min(error.abs()).copysign(error)
+                }
+            }
+        };
+        self.next_us = Some(first + duration);
+        first
+    }
+}
 
 /// 正在被写盘线程写着的整段文件（停止已应答、磁盘还在写完的也算）：这期间不能恢复它，免得与写盘线程同时改文件头。
 static WRITING: Mutex<Vec<String>> = Mutex::new(Vec::new());
@@ -94,13 +131,16 @@ pub struct Shared {
     /// 回调线程的合并块与入队失败累计帧数。只在音频回调里读写，或在流停止（hc_stop 返回）后由控制线程收尾。
     pending: UnsafeCell<Block>,
     lost: UnsafeCell<u64>,
+    /// 回调时刻的放置状态：只在音频回调里读写，或在流开始前由控制线程重置。
+    placement: UnsafeCell<Placement>,
     /// 已交给队列（含丢掉）的帧数，也就是下一块的 `first`。
     captured: AtomicU64,
     /// 已交给队列的最后一帧之后的单调时钟（f64 位）：流停止时补静音的收尾块用它定位。
     next_mono: AtomicU64,
     /// 一帧的微秒数（f64 位），开流后按驱动给的采样率定。
     frame_us: AtomicU64,
-    /// 所有输出都暂停时流停着（开流之前也是）：分发线程排空队列后，正在收尾的输出就没有更多数据了。
+    /// 只剩暂停的整段文件时流停着（开流之前也是）：分发线程排空队列后，正在收尾的输出就没有更多数据了。
+    /// 暂停的分段轨道不停流（与 OBS 一样暂停不关设备），继续时从下一块直接接上，不用重开设备、等首个回调。
     stream_stopped: AtomicBool,
     stop: AtomicBool,
     distributor_exited: AtomicBool,
@@ -112,7 +152,7 @@ pub struct Shared {
     dropped_frames: AtomicU64,
     channels: usize,
 }
-// pending 与 lost 的两个访问方（音频回调、流停止后的控制线程）在时间上互斥，其余字段都是原子量。
+// pending、lost 与 placement 的两个访问方（音频回调、流停止后的控制线程）在时间上互斥，其余字段都是原子量。
 unsafe impl Sync for Shared {}
 impl Shared {
     fn new(channels: usize, capacity: usize) -> Self {
@@ -120,6 +160,7 @@ impl Shared {
             queue: ArrayQueue::new(capacity),
             pending: UnsafeCell::new(EMPTY_BLOCK),
             lost: UnsafeCell::new(0),
+            placement: UnsafeCell::new(Placement::default()),
             captured: AtomicU64::new(0),
             next_mono: AtomicU64::new(0f64.to_bits()),
             frame_us: AtomicU64::new((1_000_000.0f64 / 48_000.0).to_bits()),
@@ -244,7 +285,13 @@ extern "C" fn sink(
         return;
     }
     let input = unsafe { std::slice::from_raw_parts(samples, count * shared.channels) };
-    unsafe { accept(shared, input, count, mono_us, uncertainty, flags as u64) }
+    let flags = flags as u64;
+    let frame_us = f64::from_bits(shared.frame_us.load(Ordering::Relaxed));
+    let glitch = flags & (PA_INPUT_UNDERFLOW | PA_INPUT_OVERFLOW) != 0;
+    let placed = unsafe { (*shared.placement.get()).place(mono_us, count, frame_us, glitch) };
+    // 放置值偏离测得值多少，就把多少计入时钟误差。
+    let uncertainty = uncertainty + (placed - mono_us).abs();
+    unsafe { accept(shared, input, count, placed, uncertainty, flags) }
 }
 
 /// 一路输出在整次采集里的录制区间：只写 `first` 落在某个 [from, until) 里的块，丢掉的帧按它们覆盖的位置归属。
@@ -338,8 +385,29 @@ struct Route {
     stats: Arc<Stats>,
     lost: u64,
     closing_since: Option<Instant>,
+    /// 分段轨道暂停在这一帧：分发越过它时给写盘线程一个封段标记，暂停前的段及时封口、继续后的采样另起一段。
+    seal_at: Option<u64>,
 }
 impl Route {
+    /// 越过暂停边界时交封段标记，带上这一块之前落在区间里的丢帧（它们在暂停前）：写盘先补静音再封口。
+    /// 返回 false 表示队列满、标记没交出去：丢帧已记下，标记等下一块再交。
+    fn seal_if_passed(&mut self, block: &Block, lost: u64) -> bool {
+        let marker = Block {
+            flags: SEAL_SEGMENT,
+            lost_before: self.lost + lost,
+            first: block.first,
+            mono_us: block.mono_us,
+            ..EMPTY_BLOCK
+        };
+        if self.queue.push(marker).is_ok() {
+            self.lost = 0;
+            self.seal_at = None;
+            true
+        } else {
+            self.lost += lost;
+            false
+        }
+    }
     fn deliver(&mut self, mut item: Block) {
         item.lost_before += self.lost;
         let admitted = item.frames as u64;
@@ -355,10 +423,20 @@ impl Route {
     }
     fn route(&mut self, block: &Block) {
         // 丢掉的帧按它们覆盖的位置归属：只补落在这一路区间里的那部分。
-        let lost = self
+        let mut lost = self
             .gate
             .overlap(block.first.saturating_sub(block.lost_before), block.first);
-        let admitted = block.frames > 0 && self.gate.contains(block.first);
+        let mut admitted = block.frames > 0 && self.gate.contains(block.first);
+        if self.seal_at.is_some_and(|at| block.first >= at) {
+            if !self.seal_if_passed(block, lost) && admitted {
+                // 标记没交出去时，继续之后的这一块不能先于它写进暂停前的段：按丢弃计，新段从之后的块开始。
+                self.stats
+                    .dropped_frames
+                    .fetch_add(block.frames as u64, Ordering::Relaxed);
+                admitted = false;
+            }
+            lost = 0;
+        }
         if lost > 0 || admitted {
             let mut item = *block;
             item.lost_before = lost;
@@ -499,6 +577,9 @@ impl Sink {
                         block.uncertainty,
                         None,
                     )?;
+                }
+                if block.flags & SEAL_SEGMENT != 0 {
+                    writer.seal()?;
                 }
                 if block.frames > 0 {
                     writer.write(
@@ -860,6 +941,8 @@ impl Capture {
         self.shared
             .last_callback_us
             .store(ffi::clock() as u64, Ordering::Relaxed);
+        // 流停着，回调不会同时访问：重新开流后的时刻与之前不连续，从第一块重新放置。
+        unsafe { *self.shared.placement.get() = Placement::default() };
         ffi::check(unsafe { ffi::hc_start(self.capture) }, self.exclusive)?;
         self.shared.stream_stopped.store(false, Ordering::Release);
         Ok(())
@@ -927,6 +1010,7 @@ impl Capture {
             stats: stats.clone(),
             lost: 0,
             closing_since: None,
+            seal_at: None,
         });
         self.handles.push(Handle {
             report: Report {
@@ -1070,7 +1154,10 @@ impl Capture {
     /// 停止一路：按下这一刻定终点，分发越过它（或流已停、设备不再出数据）就让那一路收尾；
     /// 应答由后台线程在写完、封口、段事件发出之后发，控制线程立即返回。
     pub fn stop(&mut self, id: &str, reply: Value) -> Result<thread::JoinHandle<()>, String> {
-        let others_running = self.handles.iter().any(|h| h.report.id != id && !h.paused);
+        let others_running = self
+            .handles
+            .iter()
+            .any(|h| h.report.id != id && Self::needs_stream(h));
         if self.running() && !others_running {
             ffi::check(self.stop_stream(), false)?;
         }
@@ -1089,18 +1176,28 @@ impl Capture {
             Outcome::Reply(reply),
         ))
     }
+    /// 这一路要不要流开着：在录的都要；暂停的分段轨道也要，继续时直接接上。
+    fn needs_stream(h: &Handle) -> bool {
+        !h.paused || h.report.track
+    }
     pub fn pause(&mut self, id: &str) -> Result<Value, String> {
         let index = self.index(id);
-        if self.handles[index].report.track {
-            return Err("INVALID_ARGUMENT|麦克风轨不支持暂停，请停止后重新开始".into());
-        }
         if !self.handles[index].paused {
-            if self.handles.iter().all(|h| h.report.id == id || h.paused) {
+            let track = self.handles[index].report.track;
+            if !track
+                && !self
+                    .handles
+                    .iter()
+                    .any(|h| h.report.id != id && Self::needs_stream(h))
+            {
                 ffi::check(self.stop_stream(), false)?;
             }
             let until = self.shared.captured.load(Ordering::Acquire);
             if let Some(route) = self.routes.lock().unwrap().iter_mut().find(|r| r.id == id) {
                 route.gate.pause(until);
+                if track {
+                    route.seal_at = Some(until);
+                }
             }
             self.handles[index].paused = true;
             self.handles[index].paused_counts = self.shared.baseline();
@@ -1109,9 +1206,6 @@ impl Capture {
     }
     pub fn resume(&mut self, id: &str) -> Result<Value, String> {
         let index = self.index(id);
-        if self.handles[index].report.track {
-            return Err("INVALID_ARGUMENT|麦克风轨不支持暂停，请停止后重新开始".into());
-        }
         if self.handles[index].paused {
             let from = self.shared.captured.load(Ordering::Acquire);
             if let Some(route) = self.routes.lock().unwrap().iter_mut().find(|r| r.id == id) {
@@ -1243,6 +1337,7 @@ mod tests {
                 stats: stats.clone(),
                 lost: 0,
                 closing_since: None,
+                seal_at: None,
             });
             (stats, done)
         }
@@ -1570,5 +1665,166 @@ mod tests {
         // 前 2 块写进去，丢的 4000 帧里 [2000, 4000) 补静音，暂停中的 [4000, 6000) 不写，继续后再 1 块。
         assert_eq!(stats.frames.load(Ordering::Acquire), 5_000);
         assert_eq!(Wav::recover(&path).unwrap(), 5_000 * 3);
+    }
+
+    fn segment_events(received: &mpsc::Receiver<Reliable>, phase: &str) -> Vec<Value> {
+        received
+            .try_iter()
+            .filter_map(|item| match item {
+                Reliable::Event(value) if value["phase"] == phase => Some(value),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_paused_track_seals_at_once_and_resumes_into_a_new_segment_from_the_next_block() {
+        // 录屏暂停时流不停：暂停前的段在暂停期间就封口，继续后第一块另起一段，时刻是它自己的。
+        let dir = tempfile::tempdir().unwrap();
+        let mut rig = Rig::new(1, QUEUE_TEST);
+        let (events, received) = mpsc::channel();
+        let (stats, done) = rig.track("screen", dir.path(), events);
+        rig.run();
+        feed(&rig.shared, 3, 1000, None);
+        let at = rig.captured();
+        rig.gate("screen", |r| {
+            r.gate.pause(at);
+            r.seal_at = Some(at);
+        });
+        feed(&rig.shared, 5, 1000, None);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut sealed = Vec::new();
+        while sealed.is_empty() && Instant::now() < deadline {
+            sealed = segment_events(&received, "seal");
+            thread::sleep(Duration::from_millis(2));
+        }
+        assert_eq!(sealed.len(), 1);
+        assert_eq!(sealed[0]["frames"], 3_000);
+        let at = rig.captured();
+        rig.gate("screen", |r| r.gate.resume(at));
+        let resumed = [0.5f32; 1000];
+        unsafe {
+            accept(&rig.shared, &resumed, 1000, 9_000_000.0, 1.0, 0);
+            accept(&rig.shared, &resumed, 1000, 9_020_833.0, 1.0, 0);
+            flush(&rig.shared);
+        }
+        let at = rig.captured();
+        rig.gate("screen", |r| {
+            r.gate.pause(at);
+            r.gate.closing = true;
+        });
+        wait(&done).unwrap();
+        rig.finish();
+        assert_eq!(stats.frames.load(Ordering::Acquire), 5_000);
+        let rest: Vec<Value> = received
+            .try_iter()
+            .filter_map(|item| match item {
+                Reliable::Event(value) => Some(value),
+                Reliable::Barrier(_) => None,
+            })
+            .collect();
+        let opened: Vec<&Value> = rest.iter().filter(|v| v["phase"] == "open").collect();
+        assert_eq!(opened.len(), 1);
+        assert_eq!(opened[0]["firstFrame"], 3_000);
+        assert_eq!(opened[0]["nativeMonoUs"], 9_000_000.0);
+        let sealed: Vec<&Value> = rest.iter().filter(|v| v["phase"] == "seal").collect();
+        assert_eq!(sealed.len(), 1);
+        assert_eq!(sealed[0]["frames"], 2_000);
+    }
+
+    #[test]
+    fn frames_lost_right_before_a_track_pause_are_filled_into_the_paused_segment() {
+        // 采集队列满丢了 4 块（[2000, 6000)），暂停边界在 4000：[2000, 4000) 补进暂停前那段再封口，继续后的采样另起一段。
+        let dir = tempfile::tempdir().unwrap();
+        let mut rig = Rig::new(1, 2);
+        let (events, received) = mpsc::channel();
+        let (_, done) = rig.track("screen", dir.path(), events);
+        feed(&rig.shared, 6, 1000, None);
+        rig.gate("screen", |r| {
+            r.gate.pause(4000);
+            r.seal_at = Some(4000);
+        });
+        rig.run();
+        while !rig.shared.queue.is_empty() {
+            thread::sleep(Duration::from_millis(2));
+        }
+        rig.gate("screen", |r| r.gate.resume(6000));
+        feed(&rig.shared, 1, 1000, None);
+        let at = rig.captured();
+        rig.gate("screen", |r| {
+            r.gate.pause(at);
+            r.gate.closing = true;
+        });
+        wait(&done).unwrap();
+        rig.finish();
+        let all: Vec<Value> = received
+            .try_iter()
+            .filter_map(|item| match item {
+                Reliable::Event(value) => Some(value),
+                Reliable::Barrier(_) => None,
+            })
+            .collect();
+        let frames = |phase: &str, key: &str| -> Vec<u64> {
+            all.iter()
+                .filter(|v| v["phase"] == phase)
+                .map(|v| v[key].as_u64().unwrap())
+                .collect()
+        };
+        assert_eq!(frames("seal", "frames"), vec![4000, 1000]);
+        assert_eq!(frames("open", "firstFrame"), vec![0, 4000]);
+    }
+
+    /// 可重复的伪随机抖动，范围 [-1, 1)。
+    fn jitter(seed: &mut u64) -> f64 {
+        *seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        (*seed >> 11) as f64 / (1u64 << 53) as f64 * 2.0 - 1.0
+    }
+
+    #[test]
+    fn placement_follows_sample_count_through_jitter_and_drift_without_jumping() {
+        // 一小时、每回调 10 ms、测得时刻带 ±10 ms 抖动，设备比系统时钟慢 50 ppm：
+        // 不触发重新对齐，每 5 秒的偏差不超过 0.5 ms（拼接时集中吸收也只有约 0.25% 变速），且一直跟住真实时刻。
+        let frame_us = 1_000_000.0 / 48_000.0;
+        let mut placement = Placement::default();
+        let mut seed = 7;
+        let (mut segment_start, mut worst_slip, mut worst_error) = (None::<f64>, 0f64, 0f64);
+        for k in 0..360_000u64 {
+            let truth = k as f64 * 480.0 * frame_us * (1.0 + 50e-6);
+            let placed =
+                placement.place(truth + 10_000.0 * jitter(&mut seed), 480, frame_us, false);
+            worst_error = worst_error.max((placed - truth).abs());
+            if k % 500 == 0 {
+                if let Some(start) = segment_start {
+                    worst_slip = worst_slip.max((placed - start - 5_000_000.0).abs());
+                }
+                segment_start = Some(placed);
+            }
+        }
+        assert!(worst_slip <= 500.0 + 1e-6, "单段偏差 {worst_slip} µs");
+        assert!(worst_error < 12_000.0, "偏离真实时刻 {worst_error} µs");
+    }
+
+    #[test]
+    fn placement_reanchors_only_on_a_real_forward_jump_and_never_goes_back() {
+        let frame_us = 1_000_000.0 / 48_000.0;
+        let duration = 480.0 * frame_us;
+        let mut p = Placement::default();
+        assert_eq!(p.place(1_000_000.0, 480, frame_us, false), 1_000_000.0);
+        // 小于 70 ms 的偏晚当抖动：按采样数推进，只缓慢修正。
+        let next = 1_000_000.0 + duration;
+        let placed = p.place(next + 30_000.0, 480, frame_us, false);
+        assert!((placed - next - duration * SLEW).abs() < 1e-6);
+        // 超过 70 ms 的偏晚是真的断了：重新对齐。
+        assert_eq!(p.place(5_000_000.0, 480, frame_us, false), 5_000_000.0);
+        // 带溢出标记（确实丢了采样）时偏晚多少就对齐多少。
+        assert_eq!(p.place(5_020_000.0, 480, frame_us, true), 5_020_000.0);
+        // 偏早（MME 批量回调给出重复时刻）再多也不往回跳。
+        let next = 5_020_000.0 + duration;
+        let placed = p.place(4_000_000.0, 480, frame_us, false);
+        assert!((placed - (next - duration * SLEW)).abs() < 1e-6);
+        let placed_again = p.place(4_000_000.0, 480, frame_us, true);
+        assert!(placed_again > placed);
     }
 }

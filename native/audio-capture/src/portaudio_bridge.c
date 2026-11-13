@@ -16,7 +16,7 @@
 typedef struct { int device, first, channels, rate, format, frames; double latency; int exclusive; } Options;
 typedef struct { int api, inputs, outputs; double rate, low_in, high_in, low_out, high_out; const char *name; } Device;
 typedef void (*Sink)(void *, const float *, int, double, double, unsigned long, unsigned long);
-typedef struct { PaStream *stream; Options options; int input_channels, first, calibrated; Sink sink; void *user; double rate, latency, clock_offset, next_us; } Capture;
+typedef struct { PaStream *stream; Options options; int input_channels, first, calibrated; Sink sink; void *user; double rate, latency, clock_offset; } Capture;
 
 double hc_clock(void) {
 #ifdef _WIN32
@@ -86,9 +86,7 @@ static int callback(const void *input, void *output, unsigned long frames, const
     if (!c->calibrated && valid) { c->clock_offset = now - time->currentTime * 1000000; c->calibrated = 1; }
     first = valid ? time->inputBufferAdcTime * 1000000 + c->clock_offset : now - c->latency * 1000000;
     uncertainty = valid ? 1000.0 : (c->latency + frames / c->rate) * 1000000;
-    /* 某些 MME 驱动的批量回调给出重复 ADC 时间；保留样本序和显式误差，不能让时钟回退。 */
-    if (first < c->next_us) { uncertainty += c->next_us - first; first = c->next_us; }
-    c->next_us = first + frames * 1000000.0 / c->rate;
+    /* 这里只给测得的时刻；按采样数连续推进与重新对齐在 Rust 侧（microphone.rs 的 Placement）。 */
     (void)output;
     for (offset = 0; offset < frames; offset += 1024) {
         unsigned long count = frames - offset < 1024 ? frames - offset : 1024;

@@ -14,6 +14,22 @@ const SOURCES = Object.freeze({
   portaudio: { version: '19.7.0', url: 'https://files.portaudio.com/archives/pa_stable_v190700_20210406.tgz', file: 'portaudio.tar.gz', sha256: '47efbf42c77c19a05d22e627d42873e991ec0c1357219c0d74ce6a2948cb2def' },
   asio: { version: '2.3.4-2025-10-15', url: 'https://download.steinberg.net/sdk_downloads/ASIO-SDK_2.3.4_2025-10-15.zip', file: 'asio.zip', sha256: 'd5ebf0c20dd2c5f43771fd0c1418f4b361bf52434ee670097cfa6b3a335e2eca' },
 })
+/**
+ * 19.7.0 之后上游修过、尚未发版的问题，解压后逐条打上。
+ * WASAPI 输入的 ADC 时刻把缓冲里还没取走的时长加反了（上游 #850，commit 7e62dfc），采集时刻应早于 currentTime。
+ */
+const PORTAUDIO_PATCHES = Object.freeze([
+  { file: 'portaudio/src/hostapi/wasapi/pa_win_wasapi.c', from: 'timeInfo.inputBufferAdcTime = timeInfo.currentTime + pending_time;', to: 'timeInfo.inputBufferAdcTime = timeInfo.currentTime - pending_time;' },
+])
+function patchPortAudio() {
+  for (const patch of PORTAUDIO_PATCHES) {
+    const file = path.join(vendor, patch.file)
+    const source = fs.readFileSync(file, 'utf8')
+    if (source.includes(patch.to)) continue
+    if (!source.includes(patch.from)) throw new Error(`PortAudio 补丁对不上源码：${patch.file}`)
+    fs.writeFileSync(file, source.replace(patch.from, patch.to))
+  }
+}
 function run(command, args, env = process.env) {
   const result = spawnSync(command, args, { cwd: root, env, stdio: 'inherit', windowsHide: true })
   if (result.error || result.status !== 0) throw result.error ?? new Error(`${command} 失败：${result.status}`)
@@ -32,6 +48,7 @@ async function main() {
   }
   fs.mkdirSync(vendor, { recursive: true })
   run(tar, ['-xf', await obtain(SOURCES.portaudio), '-C', vendor])
+  patchPortAudio()
   let asio = false
   if (win && !process.argv.includes('--without-asio')) {
     try {
@@ -54,7 +71,7 @@ async function main() {
   // 环境里没有显式指定时传空值（cargo 的 [env] 不覆盖已有变量），交给 cc 自己找编译器。
   if (win) { cargoEnv.CC ??= ''; cargoEnv.CXX ??= '' }
   run('cargo', [process.argv.includes('--test') ? 'test' : 'build', '--locked', '--release', '--manifest-path', path.join(crate, 'Cargo.toml')], cargoEnv)
-  fs.writeFileSync(path.join(crate, 'target/release/audio-capture-build.json'), JSON.stringify({ asio, sources: SOURCES }, null, 2))
+  fs.writeFileSync(path.join(crate, 'target/release/audio-capture-build.json'), JSON.stringify({ asio, sources: SOURCES, patches: PORTAUDIO_PATCHES.map(patch => patch.file) }, null, 2))
   console.log(`[audio-capture] 构建完成；ASIO=${asio}`)
 }
 module.exports = { SOURCES }

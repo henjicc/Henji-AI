@@ -115,6 +115,8 @@ export class AudioCaptureService {
       glitchKeys: ['inputOverflows', 'inputUnderflows', 'droppedFrames'],
       // 写盘失败只结束这一路；其余（设备拔出、驱动停止提供采样）都是设备没了，留空档等它回来。
       deviceLost: code => code !== 'DISK_FULL' && code !== 'FILE_ERROR',
+      // 录屏暂停时麦克风设备照开（与 OBS 一样），继续时不用重新枚举、开设备，声音紧接着就有。
+      pausable: true,
     }
   }
   /** 原生进程里麦克风正开着（不算正在开的 except 这一路）。 */

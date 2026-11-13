@@ -38,6 +38,11 @@ export interface NativeTrackSource<H extends NativeTrackHealth> {
   glitchKeys: readonly (keyof H & string)[]
   /** 原生结束会话的中断是设备没了（补空档、重连接着录），还是写盘失败（这一路结束）。 */
   deviceLost(code: string): boolean
+  /**
+   * 原生会话能原地暂停（麦克风）：暂停时设备照开、只停写，继续时从下一块直接接上，不用重开设备、等首个回调。
+   * 不能的（系统声）暂停就结束这一段原生会话，继续再开一段。
+   */
+  pausable?: boolean
 }
 
 export interface NativeTrackRecording {
@@ -68,7 +73,7 @@ type GapReason = RecordingTrackGap['reason']
 type Native = AudioCaptureEvent | SystemAudioNativeEvent
 
 /**
- * 一次录制里的一路原生轨道。原生会话负责采集与落盘，这里把段事件换算成轨道记录；暂停就结束这一段原生会话、恢复再开一段。
+ * 一次录制里的一路原生轨道。原生会话负责采集与落盘，这里把段事件换算成轨道记录；暂停时能原地暂停就原地暂停，否则结束这一段原生会话、恢复再开一段。
  * 原生服务失联或设备没了时先记空档、自动重连接着录；失联前没封口的段按文件补出来。
  * 只有开始时开不了才报错；之后暂停、恢复、停止都不因原生出错而失败，已写的段都在文件里。
  */
@@ -77,7 +82,13 @@ export class NativeTrackRecorder<H extends NativeTrackHealth> {
   private state: 'starting' | 'recording' | 'paused' | 'reconnecting' | 'stopped' = 'starting'
   private outcome: NativeTrackSummary<H>['outcome'] = 'completed'
   private readonly opened = new Map<string, { segment: RecordingTrackOpenSegment; bytesPerFrame: number }>()
-  private pending: { fromUs: number; reason: GapReason } | undefined
+  /**
+   * 还没记下的空档。afterLastEnd：原地暂停时暂停前那一段的封口随后才到，空档起点到记下时再取最后一帧的终点，
+   * 并且只由暂停之后（起点不早于 fromUs）开的段来结束它。
+   */
+  private pending: { fromUs: number; reason: GapReason; afterLastEnd?: boolean } | undefined
+  /** 原地暂停按下的时刻：暂停期间失联时，没封口的段按文件补到这里为止。 */
+  private pausedAtUs: number | undefined
   /** 已封口的段里最晚的终点：暂停与设备空档从真正录到的最后一帧起算。 */
   private lastEndUs: number | undefined
   private reconnect: { timer?: ReturnType<typeof setTimeout>; attempt: number; since: number } | undefined
@@ -137,6 +148,15 @@ export class NativeTrackRecorder<H extends NativeTrackHealth> {
     return this.exclusive(async () => {
       if (this.state !== 'recording' && this.state !== 'reconnecting') return
       const atUs = this.nowUs(), reconnecting = this.state === 'reconnecting'
+      // 等应答期间写盘失败已结束这一路，或失联转入重连：按那边的状态走。
+      if (!reconnecting && await this.pauseInPlace() && !this.ended() && this.state === 'recording') {
+        // 应答之后取时刻：原生在收到命令时定边界，边界前的采样都早于这一刻，之后的段都晚于它。
+        const pausedUs = this.nowUs()
+        this.state = 'paused'; this.pausedAtUs = pausedUs
+        this.pending = { fromUs: pausedUs, reason: 'pause', afterLastEnd: true }
+        this.setDown('process', false); this.setDown('device', false)
+        return
+      }
       await this.quiesce()
       // 收尾途中写盘失败，这一路已经结束。
       if (this.ended()) return
@@ -151,6 +171,9 @@ export class NativeTrackRecorder<H extends NativeTrackHealth> {
   resume(): Promise<void> {
     return this.exclusive(async () => {
       if (this.state !== 'paused') return
+      if (await this.resumeInPlace()) { this.state = 'recording'; return }
+      // 暂停中失联时旧段在后台按文件补封口：先等它补完，暂停空档才从真正的最后一帧起算。
+      await this.settling
       try { await this.begin(); if (this.state === 'paused') this.state = 'recording' } catch (error) {
         // 恢复时暂时开不了（设备不在、原生服务出错）不让整次录屏失败：按重连处理，暂停那段照常记暂停。
         this.source.logger.warn(`${this.source.label}恢复时没能开始，稍后自动重试`, { event: this.name('resume.failed'), error })
@@ -158,6 +181,26 @@ export class NativeTrackRecorder<H extends NativeTrackHealth> {
         this.versionMismatch(error)
       }
     })
+  }
+  /** 原地暂停；原生不支持（旧版程序）或会话已不在时返回 false，改为结束这一段原生会话。 */
+  private async pauseInPlace(): Promise<boolean> {
+    const sessionId = this.native
+    if (!this.source.pausable || !sessionId) return false
+    try { await this.source.client.request('pause', { sessionId }); return true } catch (error) {
+      this.source.logger.warn(`${this.source.label}没能原地暂停，改为结束这一段采集`, { event: this.name('pause.failed'), error })
+      return false
+    }
+  }
+  /** 从原地暂停接着录；会话已不在（暂停期间失联、设备没了）时返回 false，由调用方重新开一段。 */
+  private async resumeInPlace(): Promise<boolean> {
+    const sessionId = this.native
+    if (!sessionId) return false
+    try { await this.source.client.request('resume', { sessionId }); return true } catch (error) {
+      this.source.logger.warn(`${this.source.label}没能接着录，重新开始采集`, { event: this.name('resume.reopen'), error })
+      if (this.native === sessionId) this.native = undefined
+      if (this.opened.size) await this.settleOpened([...this.opened.keys()], this.pausedAtUs)
+      return false
+    }
   }
   /** 停止：原生会话收尾后，最后一段的封口记录已经交出。暂停或重连中停止时空档记到按下停止的时刻。 */
   stop(atUs = this.nowUs()): Promise<NativeTrackSummary<H>> {
@@ -173,9 +216,10 @@ export class NativeTrackRecorder<H extends NativeTrackHealth> {
     })
   }
   private closePending(atUs: number): void {
-    if (this.pending) this.gap(this.pending.fromUs, atUs, this.pending.reason)
+    if (this.pending) this.gap(this.pendingFromUs(this.pending), atUs, this.pending.reason)
     this.pending = undefined
   }
+  private pendingFromUs(pending: NonNullable<NativeTrackRecorder<H>['pending']>): number { return pending.afterLastEnd ? this.lastEndUs ?? pending.fromUs : pending.fromUs }
   /** 结束当前原生会话（若有），取消重连，把没封口的段按文件补出来。 */
   private async quiesce(): Promise<void> {
     const sessionId = this.native
@@ -220,6 +264,11 @@ export class NativeTrackRecorder<H extends NativeTrackHealth> {
     else if (event.event === 'interrupted') {
       this.native = undefined; this.fold(event.health ? event.health as unknown as H : this.health)
       clearTimeout(this.reconnect?.timer); this.reconnect = undefined
+      // 原地暂停中设备没了：原生已把各段封口；暂停期间不重连，继续时重新开设备。
+      if (this.state === 'paused' && this.source.deviceLost(event.error.code)) {
+        this.source.logger.warn(`${this.source.label}暂停中设备中断，继续时重新打开`, { event: this.name('device.lost'), context: { code: event.error.code } })
+        return
+      }
       if (this.state !== 'stopped' && this.source.deviceLost(event.error.code)) {
         // 设备没了：原生已把最后一段封口。轨道从真正录到的最后一帧起记设备空档，设备回来（或换到默认设备）后接着录。
         this.source.logger.warn(`${this.source.label}设备中断，留空档并自动重连`, { event: this.name('device.lost'), context: { code: event.error.code } })
@@ -257,8 +306,9 @@ export class NativeTrackRecorder<H extends NativeTrackHealth> {
       if (open && event.frames) this.seal(open.segment, event.frames)
       return
     }
-    if (this.pending) {
-      this.gap(this.pending.fromUs, startUs, this.pending.reason)
+    // 原地暂停时，暂停前排着队的采样可能跨过段界、在暂停之后才开出一段：那一段还是暂停前的，不结束空档。
+    if (this.pending && !(this.pending.afterLastEnd && startUs < this.pending.fromUs)) {
+      this.gap(this.pendingFromUs(this.pending), startUs, this.pending.reason)
       this.pending = undefined
     }
     const segment: RecordingTrackOpenSegment = { id: event.segmentId, file: event.file, sampleRate: event.sampleRate, channels: event.channels, latencyCompensationUs: 0,
@@ -302,6 +352,12 @@ export class NativeTrackRecorder<H extends NativeTrackHealth> {
 
   /** 原生服务失联（崩溃、不应答）：自动重连接着录。 */
   lost(loss: AudioCaptureLoss): void {
+    // 原地暂停中失联：暂停期间本来就不录，不记空档也不重连；没封口的段等旧进程退出后按文件补，继续时重新开一段。
+    if (this.state === 'paused' && this.native) {
+      this.native = undefined; this.fold(this.health)
+      if (this.opened.size) this.settling = this.settleOpened([...this.opened.keys()], this.pausedAtUs)
+      return
+    }
     if (this.state !== 'recording') return
     this.source.logger.warn(`${this.source.label}服务失联，自动重连`, { event: this.name('reconnect.start'), context: { code: loss.code } })
     this.lose(this.nowUs(), 'missing-data', 'process')
