@@ -18,6 +18,7 @@ import { resolveNativeCaptureSource } from './source'
 import { createCaptureBounds, createCaptureGeometry } from './geometry'
 import { RecordingSessionDocument, readRecordingEvents, recoverRecordingSession } from '../session-document'
 import { exportQuickRecording, quickExportPath } from '../quick-export'
+import { combineRecording } from '../combine'
 import { systemAudioCapture } from '../../audio-capture/system-audio'
 import { microphoneCapture } from '../../audio-capture/service'
 import type { NativeTrack, NativeTrackRecording } from '../../audio-capture/native-track'
@@ -188,6 +189,10 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
     if (active?.storage.manifest.sessionId === request.sessionId) throw new Error('请先结束当前录制，再保存视频')
     return exportQuickRecording(request.sessionId, request.directory)
   }
+  if (request.operation === 'combine') {
+    if (active?.storage.manifest.sessionId === request.sessionId) throw new Error('请先结束当前录制，再导入剪辑')
+    return combineRecording(request.sessionId)
+  }
   if (request.operation === 'reveal-export') {
     const file = quickExportPath(request.sessionId)
     if (!file) throw new Error('视频文件已移动或删除')
@@ -267,6 +272,10 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
         if (request.session && source.id !== BrowserWindow.fromWebContents(owner)?.getMediaSourceId()) minimizeOwnerWhileRecording(BrowserWindow.fromWebContents(owner))
         openRecordingControl(owner, request.sessionId, {
           start: signal => transition('start', 'recording', signal), pause: signal => transition('pause', 'paused', signal), resume: signal => transition('resume', 'recording', signal), stop: signal => transition('stop', 'stopped', signal),
+          capturingSinceUs: () => {
+            const span = manifest.spans.at(-1)
+            return backend === 'gfxcapture' && span && !span.finalized ? session.originUs + span.monoUs : undefined
+          },
           mark: async () => undefined, // Event/marker ownership is task 1.4; no duplicate event log here.
           ...(document ? {
             began: () => document!.range('startUs', now() - session.originUs), ending: () => failing(document!.range('endUs', now() - session.originUs)),

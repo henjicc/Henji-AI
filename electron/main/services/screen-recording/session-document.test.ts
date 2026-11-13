@@ -135,3 +135,20 @@ it('脚本调用落盘串行保留第一次快照，重复调用拒绝', async (
   expect(state.saved!.content.scriptCapture.baselines).toEqual([{ documentId: baseline.id, content: baseline }])
   expect(() => document.scriptCall(call, [])).toThrow('重复')
 })
+
+it('停止收尾按事件时钟与恢复后画面第一帧统一暂停区间，画面、声音与事件扣掉同一段', async () => {
+  const document = await setup({ systemAudio: false })
+  await document.range('startUs', 1_500_000)
+  await document.pause(4_000_000); await document.resume(6_300_000)
+  await document.range('endUs', 10_000_000)
+  document.page({ seqSpan: [0, 2], entries: [
+    { kind: 'control', action: 'start', eventId: 'a', monoUs: 500_000 },
+    { kind: 'control', action: 'pause', eventId: 'b', monoUs: 4_000_000 },
+    { kind: 'control', action: 'resume', eventId: 'c', monoUs: 6_100_000 },
+  ] } as unknown as CaptureLogPage, path.join(directory, '0.capture.json'), 1)
+  manifest.spans.push({ index: 0, file: 'screen-000000.mp4', monoUs: 1_000_000, durationUs: 3_400_000, finalized: true }, { index: 1, file: 'screen-000001.mp4', monoUs: 6_000_000, durationUs: 4_200_000, finalized: true })
+  manifest.status = 'stopped'
+  await document.finish(manifest)
+  // 事件时钟停了 2.1 秒；画面 6.0 秒恢复，暂停就是 3.9–6.0 秒。
+  expect(state.saved!.content.pauses).toEqual([{ startUs: 3_900_000, endUs: 6_000_000 }])
+})

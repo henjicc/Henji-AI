@@ -51,10 +51,10 @@ const start = defineApplicationCapability({ ...common, id: 'start_screen_recordi
   summarize: result => result.message ?? '录制会话已准备，倒计时后开始；可读取会话查看进度。',
 })
 const controls = [
-  ['pause', '暂停录制', '暂停屏幕、声音、摄像头与事件，保留真实空档。'],
+  ['pause', '暂停录制', '暂停屏幕、声音、摄像头与事件；继续后仍是同一次录制，导入剪辑是一个画面素材，暂停的那段不在其中。要互不相连的几段请停止后重新开始。'],
   ['resume', '恢复录制', '恢复暂停的全部录制轨道，共用原时钟继续采集。'],
   ['mark', '标记录制时刻', '在当前真实录制时刻采集重点标记，可附备注。'],
-  ['stop', '停止并保存录制', '停止全部轨道并等待媒体、事件与会话保存；如开始时指定剪辑目标，导入该目标。最多等约 45 秒：长录收尾（拼接声音、导入）没做完时先返回 finishing=true，收尾照常进行；之后读会话 phase 与 details.finishing，不要再次停止。'],
+  ['stop', '停止并保存录制', '停止全部轨道并等待媒体、事件与会话保存；如开始时指定剪辑目标，导入该目标（一次录制一个画面素材，麦克风、系统声各一条）。最多等约 45 秒：长录收尾（拼接声音、导入）没做完时先返回 finishing=true，收尾照常进行；之后读会话 phase 与 details.finishing，不要再次停止。'],
   ['cancel', '中止录制', '释放全部采集设备与输入钩子；已封存片段仍可从会话恢复，不删除原片。'],
   ['recover', '恢复中断的录制', '关闭采集后检查已落盘分片与事件页，恢复可播放片段，补齐没封口的声音分段并拼接声音；不重启设备、不重放操作。没能恢复的时段在 details.tracks 里按缺数据空档列出。最多等约 45 秒，没做完返回 finishing=true，照常在后台进行，读 details.finishing。'],
 ] as const
@@ -72,7 +72,7 @@ export const RECORDING_CAPABILITIES = [start, ...WEB_APP_RECORDING_CAPABILITIES,
   outputSchema: capabilityOutputSchema({ events: z.array(captureEventSchema), nextOffset: z.number().int().nonnegative().nullable() }),
   acceptsRefs: ['screen_recording.session'], control: capabilityControl('observe', ['screen_recording.session']), summarize: result => `已读取 ${result.events.length} 条事件。`,
 }), defineApplicationCapability({
-  ...common, id: 'import_screen_recording', title: '将录制导入剪辑', description: '把已保存或恢复的会话原片引用导入指定剪辑素材库；给 sequenceId 时按同一时钟放到 frame 处，保留暂停与缺帧空档，一步撤销。无需复制文件。最多等约 45 秒，长录没导完时返回 finishing=true、itemIds 为空，导入照常进行：读会话 details.finishing，完成后读剪辑素材。',
+  ...common, id: 'import_screen_recording', title: '将录制导入剪辑', description: '把已保存或恢复的会话导入指定剪辑素材库：一次录制（中间暂停几次都算）是一个画面素材，麦克风、系统声各一条与它对齐的声音，暂停分出的分片在导入前无损拼成一个文件（不重新编码，原分片保留）；给 sequenceId 时放到 frame 处，暂停不占时间线，画面与声音链接成一组，设备断开的空档留空，一步撤销。较早版本录的会话或拼不成时各段照原样导入，回执写明原因。最多等约 45 秒，长录没导完时返回 finishing=true、itemIds 为空，导入照常进行：读会话 details.finishing，完成后读剪辑素材。',
   aliases: ['录屏进剪辑', '录制素材导入'], supportsUndo: true,
   inputSchema: z.object({ sessionRef: recordingRefSchema, destination: recordingDestinationSchema }).strict(),
   outputSchema: capabilityOutputSchema({ resultRef: z.object({ kind: z.literal('video_edit.document'), id: z.string() }).strict(), itemIds: z.array(z.string()), verified: z.boolean(), finishing: z.boolean().optional(), message: z.string().optional() }),

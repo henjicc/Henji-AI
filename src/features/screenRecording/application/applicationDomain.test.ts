@@ -49,7 +49,7 @@ it('用户在录屏页开始、助手停止的录制：回执说明素材已按�
   // 与录屏页“开始录制”同一入口：handoff=true，停止后由录屏服务自己送进剪辑。
   const id = await startRecording({ sourceId: 'screen:1:0', width: 1920, height: 1080, fps: 30 } as Parameters<typeof startRecording>[0], { name: '课程', tracks: { systemAudio: false } }, null, undefined, undefined, true)
   Object.assign(state.content!, { startUs: 0, endUs: 2_000_000, media: [{ id: 'screen', kind: 'screen', path: '/s.mp4', monoUs: 0, durationUs: 2_000_000 }] })
-  vi.mocked(openRecordingInEditor).mockResolvedValueOnce({ documentId: 'edit', sequenceId: 'seq', frame: 0, itemIds: ['item-1'] })
+  vi.mocked(openRecordingInEditor).mockResolvedValueOnce({ documentId: 'edit', sequenceId: 'seq', frame: 0, imported: { itemIds: ['item-1'], combined: true, screens: 1 } })
   const stopped = await handlers.get('stop_screen_recording')!({ sessionRef: { kind: 'screen_recording.session', id } }, { signal: new AbortController().signal })
   expect(openRecordingInEditor).toHaveBeenCalledWith(id, null)
   expect(importRecordingToVideo).not.toHaveBeenCalled()
@@ -75,6 +75,10 @@ it('目标序列认读回的“文档:序列”与裸 id；不在这份剪辑里
   const importInput = { sessionRef: { kind: 'screen_recording.session', id: '00000000-0000-4000-8000-000000000009' }, destination: { documentId: 'edit', sequenceId: 'other:seq' } }
   await expect(handlers.get('import_screen_recording')!(importInput, { signal })).rejects.toMatchObject({ details: { execution: { notExecuted: true } } })
   expect(importRecordingToVideo).not.toHaveBeenCalled()
+  // 编码器中途重启分成两组：回执如实说两个画面素材，不说“一个”。
+  vi.mocked(importRecordingToVideo).mockResolvedValueOnce({ itemIds: ['a', 'b', 'c'], combined: true, screens: 2 })
+  const imported = await handlers.get('import_screen_recording')!({ ...importInput, destination: { documentId: 'edit', sequenceId: 'edit:seq' } }, { signal }) as { message: string }
+  expect(imported.message).toContain('分成 2 个素材'); expect(imported.message).not.toContain('一组')
   const started = await handlers.get('start_screen_recording')!(input('edit:seq'), { signal })
   expect((state.prepared.mock.calls[0] as unknown[])[4]).toMatchObject({ destination: { documentId: 'edit', sequenceId: 'seq' } })
   // 录制中计数还没封存：不给假的 0；已录时长不含暂停，停止后同一口径。
@@ -84,10 +88,11 @@ it('目标序列认读回的“文档:序列”与裸 id；不在这份剪辑里
   expect(live.properties['screen_recording.session.elapsed_ms']).toBe(6000)
   expect(live.properties['screen_recording.session.details']).not.toHaveProperty('events')
   Object.assign(state.content!, { startUs: 0, endUs: 8_000_000, pauses: [{ startUs: 2_000_000, endUs: 4_000_000 }], media: [{ id: 'screen', kind: 'screen', path: '/s.mp4', monoUs: 0, durationUs: 8_000_000 }] })
-  vi.mocked(importRecordingToVideo).mockResolvedValueOnce(['item-1'])
+  vi.mocked(importRecordingToVideo).mockResolvedValueOnce({ itemIds: ['item-1'], combined: true, screens: 1 })
   const stopped = await handlers.get('stop_screen_recording')!({ sessionRef: started.resultRef }, { signal })
   expect(importRecordingToVideo).toHaveBeenCalledWith(expect.any(String), { documentId: 'edit', sequenceId: 'seq' })
   expect(stopped).toMatchObject({ message: expect.stringContaining('课程 · 屏幕'), imported: { documentRef: { id: 'edit' }, sequenceRef: { id: 'edit:seq' }, itemRefs: [{ kind: 'video_edit.item', id: 'edit:item-1' }] } })
+  expect((stopped as { message: string }).message).toContain('暂停不占时间线，画面与声音链接成一组')
   const stop = RECORDING_CAPABILITIES.find(item => item.id === 'stop_screen_recording')!
   expect(stop.outputSchema.safeParse({ ...stopped, revision: 0, scopeRevisions: {} }).success).toBe(true)
   const saved = await provider.readEntity(started.resultRef as { kind: string; id: string }, {})

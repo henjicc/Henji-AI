@@ -15,7 +15,7 @@
 ## 录制中
 
 - `start_screen_recording` 返回会话引用后先倒计时再开始，录制在后台进行，切页面不会中断。之后用 `read_application_entity` 读 `screen_recording.session` 的 phase（countdown、recording、paused、stopping、stopped、failed）与 elapsed_ms（已录毫秒，不含暂停，录制中与停止后同一口径）判断进度；details 里有画面与声音分片、标记数、事件数和所用设备。录制中省略事件数与标记数（还没封存），要看就用 `read_screen_recording_events` 读。
-- `pause_screen_recording` / `resume_screen_recording` 暂停与继续全部轨道，暂停的空档如实保留，不拼接成连续时间。
+- `pause_screen_recording` / `resume_screen_recording` 暂停与继续全部轨道。开始到停止是一次录制，中间暂停几次都算一个整体：导入剪辑后是一个画面素材，暂停的那段不在里面；要互不相连的几段就停止后重新开始。
 - 用户说“这里记一下”时用 `mark_screen_recording`，可带 note；标记之后可按 markersOnly 单独读回。
 - `stop_screen_recording` 停止全部轨道，等画面、声音、事件与会话都保存好才返回；开始时给了剪辑目标的，会接着导入。它最多等约 45 秒：长录制收尾（拼接声音、导入）没做完时先返回 finishing=true，收尾照常进行；不要再发一次停止；之后读会话 details，finishing 变回 false 后 details.error 有值就是失败（写着原因），没有、phase 为 stopped 就算完成。`recover_screen_recording`、`import_screen_recording` 同样最多等约 45 秒，没做完返回 finishing=true（导入时 itemIds 为空），照常在后台进行，成败同样看 finishing 变回 false 后的 details.error。
 - `cancel_screen_recording` 中止录制并释放设备与输入钩子；已经封存的片段不会删，之后仍可恢复。
@@ -29,7 +29,7 @@
 
 ## 录完进剪辑
 
-- 直接放素材：`import_screen_recording` 给 sessionRef 与 destination。给 sequenceId 时各轨按录制时的同一时钟对齐放到 frame 处，暂停与缺帧的空档保留；只给 documentId 就只进素材库。引用原片、不复制文件，一步撤销。
+- 直接放素材：`import_screen_recording` 给 sessionRef 与 destination。一次录制导入后是一个画面素材（“会话名 · 屏幕”），麦克风、系统声各一条与它对齐；暂停分出的画面分片在导入前无损拼成一个文件，不重新编码，原分片保留。给 sequenceId 时放到 frame 处，暂停不占时间线，画面与声音链接成一组，设备断开的空档留空；只给 documentId 就只进素材库。一步撤销。较早版本录的会话（暂停对不齐）或拼不成时各段照原样导入，素材名带“第 N 段”，回执写明原因。
 - 一键成片：`generate_screen_recording_movie` 把会话生成到目标剪辑里一条未锁定的空序列（可同时出竖版、方版），recipe 控制剪停顿与语气词、等待加速、推近、光标、字幕、标题、章节、摄像头与响度，整批一步撤销。字幕要先有文字稿：先用 `understand_screen_recording`（默认免费，开启转写才付费）分析出步骤、章节、停顿、等待与失误候选，候选只供审阅，不会剪原片。
 - 录到了密码、手机号、密钥一类内容：用 `detect_screen_recording_sensitive_text` 在本机找出待打码的候选，确认后才生效；快速滚动、闪现、低清文字仍要人工看一遍。
 

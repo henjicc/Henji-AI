@@ -111,3 +111,22 @@ it('主进程卡住后一口气送到的事件按钩子自带的时刻记下，�
   expect(moves).toEqual(Array.from({ length: 50 }, (_, index) => (t0 + (index + 1) * 10) * 1000))
   expect(events.find(event => event.kind === 'click')?.monoUs).toBe((t0 + 505) * 1000)
 })
+
+it('事件时钟零点比画面第一帧早、恢复时从画面第一帧接着走；按下暂停当刻就停，不等文档保存', async () => {
+  const f = fixture()
+  let since: number | undefined
+  const pausing = vi.fn(async () => { expect(hooks.detach).toHaveBeenCalledTimes(1) })
+  const wrapped = f.session.wrap({ ...f.backend, pausing, capturingSinceUs: () => since })
+  vi.setSystemTime(3000); since = 10000 + 2_000_000
+  await wrapped.start(f.signal.signal)
+  vi.setSystemTime(5000); await wrapped.pausing!(); await wrapped.pause(f.signal.signal)
+  expect(pausing).toHaveBeenCalledTimes(1)
+  vi.setSystemTime(8000); since = 10000 + 7_000_000
+  await wrapped.resume(f.signal.signal)
+  await wrapped.stop(f.signal.signal)
+  const controls = pages().flatMap(page => page.entries).filter(event => event.kind === 'control')
+  expect(controls.map(event => [event.kind === 'control' && event.action, event.monoUs])).toEqual([['start', 1_000_000], ['pause', 5_000_000], ['resume', 7_000_000], ['stop', 8_000_000]])
+  // 暂停扣掉的正好是按下暂停到画面恢复第一帧。
+  const resume = controls[2]
+  expect(resume.monoUs - resume.recordingUs - (controls[0].monoUs - controls[0].recordingUs)).toBe(2_000_000 - 1)
+})

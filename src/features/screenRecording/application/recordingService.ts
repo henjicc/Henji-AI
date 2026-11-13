@@ -73,7 +73,7 @@ export async function showRecordingDocument(id: string): Promise<void> {
  * 停止后录好的素材去了哪：导入了哪份剪辑（导入了哪些素材项），或存成了哪个视频文件（快速录制在后台存，存好前 path 为空）。
  * 停止的回执据此说清楚，免得调用方以为没导入又导一遍。
  */
-export type RecordingStopOutcome = { kind: 'edit'; documentId: string; sequenceId?: string; frame?: number; itemIds?: string[] } | { kind: 'file'; path?: string; error?: string }
+export type RecordingStopOutcome = { kind: 'edit'; documentId: string; sequenceId?: string; frame?: number; itemIds?: string[]; combined?: boolean; screens?: number; separate?: string } | { kind: 'file'; path?: string; error?: string }
 const stopOutcomes = new Map<string, RecordingStopOutcome>()
 export function recordingStopOutcome(id: string): RecordingStopOutcome | undefined { return stopOutcomes.get(id) }
 async function finish(id: string, importResult: boolean): Promise<void> {
@@ -101,12 +101,15 @@ async function finish(id: string, importResult: boolean): Promise<void> {
         void saveQuickRecording(id, quick.directory).then(path => { stopOutcomes.set(id, { kind: 'file', path }) }, error => { stopOutcomes.set(id, { kind: 'file', error: error instanceof Error ? error.message : String(error) }) })
       } else if (importResult && recorded && handoff) {
         const { openRecordingInEditor } = await import('./recordingVideoImport')
-        try { stopOutcomes.set(id, { kind: 'edit', ...await openRecordingInEditor(id, destination) }) }
+        try {
+          const { imported, ...target } = await openRecordingInEditor(id, destination)
+          stopOutcomes.set(id, { kind: 'edit', ...target, ...imported })
+        }
         catch (error) { notifyUser(notificationMessage('recordingEditFailed', { error: error instanceof Error ? error.message : String(error) }), 'error'); throw error }
       } else if (importResult && recorded && destination) {
         // Assistant and director runs keep control of what happens next; they only fill the edit they named.
         const { importRecordingToVideo } = await import('./recordingVideoImport')
-        stopOutcomes.set(id, { kind: 'edit', ...destination, itemIds: await importRecordingToVideo(id, destination) })
+        stopOutcomes.set(id, { kind: 'edit', ...destination, ...await importRecordingToVideo(id, destination) })
       }
       defaultDocumentOperationChanges.changed()
       logger.info('录制会话已封存', { event: 'recording.session.finish.completed', context: { sessionId: id } })

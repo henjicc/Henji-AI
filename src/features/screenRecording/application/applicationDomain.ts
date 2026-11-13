@@ -70,13 +70,15 @@ async function stopImportReceipt(sessionId: string): Promise<{ message: string; 
   const itemIds = outcome.itemIds ?? []
   const names = itemIds.map(id => owner?.document.items.find(item => item.id === id)?.name ?? id)
   const sequenceName = outcome.sequenceId ? owner?.document.sequences.find(value => value.id === outcome.sequenceId)?.name ?? `${outcome.documentId}:${outcome.sequenceId}` : undefined
-  const placed = sequenceName ? `已放进序列「${sequenceName}」第 ${outcome.frame ?? 0} 帧起，暂停前后各段分别链接。` : '没给 sequenceId，只进了素材库。'
+  const placed = `${sequenceName ? `已放进序列「${sequenceName}」第 ${outcome.frame ?? 0} 帧起，${outcome.combined ? combinedPlacement(outcome.screens ?? 1) : '暂停前后各段分别链接。'}` : '没给 sequenceId，只进了素材库。'}${outcome.separate ? `${outcome.separate}。` : ''}`
   return {
     message: outcome.itemIds ? `已停止并保存，导入剪辑素材库 ${names.length} 项：${names.join('、')}；${placed}不要再导入。` : `已停止并保存，按录屏页的设置回到上次送进的剪辑${sequenceName ? `（序列「${sequenceName}」）` : ''}，素材已在里面，不要再导入。`,
     imported: { documentRef: { kind: 'video_edit.document', id: outcome.documentId }, ...(outcome.sequenceId ? { sequenceRef: { kind: 'video_edit.sequence', id: `${outcome.documentId}:${outcome.sequenceId}` } } : {}),
       itemRefs: itemIds.map(id => ({ kind: 'video_edit.item', id: `${outcome.documentId}:${id}` })) },
   }
 }
+/** 合并后通常一个画面素材；编码器中途重启留下真实空档时分成几组，如实说几个。 */
+const combinedPlacement = (screens: number): string => screens > 1 ? `暂停不占时间线；画面因编码中途重启分成 ${screens} 个素材，各自与同段声音链接成组。` : '暂停不占时间线，画面与声音链接成一组。'
 const stillRunning = (what: string): string => `${what}仍在后台进行（长录要拼接声音、补齐分片或导入剪辑），不要重发。读 screen_recording.session 的 details：finishing 变回 false 后，details.error 有值就是失败（写着原因），没有就是做完了。`
 
 export const screenRecordingApplicationDomain: ApplicationDomainModule = {
@@ -173,8 +175,8 @@ export const screenRecordingApplicationDomain: ApplicationDomainModule = {
         const work = trackRecordingWork(parsed.sessionRef.id, importRecordingToVideo(parsed.sessionRef.id, destination, context.signal))
         const resultRef = { kind: 'video_edit.document', id: parsed.destination.documentId }
         if (!await waitWithin(work, CAPABILITY_SHORT_WAIT_MS)) return { resultRef, itemIds: [], verified: false, finishing: true, message: stillRunning('导入') }
-        const itemIds = await work
-        return { resultRef, itemIds, verified: itemIds.length > 0 }
+        const { itemIds, combined, screens, separate } = await work
+        return { resultRef, itemIds, verified: itemIds.length > 0, message: `已导入 ${itemIds.length} 项录制素材${combined ? `：${combinedPlacement(screens)}` : '。'}${separate ? `${separate}。` : ''}` }
       }
       const parsed = parseCapabilityInput<{ sessionRef: z.infer<typeof recordingRefSchema>; note?: string }>(definition.id, input)
       const action = definition.id.replace('_screen_recording', '') as 'pause' | 'resume' | 'mark' | 'stop' | 'cancel' | 'recover'

@@ -93,7 +93,8 @@ export function quickExportArgs(list: string, audio: readonly string[], mix: { g
     '-c:v', 'copy', '-movflags', '+faststart', output]
 }
 
-function run(binary: string, args: string[]): Promise<void> {
+/** 跑一次 FFmpeg，失败时带上它最后一行报错。 */
+export function runFfmpeg(binary: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(binary, args, { stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true })
     let errors = ''
@@ -133,7 +134,7 @@ export async function exportQuickRecording(sessionId: string, directory?: string
   const started = Date.now()
   const durationUs = windows.reduce((sum, window) => sum + window.endUs - window.startUs, 0)
   try {
-    await run(ffmpeg, quickExportArgs(list, audio.map(item => item.path), mix, output, seekUs, durationUs))
+    await runFfmpeg(ffmpeg, quickExportArgs(list, audio.map(item => item.path), mix, output, seekUs, durationUs))
   } catch (error) { await rm(output, { force: true }); throw error } finally { await rm(list, { force: true }) }
   const events: CaptureEvent[] = []
   for (let offset: number | null = 0; offset !== null;) {

@@ -1,13 +1,17 @@
 import { getPlatform } from '@/platform'
 import { captureLogPageSchema, type CaptureEvent } from '@/core/captureLog/events'
 import { recordingCursorPageReference, recordingCursorSourceSchema, type RecordingCursorSource } from '@/core/videoEdit/recordingCursor'
-import type { RecordingDocument } from '@/core/screenRecording/document'
+import type { RecordingDocument, RecordingMedia } from '@/core/screenRecording/document'
 
-/** Keep immutable page references and pause offsets only, not an hour of 120 Hz samples. */
-export async function recordingMovieCursorSources(recording: RecordingDocument, signal: AbortSignal, onEvent?: (event: CaptureEvent) => void): Promise<Map<string, RecordingCursorSource>> {
+/**
+ * Keep immutable page references and pause offsets only, not an hour of 120 Hz samples.
+ * `media` defaults to the screen files; a combined file passes the first frame it starts from.
+ */
+export async function recordingMovieCursorSources(recording: RecordingDocument, signal: AbortSignal, onEvent?: (event: CaptureEvent) => void, media: ReadonlyArray<Pick<RecordingMedia, 'id' | 'monoUs'>> = recording.media.filter(v => v.kind === 'screen')): Promise<Map<string, RecordingCursorSource>> {
   const result = new Map<string, RecordingCursorSource>()
   if (!recording.eventPages.length || !recording.source) return result
-  const pages: RecordingCursorSource['pages'] = [], offsets: Array<{ monoUs: number; offset: number }> = []
+  // 每段事件时钟偏移（会话时钟 − recordingUs）连同这段的最后一个事件；暂停只改变偏移。
+  const pages: RecordingCursorSource['pages'] = [], offsets: Array<{ lastUs: number; offset: number }> = []
   let owner: RecordingCursorSource['ownerRef'] | undefined, sourceDigest = '', lastMono = -1
   for (const ref of recording.eventPages) {
     signal.throwIfAborted()
@@ -22,14 +26,14 @@ export async function recordingMovieCursorSources(recording: RecordingDocument, 
     for (const event of page.entries) {
       onEvent?.(event)
       const offset = event.monoUs - event.recordingUs
-      if (offsets.at(-1)?.offset !== offset) offsets.push({ monoUs: event.monoUs, offset })
+      if (offsets.at(-1)?.offset !== offset) offsets.push({ lastUs: event.monoUs, offset }); else offsets.at(-1)!.lastUs = event.monoUs
     }
   }
-  for (const media of recording.media.filter(v => v.kind === 'screen')) {
-    let anchor = offsets[0]
-    for (let index = offsets.length - 1; index >= 0; index--) if (offsets[index].monoUs <= media.monoUs) { anchor = offsets[index]; break }
+  for (const item of media) {
+    // 恢复后的画面比事件时钟先起来：素材第一帧落在暂停里，用它之后第一段事件的偏移，而不是暂停前那段。
+    const anchor = offsets.find(value => value.lastUs >= item.monoUs) ?? offsets.at(-1)
     if (!anchor) throw new Error('录制事件页没有时钟信息。')
-    result.set(media.id, recordingCursorSourceSchema.parse({ ownerRef: owner, sourceDigest, cursorBakedIn: recording.source.cursorEmbedded, recordingStartUs: Math.max(0, media.monoUs - anchor.offset), width: recording.source.options.width, height: recording.source.options.height, pages }))
+    result.set(item.id, recordingCursorSourceSchema.parse({ ownerRef: owner, sourceDigest, cursorBakedIn: recording.source.cursorEmbedded, recordingStartUs: Math.max(0, item.monoUs - anchor.offset), width: recording.source.options.width, height: recording.source.options.height, pages }))
   }
   return result
 }

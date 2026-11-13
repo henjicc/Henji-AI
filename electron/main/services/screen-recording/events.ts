@@ -14,6 +14,8 @@ import { createWindowsEventFacts, type DesktopNativeFacts } from './windows-even
 import type { RecordingControlBackend } from './control'
 
 const logger = createMainLogger('main.screen_recording.events')
+/** 画面第一帧的时刻是按编码进度估的，之后还会往前修正几十毫秒；事件时钟零点比它早这么多，留足余量。 */
+const EVENT_CLOCK_LEAD_US = 1_000_000
 export interface RecordingEventOptions {
   ownerRef: ApplicationRef
   sourceDigest: string
@@ -162,29 +164,38 @@ export class RecordingEventSession {
       try { await backend.cancel() } catch (cleanup) { logger.error('录制媒体释放失败', { event: 'recording.events.cancel.failed', error: cleanup }) }
       throw error
     }
+    const pauseNow = (): void => { this.detach(); this.collector.pause(this.options.nowUs()) }
     return {
       start: async signal => {
         logger.info('开始采集录制事件', { event: 'recording.events.start.start' })
         try {
           await backend.start(signal)
           if (signal.aborted) throw new Error('录制已取消')
-          this.collector.start(this.options.nowUs()); this.attach()
+          // 事件时钟的零点放在画面第一帧之前：素材起点换算成事件时间（recordingStartUs）不会是负数，不被截成 0 而整段错开。
+          const now = this.options.nowUs(), since = backend.capturingSinceUs?.()
+          this.collector.start(since === undefined ? now : Math.max(this.options.originUs, Math.min(now, since - EVENT_CLOCK_LEAD_US))); this.attach()
           logger.info('录制事件采集已开始', { event: 'recording.events.start.completed' })
         } catch (error) { logger.error('录制事件启动失败', { event: 'recording.events.start.failed', error }); return releaseOnFailure(error) }
       },
       pause: async signal => {
-        try { this.detach(); this.collector.pause(this.options.nowUs()); await backend.pause(signal); await this.collector.flush() }
+        try { pauseNow(); await backend.pause(signal); await this.collector.flush() }
         catch (error) { return releaseOnFailure(error) }
       },
       resume: async signal => {
         if (this.failure) throw this.failure
-        try { await backend.resume(signal); if (signal.aborted) throw new Error('录制已取消'); this.collector.resume(this.options.nowUs()); this.attach() }
+        try {
+          await backend.resume(signal); if (signal.aborted) throw new Error('录制已取消')
+          // 从恢复后画面的第一帧接着走：其间没有事件，但扣掉的暂停长度与画面一致。
+          const now = this.options.nowUs(), since = backend.capturingSinceUs?.()
+          this.collector.resume(since === undefined ? now : Math.min(now, since)); this.attach()
+        }
         catch (error) { return releaseOnFailure(error) }
       },
       // Events keep flowing through the countdown; consumers cut everything before the recorded start.
       ...(backend.began ? { began: () => backend.began!() } : {}),
       ...(backend.ending ? { ending: () => backend.ending!() } : {}),
-      ...(backend.pausing ? { pausing: () => backend.pausing!() } : {}),
+      // 按下暂停那一刻事件就停（不等文档存完），事件时钟与文档记的暂停起点是同一刻。
+      pausing: async () => { pauseNow(); await backend.pausing?.() },
       ...(backend.resumed ? { resumed: () => backend.resumed!() } : {}),
       mark: async (signal, note) => {
         try { await backend.mark(signal, note); this.mark(note) }

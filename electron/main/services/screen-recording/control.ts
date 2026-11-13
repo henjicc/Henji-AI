@@ -18,6 +18,11 @@ export interface RecordingControlBackend {
   /** 按下暂停的时刻（pause 之前）与各轨都恢复采集的时刻（resume 之后）；其间各轨内容都不进入成品。 */
   pausing?(): Promise<void>
   resumed?(): Promise<void>
+  /**
+   * 正在录的画面第一帧的时刻（与事件采集的 nowUs 同一时钟）；开始与恢复完成时读。编码器起来要一两秒，
+   * 事件时钟按它起算、按它接着走，暂停扣掉的长度才和画面一致。不知道时省略。
+   */
+  capturingSinceUs?(): number | undefined
 }
 interface ControlDependencies {
   now(): number

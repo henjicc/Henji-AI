@@ -9,6 +9,7 @@ import type { CaptureManifest } from '../../../../src/core/screenRecording/captu
 import type { RecordingTrackKind, RecordingTrackOptions, RecordingTracks } from '../../../../src/core/screenRecording/tracks'
 import type { RecordingTrackRecord } from '../../../../src/core/screenRecording/trackJournal'
 import { recordingDurationUs } from '../../../../src/core/screenRecording/range'
+import { alignRecordingPauses } from '../../../../src/core/screenRecording/combine'
 import type { DocumentMeta } from '../../../../src/core/documents/types'
 import { getDocumentService } from '../documents/runtime'
 import { createMainLogger } from '../logging'
@@ -34,6 +35,7 @@ export class RecordingSessionDocument {
   private queue: Promise<void> = Promise.resolve()
   private readonly pages: PageReference[] = []
   private readonly markers: RecordingDocument['markers'] = []
+  private readonly controls: PauseControl[] = []
   private events = 0
   private maxPageWriteMs = 0
   private finished = false
@@ -97,7 +99,10 @@ export class RecordingSessionDocument {
   page(page: CaptureLogPage, file: string, writeMs = 0): void {
     this.pages.push({ path: file, firstSequence: page.seqSpan[0], lastSequence: page.seqSpan[1] })
     this.events += page.entries.length; this.maxPageWriteMs = Math.max(this.maxPageWriteMs, writeMs)
-    for (const entry of page.entries) if (entry.kind === 'mark') this.markers.push({ id: entry.eventId, monoUs: entry.monoUs, note: entry.note ?? '' })
+    for (const entry of page.entries) {
+      if (entry.kind === 'mark') this.markers.push({ id: entry.eventId, monoUs: entry.monoUs, note: entry.note ?? '' })
+      collectPauseControl(this.controls, entry)
+    }
   }
   pageReferences(): readonly PageReference[] { return this.pages }
   track(record: RecordingTrackRecord): Promise<void> { return this.ledger.record(record) }
@@ -112,6 +117,7 @@ export class RecordingSessionDocument {
       status: manifest.status === 'stopped' ? 'stopped' : 'interrupted',
       eventPages: [...this.pages], markers: [...this.markers], tracks,
       media: [...capture.files.map(file => ({ id: `screen-${file.index}`, kind: 'screen' as const, path: file.path, monoUs: file.monoUs, durationUs: file.durationUs })), ...audio],
+      ...this.content.pauses ? { pauses: alignedPauses(this.content.pauses, this.controls, capture.files) } : {},
     })
     await this.save()
     if (joined) await removeNativeMicrophoneCopies(this.directory, tracks)
@@ -120,6 +126,18 @@ export class RecordingSessionDocument {
   }
 }
 
+
+type PauseControl = { action: 'pause' | 'resume'; monoUs: number }
+function collectPauseControl(controls: PauseControl[], entry: CaptureEvent): void {
+  if (entry.kind === 'control' && (entry.action === 'pause' || entry.action === 'resume')) controls.push({ action: entry.action, monoUs: entry.monoUs })
+}
+/** 暂停区间按事件时钟与画面第一帧统一（见 alignRecordingPauses）；对齐了几次进日志，便于复盘。 */
+function alignedPauses(pauses: NonNullable<RecordingDocument['pauses']>, controls: readonly PauseControl[], screens: ReadonlyArray<{ monoUs: number }>): NonNullable<RecordingDocument['pauses']> {
+  const aligned = alignRecordingPauses(pauses, controls, screens) ?? []
+  const changed = aligned.filter((pause, index) => pause.startUs !== pauses[index]?.startUs || pause.endUs !== pauses[index]?.endUs).length
+  if (pauses.length) logger.info('暂停区间已与事件时钟和画面对齐', { event: 'recording.pauses.aligned', context: { pauses: pauses.length, aligned: changed, controls: controls.length } })
+  return aligned
+}
 
 /** 没按停止就结束的（取消、失败、崩溃）以最后一帧画面为录制终点。 */
 function pictureEndUs(files: ReadonlyArray<{ monoUs: number; durationUs: number }>): number | undefined {
@@ -199,12 +217,17 @@ export async function recoverRecordingSession(documentId: string, directory: str
   const capture = await recoverCapture(directory)
   const screen = capture.files.map(file => ({ id: `screen-${file.index}`, kind: 'screen' as const, path: file.path, monoUs: file.monoUs, durationUs: file.durationUs }))
   content.eventPages = []; content.markers = []
+  const controls: PauseControl[] = []
   for await (const page of new RecordingEventStore(directory).recover()) {
     if (page.ownerRef.id !== content.sessionId) throw new Error('采集页不属于该录制')
     const hash = createHash('sha256').update(JSON.stringify(page)).digest('hex')
     content.eventPages.push({ path: path.join(directory, `${String(page.seqSpan[0]).padStart(16, '0')}-${hash}.capture.json`), firstSequence: page.seqSpan[0], lastSequence: page.seqSpan[1] })
-    for (const event of page.entries) if (event.kind === 'mark') content.markers.push({ id: event.eventId, monoUs: event.monoUs, note: event.note ?? '' })
+    for (const event of page.entries) {
+      if (event.kind === 'mark') content.markers.push({ id: event.eventId, monoUs: event.monoUs, note: event.note ?? '' })
+      collectPauseControl(controls, event)
+    }
   }
+  if (content.pauses) content.pauses = alignedPauses(content.pauses, controls, capture.files)
   // 早于轨道记录的录制没有 tracks.journal：沿用文档里录制期间存下的轨道。
   const replayed = await replayTrackJournal(directory, documentId, content.originUs, trackKinds(content.devices), content.devices.camera?.frameRate) ?? content.tracks
   const audio = replayed ? await recordingAudio(directory, replayed, content.endUs ?? pictureEndUs(capture.files)) : null

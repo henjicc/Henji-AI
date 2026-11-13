@@ -20,7 +20,7 @@ function schemaRef(kind: 'entity' | 'property', id: string) {
 }
 const detailsSchema = z.object({
   source: z.string().optional(), cursorEmbedded: z.boolean().optional(),
-  media: z.array(z.object({ id: z.string(), kind: z.string(), monoUs: z.number(), durationUs: z.number() }).strict()).optional(),
+  media: z.array(z.object({ id: z.string(), kind: z.string(), monoUs: z.number(), durationUs: z.number() }).strict()).describe('录制原件：画面按暂停分成几个文件、声音每路按暂停分成几条；导入剪辑时拼成一个画面素材与每路一条声音').optional(),
   markers: z.number().int().nonnegative().optional().describe('已封存的标记数；录制中省略，录制中用 read_screen_recording_events 读'),
   events: z.number().int().nonnegative().optional().describe('已封存的事件数；录制中省略，录制中用 read_screen_recording_events 分页读'),
   deviceKind: z.string().optional(), sourceKind: z.string().optional(),
