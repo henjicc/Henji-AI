@@ -346,6 +346,8 @@ struct Recording<F> {
     paused: bool,
     /// 当前（或刚结束的）空档里来源丢过。
     gap_lost: bool,
+    /// 当前（或刚结束的）空档里用户暂停过：这样的空档按暂停算，不标成来源丢失。
+    gap_paused: bool,
 }
 
 enum End {
@@ -408,7 +410,7 @@ impl<P: Platform> Runner<P> {
         let table = timing::Writer::create(&self.paths.timing, header).map_err(|error| io_failure(&error))?;
         let activity = activity::Writer::create(&self.paths.activity, origin_us, self.config.fps, 1).map_err(|error| io_failure(&error))?;
         self.write_manifest(&self.manifest(Some(origin_us), None, None))?;
-        Ok(Recording { pacer: Pacer::new(origin_us, self.config.fps, 1), table, activity, written: 0, durable_reported: 0, paused: false, gap_lost: false })
+        Ok(Recording { pacer: Pacer::new(origin_us, self.config.fps, 1), table, activity, written: 0, durable_reported: 0, paused: false, gap_lost: false, gap_paused: false })
     }
 
     fn totals(&self, recording: Option<&Recording<P::Frame>>) -> Value {
@@ -541,6 +543,8 @@ impl<P: Platform> Runner<P> {
                             match &mut recording {
                                 Some(recording) => {
                                     recording.pacer.pause(at, Hold::User);
+                                    // 已经在空档里（来源丢了）时按下暂停：这段空档也算用户暂停过。
+                                    recording.gap_paused |= recording.paused;
                                 }
                                 None => early_marks.push((true, at)),
                             }
@@ -683,7 +687,9 @@ impl<P: Platform> Runner<P> {
                                 }
                                 if emit.force_key && emit.output > 0 {
                                     flags |= timing::FLAG_AFTER_RESUME;
-                                    if std::mem::take(&mut active.gap_lost) {
+                                    // 来源丢失与用户暂停重叠的空档按暂停算：只有纯粹来源丢失的空档才标出来。
+                                    let (lost, user) = (std::mem::take(&mut active.gap_lost), std::mem::take(&mut active.gap_paused));
+                                    if lost && !user {
                                         flags |= timing::FLAG_AFTER_SOURCE_LOST;
                                     }
                                 }
@@ -715,6 +721,7 @@ impl<P: Platform> Runner<P> {
                         Poll::Paused { at_us, cell, output } => {
                             active.paused = true;
                             active.gap_lost |= lost;
+                            active.gap_paused |= pause_open;
                             // 空档可能很久：已录的内容现在就落成完整分片。
                             let flushed = stage.flush().and_then(|_| active.table.flush().and_then(|_| active.activity.mark(if lost { "sourceLost" } else { "pause" }, output, at_us)).map_err(|error| io_failure(&error)));
                             if let Err(error) = flushed {

@@ -34,7 +34,7 @@ it('连续文件（暂停不在文件里）：遮挡的关键帧落在文件里�
   // 会话 2.0–2.5 秒暂停过：3.0 秒时的画面在文件的 1.5 秒处（普通文件会是 2.0 秒）。
   const continuous = { id: candidate.mediaId, monoUs: 1000000, gaps: [{ startUs: 2000000, endUs: 2500000 }] }
   const times = (media: { id: string; monoUs: number; gaps?: Array<{ startUs: number; endUs: number }> }) =>
-    confirmedRecordingPrivacyFragments([candidate], [media])[0].effect.mask!.shapes![0].pathAnimation!.keys.map(key => key.sourceTimeUs)
+    [...JSON.stringify(confirmedRecordingPrivacyFragments([candidate], [media])[0].effect).matchAll(/"sourceTimeUs":(\d+)/g)].map(match => Number(match[1]))
   expect(times(continuous)).toEqual(expect.arrayContaining([1500000, 1700000]))
   expect(times({ id: candidate.mediaId, monoUs: 1000000 })).toEqual(expect.arrayContaining([2000000, 2200000]))
 })

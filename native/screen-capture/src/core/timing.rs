@@ -35,6 +35,7 @@ pub const FLAG_KEYFRAME: u16 = 1 << 2;
 pub const FLAG_AFTER_RESUME: u16 = 1 << 3;
 /// 这一帧之前的空档是来源丢失造成的（显示器断开、采集重新接上），不是用户暂停：
 /// 这段时间声音与事件并没有停，对齐时不能当暂停扣掉。与 FLAG_AFTER_RESUME 同时出现。
+/// 空档里用户也暂停过（两者重叠）时不标这一位：整段按暂停算。
 pub const FLAG_AFTER_SOURCE_LOST: u16 = 1 << 4;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

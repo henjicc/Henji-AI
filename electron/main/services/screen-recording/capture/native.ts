@@ -207,7 +207,7 @@ export class NativeCaptureBackend implements ScreenCaptureBackend {
     if (event.event === 'paused' && event.reason !== 'sourceLost') this.lastPaused = event
     // 采集短暂出错后重新接上、显示器闪断，原生都会发 sourceLost 并很快发 sourceRestored，同一文件续录
     // （那段空档记在画面条目的 gaps 里，不算暂停）。等一会儿还没回来，才按“来源没了”正常停止收尾。
-    if (event.event === 'sourceLost' && !this.lostTimer) this.lostTimer = setTimeout(() => { this.lostTimer = undefined; this.sourceLost() }, SOURCE_LOST_GRACE_MS)
+    if (event.event === 'sourceLost' && !this.lostTimer) this.waitForSource()
     if (event.event === 'sourceRestored' && this.lostTimer) { clearTimeout(this.lostTimer); this.lostTimer = undefined; logger.info('录制的画面来源已重新接上，继续录', { event: 'recording.capture.native.source_restored' }) }
     if (event.event === 'sourceChanged') logger.warn('录制的显示器换了分辨率，画面等比缩放留黑边', { event: 'recording.capture.native.source_changed', context: { width: event.width, height: event.height, frame: event.frame } })
     if (event.event === 'interrupted') {
@@ -229,6 +229,14 @@ export class NativeCaptureBackend implements ScreenCaptureBackend {
 
   /** 录制中显示器断开：原生把网格停在那里，由调用方按停止收尾（已录部分照常保存）。 */
   private lostTimer: ReturnType<typeof setTimeout> | undefined
+
+  /** 等来源回来。用户暂停着的时候不结束录制（暂停中本来就不录），接着等；继续之后还没回来才算来源没了。 */
+  private waitForSource(): void {
+    this.lostTimer = setTimeout(() => {
+      this.lostTimer = undefined
+      if (this.state === 'paused') this.waitForSource(); else this.sourceLost()
+    }, SOURCE_LOST_GRACE_MS)
+  }
 
   private sourceLost(): void {
     if (this.state !== 'recording' && this.state !== 'paused') return
