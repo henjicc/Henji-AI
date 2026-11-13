@@ -135,6 +135,7 @@ export function readVideoEditData(ref: ApplicationRef, codeMetadata = false, pro
     data.spaceBloomRadius = spaceRender?.bloomRadius ?? VIDEO_EDIT_DEFAULT_BLOOM_RADIUS
     data.spaceAmbientOcclusion = spaceRender?.ambientOcclusion ?? 0
     data.spaceReflections = spaceRender?.reflections ?? 0
+    data.spaceGlobalIllumination = spaceRender?.globalIllumination ?? 0
     data.spaceExposure = spaceRender?.exposure ?? 0
     data.spaceToneMapping = spaceRender?.toneMapping ?? 'neutral'
     data.spaceEnvironment = spaceRender?.environment ?? 'none'

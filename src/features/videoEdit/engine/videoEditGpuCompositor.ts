@@ -50,8 +50,9 @@ interface PresentationEncoder { copyTextureToBuffer(source: unknown, destination
  * on them) composes into one `rgba16float` target of the canvas size and is quantized to the canvas, with a fixed
  * dither, in a final pass of the same submission. */
 export class VideoEditGpuCompositor {
-  // 诊断会话申请 GPU 时间戳（适配器支持才申请），用来量合成与作者入口的 GPU 分段；正常会话设备描述不变。
-  private readonly manager = new ImageEditWebGpuDeviceManager(videoEditRenderDiagnosticsEnabled() ? { optionalFeatures: ['timestamp-query'] } : {})
+  // 诊断会话另外申请 GPU 时间戳（适配器支持才申请），用来量合成与作者入口的 GPU 分段。
+  // 三维全局光照的反弹光渲染到 11-11-10 浮点纹理，要这一项特性；适配器不支持时全局光照不开。
+  private readonly manager = new ImageEditWebGpuDeviceManager({ optionalFeatures: ['rg11b10ufloat-renderable', ...videoEditRenderDiagnosticsEnabled() ? ['timestamp-query'] : []] })
   private readonly context
   private device!: VideoGpuDevice
   private video!: GpuRenderPipeline

@@ -453,7 +453,7 @@ export async function renderVideoEditThreeSpaceScene(options: {
     const postEffects = { display: options.display ?? 'realtime', motionBlur: anyMotionBlur, depthOfField: Boolean(camera?.defocus || camera?.curves?.defocus?.length),
       focusDistance: center.camera.focusDistance, cocScale, cocMax: Math.max(0, ...center.cards.map(card => card.cocRangePx[1]), ...sceneCoc),
       shutterScale: plan.samples.length > 1 ? plan.samples.length / (plan.samples.length - 1) : 1,
-      bloom: options.spaceRender?.bloom ?? 0, bloomThreshold: options.spaceRender?.bloomThreshold ?? .75, bloomRadius: options.spaceRender?.bloomRadius ?? .45, ambientOcclusion: options.spaceRender?.ambientOcclusion ?? 0, reflections: options.spaceRender?.reflections ?? 0,
+      bloom: options.spaceRender?.bloom ?? 0, bloomThreshold: options.spaceRender?.bloomThreshold ?? .75, bloomRadius: options.spaceRender?.bloomRadius ?? .45, ambientOcclusion: options.spaceRender?.ambientOcclusion ?? 0, reflections: options.spaceRender?.reflections ?? 0, globalIllumination: options.spaceRender?.globalIllumination ?? 0,
       exposure: options.spaceRender?.exposure ?? 0, toneMapping: options.spaceRender?.toneMapping ?? 'neutral',
       environment: defaultLighting ? 'studioNeutral' as const : options.spaceRender?.environment ?? 'none', environmentIntensity: options.spaceRender?.environmentIntensity ?? 1, environmentRotation: options.spaceRender?.environmentRotation ?? 0,
       emission: emitting.size > 0 }

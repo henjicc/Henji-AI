@@ -591,6 +591,22 @@ describe('所有登记格式的黄金样本', () => {
     }
   })
 
+  it('序列三维全局光照 globalIllumination：旧样本升上来没有它，新样本读回，最低可读版本不变', () => {
+    const goldenSequence = (id: string, content: unknown): { spaceRender?: Record<string, unknown> } => {
+      const value = content as { sequences: Array<{ id: string; spaceRender?: Record<string, unknown> }>; scriptCapture: { baselines: Array<{ content: typeof value }> } }
+      const video = id === 'document.video_edit' ? value : value.scriptCapture.baselines[0].content
+      return video.sequences.find(sequence => sequence.id === 'golden-sequence')!
+    }
+    for (const [id, previous] of [['document.video_edit', 78], ['document.screen_recording', 82]] as const) {
+      const format = PERSISTENCE_FORMATS.find(value => value.id === id)!
+      const read = (version: number) => JSON.parse(fs.readFileSync(`tests/fixtures/persistence/${id}/v${version}.json`, 'utf8'))
+      const old = read(previous), latest = read(previous + 1)
+      expect(goldenSequence(id, upgradePersistenceContent(format, old.content, previous)).spaceRender).not.toHaveProperty('globalIllumination')
+      expect(goldenSequence(id, upgradePersistenceContent(format, latest.content, previous + 1)).spaceRender?.globalIllumination).toBe(.5)
+      expect(latest.kindMinReaderVersion).toBe(old.kindMinReaderVersion)
+    }
+  })
+
   for (const format of PERSISTENCE_FORMATS) {
     const directory = path.resolve('tests/fixtures/persistence', format.id)
     for (const file of fs.readdirSync(directory).filter(file => /^v\d+\.json$/.test(file))) {

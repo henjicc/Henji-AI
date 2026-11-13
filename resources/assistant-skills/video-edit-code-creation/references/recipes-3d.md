@@ -18,6 +18,8 @@
 - 灯光：用素材项 `kind:"light"` 放一条灯光片段（`light_kind` spot / directional / point / area、`light_intensity` 1 为常用主光且可关键帧、`light_cast_shadow`、`light_softness`、`light_angle`），位置是片段 x/y 与 `depth`，朝向是 `rotation_x` / `rotation_y`（缺省朝画面里）；它照亮整条序列受光的三维内容。要投影的片段开 `space_cast_shadow`，承接阴影的开 `space_receive_shadow`。三点布光 = 主光（左前上、投影）+ 辅光（右前、亮度 0.3–0.5、不投影）+ 轮廓光（身后上方朝镜头、亮度 1–2）。
 - 没有任何灯与环境光时，受光内容会自动套“缺省布光”（摄影棚中性环境 + 一盏主光，序列 `space_default_lighting` 可关）；要精确控制就自己放灯或设 `space_environment`。
 - 质感：序列 `space_tone_mapping`（agx 高光柔和）、`space_exposure`、`space_environment` 与强度、旋转、`space_bloom` 与 `space_bloom_threshold` / `space_bloom_radius`。实时与“渲染”（路径追踪）读同一份属性；实心玻璃、互反射以“渲染”为准，成片用序列 `final_renderer:"pathTrace"`。
+- 实时精致档（缺省都关，按需打开）：`space_global_illumination`（全局光照，0.6–1：亮面把颜色反弹到周围，墙角色溢、背光面不再死黑）+ `space_ambient_occlusion`（0.5–0.8：相接处与凹处压暗）+ `space_reflections`（0.3–0.5：金属、光滑面反射画面里的东西）+ 一个 `space_environment` 环境光。软阴影是灯光片段的 `light_softness`（0.5–0.8）。三项都只看得到画面里的东西，画外的反弹与反射没有；金属整体偏暗、玻璃折射不真时只能靠路径追踪。
+- 选实时还是路径追踪（4090、4K 实测，场景见 docs/task/三维画质）：实时现状约 15 ms/帧，开精致档三项约 21 ms/帧（约 48 帧/秒，只开全局光照约 18 ms）；4K 看片卡时把节目监视器回放分辨率降到 1/2（1080P 开全三项约 10 ms）。路径追踪 4K 每帧：16 采样约 6 秒、32 约 10 秒、64 约 17 秒、256（默认）约 64 秒，都含降噪；漫反射面 16–32 采样降噪后已接近 256，玻璃、色散、焦散要 64 以上才干净。一段 10 秒 60 帧的 4K 片子 256 采样要十个多小时，先用 32–64 采样出成片，确认后再按需提高 `path_trace_samples`。
 - 核对：`verify_video_edit_space` 的 facts 要处理：`cross-group`（引用片段隔着二维层）、`element-cycle`（代码片段互相引用）、`reference-inactive`（引用的片段这一帧不在画面里，作者拿到空画面）、`cross-group-order`（三维里靠前的卡片在层序更低的组，会被盖住）、`unlit`（受光内容没有任何光）。
 - 改完用 `observe_video_edit_frame` 看图；单张序列帧会一并返回 `space`：每组片段的形态与材质、作者物体（类型、材质、包围盒）、灯光（含缺省布光）、环境与 facts（缺省布光、实时玻璃近似等）。作者场景里物体没出现、材质不对、灯没生效，先读它再改代码。
 

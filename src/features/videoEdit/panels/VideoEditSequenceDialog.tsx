@@ -172,6 +172,9 @@ export function VideoEditSequenceDialog({ title, initial, bins, requireFrameRate
         <UiFormRow label="环境光遮蔽" inline info="物体相接处和凹处变暗，体积更实。只作用于三维物体，卡片画面不变。0 为不开。">
           <NumberInput ariaLabel="环境光遮蔽强度" disabled={busy} value={space.ambientOcclusion ?? 0} min={0} max={1} step={.05} precision={2} widthClassName="w-full" onChange={ambientOcclusion => setSpace({ ambientOcclusion })} />
         </UiFormRow>
+        <UiFormRow label="全局光照" inline info="亮面把自身颜色反弹到周围物体上，墙角有色溢、背光面被照亮，更接近路径追踪。只作用于三维物体。0 为不开。">
+          <NumberInput ariaLabel="全局光照强度" disabled={busy} value={space.globalIllumination ?? 0} min={0} max={1} step={.05} precision={2} widthClassName="w-full" onChange={globalIllumination => setSpace({ globalIllumination })} />
+        </UiFormRow>
         <UiFormRow label="屏幕反射" inline info="光滑、金属表面反射画面里看得到的东西。只作用于三维物体。0 为不开。">
           <NumberInput ariaLabel="屏幕反射强度" disabled={busy} value={space.reflections ?? 0} min={0} max={1} step={.05} precision={2} widthClassName="w-full" onChange={reflections => setSpace({ reflections })} />
         </UiFormRow>
