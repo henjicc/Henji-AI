@@ -20,7 +20,8 @@ export const VIDEO_EDIT_PANELS = [
   { id: 'project', title: '素材', minimumWidth: 220, minimumHeight: 180 },
   { id: 'program', title: '节目画面', minimumWidth: 320, minimumHeight: 200 },
   { id: 'effects', title: '效果控件', ...INSPECTOR_MIN },
-  { id: 'timeline', title: '时间线', minimumWidth: 380, minimumHeight: 200 },
+  // 时间线 280：标签行 32、标尺 44、视频区（字幕行 28 + 缩放行 24 + 一条默认轨 44）、分隔条 8、一条音频轨 44、横向滚动条与底栏 32，全都完整放下。
+  { id: 'timeline', title: '时间线', minimumWidth: 380, minimumHeight: 280 },
   { id: 'source', title: '源监视器', minimumWidth: 280, minimumHeight: 200 },
   { id: 'annotations', title: '批注', ...INSPECTOR_MIN },
   { id: 'content', title: '字幕与标记', ...INSPECTOR_MIN },
