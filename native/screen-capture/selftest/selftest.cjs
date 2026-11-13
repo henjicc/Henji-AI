@@ -56,7 +56,8 @@ function parseArgs(argv) {
 /** 采集进程的客户端：一行一条 JSON 指令；应答与事件是 u32 小端长度 + JSON + binaryBytes 字节。 */
 class CaptureClient {
   constructor() {
-    this.child = spawn(executable, [], { stdio: ['pipe', 'pipe', 'inherit'], windowsHide: true })
+    // 故障注入要显式打开（只有自测用）。
+    this.child = spawn(executable, [], { stdio: ['pipe', 'pipe', 'inherit'], windowsHide: true, env: { ...process.env, HENJI_SCREEN_CAPTURE_INJECT: '1' } })
     this.pending = new Map()
     this.events = []
     this.health = []
@@ -267,6 +268,8 @@ async function runExtra(options) {
     const exited = new Promise((resolve) => reader.on('exit', resolve))
     await sleep(1000)
     const before = lastHealth()
+    // 预览开着时再开几次（界面重载后会这样）：每次都应答，用最后一次给的句柄。
+    for (let round = 0; round < 3; round += 1) await client.request('startPreview', { sessionId, clientPid: reader.pid, maxWidth: 640, fps: 30 })
     const description = await client.request('startPreview', { sessionId, clientPid: reader.pid, maxWidth: 1280, fps: 15 })
     reader.stdin.write(`${JSON.stringify(description)}\n`)
     await exited
@@ -299,6 +302,16 @@ async function runExtra(options) {
     check(await waitEvent('sourceRestored', 5000), '来源丢失后没有恢复')
     await sleep(2000)
     const afterLost = lastHealth()
+    // 偶发的取帧失败（5 张）：只丢这几张，不中断、不当成来源丢失。
+    await inject({ kind: 'frameFailures', count: 5 })
+    await sleep(1500)
+    check(lastHealth().captureFailed === 5, `注入 5 张取帧失败，计数是 ${lastHealth().captureFailed}`)
+    check(client.events.filter((event) => event.event === 'sourceLost').length === 1, '偶发的取帧失败被当成了来源丢失')
+    // 连着失败一秒以上（90 张）：升级为重新接上采集，同一文件续录。
+    await inject({ kind: 'frameFailures', count: 90 })
+    await sleep(4500)
+    check(client.events.filter((event) => event.event === 'sourceRestored').length === 2, '连续取帧失败后没有重新接上采集')
+    await inject({ kind: 'frameFailures', count: 0 })
     // 二、编码停顿 150 毫秒一次：两个队列吸收，一帧不丢。
     await inject({ kind: 'encodeStall', ms: 150 })
     await sleep(2500)
@@ -329,8 +342,7 @@ async function runExtra(options) {
     check(!stream.error && Number(stream.nb_read_frames) === interrupted?.encodedFrames, `文件 ${stream.nb_read_frames} 帧，中断事件说编码了 ${interrupted?.encodedFrames} 帧`)
     check(table.records === interrupted?.frames, `时刻表 ${table.records} 条，应为 ${interrupted?.frames}`)
     check(table.droppedFrames === interrupted?.droppedFrames, '时刻表里的丢弃数与事件不一致')
-    const lostGap = table.pauses?.find((pause) => pause.pausedCells > 30)
-    check(lostGap?.keyframe, '来源丢失的空档之后不是关键帧')
+    check(table.pauses?.length === 2 && table.pauses.every((pause) => pause.keyframe), `应有两处空档且之后都是关键帧：${JSON.stringify(table.pauses)}`)
     const paused = client.events.find((event) => event.event === 'paused')
     check(paused?.reason === 'sourceLost', `paused 的原因是 ${paused?.reason}`)
     Object.assign(report, {
@@ -498,7 +510,7 @@ async function main() {
     check(fileFrames > 0, '强杀后文件里没有可读的帧')
     check(lastFragment && fileFrames >= lastFragment.frames, `强杀后只读到 ${fileFrames} 帧，少于最后一次落盘事件报的 ${lastFragment?.frames} 帧`)
     check(fileFrames >= (seconds - 2.5) * fps, `强杀后读到 ${fileFrames} 帧，比录制时长少了超过两秒半`)
-    check(table.records >= fileFrames - fps, `时刻表 ${table.records} 条，比文件帧数 ${fileFrames} 少了超过一秒`)
+    check(table.records >= fileFrames, `时刻表 ${table.records} 条，少于文件里读得回来的 ${fileFrames} 帧`)
   } else {
     // 标准输入关闭：进程自己收尾。
     check(exit.code === 0, `进程退出码 ${exit.code}`)

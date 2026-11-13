@@ -49,3 +49,6 @@ tempfile = "3"
 
 [profile.release]
 debug = "line-tables-only"
+# 任何线程出了意料之外的错就整个进程退出，交给主进程“采集进程意外退出”的那条路处理（文件读得到最后一个分片）；
+# 不留一个少了线程、收不到应答的半死进程。
+panic = "abort"

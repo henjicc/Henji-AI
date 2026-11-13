@@ -87,6 +87,10 @@ pub struct Health {
     pub last_source_us: AtomicI64,
     /// 采集回调处理一帧（转换并放进收件箱）花的时间。它长了系统的帧池会被占满，系统就开始丢帧，而且不会告诉我们。
     pub capture_max_us: AtomicU64,
+    /// 没取到或没转成、被丢掉的来源帧数（偶发的不影响录制，持续的会升级成重新接上采集）。
+    pub capture_failed: AtomicU64,
+    /// 开发用：接下来这么多张来源帧当作取帧失败。
+    pub inject_frame_failures: AtomicU64,
     /// 来源画面当前的尺寸（宽在高 32 位）；变了说明显示器换了分辨率。
     pub source_size: AtomicU64,
     /// 已出格、等编码的帧数。

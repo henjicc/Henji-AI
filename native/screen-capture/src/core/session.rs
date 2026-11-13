@@ -34,6 +34,8 @@ const REPORT_INTERVAL_US: i64 = 1_000_000;
 const FOREGROUND_INTERVAL_US: i64 = 250_000;
 /// 来源丢了之后隔多久找一次。
 const REACQUIRE_INTERVAL_US: i64 = 1_000_000;
+/// 设成 1 才接受 `inject` 指令。
+pub const INJECT_SWITCH: &str = "HENJI_SCREEN_CAPTURE_INJECT";
 
 pub const PREPARED: u8 = 0;
 pub const RECORDING: u8 = 1;
@@ -190,8 +192,9 @@ impl Session {
         status
     }
 
+    /// 应答与事件都已发完、不再接受指令。用这个标志而不是线程是否退出：停止的应答一到主进程就可能立刻准备下一次录制。
     pub fn is_ended(&self) -> bool {
-        self.thread.as_ref().is_none_or(|thread| thread.is_finished())
+        *self.ended.lock().unwrap()
     }
 
     /// 等会话线程收尾完（进程退出前）。
@@ -279,10 +282,15 @@ impl<F: Send + Sync + 'static> EncodeStage<F> {
         self.failure.lock().unwrap().clone()
     }
 
-    /// 队列满了返回 false：这一格由调用方记为丢弃。
+    fn has_room(&self, capacity: usize) -> bool {
+        (self.health.encode_queue.load(Ordering::Relaxed) as usize) < capacity
+    }
+
+    /// 放不进去（编码线程已经退出）返回 false；队列有没有空位由调用方先用 has_room 看。
     fn try_frame(&self, frame: Arc<F>, pts: i64, force_key: bool) -> bool {
         let queued = self.health.encode_queue.fetch_add(1, Ordering::Relaxed) + 1;
-        if self.jobs.try_send(Job::Frame(frame, pts, force_key)).is_err() {
+        // 调用方已确认有空位；偶尔被别的作业占了位置时等一下，不改变“这一帧会被编码”的结论。
+        if self.jobs.send(Job::Frame(frame, pts, force_key)).is_err() {
             self.health.encode_queue.fetch_sub(1, Ordering::Relaxed);
             return false;
         }
@@ -406,6 +414,7 @@ impl<P: Platform> Runner<P> {
         let mut totals = json!({
             "sourceFrames": load(&self.health.source_frames),
             "captureDropped": load(&self.health.capture_dropped),
+            "captureFailed": load(&self.health.capture_failed),
             "bytes": load(&self.health.bytes_written),
             "durableFrames": load(&self.health.durable_frames),
         });
@@ -427,6 +436,10 @@ impl<P: Platform> Runner<P> {
     }
 
     fn inject(&self, request: &Value, capture: Option<&P::Capture>, stage: &EncodeStage<P::Frame>) -> Result<Value, String> {
+        // 故障注入只给自测用：没有显式打开时一律拒绝，正式环境里发来也不起作用。
+        if std::env::var_os(INJECT_SWITCH).is_none_or(|value| value != "1") {
+            return Err("INVALID_ARGUMENT|故障注入没有打开".into());
+        }
         let milliseconds = request["ms"].as_u64().unwrap_or(0);
         match request["kind"].as_str().unwrap_or_default() {
             "encodeStall" => {
@@ -439,6 +452,7 @@ impl<P: Platform> Runner<P> {
                     capture.simulate_source_lost();
                 }
             }
+            "frameFailures" => self.health.inject_frame_failures.store(request["count"].as_u64().unwrap_or(1), Ordering::Relaxed),
             _ => return Err("INVALID_ARGUMENT|未知的注入种类".into()),
         }
         Ok(json!({}))
@@ -647,15 +661,10 @@ impl<P: Platform> Runner<P> {
                             break;
                         }
                         Poll::Emit(mut emit) => {
-                            if !emit.dropped {
-                                let frame = active.pacer.frame().expect("出格必有帧").clone();
-                                if stage.try_frame(frame, emit.output as i64, emit.force_key) {
-                                    active.written += 1;
-                                } else {
-                                    // 编码队列满了（编码器持续跟不上）：这一格不等，记为丢弃。
-                                    active.pacer.reject(&emit);
-                                    emit.dropped = true;
-                                }
+                            // 编码队列满了（编码器持续跟不上）：这一格不等，记为丢弃。只有本线程往队列里放，现在有空位，稍后放就一定放得进。
+                            if !emit.dropped && !stage.has_room(self.queue) {
+                                active.pacer.reject(&emit);
+                                emit.dropped = true;
                             }
                             let mut flags = 0u16;
                             if emit.dropped {
@@ -676,7 +685,9 @@ impl<P: Platform> Runner<P> {
                             // 被丢的格子没进文件，不算进活动时间线（否则卡顿的那一秒会被看成静止）。
                             // 字节数取编码线程到此刻为止新编出的量：比格子晚几帧，按秒汇总时无碍。
                             let fresh = emit.fresh && !emit.dropped;
-                            let noted = active.table.append(record).and_then(|_| {
+                            // 这一帧的记录先落盘，再把帧交给编码：磁盘上的时刻表任何时候都不比已落盘的视频短，
+                            // 进程被杀后每一个读得回来的帧都查得到它的时刻。
+                            let noted = active.table.append(record).and_then(|_| active.table.flush()).and_then(|_| {
                                 if emit.dropped {
                                     Ok(())
                                 } else {
@@ -685,6 +696,12 @@ impl<P: Platform> Runner<P> {
                             });
                             if let Err(error) = noted {
                                 break 'session End::Interrupted(io_failure(&error));
+                            }
+                            if !emit.dropped {
+                                let frame = active.pacer.frame().expect("出格必有帧").clone();
+                                if stage.try_frame(frame, emit.output as i64, emit.force_key) {
+                                    active.written += 1;
+                                }
                             }
                         }
                         Poll::Paused { at_us, cell, output } => {
@@ -911,6 +928,7 @@ mod tests {
     #[test]
     fn lifecycle_writes_contiguous_frames_and_honest_side_files() {
         let directory = tempfile::tempdir().unwrap();
+        std::env::set_var(INJECT_SWITCH, "1");
         let (events, streamer) = spawn_streamer();
         crate::core::protocol::OUTPUT_BROKEN.store(true, Ordering::Release);
         let config = CaptureConfig::parse(&json!({

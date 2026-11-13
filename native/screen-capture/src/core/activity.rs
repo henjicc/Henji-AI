@@ -50,9 +50,11 @@ impl Writer {
         Ok(writer)
     }
 
+    /// 每写一行就交给系统：条目不多（每秒一两行），进程被杀时已写的都在。
     fn line(&mut self, value: Value) -> io::Result<()> {
         serde_json::to_writer(&mut self.file, &value)?;
-        self.file.write_all(b"\n")
+        self.file.write_all(b"\n")?;
+        self.file.flush()
     }
 
     fn close_bucket(&mut self) -> io::Result<()> {

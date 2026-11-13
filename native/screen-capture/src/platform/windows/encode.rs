@@ -442,10 +442,12 @@ impl FrameWriter<HwFrame> for Encoder {
             return Ok(());
         }
         self.finished = true;
+        // 先把主文件收好：代理是附带的，它收尾再慢再出错也不能耽误主文件。
+        let result = self.main.finish();
         if let Some(proxy) = &mut self.proxy {
             let _ = proxy.finish();
         }
-        self.main.finish()
+        result
     }
 }
 

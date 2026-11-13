@@ -88,7 +88,7 @@ selftest/selftest.cjs  真实录制自测，也是主进程用法的可运行示
 | `status` | `sessionId` | 最近一次健康汇报的内容加 `state`（`prepared` / `recording` / `paused` / `stopping` / `ended`） |
 | `startPreview` | `sessionId`，`clientPid`，`maxWidth`（默认 1280），`fps`（默认 15） | 见“预览” |
 | `stopPreview` | `sessionId` | `{}` |
-| `inject` | `sessionId`，`kind`，`ms` / `code` | 开发与自测用的故障注入，应用不要调用：`encodeStall`（编码线程停 `ms` 毫秒一次）、`encodeDelay`（每帧多等 `ms` 毫秒，0 取消）、`sourceLost`（模拟显示器断开）、`captureFailure`（采集报 `code` 错误） |
+| `inject` | `sessionId`，`kind`，`ms` / `code` / `count` | 自测用的故障注入：只有进程的环境变量 `HENJI_SCREEN_CAPTURE_INJECT=1` 时才接受，否则一律回 `INVALID_ARGUMENT`。`frameFailures`（接下来 `count` 张来源帧当作取帧失败）、`encodeStall`（编码线程停 `ms` 毫秒一次）、`encodeDelay`（每帧多等 `ms` 毫秒，0 取消）、`sourceLost`（模拟显示器断开）、`captureFailure`（采集报 `code` 错误） |
 
 `prepare` 的参数：
 
@@ -114,20 +114,21 @@ selftest/selftest.cjs  真实录制自测，也是主进程用法的可运行示
 | `paused` | `atUs`，`cell`，`frame` | 暂停生效：文件第 `frame` 帧之前的内容已落盘。暂停与继续落在同一格里（间隔不到一帧）或暂停还没生效就停止时，没有格子被暂停，这两个事件不发 |
 | `resumed` | `atUs`，`cell`，`frame` | 继续生效：文件第 `frame` 帧是继续后的第一帧（关键帧） |
 | `paused` 的 `reason` | `user` / `sourceLost` | 空档的原因：用户暂停，或来源丢失 |
-| `sourceLost` | `atUs` | 正在录的显示器断开了。录制不结束：这之后的时间不进文件（随后会有 `paused`，`reason` 为 `sourceLost`），进程每秒按设备名找一次 |
+| `sourceLost` | `atUs` | 正在录的显示器断开了，或采集连着失败满一秒。录制不结束：这之后的时间不进文件（随后会有 `paused`，`reason` 为 `sourceLost`），进程每秒按设备名找一次 |
 | `sourceRestored` | `atUs` | 显示器回来了，在同一个文件里接着录（随后有 `resumed`，第一帧是关键帧）。主进程不想等可以随时 `stop` |
 | `sourceChanged` | `atUs`，`width`，`height`，`frame` | 来源画面的尺寸变了（显示器换了分辨率，或接回来的是另一种分辨率）。文件的尺寸不变，画面等比缩放、四周留黑；要不要 `stop` 后另开一段由主进程决定 |
 | `preview`（可丢） | `slot`，`sequence`，`sourceUs` | 预览的第 `slot` 张纹理刚写好 |
 | `interrupted` | 停止的结果 + `error` | 录制被迫结束（设备被移除、编码或写盘失败）。能收尾的已收尾，已录部分保留；想继续就重新 `prepare`，录到新文件 |
 | `health`（可丢） | 见下 | 每秒一次 |
 
-`health` 的字段：`frames`（已出的帧序号数）、`encodedFrames`（已交给编码的帧数）、`cells`、`freshFrames`、`repeatedFrames`、`droppedFrames`、`sourceSurplus`、`pausedCells`、`sourceFrames`、`captureDropped`、`sourceLost`、`captureQueueMax`、`captureMaxUs`、`encodeQueue`、`encodeQueueMax`、`writeQueue`、`writeQueueMax`、`encodeAvgUs`、`encodeMaxUs`（每帧编码耗时，含代理）、`writeMaxUs`（“最大”类是最近一秒内的）、`bytes`、`durableFrames`、`sourceIntervalUs {count, p50, p99, max}`、`arrivalLatencyUs {count, min, avg, max}`、`sourceAgeUs`、`cpuPercent`（100 = 占满一个核）、`privateBytes`、`gpuBytes`、`nativeMonoUs`。
+`health` 的字段：`frames`（已出的帧序号数）、`encodedFrames`（已交给编码的帧数）、`cells`、`freshFrames`、`repeatedFrames`、`droppedFrames`、`sourceSurplus`、`pausedCells`、`sourceFrames`、`captureDropped`、`captureFailed`、`sourceLost`、`captureQueueMax`、`captureMaxUs`、`encodeQueue`、`encodeQueueMax`、`writeQueue`、`writeQueueMax`、`encodeAvgUs`、`encodeMaxUs`（每帧编码耗时，含代理）、`writeMaxUs`（“最大”类是最近一秒内的）、`bytes`、`durableFrames`、`sourceIntervalUs {count, p50, p99, max}`、`arrivalLatencyUs {count, min, avg, max}`、`sourceAgeUs`、`cpuPercent`（100 = 占满一个核）、`privateBytes`、`gpuBytes`、`nativeMonoUs`。
 
 计数的含义：
 
 - `freshFrames`：系统给的新画面第一次进文件的帧数。
 - `repeatedFrames`：没有新画面、重复上一帧的帧数。画面静止时这是常态，不是问题。
 - `droppedFrames`：编码队列满了没能编码的格子（占帧序号、文件里没有这一帧）。**不为 0 就是编码或磁盘持续跟不上。**
+- `captureFailed`：没取到或没转成、被丢掉的来源帧（显存一时紧张、系统接口偶发出错）。零星几张不影响录制；连着失败满一秒会当成来源丢失，重新接上采集（`sourceLost` / `sourceRestored`）。
 - `captureDropped`：收件箱满了被挤掉的来源帧。**不为 0 说明会话线程卡住过半秒以上**（正常不会发生）。
 - `sourceSurplus`：来源帧多于格子、没进文件的张数（高刷新率显示器上是常态）。
 
@@ -135,7 +136,7 @@ selftest/selftest.cjs  真实录制自测，也是主进程用法的可运行示
 
 `{frames, encodedFrames, cells, durationUs, originUs, freshFrames, repeatedFrames, droppedFrames, sourceSurplus, pausedCells, sourceFrames, captureDropped, bytes, durableFrames, files}`。
 
-`frames` 是时刻表的条数，也是文件时间轴的长度（帧）；`encodedFrames = frames - droppedFrames` 是文件里实际的帧数。一帧都没录到时不留文件，`frames` 为 0。
+`frames` 是时刻表的条数，也是文件时间轴的长度（帧）；`encodedFrames = frames - droppedFrames` 是交给编码器的帧数，正常停止时等于文件里的帧数。录制被中断（`interrupted`）或进程被杀时，文件里实际读得回来的帧以 `durableFrames`（最后一次 `fragment` 事件）和文件里各帧的 pts 为准，可能比 `encodedFrames` 少。一帧都没录到时不留文件，`frames` 为 0。
 
 ### 错误码
 
@@ -161,13 +162,13 @@ selftest/selftest.cjs  真实录制自测，也是主进程用法的可运行示
 
 | 文件 | 内容 | 进程被杀后 |
 |---|---|---|
-| `screen.mp4` | 分片 MP4，H.264 或 HEVC，恒定帧率，BT.709 有限范围，无 B 帧，默认每秒一个关键帧、一个分片。时间基 1/fps 上 pts = 帧序号 | 读得到最后一个落盘的分片（最多丢约一秒） |
+| `screen.mp4` | 分片 MP4，H.264 或 HEVC，帧落在恒定帧率的网格上（有丢弃的格子时那个 pts 上没有帧，不要假设“第 n 个包就是第 n 帧”，按 pts 取），BT.709 有限范围，无 B 帧，默认每秒一个关键帧、一个分片。时间基 1/fps 上 pts = 帧序号 | 读得到最后一个落盘的分片（最多丢约一秒） |
 | `screen.proxy.mp4` | 代理（开了才有）：与主文件同样的格式与帧率，尺寸小 | 同上 |
-| `screen.frames` | 逐帧时刻表（二进制） | 每秒落盘一次；尾部不完整的记录舍去 |
-| `screen.activity.jsonl` | 活动时间线（一行一条 JSON） | 同上 |
+| `screen.frames` | 逐帧时刻表（二进制） | 每条记录写完即落盘，且先于对应的帧；尾部不完整的记录舍去 |
+| `screen.activity.jsonl` | 活动时间线（一行一条 JSON） | 每行写完即落盘 |
 | `screen.capture.json` | 清单：参数、起点、结果 | 开始时写一次（`completed: false`），收尾时重写 |
 
-被杀之后三份文件的长度可能差一秒以内：取“文件帧数”与“时刻表条数”里较小的那个为准。
+每条时刻表记录先落盘、对应的帧才交给编码，所以被杀之后时刻表不会比视频短：文件里读得回来的每一帧，按它的 pts 都查得到记录；时刻表末尾多出来的记录（最多一两秒）对应没来得及落盘的帧，忽略即可。
 
 ### 逐帧时刻表 `screen.frames`（版本 1，小端）
 
