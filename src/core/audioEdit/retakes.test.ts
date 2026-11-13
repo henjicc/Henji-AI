@@ -33,13 +33,15 @@ function detect(spoken: ReturnType<typeof speak>, extra: Partial<AudioEditRetake
 
 const textOf = (spoken: ReturnType<typeof speak>, ids: readonly string[]): string => ids.map((id) => spoken.blocks.find((block) => block.id === id)!.text).join('')
 const keptText = (spoken: ReturnType<typeof speak>, retakes: ReturnType<typeof detect>): string => {
-  const removed = new Set(retakes.flatMap((retake) => retake.blockIds))
+  // 只算自动删掉的；待确认的线索没有动声音
+  const removed = new Set(retakes.filter((retake) => !retake.review).flatMap((retake) => retake.blockIds))
   return spoken.blocks.filter((block) => !removed.has(block.id)).map((block) => block.text).join('')
 }
 
 describe('口播重念检测', () => {
   it('整句重念留最后一遍，切点落在两遍之间的停顿里并留出气口', () => {
     const spoken = speak('所以 综合 来看 这个 工具 挺 不错 的。', { pause: 800 }, '所以 综合 来看 这个 工具 很 不错 的。')
+    // 念完觉得不好、只改一个词再念一遍：够长、几乎相同，没有稿子也删前一遍
     const retakes = detect(spoken)
     expect(retakes).toHaveLength(1)
     expect(textOf(spoken, retakes[0].blockIds)).toBe('所以综合来看这个工具挺不错的。')
@@ -235,4 +237,145 @@ describe('成片自检', () => {
     const spoken = speak('你会 发现 它 回答 得 很 快，', { pause: 300 }, '你会 发现 它 来源 也 很 新，', { pause: 300 }, '所以 我 很 喜欢。')
     expect(detect(spoken, { referenceScript: '你会发现它回答得很快，你会发现它来源也很新，所以我很喜欢。' })).toEqual([])
   })
+})
+
+describe('同一处重念的几种剪法', () => {
+  it('贴着念坏那遍的虚字跟着删，实词不删：丢一个实词比多一个连读接缝代价大', () => {
+    const loose = speak('探索 不同 的 方向。', { pause: 400 }, '那么 这个 工具 最 重要 的 部分 呢，', { pause: 900 }, '这个 工具 最 重要 的 部分 就是 搜索')
+    expect(keptText(loose, detect(loose))).toBe('探索不同的方向。这个工具最重要的部分就是搜索')
+    const content = speak('探索 不同 的 方向。', { pause: 400 }, '我们 这个 工具 最 重要 的 部分 呢，', { pause: 900 }, '这个 工具 最 重要 的 部分 就是 搜索')
+    expect(keptText(content, detect(content))).toBe('探索不同的方向。我们这个工具最重要的部分就是搜索')
+  })
+
+  it('单独说出来的“不对”是重来的标记，和念坏那遍一起删', () => {
+    const spoken = speak('点 这里 的 前往 控制台 创建，', { pause: 300 }, '就 可以 获得 自己 的 蜜月，', { pause: 500 }, '不对，', { pause: 200 }, '就 可以 获得 自己 的 密钥 了。')
+    expect(keptText(spoken, detect(spoken))).toBe('点这里的前往控制台创建，就可以获得自己的密钥了。')
+  })
+
+  it('紧挨着的半截起头与念坏那遍同一个字开头：前面没有停顿也一起删', () => {
+    const spoken = speak('我 还以为 搜不到 呢， 但这个', { pause: 300 }, '但 结果 说的 还是 挺准，', { pause: 500 }, '但 结果 说的 还是 挺对 的')
+    expect(keptText(spoken, detect(spoken))).toBe('我还以为搜不到呢，但结果说的还是挺对的')
+  })
+})
+
+describe('对稿找重念', () => {
+  it('后一遍换了说法、识别又不给标点：稿子里只有后一种说法，前一遍照样认得出来', () => {
+    const spoken = speak('引导 你 去 进一步 探索', { pause: 300 }, '这样 一来 呢', { pause: 700 }, '这样 下来 啊 你 看到 的 内容 是 少 的')
+    expect(keptText(spoken, detect(spoken, { referenceScript: '引导你去进一步探索，这样下来，你看到的内容是少的。' }))).toBe('引导你去进一步探索这样下来啊你看到的内容是少的')
+  })
+
+  it('临场加的一句话只是和稿子下一句同一个开头：不删', () => {
+    const spoken = speak('回答 虽然 很 短', { pause: 300 }, '但是 并不代表 它 处理 的 内容 就 很少 嘛', { pause: 540 }, '但是 呢 如果 你 觉得 这个 答案 太 短 了')
+    expect(detect(spoken, { referenceScript: '回答虽然很短。但是呢，如果你觉得这个答案太短了，还可以点开。' }).filter((retake) => !retake.review)).toEqual([])
+  })
+
+  // 稿子里本来就写了两遍的话：照稿念出来不是重念，不删也不提
+  it.each([
+    ['排比', ['我们 要 做得 更快，', { pause: 300 }, '我们 要 做得 更稳，', { pause: 300 }, '我们 要 做得 更好。'], '我们要做得更快，我们要做得更稳，我们要做得更好。'],
+    ['强调', ['一定 要 记住，', { pause: 300 }, '一定 要 记住，', { pause: 300 }, '先 备份 再 升级。'], '一定要记住，一定要记住，先备份再升级。'],
+    ['口号', ['大家 一起', { pause: 200 }, '加油，', { pause: 200 }, '加油，', { pause: 200 }, '加油！'], '大家一起加油，加油，加油！'],
+    ['问答', ['它 为什么 这么 快？', { pause: 500 }, '为什么 这么 快 呢，', { pause: 300 }, '因为 它 用了 缓存。'], '它为什么这么快？为什么这么快呢，因为它用了缓存。'],
+    ['列举', ['第一 步 打开 设置，', { pause: 300 }, '第二 步 打开 设置 里 的 账户，', { pause: 300 }, '第三 步 退出。'], '第一步打开设置，第二步打开设置里的账户，第三步退出。'],
+    ['引用复述', ['他 说 慢 就是 快。', { pause: 400 }, '慢 就是 快，', { pause: 300 }, '这 句 话 我 很 认同。'], '他说慢就是快。慢就是快，这句话我很认同。'],
+    ['说三遍', ['这 很 重要，', { pause: 300 }, '很 重要，', { pause: 300 }, '很 重要。'], '这很重要，很重要，很重要。'],
+  ] as Array<[string, Part[], string]>)('稿内的%s原样保留', (_name, parts, script) => {
+    expect(detect(speak(...parts), { referenceScript: script })).toEqual([])
+  })
+})
+
+describe('分不清是不是重念的，不自动删', () => {
+  // 没有稿子时这些和念坏重来是同一个样子：不自动删，但一定列为待确认交给助手或人
+  it.each([
+    ['“不对”是内容', ['很多 人 觉得 这个 做法 不对。', { pause: 400 }, '这个 做法 其实 是 最 省事 的。'], '这个做法不对。'],
+    ['同头词列举', ['我们 会 讲 数据、', { pause: 200 }, '数据分析、', { pause: 200 }, '数据可视化 三块。'], '数据、'],
+    ['强调', ['这个 工具', { pause: 200 }, '真的，', { pause: 200 }, '真的 很 好用。'], '真的，'],
+    ['说三遍', ['这 很 重要，', { pause: 300 }, '很 重要，', { pause: 300 }, '很 重要。'], '很重要，'],
+    ['单字碰巧同字', ['这 是 我 的，', { pause: 120 }, '的确 很 好 用。'], '的，'],
+    ['对比句', ['这 不是 一个 技术 问题，', { pause: 300 }, '这 是 一个 态度 问题。'], '这不是一个技术问题，'],
+    ['带数字的列举', ['第 1 个 好处 是 快，', { pause: 300 }, '第 2 个 好处 是 稳，', { pause: 300 }, '第 3 个 好处 是 省钱。'], '第1个好处是快，'],
+    ['步骤列举', ['第一 步 打开 设置，', { pause: 300 }, '第二 步 打开 设置 里 的 账户，', { pause: 300 }, '第三 步 退出。'], '第一步打开设置，'],
+    ['短叠句', ['我 爱 你 中国，', { pause: 300 }, '我 爱 你 中国，', { pause: 300 }, '亲爱 的 母亲。'], '我爱你中国，'],
+    ['整句只换了一个词', ['一个 人 可以 走得 很快，', { pause: 300 }, '一群 人 可以 走得 很远。'], undefined],
+  ] as Array<[string, Part[], string | undefined]>)('%s', (_name, parts, listed) => {
+    const spoken = speak(...parts)
+    const retakes = detect(spoken)
+    expect(retakes.filter((retake) => !retake.review)).toEqual([])
+    if (listed) expect(retakes.map((retake) => textOf(spoken, retake.blockIds))).toContain(listed)
+  })
+
+  it('后一遍不停顿地接着往下说：前一遍没说完，删', () => {
+    const spoken = speak('为什么 要 先 备份？', { pause: 400 }, '为什么 要 先 备份 呢， 因为 升级 可能 会 丢 数据。')
+    expect(keptText(spoken, detect(spoken))).toBe('为什么要先备份呢，因为升级可能会丢数据。')
+  })
+
+  it('够长的一句原样再说一遍、或只改了一个词：删前一遍；改了两处的只列待确认', () => {
+    const same = speak('这个 功能 我 觉得 真的 特别 好用，', { pause: 500 }, '这个 功能 我 觉得 真的 特别 好用，', { pause: 300 }, '大家 可以 试试。')
+    expect(keptText(same, detect(same))).toBe('这个功能我觉得真的特别好用，大家可以试试。')
+    const two = speak('这个 功能 我 觉得 真的 特别 好用，', { pause: 500 }, '这个 模型 我 觉得 真的 特别 好玩，', { pause: 300 }, '大家 可以 试试。')
+    expect(detect(two).filter((retake) => !retake.review)).toEqual([])
+  })
+
+  it('六个字以上一字不差地再说一遍：删前一遍', () => {
+    const spoken = speak('你看 它 已经 帮 你 问 出来 了，', { pause: 300 }, '我 就 这么 一点，', { pause: 500 }, '我 就 这么 一点，', { pause: 200 }, '稍等 片刻。')
+    expect(keptText(spoken, detect(spoken))).toBe('你看它已经帮你问出来了，我就这么一点，稍等片刻。')
+  })
+
+  it('整遍只列了待确认时，不单删它中间的一截', () => {
+    // 整遍有两处不同，分不清；只删“真正记住的却不多”会留下两遍“但仔细一想”
+    const spoken = speak('给你 一大 段 内容，', { pause: 300 }, '但 仔细 一 想，', { pause: 200 }, '真正 记住 的 却 没 多少，', { pause: 600 }, '但 认真 一 想，', { pause: 200 }, '真正 记住 的 却 没 多少。')
+    const retakes = detect(spoken)
+    expect(retakes.filter((retake) => !retake.review)).toEqual([])
+    expect(retakes.length).toBeGreaterThan(0)
+  })
+
+  it('三句排比：一句都不自动删', () => {
+    const spoken = speak('我们 要 做得 更快，', { pause: 300 }, '我们 要 做得 更稳，', { pause: 300 }, '我们 要 做得 更好。')
+    const retakes = detect(spoken)
+    expect(retakes.filter((retake) => !retake.review)).toEqual([])
+    expect(retakes.length).toBeGreaterThan(0)
+  })
+
+  it('没有重复的连接词句不提', () => {
+    expect(detect(speak('我 试了 很多 工具，', { pause: 400 }, '但是 这个 工具 很快 而且 很准。'))).toEqual([])
+  })
+
+  it('连接词不随念坏那遍删：它连着的是上一句', () => {
+    const spoken = speak('我 试了 很多 工具，', { pause: 400 }, '但是 这个 工具 很快，', { pause: 600 }, '这个 工具 很快 而且 很准。')
+    const retakes = detect(spoken)
+    // 前一遍贴着“但是”说出来，删掉它会在连读处留一个接缝：不自动删，列为待确认，且线索里不含“但是”
+    expect(retakes.filter((retake) => !retake.review)).toEqual([])
+    expect(retakes.map((retake) => textOf(spoken, retake.blockIds))).toEqual(['这个工具很快，'])
+  })
+})
+
+describe('识别模型的循环输出', () => {
+  it('同一句连着重复很多遍：当成一处重念，只留最后一遍；耗时不随遍数爆炸', () => {
+    const spoken = speak(...Array.from({ length: 250 }, () => '我们 来 看 这个 工具'))
+    const started = performance.now()
+    const retakes = detect(spoken)
+    expect(performance.now() - started).toBeLessThan(2000)
+    expect(retakes).toHaveLength(1)
+    expect(keptText(spoken, retakes)).toBe('我们来看这个工具')
+  })
+
+  it('数字里连着的 0、报号码不是循环', () => {
+    expect(detect(speak('每个月 能 领 1 0 0 0 0 0 次 额度'))).toEqual([])
+    expect(detect(speak('电话 是 幺 幺 幺 幺 幺 幺。'))).toEqual([])
+  })
+
+  // 人有意的叠句是短词重复几遍：稿子里写着的原样保留、不提；没有稿子时只列待确认
+  it.each([
+    ['口号', '大家 一起 喊， 加油！ 加油！ 加油！ 加油！', '大家一起喊，加油！加油！加油！加油！'],
+    ['道谢', '谢谢 谢谢 谢谢 谢谢 大家。', '谢谢谢谢谢谢谢谢大家。'],
+    ['口令', '一二 一二 一二 一二， 大家 跟上。', '一二一二一二一二，大家跟上。'],
+    ['逐个', '我们 一个 一个 一个 一个 地 试。', '我们一个一个一个一个地试。'],
+    ['应答', '对 对 对 对 对 对， 就是 这个 意思。', '对对对对对对，就是这个意思。'],
+    ['笑声', '哈 哈 哈 哈 哈 哈， 这个 太 好笑 了。', '哈哈哈哈哈哈，这个太好笑了。'],
+    ['拟声', '啦 啦 啦 啦 啦 啦， 我 是 卖报 的 小 行家。', '啦啦啦啦啦啦，我是卖报的小行家。'],
+  ])('有意的叠句（%s）不折叠', (_name, text, script) => {
+    const spoken = speak(text)
+    expect(detect(spoken, { referenceScript: script })).toEqual([])
+    expect(detect(spoken).filter((retake) => !retake.review)).toEqual([])
+  })
+
 })

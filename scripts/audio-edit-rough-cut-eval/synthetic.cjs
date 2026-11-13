@@ -30,14 +30,16 @@ function clauses(words) {
  * - mid 不停顿或只停一下，从分句中间往回几个词重起；
  * - triple 同一句念坏两次，第三遍才念完；
  * - stutter 一个词的第一个字先单独蹦出来。
- * 重念前按概率带“哎 / 呃 / 不对”。返回词块、停顿、参考稿（干净原文）与每处重念的范围和应该剩下的文字。
+ * 重念前按概率带“哎 / 呃 / 不对”。另外按 scriptedRate 插入“稿子里本来就有的重复”（整句说两遍的强调、只换最后一个词的排比、
+ * 一个词连说三遍的口号、换掉中间一个词的句子、换了开头与结尾的对比），它们同样写进参考稿，照稿念出来不是重念。
+ * 返回词块、停顿、参考稿与每处重念的范围和应该剩下的文字、每处稿内重复的范围。
  */
-function synthesize(cleanWords, { seed = 1, rate = 0.28, sampleRate = 44100 } = {}) {
+function synthesize(cleanWords, { seed = 1, rate = 0.28, scriptedRate = 0.06, sampleRate = 44100 } = {}) {
   const next = random(seed)
   const between = (low, high) => low + next() * (high - low)
   const pick = (count) => Math.min(count - 1, Math.floor(next() * count))
   const groups = clauses(cleanWords)
-  const blocks = [], pauses = [], retakes = [], markers = []
+  const blocks = [], pauses = [], retakes = [], markers = [], scripted = [], scriptParts = []
   let cursor = 500
   const emit = (text, durationMs, role) => { blocks.push({ id: `s${blocks.length}`, text, startMs: cursor, endMs: cursor + durationMs, role }); cursor += durationMs }
   const gap = (ms) => { if (ms >= 100) pauses.push({ startMs: cursor, endMs: cursor + ms, cutMs: cursor + ms / 2 }); cursor += ms }
@@ -62,6 +64,30 @@ function synthesize(cleanWords, { seed = 1, rate = 0.28, sampleRate = 44100 } = 
     const start = blocks.length
     const usable = letters(group) >= 4 && group.length >= 2
     const type = usable && next() < rate ? ['verbatim', 'verbatim', 'verbatim', 'rephrase', 'rephrase', 'rephrase', 'mid', 'mid', 'triple', 'stutter'][pick(10)] : undefined
+    // 有意的重复都是说完一句再说：只拿带标点收尾的分句来做，凑够字数硬切出来的半句不算
+    if (!type && usable && /[，。！？、；：,.!?;:]$/.test(group.at(-1).text.trim()) && next() < scriptedRate) {
+      // 稿内重复：念的和稿子一致，整段都该留
+      // 最后一个词只是语气词（“…简单啊，”）时换掉它等于后一遍接着往下说，那是重念的样子，不拿来当排比
+      const lastIsParticle = /^[哎嗯呃额啊唉诶欸呀呢吧嘛哦]*$/.test(strip(group.at(-1).text))
+      const drawn = pick(5)
+      const kind = drawn === 1 && lastIsParticle ? 0 : drawn
+      const donor = groups[(groupIndex + 5) % groups.length], other = donor[pick(donor.length)]
+      const bare = { ...other, text: strip(other.text) || other.text }
+      const swapped = { ...other, text: other.text.replace(/[\p{P}\s]+$/u, '') + (group.at(-1).text.match(/[\p{P}]+$/u)?.[0] ?? '') }
+      const copies = kind === 0 ? [group, group]
+        : kind === 1 ? [group, [...group.slice(0, -1), swapped]]
+          : kind === 2 ? [[group[0]], [group[0]], group]
+            // 对比、列举：换掉中间一个词（“一个人可以走得很快，一群人可以走得很远”）
+            : kind === 3 ? [group, group.map((word, index) => (index === Math.floor(group.length / 2) && group.length > 2 ? bare : word))]
+              // 换了开头的主语或序数、结尾也不同（“一个人可以走得很快，一群人可以走得很远”）
+              : [group, [bare, ...group.slice(1, -1), swapped]]
+      for (const copy of copies) { emitClean(copy); scriptParts.push(copy.map((word) => word.text).join('')) }
+      // long：六个字以上的一句原样说两遍，或八个字以上只在中间换了一个词——和“念完觉得不好再念一遍”是同一个样子，没有稿子时分不清；
+      // 其余（短句叠说、口号、只换最后一个词的排比、换了开头的对比）是结构上看得出的有意重复
+      scripted.push({ start, end: blocks.length, long: (kind === 0 && letters(group) >= 6) || (kind === 3 && letters(group) >= 8) })
+      return
+    }
+    scriptParts.push(group.map((word) => word.text).join(''))
     if (!type) { emitClean(group); return }
     const prefixEnd = (minLetters) => { let end = 1; while (end < group.length && letters(group.slice(0, end)) < minLetters) end++; return end }
     if (type === 'verbatim' || type === 'triple') {
@@ -90,16 +116,16 @@ function synthesize(cleanWords, { seed = 1, rate = 0.28, sampleRate = 44100 } = 
   })
   const frame = (ms) => Math.round(ms * sampleRate / 1000)
   return {
-    sampleRate, channels: 1, durationFrames: frame(cursor + 500), referenceScript: cleanWords.map((word) => word.text).join(''),
+    sampleRate, channels: 1, durationFrames: frame(cursor + 500), referenceScript: scriptParts.join(''),
     blocks: blocks.map((block) => ({ id: block.id, text: block.text, startFrame: frame(block.startMs), endFrame: frame(block.endMs), role: block.role })),
-    pauses, retakes, markers,
+    pauses, retakes, markers, scripted,
   }
 }
 
 /**
  * 打分：每处重念看它所在范围里剩下的文字是否正好等于干净原句（“哎、呃”不计）——剪法不同但文字相同算对。
  * 结果：resolved 剪对了；review 没剪对但提了待确认；missed 还留着多余的字；damaged 少了原句的字。
- * 重念范围之外删掉的实词算误删。
+ * 重念范围之外删掉的实词算误删；其中落在“稿内重复”里的单独再数一次（scriptedDeleted：有稿时必须为 0）。
  */
 function scoreSynthetic(sample, retakes) {
   const index = new Map(sample.blocks.map((block, i) => [block.id, i]))
@@ -122,13 +148,16 @@ function scoreSynthetic(sample, retakes) {
     const hit = deleted[i] && !inRetake[i] && plain(sample.blocks[i].text)
     if (hit && !(i > 0 && deleted[i - 1] && !inRetake[i - 1])) falseRuns++
   }
+  const scriptedHit = sample.scripted.filter(({ start, end }) => sample.blocks.slice(start, end).some((block, offset) => deleted[start + offset] && plain(block.text)))
+  for (const { start, end } of scriptedHit) failures.push(`有意重复被删：${sample.blocks.slice(Math.max(0, start - 3), end + 3).map((block, offset) => (deleted[Math.max(0, start - 3) + offset] ? `~${block.text}` : block.text)).join('|')}`)
+  const scriptedDeleted = scriptedHit.length, longDeleted = scriptedHit.filter((item) => item.long).length, longTotal = sample.scripted.filter((item) => item.long).length
   const marker = { aiKept: 0, aiTotal: 0, otherDeleted: 0, otherTotal: 0 }
   for (const item of sample.markers) {
     if (item.text.startsWith('哎')) { marker.aiTotal++; if (!deleted[item.index]) marker.aiKept++ } else { marker.otherTotal++; if (deleted[item.index]) marker.otherDeleted++ }
   }
   const total = { total: 0, resolved: 0, review: 0, missed: 0, damaged: 0 }
   for (const bucket of Object.values(byType)) for (const key of Object.keys(total)) total[key] += bucket[key]
-  return { byType, total, falseRuns, marker, failures, reviewCount: retakes.filter((retake) => retake.review).length }
+  return { byType, total, falseRuns, scriptedDeleted, scriptedTotal: sample.scripted.length, longDeleted, longTotal, marker, failures, reviewCount: retakes.filter((retake) => retake.review).length }
 }
 
 module.exports = { synthesize, scoreSynthetic }

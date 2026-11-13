@@ -43,7 +43,7 @@ const MAX_FIRST_UNITS = 32
 /** 往后看几段：中间可以隔一段短的引子（“比如说，｜然后我来举个例子。｜比如说，我最近…”） */
 const SHORT_UNITS = 4
 /** 提出来的最低分 */
-const MIN_SCORE = 4
+const MIN_SCORE = 3.5
 /** 两个字的常见起头，单凭它相同说明不了什么（“然后…，然后…”“你会…，你会…”） */
 const COMMON_OPENERS = new Set(['这个', '那个', '然后', '就是', '所以', '但是', '而且', '因为', '如果', '比如', '还有', '你会', '我们', '它的', '它是', '这样', '可以', '或者', '你看', '其实', '这里', '那么', '不过', '一个'])
 const LEAD_INS = new Set(['那', '就', '哎', '嗯', '呃', '啊'])
@@ -115,7 +115,7 @@ export function findResidualRetakes(context: SelfCheckContext): SelfCheckFinding
         + (units[i].segment === b - 1 ? 0.5 : 0)
         - (segmentStart ? 0 : 1)
         - (shared === 2 && COMMON_OPENERS.has(opener) ? 1.5 : 0)
-      if (context.locate && length >= 4) {
+      if (context.locate && length >= 2) {
         const earlier = context.locate(units.slice(i, later.unitStart).map((unit) => unit.py))
         const opening = units.slice(later.unitStart, Math.min(later.unitEnd, later.unitStart + 12)).map((unit) => unit.py)
         // 稿子里前一段有其位置、后一段在它之后也对得上：是稿子本来就有的排比

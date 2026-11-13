@@ -133,7 +133,7 @@ function evaluate(pipeline) {
   }
   for (const withScript of [true, false]) {
     const failures = []
-    const merged = { byType: {}, total: { total: 0, resolved: 0, review: 0, missed: 0, damaged: 0 }, falseRuns: 0, marker: { aiKept: 0, aiTotal: 0, otherDeleted: 0, otherTotal: 0 } }
+    const merged = { byType: {}, total: { total: 0, resolved: 0, review: 0, missed: 0, damaged: 0 }, falseRuns: 0, scriptedDeleted: 0, scriptedTotal: 0, longDeleted: 0, longTotal: 0, marker: { aiKept: 0, aiTotal: 0, otherDeleted: 0, otherTotal: 0 } }
     for (const source of sources) for (const seed of [1, 2, 3]) {
       const sample = synthesize(source.words, { seed })
       const outcome = scoreSynthetic(sample, pipeline.detectRetakes({ ...sample, referenceScript: withScript ? sample.referenceScript : '' }))
@@ -141,6 +141,10 @@ function evaluate(pipeline) {
       for (const key of Object.keys(merged.total)) merged.total[key] += outcome.total[key]
       for (const key of Object.keys(merged.marker)) merged.marker[key] += outcome.marker[key]
       merged.falseRuns += outcome.falseRuns
+      merged.scriptedDeleted += outcome.scriptedDeleted
+      merged.scriptedTotal += outcome.scriptedTotal
+      merged.longDeleted += outcome.longDeleted
+      merged.longTotal += outcome.longTotal
       failures.push(...outcome.failures)
     }
     details.push([`合成重念 · ${withScript ? '有稿' : '无稿'}`, undefined, '（~ 开头的词是算法删掉的）', failures])
@@ -148,6 +152,12 @@ function evaluate(pipeline) {
     const names = { verbatim: '原样重念', rephrase: '换说法', mid: '句中重起', triple: '连念三遍', stutter: '蹦字' }
     scores[`合成重念 · ${withScript ? '有稿' : '无稿'}`] = {
       重念处数: merged.total.total, 剪对百分比: percent(merged.total), 漏剪: merged.total.missed, 剪坏: merged.total.damaged, 只提了待确认: merged.total.review, 范围外误删: merged.falseRuns,
+      // 有意的重复被自动删掉的处数。有稿时稿子里写着，必须为 0。无稿时分两类：
+      // 结构上看得出的（短句叠说、口号、只换最后一个词的排比、换了开头的对比）必须为 0；
+      // 够长的一句原样说两遍或只换中间一个词的，和“念完觉得不好再念一遍”是同一个样子，本地按重念删，只记录数字、不设线
+      ...(withScript ? { 稿内重复被删: merged.scriptedDeleted, 有意重复处数: merged.scriptedTotal }
+        : { 无稿时结构性重复与短叠句被自动删: merged.scriptedDeleted - merged.longDeleted, 结构性重复与短叠句处数: merged.scriptedTotal - merged.longTotal,
+          '无稿时长句原样重复被删（不设线）': merged.longDeleted, 长句原样重复处数: merged.longTotal }),
       ...Object.fromEntries(Object.entries(merged.byType).sort().map(([type, bucket]) => [`${names[type]}剪对百分比`, percent(bucket)])),
       哎保留: merged.marker.aiKept, 哎总数: merged.marker.aiTotal, 呃与不对删除: merged.marker.otherDeleted, 呃与不对总数: merged.marker.otherTotal,
     }
@@ -159,13 +169,19 @@ function evaluate(pipeline) {
     const sample = synthesize(long, { seed: 9 })
     const before = Date.now()
     pipeline.detectRetakes(sample)
-    scores['长录音耗时'] = { 原始分钟: Math.round(sample.durationFrames / sample.sampleRate / 60), 词块数: sample.blocks.length, 去重念毫秒: Date.now() - before }
+    const timed = (run) => { const from = Date.now(); run(); return Date.now() - from }
+    // 最坏输入：识别模型循环输出同一句、同一个字。同一截话连着重复应整体当一处重念，耗时不能随遍数爆炸
+    const loop = (text, times) => { const words = []; for (let k = 0; k < times; k++) for (const part of text.split(' ')) words.push({ text: part, durationMs: 80 * part.length }); let at = 0; return { sampleRate: 1000, channels: 1, durationFrames: words.length * 400, referenceScript: '', pauses: [], blocks: words.map((word, index) => { const block = { id: `l${index}`, text: word.text, startFrame: at, endFrame: at + word.durationMs }; at += word.durationMs; return block }) } }
+    scores['长录音耗时'] = {
+      原始分钟: Math.round(sample.durationFrames / sample.sampleRate / 60), 词块数: sample.blocks.length, 去重念毫秒: Date.now() - before,
+      同一句重复250遍毫秒: timed(() => pipeline.detectRetakes(loop('我们 来 看 这个 工具', 250))), 同一个字重复2500遍毫秒: timed(() => pipeline.detectRetakes(loop('的', 2500))),
+    }
   }
   return { scores, details }
 }
 
 /** 越小越好的指标（其余只作参考，不标好坏）。 */
-const LOWER_IS_BETTER = /漏删|误删|留错遍|接缝偏移$|停顿偏差|硬接缝|碎保留段|切到字|预计改动次数|漏剪|剪坏|范围外/
+const LOWER_IS_BETTER = /漏删|误删|留错遍|接缝偏移$|停顿偏差|硬接缝|碎保留段|切到字|预计改动次数|漏剪|剪坏|范围外|稿内重复被删|短叠句被自动删/
 const HIGHER_IS_BETTER = /剪对百分比|待确认命中/
 
 function print(label, scores, details, baseline) {
@@ -183,7 +199,7 @@ function print(label, scores, details, baseline) {
   if (verbose) {
     for (const [name, words, note, failures] of details) {
       console.log(`\n—— ${name} 的逐处差异 ${note}`)
-      if (!words) { for (const item of failures.slice(0, 60)) console.log(`  ${item}`); continue }
+      if (!words) { for (const item of failures.slice(0, 200)) console.log(`  ${item}`); continue }
       for (const item of words.wholeMiss.items) console.log(`  整处漏删 ${item}`)
       for (const item of words.wholeFalse.items) console.log(`  整处误删 ${item}`)
       for (const item of words.wrongTake.items) console.log(`  留错遍   ${item}`)
@@ -204,7 +220,9 @@ try {
   if (args.includes('--update-baseline')) {
     const { 长录音耗时: _timing, ...stable } = scores
     const head = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim()
-    const label = option('--ref') ? source.label : `${new Date().toISOString().slice(0, 10)} 的工作区（当时的提交 ${head}）`
+    const now = new Date()
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    const label = option('--ref') ? source.label : `${today} 的工作区（当时的提交 ${head}）`
     writeFileSync(baselinePath, `${JSON.stringify({ label, scores: stable }, null, 2)}\n`)
     console.log(`\n基线已更新：${baselinePath}`)
   }
