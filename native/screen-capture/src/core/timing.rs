@@ -7,6 +7,7 @@
 //! - 文件头 64 字节：魔数 "HJFT"、版本 u32、文件头字节数 u32、每条字节数 u32、帧率分子 u32、分母 u32、
 //!   网格起点 i64（微秒）、时钟种类 u32（1 = QPC，2 = mach_absolute_time），其余保留为 0。
 //! - 记录 16 字节：来源帧采集时刻 i64（微秒）、网格格号 u32、标志 u16、保留 u16。
+//!   标志：1 新帧、2 被丢弃、4 强制关键帧、8 空档后的第一帧、16 那段空档是来源丢失（不是用户暂停）。
 //!   第 n 条对应文件里 pts = n 的帧；格时刻 = 起点 + 格号 × 帧间隔；相邻两条格号不连续处就是暂停。
 
 use std::{
@@ -30,8 +31,11 @@ pub const FLAG_FRESH: u16 = 1;
 pub const FLAG_DROPPED: u16 = 1 << 1;
 /// 强制关键帧（第一帧、继续后的第一帧）。
 pub const FLAG_KEYFRAME: u16 = 1 << 2;
-/// 暂停后继续的第一帧。
+/// 空档（暂停或来源丢失）之后的第一帧。
 pub const FLAG_AFTER_RESUME: u16 = 1 << 3;
+/// 这一帧之前的空档是来源丢失造成的（显示器断开、采集重新接上），不是用户暂停：
+/// 这段时间声音与事件并没有停，对齐时不能当暂停扣掉。与 FLAG_AFTER_RESUME 同时出现。
+pub const FLAG_AFTER_SOURCE_LOST: u16 = 1 << 4;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Header {

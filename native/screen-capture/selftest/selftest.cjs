@@ -523,6 +523,7 @@ async function main() {
   if (options.proxy) {
     // 代理与主文件帧帧对应：帧数、时长相同，尺寸是 1080P。
     check(prepared.proxy?.height === 1080 && prepared.files.proxy, '准备的应答里没有代理')
+    if (result) check(result.proxyFrames === result.encodedFrames, '停止结果里代理 ' + result.proxyFrames + ' 帧，主文件 ' + result.encodedFrames + ' 帧')
     proxyFile = prepared.files.proxy ? probe(path.join(directory, prepared.files.proxy)) : { error: '没有代理文件' }
     check(!proxyFile.error && proxyFile.height === 1080 && proxyFile.width === prepared.proxy?.width, '代理文件读不了或尺寸不对：' + JSON.stringify(proxyFile).slice(0, 160))
     check(proxyFile.nb_read_frames === stream.nb_read_frames && proxyFile.duration === stream.duration, '代理 ' + proxyFile.nb_read_frames + ' 帧 / ' + proxyFile.duration + ' 秒，主文件 ' + stream.nb_read_frames + ' 帧 / ' + stream.duration + ' 秒')

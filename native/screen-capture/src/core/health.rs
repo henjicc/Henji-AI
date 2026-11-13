@@ -98,6 +98,8 @@ pub struct Health {
     pub encode_queue_max: AtomicU64,
     pub encode_sum_us: AtomicU64,
     pub encode_count: AtomicU64,
+    /// 已写进代理文件的帧数（代理中途停掉时比主文件少）。
+    pub proxy_frames: AtomicU64,
     /// 编码线程新编出、还没被活动时间线取走的字节数。
     pub encoded_bytes: AtomicU64,
     /// 已编码、等写盘的包数。

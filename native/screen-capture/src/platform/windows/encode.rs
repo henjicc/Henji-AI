@@ -381,6 +381,7 @@ pub struct Encoder {
     proxy: Option<Track>,
     finished: bool,
     pub label: &'static str,
+    health: Arc<Health>,
     _hw: Arc<HwContext>,
 }
 
@@ -389,7 +390,7 @@ unsafe impl Send for Encoder {}
 impl Encoder {
     /// 主画面的编码器打不开就整体失败；代理的打不开（比如并发编码会话数到了上限）只是不录代理。
     pub fn open(hw: Arc<HwContext>, config: &CaptureConfig, size: (u32, u32), proxy: Option<(u32, u32)>, video_path: &Path, proxy_path: &Path, health: Arc<Health>) -> Result<Self, String> {
-        let main = Track::open(hw.frames, config, size.0, size.1, config.target_bitrate(size.0, size.1), video_path, health)?;
+        let main = Track::open(hw.frames, config, size.0, size.1, config.target_bitrate(size.0, size.1), video_path, health.clone())?;
         let proxy = proxy.and_then(|(width, height)| {
             let requested = config.proxy.as_ref().map_or(0, |proxy| proxy.bitrate);
             let bitrate = CaptureConfig::bitrate_for(requested, width, height, config.fps);
@@ -404,7 +405,7 @@ impl Encoder {
         if proxy.is_none() {
             hw.proxy_enabled.store(false, Ordering::Relaxed);
         }
-        Ok(Self { label: main.label, main, proxy, finished: false, _hw: hw })
+        Ok(Self { label: main.label, main, proxy, finished: false, health, _hw: hw })
     }
 
     pub fn has_proxy(&self) -> bool {
@@ -420,7 +421,8 @@ impl FrameWriter<HwFrame> for Encoder {
             if frame.proxy.is_null() {
                 return Ok(bytes);
             }
-            if let Err(error) = unsafe { proxy.write(frame.proxy, pts, force_key) } {
+            if unsafe { proxy.write(frame.proxy, pts, force_key) }.map(|_| self.health.proxy_frames.fetch_add(1, Ordering::Relaxed)).is_err() {
+                let error = "见上一行编码器或写盘的报错";
                 eprintln!("[screen-capture] 代理中途出错，之后只录主画面：{error}");
                 let _ = proxy.finish();
                 self.proxy = None;

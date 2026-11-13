@@ -134,7 +134,7 @@ selftest/selftest.cjs  真实录制自测，也是主进程用法的可运行示
 
 ### 停止的结果
 
-`{frames, encodedFrames, cells, durationUs, originUs, freshFrames, repeatedFrames, droppedFrames, sourceSurplus, pausedCells, sourceFrames, captureDropped, bytes, durableFrames, files}`。
+`{frames, encodedFrames, proxyFrames（开了代理才有：实际写进代理的帧数，比 encodedFrames 少说明代理中途停了）, cells, durationUs, originUs, freshFrames, repeatedFrames, droppedFrames, sourceSurplus, pausedCells, sourceFrames, captureDropped, bytes, durableFrames, files}`。
 
 `frames` 是时刻表的条数，也是文件时间轴的长度（帧）；`encodedFrames = frames - droppedFrames` 是交给编码器的帧数，正常停止时等于文件里的帧数。录制被中断（`interrupted`）或进程被杀时，文件里实际读得回来的帧以 `durableFrames`（最后一次 `fragment` 事件）和文件里各帧的 pts 为准，可能比 `encodedFrames` 少。一帧都没录到时不留文件，`frames` 为 0。
 
@@ -192,7 +192,7 @@ selftest/selftest.cjs  真实录制自测，也是主进程用法的可运行示
 |---|---|---|
 | 0 | i64 | 这一帧所用来源帧的系统时刻（微秒）。同一张来源帧重复出现时这个值相同 |
 | 8 | u32 | 网格格号 `cell`。格时刻 = `originUs + cell × 1000000 × 分母 / 分子` |
-| 12 | u16 | 标志：1 = 新帧（没有这一位是重复帧）；2 = 被丢弃（文件里没有这一帧）；4 = 强制关键帧；8 = 继续后的第一帧 |
+| 12 | u16 | 标志：1 = 新帧（没有这一位是重复帧）；2 = 被丢弃（文件里没有这一帧）；4 = 强制关键帧；8 = 空档后的第一帧；16 = 那段空档是来源丢失造成的（声音与事件此时没有停，不能当暂停扣掉）。读的时候忽略不认识的位 |
 | 14 | u16 | 保留 |
 
 怎么用：

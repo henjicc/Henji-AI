@@ -344,6 +344,8 @@ struct Recording<F> {
     written: u64,
     durable_reported: u64,
     paused: bool,
+    /// 当前（或刚结束的）空档里来源丢过。
+    gap_lost: bool,
 }
 
 enum End {
@@ -406,7 +408,7 @@ impl<P: Platform> Runner<P> {
         let table = timing::Writer::create(&self.paths.timing, header).map_err(|error| io_failure(&error))?;
         let activity = activity::Writer::create(&self.paths.activity, origin_us, self.config.fps, 1).map_err(|error| io_failure(&error))?;
         self.write_manifest(&self.manifest(Some(origin_us), None, None))?;
-        Ok(Recording { pacer: Pacer::new(origin_us, self.config.fps, 1), table, activity, written: 0, durable_reported: 0, paused: false })
+        Ok(Recording { pacer: Pacer::new(origin_us, self.config.fps, 1), table, activity, written: 0, durable_reported: 0, paused: false, gap_lost: false })
     }
 
     fn totals(&self, recording: Option<&Recording<P::Frame>>) -> Value {
@@ -418,6 +420,9 @@ impl<P: Platform> Runner<P> {
             "bytes": load(&self.health.bytes_written),
             "durableFrames": load(&self.health.durable_frames),
         });
+        if !self.info["proxy"].is_null() {
+            totals["proxyFrames"] = json!(load(&self.health.proxy_frames));
+        }
         if let Some(recording) = recording {
             let counters = recording.pacer.counters;
             let frames = recording.pacer.next_output();
@@ -678,6 +683,9 @@ impl<P: Platform> Runner<P> {
                                 }
                                 if emit.force_key && emit.output > 0 {
                                     flags |= timing::FLAG_AFTER_RESUME;
+                                    if std::mem::take(&mut active.gap_lost) {
+                                        flags |= timing::FLAG_AFTER_SOURCE_LOST;
+                                    }
                                 }
                             }
                             let record = timing::Record { source_us: emit.source_us, cell: emit.cell as u32, flags };
@@ -706,6 +714,7 @@ impl<P: Platform> Runner<P> {
                         }
                         Poll::Paused { at_us, cell, output } => {
                             active.paused = true;
+                            active.gap_lost |= lost;
                             // 空档可能很久：已录的内容现在就落成完整分片。
                             let flushed = stage.flush().and_then(|_| active.table.flush().and_then(|_| active.activity.mark(if lost { "sourceLost" } else { "pause" }, output, at_us)).map_err(|error| io_failure(&error)));
                             if let Err(error) = flushed {
@@ -995,6 +1004,8 @@ mod tests {
         let lost_gap = records[before_restore].cell - records[before_restore - 1].cell;
         assert!((40..=65).contains(&lost_gap), "来源丢失跨了 {lost_gap} 格");
         assert!(records[before_resume].flags & timing::FLAG_AFTER_RESUME != 0);
+        assert!(records[before_resume].flags & timing::FLAG_AFTER_SOURCE_LOST == 0);
+        assert!(records[before_restore].flags & timing::FLAG_AFTER_SOURCE_LOST != 0);
         assert!(records.windows(2).all(|pair| pair[0].source_us <= pair[1].source_us));
         let manifest: Value = serde_json::from_slice(&fs::read(&paths.manifest).unwrap()).unwrap();
         assert_eq!(manifest["completed"], true);
