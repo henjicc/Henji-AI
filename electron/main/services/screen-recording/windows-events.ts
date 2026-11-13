@@ -3,7 +3,11 @@ import type { CaptureRect } from '../../../../src/core/captureLog/coordinates'
 import type { cursorShapes } from '../../../../src/core/captureLog/events'
 
 interface DesktopWindowFact { windowId: string | null; bounds: CaptureRect | null; available: boolean }
-export interface DesktopNativeFacts { cursor(): typeof cursorShapes[number]; foreground(): DesktopWindowFact; bounds?(windowId: string): CaptureRect | null }
+export interface DesktopNativeFacts {
+  cursor(): typeof cursorShapes[number]; foreground(): DesktopWindowFact; bounds?(windowId: string): CaptureRect | null
+  /** 窗口是否还在（最小化、被遮挡都算在）；读不到边界不等于窗口没了。 */
+  exists?(windowId: string): boolean
+}
 /** No titles, process command lines or key contents are requested from the OS. */
 export function createWindowsEventFacts(): DesktopNativeFacts {
   if (process.platform !== 'win32') return { cursor: () => 'unknown', foreground: () => ({ windowId: null, bounds: null, available: false }) }
@@ -15,6 +19,7 @@ export function createWindowsEventFacts(): DesktopNativeFacts {
   const loadCursor = lib.func('__stdcall', 'LoadCursorW', 'void *', ['void *', 'uintptr_t'])
   const getWindow = lib.func('__stdcall', 'GetForegroundWindow', 'void *', [])
   const getRect = lib.func('__stdcall', 'GetWindowRect', 'int', ['void *', koffi.out(koffi.pointer(rect))])
+  const isWindow = lib.func('__stdcall', 'IsWindow', 'int', ['void *'])
   // WGC captures the visible extended frame. GetWindowRect includes invisible resize borders.
   const getFrame = koffi.load('dwmapi.dll').func('__stdcall', 'DwmGetWindowAttribute', 'int32', ['void *', 'uint32', koffi.out(koffi.pointer(rect)), 'uint32'])
   const shapes = new Map<string, typeof cursorShapes[number]>()
@@ -23,6 +28,7 @@ export function createWindowsEventFacts(): DesktopNativeFacts {
     if (handle !== null) shapes.set(String(handle), shape)
   }
   return {
+    exists: windowId => /^\d+$/.test(windowId) && isWindow(BigInt(windowId)) !== 0,
     bounds: windowId => {
       const value = { left: 0, top: 0, right: 0, bottom: 0 }
       if (!/^\d+$/.test(windowId) || getFrame(BigInt(windowId), 9, value, koffi.sizeof(rect)) !== 0 || value.right <= value.left || value.bottom <= value.top) return null

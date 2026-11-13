@@ -45,6 +45,7 @@ const detailsSchema = z.object({
     systemAudio: z.object({ silenceSeconds: z.number().describe('没有声音播放时补的静音'), unavailableSeconds: z.number().describe('输出设备不可用或被独占时补的静音'), droppedFrames: z.number().describe('写盘跟不上丢的帧，已补等长静音'), discontinuities: z.number(), deviceSwitches: z.number(), reconnects: z.number() }).strict().nullable(),
     microphone: z.object({ device: z.string().describe('实际用的麦克风；音频编辑正在录音时与它共用同一个设备'), inputOverflows: z.number(), inputUnderflows: z.number(), droppedFrames: z.number().describe('写盘跟不上丢的帧，已补等长静音'), droppedPreviewBlocks: z.number().describe('麦克风轨由原生录音进程直接落盘，不经推送，通常为 0'), reconnects: z.number().describe('设备拔出或录音进程失联后自动重连的次数，每次留一段空档') }).strict().nullable(),
     recovered: z.boolean().describe('应用上次意外退出后，启动时自动补齐的'),
+    sourceEnded: z.string().optional().describe('录制因被录的窗口关闭或显示器断开而自动停止时的说明；这是正常结尾，不是失败，已录内容照常保存、可以导入'),
   }).strict().nullable().optional().describe('采集计数只在本次运行内有；应用重启后为 null，只剩 tracks 与 phase。null（整体或某一项）表示不知道，不等于没有丢帧或空档'),
   finishing: z.boolean().optional().describe('停止后的收尾、恢复或导入仍在后台进行；为 true 时等待，不要重发。变回 false 后看 error：有值就是失败及原因，没有就是做完了'),
 }).strict()

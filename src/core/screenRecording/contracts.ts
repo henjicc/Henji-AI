@@ -53,6 +53,8 @@ export interface RecordingControlSnapshot {
   shortcutConflicts: RecordingAction[]
   cameraPreview?: string | null
   trackWarnings?: Array<'system-audio-silent' | 'system-audio-unavailable' | 'device-disconnected'>
+  /** 录制因被录的窗口关闭（window）或显示器断开（display）而自动停止；其余结束方式省略。 */
+  sourceEnded?: 'window' | 'display'
 }
 /** 界面录的轨道（摄像头、macOS 的系统声）的状态。麦克风电平由主进程按原生麦克风轨给出。 */
 const recordingTrackStatusSchema = z.object({ cameraPreview: z.string().max(100_000).regex(/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/).nullable(), warnings: z.array(z.enum(['system-audio-silent', 'system-audio-unavailable', 'device-disconnected'])).max(3) }).strict()

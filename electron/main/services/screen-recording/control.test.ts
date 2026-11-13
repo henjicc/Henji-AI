@@ -92,14 +92,61 @@ describe('录制控制权威状态', () => {
     await service.command('toggle'); await service.command('toggle'); expect(began).toHaveBeenCalledTimes(1)
     await service.dispose()
   })
-  it('后端启动失败不显示录制；停止失败可重试、错误不吞掉', async () => {
+  it('后端启动失败不显示录制并释放采集；失败后停止不再对着已释放的后端重走一遍', async () => {
     const { service, backend } = fixture(); service.create('session', backend)
     vi.mocked(backend.start).mockRejectedValueOnce(new Error('device gone'))
     await service.command('toggle'); await vi.advanceTimersByTimeAsync(3000)
     expect(service.snapshot()).toMatchObject({ phase: 'failed', busy: false }); expect(service.snapshot()?.error).toBeTruthy()
+    expect(backend.cancel).toHaveBeenCalledTimes(1)
+    await service.command('stop'); expect(backend.stop).not.toHaveBeenCalled(); expect(service.snapshot()?.phase).toBe('failed')
+    await service.dispose(); expect(service.snapshot()).toBeNull()
+  })
+  it('停止失败不吞掉错误，随即释放采集；再按停止直接返回', async () => {
+    const { service, backend } = fixture(); service.create('session', backend)
+    await service.command('toggle'); await vi.advanceTimersByTimeAsync(3000)
     vi.mocked(backend.stop).mockRejectedValueOnce(new Error('write failed'))
-    await expect(service.command('stop')).rejects.toThrow('write failed'); expect(service.snapshot()?.phase).toBe('failed')
-    await service.command('stop'); expect(service.snapshot()?.phase).toBe('stopped'); await service.dispose()
+    await expect(service.command('stop')).rejects.toThrow('write failed')
+    expect(service.snapshot()?.phase).toBe('failed'); expect(backend.cancel).toHaveBeenCalledTimes(1)
+    await service.command('stop'); expect(backend.stop).toHaveBeenCalledTimes(1)
+    await service.dispose()
+  })
+  it('被录的来源没了：按停止同一条路收尾，快照记下原因；已停止或已失败时不再处理', async () => {
+    const { service, backend } = fixture(); const order: string[] = []
+    backend.stop.mockImplementation(async () => { order.push('stop') })
+    service.create('session', { ...backend, ending: async () => { order.push('ending') } })
+    await service.command('toggle'); await vi.advanceTimersByTimeAsync(3000)
+    expect(service.sourceEnded('other', 'window')).toBe(false); expect(backend.stop).not.toHaveBeenCalled()
+    expect(service.sourceEnded('session', 'window')).toBe(true); await vi.advanceTimersByTimeAsync(0)
+    expect(order).toEqual(['ending', 'stop']); expect(service.snapshot()).toMatchObject({ phase: 'stopped', sourceEnded: 'window', error: null })
+    expect(backend.cancel).not.toHaveBeenCalled()
+    expect(service.sourceEnded('session', 'window')).toBe(false); expect(backend.stop).toHaveBeenCalledTimes(1)
+    await service.dispose()
+  })
+  it('暂停中来源没了照样停止；正在切换状态时等它做完再停', async () => {
+    const { service, backend } = fixture(); let finish!: () => void
+    service.create('session', backend); await service.command('toggle'); await vi.advanceTimersByTimeAsync(3000)
+    vi.mocked(backend.pause).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const pausing = service.command('toggle'); await vi.advanceTimersByTimeAsync(0)
+    expect(service.sourceEnded('session', 'display')).toBe(true); finish(); await pausing; await vi.advanceTimersByTimeAsync(0)
+    expect(service.snapshot()).toMatchObject({ phase: 'stopped', sourceEnded: 'display' }); expect(backend.stop).toHaveBeenCalledTimes(1)
+    await service.dispose()
+  })
+  it('用户已按停止、收尾未完时来源才没了：不接手、不记来源原因', async () => {
+    const { service, backend } = fixture(); let finish!: () => void
+    service.create('session', backend); await service.command('toggle'); await vi.advanceTimersByTimeAsync(3000)
+    vi.mocked(backend.stop).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const stopping = service.command('stop'); await vi.advanceTimersByTimeAsync(0)
+    expect(service.sourceEnded('session', 'window')).toBe(false); finish(); await stopping
+    expect(service.snapshot()?.phase).toBe('stopped'); expect(service.snapshot()?.sourceEnded).toBeUndefined()
+    await service.dispose()
+  })
+  it('来源没了触发的停止本身失败：按失败呈现，不再带来源原因', async () => {
+    const { service, backend } = fixture()
+    service.create('session', backend); await service.command('toggle'); await vi.advanceTimersByTimeAsync(3000)
+    vi.mocked(backend.stop).mockRejectedValueOnce(new Error('write failed'))
+    expect(service.sourceEnded('session', 'window')).toBe(true); await vi.advanceTimersByTimeAsync(0)
+    expect(service.snapshot()?.phase).toBe('failed'); expect(service.snapshot()?.sourceEnded).toBeUndefined()
+    await service.dispose()
   })
   it('系统快捷键占用提示，只卸载本实例成功注册的键；热修改失败仍有按钮操作', async () => {
     const { service, backend, register, unregister } = fixture(); register.mockImplementation(key => key !== DEFAULT_RECORDING_SHORTCUTS.mark)

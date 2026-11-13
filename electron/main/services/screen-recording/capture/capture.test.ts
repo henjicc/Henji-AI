@@ -111,6 +111,64 @@ describe('screen capture ownership and durable spans', () => {
       expect(failed).toHaveBeenCalledTimes(1)
     } finally { await backend.cancel(); await fs.rm(storage.directory, { recursive: true, force: true }) }
   })
+  it('被录的窗口关闭：进程报完结尾、来源也确认没了，不对着已经不在的窗口续录，这一片按进度封口并报来源结束', async () => {
+    const storage = await fixture(), children: ChildProcessWithoutNullStreams[] = []
+    const failed = vi.fn(), sourceEnded = vi.fn()
+    const spawn = vi.fn(() => {
+      const child = processFixture(); children.push(child)
+      setTimeout(() => child.stdout.emit('data', Buffer.from('out_time_us=1000000\n')), 1)
+      return child
+    })
+    const backend = new GfxCaptureBackend(options, source, storage, { spawn, binary: async () => 'ffmpeg', encoder: async () => profile, nowUs: () => 2_000_000, failed, sourceEnded, sourceGone: async () => true })
+    try {
+      await backend.prepare(); await backend.start(new AbortController().signal)
+      // 与实测一致：gfxcapture 在窗口关闭后约 70 ms 输出最后一次进度（progress=end），退出码 0。
+      children[0].stdout.emit('data', Buffer.from('out_time_us=2733333\nprogress=end\n'))
+      Object.assign(children[0], { exitCode: 0 }); children[0].emit('close', 0)
+      await vi.waitFor(() => expect(sourceEnded).toHaveBeenCalledOnce())
+      expect(spawn).toHaveBeenCalledTimes(1); expect(failed).not.toHaveBeenCalled()
+      expect(storage.manifest.spans[0]).toMatchObject({ finalized: true, durationUs: 2_733_333 })
+      await backend.stop(new AbortController().signal)
+      expect(backend.stats().restarts).toBe(0)
+    } finally { await backend.cancel(); await fs.rm(storage.directory, { recursive: true, force: true }) }
+  })
+  it('只报了结尾而来源还在（如短暂查不准）：照常续录，不把正常的长录停掉', async () => {
+    const storage = await fixture(), children: ChildProcessWithoutNullStreams[] = []
+    const failed = vi.fn(), sourceEnded = vi.fn(), restarted = vi.fn()
+    const spawn = vi.fn(() => {
+      const child = processFixture(); children.push(child)
+      setTimeout(() => child.stdout.emit('data', Buffer.from('out_time_us=1000000\n')), 1)
+      return child
+    })
+    const backend = new GfxCaptureBackend(options, source, storage, { spawn, binary: async () => 'ffmpeg', encoder: async () => profile, nowUs: () => 2_000_000, failed, sourceEnded, restarted, sourceGone: async () => false })
+    try {
+      await backend.prepare(); await backend.start(new AbortController().signal)
+      children[0].stdout.emit('data', Buffer.from('progress=end\n'))
+      Object.assign(children[0], { exitCode: 0 }); children[0].emit('close', 0)
+      await vi.waitFor(() => expect(restarted).toHaveBeenCalledOnce())
+      expect(spawn).toHaveBeenCalledTimes(2); expect(sourceEnded).not.toHaveBeenCalled(); expect(failed).not.toHaveBeenCalled()
+    } finally { await backend.cancel(); await fs.rm(storage.directory, { recursive: true, force: true }) }
+  })
+  it('退出时来源还在、续录途中才没了：同样按来源结束，不报采集失败', async () => {
+    const storage = await fixture(), children: ChildProcessWithoutNullStreams[] = []
+    const failed = vi.fn(), sourceEnded = vi.fn()
+    const spawn = vi.fn(() => {
+      const child = processFixture(); children.push(child)
+      const first = children.length === 1
+      setTimeout(() => {
+        if (first) child.stdout.emit('data', Buffer.from('out_time_us=1000000\n'))
+        else { child.stderr.emit('data', Buffer.from('Failed to create capture item\n')); Object.assign(child, { exitCode: 1 }); child.emit('close', 1) }
+      }, 1)
+      return child
+    })
+    const backend = new GfxCaptureBackend(options, source, storage, { spawn, binary: async () => 'ffmpeg', encoder: async () => profile, nowUs: () => 2_000_000, failed, sourceEnded, sourceGone: async () => spawn.mock.calls.length > 1 })
+    try {
+      await backend.prepare(); await backend.start(new AbortController().signal)
+      Object.assign(children[0], { exitCode: 1 }); children[0].emit('close', 1)
+      await vi.waitFor(() => expect(sourceEnded).toHaveBeenCalledOnce())
+      expect(failed).not.toHaveBeenCalled()
+    } finally { await backend.cancel(); await fs.rm(storage.directory, { recursive: true, force: true }) }
+  })
   it('第一帧时刻按采集一出帧的打点估（不含编码排队），打点行不进报错文本', async () => {
     const storage = await fixture()
     let now = 3_000_000

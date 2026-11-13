@@ -15,7 +15,7 @@ import { CaptureStorage, recoverCapture } from './storage'
 import { GfxCaptureBackend } from './gfxcapture'
 import { systemCursorLook } from './cursor-look'
 import { resolveNativeCaptureSource } from './source'
-import { createCaptureBounds, createCaptureGeometry } from './geometry'
+import { CAPTURE_PRESENCE_INTERVAL_MS, captureSourceGone, createCaptureBounds, createCaptureGeometry, createCaptureSourcePresence } from './geometry'
 import { RecordingSessionDocument, readRecordingEvents, recoverRecordingSession } from '../session-document'
 import { exportQuickRecording, quickExportPath } from '../quick-export'
 import { combineRecording } from '../combine'
@@ -42,6 +42,12 @@ interface Active {
   finishing?: Promise<void>
   /** 主进程让原生录音服务录的声音轨（麦克风；Windows 上还有系统声）：与画面、事件一样不依赖界面。开始后才有录制器。 */
   hosted: Partial<Record<HostTrackKind, { recorder?: NativeTrack }>>
+  /** 被录的来源没了（窗口关闭、显示器断开）：录制按停止收尾，这是说明。 */
+  ended?: { source: 'window' | 'display'; message: string }
+  /** 定时检查来源还在不在；暂停中也查，收尾时停。 */
+  presence?: ReturnType<typeof setInterval>
+  /** 释放只做一次：采集失败时已经释放过，之后关控制条再释放就直接用那次的结果，不再对着已结束的会话等回执。 */
+  released?: Promise<void>
 }
 type HostTrackKind = NonNullable<CapturePrepared['hostTracks']>[number]
 let active: Active | null = null
@@ -58,6 +64,8 @@ function captureFacts(session: Active, live: boolean): RecordingCaptureFacts {
     systemAudio: system ? { silenceSeconds: system.silenceSeconds ?? 0, unavailableSeconds: system.unavailableSeconds ?? 0, droppedFrames: system.droppedFrames ?? 0, discontinuities: system.discontinuities ?? 0, deviceSwitches: system.deviceSwitches ?? 0, reconnects: systemReconnects } : null,
     microphone: microphone ? { device: microphone.device, inputOverflows: microphone.health.inputOverflows ?? 0, inputUnderflows: microphone.health.inputUnderflows ?? 0, droppedFrames: microphone.health.droppedFrames ?? 0, droppedPreviewBlocks: microphone.health.droppedPreviewBlocks ?? 0, reconnects: microphone.reconnects } : null,
     recovered: false,
+    // 来源关闭后的停止本身失败了：按失败如实呈现，不再说是来源关闭。
+    ...(session.ended && !session.failed ? { sourceEnded: session.ended.message } : {}),
     ...(live && session.document ? { tracks: session.document.ledger.state.tracks(session.prepared.sessionId, session.originUs) } : {}),
   }
 }
@@ -87,6 +95,18 @@ async function fail(session: Active, error: Error): Promise<void> {
   session.storage.manifest.status = 'failed'; session.failed = true; session.failure = error.message
   logger.error('屏幕录制失败', { event: 'recording.capture.failed', error })
   await recordingControl.captureFailed(session.storage.manifest.sessionId, error)
+}
+/**
+ * 被录的窗口关闭、显示器断开：录制到此为止，按停止收尾（已录的画面、声音、事件照常封存，能导入剪辑、合并），
+ * 不当成采集出错，也不对着已经不在的来源续录。
+ */
+function sourceEnded(session: Active, source: 'window' | 'display'): void {
+  if (active !== session || session.ended || session.failed) return
+  clearInterval(session.presence)
+  // 用户已经按了停止（或已失败）：这次结束不是来源关闭造成的，不记原因、不提示。
+  if (!recordingControl.sourceEnded(session.prepared.sessionId, source)) return
+  session.ended = { source, message: source === 'window' ? '被录制的窗口已关闭' : '被录制的显示器已断开' }
+  logger.info('录制来源已关闭，按停止收尾', { event: 'recording.capture.source.ended', context: { sessionId: session.prepared.sessionId, source } })
 }
 
 /**
@@ -146,11 +166,12 @@ function grantKinds(options: RecordingSessionOptions | undefined): CaptureKind[]
 /** 停止、取消、失败都走这里：一次写全文档，留一条汇总日志；意外停止时提醒用户。 */
 async function finishSession(session: Active, document: RecordingSessionDocument): Promise<void> {
   const sessionId = session.prepared.sessionId
+  clearInterval(session.presence)
   try {
     const summary = await document.finish(session.storage.manifest)
     const capture = session.backend instanceof GfxCaptureBackend ? session.backend.stats() : undefined
     keepFacts(sessionId, captureFacts(session, false))
-    logger.info('录制结束汇总', { event: 'recording.capture.summary', context: { sessionId, backend: session.storage.manifest.backend, failed: session.failed, ...summary, eventPageBacklog: recordingEventBacklog(), ...capture ? { droppedFrames: capture.droppedFrames, duplicatedFrames: capture.duplicatedFrames, encoderRestarts: capture.restarts, encoder: capture.encoder } : {} } })
+    logger.info('录制结束汇总', { event: 'recording.capture.summary', context: { sessionId, backend: session.storage.manifest.backend, failed: session.failed, ...session.ended ? { sourceEnded: session.ended.source } : {}, ...summary, eventPageBacklog: recordingEventBacklog(), ...capture ? { droppedFrames: capture.droppedFrames, duplicatedFrames: capture.duplicatedFrames, encoderRestarts: capture.restarts, encoder: capture.encoder } : {} } })
     if (session.failed) notifyRecordingProblem(session.owner, `录制意外停止，已保存 ${formatDuration(summary.durationUs)}，可以导入剪辑。`)
   } catch (error) {
     logger.error('录制收尾失败，已写文件保留，可以从录制页恢复', { event: 'recording.capture.finish.failed', error, context: { sessionId } })
@@ -234,6 +255,7 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
       const hostTracks: HostTrackKind[] = [...(request.session?.tracks.microphone ? ['microphone' as const] : []), ...(request.session?.tracks.systemAudio && nativeSystemAudioSupported(process.platform) ? ['systemAudio' as const] : [])]
       const prepared: CapturePrepared = { sessionId: request.sessionId, originUs, backend, cursorEmbedded: manifest.cursorEmbedded, options: request.options, ...(request.session ? { directory: storage.directory } : {}), ...(hostTracks.length ? { hostTracks } : {}) }
       const session: Active = { owner, storage, originUs, rpc: new Map(), backend: null!, tracksAttached: true, failed: false, prepared, ...(request.session ? { session: request.session } : {}), ...(request.followUp ? { followUp: request.followUp } : {}), hosted: Object.fromEntries(hostTracks.map(kind => [kind, {}])) }
+      const presence = createCaptureSourcePresence(source), endedSource = source.kind === 'window' ? 'window' as const : 'display' as const
       const geometry = request.session ? createCaptureGeometry(source, request.options) : undefined
       geometry?.()
       if (request.session) {
@@ -247,6 +269,7 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
         nowUs: () => now() - session.originUs,
         failed: error => { void fail(session, error).catch(failure => logger.error('录制失败清理未完成', { event: 'recording.capture.cleanup.failed', error: failure })) },
         restarted: info => notifyRecordingProblem(session.owner, info.encoder === 'cpu' ? '画面编码中断过一次，已改用软件编码自动接着录。' : '画面编码中断过一次，已自动接着录。'),
+        sourceGone: () => captureSourceGone(presence), sourceEnded: () => sourceEnded(session, endedSource),
       }, request.cursor === 'embed') : {
         prepare: async () => undefined,
         start: () => remote(session, 'start'), pause: () => remote(session, 'pause'), resume: () => remote(session, 'resume'), stop: () => remote(session, 'stop'),
@@ -281,17 +304,24 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
             began: () => document!.range('startUs', now() - session.originUs), ending: () => failing(document!.range('endUs', now() - session.originUs)),
             pausing: () => failing(document!.pause(now() - session.originUs)), resumed: () => failing(document!.resume(now() - session.originUs)),
           } : {}),
-          cancel: async () => {
-            try {
-              const results = await Promise.allSettled([session.backend.cancel(), ...(request.session && backend !== 'chromium' && !owner.isDestroyed() ? [remote(session, 'cancel')] : []), ...Object.values(session.hosted).flatMap(host => host.recorder ? [host.recorder.stop()] : [])])
-              const failure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')
-              if (failure) throw failure.reason
-            } finally {
-              await storage.release()
-              // 用户取消只是不导入：已录内容完整保留并当作正常结束；只有采集出错才记为中断。
-              if (manifest.status !== 'failed') manifest.status = 'stopped'
-              await storage.save(); if (active === session) active = null
-            }
+          cancel: () => {
+            // 第二次（采集失败释放过后再关控制条）这时会话已不是 active，界面的回执路由不到这里，再发命令只会白等超时；
+            // 那次的失败已经报过，这里只等它结束。
+            if (session.released) return session.released.catch(() => undefined)
+            clearInterval(session.presence)
+            session.released = (async () => {
+              try {
+                const results = await Promise.allSettled([session.backend.cancel(), ...(request.session && backend !== 'chromium' && !owner.isDestroyed() ? [remote(session, 'cancel')] : []), ...Object.values(session.hosted).flatMap(host => host.recorder ? [host.recorder.stop()] : [])])
+                const failure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')
+                if (failure) throw failure.reason
+              } finally {
+                await storage.release()
+                // 用户取消只是不导入：已录内容完整保留并当作正常结束；只有采集出错才记为中断。
+                if (manifest.status !== 'failed') manifest.status = 'stopped'
+                await storage.save(); if (active === session) active = null
+              }
+            })()
+            return session.released
           },
         }, document && geometry ? {
           ownerRef: { kind: 'screen_recording.session', id: request.sessionId }, sourceDigest: `sha256:${createHash('sha256').update(JSON.stringify(request.options)).digest('hex')}`,
@@ -299,6 +329,12 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
           onPage: (page, file, writeMs) => document!.page(page, file, writeMs),
           onFailure: error => { session.failed = true; session.failure ??= `录制事件采集失败：${error instanceof Error ? error.message : String(error)}`; session.storage.manifest.status = 'failed'; logger.error('录制事件失败', { event: 'recording.session.events.failed', error }) },
         } : undefined, document ? () => (session.finishing ??= finishSession(session, document!)) : undefined, createCaptureBounds(source, request.options), () => ownerLost(session))
+        let misses = 0
+        session.presence = setInterval(() => {
+          misses = presence.present() ? 0 : misses + 1
+          if (misses >= presence.misses) sourceEnded(session, endedSource)
+        }, CAPTURE_PRESENCE_INTERVAL_MS)
+        session.presence.unref?.()
       } catch (error) {
         try { if (backend === 'gfxcapture') await session.backend.cancel() } finally { await storage.release(); active = null }
         throw error
