@@ -21,7 +21,8 @@ struct Packet(*mut ff::AVPacket);
 unsafe impl Send for Packet {}
 
 enum Message {
-    Packet(Packet),
+    /// 包与它的帧序号。
+    Packet(Packet, u64),
     Flush(mpsc::Sender<()>),
     Finish(mpsc::Sender<()>),
 }
@@ -29,7 +30,8 @@ enum Message {
 struct Output {
     context: *mut ff::AVFormatContext,
     encoder_time_base: ff::AVRational,
-    packets: u64,
+    /// 已写进封装器的最后一帧的序号加一。丢弃的格子占序号但没有包，所以不能数包。
+    frames_end: u64,
     position: i64,
     closed: bool,
 }
@@ -102,7 +104,7 @@ impl Mux {
             if result < 0 {
                 return Err(file_error(result));
             }
-            let output = Output { context, encoder_time_base: (*encoder).time_base, packets: 0, position: 0, closed: true };
+            let output = Output { context, encoder_time_base: (*encoder).time_base, frames_end: 0, position: 0, closed: true };
             let stream = ff::avformat_new_stream(context, ptr::null());
             if stream.is_null() {
                 return Err("FILE_ERROR|无法创建视频轨".into());
@@ -147,7 +149,7 @@ impl Mux {
                 };
                 for message in receiver {
                     match message {
-                        Message::Packet(Packet(mut packet)) => unsafe {
+                        Message::Packet(Packet(mut packet), frame) => unsafe {
                             health.write_queue.fetch_sub(1, Ordering::Relaxed);
                             // 出过错之后只收包、放掉，不再写：编码线程下一次写入时会看到错误并收尾。
                             if thread_failure.lock().unwrap().is_none() {
@@ -161,8 +163,8 @@ impl Mux {
                                     fail(result);
                                 } else {
                                     // 这一包（关键帧）触发了上一个分片落盘：它之前的包都读得回来了。
-                                    output.settle(&health, output.packets);
-                                    output.packets += 1;
+                                    output.settle(&health, output.frames_end);
+                                    output.frames_end = frame + 1;
                                 }
                             }
                             ff::av_packet_free(&mut packet);
@@ -174,7 +176,7 @@ impl Mux {
                                     fail(result);
                                 } else {
                                     unsafe { ff::avio_flush((*output.context).pb) };
-                                    output.settle(&health, output.packets);
+                                    output.settle(&health, output.frames_end);
                                 }
                             }
                             let _ = done.send(());
@@ -184,7 +186,7 @@ impl Mux {
                             if result < 0 {
                                 fail(result);
                             } else if thread_failure.lock().unwrap().is_none() {
-                                health.durable_frames.store(output.packets, Ordering::Relaxed);
+                                health.durable_frames.store(output.frames_end, Ordering::Relaxed);
                                 if let Ok(metadata) = std::fs::metadata(&file) {
                                     health.bytes_written.store(metadata.len(), Ordering::Relaxed);
                                 }
@@ -206,17 +208,23 @@ impl Mux {
     }
 
     /// 队列满时在这里等磁盘。
-    pub fn write(&self, packet: *mut ff::AVPacket) -> Result<(), String> {
+    pub fn write(&self, packet: *mut ff::AVPacket, frame: u64) -> Result<(), String> {
         let queued = self.health.write_queue.fetch_add(1, Ordering::Relaxed) + 1;
         Health::raise(&self.health.write_queue_max, queued);
-        self.sender.send(Message::Packet(Packet(packet))).map_err(|_| "FILE_ERROR|写盘线程已退出".to_string())?;
+        if let Err(mpsc::SendError(message)) = self.sender.send(Message::Packet(Packet(packet), frame)) {
+            if let Message::Packet(Packet(mut packet), _) = message {
+                unsafe { ff::av_packet_free(&mut packet) };
+            }
+            return Err("FILE_ERROR|写盘线程已退出".into());
+        }
         self.check()
     }
 
     fn round_trip(&self, message: impl FnOnce(mpsc::Sender<()>) -> Message) -> Result<(), String> {
         let (done, wait) = mpsc::channel();
         self.sender.send(message(done)).map_err(|_| "FILE_ERROR|写盘线程已退出".to_string())?;
-        let _ = wait.recv();
+        // 应答端没回话就断开，说明写盘线程中途没了。
+        wait.recv().map_err(|_| "FILE_ERROR|写盘线程已退出".to_string())?;
         self.check()
     }
 

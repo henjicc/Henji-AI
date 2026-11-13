@@ -9,6 +9,8 @@
  *     kill     录到一半强杀进程，核对文件与时刻表读得回来
  *     eof      录到一半关掉标准输入（等于主进程没了），核对进程自己把文件收尾
  *     soak     长录（默认 300 秒），每秒记一次健康汇报，看丢帧、内存、显存是否平稳
+ *     flash    在屏幕上放一个黑白闪烁的小色块（不抢焦点），核对时刻表里每帧的系统时刻与真实上屏时刻差多少
+ *     cancel   录几秒后取消（文件应删干净），同一个进程里再录一次
  *   选项：
  *     --display <设备名>   录哪块显示器（sources 返回的 id，如 \\.\DISPLAY1）；默认录非主显示器，没有就录主显示器
  *     --seconds <秒>       录制时长
@@ -30,6 +32,7 @@ const crate = path.resolve(__dirname, '..')
 const executable = path.join(crate, 'target', 'release', 'henji-screen-capture.exe')
 const ffprobe = path.join(ffmpegBinDir, 'ffprobe.exe')
 const ffplay = path.join(ffmpegBinDir, 'ffplay.exe')
+const ffmpeg = path.join(ffmpegBinDir, 'ffmpeg.exe')
 const PROTOCOL = 1
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -155,6 +158,58 @@ function watchSystem() {
   }
 }
 
+function readTimingTable(file) {
+  const bytes = fs.readFileSync(file)
+  const headerBytes = bytes.readUInt32LE(8)
+  const recordBytes = bytes.readUInt32LE(12)
+  const header = { fpsNum: bytes.readUInt32LE(16), fpsDen: bytes.readUInt32LE(20), originUs: Number(bytes.readBigInt64LE(24)) }
+  const records = []
+  for (let offset = headerBytes; offset + recordBytes <= bytes.length; offset += recordBytes) {
+    records.push({ sourceUs: Number(bytes.readBigInt64LE(offset)), cell: bytes.readUInt32LE(offset + 8), flags: bytes.readUInt16LE(offset + 12) })
+  }
+  return { header, records }
+}
+
+/** 文件里每一帧在指定区域的平均亮度（0–255），一帧一个字节。 */
+function regionLuma(video, region) {
+  const result = spawnSync(ffmpeg, ['-v', 'error', '-i', video, '-vf', `crop=${region.width}:${region.height}:${region.x}:${region.y},scale=1:1:flags=area`, '-pix_fmt', 'gray', '-f', 'rawvideo', '-'],
+    { windowsHide: true, maxBuffer: 64 * 1024 * 1024 })
+  if (result.status !== 0) throw new Error(`ffmpeg 读不出画面：${result.stderr}`)
+  return result.stdout
+}
+
+/**
+ * 闪烁色块的每次变色，对到文件里第一张带上新颜色的帧，比较“时刻表里这一帧的系统时刻”与“变色画完的时刻”。
+ * 色块画完后要等合成器下一次合成、再等一次刷新才上屏，所以差值应当落在一个刷新周期宽的窗口里：
+ * 窗口的宽度就是时刻表的精度。
+ */
+function analyzeFlash(video, timingFile, flash, region, fps) {
+  const { header, records } = readTimingTable(timingFile)
+  const luma = regionLuma(video, region)
+  const frameUs = 1e6 / fps
+  const transitions = []
+  for (let frame = 1; frame < Math.min(luma.length, records.length); frame += 1) {
+    if ((luma[frame] > 128) !== (luma[frame - 1] > 128)) transitions.push(frame)
+  }
+  const toggles = flash.ticks.map((ticks) => ticks * 1e6 / flash.frequency)
+  const matched = transitions.length === toggles.length
+  const stats = (values) => {
+    if (!values.length) return null
+    const avg = values.reduce((sum, value) => sum + value, 0) / values.length
+    const deviation = Math.sqrt(values.reduce((sum, value) => sum + (value - avg) ** 2, 0) / values.length)
+    return { min: Math.round(Math.min(...values)), avg: Math.round(avg), max: Math.round(Math.max(...values)), stddev: Math.round(deviation), spreadFrames: Math.round((Math.max(...values) - Math.min(...values)) / frameUs * 100) / 100 }
+  }
+  const pairs = matched ? transitions.map((frame, index) => ({ frame, toggleUs: toggles[index], record: records[frame] })) : []
+  return {
+    toggles: toggles.length,
+    transitionsInFile: transitions.length,
+    // 变色画完 → 时刻表里那一帧的系统时刻。
+    paintToSourceTimeUs: stats(pairs.map((pair) => pair.record.sourceUs - pair.toggleUs)),
+    // 变色画完 → 那一帧在文件时间轴上的位置（格时刻）。
+    paintToFileTimeUs: stats(pairs.map((pair) => header.originUs + pair.record.cell * 1e6 * header.fpsDen / header.fpsNum - pair.toggleUs)),
+  }
+}
+
 function summarizeHealth(samples) {
   const recording = samples.filter((sample) => sample.frames > 0)
   if (!recording.length) return null
@@ -175,6 +230,7 @@ function summarizeHealth(samples) {
     encodeMaxUs: stats('encodeMaxUs'),
     writeMaxUs: stats('writeMaxUs'),
     captureQueueMax: stats('captureQueueMax'),
+    captureMaxUs: stats('captureMaxUs'),
     writeQueueMax: stats('writeQueueMax'),
     sourceIntervalUs: last.sourceIntervalUs,
     arrivalLatencyUs: last.arrivalLatencyUs,
@@ -184,13 +240,13 @@ function summarizeHealth(samples) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2))
-  if (!['record', 'kill', 'eof', 'soak'].includes(options.scenario)) {
-    console.error('用法：node native/screen-capture/selftest/selftest.cjs <record|kill|eof|soak> [选项]（见文件头）')
+  if (!['record', 'kill', 'eof', 'soak', 'flash', 'cancel'].includes(options.scenario)) {
+    console.error('用法：node native/screen-capture/selftest/selftest.cjs <record|kill|eof|soak|flash|cancel> [选项]（见文件头）')
     process.exit(2)
   }
   if (!fs.existsSync(executable)) throw new Error('还没有构建：先运行 node scripts/build-screen-capture.cjs')
   const fps = Number(options.fps ?? 60)
-  const seconds = Number(options.seconds ?? (options.scenario === 'soak' ? 300 : options.scenario === 'record' ? 60 : 12))
+  const seconds = Number(options.seconds ?? ({ soak: 300, record: 60, cancel: 5 }[options.scenario] ?? 12))
   const directory = options.out ?? fs.mkdtempSync(path.join(os.tmpdir(), 'henji-screen-capture-'))
   fs.mkdirSync(directory, { recursive: true })
   const problems = []
@@ -206,17 +262,52 @@ async function main() {
   const motion = options.motion ? startMotion(display) : null
   if (motion) await sleep(1500)
 
-  const sessionId = `selftest-${Date.now()}`
-  const prepared = await client.request('prepare', { sessionId, directory, source: { kind: 'display', id: display.id }, fps, codec: options.codec ?? 'h264' })
+  let sessionId = `selftest-${Date.now()}`
+  const parameters = { directory, source: { kind: 'display', id: display.id }, fps, codec: options.codec ?? 'h264' }
+  let prepared = await client.request('prepare', { sessionId, ...parameters })
   await sleep(300)
-  const startedAt = Date.now()
+  const rejected = async (type, code) => {
+    const outcome = await client.request(type, { sessionId }).then(() => 'ok', (error) => error.code)
+    check(code.split('|').includes(outcome), `${type} 此时应被拒绝为 ${code}，实际 ${outcome}`)
+  }
+  if (options.scenario === 'cancel') await rejected('pause', 'INVALID_STATE')
+  let startedAt = Date.now()
   await client.request('start', { sessionId })
+  if (options.scenario === 'cancel') await rejected('start', 'INVALID_STATE')
+  if (options.scenario === 'cancel') {
+    // 录三秒后取消：文件应全部删掉；同一个进程里紧接着再录一次（不先 prepare，直接带参数 start）应当正常。
+    await sleep(3000)
+    await client.request('cancel', { sessionId })
+    const left = fs.readdirSync(directory)
+    check(left.length === 0, `取消后目录里还留着：${left.join('、')}`)
+    const status = await client.request('status', { sessionId })
+    check(status.state === 'ended', `取消后的状态是 ${status.state}`)
+    sessionId = `${sessionId}-again`
+    startedAt = Date.now()
+    prepared = await client.request('start', { sessionId, ...parameters })
+  }
   const system = watchSystem()
   let result = null
   let exit = null
   let stopMs = null
 
-  if (options.scenario === 'record' || options.scenario === 'soak') {
+  let flash = null
+  // 闪烁色块放在被录显示器的右上角；只取中间一块量亮度，避开边缘。
+  const flashWindow = { x: display.x + display.width - 520, y: display.y + 120, size: 400 }
+  const flashRegion = { x: flashWindow.x - display.x + 100, y: flashWindow.y - display.y + 100, width: 200, height: 200 }
+
+  if (options.scenario === 'flash') {
+    const flashFile = path.join(directory, 'flash.json')
+    await sleep(500)
+    const run = spawnSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(__dirname, 'flash.ps1'),
+      '-X', String(flashWindow.x), '-Y', String(flashWindow.y), '-Size', String(flashWindow.size), '-Count', String(options.count ?? 40), '-Out', flashFile], { encoding: 'utf8', windowsHide: true })
+    if (run.status !== 0) problems.push(`闪烁色块没跑起来：${run.stderr}`)
+    else flash = JSON.parse(fs.readFileSync(flashFile, 'utf8'))
+    await sleep(500)
+    result = await client.request('stop', { sessionId })
+    client.child.stdin.end()
+    exit = await client.exited
+  } else if (['record', 'soak', 'cancel'].includes(options.scenario)) {
     if (options.scenario === 'record' && options.pause && seconds > 30) {
       await sleep(20_000)
       await client.request('pause', { sessionId })
@@ -227,8 +318,14 @@ async function main() {
       await sleep(seconds * 1000)
     }
     const stopStarted = Date.now()
-    result = await client.request('stop', { sessionId })
+    // 停止在途时再发一次停止：第二条应被拒绝，第一条照常应答。
+    const first = client.request('stop', { sessionId })
+    // 第二条到的时候录制可能正在结束，也可能已经结束，两种拒绝都对。
+    const second = options.scenario === 'cancel' ? rejected('stop', 'INVALID_STATE|SESSION_MISSING') : null
+    result = await first
     stopMs = Date.now() - stopStarted
+    await second
+    if (options.scenario === 'cancel') await rejected('pause', 'SESSION_MISSING')
     client.child.stdin.end()
     exit = await client.exited
   } else if (options.scenario === 'kill') {
@@ -293,8 +390,20 @@ async function main() {
     check(fileFrames >= (seconds - 1) * fps, `只录到 ${fileFrames} 帧`)
   }
 
+  let flashResult = null
+  if (flash && !stream.error && !table.error) {
+    flashResult = analyzeFlash(video, path.join(directory, prepared.files.timing), flash, flashRegion, fps)
+    check(flashResult.transitionsInFile === flashResult.toggles, `色块变了 ${flashResult.toggles} 次，文件里看到 ${flashResult.transitionsInFile} 次`)
+    const spread = flashResult.paintToSourceTimeUs
+    if (spread) {
+      check(spread.min > 0, `有的帧的系统时刻早于它画面里那次变色（最小 ${spread.min} 微秒）`)
+      check(spread.spreadFrames <= 1.5, `变色到上屏时刻的差值散布 ${spread.spreadFrames} 帧，超过一帧半`)
+    }
+  }
+
   const report = {
     scenario: options.scenario,
+    flash: flashResult,
     ok: problems.length === 0,
     problems,
     directory,
@@ -317,4 +426,5 @@ async function main() {
   process.exitCode = report.ok ? 0 : 1
 }
 
-main().catch((error) => { console.error(error); process.exitCode = 1 })
+// 出错时直接退出：标准输入随之关闭，采集进程会自己收尾退出。
+main().catch((error) => { console.error(error); process.exit(1) })

@@ -1,6 +1,9 @@
 //! 画面采集进程。不带参数运行时是服务：标准输入收指令，标准输出发应答与事件（协议见 README.md）。
 //! 带子命令运行时是开发工具：`record` 直接录一段，`inspect` 读一次录制的旁路文件做统计，`sources` 列出显示器。
 
+// 还没有平台层的系统上，共用核心里只有平台层才调用的部分没人用。
+#![cfg_attr(not(windows), allow(dead_code))]
+
 mod core;
 mod dev;
 mod platform;
@@ -50,20 +53,15 @@ fn command(request: &Value, session: &mut Option<Session>, events: &Events) -> R
             // 带着完整参数的 start：一步完成准备与开始。
             _ => {
                 prepare(session)?;
-                session.as_ref().unwrap().start(at_us).map(Reply::Now)
+                session.as_ref().unwrap().command("start", at_us, request["id"].clone()).map(|_| Reply::Later)
             }
         };
     }
     let id = request["sessionId"].as_str().unwrap_or_default();
     let active = session.as_ref().filter(|session| session.id == id).ok_or("SESSION_MISSING|没有这次录制")?;
     match kind {
-        "start" => active.start(at_us).map(Reply::Now),
-        "pause" => active.pause(at_us).map(Reply::Now),
-        "resume" => active.resume(at_us).map(Reply::Now),
         "status" => now(active.status()),
-        "stop" => active.stop(at_us, request["id"].clone()).map(|_| Reply::Later),
-        "cancel" => active.cancel(request["id"].clone()).map(|_| Reply::Later),
-        _ => Err("INVALID_ARGUMENT|未知指令".into()),
+        _ => active.command(kind, at_us, request["id"].clone()).map(|_| Reply::Later),
     }
 }
 
@@ -105,14 +103,16 @@ fn service() {
     }
     // 主进程没了（标准输入关闭或读端关闭）：把正在录的文件收尾后退出。
     if let Some(mut active) = session.take() {
-        let _ = active.stop(None, Value::Null);
+        let _ = active.command("stop", None, Value::Null);
         let deadline = Instant::now() + EXIT_WAIT;
         while !active.is_ended() && Instant::now() < deadline {
             thread::sleep(Duration::from_millis(20));
         }
-        if active.is_ended() {
-            active.join();
+        if !active.is_ended() {
+            // 磁盘一直不动：不再等，直接退出（已落盘的分片读得回来）。
+            return;
         }
+        active.join();
     }
     drop(events);
     let _ = streamer.join();

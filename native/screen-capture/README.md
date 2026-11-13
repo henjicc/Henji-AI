@@ -59,7 +59,9 @@ selftest/selftest.cjs  真实录制自测，也是主进程用法的可运行示
 - 应答与状态事件不丢、按发生顺序；`health` 事件可丢（管道慢时直接丢弃）。
 - 标准输入关闭或主进程的读端关闭：正在录的文件正常收尾（排空编码器、写好结尾、清单标记完成）后退出，最多等 100 秒。
 - 标准错误：FFmpeg 与本进程的诊断文字，主进程按行记进日志即可。
-- 同一时间只有一次录制。
+- 同一时间只有一次录制。每条指令恰好一条应答；录制的状态只在会话线程里，指令不合时宜时回 `INVALID_STATE`，录制已结束回 `SESSION_MISSING`。
+- 每次录制用新的 `directory`（或新的 `name`）：准备时会覆盖同名文件，取消或一帧没录到时会删掉这四个同名文件。
+- `atUs` 不接受未来的时刻（按此刻处理）；`start` 的 `atUs` 最多回溯四分之一秒。
 - 时刻一律是本进程的单调时钟，单位微秒（Windows 上是 QPC 换算，与录音进程的 `nativeMonoUs`、主进程的 `hrtime` 同一个计数器）。主进程用 `hello` / `clock` 返回的 `nativeMonoUs` 与自己的时钟校准，做法同录音进程的 `correlateNativeClock`。
 
 ### 指令
@@ -96,8 +98,8 @@ selftest/selftest.cjs  真实录制自测，也是主进程用法的可运行示
 | 事件 | 字段 | 说明 |
 |---|---|---|
 | `started` | `originUs`，`firstSourceUs` | 网格起点已定：文件第 0 帧对应 `originUs` |
-| `fragment` | `frames`，`bytes` | 又有分片落盘：进程此刻被杀，前 `frames` 帧读得回来。约每秒一条 |
-| `paused` | `atUs`，`cell`，`frame` | 暂停生效：文件第 `frame` 帧之前的内容已落盘 |
+| `fragment` | `frames`，`bytes` | 又有分片落盘：进程此刻被杀，帧序号小于 `frames` 的帧读得回来。约每秒一条 |
+| `paused` | `atUs`，`cell`，`frame` | 暂停生效：文件第 `frame` 帧之前的内容已落盘。暂停与继续落在同一格里（间隔不到一帧）或暂停还没生效就停止时，没有格子被暂停，这两个事件不发 |
 | `resumed` | `atUs`，`cell`，`frame` | 继续生效：文件第 `frame` 帧是继续后的第一帧（关键帧） |
 | `interrupted` | 停止的结果 + `error` | 录制被迫结束（来源消失、设备被移除、编码或写盘失败）。能收尾的已收尾，已录部分保留 |
 | `health`（可丢） | 见下 | 每秒一次 |

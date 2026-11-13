@@ -56,6 +56,7 @@ impl Shared {
                 Err(error) if error.code().is_err() => return self.fail(&error),
                 Err(_) => return,
             };
+            let arrived = now_us();
             let converted = (|| -> windows::core::Result<(i64, SizeInt32, HwFrame)> {
                 let source_us = frame.SystemRelativeTime()?.Duration / 10;
                 let content = frame.ContentSize()?;
@@ -68,7 +69,8 @@ impl Shared {
             let _ = frame.Close();
             match converted {
                 Ok((source_us, content, output)) => {
-                    self.inbox.push(&self.health, source_us, now_us(), output);
+                    self.inbox.push(&self.health, source_us, arrived, output);
+                    Health::raise(&self.health.capture_max_us, (now_us() - arrived).max(0) as u64);
                     // 显示器换了分辨率：帧池按新尺寸重建，输出尺寸不变（转换时等比缩放）。
                     if content.Width != pool_size.Width || content.Height != pool_size.Height {
                         match pool.Recreate(&self.device, PIXEL_FORMAT, POOL_BUFFERS, content) {

@@ -63,8 +63,7 @@ pub fn failure(message: &str) -> Value {
 }
 
 pub fn io_failure(error: &io::Error) -> String {
-    // Windows 的磁盘已满是 112（ERROR_DISK_FULL）与 39（ERROR_HANDLE_DISK_FULL），POSIX 是 28（ENOSPC）。
-    if matches!(error.raw_os_error(), Some(28 | 112 | 39)) {
+    if matches!(error.kind(), io::ErrorKind::StorageFull | io::ErrorKind::QuotaExceeded) {
         format!("DISK_FULL|磁盘空间不足，已录部分保留，请释放空间：{error}")
     } else {
         format!("FILE_ERROR|录屏文件读写失败，已录部分保留：{error}")
@@ -293,7 +292,7 @@ mod tests {
 
     #[test]
     fn disk_full_is_told_apart_from_other_file_errors() {
-        assert!(io_failure(&io::Error::from_raw_os_error(112)).starts_with("DISK_FULL|"));
-        assert!(io_failure(&io::Error::from_raw_os_error(5)).starts_with("FILE_ERROR|"));
+        assert!(io_failure(&io::Error::from(io::ErrorKind::StorageFull)).starts_with("DISK_FULL|"));
+        assert!(io_failure(&io::Error::from(io::ErrorKind::PermissionDenied)).starts_with("FILE_ERROR|"));
     }
 }

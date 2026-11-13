@@ -1,6 +1,9 @@
 //! 硬件编码：显卡里的 NV12 纹理经 FFmpeg 的 D3D11 硬件帧直接进编码器，不经系统内存。
 //!
 //! 编码器选择是一张表（`ENCODERS`），第一版只有 NVIDIA；加 AMD、Intel 时在表里加一行并补上各自的选项。
+//! 编码调用不持我们的设备锁：设备开了多线程保护，经运行时的调用本身是串行的；FFmpeg 命令行里采集滤镜与
+//! NVENC 也是各在各的线程上这样用同一个设备。持锁编码会让采集回调每帧多等几毫秒，换不来更多保证。
+//!
 //! 帧池由 FFmpeg 的 D3D11 硬件帧上下文管理（按需分配独立纹理、循环使用）：采集回调取一张、画进去、交给会话线程，
 //! 编码完放下就回池，稳定后不再分配。
 
@@ -274,7 +277,8 @@ impl Encoder {
                 ff::av_packet_move_ref(packet, self.packet);
                 (*packet).duration = 1;
                 bytes += (*packet).size.max(0) as u64;
-                self.mux.write(packet)?;
+                // 编码器时间基是 1/fps，pts 就是帧序号。
+                self.mux.write(packet, (*packet).pts.max(0) as u64)?;
             }
         }
     }

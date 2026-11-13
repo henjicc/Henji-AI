@@ -85,6 +85,8 @@ pub struct Health {
     pub capture_dropped: AtomicU64,
     pub capture_queue_max: AtomicU64,
     pub last_source_us: AtomicI64,
+    /// 采集回调处理一帧（转换并放进收件箱）花的时间。它长了系统的帧池会被占满，系统就开始丢帧，而且不会告诉我们。
+    pub capture_max_us: AtomicU64,
     /// 已编码、等写盘的包数。
     pub write_queue: AtomicU64,
     pub write_queue_max: AtomicU64,
@@ -113,6 +115,7 @@ struct State<F> {
     frames: VecDeque<(i64, F)>,
     failure: Option<String>,
     signaled: bool,
+    closed: bool,
 }
 
 pub struct Inbox<F> {
@@ -124,7 +127,7 @@ pub struct Inbox<F> {
 impl<F> Inbox<F> {
     pub fn new(capacity: usize) -> Self {
         Self {
-            state: Mutex::new(State { frames: VecDeque::with_capacity(capacity), failure: None, signaled: false }),
+            state: Mutex::new(State { frames: VecDeque::with_capacity(capacity), failure: None, signaled: false, closed: false }),
             wake: Condvar::new(),
             capacity,
         }
@@ -139,6 +142,9 @@ impl<F> Inbox<F> {
         health.arrival_latency.lock().unwrap().record(now_us - source_us);
         let evicted = {
             let mut state = self.state.lock().unwrap();
+            if state.closed {
+                return;
+            }
             let evicted = if state.frames.len() >= self.capacity { state.frames.pop_front() } else { None };
             state.frames.push_back((source_us, frame));
             Health::raise(&health.capture_queue_max, state.frames.len() as u64);
@@ -156,6 +162,16 @@ impl<F> Inbox<F> {
     pub fn fail(&self, message: String) {
         self.state.lock().unwrap().failure.get_or_insert(message);
         self.wake.notify_one();
+    }
+
+    /// 会话结束：放掉里面的帧，之后再放进来的也直接放掉（停采集时可能还有回调在路上）。
+    pub fn close(&self) {
+        let frames = {
+            let mut state = self.state.lock().unwrap();
+            state.closed = true;
+            std::mem::take(&mut state.frames)
+        };
+        drop(frames);
     }
 
     /// 有控制指令要处理时叫醒会话线程。

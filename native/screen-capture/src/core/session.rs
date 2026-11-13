@@ -46,11 +46,13 @@ fn state_name(state: u8) -> &'static str {
     }
 }
 
+/// 交给会话线程的指令，都带应答号：状态只在会话线程里，由它判断指令合不合时宜并应答，每条恰好一次。
+/// 应答号为空值表示没人等应答（标准输入已关）。
 enum Control {
-    Start(Option<i64>),
-    Pause(Option<i64>),
-    Resume(Option<i64>),
-    /// 收尾后用这个 id 应答。
+    Start(Option<i64>, Value),
+    Pause(Option<i64>, Value),
+    Resume(Option<i64>, Value),
+    /// 文件收尾之后才应答。
     Stop(Option<i64>, Value),
     Cancel(Value),
 }
@@ -90,6 +92,8 @@ pub struct Session {
     /// 准备的结果：实际尺寸、编码器、文件名。
     pub info: Value,
     control: mpsc::Sender<Control>,
+    /// 会话线程结束时在这把锁里置真并把没处理的指令逐条回绝；发指令也在锁里，所以不会有指令掉进没人读的通道。
+    ended: Arc<Mutex<bool>>,
     wake: Box<dyn Fn() + Send>,
     state: Arc<AtomicU8>,
     status: Arc<Mutex<Value>>,
@@ -103,7 +107,10 @@ impl Session {
         let paths = Paths::new(&directory, &config.name);
         let inbox = Arc::new(Inbox::<P::Frame>::new((config.fps / INBOX_SECONDS_DIVISOR).max(8) as usize));
         let health = Arc::new(Health::default());
-        let opened = P::open(&config, &paths.video, inbox.clone(), health.clone())?;
+        // 打开到一半失败时视频文件可能已经建好：不留空文件。
+        let opened = P::open(&config, &paths.video, inbox.clone(), health.clone()).inspect_err(|_| {
+            let _ = fs::remove_file(&paths.video);
+        })?;
         let info = json!({
             "sessionId": config.session_id,
             "width": opened.width, "height": opened.height, "fps": config.fps,
@@ -115,6 +122,7 @@ impl Session {
         });
         let (control, control_rx) = mpsc::channel();
         let state = Arc::new(AtomicU8::new(PREPARED));
+        let ended = Arc::new(Mutex::new(false));
         let status = Arc::new(Mutex::new(json!({"state": "prepared"})));
         let id = config.session_id.clone();
         let wake_inbox = inbox.clone();
@@ -126,57 +134,33 @@ impl Session {
             events,
             control: control_rx,
             state: state.clone(),
+            ended: ended.clone(),
             status: status.clone(),
             opened: Some(opened),
             info: info.clone(),
         };
         let thread = thread::Builder::new().name("capture-session".into()).spawn(move || runner.run()).map_err(|error| format!("CAPTURE_FAILED|无法启动会话线程：{error}"))?;
-        Ok(Self { id, info, control, wake: Box::new(move || wake_inbox.signal()), state, status, thread: Some(thread) })
+        Ok(Self { id, info, control, ended, wake: Box::new(move || wake_inbox.signal()), state, status, thread: Some(thread) })
     }
 
-    fn send(&self, control: Control) {
-        let _ = self.control.send(control);
-        (self.wake)();
-    }
-
-    fn expect(&self, allowed: &[u8], next: u8, message: &str) -> Result<(), String> {
-        let current = self.state.load(Ordering::Acquire);
-        if !allowed.contains(&current) {
-            return Err(format!("INVALID_STATE|{message}（当前：{}）", state_name(current)));
+    /// 把 start / pause / resume / stop / cancel 交给会话线程，应答由它发出。
+    /// 返回错误时指令没有交出去（会话已结束或指令不认识），由调用方应答。
+    pub fn command(&self, kind: &str, at_us: Option<i64>, id: Value) -> Result<(), String> {
+        let control = match kind {
+            "start" => Control::Start(at_us, id),
+            "pause" => Control::Pause(at_us, id),
+            "resume" => Control::Resume(at_us, id),
+            "stop" => Control::Stop(at_us, id),
+            "cancel" => Control::Cancel(id),
+            _ => return Err("INVALID_ARGUMENT|未知指令".into()),
+        };
+        let ended = self.ended.lock().unwrap();
+        if *ended {
+            return Err("SESSION_MISSING|这次录制已经结束".into());
         }
-        // 会话线程可能刚好自己结束：只在状态没变时前进。
-        let _ = self.state.compare_exchange(current, next, Ordering::AcqRel, Ordering::Acquire);
-        Ok(())
-    }
-
-    pub fn start(&self, at_us: Option<i64>) -> Result<Value, String> {
-        self.expect(&[PREPARED], RECORDING, "录制已经开始")?;
-        self.send(Control::Start(at_us));
-        Ok(self.info.clone())
-    }
-
-    pub fn pause(&self, at_us: Option<i64>) -> Result<Value, String> {
-        self.expect(&[RECORDING], PAUSED, "不在录制中，无法暂停")?;
-        self.send(Control::Pause(at_us));
-        Ok(json!({}))
-    }
-
-    pub fn resume(&self, at_us: Option<i64>) -> Result<Value, String> {
-        self.expect(&[PAUSED], RECORDING, "不在暂停中，无法继续")?;
-        self.send(Control::Resume(at_us));
-        Ok(json!({}))
-    }
-
-    /// 应答在文件收尾之后由会话线程发出。
-    pub fn stop(&self, at_us: Option<i64>, id: Value) -> Result<(), String> {
-        self.expect(&[PREPARED, RECORDING, PAUSED], STOPPING, "录制已经在结束")?;
-        self.send(Control::Stop(at_us, id));
-        Ok(())
-    }
-
-    pub fn cancel(&self, id: Value) -> Result<(), String> {
-        self.expect(&[PREPARED, RECORDING, PAUSED], STOPPING, "录制已经在结束")?;
-        self.send(Control::Cancel(id));
+        let _ = self.control.send(control);
+        drop(ended);
+        (self.wake)();
         Ok(())
     }
 
@@ -206,6 +190,7 @@ struct Runner<P: Platform> {
     events: Events,
     control: mpsc::Receiver<Control>,
     state: Arc<AtomicU8>,
+    ended: Arc<Mutex<bool>>,
     status: Arc<Mutex<Value>>,
     opened: Option<Opened<P>>,
     info: Value,
@@ -224,8 +209,6 @@ struct Recording<F> {
 enum End {
     Stopped(Value),
     Cancelled(Value),
-    /// 标准输入关了或主循环放下了会话：收尾，不应答。
-    Abandoned,
     Interrupted(String),
 }
 
@@ -234,6 +217,16 @@ impl<P: Platform> Runner<P> {
         fields["event"] = json!(name);
         fields["sessionId"] = json!(self.config.session_id);
         self.events.send(fields);
+    }
+
+    fn reply(&self, id: &Value, result: Result<Value, String>) {
+        if id.is_null() {
+            return;
+        }
+        self.events.send(match result {
+            Ok(result) => json!({"id": id, "ok": true, "result": result}),
+            Err(error) => json!({"id": id, "ok": false, "error": failure(&error)}),
+        });
     }
 
     fn manifest(&self, origin_us: Option<i64>, result: Option<&Value>, error: Option<&str>) -> Value {
@@ -306,8 +299,10 @@ impl<P: Platform> Runner<P> {
         // 开始之前只留最新的一张，开始那一刻就有画面。
         let mut preroll: Option<(i64, P::Frame)> = None;
         let mut start_at: Option<i64> = None;
-        let mut deferred: Vec<Control> = Vec::new();
-        // 停止指令的应答号；空值表示没人等应答（标准输入已关）。
+        // 已要求开始、第一帧还没到时收到的暂停与继续（真为暂停）：网格建好后补上。
+        let mut early_marks: Vec<(bool, i64)> = Vec::new();
+        let mut pause_open = false;
+        // 已接受的停止指令的应答号。
         let mut stop_reply: Option<Value> = None;
         let mut next_due = P::now_us();
         let mut last_report = P::now_us();
@@ -328,7 +323,7 @@ impl<P: Platform> Runner<P> {
                 }
             }
 
-            let mut controls: Vec<Control> = std::mem::take(&mut deferred);
+            let mut controls: Vec<Control> = Vec::new();
             loop {
                 match self.control.try_recv() {
                     Ok(control) => controls.push(control),
@@ -340,28 +335,67 @@ impl<P: Platform> Runner<P> {
                 }
             }
             for control in controls {
-                match (control, &mut recording) {
-                    (Control::Start(at), _) => {
-                        // 早于现在太多的开始时刻补不出画面，只接受四分之一秒以内的回溯。
-                        start_at = Some(at.unwrap_or(now).max(now - 250_000));
+                let stopping = stop_reply.is_some();
+                match control {
+                    Control::Start(at, id) => {
+                        if start_at.is_some() {
+                            self.reply(&id, Err("INVALID_STATE|录制已经开始".into()));
+                        } else {
+                            // 早于现在太多的开始时刻补不出画面，只接受四分之一秒以内的回溯。
+                            start_at = Some(at.unwrap_or(now).clamp(now - 250_000, now));
+                            self.state.store(RECORDING, Ordering::Release);
+                            self.reply(&id, Ok(self.info.clone()));
+                        }
                     }
-                    (Control::Pause(at), Some(recording)) => {
-                        recording.pacer.pause(at.unwrap_or(now));
+                    Control::Pause(_, id) | Control::Resume(_, id) if start_at.is_none() || stopping => {
+                        self.reply(&id, Err("INVALID_STATE|不在录制中，无法暂停或继续".into()));
                     }
-                    (Control::Resume(at), Some(recording)) => {
-                        recording.pacer.resume(at.unwrap_or(now));
+                    Control::Pause(at, id) => {
+                        if pause_open {
+                            self.reply(&id, Err("INVALID_STATE|已经在暂停中".into()));
+                        } else {
+                            // 未来的时刻不接受：状态已经是暂停，画面却还在录，会对不上。
+                            let at = at.unwrap_or(now).min(now);
+                            match &mut recording {
+                                Some(recording) => {
+                                    recording.pacer.pause(at);
+                                }
+                                None => early_marks.push((true, at)),
+                            }
+                            pause_open = true;
+                            self.state.store(PAUSED, Ordering::Release);
+                            self.reply(&id, Ok(json!({})));
+                        }
                     }
-                    (Control::Stop(at, id), Some(recording)) => {
-                        recording.pacer.stop(at.unwrap_or(now));
-                        self.state.store(STOPPING, Ordering::Release);
-                        stop_reply.get_or_insert(id);
+                    Control::Resume(at, id) => {
+                        if !pause_open {
+                            self.reply(&id, Err("INVALID_STATE|不在暂停中，无法继续".into()));
+                        } else {
+                            let at = at.unwrap_or(now).min(now);
+                            match &mut recording {
+                                Some(recording) => {
+                                    recording.pacer.resume(at);
+                                }
+                                None => early_marks.push((false, at)),
+                            }
+                            pause_open = false;
+                            self.state.store(RECORDING, Ordering::Release);
+                            self.reply(&id, Ok(json!({})));
+                        }
                     }
-                    (Control::Stop(_, id), None) if start_at.is_none() || preroll.is_none() => {
-                        break 'session if id.is_null() { End::Abandoned } else { End::Stopped(id) };
+                    Control::Stop(at, id) => {
+                        if stopping {
+                            self.reply(&id, Err("INVALID_STATE|录制已经在结束".into()));
+                        } else if let Some(recording) = &mut recording {
+                            // 停止时刻之前的格子会立刻补齐，所以不接受未来的时刻。
+                            recording.pacer.stop(at.unwrap_or(now).min(now));
+                            self.state.store(STOPPING, Ordering::Release);
+                            stop_reply = Some(id);
+                        } else {
+                            break 'session End::Stopped(id);
+                        }
                     }
-                    (Control::Cancel(id), _) => break 'session End::Cancelled(id),
-                    // 已经要求开始、第一帧还没到：等网格建好再处理。
-                    (other, None) => deferred.push(other),
+                    Control::Cancel(id) => break 'session End::Cancelled(id),
                 }
             }
 
@@ -372,6 +406,13 @@ impl<P: Platform> Runner<P> {
                     match self.begin(origin) {
                         Ok(mut started) => {
                             started.pacer.push(source_us, frame);
+                            for (pause, at) in early_marks.drain(..) {
+                                if pause {
+                                    started.pacer.pause(at);
+                                } else {
+                                    started.pacer.resume(at);
+                                }
+                            }
                             self.event("started", json!({"originUs": origin, "firstSourceUs": source_us}));
                             recording = Some(started);
                             next_due = now;
@@ -418,7 +459,9 @@ impl<P: Platform> Runner<P> {
                             }
                             let record = timing::Record { source_us: emit.source_us, cell: emit.cell as u32, flags };
                             let grid = active.pacer.cell_time(emit.cell);
-                            if let Err(error) = active.table.append(record).and_then(|_| active.activity.cell(emit.output, grid, emit.fresh, bytes)) {
+                            // 被丢的格子没进文件，不算进活动时间线（否则卡顿的那一秒会被看成静止）。
+                            let noted = active.table.append(record).and_then(|_| if emit.dropped { Ok(()) } else { active.activity.cell(emit.output, grid, emit.fresh, bytes) });
+                            if let Err(error) = noted {
                                 break 'session End::Interrupted(io_failure(&error));
                             }
                         }
@@ -439,10 +482,7 @@ impl<P: Platform> Runner<P> {
                             self.event("resumed", json!({"atUs": at_us, "cell": cell, "frame": output}));
                         }
                         Poll::Finished => {
-                            break 'session match stop_reply.take() {
-                                Some(id) if !id.is_null() => End::Stopped(id),
-                                _ => End::Abandoned,
-                            };
+                            break 'session End::Stopped(stop_reply.take().unwrap_or(Value::Null));
                         }
                     }
                 }
@@ -476,6 +516,7 @@ impl<P: Platform> Runner<P> {
                 last_cpu = (now, stats.cpu_time_us);
                 let mut report = self.totals(recording.as_ref());
                 report["captureQueueMax"] = json!(Health::take(&self.health.capture_queue_max));
+                report["captureMaxUs"] = json!(Health::take(&self.health.capture_max_us));
                 report["writeQueue"] = json!(self.health.write_queue.load(Ordering::Relaxed));
                 report["writeQueueMax"] = json!(Health::take(&self.health.write_queue_max));
                 report["encodeMaxUs"] = json!(Health::take(&self.health.encode_max_us));
@@ -498,8 +539,10 @@ impl<P: Platform> Runner<P> {
             }
         };
 
-        // 先停采集，回调不再往收件箱放帧。
+        self.state.store(STOPPING, Ordering::Release);
+        // 先停采集；收件箱关上，还在路上的回调放进来的帧直接放掉，不占着显存等下一次录制。
         capture.take();
+        self.inbox.close();
         let cancelled = matches!(end, End::Cancelled(_));
         let mut error = match &end {
             End::Interrupted(error) => Some(error.clone()),
@@ -531,17 +574,32 @@ impl<P: Platform> Runner<P> {
                 error.get_or_insert(manifest_error);
             }
         }
-        self.state.store(ENDED, Ordering::Release);
         *self.status.lock().unwrap() = result.clone();
         match (end, error) {
-            (End::Cancelled(id), _) => self.events.send(json!({"id": id, "ok": true, "result": {}})),
-            (End::Stopped(id), None) => self.events.send(json!({"id": id, "ok": true, "result": result})),
-            (End::Stopped(id), Some(error)) => self.events.send(json!({"id": id, "ok": false, "error": failure(&error)})),
+            (End::Cancelled(id), _) => {
+                if let Some(stop) = stop_reply.take() {
+                    self.reply(&stop, Err("INVALID_STATE|录制已取消".into()));
+                }
+                self.reply(&id, Ok(json!({})));
+            }
+            (End::Stopped(id), None) => self.reply(&id, Ok(result)),
+            (End::Stopped(id), Some(error)) => self.reply(&id, Err(error)),
             (End::Interrupted(_), Some(error)) => {
+                // 停止已经在途时出的错：等应答的一方要收到应答，事件照发。
+                if let Some(stop) = stop_reply.take() {
+                    self.reply(&stop, Err(error.clone()));
+                }
                 result["error"] = failure(&error);
                 self.event("interrupted", result);
             }
-            (End::Abandoned, _) | (End::Interrupted(_), None) => {}
+            (End::Interrupted(_), None) => {}
+        }
+        let mut ended = self.ended.lock().unwrap();
+        *ended = true;
+        self.state.store(ENDED, Ordering::Release);
+        while let Ok(control) = self.control.try_recv() {
+            let (Control::Start(_, id) | Control::Pause(_, id) | Control::Resume(_, id) | Control::Stop(_, id) | Control::Cancel(id)) = control;
+            self.reply(&id, Err("SESSION_MISSING|这次录制已经结束".into()));
         }
     }
 }
@@ -624,16 +682,18 @@ mod tests {
             })
         };
         thread::sleep(Duration::from_millis(100));
-        assert!(session.pause(None).is_err());
-        session.start(None).unwrap();
+        session.command("pause", None, json!(1)).unwrap();
+        session.command("start", None, json!(2)).unwrap();
         thread::sleep(Duration::from_millis(300));
-        session.pause(None).unwrap();
+        session.command("pause", None, json!(3)).unwrap();
         thread::sleep(Duration::from_millis(300));
         let before_resume = WRITES.lock().unwrap().len();
-        session.resume(None).unwrap();
+        session.command("resume", None, json!(4)).unwrap();
         thread::sleep(Duration::from_millis(300));
-        session.stop(None, json!(7)).unwrap();
+        session.command("stop", None, json!(5)).unwrap();
+        session.command("stop", None, json!(6)).unwrap();
         session.join();
+        assert!(session.command("pause", None, json!(7)).is_err());
         feeding.store(false, Ordering::Release);
         feeder.join().unwrap();
         drop(session);

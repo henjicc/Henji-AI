@@ -43,20 +43,20 @@ pub fn record(arguments: &[String]) -> i32 {
         let mut session = Session::prepare::<Native>(CaptureConfig::parse(&request)?, events.clone())?;
         events.send(json!({"event": "prepared", "info": session.info}));
         thread::sleep(Duration::from_millis(number(arguments, "--prepare-ms", 300.0) as u64));
-        session.start(None)?;
+        session.command("start", None, json!("start"))?;
         let seconds = number(arguments, "--seconds", 30.0);
         let (pause_at, pause_for) = (number(arguments, "--pause-at", -1.0), number(arguments, "--pause-for", 5.0));
         if pause_at >= 0.0 && pause_at < seconds {
             thread::sleep(Duration::from_secs_f64(pause_at));
-            session.pause(None)?;
+            session.command("pause", None, json!("pause"))?;
             thread::sleep(Duration::from_secs_f64(pause_for));
-            session.resume(None)?;
+            session.command("resume", None, json!("resume"))?;
             thread::sleep(Duration::from_secs_f64((seconds - pause_at).max(0.0)));
         } else {
             thread::sleep(Duration::from_secs_f64(seconds));
         }
         // 被中断的会话已经自己结束，停止会被拒绝：照常等它收尾。
-        let _ = session.stop(None, json!("stop"));
+        let _ = session.command("stop", None, json!("stop"));
         session.join();
         Ok(())
     })();
