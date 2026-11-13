@@ -30,6 +30,14 @@ function createVideoEditScrubScene() {
       // 诊断运行（HENJI_VIDEO_EDIT_SCRUB_DIAGNOSTICS=1）按轮记录 Worker 准备阶段的增量，定位每一轮的时间花在哪里。
       const diagnostics = process.env.HENJI_VIDEO_EDIT_SCRUB_DIAGNOSTICS === '1'
       await observeWorkers(page, false, diagnostics)
+      // 帧缓存等预算按硬件记录里的显存取；临时资料目录里记录要启动后几秒才检测出来，先打开工程会按“显存未知”的保守预算测。
+      let hardware = null
+      for (const deadline = performance.now() + 60_000; performance.now() < deadline;) {
+        const state = await page.evaluate(() => window.henjiNative.mediaCache.hardwareCapabilities())
+        if (state.report && !state.stale) { hardware = state.report; break }
+        await page.waitForTimeout(1000)
+      }
+      assert.ok(hardware, '60 秒内没有得到本机硬件记录，预算会按显存未知取值')
       await button(page, '剪辑').click(); const openedAt = performance.now(); await openVideoEditFile(page, file)
       const canvas = page.getByLabel('剪辑画面', { exact: true })
       try {
@@ -38,7 +46,7 @@ function createVideoEditScrubScene() {
         await capture('first-frame-failed'); console.error((await page.locator('body').innerText()).slice(-2500)); throw error
       }
       const firstFrameMs = performance.now() - openedAt
-      const evidence = { machine: { cpu: os.cpus()[0].model, memoryBytes: os.totalmem() }, runtime: await app.evaluate(({ app }) => ({ versions: process.versions, gpu: app.getGPUFeatureStatus(), memory: app.getAppMetrics() })), media: mediaProbe, layers: 3, cases: [] }
+      const evidence = { machine: { cpu: os.cpus()[0].model, memoryBytes: os.totalmem() }, runtime: await app.evaluate(({ app }) => ({ versions: process.versions, gpu: app.getGPUFeatureStatus(), memory: app.getAppMetrics() })), media: mediaProbe, layers: 3, cases: [], gpus: hardware.gpus.map(gpu => ({ name: gpu.name, dedicatedMemoryMiB: gpu.dedicatedMemoryMiB })) }
       evidence.firstFrameMs = firstFrameMs
       evidence.firstFrame = await canvas.evaluate(canvas => ({ renderMs: Number(canvas.dataset.renderMs), decodeMs: Number(canvas.dataset.decodeMs), gpuMs: Number(canvas.dataset.gpuMs), cacheHits: Number(canvas.dataset.cacheHits), cacheBytes: Number(canvas.dataset.cacheBytes), timestamps: canvas.dataset.sourceTimestamps }))
       evidence.cacheDirectory = path.join(await app.evaluate(({ app }) => app.getPath('userData')), 'cache', 'video-edit-preview')
