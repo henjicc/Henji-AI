@@ -56,8 +56,8 @@ interface Active {
 type Capturer = 'native' | 'ffmpeg' | 'chromium'
 const videoStats = (backend: ScreenCaptureBackend): GfxCaptureStats | undefined => backend instanceof GfxCaptureBackend || backend instanceof NativeCaptureBackend ? backend.stats() : undefined
 
-/** 开发开关：设了 HENJI_NATIVE_SCREEN_CAPTURE=1 时整屏录制先试原生画面采集进程，不支持就回到现有录法。 */
-const nativeCaptureRequested = (): boolean => process.env.HENJI_NATIVE_SCREEN_CAPTURE === '1'
+/** 整屏录制默认先试原生画面采集进程，不支持就回到 FFmpeg 录法；排查时设 HENJI_NATIVE_SCREEN_CAPTURE=0 强制走 FFmpeg。 */
+const nativeCaptureRequested = (): boolean => process.env.HENJI_NATIVE_SCREEN_CAPTURE !== '0'
 /**
  * 原生采集第一版只录整块显示器、按显示器原尺寸、不录光标、只用 NVIDIA 编码：其余情况直接走现有录法。
  * 返回显示器中心的物理像素坐标（原生按物理像素找显示器，副屏起点是物理坐标，不是 DIP），或不走原生的原因。

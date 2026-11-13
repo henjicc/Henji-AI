@@ -141,7 +141,7 @@ it('界面重载期间画面照常录、不再向断开的界面发命令；同�
     expect(state.notify).not.toHaveBeenCalled()
   } finally { Object.defineProperty(process, 'platform', platform) }
 })
-async function prepareNative(): Promise<void> {
+async function prepareGfxCapture(): Promise<void> {
   vi.mocked(owner.send).mockImplementation((_channel, command: { sessionId: string; requestId: string }) => { void handleCaptureRequest(owner, { operation: 'ack', sessionId: command.sessionId, requestId: command.requestId }) })
   await handleCaptureRequest(owner, { operation: 'prepare', sessionId: id, options: captureOptionsSchema.parse({ ...options, backend: 'auto' }), session: { name: '课程', tracks: { microphone: {}, systemAudio: false } } })
   await state.backend!.start(new AbortController().signal)
@@ -149,12 +149,13 @@ async function prepareNative(): Promise<void> {
 async function withWindows(work: () => Promise<void>): Promise<void> {
   const platform = Object.getOwnPropertyDescriptor(process, 'platform')!
   Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
-  try { await work() } finally { Object.defineProperty(process, 'platform', platform) }
+  process.env.HENJI_NATIVE_SCREEN_CAPTURE = '0' // 这些用例测 FFmpeg 录法的收尾。
+  try { await work() } finally { Object.defineProperty(process, 'platform', platform); delete process.env.HENJI_NATIVE_SCREEN_CAPTURE }
 }
 const manifestStatus = async (): Promise<string> => JSON.parse(await fs.readFile(path.join(state.root, 'screen-recordings', id, 'capture.json'), 'utf8')).status
 it('被录的来源没了（编码进程报来源结束）：按停止收尾为已停止、不算失败，读回写明原因；释放后马上能开始新的录制', () => withWindows(async () => {
   const { recordingControl } = await import('../runtime')
-  await prepareNative()
+  await prepareGfxCapture()
   gfx.deps!.sourceEnded!()
   await vi.waitFor(() => expect(state.document.finish).toHaveBeenCalledOnce())
   expect(recordingControl.sourceEnded).toHaveBeenCalledWith(id, 'display')
@@ -170,7 +171,7 @@ it('被录的来源没了（编码进程报来源结束）：按停止收尾为�
 }))
 it('来源巡检：暂停中显示器连续几次都查不到才按停止收尾（编码进程不报时兜底）', () => withWindows(async () => {
   const { recordingControl } = await import('../runtime')
-  await prepareNative()
+  await prepareGfxCapture()
   await state.backend!.pause(new AbortController().signal)
   gfx.present.mockImplementation(() => false)
   await vi.waitFor(() => expect(state.document.finish).toHaveBeenCalledOnce(), { timeout: 3000 })
@@ -178,7 +179,7 @@ it('来源巡检：暂停中显示器连续几次都查不到才按停止收尾�
   expect(await manifestStatus()).toBe('stopped')
 }))
 it('采集出错（如续录达到上限）：已录部分收尾保存为中断；释放只做一次，之后关控制条不再对着已结束的会话等回执', () => withWindows(async () => {
-  await prepareNative()
+  await prepareGfxCapture()
   const backend = state.backend!
   gfx.deps!.failed(new Error('一分钟内多次续录都没能恢复'))
   await vi.waitFor(() => expect(state.failed).toHaveBeenCalledOnce())
@@ -200,7 +201,7 @@ it('采集出错（如续录达到上限）：已录部分收尾保存为中断�
 }))
 it('显示器短暂从枚举里消失（休眠、KVM、改投影）不结束录制；用户已在停止时来源才没了不记原因', () => withWindows(async () => {
   const { recordingControl } = await import('../runtime')
-  await prepareNative()
+  await prepareGfxCapture()
   let calls = 0
   gfx.present.mockImplementation(() => ++calls % 3 !== 0) // 每三次巡检有一次查不到，从不连续。
   await new Promise(resolve => setTimeout(resolve, 300))
@@ -213,10 +214,10 @@ it('显示器短暂从枚举里消失（休眠、KVM、改投影）不结束录�
   expect(await handleCaptureRequest(owner, { operation: 'facts', sessionId: id })).not.toHaveProperty('sourceEnded')
 }))
 
-it('开发开关打开时整屏录制先试原生画面采集（按物理像素找显示器）；原生不支持就照现有录法录，不报错', async () => {
+it('整屏录制默认先试原生画面采集（按物理像素找显示器）；原生不支持就照现有录法录，不报错', async () => {
   const platform = Object.getOwnPropertyDescriptor(process, 'platform')!
   Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
-  process.env.HENJI_NATIVE_SCREEN_CAPTURE = '1'
+  delete process.env.HENJI_NATIVE_SCREEN_CAPTURE
   try {
     const full = captureOptionsSchema.parse({ ...options, backend: 'auto' })
     native.prepare.mockRejectedValueOnce(Object.assign(new Error('没有 NVIDIA 显卡'), { code: 'ENCODER_UNSUPPORTED' }))
@@ -237,5 +238,13 @@ it('开发开关打开时整屏录制先试原生画面采集（按物理像素�
     id = randomUUID(); native.prepare.mockClear()
     await handleCaptureRequest(owner, { operation: 'prepare', sessionId: id, options: captureOptionsSchema.parse({ ...full, width: 1280, height: 720 }) })
     expect(native.prepare).not.toHaveBeenCalled()
+
+    // 排查开关：设为 0 时整屏也走 FFmpeg。
+    await handleCaptureRequest(owner, { operation: 'close', sessionId: id })
+    process.env.HENJI_NATIVE_SCREEN_CAPTURE = '0'
+    id = randomUUID(); gfx.deps = undefined
+    await handleCaptureRequest(owner, { operation: 'prepare', sessionId: id, options: full })
+    expect(native.prepare).not.toHaveBeenCalled()
+    expect(gfx.deps).toBeDefined()
   } finally { Object.defineProperty(process, 'platform', platform); delete process.env.HENJI_NATIVE_SCREEN_CAPTURE }
 })
