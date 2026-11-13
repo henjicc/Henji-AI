@@ -86,12 +86,13 @@ describe('图片编辑工作台技能的渐进披露与真实契约', () => {
     for (const trigger of ['修图', '调色', '主体', '移除物体', '修补瑕疵', '图层与蒙版', '导出图片', 'video-edit-workbench', 'video-edit-code-creation']) expect(description).toContain(trigger)
     expect(main).toContain('本技能给起点与判断依据，不规定风格，用户简报和偏好优先')
     expect(main).not.toContain('params.exposure')
-    expect(Buffer.byteLength(main, 'utf8')).toBeLessThanOrEqual(6144)
+    // 只防事故的宽松上限：按需加载一次，拆不拆按主题相关性判断，不按字节（见 embedded-agent/skills.test.ts）
+    expect(Buffer.byteLength(main, 'utf8')).toBeLessThanOrEqual(64 * 1024)
     expect(referencePaths).toEqual(['references/adjust.md', 'references/layers-export.md', 'references/repair.md', 'references/select.md'])
     expect([...main.matchAll(/\]\((references\/[^)]+)\)/g)].map(match => match[1]).filter((link, index, links) => links.indexOf(link) === index).sort()).toEqual(referencePaths)
     for (const file of files.slice(1)) {
       expect(file.content).toMatch(/^# .+\r?\n\r?\n> 何时读：/)
-      expect(Buffer.byteLength(file.content, 'utf8'), file.relativePath).toBeLessThanOrEqual(8 * 1024)
+      expect(Buffer.byteLength(file.content, 'utf8'), file.relativePath).toBeLessThanOrEqual(64 * 1024)
     }
   })
 

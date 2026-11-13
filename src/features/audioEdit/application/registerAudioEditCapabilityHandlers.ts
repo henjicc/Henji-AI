@@ -3,7 +3,8 @@ import { repairAudioEditRegion } from './audioEditRegions'
 import { requestAlertConfirmation } from '@/stores/alertDialogStore'
 import { applicationPaidRequest, transcriptionEstimatedCny } from '@/services/paidApproval'
 import { preflightAudioEditTranscription } from './audioEditApplicationService'
-import { AUDIO_EDIT_APPLICATION_CAPABILITIES, AUDIO_EDIT_VERIFIED_EDIT_OPERATIONS, audioEditInputSchema } from '@/core/application-control/domains/audioEdit/audioEditApplicationCapabilities'
+import { AUDIO_EDIT_APPLICATION_CAPABILITIES, AUDIO_EDIT_UNDOABLE_OPERATIONS, AUDIO_EDIT_VERIFIED_EDIT_OPERATIONS, audioEditInputSchema } from '@/core/application-control/domains/audioEdit/audioEditApplicationCapabilities'
+import { recordAudioEditStep, redoAudioEditStep, undoAudioEditStep } from './audioEditStepUndo'
 import { audioEditContentKey } from '@/core/audioEdit/baseline'
 import { audioEditProjectFromDocument } from '@/core/audioEdit/documentContent'
 import type { ApplicationCapabilityHandlerRegistrar } from '@/features/application-control/capabilities/handlerTypes'
@@ -23,7 +24,7 @@ import { compressAudioEditSilence, cleanProjectAudioEditFillers, cleanProjectAud
 
 /** 拿不准、没有自动删的重念：留在剪辑线索里，交给助手逐处试听后决定。 */
 const retakeReviewText = (count: number): string => count
-  ? `另有 ${count} 处像是换了说法的重念，没有参考稿佐证，没有自动删：用 list_application_entities 读 audio_edit.suggestion（kind=retake、status=pending）逐处判断，确认是念坏重来再把对应词块 included 设为 false。`
+  ? `另有 ${count} 处像是换了说法的重念，没有参考稿佐证，没有自动删：用 list_application_entities 读 audio_edit.suggestion（where kind=retake、current_state=available，propertyIds 带 confidence、removed_text、kept_text、before_text、after_text、block_ids）逐处判断：确认是念坏重来就把线索 status 写成 applied（同时删掉 block_ids 的词并补上接缝处的停顿剪切），不是就写 dismissed；只想删其中一部分时才逐个改词块 included（这条线索随之不再可用）。`
   : ''
 
 /** 剪后时长的变化：重新处理呼吸声时比上次删得少，时长会变长。 */
@@ -88,6 +89,7 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
     context.signal.addEventListener('abort', cancel, { once: true })
     let recognized = false
     const execute = async () => {
+    const start = instance.document
     try {
       const result: Record<string, unknown> = { resultRef: { kind: 'audio_edit.document', id }, message: '' }
       switch (definition.id) {
@@ -115,7 +117,7 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
           const { retakeCount, retakeReviewCount, breaths, gaps, ...processed } = await quickProcessAudioEdit(id, input.range, requestId)
           Object.assign(result, processed)
           const breathText = breaths ? `处理呼吸声（删除 ${breaths.deleted}、减弱 ${breaths.attenuated} 处）、${gaps ? `把 ${gaps} 处字间气口清成静音、` : ''}` : ''
-          result.message = `已${retakeCount ? `去掉 ${retakeCount} 处重念、` : ''}${breathText}压缩停顿并清理所选语气词，${lengthChange(processed.shortenedMs)}，可整批撤销。${retakeReviewText(retakeReviewCount)}这只是起点：请逐处复核接缝、呼吸与语气词。`; break
+          result.message = `已${retakeCount ? `去掉 ${retakeCount} 处重念、` : ''}${breathText}压缩停顿并清理所选语气词，${lengthChange(processed.shortenedMs)}，可用回执的 undoRef 整批撤销。${retakeReviewText(retakeReviewCount)}这只是起点：请逐处复核接缝、呼吸与语气词。`; break
         }
         case 'compress_audio_edit_silence': { const { count, shortenedMs } = await compressAudioEditSilence(id, input.range, requestId); Object.assign(result, { count, shortenedMs }) } result.message = `处理 ${result.count} 处停顿，缩短 ${result.shortenedMs} 毫秒。`; break
         case 'clean_audio_edit_fillers': result.count = await cleanProjectAudioEditFillers(id, input.range); result.message = `清理 ${result.count} 处语气词。`; break
@@ -157,6 +159,8 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
           await api.cancelTask(taskId); result.verified = (await api.listTasks(id)).some(task => task.requestId === taskId); result.message = '已请求取消任务，请查询最终状态。'; break
         }
         case 'retry_audio_edit_save': await flushAudioEditProject(id); result.message = '口播已保存，未重复执行剪辑。'; break
+        case 'undo_audio_edit': undoAudioEditStep(id, input.undoRef!); await flushAudioEditProject(id); result.message = '已撤销这一步并保存；要恢复用 redo_audio_edit（同一 undoRef）。'; break
+        case 'redo_audio_edit': redoAudioEditStep(id, input.undoRef!); await flushAudioEditProject(id); result.message = '已重做这一步并保存。'; break
         case 'export_audio_edit': {
           const format = input.format ?? 'xml'
           const fileName = `${instance.document.name.replace(/[<>:"/\\|?*]/g, '_')}-${crypto.randomUUID()}`
@@ -168,6 +172,10 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
           result.verified = (await Promise.all([exported.xmlPath ?? exported.audioPath, exported.subtitlePath].filter((path): path is string => Boolean(path)).map(exists))).every(Boolean)
           result.durationFrames = exported.durationFrames; result.message = `已导出 ${format.toUpperCase()} 到所选目录。`; break
         }
+      }
+      if (AUDIO_EDIT_UNDOABLE_OPERATIONS.has(definition.id)) {
+        const undoRef = recordAudioEditStep(id, start)
+        if (undoRef) result.undoRef = undoRef
       }
       if (AUDIO_EDIT_VERIFIED_EDIT_OPERATIONS.has(definition.id) || ['transcribe_audio_edit', 'retry_audio_edit_save'].includes(definition.id)) {
         context.execution?.report({ targetMutation: 'applied', ...(recognized ? { billing: 'completed' as const, audioDocumentId: id } : {}) })

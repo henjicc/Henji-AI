@@ -222,7 +222,7 @@ const migrateCodeStorage = defineApplicationCapability({
 const trashDocument = defineApplicationCapability({
   id: 'trash_document', version: 1, title: '把文档移到回收站',
   external: { kind: 'delegate', entityType: DOCUMENT_ENTITY_TYPE, operations: ['remove'], reason: '文档删除走通用集合操作，恢复使用最近删除集合。' },
-  description: '把文档文件移到回收站，可从设置的最近删除恢复。只在后台打开（包括编辑器页面已切走）的文档先保存并关闭再删；正在前台编辑的会被拒绝。',
+  description: '把文档文件移到回收站，可从设置的最近删除恢复。只在后台打开（包括编辑器页面已切走）的文档先保存并关闭再删；正在前台编辑的会被拒绝；有进行中的任务（录音、转写、处理、导出等）或正在打开、关闭的也会被拒绝，等任务结束后再删。',
   domain: DOCUMENTS_DOMAIN,
   aliases: ['删除文档', '删除画布', '删除口播', 'trash document', 'delete document'],
   readOnly: false, dataClasses: ['C1'], idempotent: true, destructive: true,

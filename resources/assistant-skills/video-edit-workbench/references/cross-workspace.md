@@ -11,7 +11,7 @@
 | 生成历史结果 | type=generation，resultRef 为 generation.result，outputIndex 从0开始 |
 | 画布结果节点（含三维结果） | type=document，documentRef 为 list_documents 返回的 documents.document，nodeRef 为 canvas.node |
 | 图片文档 | type=document，documentRef 为 documents.document；导出当前编辑结果，片段保持来源链接 |
-| 音频编辑（口播）剪后声音 | type=document，documentRef 为 documents.document；声音动态链接，音频编辑重新剪辑后声音片段按原来的词对回；首次按字幕段一次性生成普通剪辑字幕并保留逐词参考，最终字幕由剪辑决定，后续不随音频编辑改字、分段或剪切而更新，也不写回音频编辑；使用剪后声音 |
+| 音频编辑（口播）剪后声音 | type=document，documentRef 为 documents.document；使用剪后声音，动态链接。首次按字幕段生成普通剪辑字幕并保留逐词参考。之后在音频编辑里剪切或恢复，剪辑里的声音、片段长度和字幕跟着更新：字幕时间前移，删光的句子移除，恢复的整句补回，没手改的文字按剩下的词重写，手改的保留并标“正文待复核”，剪到词中间才标“时间待复核”；跨多个片段、变速或倒放片段上的字幕仍只对回参考并标“时间待复核”；音频编辑里改字、改分段不同步，剪辑里改字幕也不写回音频编辑 |
 | 已有资产 | type=asset，assetRef 为 asset；原文件引用导入还可用 `import_video_edit_asset` |
 
 placement.mode=library 只进素材面板；replace 给 clipRef；insert/overwrite 给 frame、trackRef，可给 durationFrames；add 给 frame 且 trackRef/newTrack 二选一，newTrack=video/audio。时长是序列帧，overwrite 会覆盖相交区间，insert 会按同步锁定后移；选择来自实际剪辑意图。
@@ -30,6 +30,8 @@ placement.mode=library 只进素材面板；replace 给 clipRef；insert/overwri
 }
 ```
 
+口播改动不是立刻进剪辑：停改约 5 秒、切回剪辑工作区、开始播放时开始更新（新声音就绪前继续播旧的），导出前先等更新完成。要马上更新，对已链接片段调 `send_video_edit_clip_to_audio_edit`。等待中、更新失败（稍后自动重试）以及截短、移除的结果读 `video_edit.document.audio_link_notices`；一次更新是剪辑的一步撤销。导出前没更新上时，导出任务的 notice 会带提示。
+
 回读返回片段／项目项及来源，检查落点、时长、画面和声音。准备期间目标改动或关闭会拒绝迟到结果，不能偷偷放到当前别的工程；先查现状，不重复插入。要回来源继续改，用 `open_video_edit_clip_source` 给 documentRef、clipRef；它会切页，仅用户要求回去编辑时用。
 
 ## 剪辑帧到图片编辑／画布
@@ -41,7 +43,7 @@ placement.mode=library 只进素材面板；replace 给 clipRef；insert/overwri
 
 ## 原地生成：计划、付费、等待、落位
 
-1. 优先查已有产物。确需新镜头／配音／音乐，用 `prepare_video_edit_in_place_generation` 固定 documentRef、sequenceRef，target.action 为 generate_shot/replace_shot/extend_shot/generate_audio，prompt 为内容。新镜头用 startSeconds/durationSeconds，可给 trackRef；替换／续接用 clipRef；声音给 startSeconds 或 clipRef 二选一。
+1. 优先查已有产物（`list_generation_history` 可按 keyword、modelId、mediaType、时间范围筛）。确需新镜头／配音／音乐，用 `prepare_video_edit_in_place_generation` 固定 documentRef、sequenceRef，target.action 为 generate_shot/replace_shot/extend_shot/generate_audio，prompt 为内容。新镜头用 startSeconds/durationSeconds，可给 trackRef；替换／续接用 clipRef；声音给 startSeconds 或 clipRef 二选一。
 2. 准备校验落点、参考、参数及费用信息，不取帧、不生成、不改剪辑。模型字段按 `get_model_schema`，不编造时长／比例。referenceRoles 从返回规划选择，referenceTimeSeconds 可给指定节目时刻；仅用指定帧时 referenceRoles=[]。useReferenceFrames=false 不能同时指定参考，声音不接受参考帧。
 3. `generate_video_edit_in_place` 用相同业务参数提交并走统一付费策略；超额费用由用户确认。占位出现不等于已生成。已知目标要精确长度就显式给 durationSeconds，省略时规划常用5秒但落位取实际生成长度。
 4. 返回 taskRef 后 `wait_generation_task` 等终态，再 `get_video_edit_in_place_generation` 给 documentRef/taskRef 查落位；生成完成不等于已放入时间线。用户取消时 `cancel_generation_task` 撤回占位，取消等待不等于取消任务。

@@ -75,7 +75,7 @@ const schemas: Record<VideoEditEntityType, Record<string, z.ZodType>> = {
   // 内置效果目录（4.7a，只读）：助手据此选效果、按参数语义取值，再用 video_edit.effect 加到片段上。
   'video_edit.builtin_effect': { name: text, group: text, description: text, params: z.array(z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.array(z.string())]))).max(Math.max(16, ...VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS.map(definition => definition.params.length))) },
 }
-schemas['video_edit.document'].audioLinkNotices = z.array(z.object({ clipId: z.string(), message: z.string() }).strict()).describe('链接音频刷新后的截短或移除提示，只读，不移动后续片段。')
+schemas['video_edit.document'].audioLinkNotices = z.array(z.object({ clipId: z.string(), message: z.string() }).strict()).describe('链接音频（口播）的更新状态，只读：等待更新、更新失败（稍后自动重试），以及刷新后片段被截短或移除的提示；刷新不移动后续片段。')
 schemas['video_edit.document'].audioAnalysisProgress = z.number().min(0).max(1).nullable().describe('原素材音频分析进度，0–1；没有任务时为 null。取消通过当前算法操作的取消信号。')
 schemas['video_edit.media'].audioAnalysis = z.object({ bpm: z.number(), beats: z.array(z.number()), onsets: z.array(z.number()), beatsPerBar: z.number(), barOrigin: z.number() }).strict().nullable().describe('原素材音频分析；未分析或内容改变为 null。调用 analyze_video_edit_beats 并指定 mediaRef。时刻为源素材秒数，四拍分组与 barOrigin 为估计；不能据未分析数据声称对拍。')
 schemas['video_edit.media'].recordingCursorMode = z.enum(['unavailable', 'redraw', 'clicks'])

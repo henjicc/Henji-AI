@@ -15,10 +15,10 @@ import { prepareAudioEditAudio, probeAudioEditImport, relinkAudioEditSource, ver
 import { getBreathDetectionService } from '../services/breath-detection/runtime'
 import { detectAudioEditSilence } from '../services/audio-edit/silence'
 import { speechEnergyOptionsSchema } from '../../../src/core/audioEdit/speechEnergy'
-import { cancelAudioEditTask, listAudioEditTasks, runAudioEditTask } from '../services/audio-edit/task-store'
+import { cancelAudioEditTask, runAudioEditTask } from '../services/audio-edit/task-store'
 import { audioEditSettingsSchema, audioEditRangeSchema, audioEditFrameRateSchema } from '../../../src/core/audioEdit/schema'
 import { requireAudioEditProject } from '../services/audio-edit/project-store'
-import { listAudioEditAsrModels, transcribeAudioEditProject, preflightAudioEditTranscription } from '../services/audio-edit/asr'
+import { listAudioEditAsrModels, listAudioEditTaskStatuses, transcribeAudioEditProject, preflightAudioEditTranscription } from '../services/audio-edit/asr'
 import { transcriptionPreflightSchema } from '../../../src/core/audioEdit/transcriptionFailure'
 import { exportAudioEditProject } from '../services/audio-edit/export'
 import { listAudioEditProcessors } from '../services/audio-edit/processors'
@@ -96,7 +96,7 @@ export function registerAudioIpc(): void {
     const project = await requireAudioEditProject(projectId)
     return (await getBreathDetectionService().detect(await prepareAudioEditAudio(project), new AbortController().signal)).detection
   })
-  registerIpcHandler('audioEdit:tasks:list', (input) => parseStringField(input, 'projectId'), listAudioEditTasks)
+  registerIpcHandler('audioEdit:tasks:list', (input) => parseStringField(input, 'projectId'), listAudioEditTaskStatuses)
   registerIpcHandler('audioEdit:tasks:cancel', (input) => parseStringField(input, 'requestId'), cancelAudioEditTask)
   registerIpcHandler('audioEdit:processing', (input) => {
     const record = parseRecord(input)

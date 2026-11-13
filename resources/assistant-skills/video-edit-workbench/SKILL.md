@@ -1,6 +1,6 @@
 ---
 name: video-edit-workbench
-description: 在痕迹AI剪辑工作台做粗剪、整理时间线、节奏、字幕、配乐与音量、响度、调色、转场、多机位、竖版改画幅、导出，或把生成、画布、图片文档、口播产物放进剪辑及把剪辑帧送到其他工作区时使用。写代码画面用 video-edit-code-creation；单独写代码素材不触发本技能。
+description: 录屏并放进剪辑，在痕迹AI剪辑工作台做粗剪、整理时间线、节奏、字幕、配乐与音量、响度、调色、转场、多机位、竖版改画幅、导出，或把生成、画布、图片文档、口播产物放进剪辑及把剪辑帧送到其他工作区时使用。写代码画面用 video-edit-code-creation；单独写代码素材不触发本技能。
 ---
 
 # 剪辑工作台：围绕素材与意图完成成片
@@ -42,6 +42,7 @@ description: 在痕迹AI剪辑工作台做粗剪、整理时间线、节奏、�
 | 全能调色、自动校色、参考匹配、LUT、HSL、内置及框架转场 | [调色与转场](references/color-transitions.md) |
 | 导出预设、范围、队列、竖版改画幅、素材箱、收录与交付自检 | [交付](references/deliver.md) |
 | 生成／画布／图片／口播进剪辑、节目帧出去、原地生成 | [跨工作区](references/cross-workspace.md) |
+| 录屏、中断恢复、进剪辑、按录制事件推近与跟踪 | [录屏](references/screen-recording.md) |
 
 ## 标准流程
 

@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import { createAudioEditDocumentContent } from '../../../../src/core/audioEdit/documentContent'
 import type { AudioEditStoredTask } from './task-store'
-import { preflightAudioEditTranscription, transcribeAudioEditProject } from './asr'
+import { listAudioEditTaskStatuses, preflightAudioEditTranscription, transcribeAudioEditProject } from './asr'
 
 const mock = vi.hoisted(() => ({ project: vi.fn(), verify: vi.fn(), prepareAudio: vi.fn(), preflight: vi.fn(), execute: vi.fn(),
   task: undefined as AudioEditStoredTask | undefined, active: false, stale: false, clock: 0, controllers: new Map<string, AbortController>() }))
@@ -20,6 +20,8 @@ vi.mock('./timestamped-asr', async importOriginal => ({ ...await importOriginal<
 vi.mock('./task-store', () => ({
   findAudioEditTranscription: () => mock.task,
   isAudioEditTaskActive: () => mock.active,
+  isAudioEditTaskRunningHere: () => false,
+  listAudioEditTasks: () => mock.task ? [{ requestId: mock.task.request_id, projectId: 'audio', kind: 'transcription', state: mock.task.state }] : [],
   settleStaleAudioEditTask: (requestId: string) => { if (mock.stale && mock.task?.request_id === requestId && ['queued', 'running'].includes(mock.task.state)) mock.task.state = 'failed' },
   assertAudioEditProjectIdle: () => {},
   registerAudioEditTaskController: (requestId: string, _projectId: string, controller: AbortController) => { mock.controllers.set(requestId, controller); return () => {} },
@@ -213,4 +215,33 @@ it('只有采样指纹的素材移动后重新定位（摘要、大小、修改�
   // 内容记录变了（修改时间不同）仍拒绝旧结果
   mock.project.mockResolvedValue({ ...project, source: { ...moved, fingerprint: { ...fingerprint, mtimeMs: fingerprint.mtimeMs + 1 } } })
   await expect(transcribeAudioEditProject({ ...request, requestId: 'touched' })).rejects.toThrow('素材已变化')
+})
+
+it('任务列表给出最近一次转写能否再发起，与提交时的拒绝条件一致', async () => {
+  const resubmission = async () => (await listAudioEditTaskStatuses('audio'))[0]?.resubmission
+  // 上传阶段取消：没有计费，可以重新转写
+  mock.execute.mockImplementationOnce(async (_plan, context) => { mock.controllers.get('first')!.abort(); context.signal.throwIfAborted() })
+  await expect(transcribeAudioEditProject({ ...request, requestId: 'first' })).rejects.toThrow()
+  expect(await resubmission()).toBe('allowed')
+  // 交给识别服务时中断：无法确认是否计费，不能重提；拿到供应商任务号后只续查
+  mock.task = undefined
+  mock.execute.mockImplementationOnce(async (_plan, context) => { context.onSubmitting?.(); throw new Error('network interrupted') })
+  await expect(transcribeAudioEditProject(request)).rejects.toThrow()
+  expect(await resubmission()).toBe('blocked')
+  mock.task!.provider_task_id = 'provider-task'
+  expect(await resubmission()).toBe('resume')
+  // 另一个进程正在转写
+  mock.active = true
+  mock.task = { request_id: 'other-process', state: 'running', provider_task_id: null, input_digest: '', updated_at: 1, result_json: JSON.stringify({ modelId: 'fixture-asr', sourceDigest: 'voice.wav', billing: 'not_charged' }) }
+  expect(await resubmission()).toBe('running_elsewhere')
+  // 进程已退出、心跳停了的未计费记录：可以重新转写
+  mock.active = false
+  expect(await resubmission()).toBe('allowed')
+  // 素材已变化：旧回执不能续用，也不能覆盖当前口播
+  mock.task.result_json = JSON.stringify({ modelId: 'fixture-asr', sourceDigest: 'other.wav', billing: 'not_charged' })
+  expect(await resubmission()).toBe('blocked')
+  // 已完成的不标
+  mock.task = undefined
+  await transcribeAudioEditProject({ ...request, requestId: 'done' })
+  expect((await listAudioEditTaskStatuses('audio'))[0]).not.toHaveProperty('resubmission')
 })

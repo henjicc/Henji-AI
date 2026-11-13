@@ -362,7 +362,7 @@ export interface HenjiAudioApi {
   relinkEditSource(projectId: string, sourcePath: string): Promise<AudioEditSourceMetadata>
   detectEditSilence(payload: AudioEditSilenceRequest): Promise<AudioEditSilenceResult>
   detectEditBreaths(projectId: string): Promise<import('../../src/core/audioAnalysis/breath/respiro').BreathDetection>
-  listEditTasks(projectId: string): Promise<AudioEditTask[]>
+  listEditTasks(projectId: string): Promise<import('../../src/core/application-control/domains/audioEdit/audioEditTaskStatus').AudioEditTaskStatus[]>
   cancelEditTask(requestId: string): Promise<void>
   prepareEditProcessing(projectId: string, requestId: string): Promise<void>
   exportEditProject(payload: AudioEditExportRequest): Promise<AudioEditExportResult>
@@ -380,7 +380,6 @@ import type {
   AudioEditExportRequest,
   AudioEditSilenceRequest,
   AudioEditSilenceResult,
-  AudioEditTask,
   AudioEditExportResult,
   AudioEditProcessorDescriptor,
   AudioEditPreviewChunk,

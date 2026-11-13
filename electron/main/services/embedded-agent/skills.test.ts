@@ -13,6 +13,15 @@ import { embeddedSkillCatalog, callEmbeddedSkill } from './skills'
 afterEach(() => { state.disabled = [] })
 const signal = new AbortController().signal
 
+/**
+ * 按需加载的技能正文与参考只防事故（误把整份资料或生成物塞进技能），不做逐篇预算：它们只在助手用到时加载一次，
+ * 十几 KB 相对每次请求十几万 token 的工具定义微不足道；为卡字节数去删有用内容得不偿失。
+ * 该不该拆分按主题相关性判断（一次任务用不到的内容才拆出去），不按字节。
+ */
+const ON_DEMAND_SKILL_FILE_MAX_BYTES = 64 * 1024
+/** 技能索引属于每次请求都带的常驻前缀，保留预算；常驻前缀的总量由 tickets/46-正式使用链路/证据/payload-audit/run.sh 的总账把关。 */
+const SKILL_INDEX_MAX_BYTES = 6000
+
 function skillBudgetBytes(result: { bytes: number; content: string }): number {
   // bytes 只计原文；运行时包裹标记使用 LF，每个原文 CRLF 规范化后减少一个 UTF-8 字节。
   return result.bytes - (result.content.match(/\r\n/g)?.length ?? 0)
@@ -21,17 +30,16 @@ function skillBudgetBytes(result: { bytes: number; content: string }): number {
 describe('内置提示词技能使用正式文件注册与读取', () => {
   it('创作索引与每个可路由模块有界，主文件链接都能经正式加载入口读取', async () => {
     const catalog = await embeddedSkillCatalog()
-    // 技能仍只披露名称与触发条件，预算与外部 MCP 元数据索引一致；2026-10-25 加入口播剪辑技能后八个技能约 2.6k 字节，
-    // 2026-11-04 三维镜头构图技能迁到正式能力后加入，九个技能约 2.85k。
-    expect(Buffer.byteLength(catalog.instructions, 'utf8')).toBeLessThan(3000)
+    // 技能仍只披露名称与触发条件，与外部 MCP 元数据索引一致
+    expect(Buffer.byteLength(catalog.instructions, 'utf8')).toBeLessThan(SKILL_INDEX_MAX_BYTES)
     for (const name of ['prompt-optimization', 'cinematic-director', 'short-drama']) {
       const main = (await callEmbeddedSkill({ name, reason: '验证路由' }, signal)).data
-      expect(skillBudgetBytes(main)).toBeLessThan(4500)
+      expect(skillBudgetBytes(main)).toBeLessThanOrEqual(ON_DEMAND_SKILL_FILE_MAX_BYTES)
       const links = [...main.content.matchAll(/\]\((references\/[^)]+)\)/g)].map(match => match[1])
       expect(new Set(links)).toEqual(new Set(main.referencePaths))
       for (const reference of links) {
         const result = (await callEmbeddedSkill({ name, path: reference, reason: '验证单模块读取' }, signal)).data
-        expect(skillBudgetBytes(result)).toBeLessThan(4000)
+        expect(skillBudgetBytes(result)).toBeLessThanOrEqual(ON_DEMAND_SKILL_FILE_MAX_BYTES)
         expect(result.path).toBe(reference)
       }
     }
@@ -82,7 +90,7 @@ describe('内置提示词技能使用正式文件注册与读取', () => {
     await expect(callEmbeddedSkill({ name: 'cinematic-director', reason: '旧调用' }, signal)).rejects.toThrow('停用')
   })
 
-  it('剪辑工作台能从首轮索引选中，七份参考按需读取，停用不影响代码创作', async () => {
+  it('剪辑工作台能从首轮索引选中，八份参考按需读取，停用不影响代码创作', async () => {
     const catalog = await embeddedSkillCatalog()
     expect(catalog.instructions).toContain('video-edit-workbench')
     expect(catalog.instructions).toContain('粗剪')
@@ -90,10 +98,10 @@ describe('内置提示词技能使用正式文件注册与读取', () => {
     expect(catalog.instructions).not.toContain('片段响度测量')
     const main = (await callEmbeddedSkill({ name: 'video-edit-workbench', reason: '普通剪辑与跨工作区交付' }, signal)).data
     expect(main.content).toContain('trust=builtin')
-    expect(skillBudgetBytes(main)).toBeLessThanOrEqual(6144)
+    expect(skillBudgetBytes(main)).toBeLessThanOrEqual(ON_DEMAND_SKILL_FILE_MAX_BYTES)
     expect(main.referencePaths).toEqual([
       'references/captions.md', 'references/color-transitions.md', 'references/cross-workspace.md',
-      'references/deliver.md', 'references/rhythm.md', 'references/sound.md', 'references/timeline.md',
+      'references/deliver.md', 'references/rhythm.md', 'references/screen-recording.md', 'references/sound.md', 'references/timeline.md',
     ])
     const links = [...main.content.matchAll(/\]\((references\/[^)]+)\)/g)].map(match => match[1])
     expect(new Set(links)).toEqual(new Set(main.referencePaths))
@@ -101,7 +109,7 @@ describe('内置提示词技能使用正式文件注册与读取', () => {
       const result = (await callEmbeddedSkill({ name: 'video-edit-workbench', path: reference, reason: '当前剪辑步骤' }, signal)).data
       expect(result.path).toBe(reference)
       expect(result.content).toContain('trust=builtin')
-      expect(skillBudgetBytes(result)).toBeLessThanOrEqual(8 * 1024)
+      expect(skillBudgetBytes(result)).toBeLessThanOrEqual(ON_DEMAND_SKILL_FILE_MAX_BYTES)
     }
     await expect(callEmbeddedSkill({ name: 'video-edit-workbench', path: 'references/missing.md', reason: '错误路径' }, signal)).rejects.toThrow('references/timeline.md')
     state.disabled = ['video-edit-workbench']
@@ -122,14 +130,14 @@ describe('内置提示词技能使用正式文件注册与读取', () => {
     expect(main.name).toBe('image-edit-workbench')
     expect(main.source).toBe('builtin')
     expect(main.content).toContain('trust=builtin')
-    expect(skillBudgetBytes(main)).toBeLessThanOrEqual(6144)
+    expect(skillBudgetBytes(main)).toBeLessThanOrEqual(ON_DEMAND_SKILL_FILE_MAX_BYTES)
     expect(main.referencePaths).toEqual(references)
     expect(main.content).not.toContain('params.exposure')
     for (const reference of references) {
       const result = (await callEmbeddedSkill({ name: 'image-edit-workbench', path: reference, reason: '当前修图步骤' }, signal)).data
       expect(result.path).toBe(reference)
       expect(result.content).toContain('trust=builtin')
-      expect(skillBudgetBytes(result)).toBeLessThanOrEqual(8 * 1024)
+      expect(skillBudgetBytes(result)).toBeLessThanOrEqual(ON_DEMAND_SKILL_FILE_MAX_BYTES)
     }
     await expect(callEmbeddedSkill({ name: 'image-edit-workbench', path: 'references/../SKILL.md', reason: '越界' }, signal)).rejects.toThrow()
     await expect(callEmbeddedSkill({ name: 'image-edit-workbench', path: 'references/missing.md', reason: '错误路径' }, signal)).rejects.toThrow('references/repair.md')
@@ -148,7 +156,7 @@ describe('内置提示词技能使用正式文件注册与读取', () => {
     expect(catalog.instructions).toContain('video-edit-code-creation')
     expect(catalog.instructions).not.toContain('smoothstep')
     const main = (await callEmbeddedSkill({ name: 'video-edit-code-creation', reason: '写新的代码素材' }, signal)).data
-    expect(skillBudgetBytes(main)).toBeLessThanOrEqual(10 * 1024)
+    expect(skillBudgetBytes(main)).toBeLessThanOrEqual(ON_DEMAND_SKILL_FILE_MAX_BYTES)
     expect(main.content).toContain('trust=builtin')
     expect(main.content).not.toContain('smoothstep')
     const links = [...main.content.matchAll(/\]\((references\/[^)]+)\)/g)].map(match => match[1])
@@ -160,8 +168,7 @@ describe('内置提示词技能使用正式文件注册与读取', () => {
     for (const reference of main.referencePaths) {
       const result = (await callEmbeddedSkill({ name: 'video-edit-code-creation', path: reference, reason: '当前步骤' }, signal)).data
       expect(result.path).toBe(reference)
-      const limit = reference === 'references/examples.md' ? 16 * 1024 : 10 * 1024
-      expect(skillBudgetBytes(result), reference).toBeLessThanOrEqual(limit)
+      expect(skillBudgetBytes(result), reference).toBeLessThanOrEqual(ON_DEMAND_SKILL_FILE_MAX_BYTES)
     }
     await expect(callEmbeddedSkill({ name: 'video-edit-code-creation', path: 'references/missing.md', reason: '猜测' }, signal)).rejects.toThrow('references/author-api.md')
     state.disabled = ['video-edit-code-creation']

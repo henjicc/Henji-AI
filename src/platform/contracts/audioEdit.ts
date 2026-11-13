@@ -12,7 +12,6 @@ import type {
   AudioEditTranscriptionResult,
   AudioEditSilenceRequest,
   AudioEditSilenceResult,
-  AudioEditTask,
 } from '@/core/audioEdit/types'
 import type { AudioWaveformPyramidRequest, AudioWaveformPyramidResult, AudioWaveformRangeRequest, AudioWaveformRangeResult } from './audioWaveform'
 import type { AudioLoudnessPlatform } from './audioLoudness'
@@ -52,7 +51,7 @@ export interface AudioEditPlatform {
   detectSilence(request: AudioEditSilenceRequest): Promise<AudioEditSilenceResult>
   /** 呼吸声检测（本地 Respiro 模型，第一次用到时下载约 13 MB）；区间为原素材时间（毫秒）。 */
   detectBreaths(projectId: string): Promise<BreathDetection>
-  listTasks(projectId: string): Promise<AudioEditTask[]>
+  listTasks(projectId: string): Promise<import('@/core/application-control/domains/audioEdit/audioEditTaskStatus').AudioEditTaskStatus[]>
   cancelTask(requestId: string): Promise<void>
   prepareProcessing(projectId: string, requestId: string): Promise<void>
   listAsrModels(): Promise<AudioEditAsrModel[]>

@@ -13,7 +13,8 @@ import { analyzeAudioEditTranscript } from '../../../../src/core/audioEdit/analy
 import { createAudioEditBaseline } from '../../../../src/core/audioEdit/baseline'
 import { createMainLogger } from '../logging'
 import { requireAudioEditProject } from './project-store'
-import { assertAudioEditProjectIdle, claimAudioEditTask, findAudioEditTranscription, isAudioEditTaskActive, settleStaleAudioEditTask, updateOwnedAudioEditTask, registerAudioEditTaskController, type AudioEditStoredTask } from './task-store'
+import { assertAudioEditProjectIdle, claimAudioEditTask, findAudioEditTranscription, isAudioEditTaskActive, isAudioEditTaskRunningHere, listAudioEditTasks, settleStaleAudioEditTask, updateOwnedAudioEditTask, registerAudioEditTaskController, type AudioEditStoredTask } from './task-store'
+import type { AudioEditTaskStatus, AudioEditTranscriptionResubmission } from '../../../../src/core/application-control/domains/audioEdit/audioEditTaskStatus'
 import { prepareAudioEditTranscriptionAudio, verifyAudioEditSource } from './media'
 import { audioEditSourceReceiptDigest } from './source-identity'
 
@@ -39,6 +40,33 @@ function latestSettledTranscription(projectId: string, ownRequestId?: string): A
   if (task.request_id !== ownRequestId && isAudioEditTaskActive(task.request_id)) throw new Error('这份口播正在转写（可能在另一个窗口或助手命令行里），请等待或取消原任务。')
   settleStaleAudioEditTask(task.request_id)
   return findAudioEditTranscription(projectId)
+}
+
+/**
+ * 最近一次转写再发起会怎样，与 preflight / transcribe 的拒绝条件同源：已拿到结果或能续查的供应商任务只续查、不重复计费；
+ * 确认没有交给识别服务才可重新提交；交出去却无法确认、也续查不了的拒绝。本进程正在跑的不标。
+ */
+function transcriptionResubmission(task: AudioEditStoredTask, sourceDigest: string): AudioEditTranscriptionResubmission | undefined {
+  if (task.state === 'completed') return undefined
+  const unfinished = task.state === 'queued' || task.state === 'running'
+  if (unfinished && isAudioEditTaskRunningHere(task.request_id)) return undefined
+  if (unfinished && isAudioEditTaskActive(task.request_id)) return 'running_elsewhere'
+  const prior = task.result_json ? JSON.parse(task.result_json) as TranscriptionReceipt : undefined
+  // 素材变了，旧回执既不能续用也不能覆盖当前口播
+  if (prior?.sourceDigest !== sourceDigest) return 'blocked'
+  if (prior?.output || prior?.rawOutput) return 'resume'
+  if (task.provider_task_id) return prior?.modelId && client.get(prior.modelId)?.descriptor.features?.includes('resume-task') ? 'resume' : 'blocked'
+  // 心跳已停的运行中记录在下次发起时会先记为中断，这里按中断判断
+  return timestampedAsrNeverSubmitted(unfinished ? { ...task, state: 'failed' } : task, prior) ? 'allowed' : 'blocked'
+}
+
+/** 口播的处理任务；最近一次转写附上能否再发起。口播读不出来时只列任务，不猜能否再发起。 */
+export async function listAudioEditTaskStatuses(projectId: string): Promise<AudioEditTaskStatus[]> {
+  const tasks = listAudioEditTasks(projectId)
+  const latest = findAudioEditTranscription(projectId)
+  const project = latest ? await requireAudioEditProject(projectId).catch(() => undefined) : undefined
+  const resubmission = latest && project ? transcriptionResubmission(latest, audioEditSourceReceiptDigest(project.source)) : undefined
+  return resubmission ? tasks.map(task => task.requestId === latest!.request_id ? { ...task, resubmission } : task) : tasks
 }
 
 export async function preflightAudioEditTranscription(input: TranscriptionPreflight): Promise<TranscriptionPreparation> {

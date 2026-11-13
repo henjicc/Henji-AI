@@ -1,3 +1,7 @@
+2026-11-13（助手缓存与用量可观察、最高思考档）：用户选“最高”思考档时内置助手发出该供应商支持的最高档（此前 Pi 未声明 xhigh/max 档位，一律静默降为 high）；只声明这两档、按 SDK 登记的供应商写法换算，低中高原样发送；没有登记写法或落到通用兜底的模型（如 MiniMax 非 Flash，公开文档未见强度字段）保持降到 high。Kimi、智谱等预设默认档就是最高，更新后内置助手对这些供应商会从 high 变为最高，费用与延迟上升；load_application_tools 说明列出各领域工具名并提示按名精确加载——工具定义排在历史之前，整领域加载剪辑（约 90 个工具、近十万 token）会让此前对话的缓存全部失效，真跑同一任务加载那一步的未命中由约 10.4 万 token 降到 0.3–0.7 万。每轮与每次运行的用量日志新增缓存命中率、首字等待、思考 token 与参考费用，logs:query --chain 开头一行汇总。无新增工具或持久格式。精确测试覆盖同输入首请求逐字节一致、多轮与工具往返只追加、max 档发送；真实 Pi（deepseek-flash）改前改后各跑多遍，见 tickets/46-正式使用链路/result-助手DeepSeek适配.md。
+
+2026-11-13（主链路助手可用性补齐，推翻“音频编辑算法操作可一步撤销”只是账面成立）：口播线索 audio_edit.suggestion 新增只读属性 kind、confidence、start_frame、end_frame、sample_rate、block_ids，以及读取时由词块现算的 removed_text、kept_text、before_text、after_text（不落盘），助手可按类型与把握筛选、不翻全文就能裁决；新增 undo_audio_edit / redo_audio_edit：去重念、快速处理、呼吸、停顿、语气词、字幕整理、插入、修复、全部还原等操作回执带 undoRef，按回执撤销自己那一步，走与界面同一撤销栈，这一步之后口播又被改过（如用户手改）就拒绝、不冲掉；此前界面撤销在账本里记为“绑定全部可写属性”，助手实际撤不掉这些算法操作，现改为绑定这两个能力。通用属性写入的 undoRef 仍走 undo_application_changes（已有结果测试）。query_audio_edit_tasks 的最近一次转写带 resubmission（allowed / resume / blocked / running_elsewhere），与提交时的拒绝条件同源；transcribe_audio_edit 说明补齐等待、长音频选模、modelId 来源与超上传上限的改道。剪辑技能改正口播剪切后字幕的说法，补多机位实时播放评估与建代理、导出预设帧率与画质、导出前等口播更新与生成历史按条件查询，并写明自动预渲染何时进行；新增录屏参考（video-edit-workbench/references/screen-recording.md）。精确测试与覆盖门禁通过；未运行真实 Electron、Pi/MCP。
+
 2026-11-13（口播剪切逐条写，推翻 10-22 起 audio_edit.document.cuts 整组可写）：新增实体 audio_edit.cut（父为 audio_edit.document，start_frame / end_frame / enabled / mode 可写，reason 只读；create_items 只需起止采样帧，remove_items 按引用删），逐条写只换改到的那一处；audio_edit.document.cuts 改为只读总览，readOnlyReason 指向 audio_edit.cut。并发：不带基线时按该剪切自身属性核对，用户同时改别的剪切两边都保留；带基线写入时读取后同一口播有任何改动都以 CONFLICT 拒绝（不覆盖，重读后再写）；执行器读到写回之间作品变了就在最新内容上重算。参考稿写入上限由 2 万字改为与 .hjaud 格式一致的 20 万字。口播撤销 50 步放宽到 500 步。无新增工具与持久格式。精确测试与覆盖门禁通过；未运行真实 Electron、Pi/MCP。
 2026-11-13（口播改动后剪辑字幕跟着更新，部分推翻 10-30）：字幕仍归剪辑所有、剪辑改字不写回音频编辑；但口播剪切、恢复后，按词对回片段上的字幕改为跟着声音更新：首尾按新旧成品时间线换算并前移，删光词的句子字幕移除，没手改的文字按剩下的词重写，手改的文字与样式保留（删掉其中的词时标“正文待复核”），只有剪到词中间或换算不出时才标“时间待复核”；这次才恢复的整句在原本带口播字幕的片段上按口播字幕段补回。口播保存后不再立即刷新：停改 5 秒、回到剪辑工作区、播放或导出前才刷新；send_video_edit_clip_to_audio_edit 对已链接片段立即刷新；等待与失败状态经 video_edit.document.audioLinkNotices 读回。一次刷新是剪辑的一步撤销。无新增工具、实体或持久格式。精确测试覆盖；未运行真实 Electron、Pi/MCP。
 
@@ -778,6 +782,12 @@ L-B 已经没有独立 npm 脚本，harness 文件也从 `assistantHarness.*` �
 
 当前没有挂在 `KNOWN_UNPUBLISHABLE` / `KNOWN_UNREACHABLE` 的“声明可写但实际走不通”结构性欠账；
 2026-08-18 真机验收登记的四条脚本空转问题也已全部注销。
+
+### 主链路上助手还走不通或没走过的（2026-11-13）
+
+- **音频编辑录音没有助手能力**：开始、暂停、停止、恢复只能在界面点（`AUDIO_CAPTURE_CONTROL_EXCLUSION`）；`audio_capture.settings.recording` 在界面重载后、标题栏接管前读到的是 idle，录到哪份作品、中断原因、待恢复文件也读不到。等录音与系统声那批改动交回后补，补法见 `tickets/46-正式使用链路/result-助手可用性.md`。
+- **录屏省略参数不跟用户保存的设置**，长录的中断原因、空档、丢帧、续录次数只进日志；`render_cache.rendering.paused` 没进 schema；录屏 stop/recover/import 统一 60 秒等待。同上，待那批改动交回后补。
+- **主链路自 10-25 之后的改动尚未由真实助手走过**：口播整条链只在 10-25 由 Pi 真跑过一次，之后的 audio_edit.cut、粗剪与线索自检、转写跨进程规则、剪辑字幕跟随、本次的线索属性与按回执撤销，以及录屏开始到导入、多机位、代理、导出队列，都只有精确测试与覆盖门禁，没有真实 Electron 加 Pi/MCP 的整链走查（走查脚本草案见 `tickets/46-正式使用链路/排查-助手可用性.md` 第三节）。
 
 ### 剪辑新增入口的覆盖差集（2026-10-07 复核）
 

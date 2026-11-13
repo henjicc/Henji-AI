@@ -11,6 +11,7 @@ import { hasAudioEditModifications } from '@/core/audioEdit/baseline'
 import { buildProjectAudioEditTimeline, editedDurationFrames } from '@/core/audioEdit/timeline'
 import { setAudioEditBreathHandling, type AudioEditBreathView } from '@/core/audioEdit/breaths'
 import { describeAudioEditCaptions, setAudioEditCaptionText } from '@/core/audioEdit/captionReview'
+import { joinAudioEditText } from '@/core/audioEdit/captions'
 import type { AudioBreath } from '@/core/audioAnalysis/breath/respiro'
 
 export const AUDIO_EDIT_ENTITY_TYPES = { project: 'audio_edit.document', transcriptBlock: 'audio_edit.transcript_block', cut: 'audio_edit.cut', caption: 'audio_edit.caption', suggestion: 'audio_edit.suggestion', breath: 'audio_edit.breath', processorChain: 'audio_edit.processor_chain', render: 'audio_edit.render' } as const
@@ -42,6 +43,55 @@ function frame(value: unknown): number { if (typeof value !== 'number' || !Numbe
 function breath(source: AudioEditFieldSource) { const found = source.breaths?.views.find((item) => item.id === source.childId); if (!found) throw new Error('NOT_FOUND'); return found }
 function caption(source: AudioEditFieldSource) { const found = describeAudioEditCaptions(source.document).find((item) => item.id === source.childId); if (!found) throw new Error('NOT_FOUND'); return found }
 function suggestion(source: AudioEditFieldSource) { const found = source.document.suggestions.find((item) => item.id === source.childId); if (!found) throw new Error('NOT_FOUND'); return found }
+
+/** 线索上下文单侧最多取的字数：没有标点的长段也只带出一句左右，不把半篇稿子塞给助手。 */
+const CLUE_CONTEXT_MAX_CHARS = 60
+const CLAUSE_END = /[。！？.!?；;，,、…]$/
+interface SuggestionTexts { removed: string; kept: string; before: string; after: string }
+const suggestionTextCache = new WeakMap<AudioEditProjectDocument, Map<string, SuggestionTexts>>()
+const joinBlocks = (blocks: readonly AudioEditTranscriptBlock[]): string => blocks.reduce((text, item) => joinAudioEditText(text, item.text.trim()), '')
+/**
+ * 线索的文字与上下文（读取时由词块现算，不落盘）：上下文只取还听得到的词，跳过已删的；
+ * 向前取到上一处句读为止，向后取到句读并至少与被删段一样长（重念时后一段通常就是重来的那一遍）。
+ */
+function suggestionTexts(source: AudioEditFieldSource): SuggestionTexts {
+  const { document } = source
+  let cache = suggestionTextCache.get(document)
+  if (!cache) { cache = new Map(); suggestionTextCache.set(document, cache) }
+  const cached = cache.get(source.childId)
+  if (cached) return cached
+  const item = suggestion(source)
+  const transcript = document.transcript
+  const own = new Set(item.blockIds)
+  const indices = transcript.flatMap((entry, index) => own.has(entry.id) ? [index] : [])
+  const bound = (index: number) => index < 0 ? transcript.length : index
+  const head = indices.length ? indices[0] : bound(transcript.findIndex((entry) => entry.endFrame > item.startFrame))
+  const tail = indices.length ? indices.at(-1)! + 1 : bound(transcript.findIndex((entry) => entry.startFrame >= item.endFrame))
+  const audible = (entry: AudioEditTranscriptBlock) => entry.included && !own.has(entry.id)
+  const forward = (from: number, minChars: number): { text: string; next: number } => {
+    const picked: AudioEditTranscriptBlock[] = []
+    let index = from, length = 0
+    for (; index < transcript.length && length < CLUE_CONTEXT_MAX_CHARS; index++) {
+      const entry = transcript[index]
+      if (!audible(entry)) continue
+      picked.push(entry); length += entry.text.trim().length
+      if (length >= minChars && CLAUSE_END.test(entry.text.trim())) { index++; break }
+    }
+    return { text: joinBlocks(picked), next: index }
+  }
+  const picked: AudioEditTranscriptBlock[] = []
+  for (let index = head - 1, length = 0; index >= 0 && length < CLUE_CONTEXT_MAX_CHARS; index--) {
+    const entry = transcript[index]
+    if (!audible(entry)) continue
+    if (picked.length && CLAUSE_END.test(entry.text.trim())) break
+    picked.unshift(entry); length += entry.text.trim().length
+  }
+  const removed = joinBlocks(indices.map((index) => transcript[index]))
+  const kept = forward(tail, removed.length)
+  const texts = { removed, kept: kept.text, before: joinBlocks(picked), after: forward(kept.next, 0).text }
+  cache.set(source.childId, texts)
+  return texts
+}
 function field(entityType: AudioEditEntityType, suffix: string, title: string, value: ApplicationPropertyDescriptor['value'], read: (source: AudioEditFieldSource) => JsonValue, write?: (source: AudioEditFieldSource, value: JsonValue | undefined) => void, storeActions: string[] = [], description = `口播剪辑${title}。`): ApplicationFieldDefinition<AudioEditFieldSource, AudioEditFieldSource> {
   const id = `${entityType}.${suffix}`
   return { propertyId: id, descriptor: { id, entityType, version: audioEditSchemaRef('property', id).version, title, description, value, nullable: false, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['audio_edit:read'], write: write ? ['audio_edit:write'] : [] }, revisionScopes: ['audio_edit'], schemaRef: audioEditSchemaRef('property', id), ...(!write ? { readOnlyReason: '由源媒体、识别结果或剪辑时间线计算。' } : {}) }, read, ...(write ? { writer: { write: (draft, mutation) => write(draft, mutation.value) } } : {}), storeActions }
@@ -111,7 +161,7 @@ export const AUDIO_EDIT_FIELDS: Record<AudioEditEntityType, ApplicationFieldDefi
     field(E.caption, 'document_id', '所属音频作品（文档 ID，分页读取时可按此筛选）', TEXT, (s) => s.document.id),
     field(E.caption, 'text', '成片字幕文字', TEXT, (s) => caption(s).text, (s, v) => { s.document = setAudioEditCaptionText(s.document, s.childId, string(v)) }, [],
       '成片字幕显示的文字（排版后：中文与英文、数字之间有空格，行尾逗号句号已去掉，单独的“哎”“嗯”等叹词不显示）。'
-      + '改写时逐字比对写回这段的词块文字（保留的字留在原词块，删掉的去掉，新加的归前一个字所在的词块），词时间与声音不变；音频编辑里的文字与导出的 SRT 共用；字幕段只供首次放进剪辑时参考，剪辑字幕在剪辑里定稿，不随此处更新。'
+      + '改写时逐字比对写回这段的词块文字（保留的字留在原词块，删掉的去掉，新加的归前一个字所在的词块），词时间与声音不变；音频编辑里的文字与导出的 SRT 共用；字幕段只供首次放进剪辑时参考：已放进剪辑的字幕文字在剪辑里定稿，这里改字不同步过去（剪切与恢复会让剪辑字幕跟着声音更新）。'
       + '校对原则：既不完全照稿也不完全照识别——实际念的与稿子不同（改词、加词、少念）按实际念的写；同音错字、专有名词、英文大小写、数字按稿子写；拿不准时保留识别。只改字，分段用 audio_edit.transcript_block.caption_break_after。'),
     field(E.caption, 'spoken_text', '这段词块文字原样拼接（识别结果加已有校正，未排版）', TEXT, (s) => caption(s).spokenText),
     field(E.caption, 'original_text', '最初识别的文字（旧作品没有保存时同 spoken_text）', TEXT, (s) => caption(s).originalText),
@@ -132,6 +182,16 @@ export const AUDIO_EDIT_FIELDS: Record<AudioEditEntityType, ApplicationFieldDefi
       else if (v === 'dismissed') { const next = dismissAudioEditSuggestion(s.document, item.id); if (next === s.document) throw new Error('这条线索已处理、隐藏、失效或受锁定保护'); s.document = next }
       else throw new Error('该建议不能重复应用或直接恢复状态，请撤销剪辑。')
     }, ['applySuggestion', 'dismissSuggestion']),
+    field(E.suggestion, 'kind', '线索类型：retake 重念（同一内容念了几遍）、filler 语气词、long_silence 长停顿', { kind: 'enum', values: [['retake', '重念'], ['filler', '语气词'], ['long_silence', '长停顿']].map(([value, label]) => ({ value, label })) }, (s) => suggestion(s).kind),
+    field(E.suggestion, 'confidence', '本地算法的把握：high 大、medium 中、low 小（低的先看）', { kind: 'enum', values: [['high', '把握大'], ['medium', '把握中'], ['low', '把握小']].map(([value, label]) => ({ value, label })) }, (s) => suggestion(s).confidence),
+    field(E.suggestion, 'start_frame', '线索开始采样帧（原素材时间，除以 sample_rate 得秒）', INT, (s) => suggestion(s).startFrame),
+    field(E.suggestion, 'end_frame', '线索结束采样帧（原素材时间）', INT, (s) => suggestion(s).endFrame),
+    field(E.suggestion, 'sample_rate', '时间戳采样率（每秒采样帧数）', INT, (s) => s.document.source.sampleRate),
+    field(E.suggestion, 'block_ids', '这条线索建议删掉的词块 ID（按顺序，长停顿线索为空）；整条接受写 status=applied（删词并补接缝停顿剪切），只删其中一部分才逐个改 audio_edit.transcript_block.included', objectValue('audio_edit.suggestion_blocks'), (s) => json(suggestion(s).blockIds)),
+    field(E.suggestion, 'removed_text', '建议删掉的那段文字（block_ids 原样拼接）', TEXT, (s) => suggestionTexts(s).removed),
+    field(E.suggestion, 'kept_text', '紧接在这段之后、还保留着的文字（重念时通常就是重来的那一遍；取到句读为止，至少与被删段一样长）', TEXT, (s) => suggestionTexts(s).kept),
+    field(E.suggestion, 'before_text', '前文：这段之前还保留着的一句（取到上一处句读）', TEXT, (s) => suggestionTexts(s).before),
+    field(E.suggestion, 'after_text', '后文：kept_text 之后还保留着的一句', TEXT, (s) => suggestionTexts(s).after),
   ],
   [E.breath]: [
     field(E.breath, 'document_id', '所属口播（口播文档 ID，分页读取时可按此筛选）', TEXT, (s) => s.document.id),
@@ -167,6 +227,7 @@ const audioEditValueSchemas: Record<string, z.ZodType> = {
   'audio_edit.frame_rate': audioEditFrameRateSchema,
   'audio_edit.effect_chain': audioEditEffectChainSchema,
   'audio_edit.caption_blocks': z.array(z.string()),
+  'audio_edit.suggestion_blocks': z.array(z.string()),
   'audio_edit.output': audioEditOutputSchema,
   // 只读描述来自宿主处理器目录，形状与 AudioEditProcessorDescriptor 一致。
   'audio_edit.processors': z.array(z.object({

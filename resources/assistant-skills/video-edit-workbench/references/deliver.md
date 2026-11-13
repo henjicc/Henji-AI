@@ -8,17 +8,18 @@
 - 时间线：查末尾多余声音、禁用片段、空隙、锁轨、来源缺失、跟踪及长任务状态；确认字幕和标记在剪后位置。
 - 画面：取片头、关键停留、调色交接、转场附近与片尾，真实读取；竖版看主体与字幕，循环看首末接缝。
 - 画面检查：`query_video_edit_review` 加 motion 即附带 settled_jitter（停稳文字/细线仍小数像素爬动或来回跳）、safe_area（文字出标题安全框90%、关键元素出动作安全框93%，含原生文字与字幕）、motion_too_fast（超 pace 上限）。pace 按记忆或风格的节奏偏好选：不过快用 gentle（60%画面宽/秒），偏快用 brisk（150%），默认 standard（100%）。把 suggestion 里的时间、问题和改法告诉用户，确认后沿原属性、曲线或源码修改并重查；有意设计可保留。draw 内部绘制与原视频运动不在检查内，仍看图。
+- 播放与预渲染：卡顿先读 `video_edit.document.render_cache`。自动预渲染只在空闲且划算时进行（打开后 30 秒内、编辑停下不到 10 秒、有输入、录屏、导出或建代理时都会让出），要马上渲染某段用 `render_video_edit_preview`；导出默认不复用预览，不必为导出先渲染。
 - 声音：核实声音角色、静音／独奏、音量与淡化、声道、目标响度；未试听或未最终测量就保留说明。
 - 文本与依赖：错字、专名、译文、字体、图片及代码素材依赖；按要求烧录或单独交字幕。
 - 保存与证据：普通主动保存用 `save_video_edit`；原修改已 partial 且保存未确认，用 `retry_application_operation_save` 携带原 originalOperationId，核对原产物后才解除保护。不能靠重新放入、生成或导出来证明已保存。工具回执、结构、已看帧、听感、成片检查分别报告，不把一种当全部验收。
 
 ## 预设与范围
 
-先读 `video_edit.export_preset`，再 `export_video_edit`。不猜预设ID或输出路径；能力调用不弹保存对话框，默认写进剪辑所在项目的“导出”文件夹（重名自动加序号），也可用 destination 指定快速下载或下载预设目录。
+先读 `video_edit.export_preset`，再 `export_video_edit`。内置预设只规定画幅与编码，帧率跟随序列（60 帧的序列用平台预设仍导 60 帧）；“与序列一致”和各平台投稿预设默认“高画质”（恒定质量），母版预设为 H.265、80 Mbps 指定码率；要视觉无损或别的画质用 quality 直接选（如 visually_lossless）。不猜预设ID或输出路径；能力调用不弹保存对话框，默认写进剪辑所在项目的“导出”文件夹（重名自动加序号），也可用 destination 指定快速下载或下载预设目录。
 
 单项可给 format=mp4/aac/wav/srt/vtt、range、loudness，或完整 settings；settings 不能混 format/loudness/subtitleClock。完整设置查正式 schema：codec=avc/hevc、bitrateMode=vbr/cbr、encoderPreference=hardware/software、captionMode=none/burn/srt/vtt；不编造ProRes或VBR双次编码选项。只用预设或省略设置会适配设备，完整 settings 不支持时明确拒绝；回读 queue.settings 确认实际编码与规格。
 
-默认导出遇到无可测量声音会跳过响度标准化，query 的 notice 说明原因；图文无声成片仍可正常交付。显式 loudness、完整 settings.loudness 或自选响度预设属于主动要求，无可测量声音时会失败；按原因添加声音、扩大范围，或用完整 settings.loudness=null 重新提交。retryTaskId 保留原设置，不能用它修改响度策略。
+序列里有链接的口播声音时，导出前会先等口播的最新改动更新进剪辑；没更新上照常导出，queue 的 notice 带提示。默认导出遇到无可测量声音会跳过响度标准化，query 的 notice 说明原因；图文无声成片仍可正常交付。显式 loudness、完整 settings.loudness 或自选响度预设属于主动要求，无可测量声音时会失败；按原因添加声音、扩大范围，或用完整 settings.loudness=null 重新提交。retryTaskId 保留原设置，不能用它修改响度策略。
 
 range 的 startFrame 包含、endFrame 不包含；省略用序列入出点，无入出点用整序列。范围标记在 `video_edit.document.timeline_view` 的 inFrame/outFrame，修改需合并其他视图字段。独立 SRT/VTT 不接受自定义 range，使用时间线入出点；subtitleClock=range 从导出入点计零，sequence 保持原序列钟，只用于独立字幕。视频旁带字幕的自定义范围用完整 settings.captionMode。
 

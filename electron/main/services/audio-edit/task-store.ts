@@ -174,7 +174,7 @@ export function listAudioEditTasks(projectId: string): AudioEditTask[] {
     const running = active.get(row.request_id)
     const interrupted = !running && (row.state === 'running' || row.state === 'queued') && !liveElsewhere(row, now)
     return { requestId: row.request_id, projectId: row.document_id, kind: row.kind, state: interrupted ? 'failed' : row.state,
-      progress: running?.progress, errorMessage: interrupted ? '上次处理已中断。转写不会自动重新提交。' : row.error_message }
+      progress: running?.progress, errorMessage: interrupted ? '上次处理已中断。' : row.error_message }
   })
 }
 
@@ -244,6 +244,8 @@ export function findAudioEditTranscription(projectId: string): AudioEditStoredTa
   const row = getDb().prepare("SELECT request_id,state,provider_task_id,input_digest,result_json,error_message,updated_at FROM audio_edit_tasks WHERE document_id = ? AND kind = 'transcription' ORDER BY created_at DESC LIMIT 1").get(projectId) as AudioEditStoredTask | undefined
   return row?.result_json ? { ...row, result_json: JSON.stringify(decodeTaskResult(row.result_json)) } : row
 }
+/** 任务正由本进程执行。 */
+export function isAudioEditTaskRunningHere(requestId: string): boolean { return active.has(requestId) }
 /** 任务此刻有没有进程在跑：本进程看登记表，别的进程（助手命令行与主应用共用数据库）看心跳。 */
 export function isAudioEditTaskActive(requestId: string): boolean {
   if (active.has(requestId)) return true

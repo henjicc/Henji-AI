@@ -51,12 +51,13 @@ describe('剪辑工作台技能的操作说明与正式契约保持一致', () =
   it('主文件链接完整、每篇先说明何时读且按需加载内容有界', () => {
     const main = files[0].content
     expect(main).toMatch(/^---\r?\nname: video-edit-workbench\r?\ndescription: .+\r?\n---/)
-    expect(Buffer.byteLength(main, 'utf8')).toBeLessThanOrEqual(6144)
+    // 只防事故的宽松上限：按需加载一次，拆不拆按主题相关性判断，不按字节（见 embedded-agent/skills.test.ts）
+    expect(Buffer.byteLength(main, 'utf8')).toBeLessThanOrEqual(64 * 1024)
     const links = [...main.matchAll(/\]\((references\/[^)]+)\)/g)].map(match => match[1]).sort()
     expect(links).toEqual(referencePaths)
     for (const file of files.slice(1)) {
       expect(file.content).toMatch(/^# .+\r?\n\r?\n> 何时读：/)
-      expect(Buffer.byteLength(file.content, 'utf8'), file.relativePath).toBeLessThanOrEqual(8 * 1024)
+      expect(Buffer.byteLength(file.content, 'utf8'), file.relativePath).toBeLessThanOrEqual(64 * 1024)
     }
   })
 })

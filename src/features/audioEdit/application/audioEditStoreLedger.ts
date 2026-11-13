@@ -9,7 +9,6 @@ type ActionName = {
 }[keyof State]
 
 const fields = Object.values(AUDIO_EDIT_FIELDS).flat()
-const properties = fields.filter((field) => field.writer).map((field) => field.propertyId) as [string, ...string[]]
 const bindings = fieldLedgerEntries(fields)
 
 export const AUDIO_EDIT_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
@@ -29,7 +28,7 @@ export const AUDIO_EDIT_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> =
       kind: 'excluded', category: 'transient_selection',
       reason: '当前框选词块是鼠标交互的临时状态；助手使用稳定词块引用直接修改保留状态。',
     },
-    undo: { kind: 'property', propertyIds: properties },
-    redo: { kind: 'property', propertyIds: properties },
+    undo: { kind: 'capability', capabilityId: 'undo_audio_edit' },
+    redo: { kind: 'capability', capabilityId: 'redo_audio_edit' },
   },
 }
