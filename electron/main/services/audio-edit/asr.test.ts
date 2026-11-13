@@ -4,7 +4,11 @@ import type { AudioEditStoredTask } from './task-store'
 import { listAudioEditTaskStatuses, preflightAudioEditTranscription, transcribeAudioEditProject } from './asr'
 
 const mock = vi.hoisted(() => ({ project: vi.fn(), verify: vi.fn(), prepareAudio: vi.fn(), preflight: vi.fn(), execute: vi.fn(),
-  task: undefined as AudioEditStoredTask | undefined, active: false, stale: false, clock: 0, controllers: new Map<string, AbortController>() }))
+  task: undefined as AudioEditStoredTask | undefined, active: false, stale: false, clock: 0, controllers: new Map<string, AbortController>(),
+  /** 补转写各段的任务（按 kind），整份转写仍在 task */
+  fills: new Map<string, AudioEditStoredTask>() }))
+const taskOf = (kind = 'transcription'): AudioEditStoredTask | undefined => kind === 'transcription' ? mock.task : mock.fills.get(kind)
+const taskById = (requestId: string): AudioEditStoredTask | undefined => [mock.task, ...mock.fills.values()].find(task => task?.request_id === requestId)
 vi.mock('../logging', () => ({ createMainLogger: () => ({ info: vi.fn(), error: vi.fn() }) }))
 vi.mock('./project-store', () => ({ requireAudioEditProject: mock.project }))
 vi.mock('./media', () => ({ verifyAudioEditSource: mock.verify, prepareAudioEditTranscriptionAudio: mock.prepareAudio }))
@@ -18,7 +22,7 @@ vi.mock('./timestamped-asr', async importOriginal => ({ ...await importOriginal<
   prepare: (input: Record<string, unknown>) => ({ ...input, modelId: 'groq.speech-recognition.whisper-large-v3-turbo', providerId: 'groq', cost: { status: 'unknown', amount: null, currency: null } }),
 } }))
 vi.mock('./task-store', () => ({
-  findAudioEditTranscription: () => mock.task,
+  findAudioEditTranscription: (_projectId: string, kind?: string) => taskOf(kind),
   isAudioEditTaskActive: () => mock.active,
   isAudioEditTaskRunningHere: () => false,
   listAudioEditTasks: () => mock.task ? [{ requestId: mock.task.request_id, projectId: 'audio', kind: 'transcription', state: mock.task.state }] : [],
@@ -26,19 +30,22 @@ vi.mock('./task-store', () => ({
   assertAudioEditProjectIdle: () => {},
   registerAudioEditTaskController: (requestId: string, _projectId: string, controller: AbortController) => { mock.controllers.set(requestId, controller); return () => {} },
   // 与正式表同一套条件写入语义：新建要求这份口播还没有记录，接管要求已结束且 updated_at 未变，写入要求令牌对得上
-  claimAudioEditTask: ({ requestId, owner, result, takeoverUpdatedAt }: { requestId: string; owner: string; result: Record<string, unknown>; takeoverUpdatedAt?: number }) => {
+  claimAudioEditTask: ({ requestId, kind, owner, result, takeoverUpdatedAt }: { requestId: string; kind: string; owner: string; result: Record<string, unknown>; takeoverUpdatedAt?: number }) => {
+    const existing = taskOf(kind)
     if (takeoverUpdatedAt === undefined) {
-      if (mock.task) return false
-      mock.task = { request_id: requestId, state: 'running', provider_task_id: null, input_digest: '', updated_at: ++mock.clock, result_json: JSON.stringify({ ...result, owner }) }
+      if (existing) return false
+      const created = { request_id: requestId, state: 'running' as const, provider_task_id: null, input_digest: '', updated_at: ++mock.clock, result_json: JSON.stringify({ ...result, owner }) }
+      if (kind === 'transcription') mock.task = created; else mock.fills.set(kind, created)
       return true
     }
-    if (!mock.task || mock.task.updated_at !== takeoverUpdatedAt || !['failed', 'cancelled'].includes(mock.task.state)) return false
-    Object.assign(mock.task, { state: 'running', updated_at: ++mock.clock, result_json: JSON.stringify({ ...result, owner }) })
+    if (!existing || existing.updated_at !== takeoverUpdatedAt || !['failed', 'cancelled'].includes(existing.state)) return false
+    Object.assign(existing, { state: 'running', updated_at: ++mock.clock, result_json: JSON.stringify({ ...result, owner }) })
     return true
   },
-  updateOwnedAudioEditTask: (_id: string, owner: string, value: { state: AudioEditStoredTask['state']; result?: Record<string, unknown>; providerTaskId?: string; errorMessage?: string }) => {
-    if (!mock.task || JSON.parse(mock.task.result_json ?? '{}').owner !== owner) return false
-    Object.assign(mock.task, { state: value.state, error_message: value.errorMessage, updated_at: ++mock.clock }, value.result ? { result_json: JSON.stringify({ ...value.result, owner }) } : {}, value.providerTaskId ? { provider_task_id: value.providerTaskId } : {})
+  updateOwnedAudioEditTask: (id: string, owner: string, value: { state: AudioEditStoredTask['state']; result?: Record<string, unknown>; providerTaskId?: string; errorMessage?: string }) => {
+    const task = taskById(id)
+    if (!task || JSON.parse(task.result_json ?? '{}').owner !== owner) return false
+    Object.assign(task, { state: value.state, error_message: value.errorMessage, updated_at: ++mock.clock }, value.result ? { result_json: JSON.stringify({ ...value.result, owner }) } : {}, value.providerTaskId ? { provider_task_id: value.providerTaskId } : {})
     return true
   },
 }))
@@ -47,7 +54,7 @@ const takeOver = (receipt: Record<string, unknown>): void => { Object.assign(moc
 const source = { mediaType: 'audio' as const, sourcePath: 'voice.wav', audioPath: 'voice.wav', sampleRate: 1000, channels: 1, durationFrames: 2400 }
 const request = { projectId: 'audio', requestId: 'request' }
 beforeEach(() => {
-  vi.clearAllMocks(); mock.task = undefined; mock.active = false; mock.stale = false; mock.clock = 10; mock.controllers.clear()
+  vi.clearAllMocks(); mock.task = undefined; mock.fills.clear(); mock.active = false; mock.stale = false; mock.clock = 10; mock.controllers.clear()
   mock.project.mockResolvedValue({ ...createAudioEditDocumentContent(source), id: 'audio', name: '声音', revision: 1, createdAt: 1, updatedAt: 1 })
   mock.verify.mockResolvedValue(undefined); mock.prepareAudio.mockResolvedValue({ path: 'voice-asr.ogg', bytes: 4096 })
   mock.preflight.mockResolvedValue({ modelId: 'fixture-asr' })
@@ -244,4 +251,32 @@ it('任务列表给出最近一次转写能否再发起，与提交时的拒绝�
   mock.task = undefined
   await transcribeAudioEditProject({ ...request, requestId: 'done' })
   expect(await resubmission()).toBe('completed')
+})
+
+it('已有转写时只补转写插入段：按段截副本、只对这段估价计费，结果换掉占位；已付费的段重试不再提交', async () => {
+  const word = (id: string, text: string, startFrame: number, endFrame: number) => ({ id, text, startFrame, endFrame, included: true, locked: false, granularity: 'word' as const })
+  const placeholder = { id: 'recording-3-1000-0', text: '（需要重新转写）', startFrame: 1000, endFrame: 1800, included: true, locked: false, granularity: 'segment' as const, confidence: 0 }
+  const base = await mock.project()
+  mock.project.mockResolvedValue({ ...base, selectedAsrModelId: 'fixture-asr', transcript: [word('transcript-0', '前面', 0, 1000), placeholder, word('transcript-1', '后面', 1800, 2400)] })
+  mock.execute.mockResolvedValue({ unit: 'ms', granularity: 'character', text: '补录', words: [], segments: [{ text: '补录', startMs: 0, endMs: 800, granularity: 'segment', timing: 'coarse', words: [
+    { text: '补', startMs: 0, endMs: 400, granularity: 'character', timing: 'precise' }, { text: '录', startMs: 400, endMs: 800, granularity: 'character', timing: 'precise' }] }] })
+  const preflight = () => preflightAudioEditTranscription({ sourcePath: source.sourcePath, durationMs: 2400, audioDocumentId: 'audio' })
+  expect(await preflight()).toMatchObject({ requiresConfirmation: true })
+  // 只按插入段的 0.8 秒检查上传上限与估价，不是整份 2.4 秒
+  expect(mock.preflight.mock.calls[0][0]).toMatchObject({ durationMs: 800 })
+  const result = await transcribeAudioEditProject(request)
+  expect(mock.prepareAudio.mock.calls[0][3]).toMatchObject({ startFrame: 1000, endFrame: 1800 })
+  expect(result.project.transcript.map(block => [block.id, block.text, block.startFrame, block.endFrame])).toEqual([
+    ['transcript-0', '前面', 0, 1000], ['recording-3-1000-0:0', '补', 1000, 1400], ['recording-3-1000-0:1', '录', 1400, 1800], ['transcript-1', '后面', 1800, 2400]])
+  expect(result.granularity).toBe('word')
+  // 补转写用自己的任务，整份转写的记录不受影响
+  expect(mock.task).toBeUndefined()
+  expect([...mock.fills.keys()][0]).toMatch(/^transcription_fill:/)
+  // 结果没送到界面（如重载）：再发起只取回回执，不再计费
+  expect(await preflight()).toMatchObject({ requiresConfirmation: false })
+  expect((await transcribeAudioEditProject({ ...request, requestId: 'retry' })).project.transcript).toEqual(result.project.transcript)
+  expect(mock.execute).toHaveBeenCalledTimes(1)
+  // 没有插入段的已有转写照旧拒绝
+  mock.project.mockResolvedValue({ ...base, transcript: [word('transcript-0', '前面', 0, 2400)] })
+  await expect(transcribeAudioEditProject({ ...request, requestId: 'again' })).rejects.toThrow('口播已有转写')
 })

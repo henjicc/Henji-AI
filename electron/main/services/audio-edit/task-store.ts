@@ -243,8 +243,9 @@ export function getAudioEditStoredTask(requestId: string): (AudioEditStoredTask 
   const row = getDb().prepare('SELECT request_id,document_id,state,provider_task_id,input_digest,result_json,updated_at FROM audio_edit_tasks WHERE request_id = ?').get(requestId) as (AudioEditStoredTask & { document_id: string }) | undefined
   return row?.result_json ? { ...row, result_json: JSON.stringify(decodeTaskResult(row.result_json)) } : row
 }
-export function findAudioEditTranscription(projectId: string): AudioEditStoredTask | undefined {
-  const row = getDb().prepare("SELECT request_id,state,provider_task_id,input_digest,result_json,error_message,updated_at FROM audio_edit_tasks WHERE document_id = ? AND kind = 'transcription' ORDER BY created_at DESC LIMIT 1").get(projectId) as AudioEditStoredTask | undefined
+/** kind：整份转写是 transcription，补转写插入段各用自己的 transcription_fill:… */
+export function findAudioEditTranscription(projectId: string, kind = 'transcription'): AudioEditStoredTask | undefined {
+  const row = getDb().prepare('SELECT request_id,state,provider_task_id,input_digest,result_json,error_message,updated_at FROM audio_edit_tasks WHERE document_id = ? AND kind = ? ORDER BY created_at DESC LIMIT 1').get(projectId, kind) as AudioEditStoredTask | undefined
   return row?.result_json ? { ...row, result_json: JSON.stringify(decodeTaskResult(row.result_json)) } : row
 }
 /** 任务正由本进程执行。 */

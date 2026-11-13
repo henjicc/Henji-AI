@@ -1,5 +1,6 @@
 import { z } from 'zod'
-import type { AudioEditProjectDocument, AudioEditRange, AudioEditSourceMetadata } from './types'
+import type { AudioEditProjectDocument, AudioEditRange, AudioEditSourceMetadata, AudioEditTranscriptBlock } from './types'
+import { buildProjectAudioEditTimeline, editedDurationFrames, nextRetainedSourceFrame, outputFrameToSourceFrame, sourceFrameToOutputFrame } from './timeline'
 
 export const audioEditSpliceSchema = z.object({
   projectId: z.string().regex(/^[\w-]+$/), sourcePath: z.string().min(1).max(4096),
@@ -31,6 +32,71 @@ export function spliceAudioRanges<T extends AudioEditRange & { id: string }>(ran
   })
 }
 
+/** 插入段的占位文字：转写里还没有识别的那一段，文字区看得见，字幕不出现它。 */
+export const AUDIO_EDIT_UNTRANSCRIBED_TEXT = '（需要重新转写）'
+const UNTRANSCRIBED_ID = /^recording-\d+-\d+-\d+$/
+
+/**
+ * 插入段的占位词块（spliceAudioEditProject 唯一生成）：整句粒度、编号形如 recording-修订号-起点-序号。
+ * 补转写得到的词块编号带“:序号”，不会再被认成占位。
+ */
+export function isAudioEditUntranscribedBlock(block: Pick<AudioEditTranscriptBlock, 'id' | 'granularity'>): boolean {
+  return block.granularity === 'segment' && UNTRANSCRIBED_ID.test(block.id)
+}
+
+/** 还要补转写的插入段：保留着的占位词块（删掉的那段声音已经剪掉，不必再识别）。 */
+export function audioEditUntranscribedBlocks(project: Pick<AudioEditProjectDocument, 'transcript'>): AudioEditTranscriptBlock[] {
+  return project.transcript.filter((block) => (block.included || block.locked) && isAudioEditUntranscribedBlock(block) && block.endFrame > block.startFrame)
+}
+
+/**
+ * 插入或录音的位置。秒数（positionSeconds / replaceUntilSeconds）是剪后作品时间，与 audio_edit.caption 的 start_ms、
+ * 剪后时长同一坐标；采样帧（positionSourceFrame / replaceUntilSourceFrame）是原素材时间，与 transcript_block 的 start_frame 同一坐标。
+ * 同一端只能给一种。
+ */
+export interface AudioEditPlacementInput { positionSeconds?: number; replaceUntilSeconds?: number; positionSourceFrame?: number; replaceUntilSourceFrame?: number }
+
+type TimelineProject = Pick<AudioEditProjectDocument, 'source' | 'transcript' | 'cuts'>
+
+/**
+ * 把位置换成原素材采样帧 [起点, 终点]。剪后时间落在剪切处时，起点取剪切之后那段保留声音的开头，
+ * 终点取剪切之前那段的末尾（不把剪掉的声音算进覆盖范围的末端）。fallback 是省略起点时的原素材帧。
+ * 参数错误抛出点名字段的 Error。
+ */
+export function audioEditPlacementFrames(project: TimelineProject, input: AudioEditPlacementInput, fallback: number): [number, number] {
+  if (input.positionSeconds !== undefined && input.positionSourceFrame !== undefined) throw new Error('positionSeconds 与 positionSourceFrame 只能给一个：秒数按剪后作品时间，采样帧按原素材时间。')
+  if (input.replaceUntilSeconds !== undefined && input.replaceUntilSourceFrame !== undefined) throw new Error('replaceUntilSeconds 与 replaceUntilSourceFrame 只能给一个。')
+  const rate = project.source.sampleRate, total = project.source.durationFrames
+  const spans = buildProjectAudioEditTimeline(project)
+  const edited = editedDurationFrames(spans)
+  const fromSeconds = (field: string, seconds: number, end: boolean): number => {
+    const target = Math.round(seconds * rate)
+    if (target > edited) throw new Error(`${field} 超出剪后作品长度（${(edited / rate).toFixed(2)} 秒）。`)
+    if (!spans.length) return 0
+    // 终点落在两段之间时归前一段：按“目标在 (开头, 末尾]”找段；起点按“[开头, 末尾)”找（outputFrameToSourceFrame）
+    const span = end && target > 0 ? spans.find((item) => target > item.outputStartFrame && target <= item.outputEndFrame) : undefined
+    return span ? span.sourceStartFrame + target - span.outputStartFrame : outputFrameToSourceFrame(target, spans) ?? 0
+  }
+  const fromFrame = (field: string, frame: number): number => {
+    if (!Number.isSafeInteger(frame) || frame < 0 || frame > total) throw new Error(`${field} 要是 0 到 ${total}（原素材采样帧总数）之间的整数。`)
+    return frame
+  }
+  const start = input.positionSourceFrame !== undefined ? fromFrame('positionSourceFrame', input.positionSourceFrame)
+    : input.positionSeconds !== undefined ? fromSeconds('positionSeconds', input.positionSeconds, false) : fallback
+  const end = input.replaceUntilSourceFrame !== undefined ? fromFrame('replaceUntilSourceFrame', input.replaceUntilSourceFrame)
+    : input.replaceUntilSeconds !== undefined ? fromSeconds('replaceUntilSeconds', input.replaceUntilSeconds, true) : start
+  if (end < start) throw new Error('覆盖终点（replaceUntilSeconds / replaceUntilSourceFrame）不能早于插入位置。')
+  return [start, end]
+}
+
+/** 原素材帧在剪后作品里的秒数（读回用，与 positionSeconds 同一坐标）；落在剪掉的声音里时取其后第一段保留声音的位置。 */
+export function audioEditOutputSeconds(project: TimelineProject, sourceFrame: number): number {
+  const spans = buildProjectAudioEditTimeline(project)
+  const retained = nextRetainedSourceFrame(sourceFrame, spans)
+  const output = (retained === null ? null : sourceFrameToOutputFrame(retained, spans)) ?? editedDurationFrames(spans)
+  return output / project.source.sampleRate
+}
+
 export function assertAudioEditSplicePosition(project: AudioEditProjectDocument, start: number, end: number): void {
   if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end < start || end > project.source.durationFrames) throw new Error('录音插入范围无效')
   if (project.transcript.some(block => block.locked && block.startFrame < (end === start ? start : end) && block.endFrame > start)) throw new Error('录音位置包含锁定的词块，请先解锁')
@@ -51,7 +117,7 @@ export function spliceAudioEditProject(project: AudioEditProjectDocument, source
     let ordinal = 0
     let id = `recording-${project.revision}-${start}-${ordinal}`
     while (transcript.some(block => block.id === id)) id = `recording-${project.revision}-${start}-${++ordinal}`
-    transcript.push({ id, text: '（需要重新转写）', startFrame: start, endFrame: start + inserted, included: true, locked: false, granularity: 'segment', confidence: 0 })
+    transcript.push({ id, text: AUDIO_EDIT_UNTRANSCRIBED_TEXT, startFrame: start, endFrame: start + inserted, included: true, locked: false, granularity: 'segment', confidence: 0 })
   }
   transcript.sort((a, b) => a.startFrame - b.startFrame)
   const suggestions = shiftIntact(project.suggestions).map(item => ({ ...item, blockIds: item.blockIds.filter(id => transcript.some(block => block.id === id)) }))

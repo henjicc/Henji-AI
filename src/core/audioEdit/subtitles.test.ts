@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AudioEditProjectDocument, AudioEditTranscriptBlock } from './types'
 import { buildAudioEditSubtitleGroups, formatAudioEditCaptions } from './captions'
-import { buildAudioEditSubtitleCues, buildProjectAudioEditSubtitleCues, formatAudioEditSubtitleText } from './subtitles'
+import { buildAudioEditSrt, buildAudioEditSubtitleCues, buildProjectAudioEditSubtitleCues, formatAudioEditSubtitleText } from './subtitles'
 import { describeAudioEditCaptions, setAudioEditCaptionText } from './captionReview'
 import { buildAudioEditTimeline } from './timeline'
 import { audioEditScriptPlainText } from './scriptCaptions'
@@ -153,5 +153,17 @@ describe('逐段核对与改字', () => {
     const added = setAudioEditCaptionText(tail, line.id, '或者说呀')
     expect(added.transcript.map(block => block.text)).toEqual(['或者', '说呀，'])
     expect(describeAudioEditCaptions(added)[0].text).toBe('或者说呀')
+  })
+})
+
+describe('插入后还没补转写的段', () => {
+  it('占位文字不上字幕，导出的 SRT 与送进剪辑的字幕都不带它', () => {
+    const blocks = blocksOf(['前面', '一句'])
+    const placeholder: AudioEditTranscriptBlock = { id: 'recording-3-440-0', text: '（需要重新转写）', startFrame: 440, endFrame: 1400, included: true, locked: false, granularity: 'segment', confidence: 0 }
+    const project = projectOf([...blocks, placeholder], '')
+    const cues = buildProjectAudioEditSubtitleCues(project)
+    expect(cues.map(cue => cue.text).join('')).not.toContain('需要重新转写')
+    expect(cues.flatMap(cue => cue.words.map(word => word.blockId))).toEqual(['w0', 'w1'])
+    expect(buildAudioEditSrt(project.transcript, buildAudioEditTimeline(project.source.durationFrames, project.transcript), 1000)).not.toContain('需要重新转写')
   })
 })

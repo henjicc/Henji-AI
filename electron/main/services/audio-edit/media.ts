@@ -2,7 +2,7 @@ import { removeUnmanagedCachePath } from '../media-recycle/cache-deletion'
 import crypto from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import type { AudioEditProjectDocument, AudioEditSourceMetadata } from '../../../../src/core/audioEdit/types'
+import type { AudioEditProjectDocument, AudioEditRange, AudioEditSourceMetadata } from '../../../../src/core/audioEdit/types'
 import type { AsrUploadEncoding } from '../../../../src/core/audioEdit/asrCatalog'
 import { resolveLocalMediaPath } from '../media/shared'
 import { getProgramStoreDir } from '../appPaths'
@@ -287,19 +287,22 @@ const TRANSCRIPTION_ENCODERS: Record<AsrUploadEncoding, { extension: string; cod
  * 不用 MP3、AAC：它们的编码延迟（16 kHz 下约 60–70 ms）要靠解码端读私有头才扣得掉；Ogg Opus 的编码前导写在容器里，按标准解码时扣除。
  * 副本只为上传存在：按素材内容寻址放在本口播的缓存目录，重试直接复用。
  */
-export async function prepareAudioEditTranscriptionAudio(project: AudioEditProjectDocument, encoding: AsrUploadEncoding, signal?: AbortSignal): Promise<{ path: string; bytes: number }> {
+export async function prepareAudioEditTranscriptionAudio(project: AudioEditProjectDocument, encoding: AsrUploadEncoding, signal?: AbortSignal, range?: AudioEditRange): Promise<{ path: string; bytes: number }> {
   await verifyAudioEditSource(project, signal, 'quick')
-  const { sampleRate, channels, durationFrames, ownership } = project.source
+  const { sampleRate, channels, ownership } = project.source
+  // 补转写插入段时只截这一段（原素材采样帧区间），识别结果的时间再由调用方加上起点
+  const startFrame = range?.startFrame ?? 0
+  const durationFrames = (range?.endFrame ?? project.source.durationFrames) - startFrame
   // 应用内录音本身就是浮点 WAV；外部素材从原文件的那条音轨直接转，不必先落一份浮点副本。
   const input = ownership === 'external' ? project.source.sourcePath : project.source.audioPath
   const stream = ownership === 'external' ? project.source.audioStreamIndex ?? 0 : 0
   const encoder = TRANSCRIPTION_ENCODERS[encoding]
-  const name = `asr-${encoding}-${await audioEditSourceContentKey(project.source, signal)}-${stream}`
+  const name = `asr-${encoding}-${await audioEditSourceContentKey(project.source, signal)}-${stream}${range ? `-${startFrame}-${durationFrames}` : ''}`
   // 各声道等权平均：单声道识别够用，也不会像直接相加那样削顶。
   const downmix = channels > 1 ? `pan=mono|c0=${Array.from({ length: channels }, (_, index) => `${1 / channels}*c${index}`).join('+')},` : ''
   const file = await cachedAudioFile(audioEditCacheDirectory(project.id), name, encoder.extension, async temporary => {
     await runAudioEditProcess(await loadFfmpegPath(), ['-v', 'error', '-nostdin', '-y', '-i', input, '-map', `0:${stream}`, '-vn',
-      '-af', `asetpts=N/SR/TB,atrim=end_sample=${durationFrames},apad=whole_len=${durationFrames},${downmix}aresample=${TRANSCRIPTION_SAMPLE_RATE}`,
+      '-af', `asetpts=N/SR/TB,atrim=${range ? `start_sample=${startFrame}:end_sample=${startFrame + durationFrames},asetpts=N/SR/TB,` : `end_sample=${durationFrames},`}apad=whole_len=${durationFrames},${downmix}aresample=${TRANSCRIPTION_SAMPLE_RATE}`,
       ...encoder.codec, temporary], signal)
     const output = JSON.parse(await runAudioEditProcess(await loadFfprobePath(), ['-v', 'error', '-select_streams', 'a:0', '-show_streams', '-of', 'json', temporary], signal)) as { streams?: ProbeStream[] }
     const audio = output.streams?.[0]

@@ -70,7 +70,7 @@ export function buildAudioEditTimeline(
   return spans
 }
 
-export function buildProjectAudioEditTimeline(project: AudioEditProjectDocument): AudioEditTimelineSpan[] {
+export function buildProjectAudioEditTimeline(project: Pick<AudioEditProjectDocument, 'source' | 'transcript' | 'cuts'>): AudioEditTimelineSpan[] {
   const spans = buildAudioEditTimeline(project.source.durationFrames, project.transcript, project.cuts)
   const muted = subtractRanges((project.cuts ?? []).filter((cut) => cut.enabled && cut.mode === 'mute'), project.transcript.filter((block) => block.locked))
   return splitAudioEditMutedSpans(spans, muted)

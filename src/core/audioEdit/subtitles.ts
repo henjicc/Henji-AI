@@ -3,6 +3,7 @@ import { buildAudioEditSubtitleGroups, joinAudioEditText } from './captions'
 import type { AudioEditProjectDocument, AudioEditTimelineSpan, AudioEditTranscriptBlock } from './types'
 import { formatSubtitleTimestampUs } from '../media/subtitleFormat'
 import { isAudioEditSubtitleFiller } from './scriptCaptions'
+import { isAudioEditUntranscribedBlock } from './splice'
 
 /** 两条字幕间隔短于此（秒）就接上：前一条一直显示到后一条出现，不闪空。 */
 const AUDIO_EDIT_SUBTITLE_JOIN_GAP_SECONDS = 0.5
@@ -99,8 +100,8 @@ export function buildAudioEditSubtitleCues(blocks: readonly AudioEditTranscriptB
   const titles = scriptTitleMarks(referenceScript)
   const cues = buildAudioEditSubtitleGroups(blocks, sampleRate).flatMap((group): AudioEditSubtitleCue[] => {
     const words = group.blocks.flatMap((block): AudioEditSubtitleWord[] => {
-      // 校对时改空的词块、单独的叹词不上字幕
-      if (!block.text.trim() || isAudioEditSubtitleFiller(block.text)) return []
+      // 校对时改空的词块、单独的叹词、插入后还没识别的占位不上字幕
+      if (!block.text.trim() || isAudioEditSubtitleFiller(block.text) || isAudioEditUntranscribedBlock(block)) return []
       const range = outputRange(block.startFrame, block.endFrame, spans, sampleRate)
       return range ? [{ blockId: block.id, text: block.text.trim(), startFrame: range.start, endFrame: Math.max(range.start + 1, range.end) }] : []
     })

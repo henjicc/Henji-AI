@@ -7,6 +7,8 @@ import { selectToolboxTool, switchWorkspace } from '@/stores/navigationStore'
 import { bindCaptureIndicator } from './captureIndicatorBinding'
 import type { AudioCaptureHealth, AudioCapturePlacement, AudioCaptureRecordingState } from '@/core/audioCapture/contracts'
 import { audioEditContentSchema } from '@/core/documents/kinds/audioEdit'
+import { audioEditProjectFromDocument } from '@/core/audioEdit/documentContent'
+import { audioEditOutputSeconds } from '@/core/audioEdit/splice'
 
 let session: CaptureSession | undefined
 
@@ -41,19 +43,24 @@ let lastTake: AudioEditTakeOutcome | null = null
  */
 export function noteAudioEditTake(outcome: AudioEditTakeOutcome): void { lastTake = outcome }
 
-async function documentRate(id: string): Promise<number | null> {
+/**
+ * 原素材帧换成剪后作品的秒数（与 start_audio_edit_recording 的 positionSeconds 同一坐标）：正在编辑的实例优先，否则读口播文件。
+ * 还没有素材的口播从 0 开始。读不出来时为空。
+ */
+async function documentSeconds(id: string): Promise<((frame: number) => number) | null> {
   const instance = getAudioEditProjectInstance(id)
-  if (instance) return instance.document.source.sampleRate
+  if (instance) return frame => audioEditOutputSeconds(instance.document, frame)
   try {
     const read = await getPlatform().documents.readDocument({ id })
-    // 还没有素材的口播按空素材的 48 kHz 计，与音频编辑打开它时一致。
-    return audioEditContentSchema.safeParse(read.content).data?.source?.sampleRate ?? 48000
+    if (!audioEditContentSchema.safeParse(read.content).data?.source) return () => 0
+    const project = audioEditProjectFromDocument(read.meta, read.content).project
+    return frame => audioEditOutputSeconds(project, frame)
   } catch { return null }
 }
 async function placementFacts(placement: AudioCapturePlacement | null | undefined): Promise<Pick<AudioCaptureRecordingFacts, 'documentId' | 'positionSeconds' | 'replaceUntilSeconds'>> {
   if (!placement) return { documentId: null, positionSeconds: null, replaceUntilSeconds: null }
-  const rate = await documentRate(placement.projectId)
-  return { documentId: placement.projectId, positionSeconds: rate ? placement.startFrame / rate : null, replaceUntilSeconds: rate && placement.endFrame > placement.startFrame ? placement.endFrame / rate : null }
+  const seconds = await documentSeconds(placement.projectId)
+  return { documentId: placement.projectId, positionSeconds: seconds ? seconds(placement.startFrame) : null, replaceUntilSeconds: seconds && placement.endFrame > placement.startFrame ? seconds(placement.endFrame) : null }
 }
 
 /** 主进程里录音的真实状态。只走一次不排队的 IPC：读回与写入前检查不会被正在进行的开始、停止、授权或重连拖住。 */

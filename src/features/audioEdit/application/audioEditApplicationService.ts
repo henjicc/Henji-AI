@@ -18,6 +18,7 @@ import { acceptAudioEditNativeResult, editAudioEditProject, flushAudioEditProjec
 import { detectAudioEditRetakesOffThread } from './audioEditRetakeDetection'
 import { loadAudioEditBreaths } from './audioEditBreaths'
 import { audioEditRetakeAttentionCounts } from './audioEditFields'
+import { audioEditUntranscribedBlocks, isAudioEditUntranscribedBlock } from '@/core/audioEdit/splice'
 
 const logger = createLogger('features.audioEdit.operations')
 
@@ -52,10 +53,12 @@ export async function formatProjectAudioEditCaptions(projectId: string): Promise
   }
 }
 
-/** 是否有可以逐词剪辑的转写（去重念、清理语气词都需要）。 */
+/** 是否有可以逐词剪辑的转写（去重念、清理语气词都需要）；插入后还没补转写的段不算，去重念跳过它们。 */
 function hasWordTranscript(document: AudioEditProjectDocument): boolean {
-  return document.transcript.length > 0 && document.transcript.every((block) => block.granularity === 'word')
+  const recognized = document.transcript.filter((block) => !isAudioEditUntranscribedBlock(block))
+  return recognized.length > 0 && recognized.every((block) => block.granularity === 'word')
 }
+const wordCount = (document: AudioEditProjectDocument): number => document.transcript.filter((block) => block.granularity === 'word').length
 /** 少于几个词不可能有重念，快速处理不必为此读取声音证据 */
 const RETAKE_MIN_WORDS = 4
 
@@ -131,7 +134,7 @@ export async function compressAudioEditSilence(projectId: string, range?: AudioE
     const settings = instance.document.batchSettings ?? DEFAULT_AUDIO_EDIT_SETTINGS
     const before = editedDurationFrames(buildProjectAudioEditTimeline(instance.document))
     // 快速处理（连带语气词）在有逐词转写时先去掉重念，再压缩停顿、清理语气词、处理呼吸声，整批一个撤销步骤
-    const retakes = includeFillers && hasWordTranscript(instance.document) && instance.document.transcript.length >= RETAKE_MIN_WORDS ? await detectRetakeSuggestions(instance, range, requestId) : []
+    const retakes = includeFillers && hasWordTranscript(instance.document) && wordCount(instance.document) >= RETAKE_MIN_WORDS ? await detectRetakeSuggestions(instance, range, requestId) : []
     const breaths = includeFillers && instance.document.transcript.length ? await detectProjectBreaths(instance.document, false, requestId) : undefined
     let breathCounts: Record<'deleted' | 'attenuated' | 'muted' | 'kept', number> | undefined
     let gapCount: number | undefined
@@ -243,7 +246,10 @@ export async function cleanProjectAudioEditFillers(projectId: string, range?: Au
   return next.transcript.filter((block) => !block.included).length - before
 }
 
-/** 转写并保存；返回实际所用模型与得到的时间粒度。 */
+/**
+ * 转写并保存；返回实际所用模型与得到的时间粒度。已有转写的口播只补识别插入后还没转写的段（只对这些段计费），
+ * 结果换掉占位词块，形成一步撤销，可撤回补之前。
+ */
 export async function transcribeAudioEdit(request: AudioEditTranscriptionRequest, signal?: AbortSignal, approvalDocumentId = request.projectId): Promise<{ modelId: string; granularity: 'word' | 'segment' | 'none' }> {
   let dispatched = false
   let completed = false
@@ -275,7 +281,8 @@ export async function transcribeAudioEdit(request: AudioEditTranscriptionRequest
 
 export async function preflightAudioEditTranscription(projectId: string, modelId?: string, language?: string): Promise<import('@/core/audioEdit/transcriptionFailure').TranscriptionPreparation> {
   const instance = await loadAudioEditProject(projectId)
-  if (instance.document.transcript.length) return { requiresConfirmation: false }
+  // 已有转写时只剩插入段要补：主进程按这些段的时长估价，已付过费的段不再计费
+  if (instance.document.transcript.length && !audioEditUntranscribedBlocks(instance.document).length) return { requiresConfirmation: false }
   const source = instance.document.source
   return getPlatform().audioEdit.preflightTranscription({ sourcePath: source.sourcePath, durationMs: source.durationFrames * 1000 / source.sampleRate, modelId, language, audioDocumentId: projectId })
 }

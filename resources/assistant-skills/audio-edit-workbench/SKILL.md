@@ -13,7 +13,7 @@ description: 剪口播时使用：把录音全自动粗剪成可继续修改的�
 
 1. **口播文档**：已有口播就用它（`list_documents`，kind=audio_edit）。只有文件时先 `create_document`（kind=audio_edit；用户在某个项目里工作就传 projectId），再 `import_audio_edit_source` 导入本机音频或视频。默认引用原文件，不复制。
 2. **参考稿（可选）**：用户给了口播稿就写入 `audio_edit.document.reference_script`。稿子只用来避免误删稿子里本来就有的重复、辅助校对近音字，不能覆盖识别出的原话；录音时改过稿也没关系。
-3. **转写**：`transcribe_audio_edit`（modelId 通常省略，自动选合适的模型）。按时长计费，走应用的付费授权；调用会等到识别完成，等不到时用 `query_audio_edit_tasks` 查，不重复提交。失败后能不能重新提交看最近一次转写的 resubmission（allowed / resume / blocked / running_elsewhere），不要从报错文字猜。已有转写不再识别。
+3. **转写**：`transcribe_audio_edit`（modelId 通常省略，自动选合适的模型）。按时长计费，走应用的付费授权；调用会等到识别完成，等不到时用 `query_audio_edit_tasks` 查，不重复提交。失败后能不能重新提交看最近一次转写的 resubmission（allowed / resume / blocked / running_elsewhere），不要从报错文字猜。已有转写不再整份识别；插入或补录进来、文字显示为“（需要重新转写）”的段，再调一次 `transcribe_audio_edit` 只补识别这些段（只按这些段的时长计费），回执的 undoRef 可撤回补之前。插入音频的位置 positionSeconds 是剪后作品时间（与 `audio_edit.caption` 的 start_ms 同一坐标）；要按词块定位就给 positionSourceFrame（与 transcript_block 的 start_frame 同一坐标）。
 4. **去掉重念**：`clean_audio_edit_retakes`。同一内容念了几遍只留最后一遍；呼吸也算气口，原切点连读时会在两遍对应位置的明显气口换遍拼接，贴着念坏那遍的一两个字一起删。拿不准的（换了说法又没有稿子佐证、短的原样重复、像排比的两句、删完后保留内容里前后两段开头仍相同）不删，列为待确认的剪辑线索；每条线索（包括已经自动删掉的）都带着原因和几种做法，第二步先裁决这份清单。
 5. **呼吸声**：`process_audio_edit_breaths`（本机模型，第一次用时下载约 13 MB）。默认（快节奏）去掉呼吸，并按声音电平把字与字之间残留的气声、呼吸尾巴整段静音、再从中间删去多余部分（句间与接缝留约 0.2 秒、句中约 0.12 秒；标识以 `gap:` 开头的静音与删除剪切），和字连着的只减弱；用户说过的节奏偏好优先（偏自然就把句中的改成减弱或保留）。用户说先不处理呼吸时跳过。
 6. **停顿**：`compress_audio_edit_silence` 按实际声音压缩停顿、保留自然气口。不要把词间时间差当作停顿。

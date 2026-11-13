@@ -1,5 +1,5 @@
 import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
-import { assertAudioEditSplicePosition } from '@/core/audioEdit/splice'
+import { assertAudioEditSplicePosition, audioEditOutputSeconds, audioEditPlacementFrames, type AudioEditPlacementInput } from '@/core/audioEdit/splice'
 import type { AudioCaptureFile } from '@/core/audioCapture/contracts'
 import type { AudioEditRecordingOutput } from '@/core/application-control/domains/audioEdit/audioEditRecordingCapabilities'
 import { AUDIO_CAPTURE_TARGET } from '@/core/application-control/domains/audioEdit/audioEditRecordingCapabilities'
@@ -91,15 +91,21 @@ function assertCanBegin(facts: AudioCaptureRecordingFacts): void {
   if (facts.microphoneInUse) refuse('讲解正在用麦克风，音频编辑不能同时录音：等讲解结束再录。录屏的麦克风不影响音频编辑录音。')
 }
 
-/** 录到哪：秒数换成采样帧，并按拼接时同一条位置规则（不越界、不落在锁定词块里）在写入前检查。 */
-function takeRange(document: AudioEditProjectDocument, positionSeconds: number | undefined, replaceUntilSeconds: number | undefined, fallback: number): [number, number] {
-  const rate = document.source.sampleRate, total = document.source.durationFrames
-  const start = positionSeconds === undefined ? fallback : Math.round(positionSeconds * rate)
-  const end = replaceUntilSeconds === undefined ? start : Math.round(replaceUntilSeconds * rate)
-  if (start > total) refuse(`positionSeconds 超出作品长度（作品 ${(total / rate).toFixed(2)} 秒）。`)
-  if (end < start || end > total) refuse(`replaceUntilSeconds 要在 positionSeconds 与作品末尾（${(total / rate).toFixed(2)} 秒）之间。`)
-  try { assertAudioEditSplicePosition(document, start, end) } catch (error) { refuse(describe(error)) }
-  return [start, end]
+/**
+ * 录到哪：秒数按剪后作品时间、采样帧按原素材时间（与插入音频同一个换算），换成原素材帧，
+ * 并按拼接时同一条位置规则（不越界、不落在锁定词块里）在写入前检查。fallback 是省略位置时的原素材帧。
+ */
+function takeRange(document: AudioEditProjectDocument, placement: AudioEditPlacementInput, fallback: number): [number, number] {
+  try {
+    const [start, end] = audioEditPlacementFrames(document, placement, fallback)
+    assertAudioEditSplicePosition(document, start, end)
+    return [start, end]
+  } catch (error) { return refuse(describe(error)) }
+}
+/** 原素材帧在剪后作品里的秒数，回执与读回都用这一坐标。 */
+const outputSeconds = (documentId: string, frame: number): string => {
+  const document = getAudioEditProjectInstance(documentId)?.document
+  return (document ? audioEditOutputSeconds(document, frame) : 0).toFixed(2)
 }
 
 async function begin(documentId: string, startFrame: number, endFrame: number): Promise<void> {
@@ -108,19 +114,19 @@ async function begin(documentId: string, startFrame: number, endFrame: number): 
   await own(() => getAudioCaptureSession().start(placement))
 }
 
-export async function startAudioEditRecording(input: { documentRef?: { id: string }; projectId?: string; positionSeconds?: number; replaceUntilSeconds?: number }, context: Context): Promise<AudioEditRecordingOutput> {
+export async function startAudioEditRecording(input: { documentRef?: { id: string }; projectId?: string } & AudioEditPlacementInput, context: Context): Promise<AudioEditRecordingOutput> {
   let documentId = input.documentRef?.id
   const range = await preflight(context, async () => {
     refuseWhileBusy()
     if (documentId && input.projectId) refuse('projectId 只用于新建录音口播；录进已有口播时只给 documentRef。')
     assertCanBegin(await readAudioCaptureRecording())
     if (!documentId) {
-      if (input.positionSeconds || input.replaceUntilSeconds) refuse('新建的录音口播从 0 秒开始；positionSeconds、replaceUntilSeconds 只用于录进已有口播。')
+      if (input.positionSeconds || input.replaceUntilSeconds || input.positionSourceFrame || input.replaceUntilSourceFrame) refuse('新建的录音口播从 0 秒开始；positionSeconds、replaceUntilSeconds、positionSourceFrame、replaceUntilSourceFrame 只用于录进已有口播。')
       return null
     }
     const instance = await loadAudioEditProject(documentId)
     if (instance.busy) refuse('这份口播正在处理，等处理完成后再录音。')
-    return takeRange(instance.document, input.positionSeconds, input.replaceUntilSeconds, instance.document.source.durationFrames)
+    return takeRange(instance.document, input, instance.document.source.durationFrames)
   })
   if (!documentId) {
     // 与音频编辑里“录音”新建作品同一个入口；不打开页面。
@@ -130,11 +136,10 @@ export async function startAudioEditRecording(input: { documentRef?: { id: strin
     try { await begin(documentId, 0, 0) } catch (error) { throw new Error(await abandonDraft(documentId, error), { cause: error }) }
   } else await begin(documentId, range![0], range![1])
   const facts = await readAudioCaptureRecording()
-  const rate = getAudioEditProjectInstance(documentId)!.document.source.sampleRate
   const [start, end] = range ?? [0, 0]
   const name = getAudioEditProjectInstance(documentId)!.session.documentMeta.name
   const outputPath = facts.outputPath ?? getAudioCaptureSession().store.getState().outputPath
-  const result = await outcome(documentId, `已开始录音，录进口播「${name}」（${documentId}）的 ${(start / rate).toFixed(2)} 秒处${end > start ? '（覆盖到指定秒数）' : ''}${outputPath ? `，录音文件写在 ${outputPath}` : ''}。读 audio_capture.settings.recording 看进度。`, facts.phase === 'recording' && facts.documentId === documentId)
+  const result = await outcome(documentId, `已开始录音，录进口播「${name}」（${documentId}）剪后作品的 ${outputSeconds(documentId, start)} 秒处${end > start ? '（覆盖到指定位置）' : ''}${outputPath ? `，录音文件写在 ${outputPath}` : ''}。读 audio_capture.settings.recording 看进度。`, facts.phase === 'recording' && facts.documentId === documentId)
   return { ...result, documentName: name, ...(outputPath ? { outputPath } : {}) }
 }
 
@@ -175,7 +180,7 @@ export async function pauseAudioEditRecording(context: Context): Promise<AudioEd
   return outcome(documentId, ok ? `已暂停：这一段已拼进口播并保存${take.undoRef ? '，可用 undoRef 撤销' : ''}。resume_audio_edit_recording 继续录。` : '已暂停，但没能确认这一段已拼回并保存：读 audio_capture.settings.recording 与 pending_files 核对。', ok, take)
 }
 
-export async function resumeAudioEditRecording(input: { positionSeconds?: number }, context: Context): Promise<AudioEditRecordingOutput> {
+export async function resumeAudioEditRecording(input: Pick<AudioEditPlacementInput, 'positionSeconds' | 'positionSourceFrame'>, context: Context): Promise<AudioEditRecordingOutput> {
   const session = getAudioCaptureSession()
   const { documentId, frame } = await preflight(context, async () => {
     refuseWhileBusy()
@@ -187,13 +192,13 @@ export async function resumeAudioEditRecording(input: { positionSeconds?: number
     // 默认：音频编辑正显示这份口播时与界面“继续录音”同一处（当前播放头，试听中先停）；没显示时接在刚拼回那一段的末尾。
     const id = state.placement!.projectId, total = instance.document.source.durationFrames
     const takeEnd = takeEnds.get(id) ?? state.placement!.startFrame + Math.round(session.durationSeconds * instance.document.source.sampleRate)
-    const [start] = takeRange(instance.document, input.positionSeconds, undefined, input.positionSeconds === undefined ? audioEditResumeFrame(id, total, takeEnd) : total)
+    const given = input.positionSeconds !== undefined || input.positionSourceFrame !== undefined
+    const [start] = takeRange(instance.document, { positionSeconds: input.positionSeconds, positionSourceFrame: input.positionSourceFrame }, given ? total : audioEditResumeFrame(id, total, takeEnd))
     return { documentId: state.placement!.projectId, frame: start }
   })
   await begin(documentId, frame, frame)
   const facts = await readAudioCaptureRecording()
-  const rate = getAudioEditProjectInstance(documentId)!.document.source.sampleRate
-  return outcome(documentId, `已从口播的 ${(frame / rate).toFixed(2)} 秒处继续录音。`, facts.phase === 'recording' && facts.documentId === documentId)
+  return outcome(documentId, `已从口播剪后作品的 ${outputSeconds(documentId, frame)} 秒处继续录音。`, facts.phase === 'recording' && facts.documentId === documentId)
 }
 
 export async function stopAudioEditRecording(context: Context): Promise<AudioEditRecordingOutput> {

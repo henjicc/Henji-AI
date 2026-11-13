@@ -19,11 +19,14 @@ const captureRef = z.object({ kind: z.literal('audio_capture.settings'), id: z.l
 export const startAudioEditRecordingInput = z.object({
   documentRef: documentRef.optional().describe('录进哪份口播；省略时新建一份录音口播'),
   projectId: z.string().min(1).optional().describe('省略 documentRef 新建口播时放进这个项目；都省略放在作品目录的“口播”文件夹'),
-  positionSeconds: z.number().finite().nonnegative().optional().describe('录到作品里的位置（秒）；省略接在作品末尾，新建的从 0 开始'),
-  replaceUntilSeconds: z.number().finite().nonnegative().optional().describe('给出时覆盖 positionSeconds 到这一秒之间的原声音；省略只插入、不覆盖'),
+  positionSeconds: z.number().finite().nonnegative().optional().describe('录到作品里的位置，剪后作品时间（秒，与 audio_edit.caption 的 start_ms 同一坐标，落在剪切处时录在剪切之后那段声音的开头）；省略接在作品末尾，新建的从 0 开始。与 positionSourceFrame 二选一'),
+  replaceUntilSeconds: z.number().finite().nonnegative().optional().describe('给出时覆盖录音位置到这一秒之间听得到的声音（剪后作品时间）；省略只插入、不覆盖。与 replaceUntilSourceFrame 二选一'),
+  positionSourceFrame: z.number().int().nonnegative().optional().describe('录到的位置，原素材采样帧（与 audio_edit.transcript_block 的 start_frame 同一坐标）；与 positionSeconds 二选一'),
+  replaceUntilSourceFrame: z.number().int().nonnegative().optional().describe('覆盖到原素材的这一采样帧；与 replaceUntilSeconds 二选一'),
 }).strict()
 export const resumeAudioEditRecordingInput = z.object({
-  positionSeconds: z.number().finite().nonnegative().optional().describe('从作品的哪一秒接着录；省略时音频编辑正显示这份口播就从当前播放头接（与界面“继续录音”一样），没显示就接在刚拼回那一段的末尾'),
+  positionSeconds: z.number().finite().nonnegative().optional().describe('从作品的哪一秒接着录（剪后作品时间）；省略时音频编辑正显示这份口播就从当前播放头接（与界面“继续录音”一样），没显示就接在刚拼回那一段的末尾。与 positionSourceFrame 二选一'),
+  positionSourceFrame: z.number().int().nonnegative().optional().describe('从原素材的这一采样帧接着录（与 audio_edit.transcript_block 的 start_frame 同一坐标）；与 positionSeconds 二选一'),
 }).strict()
 export const recoverAudioEditRecordingInput = z.object({
   outputPath: z.string().min(1).max(4096).optional().describe('待恢复的录音文件，取自 audio_capture.settings.pending_files 的 outputPath；省略时用刚中断的那一个，只有一个待恢复文件时用它'),

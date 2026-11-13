@@ -5,6 +5,7 @@ import { applicationPaidRequest, transcriptionEstimatedCny } from '@/services/pa
 import { preflightAudioEditTranscription } from './audioEditApplicationService'
 import { AUDIO_EDIT_APPLICATION_CAPABILITIES, AUDIO_EDIT_UNDOABLE_OPERATIONS, AUDIO_EDIT_VERIFIED_EDIT_OPERATIONS, audioEditInputSchema } from '@/core/application-control/domains/audioEdit/audioEditApplicationCapabilities'
 import { recordAudioEditStep, redoAudioEditStep, undoAudioEditStep } from './audioEditStepUndo'
+import { audioEditOutputSeconds, audioEditPlacementFrames, audioEditUntranscribedBlocks } from '@/core/audioEdit/splice'
 import { audioEditContentKey } from '@/core/audioEdit/baseline'
 import { audioEditProjectFromDocument } from '@/core/audioEdit/documentContent'
 import type { ApplicationCapabilityHandlerRegistrar } from '@/features/application-control/capabilities/handlerTypes'
@@ -85,7 +86,7 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
     const api = getPlatform().audioEdit
     const cancel = () => {
       void api.cancelTask(requestId)
-      if (definition.id === 'transcribe_audio_edit') void api.listTasks(id).then((tasks) => Promise.all(tasks.filter((task) => task.kind === 'transcription' && task.state === 'running').map((task) => api.cancelTask(task.requestId))))
+      if (definition.id === 'transcribe_audio_edit') void api.listTasks(id).then((tasks) => Promise.all(tasks.filter((task) => task.kind.startsWith('transcription') && task.state === 'running').map((task) => api.cancelTask(task.requestId))))
     }
     context.signal.addEventListener('abort', cancel, { once: true })
     let recognized = false
@@ -95,10 +96,14 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
       const result: Record<string, unknown> = { resultRef: { kind: 'audio_edit.document', id }, message: '' }
       switch (definition.id) {
         case 'insert_audio_edit_file': {
-          if (!input.sourcePath || input.positionSeconds === undefined) throw new Error('请提供音频文件和插入秒数')
-          const rate = instance.document.source.sampleRate
-          await insertAudioEditFile(id, input.sourcePath, Math.round(input.positionSeconds * rate), Math.round((input.replaceUntilSeconds ?? input.positionSeconds) * rate), requestId)
-          result.durationFrames = instance.document.source.durationFrames; result.message = '音频已拼接并保存，可一步撤销。'; break
+          const sourcePath = input.sourcePath
+          const [startFrame, endFrame] = await applicationWritePreflight(context, async () => {
+            if (!sourcePath || (input.positionSeconds === undefined && input.positionSourceFrame === undefined)) throw new Error('请提供音频文件，以及插入位置 positionSeconds（剪后作品时间）或 positionSourceFrame（原素材采样帧）。')
+            return audioEditPlacementFrames(instance.document, input, 0)
+          })
+          await insertAudioEditFile(id, sourcePath!, startFrame, endFrame, requestId)
+          result.durationFrames = instance.document.source.durationFrames
+          result.message = `音频已插入剪后作品的 ${audioEditOutputSeconds(instance.document, startFrame).toFixed(2)} 秒处（原素材第 ${startFrame} 帧）并保存，可一步撤销。${instance.document.transcript.length ? '插入段还没有文字：用 transcribe_audio_edit 只补识别这一段（只按这段时长计费）。' : ''}`; break
         }
         case 'repair_audio_edit_region': {
           if (!input.repair) throw new Error('请提供 repair 修复范围')
@@ -153,16 +158,27 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
           break
         }
         case 'transcribe_audio_edit': {
+          // 已有转写时只补识别插入后还没转写的段：只对这些段计费，结果单独一步撤销
+          const filling = start.transcript.length > 0
+          const pending = new Set(audioEditUntranscribedBlocks(start).map((block) => block.id))
           const prepared = await applicationWritePreflight(context, () => preflightAudioEditTranscription(id, input.modelId))
-          if (prepared.requiresConfirmation) await requestAlertConfirmation({ title: '识别口播', message: '将使用已配置的语音识别模型转写这段声音。', confirmLabel: '允许本次', paid: await applicationPaidRequest('recognition', id, context.signal, transcriptionEstimatedCny(prepared)) }, context.signal)
+          if (prepared.requiresConfirmation) await requestAlertConfirmation({ title: filling ? '补识别插入的部分' : '识别口播', message: filling ? '将使用已配置的语音识别模型识别插入后还没转写的声音，只按这几段的时长计费。' : '将使用已配置的语音识别模型转写这段声音。', confirmLabel: '允许本次', paid: await applicationPaidRequest('recognition', id, context.signal, transcriptionEstimatedCny(prepared)) }, context.signal)
           const transcribed = await transcribeAudioEdit({ projectId: id, modelId: prepared.modelId ?? input.modelId, requestId }, context.signal); recognized = true
           // 费用与付费账本同一口径：按时长与所选模型单价算的那一笔；不需要确认的（续查原任务、取回已付费结果）这次不再计费
           const costCny = prepared.requiresConfirmation ? transcriptionEstimatedCny(prepared) : 0
-          const blocks = instance.document.transcript
+          // 补识别只报换上去的词块
+          const blocks = filling ? instance.document.transcript.filter((block) => pending.has(block.id.split(':')[0]) && block.id.includes(':')) : instance.document.transcript
           const transcription = { modelId: transcribed.modelId, granularity: transcribed.granularity, blockCount: blocks.length, characterCount: blocks.reduce((total, block) => total + [...block.text.replace(/[\s\p{P}]/gu, '')].length, 0), costCny }
           Object.assign(result, { transcription })
           const unit = transcribed.granularity === 'word' ? '个逐词词块' : '个整句片段'
-          result.message = `转写已保存：模型 ${transcribed.modelId}，${blocks.length} ${unit}（${transcription.characterCount} 字），费用 ${costCny === null ? '未知（模型没有单价资料）' : costCny === 0 ? '¥0（沿用已计费的结果，没有再收费）' : `约 ¥${costCny.toFixed(4)}`}。${transcribed.granularity === 'word' ? '' : '只有整句时间，不能逐词去重念。'}`; break
+          const cost = `费用 ${costCny === null ? '未知（模型没有单价资料）' : costCny === 0 ? '¥0（沿用已计费的结果，没有再收费）' : `约 ¥${costCny.toFixed(4)}`}`
+          if (filling) {
+            const undoRef = recordAudioEditStep(id, start)
+            if (undoRef) result.undoRef = undoRef
+          }
+          result.message = filling
+            ? `已补识别 ${pending.size} 段插入的声音并保存：模型 ${transcribed.modelId}，${blocks.length} ${unit}（${transcription.characterCount} 字），${cost}；占位已换成识别结果，可用回执的 undoRef 撤回补之前。`
+            : `转写已保存：模型 ${transcribed.modelId}，${blocks.length} ${unit}（${transcription.characterCount} 字），${cost}。${transcribed.granularity === 'word' ? '' : '只有整句时间，不能逐词去重念。'}`; break
         }
         case 'process_audio_edit_sound': await prepareAudioEditProcessing(id, requestId); result.verified = (await api.listTasks(id)).some(task => task.requestId === requestId && task.state === 'completed'); result.message = '全长声音处理已完成。'; break
         case 'query_audio_edit_tasks': result.tasks = (await api.listTasks(id)).map(({ projectId, ...task }) => ({ ...task, documentId: projectId })); result.message = '已读取这份口播的处理任务。'; break

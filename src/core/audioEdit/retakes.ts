@@ -1102,7 +1102,17 @@ function likelihoodOf(candidate: Candidate): number {
 
 /** 检测重念并给出删除方案。只在逐词转写上工作；已删除的词视为不存在，锁定的词不删。 */
 export function detectAudioEditRetakes(blocks: readonly AudioEditTranscriptBlock[], options: AudioEditRetakeOptions): AudioEditRetake[] {
-  const ordered = [...blocks].filter((block) => block.granularity === 'word').sort((a, b) => a.startFrame - b.startFrame)
+  // 没有逐词时间的词块（插入后还没补转写的那段）里有说话却不知道说了什么：两侧各自检测，不跨过它比对，下刀也不落进它的声音
+  const runs: AudioEditTranscriptBlock[][] = [[]]
+  for (const block of [...blocks].sort((a, b) => a.startFrame - b.startFrame)) {
+    if (block.granularity === 'word') runs.at(-1)!.push(block)
+    else if (runs.at(-1)!.length) runs.push([])
+  }
+  if (runs.length > 1) return runs.flatMap((run) => detectWordRetakes(run, options)).sort((a, b) => a.startFrame - b.startFrame)
+  return detectWordRetakes(runs[0], options)
+}
+
+function detectWordRetakes(ordered: readonly AudioEditTranscriptBlock[], options: AudioEditRetakeOptions): AudioEditRetake[] {
   if (ordered.length < 2) return []
   const words = buildWords(ordered, options.sampleRate)
   const detector = new RetakeDetector(words, options)

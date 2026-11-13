@@ -426,3 +426,22 @@ describe('交给助手二次判断的材料', () => {
     if (reason) expect(review.map((retake) => retake.reason)).toContain(reason)
   })
 })
+
+describe('插入后还没补转写的段', () => {
+  const placeholderIn = (spoken: ReturnType<typeof speak>, after: number): AudioEditTranscriptBlock => {
+    const startFrame = spoken.blocks[after].endFrame + 100
+    return { id: 'recording-3-1000-0', text: '（需要重新转写）', startFrame, endFrame: startFrame + 600, included: true, locked: false, granularity: 'segment', confidence: 0 }
+  }
+  it('两遍之间夹着未转写的插入段时不跨过它比对；插入段一侧的重念照常检测，下刀不落进插入段', () => {
+    const take = '所以 综合 来看 这个 工具 挺 不错 的。'
+    const across = speak(take, { pause: 800 }, take)
+    expect(detect(across)).toHaveLength(1)
+    expect(detectAudioEditRetakes([...across.blocks, placeholderIn(across, 7)], { sampleRate: 1000, pauses: across.pauses })).toEqual([])
+    const after = speak('前面 还有 一句 话。', { pause: 800 }, take, { pause: 800 }, take)
+    const placeholder = placeholderIn(after, 3)
+    const retakes = detectAudioEditRetakes([...after.blocks, placeholder], { sampleRate: 1000, pauses: after.pauses })
+    expect(retakes).toHaveLength(1)
+    expect(textOf(after, retakes[0].blockIds)).toBe('所以综合来看这个工具挺不错的。')
+    expect(retakes[0].startFrame).toBeGreaterThanOrEqual(placeholder.endFrame)
+  })
+})

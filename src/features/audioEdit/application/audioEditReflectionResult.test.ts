@@ -296,3 +296,40 @@ it('参考稿按文档上限写入，六十分钟口播的长稿不被两万字�
     expect((harnessDocumentStore().stored('audio-result')?.content as AudioEditProjectDocument).referenceScript).toBe(script)
   } finally { app.dispose() }
 })
+
+it('插入位置的秒数按剪后作品时间换算（与字幕 start_ms 同一坐标）；也可以直接给原素材采样帧，两者只能给一个', async () => {
+  registerHarnessAudioEditProject(cutsFixture())
+  const source = fixture().source
+  const splice = vi.spyOn(getPlatform().audioEdit, 'splice').mockResolvedValue({ source: { ...source, sourcePath: 'inserted.wav', audioPath: 'inserted.wav', durationFrames: 120000, ownership: 'managed' }, insertedFrames: 24000 })
+  const app = createApplicationHarness()
+  try {
+    // 剪后第 1 秒：前面剪掉了原素材 1000–2000 帧，所以落在原素材第 49000 帧
+    const result = await app.requireResult('insert_audio_edit_file', { documentRef: projectRef, sourcePath: 'take.wav', positionSeconds: 1 })
+    expect(splice).toHaveBeenCalledWith(expect.objectContaining({ startFrame: 49000, endFrame: 49000 }))
+    expect(result.message).toContain('剪后作品的 1.00 秒处')
+    undoAudioEditProject('audio-result'); await flushAudioEditProject('audio-result')
+    await app.requireResult('insert_audio_edit_file', { documentRef: projectRef, sourcePath: 'take.wav', positionSourceFrame: 48000 })
+    expect(splice).toHaveBeenLastCalledWith(expect.objectContaining({ startFrame: 48000, endFrame: 48000 }))
+    expect(await app.call('insert_audio_edit_file', { documentRef: projectRef, sourcePath: 'take.wav', positionSeconds: 1, positionSourceFrame: 48000 })).toMatchObject({ ok: false, error: { details: { execution: { notExecuted: true } } } })
+  } finally { splice.mockRestore(); app.dispose() }
+})
+
+it('已有转写时识别口播只补插入段：只对插入段计费，占位换成识别结果，回执的 undoRef 撤回补之前', async () => {
+  const placeholder = { id: 'recording-1-48000-0', text: '（需要重新转写）', startFrame: 48000, endFrame: 72000, included: true, locked: false, granularity: 'segment' as const, confidence: 0 }
+  const shifted = { ...fixture().transcript[1], startFrame: 72000, endFrame: 120000 }
+  const inserted = { ...fixture(), source: { ...fixture().source, durationFrames: 120000 }, transcript: [fixture().transcript[0], placeholder, shifted] }
+  registerHarnessAudioEditProject(inserted)
+  const words = [{ id: `${placeholder.id}:0`, text: '补录', startFrame: 48000, endFrame: 60000, included: true, locked: false, granularity: 'word' as const }]
+  const preflight = vi.spyOn(getPlatform().audioEdit, 'preflightTranscription').mockResolvedValue({ requiresConfirmation: false, modelId: 'fixture-asr' })
+  const transcribe = vi.spyOn(getPlatform().audioEdit, 'transcribe').mockImplementation(async () => ({ project: { ...inserted, transcript: [inserted.transcript[0], ...words, shifted] }, modelId: 'fixture-asr', granularity: 'word' }))
+  const app = createApplicationHarness()
+  try {
+    const result = await app.requireResult('transcribe_audio_edit', { documentRef: projectRef })
+    expect(preflight).toHaveBeenCalled()
+    expect(result.transcription).toMatchObject({ blockCount: 1, characterCount: 2, costCny: 0 })
+    const instance = await loadAudioEditProject('audio-result')
+    expect(instance.document.transcript.map(block => block.text)).toEqual(['第一句', '补录', '第二句'])
+    await app.requireResult('undo_audio_edit', { documentRef: projectRef, undoRef: result.undoRef })
+    expect(instance.document.transcript.map(block => block.id)).toEqual(['first', placeholder.id, 'second'])
+  } finally { preflight.mockRestore(); transcribe.mockRestore(); app.dispose() }
+})

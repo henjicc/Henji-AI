@@ -12,6 +12,7 @@ import { buildAudioEditCaptionGroups } from '@/core/audioEdit/captions'
 import { formatFrameRate } from '@/core/format/specFormat'
 import { normalizeAudioEditFiller } from '@/core/audioEdit/analysis'
 import { DEFAULT_AUDIO_EDIT_SETTINGS, DEFAULT_AUDIO_EDIT_VIEW_SETTINGS } from '@/core/audioEdit/edits'
+import { audioEditUntranscribedBlocks } from '@/core/audioEdit/splice'
 import { notificationMessage } from '@/i18n/notifications'
 import { AudioEditFindReplace, AudioEditMatchedText } from '../AudioEditTextTools'
 import { transcribeAudioEdit } from '../application/audioEditApplicationService'
@@ -83,12 +84,16 @@ export function AudioEditTranscriptPanel() {
 
   const configuredAsr = workspace.asrModels.some((model) => model.configured && model.timestamps)
   const interrupted = workspace.tasks.some((task) => task.kind === 'transcription' && ['failed', 'cancelled'].includes(task.state)) && !transcript.length
+  const untranscribed = useMemo(() => audioEditUntranscribedBlocks({ transcript }).length, [transcript])
+  const transcribe = () => void workspace.run(async () => { await transcribeAudioEdit({ projectId: project.id }); if (!interrupted) workspace.notify(notificationMessage('audioTranscribed')) })
   const pause = () => { followPausedUntilRef.current = Date.now() + 2500 }
 
   return <div className="relative flex h-full min-h-0 flex-col bg-panel" data-audio-edit-panel="transcript">
     {/* 文字稿自己的工具（自动粗剪、原稿 / 校对后、显示设置）放在它的标签行；面板组太窄时回到面板顶部一行 */}
     <DockHeaderPortal panelId="audio_edit:transcript" fallback={children => <div className="flex shrink-0 justify-end gap-1 px-2 pt-1">{children}</div>}>
       <div className="flex items-center gap-1">
+        {untranscribed > 0 && <UiButton size="sm" disabled={disabled || !configuredAsr || Boolean(workspace.sourceError)} disabledReason={!configuredAsr ? '还没有可用的语音识别模型' : '正在处理，请稍候'}
+          tooltip="只识别插入后还没有文字的声音，按这几段的时长计费" onClick={transcribe}>补识别插入的部分</UiButton>}
         {transcript.length > 0 && <AudioEditRoughCutMenu />}
         {corrected && <UiSwitch appearance="segmented" size="sm" aria-label="文字稿显示校对后" offLabel="原稿" onLabel="校对后" checked={textView === 'corrected'} onCheckedChange={(checked) => setTextView(checked ? 'corrected' : 'original')} />}
         <UiIconButton size="sm" tooltip="文字稿显示设置" aria-label="文字稿显示设置" onClick={workspace.openViewSettings}><SettingsIcon /></UiIconButton>
@@ -101,7 +106,7 @@ export function AudioEditTranscriptPanel() {
         <UiEmpty className="h-full" icon={<FileAudio size={UI_ICON_SIZE.hero} aria-hidden="true" />} title={interrupted ? '上次转写没有完成' : '还没有文字稿'}
           description={interrupted ? '可以接着原来的任务继续转写。' : configuredAsr ? '转写后可以像改文档一样逐词删减声音。识别按配置的模型计费。' : '先在设置里配置带时间戳的语音识别模型，再来转写。'}
           action={<UiButton variant="secondary" disabled={disabled || (!interrupted && !configuredAsr) || Boolean(workspace.sourceError)} disabledReason={!configuredAsr ? '还没有可用的语音识别模型' : '正在处理，请稍候'}
-            onClick={() => void workspace.run(async () => { await transcribeAudioEdit({ projectId: project.id }); if (!interrupted) workspace.notify(notificationMessage('audioTranscribed')) })}>{interrupted ? '继续转写' : '开始转写'}</UiButton>} />
+            onClick={transcribe}>{interrupted ? '继续转写' : '开始转写'}</UiButton>} />
       ) : (
         <Virtuoso ref={listRef} className="h-full" data={rows} increaseViewportBy={320} components={{ Header: TranscriptEdge, Footer: TranscriptEdge }}
           itemContent={(_, row) => (

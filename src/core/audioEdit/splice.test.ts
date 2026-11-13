@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { spliceAudioEditProject, spliceAudioRanges } from './splice'
+import { audioEditOutputSeconds, audioEditPlacementFrames, audioEditUntranscribedBlocks, isAudioEditUntranscribedBlock, spliceAudioEditProject, spliceAudioRanges } from './splice'
 import { audioEditProjectSchema } from './schema'
 import { emptyAudioEditSource } from './documentContent'
 import type { AudioEditProjectDocument } from './types'
@@ -62,5 +62,29 @@ describe('录音素材拼接坐标', () => {
     expect(next.suggestionHandoff).toEqual({ after: { reason: 'repeated', audience: 'user', options: [
       { id: 'keep_later', blockIds: ['c'], startFrame: 880, endFrame: 960 }, { id: 'keep_earlier', blockIds: ['d'], startFrame: 960, endFrame: 1060 }, { id: 'keep_both', blockIds: [], startFrame: 880, endFrame: 960 },
     ] } })
+  })
+})
+
+describe('插入位置的两种坐标', () => {
+  // 1 秒素材，200–400 帧被剪掉：剪后 0–0.2 秒是原素材 0–200，0.2–0.8 秒是原素材 400–1000
+  const cutProject = () => ({ ...project(), cuts: [{ id: 'c', startFrame: 200, endFrame: 400, enabled: true, reason: 'manual' as const, mode: 'delete' as const }] })
+  it('秒数按剪后作品时间换算；落在剪切处时起点插在剪切之后、覆盖终点停在剪切之前；采样帧按原素材时间原样使用', () => {
+    expect(audioEditPlacementFrames(cutProject(), { positionSeconds: 0.5 }, 0)).toEqual([700, 700])
+    expect(audioEditPlacementFrames(cutProject(), { positionSeconds: 0.2 }, 0)).toEqual([400, 400])
+    expect(audioEditPlacementFrames(cutProject(), { positionSeconds: 0.1, replaceUntilSeconds: 0.2 }, 0)).toEqual([100, 200])
+    expect(audioEditPlacementFrames(cutProject(), { positionSourceFrame: 300, replaceUntilSourceFrame: 350 }, 0)).toEqual([300, 350])
+    expect(audioEditPlacementFrames(cutProject(), {}, 1000)).toEqual([1000, 1000])
+    expect(() => audioEditPlacementFrames(cutProject(), { positionSeconds: 0.9 }, 0)).toThrow('剪后作品长度（0.80 秒）')
+    expect(() => audioEditPlacementFrames(cutProject(), { positionSeconds: 0.1, positionSourceFrame: 100 }, 0)).toThrow('只能给一个')
+    // 读回与传入同一坐标：剪掉的声音里取其后第一段保留声音的位置
+    expect(audioEditOutputSeconds(cutProject(), 700)).toBe(0.5)
+    expect(audioEditOutputSeconds(cutProject(), 300)).toBe(0.2)
+  })
+  it('已有转写时插入段留下占位，能被认出来；补转写换上的词块不再算占位', () => {
+    const p = { ...project(), transcript: [{ id: 'transcript-0', text: '你好', startFrame: 0, endFrame: 1000, included: true, locked: false, granularity: 'word' as const }] }
+    const next = spliceAudioEditProject(p, resultSource(1300), 1000, 1000, 300)
+    expect(audioEditUntranscribedBlocks(next).map(block => [block.startFrame, block.endFrame])).toEqual([[1000, 1300]])
+    const filled = { ...audioEditUntranscribedBlocks(next)[0], id: `${audioEditUntranscribedBlocks(next)[0].id}:0` }
+    expect(isAudioEditUntranscribedBlock(filled)).toBe(false)
   })
 })

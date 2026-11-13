@@ -156,3 +156,18 @@ it('词块手改后删呼吸不撤回已有的 3.9 秒删除，缺少电平时�
   await processProjectAudioEditBreaths(document.id, 'keep')
   expect(instance.document.cuts!.filter((cut) => cut.reason === 'manual')).toEqual(manual)
 })
+
+it('插入后还没补转写的段不让整份口播判成“只有整句时间”：去重念与快速处理跳过它，其余照常', async () => {
+  installHarnessNativeStorage()
+  const commands = new FakeDocumentCommands()
+  setAudioEditDocumentRegistryForTests(new DocumentSessionRegistry({ commands, prompter: createScriptedPrompter(), kinds: documentKindRegistry }))
+  const placeholder: AudioEditTranscriptBlock = { id: 'recording-1-3500-0', text: '（需要重新转写）', startFrame: 3500, endFrame: 3900, included: true, locked: false, granularity: 'segment', confidence: 0 }
+  for (const id of ['inserted', 'inserted-quick']) commands.seed({ kind: 'audio_edit', id, name: '录音', content: audioEditProjectToDocumentContent({ id, name: '录音', source: { mediaType: 'audio', sourcePath: 'a.wav', audioPath: 'a.wav', sampleRate: 1000, channels: 1, durationFrames: 4000 }, transcript: [...retakeTranscript(), placeholder], referenceScript: '', suggestions: [], revision: 1, createdAt: 1, updatedAt: 1 }) })
+  const instance = await loadAudioEditProject('inserted')
+  const quick = await loadAudioEditProject('inserted-quick')
+  vi.spyOn(getPlatform().audioEdit, 'detectSilence').mockImplementation(async (request) => ({ revision: (request.projectId === 'inserted' ? instance : quick).session.documentMeta.revision, suggestions: [], energy }))
+  expect((await cleanProjectAudioEditRetakes('inserted')).count).toBe(1)
+  expect(instance.document.transcript.find((block) => block.id === placeholder.id)).toMatchObject({ included: true })
+  expect((await quickProcessAudioEdit('inserted-quick')).retakeCount).toBe(1)
+  expect(quick.document.transcript.find((block) => block.id === placeholder.id)).toMatchObject({ included: true })
+})
