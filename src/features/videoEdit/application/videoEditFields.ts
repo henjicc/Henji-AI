@@ -415,7 +415,7 @@ descriptions['video_edit.sequence.space_environment'] = '三维环境光预设�
 descriptions['video_edit.sequence.space_environment_intensity'] = '三维环境光强度 0–4，默认 1。'
 descriptions['video_edit.sequence.space_environment_rotation'] = '三维环境光水平旋转角度 −180–180°，默认 0：转动灯位，换高光与反射落在物体哪里。'
 descriptions['video_edit.sequence.space_default_lighting'] = '三维缺省布光，默认 auto：序列里有受光的片段（受光、非画面材质），却没有灯光片段与环境光、作者场景也没布光时，自动加摄影棚中性环境与一盏左前上方的主光（投影）；加入第一盏灯或设了环境光后自动不加。off 关闭。'
-descriptions['video_edit.sequence.path_trace_samples'] = '路径追踪每像素采样数 16–4096，默认 256；越多噪点越少、越慢，大致与采样数成正比。只在 final_renderer 为 pathTrace 时起作用。'
+descriptions['video_edit.sequence.path_trace_samples'] = '路径追踪每像素采样数 16–4096，默认 64（4K 每帧约 9 秒，与 256 肉眼几乎分不出；256 约 31 秒）；越多噪点越少、越慢，大致与采样数成正比。只在 final_renderer 为 pathTrace 时起作用。'
 descriptions['video_edit.sequence.motion_blur'] = '整条序列的运动模糊总开关（新建序列默认开）。开着时按规则自动判断：连续的位移、缩放、旋转、形变模糊；只变内容或颜色、跳变、文字重新排版、刚出现或消失的不模糊。关掉后整条序列默认不模糊，单个片段或元素写了强制打开的除外。优先级从低到高是序列、片段（video_edit.clip.motion_blur）、元素（video_edit.code_element.transform 的 motionBlur）；批量调整就在同一次修改里改多个片段或元素。'
 labels.fontVariationKeyframes = '字体轴关键帧'
 descriptions['video_edit.clip.font_variation_keyframes'] = '文字片段可变字体的轴动画：{轴标签: 关键帧序列}，如 {"wght": [{"time":0,"value":200,"interpolation":"ease"},{"time":48,"value":800,"interpolation":"linear"}]} 让字重从细到粗。整体替换，先读取保留其他轴；{} 关闭全部轴动画，省略的轴没有动画。time 为片段内整数帧（0 为第一帧，允许 time=duration 的右边界点）；value 是轴坐标，范围见所用字体 font 实体的 axes（超出按轴范围夹取）；interpolation 与其他关键帧相同（linear/hold/ease/bezier）。只对可变字体生效；有动画的轴覆盖 text_style.fontVariations 里的同名轴。片段需已有文字样式。'

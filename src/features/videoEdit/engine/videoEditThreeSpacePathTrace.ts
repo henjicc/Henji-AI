@@ -67,7 +67,7 @@ interface PathTraceModule {
   PhysicalCamera: new (fov: number, aspect: number, near: number, far: number) => Three.PerspectiveCamera & { focusDistance: number; bokehSize: number; apertureBlades: number }
 }
 interface DenoiseModule {
-  OIDNDenoiser: new (options: { initUNetFromURL: (url: string, backend: unknown, options: unknown) => Promise<unknown>; auxWeightsUrl: string }) => Denoiser
+  OIDNDenoiser: new (options: { initUNetFromURL: (url: string, backend: unknown, options: unknown) => Promise<unknown>; auxWeightsUrl: string; maxTileSize?: number; dynamicTile?: boolean }) => Denoiser
 }
 /** 追踪库自带的 OIDN 降噪封装：按反照率与法线引导、分块执行，结果是线性 HDR 纹理（逐块从原图换成降噪图）。 */
 interface Denoiser {
@@ -119,12 +119,28 @@ export interface PathTraceFrame {
  */
 const FIRST_DENOISE_SAMPLES = 32
 
+/**
+ * 降噪分块固定为 512 像素见方（oidn-web 的块上限缺省值）：它缺省按每块耗时动态调块大小（为交互设计），块的划分随之在帧与帧之间变，
+ * 同一帧前后两次降噪的结果就不完全相同（帧缓存要求一致）。固定后速度不变（4K 约 0.3 秒）；更大的块在缺省 128 MB 存储缓冲上限下建不出中间缓冲。
+ */
+const DENOISE_TILES = { maxTileSize: 512, dynamicTile: false }
+
 const HOST_PATH_TRACER_VERSION = '0.0.27-henji.1'
 
 /** 展开环境图的分辨率：环境光按亮度做重要性采样，用不着更细。 */
 const ENVIRONMENT_WIDTH = 1024
-/** 每读回一次采样数之间提交的采样批数；有时间预算（看片）时每批只提交一次，一批就要几百毫秒，提交多了会占住显卡、拖慢界面。 */
-const SAMPLE_BATCH = 4
+/**
+ * 每读回一次采样数之间推进的弹射轮数（每轮把光线池里的光线各推进一次弹射，4K 约 6 毫秒）；读回要等显卡做完，
+ * 轮数少了显卡反复空等（4K 每轮 4 次时比 16 次慢约三成）。有时间预算（看片）时每次只推进一轮，免得占住显卡、拖慢界面。
+ */
+const SAMPLE_BATCH = 16
+/**
+ * 波前追踪的光线池（同时在途的路径数）：追踪库缺省 25 万条，4K 一帧要分很多轮，显卡吃不满。
+ * 要求得比库的上限大，由库截到它的单个存储缓冲上限（128 MB，约 60 万条）；实测（4090、4K）比 25 万快约 1.7 倍，
+ * 再大（绕过上限试过 120 万、240 万）反而变慢。每个像素第几次采样的随机数只看像素、采样序号与追踪器的种子（库缺省的
+ * stableNoise 在每次换画面重置时把种子归零，不要关掉它），同一像素的采样依次累积，所以同一画面每次追踪结果相同，与池大小无关。
+ */
+const RAY_POOL = 1e9
 
 export class VideoEditThreeSpacePathTrace {
   private key?: string
@@ -157,7 +173,7 @@ export class VideoEditThreeSpacePathTrace {
   private readonly camera: InstanceType<PathTraceModule['PhysicalCamera']>
 
   private constructor(private readonly library: Library, private readonly tsl: Tsl, private readonly renderer: Renderer, private readonly tracer: Tracer, module: PathTraceModule, private readonly libraries?: AuthorLibraryVersions) {
-    tracer.renderDelay = 0; tracer.fadeDuration = 0; tracer.minSamples = 0; tracer.dynamicLowRes = false; tracer.synchronizeRenderSize = false
+    tracer.frameBudget = RAY_POOL; tracer.renderDelay = 0; tracer.fadeDuration = 0; tracer.minSamples = 0; tracer.dynamicLowRes = false; tracer.synchronizeRenderSize = false
     // 三维组画面要透明地叠回二维合成：穿过半透明卡片、玻璃看到的“背景”是透明，而不是按环境光染色的不透明底。
     tracer.transmissiveBackground = module.TRANSMISSIVE_BACKGROUND_TRANSPARENT
     this.camera = new module.PhysicalCamera(45, 1, .1, 100)
@@ -323,7 +339,7 @@ export class VideoEditThreeSpacePathTrace {
     try {
       if (!this.denoiser) {
         const [{ initUNetFromURL }, { OIDNDenoiser }] = await Promise.all([import('oidn-web'), loadAuthorThreeDependent<DenoiseModule>('three-gpu-pathtracer/denoise', this.libraries)])
-        this.denoiser = new OIDNDenoiser({ auxWeightsUrl: url, initUNetFromURL: (source, backend, options) => initUNetFromURL(source, backend as never, options as never) })
+        this.denoiser = new OIDNDenoiser({ ...DENOISE_TILES, auxWeightsUrl: url, initUNetFromURL: (source, backend, options) => initUNetFromURL(source, backend as never, options as never) })
         this.denoiser.init(this.renderer)
       }
       const denoiser = this.denoiser, target = frame.samples, first = Math.min(FIRST_DENOISE_SAMPLES, target)

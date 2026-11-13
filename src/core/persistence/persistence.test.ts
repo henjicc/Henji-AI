@@ -74,7 +74,7 @@ import baseline from './schemaBaseline.json'
 import { PersistenceError, upgradePersistenceContent } from './migrations'
 import { persistenceSchemaStructure } from './fingerprint'
 import { parseDocumentEnvelope, parseDocumentText } from '../documents/envelope'
-import { videoEditDocumentSchema } from '../videoEdit/document'
+import { storedVideoEditSpaceRender, videoEditDocumentSchema } from '../videoEdit/document'
 import { codeImageReference } from '../videoEdit/codeMaterial/contract'
 import { codeMaterialImageReferenceSchema } from '../videoEdit/codeMaterial/parameterValueSchema'
 import { decodeCodeAsset, encodeCodeAsset } from '../videoEdit/codeAsset'
@@ -605,6 +605,31 @@ describe('所有登记格式的黄金样本', () => {
       expect(goldenSequence(id, upgradePersistenceContent(format, latest.content, previous + 1)).spaceRender?.globalIllumination).toBe(.5)
       expect(latest.kindMinReaderVersion).toBe(old.kindMinReaderVersion)
     }
+  })
+
+  it('路径追踪采样数缺省 256 → 64：旧作品已选路径追踪且没写采样数的写实为 256，没选的不动，最低可读版本提高', () => {
+    type Sequence = { id: string; spaceRender?: Record<string, unknown> }
+    const sequences = (id: string, content: unknown): Sequence[] => {
+      const value = content as { sequences: Sequence[]; scriptCapture: { baselines: Array<{ content: { sequences: Sequence[] } }> } }
+      return id === 'document.video_edit' ? value.sequences : value.scriptCapture.baselines[0].content.sequences
+    }
+    for (const [id, previous] of [['document.video_edit', 79], ['document.screen_recording', 83]] as const) {
+      const format = PERSISTENCE_FORMATS.find(value => value.id === id)!
+      const read = (version: number) => JSON.parse(fs.readFileSync(`tests/fixtures/persistence/${id}/v${version}.json`, 'utf8'))
+      const old = read(previous), latest = read(previous + 1)
+      const list = sequences(id, old.content)
+      const golden = list.find(sequence => sequence.id === 'golden-sequence')!
+      delete golden.spaceRender!.pathTraceSamples
+      const other = list.find(sequence => sequence.id !== 'golden-sequence')!
+      other.spaceRender = { bloom: .5 }
+      const upgraded = sequences(id, upgradePersistenceContent(format, old.content, previous))
+      expect(upgraded.find(sequence => sequence.id === 'golden-sequence')!.spaceRender?.pathTraceSamples).toBe(256)
+      expect(upgraded.find(sequence => sequence.id === other.id)!.spaceRender).toEqual({ bloom: .5 })
+      expect(sequences(id, upgradePersistenceContent(format, latest.content, previous + 1)).find(sequence => sequence.id === 'golden-sequence')!.spaceRender?.pathTraceSamples).toBe(512)
+      // 旧程序把省略读成 256，必须拒读新文件。
+      expect(latest.kindMinReaderVersion).toBe(previous + 1)
+    }
+    expect(storedVideoEditSpaceRender({ finalRenderer: 'pathTrace', pathTraceSamples: 64 })).toEqual({ finalRenderer: 'pathTrace' })
   })
 
   for (const format of PERSISTENCE_FORMATS) {

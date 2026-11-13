@@ -13,6 +13,7 @@ import { migrateVideoEditStyles } from '../../videoEdit/styles/styleTemplateMigr
 import { migrateVideoEditMotionBlurMaster } from '../../videoEdit/motionBlurMigration'
 import { migrateVideoEditClipFades } from '../../videoEdit/fadeTransitionMigration'
 import { migrateVideoEditCodeEditChecks } from '../../videoEdit/codeEditCheckMigration'
+import { migrateVideoEditPathTraceSamples } from '../../videoEdit/pathTraceSamplesMigration'
 import { migrateVideoEditMergedEffects } from '../../videoEdit/mergedEffectsMigration'
 import { videoEditDocumentSchema } from '../../videoEdit/document'
 import { creativeIntentsSchema } from '../../creativeIntent/persistence'
@@ -152,7 +153,9 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
   // 71：网页图片引用新增可选 layer（{ only } 或 { hide }，按文字拆层）；旧内容没有该字段，画面不变。旧程序的网页引用是严格结构且画不出拆层，读到会把整份内容判成无效，提高到 71 让它明确提示升级。
   // 72：新建代码素材默认作者接口 18（没有位姿的图层比较相邻帧的绘制指令，draw 里的动画也有运动模糊），旧程序的作者接口上限不认识它，提高到 72。
   // 74：片段淡入淡出并进单侧过渡。旧程序靠 fadeInFrames 给没拆开的视频、嵌套序列的声音做淡化，只认音频过渡，打开新文件这些声音不再淡；提高到 74。
-  minReaderVersion: 74,
+  // 80：路径追踪采样数省略时的缺省从 256 改为 64。旧程序能打开的文件它就能改、能保存（沿用新版本戳），它把省略读成 256、切到路径追踪时也省略不写，
+  // 新程序再打开就成了 64、成片悄悄变了；只能让旧程序拒读，提高到 80。
+  minReaderVersion: 80,
   contentSchema: videoEditContentSchema,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
@@ -167,6 +170,8 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
     // 76 → 77：文字样式新增可选 fontVariations（可变字体轴数值），文字片段的 curves 新增可选键 fontAxis_<轴标签>（轴动画）；旧内容没有这两项，原样有效。只新增可选内容、不改已有字段含义；旧程序只在文件真的用到轴数值或轴动画时拒绝打开，不会误读，最低可读版本不变。
     // 77 → 78：片段新增可选备注 note（写给后期看的说明，不进画面与导出）；旧内容没有备注，原样有效。只新增可选字段，旧程序按向前兼容保留它，最低可读版本不变。
     // 78 → 79：序列 spaceRender 新增可选 globalIllumination（三维屏幕空间全局光照强度），缺省即不开；旧内容原样有效。只新增可选字段，旧程序按向前兼容保留它，最低可读版本不变。
+    // 79 → 80：路径追踪采样数省略时的缺省从 256 改为 64；成片已选路径追踪、没写采样数的序列写实为 256，成片画面不变（见 pathTraceSamplesMigration）。最低可读版本提高到 80（理由见上）。
+    79: migrateVideoEditPathTraceSamples,
     78: content => structuredClone(content),
     77: content => structuredClone(content),
     76: content => structuredClone(content),
