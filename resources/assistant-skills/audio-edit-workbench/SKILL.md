@@ -11,7 +11,7 @@ description: 剪口播时使用：把录音全自动粗剪成可继续修改的�
 
 ## 一、先让算法打底
 
-1. **口播文档**：已有口播就用它（`list_documents`，kind=audio_edit）。只有文件时先 `create_document`（kind=audio_edit；用户在某个项目里工作就传 projectId），再 `import_audio_edit_source` 导入本机音频或视频。默认引用原文件，不复制。
+1. **口播文档**：已有口播就用它（`list_documents`，kind=audio_edit）。只有文件时先 `create_document`（kind=audio_edit；用户在某个项目里工作就传 projectId），再 `import_audio_edit_source` 导入本机音频或视频。默认引用原文件，不复制。操作报找不到原素材时读 `audio_edit.document.source_problem`：原文件只是被移动或改名，把新位置写进 `audio_edit.document.source_path` 重新定位（应用核对是同一份内容）；内容已改变就不能沿用这份口播，告诉用户。
 2. **参考稿（可选）**：用户给了口播稿就写入 `audio_edit.document.reference_script`。稿子只用来避免误删稿子里本来就有的重复、辅助校对近音字，不能覆盖识别出的原话；录音时改过稿也没关系。
 3. **转写**：`transcribe_audio_edit`（modelId 通常省略，自动选合适的模型）。按时长计费，走应用的付费授权；调用会等到识别完成，等不到时用 `query_audio_edit_tasks` 查，不重复提交。失败后能不能重新提交看最近一次转写的 resubmission（allowed / resume / blocked / running_elsewhere），不要从报错文字猜。已有转写不再整份识别；插入或补录进来、文字显示为“（需要重新转写）”的段，再调一次 `transcribe_audio_edit` 只补识别这些段（只按这些段的时长计费），回执的 undoRef 可撤回补之前。插入音频的位置 positionSeconds 是剪后作品时间（与 `audio_edit.caption` 的 start_ms 同一坐标）；要按词块定位就给 positionSourceFrame（与 transcript_block 的 start_frame 同一坐标）。
 4. **去掉重念**：`clean_audio_edit_retakes`。同一内容念了几遍只留最后一遍；呼吸也算气口，原切点连读时会在两遍对应位置的明显气口换遍拼接，贴着念坏那遍的一两个字一起删。拿不准的（换了说法又没有稿子佐证、短的原样重复、像排比的两句、删完后保留内容里前后两段开头仍相同）不删，列为待确认的剪辑线索；每条线索（包括已经自动删掉的）都带着原因和几种做法，第二步先裁决这份清单。
@@ -47,6 +47,7 @@ description: 剪口播时使用：把录音全自动粗剪成可继续修改的�
 
 - 重新分页读一遍保留的全文：每个接缝两侧连起来读是否通顺、有没有重复、有没有把半句话切掉。
 - 读 `audio_edit.render.output_duration_frames` 核对剪后时长。
+- 调一次 `check_audio_edit_sound` 听一遍成品的“体检”：过长停顿（剪漏的空当）、削波、底噪与嗡声都在 issues 里，按给出的剪后时间去看那一处。
 - 对照第二步，确认每一处都看过；发现问题就继续改，不要在第一批修改后宣布完成。
 
 ## 四、汇报
@@ -70,7 +71,8 @@ description: 剪口播时使用：把录音全自动粗剪成可继续修改的�
    `audio_edit.document.chain_bypassed` 整体关闭（对比处理前后）。
 3. **输出**（`audio_edit.document.output`）作用在剪好的整条声音上：`volumeDb` 音量；响度用 `match_audio_edit_loudness`（短视频平台 -14、播客 -16 LUFS）测量后补偿，不要自己猜 gainDb。
 4. **多轨**：口播要和音乐、音效一起混时，多轨就是剪辑的序列：音轨的 `video_edit.track.volume_db`、`video_edit.track.pan`、`video_edit.track.effects` 与序列的 `video_edit.sequence.master`（主轨音量、主轨效果）都是剪辑实体属性；片段的 `video_edit.clip.essential_sound` 与口播的基本声音同一套设置。口播放进多轨后是动态链接：这里剪切或恢复之后，剪辑里的声音和字幕跟着更新（停改约 5 秒、回到剪辑、播放或导出前）；只有改字、改字幕分段不同步过去，最终字幕文字在剪辑里定稿。
-5. 处理完回读属性核对，汇报加了哪些效果、顺序、量多少、为什么。
+5. **处理之后先读回再继续**：每做完一步会改声音的处理（降噪、去嗡声、匹配响度、改效果控件或输出），调 `check_audio_edit_sound` 读回成品，确认这一步达到了目的再做下一步，不凭回执猜。处理前先读一次，之后同一范围再读时 sinceLastCheck 直接给出变化（响度、真峰值、底噪、时长、削波与过长停顿各变了多少）。常见判断：整体响度离目标超过 1 LU 就重新匹配；真峰值高于 -1 dBTP 或有削波，先找原因（输出音量太大、某个效果加太多），不要只靠末尾限幅；底噪 rating 为 audible/high 或嗡声 suspected 时在基本声音里打开对应修复，再读回看底噪降了多少、说话有没有变闷（响度范围 LRA 明显变小、整体变轻都是信号）；某段偏响偏轻看 keyWindows。只关心一段时传 startSeconds / endSeconds（剪后作品时间），要逐段看全部才传 includeWindows。
+6. 处理完回读属性核对，汇报加了哪些效果、顺序、量多少、为什么，以及读回的前后数字。
 
 ## 边界
 

@@ -7,6 +7,8 @@ import { audioEditSpectralTileRequestSchema } from '../../../src/core/audioEdit/
 import { getAudioEditSpectralTile, cancelAudioEditSpectralTile, subscribeAudioEditSpectralProgress } from '../services/audio-edit/spectral-pyramid'
 import { renderAudioEditProject, prepareAudioEditRenderSource, detectAudioEditMouthClicksInProject } from '../services/audio-edit/render'
 import { measureAudioFileLoudness } from '../services/audio/loudness'
+import { checkAudioEditSound } from '../services/audio-edit/sound-check'
+import { audioEditSoundCheckRequestSchema } from '../../../src/core/audioEdit/soundCheck'
 import { registerAudioSampleHandlers } from './audio-samples'
 import { registerExplanationAudioHandlers } from './explanation-audio'
 import { registerAudioLoudnessHandlers } from './audio-loudness'
@@ -64,6 +66,11 @@ export function registerAudioIpc(): void {
       const gainDb = Math.round(Math.max(-40, Math.min(40, request.targetLufs - measured.integratedLufs)) * 10) / 10
       return { integratedLufs: Math.round(measured.integratedLufs * 10) / 10, gainDb }
     }, request.requestId, JSON.stringify(['match-loudness', request.targetLufs, project.revision]), true)
+  })
+  // 读回剪好的成品听起来怎样（响度、真峰值、削波、静音与停顿、底噪与嗡声）；只读，不改口播。
+  registerIpcHandler('audioEdit:checkSound', input => audioEditSoundCheckRequestSchema.parse(input), async ({ projectId, requestId, ...options }) => {
+    const project = await requireAudioEditProject(projectId)
+    return runAudioEditTask(project.id, 'analysis', signal => checkAudioEditSound(project, options, signal), requestId, JSON.stringify(['sound-check', options, project.revision]), true)
   })
   registerIpcHandler('audioEdit:detectMouthClicks', input => z.object({ projectId: z.string().min(1), itemId: z.string().min(1).max(100), sensitivity: z.number().finite().min(0).max(100), range: audioEditRangeSchema.optional(), requestId: z.string().optional() }).strict().parse(input), async request => {
     const project = await requireAudioEditProject(request.projectId)

@@ -176,3 +176,17 @@ it('带整文件摘要的旧作品重新定位：整文件比对相同后同时�
   expect(source).toMatchObject({ sourcePath: moved, durationFrames: 47_999, identity: { digest: identity.digest }, fingerprint: { digest: expect.stringMatching(/^[a-f0-9]{64}$/) } })
   expect(audioEditProjectSchema.safeParse({ ...project, source }).success).toBe(true)
 })
+
+it('重新定位到内容不同的文件被拒绝，口播素材不换', async () => {
+  directory = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-relink-'))
+  const original = path.join(directory, '原素材.wav'), other = path.join(directory, '别的录音.wav')
+  await fs.writeFile(original, Buffer.alloc(4096, 3))
+  const identity = await digestWholeAudioEditSource(original)
+  await fs.writeFile(other, Buffer.alloc(4096, 7))
+  await fs.rm(original)
+  const project = { id: 'relink', name: '旧作品', revision: 3, createdAt: 0, updatedAt: 0, referenceScript: '', transcript: [], suggestions: [],
+    source: { mediaType: 'audio', sourcePath: original, audioPath: original, ownership: 'external', sampleRate: 48000, channels: 2, durationFrames: 47_999, audioStreamIndex: 0, identity } } as AudioEditProjectDocument
+  vi.mocked(requireAudioEditProject).mockResolvedValue(project)
+  fakeProbe({ format: { format_name: 'wav', duration: '1' }, streams: [{ index: 0, codec_type: 'audio', codec_name: 'pcm_s16le', sample_rate: '48000', channels: 2, time_base: '1/48000', duration_ts: 48_000, duration: '1' }] })
+  await expect(relinkAudioEditSource('relink', other)).rejects.toThrow('不是原素材')
+})

@@ -117,7 +117,11 @@ class AudioEditReflectionProvider implements ApplicationEntityProvider {
     const document = await project(ids.projectId)
     const availableProcessors = this.entityType === AUDIO_EDIT_ENTITY_TYPES.processorChain ? await getPlatform().audioEdit.listProcessors() : undefined
     const breaths = this.entityType === AUDIO_EDIT_ENTITY_TYPES.breath ? await loadAudioEditBreaths(document) : undefined
-    return { document, values: fieldReadValues(AUDIO_EDIT_FIELDS[this.entityType].filter((field) => wanted(field.propertyId)), { document, childId: ids.childId, availableProcessors, ...(breaths ? { breaths: { raw: breaths, views: describeAudioEditBreaths(document, breaths) } } : {}) }) }
+    // 原素材核对要读磁盘：只在读这一项时做（主进程按已保存的口播核对）
+    const sourceProblem = this.entityType === AUDIO_EDIT_ENTITY_TYPES.project && wanted(`${AUDIO_EDIT_ENTITY_TYPES.project}.source_problem`)
+      ? await getPlatform().audioEdit.verifySource(document.id).then(() => '', (error: unknown) => error instanceof Error ? error.message : String(error))
+      : undefined
+    return { document, values: fieldReadValues(AUDIO_EDIT_FIELDS[this.entityType].filter((field) => wanted(field.propertyId)), { document, childId: ids.childId, availableProcessors, ...(breaths ? { breaths: { raw: breaths, views: describeAudioEditBreaths(document, breaths) } } : {}), ...(sourceProblem !== undefined ? { sourceProblem } : {}) }) }
   }
 }
 

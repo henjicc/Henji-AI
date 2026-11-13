@@ -373,6 +373,7 @@ export interface HenjiAudioApi {
   renderEditAudio(request: { projectId: string; requestId?: string }): Promise<AudioEditRenderedAudio>
   editedSourceAudio(request: { projectId: string; requestId?: string }): Promise<{ audioPath: string }>
   matchAudioEditLoudness(request: { projectId: string; targetLufs: number; requestId?: string }): Promise<{ integratedLufs: number; gainDb: number }>
+  checkAudioEditSound(request: import('../../src/core/audioEdit/soundCheck').AudioEditSoundCheckRequest): Promise<import('../../src/core/audioEdit/soundCheck').AudioEditSoundCheck>
   detectAudioEditMouthClicks(request: { projectId: string; itemId: string; sensitivity: number; range?: { startFrame: number; endFrame: number }; requestId?: string }): Promise<{ clicks: Array<{ startFrame: number; endFrame: number; score: number }> }>
   prepareEditPreviewChunk(payload: AudioEditPreviewChunkRequest): Promise<AudioEditPreviewChunk>
 }

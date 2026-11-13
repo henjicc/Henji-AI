@@ -13,7 +13,6 @@ import { setAudioEditBreathHandling, type AudioEditBreathView } from '@/core/aud
 import { describeAudioEditCaptions, setAudioEditCaptionText } from '@/core/audioEdit/captionReview'
 import { joinAudioEditText } from '@/core/audioEdit/captions'
 import type { AudioBreath } from '@/core/audioAnalysis/breath/respiro'
-import { getPlatform } from '@/platform/runtime'
 
 export const AUDIO_EDIT_ENTITY_TYPES = { project: 'audio_edit.document', transcriptBlock: 'audio_edit.transcript_block', cut: 'audio_edit.cut', caption: 'audio_edit.caption', suggestion: 'audio_edit.suggestion', breath: 'audio_edit.breath', processorChain: 'audio_edit.processor_chain', render: 'audio_edit.render' } as const
 export type AudioEditEntityType = typeof AUDIO_EDIT_ENTITY_TYPES[keyof typeof AUDIO_EDIT_ENTITY_TYPES]
@@ -209,9 +208,10 @@ export const AUDIO_EDIT_FIELDS: Record<AudioEditEntityType, ApplicationFieldDefi
     field(E.project, 'xml_frame_rate', '音频 XML 帧率', objectValue('audio_edit.frame_rate'), (s) => json(s.document.xmlFrameRate ?? { numerator: 25, denominator: 1 }), (s, v) => setDocument(s, 'xmlFrameRate', audioEditFrameRateSchema.parse(v))),
     field(E.project, 'selected_asr_model_id', '语音识别模型', TEXT, (s) => s.document.selectedAsrModelId ?? ''),
     // 重新定位原素材：与界面“重新定位”同一个主进程核对（内容必须与原素材相同，不同的请当新口播导入）
-    verifiedByExecution(field(E.project, 'source_path', '原素材文件路径', { kind: 'string', minLength: 1, maxLength: 4096 }, (s) => s.document.source.sourcePath, async (s, v) => {
-      s.document = { ...s.document, source: await getPlatform().audioEdit.relinkSource(s.document.id, string(v)) }
-    }, [], '原素材在本机的路径。原文件被移动或改名、source_problem 报找不到时，写入新位置的本机绝对路径即重新定位：应用会核对这个文件与原素材内容相同（不同就拒绝，请用 create_document 新建口播再导入），剪辑、转写与字幕都保留；可撤销。')),
+    // 素材不随普通编辑与撤销改变，写入由 AudioEditMutationExecutor 先交给 relinkAudioEdit，不经这里的草稿写入
+    verifiedByExecution(field(E.project, 'source_path', '原素材文件路径', { kind: 'string', minLength: 1, maxLength: 4096 }, (s) => s.document.source.sourcePath, () => {
+      throw new Error('INTERNAL:source_path 由口播执行器经重新定位服务写入。')
+    }, [], '原素材在本机的路径。原文件被移动或改名、source_problem 报找不到时，写入新位置的本机绝对路径即重新定位：应用核对这个文件与原素材内容相同（不同就拒绝，请用 create_document 新建口播再导入），剪辑、转写与字幕都保留。重新定位不进撤销（撤销其他修改时素材位置不变）。')),
     field(E.project, 'source_problem', '原素材现在能不能用', TEXT, (s) => s.sourceProblem ?? '', undefined, [],
       '空字符串表示原素材在、内容没变；否则是问题说明：找不到原素材（写 source_path 重新定位）或内容已改变（需要新建口播重新导入）。'),
     field(E.project, 'duration_frames', '源时长帧数', INT, (s) => s.document.source.durationFrames),
@@ -325,6 +325,7 @@ export const AUDIO_EDIT_FIELDS: Record<AudioEditEntityType, ApplicationFieldDefi
     field(E.render, 'removed_block_count', '删除词块数量', INT, (s) => s.document.transcript.filter((b) => !b.included).length),
   ],
 }
+export const AUDIO_EDIT_SOURCE_PATH_PROPERTY = `${E.project}.source_path`
 export function audioEditWriterTable(entityType: AudioEditEntityType) { return fieldWriterTable(AUDIO_EDIT_FIELDS[entityType]) }
 
 const audioEditValueSchemas: Record<string, z.ZodType> = {
