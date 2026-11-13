@@ -1,6 +1,6 @@
 # Changelog
 
-## 未发布
+## 0.15.0 - 2026-11-14
 
 轻量流式入口 `runLlmChatStream`（`@henjicc/ai-sdk/llm/streaming`，不依赖 Vercel AI SDK 与 Web Streams）补齐以下能力，`LlmChatRequestDto` 新字段均为可选：
 
