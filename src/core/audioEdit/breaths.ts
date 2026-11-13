@@ -26,6 +26,8 @@ export type AudioEditBreathHandling = 'deleted' | 'attenuated' | 'muted' | 'kept
 
 const AUDIO_EDIT_BREATH_ID_PREFIX = 'breath:'
 export const AUDIO_EDIT_BREATH_ATTENUATION_DB = -18
+// 这两个数不是成片的目标停顿（那在 rhythm.ts），而是“删掉这口气之后两个字会不会粘在一起”的下限：
+// 不够这么长才留一小截减弱的呼吸垫着。取目标停顿那么长试过，垫着的呼吸变多，气口清理再把它们清成静音，反而多出要往回收的边缘
 const MIN_GAP_MS = 80
 const SENTENCE_GAP_MS = 150
 const MIN_REGION_MS = 80

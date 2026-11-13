@@ -152,7 +152,10 @@ function cells(fixture, deleted, cuts) {
  * - 停顿偏差：相邻两个保留词中点之间，成片里听到的非语音时长，与定稿之差；
  * - 硬接缝：拼接点两侧 20 毫秒都落在语音上；
  * - 碎保留段：不超过 120 毫秒、不含任何保留词主体、听得见的保留段；
- * - 切到字：保留词里有 30 毫秒以上的有声部分被删或静音（只数定稿没有这样处理的）。
+ * - 切到字：保留词里有 30 毫秒以上的有声部分被删或静音（只数定稿没有这样处理的）；
+ * - 边缘过切 / 欠切：相邻两个保留词中点之间，成片消掉（删或静音）而定稿让它出声的部分达到 30 毫秒算一处过切，反过来算欠切；
+ *   “有声”只数其中电平够得上语音的部分。过切是用户要把边缘往里收的地方，欠切是用户要再补一刀的地方。
+ *   与停顿偏差互补：停顿偏差只看听到多少安静，这两项看消掉的是不是同一段声音。
  */
 function scoreTiming(fixture, levels, algo, final) {
   const { sampleRate, blocks } = fixture
@@ -162,7 +165,8 @@ function scoreTiming(fixture, levels, algo, final) {
   const loud = (c) => wide[c] >= speech - 16
   const cell = (frame) => Math.round(frame / sampleRate * 100)
   const outSeconds = (state) => (state.total - state.removed.reduce((sum, value) => sum + value, 0)) / 100
-  const both = blocks.map((block, i) => ({ block, i })).filter(({ i }) => !algo.deleted[i] && !final.deleted[i])
+  // 只有标点、没有字的词块（识别把“：”“”，”单独切出来）不是字：停顿与边缘都按它前后两个真正的字来量
+  const both = blocks.map((block, i) => ({ block, i })).filter(({ block, i }) => !algo.deleted[i] && !final.deleted[i] && strip(block.text))
   const pauseDiffs = []
   for (let k = 0; k + 1 < both.length; k++) {
     const p = both[k].block, n = both[k + 1].block
@@ -171,6 +175,26 @@ function scoreTiming(fixture, levels, algo, final) {
     pauseDiffs.push(heard(a) - heard(f))
   }
   const absolute = pauseDiffs.map(Math.abs)
+  const silenced = (state, c) => state.removed[c] || state.muted[c]
+  const edges = { over: 0, overLoud: 0, under: 0, underLoud: 0, overMs: [], underMs: [], items: [] }
+  for (let k = 0; k + 1 < both.length; k++) {
+    const p = both[k].block, n = both[k + 1].block
+    // 两个词之间夹着“一边删、一边留”的词时，差的是整个词，已经记在整处漏删、误删、接缝偏移或语气词里，这里不再算一遍
+    let wordDiffers = false
+    for (let i = both[k].i + 1; i < both[k + 1].i; i++) if (strip(blocks[i].text) && Boolean(algo.deleted[i]) !== Boolean(final.deleted[i])) wordDiffers = true
+    if (wordDiffers) continue
+    const from = cell((p.startFrame + p.endFrame) / 2), to = cell((n.startFrame + n.endFrame) / 2)
+    let over = 0, overLoud = 0, under = 0, underLoud = 0
+    for (let c = from; c < to; c++) {
+      if (silenced(a, c) && !silenced(f, c)) { over++; if (loud(c)) overLoud++ }
+      if (!silenced(a, c) && silenced(f, c)) { under++; if (loud(c)) underLoud++ }
+    }
+    const at = p.endFrame / sampleRate, where = `${Math.floor(at / 60)}:${(at % 60).toFixed(2).padStart(5, '0')} ${p.text}｜${n.text}`
+    if (over >= 3) { edges.over++; edges.overMs.push(over * 10); edges.items.push(`过切 ${over * 10} 毫秒（有声 ${overLoud * 10}） ${where}`) }
+    if (overLoud >= 3) edges.overLoud++
+    if (under >= 3) { edges.under++; edges.underMs.push(under * 10); edges.items.push(`欠切 ${under * 10} 毫秒（有声 ${underLoud * 10}） ${where}`) }
+    if (underLoud >= 3) edges.underLoud++
+  }
   const seams = (state) => {
     let hard = 0, total = 0
     for (let c = 2; c < state.total; c++) {
@@ -207,6 +231,7 @@ function scoreTiming(fixture, levels, algo, final) {
     hardSeams: seams(a).hard, seamCount: seams(a).total, finalHardSeams: seams(f).hard,
     islands: islands(a, algo.deleted), finalIslands: islands(f, final.deleted),
     clippedWords: [...clipped(a)].filter((i) => !clippedFinal.has(i)).length,
+    edges: { over: edges.over, overLoud: edges.overLoud, under: edges.under, underLoud: edges.underLoud, overMedianMs: quantile(edges.overMs, 0.5), underMedianMs: quantile(edges.underMs, 0.5), items: edges.items },
   }
 }
 

@@ -100,9 +100,13 @@ export function retainedAudioEditWords(blocks: readonly AudioEditTranscriptBlock
   })
 }
 
-/** 删过整词的接缝需要连同遗留的字尾碎片清理，普通词间停顿仍只依声学证据判断。 */
+/**
+ * 删过整词的接缝需要连同遗留的字尾碎片清理，普通词间停顿仍只依声学证据判断。
+ * removedFrom 是两个保留词之间第一个被删词的识别起点：碎片从这里起才属于被放弃的那遍，
+ * 之前到前一个保留词识别终点之间的声音可能还是保留词没念完的字尾（识别给的终点常比实际早几十到一百多毫秒）。
+ */
 export function audioEditWordGaps(blocks: readonly AudioEditTranscriptBlock[], spans: readonly AudioEditTimelineSpan[]): Array<{
-  previous: AudioEditTranscriptBlock; next: AudioEditTranscriptBlock; seam: boolean
+  previous: AudioEditTranscriptBlock; next: AudioEditTranscriptBlock; seam: boolean; removedFrom?: number
 }> {
   const words = retainedAudioEditWords(blocks, spans)
   const retained = new Set(words.map((word) => word.id))
@@ -111,7 +115,8 @@ export function audioEditWordGaps(blocks: readonly AudioEditTranscriptBlock[], s
   return words.slice(0, -1).map((previous, i) => {
     const next = words[i + 1]
     while (index < removed.length && removed[index].startFrame < previous.endFrame) index++
-    return { previous, next, seam: index < removed.length && removed[index].endFrame <= next.startFrame }
+    const seam = index < removed.length && removed[index].endFrame <= next.startFrame
+    return { previous, next, seam, ...(seam ? { removedFrom: removed[index].startFrame } : {}) }
   })
 }
 

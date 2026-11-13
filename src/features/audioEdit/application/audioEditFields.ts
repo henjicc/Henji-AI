@@ -153,6 +153,10 @@ function field(entityType: AudioEditEntityType, suffix: string, title: string, v
   const id = `${entityType}.${suffix}`
   return { propertyId: id, descriptor: { id, entityType, version: audioEditSchemaRef('property', id).version, title, description, value, nullable: false, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['audio_edit:read'], write: write ? ['audio_edit:write'] : [] }, revisionScopes: ['audio_edit'], schemaRef: audioEditSchemaRef('property', id), ...(!write ? { readOnlyReason: '由源媒体、识别结果或剪辑时间线计算。' } : {}) }, read, ...(write ? { writer: { write: (draft, mutation) => write(draft, mutation.value) } } : {}), storeActions }
 }
+/** 内容长、只有少数线索用得上的属性：不点名的整实体读取不带它 */
+function omitFromDefaultRead(definition: ApplicationFieldDefinition<AudioEditFieldSource, AudioEditFieldSource>): ApplicationFieldDefinition<AudioEditFieldSource, AudioEditFieldSource> {
+  return { ...definition, descriptor: { ...definition.descriptor, omitFromDefaultRead: true } }
+}
 function readOnly(definition: ApplicationFieldDefinition<AudioEditFieldSource, AudioEditFieldSource>, reason: string): ApplicationFieldDefinition<AudioEditFieldSource, AudioEditFieldSource> {
   return { ...definition, descriptor: { ...definition.descriptor, readOnlyReason: reason } }
 }
@@ -249,8 +253,8 @@ export const AUDIO_EDIT_FIELDS: Record<AudioEditEntityType, ApplicationFieldDefi
     field(E.suggestion, 'kept_text', '紧接在这段之后、还保留着的文字（重念时通常就是重来的那一遍；取到句读为止，至少与被删段一样长）', TEXT, (s) => suggestionTexts(s).kept),
     field(E.suggestion, 'before_text', '前文：这段之前还保留着的一句（取到上一处句读）', TEXT, (s) => suggestionTexts(s).before),
     field(E.suggestion, 'after_text', '后文：kept_text 之后还保留着的一句', TEXT, (s) => suggestionTexts(s).after),
-    field(E.suggestion, 'options', '这处重念除“都留着”以外可以怎么剪（只有重念线索有）；把选中的 id 写进 chosen_option', objectValue('audio_edit.suggestion_options'), suggestionOptions, undefined, [],
-      '每项 { id, current（只在当前做法上出现）, removed_text 这种做法删掉的文字（长的只给头尾）, reads_as 删完后接缝两侧连起来读的样子，“｜”是接缝 }。id：keep_later 留后一遍（删前一遍）、keep_earlier 留前一遍（删后一遍里重复的那一截）、splice_ 开头的是换个切点拼接；另有 keep_both 都留着（不是重念），总是可选，不在列表里。整段上下文看线索自己的 removed_text、kept_text、before_text、after_text。只对需要裁决的线索读它（attention=decide 或 check）。'),
+    omitFromDefaultRead(field(E.suggestion, 'options', '这处重念除“都留着”以外可以怎么剪（只有重念线索有）；把选中的 id 写进 chosen_option', objectValue('audio_edit.suggestion_options'), suggestionOptions, undefined, [],
+      '每项 { id, current（只在当前做法上出现）, removed_text 这种做法删掉的文字（长的只给头尾）, reads_as 删完后接缝两侧连起来读的样子，“｜”是接缝 }。id：keep_later 留后一遍（删前一遍）、keep_earlier 留前一遍（删后一遍里重复的那一截）、splice_ 开头的是换个切点拼接；另有 keep_both 都留着（不是重念），总是可选，不在列表里。整段上下文看线索自己的 removed_text、kept_text、before_text、after_text。只对需要裁决的线索读它（attention=decide 或 check）。')),
     field(E.suggestion, 'attention', '要不要助手看：decide 待确认、必须裁决；check 已自动删但把握不高，值得抽看；none 其余', { kind: 'enum', values: [['decide', '待确认，必须裁决'], ['check', '已自动删，值得抽看'], ['none', '不用看']].map(([value, label]) => ({ value, label })) }, suggestionAttention, undefined, [],
       '读重念线索时按它筛选（where 里写 attention），只给筛出来的线索点名读 options：本地有把握自动删掉的几百处不必逐条带着做法读一遍。check 指已自动删、把握 score 低于 0.7 或原因是口吃的。'),
     field(E.suggestion, 'chosen_option', '当前做法（options 里的 id，还没处理时为空）；写入一个 id 即改用这种做法', { kind: 'string', maxLength: 40 }, chosenOption, (s, v) => {

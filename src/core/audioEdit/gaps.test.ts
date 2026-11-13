@@ -13,7 +13,7 @@ function documentOf(words: Array<[string, number, number]>, extra: Partial<Audio
     cuts: [], gainRegions: [], ...extra,
   }
 }
-/** 说话 -30 dB，其余是 -75 dB 的房间底噪；sound 里列出有声的毫秒区间，残留气声（约 -60 dB）用 extra 标出 */
+/** 说话 -30 dB，其余是 -75 dB 的房间底噪；sound 里列出有声的毫秒区间，残留气声（比说话轻 20 dB）用 extra 标出 */
 function levelsOf(sound: Array<[number, number]>, extra: Array<[number, number, number]> = []): { resolutionMs: number; wideDb: number[] } {
   const wideDb: number[] = Array.from({ length: 400 }, (_, cell) => (sound.some(([a, b]) => cell * 10 >= a && cell * 10 < b) ? -30 : -75))
   for (const [a, b, db] of extra) for (let cell = a / 10; cell < b / 10; cell++) wideDb[cell] = db
@@ -170,6 +170,64 @@ describe('字间气口清理', () => {
     locked.transcript[1] = { ...locked.transcript[1], startFrame: 1100, locked: true }
     expect(cleanAudioEditGaps(locked, [], levels).count).toBe(0)
     expect(clearAudioEditGaps(first).cuts).toEqual([])
+  })
+
+  it('重念接缝：识别终点之后还连着响的是保留词没念完的字尾，不清；隔了一下才起的是被放弃那遍的头，清掉', () => {
+    // 前面， 识别到 1000、实际念到 1090 | 1090–1120 安静 | 并（已删，识别从 1160 起、实际 1120 就起了）到 1300 | 停顿 | 后面 2000 起
+    const document = documentOf([['前面，', 0, 1000], ['并', 1160, 1300], ['后面', 2000, 2400]])
+    document.transcript[1] = { ...document.transcript[1], included: false }
+    const levels = levelsOf([[0, 1090], [1120, 1300], [2000, 2400]])
+    const { document: next } = cleanAudioEditGaps(document, [], levels)
+    expect(heardBetween(next, 1000, 1080)).toEqual({ heard: 80, silent: 0 })
+    const head = heardBetween(next, 1120, 1160)
+    expect(head.heard - head.silent).toBe(0)
+    // 一路响到被删词、中间没有安静也没有浅谷：分不出字尾，以识别终点为界
+    const joined = cleanAudioEditGaps(document, [], levelsOf([[0, 1300], [2000, 2400]])).document
+    const tail = heardBetween(joined, 1020, 1160)
+    expect(tail.heard - tail.silent).toBe(0)
+  })
+
+  it('接缝的字尾：没有安静但有浅谷就在谷底分开；识别终点时字已经停了、之后才响的是碎响；采样率不是整百时照常算完', () => {
+    const document = documentOf([['前面，', 0, 1000], ['并', 1160, 1300], ['后面', 2000, 2400]])
+    document.transcript[1] = { ...document.transcript[1], included: false }
+    const kept = (levels: ReturnType<typeof levelsOf>, from: number, to: number): number => { const part = heardBetween(cleanAudioEditGaps(document, [], levels).document, from, to); return part.heard - part.silent }
+    // 一路都够得上语音，只在 1080–1100 回落 10 dB：谷底之前是字尾，之后是被放弃那遍的头
+    const dip = levelsOf([[0, 1300], [2000, 2400]], [[1080, 1100, -40]])
+    expect(kept(dip, 1000, 1070)).toBe(70)
+    expect(kept(dip, 1110, 1160)).toBe(0)
+    // 字在 980 就停了，1000–1030 又响了一下：不是它的字尾
+    expect(kept(levelsOf([[0, 980], [1000, 1030], [1160, 1300], [2000, 2400]]), 1000, 1030)).toBe(0)
+    // 22050 Hz 时一格电平是 220.5 帧
+    const scaled: typeof document = {
+      ...document, source: { ...document.source, sampleRate: 22050, durationFrames: 88200 },
+      transcript: document.transcript.map((block) => ({ ...block, startFrame: Math.round(block.startFrame * 22.05), endFrame: Math.round(block.endFrame * 22.05) })),
+    }
+    const next = cleanAudioEditGaps(scaled, [], levelsOf([[0, 1090], [1120, 1300], [2000, 2400]])).document
+    const tail = heardBetween(next, Math.round(1000 * 22.05), Math.round(1080 * 22.05))
+    expect(tail.silent).toBe(0)
+    expect(tail.heard).toBe(Math.round(1080 * 22.05) - Math.round(1000 * 22.05))
+  })
+
+  it('识别把标点单独切成一块时不当作字：整处停顿一起排，留前一个字后面的一拍加标点的一拍', () => {
+    // 来的 0–1000（念到 1000）| ； 1000–1500 整段是安静 | 有的 1500 起
+    const document = documentOf([['来的', 0, 1000], ['；', 1000, 1500], ['有的', 1500, 2500]])
+    const next = cleanAudioEditGaps(document, [], levelsOf([[0, 1000], [1500, 2500]])).document
+    const pause = heardBetween(next, 1000, 1500)
+    // 句中的一拍 0.12 秒加分号的一拍 0.2 秒，其余删掉；留下的除两头各 10 毫秒保护外都是静音
+    expect(pause.heard).toBe(320)
+    expect(pause.silent).toBe(300)
+  })
+
+  it('听得见的呼吸被识别算进前一个字里时照样清到字的中点；接近底噪的停顿不往字里找', () => {
+    // 就是 识别 0–1000、实际 0–500 | 500–980 一口听得见的气（约 -60 dB）| 变成了 1000 起
+    const document = documentOf([['就是', 0, 1000], ['变成了', 1000, 1500], ['这样', 1500, 2000]])
+    const breaths = [{ startMs: 520, endMs: 980, peak: 0.9 }] as Parameters<typeof cleanAudioEditGaps>[1]
+    const audible = cleanAudioEditGaps(document, breaths, levelsOf([[0, 500], [1000, 2000]], [[500, 990, -50]])).document
+    const inside = heardBetween(audible, 560, 840)
+    expect(inside.heard - inside.silent).toBe(0)
+    // 同一位置检测到“呼吸”但电平就是底噪：只在识别边界两侧 0.15 秒内处理，更靠里的原样保留
+    const silent = cleanAudioEditGaps(document, breaths, levelsOf([[0, 500], [1000, 2000]])).document
+    expect(heardBetween(silent, 560, 840)).toEqual({ heard: 280, silent: 0 })
   })
 })
 

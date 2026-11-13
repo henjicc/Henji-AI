@@ -110,12 +110,13 @@ function evaluate(pipeline) {
       接缝偏移最多词数: Math.max(0, ...shift.words), 接缝偏移中位毫秒: [...shift.ms].sort((a, b) => a - b)[shift.ms.length >> 1] ?? 0,
       停顿偏差超80毫秒: timing.pauses.over80, 其中偏长: timing.pauses.longer80, 其中偏短: timing.pauses.shorter80, 停顿偏差超150毫秒: timing.pauses.over150,
       停顿偏差九成分位毫秒: timing.pauses.p90, 停顿偏差九九分位毫秒: timing.pauses.p99,
+      边缘过切: timing.edges.over, 其中过切到有声: timing.edges.overLoud, 过切中位毫秒: timing.edges.overMedianMs, 边缘欠切: timing.edges.under, 其中欠切有声: timing.edges.underLoud, 欠切中位毫秒: timing.edges.underMedianMs,
       硬接缝: timing.hardSeams, 碎保留段: timing.islands, 切到字: timing.clippedWords, 成片秒: Number(timing.outputSeconds.toFixed(1)), 定稿秒: Number(timing.finalSeconds.toFixed(1)),
     }
     // 不需二次调整的总指标：每一项都是用户要动手的一个位置（语气词与停顿各算一处）
     section.预计改动次数 = section.整处漏删 + section.整处误删 + section.留错遍 + section.接缝偏移 + section.语气词漏删 + section.语气词误删
       + section.停顿偏差超80毫秒 + section.硬接缝 + section.碎保留段 + section.切到字
-    details.push([fixture.name, words, `（比较了 ${timing.pauses.compared} 个停顿、${timing.seamCount} 个接缝）`])
+    details.push([fixture.name, words, `（比较了 ${timing.pauses.compared} 个停顿、${timing.seamCount} 个接缝）`, timing.edges.items])
     if (!fixture.gold) continue
     for (const [name, perturb] of Object.entries(PERTURBATIONS)) {
       const input = perturb(inputOf(fixture))
@@ -193,7 +194,7 @@ function evaluate(pipeline) {
 }
 
 /** 越小越好的指标（其余只作参考，不标好坏）。 */
-const LOWER_IS_BETTER = /漏删|误删|留错遍|剩下$|接缝偏移$|停顿偏差|硬接缝|碎保留段|切到字|预计改动次数|漏剪|剪坏|范围外|稿内重复被删|短叠句被自动删/
+const LOWER_IS_BETTER = /漏删|误删|留错遍|剩下$|过切|欠切|接缝偏移$|停顿偏差|硬接缝|碎保留段|切到字|预计改动次数|漏剪|剪坏|范围外|稿内重复被删|短叠句被自动删/
 const HIGHER_IS_BETTER = /剪对百分比|待确认命中/
 
 function print(label, scores, details, baseline) {
@@ -218,6 +219,7 @@ function print(label, scores, details, baseline) {
       for (const item of words.seamShift.items) console.log(`  接缝偏移 ${item}`)
       for (const item of words.fillerItems) console.log(`  语气词   ${item}`)
       for (const item of words.review.items) console.log(`  待确认   ${item}`)
+      for (const item of failures ?? []) console.log(`  边缘     ${item}`)
     }
   }
 }

@@ -60,7 +60,7 @@ export function roughCut(input: RoughCutInput) {
   return {
     deleted: doc.transcript.map((block: { included: boolean }) => !block.included) as boolean[],
     cuts: (doc.cuts ?? []).filter((cut: { enabled: boolean }) => cut.enabled)
-      .map((cut: { startFrame: number; endFrame: number; mode?: string }) => ({ startFrame: cut.startFrame, endFrame: cut.endFrame, mute: cut.mode === 'mute' })) as Array<{ startFrame: number; endFrame: number; mute: boolean }>,
+      .map((cut: { id: string; startFrame: number; endFrame: number; mode?: string }) => ({ id: cut.id, startFrame: cut.startFrame, endFrame: cut.endFrame, mute: cut.mode === 'mute' })) as Array<{ id: string; startFrame: number; endFrame: number; mute: boolean }>,
     review: retakes.filter((retake) => retake.review).map((retake) => retake.blockIds),
     retakeCount: retakes.filter((retake) => !retake.review).length,
     handoff: retakes.map(handoffOf),

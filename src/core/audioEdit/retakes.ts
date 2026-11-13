@@ -5,6 +5,7 @@ import type { AudioEditRange, AudioEditSuggestion, AudioEditSuggestionHandoff, A
 import { alignToScript } from './contentCoordinates'
 import { findResidualRetakes } from './retakeSelfCheck'
 import { selectTakeSegments } from './takePath'
+import { AUDIO_EDIT_RHYTHM } from './rhythm'
 
 /*
  * 口播重念检测：照稿念时，念坏了（口误、没念好、在不该断的地方断开）会马上从某处重新念。
@@ -106,8 +107,6 @@ const BOUNDARY_PAUSE_MS = 80
 const RESTART_MARKERS = new Set(['哎', '唉', '诶', '欸', '不对'])
 /** “哎”之后重来：后一遍开头与前面某句开头逐字相同的最少字数 */
 const MARKER_PREFIX_UNITS = 4
-/** 切点离后一句开头保留的气口（毫秒） */
-const BREATH_MS = 120
 /** 成片自检每 10 分钟录音最多提这么多条：多了没人逐条看 */
 /** 前一遍至少这么大比例的字在后一遍里找得到，才给出“留前一遍”的做法 */
 const LATER_TAKE_RATIO = 0.5
@@ -1072,7 +1071,8 @@ class RetakeDetector {
     if (runs.length) {
       const longest = Math.max(...runs.map(([start, end]) => end - start))
       const [start, end] = runs.filter(([a, b]) => b - a >= longest / 2).at(-1)!
-      return { ms: Math.max(start + (end - start) / 2, end - BREATH_MS), joined: false }
+      // 后一遍开头前至少留够接缝的目标停顿，最后由气口清理统一收到这个长度
+      return { ms: Math.max(start + (end - start) / 2, end - AUDIO_EDIT_RHYTHM.sentenceMs), joined: false }
     }
     return { ms: Math.max(prev.endMs, cur.startMs), joined: true }
   }

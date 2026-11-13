@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import realTakes from './__fixtures__/retake-takes.json'
 import type { SpeechEnergyPause } from './speechEnergy'
 import type { AudioEditTranscriptBlock } from './types'
+import { AUDIO_EDIT_RHYTHM } from './rhythm'
 import { audioEditRetakeHandoff, audioEditRetakeSuggestion, detectAudioEditRetakes, type AudioEditRetakeOptions } from './retakes'
 
 type Part = string | { pause: number }
@@ -47,7 +48,7 @@ describe('口播重念检测', () => {
     expect(textOf(spoken, retakes[0].blockIds)).toBe('所以综合来看这个工具挺不错的。')
     const lastRemoved = spoken.blocks.find((block) => block.id === retakes[0].blockIds.at(-1))!
     const repair = spoken.blocks[retakes[0].blockIds.length]
-    expect(retakes[0].endFrame).toBe(repair.startFrame - 120)
+    expect(retakes[0].endFrame).toBe(repair.startFrame - AUDIO_EDIT_RHYTHM.sentenceMs)
     expect(retakes[0].endFrame).toBeGreaterThan(lastRemoved.endFrame)
     expect(retakes[0]).toMatchObject({ kind: 'restart', confidence: 'high', joined: false })
     expect(audioEditRetakeSuggestion(retakes[0])).toMatchObject({ kind: 'retake', evidence: 'audio', status: 'pending', blockIds: retakes[0].blockIds })

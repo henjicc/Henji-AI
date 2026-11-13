@@ -56,7 +56,8 @@ describe('真实口播的脱敏时间轴回归', () => {
       const beforeWorkaround = { ...original, cuts: original.cuts!.filter((cut) => cut.reason !== 'manual') }
       expect(seamLength(beforeWorkaround, window)).toBeCloseTo([.8369161, .82][index], 7)
       const once = deleteBreaths(beforeWorkaround, window), twice = deleteBreaths(once, window)
-      expect(seamLength(once, window)).toBe(.2)
+      // 句末那处接缝，保留词在识别终点之后还有 30 毫秒明显的字尾（比常见音量低 5–11 dB，随后才安静）：字尾留着，后面是 0.2 秒的气口
+      expect(seamLength(once, window)).toBe([.2, .23][index])
       expect(duration(once)).toBeLessThan(duration(beforeWorkaround))
       expect(twice.cuts).toEqual(once.cuts)
       expect(twice.gainRegions).toEqual(once.gainRegions)
