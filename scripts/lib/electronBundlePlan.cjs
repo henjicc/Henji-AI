@@ -5,9 +5,9 @@ function buildElectronBundlePlan(root) {
     { label: '媒体二进制权限', command: process.execPath, args: [path.join(root, 'scripts/ensure-media-binary-permissions.cjs')] },
     // 与 npm run build:video-decoder 同一入口：FFmpeg 已就绪时不重复下载，cargo 增量构建；非 Windows 自动跳过。
     { label: '构建原生视频解码服务', command: process.execPath, args: [path.join(root, 'scripts/video-decoder-ffmpeg.cjs'), 'build'] },
-    // 音频处理程序（频谱、修复、去爆音）随运行产物一起增量构建：Rust 源码改了而程序没重编时，主进程会用旧程序算出错误结果。
     // 画面采集进程链接上一步就绪的同一份 FFmpeg；非 Windows 自动跳过。
     { label: '构建原生画面采集进程', command: process.execPath, args: [path.join(root, 'scripts/build-screen-capture.cjs')] },
+    // 音频处理程序（频谱、修复、去爆音）随运行产物一起增量构建：Rust 源码改了而程序没重编时，主进程会用旧程序算出错误结果。
     { label: '构建音频处理程序', command: process.execPath, args: [path.join(root, 'scripts/build-audio-worker.cjs')] },
     { label: '构建原生录音引擎', command: process.execPath, args: [path.join(root, 'scripts/build-audio-capture.cjs')] },
     // 第三方许可清单在 FFmpeg 就绪后生成（读取包内许可与构建配置）；渲染层“关于”页面与安装包共用这份产物。

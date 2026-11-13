@@ -400,7 +400,7 @@ app.on('window-all-closed', () => {
   }
 })
 
-bindApplicationShutdown(app, [disposeFonts, disposeAudioCapture, async () => { await closeRecordingControl(); await disposeScreenCaptureProcess() }, stopWebReplayService, disposeWorkRootChange, disposeTracking, disposeSmartRegions, disposeLocalModels, disposeEmbeddedAgent, disposeMcp, disposeImageEditorV3Ipc], (error) => {
+bindApplicationShutdown(app, [disposeFonts, disposeAudioCapture, async () => { try { await closeRecordingControl() } finally { await disposeScreenCaptureProcess() } }, stopWebReplayService, disposeWorkRootChange, disposeTracking, disposeSmartRegions, disposeLocalModels, disposeEmbeddedAgent, disposeMcp, disposeImageEditorV3Ipc], (error) => {
   createMainLogger('application.shutdown').error('应用服务退出清理失败', { event: 'application.shutdown.failed', error })
 }, async () => {
   mediaRecycleLifecycle.stop()

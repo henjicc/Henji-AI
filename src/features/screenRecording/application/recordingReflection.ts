@@ -94,7 +94,8 @@ class RecordingProvider implements ApplicationEntityProvider {
       const { tracks: liveTracks, ...capture } = facts ?? { tracks: undefined }
       const view = recordingView()
       const screenFile = content.media.find(media => media.kind === 'screen')?.path
-      const activity = screenFile ? { path: captureActivityTimelineFile(screenFile), exists: await getPlatform().system.fs.exists(captureActivityTimelineFile(screenFile)).catch(() => false) } : undefined
+      // 只有原生采集写了活动时间线时才给这一项：用现有录法录的会话，对外读回的内容与以前一样。
+      const activity = screenFile && await getPlatform().system.fs.exists(captureActivityTimelineFile(screenFile)).catch(() => false) ? { path: captureActivityTimelineFile(screenFile), exists: true } : undefined
       revision = meta.revision
       // 录制中事件与标记还在主进程里，没封存进会话文档，这时给计数只会是假的 0；录制中读 read_screen_recording_events。
       const sealed = !active

@@ -25,7 +25,7 @@ export const screenCapturePreparedSchema = z.object({ sessionId: z.string(), wid
 /** 停止的结果：`frames` 是时刻表条数，也是文件时间轴的长度；一帧都没录到时为 0 且不留文件。 */
 export const screenCaptureResultSchema = z.object({
   frames: count, encodedFrames: count, durationUs: z.number(), originUs: z.number(), freshFrames: count, repeatedFrames: count, droppedFrames: count,
-  captureDropped: count, bytes: count, durableFrames: count, files: filesSchema,
+  captureDropped: count, bytes: count, durableFrames: count, proxyFrames: count.optional(), files: filesSchema,
 }).passthrough()
 export type ScreenCaptureResult = z.infer<typeof screenCaptureResultSchema>
 const sessionEvent = { sessionId: z.string() }
@@ -36,6 +36,7 @@ const eventSchema = z.discriminatedUnion('event', [
   z.object({ event: z.literal('resumed'), ...sessionEvent, atUs: z.number(), cell: count, frame: count }).passthrough(),
   z.object({ event: z.literal('interrupted'), ...sessionEvent, error: nativeErrorSchema }).passthrough(),
   z.object({ event: z.literal('sourceLost'), ...sessionEvent, atUs: z.number() }).passthrough(),
+  z.object({ event: z.literal('sourceRestored'), ...sessionEvent, atUs: z.number() }).passthrough(),
   z.object({ event: z.literal('sourceChanged'), ...sessionEvent, atUs: z.number(), width: count, height: count, frame: count }).passthrough(),
   z.object({ event: z.literal('health'), ...sessionEvent, frames: count, droppedFrames: count, repeatedFrames: count, captureDropped: count }).passthrough(),
 ])
@@ -61,7 +62,7 @@ export class ScreenCaptureClient extends NativeProcessClient<ScreenCaptureMessag
       texts: { closed: '画面采集服务已关闭', unavailable: '画面采集服务连续异常', notStarted: '画面采集服务未启动', exited: '画面采集服务已退出，已写文件保留', timeout: '画面采集服务响应超时；已录文件保留', closing: '画面采集服务正在关闭，已写文件保留' },
       losses: { exited: { code: 'PROCESS_EXITED', message: '画面采集服务异常退出，已录部分保留，可以导入' }, notResponding: { code: 'NOT_RESPONDING', message: '画面采集服务没有应答，录制已结束；已录部分保留，可以导入' } },
       // 停止要排空编码器、写好结尾；原生自己最多等 100 秒。
-      timeouts: { stop: 120_000, prepare: 30_000, start: 30_000 },
+      timeouts: { stop: 120_000, prepare: 10_000, start: 10_000 },
       reader: () => new NativeFrameReader(messageSchema, '画面采集服务'), error: (code, message) => new ScreenCaptureError(code, message),
     }, executable, loss => { for (const listener of [...this.lostListeners]) listener(loss); this.onLost(loss) })
   }

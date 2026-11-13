@@ -13,6 +13,8 @@ const logger = createMainLogger('main.screen_recording.capture')
 /** 开始后等网格起点（第一帧到达）的上限；继续后等“继续生效”的上限（暂停与继续落在同一格里时原生不发这两个事件）。 */
 const STARTED_TIMEOUT_MS = 10_000
 const RESUMED_WAIT_MS = 1500
+/** 来源丢失后等多久还没重新接上，才按“来源没了”结束录制。原生每秒找一次，采集短暂出错通常一两秒内就回来。 */
+const SOURCE_LOST_GRACE_MS = 8000
 
 type NativeEvent<T extends ScreenCaptureEvent['event']> = Extract<ScreenCaptureEvent, { event: T }>
 interface NativeDependencies {
@@ -154,7 +156,7 @@ export class NativeCaptureBackend implements ScreenCaptureBackend {
   }
 
   /** 文件已收尾：分片时长是文件时间轴的长度；起点改到第 0 帧画面真正上屏的时刻（时刻表里新画面相对格时刻的中位偏移）。 */
-  private async seal(result: Pick<ScreenCaptureResult, 'frames' | 'droppedFrames' | 'repeatedFrames' | 'captureDropped'>): Promise<void> {
+  private async seal(result: Pick<ScreenCaptureResult, 'frames' | 'encodedFrames' | 'proxyFrames' | 'droppedFrames' | 'repeatedFrames' | 'captureDropped'>): Promise<void> {
     this.health = { droppedFrames: result.droppedFrames, repeatedFrames: result.repeatedFrames, captureDropped: result.captureDropped }
     const span = this.storage.manifest.spans[this.spanIndex]
     if (!span) return
@@ -165,15 +167,19 @@ export class NativeCaptureBackend implements ScreenCaptureBackend {
       } catch (error) { logger.warn('逐帧时刻表读不出，画面起点按网格起点', { event: 'recording.capture.native.timing_failed', error }) }
     }
     await this.storage.seal(span.index, Math.round(result.frames * 1e6 / this.options.fps))
-    if (result.frames > 0 && this.proxy) await this.registerProxy(this.storage.file(span), this.proxy)
+    if (result.frames > 0 && this.proxy) await this.registerProxy(this.storage.file(span), this.proxy, result)
   }
 
   /** 代理是附带的：中途停掉（比主文件短）或登记失败都只记日志，剪辑需要时照常现转。 */
-  private async registerProxy(source: string, size: { width: number; height: number }): Promise<void> {
+  private async registerProxy(source: string, size: { width: number; height: number }, result: Pick<ScreenCaptureResult, 'encodedFrames' | 'proxyFrames'>): Promise<void> {
     const proxy = source.replace(/\.mp4$/i, '.proxy.mp4')
     try {
+      // 采集进程报了代理实际写进的帧数就直接比；老的采集程序不报，才去量两份文件的时长。
+      if (result.proxyFrames !== undefined && result.proxyFrames !== result.encodedFrames) { logger.warn('录制的代理比原片短，不登记', { event: 'recording.capture.native.proxy_short', context: { frames: result.encodedFrames, proxyFrames: result.proxyFrames } }); return }
+      if (result.proxyFrames === undefined) {
       const [main, picture] = await Promise.all([probeMediaDurationUs(source), probeMediaDurationUs(proxy)])
       if (Math.abs(main - picture) > 1.5e6 / this.options.fps) { logger.warn('录制的代理比原片短，不登记', { event: 'recording.capture.native.proxy_short', context: { mainUs: main, proxyUs: picture } }); return }
+      }
       await (this.deps.adoptProxy ?? adoptRecordedVideoProxy)(source, proxy, size)
       logger.info('录制的代理已登记给剪辑', { event: 'recording.capture.native.proxy_adopted', context: size })
     } catch (error) { logger.warn('录制的代理没能登记，剪辑需要时再转', { event: 'recording.capture.native.proxy_failed', error }) }
@@ -181,6 +187,7 @@ export class NativeCaptureBackend implements ScreenCaptureBackend {
 
   private release(): void {
     clearInterval(this.watchdog)
+    clearTimeout(this.lostTimer); this.lostTimer = undefined
     this.unsubscribe?.(); this.unsubscribe = undefined
     for (const waiter of [...this.waiters.values()]) waiter(undefined)
     this.waiters.clear()
@@ -196,10 +203,12 @@ export class NativeCaptureBackend implements ScreenCaptureBackend {
 
   private receive(event: ScreenCaptureEvent): void {
     if (event.event === 'health') this.health = { droppedFrames: event.droppedFrames, repeatedFrames: event.repeatedFrames, captureDropped: event.captureDropped }
-    if (event.event === 'paused') this.lastPaused = event
-    // 原生在显示器断开后会等它回来、同一文件续录；这里与现有录法一致，按“来源没了”正常停止收尾。
-    // 续录那段空档在事件时钟与声音里并没有暂停，按暂停算会错开，所以不让它发生。
-    if (event.event === 'sourceLost' || event.event === 'paused' && event.reason === 'sourceLost') this.sourceLost()
+    // 来源丢失造成的空档不是用户暂停：事件时钟与声音都没停，不拿它去换算暂停。
+    if (event.event === 'paused' && event.reason !== 'sourceLost') this.lastPaused = event
+    // 采集短暂出错后重新接上、显示器闪断，原生都会发 sourceLost 并很快发 sourceRestored，同一文件续录
+    // （那段空档记在画面条目的 gaps 里，不算暂停）。等一会儿还没回来，才按“来源没了”正常停止收尾。
+    if (event.event === 'sourceLost' && !this.lostTimer) this.lostTimer = setTimeout(() => { this.lostTimer = undefined; this.sourceLost() }, SOURCE_LOST_GRACE_MS)
+    if (event.event === 'sourceRestored' && this.lostTimer) { clearTimeout(this.lostTimer); this.lostTimer = undefined; logger.info('录制的画面来源已重新接上，继续录', { event: 'recording.capture.native.source_restored' }) }
     if (event.event === 'sourceChanged') logger.warn('录制的显示器换了分辨率，画面等比缩放留黑边', { event: 'recording.capture.native.source_changed', context: { width: event.width, height: event.height, frame: event.frame } })
     if (event.event === 'interrupted') {
       const error = new ScreenCaptureError(event.error.code, event.error.message)
@@ -219,6 +228,8 @@ export class NativeCaptureBackend implements ScreenCaptureBackend {
   }
 
   /** 录制中显示器断开：原生把网格停在那里，由调用方按停止收尾（已录部分照常保存）。 */
+  private lostTimer: ReturnType<typeof setTimeout> | undefined
+
   private sourceLost(): void {
     if (this.state !== 'recording' && this.state !== 'paused') return
     logger.info('录制的显示器已断开，画面到此为止', { event: 'recording.capture.source.ended', context: { capturer: 'native' } })
