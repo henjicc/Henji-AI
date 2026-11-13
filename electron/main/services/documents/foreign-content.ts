@@ -1,3 +1,4 @@
+import { documentKindMinReaderVersion } from '../../../../src/core/documents/kinds/registry'
 import type { ContentTrustReference } from '../../../../src/core/contentTrust'
 import { buildDocumentEnvelope, carryDocumentEnvelopeForward } from '../../../../src/core/documents/envelope'
 import { createLocationCodec } from '../../../../src/core/storage/locationCodec'
@@ -34,6 +35,6 @@ export function markForeignVideoDocument(file: LoadedDocumentFile, foreign: Cont
   return carryDocumentEnvelopeForward(envelope, buildDocumentEnvelope({
     ...envelope, draft: envelope.draft === true, content: encoded.content,
     kindVersion: forward ? envelope.kindVersion : file.kind.version,
-    kindMinReaderVersion: forward ? envelope.kindMinReaderVersion : file.kind.minReaderVersion,
+    kindMinReaderVersion: forward ? envelope.kindMinReaderVersion : documentKindMinReaderVersion(file.kind, content),
   }))
 }

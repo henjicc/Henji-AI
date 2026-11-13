@@ -1,3 +1,4 @@
+import { documentKindMinReaderVersion } from '../../../../src/core/documents/kinds/registry'
 import { jsonEqual } from '../../../../src/core/jsonEqual'
 import { markForeignVideoDocument } from './foreign-content'
 import type { ContentTrustReference } from '../../../../src/core/contentTrust'
@@ -276,7 +277,7 @@ export class DocumentRepository {
       if (request.id !== undefined && this.workspace.catalog.getDocument(request.id)) throw new DocumentLocationError('已有同一 ID 的文档。')
       const id = request.id ?? this.workspace.randomId()
       const written = await this.writeNewDocumentFile(folder, kind, (name) => buildDocumentEnvelope({
-        kind: kind.id, kindVersion: kind.version, kindMinReaderVersion: kind.minReaderVersion ?? kind.version, id, name, createdAt: now, updatedAt: now, revision: 0, draft, content: encoded.content,
+        kind: kind.id, kindVersion: kind.version, kindMinReaderVersion: documentKindMinReaderVersion(kind, content), id, name, createdAt: now, updatedAt: now, revision: 0, draft, content: encoded.content,
       }), userName === null ? { mode: 'untitled', base: kind.untitledNames[container.locale] } : { mode: 'exact', name: userName })
       const file = await describeWrittenDocument(kind, written.path, written.envelope)
       this.workspace.catalog.upsertDocument(indexedFromFile(file, container, kind.summarize(content)))
@@ -839,7 +840,7 @@ export class DocumentRepository {
    */
   private stamped(file: LoadedDocumentFile, decodedOnDisk: () => unknown, content: unknown): { content: unknown; kindVersion: number; kindMinReaderVersion: number } {
     const envelope = file.envelope
-    if (!envelope || envelope.kindVersion <= file.kind.version) return { content, kindVersion: file.kind.version, kindMinReaderVersion: file.kind.minReaderVersion ?? file.kind.version }
+    if (!envelope || envelope.kindVersion <= file.kind.version) return { content, kindVersion: file.kind.version, kindMinReaderVersion: documentKindMinReaderVersion(file.kind, content) }
     return { content: restoreForwardFields(content, persistenceForwardFields(decodedOnDisk())), kindVersion: envelope.kindVersion, kindMinReaderVersion: envelope.kindMinReaderVersion }
   }
 

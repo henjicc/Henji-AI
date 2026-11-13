@@ -1,3 +1,4 @@
+import { documentKindMinReaderVersion } from '../../../../src/core/documents/kinds/registry'
 import { markForeignVideoDocument } from './foreign-content'
 import { GitCodePackageSnapshot } from './code-git-transfer'
 import { parseGitCodeLocation } from '../../../../src/core/storage/gitCodeLocation'
@@ -350,7 +351,7 @@ export class DocumentPackageService {
     const bytes = jsonChunks(carryDocumentEnvelopeForward(envelope, buildDocumentEnvelope({
       kind: envelope.kind,
       kindVersion: forward ? envelope.kindVersion : file.kind.version,
-      kindMinReaderVersion: forward ? envelope.kindMinReaderVersion : file.kind.minReaderVersion ?? file.kind.version,
+      kindMinReaderVersion: forward ? envelope.kindMinReaderVersion : documentKindMinReaderVersion(file.kind, content),
       id: envelope.id,
       name: envelope.name,
       createdAt: envelope.createdAt,

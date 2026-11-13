@@ -15,6 +15,7 @@
 - **只新增可选字段**（旧程序忽略它也不会误解其余内容）：升 `version`，`minReaderVersion` 不变。
 - **改变已有字段含义、单位、必填性，或删除旧程序依赖的字段**：升 `version`，并把 `minReaderVersion` 提高到新版本。
 - `minReaderVersion` 只能不变或提高，不能高于 `version`；门禁核对二者与基线一致。
+- **新含义只出现在带某个字段的文件里**：文档类型的描述符可以再给 `minReaderVersionFor(content)`，按这份内容实际用到了什么返回它需要的最低版本（不高于 `minReaderVersion`）。写文件一律经 `documentKindMinReaderVersion` 取值，没用到新含义的文件仍写较低的版本、旧程序照常打开；基线与门禁登记的是上限 `minReaderVersion`。例：录制会话 82 起画面条目的 `gaps`（连续文件）——带它的写 82，不带的写 77。
 
 接入了版本戳的文件同时写出两者：文档外壳写 `envelopeVersion`/`minReaderVersion` 与 `kindVersion`/`kindMinReaderVersion`；项目说明、可编辑代码资产与版本化 JSON 容器写 `version`/`minReaderVersion`。读取规则统一在 `migrations.ts::upgradePersistenceContent`：
 

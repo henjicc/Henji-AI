@@ -14,6 +14,8 @@ import { createRecordingDocument, recordingDocumentSchema, type RecordingDocumen
 
 export const screenRecordingDocumentKind: DocumentKindDescriptor<RecordingDocument> = {
   id: 'screen_recording', extension: henjiExtension('screen_recording'), legacyExtensions: henjiLegacyExtensions('screen_recording'), storage: 'json', version: 82, minReaderVersion: 82,
+  // 新含义只在带 gaps 的画面条目里：没有它的会话，77 起的程序照旧读得对。
+  minReaderVersionFor: content => content.media.some(media => media.gaps) ? 82 : 77,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
     // 72 → 73：嵌入剪辑的新增灯光片段与灯光素材项（kind light，字段 lightKind、lightColor、lightIntensity 可关键帧、lightCastShadow、lightSoftness、lightAngle），序列 spaceRender 新增 defaultLighting；旧内容没有灯光，画面不变；片段与素材项的 kind、关键帧键是封闭枚举，旧程序读到 light 或 curves.lightIntensity 会拒读，最低可读版本随版本提高。

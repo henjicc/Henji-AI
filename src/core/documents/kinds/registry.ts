@@ -35,6 +35,12 @@ export interface DocumentKindDescriptor<TContent = unknown> {
   readonly version: number
   /** 本程序写出的内容需要的最低内容版本（外壳里的 kindMinReaderVersion）；只新增可选字段时保持不变。省略即等于 version。 */
   readonly minReaderVersion?: number
+  /**
+   * 按这份内容实际用到了什么，给出它需要的最低内容版本（不给就一律用 minReaderVersion）。
+   * 用于“新含义只出现在带某个字段的文件里”的情况：没用到新含义的文件仍让旧程序打开。
+   * 返回值不得高于 minReaderVersion——基线与门禁登记的是这个上限。
+   */
+  minReaderVersionFor?(content: TContent): number
   /** 内存形态（位置都是绝对路径）的内容 schema。 */
   readonly contentSchema: z.ZodType<TContent>
   /** Key N owns N → N+1; a missing step explicitly rejects old content. */
@@ -155,4 +161,10 @@ export function defineSkeletonDocumentKind(options: SkeletonKindOptions): Docume
     isEmptyContent: (content) => Object.keys(content).length === 0,
     summarize: () => ({}),
   }
+}
+
+/** 写文件时外壳里的 kindMinReaderVersion：这份内容实际需要的最低内容版本。 */
+export function documentKindMinReaderVersion<TContent>(kind: Pick<DocumentKindDescriptor<TContent>, 'version' | 'minReaderVersion' | 'minReaderVersionFor'>, content: unknown): number {
+  const ceiling = kind.minReaderVersion ?? kind.version
+  return Math.min(ceiling, kind.minReaderVersionFor?.(content as TContent) ?? ceiling)
 }
