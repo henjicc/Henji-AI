@@ -1,3 +1,4 @@
+import { recordingMediaEndUs } from '@/core/screenRecording/range'
 import { getPlatform } from '@/platform'
 import { createLogger } from '@/core/logging'
 import { registerApplicationCloseGuard } from '@/core/applicationLifecycle/applicationCloseGuards'
@@ -52,7 +53,7 @@ export async function exportRecordingProduct(sessionId: string, options: { produ
         if (event.kind !== 'click' || event.phase !== 'down') return
         for (const step of steps) {
           const at = event.monoUs + 120000
-          if (!selectedClicks.has(step.id) && at >= step.startUs && at < step.endUs && recording.media.some(media => media.kind === 'screen' && at >= media.monoUs && at < media.monoUs + media.durationUs)) { step.representativeUs = at; selectedClicks.add(step.id) }
+          if (!selectedClicks.has(step.id) && at >= step.startUs && at < step.endUs && recording.media.some(media => media.kind === 'screen' && at >= media.monoUs && at < recordingMediaEndUs(media))) { step.representativeUs = at; selectedClicks.add(step.id) }
         }
       })
       if (!cursors.size) result.warnings.push('没有操作日志，已保留原画面，未添加光标或推近。')
@@ -108,7 +109,7 @@ export async function exportRecordingProduct(sessionId: string, options: { produ
           const info = await platform.video.readVideoInfo(receipt.savedPath)
           if (info.width !== width || info.height !== height || Math.abs(info.durationSeconds - frames / fps) > 1 / fps) throw new Error('动图解码回读的尺寸或时长不一致。')
         } else {
-          const at = options.product === 'bug_report' ? Math.max(...recording.media.filter(media => media.kind === 'screen' && media.monoUs < step.endUs && media.monoUs + media.durationUs > step.startUs).map(media => Math.min(step.endUs, media.monoUs + media.durationUs) - 1)) : step.representativeUs
+          const at = options.product === 'bug_report' ? Math.max(...recording.media.filter(media => media.kind === 'screen' && media.monoUs < step.endUs && recordingMediaEndUs(media) > step.startUs).map(media => Math.min(step.endUs, recordingMediaEndUs(media)) - 1)) : step.representativeUs
           await renderer.render(frameAt(at), true)
           const path = await write(step.image, new Uint8Array(await (await renderer.canvas.convertToBlob({ type: 'image/png' })).arrayBuffer()))
           if (options.product === 'image_document') {

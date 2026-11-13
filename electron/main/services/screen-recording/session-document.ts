@@ -16,7 +16,7 @@ import { DocumentNameConflictError } from '../documents/errors'
 import { createMainLogger } from '../logging'
 import { RecordingEventStore } from './event-store'
 import { recoverCapture } from './capture/storage'
-import { captureTimingPauses, readCaptureTiming } from './capture/native-timing'
+import { captureTimingGaps, captureTimingPauses, readCaptureTiming } from './capture/native-timing'
 import { RecordingTrackLedger, replayTrackJournal } from './track-ledger'
 import { NATIVE_MICROPHONE_FILE, joinRecordingAudio } from './audio-join'
 import type { RecordingScriptCapture } from '../../../../src/core/screenRecording/script'
@@ -127,7 +127,7 @@ export class RecordingSessionDocument {
     Object.assign(this.content, {
       status: manifest.status === 'stopped' ? 'stopped' : 'interrupted',
       eventPages: [...this.pages], markers: [...this.markers], tracks,
-      media: [...capture.files.map(file => ({ id: `screen-${file.index}`, kind: 'screen' as const, path: file.path, monoUs: file.monoUs, durationUs: file.durationUs })), ...audio],
+      media: [...await screenMedia(capture.files), ...audio],
       ...this.content.pauses ? { pauses: await recordedPauses(this.content.pauses, this.controls, capture.files) } : {},
     })
     await this.save()
@@ -154,6 +154,18 @@ function alignedPauses(pauses: NonNullable<RecordingDocument['pauses']>, control
  * 原生采集录的画面是一个连续文件，暂停不在文件里：暂停区间直接按它的逐帧时刻表推出（与事件时钟扣掉的、合并时各段的是同一组数）。
  * 其余录法录的按事件时钟与各分片第一帧对齐。
  */
+/**
+ * 画面条目。旁边有逐帧时刻表的是连续文件：暂停与来源丢失不在文件里，把这些时间段记在条目的 gaps 上，
+ * 之后所有按会话时钟找画面的地方（range.ts 的 recordingFileUs）据此换算。
+ */
+async function screenMedia(files: ReadonlyArray<{ index: number; path: string; monoUs: number; durationUs: number }>): Promise<RecordingDocument['media']> {
+  return Promise.all(files.map(async file => {
+    const timing = await readCaptureTiming(file.path).catch(() => null)
+    const gaps = timing ? captureTimingGaps(timing, file.monoUs, Math.round(file.durationUs * timing.fpsNum / timing.fpsDen / 1e6)).map(({ startUs, endUs }) => ({ startUs, endUs })) : undefined
+    return { id: `screen-${file.index}`, kind: 'screen' as const, path: file.path, monoUs: file.monoUs, durationUs: file.durationUs, ...(gaps ? { gaps } : {}) }
+  }))
+}
+
 async function recordedPauses(pauses: NonNullable<RecordingDocument['pauses']>, controls: readonly PauseControl[], screens: ReadonlyArray<{ path: string; monoUs: number; durationUs: number }>): Promise<NonNullable<RecordingDocument['pauses']>> {
   if (screens.length === 1) {
     const [screen] = screens
@@ -243,7 +255,7 @@ export async function recoverRecordingSession(documentId: string, directory: str
   if (content.sessionId !== documentId) throw new Error('副本不能恢复原录制，请打开原会话')
   logger.info('恢复中断的录制', { event: 'recording.session.recover.start', context: { sessionId: documentId, status: content.status } })
   const capture = await recoverCapture(directory)
-  const screen = capture.files.map(file => ({ id: `screen-${file.index}`, kind: 'screen' as const, path: file.path, monoUs: file.monoUs, durationUs: file.durationUs }))
+  const screen = await screenMedia(capture.files)
   content.eventPages = []; content.markers = []
   const controls: PauseControl[] = []
   for await (const page of new RecordingEventStore(directory).recover()) {

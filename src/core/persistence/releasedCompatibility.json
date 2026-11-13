@@ -862,7 +862,8 @@
       },
       "structures": {
         "80": "d7d720ac121183ef42cd3a18c5bd38a96e177ae4e8160fc2a77d82e31ac197f4",
-        "81": "f9f411329aa1f2096fe34cfef1d7f1e7d2ff1416ae9e559b802f9c3341bad60f"
+        "81": "f9f411329aa1f2096fe34cfef1d7f1e7d2ff1416ae9e559b802f9c3341bad60f",
+        "82": "f67de9ca907ec9956cb844f8207fd78aa7ef646c0101448fdf1fb90dc36d1a1d"
       },
       "readers": {
         "19": 19,
@@ -920,7 +921,8 @@
         "78": 77,
         "79": 77,
         "80": 77,
-        "81": 77
+        "81": 77,
+        "82": 82
       },
       "samples": {
         "v19.json": "bed3ba5d2510d2fcb6c72a8f0608f39ff45af13e01ff2db2963e4008afd6a5b8",
@@ -985,7 +987,8 @@
         "v78.json": "0657ef9c0b2d65fa423f0723a8d103959245e4a4e9d1df13c58aeac0f4ae4f2e",
         "v79.json": "20d25cbeda09808b1445c4ce473c6b06adcd673916777b3ed2590092a07f8e60",
         "v80.json": "3a839c4b4bf53067aac0c7d5e4641ee0d7506a81700361bcb65114af3a87f563",
-        "v81.json": "64de5d01a241e959bab14900908c3636079f4d2a6e5bfb276dd6b7cd69968992"
+        "v81.json": "64de5d01a241e959bab14900908c3636079f4d2a6e5bfb276dd6b7cd69968992",
+        "v82.json": "2c645c5e443d2560b69e5546989300cd205ca5499df3715bb96809980a1ece42"
       }
     },
     "project": {

@@ -8,7 +8,7 @@ import type { RecordingDocument } from '@/core/screenRecording/document'
 import type { RecordingUnderstanding } from '@/core/screenRecording/understanding'
 import { mapRecordingMovieRange, recordingMovieSpans, type RecordingMovieRecipe } from '@/core/screenRecording/movie'
 import { confirmedRecordingPrivacyFragments } from '@/core/screenRecording/privacyEffects'
-import { recordingMediaSpans } from '@/core/screenRecording/range'
+import { recordingFileUs, recordingMediaSpans } from '@/core/screenRecording/range'
 import { buildAudioEditCaptionGroups } from '@/core/audioEdit/captions'
 import { VIDEO_EDIT_FADE_MIN_FRAMES, setVideoEditClipFade } from '@/core/videoEdit/fades'
 import { videoEditSubtitleStyleSchema } from '@/core/videoEdit/subtitleStyle'
@@ -57,7 +57,7 @@ export function buildRecordingMoviePlan(document: VideoEditDocument, recording: 
           const startUs = bounds[i], endUs = bounds[i + 1], outputUs = span.outputStartUs + (startUs - span.startUs) / span.speed
           const start = frame(outputUs), duration = Math.min(frame(span.outputStartUs + (endUs - span.startUs) / span.speed) - start, Math.floor((endUs - startUs) * fps / (1e6 * span.speed) + 1e-7))
           if (duration < 1) continue
-          const clip = makeVideoEditItemClip(document, item.id, lane.id, { frame: start, duration, track, sourceInUs: startUs - source.monoUs, sourceOutUs: endUs - source.monoUs, ...(media.kind === 'video' ? { sourceComponent: source.kind === 'screen' || source.kind === 'camera' ? 'video' : 'audio' } : {}) })
+          const clip = makeVideoEditItemClip(document, item.id, lane.id, { frame: start, duration, track, sourceInUs: recordingFileUs(source, startUs), sourceOutUs: recordingFileUs(source, endUs), ...(media.kind === 'video' ? { sourceComponent: source.kind === 'screen' || source.kind === 'camera' ? 'video' : 'audio' } : {}) })
           clip.speed = videoEditSpeedRatio(span.speed)
           const linkKey = `${start}:${duration}`; if (!linkIds.has(linkKey)) linkIds.set(linkKey, crypto.randomUUID())
           // Nested screen sequence owns its picture; audio/camera links stay within their own sequence.

@@ -13,7 +13,7 @@ import { RECORDING_CURSOR_EFFECT } from '@/core/videoEdit/recordingCursor'
 import { RECORDING_ZOOM_EFFECT } from '@/core/videoEdit/recordingZoom'
 import { openApplicationSurface } from '@/features/navigation'
 import type { RecordingDestination } from './recordingService'
-import { recordingDurationUs, recordingMediaSpans, recordingRange } from '@/core/screenRecording/range'
+import { recordingDurationUs, recordingFileUs, recordingMediaSpans, recordingRange } from '@/core/screenRecording/range'
 import { recordingCombinePlan, recordingCombinedIntervals, recordingCombinedPartEndUs, type RecordingCombinedFiles } from '@/core/screenRecording/combine'
 import { recordingMovieCursorSources } from './recordingMovieSources'
 
@@ -92,7 +92,7 @@ export function placeRecordingMedia(document: VideoEditDocument, recording: Reco
     for (const { startUs: start, endUs: end } of recordingMediaSpans(recording, source, Math.round(imported.durationSeconds * 1e6))) {
       const duration = Math.floor((end - start) * fps / 1e6 + 1e-6)
       if (duration < 1) continue
-      const clip = makeVideoEditItemClip(document, item.id, sequence.id, { frame: (target.frame ?? 0) + Math.round((start - origin) * fps / 1e6), track: trackIndices.get(source.kind), duration, sourceInUs: start - source.monoUs, sourceOutUs: end - source.monoUs, ...(source.kind === 'screen' || source.kind === 'camera' ? { sourceComponent: 'video' as const } : {}) })
+      const clip = makeVideoEditItemClip(document, item.id, sequence.id, { frame: (target.frame ?? 0) + Math.round((start - origin) * fps / 1e6), track: trackIndices.get(source.kind), duration, sourceInUs: recordingFileUs(source, start), sourceOutUs: recordingFileUs(source, end), ...(source.kind === 'screen' || source.kind === 'camera' ? { sourceComponent: 'video' as const } : {}) })
       if (source.kind === 'screen') addRecordingClipEffects(clip, recording, imported, events)
       sequence.clips.push(clip)
       const segment = pauses.filter(([pauseStart]) => pauseStart < start).length

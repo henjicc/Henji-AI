@@ -8,6 +8,11 @@ import { recordingDirectorRunSchema } from './director'
 const recordingMediaSchema = z.object({
   id: z.string().min(1), kind: z.enum(['screen', 'microphone', 'systemAudio', 'camera']),
   path: z.string().min(1), monoUs: z.number().int().nonnegative(), durationUs: z.number().int().nonnegative(),
+  /**
+   * 有这一项说明文件是“连续文件”：会话时钟上的这些时间段（暂停、来源丢失）不在文件里，文件时间轴直接跳过它们。
+   * 没有这一项的文件，文件内位置就是“会话时刻减 monoUs”。两种都经 range.ts 的 recordingFileUs 换算，不要自己减。
+   */
+  gaps: z.array(z.object({ startUs: z.number().int().nonnegative(), endUs: z.number().int().nonnegative() }).strict()).optional(),
 }).strict()
 const recordingPageReferenceSchema = z.object({
   path: z.string().min(1), firstSequence: z.number().int().nonnegative(), lastSequence: z.number().int().nonnegative(),

@@ -12,7 +12,7 @@ import { migrateVideoEditMergedEffects } from '../../videoEdit/mergedEffectsMigr
 import { createRecordingDocument, recordingDocumentSchema, type RecordingDocument } from '../../screenRecording/document'
 
 export const screenRecordingDocumentKind: DocumentKindDescriptor<RecordingDocument> = {
-  id: 'screen_recording', extension: henjiExtension('screen_recording'), legacyExtensions: henjiLegacyExtensions('screen_recording'), storage: 'json', version: 81, minReaderVersion: 77,
+  id: 'screen_recording', extension: henjiExtension('screen_recording'), legacyExtensions: henjiLegacyExtensions('screen_recording'), storage: 'json', version: 82, minReaderVersion: 82,
   // 2026-10-21 兼容起点：此前的开发期版本不再读取；今后每次升版本在这里登记 N → N+1。
   migrations: {
     // 72 → 73：嵌入剪辑的新增灯光片段与灯光素材项（kind light，字段 lightKind、lightColor、lightIntensity 可关键帧、lightCastShadow、lightSoftness、lightAngle），序列 spaceRender 新增 defaultLighting；旧内容没有灯光，画面不变；片段与素材项的 kind、关键帧键是封闭枚举，旧程序读到 light 或 curves.lightIntensity 会拒读，最低可读版本随版本提高。
@@ -25,6 +25,9 @@ export const screenRecordingDocumentKind: DocumentKindDescriptor<RecordingDocume
     // 79 → 80：嵌入剪辑随剪辑内容 77：文字样式新增可选 fontVariations（可变字体轴数值）与文字片段轴动画；内容原样保留，最低可读版本不变。
     // 80 → 81：嵌入剪辑随剪辑内容 78：片段新增可选备注 note；内容原样保留，最低可读版本不变。
     80: content => structuredClone(content),
+    // 81 → 82：画面条目新增 gaps——有它的是“连续文件”，暂停与来源丢失的时间段不在文件里，文件内位置要扣掉它们。
+    // 旧记录没有这一项，含义不变，原样保留。旧程序不认识 gaps 会把连续文件当普通文件、暂停之后的画面全部错位，所以最低可读版本提到 82。
+    81: content => structuredClone(content),
     79: content => structuredClone(content),
     78: content => structuredClone(content),
     77: content => migrateEmbeddedVideoEditCodeEditChecks(content),

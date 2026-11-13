@@ -4,7 +4,7 @@ import { mkdir, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { getDocumentService } from '../documents/runtime'
 import { recordingDocumentSchema, type RecordingDocument, type RecordingMedia } from '../../../../src/core/screenRecording/document'
-import { recordingMediaSpans } from '../../../../src/core/screenRecording/range'
+import { recordingMediaSpans, recordingSessionUs } from '../../../../src/core/screenRecording/range'
 import type { CaptureEvent } from '../../../../src/core/captureLog/events'
 import { loadFfmpegPath } from '../video/ffmpeg-loader'
 import { getUserFolderDir } from '../appPaths'
@@ -31,11 +31,23 @@ export function quickExportWindows(recording: Pick<RecordingDocument, 'media' | 
   for (const item of recording.media.filter(item => item.kind === 'screen' && item.durationUs > 0).sort((a, b) => a.monoUs - b.monoUs)) {
     const spans = recordingMediaSpans(recording, item)
     if (spans.length) {
-      const startUs = windows.length ? item.monoUs : spans[0].startUs, endUs = spans.at(-1)!.endUs
-      if (!windows.length) seekUs = joinedUs + startUs - item.monoUs
-      windows.push({ startUs, endUs, outputUs }); outputUs += endUs - startUs
-      files.push({ path: item.path, ...(endUs < item.monoUs + item.durationUs ? { outpointUs: endUs - item.monoUs } : {}) })
-      joinedUs += endUs - item.monoUs
+      const first = !windows.length, last = spans.at(-1)!
+      // 第一个文件从共同起点切入，其余文件从文件头开始（流复制切不到文件中间）。
+      const fileStartUs = first ? spans[0].fileUs : 0
+      if (first) seekUs = joinedUs + fileStartUs
+      const fileEndUs = last.fileUs + last.endUs - last.startUs
+      if (item.gaps) {
+        // 连续文件：暂停不在文件里，文件里首尾相接的每一段各是一个窗口。
+        for (const [index, span] of spans.entries()) {
+          const startUs = index === 0 && !first ? recordingSessionUs(item, 0) : span.startUs
+          windows.push({ startUs, endUs: span.endUs, outputUs }); outputUs += span.endUs - startUs
+        }
+      } else {
+        const startUs = first ? spans[0].startUs : item.monoUs
+        windows.push({ startUs, endUs: last.endUs, outputUs }); outputUs += last.endUs - startUs
+      }
+      files.push({ path: item.path, ...(fileEndUs < item.durationUs ? { outpointUs: fileEndUs } : {}) })
+      joinedUs += fileEndUs
     }
   }
   return { windows, seekUs, files }

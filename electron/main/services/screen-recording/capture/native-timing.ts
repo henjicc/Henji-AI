@@ -16,6 +16,8 @@ export interface CaptureTiming {
 const MAGIC = 'HJFT'
 export const TIMING_FRESH = 1
 export const TIMING_DROPPED = 2
+/** 这一帧之前的空档是来源丢失造成的（显示器断开、采集重新接上）：这段时间声音与事件没有停，不是暂停。 */
+export const TIMING_AFTER_SOURCE_LOST = 16
 
 export const captureTimingFile = (screenFile: string): string => screenFile.replace(/\.mp4$/i, '.frames')
 
@@ -42,13 +44,13 @@ export async function readCaptureTiming(screenFile: string): Promise<CaptureTimi
 const cellUs = (timing: Pick<CaptureTiming, 'fpsNum' | 'fpsDen'>, cells: number): number => cells * 1e6 * timing.fpsDen / timing.fpsNum
 
 /** 连续录到的几段：从文件第 frame 帧起、网格第 cell 格起的 frames 帧。`frames` 限定只看文件里真有的前这么多帧（被杀后文件可能比时刻表短）。 */
-export function captureTimingRuns(timing: CaptureTiming, frames = timing.cell.length): Array<{ frame: number; cell: number; frames: number }> {
-  const runs: Array<{ frame: number; cell: number; frames: number }> = []
+export function captureTimingRuns(timing: CaptureTiming, frames = timing.cell.length): Array<{ frame: number; cell: number; frames: number; afterSourceLost: boolean }> {
+  const runs: Array<{ frame: number; cell: number; frames: number; afterSourceLost: boolean }> = []
   const count = Math.min(frames, timing.cell.length)
   for (let index = 0; index < count; index++) {
     const last = runs.at(-1)
     if (last && timing.cell[index] === last.cell + last.frames) last.frames++
-    else runs.push({ frame: index, cell: timing.cell[index], frames: 1 })
+    else runs.push({ frame: index, cell: timing.cell[index], frames: 1, afterSourceLost: (timing.flags[index] & TIMING_AFTER_SOURCE_LOST) !== 0 })
   }
   return runs
 }
@@ -72,10 +74,18 @@ export function captureTimingLeadUs(timing: CaptureTiming): number {
  * 与事件时钟扣掉的暂停（恢复时按跳过的格数接着走）、合并计划的各段是同一组数，三者处处对齐。
  */
 export function captureTimingPauses(timing: CaptureTiming, firstFrameUs: number, frames?: number): Array<{ startUs: number; endUs: number }> {
+  return captureTimingGaps(timing, firstFrameUs, frames).filter(gap => !gap.sourceLost).map(({ startUs, endUs }) => ({ startUs, endUs }))
+}
+
+/**
+ * 文件里没有的全部时间段（会话时钟）：暂停，以及来源丢失的空档。画面条目的 gaps 用它（文件内位置要扣掉全部）；
+ * 会话的暂停只取其中不是来源丢失的那些——来源丢失时声音与事件照常在走。
+ */
+export function captureTimingGaps(timing: CaptureTiming, firstFrameUs: number, frames?: number): Array<{ startUs: number; endUs: number; sourceLost: boolean }> {
   const runs = captureTimingRuns(timing, frames)
   if (!runs.length) return []
   const at = (cell: number): number => Math.round(firstFrameUs + cellUs(timing, cell - runs[0].cell))
-  return runs.slice(1).map((run, index) => ({ startUs: at(runs[index].cell + runs[index].frames), endUs: at(run.cell) }))
+  return runs.slice(1).map((run, index) => ({ startUs: at(runs[index].cell + runs[index].frames), endUs: at(run.cell), sourceLost: run.afterSourceLost }))
 }
 
 /**
