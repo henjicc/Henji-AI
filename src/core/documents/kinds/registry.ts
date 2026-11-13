@@ -43,6 +43,12 @@ export interface DocumentKindDescriptor<TContent = unknown> {
   minReaderVersionFor?(content: TContent): number
   /** 内存形态（位置都是绝对路径）的内容 schema。 */
   readonly contentSchema: z.ZodType<TContent>
+  /**
+   * 内容顶层的这些数组，元素各自独立：schema 对它们没有跨元素的约束（不含对整份内容的 refine），
+   * 元素里的文件位置也只取决于元素自身。声明后保存时只校验、换算相对上次保存变了的元素，
+   * 几千个元素的文档不必每次整份重做；不声明则每次整份处理。
+   */
+  readonly independentArrays?: readonly string[]
   /** Key N owns N → N+1; a missing step explicitly rejects old content. */
   readonly migrations: PersistenceMigrations
   /** 用于缺失检查、收集与搬运的依赖内容；不含产出记录。省略时整份内容都参与。位置编码仍处理完整内容。 */

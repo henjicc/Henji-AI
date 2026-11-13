@@ -74,6 +74,7 @@ import { collectContainerMedia, copyKeepingBoth, rewriteContentPaths, transferCo
 import { rehomeVideoMotionResources } from './video-motion-resources'
 import { checkEntryName, readEntryNameKeys, requireEntryName } from './name-check'
 import { DocumentReadFailures } from './read-failures'
+import { isPlainRecord, memoArraysAligned, planIncrementalSave, type SaveMemo } from './incremental-save'
 import type { PackageAdapterRegistry, PackageDocumentAdapter, PackageDocumentHeaderPatch } from './package-adapters'
 import type { DocumentWorkspace, ResolvedContainer } from './workspace'
 
@@ -173,9 +174,14 @@ function sameContainer(left: DocumentContainerRef, right: DocumentContainerRef):
   return left.projectId === right.projectId
 }
 
+/** 同时为这么多份文档留着增量保存的比对结果（每份约等于三份文档内容的内存） */
+const SAVE_MEMO_LIMIT = 3
+
 export class DocumentRepository {
   private readonly executor = new KeyedSerialExecutor()
   private readonly readFailures: DocumentReadFailures
+  /** 各文档上一次保存的结果，供下一次保存只处理变了的部分（见 incremental-save.ts） */
+  private readonly saveMemos = new Map<string, SaveMemo>()
 
   constructor(private readonly options: DocumentRepositoryOptions) {
     this.readFailures = new DocumentReadFailures(options.workspace.style, options)
@@ -293,27 +299,85 @@ export class DocumentRepository {
     })
   }
 
+  /**
+   * 上一次保存留下的结果，前提是磁盘上的文件还是那一次写出的那份（位置、大小、修改时间都没变）。
+   * 文件被别处改过、移走或改名后一律作废，改走整份读取。
+   */
+  private async saveMemoFor(target: DocumentTarget): Promise<SaveMemo | undefined> {
+    const memo = this.saveMemos.get(target.id)
+    if (!memo) return undefined
+    const { style } = this.workspace
+    const indexed = this.workspace.catalog.getDocument(target.id)?.path
+    const samePlace = indexed !== undefined && samePath(style, indexed, memo.file.path)
+      && (target.path === undefined || (path.isAbsolute(target.path) && samePath(style, path.resolve(target.path), memo.file.path)))
+    const stat = samePlace ? await fsp.stat(memo.file.path).catch(() => null) : null
+    if (stat?.isFile() && stat.mtimeMs === memo.file.stat.mtimeMs && stat.size === memo.file.stat.size) return memo
+    this.saveMemos.delete(target.id)
+    return undefined
+  }
+
+  private rememberSave(file: LoadedDocumentFile, contextKey: string, input: unknown, validated: unknown): void {
+    const arrays = file.kind.independentArrays
+    const encoded = file.envelope?.content
+    this.saveMemos.delete(file.header.id)
+    if (!arrays?.length || !isPlainRecord(input) || !isPlainRecord(validated) || !isPlainRecord(encoded)) return
+    const memo: SaveMemo = { file, contextKey, input, validated, encoded }
+    if (!memoArraysAligned(arrays, memo)) return
+    this.saveMemos.set(file.header.id, memo)
+    for (const id of this.saveMemos.keys()) {
+      if (this.saveMemos.size <= SAVE_MEMO_LIMIT) break
+      this.saveMemos.delete(id)
+    }
+  }
+
+  /**
+   * 校验内容并换算成存储写法。有上一次保存的结果、文档类型又声明了独立数组时，只处理变了的元素。
+   */
+  private prepareSave(file: LoadedDocumentFile, container: ResolvedContainer, input: unknown, memo: SaveMemo | undefined, contextKey: string): {
+    content: unknown; stamped: { kindVersion: number; kindMinReaderVersion: number }; encoded: { content: unknown; report: LocationReport }; changedOnly: boolean
+  } {
+    const arrays = file.kind.independentArrays
+    // 文件由更新版本写出时要带回本程序不认识的字段，那条路按整份内容处理
+    if (memo && arrays?.length && memo.contextKey === contextKey && file.envelope?.kindVersion === file.kind.version) {
+      const plan = planIncrementalSave(arrays, memo.input, input)
+      if (plan) {
+        const validated = this.validateContent(file.kind, plan.probe)
+        const content = plan.merge(validated, memo.validated)
+        const encodedPart = content ? this.encode(file.kind, container, validated) : null
+        const encoded = encodedPart ? plan.merge(encodedPart.content, memo.encoded) : null
+        if (content && encodedPart && encoded) {
+          return { content, stamped: this.stamped(file, () => content, content), encoded: { content: encoded, report: encodedPart.report }, changedOnly: true }
+        }
+      }
+    }
+    const content = this.validateContent(file.kind, input)
+    const stamped = this.stamped(file, () => decodeDocumentContent(file, container, this.workspace).content, content)
+    return { content, stamped, encoded: this.encode(file.kind, container, stamped.content), changedOnly: false }
+  }
+
   /** 保存内容：核对版本、换算位置、原子替换；内容与磁盘一致时不写文件。 */
   async save(request: SaveDocumentRequest): Promise<DocumentSaveResult> {
     return await this.exclusive(request.target.id, async () => {
       const startedAt = performance.now()
       const context: Record<string, unknown> = { documentId: request.target.id, expectedRevision: request.expectedRevision, force: request.force === true }
       try {
-        const file = await this.locate(request.target)
+        const memo = await this.saveMemoFor(request.target)
+        const file = memo?.file ?? await this.locate(request.target)
         if (!file.envelope) throw new DocumentUnsupportedError('这种文档请在它自己的编辑器里保存。')
         context.kind = file.kind.id
         if (!request.force && file.header.revision !== request.expectedRevision) {
           throw new DocumentRevisionConflictError(file.header.id, request.expectedRevision, file.header.revision)
         }
-        const content = this.validateContent(file.kind, request.content)
         const container = await this.workspace.containerForPath(file.path)
-        const stamped = this.stamped(file, () => decodeDocumentContent(file, container, this.workspace).content, content)
-        const encoded = this.encode(file.kind, container, stamped.content)
+        const contextKey = JSON.stringify(this.workspace.locationContext(container))
+        const { content, stamped, encoded, changedOnly } = this.prepareSave(file, container, request.content, memo, contextKey)
+        context.changedOnly = changedOnly
         const name = documentNameOf(file.kind, file.path)
         const unchanged = file.envelope.kindVersion === stamped.kindVersion
           && file.envelope.name === name
           && jsonEqual(encoded.content, file.envelope.content)
         if (unchanged) {
+          this.rememberSave(file, contextKey, request.content, content)
           await this.options.mediaPublished?.(file.path)
           return { meta: metaFromFile(file, container), unchanged: true }
         }
@@ -329,6 +393,7 @@ export class DocumentRepository {
         await writeBufferAtomically(file.path, this.bytes(envelope))
         await this.options.mediaPublished?.(file.path)
         const saved = await describeWrittenDocument(file.kind, file.path, envelope)
+        this.rememberSave(saved, contextKey, request.content, content)
         this.workspace.catalog.upsertDocument(indexedFromFile(saved, container, file.kind.summarize(content)))
         this.warnProgramReferences('save', saved, encoded.report)
         this.logger.debug('文档已保存', { event: 'documents.save.completed', context: { ...context, revision: envelope.revision, bytes: saved.stat.size, durationMs: Math.round(performance.now() - startedAt) } })
@@ -337,7 +402,7 @@ export class DocumentRepository {
         this.logFailure('save', context, error)
         throw error
       }
-    })
+    }, true)
   }
 
   /** 改名（文件名与文件头同步）；用户输入的名字重名时报错，不加后缀。 */
@@ -1085,10 +1150,17 @@ export class DocumentRepository {
 
   // ==================== 串行与日志 ====================
 
-  private async exclusive<T>(documentId: string, operation: () => Promise<T>): Promise<T> {
+  /**
+   * keepSaveMemo：只有保存自己沿用上一次保存的结果；其余写入（改名、移动、收集素材、升级写回等）
+   * 一律先作废它，下次保存按磁盘上的文件重新来。
+   */
+  private async exclusive<T>(documentId: string, operation: () => Promise<T>, keepSaveMemo = false): Promise<T> {
     return await this.executor.run(documentId, async () => await withFileLock(
       path.join(this.options.lockDirectory, `${documentId}.lock`),
-      () => this.workspace.withProjectMutation(this.workspace.catalog.getDocument(documentId)?.projectId, operation),
+      () => this.workspace.withProjectMutation(this.workspace.catalog.getDocument(documentId)?.projectId, () => {
+        if (!keepSaveMemo) this.saveMemos.delete(documentId)
+        return operation()
+      }),
       { timeoutMessage: '文档正被另一个窗口或助手写入，请稍后重试。' },
     ))
   }

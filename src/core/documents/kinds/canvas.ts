@@ -53,6 +53,7 @@ export const canvasDocumentKind: DocumentKindDescriptor<CanvasDocumentContent> =
   // 版本 1 = 旧工程表 storyboard_projects 的节点 / 连线（媒体按绝对路径存，不再编码成媒体池）。
   version: 1,
   contentSchema: canvasContentSchema,
+  independentArrays: ['nodes', 'edges'],
   migrations: {},
   createEmptyContent: () => ({ nodes: [], edges: [] }),
   // 连线必须连着节点，没有节点就是空画布。
