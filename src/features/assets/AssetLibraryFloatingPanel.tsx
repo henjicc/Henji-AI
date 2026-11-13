@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react'
 import { UiPanel } from '@/components/ui'
 import { useDialogTransition } from '@/components/ui/useDialogTransition'
 import { UI_DIALOG_TRANSITION_MS } from '@/components/ui/motion'
+import { WorkspaceErrorBoundary } from '@/components/WorkspaceErrorBoundary'
 import { AssetLibrarySurface } from './AssetLibrarySurface'
 import { hasOpenModalUiOverlayAbove, resolveUiOverlayTarget, UiOverlayLayerProvider, useUiOverlayLayer } from '@/components/ui/overlayOwnership'
 
@@ -31,5 +32,5 @@ export const AssetLibraryFloatingPanel: React.FC<Props> = ({ open, position, onC
     : position === 'left'
       ? isVisible ? 'translate-x-0 opacity-100' : '-translate-x-2 opacity-0'
       : isVisible ? 'translate-x-0 opacity-100' : 'translate-x-2 opacity-0'
-  return <UiPanel ref={panelRef} variant="glass" aria-hidden={!open} {...(!open ? { inert: '' } : {})} onTransitionEnd={onTransitionEnd} className={`fixed z-panel overflow-hidden transition-[opacity,transform] duration-180 ease-out ${isVisible ? 'pointer-events-auto' : 'pointer-events-none'} ${shouldRender ? 'visible' : 'invisible'} ${positionClass} ${motionClass}`} data-asset-floating-panel data-application-surface-id="overlay.assets" {...overlay.layerProps}><UiOverlayLayerProvider id={overlay.id}>{shouldRender ? <AssetLibrarySurface mode="floating" active={open} onClose={onClose} onOpenWorkspace={onOpenWorkspace} /> : null}</UiOverlayLayerProvider></UiPanel>
+  return <UiPanel ref={panelRef} variant="glass" aria-hidden={!open} {...(!open ? { inert: '' } : {})} onTransitionEnd={onTransitionEnd} className={`fixed z-panel overflow-hidden transition-[opacity,transform] duration-180 ease-out ${isVisible ? 'pointer-events-auto' : 'pointer-events-none'} ${shouldRender ? 'visible' : 'invisible'} ${positionClass} ${motionClass}`} data-asset-floating-panel data-application-surface-id="overlay.assets" {...overlay.layerProps}><UiOverlayLayerProvider id={overlay.id}>{shouldRender ? <WorkspaceErrorBoundary scope="panel" surfaceId="overlay.assets"><AssetLibrarySurface mode="floating" active={open} onClose={onClose} onOpenWorkspace={onOpenWorkspace} /></WorkspaceErrorBoundary> : null}</UiOverlayLayerProvider></UiPanel>
 }

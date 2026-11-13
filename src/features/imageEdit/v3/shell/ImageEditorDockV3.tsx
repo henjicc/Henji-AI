@@ -2,6 +2,7 @@ import { workspaceLayoutController, WorkspaceLayoutSaveError } from '@/services/
 import { bindWorkspaceLayoutDock } from '@/components/dockLayouts/useWorkspaceLayoutPresets'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { DockPanelErrorBoundary } from '@/components/WorkspaceErrorBoundary'
 import { DockviewReact, type DockviewApi, type DockviewGroupPanel, type DockviewReadyEvent, type IDockviewPanelProps } from 'dockview-react'
 import 'dockview-react/dist/styles/dockview.css'
 
@@ -46,7 +47,7 @@ function registeredPanel(definition: ImageEditorPanelDefinitionV3): (props: IDoc
       data-docked-editor-panel={location === 'grid' ? '' : undefined}
       data-floating-editor-panel={location === 'floating' ? '' : undefined}
       className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-      {bodyVisible ? <Body controller={controller} visible={bodyVisible} /> : null}
+      {bodyVisible ? <DockPanelErrorBoundary workspace="image_edit" panelId={definition.id} resetKeys={[controller.document.id, controller.document.revision]}><Body controller={controller} visible={bodyVisible} /></DockPanelErrorBoundary> : null}
     </div>
   }
 }

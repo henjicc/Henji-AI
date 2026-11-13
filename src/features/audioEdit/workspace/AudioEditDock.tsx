@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { DockviewReact, type DockviewApi, type DockviewReadyEvent, type IDockviewHeaderActionsProps, type IDockviewPanelHeaderProps, type IDockviewPanelProps } from 'dockview-react'
 import 'dockview-react/dist/styles/dockview.css'
 import { DockviewHost } from '@/components/DockviewHost'
+import { DockPanelErrorBoundary } from '@/components/WorkspaceErrorBoundary'
 import { dockviewHostTheme } from '@/components/dockviewHostTheme'
 import { bindDockDragGestures, dockFloatingGroupsBack, DOCKVIEW_HOST_DND_OPTIONS } from '@/components/dockviewDocking'
 import { AudioWaveWorkspace } from '../spectral/AudioWaveWorkspace'
@@ -20,14 +21,14 @@ const logger = createLogger('features.audioEdit.layout')
  * dockview 宿主（拖拽重排、合并标签、调整大小，布局记住）。面板内容从工作区上下文读写，挪到哪里行为都一样。
  */
 const AUDIO_EDIT_DOCK_THEME = dockviewHostTheme('henji-cameraStage-dock henji-videoEdit-dock')
-const panel = (Body: () => React.ReactElement): React.FC<IDockviewPanelProps> => function AudioEditDockPanel() { return <div className="h-full min-h-0"><Body /></div> }
+const panel = (id: string, Body: () => React.ReactElement): React.FC<IDockviewPanelProps> => function AudioEditDockPanel() { return <div className="h-full min-h-0"><DockPanelErrorBoundary workspace="audio_edit" panelId={id}><Body /></DockPanelErrorBoundary></div> }
 const COMPONENTS = {
-  editor: panel(AudioWaveWorkspace),
-  transcript: panel(AudioEditTranscriptPanel),
-  library: panel(AudioEditEffectLibrary),
-  effects: panel(AudioEditEffectControls),
-  history: panel(AudioEditHistoryPanel),
-  delivery: panel(AudioEditDeliveryPanel),
+  editor: panel('editor', AudioWaveWorkspace),
+  transcript: panel('transcript', AudioEditTranscriptPanel),
+  library: panel('library', AudioEditEffectLibrary),
+  effects: panel('effects', AudioEditEffectControls),
+  history: panel('history', AudioEditHistoryPanel),
+  delivery: panel('delivery', AudioEditDeliveryPanel),
 }
 
 function DockTab(props: IDockviewPanelHeaderProps): React.ReactElement {

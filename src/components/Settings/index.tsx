@@ -17,6 +17,7 @@ import AssistantTab from './tabs/AssistantTab'
 import SkillsTab from './tabs/SkillsTab'
 import { useSettingsScrollSpy } from './hooks/useSettingsScrollSpy'
 import { SettingsModalFrame } from './SettingsModalFrame'
+import { WorkspaceErrorBoundary } from '@/components/WorkspaceErrorBoundary'
 import { isSettingsPlaceholderShown } from './settingsPlaceholderState'
 import SettingsSearchResults from './components/SettingsSearchResults'
 import { SETTINGS_CONTENT_CLASS, SETTINGS_CONTENT_MAX_WIDTH_CLASS } from './settingsLayout'
@@ -284,7 +285,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
             </div>
           ) : (
             <>
-              {ActiveTabComponent && <ActiveTabComponent />}
+              {/* 一个分类出错只换掉右侧内容，目录照常可用；切到别的分类自动清除 */}
+              {ActiveTabComponent && <WorkspaceErrorBoundary scope="panel" surfaceId={activeSurfaceId ?? `settings.${activeTab}`} resetKeys={[activeTab]}><ActiveTabComponent /></WorkspaceErrorBoundary>}
             </>
           )}
         </div>

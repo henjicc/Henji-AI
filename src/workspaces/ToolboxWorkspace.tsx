@@ -4,9 +4,11 @@ import React, { Suspense, useEffect, useMemo, useState } from 'react'
 import { Clock3, type LucideIcon } from 'lucide-react'
 import { ICON_TOOL_AUDIO_EDIT, ICON_TOOL_DEVELOPER } from '@/core/theme/icons'
 import { TOOLBOX_RUNTIME } from './toolboxRuntime'
+import { WorkspaceErrorBoundary } from '@/components/WorkspaceErrorBoundary'
 import { useTranslation } from 'react-i18next'
 import {
   UI_TEXT_PANEL_TITLE_CLASS,
+  UiButton,
   UiLoading,
   UiOptionButton,
   UiPageHeader,
@@ -152,9 +154,16 @@ const ToolboxWorkspace: React.FC = () => {
         className="flex h-full flex-col bg-window"
       >
         <div className="min-h-0 flex-1">
-          <Suspense fallback={<UiLoading className="h-full" />}>
-            <activeTool.component onBack={backToToolbox} />
-          </Suspense>
+          {/* 单个工具出错只换掉这个工具；返回工具箱即可离开，切到别的工具时自动清除 */}
+          <WorkspaceErrorBoundary
+            surfaceId={activeTool.descriptor.surfaceId}
+            resetKeys={[activeTool.id]}
+            actions={<UiButton onClick={backToToolbox}>返回工具箱</UiButton>}
+          >
+            <Suspense fallback={<UiLoading className="h-full" />}>
+              <activeTool.component onBack={backToToolbox} />
+            </Suspense>
+          </WorkspaceErrorBoundary>
         </div>
       </div>
     )

@@ -9,6 +9,7 @@ import { VideoEditPresetsPanel } from '../panels/VideoEditPresetsPanel'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { createRafScheduler, type RafScheduler } from '@/utils/createRafScheduler'
 import { ownerWindowOf } from '@/utils/crossRealmDom'
+import { DockPanelErrorBoundary } from '@/components/WorkspaceErrorBoundary'
 import { DockviewReact, type DockviewApi, type DockviewReadyEvent, type IWatermarkPanelProps, type IDockviewPanelProps, type IDockviewPanelHeaderProps } from 'dockview-react'
 import 'dockview-react/dist/styles/dockview.css'
 import { UiButton, UiEmpty } from '@/components/ui'
@@ -91,7 +92,7 @@ function dockPanel(id: VideoEditPanelId, Body: PanelBody): (props: IDockviewPane
     useEffect(() => trackVideoEditDockPanel(id), [])
     useEffect(() => { const event = api.onDidVisibilityChange(value => setVisible(value.isVisible)); return () => event.dispose() }, [api])
     // Keep local panel state after its first visit, but do not mount unseen libraries during project opening.
-    return visited.current ? <Body visible={visible} /> : <div data-video-edit-panel={id} />
+    return visited.current ? <DockPanelErrorBoundary workspace="video_edit" panelId={id}><Body visible={visible} /></DockPanelErrorBoundary> : <div data-video-edit-panel={id} />
   }
 }
 const COMPONENTS = Object.fromEntries(VIDEO_EDIT_PANELS.map(({ id }) => [id, dockPanel(id, BODIES[id])])) as Record<VideoEditPanelId, (props: IDockviewPanelProps) => React.ReactElement>

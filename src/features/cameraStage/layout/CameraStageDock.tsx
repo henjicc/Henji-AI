@@ -22,6 +22,7 @@ import StageViewportWorkspace from '../viewport/StageViewportWorkspace'
 import StateKeyframeTimelinePanel from '../stateKeyframes/StateKeyframeTimelinePanel'
 import type { StageCaptureFn } from '../scene/StageCaptureBridge'
 import { DockviewHost } from '@/components/DockviewHost'
+import { DockPanelErrorBoundary } from '@/components/WorkspaceErrorBoundary'
 import { dockviewHostTheme } from '@/components/dockviewHostTheme'
 import { bindDockDragGestures, dockFloatingGroupsBack, DOCKVIEW_HOST_DND_OPTIONS } from '@/components/dockviewDocking'
 import { DockHeaderActions, DockTab } from './DockChrome'
@@ -42,14 +43,14 @@ const ViewportPanel: React.FC<IDockviewPanelProps> = () => {
   const captureRef = useContext(ViewportCaptureContext)
   return (
     <div className="relative h-full w-full">
-      <StageViewportWorkspace captureRef={captureRef ?? undefined} />
+      <DockPanelErrorBoundary workspace="camera_stage" panelId="viewport"><StageViewportWorkspace captureRef={captureRef ?? undefined} /></DockPanelErrorBoundary>
     </div>
   )
 }
 
-const ObjectsPanel: React.FC<IDockviewPanelProps> = () => <ObjectListPanel />
-const PropertiesPanel: React.FC<IDockviewPanelProps> = () => <PropertyPanel />
-const TimelineDockPanel: React.FC<IDockviewPanelProps> = () => <StateKeyframeTimelinePanel />
+const ObjectsPanel: React.FC<IDockviewPanelProps> = () => <DockPanelErrorBoundary workspace="camera_stage" panelId="objects"><ObjectListPanel /></DockPanelErrorBoundary>
+const PropertiesPanel: React.FC<IDockviewPanelProps> = () => <DockPanelErrorBoundary workspace="camera_stage" panelId="properties"><PropertyPanel /></DockPanelErrorBoundary>
+const TimelineDockPanel: React.FC<IDockviewPanelProps> = () => <DockPanelErrorBoundary workspace="camera_stage" panelId="timeline"><StateKeyframeTimelinePanel /></DockPanelErrorBoundary>
 
 const CAMERA_STAGE_DOCK_THEME = dockviewHostTheme('henji-cameraStage-dock')
 const DOCK_COMPONENTS = {

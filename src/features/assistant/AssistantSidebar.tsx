@@ -8,6 +8,8 @@ import { useDialogTransition } from '@/components/ui/useDialogTransition'
 import { UI_DIALOG_TRANSITION_MS } from '@/components/ui/motion'
 import { UI_MODAL_INDEPENDENT_ATTRIBUTE } from '@/components/ui/useDialogFocusTrap'
 
+import { WorkspaceErrorBoundary } from '@/components/WorkspaceErrorBoundary'
+
 import { EmbeddedConversation } from './embedded/EmbeddedConversation'
 import { EmbeddedHistory } from './embedded/EmbeddedHistory'
 import { newEmbeddedConversation, useEmbeddedAgent } from './embedded/controller'
@@ -210,16 +212,18 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
           aria-hidden={contentView !== 'conversation'}
           className={contentView === 'conversation' ? 'flex min-h-0 min-w-0 flex-1 overflow-hidden' : 'hidden'}
         >
-          <EmbeddedConversation />
+          <WorkspaceErrorBoundary scope="panel" surfaceId="overlay.assistant.conversation"><EmbeddedConversation /></WorkspaceErrorBoundary>
         </div>
         <div
           aria-hidden={contentView !== 'history'}
           className={contentView === 'history' ? 'flex min-h-0 min-w-0 flex-1 overflow-hidden' : 'hidden'}
         >
-          <EmbeddedHistory
-            visible={contentView === 'history'}
-            onOpen={() => setContentView('conversation')}
-          />
+          <WorkspaceErrorBoundary scope="panel" surfaceId="overlay.assistant.history">
+            <EmbeddedHistory
+              visible={contentView === 'history'}
+              onOpen={() => setContentView('conversation')}
+            />
+          </WorkspaceErrorBoundary>
         </div>
 
         {mode === 'left' || mode === 'right' ? (
