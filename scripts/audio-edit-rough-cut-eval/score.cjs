@@ -103,6 +103,40 @@ function scoreWords(blocks, sampleRate, finalDeleted, algoDeleted, reviews = [])
   return result
 }
 
+/**
+ * 理想裁决：假设助手（或人）对每条线索都按定稿选了最接近的那种做法，之后还剩什么。
+ * 这是“本地粗剪 + 二次判断”能到的上限：剩下的是线索里根本没有给出对应做法的，助手只能靠自己通读发现。
+ * pendingOnly 只裁决待确认的线索；否则连已经自动删掉的也允许改判（改留前一遍、都留着）。
+ * 定稿的做法与现在的做法删完读起来一字不差（两遍字面相同、只差是哪一遍的声音）时，看文字分不出来，不算助手能判对：
+ * 不改判，只计数（audioOnly）。
+ */
+function idealDeleted(blocks, finalDeleted, algoDeleted, retakes, pendingOnly, tally = { audioOnly: 0 }) {
+  const index = new Map(blocks.map((block, i) => [block.id, i]))
+  const deleted = [...algoDeleted]
+  for (const retake of retakes) {
+    if (pendingOnly && !retake.review) continue
+    const options = retake.options.length ? retake.options : retake.review ? [{ id: 'keep_later', blockIds: retake.blockIds }, { id: 'keep_both', blockIds: [] }] : []
+    if (!options.length) continue
+    const current = retake.review ? 'keep_both' : options[0].id
+    const involved = [...new Set([...retake.blockIds, ...options.flatMap((option) => option.blockIds)])].map((id) => index.get(id)).filter((i) => i !== undefined && !isFillerWord(blocks[i].text))
+    // 这条线索自己删掉的词改判时会恢复；别的线索、别的步骤删掉的词不归它管，哪种做法下都还是删着的
+    const own = new Set(retake.review ? [] : retake.blockIds.map((id) => index.get(id)))
+    let best, bestCost = Infinity
+    for (const option of options) {
+      const chosen = new Set(option.blockIds.map((id) => index.get(id)))
+      const cost = involved.filter((i) => (chosen.has(i) || (deleted[i] && !own.has(i))) !== Boolean(finalDeleted[i])).length - (option.id === current ? 0.5 : 0)
+      if (cost < bestCost) { best = option; bestCost = cost }
+    }
+    if (best.id === current) continue
+    const ordered = [...involved].sort((a, b) => a - b)
+    const readsAs = (option) => { const chosen = new Set(option.blockIds.map((id) => index.get(id))); return ordered.filter((i) => !(chosen.has(i) || (deleted[i] && !own.has(i)))).map((i) => strip(blocks[i].text)).join('') }
+    if (readsAs(best) === readsAs(options.find((option) => option.id === current))) { tally.audioOnly++; continue }
+    for (const i of own) deleted[i] = false
+    for (const id of best.blockIds) deleted[index.get(id)] = true
+  }
+  return deleted
+}
+
 /** 把词的删除与剪切铺到 10 毫秒一格上。 */
 function cells(fixture, deleted, cuts) {
   const total = Math.ceil(fixture.durationFrames / fixture.sampleRate * 100)
@@ -176,4 +210,4 @@ function scoreTiming(fixture, levels, algo, final) {
   }
 }
 
-module.exports = { scoreWords, scoreTiming, strip, isFillerWord, quantile }
+module.exports = { scoreWords, scoreTiming, idealDeleted, strip, isFillerWord, quantile }

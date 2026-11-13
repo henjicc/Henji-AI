@@ -7,7 +7,7 @@ import {
   unrestrictedCollectionAvailability,
 } from '@/core/application-control'
 import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
-import { audioEditSuggestionState } from '@/core/audioEdit/edits'
+import { audioEditSuggestionOptionBlocker, audioEditSuggestionState } from '@/core/audioEdit/edits'
 import { getPlatform } from '@/platform/runtime'
 import { getDocumentOperations } from '@/features/documents/documentOperations'
 
@@ -71,26 +71,35 @@ class AudioEditReflectionProvider implements ApplicationEntityProvider {
   }
 
   async readEntity(ref: ApplicationRef, request: { propertyIds?: string[] }) {
-    const { values } = await this.readValues(ref)
+    // 只算要读的字段：线索的上下文与各种做法要扫前后文，没点名时不白算
     const requested = request.propertyIds ? new Set(request.propertyIds) : null
+    const { values } = await this.readValues(ref, (propertyId) => !requested || requested.has(propertyId))
     return {
       ref, entityType: this.entityType, revisions: { audio_edit: getAudioEditRevision() },
-      properties: requested ? Object.fromEntries(Object.entries(values).filter(([id]) => requested.has(id))) : values,
+      properties: values,
       capturedAt: new Date().toISOString(),
     }
   }
 
   async getPropertyAvailability(ref: ApplicationRef, propertyIds: string[]) {
-    const { document } = await this.readValues(ref)
+    const { document } = await this.readValues(ref, () => false)
     const clue = this.entityType === AUDIO_EDIT_ENTITY_TYPES.suggestion ? document.suggestions.find((item) => item.id === splitChild(ref).childId) : undefined
     const clueState = clue ? audioEditSuggestionState(document, clue) : undefined
+    // 处理过的线索不能再整条接受或隐藏，但重念线索可以改用另一种做法（条件由做法本身决定），也可以标给用户试听
+    const optionBlocker = clue ? audioEditSuggestionOptionBlocker(document, clue) : undefined
+    const clueReason = (propertyId: string): string => {
+      if (!clue) return ''
+      if (propertyId.endsWith('.chosen_option')) return optionBlocker ?? ''
+      if (propertyId.endsWith('.audience')) return clue.kind !== 'retake' ? '只有重念线索可以标给用户试听。' : clueState === 'locked' ? '涉及的词块已锁定。' : ''
+      return clueState !== 'available' ? '这条线索已处理、隐藏、失效或受锁定保护，请以当前口播内容为准。' : ''
+    }
     const descriptors = new Map(propertiesByEntity[this.entityType].map((item) => [item.id, item]))
     return propertyIds.map((propertyId) => {
       const descriptor = descriptors.get(propertyId)
       if (!descriptor) throw new Error(`PROPERTY_NOT_FOUND:${propertyId}`)
       const locked = this.entityType === AUDIO_EDIT_ENTITY_TYPES.transcriptBlock && !propertyId.endsWith('.locked') && document.transcript.find((b) => b.id === splitChild(ref).childId)?.locked
         || this.entityType === AUDIO_EDIT_ENTITY_TYPES.caption && describeAudioEditCaptions(document).find((view) => view.id === splitChild(ref).childId)?.blockIds.some((id) => document.transcript.find((b) => b.id === id)?.locked)
-      const reason = descriptor.readOnlyReason || (locked ? '词块已锁定' : getAudioEditProjectInstance(document.id)?.busy ? '口播正在处理' : clueState && clueState !== 'available' ? '这条线索已处理、隐藏、失效或受锁定保护，请以当前口播内容为准。' : '')
+      const reason = descriptor.readOnlyReason || (locked ? '词块已锁定' : getAudioEditProjectInstance(document.id)?.busy ? '口播正在处理' : clueReason(propertyId))
       return { propertyId, readable: true, writable: !reason, reasons: reason ? [reason] : [], requiredPermissions: ['audio_edit:read'], revisions: { audio_edit: getAudioEditRevision() } }
     })
   }
@@ -101,14 +110,14 @@ class AudioEditReflectionProvider implements ApplicationEntityProvider {
     return unrestrictedCollectionAvailability(this.entityType, parent, { audio_edit: getAudioEditRevision() }, ['audio_edit:write'])
   }
 
-  private async readValues(ref: ApplicationRef): Promise<{ document: AudioEditProjectDocument; values: Record<string, JsonValue> }> {
+  private async readValues(ref: ApplicationRef, wanted: (propertyId: string) => boolean = () => true): Promise<{ document: AudioEditProjectDocument; values: Record<string, JsonValue> }> {
     if (ref.kind !== this.entityType) throw new Error('NOT_FOUND')
     const isProjectScoped = this.entityType === AUDIO_EDIT_ENTITY_TYPES.project || this.entityType === AUDIO_EDIT_ENTITY_TYPES.processorChain || this.entityType === AUDIO_EDIT_ENTITY_TYPES.render
     const ids = isProjectScoped ? { projectId: ref.id, childId: '' } : splitChild(ref)
     const document = await project(ids.projectId)
     const availableProcessors = this.entityType === AUDIO_EDIT_ENTITY_TYPES.processorChain ? await getPlatform().audioEdit.listProcessors() : undefined
     const breaths = this.entityType === AUDIO_EDIT_ENTITY_TYPES.breath ? await loadAudioEditBreaths(document) : undefined
-    return { document, values: fieldReadValues(AUDIO_EDIT_FIELDS[this.entityType], { document, childId: ids.childId, availableProcessors, ...(breaths ? { breaths: { raw: breaths, views: describeAudioEditBreaths(document, breaths) } } : {}) }) }
+    return { document, values: fieldReadValues(AUDIO_EDIT_FIELDS[this.entityType].filter((field) => wanted(field.propertyId)), { document, childId: ids.childId, availableProcessors, ...(breaths ? { breaths: { raw: breaths, views: describeAudioEditBreaths(document, breaths) } } : {}) }) }
   }
 }
 

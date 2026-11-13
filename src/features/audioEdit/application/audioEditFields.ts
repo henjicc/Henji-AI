@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { type ApplicationFieldDefinition, type ApplicationPropertyDescriptor, type JsonValue, fieldWriterTable } from '@/core/application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 import type { AudioEditProjectDocument, AudioEditProcessorDescriptor, AudioEditTranscriptBlock } from '@/core/audioEdit/types'
-import { applyAudioEditSuggestion, audioEditSuggestionState, dismissAudioEditSuggestion, setAudioEditBlocks, updateAudioEditCut } from '@/core/audioEdit/edits'
+import { applyAudioEditSuggestion, audioEditSuggestionOptionBlocker, audioEditSuggestionState, chooseAudioEditSuggestionOption, chosenAudioEditSuggestionOption, dismissAudioEditSuggestion, setAudioEditBlocks, updateAudioEditCut } from '@/core/audioEdit/edits'
 import { audioEditCutsSchema, audioEditProjectSchema, audioEditSettingsSchema, audioEditFrameRateSchema, audioEditViewSettingsSchema } from '@/core/audioEdit/schema'
 import { DEFAULT_AUDIO_EDIT_VIEW_SETTINGS } from '@/core/audioEdit/edits'
 import { hasAudioEditModifications } from '@/core/audioEdit/baseline'
@@ -91,6 +91,63 @@ function suggestionTexts(source: AudioEditFieldSource): SuggestionTexts {
   const texts = { removed, kept: kept.text, before: joinBlocks(picked), after: forward(kept.next, 0).text }
   cache.set(source.childId, texts)
   return texts
+}
+/** 做法里每段文字最多给这么多字：接缝一侧的上下文、被删文字的一头 */
+const OPTION_TEXT_CHARS = 14
+/** 已自动删的重念里，把握低于这个数的值得助手抽看。依据见 tickets/46-正式使用链路/设计-口播粗剪算法.md 8.6：定稿用例四种条件下，低于它的自动删除错了约两成，不低于它的约百分之五 */
+const CHECK_SCORE = 0.7
+// 文档每次修改都换新对象：按文档对象记下算过的结果，同一版文档里一条线索只算一次（分页读几十条线索、逐条查可写性时不重复扫全文）
+const clueCache = new WeakMap<AudioEditProjectDocument, Map<string, unknown>>()
+function perClue<T>(source: AudioEditFieldSource, name: string, compute: () => T): T {
+  let cache = clueCache.get(source.document)
+  if (!cache) { cache = new Map(); clueCache.set(source.document, cache) }
+  const key = `${name}:${source.childId}`
+  if (!cache.has(key)) cache.set(key, compute())
+  return cache.get(key) as T
+}
+const chosenOption = (source: AudioEditFieldSource): string => perClue(source, 'chosen', () => chosenAudioEditSuggestionOption(source.document, suggestion(source)) ?? '')
+const suggestionOptions = (source: AudioEditFieldSource): JsonValue => perClue(source, 'options', () => describeSuggestionOptions(source))
+/**
+ * 一处重念除“都留着”以外的各种做法（读取时现算）：删掉什么、接缝两侧连起来读是什么样。
+ * 只给接缝两侧各十几个字与被删文字的头尾：整段上下文在线索自己的 removed_text、kept_text、before_text、after_text 里已经给过一次，
+ * 一小时口播有上百条待确认，每种做法再各带一遍整段就是十几万字。
+ * 这条线索自己已经删掉的词当作还在，再按这种做法删；别的线索、用户手动删掉的词不归这条线索管，哪种做法下都不算在内。
+ */
+function describeSuggestionOptions(source: AudioEditFieldSource): JsonValue {
+  const item = suggestion(source)
+  const options = (source.document.suggestionHandoff?.[item.id]?.options ?? []).filter((option) => option.blockIds.length)
+  if (!options.length) return []
+  const transcript = source.document.transcript
+  const position = new Map(transcript.map((entry, index) => [entry.id, index]))
+  const own = new Set(item.status === 'applied' ? item.blockIds : [])
+  const present = (entry: AudioEditTranscriptBlock) => entry.included || own.has(entry.id)
+  const current = chosenOption(source)
+  return json(options.flatMap((option) => {
+    const indices = option.blockIds.flatMap((id) => position.has(id) ? [position.get(id)!] : [])
+    if (!indices.length) return []
+    const first = Math.min(...indices), last = Math.max(...indices)
+    const removedIds = new Set(option.blockIds)
+    let before = '', after = ''
+    for (let index = first - 1; index >= 0 && before.length < OPTION_TEXT_CHARS; index--) if (present(transcript[index]) && !removedIds.has(transcript[index].id)) before = joinAudioEditText(transcript[index].text.trim(), before)
+    for (let index = last + 1; index < transcript.length && after.length < OPTION_TEXT_CHARS; index++) if (present(transcript[index]) && !removedIds.has(transcript[index].id)) after = joinAudioEditText(after, transcript[index].text.trim())
+    const removed = joinBlocks(transcript.filter((entry) => removedIds.has(entry.id)))
+    return [{
+      id: option.id, ...(option.id === current ? { current: true } : {}),
+      removed_text: removed.length > OPTION_TEXT_CHARS * 2 + 1 ? `${removed.slice(0, OPTION_TEXT_CHARS)}…${removed.slice(-OPTION_TEXT_CHARS)}` : removed,
+      reads_as: `${before}｜${after}`,
+    }]
+  }))
+}
+/** 这条重念线索要不要助手看：decide 待确认、必须裁决；check 已自动删但把握不高或是口吃，值得抽看；none 其余。 */
+function suggestionAttention(source: AudioEditFieldSource): 'decide' | 'check' | 'none' {
+  return perClue(source, 'attention', () => {
+    const item = suggestion(source)
+    if (item.kind !== 'retake') return 'none'
+    const state = audioEditSuggestionState(source.document, item)
+    if (item.status === 'pending') return state === 'available' ? 'decide' : 'none'
+    const handoff = source.document.suggestionHandoff?.[item.id]
+    return item.status === 'applied' && state === 'removed' && handoff?.score !== undefined && (handoff.score < CHECK_SCORE || handoff.reason === 'stutter') ? 'check' : 'none'
+  })
 }
 function field(entityType: AudioEditEntityType, suffix: string, title: string, value: ApplicationPropertyDescriptor['value'], read: (source: AudioEditFieldSource) => JsonValue, write?: (source: AudioEditFieldSource, value: JsonValue | undefined) => void, storeActions: string[] = [], description = `口播剪辑${title}。`): ApplicationFieldDefinition<AudioEditFieldSource, AudioEditFieldSource> {
   const id = `${entityType}.${suffix}`
@@ -181,7 +238,7 @@ export const AUDIO_EDIT_FIELDS: Record<AudioEditEntityType, ApplicationFieldDefi
       if (v === 'applied') { const next = applyAudioEditSuggestion(s.document, item.id); if (next === s.document) throw new Error('建议已处理、失效或受锁定保护'); s.document = next }
       else if (v === 'dismissed') { const next = dismissAudioEditSuggestion(s.document, item.id); if (next === s.document) throw new Error('这条线索已处理、隐藏、失效或受锁定保护'); s.document = next }
       else throw new Error('该建议不能重复应用或直接恢复状态，请撤销剪辑。')
-    }, ['applySuggestion', 'dismissSuggestion']),
+    }, ['applySuggestion', 'dismissSuggestion'], '口播剪辑线索标记。重念线索优先写 chosen_option（keep_later 等于整条接受，keep_both 等于驳回，还能选留前一遍或换个切点）；这里写 applied / dismissed 是等价的简写，语气词、长停顿线索只能用这里。'),
     field(E.suggestion, 'kind', '线索类型：retake 重念（同一内容念了几遍）、filler 语气词、long_silence 长停顿', { kind: 'enum', values: [['retake', '重念'], ['filler', '语气词'], ['long_silence', '长停顿']].map(([value, label]) => ({ value, label })) }, (s) => suggestion(s).kind),
     field(E.suggestion, 'confidence', '本地算法的把握：high 大、medium 中、low 小（低的先看）', { kind: 'enum', values: [['high', '把握大'], ['medium', '把握中'], ['low', '把握小']].map(([value, label]) => ({ value, label })) }, (s) => suggestion(s).confidence),
     field(E.suggestion, 'start_frame', '线索开始采样帧（原素材时间，除以 sample_rate 得秒）', INT, (s) => suggestion(s).startFrame),
@@ -192,6 +249,29 @@ export const AUDIO_EDIT_FIELDS: Record<AudioEditEntityType, ApplicationFieldDefi
     field(E.suggestion, 'kept_text', '紧接在这段之后、还保留着的文字（重念时通常就是重来的那一遍；取到句读为止，至少与被删段一样长）', TEXT, (s) => suggestionTexts(s).kept),
     field(E.suggestion, 'before_text', '前文：这段之前还保留着的一句（取到上一处句读）', TEXT, (s) => suggestionTexts(s).before),
     field(E.suggestion, 'after_text', '后文：kept_text 之后还保留着的一句', TEXT, (s) => suggestionTexts(s).after),
+    field(E.suggestion, 'options', '这处重念除“都留着”以外可以怎么剪（只有重念线索有）；把选中的 id 写进 chosen_option', objectValue('audio_edit.suggestion_options'), suggestionOptions, undefined, [],
+      '每项 { id, current（只在当前做法上出现）, removed_text 这种做法删掉的文字（长的只给头尾）, reads_as 删完后接缝两侧连起来读的样子，“｜”是接缝 }。id：keep_later 留后一遍（删前一遍）、keep_earlier 留前一遍（删后一遍里重复的那一截）、splice_ 开头的是换个切点拼接；另有 keep_both 都留着（不是重念），总是可选，不在列表里。整段上下文看线索自己的 removed_text、kept_text、before_text、after_text。只对需要裁决的线索读它（attention=decide 或 check）。'),
+    field(E.suggestion, 'attention', '要不要助手看：decide 待确认、必须裁决；check 已自动删但把握不高，值得抽看；none 其余', { kind: 'enum', values: [['decide', '待确认，必须裁决'], ['check', '已自动删，值得抽看'], ['none', '不用看']].map(([value, label]) => ({ value, label })) }, suggestionAttention, undefined, [],
+      '读重念线索时按它筛选（where 里写 attention），只给筛出来的线索点名读 options：本地有把握自动删掉的几百处不必逐条带着做法读一遍。check 指已自动删、把握 score 低于 0.7 或原因是口吃的。'),
+    field(E.suggestion, 'chosen_option', '当前做法（options 里的 id，还没处理时为空）；写入一个 id 即改用这种做法', { kind: 'string', maxLength: 40 }, chosenOption, (s, v) => {
+      const blocker = audioEditSuggestionOptionBlocker(s.document, suggestion(s))
+      if (blocker) throw new Error(blocker)
+      const next = chooseAudioEditSuggestionOption(s.document, suggestion(s).id, string(v))
+      if (next === s.document) throw new Error('没有这种做法，或它要删的词已经都不在了；先读 options 核对 id。')
+      s.document = next
+    }, ['applySuggestion', 'dismissSuggestion'], '写入时先恢复这条线索已删的词与停顿，再按新做法删词并补接缝处的停顿剪切。已经自动删掉的重念也可以这样改判（改留前一遍、都留着）；待确认的写 keep_later 等同 status=applied，写 keep_both 等同 status=dismissed。待确认线索要删的内容已被删掉、或已删内容被手动恢复过一部分时不能写。'),
+    field(E.suggestion, 'reason', '本地算法凭什么判成重念，或为什么拿不准', { kind: 'enum', values: [
+      ['repeated', '两遍几乎相同'], ['script', '对照参考稿，这里往回重念了'], ['marker', '“哎”之后从前一句开头重来'], ['stutter', '口吃（待确认时：也可能是叠词或强调）'], ['loop', '同一截话连着重复很多遍（待确认时：也可能是有意叠说）'],
+      ['reworded', '换了说法、没有参考稿佐证，可能本来就是两句'], ['short_repeat', '很短的原样重复，像强调或叠句'], ['parallel', '开头相同的两句，像排比、列举或对比'], ['unsaid', '前一遍里有后一遍没再说的内容'],
+      ['complete_clause', '要删的是说完的一整句'], ['joined', '两遍之间没有停顿，不像念坏重来'], ['inside_unsure', '所在的整段重复还没确定'], ['residual', '去重念之后前后两段开头仍相同'], ['none', '没有记录'],
+    ].map(([value, label]) => ({ value, label })) }, (s) => s.document.suggestionHandoff?.[suggestion(s).id]?.reason ?? 'none'),
+    field(E.suggestion, 'score', '本地算法估的“像念坏重来”的程度（0–1，越大越像；只用来排先后，没有记录时为 0）', { kind: 'number', hardRange: { min: 0, max: 1 } }, (s) => s.document.suggestionHandoff?.[suggestion(s).id]?.score ?? 0),
+    field(E.suggestion, 'audience', '这条线索等谁来定：assistant 助手先判断（默认）；user 助手定不了、需要用户试听', { kind: 'enum', values: [['assistant', '助手先判断'], ['user', '需要用户试听']].map(([value, label]) => ({ value, label })) }, (s) => s.document.suggestionHandoff?.[suggestion(s).id]?.audience ?? 'assistant', (s, v) => {
+      if (v !== 'assistant' && v !== 'user') throw new Error('audience 只能写 assistant 或 user。')
+      const id = suggestion(s).id
+      const { audience: _audience, ...rest } = s.document.suggestionHandoff?.[id] ?? {}
+      setDocument(s, 'suggestionHandoff', { ...s.document.suggestionHandoff, [id]: v === 'user' ? { ...rest, audience: 'user' } : rest })
+    }),
   ],
   [E.breath]: [
     field(E.breath, 'document_id', '所属口播（口播文档 ID，分页读取时可按此筛选）', TEXT, (s) => s.document.id),
@@ -228,6 +308,7 @@ const audioEditValueSchemas: Record<string, z.ZodType> = {
   'audio_edit.effect_chain': audioEditEffectChainSchema,
   'audio_edit.caption_blocks': z.array(z.string()),
   'audio_edit.suggestion_blocks': z.array(z.string()),
+  'audio_edit.suggestion_options': z.array(z.object({ id: z.string(), current: z.boolean().optional(), removed_text: z.string(), reads_as: z.string() })),
   'audio_edit.output': audioEditOutputSchema,
   // 只读描述来自宿主处理器目录，形状与 AudioEditProcessorDescriptor 一致。
   'audio_edit.processors': z.array(z.object({

@@ -16,6 +16,8 @@ export function restoreAudioEditBaseline(project: AudioEditProjectDocument): Aud
     ...project, editBaseline: baseline,
     transcript: baseline.transcript.map((block) => ({ ...block })),
     suggestions: baseline.suggestions.map((item) => ({ ...item, blockIds: [...item.blockIds] })),
+    // 交接材料记的是剪辑过程里的判断与改判，线索回到最初状态时一并作废
+    suggestionHandoff: undefined,
     cuts: [], gainRegions: [], repairs: [], batchSettings: { ...DEFAULT_AUDIO_EDIT_SETTINGS, fillers: [...DEFAULT_AUDIO_EDIT_SETTINGS.fillers] },
     effectChain: [], chainBypassed: false, output: undefined,
   }
@@ -25,7 +27,7 @@ export function restoreAudioEditBaseline(project: AudioEditProjectDocument): Aud
 export function audioEditContentKey(value: AudioEditProjectDocument): string {
   return JSON.stringify({
     gainRegions: value.gainRegions ?? [], repairs: value.repairs ?? [],
-    transcript: value.transcript, suggestions: value.suggestions, cuts: value.cuts ?? [],
+    transcript: value.transcript, suggestions: value.suggestions, suggestionHandoff: value.suggestionHandoff ?? {}, cuts: value.cuts ?? [],
     batchSettings: value.batchSettings ?? DEFAULT_AUDIO_EDIT_SETTINGS,
     effectChain: value.effectChain ?? [], chainBypassed: value.chainBypassed === true, output: value.output ?? null,
   }, (_key: string, item: unknown) => item && typeof item === 'object' && !Array.isArray(item)

@@ -69,6 +69,30 @@ export interface AudioEditSuggestion {
   status: 'pending' | 'applied' | 'dismissed'
 }
 
+/** 一处重念可以怎么剪：一种做法要删哪些词、连带剪掉的声音范围。blockIds 为空表示都留着。 */
+export interface AudioEditSuggestionOption {
+  /** keep_later 留后一遍、keep_earlier 留前一遍、splice_<切点两头词块的摘要> 换个切点拼接、keep_both 都留着 */
+  id: string
+  blockIds: string[]
+  startFrame: number
+  endFrame: number
+}
+
+/**
+ * 本地粗剪交给助手（或人）二次判断的材料，按线索 ID 存：为什么判成重念或为什么拿不准、有多像、还能怎么剪。
+ * 单独成一张表而不写进线索本身：线索是严格结构，往里加字段会让旧版本程序打不开文件；顶层不认识的字段旧版本会原样带回。
+ */
+export interface AudioEditSuggestionHandoff {
+  reason?: string
+  /** 0–1，越大越像念坏重来；只用来排先后 */
+  score?: number
+  options?: AudioEditSuggestionOption[]
+  /** 助手看过仍定不了、留给用户听的 */
+  audience?: 'user'
+  /** 改判时选的做法；没有改判过的不记，用的是排在第一的那种 */
+  chosen?: string
+}
+
 export interface AudioEditSourceMetadata {
   mediaType: 'audio' | 'video'
   sourcePath: string
@@ -95,6 +119,7 @@ export interface AudioEditProjectDocument {
   referenceScript: string
   transcript: AudioEditTranscriptBlock[]
   suggestions: AudioEditSuggestion[]
+  suggestionHandoff?: Record<string, AudioEditSuggestionHandoff>
   selectedAsrModelId?: string
   createdAt: number
   updatedAt: number

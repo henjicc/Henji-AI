@@ -1,6 +1,6 @@
 import { AUDIO_EDIT_MAX_CHAIN_ITEMS } from '@/core/audioEdit/effects'
 import type { AudioEditExportRequest, AudioEditExportResult, AudioEditRange, AudioEditTranscriptionRequest, AudioEditProjectDocument, AudioEditSuggestion } from '@/core/audioEdit/types'
-import { applyAudioEditSuggestion, cleanAudioEditFillers, DEFAULT_AUDIO_EDIT_SETTINGS } from '@/core/audioEdit/edits'
+import { applyAudioEditSuggestion, applyDetectedAudioEditRetakes, cleanAudioEditFillers, DEFAULT_AUDIO_EDIT_SETTINGS, type DetectedAudioEditRetake } from '@/core/audioEdit/edits'
 import { buildProjectAudioEditTimeline, editedDurationFrames } from '@/core/audioEdit/timeline'
 import { getPlatform } from '@/platform/runtime'
 import { withPaidOperation, transcriptionEstimatedCny } from '@/services/paidApproval'
@@ -9,7 +9,7 @@ import { createLogger } from '@/core/logging'
 import { formatAudioEditCaptions } from '@/core/audioEdit/captions'
 import { describeAudioEditCaptions } from '@/core/audioEdit/captionReview'
 import { hasAudioEditModifications } from '@/core/audioEdit/baseline'
-import { audioEditRetakeSuggestion } from '@/core/audioEdit/retakes'
+import { audioEditRetakeHandoff, audioEditRetakeSuggestion } from '@/core/audioEdit/retakes'
 import { applyAudioEditBreathPolicy, type AudioEditBreathPolicy, type AudioEditQuietRange } from '@/core/audioEdit/breaths'
 import { cleanAudioEditGaps, clearAudioEditGaps, type AudioEditLevels } from '@/core/audioEdit/gaps'
 import type { SpeechEnergyAnalysis } from '@/core/audioEdit/speechEnergy'
@@ -87,22 +87,14 @@ async function detectRetakeSuggestions(instance: AudioEditProjectInstance, range
   const retakes = await detectAudioEditRetakesOffThread(document.transcript, {
     sampleRate: document.source.sampleRate, pauses: detected.energy.pauses, referenceScript: document.referenceScript, ...(range ? { range } : {}), ...(breaths ? { breaths } : {}),
   })
-  return retakes.map((retake) => ({ suggestion: audioEditRetakeSuggestion(retake), review: retake.review }))
+  return retakes.map((retake) => ({ suggestion: audioEditRetakeSuggestion(retake), handoff: audioEditRetakeHandoff(retake), review: retake.review }))
 }
 
-interface DetectedRetake { suggestion: AudioEditSuggestion; review: boolean }
+type DetectedRetake = DetectedAudioEditRetake
 
-/**
- * 把检测到的重念并入线索并逐条应用；已处理或已隐藏的同一处不重复提出。
- * 拿不准的（换了说法又没有参考稿佐证）只留作待确认的线索，不删，在“剪辑线索”里由人或助手决定。
- */
-function applyRetakeSuggestions(document: AudioEditProjectDocument, detected: readonly DetectedRetake[]): AudioEditProjectDocument {
-  const existing = new Set(document.suggestions.filter((item) => item.status !== 'pending').map((item) => item.id))
-  const fresh = detected.filter((item) => !existing.has(item.suggestion.id))
-  let draft: AudioEditProjectDocument = { ...document, suggestions: [...document.suggestions.filter((item) => item.kind !== 'retake' || item.status !== 'pending'), ...fresh.map((item) => item.suggestion)] }
-  for (const item of fresh) if (!item.review) draft = applyAudioEditSuggestion(draft, item.suggestion.id)
-  return draft
-}
+/** 这次真正列进待确认的条数：检测出来但那一处已经定过的不算。 */
+const mergedReviewCount = (detected: readonly DetectedRetake[], after: AudioEditProjectDocument): number =>
+  detected.filter((item) => item.review && after.suggestions.some((entry) => entry.id === item.suggestion.id && entry.status === 'pending')).length
 
 const appliedCount = (detected: readonly AudioEditSuggestion[], before: AudioEditProjectDocument, after: AudioEditProjectDocument): number => {
   const applied = new Set(before.suggestions.filter((item) => item.status === 'applied').map((item) => item.id))
@@ -116,9 +108,9 @@ export async function cleanProjectAudioEditRetakes(projectId: string, range?: Au
       const original = instance.document
       const before = editedDurationFrames(buildProjectAudioEditTimeline(original))
       const detected = await detectRetakeSuggestions(instance, range, requestId)
-      const next = commit((document) => applyRetakeSuggestions(document, detected))
+      const next = commit((document) => applyDetectedAudioEditRetakes(document, detected))
       await flushAudioEditProject(projectId)
-      return { count: appliedCount(detected.map((item) => item.suggestion), original, next), reviewCount: detected.filter((item) => item.review).length, shortenedMs: Math.round((before - editedDurationFrames(buildProjectAudioEditTimeline(next))) * 1000 / next.source.sampleRate) }
+      return { count: appliedCount(detected.map((item) => item.suggestion), original, next), reviewCount: mergedReviewCount(detected, next), shortenedMs: Math.round((before - editedDurationFrames(buildProjectAudioEditTimeline(next))) * 1000 / next.source.sampleRate) }
     })
     logger.info('audio_edit.retakes.completed', { requestId, context: { projectId, ...result } })
     return result
@@ -142,7 +134,7 @@ export async function compressAudioEditSilence(projectId: string, range?: AudioE
     if (detected.revision !== instance.persistedRevision) throw new Error('口播已更新，请重新分析停顿。')
     const appliedIds = new Set(instance.document.suggestions.filter((item) => item.status === 'applied').map((item) => item.id))
     const next = commit((document) => {
-      let draft = retakes.length ? applyRetakeSuggestions(document, retakes) : document
+      let draft = retakes.length ? applyDetectedAudioEditRetakes(document, retakes) : document
       const existing = new Set(draft.suggestions.filter((item) => item.status !== 'pending').map((item) => item.id))
       const suggestions = detected.suggestions.filter((item) => !existing.has(item.id))
       draft = { ...draft, batchSettings: settings, suggestions: [...draft.suggestions.filter((item) => item.kind !== 'long_silence' || item.status !== 'pending'), ...suggestions] }
@@ -160,7 +152,7 @@ export async function compressAudioEditSilence(projectId: string, range?: AudioE
     return { count: detected.suggestions.filter((item) => !appliedIds.has(item.id) && next.suggestions.some((entry) => entry.id === item.id && entry.status === 'applied')).length,
       shortenedMs: Math.round((before - editedDurationFrames(buildProjectAudioEditTimeline(next))) * 1000 / next.source.sampleRate),
       retakeCount: retakes.filter((item) => !appliedIds.has(item.suggestion.id) && next.suggestions.some((entry) => entry.id === item.suggestion.id && entry.status === 'applied')).length,
-      retakeReviewCount: retakes.filter((item) => item.review).length,
+      retakeReviewCount: mergedReviewCount(retakes, next),
       ...(breathCounts ? { breaths: breathCounts } : {}), ...(gapCount !== undefined ? { gaps: gapCount } : {}) }
   })
 }

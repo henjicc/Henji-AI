@@ -138,8 +138,8 @@
       "minReaderVersion": 1
     },
     "document.audio_edit": {
-      "version": 8,
-      "fingerprint": "085c368d0d8729a878eada09f81e33d3b0cc1c51692ee6e07de6c243787a6315",
+      "version": 9,
+      "fingerprint": "a91c6d8133eb855af722efe6cf7e88e5e42c7cd00fb884e06ed8c861aab40be3",
       "supportedFrom": 1,
       "minReaderVersion": 8
     },

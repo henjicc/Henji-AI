@@ -45,4 +45,22 @@ describe('录音素材拼接坐标', () => {
     const locked = { ...project(), transcript: [{ id: 'w', text: '锁', startFrame: 100, endFrame: 300, included: true, locked: true, granularity: 'word' as const }] }
     expect(() => spliceAudioEditProject(locked, resultSource(1100), 200, 200, 100)).toThrow('锁定')
   })
+
+  it('交接材料跟着线索平移：各种做法的范围一起移，跨过插入位置的线索与条目一并丢掉', () => {
+    const word = (id: string, startFrame: number) => ({ id, text: id, startFrame, endFrame: startFrame + 50, included: true, locked: false, granularity: 'word' as const })
+    const clue = (id: string, startFrame: number, endFrame: number, blockIds: string[]) => ({ id, kind: 'retake' as const, evidence: 'audio' as const, title: '', detail: '', startFrame, endFrame, blockIds, confidence: 'high' as const, status: 'pending' as const })
+    const p: AudioEditProjectDocument = { ...project(), transcript: [word('a', 100), word('b', 250), word('c', 600), word('d', 700), word('e', 800)],
+      suggestions: [clue('across', 100, 320, ['a', 'b']), clue('after', 580, 760, ['c'])],
+      suggestionHandoff: {
+        across: { options: [{ id: 'keep_later', blockIds: ['a', 'b'], startFrame: 100, endFrame: 320 }] },
+        after: { reason: 'repeated', audience: 'user', options: [{ id: 'keep_later', blockIds: ['c'], startFrame: 580, endFrame: 660 }, { id: 'keep_earlier', blockIds: ['d'], startFrame: 660, endFrame: 760 }, { id: 'keep_both', blockIds: [], startFrame: 580, endFrame: 660 }] },
+        gone: { options: [] },
+      } }
+    // [200, 300) 换成 400 帧的新录音：后面整体后移 300
+    const next = spliceAudioEditProject(p, resultSource(1300), 200, 300, 400)
+    expect(next.suggestions.map((item) => [item.id, item.startFrame, item.endFrame])).toEqual([['after', 880, 1060]])
+    expect(next.suggestionHandoff).toEqual({ after: { reason: 'repeated', audience: 'user', options: [
+      { id: 'keep_later', blockIds: ['c'], startFrame: 880, endFrame: 960 }, { id: 'keep_earlier', blockIds: ['d'], startFrame: 960, endFrame: 1060 }, { id: 'keep_both', blockIds: [], startFrame: 880, endFrame: 960 },
+    ] } })
+  })
 })

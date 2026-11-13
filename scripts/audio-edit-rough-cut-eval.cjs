@@ -13,7 +13,7 @@ const { tmpdir } = require('node:os')
 const { execFileSync } = require('node:child_process')
 const { gunzipSync } = require('node:zlib')
 const { buildSync } = require('esbuild')
-const { scoreWords, scoreTiming, strip } = require('./audio-edit-rough-cut-eval/score.cjs')
+const { scoreWords, scoreTiming, idealDeleted, strip } = require('./audio-edit-rough-cut-eval/score.cjs')
 const { synthesize, scoreSynthetic } = require('./audio-edit-rough-cut-eval/synthetic.cjs')
 
 const root = resolve(__dirname, '..')
@@ -83,6 +83,18 @@ const wordSummary = (score) => ({
   留错遍: score.wrongTake.count, 接缝偏移: score.seamShift.count, 语气词漏删: score.fillerMiss, 语气词误删: score.fillerFalse, 待确认: score.review.count, 待确认命中: score.review.hit, 清单外的漏删: score.uncovered,
 })
 
+/** 助手按线索处理后的上限：每条线索都按定稿选对做法之后，还剩几处整处漏删、误删、留错遍。 */
+function idealSummary(fixture, finalDeleted, deleted, retakes, details, name) {
+  const tally = { audioOnly: 0 }
+  const after = (pendingOnly, count) => scoreWords(fixture.blocks, fixture.sampleRate, finalDeleted, idealDeleted(fixture.blocks, finalDeleted, deleted, retakes, pendingOnly, count))
+  const all = after(false, tally), pending = after(true)
+  details.push([`${name} · 理想裁决后`, all, ''])
+  return { 理想裁决后漏删: all.wholeMiss.count, 理想裁决后误删: all.wholeFalse.count, 理想裁决后留错遍: all.wrongTake.count,
+    只裁决待确认时剩下: pending.wholeMiss.count + pending.wholeFalse.count + pending.wrongTake.count,
+    // 两遍字面相同、定稿留的是另一遍的声音：看文字分不出来，没有算作判对，仍计在上面三项里
+    字面相同只差声音: tally.audioOnly }
+}
+
 function evaluate(pipeline) {
   const scores = {}, details = []
   const fixtures = loadFixtures()
@@ -94,7 +106,7 @@ function evaluate(pipeline) {
       { deleted: finalDeleted, cuts: fixture.finalCuts.filter((cut) => cut.enabled) })
     const shift = words.seamShift
     const section = scores[`${fixture.name}${fixture.gold ? '' : '（非定稿，仅参考）'}`] = {
-      ...wordSummary(words),
+      ...wordSummary(words), ...idealSummary(fixture, finalDeleted, result.deleted, result.handoff, details, fixture.name),
       接缝偏移最多词数: Math.max(0, ...shift.words), 接缝偏移中位毫秒: [...shift.ms].sort((a, b) => a - b)[shift.ms.length >> 1] ?? 0,
       停顿偏差超80毫秒: timing.pauses.over80, 其中偏长: timing.pauses.longer80, 其中偏短: timing.pauses.shorter80, 停顿偏差超150毫秒: timing.pauses.over150,
       停顿偏差九成分位毫秒: timing.pauses.p90, 停顿偏差九九分位毫秒: timing.pauses.p99,
@@ -114,7 +126,7 @@ function evaluate(pipeline) {
       // 定稿里的删除也包含只跑去重念时不会删的语气词，这里只看实词，与“原样”同口径
       const perturbed = scoreWords(fixture.blocks, fixture.sampleRate, finalDeleted, deleted, retakes.filter((retake) => retake.review).map((retake) => retake.blockIds))
       const { 语气词漏删: _a, 语气词误删: _b, ...summary } = wordSummary(perturbed)
-      scores[`${fixture.name} · ${name}`] = summary
+      scores[`${fixture.name} · ${name}`] = { ...summary, ...idealSummary(fixture, finalDeleted, deleted, retakes, details, `${fixture.name} · ${name}`) }
       details.push([`${fixture.name} · ${name}`, perturbed, ''])
     }
   }
@@ -181,7 +193,7 @@ function evaluate(pipeline) {
 }
 
 /** 越小越好的指标（其余只作参考，不标好坏）。 */
-const LOWER_IS_BETTER = /漏删|误删|留错遍|接缝偏移$|停顿偏差|硬接缝|碎保留段|切到字|预计改动次数|漏剪|剪坏|范围外|稿内重复被删|短叠句被自动删/
+const LOWER_IS_BETTER = /漏删|误删|留错遍|剩下$|接缝偏移$|停顿偏差|硬接缝|碎保留段|切到字|预计改动次数|漏剪|剪坏|范围外|稿内重复被删|短叠句被自动删/
 const HIGHER_IS_BETTER = /剪对百分比|待确认命中/
 
 function print(label, scores, details, baseline) {

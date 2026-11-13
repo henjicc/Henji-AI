@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import realTakes from './__fixtures__/retake-takes.json'
 import type { SpeechEnergyPause } from './speechEnergy'
 import type { AudioEditTranscriptBlock } from './types'
-import { audioEditRetakeSuggestion, detectAudioEditRetakes, type AudioEditRetakeOptions } from './retakes'
+import { audioEditRetakeHandoff, audioEditRetakeSuggestion, detectAudioEditRetakes, type AudioEditRetakeOptions } from './retakes'
 
 type Part = string | { pause: number }
 
@@ -378,4 +378,50 @@ describe('识别模型的循环输出', () => {
     expect(detect(spoken).filter((retake) => !retake.review)).toEqual([])
   })
 
+})
+
+describe('交给助手二次判断的材料', () => {
+  const optionTexts = (spoken: ReturnType<typeof speak>, retake: ReturnType<typeof detect>[number]) => retake.options.map((option) => [option.id, textOf(spoken, option.blockIds)])
+
+  it('自动删的重念带着其他做法：留前一遍删的是后一遍对应的那一截', () => {
+    const spoken = speak('所以 综合 来看 这个 工具 挺 不错 的。', { pause: 800 }, '所以 综合 来看 这个 工具 很 不错 的。', { pause: 300 }, '下面 说 价格。')
+    const [retake] = detect(spoken)
+    expect(retake).toMatchObject({ review: false, reason: 'repeated' })
+    expect(optionTexts(spoken, retake)).toEqual([['keep_later', '所以综合来看这个工具挺不错的。'], ['keep_earlier', '所以综合来看这个工具很不错的。'], ['keep_both', '']])
+    expect(audioEditRetakeHandoff(retake)).toMatchObject({ reason: 'repeated', score: retake.score, options: retake.options })
+    expect(retake.score).toBeGreaterThan(0.5)
+  })
+
+  it('两遍一字不差时，留前一遍仍然单列：读起来一样，听起来是另一遍声音', () => {
+    const spoken = speak('还可以 回头看 前面 扩展，', { pause: 500 }, '还可以 回头看 前面 扩展 出来 的 点。')
+    const [retake] = detect(spoken)
+    expect(optionTexts(spoken, retake)).toEqual([['keep_later', '还可以回头看前面扩展，'], ['keep_earlier', '还可以回头看前面扩展'], ['keep_both', '']])
+  })
+
+  it('一段删除里并着两处重念时只给都留着这一种改法', () => {
+    const spoken = speak('比我 想象 的 简单 太多 了一个 API KEY。', { pause: 800 }, '一个 API KEY 发个 HTTPS 请求，', { pause: 300 }, '发个 HTTP 请求， 结果 就 回来了')
+    const retakes = detect(spoken)
+    for (const retake of retakes) {
+      expect(retake.options[0].blockIds).toEqual(retake.blockIds)
+      expect(retake.options.at(-1)).toMatchObject({ id: 'keep_both', blockIds: [] })
+      expect(new Set(retake.options.map((option) => option.blockIds.join(','))).size).toBe(retake.options.length)
+    }
+    expect(retakes.map((retake) => optionTexts(spoken, retake))).toEqual([[['keep_later', '一个APIKEY发个HTTPS请求，'], ['keep_both', '']]])
+  })
+
+  it.each([
+    ['很短的原样重复', ['这个 工具', { pause: 200 }, '真的，', { pause: 200 }, '真的 很 好用。'], 'short_repeat'],
+    ['开头换了一个字的两句', ['一个 人 可以 走得 很快，', { pause: 300 }, '一群 人 可以 走得 很远。'], undefined],
+    ['对比句', ['这 不是 一个 技术 问题，', { pause: 300 }, '这 是 一个 态度 问题。'], undefined],
+  ] as Array<[string, Part[], string | undefined]>)('待确认的写明拿不准在哪里（%s）', (_name, parts, reason) => {
+    const spoken = speak(...parts)
+    const review = detect(spoken).filter((retake) => retake.review)
+    expect(review.length).toBeGreaterThan(0)
+    for (const retake of review) {
+      expect(['short_repeat', 'parallel', 'reworded', 'unsaid', 'complete_clause', 'joined', 'inside_unsure', 'stutter', 'loop', 'residual']).toContain(retake.reason)
+      expect(retake.options.map((option) => option.id)).toEqual(expect.arrayContaining(['keep_later', 'keep_both']))
+      expect(audioEditRetakeSuggestion(retake).detail).toContain('没有自动删除')
+    }
+    if (reason) expect(review.map((retake) => retake.reason)).toContain(reason)
+  })
 })

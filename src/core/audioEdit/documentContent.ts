@@ -21,7 +21,7 @@ export interface AudioEditDocumentShell {
 }
 
 const KNOWN_KEYS = new Set([
-  'source', 'referenceScript', 'transcript', 'suggestions', 'selectedAsrModelId', 'cuts',
+  'source', 'referenceScript', 'transcript', 'suggestions', 'suggestionHandoff', 'selectedAsrModelId', 'cuts',
   'gainRegions', 'repairs', 'batchSettings', 'xmlFrameRate', 'viewSettings', 'editBaseline',
   'effectChain', 'chainBypassed', 'output',
 ])

@@ -21,11 +21,16 @@ export interface RoughCutInput {
 
 const transcript = (input: RoughCutInput) => input.blocks.map((block) => ({ ...block, included: true, locked: false, granularity: 'word' as const }))
 
-/** 只跑去重念：返回每处删掉哪些词、是否只是待确认。 */
-export function detectRetakes(input: RoughCutInput): Array<{ blockIds: string[]; review: boolean; confidence: string; joined: boolean }> {
+interface Handoff { blockIds: string[]; review: boolean; options: Array<{ id: string; blockIds: string[] }> }
+// 被评估的版本可能还没有“做法”这一项（--ref 指到更早的提交）
+const handoffOf = (retake: { blockIds: string[]; review: boolean; options?: Array<{ id: string; blockIds: string[] }> }): Handoff =>
+  ({ blockIds: retake.blockIds, review: retake.review, options: (retake.options ?? []).map((option) => ({ id: option.id, blockIds: option.blockIds })) })
+
+/** 只跑去重念：返回每处删掉哪些词、是否只是待确认、交给助手的其他做法。 */
+export function detectRetakes(input: RoughCutInput): Array<Handoff & { confidence: string; joined: boolean }> {
   return detectAudioEditRetakes(transcript(input), {
     sampleRate: input.sampleRate, pauses: input.pauses, referenceScript: input.referenceScript, ...(input.breaths ? { breaths: input.breaths } : {}),
-  }).map((retake) => ({ blockIds: retake.blockIds, review: retake.review, confidence: retake.confidence, joined: retake.joined }))
+  }).map((retake) => ({ ...handoffOf(retake), confidence: retake.confidence, joined: retake.joined }))
 }
 
 /** 整条快速处理：返回每个词是否被删、全部剪切、待确认的重念。需要逐帧电平与呼吸。 */
@@ -58,5 +63,6 @@ export function roughCut(input: RoughCutInput) {
       .map((cut: { startFrame: number; endFrame: number; mode?: string }) => ({ startFrame: cut.startFrame, endFrame: cut.endFrame, mute: cut.mode === 'mute' })) as Array<{ startFrame: number; endFrame: number; mute: boolean }>,
     review: retakes.filter((retake) => retake.review).map((retake) => retake.blockIds),
     retakeCount: retakes.filter((retake) => !retake.review).length,
+    handoff: retakes.map(handoffOf),
   }
 }

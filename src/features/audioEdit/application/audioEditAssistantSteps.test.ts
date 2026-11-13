@@ -126,3 +126,27 @@ it('用户已在界面撤销了助手那一步：撤销说明已撤销，重做�
     expect(JSON.stringify(await app.call('redo_audio_edit', { documentRef, undoRef: reset.undoRef }))).toContain('不需要重做')
   } finally { app.dispose() }
 })
+
+it('重念线索带着各种做法：并排读回 reads_as，写 chosen_option 改留前一遍', async () => {
+  registerHarnessAudioEditProject({ ...fixture(), suggestionHandoff: { 'retake-1': { reason: 'reworded', score: 0.4, options: [
+    { id: 'keep_later', blockIds: ['b1', 'b2'], startFrame: 10_000, endFrame: 30_000 }, { id: 'keep_earlier', blockIds: ['b3', 'b4'], startFrame: 30_000, endFrame: 50_000 }, { id: 'keep_both', blockIds: [], startFrame: 10_000, endFrame: 30_000 },
+  ] } } })
+  const app = createApplicationHarness()
+  try {
+    const ref = { kind: 'audio_edit.suggestion', id: 'audio-steps:retake-1' }
+    const before = (await app.read(ref, ['audio_edit.suggestion.attention', 'audio_edit.suggestion.options', 'audio_edit.suggestion.reason', 'audio_edit.suggestion.score', 'audio_edit.suggestion.audience', 'audio_edit.suggestion.chosen_option'])).properties as Record<string, unknown>
+    expect(before).toMatchObject({ 'audio_edit.suggestion.reason': 'reworded', 'audio_edit.suggestion.score': 0.4, 'audio_edit.suggestion.audience': 'assistant', 'audio_edit.suggestion.chosen_option': '', 'audio_edit.suggestion.attention': 'decide' })
+    // 都留着总是可选，不占列表；每种做法只给删掉的文字与接缝两侧
+    expect(before['audio_edit.suggestion.options']).toEqual([
+      { id: 'keep_later', removed_text: '我们今天', reads_as: '前面一句。｜我们今天来聊聊，后面一句。' },
+      { id: 'keep_earlier', removed_text: '我们今天', reads_as: '前面一句。我们今天｜来聊聊，后面一句。' },
+    ])
+    // 定不了的先标给用户；已经处理过的线索仍可改用另一种做法
+    expect((await app.change(ref, { 'audio_edit.suggestion.audience': 'user' })).ok).toBe(true)
+    expect((await app.change(ref, { 'audio_edit.suggestion.chosen_option': 'keep_earlier' })).ok).toBe(true)
+    expect(stored().transcript.filter((item) => !item.included && item.id !== 'b7').map((item) => item.id)).toEqual(['b3', 'b4'])
+    expect((await app.read(ref, ['audio_edit.suggestion.chosen_option', 'audio_edit.suggestion.attention'])).properties).toMatchObject({ 'audio_edit.suggestion.chosen_option': 'keep_earlier', 'audio_edit.suggestion.attention': 'check' })
+    expect(stored().suggestionHandoff?.['retake-1']).toMatchObject({ audience: 'user', reason: 'reworded' })
+    expect((await app.change(ref, { 'audio_edit.suggestion.chosen_option': 'nope' })).ok).toBe(false)
+  } finally { app.dispose() }
+})

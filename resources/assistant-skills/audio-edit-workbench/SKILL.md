@@ -7,22 +7,30 @@ description: 剪口播时使用：把录音全自动粗剪成可继续修改的�
 
 目标：用户只给录音（可以附口播稿），交回一份剪好的口播工程。用户在口播里边听边改，满意后自己导出；每一步都可撤销、可逐处恢复。
 
-**你不是在“跑一遍工具”。** 没有接入助手时，软件的算法就是全部；有你在时，算法结果只是起点。你的价值在于逐处分析上下文、做算法做不好的判断，效果要明显好于只点“快速处理”。只调用工具、读一眼结果就交付，等于没有完成任务。
+**分两段做：本地算法先粗剪，你做二次优化。** 本地算法不懂意思：有把握的它直接剪掉（都留痕、可逐处恢复），拿不准的不动声音，连同原因和几种做法列成线索交给你。没有接入助手时，算法结果就是全部；有你在时，它只是起点，你要逐条裁决这份线索、再通读补漏，效果要明显好于只点“快速处理”。只调用工具、读一眼结果就交付，等于没有完成任务。
 
 ## 一、先让算法打底
 
 1. **口播文档**：已有口播就用它（`list_documents`，kind=audio_edit）。只有文件时先 `create_document`（kind=audio_edit；用户在某个项目里工作就传 projectId），再 `import_audio_edit_source` 导入本机音频或视频。默认引用原文件，不复制。
 2. **参考稿（可选）**：用户给了口播稿就写入 `audio_edit.document.reference_script`。稿子只用来避免误删稿子里本来就有的重复、辅助校对近音字，不能覆盖识别出的原话；录音时改过稿也没关系。
-3. **转写**：`transcribe_audio_edit`。按时长计费，走应用的付费授权，等待确认后用原操作查询，不重复提交；已有转写不再识别。
-4. **去掉重念**：`clean_audio_edit_retakes`。同一内容念了几遍只留最后一遍；呼吸也算气口，原切点连读时会在两遍对应位置的明显气口换遍拼接，贴着念坏那遍的一两个字一起删。拿不准的（换了说法又没有稿子佐证、删完后保留内容里前后两段开头仍相同）不删，列为待确认的剪辑线索（kind=retake、status=pending），第二步里先看这份清单。
+3. **转写**：`transcribe_audio_edit`（modelId 通常省略，自动选合适的模型）。按时长计费，走应用的付费授权；调用会等到识别完成，等不到时用 `query_audio_edit_tasks` 查，不重复提交。失败后能不能重新提交看最近一次转写的 resubmission（allowed / resume / blocked / running_elsewhere），不要从报错文字猜。已有转写不再识别。
+4. **去掉重念**：`clean_audio_edit_retakes`。同一内容念了几遍只留最后一遍；呼吸也算气口，原切点连读时会在两遍对应位置的明显气口换遍拼接，贴着念坏那遍的一两个字一起删。拿不准的（换了说法又没有稿子佐证、短的原样重复、像排比的两句、删完后保留内容里前后两段开头仍相同）不删，列为待确认的剪辑线索；每条线索（包括已经自动删掉的）都带着原因和几种做法，第二步先裁决这份清单。
 5. **呼吸声**：`process_audio_edit_breaths`（本机模型，第一次用时下载约 13 MB）。默认（快节奏）去掉呼吸，并按声音电平把字与字之间残留的气声、呼吸尾巴整段静音、再从中间删去多余部分（句间与接缝留约 0.2 秒、句中约 0.12 秒；标识以 `gap:` 开头的静音与删除剪切），和字连着的只减弱；用户说过的节奏偏好优先（偏自然就把句中的改成减弱或保留）。用户说先不处理呼吸时跳过。
 6. **停顿**：`compress_audio_edit_silence` 按实际声音压缩停顿、保留自然气口。不要把词间时间差当作停顿。
 
 ## 二、逐处复核（必做，不能跳过）
 
-读数据：分页读取全部词块 `audio_edit.transcript_block`（按 document_id 筛选，包括 included=false 的，才知道每一刀删了什么），读剪辑线索 `audio_edit.suggestion`（kind=retake 带置信度与接缝说明），读呼吸声 `audio_edit.breath`（context、前后文字、gap_ms、handling）。
+读数据：分页读取全部词块 `audio_edit.transcript_block`（按 document_id 筛选，包括 included=false 的，才知道每一刀删了什么），读呼吸声 `audio_edit.breath`（context、前后文字、gap_ms、handling）。
 
-1. **每一处重念都回答三个问题**，再决定留哪里：
+0. **先裁决重念线索（二次优化的主体）**。一份长口播有几百条重念线索，大多数是本地有把握自动删掉的，不要全部带着做法读一遍。按线索的 `attention` 分层读（`list_application_entities` 读 `audio_edit.suggestion`，where 里写 document_id、kind=retake 和 attention，分页读完）：先读 `attention: 'decide'`（待确认，必须逐条裁决），再读 `attention: 'check'`（已自动删、但把握 score 低于 0.7 或原因是口吃，值得抽看）；这两层 propertyIds 带 reason、score、options、chosen_option、removed_text、kept_text、before_text、after_text、start_frame、sample_rate。其余（attention=none）不读做法；通读全文时发现哪一刀不对，再点名读那一条的 options。
+   - **待确认的**（attention=decide）每条都要定，score 低的先看。线索自己的 removed_text（本地想删的那一遍）、kept_text（紧跟着留下的那一遍）、before_text、after_text 是整段上下文；options 里每种做法给它删掉的文字（removed_text，长的只有头尾）和删完后接缝两侧连起来读的样子（reads_as，“｜”是接缝）。选最通顺、意思最完整、不丢只说过一次的话的那种，把它的 id 写进 `audio_edit.suggestion.chosen_option`：keep_later 留后一遍、keep_earlier 留前一遍、splice_ 开头的是换个切点；不是重念就写 keep_both（都留着，总是可选，不在 options 列表里）。id 原样照抄。写入会删词并补好接缝处的停顿剪切，不要自己先改词块 included 再来写。只想删其中一部分、options 里没有合适的，才逐个改词块 included。
+   - **按 reason 看语义，这些本地算法分不出来，必须由你判断**：reworded 换了说法没有稿子佐证（是同一句重说，还是本来就是两句）；short_repeat 短的原样重复（强调、叠句、口号要留）；parallel 开头相同的两句（排比、列举、对比要留）；complete_clause 说完的整句又说一遍（有意重复还是重念）；unsaid 前一遍有后一遍没再说的内容（删了会不会丢话，常要 keep_earlier 或都留）；joined 两遍之间没有停顿；stutter 口吃还是叠词；loop 连着重复多遍；inside_unsure 所在整段还没定（先定那一整段）；residual 去重念后前后两段开头仍相同。有参考稿时对照稿子：稿子里写了两遍的是有意的。
+   - **已自动删、值得抽看的**（attention=check）：本地只能按“留最后一遍”定，留哪一遍更好要看意思。前一遍说得更完整、更准确，或后一遍少了内容时，写 chosen_option=keep_earlier；发现删的其实是有意的重复，写 keep_both 恢复；两遍字面一样时保持本地的选择。为什么是 0.7：在有定稿的口播上，本地自动删的重念里把握低于 0.7 的约两成与定稿不一致，不低于 0.7 的约百分之五，后者靠第三步通读兜底，不逐条看。
+   - **定不了的交给用户**：两遍字面相同只差语气、要听才知道的，或你确实拿不准的，不改它现在的做法（待确认的保持待确认，已自动删的保持本地的选择），把 `audio_edit.suggestion.audience` 写成 user，并在汇报里按时间点名。不要为了清空清单硬选。
+   - 写 chosen_option 被拒绝时照报错处理：待确认线索要删的内容已经被删掉，或已删的内容被手动恢复过一部分（多半是用户改的），这类不要硬改，以当前口播内容为准。
+   - **裁决落实后再跑一次自检**：再调一次 `clean_audio_edit_retakes`。你定过的那一对两遍（都留着、改过做法、或被手动恢复过的）它不会再动；你的改判让别的两遍挨到一起时（比如删掉后一遍后，前一遍与更后面的第三遍相邻），它会照常新删或新列出来。回执里的待确认条数是这次真正新列出的；再读一遍 attention=decide：清空了就继续，还有就再裁决一轮，仍定不了的标给用户。只复查这一次，不循环。
+   - 要撤掉自己的某一步：算法操作回执里带 undoRef，用 `undo_audio_edit`（之后用户手改过会被拒绝）；属性写入用 `undo_application_changes`。不要用 `reset_audio_edit` 撤销粗剪，那会连用户的手改一起还原。
+1. **线索之外的每一处重念也回答三个问题**（options 不够用、需要自己动词块时），再决定留哪里：
    - 他为什么重念？口误、没念好、在不该断的地方断开、还是现场改了稿？
    - 前一遍从哪里开始坏的？坏之前的部分有没有念好？
    - 接缝两侧有没有停顿或呼吸？语气接得上吗？
@@ -45,7 +53,7 @@ description: 剪口播时使用：把录音全自动粗剪成可继续修改的�
 
 - 口播在哪个项目、剪后时长、去掉多少处重念、呼吸声怎么处理的。
 - **你在算法结果之上改了什么**（换遍拼接、补剪的重念、恢复的误删、呼吸与语气词的取舍）以及理由——这是用户判断你有没有用心的依据。
-- 少数需要试听的位置，按时间列出（置信度低、接缝两侧没有停顿、你拿不准的）。
+- 少数需要试听的位置，按时间列出（audience 标成 user 的线索、接缝两侧没有停顿、你拿不准的）。
 - 只报实际处理内容和具体位置，不展示词块 ID、采样帧、字段名等内部信息。
 
 ## 五、声音处理（用户要求处理声音时）
@@ -61,7 +69,7 @@ description: 剪口播时使用：把录音全自动粗剪成可继续修改的�
    - `builtin` 内置效果（均衡器、限幅器、立体声扩展等），builtin.id 与参数同剪辑的音频效果；`plugin` 第三方插件，pluginId 取自 `audio_edit.processor_chain.available_processors`。
    `audio_edit.document.chain_bypassed` 整体关闭（对比处理前后）。
 3. **输出**（`audio_edit.document.output`）作用在剪好的整条声音上：`volumeDb` 音量；响度用 `match_audio_edit_loudness`（短视频平台 -14、播客 -16 LUFS）测量后补偿，不要自己猜 gainDb。
-4. **多轨**：口播要和音乐、音效一起混时，多轨就是剪辑的序列：音轨的 `video_edit.track.volume_db`、`video_edit.track.pan`、`video_edit.track.effects` 与序列的 `video_edit.sequence.master`（主轨音量、主轨效果）都是剪辑实体属性；片段的 `video_edit.clip.essential_sound` 与口播的基本声音同一套设置。口播放进多轨后是动态链接，口播这里保存后多轨里自动换成新声音。字幕段与识别结果仅供剪辑参考，首次放入时生成普通字幕；最终字幕在剪辑里定稿，两边后续字幕修改互不影响。
+4. **多轨**：口播要和音乐、音效一起混时，多轨就是剪辑的序列：音轨的 `video_edit.track.volume_db`、`video_edit.track.pan`、`video_edit.track.effects` 与序列的 `video_edit.sequence.master`（主轨音量、主轨效果）都是剪辑实体属性；片段的 `video_edit.clip.essential_sound` 与口播的基本声音同一套设置。口播放进多轨后是动态链接：这里剪切或恢复之后，剪辑里的声音和字幕跟着更新（停改约 5 秒、回到剪辑、播放或导出前）；只有改字、改字幕分段不同步过去，最终字幕文字在剪辑里定稿。
 5. 处理完回读属性核对，汇报加了哪些效果、顺序、量多少、为什么。
 
 ## 边界

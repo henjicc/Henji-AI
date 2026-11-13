@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
-import { adjustAudioEditRangeMode, applyAudioEditSuggestion, cleanAudioEditFillers, editAudioEditRange, setAudioEditBlocks } from './edits'
+import { adjustAudioEditRangeMode, applyAudioEditSuggestion, applyDetectedAudioEditRetakes, audioEditSuggestionOptionBlocker, chooseAudioEditSuggestionOption, chosenAudioEditSuggestionOption, cleanAudioEditFillers, editAudioEditRange, setAudioEditBlocks } from './edits'
 import { buildProjectAudioEditTimeline, editedDurationFrames } from './timeline'
 import { buildAudioEditXml, compileAudioEditXmlTimeline } from './xml'
 import type { AudioEditProjectDocument } from './types'
@@ -166,5 +166,110 @@ describe('重念剪辑', () => {
     expect(setAudioEditBlocks(applied, ['t2'], false).cuts).toEqual(applied.cuts)
     const locked = { ...original, transcript: original.transcript.map((block) => block.id === 't1' ? { ...block, locked: true, startFrame: 2000 } : block) }
     expect(applyAudioEditSuggestion(locked, 'retake:r1:r2').cuts?.map((cut) => [cut.startFrame, cut.endFrame])).toEqual([[400, 500], [900, 1000], [1500, 2000]])
+  })
+  it('改用另一种做法：先恢复这条线索删掉的词与停顿，再按新做法删；都留着就全部恢复', () => {
+    const original: AudioEditProjectDocument = { ...project(), transcript: [
+      { id: 'r1', text: '所以', startFrame: 500, endFrame: 900, included: true, locked: false, granularity: 'word' },
+      { id: 'r2', text: '综合', startFrame: 1000, endFrame: 1500, included: true, locked: false, granularity: 'word' },
+      { id: 't1', text: '所以', startFrame: 2200, endFrame: 2600, included: true, locked: false, granularity: 'word' },
+      { id: 't2', text: '综合', startFrame: 2600, endFrame: 3200, included: true, locked: false, granularity: 'word' },
+      { id: 't3', text: '来看', startFrame: 3300, endFrame: 3900, included: true, locked: false, granularity: 'word' },
+    ], suggestions: [{ id: 'retake:r1:r2', kind: 'retake', evidence: 'audio', title: '重念', detail: '', startFrame: 400, endFrame: 2080, blockIds: ['r1', 'r2'], confidence: 'high', status: 'pending' }],
+    suggestionHandoff: { 'retake:r1:r2': { reason: 'repeated', score: 0.9, options: [
+      { id: 'keep_later', blockIds: ['r1', 'r2'], startFrame: 400, endFrame: 2080 }, { id: 'keep_earlier', blockIds: ['t1', 't2'], startFrame: 1600, endFrame: 3250 }, { id: 'keep_both', blockIds: [], startFrame: 400, endFrame: 2080 },
+    ] } } }
+    const removed = (document: AudioEditProjectDocument) => document.transcript.filter((block) => !block.included).map((block) => block.id)
+    const applied = applyAudioEditSuggestion(original, 'retake:r1:r2')
+    expect(chosenAudioEditSuggestionOption(original, original.suggestions[0])).toBeUndefined()
+    expect(chosenAudioEditSuggestionOption(applied, applied.suggestions[0])).toBe('keep_later')
+    const earlier = chooseAudioEditSuggestionOption(applied, 'retake:r1:r2', 'keep_earlier')
+    expect(removed(earlier)).toEqual(['t1', 't2'])
+    expect(earlier.cuts?.map((cut) => [cut.startFrame, cut.endFrame])).toEqual([[1600, 2200], [3200, 3250]])
+    expect(earlier.suggestions[0]).toMatchObject({ status: 'applied', blockIds: ['t1', 't2'] })
+    expect(chosenAudioEditSuggestionOption(earlier, earlier.suggestions[0])).toBe('keep_earlier')
+    // 换回去、都留着都可以，也能直接从待确认选一种
+    expect(removed(chooseAudioEditSuggestionOption(earlier, 'retake:r1:r2', 'keep_later'))).toEqual(['r1', 'r2'])
+    const both = chooseAudioEditSuggestionOption(earlier, 'retake:r1:r2', 'keep_both')
+    expect(removed(both)).toEqual([])
+    expect(both.cuts).toEqual([])
+    expect(chosenAudioEditSuggestionOption(both, both.suggestions[0])).toBe('keep_both')
+    expect(removed(chooseAudioEditSuggestionOption(original, 'retake:r1:r2', 'keep_earlier'))).toEqual(['t1', 't2'])
+    // 没有这种做法、词块锁定时原样返回
+    expect(chooseAudioEditSuggestionOption(applied, 'retake:r1:r2', 'splice_9')).toBe(applied)
+    const locked = { ...applied, transcript: applied.transcript.map((block) => block.id === 't1' ? { ...block, locked: true } : block) }
+    expect(chooseAudioEditSuggestionOption(locked, 'retake:r1:r2', 'keep_earlier')).toBe(locked)
+  })
+
+  // 两遍“所以综合”，后一遍前面夹着一个“嗯”；快速处理先去重念、再去语气词
+  const twoTakes = (): AudioEditProjectDocument => ({ ...project(), transcript: [
+    { id: 'r1', text: '所以', startFrame: 500, endFrame: 900, included: true, locked: false, granularity: 'word' },
+    { id: 'r2', text: '综合', startFrame: 1000, endFrame: 1500, included: true, locked: false, granularity: 'word' },
+    { id: 'um', text: '嗯', startFrame: 1800, endFrame: 2000, included: true, locked: false, granularity: 'word' },
+    { id: 't1', text: '所以', startFrame: 2200, endFrame: 2600, included: true, locked: false, granularity: 'word' },
+    { id: 't2', text: '综合', startFrame: 2600, endFrame: 3200, included: true, locked: false, granularity: 'word' },
+  ], suggestions: [], suggestionHandoff: {} })
+  const detectedTake = (id: string, blockIds: string[]) => ({
+    review: false,
+    suggestion: { id, kind: 'retake' as const, evidence: 'audio' as const, title: '重念', detail: '', startFrame: 400, endFrame: 2080, blockIds, confidence: 'high' as const, status: 'pending' as const },
+    handoff: { reason: 'repeated', score: 0.9, options: [
+      { id: 'keep_later', blockIds, startFrame: 400, endFrame: 2080 }, { id: 'keep_earlier', blockIds: ['um', 't1', 't2'], startFrame: 1600, endFrame: 3250 }, { id: 'keep_both', blockIds: [], startFrame: 400, endFrame: 2080 },
+    ] },
+  })
+  const removedIds = (document: AudioEditProjectDocument) => document.transcript.filter((block) => !block.included).map((block) => block.id)
+
+  it('别的步骤删掉的词不归线索管：去语气词之后改判两次，语气词仍是删掉的', () => {
+    const cut = applyDetectedAudioEditRetakes(twoTakes(), [detectedTake('retake:r1:r2', ['r1', 'r2'])])
+    const cleaned = setAudioEditBlocks(cut, ['um'], false)
+    const earlier = chooseAudioEditSuggestionOption(cleaned, 'retake:r1:r2', 'keep_earlier')
+    expect(removedIds(earlier)).toEqual(['um', 't1', 't2'])
+    expect(earlier.suggestions[0].blockIds).toEqual(['t1', 't2'])
+    expect(chosenAudioEditSuggestionOption(earlier, earlier.suggestions[0])).toBe('keep_earlier')
+    expect(removedIds(chooseAudioEditSuggestionOption(earlier, 'retake:r1:r2', 'keep_later'))).toEqual(['r1', 'r2', 'um'])
+    expect(removedIds(chooseAudioEditSuggestionOption(earlier, 'retake:r1:r2', 'keep_both'))).toEqual(['um'])
+    // “嗯”不归这条线索：它所在的那段声音不记成这条的停顿剪切，之后单独恢复它就听得到
+    expect(earlier.cuts?.map((cut) => [cut.startFrame, cut.endFrame])).toEqual([[1600, 1800], [2000, 2200], [3200, 3250]])
+    const audible = buildProjectAudioEditTimeline(setAudioEditBlocks(earlier, ['um'], true))
+    expect(audible.some((span) => !span.muted && span.sourceStartFrame <= 1800 && span.sourceEndFrame >= 2000)).toBe(true)
+  })
+
+  it('定了都留着之后重跑去重念：同一处换了边界再检测出来也不再删', () => {
+    const cut = applyDetectedAudioEditRetakes(twoTakes(), [detectedTake('retake:r1:r2', ['r1', 'r2'])])
+    expect(removedIds(cut)).toEqual(['r1', 'r2'])
+    const both = chooseAudioEditSuggestionOption(cut, 'retake:r1:r2', 'keep_both')
+    // 重新检测时把“嗯”也算进了前一遍，线索 ID 不同
+    const again = applyDetectedAudioEditRetakes(both, [detectedTake('retake:r1:um', ['r1', 'r2', 'um'])])
+    expect(removedIds(again)).toEqual([])
+    expect(again.suggestions.map((item) => item.id)).toEqual(['retake:r1:r2'])
+    // 手动恢复过的同样不再删
+    const manual = setAudioEditBlocks(cut, ['r1', 'r2'], true)
+    expect(removedIds(applyDetectedAudioEditRetakes(manual, [detectedTake('retake:r1:um', ['r1', 'r2', 'um'])]))).toEqual([])
+    // 没动过的自动删除不挡别处的新检测
+    expect(removedIds(applyDetectedAudioEditRetakes(cut, [{ ...detectedTake('retake:t1:t1', ['t1']), handoff: { options: [] } }]))).toEqual(['r1', 'r2', 't1'])
+  })
+
+  it('只挡同一对两遍：后面还有第三遍时，改留前一遍之后前一遍与第三遍的重念照常提出', () => {
+    const third = twoTakes()
+    third.transcript.push({ id: 'c1', text: '所以', startFrame: 3400, endFrame: 3700, included: true, locked: false, granularity: 'word' }, { id: 'c2', text: '综合', startFrame: 3700, endFrame: 4000, included: true, locked: false, granularity: 'word' })
+    const cut = applyDetectedAudioEditRetakes(third, [detectedTake('retake:r1:r2', ['r1', 'r2'])])
+    const earlier = chooseAudioEditSuggestionOption(cut, 'retake:r1:r2', 'keep_earlier')
+    expect(removedIds(earlier)).toEqual(['um', 't1', 't2'])
+    // 新检测删的还是前一遍那几个词，但留下的是第三遍，不是已经裁决过的那一对
+    const again = applyDetectedAudioEditRetakes(earlier, [{ ...detectedTake('retake:r1:r2:c', ['r1', 'r2']), handoff: { reason: 'repeated', options: [{ id: 'keep_later', blockIds: ['r1', 'r2'], startFrame: 400, endFrame: 3350 }] } }])
+    expect(removedIds(again)).toEqual(['r1', 'r2', 'um', 't1', 't2'])
+    // 都留着之后，同一对（前一遍与后一遍）不再提；后一遍与第三遍是另一对，照常提出
+    const both = chooseAudioEditSuggestionOption(cut, 'retake:r1:r2', 'keep_both')
+    expect(removedIds(applyDetectedAudioEditRetakes(both, [detectedTake('retake:r1:um', ['r1', 'r2', 'um'])]))).toEqual([])
+    expect(removedIds(applyDetectedAudioEditRetakes(both, [{ ...detectedTake('retake:t1:t2', ['t1', 't2']), handoff: { options: [] } }]))).toEqual(['t1', 't2'])
+  })
+
+  it('改判只在不会盖掉别人修改时放行：待确认的内容已被删光、已删内容被手动恢复过，都拒绝', () => {
+    const pending = { ...twoTakes(), ...(() => { const item = detectedTake('retake:r1:r2', ['r1', 'r2']); return { suggestions: [item.suggestion], suggestionHandoff: { [item.suggestion.id]: item.handoff } } })() }
+    expect(audioEditSuggestionOptionBlocker(pending, pending.suggestions[0])).toBeUndefined()
+    const gone = setAudioEditBlocks(pending, ['r1', 'r2'], false)
+    expect(audioEditSuggestionOptionBlocker(gone, gone.suggestions[0])).toContain('已经被删掉')
+    expect(chooseAudioEditSuggestionOption(gone, 'retake:r1:r2', 'keep_earlier')).toBe(gone)
+    const partly = setAudioEditBlocks(applyAudioEditSuggestion(pending, 'retake:r1:r2'), ['r2'], true)
+    expect(audioEditSuggestionOptionBlocker(partly, partly.suggestions[0])).toContain('恢复了一部分')
+    expect(chooseAudioEditSuggestionOption(partly, 'retake:r1:r2', 'keep_earlier')).toBe(partly)
   })
 })

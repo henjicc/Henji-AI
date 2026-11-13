@@ -197,6 +197,8 @@ async function transcribeRegisteredProject(request: AudioEditTranscriptionReques
       ...project,
       transcript,
       suggestions: analyzeAudioEditTranscript(transcript, { sampleRate: project.source.sampleRate }),
+      // 词块与线索都换了一批（词块 ID 按位置编，会与旧的撞号），旧线索的判断材料不能留给新线索
+      suggestionHandoff: undefined,
       selectedAsrModelId: modelId,
     }
     const next = { ...recognized, editBaseline: createAudioEditBaseline(recognized, 'original') }

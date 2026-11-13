@@ -1,7 +1,7 @@
 import { pinyin } from 'pinyin-pro'
 import { normalizeAudioEditFiller } from './analysis'
 import type { SpeechEnergyPause } from './speechEnergy'
-import type { AudioEditRange, AudioEditSuggestion, AudioEditTranscriptBlock } from './types'
+import type { AudioEditRange, AudioEditSuggestion, AudioEditSuggestionHandoff, AudioEditSuggestionOption, AudioEditTranscriptBlock } from './types'
 import { alignToScript } from './contentCoordinates'
 import { findResidualRetakes } from './retakeSelfCheck'
 import { selectTakeSegments } from './takePath'
@@ -109,12 +109,29 @@ const MARKER_PREFIX_UNITS = 4
 /** 切点离后一句开头保留的气口（毫秒） */
 const BREATH_MS = 120
 /** 成片自检每 10 分钟录音最多提这么多条：多了没人逐条看 */
+/** 前一遍至少这么大比例的字在后一遍里找得到，才给出“留前一遍”的做法 */
+const LATER_TAKE_RATIO = 0.5
+/** 比较几种做法删完读起来是否一样时，往后一遍多看的词数 */
+const LATER_TAKE_LOOKAHEAD = 40
 const SELF_CHECK_PER_TEN_MINUTES = 8
 /** 每自动剪掉一处重念，清单上限相应放宽的条数，以及放宽的封顶倍数 */
 const SELF_CHECK_PER_RETAKE = 0.5
 const SELF_CHECK_MAX_FACTOR = 3
+/** 成片自检的证据分到这么高就算十足像重念（换算成 0–1 的把握用） */
+const SELF_CHECK_FULL_SCORE = 10
 
 type AudioEditRetakeKind = 'restart' | 'lead_in' | 'broken_start'
+
+/**
+ * 凭什么判成重念（自动删的）或为什么拿不准（待确认的），交给助手时原样带上：
+ * - repeated 两遍几乎相同；script 对稿时在这里往回跳；marker “哎”之后从前一句开头重来；
+ * - stutter 口吃（待确认时：也可能是叠词或强调）；loop 同一截话连着重复很多遍（待确认时：也可能是有意叠说）；
+ * - reworded 换了说法、没有稿子佐证；short_repeat 很短的原样重复，像强调或叠句；parallel 开头相同的两句，像排比、列举、对比；
+ * - unsaid 前一遍里有后一遍没再说的内容；complete_clause 要删的是说完的一整句；joined 两遍之间没有停顿；
+ * - inside_unsure 所在的整段重复还没确定；residual 去重念之后保留内容里前后两段开头仍相同。
+ */
+export type AudioEditRetakeReason = 'repeated' | 'script' | 'marker' | 'stutter' | 'loop'
+  | 'reworded' | 'short_repeat' | 'parallel' | 'unsaid' | 'complete_clause' | 'joined' | 'inside_unsure' | 'residual'
 
 export interface AudioEditRetake {
   id: string
@@ -134,6 +151,14 @@ export interface AudioEditRetake {
   joined: boolean
   /** 拿不准（换了说法、没有参考稿佐证，或连着念的口吃）：只作为待确认的线索，不自动删 */
   review: boolean
+  reason: AudioEditRetakeReason
+  /** 0–1，越大越像念坏重来；只用来排先后 */
+  score: number
+  /**
+   * 这一处可以怎么剪，第一项就是本条线索自己的做法（留后一遍）。留哪一遍、要不要删往往得看语义，
+   * 本地只能按“留最后一遍”先定；其余做法一并给出，助手或人改判时不必自己重新找词。
+   */
+  options: AudioEditSuggestionOption[]
 }
 
 export interface AudioEditRetakeOptions {
@@ -162,6 +187,8 @@ interface Alignment {
   diffBlocks: number
   /** 前一遍末尾多出来、后一遍没有的字数（说了半截没说下去的尾巴） */
   tail: number
+  /** 后一遍里最后一个对上的字之后的位置：后一遍与前一遍对应的那一截到这里为止 */
+  matchedEnd: number
 }
 interface Candidate {
   kind: AudioEditRetakeKind
@@ -175,6 +202,11 @@ interface Candidate {
   weight: number
   /** 证据成立但可能是有意的重复（强调、列举）：不自动删，只列为待确认 */
   unsure?: boolean
+  /** 拿不准在哪里 */
+  doubt?: AudioEditRetakeReason
+  /** 选中的是哪一处重念（留最后一遍的原始范围），以及这一处没被选中的其他剪法；交给助手改判时用 */
+  base?: Candidate
+  others?: Candidate[]
   /** 参考稿佐证过：后一遍是稿子里的话，稿子里没有把它写两遍 */
   corroborated?: boolean
   /** 被后一遍重新念到的字数 */
@@ -291,16 +323,18 @@ function align(r: readonly string[], t: readonly string[]): Alignment {
   let used = 0
   for (let j = 1; j <= m; j++) if (score[n * width + j] > score[n * width + used]) used = j
   const path: number[] = []
-  let hits = 0
+  let hits = 0, matchedEnd = 0
   for (let i = n, j = used; i > 0 || j > 0;) {
     const step = move[i * width + j]
-    if (step === 1) { const same = r[i - 1] === t[j - 1]; hits += same ? 1 : 0; path.push(same ? 1 : 0); i--; j-- } else if (step === 2) { path.push(2); i-- } else { path.push(3); j-- }
+    if (step === 1) { const same = r[i - 1] === t[j - 1]; hits += same ? 1 : 0; if (same && !matchedEnd) matchedEnd = j; path.push(same ? 1 : 0); i--; j-- } else if (step === 2) { path.push(2); i-- } else { path.push(3); j-- }
   }
   path.reverse()
   const longest = (kind: number): number => { let best = 0, run = 0; for (const step of path) { run = step === kind ? run + 1 : 0; best = Math.max(best, run) } return best }
   let prefix = 0
   while (prefix < path.length && path[prefix] === 1) prefix++
-  return { hits, score: score[n * width + used], used, prefix, anchor: path.slice(0, 4).filter((step) => step === 1).length, delRun: longest(2), insRun: longest(3), earlySubstitution: path.slice(0, 3).includes(0), diffBlocks: path.filter((step, index) => step !== 1 && (index === 0 || path[index - 1] === 1)).length, tail: path.length - 1 - path.findLastIndex((step) => step !== 2) }
+  let tail = 0
+  while (tail < path.length && path[path.length - 1 - tail] === 2) tail++
+  return { hits, score: score[n * width + used], used, prefix, anchor: path.slice(0, 4).filter((step) => step === 1).length, delRun: longest(2), insRun: longest(3), earlySubstitution: path.slice(0, 3).includes(0), diffBlocks: path.filter((step, index) => step !== 1 && (index === 0 || path[index - 1] === 1)).length, tail, matchedEnd }
 }
 
 class RetakeDetector {
@@ -582,12 +616,14 @@ class RetakeDetector {
             const span = Math.max(length - tail, a.used), different = span - a.hits
             const nearIdentical = different === 0 ? length - tail >= IDENTICAL_UNITS
               : length >= NEAR_IDENTICAL_UNITS && a.diffBlocks - (tail ? 1 : 0) <= 1 && different <= Math.max(NEAR_IDENTICAL_WORD, Math.round(span * NEAR_IDENTICAL_DIFF))
-            let doubt = length <= 2 || a.earlySubstitution
+            let doubt: AudioEditRetakeReason | undefined = length <= 2 ? 'short_repeat' : a.earlySubstitution ? 'parallel' : undefined
             // 前一遍的最后一个字只是后一遍某个词的开头（“…简单且精。｜…简单且精准，”）：前一遍断在词中间，没说完
             const cutMidWord = jj + a.used < seq.length && seq[jj + a.used].word === lastMatched
-            if (!doubt && !cutMidWord && this.sentenceEndsAt(lastMatched)) doubt = !nearIdentical || (different > 0 && this.sameOpeningFollows(seq, jj, jj + a.used))
-            else if (!doubt) doubt = length - a.hits > Math.max(2, length * UNSAID_RATIO)
-            here.push({ kind, first, last: seq[j].word, restartWord: seq[kind === 'lead_in' ? jj : j].word, length, ratio, pauseJ, weight, covered: a.hits, evidence, corroborated, ...(doubt && evidence === 'match' && !corroborated ? { unsure: true } : {}) })
+            if (!doubt && !cutMidWord && this.sentenceEndsAt(lastMatched)) {
+              if (!nearIdentical) doubt = different === 0 ? 'short_repeat' : 'reworded'
+              else if (different > 0 && this.sameOpeningFollows(seq, jj, jj + a.used)) doubt = 'parallel'
+            } else if (!doubt && length - a.hits > Math.max(2, length * UNSAID_RATIO)) doubt = 'unsaid'
+            here.push({ kind, first, last: seq[j].word, restartWord: seq[kind === 'lead_in' ? jj : j].word, length, ratio, pauseJ, weight, covered: a.hits, evidence, corroborated, ...(doubt && evidence === 'match' && !corroborated ? { unsure: true, doubt } : {}) })
           }
           if (kind === 'restart' && marker && this.phraseStart(first) && (a.prefix >= MARKER_PREFIX_UNITS || (length <= 3 && a.prefix >= length))) {
             // “在这里都能看到啊！主要是为了让你放心。｜哎，｜在这里都能看到。”：“哎”之后从前面某句的开头重来，
@@ -777,7 +813,7 @@ class RetakeDetector {
       const once = this.scriptContains(single)
       const confident = word.units.length === 1 ? once || !COMMON_SINGLE_WORDS.has(word.units[0].ch) : once && pauseJ >= CLEAR_PAUSE_MS
       if (confident && pauseJ >= BOUNDARY_PAUSE_MS) sure.push(candidate)
-      else if (pauseJ >= BOUNDARY_PAUSE_MS || this.restartMarkerBefore(next) || (word.units.length === 1 && this.words[next].units.length >= 2)) unsure.push({ ...candidate, unsure: true })
+      else if (pauseJ >= BOUNDARY_PAUSE_MS || this.restartMarkerBefore(next) || (word.units.length === 1 && this.words[next].units.length >= 2)) unsure.push({ ...candidate, unsure: true, doubt: 'stutter' })
     }
     return { sure, unsure }
   }
@@ -811,7 +847,7 @@ class RetakeDetector {
    *   实词不这样处理，丢一个实词比多一个不顺的接缝代价大；
    * - 紧挨在前面的两三个字的半截起头、首字与念坏那遍相同（“但这个｜但结果说的还是挺准｜…”），一起删。
    */
-  private alternatives(candidate: Candidate): Candidate[] {
+  alternatives(candidate: Candidate): Candidate[] {
     const all: Candidate[] = [candidate]
     const pysOf = (list: readonly number[]): string[] => list.flatMap((k) => this.words[k].units.map((unit) => unit.py))
     /** r 与 t 的开头对应：短的要逐字相同，长的拼音对齐命中八成以上；返回 t 用掉的字数 */
@@ -884,6 +920,26 @@ class RetakeDetector {
     return all
   }
 
+  /**
+   * 后一遍里与前一遍 [first, last) 对应的那一截到哪个词为止（不含）；两遍对不上时没有。
+   * “留前一遍”就是删掉后一遍的这一截：前一遍没说完时，结果是前一遍的开头接上后一遍往下说的部分。
+   */
+  laterTakeEnd(first: number, last: number, restartWord: number, present: (k: number) => boolean): number | undefined {
+    const earlier: string[] = []
+    for (let k = first; k < last; k++) if (!this.words[k].filler && this.words[k].block.included) for (const unit of this.words[k].units) earlier.push(unit.py)
+    const later: number[] = []
+    for (let k = restartWord, size = 0; k < this.words.length && size < Math.floor(earlier.length * 1.6) + 6; k++) {
+      if (present(k) && !this.words[k].filler && this.words[k].units.length) { later.push(k); size += this.words[k].units.length }
+    }
+    if (earlier.length < 2 || !later.length) return undefined
+    const aligned = align(earlier, later.flatMap((k) => this.words[k].units.map((unit) => unit.py)))
+    // 对上的字太少，或后一遍中间要跳过一截才对得上（前一遍末尾的字碰巧在后面的话里又出现）：两遍其实对不齐，不给
+    if (aligned.hits < Math.max(2, earlier.length * LATER_TAKE_RATIO) || aligned.insRun >= 3) return undefined
+    let size = 0
+    for (const k of later) { size += this.words[k].units.length; if (size >= aligned.matchedEnd) return k + 1 }
+    return undefined
+  }
+
   /** 接缝分：下刀处的安静越长越好，到 CLEAR_PAUSE_MS 封顶；连读处为 0。 */
   private seamScore(quietMs: number): number {
     return SEAM_WEIGHT * Math.min(quietMs, CLEAR_PAUSE_MS) / CLEAR_PAUSE_MS
@@ -921,7 +977,7 @@ class RetakeDetector {
         if (period >= LOOP_AUTO_UNITS && repeats >= LOOP_AUTO_REPEATS) {
           for (let k = first; k < end; k++) this.kept[k] = false
           this.accepted.push(candidate)
-        } else doubtful.push({ ...candidate, unsure: true })
+        } else doubtful.push({ ...candidate, unsure: true, doubt: 'loop' })
       }
     }
     return doubtful
@@ -944,7 +1000,7 @@ class RetakeDetector {
       // 选哪几处删看取代了多少内容；同一处的几种剪法之间再按证据分与两头的接缝分取舍
       // 没被选中的候选都是因为和选中的重叠；所以下一轮只有上一轮删过的地方附近才可能出现新的候选
       const near = (candidate: Candidate): boolean => !changed || changed.some(([from, to]) => candidate.restartWord >= from - NEARBY_WORDS && candidate.first <= to + NEARBY_WORDS)
-      const pool: Array<{ first: number; last: number; weight: number; options: Array<{ option: Candidate; value: number }> }> = []
+      const pool: Array<{ first: number; last: number; weight: number; base: Candidate; options: Array<{ option: Candidate; value: number }> }> = []
       for (const candidate of [...this.repeatCandidates(seq, changed), ...(round < SCRIPT_ROUNDS ? this.scriptCandidates(seq) : []), ...this.stutterCandidates().sure].filter(near)) {
         if (candidate.unsure) { doubtful.push(candidate); continue }
         const options = this.alternatives(candidate).map((option) => ({ option, value: option.weight + seam(option.first) + seam(option.last) })).sort((x, y) => y.value - x.value)
@@ -955,18 +1011,18 @@ class RetakeDetector {
         const weight = content - unlikely
         // 扣完分不剩什么的不删，留作待确认，交给助手或人判断
         // 口吃本来就贴着前一个字，有自己的把握判断，不按接缝再筛一遍
-        if (weight <= 0 && candidate.evidence === 'match' && !candidate.corroborated) { doubtful.push(candidate); continue }
+        if (weight <= 0 && candidate.evidence === 'match' && !candidate.corroborated) { doubtful.push({ ...candidate, doubt: 'joined' }); continue }
         // 其余的（稿子佐证过的、“哎”之后重来的、口吃）接缝不好也照删，只在与别的候选冲突时让位
         // 互相重叠的候选之间主要比“取代了多少内容”，接缝只轻轻偏向落在停顿处的那个：
         // 把扣分全算进去，会让取代得更完整但接缝连读的候选输给只删中间一截的候选，留下两遍开头
-        pool.push({ first: candidate.first, last: candidate.last, weight: Math.max(content - unlikely * JOINED_RANK_SHARE, FLOOR_WEIGHT), options })
+        pool.push({ first: candidate.first, last: candidate.last, weight: Math.max(content - unlikely * JOINED_RANK_SHARE, FLOOR_WEIGHT), base: candidate, options })
       }
       // 覆盖一整段的候选只列了待确认，完全落在这一段里面的局部候选就不能自动删：删中间一截、留下两头，必然留碎片
       // （“但仔细一想，真正记住的却不多，或者……｜但仔细一想，…”只删中间会留下两遍“但仔细一想，”）。稿子佐证过的不受此限
       for (let k = pool.length - 1; k >= 0; k--) {
         const local = pool[k], best = local.options[0].option
         if (best.evidence === 'script' || best.corroborated) continue
-        if (doubtful.some((whole) => whole.first <= local.first && local.last <= whole.restartWord && (whole.first < local.first || local.last < whole.last))) { doubtful.push({ ...best, first: local.first, last: local.last, unsure: true }); pool.splice(k, 1) }
+        if (doubtful.some((whole) => whole.first <= local.first && local.last <= whole.restartWord && (whole.first < local.first || local.last < whole.last))) { doubtful.push({ ...best, first: local.first, last: local.last, unsure: true, doubt: 'inside_unsure' }); pool.splice(k, 1) }
       }
       const chosen = selectTakeSegments(this.words.length, pool)
       if (!chosen.length) break
@@ -980,9 +1036,9 @@ class RetakeDetector {
         const { option } = item.options.find((entry) => free(entry.option)) ?? item.options.at(-1)!
         // 实际要删的恰好是说完的一整句、后面那遍也是说完的一句：和排比分不开，没有稿子佐证就不删，列为待确认。
         // 往后换遍（留前一遍、删后一遍重复的开头）时，被删内容的另一遍在它前面，不在这里判断
-        if (option.evidence === 'match' && !option.corroborated && option.first <= item.first && this.replacedByCompleteClause(option)) { doubtful.push({ ...option, unsure: true }); return }
+        if (option.evidence === 'match' && !option.corroborated && option.first <= item.first && this.replacedByCompleteClause(option)) { doubtful.push({ ...option, unsure: true, doubt: 'complete_clause' }); return }
         for (let k = option.first; k < option.last; k++) this.kept[k] = false
-        this.accepted.push(option)
+        this.accepted.push({ ...option, base: item.base, others: item.options.map((entry) => entry.option).filter((other) => other !== option) })
         applied.push(option)
       })
       // 引子（前一遍与后一遍之间夹的话）是因为连着后一遍才留的；后一遍自己也被删了，引子就没有可接的话，跟着删
@@ -1022,10 +1078,25 @@ class RetakeDetector {
   }
 }
 
+/** 换切点做法的名字：由切点两头的词块决定，重新检测后同一个切点还是同一个名字；取短摘要，不把两个词块 ID 原样拼进去 */
+function shortDigest(text: string): string {
+  let hash = 0x811c9dc5
+  for (let index = 0; index < text.length; index++) hash = Math.imul(hash ^ text.charCodeAt(index), 0x01000193)
+  return (hash >>> 0).toString(36)
+}
+
 function confidenceOf(candidate: Candidate): AudioEditRetake['confidence'] {
   if (candidate.kind === 'restart' && candidate.ratio >= 0.85 && candidate.pauseJ >= BOUNDARY_PAUSE_MS) return 'high'
   if (candidate.kind === 'restart' && candidate.ratio >= 0.7) return 'medium'
   return 'low'
+}
+
+const EVIDENCE_REASON: Record<Candidate['evidence'], AudioEditRetakeReason> = { match: 'repeated', script: 'script', marker: 'marker', stutter: 'stutter', loop: 'loop' }
+
+/** 有多像念坏重来：两遍相同的比例为主，停一下再起、有稿子或“哎”佐证、重念的内容够长各加一点。 */
+function likelihoodOf(candidate: Candidate): number {
+  const supported = candidate.corroborated || candidate.evidence === 'script' || candidate.evidence === 'marker'
+  return 0.45 * Math.min(1, candidate.ratio) + (candidate.pauseJ >= BOUNDARY_PAUSE_MS ? 0.2 : 0) + (supported ? 0.2 : 0) + 0.15 * Math.min(1, candidate.covered / 8)
 }
 
 /** 检测重念并给出删除方案。只在逐词转写上工作；已删除的词视为不存在，锁定的词不删。 */
@@ -1040,24 +1111,94 @@ export function detectAudioEditRetakes(blocks: readonly AudioEditTranscriptBlock
   const markerRemovable = (block: AudioEditTranscriptBlock): boolean => block.included && !block.locked
     && (!options.range || (block.startFrame >= options.range.startFrame && block.endFrame <= options.range.endFrame))
   const retakes: AudioEditRetake[] = []
-  const describe = (first: number, k: number, items: readonly Candidate[], review: boolean): AudioEditRetake => {
-    const levels = items.map(confidenceOf)
+  /** 删掉 [first, k) 这些词时的做法：词块与连带剪掉的声音范围（起止各自落在前后真实停顿里） */
+  /**
+   * 只记 present 的词：用户早先删掉的、别的重念删掉的不归这种做法管，落实和之后改判、恢复都不动它们。
+   * 换切点的做法用切点两头的词块命名，重新检测后同一个切点还是同一个名字。
+   */
+  const cut = (id: string, first: number, k: number, present: (w: number) => boolean): (AudioEditSuggestionOption & { joined: boolean }) | undefined => {
     const start = detector.boundary(first), end = detector.boundary(k)
     const span = words.slice(first, k)
+    const blockIds = span.filter((_word, offset) => present(first + offset)).map((word) => word.block.id)
+    if (!blockIds.length) return undefined
     const startFrame = Math.round(start.ms * options.sampleRate / 1000)
-    const endFrame = Math.max(startFrame + 1, Math.round(end.ms * options.sampleRate / 1000), span.at(-1)!.block.endFrame)
+    return {
+      id: id === 'splice' ? `splice_${shortDigest(`${blockIds[0]}:${blockIds.at(-1)}`)}` : id, blockIds, startFrame: Math.min(startFrame, span[0].block.startFrame),
+      endFrame: Math.max(startFrame + 1, Math.round(end.ms * options.sampleRate / 1000), span.at(-1)!.block.endFrame), joined: end.joined,
+    }
+  }
+  /**
+   * 一处重念的各种做法。本条自己的做法排第一：通常就是留后一遍；自动选了换遍拼接时，它是一种“换个切点”，原本的留后一遍另列。
+   * base 是这处重念留最后一遍时的范围，others 是同一处的其他切点。别的重念已经删掉的词不能再动，碰到的做法不给。
+   */
+  const optionsFor = (first: number, k: number, review: boolean, base: Pick<Candidate, 'first' | 'last' | 'restartWord'> | undefined, others: readonly Candidate[]): { own: AudioEditSuggestionOption; joined: boolean; choices: AudioEditSuggestionOption[] } => {
+    // 自动删的这一段里被删掉的词是本条自己删的；待确认的还什么都没删
+    const inOwn = (w: number): boolean => !review && w >= first && w < k
+    const present = (w: number): boolean => words[w].block.included && (detector.kept[w] || inOwn(w))
+    const untouched = (from: number, to: number): boolean => { for (let w = from; w < to; w++) if (removed[w] && !inOwn(w)) return false; return detector.removable(from, to) }
+    // 本条删的范围不是从原始范围的开头删到结尾（前后连带的“哎”和语气词不算）：自动选的是换遍拼接
+    const content = (w: number): boolean => !words[w].filler
+    let ownFirst = first, ownLast = k
+    while (ownFirst < ownLast && !content(ownFirst)) ownFirst++
+    while (ownLast > ownFirst && !content(ownLast - 1)) ownLast--
+    let baseLast = base?.last ?? k
+    while (base && baseLast > base.first && !content(baseLast - 1)) baseLast--
+    const spliced = Boolean(base && (base.first < ownFirst || baseLast !== ownLast))
+    const { joined, ...own } = cut(spliced ? 'splice' : 'keep_later', first, k, present) ?? cut(spliced ? 'splice' : 'keep_later', first, k, () => true)!
+    const choices: AudioEditSuggestionOption[] = [own]
+    // 换遍拼接的切点在两遍相同的那几个字里平移，删完读起来往往一字不差；读起来一样的只留排在前面的一种
+    const lo = Math.min(first, base?.first ?? first, ...others.map((other) => other.first))
+    const hi = Math.max(k, ...others.map((other) => other.last)) + LATER_TAKE_LOOKAHEAD
+    const readsAs = (from: number, to: number): string => {
+      let text = ''
+      for (let w = lo; w < hi && w < words.length; w++) if ((w < from || w >= to) && content(w) && present(w)) for (const unit of words[w].units) text += unit.ch
+      return text
+    }
+    // 留哪一遍不在此列：两遍字面相同时删哪一遍读起来也一样，但听起来是两遍不同的声音，仍然各算一种做法
+    const seen = new Set([readsAs(first, k)])
+    const push = (id: string, from: number, to: number): void => {
+      if (to <= from || !untouched(from, to)) return
+      const text = readsAs(from, to)
+      if (id === 'splice' && seen.has(text)) return
+      const made = cut(id, from, to, present)
+      if (!made) return
+      seen.add(text)
+      const { joined: _joined, ...option } = made
+      if (!choices.some((choice) => choice.blockIds.length === option.blockIds.length && choice.blockIds.every((blockId, index) => blockId === option.blockIds[index]))) choices.push(option)
+    }
+    if (base) {
+      if (spliced) push('keep_later', base.first, base.last)
+      // 留前一遍：删掉后一遍里与前一遍对应的那一截，连同两遍之间的语气词
+      const end = base.restartWord >= base.last ? detector.laterTakeEnd(base.first, base.last, base.restartWord, present) : undefined
+      if (end !== undefined) {
+        let from = base.restartWord
+        while (from > base.last && words[from - 1].filler) from--
+        push('keep_earlier', from, end)
+      }
+    }
+    for (const other of others) push('splice', other.first, other.last)
+    choices.push({ id: 'keep_both', blockIds: [], startFrame: own.startFrame, endFrame: own.endFrame })
+    return { own, joined, choices }
+  }
+  const describe = (first: number, k: number, items: readonly Candidate[], review: boolean, reason: AudioEditRetakeReason, score: number, base?: Pick<Candidate, 'first' | 'last' | 'restartWord'>, others: readonly Candidate[] = []): AudioEditRetake => {
+    const levels = items.map(confidenceOf)
+    const span = words.slice(first, k)
+    const { own, joined, choices } = optionsFor(first, k, review, base, others)
     const keptAfter = words.slice(k).filter((word, offset) => detector.kept[k + offset]).slice(0, 12)
     return {
       id: `retake:${span[0].block.id}:${span.at(-1)!.block.id}`,
       kind: items.some((item) => item.kind === 'restart') ? 'restart' : items.some((item) => item.kind === 'lead_in') ? 'lead_in' : 'broken_start',
-      blockIds: span.map((word) => word.block.id),
-      startFrame: Math.min(startFrame, span[0].block.startFrame),
-      endFrame,
+      blockIds: own.blockIds,
+      startFrame: own.startFrame,
+      endFrame: own.endFrame,
       removedText: span.map((word) => word.block.text).join(''),
       keptText: keptAfter.map((word) => word.block.text).join(''),
       confidence: review ? 'low' : levels.includes('low') ? 'low' : levels.includes('medium') ? 'medium' : 'high',
-      joined: end.joined,
+      joined,
       review,
+      reason,
+      score: Math.round(Math.max(0, Math.min(1, score)) * 100) / 100,
+      options: choices,
     }
   }
   for (let k = 0; k < words.length;) {
@@ -1066,9 +1207,14 @@ export function detectAudioEditRetakes(blocks: readonly AudioEditTranscriptBlock
     while (k < words.length && (removed[k] || (words[k].filler && words[k].block.included && removed[k + 1]))) k++
     // 删除段前面紧挨着的“哎”是念坏那遍的起头（“…吧。哎，不过呢…且。｜哎，不过”），跟着那一遍一起删
     while (first > 0 && isRestartMarker(words[first - 1]) && markerRemovable(words[first - 1].block)) first--
-    retakes.push(describe(first, k, accepted.filter((candidate) => candidate.first >= first && candidate.first < k), false))
+    const items = accepted.filter((candidate) => candidate.first >= first && candidate.first < k)
+    // 一段删除里并着几处重念（连念三遍）时按最没把握的那处算；这时“前一遍”不止一遍，只给都留着这一种改法
+    const weakest = items.reduce<Candidate | undefined>((low, item) => (!low || likelihoodOf(item) < likelihoodOf(low) ? item : low), undefined)
+    const single = items.length === 1 ? items[0] : undefined
+    retakes.push(describe(first, k, items, false, weakest ? EVIDENCE_REASON[weakest.evidence] : 'repeated', weakest ? likelihoodOf(weakest) : 0.5, single?.base, single?.others))
   }
-  for (const candidate of detector.review) retakes.push(describe(candidate.first, candidate.last, [candidate], true))
+  // 待确认的还没有选过剪法，把换遍拼接、连带碎字这些切点一并给出
+  for (const candidate of detector.review) retakes.push(describe(candidate.first, candidate.last, [candidate], true, candidate.doubt ?? 'reworded', likelihoodOf(candidate), candidate, detector.alternatives(candidate).slice(1)))
   // 成片自检：保留内容里还留着的重念只作待确认，证据强的优先。清单要短到用户愿意逐条看：每 10 分钟录音 SELF_CHECK_PER_TEN_MINUTES 条；
   // 已经自动剪掉的重念越多，说明这段录得越乱、拿不准的也会越多，上限随之放宽，最多放到 SELF_CHECK_MAX_FACTOR 倍
   const base = Math.ceil((words.at(-1)!.endMs - words[0].startMs) / 600_000 * SELF_CHECK_PER_TEN_MINUTES)
@@ -1079,26 +1225,46 @@ export function detectAudioEditRetakes(blocks: readonly AudioEditTranscriptBlock
     removable: (first, last) => detector.removable(first, last),
     ...(detector.script.length ? { locate: (units: readonly string[], from?: number) => detector.locate(units, from) } : {}),
   }).filter((finding) => !detector.review.some((candidate) => finding.first < candidate.last && candidate.first < finding.last))
-  for (const finding of residual.slice(0, Math.max(0, budget))) retakes.push(describe(finding.first, finding.last, [], true))
+  for (const finding of residual.slice(0, Math.max(0, budget))) retakes.push(describe(finding.first, finding.last, [], true, 'residual', finding.score / SELF_CHECK_FULL_SCORE, finding))
   return retakes.sort((a, b) => a.startFrame - b.startFrame)
 }
 
 const clip = (text: string, size: number): string => (text.length > size ? `${text.slice(0, size)}…` : text)
 
+/** 待确认线索的说明：拿不准在哪里。later 是后面那一遍的开头。 */
+const DOUBT_TEXT: Partial<Record<AudioEditRetakeReason, (later: string) => string>> = {
+  reworded: (later) => `后面换了说法又念了“${later}”，没有稿子佐证；可能是念坏重来，也可能本来就是两句`,
+  short_repeat: (later) => `紧接着又说了一遍“${later}”；这么短的重复可能是强调或叠句`,
+  parallel: (later) => `后面一句的开头相同（“${later}”）；可能是排比、列举或对比`,
+  unsaid: (later) => `后面重新念了“${later}”，但前一遍里有后一遍没再说的内容，删掉会丢话`,
+  complete_clause: (later) => `这是说完的一整句，后面又完整说了“${later}”；可能是重念，也可能是有意说两遍`,
+  joined: (later) => `和后面的“${later}”重复，但两遍之间没有停顿，不像念坏了重来`,
+  inside_unsure: (later) => `所在的整段重复还没有确定（后面是“${later}”），这一小截没有单独删`,
+  stutter: (later) => `紧接着说了“${later}”；可能是口吃，也可能是正常的叠词或强调`,
+  loop: (later) => `同一截话连着重复了几遍（后面是“${later}”）；可能是有意的叠说`,
+  residual: (later) => `去重念之后，前后两段的开头仍然相同（后面是“${later}”）；可能还留着一遍重念，也可能是排比`,
+}
+
 /** 重念 → 剪辑线索：删除这些词，并剪掉其间与前后的停顿；恢复其中任一词时停顿一并恢复。 */
 export function audioEditRetakeSuggestion(retake: AudioEditRetake): AudioEditSuggestion {
+  const later = clip(retake.keptText, 18)
   return {
     id: retake.id,
     kind: 'retake',
     evidence: 'audio',
     title: `重念“${clip(retake.removedText, 18)}”`,
     detail: retake.review
-      ? `后面换了说法又念了“${clip(retake.keptText, 18)}”；可能是念坏重来，也可能是有意的重复，没有自动删除，请试听后决定。`
-      : `后面重新念了“${clip(retake.keptText, 18)}”，保留最后一遍${retake.joined ? '；接缝处没有停顿，请试听' : ''}。`,
+      ? `${(DOUBT_TEXT[retake.reason] ?? DOUBT_TEXT.reworded!)(later)}。没有自动删除，请结合上下文或试听后决定。`
+      : `后面重新念了“${later}”，保留最后一遍${retake.joined ? '；接缝处没有停顿，请试听' : ''}。`,
     startFrame: retake.startFrame,
     endFrame: retake.endFrame,
     blockIds: retake.blockIds,
     confidence: retake.confidence,
     status: 'pending',
   }
+}
+
+/** 这处重念交给助手或人二次判断的材料，与线索按同一个 ID 存放。 */
+export function audioEditRetakeHandoff(retake: AudioEditRetake): AudioEditSuggestionHandoff {
+  return { reason: retake.reason, score: retake.score, options: retake.options }
 }

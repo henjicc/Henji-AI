@@ -1,4 +1,4 @@
-import type { AudioEditBatchSettings, AudioEditCut, AudioEditProjectDocument, AudioEditRange, AudioEditSuggestion, AudioEditTranscriptBlock } from './types'
+import type { AudioEditBatchSettings, AudioEditCut, AudioEditProjectDocument, AudioEditRange, AudioEditSuggestion, AudioEditSuggestionHandoff, AudioEditTranscriptBlock } from './types'
 import { normalizeAudioEditFiller } from './analysis'
 
 export const DEFAULT_AUDIO_EDIT_SETTINGS: AudioEditBatchSettings = {
@@ -165,12 +165,108 @@ export function setAudioEditBlocks(project: AudioEditProjectDocument, ids: reado
 
 const isRetakePauseCut = (cutId: string, suggestionId: string): boolean => cutId === suggestionId || cutId.startsWith(`${suggestionId}:`)
 
-/** 重念删除后剪掉其间与前后的停顿：删除范围里除被删词块与锁定内容以外的部分，id 跟随这条重念。 */
+/**
+ * 重念删除后剪掉其间与前后的停顿：删除范围里除词块与已有剪切以外的部分，id 跟随这条重念。
+ * 范围里别人删掉的词（用户手删的、去语气词删的）也要让开：它们不在这条线索的词块里，之后被单独恢复时不会来撤这条的剪切，
+ * 盖住了就成了“词块显示保留、成片里没声音”。保留着的词本来就不该被剪。
+ */
 function withRetakePauseCuts(project: AudioEditProjectDocument, suggestion: AudioEditSuggestion, targets: readonly AudioEditTranscriptBlock[]): AudioEditProjectDocument {
   const cuts = (project.cuts ?? []).filter((cut) => !isRetakePauseCut(cut.id, suggestion.id))
   const gaps = subtractRanges([{ startFrame: suggestion.startFrame, endFrame: suggestion.endFrame }],
-    [...targets, ...project.transcript.filter((block) => block.locked), ...cuts.filter((cut) => cut.enabled)])
+    [...targets, ...project.transcript.filter((block) => !block.included || block.locked), ...cuts.filter((cut) => cut.enabled)])
   return gaps.length ? { ...project, cuts: [...cuts, ...gaps.map((gap, index) => ({ ...gap, id: index ? `${suggestion.id}:${gap.startFrame}` : suggestion.id, reason: 'silence' as const, enabled: true }))] } : { ...project, cuts }
+}
+
+/**
+ * 这条线索现在能不能改用另一种做法；不能时返回原因。
+ * 还没处理的要它要删的内容都还在；处理过的要它删掉的内容仍然删着（被手动恢复过一部分的，改判会盖掉那次手改，不做）。
+ */
+export function audioEditSuggestionOptionBlocker(project: AudioEditProjectDocument, suggestion: AudioEditSuggestion): string | undefined {
+  if (!project.suggestionHandoff?.[suggestion.id]?.options?.length) return '这条线索没有可选的做法。'
+  const state = audioEditSuggestionState(project, suggestion)
+  if (state === 'locked') return '涉及的词块已锁定。'
+  if (suggestion.status === 'pending') return state === 'available' ? undefined : '这条线索要删的内容已经被删掉或已失效，请以当前口播内容为准。'
+  if (suggestion.status === 'applied') return state === 'removed' ? undefined : '这条线索删掉的内容已被恢复了一部分（可能是用户手改），改判会盖掉那次修改；请读当前词块，逐个改 audio_edit.transcript_block.included。'
+  return state === 'dismissed' ? undefined : '这条线索涉及的内容后来被删掉了，请以当前口播内容为准。'
+}
+
+/**
+ * 给一处重念改用另一种做法（留前一遍、换个切点、都留着）：先把这条线索已经删掉的词和停顿恢复，再按选中的做法删。
+ * 线索的词块与范围随之换成这种做法的，之后恢复其中任一词时停顿照样跟着恢复。做不成时原样返回（原因见 audioEditSuggestionOptionBlocker）。
+ */
+export function chooseAudioEditSuggestionOption(project: AudioEditProjectDocument, id: string, optionId: string): AudioEditProjectDocument {
+  const suggestion = project.suggestions.find((item) => item.id === id)
+  const handoff = project.suggestionHandoff?.[id]
+  const option = handoff?.options?.find((item) => item.id === optionId)
+  if (!suggestion || !handoff || !option || audioEditSuggestionOptionBlocker(project, suggestion)) return project
+  const restored = suggestion.status === 'applied' ? setAudioEditBlocks(project, suggestion.blockIds, true) : project
+  const chosen = { ...restored.suggestionHandoff, [id]: { ...handoff, chosen: optionId } }
+  if (!option.blockIds.length) {
+    return { ...restored, suggestionHandoff: chosen, suggestions: restored.suggestions.map((item) => item.id === id ? { ...item, status: 'dismissed' } : item) }
+  }
+  // 只把此刻还在的词记进线索：用户或别的步骤（去语气词）已经删掉的不归这条线索，之后再改判、恢复都不会把它们带回来
+  const present = new Set(restored.transcript.filter((block) => block.included).map((block) => block.id))
+  const blockIds = option.blockIds.filter((blockId) => present.has(blockId))
+  if (!blockIds.length) return project
+  const draft = { ...restored, suggestions: restored.suggestions.map((item) => item.id === id ? { ...item, blockIds, startFrame: option.startFrame, endFrame: option.endFrame, status: 'pending' as const } : item) }
+  const next = applyAudioEditSuggestion(draft, id)
+  return next === draft ? project : { ...next, suggestionHandoff: chosen }
+}
+
+/** 这条线索现在用的是哪种做法；还没处理（待确认）时没有。 */
+export function chosenAudioEditSuggestionOption(project: AudioEditProjectDocument, suggestion: AudioEditSuggestion): string | undefined {
+  const handoff = project.suggestionHandoff?.[suggestion.id]
+  if (!handoff?.options?.length || suggestion.status === 'pending') return undefined
+  const included = new Map(project.transcript.map((block) => [block.id, block.included]))
+  // 已应用后又被恢复了一部分的，实际就是都留着
+  if (suggestion.status === 'dismissed' || suggestion.blockIds.some((blockId) => included.get(blockId))) return handoff.options.find((item) => !item.blockIds.length)?.id
+  // 没有改判过的，用的就是排在第一的本条自己的做法
+  return handoff.chosen ?? handoff.options[0].id
+}
+
+export interface DetectedAudioEditRetake { suggestion: AudioEditSuggestion; handoff: AudioEditSuggestionHandoff; review: boolean }
+
+/**
+ * 把检测到的重念并入线索并逐条应用；拿不准的只留作待确认的线索，不删。
+ * 已经定过的不再提：同一条线索处理过或隐藏过的；以及与“定了都留着、改过做法、或删掉后被手动恢复”的线索是同一对两遍的——
+ * 重新检测时同一处的边界常常差一两个词、线索 ID 随之不同，只比 ID 会把刚恢复的内容再删一次。
+ * “同一对”看两头：新检测要删的词落在那条线索的两遍里，并且它留下的后一遍（紧跟在被删词后面、还保留着的词）也在那两遍里。
+ * 只碰到其中一遍、后一遍在别处的是另一处重念（前一遍、后一遍之后还有第三遍，删掉后一遍后前一遍与第三遍挨到一起），照常提出。
+ */
+export function applyDetectedAudioEditRetakes(document: AudioEditProjectDocument, detected: readonly DetectedAudioEditRetake[]): AudioEditProjectDocument {
+  const existing = new Set(document.suggestions.filter((item) => item.status !== 'pending').map((item) => item.id))
+  const position = new Map(document.transcript.map((block, index) => [block.id, index]))
+  const settled: Array<{ words: Set<string>; bothTakes: boolean }> = []
+  for (const item of document.suggestions) {
+    if (item.kind !== 'retake' || item.status === 'pending') continue
+    const handoff = document.suggestionHandoff?.[item.id]
+    if (item.status === 'applied' && handoff?.chosen === undefined && !item.blockIds.some((blockId) => document.transcript[position.get(blockId) ?? -1]?.included)) continue
+    const takes = (handoff?.options ?? []).filter((option) => option.blockIds.length)
+    // 旧版本留下的线索没有记后一遍在哪，只能按碰到这些词就算
+    settled.push({ words: new Set([...item.blockIds, ...takes.flatMap((option) => option.blockIds)]), bothTakes: takes.some((option) => option.id === 'keep_earlier') })
+  }
+  const laterTakeStart = (blockIds: readonly string[]): string | undefined => {
+    const last = Math.max(...blockIds.map((blockId) => position.get(blockId) ?? -1))
+    for (let index = last + 1; index < document.transcript.length; index++) if (document.transcript[index].included) return document.transcript[index].id
+    return undefined
+  }
+  const alreadySettled = (item: DetectedAudioEditRetake): boolean => settled.some((place) => {
+    if (!item.suggestion.blockIds.some((blockId) => place.words.has(blockId))) return false
+    if (!place.bothTakes) return true
+    const later = laterTakeStart(item.suggestion.blockIds)
+    return later !== undefined && place.words.has(later)
+  })
+  const fresh = detected.filter((item) => !existing.has(item.suggestion.id) && !alreadySettled(item))
+  const suggestions = [...document.suggestions.filter((item) => item.kind !== 'retake' || item.status !== 'pending'), ...fresh.map((item) => item.suggestion)]
+  // 交接材料跟着线索走：线索不在了的一并清掉，新线索各带一份；重新检测出同一处时，“留给用户试听”的标记保留
+  const ids = new Set(suggestions.map((item) => item.id))
+  const suggestionHandoff = {
+    ...Object.fromEntries(Object.entries(document.suggestionHandoff ?? {}).filter(([id]) => ids.has(id))),
+    ...Object.fromEntries(fresh.map((item) => { const audience = document.suggestionHandoff?.[item.suggestion.id]?.audience; return [item.suggestion.id, audience ? { ...item.handoff, audience } : item.handoff] })),
+  }
+  let draft: AudioEditProjectDocument = { ...document, suggestions, suggestionHandoff }
+  for (const item of fresh) if (!item.review) draft = applyAudioEditSuggestion(draft, item.suggestion.id)
+  return draft
 }
 
 export function applyAudioEditSuggestion(project: AudioEditProjectDocument, id: string): AudioEditProjectDocument {

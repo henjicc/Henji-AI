@@ -80,14 +80,18 @@ export const audioEditDocumentKind: DocumentKindDescriptor<AudioEditDocumentCont
   // 最低可读版本提到 8：版本 7 及以前的程序按严格结构解析 source，遇到 fingerprint 会解析失败而不是忽略。
   // 后果：被版本 8 的程序打开并保存过的 .hjaud，旧版程序打不开（提示“请升级”，不会当成损坏）。发生在 2.0 正式版之前。
   // 同一版本起 source 保留不认识的字段（宽松结构），以后再给 source 加可选字段只升版本、不再提高最低可读版本。
-  version: 8,
+  // 版本 9 = 顶层新增可选的 suggestionHandoff（本地粗剪交给助手二次判断的材料，按线索 ID 存）。
+  // 版本 8 的程序把不认识的顶层字段原样带回，所以最低可读版本不变。
+  version: 9,
   minReaderVersion: 8,
   contentSchema: audioEditContentSchema,
   migrations: {
     // 6 → 7：音频效果合并、均衡方式拆分并保留声音身份别名；旧程序无法理解新效果，最低可读版本同步提高。
     6: content => migrateAudioEqualizerModes(migrateAudioMergedEffects(content)), 1: (content) => structuredClone(content), 2: (content) => structuredClone(content), 3: (content) => structuredClone(content), 4: (content) => migrateAudioEditEffectsToChain(content as Record<string, unknown>) as AudioEditDocumentContent, 5: (content) => structuredClone(content),
     // 7 → 8：只新增可选的 source.fingerprint；旧素材的 identity 原样保留，派生缓存键照旧计算。
-    7: (content) => structuredClone(content) },
+    7: (content) => structuredClone(content),
+    // 8 → 9：只新增可选的顶层 suggestionHandoff。
+    8: (content) => structuredClone(content) },
   createEmptyContent: () => ({ source: null, referenceScript: '', transcript: [], suggestions: [] }),
   isEmptyContent: isEmptyAudioEditContent,
   summarize: (content) => ({

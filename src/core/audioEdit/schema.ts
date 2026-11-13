@@ -10,6 +10,11 @@ export const audioEditCutsSchema = z.array(z.object({ id: z.string().min(1), sta
 export const audioEditViewSettingsSchema = z.object({ textSize: z.number().int().min(14).max(36), sidePadding: z.number().int().min(16).max(240), timelineCaptions: z.boolean() }).strict()
 const transcriptSchema = z.array(z.object({ id: z.string().min(1), text: z.string().max(20000), startFrame: frame, endFrame: frame, confidence: z.number().finite().optional(), included: z.boolean(), locked: z.boolean(), granularity: z.enum(['word', 'segment']), captionBreakAfter: z.boolean().optional() }).strict())
 const suggestionsSchema = z.array(z.object({ id: z.string().min(1), kind: z.enum(['long_silence', 'filler', 'retake']), evidence: z.literal('audio').optional(), title: z.string(), detail: z.string(), startFrame: frame, endFrame: frame, blockIds: z.array(z.string()), confidence: z.enum(['high', 'medium', 'low']), status: z.enum(['pending', 'applied', 'dismissed']) }).strict())
+// 交接材料保留不认识的字段：以后给它加内容只升版本，不必提高最低可读版本
+const suggestionHandoffSchema = z.record(z.string(), z.looseObject({
+  reason: z.string().max(40).optional(), score: z.number().min(0).max(1).optional(), audience: z.literal('user').optional(), chosen: z.string().min(1).max(40).optional(),
+  options: z.array(z.looseObject({ id: z.string().min(1).max(40), blockIds: z.array(z.string()), startFrame: frame, endFrame: frame })).max(32).optional(),
+}))
 export const audioEditProjectSchema = z.object({
   id: z.string().regex(/^[\w-]+$/), name: z.string().trim().min(1).max(200),
   // source 保留不认识的字段（更新版本加的可选字段原样带回去），以后给素材加可选信息不必再提最低可读版本。
@@ -20,7 +25,7 @@ export const audioEditProjectSchema = z.object({
     video: z.object({ frameRate: audioEditFrameRateSchema, width: frame, height: frame, startSeconds: z.number().finite(), durationSeconds: z.number().positive(), variableFrameRate: z.boolean() }).strict().optional(),
   }),
   referenceScript: z.string().max(200000), transcript: transcriptSchema,
-  suggestions: suggestionsSchema,
+  suggestions: suggestionsSchema, suggestionHandoff: suggestionHandoffSchema.optional(),
   editBaseline: z.object({ kind: z.enum(['original', 'legacy']), transcript: transcriptSchema, suggestions: suggestionsSchema }).strict().optional(),
   cuts: audioEditCutsSchema.optional(),
   gainRegions: audioEditGainRegionsSchema.optional(), repairs: audioEditRepairsSchema.optional(),

@@ -86,4 +86,14 @@ describe('素材指纹（格式 8）与旧作品', () => {
     expect(project.source.fingerprint).toEqual({ size: expect.any(Number), mtimeMs: expect.any(Number), digest: expect.stringMatching(/^[a-f0-9]{64}$/) })
     expect(() => upgradePersistenceContent({ ...format, version: 7 }, envelope.content, 8, undefined, envelope.kindMinReaderVersion)).toThrowError(expect.objectContaining({ code: 'newer-version' }))
   })
+
+  it('版本 9 的样本按严格结构打开，交接材料原样写回', () => {
+    const sample = JSON.parse(fs.readFileSync('tests/fixtures/persistence/document.audio_edit/v9.json', 'utf8')) as { id: string; name: string; content: Record<string, unknown> }
+    const { project, extras } = audioEditProjectFromDocument({ id: sample.id, name: sample.name, createdAt: 0, updatedAt: 0, revision: 0 }, sample.content)
+    expect(project.suggestionHandoff).toEqual(sample.content.suggestionHandoff)
+    expect(extras).toEqual({})
+    const written = audioEditProjectToDocumentContent(project, extras) as Record<string, unknown>
+    expect(written.suggestions).toEqual(sample.content.suggestions)
+    expect(written.suggestionHandoff).toEqual(sample.content.suggestionHandoff)
+  })
 })

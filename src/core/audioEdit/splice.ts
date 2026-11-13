@@ -55,8 +55,14 @@ export function spliceAudioEditProject(project: AudioEditProjectDocument, source
   }
   transcript.sort((a, b) => a.startFrame - b.startFrame)
   const suggestions = shiftIntact(project.suggestions).map(item => ({ ...item, blockIds: item.blockIds.filter(id => transcript.some(block => block.id === id)) }))
+  // 交接材料跟着线索走：跨过插入位置的线索已经丢掉，条目一并丢；留下的各种做法与线索同样平移，跨过插入位置的那种做法不再提供
+  const kept = new Set(suggestions.map(item => item.id))
+  const present = new Set(transcript.map(block => block.id))
+  const suggestionHandoff = project.suggestionHandoff && Object.fromEntries(Object.entries(project.suggestionHandoff).filter(([id]) => kept.has(id)).map(([id, handoff]) => [id, {
+    ...handoff, ...(handoff.options ? { options: shiftIntact(handoff.options).map(option => ({ ...option, blockIds: option.blockIds.filter(blockId => present.has(blockId)) })) } : {}),
+  }]))
   return {
-    ...project, source, transcript, suggestions,
+    ...project, source, transcript, suggestions, ...(suggestionHandoff ? { suggestionHandoff } : {}),
     cuts: spliceAudioRanges([...(project.cuts ?? []), ...project.transcript.filter(block => !block.included && !block.locked && overlaps(block)).map(block => ({ id: `transcript-${block.id}`, startFrame: block.startFrame, endFrame: block.endFrame, enabled: true, reason: 'manual' as const, mode: 'delete' as const }))], start, end, inserted),
     gainRegions: spliceAudioRanges((project.gainRegions ?? []).map(region => ({ ...region, original: region })), start, end, inserted).map(({ original, ...region }) => {
       const delta = region.endFrame <= start ? 0 : inserted - (end - start)
