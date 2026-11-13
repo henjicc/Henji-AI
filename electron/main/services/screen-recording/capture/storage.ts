@@ -8,7 +8,7 @@ import { captureManifestSchema, type CaptureManifest, type CaptureSpan } from '.
 import { loadFfmpegPath, loadFfprobePath } from '../../video/ffmpeg-loader'
 import { createMainLogger } from '../../logging'
 import { writeBufferAtomically } from '../../fs/atomic-file'
-import { captureTimingFile } from './native-timing'
+import { captureTimingFile, captureTimingFirstFrameUs, readCaptureTiming } from './native-timing'
 
 const logger = createMainLogger('main.screen_recording.capture')
 const RESERVE_BYTES = 256 * 1024 * 1024
@@ -100,6 +100,15 @@ export async function probeMediaDurationUs(file: string): Promise<number> {
 }
 
 /**
+ * 没封口的原生采集分片，起点还停在开始时记下的网格起点上（正常停止时才按时刻表改准）：这里按同一份时刻表补上
+ * 第 0 帧相对网格起点的偏移（它所在的格号与上屏偏移）。同一个时钟里的差，不需要时钟校准。没有时刻表或读不出时不动。
+ */
+async function unsealedStartUs(file: string, monoUs: number): Promise<number> {
+  const timing = await readCaptureTiming(file).catch(() => null)
+  return timing ? Math.max(0, monoUs + captureTimingFirstFrameUs(timing) - timing.originUs) : monoUs
+}
+
+/**
  * 补齐没封口的画面分片。分片 MP4 边录边可读，先按原文件里真实写到的画面算时长、直接用原件；
  * 原件读不出时才另存一份重新封装的副本。已封口的分片不碰，原件永远保留。
  */
@@ -113,7 +122,7 @@ export async function recoverCapture(directory: string, manifest?: CaptureManife
     // 封了口、时长为 0、文件也不在：这一段一帧都没录到（开始后立刻停止），没有东西可补，不算恢复失败。
     if (span.finalized && span.durationUs === 0 && !await fs.access(original).then(() => true, () => false)) continue
     try {
-      span.durationUs = await probeMediaDurationUs(original); span.finalized = true
+      span.durationUs = await probeMediaDurationUs(original); span.monoUs = await unsealedStartUs(original, span.monoUs); span.finalized = true
       files.push({ index: span.index, path: original, monoUs: span.monoUs, durationUs: span.durationUs }); repaired++
     } catch (probeFailure) {
       const output = path.join(directory, `recovered-${span.index}.mp4`)
@@ -122,7 +131,7 @@ export async function recoverCapture(directory: string, manifest?: CaptureManife
         await run(await loadFfmpegPath(), ['-hide_banner', '-v', 'error', '-y', '-i', original, '-map', '0:v:0', '-c', 'copy', '-movflags', '+faststart', output])
         // 原件旁有逐帧时刻表（暂停不在文件里的连续文件）：副本里的帧与原件前面的帧一一对应，时刻表跟着放一份，暂停之后才不会错位。
         await fs.copyFile(captureTimingFile(original), captureTimingFile(output)).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error })
-        files.push({ index: span.index, path: output, monoUs: span.monoUs, durationUs: await probeMediaDurationUs(output) }); repaired++
+        files.push({ index: span.index, path: output, monoUs: await unsealedStartUs(original, span.monoUs), durationUs: await probeMediaDurationUs(output) }); repaired++
       } catch (error) {
         rejected.push(span.index)
         logger.warn('录制片段未能恢复，原文件已保留', { event: 'recording.capture.recovery.segment_failed', error, context: { index: span.index, probe: String(probeFailure) } })

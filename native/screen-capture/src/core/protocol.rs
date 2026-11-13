@@ -102,6 +102,16 @@ impl Events {
     }
 }
 
+#[cfg(test)]
+impl Events {
+    /// 测试用：应答与事件不经标准输出，原样收进通道。
+    pub fn collect() -> (Self, mpsc::Receiver<Reliable>, mpsc::Receiver<Value>) {
+        let (reliable, reliable_rx) = mpsc::channel();
+        let (lossy, lossy_rx) = mpsc::sync_channel(64);
+        (Self { reliable, lossy }, reliable_rx, lossy_rx)
+    }
+}
+
 /// 推流线程：先发完不丢的，再发可丢的；所有发送端都放下后把剩下的不丢消息发完再退出。
 pub fn spawn_streamer() -> (Events, thread::JoinHandle<()>) {
     let (reliable_tx, reliable) = mpsc::channel::<Reliable>();

@@ -51,6 +51,7 @@ impl CaptureControl for NoCapture {
         false
     }
     fn simulate_source_lost(&self) {}
+    fn simulate_resize(&self) {}
     fn start_preview(&self, _: &Value, _: Notify) -> Result<Value, String> {
         Err(UNSUPPORTED.into())
     }

@@ -463,6 +463,11 @@ impl<P: Platform> Runner<P> {
                     capture.simulate_source_lost();
                 }
             }
+            "resize" => {
+                if let Some(capture) = capture {
+                    capture.simulate_resize();
+                }
+            }
             "frameFailures" => self.health.inject_frame_failures.store(request["count"].as_u64().unwrap_or(1), Ordering::Relaxed),
             _ => return Err("INVALID_ARGUMENT|未知的注入种类".into()),
         }
@@ -611,7 +616,8 @@ impl<P: Platform> Runner<P> {
             }
 
             if recording.is_none() {
-                if let (Some(at), Some((source_us, frame))) = (start_at, preroll.take()) {
+                // 还没要求开始时那张画面留着不动：屏幕静止时系统不再给帧，开始那一刻用的就是它。
+                if let (Some(at), Some((source_us, frame))) = (start_at, start_at.and_then(|_| preroll.take())) {
                     // 手里的画面早于开始时刻：起点就是开始时刻；第一帧在开始之后才到：起点是它的系统时刻。
                     let origin = at.max(source_us);
                     match self.begin(origin) {
@@ -878,25 +884,45 @@ impl<P: Platform> Runner<P> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::{activity::Foreground, protocol::spawn_streamer};
+    use crate::core::{activity::Foreground, protocol::Reliable};
     use crate::platform::{Notify, ProcessStats};
+    use std::collections::VecDeque;
+    use std::sync::atomic::AtomicBool;
+    use std::sync::MutexGuard;
 
+    /// 假平台的状态是全局的：用它的测试一次只跑一个。
+    static SERIAL: Mutex<()> = Mutex::new(());
     static START: Mutex<Option<Instant>> = Mutex::new(None);
     static INBOX: Mutex<Option<(Arc<Inbox<Arc<u32>>>, Arc<Health>)>> = Mutex::new(None);
     static WRITES: Mutex<Vec<(u32, i64, bool)>> = Mutex::new(Vec::new());
     static FLUSHES: Mutex<Vec<usize>> = Mutex::new(Vec::new());
+    /// 来源在不在出帧（显示器断开后不出，接回后才出）。
+    static SOURCE_UP: AtomicBool = AtomicBool::new(true);
+    /// 接下来每次“找回来源”的结果；用完之后一律是找到了。
+    static REACQUIRE: Mutex<VecDeque<Result<bool, String>>> = Mutex::new(VecDeque::new());
+    static DEVICE_LOST: AtomicBool = AtomicBool::new(false);
+    /// 写到第几帧起编码器报错。
+    static WRITE_FAILS_FROM: AtomicU64 = AtomicU64::new(u64::MAX);
 
     struct Fake;
     struct FakeCapture;
     impl CaptureControl for FakeCapture {
         fn reacquire(&mut self) -> Result<bool, String> {
-            Ok(true)
+            let outcome = REACQUIRE.lock().unwrap().pop_front().unwrap_or(Ok(true));
+            if outcome == Ok(true) {
+                SOURCE_UP.store(true, Ordering::Release);
+            }
+            outcome
         }
         fn device_lost(&self) -> bool {
-            false
+            DEVICE_LOST.load(Ordering::Acquire)
         }
         fn simulate_source_lost(&self) {
+            SOURCE_UP.store(false, Ordering::Release);
             INBOX.lock().unwrap().as_ref().unwrap().0.fail("SOURCE_LOST|测试".into());
+        }
+        fn simulate_resize(&self) {
+            INBOX.lock().unwrap().as_ref().unwrap().1.source_size.store(32 << 32 | 18, Ordering::Relaxed);
         }
         fn start_preview(&self, _: &Value, _: Notify) -> Result<Value, String> {
             Ok(json!({}))
@@ -906,6 +932,9 @@ mod tests {
     struct FakeWriter(PathBuf);
     impl FrameWriter<u32> for FakeWriter {
         fn write(&mut self, frame: &u32, pts: i64, force_key: bool) -> Result<u64, String> {
+            if pts as u64 >= WRITE_FAILS_FROM.load(Ordering::Acquire) {
+                return Err("ENCODER_FAILED|测试".into());
+            }
             WRITES.lock().unwrap().push((*frame, pts, force_key));
             Ok(100)
         }
@@ -942,73 +971,156 @@ mod tests {
         }
     }
 
+    const FPS: u32 = 50;
+
+    /// 一次用假平台跑的录制：来源每 20 毫秒出一帧（帧的内容是它的序号），应答与事件收在通道里。
+    struct Rig {
+        session: Session,
+        directory: tempfile::TempDir,
+        reliable: mpsc::Receiver<Reliable>,
+        _lossy: mpsc::Receiver<Value>,
+        feeding: Arc<AtomicBool>,
+        feeder: Option<thread::JoinHandle<()>>,
+        _serial: MutexGuard<'static, ()>,
+    }
+
+    struct Outcome {
+        /// 应答（带 id）与事件（带 event），按发出的顺序。
+        messages: Vec<Value>,
+        writes: Vec<(u32, i64, bool)>,
+        /// 每次落成分片时已经写了多少帧。
+        flushes: Vec<usize>,
+        records: Vec<timing::Record>,
+        manifest: Value,
+        paths: Paths,
+        _directory: tempfile::TempDir,
+    }
+
+    impl Outcome {
+        fn events(&self, name: &str) -> Vec<&Value> {
+            self.messages.iter().filter(|message| message["event"] == name).collect()
+        }
+        fn event_names(&self) -> Vec<&str> {
+            self.messages.iter().filter_map(|message| message["event"].as_str()).filter(|name| *name != "fragment").collect()
+        }
+        fn reply(&self, id: u32) -> &Value {
+            self.messages.iter().find(|message| message["id"] == id).unwrap_or(&Value::Null)
+        }
+    }
+
+    impl Rig {
+        fn prepare() -> Self {
+            let serial = SERIAL.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            WRITES.lock().unwrap().clear();
+            FLUSHES.lock().unwrap().clear();
+            REACQUIRE.lock().unwrap().clear();
+            SOURCE_UP.store(true, Ordering::Release);
+            DEVICE_LOST.store(false, Ordering::Release);
+            WRITE_FAILS_FROM.store(u64::MAX, Ordering::Release);
+            std::env::set_var(INJECT_SWITCH, "1");
+            let directory = tempfile::tempdir().unwrap();
+            let (events, reliable, lossy) = Events::collect();
+            let config = CaptureConfig::parse(&json!({
+                "sessionId": "t", "directory": directory.path().to_string_lossy(), "source": {"kind": "display"}, "fps": FPS,
+            }))
+            .unwrap();
+            let session = Session::prepare::<Fake>(config, events).unwrap();
+            let (inbox, health) = INBOX.lock().unwrap().clone().unwrap();
+            let feeding = Arc::new(AtomicBool::new(true));
+            let feeder = {
+                let feeding = feeding.clone();
+                thread::spawn(move || {
+                    let mut index = 0u32;
+                    while feeding.load(Ordering::Acquire) {
+                        if SOURCE_UP.load(Ordering::Acquire) {
+                            let now = Fake::now_us();
+                            inbox.push(&health, now - 2_000, now, Arc::new(index));
+                        }
+                        index += 1;
+                        thread::sleep(Duration::from_millis(20));
+                    }
+                })
+            };
+            // 开始之前先有一张画面。
+            thread::sleep(Duration::from_millis(100));
+            Self { session, directory, reliable, _lossy: lossy, feeding, feeder: Some(feeder), _serial: serial }
+        }
+
+        /// 已经开始、录了一小会儿。
+        fn recording() -> Self {
+            let rig = Self::prepare();
+            rig.send("start", 1).unwrap();
+            rig.wait(300);
+            rig
+        }
+
+        fn send(&self, kind: &str, id: u32) -> Result<(), String> {
+            self.session.command(kind, &json!({"id": id}))
+        }
+
+        fn inject(&self, kind: &str) {
+            self.session.command("inject", &json!({"id": 0, "kind": kind})).unwrap();
+        }
+
+        fn wait(&self, milliseconds: u64) {
+            thread::sleep(Duration::from_millis(milliseconds));
+        }
+
+        fn written(&self) -> usize {
+            WRITES.lock().unwrap().len()
+        }
+
+        /// 等会话线程收尾完，取回它发过的全部应答与事件、写过的帧、时刻表与清单。
+        fn finish(mut self) -> Outcome {
+            self.session.join();
+            assert!(self.send("pause", 99).is_err(), "结束之后不再接受指令");
+            self.feeding.store(false, Ordering::Release);
+            self.feeder.take().unwrap().join().unwrap();
+            let messages = self.reliable.try_iter().filter_map(|item| if let Reliable::Message(value) = item { Some(value) } else { None }).collect();
+            let paths = Paths::new(self.directory.path(), "screen");
+            let records = timing::read(&paths.timing).map(|(_, records)| records).unwrap_or_default();
+            let manifest = fs::read(&paths.manifest).ok().and_then(|bytes| serde_json::from_slice(&bytes).ok()).unwrap_or(Value::Null);
+            Outcome { messages, writes: WRITES.lock().unwrap().clone(), flushes: FLUSHES.lock().unwrap().clone(), records, manifest, paths, _directory: self.directory }
+        }
+    }
+
+    fn cells(milliseconds: u64) -> u32 {
+        (milliseconds * FPS as u64 / 1000) as u32
+    }
+
     /// 走完整个生命周期：准备 → 开始 → 暂停 → 继续 → 来源丢失又回来 → 停止，
     /// 核对写文件接口收到的帧序号、空档处的落盘与关键帧、时刻表与清单。
     #[test]
     fn lifecycle_writes_contiguous_frames_and_honest_side_files() {
-        let directory = tempfile::tempdir().unwrap();
-        std::env::set_var(INJECT_SWITCH, "1");
-        let (events, streamer) = spawn_streamer();
-        crate::core::protocol::OUTPUT_BROKEN.store(true, Ordering::Release);
-        let config = CaptureConfig::parse(&json!({
-            "sessionId": "t", "directory": directory.path().to_string_lossy(), "source": {"kind": "display"}, "fps": 50,
-        }))
-        .unwrap();
-        let mut session = Session::prepare::<Fake>(config, events).unwrap();
-        let (inbox, health) = INBOX.lock().unwrap().clone().unwrap();
-        let feeding = Arc::new(std::sync::atomic::AtomicBool::new(true));
-        let feeder = {
-            let feeding = feeding.clone();
-            thread::spawn(move || {
-                let mut index = 0u32;
-                while feeding.load(Ordering::Acquire) {
-                    let now = Fake::now_us();
-                    inbox.push(&health, now - 2_000, now, Arc::new(index));
-                    index += 1;
-                    thread::sleep(Duration::from_millis(20));
-                }
-            })
-        };
-        fn send_to(session: &Session, kind: &str, id: u32) -> Result<(), String> {
-            session.command(kind, &json!({"id": id}))
-        }
-        let settle = || thread::sleep(Duration::from_millis(300));
-        thread::sleep(Duration::from_millis(100));
-        send_to(&session, "pause", 1).unwrap();
-        send_to(&session, "start", 2).unwrap();
-        settle();
-        send_to(&session, "pause", 3).unwrap();
-        settle();
-        let before_resume = WRITES.lock().unwrap().len();
-        send_to(&session, "resume", 4).unwrap();
-        settle();
+        let rig = Rig::prepare();
+        assert!(rig.send("pause", 1).is_ok());
+        rig.send("start", 2).unwrap();
+        rig.wait(300);
+        rig.send("pause", 3).unwrap();
+        rig.wait(300);
+        let before_resume = rig.written();
+        rig.send("resume", 4).unwrap();
+        rig.wait(300);
         // 显示器断开：一秒后找回来，这一秒不进文件。
-        session.command("inject", &json!({"id": 5, "kind": "sourceLost"})).unwrap();
-        thread::sleep(Duration::from_millis(600));
-        let before_restore = WRITES.lock().unwrap().len();
-        thread::sleep(Duration::from_millis(900));
-        send_to(&session, "stop", 6).unwrap();
-        send_to(&session, "stop", 7).unwrap();
-        session.join();
-        assert!(send_to(&session, "pause", 8).is_err());
-        feeding.store(false, Ordering::Release);
-        feeder.join().unwrap();
-        drop(session);
-        streamer.join().unwrap();
+        rig.inject("sourceLost");
+        rig.wait(600);
+        let before_restore = rig.written();
+        rig.wait(900);
+        rig.send("stop", 6).unwrap();
+        rig.send("stop", 7).unwrap();
+        let outcome = rig.finish();
 
-        let writes = WRITES.lock().unwrap().clone();
+        let writes = &outcome.writes;
         assert!(writes.len() > before_restore + 5, "写了 {} 帧", writes.len());
         assert!(writes.iter().enumerate().all(|(index, (_, pts, _))| *pts == index as i64));
         // 空档期间不写；进空档那一刻把已写的落成分片；空档后的第一帧是关键帧，而且用的是空档期间到的新画面。
-        assert_eq!(*FLUSHES.lock().unwrap(), vec![before_resume, before_restore]);
+        assert_eq!(outcome.flushes, vec![before_resume, before_restore]);
         let keys: Vec<usize> = writes.iter().enumerate().filter(|(_, (_, _, key))| *key).map(|(index, _)| index).collect();
         assert_eq!(keys, vec![0, before_resume, before_restore]);
         assert!(writes[before_resume].0 >= writes[before_resume - 1].0 + 10);
 
-        let paths = Paths::new(directory.path(), "screen");
-        let (header, records) = timing::read(&paths.timing).unwrap();
+        let records = &outcome.records;
         assert_eq!(records.len(), writes.len());
-        assert_eq!(header.fps_num, 50);
         let gap = records[before_resume].cell - records[before_resume - 1].cell;
         assert!((10..=20).contains(&gap), "暂停跨了 {gap} 格");
         let lost_gap = records[before_restore].cell - records[before_restore - 1].cell;
@@ -1017,13 +1129,170 @@ mod tests {
         assert!(records[before_resume].flags & timing::FLAG_AFTER_SOURCE_LOST == 0);
         assert!(records[before_restore].flags & timing::FLAG_AFTER_SOURCE_LOST != 0);
         assert!(records.windows(2).all(|pair| pair[0].source_us <= pair[1].source_us));
-        let manifest: Value = serde_json::from_slice(&fs::read(&paths.manifest).unwrap()).unwrap();
-        assert_eq!(manifest["completed"], true);
-        assert_eq!(manifest["result"]["frames"], writes.len());
-        assert_eq!(manifest["originUs"], header.origin_us);
-        let activity = fs::read_to_string(&paths.activity).unwrap();
+        assert_eq!(outcome.manifest["completed"], true);
+        assert_eq!(outcome.manifest["result"]["frames"], writes.len());
+        let (header, _) = timing::read(&outcome.paths.timing).unwrap();
+        assert_eq!(header.fps_num, FPS);
+        assert_eq!(outcome.manifest["originUs"], header.origin_us);
+        let activity = fs::read_to_string(&outcome.paths.activity).unwrap();
         for kind in ["\"start\"", "\"foreground\"", "\"pause\"", "\"resume\"", "\"sourceLost\"", "\"stop\""] {
             assert!(activity.contains(kind), "活动时间线缺 {kind}");
         }
+        // 还没开始时的暂停被拒绝；第二个停止被拒绝，第一个在文件收尾后应答。
+        assert_eq!(outcome.reply(1)["error"]["code"], "INVALID_STATE");
+        assert!(["INVALID_STATE", "SESSION_MISSING"].contains(&outcome.reply(7)["error"]["code"].as_str().unwrap()));
+        assert_eq!(outcome.reply(6)["result"]["frames"], writes.len());
+        assert_eq!(outcome.event_names(), vec!["started", "paused", "resumed", "sourceLost", "paused", "sourceRestored", "resumed"]);
+    }
+
+    /// 拔掉显示器：头几次找不到，接回后在同一个文件里续录；再拔掉且一直没接回，停止时文件照样收好。
+    #[test]
+    fn an_unplugged_display_is_awaited_and_a_stop_while_it_is_gone_still_closes_the_file() {
+        let rig = Rig::recording();
+        REACQUIRE.lock().unwrap().extend([Ok(false), Ok(false)]);
+        rig.inject("sourceLost");
+        rig.wait(1500);
+        let while_gone = rig.written();
+        // 第三次（约三秒后）才找到。
+        rig.wait(2200);
+        assert!(rig.written() > while_gone + 5, "接回后没有续录");
+        REACQUIRE.lock().unwrap().extend(std::iter::repeat_n(Ok(false), 20));
+        rig.inject("sourceLost");
+        rig.wait(1300);
+        let at_stop = rig.written();
+        rig.send("stop", 2).unwrap();
+        let outcome = rig.finish();
+
+        assert_eq!(outcome.event_names(), vec!["started", "sourceLost", "paused", "sourceRestored", "resumed", "sourceLost", "paused"]);
+        assert!(outcome.events("paused").iter().all(|event| event["reason"] == "sourceLost"));
+        // 断开期间一帧不写；文件里只有一处空档，约三秒，标成来源丢失而不是暂停。
+        assert_eq!(outcome.writes.len(), at_stop);
+        assert!(outcome.writes.iter().enumerate().all(|(index, (_, pts, _))| *pts == index as i64));
+        let gap = outcome.records[while_gone].cell - outcome.records[while_gone - 1].cell;
+        assert!((cells(2800)..=cells(3600)).contains(&gap), "断开跨了 {gap} 格");
+        assert!(outcome.records[while_gone].flags & timing::FLAG_AFTER_SOURCE_LOST != 0);
+        assert!(outcome.writes[while_gone].2, "接回后的第一帧应是关键帧");
+        assert_eq!(outcome.records.windows(2).filter(|pair| pair[1].cell != pair[0].cell + 1).count(), 1);
+        // 一直没接回时按停止收尾：应答成功、清单完整、文件写好。
+        assert_eq!(outcome.reply(2)["ok"], true);
+        assert_eq!(outcome.reply(2)["result"]["frames"], at_stop);
+        assert_eq!(outcome.manifest["completed"], true);
+        assert!(outcome.paths.video.exists());
+    }
+
+    /// 还没开始显示器就断开了：开始照常应答，文件从它接回后的第一张画面起，第一帧的格号如实记着等了多久。
+    #[test]
+    fn a_source_lost_before_the_start_begins_the_file_with_the_first_picture_after_it_returns() {
+        let rig = Rig::prepare();
+        REACQUIRE.lock().unwrap().push_back(Ok(false));
+        rig.inject("sourceLost");
+        rig.wait(200);
+        rig.send("start", 1).unwrap();
+        rig.wait(500);
+        assert_eq!(rig.written(), 0, "来源还没回来就写了帧");
+        rig.wait(2000);
+        rig.send("stop", 2).unwrap();
+        let outcome = rig.finish();
+
+        assert_eq!(outcome.reply(1)["ok"], true);
+        assert_eq!(outcome.event_names(), vec!["sourceLost", "started", "paused", "sourceRestored", "resumed"]);
+        assert!(outcome.writes.len() > 5);
+        assert_eq!((outcome.writes[0].1, outcome.writes[0].2), (0, true));
+        assert!((cells(1200)..=cells(2100)).contains(&outcome.records[0].cell), "第一帧在第 {} 格", outcome.records[0].cell);
+        assert!(outcome.records.windows(2).all(|pair| pair[1].cell == pair[0].cell + 1));
+        assert_eq!(outcome.reply(2)["result"]["frames"], outcome.writes.len());
+    }
+
+    /// `encoder_failed`：编码器自己报的错。出错时还在编码队列里的几帧没有写进文件，事件里“交给编码的帧数”会比写成的多。
+    fn assert_interrupted(outcome: &Outcome, code: &str, encoder_failed: bool) {
+        let interrupted = outcome.events("interrupted");
+        assert_eq!(interrupted.len(), 1, "事件：{:?}", outcome.event_names());
+        assert_eq!(interrupted[0]["error"]["code"], code);
+        // 已录部分保留：文件结尾写好，事件里的帧数、时刻表与写进去的帧一致，清单记下没有正常结束及原因。
+        assert!(outcome.writes.len() > 5);
+        assert!(outcome.paths.video.exists());
+        let handed = interrupted[0]["encodedFrames"].as_u64().unwrap() as usize;
+        assert!(if encoder_failed { handed >= outcome.writes.len() } else { handed == outcome.writes.len() }, "交给编码 {handed} 帧，写成 {} 帧", outcome.writes.len());
+        assert_eq!(interrupted[0]["frames"], outcome.records.len());
+        assert_eq!(outcome.manifest["completed"], false);
+        assert_eq!(outcome.manifest["error"]["code"], code);
+        assert_eq!(outcome.manifest["result"]["frames"], outcome.records.len());
+    }
+
+    /// 显卡设备没了（驱动重置、休眠唤醒后设备失效）有三处能发现：等显示器回来时、每秒的检查、编码出错。
+    /// 哪一处发现都收尾并报 DEVICE_REMOVED，之后的停止被拒绝。
+    #[test]
+    fn a_removed_device_closes_the_file_and_reports_interrupted_wherever_it_is_noticed() {
+        let rig = Rig::recording();
+        REACQUIRE.lock().unwrap().push_back(Err("DEVICE_REMOVED|测试".into()));
+        rig.inject("sourceLost");
+        let outcome = rig.finish();
+        assert_interrupted(&outcome, "DEVICE_REMOVED", false);
+        assert_eq!(outcome.event_names(), vec!["started", "sourceLost", "paused", "interrupted"]);
+        drop(outcome);
+
+        // 画面静止时没有回调：靠每秒的检查发现。
+        let rig = Rig::recording();
+        DEVICE_LOST.store(true, Ordering::Release);
+        let outcome = rig.finish();
+        assert_interrupted(&outcome, "DEVICE_REMOVED", false);
+        drop(outcome);
+
+        // 设备没了时编码器报的错各式各样：统一说成设备被移除。
+        let rig = Rig::recording();
+        DEVICE_LOST.store(true, Ordering::Release);
+        WRITE_FAILS_FROM.store(rig.written() as u64 + 3, Ordering::Release);
+        let outcome = rig.finish();
+        assert_interrupted(&outcome, "DEVICE_REMOVED", true);
+        drop(outcome);
+
+        // 设备还在、编码器自己出错：照实报编码失败。
+        let rig = Rig::recording();
+        WRITE_FAILS_FROM.store(rig.written() as u64 + 3, Ordering::Release);
+        let outcome = rig.finish();
+        assert_interrupted(&outcome, "ENCODER_FAILED", true);
+    }
+
+    /// 显示器换了分辨率：报一次 sourceChanged（带新尺寸与发生在第几帧），录制不停、文件里没有空档。
+    #[test]
+    fn a_resolution_change_is_reported_once_and_recording_continues() {
+        let rig = Rig::recording();
+        let before = rig.written();
+        rig.inject("resize");
+        rig.wait(400);
+        rig.send("stop", 2).unwrap();
+        let outcome = rig.finish();
+
+        let changed = outcome.events("sourceChanged");
+        assert_eq!(changed.len(), 1);
+        assert_eq!((changed[0]["width"].as_u64(), changed[0]["height"].as_u64()), (Some(32), Some(18)));
+        let frame = changed[0]["frame"].as_u64().unwrap() as usize;
+        assert!((before..=before + 15).contains(&frame), "变化记在第 {frame} 帧，当时写到 {before}");
+        assert_eq!(outcome.event_names(), vec!["started", "sourceChanged"]);
+        assert!(outcome.writes.len() > before + 10);
+        assert!(outcome.records.windows(2).all(|pair| pair[1].cell == pair[0].cell + 1));
+    }
+
+    /// 锁屏、画面不变：来源不出帧也不报错。网格照常走，重复最后一张，时间轴不缩短也没有空档，不发任何事件。
+    #[test]
+    fn a_source_that_goes_quiet_repeats_the_last_picture_without_a_gap() {
+        let rig = Rig::recording();
+        SOURCE_UP.store(false, Ordering::Release);
+        rig.wait(100);
+        let quiet_from = rig.written();
+        rig.wait(900);
+        let quiet_until = rig.written();
+        SOURCE_UP.store(true, Ordering::Release);
+        rig.wait(300);
+        rig.send("stop", 2).unwrap();
+        let outcome = rig.finish();
+
+        assert!(quiet_until - quiet_from >= cells(700) as usize, "静止的 0.9 秒只写了 {} 帧", quiet_until - quiet_from);
+        let quiet = &outcome.writes[quiet_from..quiet_until];
+        assert!(quiet.iter().all(|(frame, _, key)| *frame == quiet[0].0 && !key));
+        assert!(outcome.records[quiet_from + 1..quiet_until].iter().all(|record| record.flags & timing::FLAG_FRESH == 0));
+        assert!(outcome.records.windows(2).all(|pair| pair[1].cell == pair[0].cell + 1));
+        assert!(outcome.writes.last().unwrap().0 > quiet[0].0);
+        assert_eq!(outcome.event_names(), vec!["started"]);
     }
 }

@@ -298,6 +298,9 @@ async function runExtra(options) {
   const sources = await client.request('sources')
   const display = sources.displays.find((candidate) => !candidate.primary) ?? sources.displays[0]
   const sessionId = `selftest-${Date.now()}`
+  // 取帧失败、换分辨率这几项要有来源帧到达才走得到：屏幕静止时系统不给帧，加 --motion 放一块一直在变的测试图。
+  const motion = options.motion ? startMotion(display) : null
+  if (motion) await sleep(1500)
   const prepared = await client.request('start', { sessionId, directory, source: { kind: 'display', id: display.id }, fps: 60 })
   const lastHealth = () => client.health[client.health.length - 1] ?? {}
   const report = { scenario: options.scenario, directory }
@@ -343,6 +346,18 @@ async function runExtra(options) {
     check(await waitEvent('sourceRestored', 5000), '来源丢失后没有恢复')
     await sleep(2000)
     const afterLost = lastHealth()
+    // 显示器换分辨率：把帧池换成一半大小，下一张来源帧的内容尺寸与帧池对不上，走的就是真换分辨率时的那条路
+    // （丢掉这一帧、按内容尺寸重建帧池）。先报一次一半的尺寸，重建后再报回实际尺寸；录制不中断，输出尺寸不变。
+    const framesBeforeResize = lastHealth().frames
+    await inject({ kind: 'resize' })
+    await sleep(2500)
+    const resized = client.events.filter((event) => event.event === 'sourceChanged')
+    // 尺寸是会话线程每轮比一次：下一张来源帧来得太快时，它可能还没看到一半的尺寸就已经改回来，这时一次都不报。
+    // 帧池要是没按实际尺寸重建好，之后每一帧都对不上、不会有新帧进文件，由下一条核对。
+    check(resized.length === 0 || (resized.length === 2 && resized[1].width === prepared.width && resized[1].height === prepared.height), `换分辨率后应报两次尺寸变化并回到 ${prepared.width}×${prepared.height}：${JSON.stringify(resized.map((event) => [event.width, event.height]))}`)
+    check(Boolean(motion), '换分辨率这一项要加 --motion（屏幕静止时没有来源帧，走不到重建）')
+    check(lastHealth().frames > framesBeforeResize + 60, '帧池重建后没有接着录')
+    check(client.events.filter((event) => event.event === 'sourceLost').length === 1, '帧池重建被当成了来源丢失')
     // 偶发的取帧失败（5 张）：只丢这几张，不中断、不当成来源丢失。
     await inject({ kind: 'frameFailures', count: 5 })
     await sleep(1500)
@@ -380,6 +395,7 @@ async function runExtra(options) {
     check(stopOutcome === 'SESSION_MISSING', `中断后的 stop 应被拒绝，实际 ${stopOutcome}`)
     const stream = probe(path.join(directory, prepared.files.video))
     const table = inspect(directory)
+    check(stream.width === prepared.width && stream.height === prepared.height, `文件尺寸 ${stream.width}×${stream.height}，应为 ${prepared.width}×${prepared.height}`)
     check(!stream.error && Number(stream.nb_read_frames) === interrupted?.encodedFrames, `文件 ${stream.nb_read_frames} 帧，中断事件说编码了 ${interrupted?.encodedFrames} 帧`)
     check(table.records === interrupted?.frames, `时刻表 ${table.records} 条，应为 ${interrupted?.frames}`)
     check(table.droppedFrames === interrupted?.droppedFrames, '时刻表里的丢弃数与事件不一致')
@@ -387,7 +403,7 @@ async function runExtra(options) {
     const paused = client.events.find((event) => event.event === 'paused')
     check(paused?.reason === 'sourceLost', `paused 的原因是 ${paused?.reason}`)
     Object.assign(report, {
-      events: client.events.filter((event) => !['fragment', 'preview'].includes(event.event)).map((event) => ({ event: event.event, reason: event.reason, frame: event.frame })),
+      events: client.events.filter((event) => !['fragment', 'preview'].includes(event.event)).map((event) => ({ event: event.event, reason: event.reason, frame: event.frame, ...(event.event === 'sourceChanged' ? { width: event.width, height: event.height } : {}) })),
       afterLost: { frames: afterLost.frames, pausedCells: afterLost.pausedCells },
       afterStall: { dropped: afterStall.droppedFrames, captureDropped: afterStall.captureDropped },
       slow: { dropped: slow.droppedFrames, captureDropped: slow.captureDropped, encodeQueue: slow.encodeQueue },
@@ -397,6 +413,7 @@ async function runExtra(options) {
       timing: { records: table.records, dropped: table.droppedFrames, pauses: table.pauses },
     })
   }
+  motion?.stop()
   client.child.stdin.end()
   report.exit = await client.exited
   check(report.exit.code === 0, `进程退出码 ${report.exit.code}`)

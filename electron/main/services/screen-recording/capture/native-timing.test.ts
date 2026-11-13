@@ -1,11 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import { recordingCombinedIntervals } from '../../../../../src/core/screenRecording/combine'
 import fs from 'node:fs'
-import { captureTimingGaps, captureTimingGroup, captureTimingLeadUs, captureTimingPauses, captureTimingRuns, parseCaptureTiming, TIMING_AFTER_SOURCE_LOST } from './native-timing'
-import { pausedRecording, timingBytes } from './native-timing.test-support'
+import path from 'node:path'
+import { captureFrameTimingFile } from '../../../../../src/core/screenRecording/capture'
+import { captureTimingFile, captureTimingFirstFrameUs, captureTimingGaps, captureTimingGroup, captureTimingLeadUs, TIMING_FRESH, captureTimingPauses, captureTimingRuns, parseCaptureTiming, TIMING_AFTER_SOURCE_LOST } from './native-timing'
+import { CELL, pausedRecording, timingBytes } from './native-timing.test-support'
 
 
 describe('原生画面采集的逐帧时刻表', () => {
+  it('恢复时另存的画面副本，旁边的时刻表文件名与助手读回判断录法用的一致', () => {
+    const copy = path.join('uploads', 'screen-recordings', 's', 'recovered-0.mp4')
+    const expected = path.join('uploads', 'screen-recordings', 's', 'recovered-0.frames')
+    expect([captureTimingFile(copy), captureFrameTimingFile(copy)]).toEqual([expected, expected])
+  })
   it('真实采集进程写的版本 1 样本读得出：约 40 秒 60 帧、中间暂停约 5 秒', () => {
     const timing = parseCaptureTiming(fs.readFileSync('tests/fixtures/persistence/capture-timing/v1.frames'))
     expect([timing.fpsNum, timing.fpsDen]).toEqual([60, 1])
@@ -37,7 +44,22 @@ describe('原生画面采集的逐帧时刻表', () => {
   })
   it('上屏偏移取新画面相对格时刻的中位数（被丢弃的不算），与时钟校准无关', () => {
     expect(captureTimingLeadUs(parseCaptureTiming(pausedRecording()))).toBe(5000)
+    // 来源帧到得很晚（比所在格晚 60 毫秒上屏）时偏移照实反映。
+    expect(captureTimingLeadUs(parseCaptureTiming(timingBytes(0, [[60_000, 0, 1], [Math.round(CELL + 60_000), 1, 1], [Math.round(2 * CELL + 60_000), 2, 1]])))).toBe(60_000)
     expect(captureTimingLeadUs(parseCaptureTiming(timingBytes(0, [[0, 0, 0]])))).toBe(0)
+  })
+  it('每段的第一帧不参与上屏偏移（屏幕静止时它是留下的旧画面）；第 0 帧不在第 0 格时，画面起点按它所在的格算', () => {
+    const origin = 10_000_000
+    // 开始前 8 秒屏幕就没变过：第 0 格用的是那张旧画面；之后只有两张新画面，各比所在格晚 4 毫秒上屏。
+    const still = parseCaptureTiming(timingBytes(origin, [[origin - 8_000_000, 0, TIMING_FRESH], [origin - 8_000_000, 1, 0], [Math.round(origin + 2 * CELL + 4000), 2, TIMING_FRESH], [Math.round(origin + 3 * CELL + 4000), 3, TIMING_FRESH]]))
+    expect(captureTimingLeadUs(still)).toBe(4000)
+    expect(captureTimingFirstFrameUs(still)).toBe(origin + 4000)
+    // 全程只有那一张旧画面：偏移取 0，起点就是网格起点。
+    expect(captureTimingFirstFrameUs(parseCaptureTiming(timingBytes(origin, [[origin - 8_000_000, 0, TIMING_FRESH], [origin - 8_000_000, 1, 0]])))).toBe(origin)
+    // 开始时来源丢着，45 格之后才有第一帧。
+    const late = parseCaptureTiming(timingBytes(origin, [[Math.round(origin + 45 * CELL + 9000), 45, TIMING_FRESH], [Math.round(origin + 46 * CELL + 5000), 46, TIMING_FRESH]]))
+    expect(captureTimingFirstFrameUs(late)).toBe(Math.round(origin + 45 * CELL + 5000))
+    expect(captureTimingGaps(late, 0)).toEqual([])
   })
   it('暂停与合并各段是同一组数：会话时刻处处落在正确的文件位置', () => {
     const timing = parseCaptureTiming(pausedRecording())

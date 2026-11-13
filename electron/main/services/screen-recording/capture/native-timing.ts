@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises'
 import type { RecordingCombinedGroup } from '../../../../../src/core/screenRecording/combine'
+import { captureFrameTimingFile } from '../../../../../src/core/screenRecording/capture'
 
 /**
  * 原生画面采集进程写的逐帧时刻表（`<名字>.frames`，格式见 native/screen-capture/README.md）。
@@ -19,7 +20,8 @@ export const TIMING_DROPPED = 2
 /** 这一帧之前的空档是来源丢失造成的（显示器断开、采集重新接上）：这段时间声音与事件没有停，不是暂停。 */
 export const TIMING_AFTER_SOURCE_LOST = 16
 
-export const captureTimingFile = (screenFile: string): string => screenFile.replace(/\.mp4$/i, '.frames')
+/** 画面文件旁的时刻表文件名。与助手读回判断录法用的是同一个定义：恢复时另存的画面副本旁放的时刻表，读回时照样认得出。 */
+export const captureTimingFile = captureFrameTimingFile
 
 export function parseCaptureTiming(bytes: Buffer): CaptureTiming {
   if (bytes.length < 64 || bytes.toString('latin1', 0, 4) !== MAGIC) throw new Error('逐帧时刻表格式无效')
@@ -59,17 +61,26 @@ export function captureTimingRuns(timing: CaptureTiming, frames = timing.cell.le
 }
 
 /**
- * 画面相对网格的上屏偏移：新画面的上屏时刻减去它所在格的格时刻，取中位数（微秒，同一时钟里的差，与时钟校准无关）。
- * 文件第 0 帧显示的画面在“格 0 时刻 + 偏移”上屏；它的内容还要早一个上屏提前量，由采集后端换算（见 native.ts）。没有新画面时为 0。
+ * 画面相对网格的上屏偏移：新画面的上屏时刻减去它所在格的格时刻，取中位数（微秒，同一时钟里的差，与时钟校准无关）。没有新画面时为 0。
+ * 每段的第一帧（文件第 0 帧、空档后的第一帧）不算：屏幕静止时它是开始前或空档中留下的旧画面，什么时候上屏与网格的相位无关。
  */
 export function captureTimingLeadUs(timing: CaptureTiming): number {
   const values: number[] = []
-  for (let index = 0; index < timing.cell.length; index++) {
-    if ((timing.flags[index] & TIMING_FRESH) && !(timing.flags[index] & TIMING_DROPPED)) values.push(timing.sourceUs[index] - timing.originUs - cellUs(timing, timing.cell[index]))
+  for (let index = 1; index < timing.cell.length; index++) {
+    if (!(timing.flags[index] & TIMING_FRESH) || (timing.flags[index] & TIMING_DROPPED) || timing.cell[index] !== timing.cell[index - 1] + 1) continue
+    values.push(timing.sourceUs[index] - timing.originUs - cellUs(timing, timing.cell[index]))
   }
   if (!values.length) return 0
   values.sort((a, b) => a - b)
   return Math.round(values[values.length >> 1])
+}
+
+/**
+ * 文件第 0 帧显示的画面上屏的时刻（采集进程时钟）：它所在格的格时刻加上屏偏移。第 0 帧不一定在第 0 格——
+ * 还没出第一帧就暂停过、或开始时来源正丢着，前面的格子都没进文件。画面内容还要早一个上屏提前量，由采集后端换算（见 native.ts）。
+ */
+export function captureTimingFirstFrameUs(timing: CaptureTiming): number {
+  return Math.round(timing.originUs + cellUs(timing, timing.cell.length ? timing.cell[0] : 0) + captureTimingLeadUs(timing))
 }
 
 /**

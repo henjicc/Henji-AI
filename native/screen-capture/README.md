@@ -88,7 +88,7 @@ selftest/selftest.cjs  真实录制自测，也是主进程用法的可运行示
 | `status` | `sessionId` | 最近一次健康汇报的内容加 `state`（`prepared` / `recording` / `paused` / `stopping` / `ended`） |
 | `startPreview` | `sessionId`，`clientPid`，`maxWidth`（默认 1280），`fps`（默认 15） | 见“预览” |
 | `stopPreview` | `sessionId` | `{}` |
-| `inject` | `sessionId`，`kind`，`ms` / `code` / `count` | 自测用的故障注入：只有进程的环境变量 `HENJI_SCREEN_CAPTURE_INJECT=1` 时才接受，否则一律回 `INVALID_ARGUMENT`。`frameFailures`（接下来 `count` 张来源帧当作取帧失败）、`encodeStall`（编码线程停 `ms` 毫秒一次）、`encodeDelay`（每帧多等 `ms` 毫秒，0 取消）、`sourceLost`（模拟显示器断开）、`captureFailure`（采集报 `code` 错误） |
+| `inject` | `sessionId`，`kind`，`ms` / `code` / `count` | 自测用的故障注入：只有进程的环境变量 `HENJI_SCREEN_CAPTURE_INJECT=1` 时才接受，否则一律回 `INVALID_ARGUMENT`。`frameFailures`（接下来 `count` 张来源帧当作取帧失败）、`encodeStall`（编码线程停 `ms` 毫秒一次）、`encodeDelay`（每帧多等 `ms` 毫秒，0 取消）、`sourceLost`（模拟显示器断开）、`resize`（把帧池换成一半大小，下一张来源帧走显示器换分辨率时的那条路）、`captureFailure`（采集报 `code` 错误） |
 
 `prepare` 的参数：
 
@@ -109,7 +109,7 @@ selftest/selftest.cjs  真实录制自测，也是主进程用法的可运行示
 
 | 事件 | 字段 | 说明 |
 |---|---|---|
-| `started` | `originUs`，`firstSourceUs` | 网格起点已定：文件第 0 帧对应 `originUs` |
+| `started` | `originUs`，`firstSourceUs` | 网格起点已定：第 0 格的格时刻是 `originUs`。文件第 0 帧通常就在第 0 格；还没出第一帧就暂停过、或开始时来源正丢着，它在后面的格子里（时刻表第一条的格号）。屏幕静止时第 0 帧用的是开始前留着的那张画面，`firstSourceUs` 早于 `originUs` |
 | `fragment` | `frames`，`bytes` | 又有分片落盘：进程此刻被杀，帧序号小于 `frames` 的帧读得回来。约每秒一条 |
 | `paused` | `atUs`，`cell`，`frame` | 暂停生效（`atUs` 是第一个不进文件的格子的格时刻；要画面内容正好切在某一刻，`pause` / `resume` 的 `atUs` 给“那一刻 + `presentLeadUs`”）：文件第 `frame` 帧之前的内容已落盘。暂停与继续落在同一格里（间隔不到一帧）或暂停还没生效就停止时，没有格子被暂停，这两个事件不发 |
 | `resumed` | `atUs`，`cell`，`frame` | 继续生效：文件第 `frame` 帧是继续后的第一帧（关键帧） |

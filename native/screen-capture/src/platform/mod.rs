@@ -36,6 +36,8 @@ pub trait CaptureControl {
     fn device_lost(&self) -> bool;
     /// 开发用：模拟显示器断开（停掉采集并往收件箱报 `SOURCE_LOST`）。
     fn simulate_source_lost(&self);
+    /// 开发用：模拟显示器换了分辨率（让采集按“来源尺寸变了”的那条路重建一次）。
+    fn simulate_resize(&self);
     /// 开始把低延迟的预览画面交给另一个进程；应答的内容见 README“预览”。
     fn start_preview(&self, request: &Value, notify: Notify) -> Result<Value, String>;
     fn stop_preview(&self);

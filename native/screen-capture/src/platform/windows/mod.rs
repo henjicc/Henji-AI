@@ -84,6 +84,9 @@ impl CaptureControl for Capture {
     fn simulate_source_lost(&self) {
         self.capture.simulate_source_lost();
     }
+    fn simulate_resize(&self) {
+        self.capture.simulate_resize();
+    }
     fn start_preview(&self, request: &Value, notify: Notify) -> Result<Value, String> {
         self.capture.start_preview(request, notify)
     }

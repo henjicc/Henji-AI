@@ -46,6 +46,29 @@ const DEVICE_REMOVED: &str = "DEVICE_REMOVED|显卡设备已重置或被移除�
 /// 连着多久没有一帧成功才升级处理。
 const ESCALATE_AFTER_US: i64 = 1_000_000;
 
+/// 连续失败是从什么时刻开始的；0 表示上一帧是成功的。
+#[derive(Default)]
+struct FailureStreak(AtomicI64);
+
+impl FailureStreak {
+    fn succeeded(&self) {
+        self.0.store(0, Ordering::Relaxed);
+    }
+
+    /// 记一次失败。连着失败满 `ESCALATE_AFTER_US` 时返回 true 并重新计时（升级之后还在失败，就再过这么久再升级一次）。
+    fn failed(&self, now: i64) -> bool {
+        let since = match self.0.compare_exchange(0, now, Ordering::Relaxed, Ordering::Relaxed) {
+            Ok(_) => now,
+            Err(since) => since,
+        };
+        if now - since < ESCALATE_AFTER_US {
+            return false;
+        }
+        self.0.store(0, Ordering::Relaxed);
+        true
+    }
+}
+
 struct Shared {
     gpu: Arc<Gpu>,
     device: IDirect3DDevice,
@@ -60,8 +83,7 @@ struct Shared {
     display_name: String,
     /// 帧池当前的尺寸；也用来让回调一次只跑一个。
     pool_size: Mutex<SizeInt32>,
-    /// 连续失败是从什么时刻开始的；0 表示上一帧是成功的。
-    failing_since: AtomicI64,
+    failing: FailureStreak,
     preview: Mutex<Option<preview::Preview>>,
 }
 
@@ -130,7 +152,7 @@ impl Shared {
             let _ = frame.Close();
             match converted {
                 Ok((source_us, output)) => {
-                    self.failing_since.store(0, Ordering::Relaxed);
+                    self.failing.succeeded();
                     self.inbox.push(&self.health, source_us, arrived, Arc::new(output));
                     Health::raise(&self.health.capture_max_us, (now_us() - arrived).max(0) as u64);
                 }
@@ -146,13 +168,7 @@ impl Shared {
             return self.inbox.fail(DEVICE_REMOVED.into());
         }
         self.health.capture_failed.fetch_add(1, Ordering::Relaxed);
-        let now = now_us();
-        let since = match self.failing_since.compare_exchange(0, now, Ordering::Relaxed, Ordering::Relaxed) {
-            Ok(_) => now,
-            Err(since) => since,
-        };
-        if now - since >= ESCALATE_AFTER_US {
-            self.failing_since.store(0, Ordering::Relaxed);
+        if self.failing.failed(now_us()) {
             self.inbox.fail("SOURCE_LOST|画面采集连续出错，正在重新接上".into());
         }
     }
@@ -268,7 +284,7 @@ pub fn start(
         fps,
         display_name: display.device_name.clone(),
         pool_size: Mutex::new(SizeInt32::default()),
-        failing_since: AtomicI64::new(0),
+        failing: FailureStreak::default(),
         preview: Mutex::new(None),
     });
     let running = run(&shared, display)?;
@@ -301,6 +317,19 @@ impl Capture {
         self.shared.inbox.fail(SOURCE_LOST.into());
     }
 
+    /// 把帧池换成一半大小：下一张来源帧的内容尺寸与帧池对不上，走的就是显示器换分辨率时的那条路（丢掉这一帧、按内容尺寸重建帧池）。
+    pub fn simulate_resize(&self) {
+        let running = self.running.lock().unwrap();
+        let Some(running) = running.as_ref() else { return };
+        // 占着回调也要用的这把锁换：回调要么在换之前跑完，要么在换之后看到新的尺寸。
+        let mut pool_size = self.shared.pool_size.lock().unwrap();
+        let half = SizeInt32 { Width: (pool_size.Width / 2).max(2), Height: (pool_size.Height / 2).max(2) };
+        if running.pool.Recreate(&self.shared.device, PIXEL_FORMAT, POOL_BUFFERS, half).is_ok() {
+            *pool_size = half;
+            self.shared.note_size(half);
+        }
+    }
+
     pub fn start_preview(&self, request: &Value, notify: Notify) -> Result<Value, String> {
         let size = *self.shared.pool_size.lock().unwrap();
         let (created, description) = preview::Preview::create(&self.gpu, request, (size.Width.max(2) as u32, size.Height.max(2) as u32), notify)?;
@@ -323,5 +352,28 @@ impl Drop for Capture {
         let stopped = self.running.lock().unwrap().take();
         drop(stopped);
         self.stop_preview();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 锁屏、显存一时紧张这类情况下取帧会连着失败：零星的不升级，连着满一秒才升级，升级后重新计时。
+    #[test]
+    fn frame_failures_escalate_only_after_a_full_second_without_a_good_frame() {
+        let streak = FailureStreak::default();
+        let start = 5_000_000;
+        assert!(!streak.failed(start));
+        assert!(!streak.failed(start + 600_000));
+        // 中间成功过一张：重新计时。
+        streak.succeeded();
+        assert!(!streak.failed(start + 900_000));
+        assert!(!streak.failed(start + 1_800_000));
+        assert!(streak.failed(start + 1_900_000));
+        // 升级之后还在失败：再过一秒才再升级一次，不是每一张都升级。
+        assert!(!streak.failed(start + 1_950_000));
+        assert!(!streak.failed(start + 2_900_000));
+        assert!(streak.failed(start + 2_950_000));
     }
 }

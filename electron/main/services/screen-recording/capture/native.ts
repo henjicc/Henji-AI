@@ -4,7 +4,7 @@ import { createMainLogger } from '../../logging'
 import type { NativeProcessLoss } from '../../native-process/client'
 import type { GfxCaptureStats } from './gfxcapture'
 import { ScreenCaptureError, screenCapturePreparedSchema, screenCaptureResultSchema, type ScreenCaptureClient, type ScreenCaptureEvent, type ScreenCaptureResult } from './native-client'
-import { captureTimingLeadUs, readCaptureTiming } from './native-timing'
+import { captureTimingFirstFrameUs, readCaptureTiming } from './native-timing'
 import { assertCaptureDiskSpace, probeMediaDurationUs, type CaptureStorage } from './storage'
 import { videoProxySize } from '../../../../../src/core/videoEdit/proxy'
 import { adoptRecordedVideoProxy } from '../../video/proxy-runtime'
@@ -194,7 +194,7 @@ export class NativeCaptureBackend implements ScreenCaptureBackend {
     })()
   }
 
-  /** 文件已收尾：分片时长是文件时间轴的长度；起点改到第 0 帧画面内容的时刻（格 0 时刻加上时刻表里新画面相对格时刻的中位偏移，再换成内容的时刻）。 */
+  /** 文件已收尾：分片时长是文件时间轴的长度；起点改到第 0 帧画面内容的时刻（它所在格的时刻加上时刻表里新画面相对格时刻的中位偏移，再换成内容的时刻）。 */
   private async seal(result: Pick<ScreenCaptureResult, 'frames' | 'encodedFrames' | 'proxyFrames' | 'droppedFrames' | 'repeatedFrames' | 'captureDropped'>): Promise<void> {
     this.health = { droppedFrames: result.droppedFrames, repeatedFrames: result.repeatedFrames, captureDropped: result.captureDropped }
     const span = this.storage.manifest.spans[this.spanIndex]
@@ -202,7 +202,7 @@ export class NativeCaptureBackend implements ScreenCaptureBackend {
     if (result.frames > 0) {
       try {
         const timing = await readCaptureTiming(this.storage.file(span))
-        if (timing) span.monoUs = Math.max(0, this.contentUs(timing.originUs + captureTimingLeadUs(timing)) - this.deps.originUs)
+        if (timing) span.monoUs = Math.max(0, this.contentUs(captureTimingFirstFrameUs(timing)) - this.deps.originUs)
       } catch (error) { logger.warn('逐帧时刻表读不出，画面起点按网格起点', { event: 'recording.capture.native.timing_failed', error }) }
     }
     await this.storage.seal(span.index, Math.round(result.frames * 1e6 / this.options.fps))
