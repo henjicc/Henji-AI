@@ -35,6 +35,7 @@ import { createElectronTracking } from './tracking'
 import { createElectronVideoProxy } from './videoProxy'
 import { createElectronMediaCache } from './mediaCache'
 import { createElectronSceneDetection } from './sceneDetection'
+import { createElectronDocumentText } from './documentText'
 import { createElectronWebReplay } from './webReplay'
 import { createElectronMusicAnalysis } from './musicAnalysis'
 import { createElectronVideoEditExport } from './videoEditExport'
@@ -82,6 +83,7 @@ export function createElectronPlatform(): PlatformRuntime {
     videoProxy: createElectronVideoProxy(),
     mediaCache: createElectronMediaCache(),
     sceneDetection: createElectronSceneDetection(),
+    documentText: createElectronDocumentText(),
     webReplay: createElectronWebReplay(),
     musicAnalysis: createElectronMusicAnalysis(),
     videoEditExport: createElectronVideoEditExport(),

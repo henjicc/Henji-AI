@@ -57,6 +57,7 @@ import { createTrackingApi } from './tracking-api'
 import { createVideoProxyApi } from './video-proxy-api'
 import { createMediaCacheApi } from './media-cache-api'
 import { createSceneDetectionApi } from './scene-detection-api'
+import { createDocumentTextApi } from './document-text-api'
 import { createWebReplayApi } from './web-replay-api'
 import { createMusicAnalysisApi } from './music-analysis-api'
 import { createVideoEditExportApi } from './video-edit-export-api'
@@ -545,6 +546,7 @@ const api: HenjiNativeApi = {
   videoProxy: createVideoProxyApi(nativeInvoke, subscribeChannel),
   mediaCache: createMediaCacheApi(nativeInvoke, subscribeChannel),
   sceneDetection: createSceneDetectionApi(nativeInvoke, subscribeChannel),
+  documentText: createDocumentTextApi(nativeInvoke),
   webReplay: createWebReplayApi(nativeInvoke, subscribeChannel),
   musicAnalysis: createMusicAnalysisApi(nativeInvoke, subscribeChannel),
   videoEditExport: createVideoEditExportApi(nativeInvoke),

@@ -530,6 +530,17 @@ describe('Pi official SDK engine', () => {
     expect(embeddedThinkingLevelMap(selected('minimax', 'minimax', 'MiniMax-M3'), 'minimax')).toBeUndefined()
     expect(embeddedThinkingLevelMap(selected('custom', 'openai-compatible', 'any'), 'custom')).toBeUndefined()
   })
+  it('主模型是 DeepSeek flash 时自动挂服务端联网工具，其他供应商不挂', async () => {
+    const f = await fixture({ reasoning: true }, 'openai-responses')
+    await f.engine.command({ action: 'prompt', input: { text: '回答', context: '' } })
+    const types = (index: number) => ((f.requests[index] as unknown as { tools?: Array<{ type?: string }> }).tools ?? []).map(tool => tool.type)
+    expect(types(0)).not.toContain('deepseek_web_search')
+    const deepseek = { ...f.configuration.model, providerId: 'deepseek',
+      model: { ...f.configuration.model.model, providerId: 'deepseek', adapter: 'deepseek', modelId: 'deepseek-flash' } }
+    await f.engine.command({ action: 'configure', input: { ...f.configuration, model: deepseek } })
+    await f.engine.command({ action: 'prompt', input: { text: '查一下今天的新闻', context: '' } })
+    expect(types(f.requests.length - 1)).toEqual(expect.arrayContaining(['function', 'deepseek_web_search', 'deepseek_read_url']))
+  })
   it('用户选“低”思考档时仍原样发低，不被换算成别的档位', async () => {
     const f = await fixture({ reasoning: true }, 'openai-responses')
     const deepseek = { ...f.configuration.model, providerId: 'deepseek', reasoning: { enabled: true, effort: 'low' as const },

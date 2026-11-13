@@ -72,6 +72,8 @@ const requiredEntries = [
   './capabilities/speech-recognition/volcengine/realtime',
   './capabilities/speech-recognition/siliconflow',
   './capabilities/speech-recognition/groq',
+  './capabilities/speech-recognition/deepseek',
+  './capabilities/deepseek',
   './capabilities/translation',
   './capabilities/translation/bailian',
   './capabilities/realtime',

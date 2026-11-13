@@ -107,6 +107,7 @@ export const GENERATION_MODEL_DESCRIPTIONS = {
   'gemini-3.1-flash-tts': { zh: 'Gemini 语音合成，可通过结构化说话人和台词生成对话。', en: 'Speech synthesis using structured speakers and dialogue turns.' },
   'gemini-3.8-flash-tts': { zh: 'Gemini 3.8 语音合成，音色更丰富、语气标签和逐句风格描述更细，适合有表演感的旁白与对话。', en: 'Gemini 3.8 speech synthesis with more voices, richer tone tags and per-line style direction, suited to expressive narration and dialogue.' },
   'gemini-3.8-flash-lite-tts': { zh: 'Gemini 3.8 语音合成的轻量版，延迟和价格更低，适合大批量配音与语音助手。', en: 'The lightweight tier of Gemini 3.8 speech synthesis with lower latency and price, suited to high-volume voiceover and voice agents.' },
+  'deepseek-tts': { zh: 'DeepSeek 官方语音合成，女声与男声两种音色，按文本自动识别普通话、粤语、英语等语言，朗读前自动去掉 Markdown 格式，适合朗读对话与讲解稿。', en: 'DeepSeek’s official speech synthesis with one female and one male voice; it detects Mandarin, Cantonese, English and other languages from the text and strips Markdown before reading, suited to reading replies and narration.' },
   'cosyvoice2-0.5b': { zh: '硅基流动托管的 CosyVoice2 语音合成模型。', en: 'CosyVoice2 speech synthesis hosted by SiliconFlow.' },
   'moss-ttsd-v0.5': { zh: '硅基流动托管的多说话人对话语音模型。', en: 'Multi-speaker dialogue speech synthesis hosted by SiliconFlow.' },
   'seed-tts-2.0': { zh: '豆包新一代语音合成模型，可选择平台音色。', en: 'Doubao speech synthesis with platform voices.' },

@@ -12,7 +12,7 @@ import { budgetContext, contextPageTokenLimit, estimateContextTokens, projectTex
 import { archiveToolResult, contextReader, selectionSummary } from './contextReader'
 import { embeddedModelCompat, embeddedModelLimits, embeddedModelPricing, embeddedThinkingLevel, embeddedThinkingLevelMap } from './modelOptions'
 import { deduplicateHostContexts, prepareHostContext } from './hostContext'
-import { applyProviderRequestBodyQuirks, resolveProviderExtraAuthHeaders, resolveLlmEndpointIdentity } from '@henjicc/ai-sdk'
+import { appendProviderWebTools, applyProviderRequestBodyQuirks, resolveProviderExtraAuthHeaders, resolveLlmEndpointIdentity } from '@henjicc/ai-sdk'
 
 type PiSdk = typeof import('@earendil-works/pi-coding-agent')
 /**
@@ -150,8 +150,12 @@ export class PiEngine implements EmbeddedAgentEngine {
       this.usageTotals.requests++
       const base = await onPayload?.(payload, currentModel) ?? payload
       const next = await this.attachments.apply(base, selected)
+      // 助手在供应商支持时自动联网：搜索与读链接由模型自行决定、服务端执行。
+      const webToolProtocol = selected.api === 'openai-responses' ? 'openai-responses' : selected.api === 'openai-completions' ? 'openai-compatible' : null
       const finalPayload = next && typeof next === 'object' && !Array.isArray(next)
-        ? applyProviderRequestBodyQuirks(identity.providerFamilyId, next as Record<string, unknown>) : next
+        ? applyProviderRequestBodyQuirks(identity.providerFamilyId, webToolProtocol
+          ? appendProviderWebTools(identity.providerFamilyId, model.adapter, next as Record<string, unknown>, webToolProtocol)
+          : next as Record<string, unknown>) : next
       if (finalPayload && typeof finalPayload === 'object' && !Array.isArray(finalPayload)) {
         const body = finalPayload as Record<string, unknown>
         const messages = Array.isArray(body.messages) ? body.messages : Array.isArray(body.input) ? body.input : []

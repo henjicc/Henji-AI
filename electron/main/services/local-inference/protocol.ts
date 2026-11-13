@@ -1,5 +1,6 @@
 import type { ImageSubjectSelectionJob, ImageSubjectSelectionResult } from './subject-selection/protocol'
 import type { OcrPrivacyJob, OcrPrivacyResult } from './ocr/protocol'
+import type { ImageTextJob, ImageTextResult } from './ocr/imageText'
 import type { SmartRegionAnalysisKind, SmartRegionSummary } from '../../../../src/core/videoEdit/smartRegions'
 import type { LocalExecutionProvider } from './providers'
 import type { OnnxExtraOutput } from './tracking/onnxGraphOutputs'
@@ -53,6 +54,7 @@ export type LocalInferenceFailureCode = 'decode' | 'inference' | 'output' | 'can
 
 export type LocalInferenceRequest =
   | { type: 'ocr-privacy'; job: OcrPrivacyJob }
+  | { type: 'image-text'; job: ImageTextJob }
   | { type: 'analyze'; job: SmartRegionAnalysisJob }
   | { type: 'select-image-region'; job: ImageSubjectSelectionJob }
   | { type: 'inpaint'; job: ImageInpaintJob }
@@ -80,6 +82,6 @@ export interface SmartRegionAnalysisResult {
 export type LocalInferenceEvent =
   | { type: 'frames'; id: string; requestId: string; request: TrackingFrameRequest }
   | { type: 'progress'; id: string; done: number; total: number }
-  | { type: 'done'; id: string; result: SmartRegionAnalysisResult | TrackingJobResult | TrackingCandidatesResult | ImageInpaintResult | ImageSubjectSelectionResult | OcrPrivacyResult | SoundAnalysisResult | SoundTextEmbeddingResult | MusicAnalysisJobResult | BreathDetectionJobResult | AudioSeparationJobResult }
+  | { type: 'done'; id: string; result: SmartRegionAnalysisResult | TrackingJobResult | TrackingCandidatesResult | ImageInpaintResult | ImageSubjectSelectionResult | OcrPrivacyResult | ImageTextResult | SoundAnalysisResult | SoundTextEmbeddingResult | MusicAnalysisJobResult | BreathDetectionJobResult | AudioSeparationJobResult }
   | { type: 'failed'; id: string; code: LocalInferenceFailureCode; message: string }
   | { type: 'log'; level: 'info' | 'warn'; message: string; event: string; context: Record<string, unknown> }

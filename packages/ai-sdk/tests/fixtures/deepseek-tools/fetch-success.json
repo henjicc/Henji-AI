@@ -1,0 +1,2 @@
+{ "kind": "capability", "status": 200, "source": {"url": "https://api-docs.deepseek.com/zh-cn/api/fetch", "capturedAt": "2026-11-14", "loginRequired": false, "classification": "official-literal", "notes": "网页抓取 API 参考 200 响应示例。"},
+  "payload": { "title": "首次调用 API | DeepSeek API Docs", "content": "# 首次调用 API\n\nDeepSeek API 使用与 OpenAI/Anthropic 兼容的 API 格式，通过修改配置，您可以使用 OpenAI/Anthropic SDK 来访问 DeepSeek API，或使用与 OpenAI/Anthropic API 兼容的软件。" } }

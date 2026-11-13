@@ -1,5 +1,6 @@
 import { z } from 'zod'
 export {
+  appendProviderWebTools,
   applyProviderRequestBodyQuirks,
   resolveProviderExtraAuthHeaders,
   resolveProviderSystemMessageSupport,

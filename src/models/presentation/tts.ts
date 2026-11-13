@@ -111,6 +111,10 @@ export const ttsPresentation: Record<string, ModelPresentation> = {
     { zh: 'MOSS TTSD 0.5', en: 'MOSS TTSD 0.5' },
     { siliconflowMossVoice: voice, siliconflowMossFormat: format },
   ),
+  'deepseek-tts': speechModel(
+    { zh: 'DeepSeek 语音合成', en: 'DeepSeek TTS' },
+    { deepseekTtsVoice: voice },
+  ),
   'volcengine-seed-tts-2.0': speechModel(
     { zh: 'Seed-TTS 2.0', en: 'Seed-TTS 2.0' },
     { volcSeedTtsSpeaker: voice },
@@ -193,6 +197,7 @@ const ttsVoiceFields: Record<keyof typeof TTS_VOICE_SELECTORS, string> = {
   'kie-gemini-3.8-flash-lite-tts': 'kieGemini38TtsVoice',
   'siliconflow-cosyvoice2-tts': 'siliconflowCosyVoice',
   'siliconflow-moss-ttsd-0.5': 'siliconflowMossVoice',
+  'deepseek-tts': 'deepseekTtsVoice',
   'volcengine-seed-tts-2.0': 'volcSeedTtsSpeaker',
   'volcengine-seed-icl-2.0': 'volcSeedIclSpeaker',
 }

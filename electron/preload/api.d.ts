@@ -38,6 +38,7 @@ import type { TrackingPlatform } from '../../src/platform/contracts/tracking'
 import type { VideoProxyPlatform } from '../../src/platform/contracts/videoProxy'
 import type { MediaCachePlatform } from '../../src/platform/contracts/mediaCache'
 import type { SceneDetectionPlatform } from '../../src/platform/contracts/sceneDetection'
+import type { DocumentTextPlatform } from '../../src/platform/contracts/documentText'
 import type { WebReplayPlatform } from '../../src/platform/contracts/webReplay'
 import type { MusicAnalysisPlatform } from '../../src/platform/contracts/musicAnalysis'
 import type { VideoEditExportPlatform } from '../../src/platform/contracts/videoEditExport'
@@ -114,6 +115,7 @@ export interface HenjiNativeApi {
   videoProxy: VideoProxyPlatform
   mediaCache: MediaCachePlatform
   sceneDetection: SceneDetectionPlatform
+  documentText: DocumentTextPlatform
   webReplay: WebReplayPlatform
   musicAnalysis: MusicAnalysisPlatform
   videoEditExport: VideoEditExportPlatform

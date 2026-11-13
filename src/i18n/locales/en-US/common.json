@@ -74,6 +74,7 @@
     "assistantChatContent": "Your content will be processed by the selected model at its actual rates.",
     "bilingualSubtitles": "Generate bilingual subtitles",
     "recognizeAudio": "Transcribe audio",
+    "recognizeDocument": "Recognize document text",
     "explanationAudio": "Transcribe the explanation recording",
     "explanationAudioContent": "Only the recording will be sent to your configured transcription model and billed at its rates.",
     "describeTitle": "Generate a title from a description",

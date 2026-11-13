@@ -28,7 +28,19 @@ export interface TokenUsagePricing extends TokenListPricing {
  * 区分地域的供应商只登记一个地域（百炼为华北2北京），调用方配置其他地域端点时这份价格不适用。
  * 内置预设之间会共用同一个价格对象，所以构造函数返回冻结对象。
  */
-export type CapabilityPricing = AudioDurationPricing | TokenUsagePricing
+export type CapabilityPricing = AudioDurationPricing | TokenUsagePricing | UnitPricing
+
+/** 按次或按页计费（如搜索每次、OCR 每页）；只有供应商判定成功的单位才计费。 */
+export interface UnitPricing {
+  billing: 'per-unit'
+  currency: 'CNY' | 'USD'
+  unit: 'request' | 'page'
+  perUnit: number
+}
+
+export function unitPrice(currency: UnitPricing['currency'], unit: UnitPricing['unit'], perUnit: number): UnitPricing {
+  return Object.freeze({ billing: 'per-unit', currency, unit, perUnit })
+}
 
 export function audioDurationPrice(
   currency: AudioDurationPricing['currency'],
@@ -62,6 +74,7 @@ export function estimateAudioDurationCost(
   if (pricing.billing === 'audio-duration') {
     return { amount: Math.max(seconds, pricing.minimumSeconds ?? 0) * pricing.perSecond, currency: pricing.currency }
   }
+  if (pricing.billing === 'per-unit') return null
   const rate = pricing.audioTokenRate
   if (!rate) return null
   const amount = seconds * (rate.inputTokensPerSecond * pricing.inputPerMillionTokens + rate.outputTokensPerSecond * pricing.outputPerMillionTokens) / 1_000_000
@@ -76,6 +89,7 @@ export function isValidCapabilityPricing(pricing: unknown): pricing is Capabilit
   const optionalPrice = (input: unknown): boolean => input === undefined || price(input)
   if (value.currency !== 'CNY' && value.currency !== 'USD') return false
   if (value.billing === 'audio-duration') return price(value.perSecond) && optionalPrice(value.minimumSeconds)
+  if (value.billing === 'per-unit') return price(value.perUnit) && (value.unit === 'request' || value.unit === 'page')
   if (value.billing !== 'tokens') return false
   const tokenPrices = (input: Record<string, unknown>): boolean =>
     price(input.inputPerMillionTokens) && price(input.outputPerMillionTokens) && optionalPrice(input.cacheReadPerMillionTokens)

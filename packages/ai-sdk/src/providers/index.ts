@@ -119,6 +119,7 @@ export async function executeContinuePolling(
 
 import * as apimart from './apimart'
 import * as bailian from './bailian'
+import * as deepseek from './deepseek'
 import * as fal from './fal'
 import * as grsai from './grsai'
 import * as kie from './kie'
@@ -131,6 +132,7 @@ import * as volcengineSpeech from './volcengine-speech'
 const builtinProviders: Record<BuiltinProviderId, ProviderAdapter> = {
   apimart,
   bailian,
+  deepseek,
   volcengine,
   'volcengine-speech': volcengineSpeech,
   ppio,

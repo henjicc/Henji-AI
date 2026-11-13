@@ -13,6 +13,7 @@ import {
 } from '@henjicc/ai-sdk'
 import apimartProviderPack from '@henjicc/ai-sdk/provider-packs/apimart'
 import bailianProviderPack from '@henjicc/ai-sdk/provider-packs/bailian'
+import deepseekProviderPack from '@henjicc/ai-sdk/provider-packs/deepseek'
 import falProviderPack from '@henjicc/ai-sdk/provider-packs/fal'
 import falImageEditTools from '@henjicc/ai-sdk/tool-packs/fal-image-edit-tools'
 import falImageUtilityTools from '@henjicc/ai-sdk/tool-packs/fal-image-utility-tools'
@@ -36,6 +37,7 @@ export const HENJI_GENERATION_PROVIDER_IDS = [
   'fal',
   'siliconflow',
   'volcengine-speech',
+  'deepseek',
 ] as const
 
 export const HENJI_GENERATION_PROVIDER_PACKS: readonly GenerationPack[] = [
@@ -49,6 +51,7 @@ export const HENJI_GENERATION_PROVIDER_PACKS: readonly GenerationPack[] = [
   falProviderPack,
   siliconflowProviderPack,
   volcengineSpeechProviderPack,
+  deepseekProviderPack,
 ]
 
 /** 运行时额外装载的受控工具模型；不进入普通模型选择器与能力发现。 */

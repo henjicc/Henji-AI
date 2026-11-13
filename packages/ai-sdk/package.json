@@ -148,6 +148,16 @@
       "import": "./dist/capabilities/speech-recognition/groq/index.js",
       "default": "./dist/capabilities/speech-recognition/groq/index.js"
     },
+    "./capabilities/speech-recognition/deepseek": {
+      "types": "./dist/capabilities/speech-recognition/deepseek/index.d.ts",
+      "import": "./dist/capabilities/speech-recognition/deepseek/index.js",
+      "default": "./dist/capabilities/speech-recognition/deepseek/index.js"
+    },
+    "./capabilities/deepseek": {
+      "types": "./dist/capabilities/deepseek/index.d.ts",
+      "import": "./dist/capabilities/deepseek/index.js",
+      "default": "./dist/capabilities/deepseek/index.js"
+    },
     "./capabilities/translation": {
       "types": "./dist/capabilities/translation/index.d.ts",
       "import": "./dist/capabilities/translation/index.js",

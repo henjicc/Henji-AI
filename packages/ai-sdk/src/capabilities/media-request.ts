@@ -111,7 +111,7 @@ export function jsonAudioRequest(media: PreparedMedia, build: (data: string) => 
 }
 
 export function multipartAudioRequest(media: PreparedMedia, fields: readonly (readonly [string, string])[]): MediaRequest {
-  if (!media.description.size) throw new AiRuntimeError('invalid_media', 'Transcription audio is empty')
+  if (!media.description.size) throw new AiRuntimeError('invalid_media', 'Upload file is empty')
   if (media.bytes) {
     const form = new FormData()
     for (const [key, value] of fields) form.append(key, value)

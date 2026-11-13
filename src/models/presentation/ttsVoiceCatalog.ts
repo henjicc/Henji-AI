@@ -104,6 +104,7 @@ export const TTS_VOICE_SELECTORS: Record<string, VoiceSelectorConfig> = {
     allowSearch: true,
     allowCustomId: true,
   },
+  'deepseek-tts': { voices: [systemVoice('stella', '海星', '女声'), systemVoice('tide', '暗潮', '男声')] },
   'volcengine-seed-tts-2.0': { voices: volcSystemVoices, allowSearch: true },
   'volcengine-seed-icl-2.0': {
     voices: volcSystemVoices,

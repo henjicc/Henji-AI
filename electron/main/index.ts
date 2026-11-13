@@ -37,6 +37,7 @@ import { registerSmartRegionsIpc } from './ipc/smart-regions'
 import { registerVideoProxyHandlers } from './ipc/video-proxy'
 import { registerMediaCacheIpc } from './ipc/media-cache'
 import { registerSceneDetectionHandlers } from './ipc/scene-detection'
+import { registerDocumentTextHandlers } from './ipc/document-text'
 import { registerMusicAnalysisHandlers } from './ipc/music-analysis'
 import { registerVideoEditExportIpc } from './ipc/video-edit-export'
 import { registerTrackingIpc } from './ipc/tracking'
@@ -269,6 +270,7 @@ app.whenReady().then(async () => {
   registerMediaCacheIpc()
   registerScreenRecordingIpc()
   registerSceneDetectionHandlers()
+  registerDocumentTextHandlers()
   registerWebReplayIpc()
   registerMusicAnalysisHandlers()
   registerVideoEditExportIpc()

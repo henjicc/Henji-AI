@@ -2,6 +2,21 @@
 
 > 核对时间：2026-11-14。以中文官方文档为准，英文页面尚有更新滞后。
 
+## 2026-11-14：联网工具、文件输入与独立接口
+
+来源（无需登录，2026-11-14 读取）：[联网工具](https://api-docs.deepseek.com/zh-cn/guides/web_tools)、[构建 Chatbot](https://api-docs.deepseek.com/zh-cn/guides/build_a_chatbot)、[模型内容安全](https://api-docs.deepseek.com/zh-cn/guides/safety)、[文件解析](https://api-docs.deepseek.com/zh-cn/guides/document_parsing)、[Responses API 指南](https://api-docs.deepseek.com/zh-cn/guides/responses_api)。
+
+- **服务端联网工具**（仅 `deepseek-flash`，Messages / Responses / Chat 三种协议）：`tools` 声明 `{"type":"deepseek_web_search"}` 与 `{"type":"deepseek_read_url"}`。关思考时为联网搜索，开思考时为深度思考搜索（约 20 次工具后作答，含 open_page / find_in_page）；read_url 只识别最后一条用户消息里前 10 个不同链接。`tool_choice` 不能指定这两个工具；不能与 `web_search` 同时声明，也不能与 custom / namespace / tool_search 工具同用；Responses 的 `text.format`、Chat 的 `response_format` 不为 text 时返回 400。`deepseek-v4-pro` 只在 Responses 支持 `web_search`。
+- 输出：Responses 为 `web_search_call` 输出项（扩展字段 `kind`：search / deep_search / read_link / image_search / deep_image_search），回答 `output_text` 带 `url_citation` 注解；Chat 为扩展字段 `message.server_tool_calls` 与 `annotations`，流式为 `server_tool_event`。用量 `usage.server_tool_use` 的 `tool_search` / `tool_fetch` / `tool_image_search` 为计费次数。
+- 多轮：原样回传输出项（含 `kind`、`signature`）才能让读过的链接正文拼回上下文；丢弃时请求照常执行，只是不再拼回。搜索结果与之前轮次的思考本来就不进后续上下文。
+- 计费：搜索（文字、图片）与网页抓取各 5 元/千次，与独立 Search / Fetch API 同价。
+- **文件输入**：先上传 Files API（`purpose` 为 `text_recognition` 或 `rich_layout_recognition`，或纯文本类 `user_data`），对话里用 `file_id` 引用（Chat `{"type":"file","file_id"}`、Responses `{"type":"input_file","file_id"}`），仅 `deepseek-flash`；每请求最多 20 个文档、文字合计 8 MiB。
+- **内容安全**：顶层 `safety_check: {"level":"high"}` 开启基础风控，面向对外提供服务的应用；本地创作工具不开启。
+- Responses 消息角色补充：`developer` 在 `deepseek-flash` 上视同 system，在 `deepseek-v4-pro` 上视同 user（Responses API 参考）。
+- 独立接口（TTS、ASR、Search、Fetch、OCR、Files）的字段与项目落点见 [model-adaptation/供应商/DeepSeek.md](../../model-adaptation/供应商/DeepSeek.md)。
+
+**本项目落点**：内置助手主模型为 DeepSeek 时，宿主在每次请求里经 SDK `appendProviderWebTools` 挂上联网工具（flash 两种协议都挂；pro 只在 Responses 挂 `web_search`；结构化输出请求不挂）。Pi 不认识 `web_search_call` 输出项，直接跳过，历史里不回传，所以读过的链接正文在后续轮次不会再拼回。SDK 模型步（提示词优化等）不自动联网。
+
 ## 2026-11-13 复核：内置助手相关要点（覆盖下方旧资料中冲突的部分）
 
 采集来源（均无需登录，2026-11-13 读取）：[上下文硬盘缓存](https://api-docs.deepseek.com/zh-cn/guides/kv_cache)、[图片理解](https://api-docs.deepseek.com/zh-cn/guides/vision)、[思考模式](https://api-docs.deepseek.com/zh-cn/guides/thinking_mode)、[工具调用](https://api-docs.deepseek.com/zh-cn/guides/tool_calls)、[Responses API 指南](https://api-docs.deepseek.com/zh-cn/guides/responses_api)、[Responses API 参考](https://api-docs.deepseek.com/zh-cn/api/create-response/)、[模型与价格](https://api-docs.deepseek.com/zh-cn/quick_start/pricing)、[错误码](https://api-docs.deepseek.com/zh-cn/quick_start/error_codes)、[限速与隔离](https://api-docs.deepseek.com/zh-cn/quick_start/rate_limit)。

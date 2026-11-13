@@ -37,6 +37,7 @@
     "grsai": "Grsai",
     "siliconflow": "SiliconFlow",
     "volcengine-speech": "Volcengine Speech",
+    "deepseek": "DeepSeek",
     "groq": "Groq"
   },
   "tags": {

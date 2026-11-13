@@ -34,6 +34,7 @@ export type ModelType = BuiltinModelType | (string & {})
 export const BUILTIN_PROVIDER_IDS = [
   'apimart',
   'bailian',
+  'deepseek',
   'volcengine',
   'volcengine-speech',
   'ppio',

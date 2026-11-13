@@ -1,5 +1,6 @@
 import type { ImageSubjectSelectionJob, ImageSubjectSelectionResult } from './subject-selection/protocol'
 import type { OcrPrivacyJob, OcrPrivacyResult } from './ocr/protocol'
+import type { ImageTextJob, ImageTextResult } from './ocr/imageText'
 import type { LocalInferenceEvent, LocalInferenceFailureCode, LocalInferenceRequest, SmartRegionAnalysisJob, SmartRegionAnalysisResult } from './protocol'
 import type { TrackingCandidatesJob, TrackingCandidatesResult, TrackingJob, TrackingJobResult } from './tracking/trackingProtocol'
 import { assertTrackingFrames, type TrackingFrameProvider } from '../../../../src/platform/contracts/tracking'
@@ -94,6 +95,9 @@ export class LocalInferenceHost {
   analyze(job: SmartRegionAnalysisJob, progress: (done: number, total: number) => void = () => undefined): Promise<SmartRegionAnalysisResult> {
     return this.send<SmartRegionAnalysisResult>({ type: 'analyze', job }, job.id, progress)
   }
+  /** 单张图片文字识别，与其他分析同一个队列。 */
+  imageText(job: ImageTextJob): Promise<ImageTextResult> { return this.send<ImageTextResult>({ type: 'image-text', job }, job.id, () => undefined) }
+
   ocrPrivacy(job: OcrPrivacyJob, progress: (done: number, total: number) => void = () => undefined): Promise<OcrPrivacyResult> { return this.send<OcrPrivacyResult>({ type: 'ocr-privacy', job }, job.id, progress) }
 
   selectImageRegion(job: ImageSubjectSelectionJob, progress: (done: number, total: number) => void = () => undefined): Promise<ImageSubjectSelectionResult> {

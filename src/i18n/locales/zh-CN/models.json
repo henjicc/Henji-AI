@@ -37,6 +37,7 @@
     "grsai": "Grsai",
     "siliconflow": "硅基流动",
     "volcengine-speech": "火山引擎（豆包语音）",
+    "deepseek": "DeepSeek",
     "groq": "Groq"
   },
   "tags": {

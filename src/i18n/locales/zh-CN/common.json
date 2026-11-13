@@ -74,6 +74,7 @@
     "assistantChatContent": "你发送的内容将由所选模型处理，按模型实际计费。",
     "bilingualSubtitles": "生成双语字幕",
     "recognizeAudio": "识别声音",
+    "recognizeDocument": "识别文件文字",
     "explanationAudio": "转写讲解录音",
     "explanationAudioContent": "将录音发送给已配置的转写模型，按模型计费。此次只发送录音。",
     "describeTitle": "描述生成标题",

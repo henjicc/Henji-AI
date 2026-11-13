@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { importLocalMediaCapability } from './localMediaImportCapability'
+import { recognizeDocumentTextCapability } from './documentTextCapability'
 import { APP_STORE_ICON_CAPABILITIES } from './appStoreIconCapabilities'
 
 import type { ApplicationCapabilityDefinition } from '../../applicationCapabilities'
@@ -272,6 +273,7 @@ const deleteAsset = defineApplicationCapability({
 export const ASSET_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
   ...APP_STORE_ICON_CAPABILITIES,
   importLocalMediaCapability,
+  recognizeDocumentTextCapability,
   queryAssets,
   getAsset,
   listAssetLibraries,

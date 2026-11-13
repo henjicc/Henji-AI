@@ -1,0 +1,2 @@
+{ "kind": "capability", "status": 200, "source": {"url": "https://api-docs.deepseek.com/zh-cn/api/asr", "capturedAt": "2026-11-14", "loginRequired": false, "classification": "official-literal", "notes": "语音识别 API 参考 200 响应示例，非真实请求日志。"},
+  "payload": { "request_id": "0b8c1c7e-3c0e-4d0f-9d3a-5f2a6f7e8b90", "text": "今天上海的天气怎么样？", "duration_ms": 3200 } }

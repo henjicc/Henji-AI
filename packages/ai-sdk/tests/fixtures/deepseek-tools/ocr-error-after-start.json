@@ -1,0 +1,2 @@
+{ "kind": "capability", "status": 200, "source": {"url": "https://api-docs.deepseek.com/zh-cn/guides/ocr", "capturedAt": "2026-11-14", "loginRequired": false, "classification": "official-literal", "notes": "识别开始后状态码已是 200，失败时响应体是 error 对象的官方示例。"},
+  "payload": { "error": { "message": "OCR did not finish in time", "type": "gateway_timeout_error", "param": null, "code": "gateway_timeout_error" } } }
