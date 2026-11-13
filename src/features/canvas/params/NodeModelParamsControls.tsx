@@ -12,7 +12,7 @@ import { useGenerationDraftStore, type GenerationModelFilterType } from '@/featu
 import { collectInputMediaByKind } from '@/features/canvas/application/graphMediaResolver';
 import { inferModelFunctionFilter } from '@/features/canvas/domain/modelFunctionFilter';
 import { canvasViewStore } from '@/stores/canvasStore';
-import { useModelPickerList } from './useModelPickerList';
+import { NO_REQUIRED_MODEL_TAGS, useModelPickerList } from './useModelPickerList';
 
 interface NodeModelParamsControlsProps {
   mediaType: CanvasModelMediaType;
@@ -51,7 +51,7 @@ export const NodeModelParamsControls = memo(({
   mediaType,
   modelId,
   onModelChange,
-  requiredTags = [],
+  requiredTags = NO_REQUIRED_MODEL_TAGS,
   modelPolicy,
   chipClassName = '',
   modelChipClassName = 'max-w-[260px] justify-start',

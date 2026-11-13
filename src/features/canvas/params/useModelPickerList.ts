@@ -127,11 +127,14 @@ interface UseModelPickerListOptions {
   modelPolicy?: CanvasImageCapabilityModelPolicy;
 }
 
+/** 没有标签要求时共用同一个空数组：每次渲染新建一个会让下面按它缓存的模型列表次次重算（含全部模型的名称翻译）。 */
+export const NO_REQUIRED_MODEL_TAGS: ModelTag[] = [];
+
 /** ModelRegistry 模型到统一选择器展示契约的适配层。 */
 export function useModelPickerList({
   mediaType,
   modelId,
-  requiredTags = [],
+  requiredTags = NO_REQUIRED_MODEL_TAGS,
   modelPolicy,
 }: UseModelPickerListOptions) {
   const { i18n } = useTranslation();
