@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { recordingCombinedIntervals } from '../../../../../src/core/screenRecording/combine'
 import fs from 'node:fs'
 import { captureTimingGaps, captureTimingGroup, captureTimingLeadUs, captureTimingPauses, captureTimingRuns, parseCaptureTiming, TIMING_AFTER_SOURCE_LOST } from './native-timing'
-import { CELL, pausedRecording, timingBytes } from './native-timing.test-support'
+import { pausedRecording, timingBytes } from './native-timing.test-support'
 
 
 describe('原生画面采集的逐帧时刻表', () => {
@@ -39,7 +39,7 @@ describe('原生画面采集的逐帧时刻表', () => {
     expect(captureTimingLeadUs(parseCaptureTiming(pausedRecording()))).toBe(5000)
     expect(captureTimingLeadUs(parseCaptureTiming(timingBytes(0, [[0, 0, 0]])))).toBe(0)
   })
-  it('暂停、合并各段与事件时钟扣掉的长度是同一组数：会话时刻处处落在正确的文件位置', () => {
+  it('暂停与合并各段是同一组数：会话时刻处处落在正确的文件位置', () => {
     const timing = parseCaptureTiming(pausedRecording())
     const first = 2_000_000
     const pauses = captureTimingPauses(timing, first)
@@ -49,9 +49,6 @@ describe('原生画面采集的逐帧时刻表', () => {
     expect(group.parts.map(part => [part.mediaId, part.monoUs, part.frames, part.fileUs])).toEqual([['screen-0', first, 90, 0], ['screen-0', first + 5_000_000, 90, 3_000_000]])
     // 暂停后 1 秒的会话时刻：文件里是第 3 秒（暂停前录了 3 秒）再加 1 秒。
     expect(recordingCombinedIntervals(group, first + 6_000_000, first + 6_000_001)[0][0]).toBe(4_000_000)
-    // 事件时钟：恢复时按“按下暂停 + 跳过的格时长”接着走，扣掉的正好是这段暂停。
-    const pressedUs = first + 3_000_000, skippedUs = 60 * CELL
-    expect(pressedUs + skippedUs).toBeCloseTo(pauses[0].endUs, 0)
     expect(captureTimingGroup('screen-0', parseCaptureTiming(timingBytes(0, [[0, 0, 1], [0, 1, 0]])), 0)).toBeNull()
   })
 })

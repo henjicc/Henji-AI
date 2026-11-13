@@ -5,6 +5,7 @@
 //! - 没有新帧就重复上一帧（静止画面的常态）；
 //! - 来源与网格同频时，相位贴着判定线会让相邻两格一格没有、一格两张。这里留一张的缓冲：
 //!   一格内有两张时先出旧的、留下新的给下一格，整个相位漂移过程只多出一次重复或少一张，不来回抖；
+//!   第一格与空档后的第一格不留缓冲，直接取最新的一张；
 //! - 来源更快（高刷屏）时每格只留最近两张里较旧的一张，其余算“来源多出”，间隔均匀。
 //!
 //! 每格在“判定线 + 余量”之后才出，余量用来等合成器把帧送到；晚到的帧顺延到下一格，时刻表照实记它的采集时刻。
@@ -101,7 +102,8 @@ impl<F> Pacer<F> {
             current_shown: false,
             pauses: Vec::new(),
             in_pause: false,
-            after_gap: false,
+            // 第一格与空档后一样直接取最新的一张：开始前留着的那张旧画面若按“先出旧的”排进去，之后每格都会晚一格。
+            after_gap: true,
             key_pending: true,
             dropping: false,
             stop_at: None,
@@ -322,6 +324,17 @@ mod tests {
         assert!(emits.iter().enumerate().all(|(i, e)| e.output == i as u64 && e.cell == i as u64 && e.source_us == frames[i]));
         assert_eq!(pacer.counters.repeated + pacer.counters.surplus + pacer.counters.dropped, 0);
         assert!(emits[0].force_key && !emits[1].force_key);
+    }
+
+    #[test]
+    fn a_stale_frame_from_before_the_start_does_not_push_every_later_frame_one_cell_late() {
+        // 开始前留着一张旧画面，开始后每格正中来一张新的：每格都该用它自己的那一张。
+        let fresh: Vec<i64> = (0..60).map(|i| 1_000 + i * 1_000_000 / 60).collect();
+        let frames: Vec<i64> = std::iter::once(-5_000).chain(fresh.iter().copied()).collect();
+        let mut pacer = Pacer::new(0, 60, 1);
+        let emits = run(&mut pacer, &frames, 0, 900_000);
+        assert!(emits.len() > 50);
+        assert!(emits.iter().enumerate().all(|(i, e)| e.source_us == fresh[i]), "{:?}", &emits[..3]);
     }
 
     #[test]

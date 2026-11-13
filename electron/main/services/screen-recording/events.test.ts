@@ -112,6 +112,36 @@ it('主进程卡住后一口气送到的事件按钩子自带的时刻记下，�
   expect(events.find(event => event.kind === 'click')?.monoUs).toBe((t0 + 505) * 1000)
 })
 
+it('画面采集按帧给得出暂停与继续的那一刻：事件时钟停在、续在画面的那一刻；输入在按下暂停时就停、画面一续上就接着采，不等其余各路', async () => {
+  const f = fixture()
+  // 按下后 30 毫秒画面才真正停下；继续时画面在 7 秒续上，其余各路（声音等）到 7.6 秒才续好。
+  const hold = vi.fn(async () => { expect(hooks.detach).toHaveBeenCalledTimes(hold.mock.calls.length); return 10000 + 5_030_000 })
+  const release = vi.fn(async () => { vi.setSystemTime(7040); return 10000 + 7_000_000 })
+  let restResumed!: () => void
+  f.backend.resume.mockImplementation(() => new Promise<void>(resolve => { restResumed = resolve }))
+  const wrapped = f.session.wrap({ ...f.backend, picture: { hold, release }, capturingSinceUs: () => 10000 + 2_000_000 })
+  vi.setSystemTime(3000)
+  await wrapped.start(f.signal.signal)
+  vi.setSystemTime(5000); await wrapped.pausing!(); await wrapped.pause(f.signal.signal)
+  expect(hold).toHaveBeenCalledTimes(1)
+  vi.setSystemTime(7000)
+  const resuming = wrapped.resume(f.signal.signal)
+  await vi.advanceTimersByTimeAsync(0)
+  // 各路同时开始续；画面一续上输入就接着采，这时其余各路还没续好。
+  expect(release).toHaveBeenCalledTimes(1); expect(f.backend.resume).toHaveBeenCalledTimes(1); expect(hooks.attach).toHaveBeenCalledTimes(2)
+  vi.setSystemTime(7600); restResumed(); await resuming
+  vi.setSystemTime(9000); await wrapped.pausing!()
+  expect(hold).toHaveBeenCalledTimes(2)
+  await wrapped.stop(f.signal.signal)
+  const events = pages().flatMap(page => page.entries)
+  const controls = events.filter(event => event.kind === 'control')
+  expect(controls.slice(0, 3).map(event => [event.kind === 'control' && event.action, event.monoUs])).toEqual([['start', 1_000_000], ['pause', 5_030_000], ['resume', 7_000_000]])
+  const resume = controls[2]
+  expect(resume.monoUs - resume.recordingUs - (controls[0].monoUs - controls[0].recordingUs)).toBe(7_000_000 - 5_030_000 - 1)
+  // 继续后的第一个光标在画面续上后 40 毫秒就有了，没有等到 7.6 秒。
+  expect(events.find(event => event.kind === 'cursor' && event.monoUs > 7_000_000)?.monoUs).toBe(7_040_000)
+})
+
 it('事件时钟零点比画面第一帧早、恢复时从画面第一帧接着走；按下暂停当刻就停，不等文档保存', async () => {
   const f = fixture()
   let since: number | undefined

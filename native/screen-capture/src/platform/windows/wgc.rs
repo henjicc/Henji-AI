@@ -200,7 +200,9 @@ fn run(shared: &Arc<Shared>, display: &Display) -> Result<Running, String> {
         let size = item.Size().map_err(failed)?;
         let pool = Direct3D11CaptureFramePool::CreateFreeThreaded(&shared.device, PIXEL_FORMAT, POOL_BUFFERS, size).map_err(failed)?;
         let session = pool.CreateCaptureSession(&item).map_err(failed)?;
-        if !has_session_property(h!("IsCursorCaptureEnabled")) || session.SetIsCursorCaptureEnabled(false).is_err() {
+        // 标定用：让系统把光标合成进画面，量“光标位置进画面”比帧的上屏时刻早多少（selftest 的 flash --cursor）。
+        let calibrating = std::env::var("HENJI_SCREEN_CAPTURE_CALIBRATE_CURSOR").is_ok_and(|value| value == "1");
+        if !has_session_property(h!("IsCursorCaptureEnabled")) || session.SetIsCursorCaptureEnabled(calibrating).is_err() {
             return Err("CAPTURE_UNSUPPORTED|此系统无法在采集时去掉光标（需要 Windows 10 2004 或更新），请用现有录法".into());
         }
         if has_session_property(h!("IsBorderRequired")) {

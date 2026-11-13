@@ -79,10 +79,10 @@ selftest/selftest.cjs  真实录制自测，也是主进程用法的可运行示
 | `hello` | `protocol`（可选，主进程期望的协议号） | `{protocol, nativeMonoUs, platform, codecs, sources, pauseInPlace}`。带了 `protocol` 且不相等时返回 `PROTOCOL_MISMATCH`，消息里写了怎么办 |
 | `clock` | — | `{nativeMonoUs}` |
 | `sources` | — | `{displays: [{kind: "display", id, x, y, width, height, primary, refreshHz}]}`，坐标与尺寸是物理像素；`id` 是系统设备名（如 `\\.\DISPLAY1`） |
-| `prepare` | 见下 | `{sessionId, width, height, fps, codec, encoder, source, files: {video, timing, activity, manifest}}`。建好采集与编码并开始采集，但不录；本机不支持时在这里报错 |
+| `prepare` | 见下 | `{sessionId, width, height, fps, codec, encoder, source, presentLeadUs, files: {video, timing, activity, manifest}}`。建好采集与编码并开始采集，但不录；本机不支持时在这里报错 |
 | `start` | `sessionId`，`atUs`（可选） | 同 `prepare` 的应答。从 `atUs`（默认此刻）起录。也可以不先 `prepare`，直接带上 `prepare` 的全部参数 |
-| `pause` | `sessionId`，`atUs`（可选） | `{}`；生效后另发 `paused` 事件 |
-| `resume` | `sessionId`，`atUs`（可选） | `{}`；生效后另发 `resumed` 事件 |
+| `pause` | `sessionId`，`atUs`（可选，可以比现在晚，最多 100 毫秒） | `{}`；格时刻不早于 `atUs` 的格子不进文件，生效后另发 `paused` 事件 |
+| `resume` | `sessionId`，`atUs`（可选，同上） | `{}`；格时刻不早于 `atUs` 的格子接着进文件，生效后另发 `resumed` 事件 |
 | `stop` | `sessionId`，`atUs`（可选） | 文件收尾之后才应答：见“停止的结果” |
 | `cancel` | `sessionId` | `{}`；停止并删掉这次的全部文件 |
 | `status` | `sessionId` | 最近一次健康汇报的内容加 `state`（`prepared` / `recording` / `paused` / `stopping` / `ended`） |
@@ -111,7 +111,7 @@ selftest/selftest.cjs  真实录制自测，也是主进程用法的可运行示
 |---|---|---|
 | `started` | `originUs`，`firstSourceUs` | 网格起点已定：文件第 0 帧对应 `originUs` |
 | `fragment` | `frames`，`bytes` | 又有分片落盘：进程此刻被杀，帧序号小于 `frames` 的帧读得回来。约每秒一条 |
-| `paused` | `atUs`，`cell`，`frame` | 暂停生效：文件第 `frame` 帧之前的内容已落盘。暂停与继续落在同一格里（间隔不到一帧）或暂停还没生效就停止时，没有格子被暂停，这两个事件不发 |
+| `paused` | `atUs`，`cell`，`frame` | 暂停生效（`atUs` 是第一个不进文件的格子的格时刻；要画面内容正好切在某一刻，`pause` / `resume` 的 `atUs` 给“那一刻 + `presentLeadUs`”）：文件第 `frame` 帧之前的内容已落盘。暂停与继续落在同一格里（间隔不到一帧）或暂停还没生效就停止时，没有格子被暂停，这两个事件不发 |
 | `resumed` | `atUs`，`cell`，`frame` | 继续生效：文件第 `frame` 帧是继续后的第一帧（关键帧） |
 | `paused` 的 `reason` | `user` / `sourceLost` | 空档的原因：用户暂停，或来源丢失 |
 | `sourceLost` | `atUs` | 正在录的显示器断开了，或采集连着失败满一秒。录制不结束：这之后的时间不进文件（随后会有 `paused`，`reason` 为 `sourceLost`），进程每秒按设备名找一次 |
@@ -203,6 +203,8 @@ selftest/selftest.cjs  真实录制自测，也是主进程用法的可运行示
 - 读的时候按文件头里的“文件头字节数”“每条记录字节数”跳，后续版本只会在保留区加字段或加长记录。
 
 Windows 上来源帧的系统时刻取自 `Direct3D11CaptureFrame.SystemRelativeTime`。实测它比帧到达进程的时刻**晚**几毫秒（见进度与交接里的数字）：它是这一帧上屏的时刻，不是合成完成的时刻。
+
+**事件对到画面要减去 `presentLeadUs`**（`prepare` 应答里给，微秒）：合成器先取好光标位置与各窗口内容，过一个刷新周期这一帧才上屏，所以系统时刻为 S 的帧里是 S − `presentLeadUs` 那一刻的光标与内容。Windows 上它等于被录显示器的一个刷新周期（60 Hz 为 16 666）。标定方法：`node native/screen-capture/selftest/selftest.cjs flash --cursor`（让系统把光标合成进画面，量“鼠标移完”到“带上新位置的那一帧的系统时刻”；60 Hz 实测 17.1–33.2 毫秒，一个周期宽、从一个周期起）。环境变量 `HENJI_SCREEN_CAPTURE_CALIBRATE_CURSOR=1` 只给这个标定用，会把光标录进画面。
 
 ### 代理 `screen.proxy.mp4`
 

@@ -164,7 +164,15 @@ export class RecordingEventSession {
       try { await backend.cancel() } catch (cleanup) { logger.error('录制媒体释放失败', { event: 'recording.events.cancel.failed', error: cleanup }) }
       throw error
     }
-    const pauseNow = (): void => { this.detach(); this.collector.pause(this.options.nowUs()) }
+    // 事件输入在按下那一刻就停。事件时钟停在哪：采集后端给得出画面内容截到的那一刻就用它（与画面扣掉的是同一段），否则就是按下的时刻。
+    let held = false
+    const pauseNow = async (): Promise<void> => {
+      if (held) return
+      held = true; this.detach()
+      if (backend.picture) this.collector.pause(await backend.picture.hold())
+      else this.collector.pause(this.options.nowUs())
+    }
+    const resumeAt = (atUs: number): void => { this.collector.resume(Math.min(this.options.nowUs(), atUs)); held = false; this.attach() }
     return {
       start: async signal => {
         logger.info('开始采集录制事件', { event: 'recording.events.start.start' })
@@ -173,21 +181,28 @@ export class RecordingEventSession {
           if (signal.aborted) throw new Error('录制已取消')
           // 事件时钟的零点放在画面第一帧之前：素材起点换算成事件时间（recordingStartUs）不会是负数，不被截成 0 而整段错开。
           const now = this.options.nowUs(), since = backend.capturingSinceUs?.()
-          this.collector.start(since === undefined ? now : Math.max(this.options.originUs, Math.min(now, since - EVENT_CLOCK_LEAD_US))); this.attach()
+          this.collector.start(since === undefined ? now : Math.max(this.options.originUs, Math.min(now, since - EVENT_CLOCK_LEAD_US))); held = false; this.attach()
           logger.info('录制事件采集已开始', { event: 'recording.events.start.completed' })
         } catch (error) { logger.error('录制事件启动失败', { event: 'recording.events.start.failed', error }); return releaseOnFailure(error) }
       },
       pause: async signal => {
-        try { pauseNow(); await backend.pause(signal); await this.collector.flush() }
+        try { await pauseNow(); await backend.pause(signal); await this.collector.flush() }
         catch (error) { return releaseOnFailure(error) }
       },
       resume: async signal => {
         if (this.failure) throw this.failure
         try {
+          if (backend.picture) {
+            // 各路同时开始续；事件时钟与输入只等画面，从它续上的那一格接着走，不等起得慢的声音与界面那几路。
+            const rest = backend.resume(signal)
+            rest.catch(() => undefined)
+            resumeAt(await backend.picture.release()); await rest
+            if (signal.aborted) throw new Error('录制已取消')
+            return
+          }
           await backend.resume(signal); if (signal.aborted) throw new Error('录制已取消')
           // 从恢复后画面的第一帧接着走：其间没有事件，但扣掉的暂停长度与画面一致。
-          const now = this.options.nowUs(), since = backend.capturingSinceUs?.()
-          this.collector.resume(since === undefined ? now : Math.min(now, since)); this.attach()
+          resumeAt(backend.capturingSinceUs?.() ?? this.options.nowUs())
         }
         catch (error) { return releaseOnFailure(error) }
       },
@@ -195,7 +210,7 @@ export class RecordingEventSession {
       ...(backend.began ? { began: () => backend.began!() } : {}),
       ...(backend.ending ? { ending: () => backend.ending!() } : {}),
       // 按下暂停那一刻事件就停（不等文档存完），事件时钟与文档记的暂停起点是同一刻。
-      pausing: async () => { pauseNow(); await backend.pausing?.() },
+      pausing: async () => { await pauseNow(); await backend.pausing?.() },
       ...(backend.resumed ? { resumed: () => backend.resumed!() } : {}),
       mark: async (signal, note) => {
         try { await backend.mark(signal, note); this.mark(note) }

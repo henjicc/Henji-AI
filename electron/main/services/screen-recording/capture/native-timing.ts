@@ -60,7 +60,7 @@ export function captureTimingRuns(timing: CaptureTiming, frames = timing.cell.le
 
 /**
  * 画面相对网格的上屏偏移：新画面的上屏时刻减去它所在格的格时刻，取中位数（微秒，同一时钟里的差，与时钟校准无关）。
- * 文件第 0 帧显示的画面真正出现在“格 0 时刻 + 偏移”：光标、点击与声音按上屏时刻对到画面才不差一帧。没有新画面时为 0。
+ * 文件第 0 帧显示的画面在“格 0 时刻 + 偏移”上屏；它的内容还要早一个上屏提前量，由采集后端换算（见 native.ts）。没有新画面时为 0。
  */
 export function captureTimingLeadUs(timing: CaptureTiming): number {
   const values: number[] = []
@@ -74,7 +74,7 @@ export function captureTimingLeadUs(timing: CaptureTiming): number {
 
 /**
  * 会话时钟上的暂停：第 0 帧在会话时钟 `firstFrameUs`，之后每段的起止按格号推出。
- * 与事件时钟扣掉的暂停（恢复时按跳过的格数接着走）、合并计划的各段是同一组数，三者处处对齐。
+ * 与事件时钟扣掉的暂停（停在采集进程报的暂停那一格、从继续那一格接着走）、合并计划的各段是同一组数，三者处处对齐。
  */
 export function captureTimingPauses(timing: CaptureTiming, firstFrameUs: number, frames?: number): Array<{ startUs: number; endUs: number }> {
   return captureTimingGaps(timing, firstFrameUs, frames).filter(gap => !gap.sourceLost).map(({ startUs, endUs }) => ({ startUs, endUs }))

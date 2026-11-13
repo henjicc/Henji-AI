@@ -14,9 +14,9 @@ const microphone = vi.hoisted(() => ({ options: undefined as { directory: string
 vi.mock('../../audio-capture/service', () => ({ microphoneCapture: () => ({ startTrack: async (options: typeof microphone.options) => { microphone.options = options; return microphone.recorder } }) }))
 const state = vi.hoisted(() => ({ root: '', backend: null as RecordingControlBackend | null, settled: undefined as (() => Promise<void>) | undefined, ownerLost: undefined as (() => void) | undefined, assert: vi.fn(), grant: vi.fn(), revoke: vi.fn(), failed: vi.fn(), open: vi.fn(), notify: vi.fn(), document: { capture: vi.fn(async () => undefined), range: vi.fn(async () => undefined), pause: vi.fn(async () => undefined), resume: vi.fn(async () => undefined), track: vi.fn(async () => undefined), finish: vi.fn(async () => ({ status: 'stopped', durationUs: 1 })), pageReferences: () => [], ledger: { detaches: 0 } } }))
 vi.mock('electron', () => ({ BrowserWindow: { fromWebContents: () => null }, screen: { getAllDisplays: () => [{ id: 1, bounds: { x: 1280, y: 0, width: 1280, height: 720 }, scaleFactor: 1.5 }], dipToScreenPoint: (point: { x: number; y: number }) => ({ x: point.x * 1.5, y: point.y * 1.5 }) } }))
-const native = vi.hoisted(() => ({ prepare: vi.fn(async (): Promise<void> => undefined), point: undefined as unknown, since: 123 }))
+const native = vi.hoisted(() => ({ prepare: vi.fn(async (): Promise<void> => undefined), point: undefined as unknown, since: 123, held: 456 }))
 vi.mock('./native-client', () => ({ screenCaptureProcess: () => ({}) }))
-vi.mock('./native', () => ({ NativeCaptureBackend: class { constructor(...args: unknown[]) { native.point = args[1] } prepare = native.prepare; start = async (): Promise<void> => undefined; pause = async (): Promise<void> => undefined; resume = async (): Promise<void> => undefined; stop = async (): Promise<void> => undefined; cancel = async (): Promise<void> => undefined; pressed(): void {} capturingSinceUs(): number { return native.since } stats(): object { return { restarts: 0, droppedFrames: 0, duplicatedFrames: 0, encoder: 'h264_nvenc' } } } }))
+vi.mock('./native', () => ({ NativeCaptureBackend: class { constructor(...args: unknown[]) { native.point = args[1] } prepare = native.prepare; start = async (): Promise<void> => undefined; pause = async (): Promise<void> => undefined; resume = async (): Promise<void> => undefined; stop = async (): Promise<void> => undefined; cancel = async (): Promise<void> => undefined; hold = async (): Promise<number> => native.held; unhold = async (): Promise<number> => native.since; capturingSinceUs(): number { return native.since } stats(): object { return { restarts: 0, droppedFrames: 0, duplicatedFrames: 0, encoder: 'h264_nvenc' } } } }))
 vi.mock('../../appPaths', () => ({ getUserFolderDir: () => state.root }))
 vi.mock('../../logging', () => ({ createMainLogger: () => ({ info: vi.fn(), error: vi.fn(), warn: vi.fn() }) }))
 vi.mock('node:os', async importOriginal => ({ ...await importOriginal<typeof import('node:os')>(), release: () => '10.0.19045' }))
@@ -232,6 +232,9 @@ it('整屏录制默认先试原生画面采集（按物理像素找显示器）�
     await handleCaptureRequest(owner, { operation: 'prepare', sessionId: id, options: full })
     expect(gfx.deps).toBeUndefined()
     expect(state.backend!.capturingSinceUs!()).toBe(native.since)
+    // 暂停与继续的那一刻由原生采集按帧给出。
+    await expect(state.backend!.picture!.hold()).resolves.toBe(native.held)
+    await expect(state.backend!.picture!.release()).resolves.toBe(native.since)
 
     // 录制尺寸与显示器原尺寸不同（原生不缩放）：不试原生。
     await handleCaptureRequest(owner, { operation: 'close', sessionId: id })
@@ -246,5 +249,6 @@ it('整屏录制默认先试原生画面采集（按物理像素找显示器）�
     await handleCaptureRequest(owner, { operation: 'prepare', sessionId: id, options: full })
     expect(native.prepare).not.toHaveBeenCalled()
     expect(gfx.deps).toBeDefined()
+    expect(state.backend!.picture).toBeUndefined()
   } finally { Object.defineProperty(process, 'platform', platform); delete process.env.HENJI_NATIVE_SCREEN_CAPTURE }
 })

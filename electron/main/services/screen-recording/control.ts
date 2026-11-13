@@ -19,6 +19,12 @@ export interface RecordingControlBackend {
   pausing?(): Promise<void>
   resumed?(): Promise<void>
   /**
+   * 能按帧给出暂停与继续那一刻的画面采集才有。按下暂停先 hold（画面停下，返回画面内容截到的时刻），按下继续先 release
+   * （画面续上，返回续上的那一格内容的时刻）；时刻与事件采集的 nowUs 同一时钟。事件时钟与输入采集跟着画面停、跟着画面续，
+   * 不等声音与界面录的那几路：它们停得慢、起得慢，等它们会让画面多录或少了光标。没有它时按按下的时刻与 capturingSinceUs。
+   */
+  picture?: { hold(): Promise<number>; release(): Promise<number> }
+  /**
    * 正在录的画面第一帧的时刻（与事件采集的 nowUs 同一时钟）；开始与恢复完成时读。编码器起来要一两秒，
    * 事件时钟按它起算、按它接着走，暂停扣掉的长度才和画面一致。不知道时省略。
    */

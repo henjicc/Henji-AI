@@ -1,0 +1,35 @@
+{
+ "mediaMonoUs": 2103926,
+ "pauses": [
+  {
+   "gapMs": [
+    21387.26,
+    29153.93
+   ],
+   "docPauseMs": [
+    21387.26,
+    29153.93
+   ],
+   "pauseEventMinusGapStartMs": 0.77,
+   "resumeEventMinusGapEndMs": 0.77,
+   "eventPausedLenMinusGapLenMs": 0,
+   "lastCursorBeforePauseMs": -10.64,
+   "firstCursorAfterResumeMs": 43.78
+  },
+  {
+   "gapMs": [
+    40570.59,
+    48270.59
+   ],
+   "docPauseMs": [
+    40570.59,
+    48270.59
+   ],
+   "pauseEventMinusGapStartMs": 0.54,
+   "resumeEventMinusGapEndMs": 0.54,
+   "eventPausedLenMinusGapLenMs": 0,
+   "lastCursorBeforePauseMs": -14.1,
+   "firstCursorAfterResumeMs": 45.8
+  }
+ ]
+}

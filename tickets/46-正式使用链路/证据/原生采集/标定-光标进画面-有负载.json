@@ -1,0 +1,239 @@
+{
+  "scenario": "flash",
+  "flash": {
+    "cursor": {
+      "moves": 60,
+      "movesInFile": 60,
+      "setToSourceTimeUs": {
+        "min": 17126,
+        "avg": 25654,
+        "max": 33024,
+        "stddev": 4781,
+        "spreadFrames": 0.95
+      },
+      "beforePaintUs": {
+        "min": 0,
+        "avg": 5000,
+        "max": 16667,
+        "stddev": 7638,
+        "spreadFrames": 1
+      }
+    },
+    "toggles": 60,
+    "transitionsInFile": 60,
+    "paintToSourceTimeUs": {
+      "min": 22480,
+      "avg": 29883,
+      "max": 38355,
+      "stddev": 4482,
+      "spreadFrames": 0.95
+    },
+    "paintToFileTimeUs": {
+      "min": 22631,
+      "avg": 30019,
+      "max": 38526,
+      "stddev": 4488,
+      "spreadFrames": 0.95
+    }
+  },
+  "proxy": {
+    "width": 1920,
+    "height": 1080,
+    "frames": "1382",
+    "duration": "23.033333",
+    "bytes": 21101701
+  },
+  "ok": true,
+  "problems": [],
+  "directory": "C:/Users/15212/AppData/Local/Temp/claude/0c13606506645089/10163793-748b-4738-b008-b3b0d67ebd3b/scratchpad/cal3",
+  "display": {
+    "height": 2160,
+    "id": "\\\\.\\DISPLAY1",
+    "kind": "display",
+    "primary": false,
+    "refreshHz": 60,
+    "width": 3840,
+    "x": 3840,
+    "y": 0
+  },
+  "handshake": {
+    "protocol": 2,
+    "platform": "windows"
+  },
+  "prepared": {
+    "width": 3840,
+    "height": 2160,
+    "fps": 60,
+    "encoder": "h264_nvenc"
+  },
+  "wallSeconds": 23.1,
+  "stopMs": null,
+  "exit": {
+    "code": 0,
+    "signal": null
+  },
+  "result": {
+    "bytes": 72985333,
+    "captureDropped": 0,
+    "captureFailed": 0,
+    "cells": 1382,
+    "droppedFrames": 0,
+    "durableFrames": 1382,
+    "durationUs": 23033333,
+    "encodedFrames": 1382,
+    "files": {
+      "activity": "screen.activity.jsonl",
+      "manifest": "screen.capture.json",
+      "proxy": "screen.proxy.mp4",
+      "timing": "screen.frames",
+      "video": "screen.mp4"
+    },
+    "frames": 1382,
+    "freshFrames": 1382,
+    "originUs": 195861230381,
+    "pausedCells": 0,
+    "proxyFrames": 1382,
+    "repeatedFrames": 0,
+    "sourceFrames": 1404,
+    "sourceSurplus": 0
+  },
+  "file": {
+    "codec_name": "h264",
+    "profile": "High",
+    "width": 3840,
+    "height": 2160,
+    "pix_fmt": "yuv420p",
+    "color_range": "tv",
+    "color_space": "bt709",
+    "color_transfer": "bt709",
+    "color_primaries": "bt709",
+    "avg_frame_rate": "60/1",
+    "duration": "23.033333",
+    "nb_read_frames": "1382",
+    "bytes": 72985333
+  },
+  "timing": {
+    "records": 1382,
+    "fresh": 1382,
+    "repeated": 0,
+    "dropped": 0,
+    "pauses": [],
+    "freshIntervalUs": {
+      "max": 16955,
+      "min": 16358,
+      "p50": 16667,
+      "p99": 16721
+    },
+    "longGaps": 0,
+    "freshDelayUs": {
+      "max": 262,
+      "min": -268,
+      "p50": 123,
+      "p99": 253
+    },
+    "monotonic": true
+  },
+  "health": {
+    "samples": 23,
+    "cpuPercentOfOneCore": {
+      "min": 1.5,
+      "avg": 4.6,
+      "max": 13.9
+    },
+    "privateMegabytes": {
+      "min": 565,
+      "avg": 566,
+      "max": 567
+    },
+    "gpuMegabytes": {
+      "min": 371,
+      "avg": 371,
+      "max": 371
+    },
+    "encodeAvgUs": {
+      "min": 9993,
+      "avg": 10770,
+      "max": 11371
+    },
+    "encodeMaxUs": {
+      "min": 10558,
+      "avg": 12072.9,
+      "max": 16754
+    },
+    "writeMaxUs": {
+      "min": 599,
+      "avg": 1155.9,
+      "max": 1730
+    },
+    "captureQueueMax": {
+      "min": 1,
+      "avg": 1,
+      "max": 1
+    },
+    "captureMaxUs": {
+      "min": 428,
+      "avg": 698.6,
+      "max": 2001
+    },
+    "writeQueueMax": {
+      "min": 1,
+      "avg": 1,
+      "max": 1
+    },
+    "sourceIntervalUs": {
+      "count": 1385,
+      "max": 16955,
+      "p50": 16750,
+      "p99": 16750
+    },
+    "arrivalLatencyUs": {
+      "avg": -8984,
+      "count": 1386,
+      "max": -4148,
+      "min": -15741
+    },
+    "totals": {
+      "frames": 1363,
+      "fresh": 1363,
+      "repeated": 0,
+      "dropped": 0,
+      "captureDropped": 0,
+      "sourceSurplus": 0,
+      "sourceFrames": 1386
+    }
+  },
+  "systemLoad": {
+    "samples": 1,
+    "cpuPercentAllCores": {
+      "avg": 33,
+      "max": 33
+    },
+    "gpuPercent": {
+      "avg": 6,
+      "max": 6
+    },
+    "gpuEncoderPercent": {
+      "avg": 29,
+      "max": 29
+    }
+  },
+  "events": [
+    {
+      "binaryBytes": 0,
+      "event": "started",
+      "firstSourceUs": 195861230381,
+      "originUs": 195861230381,
+      "sessionId": "selftest-1794584060392"
+    }
+  ],
+  "fragments": {
+    "count": 22,
+    "last": {
+      "binaryBytes": 0,
+      "bytes": 69543358,
+      "event": "fragment",
+      "frames": 1320,
+      "sessionId": "selftest-1794584060392"
+    }
+  }
+}

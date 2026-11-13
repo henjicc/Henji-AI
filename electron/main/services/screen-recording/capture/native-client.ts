@@ -21,7 +21,11 @@ const messageSchema = z.object({
 type ScreenCaptureMessage = z.infer<typeof messageSchema>
 const count = z.number().int().nonnegative()
 const filesSchema = z.object({ video: z.string(), timing: z.string(), activity: z.string(), manifest: z.string() }).passthrough()
-export const screenCapturePreparedSchema = z.object({ sessionId: z.string(), width: count, height: count, fps: z.number().positive(), codec: z.enum(['h264', 'hevc']), encoder: z.string(), proxy: z.object({ width: count, height: count }).nullable().optional(), files: filesSchema }).passthrough()
+export const screenCapturePreparedSchema = z.object({
+  sessionId: z.string(), width: count, height: count, fps: z.number().positive(), codec: z.enum(['h264', 'hevc']), encoder: z.string(), proxy: z.object({ width: count, height: count }).nullable().optional(),
+  /** 帧的系统时刻（上屏时刻）比画面内容定下的那一刻晚多少微秒；较早的采集程序不报。 */
+  presentLeadUs: z.number().nonnegative().optional(), files: filesSchema,
+}).passthrough()
 /** 停止的结果：`frames` 是时刻表条数，也是文件时间轴的长度；一帧都没录到时为 0 且不留文件。 */
 export const screenCaptureResultSchema = z.object({
   frames: count, encodedFrames: count, durationUs: z.number(), originUs: z.number(), freshFrames: count, repeatedFrames: count, droppedFrames: count,

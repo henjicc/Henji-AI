@@ -1,0 +1,281 @@
+{
+ "media": [
+  1924428,
+  50933333,
+  [
+   {
+    "startUs": 21141095,
+    "endUs": 28524428
+   },
+   {
+    "startUs": 40174428,
+    "endUs": 48374428
+   }
+  ]
+ ],
+ "runs": [
+  [
+   0,
+   929397
+  ],
+  [
+   20205350,
+   8312730
+  ],
+  [
+   31855264,
+   16512729
+  ]
+ ],
+ "flipsInPicture": 30,
+ "median": {
+  "editLookupMinusCursorEventMs": 12.3,
+  "before": 12.3,
+  "after": 11.4,
+  "pictureMinusTruthMs": 23.6,
+  "cursorEventMinusTruthMs": 13.4,
+  "lookupMinusPictureMs": 0
+ },
+ "rows": [
+  {
+   "truthMs": 2147.6,
+   "afterPause": false,
+   "pictureMinusTruthMs": 26.8,
+   "cursorEventMinusTruthMs": 988.5,
+   "editLookupMinusCursorEventMs": -961.7,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 3135.2,
+   "afterPause": false,
+   "pictureMinusTruthMs": 22.6,
+   "cursorEventMinusTruthMs": 0.9,
+   "editLookupMinusCursorEventMs": 21.7,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 4137.3,
+   "afterPause": false,
+   "pictureMinusTruthMs": 20.5,
+   "cursorEventMinusTruthMs": 13.8,
+   "editLookupMinusCursorEventMs": 6.7,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 5132.1,
+   "afterPause": false,
+   "pictureMinusTruthMs": 25.7,
+   "cursorEventMinusTruthMs": 13.4,
+   "editLookupMinusCursorEventMs": 12.3,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 6139.8,
+   "afterPause": false,
+   "pictureMinusTruthMs": 18,
+   "cursorEventMinusTruthMs": 13.8,
+   "editLookupMinusCursorEventMs": 4.2,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 7134.2,
+   "afterPause": false,
+   "pictureMinusTruthMs": 23.5,
+   "cursorEventMinusTruthMs": 13.4,
+   "editLookupMinusCursorEventMs": 10.1,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 8130.7,
+   "afterPause": false,
+   "pictureMinusTruthMs": 27.1,
+   "cursorEventMinusTruthMs": 14.4,
+   "editLookupMinusCursorEventMs": 12.7,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 9150.8,
+   "afterPause": false,
+   "pictureMinusTruthMs": 23.6,
+   "cursorEventMinusTruthMs": 5.2,
+   "editLookupMinusCursorEventMs": 18.4,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 10149.7,
+   "afterPause": false,
+   "pictureMinusTruthMs": 24.7,
+   "cursorEventMinusTruthMs": 13.2,
+   "editLookupMinusCursorEventMs": 11.5,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 11151.1,
+   "afterPause": false,
+   "pictureMinusTruthMs": 23.3,
+   "cursorEventMinusTruthMs": 3.1,
+   "editLookupMinusCursorEventMs": 20.3,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 12154.7,
+   "afterPause": false,
+   "pictureMinusTruthMs": 19.7,
+   "cursorEventMinusTruthMs": 13.6,
+   "editLookupMinusCursorEventMs": 6.1,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 13146.7,
+   "afterPause": false,
+   "pictureMinusTruthMs": 27.8,
+   "cursorEventMinusTruthMs": 5.8,
+   "editLookupMinusCursorEventMs": 21.9,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 14159.1,
+   "afterPause": false,
+   "pictureMinusTruthMs": 15.3,
+   "cursorEventMinusTruthMs": 13,
+   "editLookupMinusCursorEventMs": 2.4,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 15148.4,
+   "afterPause": false,
+   "pictureMinusTruthMs": 26.1,
+   "cursorEventMinusTruthMs": 13.4,
+   "editLookupMinusCursorEventMs": 12.6,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 16157.2,
+   "afterPause": false,
+   "pictureMinusTruthMs": 17.2,
+   "cursorEventMinusTruthMs": -0.1,
+   "editLookupMinusCursorEventMs": 17.3,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 17151.6,
+   "afterPause": false,
+   "pictureMinusTruthMs": 22.9,
+   "cursorEventMinusTruthMs": 13.5,
+   "editLookupMinusCursorEventMs": 9.4,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 18159.4,
+   "afterPause": false,
+   "pictureMinusTruthMs": 31.7,
+   "cursorEventMinusTruthMs": 14.9,
+   "editLookupMinusCursorEventMs": 16.9,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 19150.7,
+   "afterPause": false,
+   "pictureMinusTruthMs": 23.7,
+   "cursorEventMinusTruthMs": 3.1,
+   "editLookupMinusCursorEventMs": 20.6,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 20150.2,
+   "afterPause": false,
+   "pictureMinusTruthMs": 24.2,
+   "cursorEventMinusTruthMs": 13,
+   "editLookupMinusCursorEventMs": 11.3,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 29145.9,
+   "afterPause": true,
+   "pictureMinusTruthMs": 28.6,
+   "cursorEventMinusTruthMs": 8.1,
+   "editLookupMinusCursorEventMs": 20.5,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 30153.3,
+   "afterPause": true,
+   "pictureMinusTruthMs": 21.2,
+   "cursorEventMinusTruthMs": 14.9,
+   "editLookupMinusCursorEventMs": 6.3,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 31150.7,
+   "afterPause": true,
+   "pictureMinusTruthMs": 23.7,
+   "cursorEventMinusTruthMs": 2.8,
+   "editLookupMinusCursorEventMs": 20.9,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 32158.6,
+   "afterPause": true,
+   "pictureMinusTruthMs": 15.8,
+   "cursorEventMinusTruthMs": 14.3,
+   "editLookupMinusCursorEventMs": 1.5,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 33150.6,
+   "afterPause": true,
+   "pictureMinusTruthMs": 23.9,
+   "cursorEventMinusTruthMs": 13.8,
+   "editLookupMinusCursorEventMs": 10.1,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 34157,
+   "afterPause": true,
+   "pictureMinusTruthMs": 17.4,
+   "cursorEventMinusTruthMs": 15.1,
+   "editLookupMinusCursorEventMs": 2.3,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 35151.9,
+   "afterPause": true,
+   "pictureMinusTruthMs": 22.5,
+   "cursorEventMinusTruthMs": 0.5,
+   "editLookupMinusCursorEventMs": 22.1,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 36149.3,
+   "afterPause": true,
+   "pictureMinusTruthMs": 25.1,
+   "cursorEventMinusTruthMs": 14.4,
+   "editLookupMinusCursorEventMs": 10.6,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 37151.4,
+   "afterPause": true,
+   "pictureMinusTruthMs": 23,
+   "cursorEventMinusTruthMs": 5.7,
+   "editLookupMinusCursorEventMs": 17.3,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 38149.2,
+   "afterPause": true,
+   "pictureMinusTruthMs": 25.2,
+   "cursorEventMinusTruthMs": 13.8,
+   "editLookupMinusCursorEventMs": 11.4,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 39154.7,
+   "afterPause": true,
+   "pictureMinusTruthMs": 19.7,
+   "cursorEventMinusTruthMs": 0.4,
+   "editLookupMinusCursorEventMs": 19.3,
+   "lookupMinusPictureMs": 0
+  }
+ ]
+}

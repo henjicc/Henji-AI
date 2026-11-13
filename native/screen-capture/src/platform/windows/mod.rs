@@ -131,7 +131,10 @@ impl Platform for WindowsPlatform {
         let mut source = display.describe();
         source["adapter"] = json!(gpu.adapter_name);
         let capture = wgc::start(gpu, &display, hw, converter, (width, height), proxy, config.fps, inbox, health)?;
-        Ok(Opened { capture: Capture { capture, _timer: TimerResolution::raise() }, writer, width, height, encoder, proxy, source })
+        // `SystemRelativeTime` 是这一帧上屏的时刻；合成器提前一个刷新周期取光标位置与窗口内容。刷新率取不到（0 或 1）时按 60。
+        // 实测（selftest 的 flash --cursor，60 Hz）：鼠标移完到带上新位置那一帧的系统时刻是 17.1–33.2 毫秒，正好一个周期宽、从一个周期起。
+        let present_lead_us = 1_000_000 / if display.refresh_hz > 1 { display.refresh_hz as i64 } else { 60 };
+        Ok(Opened { capture: Capture { capture, _timer: TimerResolution::raise() }, writer, width, height, encoder, proxy, source, present_lead_us })
     }
 
     fn foreground() -> Option<Foreground> {

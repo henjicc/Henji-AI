@@ -318,10 +318,11 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
           }
         } else await session.backend.prepare()
         mediaPermissions.assertSelection(owner, request.sessionId, request.options.sourceId)
+        // 界面重载期间页面的授权随导航撤掉；同一会话已经由用户确认过来源，接着录不再重新核对。
+        const assertSelected = (): void => { if (session.tracksAttached) mediaPermissions.assertSelection(owner, request.sessionId, request.options.sourceId) }
         const transition = async (operation: Exclude<CaptureOperation, 'cancel'>, status: CaptureManifest['status'], signal: AbortSignal): Promise<void> => {
           try {
-            // 界面重载期间页面的授权随导航撤掉；同一会话已经由用户确认过来源，接着录不再重新核对。
-            if ((operation === 'start' || operation === 'resume') && session.tracksAttached) mediaPermissions.assertSelection(owner, request.sessionId, request.options.sourceId)
+            if (operation === 'start' || operation === 'resume') assertSelected()
             // Both capture paths cross the renderer barrier: native screen capture must also control audio/camera.
             const results = await Promise.allSettled([session.backend[operation](signal), ...(request.session && backend !== 'chromium' ? [remote(session, operation)] : []), ...hostTrackSteps(session, operation, signal)])
             const failure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')
@@ -332,6 +333,9 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
         // 停止、暂停、恢复时存不进文档也会让这次命令失败：按采集失败收尾（停下后端、记为中断），不当成用户取消。
         const failing = <T>(work: Promise<T>): Promise<T> => work.catch(async (error: unknown) => { await fail(session, error instanceof Error ? error : new Error(String(error))); throw error })
         if (request.session && source.id !== BrowserWindow.fromWebContents(owner)?.getMediaSourceId()) minimizeOwnerWhileRecording(BrowserWindow.fromWebContents(owner))
+        // 原生采集按帧给得出暂停与继续的那一刻：事件时钟与会话文档都记它，不记按键的时刻；画面在按下时就停、就续，不等其余各路。
+        const framed = session.backend instanceof NativeCaptureBackend ? session.backend : undefined
+        let heldUs: number | undefined
         openRecordingControl(owner, request.sessionId, {
           start: signal => transition('start', 'recording', signal), pause: signal => transition('pause', 'paused', signal), resume: signal => transition('resume', 'recording', signal), stop: signal => transition('stop', 'stopped', signal),
           capturingSinceUs: () => {
@@ -342,11 +346,13 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
           mark: async () => undefined, // Event/marker ownership is task 1.4; no duplicate event log here.
           ...(document ? {
             began: () => document!.range('startUs', now() - session.originUs), ending: () => failing(document!.range('endUs', now() - session.originUs)),
-            pausing: () => {
-              if (session.backend instanceof NativeCaptureBackend) session.backend.pressed(now())
-              return failing(document!.pause(now() - session.originUs))
-            }, resumed: () => failing(document!.resume(now() - session.originUs)),
+            pausing: () => failing(document!.pause((heldUs ?? now()) - session.originUs)),
+            resumed: () => { heldUs = undefined; return failing(document!.resume((framed?.capturingSinceUs() ?? now()) - session.originUs)) },
           } : {}),
+          ...(framed ? { picture: {
+            hold: async () => (heldUs = await failing(framed.hold(now()))),
+            release: () => failing((async () => { assertSelected(); return framed.unhold() })()),
+          } } : {}),
           cancel: () => {
             // 第二次（采集失败释放过后再关控制条）这时会话已不是 active，界面的回执路由不到这里，再发命令只会白等超时；
             // 那次的失败已经报过，这里只等它结束。

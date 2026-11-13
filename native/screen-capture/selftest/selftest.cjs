@@ -22,6 +22,8 @@
  *     --motion             在被录的显示器上用 ffplay 放一块 60 帧的测试图，保证画面一直在变
  *     --no-pause           record 场景不暂停
  *     --proxy              同时录一份 1080P 代理，并核对它与主文件帧帧对应
+ *     --cursor             flash 场景：每次变色前把鼠标移到色块里另一个角，并让系统把光标合成进画面，
+ *                          量“鼠标移完”到“带上新光标位置的那一帧的系统时刻”差多少（事件与画面对齐的固定延迟）
  *
  * 需要先构建：node scripts/build-screen-capture.cjs
  */
@@ -48,6 +50,7 @@ function parseArgs(argv) {
     if (name === '--motion') options.motion = true
     else if (name === '--no-pause') options.pause = false
     else if (name === '--proxy') options.proxy = true
+    else if (name === '--cursor') options.cursor = true
     else if (name.startsWith('--')) options[name.slice(2)] = rest[++index]
   }
   return options
@@ -55,9 +58,9 @@ function parseArgs(argv) {
 
 /** 采集进程的客户端：一行一条 JSON 指令；应答与事件是 u32 小端长度 + JSON + binaryBytes 字节。 */
 class CaptureClient {
-  constructor() {
+  constructor(calibrateCursor = false) {
     // 故障注入要显式打开（只有自测用）。
-    this.child = spawn(executable, [], { stdio: ['pipe', 'pipe', 'inherit'], windowsHide: true, env: { ...process.env, HENJI_SCREEN_CAPTURE_INJECT: '1' } })
+    this.child = spawn(executable, [], { stdio: ['pipe', 'pipe', 'inherit'], windowsHide: true, env: { ...process.env, HENJI_SCREEN_CAPTURE_INJECT: '1', ...(calibrateCursor ? { HENJI_SCREEN_CAPTURE_CALIBRATE_CURSOR: '1' } : {}) } })
     this.pending = new Map()
     this.events = []
     this.health = []
@@ -183,12 +186,28 @@ function regionLuma(video, region) {
   return result.stdout
 }
 
+/** 文件里每一帧在指定区域里有没有东西（最亮与最暗相差很大）：纯色背景上的光标。 */
+function regionContrast(video, region) {
+  const result = spawnSync(ffmpeg, ['-v', 'error', '-i', video, '-vf', `crop=${region.width}:${region.height}:${region.x}:${region.y}`, '-pix_fmt', 'gray', '-f', 'rawvideo', '-'],
+    { windowsHide: true, maxBuffer: 1024 * 1024 * 1024 })
+  if (result.status !== 0) throw new Error(`ffmpeg 读不出画面：${result.stderr}`)
+  const size = region.width * region.height
+  const present = []
+  for (let offset = 0; offset + size <= result.stdout.length; offset += size) {
+    let low = 255
+    let high = 0
+    for (let index = offset; index < offset + size; index += 1) { const value = result.stdout[index]; if (value < low) low = value; if (value > high) high = value }
+    present.push(high - low > 80)
+  }
+  return present
+}
+
 /**
  * 闪烁色块的每次变色，对到文件里第一张带上新颜色的帧，比较“时刻表里这一帧的系统时刻”与“变色画完的时刻”。
  * 色块画完后要等合成器下一次合成、再等一次刷新才上屏，所以差值应当落在一个刷新周期宽的窗口里：
  * 窗口的宽度就是时刻表的精度。
  */
-function analyzeFlash(video, timingFile, flash, region, fps) {
+function analyzeFlash(video, timingFile, flash, region, fps, cursorBoxes) {
   const { header, records } = readTimingTable(timingFile)
   const luma = regionLuma(video, region)
   const frameUs = 1e6 / fps
@@ -205,7 +224,29 @@ function analyzeFlash(video, timingFile, flash, region, fps) {
     return { min: Math.round(Math.min(...values)), avg: Math.round(avg), max: Math.round(Math.max(...values)), stddev: Math.round(deviation), spreadFrames: Math.round((Math.max(...values) - Math.min(...values)) / frameUs * 100) / 100 }
   }
   const pairs = matched ? transitions.map((frame, index) => ({ frame, toggleUs: toggles[index], record: records[frame] })) : []
+  // 光标合成进了画面时：鼠标每次移到色块的另一个角，找第一张光标出现在新角上的帧。
+  let cursor = null
+  if (cursorBoxes && flash.cursorTicks?.length) {
+    const [left, right] = cursorBoxes.map((box) => regionContrast(video, box))
+    const moves = []
+    let previous = null
+    for (let frame = 0; frame < Math.min(left.length, right.length, records.length); frame += 1) {
+      const side = right[frame] ? 'right' : left[frame] ? 'left' : null
+      // 录制开始时鼠标已经停在哪个角不算一次移动。
+      if (side && side !== previous) { if (frame > 0) moves.push(frame); previous = side }
+    }
+    const sets = flash.cursorTicks.map((ticks) => ticks * 1e6 / flash.frequency)
+    cursor = {
+      moves: sets.length,
+      movesInFile: moves.length,
+      // 鼠标移完 → 带上新光标位置的那一帧的系统时刻。
+      setToSourceTimeUs: moves.length === sets.length ? stats(moves.map((frame, index) => records[frame].sourceUs - sets[index])) : null,
+      // 同一次里，光标比色块早多久进画面。
+      beforePaintUs: matched && moves.length === sets.length ? stats(transitions.map((frame, index) => (frame - moves[index]) * frameUs)) : null,
+    }
+  }
   return {
+    cursor,
     toggles: toggles.length,
     transitionsInFile: transitions.length,
     // 变色画完 → 时刻表里那一帧的系统时刻。
@@ -381,7 +422,7 @@ async function main() {
   const problems = []
   const check = (condition, message) => { if (!condition) problems.push(message) }
 
-  const client = new CaptureClient()
+  const client = new CaptureClient(options.cursor)
   const hello = await client.request('hello', { protocol: PROTOCOL })
   const sources = await client.request('sources')
   const display = options.display
@@ -424,12 +465,14 @@ async function main() {
   // 闪烁色块放在被录显示器的右上角；只取中间一块量亮度，避开边缘。
   const flashWindow = { x: display.x + display.width - 520, y: display.y + 120, size: 400 }
   const flashRegion = { x: flashWindow.x - display.x + 100, y: flashWindow.y - display.y + 100, width: 200, height: 200 }
+  // 鼠标轮流停在色块左下、右下两个角（flash.ps1 里同样的位置）；光标从停的点向右下画出。
+  const cursorBoxes = options.cursor ? [60, flashWindow.size - 60].map((offset) => ({ x: flashWindow.x - display.x + offset - 4, y: flashWindow.y - display.y + flashWindow.size - 64, width: 60, height: 60 })) : null
 
   if (options.scenario === 'flash') {
     const flashFile = path.join(directory, 'flash.json')
     await sleep(500)
     const run = spawnSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(__dirname, 'flash.ps1'),
-      '-X', String(flashWindow.x), '-Y', String(flashWindow.y), '-Size', String(flashWindow.size), '-Count', String(options.count ?? 40), '-Out', flashFile], { encoding: 'utf8', windowsHide: true })
+      '-X', String(flashWindow.x), '-Y', String(flashWindow.y), '-Size', String(flashWindow.size), '-Count', String(options.count ?? 40), '-Out', flashFile, ...(options.cursor ? ['-Cursor'] : [])], { encoding: 'utf8', windowsHide: true })
     if (run.status !== 0) problems.push(`闪烁色块没跑起来：${run.stderr}`)
     else flash = JSON.parse(fs.readFileSync(flashFile, 'utf8'))
     await sleep(500)
@@ -531,7 +574,7 @@ async function main() {
   }
   let flashResult = null
   if (flash && !stream.error && !table.error) {
-    flashResult = analyzeFlash(video, path.join(directory, prepared.files.timing), flash, flashRegion, fps)
+    flashResult = analyzeFlash(video, path.join(directory, prepared.files.timing), flash, flashRegion, fps, cursorBoxes)
     check(flashResult.transitionsInFile === flashResult.toggles, `色块变了 ${flashResult.toggles} 次，文件里看到 ${flashResult.transitionsInFile} 次`)
     const spread = flashResult.paintToSourceTimeUs
     if (spread) {

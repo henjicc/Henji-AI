@@ -34,6 +34,9 @@ const REPORT_INTERVAL_US: i64 = 1_000_000;
 const FOREGROUND_INTERVAL_US: i64 = 250_000;
 /// 来源丢了之后隔多久找一次。
 const REACQUIRE_INTERVAL_US: i64 = 1_000_000;
+/// 暂停与继续的时刻最多可以比现在晚这么多。主进程要画面内容正好切在按下的那一刻，而那一刻的内容要晚一个刷新周期才上屏，
+/// 所以它给的时刻会略晚于现在；再晚就不认，免得状态已经是暂停、画面却还录很久。
+const HOLD_AHEAD_LIMIT_US: i64 = 100_000;
 /// 设成 1 才接受 `inject` 指令。
 pub const INJECT_SWITCH: &str = "HENJI_SCREEN_CAPTURE_INJECT";
 
@@ -130,6 +133,7 @@ impl Session {
             "width": opened.width, "height": opened.height, "fps": config.fps,
             "codec": config.codec.name(), "encoder": opened.encoder, "source": opened.source,
             "proxy": opened.proxy.map(|(width, height)| json!({"width": width, "height": height})),
+            "presentLeadUs": opened.present_lead_us,
             "files": {
                 "video": Paths::file_name(&paths.video),
                 "proxy": opened.proxy.map(|_| Paths::file_name(&paths.proxy)),
@@ -538,8 +542,7 @@ impl<P: Platform> Runner<P> {
                         if pause_open {
                             self.reply(&id, Err("INVALID_STATE|已经在暂停中".into()));
                         } else {
-                            // 未来的时刻不接受：状态已经是暂停，画面却还在录，会对不上。
-                            let at = at.unwrap_or(now).min(now);
+                            let at = at.unwrap_or(now).min(now + HOLD_AHEAD_LIMIT_US);
                             match &mut recording {
                                 Some(recording) => {
                                     recording.pacer.pause(at, Hold::User);
@@ -557,7 +560,7 @@ impl<P: Platform> Runner<P> {
                         if !pause_open {
                             self.reply(&id, Err("INVALID_STATE|不在暂停中，无法继续".into()));
                         } else {
-                            let at = at.unwrap_or(now).min(now);
+                            let at = at.unwrap_or(now).min(now + HOLD_AHEAD_LIMIT_US);
                             match &mut recording {
                                 Some(recording) => {
                                     recording.pacer.resume(at, Hold::User);
@@ -929,7 +932,7 @@ mod tests {
         }
         fn open(_: &CaptureConfig, video: &Path, _: &Path, inbox: Arc<Inbox<Arc<u32>>>, health: Arc<Health>) -> Result<Opened<Self>, String> {
             *INBOX.lock().unwrap() = Some((inbox, health));
-            Ok(Opened { capture: FakeCapture, writer: FakeWriter(video.to_path_buf()), width: 64, height: 36, encoder: "fake".into(), proxy: None, source: json!({}) })
+            Ok(Opened { capture: FakeCapture, writer: FakeWriter(video.to_path_buf()), width: 64, height: 36, encoder: "fake".into(), proxy: None, source: json!({}), present_lead_us: 0 })
         }
         fn foreground() -> Option<Foreground> {
             Some(Foreground { title: "测试".into(), process: "test.exe".into(), pid: 1 })

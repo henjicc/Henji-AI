@@ -7,6 +7,8 @@ param(
   [int]$Size = 400,
   [int]$Count = 40,
   [int]$IntervalMs = 300,
+  # 每次变色前先把鼠标移到色块里的另一个角，并记下移完的时刻（标定“光标位置进画面”的延迟用）。
+  [switch]$Cursor,
   [Parameter(Mandatory = $true)][string]$Out
 )
 
@@ -21,6 +23,8 @@ using System.Windows.Forms;
 
 public class FlashForm : Form {
     [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
+    [DllImport("user32.dll")] static extern bool SetCursorPos(int x, int y);
+    public static List<long> CursorTicks = new List<long>();
 
     protected override bool ShowWithoutActivation { get { return true; } }
     protected override CreateParams CreateParams {
@@ -32,7 +36,7 @@ public class FlashForm : Form {
         }
     }
 
-    public static long[] Run(int x, int y, int size, int count, int intervalMs) {
+    public static long[] Run(int x, int y, int size, int count, int intervalMs, bool cursor) {
         SetProcessDPIAware();
         FlashForm form = new FlashForm();
         form.FormBorderStyle = FormBorderStyle.None;
@@ -47,6 +51,10 @@ public class FlashForm : Form {
         Random random = new Random(7);
         List<long> ticks = new List<long>();
         for (int index = 0; index < count; index++) {
+            if (cursor) {
+                SetCursorPos(x + (index % 2 == 0 ? size - 60 : 60), y + size - 60);
+                CursorTicks.Add(Stopwatch.GetTimestamp());
+            }
             form.BackColor = index % 2 == 0 ? Color.White : Color.Black;
             // Refresh 同步重画：返回时新颜色已经画进窗口，合成器下一次合成就会带上。
             form.Refresh();
@@ -61,6 +69,6 @@ public class FlashForm : Form {
 }
 '@
 
-$ticks = [FlashForm]::Run($X, $Y, $Size, $Count, $IntervalMs)
-$result = @{ frequency = [System.Diagnostics.Stopwatch]::Frequency; ticks = $ticks }
+$ticks = [FlashForm]::Run($X, $Y, $Size, $Count, $IntervalMs, $Cursor.IsPresent)
+$result = @{ frequency = [System.Diagnostics.Stopwatch]::Frequency; ticks = $ticks; cursorTicks = [FlashForm]::CursorTicks.ToArray() }
 [System.IO.File]::WriteAllText($Out, ($result | ConvertTo-Json -Compress))

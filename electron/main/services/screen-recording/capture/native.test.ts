@@ -16,6 +16,8 @@ import { CELL, pausedRecording } from './native-timing.test-support'
 
 /** 时钟偏移：采集进程时钟 + 1000 = 主进程时钟。 */
 const OFFSET = 1000
+/** 帧的系统时刻比画面内容晚这么多（采集程序在准备时报的）。 */
+const LEAD = 20_000
 class FakeClient {
   requests: Array<{ type: string; payload: Record<string, unknown> }> = []
   listener: ((event: ScreenCaptureEvent) => void) | undefined
@@ -27,13 +29,15 @@ class FakeClient {
   async request(type: string, payload: Record<string, unknown> = {}): Promise<unknown> {
     this.requests.push({ type, payload })
     setTimeout(() => this.onRequest(type, payload))
-    if (type === 'prepare') return { sessionId: payload.sessionId, ...this.size, fps: 30, codec: 'h264', encoder: 'h264_nvenc', proxy: { width: 960, height: 540 }, files: this.result.files }
+    if (type === 'prepare') return { sessionId: payload.sessionId, ...this.size, fps: 30, codec: 'h264', encoder: 'h264_nvenc', proxy: { width: 960, height: 540 }, presentLeadUs: LEAD, files: this.result.files }
     if (type === 'stop') return this.result
     return {}
   }
   subscribe(_id: string, listener: (event: ScreenCaptureEvent) => void, lost: (loss: { code: string; message: string }) => void): () => void { this.listener = listener; this.lost = lost; return () => { this.listener = undefined } }
-  toMainUs(nativeUs: number): number { return nativeUs + OFFSET }
-  toNativeUs(mainUs: number): number { return mainUs - OFFSET }
+  /** 时钟校准的抖动：两次换算之间估出的偏移会差几毫秒。 */
+  drift = 0
+  toMainUs(nativeUs: number): number { return nativeUs + OFFSET + this.drift }
+  toNativeUs(mainUs: number): number { return mainUs - OFFSET - this.drift }
   setActive = this.active
   emit(event: Record<string, unknown>): void { this.listener?.({ sessionId: 's', ...event } as ScreenCaptureEvent) }
 }
@@ -55,33 +59,41 @@ beforeEach(async () => {
 })
 afterEach(async () => { await fs.rm(directory, { recursive: true, force: true }) })
 
-it('一次录制一个画面分片：文件名与分片一致，起点是网格起点；继续后事件时钟按跳过的格数接着走；停止按时刻表把起点改到第 0 帧上屏的时刻', async () => {
+it('一次录制一个画面分片：文件名与分片一致；起点、暂停、继续都记画面内容的时刻（采集进程按格给的时刻减去上屏提前量）；停止按时刻表把起点定准', async () => {
   const capture = backend()
   await capture.prepare()
   expect(client.requests[0]).toMatchObject({ type: 'prepare', payload: { name: 'screen-000000', directory, source: { kind: 'display', point: [960, 540] }, fps: 30, codec: 'h264', proxy: { height: 540 } } })
   await capture.start(signal)
-  expect(storage.manifest.spans).toEqual([expect.objectContaining({ index: 0, file: 'screen-000000.mp4', monoUs: 10_000_000 + OFFSET - 1_000_000, finalized: false })])
+  expect(storage.manifest.spans).toEqual([expect.objectContaining({ index: 0, file: 'screen-000000.mp4', monoUs: 10_000_000 + OFFSET - LEAD - 1_000_000, finalized: false })])
   expect(storage.manifest.encoding).toEqual({ codec: 'h264', encoder: 'h264_nvenc', softwareFallback: false })
-  expect(capture.capturingSinceUs()).toBe(10_000_000 + OFFSET)
+  expect(capture.capturingSinceUs()).toBe(10_000_000 + OFFSET - LEAD)
 
   // 按下暂停在 13 秒（主进程时钟）；网格从第 90 格暂停，第 150 格继续。
-  capture.pressed(13_000_000)
-  now = 13_000_500
   client.onRequest = type => {
     if (type === 'pause') client.emit({ event: 'paused', atUs: 10_000_000 + 90 * CELL, cell: 90, frame: 90, reason: 'user' })
     if (type === 'resume') client.emit({ event: 'resumed', atUs: 10_000_000 + 150 * CELL, cell: 150, frame: 90 })
   }
-  await capture.pause(signal)
-  expect(client.requests.at(-1)).toEqual({ type: 'pause', payload: expect.objectContaining({ atUs: 13_000_000 - OFFSET }) })
+  // 要内容切在按下那一刻，采集进程该切的帧时刻晚一个提前量；返回的是它真正切下的那一格，不是按下的时刻。
+  await expect(capture.hold(13_000_000)).resolves.toBeCloseTo(10_000_000 + 90 * CELL + OFFSET - LEAD, 0)
+  expect(client.requests.at(-1)).toEqual({ type: 'pause', payload: expect.objectContaining({ atUs: 13_000_000 + LEAD - OFFSET }) })
   expect(capture.capturingSinceUs()).toBeUndefined()
+  now = 13_400_000
+  await capture.pause(signal)
+  expect(client.requests.filter(request => request.type === 'pause')).toHaveLength(1)
   now = 15_100_000
-  await capture.resume(signal)
-  expect(capture.capturingSinceUs()).toBeCloseTo(13_000_000 + 60 * CELL, 0)
+  // 暂停期间时钟校准变了 7 毫秒：继续的时刻按两格之差接着走，暂停长度仍是整 60 格，不跟着偏。
+  client.drift = 7000
+  // 事件采集先要画面续上、各路一起续的那条路同时也来调：只向采集进程发一次。
+  const [since] = await Promise.all([capture.unhold(), capture.resume(signal)])
+  expect(since).toBeCloseTo(10_000_000 + 150 * CELL + OFFSET - LEAD, 0)
+  expect(client.requests.filter(request => request.type === 'resume')).toEqual([{ type: 'resume', payload: expect.objectContaining({ atUs: 15_100_000 + LEAD - OFFSET - 7000 }) }])
+  expect(capture.capturingSinceUs()).toBeCloseTo(10_000_000 + 150 * CELL + OFFSET - LEAD, 0)
+  client.drift = 0
 
   await fs.writeFile(path.join(directory, 'screen-000000.frames'), pausedRecording())
   await capture.stop(signal)
   // 时刻表里每帧比格晚 5 毫秒上屏：起点往后挪 5 毫秒；时长是文件时间轴的 180 帧。
-  expect(storage.manifest.spans[0]).toMatchObject({ monoUs: 10_000_000 + 5000 + OFFSET - 1_000_000, durationUs: 6_000_000, finalized: true })
+  expect(storage.manifest.spans[0]).toMatchObject({ monoUs: 10_000_000 + 5000 + OFFSET - LEAD - 1_000_000, durationUs: 6_000_000, finalized: true })
   // 原生同时录的代理按原片登记给剪辑（尺寸是剪辑 auto 档）。
   expect(deps.adoptProxy).toHaveBeenCalledWith(path.join(directory, 'screen-000000.mp4'), path.join(directory, 'screen-000000.proxy.mp4'), { width: 960, height: 540 })
   expect(capture.stats()).toEqual({ restarts: 0, droppedFrames: 1, duplicatedFrames: 0, encoder: 'h264_nvenc' })
@@ -89,10 +101,10 @@ it('一次录制一个画面分片：文件名与分片一致，起点是网格�
   expect(client.requests.filter(request => request.type === 'stop')).toHaveLength(1)
 })
 
-it('暂停与继续落在同一格里（原生不发这两个事件）：事件时钟不扣时间', async () => {
+it('采集进程没报出暂停与继续生效的那一格：暂停记在按下的时刻，事件时钟不扣时间', async () => {
   const capture = backend()
   await capture.prepare(); await capture.start(signal)
-  capture.pressed(13_000_000); await capture.pause(signal)
+  await expect(capture.hold(13_000_000)).resolves.toBe(13_000_000)
   now = 13_010_000
   await capture.resume(signal)
   expect(capture.capturingSinceUs()).toBe(13_000_000)

@@ -52,6 +52,9 @@ pub struct Opened<P: Platform> {
     pub proxy: Option<(u32, u32)>,
     /// 实际采集的来源（写进清单，供主进程核对）。
     pub source: Value,
+    /// 来源帧的系统时刻比画面内容早定下的那一刻晚多少微秒：合成器先取好光标位置与各窗口内容，过这么久这一帧才上屏。
+    /// 鼠标键盘事件对到画面、暂停与继续切在哪一格，都要按它换算；拿不准时为 0。
+    pub present_lead_us: i64,
 }
 
 #[derive(Debug, Default, Clone, Copy)]
