@@ -187,13 +187,13 @@ function ProjectRecordingSettings({ setup, sourceName, recording, selected, onRe
       </UiGroup>
     </div>
     {selected && <UiGroup title="这一段" titleTone="compact" labelWidth={72} divided>
-      <UiFormRow label="名称" density="compact"><SegmentName key={selected.id} name={selected.name} onCommit={value => onRename(selected.id, value)} /></UiFormRow>
+      <UiFormRow label="名称" density="compact"><SegmentName key={selected.id} name={selected.name} disabled={recording} onCommit={value => onRename(selected.id, value)} /></UiFormRow>
       <UiFormRow label="时长" density="compact"><span className={`text-xs text-text2 ${UI_TEXT_TIMECODE_CLASS}`}>{selected.duration}</span></UiFormRow>
     </UiGroup>}
   </>
 }
 /** 名称输入：回车或离开时提交，Esc 放弃；块上双击改名走同一份操作。 */
-function SegmentName({ name, onCommit }: { name: string; onCommit: (name: string) => void }): React.ReactElement {
+function SegmentName({ name, disabled, onCommit }: { name: string; disabled: boolean; onCommit: (name: string) => void }): React.ReactElement {
   const [draft, setDraft] = useState(name)
   const cancelled = useRef(false)
   useEffect(() => setDraft(name), [name])
@@ -202,7 +202,7 @@ function SegmentName({ name, onCommit }: { name: string; onCommit: (name: string
     if (!cancelled.current && next && next !== name) onCommit(next); else setDraft(name)
     cancelled.current = false
   }
-  return <UiInput size="sm" aria-label="这一段的名称" value={draft} onChange={event => setDraft(event.target.value)} onBlur={commit}
+  return <UiInput size="sm" aria-label="这一段的名称" disabled={disabled} value={draft} onChange={event => setDraft(event.target.value)} onBlur={commit}
     onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); else if (event.key === 'Escape') { cancelled.current = true; event.currentTarget.blur() } }} />
 }
 

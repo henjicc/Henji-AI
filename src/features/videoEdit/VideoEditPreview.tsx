@@ -224,7 +224,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true, chrome = '
     setVideoEditPlaybackLevels(instance.document.id, 'program', levelsRef.current)
   }, [instance.document.id])
   // 节目画面不再分“选择 / 移动画面”模式（重要记录 019）：命令带选着选择工具时，直接拖画面移动选中的片段。
-  const selecting = instance.tool === 'select'
+  // 只要画面（录制样子）时画面只用来看：不在画面上选中、拖动、编辑，也不接收拖进来的素材，改动都走那一屏自己的操作。
+  const selecting = chrome === 'monitor' && instance.tool === 'select'
   const picture = useVideoEditPictureGesture(instance, visible && selecting, onError)
   const motionGesture = useVideoEditMotionGesture(instance, onError)
   const temporaryMotionMode = useRef<'navigate' | 'demonstrate'>()
@@ -1082,7 +1083,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true, chrome = '
     <div className="relative flex min-h-0 flex-1">
     <div ref={zoom.containerRef} {...zoom.containerProps} className={`relative flex min-h-0 flex-1 bg-media p-3 ${zoom.containerClass}`}
       onDragOver={event => {
-        if (!acceptsVideoEditDrop(event.dataTransfer)) return
+        if (chrome === 'picture' || !acceptsVideoEditDrop(event.dataTransfer)) return
         const mode = programDropZoneAt(event)
         const sequence = instance.document.sequences.find(item => item.id === instance.activeSequenceId)
         const replaceable = Boolean(sequence && findVideoEditReplaceTarget(sequence, instance.frame, instance.targetTrackIds))
@@ -1097,7 +1098,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true, chrome = '
       onDragLeave={event => { if (!isDomNode(event.relatedTarget) || !event.currentTarget.contains(event.relatedTarget)) setDropZone(null) }}
       onDrop={event => {
         setDropZone(null)
-        if (!acceptsVideoEditDrop(event.dataTransfer)) return
+        if (chrome === 'picture' || !acceptsVideoEditDrop(event.dataTransfer)) return
         event.preventDefault(); event.stopPropagation()
         const mode = programDropZoneAt(event)
         try { void dropVideoEditInput(instance.document.id, readVideoEditDrop(event.dataTransfer), { frame: instance.frame, mode }).catch(onError) } catch (error) { onError(error) }
@@ -1111,7 +1112,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true, chrome = '
           onPointerDown={event => { if (videoMotionState(instance)?.status === 'recording') motionGesture.down(event); else if (selecting) picture.down(event) }} onPointerMove={event => { motionGesture.move(event); picture.move(event) }}
           onPointerCancel={() => { motionGesture.cancel(); picture.cancel() }} onLostPointerCapture={() => { motionGesture.cancel(); picture.cancel() }} onPointerUp={event => { motionGesture.up(event); if (selecting) picture.up(event) }} />
         <VideoEditMotionOverlay owner={instance} />
-        {!motionRecording && <><VideoEditMaskOverlay instance={instance} onError={onError} />
+        {!motionRecording && chrome === 'monitor' && <><VideoEditMaskOverlay instance={instance} onError={onError} />
         <VideoEditTrackingOverlay instance={instance} onError={onError} />
         <VideoEditTextOverlay instance={instance} onError={onError} enabled={visible} />
         <VideoEditAnnotationOverlay instance={instance} active={visible && instance.tool === 'annotate'} onError={onError} />

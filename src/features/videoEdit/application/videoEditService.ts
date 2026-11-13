@@ -114,7 +114,9 @@ export function holdVideoEditActivity(id: string, label: string): () => void {
   const owner = requireVideoEditInstance(id); assertVideoEditWritable(owner)
   const values = activities.get(owner) ?? new Set<string>(); const token = `${label}:${crypto.randomUUID()}`
   values.add(token); activities.set(owner, values)
-  return () => { values.delete(token) }
+  // 界面按长任务决定哪些操作可用（录屏写进这份剪辑期间不能撤销、不能改时间线）：开始与结束都要通知，否则按钮停在旧状态。
+  publishVideoEdit()
+  return () => { if (values.delete(token)) publishVideoEdit() }
 }
 /** 正在进行的长任务名称（录屏、导出排队、转录、同步多机位等），只读；后台预渲染据此让开。 */
 export function listVideoEditActivities(owner: VideoEditInstance): string[] {
@@ -801,6 +803,7 @@ export function undoVideoEditWorkspace(id: string, redo = false): void {
   assertApplicationWritesAllowed()
   const instance = requireVideoEditInstance(id)
   assertVideoEditWritable(instance)
+  if (instance.layout === 'record' && videoEditRecordingInProgress(instance)) throw new Error(redo ? '正在录制，停止后再重做。' : '正在录制，停止后再撤销。')
   if (!gestures.has(instance) && undoVideoEditLibraryBefore(nextHistoryOrder(instance, redo), redo)) return
   undoVideoEdit(id, redo)
 }
@@ -808,6 +811,8 @@ export function undoVideoEdit(id: string, redo = false): void {
   assertApplicationWritesAllowed()
   const instance = requireVideoEditInstance(id)
   assertVideoEditWritable(instance)
+  // 录制样子里边录边剪：撤销会把上一段连同素材撤掉，新的一段还要按录屏轨落点放进来，录完再撤。
+  if (instance.layout === 'record' && videoEditRecordingInProgress(instance)) throw new Error(redo ? '正在录制，停止后再重做。' : '正在录制，停止后再撤销。')
   if (gestures.has(instance)) { cancelVideoEditGesture(instance); return }
   const order = nextHistoryOrder(instance, redo)
   const target = redo ? instance.future.shift() : instance.past.pop()

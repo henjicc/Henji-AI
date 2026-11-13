@@ -6,7 +6,8 @@ import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { videoEditEdgeTracks, videoEditTrackCodes } from '@/core/videoEdit/tracks'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { closeAllVideoEdits, openSeededVideoEdit } from '@/features/videoEdit/application/videoEditDocumentTestKit'
-import { editVideoProject, undoVideoEdit } from '@/features/videoEdit/application/videoEditService'
+import { editVideoProject, holdVideoEditActivity, setVideoEditLayout, undoVideoEdit, videoEditRevision } from '@/features/videoEdit/application/videoEditService'
+import { videoEditRecordLayoutCommand } from '@/features/videoEdit/application/videoEditRecordLayoutCommands'
 import { placeRecordingMedia } from './recordingVideoImport'
 import { settleVideoEditRecordingTake, videoEditRecordingTarget } from '@/core/videoEdit/recordingLane'
 
@@ -101,4 +102,24 @@ it('放在录屏轨上：新的一段沿用录屏轨已有的轨道，从指针�
   const spans = (track: number) => sequence.clips.filter(clip => clip.track === track).sort((a, b) => a.start - b.start).map(clip => [clip.start, clip.start + clip.duration])
   expect(spans(1)).toEqual([[0, 30], [30, 90]])
   expect(spans(0)).toEqual([[0, 30], [30, 90]])
+})
+
+it('录制样子里录屏写进这份剪辑期间：撤销、重做都拒绝，上一段留着；开始与结束都通知界面刷新可用状态', async () => {
+  const { document, recording } = fixture()
+  const owner = await openSeededVideoEdit(document)
+  editVideoProject(document.id, current => place(current, recording))
+  const placed = structuredClone(owner.document.sequences)
+  setVideoEditLayout(document.id, 'record')
+  const revision = videoEditRevision()
+  const release = holdVideoEditActivity(document.id, '屏幕录制')
+  expect(videoEditRevision()).toBeGreaterThan(revision)
+  expect(videoEditRecordLayoutCommand(owner, 'undo')).toMatchObject({ kind: 'blocked' })
+  expect(() => undoVideoEdit(document.id)).toThrow('正在录制')
+  expect(() => undoVideoEdit(document.id, true)).toThrow('正在录制')
+  expect(owner.document.sequences).toEqual(placed)
+  const stopped = videoEditRevision()
+  release()
+  expect(videoEditRevision()).toBeGreaterThan(stopped)
+  undoVideoEdit(document.id)
+  expect(owner.document.sequences).not.toEqual(placed)
 })

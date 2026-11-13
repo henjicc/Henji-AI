@@ -14,7 +14,7 @@ import { VideoEditTimecode, VideoEditTimelinePlayheadHead } from '../timeline/Vi
 import { timelineCommandPresentation } from '../timeline/timelineCommandPresentation'
 import { captureVideoEditCommandContext, executeVideoEditCommand } from '../application/videoEditCommands'
 import { useVideoEditViewSelector, sameVideoEditViewFields } from '../application/useVideoEditViewSelector'
-import { getActiveVideoEditSequence, setVideoEditView, videoEditRevision, type VideoEditInstance } from '../application/videoEditService'
+import { getActiveVideoEditSequence, setVideoEditView, videoEditRecordingInProgress, videoEditRevision, type VideoEditInstance } from '../application/videoEditService'
 import { beginVideoEditTimelineDrag, previewVideoEditTimelineTrim } from '../application/videoEditTimeline'
 import { deleteVideoEditRecordingBlock, finishVideoEditRecordingTrim, renameVideoEditRecordingBlock, selectVideoEditRecordingBlock, splitVideoEditRecordingAtPlayhead } from '../application/videoEditRecordingLane'
 import { recordingTimeLabel } from '@/features/screenRecording'
@@ -38,7 +38,8 @@ export function ProjectRecordingLane({ instance, take, coverHint, onError }: { i
   const sequence = preview ?? committed
   const fps = committed.fps
   const lane = videoEditRecordingLane({ ...sequence, items: committed.items, media: committed.media })
-  const recording = Boolean(take)
+  // 助手或快捷键在别处开始的录制也算：录屏写进这份剪辑期间录屏轨不接受编辑。
+  const recording = Boolean(take) || videoEditRecordingInProgress(instance)
   const host = useRef<HTMLDivElement>(null)
   const [viewport, setViewport] = useState(0)
   useEffect(() => {
@@ -179,7 +180,7 @@ export function ProjectRecordingLane({ instance, take, coverHint, onError }: { i
         <div className="relative h-7 border-b border-line" aria-hidden="true" data-recording-ruler>
           {ticks.map(tick => <span key={tick.seconds} className={`absolute bottom-0 w-px ${tick.major ? 'h-2.5 bg-line-strong' : 'h-1 bg-line'}`} style={{ left: RECORDING_LANE_LEFT + tick.seconds * secondPixels }} />)}
           {ticks.filter(tick => tick.major).map(tick => <span key={`label-${tick.seconds}`} className={`absolute bottom-0.5 text-2xs leading-4 text-text3 ${UI_TEXT_NUMERIC_CLASS}`} style={{ left: RECORDING_LANE_LEFT + tick.seconds * secondPixels + 4 }}>{recordingTimeLabel(tick.seconds * 1000).replace(/^00:/, '')}</span>)}
-          {!take && <div className="absolute inset-y-0 z-raised" style={{ left: RECORDING_LANE_LEFT }}><VideoEditTimelinePlayheadHead instance={instance} pixels={pixels} /></div>}
+          {!recording && <div className="absolute inset-y-0 z-raised" style={{ left: RECORDING_LANE_LEFT }}><VideoEditTimelinePlayheadHead instance={instance} pixels={pixels} /></div>}
         </div>
         <div className="relative bg-gap" style={{ height: RECORDING_LANE_HEIGHT }} data-recording-track>
           {lane.blocks.map(renderBlock)}
@@ -193,7 +194,8 @@ export function ProjectRecordingLane({ instance, take, coverHint, onError }: { i
             <span className="absolute inset-y-0 right-0 w-0.5 bg-danger-solid" aria-hidden="true" />
           </div>}
         </div>
-        <LanePlayhead instance={instance} left={frame => x(take ? take.frame + take.frames : frame)} />
+        {/* 录制中不画指针：正在录的那一块右缘的红线就是现在的位置 */}
+        {!recording && <LanePlayhead instance={instance} left={x} />}
       </div>
     </div>
     <UiToolbar variant="footer" aria-label="录屏轨缩放" tools={[
