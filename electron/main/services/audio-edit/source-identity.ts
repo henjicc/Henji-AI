@@ -3,6 +3,7 @@ import { createReadStream } from 'node:fs'
 import fs from 'node:fs/promises'
 import type { AudioEditSourceFingerprint, AudioEditSourceIdentity, AudioEditSourceMetadata } from '../../../../src/core/audioEdit/types'
 import { createMainLogger } from '../logging'
+import { openF32Wav } from './pcm-wav'
 
 /*
  * 口播素材的身份。
@@ -118,6 +119,30 @@ async function unrecordedFingerprint(file: string, stat: { size: number; mtimeMs
   unrecorded.set(file, fingerprint)
   while (unrecorded.size > 64) unrecorded.delete(unrecorded.keys().next().value as string)
   return fingerprint
+}
+
+const SEGMENT_TAG = 'henji-audio-segment-v1'
+const SEGMENT_CHUNK_FRAMES = 1 << 16
+
+/**
+ * 一段声音本身的摘要：SHA-256（版本标签、采样率、声道、帧数、这段浮点样本的字节），与它在素材里的位置无关。
+ * 插入段在之后的拼接里按字节原样复制，前面再插入别的声音、位置平移，摘要都不变；被覆盖或剪短了才变。
+ * 素材不是浮点 WAV（拼接结果总是浮点 WAV，罕见）时返回 undefined，由调用方退回按素材与区间区分。
+ */
+export async function audioEditSegmentDigest(source: Pick<AudioEditSourceMetadata, 'audioPath' | 'sampleRate' | 'channels'>, range: { startFrame: number; endFrame: number }, signal?: AbortSignal): Promise<string | undefined> {
+  const reader = await openF32Wav(source.audioPath)
+  if (!reader) return undefined
+  try {
+    if (reader.sampleRate !== source.sampleRate || reader.channels !== source.channels || range.endFrame > reader.frames) return undefined
+    const frames = range.endFrame - range.startFrame
+    const hash = crypto.createHash('sha256').update(`${SEGMENT_TAG}\0`).update(u64(reader.sampleRate)).update(u64(reader.channels)).update(u64(frames))
+    for (let at = range.startFrame; at < range.endFrame; at += SEGMENT_CHUNK_FRAMES) {
+      signal?.throwIfAborted()
+      const pcm = await reader.read(at, Math.min(SEGMENT_CHUNK_FRAMES, range.endFrame - at))
+      hash.update(new Uint8Array(pcm.buffer, pcm.byteOffset, pcm.byteLength))
+    }
+    return hash.digest('hex')
+  } finally { await reader.close() }
 }
 
 /**

@@ -1,7 +1,15 @@
-import { beforeEach, expect, it, vi } from 'vitest'
+import fs from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
+import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest'
 import { createAudioEditDocumentContent } from '../../../../src/core/audioEdit/documentContent'
 import type { AudioEditStoredTask } from './task-store'
 import { listAudioEditTaskStatuses, preflightAudioEditTranscription, transcribeAudioEditProject } from './asr'
+import { createF32WavWriter } from './pcm-wav'
+
+let wavDirectory = ''
+beforeAll(async () => { wavDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-asr-fill-')) })
+afterAll(async () => { await fs.rm(wavDirectory, { recursive: true, force: true }) })
 
 const mock = vi.hoisted(() => ({ project: vi.fn(), verify: vi.fn(), prepareAudio: vi.fn(), preflight: vi.fn(), execute: vi.fn(),
   task: undefined as AudioEditStoredTask | undefined, active: false, stale: false, clock: 0, controllers: new Map<string, AbortController>(),
@@ -253,13 +261,25 @@ it('任务列表给出最近一次转写能否再发起，与提交时的拒绝�
   expect(await resubmission()).toBe('completed')
 })
 
+const word = (id: string, text: string, startFrame: number, endFrame: number) => ({ id, text, startFrame, endFrame, included: true, locked: false, granularity: 'word' as const })
+const pending = (id: string, startFrame: number, endFrame: number) => ({ id, text: '（需要重新转写）', startFrame, endFrame, included: true, locked: false, granularity: 'segment' as const, confidence: 0 })
+const fillOutput = { unit: 'ms', granularity: 'character', text: '补录', words: [], segments: [{ text: '补录', startMs: 0, endMs: 800, granularity: 'segment', timing: 'coarse', words: [
+  { text: '补', startMs: 0, endMs: 400, granularity: 'character', timing: 'precise' }, { text: '录', startMs: 400, endMs: 800, granularity: 'character', timing: 'precise' }] }] }
+/** 写一份应用拼接结果同规格的浮点 WAV（1 kHz 单声道），样本按 value(帧) 生成 */
+async function writeWav(name: string, frames: number, value: (frame: number) => number): Promise<string> {
+  const file = path.join(wavDirectory, name)
+  const writer = await createF32WavWriter(file, 1000, 1, frames)
+  await writer.write(Float32Array.from({ length: frames }, (_, frame) => value(frame)))
+  await writer.close()
+  return file
+}
+
 it('已有转写时只补转写插入段：按段截副本、只对这段估价计费，结果换掉占位；已付费的段重试不再提交', async () => {
-  const word = (id: string, text: string, startFrame: number, endFrame: number) => ({ id, text, startFrame, endFrame, included: true, locked: false, granularity: 'word' as const })
-  const placeholder = { id: 'recording-3-1000-0', text: '（需要重新转写）', startFrame: 1000, endFrame: 1800, included: true, locked: false, granularity: 'segment' as const, confidence: 0 }
+  const placeholder = pending('recording-3-1000-0', 1000, 1800)
   const base = await mock.project()
-  mock.project.mockResolvedValue({ ...base, selectedAsrModelId: 'fixture-asr', transcript: [word('transcript-0', '前面', 0, 1000), placeholder, word('transcript-1', '后面', 1800, 2400)] })
-  mock.execute.mockResolvedValue({ unit: 'ms', granularity: 'character', text: '补录', words: [], segments: [{ text: '补录', startMs: 0, endMs: 800, granularity: 'segment', timing: 'coarse', words: [
-    { text: '补', startMs: 0, endMs: 400, granularity: 'character', timing: 'precise' }, { text: '录', startMs: 400, endMs: 800, granularity: 'character', timing: 'precise' }] }] })
+  const voice = await writeWav('voice.wav', 2400, frame => Math.sin(frame / 7))
+  mock.project.mockResolvedValue({ ...base, source: { ...source, audioPath: voice }, selectedAsrModelId: 'fixture-asr', transcript: [word('transcript-0', '前面', 0, 1000), placeholder, word('transcript-1', '后面', 1800, 2400)] })
+  mock.execute.mockResolvedValue(fillOutput)
   const preflight = () => preflightAudioEditTranscription({ sourcePath: source.sourcePath, durationMs: 2400, audioDocumentId: 'audio' })
   expect(await preflight()).toMatchObject({ requiresConfirmation: true })
   // 只按插入段的 0.8 秒检查上传上限与估价，不是整份 2.4 秒
@@ -279,4 +299,38 @@ it('已有转写时只补转写插入段：按段截副本、只对这段估价�
   // 没有插入段的已有转写照旧拒绝
   mock.project.mockResolvedValue({ ...base, transcript: [word('transcript-0', '前面', 0, 2400)] })
   await expect(transcribeAudioEditProject({ ...request, requestId: 'again' })).rejects.toThrow('口播已有转写')
+})
+
+it('插入段付费拿到结果却没落进文档，之后前面又插入一段：原段按声音认出、不再计费，回执按相对时间放到平移后的位置', async () => {
+  const base = await mock.project()
+  const inserted = (frame: number): number => Math.sin(frame / 7) + 0.25
+  // 第一次：[0,1000) 原话，[1000,1800) 插入段，[1800,2400) 原话
+  const first = await writeWav('first.wav', 2400, frame => frame >= 1000 && frame < 1800 ? inserted(frame - 1000) : 0.01)
+  mock.project.mockResolvedValue({ ...base, source: { ...source, sourcePath: first, audioPath: first, identity: { size: 1, mtimeMs: 1, digest: 'first' } }, selectedAsrModelId: 'fixture-asr',
+    transcript: [word('transcript-0', '前面', 0, 1000), pending('recording-3-1000-0', 1000, 1800), word('transcript-1', '后面', 1800, 2400)] })
+  mock.execute.mockResolvedValue(fillOutput)
+  await transcribeAudioEditProject(request)
+  expect(mock.execute).toHaveBeenCalledTimes(1)
+  // 结果没送到界面；接着在开头插入 500 帧另一段声音：整份素材换了，原插入段平移到 [1500,2300)
+  const second = await writeWav('second.wav', 2900, frame => frame < 500 ? Math.cos(frame / 5) : frame >= 1500 && frame < 2300 ? inserted(frame - 1500) : 0.01)
+  mock.project.mockResolvedValue({ ...base, source: { ...source, sourcePath: second, audioPath: second, durationFrames: 2900, identity: { size: 2, mtimeMs: 2, digest: 'second' } }, selectedAsrModelId: 'fixture-asr',
+    transcript: [pending('recording-4-0-0', 0, 500), word('transcript-0', '前面', 500, 1500), pending('recording-3-1000-0', 1500, 2300), word('transcript-1', '后面', 2300, 2900)] })
+  mock.execute.mockResolvedValue({ ...fillOutput, segments: [{ ...fillOutput.segments[0], endMs: 500, words: [{ ...fillOutput.segments[0].words[0], endMs: 500 }] }] })
+  // 只对新插入的 0.5 秒估价
+  const prepared = await preflightAudioEditTranscription({ sourcePath: second, durationMs: 2900, audioDocumentId: 'audio' })
+  expect(prepared.requiresConfirmation).toBe(true)
+  expect(mock.preflight.mock.calls.at(-1)?.[0]).toMatchObject({ durationMs: 500 })
+  const result = await transcribeAudioEditProject({ ...request, requestId: 'after-insert' })
+  // 只为新插入的那段付费一次，原段取回回执
+  expect(mock.execute).toHaveBeenCalledTimes(2)
+  expect(mock.prepareAudio.mock.calls.at(-1)?.[3]).toMatchObject({ startFrame: 0, endFrame: 500 })
+  expect(result.project.transcript.map(block => [block.id, block.text, block.startFrame, block.endFrame])).toEqual([
+    ['recording-4-0-0:0', '补', 0, 500], ['transcript-0', '前面', 500, 1500],
+    ['recording-3-1000-0:0', '补', 1500, 1900], ['recording-3-1000-0:1', '录', 1900, 2300], ['transcript-1', '后面', 2300, 2900]])
+  // 原段被覆盖掉一部分（声音变了）就是另一段，不复用旧回执
+  const changed = await writeWav('changed.wav', 2900, frame => frame >= 1500 && frame < 2300 ? inserted(frame - 1500) * (frame < 1600 ? 0.5 : 1) : 0.01)
+  mock.project.mockResolvedValue({ ...base, source: { ...source, sourcePath: changed, audioPath: changed, durationFrames: 2900, identity: { size: 3, mtimeMs: 3, digest: 'changed' } }, selectedAsrModelId: 'fixture-asr',
+    transcript: [word('transcript-0', '前面', 0, 1500), pending('recording-3-1000-0', 1500, 2300), word('transcript-1', '后面', 2300, 2900)] })
+  await transcribeAudioEditProject({ ...request, requestId: 'overwritten' })
+  expect(mock.execute).toHaveBeenCalledTimes(3)
 })

@@ -19,7 +19,7 @@ import { requireAudioEditProject } from './project-store'
 import { assertAudioEditProjectIdle, claimAudioEditTask, findAudioEditTranscription, isAudioEditTaskActive, isAudioEditTaskRunningHere, listAudioEditTasks, settleStaleAudioEditTask, updateOwnedAudioEditTask, registerAudioEditTaskController, type AudioEditStoredTask } from './task-store'
 import type { AudioEditTaskStatus, AudioEditTranscriptionResubmission } from '../../../../src/core/application-control/domains/audioEdit/audioEditTaskStatus'
 import { prepareAudioEditTranscriptionAudio, verifyAudioEditSource } from './media'
-import { audioEditSourceReceiptDigest } from './source-identity'
+import { audioEditSegmentDigest, audioEditSourceReceiptDigest } from './source-identity'
 
 const logger = createMainLogger('main.audio_edit.asr')
 const UNCONFIRMED_SUBMISSION = '上次转写在交给识别服务时中断，无法确认是否已经计费，已阻止重复付费。需要重新识别时，请用同一素材新建口播。'
@@ -31,21 +31,33 @@ interface TranscriptionReceipt<T = AudioEditTranscriptionResult> extends Timesta
   output?: T
 }
 
-/** 补转写一段插入的声音所得：词块已换算到口播原素材的采样帧。 */
+/**
+ * 补转写一段插入的声音所得：词块的帧相对这段声音的开头。回执按声音内容登记，同一段声音之后可能落在别的位置，
+ * 交回时再按当时占位的起点与编号换算。
+ */
 interface FillOutput { modelId: string; transcript: AudioEditTranscriptBlock[] }
 
 const FULL_KIND = 'transcription'
-interface FillSegment { block: AudioEditTranscriptBlock; kind: string; durationMs: number }
+/** digest 是这段声音的回执身份（回执里的 sourceDigest），kind 由它派生。 */
+interface FillSegment { block: AudioEditTranscriptBlock; kind: string; digest: string; durationMs: number }
 
 /**
- * 插入段还没有转写：每段单独截一份转写副本、单独登记一条任务。kind 由素材摘要与区间决定，
- * 同一段重试时认领、执行者令牌、续查与防重复计费都与整份转写同一套；素材或区间变了就是另一段。
+ * 插入段还没有转写：每段单独截一份转写副本、单独登记一条任务。kind 按这段声音本身的内容（采样摘要）决定，
+ * 与它在口播里的位置、整份素材的摘要无关：付费拿到结果却没落进文档时，之后再插入别的声音、这段位置平移，
+ * 仍认得出是同一段，只取回回执不再计费。同一段重试时认领、执行者令牌、续查与防重复计费都与整份转写同一套。
  */
-function fillSegments(project: AudioEditProjectDocument): FillSegment[] {
+async function fillSegments(project: AudioEditProjectDocument, signal?: AbortSignal): Promise<FillSegment[]> {
   const sourceDigest = audioEditSourceReceiptDigest(project.source)
-  return audioEditUntranscribedBlocks(project).map(block => ({ block,
-    kind: `transcription_fill:${crypto.createHash('sha256').update(`${sourceDigest}:${block.startFrame}:${block.endFrame}`).digest('hex').slice(0, 32)}`,
-    durationMs: (block.endFrame - block.startFrame) * 1_000 / project.source.sampleRate }))
+  const segments: FillSegment[] = []
+  for (const block of audioEditUntranscribedBlocks(project)) {
+    const content = await audioEditSegmentDigest(project.source, block, signal)
+    // 两种写法都带前缀：早先按 sha256(素材摘要:起点:终点) 登记的回执存的是绝对帧，不能按相对帧取回，键不能与它们重合
+    const digest = content ? `segment:${content}` : `range:${sourceDigest}:${block.startFrame}:${block.endFrame}`
+    segments.push({ block, digest,
+      kind: `transcription_fill:${crypto.createHash('sha256').update(digest).digest('hex').slice(0, 32)}`,
+      durationMs: (block.endFrame - block.startFrame) * 1_000 / project.source.sampleRate })
+  }
+  return segments
 }
 
 export const listAudioEditAsrModels = timestampedAsrService.listModels
@@ -133,8 +145,10 @@ export async function preflightAudioEditTranscription(input: TranscriptionPrefli
     await verifyAudioEditSource(project)
     const sourceDigest = audioEditSourceReceiptDigest(project.source)
     if (project.transcript.length) {
-      // 已有转写：只看还没转写的插入段，已付过费（拿到结果或能续查）的不再计费，只按其余各段的时长估价
-      const unpaid = fillSegments(project).filter(segment => !reusablePriorTranscription(latestSettledTranscription(project.id, undefined, segment.kind), sourceDigest, project.source.sourcePath, segment.durationMs))
+      // 已有转写：只看还没转写的插入段，已付过费（拿到结果或能续查）的不再计费，只按其余各段的时长估价；
+      // 内容相同的几段（同一段声音插了几处）只识别一次
+      const segments = [...new Map((await fillSegments(project)).map(segment => [segment.kind, segment])).values()]
+      const unpaid = segments.filter(segment => !reusablePriorTranscription(latestSettledTranscription(project.id, undefined, segment.kind), segment.digest, project.source.sourcePath, segment.durationMs))
       const modelId = fillModelId(project, input.modelId)
       if (!unpaid.length) return { ...(modelId ? { modelId } : {}), requiresConfirmation: false }
       // 上传上限按最长的一段检查：每段是单独一次识别
@@ -164,10 +178,9 @@ async function transcribeRegisteredProject(request: AudioEditTranscriptionReques
   try {
     const project = await requireAudioEditProject(request.projectId)
     if (project.transcript.length) {
-      const segments = fillSegments(project)
-      if (!segments.length) throw new Error('口播已有转写，请保留当前编辑；需要重新识别时另建口播。')
+      if (!audioEditUntranscribedBlocks(project).length) throw new Error('口播已有转写，请保留当前编辑；需要重新识别时另建口播。')
       await verifyAudioEditSource(project, controller.signal)
-      return await fillUntranscribedSegments(project, segments, request, controller, facts)
+      return await fillUntranscribedSegments(project, await fillSegments(project, controller.signal), request, controller, facts)
     }
     await verifyAudioEditSource(project, controller.signal)
     return await runPaidTranscription<AudioEditTranscriptionResult>({
@@ -211,24 +224,26 @@ async function fillUntranscribedSegments(project: AudioEditProjectDocument, segm
   const filled: AudioEditTranscriptBlock[] = []
   let modelId = preferred ?? project.selectedAsrModelId ?? ''
   let charged = false
-  for (const [index, { block, kind, durationMs }] of segments.entries()) {
+  for (const [index, { block, kind, digest, durationMs }] of segments.entries()) {
     const segmentFacts: { billing: TranscriptionFacts['billing'] } = { billing: 'not_charged' }
+    const length = block.endFrame - block.startFrame
     try {
       const output = await runPaidTranscription<FillOutput>({
-        project, kind, requestId: `${request.requestId}:fill-${index}`, controller, facts: segmentFacts, modelId: preferred, language: request.language, durationMs,
+        project, kind, sourceDigest: digest, requestId: `${request.requestId}:fill-${index}`, controller, facts: segmentFacts, modelId: preferred, language: request.language, durationMs,
         prepareAudio: (encoding, signal) => prepareAudioEditTranscriptionAudio(project, encoding, signal, block),
         finish: (recognized, usedModel) => {
           const local = audioEditTranscriptBlocks(recognized, rate)
           // 插入的是一段没说话的声音时识别不出字：占位去掉即可；有字却没有时间戳才是失败
           if (!local.length && recognized.text.trim()) throw new Error('识别结果没有可用时间戳，请选择支持时间戳的模型重试。')
-          const shift = (frame: number): number => Math.max(block.startFrame, Math.min(block.endFrame, block.startFrame + frame))
-          const transcript = local.map((item, ordinal) => ({ ...item, id: `${block.id}:${ordinal}`, startFrame: shift(item.startFrame), endFrame: shift(item.endFrame), included: block.included, locked: block.locked }))
-          return { modelId: usedModel, transcript: transcript.filter(item => item.endFrame > item.startFrame) }
+          const clamp = (frame: number): number => Math.max(0, Math.min(length, frame))
+          return { modelId: usedModel, transcript: local.map(item => ({ ...item, startFrame: clamp(item.startFrame), endFrame: clamp(item.endFrame) })).filter(item => item.endFrame > item.startFrame) }
         },
       })
       if (segmentFacts.billing === 'completed') charged = true
       modelId = output.modelId
-      filled.push(...output.transcript)
+      // 回执里的帧相对这段声音：按当前占位的起点放回口播，编号、保留与锁定跟当前占位
+      filled.push(...output.transcript.map((item, ordinal) => ({ ...item, id: `${block.id}:${ordinal}`,
+        startFrame: block.startFrame + item.startFrame, endFrame: block.startFrame + item.endFrame, included: block.included, locked: block.locked })))
     } catch (error) {
       // 这次调用里前面的段已经付费拿到结果：失败时如实说明有计费
       facts.billing = segmentFacts.billing === 'not_charged' && charged ? 'completed' : segmentFacts.billing
@@ -252,6 +267,8 @@ async function fillUntranscribedSegments(project: AudioEditProjectDocument, segm
  */
 async function runPaidTranscription<T>(task: {
   project: AudioEditProjectDocument; kind: string; requestId: string; controller: AbortController; facts: { billing: TranscriptionFacts['billing'] }
+  /** 回执记录的“识别的是哪份声音”：整份转写省略（整份素材），补转写给这一段声音的身份 */
+  sourceDigest?: string
   modelId?: string; language?: string; durationMs: number
   prepareAudio: (encoding: AsrUploadEncoding, signal: AbortSignal) => Promise<{ path: string; bytes: number }>
   /** 回执里已有的结果怎么交回（默认原样） */
@@ -263,7 +280,7 @@ async function runPaidTranscription<T>(task: {
   if (previous) facts.billing = 'unknown'
   const priorInput = previous?.result_json ? JSON.parse(previous.result_json) as TranscriptionReceipt<T> : undefined
   if (priorInput?.rawOutput || priorInput?.output || priorInput?.billing === 'completed') facts.billing = 'completed'
-  const sourceDigest = audioEditSourceReceiptDigest(project.source)
+  const sourceDigest = task.sourceDigest ?? audioEditSourceReceiptDigest(project.source)
   if (previous && priorInput?.sourceDigest !== sourceDigest) throw new Error('素材已变化，旧转写任务不能覆盖当前口播。')
   const neverSubmitted = previous ? timestampedAsrNeverSubmitted(previous, priorInput) : false
   if (neverSubmitted) facts.billing = 'not_charged'
