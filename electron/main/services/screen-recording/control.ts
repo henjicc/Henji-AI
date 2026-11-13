@@ -36,8 +36,8 @@ interface ActiveRecording {
   /** Capture finished warming up while the countdown was still running. */
   warmed?: boolean
   began?: boolean
-  /** 主进程自己录的轨道（系统声）的提示；界面报的轨道状态不覆盖它。 */
-  hostWarnings: Set<TrackWarning>
+  /** 主进程自己录的轨道（麦克风、系统声）的提示，按提示记着是哪几路报的；界面报的轨道状态不覆盖它。 */
+  hostWarnings: Map<TrackWarning, Set<string>>
 }
 type TrackWarning = RecordingTrackStatus['warnings'][number]
 
@@ -54,7 +54,7 @@ export class RecordingControlService {
 
   create(sessionId: string, backend: RecordingControlBackend): RecordingControlSnapshot {
     if (this.active) throw new Error('已有录制会话，请先停止或关闭当前录制')
-    this.active = { backend, elapsed: 0, startedAt: 0, abort: new AbortController(), hostWarnings: new Set(), snapshot:{ sessionId, phase: 'ready', countdown: 0, elapsedMs: 0, microphoneLevel: null, busy: false, error: null, shortcutConflicts: [] } }
+    this.active = { backend, elapsed: 0, startedAt: 0, abort: new AbortController(), hostWarnings: new Map(), snapshot:{ sessionId, phase: 'ready', countdown: 0, elapsedMs: 0, microphoneLevel: null, busy: false, error: null, shortcutConflicts: [] } }
     this.configureShortcuts(this.shortcuts)
     this.ticker = setInterval(() => this.publish(), 200)
     this.ticker.unref?.()
@@ -67,7 +67,7 @@ export class RecordingControlService {
     const active = this.active
     if (!active) return null
     const elapsedMs = active.elapsed + (active.snapshot.phase === 'recording' ? Math.max(0, this.deps.now() - active.startedAt) : 0)
-    return { ...active.snapshot, elapsedMs, cameraPreview: active.snapshot.phase === 'recording' ? active.snapshot.cameraPreview : null, shortcutConflicts: [...active.snapshot.shortcutConflicts], trackWarnings: [...new Set([...active.snapshot.trackWarnings ?? [], ...active.hostWarnings])] }
+    return { ...active.snapshot, elapsedMs, cameraPreview: active.snapshot.phase === 'recording' ? active.snapshot.cameraPreview : null, shortcutConflicts: [...active.snapshot.shortcutConflicts], trackWarnings: [...new Set([...active.snapshot.trackWarnings ?? [], ...active.hostWarnings.keys()])] }
   }
 
   configureShortcuts(input: RecordingShortcuts): RecordingAction[] {
@@ -177,15 +177,17 @@ export class RecordingControlService {
 
   setTrackStatus(sessionId: string, status: RecordingTrackStatus): void {
     if (!this.active || this.active.snapshot.sessionId !== sessionId || ['stopped', 'failed', 'stopping'].includes(this.active.snapshot.phase)) return
-    this.setMicrophoneLevel(sessionId, status.microphoneLevel)
     this.active.snapshot.cameraPreview = this.active.snapshot.phase === 'recording' ? status.cameraPreview : null
     this.active.snapshot.trackWarnings = [...status.warnings]
     this.publish()
   }
 
-  setHostTrackWarning(sessionId: string, warning: TrackWarning, on: boolean): void {
+  /** `source` 是报这条提示的那一路（麦克风、系统声）：一路恢复不撤掉另一路仍在报的同一条提示。 */
+  setHostTrackWarning(sessionId: string, source: string, warning: TrackWarning, on: boolean): void {
     if (!this.active || this.active.snapshot.sessionId !== sessionId) return
-    if (on) this.active.hostWarnings.add(warning); else this.active.hostWarnings.delete(warning)
+    const sources = this.active.hostWarnings.get(warning) ?? new Set<string>()
+    if (on) sources.add(source); else sources.delete(source)
+    if (sources.size) this.active.hostWarnings.set(warning, sources); else this.active.hostWarnings.delete(warning)
     this.publish()
   }
 

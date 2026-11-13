@@ -17,6 +17,7 @@ export function captureFixture(): { api: AudioCapturePlatform; emit: (event: Aud
     start: vi.fn(async () => ({ ...status, notice: null })), pause: vi.fn(async () => ({ ...status, state: 'paused' as const })), resume: vi.fn(async () => ({ ...status, state: 'recording' as const })), stop: vi.fn(async () => ({ ...status, state: 'stopped' as const, durationSeconds: 3 })), status: vi.fn(async () => status),
     clock: vi.fn(async () => ({ mainUs: 0, uncertaintyUs: 0 })), recover: vi.fn(async () => ({ writtenBytes: 432000 })), openAsioPanel: vi.fn(async () => {}),
     nativeSystemAudio: false, startSystemAudio: vi.fn(async () => ({ sessionId: 'system' })), stopSystemAudio: vi.fn(async () => ({ records: [] })),
+    startMicrophoneTrack: vi.fn(async () => ({ sessionId: 'microphone' })), stopMicrophoneTrack: vi.fn(async () => ({ records: [] })),
     onEvent: vi.fn(handler => { listeners.add(handler); return () => { listeners.delete(handler) } }), onLevel: vi.fn(() => () => {}), onSamples: vi.fn(() => () => {}), onDevicesChanged: vi.fn(() => () => {}),
   }
   return { api, state, status, emit: event => listeners.forEach(listener => listener(event)) }

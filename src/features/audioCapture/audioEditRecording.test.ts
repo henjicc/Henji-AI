@@ -70,10 +70,10 @@ it('界面重载后还没接管时，录音状态按主进程读：在录、录�
   expect(getPlatform().audioCapture.pendingFiles).not.toHaveBeenCalled()
 })
 
-it('录屏占着麦克风时开始录音在写入前就被拒，不建文件', async () => {
+it('讲解占着麦克风时开始录音在写入前就被拒，不建文件', async () => {
   main.sharedMicrophone = true
   const result = await app.call('start_audio_edit_recording', { documentRef })
-  expect(result).toMatchObject({ ok: false, error: { message: expect.stringContaining('录屏或讲解正在用麦克风'), details: { execution: { notExecuted: true } } } })
+  expect(result).toMatchObject({ ok: false, error: { message: expect.stringContaining('讲解正在用麦克风'), details: { execution: { notExecuted: true } } } })
   expect(getPlatform().audioCapture.prepareFile).not.toHaveBeenCalled()
 })
 

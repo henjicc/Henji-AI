@@ -1,4 +1,4 @@
-import { captureStreamAudio, captureMicrophone, type CapturedAudioBlock } from '@/features/creativeIntent'
+import { captureStreamAudio, type CapturedAudioBlock } from '@/features/creativeIntent'
 import { CaptureSourceClock } from '@/core/captureLog/clockSync'
 import type { RecordingTrackKind, RecordingTrackOptions } from '@/core/screenRecording/tracks'
 import type { RecordingTrackRecord } from '@/core/screenRecording/trackJournal'
@@ -11,7 +11,7 @@ export interface TrackDeviceCallbacks {
   video(frame: VideoFrame, monoUs: number, uncertaintyUs: number, compensationUs: number): Promise<void>
   state(state: 'ended' | 'muted' | 'unmuted'): void
   failed(error: unknown): void
-  /** 原生录音服务自己落盘的轨道（Windows 的系统声）：停止时交回这段的开段、封段与空档记录。 */
+  /** 原生录音服务自己落盘的轨道（麦克风；Windows 的系统声）：停止时交回这段的开段、封段与空档记录。 */
   records?(records: RecordingTrackRecord[]): void
 }
 export interface TrackDeviceContext {
@@ -19,8 +19,6 @@ export interface TrackDeviceContext {
   directory: string
   /** 兼容采集已经开着屏幕共享时，从它克隆系统声，不再开第二路。 */
   displayAudio?: () => Promise<MediaStream>
-  /** 给了就是这次录屏自己的目录：原生麦克风的整段副本写在这里留给收尾，不落到系统临时目录。 */
-  microphoneCopyDirectory?: string
 }
 export type OpenTrackDevice = (kind: RecordingTrackKind, options: RecordingTrackOptions, clock: RecordingTracksClock, callbacks: TrackDeviceCallbacks, signal: AbortSignal, context: TrackDeviceContext) => Promise<TrackDevice>
 
@@ -33,23 +31,23 @@ export async function acquireSystemAudio(): Promise<MediaStream> {
   return display
 }
 
-/** Windows：系统声由原生录音服务录进轨道目录，界面只在停止时取回轨道记录；采样不经过界面。 */
-async function captureNativeSystemAudio(directory: string, originUs: number, callbacks: TrackDeviceCallbacks, signal: AbortSignal): Promise<TrackDevice> {
+/** 麦克风与 Windows 的系统声由原生录音服务录进轨道目录，界面只在停止时取回轨道记录；采样不经过界面。 */
+async function captureNativeTrack(kind: 'microphone' | 'systemAudio', directory: string, originUs: number, callbacks: TrackDeviceCallbacks, signal: AbortSignal): Promise<TrackDevice> {
   signal.throwIfAborted()
   const api = getPlatform().audioCapture
-  const { sessionId } = await api.startSystemAudio(directory, originUs)
+  const { sessionId } = kind === 'microphone' ? await api.startMicrophoneTrack(directory, originUs) : await api.startSystemAudio(directory, originUs)
   let stopping: Promise<void> | undefined
-  const stop = (): Promise<void> => stopping ??= api.stopSystemAudio(sessionId).then(({ records }) => callbacks.records?.(records))
+  const stop = (): Promise<void> => stopping ??= (kind === 'microphone' ? api.stopMicrophoneTrack(sessionId) : api.stopSystemAudio(sessionId)).then(({ records }) => callbacks.records?.(records))
   if (signal.aborted) { await stop(); signal.throwIfAborted() }
   return { stop }
 }
 
 export const openTrackDevice: OpenTrackDevice = async (kind, options, clock, callbacks, signal, context) => {
   const audio = (block: CapturedAudioBlock): void => callbacks.audio({ ...block, uncertaintyUs: block.uncertaintyUs + clock.uncertaintyUs })
-  if (kind === 'microphone') return captureMicrophone(clock.originMs, audio, () => callbacks.state('ended'), signal, { originMs: () => clock.originMs, onDeviceState: callbacks.state, ...(context.microphoneCopyDirectory ? { outputDirectory: context.microphoneCopyDirectory } : {}) })
+  if (kind === 'microphone') return captureNativeTrack('microphone', context.directory, clock.originUs, callbacks, signal)
   if (kind === 'systemAudio') {
     // 调用方自己给了声音流（macOS 兼容采集克隆的屏幕共享、巡检夹具的测试音）就用它；否则 Windows 走原生回环。
-    if (!context.displayAudio && getPlatform().audioCapture.nativeSystemAudio) return captureNativeSystemAudio(context.directory, clock.originUs, callbacks, signal)
+    if (!context.displayAudio && getPlatform().audioCapture.nativeSystemAudio) return captureNativeTrack('systemAudio', context.directory, clock.originUs, callbacks, signal)
     return captureStreamAudio(clock.originMs, audio, () => callbacks.state('muted'), signal, { channels: 2, originMs: () => clock.originMs, onDeviceState: callbacks.state, acquireStream: context.displayAudio ?? acquireSystemAudio })
   }
   const camera = options.camera!

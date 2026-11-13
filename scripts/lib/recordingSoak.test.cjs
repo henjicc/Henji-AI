@@ -103,7 +103,7 @@ test('事件读取：二分定位后只读需要的一段；光标移动按方�
   assert.equal(reversed.ok, false); assert.match(reversed.reason, /方向/)
 })
 
-test('录屏结论：没有运动源判未达测试条件；系统声重载空档、分条、无信号、重载处静音判有问题', () => {
+test('录屏结论：没有运动源判未达测试条件；系统声与麦克风重载空档、分条，系统声无信号、重载处静音判有问题', () => {
   const result = {
     scenario: 'screen', options: { minutes: 30, motion: true },
     recording: { startedAtMs: 1, stopRequestedAtMs: 1800_000, stoppedAtMs: 1801_000, wallSeconds: 1800 },
@@ -114,27 +114,29 @@ test('录屏结论：没有运动源判未达测试条件；系统声重载空�
     checks: {
       summary: { status: 'stopped', durationUs: 1800e6, screenSpans: 3, repairedSpans: 0, rejectedSpans: 0, droppedFrames: 0, duplicatedFrames: 0, encoderRestarts: 0, eventPages: 900, events: 1e5 },
       expectedEncoderRestarts: 0, expectedFrames: 108000, expectedAudioKinds: ['microphone', 'systemAudio'],
-      audioFiles: { microphone: 2, systemAudio: 1 },
-      gaps: [{ kind: 'microphone', reason: 'missing-data', durationUs: 1.5e6 }],
+      audioFiles: { microphone: 1, systemAudio: 1 },
+      gaps: [],
       files: [],
       systemAudio: { summary: { outcome: 'completed', durationSeconds: 1799.8, segments: 360, silenceSeconds: 2, unavailableSeconds: 0, discontinuities: 0, droppedFrames: 0, deviceSwitches: 0, reconnects: 0, maxWriteMs: 8 }, eventCounts: {}, file: { durationSeconds: 1799.9 } },
     },
   }
   const unmet = lib.evaluateSoak(result)
   assert.equal(unmet.conditionMet, false); assert.equal(unmet.passed, false)
-  assert.deepEqual(unmet.problems, [], '麦克风在重载处分两条只是已知限制')
+  assert.deepEqual(unmet.problems, [])
   assert.match(lib.renderSoakMarkdown({ ...result, verdict: unmet }), /结论：未达测试条件/)
 
   const bad = structuredClone(result)
   bad.motion = { ok: true, source: 'ffplay', audio: true, exitedAtMs: 1802_000 }
   bad.checks.audioFiles.systemAudio = 2
   bad.checks.gaps.push({ kind: 'systemAudio', reason: 'missing-data', durationUs: 1.2e6 })
+  bad.checks.audioFiles.microphone = 2
+  bad.checks.gaps.push({ kind: 'microphone', reason: 'missing-data', durationUs: 2.5e6 })
   bad.checks.systemAudio.level = { maxVolumeDb: -91 }
   bad.checks.systemAudio.reloadWindows = [{ scheduledSec: 810, silences: [{ startSeconds: 2.1, durationSeconds: 1.3 }] }]
   bad.checks.motionPicture = { changed: true }
   const verdict = lib.evaluateSoak(bad)
   assert.equal(verdict.conditionMet, true, '运动源在停止请求之后才退出，算全程在跑')
-  for (const expected of ['systemAudio 拼成了 2 条', '系统声有 1 段缺数据空档', '几乎没有信号', '1.30 秒的静音']) assert(verdict.problems.some(item => item.includes(expected)), `缺少问题：${expected}`)
+  for (const expected of ['systemAudio 拼成了 2 条', '系统声有 1 段缺数据空档', 'microphone 拼成了 2 条', '麦克风有 1 段缺数据空档', '几乎没有信号', '1.30 秒的静音']) assert(verdict.problems.some(item => item.includes(expected)), `缺少问题：${expected}`)
 })
 
 test('结论：完整的录音结果通过；丢帧、缺接管日志、禁止事件判有问题，无关错误只提示', () => {

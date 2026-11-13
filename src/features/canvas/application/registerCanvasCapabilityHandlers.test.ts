@@ -177,7 +177,7 @@ describe('canvas capability handlers', () => {
       focused: true,
       surfaceId: 'workspace.canvas',
     })
-    expect(mocks.openApplicationSurface).toHaveBeenCalledWith('workspace.canvas', context)
+    expect(mocks.openApplicationSurface).toHaveBeenCalledWith('workspace.canvas', {})
     expect(
       mocks.openCanvasProject.mock.invocationCallOrder[0]
     ).toBeLessThan(mocks.focusCanvasNodeFromAgent.mock.invocationCallOrder[0])
@@ -203,13 +203,14 @@ describe('canvas capability handlers', () => {
     })
     const handler = registeredHandlers().get('open_canvas_node_editor')
 
-    const result = await handler?.({ canvasRef, nodeRef }, context)
+    // 关联信息只带请求与任务标识：整个上下文带着中止信号，日志桥结构化克隆不了。
+    const result = await handler?.({ canvasRef, nodeRef }, { ...context, requestId: 'request-1', taskId: 'task-1' })
 
     expect(mocks.openCanvasNodeEditor).toHaveBeenCalledWith({
       canvasRef,
       nodeRef,
       signal: context.signal,
-      correlation: context,
+      correlation: { requestId: 'request-1', taskId: 'task-1' },
     })
     expect(result).toMatchObject({
       surfaceId: 'workspace.canvas',

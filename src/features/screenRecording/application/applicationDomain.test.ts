@@ -78,7 +78,7 @@ it('不传分辨率、帧率与声音时跟随录屏设置里保存的值，与�
   await handlers.get('stop_screen_recording')!({ sessionRef: started.resultRef }, { signal: new AbortController().signal })
 })
 
-it('音频编辑正在录音时省略 tracks 不带麦克风并如实说明；显式要麦克风在写入前拒绝；快速模式与界面一样不录摄像头', async () => {
+it('音频编辑正在录音时录屏照常开麦克风（两边共用一路采集）；快速模式与界面一样不录摄像头', async () => {
   state.saved = { ...DEFAULT_RECORDING_SETUP, mode: 'quick', microphone: true, systemAudio: false, camera: true }
   state.audioEditRecording = true
   state.prepared.mockClear()
@@ -87,12 +87,9 @@ it('音频编辑正在录音时省略 tracks 不带麦克风并如实说明；�
   const start = RECORDING_CAPABILITIES.find(item => item.id === 'start_screen_recording')!
   const signal = new AbortController().signal
   try {
-    const refused = await Promise.resolve().then(() => handlers.get('start_screen_recording')!(start.inputSchema.parse({ name: '课', sourceRef: { kind: 'screen_recording.source', id: 'screen:1:0' }, tracks: { microphone: {}, systemAudio: false } }), { signal })).catch((error: unknown) => error)
-    expect(refused).toMatchObject({ message: expect.stringContaining('音频编辑正在录音'), details: { execution: { notExecuted: true } } })
-    expect(state.prepared).not.toHaveBeenCalled()
     const started = await handlers.get('start_screen_recording')!(start.inputSchema.parse({ name: '课', sourceRef: { kind: 'screen_recording.source', id: 'screen:1:0' } }), { signal })
-    expect(started.message).toContain('没有开麦克风')
-    expect((state.prepared.mock.calls[0] as [string, unknown, { tracks: unknown }])[2].tracks).toEqual({ systemAudio: false })
+    expect(started.message).toContain('接到它正在用的设备')
+    expect((state.prepared.mock.calls[0] as [string, unknown, { tracks: unknown }])[2].tracks).toEqual({ microphone: {}, systemAudio: false })
     await handlers.get('stop_screen_recording')!({ sessionRef: started.resultRef }, { signal })
   } finally { state.audioEditRecording = false }
 })

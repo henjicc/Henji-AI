@@ -1,15 +1,13 @@
 //! 系统声（回环）采集：与麦克风同一套落盘做法，独立于界面与主进程。
 //!
-//! 采集线程只把数据包按设备给出的时间戳放上时间轴、交给队列；写盘线程按 5 秒一段写成独立 WAV（每秒更新文件头），
-//! 每开一段、封一段都发一条不丢的事件，主进程据此登记轨道。没有声音播放时回环端点不出数据，按时间补静音，
+//! 采集线程只把数据包按设备给出的时间戳放上时间轴、交给队列；写盘线程用与录屏麦克风轨同一个分段写盘器（`segments`）
+//! 按 5 秒一段落盘，主进程据段事件登记轨道。没有声音播放时回环端点不出数据，按时间补静音，
 //! 时间轴始终连续；输出设备切换、暂时没有设备的那段同样是静音。
-use crate::wav::Wav;
+use crate::segments::{spawn_streamer, Lossy, Reliable, Writer};
 use crossbeam_queue::ArrayQueue;
 use serde_json::{json, Value};
 use std::{
-    collections::hash_map::RandomState,
-    hash::{BuildHasher, Hasher},
-    path::{Path, PathBuf},
+    path::Path,
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
         mpsc, Arc,
@@ -18,8 +16,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-/// 每段时长：设备时钟与系统时钟的漂移在每个拼接处吸收（主进程拼接时轻微拉伸），段不能太长。
-pub const SEGMENT_SECONDS: u64 = 5;
 pub const CHANNELS: usize = 2;
 /// 与原来界面写出的系统声一致：16 位双声道。
 pub const BITS: u16 = 16;
@@ -233,200 +229,6 @@ impl Timeline {
     }
 }
 
-/// 段文件名用随机 UUID：与原来界面写的分段同一命名规则，轨道记录与恢复都认它。
-fn segment_id() -> String {
-    // 标准库的 RandomState 每次都取进程随机种子的新键，两次哈希凑出 128 位，不必为此引入随机数依赖。
-    let random = || {
-        let mut hasher = RandomState::new().build_hasher();
-        hasher.write_u64(crate::ffi::clock().to_bits());
-        hasher.finish()
-    };
-    let (a, b) = (random(), random());
-    format!(
-        "{:08x}-{:04x}-4{:03x}-{:x}{:03x}-{:012x}",
-        a >> 32,
-        (a >> 16) & 0xffff,
-        a & 0xfff,
-        8 | (b >> 62),
-        (b >> 48) & 0xfff,
-        b & 0xffff_ffff_ffff
-    )
-}
-
-struct Segment {
-    id: String,
-    file: String,
-    wav: Wav,
-    frames: u64,
-    start_us: f64,
-}
-struct Meter {
-    peak: [f32; CHANNELS],
-    sum: [f64; CHANNELS],
-    frames: u64,
-}
-/// 写盘：按帧数切段，段与段首尾相接。所有事件都带段在整次采集里的起始帧和单调时钟。
-pub struct Writer {
-    session: String,
-    directory: PathBuf,
-    rate: f64,
-    segment_frames: u64,
-    current: Option<Segment>,
-    total: u64,
-    bytes_before: u64,
-    sealed: u64,
-    checkpoint: Instant,
-    meter: Meter,
-    events: mpsc::Sender<Value>,
-    levels: Option<mpsc::SyncSender<Value>>,
-}
-impl Writer {
-    pub fn new(
-        session: String,
-        directory: &Path,
-        rate: u32,
-        events: mpsc::Sender<Value>,
-        levels: Option<mpsc::SyncSender<Value>>,
-    ) -> Self {
-        Self {
-            session,
-            directory: directory.to_path_buf(),
-            rate: rate as f64,
-            segment_frames: rate as u64 * SEGMENT_SECONDS,
-            current: None,
-            total: 0,
-            bytes_before: 0,
-            sealed: 0,
-            checkpoint: Instant::now(),
-            meter: Meter {
-                peak: [0.0; CHANNELS],
-                sum: [0.0; CHANNELS],
-                frames: 0,
-            },
-            events,
-            levels,
-        }
-    }
-    pub fn frames(&self) -> u64 {
-        self.total
-    }
-    pub fn bytes(&self) -> u64 {
-        self.bytes_before + self.current.as_ref().map_or(0, |s| s.wav.bytes)
-    }
-    fn open(&mut self, start_us: f64) -> Result<(), String> {
-        let id = segment_id();
-        let file = format!("{id}.wav");
-        let wav = Wav::create(
-            &self.directory.join(&file),
-            self.rate as u32,
-            CHANNELS as u16,
-            BITS,
-        )
-        .map_err(crate::io_error)?;
-        // 段一开就登记：进程中途被杀，主进程凭这条记录和文件里已写的采样补出这一段。
-        let _ = self.events.send(json!({"event":"segment","phase":"open","sessionId":self.session,"segmentId":id,"file":file,"firstFrame":self.total,"sampleRate":self.rate,"channels":CHANNELS,"nativeMonoUs":start_us}));
-        self.current = Some(Segment {
-            id,
-            file,
-            wav,
-            frames: 0,
-            start_us,
-        });
-        Ok(())
-    }
-    pub fn seal(&mut self) -> Result<(), String> {
-        let Some(mut segment) = self.current.take() else {
-            return Ok(());
-        };
-        segment.wav.checkpoint().map_err(crate::io_error)?;
-        self.bytes_before += segment.wav.bytes;
-        // 一帧都没写进去的段（刚开段就写盘失败）不封口：主进程按文件补齐时会放弃它。
-        if segment.frames == 0 {
-            return Ok(());
-        }
-        self.sealed += 1;
-        let _ = self.events.send(json!({"event":"segment","phase":"seal","sessionId":self.session,"segmentId":segment.id,"file":segment.file,"firstFrame":self.total - segment.frames,"frames":segment.frames,"sampleRate":self.rate,"channels":CHANNELS,"nativeMonoUs":segment.start_us}));
-        Ok(())
-    }
-    /// 写 `frames` 帧，`samples` 为空时写静音；跨段时在段界切开，后一段的起点按帧数推算。
-    pub fn write(
-        &mut self,
-        frames: u64,
-        mono_us: f64,
-        samples: Option<&[f32]>,
-    ) -> Result<(), String> {
-        const ZERO: [f32; CHUNK_FRAMES * CHANNELS] = [0.0; CHUNK_FRAMES * CHANNELS];
-        let mut offset = 0u64;
-        while offset < frames {
-            if self.current.is_none() {
-                self.open(mono_us + offset as f64 * 1_000_000.0 / self.rate)?;
-            }
-            let segment = self.current.as_mut().unwrap();
-            let n = (self.segment_frames - segment.frames).min(frames - offset);
-            match samples {
-                Some(data) => segment
-                    .wav
-                    .write(&data[offset as usize * CHANNELS..(offset + n) as usize * CHANNELS])
-                    .map_err(crate::io_error)?,
-                None => {
-                    let mut left = n as usize;
-                    while left > 0 {
-                        let step = left.min(CHUNK_FRAMES);
-                        segment
-                            .wav
-                            .write(&ZERO[..step * CHANNELS])
-                            .map_err(crate::io_error)?;
-                        left -= step;
-                    }
-                }
-            }
-            if let Some(data) = samples {
-                for (i, &sample) in data
-                    [offset as usize * CHANNELS..(offset + n) as usize * CHANNELS]
-                    .iter()
-                    .enumerate()
-                {
-                    let c = i % CHANNELS;
-                    self.meter.peak[c] = self.meter.peak[c].max(sample.abs());
-                    self.meter.sum[c] += (sample as f64).powi(2);
-                }
-            }
-            segment.frames += n;
-            self.total += n;
-            self.meter.frames += n;
-            offset += n;
-            if segment.frames == self.segment_frames {
-                self.seal()?;
-            }
-        }
-        if self.checkpoint.elapsed() >= Duration::from_secs(1) {
-            if let Some(segment) = self.current.as_mut() {
-                segment.wav.checkpoint().map_err(crate::io_error)?;
-            }
-            self.checkpoint = Instant::now();
-        }
-        self.level();
-        Ok(())
-    }
-    fn level(&mut self) {
-        if (self.meter.frames as f64) < self.rate * 0.033 {
-            return;
-        }
-        let frames = self.meter.frames as f64;
-        let rms: Vec<f64> = self.meter.sum.iter().map(|s| (s / frames).sqrt()).collect();
-        let clipped: Vec<bool> = self.meter.peak.iter().map(|p| *p >= 0.999969).collect();
-        if let Some(levels) = &self.levels {
-            // 电平丢一条不要紧，下一条 33 ms 后就到。
-            let _ = levels.try_send(json!({"event":"level","sessionId":self.session,"peak":self.meter.peak,"rms":rms,"clipped":clipped,"durationSeconds":self.total as f64 / self.rate,"writtenBytes":self.bytes()}));
-        }
-        self.meter = Meter {
-            peak: [0.0; CHANNELS],
-            sum: [0.0; CHANNELS],
-            frames: 0,
-        };
-    }
-}
-
 pub fn write_loop(shared: Arc<Shared>, mut writer: Writer) -> Result<(), String> {
     let result = (|| {
         loop {
@@ -444,13 +246,14 @@ pub fn write_loop(shared: Arc<Shared>, mut writer: Writer) -> Result<(), String>
                 writer.write(
                     chunk.lost_before,
                     chunk.mono_us - chunk.lost_before as f64 * 1_000_000.0 / rate,
+                    0.0,
                     None,
                 )?;
             }
             if chunk.frames > 0 {
                 let samples =
                     (!chunk.silent).then(|| &chunk.samples[..chunk.frames as usize * CHANNELS]);
-                writer.write(chunk.frames, chunk.mono_us, samples)?;
+                writer.write(chunk.frames, chunk.mono_us, 0.0, samples)?;
             }
             shared.frames.store(writer.frames(), Ordering::Release);
             shared.bytes.store(writer.bytes(), Ordering::Release);
@@ -479,8 +282,8 @@ pub struct SystemSession {
     capture: Option<thread::JoinHandle<()>>,
     writer: Option<thread::JoinHandle<Result<(), String>>>,
     streamer: Option<thread::JoinHandle<()>>,
-    events: Option<mpsc::Sender<Value>>,
-    reports: Option<mpsc::SyncSender<Value>>,
+    events: Option<mpsc::Sender<Reliable>>,
+    reports: Option<mpsc::SyncSender<Lossy>>,
     health_sent: [u64; 5],
     health_at: Instant,
 }
@@ -490,23 +293,9 @@ impl SystemSession {
         if !path.is_absolute() || !path.is_dir() {
             return Err("FILE_ERROR|系统声音的录制目录不存在".into());
         }
-        let (events, reliable) = mpsc::channel::<Value>();
-        let (reports, lossy) = mpsc::sync_channel::<Value>(256);
-        let streamer = thread::spawn(move || loop {
-            while let Ok(value) = reliable.try_recv() {
-                crate::emit(value, &[]);
-            }
-            match lossy.recv_timeout(Duration::from_millis(20)) {
-                Ok(value) => crate::emit(value, &[]),
-                Err(mpsc::RecvTimeoutError::Timeout) => {}
-                Err(mpsc::RecvTimeoutError::Disconnected) => {
-                    for value in reliable.iter() {
-                        crate::emit(value, &[]);
-                    }
-                    break;
-                }
-            }
-        });
+        let (events, reliable) = mpsc::channel::<Reliable>();
+        let (reports, lossy) = mpsc::sync_channel::<Lossy>(256);
+        let streamer = spawn_streamer(reliable, lossy);
         let started = capture::spawn(id.clone(), events.clone());
         let (capture, rate, device) = match started {
             Ok(value) => value,
@@ -515,7 +304,7 @@ impl SystemSession {
         };
         let shared = Arc::new(Shared::new(rate, QUEUE_CHUNKS));
         // 界面没有显示系统声电平的位置，不往管道里推；以后要显示时把发送端传进来即可。
-        let writer = Writer::new(id.clone(), path, rate, events.clone(), None);
+        let writer = Writer::new(id.clone(), path, rate, CHANNELS, BITS, events.clone(), None);
         let s = shared.clone();
         let writer = thread::spawn(move || write_loop(s, writer));
         capture.begin(shared.clone());
@@ -553,7 +342,7 @@ impl SystemSession {
         };
         let frames = self.shared.frames.load(Ordering::Acquire);
         let report = json!({"event":"systemHealth","sessionId":self.id,"durationSeconds":frames as f64 / self.shared.rate as f64,"health":self.shared.health()});
-        if reports.try_send(report).is_ok() {
+        if reports.try_send((report, Vec::new())).is_ok() {
             self.health_sent = signature;
         }
     }
@@ -593,7 +382,6 @@ mod capture {
 }
 #[cfg(not(windows))]
 mod capture {
-    use serde_json::Value;
     use std::sync::{mpsc, Arc};
     pub struct Started {
         pub handle: std::thread::JoinHandle<()>,
@@ -603,7 +391,7 @@ mod capture {
     }
     pub fn spawn(
         _id: String,
-        _events: mpsc::Sender<Value>,
+        _events: mpsc::Sender<crate::segments::Reliable>,
     ) -> Result<(Started, u32, String), String> {
         Err("UNSUPPORTED|当前系统的系统声音由界面采集".into())
     }
@@ -612,11 +400,7 @@ mod capture {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn writer(dir: &Path, rate: u32) -> (Writer, mpsc::Receiver<Value>) {
-        let (events, received) = mpsc::channel();
-        (Writer::new("s".into(), dir, rate, events, None), received)
-    }
+    use crate::wav::Wav;
 
     #[test]
     fn idle_endpoint_is_filled_with_silence_and_timeline_stays_continuous() {
@@ -670,48 +454,6 @@ mod tests {
     }
 
     #[test]
-    fn segments_are_contiguous_and_split_at_exact_frame_counts() {
-        let dir = tempfile::tempdir().unwrap();
-        // 每秒 1000 帧、每段 5000 帧；写 3000 帧声音 + 4000 帧静音 + 4000 帧声音，应切成 5000 + 5000 + 1000。
-        let (mut w, received) = writer(dir.path(), 1000);
-        let tone: Vec<f32> = (0..2 * 1000 * 7).map(|i| (i % 7) as f32 / 10.0).collect();
-        w.write(3000, 10_000.0, Some(&tone[..2 * 3000])).unwrap();
-        w.write(4000, 3_010_000.0, None).unwrap();
-        w.write(4000, 7_010_000.0, Some(&tone[..2 * 4000])).unwrap();
-        w.seal().unwrap();
-        let all: Vec<Value> = received.try_iter().collect();
-        let sealed: Vec<&Value> = all.iter().filter(|v| v["phase"] == "seal").collect();
-        assert_eq!(
-            sealed
-                .iter()
-                .map(|v| v["frames"].as_u64().unwrap())
-                .collect::<Vec<_>>(),
-            vec![5000, 5000, 1000]
-        );
-        assert_eq!(
-            sealed
-                .iter()
-                .map(|v| v["firstFrame"].as_u64().unwrap())
-                .collect::<Vec<_>>(),
-            vec![0, 5000, 10000]
-        );
-        // 第二段从第 5000 帧开始：落在第二次写入（3.01 秒起的静音）里 2000 帧处。
-        assert!((sealed[1]["nativeMonoUs"].as_f64().unwrap() - 5_010_000.0).abs() < 1e-6);
-        assert!((sealed[2]["nativeMonoUs"].as_f64().unwrap() - 10_010_000.0).abs() < 1e-6);
-        for seal in &sealed {
-            let path = dir.path().join(seal["file"].as_str().unwrap());
-            assert_eq!(
-                Wav::recover(&path).unwrap(),
-                seal["frames"].as_u64().unwrap() * 4
-            );
-        }
-        // 每一段先开后封，开的那条同样带首帧与时钟。
-        let opened: Vec<&Value> = all.iter().filter(|v| v["phase"] == "open").collect();
-        assert_eq!(opened.len(), 3);
-        assert_eq!(opened[1]["firstFrame"], 5000);
-    }
-
-    #[test]
     fn full_queue_drops_are_counted_and_written_back_as_silence() {
         let dir = tempfile::tempdir().unwrap();
         // 写盘线程还没开始取：前 4 块入队，后面的入队失败，记作丢帧，下一块成功入队时带上，写盘补静音。
@@ -722,7 +464,7 @@ mod tests {
         }
         assert_eq!(shared.dropped_frames.load(Ordering::Relaxed), 6 * 480);
         let (events, received) = mpsc::channel();
-        let writer = Writer::new("s".into(), dir.path(), 48000, events, None);
+        let writer = Writer::new("s".into(), dir.path(), 48000, CHANNELS, BITS, events, None);
         let s = shared.clone();
         let worker = thread::spawn(move || write_loop(s, writer));
         while !shared.queue.is_empty() {
@@ -734,22 +476,12 @@ mod tests {
         assert_eq!(shared.frames.load(Ordering::Acquire), 11 * 480);
         let sealed: Vec<Value> = received
             .try_iter()
-            .filter(|v| v["phase"] == "seal")
+            .filter_map(|item| match item {
+                Reliable::Event(value) if value["phase"] == "seal" => Some(value),
+                _ => None,
+            })
             .collect();
         let path = dir.path().join(sealed[0]["file"].as_str().unwrap());
         assert_eq!(Wav::recover(&path).unwrap(), 11 * 480 * 4);
-    }
-
-    #[test]
-    fn segment_ids_are_version_4_uuids() {
-        let id = segment_id();
-        let parts: Vec<&str> = id.split('-').collect();
-        assert_eq!(
-            parts.iter().map(|p| p.len()).collect::<Vec<_>>(),
-            vec![8, 4, 4, 4, 12]
-        );
-        assert!(parts[2].starts_with('4'));
-        assert!("89ab".contains(&parts[3][..1]));
-        assert_ne!(id, segment_id());
     }
 }

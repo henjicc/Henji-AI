@@ -9,7 +9,7 @@ export interface JoinedRecordingAudio { kind: Extract<RecordingTrackKind, 'micro
 const CONTINUOUS_TOLERANCE_US = 20_000
 /** 拼接处用前一段末尾这么长的采样吸收设备时钟漂移；漂移只有几个采样，速度变化远小于可闻范围。 */
 const SLIP_WINDOW_US = 200_000
-/** 原生麦克风整段副本：录屏让原生录音服务写在录制目录里，重连后的续写文件名带 -N。 */
+/** 原生麦克风整段副本：麦克风轨改由原生录音服务按段落盘之前，录屏让它另写在录制目录里（重连后的续写文件名带 -N）；恢复那时的录制仍用它补齐。 */
 export const NATIVE_MICROPHONE_FILE = /^microphone-native-[a-f0-9-]+\.wav$/
 /** 核对两份采样是否同一段声音时比较的帧数与容差（两边各自量化成整数采样）。 */
 const MATCH_FRAMES = 256, MATCH_TOLERANCE = 2 / 0x8000
@@ -19,8 +19,8 @@ interface Native { file: string; layout: WavLayout; frames: number }
 
 /**
  * 2 小时的声音按 5 秒一段写成上千个文件；导入剪辑前拼成每路一条连续的声音，真实空档处才分开。
- * 麦克风推送跟不上或界面进程中途退出时，分段之间会缺几段采样；原生录音服务另写的整段副本里每个采样都在，
- * 用它补齐，补上的空档从轨道空档里去掉。
+ * 麦克风分段由界面写的旧录制里，推送跟不上或界面进程中途退出时分段之间会缺几段采样；目录里留着原生整段副本时
+ * 用它补齐，补上的空档从轨道空档里去掉。现在的麦克风轨由原生录音服务直接落盘，没有副本，这一步什么也不做。
  */
 /** `untilUs` 是这次录制按下停止的时刻：最后一段之后从副本补尾巴不超过它（共享的副本可能还在被别人写）。 */
 export async function joinRecordingAudio(directory: string, tracks: RecordingTracks, untilUs = Infinity): Promise<{ audio: JoinedRecordingAudio[]; gaps: Map<RecordingTrackKind, RecordingTrackGap[]> }> {

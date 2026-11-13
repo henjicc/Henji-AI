@@ -27,8 +27,6 @@ export interface RecordingTracksSessionOptions {
   displayAudio?: () => Promise<MediaStream>
   /** 每开一段、封一段、记一个空档或警告都按发生顺序交出去；录屏把它交给主进程登记。 */
   onRecord?(record: RecordingTrackRecord): Promise<void>
-  /** 原生麦克风整段副本写到这里并留给录制收尾补采样；不给时写系统临时目录、停止即删。 */
-  microphoneCopyDirectory?: string
   status?(status: RecordingTrackStatus): Promise<void>
 }
 export interface RecordingTracksDependencies { openDevice?: OpenTrackDevice; output?: typeof createTrackOutput; clock?: RecordingTracksClock; silentRisk?: boolean; queueBudgetBytes?: number }
@@ -53,7 +51,6 @@ export class RecordingTracksSession {
   private failure: unknown
   private risk = false
   private preview: string | null = null
-  private level: number | null = null
   private lastPreview = -Infinity
   private lastStatus = -Infinity
   private publishing = false
@@ -125,7 +122,7 @@ export class RecordingTracksSession {
         video: (frame, monoUs, uncertaintyUs, compensationUs) => this.video(slot, frame, monoUs, uncertaintyUs, compensationUs),
         state: state => this.deviceState(slot, state), failed: error => this.fail(error),
         records: records => this.nativeRecords(slot, records),
-      }, this.abort.signal, { directory: this.options.directory, ...(this.options.displayAudio ? { displayAudio: this.options.displayAudio } : {}), ...(this.options.microphoneCopyDirectory ? { microphoneCopyDirectory: this.options.microphoneCopyDirectory } : {}) })
+      }, this.abort.signal, { directory: this.options.directory, ...(this.options.displayAudio ? { displayAudio: this.options.displayAudio } : {}) })
       if (this.abort.signal.aborted || this.phase !== 'recording') { await device.stop(); return }
       slot.device = device; slot.disconnected = false
     })().finally(() => { slot.opening = undefined })
@@ -146,7 +143,7 @@ export class RecordingTracksSession {
     slot.queue = task.catch(error => { if (error !== this.abort.signal.reason) this.fail(error) })
     return task
   }
-  /** 原生录音服务自己落盘的一段（Windows 系统声）：把它交回的记录并入轨道，暂停空档照常按真实起点记。 */
+  /** 原生录音服务自己落盘的一段（麦克风、Windows 系统声）：把它交回的记录并入轨道，暂停空档照常按真实起点记。 */
   private nativeRecords(slot: Slot, records: RecordingTrackRecord[]): void {
     for (const record of records) {
       if (record.type === 'open') this.beginData(slot, record.segment.monoStartUs)
@@ -166,7 +163,6 @@ export class RecordingTracksSession {
     const previousFrame = slot.previousAudioFrame; const previousRate = slot.previousAudioRate
     slot.previousAudioFrame = block.firstFrame + block.samples.length / channels; slot.previousAudioRate = block.sampleRate
     const discontinuity = previousFrame !== undefined && (block.firstFrame !== previousFrame || previousRate !== block.sampleRate)
-    if (slot.kind === 'microphone') this.level = Math.min(1, Math.max(...block.samples.subarray(0, 4096).map(Math.abs)))
     if (slot.kind === 'systemAudio' && this.risk) {
       const audible = block.samples.some(sample => Math.abs(sample) > .00001)
       slot.silentFrames = audible ? 0 : slot.silentFrames + block.samples.length / channels
@@ -223,7 +219,7 @@ export class RecordingTracksSession {
     this.lastStatus = at; this.publishing = true
     const warnings: RecordingTrackStatus['warnings'] = this.phase === 'recording' && this.slots.some(slot => slot.silent) ? ['system-audio-silent'] : []
     if (this.slots.some(slot => slot.disconnected)) warnings.push('device-disconnected')
-    const status: RecordingTrackStatus = { microphoneLevel: this.phase === 'recording' ? this.level : null, cameraPreview: this.phase === 'recording' ? this.preview : null, warnings }
+    const status: RecordingTrackStatus = { cameraPreview: this.phase === 'recording' ? this.preview : null, warnings }
     void (this.options.status?.(status) ?? getPlatform().screenRecording.trackStatus(this.options.sessionId, status)).catch(error => { if (!this.abort.signal.aborted && this.phase !== 'stopped') this.fail(error) }).finally(() => { this.publishing = false })
   }
   private async release(slot: Slot): Promise<void> {
@@ -237,7 +233,7 @@ export class RecordingTracksSession {
       signal.throwIfAborted(); if (this.phase !== 'recording') throw new Error('录制没有进行中')
       this.phase = 'paused'
       const results = await Promise.allSettled(this.slots.map(async slot => { await this.release(slot); this.gap(slot, 'pause') }))
-      this.preview = null; this.level = null; this.publish(true)
+      this.preview = null; this.publish(true)
       this.checkResults(results)
       logger.info('声音与摄像头采集已暂停', { event: 'recording.tracks.pause.completed' })
     })

@@ -6,6 +6,7 @@ import type { ApplicationDomainModule } from '@/features/application-control/dom
 import { closeApplicationSurfaceCapability, focusApplicationEntityCapability, getCurrentApplicationContextCapability, openApplicationSurfaceCapability, observeApplicationSurfaceCapability } from '@/core/application-control/builtinApplicationCapabilities'
 import { createHostContextSnapshot } from '@/features/application-control/hostContext/hostContext'
 import { closeApplicationSurface, focusApplicationEntity, openApplicationSurface } from './surfaceCapabilityService'
+import { navigationCorrelation } from './surfaceNavigationService'
 import { observeApplicationSurface } from './surfaceObservation'
 
 export const navigationApplicationDomain: ApplicationDomainModule = {
@@ -45,7 +46,7 @@ export const navigationApplicationDomain: ApplicationDomainModule = {
   })
   registrar.registerHandler(openApplicationSurfaceCapability.id, (input, context) => {
     const parsed = openApplicationSurfaceCapability.inputSchema.parse(input)
-    return openApplicationSurface(parsed.surfaceId, context)
+    return openApplicationSurface(parsed.surfaceId, navigationCorrelation(context))
   })
   registrar.registerHandler(closeApplicationSurfaceCapability.id, (input) => {
     const parsed = closeApplicationSurfaceCapability.inputSchema.parse(input)
@@ -53,7 +54,7 @@ export const navigationApplicationDomain: ApplicationDomainModule = {
   })
   registrar.registerHandler(focusApplicationEntityCapability.id, async (input, context) => {
     const parsed = focusApplicationEntityCapability.inputSchema.parse(input)
-    return await focusApplicationEntity(parsed.ref, context.signal, context)
+    return await focusApplicationEntity(parsed.ref, context.signal, navigationCorrelation(context))
   })
 
   },

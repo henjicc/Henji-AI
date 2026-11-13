@@ -12,6 +12,7 @@ export function createElectronAudioCapture(): AudioCapturePlatform {
     clock: () => native().clock(), recover: path => native().recover(path), openAsioPanel: settings => native().openAsioPanel(settings),
     get nativeSystemAudio() { return window.henjiNative?.audioCapture?.nativeSystemAudio ?? false },
     startSystemAudio: (directory, originUs) => native().startSystemAudio(directory, originUs), stopSystemAudio: id => native().stopSystemAudio(id),
+    startMicrophoneTrack: (directory, originUs) => native().startMicrophoneTrack(directory, originUs), stopMicrophoneTrack: id => native().stopMicrophoneTrack(id),
     onEvent: handler => native().onEvent(handler), onLevel: handler => native().onLevel(handler), onSamples: handler => native().onSamples(handler), onDevicesChanged: handler => native().onDevicesChanged(handler),
   }
 }

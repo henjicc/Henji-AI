@@ -56,9 +56,10 @@ function hostCapture(prepared: CapturePrepared, session: RecordingSessionOptions
   let tracks: RecordingTracksSession | undefined
   if (session) {
     if (!prepared.directory) throw new Error('录制素材目录未准备完成')
-    // 主进程录的轨道（Windows 的系统声）界面不再采集。
+    // 主进程录的轨道（麦克风；Windows 的系统声）界面不再采集：界面重载或崩溃时它们不断。
     const systemAudio = session.tracks.systemAudio && !prepared.hostTracks?.includes('systemAudio')
-    tracks = new RecordingTracksSession({ sessionId, originUs: prepared.originUs, directory: prepared.directory, microphoneCopyDirectory: prepared.directory, tracks: { ...session.tracks, systemAudio },
+    const { microphone, ...rest } = session.tracks
+    tracks = new RecordingTracksSession({ sessionId, originUs: prepared.originUs, directory: prepared.directory, tracks: { ...rest, ...(microphone && !prepared.hostTracks?.includes('microphone') ? { microphone } : {}), systemAudio },
       onRecord: async record => { await api.capture({ operation: 'track', sessionId, record }) },
       ...(browser && systemAudio ? { displayAudio: () => browser!.cloneAudio() } : {}),
       onFailure: error => { void api.capture({ operation: 'failed', sessionId, error: String(error).slice(0, 1000) }).catch(failure => logger.error('录制轨道失败同步失败', { event: 'recording.tracks.sync.failed', error: failure })) },

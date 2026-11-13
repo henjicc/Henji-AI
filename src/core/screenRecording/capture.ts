@@ -46,8 +46,9 @@ export type CaptureSpan = z.infer<typeof captureSpanSchema>
 /**
  * Pass this exact main-process monotonic origin to event and audio/camera capture.
  * `hostTracks`：由主进程（原生录音服务）录的轨道，界面不再采集它们；界面重载或崩溃时这些轨道不断。
+ * 麦克风在所有平台都在这里，系统声只在 Windows 上。
  */
-export interface CapturePrepared { sessionId: string; originUs: number; backend: CaptureBackendKind; cursorEmbedded: boolean; options: ScreenCaptureOptions; directory?: string; hostTracks?: Array<'systemAudio'> }
+export interface CapturePrepared { sessionId: string; originUs: number; backend: CaptureBackendKind; cursorEmbedded: boolean; options: ScreenCaptureOptions; directory?: string; hostTracks?: Array<'microphone' | 'systemAudio'> }
 /** 停止后界面接着做什么；主进程只代为保管，界面重载后接回进行中的录制时原样交还。 */
 export const captureFollowUpSchema = z.object({
   handoff: z.boolean(),
@@ -65,11 +66,11 @@ export interface RecordingCaptureFacts {
   live: boolean
   /** 采集出错的原因；用户取消不算。 */
   failure: string | null
-  /** 界面进程断开（重载、崩溃）的次数：断开期间麦克风与摄像头没有数据。 */
+  /** 界面进程断开（重载、崩溃）的次数：断开期间摄像头（与 macOS 的系统声）没有数据，麦克风照常录。 */
   detaches: number
   video: { droppedFrames: number; duplicatedFrames: number; encoderRestarts: number; encoder: string } | null
   systemAudio: { silenceSeconds: number; unavailableSeconds: number; droppedFrames: number; discontinuities: number; deviceSwitches: number; reconnects: number } | null
-  microphone: { inputOverflows: number; inputUnderflows: number; droppedFrames: number; droppedPreviewBlocks: number; reconnects: number } | null
+  microphone: { device: string; inputOverflows: number; inputUnderflows: number; droppedFrames: number; droppedPreviewBlocks: number; reconnects: number } | null
   /** 应用上次意外退出后，启动时自动补齐的。 */
   recovered: boolean
   /** 录制中的轨道（分段与空档）；停止后读录制文档里的 tracks。 */

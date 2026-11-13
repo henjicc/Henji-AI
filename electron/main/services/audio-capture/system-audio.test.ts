@@ -32,7 +32,7 @@ function fakeNative(options: { recoverBytes?: number } = {}) {
     return { sampleRate: RATE, device: '扬声器', durationSeconds: 0, systemHealth: health }
   })
   const segment = (phase: 'open' | 'seal', sessionId: string, segmentId: string, firstFrame: number, monoUs: number, frames?: number): void =>
-    native.event!({ event: 'segment', sessionId, phase, segmentId, file: `${segmentId}.wav`, firstFrame, sampleRate: RATE, channels: 2, nativeMonoUs: monoUs - 7, monoUs, uncertaintyUs: 3, ...(frames ? { frames } : {}) })
+    native.event!({ event: 'segment', sessionId, phase, segmentId, file: `${segmentId}.wav`, firstFrame, sampleRate: RATE, channels: 2, bitDepth: 16, nativeMonoUs: monoUs - 7, monoUs, uncertaintyUs: 3, ...(frames ? { frames } : {}) })
   return { starts, hooks, segment, calls: (type: string) => native.request.mock.calls.filter(call => call[0] === type) }
 }
 const kinds = (records: RecordingTrackRecord[]): string[] => records.map(record => record.type)

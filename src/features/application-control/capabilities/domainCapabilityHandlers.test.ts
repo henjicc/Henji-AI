@@ -135,8 +135,8 @@ describe('toolbox capability handlers', () => {
   it('选择工具通过统一 Surface 入口，关闭工具只清空选择', async () => {
     const handler = registeredHandlers().get('select_toolbox_tool')
 
-    await handler?.({ toolId: 'cameraStage' }, context)
-    expect(mocks.openApplicationSurface).toHaveBeenCalledWith('tool.camera_stage', context)
+    await handler?.({ toolId: 'cameraStage' }, { ...context, requestId: 'request-1' })
+    expect(mocks.openApplicationSurface).toHaveBeenCalledWith('tool.camera_stage', { requestId: 'request-1' })
 
     const closed = await handler?.({ toolId: null }, context)
     expect(mocks.selectToolboxTool).toHaveBeenCalledWith(null)

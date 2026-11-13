@@ -34,10 +34,10 @@ const detailsSchema = z.object({
     missingSeconds: z.number().nonnegative().describe('缺数据与设备断开空档的总秒数（暂停不算）'), warnings: z.array(recordingTrackWarningSchema),
   }).strict()).optional(),
   capture: z.object({
-    live: z.boolean(), failure: z.string().nullable(), detaches: z.number().int().nonnegative().describe('界面进程断开（重载、崩溃）次数：断开期间麦克风与摄像头没有数据，记为缺数据空档'),
+    live: z.boolean(), failure: z.string().nullable(), detaches: z.number().int().nonnegative().describe('界面进程断开（重载、崩溃）次数：断开期间摄像头（与 macOS 的系统声）没有数据，记为缺数据空档；麦克风照常录'),
     video: z.object({ droppedFrames: z.number(), duplicatedFrames: z.number(), encoderRestarts: z.number().describe('编码进程意外退出后自动续录的次数，每次画面留空一两秒'), encoder: z.string() }).strict().nullable(),
     systemAudio: z.object({ silenceSeconds: z.number().describe('没有声音播放时补的静音'), unavailableSeconds: z.number().describe('输出设备不可用或被独占时补的静音'), droppedFrames: z.number().describe('写盘跟不上丢的帧，已补等长静音'), discontinuities: z.number(), deviceSwitches: z.number(), reconnects: z.number() }).strict().nullable(),
-    microphone: z.object({ inputOverflows: z.number(), inputUnderflows: z.number(), droppedFrames: z.number().describe('写盘跟不上丢的帧，已补等长静音'), droppedPreviewBlocks: z.number().describe('来不及送到轨道的块；停止时尽量用原生整段副本补回'), reconnects: z.number() }).strict().nullable(),
+    microphone: z.object({ device: z.string().describe('实际用的麦克风；音频编辑正在录音时与它共用同一个设备'), inputOverflows: z.number(), inputUnderflows: z.number(), droppedFrames: z.number().describe('写盘跟不上丢的帧，已补等长静音'), droppedPreviewBlocks: z.number().describe('麦克风轨由原生录音进程直接落盘，不经推送，通常为 0'), reconnects: z.number().describe('设备拔出或录音进程失联后自动重连的次数，每次留一段空档') }).strict().nullable(),
     recovered: z.boolean().describe('应用上次意外退出后，启动时自动补齐的'),
   }).strict().nullable().optional().describe('采集计数只在本次运行内有；应用重启后为 null，只剩 tracks 与 phase。null（整体或某一项）表示不知道，不等于没有丢帧或空档'),
   finishing: z.boolean().optional().describe('停止后的收尾、恢复或导入仍在后台进行；为 true 时等待，不要重发。变回 false 后看 error：有值就是失败及原因，没有就是做完了'),

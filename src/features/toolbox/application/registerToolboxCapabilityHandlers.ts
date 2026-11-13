@@ -8,6 +8,7 @@ import type { ApplicationCapabilityHandlerRegistrar } from '@/features/applicati
 
 import { parseCapabilityInput, throwIfCapabilityAborted } from '@/features/application-control/capabilities/handlerUtils'
 import { openApplicationSurface } from '@/features/navigation/application/surfaceCapabilityService'
+import { navigationCorrelation } from '@/features/navigation/application/surfaceNavigationService'
 
 export function registerToolboxCapabilityHandlers(registrar: ApplicationCapabilityHandlerRegistrar): void {
   registrar.registerHandler('list_toolbox_tools', () => ({
@@ -25,7 +26,7 @@ export function registerToolboxCapabilityHandlers(registrar: ApplicationCapabili
     }>('select_toolbox_tool', input)
     if (parsed.toolId) {
       const surfaceId = TOOL_CATALOG.get(parsed.toolId)!.surfaceId
-      return { toolId: parsed.toolId, ...openApplicationSurface(surfaceId, context) }
+      return { toolId: parsed.toolId, ...openApplicationSurface(surfaceId, navigationCorrelation(context)) }
     }
     // 关闭工具只回工具箱首页，不抢占用户当前所在工作区。
     selectToolboxTool(null)

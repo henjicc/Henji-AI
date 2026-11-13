@@ -22,6 +22,13 @@ export interface SurfaceNavigationCorrelation {
   requestId?: string
   taskId?: string
 }
+/**
+ * 只取日志要的关联字段。能力处理器手里的整个上下文带着中止信号和函数，日志桥结构化克隆不了，整条日志会被拒；
+ * 类型上它又能当成关联信息传进来，所以在写日志的地方收窄，调用方也只传这两个字段。
+ */
+export function navigationCorrelation(source: SurfaceNavigationCorrelation): SurfaceNavigationCorrelation {
+  return { ...(source.requestId ? { requestId: source.requestId } : {}), ...(source.taskId ? { taskId: source.taskId } : {}) }
+}
 
 export interface SurfaceNavigationResult {
   surfaceId: string
@@ -56,8 +63,9 @@ function isApplicationSurfaceActive(surface: ApplicationSurfaceDefinition): bool
 
 export function openApplicationSurface(
   surfaceId: string,
-  correlation: SurfaceNavigationCorrelation = {}
+  source: SurfaceNavigationCorrelation = {}
 ): SurfaceNavigationResult {
+  const correlation = navigationCorrelation(source)
   const surface = getApplicationSurface(surfaceId)
   if (!surface) throw new ApplicationPreflightFailure(new Error('NOT_FOUND:找不到目标页面，请从应用能力目录获取可用的页面后重试。'))
   const beforeRevision = useNavigationStore.getState().revision
@@ -99,8 +107,9 @@ export function openApplicationSurface(
 
 export function closeApplicationSurface(
   surfaceId?: string,
-  correlation: SurfaceNavigationCorrelation = {}
+  source: SurfaceNavigationCorrelation = {}
 ): SurfaceNavigationResult {
+  const correlation = navigationCorrelation(source)
   const target = surfaceId ? getApplicationSurface(surfaceId) : listApplicationSurfaces()
     .filter((surface) => surface.id !== 'overlay.assistant')
     .sort((a, b) => Number(a.kind === 'workspace') - Number(b.kind === 'workspace'))

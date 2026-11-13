@@ -47,9 +47,9 @@ export type AudioCaptureEvent = AudioCaptureLevel | AudioCaptureSamples
 /** 系统声采集健康计数：补的静音（没声音播放）、设备不可用补的静音、去掉的重叠、驱动报的数据不连续、写盘跟不上丢的帧（已补静音）、设备切换、写盘峰值。 */
 export const systemAudioHealthSchema = z.object({ segments: z.number(), silenceSeconds: z.number(), unavailableSeconds: z.number(), trimmedFrames: z.number(), discontinuities: z.number(), droppedFrames: z.number(), deviceSwitches: z.number(), maxWriteMs: z.number() })
 export type SystemAudioHealth = z.infer<typeof systemAudioHealthSchema>
-/** 原生系统声会话的事件；只在主进程内流转，不推给界面。时间已换算到主进程单调时钟（monoUs）。 */
+/** 原生分段轨道（系统声、录屏的麦克风轨）的事件；只在主进程内流转，不推给界面。时间已换算到主进程单调时钟（monoUs）。 */
 export type SystemAudioNativeEvent =
-  | { event: 'segment'; sessionId: string; phase: 'open' | 'seal'; segmentId: string; file: string; firstFrame: number; frames?: number; sampleRate: number; channels: number; nativeMonoUs: number; monoUs: number; uncertaintyUs: number }
+  | { event: 'segment'; sessionId: string; phase: 'open' | 'seal'; segmentId: string; file: string; firstFrame: number; frames?: number; sampleRate: number; channels: number; bitDepth: 16 | 24 | 32; nativeMonoUs: number; monoUs: number; uncertaintyUs: number }
   | { event: 'device'; sessionId: string; state: 'capturing' | 'unavailable'; name: string; reason: string | null; atSeconds: number }
   | { event: 'systemHealth'; sessionId: string; durationSeconds: number; health: SystemAudioHealth }
 const audioCaptureStartSchema = z.object({ outputPath: z.string().min(1).max(4096), settings: audioCaptureSettingsSchema.optional(), streamSamples: z.boolean().default(false), shared: z.boolean().optional(), monitor: z.literal(false).optional() }).strict()
@@ -76,19 +76,19 @@ export const audioCaptureRequestSchema = z.discriminatedUnion('action', [
   z.object({ action: z.enum(['pause', 'resume', 'stop', 'status']), sessionId: z.string().uuid() }).strict(),
   z.object({ action: z.literal('asioPanel'), settings: audioCaptureSettingsSchema }).strict(),
   z.object({ action: z.literal('recover'), outputPath: z.string().min(1).max(4096) }).strict(),
-  /** 界面自己的录制（网页录制的备份声音）要系统声：原生写进 directory，停止时交回这段的轨道记录；时间相对 originUs（主进程单调微秒）。 */
-  z.object({ action: z.literal('systemAudioStart'), directory: z.string().min(1).max(4096), originUs: z.number().int().nonnegative() }).strict(),
-  z.object({ action: z.literal('systemAudioStop'), sessionId: z.string().uuid() }).strict(),
+  /** 界面自己的录制（网页录制的备份声音）要系统声或麦克风：原生写进 directory，停止时交回这段的轨道记录；时间相对 originUs（主进程单调微秒）。 */
+  z.object({ action: z.enum(['systemAudioStart', 'microphoneTrackStart']), directory: z.string().min(1).max(4096), originUs: z.number().int().nonnegative() }).strict(),
+  z.object({ action: z.enum(['systemAudioStop', 'microphoneTrackStop']), sessionId: z.string().uuid() }).strict(),
   /** 主进程里录音的真实状态（只读，不动推送确认）：界面重载后、接管之前也准。 */
   z.object({ action: z.literal('recordingState') }).strict(),
 ])
 /**
  * 主进程持有的录音事实。界面里的录音会话可能还没建立（重载后要等接管），状态以这里为准。
- * recording 只报本窗口的音频编辑录音；录屏、讲解共用麦克风时只报 sharedMicrophone。
+ * recording 只报本窗口的音频编辑录音；讲解共用麦克风时只报 sharedMicrophone。
  */
 export interface AudioCaptureRecordingState {
   recording: { outputPath: string; state: 'recording' | 'paused'; durationSeconds: number; health: AudioCaptureHealth | null } | null
-  /** 录屏或讲解正用着麦克风：这时音频编辑开始录音会被拒绝。 */
+  /** 讲解正用着麦克风：这时音频编辑开始录音会被拒绝（录屏的麦克风轨与音频编辑录音可以同时进行）。 */
   sharedMicrophone: boolean
   /** 本窗口最近一次音频编辑录音的中断；再开始录音就清掉。at 为毫秒时间戳。 */
   interruption: { outputPath: string; code: string; message: string; at: number } | null

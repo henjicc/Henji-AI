@@ -88,7 +88,7 @@ function assertCanBegin(facts: AudioCaptureRecordingFacts): void {
   refuseWhileBusy()
   if (facts.phase === 'recording' || facts.outputPath && facts.phase !== 'interrupted') refuse(`已经在录音${facts.documentId ? `（口播 ${facts.documentId}）` : ''}，已录 ${facts.durationSeconds.toFixed(1)} 秒；要换位置先 stop_audio_edit_recording。`)
   if (facts.phase === 'interrupted' || getAudioCaptureSession().store.getState().outputPath) refuse('上一段录音中断后还没处理：先用 recover_audio_edit_recording 拼回或移到回收区，再开始新的录音。')
-  if (facts.microphoneInUse) refuse('录屏或讲解正在用麦克风，音频编辑不能同时录音：等那边结束，或请用户关掉录屏的麦克风。')
+  if (facts.microphoneInUse) refuse('讲解正在用麦克风，音频编辑不能同时录音：等讲解结束再录。录屏的麦克风不影响音频编辑录音。')
 }
 
 /** 录到哪：秒数换成采样帧，并按拼接时同一条位置规则（不越界、不落在锁定词块里）在写入前检查。 */

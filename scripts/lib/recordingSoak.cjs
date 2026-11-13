@@ -397,21 +397,16 @@ function evaluateScreen(result, wall, problems, notes) {
   // 事件页按有事件的时段封页，长时间不动鼠标时会少，只作提示。
   if (Number.isFinite(durationSeconds) && summary.eventPages < durationSeconds / 4) notes.push(`事件页 ${summary.eventPages} 页（持续动鼠标时约每 2 秒一页）`)
   const gaps = result.checks?.gaps ?? []
-  for (const [kind, count] of Object.entries(result.checks?.audioFiles ?? {})) {
-    if (count === 1) continue
-    // 麦克风仍由界面写，界面重载留下、副本补不回来的缺数据空档属已知限制；系统声由原生进程录，必须是一条。
-    const missing = gaps.filter(gap => gap.kind === kind && gap.reason === 'missing-data').length
-    if (kind === 'microphone' && missing && count === missing + 1) notes.push(`${kind} 在 ${missing} 处缺数据空档分成了 ${count} 条`)
-    else problems.push(`${kind} 拼成了 ${count} 条声音（预期每路一条）`)
-  }
+  // 麦克风与系统声都由原生录音进程录，界面重载不打断：每路必须是一条。
+  for (const [kind, count] of Object.entries(result.checks?.audioFiles ?? {})) if (count !== 1) problems.push(`${kind} 拼成了 ${count} 条声音（预期每路一条）`)
   for (const kind of result.checks?.expectedAudioKinds ?? []) if (!(kind in (result.checks?.audioFiles ?? {}))) problems.push(`没有 ${kind} 声音`)
   for (const file of result.checks?.files ?? []) if (!file.probe?.ok) problems.push(`读不出 ${file.role}：${file.path}（${file.probe?.error ?? '不存在'}）`)
   if (result.checks?.leftoverNativeCopies?.length) problems.push(`录制目录残留 ${result.checks.leftoverNativeCopies.length} 个麦克风副本`)
   for (const gap of gaps) if (gap.reason !== 'pause' && gap.reason !== 'missing-data') problems.push(`${gap.kind} 有 ${gap.reason} 空档 ${(gap.durationUs / 1e6).toFixed(2)} 秒`)
-  const systemMissing = gaps.filter(gap => gap.kind === 'systemAudio' && gap.reason === 'missing-data')
-  if (systemMissing.length) problems.push(`系统声有 ${systemMissing.length} 段缺数据空档，共 ${(systemMissing.reduce((sum, gap) => sum + gap.durationUs, 0) / 1e6).toFixed(2)} 秒（系统声由原生进程录，界面重载不应留空档）`)
-  const micMissing = gaps.filter(gap => gap.kind === 'microphone' && gap.reason === 'missing-data')
-  if (micMissing.length) notes.push(`麦克风缺数据空档 ${micMissing.length} 段，共 ${(micMissing.reduce((sum, gap) => sum + gap.durationUs, 0) / 1e6).toFixed(2)} 秒（界面重载期间麦克风轨由界面写，属已知限制）`)
+  for (const [kind, label] of [['systemAudio', '系统声'], ['microphone', '麦克风']]) {
+    const missing = gaps.filter(gap => gap.kind === kind && gap.reason === 'missing-data')
+    if (missing.length) problems.push(`${label}有 ${missing.length} 段缺数据空档，共 ${(missing.reduce((sum, gap) => sum + gap.durationUs, 0) / 1e6).toFixed(2)} 秒（由原生进程录，界面重载不应留空档）`)
+  }
   evaluateSystemAudio(result, durationSeconds, problems, notes)
   for (const check of result.checks?.cursor ?? []) if (!check.ok) problems.push(`光标对齐抽查失败（第 ${Math.round(check.scheduledSec)} 秒）：${check.reason}`)
   for (const check of result.checks?.picture ?? []) if (!check.changed) notes.push(`切工作区后 ${check.windowSeconds} 秒内画面没有可见变化（被录来源可能没有显示应用窗口）`)

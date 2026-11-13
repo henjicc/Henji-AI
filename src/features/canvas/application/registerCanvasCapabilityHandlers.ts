@@ -37,6 +37,7 @@ function parseCapabilityInput<TInput>(id: string, input: unknown): TInput {
 }
 
 import { openApplicationSurface } from '@/features/navigation/application/surfaceCapabilityService'
+import { navigationCorrelation } from '@/features/navigation/application/surfaceNavigationService'
 import { confirmCanvasPersistence } from '@/features/canvas/application/canvasPersistenceService'
 
 interface ProjectInput {
@@ -175,7 +176,7 @@ export function registerCanvasCapabilityHandlers(
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<NodeInput>('focus_canvas_node', input)
     await openCanvasProject(parsed.projectId, context.signal)
-    const surface = openApplicationSurface('workspace.canvas', context)
+    const surface = openApplicationSurface('workspace.canvas', navigationCorrelation(context))
     const focused = await focusCanvasNode(parsed.projectId, parsed.nodeId, context.signal)
     return { ...focused, ...surface }
   })
@@ -189,7 +190,7 @@ export function registerCanvasCapabilityHandlers(
     return { ...await openCanvasNodeEditor({
       ...parsed,
       signal: context.signal,
-      correlation: context,
+      correlation: navigationCorrelation(context),
     }) }
   })
 
@@ -206,7 +207,7 @@ export function registerCanvasCapabilityHandlers(
       projectId: parsed.canvasRef.id,
       nodeId: parsed.nodeRef.id.slice(prefix.length),
       signal: context.signal,
-      correlation: context,
+      correlation: navigationCorrelation(context),
       execution: context.execution,
     }) }
   })

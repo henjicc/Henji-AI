@@ -38,6 +38,8 @@ export function createAudioCaptureApi(invoke: Invoke, subscribe: Subscribe): Aud
     nativeSystemAudio: nativeSystemAudioSupported(process.platform),
     startSystemAudio: (directory, originUs) => invoke(AUDIO_CAPTURE_CHANNEL, { action: 'systemAudioStart', directory, originUs }),
     stopSystemAudio: sessionId => invoke(AUDIO_CAPTURE_CHANNEL, { action: 'systemAudioStop', sessionId }),
+    startMicrophoneTrack: (directory, originUs) => invoke(AUDIO_CAPTURE_CHANNEL, { action: 'microphoneTrackStart', directory, originUs }),
+    stopMicrophoneTrack: sessionId => invoke(AUDIO_CAPTURE_CHANNEL, { action: 'microphoneTrackStop', sessionId }),
     onEvent: handler => watch(handler, true),
     onLevel: handler => watch(event => { if (event.event === 'level') handler(event) }, false),
     onSamples: handler => watch(event => { if (event.event === 'samples') handler(event) }, true),

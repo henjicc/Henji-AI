@@ -8,7 +8,7 @@ import { AUDIO_CAPTURE_CHANNEL, AUDIO_CAPTURE_EVENT_CHANNEL } from '../../../src
 import { assertTrustedApplicationSender } from './application-control'
 import { registerIpcHandler } from './registry'
 import { mediaPermissions } from '../services/media-permissions'
-import { AudioCaptureService, provideMicrophoneFacts } from '../services/audio-capture/service'
+import { AudioCaptureService, provideMicrophoneCapture } from '../services/audio-capture/service'
 import { AudioCaptureError } from '../services/audio-capture/protocol'
 import { mainClockUs } from '../services/audio-capture/client'
 import { createMainLogger } from '../services/logging'
@@ -20,7 +20,8 @@ import { trashUserFile } from '../services/recycle/runtime'
 import { holdRecordingWakeLock } from '../services/recording-power'
 import { notifyRecording } from '../services/recording-notice'
 import { audioCaptureExecutablePath } from '../services/audio-capture/executable'
-import { disposeSystemAudioCapture, systemAudioCapture, type SystemAudioRecorder } from '../services/audio-capture/system-audio'
+import { disposeSystemAudioCapture, systemAudioCapture } from '../services/audio-capture/system-audio'
+import type { NativeTrack } from '../services/audio-capture/native-track'
 
 /** 原生端使用 create_new，避免覆盖同名文件。 */
 export async function resolveCapturePath(target: string): Promise<string> {
@@ -44,17 +45,17 @@ export function registerAudioCaptureIpc(): void {
     // 音频编辑录音意外中断；窗口在前台时标题栏与录音面板已经显示中断，共用的提醒自己会跳过。
     interrupted: (owner, event) => notifyRecording(webContents.fromId(owner), '痕迹AI 录音已中断', event.error.message),
   })
-  provideMicrophoneFacts(service)
+  provideMicrophoneCapture(service)
   const watched = new Set<number>()
   const files = new AudioCaptureFiles(getUserRootDir, getSettingsStore, (file, placement) => trashUserFile(file, undefined, placement))
-  /** 界面自己的录制（网页录制的备份声音）开的系统声：停止时把这段的轨道记录交回界面，界面离开就收尾。 */
-  const systemAudio = new Map<string, { owner: number; recorder: SystemAudioRecorder; records: RecordingTrackRecord[] }>()
-  /** 界面每离开一次加一：开始途中界面就走了的，开出来的系统声当场收尾，不留在后台录。 */
+  /** 界面自己的录制（网页录制的备份声音）开的原生声音轨（麦克风、系统声）：停止时把这段的轨道记录交回界面，界面离开就收尾。 */
+  const hostTracks = new Map<string, { owner: number; recorder: NativeTrack; records: RecordingTrackRecord[] }>()
+  /** 界面每离开一次加一：开始途中界面就走了的，开出来的声音轨当场收尾，不留在后台录。 */
   const departures = new Map<number, number>()
-  const stopSystemAudio = async (sessionId: string): Promise<RecordingTrackRecord[]> => {
-    const entry = systemAudio.get(sessionId)
+  const stopHostTrack = async (sessionId: string): Promise<RecordingTrackRecord[]> => {
+    const entry = hostTracks.get(sessionId)
     if (!entry) return []
-    systemAudio.delete(sessionId)
+    hostTracks.delete(sessionId)
     await entry.recorder.stop()
     return entry.records
   }
@@ -68,7 +69,7 @@ export function registerAudioCaptureIpc(): void {
       const release = (keepRecording: boolean): void => {
         void service.run(() => service.releaseOwner(owner, { keepRecording })).catch(error => logger.warn('窗口退出时录音停止失败', { event: 'audio_capture.owner.failed', error }))
         departures.set(owner, (departures.get(owner) ?? 0) + 1)
-        for (const [sessionId, entry] of systemAudio) if (entry.owner === owner) void stopSystemAudio(sessionId)
+        for (const [sessionId, entry] of hostTracks) if (entry.owner === owner) void stopHostTrack(sessionId)
       }
       // 同文档内的地址变化（安全恢复启动时去掉地址参数、开发画廊改地址）不换页面，不算界面离开。
       event.sender.on('did-start-navigation', (_e, _url, inPlace, mainFrame) => { if (mainFrame !== false && !inPlace) release(true) })
@@ -83,22 +84,27 @@ export function registerAudioCaptureIpc(): void {
       const pending = await files.pending()
       return { ...service.recordingState(owner), pending }
     }
-    // 系统声在自己的原生进程里，不排在麦克风的操作后面。
-    if (request.action === 'systemAudioStart') {
+    // 系统声在自己的原生进程里；麦克风轨开设备时自己排进麦克风的操作队列。
+    if (request.action === 'systemAudioStart' || request.action === 'microphoneTrackStart') {
       // 离开计数在第一个等待之前取：等待期间界面离开都算。
       const departed = departures.get(owner) ?? 0
       if (!path.isAbsolute(request.directory) || request.directory.includes('\0')) throw new AudioCaptureError('PATH_DENIED', '请使用录制目录的绝对路径')
       const directory = await fs.realpath(request.directory)
       const records: RecordingTrackRecord[] = []
-      const recorder = await systemAudioCapture().start({ directory, originUs: request.originUs, record: record => records.push(record) })
-      if ((departures.get(owner) ?? 0) !== departed) { await recorder.stop(); throw new AudioCaptureError('SESSION_NOT_OWNED', '界面已离开，系统声音已停止') }
+      const options = { directory, originUs: request.originUs, record: (record: RecordingTrackRecord) => { records.push(record) } }
+      let recorder: NativeTrack
+      if (request.action === 'microphoneTrackStart') {
+        await mediaPermissions.requestAccess(['microphone'])
+        recorder = await service.startTrack(options)
+      } else recorder = await systemAudioCapture().start(options)
+      if ((departures.get(owner) ?? 0) !== departed) { await recorder.stop(); throw new AudioCaptureError('SESSION_NOT_OWNED', '界面已离开，录音已停止') }
       const sessionId = randomUUID()
-      systemAudio.set(sessionId, { owner, recorder, records })
+      hostTracks.set(sessionId, { owner, recorder, records })
       return { sessionId }
     }
-    if (request.action === 'systemAudioStop') {
-      if (systemAudio.get(request.sessionId)?.owner !== owner) throw new AudioCaptureError('SESSION_NOT_OWNED', '系统声音会话已结束或不属于当前窗口')
-      return { records: await stopSystemAudio(request.sessionId) }
+    if (request.action === 'systemAudioStop' || request.action === 'microphoneTrackStop') {
+      if (hostTracks.get(request.sessionId)?.owner !== owner) throw new AudioCaptureError('SESSION_NOT_OWNED', '录音会话已结束或不属于当前窗口')
+      return { records: await stopHostTrack(request.sessionId) }
     }
     return service.run(async () => {
       assertTrustedApplicationSender(event)

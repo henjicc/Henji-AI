@@ -1,9 +1,9 @@
 import { recordingEncoding } from '@/core/screenRecording/encoding'
 import { loadRecordingSetup, recordingOutput, recordingTracksFromSetup } from '../recordingSetupModel'
 import { notExecutedFailure } from '@/core/application-control/execution/writeExecution'
+import { getPlatform } from '@/platform'
 import { CAPABILITY_SHORT_WAIT_MS, waitWithin } from '@/core/application-control/execution/waitWithin'
 import { trackRecordingWork } from './recordingWork'
-import { getPlatform } from '@/platform'
 import { planRecordingDirector, startRecordingDirector, cancelRecordingDirector, recordingDirectorBusy } from './recordingDirectorService'
 import { planRecordingDirectorCapability, startRecordingDirectorCapability, cancelRecordingDirectorCapability, redubRecordingCapability } from '@/core/application-control/domains/screenRecording/directorCapability'
 import { redubRecordingSentence } from './recordingRedubService'
@@ -117,17 +117,12 @@ export const screenRecordingApplicationDomain: ApplicationDomainModule = {
         const size = { width: parsed.width ?? saved.width, height: parsed.height ?? saved.height, fps: parsed.fps ?? setup.fps }
         const options = captureOptionsSchema.parse({ ...recordingEncoding({ ...setup, ...size }), sourceId: parsed.sourceRef.id, ...size, ...(parsed.region ? { region: parsed.region } : {}) })
         // 快速录制在界面上不录摄像头，省略 tracks 时与界面一致。
-        let tracks = parsed.tracks ?? recordingTracksFromSetup(setup, setup.mode === 'quick')
-        let note: string | undefined
-        // 音频编辑录音独占麦克风，录屏再开麦克风会在开始时失败：写入前就处理，不靠提醒。
-        if (tracks.microphone && (await getPlatform().audioCapture.recordingState()).recording) {
-          if (parsed.tracks) throw notExecutedFailure(new Error('音频编辑正在录音，麦克风被它占着：tracks 里去掉 microphone，或先用 stop_audio_edit_recording 结束那边的录音。'))
-          const { microphone: _microphone, ...rest } = tracks
-          tracks = rest
-          note = '音频编辑正在录音、占着麦克风，这次录屏没有开麦克风（录屏设置里是开着的）；倒计时后开始，可读取会话查看进度。'
-        }
+        const tracks = parsed.tracks ?? recordingTracksFromSetup(setup, setup.mode === 'quick')
+        // 音频编辑正在录音时麦克风轨接到同一路采集上，两边互不打断，但设备、采样率与声道沿用音频编辑那边的。
+        const joined = Boolean(tracks.microphone) && Boolean((await getPlatform().audioCapture.recordingState()).recording)
         const id = await startRecording(options, { name: parsed.name, tracks, ...(parsed.projectId ? { projectId: parsed.projectId } : {}) }, parsed.destination, context.signal)
-        return { resultRef: { kind: 'screen_recording.session', id }, verified: (await readRecordingDocument(id)).sessionId === id, ...(note ? { message: note } : {}) }
+        return { resultRef: { kind: 'screen_recording.session', id }, verified: (await readRecordingDocument(id)).sessionId === id,
+          ...(joined ? { message: '音频编辑正在录音：录屏的麦克风接到它正在用的设备上（采样率与声道也沿用它的），两边互不打断；倒计时后开始，实际设备读会话 details.capture.microphone.device。' } : {}) }
       }
       if (definition.id === 'read_screen_recording_events') {
         const parsed = parseCapabilityInput<{ sessionRef: z.infer<typeof recordingRefSchema>; offset: number; limit: number; markersOnly: boolean }>(definition.id, input)

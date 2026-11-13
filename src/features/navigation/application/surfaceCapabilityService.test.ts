@@ -25,6 +25,13 @@ import { applicationWriteChannel } from '@/core/application-control/execution/wr
 
 import { closeApplicationSurface, focusApplicationEntity, openApplicationSurface } from '@/features/navigation/application/surfaceCapabilityService'
 import { useAssistantUiStore } from '@/features/assistant/store/assistantUiStore'
+import { navigationCorrelation } from '@/features/navigation/application/surfaceNavigationService'
+
+it('导航日志只带请求与任务标识：能力上下文里的中止信号与函数结构化克隆不了，带进去整条日志会被日志桥拒收', () => {
+  const context = { requestId: 'r', taskId: 't', signal: new AbortController().signal, invokeCapability: async () => ({}) }
+  expect(structuredClone(navigationCorrelation(context))).toEqual({ requestId: 'r', taskId: 't' })
+  expect(navigationCorrelation({ signal: context.signal } as never)).toEqual({})
+})
 
 describe('application surface registry', () => {
   it('页面不存在的加载前拒绝通过统一包装报告零执行，导航保持原状', async () => {

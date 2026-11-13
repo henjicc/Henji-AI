@@ -6,11 +6,7 @@ import type { AudioCaptureSamples, AudioCaptureStatus } from '@/core/audioCaptur
 
 export interface CapturedAudioBlock { firstFrame: number; samples: Float32Array; sampleRate: number; monoStartUs: number; uncertaintyUs: number; channels?: number; bitDepth?: 16 | 24 | 32; latencyCompensationUs?: number }
 export interface MicrophoneCapture { stop(): Promise<void> }
-export interface AudioCaptureOptions {
-  originMs?: () => number; onDeviceState?: (state: 'ended' | 'muted' | 'unmuted') => void
-  /** 原生服务总会另写一份整段 WAV；给了录制目录就写在那里并留给录制收尾（补齐采样后清理），不占系统盘临时目录。 */
-  outputDirectory?: string
-}
+export interface AudioCaptureOptions { originMs?: () => number; onDeviceState?: (state: 'ended' | 'muted' | 'unmuted') => void }
 const logger = createLogger('features.creativeIntent.microphone')
 
 /** 讲解转写仍用单声道，取设置里的起始输入；保持帧号和时钟，不平均左右声道。 */
@@ -27,7 +23,7 @@ export function nativeMicrophoneBlock(event: AudioCaptureSamples, correlation: {
     monoStartUs: Math.max(0, Math.round(event.monoUs + (correlation.originMs - originMs) * 1000)), uncertaintyUs: Math.ceil(event.uncertaintyUs + correlation.uncertaintyUs), latencyCompensationUs: 0 }
 }
 
-/** 所有麦克风消费者使用同一原生设备设置；主进程共享设备，每个订阅独立释放和背压。 */
+/** 讲解的麦克风：采样推到界面里转写与收集。主进程共享设备，每个订阅独立释放和背压。录屏的麦克风轨不走这里，由原生服务直接按段落盘。 */
 export async function captureMicrophone(originMs: number, onBlock: (block: CapturedAudioBlock) => void, onInterrupt: (message: string) => void, signal: AbortSignal, options: AudioCaptureOptions = {}): Promise<MicrophoneCapture> {
   const platform = getPlatform(), api = platform.audioCapture
   let status: AudioCaptureStatus | undefined, interrupted = false, stopping: Promise<void> | undefined
@@ -57,8 +53,8 @@ export async function captureMicrophone(originMs: number, onBlock: (block: Captu
       try {
         if (status && !interrupted) {
           const result = await api.stop(status.sessionId)
-          // 写在录制目录里的副本留给主进程收尾：用它补推送丢掉的采样，补完再清理。
-          if (result.sharedSubscribers === 0 && !options.outputDirectory) await platform.system.fs.remove(result.outputPath)
+          // 原生服务另写的整段副本只是兜底；最后一个订阅结束就删。
+          if (result.sharedSubscribers === 0) await platform.system.fs.remove(result.outputPath)
           logger.info('原生麦克风订阅结束', { event: 'microphone.capture.completed', context: { sharedSubscribers: result.sharedSubscribers } })
         }
       } finally { releaseSamples(); releaseEvents(); signal.removeEventListener('abort', abort) }
@@ -74,9 +70,7 @@ export async function captureMicrophone(originMs: number, onBlock: (block: Captu
     releaseEvents = api.onEvent(event => {
       if (event.event === 'interrupted' && event.sessionId === status?.sessionId) { interrupted = true; clearTimeout(timer); options.onDeviceState?.('ended'); onInterrupt(event.error.message) }
     })
-    const outputPath = options.outputDirectory
-      ? await platform.system.paths.join(options.outputDirectory, `microphone-native-${crypto.randomUUID()}.wav`)
-      : await platform.system.paths.join(await platform.system.paths.tempDir(), `henji-microphone-${crypto.randomUUID()}.wav`)
+    const outputPath = await platform.system.paths.join(await platform.system.paths.tempDir(), `henji-microphone-${crypto.randomUUID()}.wav`)
     status = await api.start({ outputPath, settings, streamSamples: true, shared: true, monitor: false })
     for (const event of early) receive(event)
     early.length = 0

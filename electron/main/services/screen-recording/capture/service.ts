@@ -18,8 +18,9 @@ import { resolveNativeCaptureSource } from './source'
 import { createCaptureBounds, createCaptureGeometry } from './geometry'
 import { RecordingSessionDocument, readRecordingEvents, recoverRecordingSession } from '../session-document'
 import { exportQuickRecording, quickExportPath } from '../quick-export'
-import { systemAudioCapture, type SystemAudioRecorder } from '../../audio-capture/system-audio'
-import { sharedMicrophoneFacts } from '../../audio-capture/service'
+import { systemAudioCapture } from '../../audio-capture/system-audio'
+import { microphoneCapture } from '../../audio-capture/service'
+import type { NativeTrack, NativeTrackRecording } from '../../audio-capture/native-track'
 import { nativeSystemAudioSupported } from '../../../../../src/platform/contracts/audioCapture'
 
 const logger = createMainLogger('main.screen_recording.capture')
@@ -27,37 +28,34 @@ interface Active {
   owner: WebContents; storage: CaptureStorage; backend: ScreenCaptureBackend; originUs: number
   rpc: Map<string, { resolve(): void; reject(error: Error): void }>
   document?: RecordingSessionDocument
-  /** 声音与摄像头由界面写；界面进程重载或崩溃期间为 false，画面与事件照常在主进程录。 */
+  /** 摄像头（与 macOS 的系统声）由界面写；界面进程重载或崩溃期间为 false，画面、事件与主进程录的声音照常录。 */
   tracksAttached: boolean
   /** 采集本身出错（区别于用户取消）。 */
   failed: boolean
   /** 出错的原因，读回长录事实时给出。 */
   failure?: string
-  /** 毫秒时间戳；麦克风计数只认这之后结束的那一路，不把上一次录屏的算进来。 */
-  startedAt: number
   session?: RecordingSessionOptions
   followUp?: CaptureFollowUp
   prepared: CapturePrepared
   /** 停止与取消都会走到收尾（失败后关控制条还会再取消一次），只收一次。 */
   finishing?: Promise<void>
-  /** Windows 上系统声由原生录音服务在主进程这边录：与画面、事件一样不依赖界面。开始后才有录制器。 */
-  systemAudio?: { recorder?: SystemAudioRecorder }
+  /** 主进程让原生录音服务录的声音轨（麦克风；Windows 上还有系统声）：与画面、事件一样不依赖界面。开始后才有录制器。 */
+  hosted: Partial<Record<HostTrackKind, { recorder?: NativeTrack }>>
 }
+type HostTrackKind = NonNullable<CapturePrepared['hostTracks']>[number]
 let active: Active | null = null
 /** 停止后的长录事实留到应用退出：停止后再读也能看到丢帧、续录与补静音；只留最近这些次。 */
 const finishedFacts = new Map<string, RecordingCaptureFacts>()
 const FINISHED_FACTS_LIMIT = 32
 function captureFacts(session: Active, live: boolean): RecordingCaptureFacts {
   const video = session.backend instanceof GfxCaptureBackend ? session.backend.stats() : undefined
-  const system = session.systemAudio?.recorder?.stats()
-  // 录制中只认正在进行的那一路；收尾时麦克风已经先停了，认本次录制开始之后结束的那一路。
-  const shared = session.session?.tracks.microphone ? sharedMicrophoneFacts() : null
-  const microphone = shared && (shared.live || !live && (shared.endedAt ?? 0) >= session.startedAt) ? shared : null
+  const system = session.hosted.systemAudio?.recorder?.stats().health, systemReconnects = session.hosted.systemAudio?.recorder?.stats().reconnects ?? 0
+  const microphone = session.hosted.microphone?.recorder?.stats()
   return {
     live, failure: session.failure ?? null, detaches: session.document?.ledger.detaches ?? 0,
     video: video ? { droppedFrames: video.droppedFrames, duplicatedFrames: video.duplicatedFrames, encoderRestarts: video.restarts, encoder: video.encoder } : null,
-    systemAudio: system ? { silenceSeconds: system.health.silenceSeconds, unavailableSeconds: system.health.unavailableSeconds, droppedFrames: system.health.droppedFrames, discontinuities: system.health.discontinuities, deviceSwitches: system.health.deviceSwitches, reconnects: system.reconnects } : null,
-    microphone: microphone ? { inputOverflows: microphone.health?.inputOverflows ?? 0, inputUnderflows: microphone.health?.inputUnderflows ?? 0, droppedFrames: microphone.health?.droppedFrames ?? 0, droppedPreviewBlocks: microphone.droppedPreviewBlocks, reconnects: microphone.reconnects } : null,
+    systemAudio: system ? { silenceSeconds: system.silenceSeconds ?? 0, unavailableSeconds: system.unavailableSeconds ?? 0, droppedFrames: system.droppedFrames ?? 0, discontinuities: system.discontinuities ?? 0, deviceSwitches: system.deviceSwitches ?? 0, reconnects: systemReconnects } : null,
+    microphone: microphone ? { device: microphone.device, inputOverflows: microphone.health.inputOverflows ?? 0, inputUnderflows: microphone.health.inputUnderflows ?? 0, droppedFrames: microphone.health.droppedFrames ?? 0, droppedPreviewBlocks: microphone.health.droppedPreviewBlocks ?? 0, reconnects: microphone.reconnects } : null,
     recovered: false,
     ...(live && session.document ? { tracks: session.document.ledger.state.tracks(session.prepared.sessionId, session.originUs) } : {}),
   }
@@ -72,7 +70,7 @@ const now = (): number => Number(process.hrtime.bigint() / 1000n)
 const sessionDirectory = (sessionId: string): string => path.join(getUserFolderDir('uploads'), 'screen-recordings', sessionId)
 
 async function remote(session: Active, operation: CaptureOperation): Promise<void> {
-  // 界面不在时声音轨已经断开，没有可以等的回执；重新接上的界面按当时的阶段自己开始。
+  // 界面不在时它录的轨道已经断开，没有可以等的回执；重新接上的界面按当时的阶段自己开始。
   if (!session.tracksAttached) return
   if (session.owner.isDestroyed()) throw new Error('录制窗口已经关闭')
   const requestId = randomUUID()
@@ -91,7 +89,7 @@ async function fail(session: Active, error: Error): Promise<void> {
 }
 
 /**
- * 界面进程重载或崩溃：画面（原生采集）和事件在主进程照常录，只记下声音轨从这里断开，等界面回来重新接上。
+ * 界面进程重载或崩溃：画面（原生采集）、事件和主进程录的声音轨照常录，只记下界面录的轨道（摄像头、macOS 的系统声）从这里断开，等界面回来重新接上。
  * 兼容采集的画面本身在界面里编码，界面没了就录不下去，按采集失败收尾、保住已录部分。
  */
 function ownerLost(session: Active): void {
@@ -106,21 +104,30 @@ function ownerLost(session: Active): void {
   for (const pending of session.rpc.values()) pending.resolve()
   session.rpc.clear()
   void session.document.track({ type: 'detach', atUs: now() - session.originUs })
-  logger.warn('界面进程断开，画面继续录制，声音等待界面重新接上', { event: 'recording.host.detached', context: { sessionId: session.prepared.sessionId } })
+  logger.warn('界面进程断开，画面与声音继续录制，摄像头等待界面重新接上', { event: 'recording.host.detached', context: { sessionId: session.prepared.sessionId } })
 }
 
-/** 系统声跟着画面开始、暂停、恢复、停止；轨道记录直接进录制文档的轨道记录，与界面写的麦克风、摄像头同一份。 */
-async function systemAudioStep(session: Active, operation: Exclude<CaptureOperation, 'cancel'>, signal: AbortSignal): Promise<void> {
-  const host = session.systemAudio, document = session.document
+/**
+ * 主进程录的声音轨（麦克风、Windows 的系统声）跟着画面开始、暂停、恢复、停止；轨道记录直接进录制文档的轨道记录，
+ * 与界面写的摄像头同一份。两路同一个原点、同一个时钟，结束时一起拼接。
+ */
+async function hostTrackStep(session: Active, kind: HostTrackKind, operation: Exclude<CaptureOperation, 'cancel'>, signal: AbortSignal): Promise<void> {
+  const host = session.hosted[kind], document = session.document
   if (!host || !document) return
   const sessionId = session.prepared.sessionId
   if (operation === 'start') {
-    const recorder = await systemAudioCapture().start({
+    const options: NativeTrackRecording = {
       directory: session.storage.directory, originUs: session.originUs,
       record: record => { void document.track(record) },
-      failed: error => { void fail(session, error).catch(failure => logger.error('系统声失败后收尾失败', { event: 'recording.system_audio.cleanup.failed', error: failure })) },
-      available: available => recordingControl.setHostTrackWarning(sessionId, 'device-disconnected', !available),
-    })
+      failed: error => { void fail(session, error).catch(failure => logger.error('声音轨失败后收尾失败', { event: 'recording.host_track.cleanup.failed', error: failure, context: { kind } })) },
+      available: available => recordingControl.setHostTrackWarning(sessionId, kind, 'device-disconnected', !available),
+      ...(kind === 'microphone' ? { level: (peak: number) => recordingControl.setMicrophoneLevel(sessionId, peak) } : {}),
+    }
+    let recorder: NativeTrack
+    if (kind === 'microphone') {
+      await mediaPermissions.requestAccess(['microphone'])
+      recorder = await microphoneCapture().startTrack(options)
+    } else recorder = await systemAudioCapture().start(options)
     // 开始途中录制已被取消：这一路随即收尾，不留在后台录。
     if (active !== session || signal.aborted) { await recorder.stop(); signal.throwIfAborted(); return }
     host.recorder = recorder
@@ -128,6 +135,8 @@ async function systemAudioStep(session: Active, operation: Exclude<CaptureOperat
   else if (operation === 'resume') await host.recorder?.resume()
   else await host.recorder?.stop(now() - session.originUs)
 }
+const hostTrackSteps = (session: Active, operation: Exclude<CaptureOperation, 'cancel'>, signal: AbortSignal): Promise<void>[] =>
+  (Object.keys(session.hosted) as HostTrackKind[]).map(kind => hostTrackStep(session, kind, operation, signal))
 
 function grantKinds(options: RecordingSessionOptions | undefined): CaptureKind[] {
   return ['screen', ...(options?.tracks.microphone ? ['microphone' as const] : []), ...(options?.tracks.systemAudio ? ['systemAudio' as const] : []), ...(options?.tracks.camera ? ['camera' as const] : [])]
@@ -216,9 +225,10 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
       const storage = new CaptureStorage(sessionDirectory(request.sessionId), manifest, async value => { await document?.capture(value) })
       await storage.prepare()
       const originUs = now()
-      const hostSystemAudio = Boolean(request.session?.tracks.systemAudio) && nativeSystemAudioSupported(process.platform)
-      const prepared: CapturePrepared = { sessionId: request.sessionId, originUs, backend, cursorEmbedded: manifest.cursorEmbedded, options: request.options, ...(request.session ? { directory: storage.directory } : {}), ...(hostSystemAudio ? { hostTracks: ['systemAudio' as const] } : {}) }
-      const session: Active = { owner, storage, originUs, rpc: new Map(), backend: null!, tracksAttached: true, failed: false, prepared, startedAt: Date.now(), ...(request.session ? { session: request.session } : {}), ...(request.followUp ? { followUp: request.followUp } : {}), ...(hostSystemAudio ? { systemAudio: {} } : {}) }
+      // 麦克风在所有平台都由原生录音服务录（PortAudio）；系统声只在 Windows 上由它录（WASAPI 回环），macOS 仍由界面采集。
+      const hostTracks: HostTrackKind[] = [...(request.session?.tracks.microphone ? ['microphone' as const] : []), ...(request.session?.tracks.systemAudio && nativeSystemAudioSupported(process.platform) ? ['systemAudio' as const] : [])]
+      const prepared: CapturePrepared = { sessionId: request.sessionId, originUs, backend, cursorEmbedded: manifest.cursorEmbedded, options: request.options, ...(request.session ? { directory: storage.directory } : {}), ...(hostTracks.length ? { hostTracks } : {}) }
+      const session: Active = { owner, storage, originUs, rpc: new Map(), backend: null!, tracksAttached: true, failed: false, prepared, ...(request.session ? { session: request.session } : {}), ...(request.followUp ? { followUp: request.followUp } : {}), hosted: Object.fromEntries(hostTracks.map(kind => [kind, {}])) }
       const geometry = request.session ? createCaptureGeometry(source, request.options) : undefined
       geometry?.()
       if (request.session) {
@@ -246,7 +256,7 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
             // 界面重载期间页面的授权随导航撤掉；同一会话已经由用户确认过来源，接着录不再重新核对。
             if ((operation === 'start' || operation === 'resume') && session.tracksAttached) mediaPermissions.assertSelection(owner, request.sessionId, request.options.sourceId)
             // Both capture paths cross the renderer barrier: native screen capture must also control audio/camera.
-            const results = await Promise.allSettled([session.backend[operation](signal), ...(request.session && backend !== 'chromium' ? [remote(session, operation)] : []), systemAudioStep(session, operation, signal)])
+            const results = await Promise.allSettled([session.backend[operation](signal), ...(request.session && backend !== 'chromium' ? [remote(session, operation)] : []), ...hostTrackSteps(session, operation, signal)])
             const failure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')
             if (failure) throw failure.reason
             if (manifest.status !== 'failed') { manifest.status = status; await storage.save() }
@@ -264,7 +274,7 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
           } : {}),
           cancel: async () => {
             try {
-              const results = await Promise.allSettled([session.backend.cancel(), ...(request.session && backend !== 'chromium' && !owner.isDestroyed() ? [remote(session, 'cancel')] : []), ...(session.systemAudio?.recorder ? [session.systemAudio.recorder.stop()] : [])])
+              const results = await Promise.allSettled([session.backend.cancel(), ...(request.session && backend !== 'chromium' && !owner.isDestroyed() ? [remote(session, 'cancel')] : []), ...Object.values(session.hosted).flatMap(host => host.recorder ? [host.recorder.stop()] : [])])
               const failure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')
               if (failure) throw failure.reason
             } finally {
@@ -302,7 +312,7 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
     }
     case 'attach': {
       if (!session.document || !session.session) throw new Error('这次录制不能接回')
-      // 页面导航时授权随之撤销；同一会话、同一宿主重新登记，系统声音与摄像头才能接着取。
+      // 页面导航时授权随之撤销；同一会话、同一宿主重新登记，界面录的轨道（摄像头、macOS 的系统声）才能接着取。
       mediaPermissions.grant(owner, request.sessionId, grantKinds(session.session), { sourceId: storage.manifest.options.sourceId, excludedSourceIds: [] })
       session.tracksAttached = true
       logger.info('界面已重新接上进行中的录制', { event: 'recording.host.attached', context: { sessionId: request.sessionId, phase: recordingControl.snapshot()?.phase } })

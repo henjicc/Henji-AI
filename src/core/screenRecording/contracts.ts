@@ -54,7 +54,8 @@ export interface RecordingControlSnapshot {
   cameraPreview?: string | null
   trackWarnings?: Array<'system-audio-silent' | 'system-audio-unavailable' | 'device-disconnected'>
 }
-const recordingTrackStatusSchema = z.object({ microphoneLevel: z.number().finite().min(0).max(1).nullable(), cameraPreview: z.string().max(100_000).regex(/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/).nullable(), warnings: z.array(z.enum(['system-audio-silent', 'system-audio-unavailable', 'device-disconnected'])).max(3) }).strict()
+/** 界面录的轨道（摄像头、macOS 的系统声）的状态。麦克风电平由主进程按原生麦克风轨给出。 */
+const recordingTrackStatusSchema = z.object({ cameraPreview: z.string().max(100_000).regex(/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/).nullable(), warnings: z.array(z.enum(['system-audio-silent', 'system-audio-unavailable', 'device-disconnected'])).max(3) }).strict()
 export type RecordingTrackStatus = z.infer<typeof recordingTrackStatusSchema>
 const sessionId = z.string().uuid()
 const recordingSensitiveDomSchema = z.array(z.object({ id: z.string().uuid(), x: z.number().finite().nonnegative(), y: z.number().finite().nonnegative(), width: z.number().finite().positive(), height: z.number().finite().positive() }).strict()).max(256)

@@ -9,7 +9,7 @@
  *   npm run build:audio-capture        # 先重建原生录音程序（henji-audio-capture，麦克风与系统声共用）
  *   npm run electron:bundle            # 再生成主进程与界面产物
  *   $env:HENJI_ELECTRON_REMOTE_DEBUGGING_PORT=9334; npm run electron:prod -- --dev-skip-onboarding --skip-build
- * 原生程序与主进程按协议号握手（现在是 3），两者不是同一次构建时握手失败：音频编辑录音、录屏麦克风和系统声都开不了，
+ * 原生程序与主进程按协议号握手（现在是 4），两者不是同一次构建时握手失败：音频编辑录音、录屏麦克风和系统声都开不了，
  * 脚本会在开始录制那一步失败。看到 audio_capture.* 或 system_audio.start.failed 报协议不匹配时，按上面顺序重建。
  *
  * 再运行（耗时等于录制时长，建议后台跑）：

@@ -26,11 +26,14 @@ const sampleSchema = z.object({ event: z.literal('samples'), sessionId: z.string
 const levelSchema = z.object({ event: z.literal('level'), sessionId: z.string(), peak: z.array(z.number()).max(2), rms: z.array(z.number()).max(2), clipped: z.array(z.boolean()).max(2), durationSeconds: z.number(), writtenBytes: z.number() })
 const interruptedSchema = z.object({ event: z.literal('interrupted'), sessionId: z.string(), outputPath: z.string(), writtenBytes: z.number(), error: z.object({ code: z.string(), message: z.string(), recoverable: z.boolean() }), health: audioCaptureHealthSchema.optional() })
 const healthSchema = z.object({ event: z.literal('health'), sessionId: z.string(), durationSeconds: z.number(), health: audioCaptureHealthSchema })
-const segmentSchema = z.object({ event: z.literal('segment'), sessionId: z.string(), phase: z.enum(['open', 'seal']), segmentId: z.string().uuid(), file: z.string().regex(/^[a-f0-9-]+\.wav$/), firstFrame: z.number().int().nonnegative(), frames: z.number().int().nonnegative().optional(), sampleRate: z.number().int().positive(), channels: z.number().int().min(1).max(2), nativeMonoUs: z.number() })
+const segmentSchema = z.object({ event: z.literal('segment'), sessionId: z.string(), phase: z.enum(['open', 'seal']), segmentId: z.string().uuid(), file: z.string().regex(/^[a-f0-9-]+\.wav$/), firstFrame: z.number().int().nonnegative(), frames: z.number().int().nonnegative().optional(), sampleRate: z.number().int().positive(), channels: z.number().int().min(1).max(2), bitDepth: z.union([z.literal(16), z.literal(24), z.literal(32)]), nativeMonoUs: z.number(), uncertaintyUs: z.number().nonnegative() })
 const deviceSchema = z.object({ event: z.literal('device'), sessionId: z.string(), state: z.enum(['capturing', 'unavailable']), name: z.string(), reason: z.string().nullable(), atSeconds: z.number() })
 const systemHealthSchema = z.object({ event: z.literal('systemHealth'), sessionId: z.string(), durationSeconds: z.number(), health: systemAudioHealthSchema })
-/** 协议 3：系统声会话（段事件、设备事件、系统声健康计数）。新旧程序不配套时在握手就失败，不在录音中途才报协议错误。 */
-export const AUDIO_CAPTURE_PROTOCOL = 3
+/**
+ * 协议 4：麦克风的一路采集可同时交给音频编辑的整段文件和录屏的分段轨道（startMicrophoneTrack），段事件带位深与采集时钟误差。
+ * 新旧程序不配套时在握手就失败，不在录音中途才报协议错误。
+ */
+export const AUDIO_CAPTURE_PROTOCOL = 4
 
 export class AudioCaptureClient {
   private child: ChildProcessWithoutNullStreams | undefined
@@ -66,7 +69,8 @@ export class AudioCaptureClient {
     if (this.ready) return this.ready
     this.crashes = this.crashes.filter(t => Date.now() - t < 60_000)
     if (this.crashes.length >= 3) throw new AudioCaptureError('SERVICE_UNAVAILABLE', '录音服务连续异常，请稍后重试并检查驱动')
-    this.ready = this.launch().catch(error => { this.ready = undefined; this.child?.kill(); throw error })
+    // 启动没成（版本不配套等）不算失联：先放开这个子进程再结束它，不记崩溃、不触发使用方的自动重连，调用方拿到原始的报错。
+    this.ready = this.launch().catch(error => { const child = this.child; this.child = undefined; this.ready = undefined; clearInterval(this.calibration); child?.kill(); throw error })
     return this.ready
   }
   private async launch(): Promise<void> {
@@ -83,7 +87,11 @@ export class AudioCaptureClient {
     child.stderr.on('data', (data: Buffer) => logger.debug('原生录音诊断', { event: 'audio_capture.native.diagnostic', context: { message: data.toString('utf8').slice(0, 4000) } }))
     const lost = (): void => this.lost(child, EXITED)
     child.once('error', lost); child.once('exit', lost); child.stdin.once('error', lost)
-    z.object({ protocol: z.literal(AUDIO_CAPTURE_PROTOCOL) }).parse(await this.send('hello'))
+    const { protocol } = z.object({ protocol: z.unknown() }).parse(await this.send('hello'))
+    if (protocol !== AUDIO_CAPTURE_PROTOCOL) {
+      logger.error('原生录音程序与应用版本不一致', { event: 'audio_capture.process.version_mismatch', context: { expected: AUDIO_CAPTURE_PROTOCOL, actual: protocol } })
+      throw new AudioCaptureError('VERSION_MISMATCH', '录音组件版本与应用不一致，请重新安装痕迹AI；开发环境请先运行 npm run build:audio-capture 重新构建录音组件。')
+    }
     await this.syncClock()
     this.calibration = setInterval(() => { if (!this.panelOpen && !this.pending.size) void this.syncClock().catch(() => this.retire(child, NOT_RESPONDING)) }, 5000)
     this.calibration.unref(); this.touch()
@@ -169,7 +177,7 @@ export class AudioCaptureClient {
     } else if (message.event === 'level') this.onEvent(levelSchema.parse(message))
     else if (message.event === 'interrupted') this.onEvent(interruptedSchema.parse(message))
     else if (message.event === 'health') this.onEvent(healthSchema.parse(message))
-    else if (message.event === 'segment') { const segment = segmentSchema.parse(message); this.onEvent({ ...segment, monoUs: segment.nativeMonoUs + this.clock.offsetUs, uncertaintyUs: this.clockUncertaintyUs() }) }
+    else if (message.event === 'segment') { const segment = segmentSchema.parse(message); this.onEvent({ ...segment, monoUs: segment.nativeMonoUs + this.clock.offsetUs, uncertaintyUs: segment.uncertaintyUs + this.clockUncertaintyUs() }) }
     else if (message.event === 'device') this.onEvent(deviceSchema.parse(message))
     else if (message.event === 'systemHealth') this.onEvent(systemHealthSchema.parse(message))
     else if (message.id) {
@@ -179,7 +187,7 @@ export class AudioCaptureClient {
       else p.reject(new AudioCaptureError(message.error?.code ?? 'CAPTURE_FAILED', message.error?.message ?? '录音请求失败'))
     }
   }
-  /** 关闭输入让原生进程自己收尾 WAV 后退出；3 秒不退才强杀。返回进程结束。 */
+  /** 关闭输入让原生进程自己收尾 WAV 后退出。空闲时它读到输入结束立即退出；停止已应答而结尾还在落盘时要等它写完，所以强杀宽限与录音中退役一致。返回进程结束。 */
   private shutdown(): Promise<void> {
     const child = this.child; this.child = undefined; this.ready = undefined
     clearInterval(this.calibration); clearTimeout(this.idle)
@@ -188,7 +196,7 @@ export class AudioCaptureClient {
     if (!child) return Promise.resolve()
     child.stdin.end()
     return new Promise(resolve => {
-      const timeout = setTimeout(() => { child.kill(); resolve() }, 3000)
+      const timeout = setTimeout(() => { child.kill(); resolve() }, RETIRE_RECORDING_MS)
       timeout.unref()
       child.once('exit', () => { clearTimeout(timeout); resolve() })
     })

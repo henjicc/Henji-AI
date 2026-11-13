@@ -1,7 +1,7 @@
 //! Windows 系统声：默认输出设备（eRender/eConsole，与 Chromium 的 loopback 相同）的 WASAPI 共享模式回环。
 //! 采集的是整个系统混音，与原来界面里的采集一致，不按窗口或应用过滤。
 use crate::system_audio::{Shared, Timeline, CHANNELS, IDLE_AFTER_US, IDLE_LAG_US};
-use serde_json::{json, Value};
+use serde_json::json;
 use std::{
     sync::{atomic::Ordering, mpsc, Arc},
     thread,
@@ -237,7 +237,10 @@ impl Started {
 }
 
 /// 在采集线程里先打开一次设备：开始时没有可用的输出设备就直接报错，与原来界面采集一致。
-pub fn spawn(id: String, events: mpsc::Sender<Value>) -> Result<(Started, u32, String), String> {
+pub fn spawn(
+    id: String,
+    events: mpsc::Sender<crate::segments::Reliable>,
+) -> Result<(Started, u32, String), String> {
     let (ready, ready_rx) = mpsc::channel::<Result<(u32, String), String>>();
     let (go, go_rx) = mpsc::channel::<Arc<Shared>>();
     let handle = thread::spawn(move || run(id, events, ready, go_rx));
@@ -253,7 +256,7 @@ pub fn spawn(id: String, events: mpsc::Sender<Value>) -> Result<(Started, u32, S
 
 fn run(
     id: String,
-    events: mpsc::Sender<Value>,
+    events: mpsc::Sender<crate::segments::Reliable>,
     ready: mpsc::Sender<Result<(u32, String), String>>,
     go: mpsc::Receiver<Arc<Shared>>,
 ) {
@@ -269,7 +272,7 @@ fn run(
 
 unsafe fn capture(
     id: &str,
-    events: &mpsc::Sender<Value>,
+    events: &mpsc::Sender<crate::segments::Reliable>,
     ready: mpsc::Sender<Result<(u32, String), String>>,
     go: mpsc::Receiver<Arc<Shared>>,
 ) {
@@ -293,7 +296,7 @@ unsafe fn capture(
         return;
     };
     let device_event = |state: &str, name: &str, reason: Option<&str>, timeline_us: f64| {
-        let _ = events.send(json!({"event":"device","sessionId":id,"state":state,"name":name,"reason":reason,"atSeconds":timeline_us / 1_000_000.0}));
+        let _ = events.send(crate::segments::Reliable::Event(json!({"event":"device","sessionId":id,"state":state,"name":name,"reason":reason,"atSeconds":timeline_us / 1_000_000.0})));
     };
     let started = crate::ffi::clock();
     let mut timeline = Timeline::new(rate, started);

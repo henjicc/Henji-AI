@@ -31,7 +31,7 @@ const output = capabilityOutputSchema({ resultRef: recordingRefSchema, verified:
 const common = { version: 1, domain: RECORDING_DOMAIN, readOnly: false, dataClasses: ['C1' as const], idempotent: false, destructive: false,
   timeoutMs: 60000, supportsPreview: false, supportsUndo: false, requiredScopes: [], concurrencyKey: 'screen_recording', outputSchema: output }
 const start = defineApplicationCapability({ ...common, id: 'start_screen_recording', title: '开始屏幕录制',
-  description: '录制所选显示器、窗口或比例区域，同时采集选定声音、摄像头和操作事件。倒计时后后台录制，切页、界面重载都不会中断。分辨率、帧率、声音与摄像头省略时跟随用户在录屏设置里保存的值（与点录屏页“开始录制”一致）。音频编辑正在录音时麦克风被它占着：省略 tracks 时这次不开麦克风并在回执里说明，tracks 里写了 microphone 会在开始前被拒绝。需要屏幕及所选设备的系统权限，不收费。返回录制会话引用，通用读取其 phase/elapsed_ms 与 details（长录事实：各轨空档、丢帧、续录、补静音）；用 stop_screen_recording 保存或 cancel_screen_recording 中止。',
+  description: '录制所选显示器、窗口或比例区域，同时采集选定声音、摄像头和操作事件。倒计时后后台录制，切页、界面重载都不会中断。分辨率、帧率、声音与摄像头省略时跟随用户在录屏设置里保存的值（与点录屏页“开始录制”一致）。音频编辑正在录音时麦克风照常可用（两边共用一路采集，互不打断）。需要屏幕及所选设备的系统权限，不收费。返回录制会话引用，通用读取其 phase/elapsed_ms 与 details（长录事实：各轨空档、丢帧、续录、补静音）；用 stop_screen_recording 保存或 cancel_screen_recording 中止。',
   aliases: ['录屏', '开始录制', 'screen recording'], inputSchema: startRecordingInputSchema,
   producesRefs: ['screen_recording.session'], acceptsRefs: ['screen_recording.source', 'video_edit.document'],
   resolveOperationTargets: input => [input.sourceRef, ...(input.destination ? [{ kind: 'video_edit.document', id: input.destination.documentId }] : [])],

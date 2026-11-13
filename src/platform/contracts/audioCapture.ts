@@ -34,6 +34,9 @@ export interface AudioCapturePlatform {
   startSystemAudio(directory: string, originUs: number): Promise<{ sessionId: string }>
   /** 停止后交回这段的轨道记录（开段、封段、空档），最后一段已经封口。 */
   stopSystemAudio(sessionId: string): Promise<{ records: import('../../core/screenRecording/trackJournal').RecordingTrackRecord[] }>
+  /** 原生麦克风轨按 5 秒一段写进 directory；轨道时间相对 originUs。与音频编辑录音共用一路采集，互不打断。 */
+  startMicrophoneTrack(directory: string, originUs: number): Promise<{ sessionId: string }>
+  stopMicrophoneTrack(sessionId: string): Promise<{ records: import('../../core/screenRecording/trackJournal').RecordingTrackRecord[] }>
   onEvent(handler: (event: AudioCaptureEvent) => void): () => void
   onLevel(handler: (level: AudioCaptureLevel) => void): () => void
   onSamples(handler: (samples: AudioCaptureSamples) => void): () => void

@@ -11,6 +11,7 @@ import { resolveImageEditPersistenceParticipantsV3 } from '../v3/application/ima
 import { registerImageEditCapabilityHandlers } from './registerImageEditCapabilityHandlers'
 import { openImageEditorWithSourceCapability } from '@/core/application-control/builtinApplicationCapabilities'
 import { openImageEditorWithSource } from './imageSourceCapabilityService'
+import { navigationCorrelation } from '@/features/navigation/application/surfaceNavigationService'
 
 export const imageEditApplicationDomain: ApplicationDomainModule = {
   id: 'imageEdit',
@@ -34,7 +35,7 @@ export const imageEditApplicationDomain: ApplicationDomainModule = {
     registerImageEditCapabilityHandlers(registrar)
     registrar.registerHandler(openImageEditorWithSourceCapability.id, async (input, context) => {
       const parsed = openImageEditorWithSourceCapability.inputSchema.parse(input)
-      return openImageEditorWithSource(parsed.sourceRef, context)
+      return openImageEditorWithSource(parsed.sourceRef, navigationCorrelation(context))
     })
   },
   resolvePersistenceParticipants: resolveImageEditPersistenceParticipantsV3,

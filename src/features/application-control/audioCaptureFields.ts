@@ -33,7 +33,7 @@ export const audioCaptureFields: Field[] = [
 for (const [key, title, read, detail] of [
   ['devices', '系统音频设备与设备类型；物理设备由系统维护', (s: CaptureFieldSource): JsonValue => JSON.parse(JSON.stringify(s.inventory)) as JsonValue, ''],
   ['effective', '当前可用参数与设备回退说明；不会覆盖保存的偏好', (s: CaptureFieldSource): JsonValue => ({ settings: s.state.effectiveSettings, notice: s.state.notice }), ''],
-  ['recording', '音频编辑录音状态', (s: CaptureFieldSource): JsonValue => s.recording ?? null, '以主进程为准，界面重载后、还没接管前也准：phase 是否在录或暂停、中断；documentId 与 positionSeconds 是录进哪份口播的哪一秒（这一段的起点，录到 positionSeconds + durationSeconds）；durationSeconds 已录时长；health 是溢出、写盘跟不上丢的帧（已补静音）、写盘峰值；error 中断原因；attached 为 false 表示界面还没接管，停止照样可用；microphoneInUse 为 true 时录屏或讲解正占着麦克风，不能开始录音；busy 为 true 时界面或后台正在处理上一个录音操作，等它完成；lastTake 是助手最近一次拼回的那一段（outputPath 标明哪一段）：state=saving 还在拼、saved 已拼回（undoRef 交给 undo_audio_edit）、failed 没拼回（error 是原因）'],
+  ['recording', '音频编辑录音状态', (s: CaptureFieldSource): JsonValue => s.recording ?? null, '以主进程为准，界面重载后、还没接管前也准：phase 是否在录或暂停、中断；documentId 与 positionSeconds 是录进哪份口播的哪一秒（这一段的起点，录到 positionSeconds + durationSeconds）；durationSeconds 已录时长；health 是溢出、写盘跟不上丢的帧（已补静音）、写盘峰值；error 中断原因；attached 为 false 表示界面还没接管，停止照样可用；microphoneInUse 为 true 时讲解正占着麦克风，不能开始录音（录屏的麦克风不占，可同时录）；busy 为 true 时界面或后台正在处理上一个录音操作，等它完成；lastTake 是助手最近一次拼回的那一段（outputPath 标明哪一段）：state=saving 还在拼、saved 已拼回（undoRef 交给 undo_audio_edit）、failed 没拼回（error 是原因）'],
   ['pending_files', '待恢复的录音文件', (s: CaptureFieldSource): JsonValue => s.pendingFiles ?? [], '中断或崩溃后还没拼回作品的录音：文件、时长、原口播与位置、中断原因；交给 recover_audio_edit_recording 拼回或移到回收区'],
 ] as const) {
   const id = `${AUDIO_CAPTURE_ENTITY}.${key}`
