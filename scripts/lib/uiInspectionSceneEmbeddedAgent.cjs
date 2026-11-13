@@ -49,13 +49,13 @@ function createEmbeddedAgentScenes(context) {
         }
         /*
          * 画布生成这一路刻意照真实模型的走法来：首轮界面只给基础工具，付费生成要先经
-         * load_application_tools 按任务加载，下一轮才调得动。直接点名调用会被挡下——那正是
+         * load_application_tools 按任务取得定义，再经 call_application_tool 分派调用。直接点名调用会被挡下——那正是
          * 渐进加载该有的行为，替身绕过去就等于没验。
          */
         const delta = canvasGeneration
           ? (!issued('call_canvas_load') ? call('call_canvas_load', 'load_application_tools', { task: 'canvas_generation' })
-            : !issued('call_canvas_generation') ? call('call_canvas_generation', 'create_visible_generation_task',
-              { operationId: require('node:crypto').randomUUID(), modelId: 'kie-gpt-image-2.5', prompt: '画布节点生成验收', mediaType: 'image', params: {} })
+            : !issued('call_canvas_generation') ? call('call_canvas_generation', 'call_application_tool', { name: 'create_visible_generation_task',
+              input: { operationId: require('node:crypto').randomUUID(), modelId: 'kie-gpt-image-2.5', prompt: '画布节点生成验收', mediaType: 'image', params: {} } })
               : { content: '画布生成任务已提交。' })
           : called ? { content: '已读取当前主题设置。' } : call('call_read_theme', 'read_application_entity',
             { ref: { kind: 'settings.registry', id: 'singleton' }, propertyIds: ['interface.theme_contrast'] })

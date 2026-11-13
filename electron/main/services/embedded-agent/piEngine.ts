@@ -52,6 +52,8 @@ export class PiEngine implements EmbeddedAgentEngine {
   private disclosure?: PiToolDisclosure
   private toolTitles = new Map<string, string>()
   private toolArgs = new Map<string, unknown>()
+  /** 分派入口转给内层工具执行的调用：外层调用标识 → 内层调用（交给应用时用的就是内层标识与工具名）。 */
+  private dispatched = new Map<string, { toolCallId: string; toolName: string }>()
   constructor(private readonly emit: (event: EngineEvent) => void,
     private readonly callTool: (id: string, name: string, input: Record<string, unknown>, signal?: AbortSignal) => Promise<unknown>) {}
 
@@ -121,8 +123,7 @@ export class PiEngine implements EmbeddedAgentEngine {
         }
       },
     }))
-    this.disclosure = new PiToolDisclosure([...customTools, contextReader(this.manager, contextPageTokenLimit(limits.contextWindow))], this.manager, () => this.session!,
-      Math.floor(limits.contextWindow / 8))
+    this.disclosure = new PiToolDisclosure([...customTools, contextReader(this.manager, contextPageTokenLimit(limits.contextWindow))], () => this.session!)
     this.toolTitles = new Map(this.disclosure.tools.map(tool => [tool.name, tool.label]))
     const { session } = await this.sdk.createAgentSession({ cwd: this.directory, agentDir: this.directory,
       modelRuntime: runtime, model: resolved, thinkingLevel: embeddedThinkingLevel(selected),
@@ -133,7 +134,7 @@ export class PiEngine implements EmbeddedAgentEngine {
     const transformContext = session.agent.transformContext
     session.agent.transformContext = async (messages, signal) => {
       const transformed = await transformContext?.(messages, signal) ?? messages
-      const filtered = deduplicateHostContexts(transformed)
+      const filtered = this.disclosure!.redirectUndeclaredCalls(deduplicateHostContexts(transformed))
       const contexts = filtered.flatMap(message => message.role === 'custom' && message.customType === 'henji-context' ? [message.content] : [])
       this.contextMetrics = { contextCount: contexts.length, contextBytes: Buffer.byteLength(JSON.stringify(contexts), 'utf8') }
       const active = new Set(session.getActiveToolNames())
@@ -200,17 +201,21 @@ export class PiEngine implements EmbeddedAgentEngine {
       }
       if (event.type === 'tool_execution_start') { this.state.activity = '正在操作应用…'; this.toolArgs.set(event.toolCallId, event.args) }
       if (event.type === 'tool_execution_end') {
+        // 经分派入口的调用只记一步，记在内层工具名与内层调用标识下，回执取模型实际看到的外层结果
+        if (event.parentToolCallId) { this.dispatched.set(event.parentToolCallId, { toolCallId: event.toolCallId, toolName: event.toolName }); return }
+        const { toolCallId, toolName } = this.dispatched.get(event.toolCallId) ?? event
+        this.dispatched.delete(event.toolCallId)
         this.state.activity = '正在整理结果…'
         const textBytes = Buffer.byteLength(JSON.stringify(event.result?.content?.filter((part: { type: string }) => part.type === 'text') ?? []), 'utf8')
-        const previous = this.usageTotals.toolTextByName[event.toolName] ?? { calls: 0, bytes: 0, maxBytes: 0 }
-        this.usageTotals.toolTextByName[event.toolName] = { calls: previous.calls + 1, bytes: previous.bytes + textBytes, maxBytes: Math.max(previous.maxBytes, textBytes) }
+        const previous = this.usageTotals.toolTextByName[toolName] ?? { calls: 0, bytes: 0, maxBytes: 0 }
+        this.usageTotals.toolTextByName[toolName] = { calls: previous.calls + 1, bytes: previous.bytes + textBytes, maxBytes: Math.max(previous.maxBytes, textBytes) }
         this.usageTotals.toolResults++
         this.usageTotals.toolTextBytes += textBytes
         this.usageTotals.largestToolTextBytes = Math.max(this.usageTotals.largestToolTextBytes, textBytes)
         const resultText = (event.result?.content ?? []).flatMap((part: { type: string; text?: string }) => part.type === 'text' && part.text ? [part.text] : []).join('\n').slice(0, 4000)
         this.emit({ type: 'log', phase: 'tool_executed', requestId: this.requestId, sessionId: this.manager.getSessionId(),
-          tool: { toolCallId: event.toolCallId, toolName: event.toolName, args: this.toolArgs.get(event.toolCallId), isError: event.isError, durationMs: event.durationMs, resultText } })
-        this.toolArgs.delete(event.toolCallId)
+          tool: { toolCallId, toolName, args: this.toolArgs.get(toolCallId), isError: event.isError, durationMs: event.durationMs, resultText } })
+        this.toolArgs.delete(toolCallId); this.toolArgs.delete(event.toolCallId)
       }
       if (event.type === 'message_end' && event.message.role === 'assistant' && event.message.stopReason === 'error') {
         this.state.error = event.message.errorMessage ?? '模型请求失败，请检查配置后重试。'

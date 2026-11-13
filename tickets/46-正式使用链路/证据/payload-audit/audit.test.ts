@@ -80,7 +80,7 @@ it('payload audit', async () => {
   let active: string[] = []
   const fakeSession = { getActiveToolNames: () => active, setActiveToolsByName: (names: string[]) => { active = names }, messages: [] } as unknown as AgentSession
   const auditManager = SessionManager.inMemory()
-  const disclosure = new PiToolDisclosure([...piTools, contextReader(auditManager, 16000)], auditManager, () => fakeSession, 125000)
+  const disclosure = new PiToolDisclosure([...piTools, contextReader(auditManager, 16000)], () => fakeSession)
   const piRealSets: Record<string, string> = {}
   for (const s of surfaces) {
     disclosure.prepareContext(JSON.stringify({ surface: { id: s } }))

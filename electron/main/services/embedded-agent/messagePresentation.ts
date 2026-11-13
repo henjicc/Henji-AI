@@ -1,6 +1,7 @@
 import type { AgentSession } from '@earendil-works/pi-coding-agent'
 import type { EmbeddedAgentMessage } from '../../../../src/core/assistant/embeddedAgent'
 import type { PiAttachments } from './piAttachments'
+import { APPLICATION_TOOL_DISPATCHER } from './toolDisclosureProfiles'
 
 /** 从 Pi 正式历史派生展示，重新打开会话也保留过程；不暴露工具参数及原始回执。 */
 export function visibleMessages(messages: AgentSession['messages'], sessionId: string, attachments: PiAttachments,
@@ -21,7 +22,9 @@ export function visibleMessages(messages: AgentSession['messages'], sessionId: s
       for (const part of message.content) {
         if (part.type !== 'toolCall') continue
         const result = results.get(part.id)
-        output.push({ id: `${id}:tool:${part.id}`, role: 'assistant', kind: 'tool', text: titles.get(part.name) ?? '操作应用',
+        // 分派入口显示它实际调用的那个工具
+        const inner: unknown = part.name === APPLICATION_TOOL_DISPATCHER ? part.arguments?.name : undefined
+        output.push({ id: `${id}:tool:${part.id}`, role: 'assistant', kind: 'tool', text: (typeof inner === 'string' ? titles.get(inner) : undefined) ?? titles.get(part.name) ?? '操作应用',
           status: result?.role === 'toolResult' ? result.isError ? 'failed' : 'completed' : 'running' })
       }
     }

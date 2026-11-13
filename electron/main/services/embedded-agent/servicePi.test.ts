@@ -36,6 +36,7 @@ it.each(['model', 'tool'] as const)('宿主调度经官方 Pi SDK 在 %s 阶段�
   type Message = { role: string; content: string | Array<{ type: string; text?: string }> }
   const textOf = (message: Message) => typeof message.content === 'string' ? message.content : message.content.map(part => part.text ?? '').join('')
   const requests: string[] = []
+  const nativeTools = new Set<string>()
   let originalClosed = false
   const server = createServer(async (request, response) => {
     const chunks: Buffer[] = []
@@ -47,9 +48,11 @@ it.each(['model', 'tool'] as const)('宿主调度经官方 Pi SDK 在 %s 阶段�
     response.writeHead(200, { 'Content-Type': 'text/event-stream' }); response.flushHeaders()
     if (text === '原请求' && stage === 'model') { response.on('close', () => { originalClosed = true }); return }
     const done = body.messages.slice(userIndex + 1).some(message => message.role === 'tool' && textOf(message).includes('accepted'))
-    const loaded = body.tools.some(tool => tool.function.name === 'create_visible_generation_task')
+    for (const tool of body.tools) nativeTools.add(tool.function.name)
+    // 工具定义经加载结果进入对话历史，原生工具列表不变
+    const loaded = body.messages.some(message => message.role === 'tool' && textOf(message).includes('"name":"create_visible_generation_task"'))
     const delta = done ? { content: '工具已返回。' } : { tool_calls: [{ index: 0, id: `call_${requests.length}`, type: 'function',
-      function: loaded ? { name: 'create_visible_generation_task', arguments: JSON.stringify({ prompt: text }) }
+      function: loaded ? { name: 'call_application_tool', arguments: JSON.stringify({ name: 'create_visible_generation_task', input: { prompt: text } }) }
         : { name: 'load_application_tools', arguments: JSON.stringify({ task: 'canvas_generation' }) } }] }
     for (const [value, finish] of [[delta, null], [{}, done ? 'stop' : 'tool_calls']] as const) {
       response.write(`data: ${JSON.stringify({ id: 'reply', object: 'chat.completion.chunk', created: 1, model: 'fixture', choices: [{ index: 0, delta: value, finish_reason: finish }] })}\n\n`)
@@ -140,4 +143,8 @@ it.each(['model', 'tool'] as const)('宿主调度经官方 Pi SDK 在 %s 阶段�
   expect(close).toHaveBeenCalledTimes(3)
   expect(mocks.info).toHaveBeenCalledWith('内置助手回复状态', expect.objectContaining({ event: 'embedded_agent.turn.cancelled', requestId: requestIds.original }))
   expect(mocks.info).toHaveBeenCalledWith('内置助手工具调用完成', expect.objectContaining({ requestId: requestIds.waiting }))
+  // 经分派入口调用的付费工具：应用与日志看到的仍是它自己的名字，付费标记不丢
+  expect([...nativeTools].sort()).toEqual(['call_application_tool', 'load_application_tools', 'read_assistant_context'])
+  expect(mocks.info).toHaveBeenCalledWith('内置助手开始调用工具', expect.objectContaining({ requestId: requestIds.waiting,
+    context: expect.objectContaining({ toolName: 'create_visible_generation_task', paid: true, input: expect.objectContaining({ prompt: '等待消息' }) }) }))
 }, 30000)
