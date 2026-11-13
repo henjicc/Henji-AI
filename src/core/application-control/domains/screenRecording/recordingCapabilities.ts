@@ -15,7 +15,9 @@ export const recordingRefSchema = z.object({ kind: z.literal('screen_recording.s
 export const recordingDestinationSchema = z.object({
   documentId: z.string().min(1).describe('剪辑文档 id'),
   sequenceId: z.string().min(1).optional().describe('目标序列：读回或创建得到的完整序列引用 id（“文档id:序列id”）或冒号后的序列 id 都可以；不在这份剪辑里时执行前就拒绝'),
-  frame: z.number().int().nonnegative().optional(),
+  frame: z.number().int().nonnegative().optional().describe('放置位置，序列帧；与 seconds 二选一'),
+  seconds: z.number().finite().nonnegative().optional().describe('放置位置，作品时间的秒（按序列帧率换成帧）；与 frame 二选一'),
+  placement: z.enum(['end', 'overwrite']).optional().describe('放在序列的录屏轨上（剪辑的“录制”样子：一条录屏轨，块与块首尾相连）。end：接在录屏轨末尾，不盖任何内容，忽略位置。overwrite：从 seconds 或 frame 起覆盖，必须写明位置；被盖住的录屏块连同它链接的声音一起切掉，盖到哪算哪，没盖到的原地不动，别的轨道和别的素材不碰；位置在录屏轨末尾或之后等于 end；录制期间录屏轨被改动过时不覆盖、改为接在末尾。被盖住的撤销或在剪辑里拖回边缘可找回。需要 sequenceId；序列里认不出唯一一条录屏轨时拒绝并说明原因。省略 placement 时按位置放到空轨道上'),
 }).strict()
 export const startRecordingInputSchema = z.object({
   sourceRef: z.object({ kind: z.literal('screen_recording.source'), id: z.string().regex(/^(screen|window):\d+:\d+$/) }).strict().describe('先列出 screen_recording.source，选择显示器或窗口'),

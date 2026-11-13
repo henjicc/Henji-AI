@@ -16,7 +16,15 @@ import { notifyUser } from '@/contexts/NotificationContext'
 import { notificationMessage, notificationText } from '@/i18n/notifications'
 
 const logger = createLogger('features.screenRecording.session')
-export interface RecordingDestination { documentId: string; sequenceId?: string; frame?: number }
+/**
+ * 录好的素材放进哪份剪辑、哪条序列。`placement` 放在序列的录屏轨上（剪辑的录制样子）：`end` 接在末尾，`overwrite` 从 `frame` 起覆盖，
+ * 盖到哪算哪；省略时按 `frame` 放到空轨道上。
+ */
+export interface RecordingDestination {
+  documentId: string; sequenceId?: string; frame?: number; placement?: 'end' | 'overwrite'
+  /** 开始时录屏轨的指纹（`videoEditRecordingLaneBasis`）：停止时对不上就不按 `frame` 覆盖，改为接在末尾。 */
+  basis?: string
+}
 /** `opening` covers the moment between stop and the edit appearing, so the page never flashes the setup. */
 interface View { documentId: string | null; snapshot: RecordingControlSnapshot | null; content: RecordingDocument | null; busy: boolean; opening: boolean; error: string | null; destination: RecordingDestination | null }
 let view: View = { documentId: null, snapshot: null, content: null, busy: false, opening: false, error: null, destination: null }
@@ -73,7 +81,7 @@ export async function showRecordingDocument(id: string): Promise<void> {
  * 停止后录好的素材去了哪：导入了哪份剪辑（导入了哪些素材项），或存成了哪个视频文件（快速录制在后台存，存好前 path 为空）。
  * 停止的回执据此说清楚，免得调用方以为没导入又导一遍。
  */
-export type RecordingStopOutcome = { kind: 'edit'; documentId: string; sequenceId?: string; frame?: number; itemIds?: string[]; combined?: boolean; screens?: number; separate?: string } | { kind: 'file'; path?: string; error?: string }
+export type RecordingStopOutcome = { kind: 'edit'; documentId: string; sequenceId?: string; frame?: number; placement?: import('./recordingVideoImport').RecordingPlacementResult; itemIds?: string[]; combined?: boolean; screens?: number; separate?: string } | { kind: 'file'; path?: string; error?: string }
 const stopOutcomes = new Map<string, RecordingStopOutcome>()
 export function recordingStopOutcome(id: string): RecordingStopOutcome | undefined { return stopOutcomes.get(id) }
 async function finish(id: string, importResult: boolean): Promise<void> {
@@ -102,14 +110,16 @@ async function finish(id: string, importResult: boolean): Promise<void> {
       } else if (importResult && recorded && handoff) {
         const { openRecordingInEditor } = await import('./recordingVideoImport')
         try {
-          const { imported, ...target } = await openRecordingInEditor(id, destination)
+          const { imported, placement: _requested, basis: _basis, ...target } = await openRecordingInEditor(id, destination)
           stopOutcomes.set(id, { kind: 'edit', ...target, ...imported })
         }
         catch (error) { notifyUser(notificationMessage('recordingEditFailed', { error: error instanceof Error ? error.message : String(error) }), 'error'); throw error }
       } else if (importResult && recorded && destination) {
         // Assistant and director runs keep control of what happens next; they only fill the edit they named.
         const { importRecordingToVideo } = await import('./recordingVideoImport')
-        stopOutcomes.set(id, { kind: 'edit', ...destination, ...await importRecordingToVideo(id, destination) })
+        // 回执写实际落点（导入的 placement 结果），不写开始时请求的放置方式与录屏轨指纹。
+        const { placement: _requested, basis: _basis, ...where } = destination
+        stopOutcomes.set(id, { kind: 'edit', ...where, ...await importRecordingToVideo(id, destination) })
       }
       defaultDocumentOperationChanges.changed()
       logger.info('录制会话已封存', { event: 'recording.session.finish.completed', context: { sessionId: id } })

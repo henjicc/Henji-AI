@@ -4,9 +4,9 @@ import { countVideoEditTiming } from './engine/videoEditFirstFrameTiming'
 import { retainVideoEditProgramWarmup } from './engine/videoEditProgramPool'
 import { ICON_DOWNLOAD, ICON_TOOL_SCREEN_RECORDING, UI_ICON_SIZE } from '@/core/theme/icons'
 import { notificationText } from '@/i18n/notifications'
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { ApplicationOperationReviewBanner } from '@/features/application-control'
-import { PanelTrigger, UiButton, UiError, UiIconButton, UiOptionButton, UiToolbar } from '@/components/ui'
+import { PanelTrigger, UiButton, UiError, UiIconButton, UiOptionButton, UiSegmented, UiToolbar } from '@/components/ui'
 import { UI_FLOATING_EDGE_CLASS } from '@/components/ui/styleTokens'
 import { useNotification } from '@/contexts/NotificationContext'
 import { videoEditUserErrorMessage } from './application/videoEditUserError'
@@ -18,7 +18,7 @@ import { ChevronDown, ChevronLeft, FolderInput, FolderOpen, Keyboard, Redo2, Und
 import { useTranslation } from 'react-i18next'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import type { DockviewApi } from 'dockview-react'
-import { activeVideoEditInstance, collectVideoEditMedia, createVideoEditProject, findActiveVideoEditSequence, leaveVideoEditProject, listVideoEditInstances, openVideoEditDocument, openVideoEditProject, openVideoEditProjectFolder, subscribeVideoEdit, videoEditRevision, focusVideoEdit, focusVideoEditPanel, videoEditExportRange, type VideoEditInstance } from './application/videoEditService'
+import { activeVideoEditInstance, collectVideoEditMedia, createVideoEditProject, findActiveVideoEditSequence, leaveVideoEditProject, listVideoEditInstances, openVideoEditDocument, openVideoEditProject, openVideoEditProjectFolder, setVideoEditLayout, subscribeVideoEdit, videoEditLayout, videoEditRecordingInProgress, videoEditRevision, focusVideoEdit, focusVideoEditPanel, videoEditExportRange, type VideoEditInstance } from './application/videoEditService'
 import { videoEditFrameTimecode } from '@/core/videoEdit/timecode'
 import { cancelVideoEditExport, videoEditExportTask } from './application/videoEditExport'
 import { VideoEditDock } from './layout/VideoEditDock'
@@ -29,6 +29,7 @@ import { captureVideoEditCommandContext, executeVideoEditCommand, videoEditComma
 import { videoEditKeyboardCommand } from './application/videoEditKeyboard'
 import { focusVideoEditPanelElement } from './layout/videoEditPanelFocus'
 import { VideoEditShortcutDialog } from './panels/VideoEditShortcutSettings'
+import { videoEditRecordLayoutCommand } from './application/videoEditRecordLayoutCommands'
 import { timelineCommandPresentation } from './timeline/timelineCommandPresentation'
 import { VideoEditTimelineTools } from './timeline/VideoEditTimelineTools'
 import { VideoEditAnnotationToolOptions } from './VideoEditAnnotationToolOptions'
@@ -46,6 +47,16 @@ import { VideoEditExportDialog } from './panels/VideoEditExportDialog'
 import { VideoEditFontWarnings } from './panels/VideoEditFontWarnings'
 import { videoEditCommittedDocument } from './application/videoEditService'
 import { cancelVideoEditBeatAnalysis, subscribeVideoEditBeats, videoEditBeatRevision, videoEditBeatTask } from './application/videoEditBeatAnalysis'
+
+// 录制样子用到屏幕录制的设置与录制状态；按需加载，打开剪辑时不带上屏幕录制。
+const ProjectRecordingView = lazy(() => import('./recording/ProjectRecordingView').then(module => ({ default: module.ProjectRecordingView })))
+
+/** 命令带中间的“录制 / 剪辑”：同一条序列的两种样子。录制进行中不切换，录完再切。 */
+function VideoEditLayoutSwitch({ instance, run }: { instance: VideoEditInstance; run: (operation: () => unknown) => void }): React.ReactElement {
+  const recording = videoEditRecordingInProgress(instance)
+  return <UiSegmented ariaLabel="录制或剪辑" value={videoEditLayout(instance)} disabled={recording} disabledReason="正在录制，停止后再切换" onChange={layout => run(() => setVideoEditLayout(instance.document.id, layout))}
+    options={[{ value: 'record', label: '录制' }, { value: 'edit', label: '剪辑' }]} />
+}
 
 /** 命令带放得下“工具组 + 批注参数条”的窗口宽度（px）；更窄时参数条落到从属参数带。 */
 const COMMAND_BAND_INLINE_OPTIONS_MIN_WIDTH = 1480
@@ -76,20 +87,19 @@ export function VideoEditToolbar({ instance, api, run, onNotice }: { instance: V
   const beatTask = videoEditBeatTask(projectId)
   const marked = instance.inFrame !== null || instance.outFrame !== null ? (() => { try { return videoEditExportRange(instance) } catch { return undefined } })() : undefined
   const [collecting, setCollecting] = useState(false)
-  const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const libraryId = useAssetLibraryStore(state => state.libraryId)
   const shortcuts = useSettingsStore(state => state.videoEditShortcuts)
   const context = captureVideoEditCommandContext(projectId, 'timeline', { includeClipboard: false })
   const presentation = (id: VideoEditCommandId) => timelineCommandPresentation(context, id, shortcuts)
   const command = (id: VideoEditCommandId): void => { const current = captureVideoEditCommandContext(projectId, 'timeline'); run(() => executeVideoEditCommand(current, id)) }
   const undo = presentation('undo'); const redo = presentation('redo'); const exporting = presentation('export')
-  const others = listVideoEditInstances().filter(item => item !== instance)
   // 编辑工具在命令带（重要记录 019）：紧跟项目名，左对齐；窄窗口时项目名先截断，工具保持完整。序列尺寸与帧率由序列决定，不在这里显示。
   // 批注工具的参数条紧跟工具组；窗口放不下时落到命令带下的从属参数带（两条共用一块底色）。
   const annotating = instance.tool === 'annotate'
   const fail = (error: unknown): void => run(() => { throw error })
   const wide = useSyncExternalStore(subscribeWindowResize, wideCommandBand)
   const tools = <div className="mr-auto flex shrink-0 items-center" data-video-edit-command-tools>
+    {sequence && <VideoEditLayoutSwitch instance={instance} run={run} />}
     <span aria-hidden="true" className="mx-1.5 h-4 w-px shrink-0 bg-line" />
     <VideoEditTimelineTools presentation={presentation} execute={id => command(id)} />
     {annotating && wide && <><span aria-hidden="true" className="mx-1.5 h-4 w-px shrink-0 bg-line" /><VideoEditAnnotationToolOptions instance={instance} presentation={presentation} onError={fail} /></>}
@@ -117,6 +127,18 @@ export function VideoEditToolbar({ instance, api, run, onNotice }: { instance: V
     {task?.state === 'running' && <UiButton onClick={() => cancelVideoEditExport(projectId)}>取消导出 {Math.round(task.progress * 100)}%</UiButton>}
     <UiButton variant="primary" aria-label="导出视频" tooltip={exporting.tooltip} disabledReason={exporting.tooltip} disabled={!exporting.enabled} onClick={() => command('export')}><ICON_DOWNLOAD  />导出</UiButton>
   </>}>
+    <VideoEditProjectLeading instance={instance} run={run} onNotice={onNotice} />
+  </UiToolbar>
+}
+
+
+/** 命令带左端：关闭项目、项目名菜单（收集素材、打开所在位置、快捷键、切换到别的项目）。剪辑与录制两种样子共用。 */
+function VideoEditProjectLeading({ instance, run, onNotice }: { instance: VideoEditInstance; run: (operation: () => unknown | Promise<unknown>) => void; onNotice: (message: string) => void }): React.ReactElement {
+  const { t } = useTranslation('ui')
+  const projectId = instance.document.id
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const others = listVideoEditInstances().filter(item => item !== instance)
+  return <>
     <UiIconButton size="md" aria-label={t('videoEditProject.back')} tooltip={t('videoEditProject.back')} onClick={() => run(() => leaveVideoEditProject(projectId))}><ChevronLeft  /></UiIconButton>
     <PanelTrigger panelSize="menu" zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" renderPanel={() => <div className="flex flex-col gap-1">
       <UiOptionButton variant="menu" size="sm" className="gap-2" onClick={() => run(async () => {
@@ -133,7 +155,24 @@ export function VideoEditToolbar({ instance, api, run, onNotice }: { instance: V
       </UiButton>}
     </PanelTrigger>
     <VideoEditShortcutDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
-  </UiToolbar>
+  </>
+}
+
+/** 录制样子的命令带左端：项目、这条序列的名字与撤销重做；录制控制在右端由录制样子自己放。 */
+function VideoEditRecordLeading({ instance, run, onNotice }: { instance: VideoEditInstance; run: (operation: () => unknown | Promise<unknown>) => void; onNotice: (message: string) => void }): React.ReactElement {
+  useSyncExternalStore(subscribeVideoEdit, videoEditRevision)
+  const shortcuts = useSettingsStore(state => state.videoEditShortcuts)
+  const projectId = instance.document.id
+  const context = captureVideoEditCommandContext(projectId, 'timeline', { includeClipboard: false })
+  const undo = timelineCommandPresentation(context, 'undo', shortcuts), redo = timelineCommandPresentation(context, 'redo', shortcuts)
+  const recording = videoEditRecordingInProgress(instance)
+  const command = (id: 'undo' | 'redo'): void => run(() => executeVideoEditCommand(captureVideoEditCommandContext(projectId, 'timeline'), id))
+  return <>
+    <VideoEditProjectLeading instance={instance} run={run} onNotice={onNotice} />
+    <span className="mx-1.5 min-w-0 truncate text-xs text-text3">{findActiveVideoEditSequence(instance)?.name}</span>
+    <UiIconButton aria-label="撤销" tooltip={undo.tooltip} disabledReason={recording ? '正在录制' : undo.tooltip} disabled={recording || !undo.enabled} onClick={() => command('undo')}><Undo2 /></UiIconButton>
+    <UiIconButton aria-label="重做" tooltip={redo.tooltip} disabledReason={recording ? '正在录制' : redo.tooltip} disabled={recording || !redo.enabled} onClick={() => command('redo')}><Redo2 /></UiIconButton>
+  </>
 }
 
 export default function VideoEditApp(): React.ReactElement {
@@ -168,14 +207,21 @@ export default function VideoEditApp(): React.ReactElement {
   const hovered = useRef<Element | null>(null)
   /** 剪辑快捷键分发：根节点的键盘事件和“焦点落在页面本身”时的事件共用。 */
   const dispatchKey = (event: KeyboardEvent): void => {
-    const binding = videoEditKeyboardCommand({ ...event, code: event.code, key: event.key, ctrlKey: event.ctrlKey, metaKey: event.metaKey, altKey: event.altKey, shiftKey: event.shiftKey, repeat: event.repeat, isComposing: event.isComposing, defaultPrevented: event.defaultPrevented, target: event.target }, instance?.activePanel ?? 'global', shortcuts)
+    // 录制样子只有一条录屏轨，快捷键都按时间线的作用域认。
+    const recordLayout = Boolean(instance && videoEditLayout(instance) === 'record')
+    const binding = videoEditKeyboardCommand({ ...event, code: event.code, key: event.key, ctrlKey: event.ctrlKey, metaKey: event.metaKey, altKey: event.altKey, shiftKey: event.shiftKey, repeat: event.repeat, isComposing: event.isComposing, defaultPrevented: event.defaultPrevented, target: event.target }, recordLayout ? 'timeline' : instance?.activePanel ?? 'global', shortcuts)
     if (!binding) return
+    // 录制样子只认少数几个命令（与菜单同一份判断）：切开、删除换成录屏轨上的操作，其余不响应。
+    const record = videoEditRecordLayoutCommand(instance, binding.id)
+    if (record.kind === 'blocked') return
+    if (record.kind === 'lane') { event.preventDefault(); event.stopPropagation(); run(record.run); return }
     if (binding.id === 'maximize_panel') { event.preventDefault(); event.stopPropagation(); toggleMaximizedGroup(dockApi, hovered.current); return }
+    const id = binding.id
     const context = captureVideoEditCommandContext(projectId, binding.scope)
-    if (!videoEditCommandState(context, binding.id).enabled) return
+    if (!videoEditCommandState(context, id).enabled) return
     event.preventDefault(); event.stopPropagation()
-    const panel = FOCUS_COMMANDS[binding.id]
-    run(async () => { await executeVideoEditCommand(context, binding.id); if (panel) focusVideoEditPanelElement(panel) })
+    const panel = FOCUS_COMMANDS[id]
+    run(async () => { await executeVideoEditCommand(context, id); if (panel) focusVideoEditPanelElement(panel) })
   }
   const dispatchKeyRef = useRef(dispatchKey)
   dispatchKeyRef.current = dispatchKey
@@ -198,9 +244,13 @@ export default function VideoEditApp(): React.ReactElement {
     {instance ? <>
       <ApplicationOperationReviewBanner documentId={instance.document.id} domain="video_edit" label="剪辑" />
       <VideoEditImportProgress projectId={instance.document.id} />
-      <VideoEditToolbar instance={instance} api={dockApi} run={run} onNotice={onNotice} />
-      <VideoEditFontWarnings document={videoEditCommittedDocument(instance)} />
-      <div className="min-h-0 flex-1" aria-label="剪辑面板工作区"><VideoEditDock instance={instance} onError={onError} onApiChange={setDockApi} /></div>
+      {videoEditLayout(instance) === 'record' && findActiveVideoEditSequence(instance)
+        ? <Suspense fallback={null}><ProjectRecordingView instance={instance} onError={onError} leading={<VideoEditRecordLeading instance={instance} run={run} onNotice={onNotice} />} layoutSwitch={<VideoEditLayoutSwitch instance={instance} run={run} />} /></Suspense>
+        : <>
+          <VideoEditToolbar instance={instance} api={dockApi} run={run} onNotice={onNotice} />
+          <VideoEditFontWarnings document={videoEditCommittedDocument(instance)} />
+          <div className="min-h-0 flex-1" aria-label="剪辑面板工作区"><VideoEditDock instance={instance} onError={onError} onApiChange={setDockApi} /></div>
+        </>}
     </> : <div className="relative min-h-0 flex-1">
       {/* 剪辑页 = 项目列表（作品索引）；打开项目 = 打开它的主剪辑 */}
       <VideoEditProjectsPage

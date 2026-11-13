@@ -24,9 +24,6 @@ export function RecordingSetupPanel({ value, devices, destination, onChange }: {
     if (folder) onChange({ saveDirectory: folder })
   }
   const quick = value.mode === 'quick'
-  // 打开过录音设置后，麦克风设备一行写当前设备名。不为显示名字提前读设备：那会拉起原生录音服务枚举设备
-  const [microphoneName, setMicrophoneName] = useState<string>()
-  const showMicrophone = (state: AudioCaptureSettingsState): void => setMicrophoneName(state.settings.deviceName || t('recording.defaultDevice'))
   return <aside className="flex w-80 shrink-0 flex-col gap-6 overflow-auto border-l border-gap bg-panel p-4" aria-label={t('recording.options')}>
     <RecordingRecoveryBanner />
     <UiGroup title={t('recording.recordGroup')} titleTone="compact" labelWidth={96}>
@@ -39,15 +36,12 @@ export function RecordingSetupPanel({ value, devices, destination, onChange }: {
       </UiFormRow>}
     </UiGroup>
     <UiGroup title={t('recording.soundGroup')} titleTone="compact" labelWidth={96} divided>
-      <UiFormRow label={t('recording.microphone')} density="compact"><UiSwitch checked={value.microphone} onCheckedChange={microphone => onChange({ microphone })} /></UiFormRow>
-      {value.microphone && <UiFormRow label={t('recording.microphoneDevice')} density="compact"><PanelTrigger display={microphoneName ?? t('recording.audioSettings')} size="sm" panelSize="compact" panelPadding="content" renderPanel={() => <AudioCaptureSettingsForm onSettings={showMicrophone} />} /></UiFormRow>}
-      <UiFormRow label={t('recording.systemAudio')} density="compact"><UiSwitch checked={value.systemAudio} onCheckedChange={systemAudio => onChange({ systemAudio })} /></UiFormRow>
+      <RecordingSoundRows value={value} onChange={onChange} />
       {!quick && <UiFormRow label={t('recording.camera')} density="compact"><UiSwitch checked={value.camera} onCheckedChange={camera => onChange({ camera })} /></UiFormRow>}
       {!quick && value.camera && <UiFormRow label={t('recording.cameraDevice')} density="compact"><Dropdown size="sm" value={value.cameraId} options={deviceOptions('camera', t('recording.camera'))} onSelect={cameraId => onChange({ cameraId })} /></UiFormRow>}
     </UiGroup>
     <UiGroup title={t('recording.pictureGroup')} titleTone="compact" labelWidth={96} divided>
-      <UiFormRow label={t('recording.quality')} density="compact"><UiSegmented ariaLabel={t('recording.quality')} size="sm" value={value.quality} onChange={quality => onChange({ quality })} options={[{ value: '1080p', label: '1080P' }, { value: '1440p', label: '2K' }, { value: '2160p', label: '4K' }]} /></UiFormRow>
-      <UiFormRow label={t('recording.fps')} density="compact"><UiSegmented ariaLabel={t('recording.fps')} size="sm" value={value.fps} onChange={fps => onChange({ fps })} options={([30, 60] as const).map(fps => ({ value: fps, label: formatFrameRate(fps, 'compact') }))} /></UiFormRow>
+      <RecordingPictureRows value={value} onChange={onChange} />
       <RecordingVideoParams value={value} onChange={onChange} />
     </UiGroup>
     <UiGroup title={t('recording.sessionGroup')} titleTone="compact" labelWidth={96} divided>
@@ -55,4 +49,25 @@ export function RecordingSetupPanel({ value, devices, destination, onChange }: {
       {destination && <UiFormRow label={t('recording.insert')} density="compact"><UiSwitch checked={value.insert} onCheckedChange={insert => onChange({ insert })} /></UiFormRow>}
     </UiGroup>
   </aside>
+}
+
+/** 麦克风、麦克风设备、系统声音三行：录制页与剪辑的录制样子共用。 */
+export function RecordingSoundRows({ value, disabled, onChange }: { value: Pick<RecordingSetup, 'microphone' | 'systemAudio'>; disabled?: boolean; onChange(patch: Partial<RecordingSetup>): void }): React.ReactElement {
+  const { t } = useTranslation('ui')
+  // 打开过录音设置后，麦克风设备一行写当前设备名。不为显示名字提前读设备：那会拉起原生录音服务枚举设备
+  const [microphoneName, setMicrophoneName] = useState<string>()
+  const showMicrophone = (state: AudioCaptureSettingsState): void => setMicrophoneName(state.settings.deviceName || t('recording.defaultDevice'))
+  return <>
+    <UiFormRow label={t('recording.microphone')} density="compact"><UiSwitch checked={value.microphone} disabled={disabled} onCheckedChange={microphone => onChange({ microphone })} /></UiFormRow>
+    {value.microphone && <UiFormRow label={t('recording.microphoneDevice')} density="compact"><PanelTrigger display={microphoneName ?? t('recording.audioSettings')} size="sm" disabled={disabled} panelSize="compact" panelPadding="content" renderPanel={() => <AudioCaptureSettingsForm onSettings={showMicrophone} />} /></UiFormRow>}
+    <UiFormRow label={t('recording.systemAudio')} density="compact"><UiSwitch checked={value.systemAudio} disabled={disabled} onCheckedChange={systemAudio => onChange({ systemAudio })} /></UiFormRow>
+  </>
+}
+/** 清晰度与帧率两行：录制页与剪辑的录制样子共用。 */
+export function RecordingPictureRows({ value, disabled, onChange }: { value: Pick<RecordingSetup, 'quality' | 'fps'>; disabled?: boolean; onChange(patch: Partial<RecordingSetup>): void }): React.ReactElement {
+  const { t } = useTranslation('ui')
+  return <>
+    <UiFormRow label={t('recording.quality')} density="compact"><UiSegmented ariaLabel={t('recording.quality')} size="sm" disabled={disabled} value={value.quality} onChange={quality => onChange({ quality })} options={[{ value: '1080p', label: '1080P' }, { value: '1440p', label: '2K' }, { value: '2160p', label: '4K' }]} /></UiFormRow>
+    <UiFormRow label={t('recording.fps')} density="compact"><UiSegmented ariaLabel={t('recording.fps')} size="sm" disabled={disabled} value={value.fps} onChange={fps => onChange({ fps })} options={([30, 60] as const).map(fps => ({ value: fps, label: formatFrameRate(fps, 'compact') }))} /></UiFormRow>
+  </>
 }

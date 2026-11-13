@@ -1,3 +1,10 @@
 export { screenRecordingApplicationDomain } from './application/applicationDomain'
 export { setRecordingDestination } from './application/recordingService'
 export { readRecordingUnderstanding } from './application/recordingUnderstandingService'
+// 剪辑的录制样子用到的录制状态、控制与设置（与屏幕录制页同一份）。
+export { controlRecording, recordingStopOutcome, recordingView, startRecording, subscribeRecording } from './application/recordingService'
+export { RecordingSourcePicker } from './RecordingSourcePicker'
+export { RecordingPictureRows, RecordingSoundRows } from './RecordingSetupPanel'
+export { orderedScreens, recordingTracksFromSetup } from './recordingSetupModel'
+export { recordingTimeLabel } from './useRecordingControlSnapshot'
+export { useRecordingSetupState, type RecordingSetupState } from './useRecordingSetupState'

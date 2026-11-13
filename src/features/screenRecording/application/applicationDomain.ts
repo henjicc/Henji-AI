@@ -17,7 +17,9 @@ import { openApplicationSurface } from '@/features/navigation'
 import { recordingDocumentSchema } from '@/core/screenRecording/document'
 import { captureOptionsSchema } from '@/core/screenRecording/capture'
 import { controlRecording, readRecordingDocument, recordingEvents, recordingStopOutcome,recordingView, recoverRecording, showRecordingDocument, startRecording } from './recordingService'
-import { importRecordingToVideo } from './recordingVideoImport'
+import { importRecordingToVideo, recordingPlacementText } from './recordingVideoImport'
+import { videoEditRecordingTarget } from '@/core/videoEdit/recordingLane'
+import { videoEditComposition } from '@/core/videoEdit/document'
 import type { RecordingDestination } from './recordingService'
 import { recordingRegistrations } from './recordingReflection'
 import { WEB_APP_CAPABILITY_IDS, executeWebAppCapability, webAppRecordingRegistrations } from './webAppRecording'
@@ -44,7 +46,7 @@ import { generateRecordingScriptCapability, replayRecordingCapability, rerecordR
  * 助手读回或创建得到的序列引用是“文档:序列”，界面传的是裸序列 id，两种都认。目标在任何写入之前核对：
  * 不对就作为参数错误拒绝（没有执行），并列出这份剪辑里能用的序列。
  */
-async function resolveRecordingDestination(destination: RecordingDestination, options: { inProject?: boolean } = {}): Promise<RecordingDestination> {
+async function resolveRecordingDestination(destination: RecordingDestination & { seconds?: number }, options: { inProject?: boolean } = {}): Promise<RecordingDestination> {
   const prefix = `${destination.documentId}:`
   const sequenceId = destination.sequenceId?.startsWith(prefix) ? destination.sequenceId.slice(prefix.length) : destination.sequenceId
   let owner: Awaited<ReturnType<typeof openVideoEditDocument>>
@@ -55,7 +57,18 @@ async function resolveRecordingDestination(destination: RecordingDestination, op
     const available = owner.document.sequences.map(sequence => `${prefix}${sequence.id}（${sequence.name}）`).join('、')
     throw notExecutedFailure(new Error(`destination.sequenceId「${destination.sequenceId}」不是这份剪辑里的序列。可用：${available || '没有序列，先新建序列'}；写完整序列引用或只写冒号后的序列 id 都可以，省略 sequenceId 只导入素材库。`))
   }
-  return { ...destination, ...(sequenceId ? { sequenceId } : {}) }
+  const { seconds, ...rest } = destination
+  if (seconds !== undefined && destination.frame !== undefined) throw notExecutedFailure(new Error('destination 的 seconds 与 frame 只写一个：seconds 是作品时间的秒，frame 是序列帧。'))
+  const sequence = sequenceId ? owner.document.sequences.find(value => value.id === sequenceId) : undefined
+  const frame = seconds !== undefined && sequence ? Math.round(seconds * sequence.frameRate.numerator / sequence.frameRate.denominator) : destination.frame
+  if (!destination.placement) return { ...rest, ...(sequenceId ? { sequenceId } : {}), ...(frame !== undefined ? { frame } : {}) }
+  if (!sequence) throw notExecutedFailure(new Error('destination.placement 要和 sequenceId 一起给：写明放进哪条序列的录屏轨。'))
+  // 覆盖必须写明从哪里盖起：没打开或刚打开的剪辑指针在 0，省略就会从头盖起。
+  if (destination.placement === 'overwrite' && frame === undefined) throw notExecutedFailure(new Error('placement=overwrite 要写明从哪里盖起：seconds（作品时间的秒）或 frame（序列帧）。只想接在后面就写 placement=end。'))
+  let target: ReturnType<typeof videoEditRecordingTarget>
+  try { target = videoEditRecordingTarget(videoEditComposition(owner.document, sequence.id), destination.placement === 'end' ? { at: 'end' } : { at: 'frame', frame: frame! }) }
+  catch (error) { throw notExecutedFailure(error instanceof Error ? error : new Error(String(error))) }
+  return { documentId: destination.documentId, sequenceId: sequence.id, frame: target.frame, placement: destination.placement, basis: target.basis }
 }
 /**
  * 停止回执说清录好的素材去了哪：导入了哪份剪辑的哪些素材项、放没放进序列，或按录屏页的快速录制存成了视频文件。
@@ -70,7 +83,7 @@ async function stopImportReceipt(sessionId: string): Promise<{ message: string; 
   const itemIds = outcome.itemIds ?? []
   const names = itemIds.map(id => owner?.document.items.find(item => item.id === id)?.name ?? id)
   const sequenceName = outcome.sequenceId ? owner?.document.sequences.find(value => value.id === outcome.sequenceId)?.name ?? `${outcome.documentId}:${outcome.sequenceId}` : undefined
-  const placed = `${sequenceName ? `已放进序列「${sequenceName}」第 ${outcome.frame ?? 0} 帧起，${outcome.combined ? combinedPlacement(outcome.screens ?? 1) : '暂停前后各段分别链接。'}` : '没给 sequenceId，只进了素材库。'}${outcome.separate ? `${outcome.separate}。` : ''}`
+  const placed = `${outcome.placement && sequenceName ? recordingPlacementText(outcome.placement, sequenceName) : sequenceName ? `已放进序列「${sequenceName}」第 ${outcome.frame ?? 0} 帧起，${outcome.combined ? combinedPlacement(outcome.screens ?? 1) : '暂停前后各段分别链接。'}` : '没给 sequenceId，只进了素材库。'}${outcome.separate ? `${outcome.separate}。` : ''}`
   return {
     message: outcome.itemIds ? `已停止并保存，导入剪辑素材库 ${names.length} 项：${names.join('、')}；${placed}不要再导入。` : `已停止并保存，按录屏页的设置回到上次送进的剪辑${sequenceName ? `（序列「${sequenceName}」）` : ''}，素材已在里面，不要再导入。`,
     imported: { documentRef: { kind: 'video_edit.document', id: outcome.documentId }, ...(outcome.sequenceId ? { sequenceRef: { kind: 'video_edit.sequence', id: `${outcome.documentId}:${outcome.sequenceId}` } } : {}),
@@ -175,8 +188,9 @@ export const screenRecordingApplicationDomain: ApplicationDomainModule = {
         const work = trackRecordingWork(parsed.sessionRef.id, importRecordingToVideo(parsed.sessionRef.id, destination, context.signal))
         const resultRef = { kind: 'video_edit.document', id: parsed.destination.documentId }
         if (!await waitWithin(work, CAPABILITY_SHORT_WAIT_MS)) return { resultRef, itemIds: [], verified: false, finishing: true, message: stillRunning('导入') }
-        const { itemIds, combined, screens, separate } = await work
-        return { resultRef, itemIds, verified: itemIds.length > 0, message: `已导入 ${itemIds.length} 项录制素材${combined ? `：${combinedPlacement(screens)}` : '。'}${separate ? `${separate}。` : ''}` }
+        const { itemIds, combined, screens, separate, placement } = await work
+        const sequenceName = destination.sequenceId ? (await openVideoEditDocument({ id: destination.documentId }, { focus: false }).catch(() => undefined))?.document.sequences.find(value => value.id === destination.sequenceId)?.name ?? destination.sequenceId : ''
+        return { resultRef, itemIds, verified: itemIds.length > 0, message: `已导入 ${itemIds.length} 项录制素材${placement ? `：${recordingPlacementText(placement, sequenceName)}` : combined ? `：${combinedPlacement(screens)}` : '。'}${separate ? `${separate}。` : ''}` }
       }
       const parsed = parseCapabilityInput<{ sessionRef: z.infer<typeof recordingRefSchema>; note?: string }>(definition.id, input)
       const action = definition.id.replace('_screen_recording', '') as 'pause' | 'resume' | 'mark' | 'stop' | 'cancel' | 'recover'

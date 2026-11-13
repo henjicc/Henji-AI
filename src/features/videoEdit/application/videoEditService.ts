@@ -101,6 +101,8 @@ export interface VideoEditInstance extends VideoEditTimelineView {
   busy: boolean
   activePanel: VideoEditFocusablePanel
   panelFocusVersion?: number
+  /** 录制样子（见 `setVideoEditLayout`）；省略即剪辑样子。 */
+  layout?: 'record'
   version: number
   /** 只随内容发布或恢复递增；元数据和视图写入不使异步操作失效。 */
   contentVersion: number
@@ -919,6 +921,25 @@ export function setVideoEditTimelineView(id: string, values: Partial<VideoEditTi
   instance.selection = primary
   if (instance.selectedCodeElement?.clipId !== primary) instance.selectedCodeElement = null
   publishVideoEdit(true)
+}
+/** 同一条序列的两种样子：剪辑（停靠面板、常规轨道）与录制（一条录屏轨，边录边粗剪）。只是视图，不进文档。 */
+export type VideoEditLayout = 'edit' | 'record'
+export function videoEditLayout(instance: VideoEditInstance): VideoEditLayout { return instance.layout ?? 'edit' }
+/** 录屏写进这份剪辑期间登记的长任务名（录制服务开始时 holdVideoEditActivity 用的就是它）。 */
+const RECORDING_ACTIVITY = '屏幕录制'
+export function videoEditRecordingInProgress(instance: VideoEditInstance | undefined): boolean {
+  return Boolean(instance && listVideoEditActivities(instance).includes(RECORDING_ACTIVITY))
+}
+/** 进入录制样子时清掉片段选择：剪辑样子里选的片段在录制样子里不一定看得见，留着会让删除作用到看不见的东西上。 */
+export function setVideoEditLayout(id: string, layout: VideoEditLayout): void {
+  const instance = requireVideoEditInstance(id)
+  if (videoEditLayout(instance) === layout) return
+  if (layout === 'record' && !findActiveVideoEditSequence(instance)) throw new Error('请先新建或打开一条序列。')
+  if (videoEditRecordingInProgress(instance)) throw new Error('正在录制，停止后再切换。')
+  if (layout === 'record') setVideoEditTimelineView(id, { selectedClipIds: [] })
+  instance.layout = layout === 'record' ? 'record' : undefined
+  logger.info(layout === 'record' ? '进入录制样子' : '回到剪辑样子', { event: layout === 'record' ? 'video_edit.record_layout.entered' : 'video_edit.record_layout.left', context: { projectId: id, sequenceId: instance.activeSequenceId } })
+  publishVideoEdit()
 }
 export function focusVideoEditPanel(id: string, panel: VideoEditInstance['activePanel'], options: { reveal?: boolean } = {}): void {
   const instance = requireVideoEditInstance(id)

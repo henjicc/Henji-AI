@@ -2,7 +2,8 @@ import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { contributeAppMenus, type AppMenuCommand, type AppMenuEditRole } from '@/core/appMenu/appMenu'
 import { VIDEO_EDIT_COMMANDS, VIDEO_EDIT_RENDER_COMMANDS, videoEditCommandShortcut, videoEditPanelCommandScope, videoEditShortcutLabel, type VideoEditCommandId, type VideoEditCommandScope } from '@/core/videoEdit/commands'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { activeVideoEditInstance, subscribeVideoEdit, videoEditRevision } from './application/videoEditService'
+import { activeVideoEditInstance, findActiveVideoEditSequence, setVideoEditLayout, subscribeVideoEdit, videoEditLayout, videoEditRecordingInProgress, videoEditRevision, type VideoEditLayout } from './application/videoEditService'
+import { videoEditRecordLayoutCommand } from './application/videoEditRecordLayoutCommands'
 import { sameVideoEditViewFields, useVideoEditViewSelector } from './application/useVideoEditViewSelector'
 import { captureVideoEditCommandContext, executeVideoEditCommand, videoEditCommandState } from './application/videoEditCommands'
 import { subscribeVideoEditAnnotationSelection, videoEditAnnotationSelectionRevision } from './application/videoEditAnnotations'
@@ -23,6 +24,11 @@ const editRoles: Partial<Record<VideoEditCommandId, AppMenuEditRole>> = { undo: 
 const annotationLabels: Partial<Record<VideoEditCommandId, string>> = { select_all: '全选批注', delete: '删除选中批注' }
 const dangerous = new Set<VideoEditCommandId>(['delete', 'annotations_clear_handled', 'annotations_clear_all'])
 
+/** 固定作用域的分组（批注、预渲染）在录制样子里不可用；其余与快捷键同一份判断。 */
+function recordLayoutCommand(owner: ReturnType<typeof activeVideoEditInstance>, id: VideoEditCommandId, fixed?: VideoEditCommandScope): ReturnType<typeof videoEditRecordLayoutCommand> {
+  const decision = videoEditRecordLayoutCommand(owner, id)
+  return fixed && decision.kind !== 'edit' ? { kind: 'blocked', reason: decision.kind === 'blocked' ? decision.reason : '录制样子里只能播放、切开、删除和撤销；其余操作切到“剪辑”再用。' } : decision
+}
 /** 菜单与快捷键共用命令上下文、可用性和用户改键；执行前重新捕获当前状态。 */
 export function VideoEditAppMenus(): null {
   const withdraw = useRef<() => void>()
@@ -42,26 +48,42 @@ export function VideoEditAppMenus(): null {
     const timer = setTimeout(() => {
       const owner = activeVideoEditInstance()
       const projectId = owner?.document.id
-      const panelScope = owner?.activePanel ?? 'timeline'
+      // 录制样子只有一条录屏轨，命令按时间线的作用域认（与快捷键一致）。
+      const panelScope = owner && videoEditLayout(owner) === 'record' ? 'timeline' : owner?.activePanel ?? 'timeline'
       const contexts = new Map<VideoEditCommandScope, ReturnType<typeof captureVideoEditCommandContext>>()
       const contextOf = (scope: VideoEditCommandScope) => { if (!contexts.has(scope)) contexts.set(scope, captureVideoEditCommandContext(projectId, scope)); return contexts.get(scope)! }
       const item = (id: VideoEditCommandId, fixed?: VideoEditCommandScope): AppMenuCommand => {
         const descriptor = VIDEO_EDIT_COMMANDS.find(command => command.id === id)!
         // 与键盘同一条规则：没有专属命令的面板里，导航命令照常作用于当前序列，编辑命令不适用。
         const scope = fixed ?? videoEditPanelCommandScope(panelScope, id)
-        const state = scope ? videoEditCommandState(contextOf(scope), id) : { enabled: false, reason: '此命令不适用于当前面板。', checked: undefined, title: undefined }
+        const commandState = scope ? videoEditCommandState(contextOf(scope), id) : { enabled: false, reason: '此命令不适用于当前面板。', checked: undefined, title: undefined }
+        // 录制样子与录制中：和快捷键同一份判断，切开、删除换成录屏轨上的操作，其余不可用并写明原因。
+        const record = recordLayoutCommand(owner, id, fixed)
+        const state = record.kind === 'blocked' ? { ...commandState, enabled: false, reason: record.reason } : record.kind === 'lane' ? { ...commandState, enabled: true } : commandState
         const shortcut = videoEditCommandShortcut(id, shortcuts)
         return {
           kind: 'action', id: fixed ? `videoEdit.${fixed}.${id}` : `videoEdit.${id}`, label: (scope === 'annotations' ? annotationLabels[id] : undefined) ?? state.title ?? descriptor.title,
           shortcut: shortcut ? videoEditShortcutLabel(shortcut) : undefined, editRole: fixed ? undefined : editRoles[id],
           disabledReason: state.enabled ? undefined : state.reason, checked: state.checked, danger: scope === 'annotations' && dangerous.has(id) ? true : undefined,
           run: async () => {
-            const at = fixed ?? videoEditPanelCommandScope(activeVideoEditInstance()?.activePanel ?? 'timeline', id)
+            const current = activeVideoEditInstance(), decision = recordLayoutCommand(current, id, fixed)
+            if (decision.kind === 'lane') { await decision.run(); return }
+            if (decision.kind === 'blocked') return
+            const at = fixed ?? videoEditPanelCommandScope(current && videoEditLayout(current) === 'record' ? 'timeline' : current?.activePanel ?? 'timeline', id)
             if (at) await executeVideoEditCommand(captureVideoEditCommandContext(projectId, at), id)
           },
         }
       }
-      withdraw.current = contributeAppMenus('videoEdit', groups.map(group => ({ menu: group.menu, label: group.label, order: 100, items: group.ids.map(id => item(id, group.scope)) })))
+      // 同一条序列的两种样子，与命令带中间的“录制 / 剪辑”同一份操作。
+      const layout = (value: VideoEditLayout, label: string): AppMenuCommand => ({
+        kind: 'action', id: `videoEdit.layout.${value}`, label, checked: owner ? videoEditLayout(owner) === value : false,
+        disabledReason: !owner || !findActiveVideoEditSequence(owner) ? '先新建或打开一条序列。' : videoEditRecordingInProgress(owner) ? '正在录制，停止后再切换。' : undefined,
+        run: () => { const current = activeVideoEditInstance(); if (current) setVideoEditLayout(current.document.id, value) },
+      })
+      withdraw.current = contributeAppMenus('videoEdit', [
+        ...groups.map(group => ({ menu: group.menu, label: group.label, order: 100, items: group.ids.map(id => item(id, group.scope)) })),
+        { menu: 'view', order: 101, items: [layout('record', '录制样子'), layout('edit', '剪辑样子')] },
+      ])
     }, withdraw.current ? 150 : 0)
     return () => clearTimeout(timer)
   }, [revision, view, annotationRevision, shortcuts])

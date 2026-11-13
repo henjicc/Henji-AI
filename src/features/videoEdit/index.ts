@@ -19,3 +19,5 @@ export { listVideoEditInstances, subscribeVideoEditDomain, videoEditDomainRevisi
 export { selectVideoEditSubtitle } from './application/videoEditSubtitleSelection'
 export { subscribeVideoEditSceneSelection, videoEditSelectedSceneRecordRef } from './application/videoEditSceneSelection'
 export { videoEditEffectLibraryRevisions } from './application/videoEditEffectPresets'
+// 录制导入按录屏轨落片（接在末尾或从某一帧覆盖），与录制样子同一份操作。
+export { placeVideoEditRecordingTake, videoEditRecordingTargetAt } from './application/videoEditRecordingLane'

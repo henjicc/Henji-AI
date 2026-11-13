@@ -5,13 +5,11 @@ import { UiButton, UiError, UiIconButton, UiLoading, UiSegmented, UiToolbar } fr
 import { UI_TEXT_TIMECODE_CLASS } from '@/components/ui/styleTokens'
 import { ICON_TOOL_SCREEN_RECORDING } from '@/core/theme/icons'
 import { getPlatform } from '@/platform'
-import type { CaptureSource } from '@/core/screenRecording/contracts'
-import { captureOptionsSchema } from '@/core/screenRecording/capture'
 import { openApplicationSurface } from '@/features/navigation'
-import { recordingDevices } from './tracks/devices'
 import { controlRecording, recordingView, setRecordingDestination, startRecording, subscribeRecording } from './application/recordingService'
 import { RecordingSourcePicker } from './RecordingSourcePicker'
-import { DEFAULT_WEB_APP_BACKUP, loadRecordingSetup, orderedScreens, recordingOutput, recordingTracksFromSetup, saveRecordingSetup, webAppBackupOptions, type WebAppBackupSetup, type RecordingRangeMode, type RecordingRegion, type RecordingSetup } from './recordingSetupModel'
+import { DEFAULT_WEB_APP_BACKUP, orderedScreens, recordingTracksFromSetup, webAppBackupOptions, type WebAppBackupSetup } from './recordingSetupModel'
+import { useRecordingSetupState } from './useRecordingSetupState'
 import { RecordingSetupPanel } from './RecordingSetupPanel'
 import { RecordingLive } from './RecordingLive'
 import { RecordingDirectorGoal, RecordingDirectorScript } from './RecordingDirectorPanel'
@@ -28,13 +26,10 @@ import { useSettingsStore } from '@/stores/settingsStore'
 export default function ScreenRecordingApp({ onBack }: { onBack: () => void }): React.ReactElement {
   const { t } = useTranslation('ui')
   const state = useSyncExternalStore(subscribeRecording, recordingView)
-  const [sources, setSources] = useState<CaptureSource[]>([])
-  const [devices, setDevices] = useState<Awaited<ReturnType<typeof recordingDevices>>>([])
-  const [remembered] = useState(() => loadRecordingSetup())
-  const [mode, setMode] = useState<RecordingRangeMode>(remembered.range)
-  const [sourceId, setSourceId] = useState(remembered.sourceId)
-  const [region, setRegion] = useState<RecordingRegion>(remembered.region)
-  const [setup, setSetup] = useState<RecordingSetup>(remembered.setup)
+  const [error, setError] = useState('')
+  const reportError = useCallback((reason: unknown) => setError(reason instanceof Error ? reason.message : String(reason)), [])
+  const recording = useRecordingSetupState(reportError)
+  const { sources, devices, loading, mode, sourceId, region, setup, setSetup, setSourceId, setRegion, changeMode, refresh } = recording
   const webAppEnabled = useSettingsStore(value => value.experimentalWebAppRecording)
   const [chosenKind, setKind] = useState<'self' | 'director' | 'webapp'>('self')
   // Web app recording is experimental: without the setting the mode does not exist on this page.
@@ -61,40 +56,13 @@ export default function ScreenRecordingApp({ onBack }: { onBack: () => void }): 
     focus()
     return subscribeWebRecordingFocus(focus)
   }, [selectRecording])
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
-  useEffect(() => { saveRecordingSetup({ range: mode, sourceId, region, setup }) }, [mode, sourceId, region, setup])
   const run = (work: () => Promise<unknown>): void => { setError(''); void work().catch(error => setError(error instanceof Error ? error.message : String(error))) }
-  const refresh = useCallback(async (): Promise<void> => {
-    setLoading(true)
-    try {
-      const values = await getPlatform().screenRecording.sources()
-      setSources(values)
-      // Keep the remembered source when it still exists; otherwise start from the primary monitor.
-      setSourceId(current => {
-        if (values.some(item => item.id === current)) return current
-        // The remembered window has closed: fall back to the main screen, and show the screen range with it.
-        setMode(range => range === 'window' ? 'screen' : range)
-        return (values.find(item => item.display?.primary) ?? orderedScreens(values)[0] ?? values[0])?.id ?? ''
-      })
-      setDevices(await recordingDevices())
-    } finally { setLoading(false) }
-  }, [])
-  useEffect(() => { void refresh().catch(error => setError(String(error))) }, [refresh])
-  const changeMode = (next: RecordingRangeMode): void => {
-    setMode(next)
-    const current = sources.find(source => source.id === sourceId)
-    const wanted = next === 'window' ? 'window' : 'screen'
-    if (current?.kind !== wanted) setSourceId((wanted === 'screen' ? sources.find(source => source.display?.primary) ?? orderedScreens(sources)[0] : sources.find(source => source.kind === 'window'))?.id ?? '')
-  }
-  const selected = sources.find(source => source.id === sourceId)
   const snapshot = state.snapshot
   const active = Boolean(snapshot)
   const planned = !active && Boolean(state.content?.understanding.director) && !state.content?.sessionId
   const begin = async (): Promise<void> => {
-    const useRegion = mode === 'region' && selected?.kind === 'screen' && (region.width < 1 || region.height < 1)
     const quick = setup.mode === 'quick'
-    const options = captureOptionsSchema.parse({ sourceId, ...recordingOutput(setup), ...(useRegion ? { region } : {}) })
+    const options = recording.captureOptions()
     const destination = state.destination ? { documentId: state.destination.documentId, ...(setup.insert ? { sequenceId: state.destination.sequenceId, frame: state.destination.frame } : {}) } : null
     await startRecording(options, { name: setup.name.trim() || `${t('recording.title')} ${new Date().toLocaleString().replace(/[/:]/g, '-')}`, tracks: recordingTracksFromSetup(setup, quick) }, destination, undefined, quick ? { ...(setup.saveDirectory ? { directory: setup.saveDirectory } : {}) } : undefined, true)
     setSetup(value => ({ ...value, name: '' }))

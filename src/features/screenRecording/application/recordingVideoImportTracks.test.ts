@@ -8,6 +8,7 @@ import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/te
 import { closeAllVideoEdits, openSeededVideoEdit } from '@/features/videoEdit/application/videoEditDocumentTestKit'
 import { editVideoProject, undoVideoEdit } from '@/features/videoEdit/application/videoEditService'
 import { placeRecordingMedia } from './recordingVideoImport'
+import { settleVideoEditRecordingTake, videoEditRecordingTarget } from '@/core/videoEdit/recordingLane'
 
 vi.mock('@/features/navigation', () => ({ openApplicationSurface: vi.fn() }))
 vi.mock('@/features/videoEdit', () => ({}))
@@ -82,4 +83,22 @@ it('轨道重命名、新增轨和片段同一步撤销及重做', async () => {
   expect(owner.document.sequences).toEqual(before)
   undoVideoEdit(document.id, true)
   expect(owner.document.sequences).toEqual(after)
+})
+
+it('放在录屏轨上：新的一段沿用录屏轨已有的轨道，从指针处盖住原来的画面和声音，不新开轨道', () => {
+  const { document, recording } = fixture()
+  let sequence = place(document, recording).sequences[0]
+  const tracks = sequence.tracks.map(track => track.id)
+  // 录屏导入给录屏画面素材写上指针记录，录屏轨按它认（这里只在认轨与落定时带上，放素材时不带，免得拉起指针效果）
+  const screen = document.media.find(media => media.id === 'media-screen')!
+  const marked = { ...document, media: document.media.map(media => media === screen ? { ...media, recordingCursor: {} as never } : media) }
+  const target = videoEditRecordingTarget({ ...sequence, items: marked.items, media: marked.media }, { at: 'frame', frame: 30 }, 60)
+  expect(target).toMatchObject({ frame: 30, mode: 'overwrite' })
+  const before = new Set(sequence.clips.map(clip => clip.id))
+  const placed = placeRecordingMedia({ ...document, sequences: [sequence] }, recording, recording.media, recording.media.map(media => media.id), { documentId: document.id, sequenceId: sequence.id, frame: target.frame }, [], target.tracks)
+  sequence = settleVideoEditRecordingTake({ ...placed, media: marked.media }, sequence.id, placed.sequences[0].clips.filter(clip => !before.has(clip.id)).map(clip => clip.id)).document.sequences[0]
+  expect(sequence.tracks.map(track => track.id)).toEqual(tracks)
+  const spans = (track: number) => sequence.clips.filter(clip => clip.track === track).sort((a, b) => a.start - b.start).map(clip => [clip.start, clip.start + clip.duration])
+  expect(spans(1)).toEqual([[0, 30], [30, 90]])
+  expect(spans(0)).toEqual([[0, 30], [30, 90]])
 })

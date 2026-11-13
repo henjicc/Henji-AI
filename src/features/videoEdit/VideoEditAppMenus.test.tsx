@@ -4,9 +4,9 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { getAppMenus, findAppMenuCommand } from '@/core/appMenu/appMenu'
 import { VideoEditAppMenus } from './VideoEditAppMenus'
 
-const mock = vi.hoisted(() => ({ panel: 'timeline', execute: vi.fn(async () => undefined), state: vi.fn((_context?: unknown, _id?: string): { enabled: boolean; reason?: string; checked?: boolean; title?: string } => ({ enabled: false, reason: '请先选择片段。' })) }))
+const mock = vi.hoisted(() => ({ panel: 'timeline', layout: 'edit', recording: false, execute: vi.fn(async () => undefined), state: vi.fn((_context?: unknown, _id?: string): { enabled: boolean; reason?: string; checked?: boolean; title?: string } => ({ enabled: false, reason: '请先选择片段。' })) }))
 vi.mock('@/stores/settingsStore', () => ({ useSettingsStore: (selector: (state: { videoEditShortcuts: object }) => unknown) => selector({ videoEditShortcuts: { split: { code: 'KeyS', ctrl: true, shift: true, alt: false, meta: false } } }) }))
-vi.mock('./application/videoEditService', () => ({ activeVideoEditInstance: () => ({ document: { id: 'project' }, activePanel: mock.panel }), subscribeVideoEdit: () => () => undefined, subscribeVideoEditView: () => () => undefined, videoEditRevision: () => 1, videoEditViewRevision: () => 1 }))
+vi.mock('./application/videoEditService', () => ({ activeVideoEditInstance: () => ({ document: { id: 'project' }, activePanel: mock.panel }), subscribeVideoEdit: () => () => undefined, subscribeVideoEditView: () => () => undefined, videoEditRevision: () => 1, videoEditViewRevision: () => 1, videoEditLayout: () => mock.layout, findActiveVideoEditSequence: () => ({ id: 'sequence' }), setVideoEditLayout: () => undefined, videoEditRecordingInProgress: () => mock.recording }))
 vi.mock('./application/videoEditCommands', () => ({ captureVideoEditCommandContext: (_projectId: string, scope: string) => ({ scope }), executeVideoEditCommand: mock.execute, videoEditCommandState: mock.state }))
 vi.mock('./application/videoEditAnnotations', () => ({ subscribeVideoEditAnnotationSelection: () => () => undefined, videoEditAnnotationSelectionRevision: () => 1 }))
 afterEach(cleanup)
@@ -60,4 +60,17 @@ it('预渲染在序列菜单独立分组，复用动态取消进度与勾选状�
     mock.panel = 'timeline'
     mock.state.mockImplementation(() => ({ enabled: false, reason: '请先选择片段。' }))
   }
+})
+
+it('录制样子录制中：剪辑命令与“录制样子 / 剪辑样子”都不可用并写明原因，不执行', async () => {
+  mock.layout = 'record'; mock.recording = true; mock.execute.mockClear()
+  try {
+    const view = render(<VideoEditAppMenus />)
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
+    for (const id of ['videoEdit.split', 'videoEdit.delete', 'videoEdit.undo', 'videoEdit.annotations.delete']) expect(findAppMenuCommand(id)).toMatchObject({ disabledReason: '正在录制，停止后再操作。' })
+    expect(findAppMenuCommand('videoEdit.layout.edit')).toMatchObject({ disabledReason: '正在录制，停止后再切换。' })
+    await findAppMenuCommand('videoEdit.delete')!.run()
+    expect(mock.execute).not.toHaveBeenCalled()
+    view.unmount()
+  } finally { mock.layout = 'edit'; mock.recording = false }
 })

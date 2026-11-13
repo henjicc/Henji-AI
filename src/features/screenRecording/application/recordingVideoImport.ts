@@ -5,34 +5,39 @@ import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { videoEditEmptyTrackIds, videoEditEdgeTracks } from '@/core/videoEdit/tracks'
 import { getPlatform } from '@/platform'
 import { createLogger } from '@/core/logging'
-import { importVideoEditSources, prepareVideoEditRecordingGain } from '@/features/videoEdit'
+import { importVideoEditSources, placeVideoEditRecordingTake, prepareVideoEditRecordingGain } from '@/features/videoEdit'
+import { VIDEO_EDIT_RECORDING_TRACK_NAMES, isVideoEditRecordingPicture, packVideoEditRecordingTake, videoEditRecordingTarget, type VideoEditRecordingTarget } from '@/core/videoEdit/recordingLane'
 import { appendVideoEditSequence, createVideoEditProject, makeRecordingClipEffect, openVideoEditDocument, saveVideoEdit, suggestRecordingClipZoom, switchVideoEditSequence } from '@/features/videoEdit'
 import type { CaptureEvent } from '@/core/captureLog/events'
 import { RECORDING_CURSOR_EFFECT } from '@/core/videoEdit/recordingCursor'
 import { RECORDING_ZOOM_EFFECT } from '@/core/videoEdit/recordingZoom'
 import { openApplicationSurface } from '@/features/navigation'
 import type { RecordingDestination } from './recordingService'
-import { recordingMediaSpans, recordingRange } from '@/core/screenRecording/range'
+import { recordingDurationUs, recordingMediaSpans, recordingRange } from '@/core/screenRecording/range'
 import { recordingCombinePlan, recordingCombinedIntervals, recordingCombinedPartEndUs, type RecordingCombinedFiles } from '@/core/screenRecording/combine'
 import { recordingMovieCursorSources } from './recordingMovieSources'
 
 const logger = createLogger('features.screenRecording.import')
 type RecordingKind = RecordingMedia['kind']
 
-/** 每类素材一条轨：只复用整条为空且未锁定的轨道；先预留，避免同次导入的不同声画共用一轨。 */
-function recordingTrackIndices(sequence: VideoEditSequence, kinds: readonly RecordingKind[]): Map<RecordingKind, number> {
+/**
+ * 每类素材一条轨：只复用整条为空且未锁定的轨道；先预留，避免同次导入的不同声画共用一轨。
+ * 放在录屏轨上时 `preferred` 给出录屏轨已有的那几条（新的一段与旧的落在同一组轨道上，覆盖才盖得住）。
+ */
+function recordingTrackIndices(sequence: VideoEditSequence, kinds: readonly RecordingKind[], preferred: Partial<Record<RecordingKind, number>> = {}): Map<RecordingKind, number> {
   const trackIndices = new Map<RecordingKind, number>()
   const reserved = new Set<number>()
   for (const kind of (['microphone', 'systemAudio', 'screen', 'camera'] as const).filter(kind => kinds.includes(kind))) {
     const trackKind = kind === 'screen' || kind === 'camera' ? 'video' : 'audio'
-    let track = videoEditEmptyTrackIds(sequence, trackKind)
-      .map(id => sequence.tracks.find(track => track.id === id)!)
-      .find(track => !track.locked && !reserved.has(track.index))
+    let track = sequence.tracks.find(track => track.index === preferred[kind] && track.kind === trackKind && !track.locked && !reserved.has(track.index))
+      ?? videoEditEmptyTrackIds(sequence, trackKind)
+        .map(id => sequence.tracks.find(track => track.id === id)!)
+        .find(track => !track.locked && !reserved.has(track.index))
     if (!track) {
       track = videoEditEdgeTracks(sequence, trackKind, 1)[0]
       sequence.tracks.push(track)
     }
-    track.name = RECORDING_KIND_NAMES[kind]
+    track.name = VIDEO_EDIT_RECORDING_TRACK_NAMES[kind]
     reserved.add(track.index)
     trackIndices.set(kind, track.index)
   }
@@ -64,13 +69,13 @@ function addRecordingClipEffects(clip: VideoEditClip, recording: RecordingDocume
  * 逐片导入：拼不成一个文件的会话（较早版本录的、合并失败的）每个文件各导一项。
  * Every track is cut to the shared recorded range and placed from its start. Pause/device gaps remain empty; audio latency is already compensated.
  */
-export function placeRecordingMedia(document: VideoEditDocument, recording: RecordingDocument, media: RecordingMedia[], itemIds: string[], target: RecordingDestination, events: readonly CaptureEvent[] = []): VideoEditDocument {
+export function placeRecordingMedia(document: VideoEditDocument, recording: RecordingDocument, media: RecordingMedia[], itemIds: string[], target: RecordingDestination, events: readonly CaptureEvent[] = [], tracks?: Partial<Record<RecordingKind, number>>): VideoEditDocument {
   if (!target.sequenceId) return document
   const editable = editableSequence(document, target.sequenceId), sequence = editable.sequence
   document = editable.document
   const fps = videoEditComposition(document, sequence.id).fps
   const origin = recordingRange(recording).startUs
-  const trackIndices = recordingTrackIndices(sequence, media.map(item => item.kind))
+  const trackIndices = recordingTrackIndices(sequence, media.map(item => item.kind), tracks)
   // 与 Premiere、DaVinci 一致：链接的是同一时间段的画面和它的声音。会话暂停把每条轨在同一时刻切开，
   // 暂停前后各是一段，各自成组，裁剪或调速一段不带动另一段；同一段里设备空档切出的几截声音仍跟着这段画面。
   // 早期会话没有 pauses，只在各轨空档里记了暂停；同一次暂停在声画两轨上前后差一点，合并成一段再计数。
@@ -116,7 +121,7 @@ export function combinedImportSources(recording: RecordingDocument, groups: read
  * 合并导入：暂停不占时间线，一次录制一个画面片段，麦克风与系统声各一个与它对齐的片段，同组链接。
  * 声音只在真录到的地方放片段：设备断开的空档照样留空（合并文件里那段是静音占位）。
  */
-export function placeCombinedRecording(document: VideoEditDocument, recording: RecordingDocument, groups: readonly RecordingCombinedFiles[], sources: readonly RecordingImportSource[], itemIds: string[], target: RecordingDestination, events: readonly CaptureEvent[] = []): VideoEditDocument {
+export function placeCombinedRecording(document: VideoEditDocument, recording: RecordingDocument, groups: readonly RecordingCombinedFiles[], sources: readonly RecordingImportSource[], itemIds: string[], target: RecordingDestination, events: readonly CaptureEvent[] = [], tracks?: Partial<Record<RecordingKind, number>>): VideoEditDocument {
   if (!target.sequenceId) return document
   const editable = editableSequence(document, target.sequenceId), sequence = editable.sequence
   document = editable.document
@@ -125,7 +130,7 @@ export function placeCombinedRecording(document: VideoEditDocument, recording: R
   const paused = (to: number): number => (recording.pauses ?? []).reduce((sum, pause) => sum + Math.max(0, Math.min(to, pause.endUs) - Math.max(range.startUs, pause.startUs)), 0)
   // 时间线位置 = 离开始的会话时间减去其间的暂停；一组里文件时间与它同步前进。
   const groupOffsetUs = groups.map(group => group.parts[0].monoUs - range.startUs - paused(group.parts[0].monoUs))
-  const trackIndices = recordingTrackIndices(sequence, sources.map(source => source.kind))
+  const trackIndices = recordingTrackIndices(sequence, sources.map(source => source.kind), tracks)
   const links = new Map<number, VideoEditClip[]>()
   const place = (index: number, group: number, intervals: ReadonlyArray<[number, number]>, sourceOriginUs = 0): void => {
     const source = sources[index]
@@ -180,7 +185,7 @@ async function readImportableRecording(id: string): Promise<{ recording: Recordi
   await getPlatform().screenRecording.capture({ operation: 'recover-session', sessionId: id })
   return { recording: recordingDocumentSchema.parse((await getPlatform().documents.readDocument({ id })).content), name: read.meta.name }
 }
-const RECORDING_KIND_NAMES = { screen: '屏幕', microphone: '麦克风', systemAudio: '系统声音', camera: '摄像头' } as const
+const RECORDING_KIND_NAMES = VIDEO_EDIT_RECORDING_TRACK_NAMES
 /** 素材库里一眼认出是哪次录制的哪一段：带会话名；只有一段就不编号，拼不成一个文件时才写“第 N 段”，不会和显示器名“屏幕 2”混淆。 */
 export function recordingItemNames(session: string, media: readonly Pick<RecordingMedia, 'kind'>[]): string[] {
   const counts = new Map<RecordingMedia['kind'], number>()
@@ -195,7 +200,19 @@ export function recordingItemNames(session: string, media: readonly Pick<Recordi
  * 这次导入放进了哪些素材项；`screens` 是画面素材个数（合并后通常是 1，编码器中途重启留下真实空档时按实际分几组）。
  * 拼不成时 `separate` 写明原因（各段照原样导入，原文件都在）。
  */
-export interface RecordingImportResult { itemIds: string[]; combined: boolean; screens: number; separate?: string }
+export interface RecordingImportResult { itemIds: string[]; combined: boolean; screens: number; separate?: string; placement?: RecordingPlacementResult }
+/**
+ * 放在录屏轨上的实际结果：新一段的范围（序列帧，半开）、接在末尾还是覆盖、盖住了哪些块的哪部分；`note` 说明落点为什么和开始时不同。
+ * 认不出录屏轨时没有放进序列（`refused` 是原因），素材只进了素材库。
+ */
+export type RecordingPlacementResult = { mode: 'append' | 'overwrite'; from: number; to: number; covered: Array<{ name: string; from: number; to: number }>; note?: string } | { refused: string }
+/** 回执里的一句话：放在了哪、盖住了什么。 */
+export function recordingPlacementText(placement: RecordingPlacementResult, sequenceName: string): string {
+  if ('refused' in placement) return `没有放进序列「${sequenceName}」：${placement.refused}素材已进素材库。`
+  const where = placement.mode === 'append' ? `接在序列「${sequenceName}」录屏轨末尾（第 ${placement.from}–${placement.to} 帧）` : `从序列「${sequenceName}」第 ${placement.from} 帧起覆盖到第 ${placement.to} 帧`
+  const covered = placement.covered.length ? `，盖住了${placement.covered.map(block => `「${block.name}」第 ${block.from}–${block.to} 帧`).join('、')}（撤销或在剪辑里拖回边缘可找回）` : ''
+  return `${where}${covered}，画面与声音链接成一组。${placement.note ? `${placement.note}。` : ''}`
+}
 
 /** 主进程把暂停分出的画面与声音各拼成一个；只有一个画面文件、或较早版本录的会话对不齐暂停时不需要。 */
 async function combinedFiles(id: string, recording: RecordingDocument): Promise<{ groups: RecordingCombinedFiles[] | null; failure?: string }> {
@@ -219,6 +236,7 @@ export async function importRecordingToVideo(id: string, target: RecordingDestin
   const events: CaptureEvent[] = []
   const cursors = await recordingMovieCursorSources(recording, signal ?? new AbortController().signal, event => { if (event.kind === 'click' || event.kind === 'key') events.push(event) }, sources.filter(source => source.kind === 'screen'))
   await openVideoEditDocument({ id: target.documentId }, { focus: false })
+  let placement: RecordingPlacementResult | undefined
   const items = await importVideoEditSources(target.documentId, sources.map(item => ({ path: item.path })), undefined, signal,
     async (document, ids) => {
       const names = recordingItemNames(name, sources)
@@ -231,14 +249,45 @@ export async function importRecordingToVideo(id: string, target: RecordingDestin
         if (item) item.name = names[index]
       }
       const before = new Set(document.sequences.flatMap(sequence => sequence.clips.map(clip => clip.id)))
-      document = groups ? placeCombinedRecording(document, recording, groups, sources, ids, target, events) : placeRecordingMedia(document, recording, media, ids, target, events)
-      if (target.sequenceId) {
+      // 放在录屏轨上：按导入这一刻的录屏轨定落点与轨道（接在末尾，或从 frame 起覆盖），放好后在同一次编辑里切掉被盖住的部分。
+      // 录制期间录屏轨被改过（开始时记下的指纹对不上）就不按旧的绝对帧硬盖，改为接在末尾；认不出录屏轨时不放进序列。
+      let sequenceId = target.sequenceId
+      let lane: VideoEditRecordingTarget | undefined
+      let note: string | undefined
+      const laneSequence = target.placement && sequenceId ? document.sequences.find(sequence => sequence.id === sequenceId) : undefined
+      if (laneSequence) {
+        const source = { ...laneSequence, items: document.items, media: document.media }
+        const frames = Math.round(recordingDurationUs(recording) * videoEditComposition(document, laneSequence.id).fps / 1e6)
+        try {
+          lane = videoEditRecordingTarget(source, target.placement === 'end' ? { at: 'end' } : { at: 'frame', frame: target.frame ?? 0 }, frames)
+          if (target.placement === 'overwrite' && target.basis && lane.basis !== target.basis) {
+            lane = videoEditRecordingTarget(source, { at: 'end' }, frames)
+            note = '录制期间录屏轨被改动过，原先的覆盖位置不再可信，没有覆盖，接在了末尾'
+          }
+        } catch (error) {
+          placement = { refused: error instanceof Error ? error.message : String(error) }
+          sequenceId = undefined
+        }
+      }
+      const placed: RecordingDestination = { ...target, ...(lane ? { frame: lane.frame } : {}), ...(sequenceId ? {} : { sequenceId: undefined }) }
+      document = groups ? placeCombinedRecording(document, recording, groups, sources, ids, placed, events, lane?.tracks) : placeRecordingMedia(document, recording, media, ids, placed, events, lane?.tracks)
+      if (lane && sequenceId) {
+        const takeIds = document.sequences.find(sequence => sequence.id === sequenceId)!.clips.filter(clip => !before.has(clip.id)).map(clip => clip.id)
+        // 拼不成一个画面时各段首尾相连；录屏轨上的块就叫这次录制的名字，分成几段时各带序号（素材项仍带“· 屏幕”后缀，素材库里分得清）。
+        document = packVideoEditRecordingTake(document, sequenceId, takeIds)
+        const pictures = document.sequences.find(sequence => sequence.id === sequenceId)!.clips.filter(clip => takeIds.includes(clip.id) && isVideoEditRecordingPicture(document, clip)).sort((a, b) => a.start - b.start).map(clip => clip.id)
+        if (name) document = { ...document, sequences: document.sequences.map(sequence => sequence.id === sequenceId ? { ...sequence, clips: sequence.clips.map(clip => pictures.includes(clip.id) ? { ...clip, name: pictures.length > 1 ? `${name}（${pictures.indexOf(clip.id) + 1}）` : name } : clip) } : sequence) }
+        const settled = placeVideoEditRecordingTake(document, sequenceId, takeIds, lane.mode)
+        document = settled.document
+        placement = { mode: lane.mode, from: settled.from, to: settled.to, covered: settled.covered, ...(note ? { note } : {}) }
+      }
+      if (sequenceId) {
         const microphoneItems = new Set(ids.filter((_, index) => sources[index].kind === 'microphone'))
-        const composition = videoEditComposition(document, target.sequenceId)
+        const composition = videoEditComposition(document, sequenceId)
         const clips = composition.clips.filter(clip => !before.has(clip.id) && microphoneItems.has(clip.itemId))
         if (clips.length) {
           const gains = await prepareVideoEditRecordingGain(composition, clips.map(clip => clip.id), signal)
-          for (const clip of document.sequences.find(sequence => sequence.id === target.sequenceId)!.clips) {
+          for (const clip of document.sequences.find(sequence => sequence.id === sequenceId)!.clips) {
             const gainDb = gains.get(clip.id)
             if (gainDb !== undefined) clip.gainDb = gainDb
           }
@@ -250,7 +299,7 @@ export async function importRecordingToVideo(id: string, target: RecordingDestin
   if (target.sequenceId) await rememberEditTarget(id, target.documentId, target.sequenceId)
   const separateAudio = groups ? (['microphone', 'systemAudio'] as const).filter(kind => media.some(item => item.kind === kind) && !groups[0].audio[kind]).map(kind => RECORDING_KIND_NAMES[kind]) : []
   const separate = failure ? `没能拼成一个画面素材（${failure}），各段照原样导入，原文件都在` : separateAudio.length ? `${separateAudio.join('、')}中途换了采样格式，拼不成一条，照原样分段导入` : undefined
-  return { itemIds: items, combined: Boolean(groups), screens: sources.filter(source => source.kind === 'screen').length, ...(separate ? { separate } : {}) }
+  return { itemIds: items, combined: Boolean(groups), screens: sources.filter(source => source.kind === 'screen').length, ...(separate ? { separate } : {}), ...(placement ? { placement } : {}) }
 }
 
 /** The session remembers where it went, so opening the recording again opens that edit. */

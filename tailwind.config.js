@@ -327,6 +327,9 @@ export default {
           title: withOpacity('--clip-text-rgb'),
           'title-line': withOpacity('--clip-text-line-rgb'),
           wave: withOpacity('--clip-wave-rgb'),
+          // 剪辑录制样子里正在录的那一块与它的名条
+          recording: cssVar('--clip-recording'),
+          'recording-title': cssVar('--clip-recording-title'),
         },
         wave: {
           DEFAULT: withOpacity('--wave-rgb'),

@@ -188,7 +188,11 @@ function VideoEditProgramPrewarm(): null {
   useEffect(() => retainVideoEditProgramWarmup(), [])
   return null
 }
-function VideoEditPreviewContent({ instance, onError, visible = true }: { instance: VideoEditInstance; onError: (error: unknown) => void; visible?: boolean }): React.ReactElement {
+/**
+ * `chrome`：`monitor`（默认）是节目监视器，画面下面带时间标尺与控制条；`picture` 只要画面（剪辑的录制样子，
+ * 播放控制在它自己的时间轴上）。播放、声音、渲染与出错提示两者相同。
+ */
+function VideoEditPreviewContent({ instance, onError, visible = true, chrome = 'monitor' }: { instance: VideoEditInstance; onError: (error: unknown) => void; visible?: boolean; chrome?: 'monitor' | 'picture' }): React.ReactElement {
   const annotationMenu = useContextMenu()
   const [multicamView, setMulticamView] = useState(false)
   const multicam = videoEditProgramMulticam(instance)
@@ -1166,11 +1170,11 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
         </div>}
       </div>}
     </div>
-    <VideoEditProgramRuler instance={instance} />
+    <ContextMenu surface="glass" visible={annotationMenu.menuVisible} items={annotationMenu.menuItems} position={annotationMenu.menuPosition} onClose={annotationMenu.hideMenu} />
+    {chrome === 'monitor' && <VideoEditProgramRuler instance={instance} />}
     {/* 节目监视器控制条单行（5.8 toolbarWrap）：窄面板下先让出时间码（时间线左上角有同一读数），
         再把显示比例与节目工具按优先级收进“更多”，不再折成多行 */}
-    <div ref={programToolbarRef} className="flex min-h-10 shrink-0 items-center gap-x-1 whitespace-nowrap px-2 py-1" role="toolbar" aria-label="节目监视器控制">
-      <ContextMenu surface="glass" visible={annotationMenu.menuVisible} items={annotationMenu.menuItems} position={annotationMenu.menuPosition} onClose={annotationMenu.hideMenu} />
+    {chrome === 'monitor' && <div ref={programToolbarRef} className="flex min-h-10 shrink-0 items-center gap-x-1 whitespace-nowrap px-2 py-1" role="toolbar" aria-label="节目监视器控制">
       {compactProgramToolbar ? null : <VideoEditTimecode instance={instance} label="节目时间码" className="w-28 px-1.5 text-13" />}
       {compactProgramToolbar ? null : <VideoEditInOutDuration instance={instance} className="px-1.5 text-xs" />}
       <UiOverflowRow
@@ -1210,7 +1214,7 @@ function VideoEditPreviewContent({ instance, onError, visible = true }: { instan
  />
       <VideoEditMotionControls owner={instance} onError={onError} />
       <VideoEditExplanationControls owner={instance} onError={onError} />
-    </div>
+    </div>}
     {canvasSend && <VideoEditCanvasSendDialog request={canvasSend} onClose={() => setCanvasSend(null)} />}
   </div>
 }

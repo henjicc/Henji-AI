@@ -53,7 +53,7 @@ export interface CapturePrepared { sessionId: string; originUs: number; backend:
 export const captureFollowUpSchema = z.object({
   handoff: z.boolean(),
   quick: z.object({ directory: z.string().min(1).max(4096).optional() }).strict().optional(),
-  destination: z.object({ documentId: z.string().min(1), sequenceId: z.string().min(1).optional(), frame: z.number().int().nonnegative().optional() }).strict().optional(),
+  destination: z.object({ documentId: z.string().min(1), sequenceId: z.string().min(1).optional(), frame: z.number().int().nonnegative().optional(), placement: z.enum(['end', 'overwrite']).optional(), basis: z.string().min(1).max(64).optional() }).strict().optional(),
 }).strict()
 export type CaptureFollowUp = z.infer<typeof captureFollowUpSchema>
 /** 界面重新接上进行中的录制所需的全部事实。 */

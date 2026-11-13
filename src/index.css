@@ -184,6 +184,9 @@
   --ui-scrim-tint: var(--scrim);
   --ui-scrim-tint-soft: var(--scrim-soft);
   /* theme-component-vars:end */
+  /* 正在录的那一块（剪辑的录制样子）：危险色与面板底混成的暗红，名条再暗一档；随主题的危险色与表面一起变。 */
+  --clip-recording: color-mix(in srgb, rgb(var(--danger-rgb)) 24%, rgb(var(--panel-rgb)));
+  --clip-recording-title: color-mix(in srgb, rgb(var(--danger-rgb)) 16%, rgb(var(--window-rgb)));
   /*
    * 毛玻璃「材质」。
    *
@@ -575,6 +578,12 @@
   }
   .ui-hatch-locked {
     background: repeating-linear-gradient(135deg, rgb(var(--text1-rgb) / 0.11) 0 1px, transparent 1px 7px);
+  }
+  /* 将被覆盖的范围（剪辑录制样子里悬停“开始录制”且指针在某段中间时）：细斜纹从指针处起向右渐隐，盖到哪算哪。 */
+  .ui-hatch-cover {
+    background: repeating-linear-gradient(135deg, rgb(var(--text1-rgb) / 0.16) 0 1px, transparent 1px 7px);
+    -webkit-mask-image: linear-gradient(90deg, rgb(var(--text1-rgb)) 0 40%, transparent 100%);
+    mask-image: linear-gradient(90deg, rgb(var(--text1-rgb)) 0 40%, transparent 100%);
   }
   .ui-glass-scrim {
     background-color: var(--ui-scrim-tint);
