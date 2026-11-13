@@ -35,7 +35,7 @@ vi.mock('@/core/videoEdit/renderCache', () => ({ videoEditRenderWindowRanges: ()
 // 吃力判断由替身窗口直接给出（真实判断见 core/videoEdit/renderLoad 的测试）。
 vi.mock('@/core/videoEdit/renderLoad', () => ({ videoEditRenderWindowsHeavy: (_document: unknown, windows: Array<{ heavy?: boolean }>) => windows.map(window => window.heavy ?? true) }))
 vi.mock('@/platform/fonts', () => ({ fontLibrarySnapshot: () => ({ revision: state.fontRevision }) }))
-vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ videoFrames: { webCacheForeground: state.webCacheForeground }, settings: { get: async () => undefined, set: async () => {} }, mediaCache: {
+vi.mock('@/platform/runtime', () => ({ isHeadlessWindow: () => false, getPlatform: () => ({ system: { setBackgroundWork: async () => {} }, videoFrames: { webCacheForeground: state.webCacheForeground }, settings: { get: async () => undefined, set: async () => {} }, mediaCache: {
   renderList: state.list, renderRemove: state.remove, renderBegin: async () => 'temporary', renderCommit: state.commit, renderDiscard: state.discard,
 } }) }))
 // Worker 编码流的替身：渲染一帧（state.render）、送进编码器（state.add，参数与成片时间一致），然后回执提交。

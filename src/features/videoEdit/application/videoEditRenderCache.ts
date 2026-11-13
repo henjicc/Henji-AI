@@ -148,7 +148,7 @@ function ensureAutoRender(): void {
       if (running || foreground || !getVideoEditRenderPreference(projectId).autoRender || !loaded.has(projectId) || clearing.has(instance) || cancelling.has(instance) || !instance.activeSequenceId) continue
       // 首帧上屏前不抢解码与显卡：先出画面，后台再建缓存。
       if (videoEditFirstFramePending(projectId) || now - state.openedAt < AUTO_RENDER_OPEN_SETTLE_MS || now - state.changedAt < AUTO_RENDER_IDLE_MS || now - programInteractionAt < RENDER_AFTER_INTERACTION_MS) continue
-      // 用户闲着：全系统空闲，或窗口有焦点且应用内空闲；窗口须可见（见 videoEditUserIdleBasis）。
+      // 用户闲着：全系统空闲，或窗口有焦点且应用内空闲（见 videoEditUserIdleBasis）。
       const idleBasis = videoEditUserIdleBasis()
       if (!idleBasis) continue
       const composition = findActiveVideoEditSequence(instance)
@@ -175,6 +175,24 @@ function ensureAutoRender(): void {
   }, 1000)
 }
 const jobs = new WeakMap<VideoEditInstance, Job>()
+let backgroundJobs = 0
+/**
+ * 预渲染的逐帧节拍（限速、占空比的休息）在主线程定时器上：窗口最小化或被完全遮住时浏览器把它们节流到一秒以上，任务停摆。
+ * 有任务在跑时请宿主对本页不做后台节流（同剪辑浮窗），全部结束后恢复。
+ */
+function holdBackgroundRendering(): () => void {
+  const report = (active: boolean): void => {
+    void Promise.resolve().then(() => getPlatform().system.setBackgroundWork(active))
+      .catch(error => logger.warn('后台出帧设置未生效', { event: 'video_edit.render_cache.background_work_failed', error, context: { active } }))
+  }
+  if (backgroundJobs++ === 0) report(true)
+  let released = false
+  return () => {
+    if (released) return
+    released = true
+    if (--backgroundJobs === 0) report(false)
+  }
+}
 const planning = new WeakMap<VideoEditInstance, AbortController>()
 const clearing = new WeakMap<VideoEditInstance, Promise<void>>()
 const cancelling = new WeakMap<VideoEditInstance, Promise<void>>()
@@ -593,7 +611,7 @@ export async function renderVideoEditRenderCache(projectId: string, request: Vid
       elapsedMs: Math.round(performance.now() - started), nextIdleMs: program ? interactionIdleMs : RENDER_RESUME_IDLE_MS } })
   }, job.auto ? programInteractionAt : Number.NEGATIVE_INFINITY, undefined, {
     input: job.auto,
-    // 自动任务只在用户闲着时继续：在别的程序里一有输入（全系统空闲归零）、窗口被隐藏都算用户回来了。
+    // 自动任务只在用户闲着时继续：在别的程序里一有输入（全系统空闲归零）就算用户回来了。
     away: job.auto ? () => videoEditUserIdleBasis() !== undefined : undefined,
     // 自动任务让开一切占显卡的前台工作，以及别的剪辑上用户或助手发起的渲染；发起的渲染只让开录屏（硬件编码器要留给录制）。
     task: job.auto
@@ -605,8 +623,10 @@ export async function renderVideoEditRenderCache(projectId: string, request: Vid
    * 用户或助手发起的预渲染只让开节目与前台任务，不因点按界面停下。
    */
   const programIdle = (): boolean => activity.idleFor() >= RENDER_RESUME_IDLE_MS && activity.interactionIdleFor() >= interactionIdleMs && (!job.auto || videoEditUserIdleBasis() !== undefined)
+  let releaseBackground: (() => void) | undefined
   logger.info('开始预渲染', { event: 'video_edit.render_cache.start', context: { projectId, sequenceId: composition.id, windows: pending.length, auto: job.auto, codec: encoding.codec, bitrateMbps: encoding.bitrateMbps, ...(job.auto ? { maxSpeed: AUTO_RENDER_MAX_SPEED } : {}) } })
   try {
+    releaseBackground = holdBackgroundRendering()
     assertOwner()
     if (pending.length) {
       smartRegions = await waitVideoEditSmartRegions(composition, composition, job.controller.signal)
@@ -683,6 +703,7 @@ export async function renderVideoEditRenderCache(projectId: string, request: Vid
     logger.warn('预渲染失败', { event: 'video_edit.render_cache.failed', error, context: { projectId, sequenceId: composition.id, windows: job.done } })
     throw error
   } finally {
+    releaseBackground?.()
     activity.dispose()
     signal?.removeEventListener('abort', abort)
     jobs.delete(instance); publishVideoEdit()

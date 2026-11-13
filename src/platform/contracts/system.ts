@@ -83,6 +83,8 @@ export interface SystemPlatform {
   memoryInfo(): Promise<{ availableBytes: number; totalBytes: number }>
   /** 全系统（不只本应用）距上次键盘鼠标输入的秒数。 */
   idleSeconds(): Promise<number>
+  /** 开着时窗口最小化或被遮住也照常推进页面定时器；后台逐帧工作开始时打开、结束时关闭。 */
+  setBackgroundWork(active: boolean): Promise<void>
   fs: FsPlatform
   dialog: DialogPlatform
   shell: ShellPlatform

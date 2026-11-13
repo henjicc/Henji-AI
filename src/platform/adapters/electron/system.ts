@@ -169,6 +169,7 @@ export function createElectronSystem(): SystemPlatform {
   return {
     memoryInfo: () => getNative().diagnostics.memoryInfo(),
     idleSeconds: () => getNative().diagnostics.idleSeconds(),
+    setBackgroundWork: (active) => getNative().diagnostics.setBackgroundWork(active),
     fs: createFs(),
     dialog: createDialog(),
     shell: createShell(),

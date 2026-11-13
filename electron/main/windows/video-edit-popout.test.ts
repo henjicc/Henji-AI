@@ -30,6 +30,7 @@ class FakeContents extends EventEmitter {
   openHandler: (() => unknown) | null = null
   getBackgroundThrottling(): boolean { return this.throttling }
   setBackgroundThrottling(value: boolean): void { this.throttling = value }
+  isDestroyed(): boolean { return false }
   setWindowOpenHandler(handler: () => unknown): void { this.openHandler = handler }
   /** 渲染层看到的窗口矩形：由所属窗口按隐形边框换算。 */
   owner: FakeWindow | null = null

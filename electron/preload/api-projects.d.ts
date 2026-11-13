@@ -46,6 +46,8 @@ export interface HenjiDiagnosticsApi {
   memoryInfo(): Promise<{ availableBytes: number; totalBytes: number }>
   /** 全系统距上次键盘鼠标输入的秒数。 */
   idleSeconds(): Promise<number>
+  /** 开着时窗口最小化或被遮住也不节流页面定时器（自动预渲染逐帧推进用）。 */
+  setBackgroundWork(active: boolean): Promise<void>
   ping(): Promise<{ pong: true; timestamp: number }>
   streamEcho(message: string, onEvent: (event: HenjiDiagnosticsStreamEvent) => void): Promise<() => Promise<void>>
 }

@@ -139,6 +139,7 @@ function createStreamId(): string {
 const diagnosticsApi: HenjiDiagnosticsApi = {
   memoryInfo: () => nativeInvoke('system:memoryInfo'),
   idleSeconds: () => nativeInvoke('system:idleSeconds'),
+  setBackgroundWork: (active) => nativeInvoke('system:backgroundWork', active),
   ping: () => nativeInvoke('system:ping'),
   async streamEcho(message, onEvent) {
     const streamId = createStreamId()

@@ -53,14 +53,12 @@ function systemIdleSeconds(): number {
 }
 /**
  * 用户是不是闲着，后台预渲染可以开始或继续：
- * - 窗口必须可见（副屏可见即可）：正式版窗口最小化或被完全遮住时浏览器把主线程定时器节流到一秒以上，预渲染逐帧的节拍
- *   在主线程上，推进不了，不假装支持。
- * - 再满足其一：全系统空闲达到阈值（用户挂着软件去吃饭、窗口在副屏，不看焦点）；或窗口有焦点且应用内一段时间没有输入。
+ * - 满足其一：全系统空闲达到阈值（用户挂着软件去吃饭、窗口在副屏或最小化，不看焦点与可见性）；或窗口有焦点且应用内一段时间没有输入。
+ *   窗口隐藏时调度节拍被节流，开始得晚一些（至多约一分钟）；开始后预渲染请宿主暂停后台节流，逐帧照常推进。
  *   用户在别的程序里操作时全系统空闲达不到，应用又没有焦点，自然不开始；一旦有全系统输入，空闲时长归零，随即让出。
  * 返回依据（system / app）便于日志说明；不闲着为 undefined。没有窗口的环境（测试）只看应用内空闲。
  */
 export function videoEditUserIdleBasis(): 'system' | 'app' | undefined {
-  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return undefined
   if (systemIdleSeconds() >= SYSTEM_IDLE_SECONDS) return 'system'
   const focused = typeof document === 'undefined' || typeof document.hasFocus !== 'function' || document.hasFocus()
   return focused && videoEditUserInputIdleFor() >= APP_INPUT_IDLE_MS ? 'app' : undefined

@@ -1,5 +1,6 @@
 import { freemem, totalmem } from 'node:os'
-import { powerMonitor } from 'electron'
+import { powerMonitor, type WebContents } from 'electron'
+import { holdBackgroundWork } from '../services/background-work'
 import {
   copyFilePath,
   dirnamePath,
@@ -244,10 +245,36 @@ function parseNativeFetchRequest(input: unknown): NativeFetchRequestDto {
   }
 }
 
+function parseBackgroundWork(input: unknown): boolean {
+  if (typeof input !== 'boolean') throw new Error('backgroundWork 需要布尔值。')
+  return input
+}
+
+const rendererBackgroundWork = new WeakMap<WebContents, () => void>()
+function setRendererBackgroundWork(contents: WebContents, active: boolean): void {
+  const release = rendererBackgroundWork.get(contents)
+  if (!active) { release?.(); rendererBackgroundWork.delete(contents); return }
+  if (release) return
+  const hold = holdBackgroundWork(contents)
+  const stop = (): void => {
+    if (rendererBackgroundWork.get(contents) !== stop) return
+    rendererBackgroundWork.delete(contents); hold()
+    contents.off('did-start-navigation', onNavigate)
+    contents.off('destroyed', stop)
+  }
+  // 页面重载后原先的请求方已不在，不能一直不节流
+  const onNavigate = (details: { isMainFrame: boolean; isSameDocument: boolean }): void => { if (details.isMainFrame && !details.isSameDocument) stop() }
+  rendererBackgroundWork.set(contents, stop)
+  contents.on('did-start-navigation', onNavigate)
+  contents.on('destroyed', stop)
+}
+
 export function registerSystemIpc(): void {
   registerIpcHandler('system:memoryInfo', parseVoid, () => ({ availableBytes: freemem(), totalBytes: totalmem() }))
   // 全系统距上次键盘鼠标输入的秒数（不分哪个程序）：后台预渲染据此判断用户是不是真的走开了。
   registerIpcHandler('system:idleSeconds', parseVoid, () => powerMonitor.getSystemIdleTime())
+  // 页面要在窗口最小化或被遮住时继续出帧（自动预渲染）：开着时不节流页面定时器，页面重载或关闭自动放开。
+  registerIpcHandler('system:backgroundWork', parseBackgroundWork, (active, event) => setRendererBackgroundWork(event.sender, active))
   registerIpcHandler<WriteFilePayload, void>('fs:writeFile', parseWriteFilePayload, ({ path, data, exclusive, position }) => writeFileBytes(path, data, { exclusive, position }))
   registerIpcHandler<WriteTextFilePayload, void>('fs:writeTextFile', parseWriteTextFilePayload, ({ path, data }) => writeTextFile(path, data))
   registerIpcHandler<ReadFilePayload, Uint8Array>('fs:readFile', parseReadFilePayload, ({ path, maxBytes }) => readFileBytes(path, maxBytes === undefined ? undefined : { maxBytes }))

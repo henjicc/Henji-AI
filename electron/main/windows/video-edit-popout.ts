@@ -2,6 +2,7 @@ import { screen, type BrowserWindow, type HandlerDetails, type Rectangle, type W
 import { windowAppearance } from '../services/window-appearance'
 import { resolveAppIconPath } from '../app-icon'
 import { createMainLogger } from '../services/logging/main-logger'
+import { holdBackgroundWork } from '../services/background-work'
 import {
   parseVideoEditPopoutRequest,
   repairVideoEditPopoutBounds,
@@ -67,7 +68,7 @@ export function createVideoEditPopoutHost(owner: BrowserWindow): VideoEditPopout
   /** 无边框浮窗的隐形边框；同一宿主的浮窗样式相同，第一次测得后复用。 */
   let frameInsets: VideoEditPopoutFrameInsets | null = null
   const remembered = new Map<string, Rectangle>()
-  let ownerThrottling: boolean | null = null
+  let releaseBackground: (() => void) | null = null
   let displayListening = false
 
   const ownerWorkArea = (): Rectangle => screen.getDisplayMatching(owner.getBounds()).workArea
@@ -83,13 +84,12 @@ export function createVideoEditPopoutHost(owner: BrowserWindow): VideoEditPopout
   }
   const updateResourcePolicy = (): void => {
     const active = windows.size + pending.size > 0
-    if (active && ownerThrottling === null && !owner.isDestroyed()) {
+    if (active && !releaseBackground && !owner.isDestroyed()) {
       // 浮窗内容由主窗口 JS 驱动；主窗口最小化或被遮挡时仍须继续调度帧与定时器。
-      ownerThrottling = owner.webContents.getBackgroundThrottling()
-      owner.webContents.setBackgroundThrottling(false)
-    } else if (!active && ownerThrottling !== null) {
-      if (!owner.isDestroyed()) owner.webContents.setBackgroundThrottling(ownerThrottling)
-      ownerThrottling = null
+      releaseBackground = holdBackgroundWork(owner.webContents)
+    } else if (!active && releaseBackground) {
+      releaseBackground()
+      releaseBackground = null
     }
     if (active && !displayListening) {
       screen.on('display-removed', repairAll); screen.on('display-metrics-changed', repairAll); displayListening = true
