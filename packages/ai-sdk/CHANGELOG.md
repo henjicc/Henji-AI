@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.14.0 - 2026-11-14
+
+- **思考参数按协议发送**：`applyProviderReasoningRequestBody` 按 Chat Completions 与 Responses 分别写入各家官方字段。此前 Responses 也只发 Chat 写法的 `thinking` / `reasoning_effort`，会被静默忽略：DeepSeek 与智谱 GLM-5.3 关不掉思考、火山方舟强度不生效、MiniMax M3 一直不思考。现在 Responses 下 DeepSeek / 智谱用 `reasoning.effort`（`none` 关闭），火山用 `thinking` 加 `reasoning.effort`，MiniMax M3 发 `reasoning.effort` 开启，百炼仍用 `enable_thinking`。DeepSeek Chat 档位改按官方映射 low / high / max（此前只有 high / max，“低”也发 high）。新增 `readReasoningEffortField`、`resolveProviderSystemMessageSupport`（DeepSeek 系统设定发 system 角色并允许中途追加）。
+- **DeepSeek 独立接口**：新增生成供应商 `deepseek` 与语音合成模型 `deepseek-tts`（`provider-packs/deepseek`）；语音识别 `capabilities/speech-recognition/deepseek`（短音频、无时间戳）；`capabilities/deepseek` 提供网页搜索、网页抓取、文档 OCR 模块与 Files 客户端。新增服务端联网工具挂载 `appendProviderWebTools`：deepseek-flash 挂 `deepseek_web_search` 与 `deepseek_read_url`，v4-pro 在 Responses 挂 `web_search`，结构化输出时不挂；声明联网工具时把工具结果里的图片挪到随后的 user 消息（DeepSeek 此时工具结果只收文字）。
+- 能力计价新增按次 / 按页：`UnitPricing`（`billing: 'per-unit'`）与 `unitPrice`。按 `billing` 分支处理 `CapabilityPricing` 的调用方需要补上这一种。
+- **新模型**：Seedream 5.5（Fal、KIE、火山方舟；生成 / 编辑、图层拆分、透明背景）、MiniMax H3 Image（Fal、KIE、APIMart）、PixVerse V6（Fal，标准 / Max）、LTX-2.5（Fal，Pro / Fast）、Qwen-Image 2.1（百炼，Pro / Turbo）。图层结果解析 `parseSeedreamLayerStack` 支持 Fal 返回结构。
+- 修复：百炼 Qwen-Image 3.0 选 2K 配 4:3、3:2 等比例时尺寸超过官方面积上限被拒；Qwen-Image 3.0 与火山 Seedream 5.0 读参考图时漏掉面板的 `uploadedImages`。
+
 ## 0.13.0 - 2026-11-10
 
 - 实时语音识别事件契约写进 `SpeechRecognitionEvent`：`partial.text` 是当前所有尚未定稿的文字（不含已以 final 发出的部分），`segment` 与之对应；`final.text` 是刚定稿的那一句；同一批服务端结果先发 final 再发 partial。百炼 Fun-ASR 实时与 Qwen3-ASR 实时本来就符合。

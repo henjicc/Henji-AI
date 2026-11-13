@@ -148,9 +148,11 @@ describe('classifyModelStepError', () => {
       model: 'deepseek-v4-pro',
       stream: true,
       store: false,
-      thinking: { type: 'enabled' },
-      reasoning_effort: 'high',
+      // Responses 只认 reasoning.effort；Chat 写法的 thinking / reasoning_effort 会被静默忽略，不能残留
+      reasoning: { effort: 'high' },
     })
+    expect(body).not.toHaveProperty('thinking')
+    expect(body).not.toHaveProperty('reasoning_effort')
     expect(body).not.toHaveProperty('messages')
     expect(body).toHaveProperty('input')
   })
