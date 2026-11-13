@@ -256,6 +256,32 @@ describe('ApplicationControlExecutionEngine', () => {
     expect(fixture.values.get('one')).toBe(2)
   })
 
+  it('声明会规范值的属性：读回被调整过算写入生效并给出实际值，仍是原值才算验证失败', async () => {
+    const commitWith = async (stored: (written: number) => number, key: string, normalized = true) => {
+      const fixture = createFixture()
+      const { engine, executor } = createEngine(fixture)
+      const getProperty = fixture.registry.getProperty.bind(fixture.registry)
+      vi.spyOn(fixture.registry, 'getProperty').mockImplementation(id => {
+        const property = getProperty(id)
+        return property && id === 'sample.value' && normalized ? { ...property, valueComparison: 'normalized' as const } : property
+      })
+      const apply = executor.apply.bind(executor)
+      vi.spyOn(executor, 'apply').mockImplementation(async step => {
+        const result = await apply(step)
+        fixture.values.set(step.target.id, stored(step.mutations[0].value as number))
+        return result
+      })
+      const plan = await engine.plan({ summary: '更新数值', transactionMode: 'compensatable', steps: [mutationStep('one', 6)] }, context())
+      return engine.commit({ planRef: plan.planRef, expectedRevisions: { 'sample.scope': 0 }, idempotencyKey: key }, context())
+    }
+    const adjusted = await commitWith(value => value + 2, 'normalized-write-0001')
+    expect(adjusted).toMatchObject({ status: 'completed', verification: { verified: true, adjustedValues: [expect.stringContaining('实际为：8')] } })
+    const unchanged = await commitWith(() => 2, 'unchanged-write-0001')
+    expect(unchanged).toMatchObject({ status: 'failed', code: 'VERIFICATION_FAILED', verification: { unmetConditions: ['属性验证失败：sample.value 写入后仍是原值'] } })
+    // 没声明会规范值的属性仍严格等值：读回变了也不算写对。
+    expect(await commitWith(value => value + 2, 'strict-write-0001', false)).toMatchObject({ status: 'failed', code: 'VERIFICATION_FAILED', verification: { unmetConditions: ['属性验证失败：sample.value'] } })
+  })
+
   it('同一事务先更新再删除实体时只验证最终世界状态', async () => {
     const fixture = createFixture()
     const { engine } = createEngine(fixture)

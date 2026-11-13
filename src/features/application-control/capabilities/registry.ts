@@ -384,11 +384,13 @@ export async function executeApplicationCapabilityResult(
      */
     const failure = toFailure(error)
     const level = CALLER_CORRECTABLE_ERROR_CODES.has(failure.error.code) ? 'warn' : 'error'
-    logger[level]('capability.execute.failed', error, {
+    // 抛出的不一定是 Error（事务失败、领域拒绝常带结构化结果），日志另记分类后的失败码与原因，排查时不必再对时间戳。
+    logger[level]('应用能力执行失败', error, {
       event: 'application.capability.execute.failed',
       requestId: context.requestId,
       taskId: context.taskId,
       capabilityId: invocation.id,
+      context: { failureCode: failure.error.code, failureReason: failure.error.message.slice(0, 300) },
     })
     return failure
   }

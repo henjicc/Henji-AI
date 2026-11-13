@@ -339,11 +339,14 @@ export class ApplicationPlanBuilder {
         context
       )
       if (descriptor.verificationStrategy !== 'execution') {
+        // 同一事务里已写过这条属性时，计划值不是领域规范后的实际值，不能拿来判断“已离开写入前的值”，只能严格等值。
+        const before = descriptor.valueComparison === 'normalized' && !workingValues.has(key) ? currentValue : undefined
         conditions.push({
           kind: 'property_equals',
           target: normalizedTarget,
           propertyId: mutation.propertyId,
           expected: resultingValue,
+          ...(before !== undefined ? { before } : {}),
         })
       }
       const writerOperations = executor.propertyOperations.get(mutation.propertyId)

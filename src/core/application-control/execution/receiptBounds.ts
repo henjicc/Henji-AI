@@ -38,6 +38,8 @@ function verificationResult(verification: ApplicationVerificationResult, omitted
     evidence: evidenceList(verification.evidence, 'verificationEvidence', omitted),
     unmetConditions: take(verification.unmetConditions, LIMITS.unmetConditions, 'unmetConditions', omitted)
       .map((condition) => text(condition, LIMITS.text, omitted)),
+    ...(verification.adjustedValues ? { adjustedValues: take(verification.adjustedValues, LIMITS.unmetConditions, 'adjustedValues', omitted)
+      .map((item) => text(item, LIMITS.text, omitted)) } : {}),
   }
 }
 

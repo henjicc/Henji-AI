@@ -5,6 +5,7 @@ import {
   type ApplicationCommitRequest,
   type ApplicationPlannedStep,
   type ApplicationTransactionResult,
+  type ApplicationVerificationCondition,
   type ApplicationUndoRequest,
 } from '../transactions'
 import type { ApplicationReflectionRegistry } from '../registry'
@@ -74,6 +75,13 @@ function assertExpectedRevisions(
   for (const [scope, revision] of Object.entries(expected)) {
     if (actual[scope] !== revision) throw new Error(`REVISION_CONFLICT:${scope}:${revision}/${actual[scope]}`)
   }
+}
+
+/** 恢复验证可能在很久以后才做，期间别人改过的值不能算作这次写入被规范后的结果，所以只按请求值严格核对。 */
+function recoveryCondition(condition: ApplicationVerificationCondition): ApplicationVerificationCondition {
+  if (condition.kind !== 'property_equals' || condition.before === undefined) return condition
+  const { before: _before, ...strict } = condition
+  return strict
 }
 
 export class ApplicationControlExecutionEngine extends ApplicationExecutionFailureSupport implements ApplicationControlExecutionApi {
@@ -287,7 +295,7 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
         if (undoRef) failureResult.undoRef = undoRef
       }
       const result = boundedTransactionResult(failureResult.status === 'failed' && error instanceof ApplicationPersistenceBoundaryFailure
-        ? { ...failureResult, recoveryVerification: { conditions: stored.plan.verificationConditions, evidence: error.completed.flatMap((item) => item.evidence) } }
+        ? { ...failureResult, recoveryVerification: { conditions: stored.plan.verificationConditions.map(recoveryCondition), evidence: error.completed.flatMap((item) => item.evidence) } }
         : failureResult)
       this.store.saveIdempotent(request.idempotencyKey, request.planRef, result)
       return result

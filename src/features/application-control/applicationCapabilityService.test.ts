@@ -162,6 +162,7 @@ describe('独立应用调用入口', () => {
     const failed = getLogEvents().filter((event) => event.event === 'application.capability.execute.failed')
     expect(failed.length).toBe(1)
     expect(failed[0].level).toBe('warn')
+    expect(failed[0].context).toMatchObject({ failureCode: 'NOT_FOUND', failureReason: expect.stringContaining('ENTITY_NOT_FOUND') })
     expect(getLogEvents().some((event) => event.level === 'error')).toBe(false)
     } finally { uninstallHarnessNativeStorage() }
   })

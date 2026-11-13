@@ -157,6 +157,8 @@ export const applicationVerificationConditionSchema = z.discriminatedUnion('kind
     target: applicationRefSchema,
     propertyId: applicationPropertyIdSchema,
     expected: jsonValueSchema,
+    /** 声明 normalized 的属性在本次写入前的值（同一事务里已写过则取上一次写入后的值）；读回既不等于请求也不等于它时，说明写入生效但被领域规则调整过。 */
+    before: jsonValueSchema.optional(),
   }).strict(),
   z.object({
     kind: z.literal('evidence_fact'),
@@ -213,6 +215,8 @@ export const applicationVerificationResultSchema = z.object({
   verified: z.boolean(),
   evidence: z.array(applicationEvidenceSchema).max(APPLICATION_RECEIPT_LIMITS.evidence),
   unmetConditions: z.array(z.string().min(1).max(APPLICATION_RECEIPT_LIMITS.text)).max(APPLICATION_RECEIPT_LIMITS.unmetConditions),
+  /** 已写入但读回与请求不完全相同的属性（如字幕自动补中英文空格、生成参数按模型约束修正），每条写明实际值。 */
+  adjustedValues: z.array(z.string().min(1).max(APPLICATION_RECEIPT_LIMITS.text)).max(APPLICATION_RECEIPT_LIMITS.unmetConditions).optional(),
   checkedAt: z.string().datetime(),
 }).strict()
 export type ApplicationVerificationResult = z.infer<typeof applicationVerificationResultSchema>

@@ -121,6 +121,8 @@ export type CaptureRequest = z.infer<typeof captureRequestSchema>
  * 只有原生采集录的才有；现有录法录的画面旁没有这个文件。窗口标题是明文，只在本机会话目录里。
  */
 export const captureActivityTimelineFile = (screenFile: string): string => screenFile.replace(/\.mp4$/i, '.activity.jsonl')
+/** 原生画面采集进程在画面文件旁写的逐帧时刻表（二进制，格式见 native/screen-capture/README.md）；与主进程 native-timing.ts 的同名规则一致。 */
+export const captureFrameTimingFile = (screenFile: string): string => screenFile.replace(/\.mp4$/i, '.frames')
 
 /** Desktop DIP rectangle → normalized selected-display coordinates (including negative desktop origins). */
 export function captureRegionFromDip(region: { x: number; y: number; width: number; height: number }, display: { x: number; y: number; width: number; height: number }): NonNullable<ScreenCaptureOptions['region']> {

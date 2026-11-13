@@ -27,6 +27,8 @@ function jsonEqual(left: JsonValue | undefined, right: JsonValue, schema?: unkno
   return false
 }
 
+const truncate = (text: string): string => text.length > 300 ? `${text.slice(0, 300)}…` : text
+
 export class ApplicationTransactionVerifier {
   private readonly customVerifiers = new Map<string, ApplicationCustomVerifier>()
 
@@ -45,6 +47,7 @@ export class ApplicationTransactionVerifier {
   ): Promise<ApplicationVerificationResult> {
     const evidence: ApplicationEvidence[] = []
     const unmetConditions: string[] = []
+    const adjustedValues: string[] = []
     for (const condition of conditions) {
       if (condition.kind === 'custom') {
         const verifier = this.customVerifiers.get(condition.verifierId)
@@ -92,8 +95,15 @@ export class ApplicationTransactionVerifier {
           ? actual.every(value => expected.some(item => jsonEqual(value, item, propertySchemaAtPath(schema, [0]))))
             && expected.every(item => actual.some(value => jsonEqual(value, item, propertySchemaAtPath(schema, [0]))))
           : jsonEqual(actual, expected, schema)
-        if (!matches) {
-          unmetConditions.push(`属性验证失败：${condition.propertyId}`)
+        // 读回变了却不等于请求：写入已生效，领域按自身规则规范了值（字幕补空格、参数按模型约束修正）。
+        // 报成失败会让调用方以为没写上而重试或去“修复”，所以如实给出实际值；仍是原值才算没写上。
+        const adjusted = !matches && property.valueComparison === 'normalized' && actual !== undefined && condition.before !== undefined && !jsonEqual(actual, condition.before, schema)
+        if (adjusted) {
+          adjustedValues.push(`${condition.target.kind}/${condition.target.id} 的 ${condition.propertyId} 已写入，按应用规则调整后实际为：${truncate(JSON.stringify(actual))}`)
+          evidence.push({ kind: 'property_value', target: snapshot.ref, fact: `属性 ${condition.propertyId} 已写入，实际值与请求不完全相同。`, data: actual, capturedAt: now.toISOString() })
+        } else if (!matches) {
+          unmetConditions.push(condition.before !== undefined && actual !== undefined && jsonEqual(actual, condition.before, schema)
+            ? `属性验证失败：${condition.propertyId} 写入后仍是原值` : `属性验证失败：${condition.propertyId}`)
         } else {
           evidence.push({
             kind: 'property_value',
@@ -125,6 +135,7 @@ export class ApplicationTransactionVerifier {
       verified: unmetConditions.length === 0,
       evidence,
       unmetConditions,
+      ...(adjustedValues.length ? { adjustedValues } : {}),
       checkedAt: now.toISOString(),
     }
   }

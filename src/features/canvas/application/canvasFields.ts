@@ -163,10 +163,11 @@ export const NODE_FIELDS: ApplicationFieldDefinition<
   },
   {
     propertyId: `${NODE_ENTITY_TYPE}.generation_config`,
-    descriptor: canvasDescriptor(NODE_ENTITY_TYPE, 'generation_config', '生成配置',
+    // 参数会按节点与模型约束补默认值、去掉不认识的键，读回与写入值不完全相同。
+    descriptor: { ...canvasDescriptor(NODE_ENTITY_TYPE, 'generation_config', '生成配置',
       GENERATION_CONFIG_VALUE,
       '仅生成节点支持。整体写入 {prompt: 字符串, modelId: 非空模型 ID, params: 参数对象}，三个字段均必填。'
-      + '先读取 generation_schema 获取当前模型参数及锁定约束；引用素材通过画布连线提供。修改配置不会提交付费生成。', true),
+      + '先读取 generation_schema 获取当前模型参数及锁定约束；引用素材通过画布连线提供。修改配置不会提交付费生成。', true), valueComparison: 'normalized' },
     read: readCanvasNodeGenerationConfig,
     writer: { write(patch, mutation) {
       patch.generationConfig = canvasNodeGenerationConfigSchema.parse(mutation.value)

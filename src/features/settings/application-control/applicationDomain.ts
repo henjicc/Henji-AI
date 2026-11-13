@@ -6,15 +6,17 @@ import { getApplicationSettingsCapability, searchApplicationSettingsCapability }
 import { getApplicationSettings, searchApplicationSettings } from './settingsApplicationService'
 import { createRecycleReflectionRegistration, RecycleCollectionExecutor } from './recycleReflection'
 import { skillCollection, providerCollection } from './settingsRecordCollections'
+import { createMediaCacheReflectionRegistration, MediaCacheCollectionExecutor } from './mediaCacheReflection'
 
 export const settingsApplicationDomain: ApplicationDomainModule = {
   id: 'settings',
-  entities: () => [createSettingsReflectionRegistration(), createRecycleReflectionRegistration(), skillCollection.registration, providerCollection.registration],
+  entities: () => [createSettingsReflectionRegistration(), createRecycleReflectionRegistration(), skillCollection.registration, providerCollection.registration, createMediaCacheReflectionRegistration()],
   registerExecutors(engine) {
     engine.registerMutationExecutor(new SettingsMutationExecutor())
     engine.registerCollectionExecutor(new RecycleCollectionExecutor())
     engine.registerCollectionExecutor(skillCollection.executor)
     engine.registerCollectionExecutor(providerCollection.executor)
+    engine.registerCollectionExecutor(new MediaCacheCollectionExecutor())
   },
   registerCapabilities(registrar) {
     registrar.registerHandler(searchApplicationSettingsCapability.id, input => {

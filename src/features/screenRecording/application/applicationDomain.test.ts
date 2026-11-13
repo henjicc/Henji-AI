@@ -6,8 +6,9 @@ import { createRecordingDocument } from '@/core/screenRecording/document'
 import { DEFAULT_RECORDING_SETUP, recordingOutput, recordingTracksFromSetup, type RecordingSetup } from '../recordingSetupModel'
 import { RECORDING_CAPABILITIES } from '@/core/application-control/domains/screenRecording/recordingCapabilities'
 
-const state = vi.hoisted(() => ({ content: undefined as RecordingDocument | undefined, snapshot: null as RecordingControlSnapshot | null, changed: undefined as ((snapshot: RecordingControlSnapshot | null) => void) | undefined, grant: vi.fn(), revoke: vi.fn(), events: vi.fn(async (): Promise<unknown> => null), prepared: vi.fn(), saved: undefined as RecordingSetup | undefined, audioEditRecording: false }))
+const state = vi.hoisted(() => ({ content: undefined as RecordingDocument | undefined, snapshot: null as RecordingControlSnapshot | null, changed: undefined as ((snapshot: RecordingControlSnapshot | null) => void) | undefined, grant: vi.fn(), revoke: vi.fn(), events: vi.fn(async (): Promise<unknown> => null), prepared: vi.fn(), saved: undefined as RecordingSetup | undefined, audioEditRecording: false, files: new Set<string>() }))
 vi.mock('@/platform', () => ({ getPlatform: () => ({
+  system: { fs: { exists: async (file: string) => state.files.has(file) } },
   audioCapture: { recordingState: async () => ({ recording: state.audioEditRecording ? { outputPath: 'take.wav', state: 'recording', durationSeconds: 1, health: null } : null, sharedMicrophone: false, interruption: null, pending: [], settingsRevision: 0 }) },
   documents: { readDocument: async () => ({ meta: { id: state.content!.sessionId, kind: 'screen_recording', name: '课程', revision: 1 }, content: structuredClone(state.content) }) },
   screenRecording: { sources: async () => [{ id: 'screen:2:0', name: '屏幕 2', kind: 'screen', displayId: '2', display: { x: 2560, y: 0, width: 1920, height: 1080, scaleFactor: 2, primary: false } }], grant: state.grant, revoke: state.revoke, snapshot: async () => state.snapshot, onChanged: (handler: typeof state.changed) => { state.changed = handler; return () => { state.changed = undefined } }, capture: state.events,
@@ -97,7 +98,13 @@ it('目标序列认读回的“文档:序列”与裸 id；不在这份剪辑里
   expect(stop.outputSchema.safeParse({ ...stopped, revision: 0, scopeRevisions: {} }).success).toBe(true)
   const saved = await provider.readEntity(started.resultRef as { kind: string; id: string }, {})
   expect(saved.properties['screen_recording.session.elapsed_ms']).toBe(6000)
-  expect(saved.properties['screen_recording.session.details']).toMatchObject({ events: 0, markers: 0 })
+  expect(saved.properties['screen_recording.session.details']).toMatchObject({ events: 0, markers: 0, recorder: 'ffmpeg_or_browser' })
+  expect(saved.properties['screen_recording.session.details']).not.toHaveProperty('frameTiming')
+  // 原生采集在画面旁写了时刻表与活动时间线：读回能看出录法，两样文件各自是否留下。
+  state.files.add('/s.frames')
+  expect((await provider.readEntity(started.resultRef as { kind: string; id: string }, {})).properties['screen_recording.session.details']).toMatchObject({
+    recorder: 'native', frameTiming: { path: '/s.frames', exists: true }, activity: { path: '/s.activity.jsonl', exists: false } })
+  state.files.clear()
 })
 
 it('根据公开名称与 schema 开始、停止并经同一会话服务读回；停止事件与显式停止不会重复收尾', async () => {

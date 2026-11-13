@@ -116,6 +116,8 @@ const successData: Record<string, Record<string, unknown>> = {
   switch_workspace: { workspace: 'videoEdit', ...revisions },
   open_application_surface: { ...revisions },
   close_application_surface: { ...revisions },
+  observe_application_surface: { target: 'window', providerId: 'surface.window', sourceKind: 'application_window', verificationKind: 'visual_pending_model', maskedRegionCount: 0, capturedAt: '2026-11-14T00:00:00.000Z',
+    attachment: { schemaVersion: 'agent-attachment/v1', mediaRef: 'asset:shot', modality: 'image', mimeType: 'image/png', sizeBytes: 1024, width: 1920, height: 1080, displayName: 'window-observation.png', dataClass: 'C2', lifecycle: 'asset_library', sourceStatus: 'ready' } },
   focus_application_entity: { ...revisions },
   search_canvas_node_types: { catalogVersion: '1', nodeTypes: [{ id: 'image' }], nextCursor: null, ...revisions },
   get_canvas_document: { document: { id: 'canvas', name: '画布' }, nodes: [{ id: 'node', type: 'image' }], edges: [], truncated: false, ...revisions },
