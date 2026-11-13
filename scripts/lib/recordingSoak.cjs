@@ -416,7 +416,7 @@ function evaluateScreen(result, wall, problems, notes) {
   for (const check of result.checks?.cursor ?? []) if (!check.ok) problems.push(`光标对齐抽查失败（第 ${Math.round(check.scheduledSec)} 秒）：${check.reason}`)
   for (const check of result.checks?.picture ?? []) if (!check.changed) notes.push(`切工作区后 ${check.windowSeconds} 秒内画面没有可见变化（被录来源可能没有显示应用窗口）`)
   const motionPicture = result.checks?.motionPicture
-  if (motionPicture && !motionPicture.changed) problems.push(`运动源在跑，但录到的画面${motionPicture.error ? `读不出（${motionPicture.error}）` : '在抽查的几秒内没有变化'}`)
+  if (motionPicture && !motionPicture.changed) problems.push(`运动源在跑，但录到的画面${motionPicture.error ? `读不出（${motionPicture.error}）` : motionPicture.reason ?? '在抽查的几秒内没有变化'}`)
   checkReload(result, ['recording.host.detached', 'recording.host.attached', 'recording.session.attach.completed'], problems)
 }
 
@@ -430,7 +430,9 @@ function evaluateSystemAudio(result, recordingSeconds, problems, notes) {
   const summary = system.summary
   if (!summary) { problems.push('没有找到 audio_capture.system_audio.summary'); return }
   if (summary.outcome && summary.outcome !== 'completed') problems.push(`系统声结束结果是 ${summary.outcome}`)
-  if (Number.isFinite(recordingSeconds) && !near(summary.durationSeconds, recordingSeconds, durationTolerance(recordingSeconds))) problems.push(`系统声时长 ${summary.durationSeconds} 秒与录制时长 ${recordingSeconds.toFixed(1)} 秒不符（无声时应按时间轴补静音）`)
+  // 系统声先于画面开录、停止时也晚收尾几秒，比录制时长略长是正常的；短了才说明丢了。
+  const lead = 10
+  if (Number.isFinite(recordingSeconds) && !(summary.durationSeconds >= recordingSeconds - durationTolerance(recordingSeconds) && summary.durationSeconds <= recordingSeconds + lead)) problems.push(`系统声时长 ${summary.durationSeconds} 秒与录制时长 ${recordingSeconds.toFixed(1)} 秒不符（无声时应按时间轴补静音）`)
   if (summary.droppedFrames > 0) problems.push(`系统声写盘跟不上丢了 ${summary.droppedFrames} 帧（已补静音）`)
   if (summary.reconnects > 0) problems.push(`系统声原生服务失联重连 ${summary.reconnects} 次`)
   if (summary.discontinuities > 0) notes.push(`系统声数据不连续 ${summary.discontinuities} 次（已按时间戳补齐）`)
@@ -441,7 +443,13 @@ function evaluateSystemAudio(result, recordingSeconds, problems, notes) {
     if (system.eventCounts?.[name]) problems.push(`出现 ${name} ×${system.eventCounts[name]}`)
   }
   const file = system.file
-  if (file && Number.isFinite(recordingSeconds) && !near(file.durationSeconds, recordingSeconds, durationTolerance(recordingSeconds))) problems.push(`拼好的系统声文件 ${file.durationSeconds?.toFixed(1)} 秒，与录制时长 ${recordingSeconds.toFixed(1)} 秒不符`)
+  if (file && Number.isFinite(recordingSeconds)) {
+    // 拼好的系统声要覆盖整段画面：起点不晚于画面起点、终点不早于画面起点 + 录制时长（各留 1 秒）。
+    const covers = Number.isFinite(file.monoUs) && Number.isFinite(file.screenStartUs)
+      ? file.monoUs <= file.screenStartUs + 1e6 && file.monoUs + file.durationSeconds * 1e6 >= file.screenStartUs + recordingSeconds * 1e6 - 1e6
+      : near(file.durationSeconds, recordingSeconds, durationTolerance(recordingSeconds))
+    if (!covers || file.durationSeconds > recordingSeconds + lead) problems.push(`拼好的系统声文件 ${file.durationSeconds?.toFixed(1)} 秒（起点 ${((file.monoUs ?? 0) / 1e6).toFixed(2)} 秒），没有覆盖整段画面（起点 ${((file.screenStartUs ?? 0) / 1e6).toFixed(2)} 秒、录制 ${recordingSeconds.toFixed(1)} 秒）`)
+  }
   if (result.motion?.ok && result.motion.audio) {
     if (!system.level) problems.push('没能测量系统声电平')
     else if (!(system.level.maxVolumeDb > -60)) problems.push(`运动源在出声，录到的系统声却几乎没有信号（峰值 ${system.level.maxVolumeDb ?? '—'} dB）`)

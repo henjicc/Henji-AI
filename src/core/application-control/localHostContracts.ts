@@ -60,13 +60,13 @@ const localEntitySurfaceSchema = z.object({
 export type LocalEntitySurface = z.infer<typeof localEntitySurfaceSchema>
 const localDomainSurfaceSchema = z.object({
   id: z.string().min(1).max(128), readable: z.boolean(), writable: z.boolean(),
-  entities: z.array(localEntitySurfaceSchema).max(128),
+  entities: z.array(localEntitySurfaceSchema),
 }).strict()
 export type LocalDomainSurface = z.infer<typeof localDomainSurfaceSchema>
 
 export const localHostRegistrationSchema = z.object({
-  rendererEpoch: z.string().uuid(), attachmentSequence: z.number().nonnegative(), ready: z.boolean(), tools: z.array(localToolSchema).max(256),
-  domains: z.array(localDomainSurfaceSchema).max(32),
+  rendererEpoch: z.string().uuid(), attachmentSequence: z.number().nonnegative(), ready: z.boolean(), tools: z.array(localToolSchema),
+  domains: z.array(localDomainSurfaceSchema),
 }).strict()
 export type LocalHostRegistration = z.infer<typeof localHostRegistrationSchema>
 /** 可信宿主必须提交完整注册信息。 */

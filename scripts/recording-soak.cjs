@@ -27,7 +27,7 @@
  *   --width 3840 --height 2160 --fps 60
  *   --no-microphone / --no-system-audio   默认带麦克风与系统声
  *   --kill-encoder          中途结束一次画面编码进程，验证自动续录
- *   --no-cursor             不移动鼠标做事件对齐抽查（默认会在几个时刻把光标移到主屏中心附近再放回）
+ *   --no-cursor             不移动鼠标做事件对齐抽查（默认会在几个时刻把光标移到被录显示器中心附近再放回）
  *   --no-motion             不放运动源。默认在被录显示器上用系统 PATH 上的 ffplay 无边框置顶播放 testsrc2 测试图
  *                           （显示器像素、60 帧）和约 -30 dBFS 的粉噪，录制结束后关掉；放不出来时结论是“未达测试条件”
  *   通用：
@@ -374,6 +374,8 @@ function audioScenario(ctx) {
         const started = await driver.call('start_audio_edit_recording', { documentRef: { kind: 'audio_edit.document', id: state.documentId } }, { write: true, timeoutMs: 120_000 })
         result.recording.startReceipt = started
         if (started?.recording?.phase !== 'recording') throw new Error(`start_audio_edit_recording 返回后没有在录音：${JSON.stringify(started)}`)
+        // 墙钟从真正开录算：开始调用本身要几秒（建会话、保存口播），从调用前算会把这段算成“丢失”，容差就掩盖了真丢。
+        result.recording.effectiveStartMs = Date.now() - (started.recording.durationSeconds ?? 0) * 1000
       } else {
         const page = await driver.page()
         await page.getByRole('button', { name: '开始录音', exact: true }).first().click({ timeout: 60_000 })
@@ -446,7 +448,7 @@ function audioScenario(ctx) {
         const receipt = await driver.call('stop_audio_edit_recording', {}, { write: true, timeoutMs: 120_000 })
         ctx.stopped = true
         result.recording.stoppedAtMs = Date.now()
-        result.recording.wallSeconds = (result.recording.stopRequestedAtMs - result.recording.prepareAtMs) / 1000
+        result.recording.wallSeconds = (result.recording.stopRequestedAtMs - (result.recording.effectiveStartMs ?? result.recording.prepareAtMs)) / 1000
         result.recording.stopVia = 'capability'
         result.recording.stopReceipt = receipt
         log(`已用 stop_audio_edit_recording 停止${receipt?.finishing ? '（仍在拼回，等作品更新）' : ''}`)
@@ -542,6 +544,7 @@ function screenScenario(ctx) {
       while (Date.now() < deadline) { current = await snapshot(); if (current?.phase === 'recording') break; if (current?.phase === 'failed') break; await sleep(250) }
       if (current?.phase !== 'recording') throw new Error(`录屏 60 秒内没有进入录制：${JSON.stringify(current)}`)
       result.recording.firstSnapshot = current
+      result.recording.effectiveStartMs = Date.now() - (current.elapsedMs ?? 0)
     },
     async alive() {
       try {
@@ -580,7 +583,7 @@ function screenScenario(ctx) {
       cursor: async (_params, item) => {
         const before = await scenario.alive()
         const mark = await scenario.mark('cursor')
-        const move = await os.moveCursor(CURSOR_HOLD_MS)
+        const move = await os.moveCursor(CURSOR_HOLD_MS, result.source.display)
         state.cursorMoves.push({ scheduledSec: item.atSec, mark, move })
         return { before, after: await scenario.alive(), move, ok: true }
       },
@@ -615,7 +618,7 @@ function screenScenario(ctx) {
       }
       ctx.stopped = true
       result.recording.stoppedAtMs = Date.now()
-      result.recording.wallSeconds = (result.recording.stopRequestedAtMs - result.recording.startedAtMs) / 1000
+      result.recording.wallSeconds = (result.recording.stopRequestedAtMs - (result.recording.effectiveStartMs ?? result.recording.startedAtMs)) / 1000
       log(`已停止，正式能力用时 ${((result.recording.stoppedAtMs - result.recording.stopRequestedAtMs) / 1000).toFixed(1)} 秒`)
       return { before, stopped, ok: true }
     },
@@ -666,7 +669,11 @@ function screenScenario(ctx) {
     if (!span) { result.checks.motionPicture = { changed: false, error: '没有长于 4 秒的画面分片' }; return }
     const at = span.durationUs / 2e6
     const scene = await sceneChanges(span.path, at, 2, 0.002)
-    result.checks.motionPicture = { file: span.path, atSeconds: at, changed: scene.ok && scene.times.length > 0, changes: scene.ok ? scene.times.length : null, ...(scene.ok ? {} : { error: scene.error }) }
+    // 右下四分之一也要在动：运动源摆错位置时只占画面一角，整帧仍会“有变化”。
+    const corner = await sceneChanges(span.path, at, 2, 0.002, { crop: 'iw/2:ih/2:iw/2:ih/2' })
+    const changed = scene.ok && scene.times.length > 0 && corner.ok && corner.times.length > 0
+    result.checks.motionPicture = { file: span.path, atSeconds: at, changed, changes: scene.ok ? scene.times.length : null, cornerChanges: corner.ok ? corner.times.length : null,
+      ...(scene.ok && corner.ok ? {} : { error: scene.error ?? corner.error }), ...(changed || !scene.ok || !corner.ok ? {} : { reason: '画面右下四分之一没有变化，运动源没有铺满被录显示器' }) }
   }
 
   /** 系统声：结束汇总与相关事件、拼好的文件时长、整体电平，以及每次界面重载前后那几秒有没有静音。 */
@@ -680,7 +687,8 @@ function screenScenario(ctx) {
     const item = media.find(entry => entry.kind === 'systemAudio')
     if (!item) return
     const probed = result.checks.files.find(file => file.path === item.path)?.probe
-    system.file = { path: item.path, durationSeconds: probed?.durationSeconds ?? null }
+    const screenStartUs = Math.min(...media.filter(entry => entry.kind === 'screen').map(entry => entry.monoUs))
+    system.file = { path: item.path, durationSeconds: probed?.durationSeconds ?? null, monoUs: item.monoUs, screenStartUs: Number.isFinite(screenStartUs) ? screenStartUs : null }
     if (!result.motion?.ok) return
     const level = await audioLevel(item.path)
     system.level = level.ok ? { maxVolumeDb: level.maxVolumeDb, meanVolumeDb: level.meanVolumeDb, silenceCount: level.silences.length, longestSilenceSeconds: Math.max(0, ...level.silences.map(entry => entry.durationSeconds ?? 0)) } : null

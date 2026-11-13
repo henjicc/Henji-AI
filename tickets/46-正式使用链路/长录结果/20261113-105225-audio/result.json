@@ -1,0 +1,3286 @@
+{
+  "version": 1,
+  "scenario": "audio",
+  "options": {
+    "scenario": "audio",
+    "minutes": 60,
+    "smoke": false,
+    "port": 9334,
+    "project": "长录测试",
+    "out": null,
+    "source": null,
+    "width": 3840,
+    "height": 2160,
+    "fps": 60,
+    "systemAudio": true,
+    "microphone": true,
+    "killEncoder": false,
+    "crashRenderer": false,
+    "cursor": true,
+    "motion": false,
+    "loadSeconds": 20,
+    "audioControl": "capability"
+  },
+  "resultDir": "D:\\VibeCode\\Henji-AI\\tickets\\46-正式使用链路\\长录结果\\20261113-105225-audio",
+  "startedAt": "2026-11-13T02:52:25.043Z",
+  "plan": [
+    {
+      "atSec": 108,
+      "action": "wake-lock",
+      "params": {}
+    },
+    {
+      "atSec": 180,
+      "action": "switch-away",
+      "params": {
+        "workspaceId": "videoEdit"
+      }
+    },
+    {
+      "atSec": 288,
+      "action": "switch-back",
+      "params": {}
+    },
+    {
+      "atSec": 360,
+      "action": "minimize",
+      "params": {}
+    },
+    {
+      "atSec": 972,
+      "action": "restore",
+      "params": {}
+    },
+    {
+      "atSec": 1152,
+      "action": "main-load",
+      "params": {}
+    },
+    {
+      "atSec": 1512,
+      "action": "reload",
+      "params": {}
+    },
+    {
+      "atSec": 1800,
+      "action": "status",
+      "params": {
+        "memoryLabel": "mid"
+      }
+    },
+    {
+      "atSec": 2520,
+      "action": "switch-away",
+      "params": {
+        "workspaceId": "assets"
+      }
+    },
+    {
+      "atSec": 3600,
+      "action": "stop",
+      "params": {}
+    }
+  ],
+  "steps": [
+    {
+      "action": "wake-lock",
+      "params": {},
+      "scheduledSec": 108,
+      "lateMs": 0,
+      "startedAtMs": 1794538459608,
+      "details": {
+        "power": {
+          "available": false,
+          "error": "此命令需要管理员权限，并且必须从提升的命令提示符中执行。"
+        },
+        "before": {
+          "alive": true,
+          "durationSeconds": 108.134,
+          "health": {
+            "inputOverflows": 0,
+            "inputUnderflows": 0,
+            "droppedFrames": 0,
+            "droppedPreviewBlocks": 0,
+            "maxWriteMs": 130.598,
+            "lastGlitchSeconds": 0
+          },
+          "via": "main"
+        },
+        "after": {
+          "alive": true,
+          "durationSeconds": 108.303,
+          "health": {
+            "inputOverflows": 0,
+            "inputUnderflows": 0,
+            "droppedFrames": 0,
+            "droppedPreviewBlocks": 0,
+            "maxWriteMs": 130.598,
+            "lastGlitchSeconds": 0
+          },
+          "via": "main"
+        },
+        "ok": true
+      },
+      "ok": true,
+      "endedAtMs": 1794538459799
+    },
+    {
+      "action": "switch-away",
+      "params": {
+        "workspaceId": "videoEdit"
+      },
+      "scheduledSec": 180,
+      "lateMs": 8,
+      "startedAtMs": 1794538531616,
+      "details": {
+        "workspaceId": "videoEdit",
+        "indicator": true,
+        "times": [
+          "00:03:00",
+          "00:03:02"
+        ],
+        "ok": true,
+        "before": {
+          "alive": true,
+          "durationSeconds": 180.128,
+          "health": {
+            "inputOverflows": 0,
+            "inputUnderflows": 0,
+            "droppedFrames": 0,
+            "droppedPreviewBlocks": 0,
+            "maxWriteMs": 153.153,
+            "lastGlitchSeconds": 0
+          },
+          "via": "main"
+        },
+        "after": {
+          "alive": true,
+          "durationSeconds": 185.9,
+          "health": {
+            "inputOverflows": 0,
+            "inputUnderflows": 0,
+            "droppedFrames": 0,
+            "droppedPreviewBlocks": 0,
+            "maxWriteMs": 153.153,
+            "lastGlitchSeconds": 0
+          },
+          "via": "main"
+        }
+      },
+      "ok": true,
+      "endedAtMs": 1794538537399
+    },
+    {
+      "action": "switch-back",
+      "params": {},
+      "scheduledSec": 288,
+      "lateMs": 8,
+      "startedAtMs": 1794538639616,
+      "details": {
+        "before": {
+          "alive": true,
+          "durationSeconds": 288.132,
+          "health": {
+            "inputOverflows": 0,
+            "inputUnderflows": 0,
+            "droppedFrames": 0,
+            "droppedPreviewBlocks": 0,
+            "maxWriteMs": 153.153,
+            "lastGlitchSeconds": 0
+          },
+          "via": "main"
+        },
+        "after": {
+          "alive": true,
+          "durationSeconds": 290.29,
+          "health": {
+            "inputOverflows": 0,
+            "inputUnderflows": 0,
+            "droppedFrames": 0,
+            "droppedPreviewBlocks": 0,
+            "maxWriteMs": 153.153,
+            "lastGlitchSeconds": 0
+          },
+          "via": "main"
+        },
+        "ui": {
+          "indicator": false,
+          "time": null,
+          "pagePhase": "recording"
+        },
+        "ok": true
+      },
+      "ok": true,
+      "endedAtMs": 1794538641787
+    },
+    {
+      "action": "minimize",
+      "params": {},
+      "scheduledSec": 360,
+      "lateMs": 4,
+      "startedAtMs": 1794538711612,
+      "details": {
+        "windows": [
+          {
+            "title": "痕迹AI",
+            "handle": 6823924,
+            "minimized": true
+          }
+        ],
+        "ok": true,
+        "before": {
+          "alive": true,
+          "durationSeconds": 360.126,
+          "health": {
+            "inputOverflows": 0,
+            "inputUnderflows": 0,
+            "droppedFrames": 0,
+            "droppedPreviewBlocks": 0,
+            "maxWriteMs": 153.153,
+            "lastGlitchSeconds": 0
+          },
+          "via": "main"
+        },
+        "after": {
+          "alive": true,
+          "durationSeconds": 365.508,
+          "health": {
+            "inputOverflows": 0,
+            "inputUnderflows": 0,
+            "droppedFrames": 0,
+            "droppedPreviewBlocks": 0,
+            "maxWriteMs": 153.153,
+            "lastGlitchSeconds": 0
+          },
+          "via": "main"
+        }
+      },
+      "ok": true,
+      "endedAtMs": 1794538716995
+    },
+    {
+      "action": "restore",
+      "params": {},
+      "scheduledSec": 972,
+      "lateMs": 5,
+      "startedAtMs": 1794539323613,
+      "details": {
+        "restored": 1,
+        "windows": [
+          {
+            "title": "痕迹AI",
+            "handle": 6823924,
+            "minimized": false
+          }
+        ],
+        "ok": true,
+        "before": {
+          "alive": true,
+          "durationSeconds": 972.14,
+          "health": {
+            "inputOverflows": 0,
+            "inputUnderflows": 0,
+            "droppedFrames": 0,
+            "droppedPreviewBlocks": 0,
+            "maxWriteMs": 155.055,
+            "lastGlitchSeconds": 0
+          },
+          "via": "main"
+        },
+        "after": {
+          "alive": true,
+          "durationSeconds": 978.692,
+          "health": {
+            "inputOverflows": 0,
+            "inputUnderflows": 0,
+            "droppedFrames": 0,
+            "droppedPreviewBlocks": 0,
+            "maxWriteMs": 155.055,
+            "lastGlitchSeconds": 0
+          },
+          "via": "main"
+        }
+      },
+      "ok": true,
+      "endedAtMs": 1794539330182
+    },
+    {
+      "action": "main-load",
+      "params": {},
+      "scheduledSec": 1152,
+      "lateMs": 2,
+      "startedAtMs": 1794539503610,
+      "details": {
+        "load": {
+          "seconds": 20,
+          "queries": 909,
+          "errors": 0,
+          "baselinePingMs": {
+            "count": 10,
+            "p50": 0.20000001788139343,
+            "p95": 0.4000000059604645,
+            "max": 0.4000000059604645
+          },
+          "loadPingMs": {
+            "count": 99,
+            "p50": 1.699999988079071,
+            "p95": 3.899999976158142,
+            "max": 5
+          }
+        },
+        "notes": [
+          "加压期间主进程 ping 最长只有 5 ms，压力不明显（当天日志可能很小）"
+        ],
+        "before": {
+          "alive": true,
+          "durationSeconds": 1152.125,
+          "health": {
+            "inputOverflows": 0,
+            "inputUnderflows": 0,
+            "droppedFrames": 0,
+            "droppedPreviewBlocks": 0,
+            "maxWriteMs": 178.905,
+            "lastGlitchSeconds": 0
+          },
+          "via": "main"
+        },
+        "after": {
+          "alive": true,
+          "durationSeconds": 1176.5,
+          "health": {
+            "inputOverflows": 0,
+            "inputUnderflows": 0,
+            "droppedFrames": 0,
+            "droppedPreviewBlocks": 0,
+            "maxWriteMs": 178.905,
+            "lastGlitchSeconds": 0
+          },
+          "via": "main"
+        },
+        "ok": true
+      },
+      "ok": true,
+      "endedAtMs": 1794539527987
+    },
+    {
+      "action": "reload",
+      "params": {},
+      "scheduledSec": 1512,
+      "lateMs": 12,
+      "startedAtMs": 1794539863620,
+      "details": {
+        "reloadedInMs": 1186,
+        "reattached": true,
+        "ui": {
+          "indicator": true,
+          "time": "00:25:12",
+          "pagePhase": null
+        },
+        "ok": true,
+        "before": {
+          "alive": true,
+          "durationSeconds": 1512.147,
+          "health": {
+            "inputOverflows": 0,
+            "inputUnderflows": 0,
+            "droppedFrames": 0,
+            "droppedPreviewBlocks": 0,
+            "maxWriteMs": 178.905,
+            "lastGlitchSeconds": 0
+          },
+          "via": "main"
+        },
+        "after": {
+          "alive": true,
+          "durationSeconds": 1518.348,
+          "health": {
+            "inputOverflows": 0,
+            "inputUnderflows": 0,
+            "droppedFrames": 0,
+            "droppedPreviewBlocks": 0,
+            "maxWriteMs": 178.905,
+            "lastGlitchSeconds": 0
+          },
+          "via": "main"
+        }
+      },
+      "ok": true,
+      "endedAtMs": 1794539869827
+    },
+    {
+      "action": "status",
+      "params": {
+        "memoryLabel": "mid"
+      },
+      "scheduledSec": 1800,
+      "lateMs": 9,
+      "startedAtMs": 1794540151617,
+      "details": {
+        "status": {
+          "main": {
+            "alive": true,
+            "durationSeconds": 1800.149,
+            "health": {
+              "inputOverflows": 0,
+              "inputUnderflows": 0,
+              "droppedFrames": 0,
+              "droppedPreviewBlocks": 0,
+              "maxWriteMs": 178.905,
+              "lastGlitchSeconds": 0
+            },
+            "via": "main"
+          },
+          "ui": {
+            "indicator": false,
+            "time": null,
+            "pagePhase": "recording"
+          },
+          "entity": {
+            "audio_capture.settings.recording": {
+              "visible": true,
+              "phase": "recording",
+              "durationSeconds": 1800.162,
+              "documentId": "7f25cff6-9af3-443b-8e8e-21b57b1454e0",
+              "positionSeconds": 0.5,
+              "replaceUntilSeconds": null,
+              "busy": false,
+              "attached": true,
+              "error": null,
+              "notice": null,
+              "outputPath": "E:\\文档\\HenjiAI\\Audio Recordings\\录音 2026-11-13 105230.wav",
+              "health": {
+                "inputOverflows": 0,
+                "inputUnderflows": 0,
+                "droppedFrames": 0,
+                "droppedPreviewBlocks": 0,
+                "maxWriteMs": 178.905,
+                "lastGlitchSeconds": 0
+              },
+              "microphoneInUse": false,
+              "lastTake": null
+            }
+          }
+        },
+        "before": {
+          "alive": true,
+          "durationSeconds": 1800.136,
+          "health": {
+            "inputOverflows": 0,
+            "inputUnderflows": 0,
+            "droppedFrames": 0,
+            "droppedPreviewBlocks": 0,
+            "maxWriteMs": 178.905,
+            "lastGlitchSeconds": 0
+          },
+          "via": "main"
+        },
+        "after": {
+          "alive": true,
+          "durationSeconds": 1801.059,
+          "health": {
+            "inputOverflows": 0,
+            "inputUnderflows": 0,
+            "droppedFrames": 0,
+            "droppedPreviewBlocks": 0,
+            "maxWriteMs": 178.905,
+            "lastGlitchSeconds": 0
+          },
+          "via": "main"
+        },
+        "ok": true
+      },
+      "ok": true,
+      "endedAtMs": 1794540152551
+    },
+    {
+      "action": "switch-away",
+      "params": {
+        "workspaceId": "assets"
+      },
+      "scheduledSec": 2520,
+      "lateMs": 10,
+      "startedAtMs": 1794540871618,
+      "details": {
+        "workspaceId": "assets",
+        "indicator": true,
+        "times": [
+          "00:42:00",
+          "00:42:02"
+        ],
+        "ok": true,
+        "before": {
+          "alive": true,
+          "durationSeconds": 2520.141,
+          "health": {
+            "inputOverflows": 0,
+            "inputUnderflows": 0,
+            "droppedFrames": 0,
+            "droppedPreviewBlocks": 0,
+            "maxWriteMs": 178.905,
+            "lastGlitchSeconds": 0
+          },
+          "via": "main"
+        },
+        "after": {
+          "alive": true,
+          "durationSeconds": 2525.77,
+          "health": {
+            "inputOverflows": 0,
+            "inputUnderflows": 0,
+            "droppedFrames": 0,
+            "droppedPreviewBlocks": 0,
+            "maxWriteMs": 178.905,
+            "lastGlitchSeconds": 0
+          },
+          "via": "main"
+        }
+      },
+      "ok": true,
+      "endedAtMs": 1794540877247
+    },
+    {
+      "action": "stop",
+      "params": {},
+      "scheduledSec": 3600,
+      "lateMs": 14,
+      "startedAtMs": 1794541951622,
+      "details": {
+        "via": "capability",
+        "before": {
+          "alive": true,
+          "durationSeconds": 3600.155,
+          "health": {
+            "inputOverflows": 0,
+            "inputUnderflows": 0,
+            "droppedFrames": 0,
+            "droppedPreviewBlocks": 0,
+            "maxWriteMs": 632.21,
+            "lastGlitchSeconds": 0
+          },
+          "via": "main"
+        },
+        "receipt": {
+          "resultRef": {
+            "kind": "audio_edit.document",
+            "id": "7f25cff6-9af3-443b-8e8e-21b57b1454e0"
+          },
+          "message": "已停止录音，这一段已拼回口播并保存，作品现长 3601.54 秒；undoRef 交给 undo_audio_edit 可撤掉这次拼接。",
+          "verified": true,
+          "recording": {
+            "phase": "idle",
+            "durationSeconds": 0,
+            "positionSeconds": null
+          },
+          "durationFrames": 172873872,
+          "undoRef": "audio_edit.step:68ed2a7f-c241-4a8e-92c7-9a15009b12f7",
+          "verification": {
+            "verified": true,
+            "condition": "已从主进程读回录音状态，并核对口播保存后的内容。"
+          }
+        },
+        "ok": true
+      },
+      "ok": true,
+      "endedAtMs": 1794541974062
+    }
+  ],
+  "heartbeats": [
+    {
+      "atMs": 1794538411619,
+      "alive": true,
+      "durationSeconds": 60.138,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 127.988,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794538471620,
+      "alive": true,
+      "durationSeconds": 120.133,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 153.153,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794538537402,
+      "alive": true,
+      "durationSeconds": 185.913,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 153.153,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794538591619,
+      "alive": true,
+      "durationSeconds": 240.136,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 153.153,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794538651609,
+      "alive": true,
+      "durationSeconds": 300.118,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 153.153,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794538716998,
+      "alive": true,
+      "durationSeconds": 365.508,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 153.153,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794538771617,
+      "alive": true,
+      "durationSeconds": 420.134,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 153.153,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794538831609,
+      "alive": true,
+      "durationSeconds": 480.129,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 153.153,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794538891612,
+      "alive": true,
+      "durationSeconds": 540.124,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 153.153,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794538951623,
+      "alive": true,
+      "durationSeconds": 600.132,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 153.153,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794539011618,
+      "alive": true,
+      "durationSeconds": 660.14,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 153.153,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794539071620,
+      "alive": true,
+      "durationSeconds": 720.135,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 153.153,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794539131616,
+      "alive": true,
+      "durationSeconds": 780.13,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 155.055,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794539191621,
+      "alive": true,
+      "durationSeconds": 840.138,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 155.055,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794539251619,
+      "alive": true,
+      "durationSeconds": 900.133,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 155.055,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794539311614,
+      "alive": true,
+      "durationSeconds": 960.128,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 155.055,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794539371621,
+      "alive": true,
+      "durationSeconds": 1020.149,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 155.055,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794539431612,
+      "alive": true,
+      "durationSeconds": 1080.131,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 155.055,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794539491609,
+      "alive": true,
+      "durationSeconds": 1140.126,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 178.905,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794539551616,
+      "alive": true,
+      "durationSeconds": 1200.134,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 178.905,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794539611619,
+      "alive": true,
+      "durationSeconds": 1260.129,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 178.905,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794539671611,
+      "alive": true,
+      "durationSeconds": 1320.124,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 178.905,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794539731615,
+      "alive": true,
+      "durationSeconds": 1380.132,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 178.905,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794539791618,
+      "alive": true,
+      "durationSeconds": 1440.14,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 178.905,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794539851611,
+      "alive": true,
+      "durationSeconds": 1500.135,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 178.905,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794539911614,
+      "alive": true,
+      "durationSeconds": 1560.13,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 178.905,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794539971608,
+      "alive": true,
+      "durationSeconds": 1620.125,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 178.905,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794540031617,
+      "alive": true,
+      "durationSeconds": 1680.133,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 178.905,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794540091621,
+      "alive": true,
+      "durationSeconds": 1740.141,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 178.905,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794540152553,
+      "alive": true,
+      "durationSeconds": 1801.072,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 178.905,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794540211616,
+      "alive": true,
+      "durationSeconds": 1860.131,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 178.905,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794540271614,
+      "alive": true,
+      "durationSeconds": 1920.139,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 178.905,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794540331617,
+      "alive": true,
+      "durationSeconds": 1980.134,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 178.905,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794540391614,
+      "alive": true,
+      "durationSeconds": 2040.129,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 178.905,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794540451617,
+      "alive": true,
+      "durationSeconds": 2100.137,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 178.905,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794540511617,
+      "alive": true,
+      "durationSeconds": 2160.145,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 178.905,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794540571610,
+      "alive": true,
+      "durationSeconds": 2220.14,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 178.905,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794540631616,
+      "alive": true,
+      "durationSeconds": 2280.083,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 178.905,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794540691617,
+      "alive": true,
+      "durationSeconds": 2340.143,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 178.905,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794540751614,
+      "alive": true,
+      "durationSeconds": 2400.138,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 178.905,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794540811624,
+      "alive": true,
+      "durationSeconds": 2460.159,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 178.905,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794540877250,
+      "alive": true,
+      "durationSeconds": 2525.77,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 178.905,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794540931618,
+      "alive": true,
+      "durationSeconds": 2580.162,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 233.157,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794540991623,
+      "alive": true,
+      "durationSeconds": 2640.17,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 632.21,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794541051614,
+      "alive": true,
+      "durationSeconds": 2700.178,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 632.21,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794541111622,
+      "alive": true,
+      "durationSeconds": 2760.147,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 632.21,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794541171614,
+      "alive": true,
+      "durationSeconds": 2820.168,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 632.21,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794541231611,
+      "alive": true,
+      "durationSeconds": 2880.176,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 632.21,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794541291622,
+      "alive": true,
+      "durationSeconds": 2940.171,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 632.21,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794541351608,
+      "alive": true,
+      "durationSeconds": 3000.179,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 632.21,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794541411622,
+      "alive": true,
+      "durationSeconds": 3060.148,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 632.21,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794541471618,
+      "alive": true,
+      "durationSeconds": 3120.169,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 632.21,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794541531614,
+      "alive": true,
+      "durationSeconds": 3180.138,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 632.21,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794541591617,
+      "alive": true,
+      "durationSeconds": 3240.146,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 632.21,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794541651622,
+      "alive": true,
+      "durationSeconds": 3300.154,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 632.21,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794541711620,
+      "alive": true,
+      "durationSeconds": 3360.162,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 632.21,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794541771619,
+      "alive": true,
+      "durationSeconds": 3420.144,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 632.21,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794541831614,
+      "alive": true,
+      "durationSeconds": 3480.139,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 632.21,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    },
+    {
+      "atMs": 1794541891622,
+      "alive": true,
+      "durationSeconds": 3540.16,
+      "health": {
+        "inputOverflows": 0,
+        "inputUnderflows": 0,
+        "droppedFrames": 0,
+        "droppedPreviewBlocks": 0,
+        "maxWriteMs": 632.21,
+        "lastGlitchSeconds": 0
+      },
+      "via": "main"
+    }
+  ],
+  "memory": [
+    {
+      "label": "before-start",
+      "atMs": 1794538347994,
+      "processCount": 11,
+      "totalPrivateBytes": 1910923264,
+      "categories": {
+        "main": {
+          "count": 1,
+          "privateBytes": 392114176,
+          "workingSetBytes": 407900160
+        },
+        "crashpad-handler": {
+          "count": 1,
+          "privateBytes": 9777152,
+          "workingSetBytes": 74678272
+        },
+        "gpu-process": {
+          "count": 1,
+          "privateBytes": 858624000,
+          "workingSetBytes": 403972096
+        },
+        "utility:network.mojom.NetworkService": {
+          "count": 1,
+          "privateBytes": 12038144,
+          "workingSetBytes": 80019456
+        },
+        "renderer": {
+          "count": 1,
+          "privateBytes": 464203776,
+          "workingSetBytes": 537591808
+        },
+        "utility:audio.mojom.AudioService": {
+          "count": 1,
+          "privateBytes": 11071488,
+          "workingSetBytes": 103383040
+        },
+        "henji-audio-worker": {
+          "count": 1,
+          "privateBytes": 9728000,
+          "workingSetBytes": 12001280
+        },
+        "henji-video-decoder": {
+          "count": 1,
+          "privateBytes": 71426048,
+          "workingSetBytes": 38154240
+        },
+        "utility:video_capture.mojom.VideoCaptureService": {
+          "count": 1,
+          "privateBytes": 68833280,
+          "workingSetBytes": 147714048
+        },
+        "conhost": {
+          "count": 2,
+          "privateBytes": 13107200,
+          "workingSetBytes": 24248320
+        }
+      }
+    },
+    {
+      "label": "start",
+      "atMs": 1794538352483,
+      "processCount": 13,
+      "totalPrivateBytes": 2277646336,
+      "categories": {
+        "main": {
+          "count": 1,
+          "privateBytes": 407232512,
+          "workingSetBytes": 423170048
+        },
+        "crashpad-handler": {
+          "count": 1,
+          "privateBytes": 9777152,
+          "workingSetBytes": 74678272
+        },
+        "gpu-process": {
+          "count": 1,
+          "privateBytes": 1143242752,
+          "workingSetBytes": 585359360
+        },
+        "utility:network.mojom.NetworkService": {
+          "count": 1,
+          "privateBytes": 12038144,
+          "workingSetBytes": 80019456
+        },
+        "renderer": {
+          "count": 1,
+          "privateBytes": 484122624,
+          "workingSetBytes": 547299328
+        },
+        "utility:audio.mojom.AudioService": {
+          "count": 1,
+          "privateBytes": 11194368,
+          "workingSetBytes": 103469056
+        },
+        "henji-audio-worker": {
+          "count": 1,
+          "privateBytes": 10686464,
+          "workingSetBytes": 11866112
+        },
+        "henji-video-decoder": {
+          "count": 1,
+          "privateBytes": 71426048,
+          "workingSetBytes": 38154240
+        },
+        "utility:video_capture.mojom.VideoCaptureService": {
+          "count": 1,
+          "privateBytes": 68833280,
+          "workingSetBytes": 147714048
+        },
+        "henji-audio-capture": {
+          "count": 1,
+          "privateBytes": 39329792,
+          "workingSetBytes": 32829440
+        },
+        "conhost": {
+          "count": 3,
+          "privateBytes": 19763200,
+          "workingSetBytes": 36425728
+        }
+      }
+    },
+    {
+      "label": "periodic",
+      "atMs": 1794538652524,
+      "processCount": 13,
+      "totalPrivateBytes": 1949163520,
+      "categories": {
+        "main": {
+          "count": 1,
+          "privateBytes": 393011200,
+          "workingSetBytes": 408748032
+        },
+        "crashpad-handler": {
+          "count": 1,
+          "privateBytes": 9744384,
+          "workingSetBytes": 74661888
+        },
+        "gpu-process": {
+          "count": 1,
+          "privateBytes": 845672448,
+          "workingSetBytes": 462995456
+        },
+        "utility:network.mojom.NetworkService": {
+          "count": 1,
+          "privateBytes": 12034048,
+          "workingSetBytes": 80015360
+        },
+        "renderer": {
+          "count": 1,
+          "privateBytes": 468533248,
+          "workingSetBytes": 535715840
+        },
+        "utility:audio.mojom.AudioService": {
+          "count": 1,
+          "privateBytes": 11079680,
+          "workingSetBytes": 103395328
+        },
+        "henji-audio-worker": {
+          "count": 1,
+          "privateBytes": 9904128,
+          "workingSetBytes": 12226560
+        },
+        "henji-video-decoder": {
+          "count": 1,
+          "privateBytes": 71426048,
+          "workingSetBytes": 38154240
+        },
+        "utility:video_capture.mojom.VideoCaptureService": {
+          "count": 1,
+          "privateBytes": 68833280,
+          "workingSetBytes": 147714048
+        },
+        "henji-audio-capture": {
+          "count": 1,
+          "privateBytes": 39194624,
+          "workingSetBytes": 49655808
+        },
+        "conhost": {
+          "count": 3,
+          "privateBytes": 19730432,
+          "workingSetBytes": 36421632
+        }
+      }
+    },
+    {
+      "label": "periodic",
+      "atMs": 1794538952588,
+      "processCount": 13,
+      "totalPrivateBytes": 2064240640,
+      "categories": {
+        "main": {
+          "count": 1,
+          "privateBytes": 395763712,
+          "workingSetBytes": 411258880
+        },
+        "crashpad-handler": {
+          "count": 1,
+          "privateBytes": 9744384,
+          "workingSetBytes": 74661888
+        },
+        "gpu-process": {
+          "count": 1,
+          "privateBytes": 917807104,
+          "workingSetBytes": 437702656
+        },
+        "utility:network.mojom.NetworkService": {
+          "count": 1,
+          "privateBytes": 12034048,
+          "workingSetBytes": 80015360
+        },
+        "renderer": {
+          "count": 1,
+          "privateBytes": 508792832,
+          "workingSetBytes": 567468032
+        },
+        "utility:audio.mojom.AudioService": {
+          "count": 1,
+          "privateBytes": 11079680,
+          "workingSetBytes": 103395328
+        },
+        "henji-audio-worker": {
+          "count": 1,
+          "privateBytes": 9904128,
+          "workingSetBytes": 12226560
+        },
+        "henji-video-decoder": {
+          "count": 1,
+          "privateBytes": 71393280,
+          "workingSetBytes": 38137856
+        },
+        "utility:video_capture.mojom.VideoCaptureService": {
+          "count": 1,
+          "privateBytes": 68800512,
+          "workingSetBytes": 147697664
+        },
+        "henji-audio-capture": {
+          "count": 1,
+          "privateBytes": 39194624,
+          "workingSetBytes": 49680384
+        },
+        "conhost": {
+          "count": 3,
+          "privateBytes": 19726336,
+          "workingSetBytes": 36413440
+        }
+      }
+    },
+    {
+      "label": "periodic",
+      "atMs": 1794539252493,
+      "processCount": 13,
+      "totalPrivateBytes": 2115743744,
+      "categories": {
+        "main": {
+          "count": 1,
+          "privateBytes": 398876672,
+          "workingSetBytes": 414920704
+        },
+        "crashpad-handler": {
+          "count": 1,
+          "privateBytes": 9744384,
+          "workingSetBytes": 74661888
+        },
+        "gpu-process": {
+          "count": 1,
+          "privateBytes": 965193728,
+          "workingSetBytes": 437940224
+        },
+        "utility:network.mojom.NetworkService": {
+          "count": 1,
+          "privateBytes": 12034048,
+          "workingSetBytes": 80015360
+        },
+        "renderer": {
+          "count": 1,
+          "privateBytes": 509804544,
+          "workingSetBytes": 568131584
+        },
+        "utility:audio.mojom.AudioService": {
+          "count": 1,
+          "privateBytes": 11079680,
+          "workingSetBytes": 103395328
+        },
+        "henji-audio-worker": {
+          "count": 1,
+          "privateBytes": 9904128,
+          "workingSetBytes": 12226560
+        },
+        "henji-video-decoder": {
+          "count": 1,
+          "privateBytes": 71426048,
+          "workingSetBytes": 38158336
+        },
+        "utility:video_capture.mojom.VideoCaptureService": {
+          "count": 1,
+          "privateBytes": 68833280,
+          "workingSetBytes": 147718144
+        },
+        "henji-audio-capture": {
+          "count": 1,
+          "privateBytes": 39161856,
+          "workingSetBytes": 49664000
+        },
+        "conhost": {
+          "count": 3,
+          "privateBytes": 19685376,
+          "workingSetBytes": 36397056
+        }
+      }
+    },
+    {
+      "label": "periodic",
+      "atMs": 1794539552546,
+      "processCount": 13,
+      "totalPrivateBytes": 1963032576,
+      "categories": {
+        "main": {
+          "count": 1,
+          "privateBytes": 391073792,
+          "workingSetBytes": 406892544
+        },
+        "crashpad-handler": {
+          "count": 1,
+          "privateBytes": 9744384,
+          "workingSetBytes": 74661888
+        },
+        "gpu-process": {
+          "count": 1,
+          "privateBytes": 820195328,
+          "workingSetBytes": 438366208
+        },
+        "utility:network.mojom.NetworkService": {
+          "count": 1,
+          "privateBytes": 12034048,
+          "workingSetBytes": 80015360
+        },
+        "renderer": {
+          "count": 1,
+          "privateBytes": 509890560,
+          "workingSetBytes": 568299520
+        },
+        "utility:audio.mojom.AudioService": {
+          "count": 1,
+          "privateBytes": 11079680,
+          "workingSetBytes": 103395328
+        },
+        "henji-audio-worker": {
+          "count": 1,
+          "privateBytes": 9904128,
+          "workingSetBytes": 12226560
+        },
+        "henji-video-decoder": {
+          "count": 1,
+          "privateBytes": 71426048,
+          "workingSetBytes": 38158336
+        },
+        "utility:video_capture.mojom.VideoCaptureService": {
+          "count": 1,
+          "privateBytes": 68833280,
+          "workingSetBytes": 147718144
+        },
+        "henji-audio-capture": {
+          "count": 1,
+          "privateBytes": 39165952,
+          "workingSetBytes": 49680384
+        },
+        "conhost": {
+          "count": 3,
+          "privateBytes": 19685376,
+          "workingSetBytes": 36397056
+        }
+      }
+    },
+    {
+      "label": "periodic",
+      "atMs": 1794539852621,
+      "processCount": 13,
+      "totalPrivateBytes": 1969172480,
+      "categories": {
+        "main": {
+          "count": 1,
+          "privateBytes": 390234112,
+          "workingSetBytes": 406507520
+        },
+        "crashpad-handler": {
+          "count": 1,
+          "privateBytes": 9744384,
+          "workingSetBytes": 74657792
+        },
+        "gpu-process": {
+          "count": 1,
+          "privateBytes": 827416576,
+          "workingSetBytes": 448716800
+        },
+        "utility:network.mojom.NetworkService": {
+          "count": 1,
+          "privateBytes": 12034048,
+          "workingSetBytes": 80011264
+        },
+        "renderer": {
+          "count": 1,
+          "privateBytes": 509648896,
+          "workingSetBytes": 568127488
+        },
+        "utility:audio.mojom.AudioService": {
+          "count": 1,
+          "privateBytes": 11079680,
+          "workingSetBytes": 103391232
+        },
+        "henji-audio-worker": {
+          "count": 1,
+          "privateBytes": 9904128,
+          "workingSetBytes": 12226560
+        },
+        "henji-video-decoder": {
+          "count": 1,
+          "privateBytes": 71426048,
+          "workingSetBytes": 38154240
+        },
+        "utility:video_capture.mojom.VideoCaptureService": {
+          "count": 1,
+          "privateBytes": 68833280,
+          "workingSetBytes": 147689472
+        },
+        "henji-audio-capture": {
+          "count": 1,
+          "privateBytes": 39165952,
+          "workingSetBytes": 49676288
+        },
+        "conhost": {
+          "count": 3,
+          "privateBytes": 19685376,
+          "workingSetBytes": 36397056
+        }
+      }
+    },
+    {
+      "label": "mid",
+      "atMs": 1794540152545,
+      "processCount": 13,
+      "totalPrivateBytes": 1738809344,
+      "categories": {
+        "main": {
+          "count": 1,
+          "privateBytes": 397029376,
+          "workingSetBytes": 413196288
+        },
+        "crashpad-handler": {
+          "count": 1,
+          "privateBytes": 9744384,
+          "workingSetBytes": 74657792
+        },
+        "gpu-process": {
+          "count": 1,
+          "privateBytes": 553689088,
+          "workingSetBytes": 323928064
+        },
+        "utility:network.mojom.NetworkService": {
+          "count": 1,
+          "privateBytes": 11984896,
+          "workingSetBytes": 79962112
+        },
+        "renderer": {
+          "count": 1,
+          "privateBytes": 546283520,
+          "workingSetBytes": 600776704
+        },
+        "utility:audio.mojom.AudioService": {
+          "count": 1,
+          "privateBytes": 11063296,
+          "workingSetBytes": 103378944
+        },
+        "henji-audio-worker": {
+          "count": 1,
+          "privateBytes": 9904128,
+          "workingSetBytes": 12226560
+        },
+        "henji-video-decoder": {
+          "count": 1,
+          "privateBytes": 71426048,
+          "workingSetBytes": 38154240
+        },
+        "utility:video_capture.mojom.VideoCaptureService": {
+          "count": 1,
+          "privateBytes": 68833280,
+          "workingSetBytes": 147689472
+        },
+        "henji-audio-capture": {
+          "count": 1,
+          "privateBytes": 39165952,
+          "workingSetBytes": 49676288
+        },
+        "conhost": {
+          "count": 3,
+          "privateBytes": 19685376,
+          "workingSetBytes": 36397056
+        }
+      }
+    },
+    {
+      "label": "periodic",
+      "atMs": 1794540153413,
+      "processCount": 13,
+      "totalPrivateBytes": 1741430784,
+      "categories": {
+        "main": {
+          "count": 1,
+          "privateBytes": 397606912,
+          "workingSetBytes": 413409280
+        },
+        "crashpad-handler": {
+          "count": 1,
+          "privateBytes": 9744384,
+          "workingSetBytes": 74657792
+        },
+        "gpu-process": {
+          "count": 1,
+          "privateBytes": 553594880,
+          "workingSetBytes": 324775936
+        },
+        "utility:network.mojom.NetworkService": {
+          "count": 1,
+          "privateBytes": 11984896,
+          "workingSetBytes": 79962112
+        },
+        "renderer": {
+          "count": 1,
+          "privateBytes": 548421632,
+          "workingSetBytes": 602931200
+        },
+        "utility:audio.mojom.AudioService": {
+          "count": 1,
+          "privateBytes": 11063296,
+          "workingSetBytes": 103378944
+        },
+        "henji-audio-worker": {
+          "count": 1,
+          "privateBytes": 9904128,
+          "workingSetBytes": 12226560
+        },
+        "henji-video-decoder": {
+          "count": 1,
+          "privateBytes": 71426048,
+          "workingSetBytes": 38154240
+        },
+        "utility:video_capture.mojom.VideoCaptureService": {
+          "count": 1,
+          "privateBytes": 68833280,
+          "workingSetBytes": 147689472
+        },
+        "henji-audio-capture": {
+          "count": 1,
+          "privateBytes": 39165952,
+          "workingSetBytes": 49676288
+        },
+        "conhost": {
+          "count": 3,
+          "privateBytes": 19685376,
+          "workingSetBytes": 36397056
+        }
+      }
+    },
+    {
+      "label": "periodic",
+      "atMs": 1794540452511,
+      "processCount": 13,
+      "totalPrivateBytes": 1675812864,
+      "categories": {
+        "main": {
+          "count": 1,
+          "privateBytes": 397348864,
+          "workingSetBytes": 413806592
+        },
+        "crashpad-handler": {
+          "count": 1,
+          "privateBytes": 9744384,
+          "workingSetBytes": 74657792
+        },
+        "gpu-process": {
+          "count": 1,
+          "privateBytes": 555651072,
+          "workingSetBytes": 324812800
+        },
+        "utility:network.mojom.NetworkService": {
+          "count": 1,
+          "privateBytes": 11984896,
+          "workingSetBytes": 79962112
+        },
+        "renderer": {
+          "count": 1,
+          "privateBytes": 480870400,
+          "workingSetBytes": 537509888
+        },
+        "utility:audio.mojom.AudioService": {
+          "count": 1,
+          "privateBytes": 11063296,
+          "workingSetBytes": 103378944
+        },
+        "henji-audio-worker": {
+          "count": 1,
+          "privateBytes": 9904128,
+          "workingSetBytes": 12226560
+        },
+        "henji-video-decoder": {
+          "count": 1,
+          "privateBytes": 71426048,
+          "workingSetBytes": 38154240
+        },
+        "utility:video_capture.mojom.VideoCaptureService": {
+          "count": 1,
+          "privateBytes": 68833280,
+          "workingSetBytes": 147689472
+        },
+        "henji-audio-capture": {
+          "count": 1,
+          "privateBytes": 39301120,
+          "workingSetBytes": 49803264
+        },
+        "conhost": {
+          "count": 3,
+          "privateBytes": 19685376,
+          "workingSetBytes": 36397056
+        }
+      }
+    },
+    {
+      "label": "periodic",
+      "atMs": 1794540752545,
+      "processCount": 13,
+      "totalPrivateBytes": 1689513984,
+      "categories": {
+        "main": {
+          "count": 1,
+          "privateBytes": 397066240,
+          "workingSetBytes": 413462528
+        },
+        "crashpad-handler": {
+          "count": 1,
+          "privateBytes": 9744384,
+          "workingSetBytes": 74657792
+        },
+        "gpu-process": {
+          "count": 1,
+          "privateBytes": 556466176,
+          "workingSetBytes": 328146944
+        },
+        "utility:network.mojom.NetworkService": {
+          "count": 1,
+          "privateBytes": 11984896,
+          "workingSetBytes": 79962112
+        },
+        "renderer": {
+          "count": 1,
+          "privateBytes": 494104576,
+          "workingSetBytes": 550928384
+        },
+        "utility:audio.mojom.AudioService": {
+          "count": 1,
+          "privateBytes": 11063296,
+          "workingSetBytes": 103378944
+        },
+        "henji-audio-worker": {
+          "count": 1,
+          "privateBytes": 9904128,
+          "workingSetBytes": 12226560
+        },
+        "henji-video-decoder": {
+          "count": 1,
+          "privateBytes": 71393280,
+          "workingSetBytes": 38137856
+        },
+        "utility:video_capture.mojom.VideoCaptureService": {
+          "count": 1,
+          "privateBytes": 68800512,
+          "workingSetBytes": 147673088
+        },
+        "henji-audio-capture": {
+          "count": 1,
+          "privateBytes": 39301120,
+          "workingSetBytes": 49803264
+        },
+        "conhost": {
+          "count": 3,
+          "privateBytes": 19685376,
+          "workingSetBytes": 36397056
+        }
+      }
+    },
+    {
+      "label": "periodic",
+      "atMs": 1794541052897,
+      "processCount": 13,
+      "totalPrivateBytes": 1522290688,
+      "categories": {
+        "main": {
+          "count": 1,
+          "privateBytes": 398594048,
+          "workingSetBytes": 414834688
+        },
+        "crashpad-handler": {
+          "count": 1,
+          "privateBytes": 9744384,
+          "workingSetBytes": 74649600
+        },
+        "gpu-process": {
+          "count": 1,
+          "privateBytes": 368087040,
+          "workingSetBytes": 281358336
+        },
+        "utility:network.mojom.NetworkService": {
+          "count": 1,
+          "privateBytes": 11984896,
+          "workingSetBytes": 79953920
+        },
+        "renderer": {
+          "count": 1,
+          "privateBytes": 513597440,
+          "workingSetBytes": 576319488
+        },
+        "utility:audio.mojom.AudioService": {
+          "count": 1,
+          "privateBytes": 11063296,
+          "workingSetBytes": 103346176
+        },
+        "henji-audio-worker": {
+          "count": 1,
+          "privateBytes": 9904128,
+          "workingSetBytes": 12218368
+        },
+        "henji-video-decoder": {
+          "count": 1,
+          "privateBytes": 71426048,
+          "workingSetBytes": 38137856
+        },
+        "utility:video_capture.mojom.VideoCaptureService": {
+          "count": 1,
+          "privateBytes": 68833280,
+          "workingSetBytes": 147570688
+        },
+        "henji-audio-capture": {
+          "count": 1,
+          "privateBytes": 39370752,
+          "workingSetBytes": 49852416
+        },
+        "conhost": {
+          "count": 3,
+          "privateBytes": 19685376,
+          "workingSetBytes": 36397056
+        }
+      }
+    },
+    {
+      "label": "periodic",
+      "atMs": 1794541352542,
+      "processCount": 13,
+      "totalPrivateBytes": 1524572160,
+      "categories": {
+        "main": {
+          "count": 1,
+          "privateBytes": 399212544,
+          "workingSetBytes": 415293440
+        },
+        "crashpad-handler": {
+          "count": 1,
+          "privateBytes": 9744384,
+          "workingSetBytes": 74649600
+        },
+        "gpu-process": {
+          "count": 1,
+          "privateBytes": 367710208,
+          "workingSetBytes": 281038848
+        },
+        "utility:network.mojom.NetworkService": {
+          "count": 1,
+          "privateBytes": 11984896,
+          "workingSetBytes": 79953920
+        },
+        "renderer": {
+          "count": 1,
+          "privateBytes": 515637248,
+          "workingSetBytes": 578711552
+        },
+        "utility:audio.mojom.AudioService": {
+          "count": 1,
+          "privateBytes": 11063296,
+          "workingSetBytes": 103346176
+        },
+        "henji-audio-worker": {
+          "count": 1,
+          "privateBytes": 9904128,
+          "workingSetBytes": 12218368
+        },
+        "henji-video-decoder": {
+          "count": 1,
+          "privateBytes": 71426048,
+          "workingSetBytes": 38137856
+        },
+        "utility:video_capture.mojom.VideoCaptureService": {
+          "count": 1,
+          "privateBytes": 68833280,
+          "workingSetBytes": 147570688
+        },
+        "henji-audio-capture": {
+          "count": 1,
+          "privateBytes": 39370752,
+          "workingSetBytes": 49852416
+        },
+        "conhost": {
+          "count": 3,
+          "privateBytes": 19685376,
+          "workingSetBytes": 36397056
+        }
+      }
+    },
+    {
+      "label": "periodic",
+      "atMs": 1794541652512,
+      "processCount": 13,
+      "totalPrivateBytes": 1523806208,
+      "categories": {
+        "main": {
+          "count": 1,
+          "privateBytes": 399220736,
+          "workingSetBytes": 415375360
+        },
+        "crashpad-handler": {
+          "count": 1,
+          "privateBytes": 9744384,
+          "workingSetBytes": 74645504
+        },
+        "gpu-process": {
+          "count": 1,
+          "privateBytes": 367292416,
+          "workingSetBytes": 280715264
+        },
+        "utility:network.mojom.NetworkService": {
+          "count": 1,
+          "privateBytes": 11984896,
+          "workingSetBytes": 79949824
+        },
+        "renderer": {
+          "count": 1,
+          "privateBytes": 515276800,
+          "workingSetBytes": 578355200
+        },
+        "utility:audio.mojom.AudioService": {
+          "count": 1,
+          "privateBytes": 11063296,
+          "workingSetBytes": 103342080
+        },
+        "henji-audio-worker": {
+          "count": 1,
+          "privateBytes": 9904128,
+          "workingSetBytes": 12218368
+        },
+        "henji-video-decoder": {
+          "count": 1,
+          "privateBytes": 71426048,
+          "workingSetBytes": 38137856
+        },
+        "utility:video_capture.mojom.VideoCaptureService": {
+          "count": 1,
+          "privateBytes": 68837376,
+          "workingSetBytes": 147570688
+        },
+        "henji-audio-capture": {
+          "count": 1,
+          "privateBytes": 39370752,
+          "workingSetBytes": 49852416
+        },
+        "conhost": {
+          "count": 3,
+          "privateBytes": 19685376,
+          "workingSetBytes": 36397056
+        }
+      }
+    },
+    {
+      "label": "end",
+      "atMs": 1794541952478,
+      "processCount": 13,
+      "totalPrivateBytes": 1522081792,
+      "categories": {
+        "main": {
+          "count": 1,
+          "privateBytes": 398905344,
+          "workingSetBytes": 415084544
+        },
+        "crashpad-handler": {
+          "count": 1,
+          "privateBytes": 9744384,
+          "workingSetBytes": 74645504
+        },
+        "gpu-process": {
+          "count": 1,
+          "privateBytes": 367144960,
+          "workingSetBytes": 280494080
+        },
+        "utility:network.mojom.NetworkService": {
+          "count": 1,
+          "privateBytes": 11984896,
+          "workingSetBytes": 79949824
+        },
+        "renderer": {
+          "count": 1,
+          "privateBytes": 514015232,
+          "workingSetBytes": 577126400
+        },
+        "utility:audio.mojom.AudioService": {
+          "count": 1,
+          "privateBytes": 11063296,
+          "workingSetBytes": 103342080
+        },
+        "henji-audio-worker": {
+          "count": 1,
+          "privateBytes": 9904128,
+          "workingSetBytes": 12218368
+        },
+        "henji-video-decoder": {
+          "count": 1,
+          "privateBytes": 71426048,
+          "workingSetBytes": 38137856
+        },
+        "utility:video_capture.mojom.VideoCaptureService": {
+          "count": 1,
+          "privateBytes": 68837376,
+          "workingSetBytes": 147570688
+        },
+        "henji-audio-capture": {
+          "count": 1,
+          "privateBytes": 39370752,
+          "workingSetBytes": 49852416
+        },
+        "conhost": {
+          "count": 3,
+          "privateBytes": 19685376,
+          "workingSetBytes": 36397056
+        }
+      }
+    },
+    {
+      "label": "after-stop",
+      "atMs": 1794541981357,
+      "processCount": 13,
+      "totalPrivateBytes": 1682276352,
+      "categories": {
+        "main": {
+          "count": 1,
+          "privateBytes": 595951616,
+          "workingSetBytes": 609275904
+        },
+        "crashpad-handler": {
+          "count": 1,
+          "privateBytes": 9744384,
+          "workingSetBytes": 74645504
+        },
+        "gpu-process": {
+          "count": 1,
+          "privateBytes": 367247360,
+          "workingSetBytes": 273108992
+        },
+        "utility:network.mojom.NetworkService": {
+          "count": 1,
+          "privateBytes": 11984896,
+          "workingSetBytes": 79949824
+        },
+        "renderer": {
+          "count": 1,
+          "privateBytes": 511356928,
+          "workingSetBytes": 569024512
+        },
+        "utility:audio.mojom.AudioService": {
+          "count": 1,
+          "privateBytes": 11063296,
+          "workingSetBytes": 103342080
+        },
+        "henji-audio-worker": {
+          "count": 1,
+          "privateBytes": 9904128,
+          "workingSetBytes": 12218368
+        },
+        "henji-video-decoder": {
+          "count": 1,
+          "privateBytes": 71426048,
+          "workingSetBytes": 38137856
+        },
+        "utility:video_capture.mojom.VideoCaptureService": {
+          "count": 1,
+          "privateBytes": 68837376,
+          "workingSetBytes": 147570688
+        },
+        "henji-audio-capture": {
+          "count": 1,
+          "privateBytes": 5074944,
+          "workingSetBytes": 15847424
+        },
+        "conhost": {
+          "count": 3,
+          "privateBytes": 19685376,
+          "workingSetBytes": 36397056
+        }
+      }
+    }
+  ],
+  "power": {
+    "during": {
+      "available": false,
+      "atMs": 1794538459782,
+      "error": "此命令需要管理员权限，并且必须从提升的命令提示符中执行。"
+    },
+    "after": {
+      "available": false,
+      "atMs": 1794541980517,
+      "error": "此命令需要管理员权限，并且必须从提升的命令提示符中执行。"
+    }
+  },
+  "logs": {
+    "sinceIso": "2026-11-13T02:52:24.072Z",
+    "warnings": [
+      {
+        "timestamp": "2026-11-13T02:52:35.834Z",
+        "level": "warn",
+        "domain": "main.audio_capture",
+        "event": "audio_capture.disk.slow",
+        "message": "录音写盘耗时出现新峰值",
+        "context": {
+          "sessionId": "56f443d0-9e71-4618-88a2-11cd2edbb044",
+          "inputOverflows": 0,
+          "inputUnderflows": 0,
+          "droppedFrames": 0,
+          "droppedPreviewBlocks": 0,
+          "maxWriteMs": 111.852,
+          "lastGlitchSeconds": 0,
+          "newInputOverflows": 0,
+          "newInputUnderflows": 0,
+          "newDroppedFrames": 0,
+          "newDroppedPreviewBlocks": 0
+        }
+      },
+      {
+        "timestamp": "2026-11-13T02:53:31.622Z",
+        "level": "warn",
+        "domain": "main.audio_capture",
+        "event": "audio_capture.disk.slow",
+        "message": "录音写盘耗时出现新峰值",
+        "context": {
+          "sessionId": "56f443d0-9e71-4618-88a2-11cd2edbb044",
+          "inputOverflows": 0,
+          "inputUnderflows": 0,
+          "droppedFrames": 0,
+          "droppedPreviewBlocks": 0,
+          "maxWriteMs": 127.988,
+          "lastGlitchSeconds": 0,
+          "newInputOverflows": 0,
+          "newInputUnderflows": 0,
+          "newDroppedFrames": 0,
+          "newDroppedPreviewBlocks": 0
+        }
+      },
+      {
+        "timestamp": "2026-11-13T02:54:19.623Z",
+        "level": "warn",
+        "domain": "main.audio_capture",
+        "event": "audio_capture.disk.slow",
+        "message": "录音写盘耗时出现新峰值",
+        "context": {
+          "sessionId": "56f443d0-9e71-4618-88a2-11cd2edbb044",
+          "inputOverflows": 0,
+          "inputUnderflows": 0,
+          "droppedFrames": 0,
+          "droppedPreviewBlocks": 0,
+          "maxWriteMs": 130.598,
+          "lastGlitchSeconds": 0,
+          "newInputOverflows": 0,
+          "newInputUnderflows": 0,
+          "newDroppedFrames": 0,
+          "newDroppedPreviewBlocks": 0
+        }
+      },
+      {
+        "timestamp": "2026-11-13T02:54:31.623Z",
+        "level": "warn",
+        "domain": "main.audio_capture",
+        "event": "audio_capture.disk.slow",
+        "message": "录音写盘耗时出现新峰值",
+        "context": {
+          "sessionId": "56f443d0-9e71-4618-88a2-11cd2edbb044",
+          "inputOverflows": 0,
+          "inputUnderflows": 0,
+          "droppedFrames": 0,
+          "droppedPreviewBlocks": 0,
+          "maxWriteMs": 153.153,
+          "lastGlitchSeconds": 0,
+          "newInputOverflows": 0,
+          "newInputUnderflows": 0,
+          "newDroppedFrames": 0,
+          "newDroppedPreviewBlocks": 0
+        }
+      },
+      {
+        "timestamp": "2026-11-13T02:57:19.640Z",
+        "level": "warn",
+        "domain": "core.logging",
+        "event": "logging.bridge.event_rejected",
+        "message": "一条日志未能写入文件",
+        "context": {
+          "rejectedEvent": "navigation.surface.open.completed",
+          "rejectedDomain": "features.navigation.surface",
+          "reason": "An object could not be cloned."
+        }
+      },
+      {
+        "timestamp": "2026-11-13T02:57:19.640Z",
+        "level": "warn",
+        "domain": "core.logging",
+        "event": "logging.bridge.event_rejected",
+        "message": "一条日志未能写入文件",
+        "context": {
+          "rejectedEvent": "navigation.surface.open.start",
+          "rejectedDomain": "features.navigation.surface",
+          "reason": "An object could not be cloned."
+        }
+      },
+      {
+        "timestamp": "2026-11-13T03:05:31.620Z",
+        "level": "warn",
+        "domain": "main.audio_capture",
+        "event": "audio_capture.disk.slow",
+        "message": "录音写盘耗时出现新峰值",
+        "context": {
+          "sessionId": "56f443d0-9e71-4618-88a2-11cd2edbb044",
+          "inputOverflows": 0,
+          "inputUnderflows": 0,
+          "droppedFrames": 0,
+          "droppedPreviewBlocks": 0,
+          "maxWriteMs": 155.055,
+          "lastGlitchSeconds": 0,
+          "newInputOverflows": 0,
+          "newInputUnderflows": 0,
+          "newDroppedFrames": 0,
+          "newDroppedPreviewBlocks": 0
+        }
+      },
+      {
+        "timestamp": "2026-11-13T03:11:31.613Z",
+        "level": "warn",
+        "domain": "main.audio_capture",
+        "event": "audio_capture.disk.slow",
+        "message": "录音写盘耗时出现新峰值",
+        "context": {
+          "sessionId": "56f443d0-9e71-4618-88a2-11cd2edbb044",
+          "inputOverflows": 0,
+          "inputUnderflows": 0,
+          "droppedFrames": 0,
+          "droppedPreviewBlocks": 0,
+          "maxWriteMs": 178.905,
+          "lastGlitchSeconds": 0,
+          "newInputOverflows": 0,
+          "newInputUnderflows": 0,
+          "newDroppedFrames": 0,
+          "newDroppedPreviewBlocks": 0
+        }
+      },
+      {
+        "timestamp": "2026-11-13T03:35:19.653Z",
+        "level": "warn",
+        "domain": "main.audio_capture",
+        "event": "audio_capture.disk.slow",
+        "message": "录音写盘耗时出现新峰值",
+        "context": {
+          "sessionId": "56f443d0-9e71-4618-88a2-11cd2edbb044",
+          "inputOverflows": 0,
+          "inputUnderflows": 0,
+          "droppedFrames": 0,
+          "droppedPreviewBlocks": 0,
+          "maxWriteMs": 233.157,
+          "lastGlitchSeconds": 0,
+          "newInputOverflows": 0,
+          "newInputUnderflows": 0,
+          "newDroppedFrames": 0,
+          "newDroppedPreviewBlocks": 0
+        }
+      },
+      {
+        "timestamp": "2026-11-13T03:35:38.285Z",
+        "level": "warn",
+        "domain": "main.audio_capture",
+        "event": "audio_capture.disk.slow",
+        "message": "录音写盘耗时出现新峰值",
+        "context": {
+          "sessionId": "56f443d0-9e71-4618-88a2-11cd2edbb044",
+          "inputOverflows": 0,
+          "inputUnderflows": 0,
+          "droppedFrames": 0,
+          "droppedPreviewBlocks": 0,
+          "maxWriteMs": 632.21,
+          "lastGlitchSeconds": 0,
+          "newInputOverflows": 0,
+          "newInputUnderflows": 0,
+          "newDroppedFrames": 0,
+          "newDroppedPreviewBlocks": 0
+        }
+      }
+    ],
+    "errors": [],
+    "events": [
+      {
+        "timestamp": "2026-11-13T02:52:29.127Z",
+        "level": "info",
+        "domain": "main.audio_capture.process",
+        "event": "audio_capture.process.start",
+        "message": "启动原生录音服务"
+      },
+      {
+        "timestamp": "2026-11-13T02:52:29.216Z",
+        "level": "info",
+        "domain": "main.audio_capture.process",
+        "event": "audio_capture.process.completed",
+        "message": "原生录音服务已就绪"
+      },
+      {
+        "timestamp": "2026-11-13T02:52:30.720Z",
+        "level": "info",
+        "domain": "features.audioCapture.session",
+        "event": "audio_capture.session.start.start",
+        "message": "录音操作开始",
+        "context": {}
+      },
+      {
+        "timestamp": "2026-11-13T02:52:30.731Z",
+        "level": "info",
+        "domain": "main.audio_capture.files",
+        "event": "audio_capture.file.prepare.start",
+        "message": "准备录音文件"
+      },
+      {
+        "timestamp": "2026-11-13T02:52:30.733Z",
+        "level": "info",
+        "domain": "main.audio_capture.files",
+        "event": "audio_capture.file.prepare.completed",
+        "message": "录音恢复记录已保存"
+      },
+      {
+        "timestamp": "2026-11-13T02:52:31.333Z",
+        "level": "info",
+        "domain": "main.audio_capture",
+        "event": "audio_capture.recording.start",
+        "message": "开始录音",
+        "context": {
+          "sessionId": "56f443d0-9e71-4618-88a2-11cd2edbb044",
+          "mode": "exclusive",
+          "hostApi": "MME",
+          "sampleRate": 48000,
+          "channels": 1,
+          "bitDepth": 24
+        }
+      },
+      {
+        "timestamp": "2026-11-13T02:52:31.471Z",
+        "level": "info",
+        "domain": "main.recording_power",
+        "event": "recording_power.hold.start",
+        "message": "录制期间阻止系统睡眠",
+        "context": {
+          "reason": "音频编辑录音"
+        }
+      },
+      {
+        "timestamp": "2026-11-13T02:52:31.563Z",
+        "level": "info",
+        "domain": "features.audioCapture.session",
+        "event": "audio_capture.session.start.completed",
+        "message": "录音操作完成",
+        "context": {}
+      },
+      {
+        "timestamp": "2026-11-13T02:52:35.834Z",
+        "level": "warn",
+        "domain": "main.audio_capture",
+        "event": "audio_capture.disk.slow",
+        "message": "录音写盘耗时出现新峰值",
+        "context": {
+          "sessionId": "56f443d0-9e71-4618-88a2-11cd2edbb044",
+          "inputOverflows": 0,
+          "inputUnderflows": 0,
+          "droppedFrames": 0,
+          "droppedPreviewBlocks": 0,
+          "maxWriteMs": 111.852,
+          "lastGlitchSeconds": 0,
+          "newInputOverflows": 0,
+          "newInputUnderflows": 0,
+          "newDroppedFrames": 0,
+          "newDroppedPreviewBlocks": 0
+        }
+      },
+      {
+        "timestamp": "2026-11-13T02:53:31.622Z",
+        "level": "warn",
+        "domain": "main.audio_capture",
+        "event": "audio_capture.disk.slow",
+        "message": "录音写盘耗时出现新峰值",
+        "context": {
+          "sessionId": "56f443d0-9e71-4618-88a2-11cd2edbb044",
+          "inputOverflows": 0,
+          "inputUnderflows": 0,
+          "droppedFrames": 0,
+          "droppedPreviewBlocks": 0,
+          "maxWriteMs": 127.988,
+          "lastGlitchSeconds": 0,
+          "newInputOverflows": 0,
+          "newInputUnderflows": 0,
+          "newDroppedFrames": 0,
+          "newDroppedPreviewBlocks": 0
+        }
+      },
+      {
+        "timestamp": "2026-11-13T02:54:19.623Z",
+        "level": "warn",
+        "domain": "main.audio_capture",
+        "event": "audio_capture.disk.slow",
+        "message": "录音写盘耗时出现新峰值",
+        "context": {
+          "sessionId": "56f443d0-9e71-4618-88a2-11cd2edbb044",
+          "inputOverflows": 0,
+          "inputUnderflows": 0,
+          "droppedFrames": 0,
+          "droppedPreviewBlocks": 0,
+          "maxWriteMs": 130.598,
+          "lastGlitchSeconds": 0,
+          "newInputOverflows": 0,
+          "newInputUnderflows": 0,
+          "newDroppedFrames": 0,
+          "newDroppedPreviewBlocks": 0
+        }
+      },
+      {
+        "timestamp": "2026-11-13T02:54:31.623Z",
+        "level": "warn",
+        "domain": "main.audio_capture",
+        "event": "audio_capture.disk.slow",
+        "message": "录音写盘耗时出现新峰值",
+        "context": {
+          "sessionId": "56f443d0-9e71-4618-88a2-11cd2edbb044",
+          "inputOverflows": 0,
+          "inputUnderflows": 0,
+          "droppedFrames": 0,
+          "droppedPreviewBlocks": 0,
+          "maxWriteMs": 153.153,
+          "lastGlitchSeconds": 0,
+          "newInputOverflows": 0,
+          "newInputUnderflows": 0,
+          "newDroppedFrames": 0,
+          "newDroppedPreviewBlocks": 0
+        }
+      },
+      {
+        "timestamp": "2026-11-13T03:05:31.620Z",
+        "level": "warn",
+        "domain": "main.audio_capture",
+        "event": "audio_capture.disk.slow",
+        "message": "录音写盘耗时出现新峰值",
+        "context": {
+          "sessionId": "56f443d0-9e71-4618-88a2-11cd2edbb044",
+          "inputOverflows": 0,
+          "inputUnderflows": 0,
+          "droppedFrames": 0,
+          "droppedPreviewBlocks": 0,
+          "maxWriteMs": 155.055,
+          "lastGlitchSeconds": 0,
+          "newInputOverflows": 0,
+          "newInputUnderflows": 0,
+          "newDroppedFrames": 0,
+          "newDroppedPreviewBlocks": 0
+        }
+      },
+      {
+        "timestamp": "2026-11-13T03:11:31.613Z",
+        "level": "warn",
+        "domain": "main.audio_capture",
+        "event": "audio_capture.disk.slow",
+        "message": "录音写盘耗时出现新峰值",
+        "context": {
+          "sessionId": "56f443d0-9e71-4618-88a2-11cd2edbb044",
+          "inputOverflows": 0,
+          "inputUnderflows": 0,
+          "droppedFrames": 0,
+          "droppedPreviewBlocks": 0,
+          "maxWriteMs": 178.905,
+          "lastGlitchSeconds": 0,
+          "newInputOverflows": 0,
+          "newInputUnderflows": 0,
+          "newDroppedFrames": 0,
+          "newDroppedPreviewBlocks": 0
+        }
+      },
+      {
+        "timestamp": "2026-11-13T03:17:43.645Z",
+        "level": "info",
+        "domain": "main.audio_capture",
+        "event": "audio_capture.owner.detached",
+        "message": "界面已离开，录音继续，等待新界面接管",
+        "context": {
+          "sessionId": "56f443d0-9e71-4618-88a2-11cd2edbb044"
+        }
+      },
+      {
+        "timestamp": "2026-11-13T03:17:44.260Z",
+        "level": "info",
+        "domain": "main.audio_capture",
+        "event": "audio_capture.owner.attached",
+        "message": "界面查询进行中的录音",
+        "context": {
+          "sessionId": "56f443d0-9e71-4618-88a2-11cd2edbb044",
+          "durationSeconds": 1512.771
+        }
+      },
+      {
+        "timestamp": "2026-11-13T03:17:44.274Z",
+        "level": "info",
+        "domain": "features.audioCapture.session",
+        "event": "audio_capture.session.attach.start",
+        "message": "录音操作开始",
+        "context": {}
+      },
+      {
+        "timestamp": "2026-11-13T03:17:44.275Z",
+        "level": "info",
+        "domain": "main.audio_capture",
+        "event": "audio_capture.owner.attached",
+        "message": "界面查询进行中的录音",
+        "context": {
+          "sessionId": "56f443d0-9e71-4618-88a2-11cd2edbb044",
+          "durationSeconds": 1512.771
+        }
+      },
+      {
+        "timestamp": "2026-11-13T03:17:44.858Z",
+        "level": "info",
+        "domain": "features.audioCapture.session",
+        "event": "audio_capture.session.attach.completed",
+        "message": "界面接管进行中的录音",
+        "context": {
+          "durationSeconds": 1512.771,
+          "placed": true,
+          "phase": "recording"
+        }
+      },
+      {
+        "timestamp": "2026-11-13T03:17:44.859Z",
+        "level": "info",
+        "domain": "features.audioCapture.session",
+        "event": "audio_capture.session.attach.completed",
+        "message": "录音操作完成",
+        "context": {}
+      },
+      {
+        "timestamp": "2026-11-13T03:35:19.653Z",
+        "level": "warn",
+        "domain": "main.audio_capture",
+        "event": "audio_capture.disk.slow",
+        "message": "录音写盘耗时出现新峰值",
+        "context": {
+          "sessionId": "56f443d0-9e71-4618-88a2-11cd2edbb044",
+          "inputOverflows": 0,
+          "inputUnderflows": 0,
+          "droppedFrames": 0,
+          "droppedPreviewBlocks": 0,
+          "maxWriteMs": 233.157,
+          "lastGlitchSeconds": 0,
+          "newInputOverflows": 0,
+          "newInputUnderflows": 0,
+          "newDroppedFrames": 0,
+          "newDroppedPreviewBlocks": 0
+        }
+      },
+      {
+        "timestamp": "2026-11-13T03:35:38.285Z",
+        "level": "warn",
+        "domain": "main.audio_capture",
+        "event": "audio_capture.disk.slow",
+        "message": "录音写盘耗时出现新峰值",
+        "context": {
+          "sessionId": "56f443d0-9e71-4618-88a2-11cd2edbb044",
+          "inputOverflows": 0,
+          "inputUnderflows": 0,
+          "droppedFrames": 0,
+          "droppedPreviewBlocks": 0,
+          "maxWriteMs": 632.21,
+          "lastGlitchSeconds": 0,
+          "newInputOverflows": 0,
+          "newInputUnderflows": 0,
+          "newDroppedFrames": 0,
+          "newDroppedPreviewBlocks": 0
+        }
+      },
+      {
+        "timestamp": "2026-11-13T03:52:32.506Z",
+        "level": "info",
+        "domain": "features.audioCapture.session",
+        "event": "audio_capture.session.stop.start",
+        "message": "录音操作开始",
+        "context": {}
+      },
+      {
+        "timestamp": "2026-11-13T03:52:32.596Z",
+        "level": "info",
+        "domain": "main.audio_capture",
+        "event": "audio_capture.recording.summary",
+        "message": "录音结束汇总",
+        "context": {
+          "sessionId": "56f443d0-9e71-4618-88a2-11cd2edbb044",
+          "mode": "exclusive",
+          "outcome": "completed",
+          "durationSeconds": 3601.039,
+          "writtenBytes": 518549616,
+          "elapsedSeconds": 3601,
+          "reconnects": 0,
+          "previewDroppedBlocks": 0,
+          "inputOverflows": 0,
+          "inputUnderflows": 0,
+          "droppedFrames": 0,
+          "droppedPreviewBlocks": 0,
+          "maxWriteMs": 632.21,
+          "lastGlitchSeconds": 0
+        }
+      },
+      {
+        "timestamp": "2026-11-13T03:52:32.596Z",
+        "level": "info",
+        "domain": "main.audio_capture",
+        "event": "audio_capture.recording.completed",
+        "message": "录音已保存",
+        "context": {
+          "sessionId": "56f443d0-9e71-4618-88a2-11cd2edbb044",
+          "writtenBytes": 518549616
+        }
+      },
+      {
+        "timestamp": "2026-11-13T03:52:32.596Z",
+        "level": "info",
+        "domain": "main.recording_power",
+        "event": "recording_power.hold.completed",
+        "message": "录制结束，恢复系统睡眠",
+        "context": {
+          "reason": "音频编辑录音"
+        }
+      },
+      {
+        "timestamp": "2026-11-13T03:52:32.663Z",
+        "level": "info",
+        "domain": "features.audioEdit.splice",
+        "event": "audio_edit.splice.start",
+        "message": "开始拼接音频",
+        "requestId": "d41205f7-1eda-4d7b-b72f-9b9d41e051d3",
+        "context": {
+          "projectId": "7f25cff6-9af3-443b-8e8e-21b57b1454e0",
+          "startFrame": 24000,
+          "endFrame": 24000
+        }
+      },
+      {
+        "timestamp": "2026-11-13T03:52:32.667Z",
+        "level": "info",
+        "domain": "main.audio_edit.tasks",
+        "event": "audio_edit.splice.start",
+        "message": "口播处理开始",
+        "requestId": "d41205f7-1eda-4d7b-b72f-9b9d41e051d3",
+        "context": {
+          "projectId": "7f25cff6-9af3-443b-8e8e-21b57b1454e0"
+        }
+      },
+      {
+        "timestamp": "2026-11-13T03:52:53.560Z",
+        "level": "info",
+        "domain": "main.audio_edit.tasks",
+        "event": "audio_edit.splice.completed",
+        "message": "口播处理完成",
+        "requestId": "d41205f7-1eda-4d7b-b72f-9b9d41e051d3",
+        "context": {
+          "projectId": "7f25cff6-9af3-443b-8e8e-21b57b1454e0"
+        }
+      },
+      {
+        "timestamp": "2026-11-13T03:52:54.034Z",
+        "level": "info",
+        "domain": "features.audioEdit.splice",
+        "event": "audio_edit.splice.completed",
+        "message": "音频拼接已保存",
+        "requestId": "d41205f7-1eda-4d7b-b72f-9b9d41e051d3",
+        "context": {
+          "projectId": "7f25cff6-9af3-443b-8e8e-21b57b1454e0"
+        }
+      },
+      {
+        "timestamp": "2026-11-13T03:52:54.044Z",
+        "level": "info",
+        "domain": "features.audioCapture.session",
+        "event": "audio_capture.session.stop.completed",
+        "message": "录音操作完成",
+        "context": {}
+      }
+    ],
+    "corruptedLines": 0,
+    "summary": [
+      {
+        "key": "warn audio_capture.disk.slow",
+        "count": 8
+      },
+      {
+        "key": "warn logging.bridge.event_rejected",
+        "count": 2
+      }
+    ]
+  },
+  "checks": {
+    "take": {
+      "spliced": true,
+      "insertedSeconds": 3601.039,
+      "totalSeconds": 3601.539,
+      "sampleRate": 48000,
+      "channels": 1,
+      "sourcePath": "E:\\文档\\HenjiAI\\Audio Recordings\\24ea1655-f5ba-4f1b-99f4-d5a4fdca0ccb.wav",
+      "audioPath": "E:\\文档\\HenjiAI\\Audio Recordings\\24ea1655-f5ba-4f1b-99f4-d5a4fdca0ccb.wav"
+    },
+    "summary": {
+      "sessionId": "56f443d0-9e71-4618-88a2-11cd2edbb044",
+      "mode": "exclusive",
+      "outcome": "completed",
+      "durationSeconds": 3601.039,
+      "writtenBytes": 518549616,
+      "elapsedSeconds": 3601,
+      "reconnects": 0,
+      "previewDroppedBlocks": 0,
+      "inputOverflows": 0,
+      "inputUnderflows": 0,
+      "droppedFrames": 0,
+      "droppedPreviewBlocks": 0,
+      "maxWriteMs": 632.21,
+      "lastGlitchSeconds": 0
+    },
+    "files": [
+      {
+        "role": "作品音频",
+        "path": "E:\\文档\\HenjiAI\\Audio Recordings\\24ea1655-f5ba-4f1b-99f4-d5a4fdca0ccb.wav",
+        "required": true,
+        "probe": {
+          "ok": true,
+          "durationSeconds": 3601.539,
+          "sizeBytes": 691495532,
+          "codec": "pcm_f32le",
+          "sampleRate": 48000,
+          "channels": 1
+        }
+      },
+      {
+        "role": "原始录音",
+        "path": "E:\\文档\\HenjiAI\\Audio Recordings\\录音 2026-11-13 105230.wav",
+        "required": false,
+        "probe": {
+          "ok": true,
+          "durationSeconds": 3601.039,
+          "sizeBytes": 518549708,
+          "codec": "pcm_s24le",
+          "sampleRate": 48000,
+          "channels": 1
+        }
+      }
+    ],
+    "pendingFiles": []
+  },
+  "storage": {
+    "paths": [
+      {
+        "path": "E:\\文档\\HenjiAI\\Projects\\长录测试",
+        "bytes": 830054
+      },
+      {
+        "path": "E:\\文档\\HenjiAI\\Audio Recordings\\录音 2026-11-13 105230.wav",
+        "bytes": 518549708
+      },
+      {
+        "path": "E:\\文档\\HenjiAI\\Audio Recordings\\24ea1655-f5ba-4f1b-99f4-d5a4fdca0ccb.wav",
+        "bytes": 691495532
+      }
+    ],
+    "totalBytes": 1210875294
+  },
+  "recording": {
+    "prepareAtMs": 1794538349072,
+    "control": "capability",
+    "startReceipt": {
+      "resultRef": {
+        "kind": "audio_edit.document",
+        "id": "7f25cff6-9af3-443b-8e8e-21b57b1454e0"
+      },
+      "message": "已开始录音，录进口播 7f25cff6-9af3-443b-8e8e-21b57b1454e0 的 0.50 秒处。读 audio_capture.settings.recording 看进度。",
+      "verified": true,
+      "recording": {
+        "phase": "recording",
+        "durationSeconds": 0.078,
+        "positionSeconds": 0.5
+      },
+      "durationFrames": 24000,
+      "verification": {
+        "verified": true,
+        "condition": "已从主进程读回录音状态，并核对口播保存后的内容。"
+      }
+    },
+    "effectiveStartMs": 1794538351509,
+    "sessionId": "56f443d0-9e71-4618-88a2-11cd2edbb044",
+    "outputPath": "E:\\文档\\HenjiAI\\Audio Recordings\\录音 2026-11-13 105230.wav",
+    "sampleRate": 48000,
+    "startedAtMs": 1794538351608,
+    "stopRequestedAtMs": 1794541952481,
+    "stoppedAtMs": 1794541974061,
+    "wallSeconds": 3600.972,
+    "stopVia": "capability",
+    "stopReceipt": {
+      "resultRef": {
+        "kind": "audio_edit.document",
+        "id": "7f25cff6-9af3-443b-8e8e-21b57b1454e0"
+      },
+      "message": "已停止录音，这一段已拼回口播并保存，作品现长 3601.54 秒；undoRef 交给 undo_audio_edit 可撤掉这次拼接。",
+      "verified": true,
+      "recording": {
+        "phase": "idle",
+        "durationSeconds": 0,
+        "positionSeconds": null
+      },
+      "durationFrames": 172873872,
+      "undoRef": "audio_edit.step:68ed2a7f-c241-4a8e-92c7-9a15009b12f7",
+      "verification": {
+        "verified": true,
+        "condition": "已从主进程读回录音状态，并核对口播保存后的内容。"
+      }
+    }
+  },
+  "missingInterfaces": [
+    "主进程加压：没有只在自动化模式开放的“让主进程忙 N 毫秒”开发钩子，脚本用并发全文日志查询近似（读整天日志并逐行解析），并用 ping 往返时间证明主进程确实变慢",
+    "窗口还原：渲染层只有 minimize，没有 restore IPC，脚本用 Win32 ShowWindowAsync 还原主进程的最小化窗口",
+    "音频编辑录音的会话 ID 不在正式读回里，脚本从 audio_capture.recording.start 日志取，再用 audioCapture.status 读主进程真实状态；读不到时退回 audio_capture.settings.recording",
+    "powercfg /requests 需要管理员权限；脚本不在管理员终端运行时只能用 recording_power.* 日志佐证"
+  ],
+  "app": {
+    "browser": "Chrome/152.0.7977.167",
+    "url": "file:///D:/VibeCode/Henji-AI/out/renderer/index.html?henjiDevSkipOnboarding=1",
+    "dev": false,
+    "mainPid": 62012,
+    "executable": "D:\\VibeCode\\Henji-AI\\node_modules\\electron\\dist\\electron.exe"
+  },
+  "mcp": {
+    "connectionId": "7458ed7e-3687-426a-8fd9-3cb3ad5a03c4",
+    "enabledMcp": false
+  },
+  "project": {
+    "id": "58d29cf3-4036-4ee9-b217-75c4376b258a",
+    "name": "长录测试",
+    "created": false
+  },
+  "document": {
+    "id": "7f25cff6-9af3-443b-8e8e-21b57b1454e0",
+    "name": "长录 20261113-105228",
+    "path": "E:\\文档\\HenjiAI\\Projects\\长录测试\\长录 20261113-105228.hjaud"
+  },
+  "endedAt": "2026-11-13T03:53:01.466Z",
+  "verdict": {
+    "passed": true,
+    "conditionMet": true,
+    "unmetConditions": [],
+    "problems": [],
+    "notes": [
+      "main-load：加压期间主进程 ping 最长只有 5 ms，压力不明显（当天日志可能很小）",
+      "powercfg /requests 未取证：此命令需要管理员权限，并且必须从提升的命令提示符中执行。；可用管理员终端重跑",
+      "期间警告 10 条（见 logs.warnings）",
+      "写盘最长 632.21 ms",
+      "需要补的接口：主进程加压：没有只在自动化模式开放的“让主进程忙 N 毫秒”开发钩子，脚本用并发全文日志查询近似（读整天日志并逐行解析），并用 ping 往返时间证明主进程确实变慢",
+      "需要补的接口：窗口还原：渲染层只有 minimize，没有 restore IPC，脚本用 Win32 ShowWindowAsync 还原主进程的最小化窗口",
+      "需要补的接口：音频编辑录音的会话 ID 不在正式读回里，脚本从 audio_capture.recording.start 日志取，再用 audioCapture.status 读主进程真实状态；读不到时退回 audio_capture.settings.recording",
+      "需要补的接口：powercfg /requests 需要管理员权限；脚本不在管理员终端运行时只能用 recording_power.* 日志佐证"
+    ],
+    "memoryTrend": {
+      "series": {
+        "main": {
+          "firstBytes": 407232512,
+          "lastBytes": 398905344,
+          "maxBytes": 407232512,
+          "growthBytes": -8327168,
+          "samples": 14
+        },
+        "crashpad-handler": {
+          "firstBytes": 9777152,
+          "lastBytes": 9744384,
+          "maxBytes": 9777152,
+          "growthBytes": -32768,
+          "samples": 14
+        },
+        "gpu-process": {
+          "firstBytes": 1143242752,
+          "lastBytes": 367144960,
+          "maxBytes": 1143242752,
+          "growthBytes": -776097792,
+          "samples": 14
+        },
+        "utility:network.mojom.NetworkService": {
+          "firstBytes": 12038144,
+          "lastBytes": 11984896,
+          "maxBytes": 12038144,
+          "growthBytes": -53248,
+          "samples": 14
+        },
+        "renderer": {
+          "firstBytes": 484122624,
+          "lastBytes": 514015232,
+          "maxBytes": 548421632,
+          "growthBytes": 29892608,
+          "samples": 14
+        },
+        "utility:audio.mojom.AudioService": {
+          "firstBytes": 11194368,
+          "lastBytes": 11063296,
+          "maxBytes": 11194368,
+          "growthBytes": -131072,
+          "samples": 14
+        },
+        "henji-audio-worker": {
+          "firstBytes": 10686464,
+          "lastBytes": 9904128,
+          "maxBytes": 10686464,
+          "growthBytes": -782336,
+          "samples": 14
+        },
+        "henji-video-decoder": {
+          "firstBytes": 71426048,
+          "lastBytes": 71426048,
+          "maxBytes": 71426048,
+          "growthBytes": 0,
+          "samples": 14
+        },
+        "utility:video_capture.mojom.VideoCaptureService": {
+          "firstBytes": 68833280,
+          "lastBytes": 68837376,
+          "maxBytes": 68837376,
+          "growthBytes": 4096,
+          "samples": 14
+        },
+        "henji-audio-capture": {
+          "firstBytes": 39329792,
+          "lastBytes": 39370752,
+          "maxBytes": 39370752,
+          "growthBytes": 40960,
+          "samples": 14
+        },
+        "conhost": {
+          "firstBytes": 19763200,
+          "lastBytes": 19685376,
+          "maxBytes": 19763200,
+          "growthBytes": -77824,
+          "samples": 14
+        },
+        "total": {
+          "firstBytes": 2277646336,
+          "lastBytes": 1522081792,
+          "maxBytes": 2277646336,
+          "growthBytes": -755564544,
+          "samples": 14
+        }
+      },
+      "growing": []
+    }
+  }
+}

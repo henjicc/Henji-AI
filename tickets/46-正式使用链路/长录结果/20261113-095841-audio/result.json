@@ -1,0 +1,166 @@
+{
+  "version": 1,
+  "scenario": "audio",
+  "options": {
+    "scenario": "audio",
+    "minutes": 3,
+    "smoke": true,
+    "port": 9334,
+    "project": "长录测试",
+    "out": null,
+    "source": null,
+    "width": 3840,
+    "height": 2160,
+    "fps": 60,
+    "systemAudio": true,
+    "microphone": true,
+    "killEncoder": false,
+    "crashRenderer": false,
+    "cursor": true,
+    "motion": false,
+    "loadSeconds": 20,
+    "audioControl": "capability"
+  },
+  "resultDir": "D:\\VibeCode\\Henji-AI\\tickets\\46-正式使用链路\\长录结果\\20261113-095841-audio",
+  "startedAt": "2026-11-13T01:58:41.264Z",
+  "plan": [
+    {
+      "atSec": 5.4,
+      "action": "wake-lock",
+      "params": {}
+    },
+    {
+      "atSec": 9,
+      "action": "switch-away",
+      "params": {
+        "workspaceId": "videoEdit"
+      }
+    },
+    {
+      "atSec": 14.4,
+      "action": "switch-back",
+      "params": {}
+    },
+    {
+      "atSec": 18,
+      "action": "minimize",
+      "params": {}
+    },
+    {
+      "atSec": 48.6,
+      "action": "restore",
+      "params": {}
+    },
+    {
+      "atSec": 57.6,
+      "action": "main-load",
+      "params": {}
+    },
+    {
+      "atSec": 75.6,
+      "action": "reload",
+      "params": {}
+    },
+    {
+      "atSec": 90,
+      "action": "status",
+      "params": {
+        "memoryLabel": "mid"
+      }
+    },
+    {
+      "atSec": 126,
+      "action": "switch-away",
+      "params": {
+        "workspaceId": "assets"
+      }
+    },
+    {
+      "atSec": 180,
+      "action": "stop",
+      "params": {}
+    }
+  ],
+  "steps": [],
+  "heartbeats": [],
+  "memory": [
+    {
+      "label": "before-start",
+      "atMs": 1794535124204,
+      "processCount": 5,
+      "totalPrivateBytes": 1089605632,
+      "categories": {
+        "main": {
+          "count": 1,
+          "privateBytes": 363835392,
+          "workingSetBytes": 374460416
+        },
+        "crashpad-handler": {
+          "count": 1,
+          "privateBytes": 9601024,
+          "workingSetBytes": 74924032
+        },
+        "gpu-process": {
+          "count": 1,
+          "privateBytes": 443572224,
+          "workingSetBytes": 188305408
+        },
+        "utility:network.mojom.NetworkService": {
+          "count": 1,
+          "privateBytes": 12083200,
+          "workingSetBytes": 80400384
+        },
+        "renderer": {
+          "count": 1,
+          "privateBytes": 260513792,
+          "workingSetBytes": 344403968
+        }
+      }
+    }
+  ],
+  "power": {},
+  "logs": {},
+  "checks": {},
+  "storage": {
+    "paths": [],
+    "totalBytes": 0
+  },
+  "recording": {},
+  "missingInterfaces": [
+    "主进程加压：没有只在自动化模式开放的“让主进程忙 N 毫秒”开发钩子，脚本用并发全文日志查询近似（读整天日志并逐行解析），并用 ping 往返时间证明主进程确实变慢",
+    "窗口还原：渲染层只有 minimize，没有 restore IPC，脚本用 Win32 ShowWindowAsync 还原主进程的最小化窗口",
+    "音频编辑录音的会话 ID 不在正式读回里，脚本从 audio_capture.recording.start 日志取，再用 audioCapture.status 读主进程真实状态；读不到时退回 audio_capture.settings.recording",
+    "powercfg /requests 需要管理员权限；脚本不在管理员终端运行时只能用 recording_power.* 日志佐证"
+  ],
+  "app": {
+    "browser": "Chrome/152.0.7977.167",
+    "url": "file:///D:/VibeCode/Henji-AI/out/renderer/index.html?henjiDevSkipOnboarding=1",
+    "dev": false,
+    "mainPid": 63440,
+    "executable": "D:\\VibeCode\\Henji-AI\\node_modules\\electron\\dist\\electron.exe"
+  },
+  "fatal": "应用对外宿主没有就绪",
+  "endedAt": "2026-11-13T01:59:44.556Z",
+  "verdict": {
+    "passed": false,
+    "conditionMet": true,
+    "unmetConditions": [],
+    "problems": [
+      "脚本中途失败：应用对外宿主没有就绪",
+      "录制没有开始",
+      "日志里没有 recording_power.hold.start",
+      "没有找到 audio_capture.recording.summary"
+    ],
+    "notes": [
+      "内存样本不足三次，增长判断不可靠",
+      "需要补的接口：主进程加压：没有只在自动化模式开放的“让主进程忙 N 毫秒”开发钩子，脚本用并发全文日志查询近似（读整天日志并逐行解析），并用 ping 往返时间证明主进程确实变慢",
+      "需要补的接口：窗口还原：渲染层只有 minimize，没有 restore IPC，脚本用 Win32 ShowWindowAsync 还原主进程的最小化窗口",
+      "需要补的接口：音频编辑录音的会话 ID 不在正式读回里，脚本从 audio_capture.recording.start 日志取，再用 audioCapture.status 读主进程真实状态；读不到时退回 audio_capture.settings.recording",
+      "需要补的接口：powercfg /requests 需要管理员权限；脚本不在管理员终端运行时只能用 recording_power.* 日志佐证"
+    ],
+    "memoryTrend": {
+      "series": {},
+      "growing": []
+    }
+  }
+}

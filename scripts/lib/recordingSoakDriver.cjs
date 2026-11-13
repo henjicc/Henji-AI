@@ -81,17 +81,28 @@ const os = {
   },
   /**
    * 用 mouse_event 绝对坐标把光标从 A 移到 B（走系统输入，低级钩子能收到），再放回原处。
-   * 返回每次移动后的墙钟毫秒。A、B 在主屏中心两侧，x、y 都不同。
+   * 返回每次移动后的墙钟毫秒。A、B 在被录显示器（display，DIP 布局；省略时主屏）中心两侧，x、y 都不同：
+   * 录制只记被录区域里的光标，移到别的显示器上事件里只有空位置。
+   * PowerShell 不感知 DPI，坐标与 Electron 的 DIP 一致（各屏缩放相同时）；按虚拟桌面归一化（MOUSEEVENTF_VIRTUALDESK）。
    */
-  async moveCursor(holdMs = 400) {
+  async moveCursor(holdMs = 400, display = null) {
+    const rect = display ? [display.x, display.y, display.width, display.height].map(value => Math.round(value)) : null
     return powershell(`${WIN32}
 $o = New-Object SoakWin+POINT; [void][SoakWin]::GetCursorPos([ref]$o)
-$w = [SoakWin]::GetSystemMetrics(0); $h = [SoakWin]::GetSystemMetrics(1)
-$a = @([int]($w*0.4), [int]($h*0.4)); $b = @([int]($w*0.6), [int]($h*0.6))
-function MoveTo($p) { [SoakWin]::mouse_event(0x8001, [int]($p[0]*65535/($w-1)), [int]($p[1]*65535/($h-1)), 0, [UIntPtr]::Zero); [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() }
+$vx = [SoakWin]::GetSystemMetrics(76); $vy = [SoakWin]::GetSystemMetrics(77); $vw = [SoakWin]::GetSystemMetrics(78); $vh = [SoakWin]::GetSystemMetrics(79)
+${rect ? `$rx = ${rect[0]}; $ry = ${rect[1]}; $w = ${rect[2]}; $h = ${rect[3]}` : '$rx = 0; $ry = 0; $w = [SoakWin]::GetSystemMetrics(0); $h = [SoakWin]::GetSystemMetrics(1)'}
+$a = @([int]($rx+$w*0.4), [int]($ry+$h*0.4)); $b = @([int]($rx+$w*0.6), [int]($ry+$h*0.6))
+function MoveTo($p) { [SoakWin]::mouse_event(0xC001, [int](($p[0]-$vx)*65535/($vw-1)), [int](($p[1]-$vy)*65535/($vh-1)), 0, [UIntPtr]::Zero); [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() }
 $ta = MoveTo $a; Start-Sleep -Milliseconds ${Number(holdMs)}; $tb = MoveTo $b; Start-Sleep -Milliseconds ${Number(holdMs)}
 [void][SoakWin]::SetCursorPos($o.X, $o.Y)
 @{ a = $a; b = $b; aAtMs = $ta; bAtMs = $tb; endAtMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds(); screen = @($w, $h) } | ConvertTo-Json -Compress`)
+  },
+  /** 各显示器的物理像素矩形（进程先声明感知 DPI，否则拿到的是按缩放虚拟化后的坐标）。 */
+  async physicalScreens() {
+    const list = await powershell(`Add-Type 'using System; using System.Runtime.InteropServices; public static class SoakDpi { [DllImport("user32.dll")] public static extern bool SetProcessDPIAware(); }'
+[void][SoakDpi]::SetProcessDPIAware(); Add-Type -AssemblyName System.Windows.Forms
+ConvertTo-Json -Compress -InputObject @([System.Windows.Forms.Screen]::AllScreens | ForEach-Object { @{ primary = $_.Primary; x = $_.Bounds.X; y = $_.Bounds.Y; width = $_.Bounds.Width; height = $_.Bounds.Height } })`)
+    return Array.isArray(list) ? list : list ? [list] : []
   },
   /** powercfg /requests 需要管理员权限；用 UTF-8 代码页读输出。 */
   async powerRequests() {
@@ -119,9 +130,9 @@ async function probe(file) {
 }
 
 /** 一段时间里画面有没有明显变化：ffmpeg 场景分数，两个线程，避免抢满 CPU。返回相对 startSeconds 的变化时刻。 */
-async function sceneChanges(file, startSeconds, windowSeconds, threshold = 0.02) {
+async function sceneChanges(file, startSeconds, windowSeconds, threshold = 0.02, { crop } = {}) {
   const result = await run(mediaBinaries().ffmpegPath, ['-hide_banner', '-nostats', '-threads', '2', '-ss', String(Math.max(0, startSeconds)), '-i', file, '-t', String(windowSeconds), '-an',
-    '-vf', `select='gt(scene\\,${threshold})',showinfo`, '-f', 'null', '-'], { timeoutMs: 180_000 })
+    '-vf', `${crop ? `crop=${crop},` : ''}select='gt(scene\\,${threshold})',showinfo`, '-f', 'null', '-'], { timeoutMs: 180_000 })
   if (result.code !== 0) return { ok: false, error: result.stderr.trim().split('\n').slice(-3).join(' ').slice(0, 400) }
   return { ok: true, times: [...result.stderr.matchAll(/pts_time:([\d.]+)/g)].map(match => Number(match[1])) }
 }
@@ -146,7 +157,8 @@ async function audioLevel(file, { startSeconds, windowSeconds, silenceDb = -70, 
 /**
  * 被录显示器上的运动源：系统 PATH 上的 ffplay 播放 lavfi 合成源——testsrc2 高运动测试图（按显示器像素、60 帧）
  * 加约 -30 dBFS 峰值的粉噪，无边框置顶铺满该显示器，一直播到 stop()。完全静止的画面说明不了问题。
- * display 是录制来源的 DIP 布局（x/y/width/height/scaleFactor）；ffplay 不感知 DPI，按 DIP 摆放窗口。
+ * display 是录制来源的 DIP 布局（x/y/width/height/scaleFactor）。ffplay（SDL）感知 DPI，窗口位置与大小按物理像素给：
+ * 按 DIP 给时在 150% 缩放下窗口会错到相邻显示器上（盖住主屏一部分，被录屏只露出一角）。
  */
 async function startMotion({ display, fps = 60 }) {
   const version = await run('ffplay', ['-hide_banner', '-version'], { timeoutMs: 15_000 })
@@ -154,9 +166,14 @@ async function startMotion({ display, fps = 60 }) {
   if (!display) return { ok: false, reason: '录制来源没有显示器布局（单窗口录制时运动源无法放进被录画面）' }
   const even = value => Math.max(2, Math.round(value / 2) * 2)
   const scale = display.scaleFactor ?? 1
-  const graph = `testsrc2=size=${even(display.width * scale)}x${even(display.height * scale)}:rate=${fps}[out0];anoisesrc=color=pink:amplitude=0.0316:sample_rate=48000[out1]`
+  const width = Math.round(display.width * scale), height = Math.round(display.height * scale)
+  // 物理坐标里同尺寸、同为（不为）主屏、离按缩放估算的位置最近的那块就是被录显示器。
+  const screens = (await os.physicalScreens().catch(() => [])).filter(item => Boolean(item.primary) === Boolean(display.primary) && Math.abs(item.width - width) <= 2 && Math.abs(item.height - height) <= 2)
+  const target = screens.sort((a, b) => Math.hypot(a.x - display.x * scale, a.y - display.y * scale) - Math.hypot(b.x - display.x * scale, b.y - display.y * scale))[0]
+  if (!target) return { ok: false, reason: `找不到与录制来源对应的物理显示器（${width}×${height}）` }
+  const graph = `testsrc2=size=${even(width)}x${even(height)}:rate=${fps}[out0];anoisesrc=color=pink:amplitude=0.0316:sample_rate=48000[out1]`
   const args = ['-hide_banner', '-loglevel', 'error', '-noborder', '-alwaysontop', '-window_title', '长录测试运动源',
-    '-left', String(Math.round(display.x)), '-top', String(Math.round(display.y)), '-x', String(Math.round(display.width)), '-y', String(Math.round(display.height)), '-f', 'lavfi', '-i', graph]
+    '-left', String(target.x), '-top', String(target.y), '-x', String(target.width), '-y', String(target.height), '-f', 'lavfi', '-i', graph]
   const { spawn } = require('node:child_process')
   const child = spawn('ffplay', args, { stdio: ['ignore', 'ignore', 'pipe'], windowsHide: false })
   const state = { ok: true, source: 'ffplay', audio: true, pid: child.pid, args, startedAtMs: Date.now(), exitedAtMs: null, exitCode: null, stderr: '' }
