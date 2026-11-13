@@ -214,9 +214,12 @@ export function recordingPlacementText(placement: RecordingPlacementResult, sequ
   return `${where}${covered}，画面与声音链接成一组。${placement.note ? `${placement.note}。` : ''}`
 }
 
-/** 主进程把暂停分出的画面与声音各拼成一个；只有一个画面文件、或较早版本录的会话对不齐暂停时不需要。 */
+/**
+ * 主进程把暂停分出的画面与声音各拼成一个；只有一个画面文件又没暂停过、或较早版本录的会话对不齐暂停时不需要。
+ * 一个画面文件但暂停过的也要问主进程：原生采集录的连续文件（暂停不在文件里）由主进程按它的时刻表分段。
+ */
 async function combinedFiles(id: string, recording: RecordingDocument): Promise<{ groups: RecordingCombinedFiles[] | null; failure?: string }> {
-  if (!recordingCombinePlan(recording)) return { groups: null }
+  if (!recordingCombinePlan(recording) && !recording.pauses?.length) return { groups: null }
   try { return { groups: await getPlatform().screenRecording.capture({ operation: 'combine', sessionId: id }) as RecordingCombinedFiles[] | null } }
   catch (error) {
     const failure = error instanceof Error ? error.message : String(error)

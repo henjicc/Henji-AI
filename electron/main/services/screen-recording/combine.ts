@@ -9,6 +9,7 @@ import { loadFfmpegPath, loadFfprobePath } from '../video/ffmpeg-loader'
 import { createMainLogger } from '../logging'
 import { quickExportList, runFfmpeg } from './quick-export'
 import { readWavLayout, wavHeader, type WavLayout } from './wav-file'
+import { captureTimingGroup, readCaptureTiming } from './capture/native-timing'
 
 const logger = createMainLogger('main.screen_recording.combine')
 /** 合并写盘前留出的余量，与录制时的磁盘检查一致。 */
@@ -142,6 +143,18 @@ async function audioUpToDate(file: string, group: RecordingCombinedGroup): Promi
 }
 
 /**
+ * 原生采集录的画面：一次录制一个连续文件、暂停不在里面，本身就是合并好的画面；按逐帧时刻表分出各段，声音照常按这组拼。
+ * 不是这种文件（没有时刻表）或没暂停过时返回 null。
+ */
+async function continuousScreenGroup(content: RecordingDocument): Promise<RecordingCombinedGroup | null> {
+  const screens = content.media.filter(item => item.kind === 'screen' && item.durationUs > 0)
+  if (screens.length !== 1) return null
+  const [screen] = screens
+  const timing = await readCaptureTiming(screen.path)
+  return timing ? captureTimingGroup(screen.id, timing, screen.monoUs, Math.round(screen.durationUs * timing.fpsNum / timing.fpsDen / 1e6)) : null
+}
+
+/**
  * 导入剪辑前的合并：一次录制拼成一个画面文件、每路声音一条，原分片与分段一个不删（录制文件里的其他功能还按会话时钟读它们）。
  * 已经合并过且完整的直接复用；不需要合并（只有一片、较早版本录的会话对不齐暂停）返回 null。
  */
@@ -149,13 +162,15 @@ export async function combineRecording(sessionId: string): Promise<RecordingComb
   const read = await getDocumentService().readDocument({ id: sessionId })
   if (read.meta.kind !== 'screen_recording') throw new Error('请选择录制会话')
   const content: RecordingDocument = recordingDocumentSchema.parse(read.content)
-  if (!['stopped', 'interrupted'].includes(content.status) || !recordingCombinePlan(content)) return null
+  if (!['stopped', 'interrupted'].includes(content.status)) return null
+  const continuous = await continuousScreenGroup(content)
+  if (!continuous && !recordingCombinePlan(content)) return null
   const started = Date.now()
   const screens = content.media.filter(item => item.kind === 'screen' && item.durationUs > 0)
   const ffprobe = await loadFfprobePath()
   const streams = new Map<string, string>()
-  for (const screen of screens) streams.set(screen.id, await streamKey(ffprobe, screen.path))
-  const plan = recordingCombinePlan(content, streams)
+  if (!continuous) for (const screen of screens) streams.set(screen.id, await streamKey(ffprobe, screen.path))
+  const plan = continuous ? [continuous] : recordingCombinePlan(content, streams)
   if (!plan) { logger.info('画面分片编码参数不同，按分段导入', { event: 'recording.combine.skipped', context: { sessionId, screens: screens.length } }); return null }
   const media = new Map(content.media.map(item => [item.id, item]))
   const directory = path.dirname(screens[0].path)
@@ -177,7 +192,8 @@ export async function combineRecording(sessionId: string): Promise<RecordingComb
     for (const [index, group] of plan.entries()) {
       const suffix = String(index).padStart(3, '0')
       let screen = media.get(group.parts[0].mediaId)!.path
-      if (group.parts.length > 1) {
+      // 各片来自不同文件时才拼；原生采集的连续文件各片都是它自己，直接用原件。
+      if (new Set(group.parts.map(part => part.mediaId)).size > 1) {
         screen = path.join(directory, `screen-combined-${suffix}.mp4`)
         if (!await exists(screen) || !matchesFrames(await durationUs(ffprobe, screen).catch(() => NaN), group)) {
           reserve((await Promise.all(group.parts.map(part => fs.stat(media.get(part.mediaId)!.path).then(stat => stat.size, () => 0)))).reduce((sum, size) => sum + size, 0), '画面')

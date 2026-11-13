@@ -8,6 +8,7 @@ import { createRecordingDocument, type RecordingDocument } from '../../../../src
 import { captureOptionsSchema } from '../../../../src/core/screenRecording/capture'
 import { recordingDurationUs } from '../../../../src/core/screenRecording/range'
 import { wavHeader } from './wav-file'
+import { pausedRecording } from './capture/native-timing.test-support'
 
 const binaries = vi.hoisted(() => ({ ffmpeg: '', ffprobe: '' }))
 binaries.ffmpeg = path.resolve('native/video-decoder/target/release/ffmpeg.exe'); binaries.ffprobe = path.resolve('native/video-decoder/target/release/ffprobe.exe')
@@ -101,3 +102,28 @@ it.skipIf(!haveFfmpeg)('一路声音中途换了采样格式：画面照样合�
   expect(group.audio.microphone).toBeUndefined()
   expect(existsSync(path.join(directory, 'microphone-combined-000.wav'))).toBe(false)
 }, 60_000)
+
+it('原生采集录的连续文件（暂停不在文件里）：按逐帧时刻表分段，画面直接用原件不重拼；声音照这组拼，文件位置与画面对齐', async () => {
+  directory = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-combine-'))
+  const screen = path.join(directory, 'screen-000000.mp4')
+  await fs.writeFile(screen, 'native')
+  // 30 帧：录 3 秒、暂停 2 秒、再录 3 秒，第 0 帧在会话 2 秒。
+  await fs.writeFile(path.join(directory, 'screen-000000.frames'), pausedRecording())
+  await wav(path.join(directory, 'microphone-joined-000.wav'), 1_800_000, 9)
+  const content = { ...createRecordingDocument(), status: 'stopped' as const, startUs: 2_000_000, endUs: 10_000_000, pauses: [{ startUs: 5_000_000, endUs: 7_000_000 }] }
+  content.source = { name: '屏幕', options: captureOptionsSchema.parse({ sourceId: 'screen:0:0', width: 320, height: 240, fps: 30, bitrate: 1000000 }), cursorEmbedded: false }
+  content.media = [
+    { id: 'screen-0', kind: 'screen', path: screen, monoUs: 2_000_000, durationUs: 6_000_000 },
+    { id: 'microphone-joined-000', kind: 'microphone', path: path.join(directory, 'microphone-joined-000.wav'), monoUs: 1_800_000, durationUs: 9_000_000 },
+  ]
+  state.content = content
+  const [group] = (await combineRecording('s'))!
+  expect(group.screen).toBe(screen)
+  expect(group.parts.map(part => [part.mediaId, part.monoUs, part.frames, part.fileUs])).toEqual([['screen-0', 2_000_000, 90, 0], ['screen-0', 7_000_000, 90, 3_000_000]])
+  expect(await fs.readFile(screen, 'utf8')).toBe('native')
+  const audio = await fs.readFile(group.audio.microphone!)
+  expect((audio.length - 44) / 2).toBe(6 * RATE)
+  const at = (fileSeconds: number): number => audio.readInt16LE(44 + Math.round(fileSeconds * RATE) * 2)
+  expect(at(1)).toBe(sampleAt(3_000_000))
+  expect(at(4)).toBe(sampleAt(8_000_000)) // 暂停后：文件 4 秒 = 会话 8 秒
+})

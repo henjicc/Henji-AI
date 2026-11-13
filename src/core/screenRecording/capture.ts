@@ -116,6 +116,12 @@ export const captureRequestSchema = z.discriminatedUnion('operation', [
 ])
 export type CaptureRequest = z.infer<typeof captureRequestSchema>
 
+/**
+ * 原生画面采集进程在画面文件旁写的活动时间线（每秒画面变化量、前台窗口、暂停与停止，一行一条 JSON）。
+ * 只有原生采集录的才有；现有录法录的画面旁没有这个文件。窗口标题是明文，只在本机会话目录里。
+ */
+export const captureActivityTimelineFile = (screenFile: string): string => screenFile.replace(/\.mp4$/i, '.activity.jsonl')
+
 /** Desktop DIP rectangle → normalized selected-display coordinates (including negative desktop origins). */
 export function captureRegionFromDip(region: { x: number; y: number; width: number; height: number }, display: { x: number; y: number; width: number; height: number }): NonNullable<ScreenCaptureOptions['region']> {
   return { x: (region.x - display.x) / display.width, y: (region.y - display.y) / display.height, width: region.width / display.width, height: region.height / display.height }

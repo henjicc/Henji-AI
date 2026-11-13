@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { AudioCaptureFrameReader, correlateNativeClock } from './protocol'
+import { AudioCaptureFrameReader } from './protocol'
+import { correlateNativeClock } from '../native-process/protocol'
 
 describe('原生录音二进制协议与时钟', () => {
   it('任意分片保留 JSON 和采样字节边界，多个帧不串音', () => {

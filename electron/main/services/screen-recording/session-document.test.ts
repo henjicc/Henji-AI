@@ -13,6 +13,7 @@ import { RECORDING_TRACK_JOURNAL_FILE } from '../../../../src/core/screenRecordi
 import { CaptureLogCollector } from '../../../../src/core/captureLog/collector'
 import { RecordingEventStore } from './event-store'
 import { wavHeader } from './wav-file'
+import { pausedRecording } from './capture/native-timing.test-support'
 
 const state = vi.hoisted(() => ({ saved: undefined as { meta: DocumentMeta; content: RecordingDocument } | undefined, save: vi.fn(), recover: vi.fn(), takenNames: new Set<string>() }))
 vi.mock('../logging', () => ({ createMainLogger: () => ({ info: vi.fn(), error: vi.fn(), warn: vi.fn() }) }))
@@ -161,4 +162,18 @@ it('停止收尾按事件时钟与恢复后画面第一帧统一暂停区间，�
   await document.finish(manifest)
   // 事件时钟停了 2.1 秒；画面 6.0 秒恢复，暂停就是 3.9–6.0 秒。
   expect(state.saved!.content.pauses).toEqual([{ startUs: 3_900_000, endUs: 6_000_000 }])
+})
+
+it('原生采集录的连续画面文件：暂停区间按它的逐帧时刻表定（与事件时钟扣掉的、合并各段的同一组数），不再按分片第一帧猜', async () => {
+  const document = await setup({ systemAudio: false })
+  await document.range('startUs', 2_000_000)
+  await document.pause(5_010_000); await document.resume(7_100_000)
+  await document.range('endUs', 10_000_000)
+  // 30 帧：第 0 帧在会话 2 秒，录 3 秒、暂停 60 格（2 秒）、再录 3 秒。
+  await writeFile(path.join(directory, 'screen-000000.frames'), pausedRecording())
+  manifest.spans.push({ index: 0, file: 'screen-000000.mp4', monoUs: 2_000_000, durationUs: 6_000_000, finalized: true })
+  manifest.status = 'stopped'
+  await document.finish(manifest)
+  expect(state.saved!.content.pauses).toEqual([{ startUs: 5_000_000, endUs: 7_000_000 }])
+  expect(state.saved!.content.media.filter(media => media.kind === 'screen')).toEqual([expect.objectContaining({ monoUs: 2_000_000, durationUs: 6_000_000 })])
 })

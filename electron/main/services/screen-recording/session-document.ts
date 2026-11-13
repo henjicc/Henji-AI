@@ -16,6 +16,7 @@ import { DocumentNameConflictError } from '../documents/errors'
 import { createMainLogger } from '../logging'
 import { RecordingEventStore } from './event-store'
 import { recoverCapture } from './capture/storage'
+import { captureTimingPauses, readCaptureTiming } from './capture/native-timing'
 import { RecordingTrackLedger, replayTrackJournal } from './track-ledger'
 import { NATIVE_MICROPHONE_FILE, joinRecordingAudio } from './audio-join'
 import type { RecordingScriptCapture } from '../../../../src/core/screenRecording/script'
@@ -127,7 +128,7 @@ export class RecordingSessionDocument {
       status: manifest.status === 'stopped' ? 'stopped' : 'interrupted',
       eventPages: [...this.pages], markers: [...this.markers], tracks,
       media: [...capture.files.map(file => ({ id: `screen-${file.index}`, kind: 'screen' as const, path: file.path, monoUs: file.monoUs, durationUs: file.durationUs })), ...audio],
-      ...this.content.pauses ? { pauses: alignedPauses(this.content.pauses, this.controls, capture.files) } : {},
+      ...this.content.pauses ? { pauses: await recordedPauses(this.content.pauses, this.controls, capture.files) } : {},
     })
     await this.save()
     if (joined) await removeNativeMicrophoneCopies(this.directory, tracks)
@@ -147,6 +148,23 @@ function alignedPauses(pauses: NonNullable<RecordingDocument['pauses']>, control
   const changed = aligned.filter((pause, index) => pause.startUs !== pauses[index]?.startUs || pause.endUs !== pauses[index]?.endUs).length
   if (pauses.length) logger.info('暂停区间已与事件时钟和画面对齐', { event: 'recording.pauses.aligned', context: { pauses: pauses.length, aligned: changed, controls: controls.length } })
   return aligned
+}
+
+/**
+ * 原生采集录的画面是一个连续文件，暂停不在文件里：暂停区间直接按它的逐帧时刻表推出（与事件时钟扣掉的、合并时各段的是同一组数）。
+ * 其余录法录的按事件时钟与各分片第一帧对齐。
+ */
+async function recordedPauses(pauses: NonNullable<RecordingDocument['pauses']>, controls: readonly PauseControl[], screens: ReadonlyArray<{ path: string; monoUs: number; durationUs: number }>): Promise<NonNullable<RecordingDocument['pauses']>> {
+  if (screens.length === 1) {
+    const [screen] = screens
+    const timing = await readCaptureTiming(screen.path).catch(error => { logger.warn('逐帧时刻表读不出，暂停按事件时钟对齐', { event: 'recording.pauses.timing_failed', error }); return null })
+    if (timing) {
+      const result = captureTimingPauses(timing, screen.monoUs, Math.round(screen.durationUs * timing.fpsNum / timing.fpsDen / 1e6))
+      logger.info('暂停区间按逐帧时刻表定下', { event: 'recording.pauses.timing', context: { pauses: pauses.length, recorded: result.length } })
+      return result
+    }
+  }
+  return alignedPauses(pauses, controls, screens)
 }
 
 /** 没按停止就结束的（取消、失败、崩溃）以最后一帧画面为录制终点。 */
@@ -237,7 +255,7 @@ export async function recoverRecordingSession(documentId: string, directory: str
       collectPauseControl(controls, event)
     }
   }
-  if (content.pauses) content.pauses = alignedPauses(content.pauses, controls, capture.files)
+  if (content.pauses) content.pauses = await recordedPauses(content.pauses, controls, capture.files)
   // 早于轨道记录的录制没有 tracks.journal：沿用文档里录制期间存下的轨道。
   const replayed = await replayTrackJournal(directory, documentId, content.originUs, trackKinds(content.devices), content.devices.camera?.frameRate) ?? content.tracks
   const audio = replayed ? await recordingAudio(directory, replayed, content.endUs ?? pictureEndUs(capture.files)) : null
