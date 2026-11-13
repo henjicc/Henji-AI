@@ -48,8 +48,8 @@ export interface AudioEditWorkspace {
   setReferenceScript: (text: string) => void
   editBlock: (id: string) => void
   deleteBlock: (id: string) => void
-  /** 改判一条剪辑线索（进撤销栈）；没改成时提示原因并返回 false。 */
-  chooseClueOption: (id: string, optionId: string) => boolean
+  /** 切到某个停靠面板（布局里没有时加回来）。 */
+  showPanel: (id: string) => void
   asrModels: readonly AudioEditAsrModel[]
   processors: readonly AudioEditProcessorDescriptor[]
   tasks: readonly AudioEditTask[]
@@ -61,6 +61,9 @@ export interface AudioEditWorkspace {
 }
 
 export const AudioEditWorkspaceContext = createContext<AudioEditWorkspace | null>(null)
+
+/** 所在的停靠面板此刻是否显示着（同组里切到别的标签时为 false）：面板上开出的浮层据此收起。 */
+export const AudioEditPanelVisibleContext = createContext(true)
 
 export function useAudioEditWorkspace(): AudioEditWorkspace {
   const value = useContext(AudioEditWorkspaceContext)

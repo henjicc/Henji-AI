@@ -70,12 +70,18 @@ export function timelineLayout(sequence: Pick<VideoEditSequence, 'tracks'>, inpu
   // Rows pinned to the top of the video area: captions, then the zoom lane when there is one.
   const sticky = TIMELINE_CAPTION_HEIGHT + (input.zoomRow ? TIMELINE_ZOOM_HEIGHT : 0)
   const area = Math.max(0, input.viewportHeight - trackTop - TIMELINE_TRACK_SECTION_GAP)
-  const min = Math.min(TIMELINE_REGION_MIN, area / 2)
-  const videoHeight = Math.round(Math.max(min, Math.min(area - min, area * input.split)))
   const height = (track: VideoEditSequence['tracks'][number]): number => resized?.trackId === track.id ? resized.height : track.height ?? VIDEO_EDIT_TRACK_HEIGHT_DEFAULT
   const lane = (track: VideoEditSequence['tracks'][number]): number => input.lanes?.get(track.id) ?? 0
   const extra = (track: VideoEditSequence['tracks'][number]): { lane?: number } => lane(track) > 0 ? { lane: lane(track) } : {}
   const tracks = { video: sequence.tracks.filter(track => track.kind === 'video').sort((a, b) => a.index - b.index), audio: sequence.tracks.filter(track => track.kind === 'audio').sort((a, b) => a.index - b.index) }
+  // 固定行不属于视频轨的可见区（PR、达芬奇：固定区域不压在轨道上，轨道区自己滚动）。每个区至少放得下贴着分隔条的那条轨
+  // （视频区再加上固定行），轨道才能完整露出；视频区里其余的轨靠滚动露出，滚动范围已按“区高减固定行”算（content 含固定行）。
+  // 面板矮到连这两条都放不下时按比例分（时间线面板的最小高度保证正常不会到这一步）。
+  const videoMin = Math.max(TIMELINE_REGION_MIN, sticky + (tracks.video[0] ? height(tracks.video[0]) : VIDEO_EDIT_TRACK_HEIGHT_DEFAULT))
+  const audioMin = Math.max(TIMELINE_REGION_MIN, tracks.audio[0] ? height(tracks.audio[0]) : VIDEO_EDIT_TRACK_HEIGHT_DEFAULT)
+  const videoHeight = area >= videoMin + audioMin
+    ? Math.round(Math.max(videoMin, Math.min(area - audioMin, area * input.split)))
+    : Math.round(area * videoMin / (videoMin + audioMin))
   const region = (kind: TimelineRegionKind, top: number, regionHeight: number): TimelineRegion => {
     const content = tracks[kind].reduce((sum, track) => sum + height(track) + lane(track), 0) + TIMELINE_NEW_TRACK_ZONE + (kind === 'video' ? sticky : 0)
     const maxScroll = Math.max(0, content - regionHeight)

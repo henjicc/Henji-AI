@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { AudioEditSoundStatsCollector, compareAudioEditSoundChecks, gatedAudioEditLoudness, summarizeAudioEditSound, type AudioEditLoudnessTimeline } from './soundCheck'
+import { AudioEditHumCollector, AudioEditSoundStatsCollector, audioEditNoiseFrames, compareAudioEditSoundChecks, gatedAudioEditLoudness, summarizeAudioEditSound, type AudioEditLoudnessTimeline } from './soundCheck'
 
 const RATE = 8000
 /** 交错 PCM：每段 [秒数, 每个采样的取值函数(全局采样序号)] 依次拼接 */
@@ -16,25 +16,31 @@ const sine = (frequency: number, amplitude: number) => (index: number) => amplit
 const silent = () => 0
 /** 确定性的宽带噪声 */
 const noise = (amplitude: number) => { let seed = 1; return () => { seed = (seed * 1103515245 + 12345) % 2147483648; return amplitude * (seed / 1073741824 - 1) } }
+/** 与工作线程同样两遍：第一遍电平、削波、非语音片段，第二遍只在非语音片段里估嗡声 */
 const stats = (channels: number, parts: Array<[number, (index: number) => number]>, blockFrames = 1000) => {
   const data = pcm(channels, parts)
   const collector = new AudioEditSoundStatsCollector(RATE, channels)
   // 分块送入，结果与块大小无关
   for (let at = 0; at < data.length; at += blockFrames * channels) collector.push(data.subarray(at, at + blockFrames * channels))
-  return collector.finish()
+  const first = collector.finish()
+  const hum = new AudioEditHumCollector(RATE, channels, audioEditNoiseFrames(first))
+  for (let at = 0; at < data.length; at += blockFrames * channels) hum.push(data.subarray(at, at + blockFrames * channels))
+  return { ...first, hum: hum.finish() }
 }
+/** 有高频的“说话”：宽带噪声，RMS 约为幅度减 4.8 dB */
+const voice = (amplitude: number) => noise(amplitude)
 const flatLoudness = (seconds: number, lufs: number): AudioEditLoudnessTimeline => ({ integratedLufs: lufs, loudnessRangeLu: 0, truePeakDbtp: -3, momentaryLufs: Array.from({ length: Math.round(seconds * 10) }, (_, index) => index < 3 ? -120.7 : lufs) })
-const options = { offsetSeconds: 0, windowSeconds: 10, silenceDb: -40, longPauseSeconds: 0.8, includeWindows: false }
+const options = { offsetSeconds: 0, windowSeconds: 10, longPauseSeconds: 0.8, includeWindows: false }
 
 describe('采样级统计', () => {
-  it('满刻度与平顶都算削波，相距不到 50 毫秒的合成一处；分块大小不影响结果', () => {
+  it('同一声道连续 3 个以上采样接近满刻度才算削波，相距不到 50 毫秒的合成一处；分块大小不影响结果', () => {
     const parts: Array<[number, (index: number) => number]> = [
       [1, sine(200, 0.5)],
       // 1.0–1.01 秒满刻度
       [0.01, () => 1],
       [1, sine(200, 0.5)],
-      // 2.01 秒起录音时削过再衰减的平顶：一串完全相同的 0.6
-      [0.005, () => 0.6],
+      // 2.01 秒起 -0.05 dBFS 的平顶（录音时削掉的峰）
+      [0.005, () => 0.995],
       [1, sine(200, 0.5)],
     ]
     const small = stats(2, parts, 333), large = stats(2, parts, 8000)
@@ -46,16 +52,33 @@ describe('采样级统计', () => {
     expect(Array.from(small.levelsDb)).toEqual(Array.from(large.levelsDb))
   })
 
+  it('离满刻度有余量的平坦段不算削波：16 位录音加增益后波峰处相邻采样相等、压到 -1 dBFS 的峰', () => {
+    // 真实口播（16 位、约 -39 LUFS）匹配响度加 23 dB 后的样子：波峰波谷处 3–4 个量化值相同的采样，幅度 -10～-4 dBFS，真峰值 -1 dBTP
+    const quantized = (index: number) => Math.round(sine(30, 0.34)(index) * 2400) / 2400
+    const limited = (index: number) => Math.max(-0.8913, Math.min(0.8913, sine(200, 1.2)(index)))
+    expect(stats(2, [[2, quantized], [2, limited]]).clips).toEqual([])
+    // 单个超过满刻度的采样（浮点成品转整数时一定削掉）也算；一串里每个采样只计一次
+    expect(stats(1, [[0.5, sine(200, 0.5)], [1 / RATE, () => 1.2], [0.5, sine(200, 0.5)]]).clips).toMatchObject([{ samples: 1 }])
+    expect(stats(1, [[0.5, sine(200, 0.5)], [5 / RATE, () => 1.2], [0.5, sine(200, 0.5)]]).clips).toMatchObject([{ startFrame: RATE / 2, endFrame: RATE / 2 + 5, samples: 5 }])
+  })
+
   it('普通正弦与说话般起伏的声音不算削波', () => {
     expect(stats(1, [[2, sine(440, 0.9)]]).clips).toEqual([])
   })
 
-  it('每秒给出电源频率及谐波占的能量比例：纯 50 Hz 接近 1，宽带噪声接近 0', () => {
-    const hum = stats(1, [[2, sine(50, 0.01)]]).hum
+  it('嗡声只在非语音帧里累计，每凑满一秒给出电源频率及谐波的能量占比：纯 50 Hz 接近 1，宽带噪声接近 0；隔着说话拼起来也同相', () => {
+    const all = (seconds: number) => new Uint8Array(seconds * 100).fill(1)
+    const run = (seconds: number, value: (index: number) => number, mask = all(seconds)) => { const collector = new AudioEditHumCollector(RATE, 1, mask); collector.push(pcm(1, [[seconds, value]])); return collector.finish() }
+    const hum = run(2, sine(50, 0.01))
     expect(hum).toHaveLength(2)
     expect(hum[0].mains50).toBeGreaterThan(0.95)
     expect(hum[0].mains60).toBeLessThan(0.05)
-    expect(stats(1, [[2, noise(0.01)]]).hum[0].mains50).toBeLessThan(0.02)
+    expect(run(2, noise(0.01))[0].mains50).toBeLessThan(0.02)
+    // 每隔 0.3 秒有 0.2 秒被说话占去（不计入），剩下的片段拼起来仍是同相的 50 Hz
+    const gappy = new Uint8Array(400).map((_, index) => index % 30 < 20 ? 1 : 0)
+    const pieces = run(4, sine(50, 0.01), gappy)
+    expect(pieces.length).toBeGreaterThanOrEqual(2)
+    expect(pieces[0].mains50).toBeGreaterThan(0.95)
   })
 })
 
@@ -96,7 +119,23 @@ describe('汇总读回', () => {
     expect(detailed.windows?.[0].peakDbfs).toBeCloseTo(-14, 0)
   })
 
-  it('底噪按安静片段估计（静音掉的段不算）；安静处有 50 Hz 时报疑似嗡声', () => {
+  it('停顿门限相对这段声音自己的电平：整体约 -40 dBFS 的轻声录音里，比 -40 还轻的轻声不算停顿', () => {
+    // 说话约 -40 dBFS，中间 1.5 秒轻声约 -46 dBFS（低于口播批量设置的 -40 dBFS，但仍是说话），之后 3 秒真正的停顿（底噪约 -75 dBFS）
+    const quiet = stats(1, [[4, voice(0.017)], [1.5, voice(0.0085)], [3, voice(0.017)], [3, voice(0.0003)], [3, voice(0.017)]])
+    const result = summarizeAudioEditSound(quiet, flatLoudness(14.5, -40), options)
+    expect(result.silence.thresholdDbfs).toBeLessThan(-55)
+    expect(result.silence.longPauseCount).toBe(1)
+    expect(result.silence.longPauses[0].startSeconds).toBeCloseTo(8.5, 1)
+    expect(result.noise.floorDbfs).toBeCloseTo(-75, 0)
+  })
+
+  it('停顿都被静音掉的成品估不出底噪与嗡声，不拿说话里的轻声顶数', () => {
+    const muted = stats(1, [[3, voice(0.1)], [0.3, silent], [3, voice(0.03)], [0.3, silent], [3, voice(0.1)]])
+    const result = summarizeAudioEditSound(muted, flatLoudness(9.6, -20), options)
+    expect(result.noise).toMatchObject({ floorDbfs: null, rating: 'unknown', hum: { status: 'unknown' } })
+  })
+
+  it('底噪只在非语音片段里估（静音掉的段不算）；停顿处有 50 Hz 时报疑似嗡声', () => {
     const humming = stats(1, [[3, sine(300, 0.3)], [4, sine(50, 0.003)], [3, sine(300, 0.3)], [1, silent]])
     const result = summarizeAudioEditSound(humming, flatLoudness(11, -20), options)
     expect(result.noise.hum).toMatchObject({ status: 'suspected', frequencyHz: 50 })

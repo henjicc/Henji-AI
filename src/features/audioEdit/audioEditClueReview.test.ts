@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { applyAudioEditSuggestion, chooseAudioEditSuggestionOption } from '@/core/audioEdit/edits'
 import type { AudioEditProjectDocument, AudioEditSuggestion, AudioEditTranscriptBlock } from '@/core/audioEdit/types'
 import { audioEditClueOptionLabel, audioEditClueReason, buildAudioEditClueRows, chooseAudioEditClueOption, countAudioEditClues } from './audioEditClueReview'
+import { describeAudioEditStep } from './workspace/audioEditHistory'
 
 const word = (id: string, text: string, startFrame: number): AudioEditTranscriptBlock => ({ id, text, startFrame, endFrame: startFrame + 400, included: true, locked: false, granularity: 'word' })
 const retake = (id: string, blockIds: string[], startFrame: number, endFrame: number): AudioEditSuggestion => ({ id, kind: 'retake', evidence: 'audio', title: '重念', detail: '', startFrame, endFrame, blockIds, confidence: 'high', status: 'pending' })
@@ -81,5 +82,12 @@ describe('口播线索面板的分层与改判', () => {
     expect(buildAudioEditClueRows(changed).find((row) => row.id === 'A')?.tier).toBe('check')
     expect(buildAudioEditClueRows(changed, new Map([['A', 'decide']]))[0]).toMatchObject({ id: 'A', tier: 'decide', current: 'keep_earlier' })
     expect(countAudioEditClues(changed)).toEqual({ decide: 1, check: 2 })
+  })
+
+  it('历史记录里改判一步按做法命名，不叫“删除”“恢复”', () => {
+    const original = document()
+    expect(describeAudioEditStep(original, chooseAudioEditClueOption(original, 'A', 'keep_earlier'))).toBe('线索改为留前一遍')
+    expect(describeAudioEditStep(original, chooseAudioEditClueOption(original, 'C', 'keep_both'))).toBe('线索改为两遍都留')
+    expect(describeAudioEditStep(original, chooseAudioEditClueOption(original, 'D', 'hint:apply'))).toBe('线索改为删掉')
   })
 })

@@ -13,6 +13,8 @@ const SIDE_MIN = { minimumWidth: 240, minimumHeight: 120 } as const
 export const AUDIO_EDIT_PANELS = [
   { id: 'editor', title: '编辑器', minimumWidth: 440, minimumHeight: 200 },
   { id: 'transcript', title: '文字稿', minimumWidth: 240, minimumHeight: 160 },
+  // 线索与文字稿同组：校对时在两者之间切换；240 宽放得下“文字 · 原因 · 做法”一行与底栏三个工具
+  { id: 'clues', title: '线索', minimumWidth: 240, minimumHeight: 160 },
   { id: 'library', title: '效果', ...SIDE_MIN },
   { id: 'effects', title: '效果控件', ...SIDE_MIN },
   { id: 'history', title: '历史记录', ...SIDE_MIN },
@@ -39,21 +41,21 @@ function layout(root: Node): SerializedDockview {
  */
 export const AUDIO_EDIT_LAYOUT_PRESETS = [
   { id: 'classic', name: '经典', layout: () => layout(branch(1440,
-    leaf({ id: 'left-group', size: 280, views: ['transcript', 'library'] }),
+    leaf({ id: 'left-group', size: 280, views: ['transcript', 'clues', 'library'] }),
     leaf({ id: 'editor-group', size: 880, views: ['editor'] }),
     branch(300,
       leaf({ id: 'effects-group', size: 560, views: ['effects'] }),
       leaf({ id: 'info-group', size: 300, views: ['history', 'delivery'] })),
   )) },
   { id: 'voice', name: '口播', layout: () => layout(branch(1440,
-    leaf({ id: 'left-group', size: 460, views: ['transcript', 'library'] }),
+    leaf({ id: 'left-group', size: 460, views: ['transcript', 'clues', 'library'] }),
     leaf({ id: 'editor-group', size: 700, views: ['editor'] }),
     leaf({ id: 'right-group', size: 300, views: ['effects', 'delivery', 'history'] }),
   )) },
   { id: 'focus', name: '专注', layout: () => layout(branch(1440,
     branch(1160,
       leaf({ id: 'editor-group', size: 640, views: ['editor'] }),
-      leaf({ id: 'bottom-group', size: 220, views: ['transcript', 'history'] })),
+      leaf({ id: 'bottom-group', size: 220, views: ['transcript', 'clues', 'history'] })),
     leaf({ id: 'right-group', size: 300, views: ['effects', 'library', 'delivery'] }),
   )) },
 ] as const
@@ -65,17 +67,17 @@ export const AUDIO_EDIT_LAYOUT_PRESETS = [
 const RETIRED_PANELS = new Set(['selection', 'process', 'essential'])
 
 /**
- * 旧布局迁到当前面板集合：去掉已取消的面板；没有“效果”（效果目录）时放进文字稿所在的那组标签（排在文字稿后面）。
+ * 旧布局迁到当前面板集合：去掉已取消的面板；没有“线索”“效果”（效果目录）时放进文字稿所在的那组标签（依次排在文字稿后面）。
  * 只调整面板集合，用户排好的位置和大小不动。
  */
 export function migrateAudioEditLayout(value: SerializedDockview): SerializedDockview {
   let host: { views: string[]; activeView?: string } | null = null
-  let hasLibrary = false
+  const present = new Set<string>()
   const visit = (node: Node): void => {
     if (node.type === 'leaf') {
       node.data.views = node.data.views.filter(id => !RETIRED_PANELS.has(id))
       if (!node.data.views.includes(node.data.activeView)) node.data.activeView = node.data.views[0]
-      if (node.data.views.includes('library')) hasLibrary = true
+      node.data.views.forEach(id => present.add(id))
       if (node.data.views.includes('transcript')) host = node.data
       return
     }
@@ -85,9 +87,13 @@ export function migrateAudioEditLayout(value: SerializedDockview): SerializedDoc
   visit(value.grid.root as Node)
   for (const id of RETIRED_PANELS) delete value.panels[id]
   const target = host as { views: string[]; activeView?: string } | null
-  if (!hasLibrary && target) {
-    target.views.splice(target.views.indexOf('transcript') + 1, 0, 'library')
-    value.panels.library = { id: 'library', contentComponent: 'library', title: TITLES.library, renderer: 'always' } as SerializedDockview['panels'][string]
+  if (target) {
+    let after = target.views.indexOf('transcript')
+    for (const id of ['clues', 'library'] as const) {
+      if (present.has(id)) { after = Math.max(after, target.views.indexOf(id)); continue }
+      target.views.splice(++after, 0, id)
+      value.panels[id] = { id, contentComponent: id, title: TITLES[id], renderer: 'always' } as SerializedDockview['panels'][string]
+    }
   }
   return value
 }

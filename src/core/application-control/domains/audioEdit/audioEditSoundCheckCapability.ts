@@ -27,8 +27,8 @@ export type CheckAudioEditSoundOutput = z.infer<typeof output>
 export const checkAudioEditSoundCapability = defineApplicationCapability<CheckAudioEditSoundInput, CheckAudioEditSoundOutput>({
   id: 'check_audio_edit_sound', title: '读回口播成品的声音',
   description: '只读检查口播剪好的成品现在听起来怎样：测的是剪切、修复、效果控件与输出都生效后的整条声音（和导出的 WAV 同一份）。'
-    + '给出整体积分响度 LUFS、响度范围 LRA、4 倍重建真峰值 dBTP（与 measure_video_edit_loudness 同一口径）与采样峰值；削波（满刻度或平顶）的处数与位置；'
-    + '静音段合计、开头结尾静音和超过口播批量设置检测时长的过长停顿位置；底噪电平与是否疑似 50/60 Hz 电源嗡声；偏响、偏轻、有削波的关键分段；issues 用一句话列出发现的问题。'
+    + '给出整体积分响度 LUFS、响度范围 LRA、4 倍重建真峰值 dBTP（与 measure_video_edit_loudness 同一口径）与采样峰值；削波（连续采样顶到满刻度；离满刻度有余量的限幅峰不算）的处数与位置；'
+    + '停顿合计、开头结尾静音和超过口播批量设置检测时长的过长停顿位置（停顿与粗剪同一判据，门限相对这段声音自己的电平，录得轻也不会把轻声当停顿）；底噪电平与是否疑似 50/60 Hz 电源嗡声，只在没人说话的片段里测，这样的片段不足 2 秒（比如停顿都被清成了静音）时 floorDbfs 为 null、rating 为 unknown，表示估不出而不是干净，要知道底噪就在清理呼吸与停顿之前读回；偏响、偏轻、有削波的关键分段；issues 用一句话列出发现的问题。'
     + '时间一律是剪后作品时间（秒），与 audio_edit.caption 的 start_ms ÷ 1000、insert_audio_edit_file 的 positionSeconds 同一坐标。'
     + '降噪、匹配响度、快速处理、呼吸、停顿、修复或改效果与输出之后调用一次，核对处理是否达到目的；同一范围上次读回后口播改过时，sinceLastCheck 给出本次减上次的差值。'
     + '要修嗡声或底噪，在 audio_edit.document.effect_chain 的基本声音（essential）里打开 repair 的 hum（国内 mains=50）或 noise；有削波时先查输出音量（audio_edit.document.output）和效果控件里加增益的项是否过大，成段削波去爆音修不了（单段上限 128 毫秒），修复区域用原素材采样帧，不是这里的剪后秒。免费，不改口播；长口播需先渲染成品，可能要几十秒。',

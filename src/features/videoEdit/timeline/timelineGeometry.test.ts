@@ -93,8 +93,9 @@ it('新序列 V1/A1 居中：最上视频轨之上、最下音频轨之下是新
   expect(timelineNewTrackZone(layout, R + 194)).toBe('audio'); expect(timelineNewTrackZone(layout, R + 140)).toBeUndefined()
   expect(timelineNewTrackZone(layout, R + 134)).toBeUndefined()
   expect(timelineRegionAt(layout, R - 8)).toBeUndefined(); expect(timelineRegionAt(layout, R + 12)).toBe('video'); expect(timelineRegionAt(layout, R + 72)).toBe('video'); expect(timelineRegionAt(layout, R + 142)).toBe('audio')
-  // 拖动分隔条改变两区比例，每区至少留 40
-  expect(timelineLayout(sequence, { ...input(), split: 0 }).regions.video.height).toBe(40)
+  // 拖动分隔条改变两区比例：视频区至少放得下字幕行与 V1，音频区至少放得下 A1
+  expect(timelineLayout(sequence, { ...input(), split: 0 }).regions.video.height).toBe(TIMELINE_CAPTION_HEIGHT + VIDEO_EDIT_TRACK_HEIGHT_DEFAULT)
+  expect(timelineLayout(sequence, { ...input(), split: 1 }).regions.audio.height).toBe(VIDEO_EDIT_TRACK_HEIGHT_DEFAULT)
 })
 
 it('字幕轨置顶在视频区最上方且不随滚动，被盖住的视频轨不命中，新建视频轨落点在字幕与最上视频轨之间', () => {
@@ -167,4 +168,34 @@ it('播放跟随：序列结尾滚到头后播放头继续走到底，不滚进�
   // 播放头在可见区左边或右边：跳过去让它居中
   expect(timelineFollowScrollLeft({ ...base, frame: 400, scrollLeft: 1200 })).toBe(600)
   expect(timelineFollowScrollLeft({ ...base, frame: 400, scrollLeft: 0, direction: -1 })).toBe(600)
+})
+
+it('视频区顶上有字幕行与缩放行、面板很矮时：贴分隔条的视频轨完整露出不被固定行遮住，滚到头每条轨都能完整露出，命中与显示一致', () => {
+  const sequence = createVideoEditDocument('矮时间线').sequences[0]
+  const base = sequence.tracks.find(track => track.kind === 'video')!
+  const tracks = [...sequence.tracks, { ...base, id: 'video-2', index: 5, height: VIDEO_EDIT_TRACK_HEIGHT_DEFAULT }, { ...base, id: 'video-3', index: 6, height: 60 }]
+  // 标尺下只剩 148（时间线面板最小高度时约 172）：按一半分视频区只有约 70，放不下字幕 28 + 缩放 24 + 一条轨 44
+  for (const viewportHeight of [R + 148, R + 200]) {
+    const fresh = timelineLayout({ tracks }, { ...input({}, viewportHeight), zoomRow: true })
+    const stickyBottom = fresh.zoom!.top + fresh.zoom!.height
+    const lowest = fresh.rows.find(row => row.track.id === base.id)!
+    expect(lowest.top).toBeGreaterThanOrEqual(stickyBottom)
+    expect(lowest.top + lowest.height).toBeLessThanOrEqual(fresh.regions.video.top + fresh.regions.video.height)
+    expect(timelineTrackAt(fresh.rows, lowest.top)?.track.id).toBe(base.id)
+    // 滚动范围让每条视频轨都能整条落在固定行与分隔条之间（比可见窗口还高的轨，顶边与底边都能滚到窗口里）；落在固定行上的那一截不命中
+    const regionBottom = fresh.regions.video.top + fresh.regions.video.height
+    const shownAt = (scroll: number, id: string) => timelineLayout({ tracks }, { ...input({ video: scroll }, viewportHeight), zoomRow: true }).rows.find(value => value.track.id === id)!
+    const scrolls = [...Array(fresh.regions.video.maxScroll + 1).keys()]
+    for (const row of fresh.rows.filter(value => value.region === 'video')) {
+      const fits = row.height <= regionBottom - stickyBottom
+      const whole = scrolls.some(scroll => { const shown = shownAt(scroll, row.track.id); return shown.top >= stickyBottom && shown.top + shown.height <= regionBottom })
+      const topEdge = scrolls.some(scroll => { const shown = shownAt(scroll, row.track.id); return shown.top >= stickyBottom && shown.top < regionBottom })
+      const bottomEdge = scrolls.some(scroll => { const shown = shownAt(scroll, row.track.id); const end = shown.top + shown.height; return end <= regionBottom && end > stickyBottom })
+      expect(fits ? whole : topEdge && bottomEdge).toBe(true)
+    }
+    const covered = timelineLayout({ tracks }, { ...input({ video: fresh.regions.video.maxScroll }, viewportHeight), zoomRow: true })
+    for (const row of covered.rows.filter(value => value.region === 'video' && value.top < stickyBottom)) expect(timelineTrackAt(covered.rows, Math.max(row.top, stickyBottom - 1))?.track.id).not.toBe(row.track.id)
+    const firstAudio = fresh.rows.find(row => row.region === 'audio')!
+    expect(firstAudio.top + firstAudio.height).toBeLessThanOrEqual(fresh.regions.audio.top + fresh.regions.audio.height)
+  }
 })
