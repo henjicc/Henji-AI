@@ -2,7 +2,7 @@ import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { composeImageTextLines, createDocumentTextService, type DocumentTextDependencies } from './service'
+import { composeImageTextLines, createDocumentTextService, inspectDocumentText, type DocumentTextDependencies } from './service'
 
 let directory = ''
 beforeAll(async () => {
@@ -66,5 +66,13 @@ describe('识别文件文字', () => {
     const dependencies = deps({ imageText: vi.fn(async () => { controller.abort(); throw new Error('cancelled') }) })
     await expect(createDocumentTextService(dependencies)({ requestId: 'e', path: path.join(directory, 'shot.png'), engine: 'local', layout: 'text' }, controller.signal)).rejects.toThrow()
     expect(dependencies.cancelLocal).toHaveBeenCalled()
+  })
+
+  it('预检核对文件并统计页数：图片按 1 页，文档调用页数统计，缺失文件带错误码', async () => {
+    const countPages = vi.fn(async () => 42)
+    await expect(inspectDocumentText({ path: path.join(directory, 'shot.png'), engine: 'deepseek' }, countPages)).resolves.toMatchObject({ engine: 'deepseek', pages: 1 })
+    await expect(inspectDocumentText({ path: path.join(directory, 'report.pdf'), engine: 'auto' }, countPages)).resolves.toMatchObject({ engine: 'deepseek', pages: 42 })
+    expect(countPages).toHaveBeenCalledTimes(1)
+    await expect(inspectDocumentText({ path: path.join(directory, 'missing.pdf'), engine: 'auto' }, countPages)).rejects.toThrow('DOCUMENT_NOT_FOUND')
   })
 })

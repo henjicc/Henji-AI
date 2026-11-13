@@ -37,5 +37,16 @@ export async function recognizeDocumentText(raw: unknown, signal?: AbortSignal):
     } finally { runSignal?.removeEventListener('abort', cancel) }
   }
   if (engine === 'local') return run(signal)
-  return withPaidOperation({ category: 'recognition', estimatedCny: documentTextEstimatedCny(input.path, engine), titleKey: 'paidApproval.recognizeDocument' }, run, signal)
+  // 付费确认之前先核对文件并统计页数：文件不存在或超限时不弹确认，估价按真实页数而不是一律按上限占额度。
+  let pages
+  try {
+    const inspecting = platform.inspect({ path: input.path, engine })
+    // 统计页数最长约 20 秒；取消时不等它结束，预检本身没有副作用。
+    ;({ pages } = await (signal ? Promise.race([inspecting, new Promise<never>((_resolve, reject) => {
+      if (signal.aborted) reject(signal.reason)
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+    })]) : inspecting))
+  } catch (error) { throw notExecutedFailure(error) }
+  signal?.throwIfAborted()
+  return withPaidOperation({ category: 'recognition', estimatedCny: documentTextEstimatedCny(engine, pages), titleKey: 'paidApproval.recognizeDocument' }, run, signal)
 }

@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { createCapabilityClient, createDeepSeekDocumentOcrModule, type DocumentOcrInput, type DocumentOcrOutput, type RuntimeContext } from '@henjicc/ai-sdk'
-import { DOCUMENT_TEXT_MAX_BYTES, DOCUMENT_TEXT_MEDIA_TYPES, documentTextExtension, resolveDocumentTextEngine } from '../../../../src/core/documentText'
-import type { DocumentTextRequest, DocumentTextResult } from '../../../../src/platform/contracts/documentText'
+import { DOCUMENT_TEXT_MAX_BYTES, DOCUMENT_TEXT_MEDIA_TYPES, documentTextExtension, isDocumentTextImage, resolveDocumentTextEngine, type DocumentTextEngine } from '../../../../src/core/documentText'
+import type { DocumentTextInspection, DocumentTextInspectRequest, DocumentTextRequest, DocumentTextResult } from '../../../../src/platform/contracts/documentText'
 import type { ImageTextJob, ImageTextLine, ImageTextResult } from '../local-inference/ocr/imageText'
 import type { LocalExecutionProvider } from '../local-inference/providers'
 import type { BundledOcrModelId } from '../local-models/bundledOcr'
@@ -33,6 +33,22 @@ export function composeImageTextLines(lines: readonly ImageTextLine[]): string {
   return rows.map(row => row.sort((a, b) => a.box[0] - b.box[0]).map(item => item.text.trim()).join(' ')).join('\n')
 }
 
+/** 识别前与识别时共用的文件检查；上传前就能确定的问题都带错误码，调用方据此判定没有执行、没有计费。 */
+async function checkDocumentFile(filePath: string, engine: DocumentTextEngine): Promise<number> {
+  const stat = await fs.stat(filePath).catch(() => { throw new Error('DOCUMENT_NOT_FOUND: 找不到这个文件，或没有读取权限。') })
+  if (!stat.isFile()) throw new Error('DOCUMENT_NOT_FILE: 路径不是文件。')
+  if (engine === 'deepseek' && stat.size > DOCUMENT_TEXT_MAX_BYTES) throw new Error('DOCUMENT_TOO_LARGE: DeepSeek 文字识别单个文件最大 100 MiB，没有上传，也不收费。')
+  return stat.size
+}
+
+/** 付费确认之前调用：核对文件并估出页数（图片算 1 页；统计不出的文档返回 null，由调用方按上限估价）。 */
+export async function inspectDocumentText(request: DocumentTextInspectRequest, countPages: (filePath: string, extension: string) => Promise<number | null>): Promise<DocumentTextInspection> {
+  const engine = resolveDocumentTextEngine(request.path, request.engine)
+  const sizeBytes = await checkDocumentFile(request.path, engine)
+  const pages = engine === 'local' || isDocumentTextImage(request.path) ? 1 : await countPages(request.path, documentTextExtension(request.path))
+  return { engine, sizeBytes, pages }
+}
+
 export function createDocumentTextService(deps: DocumentTextDependencies) {
   return async function recognize(request: DocumentTextRequest, signal: AbortSignal): Promise<DocumentTextResult> {
     const engine = resolveDocumentTextEngine(request.path, request.engine)
@@ -40,8 +56,7 @@ export function createDocumentTextService(deps: DocumentTextDependencies) {
     deps.log('info', '识别文件文字开始', 'document_text.recognize.start', summary)
     const started = Date.now()
     try {
-      const stat = await fs.stat(request.path).catch(() => { throw new Error('DOCUMENT_NOT_FOUND: 找不到这个文件，或没有读取权限。') })
-      if (!stat.isFile()) throw new Error('DOCUMENT_NOT_FILE: 路径不是文件。')
+      await checkDocumentFile(request.path, engine)
       signal.throwIfAborted()
       let result: DocumentTextResult
       if (engine === 'local') {
@@ -59,7 +74,6 @@ export function createDocumentTextService(deps: DocumentTextDependencies) {
           result = { engine, charged: false, pageCount: 1, pages: [{ index: 0, text: composeImageTextLines(image.lines), complete: true }] }
         } finally { signal.removeEventListener('abort', cancel) }
       } else {
-        if (stat.size > DOCUMENT_TEXT_MAX_BYTES) throw new Error('DOCUMENT_TOO_LARGE: DeepSeek 文字识别单个文件最大 100 MiB，没有上传，也不收费。')
         const extension = documentTextExtension(request.path)
         const bytes = new Uint8Array(await fs.readFile(request.path))
         signal.throwIfAborted()

@@ -76,6 +76,8 @@ export default defineConfig({
           'audio-waveform-worker': resolve(__dirname, 'electron/main/services/audio/waveform-worker.ts'),
           'video-screen-change-worker': resolve(__dirname, 'electron/main/services/video/screen-change-worker.ts'),
           'font-worker': resolve(__dirname, 'electron/main/services/fonts/worker.ts'),
+          // 识别文件文字前估算文档页数（解析 PDF 是 CPU 重活）。
+          'document-pages-worker': resolve(__dirname, 'electron/main/document-pages-worker.ts'),
           // 本地模型推理后台进程（任务 4.7d，onnxruntime-node 原生推理）。
           'local-inference-utility': resolve(__dirname, 'electron/main/local-inference-utility.ts'),
           'ocr-recognition-worker': resolve(__dirname, 'electron/main/services/local-inference/ocr/recognitionWorker.ts'),

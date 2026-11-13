@@ -24,6 +24,10 @@ export function documentTextExtension(path: string): string {
   return dot > 0 ? name.slice(dot + 1).toLowerCase() : ''
 }
 
+export function isDocumentTextImage(path: string): boolean {
+  return DEEPSEEK_IMAGE_EXTENSIONS.has(documentTextExtension(path))
+}
+
 export class DocumentTextEngineError extends Error {}
 
 export function resolveDocumentTextEngine(path: string, choice: DocumentTextEngineChoice): DocumentTextEngine {
@@ -38,8 +42,12 @@ export function resolveDocumentTextEngine(path: string, choice: DocumentTextEngi
   return choice === 'auto' ? image ? 'local' : 'deepseek' : choice
 }
 
-/** DeepSeek OCR 1.5 元/千页；文档页数要识别后才知道，按官方单份上限 1000 页估上限，图片按 1 页。 */
-export function documentTextEstimatedCny(path: string, engine: DocumentTextEngine): number {
+const DEEPSEEK_OCR_CNY_PER_PAGE = 0.0015
+/** 官方单份上限 1000 页；识别前统计不出页数时按它估上限。 */
+const DEEPSEEK_OCR_MAX_PAGES = 1000
+
+/** DeepSeek OCR 1.5 元/千页，按识别前统计的页数估价；本地识别免费。 */
+export function documentTextEstimatedCny(engine: DocumentTextEngine, pages: number | null): number {
   if (engine === 'local') return 0
-  return DEEPSEEK_IMAGE_EXTENSIONS.has(documentTextExtension(path)) ? 0.0015 : 1.5
+  return Math.min(pages ?? DEEPSEEK_OCR_MAX_PAGES, DEEPSEEK_OCR_MAX_PAGES) * DEEPSEEK_OCR_CNY_PER_PAGE
 }

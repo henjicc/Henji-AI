@@ -5,5 +5,5 @@ function native(): DocumentTextPlatform {
   return api
 }
 export function createElectronDocumentText(): DocumentTextPlatform {
-  return { recognize: request => native().recognize(request), cancel: id => native().cancel(id) }
+  return { inspect: request => native().inspect(request), recognize: request => native().recognize(request), cancel: id => native().cancel(id) }
 }

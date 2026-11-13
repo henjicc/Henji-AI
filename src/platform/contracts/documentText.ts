@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export const DOCUMENT_TEXT_CHANNELS = { recognize: 'document-text:recognize', cancel: 'document-text:cancel' } as const
+export const DOCUMENT_TEXT_CHANNELS = { inspect: 'document-text:inspect', recognize: 'document-text:recognize', cancel: 'document-text:cancel' } as const
 
 export const documentTextRequestSchema = z.object({
   requestId: z.string().min(1).max(100),
@@ -9,6 +9,16 @@ export const documentTextRequestSchema = z.object({
   layout: z.enum(['text', 'rich_layout']),
 }).strict()
 export type DocumentTextRequest = z.infer<typeof documentTextRequestSchema>
+
+export const documentTextInspectRequestSchema = documentTextRequestSchema.pick({ path: true, engine: true })
+export type DocumentTextInspectRequest = z.infer<typeof documentTextInspectRequestSchema>
+
+export interface DocumentTextInspection {
+  engine: 'local' | 'deepseek'
+  sizeBytes: number
+  /** 识别前统计的页数；图片为 1，统计不出（旧版 doc/ppt、加密或损坏）为 null。 */
+  pages: number | null
+}
 
 export interface DocumentTextResult {
   engine: 'local' | 'deepseek'
@@ -20,6 +30,7 @@ export interface DocumentTextResult {
 }
 
 export interface DocumentTextPlatform {
+  inspect(request: DocumentTextInspectRequest): Promise<DocumentTextInspection>
   recognize(request: DocumentTextRequest): Promise<DocumentTextResult>
   cancel(requestId: string): Promise<void>
 }
