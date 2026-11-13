@@ -26,12 +26,12 @@
 - 测的是剪好的成品（`renderAudioEditProject`，剪切、修复、效果控件、输出都生效，与导出 WAV 同一份、走同一缓存），所以时间轴天然就是剪后作品时间（秒），与 `audio_edit.caption.start_ms ÷ 1000`、`insert_audio_edit_file.positionSeconds` 同一坐标。可给 `startSeconds/endSeconds` 只测一段，返回的所有位置都已加上起点偏移。
 - 两路并行，主进程只汇总：
   - 响度：`measureAudioFileLoudnessTimeline`（`loudness.ts`，原 `measureAudioFileLoudness` 改为调用它，滤镜参数一字未改），同一次 FFmpeg 顺带取 LRA 与逐 100 毫秒的 400 毫秒块响度（ebur128 的 M）。整体积分、真峰值与剪辑同一口径；分段响度用这些块按 BS.1770（-70 绝对门限、-10 相对门限）积分，真实 FFmpeg 测试里与“FFmpeg 只测这一段”相差 ≤0.2 LU。
-  - 采样级统计：效果工作线程新增任务 `sound-stats`（`pcm-jobs.ts`），算法在 `src/core/audioEdit/soundCheck.ts` 的 `AudioEditSoundStatsCollector`：每 10 毫秒电平与峰值；削波 = 达到满刻度（≥0.999）或至少 3 个完全相同、幅度 ≥0.3 的连续采样（录音时削了再整体衰减的平顶），相距 <50 毫秒算一处；每整秒用 Goertzel 算 50/100/150 与 60/120/180 Hz 占这一秒能量的比例。
+  - 采样级统计：效果工作线程新增任务 `sound-stats`（`pcm-jobs.ts`），算法在 `src/core/audioEdit/soundCheck.ts` 的 `AudioEditSoundStatsCollector`：每 10 毫秒电平与峰值；每 10 毫秒全频与 2.5 kHz 以上两个电平；削波 = 同一声道连续至少 3 个采样达到 -0.1 dBFS 以上，或一串里有采样超过满刻度，相距 <50 毫秒算一处；工作线程读两遍，第二遍只把非语音帧里的采样凑成整秒，算 50/100/150 与 60/120/180 Hz 的能量占比（判据与依据见第十一节）。
 - 汇总（`summarizeAudioEditSound`）：
   - loudness：integratedLufs、loudnessRangeLu、truePeakDbtp、samplePeakDbfs；输出一节打开自动匹配时带 targetLufs。
   - clipping：处数、采样数、位置。
-  - silence：判定电平用口播批量设置的 noiseDb，过长停顿用批量设置的检测时长（与粗剪同一套定义）；合计、开头结尾静音、过长停顿处数、最长一段与位置。
-  - noise：底噪 = 50 毫秒片段电平的第 10 百分位（剪辑里静音掉的数字静音不算）；rating clean ≤-60、audible -60～-50、high >-50 dBFS；嗡声只看最安静的 20%（至少 3 秒），电源频率族占比中位数 ≥0.2 判 suspected，不足 3 秒为 unknown。
+  - silence：停顿用粗剪停顿检测的同一判据（`speechEnergy.ts` 的直方图与低谷：全频低于第 80 百分位减 22 dB，且 2.5 kHz 以上低于其第 80 百分位减 16 dB），thresholdDbfs 给出这次算出的全频门限；过长停顿用批量设置的检测时长；合计、开头结尾静音、过长停顿处数、最长一段与位置。
+  - noise：底噪 = 非语音且不是数字静音的 50 毫秒片段电平的中位数，这样的片段不足 2 秒时 floorDbfs 为 null、rating 为 unknown；rating clean ≤-60、audible -60～-50、high >-50 dBFS；嗡声只用非语音片段凑出的整秒，电源频率族占比中位数 ≥0.2 判 suspected，不足 2 秒为 unknown。
   - keyWindows：最响、最轻、比整体响或轻 4 LU 以上（最多 6 段）、有削波（最多 3 段）的分段，windowSeconds 默认 10。
   - issues：用户语言的一句话问题清单（离目标 >1 LU、削波、真峰值高于 -1 dBTP、底噪、嗡声、过长停顿）。
 - 细节按需：项目通用的 includeDetails 在主进程投影层就被剥掉、到不了处理器，所以用业务参数 `includeWindows`：默认不给逐段数组，削波与停顿位置各最多 8 处；true 时给全部分段与全部位置。
@@ -95,7 +95,7 @@
 - eslint（本次改到的全部 ts 文件）：通过。`check:skill-sync`：通过。
 - `check:assistant-capabilities:structure`：失败，只有一条，不是本次文件：“store 未建账且未登记原因：src/workspaces/GenerationWorkspace/hooks/resultSelection.ts”（生成工作区，11-11 的文件）。本次新增的能力、属性、执行器在这项检查与 applicationControlCoverage、属性/集合/账本覆盖测试里都没有报错。
 - 精确测试 15 个文件 385 项通过（新增 `soundCheck.test.ts` 9 项、`audioEditSoundCheck.test.ts` 3 项，以及受影响的口播反射、快速处理、助手步骤、loudness.ffmpeg、效果线程、公共输出契约、工具目录、外部能力清单、属性/集合/结果/账本覆盖、applicationControlCoverage），另 `sound-check.ffmpeg.test.ts` 1 项（真实 FFmpeg）通过。断言内容：
-  - 削波满刻度与平顶都识别、相距近的合一处、分块大小不影响结果；普通正弦不误报。
+  - 削波：接近满刻度的连续采样与超过满刻度的采样都识别、相距近的合一处、分块大小不影响结果；普通正弦、离满刻度有余量的平坦段不误报。
   - 纯 50 Hz 的电源频率占比接近 1、宽带噪声接近 0；安静处有 50 Hz 报 suspected，安静秒数不够为 unknown；底噪百分位与 rating。
   - BS.1770 门限积分；分段响度与 FFmpeg 只测该段的积分 ≤0.2 LU。
   - 位置换算：分析起点偏移加到全部位置上（剪后作品时间）；过长停顿按检测时长、结尾静音单列。
@@ -109,7 +109,7 @@
 1. `npm run electron:bundle` 后启动开发版，打开一份已粗剪的口播。
 2. 外部助手（MCP）或内置助手调用 `check_audio_edit_sound`，记录长口播（10 分钟、1 小时）的耗时；对照界面播放核对 longPauses、clipping 给出的剪后时间是否落在对应处。
 3. 调 `match_audio_edit_loudness`（目标 -16），看回执 sound 是否在 -16±0.5、真峰值 ≤ -1；再调一次读回，sinceLastCheck 的响度差应与补偿量一致。
-4. 在效果控件加基本声音的降噪或去嗡声后读回，看 noise.floorDbfs、hum 是否变化；拿一段已知有电源嗡声的录音确认 suspected，拿干净录音看是否误报。
+4. 在效果控件加基本声音的降噪或去嗡声后读回，看 noise.floorDbfs、hum 是否变化（要用停顿还没被清成静音的口播，否则 floorDbfs 为 null）；拿一段已知有电源嗡声的录音确认 suspected，拿干净录音看是否误报。
 5. 把原素材移到别处，读 source_problem 应报找不到；写 source_path 为新位置后标题栏报错是否消失（界面只在 source.audioPath 变化时重新核对，若外部素材的 audioPath 不变，报错可能残留到重开，见第八节）。写一份内容不同的文件应被拒绝。
 
 ## 八、没做的与原因
@@ -137,7 +137,44 @@
 
 ## 十、已知问题（记录，不在本次修）
 
-- 静音多的成品（大量字间气口被清成静音、每段只剩很短的安静）里，底噪取“非数字静音的最安静 10%”，能落进去的多是字头字尾的弱音，底噪可能偏高；嗡声取最安静 20% 的秒，秒里多半夹着说话，占比被稀释、也可能被说话的低频抬高，判定可能偏差。
+- 停顿都被清成静音的成品估不出底噪（floorDbfs 为 null、rating 为 unknown），这是如实返回，不是缺陷；要知道底噪得在清理呼吸与停顿之前读回，或读原素材还留着停顿的范围。这类成品的嗡声只靠几秒零碎的非语音帧判断，证据少。
+- 录音时削过、之后整体衰减的平顶认不出来（实测：真削波样本整体降 6 dB 后报 0 处）。按“信号自身峰值处的平顶”去找（FFmpeg astats 的 Flat factor 思路）会把限幅后的成品报出来：那份匹配响度后的成品在自身峰值 0.1 dB 内有 78 个采样、5 串连续 3 个以上。
+- 停顿判据与粗剪相同，也带着它的前提：说话占多数。大半是空白的长录音里第 80 百分位会落在底噪上，停顿会漏报。
+- 读回与粗剪的停顿不是逐帧相同：粗剪在 16 kHz、按声道分开测，读回在成品采样率、混成单声道后测。原素材上实测门限同为 -62 dBFS，停顿 238 对 239 段，过长停顿 17 对 19 处（差的两处是 0.81 与 0.84 秒，卡在 0.8 秒线上）。
 - 重新定位与其他属性同一次写入不是原子的：先重新定位并保存，其余属性写入若失败，重新定位不会回滚（素材本就不进撤销）。
 - 匹配响度现在多一次成品渲染与测量（补偿改了输出，末尾效果要重跑），长口播会明显变慢。
+
+## 十一、三处读数偏差的修正（2026-11-13，第五轮真实验证之后）
+
+用的是第五轮那份口播（测试项目“主链路走查 11-13”的“口播走查-带重念”，16 位原素材 579.6 秒，剪后 370.25 秒）在缓存里的三份文件：原素材解码、补偿前成品、匹配响度到 -16 后的成品；另用原素材前 60 秒加 30 dB 做了真削波样本。只读分析，脚本在会话临时目录，没进仓库。
+
+| | 改前 | 改后 | 查实的原因 |
+|---|---|---|---|
+| 匹配响度后的削波 | 146 处、1028 个采样 | 0 处 | 不是限幅器压出的平顶。原素材是 16 位，波峰波谷处本来就有 3–4 个量化值相同的相邻采样（补偿前成品里有 173 串，如 -854、-785 个量化单位）；加 23.1 dB（×14.29）后幅度过了 0.3 的门限，共 334 串，幅度 -10～-4 dBFS，没有一个采样到 -0.1 dBFS，采样峰值 -1.00 dBFS |
+| 真削波样本（加 30 dB 后存 16 位） | 259 处、25414 个采样（含上面那类误报） | 96 处、23018 个采样 | 达到 -0.1 dBFS 的采样共 23516 个，连续 3 个以上的 2444 串 |
+| 补偿前成品的过长停顿 | 28 处，“静音”合计 183 秒（一半时长） | 0 处，最长停顿 0.35 秒（正是粗剪保留的气口长度），合计 0.62 秒 | 固定 -40 dBFS 门限，而这段录音的 10 毫秒电平中位数是 -43 dBFS、第 80 百分位 -39 dBFS，一半的说话都在门限下。改后门限 -61.2 dBFS |
+| 原素材的过长停顿 | 104 处 | 17 处（粗剪自己的检测 19 处） | 同上 |
+| 补偿前成品的底噪 | -53.9 dBFS“听得到” | null、unknown | 成品里 18.7 秒是数字静音，非语音且不是数字静音的帧只有 3.1 秒，凑不出 2 秒完整的 50 毫秒片段；旧值是说话电平的第 10 百分位 |
+| 匹配响度后成品的底噪 | -30.9 dBFS“明显” | null、unknown | 同上 |
+| 原素材的底噪 | -67.9 dBFS | -72.4 dBFS（68.4 秒非语音） | 改为只在非语音片段里取中位数 |
+| 嗡声（三份都是） | none | none（非语音秒的 50 Hz 族占比中位数 0.005–0.009） | 没有误报 |
+
+判据的依据：
+
+- 削波：Audacity“查找削波”是连续若干个（默认 3 个）达到满刻度的采样才算一处；这里把门限放在 -0.1 dBFS，并把超过满刻度的采样单独算上（浮点成品存成整数格式时一定被削）。FFmpeg astats 没有“削波采样数”，相近的是 Flat factor 与 Peak count，都是看信号自身最大最小值处的连续相同采样；iZotope RX De-clip 同样是在直方图上找峰值处堆起来的电平。两者都以“平顶在信号的峰值上”为前提，离峰值有余量的相同采样不算；而按自身峰值找又会把限幅后的成品报出来（见第十节），所以只认接近满刻度的。
+- 停顿与语音 / 非语音：直接用粗剪的 `SpeechEnergyHistogram` 与 `SpeechEnergyValleys`，参数（22、16、-110）与 `speech-energy.ts` 相同，没有第二套标准；批量设置里的 noiseDb 不再用于读回。
+- 底噪与嗡声：只取上面判为非语音、且高于 -90 dBFS 的帧；不足 2 秒返回估不出。
+
+顺带修了一处：含有超过满刻度采样的一串里，前两个采样会被重复计数。读回消息在底噪或嗡声估不出时会说明，不再笼统说“没发现底噪问题”。
+
+改动文件：`src/core/audioEdit/soundCheck.ts`、`src/core/audioEdit/soundCheck.test.ts`、`electron/main/services/audio-edit/pcm-jobs.ts`（两遍）、`electron/main/services/audio-edit/sound-check.ts`、`electron/main/services/audio-edit/sound-check.ffmpeg.test.ts`、`src/core/application-control/domains/audioEdit/audioEditSoundCheckCapability.ts`（说明）、`src/features/audioEdit/application/registerAudioEditCapabilityHandlers.ts`（消息）。契约：字段与类型都没变，只改了说明；`AudioEditSoundSummaryOptions` 去掉 silenceDb（内部）。
+
+验证：两套 tsc 通过（渲染层经 heavy.sh）；改到文件的 eslint 通过；`soundCheck.test.ts` 12 项、`audioEditSoundCheck.test.ts` 5 项、`sound-check.ffmpeg.test.ts` 1 项、`outputContract.test.ts` 272 项通过。新增断言：量化重复值与压到 -1 dBFS 的峰不算削波；超过满刻度的采样每个只计一次；整体约 -40 dBFS 的录音里更轻的说话不算停顿；停顿都被静音掉时底噪与嗡声为估不出；嗡声只在非语音帧里累计、隔着说话拼起来仍同相。
+
+还需真实窗口确认（要先 `electron:bundle`）：
+
+1. 打开同一份口播，匹配响度到 -16 后读回：clipping.count 应为 0，issues 里没有削波。
+2. 补偿前读回：longPauseCount 应为 0，silence.thresholdDbfs 在 -61 左右；308.45–310.18 秒不再出现在 longPauses 里。
+3. 这份成品的 noise.floorDbfs 应为 null、rating 为 unknown，消息里写明估不出；换一份只去了重念、没清呼吸与停顿的口播，底噪应接近原素材（约 -72 dBFS）。
+4. 读回现在读两遍成品，记录 370 秒与更长口播的耗时（此前 1.4–1.6 秒）。
 

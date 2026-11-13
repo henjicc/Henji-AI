@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import type { AudioEditGainRegion } from '../../../../src/core/audioEdit/regions'
 import { AudioEditSpliceRenderer } from '../../../../src/core/audioEdit/spliceCrossfade'
 import type { AudioEditTimelineSpan } from '../../../../src/core/audioEdit/types'
-import { AudioEditSoundStatsCollector, type AudioEditSoundStats } from '../../../../src/core/audioEdit/soundCheck'
+import { AudioEditHumCollector, AudioEditSoundStatsCollector, audioEditNoiseFrames, type AudioEditSoundStats } from '../../../../src/core/audioEdit/soundCheck'
 import { applyAudioEditGainLayers } from './gain-layers'
 import { createF32WavWriter, openF32Wav, openF32WavForPatch } from './pcm-wav'
 
@@ -61,15 +61,23 @@ export async function runAudioEditPcmJob(job: AudioEditPcmJob, onProgress?: (val
   const block = sampleRate * BLOCK_SECONDS
   try {
     if (job.kind === 'sound-stats') {
+      // 两遍：第一遍电平、峰值、削波并定出非语音片段，第二遍只在非语音片段里估嗡声
       const collector = new AudioEditSoundStatsCollector(sampleRate, channels)
       const from = Math.max(0, job.startFrame), to = Math.min(reader.frames, job.endFrame)
       const buffer = new Float32Array(block * channels)
       for (let start = from; start < to; start += block) {
         const count = Math.min(block, to - start)
         collector.push(await reader.read(start, count, count === block ? buffer : undefined))
-        onProgress?.((start + count - from) / Math.max(1, to - from))
+        onProgress?.((start + count - from) / Math.max(1, to - from) / 2)
       }
-      return collector.finish()
+      const first = collector.finish()
+      const hum = new AudioEditHumCollector(sampleRate, channels, audioEditNoiseFrames(first))
+      for (let start = from; start < to; start += block) {
+        const count = Math.min(block, to - start)
+        hum.push(await reader.read(start, count, count === block ? buffer : undefined))
+        onProgress?.(0.5 + (start + count - from) / Math.max(1, to - from) / 2)
+      }
+      return { ...first, hum: hum.finish() }
     }
     if (job.kind === 'gains') {
       const writer = await createF32WavWriter(job.output, sampleRate, channels, reader.frames)

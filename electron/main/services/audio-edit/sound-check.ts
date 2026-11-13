@@ -29,7 +29,7 @@ export async function checkAudioEditSound(project: AudioEditProjectDocument, req
     const settings = project.batchSettings ?? DEFAULT_AUDIO_EDIT_SETTINGS
     const loudnessOutput = project.output?.loudness
     const result = summarizeAudioEditSound(stats, { integratedLufs: loudness.measurement.integratedLufs, loudnessRangeLu: loudness.loudnessRangeLu, truePeakDbtp: loudness.measurement.truePeakDbtp, momentaryLufs: loudness.momentaryLufs }, {
-      offsetSeconds: startFrame / rate, windowSeconds: request.windowSeconds ?? DEFAULT_WINDOW_SECONDS, silenceDb: settings.noiseDb, longPauseSeconds: settings.silenceThresholdMs / 1000,
+      offsetSeconds: startFrame / rate, windowSeconds: request.windowSeconds ?? DEFAULT_WINDOW_SECONDS, longPauseSeconds: settings.silenceThresholdMs / 1000,
       includeWindows: request.includeWindows === true, ...(loudnessOutput?.enabled ? { targetLufs: loudnessOutput.targetLufs } : {}),
     })
     logger.info('口播声音读回完成', { event: 'audio_edit.sound_check.completed', context: { projectId: project.id, elapsedMs: Math.round(performance.now() - started), durationSeconds: result.durationSeconds, integratedLufs: result.loudness.integratedLufs, truePeakDbtp: result.loudness.truePeakDbtp, clipping: result.clipping.count, longPauses: result.silence.longPauseCount, noise: result.noise.rating, hum: result.noise.hum.status } })

@@ -33,7 +33,7 @@ it('成品读回：分段响度与 FFmpeg 对同一段的积分一致，位置�
     expect(timeline.loudnessRangeLu).not.toBeNull()
     const stats = await runAudioEditPcmJob({ kind: 'sound-stats', input: file, startFrame: rate, endFrame: rate * 12 }) as AudioEditSoundStats
     const result = summarizeAudioEditSound(stats, { integratedLufs: timeline.measurement.integratedLufs, loudnessRangeLu: timeline.loudnessRangeLu, truePeakDbtp: timeline.measurement.truePeakDbtp, momentaryLufs: timeline.momentaryLufs },
-      { offsetSeconds: 1, windowSeconds: 5, silenceDb: -40, longPauseSeconds: 0.8, includeWindows: true })
+      { offsetSeconds: 1, windowSeconds: 5, longPauseSeconds: 0.8, includeWindows: true })
 
     expect(result.startSeconds).toBe(1)
     expect(result.endSeconds).toBe(12)

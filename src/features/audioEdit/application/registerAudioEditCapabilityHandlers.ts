@@ -45,7 +45,11 @@ const logger = createLogger('features.audioEdit.capabilities')
 function soundCheckMessage(check: Awaited<ReturnType<typeof checkAudioEditProjectSound>>): string {
   const { loudness, durationSeconds } = check.check
   const head = `剪后 ${durationSeconds.toFixed(1)} 秒：整体 ${loudness.integratedLufs ?? '测不出'} LUFS、LRA ${loudness.loudnessRangeLu ?? '—'} LU、真峰值 ${loudness.truePeakDbtp ?? '—'} dBTP。`
-  const issues = check.check.issues.length ? `问题：${check.check.issues.join('')}` : '没发现削波、底噪、嗡声或过长停顿的问题。'
+  const { noise } = check.check
+  // 估不出不等于干净：没人说话的片段太少时如实说，不让“没发现问题”把它盖过去
+  const unknown = [noise.rating === 'unknown' ? '底噪' : '', noise.hum.status === 'unknown' ? '嗡声' : ''].filter(Boolean)
+  const checked = ['削波', ...['底噪', '嗡声'].filter(item => !unknown.includes(item))].join('、')
+  const issues = `${check.check.issues.length ? `问题：${check.check.issues.join('')}` : `没发现${checked}或过长停顿的问题。`}${unknown.length ? `没人说话的片段太少，${unknown.join('与')}估不出。` : ''}`
   const delta = check.sinceLastCheck
   const changes = delta ? [
     delta.integratedLufs ? `响度 ${delta.integratedLufs > 0 ? '+' : ''}${delta.integratedLufs} LU` : '', delta.truePeakDbtp ? `真峰值 ${delta.truePeakDbtp > 0 ? '+' : ''}${delta.truePeakDbtp} dB` : '',
