@@ -1,0 +1,1980 @@
+diff --git a/patches/@xyflow+react+12.11.6.patch b/patches/@xyflow+react+12.11.6.patch
+index 420d9f18f..ac1a31731 100644
+--- a/patches/@xyflow+react+12.11.6.patch
++++ b/patches/@xyflow+react+12.11.6.patch
+@@ -77,7 +77,7 @@ index 0000000..7d3dee8
+ +    return view;
+ +}
+ diff --git a/node_modules/@xyflow/react/dist/esm/index.js b/node_modules/@xyflow/react/dist/esm/index.js
+-index 422889f..fe3b30f 100644
++index 422889f..2a3c66a 100644
+ --- a/node_modules/@xyflow/react/dist/esm/index.js
+ +++ b/node_modules/@xyflow/react/dist/esm/index.js
+ @@ -1,4 +1,5 @@
+@@ -116,8 +116,26 @@ index 422889f..fe3b30f 100644
+      if (!nodeId) {
+          store.getState().onError?.('010', errorMessages['error010']());
+      }
++@@ -2127,6 +2134,8 @@ FlowRendererComponent.displayName = 'FlowRenderer';
++ const FlowRenderer = memo(FlowRendererComponent);
++ 
++ const selector$c = (onlyRenderVisible) => (s) => {
+++    // Henji-AI: the host may name the nodes to mount (large canvases draw the rest on a GPU layer).
+++    if (s.henjiRenderedNodeIds) return s.henjiRenderedNodeIds.filter((id) => s.nodeLookup.has(id));
++     return onlyRenderVisible
++         ? getNodesInside(s.nodeLookup, { x: 0, y: 0, width: s.width, height: s.height }, s.transform, true).map((node) => node.id)
++         : Array.from(s.nodeLookup.keys());
++@@ -2419,6 +2428,8 @@ const NodeRenderer = memo(NodeRendererComponent);
++  */
++ function useVisibleEdgeIds(onlyRenderVisible) {
++     const edgeIds = useStore(useCallback((s) => {
+++        // Henji-AI: same host-provided list for edges, see selector$c.
+++        if (s.henjiRenderedEdgeIds) return s.henjiRenderedEdgeIds.filter((id) => s.edgeLookup.has(id));
++         if (!onlyRenderVisible) {
++             return s.edges.map((edge) => edge.id);
++         }
+ diff --git a/node_modules/@xyflow/react/dist/esm/index.mjs b/node_modules/@xyflow/react/dist/esm/index.mjs
+-index 422889f..fe3b30f 100644
++index 422889f..2a3c66a 100644
+ --- a/node_modules/@xyflow/react/dist/esm/index.mjs
+ +++ b/node_modules/@xyflow/react/dist/esm/index.mjs
+ @@ -1,4 +1,5 @@
+@@ -156,3 +174,21 @@ index 422889f..fe3b30f 100644
+      if (!nodeId) {
+          store.getState().onError?.('010', errorMessages['error010']());
+      }
++@@ -2127,6 +2134,8 @@ FlowRendererComponent.displayName = 'FlowRenderer';
++ const FlowRenderer = memo(FlowRendererComponent);
++ 
++ const selector$c = (onlyRenderVisible) => (s) => {
+++    // Henji-AI: the host may name the nodes to mount (large canvases draw the rest on a GPU layer).
+++    if (s.henjiRenderedNodeIds) return s.henjiRenderedNodeIds.filter((id) => s.nodeLookup.has(id));
++     return onlyRenderVisible
++         ? getNodesInside(s.nodeLookup, { x: 0, y: 0, width: s.width, height: s.height }, s.transform, true).map((node) => node.id)
++         : Array.from(s.nodeLookup.keys());
++@@ -2419,6 +2428,8 @@ const NodeRenderer = memo(NodeRendererComponent);
++  */
++ function useVisibleEdgeIds(onlyRenderVisible) {
++     const edgeIds = useStore(useCallback((s) => {
+++        // Henji-AI: same host-provided list for edges, see selector$c.
+++        if (s.henjiRenderedEdgeIds) return s.henjiRenderedEdgeIds.filter((id) => s.edgeLookup.has(id));
++         if (!onlyRenderVisible) {
++             return s.edges.map((edge) => edge.id);
++         }
+diff --git a/scripts/ui-residue.allowlist.json b/scripts/ui-residue.allowlist.json
+index f6db093f6..8ab2d7894 100644
+--- a/scripts/ui-residue.allowlist.json
++++ b/scripts/ui-residue.allowlist.json
+@@ -213,6 +213,7 @@
+       "definedIn": "src/features/canvas/storyboard.css",
+       "names": [
+         "canvas-lod-low",
++        "canvas-far-view",
+         "canvas-node-lod-detail",
+         "canvas-node-lod-placeholder",
+         "canvas-viewport-moving",
+diff --git a/src/features/canvas/Canvas.tsx b/src/features/canvas/Canvas.tsx
+index dd45ed474..0fd70cba6 100644
+--- a/src/features/canvas/Canvas.tsx
++++ b/src/features/canvas/Canvas.tsx
+@@ -61,6 +61,8 @@ import { maintainMultiLayerDocumentReleaseCandidates } from './application/multi
+ import { CanvasViewportFlow } from './ui/CanvasViewportFlow';
+ import { useCanvasTidy } from './hooks/useCanvasTidy';
+ import { CanvasTidyPanel } from './ui/CanvasTidyPanel';
++import { CanvasFarLayer } from './farLayer/CanvasFarLayer';
++import { useCanvasFarView } from './presence/useCanvasNodePresence';
+ 
+ interface CanvasToastState {
+   message: string;
+@@ -73,6 +75,8 @@ const CANVAS_DEFAULT_EDGE_OPTIONS: DefaultEdgeOptions = { type: 'disconnectableE
+ const CANVAS_PRO_OPTIONS = { hideAttribution: true };
+ const CANVAS_MULTI_SELECTION_KEY_CODE = ['Control', 'Meta'];
+ const CANVAS_SELECTION_KEY_CODE = ['Control', 'Meta'];
++/** 最小缩放：缩到这里一屏能放下上万个节点（远景由 farLayer 一次画完，节点再多也不影响帧率）。 */
++const CANVAS_MIN_ZOOM = 0.03;
+ 
+ /**
+  * 画布点阵：直接引用主题 CSS 变量（辅助文字色 35%），切换主题由浏览器重算样式，不触发 React 渲染。
+@@ -402,17 +406,20 @@ export function Canvas() {
+   });
+   const assetDrop = useCanvasAssetDrop({ reactFlowInstance, addNode, schedulePersist: scheduleCanvasPersist });
+   const { onNodeContextMenu, hideNodeContextMenu, nodeContextMenu } = useNodeParameterContextMenu(closeNodeMenu);
+-  // 低倍率内容 LOD：只在跨越阈值时翻转一次 class，节点正文的显隐全部由 CSS 承担
+-  const isContentLodLow = useCanvasContentLod();
++  // 远景层可用时：节点正文只在近景分批挂载，远景整层淡出、画面交给远景层（见 presence/ 与 farLayer/）
++  const farView = useCanvasFarView();
++  // 远景层不可用时的退路：全部节点常驻挂载，低倍率只在跨越阈值时翻转一次 class，正文显隐由 CSS 承担
++  const contentLodLow = useCanvasContentLod();
++  const isContentLodLow = contentLodLow && farView === 'unavailable';
+ 
+-  // 有意不开 onlyRenderVisibleElements：裁剪带来的节点挂载/卸载抖动是平移/缩放时
++  // 有意不开 onlyRenderVisibleElements：它在视口变化的同一帧里同步挂载、卸载节点，是平移与缩放时
+   // 数百毫秒长任务的主要来源（240 节点实测 zoom 长任务 550ms → 0）。
+   return (
+     <div
+       ref={wrapperRef}
+       onMouseDownCapture={handleMediaDrag}
+       data-application-observation-region="canvas.viewport_observer"
+-      className={`relative h-full w-full ${isContentLodLow ? 'canvas-lod-low' : ''}`}
++      className={`relative h-full w-full ${isContentLodLow ? 'canvas-lod-low' : ''} ${farView === 'far' ? 'canvas-far-view' : ''}`}
+       onDragOver={assetDrop.onDragOver}
+       onDrop={assetDrop.onDrop}
+     >
+@@ -446,7 +453,7 @@ export function Canvas() {
+         edgeTypes={edgeTypes}
+         defaultEdgeOptions={CANVAS_DEFAULT_EDGE_OPTIONS}
+         defaultViewport={DEFAULT_VIEWPORT}
+-        minZoom={0.1}
++        minZoom={CANVAS_MIN_ZOOM}
+         maxZoom={5}
+         selectionOnDrag
+         selectionMode={SelectionMode.Partial}
+@@ -458,6 +465,7 @@ export function Canvas() {
+         className="bg-canvas"
+       >
+         <CanvasGridBackground />
++        <CanvasFarLayer />
+         <CanvasMiniMap />
+         <CanvasZoomBar />
+ 
+diff --git a/src/features/canvas/nodes/index.ts b/src/features/canvas/nodes/index.ts
+index 851c8f0ab..66cb6a25e 100644
+--- a/src/features/canvas/nodes/index.ts
++++ b/src/features/canvas/nodes/index.ts
+@@ -8,6 +8,8 @@ import {
+   type CanvasNodePaintFrameOptions,
+ } from '@/features/canvas/ui/CanvasNodePaintFrame';
+ 
++import { CanvasNodeBody } from '@/features/canvas/presence/CanvasNodeBody';
++
+ import { AudioGenNode } from './AudioGenNode';
+ import { AudioNode } from './AudioNode';
+ import { GroupNode } from './GroupNode';
+@@ -49,20 +51,26 @@ type NodeRenderComponent<TProps extends object> = ((props: TProps) => ReactNode)
+ 
+ const CANVAS_NODE_PAINT_CONTAINMENT_ENABLED = true;
+ 
++/** 节点组件统一经过两层包装：正文挂载闸门（远景时不挂正文）与绘制裁剪框。 */
+ function withNodePaintFrame<TProps extends object>(
+   Component: NodeRenderComponent<TProps>,
+   options?: CanvasNodePaintFrameOptions,
+ ): NodeRenderComponent<TProps> {
+-  if (!CANVAS_NODE_PAINT_CONTAINMENT_ENABLED || options?.disabled) {
+-    return Component;
+-  }
++  const framed = !(!CANVAS_NODE_PAINT_CONTAINMENT_ENABLED || options?.disabled);
+   const WrappedNode: NodeRenderComponent<TProps> = (props) => {
+-    const nodeId = 'id' in props && typeof props.id === 'string' ? props.id : undefined;
+-    return createElement(
+-      CanvasNodePaintFrame,
+-      { ...options, nodeId },
+-      createElement(Component, props),
+-    );
++    const { id, width, height } = props as { id?: unknown; width?: unknown; height?: unknown };
++    const nodeId = typeof id === 'string' ? id : undefined;
++    const renderBody = (size: { width: number | undefined; height: number | undefined }): ReactNode => {
++      const body = createElement(Component, nodeId === undefined ? props : { ...props, ...size });
++      return framed ? createElement(CanvasNodePaintFrame, { ...options, nodeId }, body) : body;
++    };
++    if (nodeId === undefined) return renderBody({ width: undefined, height: undefined });
++    return createElement(CanvasNodeBody, {
++      id: nodeId,
++      width: typeof width === 'number' ? width : undefined,
++      height: typeof height === 'number' ? height : undefined,
++      render: renderBody,
++    });
+   };
+   WrappedNode.displayName = `withNodePaintFrame(${Component.displayName ?? Component.name ?? 'Node'})`;
+   return memo<TProps>(WrappedNode, areNodeContentPropsEqual);
+diff --git a/src/features/canvas/nodes/shared/canvasViewSubscriptions.ts b/src/features/canvas/nodes/shared/canvasViewSubscriptions.ts
+index 04741a892..c1085f143 100644
+--- a/src/features/canvas/nodes/shared/canvasViewSubscriptions.ts
++++ b/src/features/canvas/nodes/shared/canvasViewSubscriptions.ts
+@@ -12,6 +12,15 @@ const CONTENT_LOD_THRESHOLDS: Record<CanvasLodLevel, number | null> = {
+   off: null, detail: 0.25, balanced: 0.4, performance: 0.6,
+ };
+ 
++/** 不简化（off）时正文仍需要一个起挂缩放：再小就只剩几个像素，交给远景层。 */
++const MIN_DETAIL_ZOOM = 0.15;
++
++/** 节点正文开始显示的缩放：与内容简化等级共用一组阈值。 */
++export function resolveCanvasDetailZoomThreshold(level: CanvasLodLevel): number {
++  const threshold = Object.hasOwn(CONTENT_LOD_THRESHOLDS, level) ? CONTENT_LOD_THRESHOLDS[level] : CONTENT_LOD_THRESHOLDS.balanced;
++  return threshold ?? MIN_DETAIL_ZOOM;
++}
++
+ /** 同一画布只计算一次公共呈现值；平移不把无变化的值广播到每个节点。 */
+ export function createCanvasViewSubscriptions(flow: CanvasViewSource, settings: SettingsSource) {
+   let subscriberCount = 0;
+diff --git a/src/features/canvas/storyboard.css b/src/features/canvas/storyboard.css
+index e67cabb23..929005db3 100644
+--- a/src/features/canvas/storyboard.css
++++ b/src/features/canvas/storyboard.css
+@@ -174,6 +174,22 @@
+   display: flex;
+ }
+ 
++/* 远景（见 presence/canvasNodePresence.ts）：节点正文整层淡出，露出铺在下面的远景层画面；
++   空外框仍然接收指针，选中、拖动、框选照常。连线此时全部由远景层画。 */
++.react-flow__nodes,
++.react-flow__viewport-portal {
++  transition: opacity var(--ui-duration-fast) var(--ui-ease);
++}
++
++.canvas-far-view .react-flow__nodes,
++.canvas-far-view .react-flow__viewport-portal {
++  opacity: 0;
++}
++
++.canvas-far-view .react-flow__edges {
++  visibility: hidden;
++}
++
+ .canvas-minimap {
+   border-radius: var(--radius-overlay);
+   overflow: hidden;
+diff --git a/src/features/canvas/farLayer/farLayerAtlas.ts b/src/features/canvas/farLayer/farLayerAtlas.ts
+new file mode 100644
+index 000000000..6be8a31c6
+--- /dev/null
++++ b/src/features/canvas/farLayer/farLayerAtlas.ts
+@@ -0,0 +1,80 @@
++/**
++ * 远景缩略图图集：一张二维纹理数组，按固定格子切分，每个节点占一格。
++ * 格子内容按节点长宽比贴着左上角放，四周留 1 像素空边，采样范围随内容收窄，相邻格子互不渗色。
++ */
++
++export interface AtlasSlot {
++  index: number;
++  layer: number;
++  /** 内容在整页里的归一化范围 */
++  u0: number; v0: number; u1: number; v1: number;
++  width: number;
++  height: number;
++}
++
++const GUTTER = 1;
++
++export interface FarLayerAtlas {
++  readonly texture: WebGLTexture;
++  readonly cell: number;
++  readonly levels: number;
++  readonly capacity: number;
++  /** 格子里放得下的最大内容边长 */
++  readonly contentSize: number;
++  allocate(): number | null;
++  release(index: number): void;
++  /** 把各级画面（第 0 级在前，逐级减半）写进格子，返回采样范围。 */
++  write(index: number, sources: readonly TexImageSource[], width: number, height: number): AtlasSlot;
++  dispose(): void;
++}
++
++export function createFarLayerAtlas(gl: WebGL2RenderingContext, options: { cell: number; page: number; levels: number; capacity: number }): FarLayerAtlas {
++  const { cell, page, levels } = options;
++  const perRow = Math.floor(page / cell);
++  const perPage = perRow * perRow;
++  const pages = Math.max(1, Math.ceil(options.capacity / perPage));
++  const capacity = pages * perPage;
++  const texture = gl.createTexture();
++  if (!texture) throw new Error('远景图集纹理创建失败');
++  gl.bindTexture(gl.TEXTURE_2D_ARRAY, texture);
++  gl.texStorage3D(gl.TEXTURE_2D_ARRAY, levels, gl.RGBA8, page, page, pages);
++  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, levels > 1 ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR);
++  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
++  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
++  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
++  gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAX_LEVEL, levels - 1);
++
++  const free: number[] = [];
++  let next = 0;
++
++  return {
++    texture, cell, levels, capacity,
++    contentSize: cell - GUTTER * 2,
++    allocate() {
++      const reused = free.pop();
++      if (reused !== undefined) return reused;
++      return next < capacity ? next++ : null;
++    },
++    release(index) { free.push(index); },
++    write(index, sources, width, height) {
++      const layer = Math.floor(index / perPage);
++      const within = index % perPage;
++      const x = (within % perRow) * cell + GUTTER;
++      const y = Math.floor(within / perRow) * cell + GUTTER;
++      gl.bindTexture(gl.TEXTURE_2D_ARRAY, texture);
++      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
++      for (let level = 0; level < Math.min(levels, sources.length); level += 1) {
++        const levelWidth = Math.max(1, width >> level);
++        const levelHeight = Math.max(1, height >> level);
++        gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, level, x >> level, y >> level, layer, levelWidth, levelHeight, 1, gl.RGBA, gl.UNSIGNED_BYTE, sources[level]);
++      }
++      // 采样范围向内收半个像素，线性过滤不取到空边
++      return {
++        index, layer, width, height,
++        u0: (x + 0.5) / page, v0: (y + 0.5) / page,
++        u1: (x + width - 0.5) / page, v1: (y + height - 0.5) / page,
++      };
++    },
++    dispose() { gl.deleteTexture(texture); },
++  };
++}
+diff --git a/src/features/canvas/farLayer/farLayerRenderer.ts b/src/features/canvas/farLayer/farLayerRenderer.ts
+new file mode 100644
+index 000000000..31408b579
+--- /dev/null
++++ b/src/features/canvas/farLayer/farLayerRenderer.ts
+@@ -0,0 +1,340 @@
++import type { FarLayerEdge, FarLayerNode } from './farLayerScene';
++import type { FarLayerTiles } from './farLayerTiles';
++
++/**
++ * 远景层的绘制：所有节点一次实例化画完（圆角矩形 + 图集里的缩略图 + 描边），连线同样一次实例化
++ * （每条线是着色器里展开的一条三次贝塞尔带）。每帧只更新视口矩阵；节点或连线变了才重填实例缓冲。
++ */
++
++export interface FarLayerColors {
++  panel: readonly [number, number, number];
++  border: readonly [number, number, number];
++  accent: readonly [number, number, number];
++  edge: readonly [number, number, number];
++  group: readonly [number, number, number];
++  /** 节点圆角（画布单位） */
++  radius: number;
++}
++
++export interface FarLayerView {
++  x: number; y: number; zoom: number;
++  /** 画布元素的 CSS 尺寸 */
++  width: number; height: number;
++  dpr: number;
++}
++
++const NODE_FLOATS = 20;
++const EDGE_FLOATS = 10;
++const EDGE_SEGMENTS = 24;
++/** 画面写入后淡入的时长（秒） */
++const TILE_FADE_SECONDS = 0.18;
++
++const NODE_VERTEX = `#version 300 es
++precision highp float;
++layout(location=0) in vec2 aCorner;
++layout(location=1) in vec4 iRect;
++layout(location=2) in vec4 iOverviewUv;
++layout(location=3) in vec4 iDetailUv;
++layout(location=4) in vec4 iTile;   // 概览层号、清晰层号、概览写入时刻、清晰写入时刻（层号为负表示没有）
++layout(location=5) in vec4 iStyle;  // 是否分组、是否选中、保留、保留
++uniform vec3 uView;
++uniform vec2 uViewport;
++uniform float uDpr;
++out vec2 vLocal;
++out vec2 vHalf;
++out vec2 vUnit;
++out vec4 vOverviewUv;
++out vec4 vDetailUv;
++out vec4 vTile;
++out vec4 vStyle;
++void main() {
++  // 外扩一点给描边与抗锯齿留位置（屏幕像素）
++  float pad = 2.0;
++  vec2 size = iRect.zw * uView.z;
++  vec2 origin = iRect.xy * uView.z + uView.xy;
++  vec2 position = origin - pad + aCorner * (size + pad * 2.0);
++  vHalf = size * 0.5;
++  vLocal = position - (origin + vHalf);
++  vUnit = (position - origin) / max(size, vec2(0.0001));
++  vOverviewUv = iOverviewUv; vDetailUv = iDetailUv; vTile = iTile; vStyle = iStyle;
++  vec2 clip = position / uViewport * 2.0 - 1.0;
++  gl_Position = vec4(clip.x, -clip.y, 0.0, 1.0);
++}`;
++
++const NODE_FRAGMENT = `#version 300 es
++precision highp float;
++precision highp sampler2DArray;
++in vec2 vLocal;
++in vec2 vHalf;
++in vec2 vUnit;
++in vec4 vOverviewUv;
++in vec4 vDetailUv;
++in vec4 vTile;
++in vec4 vStyle;
++uniform sampler2DArray uOverview;
++uniform sampler2DArray uDetail;
++uniform vec3 uView;
++uniform float uDpr;
++uniform float uTime;
++uniform float uRadius;
++uniform vec3 uPanel;
++uniform vec3 uBorder;
++uniform vec3 uAccent;
++uniform vec3 uGroup;
++out vec4 outColor;
++const float FADE = ${TILE_FADE_SECONDS.toFixed(2)};
++float roundedBox(vec2 point, vec2 halfSize, float radius) {
++  vec2 q = abs(point) - halfSize + radius;
++  return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
++}
++void main() {
++  float radius = min(uRadius * uView.z, min(vHalf.x, vHalf.y));
++  float distance = roundedBox(vLocal, vHalf, radius);
++  float coverage = clamp(0.5 - distance * uDpr, 0.0, 1.0);
++  bool group = vStyle.x > 0.5;
++  bool selected = vStyle.y > 0.5;
++  vec2 unit = clamp(vUnit, 0.0, 1.0);
++  // 采样放在分支外：分支里取纹理没有可用的导数，逐级缩小的副本会选错
++  vec4 overview = texture(uOverview, vec3(mix(vOverviewUv.xy, vOverviewUv.zw, unit), max(vTile.x, 0.0)));
++  vec4 detail = texture(uDetail, vec3(mix(vDetailUv.xy, vDetailUv.zw, unit), max(vTile.y, 0.0)));
++  float overviewMix = step(0.0, vTile.x) * clamp((uTime - vTile.z) / FADE, 0.0, 1.0) * overview.a;
++  float detailMix = step(0.0, vTile.y) * clamp((uTime - vTile.w) / FADE, 0.0, 1.0) * detail.a;
++  vec4 fill = vec4(uPanel, 1.0);
++  fill = mix(fill, vec4(overview.rgb / max(overview.a, 0.001), 1.0), overviewMix);
++  fill = mix(fill, vec4(detail.rgb / max(detail.a, 0.001), 1.0), detailMix);
++  if (group) fill = vec4(uGroup, 1.0) * 0.4;
++  // 描边：与正文的 1 单位描边一致，缩得很小时保底 1 个设备像素并相应变淡
++  float borderWidth = selected ? max(1.5 * uView.z, 1.5 / uDpr) : max(uView.z, 1.0 / uDpr);
++  float borderAlpha = selected ? 1.0 : 0.3 * clamp(uView.z * uDpr, 0.35, 1.0);
++  float inner = clamp(0.5 - (distance + borderWidth) * uDpr, 0.0, 1.0);
++  vec3 borderColor = selected ? uAccent : uBorder;
++  vec4 bordered = vec4(borderColor * borderAlpha, borderAlpha) + fill * (1.0 - borderAlpha);
++  vec4 color = mix(bordered, fill, inner);
++  outColor = color * coverage;
++}`;
++
++const EDGE_VERTEX = `#version 300 es
++precision highp float;
++layout(location=0) in vec2 aStrip; // 沿线参数、左右侧（±1）
++layout(location=1) in vec4 iStart; // 起点、控制点一
++layout(location=2) in vec4 iEnd;   // 控制点二、终点
++layout(location=3) in vec2 iStyle; // 是否选中、不透明度
++uniform vec3 uView;
++uniform vec2 uViewport;
++uniform float uDpr;
++out float vSide;
++out float vHalfWidth;
++out vec2 vStyle;
++vec2 bezier(float t) {
++  float s = 1.0 - t;
++  return s * s * s * iStart.xy + 3.0 * s * s * t * iStart.zw + 3.0 * s * t * t * iEnd.xy + t * t * t * iEnd.zw;
++}
++vec2 tangent(float t) {
++  float s = 1.0 - t;
++  return 3.0 * s * s * (iStart.zw - iStart.xy) + 6.0 * s * t * (iEnd.xy - iStart.zw) + 3.0 * t * t * (iEnd.zw - iEnd.xy);
++}
++void main() {
++  vec2 point = bezier(aStrip.x) * uView.z + uView.xy;
++  vec2 direction = tangent(aStrip.x);
++  // 控制点与端点重合时切线为零，退回首尾连线方向
++  if (dot(direction, direction) < 1e-6) direction = iEnd.zw - iStart.xy;
++  vec2 normal = normalize(vec2(-direction.y, direction.x) + vec2(1e-6, 0.0));
++  float width = (iStyle.x > 0.5 ? 2.4 : 1.9) * uView.z;
++  // 线再细也至少画满 1 个设备像素，外加半个像素的抗锯齿边
++  vHalfWidth = max(width, 1.0 / uDpr) * 0.5;
++  float extent = vHalfWidth + 0.5 / uDpr;
++  vec2 position = point + normal * aStrip.y * extent;
++  vSide = aStrip.y * extent;
++  vStyle = vec2(iStyle.x, iStyle.y * clamp(width * uDpr, 0.45, 1.0));
++  vec2 clip = position / uViewport * 2.0 - 1.0;
++  gl_Position = vec4(clip.x, -clip.y, 0.0, 1.0);
++}`;
++
++const EDGE_FRAGMENT = `#version 300 es
++precision highp float;
++in float vSide;
++in float vHalfWidth;
++in vec2 vStyle;
++uniform float uDpr;
++uniform vec3 uEdge;
++uniform vec3 uAccent;
++out vec4 outColor;
++void main() {
++  float coverage = clamp(0.5 + (vHalfWidth - abs(vSide)) * uDpr, 0.0, 1.0);
++  vec3 color = vStyle.x > 0.5 ? uAccent : uEdge;
++  outColor = vec4(color, 1.0) * coverage * vStyle.y;
++}`;
++
++function compile(gl: WebGL2RenderingContext, vertex: string, fragment: string): WebGLProgram {
++  const program = gl.createProgram();
++  if (!program) throw new Error('远景层着色程序创建失败');
++  for (const [type, source] of [[gl.VERTEX_SHADER, vertex], [gl.FRAGMENT_SHADER, fragment]] as const) {
++    const shader = gl.createShader(type);
++    if (!shader) throw new Error('远景层着色器创建失败');
++    gl.shaderSource(shader, source);
++    gl.compileShader(shader);
++    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw new Error(`远景层着色器编译失败：${gl.getShaderInfoLog(shader) ?? ''}`);
++    gl.attachShader(program, shader);
++    gl.deleteShader(shader);
++  }
++  gl.linkProgram(program);
++  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(`远景层着色程序链接失败：${gl.getProgramInfoLog(program) ?? ''}`);
++  return program;
++}
++
++function uniforms<T extends string>(gl: WebGL2RenderingContext, program: WebGLProgram, names: readonly T[]): Record<T, WebGLUniformLocation | null> {
++  return Object.fromEntries(names.map(name => [name, gl.getUniformLocation(program, name)])) as Record<T, WebGLUniformLocation | null>;
++}
++
++export function createFarLayerRenderer(gl: WebGL2RenderingContext) {
++  const nodeProgram = compile(gl, NODE_VERTEX, NODE_FRAGMENT);
++  const edgeProgram = compile(gl, EDGE_VERTEX, EDGE_FRAGMENT);
++  const nodeUniforms = uniforms(gl, nodeProgram, ['uView', 'uViewport', 'uDpr', 'uTime', 'uRadius', 'uPanel', 'uBorder', 'uAccent', 'uGroup', 'uOverview', 'uDetail'] as const);
++  const edgeUniforms = uniforms(gl, edgeProgram, ['uView', 'uViewport', 'uDpr', 'uEdge', 'uAccent'] as const);
++
++  const quad = gl.createBuffer();
++  gl.bindBuffer(gl.ARRAY_BUFFER, quad);
++  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]), gl.STATIC_DRAW);
++
++  const strip = gl.createBuffer();
++  const stripData = new Float32Array((EDGE_SEGMENTS + 1) * 4);
++  for (let index = 0; index <= EDGE_SEGMENTS; index += 1) {
++    stripData.set([index / EDGE_SEGMENTS, -1, index / EDGE_SEGMENTS, 1], index * 4);
++  }
++  gl.bindBuffer(gl.ARRAY_BUFFER, strip);
++  gl.bufferData(gl.ARRAY_BUFFER, stripData, gl.STATIC_DRAW);
++
++  function instancedLayout(vertexBuffer: WebGLBuffer | null, instanceBuffer: WebGLBuffer | null, stride: number, layout: readonly number[]): WebGLVertexArrayObject | null {
++    const vao = gl.createVertexArray();
++    gl.bindVertexArray(vao);
++    gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
++    gl.enableVertexAttribArray(0);
++    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
++    gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
++    let offset = 0;
++    layout.forEach((size, index) => {
++      gl.enableVertexAttribArray(index + 1);
++      gl.vertexAttribPointer(index + 1, size, gl.FLOAT, false, stride * 4, offset * 4);
++      gl.vertexAttribDivisor(index + 1, 1);
++      offset += size;
++    });
++    gl.bindVertexArray(null);
++    return vao;
++  }
++
++  const nodeBuffer = gl.createBuffer();
++  const groupBuffer = gl.createBuffer();
++  const edgeBuffer = gl.createBuffer();
++  const nodeLayout = [4, 4, 4, 4, 4] as const;
++  const nodeVao = instancedLayout(quad, nodeBuffer, NODE_FLOATS, nodeLayout);
++  const groupVao = instancedLayout(quad, groupBuffer, NODE_FLOATS, nodeLayout);
++  const edgeVao = instancedLayout(strip, edgeBuffer, EDGE_FLOATS, [4, 4, 2]);
++
++  let nodeData = new Float32Array(0);
++  let groupData = new Float32Array(0);
++  let edgeData = new Float32Array(0);
++  let nodeCount = 0, groupCount = 0, edgeCount = 0;
++  /** 最近一次写入画面的时刻：在它之后的淡入时长内需要持续重画 */
++  let latestTileAt = 0;
++
++  function grow(current: Float32Array<ArrayBuffer>, floats: number): Float32Array<ArrayBuffer> {
++    return current.length >= floats ? current : new Float32Array(Math.ceil(floats * 1.25));
++  }
++
++  return {
++    /** 重填节点实例。tiles 提供每个节点当前可用的画面。 */
++    setNodes(nodes: readonly FarLayerNode[], tiles: FarLayerTiles): void {
++      nodeData = grow(nodeData, nodes.length * NODE_FLOATS);
++      groupData = grow(groupData, nodes.length * NODE_FLOATS);
++      nodeCount = 0; groupCount = 0;
++      for (const entry of nodes) {
++        const target = entry.group ? groupData : nodeData;
++        const offset = (entry.group ? groupCount++ : nodeCount++) * NODE_FLOATS;
++        const tile = entry.group ? undefined : tiles.get(entry.id);
++        const overview = tile?.overview, detail = tile?.detail;
++        target[offset] = entry.x; target[offset + 1] = entry.y; target[offset + 2] = entry.width; target[offset + 3] = entry.height;
++        target[offset + 4] = overview?.u0 ?? 0; target[offset + 5] = overview?.v0 ?? 0; target[offset + 6] = overview?.u1 ?? 0; target[offset + 7] = overview?.v1 ?? 0;
++        target[offset + 8] = detail?.u0 ?? 0; target[offset + 9] = detail?.v0 ?? 0; target[offset + 10] = detail?.u1 ?? 0; target[offset + 11] = detail?.v1 ?? 0;
++        target[offset + 12] = overview ? overview.layer : -1; target[offset + 13] = detail ? detail.layer : -1;
++        target[offset + 14] = tile?.overviewAt ?? 0; target[offset + 15] = tile?.detailAt ?? 0;
++        target[offset + 16] = entry.group ? 1 : 0; target[offset + 17] = entry.selected ? 1 : 0; target[offset + 18] = 0; target[offset + 19] = 0;
++        if (tile) latestTileAt = Math.max(latestTileAt, tile.overviewAt, tile.detailAt);
++      }
++      gl.bindBuffer(gl.ARRAY_BUFFER, nodeBuffer);
++      gl.bufferData(gl.ARRAY_BUFFER, nodeData.subarray(0, nodeCount * NODE_FLOATS), gl.DYNAMIC_DRAW);
++      gl.bindBuffer(gl.ARRAY_BUFFER, groupBuffer);
++      gl.bufferData(gl.ARRAY_BUFFER, groupData.subarray(0, groupCount * NODE_FLOATS), gl.DYNAMIC_DRAW);
++    },
++
++    /** 重填连线实例。skipDomDrawable 为真时略过 ReactFlow 自己能画的线。 */
++    setEdges(edges: readonly FarLayerEdge[], skipDomDrawable: boolean): void {
++      edgeData = grow(edgeData, edges.length * EDGE_FLOATS);
++      edgeCount = 0;
++      for (const edge of edges) {
++        if (skipDomDrawable && edge.domDrawable) continue;
++        const offset = edgeCount++ * EDGE_FLOATS;
++        edgeData.set(edge.points, offset);
++        edgeData[offset + 8] = edge.selected ? 1 : 0;
++        edgeData[offset + 9] = 1;
++      }
++      gl.bindBuffer(gl.ARRAY_BUFFER, edgeBuffer);
++      gl.bufferData(gl.ARRAY_BUFFER, edgeData.subarray(0, edgeCount * EDGE_FLOATS), gl.DYNAMIC_DRAW);
++    },
++
++    /** 画一帧；返回画面是否还在淡入（需要继续安排下一帧）。 */
++    draw(view: FarLayerView, colors: FarLayerColors, tiles: FarLayerTiles, time: number): boolean {
++      gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
++      gl.clearColor(0, 0, 0, 0);
++      gl.clear(gl.COLOR_BUFFER_BIT);
++      gl.enable(gl.BLEND);
++      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
++
++      const drawNodes = (vao: WebGLVertexArrayObject | null, count: number) => {
++        if (!count) return;
++        gl.useProgram(nodeProgram);
++        gl.uniform3f(nodeUniforms.uView, view.x, view.y, view.zoom);
++        gl.uniform2f(nodeUniforms.uViewport, view.width, view.height);
++        gl.uniform1f(nodeUniforms.uDpr, view.dpr);
++        gl.uniform1f(nodeUniforms.uTime, time);
++        gl.uniform1f(nodeUniforms.uRadius, colors.radius);
++        gl.uniform3fv(nodeUniforms.uPanel, colors.panel);
++        gl.uniform3fv(nodeUniforms.uBorder, colors.border);
++        gl.uniform3fv(nodeUniforms.uAccent, colors.accent);
++        gl.uniform3fv(nodeUniforms.uGroup, colors.group);
++        gl.activeTexture(gl.TEXTURE0);
++        gl.bindTexture(gl.TEXTURE_2D_ARRAY, tiles.overviewTexture);
++        gl.uniform1i(nodeUniforms.uOverview, 0);
++        gl.activeTexture(gl.TEXTURE1);
++        // 清晰级还没建时绑概览纹理占位：实例里清晰层号为负，不会采样到
++        gl.bindTexture(gl.TEXTURE_2D_ARRAY, tiles.detailTexture ?? tiles.overviewTexture);
++        gl.uniform1i(nodeUniforms.uDetail, 1);
++        gl.bindVertexArray(vao);
++        gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, count);
++      };
++
++      drawNodes(groupVao, groupCount);
++      if (edgeCount) {
++        gl.useProgram(edgeProgram);
++        gl.uniform3f(edgeUniforms.uView, view.x, view.y, view.zoom);
++        gl.uniform2f(edgeUniforms.uViewport, view.width, view.height);
++        gl.uniform1f(edgeUniforms.uDpr, view.dpr);
++        gl.uniform3fv(edgeUniforms.uEdge, colors.edge);
++        gl.uniform3fv(edgeUniforms.uAccent, colors.accent);
++        gl.bindVertexArray(edgeVao);
++        gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, (EDGE_SEGMENTS + 1) * 2, edgeCount);
++      }
++      drawNodes(nodeVao, nodeCount);
++      gl.bindVertexArray(null);
++      return time - latestTileAt < TILE_FADE_SECONDS;
++    },
++
++    dispose(): void {
++      for (const buffer of [quad, strip, nodeBuffer, groupBuffer, edgeBuffer]) gl.deleteBuffer(buffer);
++      for (const vao of [nodeVao, groupVao, edgeVao]) gl.deleteVertexArray(vao);
++      gl.deleteProgram(nodeProgram);
++      gl.deleteProgram(edgeProgram);
++    },
++  };
++}
++
++export type FarLayerRenderer = ReturnType<typeof createFarLayerRenderer>;
+diff --git a/src/features/canvas/farLayer/farLayerScene.ts b/src/features/canvas/farLayer/farLayerScene.ts
+new file mode 100644
+index 000000000..f1bf34d4d
+--- /dev/null
++++ b/src/features/canvas/farLayer/farLayerScene.ts
+@@ -0,0 +1,121 @@
++import { Position, type InternalNode, type ReactFlowState } from '@xyflow/react';
++import type { CanvasEdge, CanvasNode } from '@/features/canvas/domain/canvasNodes';
++import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodeConstants';
++
++/**
++ * 远景层要画的内容：每个节点一个矩形、每条连线一段三次贝塞尔。
++ * 只读 ReactFlow 已有的位置与量得尺寸，不另存一份几何；端口位置优先用量得的值，
++ * 节点正文没挂载时退回上次记下的相对位置，再没有就取左右两侧中点。
++ */
++
++export interface FarLayerNode {
++  id: string;
++  node: InternalNode<CanvasNode>;
++  x: number;
++  y: number;
++  width: number;
++  height: number;
++  selected: boolean;
++  group: boolean;
++}
++
++export interface FarLayerEdge {
++  /** 起点、两个控制点、终点（画布坐标） */
++  points: [number, number, number, number, number, number, number, number];
++  selected: boolean;
++  /** 两端都挂着正文且端口已量得：近景时这条线由 ReactFlow 自己画 */
++  domDrawable: boolean;
++}
++
++interface HandleAnchor { dx: number; dy: number; position: Position }
++
++type SceneState = Pick<ReactFlowState, 'nodeLookup'> & { edges: readonly CanvasEdge[] };
++
++function controlOffset(distance: number): number {
++  // 与 ReactFlow getBezierPath 默认曲率 0.25 相同
++  return distance >= 0 ? 0.5 * distance : 0.25 * 25 * Math.sqrt(-distance);
++}
++
++function controlPoint(position: Position, x1: number, y1: number, x2: number, y2: number): [number, number] {
++  switch (position) {
++    case Position.Left: return [x1 - controlOffset(x1 - x2), y1];
++    case Position.Right: return [x1 + controlOffset(x2 - x1), y1];
++    case Position.Top: return [x1, y1 - controlOffset(y1 - y2)];
++    default: return [x1, y1 + controlOffset(y2 - y1)];
++  }
++}
++
++export function createFarLayerScene() {
++  /** 节点 → 端口键 → 相对节点左上角的连线锚点；正文卸载后仍用它，连线端点不跳。 */
++  const anchors = new Map<string, Map<string, HandleAnchor>>();
++
++  function measuredAnchor(node: InternalNode<CanvasNode>, type: 'source' | 'target', handleId: string | null | undefined): HandleAnchor | null {
++    const bounds = node.internals.handleBounds?.[type];
++    if (!bounds?.length) return null;
++    const handle = handleId ? bounds.find(candidate => candidate.id === handleId) : bounds[0];
++    if (!handle) return null;
++    const position = handle.position ?? (type === 'source' ? Position.Right : Position.Left);
++    const dx = position === Position.Right ? handle.x + handle.width : position === Position.Left ? handle.x : handle.x + handle.width / 2;
++    const dy = position === Position.Bottom ? handle.y + handle.height : position === Position.Top ? handle.y : handle.y + handle.height / 2;
++    return { dx, dy, position };
++  }
++
++  function resolveAnchor(entry: FarLayerNode, type: 'source' | 'target', handleId: string | null | undefined): { anchor: HandleAnchor; measured: boolean } {
++    const key = `${type}:${handleId ?? ''}`;
++    const measured = measuredAnchor(entry.node, type, handleId);
++    if (measured) {
++      let known = anchors.get(entry.id);
++      if (!known) { known = new Map(); anchors.set(entry.id, known); }
++      known.set(key, measured);
++      return { anchor: measured, measured: true };
++    }
++    const remembered = anchors.get(entry.id)?.get(key);
++    if (remembered) return { anchor: remembered, measured: false };
++    return {
++      anchor: type === 'source'
++        ? { dx: entry.width, dy: entry.height / 2, position: Position.Right }
++        : { dx: 0, dy: entry.height / 2, position: Position.Left },
++      measured: false,
++    };
++  }
++
++  function build(state: SceneState, isBodyMounted: (id: string) => boolean): { nodes: FarLayerNode[]; edges: FarLayerEdge[] } {
++    const nodes: FarLayerNode[] = [];
++    const byId = new Map<string, FarLayerNode>();
++    for (const node of state.nodeLookup.values() as IterableIterator<InternalNode<CanvasNode>>) {
++      if (node.hidden) continue;
++      const width = node.measured.width;
++      const height = node.measured.height;
++      // 没量过尺寸的节点由正文挂载调度先挂一次，量到之后才进远景
++      if (!width || !height) continue;
++      const entry: FarLayerNode = {
++        id: node.id, node, width, height,
++        x: node.internals.positionAbsolute.x,
++        y: node.internals.positionAbsolute.y,
++        selected: Boolean(node.selected),
++        group: node.type === CANVAS_NODE_TYPES.group,
++      };
++      nodes.push(entry);
++      byId.set(node.id, entry);
++    }
++    for (const id of anchors.keys()) if (!state.nodeLookup.has(id)) anchors.delete(id);
++
++    const edges: FarLayerEdge[] = [];
++    for (const edge of state.edges) {
++      if (edge.hidden) continue;
++      const source = byId.get(edge.source);
++      const target = byId.get(edge.target);
++      if (!source || !target) continue;
++      const from = resolveAnchor(source, 'source', edge.sourceHandle);
++      const to = resolveAnchor(target, 'target', edge.targetHandle);
++      const x1 = source.x + from.anchor.dx, y1 = source.y + from.anchor.dy;
++      const x2 = target.x + to.anchor.dx, y2 = target.y + to.anchor.dy;
++      const [c1x, c1y] = controlPoint(from.anchor.position, x1, y1, x2, y2);
++      const [c2x, c2y] = controlPoint(to.anchor.position, x2, y2, x1, y1);
++      edges.push({ points: [x1, y1, c1x, c1y, c2x, c2y, x2, y2], selected: Boolean(edge.selected), domDrawable: from.measured && to.measured && isBodyMounted(edge.source) && isBodyMounted(edge.target) });
++    }
++    return { nodes, edges };
++  }
++
++  return { build };
++}
+diff --git a/src/features/canvas/farLayer/farLayerTiles.ts b/src/features/canvas/farLayer/farLayerTiles.ts
+new file mode 100644
+index 000000000..121cab31d
+--- /dev/null
++++ b/src/features/canvas/farLayer/farLayerTiles.ts
+@@ -0,0 +1,384 @@
++import { createLogger } from '@/core/logging';
++import { getPlatform } from '@/platform';
++import { resolveImageDisplayUrl, toFetchableMediaUrl } from '@/services/imageSource';
++import { requestMicroThumbnail } from '@/features/canvas/application/microThumbnail';
++import { getNodeDefinition } from '@/features/canvas/domain/nodeRegistry';
++import { resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
++import type { CanvasNodeType } from '@/features/canvas/domain/canvasNodeConstants';
++import { createFarLayerAtlas, type AtlasSlot, type FarLayerAtlas } from './farLayerAtlas';
++import type { FarLayerNode } from './farLayerScene';
++
++const logger = createLogger('features.canvas.farLayer.tiles');
++
++/**
++ * 每个节点的远景画面，分两级：
++ * - 概览级：很小的一格，所有节点常驻，带逐级缩小的副本，缩到很远也不闪；
++ * - 清晰级：大一号，只给屏幕上够大的节点，数量有上限、按最近使用淘汰。
++ * 画面来源：媒体节点用主进程落盘的缩略图；其余节点自绘（面板底、标题、几行文字块）。
++ * 两级都没到之前节点先画成一块面板色，画面到了再淡入，所以任何时刻每个节点都有东西可画。
++ */
++
++const OVERVIEW_CELL = 64;
++const OVERVIEW_LEVELS = 3;
++const DETAIL_CELL = 256;
++const PAGE = 2048;
++/** 清晰级的格子数：同屏够大的节点远少于这个数 */
++const DETAIL_CAPACITY = 512;
++/** 节点在屏幕上的长边超过这么多设备像素才值得换清晰级 */
++const DETAIL_MIN_SCREEN_PX = OVERVIEW_CELL * 1.25;
++const MAX_CONCURRENT_LOADS = 6;
++/** 每帧花在自绘与上传上的时间上限 */
++const FRAME_BUDGET_MS = 3;
++
++export interface FarLayerPalette {
++  panel: string;
++  text: string;
++  subtle: string;
++  fontFamily: string;
++  /** 主题变了就加一，自绘画面随之重画 */
++  epoch: number;
++}
++
++export interface NodeTile {
++  overview: AtlasSlot | null;
++  /** 概览级画面写入的时刻（秒），着色器据此淡入 */
++  overviewAt: number;
++  detail: AtlasSlot | null;
++  detailAt: number;
++}
++
++type TileContent =
++  | { kind: 'image'; source: string; signature: string }
++  | { kind: 'video'; source: string; signature: string }
++  | { kind: 'card'; title: string; lines: string; signature: string };
++
++interface TileState extends NodeTile {
++  content: TileContent;
++  overviewLoading: boolean;
++  detailLoading: boolean;
++  detailUsedAt: number;
++  /** 媒体读不出来时改用自绘 */
++  mediaFailed: boolean;
++}
++
++function text(value: unknown): string {
++  return typeof value === 'string' ? value.trim() : '';
++}
++
++/** 同一个节点对象、同一套配色下内容描述不变：按节点对象缓存，不必每次重拼。 */
++const described = new WeakMap<object, { epoch: number; shape: string; content: TileContent }>();
++
++function describe(entry: FarLayerNode, paletteEpoch: number): TileContent {
++  const node = entry.node;
++  // 自绘画面按节点形状排版，尺寸取整到 16 以内的变化不重画
++  const shape = `${Math.round(entry.width / 16)}x${Math.round(entry.height / 16)}`;
++  const cached = described.get(node.internals.userNode);
++  if (cached && cached.epoch === paletteEpoch && cached.shape === shape) return cached.content;
++  const content = describeContent(entry, paletteEpoch, shape);
++  described.set(node.internals.userNode, { epoch: paletteEpoch, shape, content });
++  return content;
++}
++
++function describeContent(entry: FarLayerNode, paletteEpoch: number, shape: string): TileContent {
++  const node = entry.node;
++  const data = (node.internals.userNode.data ?? {}) as Record<string, unknown>;
++  const type = (node.type ?? '') as CanvasNodeType;
++  const media = getNodeDefinition(type).media;
++  if (media && media.role !== 'generator') {
++    const image = text(data.previewImageUrl) || text(data.imageUrl);
++    if (image) return { kind: 'image', source: image, signature: `image|${image}` };
++    const video = text(data.videoUrl);
++    if (video) return { kind: 'video', source: video, signature: `video|${video}` };
++  }
++  const title = resolveNodeDisplayName(type, data);
++  const lines = text(data.prompt) || text(data.content) || text(data.text);
++  return { kind: 'card', title, lines, signature: `card|${paletteEpoch}|${type}|${title}|${lines.slice(0, 80)}|${shape}` };
++}
++
++function fit(width: number, height: number, limit: number): { width: number; height: number } {
++  const scale = limit / Math.max(width, height);
++  return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
++}
++
++export function createFarLayerTiles(gl: WebGL2RenderingContext, options: { nodeCapacity: number; onChange(): void; now(): number }) {
++  let overview: FarLayerAtlas = createFarLayerAtlas(gl, { cell: OVERVIEW_CELL, page: PAGE, levels: OVERVIEW_LEVELS, capacity: options.nodeCapacity });
++  // 清晰级占显存较多，用到才建
++  let detail: FarLayerAtlas | null = null;
++  const states = new Map<string, TileState>();
++  /** 概览级排队：媒体受同时读取数限制，自绘受每帧时间限制，分开排才不会互相堵住 */
++  const mediaOverviewQueue = new Set<string>();
++  const cardOverviewQueue = new Set<string>();
++  const cardDetailQueue = new Set<string>();
++  let activeLoads = 0;
++  let disposed = false;
++  let palette: FarLayerPalette = { panel: '', text: '', subtle: '', fontFamily: 'sans-serif', epoch: 0 };
++
++  const scratch = [OVERVIEW_CELL, OVERVIEW_CELL / 2, OVERVIEW_CELL / 4].map(size => new OffscreenCanvas(size, size));
++  const detailScratch = new OffscreenCanvas(DETAIL_CELL, DETAIL_CELL);
++
++  function context(canvas: OffscreenCanvas): OffscreenCanvasRenderingContext2D {
++    // 画完立刻整块上传成纹理：留在内存里画，避免每次上传都从显存读回
++    const ctx = canvas.getContext('2d', { willReadFrequently: true });
++    if (!ctx) throw new Error('远景自绘画布不可用');
++    return ctx;
++  }
++
++  function drawCover(ctx: OffscreenCanvasRenderingContext2D, image: CanvasImageSource, sourceWidth: number, sourceHeight: number, width: number, height: number): void {
++    const scale = Math.max(width / sourceWidth, height / sourceHeight);
++    const drawWidth = sourceWidth * scale, drawHeight = sourceHeight * scale;
++    ctx.clearRect(0, 0, width, height);
++    ctx.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
++  }
++
++  /** 简化的节点卡片：面板底、标题、正文。字小到读不出时改画等宽的色条，远看仍是“有标题、有几行字”的形状。 */
++  function drawCard(ctx: OffscreenCanvasRenderingContext2D, content: Extract<TileContent, { kind: 'card' }>, entry: FarLayerNode, width: number, height: number): void {
++    const scale = width / entry.width;
++    ctx.clearRect(0, 0, width, height);
++    ctx.fillStyle = palette.panel;
++    ctx.fillRect(0, 0, width, height);
++    const pad = 14 * scale;
++    const titleSize = 20 * scale;
++    const bodySize = 13 * scale;
++    ctx.textBaseline = 'top';
++    if (titleSize >= 7) {
++      ctx.fillStyle = palette.text;
++      ctx.font = `500 ${titleSize}px ${palette.fontFamily}`;
++      ctx.fillText(content.title, pad, pad, width - pad * 2);
++    } else {
++      ctx.fillStyle = palette.subtle;
++      ctx.globalAlpha = 0.9;
++      ctx.fillRect(pad, pad, Math.min(width - pad * 2, Math.max(titleSize * 2, content.title.length * titleSize * 0.9)), Math.max(1, titleSize * 0.7));
++      ctx.globalAlpha = 1;
++    }
++    if (!content.lines) return;
++    const top = pad + titleSize * 1.7;
++    const lineHeight = bodySize * 1.6;
++    const available = Math.max(0, Math.floor((height - top - pad) / lineHeight));
++    const perLine = Math.max(4, Math.floor((width - pad * 2) / bodySize));
++    const rows = Math.min(available, 6, Math.ceil(content.lines.length / perLine));
++    ctx.fillStyle = palette.subtle;
++    for (let row = 0; row < rows; row += 1) {
++      const slice = content.lines.slice(row * perLine, (row + 1) * perLine);
++      if (bodySize >= 7) {
++        ctx.font = `${bodySize}px ${palette.fontFamily}`;
++        ctx.fillText(slice, pad, top + row * lineHeight, width - pad * 2);
++      } else {
++        ctx.globalAlpha = 0.45;
++        ctx.fillRect(pad, top + row * lineHeight, (width - pad * 2) * Math.min(1, slice.length / perLine), Math.max(1, bodySize * 0.6));
++        ctx.globalAlpha = 1;
++      }
++    }
++  }
++
++  function writeOverview(state: TileState, entry: FarLayerNode, paint: (ctx: OffscreenCanvasRenderingContext2D, width: number, height: number) => void): void {
++    const index = state.overview?.index ?? overview.allocate();
++    if (index === null) return;
++    const size = fit(entry.width, entry.height, overview.contentSize);
++    scratch.forEach((canvas, level) => paint(context(canvas), Math.max(1, size.width >> level), Math.max(1, size.height >> level)));
++    state.overview = overview.write(index, scratch, size.width, size.height);
++    state.overviewAt = options.now();
++  }
++
++  function ensureDetailAtlas(): FarLayerAtlas {
++    detail ??= createFarLayerAtlas(gl, { cell: DETAIL_CELL, page: PAGE, levels: 1, capacity: DETAIL_CAPACITY });
++    return detail;
++  }
++
++  function allocateDetail(wanted: ReadonlySet<string>): number | null {
++    const atlas = ensureDetailAtlas();
++    const index = atlas.allocate();
++    if (index !== null) return index;
++    // 满了：淘汰当前不需要、最久没用的一格
++    let victim: TileState | null = null;
++    for (const [id, state] of states) {
++      if (!state.detail || wanted.has(id)) continue;
++      if (!victim || state.detailUsedAt < victim.detailUsedAt) victim = state;
++    }
++    if (!victim?.detail) return null;
++    const reused = victim.detail.index;
++    victim.detail = null;
++    return reused;
++  }
++
++  function writeDetail(state: TileState, entry: FarLayerNode, wanted: ReadonlySet<string>, paint: (ctx: OffscreenCanvasRenderingContext2D, width: number, height: number) => void): void {
++    const index = state.detail?.index ?? allocateDetail(wanted);
++    if (index === null) return;
++    const atlas = ensureDetailAtlas();
++    const size = fit(entry.width, entry.height, atlas.contentSize);
++    paint(context(detailScratch), size.width, size.height);
++    state.detail = atlas.write(index, [detailScratch], size.width, size.height);
++    state.detailAt = options.now();
++    state.detailUsedAt = state.detailAt;
++  }
++
++  async function loadBitmap(content: Extract<TileContent, { kind: 'image' | 'video' }>, limit: number): Promise<ImageBitmap> {
++    let url: string;
++    if (content.kind === 'image') {
++      const request = requestMicroThumbnail(content.source);
++      url = await request.promise;
++    } else {
++      const { path } = await getPlatform().video.getCachedThumbnail(content.source);
++      url = resolveImageDisplayUrl(path);
++    }
++    const response = await fetch(toFetchableMediaUrl(url));
++    if (!response.ok) throw new Error(`缩略图读取失败（${response.status}）`);
++    const blob = await response.blob();
++    const full = await createImageBitmap(blob);
++    if (Math.max(full.width, full.height) <= limit * 2) return full;
++    // 远大于目标的图先缩一次，后面逐级画的时候不走大图
++    const size = fit(full.width, full.height, limit * 2);
++    const reduced = await createImageBitmap(full, { resizeWidth: size.width, resizeHeight: size.height, resizeQuality: 'medium' });
++    full.close();
++    return reduced;
++  }
++
++  function startMediaLoad(id: string, level: 'overview' | 'detail', entry: FarLayerNode, wanted: ReadonlySet<string>): void {
++    const state = states.get(id);
++    if (!state || state.content.kind === 'card') return;
++    const content = state.content;
++    activeLoads += 1;
++    if (level === 'overview') state.overviewLoading = true; else state.detailLoading = true;
++    void loadBitmap(content, level === 'overview' ? OVERVIEW_CELL : DETAIL_CELL).then((bitmap) => {
++      const current = states.get(id);
++      if (disposed || !current || current.content.signature !== content.signature) { bitmap.close(); return; }
++      const paint = (ctx: OffscreenCanvasRenderingContext2D, width: number, height: number) => drawCover(ctx, bitmap, bitmap.width, bitmap.height, width, height);
++      if (level === 'overview') writeOverview(current, entry, paint); else writeDetail(current, entry, wanted, paint);
++      bitmap.close();
++    }).catch((error: unknown) => {
++      const current = states.get(id);
++      if (!current || current.content.signature !== content.signature) return;
++      logger.debug('远景缩略图读取失败，改用自绘', { error: String(error) });
++      current.mediaFailed = true;
++      cardOverviewQueue.add(id);
++    }).finally(() => {
++      activeLoads -= 1;
++      const current = states.get(id);
++      if (current?.content.signature === content.signature) {
++        if (level === 'overview') current.overviewLoading = false; else current.detailLoading = false;
++      }
++      if (!disposed) options.onChange();
++    });
++  }
++
++  function enqueueOverview(id: string, state: TileState): void {
++    if (state.content.kind === 'card' || state.mediaFailed) cardOverviewQueue.add(id); else mediaOverviewQueue.add(id);
++  }
++
++  function cardOf(state: TileState, entry: FarLayerNode): Extract<TileContent, { kind: 'card' }> {
++    if (state.content.kind === 'card') return state.content;
++    const data = (entry.node.internals.userNode.data ?? {}) as Record<string, unknown>;
++    return { kind: 'card', title: resolveNodeDisplayName((entry.node.type ?? '') as CanvasNodeType, data), lines: '', signature: '' };
++  }
++
++  return {
++    get overviewTexture() { return overview.texture; },
++    get detailTexture() { return detail?.texture ?? null; },
++    get(id: string): NodeTile | undefined { return states.get(id); },
++
++    setPalette(next: Omit<FarLayerPalette, 'epoch'>): void {
++      if (next.panel === palette.panel && next.text === palette.text && next.subtle === palette.subtle && next.fontFamily === palette.fontFamily) return;
++      palette = { ...next, epoch: palette.epoch + 1 };
++    },
++
++    /**
++     * 对齐节点集合并推进加载。view 给出视口（画布坐标）与每画布单位对应的设备像素，用来排优先级与决定谁要清晰级。
++     * 返回是否还有没做完的工作（调用方据此继续安排下一帧）。
++     */
++    update(nodes: readonly FarLayerNode[], view: { left: number; top: number; right: number; bottom: number; devicePixelsPerUnit: number }): boolean {
++      if (disposed) return false;
++      const started = performance.now();
++      if (nodes.length > overview.capacity) {
++        // 节点数超过图集容量：换一张更大的，画面重新排队（先画成面板色，再逐个回来）
++        overview.dispose();
++        overview = createFarLayerAtlas(gl, { cell: OVERVIEW_CELL, page: PAGE, levels: OVERVIEW_LEVELS, capacity: Math.ceil(nodes.length * 1.5) });
++        for (const [id, state] of states) { state.overview = null; enqueueOverview(id, state); }
++      }
++      const byId = new Map<string, FarLayerNode>();
++      const centerX = (view.left + view.right) / 2, centerY = (view.top + view.bottom) / 2;
++      const wantedDetail: Array<{ id: string; distance: number }> = [];
++      const visibleQueued: string[] = [];
++      for (const entry of nodes) {
++        if (entry.group) continue;
++        byId.set(entry.id, entry);
++        const content = describe(entry, palette.epoch);
++        let state = states.get(entry.id);
++        if (!state || state.content.signature !== content.signature) {
++          if (state?.detail) detail?.release(state.detail.index);
++          // 内容变了：概览格子沿用，新画面写进去之前仍显示旧画面，不退回空白
++          state = {
++            content, overview: state?.overview ?? null, overviewAt: state?.overviewAt ?? 0,
++            detail: null, detailAt: 0, overviewLoading: false, detailLoading: false, detailUsedAt: 0, mediaFailed: false,
++          };
++          states.set(entry.id, state);
++          enqueueOverview(entry.id, state);
++        }
++        const visible = entry.x < view.right && entry.x + entry.width > view.left && entry.y < view.bottom && entry.y + entry.height > view.top;
++        if (visible && (mediaOverviewQueue.has(entry.id) || cardOverviewQueue.has(entry.id))) visibleQueued.push(entry.id);
++        if (visible && Math.max(entry.width, entry.height) * view.devicePixelsPerUnit >= DETAIL_MIN_SCREEN_PX) {
++          wantedDetail.push({ id: entry.id, distance: Math.hypot(entry.x + entry.width / 2 - centerX, entry.y + entry.height / 2 - centerY) });
++        }
++      }
++      for (const [id, state] of states) {
++        if (byId.has(id)) continue;
++        if (state.overview) overview.release(state.overview.index);
++        if (state.detail) detail?.release(state.detail.index);
++        states.delete(id); mediaOverviewQueue.delete(id); cardOverviewQueue.delete(id); cardDetailQueue.delete(id);
++      }
++
++      wantedDetail.sort((a, b) => a.distance - b.distance);
++      const wanted = new Set(wantedDetail.slice(0, DETAIL_CAPACITY).map(item => item.id));
++      const stamp = options.now();
++      for (const id of wanted) {
++        const state = states.get(id);
++        if (!state) continue;
++        if (state.detail) { state.detailUsedAt = stamp; continue; }
++        if (state.detailLoading) continue;
++        if (state.content.kind === 'card' || state.mediaFailed) cardDetailQueue.add(id);
++        else if (activeLoads < MAX_CONCURRENT_LOADS) { const entry = byId.get(id); if (entry) startMediaLoad(id, 'detail', entry, wanted); }
++      }
++
++      // 概览级：视口里的先做，其余按排队顺序
++      const stepMedia = (id: string): void => {
++        const state = states.get(id);
++        const entry = byId.get(id);
++        mediaOverviewQueue.delete(id);
++        if (!state || !entry || state.overviewLoading) return;
++        startMediaLoad(id, 'overview', entry, wanted);
++      };
++      const stepCard = (id: string): void => {
++        const state = states.get(id);
++        const entry = byId.get(id);
++        cardOverviewQueue.delete(id);
++        if (!state || !entry) return;
++        const card = cardOf(state, entry);
++        writeOverview(state, entry, (ctx, width, height) => drawCard(ctx, card, entry, width, height));
++      };
++      const mediaFull = () => activeLoads >= MAX_CONCURRENT_LOADS;
++      const cardsOverBudget = () => performance.now() - started > FRAME_BUDGET_MS;
++      for (const id of visibleQueued) {
++        if (mediaOverviewQueue.has(id)) { if (!mediaFull()) stepMedia(id); } else if (!cardsOverBudget()) stepCard(id);
++      }
++      for (const id of mediaOverviewQueue) { if (mediaFull()) break; stepMedia(id); }
++      for (const id of cardOverviewQueue) { if (cardsOverBudget()) break; stepCard(id); }
++      for (const id of [...cardDetailQueue]) {
++        if (performance.now() - started > FRAME_BUDGET_MS) break;
++        cardDetailQueue.delete(id);
++        const state = states.get(id);
++        const entry = byId.get(id);
++        if (!state || !entry || state.detail || !wanted.has(id)) continue;
++        const card = cardOf(state, entry);
++        writeDetail(state, entry, wanted, (ctx, width, height) => drawCard(ctx, card, entry, width, height));
++      }
++      return cardOverviewQueue.size > 0 || cardDetailQueue.size > 0 || (mediaOverviewQueue.size > 0 && !mediaFull());
++    },
++
++    dispose(): void {
++      disposed = true;
++      overview.dispose();
++      detail?.dispose();
++      states.clear(); mediaOverviewQueue.clear(); cardOverviewQueue.clear(); cardDetailQueue.clear();
++    },
++  };
++}
++
++export type FarLayerTiles = ReturnType<typeof createFarLayerTiles>;
+diff --git a/src/features/canvas/farLayer/CanvasFarLayer.tsx b/src/features/canvas/farLayer/CanvasFarLayer.tsx
+new file mode 100644
+index 000000000..64b85cc0c
+--- /dev/null
++++ b/src/features/canvas/farLayer/CanvasFarLayer.tsx
+@@ -0,0 +1,232 @@
++import { useEffect, useRef } from 'react';
++import { useStoreApi } from '@xyflow/react';
++import { createLogger } from '@/core/logging';
++import type { CanvasEdge, CanvasNode } from '@/features/canvas/domain/canvasNodes';
++import { canvasEventBus } from '@/features/canvas/application/canvasServices';
++import { useCanvasNodePresence } from '@/features/canvas/presence/useCanvasNodePresence';
++import { createFarLayerScene, type FarLayerEdge, type FarLayerNode } from './farLayerScene';
++import { createFarLayerRenderer, type FarLayerColors, type FarLayerRenderer } from './farLayerRenderer';
++import { createFarLayerTiles, type FarLayerTiles } from './farLayerTiles';
++
++const logger = createLogger('features.canvas.farLayer');
++
++/** 画面排队与加载的推进间隔：缩略图陆续回来、视口连续移动时，这么久统一处理一次 */
++const TILE_REFRESH_INTERVAL_MS = 90;
++/** 节点组件要接住的操作（导入文件等）到来时，正文保持挂载的时长 */
++const NODE_OPERATION_PIN_MS = 15_000;
++
++function readTriplet(style: CSSStyleDeclaration, name: string): [number, number, number] {
++  const parts = style.getPropertyValue(name).trim().split(/[\s,]+/).map(Number);
++  return [(parts[0] ?? 0) / 255, (parts[1] ?? 0) / 255, (parts[2] ?? 0) / 255];
++}
++
++function readTheme(element: HTMLElement): { colors: FarLayerColors; palette: { panel: string; text: string; subtle: string; fontFamily: string } } {
++  const style = getComputedStyle(element);
++  const css = (name: string) => `rgb(${style.getPropertyValue(name).trim()})`;
++  // 圆角是带 var() 与 calc() 的令牌，借一个临时元素让浏览器算出像素值
++  const probe = element.ownerDocument.createElement('div');
++  probe.style.borderRadius = 'var(--node-radius)';
++  element.parentElement?.appendChild(probe);
++  const radius = Number.parseFloat(getComputedStyle(probe).borderTopLeftRadius) || 0;
++  probe.remove();
++  const subtle = readTriplet(style, '--text3-rgb');
++  return {
++    colors: {
++      panel: readTriplet(style, '--panel-rgb'), border: subtle, edge: subtle,
++      accent: readTriplet(style, '--accent-rgb'), group: readTriplet(style, '--hover-rgb'), radius,
++    },
++    palette: { panel: css('--panel-rgb'), text: css('--text1-rgb'), subtle: css('--text3-rgb'), fontFamily: style.fontFamily || 'sans-serif' },
++  };
++}
++
++/**
++ * 画布远景层：铺在节点下面的一块画布，每一帧把所有节点和连线都画出来。
++ * 节点正文（真 DOM）只在近景挂载并盖在它上面；正文没挂上、缩放太小或者正在加载时，看到的就是这一层，
++ * 所以不管怎么快速缩放，节点都一直在。
++ */
++export function CanvasFarLayer(): JSX.Element {
++  const canvasRef = useRef<HTMLCanvasElement>(null);
++  const store = useStoreApi<CanvasNode, CanvasEdge>();
++  const presence = useCanvasNodePresence();
++
++  useEffect(() => {
++    const canvas = canvasRef.current;
++    if (!canvas) return;
++    let renderer: FarLayerRenderer | null = null;
++    let tiles: FarLayerTiles | null = null;
++    let gl: WebGL2RenderingContext | null = null;
++    const scene = createFarLayerScene();
++    let nodes: FarLayerNode[] = [];
++    let edges: FarLayerEdge[] = [];
++    let theme = readTheme(canvas);
++    let frame: number | null = null;
++    let sceneDirty = true;
++    let tilesDirty = true;
++    let viewMovedAt = 0;
++    let tilesUpdatedAt = 0;
++    let wasFading = false;
++    let previousTransform = store.getState().transform;
++    let disposed = false;
++    const seconds = () => performance.now() / 1000;
++
++    function view() {
++      const [x, y, zoom] = store.getState().transform;
++      return { x, y, zoom, width: canvas!.clientWidth, height: canvas!.clientHeight, dpr: window.devicePixelRatio || 1 };
++    }
++
++    function resize(): void {
++      const dpr = window.devicePixelRatio || 1;
++      const width = Math.max(1, Math.round(canvas!.clientWidth * dpr));
++      const height = Math.max(1, Math.round(canvas!.clientHeight * dpr));
++      if (canvas!.width !== width || canvas!.height !== height) { canvas!.width = width; canvas!.height = height; }
++    }
++
++    function draw(): boolean {
++      if (!renderer || !tiles) return false;
++      return renderer.draw(view(), theme.colors, tiles, seconds());
++    }
++
++    function schedule(): void {
++      if (disposed || frame !== null) return;
++      frame = requestAnimationFrame(runFrame);
++    }
++
++    function runFrame(): void {
++      frame = null;
++      if (disposed || !renderer || !tiles) return;
++      const rebuilt = sceneDirty;
++      if (sceneDirty) {
++        sceneDirty = false;
++        ({ nodes, edges } = scene.build(store.getState(), presence.isActive));
++      }
++      // 画面的排队与加载不必每帧推进：缩略图一张张回来、视口连续移动时，隔一小段时间统一处理一次
++      const stamp = performance.now();
++      const tilesWaiting = tilesDirty || viewMovedAt > tilesUpdatedAt;
++      const tilesDue = tilesWaiting && (tilesUpdatedAt === 0 || stamp - tilesUpdatedAt >= TILE_REFRESH_INTERVAL_MS);
++      if (tilesDue) {
++        tilesDirty = false;
++        tilesUpdatedAt = stamp;
++        const current = view();
++        const more = tiles.update(nodes, {
++          left: -current.x / current.zoom, top: -current.y / current.zoom,
++          right: (current.width - current.x) / current.zoom, bottom: (current.height - current.y) / current.zoom,
++          devicePixelsPerUnit: current.zoom * current.dpr,
++        });
++        if (more) tilesDirty = true;
++      }
++      if (rebuilt || tilesDue) {
++        renderer.setNodes(nodes, tiles);
++        // 近景时两端都挂着正文的连线由 ReactFlow 画，这里只补它画不出的
++        renderer.setEdges(edges, presence.isNear());
++      }
++      const fading = rebuilt || tilesDue || wasFading ? draw() : false;
++      wasFading = fading;
++      if (fading || tilesDirty || viewMovedAt > tilesUpdatedAt) schedule();
++    }
++
++    function start(): void {
++      gl = canvas!.getContext('webgl2', { alpha: true, premultipliedAlpha: true, antialias: false, powerPreference: 'high-performance' });
++      if (!gl) throw new Error('当前环境不支持 WebGL2');
++      renderer = createFarLayerRenderer(gl);
++      tiles = createFarLayerTiles(gl, {
++        nodeCapacity: Math.max(1024, Math.ceil(store.getState().nodeLookup.size * 1.5)),
++        onChange: () => { tilesDirty = true; schedule(); },
++        now: seconds,
++      });
++      tiles.setPalette(theme.palette);
++      sceneDirty = true; tilesDirty = true;
++      resize();
++      schedule();
++    }
++
++    function stop(): void {
++      renderer?.dispose(); tiles?.dispose();
++      renderer = null; tiles = null;
++    }
++
++    /** 远景层画不了时退回全部节点挂真 DOM 的旧行为；放到微任务里，避开 React 提交阶段。 */
++    function fallBack(reason: unknown): void {
++      logger.warn('画布远景层不可用，改为全部节点常驻挂载', { event: 'canvas.far_layer.unavailable', error: reason });
++      queueMicrotask(() => { if (!disposed) presence.setEnabled(false); });
++    }
++
++    try { start(); } catch (error) { stop(); fallBack(error); }
++
++    const onContextLost = (event: Event) => { event.preventDefault(); stop(); fallBack('context lost'); };
++    const onContextRestored = () => {
++      try { start(); queueMicrotask(() => { if (!disposed) presence.setEnabled(true); }); } catch (error) { stop(); fallBack(error); }
++    };
++    canvas.addEventListener('webglcontextlost', onContextLost);
++    canvas.addEventListener('webglcontextrestored', onContextRestored);
++
++    const stopStore = store.subscribe((state) => {
++      if (state.transform !== previousTransform) {
++        previousTransform = state.transform;
++        viewMovedAt = performance.now();
++        // 与节点层的视口变换同一帧落屏：视口变了立刻用现有实例重画，不等下一帧
++        draw();
++        schedule();
++        return;
++      }
++      sceneDirty = true;
++      schedule();
++    });
++    const stopPresence = presence.subscribeState(() => { sceneDirty = true; schedule(); });
++    const flowElement = canvas.closest<HTMLElement>('.react-flow');
++    // 指针换算用的画布位置：只在尺寸变化时重读，指针移动途中不读布局
++    let flowBounds = flowElement?.getBoundingClientRect();
++    const onResize = () => { flowBounds = flowElement?.getBoundingClientRect(); resize(); draw(); };
++    const resizeObserver = new ResizeObserver(onResize);
++    resizeObserver.observe(canvas);
++    // 窗口挪到另一块屏幕时设备像素比会变而元素尺寸不变
++    window.addEventListener('resize', onResize);
++    const themeObserver = new MutationObserver(() => {
++      theme = readTheme(canvas);
++      tiles?.setPalette(theme.palette);
++      sceneDirty = true;
++      schedule();
++    });
++    themeObserver.observe(canvas.ownerDocument.documentElement, { attributes: true, attributeFilter: ['style', 'class', 'data-theme'] });
++
++    // 指针停在哪个没挂正文的节点上，就让它出一个空外框接住点选、拖动与右键
++    const onPointerMove = (event: PointerEvent) => {
++      // 按着键移动是拖动或框选途中，不换目标
++      if (event.buttons !== 0 || !flowBounds) return;
++      if (event.target instanceof Element && event.target.closest('.react-flow__node')) return;
++      const state = store.getState();
++      const bounds = flowBounds;
++      const [x, y, zoom] = state.transform;
++      const pointX = (event.clientX - bounds.left - x) / zoom;
++      const pointY = (event.clientY - bounds.top - y) / zoom;
++      let hit: string | null = null;
++      // 后面的节点画在上面，取最后一个命中的
++      for (const entry of nodes) {
++        if (pointX >= entry.x && pointX <= entry.x + entry.width && pointY >= entry.y && pointY <= entry.y + entry.height && !presence.isActive(entry.id)) hit = entry.id;
++      }
++      presence.setShell(hit);
++    };
++    flowElement?.addEventListener('pointermove', onPointerMove, { passive: true });
++
++    // 这些操作由节点组件自己接住，正文没挂着就会落空：先把它挂上
++    const pin = ({ nodeId }: { nodeId: string }) => presence.pin(nodeId, NODE_OPERATION_PIN_MS);
++    const stopEvents = [
++      canvasEventBus.subscribe('canvas/import-media', pin),
++      canvasEventBus.subscribe('upload-node/reupload', pin),
++      canvasEventBus.subscribe('upload-node/paste-image', pin),
++    ];
++
++    return () => {
++      disposed = true;
++      if (frame !== null) cancelAnimationFrame(frame);
++      stopStore(); stopPresence(); resizeObserver.disconnect(); themeObserver.disconnect();
++      window.removeEventListener('resize', onResize);
++      stopEvents.forEach(stopEvent => stopEvent());
++      flowElement?.removeEventListener('pointermove', onPointerMove);
++      canvas.removeEventListener('webglcontextlost', onContextLost);
++      canvas.removeEventListener('webglcontextrestored', onContextRestored);
++      stop();
++    };
++  }, [presence, store]);
++
++  return <canvas ref={canvasRef} aria-hidden className="pointer-events-none absolute inset-0 h-full w-full" />;
++}
+diff --git a/src/features/canvas/presence/canvasNodePresence.test.ts b/src/features/canvas/presence/canvasNodePresence.test.ts
+new file mode 100644
+index 000000000..a5abb03d1
+--- /dev/null
++++ b/src/features/canvas/presence/canvasNodePresence.test.ts
+@@ -0,0 +1,97 @@
++import { describe, expect, it } from 'vitest';
++import { createCanvasNodePresence, MAX_ACTIVE_CANVAS_NODES, type CanvasNodePresenceSource } from './canvasNodePresence';
++
++interface FixtureNode { id: string; x: number; y: number; measured?: boolean }
++
++function fixture(nodes: FixtureNode[], zoom: number) {
++  const listeners = new Set<() => void>();
++  const rendered: { henjiRenderedNodeIds?: string[] | null } = {};
++  const state = {
++    transform: [0, 0, zoom] as [number, number, number],
++    width: 1000,
++    height: 800,
++    domNode: null,
++    nodes: [] as unknown[],
++    edges: [] as Array<{ id: string; source: string; target: string }>,
++    nodeLookup: new Map(nodes.map(node => [node.id, {
++      id: node.id, type: 'uploadNode', hidden: false, dragging: false,
++      measured: node.measured === false ? {} : { width: 100, height: 100 },
++      internals: { positionAbsolute: { x: node.x, y: node.y } },
++    }])),
++  };
++  const source = {
++    getState: () => state,
++    subscribe: (listener: () => void) => { listeners.add(listener); return () => listeners.delete(listener); },
++    setState: (ids: object) => { Object.assign(rendered, ids); },
++    seed: (ids: object) => { Object.assign(rendered, ids); },
++  } as unknown as CanvasNodePresenceSource;
++  let clock = 0;
++  const frames: Array<() => void> = [];
++  const presence = createCanvasNodePresence(source, {
++    getZoomThreshold: () => 0.4,
++    now: () => clock,
++    requestFrame: (callback) => { frames.push(callback); return frames.length; },
++    cancelFrame: () => undefined,
++  });
++  return {
++    presence,
++    rendered,
++    setZoom(next: number) { state.transform = [0, 0, next]; listeners.forEach(listener => listener()); },
++    /** 推进若干帧；每帧时钟走 16ms，时间预算因此每帧都用得完一批。 */
++    run(count = 1) { for (let i = 0; i < count && frames.length; i += 1) { clock += 16; frames.shift()?.(); } },
++    advance(ms: number) { clock += ms; },
++    pendingFrames: () => frames.length,
++  };
++}
++
++describe('节点正文挂载调度', () => {
++  it('近景只挂视口附近的节点，远景全部交给远景层，没量过尺寸的节点不论缩放都要挂一次', () => {
++    const { presence, setZoom, run, advance } = fixture([
++      { id: 'inside', x: 100, y: 100 },
++      { id: 'faraway', x: 50_000, y: 50_000 },
++      { id: 'fresh', x: 90_000, y: 0, measured: false },
++    ], 1);
++    presence.arm();
++    run(8);
++    expect(presence.modeOf('inside')).toBe('body');
++    expect(presence.modeOf('faraway')).toBe('off');
++    expect(presence.modeOf('fresh')).toBe('body');
++
++    setZoom(0.1);
++    run(1);
++    // 视口刚动过：正文先留着（节点层同时在淡出），停稳后才卸
++    expect(presence.modeOf('inside')).toBe('body');
++    advance(200);
++    run(4);
++    expect(presence.modeOf('inside')).toBe('off');
++    expect(presence.modeOf('fresh')).toBe('body');
++  });
++
++  it('同时挂载的正文有上限，离视口中心近的优先', () => {
++    const nodes = Array.from({ length: MAX_ACTIVE_CANVAS_NODES + 200 }, (_, index) => ({ id: `n${index}`, x: 500 + index, y: 400 }));
++    const { presence, run } = fixture(nodes, 1);
++    presence.arm();
++    run(2000);
++    expect(presence.activeCount()).toBeLessThanOrEqual(MAX_ACTIVE_CANVAS_NODES);
++    expect(presence.modeOf('n0')).toBe('body');
++    expect(presence.modeOf(`n${nodes.length - 1}`)).toBe('off');
++  });
++
++  it('指针所在的节点成为壳；被点名的节点立刻挂上正文；调度停用后一律按正文', () => {
++    const { presence, rendered, run } = fixture([{ id: 'a', x: 0, y: 0 }, { id: 'b', x: 300, y: 0 }], 0.1);
++    presence.arm();
++    run(2);
++    expect(presence.modeOf('a')).toBe('off');
++    expect(rendered.henjiRenderedNodeIds).toEqual([]);
++    presence.setShell('a');
++    expect(presence.modeOf('a')).toBe('shell');
++    expect(rendered.henjiRenderedNodeIds).toEqual(['a']);
++    presence.setShell('b');
++    expect(presence.modeOf('a')).toBe('off');
++    presence.pin('a', 1000);
++    expect(presence.modeOf('a')).toBe('body');
++    presence.setEnabled(false);
++    expect(presence.modeOf('b')).toBe('body');
++    expect(rendered.henjiRenderedNodeIds).toBeNull();
++  });
++});
+diff --git a/src/features/canvas/presence/canvasNodePresence.ts b/src/features/canvas/presence/canvasNodePresence.ts
+new file mode 100644
+index 000000000..580645702
+--- /dev/null
++++ b/src/features/canvas/presence/canvasNodePresence.ts
+@@ -0,0 +1,337 @@
++import type { ReactFlowState } from '@xyflow/react';
++
++/**
++ * 画布节点的按需挂载调度。
++ *
++ * 大画布上绝大多数节点不挂任何 DOM，画面由远景层（farLayer）常驻绘制；这里决定哪些节点交给
++ * ReactFlow 渲染，并把名单写进它的 store（`henjiRenderedNodeIds` / `henjiRenderedEdgeIds`，
++ * 由 patches/ 里的 ReactFlow 补丁读取）。被渲染的节点有两种形态：
++ * - 正文：视口附近且缩放够大的节点，按每帧时间预算分批挂上、分批卸下；
++ * - 壳：只有一个同尺寸的空块。指针停在哪个没挂正文的节点上，哪个节点就是壳，于是点选、拖动、
++ *   右键仍由 ReactFlow 原生处理，而同一时刻最多只多出一个空外框。
++ * 连线只有两端都挂着正文时才交给 ReactFlow，其余由远景层画。
++ *
++ * 没量过尺寸的节点（刚新建）不受缩放限制，排队挂载一次以取得真实尺寸与端口位置。
++ */
++
++type PresenceState = Pick<ReactFlowState, 'nodes' | 'nodeLookup' | 'edges' | 'transform' | 'width' | 'height' | 'domNode'>;
++/** 交给 ReactFlow 的渲染名单；null 表示不干预（全部渲染）。 */
++export interface CanvasRenderedIds {
++  henjiRenderedNodeIds: string[] | null;
++  henjiRenderedEdgeIds: string[] | null;
++}
++export interface CanvasNodePresenceSource {
++  getState(): PresenceState;
++  subscribe(listener: () => void): () => void;
++  /** 写入渲染名单并通知 ReactFlow 重新渲染节点层。 */
++  setState(partial: CanvasRenderedIds): void;
++  /** 写入渲染名单但不发通知：只在画布外壳首次渲染、节点层还没挂载时用。 */
++  seed(partial: CanvasRenderedIds): void;
++}
++
++export interface CanvasNodePresenceOptions {
++  /** 正文开始挂载的缩放；低于它全部交给远景层。 */
++  getZoomThreshold(): number;
++  /** 同步提交一批变更并返回；默认直接执行（测试用），画布里传 flushSync，这样才能量出挂载花了多久。 */
++  commit?(apply: () => void): void;
++  now?(): number;
++  requestFrame?(callback: () => void): number;
++  cancelFrame?(handle: number): void;
++}
++
++/** 同时挂载正文的节点上限：超过的部分留给远景层，保证 DOM 规模有界。 */
++export const MAX_ACTIVE_CANVAS_NODES = 360;
++/** 视口向外扩多少（占视口边长的比例）开始预挂载，离开多远才卸载。 */
++const ACTIVATE_MARGIN = 0.3;
++const RELEASE_MARGIN = 0.7;
++/** 缩放回落到阈值的这个比例以下才整体退出近景，避免在阈值附近来回挂卸。 */
++const FAR_HYSTERESIS = 0.85;
++/**
++ * 视口在动（平移或缩放）时不挂也不卸正文：挂一个节点连同布局、绘制要十几毫秒，放在运动途中就是掉帧，
++ * 而这时画面本来就由远景层画着。停稳这么久之后再按每帧时间预算补挂。
++ */
++const SETTLE_MS = 110;
++/** 帧很慢时两次视口变化之间本来就可能隔过上面的时长，所以还要连续这么多帧没动才算停稳。 */
++const SETTLE_FRAMES = 3;
++const MOUNT_BUDGET_MS = 8;
++/** 退出近景后正文再留这么久才开始卸载：节点层先整体淡出，露出下面的远景画面。 */
++const FAR_RELEASE_DELAY_MS = 140;
++/** 排队先后（数值越小越先挂）：视口附近的节点在 0 到 2 之间，其后是视口内连线的另一端，最后是等着量尺寸的节点。 */
++const NEIGHBOR_PRIORITY = 3;
++const UNMEASURED_PRIORITY = 4;
++
++export type CanvasNodeBodyMode = 'off' | 'shell' | 'body';
++
++function hasSize(width: number | undefined, height: number | undefined): boolean {
++  return typeof width === 'number' && width > 0 && typeof height === 'number' && height > 0;
++}
++
++export function createCanvasNodePresence(source: CanvasNodePresenceSource, options: CanvasNodePresenceOptions) {
++  const commit = options.commit ?? (apply => apply());
++  const now = options.now ?? (() => performance.now());
++  const requestFrame = options.requestFrame ?? (callback => requestAnimationFrame(callback));
++  const cancelFrame = options.cancelFrame ?? (handle => cancelAnimationFrame(handle));
++
++  /** 按节点订阅形态变化（壳与正文之间切换时，外框不变、里面的内容要换）。 */
++  const listeners = new Map<string, Set<() => void>>();
++  const stateListeners = new Set<() => void>();
++  const active = new Set<string>();
++  /** 被点名必须挂着的节点（如正在接收导入文件）及其到期时间。 */
++  const pinned = new Map<string, number>();
++  let shellId: string | null = null;
++  let enabled = false;
++  let near = false;
++  let frame: number | null = null;
++  let stopSource: (() => void) | undefined;
++  let previousTransform: readonly number[] | undefined;
++  let publishedEdges: PresenceState['edges'] | undefined;
++  let plannedNodes: PresenceState['nodes'] | undefined;
++  let lastMoveAt = Number.NEGATIVE_INFINITY;
++  let framesSinceMove = SETTLE_FRAMES;
++  let farSince = Number.NEGATIVE_INFINITY;
++
++  function renderedIds(state: PresenceState): CanvasRenderedIds {
++    // 沿用节点原有的先后顺序：同层级的节点谁压着谁不因挂载先后而变
++    const nodeIds: string[] = [];
++    for (const id of state.nodeLookup.keys()) if (active.has(id) || id === shellId) nodeIds.push(id);
++    const edgeIds: string[] = [];
++    for (const edge of state.edges) if (active.has(edge.source) && active.has(edge.target)) edgeIds.push(edge.id);
++    return { henjiRenderedNodeIds: nodeIds, henjiRenderedEdgeIds: edgeIds };
++  }
++
++  /** 把当前名单交给 ReactFlow，并通知形态变了的节点。 */
++  function publish(changed: Iterable<string>): void {
++    commit(() => {
++      const state = source.getState();
++      publishedEdges = state.edges;
++      source.setState(renderedIds(state));
++      for (const id of changed) listeners.get(id)?.forEach(listener => listener());
++    });
++  }
++
++  function notifyState(): void {
++    stateListeners.forEach(listener => listener());
++  }
++
++  function schedule(): void {
++    if (!enabled || frame !== null) return;
++    frame = requestFrame(() => { frame = null; reconcile(); });
++  }
++
++  /** 应当挂载的节点，按离视口中心由近到远排列；以及允许继续保留的范围判断。 */
++  function plan(state: PresenceState, timestamp: number) {
++    const [x, y, zoom] = state.transform;
++    const threshold = options.getZoomThreshold();
++    const wasNear = near;
++    near = near ? zoom >= threshold * FAR_HYSTERESIS : zoom >= threshold;
++    if (wasNear && !near) farSince = timestamp;
++    const centerX = (state.width / 2 - x) / zoom;
++    const centerY = (state.height / 2 - y) / zoom;
++    const halfWidth = state.width / zoom / 2;
++    const halfHeight = state.height / zoom / 2;
++    const focusedId = state.domNode?.ownerDocument.activeElement?.closest<HTMLElement>('.react-flow__node')?.dataset.id;
++
++    const wanted: Array<{ id: string; distance: number }> = [];
++    const forced: string[] = [];
++    const retainable = new Set<string>();
++    const inView = new Set<string>();
++    const wantedIds = new Set<string>();
++    for (const node of state.nodeLookup.values()) {
++      if (node.hidden) continue;
++      const width = node.measured.width;
++      const height = node.measured.height;
++      const pinnedUntil = pinned.get(node.id);
++      if (pinnedUntil !== undefined && pinnedUntil <= timestamp) pinned.delete(node.id);
++      // 正在输入、正在拖动的正文不能中途卸掉
++      if (pinned.has(node.id) || node.id === focusedId || (node.dragging && active.has(node.id))) {
++        forced.push(node.id);
++        continue;
++      }
++      const left = node.internals.positionAbsolute.x;
++      const top = node.internals.positionAbsolute.y;
++      const dx = Math.max(0, Math.abs(left + (width ?? 0) / 2 - centerX) - (width ?? 0) / 2);
++      const dy = Math.max(0, Math.abs(top + (height ?? 0) / 2 - centerY) - (height ?? 0) / 2);
++      // 归一到“几个视口半径”，横纵取大者：1 以内就是与视口相交
++      const distance = Math.max(dx / halfWidth, dy / halfHeight);
++      if (!hasSize(width, height)) {
++        // 还没有真实尺寸：不论缩放都要挂一次。排在视口内节点之后，离得近的先量。
++        wanted.push({ id: node.id, distance: distance + UNMEASURED_PRIORITY });
++        wantedIds.add(node.id);
++        continue;
++      }
++      if (!near) continue;
++      if (distance <= 1) inView.add(node.id);
++      if (distance <= 1 + RELEASE_MARGIN) retainable.add(node.id);
++      if (distance <= 1 + ACTIVATE_MARGIN) { wanted.push({ id: node.id, distance }); wantedIds.add(node.id); }
++    }
++    // 视口里节点的连线另一端也挂上（排在视口附近的节点之后）：两端都有真实端口，这条线才能由 ReactFlow 画出来、
++    // 才点得中、删得掉；另一端在屏幕外，挂上后由布局暂停机制收起，不参与绘制。
++    if (inView.size) {
++      for (const edge of state.edges) {
++        const other = inView.has(edge.source) ? edge.target : inView.has(edge.target) ? edge.source : null;
++        if (other === null || wantedIds.has(other) || !state.nodeLookup.has(other)) continue;
++        wantedIds.add(other);
++        retainable.add(other);
++        wanted.push({ id: other, distance: NEIGHBOR_PRIORITY });
++      }
++    }
++    wanted.sort((a, b) => a.distance - b.distance);
++    const limit = Math.max(0, MAX_ACTIVE_CANVAS_NODES - forced.length);
++    const desired = [...forced, ...wanted.slice(0, limit).map(entry => entry.id)];
++    for (const id of forced) retainable.add(id);
++    return { desired, retainable };
++  }
++
++  function reconcile(): void {
++    if (!enabled) return;
++    const started = now();
++    const state = source.getState();
++    if (!state.width || !state.height) { schedule(); return; }
++    // 远景里什么都没挂、节点也没变：视口怎么动都无事可做，不必每帧把全部节点过一遍
++    if (!near && active.size === 0 && pinned.size === 0 && state.nodes === plannedNodes
++      && state.transform[2] < options.getZoomThreshold()) return;
++    plannedNodes = state.nodes;
++    const wasNear = near;
++    const { desired, retainable } = plan(state, started);
++    const fadingOut = !near && started - farSince < FAR_RELEASE_DELAY_MS;
++    const desiredSet = new Set(desired);
++    framesSinceMove += 1;
++    const moving = started - lastMoveAt < SETTLE_MS || framesSinceMove < SETTLE_FRAMES;
++    const budget = MOUNT_BUDGET_MS;
++
++    // 先卸载：正文离开后远景层的画面本来就在下面，卸载比挂载便宜得多
++    const release: string[] = [];
++    let overflow = active.size - MAX_ACTIVE_CANVAS_NODES;
++    for (const id of active) {
++      if (desiredSet.has(id)) continue;
++      // 仍在保留范围内的不急着卸，除非已经超出上限
++      if ((moving || fadingOut || retainable.has(id)) && overflow <= 0 && state.nodeLookup.has(id)) continue;
++      release.push(id);
++      overflow -= 1;
++    }
++    let pending = false;
++    let changed = false;
++    for (let index = 0; index < release.length;) {
++      const batch = release.slice(index, index + 24);
++      batch.forEach(id => active.delete(id));
++      publish(batch);
++      changed = true;
++      index += batch.length;
++      if (index < release.length && now() - started >= budget) { pending = true; break; }
++    }
++
++    const admit = desired.filter(id => !active.has(id));
++    if (moving && (admit.length || active.size)) pending = true;
++    for (let index = 0; index < admit.length && !moving;) {
++      // 每帧至少挂一个，其后按时间预算决定
++      if (index > 0 && now() - started >= budget) { pending = true; break; }
++      const batch = admit.slice(index, index + 1);
++      batch.forEach(id => active.add(id));
++      if (shellId !== null && active.has(shellId)) shellId = null;
++      publish(batch);
++      changed = true;
++      index += batch.length;
++    }
++    // 新连上的线两端若都挂着正文，要补进名单
++    if (!changed && state.edges !== publishedEdges) publish([]);
++    if (changed || wasNear !== near) notifyState();
++    if (pending || pinned.size || fadingOut) schedule();
++  }
++
++  function start(): void {
++    if (stopSource) return;
++    stopSource = source.subscribe(() => {
++      const transform = source.getState().transform;
++      if (transform !== previousTransform) {
++        previousTransform = transform;
++        lastMoveAt = now();
++        framesSinceMove = 0;
++      }
++      schedule();
++    });
++    schedule();
++  }
++
++  function stop(): void {
++    stopSource?.(); stopSource = undefined;
++    if (frame !== null) cancelFrame(frame);
++    frame = null;
++  }
++
++  function reset(): void {
++    enabled = false; near = false; shellId = null; publishedEdges = undefined; plannedNodes = undefined;
++    active.clear(); pinned.clear();
++  }
++
++  return {
++    /** 调度是否生效；未生效时全部节点照常渲染（远景层不可用时的退路）。 */
++    isEnabled: () => enabled,
++    setEnabled(next: boolean): void {
++      if (enabled === next) return;
++      if (next) {
++        enabled = true;
++        start();
++        publish(listeners.keys());
++      } else {
++        stop(); reset();
++        commit(() => {
++          source.setState({ henjiRenderedNodeIds: null, henjiRenderedEdgeIds: null });
++          for (const set of listeners.values()) set.forEach(listener => listener());
++        });
++      }
++      notifyState();
++    },
++    /** 在节点层首次渲染之前开启调度（不发通知）：画布外壳渲染时调用，于是一开始就不挂任何节点。 */
++    arm(): void {
++      if (enabled) return;
++      enabled = true;
++      source.seed({ henjiRenderedNodeIds: [], henjiRenderedEdgeIds: [] });
++      start();
++    },
++    /** 画布外壳卸载时停掉调度并交还渲染名单。 */
++    disarm(): void {
++      stop(); reset();
++      source.seed({ henjiRenderedNodeIds: null, henjiRenderedEdgeIds: null });
++    },
++    isActive: (id: string) => !enabled || active.has(id),
++    modeOf: (id: string): CanvasNodeBodyMode => (!enabled || active.has(id) ? 'body' : id === shellId ? 'shell' : 'off'),
++    /** 指针所在的节点设为壳（null 表示指针不在任何未挂正文的节点上）。 */
++    setShell(id: string | null): void {
++      if (!enabled || id === shellId || (id !== null && active.has(id))) return;
++      const previous = shellId;
++      shellId = id;
++      publish([previous, id].filter((value): value is string => value !== null));
++    },
++    isNear: () => near,
++    activeCount: () => active.size,
++    subscribe(id: string, listener: () => void): () => void {
++      let set = listeners.get(id);
++      if (!set) { set = new Set(); listeners.set(id, set); }
++      set.add(listener);
++      return () => {
++        const current = listeners.get(id);
++        if (!current?.delete(listener)) return;
++        if (current.size === 0) listeners.delete(id);
++      };
++    },
++    /** 挂载集合或近景状态变化时通知（远景层据此重画）。 */
++    subscribeState(listener: () => void): () => void {
++      stateListeners.add(listener);
++      return () => { stateListeners.delete(listener); };
++    },
++    /** 立刻挂上某个节点的正文并保持一段时间：给必须由节点组件接住的操作（导入文件、重新上传）用。 */
++    pin(id: string, durationMs: number): void {
++      if (!enabled) return;
++      pinned.set(id, now() + durationMs);
++      if (!active.has(id)) {
++        active.add(id);
++        if (shellId === id) shellId = null;
++        publish([id]);
++        notifyState();
++      }
++      schedule();
++    },
++  };
++}
++
++export type CanvasNodePresence = ReturnType<typeof createCanvasNodePresence>;
+diff --git a/src/features/canvas/presence/useCanvasNodePresence.ts b/src/features/canvas/presence/useCanvasNodePresence.ts
+new file mode 100644
+index 000000000..d6743959e
+--- /dev/null
++++ b/src/features/canvas/presence/useCanvasNodePresence.ts
+@@ -0,0 +1,64 @@
++import { useStoreApi } from '@xyflow/react';
++import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
++import { flushSync } from 'react-dom';
++import { useSettingsStore } from '@/stores/settingsStore';
++import { resolveCanvasDetailZoomThreshold } from '@/features/canvas/nodes/shared/canvasViewSubscriptions';
++import { createCanvasNodePresence, type CanvasNodeBodyMode, type CanvasNodePresence, type CanvasNodePresenceSource } from './canvasNodePresence';
++
++const instances = new WeakMap<CanvasNodePresenceSource['getState'], CanvasNodePresence>();
++
++/** 取当前画布的挂载调度；未取过时不创建（节点单独渲染、没有画布外壳的场合一律视为全部挂载）。 */
++export function peekCanvasNodePresence(getState: CanvasNodePresenceSource['getState']): CanvasNodePresence | undefined {
++  return instances.get(getState);
++}
++
++/** 同一个 ReactFlow store 共用一份调度；useStoreApi 每次返回新包装，getState 才是稳定标识。 */
++export function useCanvasNodePresence(): CanvasNodePresence {
++  const source = useStoreApi();
++  let presence = instances.get(source.getState);
++  if (!presence) {
++    const { getState, setState, subscribe } = source;
++    presence = createCanvasNodePresence({
++      getState,
++      subscribe,
++      // 渲染名单是补丁加在 ReactFlow store 上的字段，不在它的类型里
++      setState: ids => setState(ids as Partial<ReturnType<typeof getState>>),
++      // 就地改当前状态对象、不触发订阅：此时节点层还没渲染，下一次 set 会带着这两个字段一起复制
++      seed: ids => { Object.assign(getState(), ids); },
++    }, {
++      getZoomThreshold: () => resolveCanvasDetailZoomThreshold(useSettingsStore.getState().canvasLodLevel),
++      commit: apply => flushSync(apply),
++    });
++    instances.set(source.getState, presence);
++  }
++  return presence;
++}
++
++/** 这个节点现在的形态（关、壳、正文）。 */
++export function useCanvasNodeBodyMode(id: string): CanvasNodeBodyMode {
++  const source = useStoreApi();
++  const subscribe = useCallback(
++    (listener: () => void) => instances.get(source.getState)?.subscribe(id, listener) ?? (() => undefined),
++    [id, source.getState],
++  );
++  return useSyncExternalStore(subscribe, () => instances.get(source.getState)?.modeOf(id) ?? 'body');
++}
++
++export type CanvasFarView = 'unavailable' | 'far' | 'near';
++
++/**
++ * 画布外壳用：开启正文挂载调度，并返回当前处于远景还是近景。
++ * 开启动作放在渲染阶段（惰性初始值），这样同一次渲染里的节点一开始就只出空块，不会先把全部正文挂上。
++ */
++export function useCanvasFarView(): CanvasFarView {
++  const presence = useCanvasNodePresence();
++  useState(() => { presence.arm(); return null; });
++  useEffect(() => {
++    presence.arm();
++    return () => presence.disarm();
++  }, [presence]);
++  return useSyncExternalStore(
++    presence.subscribeState,
++    () => (!presence.isEnabled() ? 'unavailable' : presence.isNear() ? 'near' : 'far'),
++  );
++}
+diff --git a/src/features/canvas/presence/CanvasNodeBody.tsx b/src/features/canvas/presence/CanvasNodeBody.tsx
+new file mode 100644
+index 000000000..6b8a1ec87
+--- /dev/null
++++ b/src/features/canvas/presence/CanvasNodeBody.tsx
+@@ -0,0 +1,36 @@
++import { useLayoutEffect, useRef, type ReactNode } from 'react';
++import { UI_DURATION } from '@/components/ui/motion';
++import { useCanvasNodeBodyMode } from './useCanvasNodePresence';
++
++interface CanvasNodeBodyProps {
++  id: string;
++  width: number | undefined;
++  height: number | undefined;
++  /** 正文需要挂载时才调用，未挂载的节点不为正文付任何渲染成本。 */
++  render(size: { width: number | undefined; height: number | undefined }): ReactNode;
++}
++
++/**
++ * 节点内容的闸门：指针所在、还没挂正文的节点只出一个与量得尺寸相同的空块（壳），让 ReactFlow 外框接住指针；
++ * 其余被渲染的节点出真正的正文。哪些节点会被渲染由 presence/canvasNodePresence.ts 决定。
++ */
++export function CanvasNodeBody({ id, width, height, render }: CanvasNodeBodyProps): JSX.Element | null {
++  const mode = useCanvasNodeBodyMode(id);
++  const measured = typeof width === 'number' && width > 0 && typeof height === 'number' && height > 0;
++  if (mode === 'off') return null;
++  if (mode === 'shell') return measured ? <div style={{ width, height }} /> : null;
++  // 没量过的节点外框尺寸是 0，不能当成显式尺寸交给正文
++  return <CanvasNodeBodyEnter>{render(measured ? { width, height } : { width: undefined, height: undefined })}</CanvasNodeBodyEnter>;
++}
++
++/** 正文挂上后在远景画面之上淡入，不直接跳出来。 */
++function CanvasNodeBodyEnter({ children }: { children: ReactNode }): JSX.Element {
++  const marker = useRef<HTMLSpanElement>(null);
++  useLayoutEffect(() => {
++    const frame = marker.current?.parentElement;
++    if (!frame || typeof frame.animate !== 'function') return;
++    const animation = frame.animate([{ opacity: 0 }, { opacity: 1 }], { duration: UI_DURATION.fast, easing: 'ease-out' });
++    return () => animation.cancel();
++  }, []);
++  return <><span ref={marker} hidden />{children}</>;
++}
