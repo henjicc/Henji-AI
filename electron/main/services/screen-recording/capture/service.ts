@@ -336,7 +336,7 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
         }
         // 停止、暂停、恢复时存不进文档也会让这次命令失败：按采集失败收尾（停下后端、记为中断），不当成用户取消。
         const failing = <T>(work: Promise<T>): Promise<T> => work.catch(async (error: unknown) => { await fail(session, error instanceof Error ? error : new Error(String(error))); throw error })
-        if (request.session && source.id !== BrowserWindow.fromWebContents(owner)?.getMediaSourceId()) minimizeOwnerWhileRecording(BrowserWindow.fromWebContents(owner))
+        if (request.session && source.id !== BrowserWindow.fromWebContents(owner)?.getMediaSourceId()) minimizeOwnerWhileRecording(BrowserWindow.fromWebContents(owner), createCaptureBounds(source, request.options)())
         // 原生采集按帧给得出暂停与继续的那一刻：事件时钟与会话文档都记它，不记按键的时刻；画面在按下时就停、就续，不等其余各路。
         const framed = session.backend instanceof NativeCaptureBackend ? session.backend : undefined
         let heldUs: number | undefined

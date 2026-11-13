@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events'
 import { afterEach, expect, it, vi } from 'vitest'
-import type { WebContents } from 'electron'
-import { closeRecordingControl, openRecordingControl, recordRecordingCapability, updateRecordingTracks } from './runtime'
+import type { BrowserWindow, WebContents } from 'electron'
+import { closeRecordingControl, minimizeOwnerWhileRecording, openRecordingControl, recordRecordingCapability, updateRecordingTracks } from './runtime'
 
 const hooks = vi.hoisted(() => { const release = vi.fn(); return { capture: vi.fn(), options: vi.fn(), revoke: vi.fn(), release, hold: vi.fn(() => release) } })
 vi.mock('electron', () => ({ globalShortcut: { register: () => true, unregister: vi.fn() } }))
@@ -35,6 +35,16 @@ it('能力记录只接受归属宿主及当前会话；控制条区域和原生�
   if (process.platform === 'win32') expect(injected.excludedWindowIds).toContain('99')
   await closeRecordingControl(); recordRecordingCapability(owner, 'live', fact)
   expect(hooks.capture).toHaveBeenCalledTimes(1); expect(backend.cancel).toHaveBeenCalledTimes(1)
+})
+it('主窗口在另一块屏上不最小化，与被录范围重叠才最小化', () => {
+  const window = (x: number) => ({ isDestroyed: () => false, isMinimized: () => false, getBounds: () => ({ x, y: 0, width: 1600, height: 900 }), minimize: vi.fn(), restore: vi.fn(), focus: vi.fn() })
+  const leftScreen = { x: 0, y: 0, width: 2560, height: 1440 }
+  const elsewhere = window(2560)
+  minimizeOwnerWhileRecording(elsewhere as unknown as BrowserWindow, leftScreen)
+  expect(elsewhere.minimize).not.toHaveBeenCalled()
+  const same = window(200)
+  minimizeOwnerWhileRecording(same as unknown as BrowserWindow, leftScreen)
+  expect(same.minimize).toHaveBeenCalledOnce()
 })
 it('录屏会话期间阻止系统睡眠，会话结束恰好释放一次', async () => {
   const backend = { start: vi.fn(), pause: vi.fn(), resume: vi.fn(), mark: vi.fn(), stop: vi.fn(), cancel: vi.fn() }

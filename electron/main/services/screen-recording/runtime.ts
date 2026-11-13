@@ -119,11 +119,16 @@ export function openRecordingControl(ownerContents: WebContents, sessionId: stri
 }
 
 /**
- * Get the app out of the way while it records something else: minimize the owner window now,
- * and bring it back when the session closes. Recording the app's own window keeps it visible.
+ * 录别的内容时把主窗口让开：最小化，会话结束时还原。只有主窗口挡在被录范围里才让开；
+ * 窗口在另一块屏上就留着，用户能一边录一边看实时画面。被录范围查不到时照旧让开。
  */
-export function minimizeOwnerWhileRecording(window: BrowserWindow | null): void {
+export function minimizeOwnerWhileRecording(window: BrowserWindow | null, captured?: CaptureRect): void {
   if (!window || window.isDestroyed() || window.isMinimized()) return
+  if (captured) {
+    const own = window.getBounds()
+    const overlaps = own.x < captured.x + captured.width && captured.x < own.x + own.width && own.y < captured.y + captured.height && captured.y < own.y + own.height
+    if (!overlaps) return
+  }
   window.minimize()
   restoreOwnerWindow = () => { if (!window.isDestroyed()) { window.restore(); window.focus() } }
 }
