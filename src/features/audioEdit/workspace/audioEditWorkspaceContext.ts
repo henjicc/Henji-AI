@@ -48,7 +48,8 @@ export interface AudioEditWorkspace {
   setReferenceScript: (text: string) => void
   editBlock: (id: string) => void
   deleteBlock: (id: string) => void
-  resolveSuggestions: (ids: string[], apply: boolean) => void
+  /** 改判一条剪辑线索（进撤销栈）；没改成时提示原因并返回 false。 */
+  chooseClueOption: (id: string, optionId: string) => boolean
   asrModels: readonly AudioEditAsrModel[]
   processors: readonly AudioEditProcessorDescriptor[]
   tasks: readonly AudioEditTask[]

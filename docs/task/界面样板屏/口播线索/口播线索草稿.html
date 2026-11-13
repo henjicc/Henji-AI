@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>口播线索草稿</title>
+<style>
+@font-face { font-family: 'HarmonyOS Sans SC UI'; src: url('../../../../src/assets/fonts/HarmonyOS_Sans_SC.ttf') format('truetype'); font-weight: 100 900; font-display: block; }
+:root {
+  /* 数值取自 src/index.css 的石墨主题令牌（同剪辑、录屏样板屏草稿） */
+  --gap:#181818; --window:#1B1B1B; --panel:#212121; --raised:#272727; --overlay:#292929;
+  --line-overlay:#393939; --control:#2B2B2B; --hover:#2A2A2A; --selected:#333333; --line:#282828;
+  --text1:#EEEEEE; --text2:#CACACA; --text3:#A5A5A5; --icon-rest:#737373;
+  --accent:#3A6FDF; --accent-text:#9CBEFF;
+}
+* { box-sizing:border-box; }
+html, body { margin:0; background:#101010; color:var(--text1); font-family:'HarmonyOS Sans SC UI','Microsoft YaHei UI',sans-serif; font-size:13px; line-height:20px; -webkit-font-smoothing:antialiased; }
+svg.i { width:var(--s,16px); height:var(--s,16px); flex:none; stroke:currentColor; fill:none; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round; display:block; }
+.page { padding:40px; }
+.block h2 { font-size:16px; margin:0 0 16px; }
+.shot { width:1440px; height:900px; background:var(--window); display:flex; gap:48px; align-items:flex-start; justify-content:center; padding-top:80px; white-space:nowrap; }
+body.single { background:var(--gap); } body.single .page { padding:0; } body.single h2 { display:none; }
+.col { display:flex; flex-direction:column; gap:10px; }
+.cap { color:var(--text3); font-size:12px; }
+/* 自动粗剪浮层：实底 + 一圈描边，320 宽 */
+.pop { width:320px; background:var(--overlay); border:1px solid var(--line-overlay); border-radius:12px; padding:8px; }
+.dis { height:32px; display:flex; align-items:center; justify-content:space-between; padding:0 8px; margin:0 -8px; color:var(--text1); }
+.dis .v { color:var(--text3); font-size:12px; display:flex; align-items:center; gap:6px; --s:14px; }
+.list { display:flex; flex-direction:column; }
+.row { height:28px; display:flex; align-items:center; gap:8px; padding:0 8px; border-radius:8px; font-size:12px; }
+.row.sel { background:var(--selected); }
+.dot { width:8px; display:flex; justify-content:center; flex:none; }
+.dot i { width:6px; height:6px; border-radius:50%; display:block; }
+.dot i.f { background:var(--text1); } .dot i.h { border:1px solid var(--text3); }
+.t { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.t1 { color:var(--text1); } .t2 { color:var(--text2); } .t3 { color:var(--text3); }
+.opts { padding-left:16px; display:flex; flex-direction:column; }
+.opt { height:28px; display:flex; align-items:center; gap:8px; padding:0 8px; border-radius:8px; font-size:12px; }
+.ck { width:16px; display:flex; justify-content:center; color:var(--accent-text); --s:14px; }
+.btn { height:28px; display:inline-flex; align-items:center; gap:6px; padding:0 10px; color:var(--text2); font-size:12px; --s:14px; align-self:flex-start; }
+.foot { height:32px; border-top:1px solid var(--line); margin-top:12px; display:flex; align-items:center; justify-content:space-between; padding:0 4px; color:var(--text3); font-size:12px; }
+.foot .tools { display:flex; gap:2px; }
+.ib { width:28px; height:28px; display:inline-flex; align-items:center; justify-content:center; color:var(--text2); --s:16px; }
+.ib.on { color:var(--accent-text); }
+.sum { color:var(--text3); }
+</style>
+</head>
+<body>
+<div class="page">
+<section class="block" data-id="1">
+<h2>口播线索：默认、选中一条、只看待定</h2>
+<div class="shot" id="shot"></div>
+</section>
+</div>
+<script>
+const ICONS = /*ICONS_START*/{"check":"<path d=\"M20 6 9 17l-5-5\"/>","play":"<path d=\"M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z\"/>","chevron-right":"<path d=\"m9 18 6-6-6-6\"/>","chevron-up":"<path d=\"m18 15-6-6-6 6\"/>","chevron-down":"<path d=\"m6 9 6 6 6-6\"/>","list-filter":"<path d=\"M2 5h20\"/><path d=\"M6 12h12\"/><path d=\"M9 19h6\"/>"}/*ICONS_END*/
+const ic = (name) => `<svg class="i" viewBox="0 0 24 24">${ICONS[name] ?? ''}</svg>`
+const rows = [
+  ['f', '我们先看一下这个功能', '念到一半改口', '未处理', 't1'],
+  ['f', '所以说所以', '重念', '留后一遍', 't1'],
+  ['h', '这个这个', '口吃或叠词', '留后一遍', 't1'],
+  ['h', '然后我们打开设置然后', '前一遍多说了', '留后一遍', 't1'],
+]
+const row = ([dot, text, reason, current, tone], selected) => `<div class="row${selected ? ' sel' : ''}"><span class="dot">${dot ? `<i class="${dot}"></i>` : ''}</span><span class="t ${tone}">${text}</span><span class="t3">${reason}</span><span class="${current === '未处理' ? 't3' : 't2'}">${current}</span></div>`
+const opts = `<div class="opts">
+  <div class="opt"><span class="ck"></span><span class="t2">留后一遍</span><span class="t t3">我们｜我们再看一下</span></div>
+  <div class="opt"><span class="ck">${ic('check')}</span><span class="t1">留前一遍</span><span class="t t3">先看一下｜这个功能</span></div>
+  <div class="opt"><span class="ck"></span><span class="t2">两遍都留</span></div>
+  <span class="btn">${ic('play')}试听</span></div>`
+const summary = (text) => `<div class="row"><span class="dot"></span><span class="t sum">${text}</span><span class="t3" style="--s:14px">${ic('chevron-right')}</span></div>`
+const foot = (on) => `<div class="foot"><span>待定 2 · 建议抽看 2</span><span class="tools"><span class="ib">${ic('chevron-up')}</span><span class="ib">${ic('chevron-down')}</span><span class="ib${on ? ' on' : ''}">${ic('list-filter')}</span></span></div>`
+const pop = (inner, on) => `<div class="pop"><div class="dis"><span>剪辑线索</span><span class="v">待定 2${ic('chevron-down')}</span></div><div class="list">${inner}</div>${foot(on)}</div>`
+const view = (cap, html) => `<div class="col"><span class="cap">${cap}</span>${html}</div>`
+document.getElementById('shot').innerHTML = [
+  view('默认', pop(rows.map((item) => row(item)).join('') + summary('另有 42 处已自动处理') + summary('12 处语气词与停顿'))),
+  view('选中第一条并改判为留前一遍', pop(row([...rows[0].slice(0, 3), '留前一遍', 't1'], true) + opts + rows.slice(1).map((item) => row(item)).join('') + summary('另有 42 处已自动处理'))),
+  view('只看待定', pop(rows.slice(0, 2).map((item) => row(item)).join(''), true)),
+].join('')
+if (new URLSearchParams(location.search).get('s')) { document.body.classList.add('single'); document.querySelector('.block').classList.add('show') }
+</script>
+</body>
+</html>

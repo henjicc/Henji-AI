@@ -39,7 +39,8 @@ import { WorkspaceLayoutMenu } from '@/components/dockLayouts/WorkspaceLayoutMen
 import { AUDIO_EDIT_WORKSPACE_ID } from './workspace/audioEditDockLayout'
 import { AudioEditWorkspaceContext, type AudioEditDeliveryFormat, type AudioEditWorkspace } from './workspace/audioEditWorkspaceContext'
 
-import { adjustAudioEditRangeMode, applyAudioEditSuggestion, audioEditSuggestionStates, DEFAULT_AUDIO_EDIT_VIEW_SETTINGS, dismissAudioEditSuggestion, editAudioEditRange, setAudioEditBlocks } from '@/core/audioEdit/edits'
+import { adjustAudioEditRangeMode, DEFAULT_AUDIO_EDIT_VIEW_SETTINGS, editAudioEditRange, setAudioEditBlocks } from '@/core/audioEdit/edits'
+import { chooseAudioEditClueOption } from './audioEditClueReview'
 import { editAudioEditProject, flushAudioEditProject, getAudioEditProjectInstance } from './application/audioEditProjectInstances'
 import { DocumentSaveStatus } from '@/features/documents'
 import { AudioEditLeaveCancelledError, createAudioEditRecording, importAudioEditMedia, isAudioEditMediaPath, leaveAudioEditEditor, openAudioEditDocument, pickAudioEditMedia, renameAudioEditDocument } from './application/audioEditDocumentService'
@@ -242,22 +243,13 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
   const deleteBlock = (id: string) => {
     try { editAudioEditProject(project.id, (current) => setAudioEditBlocks(current, [id], false)) } catch (error) { notifyError(error) }
   }
-  const resolveSuggestions = (ids: string[], apply: boolean) => {
+  const chooseClueOption = (id: string, optionId: string): boolean => {
     try {
-      const wanted = new Set(ids)
-      let count = 0
-      editAudioEditProject(project.id, (current) => {
-        const states = audioEditSuggestionStates(current)
-        const eligible = current.suggestions.filter((item) => wanted.has(item.id) && states.get(item.id) === 'available')
-        const selected = new Set(eligible.map((item) => item.id))
-        const next = apply
-          ? eligible.reduce((draft, item) => applyAudioEditSuggestion(draft, item.id), current)
-          : eligible.reduce((draft, item) => dismissAudioEditSuggestion(draft, item.id), current)
-        count = next.suggestions.filter((item) => selected.has(item.id) && item.status === (apply ? 'applied' : 'dismissed')).length
-        return count ? next : current
-      })
-      showNotification(count ? notificationMessage(apply ? 'audioCuesProcessed' : 'audioCuesHidden', { count }) : notificationMessage('audioCuesUnchanged'))
-    } catch (error) { notifyError(error) }
+      let changed = false
+      editAudioEditProject(project.id, (current) => { const next = chooseAudioEditClueOption(current, id, optionId); changed = next !== current; return next })
+      if (!changed) showNotification(notificationMessage('audioCuesUnchanged'))
+      return changed
+    } catch (error) { notifyError(error); return false }
   }
   const editSelection = (mode: 'delete' | 'mute' | 'restore') => {
     if (!waveSelection || disabled) return
@@ -286,7 +278,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     silencePreview: { ranges: silencePreview.ranges, pending: silencePreview.pending, ...(silencePreview.error ? { error: silencePreview.error } : {}) },
     selectionOnly, setSelectionOnly, processRange: range, selectedBlocks, selectedBlockIds, setSelectedBlockIds,
     setBlocksIncluded: state.setBlocksIncluded, setReferenceScript: state.setReferenceScript,
-    editBlock: setEditingBlockId, deleteBlock, resolveSuggestions, asrModels, processors, tasks,
+    editBlock: setEditingBlockId, deleteBlock, chooseClueOption, asrModels, processors, tasks,
     deliveryFormat: format, setDeliveryFormat: setFormat, withSrt, setWithSrt,
     openViewSettings: () => setViewSettingsOpen(true),
   }
