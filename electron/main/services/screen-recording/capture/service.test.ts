@@ -13,7 +13,10 @@ vi.mock('../../audio-capture/system-audio', () => ({ systemAudioCapture: () => (
 const microphone = vi.hoisted(() => ({ options: undefined as { directory: string; originUs: number; record(record: unknown): void; level?(peak: number): void } | undefined, recorder: { pause: vi.fn(async () => undefined), resume: vi.fn(async () => undefined), stop: vi.fn(async () => ({})), stats: () => ({ reconnects: 0, device: '麦克风', health: {} }) } }))
 vi.mock('../../audio-capture/service', () => ({ microphoneCapture: () => ({ startTrack: async (options: typeof microphone.options) => { microphone.options = options; return microphone.recorder } }) }))
 const state = vi.hoisted(() => ({ root: '', backend: null as RecordingControlBackend | null, settled: undefined as (() => Promise<void>) | undefined, ownerLost: undefined as (() => void) | undefined, assert: vi.fn(), grant: vi.fn(), revoke: vi.fn(), failed: vi.fn(), open: vi.fn(), notify: vi.fn(), document: { capture: vi.fn(async () => undefined), range: vi.fn(async () => undefined), pause: vi.fn(async () => undefined), resume: vi.fn(async () => undefined), track: vi.fn(async () => undefined), finish: vi.fn(async () => ({ status: 'stopped', durationUs: 1 })), pageReferences: () => [], ledger: { detaches: 0 } } }))
-vi.mock('electron', () => ({ BrowserWindow: { fromWebContents: () => null } }))
+vi.mock('electron', () => ({ BrowserWindow: { fromWebContents: () => null }, screen: { getAllDisplays: () => [{ id: 1, bounds: { x: 1280, y: 0, width: 1280, height: 720 }, scaleFactor: 1.5 }], dipToScreenPoint: (point: { x: number; y: number }) => ({ x: point.x * 1.5, y: point.y * 1.5 }) } }))
+const native = vi.hoisted(() => ({ prepare: vi.fn(async (): Promise<void> => undefined), point: undefined as unknown, since: 123 }))
+vi.mock('./native-client', () => ({ screenCaptureProcess: () => ({}) }))
+vi.mock('./native', () => ({ NativeCaptureBackend: class { constructor(...args: unknown[]) { native.point = args[1] } prepare = native.prepare; start = async (): Promise<void> => undefined; pause = async (): Promise<void> => undefined; resume = async (): Promise<void> => undefined; stop = async (): Promise<void> => undefined; cancel = async (): Promise<void> => undefined; pressed(): void {} capturingSinceUs(): number { return native.since } stats(): object { return { restarts: 0, droppedFrames: 0, duplicatedFrames: 0, encoder: 'h264_nvenc' } } } }))
 vi.mock('../../appPaths', () => ({ getUserFolderDir: () => state.root }))
 vi.mock('../../logging', () => ({ createMainLogger: () => ({ info: vi.fn(), error: vi.fn(), warn: vi.fn() }) }))
 vi.mock('node:os', async importOriginal => ({ ...await importOriginal<typeof import('node:os')>(), release: () => '10.0.19045' }))
@@ -209,3 +212,30 @@ it('显示器短暂从枚举里消失（休眠、KVM、改投影）不结束录�
   await handleCaptureRequest(owner, { operation: 'close', sessionId: id })
   expect(await handleCaptureRequest(owner, { operation: 'facts', sessionId: id })).not.toHaveProperty('sourceEnded')
 }))
+
+it('开发开关打开时整屏录制先试原生画面采集（按物理像素找显示器）；原生不支持就照现有录法录，不报错', async () => {
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform')!
+  Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
+  process.env.HENJI_NATIVE_SCREEN_CAPTURE = '1'
+  try {
+    const full = captureOptionsSchema.parse({ ...options, backend: 'auto' })
+    native.prepare.mockRejectedValueOnce(Object.assign(new Error('没有 NVIDIA 显卡'), { code: 'ENCODER_UNSUPPORTED' }))
+    gfx.deps = undefined
+    await expect(handleCaptureRequest(owner, { operation: 'prepare', sessionId: id, options: full })).resolves.toMatchObject({ backend: 'gfxcapture' })
+    // 副屏在 DIP 的 1280 起、缩放 150%：中心的物理坐标是 (2880, 540)。
+    expect(native.point).toEqual([2880, 540])
+    expect(gfx.deps).toBeDefined()
+    await handleCaptureRequest(owner, { operation: 'close', sessionId: id })
+
+    id = randomUUID(); gfx.deps = undefined
+    await handleCaptureRequest(owner, { operation: 'prepare', sessionId: id, options: full })
+    expect(gfx.deps).toBeUndefined()
+    expect(state.backend!.capturingSinceUs!()).toBe(native.since)
+
+    // 录制尺寸与显示器原尺寸不同（原生不缩放）：不试原生。
+    await handleCaptureRequest(owner, { operation: 'close', sessionId: id })
+    id = randomUUID(); native.prepare.mockClear()
+    await handleCaptureRequest(owner, { operation: 'prepare', sessionId: id, options: captureOptionsSchema.parse({ ...full, width: 1280, height: 720 }) })
+    expect(native.prepare).not.toHaveBeenCalled()
+  } finally { Object.defineProperty(process, 'platform', platform); delete process.env.HENJI_NATIVE_SCREEN_CAPTURE }
+})

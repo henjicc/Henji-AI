@@ -1,0 +1,54 @@
+[package]
+name = "henji-screen-capture"
+version = "0.1.0"
+edition = "2021"
+description = "Henji-AI 原生画面采集进程：画面全程留在显卡里，硬件编码，单文件分片 MP4，逐帧时刻表"
+publish = false
+# 源码按项目许可发布；Windows 可执行文件动态链接 GPL FFmpeg，整体按 GPL-3.0-or-later 分发（与视频解码服务相同）。
+license = "GPL-3.0-or-later"
+
+[[bin]]
+name = "henji-screen-capture"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[target.'cfg(windows)'.dependencies]
+# 与视频解码服务链接同一份随包 FFmpeg（scripts/video-decoder-ffmpeg.cjs 固定的构建）；只用编码与封装。
+ffmpeg-sys-next = { version = "=9.0.0", default-features = false, features = ["avcodec", "avformat"] }
+windows = { version = "=0.62.2", features = [
+  "Foundation",
+  "Foundation_Metadata",
+  "Graphics",
+  "Graphics_Capture",
+  "Graphics_DirectX",
+  "Graphics_DirectX_Direct3D11",
+  "Win32_Foundation",
+  "Win32_Graphics_Direct3D",
+  "Win32_Graphics_Direct3D_Fxc",
+  "Win32_Graphics_Direct3D11",
+  "Win32_Graphics_Dxgi",
+  "Win32_Graphics_Dxgi_Common",
+  "Win32_Graphics_Gdi",
+  "Win32_Media",
+  "Win32_Security",
+  "Win32_System_Performance",
+  "Win32_System_ProcessStatus",
+  "Win32_System_Threading",
+  "Win32_System_WinRT",
+  "Win32_System_WinRT_Direct3D11",
+  "Win32_System_WinRT_Graphics_Capture",
+  "Win32_UI_HiDpi",
+  "Win32_UI_WindowsAndMessaging",
+] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+debug = "line-tables-only"
+# 任何线程出了意料之外的错就整个进程退出，交给主进程“采集进程意外退出”的那条路处理（文件读得到最后一个分片）；
+# 不留一个少了线程、收不到应答的半死进程。
+panic = "abort"

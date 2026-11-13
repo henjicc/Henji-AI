@@ -8,6 +8,7 @@ const { listPackage } = require('@electron/asar')
 const { VIDEO_DECODER_EXECUTABLE, verifyPackagedResources } = require('./lib/packagedResources.cjs')
 
 const root = path.resolve(__dirname, '..')
+const SCREEN_CAPTURE_EXECUTABLE = 'henji-screen-capture.exe'
 
 function videoDecoderSources() {
   const { FFMPEG_BUILD, crateDir, isReady, runtimeFiles } = require('./video-decoder-ffmpeg.cjs')
@@ -19,6 +20,8 @@ function videoDecoderSources() {
       { name: VIDEO_DECODER_EXECUTABLE, source: path.join(releaseDir, VIDEO_DECODER_EXECUTABLE) },
       // 随包文件来自 target/release（build:video-decoder 从 BtbN 包复制），以 BtbN 包原件为准核对。
       ...runtimeFiles().map((file) => ({ name: path.basename(file), source: file })),
+      // 原生画面采集进程与解码服务同目录、共用上面的 FFmpeg DLL。
+      { name: SCREEN_CAPTURE_EXECUTABLE, source: path.join(root, 'native', 'screen-capture', 'target', 'release', SCREEN_CAPTURE_EXECUTABLE) },
     ],
   }
 }

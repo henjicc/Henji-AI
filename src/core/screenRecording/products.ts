@@ -1,3 +1,4 @@
+import { recordingMediaSpans } from './range'
 import { z } from 'zod'
 import type { RecordingDocument } from './document'
 import type { RecordingUnderstanding } from './understanding'
@@ -13,7 +14,7 @@ export function recordingProductSteps(recording: RecordingDocument, understandin
   if (!selected.length) throw new Error('会话尚无步骤，请先理解录制。')
   if (selected.length > 100) throw new Error('每批最多导出 100 步，请用 stepIds 分批选择。')
   return selected.map((step, index) => {
-    const ranges = recording.media.filter(media => media.kind === 'screen').map(media => ({ start: Math.max(step.startUs, media.monoUs), end: Math.min(step.endUs, media.monoUs + media.durationUs) })).filter(range => range.end > range.start)
+    const ranges = recording.media.filter(media => media.kind === 'screen').flatMap(media => recordingMediaSpans(recording, media)).map(span => ({ start: Math.max(step.startUs, span.startUs), end: Math.min(step.endUs, span.endUs) })).filter(range => range.end > range.start)
     if (!ranges.length) throw new Error(`步骤“${step.title}”没有已保存的屏幕画面。`)
     // The longest real part is representative, even when a step spans a capture gap.
     const range = ranges.reduce((best, next) => next.end - next.start > best.end - best.start ? next : best)

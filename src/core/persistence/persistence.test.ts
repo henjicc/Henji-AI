@@ -554,6 +554,17 @@ describe('所有登记格式的黄金样本', () => {
     }
   })
 
+  it('录制会话 82：画面条目的 gaps 标出连续文件；旧样本升上来没有它，最低可读版本提到 82', () => {
+    const format = PERSISTENCE_FORMATS.find(value => value.id === 'document.screen_recording')!
+    const read = (version: number) => JSON.parse(fs.readFileSync(`tests/fixtures/persistence/document.screen_recording/v${version}.json`, 'utf8'))
+    const screen = (content: unknown) => (content as { media: Array<Record<string, unknown>> }).media.find(media => media.kind === 'screen')!
+    const old = read(81), latest = read(82)
+    expect(screen(upgradePersistenceContent(format, old.content, 81))).not.toHaveProperty('gaps')
+    expect(screen(upgradePersistenceContent(format, latest.content, 82)).gaps).toEqual([{ startUs: 6000000, endUs: 7000000 }])
+    // 旧程序不认识 gaps 会把暂停之后的画面全部读错位：不允许它打开新文件。
+    expect([old.kindMinReaderVersion, latest.kindMinReaderVersion]).toEqual([77, 82])
+  })
+
   it('片段备注 note：旧样本升上来没有备注，新样本读回备注，最低可读版本不变', () => {
     const goldenClip = (id: string, content: unknown): Record<string, unknown> => {
       const value = content as { sequences: Array<{ id: string; clips: Array<Record<string, unknown>> }>; scriptCapture: { baselines: Array<{ content: typeof value }> }; soundClips: Array<Record<string, unknown>> }

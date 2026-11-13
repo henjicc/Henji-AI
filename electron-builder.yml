@@ -72,6 +72,11 @@ win:
         - "*.dll"
         - ffmpeg.exe
         - ffprobe.exe
+    # 原生画面采集进程链接同一份 FFmpeg，与解码服务同放一个目录、共用上面那份 DLL（macOS 还没有平台层，不随包）。
+    - from: native/screen-capture/target/release
+      to: resources/video-decoder
+      filter:
+        - henji-screen-capture.exe
   # 平台级 files 会单独成为文件匹配器：只写排除项时 electron-builder 会补一个 "**/*"，把整个仓库打进 app.asar
   # （3.3 实测 4.3GB，MSI 因单文件超 2GB 失败）。所以这里必须重复顶层的包含项，再加 Windows 排除项。
   files:

@@ -156,10 +156,10 @@
       "minReaderVersion": 1
     },
     "document.screen_recording": {
-      "version": 81,
-      "fingerprint": "f9f411329aa1f2096fe34cfef1d7f1e7d2ff1416ae9e559b802f9c3341bad60f",
+      "version": 82,
+      "fingerprint": "f67de9ca907ec9956cb844f8207fd78aa7ef646c0101448fdf1fb90dc36d1a1d",
       "supportedFrom": 19,
-      "minReaderVersion": 77
+      "minReaderVersion": 82
     },
     "project": {
       "version": 4,

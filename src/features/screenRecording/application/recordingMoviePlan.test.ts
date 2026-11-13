@@ -79,3 +79,17 @@ it('仅已确认候选按各自原片切片启用，跨变速与剪切保持源�
   expect(videoEditDocumentSchema.safeParse(document)).toMatchObject({ success: true })
   expect(() => buildRecordingMoviePlan(document, recording, recording.understanding, RECORDING_MOVIE_RECIPES.original, '成片', result.sequenceIds[0])).toThrow('必须为空')
 })
+
+it('带暂停的连续文件：暂停后的片段从文件里紧接着的位置取画面，不错位', () => {
+  const { recording, document } = fixture()
+  // 录 3 秒、暂停 1 秒、再录 6 秒：文件里只有 9 秒画面。
+  recording.media = [{ id: 'screen', kind: 'screen', path: '/screen.mp4', monoUs: 1_000_000, durationUs: 9_000_000, gaps: [{ startUs: 4_000_000, endUs: 5_000_000 }] }]
+  recording.pauses = [{ startUs: 4_000_000, endUs: 5_000_000 }]
+  recording.understanding = { ...recording.understanding, transcript: [], candidates: [] }
+  document.media = document.media.filter(v => v.id === 'screen').map(v => ({ ...v, durationSeconds: 9 }))
+  document.items = document.items.filter(v => v.mediaId === 'screen')
+  const result = buildRecordingMoviePlan(document, recording, recording.understanding, { ...RECORDING_MOVIE_RECIPES.tutorial, formats: ['landscape'] }, '成片')
+  const screen = document.sequences.find(v => v.id === result.screenSequenceIds[0])!
+  // 第一段是文件的 0–3 秒（90 帧），第二段从文件的 3 秒处接着取 6 秒（180 帧）：没有跳过或重复文件里的画面。
+  expect(screen.clips.map(v => [v.duration, v.sourceInUs])).toEqual([[90, 0], [180, 3_000_000]])
+})

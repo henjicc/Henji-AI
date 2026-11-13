@@ -17,6 +17,17 @@ type Session = Parameters<typeof quickExportWindows>[0]
 const session = (items: Session['media'], extra: Partial<Session> = {}): Session => ({ media: items, tracks: null, ...extra })
 
 describe('快速模式保存视频', () => {
+  it('连续文件（暂停不在文件里）：一个文件、每段一个窗口，暂停后的事件与声音对到文件里紧接着的位置', () => {
+    // 录 2 秒、暂停 3 秒、再录 4 秒：文件 6 秒。
+    const screen = { ...media('s', 'screen', 1_000_000, 6_000_000), gaps: [{ startUs: 3_000_000, endUs: 6_000_000 }] }
+    const { windows, files, seekUs } = quickExportWindows(session([screen, media('m', 'microphone', 1_000_000, 9_000_000)], { pauses: [{ startUs: 3_000_000, endUs: 6_000_000 }] }))
+    expect(files).toEqual([{ path: 's.mp4' }])
+    expect(seekUs).toBe(0)
+    expect(windows).toEqual([{ startUs: 1_000_000, endUs: 3_000_000, outputUs: 0 }, { startUs: 6_000_000, endUs: 10_000_000, outputUs: 2_000_000 }])
+    // 继续后 1.5 秒处的事件在成品的 3.5 秒；暂停中的事件不进成品。
+    expect(quickExportOutputUs(windows, 7_500_000)).toBe(3_500_000)
+    expect(quickExportOutputUs(windows, 4_000_000)).toBeNull()
+  })
   it('画面分段首尾相接，暂停期间的事件不进入视频时间', () => {
     const { windows } = quickExportWindows(session([media('b', 'screen', 5_000_000, 1_000_000), media('a', 'screen', 1_000_000, 2_000_000), media('m', 'microphone', 1_000_000, 5_000_000)]))
     expect(windows).toEqual([{ startUs: 1_000_000, endUs: 3_000_000, outputUs: 0 }, { startUs: 5_000_000, endUs: 6_000_000, outputUs: 2_000_000 }])

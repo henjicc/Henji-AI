@@ -1,3 +1,4 @@
+import { recordingFileUs, recordingSessionUs } from './range'
 import { splitVideoEditClip, type VideoEditDocument, type VideoEditMedia } from '../videoEdit/document'
 import { videoEditClipSourceRange, videoEditClipSpeedValue, videoEditSpeedRatio } from '../videoEdit/clipSpeed'
 import type { RecordingDocument } from './document'
@@ -22,12 +23,12 @@ export function replaceRecordingSteps(draft: VideoEditDocument, recording: Recor
         const source = oldMedia && sourceMedia.find(v => pathKey(v.path) === pathKey(oldMedia.path))
         if (!source) continue
         const range = videoEditClipSourceRange(original, fps)
-        const from = Math.max(step.startUs, source.monoUs + range.from * 1e6), to = Math.min(step.endUs, source.monoUs + range.to * 1e6)
+        const from = Math.max(step.startUs, recordingSessionUs(source, range.from * 1e6)), to = Math.min(step.endUs, recordingSessionUs(source, range.to * 1e6))
         if (to <= from) continue
         if (original.reverse || original.timeRemap || sequence.tracks.some(v => v.index === original.track && v.locked) || sequence.transitions?.some(v => v.leftClipId === original.id || v.rightClipId === original.id)) throw new Error('目标步骤包含锁定、倒放、速度曲线或转场片段，请先解除这些编辑再重录。')
         const speed = videoEditClipSpeedValue(original)
-        const start = Math.max(original.start, original.start + Math.round((from - source.monoUs - range.from * 1e6) * fps / (1e6 * speed)))
-        const end = Math.min(original.start + original.duration, original.start + Math.round((to - source.monoUs - range.from * 1e6) * fps / (1e6 * speed)))
+        const start = Math.max(original.start, original.start + Math.round((recordingFileUs(source, from) - range.from * 1e6) * fps / (1e6 * speed)))
+        const end = Math.min(original.start + original.duration, original.start + Math.round((recordingFileUs(source, to) - range.from * 1e6) * fps / (1e6 * speed)))
         if (end <= start) continue
         if (end < original.start + original.duration) sequence = splitVideoEditClip(sequence, original.id, end)
         if (start > original.start) sequence = splitVideoEditClip(sequence, original.id, start)

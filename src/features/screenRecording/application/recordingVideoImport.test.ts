@@ -230,3 +230,23 @@ it('合并失败时各段照原样导入、原文件不动，结果如实写明�
   expect(vi.mocked(importVideoEditSources).mock.calls.at(-1)?.[1]).toEqual(recording.media.map(media => ({ path: media.path })))
   expect(run.committed().items.map(item => item.name)).toContain('走查 · 屏幕 第 2 段')
 })
+
+it('原生采集录的一个连续画面文件（暂停不在文件里）也问主进程分段：导入是一个画面片段，直接用原件，暂停不占时间线', async () => {
+  const recording = { ...createRecordingDocument(), sessionId: crypto.randomUUID(), status: 'stopped' as const, startUs: 1_000_000, endUs: 9_000_000, pauses: [{ startUs: 4_000_000, endUs: 6_000_000 }] }
+  recording.source = { name: '屏幕', options: captureOptionsSchema.parse({ sourceId: 'screen:0:0', width: 1920, height: 1080, fps: 30, bitrate: 12_000_000 }), cursorEmbedded: false }
+  recording.media = [{ id: 'screen-0', kind: 'screen', path: '/s/screen-000000.mp4', monoUs: 1_000_000, durationUs: 6_000_000 }]
+  // 单看文档对不出暂停（一个文件跨着暂停），合并计划为空；分段只有主进程按时刻表给得出。
+  expect(recordingCombinePlan(recording)).toBeNull()
+  const document = createVideoEditDocument('剪辑'), sequence = createVideoEditSequence('课程')
+  document.sequences.push(sequence)
+  const combined = [{ fps: 30, frames: 180, parts: [{ mediaId: 'screen-0', monoUs: 1_000_000, frames: 90, fileUs: 0 }, { mediaId: 'screen-0', monoUs: 6_000_000, frames: 90, fileUs: 3_000_000 }], screen: '/s/screen-000000.mp4', audio: {} }]
+  const capture = vi.fn(async () => combined)
+  vi.mocked(getPlatform).mockReturnValue({ documents: { readDocument: async () => ({ meta: { kind: 'screen_recording', name: '走查' }, content: recording }), saveDocument: vi.fn() }, screenRecording: { capture } } as unknown as ReturnType<typeof getPlatform>)
+  const run = importInto(document, { '/s/screen-000000.mp4': 6 })
+  const result = await importRecordingToVideo('rec', { documentId: document.id, sequenceId: sequence.id, frame: 0 })
+  expect(capture).toHaveBeenCalledWith({ operation: 'combine', sessionId: 'rec' })
+  expect(result).toMatchObject({ combined: true, screens: 1 })
+  expect(vi.mocked(importVideoEditSources).mock.calls.at(-1)?.[1]).toEqual([{ path: '/s/screen-000000.mp4' }])
+  const clips = run.committed().sequences[0].clips
+  expect(clips.map(clip => [clip.start, clip.duration, clip.sourceInUs])).toEqual([[0, 180, 0]])
+})

@@ -6,7 +6,7 @@ import { recordingDevices } from '../tracks/devices'
 import { recordingDocumentSchema } from '@/core/screenRecording/document'
 import { recordingDurationUs } from '@/core/screenRecording/range'
 import { recordingTrackKindSchema, recordingTrackOptionsSchema, recordingTrackWarningSchema, type RecordingTracks } from '@/core/screenRecording/tracks'
-import type { RecordingCaptureFacts } from '@/core/screenRecording/capture'
+import { captureActivityTimelineFile, type RecordingCaptureFacts } from '@/core/screenRecording/capture'
 import { recordingProductExports, recordingProductExport } from './recordingProductService'
 import { recordingView } from './recordingService'
 import { recordingWorkFailure, recordingWorkInProgress } from './recordingWork'
@@ -47,6 +47,7 @@ const detailsSchema = z.object({
     recovered: z.boolean().describe('应用上次意外退出后，启动时自动补齐的'),
     sourceEnded: z.string().optional().describe('录制因被录的窗口关闭或显示器断开而自动停止时的说明；这是正常结尾，不是失败，已录内容照常保存、可以导入'),
   }).strict().nullable().optional().describe('采集计数只在本次运行内有；应用重启后为 null，只剩 tracks 与 phase。null（整体或某一项）表示不知道，不等于没有丢帧或空档'),
+  activity: z.object({ path: z.string(), exists: z.boolean() }).strict().optional().describe('画面旁的活动时间线（一行一条 JSON：每秒新画面数与编码字节数、前台窗口与标题、暂停/继续/停止），只有原生画面采集录的才有；exists 为 false 表示这次没有'),
   finishing: z.boolean().optional().describe('停止后的收尾、恢复或导入仍在后台进行；为 true 时等待，不要重发。变回 false 后看 error：有值就是失败及原因，没有就是做完了'),
 }).strict()
 /** 各轨的分段与空档汇总：录制中来自主进程的实时轨道，停止后来自录制文档。 */
@@ -92,6 +93,9 @@ class RecordingProvider implements ApplicationEntityProvider {
       const facts = await getPlatform().screenRecording.capture({ operation: 'facts', sessionId: ref.id }).catch(() => null) as RecordingCaptureFacts | null
       const { tracks: liveTracks, ...capture } = facts ?? { tracks: undefined }
       const view = recordingView()
+      const screenFile = content.media.find(media => media.kind === 'screen')?.path
+      // 只有原生采集写了活动时间线时才给这一项：用现有录法录的会话，对外读回的内容与以前一样。
+      const activity = screenFile && await getPlatform().system.fs.exists(captureActivityTimelineFile(screenFile)).catch(() => false) ? { path: captureActivityTimelineFile(screenFile), exists: true } : undefined
       revision = meta.revision
       // 录制中事件与标记还在主进程里，没封存进会话文档，这时给计数只会是假的 0；录制中读 read_screen_recording_events。
       const sealed = !active
@@ -101,6 +105,7 @@ class RecordingProvider implements ApplicationEntityProvider {
         ...(sealed ? { markers: content.markers.length, events: content.eventPages.reduce((sum, page) => sum + page.lastSequence - page.firstSequence + 1, 0) } : {}),
         devices: content.devices,
         tracks: trackFacts(liveTracks ?? content.tracks) as unknown as JsonValue, capture: facts ? capture as unknown as JsonValue : null,
+        ...(activity ? { activity } : {}),
         ...(facts?.failure || recordingWorkFailure(ref.id) ? { error: [facts?.failure, recordingWorkFailure(ref.id)].filter(Boolean).join('；') } : {}),
         finishing: recordingWorkInProgress(ref.id) || Boolean(active?.phase === 'stopped' && active.busy || view.busy && view.documentId === ref.id && active?.phase !== 'recording'),
       } }

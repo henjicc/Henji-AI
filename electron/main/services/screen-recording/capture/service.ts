@@ -3,7 +3,7 @@ import { BrowserWindow, screen, shell, type WebContents } from 'electron'
 import { createHash, randomUUID } from 'node:crypto'
 import { release } from 'node:os'
 import path from 'node:path'
-import type { CaptureAttachment, CaptureBackendKind, CaptureCommand, CaptureFollowUp, CaptureManifest, CaptureOperation, CapturePrepared, CaptureRequest, RecordingCaptureFacts, RecoveredRecording, ScreenCaptureBackend } from '../../../../../src/core/screenRecording/capture'
+import type { CaptureAttachment, CaptureBackendKind, ScreenCaptureOptions, CaptureCommand, CaptureFollowUp, CaptureManifest, CaptureOperation, CapturePrepared, CaptureRequest, RecordingCaptureFacts, RecoveredRecording, ScreenCaptureBackend } from '../../../../../src/core/screenRecording/capture'
 import type { RecordingSessionOptions } from '../../../../../src/core/screenRecording/sessionOptions'
 import type { CaptureKind } from '../../../../../src/core/screenRecording/contracts'
 import { getUserFolderDir } from '../../appPaths'
@@ -12,7 +12,9 @@ import { mediaPermissions } from '../../media-permissions'
 import { createMainLogger } from '../../logging'
 import { openRecordingControl, closeRecordingControl, minimizeOwnerWhileRecording, notifyRecordingProblem, recordingControl, recordingEventBacklog } from '../runtime'
 import { CaptureStorage, recoverCapture } from './storage'
-import { GfxCaptureBackend } from './gfxcapture'
+import { GfxCaptureBackend, type GfxCaptureStats } from './gfxcapture'
+import { NativeCaptureBackend } from './native'
+import { screenCaptureProcess } from './native-client'
 import { systemCursorLook } from './cursor-look'
 import { resolveNativeCaptureSource } from './source'
 import { CAPTURE_PRESENCE_INTERVAL_MS, captureSourceGone, createCaptureBounds, createCaptureGeometry, createCaptureSourcePresence } from './geometry'
@@ -48,6 +50,29 @@ interface Active {
   presence?: ReturnType<typeof setInterval>
   /** 释放只做一次：采集失败时已经释放过，之后关控制条再释放就直接用那次的结果，不再对着已结束的会话等回执。 */
   released?: Promise<void>
+  /** 画面实际由谁录：原生采集进程、FFmpeg 的 gfxcapture，或界面里的兼容采集；进日志，便于复盘每次录制走的哪条路。 */
+  capturer: Capturer
+}
+type Capturer = 'native' | 'ffmpeg' | 'chromium'
+const videoStats = (backend: ScreenCaptureBackend): GfxCaptureStats | undefined => backend instanceof GfxCaptureBackend || backend instanceof NativeCaptureBackend ? backend.stats() : undefined
+
+/** 开发开关：设了 HENJI_NATIVE_SCREEN_CAPTURE=1 时整屏录制先试原生画面采集进程，不支持就回到现有录法。 */
+const nativeCaptureRequested = (): boolean => process.env.HENJI_NATIVE_SCREEN_CAPTURE === '1'
+/**
+ * 原生采集第一版只录整块显示器、按显示器原尺寸、不录光标、只用 NVIDIA 编码：其余情况直接走现有录法。
+ * 返回显示器中心的物理像素坐标（原生按物理像素找显示器，副屏起点是物理坐标，不是 DIP），或不走原生的原因。
+ */
+export function nativeCaptureTarget(source: { kind: string; displayId?: string }, options: ScreenCaptureOptions, cursor: 'redraw' | 'embed' | undefined, platform = process.platform): { point: [number, number] } | { skipped: string } {
+  if (platform !== 'win32') return { skipped: '只支持 Windows' }
+  if (source.kind !== 'screen') return { skipped: '只支持整块显示器' }
+  if (options.region) return { skipped: '不支持区域录制' }
+  if (cursor === 'embed') return { skipped: '不录光标' }
+  if (options.encoder && !['auto', 'nvidia'].includes(options.encoder)) return { skipped: `指定了编码器 ${options.encoder}` }
+  const display = screen.getAllDisplays().find(item => String(item.id) === source.displayId)
+  if (!display) return { skipped: '找不到所选显示器' }
+  if (Math.round(display.bounds.width * display.scaleFactor) !== options.width || Math.round(display.bounds.height * display.scaleFactor) !== options.height) return { skipped: '录制尺寸与显示器原尺寸不同' }
+  const center = screen.dipToScreenPoint({ x: display.bounds.x + display.bounds.width / 2, y: display.bounds.y + display.bounds.height / 2 })
+  return { point: [center.x, center.y] }
 }
 type HostTrackKind = NonNullable<CapturePrepared['hostTracks']>[number]
 let active: Active | null = null
@@ -55,7 +80,7 @@ let active: Active | null = null
 const finishedFacts = new Map<string, RecordingCaptureFacts>()
 const FINISHED_FACTS_LIMIT = 32
 function captureFacts(session: Active, live: boolean): RecordingCaptureFacts {
-  const video = session.backend instanceof GfxCaptureBackend ? session.backend.stats() : undefined
+  const video = videoStats(session.backend)
   const system = session.hosted.systemAudio?.recorder?.stats().health, systemReconnects = session.hosted.systemAudio?.recorder?.stats().reconnects ?? 0
   const microphone = session.hosted.microphone?.recorder?.stats()
   return {
@@ -169,9 +194,9 @@ async function finishSession(session: Active, document: RecordingSessionDocument
   clearInterval(session.presence)
   try {
     const summary = await document.finish(session.storage.manifest)
-    const capture = session.backend instanceof GfxCaptureBackend ? session.backend.stats() : undefined
+    const capture = videoStats(session.backend)
     keepFacts(sessionId, captureFacts(session, false))
-    logger.info('录制结束汇总', { event: 'recording.capture.summary', context: { sessionId, backend: session.storage.manifest.backend, failed: session.failed, ...session.ended ? { sourceEnded: session.ended.source } : {}, ...summary, eventPageBacklog: recordingEventBacklog(), ...capture ? { droppedFrames: capture.droppedFrames, duplicatedFrames: capture.duplicatedFrames, encoderRestarts: capture.restarts, encoder: capture.encoder } : {} } })
+    logger.info('录制结束汇总', { event: 'recording.capture.summary', context: { sessionId, backend: session.storage.manifest.backend, capturer: session.capturer, failed: session.failed, ...session.ended ? { sourceEnded: session.ended.source } : {}, ...summary, eventPageBacklog: recordingEventBacklog(), ...capture ? { droppedFrames: capture.droppedFrames, duplicatedFrames: capture.duplicatedFrames, encoderRestarts: capture.restarts, encoder: capture.encoder } : {} } })
     if (session.failed) notifyRecordingProblem(session.owner, `录制意外停止，已保存 ${formatDuration(summary.durationUs)}，可以导入剪辑。`)
   } catch (error) {
     logger.error('录制收尾失败，已写文件保留，可以从录制页恢复', { event: 'recording.capture.finish.failed', error, context: { sessionId } })
@@ -254,7 +279,7 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
       // 麦克风在所有平台都由原生录音服务录（PortAudio）；系统声只在 Windows 上由它录（WASAPI 回环），macOS 仍由界面采集。
       const hostTracks: HostTrackKind[] = [...(request.session?.tracks.microphone ? ['microphone' as const] : []), ...(request.session?.tracks.systemAudio && nativeSystemAudioSupported(process.platform) ? ['systemAudio' as const] : [])]
       const prepared: CapturePrepared = { sessionId: request.sessionId, originUs, backend, cursorEmbedded: manifest.cursorEmbedded, options: request.options, ...(request.session ? { directory: storage.directory } : {}), ...(hostTracks.length ? { hostTracks } : {}) }
-      const session: Active = { owner, storage, originUs, rpc: new Map(), backend: null!, tracksAttached: true, failed: false, prepared, ...(request.session ? { session: request.session } : {}), ...(request.followUp ? { followUp: request.followUp } : {}), hosted: Object.fromEntries(hostTracks.map(kind => [kind, {}])) }
+      const session: Active = { owner, storage, originUs, rpc: new Map(), backend: null!, capturer: backend === 'chromium' ? 'chromium' : 'ffmpeg', tracksAttached: true, failed: false, prepared, ...(request.session ? { session: request.session } : {}), ...(request.followUp ? { followUp: request.followUp } : {}), hosted: Object.fromEntries(hostTracks.map(kind => [kind, {}])) }
       const presence = createCaptureSourcePresence(source), endedSource = source.kind === 'window' ? 'window' as const : 'display' as const
       const geometry = request.session ? createCaptureGeometry(source, request.options) : undefined
       geometry?.()
@@ -265,19 +290,33 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
         document = await RecordingSessionDocument.create(request.sessionId, session.originUs, request.session, source.name, manifest, storage.directory, cursor)
         session.document = document
       }
-      session.backend = backend === 'gfxcapture' ? new GfxCaptureBackend(request.options, nativeSource!, storage, {
+      const gfxCapture = (): GfxCaptureBackend => new GfxCaptureBackend(request.options, nativeSource!, storage, {
         nowUs: () => now() - session.originUs,
         failed: error => { void fail(session, error).catch(failure => logger.error('录制失败清理未完成', { event: 'recording.capture.cleanup.failed', error: failure })) },
         restarted: info => notifyRecordingProblem(session.owner, info.encoder === 'cpu' ? '画面编码中断过一次，已改用软件编码自动接着录。' : '画面编码中断过一次，已自动接着录。'),
         sourceGone: () => captureSourceGone(presence), sourceEnded: () => sourceEnded(session, endedSource),
-      }, request.cursor === 'embed') : {
+      }, request.cursor === 'embed')
+      const native = backend === 'gfxcapture' && nativeCaptureRequested() ? nativeCaptureTarget(source, request.options, request.cursor) : undefined
+      if (native && 'skipped' in native) logger.info('这次录制不走原生画面采集', { event: 'recording.capture.native.skipped', context: { sessionId: request.sessionId, reason: native.skipped } })
+      session.backend = native && 'point' in native ? new NativeCaptureBackend(request.options, native.point, storage, {
+        client: screenCaptureProcess(), originUs: session.originUs, nowUs: now,
+        failed: error => { void fail(session, error).catch(failure => logger.error('录制失败清理未完成', { event: 'recording.capture.cleanup.failed', error: failure })) },
+        sourceEnded: () => sourceEnded(session, endedSource),
+      }) : backend === 'gfxcapture' ? gfxCapture() : {
         prepare: async () => undefined,
         start: () => remote(session, 'start'), pause: () => remote(session, 'pause'), resume: () => remote(session, 'resume'), stop: () => remote(session, 'stop'),
         cancel: async () => { for (const pending of session.rpc.values()) pending.reject(new Error('录制已取消')); session.rpc.clear(); if (!owner.isDestroyed()) await remote(session, 'cancel') },
       }
       active = session
       try {
-        await session.backend.prepare()
+        if (session.backend instanceof NativeCaptureBackend) {
+          try { await session.backend.prepare(); session.capturer = 'native' } catch (error) {
+            // 本机不支持（不是 NVIDIA、系统太旧）、程序起不来或版本不配套：这次照现有录法录，不向用户报错。
+            logger.warn('原生画面采集不可用，改用现有录法', { event: 'recording.capture.native.fallback', error, context: { sessionId: request.sessionId, code: (error as { code?: unknown }).code ?? null } })
+            session.backend = gfxCapture()
+            await session.backend.prepare()
+          }
+        } else await session.backend.prepare()
         mediaPermissions.assertSelection(owner, request.sessionId, request.options.sourceId)
         const transition = async (operation: Exclude<CaptureOperation, 'cancel'>, status: CaptureManifest['status'], signal: AbortSignal): Promise<void> => {
           try {
@@ -296,13 +335,17 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
         openRecordingControl(owner, request.sessionId, {
           start: signal => transition('start', 'recording', signal), pause: signal => transition('pause', 'paused', signal), resume: signal => transition('resume', 'recording', signal), stop: signal => transition('stop', 'stopped', signal),
           capturingSinceUs: () => {
+            if (session.backend instanceof NativeCaptureBackend) return session.backend.capturingSinceUs()
             const span = manifest.spans.at(-1)
             return backend === 'gfxcapture' && span && !span.finalized ? session.originUs + span.monoUs : undefined
           },
           mark: async () => undefined, // Event/marker ownership is task 1.4; no duplicate event log here.
           ...(document ? {
             began: () => document!.range('startUs', now() - session.originUs), ending: () => failing(document!.range('endUs', now() - session.originUs)),
-            pausing: () => failing(document!.pause(now() - session.originUs)), resumed: () => failing(document!.resume(now() - session.originUs)),
+            pausing: () => {
+              if (session.backend instanceof NativeCaptureBackend) session.backend.pressed(now())
+              return failing(document!.pause(now() - session.originUs))
+            }, resumed: () => failing(document!.resume(now() - session.originUs)),
           } : {}),
           cancel: () => {
             // 第二次（采集失败释放过后再关控制条）这时会话已不是 active，界面的回执路由不到这里，再发命令只会白等超时；
@@ -339,7 +382,7 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
         try { if (backend === 'gfxcapture') await session.backend.cancel() } finally { await storage.release(); active = null }
         throw error
       }
-      logger.info('屏幕采集准备完成', { event: 'recording.capture.prepare.completed', context: { backend, sessionId: request.sessionId, monoUs: now() - session.originUs, capturesApplication: source.id === BrowserWindow.fromWebContents(owner)?.getMediaSourceId() } })
+      logger.info('屏幕采集准备完成', { event: 'recording.capture.prepare.completed', context: { backend, capturer: session.capturer, sessionId: request.sessionId, monoUs: now() - session.originUs, capturesApplication: source.id === BrowserWindow.fromWebContents(owner)?.getMediaSourceId() } })
       return prepared
     } finally { preparing = null }
   }

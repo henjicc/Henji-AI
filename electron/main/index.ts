@@ -13,6 +13,7 @@ import { registerAudioIpc } from './ipc/audio'
 import { disposeAudioCapture, registerAudioCaptureIpc } from './ipc/audio-capture'
 import { registerScreenRecordingIpc } from './ipc/screen-recording'
 import { closeRecordingControl } from './services/screen-recording/runtime'
+import { disposeScreenCaptureProcess } from './services/screen-recording/capture/native-client'
 import { registerWebReplayIpc } from './ipc/web-replay'
 import { cleanWebRecordingTrash, stopWebReplayService } from './services/web-replay/runtime'
 import { purgeRecycledItems } from './services/recycle/runtime'
@@ -399,7 +400,7 @@ app.on('window-all-closed', () => {
   }
 })
 
-bindApplicationShutdown(app, [disposeFonts, disposeAudioCapture, closeRecordingControl,stopWebReplayService, disposeWorkRootChange, disposeTracking, disposeSmartRegions, disposeLocalModels, disposeEmbeddedAgent, disposeMcp, disposeImageEditorV3Ipc], (error) => {
+bindApplicationShutdown(app, [disposeFonts, disposeAudioCapture, async () => { try { await closeRecordingControl() } finally { await disposeScreenCaptureProcess() } }, stopWebReplayService, disposeWorkRootChange, disposeTracking, disposeSmartRegions, disposeLocalModels, disposeEmbeddedAgent, disposeMcp, disposeImageEditorV3Ipc], (error) => {
   createMainLogger('application.shutdown').error('应用服务退出清理失败', { event: 'application.shutdown.failed', error })
 }, async () => {
   mediaRecycleLifecycle.stop()

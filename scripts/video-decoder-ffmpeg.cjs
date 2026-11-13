@@ -317,6 +317,7 @@ async function main() {
 module.exports = {
   FFMPEG_BUILD,
   FFMPEG_URL,
+  cargoEnv,
   crateDir,
   downloadWithRetry,
   ensureFfmpeg,

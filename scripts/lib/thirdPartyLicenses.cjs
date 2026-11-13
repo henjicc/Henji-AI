@@ -31,6 +31,7 @@ const NATIVE_CRATES = Object.freeze([
   { dir: 'native/audio-capture', platforms: ['win32', 'darwin'] },
   { dir: 'native/audio-worker', platforms: null },
   { dir: 'native/video-decoder', platforms: ['win32'] },
+  { dir: 'native/screen-capture', platforms: ['win32'] },
 ])
 
 const RUST_TARGETS = Object.freeze({

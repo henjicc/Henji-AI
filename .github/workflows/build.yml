@@ -376,6 +376,13 @@ jobs:
           test -f native/video-decoder/target/release/henji-video-decoder.exe
           test -f native/video-decoder/target/release/ffmpeg.exe
           test -f native/video-decoder/target/release/ffprobe.exe
+      # 原生画面采集进程链接同一份 FFmpeg；runner 没有 NVIDIA 显卡，要真实显卡的色彩转换用例按设计跳过。
+      - name: 原生画面采集进程测试与 release 构建
+        shell: bash
+        run: |
+          node scripts/build-screen-capture.cjs --test
+          node scripts/build-screen-capture.cjs
+          test -f native/screen-capture/target/release/henji-screen-capture.exe
 
   audio-capture-tests:
     name: 原生录音 ${{ matrix.os }}
