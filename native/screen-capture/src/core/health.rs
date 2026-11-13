@@ -87,6 +87,15 @@ pub struct Health {
     pub last_source_us: AtomicI64,
     /// 采集回调处理一帧（转换并放进收件箱）花的时间。它长了系统的帧池会被占满，系统就开始丢帧，而且不会告诉我们。
     pub capture_max_us: AtomicU64,
+    /// 来源画面当前的尺寸（宽在高 32 位）；变了说明显示器换了分辨率。
+    pub source_size: AtomicU64,
+    /// 已出格、等编码的帧数。
+    pub encode_queue: AtomicU64,
+    pub encode_queue_max: AtomicU64,
+    pub encode_sum_us: AtomicU64,
+    pub encode_count: AtomicU64,
+    /// 编码线程新编出、还没被活动时间线取走的字节数。
+    pub encoded_bytes: AtomicU64,
     /// 已编码、等写盘的包数。
     pub write_queue: AtomicU64,
     pub write_queue_max: AtomicU64,
@@ -158,7 +167,7 @@ impl<F> Inbox<F> {
         self.wake.notify_one();
     }
 
-    /// 采集出错（来源消失、设备被移除）：会话线程醒来后收尾。只记第一条。
+    /// 采集出错：`SOURCE_LOST|...` 表示来源没了、可以等它回来，其余的会话线程收尾。取走之前只记第一条。
     pub fn fail(&self, message: String) {
         self.state.lock().unwrap().failure.get_or_insert(message);
         self.wake.notify_one();
@@ -191,7 +200,8 @@ impl<F> Inbox<F> {
                 .0;
         }
         state.signaled = false;
-        (state.frames.drain(..).collect(), state.failure.clone())
+        // 出错只交付一次：来源丢失是可以恢复的，恢复后再丢要能再报。
+        (state.frames.drain(..).collect(), state.failure.take())
     }
 }
 

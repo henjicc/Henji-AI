@@ -11,6 +11,8 @@
  *     soak     长录（默认 300 秒），每秒记一次健康汇报，看丢帧、内存、显存是否平稳
  *     flash    在屏幕上放一个黑白闪烁的小色块（不抢焦点），核对时刻表里每帧的系统时刻与真实上屏时刻差多少
  *     cancel   录几秒后取消（文件应删干净），同一个进程里再录一次
+ *     faults   注入故障：显示器断开再接回、编码停顿、编码持续过慢、采集出错
+ *     preview  开预览，由另一个进程按句柄打开共享纹理读回
  *   选项：
  *     --display <设备名>   录哪块显示器（sources 返回的 id，如 \\.\DISPLAY1）；默认录非主显示器，没有就录主显示器
  *     --seconds <秒>       录制时长
@@ -19,6 +21,7 @@
  *     --out <目录>         输出目录；默认在系统临时目录下新建
  *     --motion             在被录的显示器上用 ffplay 放一块 60 帧的测试图，保证画面一直在变
  *     --no-pause           record 场景不暂停
+ *     --proxy              同时录一份 1080P 代理，并核对它与主文件帧帧对应
  *
  * 需要先构建：node scripts/build-screen-capture.cjs
  */
@@ -33,7 +36,7 @@ const executable = path.join(crate, 'target', 'release', 'henji-screen-capture.e
 const ffprobe = path.join(ffmpegBinDir, 'ffprobe.exe')
 const ffplay = path.join(ffmpegBinDir, 'ffplay.exe')
 const ffmpeg = path.join(ffmpegBinDir, 'ffmpeg.exe')
-const PROTOCOL = 1
+const PROTOCOL = 2
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -44,6 +47,7 @@ function parseArgs(argv) {
     const name = rest[index]
     if (name === '--motion') options.motion = true
     else if (name === '--no-pause') options.pause = false
+    else if (name === '--proxy') options.proxy = true
     else if (name.startsWith('--')) options[name.slice(2)] = rest[++index]
   }
   return options
@@ -238,8 +242,121 @@ function summarizeHealth(samples) {
   }
 }
 
+/**
+ * faults：用注入的故障核对来源丢失、编码停顿、编码持续过慢、采集出错四种情况下的行为。
+ * preview：开预览，由另一个进程按句柄打开纹理读回。
+ */
+async function runExtra(options) {
+  const directory = options.out ?? fs.mkdtempSync(path.join(os.tmpdir(), 'henji-screen-capture-'))
+  fs.mkdirSync(directory, { recursive: true })
+  const problems = []
+  const check = (condition, message) => { if (!condition) problems.push(message) }
+  const client = new CaptureClient()
+  await client.request('hello', { protocol: PROTOCOL })
+  const sources = await client.request('sources')
+  const display = sources.displays.find((candidate) => !candidate.primary) ?? sources.displays[0]
+  const sessionId = `selftest-${Date.now()}`
+  const prepared = await client.request('start', { sessionId, directory, source: { kind: 'display', id: display.id }, fps: 60 })
+  const lastHealth = () => client.health[client.health.length - 1] ?? {}
+  const report = { scenario: options.scenario, directory }
+
+  if (options.scenario === 'preview') {
+    const reader = spawn(executable, ['preview-read'], { stdio: ['pipe', 'pipe', 'inherit'], windowsHide: true })
+    let output = ''
+    reader.stdout.on('data', (chunk) => { output += chunk })
+    const exited = new Promise((resolve) => reader.on('exit', resolve))
+    await sleep(1000)
+    const before = lastHealth()
+    const description = await client.request('startPreview', { sessionId, clientPid: reader.pid, maxWidth: 1280, fps: 15 })
+    reader.stdin.write(`${JSON.stringify(description)}\n`)
+    await exited
+    const read = JSON.parse(output || '{"error":"没有输出"}')
+    await sleep(2500)
+    const previews = client.events.filter((event) => event.event === 'preview')
+    await client.request('stopPreview', { sessionId })
+    const result = await client.request('stop', { sessionId })
+    check(!read.error && read.opened === description.slots.length, `另一个进程打不开预览纹理：${JSON.stringify(read).slice(0, 200)}`)
+    // 屏幕上没东西在动时每张预览都一样，这时只核对读得到画面。
+    check(read.nonblank, '预览纹理读回来是空的')
+    check(description.codedSize.width === 1280, `预览宽 ${description.codedSize.width}`)
+    check(result.droppedFrames === 0 && result.captureDropped === 0, `开预览期间丢帧：${result.droppedFrames} / ${result.captureDropped}`)
+    // 预览事件是可丢的；这里只看它确实在以大致的帧率到达。
+    check(previews.length >= 20, `预览事件只有 ${previews.length} 条`)
+    Object.assign(report, { description, read: { ...read, rounds: undefined }, previewEvents: previews.length, encodeAvgUsBefore: before.encodeAvgUs, encodeAvgUsDuring: lastHealth().encodeAvgUs, captureMaxUs: summarizeHealth(client.health)?.captureMaxUs, result })
+  } else {
+    const inject = (fields) => client.request('inject', { sessionId, ...fields })
+    const waitEvent = async (name, ms) => {
+      const deadline = Date.now() + ms
+      while (Date.now() < deadline) {
+        if (client.events.some((event) => event.event === name)) return true
+        await sleep(50)
+      }
+      return false
+    }
+    await sleep(3000)
+    // 一、显示器断开再接回：同一个文件里续录，中间是一段空档。
+    await inject({ kind: 'sourceLost' })
+    check(await waitEvent('sourceRestored', 5000), '来源丢失后没有恢复')
+    await sleep(2000)
+    const afterLost = lastHealth()
+    // 二、编码停顿 150 毫秒一次：两个队列吸收，一帧不丢。
+    await inject({ kind: 'encodeStall', ms: 150 })
+    await sleep(2500)
+    const afterStall = lastHealth()
+    check(afterStall.droppedFrames === 0 && afterStall.captureDropped === 0, `150 毫秒的编码停顿丢了帧：丢格 ${afterStall.droppedFrames}，采集丢 ${afterStall.captureDropped}`)
+    // 三、编码器持续过慢（每帧多 25 毫秒，一秒只编得了约 30 帧）：队列满后按规则丢格，采集回调不受影响。
+    await inject({ kind: 'encodeDelay', ms: 25 })
+    await sleep(5000)
+    const slow = lastHealth()
+    await inject({ kind: 'encodeDelay', ms: 0 })
+    await sleep(3000)
+    const recovered = lastHealth()
+    check(slow.droppedFrames > 60, `编码过慢 5 秒只丢了 ${slow.droppedFrames} 格`)
+    check(slow.captureDropped === 0, `编码过慢时采集队列丢了 ${slow.captureDropped} 张（会话线程被卡住了）`)
+    check(recovered.encodeQueue <= 2, `编码恢复后队列还有 ${recovered.encodeQueue} 帧`)
+    const droppedAtEnd = (await client.request('status', { sessionId })).droppedFrames
+    await sleep(1500)
+    check((await client.request('status', { sessionId })).droppedFrames === droppedAtEnd, '编码恢复后还在丢格')
+    // 四、采集报设备被移除：收尾并发 interrupted，已录内容可读。
+    await inject({ kind: 'captureFailure', code: 'DEVICE_REMOVED' })
+    check(await waitEvent('interrupted', 5000), '采集出错后没有 interrupted 事件')
+    const interrupted = client.events.find((event) => event.event === 'interrupted')
+    check(interrupted?.error?.code === 'DEVICE_REMOVED', `interrupted 的错误码是 ${interrupted?.error?.code}`)
+    const stopOutcome = await client.request('stop', { sessionId }).then(() => 'ok', (error) => error.code)
+    check(stopOutcome === 'SESSION_MISSING', `中断后的 stop 应被拒绝，实际 ${stopOutcome}`)
+    const stream = probe(path.join(directory, prepared.files.video))
+    const table = inspect(directory)
+    check(!stream.error && Number(stream.nb_read_frames) === interrupted?.encodedFrames, `文件 ${stream.nb_read_frames} 帧，中断事件说编码了 ${interrupted?.encodedFrames} 帧`)
+    check(table.records === interrupted?.frames, `时刻表 ${table.records} 条，应为 ${interrupted?.frames}`)
+    check(table.droppedFrames === interrupted?.droppedFrames, '时刻表里的丢弃数与事件不一致')
+    const lostGap = table.pauses?.find((pause) => pause.pausedCells > 30)
+    check(lostGap?.keyframe, '来源丢失的空档之后不是关键帧')
+    const paused = client.events.find((event) => event.event === 'paused')
+    check(paused?.reason === 'sourceLost', `paused 的原因是 ${paused?.reason}`)
+    Object.assign(report, {
+      events: client.events.filter((event) => !['fragment', 'preview'].includes(event.event)).map((event) => ({ event: event.event, reason: event.reason, frame: event.frame })),
+      afterLost: { frames: afterLost.frames, pausedCells: afterLost.pausedCells },
+      afterStall: { dropped: afterStall.droppedFrames, captureDropped: afterStall.captureDropped },
+      slow: { dropped: slow.droppedFrames, captureDropped: slow.captureDropped, encodeQueue: slow.encodeQueue },
+      recovered: { dropped: recovered.droppedFrames, encodeQueue: recovered.encodeQueue },
+      health: summarizeHealth(client.health),
+      file: { frames: stream.nb_read_frames, duration: stream.duration },
+      timing: { records: table.records, dropped: table.droppedFrames, pauses: table.pauses },
+    })
+  }
+  client.child.stdin.end()
+  report.exit = await client.exited
+  check(report.exit.code === 0, `进程退出码 ${report.exit.code}`)
+  report.ok = problems.length === 0
+  report.problems = problems
+  fs.writeFileSync(path.join(directory, 'selftest-report.json'), JSON.stringify({ ...report, healthSamples: client.health }, null, 2))
+  console.log(JSON.stringify(report, null, 2))
+  process.exit(report.ok ? 0 : 1)
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2))
+  if (['faults', 'preview'].includes(options.scenario)) return runExtra(options)
   if (!['record', 'kill', 'eof', 'soak', 'flash', 'cancel'].includes(options.scenario)) {
     console.error('用法：node native/screen-capture/selftest/selftest.cjs <record|kill|eof|soak|flash|cancel> [选项]（见文件头）')
     process.exit(2)
@@ -263,7 +380,7 @@ async function main() {
   if (motion) await sleep(1500)
 
   let sessionId = `selftest-${Date.now()}`
-  const parameters = { directory, source: { kind: 'display', id: display.id }, fps, codec: options.codec ?? 'h264' }
+  const parameters = { directory, source: { kind: 'display', id: display.id }, fps, codec: options.codec ?? 'h264', ...(options.proxy ? { proxy: { height: 1080 } } : {}) }
   let prepared = await client.request('prepare', { sessionId, ...parameters })
   await sleep(300)
   const rejected = async (type, code) => {
@@ -390,6 +507,15 @@ async function main() {
     check(fileFrames >= (seconds - 1) * fps, `只录到 ${fileFrames} 帧`)
   }
 
+  let proxyFile = null
+  if (options.proxy) {
+    // 代理与主文件帧帧对应：帧数、时长相同，尺寸是 1080P。
+    check(prepared.proxy?.height === 1080 && prepared.files.proxy, '准备的应答里没有代理')
+    proxyFile = prepared.files.proxy ? probe(path.join(directory, prepared.files.proxy)) : { error: '没有代理文件' }
+    check(!proxyFile.error && proxyFile.height === 1080 && proxyFile.width === prepared.proxy?.width, '代理文件读不了或尺寸不对：' + JSON.stringify(proxyFile).slice(0, 160))
+    check(proxyFile.nb_read_frames === stream.nb_read_frames && proxyFile.duration === stream.duration, '代理 ' + proxyFile.nb_read_frames + ' 帧 / ' + proxyFile.duration + ' 秒，主文件 ' + stream.nb_read_frames + ' 帧 / ' + stream.duration + ' 秒')
+    if (table.pauses?.[0]) check(packets(path.join(directory, prepared.files.proxy), fps).find((candidate) => candidate.frame === table.pauses[0].frame)?.key === true, '代理里继续后的第一帧不是关键帧')
+  }
   let flashResult = null
   if (flash && !stream.error && !table.error) {
     flashResult = analyzeFlash(video, path.join(directory, prepared.files.timing), flash, flashRegion, fps)
@@ -404,6 +530,7 @@ async function main() {
   const report = {
     scenario: options.scenario,
     flash: flashResult,
+    proxy: proxyFile && { width: proxyFile.width, height: proxyFile.height, frames: proxyFile.nb_read_frames, duration: proxyFile.duration, bytes: prepared.files.proxy && fs.existsSync(path.join(directory, prepared.files.proxy)) ? fs.statSync(path.join(directory, prepared.files.proxy)).size : 0 },
     ok: problems.length === 0,
     problems,
     directory,

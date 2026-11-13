@@ -17,9 +17,10 @@ use std::{
     time::Duration,
 };
 
-/// 协议 1：prepare / start / pause / resume / stop / cancel / status / sources / clock / hello。
+/// 协议 2：显示器断开不再结束录制（sourceLost / sourceRestored 事件，同一文件续录）；新增代理、预览、
+/// sourceChanged 事件与编码队列的健康字段。协议 1 是最初的 prepare / start / pause / resume / stop / cancel。
 /// 指令、事件或落盘格式的含义有变就加一；主进程在握手时带上自己的协议号，不相等直接报错。
-pub const PROTOCOL: u32 = 1;
+pub const PROTOCOL: u32 = 2;
 
 static OUTPUT: Mutex<()> = Mutex::new(());
 /// 主进程读端已关闭：之后的输出全部丢弃，由主循环把文件收尾后退出。
@@ -197,6 +198,24 @@ pub struct CaptureConfig {
     /// 关键帧间隔（帧）；0 表示一秒。每个关键帧起一个分片，间隔就是被杀时最多丢的时长。
     #[serde(default)]
     pub keyframe_frames: u32,
+    /// 同时录一份小尺寸的代理文件（<name>.proxy.mp4），与主文件帧帧对应、共用时刻表。不给就不录。
+    #[serde(default)]
+    pub proxy: Option<ProxyConfig>,
+}
+
+fn default_proxy_height() -> u32 {
+    1080
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProxyConfig {
+    /// 代理的高度，宽按来源比例取；来源不比它高时不录代理。
+    #[serde(default = "default_proxy_height")]
+    pub height: u32,
+    /// 比特每秒；0 表示按尺寸与帧率取默认。
+    #[serde(default)]
+    pub bitrate: u64,
 }
 
 impl CaptureConfig {
@@ -219,10 +238,14 @@ impl CaptureConfig {
 
     /// 没给码率时的默认值：每像素每帧 0.08 比特，限制在 4–80 Mbps（4K60 约 40 Mbps）。
     pub fn target_bitrate(&self, width: u32, height: u32) -> u64 {
-        if self.bitrate > 0 {
-            return self.bitrate;
+        Self::bitrate_for(self.bitrate, width, height, self.fps)
+    }
+
+    pub fn bitrate_for(requested: u64, width: u32, height: u32, fps: u32) -> u64 {
+        if requested > 0 {
+            return requested;
         }
-        ((width as u64 * height as u64 * self.fps as u64) * 8 / 100).clamp(4_000_000, 80_000_000)
+        ((width as u64 * height as u64 * fps as u64) * 8 / 100).clamp(4_000_000, 80_000_000)
     }
 }
 

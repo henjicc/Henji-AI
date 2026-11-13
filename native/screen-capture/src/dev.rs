@@ -43,20 +43,20 @@ pub fn record(arguments: &[String]) -> i32 {
         let mut session = Session::prepare::<Native>(CaptureConfig::parse(&request)?, events.clone())?;
         events.send(json!({"event": "prepared", "info": session.info}));
         thread::sleep(Duration::from_millis(number(arguments, "--prepare-ms", 300.0) as u64));
-        session.command("start", None, json!("start"))?;
+        session.command("start", &json!({"id": "start"}))?;
         let seconds = number(arguments, "--seconds", 30.0);
         let (pause_at, pause_for) = (number(arguments, "--pause-at", -1.0), number(arguments, "--pause-for", 5.0));
         if pause_at >= 0.0 && pause_at < seconds {
             thread::sleep(Duration::from_secs_f64(pause_at));
-            session.command("pause", None, json!("pause"))?;
+            session.command("pause", &json!({"id": "pause"}))?;
             thread::sleep(Duration::from_secs_f64(pause_for));
-            session.command("resume", None, json!("resume"))?;
+            session.command("resume", &json!({"id": "resume"}))?;
             thread::sleep(Duration::from_secs_f64((seconds - pause_at).max(0.0)));
         } else {
             thread::sleep(Duration::from_secs_f64(seconds));
         }
         // 被中断的会话已经自己结束，停止会被拒绝：照常等它收尾。
-        let _ = session.command("stop", None, json!("stop"));
+        let _ = session.command("stop", &json!({"id": "stop"}));
         session.join();
         Ok(())
     })();
@@ -67,6 +67,24 @@ pub fn record(arguments: &[String]) -> i32 {
         Ok(()) => 0,
         Err(error) => {
             println!("{}", json!({"ok": false, "error": protocol::failure(&error)}));
+            1
+        }
+    }
+}
+
+/// preview-read：在另一个进程里按句柄打开预览纹理并读回（自测用，见平台层的说明）。
+pub fn preview_read() -> i32 {
+    #[cfg(windows)]
+    let outcome = crate::platform::windows::read_preview_from_stdin();
+    #[cfg(not(windows))]
+    let outcome: Result<Value, String> = Err("这个平台还没有预览".into());
+    match outcome {
+        Ok(result) => {
+            println!("{result}");
+            0
+        }
+        Err(error) => {
+            println!("{}", json!({"error": error}));
             1
         }
     }

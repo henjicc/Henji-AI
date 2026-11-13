@@ -12,6 +12,7 @@
 //!   `write` 用 pts（时间基 1/fps）append，`isReadyForMoreMediaData` 为假时等待（核心会据此丢格并计数）；
 //!   `flush_fragment` 对应暂停时落盘；`finish` 调 `finishWriting`；
 //! - `foreground`：`NSWorkspace.frontmostApplication` 与最前窗口标题；
+//! - `CaptureControl`：`reacquire` 在显示器接回后重建 `SCStream`；预览可以把 IOSurface 的句柄交给界面进程；
 //! - 最低系统版本 14；不引入 FFmpeg。
 //!
 //! 做法与参照见 tickets/46-正式使用链路/调研-Rust画面采集进程.md 第 5 节。
@@ -22,7 +23,7 @@ use crate::core::{
     protocol::CaptureConfig,
     timing,
 };
-use crate::platform::{FrameWriter, Opened, Platform, ProcessStats};
+use crate::platform::{CaptureControl, FrameWriter, Notify, Opened, Platform, ProcessStats};
 use serde_json::{json, Value};
 use std::{path::Path, sync::Arc, sync::OnceLock, time::Instant};
 
@@ -41,11 +42,26 @@ impl FrameWriter<()> for NoWriter {
     }
 }
 
+pub struct NoCapture;
+impl CaptureControl for NoCapture {
+    fn reacquire(&mut self) -> Result<bool, String> {
+        Err(UNSUPPORTED.into())
+    }
+    fn device_lost(&self) -> bool {
+        false
+    }
+    fn simulate_source_lost(&self) {}
+    fn start_preview(&self, _: &Value, _: Notify) -> Result<Value, String> {
+        Err(UNSUPPORTED.into())
+    }
+    fn stop_preview(&self) {}
+}
+
 const UNSUPPORTED: &str = "CAPTURE_UNSUPPORTED|此系统暂不支持新的录屏方式，请用现有录法";
 
 impl Platform for MacosPlatform {
     type Frame = ();
-    type Capture = ();
+    type Capture = NoCapture;
     type Writer = NoWriter;
     const NAME: &'static str = "unsupported";
     const CLOCK: u32 = timing::CLOCK_MACH_ABSOLUTE;
@@ -61,7 +77,7 @@ impl Platform for MacosPlatform {
         Ok(json!({"displays": []}))
     }
 
-    fn open(_: &CaptureConfig, _: &Path, _: Arc<Inbox<()>>, _: Arc<Health>) -> Result<Opened<Self>, String> {
+    fn open(_: &CaptureConfig, _: &Path, _: &Path, _: Arc<Inbox<Arc<()>>>, _: Arc<Health>) -> Result<Opened<Self>, String> {
         Err(UNSUPPORTED.into())
     }
 
@@ -69,7 +85,7 @@ impl Platform for MacosPlatform {
         None
     }
 
-    fn process_stats(_: &()) -> ProcessStats {
+    fn process_stats(_: &NoCapture) -> ProcessStats {
         ProcessStats::default()
     }
 }

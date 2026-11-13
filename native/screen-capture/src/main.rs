@@ -32,7 +32,6 @@ enum Reply {
 
 fn command(request: &Value, session: &mut Option<Session>, events: &Events) -> Result<Reply, String> {
     let kind = request["type"].as_str().ok_or("INVALID_ARGUMENT|缺少指令类型")?;
-    let at_us = request["atUs"].as_i64();
     let now = |value: Value| Ok(Reply::Now(value));
     let prepare = |session: &mut Option<Session>| -> Result<(), String> {
         if session.as_ref().is_some_and(|session| !session.is_ended()) {
@@ -53,7 +52,7 @@ fn command(request: &Value, session: &mut Option<Session>, events: &Events) -> R
             // 带着完整参数的 start：一步完成准备与开始。
             _ => {
                 prepare(session)?;
-                session.as_ref().unwrap().command("start", at_us, request["id"].clone()).map(|_| Reply::Later)
+                session.as_ref().unwrap().command("start", request).map(|_| Reply::Later)
             }
         };
     }
@@ -61,7 +60,7 @@ fn command(request: &Value, session: &mut Option<Session>, events: &Events) -> R
     let active = session.as_ref().filter(|session| session.id == id).ok_or("SESSION_MISSING|没有这次录制")?;
     match kind {
         "status" => now(active.status()),
-        _ => active.command(kind, at_us, request["id"].clone()).map(|_| Reply::Later),
+        _ => active.command(kind, request).map(|_| Reply::Later),
     }
 }
 
@@ -103,7 +102,7 @@ fn service() {
     }
     // 主进程没了（标准输入关闭或读端关闭）：把正在录的文件收尾后退出。
     if let Some(mut active) = session.take() {
-        let _ = active.command("stop", None, Value::Null);
+        let _ = active.command("stop", &Value::Null);
         let deadline = Instant::now() + EXIT_WAIT;
         while !active.is_ended() && Instant::now() < deadline {
             thread::sleep(Duration::from_millis(20));
@@ -127,6 +126,7 @@ fn main() {
         }
         Some("record") => dev::record(&arguments[1..]),
         Some("inspect") => dev::inspect(&arguments[1..]),
+        Some("preview-read") => dev::preview_read(),
         Some("sources") => match Native::sources() {
             Ok(sources) => {
                 println!("{}", serde_json::to_string_pretty(&sources).unwrap());
@@ -138,7 +138,7 @@ fn main() {
             }
         },
         Some(_) => {
-            eprintln!("用法：henji-screen-capture [record|inspect|sources]；不带参数时作为服务运行（协议见 README.md）");
+            eprintln!("用法：henji-screen-capture [record|inspect|sources|preview-read]；不带参数时作为服务运行（协议见 README.md）");
             2
         }
     };

@@ -5,7 +5,10 @@ mod convert;
 mod device;
 mod encode;
 mod mux;
+mod preview;
 mod wgc;
+
+pub use preview::read_from_stdin as read_preview_from_stdin;
 
 use crate::core::{
     activity::Foreground,
@@ -13,7 +16,7 @@ use crate::core::{
     protocol::{CaptureConfig, SourceSpec},
     timing,
 };
-use crate::platform::{Opened, Platform, ProcessStats};
+use crate::platform::{CaptureControl, Notify, Opened, Platform, ProcessStats};
 use serde_json::{json, Value};
 use std::{
     path::Path,
@@ -71,6 +74,24 @@ pub struct Capture {
     _timer: TimerResolution,
 }
 
+impl CaptureControl for Capture {
+    fn reacquire(&mut self) -> Result<bool, String> {
+        self.capture.reacquire()
+    }
+    fn device_lost(&self) -> bool {
+        self.capture.gpu.removed()
+    }
+    fn simulate_source_lost(&self) {
+        self.capture.simulate_source_lost();
+    }
+    fn start_preview(&self, request: &Value, notify: Notify) -> Result<Value, String> {
+        self.capture.start_preview(request, notify)
+    }
+    fn stop_preview(&self) {
+        self.capture.stop_preview();
+    }
+}
+
 pub struct WindowsPlatform;
 
 impl Platform for WindowsPlatform {
@@ -90,21 +111,27 @@ impl Platform for WindowsPlatform {
         Ok(json!({"displays": device::displays().iter().map(device::Display::describe).collect::<Vec<_>>()}))
     }
 
-    fn open(config: &CaptureConfig, video_path: &Path, inbox: Arc<Inbox<Self::Frame>>, health: Arc<Health>) -> Result<Opened<Self>, String> {
+    fn open(config: &CaptureConfig, video_path: &Path, proxy_path: &Path, inbox: Arc<Inbox<Arc<Self::Frame>>>, health: Arc<Health>) -> Result<Opened<Self>, String> {
         initialize();
         let SourceSpec::Display { id, point } = &config.source;
         let display = device::find_display(id.as_deref(), *point)?;
         let gpu = Arc::new(device::Gpu::create_for_nvenc()?);
         // NV12 的色度是半分辨率：宽高取偶数。
         let (width, height) = (display.width() & !1, display.height() & !1);
-        let hw = Arc::new(encode::HwContext::new(gpu.clone(), width, height)?);
-        let writer = encode::Encoder::open(hw.clone(), config, width, height, video_path, health.clone())?;
+        // 代理按来源比例缩到指定高度；来源不比它高就不录代理。
+        let proxy = config.proxy.as_ref().filter(|proxy| proxy.height >= 2 && proxy.height < height).map(|proxy| {
+            let proxy_height = proxy.height & !1;
+            (((width as u64 * proxy_height as u64 / height as u64) as u32).max(2) & !1, proxy_height)
+        });
+        let hw = Arc::new(encode::HwContext::new(gpu.clone(), (width, height), proxy)?);
+        let writer = encode::Encoder::open(hw.clone(), config, (width, height), proxy, video_path, proxy_path, health.clone())?;
+        let proxy = proxy.filter(|_| writer.has_proxy());
         let converter = convert::Converter::new(&gpu)?;
         let encoder = writer.label.to_string();
         let mut source = display.describe();
         source["adapter"] = json!(gpu.adapter_name);
-        let capture = wgc::start(gpu, &display, hw, converter, width, height, config.fps, inbox, health)?;
-        Ok(Opened { capture: Capture { capture, _timer: TimerResolution::raise() }, writer, width, height, encoder, source })
+        let capture = wgc::start(gpu, &display, hw, converter, (width, height), proxy, config.fps, inbox, health)?;
+        Ok(Opened { capture: Capture { capture, _timer: TimerResolution::raise() }, writer, width, height, encoder, proxy, source })
     }
 
     fn foreground() -> Option<Foreground> {

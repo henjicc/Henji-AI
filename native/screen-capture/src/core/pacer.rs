@@ -27,6 +27,15 @@ pub struct Emit {
     pub dropped: bool,
 }
 
+/// 格子不进文件的原因。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Hold {
+    /// 用户暂停。
+    User,
+    /// 来源没了（显示器断开），等它回来。
+    SourceLost,
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum Poll {
     /// 现在没有到点的格子；下一格最早在这个时刻到点。
@@ -61,10 +70,14 @@ pub struct Pacer<F> {
     pending: VecDeque<(i64, F)>,
     current: Option<(i64, F)>,
     current_shown: bool,
-    /// 暂停区间 [起, 止)，按时钟时刻；还没继续的区间止于 i64::MAX。
-    pauses: Vec<(i64, i64)>,
+    /// 不进文件的区间 [起, 止)，按时钟时刻，带原因；还没结束的区间止于 i64::MAX。
+    /// 不同原因的区间可以重叠（用户暂停期间显示器又断开），格子落在任何一个区间里都不进文件。
+    pauses: Vec<(i64, i64, Hold)>,
     in_pause: bool,
-    after_resume: bool,
+    /// 空档刚结束：下一格直接取最新的一张，不从空档前攒下的旧帧接着出。
+    after_gap: bool,
+    /// 下一个进文件的格子要强制关键帧（第一帧、空档之后的第一帧）。
+    key_pending: bool,
     dropping: bool,
     stop_at: Option<i64>,
     pub counters: Counters,
@@ -88,7 +101,8 @@ impl<F> Pacer<F> {
             current_shown: false,
             pauses: Vec::new(),
             in_pause: false,
-            after_resume: false,
+            after_gap: false,
+            key_pending: true,
             dropping: false,
             stop_at: None,
             counters: Counters::default(),
@@ -122,24 +136,39 @@ impl<F> Pacer<F> {
         self.current.as_ref().map(|(_, frame)| frame)
     }
 
-    /// 从 at_us 起的格子不进文件。已经在暂停中返回 false。
-    pub fn pause(&mut self, at_us: i64) -> bool {
-        if self.pauses.last().is_some_and(|(_, end)| *end == i64::MAX) {
+    /// 从 at_us 起的格子不进文件。同一原因已经有没结束的区间时返回 false。
+    pub fn pause(&mut self, at_us: i64, hold: Hold) -> bool {
+        if self.pauses.iter().any(|(_, end, kind)| *end == i64::MAX && *kind == hold) {
             return false;
         }
-        self.pauses.push((at_us, i64::MAX));
+        self.pauses.push((at_us, i64::MAX, hold));
         true
     }
 
-    /// at_us 起的格子恢复进文件。不在暂停中返回 false。
-    pub fn resume(&mut self, at_us: i64) -> bool {
-        match self.pauses.last_mut() {
-            Some((start, end)) if *end == i64::MAX => {
+    /// at_us 起这一原因不再拦着格子。没有这一原因的未结束区间时返回 false。
+    pub fn resume(&mut self, at_us: i64, hold: Hold) -> bool {
+        match self.pauses.iter_mut().find(|(_, end, kind)| *end == i64::MAX && *kind == hold) {
+            Some((start, end, _)) => {
                 *end = at_us.max(*start);
                 true
             }
-            _ => false,
+            None => false,
         }
+    }
+
+    /// 刚出的这一格没能交给编码（编码队列满了）：改记为丢弃，占着序号；它带的新帧与关键帧要求留给下一格。
+    pub fn reject(&mut self, emit: &Emit) {
+        if emit.dropped {
+            return;
+        }
+        if emit.fresh {
+            self.counters.fresh -= 1;
+            self.current_shown = false;
+        } else {
+            self.counters.repeated -= 1;
+        }
+        self.counters.dropped += 1;
+        self.key_pending |= emit.force_key;
     }
 
     /// 格时刻早于 at_us 的格子出完就结束；不再等余量。
@@ -191,7 +220,7 @@ impl<F> Pacer<F> {
             if !stopping && now_us < due_at {
                 return Poll::Idle(due_at);
             }
-            if self.pauses.iter().any(|(start, end)| grid >= *start && grid < *end) {
+            if self.pauses.iter().any(|(start, end, _)| grid >= *start && grid < *end) {
                 self.take_latest(deadline, false);
                 self.next_cell += 1;
                 self.counters.paused_cells += 1;
@@ -203,8 +232,9 @@ impl<F> Pacer<F> {
             }
             if self.in_pause {
                 self.in_pause = false;
-                self.after_resume = true;
-                self.pauses.retain(|(_, end)| *end > grid);
+                self.key_pending = true;
+                self.after_gap = true;
+                self.pauses.retain(|(_, end, _)| *end > grid);
                 return Poll::Resumed { at_us: grid, cell, output: self.next_output };
             }
             if stopping {
@@ -218,8 +248,8 @@ impl<F> Pacer<F> {
                     self.dropping = false;
                 }
             }
-            if self.after_resume || self.dropping {
-                self.take_latest(deadline, !self.after_resume);
+            if self.after_gap || self.dropping {
+                self.take_latest(deadline, !self.after_gap);
             } else {
                 self.take_next(deadline);
             }
@@ -233,12 +263,13 @@ impl<F> Pacer<F> {
             };
             let dropped = self.dropping;
             let fresh = !dropped && !self.current_shown;
-            let force_key = !dropped && (self.after_resume || self.next_output == 0);
+            let force_key = !dropped && self.key_pending;
             if dropped {
                 self.counters.dropped += 1;
             } else {
                 self.current_shown = true;
-                self.after_resume = false;
+                self.after_gap = false;
+                self.key_pending = false;
                 if fresh {
                     self.counters.fresh += 1;
                 } else {
@@ -345,10 +376,13 @@ mod tests {
     fn pause_keeps_output_contiguous_and_resumes_on_a_keyframe_with_the_latest_frame() {
         let frames: Vec<i64> = (0..300i64).map(|i| i * 1_000_000 / 60).collect();
         let mut pacer = Pacer::new(0, 60, 1);
-        assert!(pacer.pause(1_000_000));
-        assert!(!pacer.pause(1_100_000));
-        assert!(pacer.resume(3_000_000));
-        assert!(!pacer.resume(3_100_000));
+        assert!(pacer.pause(1_000_000, Hold::User));
+        assert!(!pacer.pause(1_100_000, Hold::User));
+        // 暂停期间显示器断开又接回：两个原因的区间重叠，取并集。
+        assert!(pacer.pause(1_500_000, Hold::SourceLost));
+        assert!(pacer.resume(2_000_000, Hold::SourceLost));
+        assert!(pacer.resume(3_000_000, Hold::User));
+        assert!(!pacer.resume(3_100_000, Hold::User));
         let mut marks = Vec::new();
         let mut emits = Vec::new();
         let mut next = 0;
@@ -406,6 +440,19 @@ mod tests {
         let last = encoded.last().expect("追上后恢复编码");
         assert_eq!(last.output, last.cell);
         assert!(last.fresh && last.source_us == 1_990_000);
+    }
+
+    /// 编码队列满了交不出去的格子：占序号、记丢弃；它带的新帧在下一格仍算新帧，关键帧要求也顺延。
+    #[test]
+    fn rejected_cells_keep_their_slot_and_pass_the_frame_on() {
+        let mut pacer = Pacer::new(0, 60, 1);
+        pacer.push(0, 0);
+        let Poll::Emit(first) = pacer.poll(T) else { panic!("应出第一格") };
+        assert!(first.fresh && first.force_key);
+        pacer.reject(&first);
+        let Poll::Emit(second) = pacer.poll(2 * T + 2) else { panic!("应出第二格") };
+        assert!(second.fresh && second.force_key && second.output == 1 && second.source_us == 0);
+        assert_eq!((pacer.counters.fresh, pacer.counters.dropped, pacer.counters.repeated), (1, 1, 0));
     }
 
     #[test]

@@ -1,34 +1,39 @@
 //! 一次录制的生命周期：准备 → 开始 → （暂停 ⇄ 继续）→ 停止 / 取消。
 //!
 //! 准备好之后采集就在跑（帧进收件箱，只留最新一张），开始的那一刻立刻有画面可用。
-//! 会话线程是唯一碰网格、时刻表、活动时间线与写文件接口的线程：
-//! 采集回调只往收件箱放帧，主循环只发控制指令；编码或磁盘慢时卡住的是这条线程，网格按积压丢格并如实记录。
+//!
+//! 各阶段之间都是有界队列，谁也不等后面的阶段：
+//! 采集回调 →（收件箱，满了丢最旧的来源帧）→ 会话线程（网格、时刻表、活动时间线）
+//! →（编码队列，满了这一格记为丢弃）→ 编码线程（调平台的写文件接口）→ 平台自己的写盘队列。
+//! 状态只在会话线程里：主循环把指令交过来，由它判断并应答，每条恰好一次。
 
 use super::{
     activity,
     health::{Health, Inbox},
-    pacer::{Pacer, Poll},
+    pacer::{Hold, Pacer, Poll},
     protocol::{failure, io_failure, CaptureConfig, Events, PROTOCOL},
     timing,
 };
-use crate::platform::{FrameWriter, Opened, Platform};
+use crate::platform::{CaptureControl, FrameWriter, Opened, Platform};
 use serde_json::{json, Value};
 use std::{
     fs,
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicU8, Ordering},
+        atomic::{AtomicU64, AtomicU8, Ordering},
         mpsc, Arc, Mutex,
     },
     thread,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
-/// 收件箱能装多久的来源帧：会话线程（编码）卡住不超过这么久就一帧不丢，之后追上；再久才丢最旧的。
-/// 与网格的积压上限（半秒）一致。每张是一块显卡里的 NV12 纹理（4K 约 12 MB），装满时多占几百 MB 显存。
-const INBOX_SECONDS_DIVISOR: u32 = 2;
+/// 收件箱与编码队列各能装多久的帧（帧率除以它）：后面的阶段卡住不超过这么久就一帧不丢，之后追上。
+/// 每张是一块显卡里的纹理（4K 约 12 MB），两个队列都装满时多占几百 MB 显存。
+const QUEUE_SECONDS_DIVISOR: u32 = 2;
 const REPORT_INTERVAL_US: i64 = 1_000_000;
 const FOREGROUND_INTERVAL_US: i64 = 250_000;
+/// 来源丢了之后隔多久找一次。
+const REACQUIRE_INTERVAL_US: i64 = 1_000_000;
 
 pub const PREPARED: u8 = 0;
 pub const RECORDING: u8 = 1;
@@ -46,8 +51,7 @@ fn state_name(state: u8) -> &'static str {
     }
 }
 
-/// 交给会话线程的指令，都带应答号：状态只在会话线程里，由它判断指令合不合时宜并应答，每条恰好一次。
-/// 应答号为空值表示没人等应答（标准输入已关）。
+/// 交给会话线程的指令，都带应答号：应答号为空值表示没人等应答（标准输入已关）。
 enum Control {
     Start(Option<i64>, Value),
     Pause(Option<i64>, Value),
@@ -55,11 +59,16 @@ enum Control {
     /// 文件收尾之后才应答。
     Stop(Option<i64>, Value),
     Cancel(Value),
+    /// 开预览（带请求）或关预览（空）。
+    Preview(Option<Value>, Value),
+    /// 开发用的故障注入。
+    Inject(Value, Value),
 }
 
 #[derive(Clone)]
 pub struct Paths {
     pub video: PathBuf,
+    pub proxy: PathBuf,
     pub timing: PathBuf,
     pub activity: PathBuf,
     pub manifest: PathBuf,
@@ -69,6 +78,7 @@ impl Paths {
     pub fn new(directory: &Path, name: &str) -> Self {
         Self {
             video: directory.join(format!("{name}.mp4")),
+            proxy: directory.join(format!("{name}.proxy.mp4")),
             timing: directory.join(format!("{name}.frames")),
             activity: directory.join(format!("{name}.activity.jsonl")),
             manifest: directory.join(format!("{name}.capture.json")),
@@ -80,7 +90,7 @@ impl Paths {
     }
 
     fn remove_all(&self) {
-        for path in [&self.video, &self.timing, &self.activity, &self.manifest] {
+        for path in [&self.video, &self.proxy, &self.timing, &self.activity, &self.manifest] {
             let _ = fs::remove_file(path);
         }
     }
@@ -105,18 +115,23 @@ impl Session {
         let directory = PathBuf::from(&config.directory);
         fs::create_dir_all(&directory).map_err(|error| io_failure(&error))?;
         let paths = Paths::new(&directory, &config.name);
-        let inbox = Arc::new(Inbox::<P::Frame>::new((config.fps / INBOX_SECONDS_DIVISOR).max(8) as usize));
+        let queue = (config.fps / QUEUE_SECONDS_DIVISOR).max(8) as usize;
+        let inbox = Arc::new(Inbox::<Arc<P::Frame>>::new(queue));
         let health = Arc::new(Health::default());
-        // 打开到一半失败时视频文件可能已经建好：不留空文件。
-        let opened = P::open(&config, &paths.video, inbox.clone(), health.clone()).inspect_err(|_| {
+        // 打开到一半失败时文件可能已经建好：不留空文件。
+        let opened = P::open(&config, &paths.video, &paths.proxy, inbox.clone(), health.clone()).inspect_err(|_| {
             let _ = fs::remove_file(&paths.video);
+            let _ = fs::remove_file(&paths.proxy);
         })?;
         let info = json!({
             "sessionId": config.session_id,
             "width": opened.width, "height": opened.height, "fps": config.fps,
             "codec": config.codec.name(), "encoder": opened.encoder, "source": opened.source,
+            "proxy": opened.proxy.map(|(width, height)| json!({"width": width, "height": height})),
             "files": {
-                "video": Paths::file_name(&paths.video), "timing": Paths::file_name(&paths.timing),
+                "video": Paths::file_name(&paths.video),
+                "proxy": opened.proxy.map(|_| Paths::file_name(&paths.proxy)),
+                "timing": Paths::file_name(&paths.timing),
                 "activity": Paths::file_name(&paths.activity), "manifest": Paths::file_name(&paths.manifest),
             },
         });
@@ -138,20 +153,25 @@ impl Session {
             status: status.clone(),
             opened: Some(opened),
             info: info.clone(),
+            queue,
         };
         let thread = thread::Builder::new().name("capture-session".into()).spawn(move || runner.run()).map_err(|error| format!("CAPTURE_FAILED|无法启动会话线程：{error}"))?;
         Ok(Self { id, info, control, ended, wake: Box::new(move || wake_inbox.signal()), state, status, thread: Some(thread) })
     }
 
-    /// 把 start / pause / resume / stop / cancel 交给会话线程，应答由它发出。
+    /// 把指令交给会话线程，应答由它发出。
     /// 返回错误时指令没有交出去（会话已结束或指令不认识），由调用方应答。
-    pub fn command(&self, kind: &str, at_us: Option<i64>, id: Value) -> Result<(), String> {
+    pub fn command(&self, kind: &str, request: &Value) -> Result<(), String> {
+        let (at_us, id) = (request["atUs"].as_i64(), request["id"].clone());
         let control = match kind {
             "start" => Control::Start(at_us, id),
             "pause" => Control::Pause(at_us, id),
             "resume" => Control::Resume(at_us, id),
             "stop" => Control::Stop(at_us, id),
             "cancel" => Control::Cancel(id),
+            "startPreview" => Control::Preview(Some(request.clone()), id),
+            "stopPreview" => Control::Preview(None, id),
+            "inject" => Control::Inject(request.clone(), id),
             _ => return Err("INVALID_ARGUMENT|未知指令".into()),
         };
         let ended = self.ended.lock().unwrap();
@@ -182,10 +202,121 @@ impl Session {
     }
 }
 
+enum Job<F> {
+    Frame(Arc<F>, i64, bool),
+    Flush(mpsc::Sender<()>),
+    /// 开发用：编码线程停这么多毫秒，模拟一次停顿。
+    Stall(u64),
+    Finish(mpsc::Sender<Result<(), String>>),
+}
+
+/// 编码线程：独占平台的写文件接口。会话线程只往有界队列里放，不等它。
+struct EncodeStage<F> {
+    jobs: mpsc::SyncSender<Job<F>>,
+    failure: Arc<Mutex<Option<String>>>,
+    /// 开发用：每帧额外等这么多微秒，模拟慢的编码器。
+    delay_us: Arc<AtomicU64>,
+    health: Arc<Health>,
+    thread: Option<thread::JoinHandle<()>>,
+}
+
+impl<F: Send + Sync + 'static> EncodeStage<F> {
+    fn spawn<W: FrameWriter<F> + Send + 'static>(mut writer: W, health: Arc<Health>, capacity: usize) -> Result<Self, String> {
+        let (jobs, receiver) = mpsc::sync_channel::<Job<F>>(capacity);
+        let failure = Arc::new(Mutex::new(None::<String>));
+        let delay_us = Arc::new(AtomicU64::new(0));
+        let (thread_failure, thread_delay, thread_health) = (failure.clone(), delay_us.clone(), health.clone());
+        let thread = thread::Builder::new()
+            .name("capture-encode".into())
+            .spawn(move || {
+                let health = thread_health;
+                for job in receiver {
+                    match job {
+                        Job::Frame(frame, pts, force_key) => {
+                            health.encode_queue.fetch_sub(1, Ordering::Relaxed);
+                            // 出过错之后只收帧、放掉：会话线程看到错误后收尾。
+                            if thread_failure.lock().unwrap().is_none() {
+                                let started = Instant::now();
+                                let delay = thread_delay.load(Ordering::Relaxed);
+                                if delay > 0 {
+                                    thread::sleep(Duration::from_micros(delay));
+                                }
+                                match writer.write(&frame, pts, force_key) {
+                                    Ok(bytes) => {
+                                        health.encoded_bytes.fetch_add(bytes, Ordering::Relaxed);
+                                    }
+                                    Err(error) => {
+                                        thread_failure.lock().unwrap().get_or_insert(error);
+                                    }
+                                }
+                                let elapsed = started.elapsed().as_micros() as u64;
+                                Health::raise(&health.encode_max_us, elapsed);
+                                health.encode_sum_us.fetch_add(elapsed, Ordering::Relaxed);
+                                health.encode_count.fetch_add(1, Ordering::Relaxed);
+                            }
+                        }
+                        Job::Flush(done) => {
+                            if thread_failure.lock().unwrap().is_none() {
+                                if let Err(error) = writer.flush_fragment() {
+                                    thread_failure.lock().unwrap().get_or_insert(error);
+                                }
+                            }
+                            let _ = done.send(());
+                        }
+                        Job::Stall(milliseconds) => thread::sleep(Duration::from_millis(milliseconds)),
+                        Job::Finish(done) => {
+                            let _ = done.send(writer.finish());
+                            break;
+                        }
+                    }
+                }
+            })
+            .map_err(|error| format!("CAPTURE_FAILED|无法启动编码线程：{error}"))?;
+        Ok(Self { jobs, failure, delay_us, health, thread: Some(thread) })
+    }
+
+    fn failure(&self) -> Option<String> {
+        self.failure.lock().unwrap().clone()
+    }
+
+    /// 队列满了返回 false：这一格由调用方记为丢弃。
+    fn try_frame(&self, frame: Arc<F>, pts: i64, force_key: bool) -> bool {
+        let queued = self.health.encode_queue.fetch_add(1, Ordering::Relaxed) + 1;
+        if self.jobs.try_send(Job::Frame(frame, pts, force_key)).is_err() {
+            self.health.encode_queue.fetch_sub(1, Ordering::Relaxed);
+            return false;
+        }
+        Health::raise(&self.health.encode_queue_max, queued);
+        true
+    }
+
+    /// 等队列里的帧都写完并落成分片。
+    fn flush(&self) -> Result<(), String> {
+        let (done, wait) = mpsc::channel();
+        if self.jobs.send(Job::Flush(done)).is_ok() {
+            let _ = wait.recv();
+        }
+        self.failure().map_or(Ok(()), Err)
+    }
+
+    fn finish(&mut self) -> Result<(), String> {
+        let (done, wait) = mpsc::channel();
+        let result = match self.jobs.send(Job::Finish(done)) {
+            Ok(()) => wait.recv().unwrap_or_else(|_| Err("ENCODER_FAILED|编码线程中途退出".into())),
+            Err(_) => Err("ENCODER_FAILED|编码线程中途退出".into()),
+        };
+        if let Some(thread) = self.thread.take() {
+            let _ = thread.join();
+        }
+        // 先前写帧时的错误比收尾时的错误更说明原因。
+        self.failure().map_or(result, Err)
+    }
+}
+
 struct Runner<P: Platform> {
     config: CaptureConfig,
     paths: Paths,
-    inbox: Arc<Inbox<P::Frame>>,
+    inbox: Arc<Inbox<Arc<P::Frame>>>,
     health: Arc<Health>,
     events: Events,
     control: mpsc::Receiver<Control>,
@@ -194,11 +325,12 @@ struct Runner<P: Platform> {
     status: Arc<Mutex<Value>>,
     opened: Option<Opened<P>>,
     info: Value,
+    queue: usize,
 }
 
 /// 开始之后才有的东西：网格与两份旁路文件。
 struct Recording<F> {
-    pacer: Pacer<F>,
+    pacer: Pacer<Arc<F>>,
     table: timing::Writer,
     activity: activity::Writer,
     written: u64,
@@ -231,6 +363,7 @@ impl<P: Platform> Runner<P> {
 
     fn manifest(&self, origin_us: Option<i64>, result: Option<&Value>, error: Option<&str>) -> Value {
         let unix_ms = SystemTime::now().duration_since(UNIX_EPOCH).map(|elapsed| elapsed.as_millis() as u64).unwrap_or(0);
+        let proxy = (!self.info["proxy"].is_null()).then(|| json!({"file": self.info["files"]["proxy"], "width": self.info["proxy"]["width"], "height": self.info["proxy"]["height"]}));
         json!({
             "format": "henji-screen-capture", "version": 1, "protocol": PROTOCOL,
             "sessionId": self.config.session_id,
@@ -242,6 +375,7 @@ impl<P: Platform> Runner<P> {
                 "colorMatrix": "bt709", "colorRange": "limited",
                 "keyframeFrames": self.config.keyframe_interval(),
             },
+            "proxy": proxy,
             "timing": {"file": self.info["files"]["timing"], "version": timing::VERSION},
             "activity": {"file": self.info["files"]["activity"]},
             "clock": P::CLOCK_NAME,
@@ -268,7 +402,7 @@ impl<P: Platform> Runner<P> {
     }
 
     fn totals(&self, recording: Option<&Recording<P::Frame>>) -> Value {
-        let load = |value: &std::sync::atomic::AtomicU64| value.load(Ordering::Relaxed);
+        let load = |value: &AtomicU64| value.load(Ordering::Relaxed);
         let mut totals = json!({
             "sourceFrames": load(&self.health.source_frames),
             "captureDropped": load(&self.health.capture_dropped),
@@ -292,23 +426,52 @@ impl<P: Platform> Runner<P> {
         totals
     }
 
+    fn inject(&self, request: &Value, capture: Option<&P::Capture>, stage: &EncodeStage<P::Frame>) -> Result<Value, String> {
+        let milliseconds = request["ms"].as_u64().unwrap_or(0);
+        match request["kind"].as_str().unwrap_or_default() {
+            "encodeStall" => {
+                let _ = stage.jobs.try_send(Job::Stall(milliseconds));
+            }
+            "encodeDelay" => stage.delay_us.store(milliseconds * 1000, Ordering::Relaxed),
+            "captureFailure" => self.inbox.fail(format!("{}|注入的采集故障", request["code"].as_str().unwrap_or("CAPTURE_FAILED"))),
+            "sourceLost" => {
+                if let Some(capture) = capture {
+                    capture.simulate_source_lost();
+                }
+            }
+            _ => return Err("INVALID_ARGUMENT|未知的注入种类".into()),
+        }
+        Ok(json!({}))
+    }
+
     fn run(mut self) {
-        let Opened { capture, mut writer, .. } = self.opened.take().expect("会话只运行一次");
+        let Opened { capture, writer, .. } = self.opened.take().expect("会话只运行一次");
         let mut capture = Some(capture);
+        let mut stage = match EncodeStage::spawn(writer, self.health.clone(), self.queue) {
+            Ok(stage) => stage,
+            Err(error) => {
+                self.event("interrupted", json!({"error": failure(&error)}));
+                *self.ended.lock().unwrap() = true;
+                self.state.store(ENDED, Ordering::Release);
+                return;
+            }
+        };
         let mut recording: Option<Recording<P::Frame>> = None;
         // 开始之前只留最新的一张，开始那一刻就有画面。
-        let mut preroll: Option<(i64, P::Frame)> = None;
+        let mut preroll: Option<(i64, Arc<P::Frame>)> = None;
         let mut start_at: Option<i64> = None;
         // 已要求开始、第一帧还没到时收到的暂停与继续（真为暂停）：网格建好后补上。
         let mut early_marks: Vec<(bool, i64)> = Vec::new();
         let mut pause_open = false;
         // 已接受的停止指令的应答号。
         let mut stop_reply: Option<Value> = None;
+        // 来源丢了（显示器断开），在等它回来。
+        let mut lost = false;
+        let mut last_reacquire = 0i64;
+        let mut source_size = self.health.source_size.load(Ordering::Relaxed);
         let mut next_due = P::now_us();
         let mut last_report = P::now_us();
         let mut last_foreground = 0i64;
-        // 最近一次汇报以来写帧（编码）花的总时间与帧数。
-        let mut encode_window = (0u64, 0u64);
         let mut last_cpu = (P::now_us(), capture.as_ref().map(|capture| P::process_stats(capture).cpu_time_us).unwrap_or(0));
 
         let end = 'session: loop {
@@ -358,7 +521,7 @@ impl<P: Platform> Runner<P> {
                             let at = at.unwrap_or(now).min(now);
                             match &mut recording {
                                 Some(recording) => {
-                                    recording.pacer.pause(at);
+                                    recording.pacer.pause(at, Hold::User);
                                 }
                                 None => early_marks.push((true, at)),
                             }
@@ -374,7 +537,7 @@ impl<P: Platform> Runner<P> {
                             let at = at.unwrap_or(now).min(now);
                             match &mut recording {
                                 Some(recording) => {
-                                    recording.pacer.resume(at);
+                                    recording.pacer.resume(at, Hold::User);
                                 }
                                 None => early_marks.push((false, at)),
                             }
@@ -396,22 +559,47 @@ impl<P: Platform> Runner<P> {
                         }
                     }
                     Control::Cancel(id) => break 'session End::Cancelled(id),
+                    Control::Preview(request, id) => {
+                        let result = match (&capture, request) {
+                            (Some(capture), Some(request)) => {
+                                let (events, session) = (self.events.clone(), self.config.session_id.clone());
+                                capture.start_preview(
+                                    &request,
+                                    Box::new(move |mut fields| {
+                                        fields["event"] = json!("preview");
+                                        fields["sessionId"] = json!(session);
+                                        events.send_lossy(fields);
+                                    }),
+                                )
+                            }
+                            (Some(capture), None) => {
+                                capture.stop_preview();
+                                Ok(json!({}))
+                            }
+                            (None, _) => Err("INVALID_STATE|录制已经在结束".into()),
+                        };
+                        self.reply(&id, result);
+                    }
+                    Control::Inject(request, id) => self.reply(&id, self.inject(&request, capture.as_ref(), &stage)),
                 }
             }
 
             if recording.is_none() {
                 if let (Some(at), Some((source_us, frame))) = (start_at, preroll.take()) {
-                    // 手里的画面早于开始时刻：起点就是开始时刻；第一帧在开始之后才到：起点是它的采集时刻。
+                    // 手里的画面早于开始时刻：起点就是开始时刻；第一帧在开始之后才到：起点是它的系统时刻。
                     let origin = at.max(source_us);
                     match self.begin(origin) {
                         Ok(mut started) => {
                             started.pacer.push(source_us, frame);
                             for (pause, at) in early_marks.drain(..) {
                                 if pause {
-                                    started.pacer.pause(at);
+                                    started.pacer.pause(at, Hold::User);
                                 } else {
-                                    started.pacer.resume(at);
+                                    started.pacer.resume(at, Hold::User);
                                 }
+                            }
+                            if lost {
+                                started.pacer.pause(origin, Hold::SourceLost);
                             }
                             self.event("started", json!({"originUs": origin, "firstSourceUs": source_us}));
                             recording = Some(started);
@@ -422,57 +610,91 @@ impl<P: Platform> Runner<P> {
                 }
             }
 
+            // 来源丢了不结束录制：这段时间的格子不进文件（时刻表里是一段空档），等它回来接着录。
+            if let Some(error) = capture_failure {
+                if !error.starts_with("SOURCE_LOST|") {
+                    break 'session End::Interrupted(error);
+                }
+                if !lost {
+                    lost = true;
+                    last_reacquire = now;
+                    if let Some(active) = &mut recording {
+                        active.pacer.pause(now, Hold::SourceLost);
+                    }
+                    self.event("sourceLost", json!({"atUs": now}));
+                }
+            }
+            if lost && now - last_reacquire >= REACQUIRE_INTERVAL_US {
+                last_reacquire = now;
+                match capture.as_mut().map(|capture| capture.reacquire()) {
+                    Some(Ok(true)) => {
+                        lost = false;
+                        if let Some(active) = &mut recording {
+                            active.pacer.resume(now, Hold::SourceLost);
+                        }
+                        self.event("sourceRestored", json!({"atUs": now}));
+                    }
+                    Some(Err(error)) => break 'session End::Interrupted(error),
+                    _ => {}
+                }
+            }
+
             if let Some(active) = &mut recording {
-                let mut now = now;
                 loop {
-                    match active.pacer.poll(now) {
+                    match active.pacer.poll(P::now_us()) {
                         Poll::Idle(due) => {
                             next_due = due;
                             break;
                         }
-                        Poll::Emit(emit) => {
-                            let mut bytes = 0;
+                        Poll::Emit(mut emit) => {
                             if !emit.dropped {
-                                let frame = active.pacer.frame().expect("出格必有帧");
-                                bytes = match writer.write(frame, emit.output as i64, emit.force_key) {
-                                    Ok(bytes) => bytes,
-                                    Err(error) => break 'session End::Interrupted(error),
-                                };
-                                active.written += 1;
-                                let after = P::now_us();
-                                Health::raise(&self.health.encode_max_us, (after - now).max(0) as u64);
-                                encode_window = (encode_window.0 + (after - now).max(0) as u64, encode_window.1 + 1);
-                                now = after;
+                                let frame = active.pacer.frame().expect("出格必有帧").clone();
+                                if stage.try_frame(frame, emit.output as i64, emit.force_key) {
+                                    active.written += 1;
+                                } else {
+                                    // 编码队列满了（编码器持续跟不上）：这一格不等，记为丢弃。
+                                    active.pacer.reject(&emit);
+                                    emit.dropped = true;
+                                }
                             }
                             let mut flags = 0u16;
-                            if emit.fresh {
-                                flags |= timing::FLAG_FRESH;
-                            }
                             if emit.dropped {
                                 flags |= timing::FLAG_DROPPED;
-                            }
-                            if emit.force_key {
-                                flags |= timing::FLAG_KEYFRAME;
-                            }
-                            if emit.force_key && emit.output > 0 {
-                                flags |= timing::FLAG_AFTER_RESUME;
+                            } else {
+                                if emit.fresh {
+                                    flags |= timing::FLAG_FRESH;
+                                }
+                                if emit.force_key {
+                                    flags |= timing::FLAG_KEYFRAME;
+                                }
+                                if emit.force_key && emit.output > 0 {
+                                    flags |= timing::FLAG_AFTER_RESUME;
+                                }
                             }
                             let record = timing::Record { source_us: emit.source_us, cell: emit.cell as u32, flags };
                             let grid = active.pacer.cell_time(emit.cell);
                             // 被丢的格子没进文件，不算进活动时间线（否则卡顿的那一秒会被看成静止）。
-                            let noted = active.table.append(record).and_then(|_| if emit.dropped { Ok(()) } else { active.activity.cell(emit.output, grid, emit.fresh, bytes) });
+                            // 字节数取编码线程到此刻为止新编出的量：比格子晚几帧，按秒汇总时无碍。
+                            let fresh = emit.fresh && !emit.dropped;
+                            let noted = active.table.append(record).and_then(|_| {
+                                if emit.dropped {
+                                    Ok(())
+                                } else {
+                                    active.activity.cell(emit.output, grid, fresh, self.health.encoded_bytes.swap(0, Ordering::Relaxed))
+                                }
+                            });
                             if let Err(error) = noted {
                                 break 'session End::Interrupted(io_failure(&error));
                             }
                         }
                         Poll::Paused { at_us, cell, output } => {
                             active.paused = true;
-                            // 暂停可能很久：已录的内容现在就落成完整分片。
-                            let flushed = writer.flush_fragment().and_then(|_| active.table.flush().and_then(|_| active.activity.mark("pause", output, at_us)).map_err(|error| io_failure(&error)));
+                            // 空档可能很久：已录的内容现在就落成完整分片。
+                            let flushed = stage.flush().and_then(|_| active.table.flush().and_then(|_| active.activity.mark(if lost { "sourceLost" } else { "pause" }, output, at_us)).map_err(|error| io_failure(&error)));
                             if let Err(error) = flushed {
                                 break 'session End::Interrupted(error);
                             }
-                            self.event("paused", json!({"atUs": at_us, "cell": cell, "frame": output}));
+                            self.event("paused", json!({"atUs": at_us, "cell": cell, "frame": output, "reason": if lost { "sourceLost" } else { "user" }}));
                         }
                         Poll::Resumed { at_us, cell, output } => {
                             active.paused = false;
@@ -481,9 +703,7 @@ impl<P: Platform> Runner<P> {
                             }
                             self.event("resumed", json!({"atUs": at_us, "cell": cell, "frame": output}));
                         }
-                        Poll::Finished => {
-                            break 'session End::Stopped(stop_reply.take().unwrap_or(Value::Null));
-                        }
+                        Poll::Finished => break 'session End::Stopped(stop_reply.take().unwrap_or(Value::Null)),
                     }
                 }
 
@@ -495,12 +715,25 @@ impl<P: Platform> Runner<P> {
                 }
             }
 
-            if let Some(error) = capture_failure {
-                break 'session End::Interrupted(error);
+            let device_lost = || capture.as_ref().is_some_and(|capture| capture.device_lost());
+            if let Some(error) = stage.failure() {
+                // 设备没了时编码器报的是各式各样的错：对主进程统一说成设备被移除。
+                break 'session End::Interrupted(if device_lost() { "DEVICE_REMOVED|显卡设备已重置或被移除，已录部分保留".into() } else { error });
+            }
+
+            let size = self.health.source_size.load(Ordering::Relaxed);
+            if size != source_size {
+                source_size = size;
+                // 输出尺寸不变（画面等比缩放、四周留黑）；要不要结束这一段另开新段由主进程决定。
+                self.event("sourceChanged", json!({"atUs": now, "width": size >> 32, "height": size & 0xffff_ffff, "frame": recording.as_ref().map(|active| active.pacer.next_output())}));
             }
 
             let now = P::now_us();
             if now - last_report >= REPORT_INTERVAL_US {
+                // 画面静止时没有回调，设备没了只能在这里发现。
+                if device_lost() {
+                    break 'session End::Interrupted("DEVICE_REMOVED|显卡设备已重置或被移除，已录部分保留".into());
+                }
                 if let Some(active) = &mut recording {
                     if let Err(error) = active.table.flush().and_then(|_| active.activity.flush()) {
                         break 'session End::Interrupted(io_failure(&error));
@@ -515,13 +748,15 @@ impl<P: Platform> Runner<P> {
                 let cpu_percent = (stats.cpu_time_us.saturating_sub(last_cpu.1)) as f64 * 100.0 / (now - last_cpu.0).max(1) as f64;
                 last_cpu = (now, stats.cpu_time_us);
                 let mut report = self.totals(recording.as_ref());
+                report["sourceLost"] = json!(lost);
                 report["captureQueueMax"] = json!(Health::take(&self.health.capture_queue_max));
                 report["captureMaxUs"] = json!(Health::take(&self.health.capture_max_us));
+                report["encodeQueue"] = json!(self.health.encode_queue.load(Ordering::Relaxed));
+                report["encodeQueueMax"] = json!(Health::take(&self.health.encode_queue_max));
                 report["writeQueue"] = json!(self.health.write_queue.load(Ordering::Relaxed));
                 report["writeQueueMax"] = json!(Health::take(&self.health.write_queue_max));
                 report["encodeMaxUs"] = json!(Health::take(&self.health.encode_max_us));
-                report["encodeAvgUs"] = json!(encode_window.0 / encode_window.1.max(1));
-                encode_window = (0, 0);
+                report["encodeAvgUs"] = json!(Health::take(&self.health.encode_sum_us) / Health::take(&self.health.encode_count).max(1));
                 report["writeMaxUs"] = json!(Health::take(&self.health.write_max_us));
                 report["sourceIntervalUs"] = self.health.source_interval.lock().unwrap().summary();
                 report["arrivalLatencyUs"] = self.health.arrival_latency.lock().unwrap().summary();
@@ -543,6 +778,7 @@ impl<P: Platform> Runner<P> {
         // 先停采集；收件箱关上，还在路上的回调放进来的帧直接放掉，不占着显存等下一次录制。
         capture.take();
         self.inbox.close();
+        drop(preroll);
         let cancelled = matches!(end, End::Cancelled(_));
         let mut error = match &end {
             End::Interrupted(error) => Some(error.clone()),
@@ -550,12 +786,11 @@ impl<P: Platform> Runner<P> {
         };
         // 一帧都没写：没有可收尾的内容，文件不留。
         let empty = recording.as_ref().is_none_or(|recording| recording.written == 0);
-        if let Err(finish_error) = writer.finish() {
+        if let Err(finish_error) = stage.finish() {
             if !cancelled && !empty {
                 error.get_or_insert(finish_error);
             }
         }
-        drop(writer);
         let mut result = self.totals(recording.as_ref());
         if let Some(active) = &mut recording {
             let closed = active.table.flush().and_then(|_| active.activity.mark("stop", active.pacer.next_output(), P::now_us()));
@@ -598,7 +833,7 @@ impl<P: Platform> Runner<P> {
         *ended = true;
         self.state.store(ENDED, Ordering::Release);
         while let Ok(control) = self.control.try_recv() {
-            let (Control::Start(_, id) | Control::Pause(_, id) | Control::Resume(_, id) | Control::Stop(_, id) | Control::Cancel(id)) = control;
+            let (Control::Start(_, id) | Control::Pause(_, id) | Control::Resume(_, id) | Control::Stop(_, id) | Control::Cancel(id) | Control::Preview(_, id) | Control::Inject(_, id)) = control;
             self.reply(&id, Err("SESSION_MISSING|这次录制已经结束".into()));
         }
     }
@@ -608,15 +843,30 @@ impl<P: Platform> Runner<P> {
 mod tests {
     use super::*;
     use crate::core::{activity::Foreground, protocol::spawn_streamer};
-    use crate::platform::ProcessStats;
-    use std::time::Instant;
+    use crate::platform::{Notify, ProcessStats};
 
     static START: Mutex<Option<Instant>> = Mutex::new(None);
-    static INBOX: Mutex<Option<(Arc<Inbox<u32>>, Arc<Health>)>> = Mutex::new(None);
+    static INBOX: Mutex<Option<(Arc<Inbox<Arc<u32>>>, Arc<Health>)>> = Mutex::new(None);
     static WRITES: Mutex<Vec<(u32, i64, bool)>> = Mutex::new(Vec::new());
     static FLUSHES: Mutex<Vec<usize>> = Mutex::new(Vec::new());
 
     struct Fake;
+    struct FakeCapture;
+    impl CaptureControl for FakeCapture {
+        fn reacquire(&mut self) -> Result<bool, String> {
+            Ok(true)
+        }
+        fn device_lost(&self) -> bool {
+            false
+        }
+        fn simulate_source_lost(&self) {
+            INBOX.lock().unwrap().as_ref().unwrap().0.fail("SOURCE_LOST|测试".into());
+        }
+        fn start_preview(&self, _: &Value, _: Notify) -> Result<Value, String> {
+            Ok(json!({}))
+        }
+        fn stop_preview(&self) {}
+    }
     struct FakeWriter(PathBuf);
     impl FrameWriter<u32> for FakeWriter {
         fn write(&mut self, frame: &u32, pts: i64, force_key: bool) -> Result<u64, String> {
@@ -633,7 +883,7 @@ mod tests {
     }
     impl Platform for Fake {
         type Frame = u32;
-        type Capture = ();
+        type Capture = FakeCapture;
         type Writer = FakeWriter;
         const NAME: &'static str = "fake";
         const CLOCK: u32 = timing::CLOCK_QPC;
@@ -644,19 +894,20 @@ mod tests {
         fn sources() -> Result<Value, String> {
             Ok(json!({}))
         }
-        fn open(_: &CaptureConfig, video: &Path, inbox: Arc<Inbox<u32>>, health: Arc<Health>) -> Result<Opened<Self>, String> {
+        fn open(_: &CaptureConfig, video: &Path, _: &Path, inbox: Arc<Inbox<Arc<u32>>>, health: Arc<Health>) -> Result<Opened<Self>, String> {
             *INBOX.lock().unwrap() = Some((inbox, health));
-            Ok(Opened { capture: (), writer: FakeWriter(video.to_path_buf()), width: 64, height: 36, encoder: "fake".into(), source: json!({}) })
+            Ok(Opened { capture: FakeCapture, writer: FakeWriter(video.to_path_buf()), width: 64, height: 36, encoder: "fake".into(), proxy: None, source: json!({}) })
         }
         fn foreground() -> Option<Foreground> {
             Some(Foreground { title: "测试".into(), process: "test.exe".into(), pid: 1 })
         }
-        fn process_stats(_: &()) -> ProcessStats {
+        fn process_stats(_: &FakeCapture) -> ProcessStats {
             ProcessStats::default()
         }
     }
 
-    /// 走完整个生命周期：准备 → 开始 → 暂停 → 继续 → 停止，核对写文件接口收到的帧序号、时刻表与清单。
+    /// 走完整个生命周期：准备 → 开始 → 暂停 → 继续 → 来源丢失又回来 → 停止，
+    /// 核对写文件接口收到的帧序号、空档处的落盘与关键帧、时刻表与清单。
     #[test]
     fn lifecycle_writes_contiguous_frames_and_honest_side_files() {
         let directory = tempfile::tempdir().unwrap();
@@ -675,37 +926,46 @@ mod tests {
                 let mut index = 0u32;
                 while feeding.load(Ordering::Acquire) {
                     let now = Fake::now_us();
-                    inbox.push(&health, now - 2_000, now, index);
+                    inbox.push(&health, now - 2_000, now, Arc::new(index));
                     index += 1;
                     thread::sleep(Duration::from_millis(20));
                 }
             })
         };
+        fn send_to(session: &Session, kind: &str, id: u32) -> Result<(), String> {
+            session.command(kind, &json!({"id": id}))
+        }
+        let settle = || thread::sleep(Duration::from_millis(300));
         thread::sleep(Duration::from_millis(100));
-        session.command("pause", None, json!(1)).unwrap();
-        session.command("start", None, json!(2)).unwrap();
-        thread::sleep(Duration::from_millis(300));
-        session.command("pause", None, json!(3)).unwrap();
-        thread::sleep(Duration::from_millis(300));
+        send_to(&session, "pause", 1).unwrap();
+        send_to(&session, "start", 2).unwrap();
+        settle();
+        send_to(&session, "pause", 3).unwrap();
+        settle();
         let before_resume = WRITES.lock().unwrap().len();
-        session.command("resume", None, json!(4)).unwrap();
-        thread::sleep(Duration::from_millis(300));
-        session.command("stop", None, json!(5)).unwrap();
-        session.command("stop", None, json!(6)).unwrap();
+        send_to(&session, "resume", 4).unwrap();
+        settle();
+        // 显示器断开：一秒后找回来，这一秒不进文件。
+        session.command("inject", &json!({"id": 5, "kind": "sourceLost"})).unwrap();
+        thread::sleep(Duration::from_millis(600));
+        let before_restore = WRITES.lock().unwrap().len();
+        thread::sleep(Duration::from_millis(900));
+        send_to(&session, "stop", 6).unwrap();
+        send_to(&session, "stop", 7).unwrap();
         session.join();
-        assert!(session.command("pause", None, json!(7)).is_err());
+        assert!(send_to(&session, "pause", 8).is_err());
         feeding.store(false, Ordering::Release);
         feeder.join().unwrap();
         drop(session);
         streamer.join().unwrap();
 
         let writes = WRITES.lock().unwrap().clone();
-        assert!(writes.len() >= 20, "写了 {} 帧", writes.len());
+        assert!(writes.len() > before_restore + 5, "写了 {} 帧", writes.len());
         assert!(writes.iter().enumerate().all(|(index, (_, pts, _))| *pts == index as i64));
-        // 暂停期间不写；暂停那一刻把已写的落成分片；继续后第一帧是关键帧，而且用的是暂停期间到的新画面。
-        assert_eq!(*FLUSHES.lock().unwrap(), vec![before_resume]);
+        // 空档期间不写；进空档那一刻把已写的落成分片；空档后的第一帧是关键帧，而且用的是空档期间到的新画面。
+        assert_eq!(*FLUSHES.lock().unwrap(), vec![before_resume, before_restore]);
         let keys: Vec<usize> = writes.iter().enumerate().filter(|(_, (_, _, key))| *key).map(|(index, _)| index).collect();
-        assert_eq!(keys, vec![0, before_resume]);
+        assert_eq!(keys, vec![0, before_resume, before_restore]);
         assert!(writes[before_resume].0 >= writes[before_resume - 1].0 + 10);
 
         let paths = Paths::new(directory.path(), "screen");
@@ -714,6 +974,8 @@ mod tests {
         assert_eq!(header.fps_num, 50);
         let gap = records[before_resume].cell - records[before_resume - 1].cell;
         assert!((10..=20).contains(&gap), "暂停跨了 {gap} 格");
+        let lost_gap = records[before_restore].cell - records[before_restore - 1].cell;
+        assert!((40..=65).contains(&lost_gap), "来源丢失跨了 {lost_gap} 格");
         assert!(records[before_resume].flags & timing::FLAG_AFTER_RESUME != 0);
         assert!(records.windows(2).all(|pair| pair[0].source_us <= pair[1].source_us));
         let manifest: Value = serde_json::from_slice(&fs::read(&paths.manifest).unwrap()).unwrap();
@@ -721,7 +983,7 @@ mod tests {
         assert_eq!(manifest["result"]["frames"], writes.len());
         assert_eq!(manifest["originUs"], header.origin_us);
         let activity = fs::read_to_string(&paths.activity).unwrap();
-        for kind in ["\"start\"", "\"foreground\"", "\"pause\"", "\"resume\"", "\"stop\""] {
+        for kind in ["\"start\"", "\"foreground\"", "\"pause\"", "\"resume\"", "\"sourceLost\"", "\"stop\""] {
             assert!(activity.contains(kind), "活动时间线缺 {kind}");
         }
     }
