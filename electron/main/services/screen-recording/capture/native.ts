@@ -1,3 +1,4 @@
+import fs from 'node:fs/promises'
 import type { ScreenCaptureBackend, ScreenCaptureOptions } from '../../../../../src/core/screenRecording/capture'
 import { recordingEncoding, recordingKeyframes } from '../../../../../src/core/screenRecording/encoding'
 import { createMainLogger } from '../../logging'
@@ -136,8 +137,9 @@ export class NativeCaptureBackend implements ScreenCaptureBackend {
     if (this.state === 'recording') this.state = 'paused'
     const event = await paused
     this.heldCellUs = undefined
-    if (event && event.reason !== 'sourceLost') { this.heldCellUs = event.atUs; return this.heldUs = this.contentUs(event.atUs) }
-    logger.warn('采集进程没有报出暂停生效的那一格，暂停记在按下的时刻', { event: 'recording.capture.native.pause_unconfirmed', context: { sourceLost: Boolean(this.lostTimer) || event?.reason === 'sourceLost' } })
+    // 来源丢失、停摆造成的空档不是这次暂停生效的那一格。
+    if (event && (event.reason ?? 'user') === 'user') { this.heldCellUs = event.atUs; return this.heldUs = this.contentUs(event.atUs) }
+    logger.warn('采集进程没有报出暂停生效的那一格，暂停记在按下的时刻', { event: 'recording.capture.native.pause_unconfirmed', context: { sourceLost: Boolean(this.lostTimer) || event?.reason === 'sourceLost', reason: event?.reason ?? null } })
     return this.heldUs = pressedUs
   }
 
@@ -214,7 +216,12 @@ export class NativeCaptureBackend implements ScreenCaptureBackend {
     const proxy = source.replace(/\.mp4$/i, '.proxy.mp4')
     try {
       // 采集进程报了代理实际写进的帧数就直接比；老的采集程序不报，才去量两份文件的时长。
-      if (result.proxyFrames !== undefined && result.proxyFrames !== result.encodedFrames) { logger.warn('录制的代理比原片短，不登记', { event: 'recording.capture.native.proxy_short', context: { frames: result.encodedFrames, proxyFrames: result.proxyFrames } }); return }
+      if (result.proxyFrames !== undefined && result.proxyFrames !== result.encodedFrames) {
+        logger.warn('录制的代理比原片短，不登记', { event: 'recording.capture.native.proxy_short', context: { frames: result.encodedFrames, proxyFrames: result.proxyFrames } })
+        // 半截的代理没有用处（剪辑需要时按原片现转），不留着占磁盘。
+        await fs.rm(proxy, { force: true })
+        return
+      }
       if (result.proxyFrames === undefined) {
       const [main, picture] = await Promise.all([probeMediaDurationUs(source), probeMediaDurationUs(proxy)])
       if (Math.abs(main - picture) > 1.5e6 / this.options.fps) { logger.warn('录制的代理比原片短，不登记', { event: 'recording.capture.native.proxy_short', context: { mainUs: main, proxyUs: picture } }); return }
@@ -247,6 +254,8 @@ export class NativeCaptureBackend implements ScreenCaptureBackend {
     if (event.event === 'sourceLost' && !this.lostTimer) { this.lostSinceUs = this.contentUs(event.atUs); this.waitForSource() }
     if (event.event === 'sourceRestored') this.lostSinceUs = undefined
     if (event.event === 'sourceRestored' && this.lostTimer) { clearTimeout(this.lostTimer); this.lostTimer = undefined; logger.info('录制的画面来源已重新接上，继续录', { event: 'recording.capture.native.source_restored' }) }
+    if (event.event === 'paused' && event.reason === 'stall') logger.warn('画面采集停摆过（休眠或长时间卡住），那段时间记成空档', { event: 'recording.capture.native.stalled', context: { frame: event.frame } })
+    if (event.event === 'proxyStopped') logger.warn('编码持续跟不上，采集进程已停掉代理、只录主画面', { event: 'recording.capture.native.proxy_stopped', context: { reason: event.reason, frame: event.frame } })
     if (event.event === 'sourceChanged') logger.warn('录制的显示器换了分辨率，画面等比缩放留黑边', { event: 'recording.capture.native.source_changed', context: { width: event.width, height: event.height, frame: event.frame } })
     if (event.event === 'interrupted') {
       const error = new ScreenCaptureError(event.error.code, event.error.message)

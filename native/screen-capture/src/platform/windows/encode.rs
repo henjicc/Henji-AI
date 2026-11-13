@@ -376,6 +376,16 @@ impl Drop for Track {
     }
 }
 
+/// 代理停掉的原因写进标准错误（主进程收进日志）。
+fn stop_proxy(proxy: &mut Option<Track>, hw: &HwContext, why: &str) -> bool {
+    let Some(mut track) = proxy.take() else { return false };
+    eprintln!("[screen-capture] {why}，之后只录主画面");
+    let _ = track.finish();
+    // 采集回调从下一帧起不再多画一张代理画面。
+    hw.proxy_enabled.store(false, Ordering::Relaxed);
+    true
+}
+
 pub struct Encoder {
     main: Track,
     proxy: Option<Track>,
@@ -417,19 +427,19 @@ impl FrameWriter<HwFrame> for Encoder {
     fn write(&mut self, frame: &HwFrame, pts: i64, force_key: bool) -> Result<u64, String> {
         let bytes = unsafe { self.main.write(frame.main, pts, force_key)? };
         if let Some(proxy) = &mut self.proxy {
-            // 代理中途出错不连累主画面：停掉代理，主文件照常录。
             if frame.proxy.is_null() {
                 return Ok(bytes);
             }
-            if unsafe { proxy.write(frame.proxy, pts, force_key) }.map(|_| self.health.proxy_frames.fetch_add(1, Ordering::Relaxed)).is_err() {
-                let error = "见上一行编码器或写盘的报错";
-                eprintln!("[screen-capture] 代理中途出错，之后只录主画面：{error}");
-                let _ = proxy.finish();
-                self.proxy = None;
-                self._hw.proxy_enabled.store(false, Ordering::Relaxed);
+            // 代理中途出错不连累主画面：停掉代理，主文件照常录。
+            if let Err(error) = unsafe { proxy.write(frame.proxy, pts, force_key) }.map(|_| self.health.proxy_frames.fetch_add(1, Ordering::Relaxed)) {
+                stop_proxy(&mut self.proxy, &self._hw, &format!("代理中途出错（{error}）"));
             }
         }
         Ok(bytes)
+    }
+
+    fn shed_proxy(&mut self) -> bool {
+        stop_proxy(&mut self.proxy, &self._hw, "编码持续跟不上，先停掉代理")
     }
 
     fn flush_fragment(&mut self) -> Result<(), String> {

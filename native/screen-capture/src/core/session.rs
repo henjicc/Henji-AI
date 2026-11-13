@@ -20,7 +20,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
     sync::{
-        atomic::{AtomicU64, AtomicU8, Ordering},
+        atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering},
         mpsc, Arc, Mutex,
     },
     thread,
@@ -34,6 +34,13 @@ const REPORT_INTERVAL_US: i64 = 1_000_000;
 const FOREGROUND_INTERVAL_US: i64 = 250_000;
 /// 来源丢了之后隔多久找一次。
 const REACQUIRE_INTERVAL_US: i64 = 1_000_000;
+/// 会话线程隔了这么久才又轮到（整机休眠、进程被挂起、磁盘长时间卡住）：中间这段不当成丢格去补，记成一段空档。
+/// 比这短的停顿由队列吸收或按丢格处理（时间轴照常走、画面停在上一帧）；休眠几小时若也按丢格补，
+/// 文件里会多出几小时的静止画面，醒来还要逐格补写时刻表。
+const STALL_GAP_US: i64 = 2_000_000;
+/// 编码队列连着满了这么久（期间没有超过 OVERLOAD_QUIET_US 的缓和）还开着代理：先停代理，保主画面。
+const PROXY_SHED_AFTER_US: i64 = 1_000_000;
+const OVERLOAD_QUIET_US: i64 = 500_000;
 /// 暂停与继续的时刻最多可以比现在晚这么多。主进程要画面内容正好切在按下的那一刻，而那一刻的内容要晚一个刷新周期才上屏，
 /// 所以它给的时刻会略晚于现在；再晚就不认，免得状态已经是暂停、画面却还录很久。
 const HOLD_AHEAD_LIMIT_US: i64 = 100_000;
@@ -223,6 +230,8 @@ struct EncodeStage<F> {
     failure: Arc<Mutex<Option<String>>>,
     /// 开发用：每帧额外等这么多微秒，模拟慢的编码器。
     delay_us: Arc<AtomicU64>,
+    /// 置真后编码线程在写下一帧之前停掉代理。不走编码队列：要停的时候队列正满着，放不进去。
+    shed_proxy: Arc<AtomicBool>,
     health: Arc<Health>,
     thread: Option<thread::JoinHandle<()>>,
 }
@@ -232,7 +241,8 @@ impl<F: Send + Sync + 'static> EncodeStage<F> {
         let (jobs, receiver) = mpsc::sync_channel::<Job<F>>(capacity);
         let failure = Arc::new(Mutex::new(None::<String>));
         let delay_us = Arc::new(AtomicU64::new(0));
-        let (thread_failure, thread_delay, thread_health) = (failure.clone(), delay_us.clone(), health.clone());
+        let shed_proxy = Arc::new(AtomicBool::new(false));
+        let (thread_failure, thread_delay, thread_shed, thread_health) = (failure.clone(), delay_us.clone(), shed_proxy.clone(), health.clone());
         let thread = thread::Builder::new()
             .name("capture-encode".into())
             .spawn(move || {
@@ -242,6 +252,9 @@ impl<F: Send + Sync + 'static> EncodeStage<F> {
                         Job::Frame(frame, pts, force_key) => {
                             health.encode_queue.fetch_sub(1, Ordering::Relaxed);
                             // 出过错之后只收帧、放掉：会话线程看到错误后收尾。
+                            if thread_shed.swap(false, Ordering::AcqRel) {
+                                writer.shed_proxy();
+                            }
                             if thread_failure.lock().unwrap().is_none() {
                                 let started = Instant::now();
                                 let delay = thread_delay.load(Ordering::Relaxed);
@@ -279,7 +292,7 @@ impl<F: Send + Sync + 'static> EncodeStage<F> {
                 }
             })
             .map_err(|error| format!("CAPTURE_FAILED|无法启动编码线程：{error}"))?;
-        Ok(Self { jobs, failure, delay_us, health, thread: Some(thread) })
+        Ok(Self { jobs, failure, delay_us, shed_proxy, health, thread: Some(thread) })
     }
 
     fn failure(&self) -> Option<String> {
@@ -457,6 +470,8 @@ impl<P: Platform> Runner<P> {
                 let _ = stage.jobs.try_send(Job::Stall(milliseconds));
             }
             "encodeDelay" => stage.delay_us.store(milliseconds * 1000, Ordering::Relaxed),
+            // 会话线程自己停这么久，模拟整机休眠或进程被挂起。
+            "sessionStall" => thread::sleep(Duration::from_millis(milliseconds)),
             "captureFailure" => self.inbox.fail(format!("{}|注入的采集故障", request["code"].as_str().unwrap_or("CAPTURE_FAILED"))),
             "sourceLost" => {
                 if let Some(capture) = capture {
@@ -498,6 +513,13 @@ impl<P: Platform> Runner<P> {
         // 来源丢了（显示器断开），在等它回来。
         let mut lost = false;
         let mut last_reacquire = 0i64;
+        // 上一次把到点的格子都出完是什么时刻；下一次轮到时隔得太久，中间就是一段停摆。
+        let mut last_polled = P::now_us();
+        // 刚登记了一段停摆、还没出到它的第一格。
+        let mut stall_pending = false;
+        // 编码队列从什么时刻起一直满着、最近一次满是什么时刻。
+        let mut overloaded = (0i64, i64::MIN / 2);
+        let mut proxy_live = !self.info["proxy"].is_null();
         let mut source_size = self.health.source_size.load(Ordering::Relaxed);
         let mut next_due = P::now_us();
         let mut last_report = P::now_us();
@@ -636,6 +658,8 @@ impl<P: Platform> Runner<P> {
                             self.event("started", json!({"originUs": origin, "firstSourceUs": source_us}));
                             recording = Some(started);
                             next_due = now;
+                            // 准备好到开始之间等多久都不算停摆：从网格建好的这一刻起算。
+                            last_polled = P::now_us();
                         }
                         Err(error) => break 'session End::Interrupted(error),
                     }
@@ -672,6 +696,14 @@ impl<P: Platform> Runner<P> {
             }
 
             if let Some(active) = &mut recording {
+                let polling = P::now_us();
+                // 已经在空档里（暂停、来源丢着）时停摆不用另记：那些格子本来就不进文件。
+                if polling - last_polled > STALL_GAP_US && !active.paused {
+                    // 从还没出的第一格起：它到点时线程已经停了，不留给“落后太多”的规则当丢格处理。
+                    active.pacer.pause(active.pacer.cell_time(active.pacer.next_cell()), Hold::Stall);
+                    active.pacer.resume(polling, Hold::Stall);
+                    stall_pending = true;
+                }
                 loop {
                     match active.pacer.poll(P::now_us()) {
                         Poll::Idle(due) => {
@@ -683,6 +715,15 @@ impl<P: Platform> Runner<P> {
                             if !emit.dropped && !stage.has_room(self.queue) {
                                 active.pacer.reject(&emit);
                                 emit.dropped = true;
+                                if now - overloaded.1 > OVERLOAD_QUIET_US {
+                                    overloaded.0 = now;
+                                }
+                                overloaded.1 = now;
+                                if proxy_live && now - overloaded.0 >= PROXY_SHED_AFTER_US {
+                                    proxy_live = false;
+                                    stage.shed_proxy.store(true, Ordering::Release);
+                                    self.event("proxyStopped", json!({"reason": "overload", "atUs": now, "frame": emit.output}));
+                                }
                             }
                             let mut flags = 0u16;
                             if emit.dropped {
@@ -728,15 +769,18 @@ impl<P: Platform> Runner<P> {
                             }
                         }
                         Poll::Paused { at_us, cell, output } => {
+                            // 停摆的空档与来源丢失一样：声音与事件的时钟没有停，不是用户暂停。
+                            let stalled = std::mem::take(&mut stall_pending);
                             active.paused = true;
-                            active.gap_lost |= lost;
+                            active.gap_lost |= lost || stalled;
                             active.gap_paused |= pause_open;
+                            let (mark, reason) = if stalled { ("stall", "stall") } else if lost { ("sourceLost", "sourceLost") } else { ("pause", "user") };
                             // 空档可能很久：已录的内容现在就落成完整分片。
-                            let flushed = stage.flush().and_then(|_| active.table.flush().and_then(|_| active.activity.mark(if lost { "sourceLost" } else { "pause" }, output, at_us)).map_err(|error| io_failure(&error)));
+                            let flushed = stage.flush().and_then(|_| active.table.flush().and_then(|_| active.activity.mark(mark, output, at_us)).map_err(|error| io_failure(&error)));
                             if let Err(error) = flushed {
                                 break 'session End::Interrupted(error);
                             }
-                            self.event("paused", json!({"atUs": at_us, "cell": cell, "frame": output, "reason": if lost { "sourceLost" } else { "user" }}));
+                            self.event("paused", json!({"atUs": at_us, "cell": cell, "frame": output, "reason": reason}));
                         }
                         Poll::Resumed { at_us, cell, output } => {
                             active.paused = false;
@@ -748,6 +792,8 @@ impl<P: Platform> Runner<P> {
                         Poll::Finished => break 'session End::Stopped(stop_reply.take().unwrap_or(Value::Null)),
                     }
                 }
+                last_polled = P::now_us();
+                stall_pending = false;
 
                 if !active.paused && now - last_foreground >= FOREGROUND_INTERVAL_US {
                     last_foreground = now;
@@ -903,6 +949,9 @@ mod tests {
     static DEVICE_LOST: AtomicBool = AtomicBool::new(false);
     /// 写到第几帧起编码器报错。
     static WRITE_FAILS_FROM: AtomicU64 = AtomicU64::new(u64::MAX);
+    /// 这次录制带不带代理；代理被停过几次。
+    static PROXY: AtomicBool = AtomicBool::new(false);
+    static SHEDS: AtomicU64 = AtomicU64::new(0);
 
     struct Fake;
     struct FakeCapture;
@@ -945,6 +994,10 @@ mod tests {
         fn finish(&mut self) -> Result<(), String> {
             fs::write(&self.0, b"video").map_err(|error| error.to_string())
         }
+        fn shed_proxy(&mut self) -> bool {
+            SHEDS.fetch_add(1, Ordering::AcqRel);
+            true
+        }
     }
     impl Platform for Fake {
         type Frame = u32;
@@ -961,7 +1014,8 @@ mod tests {
         }
         fn open(_: &CaptureConfig, video: &Path, _: &Path, inbox: Arc<Inbox<Arc<u32>>>, health: Arc<Health>) -> Result<Opened<Self>, String> {
             *INBOX.lock().unwrap() = Some((inbox, health));
-            Ok(Opened { capture: FakeCapture, writer: FakeWriter(video.to_path_buf()), width: 64, height: 36, encoder: "fake".into(), proxy: None, source: json!({}), present_lead_us: 0 })
+            let proxy = PROXY.load(Ordering::Acquire).then_some((32, 18));
+            Ok(Opened { capture: FakeCapture, writer: FakeWriter(video.to_path_buf()), width: 64, height: 36, encoder: "fake".into(), proxy, source: json!({}), present_lead_us: 0 })
         }
         fn foreground() -> Option<Foreground> {
             Some(Foreground { title: "测试".into(), process: "test.exe".into(), pid: 1 })
@@ -1010,7 +1064,13 @@ mod tests {
 
     impl Rig {
         fn prepare() -> Self {
+            Self::prepare_with(false)
+        }
+
+        fn prepare_with(proxy: bool) -> Self {
             let serial = SERIAL.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            PROXY.store(proxy, Ordering::Release);
+            SHEDS.store(0, Ordering::Release);
             WRITES.lock().unwrap().clear();
             FLUSHES.lock().unwrap().clear();
             REACQUIRE.lock().unwrap().clear();
@@ -1048,7 +1108,11 @@ mod tests {
 
         /// 已经开始、录了一小会儿。
         fn recording() -> Self {
-            let rig = Self::prepare();
+            Self::recording_with(false)
+        }
+
+        fn recording_with(proxy: bool) -> Self {
+            let rig = Self::prepare_with(proxy);
             rig.send("start", 1).unwrap();
             rig.wait(300);
             rig
@@ -1059,7 +1123,11 @@ mod tests {
         }
 
         fn inject(&self, kind: &str) {
-            self.session.command("inject", &json!({"id": 0, "kind": kind})).unwrap();
+            self.inject_ms(kind, 0);
+        }
+
+        fn inject_ms(&self, kind: &str, milliseconds: u64) {
+            self.session.command("inject", &json!({"id": 0, "kind": kind, "ms": milliseconds})).unwrap();
         }
 
         fn wait(&self, milliseconds: u64) {
@@ -1271,6 +1339,89 @@ mod tests {
         assert_eq!(outcome.event_names(), vec!["started", "sourceChanged"]);
         assert!(outcome.writes.len() > before + 10);
         assert!(outcome.records.windows(2).all(|pair| pair[1].cell == pair[0].cell + 1));
+    }
+
+    /// 休眠、进程被挂起：会话线程隔了很久才又轮到。两秒以上的记成一段空档（标成来源丢失那一类，不是暂停），
+    /// 不去补那段时间的格子；短的停顿照旧按丢格处理，时间轴不断。
+    #[test]
+    fn a_long_stall_becomes_a_gap_and_a_short_one_only_drops_cells() {
+        // 准备好之后等了很久才开始（等用户点开始是常态）：不是停摆，文件从第 0 格起、没有空档。
+        let rig = Rig::prepare();
+        rig.wait(2300);
+        rig.send("start", 1).unwrap();
+        rig.wait(300);
+        // 停摆的同一轮里收到停止：那段时间同样记成空档，不逐格补出来。
+        rig.inject_ms("sessionStall", 2300);
+        rig.send("stop", 2).unwrap();
+        let outcome = rig.finish();
+        assert_eq!(outcome.records[0].cell, 0);
+        assert!(outcome.records.windows(2).all(|pair| pair[1].cell == pair[0].cell + 1));
+        assert!(outcome.records.len() < cells(700) as usize, "停摆的格子被补进了文件：{} 条", outcome.records.len());
+        // 停止若与停摆排在同一批指令里，录制就停在停摆之前，没有空档可报。
+        assert!(outcome.event_names() == ["started"] || outcome.event_names() == ["started", "paused"], "事件：{:?}", outcome.event_names());
+        assert!(outcome.events("paused").iter().all(|event| event["reason"] == "stall"));
+        assert_eq!(outcome.reply(2)["ok"], true);
+        drop(outcome);
+
+        let rig = Rig::recording();
+        rig.inject_ms("sessionStall", 800);
+        rig.wait(1300);
+        rig.inject_ms("sessionStall", 2600);
+        rig.wait(3200);
+        rig.send("stop", 2).unwrap();
+        let outcome = rig.finish();
+
+        let records = &outcome.records;
+        let jumps: Vec<usize> = records.windows(2).enumerate().filter(|(_, pair)| pair[1].cell != pair[0].cell + 1).map(|(index, _)| index + 1).collect();
+        assert_eq!(jumps.len(), 1, "应只有长停摆那一处空档");
+        let after = &records[jumps[0]];
+        let gap = after.cell - records[jumps[0] - 1].cell;
+        assert!((cells(2400)..=cells(3000)).contains(&gap), "停摆跨了 {gap} 格");
+        assert!(after.flags & timing::FLAG_AFTER_SOURCE_LOST != 0 && after.flags & timing::FLAG_KEYFRAME != 0);
+        // 短停摆的那些格子占着帧序号、标成丢弃；长停摆的格子不占序号。
+        let dropped = records.iter().filter(|record| record.flags & timing::FLAG_DROPPED != 0).count();
+        assert!((10..=cells(1000) as usize).contains(&dropped), "丢了 {dropped} 格");
+        assert_eq!(outcome.reply(2)["result"]["frames"], records.len());
+        assert!(outcome.writes.windows(2).all(|pair| pair[0].1 < pair[1].1));
+        // 停摆后的第一帧是停摆期间到的新画面。
+        let first_after = outcome.writes.iter().find(|(_, pts, _)| *pts as usize >= jumps[0]).unwrap();
+        let last_before = outcome.writes.iter().rev().find(|(_, pts, _)| (*pts as usize) < jumps[0]).unwrap();
+        assert!(first_after.2 && first_after.0 > last_before.0 + 20);
+        assert_eq!(outcome.event_names(), vec!["started", "paused", "resumed"]);
+        assert_eq!(outcome.events("paused")[0]["reason"], "stall");
+        assert!(fs::read_to_string(&outcome.paths.activity).unwrap().contains("\"stall\""));
+    }
+
+    /// 编码持续跟不上（队列连着满一秒）时先停代理，主画面照常录；没有代理时不发这个事件。
+    #[test]
+    fn the_proxy_is_shed_when_the_encoder_cannot_keep_up() {
+        let rig = Rig::recording_with(true);
+        // 来源每秒 50 帧，编码每帧多等 45 毫秒：一秒只编得了约 20 帧。
+        rig.inject_ms("encodeDelay", 45);
+        rig.wait(900);
+        assert_eq!(SHEDS.load(Ordering::Acquire), 0, "队列刚满就停了代理");
+        rig.wait(2900);
+        let while_slow = rig.written();
+        rig.inject_ms("encodeDelay", 0);
+        rig.wait(800);
+        rig.send("stop", 2).unwrap();
+        let sheds = SHEDS.load(Ordering::Acquire);
+        let outcome = rig.finish();
+        assert_eq!(sheds, 1);
+        let stopped = outcome.events("proxyStopped");
+        assert_eq!(stopped.len(), 1);
+        assert_eq!(stopped[0]["reason"], "overload");
+        assert!(outcome.writes.len() > while_slow + 20, "停掉代理、编码恢复后主画面没有接着录");
+        assert_eq!(outcome.reply(2)["ok"], true);
+        drop(outcome);
+
+        let rig = Rig::recording();
+        rig.inject_ms("encodeDelay", 45);
+        rig.wait(3000);
+        rig.send("stop", 2).unwrap();
+        let sheds = SHEDS.load(Ordering::Acquire);
+        let outcome = rig.finish();
+        assert_eq!((sheds, outcome.events("proxyStopped").len()), (0, 0));
     }
 
     /// 锁屏、画面不变：来源不出帧也不报错。网格照常走，重复最后一张，时间轴不缩短也没有空档，不发任何事件。

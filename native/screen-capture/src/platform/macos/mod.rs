@@ -40,6 +40,9 @@ impl FrameWriter<()> for NoWriter {
     fn finish(&mut self) -> Result<(), String> {
         Ok(())
     }
+    fn shed_proxy(&mut self) -> bool {
+        false
+    }
 }
 
 pub struct NoCapture;

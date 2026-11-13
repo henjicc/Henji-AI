@@ -88,7 +88,7 @@ selftest/selftest.cjs  真实录制自测，也是主进程用法的可运行示
 | `status` | `sessionId` | 最近一次健康汇报的内容加 `state`（`prepared` / `recording` / `paused` / `stopping` / `ended`） |
 | `startPreview` | `sessionId`，`clientPid`，`maxWidth`（默认 1280），`fps`（默认 15） | 见“预览” |
 | `stopPreview` | `sessionId` | `{}` |
-| `inject` | `sessionId`，`kind`，`ms` / `code` / `count` | 自测用的故障注入：只有进程的环境变量 `HENJI_SCREEN_CAPTURE_INJECT=1` 时才接受，否则一律回 `INVALID_ARGUMENT`。`frameFailures`（接下来 `count` 张来源帧当作取帧失败）、`encodeStall`（编码线程停 `ms` 毫秒一次）、`encodeDelay`（每帧多等 `ms` 毫秒，0 取消）、`sourceLost`（模拟显示器断开）、`resize`（把帧池换成一半大小，下一张来源帧走显示器换分辨率时的那条路）、`captureFailure`（采集报 `code` 错误） |
+| `inject` | `sessionId`，`kind`，`ms` / `code` / `count` | 自测用的故障注入：只有进程的环境变量 `HENJI_SCREEN_CAPTURE_INJECT=1` 时才接受，否则一律回 `INVALID_ARGUMENT`。`frameFailures`（接下来 `count` 张来源帧当作取帧失败）、`encodeStall`（编码线程停 `ms` 毫秒一次）、`encodeDelay`（每帧多等 `ms` 毫秒，0 取消）、`sessionStall`（会话线程停 `ms` 毫秒，模拟休眠或进程被挂起）、`sourceLost`（模拟显示器断开）、`resize`（把帧池换成一半大小，下一张来源帧走显示器换分辨率时的那条路）、`captureFailure`（采集报 `code` 错误） |
 
 `prepare` 的参数：
 
@@ -113,7 +113,8 @@ selftest/selftest.cjs  真实录制自测，也是主进程用法的可运行示
 | `fragment` | `frames`，`bytes` | 又有分片落盘：进程此刻被杀，帧序号小于 `frames` 的帧读得回来。约每秒一条 |
 | `paused` | `atUs`，`cell`，`frame` | 暂停生效（`atUs` 是第一个不进文件的格子的格时刻；要画面内容正好切在某一刻，`pause` / `resume` 的 `atUs` 给“那一刻 + `presentLeadUs`”）：文件第 `frame` 帧之前的内容已落盘。暂停与继续落在同一格里（间隔不到一帧）或暂停还没生效就停止时，没有格子被暂停，这两个事件不发 |
 | `resumed` | `atUs`，`cell`，`frame` | 继续生效：文件第 `frame` 帧是继续后的第一帧（关键帧） |
-| `paused` 的 `reason` | `user` / `sourceLost` | 空档的原因：用户暂停，或来源丢失 |
+| `paused` 的 `reason` | `user` / `sourceLost` / `stall` | 空档的原因：用户暂停、来源丢失，或停摆（会话线程隔了两秒以上才又轮到：整机休眠、进程被挂起、磁盘长时间卡住）。停摆的那段时间不补格子，记成一段空档，紧接着就有 `resumed`；时刻表里与来源丢失一样标 16 |
+| `proxyStopped` | `reason`（`overload`），`frame` | 编码队列连着满了一秒还开着代理：先停掉代理（已写的部分收好），主画面照常录。停止的结果里 `proxyFrames` 小于 `encodedFrames` |
 | `sourceLost` | `atUs` | 正在录的显示器断开了，或采集连着失败满一秒。录制不结束：这之后的时间不进文件（随后会有 `paused`，`reason` 为 `sourceLost`），进程每秒按设备名找一次 |
 | `sourceRestored` | `atUs` | 显示器回来了，在同一个文件里接着录（随后有 `resumed`，第一帧是关键帧）。主进程不想等可以随时 `stop` |
 | `sourceChanged` | `atUs`，`width`，`height`，`frame` | 来源画面的尺寸变了（显示器换了分辨率，或接回来的是另一种分辨率）。文件的尺寸不变，画面等比缩放、四周留黑；要不要 `stop` 后另开一段由主进程决定 |

@@ -23,6 +23,8 @@ pub trait FrameWriter<F> {
     fn flush_fragment(&mut self) -> Result<(), String>;
     /// 排空编码器、写好结尾并关文件。之后不再调用 write。显卡设备已经没了时也要把文件结尾写好。
     fn finish(&mut self) -> Result<(), String>;
+    /// 编码持续跟不上时由核心调用：停掉代理（收好它已写的部分），把编码能力都留给主画面。没有代理可停时返回 false。
+    fn shed_proxy(&mut self) -> bool;
 }
 
 /// 可丢的事件出口（预览帧就绪）。

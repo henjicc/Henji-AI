@@ -301,7 +301,7 @@ async function runExtra(options) {
   // 取帧失败、换分辨率这几项要有来源帧到达才走得到：屏幕静止时系统不给帧，加 --motion 放一块一直在变的测试图。
   const motion = options.motion ? startMotion(display) : null
   if (motion) await sleep(1500)
-  const prepared = await client.request('start', { sessionId, directory, source: { kind: 'display', id: display.id }, fps: 60 })
+  const prepared = await client.request('start', { sessionId, directory, source: { kind: 'display', id: display.id }, fps: 60, ...(options.proxy ? { proxy: { height: 1080 } } : {}) })
   const lastHealth = () => client.health[client.health.length - 1] ?? {}
   const report = { scenario: options.scenario, directory }
 
@@ -358,6 +358,15 @@ async function runExtra(options) {
     check(Boolean(motion), '换分辨率这一项要加 --motion（屏幕静止时没有来源帧，走不到重建）')
     check(lastHealth().frames > framesBeforeResize + 60, '帧池重建后没有接着录')
     check(client.events.filter((event) => event.event === 'sourceLost').length === 1, '帧池重建被当成了来源丢失')
+    // 停摆 2.6 秒（模拟休眠、进程被挂起）：那段时间记成一段空档，不逐格补；之后照常录。
+    const cellsBeforeStall = (await client.request('status', { sessionId })).pausedCells
+    await inject({ kind: 'sessionStall', ms: 2600 })
+    await sleep(1500)
+    const stalled = client.events.filter((event) => event.event === 'paused' && event.reason === 'stall')
+    const stalledCells = (await client.request('status', { sessionId })).pausedCells - cellsBeforeStall
+    check(stalled.length === 1 && stalledCells > 120 && stalledCells < 200, `停摆应记成一段约 2.6 秒的空档：事件 ${stalled.length} 条，空档 ${stalledCells} 格`)
+    // 会话线程停着的时候没人取收件箱，装不下的来源帧被挤掉（它们本来也落在空档里）：后面几项只看这之后新丢的。
+    const captureDroppedByStall = (await client.request('status', { sessionId })).captureDropped
     // 偶发的取帧失败（5 张）：只丢这几张，不中断、不当成来源丢失。
     await inject({ kind: 'frameFailures', count: 5 })
     await sleep(1500)
@@ -372,7 +381,7 @@ async function runExtra(options) {
     await inject({ kind: 'encodeStall', ms: 150 })
     await sleep(2500)
     const afterStall = lastHealth()
-    check(afterStall.droppedFrames === 0 && afterStall.captureDropped === 0, `150 毫秒的编码停顿丢了帧：丢格 ${afterStall.droppedFrames}，采集丢 ${afterStall.captureDropped}`)
+    check(afterStall.droppedFrames === 0 && afterStall.captureDropped === captureDroppedByStall, `150 毫秒的编码停顿丢了帧：丢格 ${afterStall.droppedFrames}，采集丢 ${afterStall.captureDropped - captureDroppedByStall}`)
     // 三、编码器持续过慢（每帧多 25 毫秒，一秒只编得了约 30 帧）：队列满后按规则丢格，采集回调不受影响。
     await inject({ kind: 'encodeDelay', ms: 25 })
     await sleep(5000)
@@ -381,7 +390,12 @@ async function runExtra(options) {
     await sleep(3000)
     const recovered = lastHealth()
     check(slow.droppedFrames > 60, `编码过慢 5 秒只丢了 ${slow.droppedFrames} 格`)
-    check(slow.captureDropped === 0, `编码过慢时采集队列丢了 ${slow.captureDropped} 张（会话线程被卡住了）`)
+    // 带着代理录（--proxy）时：编码队列连着满一秒就先停代理，主画面照常。
+    if (prepared.proxy) {
+      const proxyStopped = client.events.filter((event) => event.event === 'proxyStopped')
+      check(proxyStopped.length === 1 && proxyStopped[0].reason === 'overload', `编码过慢时应停一次代理：${JSON.stringify(proxyStopped)}`)
+    }
+    check(slow.captureDropped === captureDroppedByStall, `编码过慢时采集队列丢了 ${slow.captureDropped - captureDroppedByStall} 张（会话线程被卡住了）`)
     check(recovered.encodeQueue <= 2, `编码恢复后队列还有 ${recovered.encodeQueue} 帧`)
     const droppedAtEnd = (await client.request('status', { sessionId })).droppedFrames
     await sleep(1500)
@@ -399,7 +413,7 @@ async function runExtra(options) {
     check(!stream.error && Number(stream.nb_read_frames) === interrupted?.encodedFrames, `文件 ${stream.nb_read_frames} 帧，中断事件说编码了 ${interrupted?.encodedFrames} 帧`)
     check(table.records === interrupted?.frames, `时刻表 ${table.records} 条，应为 ${interrupted?.frames}`)
     check(table.droppedFrames === interrupted?.droppedFrames, '时刻表里的丢弃数与事件不一致')
-    check(table.pauses?.length === 2 && table.pauses.every((pause) => pause.keyframe), `应有两处空档且之后都是关键帧：${JSON.stringify(table.pauses)}`)
+    check(table.pauses?.length === 3 && table.pauses.every((pause) => pause.keyframe), `应有三处空档且之后都是关键帧：${JSON.stringify(table.pauses)}`)
     const paused = client.events.find((event) => event.event === 'paused')
     check(paused?.reason === 'sourceLost', `paused 的原因是 ${paused?.reason}`)
     Object.assign(report, {

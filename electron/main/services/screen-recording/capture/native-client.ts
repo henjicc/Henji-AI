@@ -36,12 +36,13 @@ const sessionEvent = { sessionId: z.string() }
 const eventSchema = z.discriminatedUnion('event', [
   z.object({ event: z.literal('started'), ...sessionEvent, originUs: z.number(), firstSourceUs: z.number() }).passthrough(),
   z.object({ event: z.literal('fragment'), ...sessionEvent, frames: count, bytes: count }).passthrough(),
-  z.object({ event: z.literal('paused'), ...sessionEvent, atUs: z.number(), cell: count, frame: count, reason: z.enum(['user', 'sourceLost']).optional() }).passthrough(),
+  z.object({ event: z.literal('paused'), ...sessionEvent, atUs: z.number(), cell: count, frame: count, reason: z.enum(['user', 'sourceLost', 'stall']).optional() }).passthrough(),
   z.object({ event: z.literal('resumed'), ...sessionEvent, atUs: z.number(), cell: count, frame: count }).passthrough(),
   z.object({ event: z.literal('interrupted'), ...sessionEvent, error: nativeErrorSchema }).passthrough(),
   z.object({ event: z.literal('sourceLost'), ...sessionEvent, atUs: z.number() }).passthrough(),
   z.object({ event: z.literal('sourceRestored'), ...sessionEvent, atUs: z.number() }).passthrough(),
   z.object({ event: z.literal('sourceChanged'), ...sessionEvent, atUs: z.number(), width: count, height: count, frame: count }).passthrough(),
+  z.object({ event: z.literal('proxyStopped'), ...sessionEvent, reason: z.string(), frame: count }).passthrough(),
   z.object({ event: z.literal('health'), ...sessionEvent, frames: count, droppedFrames: count, repeatedFrames: count, captureDropped: count }).passthrough(),
 ])
 /** 采集进程的事件；时刻（`atUs`、`originUs`）仍是采集进程的时钟，用 `toMainUs` 换算。 */

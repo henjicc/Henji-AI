@@ -101,6 +101,21 @@ it('一次录制一个画面分片：文件名与分片一致；起点、暂停�
   expect(client.requests.filter(request => request.type === 'stop')).toHaveLength(1)
 })
 
+it('代理中途被停掉（比原片短）：不登记给剪辑，半截的代理文件删掉；停摆造成的空档不当成这次暂停生效的那一格', async () => {
+  const capture = backend()
+  await capture.prepare(); await capture.start(signal)
+  client.onRequest = type => { if (type === 'pause') client.emit({ event: 'paused', atUs: 12_500_000, cell: 75, frame: 75, reason: 'stall' }) }
+  await expect(capture.hold(13_000_000)).resolves.toBe(13_000_000)
+  client.emit({ event: 'proxyStopped', reason: 'overload', frame: 80 })
+  const proxy = path.join(directory, 'screen-000000.proxy.mp4')
+  await fs.writeFile(proxy, 'half')
+  client.result = { ...client.result, proxyFrames: 80 } as typeof client.result
+  await capture.stop(signal)
+  expect(deps.adoptProxy).not.toHaveBeenCalled()
+  await expect(fs.stat(proxy)).rejects.toMatchObject({ code: 'ENOENT' })
+  expect(storage.manifest.spans[0].finalized).toBe(true)
+})
+
 it('采集进程没报出暂停与继续生效的那一格：暂停记在按下的时刻，事件时钟不扣时间', async () => {
   const capture = backend()
   await capture.prepare(); await capture.start(signal)

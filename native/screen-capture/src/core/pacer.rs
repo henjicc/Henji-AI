@@ -35,6 +35,8 @@ pub enum Hold {
     User,
     /// 来源没了（显示器断开），等它回来。
     SourceLost,
+    /// 本进程或整台机器停摆过（休眠、长时间卡住）：那段时间没有画面可录。
+    Stall,
 }
 
 #[derive(Debug, PartialEq, Eq)]
