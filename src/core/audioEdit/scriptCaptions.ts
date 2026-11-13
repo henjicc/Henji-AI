@@ -30,6 +30,25 @@ function units(chars: readonly string[]): string[] {
   return chars.map(char => isHanzi(char) ? readings[cursor++] ?? char : char.toLowerCase())
 }
 
+/**
+ * 参考稿只留要念的正文：稿子常是 Markdown，标题（# 引入）是分节名不会念，整行去掉（留下换行，仍算断句）；
+ * 列表符号、引用符号、强调符号、行内代码、链接与图片语法、转义反斜杠、分隔线只去掉标记。
+ * 不剥的话标题字会混进对稿：字幕的“稿子原文”带上标题，标题字还会和念的字按读音对上。
+ */
+export function audioEditScriptPlainText(script: string): string {
+  return script.split('\n').map((line) => {
+    if (/^\s{0,3}#{1,6}(\s|$)/u.test(line) || /^\s{0,3}([-*_])(\s*\1){2,}\s*$/u.test(line)) return ''
+    return line
+      .replace(/^\s{0,3}(>\s?)+/u, '')
+      .replace(/^\s*([-*+]|\d+[.)])\s+(\[[ xX]\]\s+)?/u, '')
+      .replace(/!\[([^\]]*)\]\([^)]*\)/gu, '')
+      .replace(/\[([^\]]+)\]\([^)]*\)/gu, '$1')
+      .replace(/`([^`]*)`/gu, '$1')
+      .replace(/(\*{1,3}|_{2,3}|~~)(?=\S)([^\n]*?\S)\1/gu, '$2')
+      .replace(/\\([\\`*_{}[\]()#+\-.!|~<>])/gu, '$1')
+  }).join('\n')
+}
+
 export interface AudioEditScriptAlignment {
   /** 每个保留词块在稿子里对应的字符区间 [start, end)；对不上（稿子里没有）的词块没有这一项。 */
   scriptRanges: Map<string, { start: number; end: number }>
@@ -39,6 +58,8 @@ export interface AudioEditScriptAlignment {
   unscripted: Set<string>
   /** 稿子里对上的读音单元占比。 */
   coverage: number
+  /** 对稿用的稿子正文（已剥掉 Markdown 标记）；scriptRanges 是它里面的位置。 */
+  text: string
 }
 
 export function alignAudioEditToScript(blocks: readonly AudioEditTranscriptBlock[], script: string): AudioEditScriptAlignment {
@@ -51,7 +72,8 @@ export function alignAudioEditToScript(blocks: readonly AudioEditTranscriptBlock
     chars.forEach((char, index) => { spoken.push({ block: blockIndex, index, count: chars.length }); spokenChars.push(char) })
   })
   // 稿子侧：每个读音单元在稿子里的字符位置，以及它后面是否断句（小数点不算）
-  const scriptChars = [...script]
+  const text = audioEditScriptPlainText(script)
+  const scriptChars = [...text]
   const written: Array<{ at: number; breakAfter: boolean }> = []
   scriptChars.forEach((char, at) => {
     if (!isUnit(char)) return
@@ -131,18 +153,18 @@ export function alignAudioEditToScript(blocks: readonly AudioEditTranscriptBlock
     if (j - i >= 8) for (let k = i; k < j; k++) if (!scriptRanges.has(kept[spoken[k].block].id)) unscripted.add(kept[spoken[k].block].id)
     i = j
   }
-  return { scriptRanges, breaks, unscripted, coverage: written.length ? matched / written.length : 0 }
+  return { scriptRanges, breaks, unscripted, coverage: written.length ? matched / written.length : 0, text }
 }
 
 /** 一段字幕（若干词块）对应的稿子原文：取各词块对上的字符区间并到一起，补上紧跟的标点。 */
-export function audioEditScriptTextFor(alignment: AudioEditScriptAlignment, blockIds: readonly string[], script: string): string {
+export function audioEditScriptTextFor(alignment: AudioEditScriptAlignment, blockIds: readonly string[]): string {
   let start = Infinity, end = -Infinity
   for (const id of blockIds) {
     const range = alignment.scriptRanges.get(id)
     if (range) { start = Math.min(start, range.start); end = Math.max(end, range.end) }
   }
   if (!Number.isFinite(start)) return ''
-  const chars = [...script]
+  const chars = [...alignment.text]
   while (end < chars.length && !isUnit(chars[end]) && chars[end] !== '\n') { if (BREAK.test(chars[end++])) break }
   return chars.slice(start, end).join('').trim()
 }

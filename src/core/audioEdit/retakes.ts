@@ -6,6 +6,7 @@ import { alignToScript } from './contentCoordinates'
 import { findResidualRetakes } from './retakeSelfCheck'
 import { selectTakeSegments } from './takePath'
 import { AUDIO_EDIT_RHYTHM } from './rhythm'
+import { audioEditScriptPlainText } from './scriptCaptions'
 
 /*
  * 口播重念检测：照稿念时，念坏了（口误、没念好、在不该断的地方断开）会马上从某处重新念。
@@ -348,7 +349,7 @@ class RetakeDetector {
 
   constructor(private readonly words: readonly Word[], private readonly options: AudioEditRetakeOptions) {
     this.kept = words.map((word) => word.block.included)
-    this.script = options.referenceScript?.trim() ? scriptUnits(options.referenceScript) : []
+    this.script = options.referenceScript?.trim() ? scriptUnits(audioEditScriptPlainText(options.referenceScript)) : []
     this.script.forEach((py, index) => { const list = this.scriptIndex.get(py); if (list) list.push(index); else this.scriptIndex.set(py, [index]) })
     // 停顿紧接着呼吸（或反过来）是同一个气口，合并后再量长度
     const runs = [...options.pauses, ...(options.breaths ?? [])].map((pause): [number, number] => [pause.startMs, pause.endMs]).sort((x, y) => x[0] - y[0])

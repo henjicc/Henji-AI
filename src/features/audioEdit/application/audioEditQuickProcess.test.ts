@@ -11,6 +11,7 @@ import { loadAudioEditProject, resetAudioEditProjectInstancesForTests, setAudioE
 import { setAudioEditBlocks } from '@/core/audioEdit/edits'
 import type { AudioEditProjectDocument, AudioEditTranscriptBlock } from '@/core/audioEdit/types'
 import { buildProjectAudioEditTimeline, editedDurationFrames } from '@/core/audioEdit/timeline'
+import { AUDIO_EDIT_RHYTHM } from '@/core/audioEdit/rhythm'
 
 afterEach(async () => { vi.restoreAllMocks(); await resetAudioEditProjectInstancesForTests(); setAudioEditDocumentRegistryForTests(null); uninstallHarnessNativeStorage() })
 it('quick processing commits fillers and pauses as one undo step and is idempotent', async () => {
@@ -21,7 +22,9 @@ it('quick processing commits fillers and pauses as one undo step and is idempote
   const instance = await loadAudioEditProject('quick')
   // 主进程读文件分析：返回的版本就是文件版本（处理前已把修改写完）
   vi.spyOn(getPlatform().audioEdit, 'detectSilence').mockImplementation(async () => ({ revision: instance.session.documentMeta.revision, suggestions: [{ id: 'pause', kind: 'long_silence', evidence: 'audio', startFrame: 1000, endFrame: 3000, title: '停顿', detail: '', confidence: 'high', status: 'pending', blockIds: [] }] }))
-  await quickProcessAudioEdit('quick')
+  const first = await quickProcessAudioEdit('quick')
+  // 回执各步分开计数：压缩 1 处停顿、删掉 1 个语气词，没有重念线索要裁决
+  expect([first.count, first.fillers, first.attention]).toEqual([1, 1, { decide: 0, check: 0 }])
   expect(editedDurationFrames(buildProjectAudioEditTimeline(instance.document))).toBe(1850)
   expect(instance.past).toHaveLength(1)
   expect((commands.stored('quick')!.content as { cuts: unknown[] }).cuts.length).toBeGreaterThan(0)
@@ -57,8 +60,8 @@ it('去掉重念：删掉前一遍和其间停顿，只留最后一遍，一步�
   expect(detect).toHaveBeenCalledWith(expect.objectContaining({ projectId: 'retake', energy: {} }))
   expect(result.count).toBe(1)
   expect(instance.document.transcript.filter((block) => !block.included).map((block) => block.text).join('')).toBe('所以综合来看挺好。')
-  // 从第一遍开头删到第二遍开头前 120 毫秒（两遍间的停顿只留一口气）
-  expect(result.shortenedMs).toBe(2180 - 500)
+  // 从第一遍开头删到第二遍开头前留够接缝的目标停顿（rhythm.ts 的句末与接缝时长）
+  expect(result.shortenedMs).toBe(2300 - AUDIO_EDIT_RHYTHM.sentenceMs - 500)
   expect(instance.past).toHaveLength(1)
   const stored = commands.stored('retake')!.content as { suggestions: Array<{ kind: string; status: string }> }
   expect(stored.suggestions).toEqual([expect.objectContaining({ kind: 'retake', status: 'applied' })])

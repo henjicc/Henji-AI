@@ -39,7 +39,7 @@ export function describeAudioEditCaptions(project: AudioEditProjectDocument): Au
   const result = buildProjectAudioEditSubtitleCues(project).map((cue): AudioEditCaptionView => {
     const blocks = groups.get(cue.id)?.blocks ?? []
     const blockIds = blocks.map(block => block.id)
-    const scriptText = alignment ? audioEditScriptTextFor(alignment, blockIds, script) : ''
+    const scriptText = alignment ? audioEditScriptTextFor(alignment, blockIds) : ''
     return {
       id: cue.id, blockIds, text: cue.text,
       spokenText: blocks.reduce((value, block) => joinAudioEditText(value, block.text.trim()), ''),

@@ -44,12 +44,12 @@ function latestSettledTranscription(projectId: string, ownRequestId?: string): A
 
 /**
  * 最近一次转写再发起会怎样，与 preflight / transcribe 的拒绝条件同源：已拿到结果或能续查的供应商任务只续查、不重复计费；
- * 确认没有交给识别服务才可重新提交；交出去却无法确认、也续查不了的拒绝。本进程正在跑的不标。
+ * 确认没有交给识别服务才可重新提交；交出去却无法确认、也续查不了的拒绝。
  */
-function transcriptionResubmission(task: AudioEditStoredTask, sourceDigest: string): AudioEditTranscriptionResubmission | undefined {
-  if (task.state === 'completed') return undefined
+function transcriptionResubmission(task: AudioEditStoredTask, sourceDigest: string): AudioEditTranscriptionResubmission {
+  if (task.state === 'completed') return 'completed'
   const unfinished = task.state === 'queued' || task.state === 'running'
-  if (unfinished && isAudioEditTaskRunningHere(task.request_id)) return undefined
+  if (unfinished && isAudioEditTaskRunningHere(task.request_id)) return 'running'
   if (unfinished && isAudioEditTaskActive(task.request_id)) return 'running_elsewhere'
   const prior = task.result_json ? JSON.parse(task.result_json) as TranscriptionReceipt : undefined
   // 素材变了，旧回执既不能续用也不能覆盖当前口播

@@ -240,8 +240,8 @@ it('任务列表给出最近一次转写能否再发起，与提交时的拒绝�
   // 素材已变化：旧回执不能续用，也不能覆盖当前口播
   mock.task.result_json = JSON.stringify({ modelId: 'fixture-asr', sourceDigest: 'other.wav', billing: 'not_charged' })
   expect(await resubmission()).toBe('blocked')
-  // 已完成的不标
+  // 已完成的也标出来：已有转写，再调不会再识别
   mock.task = undefined
   await transcribeAudioEditProject({ ...request, requestId: 'done' })
-  expect((await listAudioEditTaskStatuses('audio'))[0]).not.toHaveProperty('resubmission')
+  expect(await resubmission()).toBe('completed')
 })

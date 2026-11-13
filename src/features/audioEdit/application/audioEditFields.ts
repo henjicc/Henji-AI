@@ -149,6 +149,15 @@ function suggestionAttention(source: AudioEditFieldSource): 'decide' | 'check' |
     return item.status === 'applied' && state === 'removed' && handoff?.score !== undefined && (handoff.score < CHECK_SCORE || handoff.reason === 'stutter') ? 'check' : 'none'
   })
 }
+/** 整份口播里要助手或人看的重念线索数：decide 必须裁决，check 已自动删、值得抽看（与 audio_edit.suggestion.attention 同一判断）。 */
+export function audioEditRetakeAttentionCounts(document: AudioEditProjectDocument): { decide: number; check: number } {
+  const counts = { decide: 0, check: 0 }
+  for (const item of document.suggestions) {
+    const attention = suggestionAttention({ document, childId: item.id })
+    if (attention !== 'none') counts[attention]++
+  }
+  return counts
+}
 function field(entityType: AudioEditEntityType, suffix: string, title: string, value: ApplicationPropertyDescriptor['value'], read: (source: AudioEditFieldSource) => JsonValue, write?: (source: AudioEditFieldSource, value: JsonValue | undefined) => void, storeActions: string[] = [], description = `口播剪辑${title}。`): ApplicationFieldDefinition<AudioEditFieldSource, AudioEditFieldSource> {
   const id = `${entityType}.${suffix}`
   return { propertyId: id, descriptor: { id, entityType, version: audioEditSchemaRef('property', id).version, title, description, value, nullable: false, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['audio_edit:read'], write: write ? ['audio_edit:write'] : [] }, revisionScopes: ['audio_edit'], schemaRef: audioEditSchemaRef('property', id), ...(!write ? { readOnlyReason: '由源媒体、识别结果或剪辑时间线计算。' } : {}) }, read, ...(write ? { writer: { write: (draft, mutation) => write(draft, mutation.value) } } : {}), storeActions }

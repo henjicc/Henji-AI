@@ -4,6 +4,7 @@ import { buildAudioEditSubtitleGroups, formatAudioEditCaptions } from './caption
 import { buildAudioEditSubtitleCues, buildProjectAudioEditSubtitleCues, formatAudioEditSubtitleText } from './subtitles'
 import { describeAudioEditCaptions, setAudioEditCaptionText } from './captionReview'
 import { buildAudioEditTimeline } from './timeline'
+import { audioEditScriptPlainText } from './scriptCaptions'
 
 /*
  * 成片字幕：按参考稿断句（一行一句）、排版（中英文空格、行尾标点、叹词不上字幕）、间隔短于 0.5 秒接上，
@@ -97,6 +98,16 @@ describe('成片字幕排版与时间', () => {
     expect(cues[2].startFrame - cues[1].endFrame).toBe(600)
     const spans = buildAudioEditTimeline(project.source.durationFrames, project.transcript, project.cuts)
     expect(buildAudioEditSubtitleCues(project.transcript, spans, 1000).map(cue => cue.text)).toEqual(cues.map(cue => cue.text))
+  })
+})
+
+describe('Markdown 参考稿', () => {
+  it('标题整行不进对稿，列表、强调、链接、转义只去标记；稿子原文里不带标题与符号', () => {
+    const script = '# 2026\\-10\\-23\\_元宝搜索 脚本\n\n**暂定标题：做个工具**\n\n# 开场\n\n- 好，今天聊 [搜索](https://example.com) 这件事。'
+    expect(audioEditScriptPlainText(script)).toBe('\n\n暂定标题：做个工具\n\n\n\n好，今天聊 搜索 这件事。')
+    const project = formatAudioEditCaptions(projectOf(blocksOf(['好，', '今天', '聊', '搜索', '这件事。']), script))
+    // “好”对上的是正文里的“好”，不会被标题“开场”的“开”拉过去
+    expect(describeAudioEditCaptions(project).map(view => view.scriptText)).toEqual(['好，', '今天聊 搜索 这件事。'])
   })
 })
 

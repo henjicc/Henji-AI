@@ -17,7 +17,7 @@ export function audioEditInputSchema(id: string): z.ZodType<z.infer<typeof audio
   if (id === 'insert_audio_edit_file') return audioEditOperationInput.pick({ documentRef: true, sourcePath: true, positionSeconds: true, replaceUntilSeconds: true }).required({ sourcePath: true, positionSeconds: true })
   if (id === 'repair_audio_edit_region') return audioEditOperationInput.pick({ documentRef: true, repair: true }).required({ repair: true })
   if (id === 'cancel_audio_edit_task') return base.extend({ taskId: z.string().min(1) })
-  if (id === 'export_audio_edit') return audioEditOperationInput.pick({ documentRef: true, format: true, includeSrt: true, destination: true }).required({ destination: true })
+  if (id === 'export_audio_edit') return audioEditOperationInput.pick({ documentRef: true, format: true, includeSrt: true, destination: true })
   if (id === 'transcribe_audio_edit') return audioEditOperationInput.pick({ documentRef: true, modelId: true })
   if (id === 'import_audio_edit_source') return audioEditOperationInput.pick({ documentRef: true, sourcePath: true }).required({ sourcePath: true })
   if (['quick_process_audio_edit', 'compress_audio_edit_silence', 'clean_audio_edit_fillers', 'clean_audio_edit_retakes'].includes(id)) return audioEditOperationInput.pick({ documentRef: true, range: true })
@@ -27,12 +27,24 @@ export function audioEditInputSchema(id: string): z.ZodType<z.infer<typeof audio
   if (id === 'undo_audio_edit' || id === 'redo_audio_edit') return audioEditOperationInput.pick({ documentRef: true, undoRef: true }).required({ undoRef: true })
   return base
 }
-const output = z.object({ resultRef: documentRef, message: z.string(), verified: z.boolean().optional(), count: z.number().nonnegative().optional(), shortenedMs: z.number().optional().describe('剪后时长的变化（毫秒）：正数为缩短；重新处理呼吸声时比上次删得少会是负数，表示变长'), durationFrames: z.number().nonnegative().optional(), tasks: z.array(z.object({ requestId: z.string(), documentId: z.string(), kind: z.string(), state: z.enum(['queued', 'running', 'completed', 'failed', 'cancelled']), progress: z.number().optional(), errorMessage: z.string().optional(), resubmission: z.enum(AUDIO_EDIT_TRANSCRIPTION_RESUBMISSIONS).optional().describe('只在最近一次转写上给出，表示再调 transcribe_audio_edit 会怎样：allowed 没有计费，可以重新转写；resume 已交给识别服务或已拿到结果，再调会接着查原任务或取回结果，不重复计费；blocked 无法确认是否已计费、或素材已变化，不会再提交（需要重新识别时用当前素材新建口播）；running_elsewhere 助手命令行（无窗口运行的助手）正在转写这份口播，等它结束或取消') })).optional(), undoRef: z.string().optional().describe('这一步的撤销引用：传给 undo_audio_edit 只撤这一步；之后口播又被改过（如用户手改）会拒绝撤销，不冲掉那些修改') }).strict()
+const output = z.object({ resultRef: documentRef, message: z.string(), verified: z.boolean().optional(), count: z.number().nonnegative().optional(), shortenedMs: z.number().optional().describe('剪后时长的变化（毫秒）：正数为缩短；重新处理呼吸声时比上次删得少会是负数，表示变长'), durationFrames: z.number().nonnegative().optional(),
+  outputPath: z.string().optional().describe('导出：写出的成品文件（WAV，或 FCP7 XML）的本机路径'), audioPath: z.string().optional().describe('导出 XML 时：XML 引用的音频文件路径'), subtitlePath: z.string().optional().describe('导出时附带的 SRT 字幕路径'),
+  quickProcess: z.object({
+    retakesRemoved: z.number().int().nonnegative().describe('这次去掉的重念处数'), breathsRemoved: z.number().int().nonnegative().describe('删掉的呼吸处数'), breathsAttenuated: z.number().int().nonnegative().describe('减弱的呼吸处数（和字连着的）'),
+    gapsSilenced: z.number().int().nonnegative().describe('清成静音的字间气口处数'), pausesCompressed: z.number().int().nonnegative().describe('这次新压缩的长停顿处数'), fillersRemoved: z.number().int().nonnegative().describe('删掉的语气词个数'),
+    retakesToDecide: z.number().int().nonnegative().describe('处理后整份口播里待确认、必须由助手或人裁决的重念线索数（audio_edit.suggestion 按 attention=decide 筛出）'), retakesToCheck: z.number().int().nonnegative().describe('已自动删但把握不高、值得抽看的重念线索数（attention=check）'),
+  }).strict().optional().describe('快速处理各步的结果；剪后时长变化见 shortenedMs'),
+  transcription: z.object({
+    modelId: z.string().describe('实际所用的语音识别模型'), granularity: z.enum(['word', 'segment', 'none']).describe('时间粒度：word 逐词（可以去重念），segment 只有整句时间'),
+    blockCount: z.number().int().nonnegative().describe('得到的词块数'), characterCount: z.number().int().nonnegative().describe('识别出的字数（不含标点与空白）'),
+    costCny: z.number().nonnegative().nullable().describe('这次的费用（人民币，与付费账本同一口径：按时长与模型单价）；0 表示沿用已计费的结果、没有再收费；null 表示模型没有单价资料'),
+  }).strict().optional().describe('转写结果'),
+  tasks: z.array(z.object({ requestId: z.string(), documentId: z.string(), kind: z.string(), state: z.enum(['queued', 'running', 'completed', 'failed', 'cancelled']), progress: z.number().optional(), errorMessage: z.string().optional(), resubmission: z.enum(AUDIO_EDIT_TRANSCRIPTION_RESUBMISSIONS).optional().describe('只在最近一次转写上给出，表示再调 transcribe_audio_edit 会怎样：completed 已转写完成，不会再识别；running 本窗口正在转写，等它结束或用 cancel_audio_edit_task 取消；allowed 没有计费，可以重新转写；resume 已交给识别服务或已拿到结果，再调会接着查原任务或取回结果，不重复计费；blocked 无法确认是否已计费、或素材已变化，不会再提交（需要重新识别时用当前素材新建口播）；running_elsewhere 助手命令行（无窗口运行的助手）正在转写这份口播，等它结束或取消') })).optional(), undoRef: z.string().optional().describe('这一步的撤销引用：传给 undo_audio_edit 只撤这一步；之后口播又被改过（如用户手改）会拒绝撤销，不冲掉那些修改') }).strict()
 export const AUDIO_EDIT_VERIFIED_EDIT_OPERATIONS = new Set(['insert_audio_edit_file', 'repair_audio_edit_region', 'reset_audio_edit', 'format_audio_edit_subtitles', 'quick_process_audio_edit', 'compress_audio_edit_silence', 'clean_audio_edit_fillers', 'clean_audio_edit_retakes', 'process_audio_edit_breaths', 'match_audio_edit_loudness', 'detect_audio_edit_mouth_clicks', 'undo_audio_edit', 'redo_audio_edit'])
 /** 这些操作完成后各形成一步撤销，回执带 undoRef。 */
 export const AUDIO_EDIT_UNDOABLE_OPERATIONS = new Set([...AUDIO_EDIT_VERIFIED_EDIT_OPERATIONS].filter((id) => id !== 'undo_audio_edit' && id !== 'redo_audio_edit'))
 export const AUDIO_EDIT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = ([
-  ['insert_audio_edit_file', '插入或覆盖音频', '在音频作品的 positionSeconds 秒处插入已有音频文件；提供 replaceUntilSeconds 则覆盖至该秒数。自动匹配采样格式，移动旧编辑并保留原文件，一步撤销，完成后立即保存。要用麦克风现录用 start_audio_edit_recording。', false],
+  ['insert_audio_edit_file', '插入或覆盖音频', '在音频作品的 positionSeconds 秒处插入已有音频文件（注意：这个秒数目前按原素材时间算，即 audio_edit.transcript_block 的 start_frame ÷ sample_rate，不是剪后成品时间）；提供 replaceUntilSeconds 则覆盖至该秒数。自动匹配采样格式，移动旧编辑并保留原文件，一步撤销，完成后立即保存。要用麦克风现录用 start_audio_edit_recording。', false],
   ['repair_audio_edit_region', '修复声音区域', '按源采样帧和频率范围修复声音瑕疵：spectral_heal 修复频谱区域，可带归一化画笔；declick 去除短促爆音。创建可撤销修复记录，渲染并回读确认。启用、强度或增删已有记录可用 audio_edit.document.repairs 通用属性。', false],
   ['reset_audio_edit', '撤销口播所有修改', '用户明确要求后恢复初始剪辑：恢复原文、全部声音、字幕分段、锁定和处理设置，保留口播名、参考稿、显示偏好。旧口播没有原始文本时保留已有文字，不能假称恢复识别原文。可用回执的 undoRef 经 undo_audio_edit 恢复操作前状态。', false],
   ['format_audio_edit_subtitles', '整理字幕分段', '整理成片字幕的分段，上方文字、波形字幕与 SRT 共用，字幕段供首次放进剪辑时参考；已放进剪辑的字幕文字与分段在剪辑里定稿，这里改字、改分段不同步过去（剪切与恢复会让剪辑字幕跟着声音更新）；不改声音、词块 ID 或时间戳。有参考稿时按稿子断句：稿子的逗号、句号、问号、感叹号、分号处换行，一行一句，念时多带的句尾语气词归前一句，稿子里没有的一大段按停顿兜底，超过约 24 个字的长句在中间附近最明显的停顿处拆开；没有参考稿时按现有标点、停顿、长度和时长合并。之后逐段核对用 audio_edit.caption（显示文字、稿子原文、识别原样），改字写它的 text，分段用 audio_edit.transcript_block.caption_break_after。', false],
@@ -46,7 +58,7 @@ export const AUDIO_EDIT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinitio
   ['clean_audio_edit_fillers', '清理口播语气词', '按口播中选择的词类清理有逐词时间戳的语气词，不删除锁定内容。', false],
   ['transcribe_audio_edit', '转写口播素材', '用已配置的语音识别模型识别原素材，得到逐词时间的文字（之后才能去重念、整理字幕），按时长计费，走付费策略；参考稿只辅助内容对齐。会一直等到转写完成并保存才返回（最长约 10 分钟）；等不到时只是不再等，转写照常进行，用 query_audio_edit_tasks 查进度，completed 后读 audio_edit.transcript_block。已有转写的口播不会再识别。超过所选模型单次上传上限时不上传、不收费，错误会说明：省略 modelId 让应用自动选长音频模型重试；只配置了短音频模型时请用户配置百炼这类长音频模型。中断或失败后能不能重新发起看 query_audio_edit_tasks 里最近一次转写的 resubmission。', false],
   ['process_audio_edit_sound', '准备口播声音处理', '按效果控件里要整段处理的效果（去除口水音、呼吸声、人声分离、去混响、插件）把全长录音先处理好并缓存，试听、XML 与成品共用处理结果。', false],
-  ['export_audio_edit', '导出口播剪辑', '导出 FCP7 XML 或 WAV 到已配置下载目录，可附带 SRT；返回实际交付时长。', false],
+  ['export_audio_edit', '导出口播剪辑', '导出剪好的口播：format=wav 是成品音频，xml（默认）是 FCP7 XML 加它引用的音频；includeSrt 附带同名 SRT 字幕。省略 destination 时放进口播所在项目的“导出”文件夹（与剪辑导出一致；口播不在项目里时才需要指定快速下载或预设目录），重名加序号，不覆盖已有文件。回执的 outputPath、subtitlePath 是写出的文件路径，durationFrames 是实际交付时长。', false],
   ['query_audio_edit_tasks', '查询口播处理任务', '读取该口播的分析、转写、处理和导出状态；最近一次转写带 resubmission，说明能否重新转写、会不会重复计费。', true],
   ['cancel_audio_edit_task', '取消口播处理任务', '取消明确口播下正在进行的指定任务。', false],
   ['retry_audio_edit_save', '重试保存口播', '只重新确认已修改口播的保存，不重放剪辑或付费任务。', false],

@@ -12,7 +12,8 @@ import { resolveConfiguredDestination } from '@/features/canvas/application/canv
 import { getPlatform } from '@/platform/runtime'
 import { applicationWritePreflight, ApplicationWriteExecution } from '@/core/application-control/execution/writeExecution'
 import { readTranscriptionFacts, TranscriptionFailure } from '@/core/audioEdit/transcriptionFailure'
-import { join, exists } from '@/platform/desktopApi'
+import { exists } from '@/platform/desktopApi'
+import { projectExportDirectory, uniqueOutputPath } from '@/features/documents/projectOutputs'
 import { getDocumentOperations, registerDocumentCreator, registerDocumentOpener, registerDocumentReleaser } from '@/features/documents/documentOperations'
 import { getDocumentSessionRegistry } from '@/features/documents/documentSessionRegistry'
 import { registerDocumentCoverProvider, registerDocumentHoverPreview } from '@/features/documents/documentCovers'
@@ -114,10 +115,17 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
           break
         }
         case 'quick_process_audio_edit': {
-          const { retakeCount, retakeReviewCount, breaths, gaps, ...processed } = await quickProcessAudioEdit(id, input.range, requestId)
-          Object.assign(result, processed)
-          const breathText = breaths ? `处理呼吸声（删除 ${breaths.deleted}、减弱 ${breaths.attenuated} 处）、${gaps ? `把 ${gaps} 处字间气口清成静音、` : ''}` : ''
-          result.message = `已${retakeCount ? `去掉 ${retakeCount} 处重念、` : ''}${breathText}压缩停顿并清理所选语气词，${lengthChange(processed.shortenedMs)}，可用回执的 undoRef 整批撤销。${retakeReviewText(retakeReviewCount)}这只是起点：请逐处复核接缝、呼吸与语气词。`; break
+          const processed = await quickProcessAudioEdit(id, input.range, requestId)
+          const quickProcess = {
+            retakesRemoved: processed.retakeCount, breathsRemoved: processed.breaths?.deleted ?? 0, breathsAttenuated: processed.breaths?.attenuated ?? 0,
+            gapsSilenced: processed.gaps ?? 0, pausesCompressed: processed.count, fillersRemoved: processed.fillers,
+            retakesToDecide: processed.attention.decide, retakesToCheck: processed.attention.check,
+          }
+          Object.assign(result, { shortenedMs: processed.shortenedMs, quickProcess })
+          const toReview = quickProcess.retakesToDecide
+            ? `待确认 ${quickProcess.retakesToDecide} 处重念（audio_edit.suggestion 按 attention=decide 筛出，逐处定做法）${quickProcess.retakesToCheck ? `，另有 ${quickProcess.retakesToCheck} 处已自动删但把握不高（attention=check）值得抽看` : ''}。`
+            : quickProcess.retakesToCheck ? `没有待确认的重念；${quickProcess.retakesToCheck} 处已自动删但把握不高（attention=check）值得抽看。` : '没有待确认的重念。'
+          result.message = `已去掉 ${quickProcess.retakesRemoved} 处重念、删除 ${quickProcess.breathsRemoved} 处与减弱 ${quickProcess.breathsAttenuated} 处呼吸、把 ${quickProcess.gapsSilenced} 处字间气口清成静音、压缩 ${quickProcess.pausesCompressed} 处停顿、删掉 ${quickProcess.fillersRemoved} 个语气词，${lengthChange(processed.shortenedMs)}；${toReview}可用回执的 undoRef 整批撤销。这只是起点：请逐处复核接缝、呼吸与语气词。`; break
         }
         case 'compress_audio_edit_silence': { const { count, shortenedMs } = await compressAudioEditSilence(id, input.range, requestId); Object.assign(result, { count, shortenedMs }) } result.message = `处理 ${result.count} 处停顿，缩短 ${result.shortenedMs} 毫秒。`; break
         case 'clean_audio_edit_fillers': result.count = await cleanProjectAudioEditFillers(id, input.range); result.message = `清理 ${result.count} 处语气词。`; break
@@ -147,7 +155,14 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
         case 'transcribe_audio_edit': {
           const prepared = await applicationWritePreflight(context, () => preflightAudioEditTranscription(id, input.modelId))
           if (prepared.requiresConfirmation) await requestAlertConfirmation({ title: '识别口播', message: '将使用已配置的语音识别模型转写这段声音。', confirmLabel: '允许本次', paid: await applicationPaidRequest('recognition', id, context.signal, transcriptionEstimatedCny(prepared)) }, context.signal)
-          await transcribeAudioEdit({ projectId: id, modelId: prepared.modelId ?? input.modelId, requestId }, context.signal); recognized = true; result.message = '转写已保存，按实际时间戳粒度剪辑。'; break
+          const transcribed = await transcribeAudioEdit({ projectId: id, modelId: prepared.modelId ?? input.modelId, requestId }, context.signal); recognized = true
+          // 费用与付费账本同一口径：按时长与所选模型单价算的那一笔；不需要确认的（续查原任务、取回已付费结果）这次不再计费
+          const costCny = prepared.requiresConfirmation ? transcriptionEstimatedCny(prepared) : 0
+          const blocks = instance.document.transcript
+          const transcription = { modelId: transcribed.modelId, granularity: transcribed.granularity, blockCount: blocks.length, characterCount: blocks.reduce((total, block) => total + [...block.text.replace(/[\s\p{P}]/gu, '')].length, 0), costCny }
+          Object.assign(result, { transcription })
+          const unit = transcribed.granularity === 'word' ? '个逐词词块' : '个整句片段'
+          result.message = `转写已保存：模型 ${transcribed.modelId}，${blocks.length} ${unit}（${transcription.characterCount} 字），费用 ${costCny === null ? '未知（模型没有单价资料）' : costCny === 0 ? '¥0（沿用已计费的结果，没有再收费）' : `约 ¥${costCny.toFixed(4)}`}。${transcribed.granularity === 'word' ? '' : '只有整句时间，不能逐词去重念。'}`; break
         }
         case 'process_audio_edit_sound': await prepareAudioEditProcessing(id, requestId); result.verified = (await api.listTasks(id)).some(task => task.requestId === requestId && task.state === 'completed'); result.message = '全长声音处理已完成。'; break
         case 'query_audio_edit_tasks': result.tasks = (await api.listTasks(id)).map(({ projectId, ...task }) => ({ ...task, documentId: projectId })); result.message = '已读取这份口播的处理任务。'; break
@@ -163,14 +178,15 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
         case 'redo_audio_edit': redoAudioEditStep(id, input.undoRef!); await flushAudioEditProject(id); result.message = '已重做这一步并保存。'; break
         case 'export_audio_edit': {
           const format = input.format ?? 'xml'
-          const fileName = `${instance.document.name.replace(/[<>:"/\\|?*]/g, '_')}-${crypto.randomUUID()}`
-          const targetPath = await applicationWritePreflight(context, () => {
-            if (!input.destination) throw new Error('请选择已配置的快速下载或预设目录。')
-            return join(resolveConfiguredDestination(input.destination), `${fileName}.${format}`)
-          })
+          // 与剪辑导出一致：不指定 destination 时放进口播所在项目的“导出”文件夹，重名加序号，不覆盖已有文件
+          const targetPath = await applicationWritePreflight(context, async () => uniqueOutputPath(
+            input.destination ? resolveConfiguredDestination(input.destination) : await projectExportDirectory(instance.session.documentMeta.container),
+            `${instance.document.name}-剪辑`, format, input.includeSrt ? ['srt'] : []))
           const exported = await exportAudioEdit({ projectId: id, targetPath, format, requestId, ...(input.includeSrt ? { subtitleTargetPath: targetPath.replace(/\.[^.]+$/, '.srt') } : {}) })
-          result.verified = (await Promise.all([exported.xmlPath ?? exported.audioPath, exported.subtitlePath].filter((path): path is string => Boolean(path)).map(exists))).every(Boolean)
-          result.durationFrames = exported.durationFrames; result.message = `已导出 ${format.toUpperCase()} 到所选目录。`; break
+          const outputPath = exported.xmlPath ?? exported.audioPath
+          result.verified = (await Promise.all([outputPath, exported.subtitlePath].filter((path): path is string => Boolean(path)).map(exists))).every(Boolean)
+          Object.assign(result, { outputPath, ...(format === 'xml' ? { audioPath: exported.audioPath } : {}), ...(exported.subtitlePath ? { subtitlePath: exported.subtitlePath } : {}) })
+          result.durationFrames = exported.durationFrames; result.message = `已导出 ${format.toUpperCase()}：${outputPath}${exported.subtitlePath ? `，字幕 ${exported.subtitlePath}` : ''}。`; break
         }
       }
       if (AUDIO_EDIT_UNDOABLE_OPERATIONS.has(definition.id)) {
