@@ -8,7 +8,7 @@ import { PiEngine } from './piEngine'
 import { PiToolDisclosure } from './toolDisclosure'
 import { videoEditCreativeTools } from './toolDisclosureProfiles'
 import { contextReader } from './contextReader'
-import { embeddedThinkingLevelMap } from './modelOptions'
+import { embeddedModelCompat, embeddedThinkingLevelMap } from './modelOptions'
 import { SessionManager, type AgentSession, type ToolDefinition } from '@earendil-works/pi-coding-agent'
 import type { EngineEvent } from './contracts'
 import { z } from 'zod'
@@ -519,9 +519,14 @@ describe('Pi official SDK engine', () => {
     expect(JSON.stringify({ input: requests[3].input, tools: requests[3].tools })).toBe(JSON.stringify({ input: requests[0].input, tools: requests[0].tools }))
   }, 30000)
   it('只给有登记写法的模型声明最高两档；落到通用兜底的模型保持原行为', () => {
-    const selected = (providerId: string, adapter: string, modelId: string) => ({ providerId, baseUrl: '', api: 'openai-responses' as const, apiKey: '',
+    const selected = (providerId: string, adapter: string, modelId: string, api: 'openai-responses' | 'openai-completions' = 'openai-responses') => ({ providerId, baseUrl: '', api, apiKey: '',
       model: { ...model, providerId, adapter, modelId, capabilities: { ...model.capabilities, reasoning: true } } })
-    expect(embeddedThinkingLevelMap(selected('kimi', 'kimi', 'kimi-k3'), 'kimi')).toEqual({ xhigh: 'high', max: 'max' })
+    expect(embeddedThinkingLevelMap(selected('kimi', 'kimi', 'kimi-k3', 'openai-completions'), 'kimi')).toEqual({ xhigh: 'high', max: 'max' })
+    // 档位按所走协议的写法换算：同为“极高”，DeepSeek 落 high，智谱 Responses 落 max
+    expect(embeddedThinkingLevelMap(selected('deepseek', 'deepseek', 'deepseek-flash'), 'deepseek')).toEqual({ xhigh: 'high', max: 'max' })
+    expect(embeddedThinkingLevelMap(selected('bigmodel', 'openai', 'glm-5.3'), 'bigmodel')).toEqual({ xhigh: 'max', max: 'max' })
+    expect(embeddedModelCompat(selected('deepseek', 'deepseek', 'deepseek-v4-pro'), 'deepseek')).toEqual({ supportsDeveloperRole: false, supportsMidConvoSystemMessages: true })
+    expect(embeddedModelCompat(selected('kimi', 'kimi', 'kimi-k3'), 'kimi')).toBeUndefined()
     expect(embeddedThinkingLevelMap(selected('minimax', 'minimax', 'MiniMax-M3'), 'minimax')).toBeUndefined()
     expect(embeddedThinkingLevelMap(selected('custom', 'openai-compatible', 'any'), 'custom')).toBeUndefined()
   })

@@ -1,6 +1,6 @@
 # DeepSeek
 
-> 核对时间：2026-11-13。以中文官方文档为准，英文页面尚有更新滞后。
+> 核对时间：2026-11-14。以中文官方文档为准，英文页面尚有更新滞后。
 
 ## 2026-11-13 复核：内置助手相关要点（覆盖下方旧资料中冲突的部分）
 
@@ -27,7 +27,9 @@
 
 **本项目落点**（2026-11-13，只做了与供应商无关的部分）：内置助手经 Pi 走 Responses；“最高”思考档按 SDK 已登记的供应商写法发出（此前 Pi 未声明 xhigh / max 档位，对所有供应商都静默降为 high）；每轮与每次运行的缓存命中、首字等待、思考 token 与参考费用进入 `embedded_agent.turn.model_completed` / `usage_summary` 日志与助手追踪。
 
-**以后再做（DeepSeek 专项，尚未实现）**：Pi 对推理模型默认把系统设定发成 `developer` 角色，DeepSeek 按 user 处理，宜对该端点声明 `supportsDeveloperRole: false` 改发 system；SDK 的 Chat 思考映射仍是旧的 high / max 两档，应改为官方 low / high / max（medium、xhigh 归 high）；DeepSeek 支持对话中途插入 system 消息，可声明 `supportsMidConvoSystemMessages` 让系统设定变化时追加而不是改写首条；48 MiB 请求体上限低于宿主现有的 128 MiB 附件预算；422 参数错误尚无专门提示。
+**2026-11-14 已完成**：助手对 DeepSeek 声明 `supportsDeveloperRole: false` 改发 system（官方 Responses 参考：developer 在 deepseek-flash 上视同 system、在 deepseek-v4-pro 上视同 user），并声明 `supportsMidConvoSystemMessages`；SDK Chat 思考档位改为官方映射 low / high / max；Responses 下改发 `reasoning.effort`（none 关闭），此前发的 Chat 字段被静默忽略，思考关不掉。
+
+**仍未处理**：48 MiB 请求体上限低于宿主现有的 128 MiB 附件预算；422 参数错误尚无专门提示。
 
 ## 2026-09-24 复核（含 2026-09-11 更新）（覆盖下方历史资料中的旧模型和能力说明）
 

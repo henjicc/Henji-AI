@@ -2,6 +2,7 @@ import { z } from 'zod'
 export {
   applyProviderRequestBodyQuirks,
   resolveProviderExtraAuthHeaders,
+  resolveProviderSystemMessageSupport,
 } from './providerProtocolCore'
 export type { LlmApiProtocol } from './providerProtocolCore'
 

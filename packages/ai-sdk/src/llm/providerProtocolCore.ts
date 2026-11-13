@@ -13,6 +13,19 @@ export function resolveProviderExtraAuthHeaders(
   return headerName && apiKey ? { [headerName]: apiKey } : {}
 }
 
+/**
+ * 系统设定的消息角色约定。DeepSeek 把 developer 在 deepseek-v4-pro 上当作用户消息（flash 上等同 system），
+ * 必须发 system；两种协议都支持对话中途插入 system 消息，系统设定变化时可追加而不改写首条，保住前缀缓存。
+ * 未登记的供应商返回 undefined，沿用调用方默认。
+ */
+export function resolveProviderSystemMessageSupport(
+  providerId: string,
+  adapter?: string
+): { developerRole: boolean; midConversationSystem: boolean } | undefined {
+  const keys = [providerId, adapter ?? ''].map(value => value.trim().toLowerCase())
+  return keys.includes('deepseek') ? { developerRole: false, midConversationSystem: true } : undefined
+}
+
 export function applyProviderRequestBodyQuirks(
   providerId: string,
   body: Record<string, unknown>

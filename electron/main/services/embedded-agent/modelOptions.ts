@@ -1,4 +1,4 @@
-import { applyProviderReasoningRequestBody, findLlmProviderPreset, hasProviderReasoningRule } from '@henjicc/ai-sdk'
+import { applyProviderReasoningRequestBody, findLlmProviderPreset, hasProviderReasoningRule, readReasoningEffortField, resolveProviderSystemMessageSupport } from '@henjicc/ai-sdk'
 import type { EmbeddedModel } from './contracts'
 import { AGENT_MIN_OUTPUT_TOKENS } from '../../../../src/core/llm/agentProfiles'
 
@@ -22,7 +22,13 @@ export function embeddedModelPricing(selected: EmbeddedModel): { cost: { input: 
     cacheRead: listed.cacheReadPerMillionTokens ?? listed.inputPerMillionTokens, cacheWrite: listed.inputPerMillionTokens } }
 }
 
-type PiThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+/** 系统设定的角色约定由 SDK 按供应商登记，这里只翻译成 Pi 的 compat 字段。 */
+export function embeddedModelCompat(selected: EmbeddedModel, providerFamilyId: string): { supportsDeveloperRole: boolean; supportsMidConvoSystemMessages: boolean } | undefined {
+  const support = resolveProviderSystemMessageSupport(providerFamilyId, selected.model.adapter)
+  return support ? { supportsDeveloperRole: support.developerRole, supportsMidConvoSystemMessages: support.midConversationSystem } : undefined
+}
+
+type PiThinkingLevel ='off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 
 export function embeddedThinkingLevel(selected: EmbeddedModel): PiThinkingLevel {
   if (!selected.model.capabilities.reasoning || selected.reasoning?.enabled === false) return 'off'
@@ -38,8 +44,9 @@ export function embeddedThinkingLevel(selected: EmbeddedModel): PiThinkingLevel 
 export function embeddedThinkingLevelMap(selected: EmbeddedModel, providerFamilyId: string): { xhigh: string; max: string } | undefined {
   const { model } = selected
   if (!model.capabilities.reasoning || !hasProviderReasoningRule(providerFamilyId, model.adapter)) return undefined
-  const effortFor = (effort: string): unknown => applyProviderReasoningRequestBody(providerFamilyId, model.adapter, { model: model.modelId },
-    { enabled: true, effort: effort as 'high' }).reasoning_effort
+  const protocol = selected.api === 'openai-responses' ? 'openai-responses' : 'openai-compatible'
+  const effortFor = (effort: string): unknown => readReasoningEffortField(applyProviderReasoningRequestBody(providerFamilyId, model.adapter, { model: model.modelId },
+    { enabled: true, effort: effort as 'high' }, protocol))
   // 登记过的写法都会把不认识的档位换成自己的某一档；原样回声说明这个模型走的是通用兜底
   if (effortFor('henji-probe') === 'henji-probe') return undefined
   const xhigh = effortFor('xhigh')

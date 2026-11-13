@@ -4,7 +4,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-11-13 |
+| 最后更新 | 2026-11-14 |
 | 覆盖供应商 | 火山引擎（Doubao）、Kimi（Moonshot）、智谱 GLM、DeepSeek、小米 MiMo、阿里云百炼（Qwen）、MiniMax |
 | 覆盖模型 | 7 家供应商的当前旗舰文本/多模态系列；供应商专属模型见各自文档内的“模型清单” |
 
@@ -145,15 +145,19 @@ Responses 请求统一下发 `store: false`：助手自己的会话存储仍是�
 
 ## 六、思考参数速查（各家字段名一致但取值集合不同，不要共用常量）
 
-| 供应商 | 字段 | 取值 | 默认 | 能否关闭 |
+2026-11-14 核对：**同一家在 Chat 与 Responses 下的写法不同**。Responses 的强度字段是 `reasoning.effort`，顶层 `reasoning_effort`、`thinking` 等 Chat 写法会被静默忽略，不报错，开关和强度都不生效。此前 SDK 在两种协议下都只发 Chat 写法，导致 DeepSeek、GLM-5.3 在 Responses 下关不掉思考，火山方舟的强度设置不生效，MiniMax M3 一直不思考。现在 `providerReasoningRequest.ts` 按协议分两份规则。
+
+| 供应商 | Chat 写法 | Responses 写法 | 默认 | 能否关闭 |
 |---|---|---|---|---|
-| 火山引擎 | `reasoning_effort` | `none`/`minimal`/`low`/`medium`/`high`/`xhigh`/`max`（7 档） | `high` | 可以（`thinking` 开关） |
-| Kimi | `reasoning_effort` | `low`/`high`/`max` | `max` | **不可以**，K3 始终思考 |
-| 智谱 GLM | `reasoning_effort` + `thinking` | `low`/`high`/`max`（`glm-5.3`、`glm-5.3-flash`） | `max` | GLM-5.3 / Flash 不可以；GLM-5V-Turbo 可以 |
-| DeepSeek | `reasoning_effort` + `thinking.type` | 代码按 high / max 两档发送；官方 2026-11-13 已列 low / high / max，见供应商文档“以后再做” | `high` | 可以 |
-| 小米 MiMo | Chat `thinking.type`；Responses `reasoning.effort` | 开 / 关，无强度分级 | 开启 | 可以；Chat disabled / Responses none |
-| 百炼 Qwen | `enable_thinking`（布尔） | `true`/`false` | 视模型而定 | 可以 |
-| MiniMax | 仅 Anthropic 协议下确认为原生 `thinking` 内容块；Chat/Responses 路径的思考强度字段未在公开文档中找到，接入 Responses API 时需要单独实测确认 | — | — | 视协议而定 |
+| 火山引擎 | `thinking` 开关 + `reasoning_effort`（7 档） | `thinking` 开关 + `reasoning.effort`；`thinking` 为 disabled 时强度只能是 minimal | `high`（豆包 2.0 为 medium） | 可以 |
+| Kimi | `reasoning_effort` `low`/`high`/`max` | 原厂不支持 Responses | `max` | **不可以**，K3 始终思考 |
+| 智谱 GLM | `thinking` + `reasoning_effort` `low`/`high`/`max` | `reasoning.effort`，`none`/`minimal` 关闭，`low`/`medium`→high，`xhigh`→max | `max` | Chat 下 GLM-5.3 / Flash 不可以；**Responses 下 GLM-5.3 可以**；GLM-5V-Turbo 可以 |
+| DeepSeek | `thinking.type` + `reasoning_effort` | `reasoning.effort` `none`/`low`/`high`/`max` | `high` | 可以（两种协议） |
+| 小米 MiMo | `thinking.type` | `reasoning.effort` high / none | 开启 | 可以 |
+| 百炼 Qwen | `enable_thinking`（布尔） | 同左（官方写明两种协议都适用；`reasoning.effort` 优先） | 视模型而定 | 可以 |
+| MiniMax | M3.1 Flash：`reasoning_effort` 五档，不能关 | M3 默认**不思考**，发非 none 的 `reasoning.effort` 才开启，不调深度；M3.1 Flash 五档，none 返回 400 | M3 关 / Flash `max` | M3 可以；Flash 不可以 |
+
+DeepSeek 官方档位映射：minimal→low，medium、xhigh→high，ultra→max。来源：[DeepSeek 思考模式](https://api-docs.deepseek.com/zh-cn/guides/thinking_mode)、[火山方舟 Responses 深度思考](https://www.volcengine.com/docs/82379/1956279)、[智谱创建 Response](https://docs.bigmodel.cn/api-reference/response/创建-response)、[MiniMax 对话生成（Responses）](https://platform.minimaxi.com/docs/api-reference/responses-create)，均无需登录。
 
 ## 七、维护方式
 

@@ -10,7 +10,7 @@ import { PiAttachments } from './piAttachments'
 import { PiToolDisclosure } from './toolDisclosure'
 import { budgetContext, contextPageTokenLimit, estimateContextTokens, projectText, PROJECTED_EXCERPT_TOKENS, singleResultTokenLimit } from './contextBudget'
 import { archiveToolResult, contextReader, selectionSummary } from './contextReader'
-import { embeddedModelLimits, embeddedModelPricing, embeddedThinkingLevel, embeddedThinkingLevelMap } from './modelOptions'
+import { embeddedModelCompat, embeddedModelLimits, embeddedModelPricing, embeddedThinkingLevel, embeddedThinkingLevelMap } from './modelOptions'
 import { deduplicateHostContexts, prepareHostContext } from './hostContext'
 import { applyProviderRequestBodyQuirks, resolveProviderExtraAuthHeaders, resolveLlmEndpointIdentity } from '@henjicc/ai-sdk'
 
@@ -82,6 +82,7 @@ export class PiEngine implements EmbeddedAgentEngine {
     const pricing = embeddedModelPricing(selected)
     this.costCurrency = pricing.currency
     const thinkingLevelMap = embeddedThinkingLevelMap(selected, identity.providerFamilyId)
+    const compat = embeddedModelCompat(selected, identity.providerFamilyId)
     runtime.registerProvider(provider, { baseUrl: selected.baseUrl, api: selected.api, headers: resolveProviderExtraAuthHeaders(identity.providerFamilyId, selected.apiKey), models: [{
       id: model.modelId, name: model.displayName, reasoning: model.capabilities.reasoning,
       input: model.capabilities.image ? ['text', 'image'] : ['text'],
@@ -89,6 +90,7 @@ export class PiEngine implements EmbeddedAgentEngine {
       maxTokens: limits.maxOutputTokens,
       cost: pricing.cost,
       ...(thinkingLevelMap ? { thinkingLevelMap } : {}),
+      ...(compat ? { compat } : {}),
     }] })
     await runtime.setRuntimeApiKey(provider, selected.apiKey)
     const resolved = runtime.getModel(provider, model.modelId)

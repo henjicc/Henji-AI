@@ -9,6 +9,8 @@ it.each([
   ['fetch failed ECONNRESET', '连接助手模型服务失败'],
   ['maximum context length exceeded', '长度限制'],
   ['503 Service unavailable', '暂时无法响应'],
+  ['400 Content Exists Risk', '内容审核'],
+  ['OpenAI API error (422): {"message":"Invalid reasoning effort"}', '不接受当前请求参数'],
   ['Unexpected xyz', '未能完成'],
 ])('将 %s 转为可理解的助手错误', (raw, expected) => {
   expect(assistantErrorMessage(raw)).toContain(expected)

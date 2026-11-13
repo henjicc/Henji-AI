@@ -26,16 +26,54 @@ describe('applyProviderReasoningRequestBody', () => {
         .toEqual({ model: 'kimi-k3', max_tokens: 4096, reasoning_effort: enabled ? 'max' : 'low' })
     }
   })
-  it('DeepSeek 同时发 thinking 与 reasoning_effort，且只用官方示例里的两档', () => {
+  it('DeepSeek Chat 同时发 thinking 与 reasoning_effort，按官方映射表落到 low / high / max', () => {
     expect(apply('deepseek', { enabled: true, effort: 'low' })).toMatchObject({
       thinking: { type: 'enabled' },
-      reasoning_effort: 'high',
+      reasoning_effort: 'low',
     })
+    expect(apply('deepseek', { enabled: true, effort: 'medium' })).toMatchObject({ reasoning_effort: 'high' })
+    expect(apply('deepseek', { enabled: true, effort: 'xhigh' })).toMatchObject({ reasoning_effort: 'high' })
     expect(apply('deepseek', { enabled: true, effort: 'max' })).toMatchObject({
       reasoning_effort: 'max',
     })
-    expect(apply('deepseek', { enabled: false, effort: 'high' })).toMatchObject({
-      thinking: { type: 'disabled' },
+    expect(apply('deepseek', { enabled: false, effort: 'high' })).toEqual({ model: 'm', thinking: { type: 'disabled' } })
+  })
+
+  describe('Responses 协议只认 reasoning.effort，Chat 写法会被静默忽略', () => {
+    const responses = (providerId: string, model: string, reasoning: { enabled: boolean; effort: 'low' | 'medium' | 'high' | 'xhigh' | 'max' }) =>
+      applyProviderReasoningRequestBody(providerId, undefined, { model, reasoning_effort: 'high', thinking: { type: 'enabled' } }, reasoning, 'openai-responses')
+
+    it('DeepSeek 用 reasoning.effort 调强度，none 关闭思考，且不残留 Chat 字段', () => {
+      expect(responses('deepseek', 'deepseek-flash', { enabled: true, effort: 'low' })).toEqual({ model: 'deepseek-flash', reasoning: { effort: 'low' } })
+      expect(responses('deepseek', 'deepseek-flash', { enabled: true, effort: 'max' })).toEqual({ model: 'deepseek-flash', reasoning: { effort: 'max' } })
+      expect(responses('deepseek', 'deepseek-flash', { enabled: false, effort: 'high' })).toEqual({ model: 'deepseek-flash', reasoning: { effort: 'none' } })
+    })
+
+    it('智谱 GLM-5.3 在 Responses 下能关闭思考', () => {
+      expect(responses('bigmodel', 'glm-5.3', { enabled: false, effort: 'high' })).toEqual({ model: 'glm-5.3', reasoning: { effort: 'none' } })
+      expect(responses('bigmodel', 'glm-5.3', { enabled: true, effort: 'xhigh' })).toEqual({ model: 'glm-5.3', reasoning: { effort: 'max' } })
+      expect(responses('bigmodel', 'glm-5.3', { enabled: true, effort: 'low' })).toEqual({ model: 'glm-5.3', reasoning: { effort: 'high' } })
+    })
+
+    it('火山引擎开关用 thinking、强度用 reasoning.effort，关闭时不发强度', () => {
+      expect(responses('volcengine', 'doubao-seed-2-1-pro-260915', { enabled: true, effort: 'medium' }))
+        .toEqual({ model: 'doubao-seed-2-1-pro-260915', thinking: { type: 'enabled' }, reasoning: { effort: 'medium' } })
+      expect(responses('volcengine', 'doubao-seed-2-1-pro-260915', { enabled: false, effort: 'high' }))
+        .toEqual({ model: 'doubao-seed-2-1-pro-260915', thinking: { type: 'disabled' } })
+    })
+
+    it('MiniMax M3 默认不思考，开启时必须发 reasoning.effort', () => {
+      expect(responses('minimax', 'MiniMax-M3', { enabled: true, effort: 'high' })).toEqual({ model: 'MiniMax-M3', reasoning: { effort: 'high' } })
+      expect(responses('minimax', 'MiniMax-M3', { enabled: false, effort: 'high' })).toEqual({ model: 'MiniMax-M3' })
+    })
+
+    it('百炼在两种协议下都用 enable_thinking', () => {
+      expect(responses('bailian', 'qwen3.8-max', { enabled: false, effort: 'high' })).toEqual({ model: 'qwen3.8-max', enable_thinking: false })
+    })
+
+    it('未登记供应商在 Responses 下走 reasoning.effort 通用写法', () => {
+      expect(responses('openai', 'gpt', { enabled: true, effort: 'medium' })).toEqual({ model: 'gpt', reasoning: { effort: 'medium' } })
+      expect(responses('openai', 'gpt', { enabled: false, effort: 'medium' })).toEqual({ model: 'gpt' })
     })
   })
 

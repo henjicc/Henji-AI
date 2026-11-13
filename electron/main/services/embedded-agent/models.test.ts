@@ -14,7 +14,7 @@ it('注册和预算共用输出上限，未知窗口留出输入空间，思考�
   expect(embeddedThinkingLevel(selected)).toBe('high')
   expect(embeddedThinkingLevel({ ...selected, reasoning: { enabled: true, effort: 'low' } })).toBe('low')
   expect(embeddedThinkingLevel({ ...selected, reasoning: { enabled: false, effort: 'high' } })).toBe('off')
-  expect(embeddedThinkingLevel({ ...selected, reasoning: { enabled: true, effort: 'max' } })).toBe('xhigh')
+  expect(embeddedThinkingLevel({ ...selected, reasoning: { enabled: true, effort: 'max' } })).toBe('max')
   expect(embeddedThinkingLevel({ ...selected, model: { ...selected.model, capabilities: { ...selected.model.capabilities, reasoning: false } } })).toBe('off')
 })
 
