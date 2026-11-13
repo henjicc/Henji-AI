@@ -321,7 +321,7 @@ function requireRecord(id: string): InstanceRecord {
 }
 
 export function editAudioEditProject(id: string, update: (document: AudioEditProjectDocument) => AudioEditProjectDocument): AudioEditProjectDocument {
-  return updateAudioEditProject(id, update, false)
+  return updateAudioEditProject(id, update, {})
 }
 
 /** 读到写回之间作品又变了：最多重算几次，仍在变就请调用方稍后再试。 */
@@ -338,7 +338,8 @@ export async function editAudioEditProjectAsync(id: string, compute: (current: A
     const current = (await loadAudioEditProject(id)).document
     const next = await compute(current)
     try {
-      const saved = editAudioEditProject(id, latest => { if (latest !== current) throw new StaleRead(); return next })
+      // 助手写入不是用户手里的拖动：即使用户正拖着滑杆，也整份校验，不合规的内容当场退回，不等到用户松手。
+      const saved = updateAudioEditProject(id, latest => { if (latest !== current) throw new StaleRead(); return next }, { complete: true })
       return { previous: current, saved }
     } catch (error) {
       if (!(error instanceof StaleRead)) throw error
@@ -386,7 +387,7 @@ export function restoreAudioEditProjectSnapshot(id: string, snapshot: AudioEditP
   return updateAudioEditProject(id, current => {
     if (!sameAudioEditProjectContent(current, expected)) throw new Error('口播已有后续修改，请使用口播撤销逐步恢复。')
     return { ...snapshot, source: current.source }
-  }, true)
+  }, { restoring: true, complete: true })
 }
 
 /** 内容是否相同（修订号与更新时间不算内容）；共享子树按引用短路，不整份序列化。 */
@@ -394,7 +395,11 @@ export function sameAudioEditProjectContent(left: AudioEditProjectDocument, righ
   return jsonEqual({ ...left, revision: 0, updatedAt: 0 }, { ...right, revision: 0, updatedAt: 0 })
 }
 
-function updateAudioEditProject(id: string, update: (document: AudioEditProjectDocument) => AudioEditProjectDocument, restoring: boolean): AudioEditProjectDocument {
+/**
+ * restoring：撤销与补偿，连锁定一起恢复。complete：不论是否在拖动中都整份校验（助手写入与补偿用）；
+ * 否则拖动进行中只校验改到的字段，跨字段检查留到松手。
+ */
+function updateAudioEditProject(id: string, update: (document: AudioEditProjectDocument) => AudioEditProjectDocument, { restoring = false, complete = false }: { restoring?: boolean; complete?: boolean }): AudioEditProjectDocument {
   assertApplicationWritesAllowed()
   const record = requireRecord(id)
   const { instance } = record
@@ -407,7 +412,7 @@ function updateAudioEditProject(id: string, update: (document: AudioEditProjectD
   if (!changed.length) return instance.document
   if (changed.includes('source')) throw new Error('IMMUTABLE_SOURCE：原素材不能通过编辑修改，请用“重新定位原素材”。')
   // 拖动中只校验改到的字段（跨字段检查留到松手）；其余编辑整份校验，没换引用的部分沿用上次结果
-  const validated = record.gestures > 0 ? (validateChangedFields(normalized, changed), normalized) : parseProject(normalized, instance.document)
+  const validated = record.gestures > 0 && !complete ? (validateChangedFields(normalized, changed), normalized) : parseProject(normalized, instance.document)
   if (!restoring) assertAudioEditLocks(instance.document, validated)
   return commitEdit(record, validated)
 }
@@ -455,8 +460,9 @@ export function undoAudioEditProject(id: string, redo = false): void {
   instance.version += 1
   publish(instance)
   notifyContent(record)
-  // 撤销同样立即保存，崩溃后不能重新出现已撤销的录音。
-  void flushAudioEditProject(id).catch(error => logger.warn('撤销保存失败，修改仍保留', { event: 'audio_edit.undo.save.failed', error }))
+  // 撤销、重做换了素材（撤掉或重做一段补录拼接）时立即保存，崩溃后不能重新出现已撤销的录音；
+  // 其余撤销与普通编辑一样交给会话的防抖保存，连按撤销不再每步整份写一遍，离开时会话照常写完。
+  if (previous.source !== current.source) void flushAudioEditProject(id).catch(error => logger.warn('撤销保存失败，修改仍保留', { event: 'audio_edit.undo.save.failed', error }))
 }
 
 /** 保存屏障：写完当前全部修改（会话的 flush）。失败时修改保留在实例里，会话按退避自动重试。 */

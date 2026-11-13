@@ -123,6 +123,21 @@ it('取消在开始之前只放掉采集；开始之后按停止收尾、保留�
   expect(storage.manifest.spans[0].finalized).toBe(true)
 })
 
+it('来源丢着时报出画面从哪一刻起没有的，接回后不再报：录制若就此结束，会话到那一刻为止', async () => {
+  const capture = backend()
+  await capture.prepare(); await capture.start(signal)
+  expect(capture.sourceLostSinceUs()).toBeUndefined()
+  client.emit({ event: 'sourceLost', atUs: 14_000_000 })
+  expect(capture.sourceLostSinceUs()).toBe(14_000_000 + OFFSET - LEAD)
+  client.emit({ event: 'sourceRestored', atUs: 15_000_000 })
+  expect(capture.sourceLostSinceUs()).toBeUndefined()
+  // 暂停在先、来源后丢：画面在暂停那一刻就没有了。
+  await capture.hold(16_000_000)
+  client.emit({ event: 'sourceLost', atUs: 17_000_000 })
+  expect(capture.sourceLostSinceUs()).toBe(16_000_000)
+  await capture.stop(signal)
+})
+
 it('显示器实际尺寸与录制尺寸不同：准备阶段放掉采集并报不支持，由调用方改用现有录法', async () => {
   client.size = { width: 3840, height: 2160 }
   await expect(backend().prepare()).rejects.toMatchObject({ code: 'CAPTURE_UNSUPPORTED' })

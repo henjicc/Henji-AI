@@ -72,6 +72,29 @@ describe('频谱取块调度', () => {
     scheduler.dispose()
   })
 
+  it('整段计算进行中，部分块每秒最多重取一次；算完那一条进度立刻重取', async () => {
+    const { client, pending } = fakeClient()
+    const scheduler = new SpectralTileScheduler(client, new SpectralTileStore(), target, () => {}, () => {})
+    const progress = (coveredFrames: number, done = false): void => { scheduler.progress({ projectId: 'p', mode: 'source', revision: 0, coveredFrames, durationFrames: DURATION, done }) }
+    scheduler.setNeeds([{ level: 5, tile: 0 }])
+    pending[0].resolve(tileFor(pending[0].request, { complete: false, columnCount: 1 }))
+    await flush()
+    progress(SR * 60)
+    expect(pending).toHaveLength(2)
+    pending[1].resolve(tileFor(pending[1].request, { complete: false, columnCount: 2 }))
+    await flush()
+    vi.advanceTimersByTime(250); progress(SR * 120)
+    vi.advanceTimersByTime(250); progress(SR * 180)
+    expect(pending).toHaveLength(2)
+    vi.advanceTimersByTime(500)
+    expect(pending).toHaveLength(3)
+    pending[2].resolve(tileFor(pending[2].request, { complete: false, columnCount: 3 }))
+    await flush()
+    progress(DURATION, true)
+    expect(pending).toHaveLength(4)
+    scheduler.dispose()
+  })
+
   it('部分块晚于“已完成”通知到达时立刻重取，不会永远停在半截', async () => {
     const { client, pending } = fakeClient()
     const scheduler = new SpectralTileScheduler(client, new SpectralTileStore(), target, () => {}, () => {})
@@ -180,6 +203,31 @@ describe('频谱取块钩子', () => {
     expect(hook.result.current.computing).toBe(true)
     act(() => emit({ projectId: 'computing', mode: 'source', revision: 0, coveredFrames: DURATION, durationFrames: DURATION, done: true }))
     expect(hook.result.current.computing).toBeUndefined()
+    hook.unmount()
+  })
+
+  it('换声音后新块逐块到达：还缺的块与算得更少的块先用上一份声音的', async () => {
+    const { client, pending } = fakeClient()
+    const view = { start: 0, end: SR * 10 }
+    const hook = renderHook(({ revision }: { revision: number }) => useAudioEditSpectral(client, 'swap', view, 1000, DURATION, 'edited', revision, 'a.wav'), { initialProps: { revision: 1 } })
+    await act(async () => { for (const item of [...pending]) item.resolve(tileFor(item.request, { revision: 1, columnCount: 4 })); await flush() })
+    await waitFor(() => expect(hook.result.current.status).toBe('ready'))
+    const asked = pending.length
+    const visible = pending[0].request
+    hook.rerender({ revision: 2 })
+    const fresh = pending.slice(asked)
+    expect(fresh.length).toBeGreaterThan(1)
+    // 第一块是刚开始算的总览：零列、没算完
+    const overview = fresh.find(item => item.request.level === spectralOverviewLevel(DURATION))!
+    const tiles = (): NonNullable<typeof hook.result.current.tiles> => hook.result.current.tiles!
+    const shownRevision = (level: number, tile: number): number | undefined => tiles().get(level, tile)?.revision
+    await act(async () => { overview.resolve(tileFor(overview.request, { revision: 2, complete: false, columnCount: 0 })); await flush() })
+    await waitFor(() => expect(tiles().get(overview.request.level, overview.request.tile)).toBeDefined())
+    expect(shownRevision(visible.level, visible.tile)).toBe(1)
+    expect(shownRevision(overview.request.level, overview.request.tile)).toBe(1)
+    await act(async () => { for (const item of fresh) if (item !== overview) item.resolve(tileFor(item.request, { revision: 2, columnCount: 4 })); await flush() })
+    await waitFor(() => expect(shownRevision(visible.level, visible.tile)).toBe(2))
+    expect(shownRevision(overview.request.level, overview.request.tile)).toBe(1)
     hook.unmount()
   })
 

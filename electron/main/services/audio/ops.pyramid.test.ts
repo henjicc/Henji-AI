@@ -179,6 +179,42 @@ describe('whole-source multi-resolution waveform (task 2.3)', () => {
     expect(derived).toEqual(pyramid(await full))
     await analyzer.dispose(); await reference.dispose(); await fs.rm(directory, { recursive: true, force: true })
   })
+  it('浮点 WAV 在来历记录写下之前要过波形，也留第 1 级摘要：第一次改动就能派生', async () => {
+    probeWith([{ codec_type: 'audio', sample_rate: '48000', channels: 2, duration: '10' }], '10')
+    const directory = await cacheDirectory()
+    const frames = 480_000
+    const parentFile = path.join(directory, 'root.wav'), childFile = path.join(directory, 'edited.wav')
+    const values = Float32Array.from({ length: frames * 2 }, (_, index) => Math.cos(index / 37) * 0.4)
+    for (const file of [parentFile, childFile]) { const writer = await createF32WavWriter(file, 48000, 2, frames); await writer.write(values); await writer.close() }
+    const analyzer = createAudioWaveformService({ ffmpegPath: async () => 'mpeg', ffprobePath: async () => 'probe', identity: async (source: string) => ({ path: source, identity: path.basename(source) }), createWorker: worker,
+      diskCache: createContentDiskCache({ directory: () => directory, extension: '.hwpk' }), lineage: {
+        tracked: async () => false,
+        ancestor: async <T>(file: string, accept: (ancestor: string) => Promise<T | undefined>) => {
+          const value = file === childFile ? await accept(parentFile) : undefined
+          return value === undefined ? undefined : { ancestor: parentFile, value, dirty: [[1000, 2000] as [number, number]], hops: 1 }
+        },
+      } })
+    const root = analyzer.extractPyramid({ source: parentFile, channels: 2 })
+    await vi.waitFor(() => expect(children).toHaveLength(1))
+    finish(0, Array.from(values))
+    await root
+    pyramid(await analyzer.extractPyramid({ source: childFile, channels: 2 }))
+    expect(children).toHaveLength(1)
+    await analyzer.dispose(); await fs.rm(directory, { recursive: true, force: true })
+  })
+  it('同一条立体声流同时要单声道与立体声（素材卡片与编辑器）：只解一遍', async () => {
+    probeWith([{ codec_type: 'audio', sample_rate: '48000', channels: 2, duration: '0.01' }])
+    const analyzer = cachedService(null)
+    const source = localMedia('import.wav')
+    const mono = analyzer.extractPyramid({ source, channels: 1 })
+    const stereo = analyzer.extractPyramid({ source, channels: 2 })
+    await vi.waitFor(() => expect(children).toHaveLength(1))
+    finish(0, Array.from({ length: 480 }, () => [0.5, -0.25]).flat())
+    expect(pyramid(await mono).channelCount).toBe(1)
+    expect(pyramid(await stereo).channelCount).toBe(2)
+    expect(children).toHaveLength(1)
+    await analyzer.dispose()
+  })
   it('returns the signed samples of a short detail range and refuses detail ranges above the readback limit', async () => {
     probeWith([{ codec_type: 'audio', sample_rate: '48000', channels: 2 }], '1800')
     const analyzer = cachedService(null)

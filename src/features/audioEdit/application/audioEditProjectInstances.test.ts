@@ -12,7 +12,7 @@ import { AUDIO_EDIT_ENTITY_TYPES } from './audioEditFields'
 import { DocumentSessionRegistry } from '@/features/documents/documentSessionRegistry'
 import { createScriptedPrompter, FakeDocumentCommands, type ScriptedPrompter } from '@/features/documents/documentSessionTestKit'
 import {
-  acceptAudioEditNativeResult, beginAudioEditGesture, lockAudioEditRecording, assignAudioEditSource, createAudioEditDraft, editAudioEditProject, flushAudioEditProject, getAudioEditProjectInstance,
+  acceptAudioEditNativeResult, beginAudioEditGesture, lockAudioEditRecording, assignAudioEditSource, createAudioEditDraft, editAudioEditProject, editAudioEditProjectAsync, flushAudioEditProject, getAudioEditProjectInstance,
   leaveAudioEditProject, loadAudioEditProject, releaseAudioEditProject, resetAudioEditProjectInstancesForTests,
   setAudioEditDocumentRegistryForTests, undoAudioEditProject, withAudioEditProjectOperation, getAudioEditRevision,
 } from './audioEditProjectInstances'
@@ -327,6 +327,32 @@ it('松手时整份校验不通过：回到拖动前、不抛错，之后的拖�
   editAudioEditProject('instance-test', document => ({ ...document, output: { volumeDb: 2 } }))
   next.finish()
   expect(instance.past).toHaveLength(1)
+})
+
+it('用户拖动滑杆时助手写入照样整份校验：不合规的当场退回，合规的照常生效', async () => {
+  const instance = await loadAudioEditProject('instance-test')
+  const gesture = beginAudioEditGesture('instance-test')
+  editAudioEditProject('instance-test', document => ({ ...document, output: { volumeDb: 2 } }))
+  const outOfRange = [{ id: 'g', startFrame: 0, endFrame: 9000, gainDb: -3, fadeInFrames: 0, fadeOutFrames: 0, enabled: true }]
+  await expect(editAudioEditProjectAsync('instance-test', async document => ({ ...document, gainRegions: outOfRange }))).rejects.toThrow()
+  expect(instance.document.gainRegions).toBeUndefined()
+  await editAudioEditProjectAsync('instance-test', async document => ({ ...document, referenceScript: '助手写的' }))
+  expect(instance.document.referenceScript).toBe('助手写的')
+  gesture.finish()
+  expect(instance.document).toMatchObject({ output: { volumeDb: 2 }, referenceScript: '助手写的' })
+})
+
+it('普通撤销交给会话的防抖保存，不每步立即整份写；保存屏障照常写完', async () => {
+  const instance = await loadAudioEditProject('instance-test')
+  editAudioEditProject('instance-test', document => ({ ...document, referenceScript: '一' }))
+  await flushAudioEditProject('instance-test')
+  const writes = commands.writes
+  undoAudioEditProject('instance-test')
+  await Promise.resolve(); await Promise.resolve()
+  expect(commands.writes).toBe(writes)
+  expect(instance.dirty).toBe(true)
+  await flushAudioEditProject('instance-test')
+  expect(stored().referenceScript).toBe('')
 })
 
 it('拖动中组件卸载时取消拖动，之后的编辑恢复整份校验并照常保存', async () => {

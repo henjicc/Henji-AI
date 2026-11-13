@@ -58,6 +58,7 @@ export class NativeCaptureBackend implements ScreenCaptureBackend {
   /** 采集进程报的暂停那一格（它的时钟）；继续时按两格之差接着走，暂停长度不受时钟校准抖动影响。 */
   private heldCellUs: number | undefined
   private unholding: Promise<number> | undefined
+  private lostSinceUs: number | undefined
   private health = { droppedFrames: 0, repeatedFrames: 0, captureDropped: 0 }
   private watchdog: ReturnType<typeof setInterval> | undefined
   private finishing: Promise<void> | undefined
@@ -69,6 +70,8 @@ export class NativeCaptureBackend implements ScreenCaptureBackend {
   stats(): GfxCaptureStats { return { restarts: 0, droppedFrames: this.health.droppedFrames + this.health.captureDropped, duplicatedFrames: this.health.repeatedFrames, encoder: this.encoder } }
   /** 正在录的这一段画面从哪一刻的内容起（开始后是网格起点，继续后是继续生效的那一格），主进程时钟。 */
   capturingSinceUs(): number | undefined { return this.state === 'recording' ? this.sinceUs : undefined }
+  /** 来源此刻丢着（显示器断开、采集连续出错）时，画面是从哪一刻起没有的（主进程时钟；暂停在先就是暂停的那一刻）；录制若就此结束，会话到这一刻为止。 */
+  sourceLostSinceUs(): number | undefined { return this.lostSinceUs === undefined ? undefined : Math.min(this.lostSinceUs, this.state === 'paused' ? this.heldUs ?? this.lostSinceUs : this.lostSinceUs) }
   /** 采集进程给的帧时刻（上屏时刻）→ 这张画面内容的时刻（主进程时钟）。 */
   private contentUs(nativeUs: number): number { return this.deps.client.toMainUs(nativeUs) - this.presentLeadUs }
   /** 反过来：画面内容要切在主进程时钟的这一刻，采集进程该切在哪个帧时刻。 */
@@ -241,7 +244,8 @@ export class NativeCaptureBackend implements ScreenCaptureBackend {
     if (event.event === 'health') this.health = { droppedFrames: event.droppedFrames, repeatedFrames: event.repeatedFrames, captureDropped: event.captureDropped }
     // 采集短暂出错后重新接上、显示器闪断，原生都会发 sourceLost 并很快发 sourceRestored，同一文件续录
     // （那段空档记在画面条目的 gaps 里，不算暂停）。等一会儿还没回来，才按“来源没了”正常停止收尾。
-    if (event.event === 'sourceLost' && !this.lostTimer) this.waitForSource()
+    if (event.event === 'sourceLost' && !this.lostTimer) { this.lostSinceUs = this.contentUs(event.atUs); this.waitForSource() }
+    if (event.event === 'sourceRestored') this.lostSinceUs = undefined
     if (event.event === 'sourceRestored' && this.lostTimer) { clearTimeout(this.lostTimer); this.lostTimer = undefined; logger.info('录制的画面来源已重新接上，继续录', { event: 'recording.capture.native.source_restored' }) }
     if (event.event === 'sourceChanged') logger.warn('录制的显示器换了分辨率，画面等比缩放留黑边', { event: 'recording.capture.native.source_changed', context: { width: event.width, height: event.height, frame: event.frame } })
     if (event.event === 'interrupted') {

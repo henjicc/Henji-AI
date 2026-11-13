@@ -6,7 +6,7 @@ import { createMainLogger } from '../logging'
 import { audioDiskBudgetBytes } from '../audio/cache-budget'
 import { audioFileStamp, findAudioLineageAncestor, writeAudioCacheRecord, type AudioLineageRange } from '../audio/lineage'
 import { removeUnmanagedCachePath } from '../media-recycle/cache-deletion'
-import { requireAudioEditProject } from './project-store'
+import { readAudioEditProjectSnapshot } from './project-store'
 import { audioEditSpectralCacheDirectory, prepareAudioEditAudio, verifyAudioEditSource } from './media'
 import { audioEditSourceContentKey } from './source-identity'
 import { prepareAudioEditRenderSource } from './render'
@@ -19,7 +19,8 @@ import { registerAudioEditTaskController } from './task-store'
 const logger = createMainLogger('main.audio_edit.spectral')
 const requests = new Map<string, AbortController>()
 const listeners = new Set<(event: AudioEditSpectralProgress) => void>()
-interface Background { directory: string; operation: Promise<void>; observers: Map<string, Omit<AudioEditSpectralProgress, 'coveredFrames' | 'durationFrames' | 'done'>> }
+type Observer = Omit<AudioEditSpectralProgress, 'coveredFrames' | 'durationFrames' | 'done'>
+interface Background { directory: string; operation: Promise<void>; observers: Map<string, Observer>; controller: AbortController }
 const backgrounds = new Map<string, Background>()
 interface Immediate { controller: AbortController; operation: Promise<string>; users: number }
 const immediate = new Map<string, Immediate>()
@@ -106,7 +107,7 @@ async function startBackground(cache: string, key: string, input: string, reques
   const observer = { projectId: request.projectId, mode: request.mode, revision }
   const observerKey = JSON.stringify(observer)
   const existing = backgrounds.get(identity)
-  if (existing) { existing.observers.set(observerKey, observer); return existing.directory }
+  if (existing) { existing.observers.set(observerKey, observer); dropSuperseded(identity, observer); return existing.directory }
   let claim = claims.get(identity)
   if (!claim) {
     claim = claimBackground(cache, key, identity, input, request, observer, deriveSource)
@@ -115,7 +116,21 @@ async function startBackground(cache: string, key: string, input: string, reques
   }
   const directory = await claim
   backgrounds.get(identity)?.observers.set(observerKey, observer)
+  dropSuperseded(identity, observer)
   return directory
+}
+
+/**
+ * 同一作品的声音改了（编辑后模式来了更新版本的读取）：旧声音的整段计算不再有人看，从它的关注者里去掉旧版本；
+ * 没有关注者了就停下，让最新声音的计算不排在后面（原生端整段计算串行）。已算的部分与清单留着，撤销回去时从那里续算。
+ */
+function dropSuperseded(identity: string, observer: Observer): void {
+  if (observer.mode !== 'edited') return
+  for (const [other, job] of backgrounds) {
+    if (other === identity) continue
+    for (const [key, seen] of job.observers) if (seen.projectId === observer.projectId && seen.mode === 'edited' && seen.revision < observer.revision) job.observers.delete(key)
+    if (!job.observers.size && !job.controller.signal.aborted) job.controller.abort(new Error('声音已经改了，旧声音的整段频谱不再计算'))
+  }
 }
 
 async function claimBackground(cache: string, key: string, identity: string, input: string, request: AudioEditSpectralTileRequest, observer: { projectId: string; mode: AudioEditSpectralTileRequest['mode']; revision: number }, deriveSource?: DeriveSource): Promise<string> {
@@ -134,10 +149,10 @@ async function claimBackground(cache: string, key: string, identity: string, inp
   // 没有可续算的目录时，先找能派生的上一版：只重算改动波及的列，不整段做 STFT。
   const parent = resumable ? undefined : await deriveSource?.().catch(() => undefined)
   const directory = resumable ?? path.join(cache, `${key}-${randomUUID()}`)
-  const job: Background = { directory, operation: Promise.resolve(), observers: new Map([[JSON.stringify(observer), observer]]) }
+  const controller = new AbortController()
+  const job: Background = { directory, operation: Promise.resolve(), observers: new Map([[JSON.stringify(observer), observer]]), controller }
   backgrounds.set(identity, job)
   const began = performance.now()
-  const controller = new AbortController()
   const release = protectCache(request.projectId, controller)
   let last = -Infinity
   const emit = (progress: { coveredFrames: number; durationFrames: number; done: boolean }): void => {
@@ -178,7 +193,8 @@ async function claimBackground(cache: string, key: string, identity: string, inp
     } catch (error) {
       // 已算完的部分与清单留着，下次读取从清单的覆盖位置续算，不从头再来。
       const coveredFrames = (await readSpectralManifest(directory).catch(() => undefined))?.coveredFrames
-      logger.error('整段音频频谱计算未完成，已算部分保留待续算', { event: 'audio_edit.spectral.failed', error, context: { ...observer, coveredFrames, elapsedMs: performance.now() - began } })
+      if (controller.signal.aborted) logger.info('旧声音的整段频谱已停止，已算部分保留待续算', { event: 'audio_edit.spectral.cancelled', context: { ...observer, coveredFrames, elapsedMs: performance.now() - began } })
+      else logger.error('整段音频频谱计算未完成，已算部分保留待续算', { event: 'audio_edit.spectral.failed', error, context: { ...observer, coveredFrames, elapsedMs: performance.now() - began } })
       throw error
     } finally { backgrounds.delete(identity); release() }
   })()
@@ -250,7 +266,8 @@ export async function getAudioEditSpectralTile(raw: AudioEditSpectralTileRequest
   const release = protectCache(request.projectId, controller)
   const signal = controller.signal
   try {
-    const project = await wait(requireAudioEditProject(request.projectId), signal)
+    // 只读快照：文件没变时是同一个冻结对象，逐块读取不再整份复制作品（一小时口播每次几十毫秒，都在主进程）。
+    const project = await wait(readAudioEditProjectSnapshot(request.projectId), signal)
     await wait(verifyAudioEditSource(project, signal, 'quick'), signal)
     // 只有整文件摘要的素材，频谱键用那个身份对象（已算好的目录继续命中）；带采样指纹的（含重新定位过的旧作品）走内容键，
     // 原文件在未采样位置被改写、修改时间变了也会换键。

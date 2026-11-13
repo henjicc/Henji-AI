@@ -270,8 +270,22 @@ export async function prepareAudioEditAudio(project: AudioEditProjectDocument, s
   const directory = audioEditCacheDirectory(project.id)
   const name = `audio-f32-${await audioEditSourceContentKey(project.source, signal)}-${project.source.audioStreamIndex ?? 0}-${project.source.sampleRate}-${project.source.channels}`
   const transcoded = cachedAudioFile(directory, name, 'wav', temporary => transcodeAudioEditSource(project, temporary, path.join(directory, `${name}.wav`)))
-  transcoded.catch(() => undefined)
+  transcoded.then(file => warmAudioEditRootWaveform(file, project.source.channels), () => undefined)
   return waitUnless(transcoded, signal)
+}
+
+/*
+ * 外部素材的浮点副本是编辑后声音的“上一版”：界面显示的是原文件的波形，副本自己的波形与摘要没人要，
+ * 第一次改动就派生不了、只能整段重算。副本转好后在后台把它的波形算好（只算一次，之后命中缓存），第一次改动起就只重算改动的那几段。
+ */
+const warmedRootWaveforms = new Set<string>()
+function warmAudioEditRootWaveform(file: string, channels: number): void {
+  if (channels > 2 || warmedRootWaveforms.has(file)) return
+  warmedRootWaveforms.add(file)
+  void import('../audio/ops').then(({ extractAudioWaveformPyramid }) => extractAudioWaveformPyramid({ source: file, channels: channels > 1 ? 2 : 1, maxBuckets: 1 })).catch(error => {
+    warmedRootWaveforms.delete(file)
+    logger.warn('浮点副本的波形未能预先算好，第一次改动会整段重算波形', { event: 'audio_edit.source.waveform_warm.failed', error })
+  })
 }
 
 const TRANSCRIPTION_SAMPLE_RATE = 16_000

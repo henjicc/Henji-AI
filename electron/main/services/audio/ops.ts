@@ -88,6 +88,11 @@ interface PyramidCacheHit { from: 'memory' | 'disk'; bytes: number; readMs: numb
 interface LoadedPyramid { data: WaveformPyramidData; channels: number[]; version: string; hit?: PyramidCacheHit }
 
 
+async function isFloatWav(file: string): Promise<boolean> {
+  const reader = await openF32Wav(file).catch(() => null)
+  await reader?.close()
+  return Boolean(reader)
+}
 const isRemote = (source: string): boolean => source.startsWith('http://') || source.startsWith('https://')
 const digest = (parts: unknown[]): string => createHash('sha256').update(JSON.stringify(parts)).digest('hex')
 const selectionLayout = (selection: ChannelSelection): Exclude<FileLayout, 'native'> => selection.audioChannel !== undefined ? `ch${selection.audioChannel}` : selection.channels === 2 ? 'mix2' : 'mix1'
@@ -255,14 +260,21 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
     : dependencies.diskCache
   const memoryBudget = dependencies.pyramidMemoryBytes ?? audioMemoryBudgetBytes(64, 128 * MIB)
   const lineage = dependencies.lineage ?? { tracked: audioLineageTracked, ancestor: findAudioLineageAncestor }
-  const probes = new Map<string, AudioMetadata>()
+  // 进行中的探测也记下：同一素材同时来的请求共用一次 ffprobe（它只要几十毫秒，不随某个调用方取消）。
+  const probes = new Map<string, Promise<AudioMetadata>>()
   async function probe(original: SourceIdentity, signal: AbortSignal, audioStream: number): Promise<AudioMetadata> {
+    signal.throwIfAborted()
     const key = `${original.identity}|${audioStream}`
-    const held = probes.get(key)
-    if (held) { probes.delete(key); probes.set(key, held); return held }
-    const metadata = await probeAudio(await (dependencies.ffprobePath ?? loadFfprobePath)(), original.path, signal, audioStream)
-    probes.set(key, metadata)
+    let held = probes.get(key)
+    if (held) probes.delete(key)
+    else {
+      held = (dependencies.ffprobePath ?? loadFfprobePath)().then(binary => probeAudio(binary, original.path, new AbortController().signal, audioStream))
+      held.catch(() => { if (probes.get(key) === held) probes.delete(key) })
+    }
+    probes.set(key, held)
     if (probes.size > PROBE_CACHE_ENTRIES) probes.delete(probes.keys().next().value as string)
+    const metadata = await held
+    signal.throwIfAborted()
     return metadata
   }
   type MemoryEntry = { data: WaveformPyramidData; bytes: number } | { floats: WaveformPyramidFloats; bytes: number }
@@ -445,7 +457,13 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
       const { data: _data, layout: _layout, ...timing } = hit
       return { data: hit.data, channels: selectPyramidChannels(hit.data, hit.layout, selection), version, hit: { ...timing, lookupMs: performance.now() - startedAt } }
     }
-    const jobKey = JSON.stringify(['pyramid', known?.identity ?? `remote:${createHash('sha256').update(source).digest('hex')}`, selection.audioStream, selectionLayout(selection)])
+    // 不超过两声道的声音流只解一次、存成原声道文件，回答任何声道选择：同一条流的单声道与立体声请求（素材卡片与编辑器同时要）共用一个任务，
+    // 不各解一遍。多声道素材每种选择各是一份文件，按选择分开；探测失败时也按选择分开，由任务自己报错并记日志。
+    const metadata = known ? await probe(known, signal ?? new AbortController().signal, selection.audioStream).catch(() => { signal?.throwIfAborted(); return undefined }) : undefined
+    // 共用任务按第一个调用方的选择解码：不存在的声道先在这里拒绝，不让它的错误传给同时加入的其他请求。
+    if (metadata && selection.audioChannel !== undefined && selection.audioChannel >= metadata.channels) throw new Error(`声音流只有 ${metadata.channels} 个声道。`)
+    const native = Boolean(metadata && metadata.channels <= NATIVE_PYRAMID_CHANNELS)
+    const jobKey = JSON.stringify(['pyramid', known?.identity ?? `remote:${createHash('sha256').update(source).digest('hex')}`, selection.audioStream, native ? 'native' : selectionLayout(selection)])
     const result = await queue.run<PyramidJobResult>(jobKey, jobSignal => withMediaHeavyTask(async () => {
       // A concurrent job for another selection of the same stream may have produced the native file meanwhile.
       const again = known ? await lookup(known.identity, selection) : undefined
@@ -473,7 +491,10 @@ export function createAudioWaveformService(dependencies: AudioWaveformServiceDep
           return undefined
         }) : undefined
         const tracked = Boolean(known && !remote && (derived || await lineage.tracked(original.path)))
-        const decoded = derived ? { data: derived.data, layout: 'native' as const, floats: derived.floats } : await decodePyramid(original, selection, controller.signal, timer.refresh, tracked)
+        // 浮点 WAV 是口播的浮点副本、录音、编辑后声音这一类会被增量派生的文件：不论来历记录写没写好都留第 1 级摘要，
+        // 第一次改动就能从它派生（来历记录可能晚于界面第一次要波形才写下）。
+        const keepFloats = tracked || Boolean(known && !remote && await isFloatWav(original.path))
+        const decoded = derived ? { data: derived.data, layout: 'native' as const, floats: derived.floats } : await decodePyramid(original, selection, controller.signal, timer.refresh, keepFloats)
         const after = await identity(resolved)
         if (after.identity !== original.identity) throw new Error('音频素材在分析期间变化，请重新分析。')
         if (known) await store(known.identity, selection.audioStream, decoded.layout, decoded.data, decoded.floats, requestId)

@@ -45,6 +45,11 @@ export function spectralNeeds(view: WaveformViewport, columns: number, duration:
 
 /** 落盘层读盘很快，可多并发；更细层要 FFT，少并发让可见块先出来。 */
 const DISK_CONCURRENCY = 4, COMPUTE_CONCURRENCY = 3, CANCEL_GRACE_MS = 300, RETRY_DELAY_MS = 600, MAX_FAILURES = 3
+/**
+ * 整段计算进行中，没算完的块每秒最多重取一次：进度每 250 ms 来一条，每条都把可见块和总览块整块重读一遍
+ * （每块几百 KB 到几 MB 过一次进程间通信），会把主进程与界面都占满。算完的那一条进度立刻重取。
+ */
+const PARTIAL_REFRESH_MS = 1000
 
 export class SpectralTileScheduler {
   private needs: SpectralNeed[] = []
@@ -52,6 +57,8 @@ export class SpectralTileScheduler {
   private readonly stale = new Set<string>()
   private readonly failures = new Map<string, number>()
   private readonly retryAt = new Map<string, number>()
+  /** 没算完的块上次开始重取的时刻。 */
+  private readonly refreshedAt = new Map<string, number>()
   /** 最近一次进度：部分块可能晚于进度通知到达，到达时要对照它决定是否立刻重取。 */
   private latest: AudioEditSpectralProgress | undefined
   private timer: ReturnType<typeof setTimeout> | undefined
@@ -96,6 +103,11 @@ export class SpectralTileScheduler {
     if (progress.done || progress.coveredFrames > frontier) this.stale.add(spectralTileKey(tile.level, tile.tile))
   }
 
+  /** 当前要的块是不是都已完整（可见、总览与预取范围）。 */
+  covers(): boolean {
+    return this.needs.every(need => this.store.get(need.level, need.tile)?.complete)
+  }
+
   dispose(): void {
     this.disposed = true
     if (this.timer) clearTimeout(this.timer)
@@ -117,6 +129,8 @@ export class SpectralTileScheduler {
       if (this.inflight.has(key) || (held && (held.complete || !this.stale.has(key))) || (this.failures.get(key) ?? 0) >= MAX_FAILURES) continue
       const retry = this.retryAt.get(key)
       if (retry !== undefined && retry > now) { wake = Math.min(wake, retry); continue }
+      const refresh = held && !this.latest?.done ? (this.refreshedAt.get(key) ?? -Infinity) + PARTIAL_REFRESH_MS : -Infinity
+      if (refresh > now) { wake = Math.min(wake, refresh); continue }
       const persisted = need.level >= SPECTRAL_PERSISTED_MIN_LEVEL
       if (persisted ? disk >= DISK_CONCURRENCY : compute >= COMPUTE_CONCURRENCY) continue
       persisted ? disk++ : compute++
@@ -132,6 +146,7 @@ export class SpectralTileScheduler {
     const requestId = `spectral-${crypto.randomUUID()}`
     this.inflight.set(key, { requestId, persisted })
     this.stale.delete(key)
+    if (this.store.get(need.level, need.tile)) this.refreshedAt.set(key, this.now())
     void this.client.fetch({ projectId: this.target.projectId, mode: this.target.mode, level: need.level, tile: need.tile, requestId }).then(tile => {
       if (this.disposed || this.inflight.get(key)?.requestId !== requestId) return
       if (tile.mode !== this.target.mode || (tile.mode === 'edited' && tile.revision < this.target.revision)) {
@@ -183,6 +198,7 @@ export function useAudioEditSpectral(client: SpectralTileClient, projectId: stri
   const target = useMemo(() => ({ projectId, mode, revision: effectiveRevision }), [projectId, mode, effectiveRevision])
   const retainKey = JSON.stringify([projectId, mode, sourceKey, mode === 'edited' ? contentKey || `revision:${effectiveRevision}` : ''])
   const shown = useRef<{ store: SpectralTileStore; projectId: string; mode: 'source' | 'edited'; sourceKey: string } | null>(null)
+  const previous = useRef<SpectralTileStore | null>(null)
   // 调度器随挂载创建、随卸载销毁：开发模式会挂载两次，不能把已销毁的实例留给第二次挂载。
   const [binding, setBinding] = useState<{ scheduler: SpectralTileScheduler; sourceKey: string; retainKey: string } | null>(null)
   // 重新打开时第一帧（调度器还没接上）就画留下的块，不闪一下“正在读取”。
@@ -216,15 +232,28 @@ export function useAudioEditSpectral(client: SpectralTileClient, projectId: stri
   }, [scheduler, view.start, view.end, columns, duration]) // eslint-disable-line react-hooks/exhaustive-deps -- view 只用起止
 
   // 同一作品同一模式换版本（或重试）时，新块到达前继续显示旧图；换作品或换模式不沿用。
+  // 新块开始到达后，新声音还缺的块（或比旧块算得少的块）逐块回落到上一份声音的块，不因第一块是刚开始算的总览就整片变空；
+  // 新声音要的块都齐了就放掉上一份。
   const current = scheduler?.store
   const held = shown.current
-  const display = current && current.version > 0 ? current : held && held.projectId === projectId && held.mode === mode && held.sourceKey === sourceKey ? held.store : null
-  if (current && current.version > 0) shown.current = { store: current, projectId, mode, sourceKey }
+  const sameTarget = (entry: typeof held): entry is NonNullable<typeof held> => Boolean(entry && entry.projectId === projectId && entry.mode === mode && entry.sourceKey === sourceKey)
+  const display = current && current.version > 0 ? current : sameTarget(held) ? held.store : null
+  if (current && current.version > 0) {
+    if (held && held.store !== current) previous.current = sameTarget(held) ? held.store : null
+    shown.current = { store: current, projectId, mode, sourceKey }
+  }
+  if (!sameTarget(shown.current) || (display === current && scheduler?.covers())) previous.current = null
+  const fallback = display === current ? previous.current : null
   const displayVersion = display?.version ?? 0
   const tiles = useMemo<SpectralTileSet | undefined>(() => display && displayVersion > 0 ? {
     sampleRate: display.sampleRate, channels: display.channels, durationFrames: display.durationFrames,
-    version: displayVersion, get: (level, tile) => display.get(level, tile),
-  } : undefined, [display, displayVersion, version]) // eslint-disable-line react-hooks/exhaustive-deps -- version 驱动快照刷新
+    version: displayVersion, get: (level, tile) => {
+      const own = display.get(level, tile)
+      if (!fallback || own?.complete) return own
+      const old = fallback.get(level, tile)
+      return old && (!own || old.columnCount > own.columnCount) ? old : own
+    },
+  } : undefined, [display, displayVersion, version, fallback]) // eslint-disable-line react-hooks/exhaustive-deps -- version 驱动快照刷新
 
   return {
     ...(tiles ? { tiles } : {}),

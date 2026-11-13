@@ -345,7 +345,9 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
           },
           mark: async () => undefined, // Event/marker ownership is task 1.4; no duplicate event log here.
           ...(document ? {
-            began: () => document!.range('startUs', now() - session.originUs), ending: () => failing(document!.range('endUs', now() - session.originUs)),
+            began: () => document!.range('startUs', now() - session.originUs),
+            // 来源丢了没回来而结束（或等它回来时用户按了停止）：会话到画面没有的那一刻为止，不把等它的那几秒算进去。
+            ending: () => failing(document!.range('endUs', (framed?.sourceLostSinceUs() ?? now()) - session.originUs)),
             pausing: () => failing(document!.pause((heldUs ?? now()) - session.originUs)),
             resumed: () => { heldUs = undefined; return failing(document!.resume((framed?.capturingSinceUs() ?? now()) - session.originUs)) },
           } : {}),

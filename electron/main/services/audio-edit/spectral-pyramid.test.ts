@@ -4,9 +4,9 @@ import path from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { spectralColumnCount, spectralHighBins, spectralLowBins } from '../../../../src/core/audioEdit/spectralPyramid'
 import { audioRenderKey } from './render-cache'
-const state = vi.hoisted(() => ({ directory: '', digest: 'one', edited: 'repair.wav', calls: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), hold: false, holdBuild: false, failBuild: false, failDerive: false, frames: 9000, capabilities: { deriveGroupLevel: 9 } as { deriveGroupLevel?: number; deriveLengthChange?: boolean }, decoded: 'decoded.wav', active: new Set<string>(), releaseBuild: undefined as (() => void) | undefined, release: undefined as (() => void) | undefined }))
+const state = vi.hoisted(() => ({ directory: '', digest: 'one', edited: 'repair.wav', calls: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), hold: false, holdBuild: false, failBuild: false, failDerive: false, frames: 9000, revision: 7, capabilities: { deriveGroupLevel: 9 } as { deriveGroupLevel?: number; deriveLengthChange?: boolean }, decoded: 'decoded.wav', active: new Set<string>(), releaseBuild: undefined as (() => void) | undefined, release: undefined as (() => void) | undefined }))
 vi.mock('./render', () => ({ prepareAudioEditRenderSource: async () => state.edited }))
-vi.mock('./project-store', () => ({ requireAudioEditProject: async (id: string) => ({ id, revision: 7, source: { sourcePath: 'source', sampleRate: 48000, channels: 2, durationFrames: state.frames } }) }))
+vi.mock('./project-store', () => ({ readAudioEditProjectSnapshot: async (id: string) => ({ id, revision: state.revision, source: { sourcePath: 'source', sampleRate: 48000, channels: 2, durationFrames: state.frames } }) }))
 vi.mock('./media', () => ({ audioEditSpectralCacheDirectory: () => state.directory, verifyAudioEditSource: async () => undefined, prepareAudioEditAudio: async () => state.decoded }))
 vi.mock('./source-identity', () => ({ audioEditSourceContentKey: async () => state.digest }))
 vi.mock('../logging', () => ({ createMainLogger: () => ({ info: state.info, warn: state.warn, error: state.error }) }))
@@ -23,7 +23,7 @@ vi.mock('./spectral-worker-client', () => ({ spectralWorker: { capabilities: asy
   }
   if (command.type === 'spectral_build') {
     await fs.mkdir(command.output_directory, { recursive: true })
-    if (state.holdBuild) await new Promise<void>(resolve => { state.releaseBuild = resolve })
+    if (state.holdBuild) await new Promise<void>((resolve, reject) => { state.releaseBuild = resolve; signal?.addEventListener('abort', () => reject(new Error('已取消')), { once: true }) })
     if (state.failBuild) {
       // 失败前已算完一部分：清单记录覆盖位置，未完成。
       await fs.writeFile(path.join(command.output_directory, 'manifest.json'), JSON.stringify({ format: 'spectral-pyramid-v1', sampleRate: 48000, channels: 2, durationFrames: state.frames, lowBins: 205, highBins: 1025,
@@ -53,10 +53,10 @@ vi.mock('./spectral-worker-client', () => ({ spectralWorker: { capabilities: asy
 import { getAudioEditSpectralTile, cancelAudioEditSpectralTile, subscribeAudioEditSpectralProgress } from './spectral-pyramid'
 import { recordAudioLineage } from '../audio/lineage'
 const request = { projectId: 'p', mode: 'source' as const, level: 0, tile: 0, requestId: 'one' }
-beforeEach(async () => { state.directory = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-pyramid-service-')); state.digest = 'one'; state.edited = 'repair.wav'; state.hold = false; state.holdBuild = false; state.failBuild = false; state.failDerive = false; state.frames = 9000; state.capabilities = { deriveGroupLevel: 9 }; state.decoded = 'decoded.wav'; state.release = undefined; state.releaseBuild = undefined; vi.clearAllMocks() })
+beforeEach(async () => { state.directory = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-pyramid-service-')); state.digest = 'one'; state.edited = 'repair.wav'; state.hold = false; state.holdBuild = false; state.failBuild = false; state.failDerive = false; state.frames = 9000; state.revision = 7; state.capabilities = { deriveGroupLevel: 9 }; state.decoded = 'decoded.wav'; state.release = undefined; state.releaseBuild = undefined; vi.clearAllMocks() })
 const logged = (event: string): Array<Record<string, unknown>> => state.info.mock.calls.filter(call => call[1].event === event).map(call => call[1].context)
 afterEach(async () => {
-  await vi.waitFor(() => expect(logged('audio_edit.spectral.completed').length + state.error.mock.calls.length).toBe(logged('audio_edit.spectral.start').length))
+  await vi.waitFor(() => expect(logged('audio_edit.spectral.completed').length + logged('audio_edit.spectral.cancelled').length + state.error.mock.calls.length).toBe(logged('audio_edit.spectral.start').length))
   await vi.waitFor(() => expect(state.active.size).toBe(0))
   await fs.rm(state.directory, { recursive: true, force: true })
 })
@@ -118,6 +118,30 @@ it('取消单个共享读者不影响其他读者，最后一个取消会通知 
   const lastSignal = state.calls.mock.calls.filter(call => call[0].type === 'spectral_tile').at(-1)?.[1] as AbortSignal
   expect(lastSignal.aborted).toBe(true)
   await vi.waitFor(async () => expect((await fs.readdir(state.directory)).filter(name => name.endsWith('.rg'))).toHaveLength(1))
+})
+it('声音改了以后旧声音的整段计算没人看就停下，已算部分留着；新声音照常算完', async () => {
+  state.holdBuild = true
+  state.edited = 'first.wav'
+  await getAudioEditSpectralTile({ ...request, mode: 'edited', level: 3 })
+  await vi.waitFor(() => expect(state.releaseBuild).toBeTypeOf('function'))
+  const oldSignal = state.calls.mock.calls.find(call => call[0].type === 'spectral_build')?.[1] as AbortSignal
+  expect(oldSignal.aborted).toBe(false)
+  state.holdBuild = false; state.edited = 'second.wav'; state.revision = 8
+  await getAudioEditSpectralTile({ ...request, mode: 'edited', level: 3, requestId: 'two' })
+  expect(oldSignal.aborted).toBe(true)
+  await vi.waitFor(() => expect(logged('audio_edit.spectral.cancelled')).toHaveLength(1))
+  await vi.waitFor(() => expect(logged('audio_edit.spectral.completed')).toEqual([expect.objectContaining({ mode: 'edited', revision: 8 })]))
+  expect(state.error).not.toHaveBeenCalled()
+})
+it('原始模式的整段计算不因编辑后模式换版本而停下', async () => {
+  state.holdBuild = true
+  await getAudioEditSpectralTile({ ...request, level: 3 })
+  await vi.waitFor(() => expect(state.releaseBuild).toBeTypeOf('function'))
+  const sourceSignal = state.calls.mock.calls.find(call => call[0].type === 'spectral_build')?.[1] as AbortSignal
+  state.holdBuild = false; state.revision = 8
+  await getAudioEditSpectralTile({ ...request, mode: 'edited', level: 3, requestId: 'two' })
+  expect(sourceSignal.aborted).toBe(false)
+  state.releaseBuild?.()
 })
 it('请求校验在任何文件或进程操作前拒绝非法输入', async () => {
   for (const invalid of [{ level: 16 }, { level: -6 }, { level: 0.5 }, { tile: -1 }, { mode: 'other' }, { requestId: '' }, { extra: true }]) {
