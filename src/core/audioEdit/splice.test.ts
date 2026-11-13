@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { audioEditOutputSeconds, audioEditPlacementFrames, audioEditUntranscribedBlocks, isAudioEditUntranscribedBlock, spliceAudioEditProject, spliceAudioRanges } from './splice'
+import { audioEditOutputSeconds, audioEditPlacementFrames, audioEditUntranscribedBlocks, isAudioEditUntranscribedBlock, replaceAudioEditPlaceholders, spliceAudioEditProject, spliceAudioRanges } from './splice'
 import { audioEditProjectSchema } from './schema'
 import { emptyAudioEditSource } from './documentContent'
 import type { AudioEditProjectDocument } from './types'
@@ -86,5 +86,28 @@ describe('插入位置的两种坐标', () => {
     expect(audioEditUntranscribedBlocks(next).map(block => [block.startFrame, block.endFrame])).toEqual([[1000, 1300]])
     const filled = { ...audioEditUntranscribedBlocks(next)[0], id: `${audioEditUntranscribedBlocks(next)[0].id}:0` }
     expect(isAudioEditUntranscribedBlock(filled)).toBe(false)
+  })
+  it('起点终点给同一个剪后时刻、正好落在剪切处时只插入不覆盖，不报终点早于起点', () => {
+    expect(audioEditPlacementFrames(cutProject(), { positionSeconds: 0.2, replaceUntilSeconds: 0.2 }, 0)).toEqual([400, 400])
+  })
+  it('插在还没补转写的插入段中间：左右两半各留一个占位；手填过字的占位不再补识别、照常进字幕', () => {
+    const p = { ...project(), transcript: [{ id: 'transcript-0', text: '你好', startFrame: 0, endFrame: 1000, included: true, locked: false, granularity: 'word' as const }] }
+    const once = { ...spliceAudioEditProject(p, resultSource(1300), 1000, 1000, 300), revision: 1 }
+    const twice = spliceAudioEditProject(once, { ...resultSource(1400), durationFrames: 1400 }, 1100, 1100, 100)
+    expect(audioEditUntranscribedBlocks(twice).map(block => [block.startFrame, block.endFrame])).toEqual([[1000, 1100], [1100, 1200], [1200, 1400]])
+    expect(new Set(twice.transcript.map(block => block.id)).size).toBe(twice.transcript.length)
+    const typed = { ...twice, transcript: twice.transcript.map(block => block.startFrame === 1000 ? { ...block, text: '补上的字' } : block) }
+    expect(audioEditUntranscribedBlocks(typed).map(block => block.startFrame)).toEqual([1100, 1200])
+  })
+  it('补转写换掉占位：原文基线补上新词；已整理过字幕分段的口播给新词断好句', () => {
+    const p = { ...project(), transcript: [{ id: 'transcript-0', text: '你好。', startFrame: 0, endFrame: 1000, included: true, locked: false, granularity: 'word' as const, captionBreakAfter: true }] }
+    p.editBaseline = { kind: 'original', transcript: [{ ...p.transcript[0], captionBreakAfter: undefined }], suggestions: [] }
+    const inserted = spliceAudioEditProject(p, resultSource(1300), 1000, 1000, 300)
+    const placeholder = audioEditUntranscribedBlocks(inserted)[0]
+    const words = [{ id: `${placeholder.id}:0`, text: '补录', startFrame: 1000, endFrame: 1100, included: true, locked: false, granularity: 'word' as const }, { id: `${placeholder.id}:1`, text: '一句。', startFrame: 1100, endFrame: 1300, included: true, locked: false, granularity: 'word' as const }]
+    const next = replaceAudioEditPlaceholders(inserted, new Set([placeholder.id]), words, [])
+    expect(next.transcript.map(block => [block.text, block.captionBreakAfter])).toEqual([['你好。', true], ['补录', false], ['一句。', true]])
+    expect(next.editBaseline?.transcript.map(block => block.text)).toEqual(['你好。', '补录', '一句。'])
+    expect(audioEditProjectSchema.safeParse(next).success).toBe(true)
   })
 })

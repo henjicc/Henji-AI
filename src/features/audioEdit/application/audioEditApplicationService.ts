@@ -63,6 +63,16 @@ const wordCount = (document: AudioEditProjectDocument): number => document.trans
 const RETAKE_MIN_WORDS = 4
 
 /**
+ * 删呼吸、清字间气口要靠逐词时间分清“字间”与“字里”；还没逐词转写的插入段整段当一个词，分不清，先不碰，补识别后再处理。
+ */
+function breathsOutsideInsertions(document: AudioEditProjectDocument, breaths: AudioBreath[] | undefined): AudioBreath[] | undefined {
+  const rate = document.source.sampleRate
+  const insertions = document.transcript.filter(isAudioEditUntranscribedBlock)
+  if (!breaths || !insertions.length) return breaths
+  return breaths.filter(breath => !insertions.some(block => breath.startMs * rate / 1000 < block.endFrame && breath.endMs * rate / 1000 > block.startFrame))
+}
+
+/**
  * 呼吸声（本地模型，第一次用到时下载）。required=false 时取不到就返回空：去重念、快速处理照常进行，只是不拿呼吸当气口。
  */
 async function detectProjectBreaths(document: AudioEditProjectDocument, required: boolean, requestId: string): Promise<AudioBreath[] | undefined> {
@@ -135,7 +145,7 @@ export async function compressAudioEditSilence(projectId: string, range?: AudioE
     const before = editedDurationFrames(buildProjectAudioEditTimeline(instance.document))
     // 快速处理（连带语气词）在有逐词转写时先去掉重念，再压缩停顿、清理语气词、处理呼吸声，整批一个撤销步骤
     const retakes = includeFillers && hasWordTranscript(instance.document) && wordCount(instance.document) >= RETAKE_MIN_WORDS ? await detectRetakeSuggestions(instance, range, requestId) : []
-    const breaths = includeFillers && instance.document.transcript.length ? await detectProjectBreaths(instance.document, false, requestId) : undefined
+    const breaths = includeFillers && instance.document.transcript.length ? breathsOutsideInsertions(instance.document, await detectProjectBreaths(instance.document, false, requestId)) : undefined
     let breathCounts: Record<'deleted' | 'attenuated' | 'muted' | 'kept', number> | undefined
     let gapCount: number | undefined
     let fillerCount = 0
@@ -193,7 +203,7 @@ export async function processProjectAudioEditBreaths(projectId: string, policy: 
   logger.info('audio_edit.breaths.start', { requestId, context: { projectId, policy, range: Boolean(range) } })
   try {
     const result = await withAudioEditProjectOperation(projectId, async (instance, commit) => {
-      const breaths = (await detectProjectBreaths(instance.document, true, requestId))!
+      const breaths = breathsOutsideInsertions(instance.document, await detectProjectBreaths(instance.document, true, requestId))!
       const energy = await detectQuietRanges(instance.document, requestId)
       const before = editedDurationFrames(buildProjectAudioEditTimeline(instance.document))
       let counts = { deleted: 0, attenuated: 0, muted: 0, kept: 0 }

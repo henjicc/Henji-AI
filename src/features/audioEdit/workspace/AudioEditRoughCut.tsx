@@ -99,7 +99,8 @@ function RoughCutPanel({ onShowClues }: { onShowClues: () => void }): React.Reac
 function CluesEntry({ onOpen }: { onOpen: () => void }): React.ReactElement {
   const { project } = useAudioEditWorkspace()
   const decide = countAudioEditClues(project).decide
-  return <UiOptionButton variant="menu" size="md" className="w-full justify-between gap-2" onClick={onOpen}>
+  // 与上下的折叠行同一套外扩与内边距（-mx-2 px-2），名称和它们左对齐
+  return <UiOptionButton variant="menu" size="md" className="-mx-2 w-[calc(100%+1rem)] justify-between gap-2 !px-2" onClick={onOpen}>
     <span className="min-w-0 truncate">{decide ? `${decide} 处待定 · 查看线索` : '查看线索'}</span>
     <ChevronRight size={UI_ICON_SIZE.sm} aria-hidden="true" className="shrink-0 text-text3" />
   </UiOptionButton>

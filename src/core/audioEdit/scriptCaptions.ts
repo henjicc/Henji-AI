@@ -36,15 +36,27 @@ function units(chars: readonly string[]): string[] {
  * 不剥的话标题字会混进对稿：字幕的“稿子原文”带上标题，标题字还会和念的字按读音对上。
  */
 export function audioEditScriptPlainText(script: string): string {
-  return script.split('\n').map((line) => {
-    if (/^\s{0,3}#{1,6}(\s|$)/u.test(line) || /^\s{0,3}([-*_])(\s*\1){2,}\s*$/u.test(line)) return ''
+  let previous: 'blank' | 'list' | 'text' = 'blank'
+  return script.split('\n').map((raw) => {
+    if (/^\s{0,3}#{1,6}(\s|$)/u.test(raw) || /^\s{0,3}([-*_])(\s*\1){2,}\s*$/u.test(raw)) { previous = 'blank'; return '' }
+    let line = raw.replace(/^\s{0,3}(>\s?)+/u, '')
+    const bullet = /^\s*[-*+]\s+/u.exec(line)
+    // 同 CommonMark：有序列表打断正文段落时只能从 1 开始，所以正文下一行开头的“5. ”是接着念的数字，不是列表符号
+    const ordered = /^\s*(\d+)[.)]\s+/u.exec(line)
+    const marker = bullet ?? (ordered && (previous !== 'text' || ordered[1] === '1') ? ordered : null)
+    if (marker) line = line.slice(marker[0].length).replace(/^\[[ xX]\]\s+/u, '')
+    // 列表项下缩进的续行仍属于这个列表，后面的“2. ”照样是列表符号
+    const continuation = !marker && previous === 'list' && /^\s+\S/u.test(line)
+    previous = marker || continuation ? 'list' : line.trim() ? 'text' : 'blank'
     return line
-      .replace(/^\s{0,3}(>\s?)+/u, '')
-      .replace(/^\s*([-*+]|\d+[.)])\s+(\[[ xX]\]\s+)?/u, '')
-      .replace(/!\[([^\]]*)\]\([^)]*\)/gu, '')
-      .replace(/\[([^\]]+)\]\([^)]*\)/gu, '$1')
+      // 链接、图片的地址像网址或路径（含 / . : #，不含空白）；“[注](见下)”这类括号里是正文，原样保留
+      .replace(/!\[([^\]]*)\]\([^\s()]*[/.:#][^\s()]*\)/gu, '')
+      .replace(/\[([^\]]+)\]\([^\s()]*[/.:#][^\s()]*\)/gu, '$1')
       .replace(/`([^`]*)`/gu, '$1')
-      .replace(/(\*{1,3}|_{2,3}|~~)(?=\S)([^\n]*?\S)\1/gu, '$2')
+      // 一对星号外侧两边都贴着数字是算式（5*3 和 2*4），下划线贴着英文字母或数字是标识（a_b_c），都不是强调；一边贴字（2025**年**、AI**原生**）照常剥
+      .replace(/(?<!\*)(\*{1,3})(?=\S)([^\n]*?\S)\1(?!\*)/gu, (match: string, _stars: string, inner: string, at: number, whole: string) =>
+        /[0-9]/.test(whole[at - 1] ?? '') && /[0-9]/.test(whole[at + match.length] ?? '') ? match : inner)
+      .replace(/(?<![0-9A-Za-z])(_{2,3}|~~)(?=\S)([^\n]*?\S)\1(?![0-9A-Za-z])/gu, '$2')
       .replace(/\\([\\`*_{}[\]()#+\-.!|~<>])/gu, '$1')
   }).join('\n')
 }

@@ -12,8 +12,8 @@ description: 剪口播时使用：把录音全自动粗剪成可继续修改的�
 ## 一、先让算法打底
 
 1. **口播文档**：已有口播就用它（`list_documents`，kind=audio_edit）。只有文件时先 `create_document`（kind=audio_edit；用户在某个项目里工作就传 projectId），再 `import_audio_edit_source` 导入本机音频或视频。默认引用原文件，不复制。操作报找不到原素材时读 `audio_edit.document.source_problem`：原文件只是被移动或改名，把新位置写进 `audio_edit.document.source_path` 重新定位（应用核对是同一份内容）；内容已改变就不能沿用这份口播，告诉用户。
-2. **参考稿（可选）**：用户给了口播稿就写入 `audio_edit.document.reference_script`。稿子只用来避免误删稿子里本来就有的重复、辅助校对近音字，不能覆盖识别出的原话；录音时改过稿也没关系。
-3. **转写**：`transcribe_audio_edit`（modelId 通常省略，自动选合适的模型）。按时长计费，走应用的付费授权；调用会等到识别完成，等不到时用 `query_audio_edit_tasks` 查，不重复提交。失败后能不能重新提交看最近一次转写的 resubmission（allowed / resume / blocked / running_elsewhere），不要从报错文字猜。已有转写不再整份识别；插入或补录进来、文字显示为“（需要重新转写）”的段，再调一次 `transcribe_audio_edit` 只补识别这些段（只按这些段的时长计费），回执的 undoRef 可撤回补之前。插入音频的位置 positionSeconds 是剪后作品时间（与 `audio_edit.caption` 的 start_ms 同一坐标）；要按词块定位就给 positionSourceFrame（与 transcript_block 的 start_frame 同一坐标）。
+2. **参考稿（可选）**：用户给了口播稿就写入 `audio_edit.document.reference_script`。稿子只用来避免误删稿子里本来就有的重复、辅助校对同音字与写法；念的和稿子不是同一个词时（念 HTTP、稿子写 HTTPS）以念的为准，不拿稿子改原话。录音时改过稿也没关系。
+3. **转写**：`transcribe_audio_edit`（modelId 通常省略，自动选合适的模型）。按时长计费，走应用的付费授权；调用会等到识别完成，等不到时用 `query_audio_edit_tasks` 查，不重复提交。能不能重新提交看最近一次转写的 resubmission（completed 已转写完 / running 正在转写 / allowed / resume / blocked / running_elsewhere），不要从报错文字猜。已有转写不再整份识别；插入或补录进来、文字显示为“（需要重新转写）”的段，再调一次 `transcribe_audio_edit` 只补识别这些段（只按这些段的时长计费），回执的 undoRef 可撤回补之前。插入音频的位置 positionSeconds 是剪后作品时间（与 `audio_edit.caption` 的 start_ms 同一坐标）；要按词块定位就给 positionSourceFrame（与 transcript_block 的 start_frame 同一坐标）。
 4. **去掉重念**：`clean_audio_edit_retakes`。同一内容念了几遍只留最后一遍；呼吸也算气口，原切点连读时会在两遍对应位置的明显气口换遍拼接，贴着念坏那遍的一两个字一起删。拿不准的（换了说法又没有稿子佐证、短的原样重复、像排比的两句、删完后保留内容里前后两段开头仍相同）不删，列为待确认的剪辑线索；每条线索（包括已经自动删掉的）都带着原因和几种做法，第二步先裁决这份清单。
 5. **呼吸声**：`process_audio_edit_breaths`（本机模型，第一次用时下载约 13 MB）。默认（快节奏）去掉呼吸，并按声音电平把字与字之间残留的气声、呼吸尾巴整段静音、再从中间删去多余部分（句间与接缝留约 0.2 秒、句中约 0.12 秒；标识以 `gap:` 开头的静音与删除剪切），和字连着的只减弱；用户说过的节奏偏好优先（偏自然就把句中的改成减弱或保留）。用户说先不处理呼吸时跳过。
 6. **停顿**：`compress_audio_edit_silence` 按实际声音压缩停顿、保留自然气口。不要把词间时间差当作停顿。
@@ -39,7 +39,7 @@ description: 剪口播时使用：把录音全自动粗剪成可继续修改的�
 3. **逐处看呼吸与气口**：按 context 与前后文字判断。去掉一口气后前后挨得太紧、句中这口气承担了强调或停顿的语气、或删掉后前后语速突变时，改成减弱或保留（写 `audio_edit.breath.handling`）。段落转折、需要停一下的地方，把对应 `gap:` 删除剪切缩短或停用（逐条写 `audio_edit.cut.start_frame`、`audio_edit.cut.end_frame` 或 `audio_edit.cut.enabled`），让静音停顿长一点；不要恢复成带气声的原声。
 4. **语气词按位置判断**：接在句尾、和前一个字连着念的“啊、呢、吧、哦”带着语气，通常保留（删了还容易切到字尾）；单独成词、在句首或重念前的“哎、诶、嗯、呃、啊”多是起头习惯，没用就删。起作用的“就是、那个”保留。用户说先不删语气词时不删。
 5. **字幕**：`format_audio_edit_subtitles` 整理分段（有参考稿时按稿子的逗号、句号等断句，一行一句）。然后逐段核对成片字幕 `audio_edit.caption`：用 list_application_entities 按 document_id 与 script_match=different、not_in_script 筛选，带上 text、script_text、spoken_text、original_text 一起读回。
-   - 校对既不完全照稿也不完全照识别：实际念的与稿子不同（改词、加词、少念）按念的写；同音错字、产品名和专有名词、英文大小写、数字按稿子写；拿不准就保留识别，并在汇报里点名。
+   - 校对既不完全照稿也不完全照识别：实际念的与稿子不同（改词、加词、少念，包括 HTTP 与 HTTPS 这类多一个字母就是另一个词的）按念的写；同一个词的写法（同音错字、产品名和专有名词的写法、英文大小写、阿拉伯数字还是汉字）按稿子写；拿不准就保留识别，并在汇报里点名。
    - 改字写 `audio_edit.caption.text`（会逐字写回词块，词时间与声音不变）；断句不对时改最后一个词块（block_ids 末项）的 `audio_edit.transcript_block.caption_break_after`。
    - 排版不用手动做：中英文与数字之间的空格、行尾逗号句号、单独的“哎”“嗯”这类叹词都按规则自动处理，间隔短于 0.5 秒的两条字幕自动接上。
 

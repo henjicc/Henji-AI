@@ -1,5 +1,7 @@
 import { z } from 'zod'
-import type { AudioEditProjectDocument, AudioEditRange, AudioEditSourceMetadata, AudioEditTranscriptBlock } from './types'
+import type { AudioEditProjectDocument, AudioEditRange, AudioEditSourceMetadata, AudioEditSuggestion, AudioEditTranscriptBlock } from './types'
+import { createAudioEditBaseline } from './baseline'
+import { buildAudioEditCaptionGroups } from './captions'
 import { buildProjectAudioEditTimeline, editedDurationFrames, nextRetainedSourceFrame, outputFrameToSourceFrame, sourceFrameToOutputFrame } from './timeline'
 
 export const audioEditSpliceSchema = z.object({
@@ -44,9 +46,36 @@ export function isAudioEditUntranscribedBlock(block: Pick<AudioEditTranscriptBlo
   return block.granularity === 'segment' && UNTRANSCRIBED_ID.test(block.id)
 }
 
-/** 还要补转写的插入段：保留着的占位词块（删掉的那段声音已经剪掉，不必再识别）。 */
+/** 占位词块还显示着占位文字：用户手动填过字的占位当作已有文字，不再补识别、也照常进字幕。 */
+export function isAudioEditPendingTranscriptionBlock(block: Pick<AudioEditTranscriptBlock, 'id' | 'granularity' | 'text'>): boolean {
+  return isAudioEditUntranscribedBlock(block) && block.text === AUDIO_EDIT_UNTRANSCRIBED_TEXT
+}
+
+/** 还要补转写的插入段：保留着、仍是占位文字的占位词块（删掉的那段声音已经剪掉，不必再识别）。 */
 export function audioEditUntranscribedBlocks(project: Pick<AudioEditProjectDocument, 'transcript'>): AudioEditTranscriptBlock[] {
-  return project.transcript.filter((block) => (block.included || block.locked) && isAudioEditUntranscribedBlock(block) && block.endFrame > block.startFrame)
+  return project.transcript.filter((block) => (block.included || block.locked) && isAudioEditPendingTranscriptionBlock(block) && block.endFrame > block.startFrame)
+}
+
+/**
+ * 补转写得到的词块换掉占位：原文基线里补上这些词（插入时基线里没有这段，恢复原文后不能丢），
+ * 已整理过字幕分段的口播给新词块按停顿与长度断好句，不动其余已调好的分段。
+ */
+export function replaceAudioEditPlaceholders(project: AudioEditProjectDocument, replacedIds: ReadonlySet<string>, filled: readonly AudioEditTranscriptBlock[], suggestions: readonly AudioEditSuggestion[]): AudioEditProjectDocument {
+  const formatted = project.transcript.some(block => block.captionBreakAfter !== undefined)
+  const ends = formatted ? new Set(buildAudioEditCaptionGroups(filled, project.source.sampleRate).map(group => group.blocks.at(-1)!.id)) : null
+  const blocks = ends ? filled.map(block => ({ ...block, captionBreakAfter: ends.has(block.id) })) : [...filled]
+  const transcript = [...project.transcript.filter(item => !replacedIds.has(item.id)), ...blocks].sort((a, b) => a.startFrame - b.startFrame)
+  const merged = [...project.suggestions.filter(item => !item.blockIds.some(id => replacedIds.has(id))), ...suggestions]
+  if (!project.editBaseline) return { ...project, transcript, suggestions: merged }
+  const added = createAudioEditBaseline({ ...project, transcript: [...filled], suggestions: [...suggestions] }, project.editBaseline.kind)
+  return {
+    ...project, transcript, suggestions: merged,
+    editBaseline: {
+      ...project.editBaseline,
+      transcript: [...project.editBaseline.transcript.filter(item => !replacedIds.has(item.id)), ...added.transcript].sort((a, b) => a.startFrame - b.startFrame),
+      suggestions: [...project.editBaseline.suggestions, ...added.suggestions],
+    },
+  }
 }
 
 /**
@@ -83,8 +112,10 @@ export function audioEditPlacementFrames(project: TimelineProject, input: AudioE
   }
   const start = input.positionSourceFrame !== undefined ? fromFrame('positionSourceFrame', input.positionSourceFrame)
     : input.positionSeconds !== undefined ? fromSeconds('positionSeconds', input.positionSeconds, false) : fallback
+  // 起点终点给同一个剪后时刻就是只插入不覆盖：落在剪切处时两端分属前后两段，不能按“终点早于起点”拒绝
+  const sameMoment = input.positionSeconds !== undefined && input.replaceUntilSeconds !== undefined && Math.round(input.positionSeconds * rate) === Math.round(input.replaceUntilSeconds * rate)
   const end = input.replaceUntilSourceFrame !== undefined ? fromFrame('replaceUntilSourceFrame', input.replaceUntilSourceFrame)
-    : input.replaceUntilSeconds !== undefined ? fromSeconds('replaceUntilSeconds', input.replaceUntilSeconds, true) : start
+    : input.replaceUntilSeconds !== undefined && !sameMoment ? fromSeconds('replaceUntilSeconds', input.replaceUntilSeconds, true) : start
   if (end < start) throw new Error('覆盖终点（replaceUntilSeconds / replaceUntilSourceFrame）不能早于插入位置。')
   return [start, end]
 }
@@ -112,13 +143,19 @@ export function spliceAudioEditProject(project: AudioEditProjectDocument, source
   if (project.transcript.some(block => block.locked && overlaps(block))) throw new Error('录音位置包含锁定的词块，请先解锁')
   const shiftIntact = <T extends AudioEditRange & { id: string }>(items: readonly T[]): T[] => spliceAudioRanges(items.filter(item => !overlaps(item)), start, end, inserted)
   const transcript = shiftIntact(project.transcript)
-  // 不捏造识别词时间；占位词块使文字区和字幕区都能看见需要重新转写的区间。
-  if (project.transcript.length) {
+  const placeholderId = (at: number): string => {
     let ordinal = 0
-    let id = `recording-${project.revision}-${start}-${ordinal}`
-    while (transcript.some(block => block.id === id)) id = `recording-${project.revision}-${start}-${++ordinal}`
-    transcript.push({ id, text: AUDIO_EDIT_UNTRANSCRIBED_TEXT, startFrame: start, endFrame: start + inserted, included: true, locked: false, granularity: 'segment', confidence: 0 })
+    while (transcript.some(block => block.id === `recording-${project.revision}-${at}-${ordinal}`)) ordinal++
+    return `recording-${project.revision}-${at}-${ordinal}`
   }
+  // 插在一段还没逐词转写的插入段中间：那段声音左右两半都还在，各留一个词块。左半沿用原文字（手填的字留着），
+  // 右半没法确定对应哪些字，标回占位，之后照样能补识别
+  for (const block of project.transcript.filter(item => item.included && isAudioEditUntranscribedBlock(item) && overlaps(item))) {
+    if (block.startFrame < start) transcript.push({ ...block, endFrame: start })
+    if (block.endFrame > end) transcript.push({ ...block, id: placeholderId(start + inserted), text: AUDIO_EDIT_UNTRANSCRIBED_TEXT, startFrame: start + inserted, endFrame: block.endFrame + inserted - (end - start) })
+  }
+  // 不捏造识别词时间；占位词块使文字区和字幕区都能看见需要重新转写的区间。
+  if (project.transcript.length) transcript.push({ id: placeholderId(start), text: AUDIO_EDIT_UNTRANSCRIBED_TEXT, startFrame: start, endFrame: start + inserted, included: true, locked: false, granularity: 'segment', confidence: 0 })
   transcript.sort((a, b) => a.startFrame - b.startFrame)
   const suggestions = shiftIntact(project.suggestions).map(item => ({ ...item, blockIds: item.blockIds.filter(id => transcript.some(block => block.id === id)) }))
   // 交接材料跟着线索走：跨过插入位置的线索已经丢掉，条目一并丢；留下的各种做法与线索同样平移，跨过插入位置的那种做法不再提供

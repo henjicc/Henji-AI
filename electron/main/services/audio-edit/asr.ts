@@ -4,7 +4,7 @@ import { asrUploadEncoding, estimateAsrCost, type AsrCostEstimate, type AsrUploa
 import { removeUnmanagedCachePath } from '../media-recycle/cache-deletion'
 import { readTranscriptionFacts, TranscriptionFailure, type TranscriptionFacts, type TranscriptionPreflight, type TranscriptionPreparation } from '../../../../src/core/audioEdit/transcriptionFailure'
 import { audioEditTranscriptBlocks, type TimestampedTranscript } from '../../../../src/core/audioEdit/timestampedTranscript'
-import { audioEditUntranscribedBlocks } from '../../../../src/core/audioEdit/splice'
+import { audioEditUntranscribedBlocks, replaceAudioEditPlaceholders } from '../../../../src/core/audioEdit/splice'
 
 import type {
   AudioEditProjectDocument,
@@ -237,14 +237,13 @@ async function fillUntranscribedSegments(project: AudioEditProjectDocument, segm
   }
   facts.billing = 'completed'
   const replaced = new Set(segments.map(segment => segment.block.id))
-  const transcript = [...project.transcript.filter(item => !replaced.has(item.id)), ...filled].sort((a, b) => a.startFrame - b.startFrame)
-  const suggestions = [...project.suggestions.filter(item => !item.blockIds.some(id => replaced.has(id))), ...analyzeAudioEditTranscript(filled, { sampleRate: rate })]
+  const next = replaceAudioEditPlaceholders(project, replaced, filled, analyzeAudioEditTranscript(filled, { sampleRate: rate }))
   const granularity = filled.some(item => item.granularity === 'word') ? 'word' : filled.length ? 'segment' : 'none'
   logger.info('插入段补转写完成', {
     event: 'audio_edit.transcription.fill_completed', requestId: request.requestId, modelId,
     context: { projectId: project.id, segments: segments.length, blockCount: filled.length, granularity },
   })
-  return { project: { ...project, transcript, suggestions }, modelId, granularity }
+  return { project: next, modelId, granularity }
 }
 
 /**

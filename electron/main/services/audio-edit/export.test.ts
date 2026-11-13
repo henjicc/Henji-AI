@@ -23,10 +23,11 @@ beforeEach(async () => {
 afterEach(async () => { vi.restoreAllMocks(); await fs.rm(directory, { recursive: true, force: true }) })
 it('exports original file URLs without invoking an encoder and refuses source overwrite', async () => {
   const targetPath = path.join(directory, '剪辑.xml')
-  await exportAudioEditProject({ projectId: 'p', format: 'xml', targetPath })
+  const exported = await exportAudioEditProject({ projectId: 'p', format: 'xml', targetPath })
   const xml = await fs.readFile(targetPath, 'utf8')
   const url = /<pathurl>([^<]+)<\/pathurl>/.exec(xml)![1].replaceAll('&amp;', '&')
   expect(fileURLToPath(url)).toBe(state.project!.source.sourcePath)
+  expect(exported.audioPath).toBe(state.project!.source.sourcePath)
   expect(runAudioEditProcess).not.toHaveBeenCalled()
   await expect(exportAudioEditProject({ projectId: 'p', format: 'xml', targetPath: state.project!.source.sourcePath })).rejects.toThrow('原素材')
   expect(await fs.readFile(state.project!.source.sourcePath, 'utf8')).toBe('original file')

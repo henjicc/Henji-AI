@@ -109,6 +109,16 @@ describe('Markdown 参考稿', () => {
     // “好”对上的是正文里的“好”，不会被标题“开场”的“开”拉过去
     expect(describeAudioEditCaptions(project).map(view => view.scriptText)).toEqual(['好，', '今天聊 搜索 这件事。'])
   })
+
+  it('算式里的星号、括号里是正文的方括号、正文下一行开头的“数字. ”都原样保留', () => {
+    expect(audioEditScriptPlainText('5*3 再乘 2*4，**重点**在这')).toBe('5*3 再乘 2*4，重点在这')
+    expect(audioEditScriptPlainText('这个说法[注](见下)要核实，[官网](https://a.cn/x)')).toBe('这个说法[注](见下)要核实，官网')
+    expect(audioEditScriptPlainText('价格一共涨了\n5. 这是第二段')).toBe('价格一共涨了\n5. 这是第二段')
+    expect(audioEditScriptPlainText('步骤：\n\n1. 打开\n2. 保存\n正文接着\n1. 新列表')).toBe('步骤：\n\n打开\n保存\n正文接着\n新列表')
+    expect(audioEditScriptPlainText('1. 打开\n   设置页\n2. 保存')).toBe('打开\n   设置页\n保存')
+    expect(audioEditScriptPlainText('2025**年**第1**名**')).toBe('2025年第1名')
+    expect(audioEditScriptPlainText('AI**原生**，见[维基](https://zh.wikipedia.org/wiki/中文)')).toBe('AI原生，见维基')
+  })
 })
 
 describe('逐段核对与改字', () => {

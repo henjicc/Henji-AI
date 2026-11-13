@@ -133,6 +133,9 @@ describe('汇总读回', () => {
     const muted = stats(1, [[3, voice(0.1)], [0.3, silent], [3, voice(0.03)], [0.3, silent], [3, voice(0.1)]])
     const result = summarizeAudioEditSound(muted, flatLoudness(9.6, -20), options)
     expect(result.noise).toMatchObject({ floorDbfs: null, rating: 'unknown', hum: { status: 'unknown' } })
+    // 零散的安静帧凑满了嗡声秒数、却凑不出底噪片段：嗡声也报未知，不说“没有”
+    const scattered = { ...stats(1, [[3, voice(0.1)]]), hum: Array.from({ length: 3 }, () => ({ levelDb: -70, mains50: 0, mains60: 0 })) }
+    expect(summarizeAudioEditSound(scattered, flatLoudness(3, -20), options).noise).toMatchObject({ floorDbfs: null, hum: { status: 'unknown' } })
   })
 
   it('底噪只在非语音片段里估（静音掉的段不算）；停顿处有 50 Hz 时报疑似嗡声', () => {

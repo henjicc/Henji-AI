@@ -91,7 +91,8 @@ export async function exportAudioEditProject(request: AudioEditExportRequest): P
       for (const output of outputs) if (!(await fs.stat(output.temporary)).size && output.target !== subtitleTarget) throw new Error('生成的交付文件为空，未提交导出。')
       await publishOutputs(outputs)
       progress(1)
-      return { audioPath: exportedAudioPath, ...(timeline ? { xmlPath: target } : {}), ...(subtitleTarget ? { subtitlePath: subtitleTarget } : {}), durationFrames: editedDurationFrames(spans) }
+      // 没有处理过的 XML 直接引用原素材，audioPath 照实给出它引用的那个文件
+      return { audioPath: exportedAudioPath || project.source.sourcePath, ...(timeline ? { xmlPath: target } : {}), ...(subtitleTarget ? { subtitlePath: subtitleTarget } : {}), durationFrames: editedDurationFrames(spans) }
     } finally { await Promise.all(temporaryPaths.map((file) => removeUnmanagedCachePath(file, { force: true }))) }
   }, request.requestId, JSON.stringify([project.revision, audioEditSourceRevisionKey(project.source), request]))
 }

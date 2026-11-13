@@ -82,7 +82,7 @@ export const audioEditSoundCheckSchema = z.object({
     floorDbfs: level.describe('底噪电平 dBFS：只在非语音片段里测（50 毫秒片段的中位数），静音掉的段不算；这样的片段不足 2 秒时为 null'),
     rating: z.enum(['clean', 'audible', 'high', 'unknown']).describe('clean 不高于 -60 dBFS；audible -60～-50 停顿处能听到；high 高于 -50 明显；unknown 非语音片段太少（比如停顿都被清成了静音）估不出'),
     hum: z.object({
-      status: z.enum(['none', 'suspected', 'unknown']).describe('suspected 疑似电源嗡声；unknown 非语音片段（不含静音掉的段）合计不足 2 秒，无法判断'),
+      status: z.enum(['none', 'suspected', 'unknown']).describe('suspected 疑似电源嗡声；unknown 底噪估不出（非语音片段不足 2 秒，不含静音掉的段）时无法判断'),
       frequencyHz: z.union([z.literal(50), z.literal(60)]).optional(),
       levelDbfs: z.number().finite().optional().describe('嗡声分量电平'),
       share: z.number().min(0).max(1).optional().describe('非语音片段里电源频率及谐波占的能量比例'),
@@ -333,9 +333,10 @@ export function summarizeAudioEditSound(stats: AudioEditSoundStats, loudness: Au
   const floor = blockLevels.length * 0.05 >= MIN_NOISE_SECONDS ? round(quantile(blockLevels, 0.5)) : null
   const rating = floor === null ? 'unknown' : floor <= -60 ? 'clean' : floor <= -50 ? 'audible' : 'high'
 
-  // 嗡声：第二遍只累计了非语音片段，凑满的每一秒都算；同样不够 2 秒就不判断
+  // 嗡声：第二遍只累计了非语音片段，凑满的每一秒都算；同样不够 2 秒就不判断。
+  // 零散的非语音帧能凑满秒数却凑不出底噪片段，这时停顿太少，说“没有嗡声”没有依据，跟底噪一起报未知
   let hum: AudioEditSoundCheck['noise']['hum'] = { status: 'unknown' }
-  if (stats.hum.length >= MIN_NOISE_SECONDS) {
+  if (floor !== null && stats.hum.length >= MIN_NOISE_SECONDS) {
     const share50 = quantile(stats.hum.map(second => second.mains50), 0.5), share60 = quantile(stats.hum.map(second => second.mains60), 0.5)
     const frequency = share50 >= share60 ? 50 : 60, share = Math.max(share50, share60)
     hum = share >= HUM_SHARE
