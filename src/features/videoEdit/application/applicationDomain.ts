@@ -80,7 +80,8 @@ const isVideoEditDocumentKind = (kind: string): boolean => kind.startsWith('vide
 import { VIDEO_EDIT_APPLICATION_CAPABILITIES, collectVideoEditOutputCapability, collectVideoEditCodeAssetCapability, placeVideoEditCreativeResultCapability, observeVideoEditFrameCapability, openVideoEditClipSourceCapability, trimVideoEditClipCapability } from '@/core/application-control/domains/videoEdit/videoEditApplicationCapabilities'
 import { trimVideoEditClip } from './videoEditTrimCapability'
 import { handleVideoEditExportCapability } from './videoEditExportCapability'
-import { uniqueVideoEditOutputPath, videoEditProjectOutputDirectory, videoEditQueuedExportTask } from './videoEditExportQueue'
+import { videoEditProjectOutputDirectory, videoEditQueuedExportTask } from './videoEditExportQueue'
+import { uniqueOutputPath } from '@/features/documents/projectOutputs'
 import { VideoEditExportPresetExecutor, VideoEditExportPresetMutationExecutor } from './videoEditExportPresetReflection'
 import { VideoEditSourceExecutor } from './videoEditSourceExecutor'
 import { importVideoEditSources } from './videoEditMedia'
@@ -324,7 +325,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
           target = { kind: 'clip', sequenceId: sequence.id, clipId: clip.id, ...(input.targetRef.kind === 'video_edit.effect' ? { effectId: ref.childId } : {}) }
         }
         // 能力调用不弹保存对话框：先写进项目“导出”文件夹再收录。
-        const path = async (): Promise<string> => uniqueVideoEditOutputPath(await videoEditProjectOutputDirectory(ref.projectId), '可编辑代码素材', henjiExtension('code_effect').slice(1))
+        const path = async (): Promise<string> => uniqueOutputPath(await videoEditProjectOutputDirectory(ref.projectId), '可编辑代码素材', henjiExtension('code_effect').slice(1))
         const collected = await collectVideoEditCodeAsset(ref.projectId, target, { ...(input.libraryRef ? { libraryId: input.libraryRef.id } : {}), path }, context.signal)
         if (!collected) throw new Error('用户取消代码素材保存，没有收录资产。')
         const resultRef = { kind: 'asset' as const, id: collected.asset.id }
@@ -336,7 +337,7 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
         const input = collectVideoEditOutputCapability.inputSchema.parse(raw)
         const task = input.kind === 'export' ? videoEditQueuedExportTask(input.documentRef.id, input.taskId!) : undefined
         if (input.kind === 'export' && (!task || task.state !== 'completed' || !task.output)) throw new Error('请提供原剪辑已完成且可收录的导出taskId；先查询导出状态。')
-        const receipt = input.kind === 'export' ? task!.output! : await captureVideoEditProgramFrame(input.documentRef.id, input.frame, async () => uniqueVideoEditOutputPath(await videoEditProjectOutputDirectory(input.documentRef.id), `${requireVideoEditInstance(input.documentRef.id).document.name}-节目帧${input.frame ?? ''}`, 'png'), context.signal)
+        const receipt = input.kind === 'export' ? task!.output! : await captureVideoEditProgramFrame(input.documentRef.id, input.frame, async () => uniqueOutputPath(await videoEditProjectOutputDirectory(input.documentRef.id), `${requireVideoEditInstance(input.documentRef.id).document.name}-节目帧${input.frame ?? ''}`, 'png'), context.signal)
         if (!receipt) throw new Error('用户取消选帧，没有保存文件或收录素材。')
         const asset = await collectVideoEditOutput(receipt, input.libraryRef ? { libraryId: input.libraryRef.id } : {}, context.signal)
         const resultRef = { kind: 'asset' as const, id: asset.id }

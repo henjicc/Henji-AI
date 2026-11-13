@@ -1,5 +1,5 @@
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
-import { joinVideoEditOutputPath } from './videoEditExportQueue'
+import { joinOutputPath } from '@/features/documents/projectOutputs'
 import { createLogger } from '@/core/logging'
 import { videoEditCaptionSchema, videoEditMarkerSchema, importVideoEditCaptions, exportVideoEditCaptions, type VideoEditCaption, type VideoEditMarker } from '@/core/videoEdit/timedContent'
 import { getPlatform } from '@/platform/runtime'
@@ -92,7 +92,7 @@ export async function exportVideoEditSubtitles(projectId: string, format: 'srt' 
     const platform = getPlatform(); await platform.system.fs.mkdir(outputDirectory, { recursive: true })
     const base = sequence.name.replace(/[\\/:*?"<>|]/g, '-').trim() || '字幕'
     for (let attempt = 1; ; attempt++) {
-      path = joinVideoEditOutputPath(outputDirectory, `${attempt === 1 ? base : `${base} (${attempt})`}.${format}`)
+      path = joinOutputPath(outputDirectory, `${attempt === 1 ? base : `${base} (${attempt})`}.${format}`)
       if (!await platform.system.fs.exists(path)) break
     }
   } else path = await getPlatform().system.dialog.save({ defaultPath: `${sequence.name}.${format}`, filters: [{ name: format.toUpperCase(), extensions: [format] }] })

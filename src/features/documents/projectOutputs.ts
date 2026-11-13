@@ -1,11 +1,11 @@
 import type { DocumentContainerRef } from '@/core/documents/types'
 import { getPlatform } from '@/platform/runtime'
-import { getDocumentOperations } from './documentOperations'
+import { getDocumentOperations, type DocumentOperations } from './documentOperations'
 
 /** 文档所在项目的“导出”文件夹：助手与外部智能体的成品不指定位置时放这里，不弹保存对话框。 */
-export async function projectExportDirectory(container: DocumentContainerRef): Promise<string> {
+export async function projectExportDirectory(container: DocumentContainerRef, operations: DocumentOperations = getDocumentOperations()): Promise<string> {
   if (container.kind !== 'project') throw new Error('这份文档不在项目里，无法确定输出位置；请指定 destination（快速下载或预设目录）。')
-  const project = await getDocumentOperations().findProject(container.projectId).catch(() => null)
+  const project = await operations.findProject(container.projectId).catch(() => null)
   if (!project) throw new Error('文档所在项目找不到，请指定 destination。')
   return joinOutputPath(project.path, '导出')
 }
