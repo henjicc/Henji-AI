@@ -196,29 +196,6 @@ export function registerDocumentsCapabilityHandlers(
       verification: { verified: true, condition: '迁移服务已保存并读回项目文档，逐项核对版本内容，原文件保留或已归档', target } }
   })
 
-  registrar.registerHandler('trash_document', async (raw, context) => {
-    throwIfCapabilityAborted(context.signal)
-    const input = parseCapabilityInput<{ documentId: string }>('trash_document', raw)
-    const document = await operations().findDocument(input.documentId)
-    await operations().trashDocument({ id: document.id, path: document.path, name: document.name })
-    const gone = await operations().findDocument(document.id).then(() => false, () => true)
-    const verification = { verified: gone, condition: '文档已从作品索引移除（文件在系统回收站）', target: documentRef(document.id) }
-    return { resultRef: documentRef(document.id), name: document.name, status: 'trashed' as const, verification }
-  })
-
-  // 与剪辑页项目卡片“删除”同一入口：项目里有打开着的文档时先请工具释放，释放不了如实拒绝
-  registrar.registerHandler('trash_project', async (raw, context) => {
-    throwIfCapabilityAborted(context.signal)
-    const input = parseCapabilityInput<{ projectId: string }>('trash_project', raw)
-    const project = await operations().findProject(input.projectId)
-    if (project.missing) throw new Error('这个项目的文件夹已经找不到了，没有可移到回收站的内容；如需从列表去掉，请用户在剪辑页项目卡片上选择“从列表移除”。')
-    await operations().trashProject(project)
-    const gone = await operations().findProject(project.id).then(() => false, () => true)
-    const target = { kind: DOCUMENT_PROJECT_ENTITY_TYPE, id: project.id }
-    const verification = { verified: gone, condition: '项目已从作品索引移除（文件夹在系统回收站）', target }
-    return { resultRef: target, name: project.name, status: 'trashed' as const, verification }
-  })
-
   registrar.registerHandler('export_document_package', async (raw, context) => {
     throwIfCapabilityAborted(context.signal)
     const input = parseCapabilityInput<{ documentId?: string; projectId?: string }>('export_document_package', raw)

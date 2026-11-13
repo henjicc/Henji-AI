@@ -99,7 +99,7 @@ it('讲解授权绑定原请求：拒绝不记费，超出额度也直接通过�
   }
   const spent = () => [...records.values()].filter(record => record.state !== 'not_executed').reduce((sum, record) => sum + (record.paidReservations ?? []).reduce((total, value) => total + (value.estimatedCny ?? 0), 0), 0)
   const send = (id: string, action: NonNullable<LocalHostReply['uiPaidApproval']>['action'], amount = 1) => handleUiPaidApproval(store, {
-    requestId: id, rendererEpoch: 'renderer', result: {}, uiPaidApproval: { action, capabilityId: 'interpret_image_edit_intent', request: { category: 'explanation', estimatedCny: amount, project } },
+    requestId: id, rendererEpoch: 'renderer', result: {}, uiPaidApproval: { action, capabilityId: 'interpret_intent', request: { category: 'explanation', estimatedCny: amount, project } },
   })
   expect(send('cancelled', 'prepare')).toMatchObject({ decision: 'auto' })
   expect(spent()).toBe(1)

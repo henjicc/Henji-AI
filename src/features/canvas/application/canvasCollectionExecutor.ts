@@ -1,9 +1,6 @@
 import { findCanvasProjectInstance, getCanvasProjectInstance, requireCanvasProjectInstance } from './canvasProjectInstances';
 import type { ApplicationCollectionExecutor, ApplicationCompletedStepResult, ApplicationEvidence, ApplicationPlannedStep, ApplicationRef, JsonValue } from '@/core/application-control';
-import type { CanvasBatchOperation } from '@/core/application-control/domains/canvas/canvasBatchApplicationCapabilities';
-
-
-import { applyCanvasOperationsAtomically, undoCanvasBatch } from './canvasBatchService';
+import { applyCanvasOperationsAtomically, undoCanvasBatch, type CanvasBatchOperation } from './canvasBatchService';
 import { CANVAS_ENTITY_TYPES } from './canvasReflection';
 import { canvasRemainingWrite, canvasStepFailure } from './canvasStepFailure';
 
@@ -34,9 +31,8 @@ function property(properties: Record<string, JsonValue>, entityType: string, suf
 /**
  * 画布节点与连线的集合写入执行器。
  *
- * **不含任何自己的写入逻辑**：全部委托 `applyCanvasOperationsAtomically`，与批量能力共用同一个
- * 内核。画布已经有一套完整的「抓快照—执行—失败整批回滚—合并撤销历史」实现，再写一份就是
- * 本项目已经吃过四次亏的那种双路径。
+ * **不含任何自己的写入逻辑**：全部委托 `applyCanvasOperationsAtomically`。画布已经有一套完整的
+ * 「抓快照—执行—失败整批回滚—合并撤销历史」实现，再写一份就是本项目已经吃过四次亏的那种双路径。
  */
 export class CanvasCollectionExecutor implements ApplicationCollectionExecutor {
   readonly effectContract = {

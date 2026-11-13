@@ -117,7 +117,7 @@ function createVideoEditMotionDraftScene() {
         assert(draft.clockSegments.length > 1, '暂停与重访时钟必须保留')
         await shot('05-原稿封存')
         const organize = async () => {
-          const result = await callTool(client, 'organize_video_edit_intent', operationEnvelope([await readEntity(draftRef)], { draftRef, motionIntent: { kind: 'follow_path', preserveJitter: false } }))
+          const result = await callTool(client, 'organize_intent', operationEnvelope([await readEntity(draftRef)], { draftRef, motionIntent: { kind: 'follow_path', preserveJitter: false } }))
           assert.equal(result.executionState, 'completed', JSON.stringify(result)); assert(result.result.data.candidateRefs.length)
           return result.result.data.candidateRefs[0]
         }

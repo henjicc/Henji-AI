@@ -77,7 +77,7 @@ function createVideoEditPrimitivesScene() {
         }
         // 录制面板负责采集与交接，动作整理和整组应用使用正式公共能力。
         const organize = async motionIntent => {
-          const result = await callTool(client, 'organize_video_edit_intent', operationEnvelope([await read(draftRef)], { draftRef, ...(motionIntent ? { motionIntent } : {}) }))
+          const result = await callTool(client, 'organize_intent', operationEnvelope([await read(draftRef)], { draftRef, ...(motionIntent ? { motionIntent } : {}) }))
           assert.equal(result.executionState, 'completed', JSON.stringify(result))
           const candidates = []
           for (const ref of result.result.data.candidateRefs) {

@@ -110,7 +110,7 @@ export class PiEngine implements EmbeddedAgentEngine {
       execute: async (id, args: Record<string, unknown>, signal) => {
         try {
           const result = await executePiTool({ id, name: tool.name, args, signal, vision: model.capabilities.image }, this.callTool)
-          if (/^interpret_(video_edit|image_edit)_intent$/.test(tool.name) && args.draftRef && typeof args.draftRef === 'object') this.completedIntents.add(JSON.stringify(args.draftRef))
+          if (tool.name === 'interpret_intent' && args.draftRef && typeof args.draftRef === 'object') this.completedIntents.add(JSON.stringify(args.draftRef))
           return archiveToolResult(this.manager, result, resultLimit)
         } catch (error) {
           if (!(error instanceof Error) || signal?.aborted) throw error
@@ -308,7 +308,7 @@ export class PiEngine implements EmbeddedAgentEngine {
           for (const draftRef of command.input.creativeIntent.draftRefs) {
             if (this.cancelled) break
             if (this.completedIntents.has(JSON.stringify(draftRef))) continue
-            await executePiTool({ id: randomUUID(), name: `organize_${draftRef.kind.split('.')[0]}_intent`, args: { draftRef, operationId: randomUUID() }, vision: false }, this.callTool)
+            await executePiTool({ id: randomUUID(), name: 'organize_intent', args: { draftRef, operationId: randomUUID() }, vision: false }, this.callTool)
           }
           this.state.error = null
           this.emit({ type: 'log', phase: 'completed', requestId: this.requestId, sessionId: this.manager.getSessionId(), message: '模型未完成，已使用本地整理。' })

@@ -18,27 +18,6 @@ export const cameraStageVec3Schema = z.object({
 export const cameraStageDocumentIdSchema = z.string().min(1)
   .describe('镜头参考文档 ID：取自 list_documents（kind=camera_stage）返回的 id，不是文档所在项目的 ID')
 
-export const cameraStageObjectUpdateSchema = z.object({
-  name: z.string().trim().min(1).max(CAMERA_STAGE_NAME_MAX_LENGTH).optional(),
-  visible: z.boolean().optional(),
-  color: z.string().regex(/^#[0-9a-f]{6}$/i).optional(),
-  transform: z.object({
-    position: cameraStageVec3Schema.optional(),
-    rotation: cameraStageVec3Schema.optional(),
-    scale: cameraStageVec3Schema.optional(),
-  }).strict().optional(),
-  fov: z.number().min(1).max(179).optional(),
-  lookAt: z.discriminatedUnion('mode', [
-    z.object({ mode: z.literal('manual'), target: cameraStageVec3Schema }).strict(),
-    z.object({ mode: z.literal('object'), objectId: z.string().min(1), fallbackTarget: cameraStageVec3Schema }).strict(),
-  ]).optional(),
-  aspectRatio: z.object({
-    preset: z.enum(['16:9', '4:3', '1:1', '9:16', 'custom']),
-    ratio: z.number().positive().max(10),
-  }).strict().optional(),
-  variant: z.enum(['standard', 'strong', 'slim', 'child']).optional(),
-}).strict().refine((value) => Object.keys(value).length > 0, { message: '至少修改一个已注册属性' })
-
 export const cameraStagePlacementSchema = z.object({
   mode: z.enum(['auto', 'beside', 'surround', 'foreground', 'background']).default('auto'),
   position: cameraStageVec3Schema.optional(),

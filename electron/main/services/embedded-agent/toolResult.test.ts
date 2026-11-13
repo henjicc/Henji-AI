@@ -61,7 +61,7 @@ describe('Pi media result boundary', () => {
         geometrySnapshotRef: 'geometry', sourceRefs: [], pointer: null, reason: 'pointing', attachmentRect: [0, 0, 640, 360] }] }
     const semanticImage = { mimeType: 'image/jpeg', data: 'cHJpdmF0ZS1waXhlbHM=', manifest }
     const response = { ok: true, data: { lines: ['private transcript'], semanticImages: [semanticImage], inputReceipt: 'complete-input' } }
-    const call = vi.fn().mockResolvedValue(response), recording = { ...input, name: 'read_image_edit_intent_recording' }
+    const call = vi.fn().mockResolvedValue(response), recording = { ...input, name: 'read_intent_recording' }
     const result = await executePiTool(recording, call)
     expect(result.content[1]).toEqual({ type: 'image', mimeType: semanticImage.mimeType, data: semanticImage.data })
     expect(JSON.stringify(result.content[0])).not.toContain(semanticImage.data)

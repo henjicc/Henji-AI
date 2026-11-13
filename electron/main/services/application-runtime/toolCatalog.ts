@@ -309,9 +309,6 @@ export function buildApplicationContract(input: {
     ...(toolSchemas ? { toolSchemas } : { toolSchemasHint: '按 names 查询各工具 schemaHash；加 includeSchemas:true 取完整参数。' }),
     access: {
       excludedTools: EXCLUDED_TOOLS.map((excluded) => ({ ...excluded })),
-      alternativeRoutes: BUILTIN_APPLICATION_CAPABILITY_REGISTRY.list()
-        .filter(definition => definition.side === 'frontend' && definition.external && requested.has(definition.domain))
-        .map(definition => ({ name: definition.id, ...definition.external })),
       note: '人和助手共用业务能力；付费按统一策略，外来代码首次运行需信任确认，删除进入回收区。',
     },
     domains: input.domains.map((domain) => ({
@@ -339,7 +336,7 @@ export function buildApplicationContract(input: {
     catalogSchemaHash: full.catalogSchemaHash,
     schemaHashAlgorithm: full.schemaHashAlgorithm,
     toolSchemas,
-    access: { ...(input.requestedDomains.length ? { alternativeRoutes: full.access.alternativeRoutes } : {}), note: full.access.note },
+    access: { note: full.access.note },
     domains: full.domains,
     ...(full.skills ? { skills: { tool: full.skills.tool, index: full.skills.index } } : {}),
     workflows: [

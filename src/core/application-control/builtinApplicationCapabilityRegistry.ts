@@ -31,7 +31,6 @@ import { SOUND_LIBRARY_APPLICATION_CAPABILITIES } from './domains/soundLibrary/s
 import { ASSET_APPLICATION_CAPABILITIES } from './domains/asset/assetApplicationCapabilities'
 import { CAMERA_STAGE_APPLICATION_CAPABILITIES } from './domains/cameraStage/cameraStageApplicationCapabilities'
 import { APPLICATION_REFLECTION_APPLICATION_CAPABILITIES } from './domains/shared/applicationReflectionApplicationCapabilities'
-import { CANVAS_BATCH_APPLICATION_CAPABILITIES } from './domains/canvas/canvasBatchApplicationCapabilities'
 import { CANVAS_EXPORT_APPLICATION_CAPABILITIES } from './domains/canvas/canvasExportApplicationCapabilities'
 import { CANVAS_EDITOR_APPLICATION_CAPABILITIES } from './domains/canvas/canvasEditorApplicationCapabilities'
 import { CANVAS_MUTATION_APPLICATION_CAPABILITIES } from './domains/canvas/canvasMutationApplicationCapabilities'
@@ -67,7 +66,6 @@ export const BUILTIN_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[]
   ...CANVAS_PROJECT_APPLICATION_CAPABILITIES,
   ...CANVAS_EDITOR_APPLICATION_CAPABILITIES,
   ...CANVAS_MUTATION_APPLICATION_CAPABILITIES,
-  ...CANVAS_BATCH_APPLICATION_CAPABILITIES,
   ...CANVAS_EXPORT_APPLICATION_CAPABILITIES,
   ...CAMERA_STAGE_APPLICATION_CAPABILITIES,
   ...IMAGE_MARK_APPLICATION_CAPABILITIES,
@@ -114,6 +112,8 @@ export const BUILTIN_APPLICATION_DOMAIN_METADATA: Readonly<Record<string, Applic
     propertySources: ['src/features/assistant/application/memoryReflection.ts'], operationSource: 'src/core/application-control/domains/assistantMemory/memoryCapabilities.ts', targetKind: 'operation', surfaceIds: [] },
   screen_recording: { migrationTask: '1.5', formalService: 'src/features/screenRecording/application/recordingService.ts',
     propertySources: ['src/features/screenRecording/application/recordingReflection.ts'], operationSource: 'src/core/application-control/domains/screenRecording/recordingCapabilities.ts', targetKind: 'operation', surfaceIds: ['tool.screen_recording'] },
+  creative_intent: { migrationTask: '7.2', formalService: 'src/features/application-control/creativeIntentDomain.ts',
+    propertySources: ['src/features/application-control/creativeIntentFields.ts'], operationSource: 'src/core/application-control/domains/creativeIntent/creativeIntentCapabilities.ts', targetKind: 'operation', surfaceIds: ['workspace.video_edit', 'tool.image_edit'] },
   video_edit: { migrationTask: '7.2', formalService: 'src/features/videoEdit/application/videoEditService.ts',
     propertySources: ['src/features/videoEdit/application/videoEditFields.ts'], operationSource: 'videoEditApplicationCapabilities.ts', targetKind: 'operation', surfaceIds: ['workspace.video_edit'] },
   application: { migrationTask: '2.2', formalService: 'src/core/application-control/',

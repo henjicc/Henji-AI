@@ -8,12 +8,11 @@ import { addTrustedMediaCanvasNode } from './canvasApplicationService';
 import { runCanvasMutationStage } from './canvasPersistenceService';
 import { releaseCanvasProjectInstance } from './canvasProjectInstances';
 
-import { CANVAS_BATCH_APPLICATION_CAPABILITIES, type CanvasBatchOperation } from '@/core/application-control/domains/canvas/canvasBatchApplicationCapabilities';
 import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes';
 import { useCanvasStore, type CanvasNode } from '@/stores/canvasStore';
 import { type Project } from '@/stores/projectStore';
 
-import { commitCanvasBatch, planCanvasBatch, resetCanvasBatchStateForTests, undoCanvasBatch, runCanvasTransaction } from './canvasBatchService';
+import { applyCanvasOperationsAtomically, resetCanvasBatchStateForTests, undoCanvasBatch, runCanvasTransaction, type CanvasBatchOperation } from './canvasBatchService';
 
 const projectId = 'canvas-batch-project'
 const nodeId = 'text-node'
@@ -121,31 +120,23 @@ describe('canvas batch service', () => {
   it('把多个操作作为一组提交并通过单一引用撤销', async () => {
     useCanvasStore.getState().setSelectedNode(nodeId)
     const operations: CanvasBatchOperation[] = [
-      { kind: 'update_node', nodeId, data: { displayName: '批量标题' } },
-      { kind: 'update_node', nodeId, data: { content: '批量内容' } },
+      { kind: 'add_node', nodeType: CANVAS_NODE_TYPES.textAnnotation, placement: { mode: 'viewport_center' } },
+      { kind: 'add_node', nodeType: CANVAS_NODE_TYPES.textAnnotation, placement: { mode: 'right_of_node', anchorNodeId: nodeId } },
     ]
-    const plan = planCanvasBatch(projectId, operations, 2)
-    const committed = await commitCanvasBatch(String(plan.planRef))
+    const committed = await applyCanvasOperationsAtomically(projectId, operations)
 
-    expect(useCanvasStore.getState().nodes[0].data).toMatchObject({
-      displayName: '批量标题',
-      content: '批量内容',
-    })
-    expect(committed).toMatchObject({ operationCount: 2, status: 'committed' })
+    expect(useCanvasStore.getState().nodes).toHaveLength(3)
     expect(committed.appliedOperations).toEqual([
-      expect.objectContaining({ index: 0, kind: 'update_node', nodeId }),
-      expect.objectContaining({ index: 1, kind: 'update_node', nodeId }),
+      expect.objectContaining({ index: 0, kind: 'add_node', nodeId: expect.any(String) }),
+      expect.objectContaining({ index: 1, kind: 'add_node', nodeId: expect.any(String) }),
     ])
     expect(useCanvasStore.getState().history.past).toHaveLength(1)
 
-    expect(await undoCanvasBatch(projectId, String(committed.undoRef))).toMatchObject({
+    expect(await undoCanvasBatch(projectId, committed.undoRef)).toMatchObject({
       operation: 'batch',
       status: 'undone',
     })
-    expect(useCanvasStore.getState().nodes[0].data).toMatchObject({
-      displayName: '原节点',
-      content: '原内容',
-    })
+    expect(useCanvasStore.getState().nodes.map(node => node.id)).toEqual([nodeId])
     expect(useCanvasStore.getState().selectedNodeId).toBe(nodeId)
   })
 
@@ -157,68 +148,14 @@ describe('canvas batch service', () => {
     useCanvasStore.getState().setCanvasData([createNode()], [], { past: snapshots, future: [] })
     const oldestRetainedSnapshot = useCanvasStore.getState().history.past[1]
     const setCanvasData = vi.spyOn(useCanvasStore.getState(), 'setCanvasData')
-    const plan = planCanvasBatch(projectId, [
-      {
-        kind: 'add_node',
-        nodeType: CANVAS_NODE_TYPES.textAnnotation,
-        placement: { mode: 'absolute', x: 420, y: 180 },
-        data: { displayName: '轻量提交', content: '新增节点' },
-      },
-    ], 2)
-
-    await commitCanvasBatch(String(plan.planRef))
+    await applyCanvasOperationsAtomically(projectId, [
+      { kind: 'add_node', nodeType: CANVAS_NODE_TYPES.textAnnotation, placement: { mode: 'viewport_center' } },
+    ])
 
     expect(setCanvasData).not.toHaveBeenCalled()
     expect(useCanvasStore.getState().history.past).toHaveLength(50)
     expect(useCanvasStore.getState().history.past[0]).toBe(oldestRetainedSnapshot)
     setCanvasData.mockRestore()
-  })
-
-  it('批次 Effect 解析器按真实步骤数量结算，而不是把整批保守计为一次', () => {
-    const capability = CANVAS_BATCH_APPLICATION_CAPABILITIES.find((item) => item.id === 'commit_canvas_batch')
-    const effects = capability?.resolveObservedEffects?.({ planRef: 'canvas-plan:test' }, {
-      planRef: 'canvas-plan:test',
-      documentId: projectId,
-      appliedOperations: [
-        { index: 0, kind: 'add_node', nodeId: 'node-a' },
-        { index: 1, kind: 'add_node', nodeId: 'node-b' },
-      ],
-      operationCount: 2,
-      undoRef: 'canvas-batch-undo:test',
-      status: 'committed',
-    }) ?? []
-
-    expect(effects).toHaveLength(2)
-    expect(effects).toEqual([
-      expect.objectContaining({ effect: 'create', entityTypes: ['canvas.node'], count: 1 }),
-      expect.objectContaining({ effect: 'create', entityTypes: ['canvas.node'], count: 1 }),
-    ])
-    expect(effects.flatMap((effect) => effect.targetRefs)).toEqual([
-      { kind: 'canvas.node', id: 'node-a' },
-      { kind: 'canvas.node', id: 'node-b' },
-    ])
-  })
-
-  it('计划创建后画布数组变化会触发 revision 冲突', async () => {
-    const plan = planCanvasBatch(projectId, [
-      { kind: 'update_node', nodeId, data: { displayName: '不应提交' } },
-    ], 2)
-    useCanvasStore.getState().updateNodePosition(nodeId, { x: 320, y: 240 })
-
-    await expect(commitCanvasBatch(String(plan.planRef))).rejects.toMatchObject({
-      code: 'STALE_CONTEXT',
-    })
-    expect(useCanvasStore.getState().nodes[0].data.displayName).toBe('原节点')
-  })
-
-  it('规划阶段拒绝非法节点字段且不产生部分状态', () => {
-    expect(() => planCanvasBatch(projectId, [
-      { kind: 'update_node', nodeId, data: { internalData: 'forbidden' } },
-    ], 2)).toThrow()
-    expect(useCanvasStore.getState().nodes[0].data).toMatchObject({
-      displayName: '原节点',
-      content: '原内容',
-    })
   })
 
   // 界面批次不带 runtime：等异步步骤时用户可能切走页面，释放不能在批次中途关掉会话

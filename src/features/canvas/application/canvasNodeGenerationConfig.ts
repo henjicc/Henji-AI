@@ -45,7 +45,7 @@ export function readCanvasNodeGenerationSchema(node: CanvasNode): JsonValue {
   })) as JsonValue
 }
 
-/** 通用属性和旧节点更新共用同一模型锁与节点注册校验。 */
+/** 节点数据写入共用的模型锁与节点注册校验。 */
 export function validateCanvasNodeDataPatch(node: CanvasNode, data: Record<string, unknown>) {
   const locked = isCanvasNodeModelLocked(node)
   if (locked && typeof data.modelId === 'string' && data.modelId !== node.data.modelId) {

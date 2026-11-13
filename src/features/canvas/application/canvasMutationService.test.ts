@@ -12,7 +12,7 @@ import { type Project } from '@/stores/projectStore';
 import { loadRealModelsIntoRegistry } from '@/tests/loadRealModels';
 
 import { addCanvasNode, addControlledCanvasNode, resetCanvasApplicationStateForTests, undoCanvasChange } from './canvasApplicationService';
-import { clearCanvasProject, connectAssetGroupToTarget, disconnectAssetGroupFromTarget, duplicateCanvasNode, deleteCanvasNodes, groupCanvasNodes, ungroupCanvasNode, updateCanvasNode } from './canvasMutationService';
+import { applyCanvasNodePropertyPatches, clearCanvasProject, connectAssetGroupToTarget, disconnectAssetGroupFromTarget, duplicateCanvasNode, deleteCanvasNodes, groupCanvasNodes, ungroupCanvasNode } from './canvasMutationService';
 import { runCanvasTransaction } from './canvasBatchService';
 
 const cancelCameraStageNodeTasks = vi.hoisted(() => vi.fn(async () => undefined))
@@ -270,22 +270,15 @@ describe('画布清空与解散分组', () => {
     })
   })
 
-  /*
-   * 拒绝必须能被自我修正：只说"没有变化"，调用方无从知道是值本来就一样，还是键被悄悄丢掉了。
-   *
-   * 实测助手为了"把节点移动到指定坐标"传了 data: { x, y }——位置根本不是节点 data 字段
-   * （它是属性 canvas.node.position）。过滤后是空对象、补丁是空操作，它只收到一句"节点数据
-   * 未发生可保存的变化"，于是原样又试了一次。
-   */
-  describe('updateCanvasNode 的拒绝信息', () => {
-    it.each([false, true])('历史满 50 步仍能更新并返回撤销引用（批事务=%s）', async (batch) => {
+  describe('节点属性写入与撤销回执', () => {
+    it('历史满 50 步仍能更新并返回撤销引用', async () => {
       const id = useCanvasStore.getState().addNode(CANVAS_NODE_TYPES.textAnnotation, { x: 0, y: 0 });
       for (let i = 0; i < 55; i++) useCanvasStore.getState().updateNodeData(id, { content: String(i) });
       expect(useCanvasStore.getState().history.past).toHaveLength(50);
-      const input = { projectId, nodeId: id, data: { content: '满栈更新' } };
-      const result = batch
-        ? await runCanvasTransaction(projectId, 1, async options => [await updateCanvasNode(input, options)])
-        : await updateCanvasNode(input);
+      const result = await runCanvasTransaction(projectId, 1, async options => {
+        await applyCanvasNodePropertyPatches(projectId, [{ nodeId: id, textContent: '满栈更新' }], options);
+        return [{ nodeId: id }];
+      });
       expect(result.undoRef).toEqual(expect.any(String));
       expect(useCanvasStore.getState().nodes.find(node => node.id === id)?.data.content).toBe('满栈更新');
     });
@@ -308,23 +301,7 @@ describe('画布清空与解散分组', () => {
       expect(useCanvasStore.getState().nodes).toHaveLength(0);
     });
 
-    it('把丢掉的键、可写字段和位置的正确通道一起说出来', async () => {
-      const created = await addCanvasNode({
-        projectId, nodeType: CANVAS_NODE_TYPES.upload, placement: { mode: 'viewport_center' },
-      })
-      const nodeId = String(created.nodeId)
-      let message = ''
-      try {
-        await updateCanvasNode({ projectId, nodeId, data: { x: 420, y: 280 } })
-      } catch (error) {
-        message = error instanceof Error ? error.message : String(error)
-      }
-      expect(message).toContain('x、y')
-      // 位置有正式通道，必须点名，否则模型只能继续在 data 里试
-      expect(message).toContain('canvas.node.position')
-    })
-
-    it('固定图片工具复制后保留模型锁定，通用更新不能换成别的模型', async () => {
+    it('固定图片工具复制后保留模型锁定，生成配置写入不能换成别的模型', async () => {
       const created = await addControlledCanvasNode({
         projectId,
         nodeType: CANVAS_NODE_TYPES.imageEdit,
@@ -352,11 +329,10 @@ describe('画布清空与解散分组', () => {
         modelId: 'fal-pixelcut-background-removal',
         generationUi: { promptMode: 'hidden', modelMode: 'locked' },
       })
-      await expect(updateCanvasNode({
-        projectId,
+      await expect(applyCanvasNodePropertyPatches(projectId, [{
         nodeId: String(duplicated.nodeId),
-        data: { modelId: 'fal-image-apps-v2-outpaint' },
-      })).rejects.toThrow('模型由能力契约锁定')
+        generationConfig: { prompt: '', modelId: 'fal-image-apps-v2-outpaint', params: {} },
+      }])).rejects.toThrow('模型由能力契约锁定')
     })
   })
 

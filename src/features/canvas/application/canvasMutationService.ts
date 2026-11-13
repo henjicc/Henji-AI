@@ -20,7 +20,6 @@ import type { CanvasNodeSourceCopy, CanvasNodeSourceServices } from '../domain/n
 import { createSnapshot, pushSnapshot } from '@/stores/canvasStoreHelpers'
 import {
   extractCanvasNodeDataForDuplication,
-  listCanvasNodeDataKeys,
   parseCanvasSpecialEditorData,
 } from '../domain/nodeControlRegistry'
 import {
@@ -101,7 +100,7 @@ function withPromptDocument(canvas: { nodes: CanvasNode[]; edges: CanvasEdge[] }
   return prompt ? { ...data, ...prompt } : data
 }
 
-/** 画布节点数据/位置写入的共享内核；专用能力与通用属性动词都必须委托这里。 */
+/** 画布节点数据/位置写入的共享内核；专用编辑器保存与通用属性动词都必须委托这里。 */
 async function applyCanvasNodePatches(projectId: string, patches: CanvasNodePatch[], options: CanvasCommitOptions = {}): Promise<void> {
   if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId)
   requireCanvasProjectInstance(projectId)
@@ -366,41 +365,6 @@ export async function duplicateCanvasNode(input: {
     await confirmCanvasPersistence(input.projectId, options)
     return { ...result, ...(undoRef ? { undoRef } : {}), duplicatedFromNodeId: node.id, ...(!options.deferCommit ? { verification: await verifyCanvasWrite(input.projectId) } : {}) }
   } finally { release() }
-}
-
-export async function updateCanvasNode(input: {
-  projectId: string
-  nodeId: string
-  data: Record<string, unknown>
-}, options: CanvasCommitOptions = {}): Promise<Record<string, unknown>> {
-  if (!findCanvasProjectInstance(input.projectId)) await getCanvasProjectInstance(input.projectId)
-  const node = requireNode(input.projectId, input.nodeId)
-  const safeData = validateCanvasNodeDataPatch(node, input.data)
-  const canvas = requireCanvasProjectInstance(input.projectId).store.getState()
-  await applyCanvasNodePatches(input.projectId, [{ nodeId: node.id, data: safeData }], options)
-  if (requireCanvasProjectInstance(input.projectId).store.getState().nodes === canvas.nodes) {
-    /*
-     * 不能只说"没有变化"——调用方无从知道是**值本来就一样**还是**键被悄悄丢掉了**。
-     *
-     * extractCanvasNodeData 会静默滤掉这个节点类型不认的键。实测助手为了"把节点移动到指定
-     * 坐标"传了 data: { x, y }：x/y 根本不是节点 data 字段（位置是属性 canvas.node.position），
-     * 于是过滤后是空对象、补丁是空操作，它只收到"节点数据未发生可保存的变化"，又试了一次
-     * 一模一样的调用。把丢掉的键和真正可用的键说出来，它才有得改。
-     */
-    const dropped = Object.keys(input.data).filter((key) => !(key in safeData))
-    const accepted = listCanvasNodeDataKeys(node.type)
-    throw new CanvasApplicationError(
-      'INVALID_INPUT',
-      '节点数据未发生可保存的变化'
-      + (dropped.length > 0 ? `：${dropped.join('、')} 不是 ${node.type} 的 data 字段` : '（提交的值与当前值相同）')
-      + `。${node.type} 的 data 可写字段：${accepted.length > 0 ? accepted.join('、') : '无'}`
-      + '；节点位置不在 data 里，用属性 canvas.node.position 修改。',
-      true,
-      { nodeId: node.id }
-    )
-  }
-  const undoRef = rememberCanvasUndo(input.projectId, 'update_node')
-  return { projectId: input.projectId, nodeId: node.id, updatedKeys: Object.keys(safeData), undoRef }
 }
 
 /**

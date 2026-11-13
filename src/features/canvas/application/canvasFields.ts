@@ -148,7 +148,7 @@ function parseStoryboardFramePatches(raw: JsonValue | undefined): CanvasStoryboa
 
 /** 写入目标是节点补丁本身——两条属性合成一个 patch 再整体提交，逐条提交会产生两次历史记录。 */
 export const NODE_FIELDS: ApplicationFieldDefinition<
-  CanvasNode, CanvasNodePropertyPatch, 'updateNodePosition' | 'updateStoryboardFrame' | 'reorderStoryboardFrame'
+  CanvasNode, CanvasNodePropertyPatch, 'updateNodeData' | 'updateNodePosition' | 'updateStoryboardFrame' | 'reorderStoryboardFrame'
 >[] = [
   {
     propertyId: `${NODE_ENTITY_TYPE}.text_content`,
@@ -159,7 +159,7 @@ export const NODE_FIELDS: ApplicationFieldDefinition<
     writer: { write(patch, mutation) {
       patch.textContent = z.string().max(32768).parse(mutation.value)
     } },
-    storeActions: [],
+    storeActions: ['updateNodeData'],
   },
   {
     propertyId: `${NODE_ENTITY_TYPE}.generation_config`,
@@ -172,7 +172,7 @@ export const NODE_FIELDS: ApplicationFieldDefinition<
     writer: { write(patch, mutation) {
       patch.generationConfig = canvasNodeGenerationConfigSchema.parse(mutation.value)
     } },
-    storeActions: [],
+    storeActions: ['updateNodeData'],
   },
   {
     propertyId: `${NODE_ENTITY_TYPE}.generation_schema`,
@@ -208,8 +208,7 @@ export const NODE_FIELDS: ApplicationFieldDefinition<
         patch.displayName = mutation.value
       },
     },
-    // updateNodeData 已经以 capability 形式绑定在 canvasStoreLedger.ts，这里不重复声明。
-    storeActions: [],
+    storeActions: ['updateNodeData'],
   },
   {
     propertyId: `${NODE_ENTITY_TYPE}.position`,

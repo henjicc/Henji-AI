@@ -130,7 +130,7 @@ const STRING = { kind: 'string', maxLength: 500 } as const
 /** 3.2：camera_stage.document 就是一份镜头参考文档，文档本身的管理全部归通用文档能力。 */
 const PROJECT_NAME_READ_ONLY = '名称就是镜头参考文档的文件名：改名用 change_application_entities 写 documents.document.name（同一个 id）。'
 const PROJECT_WRITE_EXCLUSION = 'camera_stage.document 就是一份镜头参考文档（id 即文档 ID），本身只读：改名写 documents.document.name；'
-  + '移动、创建副本、移到回收站用 move_document / duplicate_document / trash_document；新建用 create_document（kind=camera_stage）。'
+  + '移动、创建副本用 move_document / duplicate_document；移到回收站用 change_application_entities 对 documents.document 做 remove_items；新建用 create_document（kind=camera_stage）。'
   + '场景内容经 camera_stage.scene 及其对象、摄像机、状态关键帧等子实体写入。'
 const INTEGER = { kind: 'integer', hardRange: { min: 0 } } as const
 const SET_READ_ONLY = '布景参数改了要重新生成成员：调用 generate_camera_stage_set 并传 replaceSetId，省略的参数沿用原值。'

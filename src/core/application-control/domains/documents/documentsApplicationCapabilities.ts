@@ -8,10 +8,11 @@ import { capabilityControl, capabilityOutputSchema, defineApplicationCapability 
  * 通用文档与项目能力（存储底座 2.5，实施方案 2.12）：取代各工具各写一套的项目管理能力。
  * 文档 = 剪辑、画布、口播、镜头参考、图片文档；项目 = 装文档与素材的文件夹（“总项目”）。
  *
- * 改名不在这里：文档与项目的名称是 `documents.document.name` / `documents.project.name` 两条可写属性，
- * 走 change_application_entities。这里只放无法用属性写入表达的动作：
+ * 改名与删除不在这里：文档与项目的名称是 `documents.document.name` / `documents.project.name` 两条可写属性，
+ * 移到回收站是这两个实体的集合删除（remove_items，可从最近删除恢复），都走 change_application_entities。
+ * 这里只放无法用属性或集合写入表达的动作：
  * 新建（落一个新文件 / 文件夹，重名策略）、移动（换容器并复制原项目里引用的素材）、
- * 创建副本、移到系统回收站（不可撤销）、打开（进入对应工具的界面）、导出为单文件包（4.1）。
+ * 创建副本、打开（进入对应工具的界面）、导出为单文件包（4.1）。
  *
  * 导入单文件包不向助手开放：界面的“导入单个文件…”由用户自己选文件。
  *
@@ -224,46 +225,6 @@ const migrateCodeStorage = defineApplicationCapability({
   summarize: output => `已把 ${output.relocatedFiles} 个旧位置的工作区文件整理到“软件维护”；整理 ${output.importedVersions} 个代码版本，归档 ${output.archivedFolders} 个旧文件夹，保留 ${output.retainedFolders} 个仍需使用或检查的文件夹。`,
 })
 
-const trashDocument = defineApplicationCapability({
-  id: 'trash_document', version: 1, title: '把文档移到回收站',
-  external: { kind: 'delegate', entityType: DOCUMENT_ENTITY_TYPE, operations: ['remove'], reason: '文档删除走通用集合操作，恢复使用最近删除集合。' },
-  description: '把文档文件移到回收站，可从设置的最近删除恢复。只在后台打开（包括编辑器页面已切走）的文档先保存并关闭再删；正在前台编辑的会被拒绝；有进行中的任务（录音、转写、处理、导出等）或正在打开、关闭的也会被拒绝，等任务结束后再删。',
-  domain: DOCUMENTS_DOMAIN,
-  aliases: ['删除文档', '删除画布', '删除口播', 'trash document', 'delete document'],
-  readOnly: false, dataClasses: ['C1'], idempotent: true, destructive: true,
-  timeoutMs: 15_000, supportsPreview: true, supportsUndo: false, requiredScopes: [],
-  acceptsRefs: [DOCUMENT_ENTITY_TYPE],
-  failureRecovery: ['文档正在前台编辑时先离开它所在的页面（工具页可用 close_application_surface）后重试；文档已不存在时重新列出文档。'],
-  inputSchema: z.object({ documentId: z.string().min(1) }).strict(),
-  outputSchema: capabilityOutputSchema({ resultRef: documentRefSchema, name: z.string(), status: z.literal('trashed') }),
-  concurrencyKey: 'documents_write',
-  resolveConcurrencyKey: (input) => `documents_document:${input.documentId}`,
-  resolveOperationTargets: (input) => [{ kind: DOCUMENT_ENTITY_TYPE, id: input.documentId }],
-  preview: (input) => ({ title: '把文档移到回收站', summary: `把文档 ${input.documentId} 移到系统回收站；可以从回收站找回，应用内不能撤销。`, targetIds: { documentId: input.documentId }, reversible: false, dataClasses: ['C1'] }),
-  control: capabilityControl('delete', [DOCUMENT_ENTITY_TYPE], { revisionScopes: [DOCUMENTS_DOMAIN] }),
-  summarize: (output) => `“${output.name}”已移到回收站。`,
-})
-
-const trashProject = defineApplicationCapability({
-  id: 'trash_project', version: 1, title: '把项目移到回收站',
-  external: { kind: 'delegate', entityType: DOCUMENT_PROJECT_ENTITY_TYPE, operations: ['remove'], reason: '项目删除走通用集合操作，恢复使用最近删除集合。' },
-  description: '把整个项目文件夹（里面的剪辑、画布、口播等文档、生成结果和素材）移到系统回收站（用户可以从回收站找回，应用内不能撤销）。项目里有正在编辑的文档时会被拒绝。提交前先 read_application_entity 读取该 documents.project 取得 baselineId 并随调用带上。与剪辑页项目卡片的“删除”是同一操作。',
-  domain: DOCUMENTS_DOMAIN,
-  aliases: ['删除项目', '删除总项目', 'trash project', 'delete project'],
-  readOnly: false, dataClasses: ['C1'], idempotent: true, destructive: true,
-  timeoutMs: 30_000, supportsPreview: true, supportsUndo: false, requiredScopes: [],
-  acceptsRefs: [DOCUMENT_PROJECT_ENTITY_TYPE],
-  failureRecovery: ['项目里有正在编辑的文档时，错误会点名是哪几份，请用户关闭它们后重试；项目已不存在时重新列出项目。'],
-  inputSchema: z.object({ projectId: z.string().min(1).describe('项目 ID（来自 list_projects）') }).strict(),
-  outputSchema: capabilityOutputSchema({ resultRef: projectRefSchema, name: z.string(), status: z.literal('trashed') }),
-  concurrencyKey: 'documents_write',
-  resolveConcurrencyKey: (input) => `documents_project:${input.projectId}`,
-  resolveOperationTargets: (input) => [{ kind: DOCUMENT_PROJECT_ENTITY_TYPE, id: input.projectId }],
-  preview: (input) => ({ title: '把项目移到回收站', summary: `把项目 ${input.projectId} 的整个文件夹移到系统回收站；可以从回收站找回，应用内不能撤销。`, targetIds: { projectId: input.projectId }, reversible: false, dataClasses: ['C1'] }),
-  control: capabilityControl('delete', [DOCUMENT_PROJECT_ENTITY_TYPE], { revisionScopes: [DOCUMENTS_DOMAIN] }),
-  summarize: (output) => `项目“${output.name}”已移到回收站。`,
-})
-
 const createProject = defineApplicationCapability({
   id: 'create_project', version: 1, title: '新建项目',
   description: '用给定名称新建一个项目文件夹（不是草稿），之后可以把文档放进去；不切换界面。',
@@ -326,5 +287,5 @@ const exportDocumentPackage = defineApplicationCapability({
 })
 
 export const DOCUMENTS_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
-  listDocuments, listProjects, createDocument, openDocument, moveDocument, duplicateDocument, collectDocumentMedia, migrateCodeStorage, trashDocument, trashProject, createProject, registerExternalProject, exportDocumentPackage,
+  listDocuments, listProjects, createDocument, openDocument, moveDocument, duplicateDocument, collectDocumentMedia, migrateCodeStorage, createProject, registerExternalProject, exportDocumentPackage,
 ]

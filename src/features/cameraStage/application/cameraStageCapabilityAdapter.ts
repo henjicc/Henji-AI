@@ -4,7 +4,7 @@ import { cameraStageCheckIntentShape } from '@/core/application-control/domains/
 import { COVERAGE_FACT, CUT_FACT } from './cameraStageCoverageExecutors'
 import { checkCameraStageEdit } from './editService'
 
-import { cameraStageApplicationService, type CameraStageObjectUpdate } from '@/features/cameraStage/application/cameraStageApplicationService'
+import { cameraStageApplicationService } from '@/features/cameraStage/application/cameraStageApplicationService'
 import { verifyCameraStageScene, type CameraStageVerificationRequest } from '@/features/cameraStage/application/cameraStageVerification'
 
 import { getHostScopeRevisions, notifyHostScopeChanged } from '@/features/application-control/hostContext/hostContext'
@@ -103,41 +103,11 @@ async function executeOperation(
   }))
 }
 
-async function executeMutation(
-  input: {
-    summary: string
-    entityType: string
-    targetId: string
-    mutations: Array<{ propertyId: string; operation: 'set'; value: JsonValue }>
-  },
-  context: CapabilityExecutionContext,
-): Promise<Record<string, unknown>> {
-  return await planAndCommit(context, input.entityType, revision => ({
-    summary: input.summary,
-    transactionMode: 'atomic',
-    steps: [{
-      kind: 'mutation',
-      target: { kind: input.entityType, id: input.targetId },
-      entityType: input.entityType,
-      expectedRevisions: { camera_stage: revision },
-      mutations: input.mutations,
-    }],
-  }))
-}
-
 /** 对象不存在是写入前的拒绝；放在 applicationWritePreflight 里调用，执行层才会记为未执行。 */
 function requireSceneObject<T extends { objects: Array<{ id: string }> }>(snapshot: T, objectId: string): T['objects'][number] {
   const object = snapshot.objects.find(candidate => candidate.id === objectId)
   if (!object) throw new Error(`NOT_FOUND:对象 «${objectId}» 不在本场景中，objectId 取自 observe_camera_stage_scene 返回的 objects[].id 原值。`)
   return object
-}
-
-function mutation(propertyId: string, value: JsonValue) {
-  return { propertyId, operation: 'set' as const, value }
-}
-
-function vec3Value(value: { x: number; y: number; z: number }): JsonValue {
-  return { x: value.x, y: value.y, z: value.z }
 }
 
 export async function observeCameraStageScene(projectId: string, times: readonly number[] = []): Promise<Record<string, unknown>> {
@@ -187,37 +157,6 @@ export async function deleteCameraStageObject(input: { projectId: string; object
   const verified = !snapshot.objects.some(object => object.id === input.objectId)
     && snapshot.stateKeyframes.every(frame => !frame.objectStates[input.objectId])
   return { ...result, verification: { verified, condition: '从正式场景回读确认对象及状态关键帧中的对象状态已删除。', target: { kind, id: `${input.projectId}:${input.objectId}` } } }
-}
-
-export async function updateCameraStageObject(
-  input: { projectId: string; objectId: string; changes: CameraStageObjectUpdate },
-  context: CapabilityExecutionContext,
-): Promise<Record<string, unknown>> {
-  const { entityType, mutations } = await applicationWritePreflight(context, async () => {
-    const object = requireSceneObject(await cameraStageApplicationService.readSnapshot(input.projectId), input.objectId)
-    const entityType = object.type === 'camera' ? 'camera_stage.camera' : 'camera_stage.object'
-    const prefix = entityType
-    const changes = input.changes
-    const mutations = [
-      ...(changes.name !== undefined ? [mutation(`${prefix}.name`, changes.name)] : []),
-      ...(changes.visible !== undefined ? [mutation(`${prefix}.visible`, changes.visible)] : []),
-      ...(changes.color !== undefined ? [mutation(`${prefix}.color`, changes.color)] : []),
-      ...(changes.transform?.position ? [mutation(`${prefix}.transform.position`, vec3Value(changes.transform.position))] : []),
-      ...(changes.transform?.rotation ? [mutation(`${prefix}.transform.rotation`, vec3Value(changes.transform.rotation))] : []),
-      ...(changes.transform?.scale ? [mutation(`${prefix}.transform.scale`, vec3Value(changes.transform.scale))] : []),
-      ...(changes.variant !== undefined ? [mutation('camera_stage.object.character_variant', changes.variant)] : []),
-      ...(changes.fov !== undefined ? [mutation('camera_stage.camera.fov', changes.fov)] : []),
-      ...(changes.lookAt?.mode === 'manual' ? [mutation('camera_stage.camera.look_at_target', vec3Value(changes.lookAt.target))] : []),
-      ...(changes.lookAt?.mode === 'object' ? [mutation('camera_stage.camera.look_at_object_ref', { kind: 'camera_stage.object', id: `${input.projectId}:${changes.lookAt.objectId}` })] : []),
-      ...(changes.aspectRatio ? [
-        mutation('camera_stage.camera.aspect_ratio_preset', changes.aspectRatio.preset),
-        mutation('camera_stage.camera.aspect_ratio', changes.aspectRatio.ratio),
-      ] : []),
-    ]
-    if (mutations.length === 0 || changes.effectors) throw new Error('INVALID_INPUT')
-    return { entityType, mutations }
-  })
-  return await executeMutation({ summary: '更新三维对象属性', entityType, targetId: `${input.projectId}:${input.objectId}`, mutations }, context)
 }
 
 export async function applyCameraStageCameraMove(input: Record<string, unknown>, context: CapabilityExecutionContext): Promise<Record<string, unknown>> {

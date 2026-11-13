@@ -1,4 +1,3 @@
-import type { CanvasBatchOperation } from '@/core/application-control/domains/canvas/canvasBatchApplicationCapabilities'
 import type { CanvasNodePlacement } from '@/core/application-control/domains/canvas/canvasMutationApplicationCapabilities'
 import { OPEN_CANVAS_NODE_EDITOR_CAPABILITY_ID, RETRY_LAYER_STACK_RESULT_CAPABILITY_ID } from '@/core/application-control/domains/canvas/canvasEditorApplicationCapabilities'
 import type { ApplicationRef } from '@/core/application-control/index'
@@ -7,14 +6,13 @@ import { ApplicationPreflightFailure } from '@/core/application-control/executio
 import type { AssistantCanvasImageCapabilityId } from '@/core/canvas/imageCapabilityIds'
 import type { CanvasDownloadDestination } from '@/core/application-control/domains/canvas/canvasExportApplicationCapabilities'
 import { CANVAS_NODE_CONTROL_CATALOG_VERSION, getCanvasNodeSchema, searchCanvasNodeTypes } from '@/features/canvas/domain/nodeControlRegistry'
-import { addCanvasNode, connectCanvasNodes, focusCanvasNode, openCanvasProject, redoCanvasChange, undoCanvasChange } from '@/features/canvas/application/canvasApplicationService'
-import { commitCanvasBatch, planCanvasBatch, previewCanvasBatch } from '@/features/canvas/application/canvasBatchService'
+import { focusCanvasNode, openCanvasProject, redoCanvasChange, undoCanvasChange } from '@/features/canvas/application/canvasApplicationService'
 import { createCanvasDocumentIn, openCanvasDocument, releaseCanvasDocument } from '@/features/canvas/application/canvasProjectService'
 import { registerDocumentCreator, registerDocumentOpener, registerDocumentReleaser } from '@/features/documents/documentOperations'
 import { registerDocumentCoverProvider } from '@/features/documents/documentCovers'
 import { findGeneratedCoverSources } from './canvasProjectCover'
 import type { CanvasNode } from '@/stores/canvasStore'
-import { clearCanvasProject, connectAssetGroupToTarget, deleteCanvasNodes, disconnectAssetGroupFromTarget, disconnectCanvasEdge, duplicateCanvasNode, groupCanvasNodes, selectCanvasNode, ungroupCanvasNode, updateCanvasNode } from '@/features/canvas/application/canvasMutationService'
+import { clearCanvasProject, connectAssetGroupToTarget, disconnectAssetGroupFromTarget, duplicateCanvasNode, groupCanvasNodes, selectCanvasNode, ungroupCanvasNode } from '@/features/canvas/application/canvasMutationService'
 import { getCanvasNode, getCanvasProject, verifyCanvasWrite } from '@/features/canvas/application/canvasQueryService'
 import { addAssetToCanvas } from '@/features/assets/application/assetCanvasApplicationService'
 import { addGenerationResultToCanvas } from '@/features/canvas/application/generationResultCanvasApplicationService'
@@ -22,7 +20,6 @@ import { downloadCanvasMedia } from '@/features/canvas/application/canvasDownloa
 import { executeCanvasImageCapabilityForProject } from '@/features/canvas/application/canvasImageCapabilityApplicationService'
 import { type OpenCanvasNodeEditorInput, openCanvasNodeEditor } from '@/features/canvas/application/canvasNodeEditorApplicationService'
 import { exportMultiLayerDocumentTargetToCanvas, type MultiLayerDocumentTargetExportInput } from '@/features/canvas/application/multiLayerDocumentNodeGenerationAdapter'
-import { createHostContextSnapshot } from '@/features/application-control/hostContext/hostContext'
 import type { ApplicationCapabilityHandlerRegistrar } from '@/features/application-control/capabilities/handlerTypes'
 import { parseDocumentCapabilityInput, throwIfCapabilityAborted, withDocumentIdOutput } from '@/features/application-control/capabilities/handlerUtils'
 import { normalizeCanvasNodeIds } from './canvasNodeIdNormalization'
@@ -46,12 +43,6 @@ interface ProjectInput {
 
 interface NodeInput extends ProjectInput {
   nodeId: string
-}
-
-interface AddNodeInput extends ProjectInput {
-  nodeType: string
-  placement: CanvasNodePlacement
-  data?: Record<string, unknown>
 }
 
 export function registerCanvasCapabilityHandlers(
@@ -121,11 +112,6 @@ export function registerCanvasCapabilityHandlers(
     return getCanvasNode(parsed.projectId, parsed.nodeId)
   })
 
-  registrar.registerHandler('add_canvas_node', (input, context) => {
-    throwIfCapabilityAborted(context.signal)
-    return addCanvasNode(parseCapabilityInput<AddNodeInput>('add_canvas_node', input))
-  })
-
   registrar.registerHandler('apply_canvas_image_capability', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<ProjectInput & {
@@ -161,15 +147,6 @@ export function registerCanvasCapabilityHandlers(
       placement?: CanvasNodePlacement
     }>('add_generation_result_to_canvas', input)
     return addGenerationResultToCanvas(parsed)
-  })
-
-  registrar.registerHandler('connect_canvas_nodes', (input, context) => {
-    throwIfCapabilityAborted(context.signal)
-    const parsed = parseCapabilityInput<ProjectInput & {
-      sourceNodeId: string
-      targetNodeId: string
-    }>('connect_canvas_nodes', input)
-    return connectCanvasNodes(parsed)
   })
 
   registrar.registerHandler('focus_canvas_node', async (input, context) => {
@@ -236,24 +213,6 @@ export function registerCanvasCapabilityHandlers(
     return duplicateCanvasNode(parsed)
   })
 
-  registrar.registerHandler('update_canvas_node', (input, context) => {
-    throwIfCapabilityAborted(context.signal)
-    const parsed = parseCapabilityInput<NodeInput & { data: Record<string, unknown> }>(
-      'update_canvas_node',
-      input
-    )
-    return updateCanvasNode(parsed)
-  })
-
-  registrar.registerHandler('delete_canvas_nodes', (input, context) => {
-    throwIfCapabilityAborted(context.signal)
-    const parsed = parseCapabilityInput<ProjectInput & { nodeIds: string[] }>(
-      'delete_canvas_nodes',
-      input
-    )
-    return deleteCanvasNodes(parsed.projectId, parsed.nodeIds)
-  })
-
   registrar.registerHandler('select_canvas_node', (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<ProjectInput & { nodeId: string | null }>(
@@ -314,15 +273,6 @@ export function registerCanvasCapabilityHandlers(
     return clearCanvasProject(parsed.projectId)
   })
 
-  registrar.registerHandler('disconnect_canvas_edge', (input, context) => {
-    throwIfCapabilityAborted(context.signal)
-    const parsed = parseCapabilityInput<ProjectInput & { edgeId: string }>(
-      'disconnect_canvas_edge',
-      input
-    )
-    return disconnectCanvasEdge(parsed.projectId, parsed.edgeId)
-  })
-
   registrar.registerHandler('download_canvas_media', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<ProjectInput & {
@@ -330,27 +280,5 @@ export function registerCanvasCapabilityHandlers(
       destination: CanvasDownloadDestination
     }>('download_canvas_media', input)
     return await downloadCanvasMedia(parsed)
-  })
-
-  registrar.registerHandler('plan_canvas_batch', (input) => {
-    const parsed = parseCapabilityInput<ProjectInput & {
-      operations: CanvasBatchOperation[]
-    }>('plan_canvas_batch', input)
-    return planCanvasBatch(
-      parsed.projectId,
-      parsed.operations,
-      createHostContextSnapshot().scopeRevisions.canvas
-    )
-  })
-
-  registrar.registerHandler('preview_canvas_batch', (input) => {
-    const parsed = parseCapabilityInput<{ planRef: string }>('preview_canvas_batch', input)
-    return previewCanvasBatch(parsed.planRef)
-  })
-
-  registrar.registerHandler('commit_canvas_batch', async (input, context) => {
-    throwIfCapabilityAborted(context.signal)
-    const parsed = parseCapabilityInput<{ planRef: string }>('commit_canvas_batch', input)
-    return await commitCanvasBatch(parsed.planRef)
   })
 }

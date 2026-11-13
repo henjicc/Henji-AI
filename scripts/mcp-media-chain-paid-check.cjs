@@ -136,7 +136,7 @@ async function main() {
     assert.equal(providerBefore, 0, '运行开始前已存在本轮供应商请求，计数不可信')
 
     /*
-     * 夹具画布经正式的 trash_document 移到回收站。
+     * 夹具画布经正式的文档删除（change_application_entities 对 documents.document 做 remove_items）移到回收站。
      * 它先请画布释放后台会话（写完在途保存再关闭），之后不会再被写回；直接经文档接口删文件
      * 没有这层保护，后台落图排的保存会在删除之后把文件写回来（曾在真实库里留下夹具工程，
      * 而每次清理都因为"删完当场读不到"而报了成功）。
@@ -293,8 +293,12 @@ async function main() {
       // 趁客户端还在，走正式能力把夹具画布移到回收站；它会等在途保存落定并关闭后台会话。
       if (created.project) {
         try {
-          const projectRead = await callTool(client, 'read_application_entity', { ref: { kind: 'documents.document', id: FIXTURE_PROJECT_ID }, propertyIds: [] })
-          await callTool(client, 'trash_document', operationEnvelope([projectRead], { documentId: FIXTURE_PROJECT_ID }))
+          const fixtureRef = { kind: 'documents.document', id: FIXTURE_PROJECT_ID }
+          const projectRead = await callTool(client, 'read_application_entity', { ref: fixtureRef, propertyIds: [] })
+          await callTool(client, 'change_application_entities', operationEnvelope([projectRead], {
+            summary: '把夹具画布移到回收站',
+            changes: [{ kind: 'remove_items', entityType: fixtureRef.kind, parent: fixtureRef, targets: [fixtureRef] }],
+          }))
           created.project = false
           evidence.fixtureDeletedViaCapability = true
         } catch (error) {

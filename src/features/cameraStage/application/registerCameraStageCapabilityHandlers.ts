@@ -15,7 +15,7 @@ import type { ApplicationCapabilityHandlerRegistrar } from '@/features/applicati
 import { parseDocumentCapabilityInput as parseCapabilityInput, throwIfCapabilityAborted, withDocumentIdOutput } from '@/features/application-control/capabilities/handlerUtils'
 import { openApplicationSurface } from '@/features/navigation/application/surfaceCapabilityService'
 import { checkCameraStageEditQuery, coverCameraStageSceneOperation, cutCameraStageCoverageOperation } from '@/features/cameraStage/application/cameraStageCapabilityAdapter'
-import { assertCameraStageRevision, applyCameraStageCameraMove, blockCameraStageCharacterOperation, composeCameraStageShotOperation, followCameraStageCharacterOperation, deleteCameraStageObject, duplicateCameraStageObject, generateCameraStageSet, observeCameraStageScene, placeCameraStageObject, updateCameraStageObject, verifyCameraStage } from '@/features/cameraStage/application/cameraStageCapabilityAdapter'
+import { assertCameraStageRevision, applyCameraStageCameraMove, blockCameraStageCharacterOperation, composeCameraStageShotOperation, followCameraStageCharacterOperation, deleteCameraStageObject, duplicateCameraStageObject, generateCameraStageSet, observeCameraStageScene, placeCameraStageObject, verifyCameraStage } from '@/features/cameraStage/application/cameraStageCapabilityAdapter'
 import { releaseCameraStageProjectInstance } from '@/features/cameraStage/application/cameraStageProjectRuntime'
 import { createDraftCameraStageDocument, openCameraStageDocument } from '@/features/cameraStage/projects/cameraStageProjectService'
 import { getDocumentSessionRegistry } from '@/features/documents/documentSessionRegistry'
@@ -102,14 +102,6 @@ export function registerCameraStageCapabilityHandlers(publicRegistrar: Applicati
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<CameraObjectInput>('delete_camera_stage_object', input)
     return await deleteCameraStageObject(parsed, context)
-  })
-
-  registrar.registerHandler('update_camera_stage_object', async (input, context) => {
-    throwIfCapabilityAborted(context.signal)
-    const parsed = parseCapabilityInput<CameraObjectInput & {
-      changes: Parameters<typeof updateCameraStageObject>[0]['changes']
-    }>('update_camera_stage_object', input)
-    return await updateCameraStageObject(parsed, context)
   })
 
   registrar.registerHandler('apply_camera_stage_camera_move', async (input, context) => {

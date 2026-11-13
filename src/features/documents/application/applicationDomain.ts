@@ -9,7 +9,7 @@ import { getDocumentOperations } from '../documentOperations'
 import { RecyclableCollectionExecutor, captureRecycledRemoval } from '@/features/application-control'
 
 /**
- * 通用文档与项目领域（存储底座 2.5）：文档 / 项目实体（名称可写）+ 列出、新建、打开、移动、副本、回收站、新建项目能力。
+ * 通用文档与项目领域（存储底座 2.5）：文档 / 项目实体（名称可写、集合删除即移到回收站）+ 列出、新建、打开、移动、副本、新建项目能力。
  * 全部委托 `getDocumentOperations()`，与项目页右键同一个领域服务。
  */
 export const documentsApplicationDomain: ApplicationDomainModule = {

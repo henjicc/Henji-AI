@@ -57,14 +57,8 @@ export const applicationCapabilityDescriptorSchema = z.object({
     baseDelayMs: z.number().int().nonnegative().max(30_000),
   }).strict().optional(),
   available: z.boolean().default(true),
-  /** 默认公开前端业务能力；已有通用实体入口或内部恢复必须在原声明中说明。 */
-  external: z.discriminatedUnion('kind', [
-    z.object({ kind: z.literal('delegate'), entityType: z.string().min(1),
-      operations: z.array(z.enum(['read', 'write', 'create', 'remove'])).min(1),
-      propertyIds: z.array(z.string().min(1)).optional(), reason: z.string().min(12) }).strict(),
-    z.object({ kind: z.literal('internal'), reason: z.string().min(12) }).strict(),
-    z.object({ kind: z.literal('recovery'), reason: z.string().min(12) }).strict(),
-  ]).optional(),
+  /** 默认公开前端业务能力；只经保存恢复入口按账本触发的能力在原声明中说明，不作为独立工具开放。 */
+  external: z.object({ kind: z.literal('recovery'), reason: z.string().min(12) }).strict().optional(),
   control: z.object({
     execution: applicationOperationExecutionSchema,
     impacts: z.array(applicationOperationImpactSchema).min(1).max(32),

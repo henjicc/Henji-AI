@@ -4,7 +4,8 @@ import type Database from 'better-sqlite3'
 import { UI_PAID_CAPABILITIES, generationReservationKey, type PaidReservation } from '../../../../src/core/application-control/paidApproval'
 
 // UI 费用收据没有业务目标或派发身份；未知账单不能进入助手的修改核对流程。
-const uiPaidCapabilities = Object.keys(UI_PAID_CAPABILITIES)
+// 讲解收据在契约 5 之前按领域记成两个名字；账本里的历史记录仍要认成界面收据。
+const uiPaidCapabilities = [...Object.keys(UI_PAID_CAPABILITIES), 'interpret_video_edit_intent', 'interpret_image_edit_intent']
 const uiPaidReceiptSql = `coalesce(json_extract(record_json, '$.origin.actor') = 'user'
   AND json_extract(record_json, '$.capabilityId') IN (${uiPaidCapabilities.map(() => '?').join(',')})
   AND json_type(record_json, '$.input.paid') = 'object'

@@ -47,7 +47,7 @@ export async function readVideoMotionGroup(id: string, draftId: string, offset: 
       }
       const retainedSession = { ...session, finalPoseRefs: [], bindings: [], clockSegments: session.clockSegments.filter(clock => includes(...clock.monoSpanUs)), visualEvidenceRefs: session.visualEvidenceRefs.filter(visual => visual.frames.some(frame => includes(frame.monoUs))) }
       for await (const line of serializeRecordingInput(retainedSession, retainedEvents(), { size: draft!.targets[0]?.compositionSize ?? [1, 1], includeImages: false, directApplication: true })) yield line
-      for (const visual of retainedSession.visualEvidenceRefs) yield JSON.stringify({ ...visual, recordType: 'visual-reference', documentRef: { kind: 'video_edit.document', id }, sessionId: session.id, read: '使用 read_video_edit_intent_recording 的图片分页读取实际图像；仅采用此处列出的画面，已删段落不可用于应用。引用本身不代表看过画面。' })
+      for (const visual of retainedSession.visualEvidenceRefs) yield JSON.stringify({ ...visual, recordType: 'visual-reference', documentRef: { kind: 'video_edit.document', id }, sessionId: session.id, read: '使用 read_intent_recording 的图片分页读取实际图像；仅采用此处列出的画面，已删段落不可用于应用。引用本身不代表看过画面。' })
     }
   }
   logger.info('读取超级关键帧组', { event: 'video_edit.motion_group.read.start', context: { documentId: id, draftId, offset } })

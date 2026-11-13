@@ -35,7 +35,6 @@ it.each([
   ['generate_camera_stage_set', { layout: { preset: 'city', density: 0 } }, 'STAGE_SET_EMPTY'],
   ['generate_camera_stage_set', { layout: { preset: 'city' }, replaceSetId: 'missing' }, 'STAGE_SET_NOT_FOUND'],
   ['place_camera_stage_object', { objectType: 'primitive', primitiveKind: 'box', reusePolicy: 'require_new', placement: { mode: 'beside', targetObjectId: 'missing' } }, 'TARGET_OBJECT_NOT_FOUND'],
-  ['update_camera_stage_object', { objectId: 'missing', changes: { name: '新名字' } }, 'missing'],
   ['delete_camera_stage_object', { objectId: 'missing' }, 'missing'],
   ['duplicate_camera_stage_object', { objectId: 'missing' }, 'missing'],
 ] as const)('%s 写入前被拒绝（%j）时报告未执行', async (id, input, reason) => {
@@ -51,7 +50,9 @@ it('写入后存盘失败时先恢复到写入前，再报告未执行', async (
   const { commands, before } = await openScene('save-doc')
   const [target] = before
   commands.failSaves = 1
-  const result = await invoke('update_camera_stage_object', { documentId: 'save-doc', objectId: target.id, changes: { name: '存盘失败的新名字' } })
+  const entityType = target.type === 'camera' ? 'camera_stage.camera' : 'camera_stage.object'
+  const result = await invoke('change_application_entities', { summary: '改名', changes: [{ kind: 'set_properties', entityType,
+    target: { kind: entityType, id: `save-doc:${target.id}` }, properties: { name: '存盘失败的新名字' } }] })
   expect(result).toMatchObject({ ok: false, error: { details: { execution: { notExecuted: true } } } })
   expect(cameraStageProjectStore('save-doc').getState().objects).toEqual(before)
 })

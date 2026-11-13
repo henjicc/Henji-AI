@@ -1,20 +1,22 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  CAMERA_STAGE_NAME_MAX_LENGTH,
-  cameraStageObjectUpdateSchema,
-} from '@/core/application-control/domains/cameraStage/cameraStageCapabilitySchemas'
+import { fieldDescriptors } from '@/core/application-control'
+import { CAMERA_STAGE_NAME_MAX_LENGTH } from '@/core/application-control/domains/cameraStage/cameraStageCapabilitySchemas'
 
 import { createPrimitiveObject, pickDefaultColor } from '../domain/sceneDefaults'
 import { resolveUniqueCameraStageObjectName } from './cameraStageApplicationService'
+import { CAMERA_FIELDS, OBJECT_FIELDS } from './cameraStageObjectFields'
 
-// 双路径清单 DP-07：能力 schema 与领域唯一名称生成必须共用同一上限。
+// 双路径清单 DP-07：名称属性声明与领域唯一名称生成必须共用同一上限。
 
 describe('三维名称约束唯一来源', () => {
-  it('能力 schema 与领域唯一名称生成共同遵守同一上限', () => {
+  it('名称属性声明与领域唯一名称生成共同遵守同一上限', () => {
     const fullName = '名'.repeat(CAMERA_STAGE_NAME_MAX_LENGTH)
-    expect(cameraStageObjectUpdateSchema.safeParse({ name: fullName }).success).toBe(true)
-    expect(cameraStageObjectUpdateSchema.safeParse({ name: `${fullName}超` }).success).toBe(false)
+    const nameValues = [
+      fieldDescriptors(OBJECT_FIELDS).find(descriptor => descriptor.id === 'camera_stage.object.name')?.value,
+      fieldDescriptors(CAMERA_FIELDS).find(descriptor => descriptor.id === 'camera_stage.camera.name')?.value,
+    ]
+    for (const value of nameValues) expect(value).toMatchObject({ kind: 'string', maxLength: CAMERA_STAGE_NAME_MAX_LENGTH })
 
     const existing = createPrimitiveObject('box', fullName, pickDefaultColor(0))
     const unique = resolveUniqueCameraStageObjectName([existing], fullName)

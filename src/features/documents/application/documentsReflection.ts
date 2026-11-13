@@ -98,11 +98,11 @@ class DocumentsReflectionProvider implements ApplicationEntityProvider {
 const ENTITY_META: Record<DocumentsEntityType, { title: string; description: string }> = {
   [DOCUMENTS_ENTITY_TYPES.document]: {
     title: '文档',
-    description: '剪辑、画布、口播、镜头参考、图片文档等作品文件；集合 remove 删除到最近删除，可恢复；位置用 move_document、副本用 duplicate_document、收集素材进项目用 collect_document_media。',
+    description: '剪辑、画布、口播、镜头参考、图片文档等作品文件；集合 remove 删除到最近删除，可恢复（只在后台打开的先保存关闭再删；正在前台编辑或有进行中任务的会被拒绝，先离开它的页面或等任务结束）；位置用 move_document、副本用 duplicate_document、收集素材进项目用 collect_document_media。',
   },
   [DOCUMENTS_ENTITY_TYPES.project]: {
     title: '项目',
-    description: '装文档与素材的文件夹（总项目）；名称与制作进度（progress，项目根目录的 Markdown）可改，新建用 create_project，登记作品目录外的文件夹用 register_external_project。',
+    description: '装文档与素材的文件夹（总项目）；名称与制作进度（progress，项目根目录的 Markdown）可改；集合 remove 把整个项目文件夹（含里面的文档、生成结果和素材）删除到最近删除，可恢复，项目里有正在编辑的文档时拒绝并点名；文件夹已经找不到的项目没有可删的内容，请用户在项目卡片上选“从列表移除”；新建用 create_project，登记作品目录外的文件夹用 register_external_project。',
   },
 }
 

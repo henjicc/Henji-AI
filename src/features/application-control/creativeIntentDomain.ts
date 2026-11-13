@@ -60,7 +60,8 @@ export const creativeIntentApplicationDomain: ApplicationDomainModule = {
   registerCapabilities(registrar) {
     for (const definition of CREATIVE_INTENT_CAPABILITIES) registrar.registerHandler(definition.id, async (raw, context) => {
       const input = definition.inputSchema.parse(raw)
-      const domain = definition.domain as IntentDomain
+      // 一个入口服务剪辑与图片两个领域：所属领域只从输入引用的类型得出。
+      const domain = ('documentRef' in input ? input.documentRef : input.draftRef).kind.split('.')[0] as IntentDomain
       logger.info('意图处理开始', { event: 'creative_intent.process.start', requestId: context.requestId, capabilityId: definition.id })
       try {
         if ('offset' in input && 'draftRef' in input) {
@@ -151,9 +152,10 @@ export const creativeIntentApplicationDomain: ApplicationDomainModule = {
         await applicationWritePreflight(context, async () => { await record.host.prepare(record.draft); context.signal.throwIfAborted() })
         return (context.execution ?? new ApplicationWriteExecution()).atomic(() => record.host.read(), async () => {
         try {
-        const options = definition.id === 'organize_video_edit_intent' ? videoMotionOrganizeOptionsSchema.parse(input) : undefined
-        if (options?.motionIntent) await intentProvider(domain).configureMotion!(record.documentRef.id, { intent: options.motionIntent, selectedTakeIds: options.takeIds ?? record.draft.takes.map(take => take.id) })
-        else if (options?.takeIds) await record.host.configure({ selectedTakeIds: options.takeIds })
+        // 动作与段落选择只有剪辑原稿的整理入口接受；图片原稿带上它们时输入校验已经拒绝。
+        const options = videoMotionOrganizeOptionsSchema.parse(input)
+        if (options.motionIntent) await intentProvider(domain).configureMotion!(record.documentRef.id, { intent: options.motionIntent, selectedTakeIds: options.takeIds ?? record.draft.takes.map(take => take.id) })
+        else if (options.takeIds) await record.host.configure({ selectedTakeIds: options.takeIds })
         if (review?.plan) {
           const actions = review.plan.actions
           if (domain === 'video_edit' && actions.length === 1 && actions[0].kind === 'motion') await intentProvider(domain).configureMotion!(record.documentRef.id, { intent: actions[0].intent, selectedTakeIds: [actions[0].takeId] })

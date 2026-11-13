@@ -21,8 +21,6 @@ import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 
 import { assetApplicationService } from './assetApplicationService'
 import { deleteAssetsBatch } from './assetBatchOperations'
-import { registerAssetCapabilityHandlers } from './registerAssetCapabilityHandlers'
-import type { CapabilityHandler } from '@/features/application-control/capabilities/handlerTypes'
 import { ApplicationControlExecutionEngine, ApplicationReflectionRegistry, type ApplicationExecutionContext } from '@/core/application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 import { createAssetReflectionRegistrations } from './assetReflection'
@@ -109,12 +107,6 @@ describe('asset application service', () => {
     commands.inspectAssets.mockRejectedValue(new Error('资产不存在'))
     const result = await deleteAssetsBatch([asset, { ...asset, id: 'asset-2' }])
     expect(result).toMatchObject({ succeededIds: ['asset-1', 'asset-2'], failures: [] })
-  })
-  it('delete_asset 处理器通过同源服务返回已核验的删除结果', async () => {
-    commands.inspectAssets.mockRejectedValue(new Error('资产不存在'))
-    const handlers = new Map<string, CapabilityHandler>()
-    registerAssetCapabilityHandlers({ registerHandler: (id, handler) => { handlers.set(id, handler) } })
-    await expect(handlers.get('delete_asset')!({ assetId: asset.id }, { signal: new AbortController().signal })).resolves.toMatchObject({ assetId: asset.id, status: 'deleted', verification: { verified: true } })
   })
   it('删除或主进程核验失败继续上抛，不清除当前选择', async () => {
     useAssetLibraryStore.getState().setSelectedAsset(asset)

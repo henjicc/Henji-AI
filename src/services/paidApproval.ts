@@ -44,9 +44,7 @@ async function paidRequestForDocument(category: PaidOperationCategory, documentR
 }
 
 export async function prepareExplanationPaidApproval(documentRef: { kind: string; id: string }) {
-  const request = await paidRequestForDocument('explanation', documentRef)
-  const capabilityId = documentRef.kind === 'video_edit.document' ? 'interpret_video_edit_intent' : 'interpret_image_edit_intent'
-  return prepareUiPaidApproval(request, capabilityId)
+  return prepareUiPaidApproval(await paidRequestForDocument('explanation', documentRef), 'interpret_intent')
 }
 
 export async function prepareGenerationPaidApproval(modelId: string, params: DynamicValueMap, projectId?: string) {
@@ -79,7 +77,7 @@ export interface PaidOperationOptions {
   capabilityId?: NonNullable<LocalHostReply['uiPaidApproval']>['capabilityId']
 }
 // Receipts only live for this call. They cannot be supplied by tools or carried to another UI action.
-const uiCapabilities = { generation: 'ui_generate_text', recognition: 'transcribe_audio_edit', translation: 'ui_translate_subtitles', title: 'ui_generate_title', explanation: 'interpret_video_edit_intent' } as const
+const uiCapabilities = { generation: 'ui_generate_text', recognition: 'transcribe_audio_edit', translation: 'ui_translate_subtitles', title: 'ui_generate_title', explanation: 'interpret_intent' } as const
 
 /** 生成提交确认被拒与中途停止：名字跨模块、跨桌面桥都可靠（src/core/nativeErrors.ts） */
 const USER_CANCELLATION_NAMES = new Set(['GenerationSubmissionCancelledError', 'AbortError'])

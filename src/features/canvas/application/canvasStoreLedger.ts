@@ -52,7 +52,6 @@ export const CANVAS_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
         + '助手仍通过画布节点与连线的正式集合能力编排显式结构。',
     },
     deleteEdge: { kind: 'collection', entityType: ENTITY.edge, operation: 'remove' },
-    updateNodeData: { kind: 'capability', capabilityId: 'update_canvas_node' },
     resolveUploadPlaceholder: {
       kind: 'excluded',
       category: 'internal',
@@ -60,7 +59,7 @@ export const CANVAS_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
         + '它不暴露本地路径，助手仍通过可信素材引用创建具体节点。',
     },
     /*
-     * 定义收敛在 canvasFields.ts；display_name 走 updateNodeData 能力，不在这里重复声明。
+     * 定义收敛在 canvasFields.ts：updateNodeData 对应节点标题、文本正文与生成配置三条属性。
      * 3.2 又把分镜格子的 updateStoryboardFrame/reorderStoryboardFrame 并进同一批字段——
      * 两个 store 动作共用同一条 canvas.node.storyboard_frames 属性（内容与排序都是按 id
      * 定点写 note/order 字段），账本条目同样从这里自动派生。

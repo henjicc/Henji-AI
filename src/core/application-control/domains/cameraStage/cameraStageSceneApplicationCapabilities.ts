@@ -7,7 +7,6 @@ import {
   CONFLICT_RECOVERY,
   cameraStageDocumentIdSchema,
   cameraStageControl,
-  cameraStageObjectUpdateSchema,
   cameraStagePlacementSchema,
   cameraStageTarget,
   cameraStageTransactionResultShape,
@@ -142,28 +141,6 @@ const deleteObject = defineApplicationCapability({
   summarize: (output) => `3D 对象 ${output.objectId} 已删除。`,
 })
 
-const updateObject = defineApplicationCapability({
-  id: 'update_camera_stage_object',
-  external: { kind: 'delegate', entityType: 'camera_stage.object', operations: ['write'], reason: '普通数据操作由正式实体描述及 change_application_entities 通用事务承接，不另增同功能工具。' },
-  version: 2, title: '更新 3D 场景对象',
-  description: '只修改 schema 明确列出的对象或摄像机属性，并通过 revision 事务提交。', domain: 'camera_stage',
-  aliases: ['修改 3D 物体', '调整摄像机参数', 'update camera object'], readOnly: false, dataClasses: ['C1'],
-  idempotent: true, destructive: false, timeoutMs: 15_000, supportsPreview: false, supportsUndo: true,
-  requiredScopes: ['camera_stage'], acceptsRefs: ['camera_stage.document', 'camera_stage.object', 'camera_stage.camera'], producesRefs: ['camera_stage.object', 'camera_stage.camera'],
-  failureRecovery: [CONFLICT_RECOVERY],
-  inputSchema: z.object({ documentId: cameraStageDocumentIdSchema, objectId: z.string().min(1), changes: cameraStageObjectUpdateSchema }).strict(),
-  outputSchema: capabilityOutputSchema(cameraStageTransactionResultShape),
-  resolveConcurrencyKey: (input) => `camera_stage:${input.documentId}:${input.objectId}`, resolveTargetIds: (input) => cameraStageTarget(input.documentId, { objectId: input.objectId }),
-  control: cameraStageControl('update', ['camera_stage.object', 'camera_stage.camera'], [
-    'camera_stage.object.name', 'camera_stage.object.visible', 'camera_stage.object.color', 'camera_stage.object.transform.position',
-    'camera_stage.object.transform.rotation', 'camera_stage.object.transform.scale', 'camera_stage.object.character_variant',
-    'camera_stage.camera.name', 'camera_stage.camera.visible', 'camera_stage.camera.transform.position', 'camera_stage.camera.transform.rotation',
-    'camera_stage.camera.fov', 'camera_stage.camera.look_at_target', 'camera_stage.camera.look_at_object_ref',
-    'camera_stage.camera.aspect_ratio_preset', 'camera_stage.camera.aspect_ratio',
-  ]),
-  summarize: (output) => `3D 对象更新事务 ${output.transactionRef} 已完成。`,
-})
-
 /*
  * add_camera_stage_shot / update_camera_stage_shot 已下线（2.1）：状态关键帧的创建、删除、
  * 排序、改名/时间/机位等全部属性都已被 camera_stage.state_keyframe 的集合写入与统一字段定义覆盖，
@@ -171,5 +148,5 @@ const updateObject = defineApplicationCapability({
  */
 
 export const CAMERA_STAGE_SCENE_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
-  observeScene, placeObject, generateSet, duplicateObject, deleteObject, updateObject,
+  observeScene, placeObject, generateSet, duplicateObject, deleteObject,
 ]

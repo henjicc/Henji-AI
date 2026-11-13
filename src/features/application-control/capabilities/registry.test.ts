@@ -6,7 +6,6 @@ import type { ApplicationOperationImpact } from '@/core/application-control'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '@/core/application-control/builtinApplicationCapabilityRegistry'
 import { ASSET_APPLICATION_CAPABILITIES } from '@/core/application-control/domains/asset/assetApplicationCapabilities'
 import { CAMERA_STAGE_APPLICATION_CAPABILITIES } from '@/core/application-control/domains/cameraStage/cameraStageApplicationCapabilities'
-import { CANVAS_BATCH_APPLICATION_CAPABILITIES } from '@/core/application-control/domains/canvas/canvasBatchApplicationCapabilities'
 import { CANVAS_EDITOR_APPLICATION_CAPABILITIES } from '@/core/application-control/domains/canvas/canvasEditorApplicationCapabilities'
 import { CANVAS_MUTATION_APPLICATION_CAPABILITIES } from '@/core/application-control/domains/canvas/canvasMutationApplicationCapabilities'
 import { CANVAS_PROJECT_APPLICATION_CAPABILITIES } from '@/core/application-control/domains/canvas/canvasProjectApplicationCapabilities'
@@ -36,7 +35,6 @@ describe('application capability handler coverage', () => {
       ...CANVAS_PROJECT_APPLICATION_CAPABILITIES,
       ...CANVAS_EDITOR_APPLICATION_CAPABILITIES,
       ...CANVAS_MUTATION_APPLICATION_CAPABILITIES,
-      ...CANVAS_BATCH_APPLICATION_CAPABILITIES,
       ...CAMERA_STAGE_APPLICATION_CAPABILITIES,
       ...TOOLBOX_APPLICATION_CAPABILITIES,
     ]
@@ -84,13 +82,9 @@ describe('application capability handler coverage', () => {
    * 免费拿来当门禁。
    */
   it('名字里的动词与 impacts 声明的 effect 一致', () => {
-    /*
-     * 例外必须逐条写明理由，不接受"名字只是名字"。
-     * 这两条是**属性写入**而不是集合增删：素材的库归属存在 asset.library_refs 上，
-     * 走 append/remove 两个 operation，实体本身既没新建也没删除，声明 update 是准确的。
-     */
+    // 例外必须逐条写明理由，不接受"名字只是名字"。
     // remove_image_edit_region 是“移除画面里的物体”：改写图片像素（新增补丁层），不删除任何实体，effect 正是 update。
-    const justifiedExceptions = new Set(['add_asset_to_library', 'remove_asset_from_library', 'remove_image_edit_region'])
+    const justifiedExceptions = new Set(['remove_image_edit_region'])
     const rules: { pattern: RegExp; effect: ApplicationOperationImpact['effect'] }[] = [
       { pattern: /^(?:create|add|new|duplicate)_/, effect: 'create' },
       { pattern: /^(?:delete|remove)_/, effect: 'delete' },
@@ -181,22 +175,11 @@ describe('application capability handler coverage', () => {
 
   })
 
-  it('所有有控制影响的能力都能产出强类型 Effect，画布读写使用完整稳定引用', () => {
+  it('所有有控制影响的能力都能产出强类型 Effect，画布读取使用完整稳定引用', () => {
     const missing = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.list()
       .filter((definition) => definition.control.impacts.length > 0 && !definition.resolveObservedEffects)
       .map((definition) => definition.id)
     expect(missing).toEqual([])
-
-    const add = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('add_canvas_node')
-    const created = add?.resolveObservedEffects?.(
-      { documentId: 'project-1', nodeType: 'textInput', placement: { mode: 'viewport_center' } },
-      { documentId: 'project-1', nodeId: 'node-1', nodeType: 'textInput', undoRef: 'undo-1' },
-    ) ?? []
-    expect(created.map((effect) => applicationObservedEffectSchema.parse(effect))).toEqual([
-      expect.objectContaining({
-        effect: 'create', targetRefs: [{ kind: 'canvas.node', id: 'node-1' }],
-      }),
-    ])
 
     const read = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('get_canvas_document')
     const observed = read?.resolveObservedEffects?.(

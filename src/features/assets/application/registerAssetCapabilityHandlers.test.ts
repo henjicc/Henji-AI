@@ -39,16 +39,13 @@ describe('asset capability handlers', () => {
     vi.clearAllMocks()
     mocks.configuredDependencies = null
     mocks.assetService.select.mockResolvedValue({ assetId: 'asset-1' })
-    mocks.assetService.replaceTags.mockResolvedValue({ assetId: 'asset-1', tags: ['精选'] })
   })
 
-  it('正式写入只由素材命令边界推进一次 revision，handler 与 executor 不重复 bump', async () => {
-    const handlers = registeredHandlers()
+  it('素材写入执行器拿到的依赖读宿主 revision，自己不推进：推进只在素材命令边界发生一次', () => {
+    registeredHandlers()
 
-    await handlers.get('set_asset_tags')?.({ assetId: 'asset-1', tags: ['精选'] }, context)
     mocks.configuredDependencies?.bumpRevision()
 
-    expect(mocks.assetService.replaceTags).toHaveBeenCalledTimes(1)
     expect(mocks.notifyHostScopeChanged).not.toHaveBeenCalled()
     expect(mocks.configuredDependencies?.readRevision()).toBe(7)
   })

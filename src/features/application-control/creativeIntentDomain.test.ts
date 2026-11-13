@@ -120,7 +120,7 @@ it('整理候选回执必须回读真实资源，文件丢失不能返回已核�
     return bytes
   })
   try {
-    const result = await app.call('organize_video_edit_intent', { draftRef })
+    const result = await app.call('organize_intent', { draftRef })
     expect(result.ok).toBe(false)
     expect(JSON.stringify(result)).toContain('候选文件已丢失')
   } finally { app.dispose() }
@@ -140,7 +140,7 @@ it('正式 describe → change/invoke → read：钉点保持、候选应用与�
     expect(duplicate.ok).toBe(false)
     expect(owner.document.creativeIntents!.drafts[0].pins).toEqual(pins)
     const baseline = await app.read(draftRef)
-    const organized = await app.requireResult('organize_video_edit_intent', { draftRef, motionIntent: { kind: 'follow_path', preserveJitter: false }, takeIds: [state.draft.takes[0].id] }, baseline.revisions as Record<string, number>)
+    const organized = await app.requireResult('organize_intent', { draftRef, motionIntent: { kind: 'follow_path', preserveJitter: false }, takeIds: [state.draft.takes[0].id] }, baseline.revisions as Record<string, number>)
     expect(organized.verification).toMatchObject({ verified: true })
     expect(videoMotionState(owner)!.intent).toEqual({ kind: 'follow_path', preserveJitter: false })
     expect(owner.document.creativeIntents!.drafts[0].pins).toEqual(pins)
@@ -204,13 +204,13 @@ it('权限拒绝先于 provider；已关闭实例不写入；保存失败只恢�
     failVideoEditSaves(false)
     expect((await app.call('save_video_edit', { documentRef: { kind: 'video_edit.document', id: owner.document.id } })).ok).toBe(true)
     await closeVideoEditProject(owner.document.id)
-    expect((await app.call('organize_video_edit_intent', { draftRef })).ok).toBe(false)
+    expect((await app.call('organize_intent', { draftRef })).ok).toBe(false)
   } finally { failVideoEditSaves(false); app.dispose() }
 })
 it('正式候选应用保存失败后恢复回执，不重复写曲线或增加撤销步', async () => {
   const { owner, draftRef } = await setup(), app = createApplicationHarness()
   try {
-    const organized = await app.requireResult('organize_video_edit_intent', { draftRef })
+    const organized = await app.requireResult('organize_intent', { draftRef })
     const candidate = (organized.candidateRefs as ApplicationRef[])[0], history = owner.past.length
     failVideoEditSaves(true)
     const failed = await app.change(candidate, { 'video_edit.intent_candidate.applied': true })
@@ -229,7 +229,7 @@ it('正式候选应用保存失败后恢复回执，不重复写曲线或增加�
 it('作品后续手调后，正式候选应用拒绝过期结果并保留新状态', async () => {
   const { owner, draftRef } = await setup(), app = createApplicationHarness()
   try {
-    const organized = await app.requireResult('organize_video_edit_intent', { draftRef })
+    const organized = await app.requireResult('organize_intent', { draftRef })
     const candidate = (organized.candidateRefs as ApplicationRef[])[0]
     editVideoProject(owner.document.id, document => { document = structuredClone(document); document.sequences[0].clips[0].x = .25; return document })
     const history = owner.past.length
@@ -266,22 +266,22 @@ it('正式 C2 讲解读取与封闭计划：未授权拒绝、连续输入回执
   session.consent!.textUpload = true
   updateVideoEditCreativeIntents(owner.document.id, { ...owner.document.creativeIntents!, sessions: [session] })
   const createSession = (_capabilityId: string, _input: unknown) => createApplicationCapabilitySession(createApplicationCallerGrant({ callerId: 'private-caller' }))
-  const read = createSession('read_video_edit_intent_recording', raw)
-  const result = await read.execute({ id: 'read_video_edit_intent_recording', version: 1, input: raw }, { requestId: crypto.randomUUID(), signal: new AbortController().signal })
+  const read = createSession('read_intent_recording', raw)
+  const result = await read.execute({ id: 'read_intent_recording', version: 1, input: raw }, { requestId: crypto.randomUUID(), signal: new AbortController().signal })
   expect(result.ok, JSON.stringify(result)).toBe(true)
   if (!result.ok) throw new Error('private read failed')
   expect(result.data.inputReceipt).toBeTypeOf('string')
   expect(result.data.semanticImages).toEqual([])
   expect(JSON.stringify(result.data)).not.toContain('input_audio')
   const proposed = { draftRef, sessionId: session.id, inputReceipt: result.data.inputReceipt, semanticPlan: { draftDigest: `sha256:${'f'.repeat(64)}`, actions: [], protectedRefs: [], questions: [] } }
-  const interpreted = await createSession('interpret_video_edit_intent', proposed).execute({ id: 'interpret_video_edit_intent', version: 1, input: proposed }, { requestId: crypto.randomUUID(), signal: new AbortController().signal })
+  const interpreted = await createSession('interpret_intent', proposed).execute({ id: 'interpret_intent', version: 1, input: proposed }, { requestId: crypto.randomUUID(), signal: new AbortController().signal })
   expect(interpreted.ok, JSON.stringify(interpreted)).toBe(true)
   if (interpreted.ok) expect(interpreted.data.status).toBe('local_fallback')
-  const replay = await createSession('interpret_video_edit_intent', proposed).execute({ id: 'interpret_video_edit_intent', version: 1, input: proposed }, { requestId: crypto.randomUUID(), signal: new AbortController().signal })
+  const replay = await createSession('interpret_intent', proposed).execute({ id: 'interpret_intent', version: 1, input: proposed }, { requestId: crypto.randomUUID(), signal: new AbortController().signal })
   expect(replay.ok).toBe(false)
   session.consent!.textUpload = false
   updateVideoEditCreativeIntents(owner.document.id, { ...owner.document.creativeIntents!, sessions: [session] })
-  expect((await read.execute({ id: 'read_video_edit_intent_recording', version: 1, input: raw }, { requestId: crypto.randomUUID(), signal: new AbortController().signal })).ok).toBe(true)
+  expect((await read.execute({ id: 'read_intent_recording', version: 1, input: raw }, { requestId: crypto.randomUUID(), signal: new AbortController().signal })).ok).toBe(true)
 })
 it('图片正式保真度、钉点、应用保存失败恢复和公共撤销共用原布局服务，无事务互等', async () => {
   const document = createImageEditDocumentV3({ documentId: 'image-intent-transaction', width: 1000, height: 600 })

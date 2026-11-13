@@ -4,152 +4,38 @@ import { v4 as uuidv4 } from 'uuid';
 import { ZodError } from 'zod';
 import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure';
 
-import type { CanvasBatchOperation } from '@/core/application-control/domains/canvas/canvasBatchApplicationCapabilities';
 import { createLogger } from '@/core/logging';
-import { type CanvasHistoryState, type CanvasNode, type CanvasEdge } from '@/stores/canvasStore';
+import { type CanvasHistoryState } from '@/stores/canvasStore';
 
-import { addCanvasNode, CanvasApplicationError, connectCanvasNodes } from './canvasApplicationService';
-import { deleteCanvasNodes, disconnectCanvasEdge, duplicateCanvasNode, groupCanvasNodes, selectCanvasNode, updateCanvasNode } from './canvasMutationService';
-import { parseCanvasNodeData } from '../domain/nodeControlRegistry';
+import { addCanvasNode, connectCanvasNodes } from './canvasApplicationService';
+import { deleteCanvasNodes, disconnectCanvasEdge } from './canvasMutationService';
 
-interface CanvasBatchPlan {
-  planRef: string
-  projectId: string
-  createdCanvasRevision: number
-  createdNodes: CanvasNode[]
-  createdEdges: CanvasEdge[]
-  operations: CanvasBatchOperation[]
-  createdAt: number
-  committed: boolean
-}
+/** 通用集合写入翻译成的画布步骤：新建节点、删除节点、连线、断开连线。 */
+export type CanvasBatchOperation =
+  | { kind: 'add_node'; nodeType: string; placement: { mode: 'viewport_center' } | { mode: 'right_of_node'; anchorNodeId: string } }
+  | { kind: 'delete_nodes'; nodeIds: string[] }
+  | { kind: 'connect_nodes'; sourceNodeId: string; targetNodeId: string; sourceHandle?: string; targetHandle?: string }
+  | { kind: 'disconnect_edge'; edgeId: string }
 
 // canvasStore 的节点与连线写入始终替换数组引用。事务冲突检测直接保存快照引用即可；
 // 若在这里序列化整张画布，工具条每创建一个轻量节点都会同步遍历全部节点、媒体数据与历史，
 // 其耗时会随项目体量增长，并阻塞 React 提交新节点的首帧。
 
-const plans = new Map<string, CanvasBatchPlan>()
 import { canvasBatchUndos as undos } from './canvasBatchUndo'
 export { undoCanvasBatch } from './canvasBatchUndo'
 import { pauseCanvasProjectPersistence } from './canvasPersistenceService';
 import { confirmCanvasPersistence, createCanvasMutationCheckpoint, isCanvasMutationCheckpointCurrent, assertCanvasCommitContext, CanvasTransactionConflictError, CanvasTransactionRolledBackError, CanvasPersistenceError, CanvasSourceCompensationError, type CanvasCommitOptions, type CanvasTransactionRuntime } from './canvasPersistenceService';
-const PLAN_TTL_MS = 15 * 60_000
 const logger = createLogger('features.canvas.batch')
-
-function cleanupExpiredPlans(): void {
-  const threshold = Date.now() - PLAN_TTL_MS
-  for (const [key, plan] of plans) if (plan.createdAt < threshold || plan.committed) plans.delete(key)
-}
-
-function requireNode(projectId: string, nodeId: string): CanvasNode {
-  const node = requireCanvasProjectInstance(projectId).store.getState().nodes.find((item) => item.id === nodeId)
-  if (!node) throw new CanvasApplicationError('NOT_FOUND', `画布节点不存在：${nodeId}`, true, { nodeId })
-  return node
-}
-
-function validateOperation(projectId: string, operation: CanvasBatchOperation): void {
-  if (operation.kind === 'add_node') {
-    parseCanvasNodeData(operation.nodeType, operation.data)
-    if (operation.placement.mode === 'right_of_node') requireNode(projectId, operation.placement.anchorNodeId)
-    return
-  }
-  if (operation.kind === 'duplicate_node') {
-    requireNode(projectId, operation.nodeId)
-    if (operation.placement.mode === 'right_of_node') requireNode(projectId, operation.placement.anchorNodeId)
-    return
-  }
-  if (operation.kind === 'update_node') {
-    const node = requireNode(projectId, operation.nodeId)
-    parseCanvasNodeData(node.type, operation.data)
-    return
-  }
-  if (operation.kind === 'delete_nodes' || operation.kind === 'group_nodes') {
-    for (const nodeId of operation.nodeIds) requireNode(projectId, nodeId)
-    return
-  }
-  if (operation.kind === 'connect_nodes') {
-    requireNode(projectId, operation.sourceNodeId)
-    requireNode(projectId, operation.targetNodeId)
-    return
-  }
-  if (operation.kind === 'disconnect_edge') {
-    if (!requireCanvasProjectInstance(projectId).store.getState().edges.some((edge) => edge.id === operation.edgeId)) {
-      throw new CanvasApplicationError('NOT_FOUND', `画布连接不存在：${operation.edgeId}`, true, { edgeId: operation.edgeId })
-    }
-    return
-  }
-  if (operation.nodeId) requireNode(projectId, operation.nodeId)
-}
-
-function operationSummary(operation: CanvasBatchOperation, index: number): Record<string, unknown> {
-  return {
-    index,
-    kind: operation.kind,
-    targetIds: Object.fromEntries(Object.entries(operation).filter(([key]) => key.endsWith('Id') || key.endsWith('Ids')).map(([key, value]) => [key, Array.isArray(value) ? value.join(',') : String(value)])),
-  }
-}
-
-export function planCanvasBatch(
-  projectId: string,
-  operations: CanvasBatchOperation[],
-  canvasRevision: number,
-): Record<string, unknown> {
-  cleanupExpiredPlans()
-  requireCanvasProjectInstance(projectId)
-  operations.forEach(operation => validateOperation(projectId, operation))
-  const canvas = requireCanvasProjectInstance(projectId).store.getState()
-  const planRef = `canvas-plan:${uuidv4()}`
-  plans.set(planRef, {
-    planRef,
-    projectId,
-    createdCanvasRevision: canvasRevision,
-    createdNodes: canvas.nodes,
-    createdEdges: canvas.edges,
-    operations: structuredClone(operations),
-    createdAt: Date.now(),
-    committed: false,
-  })
-  return {
-    planRef,
-    projectId,
-    canvasRevision,
-    operationCount: operations.length,
-    operations: operations.map(operationSummary),
-    reversible: true,
-  }
-}
-
-export function previewCanvasBatch(planRef: string): Record<string, unknown> {
-  cleanupExpiredPlans()
-  const plan = plans.get(planRef)
-  if (!plan) throw new CanvasApplicationError('NOT_FOUND', '画布批量计划不存在或已过期')
-  requireCanvasProjectInstance(plan.projectId)
-  return {
-    planRef: plan.planRef,
-    projectId: plan.projectId,
-    createdCanvasRevision: plan.createdCanvasRevision,
-    operations: plan.operations.map(operationSummary),
-    summary: `将按顺序执行 ${plan.operations.length} 个画布操作，完成后生成一个撤销引用。`,
-    reversible: true,
-  }
-}
 
 async function executeOperation(projectId: string, operation: CanvasBatchOperation, options: CanvasCommitOptions): Promise<Record<string, unknown>> {
   if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId)
   assertCanvasCommitContext(projectId, options)
   switch (operation.kind) {
-    case 'add_node': return addCanvasNode({ projectId, nodeType: operation.nodeType, placement: operation.placement, data: operation.data }, options)
-    case 'duplicate_node': return duplicateCanvasNode({ projectId, nodeId: operation.nodeId, placement: operation.placement }, options)
-    case 'update_node': return updateCanvasNode({ projectId, nodeId: operation.nodeId, data: operation.data }, options)
+    case 'add_node': return addCanvasNode({ projectId, nodeType: operation.nodeType, placement: operation.placement }, options)
     case 'delete_nodes': return deleteCanvasNodes(projectId, operation.nodeIds, options)
     case 'connect_nodes': return connectCanvasNodes({ projectId, sourceNodeId: operation.sourceNodeId, targetNodeId: operation.targetNodeId,
       sourceHandle: operation.sourceHandle, targetHandle: operation.targetHandle }, options)
     case 'disconnect_edge': return disconnectCanvasEdge(projectId, operation.edgeId, options)
-    case 'group_nodes': return groupCanvasNodes(projectId, operation.nodeIds, 'spatial', options)
-    case 'select_node': {
-      const result = selectCanvasNode(projectId, operation.nodeId)
-      await confirmCanvasPersistence(projectId, options)
-      return result
-    }
   }
 }
 
@@ -323,9 +209,8 @@ async function executeCanvasTransaction(
 /**
  * 原子地应用一组画布操作，**这是画布批量写入的唯一内核**。
  *
- * 批量能力（plan/commit 两段式）与反射层的集合写入都调用它，不要再写第二份「抓快照—执行—
- * 失败回滚—合并撤销历史」的循环。项目里已经因为「同一语义两条实现」吃过四次亏，画布这条
- * 是唯一还没分叉的，别在这里开第一刀。
+ * 反射层的集合写入调用它，不要再写第二份「抓快照—执行—失败回滚—合并撤销历史」的循环。
+ * 项目里已经因为「同一语义两条实现」吃过四次亏，画布这条是唯一还没分叉的，别在这里开第一刀。
  *
  * 语义保证：
  * - 业务失败仅在本批次仍持有状态时补偿；出现新编辑或存储拒绝时保留现场并报告恢复动作
@@ -351,38 +236,6 @@ export async function applyCanvasOperationsAtomically(
   }, logContext)
 }
 
-export async function commitCanvasBatch(planRef: string): Promise<Record<string, unknown>> {
-  cleanupExpiredPlans()
-  const plan = plans.get(planRef)
-  if (!plan) throw new CanvasApplicationError('NOT_FOUND', '画布批量计划不存在或已过期')
-  if (plan.committed) throw new CanvasApplicationError('CONFLICT', '画布批量计划已经提交')
-  if (!findCanvasProjectInstance(plan.projectId)) await getCanvasProjectInstance(plan.projectId)
-  const canvas = requireCanvasProjectInstance(plan.projectId).store.getState()
-  if (canvas.nodes !== plan.createdNodes || canvas.edges !== plan.createdEdges) {
-    throw new CanvasApplicationError('STALE_CONTEXT', '画布批量计划创建后画布已发生变化，请重新规划', true, {
-      planRef,
-      projectId: plan.projectId,
-    })
-  }
-  // 写入本身走共享内核，这里只负责计划态的校验与标记
-  const { appliedOperations, undoRef } = await applyCanvasOperationsAtomically(
-    plan.projectId,
-    plan.operations,
-    { planRef },
-  )
-  plan.committed = true
-  return {
-    planRef,
-    projectId: plan.projectId,
-    appliedOperations,
-    operationCount: appliedOperations.length,
-    undoRef,
-    status: 'committed',
-  }
-}
-
-
 export function resetCanvasBatchStateForTests(): void {
-  plans.clear()
   undos.clear()
 }

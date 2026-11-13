@@ -14,7 +14,6 @@ const mocks = vi.hoisted(() => ({
     observeCameraStagePreview: vi.fn(),
     observeCameraStageScene: vi.fn(),
     placeCameraStageObject: vi.fn(),
-    updateCameraStageObject: vi.fn(),
     verifyCameraStage: vi.fn(),
   },
   cameraRenderAdapter: {

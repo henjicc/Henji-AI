@@ -191,7 +191,6 @@ describe('契约发现的投影', () => {
 
     const expanded = buildApplicationContract({ domains, catalog: catalog(), port: 43821, requestedDomains: ['storyboard'] })
     const storyboard = (expanded.domains as Array<Record<string, unknown>>).find((domain) => domain.id === 'storyboard')!
-    expect(expanded.access).toHaveProperty('alternativeRoutes')
     expect((storyboard.entities as Array<{ readOnlyReason?: string }>)[0].readOnlyReason).toContain('只读摘要投影')
     expect((expanded.domains as Array<Record<string, unknown>>).find((domain) => domain.id === 'settings')).not.toHaveProperty('entities')
   })

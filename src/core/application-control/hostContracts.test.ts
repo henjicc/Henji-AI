@@ -37,10 +37,10 @@ describe('application host contracts', () => {
     expect(videoEdit.parse({ documentRef: 'video_edit.document:p', sequenceRef: null, frame: 0, playing: false, inFrame: null, outFrame: null, focusedPanel: VIDEO_EDIT_FOCUSABLE_PANELS[0], selectedClipRefs: [], ...annotations, targetTrackRefs: [] }).draftAnnotations?.count).toBe(2)
   })
   it('拒绝没有明确项目 ID 的画布能力输入', () => {
-    const capability = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('add_canvas_node')
+    const capability = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('duplicate_canvas_node')
     expect(capability).toBeDefined()
     expect(() => capability?.inputSchema.parse({
-      nodeType: 'imageNode',
+      nodeId: 'node-1',
       placement: { mode: 'viewport_center' },
     })).toThrow()
   })

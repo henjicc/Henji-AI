@@ -37,55 +37,6 @@ function target(documentId: string, extra: Record<string, string> = {}): Record<
   return { documentId, ...extra }
 }
 
-const addCanvasNode = defineApplicationCapability({
-  id: 'add_canvas_node',
-  external: { kind: 'delegate', entityType: 'canvas.node', operations: ['create'], reason: '普通数据操作由正式实体描述及 change_application_entities 通用事务承接，不另增同功能工具。' },
-  version: 1,
-  title: '添加画布节点',
-  description: '在明确画布中按确定性布局添加已通过节点结构校验的节点。',
-  domain: 'canvas',
-  aliases: ['新建画布节点', 'add canvas node'],
-  readOnly: false,
-  dataClasses: ['C1'],
-  idempotent: true,
-  destructive: false,
-  timeoutMs: 8_000,
-  supportsPreview: false,
-  supportsUndo: true,
-  requiredScopes: ['canvas'],
-  prerequisites: [
-    'nodeType 必须来自 search_canvas_node_types，且应先用 get_canvas_node_schema 校验数据和端口。',
-  ],
-  acceptsRefs: ['canvas.document', 'canvas.node_type'],
-  producesRefs: ['canvas.node'],
-  executionPrerequisites: ['get_canvas_node_schema'],
-  inputSchema: z.object({
-    documentId: canvasDocumentIdSchema,
-    nodeType: z.string().min(1),
-    placement: canvasNodePlacementSchema,
-    data: z.record(z.string(), z.unknown()).optional(),
-  }).strict(),
-  outputSchema: capabilityOutputSchema({
-    documentId: z.string(),
-    nodeId: z.string(),
-    nodeType: z.string(),
-    undoRef: z.string(),
-  }),
-  concurrencyKey: 'canvas',
-  resolveConcurrencyKey: (input) => `canvas:${input.documentId}`,
-  resolveTargetIds: (input) => target(input.documentId, { nodeType: input.nodeType }),
-  summarize: (output) => `已在画布 ${output.documentId} 添加节点 ${output.nodeId}。`,
-  createUndo: (output) => ({ kind: 'canvas_history', token: output.undoRef }),
-  control: { execution: { mode: 'immediate', cancelable: false, resultState: 'completed' }, impacts: [{
-    effect: 'create', entityTypes: ['canvas.node'], propertyIds: [], revisionScopes: ['canvas'], verificationRequired: true,
-  }] },
-  resolveObservedEffects: (_input, output) => [{
-    effect: 'create', entityTypes: ['canvas.node'], propertyIds: [],
-    targetRefs: [{ kind: 'canvas.node', id: output.nodeId }], count: 1, verified: false,
-    evidence: [`node:${output.nodeId}`],
-  }],
-})
-
 const applyCanvasImageCapability = defineApplicationCapability({
   id: 'apply_canvas_image_capability',
   version: 1,
@@ -270,75 +221,6 @@ const addGenerationResultToCanvas = defineApplicationCapability({
   }],
 })
 
-const connectCanvasNodes = defineApplicationCapability({
-  id: 'connect_canvas_nodes',
-  external: { kind: 'delegate', entityType: 'canvas.edge', operations: ['create'], reason: '普通数据操作由正式实体描述及 change_application_entities 通用事务承接，不另增同功能工具。' },
-  version: 1,
-  title: '连接画布节点',
-  description: '连接明确的上下游节点，由宿主拒绝不兼容、重复或循环连接。',
-  domain: 'canvas',
-  aliases: ['连接节点', 'connect canvas nodes'],
-  readOnly: false,
-  dataClasses: ['C1'],
-  idempotent: true,
-  destructive: false,
-  timeoutMs: 8_000,
-  supportsPreview: false,
-  supportsUndo: true,
-  requiredScopes: ['canvas'],
-  acceptsRefs: ['canvas.document', 'canvas.node'],
-  producesRefs: ['canvas.edge', 'canvas.node'],
-  executionPrerequisites: ['add_canvas_node'],
-  inputSchema: z.object({
-    documentId: canvasDocumentIdSchema,
-    sourceNodeId: z.string().min(1),
-    targetNodeId: z.string().min(1),
-    sourceHandle: z.string().min(1).max(160).optional(),
-    targetHandle: z.string().min(1).max(160).optional(),
-  }).strict(),
-  outputSchema: capabilityOutputSchema({
-    documentId: z.string(),
-    edgeId: z.string(),
-    sourceNodeId: z.string(),
-    targetNodeId: z.string(),
-    effectiveSourceNodeId: z.string(),
-    createdNodeIds: z.array(z.string()).optional(),
-    createdEdgeIds: z.array(z.string()).optional(),
-    sourceHandle: z.string(),
-    targetHandle: z.string(),
-    undoRef: z.string(),
-  }),
-  concurrencyKey: 'canvas',
-  resolveConcurrencyKey: (input) => `canvas:${input.documentId}`,
-  resolveTargetIds: (input) => target(input.documentId, {
-    sourceNodeId: input.sourceNodeId,
-    targetNodeId: input.targetNodeId,
-    ...(input.sourceHandle ? { sourceHandle: input.sourceHandle } : {}),
-    ...(input.targetHandle ? { targetHandle: input.targetHandle } : {}),
-  }),
-  summarize: (output) => `已创建画布连接 ${output.edgeId}。`,
-  createUndo: (output) => ({ kind: 'canvas_history', token: output.undoRef }),
-  control: { execution: { mode: 'immediate', cancelable: false, resultState: 'completed' }, impacts: [{
-    effect: 'create', entityTypes: ['canvas.edge'], propertyIds: [], revisionScopes: ['canvas'], verificationRequired: true,
-  }, {
-    effect: 'create', entityTypes: ['canvas.node'], propertyIds: [], revisionScopes: ['canvas'], verificationRequired: true,
-  }] },
-  resolveObservedEffects: (_input, output) => {
-    const edgeIds = output.createdEdgeIds?.length ? output.createdEdgeIds : [output.edgeId]
-    return [{
-      effect: 'create' as const, entityTypes: ['canvas.edge'], propertyIds: [],
-      targetRefs: edgeIds.map((id) => ({ kind: 'canvas.edge' as const, id })),
-      count: edgeIds.length, verified: false,
-      evidence: edgeIds.map((id) => `edge:${id}`),
-    }, ...(output.createdNodeIds?.length ? [{
-      effect: 'create' as const, entityTypes: ['canvas.node'], propertyIds: [],
-      targetRefs: output.createdNodeIds.map((id) => ({ kind: 'canvas.node' as const, id })),
-      count: output.createdNodeIds.length, verified: false,
-      evidence: output.createdNodeIds.map((id) => `node:${id}`),
-    }] : [])]
-  },
-})
-
 const focusCanvasNode = defineApplicationCapability({
   id: 'focus_canvas_node',
   version: 2,
@@ -480,100 +362,6 @@ const duplicateCanvasNode = defineApplicationCapability({
   control: { execution: { mode: 'immediate', cancelable: false, resultState: 'completed' }, impacts: [{
     effect: 'create', entityTypes: ['canvas.node'], propertyIds: [], revisionScopes: ['canvas'], verificationRequired: true,
   }] },
-})
-
-const updateCanvasNode = defineApplicationCapability({
-  id: 'update_canvas_node',
-  external: { kind: 'delegate', entityType: 'canvas.node', operations: ['write'], reason: '普通数据操作由正式实体描述及 change_application_entities 通用事务承接，不另增同功能工具。', propertyIds: ['canvas.node.generation_config', 'canvas.node.display_name', 'canvas.node.position'] },
-  version: 1,
-  title: '更新画布节点',
-  description: '按照节点结构更新明确节点的可编辑数据。',
-  domain: 'canvas',
-  aliases: ['修改节点参数', 'update canvas node'],
-  readOnly: false,
-  dataClasses: ['C1'],
-  idempotent: true,
-  destructive: false,
-  timeoutMs: 8_000,
-  supportsPreview: false,
-  supportsUndo: true,
-  requiredScopes: ['canvas'],
-  acceptsRefs: ['canvas.document', 'canvas.node'],
-  producesRefs: ['canvas.node'],
-  inputSchema: z.object({
-    documentId: canvasDocumentIdSchema,
-    nodeId: z.string().min(1),
-    data: z.record(z.string(), z.unknown()),
-  }).strict(),
-  outputSchema: capabilityOutputSchema({
-    documentId: z.string(),
-    nodeId: z.string(),
-    updatedKeys: z.array(z.string()),
-    undoRef: z.string(),
-  }),
-  concurrencyKey: 'canvas_node',
-  resolveConcurrencyKey: (input) => `canvas:${input.documentId}:${input.nodeId}`,
-  resolveTargetIds: (input) => target(input.documentId, { nodeId: input.nodeId }),
-  summarize: (output) => `已更新画布节点 ${output.nodeId}。`,
-  createUndo: (output) => ({ kind: 'canvas_history', token: output.undoRef }),
-  control: { execution: { mode: 'immediate', cancelable: false, resultState: 'completed' }, impacts: [{
-    effect: 'update', entityTypes: ['canvas.node'], propertyIds: [], revisionScopes: ['canvas'], verificationRequired: true,
-  }] },
-  resolveObservedEffects: (input, output) => [{
-    effect: 'update', entityTypes: ['canvas.node'],
-    propertyIds: Object.keys(input.data).map((key) => `canvas.node.${key}`),
-    targetRefs: [{ kind: 'canvas.node', id: input.nodeId }], count: 1, verified: false,
-    evidence: [`node:${output.nodeId}`],
-  }],
-})
-
-const deleteCanvasNodes = defineApplicationCapability({
-  id: 'delete_canvas_nodes',
-  external: { kind: 'delegate', entityType: 'canvas.node', operations: ['remove'], reason: '普通数据操作由正式实体描述及 change_application_entities 通用事务承接，不另增同功能工具。' },
-  version: 1,
-  title: '删除画布节点',
-  description: '删除明确的画布节点及关联边，并返回可撤销引用。',
-  domain: 'canvas',
-  aliases: ['删除节点', 'delete canvas nodes'],
-  readOnly: false,
-  dataClasses: ['C1'],
-  idempotent: true,
-  destructive: true,
-  timeoutMs: 8_000,
-  supportsPreview: true,
-  supportsUndo: true,
-  requiredScopes: ['canvas'],
-  acceptsRefs: ['canvas.document', 'canvas.node'],
-  producesRefs: ['canvas.undo'],
-  inputSchema: z.object({
-    documentId: canvasDocumentIdSchema,
-    nodeIds: z.array(z.string().min(1)).min(1),
-  }).strict(),
-  outputSchema: capabilityOutputSchema({
-    documentId: z.string(),
-    deletedNodeIds: z.array(z.string()),
-    undoRef: z.string(),
-  }),
-  concurrencyKey: 'canvas',
-  resolveConcurrencyKey: (input) => `canvas:${input.documentId}`,
-  resolveTargetIds: (input) => target(input.documentId, { nodeIds: input.nodeIds.join(',') }),
-  preview: (input) => ({
-    title: '删除画布节点',
-    summary: `删除 ${input.nodeIds.length} 个节点及关联边。`,
-    targetIds: target(input.documentId, { nodeIds: input.nodeIds.join(',') }),
-    reversible: true,
-    dataClasses: ['C1'],
-  }),
-  summarize: (output) => `已删除 ${output.deletedNodeIds.length} 个画布节点。`,
-  createUndo: (output) => ({ kind: 'canvas_history', token: output.undoRef }),
-  control: { execution: { mode: 'immediate', cancelable: false, resultState: 'completed' }, impacts: [{
-    effect: 'delete', entityTypes: ['canvas.node'], propertyIds: [], revisionScopes: ['canvas'], verificationRequired: true,
-  }] },
-  resolveObservedEffects: (input, output) => [{
-    effect: 'delete', entityTypes: ['canvas.node'], propertyIds: [],
-    targetRefs: input.nodeIds.map((id) => ({ kind: 'canvas.node', id })), count: input.nodeIds.length,
-    verified: false, evidence: [`undo:${output.undoRef}`],
-  }],
 })
 
 const selectCanvasNode = defineApplicationCapability({
@@ -873,43 +661,6 @@ const clearCanvas = defineApplicationCapability({
   }] },
 })
 
-const disconnectCanvasEdge = defineApplicationCapability({
-  id: 'disconnect_canvas_edge',
-  external: { kind: 'delegate', entityType: 'canvas.edge', operations: ['remove'], reason: '普通数据操作由正式实体描述及 change_application_entities 通用事务承接，不另增同功能工具。' },
-  version: 1,
-  title: '断开画布连接',
-  description: '按明确连接引用断开画布连接。',
-  domain: 'canvas',
-  aliases: ['删除节点连线', 'disconnect canvas edge'],
-  readOnly: false,
-  dataClasses: ['C1'],
-  idempotent: true,
-  destructive: true,
-  timeoutMs: 8_000,
-  supportsPreview: false,
-  supportsUndo: true,
-  requiredScopes: ['canvas'],
-  acceptsRefs: ['canvas.document', 'canvas.edge'],
-  producesRefs: ['canvas.undo'],
-  inputSchema: z.object({
-    documentId: canvasDocumentIdSchema,
-    edgeId: z.string().min(1),
-  }).strict(),
-  outputSchema: capabilityOutputSchema({
-    documentId: z.string(),
-    edgeId: z.string(),
-    undoRef: z.string(),
-  }),
-  concurrencyKey: 'canvas',
-  resolveConcurrencyKey: (input) => `canvas:${input.documentId}`,
-  resolveTargetIds: (input) => target(input.documentId, { edgeId: input.edgeId }),
-  summarize: (output) => `已断开画布连接 ${output.edgeId}。`,
-  createUndo: (output) => ({ kind: 'canvas_history', token: output.undoRef }),
-  control: { execution: { mode: 'immediate', cancelable: false, resultState: 'completed' }, impacts: [{
-    effect: 'delete', entityTypes: ['canvas.edge'], propertyIds: [], revisionScopes: ['canvas'], verificationRequired: true,
-  }] },
-})
-
 const EXPORT_IMAGE_EDIT_TARGET_TO_CANVAS_CAPABILITY_ID = 'export_image_edit_target_to_canvas'
 
 const canvasDocumentRefSchema = applicationRefSchema.extend({
@@ -1008,17 +759,13 @@ const exportImageEditTargetToCanvas = defineApplicationCapability({
 })
 
 export const CANVAS_MUTATION_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
-  addCanvasNode,
   applyCanvasImageCapability,
   addAssetToCanvas,
   addGenerationResultToCanvas,
-  connectCanvasNodes,
   focusCanvasNode,
   undoCanvasChange,
   redoCanvasChange,
   duplicateCanvasNode,
-  updateCanvasNode,
-  deleteCanvasNodes,
   selectCanvasNode,
   groupCanvasNodes,
   tidyCanvasNodes,
@@ -1026,6 +773,5 @@ export const CANVAS_MUTATION_APPLICATION_CAPABILITIES: ApplicationCapabilityDefi
   disconnectAssetGroupFromTarget,
   ungroupCanvasNode,
   clearCanvas,
-  disconnectCanvasEdge,
   exportImageEditTargetToCanvas,
 ]

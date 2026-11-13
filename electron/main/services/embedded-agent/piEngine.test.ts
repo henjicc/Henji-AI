@@ -179,7 +179,7 @@ describe('Pi official SDK engine', () => {
   })
   it('授权讲解 JSONL 与历史附图经正式 Pi 消息进入受控模型 transport，用量复用原循环', async () => {
     const f = await fixture({ image: true })
-    const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('read_image_edit_intent_recording')!
+    const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('read_intent_recording')!
     await f.engine.command({ action: 'configure', input: { ...f.configuration, tools: [{ name: definition.id, description: definition.description,
       inputSchema: z.toJSONSchema(definition.inputSchema, { io: 'input' }) as Record<string, unknown> }] } })
     const digest = `sha256:${'a'.repeat(64)}`
@@ -721,7 +721,7 @@ it('正式 Pi 模型失败自动调用同源本地整理，不重试模型或应
   const draftRef = { kind: 'video_edit.intent_draft' as const, id: 'document:draft' }
   await f.engine.command({ action: 'prompt', input: { text: '整理讲解', context: '', creativeIntent: { documentRef: { kind: 'video_edit.document', id: 'document' }, sessionId: 'session', draftRefs: [draftRef] } } })
   expect(f.requests).toHaveLength(1)
-  expect(f.tool).toHaveBeenCalledWith(expect.any(String), 'organize_video_edit_intent', { draftRef, operationId: expect.any(String) }, undefined)
+  expect(f.tool).toHaveBeenCalledWith(expect.any(String), 'organize_intent', { draftRef, operationId: expect.any(String) }, undefined)
   expect(await f.engine.command({ action: 'snapshot' })).toMatchObject({ busy: false, error: null })
 })
 

@@ -78,13 +78,10 @@ describe('application control coverage', () => {
     expect(auditExternalCapabilityCoverage({ publishedIds: APPLICATION_CAPABILITY_IDS }).issues).toEqual([])
   })
 
-  it.each(['catalog', 'handler', 'target', 'delegate'] as const)('故意断开 %s 后门禁必须指出缺口', kind => {
+  it.each(['catalog', 'handler', 'target'] as const)('故意断开 %s 后门禁必须指出缺口', kind => {
     const definitions = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.list()
     const changed = definitions.map(definition => {
       if (kind === 'target' && definition.id === 'create_visible_generation_task') return { ...definition, resolveOperationTargets: undefined }
-      if (kind === 'delegate' && definition.id === 'set_asset_tags') return { ...definition, external: {
-        kind: 'delegate' as const, entityType: 'asset', operations: ['write' as const], propertyIds: ['asset.missing'], reason: '用于验证失效字段确实能被覆盖门禁发现。',
-      } }
       return definition
     })
     const audit = auditExternalCapabilityCoverage({ definitions: changed,
@@ -92,7 +89,7 @@ describe('application control coverage', () => {
       ...(kind === 'handler' ? { handlerIds: listRendererApplicationCapabilityIds().filter(id => id !== 'get_current_application_context') } : {}),
     })
     expect(audit.issues.length).toBeGreaterThan(0)
-    expect(audit.issues.join('\n')).toContain(kind === 'delegate' ? 'asset.missing' : kind === 'target' ? 'create_visible_generation_task' : 'get_current_application_context')
+    expect(audit.issues.join('\n')).toContain(kind === 'target' ? 'create_visible_generation_task' : 'get_current_application_context')
   })
   it('关键业务能力返回的稳定引用存在同名正式反射实体', () => {
     const reflection = getApplicationReflectionRegistry()

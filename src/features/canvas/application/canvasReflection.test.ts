@@ -108,7 +108,7 @@ describe('canvas reflection and mutation', () => {
   })
 
   /*
-   * 专用能力（add_canvas_node 等）返回的是裸 nodeId，通用动词要的是 `画布ID:节点ID`。
+   * 专用能力（duplicate_canvas_node 等）返回的是裸 nodeId，通用动词要的是 `画布ID:节点ID`。
    * 同一样东西两种形状，拿着能力返回的 id 去调通用动词就必然 NOT_FOUND——实测画布场景反复
    * 撞这一条。规则本来就写着"领域 provider 可将全局唯一的短引用补全成正式稳定引用"。
    */

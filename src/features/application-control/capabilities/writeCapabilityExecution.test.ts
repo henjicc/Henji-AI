@@ -22,6 +22,11 @@ describe('专用写 handler 的事务前拒绝', () => {
       }
     }
   })
+  it('整理入口一个工具服务两个领域：图片原稿带剪辑专用参数时在写入前被拒绝，并点名字段与改法', async () => {
+    const input = { draftRef: { kind: 'image_edit.intent_draft', id: 'v3:missing-image:draft' }, takeIds: ['take-1'] }
+    const result = await executeApplicationCapabilityResult({ id: 'organize_intent', version: 1, input }, { signal: new AbortController().signal })
+    expect(result).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT', recoverable: true, message: expect.stringContaining('takeIds 只适用于剪辑原稿') } })
+  })
   it.each<[string, Record<string, unknown>]>([
     ['prepare_video_edit_subtitle_audio', { documentRef, sequenceRef, scope: 'sequence' }],
     ['generate_video_edit_subtitles', { documentRef, sequenceRef, audioDocumentRef: audioRef }],
@@ -29,7 +34,7 @@ describe('专用写 handler 的事务前拒绝', () => {
     ['transcribe_audio_edit', { documentRef: audioRef }],
     ['quick_process_audio_edit', { documentRef: audioRef }],
     ['export_audio_edit', { documentRef: audioRef, destination: { mode: 'quick' } }],
-    ['organize_image_edit_intent', { draftRef: { kind: 'image_edit.intent_draft', id: 'missing-draft' } }],
+    ['organize_intent', { draftRef: { kind: 'image_edit.intent_draft', id: 'missing-draft' } }],
     ['retry_layer_stack_result', { canvasRef: { kind: 'canvas.document', id: 'missing-canvas' }, nodeRef: { kind: 'canvas.node', id: 'missing-canvas:node' } }],
     ['generate_image_edit_outpaint', { documentRef: { kind: 'image_edit.document', id: 'v3:missing-image' }, margins: { right: .25, bottom: 0 }, prompt: '延展背景' }],
     ['export_video_edit', { documentRef, format: 'mp4' }],

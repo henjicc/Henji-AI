@@ -29,7 +29,7 @@ export const paidApprovalRequestSchema = z.object({
 export type PaidApprovalRequest = z.infer<typeof paidApprovalRequestSchema>
 /** Trusted UI operations; this map is internal and is not part of the public tool catalog. */
 export const UI_PAID_CAPABILITIES = {
-  interpret_video_edit_intent: 'explanation', interpret_image_edit_intent: 'explanation',
+  interpret_intent: 'explanation',
   create_visible_generation_task: 'generation', transcribe_audio_edit: 'recognition',
   ui_translate_subtitles: 'translation', ui_generate_title: 'title', ui_generate_text: 'generation',
   ui_verify_model: 'generation', ui_assistant_chat: 'generation',

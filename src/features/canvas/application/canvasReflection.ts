@@ -22,7 +22,7 @@ import { supportsCanvasNodeGenerationConfig } from './canvasNodeGenerationConfig
 
 /** 3.4：canvas.document 就是一份画布文档，文档本身的管理全部归通用文档能力。 */
 const PROJECT_WRITE_EXCLUSION = 'canvas.document 就是一份画布文档（id 即文档 ID），本身只读：改名写 documents.document.name；'
-  + '打开、移动、创建副本、移到回收站用 open_document / move_document / duplicate_document / trash_document；'
+  + '打开、移动、创建副本用 open_document / move_document / duplicate_document；移到回收站用 change_application_entities 对 documents.document 做 remove_items；'
   + '新建用 create_document（kind=canvas）。画布内容经 canvas.node / canvas.edge 写入。'
 
 const DOMAIN = 'canvas'
@@ -126,7 +126,7 @@ function childRef(kind: typeof CANVAS_ENTITY_TYPES.node | typeof CANVAS_ENTITY_T
 }
 
 /**
- * 画布子实体的稳定 id 是 `画布ID:子ID`，但专用能力（add_canvas_node 等）返回的是**裸 nodeId**。
+ * 画布子实体的稳定 id 是 `画布ID:子ID`，但专用能力（duplicate_canvas_node 等）返回的是**裸 nodeId**。
  *
  * 同一样东西两种形状，调用方拿着能力返回的 id 去调通用动词就必然 NOT_FOUND——实测画布场景
  * 反复撞这一条。规则本来就写着"领域 provider 可将全局唯一的短引用补全成正式稳定引用，但存在

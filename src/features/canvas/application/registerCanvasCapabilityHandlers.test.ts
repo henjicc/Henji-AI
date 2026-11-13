@@ -26,17 +26,10 @@ vi.mock('@/features/canvas/domain/nodeControlRegistry', () => ({
   searchCanvasNodeTypes: vi.fn(() => []),
 }))
 vi.mock('@/features/canvas/application/canvasApplicationService', () => ({
-  addCanvasNode: vi.fn(),
-  connectCanvasNodes: vi.fn(),
   focusCanvasNode: mocks.focusCanvasNodeFromAgent,
   openCanvasProject: mocks.openCanvasProject,
   undoCanvasChange: vi.fn(),
   redoCanvasChange: mocks.redoCanvasChangeFromAgent,
-}))
-vi.mock('@/features/canvas/application/canvasBatchService', () => ({
-  commitCanvasBatch: vi.fn(),
-  planCanvasBatch: vi.fn(),
-  previewCanvasBatch: vi.fn(),
 }))
 vi.mock('@/features/canvas/application/canvasProjectService', () => ({
   openCanvasDocument: mocks.openCanvasDocument,
@@ -48,8 +41,6 @@ vi.mock('@/features/documents/documentOperations', () => ({
   registerDocumentCreator: vi.fn(),
 }))
 vi.mock('@/features/canvas/application/canvasMutationService', () => ({
-  deleteCanvasNodes: vi.fn(),
-  disconnectCanvasEdge: vi.fn(),
   duplicateCanvasNode: vi.fn(),
   groupCanvasNodes: vi.fn(),
   ungroupCanvasNode: mocks.ungroupCanvasNodeFromAgent,
@@ -57,7 +48,6 @@ vi.mock('@/features/canvas/application/canvasMutationService', () => ({
   connectAssetGroupToTarget: mocks.connectAssetGroupToTarget,
   disconnectAssetGroupFromTarget: mocks.disconnectAssetGroupFromTarget,
   selectCanvasNode: vi.fn(),
-  updateCanvasNode: vi.fn(),
 }))
 vi.mock('@/features/canvas/application/canvasQueryService', () => ({
   getCanvasNode: vi.fn(),
@@ -80,9 +70,6 @@ vi.mock('@/features/canvas/application/multiLayerDocumentNodeGenerationAdapter',
 }))
 vi.mock('@/features/canvas/application/canvasNodeEditorApplicationService', () => ({
   openCanvasNodeEditor: mocks.openCanvasNodeEditor,
-}))
-vi.mock('@/features/application-control/hostContext/hostContext', () => ({
-  createHostContextSnapshot: vi.fn(() => ({ scopeRevisions: { canvas: 0 } })),
 }))
 vi.mock('@/features/navigation/application/surfaceCapabilityService', () => ({ openApplicationSurface: mocks.openApplicationSurface }))
 
