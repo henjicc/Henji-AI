@@ -1,10 +1,12 @@
 import { normalizeApplicationRefLabel, type ApplicationRef } from '../identifiers'
-import type { ApplicationEffectReceipt, ApplicationPlannedStep } from '../transactions'
+import type { ApplicationEffectReceipt, ApplicationEvidence, ApplicationPlannedStep } from '../transactions'
 import type { ApplicationCascadeEffectDeclaration, ApplicationCompletedStepResult, ApplicationExecutionContext } from './types'
 
 export interface ApplicationPersistenceReceipt {
   effects: ApplicationEffectReceipt[]
   resultingRevisions: Record<string, number>
+  /** 保存过程里发生、调用方必须知道的事实（例如覆盖了别处对同一文件的修改）；并入事务回执的 evidence。 */
+  evidence?: ApplicationEvidence[]
 }
 
 /** Effect 的 refs 来自领域执行器或持久化回执，label 在进入事务结果前统一收敛到契约长度。 */
@@ -42,6 +44,8 @@ export interface ApplicationPersistenceBatch {
 
 export interface ApplicationPersistenceParticipant {
   readonly key: string
+  /** 只汇报其他参与者保存后的状态（不自己写入）：排在全部参与者之后开始与确认。 */
+  readonly confirmLast?: boolean
   readonly persistenceEffects?: readonly ApplicationCascadeEffectDeclaration[]
   begin(): ApplicationPersistenceBatch
 }
@@ -192,7 +196,8 @@ export async function withApplicationPersistenceBoundary<T>(input: {
   onReceipt?: (receipt: ApplicationPersistenceReceipt) => void
 }): Promise<T> {
   const batches = new Map<string, ApplicationPersistenceBatch>()
-  const participants = new Map(input.participants.map((participant) => [participant.key, participant]))
+  const ordered = [...input.participants.filter((participant) => !participant.confirmLast), ...input.participants.filter((participant) => participant.confirmLast)]
+  const participants = new Map(ordered.map((participant) => [participant.key, participant]))
   const receipts: ApplicationPersistenceReceipt[] = []
   const acceptReceipt = (key: string, raw: ApplicationPersistenceReceipt | void): void => {
     if (!raw) return
@@ -222,7 +227,7 @@ export async function withApplicationPersistenceBoundary<T>(input: {
     }
   }
   try {
-    for (const participant of input.participants) {
+    for (const participant of ordered) {
       if (!batches.has(participant.key)) batches.set(participant.key, participant.begin())
     }
     const context = { ...input.context, persistenceScopes: new Set(batches.keys()), persistenceBatches: new Map(batches) }

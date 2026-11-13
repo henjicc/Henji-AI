@@ -1,6 +1,7 @@
 import { cancelVideoEditPreviewCapability, clearVideoEditPreviewCapability, renderVideoEditPreviewCapability } from '@/core/application-control/domains/videoEdit/videoEditRenderCacheCapability'
 import type { CapabilityExecutionContext } from '@/features/application-control'
 import { ApplicationPreflightFailure } from '@/core/application-control/execution/transactionFailure'
+import { assertVideoEditFramesComposable } from './videoEditHeadlessGuard'
 import { createLogger } from '@/core/logging'
 import { cancelVideoEditRenderCache, clearVideoEditRenderCache, readVideoEditRenderCache, renderVideoEditRenderCache } from './videoEditRenderCache'
 import { requireVideoEditInstance } from './videoEditService'
@@ -30,6 +31,7 @@ export async function handleVideoEditRenderCacheCapability(id: string, raw: unkn
   if (id !== renderVideoEditPreviewCapability.id) return undefined
   const input = renderVideoEditPreviewCapability.inputSchema.parse(raw)
   const owner = requireVideoEditInstance(input.documentRef.id)
+  assertVideoEditFramesComposable()
   if (!owner.activeSequenceId) throw new ApplicationPreflightFailure('剪辑还没有序列，请先创建序列。')
   context.signal?.throwIfAborted()
   const plan = await new Promise<{ pendingWindows: number; requestedFrames: number; readyFrames: number }>((resolve, reject) => {

@@ -85,7 +85,10 @@ const ref = <K extends string>(kind: K) => applicationRefSchema.extend({ kind: z
 const creativeResult = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('document'),
-    documentRef: ref('documents.document').describe('来源文档，取自 list_documents。画布、图片文档、口播可以放进剪辑。'),
+    // 口播能力读回的是 audio_edit.document，通用文档列表给的是 documents.document；两者 id 相同，都认，免得助手为引用写法多空转一轮。
+    documentRef: applicationRefSchema.extend({
+      kind: z.enum(['documents.document', 'audio_edit.document'], { error: 'documentRef.kind 应为 documents.document（list_documents 读回）或 audio_edit.document（口播能力读回），id 为文档 ID。' }),
+    }).strict().describe('来源文档：documents.document（取自 list_documents）或口播的 audio_edit.document，id 为文档 ID。画布、图片文档、口播可以放进剪辑。'),
     nodeRef: ref('canvas.node').optional().describe('画布来源必填：要放进剪辑的结果节点（三维渲染结果也是画布节点）。'),
   }).strict(),
   z.object({ type: z.literal('generation'), resultRef: ref('generation.result'), outputIndex: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER) }).strict(),
@@ -103,7 +106,7 @@ const placeOutput = z.object({ resultRef: placedResultRef, documentRef, assetRef
 export const placeVideoEditCreativeResultCapability = defineApplicationCapability({
   id: 'place_video_edit_creative_result', title: '把创作结果放入剪辑', description: '把画布结果节点、图片文档、口播剪后声音、生成历史第几个结果或资产库图片/视频/声音，送到明确的剪辑文档和序列。placement.mode：library 只进素材面板并返回 item 引用；overwrite 在指定轨道整数帧覆盖相交部分；insert 在指定帧插入并按同步锁定后移；add 加到空轨道；replace 替换明确片段。durationFrames 为序列帧数，图片编辑回填当前帧用 overwrite 或上方空轨 add，时长 1。结果复制进目标项目的“生成结果”，文档/生成来源片段可回到来源；图片文档片段保持链接。目标在开始前固定，原剪辑在准备期间修改、关闭或取消则拒绝；一次撤销恢复。不会发起新的付费生成。图片编辑当前帧回填必须携带 edit_video_edit_program_frame 返回的 frameEditSessionRef 与 returnPlacement，沿原会话冻结目标，原剪辑改动或关闭后拒绝迟到回填。',
   version: 1, domain: 'video_edit', aliases: ['生成结果加入剪辑', '替换剪辑片段', '图片编辑结果回填剪辑', '口播加入剪辑', '三维渲染加入剪辑'], readOnly: false, dataClasses: ['C1'], idempotent: false, destructive: false, timeoutMs: 600000, supportsPreview: false, supportsUndo: false,
-  requiredScopes: ['video_edit', 'assets'], acceptsRefs: ['video_edit.document', 'video_edit.sequence', 'video_edit.track', 'video_edit.clip', 'generation.result', 'documents.document', 'canvas.node', 'asset'], producesRefs: ['video_edit.clip', 'video_edit.item', 'asset'],
+  requiredScopes: ['video_edit', 'assets'], acceptsRefs: ['video_edit.document', 'video_edit.sequence', 'video_edit.track', 'video_edit.clip', 'generation.result', 'documents.document', 'audio_edit.document', 'canvas.node', 'asset'], producesRefs: ['video_edit.clip', 'video_edit.item', 'asset'],
   prerequisites: ['来源必须已经完成并保存为本地文件；口播来源的剪后声音写进剪辑所在项目的“生成结果”（同名 SRT 一并写出）。'],
   inputSchema: z.object({ documentRef, sequenceRef: ref('video_edit.sequence'), placement: placementInput, result: creativeResult, frameEditSessionRef: z.string().min(1).max(200).optional() }).strict(), outputSchema: placeOutput,
   concurrencyKey: 'video_edit', resolveConcurrencyKey: parsed => `video_edit:${parsed.documentRef.id}`,

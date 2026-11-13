@@ -4,6 +4,7 @@ import { DOCUMENTS_ENTITY_TYPES } from './documentsFields'
 import { DocumentsMutationExecutor } from './documentsMutationExecutor'
 import { createDocumentsReflectionRegistrations } from './documentsReflection'
 import { registerDocumentsCapabilityHandlers } from './registerDocumentsCapabilityHandlers'
+import { documentOverwriteReceiptParticipant } from './documentOverwriteReceipt'
 import { getDocumentOperations } from '../documentOperations'
 import { RecyclableCollectionExecutor, captureRecycledRemoval } from '@/features/application-control'
 
@@ -14,6 +15,8 @@ import { RecyclableCollectionExecutor, captureRecycledRemoval } from '@/features
 export const documentsApplicationDomain: ApplicationDomainModule = {
   id: 'documents',
   entities: () => createDocumentsReflectionRegistrations(),
+  // 任何保存文档的事务都要能说出“覆盖了别处的修改”；参与者声明 confirmLast，读各领域保存之后的会话状态。
+  resolvePersistenceParticipants: steps => steps.length ? [documentOverwriteReceiptParticipant] : [],
   registerExecutors(engine) {
     engine.registerMutationExecutor(new DocumentsMutationExecutor(DOCUMENTS_ENTITY_TYPES.document))
     engine.registerMutationExecutor(new DocumentsMutationExecutor(DOCUMENTS_ENTITY_TYPES.project))

@@ -11,6 +11,7 @@ import { patchVideoEditExportSettings, resolveVideoEditExportSettings, videoEdit
 import { videoEditComposition } from '@/core/videoEdit/document'
 import { adaptVideoEditExportPreset } from '../engine/videoEditExportEncoder'
 import { ApplicationWriteExecution } from '@/core/application-control/execution/writeExecution'
+import { assertVideoEditFramesComposable } from './videoEditHeadlessGuard'
 
 const RESTORED_NOTICE = '按界面重新加载前提交时的内容导出。'
 function videoEditExportJobSummary(job: VideoEditExportJob): Record<string, unknown> {
@@ -45,6 +46,9 @@ export async function handleVideoEditExportCapability(id: string, raw: unknown, 
       const result = await execution.run(() => exportVideoEditSubtitles(documentRef.id, format, owner.activeSequenceId, context.signal, input.subtitleClock, directory))
       return { resultRef: documentRef, queue: [], verification: { verified: result.verified, target: documentRef, condition: result.verified ? '已回读字幕文件核对。' : '用户取消文件选择。' }, message: result.saved ? '字幕已导出并核实。' : '已取消字幕导出。' }
     }
+    // 声音与字幕不经画面合成；其余导出在无窗口模式下合成不了任何一帧，入口处就说清楚。
+    const audioOnly = input.format === 'aac' || input.format === 'wav'
+    if (!audioOnly) assertVideoEditFramesComposable()
     if (input.retryTaskId) {
       const job = videoEditExportQueue.require(input.retryTaskId)
       if (job.owner !== owner) throw new Error('导出项必须属于明确的原剪辑。')
@@ -123,11 +127,11 @@ export async function handleVideoEditExportCapability(id: string, raw: unknown, 
     const remaining = after === undefined ? filtered : filtered.filter(item => String(item.id) > after!)
     const page = remaining.slice(0, query.limit)
     const projected = page.map(item => {
-      const { id, state, progress, phase, compositionProgress, compressionProgress, outputReady, taskId, error, notice, assetRef, completedAt, archived } = item
+      const { id, state, progress, phase, compositionProgress, compressionProgress, outputReady, taskId, error, notice, assetRef, path, completedAt, archived } = item
       const summary = { id, documentRef, state, progress, phase, compositionProgress, compressionProgress, outputReady,
         resultRef: { documentRef, taskId: String(id) },
         ...(taskId ? { taskId } : {}), ...(error ? { error } : {}), ...(notice ? { notice } : {}),
-        ...(assetRef ? { assetRef } : {}), ...(completedAt ? { completedAt } : {}), ...(archived ? { archived } : {}),
+        ...(assetRef ? { assetRef } : {}), ...(typeof path === 'string' ? { path } : {}), ...(completedAt ? { completedAt } : {}), ...(archived ? { archived } : {}),
       }
       return query.detail === 'full' ? { ...item, ...summary } : summary
     })

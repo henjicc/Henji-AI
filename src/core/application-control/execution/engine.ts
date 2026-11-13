@@ -265,7 +265,7 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
         resultingRevisions,
         resultRefs: execution.completed.flatMap((item) => item.directRefs),
         effects,
-        evidence: [...evidence, ...verification.evidence],
+        evidence: [...evidence, ...verification.evidence, ...persistenceReceipts.flatMap((receipt) => receipt.evidence ?? [])],
         verification,
         ...(undoRef ? { undoRef } : {}),
         completedAt: this.now().toISOString(),
@@ -376,7 +376,8 @@ export class ApplicationControlExecutionEngine extends ApplicationExecutionFailu
         resultRefs: results.flatMap((item) => item.directRefs),
         effects: [...this.collectEffects([...record.steps].reverse(), results, 'undo'), ...persistenceReceipts.flatMap((receipt) => receipt.effects)],
         // 撤销已经生效；执行器不一定回读，此时只如实记下撤销本身完成，不能因此报成失败。
-        evidence: evidence.length > 0 ? evidence : [{ kind: 'operation_result', fact: '撤销已执行。', capturedAt: this.now().toISOString() }],
+        evidence: [...(evidence.length > 0 ? evidence : [{ kind: 'operation_result' as const, fact: '撤销已执行。', capturedAt: this.now().toISOString() }]),
+          ...persistenceReceipts.flatMap((receipt) => receipt.evidence ?? [])],
         verification: { verified: true, evidence: [], unmetConditions: [], checkedAt: this.now().toISOString() },
         completedAt: this.now().toISOString(),
       })

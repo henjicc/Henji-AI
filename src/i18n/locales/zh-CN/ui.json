@@ -165,6 +165,8 @@
   },
   "promptProfileFields": {"provider": "供应商", "model": "模型", "followAssistant": "跟随助手", "reasoning": "思考程度"},
   "notifications": {
+    "documentExternalOverwrite": "“{{name}}”在别处有更新的版本，已按应用里的内容保存；别处的版本可在“最近删除”恢复",
+    "documentExternalOverwriteOpen": "查看最近删除",
     "multicamPlaybackHeavy": "这组机位实时播放可能卡顿，建议创建代理",
     "recordingVideoSaved": "已保存视频：{{name}}",
     "recordingVideoFailed": "视频没有保存成功：{{error}}",

@@ -1,3 +1,4 @@
+import { assertVideoEditFramesComposable } from './videoEditHeadlessGuard'
 import { authorFrameEffects, type AuthorFrameEffects } from '@/core/videoEdit/authorEffectObservation'
 import type { CodeFramePerformance } from '@/core/videoEdit/codeMaterial/performance'
 import { prepareVideoEditAnnotationObservation, paintVideoEditAnnotationObservation, type VideoEditAnnotationObservationOptions } from './videoEditAnnotationImage'
@@ -81,6 +82,7 @@ export function observeVideoEditFrame(projectId: string, target: VideoEditFrameO
 export async function observeVideoEditFrame(projectId: string, target: VideoEditFrameObservationTarget, maxWidth: number | null = VIDEO_EDIT_OBSERVATION_DEFAULT_WIDTH, signal: AbortSignal = new AbortController().signal, snapshot?: VideoEditComposition, annotations: VideoEditFrameObservationOptions = {}): Promise<VideoEditFrameObservation> {
   // null 仅供工作区流转保存完整画幅；助手观察仍由公开 schema 限制尺寸预算。
   if (maxWidth !== null && (!Number.isSafeInteger(maxWidth) || maxWidth < 256 || maxWidth > 3840)) throw new Error('观察宽度须为256到3840之间的整数像素。')
+  assertVideoEditFramesComposable()
   const owner = requireVideoEditInstance(projectId); const document = owner.document
   const contentVersion = owner.contentVersion
   const baseVersion = videoEditObservationVersion(owner, document.revision), documentVersion = annotations.documentVersion ?? baseVersion

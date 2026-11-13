@@ -60,6 +60,8 @@ export interface HenjiNativeApi {
     uiInspectionActive: boolean
     uiInspectionGpuInitializationFailure: boolean
     uiInspectionReadOnly: boolean
+    /** 助手命令行的无窗口运行：关了显卡，不能合成视频帧。 */
+    headlessWindow: boolean
   }
   assistant: HenjiAssistantApi
   ai: HenjiAiApi

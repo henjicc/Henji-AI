@@ -48,6 +48,13 @@ export function isUiInspectionGpuInitializationFailure(): boolean {
   return native?.runtimeInfo?.uiInspectionGpuInitializationFailure === true
 }
 
+/** 助手命令行的无窗口运行（关了显卡）：不能合成视频帧，取帧、导出与预渲染都要在应用窗口里做。 */
+export function isHeadlessWindow(): boolean {
+  if (typeof window === 'undefined') return false
+  const native = window.henjiNative as { runtimeInfo?: { headlessWindow?: boolean } } | undefined
+  return native?.runtimeInfo?.headlessWindow === true
+}
+
 let cachedPlatform: PlatformRuntime | null = null
 let cachedShell: ShellKind | null = null
 

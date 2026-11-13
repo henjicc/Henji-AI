@@ -19,6 +19,7 @@ import type {
   DocumentCommitReason,
   DocumentConflictChoice,
   DocumentContentAdapter,
+  DocumentExternalOverwrite,
   DocumentPersistence,
   DocumentReadPurpose,
   DocumentSessionCommands,
@@ -64,6 +65,8 @@ export interface DocumentSessionInit {
   timing: DocumentSessionTiming
   logger: Logger
   onEnded: (session: DocumentSession) => void
+  /** 保存时按应用里的内容覆盖了别处更新过的文件（磁盘版本已进“最近删除”）。 */
+  onExternalOverwrite?: (session: DocumentSession) => void
 }
 
 type Timer = ReturnType<typeof setTimeout>
@@ -88,6 +91,7 @@ export class DocumentSession {
   private suspended = 0
   private queue: Promise<void> = Promise.resolve()
   private conflictPrompt: Promise<void> | null = null
+  private externalOverwrite: DocumentExternalOverwrite | null = null
   private closing: Promise<void> | null = null
   private ended = false
   /** 引用中的草稿需要保留，避免剪辑片段失去来源。 */
@@ -99,8 +103,10 @@ export class DocumentSession {
   private readonly timing: DocumentSessionTiming
   private readonly logger: Logger
   private readonly onEnded: (session: DocumentSession) => void
+  private readonly onExternalOverwrite: ((session: DocumentSession) => void) | undefined
 
   constructor(init: DocumentSessionInit) {
+    this.onExternalOverwrite = init.onExternalOverwrite
     this.id = init.read.meta.id
     this.kind = init.kind
     this.meta = init.read.meta
@@ -465,9 +471,26 @@ export class DocumentSession {
     }
   }
 
+  /**
+   * 自动保存撞上版本冲突时以应用里的内容为准写入，存储层先把磁盘版本放进“最近删除”。
+   * 这样做不丢任何一方，但别处的修改不再出现在文档里，所以必须让用户与助手知道：记日志、
+   * 在会话状态里留下 externalOverwrite（助手经文档实体与事务回执读到），并通知界面。
+   */
   private promptConflict(): Promise<void> {
     if (!this.conflictPrompt) {
-      const prompt = this.resolveConflict('overwrite')
+      const conflict = this.error
+      const prompt = this.resolveConflict('overwrite').then(() => {
+        // 冲突期间会话已结束时覆盖没有写盘，不记录也不通知
+        if (this.ended) return
+        this.externalOverwrite = { at: new Date().toISOString(), count: (this.externalOverwrite?.count ?? 0) + 1 }
+        this.logger.warn('文件已被别处更新，已按应用里的内容覆盖，磁盘版本已放进最近删除', {
+          event: 'documents.session.conflict.overwritten', error: conflict ?? undefined, context: { revision: this.meta.revision },
+        })
+        this.emit()
+        try { this.onExternalOverwrite?.(this) } catch (error) {
+          this.logger.warn('覆盖外部修改的通知处理失败', { event: 'documents.session.conflict.notify_failed', error: toError(error) })
+        }
+      })
       this.conflictPrompt = prompt
       void prompt.finally(() => { if (this.conflictPrompt === prompt) this.conflictPrompt = null }).catch(() => undefined)
     }
@@ -533,6 +556,7 @@ export class DocumentSession {
       error: this.error,
       missingPaths: this.missingPaths,
       unresolved: this.unresolved,
+      externalOverwrite: this.externalOverwrite,
     }
   }
 

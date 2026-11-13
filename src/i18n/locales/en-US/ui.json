@@ -165,6 +165,8 @@
   },
   "promptProfileFields": {"provider": "Provider", "model": "Model", "followAssistant": "Follow assistant", "reasoning": "Thinking"},
   "notifications": {
+    "documentExternalOverwrite": "“{{name}}” was changed elsewhere. The app’s version was saved; the other version can be restored from Recently Deleted.",
+    "documentExternalOverwriteOpen": "Recently Deleted",
     "multicamPlaybackHeavy": "These cameras may stutter in real time. Create proxies to play smoothly.",
     "recordingVideoSaved": "Video saved: {{name}}",
     "recordingVideoFailed": "The video was not saved: {{error}}",

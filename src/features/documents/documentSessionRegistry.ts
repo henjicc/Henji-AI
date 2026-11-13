@@ -14,6 +14,9 @@ import type {
   ProjectSummary,
 } from '@/core/documents/types'
 import { createLogger, type Logger } from '@/core/logging/logger'
+import { notifyUser } from '@/contexts/NotificationContext'
+import { notificationMessage, notificationText } from '@/i18n/notifications'
+import { useUiStore } from '@/stores/uiStore'
 
 import { isDocumentServiceError, toError } from './documentErrors'
 import { markSessionDocumentOpened } from './documentOperationChanges'
@@ -325,6 +328,10 @@ export class DocumentSessionRegistry {
         if (this.sessions.get(ended.id) === ended) this.sessions.delete(ended.id)
         this.emit()
       },
+      onExternalOverwrite: (overwritten) => notifyUser(notificationMessage('documentExternalOverwrite', { name: overwritten.documentMeta.name }), 'warning', {
+        label: notificationText('documentExternalOverwriteOpen'),
+        onClick: () => useUiStore.getState().openSettings({ tab: 'files', sectionId: 'files-storage' }),
+      }),
     })
     this.sessions.set(session.id, session)
     this.logger.info('打开文档', {

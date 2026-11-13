@@ -221,3 +221,23 @@ describe('最近打开', () => {
     await expect(registry.open({ id: meta.id })).resolves.toBeTruthy()
   })
 })
+
+describe('别处更新过的文件', () => {
+  it('保存撞上版本冲突时按应用里的内容覆盖，并留下可读回的覆盖记录、通知一次', async () => {
+    const notices: string[] = []
+    const kit = createTestRegistry()
+    const meta = kit.commands.seed({ name: '海报', content: { items: ['a'] } })
+    const session = await kit.registry.open({ id: meta.id, path: meta.path })
+    const tool = new TestToolInstance(session.getContent() as TestContent)
+    session.attach(tool)
+    session.subscribe(() => { const value = session.getState().externalOverwrite; if (value) notices.push(value.at) })
+    kit.commands.modifyExternally(meta.id, { items: ['命令行写的'] })
+    tool.edit('应用里的')
+    await vi.advanceTimersByTimeAsync(800)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(kit.commands.stored(meta.id)?.content).toEqual({ items: ['a', '应用里的'] })
+    expect(session.getState()).toMatchObject({ status: 'saved', dirty: false, externalOverwrite: { count: 1 } })
+    expect(notices.length).toBeGreaterThan(0)
+    await session.discard()
+  })
+})

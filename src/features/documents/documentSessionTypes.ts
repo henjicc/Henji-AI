@@ -111,6 +111,16 @@ export interface DocumentSessionState {
   /** 引用到但磁盘上找不到的素材（绝对路径），打开与重新载入时更新。 */
   missingPaths: readonly string[]
   unresolved: readonly DocumentUnresolvedLocation[]
+  /**
+   * 最近一次保存时发现磁盘上的文件已被别处（命令行助手、另一个实例、同步盘）更新，
+   * 按应用里的内容覆盖了它；被覆盖的磁盘版本已放进“最近删除”。count 每覆盖一次加一。
+   */
+  externalOverwrite: DocumentExternalOverwrite | null
+}
+
+export interface DocumentExternalOverwrite {
+  at: string
+  count: number
 }
 
 /** 冲突时的选择：“稍后”保持冲突状态，不写入。 */

@@ -151,12 +151,18 @@ if (!isAssistantCliMode()) {
 configureWebGpuRuntime()
 registerWebGpuDiagnostics()
 
+// 无窗口标志只由本进程下面的判断设置：先清掉从父进程继承来的值，正式应用不会被误判成无窗口。
+delete process.env['HENJI_HEADLESS_WINDOW']
 if (isAssistantCliMode()) {
   // safeStorage 依赖既有的 userData/sessionData；助手 CLI 只隔离纯 Chromium 磁盘缓存。
   app.commandLine.appendSwitch('disk-cache-dir', path.join(app.getPath('temp'), 'henji-assistant-cli-cache'))
   app.commandLine.appendSwitch('disable-gpu-shader-disk-cache')
   // 剪辑渲染与代码素材试渲染都要 WebGPU：只在无窗口运行时关 GPU，--visible 端到端验证保留显卡。
-  if (!process.argv.includes('--visible')) app.commandLine.appendSwitch('disable-gpu')
+  if (!process.argv.includes('--visible')) {
+    app.commandLine.appendSwitch('disable-gpu')
+    // 界面进程继承这个环境变量：取帧、导出在入口处就说明无窗口模式不能合成画面，也不启动空闲预渲染。
+    process.env['HENJI_HEADLESS_WINDOW'] = '1'
+  }
 }
 
 /*

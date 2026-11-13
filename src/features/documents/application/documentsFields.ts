@@ -16,7 +16,8 @@ export type DocumentsEntityType = typeof DOCUMENTS_ENTITY_TYPES[keyof typeof DOC
 
 /** 写入草稿：执行器把新名称 / 新进度记在这里，再委托通用文档操作服务改名、写进度文件。 */
 export interface DocumentsFieldDraft { name?: string; progress?: string }
-export type DocumentFieldSource = { document: DocumentSummary }
+/** externalOverwrite：本次运行里应用保存时覆盖了别处更新的版本（见 DocumentSession）。 */
+export type DocumentFieldSource = { document: DocumentSummary; externalOverwrite?: { at: string; count: number } | null }
 /** progress：项目根目录进度文件的全文，没有这份文件时为空字符串。 */
 export type ProjectFieldSource = { project: ProjectSummary; progress: string }
 
@@ -74,6 +75,12 @@ const D = DOCUMENTS_ENTITY_TYPES.document
 const P = DOCUMENTS_ENTITY_TYPES.project
 const MOVE_REASON = '所在项目由 move_document 改变（会复制原项目里引用的素材）。'
 
+/** 文档实体与事务回执共用同一句说明。 */
+export function externalOverwriteNote(overwrite: DocumentFieldSource['externalOverwrite']): string {
+  if (!overwrite) return ''
+  return `${overwrite.at} 保存时发现文件已被别处更新，已按应用里的内容覆盖${overwrite.count > 1 ? `（本次运行共 ${overwrite.count} 次）` : ''}；被覆盖的版本在“最近删除”里，可用 settings.deleted_item 找到并恢复。`
+}
+
 export const DOCUMENT_FIELDS: ApplicationFieldDefinition<DocumentFieldSource, DocumentsFieldDraft>[] = [
   field<DocumentFieldSource>(D, 'name', '文档名称（即文件名；同一文件夹里同类型不能重名）', NAME, (s) => s.document.name, { write: writeName }),
   field<DocumentFieldSource>(D, 'path', '文档文件的本机绝对路径', PATH, (s) => s.document.path, { readOnlyReason: '改名用 name，换项目用 move_document。' }),
@@ -84,6 +91,10 @@ export const DOCUMENT_FIELDS: ApplicationFieldDefinition<DocumentFieldSource, Do
   field<DocumentFieldSource>(D, 'missing', '文件是否找不到', BOOL, (s) => s.document.missing, { readOnlyReason: '由作品索引扫描判断。' }),
   field<DocumentFieldSource>(D, 'external', '是否位于作品目录之外', BOOL, (s) => s.document.external, { readOnlyReason: '由保存位置决定。' }),
   field<DocumentFieldSource>(D, 'updated_at', '最后修改时间（毫秒时间戳）', TIME, (s) => s.document.updatedAt, { readOnlyReason: '由保存自动更新。' }),
+  field<DocumentFieldSource>(D, 'external_overwrite', '保存时是否覆盖过别处的修改', TEXT, (s) => externalOverwriteNote(s.externalOverwrite), {
+    readOnlyReason: '由应用保存时记录。',
+    description: '应用打开着这份文档时，文件被别处（命令行助手、另一个实例、同步盘）改过，应用下一次保存按应用里的内容写入；被覆盖的磁盘版本放进“最近删除”（settings.deleted_item，可恢复）。没有发生过时为空字符串，发生过时是一句说明（含时间与次数）。',
+  }),
   field<DocumentFieldSource>(D, 'summary', '类型摘要（如节点数）', { kind: 'json', schemaRef: documentsSchemaRef('property', `${D}.summary`) }, (s) => s.document.summary, { readOnlyReason: '由文档内容计算。' }),
 ]
 

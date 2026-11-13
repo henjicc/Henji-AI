@@ -1,3 +1,4 @@
+import { videoEditFramesComposable } from './videoEditHeadlessGuard'
 import type { VideoEditRenderPrecision } from '../engine/videoEditRenderer'
 import { videoEditRenderFingerprints, subscribeVideoEditRenderFingerprints } from './videoEditRenderFingerprints'
 import { videoEditCodeInputParameters } from '@/core/videoEdit/codeInputParameters'
@@ -120,7 +121,7 @@ function noteProgramInteraction(): void {
 }
 /** Starts watching open projects for idle time (once, when a program monitor first reads its cache). */
 function ensureAutoRender(): void {
-  if (autoTimer) return
+  if (autoTimer || !videoEditFramesComposable()) return
   noteProgramInteraction()
   const stopInteraction = subscribeVideoEditView(noteProgramInteraction)
   const background = watchProgramActivity(() => undefined, programInteractionAt, () => {

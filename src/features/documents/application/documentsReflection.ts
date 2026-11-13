@@ -15,6 +15,7 @@ import {
 } from '@/core/application-control'
 
 import { getDocumentOperations, type DocumentOperations } from '../documentOperations'
+import { getDocumentSessionRegistry } from '../documentSessionRegistry'
 import { DOCUMENT_FIELDS, DOCUMENTS_ENTITY_TYPES, PROJECT_FIELDS, documentsSchemaRef, type DocumentsEntityType } from './documentsFields'
 
 /*
@@ -85,7 +86,8 @@ class DocumentsReflectionProvider implements ApplicationEntityProvider {
     const operations = this.operations()
     if (this.entityType === DOCUMENTS_ENTITY_TYPES.document) {
       const document = await operations.findDocument(ref.id)
-      return { values: fieldReadValues(DOCUMENT_FIELDS, { document }), missing: document.missing }
+      const externalOverwrite = getDocumentSessionRegistry().get(document.id)?.getState().externalOverwrite ?? null
+      return { values: fieldReadValues(DOCUMENT_FIELDS, { document, externalOverwrite }), missing: document.missing }
     }
     const project = await operations.findProject(ref.id)
     const progress = await operations.readProjectProgress(project)
