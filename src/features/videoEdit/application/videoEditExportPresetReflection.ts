@@ -3,7 +3,7 @@ import { fieldDescriptors, fieldReadValues, fieldWriterTable, unrestrictedCollec
 import { applyWriterTable, propertyOperations, writableProperties } from '@/core/application-control/execution/writerTable'
 import { videoEditExportPresetSchema, videoEditExportSettingsSchema, type VideoEditExportPreset } from '@/core/videoEdit/exportPresets'
 import { videoEditSchemaRef } from './videoEditFields'
-import { requireVideoEditInstance, videoEditDomainRevision } from './videoEditService'
+import { requireVideoEditInstance, videoEditContentRevision } from './videoEditService'
 import { videoEditExportPresetLibrary } from './videoEditExportPresets'
 
 const type = 'video_edit.export_preset'
@@ -18,7 +18,7 @@ const fields = [
   field('settings', '导出设置', '完整设置含格式、codec、bitrateMode、keyframeInterval秒、encoderPreference、音视频开关、audioCodec、采样率Hz/声道、loudness(null不标准化)、captionMode(none/burn/srt/vtt)、followSequence四项、importToProject、addToLibrary、renderAtOutputResolution（默认开启，关闭按序列完整分辨率合成再缩放）、useProxies和usePreviews（默认关闭，开启后使用预览文件；关闭时从原始画面合成）、useWebCache（默认关闭，开启后网页画面取自网页缓存，缺失部分实时渲染；关闭时预览文件里用了网页缓存的部分也不复用）。跟随标志在提交时读取目标序列；读取schema查看真实字段约束。', { kind: 'json', schemaRef: videoEditSchemaRef('property', `${type}.settings.value`) }),
 ]
 export function createVideoEditExportPresetRegistration(): ApplicationEntityRegistration {
-  const revisions = (): Record<string, number> => ({ video_edit: videoEditDomainRevision() })
+  const revisions = (): Record<string, number> => ({ video_edit: videoEditContentRevision() })
   const requirePreset = (ref: ApplicationRef): VideoEditExportPreset => {
     const preset = videoEditExportPresetLibrary.list().find(value => value.id === ref.id)
     if (ref.kind !== type || !preset) throw new Error('NOT_FOUND：原导出预设不存在，请重新列出。')
@@ -46,7 +46,7 @@ export class VideoEditExportPresetExecutor implements ApplicationCollectionExecu
   readonly entityType = type
   readonly effectContract = { direct: [], cascades: [] }
   private undoStates = new Map<string, { before: VideoEditExportPreset[]; after: VideoEditExportPreset[]; refs: ApplicationRef[] }>()
-  private result(refs: ApplicationRef[], undoToken?: string): ApplicationCompletedStepResult { return { status: 'completed', resultingRevisions: { video_edit: videoEditDomainRevision() }, directRefs: refs, evidence: [{ kind: 'entity_state', fact: '已从正式本机预设库回读。', capturedAt: new Date().toISOString() }], ...(undoToken ? { undoToken } : {}) } }
+  private result(refs: ApplicationRef[], undoToken?: string): ApplicationCompletedStepResult { return { status: 'completed', resultingRevisions: { video_edit: videoEditContentRevision() }, directRefs: refs, evidence: [{ kind: 'entity_state', fact: '已从正式本机预设库回读。', capturedAt: new Date().toISOString() }], ...(undoToken ? { undoToken } : {}) } }
   async apply(step: Extract<ApplicationPlannedStep, { kind: 'collection' }>, context: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     context.signal?.throwIfAborted()
     if (step.parent.kind !== 'video_edit.document') throw new Error('请使用剪辑 document 作为本机预设上下文。')
@@ -81,7 +81,7 @@ export class VideoEditExportPresetMutationExecutor implements ApplicationMutatio
   readonly writableProperties = writableProperties(fieldWriterTable(fields))
   readonly propertyOperations = propertyOperations(fieldWriterTable(fields))
   private undos = new Map<string, { before: VideoEditExportPreset; after: VideoEditExportPreset; target: ApplicationRef }>()
-  private result(target: ApplicationRef, undoToken?: string): ApplicationCompletedStepResult { return { status: 'completed', resultingRevisions: { video_edit: videoEditDomainRevision() }, directRefs: [target], evidence: [{ kind: 'entity_state', fact: '已回读本机自定义导出预设。', capturedAt: new Date().toISOString() }], ...(undoToken ? { undoToken } : {}) } }
+  private result(target: ApplicationRef, undoToken?: string): ApplicationCompletedStepResult { return { status: 'completed', resultingRevisions: { video_edit: videoEditContentRevision() }, directRefs: [target], evidence: [{ kind: 'entity_state', fact: '已回读本机自定义导出预设。', capturedAt: new Date().toISOString() }], ...(undoToken ? { undoToken } : {}) } }
   async apply(step: Extract<ApplicationPlannedStep, { kind: 'mutation' }>, context: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     context.signal?.throwIfAborted()
     const before = videoEditExportPresetLibrary.custom().find(value => value.id === step.target.id)

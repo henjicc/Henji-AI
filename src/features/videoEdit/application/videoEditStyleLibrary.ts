@@ -17,7 +17,7 @@ import { videoEditTemplateSchema, type VideoEditTemplate } from '@/core/videoEdi
 import { migrateStyleKit, migrateTitleTemplate, styleKitMigrationSchema, titleTemplateMigrationSchema } from '@/core/videoEdit/styles/styleTemplateMigration'
 import { z } from 'zod'
 import { appLocalDataDir, exists, getBundledResourcePath, join, mkdir, readDir, readFile, readTextFile, writeFile, writeTextFile, remove } from '@/platform/desktopApi'
-import { publishVideoEdit } from './videoEditService'
+import { publishVideoEdit, publishVideoEditContent } from './videoEditService'
 
 const logger = createLogger('features.videoEdit.styleLibrary')
 const STYLE_FORMAT = PERSISTENCE_FORMATS.find(format => format.id === 'video-style-library')!
@@ -80,7 +80,9 @@ class VideoEditStyleLibrary {
   private loading?: Promise<void>
   private queue: Promise<unknown> = Promise.resolve()
   private error = ''
-  constructor(private io: VideoEditStyleLibraryIo = desktopStyleLibraryIo, private migrationStorage: Pick<Storage, 'getItem' | 'setItem'> | undefined = typeof localStorage === 'undefined' ? undefined : localStorage, private readonly publish: () => void = () => publishVideoEdit(true)) {}
+  /** 读取前助手无法读到风格库（读取入口都先等 ready），首次读取只通知界面；换资料目录后的重读才算数据变化。 */
+  private loadedOnce = false
+  constructor(private io: VideoEditStyleLibraryIo = desktopStyleLibraryIo, private migrationStorage: Pick<Storage, 'getItem' | 'setItem'> | undefined = typeof localStorage === 'undefined' ? undefined : localStorage, private readonly publish: () => void = publishVideoEditContent) {}
   /** 换一个资料目录重新读取（隔离测试与切换资料目录时用）。 */
   reset(io: VideoEditStyleLibraryIo = desktopStyleLibraryIo, migrationStorage?: Pick<Storage, 'getItem' | 'setItem'>): void {
     this.io = io; this.migrationStorage = migrationStorage; this.loading = undefined; this.error = ''; this.styles = new Map(); this.templates = new Map(); this.queue = Promise.resolve()
@@ -222,7 +224,8 @@ class VideoEditStyleLibrary {
     if (problems.length) logger.warn('load.partial', '部分风格或模板无法读取', { context: { count: problems.length } })
     try { await this.importStoredStyleKits(root) } catch (error) { logger.error('legacy.import_failed', '旧本机风格与标题模板转存失败，下次启动重试', { error }) }
     logger.info('load.completed', '风格库已读取', { context: { styles: styles.size, templates: templates.size } })
-    this.publish()
+    if (this.loadedOnce) this.publish()
+    else { this.loadedOnce = true; publishVideoEdit(true) }
   }
   /** 旧本机风格库与标题模板（localStorage）只读：第一次加载时转存成文件，原键保持不变，再次加载不重复转存。 */
   private async importStoredStyleKits(root: string): Promise<void> {

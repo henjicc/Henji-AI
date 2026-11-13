@@ -102,3 +102,11 @@ test('作者库构建目录与新增冻结版本不改变引擎身份，库运�
   write('entry.ts', "import { AUTHOR_LIBRARIES } from '@/core/videoEdit/codeMaterial/authorLibraries';export const get = () => Object.keys(AUTHOR_LIBRARIES.physics)")
   assert.notEqual(await version(), first)
 })
+
+test('正式散列名单：预渲染调度与吃力判断不参与，只改它们时引擎版本不变；编码与封装参与', async () => {
+  const root = path.resolve(import.meta.dirname, '../..')
+  const { files } = await computeRenderEngineVersion({ root })
+  const hashed = new Set(files.map(file => path.relative(root, file).split(path.sep).join('/')))
+  for (const file of ['src/features/videoEdit/application/videoEditRenderCache.ts', 'src/core/videoEdit/renderLoad.ts']) assert.ok(!hashed.has(file), `${file} 不应参与引擎版本`)
+  for (const file of ['src/features/videoEdit/application/videoEditRenderCacheEncode.ts', 'src/features/videoEdit/engine/videoEditEncodedVideo.ts', 'src/core/videoEdit/renderCache.ts', 'src/core/videoEdit/renderBitrate.ts']) assert.ok(hashed.has(file), `${file} 应参与引擎版本`)
+})

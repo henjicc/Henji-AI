@@ -4,7 +4,7 @@ import { applyWriterTable, propertyOperations, writableProperties } from '@/core
 import { VIDEO_EDIT_TEXT_STYLE_DESCRIPTION, videoEditTextStyleSchema } from '@/core/videoEdit/text'
 import { videoEditTextPresetSchema, type VideoEditTextPreset } from './videoEditTextPresets'
 import { videoEditSchemaRef } from './videoEditFields'
-import { requireVideoEditInstance, videoEditDomainRevision } from './videoEditService'
+import { requireVideoEditInstance, videoEditContentRevision } from './videoEditService'
 import { videoEditTextPresetLibrary } from './videoEditTextPresets'
 
 const type = 'video_edit.text_preset'
@@ -19,7 +19,7 @@ const fields = [
   field('style', '文字样式', '本机共享预设；通用增删改，读style写入目标文字属性时按宿主转换空间单位。' + VIDEO_EDIT_TEXT_STYLE_DESCRIPTION, { kind: 'json', schemaRef: videoEditSchemaRef('property', `${type}.style.value`) }),
 ]
 export function createVideoEditTextPresetRegistration(): ApplicationEntityRegistration {
-  const revisions = (): Record<string, number> => ({ video_edit: videoEditDomainRevision() })
+  const revisions = (): Record<string, number> => ({ video_edit: videoEditContentRevision() })
   const requirePreset = (ref: ApplicationRef): VideoEditTextPreset => {
     const preset = videoEditTextPresetLibrary.list().find(value => value.id === ref.id)
     if (ref.kind !== type || !preset) throw new Error('NOT_FOUND：原文字样式预设不存在，请重新列出。')
@@ -47,7 +47,7 @@ export class VideoEditTextPresetExecutor implements ApplicationCollectionExecuto
   readonly entityType = type
   readonly effectContract = { direct: [], cascades: [] }
   private undoStates = new Map<string, { before: VideoEditTextPreset[]; after: VideoEditTextPreset[]; refs: ApplicationRef[] }>()
-  private result(refs: ApplicationRef[], undoToken?: string): ApplicationCompletedStepResult { return { status: 'completed', resultingRevisions: { video_edit: videoEditDomainRevision() }, directRefs: refs, evidence: [{ kind: 'entity_state', fact: '已从正式本机预设库回读。', capturedAt: new Date().toISOString() }], ...(undoToken ? { undoToken } : {}) } }
+  private result(refs: ApplicationRef[], undoToken?: string): ApplicationCompletedStepResult { return { status: 'completed', resultingRevisions: { video_edit: videoEditContentRevision() }, directRefs: refs, evidence: [{ kind: 'entity_state', fact: '已从正式本机预设库回读。', capturedAt: new Date().toISOString() }], ...(undoToken ? { undoToken } : {}) } }
   async apply(step: Extract<ApplicationPlannedStep, { kind: 'collection' }>, context: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     context.signal?.throwIfAborted()
     if (step.parent.kind !== 'video_edit.document') throw new Error('请使用剪辑 document 作为本机预设上下文。')
@@ -82,7 +82,7 @@ export class VideoEditTextPresetMutationExecutor implements ApplicationMutationE
   readonly writableProperties = writableProperties(fieldWriterTable(fields))
   readonly propertyOperations = propertyOperations(fieldWriterTable(fields))
   private undos = new Map<string, { before: VideoEditTextPreset; after: VideoEditTextPreset; target: ApplicationRef }>()
-  private result(target: ApplicationRef, undoToken?: string): ApplicationCompletedStepResult { return { status: 'completed', resultingRevisions: { video_edit: videoEditDomainRevision() }, directRefs: [target], evidence: [{ kind: 'entity_state', fact: '已回读本机自定义文字样式预设。', capturedAt: new Date().toISOString() }], ...(undoToken ? { undoToken } : {}) } }
+  private result(target: ApplicationRef, undoToken?: string): ApplicationCompletedStepResult { return { status: 'completed', resultingRevisions: { video_edit: videoEditContentRevision() }, directRefs: [target], evidence: [{ kind: 'entity_state', fact: '已回读本机自定义文字样式预设。', capturedAt: new Date().toISOString() }], ...(undoToken ? { undoToken } : {}) } }
   async apply(step: Extract<ApplicationPlannedStep, { kind: 'mutation' }>, context: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     context.signal?.throwIfAborted()
     const before = videoEditTextPresetLibrary.custom().find(value => value.id === step.target.id)

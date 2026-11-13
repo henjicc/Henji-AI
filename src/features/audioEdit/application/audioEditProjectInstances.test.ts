@@ -14,7 +14,7 @@ import { createScriptedPrompter, FakeDocumentCommands, type ScriptedPrompter } f
 import {
   acceptAudioEditNativeResult, beginAudioEditGesture, lockAudioEditRecording, assignAudioEditSource, createAudioEditDraft, editAudioEditProject, flushAudioEditProject, getAudioEditProjectInstance,
   leaveAudioEditProject, loadAudioEditProject, releaseAudioEditProject, resetAudioEditProjectInstancesForTests,
-  setAudioEditDocumentRegistryForTests, undoAudioEditProject, withAudioEditProjectOperation,
+  setAudioEditDocumentRegistryForTests, undoAudioEditProject, withAudioEditProjectOperation, getAudioEditRevision,
 } from './audioEditProjectInstances'
 import { DocumentOperations } from '@/features/documents/documentOperations'
 import { registerCurrentDocumentProvider } from '@/features/documents/currentDocumentContext'
@@ -215,6 +215,17 @@ describe('口播草稿', () => {
     expect(stored().referenceScript).toBe('释放前写完')
     expect(instance.session.isEnded).toBe(true)
     expect(getAudioEditProjectInstance('instance-test')).toBeUndefined()
+  })
+
+  it('打开、释放另一份口播不推进助手修订，内容修改才推进', async () => {
+    commands.seed({ kind: 'audio_edit', id: 'other', name: '另一段', content: audioEditProjectToDocumentContent({ ...fixture(), id: 'other', name: '另一段', revision: 99 }) })
+    await loadAudioEditProject('instance-test')
+    const before = getAudioEditRevision()
+    await loadAudioEditProject('other')
+    expect(await releaseAudioEditProject('other')).toBe(true)
+    expect(getAudioEditRevision()).toBe(before)
+    editAudioEditProject('instance-test', (document) => ({ ...document, referenceScript: '真的改了' }))
+    expect(getAudioEditRevision()).toBeGreaterThan(before)
   })
 
   // 编辑器切到工具首页后，口播状态里仍记着这份文档：页面已关、没有任何入口能再关它，删除必须直接成功

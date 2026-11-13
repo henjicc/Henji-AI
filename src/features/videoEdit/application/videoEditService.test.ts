@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
-import { appendVideoEditSequence, duplicateVideoEditSequence, deleteVideoEditSequence, switchVideoEditSequence, updateVideoEditSequenceSettings, getActiveVideoEditSequence, editVideoSequence, appendVideoEditClip, appendVideoEditMedia, editVideoProject, saveVideoEdit, undoVideoEdit, videoEditDomainRevision, setVideoEditView, subscribeVideoEdit, subscribeVideoEditView } from './videoEditService'
+import { appendVideoEditSequence, duplicateVideoEditSequence, deleteVideoEditSequence, switchVideoEditSequence, updateVideoEditSequenceSettings, getActiveVideoEditSequence, editVideoSequence, appendVideoEditClip, appendVideoEditMedia, editVideoProject, saveVideoEdit, undoVideoEdit, videoEditDomainRevision, videoEditContentRevision, setVideoEditView, subscribeVideoEdit, subscribeVideoEditView } from './videoEditService'
 import { splitVideoEditClip, clipSourceSeconds, adjustVideoEditClip } from '@/core/videoEdit/document'
 import { closeAllVideoEdits, failVideoEditSaves, reopenVideoEdit, savedVideoEdit, videoEditWrites, createLegacyTrackVideoEditProject } from './videoEditDocumentTestKit'
 import { harnessDocumentStore } from '@/tests/harnessNativeStorage'
@@ -20,7 +20,7 @@ import { beginVideoEditGesture, finishVideoEditGesture, updateVideoEditPicturePo
 import { createVideoEditGraphic } from '@/core/videoEdit/graphics'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { openVideoEditDocument, activeVideoEditInstance, closeVideoEditProject, subscribeVideoEditCommandFacts, beginVideoEditCommitBatch, endVideoEditCommitBatch, withVideoEditCommitBatch } from './videoEditService'
-import { updateVideoEditParameterGesture } from './videoEditService'
+import { updateVideoEditParameterGesture, setVideoEditPlaybackRate, setVideoEditTimelineView, focusVideoEditPanel, publishVideoEdit } from './videoEditService'
 import { videoEditSubtitleStyleSchema } from '@/core/videoEdit/subtitleStyle'
 import { GENERIC_FONT_FACES } from '@/core/fonts/catalog'
 import { loadFontLibrary } from '@/platform/fonts'
@@ -205,7 +205,7 @@ it('受限位置写入拒绝越界、额外属性、锁定和旧手势，应用�
   expect(getActiveVideoEditSequence(owner).clips[0].x).toBe(0)
   expect(() => updateVideoEditPicturePosition(gesture, sequenceId, clipId, { x: .3, y: .2 })).toThrow('已结束')
 })
-it('序列切换和选区刷新助手上下文，控制改变并发基线而逐帧观察保持稳定', async () => {
+it('序列切换和选区刷新助手上下文，视图与播放控制不改变并发基线，内容修改才改变', async () => {
   const navigation = useNavigationStore.getState()
   const release = retainHostContextTracking()
   try {
@@ -218,15 +218,17 @@ it('序列切换和选区刷新助手上下文，控制改变并发基线而逐�
     const switched = createHostContextSnapshot()
     expect(switched.surface?.focusedRef).toBe(`video_edit.sequence:${projectId}:${sequenceId}`)
     expect(switched.revision).toBeGreaterThan(before.revision)
-    expect(switched.scopeRevisions.video_edit).toBeGreaterThan(before.scopeRevisions.video_edit)
+    // 切序列与播放控制只是视图变化：上下文刷新，但并发基线不动，助手手里的撤销引用仍可用。
+    expect(switched.scopeRevisions.video_edit).toBe(before.scopeRevisions.video_edit)
     setVideoEditView(projectId, { frame: 60 })
     expect(createHostContextSnapshot().revision).toBe(switched.revision)
     const controlled = createHostContextSnapshot()
-    expect(controlled.scopeRevisions.video_edit).toBeGreaterThan(switched.scopeRevisions.video_edit)
+    expect(controlled.scopeRevisions.video_edit).toBe(switched.scopeRevisions.video_edit)
     setVideoEditView(projectId, { frame: 61 }, true)
     expect(createHostContextSnapshot().scopeRevisions.video_edit).toBe(controlled.scopeRevisions.video_edit)
     appendVideoEditClip(projectId)
     const edited = createHostContextSnapshot()
+    expect(edited.scopeRevisions.video_edit).toBeGreaterThan(controlled.scopeRevisions.video_edit)
     expect(edited.surface?.selectedRefs).toContain(`video_edit.clip:${projectId}:${instance.selection}`)
     // The edit block carries what an agent needs to aim: owner, sequence, time, range, focus, multi-select, targets.
     expect(edited.videoEdit).toMatchObject({ documentRef: `video_edit.document:${projectId}`, sequenceRef: `video_edit.sequence:${projectId}:${sequenceId}`, frame: 61, playing: false, focusedPanel: instance.activePanel,
@@ -488,13 +490,13 @@ it('保存中发生新修改时继续写入最新版本而不提前清除脏状�
   expect(instance.dirty).toBe(false)
   expect(savedVideoEdit(instance).sequences[0].name).toBe('保存期间的修改')
 })
-it('手动定位推进并发版本，播放观察不推进版本，拆分保持源时间连续', async () => {
+it('手动定位与播放观察都不推进内容版本，拆分保持源时间连续', async () => {
   const instance = (await createLegacyTrackVideoEditProject()); appendVideoEditClip(instance.document.id)
-  const revision = videoEditDomainRevision()
+  const revision = videoEditContentRevision()
   setVideoEditView(instance.document.id, { frame: 30 })
-  expect(videoEditDomainRevision()).toBe(revision + 1)
+  expect(videoEditContentRevision()).toBe(revision)
   setVideoEditView(instance.document.id, { frame: 31 }, true)
-  expect(videoEditDomainRevision()).toBe(revision + 1)
+  expect(videoEditContentRevision()).toBe(revision)
   const original = getActiveVideoEditSequence(instance).clips[0]
   editVideoSequence(instance.document.id, instance.activeSequenceId, sequence => splitVideoEditClip(sequence, original.id, 30))
   const right = getActiveVideoEditSequence(instance).clips[1]
@@ -536,13 +538,13 @@ it('通用收集素材能力（4.4）与剪辑页同一入口：外部文件复�
 it('播放与拖动只通知瞬态叶子，相等写入不通知，也不污染历史或保存', async () => {
   const instance = (await createLegacyTrackVideoEditProject()); const id = instance.document.id
   const editor = vi.fn(); const view = vi.fn(); const offEditor = subscribeVideoEdit(editor); const offView = subscribeVideoEditView(view)
-  const revision = videoEditDomainRevision()
+  const revision = videoEditContentRevision()
   try {
     setVideoEditView(id, { frame: 15, scrubbing: true }); setVideoEditView(id, { frame: 15, scrubbing: true }); setVideoEditView(id, { scrubbing: false })
     expect(editor).not.toHaveBeenCalled(); expect(view).toHaveBeenCalledTimes(2)
-    expect(videoEditDomainRevision()).toBe(revision + 1); expect(instance.dirty).toBe(false); expect(instance.past).toHaveLength(0)
+    expect(videoEditContentRevision()).toBe(revision); expect(instance.dirty).toBe(false); expect(instance.past).toHaveLength(0)
     setVideoEditView(id, { frame: 16 }, true)
-    expect(videoEditDomainRevision()).toBe(revision + 1); expect(editor).not.toHaveBeenCalled()
+    expect(videoEditContentRevision()).toBe(revision); expect(editor).not.toHaveBeenCalled()
     await saveVideoEdit(id); expect(savedVideoEdit(instance)).not.toHaveProperty('scrubbing')
     appendVideoEditClip(id); setVideoEditView(id, { selection: null })
     editor.mockClear(); setVideoEditView(id, { selection: getActiveVideoEditSequence(instance).clips[0].id }); expect(editor).toHaveBeenCalledOnce()
@@ -587,10 +589,10 @@ it('两个不同设置的序列保存冷重开，切换只保留会话，不写�
   const second = appendVideoEditSequence(id, { name: '竖屏', width: 2160, height: 3840, frameRate: { numerator: 30000, denominator: 1001 }, sampleRate: 44100, channels: 1 })
   switchVideoEditSequence(id, second); appendVideoEditClip(id, 'shared'); setVideoEditView(id, { frame: 47 })
   await saveVideoEdit(id)
-  const before = instance.document; const history = instance.past.length; const revision = videoEditDomainRevision()
+  const before = instance.document; const history = instance.past.length; const revision = videoEditDomainRevision(); const content = videoEditContentRevision()
   switchVideoEditSequence(id, first); expect(instance.frame).toBe(23); expect(instance.selection).toBe(firstClip)
   switchVideoEditSequence(id, second); expect(instance.frame).toBe(47)
-  expect(instance.document).toBe(before); expect(instance.past).toHaveLength(history); expect(videoEditDomainRevision()).toBe(revision + 2); expect(instance.dirty).toBe(false)
+  expect(instance.document).toBe(before); expect(instance.past).toHaveLength(history); expect(videoEditDomainRevision()).toBe(revision + 2); expect(videoEditContentRevision()).toBe(content); expect(instance.dirty).toBe(false)
   const reopened = await reopenVideoEdit(id)
   expect(reopened.document.sequences).toHaveLength(2)
   expect(reopened.document.sequences[1]).toMatchObject({ name: '竖屏', width: 2160, height: 3840, sampleRate: 44100, channels: 1, frameRate: { numerator: 30000, denominator: 1001 } })
@@ -648,7 +650,7 @@ it('正式事务撤销保留实体引用，帧率写入回执包含实际片段�
     [{ kind: 'video_edit.clip', id: `${id}:${clipId}` }, 'video_edit.clip.duration', 20],
     [{ kind: 'video_edit.clip', id: `${id}:${clipId}` }, 'video_edit.clip.opacity.keyframes', directCurves],
   ] as const) {
-    const revisions = { video_edit: videoEditDomainRevision() }
+    const revisions = { video_edit: videoEditContentRevision() }
     const plan = await engine.plan({ summary: '实体修改与撤销', transactionMode: 'atomic', steps: [{ kind: 'mutation', entityType: target.kind, target, expectedRevisions: revisions, mutations: [{ propertyId, operation: 'set', value }] }] }, context)
     const result = await engine.commit({ planRef: plan.planRef, expectedRevisions: revisions, idempotencyKey: crypto.randomUUID() }, context)
     expect(result.status, JSON.stringify(result)).toBe('completed')
@@ -667,6 +669,41 @@ it('正式事务撤销保留实体引用，帧率写入回执包含实际片段�
     expect(getActiveVideoEditSequence(instance).clips[0]).toMatchObject({ duration: 90, text: '输入文字' })
     expect(getActiveVideoEditSequence(instance).clips[0].curves).toEqual(originalCurves)
   }
+})
+it('撤销引用只因内容变化失效：切序列、定位、视图、打开别的剪辑与界面通知之后仍可撤销', async () => {
+  const instance = (await createLegacyTrackVideoEditProject()); const id = instance.document.id
+  appendVideoEditClip(id); const clipId = getActiveVideoEditSequence(instance).clips[0].id; const first = instance.activeSequenceId
+  const second = appendVideoEditSequence(id, { name: '竖屏', width: 1080, height: 1920, frameRate: { numerator: 30, denominator: 1 }, sampleRate: 48000, channels: 2 })
+  switchVideoEditSequence(id, first)
+  const engine = getApplicationControlExecutionEngine()
+  const context: ApplicationExecutionContext = { requestId: crypto.randomUUID(), exposure: 'assistant', acceptedDataClasses: new Set(['C1']) }
+  const write = async (text: string) => {
+    const revisions = { video_edit: videoEditContentRevision() }
+    const plan = await engine.plan({ summary: '改字', transactionMode: 'atomic', steps: [{ kind: 'mutation', entityType: 'video_edit.clip', target: { kind: 'video_edit.clip', id: `${id}:${clipId}` }, expectedRevisions: revisions, mutations: [{ propertyId: 'video_edit.clip.text', operation: 'set', value: text }] }] }, context)
+    const result = await engine.commit({ planRef: plan.planRef, expectedRevisions: revisions, idempotencyKey: crypto.randomUUID() }, context)
+    if (result.status !== 'completed' || !result.undoRef) throw new Error(JSON.stringify(result))
+    return result
+  }
+  const clipText = (): string | undefined => instance.document.sequences.find(sequence => sequence.id === first)!.clips[0].text
+  const result = await write('助手改字')
+  const domain = videoEditDomainRevision()
+  switchVideoEditSequence(id, second); switchVideoEditSequence(id, first)
+  setVideoEditView(id, { frame: 12 }); setVideoEditView(id, { playing: true }); setVideoEditView(id, { playing: false }); setVideoEditPlaybackRate(id, .5)
+  setVideoEditTimelineView(id, { zoom: 2 }); focusVideoEditPanel(id, 'timeline')
+  await createLegacyTrackVideoEditProject()
+  publishVideoEdit(true)
+  // 订阅者照常收到通知，只是内容修订不动
+  expect(videoEditDomainRevision()).toBeGreaterThan(domain)
+  expect(result.resultingRevisions.video_edit).toBe(videoEditContentRevision())
+  const undone = await engine.undo({ undoRef: result.undoRef!, expectedRevisions: result.resultingRevisions, idempotencyKey: crypto.randomUUID() }, context)
+  expect(undone.status, JSON.stringify(undone)).toBe('completed')
+  expect(clipText()).toBe('输入文字')
+
+  const again = await write('再改一次')
+  editVideoProject(id, document => ({ ...document, sequences: document.sequences.map(sequence => sequence.id === second ? { ...sequence, name: '别人改了名' } : sequence) }))
+  const conflicted = await engine.undo({ undoRef: again.undoRef!, expectedRevisions: again.resultingRevisions, idempotencyKey: crypto.randomUUID() }, context)
+  expect(conflicted).toMatchObject({ status: 'failed', code: 'CONFLICT' })
+  expect(clipText()).toBe('再改一次')
 })
 it('移除未使用的素材项后再次添加原媒体，在一次编辑内恢复引用', async () => {
   const instance = (await createLegacyTrackVideoEditProject()); const id = instance.document.id

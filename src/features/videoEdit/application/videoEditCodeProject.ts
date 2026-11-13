@@ -4,7 +4,7 @@ import { codeProjectPathSchema } from '@/core/videoEdit/codeMaterial/projectCont
 import { sha256HexString } from '@/utils/save/hash'
 import type { ApplicationPlannedStep } from '@/core/application-control'
 import type { ApplicationPersistenceParticipant } from '@/core/application-control/execution/persistence'
-import { requireVideoEditInstance, publishVideoEdit } from './videoEditService'
+import { requireVideoEditInstance, publishVideoEditContent } from './videoEditService'
 
 const target = (id: string) => ({ id, path: requireVideoEditInstance(id).session.documentMeta.path })
 const keyOf = (id: string): string => JSON.stringify(requireVideoEditInstance(id).session.documentMeta.container)
@@ -32,7 +32,7 @@ export async function replaceVideoCodeProjectFiles(id: string, files: CodeProjec
   if (!batch) throw new Error('工程文件修改必须位于 change_application_entities 事务中。')
   await readVideoCodeProject(id)
   batch.current!.files = structuredClone(files); batch.summary = summary
-  publishVideoEdit(true)
+  publishVideoEditContent()
 }
 export async function makeCodeProjectFile(path: string, source: string): Promise<CodeProjectFile> {
   return { path: codeProjectPathSchema.parse(path), source, bytes: new TextEncoder().encode(source).byteLength, hash: await sha256HexString(source) }

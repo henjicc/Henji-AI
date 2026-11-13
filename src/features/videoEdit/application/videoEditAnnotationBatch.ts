@@ -4,7 +4,7 @@ import { assertVideoEditAnnotationTransition, videoEditAnnotationSchema, type Vi
 import { filterVideoEditAnnotations, VIDEO_EDIT_ANNOTATION_HANDLED_STATUSES, type VideoEditAnnotationFilter, type VideoEditAnnotationStatus } from '@/core/videoEdit/annotationQuery'
 import type { VideoEditDocument } from '@/core/videoEdit/document'
 import { queryVideoEditAnnotationsCapability, removeVideoEditAnnotationsCapability, updateVideoEditAnnotationsCapability } from '@/core/application-control/domains/videoEdit/videoEditAnnotationCapabilities'
-import { editVideoProject, requireVideoEditInstance, videoEditDomainRevision } from './videoEditService'
+import { editVideoProject, requireVideoEditInstance, videoEditContentRevision } from './videoEditService'
 import { splitVideoEditRef } from './videoEditReflection'
 
 const logger = createLogger('features.videoEdit.annotationBatch')
@@ -158,7 +158,7 @@ export function handleVideoEditAnnotationCapability(id: string, raw: unknown): R
       clipRef: mark.clipId ? { kind: 'video_edit.clip' as const, id: `${documentId}:${mark.clipId}` } : null, targetKind: mark.target.kind, text: mark.text.slice(0, SUMMARY_LENGTH), textTruncated: mark.text.length > SUMMARY_LENGTH,
       replyCount: mark.thread.length, lastReply: mark.thread.at(-1)?.text.slice(0, SUMMARY_LENGTH) ?? null }))
     const nextCursor = offset + input.limit < all.length ? `${revision}:${offset + input.limit}` : null
-    return { documentRef: input.documentRef, refs: items.map(item => item.ref), revisions: { video_edit: videoEditDomainRevision() }, items, total: all.length, nextCursor, message: `找到 ${all.length} 条批注${nextCursor ? `，本页 ${items.length} 条` : ''}。` }
+    return { documentRef: input.documentRef, refs: items.map(item => item.ref), revisions: { video_edit: videoEditContentRevision() }, items, total: all.length, nextCursor, message: `找到 ${all.length} 条批注${nextCursor ? `，本页 ${items.length} 条` : ''}。` }
   }
   if (id === updateVideoEditAnnotationsCapability.id) {
     const input = updateVideoEditAnnotationsCapability.inputSchema.parse(raw); const documentId = input.documentRef.id

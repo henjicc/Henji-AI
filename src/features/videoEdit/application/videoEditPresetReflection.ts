@@ -4,7 +4,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import type { VideoEditTransitionKind } from '@/core/videoEdit/transitions'
 import { VIDEO_EDIT_PRESET_PANEL_CATEGORIES, VIDEO_EDIT_PRESET_CATEGORY_LABELS, VIDEO_EDIT_PRESET_DEFAULTABLE, VIDEO_EDIT_PRESET_MAX_RATING, type VideoEditPresetCategory, type VideoEditPresetPreference } from '@/core/videoEdit/presetPackage'
 import { videoEditSchemaRef } from './videoEditFields'
-import { videoEditDomainRevision } from './videoEditService'
+import { videoEditContentRevision } from './videoEditService'
 import { VIDEO_EDIT_EFFECT_LIBRARY_SCOPE, videoEditEffectLibraryRevisions } from './videoEditEffectPresets'
 import { listAllVideoEditPresets, requireVideoEditPreset, setVideoEditPresetDefault, setVideoEditPresetRating, type VideoEditPresetEntry } from './videoEditPresetCatalog'
 import { videoEditPresetPreferences } from './videoEditPresetPreferences'
@@ -39,7 +39,7 @@ const fields: ApplicationFieldDefinition<Draft, Draft>[] = [
     descriptor: { id: `${PRESET_ENTITY}.is_default`, entityType: PRESET_ENTITY, version: 1, title: '设为默认', description: 'true 设为该类默认（同类原默认自动取消），false 取消；效果预设没有默认。', value: { kind: 'boolean' }, nullable: false, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['video_edit:read'], write: ['video_edit:write'] }, revisionScopes: ['video_edit', VIDEO_EDIT_EFFECT_LIBRARY_SCOPE], schemaRef: videoEditSchemaRef('property', `${PRESET_ENTITY}.is_default`) } },
 ]
 const draftOf = (ref: ApplicationRef): Draft => { const { category, id } = parse(ref); const entry = requireVideoEditPreset(category, id); return { entry, rating: entry.rating, isDefault: entry.isDefault } }
-const revisions = (): Record<string, number> => ({ video_edit: videoEditDomainRevision(), ...videoEditEffectLibraryRevisions() })
+const revisions = (): Record<string, number> => ({ video_edit: videoEditContentRevision(), ...videoEditEffectLibraryRevisions() })
 export function createVideoEditPresetRegistration(): ApplicationEntityRegistration {
   const properties = fieldDescriptors(fields)
   return {

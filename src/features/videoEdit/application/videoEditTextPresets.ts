@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { videoEditTextPresetSchema } from '@/core/persistence/storedSchemas'
 import { type VideoEditTextStyle } from '@/core/videoEdit/text'
-import { publishVideoEdit } from './videoEditService'
+import { publishVideoEditContent } from './videoEditService'
 import { VideoEditLocalLibrary } from './videoEditLocalLibrary'
 
 export { videoEditTextPresetSchema } from '@/core/persistence/storedSchemas'
@@ -17,7 +17,7 @@ export class VideoEditTextPresetLibrary extends VideoEditLocalLibrary<VideoEditT
   readonly subscribe = (listener: () => void): (() => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener) } }
   readonly snapshot = (): number => this.revision
   constructor(storage: Pick<Storage, 'getItem' | 'setItem'> | undefined = typeof localStorage === 'undefined' ? undefined : localStorage) {
-    super(VIDEO_EDIT_TEXT_PRESETS_KEY, librarySchema, storage, () => { this.revision++; for (const listener of this.listeners) listener(); publishVideoEdit(true) })
+    super(VIDEO_EDIT_TEXT_PRESETS_KEY, librarySchema, storage, () => { this.revision++; for (const listener of this.listeners) listener(); publishVideoEditContent() })
   }
   list(): VideoEditTextPreset[] { return this.custom() }
   save(name: string, style: VideoEditTextStyle): VideoEditTextPreset {

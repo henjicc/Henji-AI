@@ -1,7 +1,7 @@
 import { renderFingerprintHash as hash, renderSceneRecordFingerprint as recordDigest, videoEditSpatialTargetClips, type VideoEditCodeFingerprints } from './renderFingerprint'
 import { VIDEO_EDIT_RENDER_ENGINE_VERSION } from 'virtual:video-edit-render-engine'
 import { activeVideoEditEffects, videoEditEffectCodes } from './compositing'
-import { videoEditClipRetimed, videoEditClipSpeedRange } from './clipSpeed'
+import { videoEditClipRetimed } from './clipSpeed'
 import { codeMediaInputClipSeconds } from './codeMediaInput'
 import { videoEditCodeInputs, videoEditCodeSceneKeys, type VideoEditCodeDeclarationReader } from './codeInputParameters'
 import { isCodeImageReference, type CodeSceneReference } from './codeMaterial/contract'
@@ -11,7 +11,7 @@ import type { ResolvedVideoEditScene } from './scene/sceneResolve'
 import type { VideoEditScene, VideoEditSceneRecord } from './scene/sceneSchema'
 import { videoEditSceneRecordMediaIds } from './scene/sceneMedia'
 import { VIDEO_EDIT_FRAME_INTERPOLATION_ENGINE } from './timeRemap'
-import { videoEditTransitionPictureClips } from './transitions'
+import { videoEditTransitionPictureClips, type VideoEditTransitionWindow } from './transitions'
 import { videoEditClipEnabled, videoEditDuration, videoEditPictureFilter, videoEditPictureTransitionWindows, videoEditVisibleTrackIndexes, type VideoEditClip, type VideoEditComposition, type VideoEditSequence } from './document'
 
 /**
@@ -26,7 +26,7 @@ import { videoEditClipEnabled, videoEditDuration, videoEditPictureFilter, videoE
  */
 export const VIDEO_EDIT_RENDER_WINDOW_SECONDS = 5
 export const VIDEO_EDIT_RENDER_MIN_SECONDS = 0.5
-export interface VideoEditRenderWindow { index: number; startFrame: number; endFrame: number; key: string; heavy: boolean; fingerprintPending?: boolean }
+export interface VideoEditRenderWindow { index: number; startFrame: number; endFrame: number; key: string; fingerprintPending?: boolean }
 
 /** 声音相关字段与修改记录不影响画面，修改音量、改值后又改回都不让预览文件失效。 */
 export function videoEditRenderPictureClip(clip: VideoEditClip): Omit<VideoEditClip, 'volume' | 'audioMapping' | 'preservePitch' | 'pitchSemitones' | 'linkId' | 'groupId' | 'takes' | 'creativeSource' | 'audioRole' | 'remix' | 'snapToBeat' | 'templateId' | 'contentAnchor' | 'name' | 'edits'> {
@@ -197,36 +197,19 @@ class DigestContext {
   }
 }
 
-/**
- * 多机位片段实际显示的那一路：所选机位在源序列里的素材片段。节目只解这一路（见 videoEditNestedComposition），
- * 所以它和一段普通视频一样轻；其他嵌套序列返回 undefined。
- */
-function multicamPicture(document: VideoEditComposition, clip: VideoEditClip): VideoEditClip | undefined {
-  if (clip.kind !== 'sequence') return undefined
-  const item = document.items.find(value => value.id === clip.itemId)
-  const sequence = document.sequences?.find(value => value.id === item?.sequenceId)
-  if (!sequence?.multicam) return undefined
-  const camera = sequence.multicam.cameras.find(value => value.id === (clip.multicamCameraId ?? sequence.multicam!.cameras[0]?.id))
-  return camera && sequence.clips.find(value => value.id === camera.clipId)
+/** 切段与每段画面共用的输入：可见轨上的画面片段（含停用的，用作切点）、启用的那部分与画面转场。 */
+export interface VideoEditRenderWindowInputs { placed: VideoEditClip[]; visual: VideoEditClip[]; transitionWindows: VideoEditTransitionWindow[] }
+export function videoEditRenderWindowInputs(document: VideoEditComposition): VideoEditRenderWindowInputs {
+  const visible = videoEditVisibleTrackIndexes(document)
+  const placed = document.clips.filter(clip => clip.kind !== 'audio' && visible.has(clip.track))
+  return { placed, visual: placed.filter(videoEditClipEnabled), transitionWindows: videoEditPictureTransitionWindows(document) }
 }
-/**
- * 窗口里可能吃力的画面：代码片段与代码效果、嵌套序列（多机位按所选那一路算）、转场、三层以上画面，以及变速、倒放和时间重映射
- * （快放跳着解、倒放逆着长 GOP 解，比顺序解一路原片重得多；慢放与定格不算）。实际播放测得掉帧也算（由调用方标注）。
- */
-function heavyClips(document: VideoEditComposition, clips: readonly VideoEditClip[], transitions: number): boolean {
-  if (transitions > 0) return true
-  if (clips.filter(clip => clip.kind !== 'text').length >= 3) return true
-  return clips.some(clip => {
-    const picture = multicamPicture(document, clip)
-    if (clip.kind === 'sequence' && !picture) return true
-    return [clip, ...(picture ? [picture] : [])].some(value => value.kind === 'code' || value.kind === 'graphic' || retimed(value) || activeVideoEditEffects(value).some(effect => effect.code))
-  })
+/** [startFrame, endFrame) 这一段的画面：与它相交的转场，以及相交的启用片段和这些转场的两侧片段。 */
+export function videoEditRenderWindowClips(inputs: VideoEditRenderWindowInputs, startFrame: number, endFrame: number): { clips: VideoEditClip[]; transitions: VideoEditTransitionWindow[] } {
+  const transitions = inputs.transitionWindows.filter(window => window.start < endFrame && window.end > startFrame)
+  const handles = new Set(transitions.flatMap(window => videoEditTransitionPictureClips(window).map(clip => clip.id)))
+  return { clips: inputs.visual.filter(clip => handles.has(clip.id) || clip.start < endFrame && clip.start + clip.duration > startFrame), transitions }
 }
-/**
- * 变速里吃力的只有快放与倒放：快放要跳着解（每个时间线帧解多帧源画面），倒放要逆着长 GOP 回溯；
- * 慢放是顺序解，比原速还轻。定格（含时间重映射加定格）只解一帧，先排除。时间重映射没有负速度，倒放只看 reverse。
- */
-const retimed = (clip: VideoEditClip): boolean => !clip.frameHold && (Boolean(clip.reverse) || videoEditClipSpeedRange(clip).max > 1 + 1e-9)
 
 /** 一条序列的窗口与输入签名：签名相同（例如只改了声音）时窗口与指纹必然相同，可直接沿用上一次的结果。 */
 export interface VideoEditRenderWindowSet { signature: string; windows: VideoEditRenderWindow[] }
@@ -273,9 +256,8 @@ export function videoEditRenderWindowSet(document: VideoEditComposition, depende
   const minimum = Math.max(1, Math.round(document.fps * VIDEO_EDIT_RENDER_MIN_SECONDS))
   const visible = videoEditVisibleTrackIndexes(document); const picture = videoEditPictureFilter(document)
   // 停用片段的首尾仍作切点：开关一个片段只让与它重叠的窗口失效，别处的切段与已渲染文件不变。
-  const placed = document.clips.filter(clip => clip.kind !== 'audio' && visible.has(clip.track))
-  const visual = placed.filter(videoEditClipEnabled)
-  const transitionWindows = videoEditPictureTransitionWindows(document)
+  const inputs = videoEditRenderWindowInputs(document)
+  const { placed, visual, transitionWindows } = inputs
   const visibleCaptions = document.captionTrackEnabled === false ? [] : document.captions ?? []
   const { id: _id, binId: _bin, label: _label, textTranscription: _transcription, tracks: _tracks, sampleRate: _rate, channels: _channels, captionTrackLocked: _locked, clips: _clips, transitions: _transitions, captions: _captions, annotations: _annotations, markers: _markers, name: _name, media: _media, items: _items, sequences: _sequences, codeMaterials: _codeMaterials, colorLuts: _luts, styles: _styles, scenes: _scenes, revision: _revision, foreign: _foreign, ...settings } = document
   // 渲染引擎版本由合成、指纹与编码相关源码在构建时散列得出（scripts/vite/renderEngineVersion.mjs），引擎实现一变旧窗口全部失效。
@@ -300,9 +282,7 @@ export function videoEditRenderWindowSet(document: VideoEditComposition, depende
   if (previous?.signature === signature) return previous
   const windows: VideoEditRenderWindow[] = []
   for (const { startFrame, endFrame } of videoEditRenderWindowRanges(document)) {
-      const overlapping = transitionWindows.filter(window => window.start < endFrame && window.end > startFrame)
-      const handles = new Set(overlapping.flatMap(window => videoEditTransitionPictureClips(window).map(clip => clip.id)))
-      const clips = visual.filter(clip => handles.has(clip.id) || clip.start < endFrame && clip.start + clip.duration > startFrame)
+      const { clips, transitions: overlapping } = videoEditRenderWindowClips(inputs, startFrame, endFrame)
       const dependencies = followSources(clips)
       // 同内容的副本可共用文件；片段身份只在段内引用关系中保留。
       const ids = new Map(dependencies.map((clip, index) => [clip.id, `clip:${index}`]))
@@ -324,7 +304,7 @@ export function videoEditRenderWindowSet(document: VideoEditComposition, depende
         .map(({ id: _id, clipId: _clipId, speech: _speech, ...caption }) => ({ ...caption, start: caption.start - startFrame }))
       const key = hash(JSON.stringify([base, endFrame - startFrame, pictures, transitions, captions, context.references(dependencies, fingerprinted)]))
       const fingerprintPending = dependencies.some(clip => context.codePending(clip, startFrame, endFrame))
-      windows.push({ index: windows.length, startFrame, endFrame, key: fingerprintPending ? `pending:${startFrame}:${key}` : key, heavy: heavyClips(document, clips, transitions.length), ...(fingerprintPending ? { fingerprintPending: true } : {}) })
+      windows.push({ index: windows.length, startFrame, endFrame, key: fingerprintPending ? `pending:${startFrame}:${key}` : key, ...(fingerprintPending ? { fingerprintPending: true } : {}) })
   }
   return { signature, windows }
 }

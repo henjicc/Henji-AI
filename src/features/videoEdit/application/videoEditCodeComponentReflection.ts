@@ -4,7 +4,7 @@ import type { CodeComponent } from '@/core/videoEdit/codeMaterial/components'
 import { codeComponentNameSchema, componentSourceMetadata } from '@/core/videoEdit/codeMaterial/components'
 import { codeSourceTextSchema, componentFileReferences } from '@/core/videoEdit/codeMaterial/sources'
 import { videoEditSchemaRef } from './videoEditFields'
-import { listVideoEditInstances, openVideoEditDocument, videoEditDomainRevision } from './videoEditService'
+import { listVideoEditInstances, openVideoEditDocument, videoEditContentRevision } from './videoEditService'
 import { projectCodeComponents, publishProjectCodeComponent, refuseCodeComponentRemoval, discardProjectCodeComponents, withdrawProjectCodeComponents, codeComponentReferences, type CodeComponentReference } from './videoEditCodeStorage'
 import type { CodeComponentPin } from '@/core/videoEdit/codeMaterial/sources'
 
@@ -40,7 +40,7 @@ async function requireComponent(ref: ApplicationRef, includeReferences = false):
   return { ...component, references: includeReferences ? await codeComponentReferences(projectId, name) : [] }
 }
 export function createCodeComponentRegistration(): ApplicationEntityRegistration {
-  const revisions = (): Record<string, number> => ({ video_edit: videoEditDomainRevision() })
+  const revisions = (): Record<string, number> => ({ video_edit: videoEditContentRevision() })
   return { entity: { id: type, domain: 'video_edit', version: 1, title: '项目代码组件', description: '同一项目所有剪辑共享的模块库。在剪辑文档下以 name/source/description 创建：新名字发布组件，相同名字发布新版本。素材保存时将 @组件/名称 解析为最新版本并钉住，@组件/名称@2 指定版本。组件更新不影响已有素材。', refKind: type, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: ['video_edit.document'], revisionScopes: ['video_edit'], queryCapabilityIds: ['read_application_entity'], schemaRef: videoEditSchemaRef('entity', type), collectionWrite: { creatable: true, removable: false, requiredPropertyIds: [`${type}.name`, `${type}.source`] } }, properties: fieldDescriptors(fields),
     schemaDocuments: [
       ...Object.entries(creation).map(([key, schema]) => ({ ref: videoEditSchemaRef('property', `${type}.${key}.value`), value: z.toJSONSchema(schema, { io: 'input' }) as JsonValue })),
@@ -89,7 +89,7 @@ export class CodeComponentCollectionExecutor implements ApplicationCollectionExe
     }
     } catch (error) { await discardProjectCodeComponents(versions); throw error }
     const undoToken = crypto.randomUUID(); this.receipts.set(undoToken, { projectId: step.parent.id, versions })
-    return { status: 'completed', directRefs: refs, undoToken, resultingRevisions: { video_edit: videoEditDomainRevision() }, evidence: [{ kind: 'entity_state', fact: '项目组件已写入不可变源码文件，可经同一组件实体读回。', capturedAt: new Date().toISOString() }] }
+    return { status: 'completed', directRefs: refs, undoToken, resultingRevisions: { video_edit: videoEditContentRevision() }, evidence: [{ kind: 'entity_state', fact: '项目组件已写入不可变源码文件，可经同一组件实体读回。', capturedAt: new Date().toISOString() }] }
   }
   async compensate(_step: Extract<ApplicationPlannedStep, { kind: 'collection' }>, result: ApplicationCompletedStepResult): Promise<ApplicationEvidence[]> {
     const receipt = result.undoToken ? this.receipts.get(result.undoToken) : undefined
@@ -100,6 +100,6 @@ export class CodeComponentCollectionExecutor implements ApplicationCollectionExe
     const receipt = this.receipts.get(undoToken)
     if (!receipt) throw new Error('此组件发布已撤回或撤销凭据已失效。')
     await withdrawProjectCodeComponents(receipt.projectId, receipt.versions); this.receipts.delete(undoToken)
-    return { status: 'completed', directRefs: [], resultingRevisions: { video_edit: videoEditDomainRevision() }, evidence: [{ kind: 'entity_state', fact: '组件发布已撤回，保留用户可见源码文件。', capturedAt: new Date().toISOString() }] }
+    return { status: 'completed', directRefs: [], resultingRevisions: { video_edit: videoEditContentRevision() }, evidence: [{ kind: 'entity_state', fact: '组件发布已撤回，保留用户可见源码文件。', capturedAt: new Date().toISOString() }] }
   }
 }

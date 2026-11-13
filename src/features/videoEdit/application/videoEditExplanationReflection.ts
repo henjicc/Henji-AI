@@ -1,6 +1,6 @@
 import { unrestrictedCollectionAvailability, type ApplicationEntityRegistration, type JsonValue } from '@/core/application-control'
 import { videoEditSchemaRef } from './videoEditFields'
-import { listVideoEditInstances, requireVideoEditInstance, videoEditDomainRevision } from './videoEditService'
+import { listVideoEditInstances, requireVideoEditInstance, videoEditContentRevision } from './videoEditService'
 
 const entityType = 'video_edit.explanation_session'
 const reason = '会话阶段与原音留存由本机录制服务维护，不能通过属性写入伪造。讲解正文通过 explanation_body 实体读取和校正。'
@@ -9,7 +9,7 @@ const fields = [
   { key: 'audio_retention', title: '原音留存选择', value: { kind: 'string' as const } },
 ]
 export function createVideoEditExplanationRegistration(): ApplicationEntityRegistration {
-  const revisions = () => ({ video_edit: videoEditDomainRevision() })
+  const revisions = () => ({ video_edit: videoEditContentRevision() })
   const requireSession = (ref: { kind: string; id: string }) => {
     const split = ref.id.indexOf(':'); if (ref.kind !== entityType || split < 0) throw new Error('请使用讲解目录返回的完整引用。')
     const owner = requireVideoEditInstance(ref.id.slice(0, split)); const session = owner.document.creativeIntents?.sessions.find(s => s.id === ref.id.slice(split+1))

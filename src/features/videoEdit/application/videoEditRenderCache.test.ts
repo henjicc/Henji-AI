@@ -32,6 +32,8 @@ vi.mock('@/services/mediaCache/mediaCacheSettings', () => ({ getMediaCacheSettin
 vi.mock('@/services/mediaCache/hardwareCapabilities', () => ({ resolveRenderCacheCodec: () => 'h264' }))
 vi.mock('@/core/videoEdit/renderBitrate', () => ({ videoEditRenderEncoding: () => ({ profile: 'test', codec: 'h264' }) }))
 vi.mock('@/core/videoEdit/renderCache', () => ({ videoEditRenderWindowRanges: () => state.windows.map(({ startFrame, endFrame }) => ({ startFrame, endFrame })), videoEditRenderWindowSet: (...args: unknown[]) => state.windowSet(...args) }))
+// 吃力判断由替身窗口直接给出（真实判断见 core/videoEdit/renderLoad 的测试）。
+vi.mock('@/core/videoEdit/renderLoad', () => ({ videoEditRenderWindowsHeavy: (_document: unknown, windows: Array<{ heavy?: boolean }>) => windows.map(window => window.heavy ?? true) }))
 vi.mock('@/platform/fonts', () => ({ fontLibrarySnapshot: () => ({ revision: state.fontRevision }) }))
 vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ videoFrames: { webCacheForeground: state.webCacheForeground }, settings: { get: async () => undefined, set: async () => {} }, mediaCache: {
   renderList: state.list, renderRemove: state.remove, renderBegin: async () => 'temporary', renderCommit: state.commit, renderDiscard: state.discard,
@@ -521,6 +523,8 @@ it('实测流畅覆盖重段预测，取消仅丢当前段并保留已完成段'
   owner.playing = false
   expect((await renderVideoEditRenderCache(owner.document.id, { scope: 'needed' })).renderedWindows).toBe(0)
   state.windows.push({ key: owner.document.id + '-second', startFrame: 3, endFrame: 6, heavy: true })
+  // 窗口按依赖缓存：换一次字体库版本，让下一次读取按新增的窗口重算。
+  state.fontRevision++
   const controller = new AbortController()
   state.add.mockImplementation(async () => { if (state.add.mock.calls.length === 4) controller.abort() })
   const result = await renderVideoEditRenderCache(owner.document.id, { scope: 'all' }, controller.signal)

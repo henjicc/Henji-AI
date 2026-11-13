@@ -9,7 +9,7 @@ import {
   attachImageEditDocumentInstanceV3, getOrCreateImageEditDocumentInstanceV3,
   getOrCreateImageEditPersistenceQueueV3, releaseImageEditDocumentInstanceV3,
   requireImageEditDocumentInstanceV3, saveImageEditDocumentInstanceV3,
-  deleteIdleImageEditDocumentV3, leaseImageEditDocumentInstanceV3, readImageEditDocumentInstanceV3,
+  deleteIdleImageEditDocumentV3, leaseImageEditDocumentInstanceV3, readImageEditDocumentInstanceV3, getImageEditDocumentCatalogRevisionV3,
 } from './imageEditDocumentInstances'
 import { IMAGE_EDITOR_V3_BRUSH_TILE_MEDIA_TYPE } from './imageEditorResourceDescriptorsV3'
 import { useImageEditorControllerV3 } from '../editor/useImageEditorControllerV3'
@@ -70,6 +70,16 @@ describe('图片文档应用实例', () => {
       { resourceRef: source, byteLength: 4_096, mediaType: null },
     ]))
   })
+  it('打开、释放另一份图片文档不推进 image_edit 修订，文档修改才推进', () => {
+    const state = setup('revision-owner')
+    const before = getImageEditDocumentCatalogRevisionV3()
+    setup('revision-other')
+    expect(releaseImageEditDocumentInstanceV3('revision-other')).toBe(true)
+    expect(getImageEditDocumentCatalogRevisionV3()).toBe(before)
+    state.rename('真的改了')
+    expect(getImageEditDocumentCatalogRevisionV3()).toBeGreaterThan(before)
+  })
+
   it('回收跳过打开的文档、活动任务、脏状态与未确认保存', async () => {
     const state = setup('retained')
     const remove = vi.fn(async () => true)

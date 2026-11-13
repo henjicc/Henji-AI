@@ -6,12 +6,12 @@ import { codeSourceTextSchema } from '@/core/videoEdit/codeMaterial/sources'
 import { getPlatform } from '@/platform/runtime'
 import { videoEditDocumentSchema } from '@/core/videoEdit/document'
 import { videoEditSchemaRef } from './videoEditFields'
-import { listVideoEditInstances, requireVideoEditInstance, openVideoEditDocument, videoEditDomainRevision } from './videoEditService'
+import { listVideoEditInstances, requireVideoEditInstance, openVideoEditDocument, videoEditContentRevision } from './videoEditService'
 import { readVideoCodeProject, makeCodeProjectFile, replaceVideoCodeProjectFiles, onCodeProjectCommitFailure } from './videoEditCodeProject'
 
 export const CODE_PROJECT_FILE = 'video_edit.code_project_file'
 export const CODE_PROJECT = 'video_edit.code_project'
-const revisions = (): Record<string, number> => ({ video_edit: videoEditDomainRevision() })
+const revisions = (): Record<string, number> => ({ video_edit: videoEditContentRevision() })
 const refOf = (id: string, path: string): ApplicationRef => ({ kind: CODE_PROJECT_FILE, id: `${id}:${path}`, label: path })
 const renamedPaths = new Map<string, string>()
 function restoreAliases(id: string, snapshot: Map<string, string>): void {

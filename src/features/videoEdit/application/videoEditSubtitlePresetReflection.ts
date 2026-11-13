@@ -3,7 +3,7 @@ import { fieldDescriptors, fieldReadValues, unrestrictedCollectionAvailability, 
 import { videoEditSubtitleStyleSchema } from '@/core/videoEdit/subtitleStyle'
 import { videoEditSchemaRef } from './videoEditFields'
 import { listVideoEditSubtitlePresets, type VideoEditSubtitlePreset } from './videoEditSubtitlePresets'
-import { videoEditDomainRevision } from './videoEditService'
+import { videoEditContentRevision } from './videoEditService'
 
 const entityType = 'video_edit.subtitle_preset'
 const reason = '本机字幕样式模板目录；本机保存、改名、修改与删除统一通过 video_edit.text_preset 实体维护，不进入剪辑文件。应用时读取 style，在同一次通用事务中写入所选 video_edit.caption.style（一步撤销）。'
@@ -16,7 +16,7 @@ const fields: ApplicationFieldDefinition<VideoEditSubtitlePreset, VideoEditSubti
   },
 }))
 export function createVideoEditSubtitlePresetRegistration(): ApplicationEntityRegistration {
-  const revisions = (): Record<string, number> => ({ video_edit: videoEditDomainRevision() })
+  const revisions = (): Record<string, number> => ({ video_edit: videoEditContentRevision() })
   const requirePreset = (ref: { kind: string; id: string }): VideoEditSubtitlePreset => {
     const preset = listVideoEditSubtitlePresets().find(preset => preset.id === ref.id)
     if (ref.kind !== entityType || !preset) throw new Error('NOT_FOUND：原字幕预设已删除。')

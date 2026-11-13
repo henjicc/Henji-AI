@@ -15,7 +15,7 @@ import { videoEditEffectsRegistry } from '@/core/videoEdit/effectsRegistry'
 import { WHITE_HEX } from '@/core/theme/colorTokens'
 import { blurAmountForSigma } from '@/core/videoEdit/blur'
 import { makeVideoEditBuiltinEffect, applyVideoEditStylePiece } from './videoEditCompositing'
-import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, undoVideoEdit, undoVideoEditWorkspace, videoEditDomainRevision } from './videoEditService'
+import { appendVideoEditClip, appendVideoEditMedia, closeVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, undoVideoEdit, undoVideoEditWorkspace, videoEditContentRevision } from './videoEditService'
 import { videoEditPresetCreationProperties, createVideoEditEffectLibraryStore, filterVideoEditLibraryEntries, useVideoEditEffectLibraryStore, videoEditStylePieceLibraryEntries, listVideoEditStylePieces, findVideoEditGlobalStylePiece, VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY } from './videoEditEffectPresets'
 import { videoEditEffectDropClips } from '../panels/videoEditEffectDrag'
 import { videoEditPresetCreationItemsSchema, VideoEditStylePieceCollectionExecutor } from './videoEditEffectPresetReflection'
@@ -96,7 +96,7 @@ it('加载收藏统一合并过渡与效果引用，去重并保留原存储，�
   expect(disk.getItem(VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY)).toBe(original)
   expect(disk.getItem(`${VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY}:backup:v4`)).toBe(original)
   store.getState().toggleFavorite('transition:shape_wipe')
-  expect(JSON.parse(disk.getItem(VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY)!)).toMatchObject({ version: VIDEO_EDIT_EFFECT_LIBRARY_VERSION, minReaderVersion: VIDEO_EDIT_EFFECT_LIBRARY_VERSION })
+  expect(JSON.parse(disk.getItem(VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY)!)).toMatchObject({ version: VIDEO_EDIT_EFFECT_LIBRARY_VERSION })
   expect(createVideoEditEffectLibraryStore(disk).getState().favorites).toEqual(['effect:blur', 'effect:color_grade', 'effect:mosaic', 'transition:gl.Bounce', 'preset:mine'])
 })
 
@@ -417,7 +417,7 @@ it('恢复读取失败保留回收入口，重名长名称可恢复，可信撤�
 
 it('所有效果库写入口拒绝重名且不发布，成功操作和收藏只推进效果库自己的修订', () => {
   const store = useVideoEditEffectLibraryStore
-  const domain = videoEditDomainRevision(), baseline = getHostScopeRevisions()
+  const domain = videoEditContentRevision(), baseline = getHostScopeRevisions()
   const a = seedVideoEditEffectPreset(store.getState(), '柔化', [makeVideoEditBuiltinEffect('blur')])
   const b = seedVideoEditEffectPreset(store.getState(), '对白', [makeVideoEditBuiltinEffect('audio_filter')])
   const snapshot = store.getState(), written = localStorage.getItem(VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY)
@@ -432,7 +432,7 @@ it('所有效果库写入口拒绝重名且不发布，成功操作和收藏只�
     expect(localStorage.getItem(VIDEO_EDIT_EFFECT_LIBRARY_STORAGE_KEY)).toBe(written)
   }
   store.getState().toggleFavorite(`preset:${a.id}`)
-  expect(videoEditDomainRevision()).toBe(domain)
+  expect(videoEditContentRevision()).toBe(domain)
   expect(getHostScopeRevisions()['video_edit.effects']).toBeGreaterThan(baseline['video_edit.effects'])
 })
 

@@ -27,7 +27,7 @@ import { VIDEO_EDIT_DEFAULT_BLOOM_RADIUS, VIDEO_EDIT_DEFAULT_BLOOM_THRESHOLD, VI
 import { videoEditTranscriptWords, resolveVideoEditTextRanges } from '@/core/videoEdit/textTranscript'
 import { VIDEO_EDIT_BUILTIN_EFFECTS_DEFINITIONS, describeVideoEditBuiltinEffect, parseVideoEditBuiltinRefId, requireVideoEditBuiltinEffect, videoEditBuiltinEffect, videoEditBuiltinRefId } from '@/core/videoEdit/builtinEffects'
 import { describeVideoEditTransitionKind, parseVideoEditTransitionRefId, videoEditTransitionClipIds, VIDEO_EDIT_TRANSITION_PRESETS, VIDEO_EDIT_TRANSITION_REF_PREFIX } from '@/core/videoEdit/transitions'
-import { listVideoEditInstances, requireVideoEditInstance, openVideoEditDocument, getVideoEditTimelineView, videoEditDomainRevision as videoEditRevision } from './videoEditService'
+import { listVideoEditInstances, requireVideoEditInstance, openVideoEditDocument, getVideoEditTimelineView, videoEditContentRevision as videoEditRevision } from './videoEditService'
 import { VIDEO_EDIT_BUILTIN_CATALOG_READ_ONLY, VIDEO_EDIT_FIELDS, VIDEO_EDIT_TYPES, videoEditDataKey, videoEditSchemaDocuments, videoEditSchemaRef, type VideoEditEntityType, type VideoEditFieldData } from './videoEditFields'
 import { readVideoEditSource } from './videoEditSource'
 import { getVideoEditPlaybackResolution } from './videoEditPlaybackResolution'

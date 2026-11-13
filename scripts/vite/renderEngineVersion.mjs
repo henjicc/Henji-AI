@@ -25,7 +25,7 @@ const RESOLVED_ID = `\0${MODULE_ID}`
 /**
  * 沿依赖闭包散列的入口：合成画面的渲染 Worker、窗口切分与指纹、预渲染编码参数，以及作者代码的编译 Worker
  * （渲染 Worker 用 `new URL()` 启动它，esbuild 不会沿这种写法跟进，所以单列）。
- * 主线程的预渲染调度与会话代理只散列文件本身：它们经剪辑服务引到整个应用（约 1400 个文件），
+ * 主线程上决定预览文件字节的部分只散列文件本身：它们经剪辑服务引到整个应用（约 1400 个文件），
  * 沿闭包散列会让任何界面改动都使整片预渲染失效；画面本身由 Worker 闭包决定。
  */
 const RENDER_ENGINE_CLOSURES = [
@@ -53,10 +53,16 @@ const RENDER_ENGINE_BOUNDARIES = [
   'src/core/creativeIntent',
   'src/core/documents',
 ]
+/**
+ * 只散列文件本身的主线程部分：编码档案与单个窗口的编码封装、渲染会话、Worker 传输，以及编码结果的时间戳与关键帧封装。
+ * 预渲染调度（何时渲、渲哪些窗口、让出与续上、日志，videoEditRenderCache.ts）与吃力判断（core/videoEdit/renderLoad.ts）
+ * 不影响文件内容，不在这里；拿不准的逻辑放进 videoEditRenderCacheEncode.ts。
+ */
 const RENDER_ENGINE_FILES = [
-  'src/features/videoEdit/application/videoEditRenderCache.ts',
+  'src/features/videoEdit/application/videoEditRenderCacheEncode.ts',
   'src/features/videoEdit/engine/videoEditRenderSession.ts',
   'src/features/videoEdit/engine/videoEditRenderTransport.ts',
+  'src/features/videoEdit/engine/videoEditEncodedVideo.ts',
 ]
 
 /**

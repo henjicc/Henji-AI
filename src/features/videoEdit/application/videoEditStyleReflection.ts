@@ -14,7 +14,7 @@ import { videoEditTemplateBodySchema, videoEditTemplateSchema, type VideoEditTem
 import { BLANK_STYLE_SAMPLE_SOURCE } from '@/core/videoEdit/styles/blankSample'
 import type { VideoEditDocument, VideoEditProjectTemplate } from '@/core/videoEdit/document'
 import { videoEditSchemaRef } from './videoEditFields'
-import { editVideoProject, listVideoEditInstances, requireVideoEditInstance, restoreVideoEditSnapshot, videoEditDomainRevision } from './videoEditService'
+import { editVideoProject, listVideoEditInstances, requireVideoEditInstance, restoreVideoEditSnapshot, videoEditContentRevision } from './videoEditService'
 import { videoEditStyleLibrary, type VideoEditLibraryStyle } from './videoEditStyleLibrary'
 import { newerLibraryStyleVersion } from './videoEditStyles'
 import { newerLibraryTemplateVersion, unregisterVideoEditTemplates, videoEditTemplateInstances, withVideoEditTemplateStyle } from './videoEditTemplates'
@@ -35,7 +35,7 @@ const PROJECT_TEMPLATE_ENTITY = 'video_edit.project_template'
 const STYLE_LIBRARY_ENTITY = 'video_edit.style_library'
 const STYLE_LIBRARY_REF: ApplicationRef = { kind: STYLE_LIBRARY_ENTITY, id: 'singleton' }
 const LIBRARY_PARENT_HINT = `parent 用 ${STYLE_LIBRARY_ENTITY}:singleton（风格库是全局的，不用打开剪辑）`
-const revisions = (): Record<string, number> => ({ video_edit: videoEditDomainRevision() })
+const revisions = (): Record<string, number> => ({ video_edit: videoEditContentRevision() })
 const exposures = ['ui', 'assistant', 'local_adapter'] as const
 type Value = ApplicationFieldDefinition<unknown, unknown>['descriptor']['value']
 function descriptor(entityType: string, key: string, title: string, description: string, value: Value, writable: boolean, nullable = false): ApplicationFieldDefinition<unknown, unknown>['descriptor'] {

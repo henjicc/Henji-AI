@@ -37,8 +37,12 @@ const deleted = new Set<string>()
 const listeners = new Set<() => void>()
 let revision = 0
 
-function emit(): void {
-  revision += 1
+/**
+ * `image_edit` 作用域的修订只随文档数据与选区推进；打开、关闭某份图片文档只通知订阅者，
+ * 否则后台读一下别的图片就会让手里的撤销引用和基线失效。
+ */
+function emit(content = true): void {
+  if (content) revision += 1
   for (const listener of listeners) listener()
 }
 
@@ -159,7 +163,7 @@ function adopt(bus: ImageEditCommandBusV3, host?: ImageEditPersistenceHostV3): O
   })
   instance.unsubscribe = () => { unsubscribePersistence(); unsubscribeSelection() }
   instances.set(documentId, instance)
-  emit()
+  emit(false)
   return instance
 }
 
@@ -272,7 +276,7 @@ function dispose(instance: OwnedInstance): void {
   instance.bus.dispose()
   instances.delete(instance.documentId)
   queues.delete(instance.documentId)
-  emit()
+  emit(false)
 }
 
 /** 测试夹具注入正式总线与受控持久化边界，不提供生产环境替换入口。 */

@@ -4,7 +4,7 @@ import { beforeEach, afterEach, expect, it, vi } from 'vitest'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { getPlatform } from '@/platform/runtime'
 import { createApplicationHarness } from '@/tests/applicationHarness'
-import { appendVideoEditMedia, editVideoProject, listVideoEditInstances, closeVideoEditProject, setVideoEditView, setVideoEditProjectView, videoEditProgramCommandIdentity, videoEditDomainRevision } from './videoEditService'
+import { appendVideoEditMedia, editVideoProject, listVideoEditInstances, closeVideoEditProject, setVideoEditView, setVideoEditProjectView, videoEditProgramCommandIdentity, videoEditContentRevision } from './videoEditService'
 import { readVideoEditSource, updateVideoEditSource, registerVideoEditSourcePresenter, pauseVideoEditSourceForProgram, observeVideoEditSource, closeVideoEditSource, subscribeVideoEditSource, videoEditSourceCommandIdentity, matchesVideoEditSourceCommand, type VideoEditSourceObservation, type VideoEditSourceRequest } from './videoEditSource'
 import { VideoEditSourceExecutor } from './videoEditSourceExecutor'
 import { VideoEditMutationExecutor } from './videoEditExecutors'
@@ -223,9 +223,9 @@ it('源定位等待宿主真实确认，画面时刻与请求时刻分开，节�
   await Promise.resolve(); expect(finished).toBe(false); expect(readVideoEditSource(id).status).toBe('loading')
   acknowledge({ timeUs: 510000, presentedTimeUs: 500000, playing: false, volume: 1 })
   expect(await command).toMatchObject({ timeUs: 510000, presentedTimeUs: 500000, status: 'ready' })
-  const revision = videoEditDomainRevision()
+  const revision = videoEditContentRevision()
   observeVideoEditSource(id, instance.document.items[0].id, { timeUs: 1000000, presentedTimeUs: 999999, playing: true, volume: 1 })
-  expect(videoEditDomainRevision()).toBe(revision); expect(instance.frame).toBe(30); expect(instance.past).toHaveLength(history)
+  expect(videoEditContentRevision()).toBe(revision); expect(instance.frame).toBe(30); expect(instance.past).toHaveLength(history)
   off(); expect(readVideoEditSource(id).status).toBe('closed')
 })
 it('新请求取消旧请求且迟到宿主结果不能覆盖新定位，关闭取消进行中的预览', async () => {
@@ -282,7 +282,7 @@ it('源补偿保留逆序命令链与真实播放观察，拒绝后续手动操�
   const off = registerVideoEditSourcePresenter(id, presenter)
   const executor = new VideoEditSourceExecutor()
   const context: ApplicationExecutionContext = { requestId: crypto.randomUUID(), exposure: 'assistant', acceptedDataClasses: new Set(['C1']) }
-  const step = (time: number): Extract<ApplicationPlannedStep, { kind: 'mutation' }> => ({ kind: 'mutation', entityType: 'video_edit.source', target: { kind: 'video_edit.source', id: `${id}:source` }, expectedRevisions: { video_edit: videoEditDomainRevision() }, mutations: [{ propertyId: 'video_edit.source.time_us', operation: 'set', value: time }] })
+  const step = (time: number): Extract<ApplicationPlannedStep, { kind: 'mutation' }> => ({ kind: 'mutation', entityType: 'video_edit.source', target: { kind: 'video_edit.source', id: `${id}:source` }, expectedRevisions: { video_edit: videoEditContentRevision() }, mutations: [{ propertyId: 'video_edit.source.time_us', operation: 'set', value: time }] })
   await updateVideoEditSource(id, { itemId: instance.document.items[0].id })
   const first = await executor.apply(step(1000000), context); const second = await executor.apply(step(2000000), context)
   observeVideoEditSource(id, instance.document.items[0].id, { timeUs: 2200000, presentedTimeUs: 2200000, playing: false, volume: 1 })
@@ -322,7 +322,7 @@ function deferredPresenter() {
   return { requests, present }
 }
 function sourceMutation(projectId: string, timeUs: number): Extract<ApplicationPlannedStep, { kind: 'mutation' }> {
-  return { kind: 'mutation', entityType: 'video_edit.source', target: { kind: 'video_edit.source', id: `${projectId}:source` }, expectedRevisions: { video_edit: videoEditDomainRevision() }, mutations: [{ propertyId: 'video_edit.source.time_us', operation: 'set', value: timeUs }] }
+  return { kind: 'mutation', entityType: 'video_edit.source', target: { kind: 'video_edit.source', id: `${projectId}:source` }, expectedRevisions: { video_edit: videoEditContentRevision() }, mutations: [{ propertyId: 'video_edit.source.time_us', operation: 'set', value: timeUs }] }
 }
 function sourceContext(): ApplicationExecutionContext {
   return { requestId: crypto.randomUUID(), exposure: 'assistant', acceptedDataClasses: new Set(['C1']) }

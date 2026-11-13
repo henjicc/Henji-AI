@@ -138,6 +138,7 @@ const viewListeners = new Set<() => void>()
 let viewRevision = 0
 let revision = 0
 let domainRevision = 0
+let contentRevision = 0
 let activeId: string | null = null
 /** 内容变化（进撤销的修改、撤销 / 重做、参数调整提交）时通知会话标脏并防抖保存。 */
 const contentListeners = new WeakMap<VideoEditInstance, Set<() => void>>()
@@ -220,7 +221,7 @@ export function withVideoEditCurrentMetadata(document: VideoEditDocument, curren
 function restoreVideoEditDocumentContent(owner: VideoEditInstance, snapshot: VideoEditDocument): void {
   const before = owner.document
   owner.document = freezeVideoEditDocument(withVideoEditCurrentMetadata({ ...snapshot, id: before.id, name: before.name, revision: before.revision + 1 }, before))
-  owner.version++; owner.contentVersion++
+  owner.version++; advanceVideoEditContent(owner)
 }
 /** 页已封存后才发布头；采集不会产生作品撤销步，也不会清空重做。 */
 export function updateVideoEditCreativeIntents(id: string, head: CreativeIntents): void {
@@ -230,6 +231,8 @@ export function updateVideoEditCreativeIntents(id: string, head: CreativeIntents
   if ([...creativeIntents.drafts, ...creativeIntents.sessions].some(draft => draft.ownerRef.kind !== 'document.video_edit' || draft.ownerRef.id !== id)) throw new Error('原稿归属与当前剪辑不符，请恢复原文件。')
   const previous = owner.document
   owner.document = freezeVideoEditDocument({ ...previous, creativeIntents }); inheritVideoEditCompositions(previous, owner.document); owner.version++
+  // 原稿是助手可读写的实体，推进内容修订；但不推进 contentVersion，进行中的异步操作不因采集失效。
+  contentRevision++
   notifyVideoEditContent(owner); publishVideoEdit(true)
 }
 /** Completed output facts share document persistence but are not undone with timeline edits. */
@@ -458,7 +461,17 @@ export function setVideoEditSelectedCaption(id: string, captionId: string | null
   if (instance.selectedClipIds.length || instance.selection) { cancelVideoEditGesture(instance); commitClipSelection(instance, []); instance.selection = null; instance.selectedCodeElement = null; publishVideoEdit() }
   instance.selectedCaptionId = captionId; publishCaptionSelection()
 }
+/** 领域通知计数：任何需要领域订阅者重读的变化（含打开关闭、切序列、库加载、视图）都推进；只用于界面订阅，不作并发基线。 */
 export function videoEditDomainRevision(): number { return domainRevision }
+/**
+ * 助手 `video_edit` 作用域的修订：只在剪辑文档内容或本机剪辑库数据变化时推进。
+ * 撤销回执与带基线的写入核对它；打开关闭、切序列、播放定位、选择和源监视器这类视图变化不推进，
+ * 否则无关的界面操作会让撤销引用失效。导出记录、原地生成任务元数据同样不推进。
+ */
+export function videoEditContentRevision(): number { return contentRevision }
+function advanceVideoEditContent(owner: VideoEditInstance): void { owner.contentVersion++; contentRevision++ }
+/** 本机剪辑库（导出/文字预设、预设偏好、风格库、代码组件与代码工程）写入后的发布入口。 */
+export function publishVideoEditContent(): void { contentRevision++; publishVideoEdit(true) }
 export function subscribeVideoEditDomain(listener: () => void): () => void { domainListeners.add(listener); return () => { domainListeners.delete(listener) } }
 export function listVideoEditInstances(): VideoEditInstance[] { return [...instances.values()] }
 export function activeVideoEditInstance(): VideoEditInstance | undefined { return activeId ? instances.get(activeId) : undefined }
@@ -761,7 +774,7 @@ function publishVideoEditDocument(instance: VideoEditInstance, next: VideoEditDo
     while (compensationHistories.size > 100) compensationHistories.delete(compensationHistories.keys().next().value!)
   }
   if (!spatialOnly) { rescaleSequenceViews(instance, before); reconcileSequenceView(instance) }
-  instance.version++; instance.contentVersion++
+  instance.version++; advanceVideoEditContent(instance)
   const batch = spatialOnly ? undefined : writingBatch(instance)
   if (batch) { batch.first ??= before; batch.last = instance.document; if (recordHistory) batch.own.add(before) }
   if (operationId) { if (batch) batch.operationId ??= operationId; else publishCommandFact(instance, { operationId, phase: 'committed', before, after: instance.document }) }
@@ -854,14 +867,14 @@ export function setVideoEditView(id: string, values: Partial<Pick<VideoEditInsta
   Object.assign(instance, values)
   commitClipSelection(instance, selectedClipIds)
   if (selectionChanged || elementSelectionChanged) publishVideoEdit(programCommand)
-  else { if (programCommand) domainRevision++; publishView() }
+  else publishView()
   return command
 }
 /** A speed change starts a fresh renderer clock from the current presented frame. */
 export function setVideoEditPlaybackRate(id: string, rate: 1 | .5 | .25): void {
   const owner = requireVideoEditInstance(id)
   if (owner.playbackRate === rate) return
-  owner.playbackRate = rate; programCommands.set(owner, {}); domainRevision++; publishView()
+  owner.playbackRate = rate; programCommands.set(owner, {}); publishView()
 }
 /**
  * Sequence In/Out marks select the half-open exported range (Out is exclusive, as marked by the O command);
@@ -1052,10 +1065,10 @@ async function bindVideoEditSession(session: DocumentSession, focus: boolean): P
       invalidateCodeSourceReads((received.codeMaterials ?? []).flatMap(definition => definition.versions))
       if (receivedRoot) void relocateProjectMedia(received, receivedRoot).then(next => {
         if (!next || session.isEnded || instance.document !== received) return
-        instance.document = parseVideoEditDocument(next, received); instance.version++; instance.contentVersion++
+        instance.document = parseVideoEditDocument(next, received); instance.version++; advanceVideoEditContent(instance)
         notifyVideoEditContent(instance); publishVideoEdit(true)
       }).catch(error => logger.warn('重新载入后项目素材身份未刷新', { event: 'video_edit.document.media_relocate_failed', error }))
-      instance.past = []; instance.future = []; instance.playing = false; instance.version++; instance.contentVersion++
+      instance.past = []; instance.future = []; instance.playing = false; instance.version++; advanceVideoEditContent(instance)
       reconcileSequenceView(instance)
       installVideoEditCodeMetadata(instance, new Map())
       publishVideoEdit(true)
@@ -1081,7 +1094,7 @@ async function bindVideoEditSession(session: DocumentSession, focus: boolean): P
   const unsubscribe = session.subscribe(() => {
     if (session.isEnded) { dispose(); return }
     const name = session.documentMeta.name
-    if (instance.document.name !== name) { const previous = instance.document; instance.document = freezeVideoEditDocument({ ...previous, name }); inheritVideoEditCompositions(previous, instance.document); publishVideoEdit(true) } else publishVideoEdit()
+    if (instance.document.name !== name) { const previous = instance.document; instance.document = freezeVideoEditDocument({ ...previous, name }); inheritVideoEditCompositions(previous, instance.document); contentRevision++; publishVideoEdit(true) } else publishVideoEdit()
   })
   disposers.set(instance, dispose)
   instances.set(session.id, instance)

@@ -2,7 +2,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { videoEditDefaultTransitionKind, type VideoEditTransitionKind } from '@/core/videoEdit/transitions'
 import { VIDEO_EDIT_PRESET_MAX_RATING, VIDEO_EDIT_PRESET_DEFAULTABLE, videoEditPresetPreferencesSchema, type VideoEditPresetCategory, type VideoEditPresetPreference } from '@/core/videoEdit/presetPackage'
 import { VideoEditLocalLibrary } from './videoEditLocalLibrary'
-import { publishVideoEdit } from './videoEditService'
+import { publishVideoEditContent } from './videoEditService'
 
 export const PRESET_PREFERENCES_STORAGE_KEY = 'video-edit-preset-preferences'
 /**
@@ -10,7 +10,7 @@ export const PRESET_PREFERENCES_STORAGE_KEY = 'video-edit-preset-preferences'
  * “default transition” setting, so the preset panel and the effects panel can never disagree.
  */
 export class VideoEditPresetPreferences extends VideoEditLocalLibrary<VideoEditPresetPreference> {
-  constructor(storage: Pick<Storage, 'getItem' | 'setItem'> | undefined = typeof localStorage === 'undefined' ? undefined : localStorage, publish: () => void = () => publishVideoEdit(true)) {
+  constructor(storage: Pick<Storage, 'getItem' | 'setItem'> | undefined = typeof localStorage === 'undefined' ? undefined : localStorage, publish: () => void = publishVideoEditContent) {
     super(PRESET_PREFERENCES_STORAGE_KEY, videoEditPresetPreferencesSchema, storage, publish)
   }
   rating(category: VideoEditPresetCategory, id: string): number { return this.custom().find(value => value.category === category && value.id === id)?.rating ?? 0 }
@@ -25,7 +25,7 @@ export class VideoEditPresetPreferences extends VideoEditLocalLibrary<VideoEditP
   /** `null` clears the category default; transitions fall back to the built-in default transition. */
   setDefault(category: VideoEditPresetCategory, id: string | null): void {
     if (!VIDEO_EDIT_PRESET_DEFAULTABLE.includes(category)) throw new Error('这类预设没有默认项。')
-    if (category === 'transition') { useSettingsStore.getState().setVideoEditDefaultTransition('video', (id ?? null) as VideoEditTransitionKind | null); publishVideoEdit(true); return }
+    if (category === 'transition') { useSettingsStore.getState().setVideoEditDefaultTransition('video', (id ?? null) as VideoEditTransitionKind | null); publishVideoEditContent(); return }
     const values = this.custom().map(value => value.category === category ? { ...value, isDefault: false } : value)
     if (id) { const index = values.findIndex(value => value.category === category && value.id === id); if (index < 0) values.push({ category, id, rating: 0, isDefault: true }); else values[index] = { ...values[index], isDefault: true } }
     this.replace(values.filter(keep))

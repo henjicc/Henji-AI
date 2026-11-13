@@ -2,22 +2,19 @@ import type { VideoEditRenderPrecision } from '../engine/videoEditRenderer'
 import { videoEditRenderFingerprints, subscribeVideoEditRenderFingerprints } from './videoEditRenderFingerprints'
 import { videoEditCodeInputParameters } from '@/core/videoEdit/codeInputParameters'
 import { isCodeImageReference } from '@/core/videoEdit/codeMaterial/contract'
-import { Mp4OutputFormat, Output, StreamTarget } from 'mediabunny'
 import { z } from 'zod'
-import { videoEditRenderWindowRanges, videoEditRenderWindowSet, type VideoEditRenderWindow, type VideoEditRenderWindowSet } from '@/core/videoEdit/renderCache'
-import { videoEditRenderEncoding, type VideoEditRenderEncoding } from '@/core/videoEdit/renderBitrate'
+import { videoEditRenderWindowRanges, videoEditRenderWindowSet, type VideoEditRenderWindow as VideoEditRenderContentWindow, type VideoEditRenderWindowSet } from '@/core/videoEdit/renderCache'
+import { videoEditRenderWindowsHeavy } from '@/core/videoEdit/renderLoad'
 import type { VideoRenderCacheStoredEntry } from '@/core/videoEdit/renderCacheStore'
-import { getMediaCacheSettings, subscribeMediaCacheSettings } from '@/services/mediaCache/mediaCacheSettings'
-import { resolveRenderCacheCodec } from '@/services/mediaCache/hardwareCapabilities'
+import { subscribeMediaCacheSettings } from '@/services/mediaCache/mediaCacheSettings'
 import { videoEditComposition, type VideoEditComposition } from '@/core/videoEdit/document'
 import { createLogger } from '@/core/logging'
 import { getPlatform } from '@/platform/runtime'
 import { fontLibrarySnapshot } from '@/platform/fonts'
-import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
+import type { VideoEditRenderSession } from '../engine/videoEditRenderSession'
 import { videoEditFirstFramePending } from '../engine/videoEditFirstFrameTiming'
-import { videoEditExportVideoStream } from '../engine/videoEditExportEncoder'
 import { VIDEO_EDIT_ENCODE_FRAMES_IN_FLIGHT } from '../engine/videoEditRenderTransport'
-import { VideoEditEncodedVideo, runVideoEditEncodePipeline } from '../engine/videoEditEncodedVideo'
+import { abortable, encodeVideoEditRenderWindow, openVideoEditRenderSession, videoEditRenderProfile } from './videoEditRenderCacheEncode'
 import { findActiveVideoEditSequence, getActiveVideoEditSequence, listVideoEditInstances, publishVideoEdit, requireVideoEditInstance, subscribeVideoEditDomain, subscribeVideoEditView, type VideoEditInstance } from './videoEditService'
 import { videoEditTrackResults, waitVideoEditTracking, subscribeVideoEditTracking } from './videoEditTracking'
 import { videoEditSmartRegionSegments, waitVideoEditSmartRegions, subscribeVideoEditSmartRegions } from './videoEditSmartRegions'
@@ -103,11 +100,6 @@ function entryIdentity(entry: Pick<Entry, 'windowKey' | 'profile' | 'provenance'
 interface ProjectCache { entries: Map<string, Entry> }
 const caches = new Map<string, Promise<ProjectCache>>()
 
-/** 序列的编码档案：编码格式（自动时按本机硬件）、画质与按分辨率帧率计算的码率。 */
-export function videoEditRenderProfile(composition: Pick<VideoEditComposition, 'width' | 'height' | 'fps'>): VideoEditRenderEncoding {
-  const settings = getMediaCacheSettings()
-  return videoEditRenderEncoding(composition, resolveRenderCacheCodec(settings.renderFormat), settings.renderQuality)
-}
 // Format or quality changes make other profiles stale: the render bar and the idle scheduler pick it up.
 subscribeMediaCacheSettings(() => publishVideoEdit())
 /** paused：用户或助手发起的任务正在为录屏让开时给界面看的原因。 */
@@ -234,7 +226,11 @@ subscribeVideoEditRenderFingerprints(() => { analysisRevision++; barRevision++; 
 subscribeVideoEditWebContent(() => { analysisRevision++; barRevision++; for (const listener of barListeners) listener(); publishVideoEdit() })
 // 打开着的剪辑引用的网页文件夹一直交给主进程监视（不论页面开没开），文件夹一改就经上面的通知让窗口失效。
 subscribeVideoEditDomain(() => watchVideoEditWebContent(listVideoEditInstances().map(instance => instance.document)))
+/** 调度用的窗口：内容指纹之外带上预计吃不吃力（只决定先渲哪些，不进指纹，见 core/videoEdit/renderLoad）。 */
+export type VideoEditRenderWindow = VideoEditRenderContentWindow & { heavy: boolean }
 const windowMemo = new WeakMap<VideoEditComposition, { revision: number; fontRevision: number; windows: VideoEditRenderWindow[] }>()
+/** 同一份切段（签名相同时原样沿用）只判断一次吃力。 */
+const heavyWindows = new WeakMap<VideoEditRenderWindowSet, VideoEditRenderWindow[]>()
 /**
  * 每条序列上一次算出的窗口与输入签名。每次编辑都会产生新的文档快照，按对象缓存必然落空；
  * 签名相同（只改声音、元数据或其他序列）时整份沿用，不再逐段散列。签名决定全部窗口，同 ID 的不同工程只会少命中，不会用错。
@@ -262,8 +258,14 @@ export function videoEditRenderCacheWindows(owner: VideoEditInstance, compositio
   const set = videoEditRenderWindowSet(composition, { ...dependencies, codeFingerprints }, lastWindowSets.get(composition.id))
   lastWindowSets.delete(composition.id); lastWindowSets.set(composition.id, set)
   if (lastWindowSets.size > LAST_WINDOW_SET_LIMIT) lastWindowSets.delete(lastWindowSets.keys().next().value!)
-  windowMemo.set(composition, { revision: analysisRevision, fontRevision, windows: set.windows })
-  return set.windows
+  let windows = heavyWindows.get(set)
+  if (!windows) {
+    const heavy = videoEditRenderWindowsHeavy(composition, set.windows)
+    windows = set.windows.map((window, index) => ({ ...window, heavy: heavy[index] }))
+    heavyWindows.set(set, windows)
+  }
+  windowMemo.set(composition, { revision: analysisRevision, fontRevision, windows })
+  return windows
 }
 
 function pendingWindows(composition: VideoEditComposition): VideoEditRenderWindow[] {
@@ -552,7 +554,6 @@ export async function renderVideoEditRenderCache(projectId: string, request: Vid
   if (signal?.aborted) abort()
   jobs.set(instance, job); publishVideoEdit()
   onStarted?.({ pendingWindows: pending.length, requestedFrames: windows.reduce((sum, window) => sum + window.endFrame - window.startFrame, 0), readyFrames: windows.filter(window => readyEntry(cache, window, encoding.profile, precision)).reduce((sum, window) => sum + window.endFrame - window.startFrame, 0) })
-  const platform = getPlatform()
   let session: VideoEditRenderSession | undefined
   /** 让出时释放、尚未关完的会话；重开前等它关闭，新旧会话不同时占用解码。 */
   let closing: Promise<void> | undefined
@@ -687,56 +688,27 @@ export async function renderVideoEditRenderCache(projectId: string, request: Vid
     await closing
     await session?.dispose()
   }
-  function openSession(): VideoEditRenderSession {
-    const value = new VideoEditRenderSession({ ...composition })
-    value.setSmartRegions(smartRegions!); value.setTracks(videoEditTrackResults(composition))
-    return value
-  }
-  /** 一个窗口完整编码后才登记；中途让出、取消或失败都丢弃临时文件，缓存里不会有半成品。 */
+  function openSession(): VideoEditRenderSession { return openVideoEditRenderSession(composition, smartRegions!) }
   async function renderWindow(window: VideoEditRenderWindow, renderer: VideoEditRenderSession, attemptSignal: AbortSignal): Promise<void> {
     job.current = window.key; publishVideoEdit()
-    // 每帧都是关键帧，节目可以从窗口内任一帧起播。
-    const video = new VideoEditEncodedVideo(videoEditExportVideoStream({ codec: encoding.codec, width: composition.width, height: composition.height, fps: composition.fps, videoBitrateMbps: encoding.bitrateMbps, bitrateMode: encoding.bitrateMode, encoderPreference: encoding.encoderPreference, keyframeInterval: encoding.keyframeInterval }), 'renderCache', true)
-    const path = await platform.mediaCache.renderBegin({ projectId, windowKey: window.key, profile: encoding.profile })
-    const output = new Output({ format: new Mp4OutputFormat(), target: new StreamTarget(new WritableStream({ write: async chunk => { await platform.system.fs.writeFile(path, chunk.data, { position: chunk.position }) } }), { chunked: true, chunkSize: 4 * 1024 * 1024 }) })
-    try {
-      output.addVideoTrack(video.source, video.trackMetadata(composition.fps))
-      await output.start()
-      await video.open(renderer)
-      let provenance: VideoRenderCacheStoredEntry['provenance'] = 'live'
-      let frameStarted = 0
-      // 让出时流水随信号立即结束、会话随即释放，不等在途的帧算完。
-      await runVideoEditEncodePipeline({
-        frames: window.endFrame - window.startFrame,
-        // 自动预渲染按占空比歇着，一次只在途一帧；用户或助手发起的预渲染多帧流水。
-        inFlight: job.auto ? 1 : VIDEO_EDIT_ENCODE_FRAMES_IN_FLIGHT,
-        signal: attemptSignal,
-        before: index => {
-          // 每帧核对原实例；重开后的新实例不能让旧任务继续占用同一显卡。
-          assertOwner()
-          if (attempt) attempt.frame = window.startFrame + index
-          frameStarted = performance.now()
-        },
-        send: (index, submitted) => video.encode(window.startFrame + index, index / composition.fps, 1 / composition.fps, precision, submitted),
-        finished: async (_index, rendered) => {
-          if (rendered.provenance === 'web-cache') provenance = 'web-cache'
-          if (job.auto) {
-            const elapsed = performance.now() - frameStarted
-            await rest(Math.max(elapsed * AUTO_RENDER_REST_RATIO, 1000 / (composition.fps * AUTO_RENDER_MAX_SPEED) - elapsed), attemptSignal)
-          }
-        },
-      })
-      await abortable(video.finish(), attemptSignal)
-      await output.finalize()
-      assertOwner()
-      const stored = await platform.mediaCache.renderCommit({ temporaryPath: path, entry: { provenance, projectId, sequenceId: composition.id, windowKey: window.key, profile: encoding.profile, startFrame: window.startFrame, endFrame: window.endFrame, width: composition.width, height: composition.height, fps: composition.fps } })
-      cache.entries.set(entryIdentity(stored), stored)
-    } catch (error) {
-      video.close()
-      await output.cancel().catch(() => undefined)
-      await platform.mediaCache.renderDiscard(path).catch(() => undefined)
-      throw error
-    }
+    let frameStarted = 0
+    const stored = await encodeVideoEditRenderWindow({ projectId, composition, window, encoding, precision, renderer, signal: attemptSignal,
+      // 自动预渲染按占空比歇着，一次只在途一帧；用户或助手发起的预渲染多帧流水。
+      inFlight: job.auto ? 1 : VIDEO_EDIT_ENCODE_FRAMES_IN_FLIGHT,
+      beforeFrame: index => {
+        // 每帧核对原实例；重开后的新实例不能让旧任务继续占用同一显卡。
+        assertOwner()
+        if (attempt) attempt.frame = window.startFrame + index
+        frameStarted = performance.now()
+      },
+      afterFrame: async () => {
+        if (!job.auto) return
+        const elapsed = performance.now() - frameStarted
+        await rest(Math.max(elapsed * AUTO_RENDER_REST_RATIO, 1000 / (composition.fps * AUTO_RENDER_MAX_SPEED) - elapsed), attemptSignal)
+      },
+      beforeCommit: assertOwner,
+    })
+    cache.entries.set(entryIdentity(stored), stored)
   }
   async function waitProgramIdle(): Promise<void> {
     assertOwner()
@@ -798,16 +770,6 @@ function rest(ms: number, signal: AbortSignal): Promise<void> {
     const onAbort = (): void => { clearTimeout(timer); reject(signal.reason) }
     const timer = setTimeout(() => { signal.removeEventListener('abort', onAbort); resolve() }, ms)
     signal.addEventListener('abort', onAbort, { once: true })
-  })
-}
-/** 在途请求随信号立即结束；原请求迟到的结果被吞掉，不成为未处理的拒绝。 */
-function abortable<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
-  work.catch(() => undefined)
-  if (signal.aborted) return Promise.reject(signal.reason)
-  return new Promise<T>((resolve, reject) => {
-    const onAbort = (): void => reject(signal.reason)
-    signal.addEventListener('abort', onAbort, { once: true })
-    work.then(value => { signal.removeEventListener('abort', onAbort); resolve(value) }, error => { signal.removeEventListener('abort', onAbort); reject(error) })
   })
 }
 

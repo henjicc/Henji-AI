@@ -8,7 +8,7 @@ import { assetCodeSourceResolver, type CodeAsset } from '@/core/videoEdit/codeAs
 import { documentCodeSourceResolver } from '@/core/videoEdit/codeMaterial/sources'
 import type { CodeVersionPublication } from '@/core/videoEdit/codeMaterialVersions'
 import { compileVideoEditCode } from './videoEditCodeState'
-import { listVideoEditInstances, requireVideoEditInstance, publishVideoEdit } from './videoEditService'
+import { listVideoEditInstances, requireVideoEditInstance, publishVideoEditContent } from './videoEditService'
 import { videoEditDocumentSchema } from '@/core/videoEdit/document'
 
 import { initializeVideoEditCodeSourceRuntime } from './videoEditCodeSourceRuntime'
@@ -21,7 +21,7 @@ export async function projectCodeComponents(projectId: string): Promise<CodeComp
 export async function withdrawProjectCodeComponents(projectId: string, versions: readonly CodeComponentPin[]): Promise<void> {
   const owner = requireVideoEditInstance(projectId)
   for (const version of [...versions].reverse()) await getPlatform().documents.withdrawCodeComponent({ target: { id: projectId, path: owner.session.documentMeta.path }, location: version.location, hash: version.hash })
-  publishVideoEdit(true)
+  publishVideoEditContent()
 }
 export async function discardVideoEditCodeFiles(files: readonly CodeFileReference[]): Promise<void> {
   if (!files.length) return
@@ -36,7 +36,7 @@ export async function discardVideoEditCodeFiles(files: readonly CodeFileReferenc
 }
 export async function discardProjectCodeComponents(versions: readonly CodeComponentPin[]): Promise<void> {
   await discardVideoEditCodeFiles(versions.map(version => ({ path: version.name, location: version.location, hash: version.hash })))
-  publishVideoEdit(true)
+  publishVideoEditContent()
 }
 export function codePublicationFiles(document: import('@/core/videoEdit/document').VideoEditDocument): CodeFileReference[] {
   return (document.codeMaterials ?? []).flatMap(definition => definition.versions.flatMap(version => version.files))
@@ -70,7 +70,7 @@ export async function publishProjectCodeComponent(projectId: string, input: { na
   const result = await getPlatform().documents.publishCodeComponent({ target: { id: projectId, path: owner.session.documentMeta.path }, name, source, description: input.description ?? '', exports, imports, keepBoth })
   try { signal?.throwIfAborted(); if (!isVideoEditContentCurrent(owner, contentVersion)) throw new Error('发布期间剪辑已改变。') }
   catch (error) { await discardProjectCodeComponents([result]); throw error }
-  rememberCodeSource(result.hash, result.source); publishVideoEdit(true)
+  rememberCodeSource(result.hash, result.source); publishVideoEditContent()
   return result
 }
 /** Removal is intentionally absent from the create-only public collection. Explain live usages on refusal. */

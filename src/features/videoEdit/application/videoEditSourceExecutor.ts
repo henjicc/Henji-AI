@@ -2,13 +2,13 @@ import { fieldEffectContract, fieldWriterTable, type ApplicationCompletedStepRes
 import { applyWriterTable, propertyOperations, writableProperties } from '@/core/application-control/execution/writerTable'
 import { VIDEO_EDIT_FIELDS, VIDEO_EDIT_SOURCE_PROGRAM_CASCADE } from './videoEditFields'
 import { readVideoEditData, splitVideoEditRef } from './videoEditReflection'
-import { videoEditDomainRevision, requireVideoEditInstance, listVideoEditInstances, setVideoEditView, videoEditProgramCommandIdentity, restoreVideoEditProgramCommandIdentity } from './videoEditService'
+import { videoEditContentRevision, requireVideoEditInstance, listVideoEditInstances, setVideoEditView, videoEditProgramCommandIdentity, restoreVideoEditProgramCommandIdentity } from './videoEditService'
 import { readVideoEditSource, updateVideoEditSource, videoEditSourceCommandIdentity, matchesVideoEditSourceCommand, restoreVideoEditSourceCommandIdentity, type VideoEditSourceCommandIdentity, type VideoEditSourceRequest } from './videoEditSource'
 
 interface ProgramPause { before: { frame: number; playing: boolean; playbackDirection: 1 | -1 }; sequenceId: string; beforeCommand: object; afterCommand: object }
 const records = new Map<string, { target: ApplicationRef; owner: object; before: VideoEditSourceRequest; beforeCommand: VideoEditSourceCommandIdentity; afterCommand: VideoEditSourceCommandIdentity; programPause?: ProgramPause }>()
 function complete(target: ApplicationRef, undoToken?: string, programPaused = false): ApplicationCompletedStepResult {
-  return { status: 'completed', resultingRevisions: { video_edit: videoEditDomainRevision() }, directRefs: [target], ...(undoToken ? { undoToken } : {}), ...(programPaused ? { cascadeEffects: [{ effect: 'update' as const, entityType: VIDEO_EDIT_SOURCE_PROGRAM_CASCADE.entityType, propertyIds: VIDEO_EDIT_SOURCE_PROGRAM_CASCADE.propertyIds, refs: [{ kind: 'video_edit.document', id: splitVideoEditRef(target).projectId }], origin: { kind: 'cascade' as const, declarationId: VIDEO_EDIT_SOURCE_PROGRAM_CASCADE.declarationId } }] } : {}), evidence: [{ kind: 'entity_state', fact: '源预览已由实际媒体宿主确认；可回读实际播放与画面位置。', capturedAt: new Date().toISOString() }] }
+  return { status: 'completed', resultingRevisions: { video_edit: videoEditContentRevision() }, directRefs: [target], ...(undoToken ? { undoToken } : {}), ...(programPaused ? { cascadeEffects: [{ effect: 'update' as const, entityType: VIDEO_EDIT_SOURCE_PROGRAM_CASCADE.entityType, propertyIds: VIDEO_EDIT_SOURCE_PROGRAM_CASCADE.propertyIds, refs: [{ kind: 'video_edit.document', id: splitVideoEditRef(target).projectId }], origin: { kind: 'cascade' as const, declarationId: VIDEO_EDIT_SOURCE_PROGRAM_CASCADE.declarationId } }] } : {}), evidence: [{ kind: 'entity_state', fact: '源预览已由实际媒体宿主确认；可回读实际播放与画面位置。', capturedAt: new Date().toISOString() }] }
 }
 export class VideoEditSourceExecutor implements ApplicationMutationExecutor {
   readonly entityType = 'video_edit.source'

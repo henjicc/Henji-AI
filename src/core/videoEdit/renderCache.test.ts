@@ -2,6 +2,7 @@ import { expect, it } from 'vitest'
 import { createVideoEditDocument, createVideoEditSequence, videoEditComposition, type VideoEditClip, type VideoEditDocument } from './document'
 import { addLegacyVideoEditTracks } from './testFixtures'
 import { videoEditRenderWindows, videoEditRenderWindowSet, type VideoEditRenderDependencies } from './renderCache'
+import { videoEditRenderWindowsHeavy } from './renderLoad'
 import { parseCodeMaterialV3Parameters } from './codeMaterial/parameterTypes'
 import { GOLDEN_SCENE_DECLARATION, goldenScene } from './scene/sceneTestFixtures'
 import { CODE_AUTHOR_SIMULATION_MIN_API_VERSION } from './codeSimulation'
@@ -18,6 +19,12 @@ function project(): VideoEditDocument {
   main.clips = [{ ...clip, duration: 2700 }, { ...clip, id: 'nested', kind: 'sequence', itemId: 'item-child', track: 2, start: 3600, duration: 1800 }]
   document.sequences = [main, child]
   return document
+}
+/** 窗口连同调度用的吃力判断（判断在 renderLoad，不进窗口指纹）。 */
+function heavyWindows(document: VideoEditDocument, sequenceId = document.sequences[0].id): Array<{ startFrame: number; endFrame: number; heavy: boolean }> {
+  const composition = videoEditComposition(document, sequenceId)
+  const windows = videoEditRenderWindows(composition, dependencies), heavy = videoEditRenderWindowsHeavy(composition, windows)
+  return windows.map((window, index) => ({ ...window, heavy: heavy[index] }))
 }
 const keys = (document: VideoEditDocument): string[] => videoEditRenderWindows(videoEditComposition(document, document.sequences[0].id), dependencies).map(window => window.key)
 
@@ -39,19 +46,19 @@ it('多机位片段按所选那一路判断：不算吃力；所选那一路变�
   source.clips.push({ ...source.clips[0], id: 'child-b', itemId: 'item-b', track: 2 })
   source.multicam = { cameras: [{ id: 'cam-a', name: '机位 1', clipId: 'child-v' }, { id: 'cam-b', name: '机位 2', clipId: 'child-b' }], audioCameraId: 'cam-a' }
   main.clips[1].multicamCameraId = 'cam-b'
-  const windows = videoEditRenderWindows(videoEditComposition(document, main.id), dependencies).filter(window => window.startFrame >= 3600)
+  const windows = heavyWindows(document, main.id).filter(window => window.startFrame >= 3600)
   expect(windows.length).toBeGreaterThan(0)
   expect(windows.every(window => !window.heavy)).toBe(true)
   source.clips[1].speed = { numerator: 2, denominator: 1 }
-  expect(videoEditRenderWindows(videoEditComposition(document, main.id), dependencies).filter(window => window.startFrame >= 3600).every(window => window.heavy)).toBe(true)
+  expect(heavyWindows(document, main.id).filter(window => window.startFrame >= 3600).every(window => window.heavy)).toBe(true)
   delete source.clips[1].speed
   delete source.multicam
-  expect(videoEditRenderWindows(videoEditComposition(document, main.id), dependencies).filter(window => window.startFrame >= 3600).every(window => window.heavy)).toBe(true)
+  expect(heavyWindows(document, main.id).filter(window => window.startFrame >= 3600).every(window => window.heavy)).toBe(true)
 })
 
 it('快放、倒放与超过原速的时间重映射算吃力；慢放、定格（含重映射加定格）不算', () => {
   const document = project(), clip = document.sequences[0].clips[0]
-  const heavy = (): boolean => videoEditRenderWindows(videoEditComposition(document, document.sequences[0].id), dependencies)[0].heavy
+  const heavy = (): boolean => heavyWindows(document)[0].heavy
   expect(heavy()).toBe(false)
   clip.speed = { numerator: 2, denominator: 1 }; expect(heavy()).toBe(true)
   clip.speed = { numerator: 1, denominator: 2 }; expect(heavy()).toBe(false)
@@ -62,7 +69,7 @@ it('快放、倒放与超过原速的时间重映射算吃力；慢放、定格�
 })
 
 it('序列按剪辑点切分，长段等分到五秒，空隙仍可手动预渲染', () => {
-  const document = project(); const windows = videoEditRenderWindows(videoEditComposition(document, document.sequences[0].id), dependencies)
+  const document = project(); const windows = heavyWindows(document)
   expect(windows.map(window => [window.startFrame, window.endFrame])).toEqual(Array.from({ length: 18 }, (_, index) => [index * 300, (index + 1) * 300]))
   expect(windows.map(window => window.heavy)).toEqual([...Array(12).fill(false), ...Array(6).fill(true)])
 })

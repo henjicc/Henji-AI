@@ -78,6 +78,7 @@ const projectParser = createIncrementalSchemaParser<AudioEditProjectDocument>(au
 function parseProject(value: AudioEditProjectDocument, base?: AudioEditProjectDocument): AudioEditProjectDocument {
   return projectParser.parse(value, base, error => logger.warn('口播增量校验意外退回整份校验', { event: 'audio_edit.document.validation_fallback', error: toError(error) }))
 }
+/** 助手 `audio_edit` 作用域的修订：只随口播内容（含改名、重新载入）推进；打开、关闭某份口播不推进，否则读一下别的口播就会让手里的撤销引用失效。 */
 let catalogRevision = 0
 export function getAudioEditRevision(): number { return catalogRevision }
 const participants = new Map<string, ApplicationPersistenceParticipant>()
@@ -198,11 +199,9 @@ function bindAudioEditSession(session: DocumentSession): AudioEditProjectInstanc
     if (records.get(session.id) === record) records.delete(session.id)
     participants.delete(session.id)
     for (const listener of disposalListeners) listener(session.id)
-    catalogRevision += 1
     publish(instance)
   }
   records.set(session.id, record)
-  catalogRevision = Math.max(catalogRevision + 1, meta.revision)
   publish(instance)
   return instance
 }

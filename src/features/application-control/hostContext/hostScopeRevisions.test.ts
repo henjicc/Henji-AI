@@ -86,7 +86,6 @@ describe('宿主作用域 revision', () => {
       selectedRefs: ['audio_edit.transcript_block:audio-project:word-1'],
     })
     expect(snapshot.scopeRevisions.audio_edit).toBe(getAudioEditRevision())
-    expect(snapshot.scopeRevisions.audio_edit).toBeGreaterThan(0)
     useAudioEditStore.getState().setSelectedBlockIds(project.transcript.map(block => block.id))
     const sent = captureHostSelection()
     expect(sent.selectedRefs).toHaveLength(80)
@@ -178,7 +177,7 @@ describe('宿主作用域 revision', () => {
     expect(getHostScopeRevisions().toolbox).toBe(before.toolbox)
   })
 
-  it('V3 命令总线变化推进唯一 image_edit 基线，不发布被替代的标注域', () => {
+  it('V3 命令总线变化推进唯一 image_edit 基线，打开文档不推进，不发布被替代的标注域', () => {
     const document = createImageEditDocumentV3({
       width: 320,
       height: 200,
@@ -194,8 +193,9 @@ describe('宿主作用域 revision', () => {
     const before = getHostScopeRevisions()
     const dispose = adoptImageEditDocumentInstanceForTestsV3('host-scope-v3-session', bus)
     try {
+      // 打开文档不是数据变化，不推进基线；只有命令总线写入才推进。
       const opened = getHostScopeRevisions()
-      expect(opened.image_edit).toBe(before.image_edit + 1)
+      expect(opened.image_edit).toBe(before.image_edit)
       expect(opened).not.toHaveProperty('image_mark')
 
       bus.dispatch({

@@ -1,7 +1,7 @@
 import { currentDocumentContext } from '@/features/documents'
 import { getAudioEditRevision } from '@/features/audioEdit/application/audioEditProjectInstances'
 import { getDocumentOperations } from '@/features/documents/documentOperations'
-import { activeVideoEditInstance, videoEditDomainRevision, subscribeVideoEdit } from '@/features/videoEdit/application/videoEditService'
+import { activeVideoEditInstance, videoEditContentRevision, subscribeVideoEdit } from '@/features/videoEdit/application/videoEditService'
 import { videoEditSelectedCodeElementContext } from '@/features/videoEdit/application/videoEditCodeElements'
 import { subscribeVideoEditSceneSelection, videoEditSelectedSceneRecordRef, videoEditEffectLibraryRevisions } from '@/features/videoEdit'
 import { videoEditCodeElementHostSummary } from '@/features/videoEdit/application/videoEditCodeElementSummary'
@@ -90,7 +90,7 @@ function syncPulledRevisions(): void {
   scopeRevisions.models = getGenerationModelsRevision()
   scopeRevisions.image_edit = getImageEditDocumentCatalogRevisionV3()
   scopeRevisions.audio_edit = getAudioEditRevision()
-  scopeRevisions.video_edit = videoEditDomainRevision()
+  scopeRevisions.video_edit = videoEditContentRevision()
   Object.assign(scopeRevisions, videoEditEffectLibraryRevisions())
   scopeRevisions.documents = getDocumentOperations().revision()
 }

@@ -10,7 +10,7 @@ import { codeMaterialInstanceSchema } from '@/core/videoEdit/codeMaterialPersist
 import type { VideoEditDocument } from '@/core/videoEdit/document'
 import { GENERIC_FONT_FACES } from '@/core/fonts/catalog'
 import { loadFontLibrary } from '@/platform/fonts'
-import { listVideoEditInstances, requireVideoEditInstance, openVideoEditDocument, restoreVideoEditSnapshot, videoEditDomainRevision, withVideoEditCommitBatch, videoEditTransactionBatch } from './videoEditService'
+import { listVideoEditInstances, requireVideoEditInstance, openVideoEditDocument, restoreVideoEditSnapshot, videoEditContentRevision, withVideoEditCommitBatch, videoEditTransactionBatch } from './videoEditService'
 import { videoEditSchemaRef } from './videoEditFields'
 import { changedVideoEditFonts } from './videoEditFonts'
 import { videoEditCodeElementFrames, videoEditCodeElementRef, VIDEO_EDIT_CODE_ELEMENT } from './videoEditCodeElements'
@@ -40,7 +40,7 @@ fields.push({ propertyId: `${type}.observation`, storeActions: [], read: data =>
   descriptor: { id: `${type}.observation`, entityType: type, version: 1, title: '元素读回', description: '当前帧的元素读回：visible、missing（源码里已没有此元素）、kind（adjust 为调整层）、绑定参数 parameterKeys/declarations/values、求值后的 transform、effectStates（每项效果的 key、id、代码值 codeValues、实际值 values、被覆盖的参数 overridden、是否追加 added、是否停用、missing 表示代码里已没有这个效果但改动保留），以及 edits：每个改动最后由 user 还是 assistant 在何时修改（毫秒时间戳）。元素当前帧不可见不等于已从源码删除。', value: { kind: 'json', schemaRef: videoEditSchemaRef('property', `${type}.observation.value`) }, nullable: false, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['video_edit:read'], write: [] }, revisionScopes: ['video_edit'], schemaRef: videoEditSchemaRef('property', `${type}.observation`), readOnlyReason: '由源码、正式取帧观察与变换、属性、效果三组写入共同维护；改值请写对应的组。' },
 })
 const writers = fieldWriterTable(fields)
-const revisions = () => ({ video_edit: videoEditDomainRevision() })
+const revisions = () => ({ video_edit: videoEditContentRevision() })
 const json = (value: unknown): JsonValue => JSON.parse(JSON.stringify(value)) as JsonValue
 function resolve(ref: ApplicationRef): VideoEditCodeElementTarget {
   const [projectId, sequenceId, clipId, elementId, extra] = ref.id.split(':').map(decodeURIComponent)

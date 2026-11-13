@@ -3,7 +3,7 @@ import { explanationBodyEditor, explanationBodyRef, type ExplanationBodyEditor }
 import type { ApplicationRef } from '@/core/application-control'
 import type { MotionDraft } from '@/core/creativeIntent/contracts'
 import type { CreativeIntents } from '@/core/creativeIntent/persistence'
-import { listVideoEditInstances, requireVideoEditInstance, updateVideoEditCreativeIntents, videoEditDomainRevision, saveVideoEdit, restoreVideoEditSnapshot, getActiveVideoEditSequence } from './videoEditService'
+import { listVideoEditInstances, requireVideoEditInstance, updateVideoEditCreativeIntents, videoEditContentRevision, saveVideoEdit, restoreVideoEditSnapshot, getActiveVideoEditSequence } from './videoEditService'
 import { reopenVideoMotion, videoMotionState, configureVideoMotion, optimizeVideoMotion, cancelVideoMotionOptimization, previewVideoMotion, applyVideoMotion, syncVideoMotionMetadata } from './videoEditMotionDraft'
 import { readMotionResource, readMotionResourceBytes, motionDigest } from './videoEditMotionResources'
 const empty = (): CreativeIntents => ({ drafts: [], sessions: [], resources: [] })
@@ -60,7 +60,7 @@ function open(documentRef: ApplicationRef) {
 export const videoCreativeIntentProvider = {
   domain: 'video_edit' as const,
   documents: () => listVideoEditInstances().map(v => ({ kind: 'video_edit.document', id: v.document.id })),
-  revisions: () => ({ video_edit: videoEditDomainRevision() }),
+  revisions: () => ({ video_edit: videoEditContentRevision() }),
   readResource: readMotionResource,
   readVisual: readMotionResourceBytes,
   digest: motionDigest,

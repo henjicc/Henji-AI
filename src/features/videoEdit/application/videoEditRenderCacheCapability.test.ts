@@ -7,7 +7,8 @@ import type { VideoRenderCacheStoredEntry } from '@/core/videoEdit/renderCacheSt
 import { createVideoEditTestDocument } from '@/core/videoEdit/testFixtures'
 import { openSeededVideoEdit } from './videoEditDocumentTestKit'
 import { appendVideoEditClip, appendVideoEditSequence, closeVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, switchVideoEditSequence } from './videoEditService'
-import { clearVideoEditRenderCache, cancelVideoEditRenderCache, videoEditRenderCacheBusy, getVideoEditRenderPreference, readVideoEditRenderCache, readyVideoEditRenderWindows, renderVideoEditRenderCache, videoEditRenderCacheWindows, videoEditRenderProfile } from './videoEditRenderCache'
+import { clearVideoEditRenderCache, cancelVideoEditRenderCache, videoEditRenderCacheBusy, getVideoEditRenderPreference, readVideoEditRenderCache, readyVideoEditRenderWindows, renderVideoEditRenderCache, videoEditRenderCacheWindows } from './videoEditRenderCache'
+import { videoEditRenderProfile } from './videoEditRenderCacheEncode'
 
 const pixels = vi.hoisted(() => ({ render: vi.fn(async (..._args: unknown[]) => {}) }))
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {

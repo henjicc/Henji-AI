@@ -3,7 +3,7 @@ import { PersistenceError } from '@/core/persistence/migrations'
 import { createLogger } from '@/core/logging'
 import { assertApplicationWritesAllowed } from '@/core/applicationLifecycle/applicationWriteBarrier'
 import { VIDEO_EDIT_EXPORT_PRESETS, videoEditExportPresetSchema, type VideoEditExportPreset, type VideoEditExportSettings } from '@/core/videoEdit/exportPresets'
-import { publishVideoEdit } from './videoEditService'
+import { publishVideoEditContent } from './videoEditService'
 import { localLibraryContract, readLocalPersistenceJson, serializeVersionedPersistenceJson } from '@/core/persistence/versionedJson'
 
 const logger = createLogger('features.videoEdit.exportPresets')
@@ -32,7 +32,7 @@ export class VideoEditExportPresetLibrary {
       const parsed = librarySchema.parse(values)
       if (parsed.some(value => value.id.startsWith('builtin:')) || new Set(parsed.map(value => value.id)).size !== parsed.length) throw new Error('内置预设不可覆盖，或预设标识重复。')
       this.storage.setItem(VIDEO_EDIT_EXPORT_PRESETS_KEY, serializeVersionedPersistenceJson(localLibraryContract(VIDEO_EDIT_EXPORT_PRESETS_KEY, librarySchema), parsed))
-      this.presets = parsed; publishVideoEdit(true)
+      this.presets = parsed; publishVideoEditContent()
       logger.info('导出预设已保存', { event: 'video_edit.export_presets.save.completed', context: { count: parsed.length } })
     } catch (error) { logger.error('保存导出预设失败', { event: 'video_edit.export_presets.save.failed', error }); throw error }
   }
