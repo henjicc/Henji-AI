@@ -159,9 +159,20 @@ function filterProperties(properties: Record<string, JsonValue>, requested?: str
 }
 
 class CanvasReflectionProvider implements ApplicationEntityProvider {
+  readonly listsByParent = true
   constructor(readonly entityType: CanvasEntityType) {}
 
-  async listEntities(request: { cursor?: string; limit: number }) {
+  async listEntities(request: { cursor?: string; limit: number; parent?: ApplicationRef }) {
+    const entityType = this.entityType
+    if (request.parent && entityType !== CANVAS_ENTITY_TYPES.project) {
+      // 只读这一份画布：全量列出要把每份画布都读一遍
+      const documentId = request.parent.id
+      const snapshot = await readCanvasProjectSnapshot(documentId)
+      const refs = (entityType === CANVAS_ENTITY_TYPES.node ? snapshot.nodes : snapshot.edges).map((record) => childRef(entityType, documentId, record.id))
+      const offset = Math.max(0, Number.parseInt(request.cursor ?? '0', 10) || 0)
+      const page = refs.slice(offset, offset + request.limit)
+      return { refs: page, nextCursor: offset + page.length < refs.length ? String(offset + page.length) : null, revisions: { [REVISION_SCOPE]: revisionOf(snapshot.updatedAt) } }
+    }
     const projects = await listCanvasDocumentSummaries()
     const refs: ApplicationRef[] = []
     for (const project of projects) {

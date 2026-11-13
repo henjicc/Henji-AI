@@ -144,7 +144,7 @@ it.each(['model', 'tool'] as const)('宿主调度经官方 Pi SDK 在 %s 阶段�
   expect(mocks.info).toHaveBeenCalledWith('内置助手回复状态', expect.objectContaining({ event: 'embedded_agent.turn.cancelled', requestId: requestIds.original }))
   expect(mocks.info).toHaveBeenCalledWith('内置助手工具调用完成', expect.objectContaining({ requestId: requestIds.waiting }))
   // 经分派入口调用的付费工具：应用与日志看到的仍是它自己的名字，付费标记不丢
-  expect([...nativeTools].sort()).toEqual(['call_application_tool', 'load_application_tools', 'read_assistant_context'])
+  expect([...nativeTools].sort()).toEqual(['call_application_tool', 'load_application_tools', 'read_assistant_context', 'run_application_script'])
   expect(mocks.info).toHaveBeenCalledWith('内置助手开始调用工具', expect.objectContaining({ requestId: requestIds.waiting,
     context: expect.objectContaining({ toolName: 'create_visible_generation_task', paid: true, input: expect.objectContaining({ prompt: '等待消息' }) }) }))
 }, 30000)

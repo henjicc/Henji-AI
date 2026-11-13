@@ -161,6 +161,12 @@ function registration(): ApplicationEntityRegistration {
   }
 }
 
+/** 不带集合写入声明的实体描述，供只验证读取的夹具复用。 */
+function plainEntity(): ApplicationEntityRegistration['entity'] {
+  const { collectionWrite: _collectionWrite, ...entity } = registration().entity
+  return entity
+}
+
 const assistantContext = {
   exposure: 'assistant' as const,
   acceptedDataClasses: new Set(['C0', 'C1'] as const),
@@ -564,6 +570,113 @@ describe('ApplicationReflectionRegistry', () => {
     expect(rest.refs.map((ref) => ref.id)).toEqual(['three'])
     const filtered = await registry.listEntities('sample.item', { limit: 5 }, assistantContext, { text: '字体', where: { 'sample.level': 9 } })
     expect(filtered.refs).toEqual([])
+  })
+
+  it('where 支持多值、包含与区间，写错比较方式时在读取前拒绝并点名该属性支持哪些', async () => {
+    const registry = new ApplicationReflectionRegistry(catalogVersion)
+    registry.register({ ...registration(), provider: multiProvider })
+    const ids = async (where: Record<string, JsonValue>): Promise<string[]> => (
+      (await registry.listEntities('sample.item', { limit: 10 }, assistantContext, { where })).refs.map((ref) => ref.id)
+    )
+    expect(await ids({ 'sample.mode': { in: ['fast', 'turbo'] } })).toEqual(['two'])
+    expect(await ids({ 'sample.level': { gte: 4, lt: 9 } })).toEqual(['one', 'three'])
+    expect(await ids({ 'sample.level': { gt: 4 }, 'sample.enabled': true })).toEqual(['two'])
+    expect(await ids({ 'sample.created_at': { contains: 'b' } })).toEqual(['two'])
+    expect(await ids({ 'sample.enabled': { ne: true } })).toEqual(['three'])
+    // 引用按 kind 与 id 比较，照抄读回的引用即可
+    expect(await ids({ 'sample.owner': { kind: 'sample.owner', id: 'owner-two', label: '别名' } })).toEqual(['two'])
+    await expect(ids({ 'sample.mode': { gt: 'fast' } })).rejects.toThrow('sample.mode 是enum 属性，支持的比较方式：eq、ne、in')
+    await expect(ids({ 'sample.level': { between: [1, 2] } })).rejects.toThrow('支持的比较方式：eq、ne、in、gt、gte、lt、lte')
+    await expect(ids({ 'sample.level': { in: 4 } })).rejects.toThrow('in 要给数组')
+    // 数值属性给了带引号的数：一条也命中不了，所以直接拒绝并说清改法
+    await expect(ids({ 'sample.level': { gte: '4' } })).rejects.toThrow('sample.level 是数值属性，gte 要给数值')
+  })
+
+  it('overlap 找出与时间段有交集的实例，orderBy 先排好再分页，游标不能换查询用', async () => {
+    const registry = new ApplicationReflectionRegistry(catalogVersion)
+    // e 没有时长：只标在一个时刻上，按时间点参与重叠判断
+    const spans: Record<string, { start: number; duration?: number }> = { a: { start: 0, duration: 30 }, b: { start: 30, duration: 30 }, c: { start: 90, duration: 10 }, d: { start: 50, duration: 100 }, e: { start: 45 } }
+    const number = (key: string): ApplicationPropertyDescriptor => ({ ...properties[1], id: `sample.span.${key}`, entityType: 'sample.span', value: { kind: 'integer' }, schemaRef: schemaRef('property', `sample.span.${key}`) })
+    registry.register({
+      entity: { ...plainEntity(), id: 'sample.span', refKind: 'sample.span', parentTypes: [], schemaRef: schemaRef('entity', 'sample.span') },
+      properties: [number('start'), number('duration')],
+      provider: {
+        ...provider, entityType: 'sample.span',
+        // 每页只给一条：排序必须读完全部再切页，不能按 provider 的页序拼
+        async listEntities(request) {
+          const all = Object.keys(spans), start = Number(request.cursor ?? 0)
+          return { refs: all.slice(start, start + 1).map((id) => ({ kind: 'sample.span', id })), nextCursor: start + 1 < all.length ? String(start + 1) : null, revisions: { 'sample.items': 3 } }
+        },
+        async readEntity(ref) {
+          return { ref, entityType: 'sample.span', revisions: { 'sample.items': 3 }, capturedAt: '2026-08-01T00:00:00.000Z',
+            properties: { 'sample.span.start': spans[ref.id].start, 'sample.span.duration': spans[ref.id].duration ?? null } }
+        },
+      },
+    })
+    const overlap = { start: 'start', duration: 'duration', from: 30, to: 60 }
+    const hit = await registry.listEntities('sample.span', { limit: 10 }, assistantContext, { overlap })
+    expect(hit.refs.map((ref) => ref.id)).toEqual(['b', 'd', 'e'])
+    await expect(registry.listEntities('sample.span', { limit: 10 }, assistantContext, { overlap: { ...overlap, from: 60 } })).rejects.toThrow('INVALID_OVERLAP')
+
+    const orderBy = [{ property: 'start', direction: 'desc' as const }]
+    const first = await registry.listEntities('sample.span', { limit: 3 }, assistantContext, { orderBy })
+    expect(first.items).toEqual([
+      { ref: { kind: 'sample.span', id: 'c' }, properties: { 'sample.span.start': 90 } },
+      { ref: { kind: 'sample.span', id: 'd' }, properties: { 'sample.span.start': 50 } },
+      { ref: { kind: 'sample.span', id: 'e' }, properties: { 'sample.span.start': 45 } },
+    ])
+    expect(first.nextCursor).toBe('sort:3')
+    const rest = await registry.listEntities('sample.span', { limit: 3, cursor: first.nextCursor! }, assistantContext, { orderBy })
+    expect(rest).toMatchObject({ refs: [{ id: 'b' }, { id: 'a' }], nextCursor: null })
+    await expect(registry.listEntities('sample.span', { limit: 3, cursor: first.nextCursor! }, assistantContext)).rejects.toThrow('INVALID_CURSOR')
+    await expect(registry.listEntities('sample.span', { limit: 3 }, assistantContext, { orderBy: [{ property: 'length' }] })).rejects.toThrow('PROPERTY_NOT_FOUND')
+
+    // 引用没有先后：直接排会原样返回，所以拒绝并指到可排的字段；按那个字段排是可以的
+    const items = new ApplicationReflectionRegistry(catalogVersion)
+    items.register({ ...registration(), provider: multiProvider })
+    await expect(items.listEntities('sample.item', { limit: 3 }, assistantContext, { orderBy: [{ property: 'sample.owner' }] })).rejects.toThrow('INVALID_ORDER:sample.owner 是对象值，不能直接排序；可写 sample.owner.id')
+    const byOwner = await items.listEntities('sample.item', { limit: 3 }, assistantContext, { orderBy: [{ property: 'sample.owner.id', direction: 'desc' }] })
+    expect(byOwner.refs.map((ref) => ref.id)).toEqual(['two', 'one', 'three'])
+  })
+
+  it('按父限定：交给声明了 listsByParent 的 provider，更上层的父实体沿中间层取齐；没法确定归属的类型如实拒绝', async () => {
+    const registry = new ApplicationReflectionRegistry(catalogVersion)
+    const members: Record<string, Array<{ id: string; parent: string }>> = {
+      'tree.folder': [{ id: 'f1', parent: 'r1' }, { id: 'f2', parent: 'r1' }, { id: 'f3', parent: 'r2' }],
+      'tree.leaf': [{ id: 'l1', parent: 'f1' }, { id: 'l2', parent: 'f2' }, { id: 'l3', parent: 'f3' }],
+      'tree.root': [{ id: 'r1', parent: '' }, { id: 'r2', parent: '' }],
+      'tree.stray': [{ id: 's1', parent: 'r1' }],
+    }
+    const register = (entityType: string, parentTypes: string[], listsByParent: boolean): void => registry.register({
+      entity: { ...plainEntity(), id: entityType, refKind: entityType, parentTypes, schemaRef: schemaRef('entity', entityType) },
+      properties: [],
+      provider: { ...provider, entityType, ...(listsByParent ? { listsByParent: true as const } : {}), async listEntities(request) {
+        return { refs: members[entityType].filter((item) => !request.parent || item.parent === request.parent.id).map((item) => ({ kind: entityType, id: item.id })), nextCursor: null, revisions: { 'sample.items': 3 } }
+      } },
+    })
+    register('tree.root', [], true); register('tree.folder', ['tree.root'], true); register('tree.leaf', ['tree.folder'], true); register('tree.stray', ['tree.root'], false)
+    const list = async (entityType: string, parent: { kind: string; id: string }, limit = 10, cursor?: string) => registry.listEntities(entityType, { limit, parent, ...(cursor ? { cursor } : {}) }, assistantContext)
+
+    expect((await list('tree.leaf', { kind: 'tree.folder', id: 'f1' })).refs.map((ref) => ref.id)).toEqual(['l1'])
+    const page = await list('tree.leaf', { kind: 'tree.root', id: 'r1' }, 1)
+    expect(page).toMatchObject({ refs: [{ id: 'l1' }], nextCursor: '1' })
+    expect((await list('tree.leaf', { kind: 'tree.root', id: 'r1' }, 1, page.nextCursor!)).refs.map((ref) => ref.id)).toEqual(['l2'])
+    await expect(list('tree.stray', { kind: 'tree.root', id: 'r1' })).rejects.toThrow('PARENT_FILTER_UNSUPPORTED:tree.stray')
+    await expect(list('tree.folder', { kind: 'tree.leaf', id: 'l1' })).rejects.toThrow('INVALID_PARENT:tree.folder 不在 tree.leaf 之下')
+  })
+
+  it('describe 按文字找属性：ID 的片段、标题与说明都能命中，只带回命中属性所属的实体', () => {
+    const registry = new ApplicationReflectionRegistry(catalogVersion)
+    registry.register(registration())
+    registry.register({
+      entity: { ...registration().entity, id: 'sample.other', refKind: 'sample.other', schemaRef: schemaRef('entity', 'sample.other') },
+      properties: [{ ...properties[0], id: 'sample.other.flag', entityType: 'sample.other', title: '标记', description: '无关属性。', schemaRef: schemaRef('property', 'sample.other.flag') }],
+    })
+    const byTitle = registry.describe({ text: '等级' }, assistantContext)
+    expect(byTitle.properties.map((property) => property.id)).toEqual(['sample.level'])
+    expect(byTitle.entities.map((entity) => entity.id)).toEqual(['sample.item'])
+    expect(registry.describe({ text: 'created' }, assistantContext).properties.map((property) => property.id)).toEqual(['sample.created_at'])
+    expect(registry.describe({ text: 'zzz' }, assistantContext)).toMatchObject({ entities: [], properties: [] })
   })
 
   it('不请求投影时行为与过去逐字一致，不做任何额外读取', async () => {

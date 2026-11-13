@@ -46,7 +46,17 @@ function parentSource(ref: ApplicationRef) {
 
 class FilterProvider {
   readonly entityType = ENTITY
+  readonly listsByParent = true
   async listEntities(request: ApplicationEntityListRequest) {
+    if (request.parent) {
+      // 滤镜挂在图层或图层组上，按滤镜列表的执行顺序返回
+      await ensureImageEditRefInstanceV3(request.parent)
+      const { documentId, location } = parentSource(request.parent)
+      const refs = location.layer.filters.map(filter => imageEditV3FilterRef(documentId, location.layer.id, filter.id))
+      const start = Math.max(0, Number(request.cursor) || 0)
+      return { refs: refs.slice(start, start + request.limit), nextCursor: start + request.limit < refs.length ? String(start + request.limit) : null,
+        revisions: { image_edit: getImageEditDocumentCatalogRevisionV3() } }
+    }
     return listImageEditDocumentEntitiesV3(request, document => collectImageEditV3LiveLayers(document)
       .flatMap(({ layer }) => layer.filters.map(filter => imageEditV3FilterRef(document.id, layer.id, filter.id))))
   }

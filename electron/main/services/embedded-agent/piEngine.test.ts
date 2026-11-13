@@ -344,10 +344,10 @@ describe('Pi official SDK engine', () => {
     expect(JSON.stringify(logs)).not.toContain('fixture-key')
     const initialTools = f.requests[0].tools as unknown as Array<{ name: string }>
     expect(initialTools.map(tool => tool.name)).toEqual(expect.arrayContaining([
-      'get_canvas_document', 'change_application_entities', 'load_application_tools',
+      'get_canvas_document', 'read_application_snapshot', 'change_application_entities', 'load_application_tools',
     ]))
     expect(initialTools.map(tool => tool.name)).toEqual(expect.arrayContaining(['call_application_tool']))
-    expect(initialTools).toHaveLength(9)
+    expect(initialTools).toHaveLength(10)
     expect(initialTools.map(tool => tool.name)).not.toEqual(expect.arrayContaining(['render_camera_stage_output']))
     expect(initialTools.map(tool => tool.name)).not.toContain('create_visible_generation_task')
     expect(initialTools.map(tool => tool.name)).not.toContain('get_canvas_node_schema')
@@ -369,7 +369,7 @@ describe('Pi official SDK engine', () => {
     for (const [surface, basic] of [['tool.camera_stage', 'observe_camera_stage_scene'], ['workspace.generation', 'search_models'], ['settings.general', 'search_application_settings']]) {
       await f.engine.command({ action: 'prompt', input: { text: '当前页面', context: JSON.stringify({ surface: { id: surface } }) } })
       const names = (f.requests.at(-1)!.tools as unknown as Array<{ name: string }>).map(tool => tool.name)
-      expect(names).toHaveLength(9)
+      expect(names).toHaveLength(10)
       expect(names).toContain(basic)
       expect(names).not.toContain('get_canvas_document')
       expect(names).not.toContain('create_visible_generation_task')
@@ -387,7 +387,7 @@ describe('Pi official SDK engine', () => {
     await f.engine.command({ action: 'prompt', input: { text: '在这里生成图片', context: canvas } })
     const names = (index: number) => f.requests.at(index)!.tools.map(tool => tool.function.name)
     expect(f.requests).toHaveLength(3)
-    expect(names(0)).toHaveLength(9)
+    expect(names(0)).toHaveLength(10)
     expect(names(0)).not.toContain('get_model_schema')
     expect(JSON.stringify(f.requests[1].tools)).toBe(JSON.stringify(f.requests[0].tools))
     expect(JSON.stringify(f.requests[2].tools)).toBe(JSON.stringify(f.requests[0].tools))

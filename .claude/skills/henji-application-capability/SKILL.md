@@ -43,12 +43,14 @@ Pi 与 MCP 只负责工具和结果投影，不拥有业务状态。MCP 固定�
 
 | 需求 | 做法 |
 |---|---|
-| 读某个状态 | 注册实体和属性即可，`list_application_entities` / `read_application_entity` 自动可用 |
+| 读某个状态 | 注册实体和属性即可，`read_application_snapshot` / `list_application_entities` / `read_application_entity` 自动可用 |
 | 改某个已有对象的属性 | 注册属性并实现 `ApplicationMutationExecutor`，`change_application_entities` 自动可用 |
 | 新增或删除集合成员 | 实体描述里声明 `collectionWrite`，实现 `ApplicationCollectionExecutor` |
 | **带算法的语义操作** | 才写专用 `ApplicationCapabilityDefinition` |
 
 静态属性与 `collectionWrite` 只表示“结构上支持”。每个 provider 还必须通过 `getPropertyAvailability` / `getCollectionAvailability` 返回当前引用、模式和状态下的真实可用性；没有额外集合限制时复用 `unrestrictedCollectionAvailability`。计划、提交预检和每步执行前由统一事务引擎复核，领域服务里不再复制模式守卫。
+
+实体有父子关系时，provider 声明 `listsByParent` 并让 `listEntities` 按 `request.parent` 只列该父实体的直接成员：整份读回（`read_application_snapshot`）默认只展开声明了它的子类型，`list_application_entities` 的 `parent` 也靠它。与父实体内容无关的目录、读取昂贵（执行代码、扫描本机、下载模型）或只是会话状态的子类型，在实体描述里标 `omitFromDefaultSnapshot`；界面与会话状态的属性（选中、播放头、视图、缓存进度）标 `viewState`，两者都是点名才返回。整份读回与列表筛选排序都在注册表通用层实现，领域不另写“读整份”的专用能力。
 
 `describe_application_entities` 可带 `refs` 查询实例级动态状态。recovery 只放结构化能力/实体/属性标识；任何操作步骤必须先通过正式 `describe → change → read/真相源` 结果测试，禁止凭读代码猜一条路线写进提示或错误。
 

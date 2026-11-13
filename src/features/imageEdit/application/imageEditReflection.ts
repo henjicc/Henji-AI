@@ -155,7 +155,7 @@ class ImageEditPreviewReflectionProvider implements ApplicationEntityProvider {
 const META: Record<ImageEditEntityType, { title: string; parents: ImageEditEntityType[] }> = {
   [IMAGE_EDIT_ENTITY_TYPES.preview]: { title: '图片编辑预览', parents: [] },
   [IMAGE_EDIT_ENTITY_TYPES.document]: { title: '图片编辑文档', parents: [] },
-  [IMAGE_EDIT_ENTITY_TYPES.layer]: { title: '图片编辑层', parents: [IMAGE_EDIT_ENTITY_TYPES.document] },
+  [IMAGE_EDIT_ENTITY_TYPES.layer]: { title: '图片编辑层', parents: [IMAGE_EDIT_ENTITY_TYPES.document, IMAGE_EDIT_ENTITY_TYPES.group] },
   [IMAGE_EDIT_ENTITY_TYPES.group]: { title: '图片编辑图层组', parents: [IMAGE_EDIT_ENTITY_TYPES.document, IMAGE_EDIT_ENTITY_TYPES.group] },
   [IMAGE_EDIT_ENTITY_TYPES.mask]: { title: '图片编辑蒙版', parents: [IMAGE_EDIT_ENTITY_TYPES.layer, IMAGE_EDIT_ENTITY_TYPES.group] },
   [IMAGE_EDIT_ENTITY_TYPES.resource]: { title: '图片编辑资源', parents: [IMAGE_EDIT_ENTITY_TYPES.document] },
@@ -183,6 +183,8 @@ export function createImageEditReflectionRegistrations(): ApplicationEntityRegis
           ? '图片编辑预览是不可变结果引用，由预览创建能力维护。'
           : '权威资源由图片资源库、画笔和蒙版工具维护，助手只读取引用关系。' } }
         : {}),
+      // 资源是像素存储的引用关系，不是图层结构的一部分：整份读回默认不展开
+      ...(entityType === IMAGE_EDIT_ENTITY_TYPES.resource ? { omitFromDefaultSnapshot: true } : {}),
       ...(entityType === IMAGE_EDIT_ENTITY_TYPES.layer ? {
         collectionWrite: {
           creatable: true,

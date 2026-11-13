@@ -280,7 +280,7 @@ export class ApplicationPlanBuilder {
           `PROPERTY_NOT_FOUND:${propertyId}`
           + `（${step.entityType} 可用属性：${this.dependencies.registry
             .listProperties(step.entityType).map((item) => item.id).slice(0, 24).join('、')}`
-          + '；属性 id 必须写完整，含实体类型前缀）'
+          + '；属性键写完整 ID，或只写实体类型之后的那一段）'
         )
       }
       descriptor.revisionScopes.forEach((scope) => scopes.add(scope))

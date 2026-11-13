@@ -227,9 +227,34 @@ function layerAvailability(
 }
 
 export class ImageEditV3ReflectionProvider {
+  readonly listsByParent = true
   constructor(readonly entityType: ImageEditV3ReflectedEntityType) {}
 
+  /** 父实体的直接成员，按图层面板的叠放顺序；文档下是根图层，图层组下是组内图层，蒙版挂在它所属的图层或组上。 */
+  private async childRefs(parent: ApplicationRef): Promise<ApplicationRef[]> {
+    await ensureImageEditRefInstanceV3(parent)
+    if (parent.kind === 'image_edit.document') {
+      const { documentId } = splitImageEditV3DocumentRef(parent)
+      const document = requireImageEditDocumentInstanceV3(documentId).bus.getSnapshot().document
+      if (this.entityType === 'image_edit.resource') return collectResources(document).map(({ resourceId }) => imageEditV3ResourceRef(documentId, resourceId))
+      return document.layers.filter((layer) => (layer.type === 'group') === (this.entityType === 'image_edit.group'))
+        .map((layer) => refForLayer(documentId, layer))
+    }
+    if (parent.kind !== 'image_edit.layer' && parent.kind !== 'image_edit.group') throw new Error(`PARENT_FILTER_UNSUPPORTED:${this.entityType} 不能按 ${parent.kind} 列出。`)
+    const { documentId, location } = layerSource(parent, parent.kind)
+    if (this.entityType === 'image_edit.mask') return location.layer.mask ? [imageEditV3MaskRef(documentId, location.layer.id)] : []
+    if (location.layer.type !== 'group') return []
+    return location.layer.children.filter((layer) => (layer.type === 'group') === (this.entityType === 'image_edit.group'))
+      .map((layer) => refForLayer(documentId, layer))
+  }
+
   async listEntities(request: ApplicationEntityListRequest): Promise<ApplicationEntityListResult> {
+    if (request.parent) {
+      const refs = await this.childRefs(request.parent)
+      const start = Math.max(0, Number(request.cursor) || 0)
+      return { refs: refs.slice(start, start + request.limit), nextCursor: start + request.limit < refs.length ? String(start + request.limit) : null,
+        revisions: { image_edit: getImageEditDocumentCatalogRevisionV3() } }
+    }
     if (this.entityType === 'image_edit.document') return listImageEditDocumentEntitiesV3(request)
     return listImageEditDocumentEntitiesV3(request, (document) => {
       const documentId = document.id

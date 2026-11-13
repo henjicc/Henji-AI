@@ -46,10 +46,12 @@ async function listAudioEditDocuments(): Promise<Array<{ id: string; name: strin
 }
 
 class AudioEditReflectionProvider implements ApplicationEntityProvider {
+  readonly listsByParent = true
   constructor(readonly entityType: EntityType) {}
 
-  async listEntities(request: { cursor?: string; limit: number }) {
-    const summaries = await listAudioEditDocuments()
+  async listEntities(request: { cursor?: string; limit: number; parent?: ApplicationRef }) {
+    // 按父限定时只读这一份口播：全量列出要把每份口播都载入一遍
+    const summaries = request.parent ? [{ id: request.parent.id, name: (await project(request.parent.id)).name }] : await listAudioEditDocuments()
     const projectScoped = this.entityType === AUDIO_EDIT_ENTITY_TYPES.project || this.entityType === AUDIO_EDIT_ENTITY_TYPES.processorChain || this.entityType === AUDIO_EDIT_ENTITY_TYPES.render
     // 口播级实体只要名称，不为列出而打开每一份口播；词块与线索才需要读内容
     const loaded: AudioEditProjectDocument[] = []
@@ -145,6 +147,8 @@ export function createAudioEditReflectionRegistrations(): ApplicationEntityRegis
       revisionScopes: ['audio_edit'], queryCapabilityIds: ['read_application_entity'], schemaRef: schemaRef('entity', entityType),
       // 剪切逐条增删：建一处只要起止采样帧（mode 省略时删除）
       ...(entityType === AUDIO_EDIT_ENTITY_TYPES.cut ? { collectionWrite: { creatable: true, removable: true, requiredPropertyIds: [`${entityType}.start_frame`, `${entityType}.end_frame`] } } : {}),
+      // 呼吸声第一次读取要跑本机检测（可能下载模型）、插件目录要扫描本机、成片映射是算出来的：整份读回默认不展开
+      ...(([AUDIO_EDIT_ENTITY_TYPES.breath, AUDIO_EDIT_ENTITY_TYPES.processorChain, AUDIO_EDIT_ENTITY_TYPES.render] as EntityType[]).includes(entityType) ? { omitFromDefaultSnapshot: true } : {}),
       ...(entityType === AUDIO_EDIT_ENTITY_TYPES.render ? { writeExclusion: { reason: '成片映射由口播剪辑时间线根据词块保留状态实时计算。' } } : {}),
       ...(entityType === AUDIO_EDIT_ENTITY_TYPES.processorChain ? { writeExclusion: { reason: '插件目录由宿主扫描本机插件得到；把插件加进声音处理请写 audio_edit.document.effect_chain（kind=plugin，pluginId 取自这里）。' } } : {}),
     },

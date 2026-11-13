@@ -1,5 +1,6 @@
 import { forgetExplanationUndoAccess, rememberExplanationUndoAccess } from '../creativeIntentAuthorization'
 import { describeJsonValueShape } from '@/core/application-control/registry/jsonValueShape'
+import { readApplicationSnapshot } from '@/core/application-control/registry/snapshot'
 import type {
   ApplicationPlannedStep,
   ApplicationTransactionResult,
@@ -346,15 +347,19 @@ function describedProperty(property: Record<string, unknown>, _context?: Capabil
 
 export const applicationReflectionHandlers = {
   async describeEntities(
-    input: { domains: string[]; entityTypes: string[]; entityType?: string; propertyIds?: string[]; detail?: 'compact' | 'full'; cursor?: string; limit?: number; refs?: Array<{ kind: string; id: string; label?: string }> },
+    input: { domains: string[]; entityTypes: string[]; entityType?: string; propertyIds?: string[]; text?: string; detail?: 'compact' | 'full'; cursor?: string; limit?: number; refs?: Array<{ kind: string; id: string; label?: string }> },
     context: CapabilityExecutionContext,
   ) {
     const registry = getApplicationReflectionRegistry()
     const accessContext = executionContext(context)
+    // 整份读回与写入都用实体类型之后的短键；只查一类实体时这里同样接受
+    const onlyType = input.entityType ?? (input.entityTypes.length === 1 ? input.entityTypes[0] : undefined)
+    if (onlyType && input.propertyIds?.length) input = { ...input, propertyIds: input.propertyIds.map((id) => resolvePropertyId(onlyType, id)) }
     const description = registry.describe({
       ...(input.domains.length > 0 ? { domains: input.domains } : {}),
       ...(input.entityType ? { entityTypes: [input.entityType] } : input.entityTypes.length > 0 ? { entityTypes: input.entityTypes } : {}),
       ...(input.propertyIds?.length ? { propertyIds: input.propertyIds } : {}),
+      ...(input.text ? { text: input.text } : {}),
     }, accessContext)
     const entities = description.entities as unknown as Array<Record<string, unknown>>
     const refs = input.refs ?? []
@@ -413,7 +418,7 @@ export const applicationReflectionHandlers = {
         valueShape: schema ? describeJsonValueShape(schema) : property.value.kind,
         ...(property.requiresReadBaseline ? { requiresReadBaseline: true } : {}),
         ...(property.omitFromDefaultRead ? { omitFromDefaultRead: true } : {}),
-        ...((input.entityType || input.entityTypes.length || input.propertyIds?.length) && informativeDescription(property as unknown as Record<string, unknown>) ? { description: property.description } : {}),
+        ...((input.entityType || input.entityTypes.length || input.propertyIds?.length || input.text) && informativeDescription(property as unknown as Record<string, unknown>) ? { description: property.description } : {}),
         ...(property.nullable ? { nullable: true } : {}) }
     })
     return {
@@ -433,16 +438,20 @@ export const applicationReflectionHandlers = {
 
   async listEntities(
     input: {
-      entityType: string; cursor?: string; limit: number
+      entityType: string; cursor?: string; limit: number; parent?: { kind: string; id: string }
       propertyIds?: string[]; where?: Record<string, JsonValue>; text?: string
+      overlap?: { start: string; end?: string; duration?: string; from: number; to: number }
+      orderBy?: Array<{ property: string; direction?: 'asc' | 'desc' }>
     },
     context: CapabilityExecutionContext
   ) {
+    if (input.parent && context.callerGrant) assertCompleteRef(input.parent)
     const result = await getApplicationReflectionRegistry().listEntities(
       input.entityType,
-      { ...(input.cursor ? { cursor: input.cursor } : {}), limit: input.limit },
+      { ...(input.cursor ? { cursor: input.cursor } : {}), limit: input.limit, ...(input.parent ? { parent: { kind: input.parent.kind, id: input.parent.id } } : {}) },
       executionContext(context),
-      { propertyIds: input.propertyIds, where: input.where, ...(input.text ? { text: input.text } : {}) },
+      { propertyIds: input.propertyIds, where: input.where, ...(input.overlap ? { overlap: input.overlap } : {}),
+        ...(input.orderBy?.length ? { orderBy: input.orderBy } : {}), ...(input.text ? { text: input.text } : {}) },
     )
     rememberRefs(context.requestId ?? 'renderer', result.refs)
     return {
@@ -456,9 +465,12 @@ export const applicationReflectionHandlers = {
     context: CapabilityExecutionContext
   ) {
     if (context.callerGrant) assertCompleteRef(input.ref)
+    // 属性键与列表、写入同一套写法：完整 ID 或实体类型之后的那一段；结果仍按完整 ID 返回，写错的键由注册表报出该实体真正有哪些属性
+    const resolve = (propertyId: string): string => resolvePropertyId(input.ref.kind, propertyId)
+    if (input.textPage) input = { ...input, textPage: { ...input.textPage, propertyId: resolve(input.textPage.propertyId) } }
     const snapshot = await getApplicationReflectionRegistry().readEntity(
       input.ref,
-      input.textPage ? [input.textPage.propertyId] : input.propertyIds,
+      input.textPage ? [input.textPage.propertyId] : input.propertyIds?.map(resolve),
       executionContext(context),
     )
     rememberRefs(context.requestId ?? 'renderer', [snapshot.ref])
@@ -483,6 +495,22 @@ export const applicationReflectionHandlers = {
       capturedAt: snapshot.capturedAt,
       ...(textPage ? { textPage } : {}),
     }
+  },
+
+  async readSnapshot(
+    input: { root: { kind: string; id: string }; depth?: number; entityTypes?: string[]; properties?: Record<string, string[]>; limit: number; cursor?: string },
+    context: CapabilityExecutionContext
+  ) {
+    if (context.callerGrant) assertCompleteRef(input.root)
+    const { refs, ...snapshot } = await readApplicationSnapshot(getApplicationReflectionRegistry(), {
+      root: { kind: input.root.kind, id: input.root.id }, limit: input.limit,
+      ...(input.depth !== undefined ? { depth: input.depth } : {}),
+      ...(input.entityTypes?.length ? { entityTypes: input.entityTypes } : {}),
+      ...(input.properties && Object.keys(input.properties).length ? { properties: input.properties } : {}),
+      ...(input.cursor !== undefined ? { cursor: input.cursor } : {}),
+    }, executionContext(context))
+    rememberRefs(context.requestId ?? 'renderer', refs)
+    return snapshot
   },
 
   async changeEntities(input: ChangeInput, context: CapabilityExecutionContext) {

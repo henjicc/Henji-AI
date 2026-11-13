@@ -25,12 +25,19 @@ const busFor = (ref: { id: string }) => requireImageEditDocumentInstanceV3(split
 export function imageEditSelectionRegistrationV3(): ApplicationEntityRegistration {
   return {
     entity: { id: entityType, domain: 'image_edit', version: 1, title: '当前图片选区', description: '每个打开图片文档的独立选区；修改可撤销，关闭会话后清理，应用蒙版才进入作品。', refKind: entityType,
-      dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: ['image_edit.document'], revisionScopes: ['image_edit'], queryCapabilityIds: ['read_application_entity'], schemaRef: imageEditV3SchemaRef('entity', entityType) },
+      dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: ['image_edit.document'], revisionScopes: ['image_edit'], queryCapabilityIds: ['read_application_entity'], schemaRef: imageEditV3SchemaRef('entity', entityType),
+      // 选区是编辑会话的状态，不进作品：整份读回默认不展开
+      omitFromDefaultSnapshot: true },
     properties: fieldDescriptors(IMAGE_EDIT_SELECTION_FIELDS_V3),
     schemaDocuments: [{ ref: schemaRef, value: z.toJSONSchema(imageEditSelectionSessionSchemaV3, { io: 'input' }) as JsonValue }],
     provider: {
       entityType,
+      listsByParent: true,
       async listEntities(request) {
+        if (request.parent) {
+          await ensureImageEditRefInstanceV3(request.parent)
+          return { refs: request.cursor ? [] : [{ kind: entityType, id: request.parent.id }], nextCursor: null, revisions: { image_edit: getImageEditDocumentCatalogRevisionV3() } }
+        }
         const refs = listImageEditDocumentInstancesV3().map(instance => ({ ...imageEditV3DocumentRef(instance.documentId), kind: entityType }))
         const start = request.cursor ? Number(request.cursor) : 0
         return { refs: refs.slice(start, start + request.limit), nextCursor: start + request.limit < refs.length ? String(start + request.limit) : null, revisions: { image_edit: getImageEditDocumentCatalogRevisionV3() }, total: refs.length }

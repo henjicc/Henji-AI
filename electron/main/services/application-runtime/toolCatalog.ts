@@ -264,8 +264,8 @@ export function buildApplicationToolCatalog(input: { tools: readonly LocalTool[]
 
 const WORKFLOWS = [
   APPLICATION_TOOL_CONVENTIONS,
-  '发现：describe_application_contract → describe_application_entities（按域过滤）→ list_application_entities（cursor/limit 分页，where 按属性等值定位）。',
-  '读取：按任务需要读取实体，获取真实引用和属性；普通操作不需要额外读取来拼接基线。删除也由应用核对当前目标。',
+  '发现：describe_application_contract 看业务域；动手前用 read_application_snapshot 读回目标文档的层级、稳定引用、当前属性值与新建必填项，一次读清，不必先查结构再逐个列出。',
+  '读取：按条件找实体用 list_application_entities（parent 限定所属文档，where 支持等值、in、contains、区间，overlap 找时间段重叠，orderBy 排序）；属性的完整说明与值结构用 describe_application_entities（text 可按文字找属性）。普通操作不需要额外读取来拼接基线，删除也由应用核对当前目标。',
   MEMORY_RULES,
   '查任务：生成默认用 wait_generation_task 等待终态，用户主动询问即时进度才用 get_generation_task，三维渲染用 get_camera_stage_render_task，写操作事实用 get_application_operation；等待工具由宿主跟进，其他即时查询按需调用，不需要客户端支持通知扩展。可用 subscriptions/listen 订阅工具目录变更；收到 notifications/tools/list_changed 后重新 tools/list。',
   '取结果：看图用 read_application_media(mode="image") 直接取得图片内容；其他媒体按 offset 分块读到 eof；不支持富媒体的客户端只消费 totalBytes／eof／错误码也能理解状态并继续。',
@@ -340,7 +340,7 @@ export function buildApplicationContract(input: {
     domains: full.domains,
     ...(full.skills ? { skills: { tool: full.skills.tool, index: full.skills.index } } : {}),
     workflows: [
-      '发现：describe_application_entities 按域查属性；list_application_entities 用分页/where 定位；read_application_entity 读属性与 baselineId。tools/list 查工具，契约 detail="full" 查排除与弃用。',
+      '发现：read_application_snapshot 一次读回一份文档的层级、引用、当前属性值与新建必填项；list_application_entities 按 parent/where/overlap/orderBy 找实体；describe_application_entities 查属性完整说明（text 按文字找）；read_application_entity 读单个实体与 baselineId。tools/list 查工具，契约 detail="full" 查排除与弃用。',
       '写入：生成 UUID operationId，重传同 ID 返回原事实。baselineIds 可省略，显式提交基线时会检测冲突。结果默认省略修订号、验证证据与空值，includeDetails:true 展开。完整约定见 detail="full" 的 workflows。',
       '恢复：unknown 查 get_application_operation，沿原 operationId，禁止重放；partial 仅恢复保存。前置拒绝用 describe_application_entities(refs) 查条件。',
       '结果：wait_generation_task 等生成终态；read_application_media(mode="image") 看图，其他媒体读至 eof。load_assistant_skill 按适用条件读主文件和单份参考。',

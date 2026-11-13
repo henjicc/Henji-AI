@@ -17,6 +17,8 @@ export interface ApplicationControlAccessContext {
 export interface ApplicationEntityListRequest {
   cursor?: string
   limit: number
+  /** 只列这个父实体下的成员。只会交给声明了 listsByParent 的 provider；其余由注册表通用回退或如实拒绝。 */
+  parent?: ApplicationRef
 }
 
 export interface ApplicationEntityListResult {
@@ -33,21 +35,23 @@ export interface ApplicationEntityListItem {
 }
 
 /**
- * 「按名字找到那一个」——用户天天这么说，以前脚本里写不出来。
+ * 列表的声明式筛选：调用方说要哪些属性、按什么条件筛、怎么排，注册表统一读取、过滤与排序。
  *
- * list 只返回 kind/id，模型看不见名称；受限脚本语言又不允许遍历读取结果去逐个比对（那是
- * 编译期展开的硬约束，不能为此放宽）。两条合起来，"确认改名成功了""把叫 X 的那个删掉"
- * 这类最普通的请求就成了死路。实测四个场景全都撞过：素材库场景直接被打挂。
- *
- * 出路不是放宽语言，而是把筛选下沉成**声明式的后端能力**：调用方说要哪些属性、按什么等值
- * 条件筛，注册表统一读取并过滤。等值是有意的下限——它覆盖了实测的全部真实用法，又不会把
- * 通用查询语言的复杂度引进来。
+ * list 只返回 kind/id 时模型看不见名称，“把叫 X 的那个删掉”“第 2–5 秒之间的片段”这类请求就只能
+ * 整页取回逐个比对。比较方式只收真实用法的并集（等值、多值、包含、区间、时间段重叠），不做表达式语言。
  */
 export interface ApplicationEntityListProjection {
   /** 要一并读回的属性；支持写全 ID，也支持只写 entityType 之后的那一段，结构化属性可再接点分路径只读回其中字段。 */
   propertyIds?: string[]
-  /** 等值过滤条件；全部命中才保留。键的写法与 propertyIds 相同，json 属性可再接点分路径筛其中的字段。 */
+  /**
+   * 过滤条件；全部命中才保留。键的写法与 propertyIds 相同，json 属性可再接点分路径筛其中的字段。
+   * 值是标量时为等值；是对象时键为比较方式（见 listQuery.ts 的 WHERE_OPERATORS）。
+   */
   where?: Record<string, JsonValue>
+  /** 时间段重叠：实体占 [start, end) 或 [start, start+duration)，与 [from, to) 有交集即命中。 */
+  overlap?: { start: string; end?: string; duration?: string; from: number; to: number }
+  /** 排序键，靠前的优先；给出后先读完全部命中的实例再分页。 */
+  orderBy?: Array<{ property: string; direction?: 'asc' | 'desc' }>
   /** 关键词：按名称或正文的相关度排序查找，与 where 同时给出时先排序再筛选。 */
   text?: string
 }
@@ -58,6 +62,12 @@ export interface ApplicationEntityReadRequest {
 
 export interface ApplicationEntityProvider {
   readonly entityType: string
+  /**
+   * 声明后 listEntities 必须按 request.parent 只列该父实体的直接成员（父引用不存在时抛 NOT_FOUND）。
+   * 整份读回默认只展开声明了它的子实体类型；没声明的类型只在恰有一条指向父类型的引用属性时
+   * 由注册表按那条属性筛，否则如实拒绝（PARENT_FILTER_UNSUPPORTED）。provider 自己遇到不支持的父类型时抛同一个前缀。
+   */
+  readonly listsByParent?: true
   listEntities(request: ApplicationEntityListRequest): Promise<ApplicationEntityListResult>
   readEntity(
     ref: ApplicationRef,
@@ -90,6 +100,8 @@ export interface ApplicationRegistryQuery {
   domains?: string[]
   entityTypes?: string[]
   propertyIds?: string[]
+  /** 按文字找属性：在属性 ID、标题与说明里按相关度检索，只返回命中的属性及其所属实体。 */
+  text?: string
   includeUnavailable?: boolean
 }
 

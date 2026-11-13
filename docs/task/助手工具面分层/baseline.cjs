@@ -170,16 +170,23 @@ function runOnce(task, index) {
   })
 }
 
+/** 缓存命中率：命中的输入 token / 全部输入 token（各次运行合计后再除，长运行权重大）。 */
+function cacheHitRate(rows) {
+  const total = rows.reduce((sum, row) => sum + (row.inputTokens ?? 0), 0)
+  const fresh = rows.reduce((sum, row) => sum + (row.freshInputTokens ?? 0), 0)
+  return total ? Math.round((1 - fresh / total) * 1000) / 1000 : null
+}
+
 function summarize(rows) {
   return TASKS.filter((task) => rows.some((row) => row.task === task.id)).map((task) => {
     const own = rows.filter((row) => row.task === task.id)
     const average = (key) => Math.round(own.reduce((sum, row) => sum + (row[key] ?? 0), 0) / own.length)
-    return { task: task.id, area: task.area, title: task.title, passed: `${own.filter((row) => row.pass).length}/${own.length}`, toolCalls: average('toolCalls'), toolLoads: average('toolLoads'), failedToolCalls: average('failedToolCalls'), modelRequests: average('modelRequests'), inputTokens: average('inputTokens'), outputTokens: average('outputTokens'), seconds: Math.round(average('durationMs') / 1000), costCny: Math.round(own.reduce((sum, row) => sum + (row.costCny ?? 0), 0) / own.length * 1000) / 1000 }
+    return { task: task.id, area: task.area, title: task.title, passed: `${own.filter((row) => row.pass).length}/${own.length}`, toolCalls: average('toolCalls'), toolLoads: average('toolLoads'), failedToolCalls: average('failedToolCalls'), modelRequests: average('modelRequests'), inputTokens: average('inputTokens'), cacheHitRate: cacheHitRate(own), outputTokens: average('outputTokens'), seconds: Math.round(average('durationMs') / 1000), costCny: Math.round(own.reduce((sum, row) => sum + (row.costCny ?? 0), 0) / own.length * 1000) / 1000 }
   })
 }
 
 function saveResults(file, rows, surface) {
-  fs.writeFileSync(file, `${JSON.stringify({ label, date: new Date().toISOString(), commit: execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: ROOT, encoding: 'utf8' }).trim(), limits: { maxInputTokens: MAX_INPUT_TOKENS, maxToolCalls: MAX_TOOL_CALLS }, totalCostCny: Math.round(rows.reduce((sum, row) => sum + (row.costCny ?? 0), 0) * 100) / 100, surface, summary: summarize(rows), rows }, null, 1)}\n`)
+  fs.writeFileSync(file, `${JSON.stringify({ label, date: new Date().toISOString(), commit: execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: ROOT, encoding: 'utf8' }).trim(), limits: { maxInputTokens: MAX_INPUT_TOKENS, maxToolCalls: MAX_TOOL_CALLS }, totalCostCny: Math.round(rows.reduce((sum, row) => sum + (row.costCny ?? 0), 0) * 100) / 100, cacheHitRate: cacheHitRate(rows), surface, summary: summarize(rows), rows }, null, 1)}\n`)
 }
 
 async function main() {

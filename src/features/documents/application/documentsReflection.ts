@@ -40,19 +40,20 @@ function pick(values: Record<string, JsonValue>, propertyIds: string[] | undefin
 }
 
 class DocumentsReflectionProvider implements ApplicationEntityProvider {
+  readonly listsByParent = true
   constructor(readonly entityType: DocumentsEntityType, private readonly operations: () => DocumentOperations) {}
 
   async listEntities(request: ApplicationEntityListRequest): Promise<ApplicationEntityListResult> {
     const operations = this.operations()
     const refs: ApplicationRef[] = this.entityType === DOCUMENTS_ENTITY_TYPES.document
-      ? (await operations.listDocuments({ container: { kind: 'any' }, includeDrafts: true, includeMissing: true })).map((document) => ({ kind: this.entityType, id: document.id, label: document.name }))
+      ? (await operations.listDocuments({ container: request.parent ? { kind: 'project', projectId: request.parent.id } : { kind: 'any' }, includeDrafts: true, includeMissing: true })).map((document) => ({ kind: this.entityType, id: document.id, label: document.name }))
       : (await operations.listProjects({ includeDrafts: true, includeMissing: true })).map((project) => ({ kind: this.entityType, id: project.id, label: project.name }))
     const { items, nextCursor } = page(refs, request)
     return { refs: items, nextCursor, revisions: documentsRevisions(operations) }
   }
 
   async readEntity(ref: ApplicationRef, request: ApplicationEntityReadRequest): Promise<ApplicationEntitySnapshot> {
-    const values = await this.readValues(ref).catch((error: unknown) => {
+    const values = await this.readValues(ref, request.propertyIds).catch((error: unknown) => {
       if (error instanceof Error && ['DocumentNotFoundError', 'ProjectNotFoundError'].includes(error.name)) throw new Error(`NOT_FOUND:${error.message}`, { cause: error })
       throw error
     })
@@ -81,7 +82,7 @@ class DocumentsReflectionProvider implements ApplicationEntityProvider {
     return unrestrictedCollectionAvailability(this.entityType, parent, documentsRevisions(this.operations()), [])
   }
 
-  private async readValues(ref: ApplicationRef): Promise<{ values: Record<string, JsonValue>; missing: boolean }> {
+  private async readValues(ref: ApplicationRef, propertyIds?: string[]): Promise<{ values: Record<string, JsonValue>; missing: boolean }> {
     if (ref.kind !== this.entityType) throw new Error('NOT_FOUND')
     const operations = this.operations()
     if (this.entityType === DOCUMENTS_ENTITY_TYPES.document) {
@@ -90,6 +91,11 @@ class DocumentsReflectionProvider implements ApplicationEntityProvider {
       return { values: fieldReadValues(DOCUMENT_FIELDS, { document, externalOverwrite }), missing: document.missing }
     }
     const project = await operations.findProject(ref.id)
+    // 制作进度要读项目文件夹里的文件：没点到它（只取基线、只读名称）时不碰磁盘
+    const progressId = `${DOCUMENTS_ENTITY_TYPES.project}.progress`
+    if (propertyIds && !propertyIds.includes(progressId)) {
+      return { values: fieldReadValues(PROJECT_FIELDS.filter((field) => field.propertyId !== progressId), { project, progress: '' }), missing: project.missing }
+    }
     const progress = await operations.readProjectProgress(project)
     return { values: fieldReadValues(PROJECT_FIELDS, { project, progress }), missing: project.missing }
   }
@@ -98,7 +104,7 @@ class DocumentsReflectionProvider implements ApplicationEntityProvider {
 const ENTITY_META: Record<DocumentsEntityType, { title: string; description: string }> = {
   [DOCUMENTS_ENTITY_TYPES.document]: {
     title: '文档',
-    description: '剪辑、画布、口播、镜头参考、图片文档等作品文件；集合 remove 删除到最近删除，可恢复（只在后台打开的先保存关闭再删；正在前台编辑或有进行中任务的会被拒绝，先离开它的页面或等任务结束）；位置用 move_document、副本用 duplicate_document、收集素材进项目用 collect_document_media。',
+    description: '剪辑、画布、口播、镜头参考、图片文档等作品文件；集合 remove 删除到最近删除，可恢复（只在后台打开的先保存关闭再删；正在前台编辑或有进行中任务的会被拒绝，先离开它的页面或等任务结束）；位置用 move_document、副本用 duplicate_document、收集素材进项目用 collect_document_media。这里只有文件层面的信息；读写文档里的内容用同一个 id 换成内容根引用：剪辑 video_edit.document、画布 canvas.document、口播 audio_edit.document、镜头参考 camera_stage.document，图片文档是 image_edit.document 且 id 前加 "v3:"。',
   },
   [DOCUMENTS_ENTITY_TYPES.project]: {
     title: '项目',
@@ -111,7 +117,9 @@ export function createDocumentsReflectionRegistrations(operations: () => Documen
     entity: {
       id: entityType, domain: 'documents', version: 1, title: ENTITY_META[entityType].title,
       description: ENTITY_META[entityType].description, refKind: entityType,
-      dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: [],
+      dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'],
+      // 项目里的文档可按所属项目列出；不在项目里的文档没有父实体
+      parentTypes: entityType === DOCUMENTS_ENTITY_TYPES.document ? [DOCUMENTS_ENTITY_TYPES.project] : [],
       revisionScopes: ['documents'], queryCapabilityIds: ['read_application_entity'], schemaRef: documentsSchemaRef('entity', entityType),
       collectionWrite: { creatable: false, removable: true, requiredPropertyIds: [] },
     },

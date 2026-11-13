@@ -72,6 +72,11 @@ export const applicationEntityTypeDescriptorSchema = z.object({
   writeExclusion: z.object({
     reason: z.string().min(1).max(500),
   }).strict().optional(),
+  /**
+   * 整份读回（read_application_snapshot）默认不展开这类子实体：与父实体的内容无关的目录、读取昂贵
+   * （要执行代码、扫描本机、下载模型）或只是会话状态的类型。点名 entityTypes 时照常展开。
+   */
+  omitFromDefaultSnapshot: z.boolean().optional(),
 }).strict()
 export type ApplicationEntityTypeDescriptor = z.infer<typeof applicationEntityTypeDescriptorSchema>
 
@@ -109,6 +114,11 @@ export const applicationPropertyDescriptorSchema = z.object({
    * 由注册表统一处理，provider 收到的 propertyIds 里就不含它，据此能区分“调用方没点名”和“点名了它”。
    */
   omitFromDefaultRead: z.boolean().optional(),
+  /**
+   * 界面与会话状态（选中、播放头、视图缩放、缓存进度）：不属于作品内容，整份读回默认不带；
+   * read_application_entity 与点名读取照常返回。
+   */
+  viewState: z.boolean().optional(),
   relation: z.object({
     targetEntityTypes: z.array(applicationEntityTypeIdSchema).min(1).max(32),
     cardinality: z.enum(['one', 'optional', 'many']),

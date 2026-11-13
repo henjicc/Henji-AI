@@ -18,6 +18,7 @@ import { createDefaultAnimation } from '../domain/animationTypes'
 import { listAnimatablePropertyPaths } from '../domain/animatableProps'
 import { createCameraObject, createDefaultSceneSettings, createPrimitiveObject, pickDefaultColor } from '../domain/sceneDefaults'
 import { ApplicationReflectionRegistry } from '@/core/application-control'
+import { readApplicationSnapshot } from '@/core/application-control/registry/snapshot'
 import { CAMERA_STAGE_ENTITY_TYPES, createCameraStageReflectionRegistrations } from './cameraStageReflection'
 
 describe('三维应用反射注册', () => {
@@ -124,6 +125,27 @@ describe('三维应用反射注册', () => {
     await expect(registration.provider!.listEntities({ limit: 20 })).resolves.toMatchObject({
       refs: [{ kind: CAMERA_STAGE_ENTITY_TYPES.project, id: 'project-1' }],
     })
+  })
+
+  it('整份读回只读这一份镜头参考：文档下是场景，场景下是对象与摄像机，播放控制默认不带', async () => {
+    const camera = createCameraObject('主摄像机', pickDefaultColor(0))
+    const sphere = createPrimitiveObject('sphere', '球', pickDefaultColor(1))
+    mocks.readSnapshot.mockImplementation(async (projectId: string) => ({
+      id: projectId, name: '反射测试', createdAt: 1, updatedAt: 2, objects: [camera, sphere], activeCameraId: camera.id,
+      animation: createDefaultAnimation(), sceneSettings: createDefaultSceneSettings(), stateKeyframes: [], cameraCuts: [], sets: [],
+    }))
+    const registry = new ApplicationReflectionRegistry('application-capabilities/v2')
+    for (const registration of createCameraStageReflectionRegistrations(() => 7)) registry.register(registration)
+    mocks.listProjects.mockClear(); mocks.readSnapshot.mockClear()
+    const result = await readApplicationSnapshot(registry, { root: { kind: CAMERA_STAGE_ENTITY_TYPES.project, id: 'project-1' }, limit: 300 },
+      { exposure: 'assistant', acceptedDataClasses: new Set(['C1'] as const) })
+    const scene = result.root.children![CAMERA_STAGE_ENTITY_TYPES.scene][0]
+    expect(scene.children![CAMERA_STAGE_ENTITY_TYPES.object].map((node) => node.ref.id)).toEqual([`project-1:${sphere.id}`])
+    expect(scene.children![CAMERA_STAGE_ENTITY_TYPES.camera].map((node) => node.ref.id)).toEqual([`project-1:${camera.id}`])
+    expect(result.notExpanded).toContain(CAMERA_STAGE_ENTITY_TYPES.playback)
+    // 不为列成员去读别的镜头参考
+    expect(mocks.listProjects).not.toHaveBeenCalled()
+    expect(mocks.readSnapshot.mock.calls.every(([projectId]) => projectId === 'project-1')).toBe(true)
   })
 
   it('状态关键帧集合始终可增删，公开目录不存在属性轨道关键帧', async () => {

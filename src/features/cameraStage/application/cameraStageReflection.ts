@@ -237,10 +237,11 @@ function filterProperties(properties: Record<string, JsonValue>, requested?: str
 }
 
 class CameraStageReflectionProvider implements ApplicationEntityProvider {
+  readonly listsByParent = true
   constructor(readonly entityType: EntityType, private readonly readRevision: RevisionReader) {}
 
-  async listEntities(request: { cursor?: string; limit: number }) {
-    const refs = await this.allRefs()
+  async listEntities(request: { cursor?: string; limit: number; parent?: ApplicationRef }) {
+    const refs = request.parent ? await this.childRefs(request.parent) : await this.allRefs()
     const offset = Math.max(0, Number.parseInt(request.cursor ?? '0', 10) || 0)
     const page = refs.slice(offset, offset + request.limit)
     return {
@@ -297,8 +298,17 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
     return results.flatMap((result) => result.status === 'fulfilled' ? [result.value] : [])
   }
 
+  /** 父实体的直接成员：只读它所在的那份镜头参考；轨迹挂在状态关键帧下，按关键帧筛。 */
+  private async childRefs(parent: ApplicationRef): Promise<ApplicationRef[]> {
+    const refs = this.refsOf([await cameraStageApplicationService.readSnapshot(cameraStageDocumentIdFromRef(parent))])
+    return parent.kind === ENTITY_TYPES.stateKeyframe ? refs.filter((ref) => ref.id.startsWith(`${parent.id}:`)) : refs
+  }
+
   private async allRefs(): Promise<ApplicationRef[]> {
-    const snapshots = await this.snapshots()
+    return this.refsOf(await this.snapshots())
+  }
+
+  private refsOf(snapshots: CameraStageProjectSnapshot[]): ApplicationRef[] {
     return snapshots.flatMap((snapshot) => {
       if (this.entityType === ENTITY_TYPES.project) return [{ kind: this.entityType, id: snapshot.id, label: snapshot.name }]
       if (this.entityType === ENTITY_TYPES.scene) return [{ kind: this.entityType, id: snapshot.id, label: `${snapshot.name} 场景` }]
@@ -502,6 +512,8 @@ export function createCameraStageReflectionRegistrations(readRevision: RevisionR
         queryCapabilityIds: meta.queryIds,
         schemaRef: schemaRef('entity', entityType),
         ...(entityType === ENTITY_TYPES.project ? { writeExclusion: { reason: PROJECT_WRITE_EXCLUSION } } : {}),
+        // 播放控制是会话状态，只有当前打开的那份才有：整份读回默认不展开
+        ...(entityType === ENTITY_TYPES.playback ? { omitFromDefaultSnapshot: true } : {}),
         ...(entityType === ENTITY_TYPES.set ? {
           collectionWrite: { creatable: false, removable: true, requiredPropertyIds: [] },
         } : {}),

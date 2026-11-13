@@ -35,10 +35,15 @@ import type {
 } from './types'
 import { normalizeApplicationPropertyValue } from './valueValidation'
 import { annotatePropertyValueFormats } from './propertyValidationErrors'
+import { assertOrderable, compareByOrder, compileOverlapCondition, compileWhereCondition, valueAtPath, type ListCondition, type OrderKey, type ResolvedPropertyKey } from './listQuery'
 
 const DATA_CLASS_RANK = { C0: 0, C1: 1, C2: 2, C3: 3 } as const
 /** 带 where 的列表单次最多扫描的实例数（逐条读取属性，受列表能力超时约束） */
 const WHERE_SCAN_LIMIT = 2000
+/** 向 provider 取整份成员时的单页大小；只是传输分页，不限制总数。 */
+const PROVIDER_PAGE = 200
+/** 沿父子关系向下找成员时的嵌套上限，只防登记成环。 */
+const MAX_NESTING = 64
 
 const STRUCTURED_VALUE_KINDS = new Set(['json', 'vector2', 'vector3', 'ref', 'ref_list'])
 
@@ -67,15 +72,6 @@ function schemaProperties(node: JsonValue | null): Record<string, JsonValue> | n
     if (properties && typeof properties === 'object' && !Array.isArray(properties)) Object.assign(merged, properties)
   }
   return Object.keys(merged).length ? merged : null
-}
-
-function valueAtPath(value: JsonValue | undefined, path: readonly string[]): JsonValue | undefined {
-  let current = value
-  for (const segment of path) {
-    if (current === null || typeof current !== 'object') return undefined
-    current = Array.isArray(current) ? current[Number(segment)] : current[segment]
-  }
-  return current
 }
 
 function schemaKey(ref: ApplicationSchemaRef): string {
@@ -203,7 +199,14 @@ export class ApplicationReflectionRegistry {
       && (propertyIds.size === 0 || propertyIds.has(property.id))
       && this.canReadProperty(property, context)
     ))
-    return { catalogVersion: this.catalogVersion, entities, properties }
+    const text = query.text?.trim()
+    if (!text) return { catalogVersion: this.catalogVersion, entities, properties }
+    // 属性 ID 的各段拆开参与检索：整条 ID 是一个词，按 opacity、clip 这样的片段就搜不到
+    const split = (value: string): string => value.replace(/[._-]+/g, ' ')
+    const matched = rankByKeywords(properties.map((property) => `${split(property.id)} ${property.title} ${property.description}`), split(text))
+      .map((match) => properties[match.index])
+    const owners = new Set(matched.map((property) => property.entityType))
+    return { catalogVersion: this.catalogVersion, entities: entities.filter((entity) => owners.has(entity.id)), properties: matched }
   }
 
   getEntity(entityType: string): ApplicationEntityTypeDescriptor | undefined {
@@ -271,7 +274,7 @@ export class ApplicationReflectionRegistry {
    *
    * 解析不出来时走 requireProperty 抛错，那条错误会带上这个实体真正有哪些属性。
    */
-  private resolvePropertyId(entityType: string, propertyId: string): string {
+  resolvePropertyId(entityType: string, propertyId: string): string {
     const byEntity = this.propertiesByEntity.get(entityType)
     if (byEntity?.has(propertyId)) return propertyId
     const prefixed = `${entityType}.${propertyId}`
@@ -306,15 +309,16 @@ export class ApplicationReflectionRegistry {
   }
 
   /**
-   * 列出实体，并可按属性投影与等值过滤。
+   * 列出实体，并可按属性投影、筛选与排序。
    *
-   * 不带 projection 时行为与过去逐字一致（只返回 refs），这是绝大多数调用方的路径。
-   * 带 projection 时统一在这里读取并过滤：providers 一行不用改，所有实体类型自动受益。
+   * 不带 projection 时只返回 refs。带 projection 时统一在这里读取、过滤与排序，provider 只管列出。
    *
-   * provider 只会按 limit/cursor 分页，筛选在这里逐条做。带 where 时一页筛完不够 limit 就接着读
+   * provider 只会按 limit/cursor 分页，筛选在这里逐条做。带条件时一页筛完不够 limit 就接着读
    * provider 的下一页，直到凑满一页或读完——否则按所属文档筛词块这类请求会在别的文档那几页上
    * 连续拿到空页、却还有 nextCursor，调用方只能一页页空翻。单次最多扫 WHERE_SCAN_LIMIT 条，
    * 扫到上限仍不满时照常返回 nextCursor，由调用方继续。
+   *
+   * 排序必须看到全部命中的实例才有意义：给了 orderBy 就读完、筛完、排好，再按 sort: 游标切页。
    */
   async listEntities(
     entityType: string,
@@ -329,7 +333,38 @@ export class ApplicationReflectionRegistry {
     }
     const entity = this.requireVisibleEntity(entityType, context)
     const provider = this.requireProvider(entityType)
+    // 条件与排序键先解析：写错的属性名、比较方式在读任何实例之前拒绝
+    const resolveKey = (key: string): ResolvedPropertyKey => {
+      const resolved = this.resolveWhereKey(entityType, key, context)
+      const property = this.requireProperty(entityType, resolved.propertyId)
+      // json 属性的值 schema 写明了顶层类型时带上，比较方式与排序才能在读取前按类型校验
+      const schema = property.value.kind === 'json' && !resolved.path.length ? this.resolveSchema(property.value.schemaRef, context) : null
+      const jsonType = schema && typeof schema === 'object' && !Array.isArray(schema) && typeof schema.type === 'string' ? schema.type : undefined
+      return { key, property, path: resolved.path, ...(jsonType ? { jsonType } : {}) }
+    }
+    const conditions: ListCondition[] = Object.entries(projection?.where ?? {}).map(([key, value]) => compileWhereCondition(resolveKey(key), value))
+    if (projection?.overlap) {
+      const { start, end, duration, from, to } = projection.overlap
+      conditions.push(compileOverlapCondition({ start: resolveKey(start), ...(end ? { end: resolveKey(end) } : {}), ...(duration ? { duration: resolveKey(duration) } : {}), from, to }))
+    }
+    const order: OrderKey[] = (projection?.orderBy ?? []).map(({ property, direction }) => {
+      const resolved = resolveKey(property)
+      assertOrderable(resolved)
+      return { ...resolved, direction: direction ?? 'asc' }
+    })
+    // 读回与筛选同一套写法：属性 ID 后接点分路径时只读回其中的字段，结果按调用方写的键返回。只排序不点名时读回排序键，便于核对顺序
+    const projected = (projection?.propertyIds?.length ? projection.propertyIds : order.map((item) => item.key))
+      .map((key) => { const resolved = resolveKey(key); return { propertyId: resolved.property.id, path: resolved.path, key: resolved.path.length ? key : resolved.property.id } })
+
+    let children: ApplicationEntityListResult | undefined
     const listPage = async (pageRequest: ApplicationEntityListRequest): Promise<ApplicationEntityListResult> => {
+      if (request.parent) {
+        // 按父限定时由注册表取齐该父实体之下的全部成员再切页：游标是成员序号，与 provider 自己的游标无关
+        children ??= await this.listDescendants(entityType, request.parent, context)
+        const start = Math.max(0, Number(pageRequest.cursor) || 0)
+        const end = start + pageRequest.limit
+        return { refs: children.refs.slice(start, end), nextCursor: end < children.refs.length ? String(end) : null, revisions: children.revisions }
+      }
       const page = await provider.listEntities(pageRequest)
       for (const ref of page.refs) {
         if (ref.kind !== entity.refKind) throw new Error(`INVALID_ENTITY_REF:${ref.kind}`)
@@ -338,10 +373,34 @@ export class ApplicationReflectionRegistry {
       return { ...page, refs: page.refs.map(normalizeApplicationRefLabel) }
     }
     const text = projection?.text?.trim()
-    if (request.cursor && Boolean(text) !== request.cursor.startsWith('rank:')) {
-      throw new Error('INVALID_CURSOR：游标要与产生它的查询一起使用：rank: 开头的游标只能配同一个 text，其余游标不能配 text。')
+    const cursorKind = request.cursor?.startsWith('sort:') ? 'sort' : request.cursor?.startsWith('rank:') ? 'rank' : 'plain'
+    const expectedKind = order.length ? 'sort' : text ? 'rank' : 'plain'
+    if (request.cursor && cursorKind !== expectedKind) {
+      throw new Error('INVALID_CURSOR：游标要与产生它的查询一起使用：sort: 开头的游标只能配同一个 orderBy，rank: 开头的只能配同一个 text，其余游标不能配 orderBy 或 text。')
     }
-    // 排序要读全部实例；同一次调用里续页复用这一份排序
+    const needed = [...new Set([...projected.map(({ propertyId }) => propertyId), ...conditions.flatMap((condition) => condition.propertyIds), ...order.map((item) => item.property.id)])]
+    const project = (properties: Record<string, JsonValue>): Record<string, JsonValue> => (
+      Object.fromEntries(projected.map(({ key, propertyId, path }) => [key, valueAtPath(properties[propertyId], path) ?? null]))
+    )
+
+    if (order.length) {
+      const all = text ? await this.rankAll(listPage, text) : await this.listAll(listPage)
+      const rows: Array<{ ref: ApplicationRef; properties: Record<string, JsonValue> }> = []
+      for (const ref of all.refs) {
+        const snapshot = await this.readEntity(ref, needed, context)
+        if (conditions.every((condition) => condition.matches(snapshot.properties))) rows.push({ ref, properties: snapshot.properties })
+      }
+      const compare = compareByOrder(order)
+      rows.sort((left, right) => compare(left.properties, right.properties))
+      const start = request.cursor ? Number(request.cursor.slice(5)) || 0 : 0
+      const page = rows.slice(start, start + request.limit)
+      return {
+        refs: page.map((row) => row.ref), items: page.map((row) => ({ ref: row.ref, properties: project(row.properties) })),
+        nextCursor: start + page.length < rows.length ? `sort:${start + page.length}` : null, revisions: all.revisions,
+      }
+    }
+
+    // 关键词排序要读全部实例；同一次调用里续页复用这一份排序
     let ranked: { refs: ApplicationRef[]; revisions: Record<string, number> } | undefined
     const rankedPage = async (pageRequest: ApplicationEntityListRequest): Promise<ApplicationEntityListResult> => {
       ranked ??= await this.rankAll(listPage, text!)
@@ -350,46 +409,128 @@ export class ApplicationReflectionRegistry {
       return { refs: ranked.refs.slice(start, end), nextCursor: end < ranked.refs.length ? `rank:${end}` : null, revisions: ranked.revisions }
     }
     let result = text ? await rankedPage(request) : await listPage(request)
-    const whereEntries = Object.entries(projection?.where ?? {})
-      .map(([key, value]) => ({ ...this.resolveWhereKey(entityType, key, context), value }))
-    // 读回与筛选同一套写法：属性 ID 后接点分路径时只读回其中的字段，结果按调用方写的键返回
-    const projected = (projection?.propertyIds ?? [])
-      .map((key) => { const resolved = this.resolveWhereKey(entityType, key, context); return { ...resolved, key: resolved.path.length ? key : resolved.propertyId } })
-    if (whereEntries.length === 0 && projected.length === 0) return result
+    if (conditions.length === 0 && projected.length === 0) return result
 
-    const needed = [...new Set([...projected, ...whereEntries].map(({ propertyId }) => propertyId))]
     const items: ApplicationEntityListItem[] = []
     for (let scanned = 0; ;) {
       for (const ref of result.refs) {
         const snapshot = await this.readEntity(ref, needed, context)
-        const matches = whereEntries.every(({ propertyId, path, value }) => (
-          JSON.stringify(valueAtPath(snapshot.properties[propertyId], path) ?? null) === JSON.stringify(value ?? null)
-        ))
-        if (!matches) continue
-        items.push({
-          ref,
-          properties: Object.fromEntries(projected.map(({ key, propertyId, path }) => [key, valueAtPath(snapshot.properties[propertyId], path) ?? null])),
-        })
+        if (!conditions.every((condition) => condition.matches(snapshot.properties))) continue
+        items.push({ ref, properties: project(snapshot.properties) })
       }
       scanned += result.refs.length
-      if (whereEntries.length === 0 || !result.nextCursor || items.length >= request.limit || scanned >= WHERE_SCAN_LIMIT) break
+      if (conditions.length === 0 || !result.nextCursor || items.length >= request.limit || scanned >= WHERE_SCAN_LIMIT) break
       const next = { cursor: result.nextCursor, limit: request.limit - items.length }
       result = text ? await rankedPage(next) : await listPage(next)
     }
     return { ...result, refs: items.map((item) => item.ref), items }
   }
 
-  /** 按关键词排序：读完全部实例的名称或正文（label，没有时用 id），只保留命中的，按相关度从高到低。 */
-  private async rankAll(listPage: (request: ApplicationEntityListRequest) => Promise<ApplicationEntityListResult>, text: string): Promise<{ refs: ApplicationRef[]; revisions: Record<string, number> }> {
+  private async listAll(listPage: (request: ApplicationEntityListRequest) => Promise<ApplicationEntityListResult>): Promise<{ refs: ApplicationRef[]; revisions: Record<string, number> }> {
     const refs: ApplicationRef[] = []
     let revisions: Record<string, number> = {}
     for (let cursor: string | null = null; ;) {
-      const page: ApplicationEntityListResult = await listPage({ ...(cursor ? { cursor } : {}), limit: 200 })
-      refs.push(...page.refs); revisions = page.revisions
+      const page: ApplicationEntityListResult = await listPage({ ...(cursor ? { cursor } : {}), limit: PROVIDER_PAGE })
+      refs.push(...page.refs); revisions = { ...revisions, ...page.revisions }
       if (!page.nextCursor) break
       cursor = page.nextCursor
     }
+    return { refs, revisions }
+  }
+
+  /** 按关键词排序：读完全部实例的名称或正文（label，没有时用 id），只保留命中的，按相关度从高到低。 */
+  private async rankAll(listPage: (request: ApplicationEntityListRequest) => Promise<ApplicationEntityListResult>, text: string): Promise<{ refs: ApplicationRef[]; revisions: Record<string, number> }> {
+    const { refs, revisions } = await this.listAll(listPage)
     return { refs: rankByKeywords(refs.map((ref) => ref.label ?? ref.id), text).map((match) => refs[match.index]), revisions }
+  }
+
+  /** 取调用方可见的实体类型；写错时错误里带同域已登记的类型。 */
+  visibleEntity(entityType: string, context: ApplicationControlAccessContext): ApplicationEntityTypeDescriptor {
+    return this.requireVisibleEntity(entityType, context)
+  }
+
+  /** 说明是否只属于这个实体类型：多个类型共用的那句套话不值得再发给模型。 */
+  hasOwnDescription(entityType: string): boolean {
+    const description = this.entities.get(entityType)?.description
+    return description !== undefined && [...this.entities.values()].filter((entity) => entity.description === description).length === 1
+  }
+
+  /** 当前调用方可见、且把 parentType 登记为父类型的实体类型，按注册顺序。 */
+  childEntityTypes(parentType: string, context: ApplicationControlAccessContext): ApplicationEntityTypeDescriptor[] {
+    return [...this.entities.values()].filter((entity) => entity.parentTypes.includes(parentType)
+      && entity.exposures.includes(context.exposure) && canAccessDataClass(entity.dataClass, context)
+      && (context.exposure === 'ui' || entity.dataClass !== 'C3'))
+  }
+
+  /** entityType 是否就是 ancestorType，或沿父类型关系能走到它。 */
+  private descendsFrom(entityType: string, ancestorType: string, seen = new Set<string>()): boolean {
+    if (entityType === ancestorType) return true
+    if (seen.has(entityType)) return false
+    seen.add(entityType)
+    return (this.entities.get(entityType)?.parentTypes ?? []).some((parentType) => this.descendsFrom(parentType, ancestorType, seen))
+  }
+
+  /**
+   * 列出某个父实体的直接成员（整份，不分页）。
+   *
+   * provider 声明了 listsByParent 就交给它；否则只在该类型恰有一条指向父类型的引用属性时按它筛，
+   * 其余如实拒绝，不拿“全部实例”冒充某个父实体的成员。
+   */
+  async listChildren(entityType: string, parent: ApplicationRef, context: ApplicationControlAccessContext): Promise<{ refs: ApplicationRef[]; revisions: Record<string, number> }> {
+    const entity = this.requireVisibleEntity(entityType, context)
+    this.requireVisibleEntity(parent.kind, context)
+    if (!entity.parentTypes.includes(parent.kind)) {
+      throw new Error(`INVALID_PARENT:${entityType} 的父实体类型是 ${entity.parentTypes.join('、') || '（无，它是顶层实体）'}，收到 ${parent.kind}。`)
+    }
+    const provider = this.requireProvider(entityType)
+    const checked = (refs: ApplicationRef[]): ApplicationRef[] => {
+      for (const ref of refs) if (ref.kind !== entity.refKind) throw new Error(`INVALID_ENTITY_REF:${ref.kind}`)
+      return refs.map(normalizeApplicationRefLabel)
+    }
+    if (provider.listsByParent) {
+      const all = await this.listAll((pageRequest) => provider.listEntities({ ...pageRequest, parent }))
+      return { refs: checked(all.refs), revisions: all.revisions }
+    }
+    const links = this.listProperties(entityType).filter((property) => property.value.kind === 'ref'
+      && property.value.refKinds.includes(parent.kind) && this.canReadProperty(property, context))
+    if (links.length === 1) {
+      const all = await this.listAll((pageRequest) => provider.listEntities(pageRequest))
+      const refs: ApplicationRef[] = []
+      for (const ref of checked(all.refs)) {
+        const owner = (await this.readEntity(ref, [links[0].id], context)).properties[links[0].id]
+        if (owner && typeof owner === 'object' && !Array.isArray(owner) && owner.kind === parent.kind && owner.id === parent.id) refs.push(ref)
+      }
+      return { refs, revisions: all.revisions }
+    }
+    throw new Error(`PARENT_FILTER_UNSUPPORTED:${entityType} 暂不支持按父实体 ${parent.kind} 限定。请不带 parent 用 list_application_entities 列出，再用 where 按它指回父实体的属性筛选。`)
+  }
+
+  /**
+   * 列出某个实体之下的全部该类成员：parent 是直接父实体时即直接成员；是更上层（如所属文档）时沿父子关系逐层往下取，
+   * 同类嵌套（图层组里的图层组）一并走到底。
+   */
+  private async listDescendants(entityType: string, parent: ApplicationRef, context: ApplicationControlAccessContext): Promise<ApplicationEntityListResult> {
+    const entity = this.requireVisibleEntity(entityType, context)
+    this.requireVisibleEntity(parent.kind, context)
+    if (!entity.parentTypes.some((parentType) => this.descendsFrom(parentType, parent.kind))) {
+      throw new Error(`INVALID_PARENT:${entityType} 不在 ${parent.kind} 之下。它的父实体类型：${entity.parentTypes.join('、') || '（无，它是顶层实体）'}。`)
+    }
+    const refs: ApplicationRef[] = []
+    let revisions: Record<string, number> = {}
+    const visit = async (current: ApplicationRef, depth = 0): Promise<void> => {
+      if (depth > MAX_NESTING) throw new Error(`INVALID_PARENT:${parent.kind} 之下的嵌套超过 ${MAX_NESTING} 层，无法列全 ${entityType}。`)
+      if (entity.parentTypes.includes(current.kind)) {
+        const direct = await this.listChildren(entityType, current, context)
+        refs.push(...direct.refs); revisions = { ...revisions, ...direct.revisions }
+      }
+      // 经由中间层继续往下：只走能通到目标类型的子类型
+      for (const between of this.childEntityTypes(current.kind, context)) {
+        if (!entity.parentTypes.some((parentType) => this.descendsFrom(parentType, between.id))) continue
+        for (const ref of (await this.listChildren(between.id, current, context)).refs) await visit(ref, depth + 1)
+      }
+    }
+    await visit(parent)
+    return { refs, nextCursor: null, revisions }
   }
 
   async readEntity(
@@ -602,7 +743,7 @@ export class ApplicationReflectionRegistry {
     const listed = (near.length > 0 ? near : available).slice(0, 24)
     return `（${entityType} ${near.length > 0 ? '相近的属性' : '可用属性'}：${listed.join('、')}`
       + `${listed.length < (near.length > 0 ? near.length : available.length) ? ' …' : ''}`
-      + '；属性 id 必须写完整，含实体类型前缀）'
+      + '；属性键写完整 ID，或只写实体类型之后的那一段）'
   }
 
   private requireProvider(entityType: string): ApplicationEntityProvider {

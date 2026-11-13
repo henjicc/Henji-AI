@@ -14,7 +14,7 @@ description: 录屏并放进剪辑，在痕迹AI剪辑工作台做粗剪、整�
 
 ## 铁律：只约束真实契约
 
-1. 先从宿主上下文或 `list_documents` 确定文档，再用 `describe_application_entities`、`list_application_entities`、`read_application_entity` 读目标序列、轨道、片段与关联。引用来自返回值，不猜 ID，不靠同名定位，不随前台切换换目标。
+1. 先从宿主上下文或 `list_documents` 确定文档，再用 `read_application_snapshot`（root 为剪辑或序列）一次读回序列、轨道、片段、标记、素材项和它们的当前属性值，新建要的父实体与必填属性也在里面；只有要写结构复杂的值时才用 `describe_application_entities` 点名属性查完整说明，按条件找片段用 `list_application_entities`（parent、where、overlap、orderBy）。引用来自返回值，不猜 ID，不靠同名定位，不随前台切换换目标。
 2. 普通读改增删用 `change_application_entities` 的 `set_properties`、`create_items`、`remove_items`；算法操作用正式能力。属性、必填项、枚举和单位按发现结果，缺工具时内置 Pi 用 `load_application_tools` 按 names 只加载本步骤工具；外部 MCP 从 `describe_application_contract` 发现。
 3. 序列时间用整数帧，源入点用微秒，标为 Seconds 的字段用秒；有理帧率精确换算，范围通常半开。不要把改 duration 的修剪当成保持内容的变速。
 4. 同目的独立修改合并事务，依赖新返回引用才分调用；外部 MCP 写入带 operationId；baselineIds 可省略，显式提供时用于冲突检测。结果未知用 `get_application_operation` 查原操作，不能换标识重放。
