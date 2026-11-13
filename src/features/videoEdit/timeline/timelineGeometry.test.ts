@@ -197,5 +197,9 @@ it('视频区顶上有字幕行与缩放行、面板很矮时：贴分隔条的�
     for (const row of covered.rows.filter(value => value.region === 'video' && value.top < stickyBottom)) expect(timelineTrackAt(covered.rows, Math.max(row.top, stickyBottom - 1))?.track.id).not.toBe(row.track.id)
     const firstAudio = fresh.rows.find(row => row.region === 'audio')!
     expect(firstAudio.top + firstAudio.height).toBeLessThanOrEqual(fresh.regions.audio.top + fresh.regions.audio.height)
+    // V1 展开关键帧区：关键帧区排在片段行与分隔条之间，片段行仍完整落在固定行下面
+    const expanded = timelineLayout({ tracks }, { ...input({}, viewportHeight + 60), zoomRow: true, lanes: new Map([[base.id, 60]]) })
+    const v1 = expanded.rows.find(row => row.track.id === base.id)!
+    expect(v1.top).toBeGreaterThanOrEqual(expanded.zoom!.top + expanded.zoom!.height)
   }
 })

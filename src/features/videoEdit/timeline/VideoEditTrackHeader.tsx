@@ -41,7 +41,7 @@ interface Props {
   onExpandScene?: () => void
 }
 const CHANNEL_LABELS = { mono: '单声道', stereo: '立体声', mixed: '混合' } as const
-/** 轨道头窄于这个宽度时名称放不下几个字，干脆只留编号。 */
+/** 轨道头窄于这个宽度时名称放不下几个字，干脆只留编号。字幕轨没有展开三角，名称短，始终显示并按宽度截断，与缩放轨一致。 */
 const TRACK_NAME_MIN_HEADER = 160
 /** 轨道头按钮的无障碍短名（拼在轨道名后，如“视频 1锁定”）。 */
 const SHORT_LABELS: Record<VideoEditTrackHeaderButtonId, string> = { locked: '锁定', sync: '同步锁定', enabled: '输出', muted: '静音', solo: '独奏', target: '设为目标' }
@@ -91,7 +91,7 @@ export function VideoEditTrackHeader({ row, code, targeted, onTarget, onPatch, o
   return <div className={`sticky left-0 z-sticky flex h-full items-center gap-px border-r border-gap pl-1 pr-1.5 ${targeted ? 'bg-raised' : 'bg-panel'}`} style={{ width: header }} data-video-edit-track-header={track.id} onContextMenu={onContextMenu}>
     {onToggleExpanded && <UiIconButton size="2xs" tone="rest" aria-expanded={expanded} aria-label={expandLabel} tooltip={expanded ? expandMode === 'scene' ? '收起片子数据' : '收起关键帧' : onExpandScene ? '展开看关键帧或片子数据' : '展开看关键帧'} onClick={toggle}>{expanded ? <ChevronDown /> : <ChevronRight />}</UiIconButton>}
     {onExpandScene && <ContextMenu items={menu.menuItems} position={menu.menuPosition} visible={menu.menuVisible} onClose={menu.hideMenu} />}
-    {caption ? <div className="flex min-w-0 flex-1 items-center gap-1.5 px-1"><span className="w-5 shrink-0 text-left tabular-nums text-2xs font-semibold" data-video-edit-track-code>{code}</span>{header >= TRACK_NAME_MIN_HEADER && <span className="truncate text-xs text-text2">{name}</span>}</div> : renaming ? <TrackNameInput code={code} name={name} onDone={value => onRename?.(value)} />
+    {caption ? <div className="flex min-w-0 flex-1 items-center gap-1.5 px-1"><span className="w-5 shrink-0 text-left tabular-nums text-2xs font-semibold" data-video-edit-track-code>{code}</span><span className="truncate text-xs text-text2">{name}</span></div> : renaming ? <TrackNameInput code={code} name={name} onDone={value => onRename?.(value)} />
       : <UiButton size="sm" className="min-w-0 flex-1 !justify-start" aria-label={`目标轨道 ${name}`} aria-pressed={targeted} onClick={onTarget} onDoubleClick={onStartRename} tooltip={channelFormat ? `${name}：${channelFormat === 'mixed' ? '既有单声道也有立体声片段' : `${CHANNEL_LABELS[channelFormat]}片段`}` : name}>
         <span className="w-5 shrink-0 text-left tabular-nums text-2xs font-semibold" data-video-edit-track-code>{code}</span>
         {/* 声道类型在名称下方，名称保留整行宽度；窄面板里轨道头收窄时只留编号，名称在悬停提示里。 */}

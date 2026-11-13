@@ -10,8 +10,12 @@ export const TIMELINE_HEADER_WIDTH = 232
  * （按钮编辑器里选了几个就留几个的位置），名称收起。
  */
 export function timelineHeaderWidth(viewportWidth: number, buttons: number): number {
-  return Math.round(Math.max(68 + buttons * 24, Math.min(TIMELINE_HEADER_WIDTH, viewportWidth * 0.3)))
+  return Math.round(Math.max(68 + buttons * 24, TIMELINE_CORNER_MIN_WIDTH, Math.min(TIMELINE_HEADER_WIDTH, viewportWidth * 0.3)))
 }
+/** 角落格的五个开关（24 命中区、间距 2）加左右内边距；轨道头再窄，时间线开关就会被挤出角落格。 */
+const TIMELINE_CORNER_MIN_WIDTH = 140
+/** 轨道头窄于这个宽度时，角落格的时间码与开关放不进一行，改成时间码在上、开关在下两行。 */
+export const TIMELINE_CORNER_STACKED_BELOW = 200
 /** 时间线把这次绘制用的轨道头宽度写在视口上，指针换算与播放跟随读同一个值；还没绘制时是完整宽度。 */
 export const TIMELINE_HEADER_WIDTH_ATTRIBUTE = 'data-timeline-header-width'
 export function timelineHeaderWidthOf(host: HTMLElement): number { return Number(host.getAttribute(TIMELINE_HEADER_WIDTH_ATTRIBUTE)) || TIMELINE_HEADER_WIDTH }
@@ -76,9 +80,11 @@ export function timelineLayout(sequence: Pick<VideoEditSequence, 'tracks'>, inpu
   const tracks = { video: sequence.tracks.filter(track => track.kind === 'video').sort((a, b) => a.index - b.index), audio: sequence.tracks.filter(track => track.kind === 'audio').sort((a, b) => a.index - b.index) }
   // 固定行不属于视频轨的可见区（PR、达芬奇：固定区域不压在轨道上，轨道区自己滚动）。每个区至少放得下贴着分隔条的那条轨
   // （视频区再加上固定行），轨道才能完整露出；视频区里其余的轨靠滚动露出，滚动范围已按“区高减固定行”算（content 含固定行）。
+  // 展开的关键帧区排在 V1 片段行与分隔条之间、A1 片段行下方，也要算进去，否则 V1 片段行被顶到固定行下面。
   // 面板矮到连这两条都放不下时按比例分（时间线面板的最小高度保证正常不会到这一步）。
-  const videoMin = Math.max(TIMELINE_REGION_MIN, sticky + (tracks.video[0] ? height(tracks.video[0]) : VIDEO_EDIT_TRACK_HEIGHT_DEFAULT))
-  const audioMin = Math.max(TIMELINE_REGION_MIN, tracks.audio[0] ? height(tracks.audio[0]) : VIDEO_EDIT_TRACK_HEIGHT_DEFAULT)
+  const edge = (track: VideoEditSequence['tracks'][number] | undefined): number => track ? height(track) + lane(track) : VIDEO_EDIT_TRACK_HEIGHT_DEFAULT
+  const videoMin = Math.max(TIMELINE_REGION_MIN, sticky + edge(tracks.video[0]))
+  const audioMin = Math.max(TIMELINE_REGION_MIN, edge(tracks.audio[0]))
   const videoHeight = area >= videoMin + audioMin
     ? Math.round(Math.max(videoMin, Math.min(area - audioMin, area * input.split)))
     : Math.round(area * videoMin / (videoMin + audioMin))
