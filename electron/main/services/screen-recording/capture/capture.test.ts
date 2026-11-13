@@ -7,7 +7,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { captureOptionsSchema, captureRegionFromDip, type CaptureManifest } from '../../../../../src/core/screenRecording/capture'
-import { CaptureStorage, readCaptureManifest } from './storage'
+import { CaptureStorage, readCaptureManifest, recoverCapture } from './storage'
 import { buildGfxCaptureArgs, GfxCaptureBackend } from './gfxcapture'
 vi.mock('../../logging', () => ({ createMainLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 vi.mock('../../video/hwaccel', async importOriginal => ({ ...await importOriginal<typeof import('../../video/hwaccel')>(), invalidateEncoderCache: vi.fn(async () => undefined), getPreferredEncoder: vi.fn() }))
@@ -206,5 +206,12 @@ describe('screen capture ownership and durable spans', () => {
       expect(children[1].exitCode).not.toBeNull()
       expect(storage.manifest.spans.map(span => span.finalized)).toEqual([false, true])
     } finally { await backend.cancel(); await fs.rm(storage.directory, { recursive: true, force: true }) }
+  })
+  it('一帧都没录到的分片（封了口、时长为 0、文件不在）没有东西可补，不算恢复失败', async () => {
+    const storage = await fixture()
+    try {
+      storage.manifest.spans.push({ index: 0, file: 'screen-000000.mp4', monoUs: 0, durationUs: 0, finalized: true })
+      await expect(recoverCapture(storage.directory, storage.manifest)).resolves.toMatchObject({ files: [], rejected: [], repaired: 0 })
+    } finally { await fs.rm(storage.directory, { recursive: true, force: true }) }
   })
 })

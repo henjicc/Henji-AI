@@ -8,6 +8,7 @@ import { captureManifestSchema, type CaptureManifest, type CaptureSpan } from '.
 import { loadFfmpegPath, loadFfprobePath } from '../../video/ffmpeg-loader'
 import { createMainLogger } from '../../logging'
 import { writeBufferAtomically } from '../../fs/atomic-file'
+import { captureTimingFile } from './native-timing'
 
 const logger = createMainLogger('main.screen_recording.capture')
 const RESERVE_BYTES = 256 * 1024 * 1024
@@ -109,6 +110,8 @@ export async function recoverCapture(directory: string, manifest?: CaptureManife
   for (const span of manifest.spans) {
     const original = path.join(directory, span.file)
     if (span.finalized && span.durationUs > 0) { files.push({ index: span.index, path: original, monoUs: span.monoUs, durationUs: span.durationUs }); continue }
+    // 封了口、时长为 0、文件也不在：这一段一帧都没录到（开始后立刻停止），没有东西可补，不算恢复失败。
+    if (span.finalized && span.durationUs === 0 && !await fs.access(original).then(() => true, () => false)) continue
     try {
       span.durationUs = await probeMediaDurationUs(original); span.finalized = true
       files.push({ index: span.index, path: original, monoUs: span.monoUs, durationUs: span.durationUs }); repaired++
@@ -117,6 +120,8 @@ export async function recoverCapture(directory: string, manifest?: CaptureManife
       try {
         await assertCaptureDiskSpace(directory)
         await run(await loadFfmpegPath(), ['-hide_banner', '-v', 'error', '-y', '-i', original, '-map', '0:v:0', '-c', 'copy', '-movflags', '+faststart', output])
+        // 原件旁有逐帧时刻表（暂停不在文件里的连续文件）：副本里的帧与原件前面的帧一一对应，时刻表跟着放一份，暂停之后才不会错位。
+        await fs.copyFile(captureTimingFile(original), captureTimingFile(output)).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error })
         files.push({ index: span.index, path: output, monoUs: span.monoUs, durationUs: await probeMediaDurationUs(output) }); repaired++
       } catch (error) {
         rejected.push(span.index)
