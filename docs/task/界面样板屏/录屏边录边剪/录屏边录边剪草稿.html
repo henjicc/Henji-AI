@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>录屏边录边剪草稿</title>
+<style>
+@font-face { font-family: 'HarmonyOS Sans SC UI'; src: url('../../../../src/assets/fonts/HarmonyOS_Sans_SC.ttf') format('truetype'); font-weight: 100 900; font-display: block; }
+:root {
+  /* 数值取自 src/index.css 的石墨主题令牌 */
+  --gap:#181818; --window:#1B1B1B; --panel:#212121; --raised:#272727; --overlay:#292929;
+  --line-overlay:#393939; --control:#2B2B2B; --hover:#2A2A2A; --selected:#333333;
+  --line:#282828; --line-strong:#313131; --media:#191919;
+  --text1:#EEEEEE; --text2:#CACACA; --text3:#A5A5A5; --icon-rest:#737373;
+  --accent:#3A6FDF; --accent-text:#9CBEFF; --accent-ring:#6A9BFE;
+  --danger-solid:#D73E3F; --danger-text:#FB817A;
+  --clip-video:#2E3654; --clip-video-strip:#262D47; --clip-video-sel:#3B4570; --clip-wave:#8FA0D8;
+  --clip-rec:#4A2325; --clip-rec-strip:#3A1B1D;
+  --w-normal:400; --w-medium:460; --w-semibold:580;
+}
+* { box-sizing: border-box; }
+html, body { margin:0; background:#101010; color:var(--text1); font-family:'HarmonyOS Sans SC UI','Microsoft YaHei UI',sans-serif; font-size:13px; line-height:20px; font-weight:var(--w-normal); -webkit-font-smoothing:antialiased; }
+.num { font-variant-numeric: tabular-nums; }
+svg.i { width:var(--s,16px); height:var(--s,16px); flex:none; stroke:currentColor; fill:none; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round; display:block; }
+.page { padding:40px 40px 80px; }
+.page h1 { font-size:20px; line-height:28px; font-weight:560; margin:0 0 6px; }
+.page .lead { color:var(--text3); margin:0 0 36px; max-width:900px; }
+.block { margin-bottom:72px; }
+.block h2 { font-size:16px; line-height:24px; font-weight:var(--w-semibold); margin:0 0 4px; }
+.block .note { color:var(--text3); font-size:12px; line-height:18px; margin:0 0 16px; max-width:1100px; white-space:pre-line; }
+.pair { display:flex; gap:40px; align-items:flex-start; }
+.side { flex:none; }
+.side .tag { font-size:12px; color:var(--text3); margin-bottom:8px; }
+.side .tag b { color:var(--text1); font-weight:var(--w-medium); }
+.shot { width:1440px; height:900px; display:block; }
+body.single { background:var(--gap); }
+body.single .page { padding:0; }
+body.single .page > h1, body.single .lead, body.single .block { display:none; }
+body.single .block.show { display:block; margin:0; }
+body.single .block.show h2, body.single .block.show .note, body.single .tag { display:none; }
+body.single .pair { gap:24px; zoom:1 !important; }
+
+/* 软件界面通用零件（同工具样板屏） */
+.app { width:1440px; height:900px; position:relative; overflow:hidden; background:var(--window); display:flex; flex-direction:column; font-size:13px; color:var(--text1); white-space:nowrap; }
+.ib { width:28px; height:28px; flex:none; display:inline-flex; align-items:center; justify-content:center; border-radius:6px; color:var(--text2); }
+.ib.rest { color:var(--icon-rest); }
+.ib.dis { color:#4E4E4E; }
+.btn { height:28px; padding:0 10px; display:inline-flex; align-items:center; gap:6px; border-radius:6px; font-size:13px; font-weight:var(--w-medium); color:var(--text2); --s:14px; flex:none; }
+.btn.secondary { background:var(--control); color:var(--text1); }
+.btn.primary { background:var(--accent); color:#fff; height:30px; padding:0 14px; }
+.btn.stop { background:var(--danger-solid); color:#fff; height:30px; padding:0 14px; }
+.titlebar { height:40px; flex:none; background:var(--window); display:flex; align-items:center; padding:0 0 0 14px; position:relative; }
+.titlebar .brand { font-size:13px; font-weight:var(--w-semibold); margin-right:14px; }
+.titlebar .menu { display:flex; gap:2px; }
+.titlebar .menu span { font-size:12px; color:var(--text3); padding:0 7px; height:24px; display:flex; align-items:center; }
+.titlebar .nav { position:absolute; left:50%; transform:translateX(-50%); display:flex; gap:2px; }
+.titlebar .nav span { height:28px; padding:0 12px; display:flex; align-items:center; border-radius:6px; font-size:13px; color:var(--text2); font-weight:var(--w-medium); }
+.titlebar .nav span.cur { background:var(--selected); color:var(--text1); }
+.titlebar .right { margin-left:auto; display:flex; align-items:center; height:100%; }
+.titlebar .wc { width:44px; height:100%; display:flex; align-items:center; justify-content:center; color:var(--text3); --s:14px; }
+.cmd { height:44px; flex:none; display:flex; align-items:center; gap:2px; padding:0 8px; border-bottom:1px solid var(--line); background:var(--window); position:relative; }
+.cmd .nm { font-size:13px; font-weight:var(--w-medium); color:var(--text1); margin:0 2px 0 2px; }
+.cmd .st { font-size:12px; color:var(--text3); margin:0 8px 0 6px; }
+.cmd .grow { flex:1; }
+.cmd .sep { width:1px; height:18px; background:var(--line-strong); margin:0 6px; }
+.cmd .center { position:absolute; left:50%; transform:translateX(-50%); }
+.seg { display:flex; gap:2px; padding:2px; border-radius:8px; background:var(--gap); }
+.seg span { height:26px; padding:0 14px; display:flex; align-items:center; border-radius:6px; color:var(--text3); font-size:13px; font-weight:var(--w-medium); }
+.seg span.cur { background:var(--selected); color:var(--text1); }
+.seg.sm span { height:24px; padding:0 10px; font-size:12px; }
+.seg.full { display:grid; grid-auto-flow:column; grid-auto-columns:1fr; }
+.seg.full span { justify-content:center; }
+.rectime { display:flex; align-items:center; gap:8px; font-size:15px; color:var(--text1); margin-right:10px; }
+.rectime i { width:8px; height:8px; border-radius:50%; background:var(--danger-solid); }
+
+/* 工作面：上半画面加设置，下半一条录屏轨 */
+.dock { flex:1; min-height:0; display:flex; flex-direction:column; gap:2px; background:var(--gap); }
+.top { flex:1; min-height:0; display:flex; gap:2px; }
+.stage { flex:1; min-width:0; background:var(--media); position:relative; display:flex; align-items:center; justify-content:center; }
+.stage .pic { width:912px; height:513px; background:#0e0e0e center/cover no-repeat; }
+.stage .lab { position:absolute; left:12px; bottom:12px; height:24px; padding:0 8px; display:flex; align-items:center; gap:6px; border-radius:6px; background:rgba(0,0,0,.5); color:#e6e6e6; font-size:12px; --s:12px; }
+.stage .lab small { color:#b4b4b4; font-size:12px; }
+.stage .lab i { width:6px; height:6px; border-radius:50%; background:var(--danger-solid); }
+.panel { width:336px; flex:none; background:var(--panel); padding:4px 16px 16px; overflow:hidden; }
+.grp { padding:12px 0; border-bottom:1px solid var(--line); }
+.grp:last-child { border-bottom:0; }
+.grp .gh { font-size:12px; font-weight:var(--w-semibold); color:var(--text3); height:24px; display:flex; align-items:center; margin-bottom:4px; }
+.fr { min-height:32px; display:flex; align-items:center; gap:12px; font-size:12px; color:var(--text3); }
+.fr.topalign { align-items:flex-start; padding-top:2px; }
+.fr.topalign .lb { line-height:28px; }
+.fr .lb { width:76px; flex:none; }
+.fr .ct { flex:1; min-width:0; display:flex; align-items:center; }
+.fr .ro { color:var(--text2); font-size:12px; }
+.sw { width:30px; height:18px; border-radius:9px; background:var(--accent); position:relative; flex:none; }
+.sw::after { content:''; position:absolute; right:2px; top:2px; width:14px; height:14px; border-radius:50%; background:#fff; }
+.sw.off { background:#3d3d3d; } .sw.off::after { right:auto; left:2px; background:var(--text2); }
+.fld { height:28px; flex:1; min-width:0; border-radius:6px; background:var(--raised); display:flex; align-items:center; padding:0 8px; font-size:13px; color:var(--text1); gap:6px; --s:12px; }
+.fld span { overflow:hidden; text-overflow:ellipsis; }
+.fld svg { margin-left:auto; color:var(--icon-rest); }
+.fld.area { height:72px; align-items:flex-start; padding:5px 8px; white-space:normal; line-height:20px; color:var(--text1); }
+.fld.ph { color:var(--icon-rest); }
+.srcrow { display:flex; align-items:center; gap:10px; height:52px; border-radius:6px; background:var(--raised); padding:0 8px 0 6px; --s:12px; }
+.srcrow .th { width:71px; height:40px; border-radius:4px; background:#0e0e0e center/cover; flex:none; }
+.srcrow b { font-weight:var(--w-normal); color:var(--text1); font-size:13px; display:block; line-height:18px; }
+.srcrow small { color:var(--text3); font-size:12px; line-height:16px; display:block; }
+.srcrow svg { margin-left:auto; color:var(--icon-rest); }
+.dim { opacity:.45; }
+
+/* 时间轴：播放控制 44、标尺 28、一条录屏轨 92、底栏 32 */
+.tl { height:198px; flex:none; background:var(--panel); display:flex; flex-direction:column; position:relative; }
+.transport { height:44px; flex:none; display:flex; align-items:center; gap:2px; padding:0 8px 0 12px; border-bottom:1px solid var(--line); position:relative; }
+.tc { font-size:15px; line-height:22px; font-weight:var(--w-medium); color:var(--accent-text); font-variant-numeric:tabular-nums; }
+.tc small { color:var(--text3); font-size:12px; font-weight:var(--w-normal); margin-left:6px; }
+.transport .mid { position:absolute; left:50%; transform:translateX(-50%); display:flex; gap:2px; align-items:center; }
+.transport .grow { flex:1; }
+.transport .sep { width:1px; height:18px; background:var(--line-strong); margin:0 6px; }
+.ruler { height:28px; flex:none; position:relative; border-bottom:1px solid var(--line); overflow:hidden; }
+.ruler .tick { position:absolute; bottom:0; width:1px; height:4px; background:var(--line-strong); }
+.ruler .tick.maj { height:10px; background:#444; }
+.ruler .rl { position:absolute; bottom:1px; font-size:10px; line-height:14px; color:var(--text3); }
+.lane { height:92px; flex:none; position:relative; background:var(--gap); }
+.clip { position:absolute; top:3px; bottom:3px; border-radius:4px; overflow:hidden; background:var(--clip-video); }
+.clip .strip { position:absolute; left:0; right:0; top:0; height:18px; display:flex; align-items:center; padding:0 7px; gap:8px; font-size:11px; line-height:18px; font-weight:var(--w-medium); color:#E2E2E2; background:var(--clip-video-strip); }
+.clip .strip span { overflow:hidden; text-overflow:ellipsis; min-width:0; }
+.clip .strip em { font-style:normal; font-weight:var(--w-normal); color:#9aa3c4; margin-left:auto; flex:none; }
+.clip .film { position:absolute; left:0; right:0; top:18px; height:42px; background-repeat:repeat-x; background-size:75px 42px; opacity:.9; }
+.clip .wave { position:absolute; left:0; right:0; bottom:0; height:26px; color:var(--clip-wave); }
+.clip .wave svg { width:100%; height:100%; display:block; }
+.clip.sel { background:var(--clip-video-sel); }
+.clip.sel .strip { background:#333C61; }
+.clip.sel::after { content:""; position:absolute; inset:0; border-radius:4px; box-shadow:inset 0 0 0 1px var(--text1); z-index:3; }
+.clip.rec { background:var(--clip-rec); }
+.clip.rec .strip { background:var(--clip-rec-strip); color:#F3D5D3; }
+.clip.rec .strip em { color:#d99b97; }
+.clip.rec .wave { color:#C97F7B; }
+.clip.rec .edge { position:absolute; right:0; top:0; bottom:0; width:2px; background:var(--danger-solid); }
+.next { position:absolute; top:3px; bottom:3px; border-radius:4px; border:1px dashed #3d3d3d; display:flex; align-items:center; padding:0 12px; font-size:12px; color:var(--icon-rest); gap:6px; --s:14px; }
+.cover { position:absolute; top:3px; bottom:3px; z-index:4; pointer-events:none;
+  background:repeating-linear-gradient(135deg, rgba(238,238,238,.16) 0 1px, transparent 1px 7px);
+  -webkit-mask-image:linear-gradient(90deg,#000 0,#000 40%,transparent 100%); mask-image:linear-gradient(90deg,#000 0,#000 40%,transparent 100%); }
+.playhead { position:absolute; top:44px; height:121px; width:1px; background:var(--accent-ring); z-index:6; }
+.playhead::before { content:''; position:absolute; left:-5px; top:0; width:11px; height:13px; background:var(--accent-ring); clip-path:polygon(0 0,100% 0,100% 62%,50% 100%,0 62%); border-radius:2px; }
+.tip { position:absolute; z-index:8; height:24px; padding:0 8px; display:flex; align-items:center; border-radius:6px; background:var(--overlay); border:1px solid var(--line-overlay); font-size:12px; color:var(--text1); }
+.foot { height:32px; flex:none; border-top:1px solid var(--line); display:flex; align-items:center; padding:0 6px 0 12px; font-size:12px; color:var(--text3); margin-top:auto; }
+.foot .r { margin-left:auto; display:flex; gap:2px; align-items:center; }
+.slider { width:92px; height:4px; border-radius:2px; background:#3a3a3a; position:relative; flex:none; margin:0 6px; }
+.slider b { position:absolute; top:-5px; width:14px; height:14px; border-radius:50%; background:#cfcfcf; }
+</style>
+</head>
+<body>
+<div class="page" id="page">
+  <h1>录屏边录边剪 · 设计草稿</h1>
+  <p class="lead">项目级录屏：它就是剪辑项目里的一条序列，这里只是换一种更简单的样子——一条录屏轨，录一段落一段，块与块首尾相连。命令带中间的“录制 / 剪辑”在同一条序列的两种样子之间切换。</p>
+</div>
+
+<script>
+const ICONS = /*ICONS_START*/{"sparkles":"<path d=\"M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z\"/><path d=\"M20 2v4\"/><path d=\"M22 4h-4\"/><circle cx=\"4\" cy=\"20\" r=\"2\"/>","settings":"<path d=\"M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/>","minus":"<path d=\"M5 12h14\"/>","square":"<rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"/>","x":"<path d=\"M18 6 6 18\"/><path d=\"m6 6 12 12\"/>","chevron-down":"<path d=\"m6 9 6 6 6-6\"/>","pause":"<rect x=\"14\" y=\"3\" width=\"5\" height=\"18\" rx=\"1\"/><rect x=\"5\" y=\"3\" width=\"5\" height=\"18\" rx=\"1\"/>","circle-dot":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><circle cx=\"12\" cy=\"12\" r=\"1\"/>","arrow-left":"<path d=\"m12 19-7-7 7-7\"/><path d=\"M19 12H5\"/>","undo-2":"<path d=\"M9 14 4 9l5-5\"/><path d=\"M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11\"/>","redo-2":"<path d=\"m15 14 5-5-5-5\"/><path d=\"M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13\"/>","skip-back":"<path d=\"M17.971 4.285A2 2 0 0 1 21 6v12a2 2 0 0 1-3.029 1.715l-9.997-5.998a2 2 0 0 1-.003-3.432z\"/><path d=\"M3 20V4\"/>","play":"<path d=\"M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z\"/>","skip-forward":"<path d=\"M21 4v16\"/><path d=\"M6.029 4.285A2 2 0 0 0 3 6v12a2 2 0 0 0 3.029 1.715l9.997-5.998a2 2 0 0 0 .003-3.432z\"/>","scissors":"<circle cx=\"6\" cy=\"6\" r=\"3\"/><path d=\"M8.12 8.12 12 12\"/><path d=\"M20 4 8.12 15.88\"/><circle cx=\"6\" cy=\"18\" r=\"3\"/><path d=\"M14.8 14.8 20 20\"/>","trash-2":"<path d=\"M10 11v6\"/><path d=\"M14 11v6\"/><path d=\"M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6\"/><path d=\"M3 6h18\"/><path d=\"M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2\"/>","plus":"<path d=\"M5 12h14\"/><path d=\"M12 5v14\"/>","scan":"<path d=\"M3 7V5a2 2 0 0 1 2-2h2\"/><path d=\"M17 3h2a2 2 0 0 1 2 2v2\"/><path d=\"M21 17v2a2 2 0 0 1-2 2h-2\"/><path d=\"M7 21H5a2 2 0 0 1-2-2v-2\"/>","monitor":"<rect width=\"20\" height=\"14\" x=\"2\" y=\"3\" rx=\"2\"/><line x1=\"8\" x2=\"16\" y1=\"21\" y2=\"21\"/><line x1=\"12\" x2=\"12\" y1=\"17\" y2=\"21\"/>","section":"<path d=\"M16 5a4 3 0 0 0-8 0c0 4 8 3 8 7a4 3 0 0 1-8 0\"/><path d=\"M8 19a4 3 0 0 0 8 0c0-4-8-3-8-7a4 3 0 0 1 8 0\"/>"}/*ICONS_END*/;
+const I = (n, s) => `<svg class="i" viewBox="0 0 24 24" ${s?`style="--s:${s}px"`:''}>${ICONS[n]||''}</svg>`;
+const ib = (n, cls, s) => `<span class="ib ${cls||''}">${I(n, s)}</span>`;
+function titlebar(){ return `<div class="titlebar"><span class="brand">痕迹AI</span>
+  <div class="menu">${['文件','编辑','序列','标记','视图','窗口','帮助'].map(m=>`<span>${m}</span>`).join('')}</div>
+  <div class="nav">${['生成','画布','剪辑','工具','资产'].map(m=>`<span class="${m==='剪辑'?'cur':''}">${m}</span>`).join('')}</div>
+  <div class="right">${ib('sparkles')}${ib('settings')}<span style="width:8px"></span><span class="wc">${I('minus')}</span><span class="wc">${I('square',12)}</span><span class="wc">${I('x')}</span></div></div>`; }
+
+/* 波形：固定种子，每屏画出来一样 */
+function wave(seed, w){
+  let x = seed; const rnd = () => (x = (x * 1664525 + 1013904223) % 4294967296) / 4294967296;
+  const n = Math.max(8, Math.round(w / 3)); let d = `M0 26`; let v = .3;
+  for (let i = 0; i <= n; i++) { v = Math.max(.06, Math.min(1, v + (rnd() - .5) * .5)); const quiet = rnd() < .08 ? .15 : 1; d += ` L${(i / n * 100).toFixed(2)} ${(26 - v * quiet * 20).toFixed(1)}`; }
+  return `<svg viewBox="0 0 100 26" preserveAspectRatio="none"><path d="${d} L100 26 Z" fill="currentColor" stroke="none" opacity=".75"/></svg>`;
+}
+const PX = 2.2;                       // 每秒像素
+const X0 = 12;                        // 轨道左缘
+const IMG = { a:'../工具/现状/04-音频编辑.png', b:'../工具/现状/05-图片编辑.png', c:'../工具/现状/07-镜头参考.png', live:'../工具/现状/01-工具首页.png' };
+const fmt = (v) => { const s = Math.round(v); return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; };
+function clip(x, w, name, img, seed, cls){
+  return `<div class="clip ${cls||''}" style="left:${x}px;width:${w-1}px"><div class="strip"><span>${name}</span><em class="num">${fmt(w/PX)}</em></div><div class="film" style="background-image:url('${img}')"></div><div class="wave">${wave(seed, w)}</div></div>`;
+}
+function ruler(){
+  let h = ''; for (let s = 0; s <= 640; s += 15) { const x = X0 + s * PX; const maj = s % 60 === 0; h += `<i class="tick ${maj?'maj':''}" style="left:${x}px"></i>`; if (maj) h += `<span class="rl num" style="left:${x+4}px">${fmt(s)}</span>`; }
+  return `<div class="ruler">${h}</div>`;
+}
+function settings(o){
+  const fr = (lb, ct, cls) => `<div class="fr ${cls||''}"><span class="lb">${lb}</span><span class="ct">${ct}</span></div>`;
+  const rec = `<div class="grp ${o.recording?'dim':''}"><div class="gh">录制</div>
+      <div class="srcrow"><span class="th" style="background-image:url('${IMG.live}')"></span><span><b>屏幕 2</b><small class="num">3840×2160</small></span>${I('chevron-down')}</div>
+      <div style="height:6px"></div>
+      ${fr('麦克风','<span class="sw"></span>')}${fr('麦克风设备','<span class="fld"><span>默认麦克风</span>'+I('chevron-down')+'</span>')}${fr('系统声音','<span class="sw"></span>')}
+      ${fr('清晰度','<div class="seg sm full" style="flex:1"><span>1080P</span><span>2K</span><span class="cur">4K</span></div>')}${fr('帧率','<div class="seg sm full" style="flex:1"><span>30</span><span class="cur">60</span></div>')}</div>`;
+  const c = o.clip;
+  const seg = c ? `<div class="grp"><div class="gh">这一段</div>
+      ${fr('名称', `<span class="fld"><span>${c.name}</span></span>`)}
+      ${fr('描述', c.desc ? `<span class="fld area">${c.desc}</span>` : `<span class="fld area ph">写给后期的备注</span>`, 'topalign')}
+      ${fr('时长', `<span class="ro num">${c.len}</span>`)}</div>` : '';
+  return `<div class="panel">${rec}${seg}</div>`;
+}
+function screen(o){
+  const clips = o.clips.map(c => c.rec
+    ? `<div class="clip rec" style="left:${c.x}px;width:${c.w}px"><div class="strip"><span>正在录制</span><em class="num">${fmt(c.w/PX)}</em></div><div class="wave" style="height:40px">${wave(c.seed, c.w)}</div><i class="edge"></i></div>`
+    : clip(c.x, c.w, c.name, c.img, c.seed, c.sel ? 'sel' : '')).join('');
+  const cmdRight = o.recording
+    ? `<span class="rectime num"><i></i>${o.recTime}</span><span class="btn secondary">${I('pause')}暂停</span><span style="width:6px"></span><span class="btn stop">${I('square',12)}停止</span>`
+    : `<span class="btn primary">${I('circle-dot')}开始录制</span>`;
+  return `<div class="app shot">${titlebar()}
+    <div class="cmd">${ib('arrow-left')}<span class="nm">元宝搜索实战</span>${ib('chevron-down','rest',14)}<span class="st">录屏素材</span>${ib('undo-2')}${ib('redo-2', o.redo ? '' : 'dis')}
+      <div class="center"><div class="seg"><span class="cur">录制</span><span>剪辑</span></div></div>
+      <span class="grow"></span>${cmdRight}</div>
+    <div class="dock">
+      <div class="top">
+        <div class="stage"><div class="pic" style="background-image:url('${o.pic}')"></div><span class="lab">${o.lab}</span></div>
+        ${settings(o)}
+      </div>
+      <div class="tl">
+        <div class="transport"><span class="tc">${o.tc}<small>/ ${o.total}</small></span>
+          <div class="mid">${ib('skip-back', o.recording?'dis':'')}${ib('play', o.recording?'dis':'')}${ib('skip-forward', o.recording?'dis':'')}</div>
+          <span class="grow"></span>${ib('scissors', o.recording?'dis':'')}${ib('trash-2', o.recording||!o.clip?'dis':'')}</div>
+        ${ruler()}
+        <div class="lane">${clips}${o.extra||''}</div>
+        <div class="foot"><span class="num">${o.count}</span><span class="r">${ib('minus','rest')}<span class="slider"><b style="left:38px"></b></span>${ib('plus','rest')}${ib('scan','rest')}</span></div>
+        <div class="playhead" style="left:${o.ph}px"></div>${o.tip||''}
+      </div>
+    </div></div>`;
+}
+const W1 = Math.round(130*PX), W2 = Math.round(212*PX), W3 = Math.round(180*PX);
+const base = [
+  { x:X0, w:W1, name:'导入素材与对稿', img:IMG.a, seed:11 },
+  { x:X0+W1, w:W2, name:'调整字幕样式', img:IMG.b, seed:23 },
+  { x:X0+W1+W2, w:W3, name:'搭一个镜头参考', img:IMG.c, seed:37 },
+];
+const END = X0 + W1 + W2 + W3;
+const MID = X0 + W1 + Math.round(88*PX);   // 第二段 01:28 处
+
+const SCREENS = [
+  { id:1, title:'① 准备录下一段（指针在结尾）',
+    note:'指针停在结尾：上方显示将要录的屏幕的实时画面，结尾处一个虚线空位表示“新的一段接在这里”。右上角“开始录制”是这一屏唯一的蓝色。\n一条录屏轨：一个块同时带画面缩略与声音波形，不拆成视频轨和音频轨；块与块紧挨着，没有空隙。右侧只有录制设置；没选中任何一段时不显示“这一段”。',
+    html: () => screen({ pic:IMG.live, lab:`${I('monitor')}屏幕 2<small>实时画面</small>`, tc:'00:08:42', total:'00:08:42', count:'3 段 · 总长 00:08:42', ph:END, redo:false,
+      clips: base, extra:`<div class="next" style="left:${END+2}px;width:150px">${I('plus')}接在这里</div>` }) },
+  { id:2, title:'② 录制中',
+    note:'录制中的块从结尾长出来，暗红色，右缘一条红线跟着走；命令带右端换成计时、暂停、停止，停止是唯一的实底。暂停再继续仍是同一块。\n录制期间播放与剪切不可用（禁用灰），录制设置整组压暗。',
+    html: () => screen({ pic:IMG.live, lab:`<i></i>屏幕 2<small>录制中</small>`, tc:'00:09:51', total:'00:09:51', count:'4 段 · 总长 00:09:51', ph:END+Math.round(69*PX), recording:true, recTime:'00:01:09',
+      clips: [...base, { rec:true, x:END, w:Math.round(69*PX), seed:51 }] }) },
+  { id:3, title:'③ 回看并整理（指针停在某段中间）',
+    note:'指针拖回第二段中间：上方显示这一处录下的画面；选中的段一圈细线，右侧出现“这一段”，在这里写名称和描述（也可以在块上双击改名）。\n剪刀在指针处切开，删除后后面的段自动接上来；拖块的两端可以掐头去尾。都不改原文件，可以撤销。\n指针后面那片斜纹只在鼠标移到“开始录制”上时出现，表示这时录制会从这里盖过去；按钮的悬停提示写“从指针处开始，盖住后面的内容”。',
+    html: () => screen({ pic:IMG.b, lab:`调整字幕样式<small class="num">00:01:28</small>`, tc:'00:03:38', total:'00:08:42', count:'3 段 · 总长 00:08:42 · 已选 1', ph:MID, redo:true,
+      clip:{ name:'调整字幕样式', desc:'后半段说错了一次字号，从 01:28 起重录', len:'00:03:32' },
+      clips: base.map((c,i)=> i===1 ? {...c, sel:true} : c),
+      extra:`<div class="cover" style="left:${MID}px;width:260px"></div>`,
+      tip:`<div class="tip" style="right:8px;top:-610px">从指针处开始，盖住后面的内容</div>` }) },
+  { id:4, title:'④ 从中间重录（覆盖）',
+    note:'新录的块从指针处盖在原来的内容上，盖到哪算哪；没盖到的后半截和后面的段原地不动。被盖住的部分只是不再使用，原始文件还在，撤销或在剪辑里把那一段的边缘拖回来就能找回。\n这一屏不为“找回”单独放入口。',
+    html: () => { const w = Math.round(74*PX); const second = base[1]; const cut = MID - second.x;
+      return screen({ pic:IMG.live, lab:`<i></i>屏幕 2<small>录制中</small>`, tc:'00:04:52', total:'00:08:42', count:'4 段 · 总长 00:08:42', ph:MID+w, recording:true, recTime:'00:01:14',
+        clips: [ base[0], { ...second, w:cut }, { rec:true, x:MID, w, seed:63 }, { x:MID+w, w:second.w-cut-w, name:'调整字幕样式', img:IMG.b, seed:29 }, base[2] ] }); } },
+];
+const page = document.getElementById('page');
+SCREENS.forEach(s => {
+  const el = document.createElement('section'); el.className = 'block'; el.dataset.id = s.id;
+  el.innerHTML = `<h2>${s.title}</h2><p class="note">${s.note}</p><div class="pair"><div class="side"><div class="tag"><b>草稿</b></div>${s.html()}</div></div>`;
+  page.appendChild(el);
+});
+const q = new URLSearchParams(location.search);
+if (q.get('s')) { document.body.classList.add('single', 'draft'); document.querySelector(`.block[data-id="${q.get('s')}"]`).classList.add('show'); }
+else { const fit = () => document.querySelectorAll('.pair').forEach(p => { p.style.zoom = Math.min(1, (innerWidth - 80) / p.scrollWidth); }); fit(); addEventListener('resize', fit); }
+</script>
+</body>
+</html>
