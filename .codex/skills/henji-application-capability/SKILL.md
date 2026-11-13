@@ -56,7 +56,7 @@ Pi 与 MCP 只负责工具和结果投影，不拥有业务状态。MCP 固定�
 
 Camera Stage 只公开 `camera_stage.state_keyframe`。动画操作必须走已经过结果测试的路径：在**同一次** `change_application_entities` 的 `changes` 中按顺序交替写 `camera_stage.playback.current_time` 与对象、角色或摄像机的 `animatable.*` / `pose_preset`，最后可在同一事务写 `loop/playing`；应用会自动创建或更新完整场景状态，任一步失败则整体回滚。除非后一步需要前一步新创建且尚未返回的引用，否则禁止按时间点拆成多轮调用。派生属性轨道只供播放与导出，不能注册为公开实体或持久化真相源。
 
-多项实体写入使用同一通用事务，算法操作经正式领域能力执行。输入约束由反射和能力 schema 投影；跨领域使用完整稳定引用，不创建额外脚本编排入口。
+多项实体写入使用同一通用事务，算法操作经正式领域能力执行。输入约束由反射和能力 schema 投影；跨领域使用完整稳定引用。助手要串起多次调用时用内置的 `run_application_script`（模型写标准 JS，`app.call` 逐次走统一派发入口）；能力一经登记脚本自动可用，不为脚本另写业务分支或“脚本专用”能力。
 
 声明了可写属性就必须注册 `ApplicationMutationExecutor`，声明了 `collectionWrite` 就必须注册 `ApplicationCollectionExecutor`。每个实体必须至少拥有一种写入执行器，或填写 `writeExclusion.reason`，明确说明为何只读以及状态由哪个正式模块或操作维护；不得用“暂时不支持”代替判断。三者由覆盖测试强制一致。
 
@@ -113,7 +113,7 @@ sceneField('sky_color', '天空颜色', COLOR, {
 - 只有无法用 CRUD 表达的算法操作，才在 `src/core/application-control/domains/` 的领域能力模块中声明 `ApplicationCapabilityDefinition` 并注册到统一目录，由公共应用入口调用。
 - 使用稳定、小写的能力 ID；版本从 1 开始，破坏性契约变化才升级版本。
 - 完整声明输入/输出 schema、AI 输入 schema、领域、别名、读写属性、安全语义、超时、幂等、撤销、预览、作用域、可用条件、前置能力、并发键、引用类型、成功证据和失败恢复。
-- AI 输入 schema 顶层必须 `additionalProperties: false`，禁止开放 `patch`、`storePatch`、`executeScript`、`script` 等通用 Store Patch 或宿主代码入口。正式代码效果的 ES 模块是创作内容，在剪辑渲染 Worker 直接执行；其源码版本、参数与放置使用正式领域声明，不另开通用执行工具，也不降为受限 DSL。
+- AI 输入 schema 顶层必须 `additionalProperties: false`，业务能力禁止开放 `patch`、`storePatch`、`executeScript`、`script` 等通用 Store Patch 或宿主代码入口；编排脚本只有 `run_application_script` 一个入口，跑在拿不到密钥的隔离环境里。正式代码效果的 ES 模块是创作内容，在剪辑渲染 Worker 直接执行；其源码版本、参数与放置使用正式领域声明，不另开通用执行工具，也不降为受限 DSL。
 - 用户化描述只说明用途和影响，不写协议名、schema、revision 或开发解释。
 - 输入和输出优先传 `ApplicationRef`；本地路径不受限制（2026-10-21 用户确认）：用户给出的文件或文件夹路径可以直接作为能力输入，实体也可以返回本机绝对路径，方便外部助手直接读写；导入类能力接受任意本机绝对文件／目录路径，导入后返回稳定引用；原始密钥与不受控的大对象仍禁止。
 - 写能力必须绑定相关 scope revision；未知副作用的写操作禁止自动重放。
@@ -215,7 +215,7 @@ sceneField('sky_color', '天空颜色', COLOR, {
 - 正式业务服务是唯一业务执行源。
 - 普通界面不显示开发性解释。
 - 新代码没有旧 command/query 兼容路径。
-- 新代码没有任意 Store Patch、任意脚本执行或 Application API 核心跨层导入。
+- 新代码没有任意 Store Patch、没有在主进程或渲染层直接执行模型代码，也没有 Application API 核心跨层导入。
 - revision、日志、引用和成功证据均有自动化验证；声明了付费、外来代码或删除语义的能力，对应的付费策略、信任确认与回收区有自动化验证。
 
 - 用户编辑 A 时可后台读改、生成并保存 B；打开 B 复用同一实例和历史，关闭页面不结束已提交工作。

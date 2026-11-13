@@ -1,0 +1,108 @@
+{
+ "label": "代码模式-试跑",
+ "date": "2026-11-13T22:38:51.573Z",
+ "commit": "d8cf72da1",
+ "limits": {
+  "maxInputTokens": 1500000,
+  "maxToolCalls": 45
+ },
+ "totalCostCny": 0.15,
+ "surface": {
+  "capabilityTools": 260,
+  "hiddenDefinitions": 3,
+  "inputSchemaChars": 361498,
+  "descriptionChars": 57167,
+  "byDomain": {
+   "memory": 2,
+   "screen_recording": 28,
+   "creative_intent": 3,
+   "video_edit": 87,
+   "application": 8,
+   "navigation": 4,
+   "settings": 2,
+   "local_models": 1,
+   "sound_library": 2,
+   "generation": 11,
+   "image_edit": 20,
+   "models": 2,
+   "assets": 9,
+   "canvas": 21,
+   "camera_stage": 20,
+   "toolbox": 3,
+   "audio_edit": 26,
+   "documents": 11
+  }
+ },
+ "summary": [
+  {
+   "task": "V3",
+   "area": "剪辑",
+   "title": "批量摆片段、批量改属性、加标记",
+   "passed": "1/1",
+   "toolCalls": 23,
+   "toolLoads": 3,
+   "failedToolCalls": 2,
+   "modelRequests": 19,
+   "inputTokens": 556511,
+   "outputTokens": 6776,
+   "seconds": 45,
+   "costCny": 0.146
+  }
+ ],
+ "rows": [
+  {
+   "task": "V3",
+   "run": 1,
+   "document": "V3-代码模式-试跑-1-mwfk5b26",
+   "runId": "f771b357-c6cf-4893-9322-6f17a1b2229b",
+   "status": "completed",
+   "durationMs": 44766,
+   "pass": true,
+   "result": {
+    "clips": 6,
+    "halfOpacityClips": 3,
+    "markers": 3,
+    "lastClipEndSeconds": 6
+   },
+   "modelRequests": 19,
+   "toolCalls": 23,
+   "toolLoads": 3,
+   "failedToolCalls": 2,
+   "inputTokens": 556511,
+   "freshInputTokens": 35679,
+   "outputTokens": 6776,
+   "costCny": 0.1464,
+   "largestRequestTokens": 39887,
+   "paidCalls": 0,
+   "distinctTools": 10,
+   "tools": [
+    "load_application_tools",
+    "list_projects",
+    "load_application_tools",
+    "create_document",
+    "load_application_tools",
+    "import_video_edit_folder",
+    "read_application_snapshot",
+    "describe_application_entities",
+    "describe_application_entities",
+    "change_application_entities",
+    "read_application_snapshot",
+    "run_application_script",
+    "list_documents",
+    "read_application_snapshot",
+    "read_application_snapshot",
+    "read_application_snapshot",
+    "run_application_script",
+    "read_application_snapshot",
+    "read_application_snapshot",
+    "change_application_entities",
+    "change_application_entities",
+    "change_application_entities",
+    "change_application_entities",
+    "run_application_script",
+    "read_application_snapshot",
+    "save_video_edit"
+   ]
+  }
+ ]
+}

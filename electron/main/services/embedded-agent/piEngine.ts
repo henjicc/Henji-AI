@@ -8,6 +8,7 @@ import type { EngineCommand, EngineConfiguration, EngineEvent, EmbeddedAgentEngi
 import { executePiTool } from './toolResult'
 import { PiAttachments } from './piAttachments'
 import { PiToolDisclosure } from './toolDisclosure'
+import { applicationScriptTool } from './applicationScript'
 import { budgetContext, contextPageTokenLimit, estimateContextTokens, projectText, PROJECTED_EXCERPT_TOKENS, singleResultTokenLimit } from './contextBudget'
 import { archiveToolResult, contextReader, selectionSummary } from './contextReader'
 import { embeddedModelCompat, embeddedModelLimits, embeddedModelPricing, embeddedThinkingLevel, embeddedThinkingLevelMap } from './modelOptions'
@@ -104,26 +105,31 @@ export class PiEngine implements EmbeddedAgentEngine {
     const loader = new this.sdk.DefaultResourceLoader({ cwd: this.directory, agentDir: this.directory, settingsManager: settings,
       noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true, noContextFiles: true, systemPrompt: instructions })
     await loader.reload()
+    /** 成功与失败的文字都受单条结果上限约束，超出部分存档后可续读。 */
+    const bounded = async (run: () => Promise<Awaited<ReturnType<ToolDefinition['execute']>>>, signal?: AbortSignal) => {
+      try { return archiveToolResult(this.manager, await run(), resultLimit) } catch (error) {
+        if (!(error instanceof Error) || signal?.aborted) throw error
+        const resultId = randomUUID()
+        const reference = `tool:${resultId}:0`
+        const text = estimateContextTokens(error.message) <= resultLimit ? error.message : projectText(error.message, reference, PROJECTED_EXCERPT_TOKENS)
+        if (text === error.message) throw error
+        this.manager.appendCustomEntry('henji-tool-result', { resultId, fullText: { '0': error.message } })
+        throw new Error(text)
+      }
+    }
     const customTools: ToolDefinition[] = tools.map((tool) => ({
       name: tool.name, label: tool.title ?? '操作应用', description: tool.description ?? tool.name,
       parameters: tool.inputSchema as ToolDefinition['parameters'], executionMode: 'sequential',
-      execute: async (id, args: Record<string, unknown>, signal) => {
-        try {
-          const result = await executePiTool({ id, name: tool.name, args, signal, vision: model.capabilities.image }, this.callTool)
-          if (tool.name === 'interpret_intent' && args.draftRef && typeof args.draftRef === 'object') this.completedIntents.add(JSON.stringify(args.draftRef))
-          return archiveToolResult(this.manager, result, resultLimit)
-        } catch (error) {
-          if (!(error instanceof Error) || signal?.aborted) throw error
-          const resultId = randomUUID()
-          const reference = `tool:${resultId}:0`
-          const text = estimateContextTokens(error.message) <= resultLimit ? error.message : projectText(error.message, reference, PROJECTED_EXCERPT_TOKENS)
-          if (text === error.message) throw error
-          this.manager.appendCustomEntry('henji-tool-result', { resultId, fullText: { '0': error.message } })
-          throw new Error(text)
-        }
-      },
+      execute: (id, args: Record<string, unknown>, signal) => bounded(async () => {
+        const result = await executePiTool({ id, name: tool.name, args, signal, vision: model.capabilities.image }, this.callTool)
+        if (tool.name === 'interpret_intent' && args.draftRef && typeof args.draftRef === 'object') this.completedIntents.add(JSON.stringify(args.draftRef))
+        return result
+      }, signal),
     }))
-    this.disclosure = new PiToolDisclosure([...customTools, contextReader(this.manager, contextPageTokenLimit(limits.contextWindow))], () => this.session!)
+    // 脚本里的调用与模型直接调用共用 callTool 这一个出口。
+    const script = applicationScriptTool({ tools, call: this.callTool })
+    const scriptTool: ToolDefinition = { ...script, execute: (...args) => bounded(() => script.execute(...args), args[2]) }
+    this.disclosure = new PiToolDisclosure([...customTools, contextReader(this.manager, contextPageTokenLimit(limits.contextWindow)), scriptTool], () => this.session!)
     this.toolTitles = new Map(this.disclosure.tools.map(tool => [tool.name, tool.label]))
     const { session } = await this.sdk.createAgentSession({ cwd: this.directory, agentDir: this.directory,
       modelRuntime: runtime, model: resolved, thinkingLevel: embeddedThinkingLevel(selected),

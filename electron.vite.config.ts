@@ -60,7 +60,7 @@ export default defineConfig({
       outDir: 'out/main',
       rollupOptions: {
         // ws 必须外置：打包会把它的可选依赖 bufferutil 换成空对象，ws 随后调用不存在的 unmask，收不到任何客户端消息。
-        external: ['better-sqlite3', 'ffmpeg-ffprobe-static', '@earendil-works/pi-coding-agent', 'onnxruntime-node', '@techstark/opencv-js', 'uiohook-napi', 'koffi', 'ws'],
+        external: ['better-sqlite3', 'ffmpeg-ffprobe-static', '@earendil-works/pi-coding-agent', '@earendil-works/pi-codemode', 'onnxruntime-node', '@techstark/opencv-js', 'uiohook-napi', 'koffi', 'ws'],
         input: {
           index: resolve(__dirname, 'electron/main/index.ts'),
           'pi-agent-utility': resolve(__dirname, 'electron/main/pi-agent-utility.ts'),
