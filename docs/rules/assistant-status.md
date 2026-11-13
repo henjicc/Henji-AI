@@ -645,7 +645,7 @@ schema 校验所以看不见，MCP 侧测试又都跑在未授权付费的连接
 | 动作 | 助手怎么做 | 说明 |
 |---|---|---|
 | 列出 | `list_documents`（类型、全部 / 不在项目里 / 某个项目、草稿）、`list_projects` | 返回的文档 id 就是各工具内容能力的 `documentId` / `documentRef` |
-| 新建 | `create_document`、`create_project` | 剪辑只能建在项目里；图片文档如实拒绝（要从图片新建，经界面） |
+| 新建 | `create_document`、`create_project` | 剪辑只能建在项目里；图片文档 2026-11-14 起可后台新建（可带本机图片路径或素材 / 生成结果作底图，不进素材库、不开界面），回执带内容实体引用；网页录制拒绝并点名录制入口 |
 | 打开 | `open_document`（`fromDocumentId` 时以“返回剪辑”嵌入模式打开） | 五类文档都登记了打开方式与后台释放方式 |
 | 移动 / 副本 | `move_document`（`projectId: null` 移出项目，`onConflict`）、`duplicate_document`（可给 `projectId`） | 原项目里用到的素材一并复制 |
 | 改名 | `change_application_entities` 写 `documents.document.name` / `documents.project.name` | 各工具内容根的 `name` 只读并点名这里 |

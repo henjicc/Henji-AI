@@ -56,7 +56,46 @@ export function appendProviderWebTools(
   if (format !== undefined && format !== 'text') return body
   const existing = Array.isArray(body.tools) ? body.tools : []
   if (existing.some(tool => tool && typeof tool === 'object' && SERVER_WEB_TOOL_TYPES.has(String((tool as Record<string, unknown>).type)))) return body
-  return { ...body, tools: [...existing, ...tools] }
+  const withTools = { ...body, tools: [...existing, ...tools] }
+  return protocol === 'openai-responses' && Array.isArray(body.input)
+    ? { ...withTools, input: moveToolOutputImagesToUserMessages(body.input) }
+    : withTools
+}
+
+const TOOL_OUTPUT_ITEM_TYPES = new Set(['function_call_output', 'custom_tool_call_output'])
+
+/**
+ * DeepSeek Responses 在声明了服务端联网工具时，工具结果只收文字（带图返回 400：only text is supported in
+ * `function_call_output` with `deepseek_web_search`…）。图片挪到紧随这一组工具结果之后的一条 user 消息里，
+ * 与工具消息只能是文字的 Chat 协议下的通行写法一致：模型仍然看得到图，联网工具也不用摘掉。
+ * 只能用 user：同样条件下 system 与 developer 消息带图也返回 400。代价是 deepseek_read_url 只读最后一条
+ * 用户消息里的链接，这条消息之后的轮次读不到用户原话里的链接。
+ */
+function moveToolOutputImagesToUserMessages(input: readonly unknown[]): unknown[] {
+  const result: unknown[] = []
+  let pendingImages: unknown[] = []
+  const flush = (): void => {
+    if (!pendingImages.length) return
+    result.push({ role: 'user', content: [{ type: 'input_text', text: '以上工具结果附带的图片：' }, ...pendingImages] })
+    pendingImages = []
+  }
+  for (const item of input) {
+    const output = item && typeof item === 'object' ? item as Record<string, unknown> : null
+    if (!output || !TOOL_OUTPUT_ITEM_TYPES.has(String(output.type))) {
+      flush()
+      result.push(item)
+      continue
+    }
+    if (!Array.isArray(output.output)) { result.push(item); continue }
+    const parts = output.output as Record<string, unknown>[]
+    const images = parts.filter(part => part?.type === 'input_image')
+    if (!images.length) { result.push(item); continue }
+    const text = parts.filter(part => part?.type === 'input_text' && typeof part.text === 'string').map(part => part.text as string).join('\n')
+    result.push({ ...output, output: text ? `${text}\n（图片见随后的用户消息）` : '（图片见随后的用户消息）' })
+    pendingImages.push(...images)
+  }
+  flush()
+  return result
 }
 
 export function applyProviderRequestBodyQuirks(

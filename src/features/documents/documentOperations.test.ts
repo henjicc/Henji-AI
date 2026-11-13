@@ -210,6 +210,21 @@ describe('名称与重名', () => {
     expect(kept.meta.name).toBe('镜头 (2)')
   })
 
+  it('内容由工具读写的类型：后台新建交给登记的方式并把来源带到；重名在调用它之前拒绝', async () => {
+    const kit = setup()
+    kit.commands.seed({ name: '已有', content: { items: [] } })
+    const created = kit.commands.seed({ name: '草稿', content: { items: [] } })
+    const creator = vi.fn(async () => ({ meta: created, contentRefs: [{ kind: 'image_edit.layer', id: 'v3:a:b' }] }))
+    kit.operations.registerNamedContentCreator('canvas', creator)
+    await expect(kit.operations.createNamedDocument({ kind: 'canvas', container: { kind: 'user' }, name: '已有' })).rejects.toMatchObject({ name: 'DocumentNameConflictError' })
+    expect(creator).not.toHaveBeenCalled()
+    const result = await kit.operations.createNamedDocument({ kind: 'canvas', container: { kind: 'user' }, name: '海报', source: { path: 'D:/a.png' } })
+    expect(creator).toHaveBeenCalledWith({ container: { kind: 'user' }, name: '海报', source: { path: 'D:/a.png' } })
+    expect(result.contentRefs).toEqual([{ kind: 'image_edit.layer', id: 'v3:a:b' }])
+    // 没有登记的类型照旧建空文档
+    expect((await kit.operations.createNamedDocument({ kind: 'audio_edit', container: { kind: 'user' }, name: '口播' })).contentRefs).toEqual([])
+  })
+
   it('实时检查：改名排除自己，新建项目查“项目”文件夹', async () => {
     const kit = setup()
     const meta = kit.commands.seed({ name: '海报', content: { items: [] } })

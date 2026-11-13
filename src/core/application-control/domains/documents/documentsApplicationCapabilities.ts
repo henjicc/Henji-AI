@@ -96,19 +96,24 @@ const listProjects = defineApplicationCapability({
 
 const createDocument = defineApplicationCapability({
   id: 'create_document', version: 1, title: '新建文档',
-  description: '用给定名称新建一份空文档（不是草稿），可放进某个项目；不打开、不切换界面。剪辑只能放在项目里。',
+  description: '用给定名称新建一份文档（不是草稿），可放进某个项目；不打开、不切换界面。剪辑只能放在项目里。图片文档可以直接带一张图片（sourcePath 本机路径，或 sourceRef 素材 / 生成结果）作为底图图层，图片不进素材库；不带时是一张 1920×1080 的白底图片。结果里的 contentRefs 是新文档的内容实体（图片文档为 image_edit.document 与各 image_edit.layer），可直接用 read_application_entity / change_application_entities 接着读写。网页录制不能新建，由 start_web_app_recording 录制得到。',
   domain: DOCUMENTS_DOMAIN,
   aliases: ['新建画布', '新建口播', '新建镜头参考', '新建图片文档', 'create document'],
   readOnly: false, dataClasses: ['C1'], idempotent: false, destructive: false,
   timeoutMs: 15_000, supportsPreview: false, supportsUndo: false, requiredScopes: [],
-  acceptsRefs: [DOCUMENT_PROJECT_ENTITY_TYPE], producesRefs: [DOCUMENT_ENTITY_TYPE],
+  acceptsRefs: [DOCUMENT_PROJECT_ENTITY_TYPE, 'asset', 'generation.result'], producesRefs: [DOCUMENT_ENTITY_TYPE, 'image_edit.document', 'image_edit.layer'],
   failureRecovery: [NAME_CONFLICT_RECOVERY],
   inputSchema: z.object({
     kind: documentKindSchema,
     name: nameSchema,
     projectId: z.string().min(1).optional().describe('放进哪个项目（来自 list_projects）；省略则不放进任何项目'),
-  }).strict(),
-  outputSchema: capabilityOutputSchema({ resultRef: documentRefSchema, name: z.string(), kind: documentKindSchema, projectId: z.string().nullable() }),
+    sourcePath: z.string().trim().min(1).optional().describe('只用于 image_document：作为底图的本机图片绝对路径'),
+    sourceRef: z.object({ kind: z.enum(['asset', 'generation.result']), id: z.string().min(1) }).strict().optional().describe('只用于 image_document：作为底图的素材或生成结果'),
+  }).strict()
+    .refine((value) => !(value.sourcePath && value.sourceRef), { message: 'sourcePath 与 sourceRef 只能给一个。' })
+    .refine((value) => value.kind === 'image_document' || !(value.sourcePath || value.sourceRef), { message: '只有 image_document 可以带 sourcePath / sourceRef；其他类型先新建空文档，再用所在工具的导入能力放入内容。' }),
+  outputSchema: capabilityOutputSchema({ resultRef: documentRefSchema, name: z.string(), kind: documentKindSchema, projectId: z.string().nullable(),
+    contentRefs: z.array(z.object({ kind: z.string(), id: z.string() }).strict()).optional() }),
   concurrencyKey: 'documents_write',
   resolveOperationTargets: (input) => input.projectId ? [{ kind: DOCUMENT_PROJECT_ENTITY_TYPE, id: input.projectId }] : [],
   resolveOperationWriteTargets: (_input, operationId) => [{ kind: DOCUMENT_ENTITY_TYPE, id: `pending:${operationId}` }],

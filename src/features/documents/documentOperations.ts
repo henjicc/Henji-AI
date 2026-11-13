@@ -102,6 +102,30 @@ export interface DocumentCreateOptions {
   size?: { width: number; height: number }
 }
 
+/** 新建时放进文档的内容来源：本机文件路径，或应用里已有内容的稳定引用。 */
+export interface DocumentCreateSource {
+  path?: string
+  ref?: { kind: string; id: string }
+}
+
+export interface NamedDocumentContentRequest {
+  container: DocumentContainerRef
+  name: string
+  source?: DocumentCreateSource
+}
+
+export interface CreatedNamedDocument {
+  meta: DocumentMeta
+  /** 新文档里可以直接接着读写的内容实体（如图片文档的文档实体与图层）。 */
+  contentRefs: { kind: string; id: string }[]
+}
+
+/**
+ * 内容不由通用仓库读写的类型（单文件包）如何在后台建出一份已命名的文档：不打开、不切换界面。
+ * 由持有该类型内容的工具登记；重名与名称合法性已由通用操作在调用前查过。
+ */
+export type NamedDocumentContentCreator = (request: NamedDocumentContentRequest) => Promise<CreatedNamedDocument>
+
 export interface OpenDocumentWithOptions extends DocumentOpenOptions {
   /** 公共写通道的准备事实；界面直接调用时同样使用正式预检。 */
   execution?: ApplicationWriteExecution
@@ -227,6 +251,7 @@ export class DocumentOperations {
   private readonly releasers = new Map<DocumentKindId, DocumentReleaser>()
   private readonly busyChecks = new Map<DocumentKindId, DocumentBusyCheck>()
   private readonly creators = new Map<DocumentKindId, DocumentCreator>()
+  private readonly namedContentCreators = new Map<DocumentKindId, NamedDocumentContentCreator>()
   private readonly embedHosts = new Map<DocumentKindId, (documentId: string) => Promise<EmbeddedHost>>()
   private readonly changes: ReturnType<typeof createDocumentOperationChanges>
 
@@ -278,6 +303,14 @@ export class DocumentOperations {
     this.creators.set(kind, creator)
     return () => {
       if (this.creators.get(kind) === creator) this.creators.delete(kind)
+    }
+  }
+
+  /** 登记某类文档的“后台建一份已命名文档”方式；返回取消登记函数。 */
+  registerNamedContentCreator(kind: DocumentKindId, creator: NamedDocumentContentCreator): () => void {
+    this.namedContentCreators.set(kind, creator)
+    return () => {
+      if (this.namedContentCreators.get(kind) === creator) this.namedContentCreators.delete(kind)
     }
   }
 
@@ -511,6 +544,23 @@ export class DocumentOperations {
       }
       throw new Error('同名文件过多，请先整理文件夹。')
     })
+  }
+
+  /**
+   * 新建一份已命名的文档并给出可接着读写的内容实体，不打开。内容由工具自己读写的类型交给它登记的后台新建方式，
+   * 其余类型建空文档；只有登记了后台新建方式的类型接受内容来源。
+   */
+  async createNamedDocument(request: CreateNamedDocumentRequest & { source?: DocumentCreateSource }): Promise<CreatedNamedDocument> {
+    const creator = this.namedContentCreators.get(request.kind)
+    if (!creator) return { meta: await this.createDocument(request), contentRefs: [] }
+    const check = await this.checkNewDocumentName(request.kind, request.container, request.name)
+    if (check.status !== 'available') {
+      throw Object.assign(new Error(check.status === 'duplicate' ? `这里已经有同名文档“${check.name}”。` : check.message),
+        { name: check.status === 'duplicate' ? 'DocumentNameConflictError' : 'DocumentNameInvalidError' })
+    }
+    return await this.write('create', request.kind, async () => await creator({
+      container: request.container, name: check.name, ...(request.source ? { source: request.source } : {}),
+    }))
   }
 
   /**
@@ -757,6 +807,11 @@ export function registerDocumentOpener(kind: DocumentKindId, opener: DocumentOpe
 /** 登记某类文档的“在容器里新建并打开”方式（4.1，各工具与打开方式一起登记）。 */
 export function registerDocumentCreator(kind: DocumentKindId, creator: DocumentCreator): () => void {
   return getDocumentOperations().registerCreator(kind, creator)
+}
+
+/** 登记某类文档的“后台建一份已命名文档”方式（内容由工具自己读写的类型，与打开方式一起登记）。 */
+export function registerNamedDocumentContentCreator(kind: DocumentKindId, creator: NamedDocumentContentCreator): () => void {
+  return getDocumentOperations().registerNamedContentCreator(kind, creator)
 }
 
 /** 登记某类文档“此刻能否整份改写”的检查（收集素材前调用）。 */

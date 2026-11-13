@@ -18,7 +18,7 @@ import { notifyUser } from '@/contexts/NotificationContext'
 import { notificationMessage, notificationText } from '@/i18n/notifications'
 import { useUiStore } from '@/stores/uiStore'
 
-import { isDocumentServiceError, toError } from './documentErrors'
+import { DocumentSessionClosedError, isDocumentServiceError, toError } from './documentErrors'
 import { markSessionDocumentOpened } from './documentOperationChanges'
 import { resolveDocumentPersistence } from './documentPersistence'
 import { dialogDocumentSessionPrompter } from './documentPromptStore'
@@ -204,7 +204,6 @@ export class DocumentSessionRegistry {
 
   /** 起名并转正（离开时“保存”与编辑器里保存草稿共用）；用户取消返回 false。 */
   private async promptFinalize(session: DocumentSession): Promise<boolean> {
-    const id = session.id
     await session.suspend()
     try {
       await session.flush()
@@ -213,18 +212,31 @@ export class DocumentSessionRegistry {
         initialName: session.documentMeta.name,
         defaultFolder: parentFolderOf(session.documentMeta.path),
         check: (name, folder) => this.checkDocumentSaveName(session, name, folder),
-        submit: async (name, folder) => {
-          await session.prepareTransfer({ promptOnConflict: false })
-          const result = await this.commands.finalizeDocument({
-            target: session.target,
-            name,
-            ...(folder ? { folder } : {}),
-          })
-          await session.applyTransfer(result)
-          this.logger.info('草稿已保存', { event: 'documents.session.finalize.completed', context: { docId: id, movedFolder: Boolean(folder), copiedFiles: result.copiedFiles } })
-        },
+        submit: async (name, folder) => await this.transferFinalized(session, name, folder),
       })
     } finally { session.resume() }
+  }
+
+  /** 按给定名称把草稿转正，不询问（后台新建已命名文档时用）；名称已由调用方查过重。 */
+  async finalize(id: string, name: string): Promise<void> {
+    const session = this.sessions.get(id)
+    if (!session) throw new DocumentSessionClosedError()
+    await session.suspend()
+    try {
+      await session.flush()
+      await this.transferFinalized(session, name, null)
+    } finally { session.resume() }
+  }
+
+  private async transferFinalized(session: DocumentSession, name: string, folder: string | null): Promise<void> {
+    await session.prepareTransfer({ promptOnConflict: false })
+    const result = await this.commands.finalizeDocument({
+      target: session.target,
+      name,
+      ...(folder ? { folder } : {}),
+    })
+    await session.applyTransfer(result)
+    this.logger.info('草稿已保存', { event: 'documents.session.finalize.completed', context: { docId: session.id, movedFolder: Boolean(folder), copiedFiles: result.copiedFiles } })
   }
 
   /**

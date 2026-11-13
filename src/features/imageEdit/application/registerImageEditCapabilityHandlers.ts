@@ -39,7 +39,11 @@ import type { ApplicationCapabilityHandlerRegistrar } from '@/features/applicati
 import { createImageEditPreviewFromRef } from '@/features/imageEdit/application/imageSourceCapabilityService'
 import { readImageEditPreview } from '@/features/imageEdit/application/imageEditSessionRegistry'
 import { parseCapabilityInput, throwIfCapabilityAborted } from '@/features/application-control/capabilities/handlerUtils'
-import { registerDocumentCreator, registerDocumentOpener, registerDocumentReleaser } from '@/features/documents/documentOperations'
+import { registerDocumentCreator, registerDocumentOpener, registerDocumentReleaser, registerNamedDocumentContentCreator } from '@/features/documents/documentOperations'
+import { getDocumentSessionRegistry } from '@/features/documents/documentSessionRegistry'
+import { ensureImageEditDocumentInstanceV3 } from '../v3/application/imageEditDocumentLoading'
+import { resolveImageSource } from './imageSourceCapabilityService'
+import { readImageInfo } from '@/commands/image'
 import { UI_WHITE_HEX } from '@/components/ui/styleTokens'
 import { createBlankImageDataUrl } from '@/features/imageMark/standalone/blankImage'
 import { createImageDocumentFromSource } from '@/features/imageMark/standalone/imageDocumentFromSource'
@@ -217,6 +221,34 @@ export function registerImageEditCapabilityHandlers(registrar: ApplicationCapabi
     requestImageDocumentInEditor({ id: meta.id, path: meta.path })
     openApplicationSurface('tool.image_edit')
     return meta
+  })
+
+  // 后台新建已命名的图片文档（通用“新建文档”能力）：与界面新建同一条创建流程，建好草稿后直接按名称转正，不进编辑器。
+  // 带来源时图片就是底图图层；会话留着供随后的图层读写，空闲时照常写回。
+  registerNamedDocumentContentCreator('image_document', async ({ container, name, source }) => {
+    // 来源读不到时还没有写出任何东西：先确认图片能读，再开始建文档
+    let url: string
+    if (source?.ref) {
+      url = (await resolveImageSource(source.ref).catch((error: unknown) => {
+        if (!(error instanceof Error) || !['NOT_FOUND', 'INVALID_INPUT'].includes(error.message)) throw error
+        throw notExecutedFailure(new Error('INVALID_INPUT:sourceRef 必须是读得到的图片素材或成功的图片生成结果；用 list_application_entities 重新取引用。'))
+      })).source
+    } else if (source?.path) {
+      url = source.path
+      await readImageInfo(url).catch((error: unknown) => {
+        throw notExecutedFailure(new Error(`INVALID_INPUT:读不到这张图片（${url}）：${error instanceof Error ? error.message : String(error)}`))
+      })
+    } else {
+      url = createBlankImageDataUrl({ width: 1920, height: 1080, dpi: 72, backgroundColor: UI_WHITE_HEX })
+    }
+    const opened = await createImageDocumentFromSource({ url }, container)
+    const draft = opened.session.documentMeta
+    await getDocumentSessionRegistry().finalize(opened.id, name).catch((error: unknown) => {
+      // 草稿文件已经写出：如实说明留下了什么，不能当成没有执行
+      throw new Error(`图片文档已经建成草稿“${draft.name}”（documents.document ${draft.id}），但按名称“${name}”保存失败：${error instanceof Error ? error.message : String(error)}。不要重新新建；给这份草稿写 documents.document.name 改名，或把它移到回收区。`)
+    })
+    const document = (await ensureImageEditDocumentInstanceV3(opened.id)).bus.getSnapshot().document
+    return { meta: opened.session.documentMeta, contentRefs: [imageEditV3DocumentRef(opened.id), ...document.layers.map(layer => imageEditV3LayerRef(opened.id, layer.id))] }
   })
 
   registrar.registerHandler('create_image_edit_preview', async (input, context) => {

@@ -130,6 +130,29 @@ describe('DeepSeek 服务端联网工具', () => {
     expect(appendProviderWebTools('deepseek', undefined, { model: 'deepseek-v4-pro' }, 'openai-compatible')).toEqual({ model: 'deepseek-v4-pro' })
   })
 
+  it('Responses 挂联网工具时把工具结果里的图片挪到随后的 user 消息，工具结果只留文字', () => {
+    const image = { type: 'input_image', detail: 'auto', image_url: 'data:image/jpeg;base64,AAAA' }
+    const call = (id: string) => ({ type: 'function_call', call_id: id, name: 'f', arguments: '{}' })
+    const input = [
+      { role: 'user', content: [{ type: 'input_text', text: '看图' }] },
+      call('a'), call('b'),
+      { type: 'function_call_output', call_id: 'a', output: [{ type: 'input_text', text: '预览' }, image] },
+      { type: 'function_call_output', call_id: 'b', output: '纯文字' },
+      { type: 'message', role: 'assistant', content: [] },
+    ]
+    const body = appendProviderWebTools('deepseek', undefined, { model: 'deepseek-flash', input }, 'openai-responses')
+    expect(body.input).toEqual([
+      input[0], input[1], input[2],
+      { type: 'function_call_output', call_id: 'a', output: '预览\n（图片见随后的用户消息）' },
+      input[4],
+      { role: 'user', content: [{ type: 'input_text', text: '以上工具结果附带的图片：' }, image] },
+      input[5],
+    ])
+    // 不挂联网工具（其他供应商）时原样保留，图片仍在工具结果里
+    const untouched = { model: 'deepseek-flash', input }
+    expect(appendProviderWebTools('kimi', undefined, untouched, 'openai-responses')).toBe(untouched)
+  })
+
   it('结构化输出与其他供应商不挂', () => {
     const structured = { model: 'deepseek-flash', text: { format: { type: 'json_schema' } } }
     expect(appendProviderWebTools('deepseek', undefined, structured, 'openai-responses')).toBe(structured)

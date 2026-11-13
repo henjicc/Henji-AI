@@ -282,7 +282,11 @@ function projectFailure(error: unknown): ApplicationCapabilityFailure {
   if (error instanceof Error && ['DocumentNotFoundError', 'ProjectNotFoundError'].includes(error.name)) {
     return { ok: false, error: { code: 'NOT_FOUND', message: `${message} 请检查文件所在磁盘，或用 list_documents / list_projects 重新获取现有目标。`, recoverable: true } }
   }
-  if (error instanceof Error && ['PersistenceError', 'DocumentFormatError', 'DocumentUnsupportedError'].includes(error.name)) {
+  // 类型不支持这种操作不是文件问题：原样给出抛出处的说明，不拼接文件损坏的恢复办法
+  if (error instanceof Error && error.name === 'DocumentUnsupportedError') {
+    return { ok: false, error: { code: 'CAPABILITY_REJECTED', message, recoverable: true } }
+  }
+  if (error instanceof Error && ['PersistenceError', 'DocumentFormatError'].includes(error.name)) {
     return { ok: false, error: { code: 'CAPABILITY_REJECTED',
       message: `${message} 请改用当前版本支持的文档；文件损坏时从备份恢复后重试，旧格式请用支持它的版本打开并导出素材。`, recoverable: true } }
   }

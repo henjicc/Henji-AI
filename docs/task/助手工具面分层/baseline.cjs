@@ -10,6 +10,10 @@
  * 跑在真实配置与真实数据目录上（assistant:cli 无窗口实例，可与带窗口的应用并存）：
  * 只在项目“工具面基线 11-14”里新建文档，不调付费能力。需要最新的 out/ 产物（electron:bundle）。
  * 无窗口实例关了显卡，任务里不含取帧、导出这类要合成画面的步骤。
+ *
+ * 带窗口的正式实例正在用 out/ 时不能重新打包：另建一份产物
+ *   node --max-old-space-size=8192 node_modules/electron-vite/bin/electron-vite.js build --outDir .tmp/assistant-baseline-build
+ * 再用 HENJI_BASELINE_BUILD_DIR=.tmp/assistant-baseline-build 指过去（SDK 改过时先 node scripts/build-sdk-if-needed.cjs）。
  */
 const { execFileSync, spawn, spawnSync } = require('node:child_process')
 const fs = require('node:fs')
@@ -93,8 +97,9 @@ console.log(JSON.stringify({ capabilityTools: tools.length, hiddenDefinitions: B
   return JSON.parse(execFileSync(process.execPath, [output], { encoding: 'utf8' }).trim().split('\n').at(-1))
 }
 
-const MAX_INPUT_TOKENS = Number(option('--max-input-tokens', '1000000'))
-const MAX_TOOL_CALLS = Number(option('--max-tool-calls', '30'))
+const MAX_INPUT_TOKENS = Number(option('--max-input-tokens', '1500000'))
+const MAX_TOOL_CALLS = Number(option('--max-tool-calls', '45'))
+const BUILD_DIR = process.env.HENJI_BASELINE_BUILD_DIR ? path.resolve(ROOT, process.env.HENJI_BASELINE_BUILD_DIR) : null
 
 function readChain(runId) {
   try { return JSON.parse(execFileSync(process.execPath, [path.join(ROOT, 'scripts', 'query-logs.cjs'), '--chain', runId, '--json'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] })) } catch { return null }
@@ -129,7 +134,12 @@ function killTree(pid) {
 function runOnce(task, index) {
   return new Promise((resolve) => {
     const name = `${task.id}-${label}-${index + 1}-${Date.now().toString(36)}`
-    const child = spawn(process.execPath, [path.join(ROOT, 'scripts', 'run-assistant-cli.cjs'), '--goal', task.goal(name), '--trace', 'summary', '--timeout', '900000'], { cwd: ROOT, stdio: ['ignore', 'pipe', 'ignore'] })
+    const cliArgs = ['--goal', task.goal(name), '--trace', 'summary', '--timeout', '900000']
+    const environment = { ...process.env }
+    delete environment.ELECTRON_RUN_AS_NODE
+    const child = BUILD_DIR
+      ? spawn(require(path.join(ROOT, 'node_modules', 'electron')), [path.join(BUILD_DIR, 'main', 'index.cjs'), '--assistant-cli', ...cliArgs], { cwd: ROOT, env: environment, stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true })
+      : spawn(process.execPath, [path.join(ROOT, 'scripts', 'run-assistant-cli.cjs'), ...cliArgs], { cwd: ROOT, stdio: ['ignore', 'pipe', 'ignore'] })
     const startedAt = Date.now()
     let stdout = ''
     let runId

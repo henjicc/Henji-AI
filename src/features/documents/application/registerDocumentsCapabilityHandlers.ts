@@ -10,7 +10,7 @@ import type { DocumentContainerRef, DocumentSummary, ProjectSummary } from '@/co
 import type { ApplicationCapabilityHandlerRegistrar } from '@/features/application-control/capabilities/handlerTypes'
 import { parseCapabilityInput, throwIfCapabilityAborted } from '@/features/application-control/capabilities/handlerUtils'
 import { getPlatform } from '@/platform/runtime'
-import { applicationWritePreflight } from '@/core/application-control/execution/writeExecution'
+import { applicationWritePreflight, notExecutedFailure } from '@/core/application-control/execution/writeExecution'
 
 import { toError } from '../documentErrors'
 import { getDocumentOperations, isDocumentNameConflict, type DocumentOperations } from '../documentOperations'
@@ -19,6 +19,11 @@ import { getDocumentOperations, isDocumentNameConflict, type DocumentOperations 
  * 通用文档与项目能力的处理器（存储底座 2.5）：全部委托通用文档操作服务，与项目页右键同一条路。
  * 输出只给稳定引用与名称，不给文件路径。重名失败改写成可自我修正的说法（点名 onConflict / 换名）。
  */
+
+/** 不能凭空新建的类型：内容来自一次录制，拒绝时点名真正的入口。 */
+const CREATE_ELSEWHERE: Partial<Record<DocumentSummary['kind'], string>> = {
+  web_recording: '网页录制由一次录制得到，不能新建空的：用 start_web_app_recording 开始录制。',
+}
 
 type DocumentListItem = z.infer<typeof documentListItemSchema>
 type ProjectListItem = z.infer<typeof projectListItemSchema>
@@ -100,14 +105,18 @@ export function registerDocumentsCapabilityHandlers(
 
   registrar.registerHandler('create_document', async (raw, context) => {
     throwIfCapabilityAborted(context.signal)
-    const input = parseCapabilityInput<{ kind: DocumentSummary['kind']; name: string; projectId?: string }>('create_document', raw)
+    const input = parseCapabilityInput<{ kind: DocumentSummary['kind']; name: string; projectId?: string; sourcePath?: string; sourceRef?: { kind: string; id: string } }>('create_document', raw)
     const container: DocumentContainerRef = input.projectId ? { kind: 'project', projectId: input.projectId } : { kind: 'user' }
+    const createElsewhere = CREATE_ELSEWHERE[input.kind]
+    if (createElsewhere) throw notExecutedFailure(new Error(`INVALID_INPUT:${createElsewhere}`))
+    const source = input.sourcePath ? { path: input.sourcePath } : input.sourceRef ? { ref: input.sourceRef } : undefined
     try {
-      const meta = await operations().createDocument({ kind: input.kind, container, name: input.name })
+      const { meta, contentRefs } = await operations().createNamedDocument({ kind: input.kind, container, name: input.name, ...(source ? { source } : {}) })
       const verification = await verifyDocument(operations(), meta.id, '新建的文档已从作品索引回读确认（类型、名称、所在项目一致，不是草稿）',
         (document) => document.kind === meta.kind && document.name === meta.name && !document.draft
           && JSON.stringify(document.container) === JSON.stringify(meta.container))
-      return { resultRef: documentRef(meta.id), name: meta.name, kind: meta.kind, projectId: meta.container.kind === 'project' ? meta.container.projectId : null, verification }
+      return { resultRef: documentRef(meta.id), name: meta.name, kind: meta.kind, projectId: meta.container.kind === 'project' ? meta.container.projectId : null,
+        ...(contentRefs.length ? { contentRefs } : {}), verification }
     } catch (error) {
       rethrowWithRecovery(error, '请换一个名称后重试。')
     }
