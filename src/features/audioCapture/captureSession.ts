@@ -196,9 +196,11 @@ export class CaptureSession {
   }
   async discard(outputPath = this.store.getState().outputPath): Promise<void> {
     await this.run('discard', async () => {
-      await this.stopCapture()
-      this.unlock?.(); this.unlock = undefined
+      // 丢的是恢复横幅里别的旧文件时，不能顺手停掉、清空这个会话自己的录音。
+      const own = !outputPath || outputPath === this.store.getState().outputPath
+      if (own) { await this.stopCapture(); this.unlock?.(); this.unlock = undefined }
       if (outputPath) await this.api.trashFile(outputPath)
+      if (!own) return
       this.durationSeconds = 0
       this.store.setState({ placement: null, phase: 'idle', status: null, outputPath: null })
     })

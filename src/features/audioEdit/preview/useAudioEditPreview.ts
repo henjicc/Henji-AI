@@ -332,6 +332,14 @@ export function useAudioEditPreview(project: AudioEditProjectDocument | null, no
     else chainResetRef.current = true
   }, [effectStructure])
 
+  // 别处（助手继续录音前）通过播放状态把试听停下：与按钮停播放同样停掉音频输出。
+  // 只认“播放中 → 停下”这一次变化：开始播放时先改其他状态、后设 playing，那期间不能误判成被叫停。
+  useEffect(() => useAudioEditPlaybackStore.subscribe((state, previous) => {
+    if (state.playing || !previous.playing || !playingRef.current) return
+    playingRef.current = false
+    nodeRef.current?.port.postMessage({ type: 'playing', value: false })
+  }), [])
+
   const togglePlayback = useCallback(async () => {
     const context = contextRef.current
     const node = nodeRef.current

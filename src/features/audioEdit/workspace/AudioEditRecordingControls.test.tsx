@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({ prepare: vi.fn(), start: vi.fn(), stop: vi.fn(
 const store = createStore<CaptureSessionState>(() => ({ placement: null, visible: false, phase: 'idle', busy: false, status: null, outputPath: null, settings: null, error: '', notice: null }))
 const workspace = { project: { id: 'draft', source: { durationFrames: 0 } }, disabled: true, waveSelection: null as null | { startFrame: number; endFrame: number }, togglePlayback: vi.fn(), notifyError: mocks.error, setWaveSelection: mocks.clear }
 vi.mock('./audioEditWorkspaceContext', () => ({ useAudioEditWorkspace: () => workspace }))
-vi.mock('../application/audioEditSpliceService', () => ({ prepareAudioEditTake: mocks.prepare }))
+vi.mock('../application/audioEditSpliceService', async original => ({ audioEditPlayheadFrame: (await original<typeof import('../application/audioEditSpliceService')>()).audioEditPlayheadFrame, prepareAudioEditTake: mocks.prepare }))
 vi.mock('@/features/audioCapture', async () => ({ getAudioCaptureSession: () => ({ store, start: mocks.start, stop: mocks.stop, togglePause: mocks.pause }), AudioCaptureSettingsForm: () => null, AudioCaptureLive: () => null, isCaptureShortcut: (await import('@/features/audioCapture/captureLiveModel')).isCaptureShortcut }))
 beforeEach(() => {
   vi.clearAllMocks()

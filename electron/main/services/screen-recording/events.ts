@@ -9,6 +9,7 @@ import type { ApplicationRef } from '../../../../src/core/application-control/id
 import { createMainLogger } from '../logging'
 import { RecordingEventStore } from './event-store'
 import { MOUSE_DRAGGED, startDesktopInput } from './input-events'
+import { HookEventClock } from './hook-clock'
 import { createWindowsEventFacts, type DesktopNativeFacts } from './windows-events'
 import type { RecordingControlBackend } from './control'
 
@@ -40,6 +41,9 @@ export class RecordingEventSession {
   private lastCursorUs = -Infinity
   private lastShape: Extract<CaptureEvent, { kind: 'cursor' }>['shape'] = 'arrow'
   private cursorExcluded = false
+  private deferredPoll = false
+  /** 跨暂停保留：钩子时刻与主进程时钟的偏移不随重新挂钩改变。 */
+  private readonly hookClock = new HookEventClock()
   private accepting = false
   private failure: unknown
   constructor(private readonly options: RecordingEventOptions) {
@@ -75,13 +79,15 @@ export class RecordingEventSession {
     this.facts ??= createWindowsEventFacts()
     this.accepting = true; this.previousWindow = ''
     try {
-      this.disposeInput = startDesktopInput(payload => {
+      this.disposeInput = startDesktopInput((payload, hookMs) => {
         if (!this.accepting) return
         try {
+          // 按事件自己发生的时刻记：主进程卡顿后一口气到达的事件不挤到同一刻，移动的节流也按真实间隔算，那段轨迹不会整段被丢。
+          // 不早于录制原点：开始前就发生、开始后才送到的事件记在开始那一刻。
+          const at = Math.max(this.options.originUs, this.hookClock.at(this.options.nowUs(), hookMs))
           if (payload.kind === 'mouse' && (payload.event.type === EventType.EVENT_MOUSE_MOVED || payload.event.type === MOUSE_DRAGGED)) {
             // A timer poll on Windows runs at the system tick (about 64 Hz), which trails fast motion; the hook
             // reports every move at the moment it happens. Keep up to 250 per second.
-            const at = this.options.nowUs()
             if (this.cursorExcluded || at - this.lastCursorUs < 4000) return
             const desktopPoint = this.dipPoint(payload.event)
             if (this.excludedPoint(desktopPoint)) return
@@ -90,7 +96,6 @@ export class RecordingEventSession {
             return
           }
           if (this.excluded()) return
-          const at = this.options.nowUs()
           if (payload.kind !== 'mouse') { this.collector.record(at, payload); return }
           const event = payload.event
           const desktopPoint = this.dipPoint(event)
@@ -104,6 +109,10 @@ export class RecordingEventSession {
       let due = this.options.nowUs()
       const poll = (): void => {
         if (!this.accepting) return
+        // 定时器晚到很多说明主进程刚卡过：卡顿期间的钩子事件已排在后面，先让它们按各自的时刻记下，再记这次采样，
+        // 否则这次采样的时刻在前，那批事件会被压到它之后。
+        if (this.options.nowUs() - due > HookEventClock.LATE_US && !this.deferredPoll) { this.deferredPoll = true; setImmediate(poll); return }
+        this.deferredPoll = false
         try {
           const at = this.options.nowUs(); const geometry = this.options.geometry()
           const foreground = this.facts!.foreground()

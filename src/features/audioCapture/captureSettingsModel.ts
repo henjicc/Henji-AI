@@ -1,8 +1,9 @@
 import { AUDIO_CAPTURE_RATES, audioCaptureSettingsSchema, type AudioCaptureInventory, type AudioCaptureSettings } from '@/core/audioCapture/contracts'
 import type { DropdownOption } from '@/components/ui/Dropdown'
+import { formatSampleRate } from '@/core/format/specFormat'
 
 const captureHostLabel = (host: string): string => host === 'default' ? '系统默认' : host === 'CoreAudio' ? 'Core Audio' : host
-export const captureRateLabel = (rate: number): string => `${rate / 1000} kHz`
+export const captureRateLabel = (rate: number): string => formatSampleRate(rate)
 export const captureDepthLabel = (depth: number): string => depth === 32 ? '32 位浮点' : `${depth} 位`
 export function captureSummary(settings: Omit<AudioCaptureSettings, 'sampleRate'> & { sampleRate: number }): string {
   return [captureHostLabel(settings.hostApi), settings.deviceName || '系统默认输入', captureRateLabel(settings.sampleRate), captureDepthLabel(settings.bitDepth), settings.channels === 1 ? '单声道' : '立体声'].join(' · ')

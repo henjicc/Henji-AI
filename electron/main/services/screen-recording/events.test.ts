@@ -87,3 +87,27 @@ it('宿主取消时正在等待的开始完成后不会重新挂钩', async () =
   await expect(pending).rejects.toThrow('录制已取消')
   expect(hooks.attach).not.toHaveBeenCalled(); expect(f.backend.cancel).toHaveBeenCalled()
 })
+it('主进程卡住后一口气送到的事件按钩子自带的时刻记下，那段移动轨迹不被整段丢掉', async () => {
+  // 换算只在 Windows 上做（那里钩子时刻是系统滴答毫秒）
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform')!
+  Object.defineProperty(process, 'platform', { value: 'win32' })
+  let f: ReturnType<typeof fixture>
+  try { f = fixture() } finally { Object.defineProperty(process, 'platform', platform) }
+  await f.wrapped.start(f.signal.signal)
+  const emit = hooks.attach.mock.calls[0][0]
+  // 钩子时刻是系统滴答（毫秒），与主进程时钟不同源：先来一条准时的，对上两边的差
+  const tick = (ms: number): number => 5_000_000 + ms
+  const t0 = Date.now()
+  emit({ kind: 'mouse', event: { type: 10, x: -200, y: 100 } }, tick(t0))
+  // 主进程卡了 600 毫秒：这期间每 10 毫秒一次移动和一次点击，卡完才一起送到
+  vi.setSystemTime(t0 + 600)
+  for (let i = 1; i <= 50; i++) emit({ kind: 'mouse', event: { type: 10, x: -200 - i, y: 100 } }, tick(t0 + i * 10))
+  emit({ kind: 'mouse', event: { type: 7, x: -300, y: 120, button: 1 } }, tick(t0 + 505))
+  await vi.advanceTimersByTimeAsync(20)
+  await f.wrapped.stop(f.signal.signal)
+  const events = pages().flatMap(page => page.entries)
+  // 记下的时刻（相对录制原点 10000）就是事件自己的时刻，不是送到的那一刻
+  const moves = events.filter(event => event.kind === 'cursor' && event.monoUs > t0 * 1000 && event.monoUs < (t0 + 600) * 1000).map(event => event.monoUs)
+  expect(moves).toEqual(Array.from({ length: 50 }, (_, index) => (t0 + (index + 1) * 10) * 1000))
+  expect(events.find(event => event.kind === 'click')?.monoUs).toBe((t0 + 505) * 1000)
+})

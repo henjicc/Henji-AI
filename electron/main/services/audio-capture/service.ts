@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { z } from 'zod'
-import { audioCaptureInventorySchema, audioCaptureStatusSchema, type AudioCaptureEvent, type AudioCaptureHealth, type AudioCaptureInventory, type AudioCaptureSettings, type AudioCaptureSettingsState, type AudioCaptureStart, type AudioCaptureStatus, type SystemAudioNativeEvent } from '../../../../src/core/audioCapture/contracts'
+import { audioCaptureInventorySchema, audioCaptureStatusSchema, type AudioCaptureEvent, type AudioCaptureHealth, type AudioCaptureInventory, type AudioCaptureRecordingState, type AudioCaptureSettings, type AudioCaptureSettingsState, type AudioCaptureStart, type AudioCaptureStatus, type SystemAudioNativeEvent } from '../../../../src/core/audioCapture/contracts'
+import { formatSampleRate } from '../../../../src/core/format/specFormat'
 import { AudioCaptureClient } from './client'
 import { AudioCaptureError } from './protocol'
 import { AudioCaptureSettingsService, captureSettingsState, resolveCaptureSettings } from './settings'
@@ -36,6 +37,8 @@ interface ActiveCapture {
   subscribers: Map<string, Subscriber>
   /** 原生会话是否在采集；共享麦克风重连期间为 false。 */
   native: boolean
+  /** 独占录音是否处于原生暂停。 */
+  paused: boolean
   sampleRate: number
   writtenBytes: number
   durationSeconds: number
@@ -55,6 +58,16 @@ export interface AudioCaptureServiceHooks {
   interrupted?: (owner: number, event: InterruptedEvent) => void
 }
 type InterruptedEvent = Extract<AudioCaptureEvent, { event: 'interrupted' }>
+/** 共享麦克风（录屏、讲解）的累计健康计数。 */
+/** endedAt：这一路结束的毫秒时间戳，录屏收尾时据此只认本次录制期间那一路。 */
+export interface SharedMicrophoneFacts { health: AudioCaptureHealth | null; reconnects: number; droppedPreviewBlocks: number; live: boolean; endedAt?: number }
+let microphoneFactsSource: AudioCaptureService | undefined
+/**
+ * 录屏读回与收尾要用共享麦克风的计数，而服务实例由录音 IPC 注册时创建：在那里登记一次。
+ * 正在录时给当前这一路，结束后给最近结束的那一路（录屏收尾时麦克风已经先停了）。
+ */
+export function provideMicrophoneFacts(service: AudioCaptureService): void { microphoneFactsSource = service }
+export function sharedMicrophoneFacts(): SharedMicrophoneFacts | null { return microphoneFactsSource?.sharedFacts() ?? null }
 const logger = createMainLogger('main.audio_capture')
 const subscriber = (owner: number): Subscriber => ({ owner, paused: false, lastSent: -1, acknowledged: -1, dropping: false, dropped: 0, sinceProbe: 0 })
 const segmentPath = (base: string, index: number): string => path.join(path.dirname(base), `${path.basename(base, path.extname(base))}-${index}${path.extname(base)}`)
@@ -66,6 +79,9 @@ export class AudioCaptureService {
   private readonly deviceWatchers = new Set<number>()
   private deviceTimer: ReturnType<typeof setInterval> | undefined
   private readonly client: AudioCaptureClient
+  /** 独占录音最近一次中断：中断后主进程就没有会话了，界面重载后的新界面与助手仍要读得到原因和文件。 */
+  private interruption: (NonNullable<AudioCaptureRecordingState['interruption']> & { owner: number }) | undefined
+  private lastShared: SharedMicrophoneFacts | undefined
   constructor(executable: () => string, private readonly settings = new AudioCaptureSettingsService(), private readonly publish: (owner: number | undefined, event: AudioCaptureEvent) => void = () => {}, private readonly hooks: AudioCaptureServiceHooks = {}) {
     this.client = new AudioCaptureClient(executable, event => this.event(event), loss => {
       this.inventory = undefined
@@ -101,6 +117,7 @@ export class AudioCaptureService {
   private endInterrupted(active: ActiveCapture, event: InterruptedEvent): void {
     if (this.active !== active) return
     this.finish(active, 'interrupted', event.error.code)
+    if (!active.shared) this.interruption = { owner: active.owner, outputPath: active.outputPath, code: event.error.code, message: event.error.message, at: Date.now() }
     for (const [id, value] of active.subscribers) this.publish(value.owner, { ...event, sessionId: id })
     if (!active.shared) this.hooks.interrupted?.(active.owner, event)
   }
@@ -143,6 +160,7 @@ export class AudioCaptureService {
     this.active = undefined; this.client.setActive(false)
     active.releaseWakeLock()
     const previewDroppedBlocks = [...active.subscribers.values()].reduce((sum, value) => sum + value.dropped, 0)
+    if (active.shared) this.lastShared = { health: active.health ?? null, reconnects: active.reconnects, droppedPreviewBlocks: previewDroppedBlocks, live: false, endedAt: Date.now() }
     const context = { sessionId: active.sessionId, mode: active.shared ? 'shared' : 'exclusive', outcome, ...(code ? { code } : {}), durationSeconds: active.durationSeconds, writtenBytes: active.writtenBytes,
       elapsedSeconds: Math.round((Date.now() - active.startedAt) / 1000), reconnects: active.reconnects, previewDroppedBlocks, ...active.health }
     if (outcome === 'interrupted') logger.warn('录音中断，文件已保留', { event: 'audio_capture.recording.failed', context })
@@ -238,15 +256,16 @@ export class AudioCaptureService {
     const { native, notice } = await this.nativeSettings(settings)
     const sessionId = randomUUID(), shared = Boolean(request.shared && request.streamSamples)
     const active: ActiveCapture = { owner, sessionId, outputPath: request.outputPath, basePath: request.outputPath, segments: [], segmentIndex: 1, shared, streamSamples: request.streamSamples ?? false, settings,
-      subscribers: new Map([[sessionId, subscriber(owner)]]), native: false, sampleRate: Number(native.sampleRate) || 48000, writtenBytes: 0, durationSeconds: 0, health: undefined, startedAt: Date.now(),
+      subscribers: new Map([[sessionId, subscriber(owner)]]), native: false, paused: false, sampleRate: Number(native.sampleRate) || 48000, writtenBytes: 0, durationSeconds: 0, health: undefined, startedAt: Date.now(),
       sequenceBase: 0, lastSequence: -1, reconnects: 0, releaseWakeLock: () => {} }
     this.active = active; this.client.setActive(true)
     logger.info('开始录音', { event: 'audio_capture.recording.start', context: { sessionId, mode: shared ? 'shared' : 'exclusive', hostApi: settings.hostApi, sampleRate: native.sampleRate, channels: settings.channels, bitDepth: settings.bitDepth } })
     try {
       const result = audioCaptureStatusSchema.parse(await this.client.request('start', { outputPath: request.outputPath, streamSamples: request.streamSamples ?? false, monitor: false, settings: native, sessionId }))
       active.native = true; active.sampleRate = result.sampleRate
+      if (!shared && this.interruption?.owner === owner) this.interruption = undefined
       if (this.active === active) active.releaseWakeLock = this.hooks.holdWakeLock?.(shared ? '麦克风' : '音频编辑录音') ?? (() => {})
-      return { ...result, settings, ...(shared ? { sharedSubscribers: 1 } : {}), notice: result.sampleRate !== native.sampleRate ? [notice, `驱动当前采样率为 ${result.sampleRate} Hz，本次按驱动设置录音。`].filter(Boolean).join(' ') : notice }
+      return { ...result, settings, ...(shared ? { sharedSubscribers: 1 } : {}), notice: result.sampleRate !== native.sampleRate ? [notice, `驱动当前采样率为 ${formatSampleRate(result.sampleRate)}，本次按驱动设置录音。`].filter(Boolean).join(' ') : notice }
     } catch (error) {
       if (this.active === active) { this.active = undefined; this.client.setActive(false) }
       logger.warn('录音启动失败', { event: 'audio_capture.recording.failed', error })
@@ -271,7 +290,10 @@ export class AudioCaptureService {
       active.durationSeconds = result.durationSeconds; active.writtenBytes = result.writtenBytes
       logger.info('录音已保存', { event: 'audio_capture.recording.completed', context: { sessionId, writtenBytes: result.writtenBytes } })
       this.finish(active, 'completed')
-    } else if (type !== 'status') logger.info('录音状态改变', { event: `audio_capture.${type}.completed`, context: { sessionId } })
+    } else if (type !== 'status') {
+      active.paused = type === 'pause'
+      logger.info('录音状态改变', { event: `audio_capture.${type}.completed`, context: { sessionId } })
+    }
     return result
   }
   private async controlSubscriber(active: ActiveCapture, value: Subscriber, type: 'pause' | 'resume' | 'stop' | 'status', sessionId: string): Promise<AudioCaptureStatus> {
@@ -312,6 +334,23 @@ export class AudioCaptureService {
     if (value) { value.lastSent = -1; value.acknowledged = -1; value.dropping = false }
     logger.info('界面查询进行中的录音', { event: 'audio_capture.owner.attached', context: { sessionId: active.sessionId, durationSeconds: status.durationSeconds } })
     return { ...status, settings: active.settings }
+  }
+  /** 只读主进程已知的事实，不问原生进程、不排队，也不动推送确认：停止排队时读回不会被拖住。 */
+  recordingState(owner: number): Omit<AudioCaptureRecordingState, 'pending'> {
+    const active = this.active
+    const own = active && !active.shared && active.owner === owner ? active : undefined
+    const interruption = this.interruption?.owner === owner ? this.interruption : undefined
+    return {
+      recording: own ? { outputPath: own.outputPath, state: own.paused ? 'paused' : 'recording', durationSeconds: own.durationSeconds, health: own.health ?? null } : null,
+      sharedMicrophone: Boolean(active?.shared),
+      interruption: interruption ? { outputPath: interruption.outputPath, code: interruption.code, message: interruption.message, at: interruption.at } : null,
+      settingsRevision: this.settings.currentRevision(),
+    }
+  }
+  sharedFacts(): SharedMicrophoneFacts | null {
+    const active = this.active
+    if (!active?.shared) return this.lastShared ?? null
+    return { health: active.health ?? null, reconnects: active.reconnects, droppedPreviewBlocks: [...active.subscribers.values()].reduce((sum, value) => sum + value.dropped, 0), live: true }
   }
   watchDevices(owner: number, enabled: boolean): void {
     if (enabled) this.deviceWatchers.add(owner); else this.deviceWatchers.delete(owner)

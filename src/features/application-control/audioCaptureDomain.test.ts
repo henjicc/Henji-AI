@@ -15,6 +15,8 @@ describe('原生录音通用属性', () => {
     const api = getPlatform().audioCapture
     vi.spyOn(api, 'getSettings').mockImplementation(async () => ({ settings: { ...settings }, effectiveSettings: { ...settings }, notice: null, revision }))
     vi.spyOn(api, 'enumerate').mockResolvedValue({ hostApis: [], devices: [], defaultInputDevice: -1, asioCompiled: true })
+    vi.spyOn(api, 'recordingState').mockResolvedValue({ recording: null, sharedMicrophone: false, interruption: null, pending: [], settingsRevision: 0 })
+    vi.spyOn(api, 'pendingFiles').mockResolvedValue([])
     vi.spyOn(api, 'setSettings').mockImplementation(async (next, expected) => { if (expected !== revision) throw new Error('设置冲突'); settings = { ...next }; revision++; return { settings, effectiveSettings: settings, notice: null, revision } })
   })
   it('通过 describe 和通用 change 修改录音参数并从领域回读', async () => {
@@ -25,7 +27,8 @@ describe('原生录音通用属性', () => {
     const read = await applicationReflectionHandlers.readEntity({ ref: target }, context())
     expect(read.properties['audio_capture.settings.sample_rate']).toBe(96000)
     expect(read.properties['audio_capture.settings.devices']).toMatchObject({ asioCompiled: true })
-    expect(read.properties['audio_capture.settings.recording']).toEqual({ visible: false, phase: 'idle', durationSeconds: 0 })
+    expect(read.properties['audio_capture.settings.recording']).toMatchObject({ visible: false, phase: 'idle', durationSeconds: 0, documentId: null, microphoneInUse: false })
+    expect(read.properties['audio_capture.settings.pending_files']).toEqual([])
     expect(described.propertyAvailability[0].properties).toContainEqual(expect.objectContaining({ propertyId: 'audio_capture.settings.recording', writable: false }))
   })
   it('非法位深不写入，录音参数事务可撤销', async () => {

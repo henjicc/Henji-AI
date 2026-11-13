@@ -5,7 +5,7 @@ import { PanelTrigger, UiIconButton, UiInlineStatus } from '@/components/ui'
 import { contributeAppMenus } from '@/core/appMenu/appMenu'
 import { useAppMenuVisibility } from '@/components/appMenu/appMenuVisibility'
 import { AudioCaptureSettingsForm, getAudioCaptureSession, AudioCaptureLive, isCaptureShortcut } from '@/features/audioCapture'
-import { prepareAudioEditTake } from '../application/audioEditSpliceService'
+import { audioEditPlayheadFrame, prepareAudioEditTake } from '../application/audioEditSpliceService'
 import { useAudioEditPlaybackStore } from '../store/audioEditPlaybackStore'
 import { useAudioEditWorkspace } from './audioEditWorkspaceContext'
 
@@ -25,7 +25,7 @@ export function AudioEditRecordingControls(): JSX.Element {
     try {
       if (useAudioEditPlaybackStore.getState().playing) await workspace.togglePlayback()
       const selection = resume ? null : workspace.waveSelection
-      const frame = Math.max(0, Math.min(workspace.project.source.durationFrames, useAudioEditPlaybackStore.getState().sourceFrame))
+      const frame = audioEditPlayheadFrame(workspace.project.source.durationFrames)
       const placement = await prepareAudioEditTake(workspace.project.id, selection?.startFrame ?? frame, selection?.endFrame ?? frame)
       workspace.setWaveSelection(null)
       await session.start(placement)

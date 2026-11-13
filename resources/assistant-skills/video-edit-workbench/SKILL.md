@@ -42,7 +42,7 @@ description: 录屏并放进剪辑，在痕迹AI剪辑工作台做粗剪、整�
 | 全能调色、自动校色、参考匹配、LUT、HSL、内置及框架转场 | [调色与转场](references/color-transitions.md) |
 | 导出预设、范围、队列、竖版改画幅、素材箱、收录与交付自检 | [交付](references/deliver.md) |
 | 生成／画布／图片／口播进剪辑、节目帧出去、原地生成 | [跨工作区](references/cross-workspace.md) |
-| 录屏、中断恢复、进剪辑、按录制事件推近与跟踪 | [录屏](references/screen-recording.md) |
+| 录屏、长录事实读回、中断恢复、进剪辑、按录制事件推近与跟踪；与音频编辑录音（助手可直接开始、停止）分用麦克风 | [录屏](references/screen-recording.md) |
 
 ## 标准流程
 

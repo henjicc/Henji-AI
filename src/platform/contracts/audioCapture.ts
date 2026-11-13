@@ -11,6 +11,8 @@ export interface AudioCapturePlatform {
   pendingFiles(): Promise<import('../../core/audioCapture/contracts').AudioCaptureFile[]>
   /** 本窗口仍在进行的音频编辑录音（界面重载或崩溃后接管用）；没有时为 null。 */
   active(): Promise<(AudioCaptureStatus & { settings: AudioCaptureSettings }) | null>
+  /** 主进程里录音的真实状态，只读；界面还没接管重载前的录音时也准。 */
+  recordingState(): Promise<import('../../core/audioCapture/contracts').AudioCaptureRecordingState>
   completeFile(outputPath: string): Promise<void>
   trashFile(outputPath: string): Promise<void>
   enumerate(): Promise<AudioCaptureInventory>

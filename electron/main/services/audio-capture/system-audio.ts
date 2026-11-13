@@ -157,6 +157,8 @@ export class SystemAudioRecorder {
     logger.info('系统声结束汇总', { event: 'audio_capture.system_audio.summary', context: { outcome: summary.outcome, durationSeconds: summary.durationSeconds, reconnects: summary.reconnects, device: summary.device, elapsedSeconds: Math.round((Date.now() - this.startedAt) / 1000), ...summary.health } })
     return summary
   }
+  /** 到此刻为止的累计事实；录制读回长录事实用，停止后仍可读。 */
+  stats(): SystemAudioSummary { return this.summary() }
   private summary(): SystemAudioSummary {
     const health = addHealth(this.earlier, this.health ?? ZERO_HEALTH)
     return { outcome: this.outcome, durationSeconds: this.frames / this.sampleRate, segments: health.segments, reconnects: this.reconnects, device: this.device, health }

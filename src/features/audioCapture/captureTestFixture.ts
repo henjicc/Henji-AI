@@ -13,7 +13,7 @@ export function captureFixture(): { api: AudioCapturePlatform; emit: (event: Aud
   const api: AudioCapturePlatform = {
     getSettings: vi.fn(async () => state), setSettings: vi.fn(async settings => ({ ...state, settings, effectiveSettings: settings, revision: state.revision + 1 })), enumerate: vi.fn(async () => captureInventory),
     probe: vi.fn(async () => ({ formats: [16, 24, 32].map(bitDepth => ({ bitDepth, sampleRate: 48000, supported: bitDepth !== 32 })) })),
-    prepareFile: vi.fn(async () => ({ outputPath: status.outputPath, name: '录音.wav' })), pendingFiles: vi.fn(async () => []), active: vi.fn(async () => null), completeFile: vi.fn(async () => {}), trashFile: vi.fn(async () => {}),
+    prepareFile: vi.fn(async () => ({ outputPath: status.outputPath, name: '录音.wav' })), pendingFiles: vi.fn(async () => []), active: vi.fn(async () => null), recordingState: vi.fn(async () => ({ recording: null, sharedMicrophone: false, interruption: null, pending: [], settingsRevision: 0 })), completeFile: vi.fn(async () => {}), trashFile: vi.fn(async () => {}),
     start: vi.fn(async () => ({ ...status, notice: null })), pause: vi.fn(async () => ({ ...status, state: 'paused' as const })), resume: vi.fn(async () => ({ ...status, state: 'recording' as const })), stop: vi.fn(async () => ({ ...status, state: 'stopped' as const, durationSeconds: 3 })), status: vi.fn(async () => status),
     clock: vi.fn(async () => ({ mainUs: 0, uncertaintyUs: 0 })), recover: vi.fn(async () => ({ writtenBytes: 432000 })), openAsioPanel: vi.fn(async () => {}),
     nativeSystemAudio: false, startSystemAudio: vi.fn(async () => ({ sessionId: 'system' })), stopSystemAudio: vi.fn(async () => ({ records: [] })),

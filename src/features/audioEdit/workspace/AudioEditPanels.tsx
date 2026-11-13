@@ -9,6 +9,7 @@ import { DockHeaderPortal } from '@/components/dockLayouts/DockHeaderPortal'
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { ICON_SETTINGS as SettingsIcon, UI_ICON_SIZE } from '@/core/theme/icons'
 import { buildAudioEditCaptionGroups } from '@/core/audioEdit/captions'
+import { formatFrameRate } from '@/core/format/specFormat'
 import { normalizeAudioEditFiller } from '@/core/audioEdit/analysis'
 import { DEFAULT_AUDIO_EDIT_SETTINGS, DEFAULT_AUDIO_EDIT_VIEW_SETTINGS } from '@/core/audioEdit/edits'
 import { notificationMessage } from '@/i18n/notifications'
@@ -171,8 +172,8 @@ export function AudioEditDeliveryPanel() {
           options={[{ label: 'XML · 继续剪辑', value: 'xml' }, { label: 'WAV · 剪后音频', value: 'wav' }]} onSelect={workspace.setDeliveryFormat} />
       </UiFormRow>
       {project.source.mediaType === 'audio' && format === 'xml' && <UiFormRow label="XML 帧率" density="compact">
-        <Dropdown<number> ariaLabel="XML 帧率" size="sm" className="w-full" minWidthStrategy="none" value={project.xmlFrameRate?.numerator ?? 25} display={`${project.xmlFrameRate?.numerator ?? 25} fps`}
-          options={[24, 25, 30, 50, 60].map((fps) => ({ label: `${fps} fps`, value: fps }))} onSelect={(fps) => update({ xmlFrameRate: { numerator: fps, denominator: 1 } })} />
+        <Dropdown<number> ariaLabel="XML 帧率" size="sm" className="w-full" minWidthStrategy="none" value={project.xmlFrameRate?.numerator ?? 25} display={formatFrameRate(project.xmlFrameRate?.numerator ?? 25)}
+          options={[24, 25, 30, 50, 60].map((fps) => ({ label: formatFrameRate(fps), value: fps }))} onSelect={(fps) => update({ xmlFrameRate: { numerator: fps, denominator: 1 } })} />
       </UiFormRow>}
       <UiFormRow label="附带 SRT 字幕" density="compact" inline><UiSwitch aria-label="附带 SRT 字幕" checked={workspace.withSrt} onCheckedChange={workspace.setWithSrt} /></UiFormRow>
       <p className={UI_TEXT_META_CLASS}>{format === 'xml' ? '有声音处理时同时保存全长处理音轨，XML 引用该音轨；否则直接引用原文件。切点按视频帧向外对齐。' : '导出剪好的声音，效果控件里的效果与输出都已算进去。'}</p>

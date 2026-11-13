@@ -2,6 +2,7 @@ import { recordingEncodingFields } from './encoding'
 import { z } from 'zod'
 import { recordingSessionOptionsSchema, type RecordingSessionOptions } from './sessionOptions'
 import { recordingTrackRecordSchema } from './trackJournal'
+import type { RecordingTracks } from './tracks'
 import { recordingBaselineSchema, recordingCallSchema } from './script'
 
 export const captureOptionsSchema = z.object({
@@ -56,6 +57,24 @@ export const captureFollowUpSchema = z.object({
 export type CaptureFollowUp = z.infer<typeof captureFollowUpSchema>
 /** 界面重新接上进行中的录制所需的全部事实。 */
 export interface CaptureAttachment { prepared: CapturePrepared; session: RecordingSessionOptions; followUp?: CaptureFollowUp }
+/**
+ * 长录的采集事实（只在主进程内存里）：录制中实时给出，停止后保留到应用退出；重启后只剩录制文档里的轨道与状态。
+ * 计数都是这次录制累计的：丢帧与重复帧来自编码器，系统声补的静音分没声音播放（silenceSeconds）与设备不可用（unavailableSeconds）。
+ */
+export interface RecordingCaptureFacts {
+  live: boolean
+  /** 采集出错的原因；用户取消不算。 */
+  failure: string | null
+  /** 界面进程断开（重载、崩溃）的次数：断开期间麦克风与摄像头没有数据。 */
+  detaches: number
+  video: { droppedFrames: number; duplicatedFrames: number; encoderRestarts: number; encoder: string } | null
+  systemAudio: { silenceSeconds: number; unavailableSeconds: number; droppedFrames: number; discontinuities: number; deviceSwitches: number; reconnects: number } | null
+  microphone: { inputOverflows: number; inputUnderflows: number; droppedFrames: number; droppedPreviewBlocks: number; reconnects: number } | null
+  /** 应用上次意外退出后，启动时自动补齐的。 */
+  recovered: boolean
+  /** 录制中的轨道（分段与空档）；停止后读录制文档里的 tracks。 */
+  tracks?: RecordingTracks
+}
 /** 应用崩溃后补齐的录制。 */
 export interface RecoveredRecording { documentId: string; name: string; durationUs: number }
 const sessionId = z.string().uuid()
@@ -73,6 +92,8 @@ export const captureRequestSchema = z.discriminatedUnion('operation', [
   /** 找出上次应用意外退出时没收尾的录制，补齐后返回。 */
   z.object({ operation: z.literal('unfinished') }).strict(),
   z.object({ operation: z.literal('recover-session'), sessionId }).strict(),
+  /** 长录事实（丢帧、续录、补静音、断开与中断）；不认识这次录制时返回 null。 */
+  z.object({ operation: z.literal('facts'), sessionId }).strict(),
   /** Quick mode: join spans, mix sound and write pointer facts into one MP4 in the chosen folder. */
   z.object({ operation: z.literal('quick-export'), sessionId, directory: z.string().min(1).max(4096).optional() }).strict(),
   z.object({ operation: z.literal('reveal-export'), sessionId }).strict(),

@@ -11,7 +11,7 @@ import { openApplicationSurface } from '@/features/navigation'
 import { recordingDevices } from './tracks/devices'
 import { controlRecording, recordingView, setRecordingDestination, startRecording, subscribeRecording } from './application/recordingService'
 import { RecordingSourcePicker } from './RecordingSourcePicker'
-import { DEFAULT_WEB_APP_BACKUP, loadRecordingSetup, orderedScreens, recordingOutput, saveRecordingSetup, webAppBackupOptions, type WebAppBackupSetup, type RecordingRangeMode, type RecordingRegion, type RecordingSetup } from './recordingSetupModel'
+import { DEFAULT_WEB_APP_BACKUP, loadRecordingSetup, orderedScreens, recordingOutput, recordingTracksFromSetup, saveRecordingSetup, webAppBackupOptions, type WebAppBackupSetup, type RecordingRangeMode, type RecordingRegion, type RecordingSetup } from './recordingSetupModel'
 import { RecordingSetupPanel } from './RecordingSetupPanel'
 import { RecordingLive } from './RecordingLive'
 import { RecordingDirectorGoal, RecordingDirectorScript } from './RecordingDirectorPanel'
@@ -96,7 +96,7 @@ export default function ScreenRecordingApp({ onBack }: { onBack: () => void }): 
     const quick = setup.mode === 'quick'
     const options = captureOptionsSchema.parse({ sourceId, ...recordingOutput(setup), ...(useRegion ? { region } : {}) })
     const destination = state.destination ? { documentId: state.destination.documentId, ...(setup.insert ? { sequenceId: state.destination.sequenceId, frame: state.destination.frame } : {}) } : null
-    await startRecording(options, { name: setup.name.trim() || `${t('recording.title')} ${new Date().toLocaleString().replace(/[/:]/g, '-')}`, tracks: { systemAudio: setup.systemAudio, ...(setup.microphone ? { microphone: {} } : {}), ...(setup.camera && !quick ? { camera: { ...(setup.cameraId ? { deviceId: setup.cameraId } : {}), width: 1280, height: 720, frameRate: 30 } } : {}) } }, destination, undefined, quick ? { ...(setup.saveDirectory ? { directory: setup.saveDirectory } : {}) } : undefined, true)
+    await startRecording(options, { name: setup.name.trim() || `${t('recording.title')} ${new Date().toLocaleString().replace(/[/:]/g, '-')}`, tracks: recordingTracksFromSetup(setup, quick) }, destination, undefined, quick ? { ...(setup.saveDirectory ? { directory: setup.saveDirectory } : {}) } : undefined, true)
     setSetup(value => ({ ...value, name: '' }))
   }
   const webAppBackup = setup.webAppBackup ?? DEFAULT_WEB_APP_BACKUP

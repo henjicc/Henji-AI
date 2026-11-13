@@ -2,6 +2,7 @@ import { AudioCaptureSettingsForm } from '@/features/audioCapture'
 import { PanelTrigger } from '@/components/ui'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { formatFrameRate } from '@/core/format/specFormat'
 import { FolderOpen } from 'lucide-react'
 import { Dropdown, UiButton, UiFormRow, UiGroup, UiInput, UiSegmented, UiSwitch } from '@/components/ui'
 import { getPlatform } from '@/platform'
@@ -46,7 +47,7 @@ export function RecordingSetupPanel({ value, devices, destination, onChange }: {
     </UiGroup>
     <UiGroup title={t('recording.pictureGroup')} titleTone="compact" labelWidth={96} divided>
       <UiFormRow label={t('recording.quality')} density="compact"><UiSegmented ariaLabel={t('recording.quality')} size="sm" value={value.quality} onChange={quality => onChange({ quality })} options={[{ value: '1080p', label: '1080P' }, { value: '1440p', label: '2K' }, { value: '2160p', label: '4K' }]} /></UiFormRow>
-      <UiFormRow label={t('recording.fps')} density="compact"><UiSegmented ariaLabel={t('recording.fps')} size="sm" value={value.fps} onChange={fps => onChange({ fps })} options={[{ value: 30, label: '30' }, { value: 60, label: '60' }]} /></UiFormRow>
+      <UiFormRow label={t('recording.fps')} density="compact"><UiSegmented ariaLabel={t('recording.fps')} size="sm" value={value.fps} onChange={fps => onChange({ fps })} options={([30, 60] as const).map(fps => ({ value: fps, label: formatFrameRate(fps, 'compact') }))} /></UiFormRow>
       <RecordingVideoParams value={value} onChange={onChange} />
     </UiGroup>
     <UiGroup title={t('recording.sessionGroup')} titleTone="compact" labelWidth={96} divided>

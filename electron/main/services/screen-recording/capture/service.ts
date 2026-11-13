@@ -3,7 +3,7 @@ import { BrowserWindow, screen, shell, type WebContents } from 'electron'
 import { createHash, randomUUID } from 'node:crypto'
 import { release } from 'node:os'
 import path from 'node:path'
-import type { CaptureAttachment, CaptureBackendKind, CaptureCommand, CaptureFollowUp, CaptureManifest, CaptureOperation, CapturePrepared, CaptureRequest, RecoveredRecording, ScreenCaptureBackend } from '../../../../../src/core/screenRecording/capture'
+import type { CaptureAttachment, CaptureBackendKind, CaptureCommand, CaptureFollowUp, CaptureManifest, CaptureOperation, CapturePrepared, CaptureRequest, RecordingCaptureFacts, RecoveredRecording, ScreenCaptureBackend } from '../../../../../src/core/screenRecording/capture'
 import type { RecordingSessionOptions } from '../../../../../src/core/screenRecording/sessionOptions'
 import type { CaptureKind } from '../../../../../src/core/screenRecording/contracts'
 import { getUserFolderDir } from '../../appPaths'
@@ -19,6 +19,7 @@ import { createCaptureBounds, createCaptureGeometry } from './geometry'
 import { RecordingSessionDocument, readRecordingEvents, recoverRecordingSession } from '../session-document'
 import { exportQuickRecording, quickExportPath } from '../quick-export'
 import { systemAudioCapture, type SystemAudioRecorder } from '../../audio-capture/system-audio'
+import { sharedMicrophoneFacts } from '../../audio-capture/service'
 import { nativeSystemAudioSupported } from '../../../../../src/platform/contracts/audioCapture'
 
 const logger = createMainLogger('main.screen_recording.capture')
@@ -30,6 +31,10 @@ interface Active {
   tracksAttached: boolean
   /** 采集本身出错（区别于用户取消）。 */
   failed: boolean
+  /** 出错的原因，读回长录事实时给出。 */
+  failure?: string
+  /** 毫秒时间戳；麦克风计数只认这之后结束的那一路，不把上一次录屏的算进来。 */
+  startedAt: number
   session?: RecordingSessionOptions
   followUp?: CaptureFollowUp
   prepared: CapturePrepared
@@ -39,6 +44,28 @@ interface Active {
   systemAudio?: { recorder?: SystemAudioRecorder }
 }
 let active: Active | null = null
+/** 停止后的长录事实留到应用退出：停止后再读也能看到丢帧、续录与补静音；只留最近这些次。 */
+const finishedFacts = new Map<string, RecordingCaptureFacts>()
+const FINISHED_FACTS_LIMIT = 32
+function captureFacts(session: Active, live: boolean): RecordingCaptureFacts {
+  const video = session.backend instanceof GfxCaptureBackend ? session.backend.stats() : undefined
+  const system = session.systemAudio?.recorder?.stats()
+  // 录制中只认正在进行的那一路；收尾时麦克风已经先停了，认本次录制开始之后结束的那一路。
+  const shared = session.session?.tracks.microphone ? sharedMicrophoneFacts() : null
+  const microphone = shared && (shared.live || !live && (shared.endedAt ?? 0) >= session.startedAt) ? shared : null
+  return {
+    live, failure: session.failure ?? null, detaches: session.document?.ledger.detaches ?? 0,
+    video: video ? { droppedFrames: video.droppedFrames, duplicatedFrames: video.duplicatedFrames, encoderRestarts: video.restarts, encoder: video.encoder } : null,
+    systemAudio: system ? { silenceSeconds: system.health.silenceSeconds, unavailableSeconds: system.health.unavailableSeconds, droppedFrames: system.health.droppedFrames, discontinuities: system.health.discontinuities, deviceSwitches: system.health.deviceSwitches, reconnects: system.reconnects } : null,
+    microphone: microphone ? { inputOverflows: microphone.health?.inputOverflows ?? 0, inputUnderflows: microphone.health?.inputUnderflows ?? 0, droppedFrames: microphone.health?.droppedFrames ?? 0, droppedPreviewBlocks: microphone.droppedPreviewBlocks, reconnects: microphone.reconnects } : null,
+    recovered: false,
+    ...(live && session.document ? { tracks: session.document.ledger.state.tracks(session.prepared.sessionId, session.originUs) } : {}),
+  }
+}
+function keepFacts(sessionId: string, facts: RecordingCaptureFacts): void {
+  finishedFacts.delete(sessionId); finishedFacts.set(sessionId, facts)
+  while (finishedFacts.size > FINISHED_FACTS_LIMIT) finishedFacts.delete(finishedFacts.keys().next().value!)
+}
 /** 正在准备的会话：文档已建、还没成为 active，启动恢复不能把它当成上次崩溃留下的。 */
 let preparing: string | null = null
 const now = (): number => Number(process.hrtime.bigint() / 1000n)
@@ -58,7 +85,7 @@ async function remote(session: Active, operation: CaptureOperation): Promise<voi
 }
 async function fail(session: Active, error: Error): Promise<void> {
   if (active !== session || session.storage.manifest.status === 'failed') return
-  session.storage.manifest.status = 'failed'; session.failed = true
+  session.storage.manifest.status = 'failed'; session.failed = true; session.failure = error.message
   logger.error('屏幕录制失败', { event: 'recording.capture.failed', error })
   await recordingControl.captureFailed(session.storage.manifest.sessionId, error)
 }
@@ -112,6 +139,7 @@ async function finishSession(session: Active, document: RecordingSessionDocument
   try {
     const summary = await document.finish(session.storage.manifest)
     const capture = session.backend instanceof GfxCaptureBackend ? session.backend.stats() : undefined
+    keepFacts(sessionId, captureFacts(session, false))
     logger.info('录制结束汇总', { event: 'recording.capture.summary', context: { sessionId, backend: session.storage.manifest.backend, failed: session.failed, ...summary, eventPageBacklog: recordingEventBacklog(), ...capture ? { droppedFrames: capture.droppedFrames, duplicatedFrames: capture.duplicatedFrames, encoderRestarts: capture.restarts, encoder: capture.encoder } : {} } })
     if (session.failed) notifyRecordingProblem(session.owner, `录制意外停止，已保存 ${formatDuration(summary.durationUs)}，可以导入剪辑。`)
   } catch (error) {
@@ -132,7 +160,10 @@ async function recoverUnfinished(): Promise<RecoveredRecording[]> {
     if (document.id === active?.prepared.sessionId || document.id === preparing || !['prepared', 'recording', 'paused'].includes(String(document.summary.status))) continue
     try {
       const result = await recoverRecordingSession(document.id, sessionDirectory(document.id))
-      if (result.status === 'interrupted') recovered.push({ documentId: document.id, name: result.name, durationUs: result.durationUs })
+      if (result.status === 'interrupted') {
+        recovered.push({ documentId: document.id, name: result.name, durationUs: result.durationUs })
+        keepFacts(document.id, { live: false, failure: '应用意外退出，录制没有正常停止', detaches: 0, video: null, systemAudio: null, microphone: null, recovered: true })
+      }
     } catch (error) { logger.warn('上次中断的录制未能自动恢复', { event: 'recording.session.recover.failed', error, context: { sessionId: document.id } }) }
   }
   return recovered
@@ -143,6 +174,7 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
   if (request.operation === 'application-source') return BrowserWindow.fromWebContents(owner)?.getMediaSourceId() ?? null
   if (request.operation === 'events') return readRecordingEvents(request.sessionId, request.offset, request.limit, request.markersOnly, active?.prepared.sessionId === request.sessionId ? active.document?.pageReferences() : undefined)
   if (request.operation === 'unfinished') return recoverUnfinished()
+  if (request.operation === 'facts') return active?.prepared.sessionId === request.sessionId ? captureFacts(active, true) : finishedFacts.get(request.sessionId) ?? null
   if (request.operation === 'quick-export') {
     if (active?.storage.manifest.sessionId === request.sessionId) throw new Error('请先结束当前录制，再保存视频')
     return exportQuickRecording(request.sessionId, request.directory)
@@ -186,7 +218,7 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
       const originUs = now()
       const hostSystemAudio = Boolean(request.session?.tracks.systemAudio) && nativeSystemAudioSupported(process.platform)
       const prepared: CapturePrepared = { sessionId: request.sessionId, originUs, backend, cursorEmbedded: manifest.cursorEmbedded, options: request.options, ...(request.session ? { directory: storage.directory } : {}), ...(hostSystemAudio ? { hostTracks: ['systemAudio' as const] } : {}) }
-      const session: Active = { owner, storage, originUs, rpc: new Map(), backend: null!, tracksAttached: true, failed: false, prepared, ...(request.session ? { session: request.session } : {}), ...(request.followUp ? { followUp: request.followUp } : {}), ...(hostSystemAudio ? { systemAudio: {} } : {}) }
+      const session: Active = { owner, storage, originUs, rpc: new Map(), backend: null!, tracksAttached: true, failed: false, prepared, startedAt: Date.now(), ...(request.session ? { session: request.session } : {}), ...(request.followUp ? { followUp: request.followUp } : {}), ...(hostSystemAudio ? { systemAudio: {} } : {}) }
       const geometry = request.session ? createCaptureGeometry(source, request.options) : undefined
       geometry?.()
       if (request.session) {
@@ -246,7 +278,7 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
           ownerRef: { kind: 'screen_recording.session', id: request.sessionId }, sourceDigest: `sha256:${createHash('sha256').update(JSON.stringify(request.options)).digest('hex')}`,
           directory: storage.directory, originUs: session.originUs, nowUs: now, geometry,
           onPage: (page, file, writeMs) => document!.page(page, file, writeMs),
-          onFailure: error => { session.failed = true; session.storage.manifest.status = 'failed'; logger.error('录制事件失败', { event: 'recording.session.events.failed', error }) },
+          onFailure: error => { session.failed = true; session.failure ??= `录制事件采集失败：${error instanceof Error ? error.message : String(error)}`; session.storage.manifest.status = 'failed'; logger.error('录制事件失败', { event: 'recording.session.events.failed', error }) },
         } : undefined, document ? () => (session.finishing ??= finishSession(session, document!)) : undefined, createCaptureBounds(source, request.options), () => ownerLost(session))
       } catch (error) {
         try { if (backend === 'gfxcapture') await session.backend.cancel() } finally { await storage.release(); active = null }

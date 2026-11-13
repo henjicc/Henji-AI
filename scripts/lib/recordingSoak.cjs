@@ -10,6 +10,12 @@ const DEFAULT_MINUTES = { audio: 60, screen: 30 }
 const SMOKE_MINUTES = 3
 const MAX_MINUTES = 120
 
+/** 录音的开始与停止走正式能力（默认），或走界面按钮（ui，核对按钮那条路径）。 */
+function audioControl(value) {
+  if (value === undefined) return 'capability'
+  if (value !== 'capability' && value !== 'ui') throw new Error('--audio-control 只能是 capability 或 ui')
+  return value
+}
 function parseSoakArgs(argv) {
   const flags = new Set(['smoke', 'kill-encoder', 'crash-renderer', 'no-cursor', 'no-system-audio', 'no-microphone', 'no-motion', 'help'])
   const values = {}
@@ -50,6 +56,7 @@ function parseSoakArgs(argv) {
     cursor: !values['no-cursor'],
     motion: scenario === 'screen' && !values['no-motion'],
     loadSeconds: number('load-seconds', 20, 1, 300),
+    audioControl: audioControl(values['audio-control']),
   }
 }
 

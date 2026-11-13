@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { formatFrameRate } from '@/core/format/specFormat'
 import { FolderOpen, MonitorPlay, Square } from 'lucide-react'
 import { Dropdown, PanelTrigger, UiButton, UiEmpty, UiError, UiFormRow, UiGroup, UiInlineStatus, UiSegmented, UiSwitch } from '@/components/ui'
 import { UI_TEXT_TIMECODE_CLASS } from '@/components/ui/styleTokens'
@@ -66,9 +67,9 @@ function BackupGroup({ value, screens, disabled, onChange }: { value: WebAppBack
             options={screens.map((item, index) => ({ value: item.id, label: `${t('recording.screenNumber', { index: index + 1 })}${item.display?.primary ? ` · ${t('recording.primaryScreen')}` : ''}` }))} onSelect={sourceId => onChange({ sourceId })} />
         </UiFormRow>}
         <UiFormRow label={t('recording.quality')} density="compact">{value.range === 'screen'
-          ? <UiSegmented ariaLabel={t('recording.quality')} size="sm" value={value.quality} disabled={disabled} onChange={quality => onChange({ quality })} options={[{ value: '1080p', label: '1080p' }, { value: '1440p', label: '2K' }, { value: '2160p', label: '4K' }]} />
+          ? <UiSegmented ariaLabel={t('recording.quality')} size="sm" value={value.quality} disabled={disabled} onChange={quality => onChange({ quality })} options={[{ value: '1080p', label: '1080P' }, { value: '1440p', label: '2K' }, { value: '2160p', label: '4K' }]} />
           : <span className="text-xs text-text2">{t('recording.webapp_windowSize')}</span>}</UiFormRow>
-        <UiFormRow label={t('recording.fps')} density="compact"><UiSegmented ariaLabel={t('recording.fps')} size="sm" value={value.fps} disabled={disabled} onChange={fps => onChange({ fps })} options={[{ value: 30, label: '30' }, { value: 60, label: '60' }]} /></UiFormRow>
+        <UiFormRow label={t('recording.fps')} density="compact"><UiSegmented ariaLabel={t('recording.fps')} size="sm" value={value.fps} disabled={disabled} onChange={fps => onChange({ fps })} options={([30, 60] as const).map(fps => ({ value: fps, label: formatFrameRate(fps, 'compact') }))} /></UiFormRow>
         <RecordingVideoParams value={value} onChange={onChange} />
       </>}
     </UiGroup>

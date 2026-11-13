@@ -8,7 +8,7 @@ import { AUDIO_CAPTURE_CHANNEL, AUDIO_CAPTURE_EVENT_CHANNEL } from '../../../src
 import { assertTrustedApplicationSender } from './application-control'
 import { registerIpcHandler } from './registry'
 import { mediaPermissions } from '../services/media-permissions'
-import { AudioCaptureService } from '../services/audio-capture/service'
+import { AudioCaptureService, provideMicrophoneFacts } from '../services/audio-capture/service'
 import { AudioCaptureError } from '../services/audio-capture/protocol'
 import { mainClockUs } from '../services/audio-capture/client'
 import { createMainLogger } from '../services/logging'
@@ -44,6 +44,7 @@ export function registerAudioCaptureIpc(): void {
     // 音频编辑录音意外中断；窗口在前台时标题栏与录音面板已经显示中断，共用的提醒自己会跳过。
     interrupted: (owner, event) => notifyRecording(webContents.fromId(owner), '痕迹AI 录音已中断', event.error.message),
   })
+  provideMicrophoneFacts(service)
   const watched = new Set<number>()
   const files = new AudioCaptureFiles(getUserRootDir, getSettingsStore, (file, placement) => trashUserFile(file, undefined, placement))
   /** 界面自己的录制（网页录制的备份声音）开的系统声：停止时把这段的轨道记录交回界面，界面离开就收尾。 */
@@ -76,6 +77,12 @@ export function registerAudioCaptureIpc(): void {
     }
     if (request.action === 'clock') return { mainUs: mainClockUs(), uncertaintyUs: 0 }
     if (request.action === 'ack') return service.acknowledge(owner, request.sessionId, request.sequence)
+    // 不排在开始、停止后面：停止要等很久、等麦克风授权或重连时也能读回。待恢复文件只读恢复登记与文件头，不碰原生进程。
+    if (request.action === 'recordingState') {
+      // 先读待恢复文件，再在同一个同步段里取录音状态：两部分说的是同一时刻（读文件期间开始或中断的录音不会对不上）。
+      const pending = await files.pending()
+      return { ...service.recordingState(owner), pending }
+    }
     // 系统声在自己的原生进程里，不排在麦克风的操作后面。
     if (request.action === 'systemAudioStart') {
       // 离开计数在第一个等待之前取：等待期间界面离开都算。

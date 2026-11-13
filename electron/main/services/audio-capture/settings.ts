@@ -8,6 +8,8 @@ export interface CaptureSettingsStore { get(key: string): string | null; set(key
 export class AudioCaptureSettingsService {
   private revision = 0
   constructor(private readonly store: () => CaptureSettingsStore = getSettingsStore) {}
+  /** 只要修订号时用它：不读数据库、不解析设置。 */
+  currentRevision(): number { return this.revision }
   read(): { settings: AudioCaptureSettings; revision: number } {
     const raw = this.store().get(AUDIO_CAPTURE_SETTINGS_KEY)
     if (!raw) return { settings: { ...DEFAULT_AUDIO_CAPTURE_SETTINGS }, revision: this.revision }

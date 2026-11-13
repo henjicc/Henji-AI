@@ -3,6 +3,8 @@ import { assertAudioEditSplicePosition, spliceAudioEditProject } from '@/core/au
 import { getPlatform } from '@/platform/runtime'
 import { createLogger } from '@/core/logging'
 import { acceptAudioEditNativeResult, flushAudioEditProject, loadAudioEditProject, lockAudioEditRecording } from './audioEditProjectInstances'
+import { useAudioEditPlaybackStore } from '../store/audioEditPlaybackStore'
+import { useAudioEditStore } from '../store/audioEditStore'
 
 const logger = createLogger('features.audioEdit.splice')
 
@@ -37,6 +39,24 @@ export async function restoreAudioEditTake(file: AudioCaptureFile, alreadyLocked
   if (current.endsWith(`/${placement.spliceId}.wav`)) { await flushAudioEditProject(placement.projectId); return 0 }
   if (instance.persistedRevision !== placement.revision) throw new Error('原作品已发生后续编辑，请将这段录音另存为新草稿，避免覆盖修改')
   return insertAudioEditFile(placement.projectId, file.outputPath, placement.startFrame, placement.endFrame, crypto.randomUUID(), alreadyLocked, placement.spliceId, true)
+}
+
+/**
+ * 录音默认从哪开始：当前播放头，夹在作品范围内。录音时播放头跟着走到这一段末尾，暂停后用户挪过就以挪后的为准；
+ * 界面的“开始录音”“继续录音”与助手的 resume_audio_edit_recording 共用这一处。
+ */
+export function audioEditPlayheadFrame(durationFrames: number): number {
+  return Math.max(0, Math.min(durationFrames, useAudioEditPlaybackStore.getState().sourceFrame))
+}
+
+/**
+ * 助手“继续录音”的默认位置。播放头只属于音频编辑正显示的那份口播：显示的就是这份时与界面按钮一样取当前播放头，
+ * 正在试听就先停下（界面按钮也是先停播放再录）；没显示这份时，接在刚拼回那一段的真实末尾（takeEnd，拼回后的坐标）。
+ */
+export function audioEditResumeFrame(documentId: string, durationFrames: number, takeEnd: number): number {
+  if (useAudioEditStore.getState().project?.id !== documentId) return Math.max(0, Math.min(durationFrames, takeEnd))
+  if (useAudioEditPlaybackStore.getState().playing) useAudioEditPlaybackStore.getState().setPlaying(false)
+  return audioEditPlayheadFrame(durationFrames)
 }
 
 export async function prepareAudioEditTake(projectId: string, startFrame: number, endFrame: number): Promise<AudioCapturePlacement> {

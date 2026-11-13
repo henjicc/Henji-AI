@@ -10,6 +10,7 @@ import { computeImageEditSelectionCapability } from './domains/imageEdit/imageEd
 import { selectImageEditRegionCapability } from './domains/imageEdit/imageEditSubjectCapabilities'
 import { analyzeImageEditColorCapability, exportImageEditColorLutCapability, observeImageEditColorCapability } from './domains/imageEdit/imageEditColorCapabilities'
 import { AUDIO_EDIT_APPLICATION_CAPABILITIES } from './domains/audioEdit/audioEditApplicationCapabilities'
+import { AUDIO_EDIT_RECORDING_CAPABILITIES } from './domains/audioEdit/audioEditRecordingCapabilities'
 import { VIDEO_EDIT_APPLICATION_CAPABILITIES } from './domains/videoEdit/videoEditApplicationCapabilities'
 import {
   ApplicationCapabilityRegistry,
@@ -86,6 +87,7 @@ export const BUILTIN_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[]
   ...APPLICATION_REFLECTION_APPLICATION_CAPABILITIES,
   ...TOOLBOX_APPLICATION_CAPABILITIES,
   ...AUDIO_EDIT_APPLICATION_CAPABILITIES,
+  ...AUDIO_EDIT_RECORDING_CAPABILITIES,
   ...VIDEO_EDIT_APPLICATION_CAPABILITIES,
   ...ASSISTANT_SKILL_APPLICATION_CAPABILITIES,
   // 通用文档与项目（存储底座 2.5）：各工具的项目管理能力在 3.x 接入时删除，统一走这里

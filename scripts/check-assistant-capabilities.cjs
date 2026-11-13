@@ -186,7 +186,7 @@ for (const file of walk(path.join(root, 'src', 'core', 'application-control'))) 
  */
 const ASSISTANT_BLIND_FEATURES = {
   developer: '只在开发版出现的 SDK 模型清单与离线请求检查，正式构建整体编译掉；只给开发者核对适配结果，不是用户创作能力，不向助手开放。',
-  audioCapture: '设备设置与会话只读状态由 application-control/audioCaptureDomain 和 audioCaptureFields 统一注册；新录音与通用录音设置已有 Surface。CaptureSession 的临时快照无 store 动作，生命周期按 AUDIO_CAPTURE_CONTROL_EXCLUSION 由音频编辑持有，不向助手开放开始、停止或放弃。',
+  audioCapture: '设备设置与录音状态由 application-control/audioCaptureDomain 和 audioCaptureFields 统一注册；新录音与通用录音设置已有 Surface。CaptureSession 用 zustand/vanilla 的 createStore，没有 store 动作；开始、暂停、继续、停止、恢复由 *_audio_edit_recording 语义操作调用同一会话。',
   screenRecording: '录制由 recordingService 与主进程会话文档持有，无 Zustand Store；recordingReflection 覆盖来源、设备与会话，screenRecordingApplicationDomain 注册统一控制与事件读回能力，覆盖由录制能力回环测试验证。',
   creativeIntent: '跨工作区共用的纯 props 呈现组件，不持有业务实体、文档或 Store；'
     + '草稿业务由各宿主领域承接，P1-5 公共能力接线另行验收，不以空反射或账本冒充覆盖。',

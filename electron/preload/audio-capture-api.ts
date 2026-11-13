@@ -20,6 +20,7 @@ export function createAudioCaptureApi(invoke: Invoke, subscribe: Subscribe): Aud
     prepareFile: placement => invoke(AUDIO_CAPTURE_CHANNEL, { action: 'prepareFile', ...(placement ? { placement } : {}) }),
     pendingFiles: () => invoke(AUDIO_CAPTURE_CHANNEL, { action: 'pendingFiles' }),
     active: () => invoke(AUDIO_CAPTURE_CHANNEL, { action: 'active' }),
+    recordingState: () => invoke(AUDIO_CAPTURE_CHANNEL, { action: 'recordingState' }),
     completeFile: outputPath => invoke(AUDIO_CAPTURE_CHANNEL, { action: 'completeFile', outputPath }),
     trashFile: outputPath => invoke(AUDIO_CAPTURE_CHANNEL, { action: 'trashFile', outputPath }),
     enumerate: () => invoke(AUDIO_CAPTURE_CHANNEL, { action: 'enumerate' }),

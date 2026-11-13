@@ -79,5 +79,21 @@ export const audioCaptureRequestSchema = z.discriminatedUnion('action', [
   /** 界面自己的录制（网页录制的备份声音）要系统声：原生写进 directory，停止时交回这段的轨道记录；时间相对 originUs（主进程单调微秒）。 */
   z.object({ action: z.literal('systemAudioStart'), directory: z.string().min(1).max(4096), originUs: z.number().int().nonnegative() }).strict(),
   z.object({ action: z.literal('systemAudioStop'), sessionId: z.string().uuid() }).strict(),
+  /** 主进程里录音的真实状态（只读，不动推送确认）：界面重载后、接管之前也准。 */
+  z.object({ action: z.literal('recordingState') }).strict(),
 ])
-export const AUDIO_CAPTURE_CONTROL_EXCLUSION = '原生录音生命周期由音频编辑、录屏和讲解的所属会话维护；本期不单独向助手开放开始/停止，避免无作品归属、无结果撤销的后台录音。设备和参数可通过通用属性读写。'
+/**
+ * 主进程持有的录音事实。界面里的录音会话可能还没建立（重载后要等接管），状态以这里为准。
+ * recording 只报本窗口的音频编辑录音；录屏、讲解共用麦克风时只报 sharedMicrophone。
+ */
+export interface AudioCaptureRecordingState {
+  recording: { outputPath: string; state: 'recording' | 'paused'; durationSeconds: number; health: AudioCaptureHealth | null } | null
+  /** 录屏或讲解正用着麦克风：这时音频编辑开始录音会被拒绝。 */
+  sharedMicrophone: boolean
+  /** 本窗口最近一次音频编辑录音的中断；再开始录音就清掉。at 为毫秒时间戳。 */
+  interruption: { outputPath: string; code: string; message: string; at: number } | null
+  /** 还没拼回作品的录音文件（含正在录的那个）与它们的作品位置。 */
+  pending: AudioCaptureFile[]
+  /** 录音设置的修订号：只读录音状态时不必去枚举设备、解析设置。 */
+  settingsRevision: number
+}

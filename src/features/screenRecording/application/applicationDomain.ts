@@ -1,5 +1,9 @@
 import { recordingEncoding } from '@/core/screenRecording/encoding'
-import { loadRecordingSetup } from '@/services/recordingSetupModel'
+import { loadRecordingSetup, recordingOutput, recordingTracksFromSetup } from '../recordingSetupModel'
+import { notExecutedFailure } from '@/core/application-control/execution/writeExecution'
+import { CAPABILITY_SHORT_WAIT_MS, waitWithin } from '@/core/application-control/execution/waitWithin'
+import { trackRecordingWork } from './recordingWork'
+import { getPlatform } from '@/platform'
 import { planRecordingDirector, startRecordingDirector, cancelRecordingDirector, recordingDirectorBusy } from './recordingDirectorService'
 import { planRecordingDirectorCapability, startRecordingDirectorCapability, cancelRecordingDirectorCapability, redubRecordingCapability } from '@/core/application-control/domains/screenRecording/directorCapability'
 import { redubRecordingSentence } from './recordingRedubService'
@@ -33,6 +37,9 @@ import { exportRecordingProduct, cancelRecordingProductExport, recordingProductB
 import { resolveConfiguredDestination } from '@/features/canvas'
 import { generateSessionScript, replaySession, recordingReplayBusy } from './recordingReplayService'
 import { generateRecordingScriptCapability, replayRecordingCapability, rerecordRecordingCapability } from '@/core/application-control/domains/screenRecording/scriptCapability'
+
+/** 没在约 45 秒内做完时的如实回执：工作照常在后台进行，去哪查。 */
+const stillRunning = (what: string): string => `${what}仍在后台进行（长录要拼接声音、补齐分片或导入剪辑），不要重发。读 screen_recording.session 的 details：finishing 变回 false 后，details.error 有值就是失败（写着原因），没有就是做完了。`
 
 export const screenRecordingApplicationDomain: ApplicationDomainModule = {
   id: 'screen_recording', entities: () => [...recordingRegistrations(), ...webAppRecordingRegistrations(), webReplayTakeRegistration(), recordingUnderstandingRegistration()],
@@ -103,9 +110,24 @@ export const screenRecordingApplicationDomain: ApplicationDomainModule = {
       if (definition.id === 'detect_screen_recording_sensitive_text') return executeRecordingPrivacy(input, context)
       if (definition.id === 'start_screen_recording') {
         const parsed = startRecordingInputSchema.parse(input)
-        const options = captureOptionsSchema.parse({ ...recordingEncoding({ ...loadRecordingSetup().setup, width: parsed.width, height: parsed.height, fps: parsed.fps }), sourceId: parsed.sourceRef.id, width: parsed.width, height: parsed.height, fps: parsed.fps, ...(parsed.region ? { region: parsed.region } : {}) })
-        const id = await startRecording(options, { name: parsed.name, tracks: parsed.tracks, ...(parsed.projectId ? { projectId: parsed.projectId } : {}) }, parsed.destination, context.signal)
-        return { resultRef: { kind: 'screen_recording.session', id }, verified: (await readRecordingDocument(id)).sessionId === id }
+        if ((parsed.width === undefined) !== (parsed.height === undefined)) throw notExecutedFailure(new Error('width 与 height 要一起给；都省略时用录屏设置里保存的清晰度。'))
+        // 省略的参数跟随用户在录屏设置里保存的值，与点录屏页“开始录制”得到的一样。
+        const { setup } = loadRecordingSetup()
+        const saved = recordingOutput(setup)
+        const size = { width: parsed.width ?? saved.width, height: parsed.height ?? saved.height, fps: parsed.fps ?? setup.fps }
+        const options = captureOptionsSchema.parse({ ...recordingEncoding({ ...setup, ...size }), sourceId: parsed.sourceRef.id, ...size, ...(parsed.region ? { region: parsed.region } : {}) })
+        // 快速录制在界面上不录摄像头，省略 tracks 时与界面一致。
+        let tracks = parsed.tracks ?? recordingTracksFromSetup(setup, setup.mode === 'quick')
+        let note: string | undefined
+        // 音频编辑录音独占麦克风，录屏再开麦克风会在开始时失败：写入前就处理，不靠提醒。
+        if (tracks.microphone && (await getPlatform().audioCapture.recordingState()).recording) {
+          if (parsed.tracks) throw notExecutedFailure(new Error('音频编辑正在录音，麦克风被它占着：tracks 里去掉 microphone，或先用 stop_audio_edit_recording 结束那边的录音。'))
+          const { microphone: _microphone, ...rest } = tracks
+          tracks = rest
+          note = '音频编辑正在录音、占着麦克风，这次录屏没有开麦克风（录屏设置里是开着的）；倒计时后开始，可读取会话查看进度。'
+        }
+        const id = await startRecording(options, { name: parsed.name, tracks, ...(parsed.projectId ? { projectId: parsed.projectId } : {}) }, parsed.destination, context.signal)
+        return { resultRef: { kind: 'screen_recording.session', id }, verified: (await readRecordingDocument(id)).sessionId === id, ...(note ? { message: note } : {}) }
       }
       if (definition.id === 'read_screen_recording_events') {
         const parsed = parseCapabilityInput<{ sessionRef: z.infer<typeof recordingRefSchema>; offset: number; limit: number; markersOnly: boolean }>(definition.id, input)
@@ -113,13 +135,19 @@ export const screenRecordingApplicationDomain: ApplicationDomainModule = {
       }
       if (definition.id === 'import_screen_recording') {
         const parsed = parseCapabilityInput<{ sessionRef: z.infer<typeof recordingRefSchema>; destination: z.infer<typeof recordingDestinationSchema> }>(definition.id, input)
-        const itemIds = await importRecordingToVideo(parsed.sessionRef.id, parsed.destination, context.signal)
-        return { resultRef: { kind: 'video_edit.document', id: parsed.destination.documentId }, itemIds, verified: itemIds.length > 0 }
+        const work = trackRecordingWork(parsed.sessionRef.id, importRecordingToVideo(parsed.sessionRef.id, parsed.destination, context.signal))
+        const resultRef = { kind: 'video_edit.document', id: parsed.destination.documentId }
+        if (!await waitWithin(work, CAPABILITY_SHORT_WAIT_MS)) return { resultRef, itemIds: [], verified: false, finishing: true, message: stillRunning('导入') }
+        const itemIds = await work
+        return { resultRef, itemIds, verified: itemIds.length > 0 }
       }
       const parsed = parseCapabilityInput<{ sessionRef: z.infer<typeof recordingRefSchema>; note?: string }>(definition.id, input)
       const action = definition.id.replace('_screen_recording', '') as 'pause' | 'resume' | 'mark' | 'stop' | 'cancel' | 'recover'
-      if (action === 'recover') await recoverRecording(parsed.sessionRef.id)
-      else await controlRecording(parsed.sessionRef.id, action, parsed.note)
+      if (action === 'recover' || action === 'stop') {
+        // 长录的收尾、恢复可能比客户端的工具超时还久：短等，没做完就如实说仍在进行，不当成失败。
+        const work = trackRecordingWork(parsed.sessionRef.id, action === 'recover' ? recoverRecording(parsed.sessionRef.id) : controlRecording(parsed.sessionRef.id, 'stop'))
+        if (!await waitWithin(work, CAPABILITY_SHORT_WAIT_MS)) return { resultRef: parsed.sessionRef, verified: false, finishing: true, message: stillRunning(action === 'stop' ? '已停止采集，收尾' : '恢复') }
+      } else await controlRecording(parsed.sessionRef.id, action, parsed.note)
       await readRecordingDocument(parsed.sessionRef.id)
       return { resultRef: parsed.sessionRef, verified: true }
     })

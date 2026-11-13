@@ -33,6 +33,8 @@
  *   通用：
  *   --crash-renderer        另外让界面渲染进程崩溃一次（CDP Page.crash），验证崩溃后接管
  *   --load-seconds <20>     主进程加压时长（冒烟档按时长缩短）
+ *   录音专用：
+ *   --audio-control <capability|ui>   开始与停止录音走正式能力 start/stop_audio_edit_recording（默认），或走音频编辑与标题栏的按钮
  *
  * 时间表见 scripts/lib/recordingSoak.cjs 的 PLANS；退出码 0 = 通过，1 = 有问题，2 = 没能开始，3 = 未达测试条件（如没有运动画面）。
  * 产物不自动删除，占用大小与路径写在结果里。Ctrl+C 会先停止录制、写完结果再退出。
@@ -53,7 +55,7 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 const KNOWN_GAPS = [
   '主进程加压：没有只在自动化模式开放的“让主进程忙 N 毫秒”开发钩子，脚本用并发全文日志查询近似（读整天日志并逐行解析），并用 ping 往返时间证明主进程确实变慢',
   '窗口还原：渲染层只有 minimize，没有 restore IPC，脚本用 Win32 ShowWindowAsync 还原主进程的最小化窗口',
-  '音频编辑录音没有开始/停止的正式能力（有意不开放），脚本走界面按钮与标题栏停止；录音会话 ID 从 audio_capture.recording.start 日志取，再用 audioCapture.status 读主进程真实状态',
+  '音频编辑录音的会话 ID 不在正式读回里，脚本从 audio_capture.recording.start 日志取，再用 audioCapture.status 读主进程真实状态；读不到时退回 audio_capture.settings.recording',
   'powercfg /requests 需要管理员权限；脚本不在管理员终端运行时只能用 recording_power.* 日志佐证',
 ]
 
@@ -324,7 +326,10 @@ function commonActions(ctx, scenario) {
   }
 }
 
-/** 录音：音频编辑里点“开始录音”，期间切页、最小化、加压、重载，最后从标题栏停止并等拼回作品。 */
+/**
+ * 录音：用正式能力 start_audio_edit_recording 开始（--audio-control ui 时点音频编辑里的“开始录音”），期间切页、最小化、加压、重载，
+ * 最后用 stop_audio_edit_recording 停止（ui 时从标题栏停止）并等拼回作品。
+ */
 function audioScenario(ctx) {
   const { driver, result, log } = ctx
   const recordingRef = { kind: 'audio_capture.settings', id: 'singleton' }
@@ -362,11 +367,19 @@ function audioScenario(ctx) {
       log(`已建作品「${name}」并在音频编辑里打开`)
     },
     async start() {
-      const page = await driver.page()
       result.recording.prepareAtMs = Date.now()
-      await page.getByRole('button', { name: '开始录音', exact: true }).first().click({ timeout: 60_000 })
-      const started = await waitUi(value => value.pagePhase === 'recording', 30_000)
-      if (!started.ok) throw new Error(`点了开始录音，30 秒内没有进入录音：${JSON.stringify(started.ui)}`)
+      result.recording.control = ctx.options.audioControl
+      if (ctx.options.audioControl === 'capability') {
+        // 接在作品末尾（种子静音之后），与界面在播放头为末尾时点开始一样
+        const started = await driver.call('start_audio_edit_recording', { documentRef: { kind: 'audio_edit.document', id: state.documentId } }, { write: true, timeoutMs: 120_000 })
+        result.recording.startReceipt = started
+        if (started?.recording?.phase !== 'recording') throw new Error(`start_audio_edit_recording 返回后没有在录音：${JSON.stringify(started)}`)
+      } else {
+        const page = await driver.page()
+        await page.getByRole('button', { name: '开始录音', exact: true }).first().click({ timeout: 60_000 })
+        const started = await waitUi(value => value.pagePhase === 'recording', 30_000)
+        if (!started.ok) throw new Error(`点了开始录音，30 秒内没有进入录音：${JSON.stringify(started.ui)}`)
+      }
       // 录音会话 ID 只在主进程日志里：用它读主进程真实状态，界面重载期间也查得到。
       const deadline = Date.now() + 20_000
       while (!state.sessionId && Date.now() < deadline) {
@@ -422,11 +435,23 @@ function audioScenario(ctx) {
         return { before, after, ui: back.ui, ok: back.ok, ...(back.ok ? {} : { reason: '回到音频编辑后页面没有显示录音中，或标题栏指示没有消失' }) }
       },
     },
-    /** 不回音频编辑，直接点标题栏的停止；标题栏找不到时退回音频编辑页面里的按钮。 */
+    /** 正式能力停止；ui 时不回音频编辑，直接点标题栏的停止，标题栏找不到时退回音频编辑页面里的按钮。 */
     async stop() {
       if (ctx.stopped) return { alreadyStopped: true }
       const before = await scenario.alive()
       await sampleMemory(ctx, 'end').catch(() => {})
+      if (ctx.options.audioControl === 'capability') {
+        result.recording.stopRequestedAtMs = Date.now()
+        // 长录音拼回可能超过能力的短等：回执 finishing=true 时照常进 verify，由它等作品拼回
+        const receipt = await driver.call('stop_audio_edit_recording', {}, { write: true, timeoutMs: 120_000 })
+        ctx.stopped = true
+        result.recording.stoppedAtMs = Date.now()
+        result.recording.wallSeconds = (result.recording.stopRequestedAtMs - result.recording.prepareAtMs) / 1000
+        result.recording.stopVia = 'capability'
+        result.recording.stopReceipt = receipt
+        log(`已用 stop_audio_edit_recording 停止${receipt?.finishing ? '（仍在拼回，等作品更新）' : ''}`)
+        return { via: 'capability', before, receipt, ok: Boolean(receipt?.verified || receipt?.finishing) }
+      }
       const page = await driver.page()
       let via = 'title-bar'
       const titleStop = page.getByRole('status', { name: '正在录音' }).getByRole('button', { name: '停止录音', exact: true })

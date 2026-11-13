@@ -318,8 +318,16 @@ for (const name of ['create_document', 'open_document', 'move_document', 'duplic
 for (const name of ['ripple_delete_video_edit_text', 'extract_video_edit_text', 'insert_video_edit_text', 'detect_video_edit_text_silence']) {
   successData[name] = { documentRef, resultRef: sequenceRef, ranges: [{ from: 0, to: 60 }], changed: true, ...verified }
 }
-for (const name of ['reset_audio_edit', 'format_audio_edit_subtitles', 'quick_process_audio_edit', 'compress_audio_edit_silence', 'clean_audio_edit_fillers', 'clean_audio_edit_retakes', 'process_audio_edit_breaths', 'import_audio_edit_source', 'transcribe_audio_edit', 'process_audio_edit_sound', 'export_audio_edit', 'query_audio_edit_tasks', 'cancel_audio_edit_task', 'repair_audio_edit_region', 'insert_audio_edit_file', 'match_audio_edit_loudness', 'detect_audio_edit_mouth_clicks']) {
+for (const name of ['reset_audio_edit', 'format_audio_edit_subtitles', 'quick_process_audio_edit', 'compress_audio_edit_silence', 'clean_audio_edit_fillers', 'clean_audio_edit_retakes', 'process_audio_edit_breaths', 'import_audio_edit_source', 'transcribe_audio_edit', 'process_audio_edit_sound', 'export_audio_edit', 'query_audio_edit_tasks', 'cancel_audio_edit_task', 'repair_audio_edit_region', 'insert_audio_edit_file', 'match_audio_edit_loudness', 'detect_audio_edit_mouth_clicks', 'undo_audio_edit', 'redo_audio_edit']) {
   successData[name] = { resultRef: audioDocumentRef, ...verified, count: 1, shortenedMs: 100, durationFrames: 2400, tasks: [{ requestId: 'task', documentId: 'audio', kind: 'processing', state: 'completed', progress: 100 }] }
+}
+
+// 音频编辑录音：回执带录音读回；暂停、停止、恢复拼回后带撤销引用，等不及时 finishing=true
+for (const name of ['start_audio_edit_recording', 'resume_audio_edit_recording']) {
+  successData[name] = { resultRef: audioDocumentRef, ...verified, recording: { phase: 'recording', durationSeconds: 0, positionSeconds: 1 }, durationFrames: 2400 }
+}
+for (const name of ['pause_audio_edit_recording', 'stop_audio_edit_recording', 'recover_audio_edit_recording']) {
+  successData[name] = { resultRef: audioDocumentRef, ...verified, recording: { phase: name === 'pause_audio_edit_recording' ? 'paused' : 'idle', durationSeconds: 3, positionSeconds: null }, durationFrames: 2400, undoRef: 'audio_edit.step:take' }
 }
 
 const host = new ApplicationHostBridge(() => {})
@@ -372,7 +380,7 @@ describe('外部客户端成功输出 JSON Schema 契约', () => {
     }] }) as Record<string, unknown>
     const raw = { ok: true, data: capabilityVerificationEnvelope(definition, input, data), ...revisions, revisionEpoch: 'host' }
     const validate = validator.getValidator(tools.find(tool => tool.name === name)!.outputSchema!)
-    for (const options of [{}, { includeRevisions: true, includeEvidence: true, includeDetails: true }]) {
+    for (const options of [{}, { includeDetails: true }]) {
       const result = toMcpResult(projectApplicationToolResult(name, input, raw, options))
       expect(validate(result.structuredContent)).toMatchObject({ valid: true })
       expect(result.structuredContent).toMatchObject({ data: { records: [{ content: { records: [{ timelineRanges: [{ fromFrame: 0, toFrame: 0 }] }] } }] } })
@@ -414,7 +422,7 @@ describe('外部客户端成功输出 JSON Schema 契约', () => {
         ? { ok: true, operationId: '3e8b1d7c-6a2f-4c95-9d40-7f1e5a3c8b26', executionState: 'completed' as const, verificationState: 'verified', result: { ok: true, data: envelope }, ...revisions }
         : { ok: true, data: envelope, ...revisions, revisionEpoch: 'host' }
       const validate = validator.getValidator(tool.outputSchema!)
-      for (const options of [{}, { includeRevisions: true, includeEvidence: true, includeDetails: true }]) {
+      for (const options of [{}, { includeDetails: true }]) {
         const result = toMcpResult(projectApplicationToolResult(name, input, raw, options))
         const checked = validate(result.structuredContent)
         expect(checked.valid, JSON.stringify(checked)).toBe(true)

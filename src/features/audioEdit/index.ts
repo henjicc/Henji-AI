@@ -4,6 +4,7 @@ export { transcribeAudioEdit, preflightAudioEditTranscription } from './applicat
 export { renderAudioEdit } from './application/audioEditRegions'
 export { importAudioEditMedia, openAudioEditDocument } from './application/audioEditDocumentService'
 export { lockAudioEditRecording } from './application/audioEditProjectInstances'
-export { restoreAudioEditTake } from './application/audioEditSpliceService'
+export { audioEditPlayheadFrame, audioEditResumeFrame, prepareAudioEditTake, restoreAudioEditTake } from './application/audioEditSpliceService'
+export { recordAudioEditStep } from './application/audioEditStepUndo'
 export { useAudioEditPlaybackStore } from './store/audioEditPlaybackStore'
 export { registerAudioEditMultitrackOpener } from './application/audioEditMultitrack'
