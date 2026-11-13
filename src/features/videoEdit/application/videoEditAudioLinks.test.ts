@@ -173,6 +173,19 @@ it('拼接替换素材后刷新动态链接，撤销恢复来源也刷新，剪�
   expect(owner.document.sequences[0].clips.find(clip => clip.id === clipId)?.creativeSource).toMatchObject({ revision: audio.persistedRevision })
 })
 
+it('一次保存合并了多次编辑时照常刷新（内存编辑计数与文件版本不同步）', async () => {
+  const { owner, clipId } = await fixture()
+  const sent = await sendVideoEditClipToAudioEdit(owner.document.id, clipId, false)
+  const audio = await loadAudioEditProject(sent.documentId)
+  const start = audio.document.cuts![0].endFrame
+  editAudioEditProject(sent.documentId, p => ({ ...p, cuts: [...(p.cuts ?? []), { id: 'a', startFrame: start, endFrame: start + 24000, enabled: true, reason: 'manual' }] }))
+  editAudioEditProject(sent.documentId, p => ({ ...p, cuts: [...(p.cuts ?? []), { id: 'b', startFrame: start + 24000, endFrame: start + 48000, enabled: true, reason: 'manual' }] }))
+  await flushAudioEditProject(sent.documentId)
+  expect(audio.document.revision).not.toBe(audio.persistedRevision)
+  await refreshVideoEditAudioDocumentClips(owner.document.id, sent.documentId)
+  expect(owner.document.sequences[0].clips.find(clip => clip.id === clipId)?.creativeSource).toMatchObject({ revision: audio.persistedRevision })
+})
+
 it('独立剪辑发送音频与刷新链接均把缓存产物收进作品目录', async () => {
   const { owner, clipId } = await fixture()
   await videoEditDocumentOperations().moveDocument(owner.session.documentMeta, { kind: 'user' })

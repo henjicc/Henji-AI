@@ -42,7 +42,8 @@ function sameRender(media: VideoEditMedia, rendered: { audioPath: string }): boo
 /** 音频编辑文档当前的源录音时间线与字幕段（与渲染所用的同一版本）。 */
 async function loadAudioLinkTimeline(documentId: string, revision: number): Promise<{ timeline: VideoEditLinkedTimeline; cues: AudioEditSubtitleCue[] }> {
   const audio = await loadAudioEditProject(documentId)
-  if (audio.document.revision !== revision) throw new AudioLinkStaleError('音频正在更新，将在保存后重试')
+  // 渲染读的是文件版本（会话 revision）；document.revision 是内存编辑计数，两者不同步。内存里还有未保存的修改时字幕会领先声音，等保存后再刷新。
+  if (audio.persistedRevision !== revision || audio.dirty) throw new AudioLinkStaleError('音频正在更新，将在保存后重试')
   const spans = buildProjectAudioEditTimeline(audio.document)
   return { timeline: videoEditLinkedTimeline(spans, audio.document.source.sampleRate), cues: buildProjectAudioEditSubtitleCues(audio.document) }
 }

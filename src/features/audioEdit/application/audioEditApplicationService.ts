@@ -79,7 +79,8 @@ async function detectRetakeSuggestions(instance: AudioEditProjectInstance, range
   const document = instance.document
   if (!document.transcript.length) throw new Error('这份口播还没有转写，请先识别口播。')
   if (!hasWordTranscript(document)) throw new Error('这份转写只有整句时间，无法逐词去掉重念；请用支持逐词时间的识别模型重新识别。')
-  const detected = await getPlatform().audioEdit.detectSilence({ projectId: document.id, settings: document.batchSettings ?? DEFAULT_AUDIO_EDIT_SETTINGS, requestId, energy: {} })
+  // 快速处理在同一请求里随后还要做一次参数不同的停顿分析；主进程同一请求号只认一份输入，这次分析用派生请求号（取消父请求时一并取消）。
+  const detected = await getPlatform().audioEdit.detectSilence({ projectId: document.id, settings: document.batchSettings ?? DEFAULT_AUDIO_EDIT_SETTINGS, requestId: `${requestId}:retakes`, energy: {} })
   if (detected.revision !== instance.persistedRevision) throw new Error('口播已更新，请重新检测重念。')
   if (!detected.energy) throw new Error('没有取得声音停顿证据，请重试。')
   // 呼吸也是气口：换遍拼接、碎字判断都把它与停顿同等看待

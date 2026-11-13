@@ -140,7 +140,10 @@ export function deleteAudioEditTasks(projectId: string): number {
   return getDb().prepare('DELETE FROM audio_edit_tasks WHERE document_id = ?').run(projectId).changes
 }
 
-export function cancelAudioEditTask(requestId: string): void { active.get(requestId)?.controller.abort() }
+/** 一次操作的子步骤用“请求号:步骤”登记，取消父请求时一并取消。 */
+export function cancelAudioEditTask(requestId: string): void {
+  for (const [id, task] of active) if (id === requestId || id.startsWith(`${requestId}:`)) task.controller.abort()
+}
 
 const INTERRUPTED_MESSAGE = '上次处理在软件退出时中断。'
 
@@ -168,13 +171,13 @@ export function settleStaleAudioEditTask(requestId: string): void {
 }
 
 export function listAudioEditTasks(projectId: string): AudioEditTask[] {
-  const rows = getDb().prepare('SELECT request_id,document_id,kind,state,error_message,updated_at FROM audio_edit_tasks WHERE document_id = ? ORDER BY updated_at DESC LIMIT 30').all(projectId) as Array<{ request_id: string; document_id: string; kind: string; state: AudioEditTaskState; error_message?: string; updated_at: number }>
+  const rows = getDb().prepare('SELECT request_id,document_id,kind,state,error_message,updated_at FROM audio_edit_tasks WHERE document_id = ? ORDER BY updated_at DESC LIMIT 30').all(projectId) as Array<{ request_id: string; document_id: string; kind: string; state: AudioEditTaskState; error_message: string | null; updated_at: number }>
   const now = Date.now()
   return rows.map((row) => {
     const running = active.get(row.request_id)
     const interrupted = !running && (row.state === 'running' || row.state === 'queued') && !liveElsewhere(row, now)
     return { requestId: row.request_id, projectId: row.document_id, kind: row.kind, state: interrupted ? 'failed' : row.state,
-      progress: running?.progress, errorMessage: interrupted ? '上次处理已中断。' : row.error_message }
+      progress: running?.progress, errorMessage: interrupted ? '上次处理已中断。' : row.error_message ?? undefined }
   })
 }
 

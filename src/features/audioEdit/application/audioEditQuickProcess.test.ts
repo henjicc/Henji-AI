@@ -102,7 +102,14 @@ it('快速处理在有逐词转写时先去掉重念，再压缩停顿，整批�
   setAudioEditDocumentRegistryForTests(new DocumentSessionRegistry({ commands, prompter: createScriptedPrompter(), kinds: documentKindRegistry }))
   commands.seed({ kind: 'audio_edit', id: 'quick-retake', name: '录音', content: audioEditProjectToDocumentContent({ id: 'quick-retake', name: '录音', source: { mediaType: 'audio', sourcePath: 'a.wav', audioPath: 'a.wav', sampleRate: 1000, channels: 1, durationFrames: 4000 }, transcript: retakeTranscript(), referenceScript: '', suggestions: [], revision: 1, createdAt: 1, updatedAt: 1 }) })
   const instance = await loadAudioEditProject('quick-retake')
-  vi.spyOn(getPlatform().audioEdit, 'detectSilence').mockImplementation(async (request) => ({ revision: instance.session.documentMeta.revision, suggestions: [], ...(request.energy ? { energy } : {}) }))
+  // 与主进程任务登记同一规则：同一请求号只认一份输入，否则拒绝。
+  const inputs = new Map<string, string>()
+  vi.spyOn(getPlatform().audioEdit, 'detectSilence').mockImplementation(async (request) => {
+    const input = JSON.stringify([request.range, request.energy])
+    if (request.requestId && (inputs.get(request.requestId) ?? input) !== input) throw new Error('任务引用与当前口播不匹配。')
+    if (request.requestId) inputs.set(request.requestId, input)
+    return { revision: instance.session.documentMeta.revision, suggestions: [], ...(request.energy ? { energy } : {}) }
+  })
   const result = await quickProcessAudioEdit('quick-retake')
   expect(result.retakeCount).toBe(1)
   expect(instance.past).toHaveLength(1)
