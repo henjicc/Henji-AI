@@ -367,7 +367,7 @@ const NAMESPACES: Record<string, object> = {
       return wire(result.change)
     },
   },
-  runtimeInfo: { uiInspectionReadOnly: false },
+  runtimeInfo: { uiInspectionReadOnly: false, headlessWindow: false },
   screenRecording: {
     async snapshot() { return wire(recordingSnapshot) },
     onChanged(listener: (snapshot: RecordingControlSnapshot | null) => void) { recordingListeners.add(listener); return () => { recordingListeners.delete(listener) } },
