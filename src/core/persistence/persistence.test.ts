@@ -554,6 +554,26 @@ describe('所有登记格式的黄金样本', () => {
     }
   })
 
+  it('片段备注 note：旧样本升上来没有备注，新样本读回备注，最低可读版本不变', () => {
+    const goldenClip = (id: string, content: unknown): Record<string, unknown> => {
+      const value = content as { sequences: Array<{ id: string; clips: Array<Record<string, unknown>> }>; scriptCapture: { baselines: Array<{ content: typeof value }> }; soundClips: Array<Record<string, unknown>> }
+      if (id === 'subtitle-manifest') return value.soundClips[0]
+      const video = id === 'document.video_edit' ? value : value.scriptCapture.baselines[0].content
+      return video.sequences.find(sequence => sequence.id === 'golden-sequence')!.clips.find(clip => clip.id === 'golden-clip')!
+    }
+    for (const [id, previous] of [['document.video_edit', 77], ['document.screen_recording', 80], ['subtitle-manifest', 35]] as const) {
+      const format = PERSISTENCE_FORMATS.find(value => value.id === id)!
+      const read = (version: number) => JSON.parse(fs.readFileSync(`tests/fixtures/persistence/${id}/v${version}.json`, 'utf8'))
+      const contentOf = (raw: { content?: unknown }) => id.startsWith('document.') ? raw.content : raw
+      const minReader = (raw: { kindMinReaderVersion?: number }) => id.startsWith('document.') ? raw.kindMinReaderVersion : format.minReaderVersion
+      const old = read(previous), latest = read(previous + 1)
+      expect(goldenClip(id, upgradePersistenceContent(format, contentOf(old), previous))).not.toHaveProperty('note')
+      expect(goldenClip(id, upgradePersistenceContent(format, contentOf(latest), previous + 1)).note).toBe('后半段说错了一次字号，从 01:28 起重录')
+      // 只新增可选字段：最低可读版本不变，上一版程序按向前兼容打开新文件。
+      expect(minReader(latest)).toBe(minReader(old))
+    }
+  })
+
   for (const format of PERSISTENCE_FORMATS) {
     const directory = path.resolve('tests/fixtures/persistence', format.id)
     for (const file of fs.readdirSync(directory).filter(file => /^v\d+\.json$/.test(file))) {

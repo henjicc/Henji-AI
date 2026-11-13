@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { MoreHorizontal, Pencil } from 'lucide-react'
-import { PanelTrigger, UiEmpty, UiFieldLayoutContext, UiIconButton, UiInput, UiOptionButton, UiPropertyMenuContext } from '@/components/ui'
+import { MoreHorizontal, NotebookPen, Pencil } from 'lucide-react'
+import { PanelTrigger, UiEmpty, UiFieldLayoutContext, UiIconButton, UiInput, UiOptionButton, UiPropertyMenuContext, UiTextArea } from '@/components/ui'
 import ContextMenu from '@/components/ContextMenu'
 import { useContextMenu } from '@/hooks/useContextMenu'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
@@ -28,22 +28,31 @@ import { selectedVideoEditSubtitleId, subscribeVideoEditSubtitleSelection, video
 
 /**
  * 片段名一行（重要记录 019）：确认是哪个片段；变过速时跟一个速度读数。改名在“更多”菜单里（或双击名称），回车或失焦提交一次。
+ * 片段有备注（写给后期看的说明）时在名称下多一段备注，双击或从“更多”菜单编辑；没有备注不占位置。
  */
-function ClipNameHeader({ clip, speed, onRename }: { clip: VideoEditClip; speed: string; onRename: (name: string) => void }): React.ReactElement {
+function ClipNameHeader({ clip, speed, onRename, onNote }: { clip: VideoEditClip; speed: string; onRename: (name: string) => void; onNote: (note: string) => void }): React.ReactElement {
   const [draft, setDraft] = useState<string | null>(null)
+  const [noteDraft, setNoteDraft] = useState<string | null>(null)
   const cancelled = useRef(false)
-  if (draft !== null) return <div className="flex h-band-title shrink-0 items-center px-3"><UiInput aria-label="片段名称" size="sm" autoFocus value={draft} onChange={event => setDraft(event.target.value)}
+  const noteCancelled = useRef(false)
+  const note = noteDraft !== null
+    ? <div className="shrink-0 px-3 pb-2"><UiTextArea aria-label="片段备注" placeholder="写给后期的备注" fit="content" autoFocus value={noteDraft} onChange={event => setNoteDraft(event.target.value)}
+      onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); noteCancelled.current = true; event.currentTarget.blur() } }}
+      onBlur={() => { const next = noteDraft.trim(); setNoteDraft(null); if (noteCancelled.current) { noteCancelled.current = false; return } if (next !== (clip.note ?? '')) onNote(next) }} /></div>
+    : clip.note ? <p className="shrink-0 whitespace-pre-wrap break-words px-3 pb-2 text-xs text-text2" data-video-edit-effects-clip-note onDoubleClick={() => setNoteDraft(clip.note ?? '')}>{clip.note}</p> : null
+  if (draft !== null) return <><div className="flex h-band-title shrink-0 items-center px-3"><UiInput aria-label="片段名称" size="sm" autoFocus value={draft} onChange={event => setDraft(event.target.value)}
     onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); cancelled.current = true; event.currentTarget.blur() } }}
-    onBlur={() => { const next = draft.trim(); setDraft(null); if (cancelled.current) { cancelled.current = false; return } if (next && next !== clip.name) onRename(next) }} /></div>
-  return <div className="flex h-band-title shrink-0 items-center gap-1 pl-3 pr-2">
+    onBlur={() => { const next = draft.trim(); setDraft(null); if (cancelled.current) { cancelled.current = false; return } if (next && next !== clip.name) onRename(next) }} /></div>{note}</>
+  return <><div className="flex h-band-title shrink-0 items-center gap-1 pl-3 pr-2">
     <span className="min-w-0 flex-1 truncate text-13 font-semibold text-text1" title={clip.name} data-video-edit-effects-clip-name onDoubleClick={() => setDraft(clip.name)}>{clip.name}</span>
     {speed && <span className={`shrink-0 text-xs text-text3 ${UI_TEXT_NUMERIC_CLASS}`} data-video-edit-effects-clip-speed>{speed}</span>}
     <PanelTrigger panelSize="menu" zIndex={Z_LAYERS.dropdown} closeOnPanelClick panelPadding="menu" alignment="bottomRight" renderPanel={() => <div className="flex flex-col gap-1" role="menu" aria-label="片段操作">
       <UiOptionButton role="menuitem" variant="menu" size="sm" className="gap-2" onClick={() => setDraft(clip.name)}><Pencil size={UI_ICON_SIZE.sm} />重命名片段</UiOptionButton>
+      <UiOptionButton role="menuitem" variant="menu" size="sm" className="gap-2" onClick={() => setNoteDraft(clip.note ?? '')}><NotebookPen size={UI_ICON_SIZE.sm} />{clip.note ? '编辑备注' : '添加备注'}</UiOptionButton>
     </div>}>
       {({ open, togglePanel }) => <UiIconButton size="xs" aria-label="更多片段操作" tooltip="更多片段操作" aria-expanded={open} data-panel-trigger-button onClick={togglePanel}><MoreHorizontal /></UiIconButton>}
     </PanelTrigger>
-  </div>
+  </div>{note}</>
 }
 
 /**
@@ -70,7 +79,7 @@ function VideoEditEffectsPanelContent({ instance, onError, visible = true }: { i
     <div className="flex h-full min-h-0 flex-col" aria-label="效果控件" data-video-edit-panel="effects" tabIndex={-1} onMouseDown={event => { if (!(event.target as HTMLElement).closest('button,input,textarea,select,[contenteditable]')) event.currentTarget.focus() }}>
       <div className="min-h-0 flex-1 overflow-auto pb-3">
         {selected ? <>
-          <ClipNameHeader key={`name:${selected.id}`} clip={selected} speed={videoEditClipSpeedReadout(selected)} onRename={name => run(() => updateVideoEditClipProperties(projectId, sequence.id, selected.id, { name }))} />
+          <ClipNameHeader key={`name:${selected.id}`} clip={selected} speed={videoEditClipSpeedReadout(selected)} onRename={name => run(() => updateVideoEditClipProperties(projectId, sequence.id, selected.id, { name }))} onNote={note => run(() => updateVideoEditClipProperties(projectId, sequence.id, selected.id, { note }))} />
           <VideoEditClipPropertySections clip={selected} frame={{ ...sequence, playhead: instance.frame }} gesture={gesture} />
           {visible && selected.kind === 'text' && <VideoEditTextStylePanel key={`text-style:${selected.id}`} projectId={projectId} sequenceId={sequence.id} clip={selected} height={sequence.height} onError={reportError} />}
         </> : selectedVideoEditTransitionId(instance) ? null : captionId ? <VideoEditSubtitleInspector instance={instance} sequenceId={sequence.id} captionId={captionId} onError={reportError} /> : <UiEmpty size="sm" title="选择片段以编辑" />}

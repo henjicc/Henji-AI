@@ -165,6 +165,8 @@ export const videoEditDocumentKind: DocumentKindDescriptor<VideoEditDocumentCont
     // 74 → 75：修改记录新增键 check（助手检查过手改的时刻）；已有手改记为检查过（见 codeEditCheckMigration.ts）。旧程序原样保留它，最低可读版本不变。
     // 75 → 76：风格的使用者偏好（记忆条目）不再限条数与总字数；旧内容原样有效。只放宽取值范围、不改已有字段含义；旧程序只在偏好条目超出旧上限时拒绝打开，不会误读，最低可读版本不变。
     // 76 → 77：文字样式新增可选 fontVariations（可变字体轴数值），文字片段的 curves 新增可选键 fontAxis_<轴标签>（轴动画）；旧内容没有这两项，原样有效。只新增可选内容、不改已有字段含义；旧程序只在文件真的用到轴数值或轴动画时拒绝打开，不会误读，最低可读版本不变。
+    // 77 → 78：片段新增可选备注 note（写给后期看的说明，不进画面与导出）；旧内容没有备注，原样有效。只新增可选字段，旧程序按向前兼容保留它，最低可读版本不变。
+    77: content => structuredClone(content),
     76: content => structuredClone(content),
     75: content => structuredClone(content),
     74: content => migrateVideoEditCodeEditChecks(content),
