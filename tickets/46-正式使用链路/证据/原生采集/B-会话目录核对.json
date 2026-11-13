@@ -1,0 +1,1173 @@
+{
+ "files": [
+  "05ad6825-b8db-44a2-988c-f3632634e491.wav 960092",
+  "08c67ef9-6fa1-4df8-937b-2fa0290113b7.wav 678332",
+  "09b4a4c5-7f8d-42f0-9dd6-fdc611ecbcdf.wav 720092",
+  "0d14cc48-eff4-4049-a716-3cc1af83b1ee.wav 720092",
+  "0db84457-f2bc-4364-90e5-97d59c04c6ce.wav 4412",
+  "0ebd0281-a426-4e06-86b9-4e7b48d2acfe.wav 407524",
+  "0fb823b1-d54f-4e2d-941e-677043bd829e.wav 720092",
+  "11c4145e-7429-4732-9df0-805280556303.wav 69360",
+  "1245accf-6d88-4f7b-b5ed-f3bc6ad04bd0.wav 960092",
+  "175ffaf5-5480-4781-ab6f-91fa72bc71db.wav 960092",
+  "1ccc7507-0196-4a81-8958-a4134c39cd4a.wav 960092",
+  "1f271b2c-781d-49c8-9689-356d2ef9c627.wav 720092",
+  "22846895-7cc2-44d6-956b-1d9409a8d996.wav 720092",
+  "25798453-7bbd-4f0f-9208-cba7f279f6cd.wav 960092",
+  "2649b98f-0be3-40fc-a920-f3e79bb0629c.wav 720092",
+  "285463cb-edb9-46ec-8dd3-edd7a462ae26.wav 960092",
+  "299b67da-57a6-499a-9c48-f2dbd272d843.wav 720092",
+  "2c8ac6ce-15cc-4409-a3a9-7c1d43f3f575.wav 960092",
+  "359be85f-1d12-42b1-851a-563e74e5af07.wav 960092",
+  "37826011-64f9-4887-abe9-8b441068f0e5.wav 413908",
+  "3926ecee-efea-4715-98ed-faf40597a091.wav 720092",
+  "3a0e7cc4-8156-4a80-9d50-aec2184eafc2.wav 720092",
+  "3dbb527f-47bd-4712-8559-ed21fe18a680.wav 960092",
+  "44a3b47f-12b5-4afa-92b0-9196dfb629f3.wav 960092",
+  "46747189-c5f0-4982-8c85-f1a8dc10ee4b.wav 720092",
+  "51443fff-781f-4c0f-9c77-863f29c12545.wav 960092",
+  "595e1453-4665-4d5b-9aed-863d9ef878ec.wav 720092",
+  "5ce9f200-b873-4d01-8ed0-45d53c557df2.wav 720092",
+  "61644f5f-e103-47cd-83fe-8920d56989ed.wav 960092",
+  "63202965-dc3c-4515-9086-5f2dda2bd157.wav 960092",
+  "663e58d7-651a-4161-9dbe-a421a6896448.wav 720092",
+  "6d3d1c55-6858-432a-8410-9974c80b5efc.wav 960092",
+  "739ef461-916e-4cc0-9c72-1440b00e5e83.wav 960092",
+  "77390041-7dda-4557-80ef-0530064d8c73.wav 720092",
+  "78b82a16-b4e4-4bbc-829c-6e4eb2b9971b.wav 960092",
+  "83d30558-be92-4268-95a0-71c0808d766a.wav 720092",
+  "86c5ab23-9799-4fc7-90af-0ffad47891c2.wav 960092",
+  "8c64e724-21f0-40f9-aa9a-ee6ab614fab6.wav 720092",
+  "9e53f3cc-729d-468a-8976-08a0a19f0963.wav 720092",
+  "a31bf72d-76db-476c-96cd-4d071feaae67.wav 223292",
+  "a5ac3d41-210b-4a19-9e3b-2ec9651455a8.wav 960092",
+  "a996ab60-a245-45e5-b993-3813ac735961.wav 960092",
+  "ad5abf5c-17a0-473a-b971-5ec676a71cd3.wav 720092",
+  "b08729eb-d718-41a9-82ca-41674ea653a1.wav 960092",
+  "b3a9c3e5-2307-4a6e-adb9-5617a103cdc4.wav 960092",
+  "b3c082dc-e604-4ef0-bf47-b7a600d7bcb6.wav 720092",
+  "capture.json 496",
+  "d4650596-cfea-4eaa-88bc-ef4e203468f3.wav 720092",
+  "d4800a8f-44b8-43ad-b57e-bbd07b1e0f9e.wav 720092",
+  "ea682c71-aa05-4b1b-bc4d-619d9e52a2d3.wav 960092",
+  "eb502fa3-3cfc-458c-92a3-6951380d3204.wav 720092",
+  "ed15dfa2-c180-4cdc-8bd7-2ec4b3ac1c2b.wav 720092",
+  "f49ccdd5-c795-49d7-ac21-c5ea1fca6f8e.wav 960092",
+  "f89755e2-2681-447e-a567-57f62488c7be.wav 960092",
+  "microphone-joined-000.wav 4324710",
+  "microphone-joined-001.wav 4998656",
+  "microphone-joined-002.wav 8143694",
+  "screen-000000.activity.jsonl 12843",
+  "screen-000000.capture.json 1609",
+  "screen-000000.frames 119408",
+  "screen-000000.mp4 255895418",
+  "systemAudio-joined-000.wav 6167368",
+  "systemAudio-joined-001.wav 6789216",
+  "systemAudio-joined-002.wav 10973800",
+  "tracks.journal 82132",
+  "tracks.json 100"
+ ],
+ "probe": {
+  "05ad6825-b8db-44a2-988c-f3632634e491.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s16le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "08c67ef9-6fa1-4df8-937b-2fa0290113b7.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s24le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "4.710000",
+     "nb_read_packets": "56"
+    }
+   ],
+   "format": {
+    "duration": "4.710000"
+   }
+  },
+  "09b4a4c5-7f8d-42f0-9dd6-fdc611ecbcdf.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s24le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "0d14cc48-eff4-4049-a716-3cc1af83b1ee.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s24le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "0db84457-f2bc-4364-90e5-97d59c04c6ce.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s24le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "0.030000",
+     "nb_read_packets": "1"
+    }
+   ],
+   "format": {
+    "duration": "0.030000"
+   }
+  },
+  "0ebd0281-a426-4e06-86b9-4e7b48d2acfe.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s16le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "2.122042",
+     "nb_read_packets": "25"
+    }
+   ],
+   "format": {
+    "duration": "2.122042"
+   }
+  },
+  "0fb823b1-d54f-4e2d-941e-677043bd829e.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s24le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "11c4145e-7429-4732-9df0-805280556303.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s16le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "0.360771",
+     "nb_read_packets": "5"
+    }
+   ],
+   "format": {
+    "duration": "0.360771"
+   }
+  },
+  "1245accf-6d88-4f7b-b5ed-f3bc6ad04bd0.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s16le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "175ffaf5-5480-4781-ab6f-91fa72bc71db.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s16le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "1ccc7507-0196-4a81-8958-a4134c39cd4a.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s16le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "1f271b2c-781d-49c8-9689-356d2ef9c627.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s24le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "22846895-7cc2-44d6-956b-1d9409a8d996.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s24le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "25798453-7bbd-4f0f-9208-cba7f279f6cd.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s16le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "2649b98f-0be3-40fc-a920-f3e79bb0629c.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s24le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "285463cb-edb9-46ec-8dd3-edd7a462ae26.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s16le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "299b67da-57a6-499a-9c48-f2dbd272d843.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s24le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "2c8ac6ce-15cc-4409-a3a9-7c1d43f3f575.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s16le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "359be85f-1d12-42b1-851a-563e74e5af07.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s16le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "37826011-64f9-4887-abe9-8b441068f0e5.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s16le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "2.155292",
+     "nb_read_packets": "26"
+    }
+   ],
+   "format": {
+    "duration": "2.155292"
+   }
+  },
+  "3926ecee-efea-4715-98ed-faf40597a091.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s24le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "3a0e7cc4-8156-4a80-9d50-aec2184eafc2.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s24le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "3dbb527f-47bd-4712-8559-ed21fe18a680.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s16le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "44a3b47f-12b5-4afa-92b0-9196dfb629f3.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s16le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "46747189-c5f0-4982-8c85-f1a8dc10ee4b.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s24le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "51443fff-781f-4c0f-9c77-863f29c12545.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s16le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "595e1453-4665-4d5b-9aed-863d9ef878ec.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s24le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "5ce9f200-b873-4d01-8ed0-45d53c557df2.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s24le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "61644f5f-e103-47cd-83fe-8920d56989ed.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s16le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "63202965-dc3c-4515-9086-5f2dda2bd157.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s16le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "663e58d7-651a-4161-9dbe-a421a6896448.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s24le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "6d3d1c55-6858-432a-8410-9974c80b5efc.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s16le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "739ef461-916e-4cc0-9c72-1440b00e5e83.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s16le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "77390041-7dda-4557-80ef-0530064d8c73.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s24le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "78b82a16-b4e4-4bbc-829c-6e4eb2b9971b.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s16le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "83d30558-be92-4268-95a0-71c0808d766a.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s24le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "86c5ab23-9799-4fc7-90af-0ffad47891c2.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s16le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "8c64e724-21f0-40f9-aa9a-ee6ab614fab6.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s24le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "9e53f3cc-729d-468a-8976-08a0a19f0963.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s24le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "a31bf72d-76db-476c-96cd-4d071feaae67.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s24le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "1.550000",
+     "nb_read_packets": "19"
+    }
+   ],
+   "format": {
+    "duration": "1.550000"
+   }
+  },
+  "a5ac3d41-210b-4a19-9e3b-2ec9651455a8.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s16le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "a996ab60-a245-45e5-b993-3813ac735961.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s16le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "ad5abf5c-17a0-473a-b971-5ec676a71cd3.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s24le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "b08729eb-d718-41a9-82ca-41674ea653a1.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s16le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "b3a9c3e5-2307-4a6e-adb9-5617a103cdc4.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s16le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "b3c082dc-e604-4ef0-bf47-b7a600d7bcb6.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s24le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "d4650596-cfea-4eaa-88bc-ef4e203468f3.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s24le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "d4800a8f-44b8-43ad-b57e-bbd07b1e0f9e.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s24le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "ea682c71-aa05-4b1b-bc4d-619d9e52a2d3.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s16le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "eb502fa3-3cfc-458c-92a3-6951380d3204.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s24le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "ed15dfa2-c180-4cdc-8bd7-2ec4b3ac1c2b.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s24le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "f49ccdd5-c795-49d7-ac21-c5ea1fca6f8e.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s16le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "f89755e2-2681-447e-a567-57f62488c7be.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s16le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "5.000000",
+     "nb_read_packets": "59"
+    }
+   ],
+   "format": {
+    "duration": "5.000000"
+   }
+  },
+  "microphone-joined-000.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s24le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "30.032396",
+     "nb_read_packets": "352"
+    }
+   ],
+   "format": {
+    "duration": "30.032396"
+   }
+  },
+  "microphone-joined-001.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s24le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "34.712583",
+     "nb_read_packets": "407"
+    }
+   ],
+   "format": {
+    "duration": "34.712583"
+   }
+  },
+  "microphone-joined-002.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s24le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "56.553125",
+     "nb_read_packets": "663"
+    }
+   ],
+   "format": {
+    "duration": "56.553125"
+   }
+  },
+  "screen-000000.mp4": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "h264",
+     "codec_type": "video",
+     "width": 3840,
+     "height": 2160,
+     "r_frame_rate": "60/1",
+     "avg_frame_rate": "60/1",
+     "duration": "124.316667",
+     "nb_read_packets": "7459"
+    }
+   ],
+   "format": {
+    "duration": "124.316667"
+   }
+  },
+  "systemAudio-joined-000.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s16le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "32.121479",
+     "nb_read_packets": "377"
+    }
+   ],
+   "format": {
+    "duration": "32.121479"
+   }
+  },
+  "systemAudio-joined-001.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s16le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "35.360271",
+     "nb_read_packets": "415"
+    }
+   ],
+   "format": {
+    "duration": "35.360271"
+   }
+  },
+  "systemAudio-joined-002.wav": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "pcm_s16le",
+     "codec_type": "audio",
+     "r_frame_rate": "0/0",
+     "avg_frame_rate": "0/0",
+     "duration": "57.154979",
+     "nb_read_packets": "670"
+    }
+   ],
+   "format": {
+    "duration": "57.154979"
+   }
+  }
+ },
+ "screen-000000.frames": {
+  "fps": "60/1",
+  "originUs": 190844832647,
+  "records": 7459,
+  "fresh": 7459,
+  "repeated": 0,
+  "dropped": 0,
+  "gaps": [
+   {
+    "atFrame": 1901,
+    "cells": 606,
+    "flags": 13
+   },
+   {
+    "atFrame": 4026,
+    "cells": 481,
+    "flags": 13
+   }
+  ],
+  "lastCell": 8545,
+  "spanSec": 142.415119
+ },
+ "screen-000000.activity.jsonl": {
+  "counts": {
+   "start": 1,
+   "foreground": 3,
+   "motion": 126,
+   "pause": 2,
+   "resume": 2,
+   "stop": 1
+  },
+  "marks": [
+   "start@",
+   "pause@1901",
+   "resume@1901",
+   "pause@4026",
+   "resume@4026",
+   "stop@7459"
+  ]
+ },
+ "screen-000000.capture.json": {
+  "completed": true,
+  "encoder": "h264_nvenc",
+  "size": [
+   3840,
+   2160
+  ],
+  "proxy": {
+   "file": "screen-000000.proxy.mp4",
+   "height": 1080,
+   "width": 1920
+  },
+  "result": {
+   "bytes": 255895418,
+   "captureDropped": 0,
+   "captureFailed": 0,
+   "cells": 8546,
+   "droppedFrames": 0,
+   "durableFrames": 7459,
+   "durationUs": 124316666,
+   "encodedFrames": 7459,
+   "files": {
+    "activity": "screen-000000.activity.jsonl",
+    "manifest": "screen-000000.capture.json",
+    "proxy": "screen-000000.proxy.mp4",
+    "timing": "screen-000000.frames",
+    "video": "screen-000000.mp4"
+   },
+   "frames": 7459,
+   "freshFrames": 7459,
+   "originUs": 190844832647,
+   "pausedCells": 1087,
+   "proxyFrames": 7459,
+   "repeatedFrames": 0,
+   "sourceFrames": 8598,
+   "sourceSurplus": 0
+  },
+  "error": null
+ }
+}

@@ -1,0 +1,93 @@
+{
+ "files": [
+  "capture.json 495",
+  "screen-000000.activity.jsonl 3483",
+  "screen-000000.capture.json 1606",
+  "screen-000000.frames 32496",
+  "screen-000000.mp4 70650321",
+  "tracks.json 100"
+ ],
+ "probe": {
+  "screen-000000.mp4": {
+   "programs": [],
+   "stream_groups": [],
+   "streams": [
+    {
+     "codec_name": "h264",
+     "codec_type": "video",
+     "width": 3840,
+     "height": 2160,
+     "r_frame_rate": "60/1",
+     "avg_frame_rate": "121320/2027",
+     "duration": "33.783333",
+     "nb_read_packets": "2022"
+    }
+   ],
+   "format": {
+    "duration": "33.783333"
+   }
+  }
+ },
+ "screen-000000.frames": {
+  "fps": "60/1",
+  "originUs": 194390562374,
+  "records": 2027,
+  "fresh": 1901,
+  "repeated": 126,
+  "dropped": 5,
+  "gaps": [],
+  "lastCell": 2026,
+  "spanSec": 33.766329
+ },
+ "screen-000000.activity.jsonl": {
+  "counts": {
+   "start": 1,
+   "foreground": 1,
+   "motion": 34,
+   "stop": 1
+  },
+  "marks": [
+   "start@",
+   "stop@2027"
+  ]
+ },
+ "screen-000000.capture.json": {
+  "completed": true,
+  "encoder": "h264_nvenc",
+  "size": [
+   3840,
+   2160
+  ],
+  "proxy": {
+   "file": "screen-000000.proxy.mp4",
+   "height": 1080,
+   "width": 1920
+  },
+  "result": {
+   "bytes": 70650321,
+   "captureDropped": 0,
+   "captureFailed": 0,
+   "cells": 2027,
+   "droppedFrames": 5,
+   "durableFrames": 2027,
+   "durationUs": 33783333,
+   "encodedFrames": 2022,
+   "files": {
+    "activity": "screen-000000.activity.jsonl",
+    "manifest": "screen-000000.capture.json",
+    "proxy": "screen-000000.proxy.mp4",
+    "timing": "screen-000000.frames",
+    "video": "screen-000000.mp4"
+   },
+   "frames": 2027,
+   "freshFrames": 1901,
+   "originUs": 194390562374,
+   "pausedCells": 0,
+   "proxyFrames": 2022,
+   "repeatedFrames": 121,
+   "sourceFrames": 1937,
+   "sourceSurplus": 0
+  },
+  "error": null
+ }
+}

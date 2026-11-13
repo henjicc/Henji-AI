@@ -1,0 +1,18 @@
+22:32:38 start 72f3cac3-ec58-422b-9d97-833bae781465
+22:32:59 mem start pid=46060 ws=186MB priv=565MB cpu=1 gpu=46060, D:\VibeCode\Henji-AI\native\screen-capture\target\release\henji-screen-capture.exe, [N/A]; 17 %, 33 %, 4555 MiB
+22:37:41 switch canvas "message": "INVALID_INPUT:缺少必填参数 workspaceId（以下取值之一：generation�
+22:38:42 switch video_edit "message": "INVALID_INPUT:缺少必填参数 workspaceId（以下取值之一：generation�
+22:39:43 minimize ok pid=51896 title=�ۼ�AI
+22:40:44 restore ok pid=51896 title=�ۼ�AI
+22:43:06 pause1   "executionState": "completed",
+22:43:19 resume1   "executionState": "completed",
+22:48:10 mem mid pid=46060 ws=189MB priv=613MB cpu=33 gpu=46060, D:\VibeCode\Henji-AI\native\screen-capture\target\release\henji-screen-capture.exe, [N/A]; 7 %, 27 %, 4296 MiB
+22:48:11 reload reloaded 356 ms
+22:48:25 switch nodes "executionState": "completed"
+22:48:46 switch videoEdit "executionState": "completed"
+22:53:14 pause2   "executionState": "completed",
+22:53:26 resume2   "executionState": "completed",
+23:02:57 mem end pid=46060 ws=190MB priv=614MB cpu=64 gpu=46060, D:\VibeCode\Henji-AI\native\screen-capture\target\release\henji-screen-capture.exe, [N/A]; 17 %, 31 %, 4276 MiB
+23:03:08 stop   "executionState": "completed",     "message": "已停止并保存。开始时没有指定剪辑目标（或没录到画面），没有导入剪辑；需要时用 import_screen_recording。", 
+23:03:14 mem after-stop pid=46060 ws=31MB priv=26MB cpu=64 gpu= 20 %, 0 %, 3812 MiB
+23:03:14 done

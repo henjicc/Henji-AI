@@ -1,0 +1,173 @@
+{
+ "ms": 77,
+ "isError": false,
+ "structured": {
+  "ok": true,
+  "data": {
+   "ref": {
+    "kind": "screen_recording.session",
+    "id": "ecd3d8c5-5169-40d4-823d-9994baaf1e65"
+   },
+   "entityType": "screen_recording.session",
+   "properties": {
+    "screen_recording.session.name": "第七轮B-原生",
+    "screen_recording.session.phase": "stopped",
+    "screen_recording.session.elapsed_ms": 121675,
+    "screen_recording.session.details": {
+     "source": "屏幕 2",
+     "cursorEmbedded": false,
+     "media": [
+      {
+       "id": "screen-0",
+       "kind": "screen",
+       "path": "E:\\文档\\HenjiAI\\Uploads\\screen-recordings\\ecd3d8c5-5169-40d4-823d-9994baaf1e65\\screen-000000.mp4",
+       "monoUs": 2132137,
+       "durationUs": 124316667,
+       "gaps": [
+        {
+         "startUs": 33815470,
+         "endUs": 43915470
+        },
+        {
+         "startUs": 79332137,
+         "endUs": 87348804
+        }
+       ]
+      },
+      {
+       "id": "microphone-joined-000",
+       "kind": "microphone",
+       "path": "E:\\文档\\HenjiAI\\Uploads\\screen-recordings\\ecd3d8c5-5169-40d4-823d-9994baaf1e65\\microphone-joined-000.wav",
+       "monoUs": 3785040,
+       "durationUs": 30032396
+      },
+      {
+       "id": "microphone-joined-001",
+       "kind": "microphone",
+       "path": "E:\\文档\\HenjiAI\\Uploads\\screen-recordings\\ecd3d8c5-5169-40d4-823d-9994baaf1e65\\microphone-joined-001.wav",
+       "monoUs": 44624633,
+       "durationUs": 34712583
+      },
+      {
+       "id": "microphone-joined-002",
+       "kind": "microphone",
+       "path": "E:\\文档\\HenjiAI\\Uploads\\screen-recordings\\ecd3d8c5-5169-40d4-823d-9994baaf1e65\\microphone-joined-002.wav",
+       "monoUs": 87992692,
+       "durationUs": 56553125
+      },
+      {
+       "id": "systemAudio-joined-000",
+       "kind": "systemAudio",
+       "path": "E:\\文档\\HenjiAI\\Uploads\\screen-recordings\\ecd3d8c5-5169-40d4-823d-9994baaf1e65\\systemAudio-joined-000.wav",
+       "monoUs": 1707089,
+       "durationUs": 32121479
+      },
+      {
+       "id": "systemAudio-joined-001",
+       "kind": "systemAudio",
+       "path": "E:\\文档\\HenjiAI\\Uploads\\screen-recordings\\ecd3d8c5-5169-40d4-823d-9994baaf1e65\\systemAudio-joined-001.wav",
+       "monoUs": 43988012,
+       "durationUs": 35360271
+      },
+      {
+       "id": "systemAudio-joined-002",
+       "kind": "systemAudio",
+       "path": "E:\\文档\\HenjiAI\\Uploads\\screen-recordings\\ecd3d8c5-5169-40d4-823d-9994baaf1e65\\systemAudio-joined-002.wav",
+       "monoUs": 87422942,
+       "durationUs": 57154979
+      }
+     ],
+     "markers": 0,
+     "events": 11692,
+     "devices": {
+      "microphone": {},
+      "systemAudio": true
+     },
+     "tracks": [
+      {
+       "kind": "microphone",
+       "segments": 26,
+       "gaps": {
+        "pause": 2,
+        "device": 0,
+        "muted": 0,
+        "missingData": 0
+       },
+       "missingSeconds": 0,
+       "warnings": []
+      },
+      {
+       "kind": "systemAudio",
+       "segments": 27,
+       "gaps": {
+        "pause": 2,
+        "device": 0,
+        "muted": 0,
+        "missingData": 0
+       },
+       "missingSeconds": 0,
+       "warnings": []
+      }
+     ],
+     "capture": {
+      "live": false,
+      "failure": null,
+      "detaches": 0,
+      "video": {
+       "droppedFrames": 0,
+       "duplicatedFrames": 0,
+       "encoderRestarts": 0,
+       "encoder": "h264_nvenc"
+      },
+      "systemAudio": {
+       "silenceSeconds": 0.0160625,
+       "unavailableSeconds": 0,
+       "droppedFrames": 0,
+       "discontinuities": 0,
+       "deviceSwitches": 0,
+       "reconnects": 0
+      },
+      "microphone": {
+       "device": "麦克风 (USB Audio CODEC )",
+       "inputOverflows": 0,
+       "inputUnderflows": 0,
+       "droppedFrames": 0,
+       "droppedPreviewBlocks": 0,
+       "reconnects": 0
+      },
+      "recovered": false
+     },
+     "activity": {
+      "path": "E:\\文档\\HenjiAI\\Uploads\\screen-recordings\\ecd3d8c5-5169-40d4-823d-9994baaf1e65\\screen-000000.activity.jsonl",
+      "exists": true
+     },
+     "finishing": false
+    }
+   },
+   "revisions": {
+    "screen_recording": 15
+   },
+   "capturedAt": "2026-11-13T14:13:39.422Z"
+  },
+  "revisionEpoch": "376c650f-aac0-4a9a-8cfe-1f00beb9b14a",
+  "baselineId": "c703e80d-d94e-4fb7-8e6d-b4029da9c362",
+  "revision": 24,
+  "scopeRevisions": {
+   "navigation": 0,
+   "generation": 20,
+   "canvas": 0,
+   "toolbox": 0,
+   "assets": 0,
+   "camera_stage": 0,
+   "settings": 1,
+   "surface": 0,
+   "generation_draft": 2,
+   "models": 0,
+   "image_edit": 0,
+   "audio_edit": 0,
+   "video_edit": 0,
+   "documents": 2,
+   "video_edit.effects": 0
+  }
+ }
+}

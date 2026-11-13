@@ -1,0 +1,345 @@
+{
+ "media": [
+  1791898,
+  65766667,
+  [
+   {
+    "startUs": 31175231,
+    "endUs": 37825231
+   }
+  ]
+ ],
+ "runs": [
+  [
+   0,
+   799871
+  ],
+  [
+   29990070,
+   7450213
+  ]
+ ],
+ "flipsInPicture": 39,
+ "median": {
+  "editLookupMinusCursorEventMs": 33.1,
+  "before": 34,
+  "after": 32.9,
+  "pictureMinusTruthMs": 46.8,
+  "cursorEventMinusTruthMs": 13.9,
+  "lookupMinusPictureMs": 0
+ },
+ "rows": [
+  {
+   "truthMs": 10735.1,
+   "afterPause": false,
+   "pictureMinusTruthMs": 40.2,
+   "cursorEventMinusTruthMs": 1006.1,
+   "editLookupMinusCursorEventMs": -966,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 11726.6,
+   "afterPause": false,
+   "pictureMinusTruthMs": 48.6,
+   "cursorEventMinusTruthMs": 14.6,
+   "editLookupMinusCursorEventMs": 34,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 12726.1,
+   "afterPause": false,
+   "pictureMinusTruthMs": 49.1,
+   "cursorEventMinusTruthMs": 13.9,
+   "editLookupMinusCursorEventMs": 35.3,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 13704,
+   "afterPause": false,
+   "pictureMinusTruthMs": 37.9,
+   "cursorEventMinusTruthMs": 0.6,
+   "editLookupMinusCursorEventMs": 37.3,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 14726.8,
+   "afterPause": false,
+   "pictureMinusTruthMs": 48.5,
+   "cursorEventMinusTruthMs": 14.8,
+   "editLookupMinusCursorEventMs": 33.6,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 15699.7,
+   "afterPause": false,
+   "pictureMinusTruthMs": 42.2,
+   "cursorEventMinusTruthMs": 13.9,
+   "editLookupMinusCursorEventMs": 28.2,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 16727.8,
+   "afterPause": false,
+   "pictureMinusTruthMs": 47.4,
+   "cursorEventMinusTruthMs": 14.3,
+   "editLookupMinusCursorEventMs": 33.1,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 17699.4,
+   "afterPause": false,
+   "pictureMinusTruthMs": 42.5,
+   "cursorEventMinusTruthMs": 14,
+   "editLookupMinusCursorEventMs": 28.4,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 18724,
+   "afterPause": false,
+   "pictureMinusTruthMs": 34.6,
+   "cursorEventMinusTruthMs": 14.3,
+   "editLookupMinusCursorEventMs": 20.3,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 19703.9,
+   "afterPause": false,
+   "pictureMinusTruthMs": 38,
+   "cursorEventMinusTruthMs": 14.2,
+   "editLookupMinusCursorEventMs": 23.8,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 20727.6,
+   "afterPause": false,
+   "pictureMinusTruthMs": 47.6,
+   "cursorEventMinusTruthMs": 4.8,
+   "editLookupMinusCursorEventMs": 42.9,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 21730.8,
+   "afterPause": false,
+   "pictureMinusTruthMs": 44.4,
+   "cursorEventMinusTruthMs": 14.6,
+   "editLookupMinusCursorEventMs": 29.8,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 22723.6,
+   "afterPause": false,
+   "pictureMinusTruthMs": 34.9,
+   "cursorEventMinusTruthMs": 13.5,
+   "editLookupMinusCursorEventMs": 21.4,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 23701.5,
+   "afterPause": false,
+   "pictureMinusTruthMs": 40.4,
+   "cursorEventMinusTruthMs": 13.8,
+   "editLookupMinusCursorEventMs": 26.6,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 24726,
+   "afterPause": false,
+   "pictureMinusTruthMs": 65.9,
+   "cursorEventMinusTruthMs": 13.6,
+   "editLookupMinusCursorEventMs": 52.2,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 25724.1,
+   "afterPause": false,
+   "pictureMinusTruthMs": 51.1,
+   "cursorEventMinusTruthMs": 14.4,
+   "editLookupMinusCursorEventMs": 36.7,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 26725,
+   "afterPause": false,
+   "pictureMinusTruthMs": 50.3,
+   "cursorEventMinusTruthMs": 13.3,
+   "editLookupMinusCursorEventMs": 37,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 27703.9,
+   "afterPause": false,
+   "pictureMinusTruthMs": 54.7,
+   "cursorEventMinusTruthMs": 2.1,
+   "editLookupMinusCursorEventMs": 52.6,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 28724.7,
+   "afterPause": false,
+   "pictureMinusTruthMs": 50.6,
+   "cursorEventMinusTruthMs": 13.8,
+   "editLookupMinusCursorEventMs": 36.8,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 29700.3,
+   "afterPause": false,
+   "pictureMinusTruthMs": 58.2,
+   "cursorEventMinusTruthMs": 1.6,
+   "editLookupMinusCursorEventMs": 56.6,
+   "lookupMinusPictureMs": 0
+  },
+  {
+   "truthMs": 30726.5,
+   "afterPause": false,
+   "pictureMinusTruthMs": 65.4,
+   "cursorEventMinusTruthMs": 12.4,
+   "editLookupMinusCursorEventMs": 6703.3,
+   "lookupMinusPictureMs": 6650.342
+  },
+  {
+   "truthMs": 37700.6,
+   "afterPause": false,
+   "pictureMinusTruthMs": 124.7,
+   "cursorEventMinusTruthMs": 529.8,
+   "editLookupMinusCursorEventMs": -404.8,
+   "lookupMinusPictureMs": 0.342
+  },
+  {
+   "truthMs": 38728.5,
+   "afterPause": true,
+   "pictureMinusTruthMs": 46.7,
+   "cursorEventMinusTruthMs": 15.6,
+   "editLookupMinusCursorEventMs": 31.4,
+   "lookupMinusPictureMs": 0.342
+  },
+  {
+   "truthMs": 39729.2,
+   "afterPause": true,
+   "pictureMinusTruthMs": 46.1,
+   "cursorEventMinusTruthMs": 14.6,
+   "editLookupMinusCursorEventMs": 31.8,
+   "lookupMinusPictureMs": 0.342
+  },
+  {
+   "truthMs": 40728.3,
+   "afterPause": true,
+   "pictureMinusTruthMs": 47,
+   "cursorEventMinusTruthMs": 3.4,
+   "editLookupMinusCursorEventMs": 43.9,
+   "lookupMinusPictureMs": 0.342
+  },
+  {
+   "truthMs": 41701.7,
+   "afterPause": true,
+   "pictureMinusTruthMs": 40.2,
+   "cursorEventMinusTruthMs": 13.3,
+   "editLookupMinusCursorEventMs": 27.3,
+   "lookupMinusPictureMs": 0.342
+  },
+  {
+   "truthMs": 42726.9,
+   "afterPause": true,
+   "pictureMinusTruthMs": 48.4,
+   "cursorEventMinusTruthMs": 14.4,
+   "editLookupMinusCursorEventMs": 34.3,
+   "lookupMinusPictureMs": 0.342
+  },
+  {
+   "truthMs": 43704.5,
+   "afterPause": true,
+   "pictureMinusTruthMs": 37.4,
+   "cursorEventMinusTruthMs": 1.7,
+   "editLookupMinusCursorEventMs": 36,
+   "lookupMinusPictureMs": 0.342
+  },
+  {
+   "truthMs": 44728.3,
+   "afterPause": true,
+   "pictureMinusTruthMs": 46.9,
+   "cursorEventMinusTruthMs": 0.8,
+   "editLookupMinusCursorEventMs": 46.5,
+   "lookupMinusPictureMs": 0.342
+  },
+  {
+   "truthMs": 45703.8,
+   "afterPause": true,
+   "pictureMinusTruthMs": 38.1,
+   "cursorEventMinusTruthMs": 14,
+   "editLookupMinusCursorEventMs": 24.4,
+   "lookupMinusPictureMs": 0.342
+  },
+  {
+   "truthMs": 46728.3,
+   "afterPause": true,
+   "pictureMinusTruthMs": 47,
+   "cursorEventMinusTruthMs": 13.3,
+   "editLookupMinusCursorEventMs": 34,
+   "lookupMinusPictureMs": 0.342
+  },
+  {
+   "truthMs": 47717.5,
+   "afterPause": true,
+   "pictureMinusTruthMs": 41.1,
+   "cursorEventMinusTruthMs": 14.4,
+   "editLookupMinusCursorEventMs": 27.1,
+   "lookupMinusPictureMs": 0.342
+  },
+  {
+   "truthMs": 48711.7,
+   "afterPause": true,
+   "pictureMinusTruthMs": 46.8,
+   "cursorEventMinusTruthMs": 13.2,
+   "editLookupMinusCursorEventMs": 34,
+   "lookupMinusPictureMs": 0.342
+  },
+  {
+   "truthMs": 49702.3,
+   "afterPause": true,
+   "pictureMinusTruthMs": 39.6,
+   "cursorEventMinusTruthMs": 13.9,
+   "editLookupMinusCursorEventMs": 26.1,
+   "lookupMinusPictureMs": 0.342
+  },
+  {
+   "truthMs": 50728.7,
+   "afterPause": true,
+   "pictureMinusTruthMs": 46.5,
+   "cursorEventMinusTruthMs": 13.8,
+   "editLookupMinusCursorEventMs": 33.1,
+   "lookupMinusPictureMs": 0.342
+  },
+  {
+   "truthMs": 51724.4,
+   "afterPause": true,
+   "pictureMinusTruthMs": 34.2,
+   "cursorEventMinusTruthMs": 14.5,
+   "editLookupMinusCursorEventMs": 20,
+   "lookupMinusPictureMs": 0.342
+  },
+  {
+   "truthMs": 52727.5,
+   "afterPause": true,
+   "pictureMinusTruthMs": 47.7,
+   "cursorEventMinusTruthMs": 9.8,
+   "editLookupMinusCursorEventMs": 38.2,
+   "lookupMinusPictureMs": 0.342
+  },
+  {
+   "truthMs": 53700.1,
+   "afterPause": true,
+   "pictureMinusTruthMs": 41.8,
+   "cursorEventMinusTruthMs": 14.8,
+   "editLookupMinusCursorEventMs": 27.3,
+   "lookupMinusPictureMs": 0.342
+  },
+  {
+   "truthMs": 54727.8,
+   "afterPause": true,
+   "pictureMinusTruthMs": 47.4,
+   "cursorEventMinusTruthMs": 14.8,
+   "editLookupMinusCursorEventMs": 32.9,
+   "lookupMinusPictureMs": 0.342
+  }
+ ]
+}
