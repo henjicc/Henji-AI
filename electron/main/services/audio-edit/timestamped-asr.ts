@@ -44,7 +44,7 @@ export interface TimestampedAsrService {
   /** uploadBytes：实际要上传的文件大小（已知时，比按时长估算准）。 */
   preflight(input: TranscriptionPreflight, uploadBytes?: number): Promise<{ modelId: string; cost: AsrCostEstimate }>
   prepare(input: { modelId?: string; providerId?: string; audioPath: string; durationMs: number; language?: string }): TimestampedTranscriptionPlan
-  execute(plan: TimestampedTranscriptionPlan, context: TimestampedAsrExecutionContext): Promise<TimestampedTranscript>
+  execute(plan: TimestampedTranscriptionPlan, context: TimestampedAsrSubmissionContext): Promise<TimestampedTranscript>
   /** 明确声明不需要付费回执的调用（开发者测试台直接用 client 测模型）：只在这里面放行写请求，正式转写不走这里。 */
   withoutReceipt<T>(work: () => Promise<T>): Promise<T>
 }
@@ -59,6 +59,9 @@ export interface TimestampedAsrExecutionContext {
   /** 第一个可能计费的请求发出之前调用并等待；抛错则不发出。 */
   onSubmitting?: () => void
 }
+
+/** 直接执行时提交钩子必填：漏传就无法在发请求前写下“结果未知”，取消或闪退后会被当作未计费而重复提交。 */
+export type TimestampedAsrSubmissionContext = TimestampedAsrExecutionContext & { onSubmitting: () => void }
 
 /** 两种 owner 共用的付费事实；最终结果和任务状态仍由各自 owner 保存。 */
 export interface TimestampedAsrReceipt {
@@ -209,7 +212,7 @@ export function createTimestampedAsrService(runtime: RuntimeContext, isConfigure
     /** 仅执行一次；owner 负责授权、operationId、任务账本、恢复和音频→墙钟映射。 */
     execute: async (
       plan: TimestampedTranscriptionPlan,
-      context: TimestampedAsrExecutionContext,
+      context: TimestampedAsrSubmissionContext,
     ): Promise<TimestampedTranscript> => {
       context.signal.throwIfAborted()
       const entry = ASR_CATALOG.find((entry) => entry.descriptor.id === plan.modelId)
@@ -219,7 +222,7 @@ export function createTimestampedAsrService(runtime: RuntimeContext, isConfigure
       if (!context.resumeTaskId) assertElectronHostCapabilities(runtime, ['file-asr'])
       logger.info('带时间转写开始', { event: 'audio_edit.timestamped_asr.start', requestId: context.requestId, modelId: plan.modelId, context: { costStatus: plan.cost.status } })
       try {
-        const output = await submissionHook.run(context.onSubmitting ?? (() => undefined), () => client.execute<unknown, SpeechRecognitionOutput, SpeechRecognitionEvent>(plan.modelId, {
+        const output = await submissionHook.run(context.onSubmitting, () => client.execute<unknown, SpeechRecognitionOutput, SpeechRecognitionEvent>(plan.modelId, {
           audio: { kind: 'media-ref', ref: plan.audioPath }, language: plan.language, punctuation: true, timestamps: true,
           options: { ...entry.timestampOptions, ...(context.resumeTaskId ? { resumeTaskId: context.resumeTaskId } : {}) },
         }, context))

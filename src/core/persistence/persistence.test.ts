@@ -408,6 +408,12 @@ describe('Schema结构指纹', () => {
     expect(hash(z.object({ size: z.number().min(0).optional(), description: z.string().default('默认'), style: z.object({ description: z.string() }).default({ description: '默认' }) }).strict())).not.toBe(hash(base))
     expect(hash(z.object({ size: z.number().min(0), description: z.string().default('默认'), style: z.object({ description: z.string().optional() }).default({ description: '默认' }) }).strict())).not.toBe(hash(base))
   })
+  it('schema 的必填与枚举按集合比较；默认值数据里同名数组的顺序照计', () => {
+    const hash = (schema: z.ZodType): string => persistenceSchemaStructure({ data: schema })
+    const build = (modes: [string, string], data: string[]) => z.object({ mode: z.enum(modes), rule: z.object({ enum: z.array(z.string()), required: z.array(z.string()) }).default({ enum: data, required: data }) }).strict()
+    expect(hash(build(['a', 'b'], ['x', 'y']))).toBe(hash(build(['b', 'a'], ['x', 'y'])))
+    expect(hash(build(['a', 'b'], ['x', 'y']))).not.toBe(hash(build(['a', 'b'], ['y', 'x'])))
+  })
 })
 
 /** 序列三维渲染里只影响观感的可选项，按缺省值补齐，旧样本与新样本可直接比较。 */
@@ -565,7 +571,7 @@ describe('所有登记格式的黄金样本', () => {
     expect([old.kindMinReaderVersion, latest.kindMinReaderVersion]).toEqual([77, 82])
   })
 
-  it('片段备注 note：旧样本升上来没有备注，新样本读回备注，最低可读版本不变', () => {
+  it('片段备注 note：旧样本升上来没有备注，新样本读回备注，文档最低可读版本不变', () => {
     const goldenClip = (id: string, content: unknown): Record<string, unknown> => {
       const value = content as { sequences: Array<{ id: string; clips: Array<Record<string, unknown>> }>; scriptCapture: { baselines: Array<{ content: typeof value }> }; soundClips: Array<Record<string, unknown>> }
       if (id === 'subtitle-manifest') return value.soundClips[0]
@@ -576,12 +582,12 @@ describe('所有登记格式的黄金样本', () => {
       const format = PERSISTENCE_FORMATS.find(value => value.id === id)!
       const read = (version: number) => JSON.parse(fs.readFileSync(`tests/fixtures/persistence/${id}/v${version}.json`, 'utf8'))
       const contentOf = (raw: { content?: unknown }) => id.startsWith('document.') ? raw.content : raw
-      const minReader = (raw: { kindMinReaderVersion?: number }) => id.startsWith('document.') ? raw.kindMinReaderVersion : format.minReaderVersion
       const old = read(previous), latest = read(previous + 1)
       expect(goldenClip(id, upgradePersistenceContent(format, contentOf(old), previous))).not.toHaveProperty('note')
       expect(goldenClip(id, upgradePersistenceContent(format, contentOf(latest), previous + 1)).note).toBe('后半段说错了一次字号，从 01:28 起重录')
-      // 只新增可选字段：最低可读版本不变，上一版程序按向前兼容打开新文件。
-      expect(minReader(latest)).toBe(minReader(old))
+      // 只新增可选字段：文档最低可读版本不变，上一版程序按向前兼容打开新文件。
+      // 字幕回填记录文件里不写最低可读版本，读取入口也不做向前兼容，旧程序遇到新记录按版本过新报错，这里没有可断言的承诺。
+      if (id.startsWith('document.')) expect(latest.kindMinReaderVersion).toBe(old.kindMinReaderVersion)
     }
   })
 

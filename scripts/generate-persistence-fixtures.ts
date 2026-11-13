@@ -17,6 +17,9 @@ import fs from 'node:fs'
 import { audioCaptureSettingsEnvelopeSchema, DEFAULT_AUDIO_CAPTURE_SETTINGS } from '../src/core/audioCapture/contracts'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
+import { PERSISTENCE_FORMATS } from '../src/core/persistence/formats'
+import { CURATED_TRANSITIONS } from '../src/core/videoEdit/transitionCatalog'
+import { upgradePersistenceContent } from '../src/core/persistence/migrations'
 import { parseWebReplayDirector } from '../src/core/webReplay/director'
 import { MODEL_DEFAULTS_VERSION, SUBTITLE_MANIFEST_VERSION, modelDefaultsSchema } from '../src/core/persistence/preferenceSchemas'
 import { createMotionFixture } from '../src/core/creativeIntent/fixtures/motionFixtures'
@@ -29,7 +32,7 @@ import { ImageEditCommandHistoryV3 } from '../src/core/imageEdit/v3/commandHisto
 import { splitImageEditHistoryPagesV3 } from '../src/core/imageEdit/v3/historyPaging/checkpoint'
 import { buildDocumentEnvelope } from '../src/core/documents/envelope'
 import { buildProjectManifest } from '../src/core/documents/projectManifest'
-import { createVideoEditDocument, createVideoEditSequence, videoEditDocumentSchema, videoEditNativeTemplateClipSchema } from '../src/core/videoEdit/document'
+import { createVideoEditDocument, createVideoEditSequence, videoEditDocumentSchema, videoEditNativeTemplateClipSchema, type VideoEditDocument } from '../src/core/videoEdit/document'
 import { makeVideoEditItemClip } from '../src/core/videoEdit/projectItems'
 import { setVideoEditClipTimeRemap } from '../src/core/videoEdit/clipSpeed'
 import { videoEditClipCurvesSchema, sliceVideoEditCurves, rescaleVideoEditCurves } from '../src/core/videoEdit/keyframes'
@@ -101,6 +104,8 @@ clip.snapToBeat = true
 clip.scaleAspect = 1.2
 // 31：序列运动模糊改为总开关，片段可单独关掉自身变换动画的模糊。
 clip.motionBlur = false
+// 剪辑 78、录制 81：片段备注（写给后期的说明）。
+clip.note = '后半段说错了一次字号，从 01:28 起重录'
 clip.curves = { opacity: [{ time: 0, value: 0, interpolation: 'linear' }, { time: 20, value: 1, interpolation: 'ease' }] }
 const spatialCurves = videoEditClipCurvesSchema.parse({
   depth: [{ time: 0, value: -.5, interpolation: 'linear' }, { time: 60, value: .5, interpolation: 'linear' }],
@@ -440,7 +445,7 @@ const values: Record<string, unknown> = {
   'recording-setup': { rateControl: 'quality', codec: 'hevc', keyframeFrames: 30, encoder: 'auto', range: 'region', sourceId: 'screen:1:0', region: { x: .1, y: .1, width: .5, height: .5 }, mode: 'quick', saveDirectory: 'D:/录屏', microphone: true, systemAudio: true, camera: false, cameraId: '', quality: '1440p', fps: 60, insert: true, webAppBackup: { enabled: true, range: 'screen', sourceId: 'screen:1:0', microphone: true, systemAudio: false, quality: '2160p', fps: 30, rateControl: 'vbr', bitrate: 20_000_000 } },
   'model-defaults': modelDefaultsSchema.parse({ version: MODEL_DEFAULTS_VERSION, providerId: 'kie', models: { image: '', video: '', audio: '', transcription: 'groq.speech-recognition.whisper-large-v3-turbo' } }),
   onboarding: { version: 2, status: 'in_progress', entryReason: 'fresh_install', activeStepId: 'provider', completedStepIds: ['welcome'], configuredProviders: [], verifiedProviders: [], shownHintIds: [], firstTaskPrepared: false, firstTaskCompleted: false, startedAt: timestamp, completedAt: null },
-  'subtitle-manifest': { version: SUBTITLE_MANIFEST_VERSION, projectId: document.id, sequenceId: sequence.id, signature: 'golden-signature', startFrame: 0, endFrame: 90, soundClips: [soundClip], soundIdentities: { 'golden-sound-clip': 'golden-sound-identity' }, captions: sequence.captions, committed: true },
+  'subtitle-manifest': { version: SUBTITLE_MANIFEST_VERSION, projectId: document.id, sequenceId: sequence.id, signature: 'golden-signature', startFrame: 0, endFrame: 90, soundClips: [{ ...soundClip, note: '后半段说错了一次字号，从 01:28 起重录' }], soundIdentities: { 'golden-sound-clip': 'golden-sound-identity' }, captions: sequence.captions, committed: true },
   'storyboard-metadata': { version: 1, gridRows: 2, gridCols: 2, frameNotes: ['远景', '特写'] },
   'workspace-layouts': createWorkspaceLayoutEnvelope({ activeId: 'default', current: defaultCameraStageLayout(), users: [{ id: 'user-golden', name: '个人布局', layout: defaultCameraStageLayout(true) }] }),
   'audio-capture-recovery': { version: 2, minReaderVersion: 1, files: ['录音 2026-10-23 120000.wav'], placements: { '录音 2026-10-23 120000.wav': { projectId: 'golden-audio_edit', startFrame: 48000, endFrame: 96000, revision: 1, spliceId: 'eced7817-a431-49e0-8890-5bf4b08ecb44' } } },
@@ -466,3 +471,102 @@ export function getImageLayoutFixtureResources(): readonly unknown[] {
   return [layoutPage, samplePage, layoutCandidate]
 }
 
+/**
+ * 音频案例早于空间字段与作者接口 10：剪辑 54、录制 57 给黄金片段补空间属性与序列相机；风格包 13 的原生模板换成带空间属性的同一人名条；
+ * 预设包 14 补一件带作者接口 10 代码快照的风格件（标题条目只出现在旧文件里，写不出空间片段）。
+ * 剪辑 63、录制 66 起黄金片段另带发光强度与其关键帧，风格包与模板库的人名条同样带上；剪辑 69、录制 72 起再带三维表面（厚度及其关键帧、受光、材质、倒角、阴影）。
+ * 剪辑 64、录制 67 起黄金片段的代码图片参数 partner 引用同一序列里的录屏片段。
+ * 剪辑 70、录制 73 起黄金序列另带一盏灯光片段（聚光、投影、亮度关键帧）与它的灯光素材项。
+ * 剪辑 71、录制 74 起黄金片段的网页图片参数 page 另带 layer（按选择器拆层）。
+ * 剪辑 77、录制 80 起黄金序列另带一条可变字重文字片段；剪辑 78、录制 81 起黄金片段带备注；录制 82 起屏幕原片带断档区间。
+ */
+function withGoldenItem(video: VideoEditDocument, itemId: string, added: VideoEditDocument['sequences'][number]['clips'][number]): VideoEditDocument {
+  if (video.items.some(item => item.id === itemId)) return video
+  return { ...video, items: [...video.items, structuredClone(document.items.find(item => item.id === itemId)!)],
+    sequences: video.sequences.map(entry => entry.id !== sequence.id ? entry : { ...entry, clips: [...entry.clips, structuredClone(added)] }) }
+}
+function withSpatialVideo(value: unknown): unknown {
+  const video = withGoldenItem(withGoldenItem(value as VideoEditDocument, 'golden-light-item', lightClip), 'golden-variable-text-item', variableTextClip)
+  const fields = { spatial: clip.spatial, depth: clip.depth, rotationX: clip.rotationX, rotationY: clip.rotationY, anchorDepth: clip.anchorDepth, spaceEmission: clip.spaceEmission, spaceThickness: clip.spaceThickness, spaceLit: clip.spaceLit, spaceMaterial: clip.spaceMaterial, spaceBevel: clip.spaceBevel, spaceCastShadow: clip.spaceCastShadow, spaceReceiveShadow: clip.spaceReceiveShadow, note: clip.note }
+  return { ...video, sequences: video.sequences.map(entry => entry.id !== sequence.id ? entry : { ...entry, spatialCamera: structuredClone(sequence.spatialCamera), spaceRender: structuredClone(sequence.spaceRender),
+    clips: entry.clips.map(item => item.id !== clip.id ? item : { ...item, ...structuredClone(fields), curves: { ...item.curves, ...structuredClone(spatialCurves) },
+      ...(item.code ? { code: { ...item.code, parameters: { ...item.code.parameters, partner: structuredClone(clip.code!.parameters.partner), page: structuredClone(clip.code!.parameters.page) } } } : {}) }) }) }
+}
+function withSpatialTemplates(formatId: string, value: unknown): unknown {
+  if (formatId === 'video-preset-package') {
+    const pack = value as { items: unknown[] }
+    return { ...pack, items: [...pack.items, { category: 'effect', preset: goldenPiece }] }
+  }
+  if (formatId !== 'video-style-package') return value
+  const pack = value as { templates: Array<{ body: { kind: string; content?: { clips: unknown[] } } }> }
+  return { ...pack, templates: pack.templates.map(template => template.body.kind !== 'native' || !template.body.content ? template
+    : { ...template, body: { ...template.body, content: { ...template.body.content, clips: [nativeClipContent] } } }) }
+}
+
+/** Explicit authoring tool. Never rewrite an existing golden sample. */
+export function generatePersistenceFixtures(root = process.cwd(), only?: string): number {
+  for (const format of PERSISTENCE_FORMATS) {
+    if (only && format.id !== only) continue
+    const audioSources: Record<string, string> = {
+      'document.video_edit': 'video_edit', 'document.audio_edit': 'audio_edit', 'document.screen_recording': 'screen_recording',
+      'video-effect-library': 'effect_library', 'video-preset-package': 'preset_package', 'video-style-library': 'style_library', 'video-style-package': 'style_package',
+    }
+    const sourceFile = audioSources[format.id]
+    const source = sourceFile ? JSON.parse(fs.readFileSync(path.join(root, 'tests/fixtures/audio-effect-merge', `${sourceFile}.json`), 'utf8')) as { content?: unknown; kindVersion?: number; version: number } : undefined
+    if (format.id === 'video-effect-library' && source) {
+      const library = source.content as { favorites: string[] }
+      library.favorites.push('transition:shaders.IrisWipe', 'transition:iris_round', 'effect:shaders.Blur', 'effect:gaussian_blur', 'transition:gl.Bounce', 'preset:mine')
+    }
+    // 音频案例覆盖全部持久位置；当前构造器提供作者声明，不能被旧案例里的作者接口覆盖。
+    let content = source ? upgradePersistenceContent(format, source.content ?? source, source.kindVersion ?? source.version) : format.schema.parse(values[format.id])
+    if (source && (format.id === 'video-preset-package' || format.id === 'video-style-package')) content = format.schema.parse(withSpatialTemplates(format.id, content))
+    if (format.id === 'document.video_edit' || format.id === 'document.screen_recording') {
+      const authorFixture = (value: unknown): unknown => {
+        const video = value as VideoEditDocument
+        const elementOverrides = { 'golden-motion': { effects: { goldenGlow: { enabled: false, values: { strength: 30 }, curves: { strength: [{ id: 'golden-effect-key', sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, value: 30, interpolation: 'linear' as const }] } } }, addedEffects: [{ key: 'extraBlur', id: 'blur', params: { amount: 10 } }] } }
+        return withSpatialVideo({ ...video, sequences: video.sequences.map(sequence => ({ ...sequence, clips: sequence.clips.map(clip => clip.code ? { ...clip, elementOverrides, edits: { 'element:golden-motion:effect:goldenGlow:strength': { by: 'user' as const, at: 1793498400000 }, check: { by: 'assistant' as const, at: 1793498400000 } } } : clip) })), codeMaterials: structuredClone(document.codeMaterials), styles: video.styles?.map(style => ({ ...style, sample: { ...style.sample, code: structuredClone(document.styles![0].sample.code) } })),
+          // 导出记录覆盖当前全部可选导出开关（含网页缓存）。
+          ...(video.exportHistory ? { exportHistory: video.exportHistory.map(entry => ({ ...entry, settings: { ...entry.settings, useWebCache: true } })) } : {}) })
+      }
+      content = format.id === 'document.video_edit' ? authorFixture(content) : (() => {
+        const recording = content as { scriptCapture: { baselines: Array<{ content: unknown }> } }
+        return { ...recording, media: structuredClone((values[format.id] as { media: unknown }).media), scriptCapture: { ...recording.scriptCapture, baselines: recording.scriptCapture.baselines.map(baseline => ({ ...baseline, content: authorFixture(baseline.content) })) } }
+      })()
+      const historical = JSON.parse(fs.readFileSync(path.join(root, 'tests/fixtures/video-edit-transitions/before-u12.json'), 'utf8')) as { content: unknown; kindVersion: number }
+      const videoFormat = PERSISTENCE_FORMATS.find(value => value.id === 'document.video_edit')!
+      const transitions = (upgradePersistenceContent(videoFormat, historical.content, historical.kindVersion) as { sequences: VideoEditDocument['sequences'] }).sequences.filter(sequence => sequence.id.startsWith('transition-'))
+      const appendTransitions = (value: unknown): unknown => {
+        const video = value as Omit<VideoEditDocument, 'format' | 'version' | 'id' | 'name' | 'revision'>
+        const added = CURATED_TRANSITIONS.find(entry => entry.kind === 'dissolve')!.variants.slice(4).map(([mode]) => {
+          const sequence = createVideoEditSequence(`溶解 ${mode}`)
+          sequence.id = `dissolve-${mode}`
+          sequence.tracks.forEach((track, index) => { track.id = `${sequence.id}-track-${index}` })
+          const clip = makeVideoEditItemClip({ ...document, ...video, sequences: [...video.sequences, sequence] }, 'golden-screen-item', sequence.id, { frame: 0, duration: 30 })
+          clip.id = `${sequence.id}-clip`
+          sequence.clips.push(clip)
+          sequence.transitions = [{ id: `${sequence.id}-transition`, kind: 'dissolve', rightClipId: clip.id, durationFrames: 10, parameters: { mode, reveal_edge_width: 30, reveal_glow_strength: 40 } }]
+          return sequence
+        })
+        return { ...video, sequences: [...video.sequences, ...transitions, ...added] }
+      }
+      content = format.id === 'document.video_edit' ? appendTransitions(content) : (() => {
+        const recording = content as { scriptCapture: { baselines: Array<{ content: unknown }> } }
+        return { ...recording, scriptCapture: { ...recording.scriptCapture, baselines: recording.scriptCapture.baselines.map(baseline => ({ ...baseline, content: appendTransitions(baseline.content) })) } }
+      })()
+      content = format.schema.parse(content)
+    }
+    if (format.id === 'preset-preferences') content = upgradePersistenceContent(format, [
+      ...values[format.id] as object[],
+      { category: 'transition', id: 'shaders.IrisWipe', rating: 2, isDefault: true },
+      { category: 'transition', id: 'iris_round', rating: 5, isDefault: false },
+      { category: 'effect', id: 'gaussian_blur', rating: 4, isDefault: false },
+    ], 1)
+    const raw = format.id.startsWith('document.') ? buildDocumentEnvelope({ kind: format.id.slice('document.'.length), kindVersion: format.version, kindMinReaderVersion: format.minReaderVersion ?? format.version, id: `golden-${format.id.split('.')[1]}`, name: format.name, createdAt: timestamp, updatedAt: timestamp, revision: 0, draft: false, content })
+      : format.id === 'settings' || format.id === 'theme' ? { version: format.version, state: content }
+      : (format.storage === 'local-storage' && !['model-defaults', 'onboarding'].includes(format.id)) || ['voice-library', 'llm-config', 'sound-library-folders'].includes(format.id) ? { version: format.version, minReaderVersion: format.minReaderVersion ?? format.version, content } : ['video-style-library', 'video-template-library', 'video-style-package'].includes(format.id) ? { version: format.version, minReaderVersion: format.minReaderVersion ?? format.version, content } : content
+    const directory = path.join(root, 'tests/fixtures/persistence', format.id)
+    fs.mkdirSync(directory, { recursive: true })
+    fs.writeFileSync(path.join(directory, `v${format.version}.json`), `${JSON.stringify(raw, null, 2)}\n`, { flag: 'wx' })
+  }
+  return PERSISTENCE_FORMATS.length
+}

@@ -60,6 +60,8 @@
     "src/core/imaging/adjustments/colorGradeMigration.ts": ["exports", "types"],
     "src/core/videoEdit/styles/styleTemplateMigration.ts": ["exports", "types"],
     "scripts/generate-persistence-packages.ts": ["exports", "types"],
+    // 黄金样本写出工具：新增格式版本时手动调用，仓内没有调用方
+    "scripts/generate-persistence-fixtures.ts": ["exports", "types"],
 
     // 按路径字符串动态加载的模块（scripts 里 loadTypeScript('路径')），knip 看不到解构出的使用方
     "scripts/lib/premiereMigrationModel.ts": ["exports", "types"],

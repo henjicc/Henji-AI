@@ -228,6 +228,20 @@ describe('口播草稿', () => {
     expect(getAudioEditRevision()).toBeGreaterThan(before)
   })
 
+  it('关闭期间文件被改过，重开时推进助手修订；原样重开不推进', async () => {
+    commands.seed({ kind: 'audio_edit', id: 'other', name: '另一段', content: audioEditProjectToDocumentContent({ ...fixture(), id: 'other', name: '另一段' }) })
+    await loadAudioEditProject('other')
+    expect(await releaseAudioEditProject('other')).toBe(true)
+    const before = getAudioEditRevision()
+    await loadAudioEditProject('other')
+    expect(await releaseAudioEditProject('other')).toBe(true)
+    expect(getAudioEditRevision()).toBe(before)
+    const stored = commands.stored('other')!
+    await commands.saveDocument({ target: { id: 'other' }, expectedRevision: stored.meta.revision, content: audioEditProjectToDocumentContent({ ...fixture(), id: 'other', name: '另一段', referenceScript: '关着时被改了' }) } as never)
+    await loadAudioEditProject('other')
+    expect(getAudioEditRevision()).toBeGreaterThan(before)
+  })
+
   // 编辑器切到工具首页后，口播状态里仍记着这份文档：页面已关、没有任何入口能再关它，删除必须直接成功
   it('编辑器已切走、只剩后台持有时移到回收站：先写完并释放实例再删，编辑器回到列表；前台编辑时拒绝', async () => {
     const operations = new DocumentOperations({ commands, registry, kinds: documentKindRegistry })

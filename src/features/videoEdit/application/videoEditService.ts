@@ -148,6 +148,11 @@ let activeId: string | null = null
 const contentListeners = new WeakMap<VideoEditInstance, Set<() => void>>()
 const disposers = new WeakMap<VideoEditInstance, () => void>()
 const leaving = new Map<string, Promise<DocumentLeaveOutcome>>()
+/**
+ * 每份剪辑关闭时的持久修订号。打开本身不算内容变化；只有关闭期间文件被改过（重开时修订号对不上），
+ * 助手手里的旧基线才算过时，重开时推进内容修订。
+ */
+const closedPersistedRevisions = new Map<string, number>()
 let registryOverride: DocumentSessionRegistry | null = null
 let operationsOverride: DocumentOperations | null = null
 
@@ -155,6 +160,7 @@ let operationsOverride: DocumentOperations | null = null
 export function setVideoEditDocumentServicesForTests(services: { registry: DocumentSessionRegistry; operations: DocumentOperations } | null): void {
   registryOverride = services?.registry ?? null
   operationsOverride = services?.operations ?? null
+  closedPersistedRevisions.clear()
 }
 function documentRegistry(): DocumentSessionRegistry { return registryOverride ?? getDocumentSessionRegistry() }
 function documentOperations(): DocumentOperations { return operationsOverride ?? getDocumentOperations() }
@@ -1109,6 +1115,7 @@ async function bindVideoEditSession(session: DocumentSession, focus: boolean): P
   const dispose = (): void => {
     if (disposed) return
     disposed = true
+    closedPersistedRevisions.set(session.id, session.documentMeta.revision)
     releaseVideoEditCodeMetadata(instance)
     endVideoEditTiming(session.id)
     unsubscribe(); detach(); cancelVideoEditGesture(instance); instance.playing = false
@@ -1124,6 +1131,9 @@ async function bindVideoEditSession(session: DocumentSession, focus: boolean): P
   })
   disposers.set(instance, dispose)
   instances.set(session.id, instance)
+  const closedRevision = closedPersistedRevisions.get(session.id)
+  closedPersistedRevisions.delete(session.id)
+  if (closedRevision !== undefined && closedRevision !== session.documentMeta.revision) contentRevision++
   // 去掉了项目内素材的素材库关联：写回剪辑文件
   if (document !== loaded) session.markChanged()
   if (focus) activeId = session.id

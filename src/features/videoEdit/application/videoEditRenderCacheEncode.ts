@@ -10,7 +10,7 @@ import { VideoEditRenderSession } from '../engine/videoEditRenderSession'
 import { videoEditExportVideoStream } from '../engine/videoEditExportEncoder'
 import { VideoEditEncodedVideo, runVideoEditEncodePipeline } from '../engine/videoEditEncodedVideo'
 import { videoEditTrackResults } from './videoEditTracking'
-import type { waitVideoEditSmartRegions } from './videoEditSmartRegions'
+import { videoEditSmartRegionSegments, type waitVideoEditSmartRegions } from './videoEditSmartRegions'
 
 /**
  * 预渲染里决定预览文件字节的部分：编码档案、交给渲染会话的输入，以及一个窗口怎样编码、封装、登记。
@@ -25,7 +25,15 @@ export function videoEditRenderProfile(composition: Pick<VideoEditComposition, '
   return videoEditRenderEncoding(composition, resolveRenderCacheCodec(settings.renderFormat), settings.renderQuality)
 }
 
-/** 渲染会话的画面输入：序列、智能区域与跟踪结果。窗口指纹里的分析结果必须描述的就是这里交出去的这一份。 */
+/**
+ * 窗口指纹里的分析数据：跟踪结果与全部已就绪的智能区域，涵盖下面交给渲染会话的那一份。
+ * 两处放在同一个文件里，改哪一处都计入引擎版本，不会只改一处而让旧文件仍被当作有效。
+ */
+export function videoEditRenderAnalysisKey(composition: VideoEditComposition): string {
+  return JSON.stringify([videoEditTrackResults(composition), videoEditSmartRegionSegments()])
+}
+
+/** 渲染会话的画面输入：序列、智能区域与跟踪结果。 */
 export function openVideoEditRenderSession(composition: VideoEditComposition, smartRegions: Awaited<ReturnType<typeof waitVideoEditSmartRegions>>): VideoEditRenderSession {
   const session = new VideoEditRenderSession({ ...composition })
   session.setSmartRegions(smartRegions); session.setTracks(videoEditTrackResults(composition))

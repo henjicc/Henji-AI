@@ -685,12 +685,15 @@ it('撤销引用只因内容变化失效：切序列、定位、视图、打开�
     return result
   }
   const clipText = (): string | undefined => instance.document.sequences.find(sequence => sequence.id === first)!.clips[0].text
+  // 另一份剪辑先建好并关上；夹具建剪辑时会改写磁盘内容，那本身就是内容变化
+  const otherId = (await createLegacyTrackVideoEditProject()).document.id
+  await closeVideoEditProject(otherId)
   const result = await write('助手改字')
   const domain = videoEditDomainRevision()
   switchVideoEditSequence(id, second); switchVideoEditSequence(id, first)
   setVideoEditView(id, { frame: 12 }); setVideoEditView(id, { playing: true }); setVideoEditView(id, { playing: false }); setVideoEditPlaybackRate(id, .5)
   setVideoEditTimelineView(id, { zoom: 2 }); focusVideoEditPanel(id, 'timeline')
-  await createLegacyTrackVideoEditProject()
+  await openVideoEditDocument({ id: otherId }, { focus: false })
   publishVideoEdit(true)
   // 订阅者照常收到通知，只是内容修订不动
   expect(videoEditDomainRevision()).toBeGreaterThan(domain)
@@ -704,6 +707,19 @@ it('撤销引用只因内容变化失效：切序列、定位、视图、打开�
   const conflicted = await engine.undo({ undoRef: again.undoRef!, expectedRevisions: again.resultingRevisions, idempotencyKey: crypto.randomUUID() }, context)
   expect(conflicted).toMatchObject({ status: 'failed', code: 'CONFLICT' })
   expect(clipText()).toBe('再改一次')
+})
+it('关闭期间文件被改过，重开时内容修订推进；原样重开不推进', async () => {
+  const instance = await createLegacyTrackVideoEditProject(); const id = instance.document.id
+  await saveVideoEdit(id)
+  await closeVideoEditProject(id)
+  const before = videoEditContentRevision()
+  await openVideoEditDocument({ id }, { focus: false })
+  expect(videoEditContentRevision()).toBe(before)
+  await closeVideoEditProject(id)
+  const stored = harnessDocumentStore().stored(id)!
+  await harnessDocumentStore().saveDocument({ target: { id }, expectedRevision: stored.meta.revision, content: { ...stored.content as object, sequences: [] } } as never)
+  await openVideoEditDocument({ id }, { focus: false })
+  expect(videoEditContentRevision()).toBeGreaterThan(before)
 })
 it('移除未使用的素材项后再次添加原媒体，在一次编辑内恢复引用', async () => {
   const instance = (await createLegacyTrackVideoEditProject()); const id = instance.document.id

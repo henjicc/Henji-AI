@@ -115,6 +115,20 @@ describe.skipIf(!process.versions.electron)('应用原生操作记录与恢复',
     expect(f.store.get('failed', 'renderer')).toBeDefined()
     expect(f.store.get('agent', 'agent')).toBeDefined()
   })
+  it('终态调用记录保留 14 天；带付费预留、待核对与未结的不清', () => {
+    const f = fixture()
+    const old = Date.now() - 15 * 24 * 60 * 60 * 1000
+    const record = (id: string, state: OperationRecord['state'], extra: Partial<OperationRecord> = {}): OperationRecord => ({ operationId: id, callerId: 'agent', capabilityId: 'change_application_entities', input: {}, inputDigest: id, state, ...extra })
+    f.store.save(record('done', 'completed'))
+    f.store.save(record('skipped', 'not_executed'))
+    f.store.save(record('paid', 'completed', { paidReservations: [{ category: 'generation', estimatedCny: 1, reservedAt: old, approval: { decision: 'auto', reason: '额度内' } }] }))
+    f.store.save(record('unverified', 'completed', { verificationState: 'unresolved' }))
+    f.store.save(record('unknown', 'unknown'))
+    f.store.save(record('recent', 'completed'))
+    f.db.prepare("UPDATE application_invocations SET updated_at = ? WHERE operation_id != 'recent'").run(old)
+    new ApplicationOperationStore(f.db).recoverInterrupted()
+    expect(['done', 'skipped', 'paid', 'unverified', 'unknown', 'recent'].filter(id => f.store.get(id, 'agent'))).toEqual(['paid', 'unverified', 'unknown', 'recent'])
+  })
   it.each(['mutate_properties', 'create_items'])('%s 的验证失败人工核对后释放写锁，重启不丢已执行事实', async kind => {
     const f = fixture(), show = vi.fn()
     const coordinator = new ApplicationOperationCoordinator(f.store, undefined, () => new Set(['asset', 'canvas.node', 'canvas.document']), show)

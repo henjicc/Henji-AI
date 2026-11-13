@@ -25,7 +25,7 @@ function runtime(fetch: RuntimeContext['transport']['fetch']): RuntimeContext {
       describe: async () => ({ size: bytes.length, mimeType: 'audio/wav', filename: 'fixture.wav' }),
       readChunk: async (_ref, offset, length) => bytes.subarray(offset, offset + length) } }
 }
-const context = (): { requestId: string; signal: AbortSignal } => ({ requestId: 'fixture-transcription', signal: new AbortController().signal })
+const context = (): { requestId: string; signal: AbortSignal; onSubmitting: () => void } => ({ requestId: 'fixture-transcription', signal: new AbortController().signal, onSubmitting: () => undefined })
 
 describe('共用 SDK 带时间转写（零网络替身 transport）', () => {
   it('供应商完成后先交付原始 DTO：即使本地规范化或随后取消失败，owner 仍得到付费结果', async () => {

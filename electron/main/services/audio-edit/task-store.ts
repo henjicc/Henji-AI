@@ -80,12 +80,22 @@ export function registerAudioEditTaskController(requestId: string, projectId: st
   return () => { if (active.get(requestId)?.controller === controller) active.delete(requestId) }
 }
 
-type TaskLiveness = { state: AudioEditTaskState; updated_at: number }
-/** 别的进程的心跳是否新鲜。时钟往回拨时差值为负，按“刚刚”算，但拨回超过 STALE_MS 的同样当作过期，不让任务永远卡在运行中。 */
+type TaskLiveness = { request_id: string; state: AudioEditTaskState; updated_at: number }
+/**
+ * 时钟往回拨后，活着的执行者每次心跳仍让 updated_at 加 1，于是它一直领先本机时间；领先不止 STALE_MS 时单看差值分不出死活，
+ * 改看它在本进程的单调时钟下有没有变：STALE_MS 内没变过才算停了。
+ */
+const aheadObservations = new Map<string, { updatedAt: number; since: number }>()
+/** 别的进程的心跳是否新鲜。 */
 const liveElsewhere = (row: TaskLiveness | undefined, now = Date.now()): boolean => {
-  if (!row || (row.state !== 'queued' && row.state !== 'running')) return false
+  if (!row || (row.state !== 'queued' && row.state !== 'running')) { if (row) aheadObservations.delete(row.request_id); return false }
   const age = now - row.updated_at
-  return age < STALE_MS && age > -STALE_MS
+  if (age >= STALE_MS) { aheadObservations.delete(row.request_id); return false }
+  if (age > -STALE_MS) { aheadObservations.delete(row.request_id); return true }
+  const seen = aheadObservations.get(row.request_id), tick = performance.now()
+  if (!seen || seen.updatedAt !== row.updated_at) { aheadObservations.set(row.request_id, { updatedAt: row.updated_at, since: tick }); return true }
+  // 判成已停后保留观察：updated_at 不变期间每次判断结论一致，变了或回到正常区间才重新计时
+  return tick - seen.since < STALE_MS
 }
 
 /**
@@ -153,8 +163,9 @@ const INTERRUPTED_MESSAGE = '上次处理在软件退出时中断。'
  */
 export function markInterruptedAudioEditTasks(commandLineRunning: boolean): void {
   const now = Date.now()
-  const changes = getDb().prepare(`UPDATE audio_edit_tasks SET state = 'failed', error_message = ?, updated_at = ${NEXT_UPDATED_AT} WHERE state IN ('queued', 'running')${commandLineRunning ? ' AND (updated_at < ? OR updated_at > ?)' : ''}`)
-    .run(INTERRUPTED_MESSAGE, now, ...(commandLineRunning ? [now - STALE_MS, now + STALE_MS] : [])).changes
+  // 心跳领先本机时间的可能是时钟回拨后仍活着的命令行任务，启动时无法观察，留给 settleStaleAudioEditTask 按有没有在动判断。
+  const changes = getDb().prepare(`UPDATE audio_edit_tasks SET state = 'failed', error_message = ?, updated_at = ${NEXT_UPDATED_AT} WHERE state IN ('queued', 'running')${commandLineRunning ? ' AND updated_at < ?' : ''}`)
+    .run(INTERRUPTED_MESSAGE, now, ...(commandLineRunning ? [now - STALE_MS] : [])).changes
   if (changes) logger.info('上次中断的口播任务已标记', { event: 'audio_edit.tasks.interrupted_marked', context: { count: changes, commandLineRunning } })
 }
 
@@ -164,9 +175,12 @@ export function markInterruptedAudioEditTasks(commandLineRunning: boolean): void
  */
 export function settleStaleAudioEditTask(requestId: string): void {
   if (active.has(requestId)) return
-  const now = Date.now()
-  const changes = getDb().prepare(`UPDATE audio_edit_tasks SET state = 'failed', error_message = ?, updated_at = ${NEXT_UPDATED_AT} WHERE request_id = ? AND state IN ('queued', 'running') AND (updated_at < ? OR updated_at > ?)`)
-    .run(INTERRUPTED_MESSAGE, now, requestId, now - STALE_MS, now + STALE_MS).changes
+  const db = getDb()
+  const row = db.prepare('SELECT request_id, state, updated_at FROM audio_edit_tasks WHERE request_id = ?').get(requestId) as TaskLiveness | undefined
+  if (!row || (row.state !== 'queued' && row.state !== 'running') || liveElsewhere(row)) return
+  // 按读到的 updated_at 条件写：判断之后执行者又写过（心跳或完成），就不动
+  const changes = db.prepare(`UPDATE audio_edit_tasks SET state = 'failed', error_message = ?, updated_at = ${NEXT_UPDATED_AT} WHERE request_id = ? AND state IN ('queued', 'running') AND updated_at = ?`)
+    .run(INTERRUPTED_MESSAGE, Date.now(), requestId, row.updated_at).changes
   if (changes) logger.info('中断的口播任务已标记', { event: 'audio_edit.tasks.interrupted_marked', requestId, context: { count: changes } })
 }
 
@@ -253,5 +267,5 @@ export function isAudioEditTaskRunningHere(requestId: string): boolean { return 
 /** 任务此刻有没有进程在跑：本进程看登记表，别的进程（助手命令行与主应用共用数据库）看心跳。 */
 export function isAudioEditTaskActive(requestId: string): boolean {
   if (active.has(requestId)) return true
-  return liveElsewhere(getDb().prepare('SELECT state, updated_at FROM audio_edit_tasks WHERE request_id = ?').get(requestId) as TaskLiveness | undefined)
+  return liveElsewhere(getDb().prepare('SELECT request_id, state, updated_at FROM audio_edit_tasks WHERE request_id = ?').get(requestId) as TaskLiveness | undefined)
 }

@@ -36,6 +36,8 @@ const deleting = new Set<string>()
 const deleted = new Set<string>()
 const listeners = new Set<() => void>()
 let revision = 0
+/** 每份图片文档关闭时的文档修订号：关闭期间文件被改过（重开时对不上）才推进作用域修订。 */
+const closedDocumentRevisions = new Map<string, number>()
 
 /**
  * `image_edit` 作用域的修订只随文档数据与选区推进；打开、关闭某份图片文档只通知订阅者，
@@ -163,7 +165,9 @@ function adopt(bus: ImageEditCommandBusV3, host?: ImageEditPersistenceHostV3): O
   })
   instance.unsubscribe = () => { unsubscribePersistence(); unsubscribeSelection() }
   instances.set(documentId, instance)
-  emit(false)
+  const closedRevision = closedDocumentRevisions.get(documentId)
+  closedDocumentRevisions.delete(documentId)
+  emit(closedRevision !== undefined && closedRevision !== bus.getSnapshot().document.revision)
   return instance
 }
 
@@ -270,6 +274,7 @@ export async function deleteIdleImageEditDocumentV3(documentId: string, revision
 }
 
 function dispose(instance: OwnedInstance): void {
+  closedDocumentRevisions.set(instance.documentId, instance.bus.getSnapshot().document.revision)
   if (instance.timer) clearTimeout(instance.timer)
   instance.unsubscribe()
   instance.persistenceOwner?.dispose()
@@ -289,6 +294,7 @@ export function adoptImageEditDocumentInstanceForTestsV3(
 
 export function resetImageEditDocumentInstancesForTestsV3(): void {
   for (const instance of instances.values()) dispose(instance)
+  closedDocumentRevisions.clear()
   queues.clear()
   deleting.clear()
   deleted.clear()

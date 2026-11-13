@@ -13,6 +13,8 @@ const uiPaidReceiptSql = `coalesce(json_extract(record_json, '$.origin.actor') =
   AND coalesce(json_array_length(record_json, '$.targetRefs'), 0) = 0, 0)`
 
 type OperationState = import('../../../../src/core/application-control/userConfirmation').ApplicationOperationState
+/** 终态调用记录的保留期（用户 2026-11-10 定为 14 天）。 */
+const INVOCATION_RETENTION_MS = 14 * 24 * 60 * 60 * 1000
 /** 账本里尚未结束的状态。 */
 export const UNRESOLVED_OPERATION_STATES: readonly OperationState[] = ['preparing', 'awaiting_user_confirmation', 'executing', 'unknown', 'partial']
 export interface OperationRecord {
@@ -121,11 +123,22 @@ export class ApplicationOperationStore {
   unresolved(): OperationRecord[] {
     return (this.db.prepare(`SELECT record_json FROM application_invocations WHERE state IN (${UNRESOLVED_OPERATION_STATES.map(state => `'${state}'`).join(',')}) AND NOT (${uiPaidReceiptSql})`).all(...uiPaidCapabilities) as Array<{ record_json: string }>).map((row) => JSON.parse(row.record_json) as OperationRecord)
   }
-  /** 自然日预算过后只清理无业务恢复用途的 UI 终态收据；助手事实与在途请求永久保留原语义。 */
+  /**
+   * 每个自然日清理一次：自然日预算过后清无业务恢复用途的 UI 终态收据；
+   * 其余终态记录保留 INVOCATION_RETENTION_MS，带付费预留、待核对或未结的记录不清（付费账本与恢复要用）。
+   * 撤销引用在渲染层的事务记录里，不依赖这张表。
+   */
   private pruneUiPaidReceipts(): void {
     const today = new Date(); today.setHours(0, 0, 0, 0)
     const since = today.getTime()
     if (this.prunedPaidDay === since) return
+    // 分批删除，限制媒体回收触发器每批处理量
+    const expired = this.db.prepare(`DELETE FROM application_invocations WHERE rowid IN (SELECT rowid FROM application_invocations
+      WHERE state IN ('completed','not_executed','rolled_back') AND updated_at < ?
+      AND COALESCE(json_array_length(record_json, '$.paidReservations'), 0) = 0
+      AND COALESCE(json_extract(record_json, '$.verificationState'), '') != 'unresolved'
+      AND COALESCE(json_extract(record_json, '$.confirmation.purpose'), '') != 'review' LIMIT 256)`)
+    while (expired.run(since - INVOCATION_RETENTION_MS).changes > 0) { /* 只删超过保留期的终态记录 */ }
     this.db.prepare(`DELETE FROM application_invocations WHERE state IN ('completed','not_executed','unknown')
       AND updated_at < ? AND (${uiPaidReceiptSql})
       AND NOT EXISTS (SELECT 1 FROM json_each(record_json, '$.paidReservations') WHERE json_array_length(json_extract(value, '$.generationTaskIds')) > 0)

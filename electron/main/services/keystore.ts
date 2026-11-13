@@ -25,7 +25,7 @@ const PROVIDER_KEY_NAMESPACE = 'provider'
 export const AI_KEY_NAMESPACE = PROVIDER_KEY_NAMESPACE
 const KNOWN_AI_PROVIDER_IDS = [
   'ppio', 'fal', 'kie', 'apimart', 'bailian', 'volcengine', 'modelscope', 'grsai',
-  'siliconflow', 'volcengine-speech', 'groq',
+  'siliconflow', 'volcengine-speech', 'groq', 'deepseek',
 ] as const
 export const LLM_KEY_NAMESPACE = PROVIDER_KEY_NAMESPACE
 
@@ -160,6 +160,8 @@ export function restoreEncryptedKeySnapshot(snapshot: EncryptedKeySnapshot): voi
   if (snapshot.encrypted !== null) decryptStoredKey(snapshot.encrypted, snapshot.storeKey)
 }
 
+const reportedUndecryptable = new Map<string, string>()
+
 /**
  * 解不开的条目按"没有这个密钥"处理，不抛。
  *
@@ -175,9 +177,13 @@ export function restoreEncryptedKeySnapshot(snapshot: EncryptedKeySnapshot): voi
 function decryptStoredKey(encrypted: string, storeKey: string): string | null {
   try {
     const key = safeStorage.decryptString(Buffer.from(encrypted, 'base64'))
+    reportedUndecryptable.delete(storeKey)
     registerProviderLogSecret(key, storeKey)
     return key
   } catch (error) {
+    // 同一份密文只记一次：每次读取都会重试（钥匙串解锁后要能读出），逐次记日志会在几秒内刷出几十条同样的警告
+    if (reportedUndecryptable.get(storeKey) === encrypted) return null
+    reportedUndecryptable.set(storeKey, encrypted)
     logger.warn('已保存的密钥无法解密，按未配置处理', {
       event: 'keystore.decrypt.failed',
       context: { storeKey },

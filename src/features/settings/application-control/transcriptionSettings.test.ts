@@ -60,7 +60,7 @@ describe('默认转写模型的正式通用设置链路', () => {
     const plan = service.prepare({ modelId: reopened.resolveTranscriptionModelId(), audioPath: 'recording.wav', durationMs: 500 })
     // 设置随后改变也不能切换已经开始的收费模型。
     modelDefaultsManager.setDefaultModel('transcription', 'bailian.speech-recognition.fun-asr')
-    expect(await service.execute(plan, context('execute-transcription'))).toMatchObject({ unit: 'ms', granularity: 'character', words: [{ text: '好', startMs: 0, endMs: 500 }] })
+    expect(await service.execute(plan, { ...context('execute-transcription'), onSubmitting: () => undefined })).toMatchObject({ unit: 'ms', granularity: 'character', words: [{ text: '好', startMs: 0, endMs: 500 }] })
   })
   it('通用主供应商修改为转写清空提供 cascade；事务失败恢复原选择', async () => {
     const ref = { kind: 'settings.registry', id: 'singleton' }

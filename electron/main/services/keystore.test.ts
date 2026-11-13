@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   appDataDir: '',
   isEncryptionAvailable: vi.fn(() => true),
+  warn: vi.fn(),
   encryptString: vi.fn((value: string) => Buffer.from(`enc:${value}`)),
   decryptString: vi.fn((buffer: Buffer) => {
     // 真实 safeStorage 在没有可用加密时同样解不开，mock 要保持这一点，
@@ -27,7 +28,7 @@ vi.mock('electron', () => ({
 }))
 
 vi.mock('./logging', () => ({
-  createMainLogger: () => ({ warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() }),
+  createMainLogger: () => ({ warn: mocks.warn, info: vi.fn(), error: vi.fn(), debug: vi.fn() }),
 }))
 
 import {
@@ -131,6 +132,16 @@ describe('keystore', () => {
     writeRawKeystore({ 'ai:ppio': Buffer.from('这不是本机加密的密文').toString('base64') })
     expect(() => getKey(AI_KEY_NAMESPACE, 'ppio')).not.toThrow()
     expect(getKey(AI_KEY_NAMESPACE, 'ppio')).toBeNull()
+  })
+
+  it('同一份密文解不开只记一次警告，每次读取仍重试；重新保存后照常读出', () => {
+    writeRawKeystore({ 'mcp:retry-test': Buffer.from('这不是本机加密的密文').toString('base64') })
+    mocks.decryptString.mockClear(); mocks.warn.mockClear()
+    for (let read = 0; read < 3; read++) expect(getKey('mcp', 'retry-test')).toBeNull()
+    expect(mocks.decryptString).toHaveBeenCalledTimes(3)
+    expect(mocks.warn).toHaveBeenCalledTimes(1)
+    setKey('mcp', 'retry-test', 'fresh-key')
+    expect(getKey('mcp', 'retry-test')).toBe('fresh-key')
   })
 
   it('解不开时状态查询如实答"未配置"，不显示成已配置', () => {

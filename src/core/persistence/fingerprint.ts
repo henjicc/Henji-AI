@@ -1,13 +1,25 @@
 import { z } from 'zod'
 
-/** Sort object keys and set-like JSON Schema arrays, preserving tuple/union order. */
-function canonicalPersistenceJson(value: unknown, key = ''): unknown {
-  if (Array.isArray(value)) {
-    const entries = value.map(item => canonicalPersistenceJson(item))
-    return key === 'required' || key === 'enum' ? entries.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b), 'en')) : entries
-  }
-  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([name, item]) => [name, canonicalPersistenceJson(item, name)]))
+const sortedEntries = (value: object): Array<[string, unknown]> => Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
+const byJson = (a: unknown, b: unknown): number => JSON.stringify(a).localeCompare(JSON.stringify(b), 'en')
+
+/** 数据（default、const、enum 的取值等）只排对象键，数组顺序就是数据本身。 */
+function canonicalData(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalData)
+  if (value && typeof value === 'object') return Object.fromEntries(sortedEntries(value).map(([name, item]) => [name, canonicalData(item)]))
   return value
+}
+
+/** 只有 schema 位置上的 required、enum 是集合，排序后比较；元组与联合的顺序保留。 */
+function canonicalSchema(schema: unknown): unknown {
+  if (Array.isArray(schema)) return schema.map(canonicalSchema)
+  if (!schema || typeof schema !== 'object') return schema
+  return Object.fromEntries(sortedEntries(schema).map(([key, value]) => {
+    if ((key === 'required' || key === 'enum') && Array.isArray(value)) return [key, value.map(canonicalData).sort(byJson)]
+    if (SCHEMA_MAP_KEYWORDS.has(key) && value && typeof value === 'object' && !Array.isArray(value)) return [key, Object.fromEntries(sortedEntries(value).map(([name, item]) => [name, canonicalSchema(item)]))]
+    if (SCHEMA_KEYWORDS.has(key) || SCHEMA_LIST_KEYWORDS.has(key)) return [key, canonicalSchema(value)]
+    return [key, canonicalData(value)]
+  }))
 }
 
 /**
@@ -42,8 +54,8 @@ export function persistenceSchemaStructure(schemas: Readonly<Record<string, z.Zo
     const json = z.toJSONSchema(schema, { io, unrepresentable: 'throw', reused: 'inline' })
     return includeAnnotations ? json : withoutAnnotations(json)
   }
-  return JSON.stringify(canonicalPersistenceJson(Object.fromEntries(Object.entries(schemas).map(([name, schema]) => [name, {
-    input: structure(schema, 'input'),
-    output: structure(schema, 'output'),
-  }]))))
+  return JSON.stringify(Object.fromEntries(Object.entries(schemas).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([name, schema]) => [name, {
+    input: canonicalSchema(structure(schema, 'input')),
+    output: canonicalSchema(structure(schema, 'output')),
+  }])))
 }

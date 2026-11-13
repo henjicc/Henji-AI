@@ -55,6 +55,15 @@ it('接管只认读到时的那一行：读之后原执行者写过（updated_at
   expect(JSON.parse(after.result_json!)).toMatchObject({ owner: 'B' })
 })
 
+it('两方读到同一行、用同一个读值依次接管：先到的认领成功，后到的落空', () => {
+  expect(claim('A')).toBe(true)
+  expect(updateOwnedAudioEditTask('task', 'A', { state: 'failed', result: { billing: 'not_charged' } })).toBe(true)
+  const seen = findAudioEditTranscription('doc')!.updated_at
+  expect(claim('B', seen)).toBe(true)
+  expect(claim('C', seen)).toBe(false)
+  expect(JSON.parse(row('task').result_json!)).toMatchObject({ owner: 'B' })
+})
+
 it('心跳只在令牌对得上时刷新；令牌被接管后本进程这次转写自己停下', () => {
   expect(claim('A')).toBe(true)
   const controller = new AbortController()
@@ -70,19 +79,41 @@ it('心跳只在令牌对得上时刷新；令牌被接管后本进程这次转�
   } finally { release() }
 })
 
-it('别的进程是否在跑看心跳：一分钟内算在跑，停了更久或时钟拨回超过一分钟算中断；有命令行在跑时启动只标心跳停了的', () => {
+it('别的进程是否在跑看心跳：一分钟内算在跑，停了更久算中断；有命令行在跑时启动只标心跳停了的', () => {
   const now = Date.now()
   insert('fresh', 'running', now - 5_000)
   insert('stale', 'running', now - 120_000)
-  insert('future', 'running', now + 120_000)
   insert('done', 'failed', now)
-  expect(['fresh', 'stale', 'future', 'done'].map(isAudioEditTaskActive)).toEqual([true, false, false, false])
+  expect(['fresh', 'stale', 'done'].map(isAudioEditTaskActive)).toEqual([true, false, false])
   markInterruptedAudioEditTasks(true)
-  expect(['fresh', 'stale', 'future'].map((id) => row(id).state)).toEqual(['running', 'failed', 'failed'])
+  expect(['fresh', 'stale'].map((id) => row(id).state)).toEqual(['running', 'failed'])
   markInterruptedAudioEditTasks(false)
   expect(row('fresh').state).toBe('failed')
   insert('stuck', 'running', now - 120_000)
   insert('busy', 'running', now)
   settleStaleAudioEditTask('stuck'); settleStaleAudioEditTask('busy')
   expect([row('stuck').state, row('busy').state]).toEqual(['failed', 'running'])
+})
+
+it('时钟拨回超过一分钟：心跳还在动的仍算在跑，一分钟没动过的才算中断', () => {
+  let tick = 0
+  const monotonic = vi.spyOn(performance, 'now').mockImplementation(() => tick)
+  try {
+    const now = Date.now()
+    insert('alive', 'running', now + 120_000)
+    insert('dead', 'running', now + 120_000)
+    markInterruptedAudioEditTasks(true)
+    expect([row('alive').state, row('dead').state]).toEqual(['running', 'running'])
+    expect(['alive', 'dead'].map(isAudioEditTaskActive)).toEqual([true, true])
+    for (let step = 0; step < 13; step++) {
+      tick += 5_000
+      // 另一个进程的心跳：领先本机时间时每次加 1
+      state.sqlite!.native.prepare('UPDATE audio_edit_tasks SET updated_at = updated_at + 1 WHERE request_id = ?').run('alive')
+      // 正式路径先查是否在跑，再尝试结案
+      isAudioEditTaskActive('alive'); isAudioEditTaskActive('dead')
+      settleStaleAudioEditTask('alive'); settleStaleAudioEditTask('dead')
+    }
+    expect([row('alive').state, row('dead').state]).toEqual(['running', 'failed'])
+    expect(isAudioEditTaskActive('alive')).toBe(true)
+  } finally { monotonic.mockRestore() }
 })

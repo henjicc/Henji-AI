@@ -15,10 +15,10 @@ import { fontLibrarySnapshot } from '@/platform/fonts'
 import type { VideoEditRenderSession } from '../engine/videoEditRenderSession'
 import { videoEditFirstFramePending } from '../engine/videoEditFirstFrameTiming'
 import { VIDEO_EDIT_ENCODE_FRAMES_IN_FLIGHT } from '../engine/videoEditRenderTransport'
-import { abortable, encodeVideoEditRenderWindow, openVideoEditRenderSession, videoEditRenderProfile } from './videoEditRenderCacheEncode'
+import { abortable, encodeVideoEditRenderWindow, openVideoEditRenderSession, videoEditRenderAnalysisKey, videoEditRenderProfile } from './videoEditRenderCacheEncode'
 import { findActiveVideoEditSequence, getActiveVideoEditSequence, listVideoEditInstances, publishVideoEdit, requireVideoEditInstance, subscribeVideoEditDomain, subscribeVideoEditView, type VideoEditInstance } from './videoEditService'
-import { videoEditTrackResults, waitVideoEditTracking, subscribeVideoEditTracking } from './videoEditTracking'
-import { videoEditSmartRegionSegments, waitVideoEditSmartRegions, subscribeVideoEditSmartRegions } from './videoEditSmartRegions'
+import { waitVideoEditTracking, subscribeVideoEditTracking } from './videoEditTracking'
+import { waitVideoEditSmartRegions, subscribeVideoEditSmartRegions } from './videoEditSmartRegions'
 import { videoEditMeasuredRenderState, type VideoEditRenderPerformance } from '@/core/videoEdit/renderPerformance'
 import { loadVideoEditRenderPerformance, readVideoEditRenderPerformance, recordVideoEditRenderPerformance } from './videoEditRenderPerformance'
 import { VideoEditCodeMetadataPending } from './videoEditCodeState'
@@ -268,11 +268,11 @@ export function videoEditRenderCacheWindows(owner: VideoEditInstance, compositio
   const fontRevision = fontLibrarySnapshot().revision
   const memo = windowMemo.get(composition)
   if (memo?.revision === analysisRevision && memo.fontRevision === fontRevision) return memo.windows
-  const dependencies = { fontRevision, analysis: JSON.stringify([videoEditTrackResults(composition), videoEditSmartRegionSegments()]), codeDeclarations: videoEditCodeDeclarationReader(owner), webContent: videoEditWebContentIdentity }
+  const dependencies = { fontRevision, analysis: videoEditRenderAnalysisKey(composition), codeDeclarations: videoEditCodeDeclarationReader(owner), webContent: videoEditWebContentIdentity }
   const webContent = Object.fromEntries(composition.clips.flatMap(clip => Object.values(videoEditCodeInputParameters(composition, clip.code, dependencies.codeDeclarations)).flatMap(value => isCodeImageReference(value) && value.kind === 'web' ? [[value.path, videoEditWebContentIdentity(value.path)]] : [])))
   const codeFingerprints = videoEditRenderFingerprints(owner, composition, JSON.stringify([fontRevision, dependencies.analysis]), webContent, dependencies.codeDeclarations,
     () => fontLibrarySnapshot().revision === fontRevision
-      && JSON.stringify([videoEditTrackResults(composition), videoEditSmartRegionSegments()]) === dependencies.analysis
+      && videoEditRenderAnalysisKey(composition) === dependencies.analysis
       && Object.entries(webContent).every(([path, identity]) => videoEditWebContentIdentity(path) === identity))
   const set = videoEditRenderWindowSet(composition, { ...dependencies, codeFingerprints }, lastWindowSets.get(composition.id))
   lastWindowSets.delete(composition.id); lastWindowSets.set(composition.id, set)

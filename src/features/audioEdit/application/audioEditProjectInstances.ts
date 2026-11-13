@@ -154,6 +154,9 @@ function syncFromSession(record: InstanceRecord): void {
   publish(instance)
 }
 
+/** 每份口播关闭时的持久修订号：打开本身不推进修订，关闭期间文件被改过（重开时对不上）才推进。 */
+const closedPersistedRevisions = new Map<string, number>()
+
 /** 把一个已打开的文档会话接成实例（同步）：读内容、附着到会话、同步名称与保存状态、会话结束时自动拆掉。 */
 function bindAudioEditSession(session: DocumentSession): AudioEditProjectInstance {
   const existing = records.get(session.id)
@@ -194,6 +197,7 @@ function bindAudioEditSession(session: DocumentSession): AudioEditProjectInstanc
   record.dispose = () => {
     if (disposed) return
     disposed = true
+    closedPersistedRevisions.set(session.id, session.documentMeta.revision)
     unsubscribeSession()
     detach()
     if (records.get(session.id) === record) records.delete(session.id)
@@ -202,6 +206,9 @@ function bindAudioEditSession(session: DocumentSession): AudioEditProjectInstanc
     publish(instance)
   }
   records.set(session.id, record)
+  const closedRevision = closedPersistedRevisions.get(session.id)
+  closedPersistedRevisions.delete(session.id)
+  if (closedRevision !== undefined && closedRevision !== meta.revision) catalogRevision += 1
   publish(instance)
   return instance
 }
@@ -568,6 +575,7 @@ export async function resetAudioEditProjectInstancesForTests(): Promise<void> {
     record.dispose()
     await record.instance.session.discard()
   }
+  closedPersistedRevisions.clear()
 }
 
 export const resolveAudioEditPersistenceParticipants: ApplicationPersistenceResolver = (steps) => {

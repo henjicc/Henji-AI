@@ -79,6 +79,16 @@ describe('图片文档应用实例', () => {
     state.rename('真的改了')
     expect(getImageEditDocumentCatalogRevisionV3()).toBeGreaterThan(before)
   })
+  it('关闭期间文件被改过，重开时推进 image_edit 修订；原样重开不推进', () => {
+    const state = setup('revision-reopen')
+    expect(releaseImageEditDocumentInstanceV3('revision-reopen')).toBe(true)
+    const before = getImageEditDocumentCatalogRevisionV3()
+    getOrCreateImageEditDocumentInstanceV3(state.document, { historySnapshot: state.initial.history })
+    expect(getImageEditDocumentCatalogRevisionV3()).toBe(before)
+    expect(releaseImageEditDocumentInstanceV3('revision-reopen')).toBe(true)
+    getOrCreateImageEditDocumentInstanceV3({ ...state.document, revision: state.document.revision + 3 })
+    expect(getImageEditDocumentCatalogRevisionV3()).toBeGreaterThan(before)
+  })
 
   it('回收跳过打开的文档、活动任务、脏状态与未确认保存', async () => {
     const state = setup('retained')
