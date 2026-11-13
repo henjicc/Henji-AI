@@ -40,7 +40,7 @@
 
 每种格式在 `tests/fixtures/persistence/<id>/v<N>.*` 保存真实样本。使用当前正式构造器、序列化器或导出器生成（`scripts/generate-persistence-fixtures.ts`、`scripts/generate-persistence-packages.ts`），不手写不存在的字段。样本最小但覆盖主要结构；剪辑包括代码文件引用、效果、关键帧、字幕、转场、全能调色。已发布样本不可修改或删除：新版本添加新样本，并验证所有受支持旧样本升级后的关键内容与当前 schema。包格式同时验证真实归档读入口。
 
-`npm run check:persistence-compat` 使用 Zod 4 原生 JSON Schema 的输入/输出结构稳定排序后生成 SHA-256 指纹，不依赖源码文本。无版本变更的 schema 变化失败；新增格式需要基线；版本升级需要从兼容起点开始的完整迁移链与样本。完成精确迁移和读写测试后：
+`npm run check:persistence-compat` 使用 Zod 4 原生 JSON Schema 的输入/输出结构稳定排序后生成 SHA-256 指纹，不依赖源码文本。指纹只计数据结构：schema 位置上的 `description`、`title`、`examples`、`$comment`、`deprecated`、`readOnly`、`writeOnly` 注解不计入，改 `.describe()` 说明文字不算格式变更；`default`、`enum`、`const`、`format`、`pattern` 与范围约束照计，字段名和默认值里的数据即使叫 description 也照计。无版本变更的 schema 变化失败；新增格式需要基线；版本升级需要从兼容起点开始的完整迁移链与样本。完成精确迁移和读写测试后：
 
 ```bash
 npm run persistence:baseline            # 登记新版本、指纹与 minReaderVersion
@@ -48,6 +48,8 @@ npm run persistence:release-snapshot    # 把新版本与样本摘要追加进�
 ```
 
 检查脚本不自动修基线；`--dev-break` 与 `--waive-before` 已停用，脚本直接拒绝。`--restore-support` 只用于补迁移降低支持下限。发布承诺只追加：已发布的版本指纹、样本摘要与支持下限不可改写。CI 执行同一检查。
+
+2026-11-13 指纹算法从计入说明文字改为只计结构，用一次性的 `npm run persistence:baseline -- --structure-fingerprint --reason <原因>` 重新登记：每种格式先证明旧算法指纹仍等于基线与发布承诺里的登记值（结构未变），才登记新指纹；基线的 `structureFingerprint` 记下每种格式的新旧指纹对照。发布承诺里 `versions` 是旧算法指纹，原样冻结；`structures` 是结构指纹，此后的新版本只追加到这里，门禁按它核对当前版本。已不在代码里的历史版本无法复算，只保留旧算法记录。该命令只能执行一次。
 
 动态 JSON 扩展字段的内部语义、任意 refine 函数以及 SQLite DDL 不由结构指纹自动证明；应把稳定结构提升为正式 schema，或在既有 SQLite 账本中登记变更，并用原生/语义样本验证。未被 Zod JSON Schema 支持的类型直接失败，不允许静默跳过。
 

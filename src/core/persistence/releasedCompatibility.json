@@ -16,6 +16,9 @@
       },
       "samples": {
         "v1.json": "c8e61932dc8a35824e0b6dd05286d224ff3f026fed3a3711d47f1c900e98dd1c"
+      },
+      "structures": {
+        "1": "82b61dbb1971594d5e3dc1d3ac9f2e7b7e3a00889c418075a81027f883988c32"
       }
     },
     "screen-recording-tracks": {
@@ -33,6 +36,9 @@
       },
       "samples": {
         "v1.json": "adc46620b24bce0a4bb23b6e245a459da126e15abcc068751b5ab39b9e0fb34c"
+      },
+      "structures": {
+        "1": "7c0538485a22c4b46d5b972c36473428b3f7d4160ba7b9f920887a784df86456"
       }
     },
     "capture-log-page": {
@@ -50,6 +56,9 @@
       },
       "samples": {
         "v2.json": "15f9fbddb1cab34d2ce113d0bf106488fb19826152577e8eaaa4f9c263aa145f"
+      },
+      "structures": {
+        "2": "4a80e451c8dd07ee0107ac3d64530f185aa269ebbb6b92f58da0ef96c78e5b60"
       }
     },
     "creative-intent-page": {
@@ -67,6 +76,9 @@
       },
       "samples": {
         "v1.json": "2d3526e420b92ff3f5ae31ac2076b008c12bb56cee7347a4f71d27a852bf06c3"
+      },
+      "structures": {
+        "1": "6081af1ae01cfff032131acf898db57409909d7bec2cf6760e68d8a3e0954a64"
       }
     },
     "creative-intent-candidate": {
@@ -99,6 +111,9 @@
         "v7.json": "6f28e6e8d775ed31f706314db07d036c116935ff0a1f56fb2aeaf6a9aafda358",
         "v8.json": "d98f58ffceb6b7b37f259f0b6acd2ef36105df51674d580f3794b7ee991c8fc0",
         "v9.json": "4aefacb8b457ba2385b67d298c32fe26c3af110e692a4af06490882c99a82c20"
+      },
+      "structures": {
+        "9": "f67d2c902558551fd7cca36cef4ee64b1dc4e0ab20a6bd18a8f721b8ddd18301"
       }
     },
     "image-layout-page": {
@@ -116,6 +131,9 @@
       },
       "samples": {
         "v1.json": "cee402a2fcb6bec29c2d7cb6ab4933ac0c8b8e2b2e5eed071648e3306fbd006a"
+      },
+      "structures": {
+        "1": "9a1a010e38ba0a6c8cf6e0af3ba4dcbb52b8353320610bcd600bec39e1fca47d"
       }
     },
     "image-layout-candidate": {
@@ -133,6 +151,9 @@
       },
       "samples": {
         "v1.json": "ad758cb7eb69bcd1a4bc6ca4d1bbc2bcd52fc8fd39bc993f9296d629ef6b591e"
+      },
+      "structures": {
+        "1": "1411ec8d29676c616ef4bbc6af9ef47c83e6fc87d1b82832e7c0fd29f3c9f3ee"
       }
     },
     "document-envelope": {
@@ -150,6 +171,9 @@
       },
       "samples": {
         "v1.json": "203f0a04860135516b207fdba328be01a451e5bc244d5430b72a1e5774c864fb"
+      },
+      "structures": {
+        "1": "be84bf7409e7cc10c107d7267942d9296dc8312a0e89cc0cbd2aaf10622b959f"
       }
     },
     "screen-capture": {
@@ -170,6 +194,9 @@
       "samples": {
         "v1.json": "f00320edae2671c7c09af08b47126bb2ce70e702da0a7922988a9750c57222aa",
         "v2.json": "9d7a3b47ac3562f0bea096e3879b74dfdc48f628815369d468b274088d3b3db2"
+      },
+      "structures": {
+        "2": "024790862f8b1f1435cde1b1a82d674ece62cad72bf60c939fc9c6e0090d9462"
       }
     },
     "mcp-connections": {
@@ -190,6 +217,9 @@
       "samples": {
         "v2.json": "2d834efab42910d2eca282d67e9c3ac9cb60ddca76efaca588ceaa78dd3df5bc",
         "v3.json": "94540871fa3a1b8b235948413d34966e2f837f25a9c771c6c68e478071197990"
+      },
+      "structures": {
+        "3": "23f24f98c2a34eae261d00fbe0cb9d9c7989bfe2ca6230a1705a2b3b17d54228"
       }
     },
     "image-history-checkpoint": {
@@ -207,6 +237,9 @@
       },
       "samples": {
         "v2.json": "4097394c116bc3c3c5e62a7c78c45b2bea54b2d8334528615c47d8a9b15e60b8"
+      },
+      "structures": {
+        "2": "b78a24b1a9beaa517831cb48dd5bdef4fc4abea484fc1d16afe5428669655d46"
       }
     },
     "image-header": {
@@ -232,6 +265,9 @@
         "v13.henjiimg": "960e17550837ebb24dd1bee8747df09e806b27fc2da11bfce1063908117e78fd",
         "v14.henjiimg": "8102fa104990a08296c4f4cf0897e73e0d0105caff25135f2c75d54364e2daa1",
         "v15.henjiimg": "9db3b3cb3a803c7e19bb857ae5db049173b968b78dac8d4f3b5eb4914da69a78"
+      },
+      "structures": {
+        "1": "624ca86b0fe7bede2621e2b2b2907bd5baf520c94a65c85dfde03ccfaee089b5"
       }
     },
     "image-package": {
@@ -265,6 +301,9 @@
         "v14.json": "6753754927cc3f5347a28a598081ba491f3f6c8ce94d53609ecc83174cda8969",
         "v15.henjiimg": "9db3b3cb3a803c7e19bb857ae5db049173b968b78dac8d4f3b5eb4914da69a78",
         "v15.json": "90b36a1e0af084fb8223ec313154ceee5f2b2e3170b91fa0b5328fd90426d3b2"
+      },
+      "structures": {
+        "15": "c5b9121d26e7cc9135b91b31d4fee9ea57c3315adef010137206168a9bd765ad"
       }
     },
     "image-working-copy": {
@@ -291,6 +330,9 @@
         "v15.json": "b8c38c751155c1d48c0fa5a2ff705bcf2c39b63fded0fb1bebd94abe5d62e8d2",
         "v16.json": "12f32c00fd26a21b58067cb0c88c9c76adaa0abdbf3b5ca1941792f05708d398",
         "v17.json": "89afb05960a9a6b5dcd1973fdd38038df40a0b01323e3510c4ad16abd7a14d31"
+      },
+      "structures": {
+        "17": "0bae93eb8180941e67c36f9c3ba18101089889243ce33a571bb2ff30655e1f2e"
       }
     },
     "canvas-layer-package": {
@@ -324,6 +366,9 @@
         "v14.json": "dcb7a17d7ba8533fcf67be9c588eb7456e21d2746ad65f9bf4e38dd688544c1b",
         "v15.henjilayer": "e319f16eefce5ac2747a6eb3443754ae924c246c10da653bc7a66a09633ed09e",
         "v15.json": "8bab1aca2dae7b1a42cf9623ab52f6b24784675886aa83954779cfcdf7456f33"
+      },
+      "structures": {
+        "15": "96165dc5beba5bc42e1685189ba97bb49b795b490f3bd4be0a89c0ca54af6483"
       }
     },
     "keystore": {
@@ -341,6 +386,9 @@
       },
       "samples": {
         "v1.json": "a3598ec22103cf22c9fe92000a142620c8e880e19e335f3257e50be7b0811b86"
+      },
+      "structures": {
+        "1": "90b8679459ffc3946251153d4e7e39ec1d8f9a5b1b436c44bcf16f96a08ea7ed"
       }
     },
     "media-grants": {
@@ -358,6 +406,9 @@
       },
       "samples": {
         "v1.json": "f42c80b2aa89f2406b738dc253ca32ce549623dffaaa905b3142397a668c1df1"
+      },
+      "structures": {
+        "1": "eda6ab6c85a5e5389b1adc9cf3b4db859053964daf7a837b62434ebb6db6ce0d"
       }
     },
     "llm-config": {
@@ -378,6 +429,9 @@
       "samples": {
         "v1.json": "36387c9579609bcfe3bb761546879640c5bec4e13f6ff278e845c6fded183e81",
         "v2.json": "47c9ff667e8e41f653fe215920017912ceaf975b33d439c0b330ff22e7e778e4"
+      },
+      "structures": {
+        "2": "419b2d11bd3a20c65cd0f8951908d113f43d4502afbe5014fd64bd3b53d1b66c"
       }
     },
     "storyboard-metadata": {
@@ -396,6 +450,9 @@
       "samples": {
         "v1.json": "de93fb5b02824c08297bceb5f42048d642ac2ba8b2e41735c497903d65e0464c",
         "v1.png": "40eefeda4a5f4b8031e3c42cc0fa923c5880ff3387b3385b43502d6608fa26c6"
+      },
+      "structures": {
+        "1": "a2015736e928ac0fc51121d25c4f783a4f12f11ce3747fd01350d054c5bc3dfe"
       }
     },
     "llm-config-journal": {
@@ -416,6 +473,9 @@
       "samples": {
         "v1.json": "fdf251f4ac01cbc6587fc9c0c9dd50a0e0cc97d1aa0077954d9d123709a16aca",
         "v2.json": "ac165a3750c843c3e8e1cf3d42a729fdcbdcfb27bf4a9d63285156c023ef93db"
+      },
+      "structures": {
+        "2": "6ecf943af3031cf9ef25becc0e054722b060a664a4dcd23ad5429005b0301c23"
       }
     },
     "document.video_edit": {
@@ -599,6 +659,9 @@
         "v75.json": "d67f460c72e0ab31a9371498b3c083b217eca3c4577e3c4a9dc40a94f8741c6d",
         "v76.json": "aa9ac1b1ba7fcf60e379ba69bd01c387f9cca856ca113e88fca94954c01609fd",
         "v77.json": "92dbe19f4512feef3c6bfe66084d161edc4d4647100e85a7735e35f76d7de6e8"
+      },
+      "structures": {
+        "77": "b98862546a5df1200f3ce7046bd4bd132a8dbc714571320ef50cb87e04d4e767"
       }
     },
     "document.canvas": {
@@ -616,6 +679,9 @@
       },
       "samples": {
         "v1.json": "ead30f4c29504b7d70f8f2bb5808ab20878baee0af1575a15f380af0d91f7b71"
+      },
+      "structures": {
+        "1": "443ed52fbebee9faede54ffb7ab00b30ea35e215f7c02aff442c2bc96c1c2a04"
       }
     },
     "document.audio_edit": {
@@ -653,6 +719,9 @@
         "v7.json": "f3fdaa8e468b235d8ece3c53e638bac5b35b8188d79ebd1a14d4e14ac31ffc92",
         "v8.json": "8c030cb747eab0cd1ca6a6bab1c23ec435360e8a6de7192e39692786faa8115a",
         "v9.json": "ad61a3214bfe3cfb4fac56920ed217dfde5344f206f9e7f4a7644a183f123f8f"
+      },
+      "structures": {
+        "9": "a91c6d8133eb855af722efe6cf7e88e5e42c7cd00fb884e06ed8c861aab40be3"
       }
     },
     "document.camera_stage": {
@@ -691,6 +760,9 @@
         "v6.json": "cf1645203581052a407c9a26eccf06f8bc5754e1c3af364c14aa9f548a827ad9",
         "v7.json": "68513e5e02e8d21921c4c6de7bef50d37a1e6be5c80731a8922d8c4c9bfdb268",
         "v8.json": "72fe4c9bbbef54dc46d6916d72d6c75a3f7c20c9aaa65345c40f674654263f8f"
+      },
+      "structures": {
+        "8": "132b846b6d3bbb6116f08d1e676e2b76d9770f8374cf1025431f404e53b7c419"
       }
     },
     "document.image_document": {
@@ -716,6 +788,9 @@
         "v13.henjiimg": "960e17550837ebb24dd1bee8747df09e806b27fc2da11bfce1063908117e78fd",
         "v14.henjiimg": "8102fa104990a08296c4f4cf0897e73e0d0105caff25135f2c75d54364e2daa1",
         "v15.henjiimg": "9db3b3cb3a803c7e19bb857ae5db049173b968b78dac8d4f3b5eb4914da69a78"
+      },
+      "structures": {
+        "1": "ea316f50b5e177668955a297adb75dbec64515d44f1b10abafa838e958acc8d4"
       }
     },
     "document.screen_recording": {
@@ -902,6 +977,9 @@
         "v78.json": "0657ef9c0b2d65fa423f0723a8d103959245e4a4e9d1df13c58aeac0f4ae4f2e",
         "v79.json": "20d25cbeda09808b1445c4ce473c6b06adcd673916777b3ed2590092a07f8e60",
         "v80.json": "3a839c4b4bf53067aac0c7d5e4641ee0d7506a81700361bcb65114af3a87f563"
+      },
+      "structures": {
+        "80": "d7d720ac121183ef42cd3a18c5bd38a96e177ae4e8160fc2a77d82e31ac197f4"
       }
     },
     "project": {
@@ -928,6 +1006,9 @@
         "v2.json": "618cadabfdeb51c8f30e9e3aa884d00b19214b9523fe035c03fcec9b87f0d43b",
         "v3.json": "e7fddc00381f4ca9fe325fa91a40feb971a9ca651bc3ef09e844c82a5bd0d1dc",
         "v4.json": "8b40c55777e04eec7873cf81a19dcabb7d06a077f30d83bc914cf2837a7ce275"
+      },
+      "structures": {
+        "4": "46c4d94e407d375e86873511cdf5afe4d4012abd4bfec04dc93e595ee3383c48"
       }
     },
     "project-package": {
@@ -953,6 +1034,9 @@
         "v1.json": "dc5f5a27a1e70ce717e0e9ec40a43890bed7ac22cd4e70862f4ff7c72d6f8fef",
         "v2.henjipack": "353111bb646803cfb28decd8a4e673cbefd553b9d4d7a9cb3950b8352b1ef6ba",
         "v2.json": "850fcc9f92ed01bbd9d8d4b9694814e311945033283020af2202dff22769d96d"
+      },
+      "structures": {
+        "2": "48454b2dae73d815b6788e3329cdd7066b1659869a91c8c6c6dbf4a7e0ef65fc"
       }
     },
     "code-version": {
@@ -1023,6 +1107,9 @@
         "v17.json": "fc8b2ef971c830de9a5f596d5bfc4e0e92e4a018b61531e2b81a5ff59be09188",
         "v18.json": "f418f838f840dd97b39714247c5525c3ce187073d30a90e1afb4dff25ee3339a",
         "v19.json": "006e75bce1a57af24845f243a11fcd6636552d158ac2d8fdc9737b8554fa37c0"
+      },
+      "structures": {
+        "19": "6cef24a5ea1a34ec9831005ed06fd811566fded2745e911a55f480b7d0085c2c"
       }
     },
     "code-author-api": {
@@ -1082,6 +1169,9 @@
         "v16.json": "3a29dbfee3e213d920a87da70046bd14b32c38ec8410eaa972ef14393d80900e",
         "v17.json": "dca771042c1f29738bb83cd3099dd2988182ce2ff508090546425c7e57446b48",
         "v18.json": "6d503960c6c22501a8fc9032f4f46d5773d76339f1ffaabf0d1061c778fcf05d"
+      },
+      "structures": {
+        "18": "5ab9066673b22e0ea0372d958fe6167286267f0abdb0aab8b8c45ba9ed0138da"
       }
     },
     "code-component": {
@@ -1100,6 +1190,9 @@
       "samples": {
         "v1.json": "4c030c139abaae92a074ce6960f7b93c7962612523cbb6333dbf2095ecaff9ee",
         "v1.ts": "967272e539c44bd28ea487abf1641c92ab5b5e63ca5e4fc22bf47c45b5c8ded8"
+      },
+      "structures": {
+        "1": "3a201852ab715598e6be49cc98560c636c49384b4cbc87f7d6880aa47259585b"
       }
     },
     "code-asset": {
@@ -1183,6 +1276,9 @@
         "v26.json": "6c4eebc4546d9c6e10aef505aecb95c4c5e1215ed4048df27df08a9470fb80ea",
         "v27.json": "6ca7d484dc16c3d56c182633898d73a7becdcfe9b265db5e31898ba882aefcc9",
         "v28.json": "e77a2a0616d889bd18f55d5e7503a26e1a821899ea8f7b196cf386cd32f58177"
+      },
+      "structures": {
+        "28": "e140c34baa218fe3a60d1514bed2160b1e2bef53f49937154ff3692e83b3f27e"
       }
     },
     "settings": {
@@ -1209,6 +1305,9 @@
         "v15.json": "7b638120023cab9e7c636f479ac5f9f5f1666241f2388e05fc1f012e10d33813",
         "v16.json": "2f9bc54aa4b5a33f86733ede6076df0d07f34036f1455ca08fe7d98a14d30d3d",
         "v17.json": "23b8b5fd6b3f860f59e6bbff9e4b61b8230b5e07294ab5b85fce0f90e50b540d"
+      },
+      "structures": {
+        "17": "190df0d10a0ee3dda657bcf36c2d91e11e06dfe50dcc0d0048dfdc452940e09c"
       }
     },
     "theme": {
@@ -1226,6 +1325,9 @@
       },
       "samples": {
         "v1.json": "28db681fc96b9ef5e1d9da06d705f6f2ba475e0a0028124baf16f013ac7065a9"
+      },
+      "structures": {
+        "1": "7a25589e13fbc4f89e8b64e3559f213f45e495757fb85e802040bb70bc82d417"
       }
     },
     "style-kits": {
@@ -1246,6 +1348,9 @@
       "samples": {
         "v3.json": "0873f67425a608820961c8e6409c0254ab6a08e06f6fab84f3cce22cc33d3989",
         "v4.json": "39e41d9faa24c3186ff751b8b7406d719221e4cfc492e1e7ccb61007e07f52a7"
+      },
+      "structures": {
+        "4": "d863e6f203eea0b7d3ab624c8ae0e364f344e2d4225038c63a1960d90a9d13d5"
       }
     },
     "title-templates": {
@@ -1293,6 +1398,9 @@
         "v14.json": "b5c9d4704efd15c6f5a302a881332c48227da5fffb810070e17828a3096c5cc5",
         "v15.json": "9f7c7da8f45a25bb29689f21713ec46f6dec5b3ca0f07a32fa6e246624b0463a",
         "v16.json": "68a7f5655a221e6e4387d52236ab5d9e24b8b7fcb1ffea0711c00bf9f0f02b0c"
+      },
+      "structures": {
+        "16": "ef65da20f817dcddf1ea5b8090457a157e282dfdb972e7f4ed9d6f562d5fde8b"
       }
     },
     "text-presets": {
@@ -1313,6 +1421,9 @@
       "samples": {
         "v1.json": "1d683816921eb10ac942a1294ad371742838da2c85ad167b3dd4e74ce9db1d20",
         "v2.json": "d317de0d0a728875f359cab8502221473b212402b29e55b572d1fcbfdf94eba2"
+      },
+      "structures": {
+        "2": "2b5cbca1e62e6507d44b9884d8521473989836f45ca7c23dd2652f94ab80e29e"
       }
     },
     "export-presets": {
@@ -1342,6 +1453,9 @@
         "v3.json": "01d2af70c111bfdeab93f963ba9978013c2d4b9415480e66f7918686f20e6a25",
         "v4.json": "e548eb5d094b65a93d8b6eb3680e451a572747736ad6f509d0befe660c3bbe8d",
         "v5.json": "f0b1c0f8211c958bcfe4085c891c15f6362dac826dd2a9c7ee9fe3aadbe68b7e"
+      },
+      "structures": {
+        "5": "25a43b7533eb47a1d29958762ad7ed558a216ccfb0761fa82e97535e3e8add38"
       }
     },
     "preset-preferences": {
@@ -1362,6 +1476,9 @@
       "samples": {
         "v1.json": "f34d5c7d220711ff80722bdc7dd2a3ccf072cb04a03c00020e11b8df39d537a3",
         "v2.json": "886ddf204898d0c07b48577aa81f5a2d996903e7a67837494000959a77d98b94"
+      },
+      "structures": {
+        "2": "747f1634f64147d9f43b1d7260b251986df86c7c5f643b21e5c402b399846c21"
       }
     },
     "video-preset-package": {
@@ -1448,6 +1565,9 @@
         "v26.json": "4e967ea47934a6879598c553b294b9e38c277a266bb8fddde8558f726810df2b",
         "v27.json": "5b9d8db6b384af39a4cc7591736dfc9d4f4d59ca6f73eee6eece7bdca14f0eda",
         "v28.json": "29410c77c97a539860948243a2f940a79bc246318549b62081e9fba7068db82f"
+      },
+      "structures": {
+        "28": "f3bd38009665d8d215ea2e636d33991d559035bfa6b73a6a046c65263c9508f1"
       }
     },
     "voice-library": {
@@ -1465,6 +1585,9 @@
       },
       "samples": {
         "v1.json": "f24824f3bad85c9d73ca2cd6fc96fb3a2130314315bb054708ba275777aa86f7"
+      },
+      "structures": {
+        "1": "4202ee44cb1ed0e207e26b4985768afa908e5771a0cc3f52360291d1801b40b6"
       }
     },
     "preset-export": {
@@ -1482,6 +1605,9 @@
       },
       "samples": {
         "v1.json": "e0422fd231726d626027d348c216d82230af4eb4caeefc36df1199cfc5cdffe3"
+      },
+      "structures": {
+        "1": "d33474184c315c126ca0164d3fedcbd38d5e67de168338287264f79d13b6c839"
       }
     },
     "theme-payload": {
@@ -1499,6 +1625,9 @@
       },
       "samples": {
         "v2.json": "2d39d2bc026ba005060269e90730bc720cf57ca0520660f78d887066fd95e115"
+      },
+      "structures": {
+        "2": "30ae0a773020585950cdb1bbf8503f78279b96f414686e88c03fb6379d7b494b"
       }
     },
     "node-defaults": {
@@ -1516,6 +1645,9 @@
       },
       "samples": {
         "v1.json": "dae74d3fd2649f0e8fb0d578d7cbbdf4c5b7ff8cad5bed03fdd3b3780712c49b"
+      },
+      "structures": {
+        "1": "630788b4d12050de7be1f939de936d1de27a7af3b3952315c51b00a10f0130bd"
       }
     },
     "recording-setup": {
@@ -1545,6 +1677,9 @@
         "v3.json": "f83426c88823890c10f00f87889936f9292cb359abf26d5eba996e517bf3a8f5",
         "v4.json": "9abbb5c0a6ac6a2c04f962c79620510be8d7c64ee2b4e9877f9fde375c596ab0",
         "v5.json": "47d8b71012c0509027e36bf38aa17c4e15fdc3c19eb0835f0376ae75de6d14d3"
+      },
+      "structures": {
+        "5": "dbc6257d4e7a9fba37783a96ef4561860613f09d6d5dac7b2119960970b38911"
       }
     },
     "model-defaults": {
@@ -1563,6 +1698,9 @@
       "samples": {
         "v2.json": "5e27e8a8e93c42d50e075e2df263e050c58ce546082af4f3d20542c3783aa12b",
         "v1.json": "b2520c0f1d5028bd64698723c5fb02b5037208511b69de357982c4882c1c0fec"
+      },
+      "structures": {
+        "2": "f710d12e9bd7be5bf8374cd318a9ad9c1f97df3ba5828e1c52e0a3d586ac3c6f"
       }
     },
     "onboarding": {
@@ -1580,6 +1718,9 @@
       },
       "samples": {
         "v2.json": "0b8494e89610f0c0e71bd3abbb39534d85665c2fdebb0e05f451795e4c53f857"
+      },
+      "structures": {
+        "2": "273682eac90ed4abe8fcfb38fb70aa4b0f6f2fa7367417eb523aadf1ca918c50"
       }
     },
     "subtitle-manifest": {
@@ -1663,6 +1804,9 @@
         "v33.json": "5262dea30ce9a6f15aefc22c28cfd6f106ab794afaabeba3c0b22e8d84386f53",
         "v34.json": "a42526f7928fc0b05c5d7376f2603e5bf0915f78d5eb9d74256ff77aaa603a93",
         "v35.json": "610217251bfc31d3cb67e05c71e6a9e8ac2339ff4e4aa270fb49477b4c197973"
+      },
+      "structures": {
+        "35": "9d2189200d31818fbc99dac9eebfcee3dacb3c470326d67c219e42fa32b91748"
       }
     },
     "setting-records": {
@@ -1683,6 +1827,9 @@
       "samples": {
         "v21.json": "f446842e085aeb6c5eb2295e31257ea09f3ac20e7157c15361ad9484dab280bb",
         "v22.json": "267eeb07acc0faee8f1409bed88bf8e75748bde9571d05e7c935c2ca484101ca"
+      },
+      "structures": {
+        "22": "7a2ee6e56dac56ca7ad36608876f5e308eb3af13a7a05a8183a99083ddec5cb7"
       }
     },
     "asset-records": {
@@ -1703,6 +1850,9 @@
       "samples": {
         "v21.json": "775d13973ce0e8dd5b29930a83a233fd9d6720d0215112d0e2250143c0b6394e",
         "v22.json": "f54a65b0a9b47b224e7eccc5dfd970eeaa8ac6e7fb503d819e36bbc961c089e7"
+      },
+      "structures": {
+        "22": "db506356f145eb2e817c242fb6288a71228a865ecc42866bd574f22c60c4cae1"
       }
     },
     "generation-presets": {
@@ -1720,6 +1870,9 @@
       },
       "samples": {
         "v21.json": "41dc05fa39c8641a5c363d79dfc28a64ce4bf107d3b41ea4b234a5c373bd7438"
+      },
+      "structures": {
+        "21": "09c9983126db9d314e301d266577c8e09beb8211d3ba0c50384c56ab3eeb9353"
       }
     },
     "sqlite": {
@@ -1749,6 +1902,9 @@
         "v25.json": "f81538a42620cc8f175478be5e388c07a1236a5cb282c0e3780afbb4c4ac2e38",
         "v26.json": "a75916cfa0f46b039fc41f62eb47935124f83cb13e549a0be813bcdc0f08ad58",
         "v27.json": "29126ac46deb86f7e5abbf25528beec766079377cb6e7a8d6eabde6f179cc98d"
+      },
+      "structures": {
+        "27": "86dc58c581e2f83661d9d1669da03784b7abae828c9c14f3da4e2454b67e41a7"
       }
     },
     "sound-library-folders": {
@@ -1769,6 +1925,9 @@
       "samples": {
         "v1.json": "255abd379d90d14ce40a1c3620307167d928c69deaf18745aa68e4488739e695",
         "v2.json": "fc80301c94061fd15707fbfadb44956563ba551a538926ee03ab2dcf76597895"
+      },
+      "structures": {
+        "2": "8873fdfa96adb6c94a262f7fdab74be945ac06e61a2b620b24fbf79ed0627851"
       }
     },
     "video-style-library": {
@@ -1845,6 +2004,9 @@
         "v20.json": "fdef831b17a64146b66e8cae4e335ab5624582ade37705943472431f0b5610ad",
         "v21.json": "306f3a06eedfa85eb53093c383e45b8342c2d3bd8978e47907eb42f7ff4cd155",
         "v22.json": "e403f4815ea0de412876b055f81564a2c2a5f25ae9508b23eb191456fa31c4a7"
+      },
+      "structures": {
+        "22": "ac71254d359e5057cdf1459a2e0d54230625e3c156ead6df6dec23e9806dea9a"
       }
     },
     "video-template-library": {
@@ -1920,6 +2082,9 @@
         "v19.json": "24d331dc41b141701c09759febb909446a8b0e25d9a2cb1cc7efafe0ce671445",
         "v20.json": "6c52f4f11d749d1ae8642256e58e7803ac66911b1f9a72a03c1904352c798792",
         "v21.json": "881a9effa5ff319f628c51fa873750617564f239727f50fd6e92ebb3e1d57e85"
+      },
+      "structures": {
+        "21": "d361417aa3d7c775a6e1787cf2d9207972fa9f22644662ebd55e65b46fc19da0"
       }
     },
     "video-style-package": {
@@ -2012,6 +2177,9 @@
         "v26.json": "827f52efe8739606179d7d96705103b4d102dc4ae391cdf331b5b07c7b75fa38",
         "v27.json": "dc93eacf5fcb0a81f592aee82456c2b61c71a462ca489ef3382c4d2dcb7b2165",
         "v28.json": "642230d9ef437439d0809b2f08473b68f95b4ee6fd9ec43008488fcb2f6737f5"
+      },
+      "structures": {
+        "28": "135174a5f2d3f2f8be84ff6762f6b9e6bf2ac577fd5ebe1efc1594752d1918c3"
       }
     },
     "workspace-layouts": {
@@ -2029,6 +2197,9 @@
       },
       "samples": {
         "v1.json": "44771fb3a77b4b8920f5dfa0bcf2db8fcb5d1c3d7f1943ef2dfa1938f9612300"
+      },
+      "structures": {
+        "1": "af337dc2da2f7711ad8d76a80986605b27bc5fb8f8b22ae074ace67da0a502a0"
       }
     },
     "audio-capture-settings": {
@@ -2046,6 +2217,9 @@
       },
       "samples": {
         "v1.json": "65cb35d13a5c50b84c816c0a454ada616c88fbbc732a9494d36161cc2fc4bc53"
+      },
+      "structures": {
+        "1": "53e7288765fa8ebdd1caee2af3014f25abdcc76bb7197f816fcdd309a3987575"
       }
     },
     "audio-capture-recovery": {
@@ -2066,6 +2240,9 @@
       "samples": {
         "v1.json": "a7805d9c6403aaae63e5495dda5c1120cb642ad1f1cfde7ee1cc591efdb9452d",
         "v2.json": "516ec986cd15616c92c47af308c750e393932d22c7494a07de5dec5ac1c71952"
+      },
+      "structures": {
+        "2": "0e60f6f34de0020992b2fedd630ccc44f159d9129215cc465e259a99237e1aae"
       }
     },
     "assistant-memory": {
@@ -2086,6 +2263,9 @@
       "samples": {
         "v1.json": "0cff1af9e53d246a304b077cd6e85caa38e042b7ccedf0bd5eefd23dc243e892",
         "v2.json": "2ce2b2c3dca2f90d1f31791cc91f4e6a2684a39833e87c69f8d7f2c2e4aa18a6"
+      },
+      "structures": {
+        "2": "1608e8878183e3f397f908693633060614f9817c92277d6fb472dba1a8200b7a"
       }
     },
     "web-recording": {
@@ -2112,6 +2292,9 @@
         "v2.json": "4575040ea7982e57d1d099a7ad944c227c047bf6a1dcedc5008e36106deb56a1",
         "v3.json": "15e6aca566be29d9d8025d0a350afe46d50e88a3d375bd1c5f0d561800144e0b",
         "v4.json": "c97a82f8cde976c7a74b69614b5fdd810d2d8b07a9e0b2549886cd9419a3b874"
+      },
+      "structures": {
+        "4": "131b7f49a494b38c4ea914d7a8d6c1e2bd9c886a4ba8ccf1c3a4dcb0edfc7043"
       }
     },
     "web-recording-backup-timing": {
@@ -2129,6 +2312,9 @@
       },
       "samples": {
         "v1.json": "e40d32cad1225693a7e1b24c4f5063fc539e6cbc8896e17ba720b8f0cc95c2f4"
+      },
+      "structures": {
+        "1": "7bcca0584521113b7776f67d59295385928d47d089f5b668c2aa7770a394767a"
       }
     },
     "code-git-location": {
@@ -2146,6 +2332,9 @@
       },
       "samples": {
         "v1.json": "63c688bc91de583d240a5768b90b9b6dd8c4e16a087fa8742c55c5258b58bff9"
+      },
+      "structures": {
+        "1": "db4339c968d33959303ea4e958ee1659d87bc3165160e37d34f1b63a9f478b57"
       }
     },
     "web-replay-director": {
@@ -2163,6 +2352,9 @@
       },
       "samples": {
         "v1.json": "02933317694b9ceacd05e71a7a0725aae886523352a15c38a57f4772f086c87c"
+      },
+      "structures": {
+        "1": "c5380975ae360e66c0ae12109aa549ecbfe9470098831e5226fc11e2dbf4f304"
       }
     },
     "export-memory": {
@@ -2184,6 +2376,9 @@
         "v1.json": "3c6304a7f1a7720c67b17ba076aeae066544a13611cfc60b1d78471abfd4caf9",
         "v2.json": "c6d8749ee207c7b862723200cb885526cf1659ceadd94c27a98d7f4122ed39d3",
         "v3.json": "047ce2062dfa834b3936d08f1eabc44fe6057c1d0c58b9e42ff1609e689707aa"
+      },
+      "structures": {
+        "3": "2fc3b6729c28e3c783721b0f0aa6e0b961e38888a18e5aa4e9ce4125251b082f"
       }
     },
     "video-effect-library": {
@@ -2248,6 +2443,9 @@
         "v16.json": "b5d65a2a1e523dd9b7b96dc21205f60fcb044292aeccb852c925c2e9150281a3",
         "v17.json": "c60ddcb58cad842f54c97111289003b5a96290e454d729ece8595713ecba4dde",
         "v18.json": "b30435265d8d0b8207ba38e6edce56af356568133079cea032da684031119b8c"
+      },
+      "structures": {
+        "18": "567ba05f1c57eacd2d2aad164da8ab58916cd25a034eca709c587e0a3df7fc14"
       }
     },
     "screen-recording-track-journal": {
@@ -2265,8 +2463,15 @@
       },
       "samples": {
         "v1.json": "1b56c5759fb07e95725f4ef82e48040956a80631d3fc4dccc20f78ec86d44801"
+      },
+      "structures": {
+        "1": "07f7ea0671cf64b92bea4e92dc733acc03402cdb007378f5eef003210b4a8d3b"
       }
     }
   },
-  "devBreaks": []
+  "devBreaks": [],
+  "structureFingerprint": {
+    "at": "2026-11-13T02:59:16.798Z",
+    "reason": "2026-11-13 指纹改为只计数据结构：去掉 description、title、examples、$comment、deprecated、readOnly、writeOnly 这些不影响接受的输入与规范化输出的注解，改说明文字不再被判为改写已发布格式；各格式结构未变，计入说明的旧算法指纹与基线及发布承诺逐一核对一致后登记"
+  }
 }

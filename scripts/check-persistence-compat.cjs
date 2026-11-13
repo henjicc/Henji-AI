@@ -16,7 +16,8 @@ function loadTypeScript(entry, root = ROOT) {
   compiled._compile(result.outputFiles[0].text, file)
   return compiled.exports
 }
-function snapshot(root = ROOT) {
+/** withAnnotations 额外算出计入说明文字的指纹，只用于核对结构指纹切换前的登记值。 */
+function snapshot(root = ROOT, { withAnnotations = false } = {}) {
   const { PERSISTENCE_FORMATS } = loadTypeScript('src/core/persistence/formats.ts', root)
   const { persistenceSchemaStructure } = loadTypeScript('src/core/persistence/fingerprint.ts', root)
   const { SCHEMA_MIGRATIONS } = loadTypeScript('electron/main/services/db-migrations.ts', root)
@@ -29,7 +30,8 @@ function snapshot(root = ROOT) {
     if (!Number.isSafeInteger(format.version) || format.version < 1) throw new Error(`格式版本无效：${format.id}`)
     const minReaderVersion = format.minReaderVersion ?? format.version
     if (!Number.isSafeInteger(minReaderVersion) || minReaderVersion < 1 || minReaderVersion > format.version) throw new Error(`最低可读版本无效：${format.id}`)
-    return { ...format, minReaderVersion, fingerprint: crypto.createHash('sha256').update(persistenceSchemaStructure(format.schemas)).digest('hex') }
+    const digest = options => crypto.createHash('sha256').update(persistenceSchemaStructure(format.schemas, options)).digest('hex')
+    return { ...format, minReaderVersion, fingerprint: digest(), ...withAnnotations ? { annotatedFingerprint: digest({ includeAnnotations: true }) } : {} }
   })
 }
 function fixtureVersions(root, id, extension) {
@@ -154,8 +156,47 @@ function updateBaseline(formats, baseline, options, fixtures) {
   if (errors.length) throw new Error(errors.join('\n'))
   return next
 }
+/**
+ * 指纹从计入说明文字改为只计结构的一次性重新登记。每种格式必须证明：按旧算法（计入说明）算出的指纹
+ * 仍等于基线与发布承诺里的登记值，即结构与登记时逐字节相同，才把同一结构的新指纹登记进去。
+ * 已发布的旧算法指纹（versions）原样保留；当前版本的新指纹追加到发布承诺的 structures，此后按它核对。
+ * 已不在代码里的历史版本无法按新算法复算，只保留旧算法记录，门禁本来也只核对当前版本。
+ */
+function adoptStructureFingerprint(formats, baseline, released, reason, samples, fixtures) {
+  if (!reason?.trim()) throw new Error('结构指纹登记须提供非空 --reason')
+  if (baseline.structureFingerprint || released.structureFingerprint) throw new Error('结构指纹已登记过，不能重复执行')
+  const at = new Date().toISOString()
+  const next = structuredClone(baseline), release = structuredClone(released), changes = [], errors = []
+  for (const format of formats) {
+    const previous = baseline.formats[format.id]
+    if (!previous) { errors.push(`未登记基线：${format.id}`); continue }
+    if (typeof format.annotatedFingerprint !== 'string') throw new Error('结构指纹登记需要计入说明文字的旧算法指纹')
+    if (format.version !== previous.version || format.annotatedFingerprint !== previous.fingerprint) { errors.push(`结构与基线登记不一致，算法切换不能夹带格式变更：${format.id}`); continue }
+    const promise = released.formats[format.id]
+    const promised = promise?.versions?.[format.version]
+    if (promised !== undefined && promised !== format.annotatedFingerprint) { errors.push(`结构与发布承诺不一致：${format.id}/v${format.version}`); continue }
+    next.formats[format.id] = { ...previous, fingerprint: format.fingerprint }
+    changes.push({ format: format.id, version: format.version, previousFingerprint: previous.fingerprint, fingerprint: format.fingerprint })
+    if (promised !== undefined) release.formats[format.id].structures = { ...promise.structures, [format.version]: format.fingerprint }
+  }
+  if (errors.length) throw new Error(errors.join('\n'))
+  next.structureFingerprint = { at, reason: reason.trim(), formats: changes }
+  if (released.releasedCompatibility) release.structureFingerprint = { at, reason: reason.trim() }
+  const after = [...validateCompatibility(formats, next, fixtures), ...validateReleaseHistory(released, release), ...validateReleasedCompatibility(formats, next, release, samples)]
+  if (after.length) throw new Error(after.join('\n'))
+  return { baseline: next, release }
+}
+function writeJsonFiles(entries) {
+  const temporaries = entries.map(([file, value]) => {
+    const temporary = `${file}.${crypto.randomUUID()}.tmp`
+    fs.writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, { flag: 'wx' })
+    return [temporary, file]
+  })
+  try { for (const [temporary, file] of temporaries) fs.renameSync(temporary, file) }
+  finally { for (const [temporary] of temporaries) if (fs.existsSync(temporary)) fs.unlinkSync(temporary) }
+}
 function main(argv = process.argv.slice(2)) {
-  const flags = new Set(['--write', '--init', '--dev-break', '--restore-support', '--reason', '--waive-before', '--release-snapshot', '--framework-adoption', '--compatibility-start'])
+  const flags = new Set(['--write', '--init', '--dev-break', '--restore-support', '--reason', '--waive-before', '--release-snapshot', '--framework-adoption', '--compatibility-start', '--structure-fingerprint'])
   const options = {}
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i]
@@ -172,10 +213,12 @@ function main(argv = process.argv.slice(2)) {
   options.frameworkAdoption = options['framework-adoption']
   options.waiveBefore = options['waive-before']
   options.compatibilityStart = options['compatibility-start']
-  if ((options.devBreak || options.restoreSupport || options.reason || options.waiveBefore || options.init || options.frameworkAdoption || options.compatibilityStart) && !options.write) throw new Error('登记命令必须通过 persistence:baseline 执行。')
+  options.structureFingerprint = options['structure-fingerprint']
+  if ((options.devBreak || options.restoreSupport || options.reason || options.waiveBefore || options.init || options.frameworkAdoption || options.compatibilityStart || options.structureFingerprint) && !options.write) throw new Error('登记命令必须通过 persistence:baseline 执行。')
   if (options.waiveBefore && !options.devBreak) throw new Error('--waive-before 只允许和 --dev-break、--reason 一起使用。')
   loadTypeScript('scripts/lib/frozenAuthorLibraries.ts').validateFrozenAuthorHistory(ROOT)
-  const formats = snapshot()
+  if (options.structureFingerprint && (options.devBreak || options.restoreSupport || options.waiveBefore || options.init || options.frameworkAdoption || options.compatibilityStart || options['release-snapshot'])) throw new Error('结构指纹登记不能混用其他登记命令。')
+  const formats = snapshot(ROOT, { withAnnotations: options.structureFingerprint === true })
   let baseline
   if (options.init) {
     if (fs.existsSync(BASELINE)) throw new Error('基线已存在，禁止重新初始化或清空历史。')
@@ -190,6 +233,14 @@ function main(argv = process.argv.slice(2)) {
     || released.releasedCompatibility && !Object.keys(released.formats).length) throw new Error('发布兼容快照结构无效')
   const samples = id => sampleDigests(ROOT, id)
   const protectedRelease = readProtectedRelease(ROOT)
+  if (options.structureFingerprint) {
+    const historyErrors = validateReleaseHistory(protectedRelease, released)
+    if (historyErrors.length) throw new Error(historyErrors.join('\n'))
+    const adopted = adoptStructureFingerprint(formats, baseline, released, options.reason, samples, fixtures)
+    writeJsonFiles([[releasedPath, adopted.release], [BASELINE, adopted.baseline]])
+    console.log(`结构指纹已登记：${adopted.baseline.structureFingerprint.formats.length} 种格式；请审查并提交。`)
+    return
+  }
   const releaseErrors = [...validateReleaseHistory(protectedRelease, released), ...validateReleasedCompatibility(formats, baseline, released, samples)]
   if (releaseErrors.length) throw new Error(releaseErrors.join('\n'))
   if (baseline.releasedCompatibility && !released.releasedCompatibility && !options['release-snapshot']) throw new Error('发布开关已开启但缺少发布快照；运行 npm run persistence:release-snapshot。')
@@ -219,4 +270,4 @@ function main(argv = process.argv.slice(2)) {
   console.log(`持久格式兼容门禁通过：${formats.length} 种格式。`)
 }
 if (require.main === module) { try { main() } catch (error) { console.error(error.message); process.exitCode = 1 } }
-module.exports = { loadTypeScript, snapshot, validateCompatibility, updateBaseline, fixtureVersions, main }
+module.exports = { loadTypeScript, snapshot, validateCompatibility, updateBaseline, adoptStructureFingerprint, fixtureVersions, main }

@@ -393,6 +393,21 @@ describe('Schema结构指纹', () => {
     for (const schema of [z.object({ label: z.number(), count: z.number().default(1) }).strict(), z.object({ label: z.string().optional(), count: z.number().default(1) }).strict(), z.object({ label: z.string(), count: z.number().default(2) }).strict(), z.object({ label: z.string(), count: z.number().default(1) }).passthrough()]) expect(hash(schema)).not.toBe(hash(base))
     expect(() => hash(z.date())).toThrow()
   })
+  it('说明文字不计入指纹；同名字段和默认值里的数据照计，类型与必填性变化仍会改变', () => {
+    const hash = (schema: z.ZodType): string => persistenceSchemaStructure({ data: schema })
+    const build = (note: string, defaultNote = '默认') => z.object({
+      size: z.number().min(0).describe(`画幅按${note}参考`).meta({ title: note, examples: [1] }),
+      description: z.string().default(defaultNote),
+      style: z.object({ description: z.string() }).default({ description: defaultNote }).describe(note),
+    }).strict()
+    const base = build('1080p')
+    expect(hash(build('1080P'))).toBe(hash(base))
+    expect(persistenceSchemaStructure({ data: build('1080P') }, { includeAnnotations: true })).not.toBe(persistenceSchemaStructure({ data: base }, { includeAnnotations: true }))
+    expect(hash(build('1080p', '改过的默认值'))).not.toBe(hash(base))
+    expect(hash(z.object({ size: z.string().describe('画幅按1080p参考'), description: z.string().default('默认'), style: z.object({ description: z.string() }).default({ description: '默认' }) }).strict())).not.toBe(hash(base))
+    expect(hash(z.object({ size: z.number().min(0).optional(), description: z.string().default('默认'), style: z.object({ description: z.string() }).default({ description: '默认' }) }).strict())).not.toBe(hash(base))
+    expect(hash(z.object({ size: z.number().min(0), description: z.string().default('默认'), style: z.object({ description: z.string().optional() }).default({ description: '默认' }) }).strict())).not.toBe(hash(base))
+  })
 })
 
 /** 序列三维渲染里只影响观感的可选项，按缺省值补齐，旧样本与新样本可直接比较。 */

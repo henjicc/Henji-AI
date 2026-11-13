@@ -1,6 +1,6 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const { validateCompatibility, updateBaseline, main } = require('./check-persistence-compat.cjs')
+const { validateCompatibility, updateBaseline, adoptStructureFingerprint, main } = require('./check-persistence-compat.cjs')
 const { emptyRelease, createReleaseSnapshot, validateReleasedCompatibility, validateReleaseHistory } = require('./lib/releasedCompatibility.cjs')
 
 const format = { id: 'test', name: '剪辑', version: 1, fingerprint: 'old', storage: 'file', migrations: {} }
@@ -83,13 +83,37 @@ test('发布快照阻止开关回退、支持下限抬高、新豁免、格式�
   reject(state, [format], () => ({ 'v1.json': 'tampered' }))
   reject(state, [format], () => ({}))
   assert.ok(validateReleaseHistory(released, emptyRelease()).length)
-  const tampered = structuredClone(released); tampered.formats.test.versions[1] = 'changed'
+  const tampered = structuredClone(released); tampered.formats.test.structures[1] = 'changed'
   assert.ok(validateReleaseHistory(released, tampered).length)
   const nextFormat = { ...format, version: 2, fingerprint: 'next', migrations: { 1: value => value } }
   const nextState = updateBaseline([nextFormat], state, {}, () => [1, 2])
   const next = createReleaseSnapshot([nextFormat], nextState, released, () => ({ ...samples(), 'v2.json': 'next-digest' }))
   assert.deepEqual(validateReleaseHistory(released, next), [])
-  assert.deepEqual(next.formats.test.versions, { 1: 'old', 2: 'next' })
+  assert.deepEqual(next.formats.test.structures, { 1: 'old', 2: 'next' })
+})
+
+test('结构指纹登记：旧算法指纹须与基线和发布承诺一致，旧记录保留，只登记一次，之后按结构指纹核对', () => {
+  const state = { ...baseline(), releasedCompatibility: true }
+  const samples = () => ({ 'v1.json': 'digest' })
+  const released = { releasedCompatibility: true, devBreaks: [], formats: { test: { supportedFrom: 1, requiredFixtures: [{ extension: 'json' }], versions: { 1: 'old' }, readers: { 1: 1 }, samples: samples() } } }
+  const switched = { ...format, fingerprint: 'structure', annotatedFingerprint: 'old' }
+  assert.match(validateReleasedCompatibility([switched], state, released, samples).join(''), /缺少结构指纹登记/)
+  const adopted = adoptStructureFingerprint([switched], state, released, '说明文字不计入指纹', samples, () => [1])
+  assert.equal(adopted.baseline.formats.test.fingerprint, 'structure')
+  assert.deepEqual(adopted.baseline.structureFingerprint.formats, [{ format: 'test', version: 1, previousFingerprint: 'old', fingerprint: 'structure' }])
+  assert.deepEqual(adopted.release.formats.test.versions, { 1: 'old' })
+  assert.deepEqual(adopted.release.formats.test.structures, { 1: 'structure' })
+  assert.deepEqual(validateReleaseHistory(released, adopted.release), [])
+  assert.deepEqual(validateReleasedCompatibility([switched], adopted.baseline, adopted.release, samples), [])
+  assert.ok(validateReleasedCompatibility([{ ...switched, fingerprint: 'changed' }], adopted.baseline, adopted.release, samples).length)
+  assert.throws(() => adoptStructureFingerprint([{ ...switched, annotatedFingerprint: 'changed' }], state, released, '理由', samples, () => [1]), /结构与基线登记不一致/)
+  assert.throws(() => adoptStructureFingerprint([switched], state, { ...released, formats: { test: { ...released.formats.test, versions: { 1: 'other' } } } }, '理由', samples, () => [1]), /结构与/)
+  assert.throws(() => adoptStructureFingerprint([switched], state, released, ' ', samples, () => [1]), /非空/)
+  assert.throws(() => adoptStructureFingerprint([switched], adopted.baseline, adopted.release, '理由', samples, () => [1]), /已登记过/)
+  const unregistered = structuredClone(adopted.release); delete unregistered.structureFingerprint
+  assert.ok(validateReleaseHistory(adopted.release, unregistered).length)
+  const rewritten = structuredClone(adopted.release); rewritten.formats.test.versions[1] = 'changed'
+  assert.ok(validateReleaseHistory(adopted.release, rewritten).length)
 })
 
 test('JSON 不能代替归档，包版本与文档头版本独立枚举', () => {

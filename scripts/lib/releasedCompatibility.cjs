@@ -8,6 +8,8 @@ const emptyRelease = () => ({ releasedCompatibility: false, formats: {}, devBrea
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
 const requirements = format => format.requiredFixtures ?? [{ extension: 'json' }]
 const retainsRequirements = (previous, next) => previous.every(requirement => next.some(candidate => same(requirement, candidate)))
+/** versions 是计入说明文字的旧算法指纹，结构指纹登记后冻结；structures 是只计结构的指纹，此后的新版本只追加到这里。 */
+const promisedVersions = promise => [...Object.keys(promise.versions ?? {}), ...Object.keys(promise.structures ?? {})].map(Number)
 
 function sampleDigests(root, id) {
   const directory = path.join(root, 'tests/fixtures/persistence', id)
@@ -27,9 +29,11 @@ function validateReleasedCompatibility(formats, baseline, released, samples) {
     if (!current || !entry) { errors.push(`禁止删除已发布格式：${id}`); continue }
     if (!retainsRequirements(promise.requiredFixtures, requirements(current))) errors.push(`禁止删除已发布样本类型要求：${id}`)
     if ((entry.supportedFrom ?? 1) > promise.supportedFrom) errors.push(`禁止抬高已发布支持下限：${id}`)
-    const versions = Object.keys(promise.versions).map(Number)
-    if (current.version < Math.max(...versions)) errors.push(`禁止回退已发布版本：${id}`)
-    if (promise.versions[current.version] && current.fingerprint !== promise.versions[current.version]) errors.push(`禁止改写已发布版本指纹：${id}/v${current.version}`)
+    if (current.version < Math.max(...promisedVersions(promise))) errors.push(`禁止回退已发布版本：${id}`)
+    const structure = promise.structures?.[current.version]
+    if (structure !== undefined ? current.fingerprint !== structure : promise.versions?.[current.version] !== undefined) errors.push(structure !== undefined
+      ? `禁止改写已发布版本指纹：${id}/v${current.version}`
+      : `已发布版本缺少结构指纹登记：${id}/v${current.version}；运行 npm run persistence:baseline -- --structure-fingerprint --reason <原因>。`)
     if (promise.readers?.[current.version] !== undefined && (current.minReaderVersion ?? current.version) !== promise.readers[current.version]) errors.push(`禁止改写已发布版本的最低可读版本：${id}/v${current.version}`)
     const actual = samples(id)
     for (const [file, digest] of Object.entries(promise.samples)) if (actual[file] !== digest) errors.push(`已发布黄金样本被修改或删除：${id}/${file}`)
@@ -42,12 +46,13 @@ function validateReleaseHistory(previous, next) {
   const errors = []
   if (next.releasedCompatibility !== true) errors.push('受保护发布快照禁止回退或删除')
   if (!same(previous.devBreaks, next.devBreaks)) errors.push('受保护发布快照的豁免不可修改')
+  if (previous.structureFingerprint && !same(previous.structureFingerprint, next.structureFingerprint)) errors.push('受保护发布快照的结构指纹登记不可修改')
   for (const [id, old] of Object.entries(previous.formats)) {
     const current = next.formats[id]
     if (!current) { errors.push(`受保护发布格式不可删除：${id}`); continue }
     if (!retainsRequirements(old.requiredFixtures, current.requiredFixtures ?? [])) errors.push(`受保护样本类型不可删除：${id}`)
     if (current.supportedFrom > old.supportedFrom) errors.push(`受保护支持下限不可提高：${id}`)
-    for (const section of ['versions', 'samples', 'readers']) for (const [key, value] of Object.entries(old[section] ?? {})) {
+    for (const section of ['versions', 'structures', 'samples', 'readers']) for (const [key, value] of Object.entries(old[section] ?? {})) {
       if (current[section]?.[key] !== value) errors.push(`受保护发布快照不可改写：${id}/${section}/${key}`)
     }
   }
@@ -65,7 +70,7 @@ function createReleaseSnapshot(formats, baseline, previous, samples) {
     const old = previous.formats[format.id]
     next.formats[format.id] = { supportedFrom: old?.supportedFrom ?? baseline.formats[format.id].supportedFrom ?? 1,
       requiredFixtures: structuredClone(requirements(format)),
-      versions: { ...old?.versions, [format.version]: format.fingerprint }, readers: { ...old?.readers, [format.version]: format.minReaderVersion ?? format.version },
+      versions: { ...old?.versions }, structures: { ...old?.structures, [format.version]: format.fingerprint }, readers: { ...old?.readers, [format.version]: format.minReaderVersion ?? format.version },
       samples: { ...old?.samples, ...samples(format.id) } }
   }
   return next
