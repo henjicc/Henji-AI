@@ -20,6 +20,13 @@ export function recordingSessionUs(media: Timed, fileUs: number): number {
   for (const gap of [...media.gaps ?? []].sort((a, b) => a.startUs - b.startUs)) if (gap.startUs <= sessionUs) sessionUs += gap.endUs - gap.startUs
   return sessionUs
 }
+/**
+ * 只认识文件时间的服务（文字识别、场景检测）给的“起点 + 文件内位置”→ 真正的会话时刻。
+ * 普通文件两者相同；连续文件要把跳过的时间段加回去。
+ */
+export function recordingSessionUsFromFileClock(media: Timed, originPlusFileUs: number): number {
+  return recordingSessionUs(media, originPlusFileUs - media.monoUs)
+}
 /** 这个文件在会话时钟上到哪一刻为止（连续文件要把跳过的时间段算进去）。 */
 export function recordingMediaEndUs(media: Pick<RecordingMedia, 'monoUs' | 'gaps' | 'durationUs'>, durationUs = media.durationUs): number {
   return recordingSessionUs(media, durationUs)

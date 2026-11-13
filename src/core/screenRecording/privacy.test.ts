@@ -28,3 +28,13 @@ it('只有确认候选进入2.4；正式动画遮罩沿源时钟跟随且在候�
   expect(raster[45 * 100 + 20]).toBeGreaterThan(250); expect(raster[25 * 100 + 20]).toBe(0)
   expect(() => privacyCandidateSchema.parse({ ...candidate, samples: [...candidate.samples].reverse() })).toThrow()
 })
+
+it('连续文件（暂停不在文件里）：遮挡的关键帧落在文件里真实的位置，不比画面早', () => {
+  const candidate = { ...privacyFixture(), status: 'accepted' as const }
+  // 会话 2.0–2.5 秒暂停过：3.0 秒时的画面在文件的 1.5 秒处（普通文件会是 2.0 秒）。
+  const continuous = { id: candidate.mediaId, monoUs: 1000000, gaps: [{ startUs: 2000000, endUs: 2500000 }] }
+  const times = (media: { id: string; monoUs: number; gaps?: Array<{ startUs: number; endUs: number }> }) =>
+    confirmedRecordingPrivacyFragments([candidate], [media])[0].effect.mask!.shapes![0].pathAnimation!.keys.map(key => key.sourceTimeUs)
+  expect(times(continuous)).toEqual(expect.arrayContaining([1500000, 1700000]))
+  expect(times({ id: candidate.mediaId, monoUs: 1000000 })).toEqual(expect.arrayContaining([2000000, 2200000]))
+})

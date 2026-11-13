@@ -1,3 +1,4 @@
+import { recordingMediaEndUs } from '../../screenRecording/range'
 import { migrateRecordingAuthor } from '../../videoEdit/styles/authorVersionMigration'
 import { migrateAudioMergedEffects, migrateAudioEqualizerModes } from '../../audio/effects/mergedEffectsMigration'
 import { migrateRecordingTransitions } from '../../videoEdit/transitionMigration'
@@ -150,5 +151,5 @@ export const screenRecordingDocumentKind: DocumentKindDescriptor<RecordingDocume
   untitledNames: { zh: '未命名录制', en: 'Untitled Recording' },
   contentSchema: recordingDocumentSchema, createEmptyContent: createRecordingDocument,
   isEmptyContent: content => !content.sessionId && !content.understanding.director,
-  summarize: content => ({ durationMs: Math.round(Math.max(0, ...content.media.map(media => media.monoUs + media.durationUs)) / 1000), status: content.status }),
+  summarize: content => ({ durationMs: Math.round(Math.max(0, ...content.media.map(media => recordingMediaEndUs(media))) / 1000), status: content.status }),
 }

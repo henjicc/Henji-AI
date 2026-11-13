@@ -1,3 +1,4 @@
+import { recordingMediaEndUs, recordingSessionUs } from '@/core/screenRecording/range'
 import { getPlatform } from '@/platform'
 import { createLogger } from '@/core/logging'
 import { recordingDocumentSchema, type RecordingDocument } from '@/core/screenRecording/document'
@@ -36,13 +37,13 @@ export async function saveRecordingUnderstanding(id: string, value: RecordingUnd
     if ((read.content.sessionId || read.content.directorRun?.recordingId) && directorPlanIdentity(plan) !== directorPlanIdentity({ director: prior.director, operationScript: prior.operationScript })) throw new Error('此脚本已形成录制，请在成片中补录旁白，或重新规划一份教程。')
   } else if (read.content.understanding.director) throw new Error('不能移除导演脚本归属。')
   else if (understanding.operationScript.steps.length) assertRecordedScriptEdits(understanding.operationScript, await recordedScriptSource(id, { ...read.content, understanding }))
-  const active = read.content.media.filter(v => v.kind === 'screen').map(v => ({ startUs: v.monoUs, endUs: v.monoUs + v.durationUs }))
+  const active = read.content.media.filter(v => v.kind === 'screen').map(v => ({ startUs: v.monoUs, endUs: recordingMediaEndUs(v) }))
   for (const range of [...understanding.transcript, ...understanding.steps, ...understanding.candidates]) {
     if (subtractRecordingRanges([range], active).length) throw new Error('理解结果超出已保存的屏幕片段，不能跨越暂停或缺片空档。')
   }
   for (const candidate of understanding.privacy.candidates) {
     const source = read.content.media.find(v => v.id === candidate.mediaId && v.kind === 'screen')
-    if (!source || candidate.startUs < source.monoUs || candidate.endUs > source.monoUs + source.durationUs) throw new Error('打码候选超出其屏幕原片范围。')
+    if (!source || candidate.startUs < source.monoUs || candidate.endUs > recordingMediaEndUs(source)) throw new Error('打码候选超出其屏幕原片范围。')
   }
   logger.info('保存录制理解', { event: 'recording.understanding.save.start', context: { documentId: id } })
   try {
@@ -66,7 +67,7 @@ export async function analyzeRecording(id: string, options: RecordingAnalysisOpt
     assertRecordingEditable(content)
     const screen = content.media.filter(v => v.kind === 'screen' && v.durationUs > 0)
     if (!screen.length) throw new Error('会话没有已保存的屏幕片段，请先恢复录制。')
-    const active = screen.map(v => ({ startUs: v.monoUs, endUs: v.monoUs + v.durationUs }))
+    const active = screen.map(v => ({ startUs: v.monoUs, endUs: recordingMediaEndUs(v) }))
     const events: CaptureEvent[] = []
     const ignoredCapabilities = recordingScriptIgnoredCapabilities()
     let offset: number | null = 0
@@ -118,7 +119,7 @@ export async function analyzeRecording(id: string, options: RecordingAnalysisOpt
           update.transcribed = true; onAudioWrite?.(update)
         }
         signal.throwIfAborted()
-        const map = (start: number, end: number): RecordingRange => ({ startUs: media.monoUs + Math.round(start * 1e6 / source.sampleRate), endUs: Math.min(media.monoUs + media.durationUs, media.monoUs + Math.round(end * 1e6 / source.sampleRate)) })
+        const map = (start: number, end: number): RecordingRange => ({ startUs: media.monoUs + Math.round(start * 1e6 / source.sampleRate), endUs: Math.min(recordingMediaEndUs(media), media.monoUs + Math.round(end * 1e6 / source.sampleRate)) })
         for (const block of directed ? [] : audio?.document.transcript ?? []) {
           const range = map(block.startFrame, block.endFrame)
           if (block.included && range.endUs > range.startUs) transcript.push({ id: `${media.id}:${block.id}`, ...range, text: block.text, granularity: block.granularity, audioDocumentId: audio!.document.id, mediaId: media.id, protected: block.locked })
@@ -142,8 +143,8 @@ export async function analyzeRecording(id: string, options: RecordingAnalysisOpt
         const result = await getPlatform().sceneDetection.detect({ requestId, source: media.path, startSeconds: 0, endSeconds: media.durationUs / 1e6, sensitivity: 50, includeStillness: true })
         signal.throwIfAborted()
         if (!await getPlatform().sceneDetection.validate(media.path, result.contentIdentity)) throw new Error('录制原片在分析期间已变化，请重新分析。')
-        sceneCutsUs.push(...result.cutsSeconds.map(t => media.monoUs + Math.round(t * 1e6)))
-        stillness.push(...(result.stillness ?? []).map(v => ({ startUs: media.monoUs + Math.round(v.startSeconds * 1e6), endUs: media.monoUs + Math.round(v.endSeconds * 1e6) })))
+        sceneCutsUs.push(...result.cutsSeconds.map(t => recordingSessionUs(media, Math.round(t * 1e6))))
+        stillness.push(...(result.stillness ?? []).map(v => ({ startUs: recordingSessionUs(media, Math.round(v.startSeconds * 1e6)), endUs: recordingSessionUs(media, Math.round(v.endSeconds * 1e6)) })))
       } finally { signal.removeEventListener('abort', cancel) }
     }
     else warnings.push('未检测画面，不生成等待加速候选。')

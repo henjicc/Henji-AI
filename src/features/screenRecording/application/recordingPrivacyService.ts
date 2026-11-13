@@ -1,3 +1,4 @@
+import { recordingFileUs, recordingSessionUsFromFileClock } from '@/core/screenRecording/range'
 import { getPlatform } from '@/platform'
 import { createLogger } from '@/core/logging'
 import { recordingPrivacySchema, type RecordingPrivacy } from '@/core/screenRecording/privacy'
@@ -41,9 +42,11 @@ export async function analyzeRecordingPrivacy(id: string, signal: AbortSignal, p
       const unsubscribe = api.onPrivacyProgress(event => { if (event.requestId === requestId) progress((done + event.progress * source.durationUs) / total) })
       signal.addEventListener('abort', cancel, { once: true })
       try {
-        const detected = await api.detectSensitiveText({ requestId, source: source.path, mediaId: source.id, startUs: 0, endUs: source.durationUs, originUs: source.monoUs, ...(cursor.length ? { cursor: cursor.filter(c => c.monoUs >= source.monoUs - 100000 && c.monoUs < source.monoUs + source.durationUs) } : {}) })
+        const detected = await api.detectSensitiveText({ requestId, source: source.path, mediaId: source.id, startUs: 0, endUs: source.durationUs, originUs: source.monoUs, ...(cursor.length ? { cursor: cursor.map(c => ({ ...c, monoUs: source.monoUs + recordingFileUs(source, c.monoUs) })).filter(c => c.monoUs >= source.monoUs - 100000 && c.monoUs < source.monoUs + source.durationUs) } : {}) })
         signal.throwIfAborted()
-        result.candidates.push(...detected.privacy.candidates); result.warnings.push(...detected.privacy.warnings)
+        // 识别服务只认识文件时间（起点 + 文件内位置）：送去的光标先换到这个坐标，回来的候选逐条换回会话时刻。
+        const sessionUs = (us: number): number => recordingSessionUsFromFileClock(source, us)
+        result.candidates.push(...detected.privacy.candidates.map(c => ({ ...c, startUs: sessionUs(c.startUs), endUs: sessionUs(c.endUs), samples: c.samples.map(s => ({ ...s, monoUs: sessionUs(s.monoUs) })) }))); result.warnings.push(...detected.privacy.warnings)
         done += source.durationUs; progress(done / total)
       } finally { signal.removeEventListener('abort', cancel); unsubscribe() }
     }

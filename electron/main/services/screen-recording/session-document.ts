@@ -8,7 +8,7 @@ import type { RecordingSessionOptions } from '../../../../src/core/screenRecordi
 import type { CaptureManifest } from '../../../../src/core/screenRecording/capture'
 import type { RecordingTrackKind, RecordingTrackOptions, RecordingTracks } from '../../../../src/core/screenRecording/tracks'
 import type { RecordingTrackRecord } from '../../../../src/core/screenRecording/trackJournal'
-import { recordingDurationUs } from '../../../../src/core/screenRecording/range'
+import { recordingDurationUs, recordingMediaEndUs } from '../../../../src/core/screenRecording/range'
 import { alignRecordingPauses } from '../../../../src/core/screenRecording/combine'
 import type { DocumentMeta } from '../../../../src/core/documents/types'
 import { getDocumentService } from '../documents/runtime'
@@ -123,11 +123,12 @@ export class RecordingSessionDocument {
     if (this.finished) throw new Error('录制会话已收尾')
     this.finished = true
     const capture = await recoverCapture(this.directory, manifest)
-    const { media: audio, tracks, joined } = await recordingAudio(this.directory, await this.ledger.finish(), this.content.endUs ?? pictureEndUs(capture.files))
+    const screens = await screenMedia(capture.files)
+    const { media: audio, tracks, joined } = await recordingAudio(this.directory, await this.ledger.finish(), this.content.endUs ?? pictureEndUs(screens))
     Object.assign(this.content, {
       status: manifest.status === 'stopped' ? 'stopped' : 'interrupted',
       eventPages: [...this.pages], markers: [...this.markers], tracks,
-      media: [...await screenMedia(capture.files), ...audio],
+      media: [...screens, ...audio],
       ...this.content.pauses ? { pauses: await recordedPauses(this.content.pauses, this.controls, capture.files) } : {},
     })
     await this.save()
@@ -160,7 +161,11 @@ function alignedPauses(pauses: NonNullable<RecordingDocument['pauses']>, control
  */
 async function screenMedia(files: ReadonlyArray<{ index: number; path: string; monoUs: number; durationUs: number }>): Promise<RecordingDocument['media']> {
   return Promise.all(files.map(async file => {
-    const timing = await readCaptureTiming(file.path).catch(() => null)
+    // 时刻表在却读不出（损坏、更新的版本）：不能当成普通文件继续——暂停之后的画面会全部错位。让收尾明确失败，文件都还在。
+    const timing = await readCaptureTiming(file.path).catch(error => {
+      logger.error('逐帧时刻表读不出，无法确定画面文件里跳过的时间段', { event: 'recording.capture.timing_unreadable', error, context: { file: file.path } })
+      throw new Error(`这次录制的逐帧时刻表读不出，暂时无法收尾：${error instanceof Error ? error.message : String(error)}`)
+    })
     const gaps = timing ? captureTimingGaps(timing, file.monoUs, Math.round(file.durationUs * timing.fpsNum / timing.fpsDen / 1e6)).map(({ startUs, endUs }) => ({ startUs, endUs })) : undefined
     return { id: `screen-${file.index}`, kind: 'screen' as const, path: file.path, monoUs: file.monoUs, durationUs: file.durationUs, ...(gaps ? { gaps } : {}) }
   }))
@@ -180,8 +185,8 @@ async function recordedPauses(pauses: NonNullable<RecordingDocument['pauses']>, 
 }
 
 /** 没按停止就结束的（取消、失败、崩溃）以最后一帧画面为录制终点。 */
-function pictureEndUs(files: ReadonlyArray<{ monoUs: number; durationUs: number }>): number | undefined {
-  return files.length ? Math.max(...files.map(file => file.monoUs + file.durationUs)) : undefined
+function pictureEndUs(files: ReadonlyArray<Pick<RecordingDocument['media'][number], 'monoUs' | 'durationUs' | 'gaps'>>): number | undefined {
+  return files.length ? Math.max(...files.map(file => recordingMediaEndUs(file))) : undefined
 }
 
 /**
@@ -270,7 +275,7 @@ export async function recoverRecordingSession(documentId: string, directory: str
   if (content.pauses) content.pauses = await recordedPauses(content.pauses, controls, capture.files)
   // 早于轨道记录的录制没有 tracks.journal：沿用文档里录制期间存下的轨道。
   const replayed = await replayTrackJournal(directory, documentId, content.originUs, trackKinds(content.devices), content.devices.camera?.frameRate) ?? content.tracks
-  const audio = replayed ? await recordingAudio(directory, replayed, content.endUs ?? pictureEndUs(capture.files)) : null
+  const audio = replayed ? await recordingAudio(directory, replayed, content.endUs ?? pictureEndUs(screen)) : null
   content.tracks = audio?.tracks ?? replayed
   content.media = [...screen, ...audio ? audio.media : content.media.filter(media => media.kind !== 'screen')]
   // 停在倒计时里就中断的会话什么也没录到：当作已结束，不再当成待恢复的录制。

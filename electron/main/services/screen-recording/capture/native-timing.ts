@@ -23,6 +23,9 @@ export const captureTimingFile = (screenFile: string): string => screenFile.repl
 
 export function parseCaptureTiming(bytes: Buffer): CaptureTiming {
   if (bytes.length < 64 || bytes.toString('latin1', 0, 4) !== MAGIC) throw new Error('逐帧时刻表格式无效')
+  // 只认识版本 1；更新的版本含义可能变了，不猜。
+  const version = bytes.readUInt32LE(4)
+  if (version !== 1) throw new Error(`逐帧时刻表是更新的版本（${version}）写的，请升级应用后再打开这次录制`)
   const headerBytes = bytes.readUInt32LE(8), recordBytes = bytes.readUInt32LE(12)
   if (headerBytes < 64 || recordBytes < 16 || bytes.length < headerBytes) throw new Error('逐帧时刻表格式无效')
   const fpsNum = bytes.readUInt32LE(16), fpsDen = bytes.readUInt32LE(20)

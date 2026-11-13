@@ -1,4 +1,4 @@
-import { recordingMediaEndUs } from '@/core/screenRecording/range'
+import { recordingMediaEndUs, recordingMediaSpans } from '@/core/screenRecording/range'
 import { getPlatform } from '@/platform'
 import { createLogger } from '@/core/logging'
 import { registerApplicationCloseGuard } from '@/core/applicationLifecycle/applicationCloseGuards'
@@ -58,7 +58,7 @@ export async function exportRecordingProduct(sessionId: string, options: { produ
       })
       if (!cursors.size) result.warnings.push('没有操作日志，已保留原画面，未添加光标或推近。')
       if (recording.understanding.privacy.candidates.some(candidate => candidate.status === 'pending')) result.warnings.push('存在未确认的隐私候选，导出画面仅对已确认项打码。')
-      const selectedMedia = recording.media.filter(media => media.kind === 'screen' && media.durationUs > 0 && steps.some(step => media.monoUs < step.endUs && media.monoUs + media.durationUs > step.startUs))
+      const selectedMedia = recording.media.filter(media => media.kind === 'screen' && media.durationUs > 0 && steps.some(step => media.monoUs < step.endUs && recordingMediaEndUs(media) > step.startUs))
       for (const source of selectedMedia) {
         await current()
         const media = await inspectVideoEditMedia(source.path, controller.signal)
@@ -89,9 +89,10 @@ export async function exportRecordingProduct(sessionId: string, options: { produ
         await current()
         if (options.product === 'gif') {
           // Only a contiguous real screen range; pause gaps must not become blank tutorial frames.
-          const source = recording.media.find(media => media.kind === 'screen' && step.startUs >= media.monoUs && step.startUs < media.monoUs + media.durationUs)
+          const source = recording.media.find(media => media.kind === 'screen' && step.startUs >= media.monoUs && step.startUs < recordingMediaEndUs(media))
           if (!source) throw new Error(`步骤“${step.title}”起点没有屏幕原片，请调整步骤边界。`)
-          const stop = Math.min(step.endUs, source.monoUs + source.durationUs, step.startUs + 15e6)
+          // 动图不跨过暂停：停在这一步开头所在那一段画面的结尾。
+          const stop = Math.min(step.endUs, recordingMediaSpans(recording, source).find(span => step.startUs >= span.startUs && step.startUs < span.endUs)?.endUs ?? recordingMediaEndUs(source), step.startUs + 15e6)
           if (stop < step.endUs) result.warnings.push(`“${step.title}”动图只包含起点后首段连续画面（最多 15 秒）。`)
           const fps = 10, frames = Math.max(1, Math.ceil((stop - step.startUs) / 1e6 * fps)), width = 640, height = Math.round(width * composition.height / composition.width)
           const output = new OffscreenCanvas(width, height), ctx = output.getContext('2d', { willReadFrequently: true })!

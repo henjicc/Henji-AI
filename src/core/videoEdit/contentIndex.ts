@@ -1,3 +1,4 @@
+import { recordingFileUs, recordingMediaEndUs } from '../screenRecording/range'
 import type { MediaContentFact, MediaContentRange } from '../media/contentIndex'
 import { mergeMediaContentRanges } from '../media/contentIndex'
 import type { AudioEditProjectDocument } from '../audioEdit/types'
@@ -91,8 +92,8 @@ export function recordingMediaContentFacts(recordingId: string, recording: Recor
   const stepsById = new Map(recording.understanding.steps.map(step => [step.id, step]))
   for (const media of recording.media.filter(value => mediaIds.includes(value.id))) {
     const project = (from: number, to: number): MediaContentRange[] => {
-      const start = Math.max(media.monoUs, from); const end = Math.min(media.monoUs + media.durationUs, to)
-      return end > start ? [{ fromUs: start - media.monoUs, toUs: end - media.monoUs }] : []
+      const start = Math.max(media.monoUs, from); const end = Math.min(recordingMediaEndUs(media), to)
+      return end > start ? [{ fromUs: recordingFileUs(media, start), toUs: recordingFileUs(media, end) }] : []
     }
     for (const step of recording.understanding.steps) {
       const ranges = project(step.startUs, step.endUs)

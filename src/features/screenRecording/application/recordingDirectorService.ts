@@ -1,3 +1,4 @@
+import { recordingMediaEndUs } from '@/core/screenRecording/range'
 import { loadRecordingSetup, recordingOutput } from '@/services/recordingSetupModel'
 import { z } from 'zod'
 import { getPlatform } from '@/platform'
@@ -139,7 +140,7 @@ export async function startRecordingDirector(id: string, documentId: string, con
       } }, { ...context, signal })
       const captured = await readRecordingUnderstanding(recordingId!)
       const captureContent = captured.content
-      const screenEnd = Math.max(...captureContent.media.filter(v => v.kind === 'screen').map(v => v.monoUs + v.durationUs))
+      const screenEnd = Math.max(...captureContent.media.filter(v => v.kind === 'screen').map(v => recordingMediaEndUs(v)))
       for (const step of actualSteps) step.endUs = Math.min(step.endUs, screenEnd)
       captureContent.understanding.operationScript = { steps: actualSteps }
       captureContent.understanding.director = structuredClone(director)
