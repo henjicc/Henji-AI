@@ -8,6 +8,8 @@ import {
 } from '@henjicc/ai-sdk'
 
 import { sdkAIClient } from '../ai-runtime/sdk-runtime'
+import { createProviderSettingsFileStorage } from './provider-settings-storage'
+import { userSelectedApiProtocol } from './userSelectedApiProtocol'
 import { createMainLogger, sanitizeJsonValue } from '../logging'
 
 /**
@@ -26,6 +28,12 @@ function toLogError(error: unknown): unknown {
   return error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : error
 }
 
+async function withConfiguredApiProtocol(request: LlmChatRequestDto): Promise<LlmChatRequestDto> {
+  if (request.apiProtocol) return request
+  const apiProtocol = userSelectedApiProtocol(await createProviderSettingsFileStorage().readConfig(), request)
+  return apiProtocol ? { ...request, apiProtocol } : request
+}
+
 export async function llmChatStream(
   request: LlmChatRequestDto,
   emit: LlmStreamEmitter
@@ -33,7 +41,7 @@ export async function llmChatStream(
   const taskId = resolveLlmTaskId(request)
 
   try {
-    const outcome = await sdkAIClient.chat.stream({ ...request, requestId: taskId }, emit, {
+    const outcome = await sdkAIClient.chat.stream({ ...await withConfiguredApiProtocol(request), requestId: taskId }, emit, {
       onRequestBuilt: ({ endpoint, requestPayload, processedRequest }) => {
         logger.info('后端发起 LLM 请求', {
           event: 'llm_runtime.chat_stream.request_json',

@@ -1,5 +1,17 @@
 # Changelog
 
+## 未发布
+
+轻量流式入口 `runLlmChatStream`（`@henjicc/ai-sdk/llm/streaming`，不依赖 Vercel AI SDK 与 Web Streams）补齐以下能力，`LlmChatRequestDto` 新字段均为可选：
+
+- **Responses 协议**：新增 `apiProtocol?: 'openai-compatible' | 'openai-responses'`。省略时已登记的供应商按预设的 `responsesModelIds` 与模型目录自动选择；未登记的、传了自定义地址（代理、中转）的走 Chat Completions；带视频、音频内容的请求自动选择时留在 Chat（Responses 没有这两种内容块，显式指定 Responses 则在发请求前报 `RESPONSES_CONTENT_UNSUPPORTED`）。Responses 路径手写 SSE 解析，发无状态请求（`store: false`），思考同时认 `reasoning_text` 与 `reasoning_summary_text`，函数调用按 `output_index` 累积参数，终止事件为 `completed` / `incomplete` / `failed`；输出仍是同一套 `LlmStreamEventDto` / `LlmStreamOutput`。思考字段按 `applyProviderReasoningRequestBody(..., 'openai-responses')` 发送，MiMo Responses 的输入改写沿用同一份规则。`LlmChatRequestBuiltInfo` 新增 `protocol`。
+- **采样参数**：新增 `temperature?`（0–2）、`topP?`（0–1），两种协议都发 `temperature` / `top_p`；越界值在请求前拒绝。模型声明为固定采样（`capabilities.sampling === false`，如 Kimi K3、MiniMax M3）、DeepSeek 开思考、MiMo 开思考（含省略思考字段时的默认开启）时省略。新增 `resolveSamplingFields`。
+- **能力由 SDK 补全**：供应商有内置预设且模型在内置目录里时，调用方不传 `capabilities` 也能用，SDK 按目录与预设的 `modelCapabilities` 补齐，调用方传的字段优先；未登记的（自定义地址的未知供应商、目录里没有的模型）只用调用方传入的。
+- **联网搜索**：新增 `webSearch?: boolean`，由 SDK 按供应商与协议挂官方服务端联网：DeepSeek（flash 两种协议 `deepseek_web_search` + `deepseek_read_url`，v4-pro 仅 Responses `web_search`）、百炼（Responses `web_search`，Chat 对 Qwen / DeepSeek 系发 `enable_search`）、火山方舟（Responses `web_search` + `sources: ["doubao"]`，Chat `web_search_options`，需先在控制台开通豆包搜索）、智谱（Responses `web_search`，Chat `web_search` + `search_std`）、MiniMax / Kimi / OpenAI（仅 Responses `web_search`）、MiMo（仅 Chat `web_search`，需先在控制台激活插件）。结构化输出、未登记的组合、Chat 下与函数工具不能共存的（火山、智谱）不挂。联网按次另计费用。`appendProviderWebTools` 新增第五个参数 `mode`：默认 `'auto'` 只对 DeepSeek 自动挂（内置助手行为不变），`'requested'` 对上表全部生效。
+- **接口地址**：未传 `baseUrl` 时按端点配置与供应商预设拼 Chat 与 Responses 地址；百炼按 `endpointProfile`（地域：`cn-beijing` 缺省、`ap-southeast-1`、`us-east-1`、`cn-hongkong`）用不带业务空间 ID 的通用域名，德国、日本没有通用域名，需要传业务空间域名。传了自定义地址按原样使用。Responses 地址直接接在根地址后（DeepSeek 为 `https://api.deepseek.com/responses`），派欧云默认地址例外，用 `/openai/v1/responses`；模型步同用这一规则。缺地址、百炼地域没有通用域名时抛 `[llm_base_url_required]`，提示原样返回给调用方。新增 `resolveCustomLlmBaseUrl`、`resolveLlmProtocolBaseUrl`、`resolveLlmChatCompletionsEndpoint`、`resolveLlmResponsesEndpoint`；`resolveOpenAiCompatibleEndpoint`、`resolvePpioChatEndpoint` 改为委托它们。
+- **模型列表**：`discoverModels(providerId, baseUrl, runtime, options)` 的 `baseUrl` 可传 `undefined`，已登记供应商按预设地址请求 `/models`；轻量入口新导出 `discoverModels` 与 `LlmApiProtocol` 类型。智谱官方没有模型列表接口，仍需静态预设。
+- 受限宿主门禁（无 Web Streams、无 TextEncoder / TextDecoder 的 VM）新增 Responses 流式解析（7 字节切块、中文跨块、函数调用、思考、用量）与无地址模型发现场景。
+
 ## 0.14.0 - 2026-11-14
 
 - **思考参数按协议发送**：`applyProviderReasoningRequestBody` 按 Chat Completions 与 Responses 分别写入各家官方字段。此前 Responses 也只发 Chat 写法的 `thinking` / `reasoning_effort`，会被静默忽略：DeepSeek 与智谱 GLM-5.3 关不掉思考、火山方舟强度不生效、MiniMax M3 一直不思考。现在 Responses 下 DeepSeek / 智谱用 `reasoning.effort`（`none` 关闭），火山用 `thinking` 加 `reasoning.effort`，MiniMax M3 发 `reasoning.effort` 开启，百炼仍用 `enable_thinking`。DeepSeek Chat 档位改按官方映射 low / high / max（此前只有 high / max，“低”也发 high）。新增 `readReasoningEffortField`、`resolveProviderSystemMessageSupport`（DeepSeek 系统设定发 system 角色并允许中途追加）。

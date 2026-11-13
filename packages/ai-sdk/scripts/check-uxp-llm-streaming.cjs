@@ -50,6 +50,7 @@ function bundle(format) {
     ['eval', /\beval\s*\(/],
     ['new Function', /\bnew\s+Function\s*\(/],
     ['Function constructor', /(?:^|[^.$\w])Function\s*\(/],
+    ['require', /(?:^|[^.$\w])require\s*\(/],
     ['Buffer', /\bBuffer\b/],
     ['process', /\bprocess\b/],
     ['direct TextDecoder constructor', /\bnew\s+TextDecoder\b/],
@@ -83,6 +84,28 @@ function utf8Response() {
         offset = cut
       }
       controller.close()
+    },
+  }), { status: 200, headers: { 'content-type': 'text/event-stream' } })
+}
+
+/** Responses 事件逐字节切块，保证中文跨 chunk、SSE 事件跨 chunk 都被手写解析器正确拼回。 */
+function responsesResponse() {
+  const fixture = JSON.parse(require('fs').readFileSync(path.resolve(__dirname, '..', 'tests', 'fixtures', 'llm', 'openai-responses-function-call.json'), 'utf8'))
+  const events = [
+    { type: 'response.output_text.delta', output_index: 2, delta: '完成✅' },
+    ...fixture.events,
+  ]
+  const bytes = encodeUtf8Fixture(events.map((event) => `event: ${event.type}
+data: ${JSON.stringify(event)}
+
+`).join(''))
+  let offset = 0
+  return new Response(new ReadableStream({
+    pull(controller) {
+      if (offset >= bytes.length) { controller.close(); return }
+      const size = 7
+      controller.enqueue(bytes.slice(offset, offset + size))
+      offset += size
     },
   }), { status: 200, headers: { 'content-type': 'text/event-stream' } })
 }
@@ -163,6 +186,48 @@ async function main() {
     fail(`usage 不匹配：${JSON.stringify(outcome.usage)}`)
   }
 
+  const responsesCalls = []
+  const responsesEvents = []
+  const responsesOutcome = await api.runLlmChatStream({
+    requestId: 'uxp-gate-responses',
+    providerId: 'deepseek',
+    modelId: 'deepseek-flash',
+    temperature: 0.4,
+    reasoning: { enabled: false },
+    messages: [{ role: 'user', content: '天气' }],
+    tools: [{ type: 'function', function: { name: 'get_weather', parameters: { type: 'object' } } }],
+  }, 'uxp-gate-responses', (event) => responsesEvents.push(event), {
+    transport: { fetch: async (url, init) => { responsesCalls.push({ url, body: JSON.parse(init.body) }); return responsesResponse() } },
+    credentials: { get: async () => 'fixture-key' },
+    media: { read: async () => { throw new Error('media forbidden') } },
+  })
+  if (responsesCalls.length !== 1 || responsesCalls[0].url !== 'https://api.deepseek.com/responses') {
+    fail(`Responses 未按预设自动选择协议与地址：${JSON.stringify(responsesCalls.map((call) => call.url))}`)
+  }
+  const sentBody = responsesCalls[0].body
+  if (sentBody.reasoning?.effort !== 'none' || sentBody.temperature !== 0.4 || sentBody.store !== false || sentBody.tools?.[0]?.name !== 'get_weather') {
+    fail(`Responses 请求体不匹配：${JSON.stringify(sentBody)}`)
+  }
+  if (JSON.stringify(responsesEvents) !== JSON.stringify([
+    { type: 'Token', data: '完成✅' },
+    { type: 'ReasoningToken', data: '查天气' },
+  ])) fail(`Responses stream events 不匹配：${JSON.stringify(responsesEvents)}`)
+  const toolCall = responsesOutcome.toolCalls?.[0]
+  if (responsesOutcome.finishReason !== 'tool_calls' || toolCall?.id !== 'call_1234xyz'
+    || toolCall?.function?.arguments !== '{"location":"Paris, France"}' || responsesOutcome.usage?.reasoningTokens !== 5) {
+    fail(`Responses 工具调用或用量不匹配：${JSON.stringify(responsesOutcome)}`)
+  }
+
+  const discoveryCalls = []
+  const discovered = await api.discoverModels('deepseek', undefined, {
+    transport: { fetch: async (url) => { discoveryCalls.push(url); return new Response(JSON.stringify({ data: [{ id: 'deepseek-flash' }] }), { status: 200 }) } },
+    credentials: { get: async () => 'fixture-key' },
+    media: { read: async () => { throw new Error('media forbidden') } },
+  })
+  if (discoveryCalls[0] !== 'https://api.deepseek.com/v1/models' || discovered[0]?.modelId !== 'deepseek-flash') {
+    fail(`模型发现不匹配：${JSON.stringify({ discoveryCalls, discovered })}`)
+  }
+
   let abortStarted
   const started = new Promise((resolve) => { abortStarted = resolve })
   const aborting = api.runLlmChatStream({
@@ -200,6 +265,8 @@ async function main() {
     esm: { bytes: esm.bytes, modules: esm.modules },
     lifecycleNetworkCalls: 0,
     fixtureTransportCalls: networkCalls,
+    responsesTransportCalls: responsesCalls.length,
+    discoveryTransportCalls: discoveryCalls.length,
     abortTransportCalls: 1,
   })}`)
 }

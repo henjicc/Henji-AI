@@ -2,6 +2,8 @@
 
 > 最后核对：2026-08-28。信息来源见文末「官方来源索引」，均为无需登录的官方页面。
 
+**2026-11-14 补核**（[Responses 介绍](https://docs.bigmodel.cn/cn/guide/develop/responses/introduction.md)、[Responses OpenAPI](https://docs.bigmodel.cn/openapi/openapi-responses.json)、[联网搜索](https://docs.bigmodel.cn/cn/guide/tools/web-search.md)）：Responses 根地址为 `https://open.bigmodel.cn/api/v1`（不是 `/api/paas/v4`），默认 `store=false`、流式不发 `[DONE]`，`text.format` 只有 text / json_object，思考事件 `response.reasoning_text.delta`，终止事件 completed / failed / incomplete。Responses 联网为 `{"type":"web_search"}`，可与函数工具并存；Chat 的 `web_search` 工具必须带 `search_engine`，未写明能否与函数工具混用。SDK 轻量入口 `webSearch`：Responses 挂 `web_search`，Chat 只在没有函数工具时挂 `search_std`（0.01 元/次）。官方没有模型列表接口。temperature [0,1]，思考时采样行为未写明。
+
 `glm-5.3-flash` 的模型级请求、事件、fixture、价格和编码门槛以
 [GLM-5.3-Flash_智谱.md](../../model-adaptation/GLM-5.3-Flash/GLM-5.3-Flash_智谱.md) 为唯一详细来源；
 本文件只承担智谱供应商级协议汇总。若两处摘要不一致，以模型级文件为准并同步修正本页。

@@ -3,12 +3,16 @@ import type { Transport } from '../runtime/Transport'
 import { AiRuntimeError } from '../runtime/AiRuntimeError'
 import { fetchProvider } from '../providers/provider-fetch'
 import {
+  appendProviderWebTools,
   applyProviderRequestBodyQuirks,
   resolveProviderExtraAuthHeaders,
+  resolveSamplingFields,
+  type LlmApiProtocol,
 } from './providerProtocolCore'
 import { applyProviderReasoningRequestBody } from './providerReasoningRequest'
 import { createUtf8StreamDecoder } from './utf8-stream-decoder'
 import { resolveLlmEndpointIdentity } from './endpointProfiles'
+import { resolveLlmChatCompletionsEndpoint } from './protocolEndpoints'
 import type {
   JsonObject,
   JsonValue,
@@ -41,29 +45,13 @@ interface StreamChatOptions {
   transport: Transport
 }
 
+/** 地址规则见 protocolEndpoints；保留这两个导出供既有消费方使用。 */
 export function resolvePpioChatEndpoint(baseUrl?: string): string {
-  const normalized = normalizeBaseUrl(baseUrl, 'https://api.ppio.com/openai')
-  return /\/v\d+$/.test(normalized)
-    ? `${normalized}/chat/completions`
-    : `${normalized}/v1/chat/completions`
+  return resolveLlmChatCompletionsEndpoint({ providerId: 'ppio', baseUrl })
 }
 
 export function resolveOpenAiCompatibleEndpoint(request: LlmChatRequestDto): string {
-  const identity = resolveLlmEndpointIdentity(request)
-  const providerId = identity.providerFamilyId
-  const adapter = request.adapter?.trim().toLowerCase()
-  const fallbackBaseUrl = providerId === 'openai' || adapter === 'openai'
-    ? 'https://api.openai.com'
-    : (providerId === 'deepseek' || adapter === 'deepseek' ? 'https://api.deepseek.com' : undefined)
-
-  if (!identity.baseUrl && !fallbackBaseUrl) {
-    throw new Error(`LLM provider "${request.providerId}" requires baseUrl.`)
-  }
-
-  const normalized = normalizeBaseUrl(identity.baseUrl, fallbackBaseUrl)
-  return /\/v\d+$/.test(normalized)
-    ? `${normalized}/chat/completions`
-    : `${normalized}/v1/chat/completions`
+  return resolveLlmChatCompletionsEndpoint(request)
 }
 
 export function buildOpenAiCompatiblePayload(request: LlmChatRequestDto): JsonObject {
@@ -94,17 +82,37 @@ export function buildOpenAiCompatiblePayload(request: LlmChatRequestDto): JsonOb
     identity.providerFamilyId,
     payload
   )
-  const reasoningCapable = request.capabilities?.reasoning === true
-  const withReasoning = reasoningCapable
-    ? applyProviderReasoningRequestBody(
-        identity.providerFamilyId,
-        request.adapter,
-        withStructuredOutput,
-        request.reasoning
-      )
-    : withStructuredOutput
+  return applyLlmRequestOptions(request, identity.providerFamilyId, withStructuredOutput, 'openai-compatible')
+}
 
-  return applyProviderRequestBodyQuirks(identity.providerFamilyId, withReasoning) as JsonObject
+/**
+ * 两种协议共用的请求体叠加顺序：采样 → 思考 → 服务端联网工具 → 供应商差异。
+ * 采样在思考之前：思考规则会按供应商删掉思考下无效的采样字段（如 MiMo 默认开思考）。
+ * 联网工具要看结构化输出字段，所以必须在协议骨架（含 response_format / text.format）建好之后再挂。
+ */
+export function applyLlmRequestOptions(
+  request: LlmChatRequestDto,
+  providerFamilyId: string,
+  body: JsonObject,
+  protocol: LlmApiProtocol,
+): JsonObject {
+  const reasoningCapable = request.capabilities?.reasoning === true
+  const sampling = resolveSamplingFields({
+    providerFamilyId,
+    adapter: request.adapter,
+    temperature: request.temperature,
+    topP: request.topP,
+    samplingCapable: request.capabilities?.sampling !== false,
+    thinkingEnabled: reasoningCapable && request.reasoning?.enabled === true,
+  })
+  const withSampling = { ...body, ...sampling }
+  const withReasoning = reasoningCapable
+    ? applyProviderReasoningRequestBody(providerFamilyId, request.adapter, withSampling, request.reasoning, protocol)
+    : withSampling
+  const withWebTools = request.webSearch === true
+    ? appendProviderWebTools(providerFamilyId, request.adapter, withReasoning, protocol, 'requested')
+    : withReasoning
+  return applyProviderRequestBodyQuirks(providerFamilyId, withWebTools) as JsonObject
 }
 
 export async function streamOpenAiCompatibleChat(options: StreamChatOptions): Promise<LlmStreamOutput> {
@@ -272,16 +280,19 @@ async function readSseStream(body: ReadableStream<Uint8Array>, options: StreamCh
   }
 }
 
-function applyStructuredOutputRequestBody(
+/** 两种协议共用的结构化输出格式；校验不通过时抛出带错误码的 400，请求前就拒绝。 */
+export type ResolvedStructuredOutputFormat =
+  | { type: 'text' }
+  | { type: 'json_object' }
+  | { type: 'json_schema'; name: string; schema: Record<string, unknown>; strict: boolean }
+
+export function resolveStructuredOutputFormat(
   request: LlmChatRequestDto,
-  providerId: string,
-  body: JsonObject
-): JsonObject {
+  providerId: string
+): ResolvedStructuredOutputFormat | undefined {
   const output = request.structuredOutput
-  if (!output) return body
-  if (output.type === 'text') {
-    return { ...body, response_format: { type: 'text' } }
-  }
+  if (!output) return undefined
+  if (output.type === 'text') return { type: 'text' }
 
   const supportedMode = request.capabilities?.structuredOutputMode ?? 'none'
   if (output.type === 'json_object' && supportedMode === 'none') {
@@ -316,9 +327,7 @@ function applyStructuredOutputRequestBody(
     }
   }
 
-  if (output.type === 'json_object') {
-    return { ...body, response_format: { type: 'json_object' } }
-  }
+  if (output.type === 'json_object') return { type: 'json_object' }
   if (providerId.trim().toLowerCase() === 'groq') {
     throw invalidRequest(
       'STRUCTURED_OUTPUT_STREAMING_UNSUPPORTED',
@@ -334,20 +343,27 @@ function applyStructuredOutputRequestBody(
   if (typeof output.strict !== 'boolean') {
     throw invalidRequest('INVALID_STRUCTURED_OUTPUT', 'JSON Schema output requires an explicit strict boolean.')
   }
+  return { type: 'json_schema', name: output.name.trim(), schema: output.schema, strict: output.strict }
+}
+
+function applyStructuredOutputRequestBody(
+  request: LlmChatRequestDto,
+  providerId: string,
+  body: JsonObject
+): JsonObject {
+  const format = resolveStructuredOutputFormat(request, providerId)
+  if (!format) return body
+  if (format.type !== 'json_schema') return { ...body, response_format: { type: format.type } }
   return {
     ...body,
     response_format: {
       type: 'json_schema',
-      json_schema: {
-        name: output.name.trim(),
-        schema: output.schema,
-        strict: output.strict,
-      },
+      json_schema: { name: format.name, schema: format.schema as JsonValue, strict: format.strict },
     },
   }
 }
 
-function resolveMaxOutputTokens(request: LlmChatRequestDto): number | undefined {
+export function resolveMaxOutputTokens(request: LlmChatRequestDto): number | undefined {
   const policy = request.policy ?? {}
   const legacy = policy.max_tokens ?? policy.maxTokens
   const candidate = request.maxOutputTokens ?? legacy
@@ -365,11 +381,11 @@ function resolveMaxOutputTokens(request: LlmChatRequestDto): number | undefined 
   return candidate
 }
 
-function invalidRequest(code: string, message: string): Error {
+export function invalidRequest(code: string, message: string): Error {
   return Object.assign(new Error(message), { code, statusCode: 400 })
 }
 
-function isOutputTruncated(finishReason: string | null, providerId: string): boolean {
+export function isOutputTruncated(finishReason: string | null, providerId: string): boolean {
   return finishReason === 'length' || finishReason === 'max_tokens' || finishReason === 'max_output_tokens'
     || (providerId === 'bigmodel' && finishReason === 'model_context_window_exceeded')
 }
@@ -479,11 +495,14 @@ function mergeToolCallDeltas(
   }
 }
 
-function readUsage(value: unknown): LlmUsageDto | undefined {
+export function readUsage(value: unknown): LlmUsageDto | undefined {
   if (!isRecord(value) || !isRecord(value.usage)) return undefined
   const usage = value.usage
-  const inputDetails = isRecord(usage.prompt_tokens_details) ? usage.prompt_tokens_details : {}
-  const outputDetails = isRecord(usage.completion_tokens_details) ? usage.completion_tokens_details : {}
+  // Chat 为 prompt/completion_tokens_details，Responses 为 input/output_tokens_details
+  const inputDetails = isRecord(usage.prompt_tokens_details) ? usage.prompt_tokens_details
+    : isRecord(usage.input_tokens_details) ? usage.input_tokens_details : {}
+  const outputDetails = isRecord(usage.completion_tokens_details) ? usage.completion_tokens_details
+    : isRecord(usage.output_tokens_details) ? usage.output_tokens_details : {}
   return {
     inputTokens: readTokenCount(usage.prompt_tokens ?? usage.input_tokens),
     outputTokens: readTokenCount(usage.completion_tokens ?? usage.output_tokens),
@@ -515,14 +534,6 @@ function readString(value: unknown): string | undefined {
 
 function readTokenCount(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
-}
-
-function normalizeBaseUrl(input: string | undefined, fallback: string | undefined): string {
-  const raw = input?.trim() || fallback
-  if (!raw) {
-    throw new Error('LLM baseUrl is required')
-  }
-  return raw.replace(/\/+$/, '')
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

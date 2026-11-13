@@ -1,6 +1,7 @@
 import type { JsonObject, JsonValue } from '../types/runtime'
 import type { LlmReasoningConfig } from './reasoning'
 import type { LlmCapabilities, LlmStructuredOutputConfig } from './types'
+import type { LlmApiProtocol } from './providerProtocolCore'
 
 export type { JsonObject, JsonValue }
 
@@ -38,10 +39,29 @@ export interface LlmChatRequestDto {
   credentialId?: string
   modelId: string
   adapter?: string
+  /** 省略时用供应商预设与端点配置（含智谱等的区域端点）；传入则按自定义地址请求，协议路径由 SDK 拼接。 */
   baseUrl?: string
+  /**
+   * 请求协议。省略时按供应商预设的 responsesModelIds 与模型目录自动选择：
+   * 已确认支持 Responses 的模型走 Responses，其余走 Chat Completions。显式传入则以它为准。
+   */
+  apiProtocol?: LlmApiProtocol
   reasoning?: LlmReasoningConfig
   messages: LlmChatMessageDto[]
+  /**
+   * 只对未登记的模型生效（自定义地址、手动添加的模型）。
+   * 已登记的供应商与模型由 SDK 按内置目录与供应商预设推断，调用方传入的值被忽略。
+   */
   capabilities?: Partial<LlmCapabilities>
+  /** 0–2。模型声明固定采样、或该供应商思考时采样参数无效 / 报错时由 SDK 省略。 */
+  temperature?: number
+  /** 0–1，省略规则同 temperature。 */
+  topP?: number
+  /**
+   * true 时按供应商与模型挂内置联网工具（由服务端执行搜索）；不支持的组合与结构化输出请求不挂。
+   * 搜索按供应商的工具价格另行计费。
+   */
+  webSearch?: boolean
   structuredOutput?: LlmStructuredOutputConfig
   /** 正整数；不设置时不下发限制，由供应商或模型默认值决定。 */
   maxOutputTokens?: number

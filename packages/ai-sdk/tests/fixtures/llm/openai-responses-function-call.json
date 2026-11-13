@@ -1,0 +1,125 @@
+{
+  "kind": "capability",
+  "source": {
+    "url": "https://platform.openai.com/docs/guides/function-calling#streaming",
+    "collectedAt": "2026-11-14",
+    "loginRequired": false,
+    "classification": "official-field-table",
+    "note": "依据官方字段表构造：函数调用事件序列与字段取自官方指南的逐事件示例（id、call_id、name、arguments 原样）；补了 response.created、思考项与 response.reasoning_summary_text.delta、response.completed 的 usage，字段名按 Responses 流式事件参考（https://developers.openai.com/api/reference/resources/responses/streaming-events）。非真实调用日志"
+  },
+  "events": [
+    {
+      "type": "response.created",
+      "response": {
+        "id": "resp_1234xyz",
+        "status": "in_progress",
+        "output": []
+      },
+      "sequence_number": 0
+    },
+    {
+      "type": "response.output_item.added",
+      "output_index": 0,
+      "item": {
+        "type": "reasoning",
+        "id": "rs_1234xyz",
+        "summary": []
+      },
+      "sequence_number": 1
+    },
+    {
+      "type": "response.reasoning_summary_text.delta",
+      "item_id": "rs_1234xyz",
+      "output_index": 0,
+      "summary_index": 0,
+      "delta": "查天气",
+      "sequence_number": 2
+    },
+    {
+      "type": "response.output_item.done",
+      "output_index": 0,
+      "item": {
+        "type": "reasoning",
+        "id": "rs_1234xyz",
+        "summary": [
+          {
+            "type": "summary_text",
+            "text": "查天气"
+          }
+        ]
+      },
+      "sequence_number": 3
+    },
+    {
+      "type": "response.output_item.added",
+      "response_id": "resp_1234xyz",
+      "output_index": 1,
+      "item": {
+        "type": "function_call",
+        "id": "fc_1234xyz",
+        "call_id": "call_1234xyz",
+        "name": "get_weather",
+        "arguments": ""
+      },
+      "sequence_number": 4
+    },
+    {
+      "type": "response.function_call_arguments.delta",
+      "response_id": "resp_1234xyz",
+      "item_id": "fc_1234xyz",
+      "output_index": 1,
+      "delta": "{\"",
+      "sequence_number": 5
+    },
+    {
+      "type": "response.function_call_arguments.delta",
+      "response_id": "resp_1234xyz",
+      "item_id": "fc_1234xyz",
+      "output_index": 1,
+      "delta": "location\":\"Paris, France\"}",
+      "sequence_number": 6
+    },
+    {
+      "type": "response.function_call_arguments.done",
+      "response_id": "resp_1234xyz",
+      "item_id": "fc_1234xyz",
+      "output_index": 1,
+      "arguments": "{\"location\":\"Paris, France\"}",
+      "sequence_number": 7
+    },
+    {
+      "type": "response.output_item.done",
+      "response_id": "resp_1234xyz",
+      "output_index": 1,
+      "item": {
+        "type": "function_call",
+        "id": "fc_1234xyz",
+        "call_id": "call_1234xyz",
+        "name": "get_weather",
+        "arguments": "{\"location\":\"Paris, France\"}",
+        "status": "completed"
+      },
+      "sequence_number": 8
+    },
+    {
+      "type": "response.completed",
+      "response": {
+        "id": "resp_1234xyz",
+        "status": "completed",
+        "incomplete_details": null,
+        "usage": {
+          "input_tokens": 20,
+          "input_tokens_details": {
+            "cached_tokens": 4
+          },
+          "output_tokens": 12,
+          "output_tokens_details": {
+            "reasoning_tokens": 5
+          },
+          "total_tokens": 32
+        }
+      },
+      "sequence_number": 9
+    }
+  ]
+}

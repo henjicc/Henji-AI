@@ -5,6 +5,8 @@
 
 最后核对日期：2026-11-14
 
+未发布（2026-11-14，源码待用户测试后发版）：轻量入口 `runLlmChatStream` 补齐外部 `say-it` 提出的六项需求——`apiProtocol`（Responses 自动或显式选择）、`temperature` / `topP`、已登记供应商与模型由 SDK 补全能力、`webSearch`（各家服务端联网）、未传 `baseUrl` 时按预设与百炼地域拼地址、`discoverModels` 可省略 `baseUrl`，字段说明见 CHANGELOG「未发布」。say-it 接入要点：已登记的供应商可以不传 `capabilities`（传了的字段优先于 SDK 推断），自定义地址与手动添加的模型继续传；自定义地址默认走 Chat，要 Responses 须显式传 `apiProtocol`；联网与采样不用自己判断供应商，只传开关和数值；火山与 MiMo 的联网要用户先在控制台开通，否则请求报错或不生效。Henji-AI 内置助手的自动联网仍只对 DeepSeek。宿主主进程 `llm:chatStream` 只把用户亲手选的协议补成 `apiProtocol`（预设供应商的连接设置覆盖、自定义供应商保存的协议），其余交给 SDK 自动选择：画布文本处理、提示词优化、双语字幕在 DeepSeek、MiMo、MiniMax M3、智谱 GLM-5.3、百炼与火山支持清单里的模型上改走 Responses（此前轻量入口一律走 Chat），带视频、音频素材的请求仍走 Chat。
+
 `0.14.0` 已发布（2026-11-14）：思考参数按 Chat / Responses 协议分别发送（修复 Responses 下 DeepSeek、智谱 GLM-5.3 关不掉思考，火山强度不生效，MiniMax M3 不思考；DeepSeek Chat 档位改按官方 low / high / max）；DeepSeek 独立接口（语音合成 `deepseek-tts`、语音识别、网页搜索与抓取、文档 OCR、Files）与服务端联网工具 `appendProviderWebTools`；新增按次 / 按页计价 `UnitPricing`；Seedream 5.5、MiniMax H3 Image、PixVerse V6、LTX-2.5、Qwen-Image 2.1 等新模型；修复 Qwen-Image 3.0 2K 部分比例尺寸越界。兼容性新增，0.x 阶段升 minor。用户明确下令发布；本地 prepublishOnly 全量门禁通过（SDK 116 文件测试、构建、仓外 Node ESM / 严格 TS / 56 个 Vite 入口 / 受限宿主），门禁发现两处测试仍按旧行为断言，已按合法变化更新。发布源码 `4c2e986c2` 经 [运行 43509798760](https://github.com/henjicc/Henji-AI/actions/runs/43509798760) 受信任发布。公共索引约 2 分钟后可读；隔离用户配置与缓存的仓外匿名安装通过：247 个根导出可导入，`capabilities/deepseek`、`capabilities/speech-recognition/deepseek` 与 `provider-packs/deepseek` 可用，发布包在 Responses 下关闭思考发 `reasoning.effort: none`，lockfile 解析到公共 tarball、integrity 与 registry 一致。外部 `say-it` 锁定 `0.13.0`、只用语音识别 / 翻译 / LLM 模块，本版无破坏性变更，本次不升级，需要新能力时再升。未执行真实付费调用。Henji-AI workspace 使用 `0.14.0`。
 
 - `0.14.0` tarball：[公共 npm 包](https://registry.npmjs.org/@henjicc/ai-sdk/-/ai-sdk-0.14.0.tgz)

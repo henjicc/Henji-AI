@@ -2,6 +2,14 @@
 
 > 核对时间：2026-08-26；M3.1 Flash 与国内域名于 2026-11-07 补核。信息来源见文末「原始链接索引」，均无需登录。
 
+## 2026-11-14 补核
+
+来源：[服务端工具](https://platform.minimaxi.com/docs/guides/server-tools.md)、[模型列表](https://platform.minimaxi.com/docs/api-reference/models/openai/list-models.md)、[Responses OpenAPI](https://platform.minimaxi.com/docs/api-reference/text/api/openapi-responses.json)。
+
+- 联网 `{"type":"web_search"}` 只在 Responses（及 Anthropic Messages），Chat Completions 不支持；Beta，0.03 元/次，耗时长。SDK 轻量入口 `webSearch` 只在 Responses 挂。
+- `GET https://api.minimax.cn/v1/models` 返回 `{id, object, created, owned_by}`，无上下文字段。
+- Responses 思考事件为 `response.reasoning_text.delta`；官方样例只出现 `response.completed`，`max_output_tokens` 过小时 `status=incomplete`。
+
 ## 1. 摘要
 
 | 项目 | 取值 |

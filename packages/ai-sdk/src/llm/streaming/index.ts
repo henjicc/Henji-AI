@@ -1,5 +1,5 @@
 /**
- * UXP 与其他受限宿主的原生 OpenAI-compatible SSE 入口。
+ * UXP 与其他受限宿主的原生 SSE 入口，覆盖 Chat Completions 与 Responses 两种协议和模型发现。
  *
  * 此入口刻意不导出模型目录、modelStep、Zod 或 Vercel AI SDK。旧的 `./llm` 与包根仍会
  * 通过同一 `chat.ts` / `streaming.ts` 实现重导出这些 API，不存在第二份流式执行逻辑。
@@ -10,6 +10,9 @@ export {
   resolveLlmTaskId,
   runLlmChatStream,
 } from '../chat'
+export { discoverModels } from '../discovery'
+export type { DiscoverModelsOptions, DiscoveredModelItem } from '../discovery'
+export type { LlmApiProtocol } from '../providerProtocolCore'
 export type {
   LlmChatCompletedInfo,
   LlmChatRequestBuiltInfo,

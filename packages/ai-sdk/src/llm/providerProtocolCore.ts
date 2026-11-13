@@ -29,37 +29,92 @@ export function resolveProviderSystemMessageSupport(
 const DEEPSEEK_FLASH_MODEL_IDS = new Set(['deepseek-flash', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp'])
 const SERVER_WEB_TOOL_TYPES = new Set(['deepseek_web_search', 'deepseek_read_url', 'web_search'])
 
+/** 一个供应商在某协议下开联网的方式：追加服务端工具，或写一个请求体开关（百炼 Chat 的 enable_search）。 */
+interface ProviderWebSearch {
+  tools?: Array<Record<string, unknown>>
+  body?: Record<string, unknown>
+  /** Chat 下与函数工具同发时联网不生效或协议不允许混用，此时不挂。 */
+  exclusiveWithTools?: boolean
+}
+
+type WebSearchRule = (model: string, protocol: LlmApiProtocol) => ProviderWebSearch | null
+
+const RESPONSES_WEB_SEARCH: WebSearchRule = (_model, protocol) => protocol === 'openai-responses' ? { tools: [{ type: 'web_search' }] } : null
+
 /**
- * 给请求挂上供应商在服务端执行的联网工具：是否搜索、读哪些链接由模型判断，搜索与抓取都在服务端完成，
- * 客户端不执行任何工具。只有调用方明确要联网时才调用，普通文本处理不自动联网。
+ * 各供应商服务端联网搜索的官方挂法（2026-11-14 核对，见 docs/llm-adaptation/供应商/）。没有登记的供应商与协议组合不挂。
  *
- * DeepSeek：deepseek-flash 在 Chat 与 Responses 下都支持 deepseek_web_search（关思考为联网搜索，开思考为
- * 深度思考搜索）与 deepseek_read_url（阅读用户消息里的链接）；deepseek-v4-pro 只在 Responses 下支持 web_search。
- * 结构化输出（Responses text.format、Chat response_format 不为 text）与这些工具同用会返回 400，此时不挂。
- * 搜索与抓取各按 5 元/千次成功调用计费，计入模型调用费用。见 docs/llm-adaptation/供应商/DeepSeek.md。
+ * - DeepSeek：flash 两种协议都挂 deepseek_web_search + deepseek_read_url；v4-pro 只在 Responses 挂 web_search。
+ * - 百炼：Responses 挂 web_search；Chat 用 enable_search，只对 Qwen 与 DeepSeek 系（glm、kimi 在 Chat 下不支持）。
+ * - 火山方舟（豆包搜索 Custom 版，需先在控制台开通）：Responses 挂 web_search + sources:["doubao"]；
+ *   Chat 用 web_search_options，与自定义函数工具同发时只保留函数工具，所以有函数工具时不挂。
+ * - 智谱：Responses 挂 web_search；Chat 的 web_search 工具必须指定搜索引擎且不与函数工具混用，用最便宜的 search_std。
+ * - MiniMax、Kimi、OpenAI：只在 Responses 挂 web_search。
+ * - MiMo（需先在控制台激活插件）：只在 Chat 挂 web_search。
+ */
+const WEB_SEARCH_RULES: Readonly<Record<string, WebSearchRule>> = {
+  deepseek: (model, protocol) => DEEPSEEK_FLASH_MODEL_IDS.has(model)
+    ? { tools: [{ type: 'deepseek_web_search' }, { type: 'deepseek_read_url' }] }
+    : model === 'deepseek-v4-pro' ? RESPONSES_WEB_SEARCH(model, protocol) : null,
+  bailian: (model, protocol) => protocol === 'openai-responses'
+    ? { tools: [{ type: 'web_search' }] }
+    : /^(?:qwen|deepseek)/.test(model) ? { body: { enable_search: true } } : null,
+  volcengine: (_model, protocol) => protocol === 'openai-responses'
+    ? { tools: [{ type: 'web_search', sources: ['doubao'] }] }
+    : { body: { web_search_options: {} }, exclusiveWithTools: true },
+  bigmodel: (_model, protocol) => protocol === 'openai-responses'
+    ? { tools: [{ type: 'web_search' }] }
+    : { tools: [{ type: 'web_search', web_search: { enable: true, search_engine: 'search_std' } }], exclusiveWithTools: true },
+  minimax: RESPONSES_WEB_SEARCH,
+  kimi: RESPONSES_WEB_SEARCH,
+  openai: RESPONSES_WEB_SEARCH,
+  mimo: (_model, protocol) => protocol === 'openai-compatible' ? { tools: [{ type: 'web_search' }] } : null,
+}
+
+/** 不用额外开通、也是项目主助手模型的供应商：内置助手在这些供应商下自动联网，其余只在调用方明确要求时挂。 */
+const AUTO_WEB_SEARCH_PROVIDERS = new Set(['deepseek'])
+
+/**
+ * 按供应商身份找规则；adapter 只认 deepseek（自建网关转发 DeepSeek 原厂协议）。
+ * 很多预设与自定义网关的 adapter 都是 openai，不能据此推断网关支持 OpenAI 的内置搜索。
+ */
+function resolveWebSearchRuleKey(providerId: string, adapter: string | undefined): string | undefined {
+  if (adapter?.trim().toLowerCase() === 'deepseek') return 'deepseek'
+  const id = providerId.trim().toLowerCase()
+  return id in WEB_SEARCH_RULES ? id : undefined
+}
+
+/**
+ * 给请求挂上供应商在服务端执行的联网搜索：是否搜索、读哪些链接由模型判断，搜索与抓取都在服务端完成，
+ * 客户端不执行任何工具。联网按次另计费用，计入模型调用。
+ *
+ * `mode: 'auto'`（内置助手）只对 AUTO_WEB_SEARCH_PROVIDERS 生效；`'requested'`（调用方明确要联网）对表里所有供应商生效。
+ * 结构化输出（Responses text.format、Chat response_format 不为 text）一律不挂：DeepSeek 等会返回 400，
+ * 其余供应商的同用行为官方未写明。
  */
 export function appendProviderWebTools(
   providerId: string,
   adapter: string | undefined,
   body: Record<string, unknown>,
   protocol: LlmApiProtocol,
+  mode: 'auto' | 'requested' = 'auto',
 ): Record<string, unknown> {
-  if (![providerId, adapter ?? ''].some(value => value.trim().toLowerCase() === 'deepseek')) return body
+  const key = resolveWebSearchRuleKey(providerId, adapter)
+  if (!key || (mode === 'auto' && !AUTO_WEB_SEARCH_PROVIDERS.has(key))) return body
   const model = typeof body.model === 'string' ? body.model.trim().toLowerCase() : ''
-  const tools = DEEPSEEK_FLASH_MODEL_IDS.has(model)
-    ? [{ type: 'deepseek_web_search' }, { type: 'deepseek_read_url' }]
-    : model === 'deepseek-v4-pro' && protocol === 'openai-responses' ? [{ type: 'web_search' }] : []
-  if (!tools.length) return body
+  const rule = WEB_SEARCH_RULES[key](model, protocol)
+  if (!rule) return body
   const format = protocol === 'openai-responses'
     ? (body.text as { format?: { type?: unknown } } | undefined)?.format?.type
     : (body.response_format as { type?: unknown } | undefined)?.type
   if (format !== undefined && format !== 'text') return body
   const existing = Array.isArray(body.tools) ? body.tools : []
+  if (rule.exclusiveWithTools && existing.length > 0) return body
   if (existing.some(tool => tool && typeof tool === 'object' && SERVER_WEB_TOOL_TYPES.has(String((tool as Record<string, unknown>).type)))) return body
-  const withTools = { ...body, tools: [...existing, ...tools] }
-  return protocol === 'openai-responses' && Array.isArray(body.input)
-    ? { ...withTools, input: moveToolOutputImagesToUserMessages(body.input) }
-    : withTools
+  const withSearch = { ...body, ...rule.body, ...(rule.tools ? { tools: [...existing, ...rule.tools] } : {}) }
+  return key === 'deepseek' && rule.tools && protocol === 'openai-responses' && Array.isArray(body.input)
+    ? { ...withSearch, input: moveToolOutputImagesToUserMessages(body.input) }
+    : withSearch
 }
 
 const TOOL_OUTPUT_ITEM_TYPES = new Set(['function_call_output', 'custom_tool_call_output'])
@@ -96,6 +151,41 @@ function moveToolOutputImagesToUserMessages(input: readonly unknown[]): unknown[
   }
   flush()
   return result
+}
+
+/**
+ * 开思考后 temperature / top_p 不生效的供应商：此时不发采样参数，与模型步规则一致。
+ * MiMo 开思考时传采样会 400，由思考规则统一删除（它省略思考字段时也默认开思考）。
+ */
+const SAMPLING_IGNORED_WHEN_THINKING = new Set(['deepseek'])
+
+export interface LlmSamplingInput {
+  providerFamilyId: string
+  adapter?: string
+  temperature?: number
+  topP?: number
+  samplingCapable: boolean
+  thinkingEnabled: boolean
+}
+
+/**
+ * 解析要发送的采样参数（键名两种协议相同）。模型声明为固定采样值、或该供应商开思考时采样无效，
+ * 一律省略；越界值直接拒绝，不替调用方截断。
+ */
+export function resolveSamplingFields(input: LlmSamplingInput): { temperature?: number; top_p?: number } {
+  if (input.temperature !== undefined && !(Number.isFinite(input.temperature) && input.temperature >= 0 && input.temperature <= 2)) {
+    throw Object.assign(new Error('temperature must be between 0 and 2'), { code: 'INVALID_SAMPLING', statusCode: 400 })
+  }
+  if (input.topP !== undefined && !(Number.isFinite(input.topP) && input.topP >= 0 && input.topP <= 1)) {
+    throw Object.assign(new Error('topP must be between 0 and 1'), { code: 'INVALID_SAMPLING', statusCode: 400 })
+  }
+  if (!input.samplingCapable) return {}
+  const keys = [input.providerFamilyId, input.adapter ?? ''].map(value => value.trim().toLowerCase())
+  if (input.thinkingEnabled && keys.some(key => SAMPLING_IGNORED_WHEN_THINKING.has(key))) return {}
+  return {
+    ...(input.temperature !== undefined ? { temperature: input.temperature } : {}),
+    ...(input.topP !== undefined ? { top_p: input.topP } : {}),
+  }
 }
 
 export function applyProviderRequestBodyQuirks(

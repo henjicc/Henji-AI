@@ -8,12 +8,11 @@ import {
   isCancelled,
   registerAbortController,
 } from '../runtime/task-registry'
-import {
-  buildOpenAiCompatiblePayload,
-  resolveOpenAiCompatibleEndpoint,
-  resolvePpioChatEndpoint,
-  streamOpenAiCompatibleChat,
-} from './streaming'
+import { buildOpenAiCompatiblePayload, streamOpenAiCompatibleChat } from './streaming'
+import { buildResponsesPayload, streamResponses } from './responsesStreaming'
+import { resolveLlmChatCompletionsEndpoint, resolveLlmResponsesEndpoint } from './protocolEndpoints'
+import { resolveLlmChatRequest } from './chatRequestResolution'
+import type { LlmApiProtocol } from './providerProtocolCore'
 import type {
   JsonObject,
   JsonValue,
@@ -42,6 +41,8 @@ import { resolveLlmEndpointIdentity } from './endpointProfiles'
 
 export interface LlmChatRequestBuiltInfo {
   endpoint: string
+  /** 实际使用的协议：调用方显式指定，或按供应商预设与模型目录自动选择。 */
+  protocol: LlmApiProtocol
   requestPayload: JsonObject
   processedRequest: LlmChatRequestDto
 }
@@ -139,8 +140,10 @@ export async function runLlmChatStream(
 
   try {
     const identity = resolveLlmEndpointIdentity(request)
+    const resolution = resolveLlmChatRequest(request)
+    const protocol = resolution.protocol
     const resolvedRequest: LlmChatRequestDto = {
-      ...request,
+      ...resolution.request,
       providerFamilyId: identity.providerFamilyId,
       endpointProfile: identity.endpointProfile,
       credentialId: identity.credentialId,
@@ -152,13 +155,18 @@ export async function runLlmChatStream(
     }
 
     const processedRequest = await preprocessLlmRequest(resolvedRequest, runtime)
-    const endpoint = identity.providerFamilyId === 'ppio'
-      ? resolvePpioChatEndpoint(processedRequest.baseUrl)
-      : resolveOpenAiCompatibleEndpoint(processedRequest)
-    const requestPayload = buildOpenAiCompatiblePayload(processedRequest)
+    // 地址按协议拼接：自定义地址原样使用，未传时用端点配置与供应商预设
+    const endpointInput = { ...processedRequest, baseUrl: request.baseUrl }
+    const endpoint = protocol === 'openai-responses'
+      ? resolveLlmResponsesEndpoint(endpointInput)
+      : resolveLlmChatCompletionsEndpoint(endpointInput)
+    const requestPayload = protocol === 'openai-responses'
+      ? buildResponsesPayload(processedRequest)
+      : buildOpenAiCompatiblePayload(processedRequest)
 
     hooks.onRequestBuilt?.({
       endpoint,
+      protocol,
       requestPayload: cloneJsonObject(requestPayload),
       processedRequest,
     })
@@ -166,7 +174,7 @@ export async function runLlmChatStream(
     // 首字时间从真正发出请求算起，不含前面的媒体预处理
     const requestSentAtMs = Date.now()
     let firstTokenAtMs: number | null = null
-    const output = await streamOpenAiCompatibleChat({
+    const output = await (protocol === 'openai-responses' ? streamResponses : streamOpenAiCompatibleChat)({
       endpoint,
       apiKey,
       providerId: identity.providerFamilyId,
@@ -237,7 +245,7 @@ export async function runLlmChatStream(
       modelId: request.modelId,
       requestId: taskId,
     }))
-    if (error instanceof AiRuntimeError && error.details?.protocol === 'openai-chat-sse') {
+    if (error instanceof AiRuntimeError && (error.details?.protocol === 'openai-chat-sse' || error.details?.protocol === 'openai-responses-sse')) {
       Object.assign(normalized, { details: error.details })
     }
     throw normalized
@@ -277,7 +285,8 @@ export function normalizeLlmChatError(
   if (isCancelled('llm', taskId) || isAbortError(error)) {
     return `[task_cancelled] LLM task cancelled: ${taskId}`
   }
-  if (error instanceof Error && error.message.startsWith('[api_key_missing]')) {
+  // 本地配置错误（缺密钥、缺地址）原样返回，提示里带着怎么改
+  if (error instanceof Error && /^\[(?:api_key_missing|llm_base_url_required)\]/.test(error.message)) {
     return error.message
   }
   if (context) return normalizeProviderError(context, error).message

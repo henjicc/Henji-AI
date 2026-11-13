@@ -1,6 +1,7 @@
 import type { RuntimeContext } from '../runtime'
-import { resolveProviderExtraAuthHeaders } from './providerProtocol'
+import { resolveProviderExtraAuthHeaders } from './providerProtocolCore'
 import { resolveLlmEndpointIdentity } from './endpointProfiles'
+import { resolveLlmProtocolBaseUrl } from './protocolEndpoints'
 
 /**
  * 模型发现（列出供应商可用模型）。任务 4.2 从 `electron/main/services/llm/discovery.ts`
@@ -87,9 +88,13 @@ export function parseDiscoveredModel(item: RawDiscoveredModel): DiscoveredModelI
   }
 }
 
+/**
+ * 列出供应商可用模型。`baseUrl` 可省略：已登记供应商按端点配置与预设地址拼出 /models；
+ * 传入自定义地址（代理、自建网关、未登记供应商）时原样使用。
+ */
 export async function discoverModels(
   providerId: string,
-  baseUrl: string,
+  baseUrl: string | undefined,
   runtime: RuntimeContext,
   options: DiscoverModelsOptions = {}
 ): Promise<DiscoveredModelItem[]> {
@@ -110,7 +115,13 @@ export async function discoverModels(
   if ((options.requireCredential || siliconflow) && !apiKey) {
     throw new Error(`[api_key_missing] LLM provider "${providerId}" API key is not configured.`)
   }
-  const endpoint = resolveModelsEndpoint(identity.baseUrl ?? baseUrl)
+  const endpoint = resolveModelsEndpoint(resolveLlmProtocolBaseUrl({
+    providerId,
+    providerFamilyId: options.providerFamilyId,
+    endpointProfile: options.endpointProfile,
+    credentialId: options.credentialId,
+    baseUrl,
+  }, 'openai-compatible'))
   const url = siliconflow ? `${endpoint}?sub_type=${modelType}` : endpoint
   const headers: Record<string, string> = { Accept: 'application/json' }
   if (apiKey) {

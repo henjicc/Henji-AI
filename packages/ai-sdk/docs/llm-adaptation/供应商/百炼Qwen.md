@@ -2,6 +2,15 @@
 
 > 核对时间：2026-11-07（第 2b 节模型清单、价格与 Responses 支持范围）；其余部分 2026-08-26。信息来源见文末「原始链接索引」。**控制台模型详情页（`bailian.console.aliyun.com`）需要登录**，实测自动化浏览器访问会被拦截（`请求失败，请检查网络设置`）；本文档内容全部来自 `help.aliyun.com` 的公开文档页，未登录也能完整核对协议、模型清单与价格。仅当需要交互式"体验中心"截图或账号级用量数据时才必须登录控制台。
 
+## 2026-11-14 地域通用域名、联网与模型列表
+
+来源：[地域与域名](https://help.aliyun.com/zh/model-studio/regions)、[Responses 兼容](https://help.aliyun.com/zh/model-studio/compatibility-with-openai-responses-api)、[联网搜索](https://help.aliyun.com/zh/model-studio/web-search)、[模型列表](https://help.aliyun.com/zh/model-studio/list-models)。
+
+- 除业务空间域名外，有不带 WorkspaceId 的通用域名（所有业务空间的密钥可用，密钥按地域独立）：北京 `dashscope.aliyuncs.com`、新加坡 `dashscope-intl.aliyuncs.com`、美国 `dashscope-us.aliyuncs.com`、香港 `cn-hongkong.dashscope.aliyuncs.com`；德国、日本没有。通用域名自 2026-09-30 起不再支持新特性，现有能力照常；超时 600 秒（业务空间域名 3600 秒）。Chat 与 Responses 都在 `{base}/compatible-mode/v1` 下；旧 `/api/v2/apps/protocols/compatible-mode/v1/responses` 已停止维护。SDK 未传 `baseUrl` 时按 `endpointProfile`（地域，缺省 cn-beijing）用通用域名。
+- 联网：Responses `{"type":"web_search"}`（可配 `web_extractor`、`code_interpreter`）；Chat `enable_search: true`，Qwen 与 DeepSeek 系支持，`glm-5.2`、`kimi-k3` 仅 Responses，`kimi-k3.1-pro` 不支持 Chat。计费 turbo 3 元/千次、max 与 agent 4 元/千次（新加坡 agent 73.39 元/千次）。
+- Responses 思考事件为 `response.reasoning_text.delta`；`response.failed` 未在官方事件表列出。
+- 模型列表官方是原生 `GET {base}/api/v1/models`（`output.models[]`）；兼容路径 `/compatible-mode/v1/models` 路由存在但文档未写。思考时采样行为未写明。
+
 ## 1. 摘要
 
 | 项目 | 取值 |
@@ -10,7 +19,7 @@
 | 对应项目 `adapter` | `openai`（Chat Completions）；官方也提供 Responses API |
 | 接入优先级（本项目约定，见 [README 第三节](../README.md)） | 官方列入 Responses 支持清单的模型默认走 **Responses API**（见第 2b 节）；其余走 Chat Completions；官方没有 Anthropic Messages API |
 | 鉴权 | `Authorization: Bearer $DASHSCOPE_API_KEY` |
-| Base URL | `https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`（**地域相关，`{WorkspaceId}` 和区域后缀需要从控制台"查看代码"复制当前值，不要硬编码**） |
+| Base URL | 推荐业务空间域名 `https://{WorkspaceId}.{region}.maas.aliyuncs.com/compatible-mode/v1`（从控制台“查看代码”复制）；也可用地域通用域名，见上方 2026-11-14 |
 | 官方协议 | OpenAI Chat Completions（`/chat/completions`）+ OpenAI Responses API（`/responses`），同一 Base URL 下两个路径 |
 
 ## 2. 模型：`qwen3.8-max`

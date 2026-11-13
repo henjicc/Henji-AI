@@ -12,7 +12,7 @@ import {
 } from '../providerProtocol'
 import { applyProviderReasoningRequestBody } from '../providerReasoningRequest'
 import { adaptMimoResponses } from './mimoResponses'
-import { resolveOpenAiCompatibleEndpoint, resolvePpioChatEndpoint } from '../streaming'
+import { resolveLlmChatCompletionsEndpoint, resolveLlmResponsesEndpoint } from '../protocolEndpoints'
 import {
   modelStepProviderAdapters,
   type ModelStepHttpCaptureRequest,
@@ -20,7 +20,7 @@ import {
   type ModelStepHttpTrace,
   type ModelStepProviderAdapter,
 } from './providerAdapter'
-import { getLlmEndpointProfileFamily, resolveLlmEndpointIdentity } from '../endpointProfiles'
+import { resolveLlmEndpointIdentity } from '../endpointProfiles'
 // `ModelStepHttpTrace` 不在这里重新导出——`./providerAdapter` 是它的唯一定义处，
 // 由 `sdk/index.ts` 的桶文件统一 `export * from './providerAdapter'`。这里再导出一次会与
 // 桶文件里的 `export * from './providerAdapter'` 产生同名重复导出（TS 报 "has already
@@ -52,53 +52,11 @@ interface DeepSeekUsage {
   prompt_tokens?: unknown
 }
 
-function stripProtocolEndpoint(endpoint: string): string {
-  return endpoint.replace(/\/(?:chat\/completions|responses)\/?$/, '')
-}
-
 export function resolveModelStepBaseUrl(input: Pick<ModelStepInput, 'providerId' | 'providerFamilyId' | 'endpointProfile' | 'credentialId' | 'adapter' | 'apiProtocol' | 'baseUrl'>): string {
-  const protocol = input.apiProtocol ?? 'openai-compatible'
-  const identityWithoutBaseUrl = resolveLlmEndpointIdentity({ ...input, baseUrl: undefined })
-  const family = getLlmEndpointProfileFamily(identityWithoutBaseUrl.providerFamilyId)
-  const profile = family?.profiles.find(item => item.id === identityWithoutBaseUrl.endpointProfile)
-  const suppliedBaseUrl = input.baseUrl ? stripProtocolEndpoint(input.baseUrl.replace(/\/+$/, '')) : undefined
-  const profileBaseUrl = profile ? stripProtocolEndpoint(profile.baseUrl.replace(/\/+$/, '')) : undefined
-  const selectedProtocolBaseUrl = profile?.protocolBaseUrls?.[protocol]
-    ? stripProtocolEndpoint(profile.protocolBaseUrls[protocol].replace(/\/+$/, ''))
-    : undefined
-  const hasExplicitBaseUrlOverride = Boolean(
-    suppliedBaseUrl
-    && suppliedBaseUrl !== profileBaseUrl
-    && suppliedBaseUrl !== selectedProtocolBaseUrl
-  )
-  const identity = hasExplicitBaseUrlOverride
-    ? identityWithoutBaseUrl
-    : resolveLlmEndpointIdentity(input)
-  const normalizedInput = {
-    ...input,
-    providerId: identity.providerFamilyId,
-    baseUrl: hasExplicitBaseUrlOverride
-      ? suppliedBaseUrl
-      : selectedProtocolBaseUrl
-        ? selectedProtocolBaseUrl
-      : identity.baseUrl ? stripProtocolEndpoint(identity.baseUrl.replace(/\/+$/, '')) : undefined,
-  }
-  if (protocol === 'openai-responses') {
-    const baseUrl = normalizedInput.baseUrl
-      ?? (identity.providerFamilyId === 'openai' ? 'https://api.openai.com/v1' : undefined)
-    if (!baseUrl) throw new Error('[llm_base_url_required] Responses API requires an explicit baseUrl')
-    return baseUrl
-  }
-  const endpoint = identity.providerFamilyId === 'ppio'
-    ? resolvePpioChatEndpoint(normalizedInput.baseUrl)
-    : resolveOpenAiCompatibleEndpoint({
-        providerId: normalizedInput.providerId,
-        modelId: 'placeholder',
-        adapter: normalizedInput.adapter,
-        baseUrl: normalizedInput.baseUrl,
-        messages: [],
-      })
-  return stripProtocolEndpoint(endpoint)
+  // OpenAI SDK 自己在根地址后接 /responses 或 /chat/completions；Chat 根地址沿用“没有版本段就补 /v1”的规则。
+  return (input.apiProtocol ?? 'openai-compatible') === 'openai-responses'
+    ? resolveLlmResponsesEndpoint(input).replace(/\/responses$/, '')
+    : resolveLlmChatCompletionsEndpoint(input).replace(/\/chat\/completions$/, '')
 }
 
 function createOpenAiCompatibleLanguageModel(

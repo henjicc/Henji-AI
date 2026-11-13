@@ -2,6 +2,15 @@
 
 > 核对时间：2026-08-26；K3.1 Pro 于 2026-11-07 补核。信息来源见文末「原始链接索引」，均无需登录。
 
+## 2026-11-14 Responses 与联网搜索
+
+来源：[Responses](https://platform.kimi.com/docs/api/responses.md)、[联网搜索计费](https://platform.kimi.com/docs/pricing/websearch.md)、[官方工具](https://platform.kimi.com/docs/guide/use-official-tools.md)、[模型列表](https://platform.kimi.com/docs/api/list-models.md)。
+
+- 下方摘要里“没有 Responses API”已过期：`POST https://api.moonshot.cn/v1/responses` 支持 kimi-k3.1-pro、kimi-k3.1-pro-highspeed、kimi-k3，无状态（`store` 固定 false）。项目预设仍走 Chat。
+- Responses 内置 `{"type":"web_search"}`，每请求最多一个，0.03 元/次；`search_context_size`、`blocked_domains` 会报 `invalid_request_error`。Chat 下 `$web_search` / `builtin_function` 已不在官方文档，现行 Formula API 需要客户端回填多轮，SDK 不接。轻量入口 `webSearch` 只在 Responses 挂。
+- 思考事件为 `response.reasoning_summary_text.delta`；`GET /v1/models` 带 `context_length`、`supports_image_in`、`supports_reasoning`。
+- K3 系采样固定 1.0 / 0.95，传其他值报错，SDK 不下发。
+
 ## 1. 摘要
 
 | 项目 | 取值 |

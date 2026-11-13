@@ -2,6 +2,15 @@
 
 > 核对时间：2026-09-24。下方更新契约优先于历史记录；官方 Markdown 可公开读取，无需登录。
 
+## 2026-11-14 联网、采样与模型列表
+
+来源：[联网搜索](https://mimo.mi.com/static/docs/quick-start/usage-guide/text-generation/tool-calling/web-search.md)、[超参数](https://mimo.mi.com/static/docs/api/guidance/model-hyperparameters.md)、[模型列表](https://mimo.mi.com/static/docs/api/model/list-models-get.md)、[Responses](https://mimo.mi.com/static/docs/api/chat/responses.md)。
+
+- 联网搜索仍只在 Chat：`tools:[{"type":"web_search"}]`，须先在控制台「插件管理」激活（开关有 5 分钟缓存），Responses 文档没有 web_search。SDK 轻量入口 `webSearch` 只在 Chat 挂。
+- 思考时 temperature / top_p 被强制为 1.0 / 0.95（静默）；非思考 temperature [0,1.5]、top_p [0.01,1.0]。
+- `GET /v1/models` 返回 `{id, object, owned_by}`，无上下文字段。
+- Responses 思考事件为 `response.reasoning_text.delta`，终止事件 `completed` / `incomplete`。
+
 ## 2026-09-24 模型与协议更新
 
 官方模型 ID 为 `mimo-v2.6-pro`、`mimo-v2.6-flash`、`mimo-v2.6-pro-ultraspeed`；均支持文本/图片/音频/视频理解、思考、工具调用、结构化输出，上下文 1M、最大输出 131072 tokens。UltraSpeed 为需联系供应商开通的定制服务，仅登记能力，不加入默认推荐。旧 `mimo-v2.5-pro`、`mimo-v2.5` 于北京时间 2026-10-21 10:00 直接停用，不自动替换；SDK 保留旧 ID 的能力识别但新建预设使用 2.6，不能把旧 ID 作为新模型别名暗中重定向。
@@ -49,8 +58,8 @@
 |---|---|
 | `providerId`（项目内约定，代码中已存在） | `mimo` |
 | 对应项目 `adapter` | `openai`（Chat Completions）；官方也提供 Anthropic Messages API |
-| 官方协议 | OpenAI Chat Completions + **Anthropic Messages API**，**没有 Responses API** |
-| 接入优先级（本项目约定，见 [README 第三节](../README.md)） | 官方**没有** Responses API；Chat Completions 是唯一已实现且能用联网搜索的路径；Anthropic **最低优先级**，且接了也拿不到联网搜索（第 7 节） |
+| 官方协议 | OpenAI Chat Completions + OpenAI Responses API + Anthropic Messages API（见上方 2026-09-24 更新） |
+| 接入优先级（本项目约定，见 [README 第三节](../README.md)） | 2.6 系默认走 Responses；联网搜索只在 Chat（第 7 节）；Anthropic 最低优先级 |
 | 已知协议怪癖（代码里已实现） | 额外发送 `api-key` 认证头；请求体 `max_tokens` 要改名成 `max_completion_tokens`，见 `packages/ai-sdk/src/llm/providerProtocol.ts` |
 
 ## 2. Base URL
