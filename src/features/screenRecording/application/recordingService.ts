@@ -104,6 +104,9 @@ async function finish(id: string, importResult: boolean): Promise<void> {
       // file. Assistant and director runs keep reading the stopped session from here.
       publish(handoff ? { documentId: null, content: null, snapshot: null, opening: importResult && !quickSessions.has(id) } : { documentId: id, content, snapshot: null })
       if (closeFailure) throw closeFailure
+      // 来源关闭而自动停止：会话封存、主窗口从最小化恢复之后马上说，不等导入剪辑（长录导入要几十秒，等到那时提示早被错过）。
+      const ended = sourceEndedSessions.get(id)
+      if (ended) notifyUser(notificationMessage(ended === 'window' ? 'recordingWindowClosed' : 'recordingDisplayRemoved'), 'success')
       const quick = quickSessions.get(id)
       quickSessions.delete(id)
       const recorded = recordingHasPicture(content)
@@ -125,8 +128,6 @@ async function finish(id: string, importResult: boolean): Promise<void> {
         stopOutcomes.set(id, { kind: 'edit', ...where, ...await importRecordingToVideo(id, destination) })
       }
       defaultDocumentOperationChanges.changed()
-      const ended = sourceEndedSessions.get(id)
-      if (ended) notifyUser(notificationMessage(ended === 'window' ? 'recordingWindowClosed' : 'recordingDisplayRemoved'), 'success')
       logger.info('录制会话已封存', { event: 'recording.session.finish.completed', context: { sessionId: id, ...(ended ? { sourceEnded: ended } : {}) } })
     } catch (error) { publish({ error: String(error) }); logger.error('录制会话收尾失败', { event: 'recording.session.finish.failed', error }); throw error }
     finally { releaseTarget?.(); releaseTarget = undefined; publish({ busy: false, opening: false }); finishing = undefined }

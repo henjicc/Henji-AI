@@ -115,3 +115,20 @@
 - **验证**：
   - 相关测试全过：录屏轨、导入两份、录屏 `applicationDomain`、菜单、录屏页，共 35 例。
   - 渲染层 tsc（heavy.sh）、改动文件 eslint、`check:surface` 通过。
+
+## 第五轮
+
+- **V1 名条被上方一行盖住**：不是本批改动引起的。
+  - 盖住名条的那一行是“Z1 缩放”（录屏片段的自动缩放轨）。本批改过的 `clipLabelSurface.ts`、`index.css`、`VideoEditPreview.tsx`、`VideoEditApp.tsx` 都没碰时间线布局；当天别的提交也没动时间线几何。
+  - 根因在 `src/features/videoEdit/timeline/timelineGeometry.ts` 的 `timelineLayout`（第 70–90 行）。
+    - 视频区顶上钉着字幕行与缩放行：`sticky` = 28，加上缩放行再 +24。
+    - 视频轨从视频区底边往上排（`let bottom = video.top + video.height + video.scroll`），初始滚动是 0，片段只按 `clipTop = video.top + sticky` 裁切。
+    - 视频区矮到放不下“钉住的行 + 视频轨”时，最上面那条视频轨（这里是 V1）的上半截就落在钉住的行下面，名条被盖住。
+  - 引入的提交：`fea0649b4`（10-13，字幕行钉在视频区顶上）与 `c86a7d0f6`（10-15，加了缩放行，`timelineGeometry.ts:71` 把 `sticky` 加到 52）。录屏片段才带缩放效果，所以现在录屏多了才常见。
+  - 按要求只报告，没改。
+- **“被录制的窗口已关闭，录制已保存”提示**
+  - 调用路径是通的：主进程 `sourceEnded` → 快照 `phase=stopped` 且带 `sourceEnded` → `recordingService.follow` 记下 → `finish` 里 `notifyUser`，经 `notificationEvents` 交给全局 `NotificationProvider`（与窗口位置无关）。
+  - 问题在时机：原先在导入剪辑之后才发。录屏页“录完进剪辑”与录制样子都要先导入（长录几十秒），提示要等到导入完、切页之后才出现，容易被错过。
+  - 已改为：会话封存、`closeRecordingControl` 把主窗口从最小化恢复之后立即发，不等导入。控制条状态下主窗口是最小化的，恢复发生在 close 里，所以提示出现时窗口已经可见。
+  - 没有真实窗口证据，需要你再看一次。
+- **验证**：录屏 `applicationDomain`、录屏页、导入轨道测试共 16 例通过；渲染层 tsc、`recordingService.ts` eslint 通过；`check:surface` 通过（错误 0）。
