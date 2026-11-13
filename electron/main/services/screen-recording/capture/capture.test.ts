@@ -111,6 +111,27 @@ describe('screen capture ownership and durable spans', () => {
       expect(failed).toHaveBeenCalledTimes(1)
     } finally { await backend.cancel(); await fs.rm(storage.directory, { recursive: true, force: true }) }
   })
+  it('第一帧时刻按采集一出帧的打点估（不含编码排队），打点行不进报错文本', async () => {
+    const storage = await fixture()
+    let now = 3_000_000
+    const spawn = vi.fn((_binary: string, args: string[]) => {
+      const child = processFixture()
+      expect(args.join(' ')).toContain(String.raw`setpts='PTS+0*print(PTS*TB\,16)'`)
+      setTimeout(() => {
+        // 采集打点：第 0 帧 3.0 秒到，第 1 帧（16.7 ms）晚到了一点。
+        child.stderr.emit('data', Buffer.from('[Eval @ 0000020a] 0.000000\n[Eval @ 0000020a] 0.01'))
+        now = 3_030_000; child.stderr.emit('data', Buffer.from('6667\n[gfxcapture @ 1] Setting minimum update interval unavailable\n'))
+        // 编码进度晚 100 ms 才报：按它估会晚 100 ms。
+        now = 3_600_000; child.stdout.emit('data', Buffer.from('out_time_us=500000\n'))
+      }, 1)
+      return child
+    })
+    const backend = new GfxCaptureBackend(options, source, storage, { spawn, binary: async () => 'ffmpeg', encoder: async () => profile, nowUs: () => now, failed: vi.fn() })
+    try {
+      await backend.prepare(); await backend.start(new AbortController().signal)
+      expect(storage.manifest.spans[0].monoUs).toBe(3_000_000)
+    } finally { await backend.cancel(); await fs.rm(storage.directory, { recursive: true, force: true }) }
+  })
   it('续录期间停止：新进程起来后也会被停下，不留后台编码', async () => {
     const storage = await fixture(), children: ChildProcessWithoutNullStreams[] = []
     const spawn = vi.fn(() => {

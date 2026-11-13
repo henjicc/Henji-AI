@@ -10,11 +10,19 @@ import { spawnCaptureProcess } from './process'
 
 const logger = createMainLogger('main.screen_recording.capture')
 export interface NativeCaptureSource { selector: 'hwnd' | 'hmonitor'; handle: string; width: number; height: number }
+/**
+ * 采集一出帧就把它相对第一帧的时刻打到 stderr（错误级，-loglevel warning 下也会输出），不等编码与封装。
+ * gfxcapture 只给相对第一帧的时间戳、拿不到系统时刻，第一帧的会话时刻只能用“到达时刻 − 帧时刻”的最小值估；
+ * 在采集之后立即打点，估计里不含编码器与封装的排队（实测比按编码进度估早约 10–15 ms，与真实合成时刻差一帧以内）。
+ */
+const FRAME_TIME_PRINT = String.raw`,setpts='PTS+0*print(PTS*TB\,16)'`
+const FRAME_TIME_LINE = /^\[Eval @ [^\]]+\] (\d+(?:\.\d+)?)$/
 export function buildGfxCaptureArgs(options: ScreenCaptureOptions, source: NativeCaptureSource, encoder: VideoEncoderProfile<HwEncoderId | 'cpu'>, output: string, embedCursor = false): string[] {
   if (!/^\d+$/.test(source.handle) || source.handle === '0') throw new Error('录制来源已失效，请重新选择')
   const crop = captureCrop(options.region, source.width, source.height)
   const filter = `gfxcapture=${source.selector}=${source.handle}:capture_cursor=${embedCursor ? 1 : 0}:capture_border=1:max_framerate=${options.fps}:width=${options.width}:height=${options.height}:resize_mode=scale_aspect`
     + (options.region ? `:crop_left=${crop.x}:crop_top=${crop.y}:crop_right=${source.width - crop.x - crop.width}:crop_bottom=${source.height - crop.y - crop.height}` : '')
+    + FRAME_TIME_PRINT
     + (encoder.id === 'cpu' ? ',hwdownload,format=bgra,format=yuv420p' : '')
   const encoding = recordingEncoding(options)
   const kbps = Math.round(encoding.bitrate / 1000)
@@ -107,9 +115,24 @@ export class GfxCaptureBackend implements ScreenCaptureBackend {
     const closed = new Promise<void>(resolve => { closeResolve = resolve })
     const run: Run = { process: child, ready, closed, span, expected: false, durationUs: 0, dropped: 0, duplicated: 0, stderr: '' }
     this.run = run
-    let stdout = '', started = false
+    let stdout = '', stderr = '', started = false, firstFrameUs = Number.POSITIVE_INFINITY
+    // 每个估计都比第一帧的真实时刻晚（晚多少看排队），取最早的一个。
+    const estimate = (timeUs: number): void => {
+      const value = Math.max(0, this.deps.nowUs() - timeUs)
+      if (!started) firstFrameUs = Math.min(firstFrameUs, value)
+      else if (value < span.monoUs && !span.finalized) span.monoUs = value
+    }
     const timeout = setTimeout(() => { readyReject(new Error('屏幕采集启动超时，请检查来源或改用兼容录制')); child.kill() }, 15000)
-    child.stderr.on('data', (data: Buffer) => { run.stderr = (run.stderr + data.toString()).slice(-4096) })
+    child.stderr.on('data', (data: Buffer) => {
+      stderr += data.toString()
+      let newline: number
+      while ((newline = stderr.indexOf('\n')) >= 0) {
+        const line = stderr.slice(0, newline).trim(); stderr = stderr.slice(newline + 1)
+        const frame = FRAME_TIME_LINE.exec(line)
+        if (frame) estimate(Math.round(Number(frame[1]) * 1e6))
+        else if (line) run.stderr = `${run.stderr}${line}\n`.slice(-4096)
+      }
+    })
     child.stdout.on('data', (data: Buffer) => {
       stdout += data.toString()
       let newline: number
@@ -122,11 +145,9 @@ export class GfxCaptureBackend implements ScreenCaptureBackend {
           const time = Number(line.slice(12))
           if (Number.isFinite(time) && time > 0) {
             run.durationUs = time
-            // Each report arrives some encoder/pipe delay after its frames were captured, so every
-            // `now - out_time` is a late guess at the first frame; the earliest one is the closest.
-            const estimate = Math.max(0, this.deps.nowUs() - time)
-            if (!started) { started = true; clearTimeout(timeout); span.monoUs = estimate; readyResolve() }
-            else if (estimate < span.monoUs && !span.finalized) span.monoUs = estimate
+            // 编码进度也是一个（更晚的）估计：采集打点没出来时（例如外部替身）仍能定下起点。
+            estimate(time)
+            if (!started) { started = true; clearTimeout(timeout); span.monoUs = Math.round(firstFrameUs); readyResolve() }
           }
         }
       }
