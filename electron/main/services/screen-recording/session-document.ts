@@ -12,6 +12,7 @@ import { recordingDurationUs } from '../../../../src/core/screenRecording/range'
 import { alignRecordingPauses } from '../../../../src/core/screenRecording/combine'
 import type { DocumentMeta } from '../../../../src/core/documents/types'
 import { getDocumentService } from '../documents/runtime'
+import { DocumentNameConflictError } from '../documents/errors'
 import { createMainLogger } from '../logging'
 import { RecordingEventStore } from './event-store'
 import { recoverCapture } from './capture/storage'
@@ -48,8 +49,17 @@ export class RecordingSessionDocument {
     const content = createRecordingDocument()
     Object.assign(content, { sessionId: id, originUs, status: 'prepared', source: { name: sourceName, options: capture.options, cursorEmbedded: capture.cursorEmbedded, ...(cursor ? { cursor } : {}) }, devices: options.tracks })
     logger.info('创建录制会话', { event: 'recording.document.create.start', context: { sessionId: id } })
-    const read = await getDocumentService().createDocument({ id, kind: 'screen_recording', name: options.name, draft: false,
-      container: options.projectId ? { kind: 'project', projectId: options.projectId } : { kind: 'user' }, content })
+    const container = options.projectId ? { kind: 'project' as const, projectId: options.projectId } : { kind: 'user' as const }
+    // 会话名会重复（用户手填的名字、录制样子按段数起的“第 N 段”在删过段后再录）：重名时自动加序号，不能因此开不了录。
+    let read: Awaited<ReturnType<ReturnType<typeof getDocumentService>['createDocument']>> | undefined
+    for (let index = 1; !read; index += 1) {
+      const name = index === 1 ? options.name : `${options.name} (${index})`
+      try {
+        read = await getDocumentService().createDocument({ id, kind: 'screen_recording', name, draft: false, container, content })
+      } catch (error) {
+        if (!(error instanceof DocumentNameConflictError) || index >= 1000) throw error
+      }
+    }
     await getDocumentService().markDocumentOpened(id)
     logger.info('录制会话已创建', { event: 'recording.document.create.completed', context: { sessionId: id } })
     return new RecordingSessionDocument(content, read.meta, directory)

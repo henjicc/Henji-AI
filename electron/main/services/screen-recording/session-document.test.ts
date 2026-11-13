@@ -14,14 +14,16 @@ import { CaptureLogCollector } from '../../../../src/core/captureLog/collector'
 import { RecordingEventStore } from './event-store'
 import { wavHeader } from './wav-file'
 
-const state = vi.hoisted(() => ({ saved: undefined as { meta: DocumentMeta; content: RecordingDocument } | undefined, save: vi.fn(), recover: vi.fn() }))
+const state = vi.hoisted(() => ({ saved: undefined as { meta: DocumentMeta; content: RecordingDocument } | undefined, save: vi.fn(), recover: vi.fn(), takenNames: new Set<string>() }))
 vi.mock('../logging', () => ({ createMainLogger: () => ({ info: vi.fn(), error: vi.fn(), warn: vi.fn() }) }))
 vi.mock('./capture/storage', () => ({ recoverCapture: state.recover, probeMediaDurationUs: vi.fn() }))
 vi.mock('../documents/runtime', () => ({ getDocumentService: () => ({
   createDocument: async (input: { id: string; name: string; content: RecordingDocument }) => {
+    if (state.takenNames.has(input.name)) throw new DocumentNameConflictError(input.name)
     state.saved = { meta: { id: input.id, kind: 'screen_recording', revision: 0, name: input.name } as DocumentMeta, content: structuredClone(input.content) }; return structuredClone(state.saved)
   }, markDocumentOpened: async () => undefined, readDocument: async () => structuredClone(state.saved), saveDocument: state.save,
 }) }))
+import { DocumentNameConflictError } from '../documents/errors'
 import { RecordingSessionDocument, readRecordingEvents, recoverRecordingSession } from './session-document'
 let directory: string, id: string, manifest: CaptureManifest
 beforeEach(async () => {
@@ -44,6 +46,14 @@ async function writeWav(file: string, frames: number, finished = true): Promise<
   for (let i = 0; i < frames; i++) data.writeInt16LE(Math.round(Math.sin(i / 10) * 8000), i * 2)
   await writeFile(path.join(directory, file), Buffer.concat([finished ? header : Buffer.concat([header.subarray(0, 4), Buffer.alloc(4), header.subarray(8, 40), Buffer.alloc(4)]), data]))
 }
+
+it('会话名与已有文件重名时自动加序号，照常开录', async () => {
+  state.takenNames = new Set(['课程', '课程 (2)'])
+  try {
+    await setup()
+    expect(state.saved?.meta.name).toBe('课程 (3)')
+  } finally { state.takenNames = new Set() }
+})
 
 it('两小时的事件页与声音分段在录制中不重写整份文档；停止时一次写全，读回顺序与内容不变', async () => {
   const document = await setup()
