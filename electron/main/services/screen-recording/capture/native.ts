@@ -9,6 +9,8 @@ import { captureTimingFirstFrameUs, readCaptureTiming } from './native-timing'
 import { assertCaptureDiskSpace, probeMediaDurationUs, type CaptureStorage } from './storage'
 import { videoProxySize } from '../../../../../src/core/videoEdit/proxy'
 import { adoptRecordedVideoProxy } from '../../video/proxy-runtime'
+import type { SharedTextureApi } from '../../video-decoder/texture-bridge'
+import { CapturePreview, type CapturePreviewTarget } from './preview'
 
 const logger = createMainLogger('main.screen_recording.capture')
 /** 开始后等网格起点（第一帧到达）的上限；暂停、继续后等它们生效的上限（正常在三四帧内；来源丢着时原生不发这两个事件）。 */
@@ -43,6 +45,8 @@ interface NativeDependencies {
   restarted?(info: { restarts: number; reason: string }): void
   /** 续录重试之间的等待；测试里换掉。 */
   sleep?(ms: number): Promise<void>
+  /** 实时预览导入共享纹理用；不给就没有预览。 */
+  sharedTexture?: SharedTextureApi
 }
 
 /**
@@ -87,8 +91,21 @@ export class NativeCaptureBackend implements ScreenCaptureBackend {
   private readonly reopenTimes: number[] = []
   private restarts = 0
   private name = ''
-  constructor(private readonly options: ScreenCaptureOptions, private readonly point: readonly [number, number], private readonly storage: CaptureStorage, private readonly deps: NativeDependencies) {}
+  private readonly preview: CapturePreview | undefined
+  constructor(private readonly options: ScreenCaptureOptions, private readonly point: readonly [number, number], private readonly storage: CaptureStorage, private readonly deps: NativeDependencies) {
+    this.preview = deps.sharedTexture ? new CapturePreview({ request: (type, payload) => this.deps.client.request(type, payload), sharedTexture: deps.sharedTexture, sessionId: () => this.sessionId }) : undefined
+  }
   private get sessionId(): string { return this.storage.manifest.sessionId }
+  /**
+   * 录制页要实时画面：帧经 `route` 那条显卡帧通道送到 `target`；`route` 为 null 时关掉。
+   * 返回预览画面的尺寸；没有预览（没给共享纹理、录制已结束、正在续录）时为 null，续录好了会自动接上。
+   */
+  async setPreview(target: CapturePreviewTarget, route: string | null): Promise<{ width: number; height: number } | null> {
+    if (!this.preview) return null
+    if (route === null) { await this.preview.close(); return null }
+    if (this.state === 'ended' || this.state === 'idle') return null
+    return this.preview.open(target, route, this.state !== 'reopening' && !this.deferred)
+  }
   stats(): GfxCaptureStats {
     const sum = (key: keyof typeof this.health): number => this.carried[key] + this.health[key]
     return { restarts: this.restarts, droppedFrames: sum('droppedFrames') + sum('captureDropped'), duplicatedFrames: sum('repeatedFrames'), encoder: this.encoder }
@@ -204,6 +221,7 @@ export class NativeCaptureBackend implements ScreenCaptureBackend {
     // 新分片没能开始（开始被拒、迟迟没有第一帧）：让采集进程把它停掉收好，不留一个没人管的采集在录。
     try { await this.begin() } catch (error) { await this.deps.client.request('stop', { sessionId: this.sessionId }).catch(() => undefined); throw error }
     this.restarts++
+    this.preview?.resume()
     logger.info('原生画面采集已接着录', { event: 'recording.capture.native.reopen.completed', context: { restarts: this.restarts, span: this.spanIndex } })
     this.deps.restarted?.({ restarts: this.restarts, reason: reason.message })
   }
@@ -297,6 +315,8 @@ export class NativeCaptureBackend implements ScreenCaptureBackend {
     return this.finishing ??= (async () => {
       await this.reopening
       clearInterval(this.watchdog)
+      // 采集进程收尾时关掉预览的句柄：发停止之前就不再导入它们。
+      this.preview?.end()
       try {
         // 暂停期间中断过、还没开新分片：采集进程那边没有在录的东西，中断的那个分片已经收好。
         if (this.deferred) this.state = 'ended'
@@ -352,6 +372,7 @@ export class NativeCaptureBackend implements ScreenCaptureBackend {
   }
 
   private release(): void {
+    this.preview?.detach()
     clearInterval(this.watchdog)
     clearTimeout(this.lostTimer); this.lostTimer = undefined
     this.unsubscribe?.(); this.unsubscribe = undefined
@@ -368,6 +389,9 @@ export class NativeCaptureBackend implements ScreenCaptureBackend {
   }
 
   private receive(event: ScreenCaptureEvent): void {
+    if (event.event === 'preview') { this.preview?.frame(event); return }
+    // 采集进程结束这次录制时会关掉预览的句柄。
+    if (event.event === 'interrupted') this.preview?.detach()
     if (event.event === 'health') this.health = { droppedFrames: event.droppedFrames, repeatedFrames: event.repeatedFrames, captureDropped: event.captureDropped }
     // 采集短暂出错后重新接上、显示器闪断，原生都会发 sourceLost 并很快发 sourceRestored，同一文件续录
     // （那段空档记在画面条目的 gaps 里，不算暂停）。等一会儿还没回来，才按“来源没了”正常停止收尾。

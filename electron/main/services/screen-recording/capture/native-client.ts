@@ -10,9 +10,10 @@ const logger = createMainLogger('main.screen_recording.native_process')
 export class ScreenCaptureError extends NativeProcessError {}
 /**
  * 与 native/screen-capture 的协议号一致；不配套时握手就失败（原生回 PROTOCOL_MISMATCH），不在录制中途才出错。
- * 协议 2：显示器断开不再结束录制，改发 sourceLost / sourceRestored；另有 sourceChanged、代理与预览（这里没用到）。
+ * 协议 2：显示器断开不再结束录制，改发 sourceLost / sourceRestored；另有 sourceChanged、代理与预览。
+ * 协议 3：预览复制进主进程的句柄由主进程停止导入后用 closeClientHandles 要采集进程关，采集进程不再自己关。
  */
-export const SCREEN_CAPTURE_PROTOCOL = 2
+export const SCREEN_CAPTURE_PROTOCOL = 3
 
 const messageSchema = z.object({
   id: z.string().optional(), ok: z.boolean().optional(), result: z.unknown().optional(), error: nativeErrorSchema.optional(),
@@ -44,6 +45,7 @@ const eventSchema = z.discriminatedUnion('event', [
   z.object({ event: z.literal('sourceChanged'), ...sessionEvent, atUs: z.number(), width: count, height: count, frame: count }).passthrough(),
   z.object({ event: z.literal('proxyStopped'), ...sessionEvent, reason: z.string(), frame: count }).passthrough(),
   z.object({ event: z.literal('health'), ...sessionEvent, frames: count, droppedFrames: count, repeatedFrames: count, captureDropped: count }).passthrough(),
+  z.object({ event: z.literal('preview'), ...sessionEvent, slot: count, sequence: count, sourceUs: z.number() }).passthrough(),
 ])
 /** 采集进程的事件；时刻（`atUs`、`originUs`）仍是采集进程的时钟，用 `toMainUs` 换算。 */
 export type ScreenCaptureEvent = z.infer<typeof eventSchema>

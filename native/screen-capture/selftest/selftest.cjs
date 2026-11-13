@@ -38,7 +38,7 @@ const executable = path.join(crate, 'target', 'release', 'henji-screen-capture.e
 const ffprobe = path.join(ffmpegBinDir, 'ffprobe.exe')
 const ffplay = path.join(ffmpegBinDir, 'ffplay.exe')
 const ffmpeg = path.join(ffmpegBinDir, 'ffmpeg.exe')
-const PROTOCOL = 2
+const PROTOCOL = 3
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 

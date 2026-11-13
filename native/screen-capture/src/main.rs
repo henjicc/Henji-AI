@@ -40,11 +40,17 @@ fn command(request: &Value, session: &mut Option<Session>, events: &Events) -> R
         *session = Some(Session::prepare::<Native>(CaptureConfig::parse(request)?, events.clone())?);
         Ok(())
     };
-    if matches!(kind, "hello" | "clock" | "sources" | "prepare") || (kind == "start" && session.as_ref().is_none_or(Session::is_ended) && !request["source"].is_null()) {
+    if matches!(kind, "hello" | "clock" | "sources" | "closeClientHandles" | "prepare") || (kind == "start" && session.as_ref().is_none_or(Session::is_ended) && !request["source"].is_null()) {
         return match kind {
             "hello" => protocol::hello(request, Native::now_us(), Native::NAME).map(Reply::Now),
             "clock" => now(json!({"nativeMonoUs": Native::now_us()})),
             "sources" => Native::sources().map(Reply::Now),
+            // 不属于哪一次录制：录制结束、甚至上一个采集进程退出后，主进程还要关它手里的预览句柄。
+            "closeClientHandles" => {
+                let pid = request["clientPid"].as_u64().ok_or("INVALID_ARGUMENT|缺少 clientPid")? as u32;
+                let handles = request["handles"].as_array().ok_or("INVALID_ARGUMENT|缺少 handles")?.iter().map(|value| value.as_str().and_then(|text| text.parse::<u64>().ok()).ok_or("INVALID_ARGUMENT|句柄值不对")).collect::<Result<Vec<_>, _>>()?;
+                Native::close_client_handles(pid, &handles).map(Reply::Now)
+            }
             "prepare" => {
                 prepare(session)?;
                 now(session.as_ref().unwrap().info.clone())

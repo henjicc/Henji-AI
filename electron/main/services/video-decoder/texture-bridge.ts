@@ -44,7 +44,7 @@ export type {
 } from '../../../../src/platform/contracts/videoFrameTypes'
 
 /**
- * 显卡纹理零拷贝桥（主进程唯一的 `sharedTexture` 使用点）：
+ * 显卡纹理零拷贝桥（解码服务与网页来源的 `sharedTexture` 使用点；录制预览另在 screen-recording/capture/preview.ts）：
  *
  * 原生服务帧就绪（`frame` 事件，槽位 + 时间戳）→ 按槽位的 NT 句柄 `importSharedTexture` →
  * `sendSharedTexture` 到发起请求的窗口主 frame（preload 接收）→ 主进程立即释放自己的引用；

@@ -114,6 +114,10 @@ impl Platform for WindowsPlatform {
         Ok(json!({"displays": device::displays().iter().map(device::Display::describe).collect::<Vec<_>>()}))
     }
 
+    fn close_client_handles(client_pid: u32, handles: &[u64]) -> Result<Value, String> {
+        preview::close_client_handles(client_pid, handles)
+    }
+
     fn open(config: &CaptureConfig, video_path: &Path, proxy_path: &Path, inbox: Arc<Inbox<Arc<Self::Frame>>>, health: Arc<Health>) -> Result<Opened<Self>, String> {
         initialize();
         let SourceSpec::Display { id, point } = &config.source;

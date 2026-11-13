@@ -16,6 +16,7 @@ import { getActiveVideoEditSequence, setVideoEditLayout, setVideoEditView, video
 import { renameVideoEditRecordingBlock, setVideoEditRecordingBlockNote, videoEditRecordingTargetAt } from '../application/videoEditRecordingLane'
 import { RecordingPictureRows, RecordingSoundRows, RecordingSourcePicker, controlRecording, recordingStopOutcome, orderedScreens, recordingTimeLabel, recordingTracksFromSetup, recordingView, startRecording, subscribeRecording, useRecordingSetupState, type RecordingSetupState } from '@/features/screenRecording'
 import { ProjectRecordingLane, type ProjectRecordingTake } from './ProjectRecordingLane'
+import { RecordingLivePicture } from './RecordingLivePicture'
 import { RECORDING_SETTINGS_INLINE_MIN_WIDTH } from './projectRecordingGeometry'
 
 const logger = createLogger('features.videoEdit.recordLayout')
@@ -93,7 +94,7 @@ export function ProjectRecordingView({ instance, leading, layoutSwitch, onError 
   const name = sourceLabel(source, setup.sources, index => t('recording.screenNumber', { index }))
   const live = recordingHere || atEnd || !block
 
-  // 指针在结尾时显示将要录的来源：定时取一张新图（不另开采集流），录制中保持最后一张。
+  // 指针在结尾时显示将要录的来源：定时取一张新图（不另开采集流）；录制中换成采集进程给的实时画面，给不出时保持最后一张。
   const { refresh } = setup
   useEffect(() => {
     if (!live || recordingHere) return
@@ -146,6 +147,7 @@ export function ProjectRecordingView({ instance, leading, layoutSwitch, onError 
   const stageLabel = recordingHere ? <><span className="h-1.5 w-1.5 rounded-full bg-danger-solid" aria-hidden="true" />{name}<span className="text-on-media/70">录制中</span></>
     : live ? <><Monitor className="h-3 w-3" aria-hidden="true" />{name}<span className="text-on-media/70">实时画面</span></>
     : block ? <>{block.clip.name}<BlockTime instance={instance} start={block.clip.start} fps={sequence.fps} /></> : null
+  const thumbnail = source?.thumbnailUrl ? <img src={source.thumbnailUrl} alt="" className="max-h-full max-w-full object-contain" data-recording-live-preview /> : null
 
   return <div className="flex min-h-0 flex-1 flex-col" data-video-edit-layout="record">
     <UiToolbar variant="command" center={layoutSwitch} centerLayout="fit" trailing={trailing} barProps={{ 'data-recording-state': recordingHere ? snapshot?.phase : 'idle' }}>{leading}</UiToolbar>
@@ -155,7 +157,7 @@ export function ProjectRecordingView({ instance, leading, layoutSwitch, onError 
           {/* 节目画面一直挂着（不随指针来回重建渲染器）；指针在结尾或录制中时上面盖着将要录的来源 */}
           {preview}
           {live && <div className="absolute inset-0 flex items-center justify-center bg-media p-3">
-            {source?.thumbnailUrl && <img src={source.thumbnailUrl} alt="" className="max-h-full max-w-full object-contain" data-recording-live-preview />}
+            {recordingHere && snapshot ? <RecordingLivePicture sessionId={snapshot.sessionId} fallback={thumbnail} /> : thumbnail}
           </div>}
           {stageLabel && <span className="pointer-events-none absolute bottom-3 left-3 z-raised flex h-6 max-w-sm items-center gap-1.5 truncate rounded-control bg-media-scrim px-2 text-xs text-on-media">{stageLabel}</span>}
         </div>

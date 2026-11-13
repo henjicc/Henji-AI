@@ -1,5 +1,5 @@
 import { recordingEncoderChoices } from '../../video/hwaccel'
-import { BrowserWindow, screen, shell, type WebContents } from 'electron'
+import { BrowserWindow, screen, sharedTexture, shell, type WebContents } from 'electron'
 import { createHash, randomUUID } from 'node:crypto'
 import { release } from 'node:os'
 import path from 'node:path'
@@ -145,6 +145,8 @@ function ownerLost(session: Active): void {
     void fail(session, new Error('界面进程已退出，兼容录制无法继续；已录部分可以导入。')).catch(error => logger.error('界面退出后录制收尾失败', { event: 'recording.host.lost_cleanup.failed', error }))
     return
   }
+  // 页面里收预览的端口随页面没了；重新接上的页面自己再要。
+  if (session.backend instanceof NativeCaptureBackend) void session.backend.setPreview(session.owner, null)
   if (!session.tracksAttached) return
   session.tracksAttached = false
   for (const pending of session.rpc.values()) pending.resolve()
@@ -303,6 +305,7 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
         failed: error => { void fail(session, error).catch(failure => logger.error('录制失败清理未完成', { event: 'recording.capture.cleanup.failed', error: failure })) },
         sourceEnded: () => sourceEnded(session, endedSource),
         restarted: () => notifyRecordingProblem(session.owner, '画面采集中断过一次，已自动接着录。'),
+        sharedTexture,
       }) : backend === 'gfxcapture' ? gfxCapture() : {
         prepare: async () => undefined,
         start: () => remote(session, 'start'), pause: () => remote(session, 'pause'), resume: () => remote(session, 'resume'), stop: () => remote(session, 'stop'),
@@ -415,6 +418,8 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
       logger.info('界面已重新接上进行中的录制', { event: 'recording.host.attached', context: { sessionId: request.sessionId, phase: recordingControl.snapshot()?.phase } })
       return { prepared: session.prepared, session: session.session, ...(session.followUp ? { followUp: session.followUp } : {}) } satisfies CaptureAttachment
     }
+    // 录制页的实时画面：只有原生采集给得出（采集进程直接画进共享纹理）；其余录法返回 null，界面照旧用来源缩略图。
+    case 'preview': return session.backend instanceof NativeCaptureBackend ? session.backend.setPreview(owner, request.route) : null
     case 'encoding': storage.manifest.encoding = request.encoding; await storage.save(); return
     case 'read': return structuredClone(storage.manifest)
     case 'clock': return now() - session.originUs

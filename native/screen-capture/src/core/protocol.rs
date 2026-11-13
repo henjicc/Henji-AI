@@ -17,10 +17,11 @@ use std::{
     time::Duration,
 };
 
+/// 协议 3：预览复制给对方的句柄改由对方停止导入后用 closeClientHandles 要我们关，停预览与录制结束不再替它关。
 /// 协议 2：显示器断开不再结束录制（sourceLost / sourceRestored 事件，同一文件续录）；新增代理、预览、
 /// sourceChanged 事件与编码队列的健康字段。协议 1 是最初的 prepare / start / pause / resume / stop / cancel。
 /// 指令、事件或落盘格式的含义有变就加一；主进程在握手时带上自己的协议号，不相等直接报错。
-pub const PROTOCOL: u32 = 2;
+pub const PROTOCOL: u32 = 3;
 
 static OUTPUT: Mutex<()> = Mutex::new(());
 /// 主进程读端已关闭：之后的输出全部丢弃，由主循环把文件收尾后退出。

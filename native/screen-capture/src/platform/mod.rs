@@ -85,6 +85,8 @@ pub trait Platform: Sized + 'static {
     /// 单调时钟，微秒；必须与来源帧的系统时刻、主进程校准用的 `nativeMonoUs` 是同一个时钟。
     fn now_us() -> i64;
     fn sources() -> Result<Value, String>;
+    /// 关掉预览复制到 `client_pid` 那个进程里的句柄（对方停止导入后才要我们关）。返回 `{closed, failed}`。
+    fn close_client_handles(client_pid: u32, handles: &[u64]) -> Result<Value, String>;
     /// 建好采集与编码并开始采集（帧进收件箱）。`proxy_path` 是代理文件的位置，配置里没开代理时不用。
     /// 本机不支持时返回 `ENCODER_UNSUPPORTED|...` 或 `CAPTURE_UNSUPPORTED|...`，主进程据此改用后备录法。
     fn open(config: &CaptureConfig, video_path: &Path, proxy_path: &Path, inbox: Arc<Inbox<Arc<Self::Frame>>>, health: Arc<Health>) -> Result<Opened<Self>, String>;

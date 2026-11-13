@@ -81,6 +81,10 @@ impl Platform for MacosPlatform {
         Ok(json!({"displays": []}))
     }
 
+    fn close_client_handles(_: u32, _: &[u64]) -> Result<Value, String> {
+        Err(UNSUPPORTED.into())
+    }
+
     fn open(_: &CaptureConfig, _: &Path, _: &Path, _: Arc<Inbox<Arc<()>>>, _: Arc<Health>) -> Result<Opened<Self>, String> {
         Err(UNSUPPORTED.into())
     }

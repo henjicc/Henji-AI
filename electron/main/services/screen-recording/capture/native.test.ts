@@ -327,3 +327,33 @@ it('录制中显示器断开按来源结束收尾；采集进程退出时原分�
   expect(requestTypes()).toEqual(['prepare', 'start', 'stop'])
   expect(storage.manifest.spans.map(span => [span.file, span.finalized])).toEqual([['screen-000000.mp4', false], ['screen-000001.mp4', true]])
 })
+
+it('实时预览：画好的一张送到页面的通道；采集中断时不再导入旧句柄，续录开好后自动重新开；停止前先停导入', async () => {
+  const imports: string[] = []
+  const sharedTexture = {
+    importSharedTexture: (input: { textureInfo: { handle?: { ntHandle?: Buffer } } }) => { imports.push(String(input.textureInfo.handle?.ntHandle?.readBigUInt64LE())); return { release: vi.fn() } },
+    sendSharedTexture: vi.fn(async () => undefined),
+  }
+  let slots = ['11', '12', '13']
+  const request = client.request.bind(client)
+  client.request = async (type, payload) => type === 'startPreview' ? (client.requests.push({ type, payload: payload ?? {} }), { format: 'bgra', codedSize: { width: 960, height: 540 }, slots }) : request(type, payload)
+  const capture = new NativeCaptureBackend(options, [960, 540], storage, { client, originUs: 1_000_000, nowUs: () => now, ...deps, sharedTexture: sharedTexture as never })
+  await capture.prepare(); await capture.start(signal)
+  const target = { isDestroyed: () => false, mainFrame: {} as never }
+  await expect(capture.setPreview(target, 'vf-route-1')).resolves.toEqual({ width: 960, height: 540 })
+  client.emit({ event: 'preview', slot: 1, sequence: 1, sourceUs: 1 })
+  expect(imports).toEqual(['12'])
+  expect(sharedTexture.sendSharedTexture).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ route: 'vf-route-1' }))
+
+  client.onRequest = type => { if (type === 'start') client.emit({ event: 'started', originUs: 20_000_000, firstSourceUs: 20_000_000 }) }
+  slots = ['21', '22', '23']
+  client.emit(interruptedEvent('DEVICE_REMOVED', 60))
+  client.emit({ event: 'preview', slot: 0, sequence: 2, sourceUs: 2 })
+  expect(imports).toEqual(['12'])
+  await vi.waitFor(() => expect(requestTypes().filter(type => type === 'startPreview')).toHaveLength(2))
+  await vi.waitFor(() => { client.emit({ event: 'preview', slot: 0, sequence: 1, sourceUs: 3 }); expect(imports).toEqual(['12', '21']) })
+
+  await capture.stop(signal)
+  client.emit({ event: 'preview', slot: 2, sequence: 2, sourceUs: 4 })
+  expect(imports).toEqual(['12', '21'])
+})

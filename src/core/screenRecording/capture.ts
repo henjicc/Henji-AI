@@ -104,6 +104,11 @@ export const captureRequestSchema = z.discriminatedUnion('operation', [
   z.object({ operation: z.literal('combine'), sessionId }).strict(),
   z.object({ operation: z.literal('events'), sessionId, offset: z.number().int().nonnegative(), limit: z.number().int().min(1).max(256), markersOnly: z.boolean().default(false) }).strict(),
   z.object({ operation: z.literal('read'), sessionId }).strict(),
+  /**
+   * 录制中的实时画面：帧经这个窗口 `route` 那条显卡帧通道送来；`route` 为 null 关掉。
+   * 返回画面尺寸，这次录法给不出实时画面时返回 null。
+   */
+  z.object({ operation: z.literal('preview'), sessionId, route: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).nullable() }).strict(),
   z.object({ operation: z.literal('clock'), sessionId }).strict(),
   z.object({ operation: z.literal('anchor'), sessionId, index: z.number().int().nonnegative(), monoUs: z.number().int().nonnegative() }).strict(),
   z.object({ operation: z.literal('close'), sessionId }).strict(),

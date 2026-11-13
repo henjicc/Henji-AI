@@ -1,8 +1,10 @@
 //! 预览：把缩小的画面画进几张带共享句柄的纹理，句柄复制到界面所在的进程，对方直接在显卡里用，不经编码也不经管道搬像素。
 //!
 //! 做法与视频解码服务给界面送帧相同（`native/video-decoder` 的共享纹理池）：每张纹理建一个 NT 句柄，
-//! `DuplicateHandle` 到对方进程后关掉本地的；对方进程里的句柄由我们在停预览时远程关闭
-//! （Electron 的 `importSharedTexture` 每次导入会自己再复制一份，不接管我们复制过去的）。
+//! `DuplicateHandle` 到对方进程后关掉本地的。复制过去的句柄归对方：停预览、录制结束都不替它关，
+//! 由对方停止导入之后用 `closeClientHandles` 要我们关（对方进程不能自己关）。我们自己关的话，
+//! 对方手里还排着的预览事件会拿一个已经关掉、甚至被别的对象重用的句柄值去导入。
+//! Electron 的 `importSharedTexture` 每次导入会自己再复制一份，不接管我们复制过去的。
 //! 不用键控互斥体：几张纹理轮着写，写完才通知；一张纹理要隔两次才会再被写，对方有足够时间读完。
 //!
 //! 预览在采集回调里顺带画（一次缩小的拷贝，远小于主画面的转换），按预览帧率抽帧；它出任何错只停预览。
@@ -67,17 +69,29 @@ impl Preview {
                 MiscFlags: (D3D11_RESOURCE_MISC_SHARED_NTHANDLE.0 | D3D11_RESOURCE_MISC_SHARED.0) as u32,
             };
             for _ in 0..SLOTS {
-                let mut texture = None;
-                gpu.device.CreateTexture2D(&description, None, Some(&mut texture)).map_err(failed)?;
-                let texture = texture.unwrap();
-                let mut view = None;
-                gpu.device.CreateRenderTargetView(&texture, None, Some(&mut view)).map_err(failed)?;
-                let local = texture.cast::<IDXGIResource1>().and_then(|resource| resource.CreateSharedHandle(None, DXGI_SHARED_RESOURCE_READ.0, PCWSTR::null())).map_err(failed)?;
-                let mut remote = HANDLE::default();
-                let duplicated = DuplicateHandle(GetCurrentProcess(), local, client, &mut remote, 0, false, DUPLICATE_SAME_ACCESS);
-                let _ = CloseHandle(local);
-                duplicated.map_err(failed)?;
-                preview.slots.push(Slot { _texture: texture, view: view.unwrap(), remote: remote.0 as usize as u64 });
+                let created = (|| -> Result<Slot, String> {
+                    let mut texture = None;
+                    gpu.device.CreateTexture2D(&description, None, Some(&mut texture)).map_err(failed)?;
+                    let texture = texture.unwrap();
+                    let mut view = None;
+                    gpu.device.CreateRenderTargetView(&texture, None, Some(&mut view)).map_err(failed)?;
+                    let local = texture.cast::<IDXGIResource1>().and_then(|resource| resource.CreateSharedHandle(None, DXGI_SHARED_RESOURCE_READ.0, PCWSTR::null())).map_err(failed)?;
+                    let mut remote = HANDLE::default();
+                    let duplicated = DuplicateHandle(GetCurrentProcess(), local, client, &mut remote, 0, false, DUPLICATE_SAME_ACCESS);
+                    let _ = CloseHandle(local);
+                    duplicated.map_err(failed)?;
+                    Ok(Slot { _texture: texture, view: view.unwrap(), remote: remote.0 as usize as u64 })
+                })();
+                match created {
+                    Ok(slot) => preview.slots.push(slot),
+                    Err(error) => {
+                        // 建到一半失败：对方还没拿到这些句柄值，不会在导入，这里当场关掉，否则就没人关了。
+                        for slot in &preview.slots {
+                            let _ = DuplicateHandle(client, HANDLE(slot.remote as usize as *mut c_void), HANDLE::default(), ptr::null_mut(), 0, false, DUPLICATE_CLOSE_SOURCE);
+                        }
+                        return Err(error);
+                    }
+                }
             }
             let reply = json!({
                 "format": "bgra", "codedSize": {"width": width, "height": height}, "keyedMutex": false,
@@ -107,13 +121,25 @@ impl Preview {
 
 impl Drop for Preview {
     fn drop(&mut self) {
+        // 复制到对方进程里的句柄不在这里关，见文件头。
         unsafe {
-            for slot in &self.slots {
-                // 关掉复制到对方进程里的句柄（对方若已退出，这一步失败无妨）。
-                let _ = DuplicateHandle(self.client, HANDLE(slot.remote as usize as *mut c_void), HANDLE::default(), ptr::null_mut(), 0, false, DUPLICATE_CLOSE_SOURCE);
-            }
             let _ = CloseHandle(self.client);
         }
+    }
+}
+
+/// 关掉之前复制到 `pid` 那个进程里的句柄（`closeClientHandles`）。返回 `{closed, failed}`，failed 是没能关的句柄值。
+pub fn close_client_handles(pid: u32, handles: &[u64]) -> Result<Value, String> {
+    unsafe {
+        let client = OpenProcess(PROCESS_DUP_HANDLE, false, pid).map_err(|error| format!("INVALID_ARGUMENT|打不开进程 {pid}：{error}"))?;
+        let mut failed = Vec::new();
+        for handle in handles {
+            if DuplicateHandle(client, HANDLE(*handle as usize as *mut c_void), HANDLE::default(), ptr::null_mut(), 0, false, DUPLICATE_CLOSE_SOURCE).is_err() {
+                failed.push(handle.to_string());
+            }
+        }
+        let _ = CloseHandle(client);
+        Ok(json!({"closed": handles.len() - failed.len(), "failed": failed}))
     }
 }
 

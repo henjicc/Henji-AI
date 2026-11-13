@@ -88,6 +88,7 @@ selftest/selftest.cjs  真实录制自测，也是主进程用法的可运行示
 | `status` | `sessionId` | 最近一次健康汇报的内容加 `state`（`prepared` / `recording` / `paused` / `stopping` / `ended`） |
 | `startPreview` | `sessionId`，`clientPid`，`maxWidth`（默认 1280），`fps`（默认 15） | 见“预览” |
 | `stopPreview` | `sessionId` | `{}` |
+| `closeClientHandles` | `clientPid`，`handles`（句柄值，十进制字符串） | `{closed, failed}`：关掉之前复制到 `clientPid` 进程里的预览句柄。不属于哪次录制，录制结束后、换了一个采集进程后也能调 |
 | `inject` | `sessionId`，`kind`，`ms` / `code` / `count` | 自测用的故障注入：只有进程的环境变量 `HENJI_SCREEN_CAPTURE_INJECT=1` 时才接受，否则一律回 `INVALID_ARGUMENT`。`frameFailures`（接下来 `count` 张来源帧当作取帧失败）、`encodeStall`（编码线程停 `ms` 毫秒一次）、`encodeDelay`（每帧多等 `ms` 毫秒，0 取消）、`sessionStall`（会话线程停 `ms` 毫秒，模拟休眠或进程被挂起）、`sourceLost`（模拟显示器断开）、`resize`（把帧池换成一半大小，下一张来源帧走显示器换分辨率时的那条路）、`captureFailure`（采集报 `code` 错误） |
 
 `prepare` 的参数：
@@ -225,7 +226,8 @@ Windows 上来源帧的系统时刻取自 `Direct3D11CaptureFrame.SystemRelative
 - 准备好之后（还没 `start`）就可以开预览，用来在录制面板里显示实时画面；录制中、暂停中都照常出。
 - 尺寸按来源比例缩到不超过 `maxWidth`；帧率是上限，画面不变时不出。
 - 预览在采集回调里顺带画，实测每帧多花不到 0.3 毫秒；它出任何错只停预览，不影响录制。
-- `stopPreview`、录制结束或进程退出时，采集进程会把复制到对方进程里的句柄关掉。对方进程先退出也没关系。
+- 复制到对方进程里的句柄归对方：`stopPreview`、再次 `startPreview`（换下旧的一批）、录制结束都**不**替它关。对方先停止导入，再用 `closeClientHandles` 要采集进程关（对方进程自己关不了）。这样对方手里还排着的 `preview` 事件不会拿一个已经关掉、被别的对象重用的句柄值去导入。采集进程异常退出时这些句柄还在对方进程里，交给下一个采集进程关。
+- 预览自己出错（画不进纹理）时只停止往里画，不通知；对方看到的画面停在最后一张。
 - 可运行的例子：`selftest.cjs preview`（另一个进程按句柄打开纹理并读回）。
 
 ### 活动时间线 `screen.activity.jsonl`
