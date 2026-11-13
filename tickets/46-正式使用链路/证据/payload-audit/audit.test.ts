@@ -15,10 +15,13 @@ import { APPLICATION_CAPABILITY_IDS, type LocalTool } from '@/core/application-c
 import { buildExternalCapabilityInventory } from '@/features/application-control/externalCapabilityInventory'
 import { applicationReflectionHandlers } from '@/features/application-control/capabilities/applicationReflectionAdapter'
 import { getApplicationReflectionRegistry } from '@/features/application-control/capabilities/applicationControlRegistry'
-import { getGenerationModelSchema, prepareGenerationTask, searchGenerationModelCatalog } from '@/features/generation/application/generationPreparationService'
+import { getGenerationModelSchema, prepareGenerationTask, publicGenerationPreparation, searchGenerationModelCatalog } from '@/features/generation/application/generationPreparationService'
 import { MEMORY_RULES } from '@/core/assistant/memoryEntries'
 import { PROJECT_PROGRESS_RULES } from '@/core/documents/projectProgress'
-import { buildApplicationContract, buildApplicationToolCatalog } from 'D:/VibeCode/Henji-AI/electron/main/services/application-runtime/toolCatalog'
+import { APPLICATION_TOOL_CONVENTIONS, buildApplicationContract, buildApplicationToolCatalog } from 'D:/VibeCode/Henji-AI/electron/main/services/application-runtime/toolCatalog'
+import { PiToolDisclosure } from 'D:/VibeCode/Henji-AI/electron/main/services/embedded-agent/toolDisclosure'
+import { contextReader } from 'D:/VibeCode/Henji-AI/electron/main/services/embedded-agent/contextReader'
+import { SessionManager, type AgentSession, type ToolDefinition } from '@earendil-works/pi-coding-agent'
 import { projectApplicationToolResult, RESULT_DETAIL_FIELDS } from 'D:/VibeCode/Henji-AI/electron/main/services/application-runtime/resultProjection'
 import { scanAssistantSkills } from 'D:/VibeCode/Henji-AI/electron/main/services/assistant/skills/registry'
 import { AGENT_SKILL_NAMES } from 'D:/VibeCode/Henji-AI/electron/main/services/assistant/skills/agentSkills'
@@ -50,7 +53,7 @@ it('payload audit', async () => {
       mcpListText: j(tool),
       inputSchemaText: j(tool.inputSchema),
       outputSchemaText: tool.outputSchema ? j(tool.outputSchema) : '',
-      detailFieldsText: ['includeRevisions', 'includeEvidence', 'includeDetails'].every(k => k in props) ? detailFieldsJson : '',
+      detailFieldsText: Object.keys(RESULT_DETAIL_FIELDS).every(k => k in props) ? detailFieldsJson : '',
       schemaKeyText: '$schema' in tool.inputSchema ? j({ $schema: (tool.inputSchema as Record<string, unknown>).$schema }) : '',
       envelopeText: 'operationId' in props ? j({ operationId: props.operationId, baselineIds: props.baselineIds }) : '',
       defsText: (tool.inputSchema as Record<string, unknown>).$defs ? j((tool.inputSchema as Record<string, unknown>).$defs) : '',
@@ -71,6 +74,23 @@ it('payload audit', async () => {
   for (const d of domains) piSets[`domain:${d}`] = embedded.tools.filter(t => domainOf(t.name) === d || (domainProfiles[d]?.tools ?? []).includes(t.name)).map(t => t.name)
   for (const [k, v] of Object.entries(taskProfiles)) piSets[`task:${k}`] = v.tools
   const piSurfaceGuidance = Object.fromEntries(surfaces.map(s => [s, surfaceProfile(s).guidance]))
+  // 真实 Pi 首轮：经 PiToolDisclosure 本身（含 load_application_tools 及其说明与 read_assistant_context）。
+  const piTools: ToolDefinition[] = embedded.tools.map(tool => ({ name: tool.name, label: tool.name, description: tool.description ?? tool.name,
+    parameters: tool.inputSchema as ToolDefinition['parameters'], execute: async () => ({ content: [], details: undefined }) }))
+  let active: string[] = []
+  const fakeSession = { getActiveToolNames: () => active, setActiveToolsByName: (names: string[]) => { active = names }, messages: [] } as unknown as AgentSession
+  const auditManager = SessionManager.inMemory()
+  const disclosure = new PiToolDisclosure([...piTools, contextReader(auditManager, 16000)], auditManager, () => fakeSession, 125000)
+  const piRealSets: Record<string, string> = {}
+  for (const s of surfaces) {
+    disclosure.prepareContext(JSON.stringify({ surface: { id: s } }))
+    piRealSets[`pi:${s}`] = j(disclosure.tools.filter(tool => active.includes(tool.name)).map(tool => ({ name: tool.name, description: tool.description, parameters: tool.parameters })))
+  }
+  const loaderTool = disclosure.tools.find(tool => tool.name === 'load_application_tools')!
+  const directoryText = await (async () => {
+    const result = await loaderTool.execute('audit', { domains: ['video_edit'] } as never, undefined as never, undefined as never, undefined as never)
+    return (result.content[0] as { text: string }).text
+  })()
 
   // ---------- 2. 契约 ----------
   const inventory = buildExternalCapabilityInventory()
@@ -153,20 +173,21 @@ it('payload audit', async () => {
   for (const id of ['fal-ai-kling-4.0', 'fal-ai-gpt-image-2.6', 'ppio-minimax-speech']) {
     try {
       const m = registry.getModel(id)!
-      prepared[id] = j({ ok: true, data: { preparation: prepareGenerationTask({ modelId: id, mediaType: m.meta.type as never, prompt, options: {} } as never) } })
+      // 与 prepare_generation_task 处理器同一份公开整形（不含宿主补的 providerConfigured/canSubmit/message）
+      prepared[id] = j({ ok: true, data: { preparation: publicGenerationPreparation(prepareGenerationTask({ modelId: id, mediaType: m.meta.type as never, prompt, options: {} } as never)) } })
     } catch (e) { prepared[id] = `error ${String(e)}` }
   }
 
   // ---------- 5. 系统提示词与技能 ----------
   const serviceSource = readFileSync(path.join(ROOT, 'electron/main/services/embedded-agent/service.ts'), 'utf8')
-  const systemTemplate = serviceSource.match(/const SYSTEM_INSTRUCTIONS = `([\s\S]*?)`\n/)![1]
-  const system = systemTemplate.replace('${MEMORY_RULES}', MEMORY_RULES).replace('${PROJECT_PROGRESS_RULES}', PROJECT_PROGRESS_RULES)
+  const systemTemplate = serviceSource.match(/const SYSTEM_INSTRUCTIONS = `([\s\S]*?)`\r?\n/)![1].replaceAll('\r\n', '\n')
+  const system = systemTemplate.replace('${MEMORY_RULES}', MEMORY_RULES).replace('${PROJECT_PROGRESS_RULES}', PROJECT_PROGRESS_RULES).replace('${APPLICATION_TOOL_CONVENTIONS}', APPLICATION_TOOL_CONVENTIONS)
   const skillsIndexText = '\n可用技能 skills_index（只列元数据）：\n' + JSON.stringify(skills)
   const skillFiles: Array<{ path: string; chars: number; text: string }> = []
   const walk = (dir: string) => { for (const f of readdirSync(dir)) { const p = path.join(dir, f); if (statSync(p).isDirectory()) walk(p); else if (p.endsWith('.md')) { const text = readFileSync(p, 'utf8'); skillFiles.push({ path: path.relative(ROOT, p).replaceAll('\\', '/'), chars: text.length, text }) } } }
   walk(path.join(ROOT, 'resources/assistant-skills'))
 
-  const payload = { generatedAt: new Date().toISOString(), tools, piSets, piSurfaceGuidance, contract, describe, entitySamples, perEntity, propertyStats, models, schemas, prepared,
+  const payload = { generatedAt: new Date().toISOString(), tools, piSets, piRealSets, directoryText, piSurfaceGuidance, contract, describe, entitySamples, perEntity, propertyStats, models, schemas, prepared,
     system, memoryRules: MEMORY_RULES, progressRules: PROJECT_PROGRESS_RULES, skillsIndexText, skillFiles,
     estimator: { sample: estimateContextTokens('测试 test') } }
   writeFileSync(path.join(OUT, 'payloads.json'), JSON.stringify(payload), 'utf8')

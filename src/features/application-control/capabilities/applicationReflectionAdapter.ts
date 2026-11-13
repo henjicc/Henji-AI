@@ -302,6 +302,17 @@ function describedEntity(entity: Record<string, unknown>): Record<string, unknow
   }
 }
 
+/**
+ * 说明只是“领域名 + 标题 + 。”时不给：注册时为每条属性自动补的这类说明占了近四成，与 title 重复，模型从中得不到新信息。
+ */
+function informativeDescription(property: Record<string, unknown>): string | undefined {
+  const description = typeof property.description === 'string' ? property.description : undefined
+  const title = typeof property.title === 'string' ? property.title : ''
+  if (!description || !title) return description
+  const body = description.replace(/[。.]$/, '')
+  return body.endsWith(title) && body.length - title.length <= 10 ? undefined : description
+}
+
 function describedProperty(property: Record<string, unknown>, _context?: CapabilityExecutionContext): Record<string, unknown> {
   const permissions = property.requiredPermissions as { write?: string[] } | undefined
   const writable = (permissions?.write?.length ?? 0) > 0
@@ -315,11 +326,12 @@ function describedProperty(property: Record<string, unknown>, _context?: Capabil
     id: property.id,
     entityType: property.entityType,
     title: property.title,
-    description: property.description,
+    ...(informativeDescription(property) ? { description: informativeDescription(property) } : {}),
     // 取值类型与范围是模型填参数的唯一依据。
     value: property.value,
     ...(property.valueComparison ? { valueComparison: property.valueComparison } : {}),
     ...(property.requiresReadBaseline ? { requiresReadBaseline: true } : {}),
+    ...(property.omitFromDefaultRead ? { omitFromDefaultRead: true } : {}),
     ...(property.nullable === true ? { nullable: true } : {}),
     ...(property.defaultValue !== undefined ? { defaultValue: property.defaultValue } : {}),
     // 模型只需要知道属性是否具备正式写入实现。
@@ -381,17 +393,31 @@ export const applicationReflectionHandlers = {
     const offset = Number(input.cursor ?? 0)
     if (!Number.isSafeInteger(offset)) throw new Error('INVALID_INPUT:cursor 必须是有效分页位置。')
     const limit = input.limit ?? 40
+    // 完整值 schema 只给点名的属性：不点名时整类实体的 schema 全部展开，剪辑片段一类就有三十多万 token，单条结果超过半个窗口，这次调用等于白做。
+    const fullProperties = input.detail === 'full' && Boolean(input.propertyIds?.length)
+    const singleEntityType = entities.length === 1
+    const seenSchemas = new Map<string, string>()
     const properties = description.properties.slice(offset, offset + limit).map(property => {
       const full = describedProperty(property as unknown as Record<string, unknown>, context)
       const schema = property.value.kind === 'json' ? registry.resolveSchema(property.value.schemaRef, accessContext) : undefined
-      if (input.detail === 'full') return { ...full, ...(schema ? { valueSchema: schema } : {}) }
-      return { id: property.id, entityType: property.entityType, title: property.title, writable: full.writable,
+      if (fullProperties) {
+        if (!schema) return full
+        // 同一次返回里结构相同的值 schema 只展开一次（例如十几条关键帧属性共用一份），其余指向第一次出现的属性。
+        const key = JSON.stringify(schema)
+        const first = seenSchemas.get(key)
+        if (first) return { ...full, valueSchemaSameAs: first }
+        seenSchemas.set(key, property.id)
+        return { ...full, valueSchema: schema }
+      }
+      return { id: property.id, ...(singleEntityType ? {} : { entityType: property.entityType }), title: property.title, writable: full.writable,
         valueShape: schema ? describeJsonValueShape(schema) : property.value.kind,
         ...(property.requiresReadBaseline ? { requiresReadBaseline: true } : {}),
-        ...((input.entityType || input.entityTypes.length || input.propertyIds?.length) && property.description ? { description: property.description } : {}),
+        ...(property.omitFromDefaultRead ? { omitFromDefaultRead: true } : {}),
+        ...((input.entityType || input.entityTypes.length || input.propertyIds?.length) && informativeDescription(property as unknown as Record<string, unknown>) ? { description: property.description } : {}),
         ...(property.nullable ? { nullable: true } : {}) }
     })
     return {
+      ...(input.detail === 'full' && !fullProperties ? { hint: 'detail="full" 只展开 propertyIds 点名的属性；这次没有点名，返回的是紧凑目录。从这里挑出要写的属性，再带 propertyIds 查询完整值 schema、范围和说明。' } : {}),
       entities: entities.map(entity => {
         if (input.detail === 'full') return describedEntity(entity)
         const collection = entity.collectionWrite as { creatable: boolean; removable: boolean } | undefined

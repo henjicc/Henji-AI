@@ -1,0 +1,223 @@
+== 1. 工具定义 ==
+                                                              chars    o200k      est
+全部工具 Pi 形态 name+description+parameters（260 个）                529667   179412   344098
+全部工具 MCP tools/list 形态（含 outputSchema/annotations/title）    1480274   445045   919828
+  其中 description 合计                                           52227    31396    42666
+  其中 inputSchema 合计                                          460006   144764   292126
+  其中 outputSchema 合计（MCP 才有）                                 920026   257377   559020
+  includeRevisions/Evidence/Details 三字段（每个工具都带）               41340    10660    25480
+  "$schema" 键                                                 14848     4608     8448
+  operationId+baselineIds 信封（写工具）                             52900    23218    41146
+  $defs（zod reused:ref 抽出的定义）                                173343    55499   108834
+  带 detail 三字段的工具数 260；写工具数 197
+  ref 对象带 label/revision 的出现次数：0；9007199254740991 出现 251 次
+
+前 25 名（Pi 形态）：
+tool                                          domain             chars   o200k   desc  schema
+export_video_edit                             video_edit         12897    4542    410    4121
+render_web_app_replay                         screen_recording   11447    4335    652    3670
+apply_video_edit_template                     video_edit         12778    3962    135    3814
+create_image_edit_preview                     image_edit         10505    3353     37    3304
+interpret_image_edit_intent                   image_edit         10424    3026     52    2960
+interpret_video_edit_intent                   video_edit         10424    3026     52    2960
+generate_video_edit_in_place                  video_edit          7753    2831    258    2560
+query_video_edit_review                       video_edit          6846    2803    427    2364
+prepare_video_edit_in_place_generation        video_edit          7032    2505     53    2438
+generate_camera_stage_set                     camera_stage        6422    2496    204    2280
+organize_video_edit_intent                    video_edit          7943    2366    120    2232
+observe_video_edit_frame                      video_edit          6716    2107    458    1636
+compose_camera_stage_shot                     camera_stage        5274    2080    173    1894
+block_camera_stage_character                  camera_stage        5711    2075    147    1916
+generate_video_edit_subtitles                 video_edit          4658    1739    518    1208
+place_video_edit_creative_result              video_edit          5537    1683    242    1427
+cover_camera_stage_scene                      camera_stage        4412    1680    165    1503
+organize_assistant_memory                     memory              4764    1663    579    1071
+ramp_video_edit_clip_speed                    video_edit          4219    1604    254    1336
+paint_image_edit_target                       image_edit          4592    1484    260    1212
+auto_reframe_video_edit                       video_edit          4216    1443    318    1112
+place_video_edit_sound_effects                video_edit          4303    1441    170    1257
+remix_video_edit_music                        video_edit          3727    1397    397     987
+generate_video_edit_screen_attention          video_edit          3685    1231    269     949
+query_video_edit_content                      video_edit          3635    1228    429     787
+
+按领域合计（Pi 形态）：
+  video_edit              90 个    85935 tok
+  screen_recording        28 个    19943 tok
+  image_edit              23 个    17771 tok
+  camera_stage            20 个    17335 tok
+  audio_edit              20 个    10363 tok
+  canvas                  21 个     7115 tok
+  generation              11 个     4448 tok
+  documents               11 个     3763 tok
+  application              7 个     2759 tok
+  memory                   2 个     1933 tok
+  assets                   8 个     1787 tok
+  None                     5 个     1476 tok
+  sound_library            2 个     1353 tok
+  navigation               4 个     1208 tok
+  models                   2 个     1114 tok
+  toolbox                  3 个      457 tok
+  local_models             1 个      371 tok
+  settings                 2 个      281 tok
+
+Pi 工具集（首轮界面 / 按领域加载 / 按任务加载）：
+  initial:workspace.generation           6 个     3307 tok     13484 bytes
+  initial:workspace.canvas               6 个     2457 tok     10067 bytes
+  initial:workspace.video_edit          20 个    15058 tok     57831 bytes
+  initial:tool.audio_edit                5 个     2308 tok      9425 bytes
+  initial:tool.image_edit                5 个     2308 tok      9425 bytes
+  initial:tool.camera_stage              6 个     2702 tok     10945 bytes
+  initial:tool.screen_recording          8 个     3940 tok     15594 bytes
+  initial:settings.general               6 个     2442 tok     10012 bytes
+  initial:workspace.unknown              5 个     2308 tok      9425 bytes
+  domain:canvas                         21 个     7115 tok     29301 bytes
+  domain:sound_library                   2 个     1353 tok      5181 bytes
+  domain:video_edit                     90 个    85935 tok    321788 bytes
+  domain:image_edit                     23 个    17771 tok     67809 bytes
+  domain:camera_stage                   21 个    17876 tok     66151 bytes
+  domain:audio_edit                     20 个    10363 tok     40920 bytes
+  domain:generation                     11 个     4448 tok     18390 bytes
+  domain:local_models                    1 个      371 tok      1574 bytes
+  domain:screen_recording               28 个    19943 tok     72818 bytes
+  domain:application                     6 个     2540 tok     10501 bytes
+  domain:navigation                      4 个     1208 tok      5357 bytes
+  domain:documents                      11 个     3763 tok     15395 bytes
+  domain:settings                        2 个      281 tok      1191 bytes
+  domain:assets                          8 个     1787 tok      7457 bytes
+  domain:models                          2 个     1114 tok      4556 bytes
+  domain:toolbox                         3 个      457 tok      1962 bytes
+  domain:memory                          2 个     1933 tok      7508 bytes
+  task:canvas_generation                13 个     5702 tok     23254 bytes
+  task:generation                        8 个     4101 tok     16737 bytes
+  task:canvas_nodes                      8 个     2644 tok     10635 bytes
+
+重复短语（出现在 >=5 个工具说明中的 12 字以上片段，抽样）：
+   12× screen_recording
+   10× _application_ent
+   10× query_video_edit
+   10×  describe_applic
+    9× o_edit.document.
+    9×  screen_recordin
+    9×  query_video_edi
+    8× eo_edit.document
+    8× 。 付费确认流程见 descri
+    8× cation_contract；
+    8× ntract；等待确认后查询原 
+    8× 确认后查询原 operation
+    6×  video_edit.docu
+    5× image_edit.previ
+    5×  change_applicat
+
+通用开销精简模拟（只做机械变换，不改业务字段）：
+  initial:workspace.generation       现状    3307  改内联    3464  保留$ref+去通用字段    2754  省  16.7%
+  initial:workspace.video_edit       现状   15058  改内联   14178  保留$ref+去通用字段   12107  省  19.6%
+  domain:video_edit                  现状   85935  改内联   90595  保留$ref+去通用字段   67001  省  22.0%
+  domain:camera_stage                现状   17876  改内联   16086  保留$ref+去通用字段   14939  省  16.4%
+  domain:image_edit                  现状   17771  改内联   22061  保留$ref+去通用字段   14512  省  18.3%
+  domain:screen_recording            现状   19943  改内联   20054  保留$ref+去通用字段   15998  省  19.8%
+  全部工具                               现状  179412  改内联  185708  保留$ref+去通用字段  138100  省  23.0%
+
+== 2. 契约 ==
+                                                              chars    o200k      est
+describe_application_contract compactExternal                  4525     1728     2929
+describe_application_contract fullExternal                    38547    12098    22573
+describe_application_contract compactVideoEdit                 9874     3390     6097
+
+== 3. describe_application_entities（经结果投影后） ==
+domain            ent  prop  page1 tok  compactAll   fullAll
+canvas              3    19        718         718      2261
+sound_library       3    22        753         753      1674
+video_edit       error Error: SCHEMA_NOT_FOUND
+image_edit         13    90       2184        4442     70171
+camera_stage        9   151       1526        5691     14643
+audio_edit          8    70       2240        3765     10783
+generation          7    38       1357        1357      3015
+local_models        2     9        322         322      1231
+screen_recording    9    27       1340        1340      7309
+application         0     0         18          18        18
+navigation          0     0         18          18        18
+documents           2    17        658         658      1755
+settings            4    71       1746        2733     36109
+assets              3     9        314         314       816
+models              1     6        198         198       477
+toolbox             1     3        124         124       299
+memory              4     6        685         685      5151
+assistant           0     0         18          18        18
+单实体：
+  video_edit.clip:full                                      1128375   331514   719726
+  video_edit.clip:compact                                     35347    15109    24681
+  video_edit.sequence:full                                   182082    53272   114580
+  video_edit.sequence:compact                                  8809     3358     5796
+  audio_edit.document:full                                    16978     4846    10083
+  audio_edit.document:compact                                  4723     1582     2931
+  audio_edit.word:full                                           68       18       44
+  audio_edit.word:compact                                        68       18       44
+  canvas.node:full                                             5398     1665     3216
+  canvas.node:compact                                          2623      870     1703
+  documents.project:full                                       2000      713     1353
+  documents.project:compact                                    1615      594     1112
+
+== 4. 模型 ==
+                                                              chars    o200k      est
+search:image: 共 73 个模型（首页 32）
+  raw                                                         17215     5430    10369
+  projected（真实通道）                                             15128     5029     9245
+  单个模型条目                                                        485      171      297
+  selectionEvidence（每条重复）                                        65       15       35
+search:video: 共 74 个模型（首页 32）
+  raw                                                         18759     6073    11303
+  projected（真实通道）                                             16672     5672    10179
+  单个模型条目                                                        526      184      328
+  selectionEvidence（每条重复）                                        65       15       35
+search:audio: 共 17 个模型（首页 32）
+  raw                                                          9024     2894     5466
+  projected（真实通道）                                              7882     2673     4852
+  单个模型条目                                                        434      144      263
+  selectionEvidence（每条重复）                                        65       15       35
+get_model_schema：164 个模型，projected 中位 496 tok，最大 1187，最小 200，raw/projected 合计 85126/85126
+  apimart-midjourney                              image     1187 tok
+  ppio-minimax-speech                             audio     1117 tok
+  fal-ai-gpt-image-2.6                            image     1057 tok
+  kie-gpt-image-2.6                               image     1051 tok
+  fal-ai-ltx-2.3                                  video     1040 tok
+  apimart-gpt-image-2.6                           image      998 tok
+  fal-flux-3-video                                video      930 tok
+  fal-ai-kling-4.0                                video      889 tok
+
+== 5. 系统提示词与技能 ==
+                                                              chars    o200k      est
+SYSTEM_INSTRUCTIONS（含 MEMORY_RULES/PROJECT_PROGRESS_RULES）     2359     1491     2094
+  MEMORY_RULES                                                  549      363      482
+  PROJECT_PROGRESS_RULES                                        280      200      262
+skills_index（9 个技能元数据，进系统提示词）                                  1195      670      965
+  界面引导 workspace.generation                                      42       20       34
+  界面引导 workspace.canvas                                         281      134      201
+  界面引导 workspace.video_edit                                     574      280      385
+  界面引导 tool.audio_edit                                           99       68       85
+  界面引导 tool.image_edit                                          127       47       78
+  界面引导 tool.camera_stage                                         91       63       81
+  界面引导 tool.screen_recording                                    201      103      156
+  界面引导 settings.general                                          30       19       30
+  界面引导 workspace.unknown                                         35       26       35
+技能文档（按需加载，单份体积）：
+  resources/assistant-skills/三维镜头构图/SKILL.md                                                   5541 tok
+  resources/assistant-skills/video-edit-code-creation/references/examples.md                   4925 tok
+  resources/assistant-skills/video-edit-code-creation/references/author-text-motion.md         3227 tok
+  resources/assistant-skills/video-edit-code-creation/references/attention.md                  2968 tok
+  resources/assistant-skills/video-edit-code-creation/references/author-api.md                 2960 tok
+  resources/assistant-skills/audio-edit-workbench/SKILL.md                                     2946 tok
+  resources/assistant-skills/video-edit-code-creation/references/review.md                     2895 tok
+  resources/assistant-skills/video-edit-code-creation/SKILL.md                                 2889 tok
+  resources/assistant-skills/video-edit-code-creation/references/code-project.md               2783 tok
+  resources/assistant-skills/video-edit-code-creation/references/motion.md                     2753 tok
+  resources/assistant-skills/video-edit-code-creation/references/author-api-layers.md          2672 tok
+  resources/assistant-skills/video-edit-code-creation/references/style-kit.md                  2643 tok
+  resources/assistant-skills/video-edit-code-creation/references/camera.md                     2594 tok
+  resources/assistant-skills/video-edit-code-creation/references/performance.md                2583 tok
+  resources/assistant-skills/video-edit-code-creation/references/timeline-check.md             2517 tok
+  resources/assistant-skills/video-edit-code-creation/references/recipes-captions.md           2509 tok
+  resources/assistant-skills/video-edit-code-creation/references/color-texture.md              2312 tok
+  resources/assistant-skills/video-edit-code-creation/references/recipes-3d.md                 2295 tok
+  resources/assistant-skills/video-edit-code-creation/references/recipes-text-data.md          2276 tok
+  resources/assistant-skills/video-edit-code-creation/references/review-ai.md                  2239 tok
+  技能 .md 共 98 份，合计 143803 tok；SKILL.md 主文件合计 20385 tok

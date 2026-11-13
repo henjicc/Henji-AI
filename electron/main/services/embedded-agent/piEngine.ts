@@ -119,7 +119,8 @@ export class PiEngine implements EmbeddedAgentEngine {
         }
       },
     }))
-    this.disclosure = new PiToolDisclosure([...customTools, contextReader(this.manager, contextPageTokenLimit(limits.contextWindow))], this.manager, () => this.session!)
+    this.disclosure = new PiToolDisclosure([...customTools, contextReader(this.manager, contextPageTokenLimit(limits.contextWindow))], this.manager, () => this.session!,
+      Math.floor(limits.contextWindow / 8))
     this.toolTitles = new Map(this.disclosure.tools.map(tool => [tool.name, tool.label]))
     const { session } = await this.sdk.createAgentSession({ cwd: this.directory, agentDir: this.directory,
       modelRuntime: runtime, model: resolved, thinkingLevel: embeddedThinkingLevel(selected),

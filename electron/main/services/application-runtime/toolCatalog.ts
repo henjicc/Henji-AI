@@ -8,7 +8,7 @@ import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '../../../../src/core/app
 import { APPLICATION_READABLE_MEDIA_KINDS, APPLICATION_IMAGE_DEFAULT_EDGE, APPLICATION_IMAGE_DEFAULT_BYTES, APPLICATION_IMAGE_MAX_BYTES } from '../../../../src/core/application-control/mediaReferenceKinds'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
 import { loadAssistantSkillCapability } from '../../../../src/core/application-control/domains/assistantSkill/assistantSkillApplicationCapabilities'
-import { projectToolOutputSchema, RESULT_DETAIL_FIELDS, resultDetailFields } from './resultProjection'
+import { projectToolOutputSchema, RESULT_DETAIL_FIELDS } from './resultProjection'
 import { capabilityPublicOutputSchema } from '../../../../src/core/application-control/capabilityVerification'
 import { applicationUserConfirmationSchema } from '../../../../src/core/application-control/userConfirmation'
 
@@ -16,10 +16,61 @@ const confirmationGuidance = '付费操作按用户的 AI 付费授权自动放�
 const waitingOutput = z.object({ ok: z.literal(false), operationId: z.string().uuid(), executionState: z.literal('awaiting_user_confirmation'),
   verificationState: z.literal('unresolved'), confirmation: applicationUserConfirmationSchema }).passthrough()
 
+/**
+ * 所有工具共用的约定只在这里写一次，内置助手放进系统提示词、外部连接放进服务器说明。
+ * 每个工具的参数 schema 里只留类型，不再逐个重复这些说明：全目录近两百个写工具各带一遍时，单这几段就占工具定义的一成多。
+ */
+export const APPLICATION_TOOL_CONVENTIONS = [
+  '工具通用约定：',
+  '- 写工具都要 operationId（UUID）：一个逻辑操作生成一次；超时、断线或结果未知时用同一个值调用 get_application_operation 查询，不要换新值重做。同值重传返回原结果，不会重复执行。',
+  '- baselineIds 普通修改、新增、删除和生成都可省略，应用在执行前自动核对当前目标；属性说明要求先读基线的（如记忆条目），先 read_application_entity 再带上返回的 baselineId。显式提供时用于并发冲突检测，不要为凑基线反复读取。',
+  '- 结果默认省略修订号、验证证据与空值（null、空字符串、空数组、空对象），没列出不代表等于默认值；任一工具加 includeDetails:true 返回完整结果。',
+  `- 说明末尾标“付费工具”的会产生真实费用。${confirmationGuidance}`,
+].join('\n')
+
 /** 对外工具与内置助手共用正式能力声明。 */
-/** 协议信封：所有写工具共用，不只是 change_application_entities。 */
-const OPERATION_ID_FIELD = { type: 'string', format: 'uuid', description: '调用者范围内唯一的幂等键；调用前生成并保存，丢响应后复用此值查询，不得重新生成重放。' }
-const BASELINE_IDS_FIELD = { type: 'array', items: { type: 'string', format: 'uuid' }, description: '普通修改、新增和生成可省略，由应用自动核对当前目标。删除也可省略，由应用在执行前读取当前基线。需要严格按旧状态修改时也可显式提供，仅包含相关目标。' }
+/**
+ * 协议信封：所有写工具共用，不只是 change_application_entities；完整含义见 APPLICATION_TOOL_CONVENTIONS。
+ * operationId 仍留一句：不把服务器说明交给模型的外部客户端只看得到工具定义，超时后会换新值重提，付费工具就会重复扣费。
+ */
+const OPERATION_ID_FIELD = { type: 'string', format: 'uuid', description: '同一次操作重试时沿用同一个值。' }
+const BASELINE_IDS_FIELD = { type: 'array', items: { type: 'string', format: 'uuid' } }
+const MAX_SAFE = Number.MAX_SAFE_INTEGER
+/** 付费工具在说明末尾只标一句，确认流程见通用约定；结果未知时不重提这半句留在工具上，只看工具定义的客户端也不会重复扣费。 */
+export const PAID_TOOL_MARK = ' 付费工具；结果未知时用原 operationId 查 get_application_operation，不要重提。'
+export function isPaidCapability(definition: NonNullable<CapabilityDefinition>): boolean {
+  return Boolean(definition.paidGenerationPreparation || definition.mayRequirePaidConfirmation)
+}
+
+/**
+ * 交给模型的参数 schema 只留这个工具特有的约束。去掉的都是不影响正确调用的通用噪音：
+ * JSON Schema 方言声明（MCP 默认即 2020-12）、zod 给整数补的安全整数界限、非空字符串的 minLength:1，
+ * 以及引用里可选的 label/revision 的长度和范围（读取结果里的引用带着它们，原样传回仍然合法）。
+ * 执行入口仍按完整的 zod 声明校验，校验失败照样点名字段；这里只减少模型每次请求都要读的字。
+ */
+export function slimToolSchema<T>(schema: T): T {
+  const visit = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(visit)
+    if (value === null || typeof value !== 'object') return value
+    const record: Record<string, unknown> = {}
+    for (const [key, item] of Object.entries(value)) {
+      if (key === '$schema') continue
+      if (key === 'maximum' && item === MAX_SAFE) continue
+      if (key === 'minimum' && item === -MAX_SAFE) continue
+      if (key === 'minLength' && item === 1) continue
+      record[key] = visit(item)
+    }
+    const properties = record.properties
+    if (properties && typeof properties === 'object' && 'kind' in properties && 'id' in properties) {
+      const refProperties = { ...properties as Record<string, unknown> }
+      if ('label' in refProperties) refProperties.label = { type: 'string' }
+      if ('revision' in refProperties) refProperties.revision = { type: 'integer' }
+      record.properties = refProperties
+    }
+    return record
+  }
+  return visit(schema) as T
+}
 
 export interface ProtocolToolSpec {
   name: string
@@ -51,7 +102,7 @@ const publicMediaOutputSchema = z.object({ ok: z.literal(true), data: z.union([
 export const PROTOCOL_TOOL_SPECS: readonly ProtocolToolSpec[] = [
   {
     name: 'describe_application_contract', readOnly: true,
-    description: '发现协议、付费策略、业务域与可用技能。domains 点名才展开实体；detail="full" 查询完整工具清单、排除理由与弃用策略。toolSchemas 返回每个工具的 name/schemaHash，可用 names 过滤；names 配合 includeSchemas=true 获取完整 description/inputSchema。本地缓存与 schemaHash 不一致时，以 describe 返回的 schema 为准并按其参数调用。catalogSchemaHash 可与 get_current_application_context 的目录哈希比较。',
+    description: '写入前先读一次，含幂等与付费约定。发现协议、付费策略、业务域与可用技能。domains 点名才展开实体；detail="full" 查询完整工具清单、排除理由与弃用策略。toolSchemas 返回每个工具的 name/schemaHash，可用 names 过滤；names 配合 includeSchemas=true 获取完整 description/inputSchema。本地缓存与 schemaHash 不一致时，以 describe 返回的 schema 为准并按其参数调用。catalogSchemaHash 可与 get_current_application_context 的目录哈希比较。',
     inputSchema: { type: 'object', properties: { domains: { type: 'array', items: { type: 'string', minLength: 1 }, maxItems: 16, description: '要展开实体清单的业务域；留空只看域级摘要。' }, detail: { type: 'string', enum: ['compact', 'full'], default: 'compact' }, names: { type: 'array', items: { type: 'string', minLength: 1 }, description: '仅返回这些工具的 schema 摘要；省略时返回全部摘要。' }, includeSchemas: { type: 'boolean', default: false, description: '配合 names 返回完整 description/inputSchema，按需分批查询。' } }, additionalProperties: false },
   },
   {
@@ -62,7 +113,7 @@ export const PROTOCOL_TOOL_SPECS: readonly ProtocolToolSpec[] = [
   },
   {
     name: 'get_application_operation', readOnly: true, requiresOperations: true,
-    description: '读取本连接操作的持久事实；未知状态不会重放修改。剪辑导出的 result.queue 从主进程登记刷新，包含已完成或已中断、可按 retryTaskId 重试的状态；操作完成表示提交完成，成片是否完成看队列。断线、超时或换客户端后用原 operationId 查询，不要换标识重试。批量结果用 resultRef.operationId、resultRef.field 作为 operationId、resultField，携带 nextCursor 继续分页。',
+    description: '读取本连接写操作的结果与状态，查询不会重放修改。断线、超时或换客户端后用原 operationId 查询，不要换标识重试。剪辑导出的 result.queue 是最新登记状态，含已完成、已中断与可按 retryTaskId 重试的任务；操作完成表示提交完成，成片是否完成看队列。批量结果用 resultRef.operationId、resultRef.field 作为 operationId、resultField，携带 nextCursor 继续分页。',
     inputSchema: { ...z.toJSONSchema(operationReadInputSchema, { io: 'input' }), properties: { ...z.toJSONSchema(operationReadInputSchema, { io: 'input' }).properties, ...RESULT_DETAIL_FIELDS } },
   },
   {
@@ -137,8 +188,8 @@ function buildCapabilityTool(tool: LocalTool, definition: CapabilityDefinition):
     if (tool.id === 'create_visible_generation_task') schema.required = [...new Set([...schema.required as string[], 'modelId', 'prompt', 'mediaType'])]
   }
   return {
-    name: tool.id, title: tool.title, description: tool.description + (definition && (definition.paidGenerationPreparation || definition.mayRequirePaidConfirmation) ? ' 付费确认流程见 describe_application_contract；等待确认后查询原 operationId，不重复提交。' : '') + (tool.id === 'list_application_entities' ? ' items 与 refs 按索引对应，默认不重复 items.ref；includeDetails=true 可读取完整元数据。' : ''),
-    inputSchema: { ...schema, properties: { ...schema.properties as Record<string, unknown>, ...resultDetailFields(tool.id) }, type: 'object' },
+    name: tool.id, title: tool.title, description: tool.description + (definition && isPaidCapability(definition) ? PAID_TOOL_MARK : ''),
+    inputSchema: slimToolSchema({ ...schema, properties: { ...schema.properties as Record<string, unknown>, ...RESULT_DETAIL_FIELDS }, type: 'object' }),
     ...(definition ? { outputSchema: { type: 'object', ...projectToolOutputSchema(z.toJSONSchema(write
       ? z.union([z.object({ ok: z.literal(true), result: z.object({ ok: z.literal(true), data: capabilityPublicOutputSchema(definition) }).passthrough() }).passthrough(), waitingOutput])
       : z.union([z.object({ ok: z.literal(true), data: capabilityPublicOutputSchema(definition) }).passthrough(), waitingOutput]),
@@ -157,7 +208,7 @@ function assistantSkillTool(): Tool {
   return {
     name: definition.id, title: definition.title,
     description: `${definition.description} 外部连接先从 describe_application_contract 的 skills 取得可用技能名和适用条件；不支持读取 references/ 以外的文件。`,
-    inputSchema: { ...z.toJSONSchema(definition.inputSchema, { io: 'input' }), properties: { ...z.toJSONSchema(definition.inputSchema, { io: 'input' }).properties, ...RESULT_DETAIL_FIELDS }, type: 'object' } as Tool['inputSchema'],
+    inputSchema: slimToolSchema({ ...z.toJSONSchema(definition.inputSchema, { io: 'input' }), properties: { ...z.toJSONSchema(definition.inputSchema, { io: 'input' }).properties, ...RESULT_DETAIL_FIELDS }, type: 'object' }) as Tool['inputSchema'],
     // 技能名与路径的 NFC 归一化是输入变换，输出侧按普通字符串描述。
     outputSchema: z.toJSONSchema(z.union([z.object({ ok: z.literal(true), data: definition.outputSchema }).passthrough(), waitingOutput]), { io: 'output', unrepresentable: 'any' }) as Tool['inputSchema'],
     annotations: { readOnlyHint: true, openWorldHint: false },
@@ -202,7 +253,7 @@ export function buildApplicationToolCatalog(input: { tools: readonly LocalTool[]
   }
   for (const spec of PROTOCOL_TOOL_SPECS) {
     tools.push({
-      name: spec.name, description: spec.description, inputSchema: { ...spec.inputSchema, type: 'object', properties: { ...spec.inputSchema.properties as Record<string, unknown>, ...RESULT_DETAIL_FIELDS } } as Tool['inputSchema'],
+      name: spec.name, description: spec.description, inputSchema: slimToolSchema({ ...spec.inputSchema, type: 'object', properties: { ...spec.inputSchema.properties as Record<string, unknown>, ...RESULT_DETAIL_FIELDS } }) as Tool['inputSchema'],
       ...(spec.outputSchema ? { outputSchema: spec.outputSchema as Tool['inputSchema'] } : {}),
       annotations: { readOnlyHint: spec.readOnly, ...(spec.readOnly ? { openWorldHint: false } : { destructiveHint: false }) },
     })
@@ -212,10 +263,9 @@ export function buildApplicationToolCatalog(input: { tools: readonly LocalTool[]
 }
 
 const WORKFLOWS = [
-  confirmationGuidance,
+  APPLICATION_TOOL_CONVENTIONS,
   '发现：describe_application_contract → describe_application_entities（按域过滤）→ list_application_entities（cursor/limit 分页，where 按属性等值定位）。',
   '读取：按任务需要读取实体，获取真实引用和属性；普通操作不需要额外读取来拼接基线。删除也由应用核对当前目标。',
-  '修改：把 operationId（客户端生成的 UUID）连同业务参数传给写工具。普通操作省略 baselineIds，由应用自动核对；要求严格按旧状态写入时提供相关 baselineIds。勿传 expectedRevisions。同一 operationId 重传返回原事实，不会重复执行。',
   MEMORY_RULES,
   '查任务：生成默认用 wait_generation_task 等待终态，用户主动询问即时进度才用 get_generation_task，三维渲染用 get_camera_stage_render_task，写操作事实用 get_application_operation；等待工具由宿主跟进，其他即时查询按需调用，不需要客户端支持通知扩展。可用 subscriptions/listen 订阅工具目录变更；收到 notifications/tools/list_changed 后重新 tools/list。',
   '取结果：看图用 read_application_media(mode="image") 直接取得图片内容；其他媒体按 offset 分块读到 eof；不支持富媒体的客户端只消费 totalBytes／eof／错误码也能理解状态并继续。',
@@ -294,7 +344,7 @@ export function buildApplicationContract(input: {
     ...(full.skills ? { skills: { tool: full.skills.tool, index: full.skills.index } } : {}),
     workflows: [
       '发现：describe_application_entities 按域查属性；list_application_entities 用分页/where 定位；read_application_entity 读属性与 baselineId。tools/list 查工具，契约 detail="full" 查排除与弃用。',
-      '写入：生成 UUID operationId，重传同 ID 返回原事实。baselineIds 普通修改/新增可省略，显式提交基线时会检测冲突。勿传 expectedRevisions。includeRevisions/includeEvidence=true 展开修订/证据。',
+      '写入：生成 UUID operationId，重传同 ID 返回原事实。baselineIds 可省略，显式提交基线时会检测冲突。结果默认省略修订号、验证证据与空值，includeDetails:true 展开。完整约定见 detail="full" 的 workflows。',
       '恢复：unknown 查 get_application_operation，沿原 operationId，禁止重放；partial 仅恢复保存。前置拒绝用 describe_application_entities(refs) 查条件。',
       '结果：wait_generation_task 等生成终态；read_application_media(mode="image") 看图，其他媒体读至 eof。load_assistant_skill 按适用条件读主文件和单份参考。',
       confirmationGuidance,

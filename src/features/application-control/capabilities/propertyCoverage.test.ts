@@ -105,6 +105,17 @@ describe('属性级写入覆盖一致', () => {
     }
   })
 
+  it('每条 json 属性的值 schema 都登记了，查询结构时不会整域失败', () => {
+    // 缺一份值 schema，describe_application_entities 带上该实体就抛 SCHEMA_NOT_FOUND，连带整个领域的结构查询失败。
+    const registry = getApplicationReflectionRegistry()
+    const access = { exposure: 'assistant' as const, acceptedDataClasses: new Set(['C0', 'C1', 'C2'] as const) }
+    const unresolved = describeAll().properties.flatMap((property) => {
+      if (property.value.kind !== 'json') return []
+      try { registry.resolveSchema(property.value.schemaRef, access); return [] } catch (error) { return [`${property.id}（${String(error)}）`] }
+    })
+    expect(unresolved, `以下 json 属性的值 schema 未登记：${unresolved.join('、')}`).toEqual([])
+  })
+
   it('集合归属这类非 set 属性保留了它真正接受的 operation', () => {
     // 全项目唯一不走 set 的属性。它退化成 set 不会有任何测试失败，但助手从此加不了集合——
     // 所以在这里钉死，顺带作为「operations 声明确实有人用」的存在性证明。

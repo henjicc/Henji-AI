@@ -616,6 +616,33 @@ export function prepareGenerationModelInput(input: GenerationPreparationInput, m
   }
 }
 
+const canonicalJson = (value: unknown): string => JSON.stringify(value, (_key, item: unknown) => item && typeof item === 'object' && !Array.isArray(item)
+  ? Object.fromEntries(Object.entries(item as Record<string, unknown>).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)) : item)
+
+/**
+ * 交给助手的准备结果只留它下一步要用的：选了哪个模型、哪些参数与默认值不同、媒体上限、预计费用与能否提交。
+ * 提示词是助手自己传进来的，不再回显；等于默认值的参数（含界面面板的空状态）不列出，默认值见 get_model_schema；
+ * 选型依据只留评级、理由和提示词语言，其余是 modelId、providerId 的重复；金额去掉浮点误差。
+ * 画布提交、估价、尺寸检查用的是完整准备结果，只在能力返回时换成这一份；提交前的付费预检（generationBudget）读的就是这份返回，
+ * 所以 canSubmit、errorCode、message 与 priceEstimate 的人民币金额、估价类型都原样保留。
+ */
+export function publicGenerationPreparation(preparation: Record<string, unknown>): Record<string, unknown> {
+  const { selectionEvidence, priceEstimate, options, ...rest } = preparation
+  const defaults = registry.getDefaultValues(String(preparation.modelId)) as Record<string, unknown>
+  const blank = (value: unknown) => value === null || value === '' || (Array.isArray(value) ? !value.length : typeof value === 'object' && !Object.keys(value as object).length)
+  const changed = Object.fromEntries(Object.entries((options ?? {}) as Record<string, unknown>)
+    .filter(([key, value]) => key !== 'prompt' && canonicalJson(value) !== canonicalJson(defaults[key]) && !(defaults[key] === undefined && blank(value))))
+  const evidence = (selectionEvidence ?? {}) as Record<string, unknown>
+  const kept = Object.fromEntries(['standing', 'standingReason', 'promptLanguage'].flatMap(key => evidence[key] === undefined ? [] : [[key, evidence[key]]]))
+  const price = priceEstimate && typeof priceEstimate === 'object' ? (() => {
+    const { comparisonNote: _note, comparableCnyExchangeRate: _rate, amount, comparableCnyAmount, ...value } = priceEstimate as Record<string, unknown>
+    // 人民币估值也是付费授权的金额，进位取整不会低估。
+    return { ...value, ...(typeof amount === 'number' ? { amount: Math.round(amount * 1e4) / 1e4 } : amount === undefined ? {} : { amount }),
+      ...(typeof comparableCnyAmount === 'number' ? { comparableCnyAmount: Math.ceil(comparableCnyAmount * 1e4 - 1e-6) / 1e4 } : comparableCnyAmount === undefined ? {} : { comparableCnyAmount }) }
+  })() : priceEstimate
+  return { ...rest, options: changed, ...(price === undefined ? {} : { priceEstimate: price }), ...(Object.keys(kept).length ? { selectionEvidence: kept } : {}) }
+}
+
 export interface GenerationMediaDimensionReaders {
   image: (source: string) => Promise<MediaDimensions | null>
   video: (source: string) => Promise<MediaDimensions | null>

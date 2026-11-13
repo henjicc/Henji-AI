@@ -398,7 +398,7 @@ export class ApplicationReflectionRegistry {
     context: ApplicationControlAccessContext
   ): Promise<ApplicationEntitySnapshot> {
     const entity = this.requireVisibleEntity(ref.kind, context)
-    const requested = propertyIds ?? this.listProperties(entity.id).map((property) => property.id)
+    const requested = propertyIds ?? this.listProperties(entity.id).filter((property) => !property.omitFromDefaultRead).map((property) => property.id)
     const allowed = requested.filter((propertyId) => this.canReadProperty(
       this.requireProperty(entity.id, propertyId),
       context

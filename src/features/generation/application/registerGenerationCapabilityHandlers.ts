@@ -6,7 +6,7 @@ import { createMediaGeneratorPromptReferences } from '@/components/MediaGenerato
 import { toLegacyPromptString } from '@/core/inputs/promptDocument/index'
 import { generationApplicationService } from '@/features/generation/application/generationApplicationService'
 import { exportGenerationResults, type GenerationExportDestination } from '@/features/generation/application/generationResultExport'
-import { assertGenerationMediaDimensions, estimateGenerationPrice } from '@/features/generation/application/generationPreparationService'
+import { assertGenerationMediaDimensions, estimateGenerationPrice, publicGenerationPreparation } from '@/features/generation/application/generationPreparationService'
 import { generationService } from '@/core/services/GenerationService'
 import { transferGenerationPaidApproval } from '@/core/services/generationSubmissionConfirmation'
 import { applicationWritePreflight } from '@/core/application-control/execution/writeExecution'
@@ -283,7 +283,7 @@ export function registerGenerationCapabilityHandlers(
     const providerConfigured = (await generationService.getConfiguredProviders()).includes(String(preparation.providerId))
     const unavailable = getProviderAvailabilityFailure(String(preparation.providerId), resolved.modelId)
     return {
-      preparation: { ...preparation, providerConfigured, canSubmit: providerConfigured && !unavailable,
+      preparation: { ...publicGenerationPreparation(preparation), providerConfigured, canSubmit: providerConfigured && !unavailable,
         ...(unavailable ? { errorCode: unavailable.code, retryAfterMs: Math.max(0, unavailable.expiresAt - Date.now()) } : {}),
         message: `${adjustmentNote(preparation.adjustedParams)}${unavailable?.message ?? (providerConfigured ? '参数已通过校验，供应商已配置；提交按统一付费策略执行。' : '参数已通过校验，但供应商未配置，不能提交。请先配置该供应商凭据，或选择已配置供应商的模型。')}` },
     }
@@ -350,7 +350,8 @@ export function registerGenerationCapabilityHandlers(
   registrar.registerHandler('prepare_canvas_node_generation', async input => {
     const parsed = normalizeCanvasDocumentNodeIds(parseCapabilityInput<CanvasNodeGenerationInput>('prepare_canvas_node_generation', input))
     const { prepareCanvasNodeGeneration } = await import('@/features/canvas/application/canvasGenerationTaskService')
-    return prepareCanvasNodeGeneration(parsed)
+    const prepared = await prepareCanvasNodeGeneration(parsed)
+    return { ...prepared, preparation: publicGenerationPreparation(prepared.preparation) }
   })
   registrar.registerHandler('submit_canvas_node_generation', async (input, context) => {
     throwIfCapabilityAborted(context.signal)

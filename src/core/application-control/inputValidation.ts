@@ -1,10 +1,11 @@
 import { z } from 'zod'
 
-/** 所有公开工具实际接受的结果投影选项；目录与执行入口共用。 */
+/**
+ * 所有公开工具实际接受的结果投影选项；目录与执行入口共用。
+ * 只有一个开关：修订号、验证证据与完整元数据一起展开。含义在工具通用约定里讲一次，每个工具的参数里不再重复说明。
+ */
 export const commonToolInputSchema = z.object({
-  includeRevisions: z.boolean().optional(),
-  includeEvidence: z.boolean().optional().describe('验证证据明细。'),
-  includeDetails: z.boolean().optional().describe('完整元数据。'),
+  includeDetails: z.boolean().optional(),
 })
 
 type InputSchema = z.ZodType | Record<string, unknown>

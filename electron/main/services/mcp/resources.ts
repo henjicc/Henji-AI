@@ -53,7 +53,8 @@ export async function readApplicationResource(dispatcher: ApplicationToolDispatc
   const { ref, format } = parseApplicationResourceUri(uri)
   const result = format === 'media'
     ? await dispatcher.readMedia(callerId, { ref }, signal, true)
-    : await dispatcher.call(callerId, 'read_application_entity', { ref }, signal)
+    // 资源是实体的完整快照，不套用给模型的默认精简。
+    : await dispatcher.call(callerId, 'read_application_entity', { ref, includeDetails: true }, signal)
   if (!result.ok) throw new Error(result.error?.message ?? '资源读取未完成，请查询原目标状态。')
   let value: unknown = result.data
   if (format === 'media') {

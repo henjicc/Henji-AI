@@ -62,7 +62,9 @@ export class ApplicationToolDispatcher {
       return applicationFailure(message)
     }
   }
-  async call(callerId: string, name: string, args: Record<string, unknown> | undefined, signal: AbortSignal): Promise<ApplicationResult> {
+  /** observeRaw 拿到精简投影之前的结果，只给宿主自己的日志用（事务号等不再交给模型的事实）。 */
+  async call(callerId: string, name: string, args: Record<string, unknown> | undefined, signal: AbortSignal,
+    observeRaw?: (raw: ApplicationResult) => void): Promise<ApplicationResult> {
     this.connections.assertActive(callerId)
     const input = { ...args }
     const parsedOptions = commonToolInputSchema.safeParse(input)
@@ -97,6 +99,7 @@ export class ApplicationToolDispatcher {
       raw = withAcceptedFields(raw)
       if (raw.result && typeof raw.result === 'object' && 'ok' in raw.result) raw = { ...raw, result: withAcceptedFields(raw.result as ApplicationResult) }
     }
+    observeRaw?.(raw)
     const result = projectApplicationToolResult(operation?.capabilityId ?? name, input, raw, options)
     validateApplicationToolOutput(name, catalog.tools.find(tool => tool.name === name)?.outputSchema, result)
     return result

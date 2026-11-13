@@ -1,9 +1,9 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
-import { applicationCatalogSchemaHash, applicationToolSchemaHash, buildApplicationContract, buildApplicationToolCatalog, EXCLUDED_TOOLS, PROTOCOL_TOOL_SPECS } from './toolCatalog'
+import { APPLICATION_TOOL_CONVENTIONS, applicationCatalogSchemaHash, applicationToolSchemaHash, buildApplicationContract, buildApplicationToolCatalog, EXCLUDED_TOOLS, isPaidCapability, PAID_TOOL_MARK, PROTOCOL_TOOL_SPECS, slimToolSchema } from './toolCatalog'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
-import { RESULT_DETAIL_FIELDS, resultDetailFields } from './resultProjection'
+import { RESULT_DETAIL_FIELDS } from './resultProjection'
 import {
   EXTERNAL_CONTRACT_VERSION, APPLICATION_CAPABILITY_IDS, APPLICATION_READ_CAPABILITY_IDS, APPLICATION_WRITE_CAPABILITY_IDS,
   type LocalDomainSurface, type LocalTool,
@@ -77,7 +77,7 @@ describe('对外工具目录的同源投影', () => {
    * 验收线：**工具 schema 与领域约束同源**。
    *
    * 这条红了就说明有人在 MCP 侧手抄了一份参数表——那正是"新增一个已登记业务字段还要回来改
-   * MCP"的开始。读取工具必须逐字节等于能力定义的 Zod 输入投影；写入工具只允许多出协议信封。
+   * MCP"的开始。读取工具必须逐字节等于能力定义的 Zod 输入投影（只经过同一个通用精简）；写入工具只允许多出协议信封。
    */
   it('能力工具的参数表逐字节来自能力定义，MCP 侧不存在第二份字段表', () => {
     const listed = new Map(catalog().tools.map((tool) => [tool.name, tool]))
@@ -86,7 +86,7 @@ describe('对外工具目录的同源投影', () => {
       const projected = listed.get(tool.id)
       expect(projected, tool.id).toBeDefined()
       if (APPLICATION_READ_CAPABILITY_IDS.some((id) => id === tool.id)) {
-        expect(projected!.inputSchema, tool.id).toEqual({ ...tool.inputSchema, properties: { ...tool.inputSchema.properties as object, ...resultDetailFields(tool.id) }, type: 'object' })
+        expect(projected!.inputSchema, tool.id).toEqual(slimToolSchema({ ...tool.inputSchema, properties: { ...tool.inputSchema.properties as object, ...RESULT_DETAIL_FIELDS }, type: 'object' }))
         continue
       }
       const properties = projected!.inputSchema.properties as Record<string, unknown>
@@ -97,7 +97,7 @@ describe('对外工具目录的同源投影', () => {
       for (const key of Object.keys(RESULT_DETAIL_FIELDS)) delete withoutEnvelope[key]
       const declaredWithoutCompat = { ...declared }
       delete declaredWithoutCompat.expectedRevisions
-      expect(withoutEnvelope, tool.id).toEqual(declaredWithoutCompat)
+      expect(withoutEnvelope, tool.id).toEqual(slimToolSchema(declaredWithoutCompat))
     }
   })
 
@@ -127,7 +127,34 @@ describe('对外工具目录的同源投影', () => {
   it('协议工具的参数表在服务端只声明一次，目录与解析共用', () => {
     const listed = new Map(catalog().tools.map((tool) => [tool.name, tool]))
     for (const spec of PROTOCOL_TOOL_SPECS) {
-      expect(listed.get(spec.name)?.inputSchema, spec.name).toEqual({ ...spec.inputSchema, properties: { ...spec.inputSchema.properties as Record<string, unknown>, ...RESULT_DETAIL_FIELDS } })
+      expect(listed.get(spec.name)?.inputSchema, spec.name).toEqual(slimToolSchema({ ...spec.inputSchema, properties: { ...spec.inputSchema.properties as Record<string, unknown>, ...RESULT_DETAIL_FIELDS } }))
+    }
+  })
+
+  /**
+   * 预算守卫：通用约定只讲一次，不随工具重复。不钉字节数——新增工具、参数照常变化——只断言结构性质：
+   * 任何一个工具的定义里都不再出现方言声明、安全整数界限、信封与结果开关的说明、付费流程的长句。
+   * 这几项曾在全目录占约四成通用开销（约 4 万 token），回潮时这里会点名是哪个工具。
+   */
+  it('每个工具定义只留自己特有的内容，通用约定只在一处讲一次', () => {
+    const tools = buildApplicationToolCatalog({ tools: hostTools, includeSkillTool: true }).tools
+    for (const tool of tools) {
+      const text = JSON.stringify(tool.inputSchema)
+      expect(text, tool.name).not.toContain('$schema')
+      expect(text, tool.name).not.toContain(String(Number.MAX_SAFE_INTEGER))
+      const properties = tool.inputSchema.properties as Record<string, Record<string, unknown>>
+      for (const key of ['includeEvidence', 'includeRevisions']) expect(properties, tool.name).not.toHaveProperty(key)
+      expect(properties.includeDetails, tool.name).toEqual({ type: 'boolean' })
+      if (properties.baselineIds) expect(properties.baselineIds, tool.name).not.toHaveProperty('description')
+      // operationId 只留一句极短的重试说明，给不读服务器说明的客户端
+      if (properties.operationId) expect(String(properties.operationId.description ?? '').length, tool.name).toBeLessThanOrEqual(20)
+      expect(tool.description, tool.name).not.toContain('付费确认流程')
+      const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(tool.name)
+      expect(tool.description.endsWith(PAID_TOOL_MARK), tool.name).toBe(Boolean(definition && isPaidCapability(definition)))
+    }
+    // 去掉的说明都由这一处通用约定承接
+    for (const term of ['operationId', 'get_application_operation', 'baselineIds', 'includeDetails', 'awaiting_user_confirmation', '付费工具']) {
+      expect(APPLICATION_TOOL_CONVENTIONS).toContain(term)
     }
   })
 })

@@ -143,7 +143,8 @@ describe('应用反射通用能力适配器', () => {
     mocks.resolveSchema.mockReturnValue(valueSchema)
     const first = await applicationReflectionHandlers.describeEntities({ domains: [], entityTypes: [], limit: 1 }, context)
     expect(first.nextCursor).toBe('1')
-    expect(first.properties).toEqual([{ id: 'sample.item.rate', entityType: 'sample.item', title: 'rate', writable: true, valueShape: '{numerator: integer, denominator: integer}' }])
+    // 只有一类实体时属性不重复 entityType
+    expect(first.properties).toEqual([{ id: 'sample.item.rate', title: 'rate', writable: true, valueShape: '{numerator: integer, denominator: integer}' }])
     expect(first.entities[0].collectionWrite).toEqual({ creatable: true, removable: true })
     const last = await applicationReflectionHandlers.describeEntities({ domains: [], entityTypes: [], limit: 1, cursor: first.nextCursor! }, context)
     expect(last.nextCursor).toBeNull()
@@ -152,6 +153,15 @@ describe('应用反射通用能力适配器', () => {
     const full = await applicationReflectionHandlers.describeEntities({ domains: [], entityTypes: [], entityType: 'sample.item', propertyIds: ['sample.item.rate'], detail: 'full' }, context)
     expect(full.properties[0]).toMatchObject({ valueSchema })
     expect(mocks.describe).toHaveBeenLastCalledWith({ entityTypes: ['sample.item'], propertyIds: ['sample.item.rate'] }, expect.anything())
+    // 不点名属性的 full 只返回紧凑目录与改道提示：整类实体的完整 schema 曾单次返回三十多万 token
+    const unnamed = await applicationReflectionHandlers.describeEntities({ domains: [], entityTypes: [], entityType: 'sample.item', detail: 'full' }, context)
+    expect(unnamed.properties.every(property => !('valueSchema' in property) && 'valueShape' in property)).toBe(true)
+    expect(unnamed).toHaveProperty('hint', expect.stringContaining('propertyIds'))
+    // 结构相同的值 schema 同一次返回只展开一次
+    const both = await applicationReflectionHandlers.describeEntities({ domains: [], entityTypes: [], entityType: 'sample.item', propertyIds: ['sample.item.rate', 'sample.item.name'], detail: 'full' }, context)
+    expect(both.properties[0]).toMatchObject({ valueSchema })
+    expect(both.properties[1]).toMatchObject({ valueSchemaSameAs: 'sample.item.rate' })
+    expect(both.properties[1]).not.toHaveProperty('valueSchema')
   })
 
   /*
@@ -174,7 +184,7 @@ describe('应用反射通用能力适配器', () => {
       }],
       properties: [{
         id: 'sample.item.time', entityType: 'sample.item', version: 1,
-        title: '时间', description: '关键帧时间。', value: { kind: 'number', minimum: 0 },
+        title: '时间', description: '关键帧所在时刻，单位秒。', value: { kind: 'number', minimum: 0 },
         nullable: false, dataClass: 'C1', exposures: ['ui', 'assistant'],
         requiredPermissions: { read: ['camera_stage:read'], write: ['camera_stage:write'] },
         revisionScopes: ['camera_stage'],
@@ -183,7 +193,7 @@ describe('应用反射通用能力适配器', () => {
     })
 
     const result = await applicationReflectionHandlers.describeEntities(
-      { domains: [], entityTypes: ['sample.item'], detail: 'full' },
+      { domains: [], entityTypes: ['sample.item'], propertyIds: ['sample.item.time'], detail: 'full' },
       context,
     )
     const serialized = JSON.stringify(result)
@@ -202,7 +212,7 @@ describe('应用反射通用能力适配器', () => {
       id: 'sample.item.time',
       entityType: 'sample.item',
       title: '时间',
-      description: '关键帧时间。',
+      description: '关键帧所在时刻，单位秒。',
       value: { kind: 'number', minimum: 0 },
       writable: true,
       writeOperations: ['set'],
@@ -222,7 +232,7 @@ describe('应用反射通用能力适配器', () => {
     mocks.getAcceptedPropertyOperations.mockReturnValueOnce(['append', 'remove', 'set'])
 
     const result = await applicationReflectionHandlers.describeEntities(
-      { domains: ['assets'], entityTypes: ['asset'], detail: 'full' }, context,
+      { domains: ['assets'], entityTypes: ['asset'], propertyIds: ['asset.library_refs'], detail: 'full' }, context,
     )
 
     expect(result.properties[0]).toMatchObject({
@@ -230,6 +240,8 @@ describe('应用反射通用能力适配器', () => {
       writeOperations: ['append', 'remove', 'set'],
       setBehavior: 'replace_collection',
     })
+    // “领域名 + 标题”式的自动说明与 title 重复，不再发给模型
+    expect(result.properties[0]).not.toHaveProperty('description')
   })
 
   it('带实例引用时投影当前属性与集合可用性，并剔除权限和 revision 噪音', async () => {

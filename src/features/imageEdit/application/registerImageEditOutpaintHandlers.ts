@@ -2,6 +2,7 @@ import { applicationGenerationTaskId } from '@/core/application-control/operatio
 import { applicationWritePreflight } from '@/core/application-control/execution/writeExecution';
 import { generateImageEditOutpaintCapability, getImageEditOutpaintCapability, prepareImageEditOutpaintCapability, recoverImageEditOutpaintCapability } from '@/core/application-control/domains/imageEdit/imageEditOutpaintCapabilities';
 import type { ApplicationCapabilityHandlerRegistrar, CapabilityExecutionContext } from '@/features/application-control';
+import { publicGenerationPreparation } from '@/features/generation/application/generationPreparationService';
 
 import { ensureImageEditDocumentInstanceV3 } from '../v3/application/imageEditDocumentLoading';
 import { imageEditV3LayerRef, splitImageEditV3DocumentRef } from '../v3/application/imageEditDocumentRefs';
@@ -25,7 +26,7 @@ export function registerImageEditOutpaintHandlers(registrar: ApplicationCapabili
     const parsed = prepareImageEditOutpaintCapability.inputSchema.parse(input), { documentId } = splitImageEditV3DocumentRef(parsed.documentRef);
     await assertHost(documentId, context, false);
     const prepared = await prepareImageEditOutpaintV3({ documentId, margins: parsed.margins, prompt: parsed.prompt, modelId: parsed.modelId, params: parsed.params });
-    return { documentRef: parsed.documentRef, preparation: prepared.preparation, message: '扩图参数已检查；将按所选模型计费，生成后进入当前图片的新层。' };
+    return { documentRef: parsed.documentRef, preparation: publicGenerationPreparation(prepared.preparation), message: '扩图参数已检查；将按所选模型计费，生成后进入当前图片的新层。' };
   });
   registrar.registerHandler(generateImageEditOutpaintCapability.id, async (input, context) => {
     const parsed = generateImageEditOutpaintCapability.inputSchema.parse(input), { documentId } = splitImageEditV3DocumentRef(parsed.documentRef);

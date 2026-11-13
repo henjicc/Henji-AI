@@ -411,9 +411,11 @@ describe('本地 MCP 协议与边界', () => {
     const readOnlyTools = (await a.client.listTools()).tools
     expect(readOnlyTools.map((tool) => tool.name)).toEqual(expect.arrayContaining(['read_application_entity', 'read_application_media', 'describe_application_contract']))
     expect(readOnlyTools.map(tool => tool.name)).toContain('change_application_entities')
-    expect((await a.client.callTool({ name: 'read_application_entity', arguments: {} })).structuredContent).toEqual({ ok: true, revision: 0, revisionEpoch: f.host.rendererEpoch, data: { ref: { kind: 'settings.registry', id: 'singleton' }, entityType: 'settings.registry', properties: { name: '隔离工程' }, revisions: { settings: 0 }, capturedAt: new Date(0).toISOString() } })
+    expect((await a.client.callTool({ name: 'read_application_entity', arguments: {} })).structuredContent).toEqual({ ok: true, data: { ref: { kind: 'settings.registry', id: 'singleton' }, properties: { name: '隔离工程' }, revisions: { settings: 0 } } })
+    expect((await a.client.callTool({ name: 'read_application_entity', arguments: { includeDetails: true } })).structuredContent).toEqual({ ok: true, revision: 0, scopeRevisions: { navigation: 0, generation: 0, canvas: 0, toolbox: 0, assets: 0 }, revisionEpoch: f.host.rendererEpoch, data: { ref: { kind: 'settings.registry', id: 'singleton' }, entityType: 'settings.registry', properties: { name: '隔离工程' }, revisions: { settings: 0 }, capturedAt: new Date(0).toISOString() } })
     expect((await a.client.callTool({ name: 'change_application_entities', arguments: {} })).isError).toBe(true)
-    expect(f.calls).toHaveLength(1)
+    // 两次读取（默认与 includeDetails）都到宿主，非法写入不到
+    expect(f.calls).toHaveLength(2)
     await a.client.close()
     await f.server.stop()
     await expect(fetch(f.url())).rejects.toThrow()
@@ -530,21 +532,19 @@ describe('本地 MCP 协议与边界', () => {
     const rejected = await unknownField.client.callTool({ name: 'read_application_media', arguments: { ref: { kind: 'asset', id: 'x' }, unexpected: 1 } })
     expect(rejected.isError).toBe(true)
     expect(JSON.stringify(rejected)).toContain('unexpected')
-    const multiple = await unknownField.client.callTool({ name: 'read_application_media', arguments: { includeEvidence: '私密输入', includeRevisions: '私密输入', foo: 1 } })
+    const multiple = await unknownField.client.callTool({ name: 'read_application_media', arguments: { includeDetails: '私密输入', foo: 1 } })
     expect(multiple.structuredContent).toMatchObject({ error: { code: 'INVALID_INPUT', message: expect.stringContaining([
-      'includeRevisions 应为 布尔值，收到字符串。',
-      // 约束会附上正式 schema 的字段说明，不能为旧断言删掉恢复所需的信息。
-      'includeEvidence 应为 布尔值；验证证据明细。，收到字符串。',
+      'includeDetails 应为 布尔值，收到字符串。',
       '缺少必填参数 ref（对象 {kind, id}）。',
       '不认识的参数：foo。',
       '这个工具接受：ref（必填）、mode、maxEdge、maxBytes、outputIndex、offset、length。',
-      '通用：includeRevisions、includeEvidence、includeDetails。',
+      '通用：includeDetails。',
     ].join('\n')) } })
     expect(JSON.stringify(multiple)).not.toContain('私密输入')
     expect(validation.calls).toHaveLength(0)
     // 根据错误提示补 ref、改成布尔值、去掉未知参数后，原客户端可继续读取。
     const recovered = await unknownField.client.callTool({ name: 'read_application_media', arguments: {
-      ref: { kind: 'asset', id: 'x' }, mode: 'chunk', includeEvidence: true, includeRevisions: true,
+      ref: { kind: 'asset', id: 'x' }, mode: 'chunk', includeDetails: true,
     } })
     expect(recovered.isError, JSON.stringify(recovered)).toBe(false)
     expect(recovered.structuredContent).toMatchObject({ ok: true, data: { mimeType: 'image/png', totalBytes: 8, byteLength: 8, eof: true } })
@@ -555,7 +555,10 @@ describe('本地 MCP 协议与边界', () => {
 
     const oversized = await fixture({ result: { ok: true, data: { ref: { kind: 'settings.registry', id: 'singleton' }, entityType: 'settings.registry', properties: { blob: 'x'.repeat(3 * 1024 * 1024) }, revisions: {}, capturedAt: new Date(0).toISOString() } } })
     const b = await oversized.connect()
-    const big = await b.client.callTool({ name: 'read_application_entity', arguments: {} })
+    // 不点名时过大的属性只报体积；点名后整份经协议返回，不被截断
+    const summary = await b.client.callTool({ name: 'read_application_entity', arguments: {} })
+    expect(summary.structuredContent).toMatchObject({ data: { largeProperties: { blob: { chars: 3 * 1024 * 1024 + 2 } } } })
+    const big = await b.client.callTool({ name: 'read_application_entity', arguments: { propertyIds: ['blob'] } })
     expect(big.isError).toBe(false)
     expect(JSON.stringify(big)).toContain('xxxxxxxxxx')
   })

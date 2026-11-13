@@ -164,7 +164,7 @@ describe('Pi official SDK engine', () => {
       const session = { getActiveToolNames: () => active, setActiveToolsByName: (names: string[]) => { active = names } } as AgentSession
       const tools: ToolDefinition[] = catalog.map(tool => ({ ...tool, label: tool.name, description: tool.description ?? tool.name,
         parameters: tool.inputSchema as ToolDefinition['parameters'], execute: async () => ({ content: [], details: undefined }) }))
-      const disclosure = new PiToolDisclosure(tools, SessionManager.inMemory(), () => session)
+      const disclosure = new PiToolDisclosure(tools, SessionManager.inMemory(), () => session, 16000)
       disclosure.prepareContext('{"surface":{"id":"workspace.video_edit"}}')
       const first = [...active]
       expect(first).toEqual([...first].sort())
@@ -376,7 +376,8 @@ describe('Pi official SDK engine', () => {
   })
 
   it('画布一次加载生成闭环，跨界面不携带旧工具，回到原界面和冷恢复可复用', async () => {
-    const f = await fixture()
+    // 已加载工具在预算（窗口的 1/8）内才跨消息保留；32k 的测试窗口放不下画布生成这一组
+    const f = await fixture({ contextWindow: 128000 })
     const configuration = { ...f.configuration, tools: applicationCatalog().tools }
     const canvas = '{"surface":{"id":"workspace.canvas"},"project":{"id":"origin"}}'
     f.setToolPlan([{ name: 'load_application_tools', arguments: { task: 'canvas_generation' } },
@@ -418,8 +419,8 @@ describe('Pi official SDK engine', () => {
   })
 
   it.each([
-    { name: 'create_image_edit_preview', arguments: {} },
-    { name: 'duplicate_canvas_node', arguments: { domains: ['canvas'] } },
+    { name: 'create_image_edit_preview', arguments: { names: ['create_image_edit_preview'] } },
+    { name: 'duplicate_canvas_node', arguments: { names: ['duplicate_canvas_node'] } },
   ])('官方 SDK 按需加载 $name 后可调用，冷恢复保留状态', async ({ name, arguments: loadArguments }) => {
     const f = await fixture()
     const configuration = { ...f.configuration, tools: [...f.configuration.tools,
@@ -682,37 +683,69 @@ it('正式 Pi 模型失败自动调用同源本地整理，不重试模型或应
 })
 
 
-it('任务精确 names 保持目录排序与基础工具稳定，避免整领域 schema 开销', async () => {
+function disclosureFixture(catalog: Array<{ name: string; description?: string; inputSchema: unknown }>, budget = 16000, manager = SessionManager.inMemory()) {
+  let active: string[] = []
+  const messages: AgentSession['messages'] = []
+  const session = { getActiveToolNames: () => active, setActiveToolsByName: (names: string[]) => { active = names }, messages } as unknown as AgentSession
+  const tools: ToolDefinition[] = catalog.map(tool => ({ ...tool, label: tool.name, description: tool.description ?? tool.name,
+    parameters: tool.inputSchema as ToolDefinition['parameters'], execute: async () => ({ content: [], details: undefined }) }))
+  const disclosure = new PiToolDisclosure([...tools, contextReader(manager, 4000)], manager, () => session, budget)
+  return { disclosure, manager, messages, active: () => active }
+}
+
+it('按领域只返回工具目录不加载，按名精确加载，避免整领域 schema 开销', async () => {
   const catalog = [...applicationCatalog().tools, ...(await embeddedSkillCatalog()).tools]
-  const measurements: Record<string, unknown> = {}
   for (const [surface, domain, names] of [
     ['workspace.video_edit', 'video_edit', ['trim_video_edit_clip', 'save_video_edit', 'undo_video_edit']],
     ['tool.image_edit', 'image_edit', ['select_image_edit_region', 'repair_image_edit_region', 'export_image_edit_target_to_canvas']],
   ] as const) {
-    const measure = (request: { names?: string[]; domains?: string[] }) => {
-      const manager = SessionManager.inMemory()
-      let active: string[] = []
-      const session = { getActiveToolNames: () => active, setActiveToolsByName: (names: string[]) => { active = names } } as AgentSession
-      const tools: ToolDefinition[] = catalog.map(tool => ({ ...tool, label: tool.name, description: tool.description ?? tool.name,
-        parameters: tool.inputSchema as ToolDefinition['parameters'], execute: async () => ({ content: [], details: undefined }) }))
-      const disclosure = new PiToolDisclosure([...tools, contextReader(manager, 4000)], manager, () => session)
-      disclosure.prepareContext(JSON.stringify({ surface: { id: surface } }))
-      const initial = [...active]
-      disclosure.activate(request)
-      expect(active).toEqual([...active].sort())
-      expect(active).toEqual(expect.arrayContaining(initial))
-      return disclosure.tools.filter(tool => active.includes(tool.name)).map(tool => ({ name: tool.name, description: tool.description, parameters: tool.parameters }))
-    }
-    const initial = measure({ domains: [] })
-    const full = measure({ domains: [domain] })
-    const precise = measure({ names: [...names] })
-    expect(precise.map(tool => tool.name)).toEqual(expect.arrayContaining([...names]))
-    expect(precise.map(tool => tool.name)).toEqual([...new Set([...initial.map(tool => tool.name), ...names])].sort())
-    const added = (tools: typeof precise) => tools.filter(tool => !initial.some(item => item.name === tool.name))
-    expect(JSON.stringify(added(precise)).length).toBeLessThan(JSON.stringify(added(full)).length * 0.3)
-    measurements[domain] = { initial, full, precise }
+    const { disclosure, active } = disclosureFixture(catalog)
+    disclosure.prepareContext(JSON.stringify({ surface: { id: surface } }))
+    const initial = [...active()]
+    const loader = disclosure.tools.find(tool => tool.name === 'load_application_tools')!
+    const listed = await loader.execute('directory', { domains: [domain] }, undefined, undefined, {} as never)
+    const content = listed.content[0]
+    if (content.type !== 'text') throw new Error('missing directory')
+    const result = JSON.parse(content.text) as { availableTools: string[]; directory: Array<{ domain: string; tools: string[] }> }
+    expect(active()).toEqual(initial)
+    expect(result.availableTools).toEqual([])
+    // 目录给名字和一句用途，模型据此点名
+    for (const name of names) expect(result.directory[0].tools.some(line => line.startsWith(`${name}：`) && line.length > name.length + 4)).toBe(true)
+    disclosure.activate({ names: [...names] })
+    expect(active()).toEqual([...new Set([...initial, ...names])].sort())
+    expect(() => disclosure.activate({})).toThrow(/names/)
   }
-  if (process.env.HENJI_PI_MEASURE_FILE) await fs.writeFile(process.env.HENJI_PI_MEASURE_FILE, JSON.stringify(measurements))
+})
+
+it('已加载的工具跨消息保留；超出预算时在下一条消息开始处只留上一条消息里调用过的', () => {
+  const catalog = applicationCatalog().tools
+  const context = JSON.stringify({ surface: { id: 'workspace.video_edit' } })
+  const kept = disclosureFixture(catalog)
+  kept.disclosure.prepareContext(context)
+  kept.disclosure.activate({ names: ['trim_video_edit_clip', 'export_video_edit'] })
+  // 侧栏每条消息都会重新 configure 会话（service.ts 发送 prompt 之前），披露按会话记录重建；预算内的已加载工具原样带到下一条消息，不让历史缓存失效
+  const next = disclosureFixture(catalog, 16000, kept.manager)
+  next.disclosure.prepareContext(context)
+  expect(next.active()).toEqual(expect.arrayContaining(['trim_video_edit_clip', 'export_video_edit']))
+
+  const over = disclosureFixture(catalog, 1, kept.manager)
+  over.messages.push({ role: 'user', content: '剪一下', timestamp: 0 } as AgentSession['messages'][number],
+    { role: 'assistant', content: [{ type: 'toolCall', id: 'call', name: 'trim_video_edit_clip', arguments: {} }] } as unknown as AgentSession['messages'][number])
+  over.disclosure.prepareContext(context)
+  expect(over.active()).toContain('trim_video_edit_clip')
+  expect(over.active()).not.toContain('export_video_edit')
+  // 再来一条消息、上一条把剩下的都用过：没有可收回的，不再写记录
+  const entries = () => kept.manager.getBranch().filter(entry => entry.type === 'custom' && entry.customType === 'henji-loaded-application-tools').length
+  const before = entries()
+  const again = disclosureFixture(catalog, 1, kept.manager)
+  again.messages.push(...over.messages)
+  again.disclosure.prepareContext(context)
+  expect(again.active()).toContain('trim_video_edit_clip')
+  expect(entries()).toBe(before)
+  // 收回写进会话，冷恢复得到同一组工具
+  const restored = disclosureFixture(catalog, 16000, kept.manager)
+  restored.disclosure.prepareContext(context)
+  expect(restored.active()).toEqual(over.active())
 })
 
 it('发送时选区保留完整数量与分页，改变选区及冷恢复后仍读取原快照', async () => {

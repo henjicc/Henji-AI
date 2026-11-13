@@ -1,4 +1,5 @@
-import { unrestrictedCollectionAvailability, type ApplicationEntityRegistration, type ApplicationFieldDefinition, fieldDescriptors, fieldReadValues } from '@/core/application-control'
+import { z } from 'zod'
+import { unrestrictedCollectionAvailability, type ApplicationEntityRegistration, type ApplicationFieldDefinition, type JsonValue, fieldDescriptors, fieldReadValues } from '@/core/application-control'
 import type { FontFaceInfo } from '@/core/fonts/catalog'
 import { fontLibrarySnapshot, loadFontLibrary } from '@/platform/fonts'
 import { videoEditSchemaRef } from './videoEditFields'
@@ -15,12 +16,15 @@ fields.push({
   propertyId: 'font.axes', storeActions: [], read: face => (face.axes ?? []).map(axis => ({ ...axis })),
   descriptor: { id: 'font.axes', entityType: 'font', version: 1, title: '可变字体变化轴', description: '可变字体的全部变化轴 [{tag 四字符轴标签, name 字体自带名称, min, default, max}]；空数组表示不是可变字体。把数值写进文字样式 fontVariations（{tag: 数值}，在 min–max 内连续取值）即可得到任意中间字重、字宽等；剪辑文字片段的轴动画写 video_edit.clip.font_variation_keyframes。', value: { kind: 'json', schemaRef: schemaRef('axes.value') }, nullable: false, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['video_edit:read'], write: [] }, revisionScopes: ['fonts'], schemaRef: schemaRef('axes'), readOnlyReason: reason },
 })
+// json 属性的值 schema 必须随实体一起登记：缺了它，查询剪辑领域结构时整域都会报 SCHEMA_NOT_FOUND。
+const axesValueSchema = z.array(z.object({ tag: z.string(), name: z.string(), min: z.number(), default: z.number(), max: z.number() }).strict())
 export function createFontRegistration(): ApplicationEntityRegistration {
   const revisions = (): Record<string, number> => ({ fonts: fontLibrarySnapshot().revision })
   const requireFace = async (ref: { kind: string; id: string }): Promise<FontFaceInfo> => { const library = await loadFontLibrary(); const face = library.faces.find(value => value.id === ref.id); if (ref.kind !== 'font' || !face) throw new Error('字体不存在，请重新查询 font 实体。'); return face }
   return {
     entity: { id: 'font', domain: 'video_edit', version: 1, title: '可用字体', description: '本机与导入字体；family/中文名查询，category（serif/sans-serif/monospace/handwriting/unknown）、supports_cjk 与 imported 支持等值筛选。分页后读取 name，可用于所有剪辑字体字段；axes 非空的是可变字体，可在轴范围内连续取值。', refKind: 'font', dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: [], revisionScopes: ['fonts'], queryCapabilityIds: ['read_application_entity'], schemaRef: schemaRef('entity'), writeExclusion: { reason } },
     properties: fieldDescriptors(fields),
+    schemaDocuments: [{ ref: schemaRef('axes.value'), value: z.toJSONSchema(axesValueSchema) as JsonValue, validator: axesValueSchema }],
     provider: {
       entityType: 'font',
       async listEntities(request) { const { faces } = await loadFontLibrary(true); const offset = Math.max(0, Number(request.cursor) || 0); return { refs: faces.slice(offset, offset + request.limit).map(face => ({ kind: 'font', id: face.id, label: `${face.localizedFamily} / ${face.style}` })), nextCursor: offset + request.limit < faces.length ? String(offset + request.limit) : null, revisions: revisions() } },

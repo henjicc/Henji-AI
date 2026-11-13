@@ -100,6 +100,11 @@ export const applicationPropertyDescriptorSchema = z.object({
   verificationStrategy: z.enum(['state', 'execution']).optional(),
   /** 仅显式声明的集合忽略顺序；时间线、节点排序等数组仍按顺序核对。 */
   valueComparison: z.literal('unordered_set').optional(),
+  /**
+   * 体积大、多数任务用不上的属性：不点名属性的整实体读取不读也不返回，点名或按它筛选时照常读取。
+   * 由注册表统一处理，provider 收到的 propertyIds 里就不含它，据此能区分“调用方没点名”和“点名了它”。
+   */
+  omitFromDefaultRead: z.boolean().optional(),
   relation: z.object({
     targetEntityTypes: z.array(applicationEntityTypeIdSchema).min(1).max(32),
     cardinality: z.enum(['one', 'optional', 'many']),

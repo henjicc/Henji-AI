@@ -25,6 +25,7 @@ import {
   getGenerationModelSchema,
   getGenerationModelSchemaRef,
   prepareGenerationTask,
+  publicGenerationPreparation,
   searchGenerationModelCatalog,
   searchGenerationModels,
 } from './generationPreparationService'
@@ -77,6 +78,33 @@ describe('generationPreparation', () => {
   afterEach(() => {
     registry.clear()
     vi.unstubAllGlobals()
+  })
+
+  it('交给助手的准备结果不回显提示词与默认参数，选型依据只留评级，金额不带浮点误差', () => {
+    registry.clear()
+    registry.register({ ...testModel, params: [...testModel.params, { id: 'clonePanel', type: 'composite', valueType: 'object', order: 3, name: { zh: '音色克隆', en: 'Voice Clone' }, default: { voiceName: '', lastPreviewAudioUrl: '' } }],
+      pricing: { currency: '$', fixed: 1.1749999999999998, description: '测试模型基础价格' } } as ModelDefinition)
+    const prompt = '一只橘猫坐在窗台上看雨，'.repeat(40)
+    const full = prepareGenerationTask({ modelId: testModel.meta.id, mediaType: 'image', prompt, options: { quality: 'high' } })
+    const preparation = publicGenerationPreparation(full)
+    // 助手要的：选了哪个模型、哪些参数与默认不同、费用；提示词是它自己传的，界面面板的空状态等于默认值
+    expect(preparation).toMatchObject({ prepared: true, modelId: testModel.meta.id, options: { quality: 'high' }, mediaLimits: expect.any(Object) })
+    expect(JSON.stringify(preparation)).not.toContain('橘猫')
+    expect(preparation.options).not.toHaveProperty('clonePanel')
+    expect(preparation.selectionEvidence).toHaveProperty('standing')
+    expect(Object.keys(preparation.selectionEvidence as object).filter(key => !['standing', 'standingReason', 'promptLanguage'].includes(key))).toEqual([])
+    const price = preparation.priceEstimate as Record<string, unknown>
+    expect(price.amount).toBe(1.175)
+    expect(price).not.toHaveProperty('comparisonNote')
+    expect(String(price.comparableCnyAmount).split('.')[1]?.length ?? 0).toBeLessThanOrEqual(4)
+    // 人民币估值是付费授权金额，只进位不低估
+    expect(price.comparableCnyAmount as number).toBeGreaterThanOrEqual((full.priceEstimate as { comparableCnyAmount: number }).comparableCnyAmount)
+    // 画布提交、估价与尺寸检查用的是完整结果
+    expect(full.options).toMatchObject({ prompt, quality: 'high', clonePanel: { voiceName: '' } })
+    // 提交前付费预检（generationBudget.ts）读的是精简后的返回：它依赖的字段一个都不能少
+    expect(publicGenerationPreparation({ ...full, canSubmit: false, errorCode: 'PROVIDER_INSUFFICIENT_BALANCE', message: '余额不足' })).toMatchObject({
+      canSubmit: false, errorCode: 'PROVIDER_INSUFFICIENT_BALANCE', message: '余额不足',
+      priceEstimate: { estimateKind: (full.priceEstimate as { estimateKind: string }).estimateKind, comparableCnyAmount: expect.any(Number) } })
   })
 
   it('估价标记由模型契约传递至助手，不冒充精确动态计费', () => {

@@ -54,6 +54,10 @@ P('Pi 工具集（首轮界面 / 按领域加载 / 按任务加载）：')
 for k, names in p['piSets'].items():
     s = ''.join(tools[n]['piText'] for n in names if n in tools)
     P(f'  {k:<36}{len(names):>4} 个 {tk(s):>8} tok  {len(s.encode()):>8} bytes')
+if 'piRealSets' in p:
+    P('Pi 真实首轮（经 PiToolDisclosure，含 load_application_tools 与 read_assistant_context）：')
+    for k, v in p['piRealSets'].items(): P(f'  {k:<36}{tk(v):>8} tok  {len(v.encode()):>8} bytes')
+    P(row('  domains=video_edit 目录结果（一次性，进历史）', p['directoryText']))
 P('')
 P('重复短语（出现在 >=5 个工具说明中的 12 字以上片段，抽样）：')
 descs = [t['description'] for t in p['tools']]
@@ -123,6 +127,8 @@ vals = [tk(s['projected']) for s in sch]
 P(f'get_model_schema：{len(sch)} 个模型，projected 中位 {sorted(vals)[len(vals)//2]} tok，最大 {vals[0]}，最小 {vals[-1]}，raw/projected 合计 {sum(tk(s["raw"]) for s in sch)}/{sum(vals)}')
 for s in sch[:8]: P(f'  {s["id"]:<48}{s["type"]:<7}{tk(s["projected"]):>7} tok')
 
+P('prepare_generation_task 领域输出（300 字提示词）：')
+for k, v in p['prepared'].items(): P(row(f'  {k}', v))
 P('\n== 5. 系统提示词与技能 ==')
 P(HDR)
 P(row('SYSTEM_INSTRUCTIONS（含 MEMORY_RULES/PROJECT_PROGRESS_RULES）', p['system']))

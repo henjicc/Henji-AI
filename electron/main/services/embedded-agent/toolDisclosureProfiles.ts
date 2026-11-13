@@ -28,7 +28,7 @@ export const taskProfiles = {
 } satisfies Record<string, { tools: string[]; guidance: string }>
 
 /**
- * 按领域加载时随工具一起给的做法与技能：只给工具不给做法时，模型会退回通用属性手写坐标、反复试错。
+ * 按领域查目录时随目录一起给的做法与技能，tools 是目录里额外列出的其他领域工具：只给工具不给做法时，模型会退回通用属性手写坐标、反复试错。
  * skill 与工具名由 skillToolReferences.test 对照技能准入名单和能力目录校验。
  */
 export const domainProfiles: Record<string, { skill: string; tools: string[]; guidance: string }> = {
@@ -57,13 +57,13 @@ export function disclosureSurface(context: string): string {
 export function surfaceProfile(surface: string): { tools: string[]; guidance: string } {
   if (surface === 'tool.screen_recording') return { tools: ['start_screen_recording', 'stop_screen_recording', 'read_screen_recording_events'], guidance: '当前为屏幕录制。先列出 screen_recording.source 与 screen_recording.device，开始后保留返回的 session 引用。通用实体读取 phase/elapsed_ms/details；暂停、继续、标记、中止、恢复和导入剪辑按名称加载对应操作。停止会等待媒体与会话保存，再分页读事件；不会自动回放操作。会话是正式文档，可通过通用文档能力列出、改名、移动和删除。' }
   if (surface === 'workspace.canvas') return { tools: ['get_canvas_document'],
-    guidance: '当前为画布。已有通用实体读写与画布读取；已有画布和选择摘要无需再查。连续建节点后用 tidy_canvas_nodes（随 task=canvas_nodes 与 canvas_generation 加载，connectedTo 填链上任一节点，mode=flow）按连线方向整理一次；用户说整理画布用默认就近整理。生成加载 task=canvas_generation，节点详细操作加载 task=canvas_nodes；3D 镜头参考节点的布景、构图与运镜加载 domains=camera_stage（文档 id 取节点的镜头参考），生成页工具按需加载。' }
+    guidance: '当前为画布。已有通用实体读写与画布读取；已有画布和选择摘要无需再查。连续建节点后用 tidy_canvas_nodes（随 task=canvas_nodes 与 canvas_generation 加载，connectedTo 填链上任一节点，mode=flow）按连线方向整理一次；用户说整理画布用默认就近整理。生成加载 task=canvas_generation，节点详细操作加载 task=canvas_nodes；3D 镜头参考节点的布景、构图与运镜先用 domains=camera_stage 查看做法与工具再按 names 加载（文档 id 取节点的镜头参考），生成页工具按需加载。' }
   if (surface === 'workspace.generation') return { tools: ['search_models'], guidance: '当前为生成页。生成任务加载 task=generation；模型参数按所选模型读取。' }
-  if (surface === 'tool.camera_stage') return { tools: ['observe_camera_stage_scene'], guidance: '当前为三维场景（一份镜头参考文档，id 即文档 ID）。普通属性走通用实体，场景算法与渲染按需加载 camera_stage 领域；文档的列出、新建、改名、移动、删除用通用文档能力。' }
+  if (surface === 'tool.camera_stage') return { tools: ['observe_camera_stage_scene'], guidance: '当前为三维场景（一份镜头参考文档，id 即文档 ID）。普通属性走通用实体，场景算法与渲染先用 domains=camera_stage 查看做法与工具，再按 names 加载；文档的列出、新建、改名、移动、删除用通用文档能力。' }
   if (surface === 'tool.image_edit') return { tools: [], guidance: '当前为图片编辑。图层普通读写走通用实体，按本步骤用 load_application_tools 的 names 加载算法，如选区 select_image_edit_region、修补 repair_image_edit_region；不加载整个领域。' }
   if (surface === 'workspace.video_edit') return { tools: ['observe_video_edit_frame', 'read_application_media', ...modelTools, ...taskTools, ...videoEditCreativeTools()],
     guidance: '当前为剪辑。宿主上下文的 videoEdit 给出当前剪辑、序列、播放头、入出点与选区；剪辑、序列、素材项、片段、代码素材与参数关键帧走通用实体读改增删。取帧、读图、代码素材收录、调色分析、就地生成（付费，提交前宿主自动估价；完成后用 get_video_edit_in_place_generation 确认落位）与模型、任务工具已加载。修改后用 observe_video_edit_frame 取指定合成帧或源帧（contact_sheet 可一次看一段动作），再用 read_application_media 读取画面核对。保存、撤销、拆分、波纹／滚动／外滑／内滑修剪（trim_video_edit_clip）、转录局部检索（query_video_edit_transcript）和文本范围波纹删除（ripple_delete_video_edit_text，优先使用检索返回的 selector）、标题模板、字幕识别与翻译、多机位源创建（create_video_edit_multicam）、本地生成代理（generate_video_edit_proxy）、切回替换前的镜头（restore_video_edit_clip_take）、导出与收录按当前步骤用 load_application_tools 的 names 加载。' }
-  if (surface === 'tool.audio_edit') return { tools: [], guidance: '当前为口播剪辑。口播是文档：列出、新建、打开、改名、删除走通用文档能力（kind=audio_edit）；口播内容、词块与线索走通用实体，转写、分析、预览和导出按需加载 audio_edit 领域。' }
+  if (surface === 'tool.audio_edit') return { tools: [], guidance: '当前为口播剪辑。口播是文档：列出、新建、打开、改名、删除走通用文档能力（kind=audio_edit）；口播内容、词块与线索走通用实体，转写、分析、预览和导出按 names 加载对应工具。' }
   if (surface.startsWith('settings.')) return { tools: ['search_application_settings'], guidance: '当前为设置。先定位需要的设置属性，再通过通用实体读取和修改。' }
-  return { tools: [], guidance: '按当前界面与用户任务使用通用实体；缺少专用操作时再按领域或工具名加载。' }
+  return { tools: [], guidance: '按当前界面与用户任务使用通用实体；缺少专用操作时按工具名加载，不确定用哪个先用 domains 查看领域目录。' }
 }

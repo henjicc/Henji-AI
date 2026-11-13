@@ -1,6 +1,7 @@
 import { ApplicationHostBridge } from './applicationHostBridge'
 import { randomUUID } from 'node:crypto'
 import type { OperationRecord } from './operationStore'
+import type { ApplicationResult } from '../../../../src/core/application-control/invocation'
 import { createMainLogger } from '../logging'
 import { ApplicationToolDispatcher } from './applicationToolDispatcher'
 import { ApplicationOperationCoordinator } from './operationCoordinator'
@@ -120,7 +121,7 @@ export function createEmbeddedApplicationClient(callerId: string) {
   const assertOpen = () => { if (closed) throw new Error('助手操作授权已结束。') }
   return {
     catalog: () => { assertOpen(); return embedded.catalog(callerId).tools },
-    call: (name: string, input: Record<string, unknown>, signal: AbortSignal) => { assertOpen(); return embedded.call(callerId, name, input, signal) },
+    call: (name: string, input: Record<string, unknown>, signal: AbortSignal, observeRaw?: (raw: ApplicationResult) => void) => { assertOpen(); return embedded.call(callerId, name, input, signal, observeRaw) },
     close: () => {
       if (closed) return
       closed = true

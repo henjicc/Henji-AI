@@ -107,16 +107,18 @@ it('真实 MCP 与 Pi 写入经过授权、SQLite账本、正式Session及设置
       const createdSequence = await client.callTool({ name: 'change_application_entities', arguments: createSequence })
       expect(createdSequence.structuredContent, JSON.stringify(createdSequence)).toMatchObject({ executionState: 'completed' })
       // t169：完整证据/修订选项仅改变交付，不进入幂等摘要，也不重放已创建序列。
-      const detailedSequence = await client.callTool({ name: 'change_application_entities', arguments: { ...createSequence, includeEvidence: true, includeRevisions: true } })
-      const compactReceipt = createdSequence.structuredContent as { revision: number; scopeRevisions: Record<string, number>; result: { data: Record<string, unknown> } }
-      const detailedReceipt = detailedSequence.structuredContent as typeof compactReceipt
+      const detailedSequence = await client.callTool({ name: 'change_application_entities', arguments: { ...createSequence, includeDetails: true } })
+      const compactReceipt = createdSequence.structuredContent as { revision?: number; scopeRevisions?: Record<string, number>; result: { data: Record<string, unknown> } }
+      const detailedReceipt = detailedSequence.structuredContent as { revision: number; scopeRevisions: Record<string, number>; result: { data: Record<string, unknown> } }
       expect(detailedSequence.isError, JSON.stringify(detailedSequence)).toBe(false)
-      expect(compactReceipt.scopeRevisions).toEqual({ video_edit: detailedReceipt.scopeRevisions.video_edit })
-      expect(compactReceipt.revision).toBe(detailedReceipt.revision)
+      // 默认回执不带修订号与证据，includeDetails 时给全
+      expect(compactReceipt).not.toHaveProperty('scopeRevisions')
+      expect(compactReceipt).not.toHaveProperty('revision')
       expect(compactReceipt.result.data).not.toHaveProperty('evidence')
+      expect(compactReceipt.result.data).toHaveProperty('undoRef')
       expect(detailedReceipt.result.data).toHaveProperty('evidence')
       expect(detailedReceipt.scopeRevisions).toHaveProperty('canvas')
-      expect(operations.store.get(createSequence.operationId, identity.id)?.input).not.toHaveProperty('includeRevisions')
+      expect(operations.store.get(createSequence.operationId, identity.id)?.input).not.toHaveProperty('includeDetails')
       const owner = await video.openVideoEditDocument(documentRef, { focus: false })
       expect(owner.document.sequences).toHaveLength(1)
       const sequenceRef = { kind: 'video_edit.sequence', id: `${owner.document.id}:${owner.document.sequences[0].id}` }

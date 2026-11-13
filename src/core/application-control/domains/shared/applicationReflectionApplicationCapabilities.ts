@@ -30,7 +30,7 @@ const refSchema = z.object({
 
 const describeEntities = defineApplicationCapability({
   id: 'describe_application_entities', version: 1, title: '查看可读写的应用结构',
-  description: '默认返回紧凑实体/属性目录与值形状，按 domains 或 entityType/entityTypes 过滤，用 cursor 翻页。写入前用 propertyIds 精确选择属性并设 detail="full" 读取完整值 schema、范围和说明；refs 可查询实例当前可写性。',
+  description: '默认返回紧凑实体/属性目录与值形状，按 domains 或 entityType/entityTypes 过滤，用 cursor 翻页；只查一类实体时属性不重复 entityType。写入前用 propertyIds 点名属性并设 detail="full" 读取完整值 schema、范围和说明（不点名时仍返回紧凑目录；结构相同的值 schema 只展开一次，其余用 valueSchemaSameAs 指向同一份）；refs 可查询实例当前可写性。',
   domain: 'application',
   aliases: ['有哪些属性', '能改什么', '可写属性', '实体结构', '关键帧属性', 'describe entities', 'schema'],
   readOnly: true, dataClasses: ['C1'],
@@ -67,7 +67,7 @@ const listEntities = defineApplicationCapability({
     + 'propertyIds 可以一并读回每个实例的属性值；where 按属性等值筛选，只保留全部命中的实例；'
     + 'json 属性可在属性 ID 后接点分路径筛选或读回其中的字段，如 where {"assistant.memory.entry.section":"creative"}、propertyIds ["assistant.memory.entry.content"]。'
     + 'text 写关键词时按名称或正文的相关度排序查找（中文两字词即可命中），适合在大量记忆、素材里找相关条目。'
-    + '要"按名字找到那一个"就用 where 或 text，不要把列表取回来自己遍历——脚本语言不支持遍历读取结果。',
+    + '要"按名字找到那一个"就用 where 或 text，不要整页取回再逐个比对。items 与 refs 按位置一一对应，items 不重复 ref。',
   domain: 'application',
   aliases: ['列出实例', '有哪些对象', '列出关键帧', '按名字查找', 'list entities'],
   readOnly: true, dataClasses: ['C1'],
@@ -79,8 +79,7 @@ const listEntities = defineApplicationCapability({
     limit: z.number().int().min(1).max(200).default(50),
     /*
      * 属性投影与等值过滤：见 registry/types.ts 的 ApplicationEntityListProjection。
-     * 简单说——list 只给 kind/id，模型看不见名称，而脚本语言不允许遍历读取结果去逐个比对，
-     * 于是"确认改名成功了""把叫 X 的那个删掉"这类最普通的请求以前根本写不出来。
+     * list 只给 kind/id 时模型看不见名称，"确认改名成功了""把叫 X 的那个删掉"这类请求就得逐个读回比对。
      */
     propertyIds: z.array(z.string().min(1)).default([]),
     where: z.record(
@@ -116,7 +115,7 @@ const listEntities = defineApplicationCapability({
 
 const readEntity = defineApplicationCapability({
   id: 'read_application_entity', version: 1, title: '读取应用实体属性',
-  description: '按稳定引用读取一个实体实例的属性值和并发基线。省略 propertyIds 时读取全部可读属性；[] 只返回实体与基线。长文本用 textPage={propertyId,offset,limit} 单独分段读取，从 offset=0 开始，按返回的 nextOffset 续读至 null；每页 revisions 应保持一致，变化时重新从头读取。',
+  description: '按稳定引用读取一个实体实例的属性值和并发基线。省略 propertyIds 时读取全部可读属性，但值为空（null、空字符串、空数组、空对象）的不列出，只给省略个数 omittedEmptyProperties；单个属性超过约 8000 字的只在 largeProperties 给条目数与字数；结构描述里标了 omitFromDefaultRead 的属性不随整实体读取返回。要确认或读取某个属性就用 propertyIds 点名，点名的原样返回；[] 只返回实体与基线。长文本用 textPage={propertyId,offset,limit} 单独分段读取，从 offset=0 开始，按返回的 nextOffset 续读至 null；每页 revisions 与 revisionEpoch 应保持一致，任一变化都重新从头读取。',
   domain: 'application',
   aliases: ['读取属性', '看看这个对象', 'read entity'],
   readOnly: true, dataClasses: ['C1'],

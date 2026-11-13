@@ -293,6 +293,21 @@ describe('ApplicationReflectionRegistry', () => {
     expect((await registry.readEntity(input.ref, [], assistantContext)).properties).toEqual({})
   })
 
+  it('标了 omitFromDefaultRead 的属性不随整实体读取交给 provider，点名或按它筛选时照常读取', async () => {
+    const registry = new ApplicationReflectionRegistry(catalogVersion)
+    const read = vi.fn(provider.readEntity)
+    const base = registration()
+    registry.register({ ...base, properties: base.properties.map(property => property.id === 'sample.level' ? { ...property, omitFromDefaultRead: true } : property),
+      provider: { ...provider, readEntity: read } })
+    const ref = { kind: 'sample.item', id: 'one' }
+    const whole = await registry.readEntity(ref, undefined, assistantContext)
+    expect(whole.properties).not.toHaveProperty('sample.level')
+    // provider 据此区分“没点名”与“点名了”：没点名时收到的属性里没有它
+    expect(read.mock.calls.at(-1)?.[1].propertyIds).not.toContain('sample.level')
+    expect((await registry.readEntity(ref, ['sample.level'], assistantContext)).properties).toEqual({ 'sample.level': 4 })
+    expect((await registry.listEntities('sample.item', { limit: 10 }, assistantContext, { where: { 'sample.level': 4 } })).refs).toHaveLength(1)
+  })
+
   it('集合可用性同时合并静态声明、provider 当前状态与调用方权限', async () => {
     const registry = new ApplicationReflectionRegistry(catalogVersion)
     registry.register({

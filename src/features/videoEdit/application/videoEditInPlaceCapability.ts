@@ -9,6 +9,7 @@ import { type VideoEditInPlaceIntent, type VideoEditInPlacePlan } from '@/core/v
 import { videoEditFps } from '@/core/videoEdit/time'
 import type { CapabilityExecutionContext } from '@/features/application-control/capabilities/handlerTypes'
 import { generationApplicationService } from '@/features/generation/application/generationApplicationService'
+import { publicGenerationPreparation } from '@/features/generation/application/generationPreparationService'
 import { VideoEditOperationFailure } from '@/core/videoEdit/operationFailure'
 import { ApplicationPersistenceFailure } from '@/core/application-control/execution/persistence'
 import { splitVideoEditRef } from './videoEditReflection'
@@ -71,7 +72,7 @@ export async function handleVideoEditInPlaceCapability(id: string, raw: unknown,
     if (input.replacesTaskRef) await assertVideoEditInPlaceRegeneration(requireVideoEditFailedGeneration(input.documentRef.id, input.replacesTaskRef.id))
     const prepared = await prepareVideoEditInPlace(toRequest(input))
     const references = prepared.references.map(reference => videoEditInPlaceReferenceLabel(reference, prepared.plan.fps))
-    return { documentRef: input.documentRef, plan: planSummary(input.documentRef.id, prepared.plan, references), preparation: prepared.preparation, stylePrompt: prepared.stylePrompt,
+    return { documentRef: input.documentRef, plan: planSummary(input.documentRef.id, prepared.plan, references), preparation: publicGenerationPreparation(prepared.preparation), stylePrompt: prepared.stylePrompt,
       message: `${videoEditInPlaceActionLabel(prepared.plan.action)}：${(prepared.plan.frame / prepared.plan.fps).toFixed(2)} 秒起约 ${(prepared.plan.duration / prepared.plan.fps).toFixed(1)} 秒，模型 ${prepared.modelId}${references.length ? `，参考 ${references.join('、')}` : '，不带参考帧'}。` }
   }
   if (id === generateVideoEditInPlaceCapability.id) {

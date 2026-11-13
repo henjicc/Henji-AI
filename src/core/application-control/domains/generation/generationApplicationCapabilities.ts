@@ -176,7 +176,7 @@ const prepareGenerationTask = defineApplicationCapability({
   id: 'prepare_generation_task',
   version: 1,
   title: '校验生成参数',
-  description: '在提交前验证模型、媒体类型、必填项、参数范围和联动结果；指定媒体类型但省略模型时读取当前默认模型；其余省略字段用 generation.draft 补全。落到画布时参考素材可写画布节点 {kind:"canvas.node",id:"画布id:节点id"}，按连线取素材。接着已完成的结果生成（草稿转正片、续写、把图做成视频）时传 continueFrom，可做的动作见生成任务的 continuations 或画布结果节点；modelId 用续接列出的目标模型。' + APPLICATION_MEDIA_REFERENCE_GUIDANCE,
+  description: '在提交前验证模型、媒体类型、必填项、参数范围和联动结果；指定媒体类型但省略模型时读取当前默认模型；其余省略字段用 generation.draft 补全。落到画布时参考素材可写画布节点 {kind:"canvas.node",id:"画布id:节点id"}，按连线取素材。接着已完成的结果生成（草稿转正片、续写、把图做成视频）时传 continueFrom，可做的动作见生成任务的 continuations 或画布结果节点；modelId 用续接列出的目标模型。返回的 options 只列与模型默认值不同的参数（不含提示词），默认值见 get_model_schema。' + APPLICATION_MEDIA_REFERENCE_GUIDANCE,
   domain: 'generation',
   aliases: ['检查生成参数', '准备生成', 'prepare generation'],
   readOnly: true,
@@ -443,7 +443,7 @@ const resumeCanvasGenerationTask = defineApplicationCapability({
 
 const prepareCanvasNodeGeneration = defineApplicationCapability({
   id: 'prepare_canvas_node_generation', version: 1, title: '准备原节点生成',
-  description: '读取原画布生成节点的实际模型、参数和参考素材并估价，包括抠图、放大、图层拆分及已绘制蒙版的局部重绘。配置使用 canvas.node.generation_config；返回 submitInput 可直接用于 submit_canvas_node_generation。',
+  description: '读取原画布生成节点的实际模型、参数和参考素材并估价，包括抠图、放大、图层拆分及已绘制蒙版的局部重绘。配置使用 canvas.node.generation_config；返回 submitInput 可直接用于 submit_canvas_node_generation，options 只列与模型默认值不同的参数。',
   domain: 'generation', aliases: ['准备图片工具', '节点生成估价'], readOnly: true,
   control: capabilityControl('observe', ['canvas.node', 'generation.preparation']), dataClasses: ['C1'], idempotent: true, destructive: false,
   timeoutMs: 30_000, supportsPreview: false, supportsUndo: false, requiredScopes: [],
