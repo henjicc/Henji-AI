@@ -1,6 +1,7 @@
 import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
 import { isAgentAuthoredStep } from '@/features/application-control'
 import { jsonEqual } from '@/core/jsonEqual'
+import { audioEditClueOptionLabel } from '../audioEditClueReview'
 
 /*
  * 历史记录面板的步骤名：撤销栈只存作品快照，这里比较相邻两份快照，说出这一步改了什么。
@@ -26,6 +27,8 @@ export function describeAudioEditStep(before: AudioEditProjectDocument, after: A
 }
 
 function compareAudioEditStep(before: AudioEditProjectDocument, after: AudioEditProjectDocument): string {
+  const clue = describeClueStep(before, after)
+  if (clue) return clue
   const cutsBefore = (before.cuts ?? []).filter(cut => cut.enabled)
   const cutsAfter = (after.cuts ?? []).filter(cut => cut.enabled)
   if (cutsAfter.length > cutsBefore.length) {
@@ -56,6 +59,27 @@ function compareAudioEditStep(before: AudioEditProjectDocument, after: AudioEdit
   if (after.referenceScript !== before.referenceScript) return '参考逐字稿'
   if (after.name !== before.name) return '重命名'
   return '编辑'
+}
+
+/**
+ * 改判一条线索（界面上选做法，或助手写 chosen_option / status）：删词、补停顿剪切都随它发生，
+ * 按“线索改为某种做法”命名，不叫“删除”“恢复”。只认这一步里恰好一条线索变了的情况，批量处理照旧按内容命名。
+ */
+function describeClueStep(before: AudioEditProjectDocument, after: AudioEditProjectDocument): string | undefined {
+  if (before.suggestions === after.suggestions && before.suggestionHandoff === after.suggestionHandoff) return undefined
+  const previous = new Map(before.suggestions.map(item => [item.id, item]))
+  const changed = after.suggestions.filter(item => { const old = previous.get(item.id); return old && (old.status !== item.status || !same(old.blockIds, item.blockIds) || before.suggestionHandoff?.[item.id]?.chosen !== after.suggestionHandoff?.[item.id]?.chosen) })
+  if (changed.length !== 1) return undefined
+  const item = changed[0]
+  const chosen = after.suggestionHandoff?.[item.id]?.chosen
+  const options = after.suggestionHandoff?.[item.id]?.options ?? []
+  if (chosen && chosen !== before.suggestionHandoff?.[item.id]?.chosen) {
+    const splices = options.filter(option => option.id.startsWith('splice_'))
+    return `线索改为${audioEditClueOptionLabel(chosen, splices.findIndex(option => option.id === chosen), splices.length)}`
+  }
+  if (item.status === 'dismissed') return item.kind === 'retake' ? '线索改为两遍都留' : '线索改为保留'
+  if (item.status === 'applied') return item.kind === 'retake' ? `线索改为${audioEditClueOptionLabel(options[0]?.id ?? 'keep_later')}` : item.kind === 'long_silence' ? '线索改为压缩' : '线索改为删掉'
+  return undefined
 }
 
 export interface AudioEditHistoryEntry { label: string; state: 'done' | 'current' | 'undone'; /** 跳到这一步需要撤销（正数）或重做（负数）多少次。 */ steps: number }

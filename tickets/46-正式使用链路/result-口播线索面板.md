@@ -54,3 +54,45 @@
 - 试听不会在接缝后自动停。
 - 线索的生成、判定、`chosen_option` 语义未改；只有“人定了标给用户的那条时清掉 audience”是新增的组合，见上。
 - 没有走“先给用户看草稿、确认后再实现”的流程：本次是委派任务，草稿与实现同时交付，请对照草稿和真实截图一起确认。
+
+---
+
+# 第二版：挪成常驻标签（2026-11-13 晚，按第五轮真实窗口结论改）
+
+上文“现状 / 改动文件 / 真实窗口核对步骤 / 没做的”里关于“在自动粗剪浮层里”的内容已过时，以本节为准。
+
+## 做了什么
+- 线索列表是停靠面板 `clues`（标题“线索”，最小 240×160），默认三个布局预设里都与“文字稿”同组、排在它后面；保存过的旧布局由 `migrateAudioEditLayout` 补进文字稿那一组。组件 `workspace/AudioEditCluesPanel.tsx`，`AudioEditSuggestions.tsx` 已删除。
+- 面板占满高度、列表自己滚动；底栏（`UiToolbar variant="footer"` 的 `tools`）常驻：左“待定 N · 建议抽看 M”，右上一条、下一条、只看待定。没有线索时是空态“没有要看的线索”。
+- 有待定时“线索”标签后跟一个第三档数字（不铺底、不着色）。
+- “自动粗剪”浮层里只剩一行入口“N 处待定 · 查看线索”，点了切到线索标签（布局里没有就加回文字稿那一组）并收起浮层。浮层在离开音频编辑（`useAppMenuVisibility`）或文字稿面板被别的标签盖住（面板可见性上下文）时自动收起。
+- 选中：列表是一个焦点（listbox + aria-activedescendant），上下键移动的是选中行；行与做法按钮不留焦点，所以选中只有中性选中底，没有蓝色描边。焦点环只在键盘聚焦列表且还没有选中行时出现。
+- 历史记录：一步里恰好改判一条线索时写成“线索改为留前一遍 / 两遍都留 / 换个切点 / 删掉 / 压缩 / 保留”，助手改判同样命名（前面照旧带助手标记）。
+- 正在处理（workspace.disabled）时做法不可点，原因“正在处理，请稍候”。
+- 文字稿标签行放工具所需的面板组宽度由 330 调到 390（同组多了一个标签）。
+
+## 改动文件（本版）
+- 新增 `src/features/audioEdit/workspace/AudioEditCluesPanel.tsx`；删除 `src/features/audioEdit/AudioEditSuggestions.tsx`
+- `src/features/audioEdit/AudioEditApp.tsx`（`showPanel`，去掉 `chooseClueOption`）、`AudioEditDisclosure.tsx`（去掉不再使用的 `defaultOpen`）、`AudioEditApp.subscription.test.tsx`
+- `src/features/audioEdit/workspace/`：`AudioEditDock.tsx`、`AudioEditRoughCut.tsx`、`audioEditDockLayout.ts`、`audioEditHistory.ts`、`audioEditWorkspaceContext.ts`、`audioEditWorkspace.test.ts`
+- `src/features/audioEdit/audioEditClueReview.test.ts`（历史命名）
+- `docs/task/界面样板屏/口播线索/`（草稿、预览图、设计说明）
+
+## 验证
+渲染层 tsc 通过；改动文件 eslint 通过；`check:surface` / `check:colors` / `check:ui-residue` / `check:icons` 通过；`audioEditClueReview.test.ts`（7）、`audioEditWorkspace.test.ts`（7）、`AudioEditAppMenus.test.tsx`、`AudioEditApp.subscription.test.tsx` 通过。真实窗口未看。
+
+## 真实窗口核对步骤（深色，1440×900，开发版加 `--dev-checks`）
+1. 打开一份做过“快速处理”、无参考稿的口播。左侧面板组的标签应为“文字稿 / 线索 N / 效果”，N 是待定数。若沿用旧布局，同样应自动多出“线索”。
+2. 点“线索”：列表占满面板高度，底栏不用滚动就看得到（左计数，右三个图标）。截图 A。
+3. 点第一条：播放头跳过去，行是中性底色、没有蓝色描边，行下展开做法与“试听”。截图 B。
+4. 按 → 或数字键改判：勾移动、行尾做法变、底栏与标签上的待定数减一、行不跳走；Ctrl+Z 撤回。打开“历史记录”，这一步应写“线索改为…”。截图 C。
+5. 回车试听；↑/↓ 换行（列表跟着滚动）；点“只看待定”。截图 D。
+6. 回“文字稿”→“自动粗剪”：原“剪辑线索”一节变成一行“N 处待定 · 查看线索”；点它，浮层收起并切到线索标签。
+7. 再打开“自动粗剪”浮层，直接切到剪辑工作区：浮层应消失，不挡点击。回来后再打开浮层，点同组“效果”标签：浮层应收起。
+8. 把左侧面板拖到最窄（240）与窗口 960 宽：文字截断不折行，底栏工具收进“更多”，没有描红。
+9. Tab 键把焦点移进线索列表（未选中行时）：列表有一圈焦点环；按 ↓ 选中后焦点环消失、只剩选中底。
+
+## 没做的
+- “建议抽看”计数不随人看过而减少、试听不在接缝后自动停、按词“隐藏这一组”：同第一版，未动。
+- 用户主动关掉“线索”标签后，下次恢复布局会被补回（与“效果”标签同一机制）。
+- 文字稿的工具仍在标签行插槽（旧规则存量），没有借这次迁到底栏。

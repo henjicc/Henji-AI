@@ -36,11 +36,10 @@ import { audioWaveActions, useAudioWaveEditor } from './spectral/audioWaveEditor
 import { AudioEditDock } from './workspace/AudioEditDock'
 import { AudioEditAppMenus } from './workspace/AudioEditAppMenus'
 import { WorkspaceLayoutMenu } from '@/components/dockLayouts/WorkspaceLayoutMenu'
-import { AUDIO_EDIT_WORKSPACE_ID } from './workspace/audioEditDockLayout'
+import { AUDIO_EDIT_PANELS, AUDIO_EDIT_WORKSPACE_ID } from './workspace/audioEditDockLayout'
 import { AudioEditWorkspaceContext, type AudioEditDeliveryFormat, type AudioEditWorkspace } from './workspace/audioEditWorkspaceContext'
 
 import { adjustAudioEditRangeMode, DEFAULT_AUDIO_EDIT_VIEW_SETTINGS, editAudioEditRange, setAudioEditBlocks } from '@/core/audioEdit/edits'
-import { chooseAudioEditClueOption } from './audioEditClueReview'
 import { editAudioEditProject, flushAudioEditProject, getAudioEditProjectInstance } from './application/audioEditProjectInstances'
 import { DocumentSaveStatus } from '@/features/documents'
 import { AudioEditLeaveCancelledError, createAudioEditRecording, importAudioEditMedia, isAudioEditMediaPath, leaveAudioEditEditor, openAudioEditDocument, pickAudioEditMedia, renameAudioEditDocument } from './application/audioEditDocumentService'
@@ -243,14 +242,6 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
   const deleteBlock = (id: string) => {
     try { editAudioEditProject(project.id, (current) => setAudioEditBlocks(current, [id], false)) } catch (error) { notifyError(error) }
   }
-  const chooseClueOption = (id: string, optionId: string): boolean => {
-    try {
-      let changed = false
-      editAudioEditProject(project.id, (current) => { const next = chooseAudioEditClueOption(current, id, optionId); changed = next !== current; return next })
-      if (!changed) showNotification(notificationMessage('audioCuesUnchanged'))
-      return changed
-    } catch (error) { notifyError(error); return false }
-  }
   const editSelection = (mode: 'delete' | 'mute' | 'restore') => {
     if (!waveSelection || disabled) return
     try {
@@ -278,7 +269,13 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     silencePreview: { ranges: silencePreview.ranges, pending: silencePreview.pending, ...(silencePreview.error ? { error: silencePreview.error } : {}) },
     selectionOnly, setSelectionOnly, processRange: range, selectedBlocks, selectedBlockIds, setSelectedBlockIds,
     setBlocksIncluded: state.setBlocksIncluded, setReferenceScript: state.setReferenceScript,
-    editBlock: setEditingBlockId, deleteBlock, chooseClueOption, asrModels, processors, tasks,
+    editBlock: setEditingBlockId, deleteBlock, asrModels, processors, tasks,
+    showPanel: (id) => {
+      const panel = dockApi?.getPanel(id)
+      if (panel) { panel.api.setActive(); return }
+      const definition = AUDIO_EDIT_PANELS.find((item) => item.id === id)
+      if (definition) dockApi?.addPanel({ id, component: id, title: definition.title, renderer: 'always', minimumWidth: definition.minimumWidth, minimumHeight: definition.minimumHeight, ...(dockApi.getPanel('transcript') ? { position: { referencePanel: 'transcript', direction: 'within' as const } } : {}) })
+    },
     deliveryFormat: format, setDeliveryFormat: setFormat, withSrt, setWithSrt,
     openViewSettings: () => setViewSettingsOpen(true),
   }

@@ -17,11 +17,19 @@ html, body { margin:0; background:#101010; color:var(--text1); font-family:'Harm
 svg.i { width:var(--s,16px); height:var(--s,16px); flex:none; stroke:currentColor; fill:none; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round; display:block; }
 .page { padding:40px; }
 .block h2 { font-size:16px; margin:0 0 16px; }
-.shot { width:1440px; height:900px; background:var(--window); display:flex; gap:48px; align-items:flex-start; justify-content:center; padding-top:80px; white-space:nowrap; }
+.shot { width:1440px; height:900px; background:var(--window); display:flex; gap:40px; align-items:flex-start; justify-content:center; padding-top:60px; white-space:nowrap; }
 body.single { background:var(--gap); } body.single .page { padding:0; } body.single h2 { display:none; }
 .col { display:flex; flex-direction:column; gap:10px; }
 .cap { color:var(--text3); font-size:12px; }
-/* 自动粗剪浮层：实底 + 一圈描边，320 宽 */
+/* 停靠面板：标签行只放标签，列表占满高度自己滚动，底栏常驻 */
+.dock { width:320px; height:560px; background:var(--panel); display:flex; flex-direction:column; }
+.tabs { height:32px; flex:none; display:flex; align-items:stretch; background:var(--window); font-size:12px; color:var(--text2); }
+.tab { padding:0 10px; display:flex; align-items:center; gap:6px; border-bottom:1px solid transparent; }
+.tab.on { color:var(--text1); background:var(--panel); border-bottom-color:var(--accent); }
+.tab .n { color:var(--text3); font-variant-numeric:tabular-nums; }
+.dock .list { flex:1; min-height:0; overflow:hidden; padding:4px 8px; }
+.dock .foot { flex:none; margin-top:0; padding:0 4px 0 12px; }
+/* 自动粗剪浮层：实底 + 一圈描边；线索只留一行入口 */
 .pop { width:320px; background:var(--overlay); border:1px solid var(--line-overlay); border-radius:12px; padding:8px; }
 .dis { height:32px; display:flex; align-items:center; justify-content:space-between; padding:0 8px; margin:0 -8px; color:var(--text1); }
 .dis .v { color:var(--text3); font-size:12px; display:flex; align-items:center; gap:6px; --s:14px; }
@@ -47,7 +55,7 @@ body.single { background:var(--gap); } body.single .page { padding:0; } body.sin
 <body>
 <div class="page">
 <section class="block" data-id="1">
-<h2>口播线索：默认、选中一条、只看待定</h2>
+<h2>口播线索：常驻标签（默认、选中一条、只看待定）与粗剪浮层入口</h2>
 <div class="shot" id="shot"></div>
 </section>
 </div>
@@ -68,12 +76,15 @@ const opts = `<div class="opts">
   <span class="btn">${ic('play')}试听</span></div>`
 const summary = (text) => `<div class="row"><span class="dot"></span><span class="t sum">${text}</span><span class="t3" style="--s:14px">${ic('chevron-right')}</span></div>`
 const foot = (on) => `<div class="foot"><span>待定 2 · 建议抽看 2</span><span class="tools"><span class="ib">${ic('chevron-up')}</span><span class="ib">${ic('chevron-down')}</span><span class="ib${on ? ' on' : ''}">${ic('list-filter')}</span></span></div>`
-const pop = (inner, on) => `<div class="pop"><div class="dis"><span>剪辑线索</span><span class="v">待定 2${ic('chevron-down')}</span></div><div class="list">${inner}</div>${foot(on)}</div>`
+const dock = (inner, on) => `<div class="dock"><div class="tabs"><span class="tab">文字稿</span><span class="tab on">线索<span class="n">2</span></span><span class="tab">效果</span></div><div class="list">${inner}</div>${foot(on)}</div>`
+const dis = (name, value) => `<div class="dis"><span>${name}</span><span class="v">${value}${ic('chevron-right')}</span></div>`
+const entry = `<div class="pop">${dis('停顿', '≥ 800 毫秒')}${dis('语气词', '3 类')}${dis('呼吸声', '删除')}${dis('已处理区间', '704 处')}<div class="row" style="margin:0 -8px;height:32px;font-size:13px"><span class="t t1">2 处待定 · 查看线索</span><span class="t3" style="--s:14px">${ic('chevron-right')}</span></div>${dis('参考逐字稿', '未使用')}</div>`
 const view = (cap, html) => `<div class="col"><span class="cap">${cap}</span>${html}</div>`
 document.getElementById('shot').innerHTML = [
-  view('默认', pop(rows.map((item) => row(item)).join('') + summary('另有 42 处已自动处理') + summary('12 处语气词与停顿'))),
-  view('选中第一条并改判为留前一遍', pop(row([...rows[0].slice(0, 3), '留前一遍', 't1'], true) + opts + rows.slice(1).map((item) => row(item)).join('') + summary('另有 42 处已自动处理'))),
-  view('只看待定', pop(rows.slice(0, 2).map((item) => row(item)).join(''), true)),
+  view('“线索”标签：默认', dock(rows.map((item) => row(item)).join('') + summary('另有 42 处已自动处理') + summary('12 处语气词与停顿'))),
+  view('选中第一条并改判为留前一遍（中性选中底，无描边）', dock(row([...rows[0].slice(0, 3), '留前一遍', 't1'], true) + opts + rows.slice(1).map((item) => row(item)).join('') + summary('另有 42 处已自动处理'))),
+  view('只看待定', dock(rows.slice(0, 2).map((item) => row(item)).join(''), true)),
+  view('“自动粗剪”浮层里的入口（点了切到线索并收起浮层）', entry),
 ].join('')
 if (new URLSearchParams(location.search).get('s')) { document.body.classList.add('single'); document.querySelector('.block').classList.add('show') }
 </script>

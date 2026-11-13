@@ -1,13 +1,17 @@
-import { Sparkles } from 'lucide-react'
-import { PanelTrigger, UI_DROP_TARGET_OVERLAY_CLASS, UiButton, useFileDropTarget, UiChipButton, UiFormRow, UiGroup, UiRangeInput, UiSwitch, UiTextArea, UI_TEXT_META_CLASS, UI_TEXT_SECONDARY_CLASS } from '@/components/ui'
+import { useContext, useEffect, useRef } from 'react'
+import type { PanelTriggerControls } from '@/components/ui/PanelTrigger'
+import { ChevronRight, Sparkles } from 'lucide-react'
+import { PanelTrigger, UI_DROP_TARGET_OVERLAY_CLASS, UiButton, UiOptionButton, useFileDropTarget, UiChipButton, UiFormRow, UiGroup, UiRangeInput, UiSwitch, UiTextArea, UI_TEXT_META_CLASS, UI_TEXT_SECONDARY_CLASS } from '@/components/ui'
 import { UI_PANEL_BODY_HEIGHT_CLASS } from '@/components/ui/styleTokens'
 import { DEFAULT_AUDIO_EDIT_SETTINGS } from '@/core/audioEdit/edits'
 import { notificationMessage } from '@/i18n/notifications'
 import { openDialog, readTextFile } from '@/platform/desktopApi'
 import { AudioEditDisclosure } from '../AudioEditDisclosure'
-import { AudioEditSuggestions } from '../AudioEditSuggestions'
+import { countAudioEditClues } from '../audioEditClueReview'
+import { useAppMenuVisibility } from '@/components/appMenu/appMenuVisibility'
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { cleanProjectAudioEditFillers, compressAudioEditSilence, processProjectAudioEditBreaths, quickProcessAudioEdit } from '../application/audioEditApplicationService'
-import { useAudioEditWorkspace } from './audioEditWorkspaceContext'
+import { AudioEditPanelVisibleContext, useAudioEditWorkspace } from './audioEditWorkspaceContext'
 
 function formatTime(frames: number, sampleRate: number): string {
   const seconds = Math.max(0, frames / Math.max(1, sampleRate))
@@ -25,12 +29,18 @@ function RangeLabel({ name, value }: { name: string; value: string }): JSX.Eleme
  */
 export function AudioEditRoughCutMenu(): React.ReactElement {
   const workspace = useAudioEditWorkspace()
-  return <PanelTrigger panelSize="compact" panelPadding="menu" alignment="bottomRight" renderPanel={() => <RoughCutPanel />}>
+  const controls = useRef<PanelTriggerControls | null>(null)
+  // 音频编辑被切走（换工作区、换工具）或文字稿面板被别的标签盖住时浮层跟着收起，不留在别的界面上挡住点击
+  const workspaceVisible = useAppMenuVisibility()
+  const visible = useContext(AudioEditPanelVisibleContext) && workspaceVisible
+  useEffect(() => { if (!visible) controls.current?.closePanel() }, [visible])
+  const showClues = () => { controls.current?.closePanel(); workspace.showPanel('clues') }
+  return <PanelTrigger panelSize="compact" panelPadding="menu" alignment="bottomRight" controlsRef={controls} renderPanel={() => <RoughCutPanel onShowClues={showClues} />}>
     {({ open, togglePanel }) => <UiButton size="sm" aria-expanded={open} disabled={workspace.disabled} disabledReason="正在处理，请稍候" onClick={togglePanel}><Sparkles />自动粗剪</UiButton>}
   </PanelTrigger>
 }
 
-function RoughCutPanel(): React.ReactElement {
+function RoughCutPanel({ onShowClues }: { onShowClues: () => void }): React.ReactElement {
   const workspace = useAudioEditWorkspace()
   const { project, run, notify, update, processRange: range } = workspace
   // 文本文件拖到参考稿区域就导入，和“导入参考稿”同一件事
@@ -72,7 +82,7 @@ function RoughCutPanel(): React.ReactElement {
             <UiButton size="sm" onClick={() => update({ cuts: project.cuts?.map((item) => item.id === cut.id ? { ...item, enabled: false } : item) })}>恢复</UiButton>
           </div>)}</div>
         </AudioEditDisclosure>}
-        <AudioEditSuggestions />
+        {project.suggestions.length > 0 && <CluesEntry onOpen={onShowClues} />}
         <AudioEditDisclosure title="参考逐字稿" value={project.referenceScript?.trim() ? '已填写' : '未使用'}>
           <div className="relative flex flex-col gap-2" {...scriptDrop.dropProps}>
             {scriptDrop.isDragOver ? <div aria-hidden="true" className={UI_DROP_TARGET_OVERLAY_CLASS} /> : null}
@@ -83,4 +93,14 @@ function RoughCutPanel(): React.ReactElement {
       </UiGroup>
     </fieldset>
   </div>
+}
+
+/** 线索在“线索”面板里看；这里只留一行入口，点了切过去并收起浮层。 */
+function CluesEntry({ onOpen }: { onOpen: () => void }): React.ReactElement {
+  const { project } = useAudioEditWorkspace()
+  const decide = countAudioEditClues(project).decide
+  return <UiOptionButton variant="menu" size="md" className="w-full justify-between gap-2" onClick={onOpen}>
+    <span className="min-w-0 truncate">{decide ? `${decide} 处待定 · 查看线索` : '查看线索'}</span>
+    <ChevronRight size={UI_ICON_SIZE.sm} aria-hidden="true" className="shrink-0 text-text3" />
+  </UiOptionButton>
 }

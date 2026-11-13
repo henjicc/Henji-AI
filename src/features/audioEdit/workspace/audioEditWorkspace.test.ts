@@ -63,7 +63,7 @@ describe('音频编辑布局预设', () => {
   })
 })
 
-it('旧布局里的“选区”“处理”“基本声音”面板迁走、“效果”补进文字稿那一组，通用校验通过且其余位置不变', async () => {
+it('旧布局里的“选区”“处理”“基本声音”面板迁走、“线索”“效果”补进文字稿那一组，通用校验通过且其余位置不变', async () => {
   const { migrateAudioEditLayout: migrate } = await import('./audioEditDockLayout')
   const { parseWorkspaceDockLayout } = await import('@/core/workspaceLayouts/validation')
   const old = {
@@ -77,7 +77,7 @@ it('旧布局里的“选区”“处理”“基本声音”面板迁走、“�
   } as unknown as Parameters<typeof migrate>[0]
   const migrated = parseWorkspaceDockLayout(JSON.stringify(migrate(structuredClone(old))), AUDIO_EDIT_PANELS)
   const leaves = (migrated.grid.root as unknown as { data: Array<{ data: { views: string[]; activeView: string } }> }).data.map(node => node.data)
-  expect(leaves[0]).toEqual({ id: 'left', views: ['transcript', 'library'], activeView: 'transcript' })
+  expect(leaves[0]).toEqual({ id: 'left', views: ['transcript', 'clues', 'library'], activeView: 'transcript' })
   expect(leaves[2]).toEqual({ id: 'right', views: ['effects', 'history', 'delivery'], activeView: 'effects' })
-  expect(Object.keys(migrated.panels).sort()).toEqual(['delivery', 'editor', 'effects', 'history', 'library', 'transcript'])
+  expect(Object.keys(migrated.panels).sort()).toEqual(['clues', 'delivery', 'editor', 'effects', 'history', 'library', 'transcript'])
 })
