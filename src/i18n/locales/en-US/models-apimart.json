@@ -34,6 +34,7 @@
     "apimart-seedream-5.0-flash": { "meta": { "name": "Seedream 5.0 Flash" } },
     "apimart-happyhorse-1.1": { "meta": { "name": "HappyHorse 1.1" } },
     "apimart-wan-2.7-image": { "meta": { "name": "Wan 2.7 Image" } },
-    "apimart-flux-3-video": { "meta": { "name": "FLUX 3 Video" } }
+    "apimart-flux-3-video": { "meta": { "name": "FLUX 3 Video" } },
+    "apimart-minimax-h3-image": {"meta": {"name": "MiniMax H3 Image"}}
   }
 }

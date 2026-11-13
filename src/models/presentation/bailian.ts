@@ -45,13 +45,22 @@ export const bailianPresentation: Record<string, ModelPresentation> = {
     linkages: [],
   },
 
-  'bailian-qwen-image-2.1-pro': {
+  'bailian-qwen-image-2.1': {
     meta: {
-      name: { key: 'meta.name', fallback: 'Qwen Image 2.1 Pro' },
-      i18nScope: 'models.defs.bailian-qwen-image-2.1-pro',
+      name: { key: 'meta.name', fallback: 'Qwen Image 2.1' },
+      i18nScope: 'models.defs.bailian-qwen-image-2.1',
     },
     params: {
-      bailianQwenImage21ProAspectRatio: {
+      bailianQwenImage21Variant: {
+        name: sharedFieldText('variant'),
+        role: 'mode',
+        optionLabels: {
+          pro: { label: 'Pro' },
+          turbo: { label: 'Turbo' },
+        },
+        tooltip: { zh: 'Turbo 出图更快、单价更低；Pro 是完整版。', en: 'Turbo renders faster at a lower price; Pro is the full version.' },
+      },
+      bailianQwenImage21AspectRatio: {
         name: sharedFieldText('aspectRatio'),
         optionLabels: {
           smart: { label: sharedOptionText('smart') },
@@ -64,14 +73,14 @@ export const bailianPresentation: Record<string, ModelPresentation> = {
           '2:3': { label: '2:3' },
         },
       },
-      bailianQwenImage21ProResolution: {
+      bailianQwenImage21Resolution: {
         name: sharedFieldText('resolution'),
         optionLabels: {
           '1K': { label: '1K' },
           '2K': { label: '2K' },
         },
       },
-      bailianQwenImage21ProCount: {
+      bailianQwenImage21Count: {
         name: { zh: '生成数量', en: 'Output Count' },
       },
     },

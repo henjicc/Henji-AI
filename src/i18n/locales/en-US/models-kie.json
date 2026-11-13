@@ -152,6 +152,8 @@
     "kie-wan-3.0": {"meta": {"name": "Wan 3.0"}},
     "kie-wan-3.0-prime": {"meta": {"name": "Wan 3.0 Prime"}},
     "kie-grok-imagine-video-1.5": {"meta": {"name": "Grok Imagine Video 1.5"}},
-    "kie-flux-3-klein": {"meta": {"name": "FLUX 3 Klein"}}
+    "kie-flux-3-klein": {"meta": {"name": "FLUX 3 Klein"}},
+    "kie-seedream-5.5": {"meta": {"name": "Seedream 5.5"}},
+    "kie-minimax-h3-image": {"meta": {"name": "MiniMax H3 Image"}}
   }
 }

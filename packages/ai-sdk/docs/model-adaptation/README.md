@@ -38,8 +38,11 @@
 - [MiniMax H3 Image · Fal](MiniMax-H3-Image/MiniMax-H3-Image_Fal.md)：标准与 Highspeed 两档；与 H3 视频分开建档。
 - [PixVerse V6 · Fal](PixVerse-V6/PixVerse-V6_Fal.md)：标准与 Max 两档合为一个模型；Max 没有首尾帧与续写。
 - [LTX-2.5 · Fal](LTX-2.5/LTX-2.5_Fal.md)：独立模型，Pro / Fast 两档，不并入 LTX-2.3（没有延长与重拍，价格约两倍）。
-- [Qwen-Image 2.1 Pro · 百炼](Qwen-Image-2.1/Qwen-Image-2.1_百炼.md)：开源权重分支的 API 版，不是 3.0 的旧版；Turbo 缺人民币价，未接。
-- 未接：Seedream 5.5 的火山方舟与 KIE（价格表未核清）、MiniMax H3 Image 的 KIE / APIMart（缺部分单价）、FLUX 3 Max 关键帧生视频（需新增按帧号放图的交互）。
+- [Qwen-Image 2.1 · 百炼](Qwen-Image-2.1/Qwen-Image-2.1_百炼.md)：开源权重分支的 API 版，不是 3.0 的旧版；Pro 0.25 元/张、Turbo 0.1 元/张，合为一个模型的版本参数。
+- [Seedream 5.5 · 火山方舟](Seedream-5.5/Seedream-5.5_火山引擎.md)：输入图 0.05 元/张，输出按像素 ≤2.61M 0.13 元、以上 0.23 元；图层拆分单价官方只写“每层按实际档位计费”，按同档推断。
+- [Seedream 5.5 · KIE](Seedream-5.5/Seedream-5.5_KIE.md)：官方三个 model 合为一个，生成 / 编辑自动切换、图层拆分为显式模式。
+- [MiniMax H3 Image · KIE](MiniMax-H3-Image/MiniMax-H3-Image_KIE.md)、[· APIMart](MiniMax-H3-Image/MiniMax-H3-Image_APIMart.md)：APIMart 只有平台按 token 的估价，参考图未计入。
+- 未接：FLUX 3 Max 关键帧生视频（需新增按帧号放图的交互）。
 - 只做了离线请求构建与官方 OpenAPI 快照对照，没有真实付费调用。
 
 ## 2026-11-14 DeepSeek 全家桶接口

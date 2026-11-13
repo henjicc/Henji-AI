@@ -29,6 +29,16 @@ describe('Seedream 图层结构化输出', () => {
     ])
   })
 
+  it('KIE Seedream 5.5 的 resultJson 多带 resultUrls，图层仍从 layers_data 读取', () => {
+    const result = parseSeedreamLayerStack('kie', fixture('seedream55-kie-layers.json'))
+    expect(result.outputs.map((layer) => [layer.sourceOutputIndex, layer.zIndex, layer.role, layer.format, layer.url])).toEqual([
+      [0, 0, 'base', 'png', 'https://fixtures.invalid/base.png'],
+      [1, 1, 'content', 'png', 'https://fixtures.invalid/title.png'],
+      [2, 2, 'content', 'png', 'https://fixtures.invalid/parrot.png'],
+    ])
+    expect(result.outputs[2]).toMatchObject({ width: 823, height: 1275, boundingBox: { normalized: [230, 181, 758, 1000] } })
+  })
+
   it('Fal 从 layers[].image 读地址、尺寸与格式，下标对应 images 的落盘顺序', () => {
     const result = parseSeedreamLayerStack('fal', fixture('seedream-fal-layers.json'))
     expect(result.outputs.map((layer) => [layer.sourceOutputIndex, layer.zIndex, layer.role, layer.format, layer.width, layer.height])).toEqual([

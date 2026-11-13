@@ -1,4 +1,4 @@
-/** apimart 模型展示补丁（第 7 组：万相 2.7 Image、FLUX 3 Video）。 */
+/** apimart 模型展示补丁（第 7 组：万相 2.7 Image、FLUX 3 Video、MiniMax H3 Image）。 */
 
 import { sharedFieldText, sharedModeText, sharedOptionText } from '@/core/i18n/modelText'
 import type { I18nText } from '@/core/types/I18nText'
@@ -89,6 +89,28 @@ export const apimartPresentationPart7: Record<string, ModelPresentation> = {
         name: { zh: '草稿', en: 'Draft' },
         tooltip: { zh: '先以约 1/3 的价格出 720P 低质预览，满意后再转成正片；转正片按正片全价另计，草稿费用不抵扣。', en: 'Renders a low-quality 720P preview at about a third of the price; turn it into the final video later at the full price, with the draft cost not deducted.' },
         description: { zh: '开启后先出低价草稿，结果可一键转正片（沿用草稿的提示词、时长与素材）', en: 'Renders a cheap draft first; the result can be finalized later, keeping its prompt, duration and media' },
+      },
+    },
+    linkages: [],
+  },
+
+  'apimart-minimax-h3-image': {
+    meta: meta('apimart-minimax-h3-image', 'MiniMax H3 Image'),
+    params: {
+      apimartMiniMaxH3ImageVersion: {
+        role: 'mode', name: sharedFieldText('version'),
+        optionLabels: labels(['standard', 'highspeed'], { standard: sharedOptionText('standard'), highspeed: 'Highspeed' }),
+        tooltip: { zh: 'Highspeed 出图更快，图片单价是标准版的 2 倍。', en: 'Highspeed is faster; its image price is twice the standard rate.' },
+      },
+      apimartMiniMaxH3ImageAspectRatio: {
+        name: sharedFieldText('aspectRatio'),
+        optionLabels: labels(['smart', '1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'], { smart: sharedOptionText('smart') }),
+      },
+      apimartMiniMaxH3ImageResolution: { name: sharedFieldText('resolution'), optionLabels: labels(['1K', '2K', '4K']) },
+      apimartMiniMaxH3ImageCount: { name: sharedFieldText('numberOfImages') },
+      apimartMiniMaxH3ImagePromptExpansion: {
+        name: sharedFieldText('promptExpansion'),
+        tooltip: { zh: '先把提示词扩写成详细描述再出图；编辑参考图时始终开启。', en: 'Rewrites the prompt into a detailed description first; always on when editing images.' },
       },
     },
     linkages: [],

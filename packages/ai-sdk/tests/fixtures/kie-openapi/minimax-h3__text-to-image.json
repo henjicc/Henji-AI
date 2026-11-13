@@ -1,0 +1,94 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/minimax-h3/text-to-image.md",
+    "collectedAt": "2026-11-14",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "minimax-h3/text-to-image",
+  "body": {
+    "properties": {
+      "model": {
+        "default": "minimax-h3/text-to-image",
+        "enum": [
+          "minimax-h3/text-to-image"
+        ],
+        "type": "string"
+      },
+      "callBackUrl": {
+        "format": "uri",
+        "type": "string"
+      },
+      "input": {
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 5000
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "1:1",
+              "5:4",
+              "4:3",
+              "3:2",
+              "16:9",
+              "21:9",
+              "4:5",
+              "3:4",
+              "2:3",
+              "9:16"
+            ]
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "1K",
+              "2K",
+              "4K"
+            ],
+            "default": "2K"
+          },
+          "seed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647
+          },
+          "expand_prompt": {
+            "type": "boolean",
+            "default": true
+          },
+          "output_format": {
+            "type": "string",
+            "enum": [
+              "png",
+              "jpeg"
+            ],
+            "default": "png"
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8192
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8192
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "type": "object"
+      }
+    },
+    "required": [
+      "model",
+      "input"
+    ],
+    "type": "object"
+  }
+}

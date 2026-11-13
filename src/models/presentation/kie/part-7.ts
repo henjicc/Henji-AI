@@ -1,4 +1,4 @@
-/** kie 模型展示补丁（第 7 组）：GPT Image 2.6、Kling 4.0、Wan 3.0、Grok Imagine Video 1.5、FLUX 3 Klein。 */
+/** kie 模型展示补丁（第 7 组）：GPT Image 2.6、Kling 4.0、Wan 3.0、Grok Imagine Video 1.5、FLUX 3 Klein、Seedream 5.5、MiniMax H3 Image。 */
 
 import { sharedFieldText, sharedModeText, sharedOptionText } from '@/core/i18n/modelText'
 import type { I18nText } from '@/core/types/I18nText'
@@ -135,6 +135,49 @@ export const kiePresentationPart7: Record<string, ModelPresentation> = {
       kieFlux3KleinResolution: { name: sharedFieldText('resolution'), optionLabels: labels(['1K', '2K', '4K']) },
       kieFlux3KleinCount: { name: sharedFieldText('numberOfImages') },
       kieFlux3KleinEnhancePrompt: { name: sharedFieldText('enhancePrompt') },
+    },
+    linkages: [],
+  },
+  'kie-seedream-5.5': {
+    meta: meta('kie-seedream-5.5', 'Seedream 5.5'),
+    params: {
+      kieSeedream55Mode: {
+        name: sharedFieldText('mode'), role: 'mode',
+        optionLabels: {
+          generate: { label: { zh: '生成 / 编辑', en: 'Generate / Edit' }, description: { zh: '不传图为文生图，传图后按提示词编辑或参考生成', en: 'Text to image without images; edits or references uploaded images' } },
+          'layer-decomposition': { label: { zh: '图层拆分', en: 'Layer Decomposition' }, description: { zh: '把 1 张图拆成底图和最多 16 个透明图层，提示词可指定要拆出的元素', en: 'Splits one image into a base and up to 16 transparent layers; the prompt can name elements to separate' } },
+        },
+      },
+      kieSeedream55AspectRatio: { name: sharedFieldText('aspectRatio'), optionLabels: labels(['smart', '1:1', '4:3', '3:4', '16:9', '9:16', '2:3', '3:2', '21:9']) },
+      kieSeedream55Resolution: { name: sharedFieldText('resolution'), optionLabels: labels(['1K', '1.5K', '2K']) },
+      kieSeedream55LayerSize: {
+        name: sharedFieldText('resolution'), optionLabels: labels(['auto', '1K', '1.5K', '2K']),
+        tooltip: { zh: '自动保持原图尺寸（限制在 1K–2K 之间），按 2K 计价。', en: 'Auto keeps the source size (clamped to 1K–2K) and is billed at the 2K rate.' },
+      },
+      kieSeedream55Background: {
+        name: { zh: '背景', en: 'Background' },
+        optionLabels: {
+          auto: { label: sharedOptionText('auto') },
+          opaque: { label: { zh: '不透明', en: 'Opaque' } },
+          transparent: { label: { zh: '透明', en: 'Transparent' } },
+        },
+        description: { zh: '透明直接输出带透明通道的 PNG，文生图也可用；自动由模型按提示词判断', en: 'Transparent outputs PNG with alpha, including text to image; auto lets the model decide from the prompt' },
+      },
+    },
+    linkages: [],
+  },
+  'kie-minimax-h3-image': {
+    meta: meta('kie-minimax-h3-image', 'MiniMax H3 Image'),
+    params: {
+      kieMiniMaxH3ImageAspectRatio: {
+        name: sharedFieldText('aspectRatio'), optionLabels: labels(['smart', '1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9']),
+        tooltip: { zh: '编辑参考图时，智能比例跟随第一张参考图。', en: 'When editing, Smart follows the first reference image.' },
+      },
+      kieMiniMaxH3ImageResolution: { name: sharedFieldText('resolution'), optionLabels: labels(['1K', '2K', '4K']) },
+      kieMiniMaxH3ImagePromptExpansion: {
+        name: sharedFieldText('promptExpansion'),
+        tooltip: { zh: '先把提示词扩写成详细描述再出图，画面通常更好；关闭后只按原文生成。', en: 'Rewrites the prompt into a detailed description first, usually for better images; turn off to follow the original text only.' },
+      },
     },
     linkages: [],
   },

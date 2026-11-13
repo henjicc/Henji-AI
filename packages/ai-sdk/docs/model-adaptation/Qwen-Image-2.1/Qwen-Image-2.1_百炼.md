@@ -5,7 +5,7 @@
 | 最后更新 | 2026-11-14 |
 | 模态 | 图片 |
 | 供应商 | 阿里云百炼（Model Studio / DashScope），模型原厂官方接口 |
-| 平台模型 ID | `qwen-image-2.1-pro`（已接入）、`qwen-image-2.1-turbo`（未接入，见第 6 节） |
+| 平台模型 ID | `qwen-image-2.1-pro`、`qwen-image-2.1-turbo`（同一模型卡片 `bailian-qwen-image-2.1` 的两个版本） |
 | 接口形态 | **同步**（推荐）与**异步**两套，共用同一请求体；另有 OpenAI 兼容同步接口 |
 | 文档可见性 | 公开，无需登录 |
 | 价格可见性 | 公开，无需登录 |
@@ -63,24 +63,27 @@
 
 ## 5. 价格（官方，人民币）
 
-来源：[qwen-image-2.1-pro 模型页](https://help.aliyun.com/zh/model-studio/qwen-image-2-1-pro)（2026-11-14 读取）。按生成张数计价，不按分辨率分档；模型页价格表只有“图片生成”一项，**未列输入图费用**。
+来源：[qwen-image-2.1-pro 模型页](https://help.aliyun.com/zh/model-studio/qwen-image-2-1-pro)、[qwen-image-2.1-turbo 模型页](https://help.aliyun.com/zh/model-studio/qwen-image-2-1-turbo)（2026-11-14 读取，原价，不含限时优惠）。按生成张数计价，不按分辨率分档；两个模型页的价格表都只有“图片生成”一项，**未列输入图费用**。
 
 | 模型 | 地域 | 单价 |
 |---|---|---|
 | `qwen-image-2.1-pro` | 华北 2（北京） | **0.25 元/张** |
 | `qwen-image-2.1-pro` | 新加坡 | 0.283404 元/张 |
 | `qwen-image-2.1-pro` | 美国（弗吉尼亚）、德国（法兰克福）、日本（东京）、中国香港 | 0.25 元/张 |
-| `qwen-image-2.1-turbo` | 华北 2（北京） | 未取得人民币价格（国际站只给美元，不按汇率换算） |
+| `qwen-image-2.1-turbo` | 华北 2（北京） | **0.1 元/张** |
+| `qwen-image-2.1-turbo` | 新加坡 | 0.113362 元/张 |
+| `qwen-image-2.1-turbo` | 德国（法兰克福）、日本（东京）、中国香港等 | 0.1 元/张 |
 
-限流：pro 华北 2 RPM 20。免费额度：模型页未提。
+限流：华北 2 pro RPM 20、turbo RPM 120。免费额度：模型页未提。
 
 ## 6. 适配要点
 
-- 当前 catalog 只接 `qwen-image-2.1-pro`（`bailian-qwen-image-2.1-pro`）；turbo 缺北京人民币价格，暂不接入。
+- catalog 用一个模型 `bailian-qwen-image-2.1`（canonical `qwen-image-2.1`）承载两个版本：顶层“版本”参数 `bailianQwenImage21Variant`（`pro` 默认 / `turbo`，`role: 'mode'`），只决定请求 `model` 字段；两个版本请求字段、参考图上限、`n` 与尺寸范围按 API 参考相同。
+- 旧入口 `bailian-qwen-image-2.1-pro` 放在 `meta.aliases`，`aliasParamDefaults` 固定为 pro，`aliasParamMappings` 把旧参数 `bailianQwenImage21Pro{AspectRatio,Resolution,Count}` 迁到 `bailianQwenImage21{AspectRatio,Resolution,Count}`。
 - 与 3.0 同构，差异只有：参考图上限 10 张、无 `negative_prompt`、透明背景由提示词决定、用量字段不同、单一价格。
 - 本项目默认不显示 `seed`、不暴露输出格式；固定下发 `prompt_extend=true`、`prompt_extend_mode=direct`（T2I/I2I 都合法）、`enable_thinking=false`、`watermark=false`。
 - `size` 由比例 + 1K/2K 本地换算为 `宽*高`，面积落在官方范围内；1K/2K 同价。
-- 本地估价 = 0.25 × 生成张数；输入图按模型页不另计费。
+- 本地估价 = 单价 × 生成张数，pro 0.25、turbo 0.1；输入图按模型页不另计费。
 - 透明输出的实际 PNG 是否带 alpha 尚未真实请求核对。
 
 ## 7. 原始链接索引

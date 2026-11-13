@@ -1,0 +1,17 @@
+{
+  "_fixture": {
+    "source": "https://docs.kie.ai/market/seedream/5-5-layer-decomposition",
+    "capturedAt": "2026-11-14",
+    "kind": "official-example-stabilized",
+    "note": "保持官方 resultJson（layers_data 与 resultUrls 同序）结构；URL 替换为不可联网地址，图层名称与描述缩短"
+  },
+  "code": 200,
+  "msg": "success",
+  "data": {
+    "taskId": "fixture-task",
+    "model": "seedream/5-5-layer-decomposition",
+    "state": "success",
+    "resultJson": "{\"resultObject\":{\"layers_data\":[{\"z_index\":0,\"size\":\"1080x1080\",\"output_format\":\"png\",\"url\":\"https://fixtures.invalid/base.png\"},{\"z_index\":1,\"size\":\"1726x608\",\"output_format\":\"png\",\"bounding_box\":{\"absolute\":[75,0,998,325],\"normalized\":[69,0,924,301]},\"name\":\"Bright yellow serif title text “Seedream”\",\"description\":\"Bright yellow serif title text “Seedream”\",\"url\":\"https://fixtures.invalid/title.png\"},{\"z_index\":2,\"size\":\"823x1275\",\"output_format\":\"png\",\"bounding_box\":{\"absolute\":[248,195,819,1080],\"normalized\":[230,181,758,1000]},\"name\":\"Scarlet macaw\",\"description\":\"Scarlet macaw perched on a moss-covered branch\",\"url\":\"https://fixtures.invalid/parrot.png\"}]},\"resultUrls\":[\"https://fixtures.invalid/base.png\",\"https://fixtures.invalid/title.png\",\"https://fixtures.invalid/parrot.png\"]}",
+    "creditsConsumed": 20.34
+  }
+}

@@ -214,4 +214,62 @@ export const volcenginePresentation: Record<string, ModelPresentation> = {
     },
     linkages: [],
   },
+
+  'volcengine-seedream-5.5': {
+    meta: {
+      name: { key: 'meta.name', fallback: 'Seedream 5.5' },
+      i18nScope: 'models.defs.volcengine-seedream-5.5',
+    },
+    params: {
+      volcengineSeedream55Mode: {
+        name: { zh: '模式', en: 'Mode' },
+        role: 'mode',
+        optionLabels: {
+          generate: { label: { zh: '生成 / 编辑', en: 'Generate / Edit' } },
+          'layer-decomposition': { label: { zh: '图层拆分', en: 'Layer Decomposition' } },
+        },
+      },
+      volcengineSeedream55AspectRatio: {
+        name: sharedFieldText('aspectRatio'),
+        optionLabels: {
+          smart: { label: sharedOptionText('smart') },
+          '1:1': { label: '1:1' },
+          '4:3': { label: '4:3' },
+          '3:4': { label: '3:4' },
+          '16:9': { label: '16:9' },
+          '9:16': { label: '9:16' },
+          '3:2': { label: '3:2' },
+          '2:3': { label: '2:3' },
+          '21:9': { label: '21:9' },
+        },
+      },
+      volcengineSeedream55Resolution: {
+        name: sharedFieldText('resolution'),
+        optionLabels: {
+          '1K': { label: '1K' },
+          '1.5K': { label: '1.5K' },
+          '2K': { label: '2K' },
+        },
+      },
+      volcengineSeedream55LayerSize: {
+        name: sharedFieldText('resolution'),
+        optionLabels: {
+          auto: { label: sharedOptionText('auto') },
+          '1K': { label: '1K' },
+          '1.5K': { label: '1.5K' },
+          '2K': { label: '2K' },
+        },
+      },
+      volcengineSeedream55Background: {
+        name: { zh: '背景', en: 'Background' },
+        optionLabels: {
+          auto: { label: sharedOptionText('auto') },
+          transparent: { label: { zh: '透明', en: 'Transparent' } },
+          opaque: { label: { zh: '不透明', en: 'Opaque' } },
+        },
+        description: { zh: '透明直接输出带透明通道的 PNG，文生图也可用；自动由模型按提示词判断', en: 'Transparent outputs PNG with alpha, including text to image; auto lets the model decide from the prompt' },
+      },
+    },
+    linkages: [],
+  },
 }

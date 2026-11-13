@@ -1,0 +1,85 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/seedream/5-5-text-to-image.md",
+    "collectedAt": "2026-11-14",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "seedream/5-5-text-to-image",
+  "body": {
+    "properties": {
+      "model": {
+        "default": "seedream/5-5-text-to-image",
+        "enum": [
+          "seedream/5-5-text-to-image"
+        ],
+        "type": "string"
+      },
+      "callBackUrl": {
+        "format": "uri",
+        "type": "string"
+      },
+      "input": {
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 5000
+          },
+          "aspect_ratio": {
+            "type": "string",
+            "enum": [
+              "1:1",
+              "4:3",
+              "3:4",
+              "16:9",
+              "9:16",
+              "2:3",
+              "3:2",
+              "21:9"
+            ]
+          },
+          "size": {
+            "type": "string",
+            "enum": [
+              "1K",
+              "1.5K",
+              "2K"
+            ],
+            "default": "2K"
+          },
+          "output_format": {
+            "type": "string",
+            "enum": [
+              "png",
+              "jpeg"
+            ],
+            "default": "png"
+          },
+          "background": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "transparent",
+              "opaque"
+            ],
+            "default": "auto"
+          },
+          "nsfw_checker": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "prompt",
+          "aspect_ratio"
+        ],
+        "type": "object"
+      }
+    },
+    "required": [
+      "model",
+      "input"
+    ],
+    "type": "object"
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "source": {
+    "url": "https://docs.kie.ai/market/seedream/5-5-layer-decomposition.md",
+    "collectedAt": "2026-11-14",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "model": "seedream/5-5-layer-decomposition",
+  "body": {
+    "properties": {
+      "model": {
+        "default": "seedream/5-5-layer-decomposition",
+        "enum": [
+          "seedream/5-5-layer-decomposition"
+        ],
+        "type": "string"
+      },
+      "callBackUrl": {
+        "format": "uri",
+        "type": "string"
+      },
+      "input": {
+        "properties": {
+          "image_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "prompt": {
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 2000
+          },
+          "size": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "1K",
+              "1.5K",
+              "2K"
+            ],
+            "default": "auto"
+          },
+          "output_format": {
+            "type": "string",
+            "enum": [
+              "png",
+              "jpeg"
+            ],
+            "default": "png"
+          },
+          "max_images": {
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 100,
+            "default": 30
+          },
+          "text_recognition": {
+            "type": "boolean",
+            "default": false
+          },
+          "nsfw_checker": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "image_url"
+        ],
+        "type": "object"
+      }
+    },
+    "required": [
+      "model",
+      "input"
+    ],
+    "type": "object"
+  }
+}
