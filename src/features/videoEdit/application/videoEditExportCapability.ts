@@ -100,9 +100,13 @@ export async function handleVideoEditExportCapability(id: string, raw: unknown, 
   const latestTask = videoEditExportTask(documentRef.id)
   const task = latestTask && (!filterId || latestTask.id === filterId || jobs.some(job => job.task === latestTask)) ? latestTask : undefined
   if (filterId && !jobs.length && !archived.length && !task && !listWaitingVideoEditExports(documentRef.id).some(record => record.id === filterId)) throw new Error('EXPORT_TASK_NOT_FOUND:此剪辑没有匹配的导出任务或归档记录；请省略 taskId 查询可用导出。')
+  // 查询列表最新的在前：轮询“第一个”就是这次提交的那项，不会把上一轮完成的当成这次的结果。
+  const recency = new Map<Record<string, unknown>, number>()
   const queue = jobs.map(job => {
     const entry = owner.document.exportHistory?.find(entry => entry.id === job.id || entry.taskId === job.task?.id)
-    return { ...videoEditExportJobSummary(job), ...(entry ? { outputReady: true, path: entry.path, completedAt: entry.completedAt, ...(entry.assetRef ? { assetRef: entry.assetRef } : {}) } : {}) }
+    const item = { ...videoEditExportJobSummary(job), ...(entry ? { outputReady: true, path: entry.path, completedAt: entry.completedAt, ...(entry.assetRef ? { assetRef: entry.assetRef } : {}) } : {}) }
+    recency.set(item, job.state === 'queued' || job.state === 'running' ? Number.MAX_SAFE_INTEGER : entry?.completedAt ?? job.finishedAt ?? job.startedAt ?? Number.MAX_SAFE_INTEGER)
+    return item
   })
   if (query) {
     // 还没接回队列的恢复项（原剪辑刚打开、登记尚在取回）同样可见，状态按排队报告。
@@ -113,8 +117,11 @@ export async function handleVideoEditExportCapability(id: string, raw: unknown, 
       id: task.id, taskId: task.id, documentRef, state: task.state, progress: task.progress, outputReady: Boolean(task.output),
       ...(task.notice ? { notice: task.notice } : {}), ...(task.assetRef ? { assetRef: task.assetRef } : {}),
     })
+    // 排队、运行中与待接回的算最新；同一时刻按加入列表的先后，后加入的在前。
+    const timeOf = (item: Record<string, unknown>): number => recency.get(item) ?? (typeof item.completedAt === 'number' ? item.completedAt : Number.MAX_SAFE_INTEGER)
+    const order = new Map(all.map((item, index) => [item, index]))
     const filtered = all.filter(item => !query.activeOnly || item.state === 'queued' || item.state === 'running')
-      .sort((a, b) => String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0)
+      .sort((a, b) => timeOf(b) - timeOf(a) || order.get(b)! - order.get(a)!)
     let after: string | undefined
     if (query.cursor) {
       try {
@@ -124,7 +131,9 @@ export async function handleVideoEditExportCapability(id: string, raw: unknown, 
         after = value.after
       } catch { throw new Error('INVALID_INPUT:cursor 不属于当前查询，请保持原筛选条件或从首页开始。') }
     }
-    const remaining = after === undefined ? filtered : filtered.filter(item => String(item.id) > after!)
+    const resume = after === undefined ? 0 : filtered.findIndex(item => String(item.id) === after) + 1
+    if (resume === 0 && after !== undefined) throw new Error('INVALID_INPUT:上一页最后一项已不在导出列表里（已清理或已移除），请不带 cursor 从首页重新读取。')
+    const remaining = filtered.slice(resume)
     const page = remaining.slice(0, query.limit)
     const projected = page.map(item => {
       const { id, state, progress, phase, compositionProgress, compressionProgress, outputReady, taskId, error, notice, assetRef, path, completedAt, archived } = item

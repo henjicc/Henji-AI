@@ -9,7 +9,7 @@ vi.mock('@/features/videoEdit', async () => ({
 }))
 vi.mock('@/features/navigation', () => ({ openApplicationSurface: vi.fn() }))
 vi.mock('./recordingMovieSources', () => ({ recordingMovieCursorSources: vi.fn(async () => new Map()) }))
-import { placeRecordingMedia, importRecordingToVideo } from './recordingVideoImport'
+import { placeRecordingMedia, importRecordingToVideo, recordingItemNames } from './recordingVideoImport'
 import { getPlatform } from '@/platform'
 import { importVideoEditSources, prepareVideoEditRecordingGain } from '@/features/videoEdit'
 
@@ -71,9 +71,45 @@ it('以第一帧画面为起点对齐音画（早开的麦克风被裁掉），�
   expect(camera).toHaveLength(2)
   expect(camera[1].start).toBe(120)
   expect(camera[0].track).toBeGreaterThan(screen.track)
-  expect(new Set(sequence.clips.map(clip => clip.linkId)).size).toBe(1)
+  // 暂停前后各成一个链接组：裁剪或调速一段不带动另一段。
+  const before = [mic, screen, camera[0]], after = [second, camera[1]]
+  expect(new Set(before.map(clip => clip.linkId)).size).toBe(1); expect(new Set(after.map(clip => clip.linkId)).size).toBe(1)
+  expect(before[0].linkId).toBeTruthy(); expect(after[0].linkId).toBeTruthy(); expect(before[0].linkId).not.toBe(after[0].linkId)
   expect(camera[1].sourceInUs).toBe(2900000)
   expect(camera[0].duration).toBe(57)
+})
+
+it('素材项带会话名；暂停分出几段才写“第 N 段”，不会和显示器名“屏幕 2”撞名', () => {
+  expect(recordingItemNames('走查录屏', [{ kind: 'screen' }, { kind: 'systemAudio' }, { kind: 'screen' }, { kind: 'systemAudio' }, { kind: 'microphone' }]))
+    .toEqual(['走查录屏 · 屏幕 第 1 段', '走查录屏 · 系统声音 第 1 段', '走查录屏 · 屏幕 第 2 段', '走查录屏 · 系统声音 第 2 段', '走查录屏 · 麦克风'])
+})
+
+it('会话暂停分出的每段画面只和同段的系统声、麦克风链接；段内设备空档切出的两截麦克风仍跟着这段画面', () => {
+  const document = createVideoEditDocument('剪辑'), sequence = createVideoEditSequence('录屏')
+  document.sequences.push(sequence)
+  const recording = createRecordingDocument()
+  recording.pauses = [{ startUs: 2000000, endUs: 3000000 }]
+  recording.media = [
+    { id: 'screen1', kind: 'screen', path: '/s1.mp4', monoUs: 0, durationUs: 2000000 },
+    { id: 'screen2', kind: 'screen', path: '/s2.mp4', monoUs: 3000000, durationUs: 2000000 },
+    { id: 'system1', kind: 'systemAudio', path: '/a1.wav', monoUs: 0, durationUs: 2000000 },
+    { id: 'system2', kind: 'systemAudio', path: '/a2.wav', monoUs: 3000000, durationUs: 2000000 },
+    { id: 'mic', kind: 'microphone', path: '/mic.wav', monoUs: 0, durationUs: 5000000 },
+  ]
+  recording.tracks = { version: 1, sessionId: '00000000-0000-4000-8000-000000000001', originUs: 1, tracks: [{ kind: 'microphone', segments: [], gaps: [{ monoSpanUs: [3500000, 4000000], reason: 'device' }], warnings: [] }] }
+  for (const source of recording.media) {
+    const kind = source.kind === 'screen' ? 'video' : 'audio'
+    document.media.push({ id: source.id, path: source.path, name: source.id, kind, durationSeconds: source.durationUs / 1e6, width: 1920, height: 1080, hasAudio: kind === 'audio' })
+    document.items.push({ id: source.id, name: source.id, kind, mediaId: source.id })
+  }
+  const clips = placeRecordingMedia(document, recording, recording.media, recording.media.map(media => media.id), { documentId: document.id, sequenceId: sequence.id }).sequences[0].clips
+  const micClips = clips.filter(clip => clip.itemId === 'mic').sort((a, b) => a.start - b.start)
+  expect(micClips).toHaveLength(3)
+  const first = new Set([...clips.filter(clip => ['screen1', 'system1'].includes(clip.itemId)), micClips[0]].map(clip => clip.linkId))
+  const second = new Set([...clips.filter(clip => ['screen2', 'system2'].includes(clip.itemId)), micClips[1], micClips[2]].map(clip => clip.linkId))
+  expect(first.size).toBe(1); expect(second.size).toBe(1)
+  expect([...first][0]).toBeTruthy(); expect([...first][0]).not.toBe([...second][0])
+  expect(new Set(clips.map(clip => clip.linkId)).size).toBe(2)
 })
 
 it('送入剪辑：倒计时预热段与停止后的编码尾巴都不进时间线，画面和声音同帧开始、同帧结束；有光标日志的屏幕片段默认重绘光标', () => {

@@ -4,6 +4,7 @@ import { unrestrictedCollectionAvailability, type ApplicationEntityProvider, typ
 import { getPlatform } from '@/platform'
 import { recordingDevices } from '../tracks/devices'
 import { recordingDocumentSchema } from '@/core/screenRecording/document'
+import { recordingDurationUs } from '@/core/screenRecording/range'
 import { recordingTrackKindSchema, recordingTrackOptionsSchema, recordingTrackWarningSchema, type RecordingTracks } from '@/core/screenRecording/tracks'
 import type { RecordingCaptureFacts } from '@/core/screenRecording/capture'
 import { recordingProductExports, recordingProductExport } from './recordingProductService'
@@ -20,8 +21,13 @@ function schemaRef(kind: 'entity' | 'property', id: string) {
 const detailsSchema = z.object({
   source: z.string().optional(), cursorEmbedded: z.boolean().optional(),
   media: z.array(z.object({ id: z.string(), kind: z.string(), monoUs: z.number(), durationUs: z.number() }).strict()).optional(),
-  markers: z.number().int().nonnegative().optional(), events: z.number().int().nonnegative().optional(),
+  markers: z.number().int().nonnegative().optional().describe('已封存的标记数；录制中省略，录制中用 read_screen_recording_events 读'),
+  events: z.number().int().nonnegative().optional().describe('已封存的事件数；录制中省略，录制中用 read_screen_recording_events 分页读'),
   deviceKind: z.string().optional(), sourceKind: z.string().optional(),
+  display: z.object({
+    x: z.number(), y: z.number(), width: z.number(), height: z.number(), scaleFactor: z.number(), primary: z.boolean(),
+    pixelWidth: z.number().int(), pixelHeight: z.number().int(),
+  }).strict().optional().describe('显示器来源：x/y/width/height 是桌面坐标里的位置与大小（缩放前），pixelWidth/pixelHeight 是实际像素分辨率，primary 表示是否主屏；窗口来源省略'),
   devices: recordingTrackOptionsSchema.optional(), deviceId: z.string().optional(),
   product: z.string().optional(), sessionId: z.string().optional(), files: z.array(z.string()).optional(),
   documentRefs: z.array(z.object({ kind: z.literal('documents.document'), id: z.string() }).strict()).optional(),
@@ -53,7 +59,7 @@ function trackFacts(tracks: RecordingTracks | null | undefined): NonNullable<z.i
 function properties(type: string): ApplicationPropertyDescriptor[] {
   const readOnlyReason = type === 'screen_recording.export' ? exportReason : reason
   return [
-    ['name', '名称', { kind: 'string' }], ['phase', '录制状态', { kind: 'string' }], ['elapsed_ms', '已录制毫秒', { kind: 'number' }],
+    ['name', '名称', { kind: 'string' }], ['phase', '录制状态', { kind: 'string' }], ['elapsed_ms', '已录制毫秒（不含暂停，录制中与停止后同一口径）', { kind: 'number' }],
     ['details', '轨道与事件摘要', { kind: 'json', schemaRef: schemaRef('property', `${type}.details.value`) }],
   ].map(([suffix, title, value]) => ({ id: `${type}.${suffix}`, entityType: type, version: 1, title: title as string, description: title as string,
     value: value as ApplicationPropertyDescriptor['value'], nullable: false, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['screen_recording:read'], write: [] },
@@ -86,20 +92,24 @@ class RecordingProvider implements ApplicationEntityProvider {
       const { tracks: liveTracks, ...capture } = facts ?? { tracks: undefined }
       const view = recordingView()
       revision = meta.revision
-      values = { name: meta.name, phase: active?.phase ?? content.status, elapsed_ms: active?.elapsedMs ?? Math.max(0, ...content.media.map(media => media.monoUs + media.durationUs)), details: {
-        source: content.source?.name ?? '', cursorEmbedded: content.source?.cursorEmbedded ?? false, media: content.media, markers: content.markers.length,
-        events: content.eventPages.reduce((sum, page) => sum + page.lastSequence - page.firstSequence + 1, 0),
+      // 录制中事件与标记还在主进程里，没封存进会话文档，这时给计数只会是假的 0；录制中读 read_screen_recording_events。
+      const sealed = !active
+      // 录制中与停止后同一口径：都不含暂停。
+      values = { name: meta.name, phase: active?.phase ?? content.status, elapsed_ms: active ? active.elapsedMs : Math.round(recordingDurationUs(content) / 1000), details: {
+        source: content.source?.name ?? '', cursorEmbedded: content.source?.cursorEmbedded ?? false, media: content.media,
+        ...(sealed ? { markers: content.markers.length, events: content.eventPages.reduce((sum, page) => sum + page.lastSequence - page.firstSequence + 1, 0) } : {}),
         devices: content.devices,
         tracks: trackFacts(liveTracks ?? content.tracks) as unknown as JsonValue, capture: facts ? capture as unknown as JsonValue : null,
         ...(facts?.failure || recordingWorkFailure(ref.id) ? { error: [facts?.failure, recordingWorkFailure(ref.id)].filter(Boolean).join('；') } : {}),
         finishing: recordingWorkInProgress(ref.id) || Boolean(active?.phase === 'stopped' && active.busy || view.busy && view.documentId === ref.id && active?.phase !== 'recording'),
       } }
-      if (!active) values.elapsed_ms = Math.round(Number(values.elapsed_ms) / 1000)
     } else {
       const source = this.entityType === 'screen_recording.source' ? (await getPlatform().screenRecording.sources()).find(item => item.id === ref.id) : undefined
       const device = this.entityType === 'screen_recording.device' ? (await recordingDevices()).find(item => `${item.kind}:${item.id}` === ref.id) : undefined
       if (!source && !device) throw new Error('来源或设备已移除，请重新列出')
-      values = { name: source?.name ?? device?.label ?? '', phase: 'available', elapsed_ms: 0, details: source ? { sourceKind: source.kind } : { deviceKind: device!.kind, deviceId: device!.id } }
+      const display = source?.display
+      values = { name: source?.name ?? device?.label ?? '', phase: 'available', elapsed_ms: 0, details: source ? { sourceKind: source.kind,
+        ...(display ? { display: { ...display, pixelWidth: Math.round(display.width * display.scaleFactor), pixelHeight: Math.round(display.height * display.scaleFactor) } } : {}) } : { deviceKind: device!.kind, deviceId: device!.id } }
     }
     return { ref, entityType: this.entityType, revisions: { screen_recording: revision }, capturedAt: new Date().toISOString(), properties: Object.fromEntries(Object.entries(values).map(([key, value]) => [`${this.entityType}.${key}`, value]).filter(([key]) => !request.propertyIds || request.propertyIds.includes(String(key)))) }
   }

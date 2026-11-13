@@ -132,7 +132,10 @@ export async function startAudioEditRecording(input: { documentRef?: { id: strin
   const facts = await readAudioCaptureRecording()
   const rate = getAudioEditProjectInstance(documentId)!.document.source.sampleRate
   const [start, end] = range ?? [0, 0]
-  return outcome(documentId, `已开始录音，录进口播 ${documentId} 的 ${(start / rate).toFixed(2)} 秒处${end > start ? '（覆盖到指定秒数）' : ''}。读 audio_capture.settings.recording 看进度。`, facts.phase === 'recording' && facts.documentId === documentId)
+  const name = getAudioEditProjectInstance(documentId)!.session.documentMeta.name
+  const outputPath = facts.outputPath ?? getAudioCaptureSession().store.getState().outputPath
+  const result = await outcome(documentId, `已开始录音，录进口播「${name}」（${documentId}）的 ${(start / rate).toFixed(2)} 秒处${end > start ? '（覆盖到指定秒数）' : ''}${outputPath ? `，录音文件写在 ${outputPath}` : ''}。读 audio_capture.settings.recording 看进度。`, facts.phase === 'recording' && facts.documentId === documentId)
+  return { ...result, documentName: name, ...(outputPath ? { outputPath } : {}) }
 }
 
 /** 为这次录音新建的口播没能开始录音：空口播与预建的录音文件都移到回收区，不留给下一次开始当成“未处理的录音”。 */

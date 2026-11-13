@@ -14,7 +14,7 @@
 
 ## 录制中
 
-- `start_screen_recording` 返回会话引用后先倒计时再开始，录制在后台进行，切页面不会中断。之后用 `read_application_entity` 读 `screen_recording.session` 的 phase（countdown、recording、paused、stopping、stopped、failed）与 elapsed_ms（已录毫秒）判断进度；details 里有画面与声音分片、标记数、事件数和所用设备。
+- `start_screen_recording` 返回会话引用后先倒计时再开始，录制在后台进行，切页面不会中断。之后用 `read_application_entity` 读 `screen_recording.session` 的 phase（countdown、recording、paused、stopping、stopped、failed）与 elapsed_ms（已录毫秒，不含暂停，录制中与停止后同一口径）判断进度；details 里有画面与声音分片、标记数、事件数和所用设备。录制中省略事件数与标记数（还没封存），要看就用 `read_screen_recording_events` 读。
 - `pause_screen_recording` / `resume_screen_recording` 暂停与继续全部轨道，暂停的空档如实保留，不拼接成连续时间。
 - 用户说“这里记一下”时用 `mark_screen_recording`，可带 note；标记之后可按 markersOnly 单独读回。
 - `stop_screen_recording` 停止全部轨道，等画面、声音、事件与会话都保存好才返回；开始时给了剪辑目标的，会接着导入。它最多等约 45 秒：长录制收尾（拼接声音、导入）没做完时先返回 finishing=true，收尾照常进行；不要再发一次停止；之后读会话 details，finishing 变回 false 后 details.error 有值就是失败（写着原因），没有、phase 为 stopped 就算完成。`recover_screen_recording`、`import_screen_recording` 同样最多等约 45 秒，没做完返回 finishing=true（导入时 itemIds 为空），照常在后台进行，成败同样看 finishing 变回 false 后的 details.error。

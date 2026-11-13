@@ -36,6 +36,8 @@ const output = z.object({
   verified: z.boolean(),
   recording: z.object({ phase: audioEditRecordingPhaseSchema, durationSeconds: z.number().nonnegative(), positionSeconds: z.number().nullable() }).strict(),
   durationFrames: z.number().nonnegative().optional(),
+  documentName: z.string().optional().describe('录进的口播名称'),
+  outputPath: z.string().optional().describe('这一段录音正在写入的本机文件；中断后用它找回或交给 recover_audio_edit_recording'),
   undoRef: z.string().optional().describe('这次拼回作品的撤销引用：交给 undo_audio_edit 只撤这一步'),
   finishing: z.boolean().optional().describe('等了约 45 秒仍在停止、拼回或保存：照常在后台进行，不要重发；读 audio_capture.settings.recording，busy 变回 false 后看 lastTake：state=saved 已拼回（undoRef 交给 undo_audio_edit），state=failed 没拼回（error 是原因）'),
 }).strict()

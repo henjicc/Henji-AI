@@ -781,12 +781,13 @@ it('completed exports survive a fresh document instance and either ID resolves; 
       const read = await app.requireResult('query_video_edit_export', { detail: 'full', documentRef, ...(taskId ? { taskId } : {}) })
       expect(read.queue).toEqual([expect.objectContaining({ ...expected, archived: true })])
     }
-    editVideoProject(reopened.document.id, document => ({ ...document, exportHistory: Array.from({ length: 3 }, (_, index) => ({ ...document.exportHistory![0], id: `archived-${index}`, taskId: `render-${index}` })) }))
+    // 归档按完成时间最新的在前；id 的字典序与完成先后不一致，排序只能看时间。
+    editVideoProject(reopened.document.id, document => ({ ...document, exportHistory: Array.from({ length: 3 }, (_, index) => ({ ...document.exportHistory![0], id: `archived-${[1, 2, 0][index]}`, taskId: `render-${index}`, completedAt: 1000 + index })) }))
     const first = await app.requireResult('query_video_edit_export', { documentRef, limit: 2 })
-    expect(first).toMatchObject({ total: 3, queue: [{ id: 'archived-0', resultRef: { documentRef, taskId: 'archived-0' } }, { id: 'archived-1' }] })
+    expect(first).toMatchObject({ total: 3, queue: [{ id: 'archived-0', resultRef: { documentRef, taskId: 'archived-0' } }, { id: 'archived-2' }] })
     expect((first.queue as Array<Record<string, unknown>>)[0]).not.toHaveProperty('settings')
     const second = await app.requireResult('query_video_edit_export', { documentRef, limit: 2, cursor: first.nextCursor })
-    expect(second).toMatchObject({ total: 3, queue: [{ id: 'archived-2' }], nextCursor: null })
+    expect(second).toMatchObject({ total: 3, queue: [{ id: 'archived-1' }], nextCursor: null })
     expect(await app.requireResult('query_video_edit_export', { documentRef, activeOnly: true })).toMatchObject({ queue: [], total: 0, nextCursor: null })
     const live = vi.spyOn(videoEditExportQueue, 'list').mockReturnValueOnce([{ ...job, owner: reopened, state: 'running' }])
     expect(await app.requireResult('query_video_edit_export', { documentRef, activeOnly: true })).toMatchObject({ queue: [{ id: job.id, state: 'running' }], total: 1 })

@@ -12,7 +12,11 @@ import { WEB_APP_RECORDING_CAPABILITIES } from './webAppCapability'
 
 const RECORDING_DOMAIN = 'screen_recording'
 export const recordingRefSchema = z.object({ kind: z.literal('screen_recording.session'), id: z.string().uuid() }).strict()
-export const recordingDestinationSchema = z.object({ documentId: z.string().min(1), sequenceId: z.string().min(1).optional(), frame: z.number().int().nonnegative().optional() }).strict()
+export const recordingDestinationSchema = z.object({
+  documentId: z.string().min(1).describe('剪辑文档 id'),
+  sequenceId: z.string().min(1).optional().describe('目标序列：读回或创建得到的完整序列引用 id（“文档id:序列id”）或冒号后的序列 id 都可以；不在这份剪辑里时执行前就拒绝'),
+  frame: z.number().int().nonnegative().optional(),
+}).strict()
 export const startRecordingInputSchema = z.object({
   sourceRef: z.object({ kind: z.literal('screen_recording.source'), id: z.string().regex(/^(screen|window):\d+:\d+$/) }).strict().describe('先列出 screen_recording.source，选择显示器或窗口'),
   name: z.string().trim().min(1).max(120).describe('录制会话名称'),
@@ -26,7 +30,13 @@ export const startRecordingInputSchema = z.object({
 }).strict()
 const output = capabilityOutputSchema({ resultRef: recordingRefSchema, verified: z.boolean(),
   finishing: z.boolean().optional().describe('等了约 45 秒仍没做完（收尾、恢复或导入）：照常在后台进行，不要重发；读会话 details，finishing 变回 false 后 details.error 有值就是失败及原因，没有就是做完了'),
-  message: z.string().optional() })
+  message: z.string().optional(),
+  imported: z.object({
+    documentRef: z.object({ kind: z.literal('video_edit.document'), id: z.string() }).strict(),
+    sequenceRef: z.object({ kind: z.literal('video_edit.sequence'), id: z.string() }).strict().optional(),
+    itemRefs: z.array(z.object({ kind: z.literal('video_edit.item'), id: z.string() }).strict()),
+  }).strict().optional().describe('stop_screen_recording：停止后素材进了哪份剪辑、哪个序列（含录屏页自己开始、停止后送进剪辑的录制）；itemRefs 是这次导入的素材项。没进剪辑（含快速录制存成文件）时省略，去向写在 message'),
+})
 // These operations expose user document metadata and sanitized event facts, never pixels, audio or typed text.
 const common = { version: 1, domain: RECORDING_DOMAIN, readOnly: false, dataClasses: ['C1' as const], idempotent: false, destructive: false,
   timeoutMs: 60000, supportsPreview: false, supportsUndo: false, requiredScopes: [], concurrencyKey: 'screen_recording', outputSchema: output }
@@ -49,7 +59,7 @@ const controls = [
   ['recover', '恢复中断的录制', '关闭采集后检查已落盘分片与事件页，恢复可播放片段，补齐没封口的声音分段并拼接声音；不重启设备、不重放操作。没能恢复的时段在 details.tracks 里按缺数据空档列出。最多等约 45 秒，没做完返回 finishing=true，照常在后台进行，读 details.finishing。'],
 ] as const
 /** 停止、恢复、导入可能要很久（两小时的声音拼接、补齐分片、导入剪辑）：处理器只等约 45 秒，没做完就说明仍在进行、去哪查。 */
-const finishingResult = (done: string) => (result: { finishing?: boolean; message?: string }): string => result.finishing ? result.message ?? '仍在后台进行；读会话 details，finishing 变回 false 后看 details.error 判断成败。' : done
+const finishingResult = (done: string) => (result: { finishing?: boolean; message?: string }): string => result.finishing ? result.message ?? '仍在后台进行；读会话 details，finishing 变回 false 后看 details.error 判断成败。' : result.message ?? done
 export const RECORDING_CAPABILITIES = [start, ...WEB_APP_RECORDING_CAPABILITIES, ...recordingDirectorCapabilities, ...recordingScriptCapabilities, understandRecordingCapability, generateRecordingMovieCapability, detectRecordingPrivacyCapability, exportRecordingProductCapability, cancelRecordingExportCapability, ...controls.map(([action, title, description]) => defineApplicationCapability({
   ...common, id: `${action}_screen_recording`, title, description, aliases: [title], acceptsRefs: ['screen_recording.session'], producesRefs: ['screen_recording.session'],
   inputSchema: z.object({ sessionRef: recordingRefSchema, ...(action === 'mark' ? { note: z.string().max(4000).optional() } : {}) }).strict(),

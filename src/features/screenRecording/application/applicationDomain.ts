@@ -16,8 +16,9 @@ import { registerDocumentCoverProvider } from '@/features/documents'
 import { openApplicationSurface } from '@/features/navigation'
 import { recordingDocumentSchema } from '@/core/screenRecording/document'
 import { captureOptionsSchema } from '@/core/screenRecording/capture'
-import { controlRecording, readRecordingDocument, recordingEvents, recordingView, recoverRecording, showRecordingDocument, startRecording } from './recordingService'
+import { controlRecording, readRecordingDocument, recordingEvents, recordingStopOutcome,recordingView, recoverRecording, showRecordingDocument, startRecording } from './recordingService'
 import { importRecordingToVideo } from './recordingVideoImport'
+import type { RecordingDestination } from './recordingService'
 import { recordingRegistrations } from './recordingReflection'
 import { WEB_APP_CAPABILITY_IDS, executeWebAppCapability, webAppRecordingRegistrations } from './webAppRecording'
 import { WebRecordingCollectionExecutor } from './webAppRecordingCollectionExecutor'
@@ -39,6 +40,43 @@ import { generateSessionScript, replaySession, recordingReplayBusy } from './rec
 import { generateRecordingScriptCapability, replayRecordingCapability, rerecordRecordingCapability } from '@/core/application-control/domains/screenRecording/scriptCapability'
 
 /** 没在约 45 秒内做完时的如实回执：工作照常在后台进行，去哪查。 */
+/**
+ * 助手读回或创建得到的序列引用是“文档:序列”，界面传的是裸序列 id，两种都认。目标在任何写入之前核对：
+ * 不对就作为参数错误拒绝（没有执行），并列出这份剪辑里能用的序列。
+ */
+async function resolveRecordingDestination(destination: RecordingDestination, options: { inProject?: boolean } = {}): Promise<RecordingDestination> {
+  const prefix = `${destination.documentId}:`
+  const sequenceId = destination.sequenceId?.startsWith(prefix) ? destination.sequenceId.slice(prefix.length) : destination.sequenceId
+  let owner: Awaited<ReturnType<typeof openVideoEditDocument>>
+  try { owner = await openVideoEditDocument({ id: destination.documentId }, { focus: false }) }
+  catch (error) { throw notExecutedFailure(new Error(`destination.documentId 打不开（${error instanceof Error ? error.message : String(error)}）：要写剪辑文档 id，取自 list_documents（kind=video_edit）或 create_document 的返回。`)) }
+  if (options.inProject && owner.session.documentMeta.container.kind !== 'project') throw notExecutedFailure(new Error('目标剪辑必须位于项目中：换一份项目里的剪辑，或省略 destination 只录制。'))
+  if (sequenceId && !owner.document.sequences.some(sequence => sequence.id === sequenceId)) {
+    const available = owner.document.sequences.map(sequence => `${prefix}${sequence.id}（${sequence.name}）`).join('、')
+    throw notExecutedFailure(new Error(`destination.sequenceId「${destination.sequenceId}」不是这份剪辑里的序列。可用：${available || '没有序列，先新建序列'}；写完整序列引用或只写冒号后的序列 id 都可以，省略 sequenceId 只导入素材库。`))
+  }
+  return { ...destination, ...(sequenceId ? { sequenceId } : {}) }
+}
+/**
+ * 停止回执说清录好的素材去了哪：导入了哪份剪辑的哪些素材项、放没放进序列，或按录屏页的快速录制存成了视频文件。
+ * 已经进了剪辑或存成文件时不能提示再导入，否则会多出一份重复素材。
+ */
+async function stopImportReceipt(sessionId: string): Promise<{ message: string; imported?: Record<string, unknown> }> {
+  const outcome = recordingStopOutcome(sessionId)
+  if (!outcome) return { message: '已停止并保存。开始时没有指定剪辑目标（或没录到画面），没有导入剪辑；需要时用 import_screen_recording。' }
+  if (outcome.kind === 'file') return { message: outcome.path ? `已停止并按录屏页的快速录制存成视频文件：${outcome.path}；没有导入剪辑。` : outcome.error ? `已停止并保存会话，但存成视频文件失败：${outcome.error}。会话原片还在，可用 import_screen_recording 导入剪辑。` : '已停止，正按录屏页的快速录制在后台存成视频文件（存好后应用里会提示文件位置）；没有导入剪辑，不要再导入。' }
+  // 停止与导入都已成功；读名称只为回执好读，剪辑这时打不开就用 id 写，不把成功的停止报成失败。
+  const owner = await openVideoEditDocument({ id: outcome.documentId }, { focus: false }).catch(() => undefined)
+  const itemIds = outcome.itemIds ?? []
+  const names = itemIds.map(id => owner?.document.items.find(item => item.id === id)?.name ?? id)
+  const sequenceName = outcome.sequenceId ? owner?.document.sequences.find(value => value.id === outcome.sequenceId)?.name ?? `${outcome.documentId}:${outcome.sequenceId}` : undefined
+  const placed = sequenceName ? `已放进序列「${sequenceName}」第 ${outcome.frame ?? 0} 帧起，暂停前后各段分别链接。` : '没给 sequenceId，只进了素材库。'
+  return {
+    message: outcome.itemIds ? `已停止并保存，导入剪辑素材库 ${names.length} 项：${names.join('、')}；${placed}不要再导入。` : `已停止并保存，按录屏页的设置回到上次送进的剪辑${sequenceName ? `（序列「${sequenceName}」）` : ''}，素材已在里面，不要再导入。`,
+    imported: { documentRef: { kind: 'video_edit.document', id: outcome.documentId }, ...(outcome.sequenceId ? { sequenceRef: { kind: 'video_edit.sequence', id: `${outcome.documentId}:${outcome.sequenceId}` } } : {}),
+      itemRefs: itemIds.map(id => ({ kind: 'video_edit.item', id: `${outcome.documentId}:${id}` })) },
+  }
+}
 const stillRunning = (what: string): string => `${what}仍在后台进行（长录要拼接声音、补齐分片或导入剪辑），不要重发。读 screen_recording.session 的 details：finishing 变回 false 后，details.error 有值就是失败（写着原因），没有就是做完了。`
 
 export const screenRecordingApplicationDomain: ApplicationDomainModule = {
@@ -118,9 +156,10 @@ export const screenRecordingApplicationDomain: ApplicationDomainModule = {
         const options = captureOptionsSchema.parse({ ...recordingEncoding({ ...setup, ...size }), sourceId: parsed.sourceRef.id, ...size, ...(parsed.region ? { region: parsed.region } : {}) })
         // 快速录制在界面上不录摄像头，省略 tracks 时与界面一致。
         const tracks = parsed.tracks ?? recordingTracksFromSetup(setup, setup.mode === 'quick')
+        const destination = parsed.destination ? await resolveRecordingDestination(parsed.destination, { inProject: true }) : undefined
         // 音频编辑正在录音时麦克风轨接到同一路采集上，两边互不打断，但设备、采样率与声道沿用音频编辑那边的。
         const joined = Boolean(tracks.microphone) && Boolean((await getPlatform().audioCapture.recordingState()).recording)
-        const id = await startRecording(options, { name: parsed.name, tracks, ...(parsed.projectId ? { projectId: parsed.projectId } : {}) }, parsed.destination, context.signal)
+        const id = await startRecording(options, { name: parsed.name, tracks, ...(parsed.projectId ? { projectId: parsed.projectId } : {}) }, destination, context.signal)
         return { resultRef: { kind: 'screen_recording.session', id }, verified: (await readRecordingDocument(id)).sessionId === id,
           ...(joined ? { message: '音频编辑正在录音：录屏的麦克风接到它正在用的设备上（采样率与声道也沿用它的），两边互不打断；倒计时后开始，实际设备读会话 details.capture.microphone.device。' } : {}) }
       }
@@ -130,7 +169,8 @@ export const screenRecordingApplicationDomain: ApplicationDomainModule = {
       }
       if (definition.id === 'import_screen_recording') {
         const parsed = parseCapabilityInput<{ sessionRef: z.infer<typeof recordingRefSchema>; destination: z.infer<typeof recordingDestinationSchema> }>(definition.id, input)
-        const work = trackRecordingWork(parsed.sessionRef.id, importRecordingToVideo(parsed.sessionRef.id, parsed.destination, context.signal))
+        const destination = await resolveRecordingDestination(parsed.destination)
+        const work = trackRecordingWork(parsed.sessionRef.id, importRecordingToVideo(parsed.sessionRef.id, destination, context.signal))
         const resultRef = { kind: 'video_edit.document', id: parsed.destination.documentId }
         if (!await waitWithin(work, CAPABILITY_SHORT_WAIT_MS)) return { resultRef, itemIds: [], verified: false, finishing: true, message: stillRunning('导入') }
         const itemIds = await work
@@ -144,6 +184,7 @@ export const screenRecordingApplicationDomain: ApplicationDomainModule = {
         if (!await waitWithin(work, CAPABILITY_SHORT_WAIT_MS)) return { resultRef: parsed.sessionRef, verified: false, finishing: true, message: stillRunning(action === 'stop' ? '已停止采集，收尾' : '恢复') }
       } else await controlRecording(parsed.sessionRef.id, action, parsed.note)
       await readRecordingDocument(parsed.sessionRef.id)
+      if (action === 'stop') return { resultRef: parsed.sessionRef, verified: true, ...await stopImportReceipt(parsed.sessionRef.id) }
       return { resultRef: parsed.sessionRef, verified: true }
     })
   },

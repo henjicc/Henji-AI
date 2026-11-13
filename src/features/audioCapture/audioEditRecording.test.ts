@@ -80,6 +80,9 @@ it('讲解占着麦克风时开始录音在写入前就被拒，不建文件', a
 it('助手开始、暂停、从播放头继续、停止与界面同一个会话；每段拼回原位置并保存，按回执一步撤销', async () => {
   const started = await app.requireResult('start_audio_edit_recording', { documentRef, positionSeconds: 1 })
   expect(started).toMatchObject({ verified: true, recording: { phase: 'recording', positionSeconds: 1 } })
+  // 回执带口播名与这一段录音的文件位置，不用再去查
+  expect(started).toMatchObject({ documentName: expect.stringMatching(/\S/), outputPath: main.recording!.outputPath })
+  expect(started.message).toContain(`「${String(started.documentName)}」`); expect(started.message).toContain(main.recording!.outputPath)
   // 界面录音按钮、标题栏指示读的就是这个会话
   expect(getAudioCaptureSession().store.getState()).toMatchObject({ phase: 'recording', placement: { projectId: 'voice', startFrame: 48_000, endFrame: 48_000 } })
   expect(await recording()).toMatchObject({ phase: 'recording', documentId: 'voice', attached: true })
