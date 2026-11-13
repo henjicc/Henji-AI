@@ -1,0 +1,82 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=minimax/h3-image/text-to-image",
+    "collectedAt": "2026-11-14",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "minimax/h3-image/text-to-image",
+  "input": {
+    "properties": {
+      "output_format": {
+        "type": "string",
+        "default": "png",
+        "enum": [
+          "jpeg",
+          "png",
+          "webp",
+          "jpg"
+        ]
+      },
+      "prompt": {
+        "minLength": 1,
+        "maxLength": 32000,
+        "type": "string"
+      },
+      "sync_mode": {
+        "type": "boolean",
+        "default": false
+      },
+      "enable_prompt_expansion": {
+        "type": "boolean",
+        "default": true
+      },
+      "image_size": {
+        "anyOf": [
+          {
+            "properties": {
+              "height": {
+                "type": "integer",
+                "default": 512,
+                "exclusiveMinimum": 0,
+                "maximum": 14142
+              },
+              "width": {
+                "type": "integer",
+                "default": 512,
+                "exclusiveMinimum": 0,
+                "maximum": 14142
+              }
+            },
+            "type": "object"
+          },
+          {
+            "type": "string",
+            "enum": [
+              "square_hd",
+              "square",
+              "portrait_4_3",
+              "portrait_16_9",
+              "landscape_4_3",
+              "landscape_16_9"
+            ]
+          }
+        ],
+        "default": {
+          "height": 2048,
+          "width": 2048
+        }
+      },
+      "num_images": {
+        "minimum": 1,
+        "default": 1,
+        "type": "integer",
+        "maximum": 10
+      }
+    },
+    "type": "object",
+    "required": [
+      "prompt"
+    ]
+  }
+}

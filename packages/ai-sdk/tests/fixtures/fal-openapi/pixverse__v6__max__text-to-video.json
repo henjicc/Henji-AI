@@ -1,0 +1,108 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=pixverse/v6/max/text-to-video",
+    "collectedAt": "2026-11-14",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "pixverse/v6/max/text-to-video",
+  "input": {
+    "properties": {
+      "generate_audio_switch": {
+        "default": false,
+        "type": "boolean"
+      },
+      "generate_multi_clip_switch": {
+        "default": false,
+        "type": "boolean"
+      },
+      "style": {
+        "anyOf": [
+          {
+            "enum": [
+              "anime",
+              "3d_animation",
+              "clay",
+              "comic",
+              "cyberpunk"
+            ],
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "resolution": {
+        "default": "720p",
+        "enum": [
+          "360p",
+          "540p",
+          "720p",
+          "1080p"
+        ],
+        "type": "string"
+      },
+      "negative_prompt": {
+        "default": "",
+        "type": "string"
+      },
+      "prompt": {
+        "type": "string"
+      },
+      "seed": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "aspect_ratio": {
+        "default": "16:9",
+        "enum": [
+          "16:9",
+          "4:3",
+          "1:1",
+          "3:4",
+          "9:16",
+          "2:3",
+          "3:2",
+          "21:9"
+        ],
+        "type": "string"
+      },
+      "duration": {
+        "default": 5,
+        "maximum": 15,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "thinking_type": {
+        "anyOf": [
+          {
+            "enum": [
+              "enabled",
+              "disabled",
+              "auto"
+            ],
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "enable_safety_checker": {
+        "default": true,
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "prompt"
+    ],
+    "type": "object"
+  }
+}

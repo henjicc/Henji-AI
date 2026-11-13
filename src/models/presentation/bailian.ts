@@ -45,6 +45,39 @@ export const bailianPresentation: Record<string, ModelPresentation> = {
     linkages: [],
   },
 
+  'bailian-qwen-image-2.1-pro': {
+    meta: {
+      name: { key: 'meta.name', fallback: 'Qwen Image 2.1 Pro' },
+      i18nScope: 'models.defs.bailian-qwen-image-2.1-pro',
+    },
+    params: {
+      bailianQwenImage21ProAspectRatio: {
+        name: sharedFieldText('aspectRatio'),
+        optionLabels: {
+          smart: { label: sharedOptionText('smart') },
+          '1:1': { label: '1:1' },
+          '4:3': { label: '4:3' },
+          '3:4': { label: '3:4' },
+          '16:9': { label: '16:9' },
+          '9:16': { label: '9:16' },
+          '3:2': { label: '3:2' },
+          '2:3': { label: '2:3' },
+        },
+      },
+      bailianQwenImage21ProResolution: {
+        name: sharedFieldText('resolution'),
+        optionLabels: {
+          '1K': { label: '1K' },
+          '2K': { label: '2K' },
+        },
+      },
+      bailianQwenImage21ProCount: {
+        name: { zh: '生成数量', en: 'Output Count' },
+      },
+    },
+    linkages: [],
+  },
+
   'bailian-wan-3.0': {
     meta: {
       name: { key: 'meta.name', fallback: 'Wan 3.0' },

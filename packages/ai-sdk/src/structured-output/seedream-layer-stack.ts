@@ -7,7 +7,7 @@ import type {
   StructuredGenerationLayerV1,
 } from '../types/runtime'
 
-type SeedreamLayerProvider = 'volcengine' | 'apimart' | 'kie'
+type SeedreamLayerProvider = 'volcengine' | 'apimart' | 'kie' | 'fal'
 
 interface RawLayer {
   sourceOutputIndex: number
@@ -28,7 +28,9 @@ export function parseSeedreamLayerStack(
     ? readVolcengineLayers(metadata)
     : provider === 'apimart'
       ? readApiMartLayers(metadata)
-      : readKieLayers(metadata)
+      : provider === 'fal'
+        ? readFalLayers(metadata)
+        : readKieLayers(metadata)
   const outputs = validateLayers(rawLayers)
   return {
     version: 1,
@@ -92,6 +94,24 @@ function readKieLayers(value: JsonValue): RawLayer[] {
   return array(resultObject.layers_data, 'KIE layers_data').map((item, sourceOutputIndex) => {
     const layer = object(item, `KIE layers_data[${sourceOutputIndex}]`)
     return fromObject(layer, sourceOutputIndex)
+  })
+}
+
+/** Fal 的 `images` 与 `layers` 同序同址，下标即宿主按结果地址落盘的序号。 */
+function readFalLayers(value: JsonValue): RawLayer[] {
+  const root = object(value, 'Fal 响应')
+  return array(root.layers, 'Fal layers').map((item, sourceOutputIndex) => {
+    const layer = object(item, `Fal layers[${sourceOutputIndex}]`)
+    const image = object(layer.image, `Fal layers[${sourceOutputIndex}].image`)
+    const width = image.width
+    const height = image.height
+    return {
+      ...fromObject(layer, sourceOutputIndex),
+      url: image.url,
+      size: typeof width === 'number' && typeof height === 'number' ? `${width}x${height}` : undefined,
+      // content_type 是可选字段。图层恒为 PNG，底图格式随 output_format（项目不发送，官方默认 png），缺失时都按 PNG。
+      format: typeof image.content_type === 'string' ? image.content_type.replace(/^image\//i, '') : 'png',
+    }
   })
 }
 

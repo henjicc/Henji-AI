@@ -1,0 +1,103 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=lightricks/ltx-2.5/image-to-video/fast",
+    "collectedAt": "2026-11-14",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "lightricks/ltx-2.5/image-to-video/fast",
+  "input": {
+    "properties": {
+      "image_url": {
+        "type": "string"
+      },
+      "generate_audio": {
+        "default": true,
+        "type": "boolean"
+      },
+      "resolution": {
+        "enum": [
+          "720p",
+          "1080p",
+          "1440p",
+          "2160p"
+        ],
+        "default": "1080p",
+        "type": "string"
+      },
+      "prompt": {
+        "minLength": 1,
+        "maxLength": 5000,
+        "type": "string"
+      },
+      "aspect_ratio": {
+        "enum": [
+          "auto",
+          "16:9",
+          "9:16"
+        ],
+        "default": "auto",
+        "type": "string"
+      },
+      "duration": {
+        "enum": [
+          6,
+          8,
+          10,
+          12,
+          14,
+          16,
+          18,
+          20,
+          "auto"
+        ],
+        "default": "auto"
+      },
+      "fps": {
+        "enum": [
+          24,
+          25,
+          48,
+          50
+        ],
+        "default": 25,
+        "type": "integer"
+      },
+      "end_image_url": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "camera_motion": {
+        "anyOf": [
+          {
+            "enum": [
+              "dolly_in",
+              "dolly_out",
+              "dolly_left",
+              "dolly_right",
+              "jib_up",
+              "jib_down",
+              "static",
+              "focus_shift"
+            ],
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "prompt",
+      "image_url"
+    ],
+    "type": "object"
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=lightricks/ltx-2.5/audio-to-video/pro",
+    "collectedAt": "2026-11-14",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "lightricks/ltx-2.5/audio-to-video/pro",
+  "input": {
+    "properties": {
+      "prompt": {
+        "anyOf": [
+          {
+            "minLength": 1,
+            "maxLength": 5000,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "enable_safety_checker": {
+        "default": true,
+        "type": "boolean"
+      },
+      "aspect_ratio": {
+        "enum": [
+          "auto",
+          "16:9",
+          "9:16"
+        ],
+        "default": "auto",
+        "type": "string"
+      },
+      "audio_url": {
+        "type": "string"
+      },
+      "image_url": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "audio_url"
+    ],
+    "type": "object"
+  }
+}

@@ -29,6 +29,16 @@ describe('Seedream 图层结构化输出', () => {
     ])
   })
 
+  it('Fal 从 layers[].image 读地址、尺寸与格式，下标对应 images 的落盘顺序', () => {
+    const result = parseSeedreamLayerStack('fal', fixture('seedream-fal-layers.json'))
+    expect(result.outputs.map((layer) => [layer.sourceOutputIndex, layer.zIndex, layer.role, layer.format, layer.width, layer.height])).toEqual([
+      [0, 0, 'base', 'png', 1024, 1024],
+      [1, 1, 'content', 'png', 670, 139],
+    ])
+    expect(result.outputs[1]).toMatchObject({ url: 'https://fixtures.invalid/title.png', name: '标题文字', boundingBox: { normalized: [187, 58, 806, 186] } })
+    expect(() => parseSeedreamLayerStack('fal', { layers: [{ image: { url: 'https://fixtures.invalid/a.png', content_type: 'image/png' }, z_index: 0 }] })).toThrow(/size 缺失/)
+  })
+
   it('拒绝空输出、18 层、重复/越界/不连续 z、缺底图和内容层非 PNG', () => {
     const valid = fixture('seedream-volcengine-layers.json') as Record<string, unknown>
     const data = valid.data as Array<Record<string, unknown>>

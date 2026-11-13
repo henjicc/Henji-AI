@@ -4,12 +4,13 @@ import model2 from '../../catalog/bailian/minimax-h3.model'
 import model3 from '../../catalog/bailian/minimax-speech-2.8.model'
 import model4 from '../../catalog/bailian/qwen-audio-3.1-tts-flash.model'
 import model5 from '../../catalog/bailian/qwen-audio-3.1-tts-plus.model'
-import model6 from '../../catalog/bailian/qwen-image-3.0.model'
-import model7 from '../../catalog/bailian/wan-3.0.model'
-import model8 from '../../catalog/bailian/z-image-turbo.model'
+import model6 from '../../catalog/bailian/qwen-image-2.1-pro.model'
+import model7 from '../../catalog/bailian/qwen-image-3.0.model'
+import model8 from '../../catalog/bailian/wan-3.0.model'
+import model9 from '../../catalog/bailian/z-image-turbo.model'
 import { provider } from '../provider-adapters/bailian'
 import type { GenerationPack } from '../../generation/core'
 
-export const models = [model1, model2, model3, model4, model5, model6, model7, model8] as const
+export const models = [model1, model2, model3, model4, model5, model6, model7, model8, model9] as const
 export const pack: GenerationPack = { models, providers: [provider] }
 export default pack

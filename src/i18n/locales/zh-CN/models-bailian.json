@@ -1,5 +1,10 @@
 {
   "defs": {
+    "bailian-qwen-image-2.1-pro": {
+      "meta": {
+        "name": "Qwen Image 2.1 Pro"
+      }
+    },
     "bailian-qwen-image-3.0": {
       "meta": {
         "name": "Qwen Image 3.0"

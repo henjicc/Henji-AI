@@ -1,0 +1,91 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=bytedance/seedream/v5.5/text-to-image",
+    "collectedAt": "2026-11-14",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "bytedance/seedream/v5.5/text-to-image",
+  "input": {
+    "properties": {
+      "enable_safety_checker": {
+        "default": true,
+        "type": "boolean"
+      },
+      "num_images": {
+        "type": "integer",
+        "default": 1,
+        "maximum": 6,
+        "minimum": 1
+      },
+      "image_size": {
+        "anyOf": [
+          {
+            "properties": {
+              "height": {
+                "exclusiveMinimum": 0,
+                "default": 512,
+                "type": "integer",
+                "maximum": 14142
+              },
+              "width": {
+                "exclusiveMinimum": 0,
+                "default": 512,
+                "type": "integer",
+                "maximum": 14142
+              }
+            },
+            "type": "object"
+          },
+          {
+            "type": "string",
+            "enum": [
+              "square_hd",
+              "square",
+              "portrait_4_3",
+              "portrait_16_9",
+              "landscape_4_3",
+              "landscape_16_9",
+              "auto_1K",
+              "auto_1.5K",
+              "auto_2K"
+            ]
+          }
+        ],
+        "default": "auto_2K"
+      },
+      "prompt": {
+        "type": "string"
+      },
+      "sync_mode": {
+        "default": false,
+        "type": "boolean"
+      },
+      "watermark": {
+        "default": false,
+        "type": "boolean"
+      },
+      "output_format": {
+        "default": "png",
+        "type": "string",
+        "enum": [
+          "jpeg",
+          "png"
+        ]
+      },
+      "background": {
+        "default": "auto",
+        "type": "string",
+        "enum": [
+          "auto",
+          "opaque",
+          "transparent"
+        ]
+      }
+    },
+    "type": "object",
+    "required": [
+      "prompt"
+    ]
+  }
+}

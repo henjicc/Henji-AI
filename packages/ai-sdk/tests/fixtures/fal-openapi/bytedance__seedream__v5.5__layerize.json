@@ -1,0 +1,64 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=bytedance/seedream/v5.5/layerize",
+    "collectedAt": "2026-11-14",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "bytedance/seedream/v5.5/layerize",
+  "input": {
+    "properties": {
+      "enable_safety_checker": {
+        "default": true,
+        "type": "boolean"
+      },
+      "image_size": {
+        "default": "auto",
+        "type": "string",
+        "enum": [
+          "auto",
+          "auto_1K",
+          "auto_1.5K",
+          "auto_2K"
+        ]
+      },
+      "prompt": {
+        "default": "",
+        "type": "string"
+      },
+      "max_images": {
+        "type": "integer",
+        "default": 30,
+        "maximum": 100,
+        "minimum": 2
+      },
+      "sync_mode": {
+        "default": false,
+        "type": "boolean"
+      },
+      "enable_text_recognition": {
+        "default": false,
+        "type": "boolean"
+      },
+      "watermark": {
+        "default": false,
+        "type": "boolean"
+      },
+      "output_format": {
+        "default": "png",
+        "type": "string",
+        "enum": [
+          "jpeg",
+          "png"
+        ]
+      },
+      "image_url": {
+        "type": "string"
+      }
+    },
+    "type": "object",
+    "required": [
+      "image_url"
+    ]
+  }
+}

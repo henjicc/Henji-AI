@@ -1,0 +1,80 @@
+{
+  "source": {
+    "url": "https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=lightricks/ltx-2.5/text-to-video/pro",
+    "collectedAt": "2026-11-14",
+    "loginRequired": false,
+    "classification": "official-literal"
+  },
+  "endpointId": "lightricks/ltx-2.5/text-to-video/pro",
+  "input": {
+    "properties": {
+      "prompt": {
+        "minLength": 1,
+        "maxLength": 5000,
+        "type": "string"
+      },
+      "generate_audio": {
+        "default": true,
+        "type": "boolean"
+      },
+      "fps": {
+        "enum": [
+          24,
+          25,
+          50
+        ],
+        "default": 25,
+        "type": "integer"
+      },
+      "duration": {
+        "enum": [
+          6,
+          8,
+          10,
+          "auto"
+        ],
+        "default": "auto"
+      },
+      "aspect_ratio": {
+        "enum": [
+          "16:9",
+          "9:16"
+        ],
+        "default": "16:9",
+        "type": "string"
+      },
+      "camera_motion": {
+        "anyOf": [
+          {
+            "enum": [
+              "dolly_in",
+              "dolly_out",
+              "dolly_left",
+              "dolly_right",
+              "jib_up",
+              "jib_down",
+              "static",
+              "focus_shift"
+            ],
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "resolution": {
+        "enum": [
+          "720p",
+          "1080p"
+        ],
+        "default": "1080p",
+        "type": "string"
+      }
+    },
+    "required": [
+      "prompt"
+    ],
+    "type": "object"
+  }
+}

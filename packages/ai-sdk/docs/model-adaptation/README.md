@@ -32,6 +32,16 @@
 - **2026-11-07 下线模型先标“已过时”不删代码**：平台已下线或即将下线的模型、派欧云全部生成模型（派欧云只保留大语言模型）写 `meta.deprecated`（大语言模型写目录条目的 `deprecated`），用户入口一律不再列出，开发者面板照常显示并注明原因。首批：Fal LTX-2、Fal Veo 3.1、火山 Seedream 5.0 Lite、KIE Seedance 1.5 Pro、派欧云 Kling 3.0 与 MiniMax Speech、Kimi K2.6 / K2.7 Code、MiMo 2.5。
 - **发布**：0.10.0 起的改动只接入痕迹AI，用户试过并明确要求后才发 npm（见 AGENTS.md 第 7 条）。
 
+## 2026-11-14 新模型
+
+- [Seedream 5.5 · Fal](Seedream-5.5/Seedream-5.5_Fal.md)：生成 / 编辑自动切换，图层拆分为显式模式，背景可选透明。
+- [MiniMax H3 Image · Fal](MiniMax-H3-Image/MiniMax-H3-Image_Fal.md)：标准与 Highspeed 两档；与 H3 视频分开建档。
+- [PixVerse V6 · Fal](PixVerse-V6/PixVerse-V6_Fal.md)：标准与 Max 两档合为一个模型；Max 没有首尾帧与续写。
+- [LTX-2.5 · Fal](LTX-2.5/LTX-2.5_Fal.md)：独立模型，Pro / Fast 两档，不并入 LTX-2.3（没有延长与重拍，价格约两倍）。
+- [Qwen-Image 2.1 Pro · 百炼](Qwen-Image-2.1/Qwen-Image-2.1_百炼.md)：开源权重分支的 API 版，不是 3.0 的旧版；Turbo 缺人民币价，未接。
+- 未接：Seedream 5.5 的火山方舟与 KIE（价格表未核清）、MiniMax H3 Image 的 KIE / APIMart（缺部分单价）、FLUX 3 Max 关键帧生视频（需新增按帧号放图的交互）。
+- 只做了离线请求构建与官方 OpenAPI 快照对照，没有真实付费调用。
+
 ## 2026-11-14 DeepSeek 全家桶接口
 
 - [DeepSeek 语音合成](DeepSeek-TTS/DeepSeek-TTS_DeepSeek.md)：新增生成供应商 `deepseek`，两个音色、WAV 输出。
