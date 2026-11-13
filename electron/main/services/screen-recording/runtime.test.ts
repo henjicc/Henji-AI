@@ -53,3 +53,14 @@ it('录屏会话期间阻止系统睡眠，会话结束恰好释放一次', asyn
   await closeRecordingControl(); await closeRecordingControl()
   expect(hooks.release).toHaveBeenCalledOnce()
 })
+it('导航开始后被拦下不放开录制，主文档换掉才交给宿主断开处理', () => {
+  const owner = contents(); const lost = vi.fn()
+  const backend = { start: vi.fn(), pause: vi.fn(), resume: vi.fn(), mark: vi.fn(), stop: vi.fn(), cancel: vi.fn() }
+  openRecordingControl(owner, 'nav', backend, undefined, undefined, undefined, lost)
+  const emitter = owner as unknown as EventEmitter
+  emitter.emit('did-start-navigation', {}, 'app://henji/other', false, true)
+  emitter.emit('did-fail-provisional-load', {}, -3, 'ERR_ABORTED', 'app://henji/other', true)
+  expect(lost).not.toHaveBeenCalled(); expect(backend.cancel).not.toHaveBeenCalled(); expect(hooks.release).not.toHaveBeenCalled()
+  emitter.emit('did-navigate', {}, 'app://henji/other')
+  expect(lost).toHaveBeenCalledOnce()
+})

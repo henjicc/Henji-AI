@@ -3,6 +3,7 @@ import { windowAppearance } from '../services/window-appearance'
 import { resolveAppIconPath } from '../app-icon'
 import { createMainLogger } from '../services/logging/main-logger'
 import { holdBackgroundWork } from '../services/background-work'
+import { onRendererDocumentReplaced } from './renderer-document'
 import {
   parseVideoEditPopoutRequest,
   repairVideoEditPopoutBounds,
@@ -173,13 +174,13 @@ export function createVideoEditPopoutHost(owner: BrowserWindow): VideoEditPopout
   }
 
   const ownerContents = owner.webContents
-  // 主帧跨文档导航提交后（旧文档已卸载）再关闭：若在导航开始时关闭，旧页面仍会收到浮窗
+  // 主文档换掉后（旧文档已卸载）再关闭：若在导航开始时关闭，旧页面仍会收到浮窗
   // pagehide 并把它当成“用户关闭=贴回”，丢失应在重载后恢复的浮窗记录。
   const onOwnerNavigation = (): void => closeAll('owner_navigation')
   const onOwnerGone = (): void => closeAll('owner_render_process_gone')
   const onOwnerClosed = (): void => closeAll('owner_closed')
   ownerContents.on('did-create-window', onCreated)
-  ownerContents.on('did-navigate', onOwnerNavigation)
+  const offOwnerReplaced = onRendererDocumentReplaced(ownerContents, onOwnerNavigation)
   ownerContents.on('render-process-gone', onOwnerGone)
   owner.on('closed', onOwnerClosed)
 
@@ -276,7 +277,7 @@ export function createVideoEditPopoutHost(owner: BrowserWindow): VideoEditPopout
       if (hostsByOwner.get(ownerContents) === host) hostsByOwner.delete(ownerContents)
       closeAll('host_disposed')
       ownerContents.off('did-create-window', onCreated)
-      ownerContents.off('did-navigate', onOwnerNavigation)
+      offOwnerReplaced()
       ownerContents.off('render-process-gone', onOwnerGone)
       owner.off('closed', onOwnerClosed)
     },

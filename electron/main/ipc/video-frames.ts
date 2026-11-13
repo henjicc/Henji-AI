@@ -27,6 +27,7 @@ import {
 import { getWebCacheActivity, getWebSourcePages, parseWebSourceCacheRequest, parseWebSourceCaptureRequest, parseWebSourceOpenRequest, parseWebSourcePaths } from '../services/web-source'
 import type { WebSourceCaptureRequest, WebSourceCaptureResult, WebSourceInfo, WebSourceOpenRequest } from '../../../src/platform/contracts/videoFrameTypes'
 import { parseStringField, parseVoid, registerIpcHandler } from './registry'
+import { onRendererDocumentReplaced } from '../windows/renderer-document'
 
 /**
  * 显卡纹理帧流 IPC：渲染层经 preload `videoFrames` 打开/关闭帧流，帧本身走 `sharedTexture`
@@ -56,11 +57,11 @@ function webContentsFrameTarget(contents: WebContents): VideoFrameTarget {
       const navigated = () => listener('navigated')
       contents.once('destroyed', destroyed)
       contents.on('render-process-gone', gone)
-      contents.on('did-navigate', navigated)
+      const offReplaced = onRendererDocumentReplaced(contents, navigated)
       return () => {
         contents.removeListener('destroyed', destroyed)
         contents.removeListener('render-process-gone', gone)
-        contents.removeListener('did-navigate', navigated)
+        offReplaced()
       }
     },
   }

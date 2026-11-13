@@ -14,6 +14,7 @@ import type { RecordingSensitiveDom } from '../../../../src/core/screenRecording
 import { bindCaptureCapabilitySink } from '../../../../src/core/captureLog/capability'
 import type { RecordingTrackStatus } from '../../../../src/core/screenRecording/contracts'
 import { holdRecordingWakeLock } from '../recording-power'
+import { onRendererDocumentReplaced } from '../../windows/renderer-document'
 
 const logger = createMainLogger('main.screen_recording')
 let releaseWakeLock: (() => void) | null = null
@@ -110,8 +111,7 @@ export function openRecordingControl(ownerContents: WebContents, sessionId: stri
       if (ownerLostHandler) { ownerLostHandler(); return }
       void closeRecordingControl().catch(error => logger.error('采集宿主关闭后清理失败', { event: 'recording.control.owner_lost.failed', error }))
     }
-    // 同一文档内的地址变化（replaceState、锚点）不换页面，录制轨道仍在原页面里。
-    ownerContents.on('did-start-navigation', (_event, _url, inPlace, isMainFrame) => { if (isMainFrame && !inPlace) lost() })
+    onRendererDocumentReplaced(ownerContents, lost)
     ownerContents.on('render-process-gone', lost)
     ownerContents.once('destroyed', lost)
   }
