@@ -195,7 +195,9 @@ export function adoptRestoredVideoEditExports(): void {
   if (!waitingRestore.length) return
   const instances = listVideoEditInstances()
   const adopted: Array<{ job: VideoEditExportJob; registeredState: VideoEditExportJob['state'] }> = []
-  waitingRestore = waitingRestore.filter(record => {
+  // 整批先从等待区摘下再处理：占住剪辑活动会同步通知订阅者（含本函数），重入时等待区里若还留着这批记录，同一项会被接回多次、重复导出
+  const batch = waitingRestore; waitingRestore = []
+  const kept = batch.filter(record => {
     const owner = instances.find(instance => instance.document.id === record.projectId)
     if (!owner) return true
     const payload = restorePayloadSchema.safeParse(record.payload); const snapshot = restoredSnapshotSchema.safeParse(parseSnapshotJson(record.snapshotJson))
@@ -214,6 +216,7 @@ export function adoptRestoredVideoEditExports(): void {
     adopted.push({ registeredState: record.state, job: { id: record.id, owner, name: record.name, presetName: record.presetName, snapshot: snapshot.data, ...payload.data, state, release, controller: new AbortController(), restored: true, restoredProgress: record.progress, outputPublished: record.outputPublished, ...(record.error ? { error: record.error } : {}) } })
     return false
   })
+  waitingRestore = kept.concat(waitingRestore)
   if (!adopted.length) return
   logger.info('恢复界面重新加载前的导出队列', { event: 'video_edit.export_queue.restored', context: { jobs: adopted.length, queued: adopted.filter(entry => entry.job.state === 'queued').length, interrupted: adopted.filter(entry => entry.job.state === 'interrupted').length } })
   videoEditExportQueue.restore(adopted)

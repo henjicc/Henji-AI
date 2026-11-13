@@ -57,10 +57,12 @@ function preparedDocument(): LayerStackDocumentV1 {
 
 describe('layerSeparationGenerationService', () => {
   it.each([
-    ['volcengine', 'seedream-volcengine-layers.json'],
-    ['apimart', 'seedream-apimart-layers.json'],
-    ['kie', 'seedream-kie-layers.json'],
-  ] as const)('%s 结构化 fixture 可被应用生成链消费为同一 V3 准备输入', async (providerId, fixtureName) => {
+    ['volcengine', 'seedream-volcengine-layers.json', 'volcengine-seedream-5.0-pro'],
+    ['apimart', 'seedream-apimart-layers.json', 'apimart-seedream-5.0-pro'],
+    ['kie', 'seedream-kie-layers.json', 'kie-seedream-5.0-pro'],
+    ['kie', 'seedream55-kie-layers.json', 'kie-seedream-5.5'],
+    ['fal', 'seedream-fal-layers.json', 'fal-ai-seedream-5.5'],
+  ] as const)('%s 结构化 fixture（%s）可被应用生成链消费为同一 V3 准备输入', async (providerId, fixtureName, modelId) => {
     const parsed = parseSeedreamLayerStack(providerId, providerFixture(fixtureName));
     const materialized = {
       ...parsed,
@@ -88,7 +90,7 @@ describe('layerSeparationGenerationService', () => {
       completionId: 'generation-output:placeholder',
       sourceImage: '/media/input.png',
       providerId,
-      modelId: `${providerId}-seedream-5.0-pro`,
+      modelId,
       result: {
         primary: materialized.outputs[0].filePath!,
         outputs: materialized.outputs.map((layer) => layer.filePath!),

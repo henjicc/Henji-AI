@@ -17,7 +17,7 @@ beforeAll(async () => {
 });
 
 describe('layerSeparationPolicy', () => {
-  it('只接受三家已核验 Seedream 图层拆分模型并固定各自真实 mode 参数', () => {
+  it('接受 Seedream 5.0 Pro 与 5.5 的图层拆分模型并固定各自真实 mode 参数，其他模型不进候选', () => {
     const candidates = resolveCanvasCapabilityModelCandidates(
       registry.getModelsByType('image'),
       LAYER_SEPARATION_MODEL_POLICY,
@@ -26,7 +26,12 @@ describe('layerSeparationPolicy', () => {
       'volcengine-seedream-5.0-pro',
       'apimart-seedream-5.0-pro',
       'kie-seedream-5.0-pro',
+      'volcengine-seedream-5.5',
+      'kie-seedream-5.5',
+      'fal-ai-seedream-5.5',
     ]));
+    // 5.0 Flash 同样能拆图层，但没有核对过画布图层契约，不放进候选
+    expect(candidates.map(({ model }) => model.meta.id)).not.toContain('volcengine-seedream-5.0-flash');
     for (const { model } of candidates) {
       const mapping = mapCanvasCapabilityModelParams(model, LAYER_SEPARATION_MODEL_POLICY);
       const mode = model.params.find((param) => param.transferKey === 'layer-decomposition-mode');
