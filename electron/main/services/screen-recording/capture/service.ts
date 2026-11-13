@@ -302,6 +302,7 @@ export async function handleCaptureRequest(owner: WebContents, request: CaptureR
         client: screenCaptureProcess(), originUs: session.originUs, nowUs: now,
         failed: error => { void fail(session, error).catch(failure => logger.error('录制失败清理未完成', { event: 'recording.capture.cleanup.failed', error: failure })) },
         sourceEnded: () => sourceEnded(session, endedSource),
+        restarted: () => notifyRecordingProblem(session.owner, '画面采集中断过一次，已自动接着录。'),
       }) : backend === 'gfxcapture' ? gfxCapture() : {
         prepare: async () => undefined,
         start: () => remote(session, 'start'), pause: () => remote(session, 'pause'), resume: () => remote(session, 'resume'), stop: () => remote(session, 'stop'),

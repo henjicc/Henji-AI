@@ -172,16 +172,15 @@ async function screenMedia(files: ReadonlyArray<{ index: number; path: string; m
 }
 
 async function recordedPauses(pauses: NonNullable<RecordingDocument['pauses']>, controls: readonly PauseControl[], screens: ReadonlyArray<{ path: string; monoUs: number; durationUs: number }>): Promise<NonNullable<RecordingDocument['pauses']>> {
-  if (screens.length === 1) {
-    const [screen] = screens
-    const timing = await readCaptureTiming(screen.path).catch(error => { logger.warn('逐帧时刻表读不出，暂停按事件时钟对齐', { event: 'recording.pauses.timing_failed', error }); return null })
-    if (timing) {
-      const result = captureTimingPauses(timing, screen.monoUs, Math.round(screen.durationUs * timing.fpsNum / timing.fpsDen / 1e6))
-      logger.info('暂停区间按逐帧时刻表定下', { event: 'recording.pauses.timing', context: { pauses: pauses.length, recorded: result.length } })
-      return result
-    }
-  }
-  return alignedPauses(pauses, controls, screens)
+  const timings = await Promise.all(screens.map(screen => readCaptureTiming(screen.path).catch(error => { logger.warn('逐帧时刻表读不出，暂停按事件时钟对齐', { event: 'recording.pauses.timing_failed', error }); return null })))
+  const derived = screens.flatMap((screen, index) => timings[index] ? captureTimingPauses(timings[index]!, screen.monoUs, Math.round(screen.durationUs * timings[index]!.fpsNum / timings[index]!.fpsDen / 1e6)) : [])
+  const untimed = screens.filter((_, index) => !timings[index])
+  if (untimed.length === screens.length) return alignedPauses(pauses, controls, screens)
+  // 采集中断后续录出的多个文件：落在两个文件之间的暂停（中断时正暂停着，继续后才开的新文件）不在任何一份时刻表里，沿用当场记下的。
+  const between = screens.length > 1 ? alignedPauses(pauses, controls, untimed).filter(pause => !derived.some(known => known.startUs < pause.endUs && pause.startUs < known.endUs)) : []
+  const result = [...derived, ...between].sort((a, b) => a.startUs - b.startUs)
+  logger.info('暂停区间按逐帧时刻表定下', { event: 'recording.pauses.timing', context: { pauses: pauses.length, recorded: result.length, files: screens.length } })
+  return result
 }
 
 /** 没按停止就结束的（取消、失败、崩溃）以最后一帧画面为录制终点。 */

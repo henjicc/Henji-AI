@@ -143,15 +143,21 @@ async function audioUpToDate(file: string, group: RecordingCombinedGroup): Promi
 }
 
 /**
- * 原生采集录的画面：一次录制一个连续文件、暂停不在里面，本身就是合并好的画面；按逐帧时刻表分出各段，声音照常按这组拼。
- * 不是这种文件（没有时刻表）或没暂停过时返回 null。
+ * 原生采集录的画面：每个文件是一段连续的画面、暂停不在里面，本身就是合并好的；按逐帧时刻表分出各段，声音照常按这组拼。
+ * 通常一次录制一个文件；采集中断后自动续录（显卡重置、采集进程退出）会再开一个，两个文件之间那一两秒没有画面，
+ * 所以每个文件各成一组，不接在一起。
+ * 返回 'none'：没有这种文件，走分片合并；null：都没暂停过，或与没有时刻表的分片混在一起（不该出现），按原样逐个导入。
  */
-async function continuousScreenGroup(content: RecordingDocument): Promise<RecordingCombinedGroup | null> {
-  const screens = content.media.filter(item => item.kind === 'screen' && item.durationUs > 0)
-  if (screens.length !== 1) return null
-  const [screen] = screens
-  const timing = await readCaptureTiming(screen.path)
-  return timing ? captureTimingGroup(screen.id, timing, screen.monoUs, Math.round(screen.durationUs * timing.fpsNum / timing.fpsDen / 1e6)) : null
+async function continuousScreenGroups(content: RecordingDocument): Promise<RecordingCombinedGroup[] | 'none' | null> {
+  const screens = content.media.filter(item => item.kind === 'screen' && item.durationUs > 0).sort((a, b) => a.monoUs - b.monoUs)
+  const timings = await Promise.all(screens.map(screen => readCaptureTiming(screen.path)))
+  if (timings.every(timing => !timing)) return 'none'
+  if (timings.some(timing => !timing)) return null
+  const groups = screens.map((screen, index): RecordingCombinedGroup => {
+    const timing = timings[index]!, fps = timing.fpsNum / timing.fpsDen, frames = Math.round(screen.durationUs * fps / 1e6)
+    return captureTimingGroup(screen.id, timing, screen.monoUs, frames) ?? { fps, frames, parts: [{ mediaId: screen.id, monoUs: screen.monoUs, frames, fileUs: 0 }] }
+  })
+  return groups.some(group => group.parts.length > 1) ? groups : null
 }
 
 /**
@@ -163,14 +169,14 @@ export async function combineRecording(sessionId: string): Promise<RecordingComb
   if (read.meta.kind !== 'screen_recording') throw new Error('请选择录制会话')
   const content: RecordingDocument = recordingDocumentSchema.parse(read.content)
   if (!['stopped', 'interrupted'].includes(content.status)) return null
-  const continuous = await continuousScreenGroup(content)
-  if (!continuous && !recordingCombinePlan(content)) return null
+  const continuous = await continuousScreenGroups(content)
+  if (!continuous || continuous === 'none' && !recordingCombinePlan(content)) return null
   const started = Date.now()
   const screens = content.media.filter(item => item.kind === 'screen' && item.durationUs > 0)
   const ffprobe = await loadFfprobePath()
   const streams = new Map<string, string>()
-  if (!continuous) for (const screen of screens) streams.set(screen.id, await streamKey(ffprobe, screen.path))
-  const plan = continuous ? [continuous] : recordingCombinePlan(content, streams)
+  if (continuous === 'none') for (const screen of screens) streams.set(screen.id, await streamKey(ffprobe, screen.path))
+  const plan = continuous === 'none' ? recordingCombinePlan(content, streams) : continuous
   if (!plan) { logger.info('画面分片编码参数不同，按分段导入', { event: 'recording.combine.skipped', context: { sessionId, screens: screens.length } }); return null }
   const media = new Map(content.media.map(item => [item.id, item]))
   const directory = path.dirname(screens[0].path)

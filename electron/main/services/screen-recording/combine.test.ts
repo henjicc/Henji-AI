@@ -8,7 +8,7 @@ import { createRecordingDocument, type RecordingDocument } from '../../../../src
 import { captureOptionsSchema } from '../../../../src/core/screenRecording/capture'
 import { recordingDurationUs } from '../../../../src/core/screenRecording/range'
 import { wavHeader } from './wav-file'
-import { pausedRecording } from './capture/native-timing.test-support'
+import { CELL, pausedRecording, timingBytes } from './capture/native-timing.test-support'
 
 const binaries = vi.hoisted(() => ({ ffmpeg: '', ffprobe: '' }))
 binaries.ffmpeg = path.resolve('native/video-decoder/target/release/ffmpeg.exe'); binaries.ffprobe = path.resolve('native/video-decoder/target/release/ffprobe.exe')
@@ -102,6 +102,37 @@ it.skipIf(!haveFfmpeg)('一路声音中途换了采样格式：画面照样合�
   expect(group.audio.microphone).toBeUndefined()
   expect(existsSync(path.join(directory, 'microphone-combined-000.wav'))).toBe(false)
 }, 60_000)
+
+it('采集中断后续录出的两个连续文件：各成一组、画面都用原件，中间没有画面的那段不接在一起；声音按各组各拼一条。都没暂停过就不合并', async () => {
+  directory = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-combine-'))
+  const files = [path.join(directory, 'screen-000000.mp4'), path.join(directory, 'screen-000001.mp4')]
+  for (const file of files) await fs.writeFile(file, 'native')
+  // 第一个文件：录 3 秒、暂停 2 秒、再录 3 秒，第 0 帧在会话 2 秒；第二个文件没暂停过，60 帧，从会话 12 秒起。
+  await fs.writeFile(path.join(directory, 'screen-000000.frames'), pausedRecording())
+  await fs.writeFile(path.join(directory, 'screen-000001.frames'), timingBytes(50_000_000, Array.from({ length: 60 }, (_, cell) => [Math.round(50_000_000 + cell * CELL), cell, 1] as [number, number, number])))
+  await wav(path.join(directory, 'microphone-joined-000.wav'), 1_800_000, 13)
+  const content = { ...createRecordingDocument(), status: 'stopped' as const, startUs: 2_000_000, endUs: 14_000_000, pauses: [{ startUs: 5_000_000, endUs: 7_000_000 }] }
+  content.source = { name: '屏幕', options: captureOptionsSchema.parse({ sourceId: 'screen:0:0', width: 320, height: 240, fps: 30, bitrate: 1000000 }), cursorEmbedded: false }
+  content.media = [
+    { id: 'screen-0', kind: 'screen', path: files[0], monoUs: 2_000_000, durationUs: 6_000_000 },
+    { id: 'screen-1', kind: 'screen', path: files[1], monoUs: 12_000_000, durationUs: 2_000_000 },
+    { id: 'microphone-joined-000', kind: 'microphone', path: path.join(directory, 'microphone-joined-000.wav'), monoUs: 1_800_000, durationUs: 13_000_000 },
+  ]
+  state.content = content
+  const groups = (await combineRecording('s'))!
+  expect(groups.map(group => [group.screen, group.frames, group.parts.map(part => [part.mediaId, part.monoUs, part.frames, part.fileUs])])).toEqual([
+    [files[0], 180, [['screen-0', 2_000_000, 90, 0], ['screen-0', 7_000_000, 90, 3_000_000]]],
+    [files[1], 60, [['screen-1', 12_000_000, 60, 0]]],
+  ])
+  const second = await fs.readFile(groups[1].audio.microphone!)
+  expect((second.length - 44) / 2).toBe(2 * RATE)
+  expect(second.readInt16LE(44 + RATE * 2)).toBe(sampleAt(13_000_000)) // 第二组文件 1 秒 = 会话 13 秒
+
+  // 两个文件都没暂停过：没有要合并的，照原样逐个导入。
+  await fs.writeFile(path.join(directory, 'screen-000000.frames'), timingBytes(10_000_000, Array.from({ length: 180 }, (_, cell) => [Math.round(10_000_000 + cell * CELL), cell, 1] as [number, number, number])))
+  state.content = { ...content, pauses: [] }
+  await expect(combineRecording('s')).resolves.toBeNull()
+})
 
 it('原生采集录的连续文件（暂停不在文件里）：按逐帧时刻表分段，画面直接用原件不重拼；声音照这组拼，文件位置与画面对齐', async () => {
   directory = await fs.mkdtemp(path.join(os.tmpdir(), 'henji-combine-'))

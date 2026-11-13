@@ -164,6 +164,24 @@ it('停止收尾按事件时钟与恢复后画面第一帧统一暂停区间，�
   expect(state.saved!.content.pauses).toEqual([{ startUs: 3_900_000, endUs: 6_000_000 }])
 })
 
+it('采集中断后续录出两个连续画面文件：各自文件里的暂停按各自的时刻表定；落在两个文件之间的暂停（中断时正暂停着）沿用当场记下的', async () => {
+  const document = await setup({ systemAudio: false })
+  await document.range('startUs', 2_000_000)
+  // 第一个文件里的暂停（当场记的与时刻表差几毫秒）；第二次暂停期间采集中断，继续后才开第二个文件；第二个文件里又暂停一次。
+  await document.pause(5_006_000); await document.resume(7_006_000)
+  await document.pause(9_000_000); await document.resume(20_000_000)
+  await document.pause(23_004_000); await document.resume(25_004_000)
+  await document.range('endUs', 28_000_000)
+  // 两个文件都是：录 3 秒、暂停 2 秒、再录 3 秒；第一个从会话 2 秒起（第二段只读得回 1 秒），第二个从 20 秒起。
+  await writeFile(path.join(directory, 'screen-000000.frames'), pausedRecording())
+  await writeFile(path.join(directory, 'screen-000001.frames'), pausedRecording(90_000_000))
+  manifest.spans.push({ index: 0, file: 'screen-000000.mp4', monoUs: 2_000_000, durationUs: 4_000_000, finalized: true }, { index: 1, file: 'screen-000001.mp4', monoUs: 20_000_000, durationUs: 6_000_000, finalized: true })
+  manifest.status = 'stopped'
+  await document.finish(manifest)
+  expect(state.saved!.content.pauses).toEqual([{ startUs: 5_000_000, endUs: 7_000_000 }, { startUs: 9_000_000, endUs: 20_000_000 }, { startUs: 23_000_000, endUs: 25_000_000 }])
+  expect(state.saved!.content.media.filter(media => media.kind === 'screen').map(media => media.gaps)).toEqual([[{ startUs: 5_000_000, endUs: 7_000_000 }], [{ startUs: 23_000_000, endUs: 25_000_000 }]])
+})
+
 it('原生采集录的连续画面文件：暂停区间按它的逐帧时刻表定（与事件时钟扣掉的、合并各段的同一组数），不再按分片第一帧猜', async () => {
   const document = await setup({ systemAudio: false })
   await document.range('startUs', 2_000_000)

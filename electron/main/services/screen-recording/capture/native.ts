@@ -17,6 +17,15 @@ const PAUSED_WAIT_MS = 500
 const RESUMED_WAIT_MS = 1500
 /** 来源丢失后等多久还没重新接上，才按“来源没了”结束录制。原生每秒找一次，采集短暂出错通常一两秒内就回来。 */
 const SOURCE_LOST_GRACE_MS = 8000
+/**
+ * 这些原因中断后在同一次录制里另开一个画面文件接着录：显卡设备重置或被移除、编码或采集出错、采集进程退出或没有应答。
+ * 编码会话绑在显卡设备上，设备换了就是另一路流，接不回原文件。磁盘满、写文件出错重开也没用，照旧按采集失败收尾。
+ */
+const REOPENABLE = new Set(['DEVICE_REMOVED', 'ENCODER_FAILED', 'CAPTURE_FAILED', 'PROCESS_EXITED', 'NOT_RESPONDING'])
+/** 一分钟内续录超过这么多次就不再试，与 FFmpeg 录法的续录上限一致。 */
+const MAX_REOPENS_PER_MINUTE = 5
+/** 显卡刚重置完，设备与编码器可能还建不起来：隔这么久各试一次。 */
+const REOPEN_DELAYS_MS = [0, 500, 1500, 3000]
 
 type NativeEvent<T extends ScreenCaptureEvent['event']> = Extract<ScreenCaptureEvent, { event: T }>
 interface NativeDependencies {
@@ -30,11 +39,17 @@ interface NativeDependencies {
   sourceEnded?(): void
   /** 把录好的代理登记进剪辑的代理缓存；默认用剪辑的代理服务。 */
   adoptProxy?(source: string, proxy: string, size: { width: number; height: number }): Promise<unknown>
+  /** 采集中断后已经另开一个文件接着录。 */
+  restarted?(info: { restarts: number; reason: string }): void
+  /** 续录重试之间的等待；测试里换掉。 */
+  sleep?(ms: number): Promise<void>
 }
 
 /**
  * 原生画面采集进程录整块显示器：采集直通硬件编码，一次录制一个画面文件，暂停在同一个文件里（文件里没有暂停的画面），
- * 旁边写逐帧时刻表与活动时间线。会话清单里仍是一个画面分片，文件名与分片一致，时刻表就在它旁边。
+ * 旁边写逐帧时刻表与活动时间线。会话清单里是一个画面分片，文件名与分片一致，时刻表就在它旁边。
+ * 采集中途中断（显卡重置、采集进程退出）时在同一次录制里另开一个分片接着录，两个分片之间那一两秒没有画面，如实留空；
+ * 中断时正暂停着就等按下继续再开。
  *
  * 时间：网格起点与每帧的系统时刻都是采集进程的单调时钟（与主进程 hrtime 同一个计数器），经客户端的校准换算到主进程时钟。
  * 帧的系统时刻是它上屏的时刻，画面里的光标与窗口内容却是更早一点定下的（采集程序在准备时报这个提前量）。
@@ -44,7 +59,7 @@ interface NativeDependencies {
  * 停止不换算，按此刻切：采集进程收到停止就把之前的格子立刻补齐，等不了还没上屏的那一帧，结尾少的不到一个刷新周期。
  */
 export class NativeCaptureBackend implements ScreenCaptureBackend {
-  private state: 'idle' | 'prepared' | 'recording' | 'paused' | 'ended' = 'idle'
+  private state: 'idle' | 'prepared' | 'recording' | 'paused' | 'reopening' | 'ended' = 'idle'
   private unsubscribe: (() => void) | undefined
   private waiters = new Map<string, (event: ScreenCaptureEvent | undefined) => void>()
   private encoder = ''
@@ -61,14 +76,23 @@ export class NativeCaptureBackend implements ScreenCaptureBackend {
   private unholding: Promise<number> | undefined
   private lostSinceUs: number | undefined
   private health = { droppedFrames: 0, repeatedFrames: 0, captureDropped: 0 }
+  /** 已经结束的那些分片的丢帧与重复帧。 */
+  private carried = { droppedFrames: 0, repeatedFrames: 0, captureDropped: 0 }
   private watchdog: ReturnType<typeof setInterval> | undefined
   private finishing: Promise<void> | undefined
-  private readonly name: string
-  constructor(private readonly options: ScreenCaptureOptions, private readonly point: readonly [number, number], private readonly storage: CaptureStorage, private readonly deps: NativeDependencies) {
-    this.name = `screen-${String(storage.manifest.spans.length).padStart(6, '0')}`
-  }
+  /** 中断后正在另开一个分片；暂停、继续、停止都等它有了结果再做。 */
+  private reopening: Promise<void> | undefined
+  /** 中断时正暂停着：按下继续时再开新分片。 */
+  private deferred = false
+  private readonly reopenTimes: number[] = []
+  private restarts = 0
+  private name = ''
+  constructor(private readonly options: ScreenCaptureOptions, private readonly point: readonly [number, number], private readonly storage: CaptureStorage, private readonly deps: NativeDependencies) {}
   private get sessionId(): string { return this.storage.manifest.sessionId }
-  stats(): GfxCaptureStats { return { restarts: 0, droppedFrames: this.health.droppedFrames + this.health.captureDropped, duplicatedFrames: this.health.repeatedFrames, encoder: this.encoder } }
+  stats(): GfxCaptureStats {
+    const sum = (key: keyof typeof this.health): number => this.carried[key] + this.health[key]
+    return { restarts: this.restarts, droppedFrames: sum('droppedFrames') + sum('captureDropped'), duplicatedFrames: sum('repeatedFrames'), encoder: this.encoder }
+  }
   /** 正在录的这一段画面从哪一刻的内容起（开始后是网格起点，继续后是继续生效的那一格），主进程时钟。 */
   capturingSinceUs(): number | undefined { return this.state === 'recording' ? this.sinceUs : undefined }
   /** 来源此刻丢着（显示器断开、采集连续出错）时，画面是从哪一刻起没有的（主进程时钟；暂停在先就是暂停的那一刻）；录制若就此结束，会话到这一刻为止。 */
@@ -79,6 +103,13 @@ export class NativeCaptureBackend implements ScreenCaptureBackend {
   private presentUs(mainUs: number): number { return this.deps.client.toNativeUs(mainUs + this.presentLeadUs) }
 
   async prepare(): Promise<void> {
+    await this.connect()
+    this.state = 'prepared'
+  }
+
+  /** 让采集进程准备好下一个画面分片（文件名取会话清单里的下一个分片号）：建好采集与编码、开始采集，但还不录。 */
+  private async connect(): Promise<void> {
+    this.name = `screen-${String(this.storage.manifest.spans.length).padStart(6, '0')}`
     this.unsubscribe = this.deps.client.subscribe(this.sessionId, event => this.receive(event), loss => this.lost(loss))
     const encoding = recordingEncoding(this.options)
     try {
@@ -89,11 +120,9 @@ export class NativeCaptureBackend implements ScreenCaptureBackend {
         // 代理按剪辑 auto 档的尺寸录：导入剪辑后查代理直接命中。来源不比它高时原生不录。
         proxy: { height: videoProxySize(this.options.width, this.options.height, 'auto').height },
       }))
-      this.state = 'prepared'
       // 原生按显示器原尺寸录、不缩放：尺寸对不上（缩放比例变了等）就交还给现有录法。
       if (prepared.width !== this.options.width || prepared.height !== this.options.height) {
         await this.deps.client.request('cancel', { sessionId: this.sessionId }).catch(() => undefined)
-        this.state = 'idle'
         throw new ScreenCaptureError('CAPTURE_UNSUPPORTED', `显示器实际尺寸 ${prepared.width}×${prepared.height} 与录制尺寸 ${this.options.width}×${this.options.height} 不同`)
       }
       this.encoder = prepared.encoder; this.codec = prepared.codec; this.proxy = prepared.proxy ?? null; this.presentLeadUs = prepared.presentLeadUs ?? 0
@@ -104,6 +133,12 @@ export class NativeCaptureBackend implements ScreenCaptureBackend {
   async start(signal: AbortSignal): Promise<void> {
     signal.throwIfAborted()
     if (this.state !== 'prepared') throw new Error('原生画面采集没有准备好')
+    await this.begin()
+    if (signal.aborted) throw new Error('录制已取消')
+  }
+
+  /** 准备好的这个分片开始录：先登记恢复入口，再等网格起点定下。 */
+  private async begin(): Promise<void> {
     await assertCaptureDiskSpace(this.storage.directory)
     // 恢复入口先于画面落盘：进程或应用此后任何时候崩溃，这个文件都找得回来。起点等网格定下后再改准。
     const span = await this.storage.openSpan(this.deps.nowUs() - this.deps.originUs, true)
@@ -121,8 +156,56 @@ export class NativeCaptureBackend implements ScreenCaptureBackend {
     clearInterval(this.watchdog)
     this.watchdog = setInterval(() => { void assertCaptureDiskSpace(this.storage.directory).catch((error: Error) => this.fail(error)) }, 2000)
     this.watchdog.unref?.()
-    logger.info('屏幕采集开始', { event: 'recording.capture.start', context: { capturer: 'native', encoder: this.encoder, width: this.options.width, height: this.options.height, fps: this.options.fps, firstFrameLagUs: this.sinceUs - this.deps.nowUs() } })
-    if (signal.aborted) throw new Error('录制已取消')
+    logger.info('屏幕采集开始', { event: 'recording.capture.start', context: { capturer: 'native', encoder: this.encoder, width: this.options.width, height: this.options.height, fps: this.options.fps, firstFrameLagUs: this.sinceUs - this.deps.nowUs(), span: span.index } })
+  }
+
+  /**
+   * 采集中断了：收好中断的那个分片（`sealPrevious`），在同一次录制里另开一个分片接着录。事件时钟与声音都没有停，
+   * 两个分片之间没有画面的那一段如实留空。中断时正暂停着就只收尾，等按下继续再开（暂停中本来就不录）。
+   * 开不起来（多次重试仍失败、一分钟内中断太多次）才按采集失败结束，已录部分照常保存。
+   */
+  private reopen(reason: ScreenCaptureError, sealPrevious: () => Promise<void>): void {
+    // 继续已经按下、正等采集进程报出续上的那一格时中断：用户要的是在录，不算暂停着。
+    const paused = this.state === 'paused' && !this.unholding
+    this.state = 'reopening'
+    this.release()
+    this.lostSinceUs = undefined
+    logger.warn('原生画面采集中断，在同一次录制里另开一个分片接着录', { event: 'recording.capture.native.reopen.start', context: { code: reason.code, paused, restarts: this.restarts } })
+    const opening = (async () => {
+      await sealPrevious().catch(error => logger.error('中断的画面分片收尾失败，留给会话收尾按文件补齐', { event: 'recording.capture.native.interrupted_cleanup_failed', error }))
+      for (const key of ['droppedFrames', 'repeatedFrames', 'captureDropped'] as const) { this.carried[key] += this.health[key]; this.health[key] = 0 }
+      const now = Date.now()
+      this.reopenTimes.push(now)
+      while (this.reopenTimes[0] < now - 60_000) this.reopenTimes.shift()
+      if (this.reopenTimes.length > MAX_REOPENS_PER_MINUTE) throw new ScreenCaptureError(reason.code, `${reason.message}；一分钟内多次续录都没能恢复，录制已停止，已录部分可以导入`)
+      if (this.state !== 'reopening') return
+      if (paused) { this.deferred = true; this.state = 'paused'; return }
+      await this.reconnect(reason)
+    })().catch(error => {
+      if (this.state === 'ended') return
+      this.state = 'ended'; this.release()
+      // 续录途中用户按了停止：不再开新分片，按正常停止收尾。
+      if (this.finishing) return
+      this.finishing = Promise.resolve()
+      logger.error('原生画面采集中断后没能接着录', { event: 'recording.capture.native.reopen.failed', error })
+      this.deps.failed(error instanceof Error ? error : new Error(String(error)))
+    }).finally(() => { if (this.reopening === opening) this.reopening = undefined })
+    this.reopening = opening
+  }
+
+  private async reconnect(reason: ScreenCaptureError): Promise<void> {
+    let failure: unknown
+    for (const delay of REOPEN_DELAYS_MS) {
+      if (delay) await (this.deps.sleep ?? (ms => new Promise<void>(resolve => setTimeout(resolve, ms))))(delay)
+      if (this.state === 'ended' || this.finishing) throw reason
+      try { await this.connect(); failure = undefined; break } catch (error) { failure = error }
+    }
+    if (failure) throw failure
+    // 新分片没能开始（开始被拒、迟迟没有第一帧）：让采集进程把它停掉收好，不留一个没人管的采集在录。
+    try { await this.begin() } catch (error) { await this.deps.client.request('stop', { sessionId: this.sessionId }).catch(() => undefined); throw error }
+    this.restarts++
+    logger.info('原生画面采集已接着录', { event: 'recording.capture.native.reopen.completed', context: { restarts: this.restarts, span: this.spanIndex } })
+    this.deps.restarted?.({ restarts: this.restarts, reason: reason.message })
   }
 
   /**
@@ -131,11 +214,17 @@ export class NativeCaptureBackend implements ScreenCaptureBackend {
    * 采集进程没报出那一格（来源正丢着，格子本来就没在进文件）时退回按下的时刻。
    */
   async hold(pressedUs: number): Promise<number> {
+    await this.reopening
     if (this.state !== 'recording') return this.heldUs ?? pressedUs
     const paused = this.lostTimer ? undefined : this.next<NativeEvent<'paused'>>('paused', PAUSED_WAIT_MS)
-    await this.deps.client.request('pause', { sessionId: this.sessionId, atUs: this.presentUs(pressedUs) })
-    if (this.state === 'recording') this.state = 'paused'
-    const event = await paused
+    let event: NativeEvent<'paused'> | undefined
+    try {
+      await this.deps.client.request('pause', { sessionId: this.sessionId, atUs: this.presentUs(pressedUs) })
+      if (this.state === 'recording') this.state = 'paused'
+      event = await paused
+    } catch (error) { if (!this.reopening) throw error }
+    // 暂停还没生效采集就中断了：等新分片开好（或确定延后到继续时再开），再按那时的状态暂停。
+    if (this.reopening) return this.hold(pressedUs)
     this.heldCellUs = undefined
     // 来源丢失、停摆造成的空档不是这次暂停生效的那一格。
     if (event && (event.reason ?? 'user') === 'user') { this.heldCellUs = event.atUs; return this.heldUs = this.contentUs(event.atUs) }
@@ -145,6 +234,7 @@ export class NativeCaptureBackend implements ScreenCaptureBackend {
 
   async pause(signal: AbortSignal): Promise<void> {
     signal.throwIfAborted()
+    await this.reopening
     if (this.state === 'recording') await this.hold(this.deps.nowUs())
   }
 
@@ -154,11 +244,34 @@ export class NativeCaptureBackend implements ScreenCaptureBackend {
    */
   unhold(): Promise<number> {
     return this.unholding ??= (async () => {
+      await this.reopening
       const pressedUs = this.deps.nowUs()
       if (this.state !== 'paused') return this.sinceUs ?? pressedUs
+      if (this.deferred) {
+        // 暂停期间采集中断过：这时才开新分片，画面从它的网格起点接着走。
+        this.deferred = false; this.state = 'reopening'
+        const opening = this.reconnect(new ScreenCaptureError('CAPTURE_FAILED', '暂停期间画面采集中断过'))
+        // 这时按下停止也要等新分片开好再停，不能留一个没人管的采集在录。
+        const settled = opening.then(() => undefined, () => undefined).finally(() => { if (this.reopening === settled) this.reopening = undefined })
+        this.reopening = settled
+        try { await opening } catch (error) { this.state = 'ended'; this.release(); this.finishing ??= Promise.resolve(); throw error }
+        this.heldUs = undefined
+        return this.sinceUs ?? pressedUs
+      }
       const resumed = this.next<NativeEvent<'resumed'>>('resumed', RESUMED_WAIT_MS)
-      await this.deps.client.request('resume', { sessionId: this.sessionId, atUs: this.presentUs(pressedUs) })
-      const event = await resumed
+      let event: NativeEvent<'resumed'> | undefined
+      try {
+        await this.deps.client.request('resume', { sessionId: this.sessionId, atUs: this.presentUs(pressedUs) })
+        event = await resumed
+      } catch (error) { if (!this.reopening) throw error }
+      if (this.reopening) {
+        // 还没续上采集就中断了：画面要等新分片开好才有，事件时钟与会话文档都从新分片的起点接着走，暂停算到那一刻为止。
+        await this.reopening
+        const since = this.capturingSinceUs()
+        if (since === undefined) throw new ScreenCaptureError('CAPTURE_FAILED', '画面采集中断后没能接着录')
+        this.heldUs = undefined
+        return since
+      }
       // 画面从继续生效的那一格接着进文件。没等到它（没有格子真的停过，或来源还丢着）时事件时钟不扣时间，从暂停处接着走。
       if (!event) logger.warn('采集进程没有报出继续生效的那一格，事件时钟从暂停处接着走', { event: 'recording.capture.native.resume_unconfirmed', context: { sourceLost: Boolean(this.lostTimer) } })
       this.sinceUs = !event ? this.heldUs ?? pressedUs : this.heldUs !== undefined && this.heldCellUs !== undefined ? this.heldUs + (event.atUs - this.heldCellUs) : this.contentUs(event.atUs)
@@ -170,6 +283,7 @@ export class NativeCaptureBackend implements ScreenCaptureBackend {
 
   async resume(signal: AbortSignal): Promise<void> {
     signal.throwIfAborted()
+    await this.reopening
     if (this.state === 'paused') await this.unhold()
   }
 
@@ -181,8 +295,11 @@ export class NativeCaptureBackend implements ScreenCaptureBackend {
 
   private finish(reason: 'stop' | 'cancel'): Promise<void> {
     return this.finishing ??= (async () => {
+      await this.reopening
       clearInterval(this.watchdog)
       try {
+        // 暂停期间中断过、还没开新分片：采集进程那边没有在录的东西，中断的那个分片已经收好。
+        if (this.deferred) this.state = 'ended'
         if (this.state === 'recording' || this.state === 'paused') {
           this.state = 'ended'
           const result = screenCaptureResultSchema.parse(await this.deps.client.request('stop', { sessionId: this.sessionId, atUs: this.deps.client.toNativeUs(this.deps.nowUs()) }))
@@ -197,7 +314,7 @@ export class NativeCaptureBackend implements ScreenCaptureBackend {
   }
 
   /** 文件已收尾：分片时长是文件时间轴的长度；起点改到第 0 帧画面内容的时刻（它所在格的时刻加上时刻表里新画面相对格时刻的中位偏移，再换成内容的时刻）。 */
-  private async seal(result: Pick<ScreenCaptureResult, 'frames' | 'encodedFrames' | 'proxyFrames' | 'droppedFrames' | 'repeatedFrames' | 'captureDropped'>): Promise<void> {
+  private async seal(result: Pick<ScreenCaptureResult, 'frames' | 'encodedFrames' | 'proxyFrames' | 'droppedFrames' | 'repeatedFrames' | 'captureDropped'>, interrupted = false): Promise<void> {
     this.health = { droppedFrames: result.droppedFrames, repeatedFrames: result.repeatedFrames, captureDropped: result.captureDropped }
     const span = this.storage.manifest.spans[this.spanIndex]
     if (!span) return
@@ -207,7 +324,10 @@ export class NativeCaptureBackend implements ScreenCaptureBackend {
         if (timing) span.monoUs = Math.max(0, this.contentUs(captureTimingFirstFrameUs(timing)) - this.deps.originUs)
       } catch (error) { logger.warn('逐帧时刻表读不出，画面起点按网格起点', { event: 'recording.capture.native.timing_failed', error }) }
     }
-    await this.storage.seal(span.index, Math.round(result.frames * 1e6 / this.options.fps))
+    let durationUs = Math.round(result.frames * 1e6 / this.options.fps)
+    // 中断时还在编码队列里的几帧没有写进文件：以文件里真有的为准，不让分片比文件长。
+    if (interrupted && result.frames > 0) durationUs = Math.min(durationUs, await probeMediaDurationUs(this.storage.file(span)).catch(() => durationUs))
+    await this.storage.seal(span.index, durationUs)
     if (result.frames > 0 && this.proxy) await this.registerProxy(this.storage.file(span), this.proxy, result)
   }
 
@@ -260,16 +380,19 @@ export class NativeCaptureBackend implements ScreenCaptureBackend {
     if (event.event === 'interrupted') {
       const error = new ScreenCaptureError(event.error.code, event.error.message)
       const result = screenCaptureResultSchema.safeParse(event)
-      this.finishing ??= (async () => {
-        this.state = 'ended'
-        clearInterval(this.watchdog)
-        try { if (result.success) await this.seal(result.data) } finally { this.release() }
-      })()
-      void this.finishing.catch(failure => logger.error('原生画面采集中断后收尾失败，已写文件保留', { event: 'recording.capture.native.interrupted_cleanup_failed', error: failure }))
-        .then(() => {
-          logger.warn('原生画面采集中断', { event: 'recording.capture.native.interrupted', context: { code: error.code } })
-          if (error.code === 'SOURCE_LOST') this.deps.sourceEnded?.(); else this.deps.failed(error)
-        })
+      if (this.reopenable(error.code)) this.reopen(error, async () => { if (result.success) await this.seal(result.data, true) })
+      else {
+        this.finishing ??= (async () => {
+          this.state = 'ended'
+          clearInterval(this.watchdog)
+          try { if (result.success) await this.seal(result.data, true) } finally { this.release() }
+        })()
+        void this.finishing.catch(failure => logger.error('原生画面采集中断后收尾失败，已写文件保留', { event: 'recording.capture.native.interrupted_cleanup_failed', error: failure }))
+          .then(() => {
+            logger.warn('原生画面采集中断', { event: 'recording.capture.native.interrupted', context: { code: error.code } })
+            if (error.code === 'SOURCE_LOST') this.deps.sourceEnded?.(); else this.deps.failed(error)
+          })
+      }
     }
     this.waiters.get(event.event)?.(event)
   }
@@ -291,8 +414,14 @@ export class NativeCaptureBackend implements ScreenCaptureBackend {
     this.deps.sourceEnded?.()
   }
 
+  private reopenable(code: string): boolean { return REOPENABLE.has(code) && (this.state === 'recording' || this.state === 'paused') && !this.deferred && !this.finishing }
+
   private lost(loss: NativeProcessLoss): void {
+    // 续录途中进程又没了：准备阶段在途的请求会被拒，由续录的重试接着处理；已经准备好、正等第一帧的不重试，立刻按没等到结束。
+    if (this.state === 'reopening') { for (const waiter of [...this.waiters.values()]) waiter(undefined); return }
     if (this.state === 'ended' || this.state === 'idle') return
+    // 采集进程没了：它正在写的分片不封口，会话收尾时按文件里真实写到的画面补齐；新分片由重新启动的进程接着录。
+    if (this.reopenable(loss.code)) { this.reopen(new ScreenCaptureError(loss.code, loss.message), async () => undefined); return }
     this.state = 'ended'
     this.release()
     // 文件按“被杀之后”处理：会话收尾时按文件里真实写到的画面补齐时长。
