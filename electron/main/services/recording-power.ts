@@ -10,6 +10,11 @@ let nextHolder = 0
  * 录音、录屏进行中阻止系统挂起：睡眠会让原生采集超过 5 秒没有回调而判定设备丢失、录屏子进程被挂起。
  * 只拦挂起不拦息屏，长时间口播可以关掉屏幕。多路录制共用一个系统请求，最后一路结束才放开；返回的释放函数可重复调用。
  */
+/** 是否有录音或录屏正在进行（整库读写这类后台维护据此推迟，不和采集争磁盘）。 */
+export function isRecordingInProgress(): boolean {
+  return holders.size > 0
+}
+
 export function holdRecordingWakeLock(reason: string): () => void {
   const id = ++nextHolder
   holders.set(id, reason)
