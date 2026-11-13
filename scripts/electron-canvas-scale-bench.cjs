@@ -17,6 +17,7 @@
  *   SCALE_TRACE      设 1 时先录 2 秒静止时间线并按事件名汇总
  *   SCALE_HOLD_PORT  给一个端口号时，量完后保持窗口并开放该调试端口
  *   SCALE_FRAMES     设 1 时在快速缩放期间录屏并存成逐帧图片
+ *   SCALE_INTERACT   设 1 时不量帧率，改为逐项核对远景下的交互（点选、右键、拖进素材组、批量连线、文件拖放、连线落点）
  *   SCALE_IMAGE_DIR  测试图片缓存目录（默认系统临时目录下 henji-canvas-scale-images）
  *   SCALE_DISPLAY_POINT 窗口所在显示器内的桌面坐标（默认 2561,1）
  */
@@ -28,6 +29,7 @@ const sharp = require('sharp')
 const { launchElectronApp, waitForApp } = require('./lib/electronLaunch.cjs')
 const { formatScaleResult } = require('./lib/canvasScaleReport.cjs')
 const { findPanePoint } = require('./lib/canvasPanInput.cjs')
+const { runInteractionChecks } = require('./lib/canvasScaleInteract.cjs')
 
 const ROOT = path.resolve(__dirname, '..')
 // 正式实例正在用 out/ 时不能重新打包：另建一份产物（electron-vite build --outDir <目录>）并用 SCALE_BUILD_DIR 指过去
@@ -35,6 +37,8 @@ const MAIN_ENTRY = path.join(path.resolve(ROOT, process.env.SCALE_BUILD_DIR || '
 const SCALES = (process.env.SCALE_NODES || '2000,5000,10000').split(',').map(Number).filter(Boolean)
 const OUT_DIR = path.resolve(ROOT, process.env.SCALE_OUT || '.canvas-scale-bench')
 const CAPTURE_FRAMES = process.env.SCALE_FRAMES === '1'
+const INTERACT = process.env.SCALE_INTERACT === '1'
+const INTERACT_GROUP_ID = 'scale-asset-group'
 const PROFILE = process.env.SCALE_PROFILE === '1'
 const TRACE = process.env.SCALE_TRACE === '1'
 const HOLD_PORT = Number(process.env.SCALE_HOLD_PORT || 0)
@@ -114,6 +118,13 @@ function buildGraph(count, images, videoPath) {
     }
   }
   for (const node of nodes) if (MEASURED[node.type]) node.measured = { ...MEASURED[node.type] }
+  if (INTERACT && count > columns + 2) {
+    // 交互核对要一个素材组：占第二行第三格，不写量得尺寸，顺带走一遍“没量过的节点”的路径
+    const slot = columns + 2
+    const replaced = nodes[slot].id
+    nodes[slot] = { id: INTERACT_GROUP_ID, type: 'assetGroupNode', position: nodes[slot].position, data: { displayName: '素材组', memberOrder: [], coverMemberId: null, bindings: [] } }
+    for (let index = edges.length - 1; index >= 0; index -= 1) if (edges[index].source === replaced || edges[index].target === replaced) edges.splice(index, 1)
+  }
   return { nodes, edges, columns, width: columns * SPACING_X, height: Math.ceil(count / columns) * SPACING_Y }
 }
 
@@ -342,6 +353,11 @@ async function runScale(app, page, count, images) {
   const center = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
   const result = { count, edges: graph.edges.length, firstPaintMs, interactiveMs, mounted, viewportSize: { width: Math.round(box.width), height: Math.round(box.height) } }
 
+  if (INTERACT) {
+    result.interaction = await runInteractionChecks(page, { docId: id, graph, sizes: MEASURED, outDir: OUT_DIR, groupId: INTERACT_GROUP_ID })
+    return result
+  }
+
   result.memoryAfterOpen = await processMemory(app)
   if (TRACE) result.traceIdle = await traceSummary(page, () => sleep(2000))
   if (process.env.SCALE_TRACE === 'pan' || process.env.SCALE_TRACE === 'near') result.tracePan = await traceSummary(page, () => drivePan(page, center, 800))
@@ -398,7 +414,7 @@ async function main() {
       const result = await runScale(app.app, page, count, images)
       results.push(result)
       console.log(JSON.stringify(result))
-      console.log(formatScaleResult(result))
+      if (!INTERACT) console.log(formatScaleResult(result))
       fs.writeFileSync(path.join(OUT_DIR, 'result.json'), JSON.stringify(results, null, 2))
       if (HOLD_PORT) {
         // 留着窗口供别的脚本经调试端口接入；在结果目录里放一个名为 stop 的文件即退出

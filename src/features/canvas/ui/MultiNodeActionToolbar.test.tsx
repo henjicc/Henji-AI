@@ -20,6 +20,9 @@ vi.mock('react-i18next', async (importOriginal) => {
       key === 'nodeToolbar.batchDownload' ? `下载 ${values?.count} 项` : key }),
   }
 })
+vi.mock('@/features/canvas/scene/useCanvasScene', () => ({
+  useCanvasSceneView: () => ({ clientRectOf: () => null, hitNodeAtClient: () => null, scene: { subscribe: () => () => undefined } }),
+}))
 vi.mock('@/stores/settingsStore', () => ({
   useSettingsStore: (selector: (state: { downloadPresetPaths: string[] }) => unknown) =>
     selector({ downloadPresetPaths: [] }),

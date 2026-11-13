@@ -26,6 +26,7 @@ import {
   resolveMediaRowTargetHandles,
 } from '@/features/canvas/application/graphValueResolver'
 import { useCanvasStore } from '@/stores/canvasStore'
+import { useCanvasSceneView } from '@/features/canvas/scene/useCanvasScene'
 import {
   canNodeBeManualConnectionSource,
   canNodeTypeBeManualConnectionSource,
@@ -157,6 +158,9 @@ function resolveQuickAddPosition(
   }
 }
 
+/** 连线松手时，离端口这么近（画布单位）就算落在端口上：与端口的可点范围同一量级 */
+const DROP_PORT_RADIUS = 14
+
 export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
   const {
     wrapperRef,
@@ -170,6 +174,7 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
   } = params
 
   const suppressNextPaneClickRef = useRef(false)
+  const sceneView = useCanvasSceneView()
 
   // 松手在节点身上：按上游素材类型连到这个节点上同类型、离松手位置最近且还能再连的端口
   const nearestMediaHandleOnDrop = useCallback((
@@ -266,13 +271,21 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
       suppressNextPaneClickRef.current = false
       return
     }
+    // 没挂真 DOM 的节点靠指针移到它上面时出的空外框接住点击；触屏、笔的点按没有这一步，
+    // 点击会落到画布空白层上，这里按画布场景补上选中
+    const tapped = sceneView.hitNodeAtClient({ x: event.clientX, y: event.clientY })
+    if (tapped) {
+      setSelectedNode(tapped.id)
+      clearMenu()
+      return
+    }
     if (event.detail >= 2) {
       openNodeMenuAtClientPosition(event.clientX, event.clientY)
       return
     }
     setSelectedNode(null)
     clearMenu()
-  }, [clearMenu, openNodeMenuAtClientPosition, setSelectedNode])
+  }, [clearMenu, openNodeMenuAtClientPosition, sceneView, setSelectedNode])
 
   const handlePaneContextMenu = useCallback((event: ReactMouseEvent<Element> | MouseEvent) => {
     event.preventDefault()
@@ -392,12 +405,15 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
         return
       }
 
-      const eventTarget = event.target as Element | null
-      const nodeElementFromTarget = eventTarget?.closest?.('.react-flow__node[data-id]') as HTMLElement | null
-      const nodeElementFromPoint = document.elementFromPoint(clientPosition.x, clientPosition.y)
-        ?.closest?.('.react-flow__node[data-id]') as HTMLElement | null
-      const dropNodeElement = nodeElementFromTarget ?? nodeElementFromPoint
-      const dropNodeId = dropNodeElement?.dataset?.id ?? null
+      // 落点问画布场景：目标节点不一定挂着真 DOM。端口有一半伸在节点外框之外，
+      // 所以没落在任何节点里时，再看附近有没有能接这条线的端口。
+      const scenePoint = sceneView.isCanvasSurfaceAt(clientPosition) ? sceneView.toScenePoint(clientPosition) : null
+      const scene = sceneView.scene.read()
+      const dropNodeId = scenePoint
+        ? (scene.hitNode(scenePoint)?.id
+          ?? scene.hitPort(scenePoint, DROP_PORT_RADIUS, pendingConnectStart.handleType === 'source' ? 'target' : 'source')?.nodeId
+          ?? null)
+        : null
 
       if (dropNodeId && dropNodeId !== pendingConnectStart.nodeId) {
         const pendingNode = nodes.find((node) => node.id === pendingConnectStart.nodeId)
@@ -484,23 +500,11 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
       let startY: number | null = pendingConnectStart.start?.y ?? null
 
       if (startX === null || startY === null) {
-        const nodeElement = wrapperRef.current?.querySelector<HTMLElement>(
-          `.react-flow__node[data-id="${pendingConnectStart.nodeId}"]`
-        )
-        const handleElement = nodeElement?.querySelector<HTMLElement>(
-          `.react-flow__handle-${pendingConnectStart.handleType}`
-        )
-        if (handleElement) {
-          const handleRect = handleElement.getBoundingClientRect()
-          startX = handleRect.left - containerRect.left + handleRect.width / 2
-          startY = handleRect.top - containerRect.top + handleRect.height / 2
-        } else if (nodeElement) {
-          const nodeRect = nodeElement.getBoundingClientRect()
-          startX =
-            pendingConnectStart.handleType === 'source'
-              ? nodeRect.right - containerRect.left
-              : nodeRect.left - containerRect.left
-          startY = nodeRect.top - containerRect.top + nodeRect.height / 2
+        const port = scene.port(pendingConnectStart.nodeId, pendingConnectStart.handleType, pendingConnectStart.handleId)
+        const portOnScreen = port ? sceneView.toClientRect({ x: port.x, y: port.y, width: 0, height: 0 }) : null
+        if (portOnScreen) {
+          startX = portOnScreen.x - containerRect.left
+          startY = portOnScreen.y - containerRect.top
         } else if (connectionState.from) {
           startX = connectionState.from.x
           startY = connectionState.from.y
@@ -538,7 +542,7 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
       suppressNextPaneClickRef.current = true
       setShowNodeMenu(true)
     },
-    [connectAssetGroup, connectNodes, nodes, pendingConnectStart, reactFlowInstance, resolveAllowedTypesForPending, nearestMediaHandleOnDrop, scheduleCanvasPersist, targetHandlesFor, wrapperRef]
+    [connectAssetGroup, connectNodes, nodes, pendingConnectStart, reactFlowInstance, resolveAllowedTypesForPending, nearestMediaHandleOnDrop, sceneView, scheduleCanvasPersist, targetHandlesFor, wrapperRef]
   )
 
   return {

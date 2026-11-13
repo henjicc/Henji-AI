@@ -5,6 +5,7 @@ import { SURFACE_OBSERVATION_SCHEMA_VERSION, type SurfaceCaptureRect } from '@/c
 import { useCanvasStore, type CanvasNode } from '@/stores/canvasStore'
 import { canvasDocumentCommands } from './canvasDocumentEnvironment'
 import { getCanvasNodeDefinition } from '../domain/nodeRegistry'
+import { getActiveCanvasSceneView } from '../scene/useCanvasScene'
 
 const logger = createLogger('features.canvas.application.canvasProjectCover')
 
@@ -61,30 +62,17 @@ function toIntRect(rect: { x: number; y: number; width: number; height: number }
  * 交给占位图，不去改视口——退出时改视口会把刚保存的视口状态写脏。
  */
 function resolveNodeAreaRect(): SurfaceCaptureRect | null {
-  const pane = document.querySelector('.react-flow')
-  if (!pane) return null
-  const paneRect = pane.getBoundingClientRect()
-  const nodeElements = [...document.querySelectorAll('.react-flow__node')]
-  if (nodeElements.length === 0) return null
+  // 节点范围读画布场景：多数节点没有真 DOM（由远景层绘制），量节点元素会漏掉它们
+  const view = getActiveCanvasSceneView()
+  const paneRect = view?.canvasClientRect()
+  const sceneBounds = view?.scene.read().bounds()
+  const nodeArea = sceneBounds ? view?.toClientRect(sceneBounds) : null
+  if (!paneRect || !nodeArea) return null
 
-  let left = Number.POSITIVE_INFINITY
-  let top = Number.POSITIVE_INFINITY
-  let right = Number.NEGATIVE_INFINITY
-  let bottom = Number.NEGATIVE_INFINITY
-  for (const element of nodeElements) {
-    const bounds = element.getBoundingClientRect()
-    if (bounds.width <= 0 || bounds.height <= 0) continue
-    left = Math.min(left, bounds.left)
-    top = Math.min(top, bounds.top)
-    right = Math.max(right, bounds.right)
-    bottom = Math.max(bottom, bounds.bottom)
-  }
-  if (!Number.isFinite(left) || !Number.isFinite(top)) return null
-
-  const clampedLeft = Math.max(paneRect.left, left - CAPTURE_PADDING)
-  const clampedTop = Math.max(paneRect.top, top - CAPTURE_PADDING)
-  const clampedRight = Math.min(paneRect.right, right + CAPTURE_PADDING)
-  const clampedBottom = Math.min(paneRect.bottom, bottom + CAPTURE_PADDING)
+  const clampedLeft = Math.max(paneRect.x, nodeArea.x - CAPTURE_PADDING)
+  const clampedTop = Math.max(paneRect.y, nodeArea.y - CAPTURE_PADDING)
+  const clampedRight = Math.min(paneRect.x + paneRect.width, nodeArea.x + nodeArea.width + CAPTURE_PADDING)
+  const clampedBottom = Math.min(paneRect.y + paneRect.height, nodeArea.y + nodeArea.height + CAPTURE_PADDING)
   const width = clampedRight - clampedLeft
   const height = clampedBottom - clampedTop
   if (width < 32 || height < 32) return null
@@ -106,7 +94,7 @@ async function captureNodeAreaDataUrl(): Promise<string | null> {
 }
 
 /**
- * 更新画布封面。必须在画布仍然挂载时调用（截图读的是真实 DOM）。
+ * 更新画布封面。必须在画布仍然挂载时调用（截的是窗口里的画布画面）。
  * 失败只记日志：封面是装饰，不能因为它拦住用户退出项目。
  */
 export async function updateCanvasProjectCover(projectId: string): Promise<void> {

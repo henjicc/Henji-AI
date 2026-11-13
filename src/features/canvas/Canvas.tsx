@@ -61,6 +61,9 @@ import { maintainMultiLayerDocumentReleaseCandidates } from './application/multi
 import { CanvasViewportFlow } from './ui/CanvasViewportFlow';
 import { useCanvasTidy } from './hooks/useCanvasTidy';
 import { CanvasTidyPanel } from './ui/CanvasTidyPanel';
+import { CanvasFarLayer } from './farLayer/CanvasFarLayer';
+import { useCanvasFarView } from './presence/useCanvasNodePresence';
+import { useActiveCanvasSceneView } from './scene/useCanvasScene';
 
 interface CanvasToastState {
   message: string;
@@ -73,6 +76,8 @@ const CANVAS_DEFAULT_EDGE_OPTIONS: DefaultEdgeOptions = { type: 'disconnectableE
 const CANVAS_PRO_OPTIONS = { hideAttribution: true };
 const CANVAS_MULTI_SELECTION_KEY_CODE = ['Control', 'Meta'];
 const CANVAS_SELECTION_KEY_CODE = ['Control', 'Meta'];
+/** 最小缩放：缩到这里一屏能放下上万个节点（远景由 farLayer 一次画完，节点再多也不影响帧率）。 */
+const CANVAS_MIN_ZOOM = 0.03;
 
 /**
  * 画布点阵：直接引用主题 CSS 变量（辅助文字色 35%），切换主题由浏览器重算样式，不触发 React 渲染。
@@ -89,6 +94,7 @@ export function Canvas() {
   const { t } = useTranslation();
   const reactFlowInstance = useReactFlow<CanvasNode, CanvasEdge>();
   const wrapperRef = useRef<HTMLDivElement>(null);
+  useActiveCanvasSceneView();
   const handleMediaDrag = useCanvasMediaDrag();
   const { prepareGlassGesture, clearGlassGesture } = useCanvasGlassPerformance(wrapperRef);
   // 画布提示走共享 UiToast（任务 5.7 收敛）：压在画布上用玻璃、相对画布容器定位；停留与淡出时长同全局通知
@@ -329,7 +335,6 @@ export function Canvas() {
     handleDragStop: handleCanvasNodeDragStop,
     renderGraph,
   } = useCanvasAssetGroups({
-    wrapperRef,
     nodes,
     edges,
     selectedNodeId,
@@ -402,17 +407,20 @@ export function Canvas() {
   });
   const assetDrop = useCanvasAssetDrop({ reactFlowInstance, addNode, schedulePersist: scheduleCanvasPersist });
   const { onNodeContextMenu, hideNodeContextMenu, nodeContextMenu } = useNodeParameterContextMenu(closeNodeMenu);
-  // 低倍率内容 LOD：只在跨越阈值时翻转一次 class，节点正文的显隐全部由 CSS 承担
-  const isContentLodLow = useCanvasContentLod();
+  // 远景层可用时：节点正文只在近景分批挂载，远景整层淡出、画面交给远景层（见 presence/ 与 farLayer/）
+  const farView = useCanvasFarView();
+  // 远景层不可用时的退路：全部节点常驻挂载，低倍率只在跨越阈值时翻转一次 class，正文显隐由 CSS 承担
+  const contentLodLow = useCanvasContentLod();
+  const isContentLodLow = contentLodLow && farView === 'unavailable';
 
-  // 有意不开 onlyRenderVisibleElements：裁剪带来的节点挂载/卸载抖动是平移/缩放时
+  // 有意不开 onlyRenderVisibleElements：它在视口变化的同一帧里同步挂载、卸载节点，是平移与缩放时
   // 数百毫秒长任务的主要来源（240 节点实测 zoom 长任务 550ms → 0）。
   return (
     <div
       ref={wrapperRef}
       onMouseDownCapture={handleMediaDrag}
       data-application-observation-region="canvas.viewport_observer"
-      className={`relative h-full w-full ${isContentLodLow ? 'canvas-lod-low' : ''}`}
+      className={`relative h-full w-full ${isContentLodLow ? 'canvas-lod-low' : ''} ${farView === 'far' ? 'canvas-far-view' : ''}`}
       onDragOver={assetDrop.onDragOver}
       onDrop={assetDrop.onDrop}
     >
@@ -446,7 +454,7 @@ export function Canvas() {
         edgeTypes={edgeTypes}
         defaultEdgeOptions={CANVAS_DEFAULT_EDGE_OPTIONS}
         defaultViewport={DEFAULT_VIEWPORT}
-        minZoom={0.1}
+        minZoom={CANVAS_MIN_ZOOM}
         maxZoom={5}
         selectionOnDrag
         selectionMode={SelectionMode.Partial}
@@ -458,6 +466,7 @@ export function Canvas() {
         className="bg-canvas"
       >
         <CanvasGridBackground />
+        <CanvasFarLayer />
         <CanvasMiniMap />
         <CanvasZoomBar />
 

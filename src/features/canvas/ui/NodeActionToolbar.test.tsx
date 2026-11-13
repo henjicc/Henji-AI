@@ -23,6 +23,9 @@ vi.mock('@/features/assets/hooks/useAddToAssetLibrary', () => ({
   useAddToAssetLibrary: () => ({ addMedia: vi.fn(), collecting: false }),
 }))
 vi.mock('./CanvasImageCapabilityActions', () => ({ CanvasImageCapabilityActions: () => null }))
+vi.mock('@/features/canvas/scene/useCanvasScene', () => ({
+  useCanvasSceneView: () => ({ clientRectOf: () => null, scene: { subscribe: () => () => undefined } }),
+}))
 
 const nodes = [
   { id: 'copy-image', type: 'uploadNode', position: { x: 0, y: 0 }, data: { imageUrl: 'https://fixture.invalid/image.png', aspectRatio: '1:1' } },

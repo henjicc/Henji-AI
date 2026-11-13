@@ -12,6 +12,21 @@
 - 通用计算与连接预览逻辑放 `src/features/canvas/canvasUtils.ts`
 - 新画布能力必须落在 `src/features/canvas/`
 
+## 大画布：场景数据、远景层与按需挂载
+
+节点数超过 `ALWAYS_MOUNTED_NODE_LIMIT`（`presence/canvasNodePresence.ts`）的画布，多数节点**没有真 DOM**：
+
+- `scene/`（画布场景）是节点几何、层级、端口位置、标题摘要与缩略图来源的唯一来源，从 ReactFlow store 派生。
+- `farLayer/` 用一块 WebGL 画布照场景画出全部节点与连线，任何缩放下都在。
+- `presence/` 只给近景、视口附近的节点挂真 DOM（正文），视口运动途中不挂不卸；指针下没挂正文的节点出一个空外框接住点选、拖动与右键。
+
+由此而来的硬约束：
+
+- **命中、落点、锚定一律问场景，不问节点 DOM**：“某点下是哪个节点”“某节点在屏幕哪里”“端口在哪”用 `useCanvasSceneView()`（组件树外用 `getActiveCanvasSceneView()`）。禁止对节点使用 `elementFromPoint`、`querySelector('.react-flow__node…')`、`getBoundingClientRect` 来做这些事；节点正文内部量自己的元素不受限。
+- **不能假设节点组件挂着**：必须由节点组件接住的事件（导入文件、重新上传）要先点名挂载（`presence.pin`，见 `useCanvasFarView`）。新增这类事件时同步登记；能放进 store 或应用服务的逻辑不要放在节点组件里。
+- **正文会被卸载**：只存在组件里的编辑状态会随卸载丢失。有焦点、展开着浮层、正在拖动、选中着的正文不卸；除此之外需要跨卸载保留的状态写回节点数据或 store。
+- 验证用 `scripts/electron-canvas-scale-bench.cjs`（隔离资料目录；`SCALE_INTERACT=1` 逐项核对远景交互，`SCALE_FRAMES=1` 录快速缩放逐帧）。按 `.react-flow__node` 数节点的脚本只对常驻挂载的小画布成立。
+
 ## 节点组成
 
 新建/改造节点时从标准化的"参数行组件"拼装，不要从零写 UI。

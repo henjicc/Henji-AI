@@ -12,6 +12,15 @@ const CONTENT_LOD_THRESHOLDS: Record<CanvasLodLevel, number | null> = {
   off: null, detail: 0.25, balanced: 0.4, performance: 0.6,
 };
 
+/** 不简化（off）时正文仍需要一个起挂缩放：再小就只剩几个像素，交给远景层。 */
+const MIN_DETAIL_ZOOM = 0.15;
+
+/** 节点正文开始显示的缩放：与内容简化等级共用一组阈值。 */
+export function resolveCanvasDetailZoomThreshold(level: CanvasLodLevel): number {
+  const threshold = Object.hasOwn(CONTENT_LOD_THRESHOLDS, level) ? CONTENT_LOD_THRESHOLDS[level] : CONTENT_LOD_THRESHOLDS.balanced;
+  return threshold ?? MIN_DETAIL_ZOOM;
+}
+
 /** 同一画布只计算一次公共呈现值；平移不把无变化的值广播到每个节点。 */
 export function createCanvasViewSubscriptions(flow: CanvasViewSource, settings: SettingsSource) {
   let subscriberCount = 0;

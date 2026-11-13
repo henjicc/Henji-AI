@@ -1,10 +1,12 @@
 import { useLayoutEffect, useRef, type RefObject } from 'react'
 import { resolveNodeToolbarPosition, type ToolbarSide } from './nodeToolbarPosition'
 import { createRafScheduler } from '@/utils/createRafScheduler'
+import { useCanvasSceneView } from '@/features/canvas/scene/useCanvasScene'
 
 /** 仅修正选中态浮层，不改变 ReactFlow 节点盒、缩放或画布位置。 */
 export function useNodeToolbarBoundary(nodeIdsKey: string, visible = true): RefObject<HTMLDivElement> {
   const panelRef = useRef<HTMLDivElement>(null)
+  const sceneView = useCanvasSceneView()
 
   useLayoutEffect(() => {
     const panel = panelRef.current
@@ -14,8 +16,7 @@ export function useNodeToolbarBoundary(nodeIdsKey: string, visible = true): RefO
     let side: ToolbarSide = 'above'
     let shift = { x: 0, y: 0 }
     const owner = panel.ownerDocument.defaultView ?? window
-    const ids = new Set((toolbar.dataset.id ?? '').split(' '))
-    const nodes = Array.from(renderer.querySelectorAll<HTMLElement>('.react-flow__node')).filter((node) => ids.has(node.dataset.id ?? ''))
+    const ids = (toolbar.dataset.id ?? '').split(' ')
     const update = () => {
       const area = renderer.getBoundingClientRect()
       const boundary = {
@@ -25,11 +26,10 @@ export function useNodeToolbarBoundary(nodeIdsKey: string, visible = true): RefO
       }
       const maxWidth = `${Math.max(0, boundary.width - 24)}px`
       if (panel.style.maxWidth !== maxWidth) panel.style.maxWidth = maxWidth
-      const rects = nodes.map((node) => node.getBoundingClientRect())
-      if (!rects.length) return
-      const left = Math.min(...rects.map((rect) => rect.left))
-      const top = Math.min(...rects.map((rect) => rect.top))
-      const anchor = { left, top, width: Math.max(...rects.map((rect) => rect.right)) - left, height: Math.max(...rects.map((rect) => rect.bottom)) - top }
+      // 锚点取自画布场景：被选中的节点不一定挂着真 DOM（远景、移出视口），不能量节点元素
+      const rect = sceneView.clientRectOf(ids)
+      if (!rect) return
+      const anchor = { left: rect.x, top: rect.y, width: rect.width, height: rect.height }
       const natural = toolbar.getBoundingClientRect()
       const next = resolveNodeToolbarPosition(anchor, natural, boundary, side, Boolean(panel.querySelector('[aria-expanded="true"]')))
       // 菜单打开时保持已有一侧；边界夹取仍然生效，防止窗口缩小时越界。
@@ -44,7 +44,9 @@ export function useNodeToolbarBoundary(nodeIdsKey: string, visible = true): RefO
     const scheduler = createRafScheduler(update, owner)
     const schedule = scheduler.schedule
     const resize = new ResizeObserver(schedule)
-    ;[panel, renderer, ...nodes].forEach((element) => resize.observe(element))
+    ;[panel, renderer].forEach((element) => resize.observe(element))
+    // 节点尺寸或位置变了，锚点跟着变
+    const stopScene = sceneView.scene.subscribe(schedule)
     // ReactFlow 持有原始 transform；观察它的更新，并在独立 translate 中做边缘修正。
     let anchorTransform = toolbar.style.transform
     const mutations = new MutationObserver(() => {
@@ -58,11 +60,12 @@ export function useNodeToolbarBoundary(nodeIdsKey: string, visible = true): RefO
     return () => {
       toolbar.style.removeProperty('translate')
       resize.disconnect()
+      stopScene()
       mutations.disconnect()
       scheduler.cancel()
       owner.removeEventListener('resize', schedule)
     }
-  }, [nodeIdsKey, visible])
+  }, [nodeIdsKey, sceneView, visible])
 
   return panelRef
 }

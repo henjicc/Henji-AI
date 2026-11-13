@@ -4,9 +4,9 @@ import { canvasEventBus } from '@/features/canvas/application/canvasServices';
 import { resolveAssetGroupMemberKind } from '@/features/canvas/application/assetGroupGraph';
 import { createAssetGroupRenderGraph } from '@/features/canvas/application/assetGroupRenderGraph';
 import { isAssetGroupNode, type CanvasEdge, type CanvasNode } from '@/features/canvas/domain/canvasNodes';
+import { useCanvasSceneView } from '@/features/canvas/scene/useCanvasScene';
 
 interface UseCanvasAssetGroupsInput {
-  wrapperRef: React.RefObject<HTMLDivElement>;
   nodes: CanvasNode[];
   edges: CanvasEdge[];
   selectedNodeId: string | null;
@@ -16,7 +16,8 @@ interface UseCanvasAssetGroupsInput {
 }
 
 export function useCanvasAssetGroups(input: UseCanvasAssetGroupsInput) {
-  const { wrapperRef, nodes, edges, selectedNodeId, selectedNodeIds, onNodeDragStop, addToAssetGroup } = input;
+  const { nodes, edges, selectedNodeId, selectedNodeIds, onNodeDragStop, addToAssetGroup } = input;
+  const sceneView = useCanvasSceneView();
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
 
   useEffect(() => canvasEventBus.subscribe('asset-group/open', ({ groupId }) => {
@@ -45,13 +46,12 @@ export function useCanvasAssetGroups(input: UseCanvasAssetGroupsInput) {
   const handleDragStop = useCallback((event: Pick<MouseEvent, 'altKey'>, node: CanvasNode) => {
     if (onNodeDragStop(event, node)) return;
     if (event.altKey || isAssetGroupNode(node) || !resolveAssetGroupMemberKind(node)) return;
-    const draggedElement = wrapperRef.current?.querySelector<HTMLElement>(`.react-flow__node[data-id="${node.id}"]`);
-    const rect = draggedElement?.getBoundingClientRect();
-    if (!rect) return;
-    const targetElement = document.elementsFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
-      .map((element) => element.closest<HTMLElement>('.react-flow__node[data-id]'))
-      .find((element) => element && element.dataset.id !== node.id);
-    const targetId = targetElement?.dataset.id;
+    // 落点问画布场景：被拖的节点和素材组都不一定挂着真 DOM
+    const scene = sceneView.scene.read();
+    const dragged = scene.node(node.id);
+    if (!dragged) return;
+    const center = { x: dragged.x + dragged.width / 2, y: dragged.y + dragged.height / 2 };
+    const targetId = scene.hitNode(center, (id) => id === node.id)?.id;
     const target = targetId ? nodes.find((item) => item.id === targetId) : undefined;
     if (!target || !isAssetGroupNode(target)) return;
     const memberIds = selectedNodeIds.includes(node.id)
@@ -61,7 +61,7 @@ export function useCanvasAssetGroups(input: UseCanvasAssetGroupsInput) {
         })
       : [node.id];
     addToAssetGroup(target.id, memberIds);
-  }, [addToAssetGroup, nodes, onNodeDragStop, selectedNodeIds, wrapperRef]);
+  }, [addToAssetGroup, nodes, onNodeDragStop, sceneView, selectedNodeIds]);
 
   const renderGraph = useMemo(
     () => createAssetGroupRenderGraph(nodes, edges),

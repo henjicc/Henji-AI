@@ -7,6 +7,8 @@ import type { CanvasEdge, CanvasNode, CanvasNodeData, CanvasNodeType } from '../
 import { mediaSourceNodeData, mediaSourceNodeType } from '../application/assetMediaAssignment'
 import { canvasEventBus } from '../application/canvasServices'
 import { resolveMediaFiles } from '../canvasUtils'
+import { useCanvasNodePresence } from '../presence/useCanvasNodePresence'
+import { useCanvasSceneView } from '../scene/useCanvasScene'
 
 const logger = createLogger('features.canvas.hooks.useCanvasAssetDrop')
 const EXTERNAL_MEDIA_COLUMNS = 3
@@ -24,6 +26,8 @@ export function useCanvasAssetDrop({ reactFlowInstance, addNode, schedulePersist
   onDrop: (event: React.DragEvent) => void
 } {
   const { t } = useTranslation()
+  const sceneView = useCanvasSceneView()
+  const presence = useCanvasNodePresence()
   const onDragOver = useCallback((event: React.DragEvent): void => {
     const isAssetDrag = event.dataTransfer.types.includes('application/x-henji-drag-data')
     const isExternalFileDrag = event.dataTransfer.types.includes('Files')
@@ -46,9 +50,18 @@ export function useCanvasAssetDrop({ reactFlowInstance, addNode, schedulePersist
     // 节点自己的上传区会消费落在节点内的文件；画布级导入只处理空白区域，
     // 避免一次拖放既写入目标节点、又额外创建一个媒体节点。
     const targetElement = event.target as Element | null
-    if (targetElement?.closest('.react-flow__node')) return
+    const targetNodeId = targetElement?.closest<HTMLElement>('.react-flow__node')?.dataset.id
+    if (targetNodeId && presence.isBodyInteractive(targetNodeId)) return
 
     const mediaFiles = resolveMediaFiles(event.dataTransfer.files)
+    // 落点上的节点没挂正文（远景，或还没轮到挂载）：它的上传区不在场，把文件按“导入到这个节点”交给它，
+    // 能接收文件的节点会在挂上正文后处理，其余节点与落在自己上传区之外一样不处理。
+    const dropNode = sceneView.hitNodeAtClient({ x: event.clientX, y: event.clientY })
+    if (dropNode) {
+      if (mediaFiles[0]) canvasEventBus.publish('canvas/import-media', { nodeId: dropNode.id, file: mediaFiles[0].file })
+      return
+    }
+
     const skippedCount = Math.max(0, event.dataTransfer.files.length - mediaFiles.length)
     if (mediaFiles.length === 0) {
       canvasEventBus.publish('canvas/toast', {
@@ -102,6 +115,6 @@ export function useCanvasAssetDrop({ reactFlowInstance, addNode, schedulePersist
         type: 'error',
       })
     }
-  }, [addNode, reactFlowInstance, schedulePersist, t])
+  }, [addNode, presence, reactFlowInstance, sceneView, schedulePersist, t])
   return { onDragOver, onDrop }
 }

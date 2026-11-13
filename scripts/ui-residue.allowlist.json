@@ -213,6 +213,7 @@
       "definedIn": "src/features/canvas/storyboard.css",
       "names": [
         "canvas-lod-low",
+        "canvas-far-view",
         "canvas-node-lod-detail",
         "canvas-node-lod-placeholder",
         "canvas-viewport-moving",

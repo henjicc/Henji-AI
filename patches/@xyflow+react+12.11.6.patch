@@ -77,7 +77,7 @@ index 0000000..7d3dee8
 +    return view;
 +}
 diff --git a/node_modules/@xyflow/react/dist/esm/index.js b/node_modules/@xyflow/react/dist/esm/index.js
-index 422889f..fe3b30f 100644
+index 422889f..cfbc3d0 100644
 --- a/node_modules/@xyflow/react/dist/esm/index.js
 +++ b/node_modules/@xyflow/react/dist/esm/index.js
 @@ -1,4 +1,5 @@
@@ -95,6 +95,15 @@ index 422889f..fe3b30f 100644
  }
  /**
   * In some cases, you might need to access the store directly. This hook returns the store object which can be used on demand to access the state or dispatch actions.
+@@ -1533,7 +1534,7 @@ function Pane({ isSelecting, selectionKeyPressed, selectionMode = SelectionMode.
+         };
+         const prevSelectedNodeIds = selectedNodeIds.current;
+         const prevSelectedEdgeIds = selectedEdgeIds.current;
+-        selectedNodeIds.current = new Set(getNodesInside(nodeLookup, nextUserSelectRect, transform, selectionMode === SelectionMode.Partial, true).map((node) => node.id));
++        selectedNodeIds.current = new Set(getNodesInside(nodeLookup, nextUserSelectRect, transform, selectionMode === SelectionMode.Partial, true).filter((node) => henjiNodeInSelection(node, nextUserSelectRect, transform, selectionMode === SelectionMode.Partial)).map((node) => node.id));
+         selectedEdgeIds.current = new Set();
+         const edgesSelectable = defaultEdgeOptions?.selectable ?? true;
+         // We look for all edges connected to the selected nodes
 @@ -1860,13 +1861,19 @@ const connectingSelector = (nodeId, handleId, type) => (state) => {
          valid: connectingTo && isValid,
      };
@@ -116,8 +125,41 @@ index 422889f..fe3b30f 100644
      if (!nodeId) {
          store.getState().onError?.('010', errorMessages['error010']());
      }
+@@ -2126,7 +2133,23 @@ function FlowRendererComponent({ children, onPaneClick, onPaneMouseEnter, onPane
+ FlowRendererComponent.displayName = 'FlowRenderer';
+ const FlowRenderer = memo(FlowRendererComponent);
+ 
++// Henji-AI: getNodesInside treats every node without handle bounds as inside (it wants them rendered once).
++// With host-named rendering most nodes are never mounted, so a selection rect must test their geometry instead.
++function henjiNodeInSelection(node, rect, [tx, ty, scale], partially) {
++    if (node.internals.handleBounds) return true;
++    const width = node.measured.width ?? node.width ?? node.initialWidth ?? 0;
++    const height = node.measured.height ?? node.height ?? node.initialHeight ?? 0;
++    const { x, y } = node.internals.positionAbsolute;
++    const left = (rect.x - tx) / scale;
++    const top = (rect.y - ty) / scale;
++    const overlapX = Math.max(0, Math.min(left + rect.width / scale, x + width) - Math.max(left, x));
++    const overlapY = Math.max(0, Math.min(top + rect.height / scale, y + height) - Math.max(top, y));
++    const overlap = overlapX * overlapY;
++    return partially ? overlap > 0 : overlap >= width * height && overlap > 0;
++}
+ const selector$c = (onlyRenderVisible) => (s) => {
++    // Henji-AI: the host may name the nodes to mount (large canvases draw the rest on a GPU layer).
++    if (s.henjiRenderedNodeIds) return s.henjiRenderedNodeIds.filter((id) => s.nodeLookup.has(id));
+     return onlyRenderVisible
+         ? getNodesInside(s.nodeLookup, { x: 0, y: 0, width: s.width, height: s.height }, s.transform, true).map((node) => node.id)
+         : Array.from(s.nodeLookup.keys());
+@@ -2419,6 +2442,8 @@ const NodeRenderer = memo(NodeRendererComponent);
+  */
+ function useVisibleEdgeIds(onlyRenderVisible) {
+     const edgeIds = useStore(useCallback((s) => {
++        // Henji-AI: same host-provided list for edges, see selector$c.
++        if (s.henjiRenderedEdgeIds) return s.henjiRenderedEdgeIds.filter((id) => s.edgeLookup.has(id));
+         if (!onlyRenderVisible) {
+             return s.edges.map((edge) => edge.id);
+         }
 diff --git a/node_modules/@xyflow/react/dist/esm/index.mjs b/node_modules/@xyflow/react/dist/esm/index.mjs
-index 422889f..fe3b30f 100644
+index 422889f..cfbc3d0 100644
 --- a/node_modules/@xyflow/react/dist/esm/index.mjs
 +++ b/node_modules/@xyflow/react/dist/esm/index.mjs
 @@ -1,4 +1,5 @@
@@ -135,6 +177,15 @@ index 422889f..fe3b30f 100644
  }
  /**
   * In some cases, you might need to access the store directly. This hook returns the store object which can be used on demand to access the state or dispatch actions.
+@@ -1533,7 +1534,7 @@ function Pane({ isSelecting, selectionKeyPressed, selectionMode = SelectionMode.
+         };
+         const prevSelectedNodeIds = selectedNodeIds.current;
+         const prevSelectedEdgeIds = selectedEdgeIds.current;
+-        selectedNodeIds.current = new Set(getNodesInside(nodeLookup, nextUserSelectRect, transform, selectionMode === SelectionMode.Partial, true).map((node) => node.id));
++        selectedNodeIds.current = new Set(getNodesInside(nodeLookup, nextUserSelectRect, transform, selectionMode === SelectionMode.Partial, true).filter((node) => henjiNodeInSelection(node, nextUserSelectRect, transform, selectionMode === SelectionMode.Partial)).map((node) => node.id));
+         selectedEdgeIds.current = new Set();
+         const edgesSelectable = defaultEdgeOptions?.selectable ?? true;
+         // We look for all edges connected to the selected nodes
 @@ -1860,13 +1861,19 @@ const connectingSelector = (nodeId, handleId, type) => (state) => {
          valid: connectingTo && isValid,
      };
@@ -156,3 +207,36 @@ index 422889f..fe3b30f 100644
      if (!nodeId) {
          store.getState().onError?.('010', errorMessages['error010']());
      }
+@@ -2126,7 +2133,23 @@ function FlowRendererComponent({ children, onPaneClick, onPaneMouseEnter, onPane
+ FlowRendererComponent.displayName = 'FlowRenderer';
+ const FlowRenderer = memo(FlowRendererComponent);
+ 
++// Henji-AI: getNodesInside treats every node without handle bounds as inside (it wants them rendered once).
++// With host-named rendering most nodes are never mounted, so a selection rect must test their geometry instead.
++function henjiNodeInSelection(node, rect, [tx, ty, scale], partially) {
++    if (node.internals.handleBounds) return true;
++    const width = node.measured.width ?? node.width ?? node.initialWidth ?? 0;
++    const height = node.measured.height ?? node.height ?? node.initialHeight ?? 0;
++    const { x, y } = node.internals.positionAbsolute;
++    const left = (rect.x - tx) / scale;
++    const top = (rect.y - ty) / scale;
++    const overlapX = Math.max(0, Math.min(left + rect.width / scale, x + width) - Math.max(left, x));
++    const overlapY = Math.max(0, Math.min(top + rect.height / scale, y + height) - Math.max(top, y));
++    const overlap = overlapX * overlapY;
++    return partially ? overlap > 0 : overlap >= width * height && overlap > 0;
++}
+ const selector$c = (onlyRenderVisible) => (s) => {
++    // Henji-AI: the host may name the nodes to mount (large canvases draw the rest on a GPU layer).
++    if (s.henjiRenderedNodeIds) return s.henjiRenderedNodeIds.filter((id) => s.nodeLookup.has(id));
+     return onlyRenderVisible
+         ? getNodesInside(s.nodeLookup, { x: 0, y: 0, width: s.width, height: s.height }, s.transform, true).map((node) => node.id)
+         : Array.from(s.nodeLookup.keys());
+@@ -2419,6 +2442,8 @@ const NodeRenderer = memo(NodeRendererComponent);
+  */
+ function useVisibleEdgeIds(onlyRenderVisible) {
+     const edgeIds = useStore(useCallback((s) => {
++        // Henji-AI: same host-provided list for edges, see selector$c.
++        if (s.henjiRenderedEdgeIds) return s.henjiRenderedEdgeIds.filter((id) => s.edgeLookup.has(id));
+         if (!onlyRenderVisible) {
+             return s.edges.map((edge) => edge.id);
+         }

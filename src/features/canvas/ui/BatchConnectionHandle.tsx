@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { UiIconButton, UiPanel } from '@/components/ui';
 import { resolveMediaConnectionSource } from '@/features/canvas/application/mediaConnectionPlanner';
 import type { CanvasNode } from '@/features/canvas/domain/canvasNodes';
+import { useCanvasSceneView } from '@/features/canvas/scene/useCanvasScene';
 
 interface BatchConnectionHandleProps {
   nodes: CanvasNode[];
@@ -25,6 +26,7 @@ function connectionPath(line: DragLine): string {
 
 export function BatchConnectionHandle({ nodes, onConnect }: BatchConnectionHandleProps) {
   const { t } = useTranslation();
+  const sceneView = useCanvasSceneView();
   const [dragLine, setDragLine] = useState<DragLine | null>(null);
   const sourceNodeIds = useMemo(
     () => nodes.filter((node) => resolveMediaConnectionSource(node)).map((node) => node.id),
@@ -52,16 +54,15 @@ export function BatchConnectionHandle({ nodes, onConnect }: BatchConnectionHandl
       document.removeEventListener('pointerup', handleUp, true);
       document.body.classList.remove('cursor-crosshair');
       setDragLine(null);
-      const element = document.elementFromPoint(upEvent.clientX, upEvent.clientY)
-        ?.closest<HTMLElement>('.react-flow__node[data-id]');
-      const targetNodeId = element?.dataset.id;
+      // 落点问画布场景：目标节点不一定挂着真 DOM
+      const targetNodeId = sceneView.hitNodeAtClient({ x: upEvent.clientX, y: upEvent.clientY })?.id;
       if (targetNodeId && !sourceNodeIds.includes(targetNodeId)) {
         onConnect(sourceNodeIds, targetNodeId);
       }
     };
     document.addEventListener('pointermove', handleMove, true);
     document.addEventListener('pointerup', handleUp, true);
-  }, [onConnect, sourceNodeIds]);
+  }, [onConnect, sceneView, sourceNodeIds]);
 
   if (sourceNodeIds.length < 2) return null;
 

@@ -8,6 +8,8 @@ import {
   type CanvasNodePaintFrameOptions,
 } from '@/features/canvas/ui/CanvasNodePaintFrame';
 
+import { CanvasNodeBody } from '@/features/canvas/presence/CanvasNodeBody';
+
 import { AudioGenNode } from './AudioGenNode';
 import { AudioNode } from './AudioNode';
 import { GroupNode } from './GroupNode';
@@ -49,20 +51,26 @@ type NodeRenderComponent<TProps extends object> = ((props: TProps) => ReactNode)
 
 const CANVAS_NODE_PAINT_CONTAINMENT_ENABLED = true;
 
+/** 节点组件统一经过两层包装：正文挂载闸门（远景时不挂正文）与绘制裁剪框。 */
 function withNodePaintFrame<TProps extends object>(
   Component: NodeRenderComponent<TProps>,
   options?: CanvasNodePaintFrameOptions,
 ): NodeRenderComponent<TProps> {
-  if (!CANVAS_NODE_PAINT_CONTAINMENT_ENABLED || options?.disabled) {
-    return Component;
-  }
+  const framed = !(!CANVAS_NODE_PAINT_CONTAINMENT_ENABLED || options?.disabled);
   const WrappedNode: NodeRenderComponent<TProps> = (props) => {
-    const nodeId = 'id' in props && typeof props.id === 'string' ? props.id : undefined;
-    return createElement(
-      CanvasNodePaintFrame,
-      { ...options, nodeId },
-      createElement(Component, props),
-    );
+    const { id, width, height } = props as { id?: unknown; width?: unknown; height?: unknown };
+    const nodeId = typeof id === 'string' ? id : undefined;
+    const renderBody = (size: { width: number | undefined; height: number | undefined }): ReactNode => {
+      const body = createElement(Component, nodeId === undefined ? props : { ...props, ...size });
+      return framed ? createElement(CanvasNodePaintFrame, { ...options, nodeId }, body) : body;
+    };
+    if (nodeId === undefined) return renderBody({ width: undefined, height: undefined });
+    return createElement(CanvasNodeBody, {
+      id: nodeId,
+      width: typeof width === 'number' ? width : undefined,
+      height: typeof height === 'number' ? height : undefined,
+      render: renderBody,
+    });
   };
   WrappedNode.displayName = `withNodePaintFrame(${Component.displayName ?? Component.name ?? 'Node'})`;
   return memo<TProps>(WrappedNode, areNodeContentPropsEqual);

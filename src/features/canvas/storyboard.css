@@ -174,6 +174,30 @@
   display: flex;
 }
 
+/* 远景（见 presence/canvasNodePresence.ts）：节点正文整层淡出，露出铺在下面的远景层画面；
+   空外框仍然接收指针，选中、拖动、框选照常。连线此时全部由远景层画。 */
+.react-flow__nodes,
+.react-flow__viewport-portal {
+  transition: opacity var(--ui-duration-fast) var(--ui-ease);
+}
+
+.canvas-far-view .react-flow__nodes,
+.canvas-far-view .react-flow__viewport-portal {
+  opacity: 0;
+}
+
+/* 远景里留着的正文（正在接收导入文件等）看不见，也就不能点到：外框照旧接收指针，
+   与空外框一样只承担选中和拖动；里面的输入框、按钮、端口一律不接收。
+   端口等元素自带 pointer-events 声明，所以这里必须压过它们。 */
+.canvas-far-view .react-flow__node *,
+.canvas-far-view .react-flow__viewport-portal {
+  pointer-events: none !important;
+}
+
+.canvas-far-view .react-flow__edges {
+  visibility: hidden;
+}
+
 .canvas-minimap {
   border-radius: var(--radius-overlay);
   overflow: hidden;

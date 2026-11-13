@@ -9,6 +9,8 @@ import { useCanvasAssetDrop } from './useCanvasAssetDrop'
 const mocks = vi.hoisted(() => ({
   publish: vi.fn(),
   readAssetDragPayload: vi.fn(() => null),
+  hitNodeAtClient: vi.fn((): { id: string } | null => null),
+  isBodyInteractive: vi.fn(() => true),
 }))
 
 vi.mock('react-i18next', async (importOriginal) => {
@@ -24,6 +26,8 @@ vi.mock('@/features/assets/drag/assetDragPayload', () => ({
 vi.mock('../application/canvasServices', () => ({
   canvasEventBus: { publish: mocks.publish },
 }))
+vi.mock('../scene/useCanvasScene', () => ({ useCanvasSceneView: () => ({ hitNodeAtClient: mocks.hitNodeAtClient }) }))
+vi.mock('../presence/useCanvasNodePresence', () => ({ useCanvasNodePresence: () => ({ isBodyInteractive: mocks.isBodyInteractive }) }))
 
 describe('useCanvasAssetDrop', () => {
   beforeEach(() => {
@@ -87,6 +91,7 @@ describe('useCanvasAssetDrop', () => {
     const addNode = vi.fn()
     const nodeElement = document.createElement('div')
     nodeElement.className = 'react-flow__node'
+    nodeElement.dataset.id = 'upload-node'
     const target = document.createElement('div')
     nodeElement.append(target)
     document.body.append(nodeElement)
@@ -103,5 +108,28 @@ describe('useCanvasAssetDrop', () => {
     } as unknown as React.DragEvent))
 
     expect(addNode).not.toHaveBeenCalled()
+    expect(mocks.publish).not.toHaveBeenCalled()
+  })
+
+  it('落点上的节点没挂正文时把文件交给这个节点，不在它上面再建一个节点', () => {
+    const addNode = vi.fn()
+    mocks.hitNodeAtClient.mockReturnValueOnce({ id: 'far-node' })
+    const file = new File([], 'a.png', { type: 'image/png' })
+    const { result } = renderHook(() => useCanvasAssetDrop({
+      reactFlowInstance: { screenToFlowPosition: vi.fn() } as unknown as ReactFlowInstance<CanvasNode, CanvasEdge>,
+      addNode,
+      schedulePersist: vi.fn(),
+    }))
+
+    act(() => result.current.onDrop({
+      target: document.body,
+      clientX: 10,
+      clientY: 10,
+      preventDefault: vi.fn(),
+      dataTransfer: { types: ['Files'], files: [file] },
+    } as unknown as React.DragEvent))
+
+    expect(addNode).not.toHaveBeenCalled()
+    expect(mocks.publish).toHaveBeenCalledWith('canvas/import-media', { nodeId: 'far-node', file })
   })
 })
