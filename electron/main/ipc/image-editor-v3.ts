@@ -76,6 +76,7 @@ export {
   parseImageEditorV3PyramidPrewarmPayload,
   parseImageEditorV3TileBatchPayload,
 } from './image-editor-v3-tile-payloads'
+import { onRendererDocumentReplaced } from '../windows/renderer-document'
 
 const logger = createMainLogger('main.image_editor_v3.ipc')
 interface ImageEditorV3Runtime {
@@ -178,7 +179,7 @@ function trackRendererLifetime(sender: WebContents): void {
   const cleanup = (): void => {
     sender.off('destroyed', abortRequests)
     sender.off('render-process-gone', abortRequests)
-    sender.off('did-start-loading', abortRequests)
+    stopWatchingDocument()
     trackedSenders.delete(sender)
   }
   const abortRequests = (): void => {
@@ -187,7 +188,7 @@ function trackRendererLifetime(sender: WebContents): void {
   }
   sender.once('destroyed', abortRequests)
   sender.once('render-process-gone', abortRequests)
-  sender.once('did-start-loading', abortRequests)
+  const stopWatchingDocument = onRendererDocumentReplaced(sender, abortRequests)
   trackedSenders.set(sender, cleanup)
 }
 
@@ -391,11 +392,11 @@ export function registerImageEditorV3Ipc(): void {
         for (const key of layoutLeases.keys()) if (key.startsWith(`${event.sender.id}:`)) void releaseLayout(key)
         event.sender.removeListener('destroyed', cleanup)
         event.sender.removeListener('render-process-gone', cleanup)
-        event.sender.removeListener('did-start-loading', cleanup)
+        stopWatchingDocument()
       }
       event.sender.once('destroyed', cleanup)
       event.sender.once('render-process-gone', cleanup)
-      event.sender.once('did-start-loading', cleanup)
+      const stopWatchingDocument = onRendererDocumentReplaced(event.sender, cleanup)
     }
     const bytes = Buffer.from(JSON.stringify(payload.value), 'utf8')
     const publication = await getRuntime().resources.putBufferLeased(bytes, { mediaType: 'application/vnd.henji.layout+json', maxBytes: IMAGE_LAYOUT_RESOURCE_MAX_BYTES, signal })

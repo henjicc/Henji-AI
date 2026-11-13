@@ -3,6 +3,7 @@ import { release } from 'node:os'
 import { isTrustedMainRendererUrl } from '../security/main-renderer-url'
 import type { CaptureKind, CapturePermissionStatus, CaptureSelection, CaptureSource } from '../../../src/core/screenRecording/contracts'
 import { createMainLogger } from './logging'
+import { onRendererDocumentReplaced } from '../windows/renderer-document'
 
 interface CaptureGrant { kinds: ReadonlySet<CaptureKind>; selection?: CaptureSelection }
 const logger = createMainLogger('main.media_permissions')
@@ -94,7 +95,7 @@ export class MediaPermissionService {
     this.identities.set(contents, { target, id: contents.id })
     if (!this.watched.has(contents)) {
       this.watched.add(contents)
-      contents.on('did-start-navigation', (_event, _url, _inPlace, isMainFrame) => { if (isMainFrame !== false) this.revokeWindow(contents) })
+      onRendererDocumentReplaced(contents, () => this.revokeWindow(contents))
       contents.on('render-process-gone', () => this.revokeWindow(contents))
       contents.once('destroyed', () => this.revokeWindow(contents))
     }

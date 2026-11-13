@@ -17,6 +17,7 @@ export interface LlmProviderKeyStatusDto {
   credentialId: string
   configured: boolean
   maskedHint?: string | null
+  unreadable?: boolean
 }
 
 function ensureDesktopRuntime(): void {

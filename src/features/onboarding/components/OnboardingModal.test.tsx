@@ -52,7 +52,7 @@ describe('OnboardingModal', () => {
     localStorage.clear()
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
     await i18n.changeLanguage('zh-CN')
-    vi.mocked(aiGetProviderKeyInfo).mockResolvedValue({ configured: false, maskedHint: null })
+    vi.mocked(aiGetProviderKeyInfo).mockResolvedValue({ configured: false, maskedHint: null, unreadable: false })
     vi.mocked(aiSetProviderApiKey).mockResolvedValue()
     vi.mocked(aiTestProviderConnection).mockResolvedValue({
       providerId: 'fal',
@@ -110,7 +110,7 @@ describe('OnboardingModal', () => {
   })
 
   it('已保存密钥只显示摘要，主进程可直接测试而无需重新填写', async () => {
-    vi.mocked(aiGetProviderKeyInfo).mockResolvedValue({ configured: true, maskedHint: '••••1234' })
+    vi.mocked(aiGetProviderKeyInfo).mockResolvedValue({ configured: true, maskedHint: '••••1234', unreadable: false })
     onboardingManager.setPrimaryProvider('fal')
     onboardingManager.goToStep('api-key')
     render(<OnboardingModal />)

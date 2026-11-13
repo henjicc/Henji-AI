@@ -7,6 +7,7 @@ import { extractAudioSamples, extractAudioWaveformPyramid, extractAudioWaveformR
 import type { AudioWaveformPyramidRequest, AudioWaveformRangeRequest } from '../services/audio/types'
 import { assertTrustedApplicationSender } from './application-control'
 import { parseRecord, registerIpcHandler } from './registry'
+import { onRendererDocumentReplaced } from '../windows/renderer-document'
 
 type SamplesPayload = ({ mode: 'range'; requestId: string } & AudioWaveformRangeRequest)
   | ({ mode: 'pyramid'; requestId: string } & AudioWaveformPyramidRequest)
@@ -49,7 +50,7 @@ function watch(sender: WebContents): void {
   if (watched.has(sender)) return
   watched.add(sender)
   sender.once('destroyed', () => abortSender(sender.id))
-  sender.on('did-start-navigation', (_event, _url, _inPlace, mainFrame) => { if (mainFrame) abortSender(sender.id) })
+  onRendererDocumentReplaced(sender, () => abortSender(sender.id))
 }
 async function resolveLocalPath(source: string): Promise<string> {
   const normalized = normalizeLocalSource(source)

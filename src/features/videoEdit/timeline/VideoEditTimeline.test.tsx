@@ -14,6 +14,7 @@ import { getPlatform } from '@/platform/runtime'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { rememberVideoEditCodeMetadata, readVideoEditCodeMetadata } from '../application/videoEditCodeState'
 import { subscribeVideoEditScrub, type VideoEditScrubIntent } from '../engine/videoEditAudioScrub'
+import { releaseVideoEditFirstFrameWait } from '../engine/videoEditFirstFrameTiming'
 import { appendVideoEditSequence, closeVideoEditProject, editVideoProject, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditTimelineView, setVideoEditView, subscribeVideoEdit, switchVideoEditSequence, undoVideoEdit, videoEditRevision, type VideoEditInstance } from '../application/videoEditService'
 import { executeVideoEditTimelineEdit } from '../application/videoEditTimeline'
 import { captureVideoEditCommandContext, executeVideoEditCommand, videoEditCommandState } from '../application/videoEditCommands'
@@ -878,6 +879,8 @@ it('声道映射片段按每个片段声道各画一条波形并按声音流与�
     document.sequences[0].clips = document.sequences[0].clips.map(clip => clip.id === sound ? { ...clip, audioMapping: { format: 'stereo', sources: [{ stream: 0, channel: 0 }, { stream: 1, channel: 0 }] } } : clip)
     return document
   })
+  // 波形等节目首帧上屏才读；这里只渲染时间线、没有节目画面，按“首帧来不了”放行
+  releaseVideoEditFirstFrameWait(owner.document.id, 'test-timeline-only')
   const view = render(<View />)
   await waitFor(() => expect(view.container.querySelector(`[data-video-edit-waveform="${sound}"]`)?.getAttribute('data-waveform-lanes')).toBe('2'))
   expect(requests).toEqual(expect.arrayContaining([{ audioStream: 0, audioChannel: 0, channels: 1 }, { audioStream: 1, audioChannel: 0, channels: 1 }]))

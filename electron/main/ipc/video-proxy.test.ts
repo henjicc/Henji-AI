@@ -44,7 +44,7 @@ it('可信窗口、严格参数和真实文件定位在后台调用前检查；�
   await expect(invoke('lookup', { source, preset: '720p' }, event)).resolves.toBeNull()
 })
 
-it('取消仅归原窗口，重复与每窗口上限拒绝；主导航取消任务，进度仅回原窗口', async () => {
+it('取消仅归原窗口，重复 ID 拒绝、超并发不拒绝（服务里排队）；导航提交才取消任务，进度仅回原窗口', async () => {
   const event = sender(); const other = sender(); const signals: AbortSignal[] = []
   mocks.create.mockImplementation((_request, signal: AbortSignal, progress: (value: number) => void) => {
     signals.push(signal); progress(.5)
@@ -57,10 +57,11 @@ it('取消仅归原窗口，重复与每窗口上限拒绝；主导航取消任�
   await expect(invoke('create', request, event)).rejects.toThrow('正在进行')
   const second = invoke('create', { ...request, requestId: 'second' }, event).catch(error => error)
   await vi.waitFor(() => expect(signals).toHaveLength(2))
-  await expect(invoke('create', { ...request, requestId: 'third' }, event)).rejects.toThrow('正在进行')
+  const third = invoke('create', { ...request, requestId: 'third' }, event).catch(error => error)
+  await vi.waitFor(() => expect(signals).toHaveLength(3))
   await invoke('cancel', 'scene', event); expect(await first).toBeInstanceOf(Error)
-  event.sender.emit('did-start-navigation', {}, '', false, false); expect(signals[1].aborted).toBe(false)
-  event.sender.emit('did-start-navigation', {}, '', false, true); expect(await second).toBeInstanceOf(Error)
+  event.sender.emit('did-start-navigation', {}, '', false, true); expect(signals[1].aborted).toBe(false)
+  event.sender.emit('did-navigate', {}, ''); expect(await second).toBeInstanceOf(Error); expect(await third).toBeInstanceOf(Error)
   mocks.create.mockResolvedValue({ path: source, preset: '720p' })
   await expect(invoke('create', request, event)).resolves.toMatchObject({ preset: '720p' })
 })

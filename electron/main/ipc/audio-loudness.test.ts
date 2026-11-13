@@ -19,7 +19,9 @@ it('会话只能由原窗口使用和关闭；重复 ID 拒绝，导航时清理
   await expect(invoke({ action: 'start', sessionId: 'audio', sampleRate: 48000, channels: 2 }, a)).rejects.toThrow('正在进行')
   await expect(invoke({ action: 'measure', sessionId: 'audio' }, b)).rejects.toThrow('关闭')
   await invoke({ action: 'close', sessionId: 'audio' }, b); expect(mock.close).not.toHaveBeenCalled()
-  a.sender.emit('did-start-navigation', {}, '', false, true)
+  // 导航开始后可能被拦下，旧页面还在用；提交后才清理
+  a.sender.emit('did-start-navigation', {}, '', false, true); expect(mock.close).not.toHaveBeenCalled()
+  a.sender.emit('did-navigate', {}, 'file://new')
   expect(mock.close).toHaveBeenCalledOnce(); await expect(invoke({ action: 'measure', sessionId: 'audio' }, a)).rejects.toThrow('关闭')
 })
 it('严格参数、可信窗口和每窗口四会话上限', async () => {

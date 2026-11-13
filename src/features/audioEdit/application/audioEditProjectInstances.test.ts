@@ -197,6 +197,17 @@ describe('口播草稿', () => {
     expect(getAudioEditProjectInstance(id)).toBeUndefined()
   })
 
+  it('录音草稿按开始时间起名，同一分钟再录加序号，仍是草稿', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(new Date(2026, 10, 14, 9, 5, 30))
+      const first = (await createAudioEditDraft(null)).session.documentMeta
+      const second = (await createAudioEditDraft(null)).session.documentMeta
+      expect([first.name, second.name]).toEqual(['录音 2026-11-14 09.05', '录音 2026-11-14 09.05 2'])
+      expect(first.draft && second.draft).toBe(true)
+    } finally { vi.useRealTimers() }
+  })
+
   it('没有素材的空文档：进入待录音实例，导入后写进同一文档', async () => {
     commands.seed({ kind: 'audio_edit', id: 'empty', name: '助手新建', content: documentKindRegistry.require('audio_edit').createEmptyContent() })
     expect((await loadAudioEditProject('empty')).document.source.durationFrames).toBe(0)

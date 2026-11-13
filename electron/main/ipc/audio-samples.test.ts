@@ -41,6 +41,8 @@ describe('waveform IPC ownership and permissions', () => {
     await invoke('audio:cancelExtractSamples', { requestId: 'same' }, a.event)
     expect(signals[0].aborted).toBe(true); expect(signals[1].aborted).toBe(false)
     b.emitter.emit('did-start-navigation', {}, 'file://new', false, true)
+    expect(signals[1].aborted).toBe(false)
+    b.emitter.emit('did-navigate', {}, 'file://new')
     expect(signals[1].aborted).toBe(true)
     finish[0]({ peak: [9] }); finish[1]({ peak: [10] })
     expect(await first).toMatchObject({ name: 'AbortError' }); expect(await second).toMatchObject({ name: 'AbortError' })

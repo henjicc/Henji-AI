@@ -22,6 +22,7 @@ import { installRendererNavigationGuards } from './security/main-renderer-url'
 import { resolveDevelopmentLaunchQuery } from './development-launch'
 import { RENDERER_RECOVERY_QUERY, RENDERER_SAFE_RECOVERY } from '../../src/core/applicationLifecycle/rendererRecovery'
 import { DEVELOPMENT_LAUNCH_QUERY_KEYS } from '../../src/core/development/developmentLaunchContract'
+import { onRendererDocumentReplaced } from './windows/renderer-document'
 
 const logger = createMainLogger('main.window')
 let mainWindow: BrowserWindow | null = null
@@ -114,7 +115,7 @@ export function createWindow(options: CreateWindowOptions = {}): BrowserWindow {
   // 只有剪辑系统浮窗的受控 about:blank 请求放行，其余开窗一律拒绝。
   const videoEditPopouts = createVideoEditPopoutHost(win)
   installRendererNavigationGuards(win.webContents, 'main', details => videoEditPopouts.handleWindowOpen(details))
-  win.webContents.on('did-start-loading', () => {
+  onRendererDocumentReplaced(win.webContents, () => {
     void cleanupAllVideoFrameExports('renderer_reloading')
   })
   const crashPolicy = createRendererCrashPolicy()

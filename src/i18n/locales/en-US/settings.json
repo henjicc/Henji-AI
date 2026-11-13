@@ -42,7 +42,8 @@
     "errors": {
       "encryptionUnavailable": "Your key changes were not saved: secure key storage is unavailable on this device. Check your system's password and key storage service, then restart the app and retry once it is available.",
       "unreadable": "Your key changes were not saved: the stored keys could not be read. Check access to your data folder, or restore the key file from a backup if you have one, then retry. The original file was not overwritten.",
-      "saveFailed": "Your key changes were not saved. Check access to your data folder and available free space, then retry."
+      "saveFailed": "Your key changes were not saved. Check access to your data folder and available free space, then retry.",
+      "storedUnreadable": "The saved key can't be read (this happens after moving to another device or resetting the system keychain). Enter it again."
     },
     "visibility": {
       "show": "Show",

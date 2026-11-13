@@ -22,6 +22,7 @@ import { notifyRecording } from '../services/recording-notice'
 import { audioCaptureExecutablePath } from '../services/audio-capture/executable'
 import { disposeSystemAudioCapture, systemAudioCapture } from '../services/audio-capture/system-audio'
 import type { NativeTrack } from '../services/audio-capture/native-track'
+import { onRendererDocumentReplaced } from '../windows/renderer-document'
 
 /** 原生端使用 create_new，避免覆盖同名文件。 */
 export async function resolveCapturePath(target: string): Promise<string> {
@@ -72,7 +73,7 @@ export function registerAudioCaptureIpc(): void {
         for (const [sessionId, entry] of hostTracks) if (entry.owner === owner) void stopHostTrack(sessionId)
       }
       // 同文档内的地址变化（安全恢复启动时去掉地址参数、开发画廊改地址）不换页面，不算界面离开。
-      event.sender.on('did-start-navigation', (_e, _url, inPlace, mainFrame) => { if (mainFrame !== false && !inPlace) release(true) })
+      onRendererDocumentReplaced(event.sender, () => release(true))
       event.sender.on('render-process-gone', () => release(true))
       event.sender.once('destroyed', () => { release(false); watched.delete(owner) })
     }

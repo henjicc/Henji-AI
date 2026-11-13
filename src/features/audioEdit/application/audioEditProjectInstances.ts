@@ -253,10 +253,30 @@ export async function loadAudioEditProject(id: string, path?: string): Promise<A
 /** 导入音频或视频即新建草稿（以草稿标记立即写进“口播”文件夹或所在项目），并接成实例。 */
 export async function createAudioEditDraft(source: AudioEditSourceMetadata | null, container: DocumentContainerRef = { kind: 'user' }): Promise<AudioEditProjectInstance> {
   assertApplicationWritesAllowed()
-  const session = await documentRegistry().create({ kind: 'audio_edit', container, content: createAudioEditDocumentContent(source) })
+  const content = createAudioEditDocumentContent(source)
+  const session = source
+    ? await documentRegistry().create({ kind: 'audio_edit', container, content })
+    : await createRecordingDraftSession(container, content)
   const instance = await bindOrDiscard(session)
   logger.info('新建口播草稿', { event: 'audio_edit.document.create_draft.completed', context: { docId: session.id, mediaType: source?.mediaType } })
   return instance
+}
+
+/**
+ * 没有素材的草稿只会是录音口播：按开始时间起名（“录音 2026-11-14 15.30”），列表里一眼能认出是哪次录的；
+ * 仍是草稿，空着离开照样删除。同一分钟录了几次时依次加序号。
+ */
+async function createRecordingDraftSession(container: DocumentContainerRef, content: unknown): Promise<DocumentSession> {
+  const now = new Date()
+  const pad = (value: number): string => String(value).padStart(2, '0')
+  const base = `录音 ${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}.${pad(now.getMinutes())}`
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await documentRegistry().create({ kind: 'audio_edit', container, content, name: attempt === 1 ? base : `${base} ${attempt}`, draft: true })
+    } catch (error) {
+      if (attempt >= 20 || !isDocumentServiceError(error, 'DocumentNameConflictError')) throw error
+    }
+  }
 }
 
 /** 给还没有素材的口播（如助手 create_document 新建的空文档）导入素材，然后接成实例。 */

@@ -34,6 +34,7 @@ import { getAppDirectories, setUserFolderLanguageHint, type AppDirectoriesDto } 
 import { parseOptionalStringField, parseRecord, parseStringField, parseVoid, registerIpcHandler } from './registry'
 import { closeDirectoryScans, readDirectoryPage } from '../services/systemDirectory'
 import type { FsDirPage } from '../../../src/platform/contracts/system'
+import { onRendererDocumentReplaced } from '../windows/renderer-document'
 
 interface PathPayload {
   path: string
@@ -259,13 +260,12 @@ function setRendererBackgroundWork(contents: WebContents, active: boolean): void
   const stop = (): void => {
     if (rendererBackgroundWork.get(contents) !== stop) return
     rendererBackgroundWork.delete(contents); hold()
-    contents.off('did-start-navigation', onNavigate)
+    stopWatchingDocument()
     contents.off('destroyed', stop)
   }
   // 页面重载后原先的请求方已不在，不能一直不节流
-  const onNavigate = (details: { isMainFrame: boolean; isSameDocument: boolean }): void => { if (details.isMainFrame && !details.isSameDocument) stop() }
   rendererBackgroundWork.set(contents, stop)
-  contents.on('did-start-navigation', onNavigate)
+  const stopWatchingDocument = onRendererDocumentReplaced(contents, stop)
   contents.on('destroyed', stop)
 }
 

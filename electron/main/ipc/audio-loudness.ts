@@ -5,6 +5,7 @@ import { assertTrustedApplicationSender } from './application-control'
 import { AudioLoudnessSession } from '../services/audio/loudness'
 import { createMainLogger } from '../services/logging'
 import { videoEditLoudnessSettingsSchema } from '../../../src/core/videoEdit/loudness'
+import { onRendererDocumentReplaced } from '../windows/renderer-document'
 
 const id = z.string().min(1).max(128)
 const input = z.discriminatedUnion('action', [
@@ -28,7 +29,7 @@ export function registerAudioLoudnessHandlers(): void {
     const sender = event.sender
     if (!watched.has(sender)) {
       watched.add(sender); sender.once('destroyed', () => release(sender.id))
-      sender.on('did-start-navigation', (_event, _url, _inPlace, main) => { if (main) release(sender.id) })
+      onRendererDocumentReplaced(sender, () => release(sender.id))
     }
     let owned = sessions.get(sender.id)
     if (request.action === 'start') {

@@ -5,6 +5,7 @@ import { registerIpcHandler } from './registry'
 import { assertTrustedApplicationSender } from './application-control'
 import { explanationAudioService } from '../services/audio-edit/explanation-audio'
 import { createMainLogger } from '../services/logging'
+import { onRendererDocumentReplaced } from '../windows/renderer-document'
 
 export function registerExplanationAudioHandlers(): void {
   const watched = new Set<number>(); const owned = new Map<number, Set<string>>()
@@ -19,8 +20,8 @@ export function registerExplanationAudioHandlers(): void {
     if (!watched.has(senderId)) {
       watched.add(senderId)
       const revoke = (): void => { for (const id of owned.get(senderId) ?? []) explanationAudioService.cancel(id); owned.delete(senderId) }
-      event.sender.on('did-start-navigation', revoke)
-      event.sender.once('destroyed', () => { revoke(); watched.delete(senderId); event.sender.removeListener('did-start-navigation', revoke) })
+      const stopWatching = onRendererDocumentReplaced(event.sender, revoke)
+      event.sender.once('destroyed', () => { revoke(); watched.delete(senderId); stopWatching() })
     }
     if ('sessionId' in request) { const ids = owned.get(senderId) ?? new Set<string>(); ids.add(request.sessionId); owned.set(senderId, ids) }
     switch (request.action) {

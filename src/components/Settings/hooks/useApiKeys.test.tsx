@@ -8,7 +8,7 @@ vi.mock('@/stores/settingsStore', () => ({ useSettingsStore: (select: (state: { 
 vi.mock('@/core/events/applicationEvents', () => ({ emitApplicationEvent: mocks.emit }))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ error: vi.fn() }) }))
 import { useApiKeys } from './useApiKeys'
-beforeEach(() => { vi.clearAllMocks(); vi.useFakeTimers(); mocks.set.mockResolvedValue(undefined); mocks.remove.mockResolvedValue(undefined); mocks.statuses.mockResolvedValue({}); mocks.info.mockResolvedValue({ configured: true, maskedHint: '••••1234' }) })
+beforeEach(() => { vi.clearAllMocks(); vi.useFakeTimers(); mocks.set.mockResolvedValue(undefined); mocks.remove.mockResolvedValue(undefined); mocks.statuses.mockResolvedValue({}); mocks.info.mockResolvedValue({ configured: true, maskedHint: '••••1234', unreadable: false }) })
 afterEach(() => { cleanup(); vi.useRealTimers() })
 describe('生成密钥写入', () => {
   it.each([
@@ -57,7 +57,7 @@ it('已配置密钥只回填摘要，替换和清除不把掩码当作密钥写�
   await act(async () => result.current.saveKey('fal'))
   expect(mocks.set).toHaveBeenCalledWith('fal', 'replacement')
   expect(result.current.keys.fal).toBe('replacement')
-  mocks.info.mockResolvedValue({ configured: false, maskedHint: null })
+  mocks.info.mockResolvedValue({ configured: false, maskedHint: null, unreadable: false })
   act(() => result.current.clearKey('fal'))
   await act(async () => { await vi.advanceTimersByTimeAsync(450) })
   expect(mocks.remove).toHaveBeenCalledWith('fal')
@@ -96,14 +96,25 @@ it('清除按钮取消待保存草稿，卸载不会重新保存', async () => {
 
 it('摘要尚未返回时编辑再清空草稿，仍保留已保存凭据的摘要', async () => {
   mocks.statuses.mockResolvedValue({ fal: true })
-  let finish!: (info: { configured: boolean; maskedHint: string }) => void
-  mocks.info.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+  let finish!: (info: { configured: boolean; maskedHint: string; unreadable: boolean }) => void
+  const pending = new Promise(resolve => { finish = resolve })
+  mocks.info.mockImplementation(async (id: string) => id === 'fal' ? pending : { configured: false, maskedHint: null, unreadable: false })
   const { result } = renderHook(useApiKeys)
   await act(async () => {})
   act(() => result.current.updateKey('fal', 'unfinished-replacement'))
   act(() => result.current.updateKey('fal', ''))
-  await act(async () => { finish({ configured: true, maskedHint: '••••1234' }); await vi.advanceTimersByTimeAsync(450) })
+  await act(async () => { finish({ configured: true, maskedHint: '••••1234', unreadable: false }); await vi.advanceTimersByTimeAsync(450) })
   expect(result.current.hints.fal).toBe('••••1234')
   expect(mocks.set).not.toHaveBeenCalled()
   expect(mocks.remove).not.toHaveBeenCalled()
+})
+
+it('存着密钥却解不开时提示重新填写，输入新密钥后提示消失', async () => {
+  mocks.info.mockImplementation(async (id: string) => ({ configured: false, maskedHint: null, unreadable: id === 'fal' }))
+  const { result } = renderHook(useApiKeys)
+  await act(async () => {})
+  expect(result.current.errors.fal).toBe('apiKeys.errors.storedUnreadable')
+  expect(result.current.hints.fal).toBe('')
+  act(() => result.current.updateKey('fal', 'new-key'))
+  expect(result.current.errors.fal).toBeUndefined()
 })

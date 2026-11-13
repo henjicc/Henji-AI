@@ -148,6 +148,7 @@ describe('keystore', () => {
     writeRawKeystore({ 'ai:ppio': Buffer.from('这不是本机加密的密文').toString('base64') })
     expect(hasKey(AI_KEY_NAMESPACE, 'ppio')).toBe(false)
     expect(getAiProviderKeyStatus().find(item => item.providerId === 'ppio')?.configured).toBe(false)
+    expect(getProviderKeyInfo('ppio')).toEqual({ configured: false, maskedHint: null, unreadable: true })
   })
 
   it('设备没有可用加密时，状态查询答"未配置"而不是让整张列表失败', () => {
@@ -247,12 +248,12 @@ it('设置摘要从不返回完整密钥，替换、共享槽和清除保持一�
   mocks.isEncryptionAvailable.mockReturnValue(true)
   try {
     setAiProviderApiKey('fal', 'fixture-provider-secret-1234')
-    expect(getProviderKeyInfo('fal')).toEqual({ configured: true, maskedHint: '•'.repeat('fixture-provider-secret-1234'.length) })
-    expect(getLlmProviderKeyStatus(['fal'])).toEqual([{ credentialId: 'fal', configured: true, maskedHint: '•'.repeat('fixture-provider-secret-1234'.length) }])
+    expect(getProviderKeyInfo('fal')).toEqual({ configured: true, maskedHint: '•'.repeat('fixture-provider-secret-1234'.length), unreadable: false })
+    expect(getLlmProviderKeyStatus(['fal'])).toEqual([{ credentialId: 'fal', configured: true, maskedHint: '•'.repeat('fixture-provider-secret-1234'.length), unreadable: false }])
     setLlmProviderApiKey('fal', 'tiny')
-    expect(getProviderKeyInfo('fal')).toEqual({ configured: true, maskedHint: '••••' })
+    expect(getProviderKeyInfo('fal')).toEqual({ configured: true, maskedHint: '••••', unreadable: false })
     expect(getAiProviderApiKey('fal')).toBe('tiny')
     removeAiProviderApiKey('fal')
-    expect(getProviderKeyInfo('fal')).toEqual({ configured: false, maskedHint: null })
+    expect(getProviderKeyInfo('fal')).toEqual({ configured: false, maskedHint: null, unreadable: false })
   } finally { fs.rmSync(dir, { recursive: true, force: true }); vi.unstubAllEnvs() }
 })

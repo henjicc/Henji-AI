@@ -12,6 +12,7 @@ interface LlmProviderKeyStatusDto {
   credentialId: string
   configured: boolean
   maskedHint?: string | null
+  unreadable?: boolean
 }
 
 export type LlmCredentialMutationDto =

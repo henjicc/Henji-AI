@@ -18,6 +18,7 @@ import {
 } from './image-editor-v3-export-payloads'
 import { registerIpcHandler, type IpcSenderGuard } from './registry'
 import { showSaveDialog } from '../services/dialogs'
+import { onRendererDocumentReplaced } from '../windows/renderer-document'
 
 const logger = createMainLogger('main.image_editor_v3.raster_export_ipc')
 
@@ -103,7 +104,7 @@ function monitorRendererLifetime(
   const clear = (): void => {
     sender.off('destroyed', onDestroyed)
     sender.off('render-process-gone', onRenderProcessGone)
-    sender.off('did-start-loading', onReload)
+    stopWatchingDocument()
     unsubscribe()
   }
   const cancelForRenderer = (reason: string): void => {
@@ -122,7 +123,7 @@ function monitorRendererLifetime(
   const onReload = (): void => { cancelForRenderer('renderer_reload') }
   sender.once('destroyed', onDestroyed)
   sender.once('render-process-gone', onRenderProcessGone)
-  sender.once('did-start-loading', onReload)
+  const stopWatchingDocument = onRendererDocumentReplaced(sender, onReload)
   unsubscribe = manager.onClosed(sessionId, clear)
 }
 

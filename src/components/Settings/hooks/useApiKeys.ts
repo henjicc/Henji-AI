@@ -87,26 +87,19 @@ export function useApiKeys(): UseApiKeysResult {
     const bootstrap = async (): Promise<void> => {
       try {
         // 输入框只保存待替换值，已保存凭据只读取摘要。
-        const statusMap = await syncProviderKeyStatuses()
+        await syncProviderKeyStatuses()
         if (disposed) return
 
         const loadedHints = createEmptyKeys()
-        const configuredProviders: ApiKeyProvider[] = []
-
-        Object.entries(statusMap).forEach(([providerId, configured]) => {
-          if (configured && providerId in loadedHints) {
-            configuredProviders.push(providerId as ApiKeyProvider)
-          }
-        })
-
+        // 未配置的也要问：存着密文却解不开时要提示重新填写
         const loadedValues = await Promise.all(
-          configuredProviders.map(async (providerId) => {
+          API_KEY_PROVIDERS.map(async ({ id: providerId }) => {
             try {
               const info = await aiGetProviderKeyInfo(providerId)
-              return [providerId, info.maskedHint ?? ''] as const
+              return [providerId, info.maskedHint ?? '', info.unreadable] as const
             } catch (error) {
               logger.error(`[useApiKeys] load key failed: ${providerId}`, error)
-              return [providerId, ''] as const
+              return [providerId, '', false] as const
             }
           })
         )
@@ -116,8 +109,10 @@ export function useApiKeys(): UseApiKeysResult {
         loadedValues.forEach(([providerId, hint]) => {
           loadedHints[providerId] = hint
         })
+        const unreadable = loadedValues.filter(([providerId, , flag]) => flag && !savedRef.current.has(providerId)).map(([providerId]) => providerId)
 
         setHints(prev => Object.assign(loadedHints, ...[...savedRef.current].map(id => ({ [id]: prev[id] }))))
+        if (unreadable.length) setErrors(prev => Object.assign({}, prev, ...unreadable.map(id => ({ [id]: prev[id] ?? 'apiKeys.errors.storedUnreadable' }))))
       } catch (error) {
         logger.error('[useApiKeys] load key status failed', error)
       }

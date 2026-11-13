@@ -126,7 +126,7 @@ export interface HenjiAiApi {
 }
 
 export interface HenjiLlmApi {
-  getProviderKeyStatus(credentialIds: string[]): Promise<Array<{ credentialId: string; configured: boolean; maskedHint?: string | null }>>
+  getProviderKeyStatus(credentialIds: string[]): Promise<Array<{ credentialId: string; configured: boolean; maskedHint?: string | null; unreadable?: boolean }>>
   readConfig(): Promise<LlmConfigState | null>
   writeConfig(config: LlmConfigState): Promise<void>
   commitProviderSettings(request: {

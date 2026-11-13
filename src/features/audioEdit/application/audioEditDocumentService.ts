@@ -59,7 +59,7 @@ function show(id: string): void {
 
 /**
  * 导入音频或视频即新建草稿（默认在作品目录“口播”文件夹，也可指定所在项目），并进入编辑器。
- * 素材默认引用原文件（重要记录 006）；名称是“未命名口播 N”，离开时起名。
+ * 素材默认引用原文件（重要记录 006）；导入的草稿名称是“未命名音频 N”、录音的按开始时间起名，离开时起名。
  */
 export async function createAudioEditRecording(): Promise<string> {
   await leaveShownBefore(null)

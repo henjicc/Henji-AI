@@ -10,6 +10,7 @@ import { normalizeLocalSource } from '../services/image/source'
 import { createMainLogger } from '../services/logging'
 import type { VideoProxyTranscodeReport } from '../services/video/proxy'
 import { videoProxyService } from '../services/video/proxy-runtime'
+import { onRendererDocumentReplaced } from '../windows/renderer-document'
 
 const logger = createMainLogger('main.video.proxy')
 const tasks = new Map<number, Map<string, AbortController>>()
@@ -26,7 +27,7 @@ export function registerVideoProxyHandlers(): void {
     const sender = event.sender; const senderId = sender.id
     if (!watched.has(sender)) {
       watched.add(sender); sender.once('destroyed', () => release(senderId))
-      sender.on('did-start-navigation', (_event, _url, _inPlace, main) => { if (main) release(senderId) })
+      onRendererDocumentReplaced(sender, () => release(senderId))
     }
     let owned = tasks.get(senderId)
     if (!owned) { owned = new Map(); tasks.set(senderId, owned) }

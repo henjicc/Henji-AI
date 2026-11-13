@@ -70,9 +70,9 @@ describe('统一媒体权限', () => {
     expect(decide({ isMainFrame: false, mediaTypes: ['audio'] })).toBe(false)
     expect(decide({ isMainFrame: true, requestingUrl: 'https://other', mediaTypes: ['audio'] })).toBe(false)
     expect(decide({ isMainFrame: true, mediaTypes: [] })).toBe(false)
-    contents.emit('did-start-navigation', {}, '', false, false)
-    expect(decide({ isMainFrame: true, mediaTypes: ['audio'] })).toBe(true)
     contents.emit('did-start-navigation', {}, '', false, true)
+    expect(decide({ isMainFrame: true, mediaTypes: ['audio'] })).toBe(true)
+    contents.emit('did-navigate', {}, '')
     expect(decide({ isMainFrame: true, mediaTypes: ['audio'] })).toBe(false)
   })
   it.each(['destroyed', 'render-process-gone'])('%s 立即撤销，其他窗口和会话不受影响', event => {

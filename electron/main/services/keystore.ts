@@ -298,7 +298,10 @@ export function getLlmProviderApiKey(credentialId: string): string | null {
 export function getProviderKeyInfo(credentialId: string): ProviderKeyInfo {
   migrateLegacyProviderCredential(credentialId)
   const key = readStoredKey(PROVIDER_KEY_NAMESPACE, credentialId)
-  return { configured: key !== null, maskedHint: key === null ? null : '•'.repeat(key.length) }
+  // 存着密文却解不开：与“没填过”分开，设置页据此提示重新填写，而不是一声不响地显示成空
+  const stored = readKeystoreFile().keys
+  const unreadable = key === null && [PROVIDER_KEY_NAMESPACE, LEGACY_AI_KEY_NAMESPACE, LEGACY_LLM_KEY_NAMESPACE].some(namespace => Boolean(stored[buildKey(namespace, credentialId)]))
+  return { configured: key !== null, maskedHint: key === null ? null : '•'.repeat(key.length), unreadable }
 }
 
 export function getLlmProviderKeyStatus(credentialIds: string[]): Array<ProviderKeyInfo & { credentialId: string }> {

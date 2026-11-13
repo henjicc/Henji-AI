@@ -9,6 +9,7 @@ import { createMainLogger } from '../services/logging'
 import { contentTrustCommandSchema } from '../../../src/core/contentTrust'
 import { executeContentTrust } from '../services/content-trust/commands'
 import { resumeContentTrustConfirmations } from '../services/content-trust/confirmation'
+import { onRendererDocumentReplaced } from '../windows/renderer-document'
 export function assertTrustedApplicationSender(event: IpcMainInvokeEvent): void {
   const window = getMainWindow()
   if (!window || window.isDestroyed() || BrowserWindow.fromWebContents(event.sender) !== window || event.senderFrame !== event.sender.mainFrame) throw new Error('不可信的连接管理请求。')
@@ -48,8 +49,7 @@ export function registerApplicationControlIpc(): void {
     watchApplicationHostRenderer(event.sender)
     if (!watched.has(event.sender)) {
       watched.add(event.sender)
-      // 页内导航（pushState/hash）不换渲染进程，宿主与上下文仍然有效，只有整页导航才断开。
-      event.sender.on('did-start-navigation', (_event, _url, inPlace, isMainFrame) => { if (isMainFrame && !inPlace) host.disconnect() })
+      onRendererDocumentReplaced(event.sender, () => host.disconnect())
       event.sender.once('destroyed', () => host.disconnect())
     }
     const recovering = host.hostUnavailable?.reason

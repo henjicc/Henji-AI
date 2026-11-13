@@ -2,4 +2,6 @@
 export interface ProviderKeyInfo {
   configured: boolean
   maskedHint: string | null
+  /** 存着密钥却解不开（换了设备、系统钥匙串被重置等），需要重新填写。 */
+  unreadable: boolean
 }

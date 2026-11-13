@@ -7,6 +7,7 @@ import { loadSharp } from '../services/image/sharp-loader'
 import { createImageInpaintService } from '../services/local-inference/inpainting/runtime'
 import { registerIpcHandler } from './registry'
 import { createMainLogger } from '../services/logging'
+import { onRendererDocumentReplaced } from '../windows/renderer-document'
 
 const ref = z.string().regex(/^sha256:[a-f0-9]{64}$/)
 const requestId = z.string().min(1).max(256)
@@ -36,12 +37,12 @@ export function registerImageEditorV3RepairIpc(deps: {
     tracked.add(event.sender.id)
     const cleanup = (): void => {
       for (const [id, entry] of pins) if (entry.senderId === event.sender.id) { pins.delete(id); entry.leases.forEach(free) }
-      event.sender.removeListener('destroyed', cleanup); event.sender.removeListener('render-process-gone', cleanup); event.sender.removeListener('did-start-loading', cleanup)
+      event.sender.removeListener('destroyed', cleanup); event.sender.removeListener('render-process-gone', cleanup); stopWatchingDocument()
       tracked.delete(event.sender.id)
     }
     event.sender.once('destroyed', cleanup)
     event.sender.once('render-process-gone', cleanup)
-    event.sender.once('did-start-loading', cleanup)
+    const stopWatchingDocument = onRendererDocumentReplaced(event.sender, cleanup)
   }
   const pin = async (event: IpcMainInvokeEvent, id: string, refs: ResourceId[], create = false): Promise<void> => {
     track(event)

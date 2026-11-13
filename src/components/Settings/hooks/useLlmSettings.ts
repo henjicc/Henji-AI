@@ -83,17 +83,28 @@ export function useLlmSettings(): UseLlmSettingsResult {
         const statusByCredential = new Map(statuses.map(item => [item.credentialId, item]))
         const nextStatus: StatusMap = {}
         const nextHints: KeyMap = {}
+        const unreadable: string[] = []
         config.providers.forEach(provider => {
           const credentialId = provider.credentialId ?? provider.providerId
           const configured = statusByCredential.get(credentialId)?.configured === true
           nextStatus[provider.providerId] = configured
           if (configured) {
             nextHints[provider.providerId] = statusByCredential.get(credentialId)?.maskedHint ?? '••••'
-          }
+          } else if (statusByCredential.get(credentialId)?.unreadable) unreadable.push(provider.providerId)
         })
         if (disposed) return
         setStatus(nextStatus)
         setHints(nextHints)
+        // 只增删“读不出”这一种提示：配置变了重读时，已重新填好的服务商不能留着旧提示
+        setKeyErrors(prev => {
+          const next = { ...prev }
+          for (const provider of config.providers) {
+            const id = provider.providerId
+            if (unreadable.includes(id)) next[id] ??= 'apiKeys.errors.storedUnreadable'
+            else if (next[id] === 'apiKeys.errors.storedUnreadable') delete next[id]
+          }
+          return next
+        })
       } catch (error) {
         logger.error('[useLlmSettings] load key status failed', error)
       }
@@ -115,6 +126,11 @@ export function useLlmSettings(): UseLlmSettingsResult {
       .map(item => item.providerId)
     setStatus(prev => Object.assign({}, prev, ...affectedProviderIds.map(id => ({ [id]: configured }))))
     setHints(prev => Object.assign({}, prev, ...affectedProviderIds.map(id => ({ [id]: hint }))))
+    if (configured) setKeyErrors(prev => {
+      const next = { ...prev }
+      for (const id of affectedProviderIds) if (next[id] === 'apiKeys.errors.storedUnreadable') delete next[id]
+      return next
+    })
   }
 
   const persistKey = async (providerId: string, value: string, remove = false): Promise<void> => {

@@ -11,6 +11,7 @@ import { getMediaCacheManager } from '../services/media/media-cache-runtime'
 import { createMainLogger } from '../services/logging'
 import { SceneDetectionService } from '../services/video/scene-detection'
 import { identifyMediaContent } from '../services/media/content-identity'
+import { onRendererDocumentReplaced } from '../windows/renderer-document'
 
 const logger = createMainLogger('main.video.scene_detection')
 const tasks = new Map<number, Map<string, AbortController>>()
@@ -28,7 +29,7 @@ export function registerSceneDetectionHandlers(): void {
     const sender = event.sender; const senderId = sender.id
     if (!watched.has(sender)) {
       watched.add(sender); sender.once('destroyed', () => release(senderId))
-      sender.on('did-start-navigation', (_event, _url, _inPlace, main) => { if (main) release(senderId) })
+      onRendererDocumentReplaced(sender, () => release(senderId))
     }
     let owned = tasks.get(senderId)
     if (!owned) { owned = new Map(); tasks.set(senderId, owned) }
