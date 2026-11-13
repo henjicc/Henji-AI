@@ -16,7 +16,7 @@ import { registerDocumentCoverProvider } from '@/features/documents'
 import { openApplicationSurface } from '@/features/navigation'
 import { recordingDocumentSchema } from '@/core/screenRecording/document'
 import { captureOptionsSchema } from '@/core/screenRecording/capture'
-import { controlRecording, readRecordingDocument, recordingEvents, recordingStopOutcome,recordingView, recoverRecording, showRecordingDocument, startRecording } from './recordingService'
+import { controlRecording, readRecordingDocument, recordingEvents, recordingSourceEnded, recordingStopOutcome,recordingView, recoverRecording, showRecordingDocument, startRecording } from './recordingService'
 import { importRecordingToVideo, recordingPlacementText } from './recordingVideoImport'
 import { videoEditRecordingTarget } from '@/core/videoEdit/recordingLane'
 import { videoEditComposition } from '@/core/videoEdit/document'
@@ -200,7 +200,11 @@ export const screenRecordingApplicationDomain: ApplicationDomainModule = {
         if (!await waitWithin(work, CAPABILITY_SHORT_WAIT_MS)) return { resultRef: parsed.sessionRef, verified: false, finishing: true, message: stillRunning(action === 'stop' ? '已停止采集，收尾' : '恢复') }
       } else await controlRecording(parsed.sessionRef.id, action, parsed.note)
       await readRecordingDocument(parsed.sessionRef.id)
-      if (action === 'stop') return { resultRef: parsed.sessionRef, verified: true, ...await stopImportReceipt(parsed.sessionRef.id) }
+      if (action === 'stop') {
+        const receipt = await stopImportReceipt(parsed.sessionRef.id), ended = recordingSourceEnded(parsed.sessionRef.id)
+        // 来源没了时录制在那一刻已自动停止并照常保存：如实说明停在哪、为什么，不是采集失败。
+        return { resultRef: parsed.sessionRef, verified: true, ...receipt, ...(ended ? { message: `${ended === 'window' ? '被录制的窗口已关闭' : '被录制的显示器已断开'}，录制在那一刻自动停止（不是采集失败）。${receipt.message}` } : {}) }
+      }
       return { resultRef: parsed.sessionRef, verified: true }
     })
   },

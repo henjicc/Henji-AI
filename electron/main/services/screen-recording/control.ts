@@ -122,7 +122,8 @@ export class RecordingControlService {
       return
     }
     if (action === 'stop' && active.snapshot.phase === 'countdown') this.clearCountdown()
-    if (action === 'stop' && active.snapshot.phase === 'stopped') return
+    // 失败时采集已经由 captureFailed 收尾保存（或命令失败时已释放）：没有东西可停，再走一遍后端只会对着已结束的会话等回执。
+    if (action === 'stop' && (active.snapshot.phase === 'stopped' || active.snapshot.phase === 'failed')) return
     if (action === 'mark' && active.snapshot.phase !== 'recording') throw new Error('标记只能在录制过程中添加')
     if (action === 'toggle' && !['recording', 'paused'].includes(active.snapshot.phase)) throw new Error('当前不能开始或暂停，请停止当前会话后重新准备')
     return this.execute(action === 'toggle' ? active.snapshot.phase === 'paused' ? 'resume' : 'pause' : action, active, note)
@@ -160,9 +161,13 @@ export class RecordingControlService {
         if (active.snapshot.phase === 'recording') active.elapsed += Math.max(0, this.deps.now() - active.startedAt)
         active.snapshot.phase = 'failed'
         active.snapshot.error = '录制操作未完成，请停止录制后重新准备。'
+        delete active.snapshot.sourceEnded
         active.snapshot.microphoneLevel = null
-        // 与采集失败同样放开快捷键、权限与防睡眠：录制已经停下，不必等用户关掉控制条。
+        // 与采集失败同样放开快捷键、权限与防睡眠，并释放采集（后端的释放只做一次）：已录部分由释放收尾保存，
+        // 之后停止无事可做、取消直接解开，不必等用户关掉控制条。
         this.releaseResources()
+        active.abort.abort()
+        void active.backend.cancel().catch(cleanup => this.deps.log('recording.control.cancel.failed', cleanup))
       }
       this.deps.log(`recording.control.${operation}.failed`, error)
       throw error
@@ -201,8 +206,22 @@ export class RecordingControlService {
     const active = this.active
     if (!active || active.snapshot.sessionId !== sessionId) return
     if (active.snapshot.phase === 'recording') active.elapsed += Math.max(0, this.deps.now() - active.startedAt)
-    active.snapshot.phase = 'failed'; active.snapshot.error = message; active.snapshot.microphoneLevel = null
+    active.snapshot.phase = 'failed'; active.snapshot.error = message; active.snapshot.microphoneLevel = null; delete active.snapshot.sourceEnded
     this.releaseResources(); this.publish()
+  }
+
+  /**
+   * 被录的窗口关闭、显示器断开：录制到此为止，与按停止同一条路收尾（已录内容照常封存、导入或存成视频），
+   * 快照记下是哪种来源没了，界面与助手据此告诉用户为什么停了。用户已经按了停止（停止中、已停止）或已失败时不接手，
+   * 返回 false，调用方也不记原因：那次结束不是来源关闭造成的。停止本身失败时按失败如实呈现，不再带来源原因。
+   */
+  sourceEnded(sessionId: string, source: NonNullable<RecordingControlSnapshot['sourceEnded']>): boolean {
+    const active = this.active
+    if (!active || active.snapshot.sessionId !== sessionId || ['stopping', 'stopped', 'failed'].includes(active.snapshot.phase)) return false
+    active.snapshot.sourceEnded = source
+    this.deps.log('recording.control.source.ended')
+    void this.command('stop').catch(error => this.deps.log('recording.control.source.stop_failed', error))
+    return true
   }
 
   /** Capture/storage failures terminate native resources immediately, including an in-flight start. */

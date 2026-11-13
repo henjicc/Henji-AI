@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { getPlatform } from '@/platform/runtime'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
+import { createApplicationHarness } from '@/tests/applicationHarness'
 import { updateVideoEditClipProperties, videoEditClipPropertyBounds } from './videoEditClipProperties'
 import { appendVideoEditClip, beginVideoEditGesture, closeVideoEditProject, editVideoProject, finishVideoEditGesture, getActiveVideoEditSequence, listVideoEditInstances, setVideoEditView, undoVideoEdit } from './videoEditService'
 
@@ -78,4 +79,29 @@ it('播放头自动选中：开启后移动播放头选中最上面的可见片�
   setVideoEditView(id, { frame: 80 }); expect(owner.selection).toBe(clipId)
   finishVideoEditGesture(drag, false)
   expect(owner.past).toHaveLength(afterHide); expect(afterHide).toBe(history + 1)
+})
+
+it('片段备注：写入去掉首尾空白、保留换行，清空即删除字段，每次一步撤销', async () => {
+  const { owner, id, sequenceId, clipId } = await project()
+  const clip = () => getActiveVideoEditSequence(owner).clips[0]
+  updateVideoEditClipProperties(id, sequenceId, clipId, { note: '  开头说快了\n01:28 起重录  ' })
+  expect(clip().note).toBe('开头说快了\n01:28 起重录')
+  updateVideoEditClipProperties(id, sequenceId, clipId, { note: '   ' })
+  expect(clip()).not.toHaveProperty('note')
+  undoVideoEdit(id); expect(clip().note).toBe('开头说快了\n01:28 起重录')
+  undoVideoEdit(id); expect(clip()).not.toHaveProperty('note')
+})
+
+it('助手经通用属性读写片段备注：没有备注读成空字符串，写空字符串删除，可撤销', async () => {
+  const { owner, id, clipId } = await project()
+  const app = createApplicationHarness(); const ref = { kind: 'video_edit.clip', id: `${id}:${clipId}` }
+  try {
+    expect((await app.read(ref, ['video_edit.clip.note'])).properties).toEqual({ 'video_edit.clip.note': '' })
+    expect((await app.change(ref, { 'video_edit.clip.note': '给后期：这段节奏偏慢' })).ok).toBe(true)
+    expect(getActiveVideoEditSequence(owner).clips[0].note).toBe('给后期：这段节奏偏慢')
+    expect((await app.read(ref, ['video_edit.clip.note'])).properties).toEqual({ 'video_edit.clip.note': '给后期：这段节奏偏慢' })
+    expect((await app.change(ref, { 'video_edit.clip.note': '' })).ok).toBe(true)
+    expect(getActiveVideoEditSequence(owner).clips[0]).not.toHaveProperty('note')
+    undoVideoEdit(id); expect(getActiveVideoEditSequence(owner).clips[0].note).toBe('给后期：这段节奏偏慢')
+  } finally { app.dispose() }
 })

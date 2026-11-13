@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Monitor, Pause, Play, Settings2, Square } from 'lucide-react'
-import { PanelTrigger, UiButton, UiError, UiFormRow, UiGroup, UiIconButton, UiInput, UiToolbar } from '@/components/ui'
+import { PanelTrigger, UiButton, UiError, UiFormRow, UiGroup, UiIconButton, UiInput, UiTextArea, UiToolbar } from '@/components/ui'
 import { UI_PANEL_BODY_HEIGHT_CLASS, UI_TEXT_TIMECODE_CLASS } from '@/components/ui/styleTokens'
 import { ICON_TOOL_SCREEN_RECORDING } from '@/core/theme/icons'
 import { Z_LAYERS } from '@/core/theme/zLayers'
@@ -13,7 +13,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { VideoEditPreview } from '../VideoEditPreview'
 import { useVideoEditViewSelector, sameVideoEditViewFields } from '../application/useVideoEditViewSelector'
 import { getActiveVideoEditSequence, setVideoEditLayout, setVideoEditView, videoEditRevision, type VideoEditInstance } from '../application/videoEditService'
-import { renameVideoEditRecordingBlock, videoEditRecordingTargetAt } from '../application/videoEditRecordingLane'
+import { renameVideoEditRecordingBlock, setVideoEditRecordingBlockNote, videoEditRecordingTargetAt } from '../application/videoEditRecordingLane'
 import { RecordingPictureRows, RecordingSoundRows, RecordingSourcePicker, controlRecording, recordingStopOutcome, orderedScreens, recordingTimeLabel, recordingTracksFromSetup, recordingView, startRecording, subscribeRecording, useRecordingSetupState, type RecordingSetupState } from '@/features/screenRecording'
 import { ProjectRecordingLane, type ProjectRecordingTake } from './ProjectRecordingLane'
 import { RECORDING_SETTINGS_INLINE_MIN_WIDTH } from './projectRecordingGeometry'
@@ -128,8 +128,8 @@ export function ProjectRecordingView({ instance, leading, layoutSwitch, onError 
     { kind: 'action', id: 'videoEditRecording.stop', label: '停止录制', shortcut: shortcutLabel(recordingShortcuts.stop), disabledReason: recordingHere ? undefined : '还没有开始录制', run: stop },
   ] }]))
 
-  const settings = <ProjectRecordingSettings setup={setup} sourceName={name} recording={recordingHere || state.busy} selected={selected ? { id: selected.clip.id, name: selected.clip.name, duration: recordingTimeLabel(selected.clip.duration / sequence.fps * 1000) } : null}
-    onRename={(id, value) => run(() => renameVideoEditRecordingBlock(projectId, id, value))} onError={onError} />
+  const settings = <ProjectRecordingSettings setup={setup} sourceName={name} recording={recordingHere || state.busy} selected={selected ? { id: selected.clip.id, name: selected.clip.name, note: selected.clip.note ?? '', duration: recordingTimeLabel(selected.clip.duration / sequence.fps * 1000) } : null}
+    onRename={(id, value) => run(() => renameVideoEditRecordingBlock(projectId, id, value))} onNote={(id, value) => run(() => setVideoEditRecordingBlockNote(projectId, id, value))} onError={onError} />
   const trailing = recordingHere && snapshot ? <>
     <span className={`mr-3 flex items-center gap-2 text-15 text-text1 ${UI_TEXT_TIMECODE_CLASS}`} data-recording-elapsed><span className="h-2 w-2 rounded-full bg-danger-solid" aria-hidden="true" />{recordingTimeLabel(snapshot.elapsedMs)}</span>
     <UiButton variant="secondary" disabled={snapshot.busy || !(snapshot.phase === 'recording' || snapshot.phase === 'paused')} disabledReason={t('screenRecording.toggleUnavailable')} onClick={pause}>{snapshot.phase === 'paused' ? <Play /> : <Pause />}{snapshot.phase === 'paused' ? t('recording.resume') : t('recording.pause')}</UiButton>
@@ -170,7 +170,7 @@ export function ProjectRecordingView({ instance, leading, layoutSwitch, onError 
 }
 
 /** 右侧设置：录制（来源、声音、清晰度、帧率，与屏幕录制页同一套）与选中一段时的“这一段”。录制中整组压暗。 */
-function ProjectRecordingSettings({ setup, sourceName, recording, selected, onRename, onError }: { setup: RecordingSetupState; sourceName: string; recording: boolean; selected: { id: string; name: string; duration: string } | null; onRename: (id: string, name: string) => void; onError: (error: unknown) => void }): React.ReactElement {
+function ProjectRecordingSettings({ setup, sourceName, recording, selected, onRename, onNote, onError }: { setup: RecordingSetupState; sourceName: string; recording: boolean; selected: { id: string; name: string; note: string; duration: string } | null; onRename: (id: string, name: string) => void; onNote: (id: string, note: string) => void; onError: (error: unknown) => void }): React.ReactElement {
   const { t } = useTranslation('ui')
   const change = (patch: Partial<RecordingSetupState['setup']>): void => setup.setSetup(value => ({ ...value, ...patch }))
   const resolution = setup.selected?.display ? ` · ${Math.round(setup.selected.display.width * setup.selected.display.scaleFactor)}×${Math.round(setup.selected.display.height * setup.selected.display.scaleFactor)}` : ''
@@ -188,6 +188,7 @@ function ProjectRecordingSettings({ setup, sourceName, recording, selected, onRe
     </div>
     {selected && <UiGroup title="这一段" titleTone="compact" labelWidth={72} divided>
       <UiFormRow label="名称" density="compact"><SegmentName key={selected.id} name={selected.name} disabled={recording} onCommit={value => onRename(selected.id, value)} /></UiFormRow>
+      <UiFormRow label="描述" density="compact"><SegmentNote key={selected.id} note={selected.note} disabled={recording} onCommit={value => onNote(selected.id, value)} /></UiFormRow>
       <UiFormRow label="时长" density="compact"><span className={`text-xs text-text2 ${UI_TEXT_TIMECODE_CLASS}`}>{selected.duration}</span></UiFormRow>
     </UiGroup>}
   </>
@@ -204,6 +205,20 @@ function SegmentName({ name, disabled, onCommit }: { name: string; disabled: boo
   }
   return <UiInput size="sm" aria-label="这一段的名称" disabled={disabled} value={draft} onChange={event => setDraft(event.target.value)} onBlur={commit}
     onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); else if (event.key === 'Escape') { cancelled.current = true; event.currentTarget.blur() } }} />
+}
+
+/** 描述即片段备注：可换行，离开时提交（清空即删掉备注），Esc 放弃。 */
+function SegmentNote({ note, disabled, onCommit }: { note: string; disabled: boolean; onCommit: (note: string) => void }): React.ReactElement {
+  const [draft, setDraft] = useState(note)
+  const cancelled = useRef(false)
+  useEffect(() => setDraft(note), [note])
+  const commit = (): void => {
+    const next = draft.trim()
+    if (!cancelled.current && next !== note) onCommit(next); else setDraft(note)
+    cancelled.current = false
+  }
+  return <UiTextArea aria-label="这一段的描述" placeholder="写给后期的备注" fit="content" disabled={disabled} value={draft} onChange={event => setDraft(event.target.value)} onBlur={commit}
+    onKeyDown={event => { if (event.key === 'Escape') { cancelled.current = true; event.currentTarget.blur() } }} />
 }
 
 /** 指针在这一段里的位置：自己订阅帧，播放时只有它跟着变。 */

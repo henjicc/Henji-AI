@@ -38,8 +38,13 @@ interface GfxDependencies {
   failed(error: Error): void
   /** 编码进程意外退出后已在新分片里接着录。 */
   restarted?(info: { restarts: number; encoder: string; reason: string }): void
+  /** 确认被录的窗口或显示器已经没了（显示器要连续几次都查不到）；不提供时当作还在。 */
+  sourceGone?(): Promise<boolean>
+  /** 来源没了（窗口关闭、显示器拔出），画面到此为止且已封口；由调用方按停止收尾。 */
+  sourceEnded?(): void
 }
-interface Run { process: ChildProcessWithoutNullStreams; closed: Promise<void>; ready: Promise<void>; span: CaptureSpan; expected: boolean; durationUs: number; dropped: number; duplicated: number; stderr: string }
+/** endOfStream：进程自己报了 progress=end，即采集源给出了结尾（gfxcapture 在被录窗口关闭后约 70 ms 以退出码 0 结束）。 */
+interface Run { process: ChildProcessWithoutNullStreams; closed: Promise<void>; ready: Promise<void>; span: CaptureSpan; expected: boolean; durationUs: number; dropped: number; duplicated: number; stderr: string; endOfStream: boolean }
 export interface GfxCaptureStats { restarts: number; droppedFrames: number; duplicatedFrames: number; encoder: string }
 /** 一分钟内续录超过这么多次，说明来源或显卡已经起不来了，停下来保住已录部分。 */
 const MAX_RESTARTS_PER_MINUTE = 5
@@ -113,7 +118,7 @@ export class GfxCaptureBackend implements ScreenCaptureBackend {
     const ready = new Promise<void>((resolve, reject) => { readyResolve = resolve; readyReject = reject })
     let closeResolve!: () => void
     const closed = new Promise<void>(resolve => { closeResolve = resolve })
-    const run: Run = { process: child, ready, closed, span, expected: false, durationUs: 0, dropped: 0, duplicated: 0, stderr: '' }
+    const run: Run = { process: child, ready, closed, span, expected: false, durationUs: 0, dropped: 0, duplicated: 0, stderr: '', endOfStream: false }
     this.run = run
     let stdout = '', stderr = '', started = false, firstFrameUs = Number.POSITIVE_INFINITY
     // 每个估计都比第一帧的真实时刻晚（晚多少看排队），取最早的一个。
@@ -141,6 +146,7 @@ export class GfxCaptureBackend implements ScreenCaptureBackend {
         // -progress 的帧计数在一个编码进程内累计。
         if (line.startsWith('drop_frames=')) run.dropped = Number(line.slice(12)) || run.dropped
         else if (line.startsWith('dup_frames=')) run.duplicated = Number(line.slice(11)) || run.duplicated
+        else if (line === 'progress=end') run.endOfStream = true
         else if (line.startsWith('out_time_us=')) {
           const time = Number(line.slice(12))
           if (Number.isFinite(time) && time > 0) {
@@ -174,6 +180,16 @@ export class GfxCaptureBackend implements ScreenCaptureBackend {
     this.run = null
     clearInterval(this.watchdog)
     this.collect(run)
+    // 进程报了结尾、来源也确认没了：录制到此为止，对着不在的窗口续录只会一次次起不来。这一片完整写到了结尾，按进度封口后交给停止收尾。
+    // 只报了结尾而来源还在（或查不准）照常续录，宁可多续一次也不把正常的长录停掉。
+    if (run.endOfStream && await this.sourceGone()) {
+      if (this.cancelled) return
+      logger.info('录制来源已关闭，画面到此为止', { event: 'recording.capture.source.ended', context: { code, durationUs: run.durationUs } })
+      if (run.durationUs > 0) await this.storage.seal(run.span.index, run.durationUs)
+      this.deps.sourceEnded?.()
+      return
+    }
+    if (this.cancelled) return
     const now = Date.now()
     this.restartTimes.push(now)
     while (this.restartTimes[0] < now - 60_000) this.restartTimes.shift()
@@ -181,12 +197,19 @@ export class GfxCaptureBackend implements ScreenCaptureBackend {
     logger.warn('屏幕采集意外结束，自动续录', { event: 'recording.capture.restart.start', context: { code, restarts: this.totals.restarts, encoder: this.encoder?.id, stderr: run.stderr.slice(-1000) } })
     if (this.restartTimes.length > MAX_RESTARTS_PER_MINUTE) throw new Error(`${reason}，一分钟内多次续录都没能恢复，录制已停止；已录部分可以导入。`)
     await assertCaptureDiskSpace(this.storage.directory)
-    await this.launchWithFallback(this.lifetime.signal)
+    try { await this.launchWithFallback(this.lifetime.signal) } catch (error) {
+      // 退出时来源还在、续录途中才没的：同样是录制到此为止，不当成失败。
+      if (this.cancelled || !await this.sourceGone()) throw error
+      logger.info('续录时录制来源已关闭，画面到此为止', { event: 'recording.capture.source.ended', context: { code } })
+      this.deps.sourceEnded?.()
+      return
+    }
     if (this.cancelled) { await this.end(false); return }
     this.totals.restarts++
     logger.info('屏幕采集已续录', { event: 'recording.capture.restart.completed', context: { restarts: this.totals.restarts, encoder: this.encoder?.id } })
     this.deps.restarted?.({ restarts: this.totals.restarts, encoder: this.encoder?.id ?? '', reason })
   }
+  private async sourceGone(): Promise<boolean> { return await this.deps.sourceGone?.() ?? false }
   private collect(run: Run): void { this.totals.droppedFrames += run.dropped; this.totals.duplicatedFrames += run.duplicated; run.dropped = 0; run.duplicated = 0 }
   private fail(error: Error): void {
     clearInterval(this.watchdog)

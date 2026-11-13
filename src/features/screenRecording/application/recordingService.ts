@@ -84,6 +84,9 @@ export async function showRecordingDocument(id: string): Promise<void> {
 export type RecordingStopOutcome = { kind: 'edit'; documentId: string; sequenceId?: string; frame?: number; placement?: import('./recordingVideoImport').RecordingPlacementResult; itemIds?: string[]; combined?: boolean; screens?: number; separate?: string } | { kind: 'file'; path?: string; error?: string }
 const stopOutcomes = new Map<string, RecordingStopOutcome>()
 export function recordingStopOutcome(id: string): RecordingStopOutcome | undefined { return stopOutcomes.get(id) }
+/** 因被录的窗口关闭或显示器断开而自动停止的会话：停止回执据此如实说明，之后再按停止也不算错。 */
+const sourceEndedSessions = new Map<string, NonNullable<RecordingControlSnapshot['sourceEnded']>>()
+export function recordingSourceEnded(id: string): NonNullable<RecordingControlSnapshot['sourceEnded']> | undefined { return sourceEndedSessions.get(id) }
 async function finish(id: string, importResult: boolean): Promise<void> {
   if (finishing) return finishing
   if (!capture) return
@@ -122,7 +125,9 @@ async function finish(id: string, importResult: boolean): Promise<void> {
         stopOutcomes.set(id, { kind: 'edit', ...where, ...await importRecordingToVideo(id, destination) })
       }
       defaultDocumentOperationChanges.changed()
-      logger.info('录制会话已封存', { event: 'recording.session.finish.completed', context: { sessionId: id } })
+      const ended = sourceEndedSessions.get(id)
+      if (ended) notifyUser(notificationMessage(ended === 'window' ? 'recordingWindowClosed' : 'recordingDisplayRemoved'), 'success')
+      logger.info('录制会话已封存', { event: 'recording.session.finish.completed', context: { sessionId: id, ...(ended ? { sourceEnded: ended } : {}) } })
     } catch (error) { publish({ error: String(error) }); logger.error('录制会话收尾失败', { event: 'recording.session.finish.failed', error }); throw error }
     finally { releaseTarget?.(); releaseTarget = undefined; publish({ busy: false, opening: false }); finishing = undefined }
   })()
@@ -166,7 +171,11 @@ export async function startRecording(options: ScreenCaptureOptions, session: Rec
 export async function controlRecording(id: string, action: 'pause' | 'resume' | 'mark' | 'stop' | 'cancel', note?: string): Promise<void> {
   const api = getPlatform().screenRecording
   const state = await api.snapshot()
-  if (!state || state.sessionId !== id) throw new Error('该录制已结束，请读取会话查看保存结果')
+  if (!state || state.sessionId !== id) {
+    // 来源没了已经按停止收尾：再按停止就是等那次收尾做完，结果与自己按停止一样。
+    if (action === 'stop' && sourceEndedSessions.has(id)) { await finishing; return }
+    throw new Error('该录制已结束，请读取会话查看保存结果')
+  }
   if (action === 'cancel') { await finish(id, false); return }
   if (action === 'pause' && state.phase !== 'recording' || action === 'resume' && state.phase !== 'paused') throw new Error('录制状态已变化，请读取会话后重试')
   await api.control(id, action === 'pause' || action === 'resume' ? 'toggle' : action, note)
@@ -177,8 +186,12 @@ function follow(id: string): void {
   detach?.()
   detach = getPlatform().screenRecording.onChanged(snapshot => {
     if (snapshot && snapshot.sessionId !== id) return
+    // 只在因来源关闭而停止成功时记下：停止途中失败的，按失败提示，不说“录制已保存”。
+    if (snapshot?.sourceEnded && snapshot.phase === 'stopped') sourceEndedSessions.set(id, snapshot.sourceEnded)
     publish({ snapshot })
     if (snapshot?.phase === 'stopped' && !snapshot.busy) void finish(id, true).catch(() => undefined)
+    // 采集出错时主进程已经把已录部分收尾保存（记为中断，可以导入）：这里只放开“当前录制”，好马上开始新的录制。
+    else if (snapshot?.phase === 'failed' && !snapshot.busy) void finish(id, false).catch(() => undefined)
   })
 }
 

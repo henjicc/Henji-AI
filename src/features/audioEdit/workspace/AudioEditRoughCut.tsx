@@ -72,7 +72,7 @@ function RoughCutPanel(): React.ReactElement {
             <UiButton size="sm" onClick={() => update({ cuts: project.cuts?.map((item) => item.id === cut.id ? { ...item, enabled: false } : item) })}>恢复</UiButton>
           </div>)}</div>
         </AudioEditDisclosure>}
-        <AudioEditSuggestions project={project} onSeek={workspace.navigateToFrame} onResolve={workspace.resolveSuggestions} />
+        <AudioEditSuggestions />
         <AudioEditDisclosure title="参考逐字稿" value={project.referenceScript?.trim() ? '已填写' : '未使用'}>
           <div className="relative flex flex-col gap-2" {...scriptDrop.dropProps}>
             {scriptDrop.isDragOver ? <div aria-hidden="true" className={UI_DROP_TARGET_OVERLAY_CLASS} /> : null}

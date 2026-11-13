@@ -5,6 +5,7 @@ import { capabilityControl, defineApplicationCapability } from '../shared/define
 import { audioEditRangeSchema } from '../../../audioEdit/schema'
 import { canvasDownloadDestinationSchema } from '../canvas/canvasExportApplicationCapabilities'
 import { AUDIO_EDIT_TRANSCRIPTION_RESUBMISSIONS } from './audioEditTaskStatus'
+import { checkAudioEditSoundCapability } from './audioEditSoundCheckCapability'
 
 // 口播是通用文档（3.3）：列出、新建、打开、改名、移动、删除走通用文档能力；这里的 id 就是口播文档 ID
 const documentRef = applicationRefSchema.extend({
@@ -28,6 +29,12 @@ export function audioEditInputSchema(id: string): z.ZodType<z.infer<typeof audio
   return base
 }
 const output = z.object({ resultRef: documentRef, message: z.string(), verified: z.boolean().optional(), count: z.number().nonnegative().optional(), shortenedMs: z.number().optional().describe('剪后时长的变化（毫秒）：正数为缩短；重新处理呼吸声时比上次删得少会是负数，表示变长'), durationFrames: z.number().nonnegative().optional(),
+  editedSeconds: z.number().nonnegative().optional().describe('处理后剪后作品的时长（秒）'),
+  sound: z.object({
+    integratedLufs: z.number().finite().nullable().describe('处理后成品的整体积分响度 LUFS（与 check_audio_edit_sound 同一口径）；测不出为 null'),
+    truePeakDbtp: z.number().finite().nullable().describe('处理后成品的真峰值 dBTP'),
+    beforeLufs: z.number().finite().optional().describe('补偿前测得的积分响度'),
+  }).strict().optional().describe('匹配响度后实际测得的成品响度；完整读回用 check_audio_edit_sound'),
   outputPath: z.string().optional().describe('导出：写出的成品文件（WAV，或 FCP7 XML）的本机路径'), audioPath: z.string().optional().describe('导出 XML 时：XML 引用的音频文件路径'), subtitlePath: z.string().optional().describe('导出时附带的 SRT 字幕路径'),
   quickProcess: z.object({
     retakesRemoved: z.number().int().nonnegative().describe('这次去掉的重念处数'), breathsRemoved: z.number().int().nonnegative().describe('删掉的呼吸处数'), breathsAttenuated: z.number().int().nonnegative().describe('减弱的呼吸处数（和字连着的）'),
@@ -43,7 +50,8 @@ const output = z.object({ resultRef: documentRef, message: z.string(), verified:
 export const AUDIO_EDIT_VERIFIED_EDIT_OPERATIONS = new Set(['insert_audio_edit_file', 'repair_audio_edit_region', 'reset_audio_edit', 'format_audio_edit_subtitles', 'quick_process_audio_edit', 'compress_audio_edit_silence', 'clean_audio_edit_fillers', 'clean_audio_edit_retakes', 'process_audio_edit_breaths', 'match_audio_edit_loudness', 'detect_audio_edit_mouth_clicks', 'undo_audio_edit', 'redo_audio_edit'])
 /** 这些操作完成后各形成一步撤销，回执带 undoRef。 */
 export const AUDIO_EDIT_UNDOABLE_OPERATIONS = new Set([...AUDIO_EDIT_VERIFIED_EDIT_OPERATIONS].filter((id) => id !== 'undo_audio_edit' && id !== 'redo_audio_edit'))
-export const AUDIO_EDIT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = ([
+/** 按同一套口播回执执行的操作（处理器在 registerAudioEditCapabilityHandlers 里逐个登记）。 */
+export const AUDIO_EDIT_OPERATION_CAPABILITIES: ApplicationCapabilityDefinition[] = ([
   ['insert_audio_edit_file', '插入或覆盖音频', '把已有音频文件插进口播：位置用 positionSeconds（剪后作品时间，听到的那一秒，与 audio_edit.caption 的 start_ms 同一坐标）或 positionSourceFrame（原素材采样帧，与 audio_edit.transcript_block 的 start_frame 同一坐标）给一个；给 replaceUntilSeconds / replaceUntilSourceFrame 则覆盖到那里。自动匹配采样格式，移动旧编辑并保留原文件，一步撤销，完成后立即保存。已有转写时插入段先显示占位“（需要重新转写）”（不进字幕），之后用 transcribe_audio_edit 只补识别插入段。要用麦克风现录用 start_audio_edit_recording。', false],
   ['repair_audio_edit_region', '修复声音区域', '按源采样帧和频率范围修复声音瑕疵：spectral_heal 修复频谱区域，可带归一化画笔；declick 去除短促爆音。创建可撤销修复记录，渲染并回读确认。启用、强度或增删已有记录可用 audio_edit.document.repairs 通用属性。', false],
   ['reset_audio_edit', '撤销口播所有修改', '用户明确要求后恢复初始剪辑：恢复原文、全部声音、字幕分段、锁定和处理设置，保留口播名、参考稿、显示偏好。旧口播没有原始文本时保留已有文字，不能假称恢复识别原文。可用回执的 undoRef 经 undo_audio_edit 恢复操作前状态。', false],
@@ -51,7 +59,7 @@ export const AUDIO_EDIT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinitio
   ['import_audio_edit_source', '给口播导入素材', '给还没有素材的口播（如 create_document 新建的 audio_edit 文档）导入本机音频或视频文件，默认引用原文件、不复制；之后即可转写与剪辑。已有素材的口播不能再导入。', false],
   ['clean_audio_edit_retakes', '去掉口播重念', '照稿录口播时念坏了会马上重念：口误、没念好、在不该断的地方断开后重新起句。按逐词转写找出同一内容念了几遍的地方，只保留最后一遍；容忍同音字和改词，连续多遍、交错重念都收敛到最后一遍。念坏后说“哎”从前面某句开头重来时，从那句开头到“哎”整段删掉；开头相同、后面换了说法的，参考稿能佐证两遍念的是同一句才删，没有佐证的只留作待确认的剪辑线索（audio_edit.suggestion 里 kind=retake、current_state=available，按 attention=decide 筛出来；自带拿不准的原因 reason、像不像重念 score、各种做法 options（留后一遍、留前一遍、换个切点，各自删掉的文字与接缝两侧读起来的样子）及前后文），要逐处判断：把选中的做法 id 写进线索的 chosen_option（删词并补接缝停顿剪切；keep_later 等于整条接受，keep_both 等于驳回，status=applied / dismissed 是等价的简写），定不了的把 audience 写成 user 留给用户试听；自动删掉的重念同样带着 options，本地只能先按留最后一遍定，留哪一遍更好也用 chosen_option 改判，其中把握不高的按 attention=check 筛出来抽看，其余不必逐条读做法；删完还会再看一遍保留下来的内容，前后两段开头相同、仍像重念的也列为待确认（每 10 分钟录音最多 8 条，证据强的优先），不自动删。切点落在实际声音的停顿里，被删的词和其间停顿一起去掉，在文字里恢复任一词时停顿也一并恢复。有参考稿时不删稿子里本来就有的重复。呼吸也算气口：原切点连读时，会在两遍对应位置的明显停顿或呼吸处换遍拼接（留下前一遍念好的开头），贴着念坏那遍的一两个字一起删。结果是确定性的起点，不是终点：之后逐处复核每一刀（为什么重念、接缝两侧的停顿与语气、留哪一遍更好），改判写线索的 chosen_option；线索给的做法都不合适时才逐个改 audio_edit.transcript_block.included。重复调用是安全的：定过都留着、改过做法或手动恢复过的那一对两遍不会再动，回执里的待确认条数只算这次新列出的。需逐词时间的转写（插入后还没补识别的段跳过，两侧各自检测），免费，一步撤销。', false],
   ['process_audio_edit_breaths', '处理口播呼吸声', '在本机用 Respiro 模型逐帧找出呼吸声（第一次用时下载约 13 MB），按策略处理：delete（默认，快节奏）去掉呼吸，再清理字间气口：按逐帧声音电平找出前一个字真正结束、后一个字真正开始的位置（前一字留 0.01 秒余音、后一字前留 0.01 秒），中间残留的气声、呼吸尾巴整段静音，超出的部分从中间删去，句间与重念接缝处留约 0.2 秒、句中约 0.12 秒，只在标点、接缝、呼吸或明显停顿处清，连着念的词之间、不到 0.1 秒或只有底噪的短停顿不动，后一个字开头很轻的送气、擦音算作字头；按剪后的时间线合并接缝两侧气口，连同已删重念遗留的碎字尾巴一起清理；重复删除保留已有剪切，时长不反弹，用户手写或手动改过的剪切不覆盖；落成标识以 gap: 开头的静音与删除剪切，想要更长的停顿或保留语气时直接改对应的 gap: 剪切（audio_edit.cut 实体逐条改起止或停用）；和字连着的呼吸只减弱；attenuate 全部减弱；mute 全部静音；keep 撤掉此前的呼吸处理；非 delete 时同时撤掉此前的气口清理。已被重念、停顿剪掉的不再处理，用户逐处恢复过的不动。逐处判断与修改用 audio_edit.breath 实体（context、前后文字、handling）。免费，一步撤销。', false],
-  ['match_audio_edit_loudness', '自动匹配口播响度', '按当前全部声音处理（修复、效果控件里的全部效果、区间音量、输出音量）渲染剪好的成品，测量积分响度，把到目标响度需要的补偿写进 audio_edit.document.output 的 loudness（同时打开自动匹配，末尾限幅 -1 dB）。改了其他处理后响度会变，需要重新匹配。', false],
+  ['match_audio_edit_loudness', '自动匹配口播响度', '按当前全部声音处理（修复、效果控件里的全部效果、区间音量、输出音量）渲染剪好的成品，测量积分响度，把到目标响度需要的补偿写进 audio_edit.document.output 的 loudness（同时打开自动匹配，末尾限幅 -1 dB），再测一次补偿后的成品，回执的 sound 给出实测整体响度与真峰值。改了其他处理后响度会变，需要重新匹配；削波、底噪等其余结果用 check_audio_edit_sound 读回。', false],
   ['detect_audio_edit_mouth_clicks', '检测口水音', '找出说话时口水带出的短促咔嗒声（约 0.3–10 毫秒的宽频瞬态），写进效果控件里“去除口水音”那一项（audio_edit.document.effect_chain，kind=mouth_declick）并打开它；检测听的是这一项之前的声音，修复用 LPC 插值一遍修完，可撤销。只在选区内检测时传 range（源采样帧），会替换这段原有的检测结果。', false],
   ['quick_process_audio_edit', '快速处理口播', '一次完成：有逐词转写时先去掉重念（插入后还没补识别的段跳过，不跨过它比对、不在里面下刀），再压缩实际音频停顿、清理已选语气词里自成一段的（前后都停了一下的迟疑；连着念的保留）、按默认策略处理呼吸声，形成一个撤销步骤；不提交付费转写。没有接入助手时它就是全部；有助手时只是起点，助手要在此基础上逐处复核。', false],
   ['compress_audio_edit_silence', '压缩口播停顿', '本地检测实际音频，按剪后的时间线合并接缝两侧停顿；接缝超过口播设置的保留长度就压到该长度，普通停顿仍按检测阈值判断。尊重锁定与选区，保留手写剪切，重复执行不重复剪切、不改变时长。', false],
@@ -74,3 +82,4 @@ export const AUDIO_EDIT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinitio
     }],
   } : {}),
 }))
+export const AUDIO_EDIT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [...AUDIO_EDIT_OPERATION_CAPABILITIES, checkAudioEditSoundCapability]

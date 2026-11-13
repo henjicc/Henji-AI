@@ -50,8 +50,21 @@ export async function runLoudnessFfmpeg(args: string[], signal: AbortSignal, bin
 
 /** 按素材采样帧测量原声区间，后台进程流式读取；不烘焙增益、不把整段 PCM 搬到渲染层。 */
 export async function measureAudioFileLoudness(file: string, startFrame: number, frameCount: number, sampleRate: number, signal: AbortSignal): Promise<VideoEditLoudnessMeasurement> {
-  const log = await runLoudnessFfmpeg(['-i', file, '-map', '0:a:0', '-vn', '-af', `atrim=start_sample=${startFrame}:end_sample=${startFrame + frameCount},asetpts=PTS-STARTPTS,aresample=${sampleRate * 4},ebur128=peak=sample:framelog=info`, '-f', 'null', '-'], signal)
-  return parseLoudnessLog(log, frameCount / sampleRate, null)
+  return (await measureAudioFileLoudnessTimeline(file, startFrame, frameCount, sampleRate, signal)).measurement
+}
+
+/**
+ * 同一次测量顺带交出响度范围 LRA 与逐 100 毫秒的 400 毫秒块响度（ebur128 的 M，第 k 个止于 (k+1)/10 秒），
+ * 任意分段的门限积分响度由这些块算出，与整体积分同一口径。
+ */
+export async function measureAudioFileLoudnessTimeline(file: string, startFrame: number, frameCount: number, sampleRate: number, signal: AbortSignal): Promise<{ measurement: VideoEditLoudnessMeasurement; loudnessRangeLu: number | null; momentaryLufs: number[] }> {
+  const momentaryLufs: number[] = []
+  const log = await runLoudnessFfmpeg(['-i', file, '-map', '0:a:0', '-vn', '-af', `atrim=start_sample=${startFrame}:end_sample=${startFrame + frameCount},asetpts=PTS-STARTPTS,aresample=${sampleRate * 4},ebur128=peak=sample:framelog=info`, '-f', 'null', '-'], signal, undefined, line => {
+    const momentary = /\bt:\s*[\d.]+\s.*?\bM:\s*(-?inf|-?[\d.]+)/.exec(line)?.[1]
+    if (momentary !== undefined) momentaryLufs.push(momentary.endsWith('inf') ? -Infinity : Number(momentary))
+  })
+  const range = number(log.slice(log.lastIndexOf('Summary:')).match(/LRA:\s*([-\d.]+)\s*LU\b/)?.[1])
+  return { measurement: parseLoudnessLog(log, frameCount / sampleRate, null), loudnessRangeLu: range, momentaryLufs }
 }
 
 /** Sequential disk spool keeps memory bounded by two-second PCM blocks, independent of duration. */

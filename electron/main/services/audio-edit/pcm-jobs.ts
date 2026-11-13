@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import type { AudioEditGainRegion } from '../../../../src/core/audioEdit/regions'
 import { AudioEditSpliceRenderer } from '../../../../src/core/audioEdit/spliceCrossfade'
 import type { AudioEditTimelineSpan } from '../../../../src/core/audioEdit/types'
+import { AudioEditSoundStatsCollector, type AudioEditSoundStats } from '../../../../src/core/audioEdit/soundCheck'
 import { applyAudioEditGainLayers } from './gain-layers'
 import { createF32WavWriter, openF32Wav, openF32WavForPatch } from './pcm-wav'
 
@@ -18,6 +19,8 @@ export type AudioEditPcmJob =
   | { kind: 'splices'; input: string; output: string; spans: AudioEditTimelineSpan[]; durationFrames: number; layers?: AudioEditGainRegion[][] }
   /** 补录拼接：按顺序把几段浮点 WAV 的帧原样接成一个文件（样本字节不变，不经过任何计算），顺带算出整个文件的 SHA-256。 */
   | { kind: 'concat'; output: string; sampleRate: number; channels: number; pieces: Array<{ input: string; startFrame: number; frames: number }> }
+  /** 只读：成品声音一段的采样级统计（电平、峰值、削波、嗡声），给“听起来怎样”的读回用。 */
+  | { kind: 'sound-stats'; input: string; startFrame: number; endFrame: number }
 
 /** 每块秒数：块越大轮次越少；增益与拼接都逐采样计算，分块大小不影响结果。 */
 const BLOCK_SECONDS = 8
@@ -49,14 +52,25 @@ async function concatF32Wavs(job: Extract<AudioEditPcmJob, { kind: 'concat' }>, 
   return { digest: hash.digest('hex') }
 }
 
-/** 拼接写出返回整文件摘要，其余处理没有返回值。 */
-export async function runAudioEditPcmJob(job: AudioEditPcmJob, onProgress?: (value: number) => void): Promise<AudioEditConcatResult | void> {
+/** 拼接写出返回整文件摘要，统计返回采样级统计，其余处理没有返回值。 */
+export async function runAudioEditPcmJob(job: AudioEditPcmJob, onProgress?: (value: number) => void): Promise<AudioEditConcatResult | AudioEditSoundStats | void> {
   if (job.kind === 'concat') return concatF32Wavs(job, onProgress)
   const reader = await openF32Wav(job.input)
   if (!reader) throw new Error('声音处理只接受 32 位浮点 WAV。')
   const { sampleRate, channels } = reader
   const block = sampleRate * BLOCK_SECONDS
   try {
+    if (job.kind === 'sound-stats') {
+      const collector = new AudioEditSoundStatsCollector(sampleRate, channels)
+      const from = Math.max(0, job.startFrame), to = Math.min(reader.frames, job.endFrame)
+      const buffer = new Float32Array(block * channels)
+      for (let start = from; start < to; start += block) {
+        const count = Math.min(block, to - start)
+        collector.push(await reader.read(start, count, count === block ? buffer : undefined))
+        onProgress?.((start + count - from) / Math.max(1, to - from))
+      }
+      return collector.finish()
+    }
     if (job.kind === 'gains') {
       const writer = await createF32WavWriter(job.output, sampleRate, channels, reader.frames)
       const buffer = new Float32Array(block * channels)

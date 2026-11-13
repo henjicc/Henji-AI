@@ -24,7 +24,8 @@ import { registerCustomModelsIpc } from './ipc/custom-models'
 import { registerLocalRecordsIpc } from './ipc/local-records'
 import { registerFontsIpc } from './ipc/fonts'
 import { registerTestFixturesIpc } from './ipc/test-fixtures'
-import { closeDb, compactDatabaseIfFragmented, configureDatabaseMigrations, getDb, takeDatabaseRecovery } from './services/db'
+import { closeDb, compactDatabaseIfFragmented, configureDatabaseMigrations, getDb, scheduleDatabaseMaintenance, takeDatabaseRecovery } from './services/db'
+import { isRecordingInProgress } from './services/recording-power'
 import { PersistenceError } from '../../src/core/persistence/migrations'
 import { databaseMigrationOptions } from './services/db-locations'
 import { registerDocumentsIpc } from './ipc/documents'
@@ -225,6 +226,23 @@ app.whenReady().then(async () => {
 `)
     else void dialog.showMessageBox({ type: 'warning', title: 'Henji AI', message })
   }
+  // 完整自检与每日快照在后台线程执行，首次等窗口加载一段时间后再开始；录制进行中推迟。
+  scheduleDatabaseMaintenance({
+    isBusy: isRecordingInProgress,
+    onCorrupt: () => {
+      const message = '后台自检发现应用数据库文件损坏。请保存手头的工作后重启痕迹AI，重启时会自动换上最近一份完好的备份，损坏的文件会原样保留。'
+      if (isAssistantCliMode()) {
+        process.stderr.write(`${message}\n`)
+        return
+      }
+      void dialog.showMessageBox({ type: 'warning', title: 'Henji AI', message, buttons: ['稍后重启', '立即重启'], defaultId: 0, cancelId: 0 }).then(({ response }) => {
+        if (response !== 1) return
+        // 开发版由启动脚本托管，自行重启只会得到连不上开发服务器的窗口，只退出。
+        if (app.isPackaged) app.relaunch()
+        app.quit()
+      })
+    },
+  })
   // 命令行进程与主应用并存，不能替主应用判定哪些任务已中断；主应用只有一个实例，由它在启动时收拾上次留下的。
   if (!commandLineProcess) markInterruptedAudioEditTasks(isCommandLineProcessRunning())
   configureMacDockIcon()

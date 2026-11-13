@@ -103,7 +103,10 @@ const videoEditClipStateSchema = z.object({
   snapToBeat: z.boolean().optional().describe('超级关键帧整理时吸附到序列节拍标记，钉点优先。'),
   /** 原生模板实例：同一模板的文字图形片段联动；分离后去掉。代码模板靠代码定义联动，不写这一项。 */
   templateId: identifier.optional(),
-  id: identifier, itemId: identifier, name, kind: z.enum(['video', 'audio', 'image', 'text', 'code', 'graphic', 'adjustment', 'sequence', 'light']), track: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER), code: codeMaterialInstanceSchema.optional(),
+  id: identifier, itemId: identifier, name,
+  /** 片段备注（剪辑内容第 78 版）：写给后期看的说明，不进画面与导出；省略即没有备注，不存空字符串。 */
+  note: z.string().min(1).optional(),
+  kind: z.enum(['video', 'audio', 'image', 'text', 'code', 'graphic', 'adjustment', 'sequence', 'light']), track: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER), code: codeMaterialInstanceSchema.optional(),
   elementOverrides: codeElementOverridesSchema.optional(),
   edits: codeEditsSchema.optional(),
   graphic: videoEditGraphicSchema.optional(), effects: z.array(videoEditEffectSchema).optional(), adjustment: videoEditAdjustmentSchema.optional(),

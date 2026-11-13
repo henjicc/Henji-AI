@@ -11,7 +11,8 @@ import type {
 import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
 import { addAudioEditCut, removeAudioEditCuts } from '@/core/audioEdit/edits'
 import { applyWriterTable, writableProperties, propertyOperations } from '@/core/application-control/execution/writerTable'
-import { audioEditWriterTable } from './audioEditFields'
+import { AUDIO_EDIT_SOURCE_PATH_PROPERTY, audioEditWriterTable } from './audioEditFields'
+import { relinkAudioEdit } from './audioEditApplicationService'
 import { loadAudioEditProject, editAudioEditProjectAsync, flushAudioEditProject, getAudioEditRevision, restoreAudioEditProjectSnapshot, subscribeAudioEditProjectDisposal } from './audioEditProjectInstances'
 import { AUDIO_EDIT_ENTITY_TYPES } from './audioEditReflection'
 import { loadAudioEditBreaths } from './audioEditBreaths'
@@ -69,19 +70,25 @@ export class AudioEditMutationExecutor implements ApplicationMutationExecutor {
 
   async apply(step: MutationStep, context?: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     const ids = splitTarget(this.entityType, step.target.id)
+    // 重新定位原素材与界面“重新定位”同一服务（主进程核对内容相同后换素材并保存）；素材不进撤销
+    const relink = step.mutations.find((mutation) => mutation.propertyId === AUDIO_EDIT_SOURCE_PATH_PROPERTY)
+    if (relink && typeof relink.value !== 'string') throw new Error('INVALID_VALUE:source_path 必须是本机文件路径。')
+    const relinked = relink ? await relinkAudioEdit(ids.projectId, relink.value as string) : undefined
+    const mutations = step.mutations.filter((mutation) => mutation !== relink)
     // 写入器只做不可变更新：草稿从当前作品出发，没改的部分沿用原引用，提交时不必整份复制和重新校验
-    const { previous, saved } = await editAudioEditProjectAsync(ids.projectId, async (current) => {
+    const edited = mutations.length ? await editAudioEditProjectAsync(ids.projectId, async (current) => {
       const raw = this.entityType === AUDIO_EDIT_ENTITY_TYPES.breath ? await loadAudioEditBreaths(current) : undefined
       const draft = { document: current, childId: ids.childId, ...(raw ? { breaths: { raw, views: describeAudioEditBreaths(current, raw) } } : {}) }
-      await applyWriterTable(audioEditWriterTable(this.entityType), draft, step.mutations)
+      await applyWriterTable(audioEditWriterTable(this.entityType), draft, mutations)
       return draft.document
-    })
+    }) : undefined
+    const saved = edited?.saved ?? relinked!
     if (!context?.persistenceScopes?.has(`audio_edit:${ids.projectId}`)) await flushAudioEditProject(ids.projectId)
     return {
       status: 'completed', resultingRevisions: { audio_edit: getAudioEditRevision() },
       directRefs: [{ kind: this.entityType, id: step.target.id, revision: saved.revision }],
-      evidence: step.mutations.map((mutation) => ({ kind: 'property_value' as const, target: { kind: this.entityType, id: step.target.id, revision: saved.revision }, fact: `口播剪辑属性 ${mutation.propertyId} 已更新。`, data: mutation.value ?? null, capturedAt: new Date().toISOString() })),
-      undoToken: retainUndo(previous, saved, [{ kind: this.entityType, id: step.target.id }]),
+      evidence: step.mutations.map((mutation) => ({ kind: 'property_value' as const, target: { kind: this.entityType, id: step.target.id, revision: saved.revision }, fact: mutation === relink ? `原素材已重新定位到 ${saved.source.sourcePath}（核对内容与原素材相同）。` : `口播剪辑属性 ${mutation.propertyId} 已更新。`, data: mutation === relink ? saved.source.sourcePath : mutation.value ?? null, capturedAt: new Date().toISOString() })),
+      ...(edited ? { undoToken: retainUndo(edited.previous, edited.saved, [{ kind: this.entityType, id: step.target.id }]) } : {}),
     }
   }
 

@@ -39,6 +39,8 @@ export interface AudioEditPlatform {
   editedSource(request: { projectId: string; requestId?: string }): Promise<{ audioPath: string }>
   /** 基本声音“自动匹配响度”：按当前全部处理（不含响度补偿本身）渲染成品并测积分响度，返回到目标响度需要的增益。 */
   matchLoudness(request: { projectId: string; targetLufs: number; requestId?: string }): Promise<{ integratedLufs: number; gainDb: number }>
+  /** 读回剪好的成品听起来怎样：响度、真峰值、削波、静音与过长停顿、底噪与嗡声（时间为剪后作品秒）。 */
+  checkSound(request: import('@/core/audioEdit/soundCheck').AudioEditSoundCheckRequest): Promise<import('@/core/audioEdit/soundCheck').AudioEditSoundCheck>
   /** 在编辑后的声音里检测口水音（源采样帧范围与把握 0–1）。 */
   detectMouthClicks(request: { projectId: string; itemId: string; sensitivity: number; range?: { startFrame: number; endFrame: number }; requestId?: string }): Promise<{ clicks: Array<{ startFrame: number; endFrame: number; score: number }> }>
   recording: import('@/core/audioEdit/recordingAudio').RecordingAudioPlatform

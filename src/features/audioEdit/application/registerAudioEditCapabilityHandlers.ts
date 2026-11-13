@@ -3,10 +3,14 @@ import { repairAudioEditRegion } from './audioEditRegions'
 import { requestAlertConfirmation } from '@/stores/alertDialogStore'
 import { applicationPaidRequest, transcriptionEstimatedCny } from '@/services/paidApproval'
 import { preflightAudioEditTranscription } from './audioEditApplicationService'
-import { AUDIO_EDIT_APPLICATION_CAPABILITIES, AUDIO_EDIT_UNDOABLE_OPERATIONS, AUDIO_EDIT_VERIFIED_EDIT_OPERATIONS, audioEditInputSchema } from '@/core/application-control/domains/audioEdit/audioEditApplicationCapabilities'
+import { AUDIO_EDIT_OPERATION_CAPABILITIES, AUDIO_EDIT_UNDOABLE_OPERATIONS, AUDIO_EDIT_VERIFIED_EDIT_OPERATIONS, audioEditInputSchema } from '@/core/application-control/domains/audioEdit/audioEditApplicationCapabilities'
 import { recordAudioEditStep, redoAudioEditStep, undoAudioEditStep } from './audioEditStepUndo'
 import { audioEditOutputSeconds, audioEditPlacementFrames, audioEditUntranscribedBlocks } from '@/core/audioEdit/splice'
 import { audioEditContentKey } from '@/core/audioEdit/baseline'
+import { buildProjectAudioEditTimeline, editedDurationFrames } from '@/core/audioEdit/timeline'
+import { checkAudioEditSoundCapability } from '@/core/application-control/domains/audioEdit/audioEditSoundCheckCapability'
+import { checkAudioEditProjectSound } from './audioEditSoundCheck'
+import { createLogger } from '@/core/logging'
 import { audioEditProjectFromDocument } from '@/core/audioEdit/documentContent'
 import type { ApplicationCapabilityHandlerRegistrar } from '@/features/application-control/capabilities/handlerTypes'
 import { resolveConfiguredDestination } from '@/features/canvas/application/canvasDownloadService'
@@ -35,7 +39,34 @@ const lengthChange = (shortenedMs: number): string => {
   return seconds === '0.0' ? '时长不变' : shortenedMs > 0 ? `缩短 ${seconds} 秒` : `比处理前加长 ${seconds} 秒`
 }
 
+const logger = createLogger('features.audioEdit.capabilities')
+
+/** 读回结果的一句话：先报整体，再报问题；差值只报变了的。 */
+function soundCheckMessage(check: Awaited<ReturnType<typeof checkAudioEditProjectSound>>): string {
+  const { loudness, durationSeconds } = check.check
+  const head = `剪后 ${durationSeconds.toFixed(1)} 秒：整体 ${loudness.integratedLufs ?? '测不出'} LUFS、LRA ${loudness.loudnessRangeLu ?? '—'} LU、真峰值 ${loudness.truePeakDbtp ?? '—'} dBTP。`
+  const issues = check.check.issues.length ? `问题：${check.check.issues.join('')}` : '没发现削波、底噪、嗡声或过长停顿的问题。'
+  const delta = check.sinceLastCheck
+  const changes = delta ? [
+    delta.integratedLufs ? `响度 ${delta.integratedLufs > 0 ? '+' : ''}${delta.integratedLufs} LU` : '', delta.truePeakDbtp ? `真峰值 ${delta.truePeakDbtp > 0 ? '+' : ''}${delta.truePeakDbtp} dB` : '',
+    delta.noiseFloorDbfs ? `底噪 ${delta.noiseFloorDbfs > 0 ? '+' : ''}${delta.noiseFloorDbfs} dB` : '', delta.durationSeconds ? `时长 ${delta.durationSeconds > 0 ? '+' : ''}${delta.durationSeconds} 秒` : '',
+    delta.clippingCount ? `削波 ${delta.clippingCount > 0 ? '+' : ''}${delta.clippingCount} 处` : '', delta.longPauseCount ? `过长停顿 ${delta.longPauseCount > 0 ? '+' : ''}${delta.longPauseCount} 处` : '',
+  ].filter(Boolean) : []
+  return `${head}${issues}${delta ? `与上次读回相比：${changes.length ? changes.join('，') : '没有变化'}。` : ''}`
+}
+
 export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabilityHandlerRegistrar): void {
+  registrar.registerHandler(checkAudioEditSoundCapability.id, async (raw, context) => {
+    const { documentRef, ...options } = checkAudioEditSoundCapability.inputSchema.parse(raw)
+    context.signal.throwIfAborted()
+    const requestId = context.requestId ?? crypto.randomUUID()
+    const cancel = () => { void getPlatform().audioEdit.cancelTask(requestId) }
+    context.signal.addEventListener('abort', cancel, { once: true })
+    try {
+      const checked = await checkAudioEditProjectSound(documentRef.id, options, requestId)
+      return { resultRef: { kind: 'audio_edit.document', id: documentRef.id }, ...checked, message: soundCheckMessage(checked), verified: true }
+    } finally { context.signal.removeEventListener('abort', cancel) }
+  })
   // 口播文档的通用打开与后台释放（3.3）：列表、新建、改名、移动、副本、回收站走通用文档能力
   // （list_documents / open_document 等），这里只登记“打开到哪里”和“后台持有的实例怎么释放”。
   registerDocumentOpener('audio_edit', async (document) => {
@@ -63,7 +94,7 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
     openApplicationSurface('tool.audio_edit')
     return getDocumentSessionRegistry().get(id)?.documentMeta ?? (await getDocumentOperations().readDocument({ id })).meta
   })
-  for (const definition of AUDIO_EDIT_APPLICATION_CAPABILITIES) registrar.registerHandler(definition.id, async (raw, context) => {
+  for (const definition of AUDIO_EDIT_OPERATION_CAPABILITIES) registrar.registerHandler(definition.id, async (raw, context) => {
     const input = audioEditInputSchema(definition.id).parse(raw)
     context.signal.throwIfAborted()
     const id = input.documentRef.id
@@ -72,7 +103,7 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
       const source = await applicationWritePreflight(context, async () => {
         const read = await getDocumentOperations().readDocument({ id })
         if (read.meta.kind !== 'audio_edit') throw new Error('请提供口播文档（list_documents 中 kind=audio_edit 的 id）。')
-        if (audioEditContentSchema.safeParse(read.content).data?.source) throw new Error('这份口播已经有素材。换素材请用重新定位原素材，或用 create_document 新建一份口播再导入。')
+        if (audioEditContentSchema.safeParse(read.content).data?.source) throw new Error('这份口播已经有素材。原文件被移动时写 audio_edit.document.source_path 重新定位（必须是同一份内容）；要换成别的录音请用 create_document 新建一份口播再导入。')
         return getPlatform().audioEdit.probeSource(input.sourcePath!)
       })
       await assignAudioEditSource(id, source)
@@ -86,6 +117,7 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
     const api = getPlatform().audioEdit
     const cancel = () => {
       void api.cancelTask(requestId)
+      if (definition.id === 'match_audio_edit_loudness') void api.cancelTask(`${requestId}:check`)
       if (definition.id === 'transcribe_audio_edit') void api.listTasks(id).then((tasks) => Promise.all(tasks.filter((task) => task.kind.startsWith('transcription') && task.state === 'running').map((task) => api.cancelTask(task.requestId))))
     }
     context.signal.addEventListener('abort', cancel, { once: true })
@@ -136,7 +168,11 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
         case 'clean_audio_edit_fillers': result.count = await cleanProjectAudioEditFillers(id, input.range); result.message = `清理 ${result.count} 处语气词。`; break
         case 'match_audio_edit_loudness': {
           const matched = await matchProjectAudioEditLoudness(id, input.targetLufs ?? -16, requestId)
-          result.message = `处理后成品测得 ${matched.integratedLufs} LUFS，已补偿 ${matched.gainDb > 0 ? '+' : ''}${matched.gainDb} dB 到 ${input.targetLufs ?? -16} LUFS（末尾限幅 -1 dB）。`
+          // 补偿与末尾限幅之后实际测一次，助手不必再读回就知道到没到目标；已取消就不再测。
+          // 这次测量不算“上一次读回”，助手处理前读的那次仍是对比基准
+          const after = context.signal.aborted ? undefined : await checkAudioEditProjectSound(id, {}, `${requestId}:check`, { remember: false }).catch((error: unknown) => { logger.warn('audio_edit.loudness.check_failed', { requestId, context: { projectId: id }, error }); return undefined })
+          if (after) result.sound = { integratedLufs: after.check.loudness.integratedLufs, truePeakDbtp: after.check.loudness.truePeakDbtp, beforeLufs: matched.integratedLufs }
+          result.message = `处理后成品测得 ${matched.integratedLufs} LUFS，已补偿 ${matched.gainDb > 0 ? '+' : ''}${matched.gainDb} dB 到 ${input.targetLufs ?? -16} LUFS（末尾限幅 -1 dB）${after ? `；补偿后实测 ${after.check.loudness.integratedLufs ?? '测不出'} LUFS、真峰值 ${after.check.loudness.truePeakDbtp ?? '—'} dBTP` : ''}。`
           break
         }
         case 'detect_audio_edit_mouth_clicks': {
@@ -208,6 +244,7 @@ export function registerAudioEditCapabilityHandlers(registrar: ApplicationCapabi
       if (AUDIO_EDIT_UNDOABLE_OPERATIONS.has(definition.id)) {
         const undoRef = recordAudioEditStep(id, start)
         if (undoRef) result.undoRef = undoRef
+        result.editedSeconds = Math.round(editedDurationFrames(buildProjectAudioEditTimeline(instance.document)) / instance.document.source.sampleRate * 100) / 100
       }
       if (AUDIO_EDIT_VERIFIED_EDIT_OPERATIONS.has(definition.id) || ['transcribe_audio_edit', 'retry_audio_edit_save'].includes(definition.id)) {
         context.execution?.report({ targetMutation: 'applied', ...(recognized ? { billing: 'completed' as const, audioDocumentId: id } : {}) })

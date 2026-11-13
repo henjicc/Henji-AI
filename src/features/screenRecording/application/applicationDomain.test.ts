@@ -154,3 +154,32 @@ it('音频编辑正在录音时录屏照常开麦克风（两边共用一路采�
     await handlers.get('stop_screen_recording')!({ sessionRef: started.resultRef }, { signal })
   } finally { state.audioEditRecording = false }
 })
+
+const startOptions = { sourceId: 'window:42:0', width: 1920, height: 1080, fps: 30 } as Parameters<typeof startRecording>[0]
+const idle = async (): Promise<void> => { await vi.waitFor(() => expect(recordingView()).toMatchObject({ busy: false, snapshot: null })) }
+it('被录的窗口关闭：主进程按停止收尾后界面放开“当前录制”，助手再停止如实说明原因，马上能开始新的录制', async () => {
+  const handlers = new Map<string, CapabilityHandler>()
+  screenRecordingApplicationDomain.registerCapabilities({ registerHandler: (id, handler) => { handlers.set(id, handler) } })
+  const id = await startRecording(startOptions, { name: '课程', tracks: { systemAudio: false } })
+  Object.assign(state.content!, { status: 'stopped', startUs: 0, endUs: 2_000_000, media: [{ id: 'screen', kind: 'screen', path: '/s.mp4', monoUs: 0, durationUs: 2_000_000 }] })
+  state.snapshot = { ...state.snapshot!, phase: 'stopped', busy: false, sourceEnded: 'window' }
+  state.changed?.(state.snapshot)
+  await idle()
+  const stopped = await handlers.get('stop_screen_recording')!({ sessionRef: { kind: 'screen_recording.session', id } }, { signal: new AbortController().signal })
+  expect(stopped).toMatchObject({ verified: true }); expect(stopped.message).toContain('被录制的窗口已关闭')
+  await expect(startRecording(startOptions, { name: '下一段', tracks: { systemAudio: false } })).resolves.toBeTruthy()
+  await handlers.get('cancel_screen_recording')!({ sessionRef: { kind: 'screen_recording.session', id: recordingView().documentId! } }, { signal: new AbortController().signal })
+})
+it('采集出错（主进程已把已录部分收尾保存）：界面随即放开“当前录制”，不用先恢复就能开始新的录制', async () => {
+  const handlers = new Map<string, CapabilityHandler>()
+  screenRecordingApplicationDomain.registerCapabilities({ registerHandler: (id, handler) => { handlers.set(id, handler) } })
+  vi.mocked(importRecordingToVideo).mockClear()
+  await startRecording(startOptions, { name: '课程', tracks: { systemAudio: false } })
+  state.content!.status = 'interrupted'
+  state.snapshot = { ...state.snapshot!, phase: 'failed', busy: false, error: '录制操作未完成' }
+  state.changed?.(state.snapshot)
+  await idle()
+  expect(importRecordingToVideo).not.toHaveBeenCalled()
+  const next = await startRecording(startOptions, { name: '下一段', tracks: { systemAudio: false } })
+  await handlers.get('cancel_screen_recording')!({ sessionRef: { kind: 'screen_recording.session', id: next } }, { signal: new AbortController().signal })
+})

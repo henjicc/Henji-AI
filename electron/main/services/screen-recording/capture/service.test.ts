@@ -18,10 +18,13 @@ vi.mock('../../appPaths', () => ({ getUserFolderDir: () => state.root }))
 vi.mock('../../logging', () => ({ createMainLogger: () => ({ info: vi.fn(), error: vi.fn(), warn: vi.fn() }) }))
 vi.mock('node:os', async importOriginal => ({ ...await importOriginal<typeof import('node:os')>(), release: () => '10.0.19045' }))
 vi.mock('../../documents/runtime', () => ({ getDocumentService: () => ({ listDocuments: async () => [] }) }))
-vi.mock('./gfxcapture', () => ({ GfxCaptureBackend: class { prepare = async (): Promise<void> => undefined; start = async (): Promise<void> => undefined; pause = async (): Promise<void> => undefined; resume = async (): Promise<void> => undefined; stop = async (): Promise<void> => undefined; cancel = async (): Promise<void> => undefined; stats(): object { return { restarts: 0, droppedFrames: 0, duplicatedFrames: 0, encoder: 'cpu' } } } }))
+const gfx = vi.hoisted(() => ({ deps: undefined as { failed(error: Error): void; sourceEnded?(): void; sourceAvailable?(): boolean } | undefined, present: vi.fn(() => true) }))
+vi.mock('./gfxcapture', () => ({ GfxCaptureBackend: class { constructor(...args: unknown[]) { gfx.deps = args[3] as typeof gfx.deps } prepare = async (): Promise<void> => undefined; start = async (): Promise<void> => undefined; pause = async (): Promise<void> => undefined; resume = async (): Promise<void> => undefined; stop = async (): Promise<void> => undefined; cancel = async (): Promise<void> => undefined; stats(): object { return { restarts: 0, droppedFrames: 0, duplicatedFrames: 0, encoder: 'cpu' } } } }))
 vi.mock('../../media-permissions', () => ({ mediaPermissions: { assertSelection: state.assert, grant: state.grant, requestAccess: async () => undefined, sources: async () => [{ id: 'screen:0:0', kind: 'screen', displayId: '1' }] } }))
-vi.mock('../runtime', () => ({ recordingControl: { snapshot: () => null, setHostTrackWarning: vi.fn(), setMicrophoneLevel: vi.fn(), captureFailed: async (_id: string, error: Error) => { state.failed(error); await state.backend?.cancel(); state.backend = null } }, openRecordingControl: (_owner: unknown, _id: string, backend: RecordingControlBackend, _events: unknown, settled?: () => Promise<void>, _frame?: unknown, ownerLost?: () => void) => { state.backend = backend; state.settled = settled; state.ownerLost = ownerLost; state.open() }, closeRecordingControl: async () => { await state.backend?.cancel(); state.backend = null }, notifyRecordingProblem: state.notify, recordingEventBacklog: () => 0, minimizeOwnerWhileRecording: vi.fn() }))
-vi.mock('./geometry', () => ({ createCaptureGeometry: vi.fn(), createCaptureBounds: vi.fn(() => () => undefined) }))
+vi.mock('../runtime', () => ({ recordingControl: { snapshot: () => null, setHostTrackWarning: vi.fn(), setMicrophoneLevel: vi.fn(), captureFailed: async (_id: string, error: Error) => { state.failed(error); await state.backend?.cancel(); state.backend = null },
+  // 与真实的控制一样：来源没了就走停止，停止后收尾。
+  sourceEnded: vi.fn((): boolean => { void (async () => { await state.backend!.ending?.(); await state.backend!.stop(new AbortController().signal); await state.settled?.() })(); return true }) }, openRecordingControl: (_owner: unknown, _id: string, backend: RecordingControlBackend, _events: unknown, settled?: () => Promise<void>, _frame?: unknown, ownerLost?: () => void) => { state.backend = backend; state.settled = settled; state.ownerLost = ownerLost; state.open() }, closeRecordingControl: async () => { await state.backend?.cancel(); state.backend = null }, notifyRecordingProblem: state.notify, recordingEventBacklog: () => 0, minimizeOwnerWhileRecording: vi.fn() }))
+vi.mock('./geometry', () => ({ createCaptureGeometry: vi.fn(), createCaptureBounds: vi.fn(() => () => undefined), createCaptureSourcePresence: () => ({ misses: 3, present: () => gfx.present() }), captureSourceGone: async () => !gfx.present(), CAPTURE_PRESENCE_INTERVAL_MS: 20 }))
 vi.mock('../session-document', () => ({ RecordingSessionDocument: { create: async () => state.document }, readRecordingEvents: vi.fn(), recoverRecordingSession: vi.fn() }))
 vi.mock('./source', () => ({ resolveNativeCaptureSource: vi.fn(async () => ({ selector: 'hmonitor', handle: '100', width: 1920, height: 1080 })) }))
 import { handleCaptureRequest } from './service'
@@ -29,7 +32,7 @@ const options = captureOptionsSchema.parse({ sourceId: 'screen:0:0', backend: 'c
 const owner = { isDestroyed: () => false, send: vi.fn() } as unknown as WebContents
 let id: string
 beforeEach(async () => {
-  state.root = await fs.mkdtemp(path.join(os.tmpdir(), 'capture-service-')); id = randomUUID(); vi.clearAllMocks()
+  state.root = await fs.mkdtemp(path.join(os.tmpdir(), 'capture-service-')); id = randomUUID(); vi.clearAllMocks(); gfx.present.mockImplementation(() => true)
   vi.mocked(owner.send).mockImplementation((_channel, command: { operation: string; sessionId: string; requestId: string }) => {
     if (command.operation === 'cancel') void handleCaptureRequest(owner, { operation: 'ack', sessionId: command.sessionId, requestId: command.requestId })
   })
@@ -135,3 +138,74 @@ it('界面重载期间画面照常录、不再向断开的界面发命令；同�
     expect(state.notify).not.toHaveBeenCalled()
   } finally { Object.defineProperty(process, 'platform', platform) }
 })
+async function prepareNative(): Promise<void> {
+  vi.mocked(owner.send).mockImplementation((_channel, command: { sessionId: string; requestId: string }) => { void handleCaptureRequest(owner, { operation: 'ack', sessionId: command.sessionId, requestId: command.requestId }) })
+  await handleCaptureRequest(owner, { operation: 'prepare', sessionId: id, options: captureOptionsSchema.parse({ ...options, backend: 'auto' }), session: { name: '课程', tracks: { microphone: {}, systemAudio: false } } })
+  await state.backend!.start(new AbortController().signal)
+}
+async function withWindows(work: () => Promise<void>): Promise<void> {
+  const platform = Object.getOwnPropertyDescriptor(process, 'platform')!
+  Object.defineProperty(process, 'platform', { value: 'win32', configurable: true })
+  try { await work() } finally { Object.defineProperty(process, 'platform', platform) }
+}
+const manifestStatus = async (): Promise<string> => JSON.parse(await fs.readFile(path.join(state.root, 'screen-recordings', id, 'capture.json'), 'utf8')).status
+it('被录的来源没了（编码进程报来源结束）：按停止收尾为已停止、不算失败，读回写明原因；释放后马上能开始新的录制', () => withWindows(async () => {
+  const { recordingControl } = await import('../runtime')
+  await prepareNative()
+  gfx.deps!.sourceEnded!()
+  await vi.waitFor(() => expect(state.document.finish).toHaveBeenCalledOnce())
+  expect(recordingControl.sourceEnded).toHaveBeenCalledWith(id, 'display')
+  expect(await manifestStatus()).toBe('stopped')
+  expect(state.failed).not.toHaveBeenCalled()
+  expect(microphone.recorder.stop).toHaveBeenCalledOnce()
+  // 停止后编码进程又报一次（或巡检再发现一次）不重复收尾。
+  gfx.deps!.sourceEnded!(); expect(recordingControl.sourceEnded).toHaveBeenCalledOnce()
+  await handleCaptureRequest(owner, { operation: 'close', sessionId: id })
+  expect(await handleCaptureRequest(owner, { operation: 'facts', sessionId: id })).toMatchObject({ failure: null, sourceEnded: '被录制的显示器已断开' })
+  id = randomUUID()
+  await expect(handleCaptureRequest(owner, { operation: 'prepare', sessionId: id, options })).resolves.toMatchObject({ sessionId: id })
+}))
+it('来源巡检：暂停中显示器连续几次都查不到才按停止收尾（编码进程不报时兜底）', () => withWindows(async () => {
+  const { recordingControl } = await import('../runtime')
+  await prepareNative()
+  await state.backend!.pause(new AbortController().signal)
+  gfx.present.mockImplementation(() => false)
+  await vi.waitFor(() => expect(state.document.finish).toHaveBeenCalledOnce(), { timeout: 3000 })
+  expect(recordingControl.sourceEnded).toHaveBeenCalledWith(id, 'display')
+  expect(await manifestStatus()).toBe('stopped')
+}))
+it('采集出错（如续录达到上限）：已录部分收尾保存为中断；释放只做一次，之后关控制条不再对着已结束的会话等回执', () => withWindows(async () => {
+  await prepareNative()
+  const backend = state.backend!
+  gfx.deps!.failed(new Error('一分钟内多次续录都没能恢复'))
+  await vi.waitFor(() => expect(state.failed).toHaveBeenCalledOnce())
+  await backend.cancel() // 等采集失败时那次释放做完。
+  await state.settled!()
+  expect(state.document.finish).toHaveBeenCalledOnce()
+  expect(await manifestStatus()).toBe('failed')
+  expect(state.notify).toHaveBeenCalledWith(owner, expect.stringContaining('已保存'))
+  const cancels = (): number => vi.mocked(owner.send).mock.calls.filter(call => (call[1] as { operation: string }).operation === 'cancel').length
+  expect(cancels()).toBe(1)
+  const acks = vi.mocked(owner.send).getMockImplementation()
+  vi.mocked(owner.send).mockImplementation(() => undefined) // 会话已结束：界面的回执不会再被受理。
+  const started = Date.now()
+  await backend.cancel()
+  expect(Date.now() - started).toBeLessThan(1000); expect(cancels()).toBe(1)
+  vi.mocked(owner.send).mockImplementation(acks!)
+  id = randomUUID()
+  await expect(handleCaptureRequest(owner, { operation: 'prepare', sessionId: id, options })).resolves.toMatchObject({ sessionId: id })
+}))
+it('显示器短暂从枚举里消失（休眠、KVM、改投影）不结束录制；用户已在停止时来源才没了不记原因', () => withWindows(async () => {
+  const { recordingControl } = await import('../runtime')
+  await prepareNative()
+  let calls = 0
+  gfx.present.mockImplementation(() => ++calls % 3 !== 0) // 每三次巡检有一次查不到，从不连续。
+  await new Promise(resolve => setTimeout(resolve, 300))
+  expect(calls).toBeGreaterThan(5); expect(recordingControl.sourceEnded).not.toHaveBeenCalled()
+  vi.mocked(recordingControl.sourceEnded).mockImplementationOnce(() => false) // 控制已在停止中，不接手。
+  gfx.present.mockImplementation(() => false)
+  await vi.waitFor(() => expect(recordingControl.sourceEnded).toHaveBeenCalledOnce())
+  await state.backend!.stop(new AbortController().signal); await state.settled!()
+  await handleCaptureRequest(owner, { operation: 'close', sessionId: id })
+  expect(await handleCaptureRequest(owner, { operation: 'facts', sessionId: id })).not.toHaveProperty('sourceEnded')
+}))

@@ -321,6 +321,15 @@ for (const name of ['ripple_delete_video_edit_text', 'extract_video_edit_text', 
 for (const name of ['reset_audio_edit', 'format_audio_edit_subtitles', 'quick_process_audio_edit', 'compress_audio_edit_silence', 'clean_audio_edit_fillers', 'clean_audio_edit_retakes', 'process_audio_edit_breaths', 'import_audio_edit_source', 'transcribe_audio_edit', 'process_audio_edit_sound', 'export_audio_edit', 'query_audio_edit_tasks', 'cancel_audio_edit_task', 'repair_audio_edit_region', 'insert_audio_edit_file', 'match_audio_edit_loudness', 'detect_audio_edit_mouth_clicks', 'undo_audio_edit', 'redo_audio_edit']) {
   successData[name] = { resultRef: audioDocumentRef, ...verified, count: 1, shortenedMs: 100, durationFrames: 2400, tasks: [{ requestId: 'task', documentId: 'audio', kind: 'processing', state: 'completed', progress: 100 }] }
 }
+successData.match_audio_edit_loudness = { ...successData.match_audio_edit_loudness, sound: { integratedLufs: -16, truePeakDbtp: -1.2, beforeLufs: -21.4 }, editedSeconds: 60 }
+successData.check_audio_edit_sound = { resultRef: audioDocumentRef, verified: true, message, check: {
+  startSeconds: 0, endSeconds: 60, durationSeconds: 60,
+  loudness: { integratedLufs: -16, loudnessRangeLu: 5.2, truePeakDbtp: -1.2, samplePeakDbfs: -1.5, targetLufs: -16 },
+  clipping: { count: 1, samples: 4, ranges: [{ startSeconds: 12.3, endSeconds: 12.31 }] },
+  silence: { thresholdDbfs: -40, totalSeconds: 4, leadingSeconds: 0.3, trailingSeconds: 0.5, longPauseSeconds: 0.8, longPauseCount: 1, longestPauseSeconds: 1.2, longPauses: [{ startSeconds: 30, endSeconds: 31.2, seconds: 1.2 }] },
+  noise: { floorDbfs: -62, rating: 'clean', hum: { status: 'suspected', frequencyHz: 50, levelDbfs: -70, share: 0.4 } },
+  windowSeconds: 10, keyWindows: [{ startSeconds: 10, endSeconds: 20, lufs: -11.5, peakDbfs: -1.5, note: 'clipping' }], issues: ['有 1 处削波，第一处在 12.3 秒。'],
+}, sinceLastCheck: { checkedAt: '2026-11-13T00:00:00.000Z', integratedLufs: 5.4, loudnessRangeLu: null, truePeakDbtp: 0.3, noiseFloorDbfs: 0, durationSeconds: -12.5, clippingCount: 0, longPauseCount: -3 } }
 
 // 音频编辑录音：回执带录音读回；暂停、停止、恢复拼回后带撤销引用，等不及时 finishing=true
 for (const name of ['start_audio_edit_recording', 'resume_audio_edit_recording']) {

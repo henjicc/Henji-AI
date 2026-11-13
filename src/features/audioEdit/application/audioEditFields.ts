@@ -16,7 +16,7 @@ import type { AudioBreath } from '@/core/audioAnalysis/breath/respiro'
 
 export const AUDIO_EDIT_ENTITY_TYPES = { project: 'audio_edit.document', transcriptBlock: 'audio_edit.transcript_block', cut: 'audio_edit.cut', caption: 'audio_edit.caption', suggestion: 'audio_edit.suggestion', breath: 'audio_edit.breath', processorChain: 'audio_edit.processor_chain', render: 'audio_edit.render' } as const
 export type AudioEditEntityType = typeof AUDIO_EDIT_ENTITY_TYPES[keyof typeof AUDIO_EDIT_ENTITY_TYPES]
-export interface AudioEditFieldSource { document: AudioEditProjectDocument; childId: string; availableProcessors?: AudioEditProcessorDescriptor[]; breaths?: { views: AudioEditBreathView[]; raw: AudioBreath[] } }
+export interface AudioEditFieldSource { document: AudioEditProjectDocument; childId: string; availableProcessors?: AudioEditProcessorDescriptor[]; breaths?: { views: AudioEditBreathView[]; raw: AudioBreath[] }; sourceProblem?: string }
 export function audioEditSchemaRef(kind: 'entity' | 'property', id: string) {
   const version = id === AUDIO_EDIT_ENTITY_TYPES.transcriptBlock || id.startsWith(`${AUDIO_EDIT_ENTITY_TYPES.transcriptBlock}.`) ? 2 : 1
   const value = [...(version === 1 ? id : `${id}:v${version}`)].reduce((total, char) => (total * 33 + char.charCodeAt(0)) >>> 0, 5381).toString(16)
@@ -106,14 +106,15 @@ function perClue<T>(source: AudioEditFieldSource, name: string, compute: () => T
   return cache.get(key) as T
 }
 const chosenOption = (source: AudioEditFieldSource): string => perClue(source, 'chosen', () => chosenAudioEditSuggestionOption(source.document, suggestion(source)) ?? '')
-const suggestionOptions = (source: AudioEditFieldSource): JsonValue => perClue(source, 'options', () => describeSuggestionOptions(source))
+const suggestionOptions = (source: AudioEditFieldSource): JsonValue => perClue(source, 'options', () => json(describeSuggestionOptions(source)))
+export interface AudioEditSuggestionOptionText { id: string; current?: true; removed_text: string; reads_as: string }
 /**
  * 一处重念除“都留着”以外的各种做法（读取时现算）：删掉什么、接缝两侧连起来读是什么样。
  * 只给接缝两侧各十几个字与被删文字的头尾：整段上下文在线索自己的 removed_text、kept_text、before_text、after_text 里已经给过一次，
  * 一小时口播有上百条待确认，每种做法再各带一遍整段就是十几万字。
  * 这条线索自己已经删掉的词当作还在，再按这种做法删；别的线索、用户手动删掉的词不归这条线索管，哪种做法下都不算在内。
  */
-function describeSuggestionOptions(source: AudioEditFieldSource): JsonValue {
+function describeSuggestionOptions(source: AudioEditFieldSource): AudioEditSuggestionOptionText[] {
   const item = suggestion(source)
   const options = (source.document.suggestionHandoff?.[item.id]?.options ?? []).filter((option) => option.blockIds.length)
   if (!options.length) return []
@@ -122,7 +123,7 @@ function describeSuggestionOptions(source: AudioEditFieldSource): JsonValue {
   const own = new Set(item.status === 'applied' ? item.blockIds : [])
   const present = (entry: AudioEditTranscriptBlock) => entry.included || own.has(entry.id)
   const current = chosenOption(source)
-  return json(options.flatMap((option) => {
+  return options.flatMap((option): AudioEditSuggestionOptionText[] => {
     const indices = option.blockIds.flatMap((id) => position.has(id) ? [position.get(id)!] : [])
     if (!indices.length) return []
     const first = Math.min(...indices), last = Math.max(...indices)
@@ -136,7 +137,7 @@ function describeSuggestionOptions(source: AudioEditFieldSource): JsonValue {
       removed_text: removed.length > OPTION_TEXT_CHARS * 2 + 1 ? `${removed.slice(0, OPTION_TEXT_CHARS)}…${removed.slice(-OPTION_TEXT_CHARS)}` : removed,
       reads_as: `${before}｜${after}`,
     }]
-  }))
+  })
 }
 /** 这条重念线索要不要助手看：decide 待确认、必须裁决；check 已自动删但把握不高或是口吃，值得抽看；none 其余。 */
 function suggestionAttention(source: AudioEditFieldSource): 'decide' | 'check' | 'none' {
@@ -149,6 +150,10 @@ function suggestionAttention(source: AudioEditFieldSource): 'decide' | 'check' |
     return item.status === 'applied' && state === 'removed' && handoff?.score !== undefined && (handoff.score < CHECK_SCORE || handoff.reason === 'stutter') ? 'check' : 'none'
   })
 }
+/** 界面与助手读同一份判断：线索要不要看、各种做法删完读起来的样子、被删的文字与前后文。 */
+export const audioEditSuggestionAttention = (document: AudioEditProjectDocument, id: string): 'decide' | 'check' | 'none' => suggestionAttention({ document, childId: id })
+export const audioEditSuggestionOptionTexts = (document: AudioEditProjectDocument, id: string): readonly AudioEditSuggestionOptionText[] => perClue({ document, childId: id }, 'optionTexts', () => describeSuggestionOptions({ document, childId: id }))
+export const audioEditSuggestionTexts = (document: AudioEditProjectDocument, id: string): Readonly<SuggestionTexts> => suggestionTexts({ document, childId: id })
 /** 整份口播里要助手或人看的重念线索数：decide 必须裁决，check 已自动删、值得抽看（与 audio_edit.suggestion.attention 同一判断）。 */
 export function audioEditRetakeAttentionCounts(document: AudioEditProjectDocument): { decide: number; check: number } {
   const counts = { decide: 0, check: 0 }
@@ -158,13 +163,17 @@ export function audioEditRetakeAttentionCounts(document: AudioEditProjectDocumen
   }
   return counts
 }
-function field(entityType: AudioEditEntityType, suffix: string, title: string, value: ApplicationPropertyDescriptor['value'], read: (source: AudioEditFieldSource) => JsonValue, write?: (source: AudioEditFieldSource, value: JsonValue | undefined) => void, storeActions: string[] = [], description = `口播剪辑${title}。`): ApplicationFieldDefinition<AudioEditFieldSource, AudioEditFieldSource> {
+function field(entityType: AudioEditEntityType, suffix: string, title: string, value: ApplicationPropertyDescriptor['value'], read: (source: AudioEditFieldSource) => JsonValue, write?: (source: AudioEditFieldSource, value: JsonValue | undefined) => void | Promise<void>, storeActions: string[] = [], description = `口播剪辑${title}。`): ApplicationFieldDefinition<AudioEditFieldSource, AudioEditFieldSource> {
   const id = `${entityType}.${suffix}`
   return { propertyId: id, descriptor: { id, entityType, version: audioEditSchemaRef('property', id).version, title, description, value, nullable: false, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['audio_edit:read'], write: write ? ['audio_edit:write'] : [] }, revisionScopes: ['audio_edit'], schemaRef: audioEditSchemaRef('property', id), ...(!write ? { readOnlyReason: '由源媒体、识别结果或剪辑时间线计算。' } : {}) }, read, ...(write ? { writer: { write: (draft, mutation) => write(draft, mutation.value) } } : {}), storeActions }
 }
 /** 内容长、只有少数线索用得上的属性：不点名的整实体读取不带它 */
 function omitFromDefaultRead(definition: ApplicationFieldDefinition<AudioEditFieldSource, AudioEditFieldSource>): ApplicationFieldDefinition<AudioEditFieldSource, AudioEditFieldSource> {
   return { ...definition, descriptor: { ...definition.descriptor, omitFromDefaultRead: true } }
+}
+/** 写入后读回的值可能与写入值写法不同（如路径被规范化），以执行器证据验收。 */
+function verifiedByExecution(definition: ApplicationFieldDefinition<AudioEditFieldSource, AudioEditFieldSource>): ApplicationFieldDefinition<AudioEditFieldSource, AudioEditFieldSource> {
+  return { ...definition, descriptor: { ...definition.descriptor, verificationStrategy: 'execution' } }
 }
 function readOnly(definition: ApplicationFieldDefinition<AudioEditFieldSource, AudioEditFieldSource>, reason: string): ApplicationFieldDefinition<AudioEditFieldSource, AudioEditFieldSource> {
   return { ...definition, descriptor: { ...definition.descriptor, readOnlyReason: reason } }
@@ -198,6 +207,13 @@ export const AUDIO_EDIT_FIELDS: Record<AudioEditEntityType, ApplicationFieldDefi
     field(E.project, 'view_settings', '文字大小、左右留白与时间轴字幕', objectValue('audio_edit.view_settings'), (s) => json(s.document.viewSettings ?? DEFAULT_AUDIO_EDIT_VIEW_SETTINGS), (s, v) => setDocument(s, 'viewSettings', audioEditViewSettingsSchema.parse(v))),
     field(E.project, 'xml_frame_rate', '音频 XML 帧率', objectValue('audio_edit.frame_rate'), (s) => json(s.document.xmlFrameRate ?? { numerator: 25, denominator: 1 }), (s, v) => setDocument(s, 'xmlFrameRate', audioEditFrameRateSchema.parse(v))),
     field(E.project, 'selected_asr_model_id', '语音识别模型', TEXT, (s) => s.document.selectedAsrModelId ?? ''),
+    // 重新定位原素材：与界面“重新定位”同一个主进程核对（内容必须与原素材相同，不同的请当新口播导入）
+    // 素材不随普通编辑与撤销改变，写入由 AudioEditMutationExecutor 先交给 relinkAudioEdit，不经这里的草稿写入
+    verifiedByExecution(field(E.project, 'source_path', '原素材文件路径', { kind: 'string', minLength: 1, maxLength: 4096 }, (s) => s.document.source.sourcePath, () => {
+      throw new Error('INTERNAL:source_path 由口播执行器经重新定位服务写入。')
+    }, [], '原素材在本机的路径。原文件被移动或改名、source_problem 报找不到时，写入新位置的本机绝对路径即重新定位：应用核对这个文件与原素材内容相同（不同就拒绝，请用 create_document 新建口播再导入），剪辑、转写与字幕都保留。重新定位不进撤销（撤销其他修改时素材位置不变）。')),
+    field(E.project, 'source_problem', '原素材现在能不能用', TEXT, (s) => s.sourceProblem ?? '', undefined, [],
+      '空字符串表示原素材在、内容没变；否则是问题说明：找不到原素材（写 source_path 重新定位）或内容已改变（需要新建口播重新导入）。'),
     field(E.project, 'duration_frames', '源时长帧数', INT, (s) => s.document.source.durationFrames),
     field(E.project, 'sample_rate', '采样率', INT, (s) => s.document.source.sampleRate),
     field(E.project, 'has_modifications', '是否存在可全部撤销的修改', BOOL, (s) => hasAudioEditModifications(s.document)),
@@ -309,6 +325,7 @@ export const AUDIO_EDIT_FIELDS: Record<AudioEditEntityType, ApplicationFieldDefi
     field(E.render, 'removed_block_count', '删除词块数量', INT, (s) => s.document.transcript.filter((b) => !b.included).length),
   ],
 }
+export const AUDIO_EDIT_SOURCE_PATH_PROPERTY = `${E.project}.source_path`
 export function audioEditWriterTable(entityType: AudioEditEntityType) { return fieldWriterTable(AUDIO_EDIT_FIELDS[entityType]) }
 
 const audioEditValueSchemas: Record<string, z.ZodType> = {

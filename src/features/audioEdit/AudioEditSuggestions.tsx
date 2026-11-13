@@ -1,63 +1,148 @@
-import { useMemo, useState } from 'react'
-import { UI_TEXT_META_CLASS, UiButton, UiOptionButton } from '@/components/ui'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { Check, ChevronDown, ChevronRight, ChevronUp, ListFilter, Play } from 'lucide-react'
+import { UiButton, UiOptionButton, UiToolbar } from '@/components/ui'
+import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { AudioEditDisclosure } from './AudioEditDisclosure'
-import { audioEditSuggestionStates } from '@/core/audioEdit/edits'
-import { normalizeAudioEditFiller } from '@/core/audioEdit/analysis'
-import type { AudioEditProjectDocument, AudioEditSuggestion } from '@/core/audioEdit/types'
+import { buildAudioEditClueRows, countAudioEditClues, type AudioEditClueRow, type AudioEditClueTier } from './audioEditClueReview'
+import { useAudioEditPlaybackStore } from './store/audioEditPlaybackStore'
+import { useAudioEditWorkspace } from './workspace/audioEditWorkspaceContext'
 
-interface ClueGroup { title: string; items: AudioEditSuggestion[] }
+/** 试听从接缝前这么多秒开始，听得到前文怎么接上 */
+const AUDITION_PREROLL_SECONDS = 1.5
 
-function ClueGroupRows({ group, project, onSeek, onResolve }: {
-  group: ClueGroup; project: AudioEditProjectDocument
-  onSeek: (frame: number) => void; onResolve: (ids: string[], apply: boolean) => void
-}) {
-  const [page, setPage] = useState(0)
-  const pageSize = 5
-  const pages = Math.ceil(group.items.length / pageSize)
-  const current = Math.min(page, pages - 1)
-  const time = (frame: number) => { const seconds = frame / project.source.sampleRate; return `${Math.floor(seconds / 60)}:${(seconds % 60).toFixed(1).padStart(4, '0')}` }
-  const context = (item: AudioEditSuggestion) => project.transcript
-    .filter((block) => block.included && block.endFrame > item.startFrame - project.source.sampleRate * 2 && block.startFrame < item.endFrame + project.source.sampleRate * 2)
-    .map((block) => block.text).join('').slice(0, 70)
-  return <details>
-    <summary className="cursor-pointer text-13 text-text1">{group.title} <span className="text-xs text-text3">· {group.items.length} 处</span></summary>
-    <div className="mt-1 flex gap-1">
-      <UiButton size="sm" onClick={() => onResolve(group.items.map((item) => item.id), true)}>{group.items[0].kind === 'long_silence' ? '压缩这一组' : '删除这一组'}</UiButton>
-      <UiButton size="sm" onClick={() => onResolve(group.items.map((item) => item.id), false)}>隐藏这一组</UiButton>
-    </div>
-    {group.items.slice(current * pageSize, (current + 1) * pageSize).map((item) => <div key={item.id} className="py-1">
-      {/* 可定位的建议列表行（多行文字）：menu 选项，高度随内容 */}
-      <UiOptionButton variant="menu" className="w-full" tooltip="定位到这段声音" onClick={() => onSeek(item.startFrame)}>
-        <span className="mr-2 shrink-0 text-xs tabular-nums text-text3">{time(item.startFrame)}</span><span className="line-clamp-2 break-all text-xs text-text1">{context(item) || item.title}</span>
-      </UiOptionButton>
-      <div className="flex gap-1"><UiButton size="sm" onClick={() => onResolve([item.id], true)}>{item.kind === 'long_silence' ? '压缩' : '删除'}</UiButton><UiButton size="sm" onClick={() => onResolve([item.id], false)}>隐藏</UiButton></div>
-    </div>)}
-    {pages > 1 && <div className="flex items-center gap-2 text-xs text-text3"><UiButton size="sm" disabled={current === 0} onClick={() => setPage(current - 1)}>上一页</UiButton><span className="tabular-nums">{current + 1} / {pages}</span><UiButton size="sm" disabled={current === pages - 1} onClick={() => setPage(current + 1)}>下一页</UiButton></div>}
-  </details>
+const TIER_NAME: Partial<Record<AudioEditClueTier, string>> = { decide: '待定', check: '建议抽看' }
+
+function formatTime(frame: number, sampleRate: number): string {
+  const seconds = frame / Math.max(1, sampleRate)
+  return `${Math.floor(seconds / 60)}:${(seconds % 60).toFixed(1).padStart(4, '0')}`
 }
 
-export function AudioEditSuggestions({ project, onSeek, onResolve }: {
-  project: AudioEditProjectDocument
-  onSeek: (frame: number) => void
-  onResolve: (ids: string[], apply: boolean) => void
-}) {
-  const groups = useMemo(() => {
-    const result = new Map<string, ClueGroup>()
-    const blocks = new Map(project.transcript.map((block) => [block.id, block]))
-    const states = audioEditSuggestionStates(project)
-    for (const suggestion of project.suggestions) {
-      if (states.get(suggestion.id) !== 'available') continue
-      const word = normalizeAudioEditFiller(suggestion.blockIds.map((id) => blocks.get(id)?.text ?? '').join(''))
-      const title = suggestion.kind === 'filler' ? `「${word || suggestion.title}」` : suggestion.kind === 'long_silence' ? '停顿' : '重复片段'
-      const group = result.get(title) ?? { title, items: [] }
-      group.items.push(suggestion)
-      result.set(title, group)
+/** 要人定的是实心点，抽看的是空心点；其余不画，行就退后。 */
+function TierMark({ tier }: { tier: AudioEditClueTier }): JSX.Element {
+  return <span aria-hidden="true" className="flex w-2 shrink-0 justify-center">
+    {tier === 'decide' ? <span className="h-1.5 w-1.5 rounded-full bg-text1" /> : tier === 'check' ? <span className="h-1.5 w-1.5 rounded-full border border-text3" /> : null}
+  </span>
+}
+
+/**
+ * 剪辑线索：本地粗剪与助手处理之后，人来过仍要定的几处。每行“这一处的文字 · 为什么 · 现在怎么剪”，
+ * 选中后就地列出各种做法，点一下改判（与助手写 chosen_option 同一份操作、进撤销栈），回车试听接缝。
+ * 已自动处理的与语气词、停顿提示默认收成一行。
+ */
+export function AudioEditSuggestions(): JSX.Element | null {
+  const workspace = useAudioEditWorkspace()
+  const { project } = workspace
+  const sampleRate = project.source.sampleRate
+  const listId = useId()
+  const listRef = useRef<HTMLDivElement>(null)
+  // 这次打开面板后改判过的线索固定在原来那一层，过到一半的行不会因为改判跳到别处
+  const [pinned, setPinned] = useState<ReadonlyMap<string, AudioEditClueTier>>(new Map())
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [onlyDecide, setOnlyDecide] = useState(false)
+  const [expanded, setExpanded] = useState<{ auto: boolean; hint: boolean }>({ auto: false, hint: false })
+  useEffect(() => { setPinned(new Map()); setSelectedId(null); setExpanded({ auto: false, hint: false }) }, [project.id])
+  const rows = useMemo(() => buildAudioEditClueRows(project, pinned), [project, pinned])
+  const counts = useMemo(() => countAudioEditClues(project), [project])
+  const lead = rows.filter((row) => row.tier === 'decide' || (!onlyDecide && row.tier === 'check'))
+  const auto = onlyDecide ? [] : rows.filter((row) => row.tier === 'auto')
+  const hints = onlyDecide ? [] : rows.filter((row) => row.tier === 'hint')
+  const visible = [...lead, ...(expanded.auto ? auto : []), ...(expanded.hint ? hints : [])]
+  const selected = visible.find((row) => row.id === selectedId)
+  if (!rows.length) return null
+
+  const select = (row: AudioEditClueRow, focus = false) => {
+    setSelectedId(row.id)
+    workspace.navigateToFrame(row.startFrame)
+    if (focus) requestAnimationFrame(() => listRef.current?.querySelector<HTMLElement>(`[data-clue-row="${row.id}"]`)?.focus())
+  }
+  const move = (step: 1 | -1) => {
+    if (!visible.length) return
+    const index = selected ? visible.indexOf(selected) : step > 0 ? -1 : visible.length
+    select(visible[Math.max(0, Math.min(visible.length - 1, index + step))], true)
+  }
+  const choose = (row: AudioEditClueRow, optionId: string) => {
+    if (row.blocked || optionId === row.current) return
+    if (!workspace.chooseClueOption(row.id, optionId)) return
+    setPinned((current) => new Map(current).set(row.id, row.tier))
+    workspace.navigateToFrame(row.startFrame)
+  }
+  const audition = (row: AudioEditClueRow) => {
+    workspace.navigateToFrame(Math.max(0, row.startFrame - Math.round(AUDITION_PREROLL_SECONDS * sampleRate)))
+    const playback = useAudioEditPlaybackStore.getState()
+    // 原声模式听不到剪过的接缝
+    if (playback.mode === 'source') playback.setMode('edited')
+    if (!playback.playing) void workspace.togglePlayback()
+  }
+  const onKeyDown = (event: React.KeyboardEvent) => {
+    if (event.ctrlKey || event.metaKey || event.altKey) return
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); move(event.key === 'ArrowDown' ? 1 : -1); return }
+    if (!selected) return
+    if (event.key === 'Enter' && event.target instanceof HTMLElement && event.target.closest('[data-clue-focus]')) { event.preventDefault(); audition(selected); return }
+    const options = selected.options
+    const index = options.findIndex((option) => option.id === selected.current)
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      event.preventDefault()
+      const step = event.key === 'ArrowRight' ? 1 : -1
+      const next = index < 0 ? (step > 0 ? 0 : options.length - 1) : (index + step + options.length) % options.length
+      if (options[next]) choose(selected, options[next].id)
+      return
     }
-    return [...result.values()]
-  }, [project])
-  if (!groups.length) return null
-  return <AudioEditDisclosure title="剪辑线索" value={`${groups.reduce((total, group) => total + group.items.length, 0)} 处`}>
-    <p className={UI_TEXT_META_CLASS}>关键词与音频检测结果，仅供定位；助手会结合全文自行判断。</p>
-    <div className="flex max-h-64 flex-col gap-3 overflow-y-auto">{groups.map((group) => <ClueGroupRows key={`${project.id}:${group.title}`} group={group} project={project} onSeek={onSeek} onResolve={onResolve} />)}</div>
+    const digit = Number(event.key)
+    if (Number.isInteger(digit) && digit >= 1 && digit <= options.length) { event.preventDefault(); choose(selected, options[digit - 1].id) }
+  }
+
+  const renderRow = (row: AudioEditClueRow) => {
+    const isSelected = row.id === selected?.id
+    const current = row.options.find((option) => option.id === row.current)
+    const tierName = TIER_NAME[row.tier]
+    const optionsId = `${listId}-${row.id}`
+    return <div key={row.id} role="listitem" className="flex flex-col">
+      <UiOptionButton variant="menu" size="sm" active={isSelected} className="w-full gap-2" data-clue-row={row.id} data-clue-focus=""
+        aria-expanded={isSelected} aria-controls={isSelected ? optionsId : undefined}
+        aria-label={[tierName, row.text, row.reason.label, current?.label ?? '未处理'].filter(Boolean).join('，')}
+        tooltip={`${formatTime(row.startFrame, sampleRate)} · ${row.text} · ${row.reason.detail}`}
+        onClick={() => select(row)}>
+        <TierMark tier={row.tier} />
+        <span className={`min-w-0 flex-1 truncate ${row.tier === 'decide' || row.tier === 'check' ? 'text-text1' : 'text-text2'}`}>{row.text}</span>
+        <span className="shrink-0 whitespace-nowrap text-text3">{row.reason.label}</span>
+        <span className={`shrink-0 whitespace-nowrap ${current ? 'text-text2' : 'text-text3'}`}>{current?.label ?? '未处理'}</span>
+      </UiOptionButton>
+      {isSelected && <div className="flex flex-col pl-4">
+        <div id={optionsId} role="radiogroup" aria-label={`${row.text}：做法`} className="flex flex-col">
+          {row.options.map((option, index) => {
+            const checked = option.id === row.current
+            return <UiOptionButton key={option.id} variant="menu" size="sm" role="radio" aria-checked={checked} className="w-full gap-2" data-clue-focus=""
+              disabled={Boolean(row.blocked)} disabledReason={row.blocked} tooltip={option.readsAs ? `${option.label}（${index + 1}）：${option.readsAs}` : `${option.label}（${index + 1}）`}
+              onClick={() => choose(row, option.id)}>
+              <span aria-hidden="true" className="flex w-4 shrink-0 justify-center">{checked ? <Check size={UI_ICON_SIZE.sm} className="text-accent-text" /> : null}</span>
+              <span className={`shrink-0 whitespace-nowrap ${checked ? 'text-text1' : 'text-text2'}`}>{option.label}</span>
+              {option.readsAs ? <span className="min-w-0 flex-1 truncate text-text3">{option.readsAs}</span> : null}
+            </UiOptionButton>
+          })}
+        </div>
+        <UiButton size="sm" className="self-start" tooltip="从这一处前一点播放剪好的声音（回车）" onClick={() => audition(row)}><Play />试听</UiButton>
+      </div>}
+    </div>
+  }
+  const renderSummary = (key: 'auto' | 'hint', items: AudioEditClueRow[], label: string) => items.length > 0 && <div role="listitem" className="flex flex-col">
+    <UiOptionButton variant="menu" size="sm" className="w-full gap-2" aria-expanded={expanded[key]} onClick={() => setExpanded((current) => ({ ...current, [key]: !current[key] }))}>
+      <span aria-hidden="true" className="flex w-2 shrink-0" />
+      <span className="min-w-0 flex-1 truncate text-text3">{label}</span>
+      <ChevronRight size={UI_ICON_SIZE.sm} aria-hidden="true" className={`shrink-0 text-text3 transition-transform duration-120 ${expanded[key] ? 'rotate-90' : ''}`} />
+    </UiOptionButton>
+    {expanded[key] && items.map(renderRow)}
+  </div>
+
+  return <AudioEditDisclosure title="剪辑线索" value={counts.decide ? `待定 ${counts.decide}` : `${rows.length} 处`} defaultOpen={counts.decide > 0}>
+    <div ref={listRef} role="list" aria-label="剪辑线索" className="flex max-h-64 flex-col overflow-y-auto" onKeyDown={onKeyDown}>
+      {lead.map(renderRow)}
+      {renderSummary('auto', auto, lead.length ? `另有 ${auto.length} 处已自动处理` : `${auto.length} 处已自动处理`)}
+      {renderSummary('hint', hints, `${hints.length} 处语气词与停顿`)}
+    </div>
+    <UiToolbar variant="footer" aria-label="剪辑线索工具" tools={[
+      { kind: 'action', id: 'previous', label: '上一条', tooltip: '上一条线索（↑）', icon: ChevronUp, disabled: !visible.length, disabledReason: '没有可看的线索', onSelect: () => move(-1) },
+      { kind: 'action', id: 'next', label: '下一条', tooltip: '下一条线索（↓）', icon: ChevronDown, disabled: !visible.length, disabledReason: '没有可看的线索', onSelect: () => move(1) },
+      { kind: 'action', id: 'only-decide', label: '只看待定', icon: ListFilter, on: onlyDecide, onSelect: () => setOnlyDecide((value) => !value) },
+    ]}>{`待定 ${counts.decide} · 建议抽看 ${counts.check}`}</UiToolbar>
   </AudioEditDisclosure>
 }

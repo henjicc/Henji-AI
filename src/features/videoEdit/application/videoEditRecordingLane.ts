@@ -53,6 +53,10 @@ export function renameVideoEditRecordingBlock(projectId: string, clipId: string,
   if (!trimmed) return
   updateVideoEditClipProperties(projectId, requireVideoEditInstance(projectId).activeSequenceId, clipId, { name: trimmed })
 }
+/** “这一段”的描述就是片段备注（video_edit.clip.note），剪辑样子与助手读写的是同一个字段；清空即删除。 */
+export function setVideoEditRecordingBlockNote(projectId: string, clipId: string, note: string): void {
+  updateVideoEditClipProperties(projectId, requireVideoEditInstance(projectId).activeSequenceId, clipId, { note })
+}
 /** 指针在结尾（或之后）时接在末尾，在某段上时从指针处覆盖。认不出录屏轨时抛出原因。 */
 export function videoEditRecordingTargetAt(projectId: string, placement?: VideoEditRecordingPlacement): VideoEditRecordingTarget & { sequenceId: string } {
   const owner = requireVideoEditInstance(projectId)

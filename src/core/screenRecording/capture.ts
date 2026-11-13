@@ -73,6 +73,8 @@ export interface RecordingCaptureFacts {
   microphone: { device: string; inputOverflows: number; inputUnderflows: number; droppedFrames: number; droppedPreviewBlocks: number; reconnects: number } | null
   /** 应用上次意外退出后，启动时自动补齐的。 */
   recovered: boolean
+  /** 录制因被录的来源没了而自动停止时的说明（如“被录制的窗口已关闭”）；不是采集出错，已录内容照常保存。 */
+  sourceEnded?: string
   /** 录制中的轨道（分段与空档）；停止后读录制文档里的 tracks。 */
   tracks?: RecordingTracks
 }
