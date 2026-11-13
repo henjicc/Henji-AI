@@ -3,7 +3,13 @@
 本清单是 `@henjicc/ai-sdk` 消费方的唯一维护入口，用于 SDK 发布后的跨仓升级协调。
 绝对路径仅描述当前开发机上的仓库位置，不进入 SDK 运行时代码、发布包或用户配置。
 
-最后核对日期：2026-11-10
+最后核对日期：2026-11-14
+
+`0.14.0` 已发布（2026-11-14）：思考参数按 Chat / Responses 协议分别发送（修复 Responses 下 DeepSeek、智谱 GLM-5.3 关不掉思考，火山强度不生效，MiniMax M3 不思考；DeepSeek Chat 档位改按官方 low / high / max）；DeepSeek 独立接口（语音合成 `deepseek-tts`、语音识别、网页搜索与抓取、文档 OCR、Files）与服务端联网工具 `appendProviderWebTools`；新增按次 / 按页计价 `UnitPricing`；Seedream 5.5、MiniMax H3 Image、PixVerse V6、LTX-2.5、Qwen-Image 2.1 等新模型；修复 Qwen-Image 3.0 2K 部分比例尺寸越界。兼容性新增，0.x 阶段升 minor。用户明确下令发布；本地 prepublishOnly 全量门禁通过（SDK 116 文件测试、构建、仓外 Node ESM / 严格 TS / 56 个 Vite 入口 / 受限宿主），门禁发现两处测试仍按旧行为断言，已按合法变化更新。发布源码 `4c2e986c2` 经 [运行 43509798760](https://github.com/henjicc/Henji-AI/actions/runs/43509798760) 受信任发布。公共索引约 2 分钟后可读；隔离用户配置与缓存的仓外匿名安装通过：247 个根导出可导入，`capabilities/deepseek`、`capabilities/speech-recognition/deepseek` 与 `provider-packs/deepseek` 可用，发布包在 Responses 下关闭思考发 `reasoning.effort: none`，lockfile 解析到公共 tarball、integrity 与 registry 一致。外部 `say-it` 锁定 `0.13.0`、只用语音识别 / 翻译 / LLM 模块，本版无破坏性变更，本次不升级，需要新能力时再升。未执行真实付费调用。Henji-AI workspace 使用 `0.14.0`。
+
+- `0.14.0` tarball：[公共 npm 包](https://registry.npmjs.org/@henjicc/ai-sdk/-/ai-sdk-0.14.0.tgz)
+- `0.14.0` shasum：`5911b74ecf3742dcec45e626f7cc819f58075866`
+- `0.14.0` integrity：`sha512-QkPi8kNlfbitWZeuhF2uQ72BpfeauIPkdC5n2bfeU75vzGI/vQLtBtnggbrofvJERG6/Z2+Ds7EEoSbhTLztAg==`
 
 `0.13.0` 已发布（2026-11-10）：实时语音识别事件契约写进 `SpeechRecognitionEvent`（partial `text` = 所有未定稿文字，final `text` = 刚定稿一句且每句只发一次，同一批结果先 final 后 partial）；火山 SeedASR 2.0 实时修正 partial 为未定稿 utterance 拼接（此前是整场累计全文）、同一帧先发 final 再发 partial、已定稿句后续修订不再重发 final；另含未发布的可选 `PromptOptimizationProfile.reasoning`。改变了火山 partial 的含义，0.x 阶段升 minor。用户明确下令发布；发布源码 `7ab8f2d47` 经 [运行 42790508500](https://github.com/henjicc/Henji-AI/actions/runs/42790508500) 受信任发布，CI 内 prepublishOnly 全量门禁通过。同提交的应用侧 CI（界面组件静态值环、媒体回收与设置搜索等应用单测）失败，不涉及 SDK 包内容，另行修复。隔离配置与缓存的仓外匿名安装通过：235 个根导出可导入，lockfile 解析到公共 tarball、integrity 与 registry 一致，发布的火山实时模块先 final 后 partial。外部 `say-it` 从公共 npm 精确升级到 `0.13.0`（提交 `95f4a91`），lockfile resolved / integrity 与 registry 一致，bundle 版本、integrity 校验更新，删除为 0.12.0 加的 partial 绕行，改回直接读 `partial.text`；Rust 793 项（另 overlay 97 项）测试通过。Henji-AI workspace 使用 `0.13.0`。
 
