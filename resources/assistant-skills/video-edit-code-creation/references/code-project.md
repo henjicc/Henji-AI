@@ -12,7 +12,7 @@
     tokens.ts                 颜色、字体与字重、字号阶梯、线宽、缓动、时长档
     strokes/*.ts              基本笔触：点阵字、定位角、点线、颗粒……
     parts/*.ts                台面上的组件：节点标签、数据卡、品牌标签……
-    shaders/*.wgsl            WGSL 源码单独成文件，用 import 当文本读入
+    shaders/*.wgsl            WGSL 源码单独成文件：import shader from "./shaders/x.wgsl" 得到全文字符串
     desk.ts  window.ts        GPU 模块（WebGPU 台面、录屏窗口）
     scene/*.ts                场景引擎：镜头、对焦、内容区域、三层模块、片段编排
   film/<film>/                片子层：这支片子独有、各段共用，只放数据

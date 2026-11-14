@@ -2,6 +2,8 @@
 
 需要逐像素计算、处理下方画面、多遍着色或大量粒子时，用 `createWebGPU`（原生 WebGPU，与合成共用同一 `GPUDevice`）或 `createWebGL`（WebGL2）。效果、效率优先，不限制 WGSL 的写法与遍数。
 
+WGSL 写成单独的 `.wgsl` 文件，默认导入就是文件全文字符串：`import shader from '../style/fire/fire.wgsl'`，再 `device.createShaderModule({ code: shader })`。
+
 ## createWebGPU
 
 ```text
