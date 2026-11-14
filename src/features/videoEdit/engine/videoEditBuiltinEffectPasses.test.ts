@@ -107,10 +107,17 @@ describe('录屏自动缩放与画框工序', () => {
     const result = planVideoEditBuiltinEffect({ id: 'recording_zoom', params: {}, zoom: draw }, { width: 1920, height: 1080, frame: 0 })
     expect(result.passes.map(pass => pass.entry)).toEqual(['recording_zoom'])
     const u = result.passes[0].uniforms
-    // 输出左上角取样视野左上角（0.5, 0），输出中心取样视野中心
-    expect(u[8]).toBeCloseTo(0.5); expect(u[9]).toBeCloseTo(0)
-    expect(u[4] * 0.5 + u[5] * 0.5 + u[8]).toBeCloseTo(0.75); expect(u[6] * 0.5 + u[7] * 0.5 + u[9]).toBeCloseTo(0.25)
+    // 取样 = 倍数 × 输出 + 平移：输出左上角取样视野左上角（0.5, 0），输出中心取样视野中心；不模糊时取样 1 次
+    expect(u[4]).toBeCloseTo(0.5); expect(u[5]).toBeCloseTo(0.5); expect(u[6]).toBeCloseTo(0)
+    expect(u[4] * 0.5 + u[5]).toBeCloseTo(0.75); expect(u[4] * 0.5 + u[6]).toBeCloseTo(0.25); expect(u[2]).toBe(1)
     expect(recordingZoomDraw({ scale: 1, centerX: 0.5, centerY: 0.5 }, clip as unknown as Parameters<typeof recordingZoomDraw>[1], document)).toBeUndefined()
+    // 运动模糊：快门内视野不动时不模糊；平移了才按画面移动的像素数取样
+    const view = { scale: 2, centerX: 0.75, centerY: 0.25 }
+    expect(recordingZoomDraw(view, clip as unknown as Parameters<typeof recordingZoomDraw>[1], document, { zoom: view, maxSamples: 16 })!.shutter).toBeUndefined()
+    const moving = recordingZoomDraw(view, clip as unknown as Parameters<typeof recordingZoomDraw>[1], document, { zoom: { ...view, centerX: 0.749 }, maxSamples: 16 })!
+    // 视野中心移动 0.001 → 2 倍下画面移动 0.002 × 1920 ≈ 3.8 像素 → 3 次取样
+    expect(moving.shutter?.samples).toBe(3)
+    expect(recordingZoomDraw(view, clip as unknown as Parameters<typeof recordingZoomDraw>[1], document, { zoom: { ...view, centerX: 0.6 }, maxSamples: 8 })!.shutter?.samples).toBe(8)
   })
   it('录屏画框：内容按边距等比缩小居中，投影走高斯模糊，最后合成不透明背景；纯色背景用指定颜色', () => {
     const result = planVideoEditBuiltinEffect({ id: 'recording_frame', params: { padding: 10, radius: 2, shadow: 50 } }, { width: 1920, height: 1080, frame: 0 })

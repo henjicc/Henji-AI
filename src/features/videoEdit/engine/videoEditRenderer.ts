@@ -2262,7 +2262,7 @@ export class VideoEditRenderer {
     const surfaceKeys = composite ? videoEditCompositeSurfaceKeys(composite) : new Set<string>()
     for (const key of nestedContext.keys.get(nestedRender?.ownerKey ?? document.id) ?? []) surfaceKeys.add(key)
     if (spatial) for (const key of videoEditSpatialBelowKeys(spatial.plan)) surfaceKeys.add(key)
-    const codeReady = this.codeSources?.prepare(document, active, frame, canPresent, imagesReady, { gpuFrame: nestedContext.gpu, observeElements, spatialFrame: spatial?.plan.centerFrame, deferredGenerators, exactInput: input => !approximateCodeInputs.has(input), quality, transitions: [...transitions, ...(filterHandles?.windows ?? [])], surfaceKeys, onEffectError, audio: async (clip, program, parameters, signal) => {
+    const codeReady = this.codeSources?.prepare(document, active, frame, canPresent, imagesReady, { gpuFrame: nestedContext.gpu, observeElements, spatialFrame: spatial?.plan.centerFrame, deferredGenerators, motionBlurSamples: sequential && quality !== 'final' ? VIDEO_EDIT_MOTION_BLUR_PLAYBACK_SAMPLES : VIDEO_EDIT_MOTION_BLUR_MAX_SAMPLES, exactInput: input => !approximateCodeInputs.has(input), quality, transitions: [...transitions, ...(filterHandles?.windows ?? [])], surfaceKeys, onEffectError, audio: async (clip, program, parameters, signal) => {
       if (!codeMaterialUsesAudio(program)) return {}
       const source = codeAudioComposition(sourceDocument, sourceDocument.clips.find(value => value.id === clip.id) ?? clip, codeAudioReferenceMediaId(parameters))
       const audio = await this.contentAudio.analyze(source.document, source.start, source.duration, signal)

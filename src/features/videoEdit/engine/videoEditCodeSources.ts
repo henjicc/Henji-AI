@@ -36,7 +36,7 @@ import type { PreparedCodeMaterialParameters } from '@/core/videoEdit/codeMateri
 import type { CodeMaterialInstance } from '@/core/videoEdit/codeMaterialPersistence'
 import { offsetVideoEditSource, videoEditSourceSeconds } from '@/core/videoEdit/time'
 import { videoEditClipSourceTimeAt } from '@/core/videoEdit/clipSpeed'
-import { videoEditCodeMotionBlur } from '@/core/videoEdit/motionBlur'
+import { videoEditClipMotionBlur, videoEditCodeMotionBlur, VIDEO_EDIT_MOTION_BLUR_MAX_SAMPLES, VIDEO_EDIT_MOTION_BLUR_SHUTTER } from '@/core/videoEdit/motionBlur'
 import { codeMaterialContextForFrame, codeMaterialContextForTransitionFrame, codeMaterialSize } from '@/core/videoEdit/codeMaterialTiming'
 import type { CodeMotionClock } from '@/core/videoEdit/codeMaterial/motionSampling'
 import type { CodeMaterialVersion } from '@/core/videoEdit/codeMaterialPersistence'
@@ -88,6 +88,8 @@ export interface PreparedCodeSources { pictures: Map<string, VideoEditCodePictur
 export interface VideoEditCodePrepareOptions { gpuFrame?: VideoEditFrameGpu; observeElements?: boolean; exactInput?: (input: VideoEditCodeImageInput) => boolean; quality?: import('@/core/imaging/effects/descriptor').EffectQuality; authorPlans?: (plans: readonly VideoEditCodePlan[]) => Promise<void>; preparationOnly?: boolean; transitions?: readonly VideoEditTransitionWindow[]; surfaceKeys?: ReadonlySet<string>; onEffectError?: (effect: VideoEditEffect, error: unknown) => void; audio?: (clip: VideoEditClip, program: CodeMaterialProgram, parameters: CodeParameterValues, signal: AbortSignal) => Promise<Pick<CodeMaterialContext, 'audio' | 'audioTime'>>;
   spatialFrame?: import('@/core/videoEdit/spatialTypes').SpatialFrame
   deferredGenerators?: ReadonlySet<string>
+  /** 内置效果（录屏缩放）运动模糊的最多取样次数：连续播放时减半，停下与导出用满。 */
+  motionBlurSamples?: number
 }
 /** 渲染与指纹共用时间、动画、片子数据及画面输入求值；编译与不可变参数准备留在帧循环外。 */
 function codeFrameValues(document: VideoEditComposition, clip: VideoEditClip, program: CodeMaterialProgram,
@@ -553,11 +555,16 @@ export class VideoEditCodeSources implements SpatialCodeSources {
             const source = videoEditClipMedia(document, clip)?.recordingCursor
             const params = recordingZoomParams(resolveVideoEditBuiltinParams(evaluateVideoEditEffect(effect, frame - clip.start).builtin!))
             const regions = effect.builtin.regions ?? []
-            const sourceUs = videoEditSourceSeconds(videoEditClipSourceTimeAt(clip, frame - clip.start, document.frameRate, transitionByClip.has(clip.id))) * 1_000_000
-            const spans = recordingZoomPointerSpans(regions, sourceUs, params)
+            const sourceUsAt = (offset: number, holdBeforeZero: boolean): number => videoEditSourceSeconds(videoEditClipSourceTimeAt(clip, offset, document.frameRate, holdBeforeZero)) * 1_000_000
+            const sourceUs = sourceUsAt(frame - clip.start, transitionByClip.has(clip.id))
+            // 运动模糊：快门在当前帧结束（与片段运动模糊同一个快门），镜头推拉、平移按快门内的真实移动模糊。
+            // 快门打开时刻可能早于素材开头（片段第一帧、转场余量），那时画面停在素材开头。
+            const shutterUs = videoEditClipMotionBlur(document, clip) && regions.length ? sourceUsAt(frame - clip.start - VIDEO_EDIT_MOTION_BLUR_SHUTTER, true) : undefined
+            const spans = [...recordingZoomPointerSpans(regions, sourceUs, params), ...(shutterUs === undefined ? [] : recordingZoomPointerSpans(regions, shutterUs, params))]
             const pointer = source && spans.length ? await this.zoomPointers.pointer(source, spans, controller.signal) : () => null
             assertCurrent()
-            const zoom = recordingZoomDraw(evaluateRecordingZoom(regions, sourceUs, params, pointer), clip, document)
+            const shutter = shutterUs === undefined ? undefined : { zoom: evaluateRecordingZoom(regions, shutterUs, params, pointer), maxSamples: options.motionBlurSamples ?? VIDEO_EDIT_MOTION_BLUR_MAX_SAMPLES }
+            const zoom = recordingZoomDraw(evaluateRecordingZoom(regions, sourceUs, params, pointer), clip, document, shutter)
             chain.push({ effect, builtin: { ...effect.builtin, ...(zoom ? { zoom } : {}) } })
             continue
           }

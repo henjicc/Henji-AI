@@ -173,9 +173,14 @@ function followCenter(scale: number, fromUs: number, endUs: number, toUs: number
   if (toUs > last) step(toUs, toUs - last)
   return camera
 }
+/**
+ * 保持段的视野。跟随只在保持段里进行，过渡段取保持段两端的定值：推近、拉远、衔接平移各自只是一次运动，
+ * 缩放与位移同一条曲线、同时开始同时结束，不会叠上跟随镜头的另一段运动而显得发飘。
+ */
 function held(span: Span, sourceUs: number, pointerAt: RecordingZoomPointer): RecordingZoomTransform {
   const focus = span.region.focus
-  const center = focus === 'cursor' ? followCenter(span.scale, span.activeStart, span.activeEnd, Math.max(span.activeStart, sourceUs), pointerAt) : focus
+  const { startUs, endUs } = span.region
+  const center = focus === 'cursor' ? followCenter(span.scale, startUs, endUs, clamp(sourceUs, startUs, endUs), pointerAt) : focus
   return clampView({ scale: span.scale, centerX: center.x, centerY: center.y })
 }
 
@@ -201,8 +206,8 @@ export function evaluateRecordingZoom(regions: readonly RecordingZoomRegion[], s
 /** 求值 `sourceUs` 时跟随镜头需要的指针时间范围（源时间微秒）；渲染端据此预先读取指针数据。 */
 export function recordingZoomPointerSpans(regions: readonly RecordingZoomRegion[], sourceUs: number, params: RecordingZoomParams): Array<{ fromUs: number; toUs: number }> {
   const { spans } = layout(regions, params)
-  // 指针分组看整个区间（镜头提前对准这组指针要去的地方），所以要读到区间结束。
-  return spans.filter(span => span.region.focus === 'cursor' && sourceUs >= span.activeStart && sourceUs <= span.activeEnd).map(span => ({ fromUs: span.activeStart, toUs: span.activeEnd }))
+  // 跟随只在保持段里；指针分组看整个保持段（镜头提前对准这组指针要去的地方），所以读到保持段结束。
+  return spans.filter(span => span.region.focus === 'cursor' && sourceUs >= span.activeStart && sourceUs <= span.activeEnd).map(span => ({ fromUs: span.region.startUs, toUs: span.region.endUs }))
 }
 
 type CursorEvent = Extract<CaptureEvent, { kind: 'cursor' }>

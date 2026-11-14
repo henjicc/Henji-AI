@@ -16,9 +16,9 @@ export const VIDEO_EDIT_MOTION_BLUR_MAX_SAMPLES = 16
 export const VIDEO_EDIT_MOTION_BLUR_PLAYBACK_SAMPLES = 8
 const TRANSFORM_KEYS = ['x', 'y', 'scale', 'rotation', 'anchorX', 'anchorY'] as const
 /** 快门内位移短于这个像素数时不模糊（肉眼看不出，省掉多次绘制）。 */
-const MIN_TRAVEL_PX = 0.75
+export const VIDEO_EDIT_MOTION_BLUR_MIN_TRAVEL_PX = 0.75
 /** 平均每隔多少像素取一次样，样本之间不出现可见的断层。 */
-const PX_PER_SAMPLE = 1.5
+export const VIDEO_EDIT_MOTION_BLUR_PX_PER_SAMPLE = 1.5
 /** 看紧贴当前帧之前的一小段：连续运动在这里走不了多远，走得多就是跳变。 */
 const HOLD_PROBE_FRAMES = .001
 
@@ -55,10 +55,10 @@ export function videoEditMotionBlurSamples(document: Pick<VideoEditComposition, 
     return Math.hypot((a.x - b.x) * document.width, (a.y - b.y) * document.height)
   }))
   const last = sample(0), travel = travelBetween(sample(-VIDEO_EDIT_MOTION_BLUR_SHUTTER), last)
-  if (!(travel >= MIN_TRAVEL_PX)) return undefined
+  if (!(travel >= VIDEO_EDIT_MOTION_BLUR_MIN_TRAVEL_PX)) return undefined
   // 定格关键帧正好在这一帧跳变：样本都早于当前帧，全取到旧位置，重构图就晚了一帧。跳变也不是运动，不模糊。
-  if (travelBetween(sample(-HOLD_PROBE_FRAMES), last) >= MIN_TRAVEL_PX && travelBetween(sample(-HOLD_PROBE_FRAMES), last) > travel * .5) return undefined
-  const count = Math.min(maxSamples, Math.max(2, Math.ceil(travel / PX_PER_SAMPLE)))
+  if (travelBetween(sample(-HOLD_PROBE_FRAMES), last) >= VIDEO_EDIT_MOTION_BLUR_MIN_TRAVEL_PX && travelBetween(sample(-HOLD_PROBE_FRAMES), last) > travel * .5) return undefined
+  const count = Math.min(maxSamples, Math.max(2, Math.ceil(travel / VIDEO_EDIT_MOTION_BLUR_PX_PER_SAMPLE)))
   return Array.from({ length: count }, (_, index) => sample(((index + .5) / count - 1) * VIDEO_EDIT_MOTION_BLUR_SHUTTER))
 }
 

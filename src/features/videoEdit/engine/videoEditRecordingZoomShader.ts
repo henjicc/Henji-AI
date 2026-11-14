@@ -18,15 +18,27 @@ fn zoomBicubic(uv: vec2f) -> vec4f {
  let a = clamp(c.a, 0.0, 1.0);
  return vec4f(clamp(c.rgb, vec3f(0.0), vec3f(a)), a);
 }
-/** a、b.xy = 输出 → 取样位置的仿射；c、b.zw = 输出 → 片段画面坐标的仿射（片段范围外透明，边缘按像素抗锯齿）。 */
+/**
+ * 取样位置 = 倍数 × 输出坐标 + 平移（各向同性）：a.x、a.yz 是当前帧，a.w、b.xy 是快门打开时；size.z = 运动模糊取样次数（1 = 不模糊）。
+ * c、b.zw = 输出 → 片段画面坐标的仿射（片段范围外透明，边缘按像素抗锯齿）。
+ * 模糊时在快门内均匀取样平均，拖影落在运动方向身后；移动只有几像素（取样不超过 3 次，推拉起止处）时每次仍用双三次，
+ * 免得开始模糊那一帧突然变软，移动更大时用双线性（拖影本身已盖过细节，4K 下也不多花时间）。
+ */
 @fragment fn recording_zoom(v: Vertex) -> @location(0) vec4f {
  let uv = uvOf(v);
  let q = vec2f(dot(u.c.xy, uv), dot(u.c.zw, uv)) + u.b.zw;
  let w = max(fwidth(q), vec2f(0.000001));
  let edge = min(min(q.x, 1.0 - q.x) / w.x, min(q.y, 1.0 - q.y) / w.y);
  let cover = clamp(edge + 0.5, 0.0, 1.0);
- let p = vec2f(dot(u.a.xy, uv), dot(u.a.zw, uv)) + u.b.xy;
- return zoomBicubic(p) * cover;
+ let samples = i32(u.size.z);
+ if (samples <= 1) { return zoomBicubic(uv * u.a.x + u.a.yz) * cover; }
+ var sum = vec4f(0.0);
+ for (var i = 0; i < samples; i++) {
+   let f = (f32(i) + 0.5) / f32(samples);
+   let p = uv * mix(u.a.w, u.a.x, f) + mix(u.b.xy, u.a.yz, f);
+   if (samples <= 3) { sum += zoomBicubic(p); } else { sum += tap(p); }
+ }
+ return sum / f32(samples) * cover;
 }
 /** a = 内容放置矩形（归一化 x0,y0,x1,y1）；b = 取样的内容矩形；c = (圆角像素, 每个输出像素覆盖的输入像素数)。 */
 @fragment fn recording_frame_content(v: Vertex) -> @location(0) vec4f {

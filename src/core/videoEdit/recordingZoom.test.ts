@@ -80,7 +80,10 @@ describe('录屏自动缩放区间', () => {
     evaluateRecordingZoom(regions, 1_000_000, smooth, pointer)
     expect(evaluateRecordingZoom(regions, 4_500_000, smooth, pointer)).toEqual(later)
     expect(evaluateRecordingZoom(regions, 3_000_000, smooth, none)).toEqual({ scale: 1.8, centerX: 0.5, centerY: 0.5 })
-    expect(recordingZoomPointerSpans(regions, 3_000_000, smooth)).toEqual([{ fromUs: 1_000_000, toUs: 6_000_000 }])
+    expect(recordingZoomPointerSpans(regions, 3_000_000, smooth)).toEqual([{ fromUs: 2_000_000, toUs: 5_200_000 }])
+    // 推近过渡只朝保持段起点的视野去：保持段之前指针怎么动都不影响过渡，缩放与位移是同一次运动
+    const wander = (us: number) => us < 2_000_000 ? { x: 0.1 + 0.8 * (us - 1_000_000) / 1_000_000, y: 0.2 } : pointer(us)
+    for (const us of [1_100_000, 1_500_000, 1_900_000]) expect(evaluateRecordingZoom(regions, us, smooth, wander)).toEqual(evaluateRecordingZoom(regions, us, smooth, pointer))
     expect(recordingZoomPointerSpans([region(1_000_000, 2_000_000)], 2_500_000, smooth)).toEqual([])
   })
   it('事件日志折算指针：静止很久仍给出位置，按源画面归一化', async () => {
