@@ -205,9 +205,11 @@ export class ImageDocumentPersistence implements DocumentPersistence {
     } catch (error) {
       if (error instanceof Error && error.name === 'DocumentRevisionConflictError') {
         this.conflicted = true
-        logger.warn('图片文档写回时发现文件已在别处被修改', { event: 'image_document.commit.conflict', context: { documentId: meta.id, reason } })
+        logger.warn('图片文档写回时发现文件已在别处被修改', { event: 'image_document.commit.conflict', error, context: { documentId: meta.id, reason } })
         // 请会话再保存一次：保存会以冲突失败，会话据此弹出“重新载入 / 覆盖”。
         this.requestSave?.()
+        // 主进程的原因带版本号，只进日志；界面拿到的是用户语言的同名错误。
+        throw Object.assign(conflictError(meta.name), { cause: error })
       }
       throw error
     }

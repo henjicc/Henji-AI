@@ -22,7 +22,8 @@ export class DocumentRevisionConflictError extends Error {
     readonly expectedRevision: number,
     readonly actualRevision: number,
   ) {
-    super(`文档已在别处被修改（期望版本 ${expectedRevision}，实际版本 ${actualRevision}），请重新载入或选择覆盖。`)
+    // 版本号留在字段里供日志与冲突处理使用，消息是界面能直接显示的话。
+    super('这份文档已在别处被修改，请重新载入后再保存。')
     this.name = 'DocumentRevisionConflictError'
   }
 }

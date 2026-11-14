@@ -7,9 +7,10 @@ import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
 import { RecordingVoiceControls } from './RecordingVoiceControls'
 import { modelDefaultsManager } from '@/features/settings'
 import { openAssistant } from '@/features/assistant'
-import { executeUiApplicationCapability } from '@/features/application-control'
+import { executeUiApplicationCapability, uiCapabilityFailureError } from '@/features/application-control'
 import type { RecordingDocument } from '@/core/screenRecording/document'
 import { recordingVoiceSchema } from '@/core/screenRecording/director'
+import { userErrorText } from '@/core/userErrorText'
 import { readRecordingUnderstanding } from './application/recordingUnderstandingService'
 import { showRecordingDocument } from './application/recordingService'
 import { createVideoEditProject, openVideoEditDocument, switchVideoEditSequence } from '@/features/videoEdit'
@@ -63,7 +64,7 @@ export function RecordingDirectorScript({ sessionId, recording }: { sessionId: s
   const changed = JSON.stringify(narration) !== JSON.stringify(saved.narration) || modelId !== saved.voice.modelId || JSON.stringify(options) !== JSON.stringify(saved.voice.options)
   const invoke = async (id: string, input: Record<string, unknown>, signal = new AbortController().signal) => {
     const result = await executeUiApplicationCapability({ id, version: 1, input }, signal)
-    if (!result.ok) throw new Error(result.error.message)
+    if (!result.ok) throw uiCapabilityFailureError(result.error)
     return result.data
   }
   const save = async (): Promise<void> => {
@@ -73,10 +74,10 @@ export function RecordingDirectorScript({ sessionId, recording }: { sessionId: s
     const ref = { kind: 'screen_recording.understanding', id: sessionId }
     const value = { ...editableRecordingUnderstanding(read.content.understanding), director: { goal: current.goal, narration, voice: recordingVoiceSchema.parse({ modelId, options }) } }
     const result = await executeUiApplicationCapability({ id: 'change_application_entities', version: 2, expectedRevisions: { screen_recording: read.meta.revision }, input: { summary: t('recording.directorSave'), changes: [{ kind: 'set_properties', entityType: ref.kind, target: ref, properties: { 'screen_recording.understanding.result': value } }] } }, new AbortController().signal)
-    if (!result.ok) throw new Error(result.error.message)
+    if (!result.ok) throw uiCapabilityFailureError(result.error)
     await showRecordingDocument(sessionId)
   }
-  const persist = (): void => { if (changed && !busy) void save().catch(failure => setError(failure instanceof Error ? failure.message : String(failure))) }
+  const persist = (): void => { if (changed && !busy) void save().catch(failure => setError(userErrorText(failure, '旁白没能保存，请再试一次。'))) }
   const start = async (): Promise<void> => {
     setBusy(true); setError(''); running.current = new AbortController()
     try {
@@ -87,7 +88,7 @@ export function RecordingDirectorScript({ sessionId, recording }: { sessionId: s
       await openVideoEditDocument({ id: destination.document.id })
       switchVideoEditSequence(destination.document.id, refs[0].id.slice(destination.document.id.length + 1), { fromStart: true })
       openApplicationSurface('workspace.video_edit')
-    } catch (failure) { setError(failure instanceof Error ? failure.message : String(failure)) }
+    } catch (failure) { setError(userErrorText(failure, '没能开始，请重试；仍然失败就重启软件。')) }
     finally { setBusy(false); running.current = null }
   }
   const finished = Boolean(recording.directorRun?.movie)
@@ -121,7 +122,7 @@ export function RecordingDirectorScript({ sessionId, recording }: { sessionId: s
         {busy && <UiLoading message={t('recording.directorBusy')} />}
         <p className="text-xs text-text3">{t(finished ? 'recording.directorFinished' : 'recording.directorHandsOff')}</p>
         {busy
-          ? <UiButton onClick={() => { void invoke('cancel_screen_recording_director', { sessionRef: { kind: 'screen_recording.session', id: sessionId } }).catch(failure => setError(String(failure))) }}>{t('recording.cancel')}</UiButton>
+          ? <UiButton onClick={() => { void invoke('cancel_screen_recording_director', { sessionRef: { kind: 'screen_recording.session', id: sessionId } }).catch(failure => setError(userErrorText(failure, '没能取消，请再试一次。'))) }}>{t('recording.cancel')}</UiButton>
           : <UiButton variant="primary" disabled={finished} disabledReason={t('recording.directorConfirmFirst')} onClick={() => { void start() }}>{t('recording.directorStartAll')}</UiButton>}
       </div>
     </aside>

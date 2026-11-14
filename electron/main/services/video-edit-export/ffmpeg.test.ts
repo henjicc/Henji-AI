@@ -48,7 +48,7 @@ it('忙与超时不缓存为不支持，错误保留 FFmpeg 摘要；探测帧�
     return ''
   })
   const probe = new VideoEditExportCapabilityProbe(run)
-  expect((await probe.get()).encoders.h264_nvenc).toMatchObject({ supported: false, reason: expect.stringContaining('encoder busy') })
+  expect((await probe.get()).encoders.h264_nvenc).toMatchObject({ supported: false, reason: expect.stringContaining('暂时初始化不了') })
   busy = false
   expect((await probe.get()).encoders.h264_nvenc.supported).toBe(true)
   expect(run.mock.calls.filter(([args]) => args.includes('h264_nvenc')).every(([args]) => args.includes('color=s=256x256:r=30'))).toBe(true)

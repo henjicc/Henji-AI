@@ -45,7 +45,8 @@ export class DocumentRevisionConflictError extends Error {
     readonly expectedRevision: number,
     readonly actualRevision: number,
   ) {
-    super(`Document revision conflict for ${documentId}: expected ${expectedRevision}, actual ${actualRevision}`)
+    // 版本号留在字段里供日志与冲突处理使用，消息是界面能直接显示的话。
+    super('这份文档已在别处被修改，请重新载入后再保存。')
     this.name = 'DocumentRevisionConflictError'
   }
 }

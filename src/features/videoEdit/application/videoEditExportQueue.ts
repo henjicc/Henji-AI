@@ -15,6 +15,7 @@ import { holdVideoEditActivity, listVideoEditInstances, publishVideoEdit, requir
 import { videoEditMediaPathKey } from './videoEditMedia'
 import { adaptVideoEditExportPreset, assertVideoEditExportSupported } from '../engine/videoEditExportEncoder'
 import { prepareVideoEditAudioLinksForExport } from './videoEditAudioLinks'
+import { videoEditUserErrorMessage } from './videoEditUserError'
 
 const logger = createLogger('features.videoEdit.exportQueue')
 export interface VideoEditExportRequest { rememberExport?: boolean; quality?: VideoEditExportQuality; invocationId?: string; projectId: string; sequenceId?: string; presetId?: string; settings?: VideoEditExportSettings; loudnessRequested?: boolean; range?: { startFrame: number; endFrame: number }; path?: string; fileName?: string
@@ -28,7 +29,7 @@ export interface VideoEditExportJob {
   /** 在目录里自动取名时用户请求的文件名（不含补上的编号），记进上次导出供下次恢复；路径由用户或保存对话框给定时省略。 */
   requestedFileName?: string
   /** interrupted：界面重新加载时正在导出，未完成文件已清理，可按原快照重试。 */
-  state: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted'; error?: string; task?: VideoEditExportTask
+  state: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted'; error?: string; errorDetail?: string; task?: VideoEditExportTask
   controller: AbortController; release: () => void
   startedAt?: number; finishedAt?: number
   loudnessRequested?: boolean
@@ -105,7 +106,7 @@ export class VideoEditExportQueue {
     if (!retryableVideoEditExportJob(job)) throw new Error('只可重试未发布文件的失败或中断项；已保存的成片请直接使用文件。')
     if (invocationId) job.invocationId = invocationId
     if (job.state === 'interrupted') logger.info('重试中断的导出', { event: 'video_edit.export_queue.interrupted_retry', context: { jobId: id, projectId: job.owner.document.id } })
-    job.controller = new AbortController(); job.release = release; job.task = undefined; job.restoredProgress = undefined; job.error = undefined; job.startedAt = undefined; job.finishedAt = undefined; job.state = 'queued'
+    job.controller = new AbortController(); job.release = release; job.task = undefined; job.restoredProgress = undefined; job.error = undefined; job.errorDetail = undefined; job.startedAt = undefined; job.finishedAt = undefined; job.state = 'queued'
     // Explicit retries join the tail, preserving the order of already submitted work.
     this.jobs = [...this.jobs.filter(value => value !== job), job]
     if (!this.registered.has(job)) { this.registering.add(job); this.publish(); return this.registerAndStart([job]) }
@@ -138,7 +139,8 @@ export class VideoEditExportQueue {
           logger.info('队列导出结束', { event: 'video_edit.export_queue.completed', context: { jobId: current.id, state: current.state } })
         } catch (error) {
           current.state = current.controller.signal.aborted && current.task?.state !== 'completed' ? 'cancelled' : 'failed'
-          current.error = error instanceof Error ? error.message : '导出失败，请重试。'
+          current.error = error instanceof Error ? videoEditUserErrorMessage(error) : '导出失败，请重试。'
+          current.errorDetail = error instanceof Error && typeof (error as Error & { detail?: unknown }).detail === 'string' ? (error as Error & { detail: string }).detail : error instanceof Error && error.message !== current.error ? error.message : undefined
           logger.error('队列导出失败', { event: 'video_edit.export_queue.failed', error, context: { jobId: current.id } })
         } finally { clearInterval(progress); current.finishedAt = Date.now(); current.release(); this.publish() }
       }

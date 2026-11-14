@@ -16,7 +16,7 @@ import { assertVideoEditFramesComposable } from './videoEditHeadlessGuard'
 const RESTORED_NOTICE = '按界面重新加载前提交时的内容导出。'
 function videoEditExportJobSummary(job: VideoEditExportJob): Record<string, unknown> {
   return { id: job.id, documentRef: { kind: 'video_edit.document', id: job.owner.document.id }, sequenceRef: { kind: 'video_edit.sequence', id: `${job.owner.document.id}:${job.snapshot.id}` }, name: job.name, presetName: job.presetName, state: job.state, progress: videoEditExportJobProgress(job), ...(job.task ? { phase: job.task.phase, compositionProgress: job.task.compositionProgress, compressionProgress: job.task.compressionProgress } : {}), range: job.range, settings: job.settings,
-    rangeSource: job.rangeSource, outputReady: Boolean(job.task?.output), ...(job.task?.notice ? { notice: job.task.notice } : job.restored ? { notice: RESTORED_NOTICE } : {}), ...(job.task?.assetRef ? { assetRef: job.task.assetRef } : {}), ...(job.task ? { taskId: job.task.id } : {}), ...(job.error ? { error: job.error } : {}), ...(job.task?.loudnessMeasurement ? { loudnessMeasurement: job.task.loudnessMeasurement } : {}) }
+    rangeSource: job.rangeSource, outputReady: Boolean(job.task?.output), ...(job.task?.notice ? { notice: job.task.notice } : job.restored ? { notice: RESTORED_NOTICE } : {}), ...(job.task?.assetRef ? { assetRef: job.task.assetRef } : {}), ...(job.task ? { taskId: job.task.id } : {}), ...(job.error ? { error: job.errorDetail ? `${job.error}（原始原因：${job.errorDetail}）` : job.error } : {}), ...(job.task?.loudnessMeasurement ? { loudnessMeasurement: job.task.loudnessMeasurement } : {}) }
 }
 
 /** 能力调用没有人点保存对话框：默认放进剪辑所在项目的“导出”文件夹，也可指定已配置的快速下载/预设目录。 */

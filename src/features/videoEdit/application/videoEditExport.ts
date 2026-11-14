@@ -14,6 +14,7 @@ import { resolveVideoEditExportIntermediateSettings, adaptVideoEditExportPreset,
 import { recordVideoEditExport, getActiveVideoEditSequence, listVideoEditInstances, videoEditExportRange, publishVideoEdit, requireVideoEditInstance, saveVideoEdit, type VideoEditInstance } from './videoEditService'
 import { collectVideoEditOutput, publishVideoEditOutput, type VideoEditOutputReceipt } from './videoEditOutputs'
 import { importVideoEditSources } from './videoEditMedia'
+import { isVideoEditRuntimeText, videoEditUserErrorMessage } from './videoEditUserError'
 import { waitVideoEditSmartRegions } from './videoEditSmartRegions'
 import { videoEditTrackResults, waitVideoEditTracking } from './videoEditTracking'
 import { transientVideoEditExportOutputs, type VideoEditExportOutputs } from './videoEditExportRegistry'
@@ -29,9 +30,18 @@ const logger = createLogger('features.videoEdit.export')
  * the user sees where in the sequence and why.
  */
 function videoEditExportFrameError(frame: number, fps: number, error: unknown): Error {
-  return new Error(`导出在 ${videoEditFrameTimecode(frame, fps)} 处停止。${error instanceof Error ? error.message : String(error)}`, { cause: error })
+  const reason = error instanceof Error ? error.message : String(error)
+  const runtime = isVideoEditRuntimeText(reason)
+  return Object.assign(new Error(`导出在 ${videoEditFrameTimecode(frame, fps)} 处停止。${runtime ? '这一帧的画面没能生成，请重试；仍然失败就重启软件后再导出。' : reason}`, { cause: error }), runtime ? { detail: reason } : {})
 }
-export interface VideoEditExportTask { phase?: 'composition' | 'compression'; compositionProgress?: number; compressionProgress?: number; id: string; projectId: string; sequenceId: string; revision: number; startFrame: number; endFrame: number; progress: number; state: 'running' | 'completed' | 'cancelled' | 'failed'; error?: string; controller: AbortController; output?: VideoEditOutputReceipt; assetRef?: { kind: 'asset'; id: string }; loudness?: VideoEditLoudnessSettings; loudnessMeasurement?: VideoEditLoudnessMeasurement; notice?: string }
+/** 失败原因的原文（浏览器、驱动给的英文）只放进可展开的详情，正文是用户语言。 */
+function videoEditExportErrorDetail(error: unknown): string | undefined {
+  const detail = error instanceof Error ? (error as Error & { detail?: unknown }).detail : undefined
+  if (typeof detail === 'string') return detail
+  const message = error instanceof Error ? error.message : undefined
+  return message && isVideoEditRuntimeText(message) ? message : undefined
+}
+export interface VideoEditExportTask { phase?: 'composition' | 'compression'; compositionProgress?: number; compressionProgress?: number; id: string; projectId: string; sequenceId: string; revision: number; startFrame: number; endFrame: number; progress: number; state: 'running' | 'completed' | 'cancelled' | 'failed'; error?: string; errorDetail?: string; controller: AbortController; output?: VideoEditOutputReceipt; assetRef?: { kind: 'asset'; id: string }; loudness?: VideoEditLoudnessSettings; loudnessMeasurement?: VideoEditLoudnessMeasurement; notice?: string }
 const tasks = new WeakMap<VideoEditInstance, VideoEditExportTask>()
 export function videoEditExportTask(projectId: string): VideoEditExportTask | undefined { return tasks.get(requireVideoEditInstance(projectId)) }
 export function cancelVideoEditExport(projectId: string): void { videoEditExportTask(projectId)?.controller.abort() }
@@ -297,9 +307,9 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
     return path
   } catch (error) {
     if (published) {
-      task.error = `成片已保存，但后续处理未完成。${error instanceof Error ? error.message : '请从已导出的文件引用素材。'}`
+      task.error = `成片已保存，但后续处理未完成。${error instanceof Error ? videoEditUserErrorMessage(error) : '请从已导出的文件引用素材。'}`; task.errorDetail = videoEditExportErrorDetail(error)
       logger.warn('成片已发布，来源核验未完成，保留输出文件', { event: 'video_edit.export.receipt_failed', error, context: { projectId, taskId: task.id } })
-      throw new Error(task.error)
+      throw Object.assign(new Error(task.error, { cause: error }), { detail: task.errorDetail })
     }
     // 先停下 Worker 里的编码，在途帧随编码流丢弃，再撤掉未完成的文件。
     video?.close()
@@ -307,10 +317,10 @@ export async function exportVideoEdit(projectId: string, requestedPath?: string,
     if (created) await platform.system.fs.remove(path).catch(cleanupError => { leftover = true; logger.warn('清理未完成导出失败', { event: 'video_edit.export.cleanup_failed', error: cleanupError }) })
     if (captionCreated && captionPath) await platform.system.fs.remove(captionPath).catch(cleanupError => { leftover = true; logger.warn('清理未完成字幕失败', { event: 'video_edit.export.cleanup_failed', error: cleanupError }) })
     const userError = videoEditExportAudioUserError(error, settings)
-    task.state = task.controller.signal.aborted ? 'cancelled' : 'failed'; task.error = userError instanceof Error ? userError.message : '导出失败'
+    task.state = task.controller.signal.aborted ? 'cancelled' : 'failed'; task.error = userError instanceof Error ? videoEditUserErrorMessage(userError) : '导出失败'; task.errorDetail = videoEditExportErrorDetail(userError)
     if (task.controller.signal.aborted) logger.info('剪辑导出已取消', { event: 'video_edit.export.cancelled', context: { projectId, taskId: task.id } })
     else logger.error('剪辑导出失败', error, { event: 'video_edit.export.failed', context: { projectId, taskId: task.id, ...(failedFrame !== undefined ? { frame: failedFrame } : {}), singleFrameReads, elapsedMs: Math.round(performance.now() - started) } })
-    if (!task.controller.signal.aborted) throw userError
+    if (!task.controller.signal.aborted) throw userError instanceof Error && userError.message !== task.error ? Object.assign(new Error(task.error, { cause: userError }), { detail: task.errorDetail }) : userError
     return null
   } finally {
     if (compression) await platform.videoEditExport.cancelCompression(compression.id).catch(error => logger.warn('导出临时文件清理未完成', { event: 'video_edit.export.cleanup_failed', error, context: { projectId, taskId: task.id } }))

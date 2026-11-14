@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { WebRecordingBackupOptions, WebRecordingExportResult, WebRecordingSummary, WebReplayRenderResult, WebReplayServerState } from '@/platform/contracts/webReplay'
 import { getPlatform } from '@/platform'
+import { userErrorText } from '@/core/userErrorText'
 import type { WebAppBackupSetup } from '@/services/recordingSetupModel'
 import { finishWebAppBackupAudio, startWebAppBackupAudio } from './application/webAppBackupAudio'
 
@@ -31,8 +32,8 @@ export function useWebAppRecording(): {
   const platform = getPlatform().webReplay
   const reload = useCallback(async () => setRecordings(await platform.recordings()), [platform])
   useEffect(() => {
-    void platform.apps().then(setServer).catch(e => setError(String(e)))
-    void reload().catch(e => setError(String(e)))
+    void platform.apps().then(setServer).catch(e => setError(userErrorText(e, '网页录制服务没有启动，请重启软件后再试。')))
+    void reload().catch(e => setError(userErrorText(e, '录制列表没能读出来，请重试。')))
     const offApps = platform.onAppsChanged(setServer)
     const offProgress = platform.onRenderProgress(event => setRenders(value => ({ ...value, [event.recordingId]: { ...value[event.recordingId], busy: true, progress: event.progress, frame: event.frame } })))
     return () => { offApps(); offProgress() }

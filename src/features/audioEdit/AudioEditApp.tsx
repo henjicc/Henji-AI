@@ -46,6 +46,7 @@ import { AudioEditLeaveCancelledError, createAudioEditRecording, importAudioEdit
 import { VideoEditSendMenu } from '@/features/videoEdit/panels/VideoEditSendMenu'
 import { videoEditDocumentRef } from '@/features/videoEdit/application/videoEditSourceRefs'
 import { exportAudioEdit, relinkAudioEdit } from './application/audioEditApplicationService'
+import { audioEditUserErrorMessage } from './application/audioEditUserError'
 
 function formatTime(frames: number, sampleRate: number): string {
   const seconds = Math.max(0, frames / Math.max(1, sampleRate))
@@ -97,7 +98,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
   const delivery = useMemo<AudioEditDelivery>(() => {
     if (!deliveryInput) return { timeline: null, error: '' }
     try { return { timeline: compileAudioEditXmlTimeline({ ...deliveryProject.current!, ...deliveryInput }), error: '' } }
-    catch (error) { return { timeline: null, error: error instanceof Error ? error.message : '无法交付 XML' } }
+    catch (error) { return { timeline: null, error: audioEditUserErrorMessage(error, '无法交付 XML') } }
   }, [deliveryInput])
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null)
   const [tasks, setTasks] = useState<AudioEditTask[]>([])
@@ -117,7 +118,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
   const silencePreview = useAudioEditSilencePreview(project, range, Boolean(project) && !disabled && !sourceError)
   const normalizationGain = useMemo(() => calculatePreviewGain(waveformPeaks), [waveformPeaks])
   const { togglePlayback, seekSourceFrame } = useAudioEditPreview(project ?? null, normalizationGain)
-  const notifyError = useCallback((error: unknown) => showNotification(error instanceof Error ? error.message : notificationMessage('operationFailed'), 'error'), [showNotification])
+  const notifyError = useCallback((error: unknown) => showNotification(error instanceof Error ? audioEditUserErrorMessage(error) : notificationMessage('operationFailed'), 'error'), [showNotification])
   const run = useCallback(async (operation: () => Promise<unknown>) => {
     setBusy(true)
     try { await operation() } catch (error) { notifyError(error) } finally { setBusy(false) }
@@ -176,7 +177,7 @@ export default function AudioEditApp({ onBack }: AudioEditAppProps): JSX.Element
     if (!projectId || !waveformPath) return
     // 主进程按磁盘上的文档核对素材：刚导入或刚换素材时先落盘，否则它读到的还是没有素材的旧内容。
     void flushAudioEditProject(projectId).then(() => getPlatform().audioEdit.verifySource(projectId)).catch((error: unknown) => {
-      if (!disposed) setSourceError(error instanceof Error ? error.message : '素材不可用')
+      if (!disposed) setSourceError(audioEditUserErrorMessage(error, '素材不可用'))
     })
     void getPlatform().audioEdit.extractWaveform(waveformPath, Math.max(1600, Math.min(360000, Math.ceil(waveformSeconds * 50)))).then((waveform) => {
       if (!disposed) setWaveformPeaks(waveform.peak)

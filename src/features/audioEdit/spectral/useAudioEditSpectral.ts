@@ -6,6 +6,7 @@ import {
 import { spectralDesiredLevel, SpectralTileStore, spectralTileKey, type SpectralTileSet } from '@/core/audio/spectralTiles'
 import { createLogger } from '@/core/logging'
 import type { WaveformViewport } from '../waveformViewport'
+import { audioEditUserErrorMessage } from '../application/audioEditUserError'
 
 const logger = createLogger('features.audioEdit.spectral')
 
@@ -164,7 +165,7 @@ export class SpectralTileScheduler {
       const failures = (this.failures.get(key) ?? 0) + 1
       this.failures.set(key, failures); this.retryAt.set(key, this.now() + RETRY_DELAY_MS * failures)
       logger.warn('频谱块读取失败', { event: 'audio_edit.spectral.tile_failed', error, context: { level: need.level, tile: need.tile, failures } })
-      if (failures >= MAX_FAILURES) this.onError(error instanceof Error ? error.message : '频谱图没有生成出来。')
+      if (failures >= MAX_FAILURES) this.onError(audioEditUserErrorMessage(error, '频谱图没有生成出来，请重试。'))
     }).finally(() => {
       if (this.inflight.get(key)?.requestId === requestId) this.inflight.delete(key)
       this.pump()

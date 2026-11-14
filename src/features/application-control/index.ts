@@ -2,6 +2,6 @@ export type { ApplicationCapabilityHandlerRegistrar, CapabilityExecutionContext 
 export { ApplicationOperationReviewBanner } from './ApplicationOperationReviewBanner';
 export type { ApplicationDomainModule } from './domainModule'
 export { parseCapabilityInput } from './capabilities/handlerUtils'
-export { executeUiApplicationCapability } from './uiCapabilityExecution'
+export { executeUiApplicationCapability, uiCapabilityFailureError } from './uiCapabilityExecution'
 export { isAgentAuthoredStep, isAgentWritingDocument, markAgentAuthoredStep } from './agentEditing'
 export { RecyclableCollectionExecutor, UntrackedRecycledRemovalError, captureRecycledRemoval, createRecyclableRecordSource } from './recyclableCollection'

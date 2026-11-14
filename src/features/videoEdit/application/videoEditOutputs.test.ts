@@ -245,6 +245,16 @@ it.each([['画面', 45, '00:00:01:15'], ['声音', 30, '00:00:01:00']] as const)
   expect(media.has('D:/stopped.mp4')).toBe(false); expect(encoder.finalize).not.toHaveBeenCalled(); expect(encoder.cancel).toHaveBeenCalledOnce(); expect(owner.busy).toBe(false)
 })
 
+// 显卡、浏览器抛出的英文原始错误放进详情，正文告诉用户停在哪、怎么办。
+it('导出中途遇到运行时原始错误：正文是用户语言，原文进详情', async () => {
+  const owner = (await createVideoEditProject())!; const id = owner.document.id
+  appendVideoEditCaptionText(id, owner.activeSequenceId, '1\n00:00:00,000 --> 00:00:03,000\n字幕')
+  const raw = "Failed to execute 'importExternalTexture' on 'GPUDevice': Failed to import texture from video"
+  encoder.render.mockImplementation(async (at: number) => { if (at === 3) throw new Error(raw); return { singleFrameReads: 0 } })
+  await expect(exportVideoEdit(id, 'D:/runtime.mp4')).rejects.toMatchObject({ message: '导出在 00:00:00:03 处停止。这一帧的画面没能生成，请重试；仍然失败就重启软件后再导出。', detail: raw })
+  expect(videoEditExportTask(id)).toMatchObject({ state: 'failed', errorDetail: raw })
+})
+
 it('序列入出点选定导出半开范围：成片与字幕文件从入点计时，范围外内容不导出', async () => {
   const owner = (await createVideoEditProject())!; const id = owner.document.id; const fps = owner.document.sequences[0].frameRate.numerator / owner.document.sequences[0].frameRate.denominator
   appendVideoEditCaptionText(id, owner.activeSequenceId, '1\n00:00:00,000 --> 00:00:01,000\n范围前\n\n2\n00:00:01,000 --> 00:00:03,000\n跨入点\n\n3\n00:00:03,000 --> 00:00:04,000\n范围后')

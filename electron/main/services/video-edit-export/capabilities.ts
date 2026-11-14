@@ -24,10 +24,13 @@ export class VideoEditExportCapabilityProbe {
         const test = async (tenBit: boolean): Promise<boolean> => {
           try { await this.run([...(encoder.endsWith('_nvenc') ? ['-hwaccel', 'cuda'] : []), '-f', 'lavfi', '-i', 'color=s=256x256:r=30', '-frames:v', '1', ...videoEditExportFfmpegVideoArgs({ ...template, tenBit }, 30), '-f', 'null', '-']); return true }
           catch (error) {
-            reason = videoEditExportFfmpegErrorSummary(error)
+            const detail = videoEditExportFfmpegErrorSummary(error)
             // 只有明确的设备/格式缺失才是稳定结论，忙、超时及未知初始化失败允许重试。
-            if (!unsupported(reason)) transient = true
-            logger.debug('编码器初始化未通过', { event: 'video_edit_export.capabilities.unsupported', error, context: { encoder, tenBit } }); return false
+            const stable = unsupported(detail)
+            if (!stable) transient = true
+            // reason 会显示在导出窗口里：编码器的英文输出只进日志。
+            reason = stable ? `这台电脑的显卡或驱动不支持 ${encoder}${tenBit ? ' 10 位输出' : ''}。` : `${encoder} 暂时初始化不了（可能正被其他程序占用），稍后会重新检测。`
+            logger.debug('编码器初始化未通过', { event: 'video_edit_export.capabilities.unsupported', error, context: { encoder, tenBit, detail } }); return false
           }
         }
         const supported = new RegExp(`\\b${encoder}\\b`).test(list) && await test(false)

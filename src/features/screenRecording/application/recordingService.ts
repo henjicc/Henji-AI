@@ -13,6 +13,7 @@ import { recordingTimeLabel } from '../useRecordingControlSnapshot'
 import { registerApplicationCloseGuard } from '@/core/applicationLifecycle/applicationCloseGuards'
 import { defaultDocumentOperationChanges, markSessionDocumentOpened } from '@/features/documents'
 import { notifyUser } from '@/contexts/NotificationContext'
+import { userErrorText } from '@/core/userErrorText'
 import { notificationMessage, notificationText } from '@/i18n/notifications'
 
 const logger = createLogger('features.screenRecording.session')
@@ -52,7 +53,7 @@ export async function saveQuickRecording(sessionId: string, directory?: string):
     return result.path
   } catch (error) {
     logger.error('快速录制保存视频失败', { event: 'recording.quick_export.failed', error, context: { sessionId } })
-    notifyUser(notificationMessage('recordingVideoFailed', { error: error instanceof Error ? error.message : String(error) }), 'error')
+    notifyUser(notificationMessage('recordingVideoFailed', { error: userErrorText(error, '视频合成没有完成，录制原片仍保留，可以在剪辑里打开。') }), 'error')
     throw error
   }
 }
@@ -129,7 +130,7 @@ async function finish(id: string, importResult: boolean): Promise<void> {
       }
       defaultDocumentOperationChanges.changed()
       logger.info('录制会话已封存', { event: 'recording.session.finish.completed', context: { sessionId: id, ...(ended ? { sourceEnded: ended } : {}) } })
-    } catch (error) { publish({ error: String(error) }); logger.error('录制会话收尾失败', { event: 'recording.session.finish.failed', error }); throw error }
+    } catch (error) { publish({ error: userErrorText(error, '录制没能正常收尾，已录的部分可以在录制列表里恢复。') }); logger.error('录制会话收尾失败', { event: 'recording.session.finish.failed', error }); throw error }
     finally { releaseTarget?.(); releaseTarget = undefined; publish({ busy: false, opening: false }); finishing = undefined }
   })()
   return finishing
@@ -166,7 +167,7 @@ export async function startRecording(options: ScreenCaptureOptions, session: Rec
   } catch (error) {
     quickSessions.delete(id); handoffSessions.delete(id)
     try { await capture?.close() } finally { capture = undefined; detach?.(); detach = undefined; releaseTarget?.(); releaseTarget = undefined; await api.revoke(id) }
-    publish({ error: String(error) }); logger.error('准备录制失败', { event: 'recording.session.start.failed', error }); throw error
+    publish({ error: userErrorText(error, '没能开始录制，请重试；仍然失败就重启软件。') }); logger.error('准备录制失败', { event: 'recording.session.start.failed', error }); throw error
   } finally { publish({ busy: false }) }
 }
 export async function controlRecording(id: string, action: 'pause' | 'resume' | 'mark' | 'stop' | 'cancel', note?: string): Promise<void> {

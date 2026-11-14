@@ -1006,7 +1006,8 @@ it('单次导出等待登记成功再写文件，登记拒绝不开始合成', a
   const register = vi.spyOn(api, 'register').mockImplementation(() => gate.promise)
   const create = vi.spyOn(api, 'createOutput').mockResolvedValue(undefined)
   const work = exportVideoEdit(owner.document.id, file('registration.mp4'), false, undefined, undefined, { snapshot: structuredClone(getActiveVideoEditSequence(owner)), range: videoEditExportRange(owner), settings: { ...VIDEO_EDIT_EXPORT_PRESETS[0].settings, loudness: null } })
-  const rejected = expect(work).rejects.toThrow('registry rejected')
+  // 英文原始原因只进详情，正文是用户语言
+  const rejected = expect(work).rejects.toMatchObject({ detail: 'registry rejected' })
   try {
     await vi.waitFor(() => expect(register).toHaveBeenCalledOnce())
     expect(create).not.toHaveBeenCalled()

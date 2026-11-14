@@ -23,10 +23,17 @@ export function runVideoEditExportFfmpeg(binary: string, args: string[], signal:
       signal.removeEventListener('abort', abort)
       if (signal.aborted) reject(signal.reason ?? new Error('导出已取消。'))
       else if (failure) reject(failure)
-      else if (code !== 0) reject(new Error(`视频压制失败：${videoEditExportFfmpegErrorSummary(tail)}`, { cause: tail }))
+      // 编码器的英文输出留在 cause 里随失败日志记下，界面只给能照着做的话。
+      else if (code !== 0) reject(new Error(videoEditExportFfmpegUserMessage(tail), { cause: tail }))
       else resolve(output)
     })
   })
+}
+/** 压制失败给用户的话：磁盘满、写不进去与编码器问题的处理办法不同。 */
+function videoEditExportFfmpegUserMessage(tail: string): string {
+  if (/no space left on device|disk full/i.test(tail)) return '磁盘空间不足，视频压制没有完成。请清理后重试。'
+  if (/permission denied|access is denied/i.test(tail)) return '成片位置写不进去（没有权限或文件被占用），请换一个保存位置后重试。'
+  return '视频压制没有完成：编码器不接受当前设置，或正被其他程序占用。请关闭其他占用显卡编码的程序后重试，或在导出设置里换一种编码。'
 }
 export function videoEditExportFfmpegErrorSummary(error: unknown): string {
   const text = error instanceof Error ? typeof error.cause === 'string' ? error.cause : error.message : String(error)

@@ -3,7 +3,7 @@ import { createLogger } from '@/core/logging'
 import type { SuperKeyframeAttachment } from '@/core/assistant/attachments'
 import { openAssistant } from '@/features/assistant'
 import { loadRecordingSetup, saveRecordingSetup } from '@/services/recordingSetupModel'
-import { executeUiApplicationCapability } from '@/features/application-control'
+import { executeUiApplicationCapability, uiCapabilityFailureError } from '@/features/application-control'
 import { requireVideoEditInstance } from './videoEditService'
 import { pauseVideoMotion, resumeVideoMotion, startVideoMotion, stopVideoMotion, videoMotionOrigin, videoMotionState } from './videoEditMotionDraft'
 import { configureVideoExplanationMicrophone, pauseVideoExplanation, preflightVideoExplanation, resumeVideoExplanation, startVideoExplanation, stopVideoExplanation, transcribeVideoExplanation, videoExplanationState, reopenVideoExplanation } from './videoEditExplanation'
@@ -87,7 +87,7 @@ export async function removeSuperKeyframeTake(id: string, draftId: string, takeI
   const parent = { kind: 'video_edit.intent_draft', id: `${id}:${encodeURIComponent(draftId)}` }
   const signal = new AbortController().signal
   const baseline = await executeUiApplicationCapability({ id: 'read_application_entity', version: 1, input: { ref: parent } }, signal)
-  if (!baseline.ok) throw new Error(baseline.error.message)
+  if (!baseline.ok) throw uiCapabilityFailureError(baseline.error)
   const result = await executeUiApplicationCapability({ id: 'change_application_entities', version: 2, expectedRevisions: baseline.data.revisions as Record<string, number>, input: { summary: '删除超级关键帧段落', changes: [{ kind: 'remove_items', entityType: 'video_edit.intent_take', parent, targets: [{ kind: 'video_edit.intent_take', id: `${parent.id}:${encodeURIComponent(takeId)}` }] }] } }, signal)
-  if (!result.ok) throw new Error(result.error.message)
+  if (!result.ok) throw uiCapabilityFailureError(result.error)
 }
