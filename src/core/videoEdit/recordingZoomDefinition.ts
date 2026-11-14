@@ -7,7 +7,7 @@ export const RECORDING_ZOOM_DEFINITION: VideoEditBuiltinEffectDefinition = {
   description: '录屏片段的缩放区间（效果的 regions 属性）：区间开始时开始放大、结束时缩小完成，中间保持放大（放大与缩小都在区间内），画面在片段自身范围内放大，输出尺寸不变。'
     + '每个区间 {id,startUs,endUs,depth,focus,origin}：startUs/endUs 是片段素材的源时间微秒（修剪、拆分、移动、变速、倒放后自动跟着内容走）；'
     + 'depth 缩放档位 1–6 = 1.25/1.5/1.8/2.2/3.5/5 倍，默认 3（1.8 倍），讲解操作常用 3–4，看清小字用 5；'
-    + 'focus 为 "cursor" 时镜头跟随鼠标（重度平滑，鼠标靠近视野边缘才平移），为 {x,y}（相对源画面 0–1）时对准固定位置；origin 为 auto（自动生成）或 manual（用户调整）。'
+    + 'focus 为 "cursor" 时镜头跟随鼠标（鼠标小范围活动时不动，移出才平滑跟过去，鼠标靠近画面边缘时视野贴边），为 {x,y}（相对源画面 0–1）时对准固定位置；origin 为 auto（自动生成）或 manual（用户调整）。'
     + '区间不能重叠、数量不限。只能加到绑定操作日志的屏幕视频片段；放在录制光标之后，重绘的光标会一起放大。',
   params: [
     { key: 'connect', name: '衔接相邻缩放', type: 'boolean', default: true, tooltip: '相邻缩放直接平移过去，不先缩小再放大', description: 'true 时间隔不超过1.5秒的相邻区间直接平移衔接；false 每个区间都先缩小回原画面再放大（紧挨着的区间总是平移）。' },

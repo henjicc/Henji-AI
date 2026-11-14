@@ -58,12 +58,15 @@ fn cursorDistance(p: vec2f, shape: i32) -> f32 {
  let delta=(v.position.xy-u.a.xy)/size;
  let p=vec2f(delta.x*u.b.x+delta.y*u.b.y,-delta.x*u.b.y+delta.y*u.b.x);
  let shape=i32(u.a.w); let opacity=u.b.w;
- let d=cursorDistance(p,shape)*size;
  let border=max(1.1,size*0.05);
+ // 文字竖线、十字、转圈、双向箭头这类线条形状的笔画比两侧描边还细，不加宽就只剩描边色（浅色样式下整个变黑）：
+ // 线条向外加宽一圈描边，填充色保持原笔画粗细。
+ let stroke=shape==1 || (shape>=3 && shape<=10);
+ let d=cursorDistance(p,shape)*size-select(0.0,border,stroke);
  let outer=clamp(0.5-d,0.0,1.0)*opacity;
  let inner=clamp(0.5-(d+border),0.0,1.0)*opacity;
  let blur=max(1.5,size*0.1);
- let ds=cursorDistance(p-vec2f(0.035,0.07),shape)*size;
+ let ds=cursorDistance(p-vec2f(0.035,0.07),shape)*size-select(0.0,border,stroke);
  let shadow=(1.0-smoothstep(-blur*0.5,blur,ds))*0.28*opacity*(1.0-outer);
  let dark=u.b.z>0.5;
  let fillColor=select(vec3f(1.0),vec3f(0.09,0.1,0.11),dark);

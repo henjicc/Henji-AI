@@ -406,6 +406,8 @@ describe('剪辑内置效果（真实设备）', () => {
       expect(pixel(right, 40, 18)[0]).toBeGreaterThan(pixel(right, 40, 18)[2])
       // All captured shapes compile and produce output; hidden is excluded by the sampler.
       for (const shape of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12]) expect(await render([{ ...draw, point: [0.5, 0.5], shape }])).not.toEqual(original)
+      // 线条形状（文字竖线）浅色样式中间是浅色填充，不会只剩深色描边。
+      expect(pixel(await render([{ ...draw, point: [0.5, 0.5], shape: 1, size: 1 }]), 32, 18)[0]).toBeGreaterThan(200)
       // Premultiplied alpha is preserved: fading a clip cannot leave a bright floating cursor.
       device.queue.writeTexture({ texture: source as never }, new Uint8Array(W * H * 4), { bytesPerRow: W * 4 }, [W, H])
       expect((await render([ring, draw])).every(value => value === 0)).toBe(true)

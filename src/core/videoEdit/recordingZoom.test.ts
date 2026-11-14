@@ -51,19 +51,36 @@ describe('录屏自动缩放区间', () => {
     // 平移连续：相邻采样没有跳变
     for (let i = 1; i < connected.length; i++) expect(Math.abs(connected[i].centerX - connected[i - 1].centerX)).toBeLessThan(0.1)
   })
-  it('跟随指针：死区内不动，靠近边缘才平移；任意定位顺序结果相同；没有指针数据时停在中央', () => {
+  it('跟随指针：小范围活动不动，移出后半秒内跟上；靠近画面边缘时视野贴边；任意定位顺序结果相同；没有指针数据时停在中央', () => {
     const regions = [region(1_000_000, 6_000_000, { focus: 'cursor', depth: 3 })]
-    const pointer = (us: number) => us < 3_000_000 ? { x: 0.5, y: 0.5 } : { x: 0.9, y: 0.5 }
-    const steady = evaluateRecordingZoom(regions, 2_800_000, smooth, pointer)
-    expect(steady.centerX).toBeCloseTo(0.5, 6)
-    const later = evaluateRecordingZoom(regions, 5_500_000, smooth, pointer)
-    expect(later.centerX).toBeGreaterThan(0.6)
-    const small = (us: number) => us < 3_000_000 ? { x: 0.5, y: 0.5 } : { x: 0.55, y: 0.5 }
-    expect(evaluateRecordingZoom(regions, 5_500_000, smooth, small).centerX).toBeCloseTo(0.5, 6)
+    const half = 0.5 / 1.8
+    const pointer = (us: number) => us < 3_000_000 ? { x: 0.5, y: 0.5 } : { x: 0.97, y: 0.5 }
+    expect(evaluateRecordingZoom(regions, 2_800_000, smooth, pointer).centerX).toBeCloseTo(0.5, 6)
+    // 指针跳到右边缘：0.5 秒后视野已基本贴右边，不再差一截
+    expect(evaluateRecordingZoom(regions, 3_500_000, smooth, pointer).centerX).toBeGreaterThan(1 - half - 0.03)
+    const later = evaluateRecordingZoom(regions, 4_500_000, smooth, pointer)
+    expect(later.centerX).toBeCloseTo(1 - half, 4)
+    // 指针在框内小幅移动：镜头不动
+    const small = (us: number) => ({ x: 0.5 + 0.1 * Math.sin(us / 300_000), y: 0.5 })
+    const still = [2_500_000, 3_500_000, 4_500_000].map(us => evaluateRecordingZoom(regions, us, smooth, small).centerX)
+    expect(Math.max(...still) - Math.min(...still)).toBeLessThan(1e-9)
+    // 指针在左下角附近走动：视野始终贴左下角
+    const corner = (us: number) => ({ x: 0.04 + 0.05 * Math.sin(us / 200_000), y: 0.95 })
+    for (const us of [2_000_000, 3_000_000, 4_000_000]) {
+      const view = evaluateRecordingZoom(regions, us, smooth, corner)
+      expect(view.centerX).toBeCloseTo(half, 6); expect(view.centerY).toBeCloseTo(1 - half, 6)
+    }
+    // 高倍数：指针在一组里来回移动也一直在视野内
+    const deep = [region(1_000_000, 6_000_000, { focus: 'cursor', depth: 6 })]
+    const sweep = (us: number) => ({ x: 0.3 + 0.05 * Math.sin(us / 150_000), y: 0.3 + 0.07 * Math.cos(us / 170_000) })
+    for (let us = 2_500_000; us <= 5_000_000; us += 50_000) {
+      const view = evaluateRecordingZoom(deep, us, smooth, sweep); const p = sweep(us); const h = 0.5 / view.scale
+      expect(Math.abs(p.x - view.centerX)).toBeLessThan(h); expect(Math.abs(p.y - view.centerY)).toBeLessThan(h)
+    }
     evaluateRecordingZoom(regions, 1_000_000, smooth, pointer)
-    expect(evaluateRecordingZoom(regions, 5_500_000, smooth, pointer)).toEqual(later)
+    expect(evaluateRecordingZoom(regions, 4_500_000, smooth, pointer)).toEqual(later)
     expect(evaluateRecordingZoom(regions, 3_000_000, smooth, none)).toEqual({ scale: 1.8, centerX: 0.5, centerY: 0.5 })
-    expect(recordingZoomPointerSpans(regions, 3_000_000, smooth)).toEqual([{ fromUs: 1_000_000, toUs: 3_000_000 }])
+    expect(recordingZoomPointerSpans(regions, 3_000_000, smooth)).toEqual([{ fromUs: 1_000_000, toUs: 6_000_000 }])
     expect(recordingZoomPointerSpans([region(1_000_000, 2_000_000)], 2_500_000, smooth)).toEqual([])
   })
   it('事件日志折算指针：静止很久仍给出位置，按源画面归一化', async () => {

@@ -7,7 +7,8 @@ import type { VideoEditRatio } from './time'
  * 录屏自动缩放（参照 Recordly 的缩放区间模型）：缩放区间是效果实例上的独立数据，时间是片段素材的源时间（微秒），
  * 与 `videoEditClipSourceTimeAt` 同一基准，修剪、拆分、移动、变速、倒放后区间自动跟着画面内容走。
  * - 区间内是“保持放大”；放大过渡在区间开始之前完成，缩小过渡在区间结束之后进行，相邻区间可直接平移衔接。
- * - 焦点 `cursor` 跟随重度平滑的指针，指针接近放大视野边缘才平移（死区跟随）；焦点坐标是相对源画面的固定点。
+ * - 焦点 `cursor` 跟随指针（参照 Cap）：指针在一处小范围活动时镜头不动，移出才重新取景；取景按比例放在可移动范围里，
+ *   靠近画面边缘时视野贴边；镜头用临界阻尼弹簧追目标。焦点坐标是相对源画面的固定点。
  * - 求值是纯函数：给定区间、源时间和指针采样回调，结果与之前播过哪些帧无关（拖动定位、倒放、导出逐帧一致）。
  * 与 `screenAttention.ts` 烘焙的位置/缩放关键帧是两套独立模型，互不改写。
  */
@@ -20,10 +21,15 @@ export const RECORDING_ZOOM_CONNECT_GAP_US = 1_500_000
 /** 跟随镜头按固定源时间网格推进（全局网格，跨区间、跨帧复用同一组指针采样）。 */
 export const RECORDING_ZOOM_FOLLOW_STEP_US = 50_000
 const TRANSITIONS = { smooth: { inUs: 1_000_000, outUs: 800_000 }, quick: { inUs: 500_000, outUs: 400_000 } } as const
-/** 指针离开视野中央这部分（相对半视野）才推动镜头。 */
-const DEAD_ZONE = 0.6
-/** 镜头追赶目标的时间常数：越大越稳。 */
-const FOLLOW_TAU_US = 450_000
+/** 指针在一处活动的范围（相对视野宽、高）：指针移出这个框才重新取景，框内的小幅移动镜头不动。取值同 Cap。 */
+const CLUSTER_WIDTH = 0.5
+const CLUSTER_HEIGHT = 0.7
+/** 焦点离画面边缘不到这个比例时视野直接贴边，边角内容整块露出，不随指针在边角附近走动（同 Cap 的 edge snap）。 */
+const EDGE_SNAP = 0.25
+/** 这组指针的外接框离视野边至少留这部分（相对半视野）：高倍数下按比例取景时指针也不出视野。 */
+const FOCUS_MARGIN = 0.1
+/** 镜头弹簧角频率（每秒，临界阻尼）：约 0.2 秒走完一半、0.5 秒到位、不过冲。接近 Cap 默认（刚度 200、阻尼 40、质量 2.25）。 */
+const FOLLOW_OMEGA = 9.4
 
 const unit = z.number().finite().min(0).max(1)
 const time = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER)
@@ -104,19 +110,63 @@ function layout(regions: readonly RecordingZoomRegion[], params: RecordingZoomPa
   return { spans, pans }
 }
 
-/** 死区跟随镜头：从 `fromUs` 起按全局网格推进到 `toUs`，状态只来自这段指针采样，任何定位都得到同一结果。 */
-function followCenter(scale: number, fromUs: number, toUs: number, pointerAt: RecordingZoomPointer): RecordingZoomPoint {
-  const half = 0.5 / scale; const zone = half * DEAD_ZONE
-  const start = pointerAt(fromUs) ?? { x: 0.5, y: 0.5 }
-  const goal = { x: clamp(start.x, half, 1 - half), y: clamp(start.y, half, 1 - half) }; const camera = { ...goal }
-  const step = (time: number, dt: number): void => {
-    const pointer = pointerAt(time)
-    if (pointer) for (const axis of ['x', 'y'] as const) {
-      const delta = pointer[axis] - goal[axis]
-      if (Math.abs(delta) > zone) goal[axis] = clamp(pointer[axis] - Math.sign(delta) * zone, half, 1 - half)
+/**
+ * 一个轴上一组指针（外接框 lo–hi）对应的视野中心：框中心按比例落在视野可移动范围里（在最左时视野贴左边，最右时贴右边），
+ * 离边不到 `EDGE_SNAP` 直接贴边；再保证整个框在视野内侧（分组框不超过视野的 0.5×0.7，留得下边距）。
+ */
+function frameAxis(lo: number, hi: number, half: number): number {
+  const travel = clamp(((lo + hi) / 2 - EDGE_SNAP) / (1 - 2 * EDGE_SNAP), 0, 1)
+  const margin = half * FOCUS_MARGIN
+  return clamp(clamp(half + travel * (1 - 2 * half), hi - half + margin, lo + half - margin), half, 1 - half)
+}
+interface Cluster { startUs: number; x0: number; x1: number; y0: number; y1: number }
+/** 按时间贪心分组区间里的指针位置：一组的外接框不超过视野宽 50%、高 70%，超出就开新组（同 Cap）。 */
+function pointerClusters(scale: number, fromUs: number, endUs: number, untilUs: number, pointerAt: RecordingZoomPointer): Cluster[] {
+  const maxW = CLUSTER_WIDTH / scale; const maxH = CLUSTER_HEIGHT / scale
+  const clusters: Cluster[] = []
+  /** 返回 false 表示这一组开始在 `untilUs` 之后：求值用不到它，也就不必再往后扫。 */
+  const add = (time: number): boolean => {
+    const p = pointerAt(time)
+    if (!p) return true
+    const last = clusters.at(-1)
+    if (last && Math.max(last.x1, p.x) - Math.min(last.x0, p.x) <= maxW && Math.max(last.y1, p.y) - Math.min(last.y0, p.y) <= maxH) {
+      last.x0 = Math.min(last.x0, p.x); last.x1 = Math.max(last.x1, p.x); last.y0 = Math.min(last.y0, p.y); last.y1 = Math.max(last.y1, p.y)
+      return true
     }
-    const k = 1 - Math.exp(-dt / FOLLOW_TAU_US)
-    camera.x += (goal.x - camera.x) * k; camera.y += (goal.y - camera.y) * k
+    if (time > untilUs) return false
+    clusters.push({ startUs: time, x0: p.x, x1: p.x, y0: p.y, y1: p.y })
+    return true
+  }
+  add(fromUs)
+  for (let grid = (Math.floor(fromUs / RECORDING_ZOOM_FOLLOW_STEP_US) + 1) * RECORDING_ZOOM_FOLLOW_STEP_US; grid <= endUs; grid += RECORDING_ZOOM_FOLLOW_STEP_US) if (!add(grid)) break
+  return clusters
+}
+/**
+ * 跟随镜头：按当前这组指针的整组外接框（含这组之后的移动，镜头提前对准指针要去的地方）用 `frameAxis` 取景；
+ * 镜头用临界阻尼弹簧追目标（精确解，速度跨目标变化连续），从 `fromUs` 起按全局网格推进到 `toUs`。
+ * 结果只取决于区间内的指针采样，任何定位顺序都得到同一结果。
+ */
+function followCenter(scale: number, fromUs: number, endUs: number, toUs: number, pointerAt: RecordingZoomPointer): RecordingZoomPoint {
+  const half = 0.5 / scale
+  const clusters = pointerClusters(scale, fromUs, endUs, toUs, pointerAt)
+  let index = -1
+  const target = { x: 0.5, y: 0.5 }
+  const aim = (time: number): void => {
+    let next = index
+    while (next + 1 < clusters.length && clusters[next + 1].startUs <= time) next++
+    if (next === index || next < 0) return
+    index = next; const c = clusters[index]
+    target.x = frameAxis(c.x0, c.x1, half); target.y = frameAxis(c.y0, c.y1, half)
+  }
+  aim(fromUs)
+  const camera = { ...target }; const velocity = { x: 0, y: 0 }
+  const step = (time: number, dt: number): void => {
+    aim(time)
+    const t = dt / 1e6; const decay = Math.exp(-FOLLOW_OMEGA * t)
+    for (const axis of ['x', 'y'] as const) {
+      const offset = camera[axis] - target[axis]; const c = velocity[axis] + FOLLOW_OMEGA * offset
+      camera[axis] = target[axis] + (offset + c * t) * decay; velocity[axis] = (velocity[axis] - FOLLOW_OMEGA * c * t) * decay
+    }
   }
   let last = fromUs
   for (let grid = (Math.floor(fromUs / RECORDING_ZOOM_FOLLOW_STEP_US) + 1) * RECORDING_ZOOM_FOLLOW_STEP_US; grid <= toUs; grid += RECORDING_ZOOM_FOLLOW_STEP_US) { step(grid, grid - last); last = grid }
@@ -125,7 +175,7 @@ function followCenter(scale: number, fromUs: number, toUs: number, pointerAt: Re
 }
 function held(span: Span, sourceUs: number, pointerAt: RecordingZoomPointer): RecordingZoomTransform {
   const focus = span.region.focus
-  const center = focus === 'cursor' ? followCenter(span.scale, span.activeStart, Math.max(span.activeStart, sourceUs), pointerAt) : focus
+  const center = focus === 'cursor' ? followCenter(span.scale, span.activeStart, span.activeEnd, Math.max(span.activeStart, sourceUs), pointerAt) : focus
   return clampView({ scale: span.scale, centerX: center.x, centerY: center.y })
 }
 
@@ -151,7 +201,8 @@ export function evaluateRecordingZoom(regions: readonly RecordingZoomRegion[], s
 /** 求值 `sourceUs` 时跟随镜头需要的指针时间范围（源时间微秒）；渲染端据此预先读取指针数据。 */
 export function recordingZoomPointerSpans(regions: readonly RecordingZoomRegion[], sourceUs: number, params: RecordingZoomParams): Array<{ fromUs: number; toUs: number }> {
   const { spans } = layout(regions, params)
-  return spans.filter(span => span.region.focus === 'cursor' && sourceUs >= span.activeStart && sourceUs <= span.activeEnd).map(span => ({ fromUs: span.activeStart, toUs: Math.max(span.activeStart, sourceUs) }))
+  // 指针分组看整个区间（镜头提前对准这组指针要去的地方），所以要读到区间结束。
+  return spans.filter(span => span.region.focus === 'cursor' && sourceUs >= span.activeStart && sourceUs <= span.activeEnd).map(span => ({ fromUs: span.activeStart, toUs: span.activeEnd }))
 }
 
 type CursorEvent = Extract<CaptureEvent, { kind: 'cursor' }>
