@@ -8,11 +8,12 @@ import type { FontCatalog, FontFaceInfo, FontFileSource, FixedFontCatalog } from
 import { FONTS_IPC } from '../../../../src/platform/contracts/fonts'
 import { createMainLogger } from '../logging'
 import { getProgramDataDir } from '../appBasePaths'
+import { writeBufferAtomically } from '../fs/atomic-file'
 import type { InternalFace } from './scanner'
 import type { FontWorkerRequest } from './worker'
 const logger = createMainLogger('main.fonts')
 type Request = FontWorkerRequest extends infer T ? T extends FontWorkerRequest ? Omit<T, 'id'> : never : never
-type ScanResult = { faces: InternalFace[]; failures: string[]; signature: string }
+type ScanResult = { faces: InternalFace[]; failures: string[]; signature: string; cache?: string }
 const CATALOG_CACHE_FILE = /^(?:catalog-cache\.(?:json|tmp)|\.catalog-cache\.json\.[\w-]+\.tmp)$/
 /** 一次复制、解压或安装字体会连发很多目录事件，合并成一次核对。 */
 const WATCH_SETTLE_MS = 500
@@ -22,6 +23,7 @@ export class FontService {
   private closing?: Promise<void>
   private id = 0
   private faces: InternalFace[] = []
+  private cacheWrite: Promise<void> = Promise.resolve()
   /** 当前目录对应的文件清单签名（路径 + 大小 + 修改时间）；未扫描过时为空。 */
   private signature?: string
   private revision = 0
@@ -51,6 +53,12 @@ export class FontService {
   }
   private catalog(): FontCatalog { return { faces: this.faces.map(value => value.face), revision: this.revision } }
   private apply(result: ScanResult): FontCatalog {
+    if (result.cache !== undefined) {
+      const bytes = Buffer.from(result.cache)
+      // 依次写入，后一次扫描的缓存不会被前一次覆盖；缓存只省重解析，写失败的代价是下次启动多解析一遍。
+      this.cacheWrite = this.cacheWrite.then(() => writeBufferAtomically(path.join(this.library, 'catalog-cache.json'), bytes))
+        .catch(error => logger.warn('字体目录缓存写入失败', { event: 'fonts.cache.write_failed', error }))
+    }
     const changed = JSON.stringify(result.faces) !== JSON.stringify(this.faces)
     this.faces = result.faces; this.signature = result.signature
     if (changed) { this.revision++; for (const window of BrowserWindow.getAllWindows()) window.webContents.send(FONTS_IPC.changed) }
@@ -138,7 +146,7 @@ export class FontService {
     for (const watcher of this.watchers) watcher.close()
     this.watchers = []; this.watched.clear()
     const worker = this.worker
-    this.closing = Promise.resolve(worker?.terminate()).then(() => undefined)
+    this.closing = Promise.all([worker?.terminate(), this.cacheWrite]).then(() => undefined)
     return this.closing
   }
 }

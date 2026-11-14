@@ -1,4 +1,3 @@
-import { writeBufferAtomically } from '../fs/atomic-file'
 import { readFile, stat, readdir, mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
@@ -34,7 +33,11 @@ export class FontScanner {
     const signature = createHash('sha256').update(JSON.stringify([...stats].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0))).digest('hex')
     return { files: files.filter(file => stats.has(file)), imported: new Set(imported), stats, failures, signature }
   }
-  async scan(): Promise<{ faces: InternalFace[]; failures: string[]; signature: string }> {
+  /**
+   * 扫描跑在字体线程里，线程里不能加载 electron（安装版没有 electron 包可解析），所以缓存不在这里落盘：
+   * 内容有变化时把新缓存文本交回 `cache`，由主进程原子写入。
+   */
+  async scan(): Promise<{ faces: InternalFace[]; failures: string[]; signature: string; cache?: string }> {
     const { files, imported: importedSet, stats, failures, signature: inventorySignature } = await this.inventory()
     const next: Record<string, CachedFile> = {}; const faces: InternalFace[] = []
     for (const file of files) {
@@ -46,11 +49,11 @@ export class FontScanner {
         for (const value of parsed) faces.push({ face: { ...value.face, id: createHash('sha256').update(`${file}:${value.index}:${signature}:${JSON.stringify(value.face.variation ?? {})}`).digest('hex'), imported: importedSet.has(file) }, path: file, index: value.index, signature })
       } catch (error) { failures.push(`${path.basename(file)}: ${error instanceof Error ? error.message : String(error)}`) }
     }
-    // 内容没变就不重写：缓存文件在字体库目录里，重写会触发目录监听。
+    // 内容没变就不交回：缓存文件在字体库目录里，重写会触发目录监听。
     const text = JSON.stringify(next)
-    if (text !== this.cacheText) { await writeBufferAtomically(path.join(this.library, 'catalog-cache.json'), Buffer.from(text)); this.cacheText = text }
-    this.cache = next
-    return { faces, failures, signature: inventorySignature }
+    const cache = text !== this.cacheText ? text : undefined
+    this.cacheText = text; this.cache = next
+    return { faces, failures, signature: inventorySignature, cache }
   }
   async importFile(source: string): Promise<void> {
     await this.init()

@@ -124,8 +124,54 @@ for (const file of mainFiles) {
   }
 }
 
+/*
+ * 主进程里的 worker_threads 线程不能加载 electron：开发时 require('electron') 恰好解析到
+ * node_modules/electron（只是可执行文件路径），安装版里没有这个包，线程一启动就报
+ * "Cannot find module 'electron'"。所以从每个线程入口沿相对导入走一遍，碰到 electron 就报。
+ * 只按类型使用的导入打包时会被删掉，不算。
+ */
+// 只认 `import type { … } from`、`import type X from`、`import type * as X from` 与 `export type { … } from`；
+// 不能用“从 type 一路匹配到 from”，项目不写分号，`export type X = …` 会一直吞到后面真实导入的 from。
+const TYPE_ONLY_PATTERN = /\b(?:import|export)\s+type\s+(?:\{[^}]*\}|\*\s+as\s+\w+|\w+)\s*from\s*['"][^'"\n]+['"]/g
+function runtimeSpecifiers(file) {
+  const source = fs.readFileSync(file, 'utf8').replace(COMMENT_PATTERN, '').replace(TYPE_ONLY_PATTERN, '')
+  const specifiers = []
+  SPECIFIER_PATTERN.lastIndex = 0
+  let match
+  while ((match = SPECIFIER_PATTERN.exec(source)) !== null) specifiers.push(match[1])
+  return specifiers
+}
+function findElectronPath(entryFile) {
+  const queue = [[entryFile]]
+  const seen = new Set([entryFile])
+  while (queue.length > 0) {
+    const chain = queue.shift()
+    const current = chain[chain.length - 1]
+    for (const specifier of runtimeSpecifiers(current)) {
+      if (specifier === 'electron' || specifier.startsWith('electron/')) return [...chain, `'${specifier}'  ← 线程里加载了 electron`]
+      const resolved = resolveSpecifier(current, specifier)
+      if (!resolved || !resolved.file || seen.has(resolved.file)) continue
+      seen.add(resolved.file)
+      queue.push([...chain, resolved.file])
+    }
+  }
+  return null
+}
+const viteConfig = fs.readFileSync(path.join(repoRoot, 'electron.vite.config.ts'), 'utf8')
+const threadEntries = [...viteConfig.matchAll(/resolve\(__dirname,\s*'(electron\/main\/[^']+\.ts)'\)/g)]
+  .map((match) => path.join(repoRoot, match[1]))
+  .filter((file) => {
+    if (!fs.existsSync(file)) return false
+    const source = fs.readFileSync(file, 'utf8')
+    return /\bfrom\s*['"](?:node:)?worker_threads['"]/.test(source) && /\bparentPort\b/.test(source)
+  })
+for (const entry of threadEntries) {
+  const chain = findElectronPath(entry)
+  if (chain) violations.push({ file: entry, specifier: 'electron', chain: chain.slice(1) })
+}
+
 if (violations.length === 0) {
-  console.log(`✔ 主进程 import 边界检查通过（扫描 ${mainFiles.length} 个 main/preload 文件）`)
+  console.log(`✔ 主进程 import 边界检查通过（扫描 ${mainFiles.length} 个 main/preload 文件、${threadEntries.length} 个线程入口）`)
   process.exit(0)
 }
 
@@ -141,5 +187,5 @@ for (const violation of violations) {
   console.error('')
 }
 console.error('`@/` 别名只配在 electron.vite.config.ts 的 renderer 块，main/preload 解析不了。')
-console.error('把主进程需要的常量/类型移进依赖链为零的模块，再由渲染层反向引用。')
+console.error('把主进程需要的常量/类型移进依赖链为零的模块，再由渲染层反向引用；线程入口要用到的写盘、日志交回主进程做。')
 process.exit(1)

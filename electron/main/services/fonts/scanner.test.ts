@@ -6,11 +6,12 @@ import path from 'node:path'
 import { create, type Font } from 'fontkit'
 import { convert } from 'fontverter'
 import { FontScanner } from './scanner'
+import { writeBufferAtomically } from '../fs/atomic-file'
 import * as metadata from './metadata'
 import { discoverSystemFonts } from './discovery'
 
 const roots: string[] = []
-const fixture = path.resolve('node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2')
+const fixture = path.resolve('node_modules/@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2')
 afterEach(async () => { vi.restoreAllMocks(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))) })
 async function setup() {
   const root = await mkdtemp(path.join(os.tmpdir(), 'henji-fonts-')); roots.push(root)
@@ -41,7 +42,9 @@ it('使用真实 WOFF2 解析真实命名字重；重启沿用缓存，文件变
   expect(first.failures).toEqual([]); expect(first.faces.some(value => value.face.weight === 700)).toBe(true)
   expect(first.faces.some(value => value.face.weight === 100 && value.face.variation?.wght === 100)).toBe(true)
   expect(parse).toHaveBeenCalledTimes(1)
-  expect((await scanner.scan()).faces).toEqual(first.faces)
+  // 缓存由主进程落盘：内容没变的扫描不再交回缓存。
+  expect(first.cache).toBeDefined(); await fs.writeFile(path.join(library, 'catalog-cache.json'), first.cache!)
+  const again = await scanner.scan(); expect(again.faces).toEqual(first.faces); expect(again.cache).toBeUndefined()
   expect((await new FontScanner(library, async () => [source]).scan()).faces).toEqual(first.faces)
   expect(parse).toHaveBeenCalledTimes(1)
   await utimes(source, new Date(), new Date(Date.now() + 5000))
@@ -105,16 +108,18 @@ it('WOFF 与 WOFF2 规范化保留完整表、可变轴、字形与轮廓，读�
   await expect(scanner.read(faces[0])).rejects.toThrow('发生变化')
 })
 
-it('缓存内容不变不重写；替换遇到临时占用会重试，发布完成后重启可读回完整目录', async () => {
+it('缓存内容不变不交回；主进程原子写入遇到临时占用会重试，发布完成后重启可读回完整目录', async () => {
   const { source, library } = await setup()
   const scanner = new FontScanner(library, async () => [source])
-  await scanner.scan()
-  const rename = vi.spyOn(fs, 'rename')
+  const persist = (text: string) => writeBufferAtomically(path.join(library, 'catalog-cache.json'), Buffer.from(text))
+  await persist((await scanner.scan()).cache!)
   // 缓存文件在被监听的字体库目录里，原样重写会让监听再触发一次扫描。
-  await scanner.scan(); expect(rename).not.toHaveBeenCalled()
+  expect((await scanner.scan()).cache).toBeUndefined()
   await utimes(source, new Date(), new Date(Date.now() + 5000))
+  const rename = vi.spyOn(fs, 'rename')
   rename.mockRejectedValueOnce(Object.assign(new Error('暂时占用'), { code: 'EPERM' }))
   const changed = await scanner.scan()
+  await persist(changed.cache!)
   expect(rename).toHaveBeenCalledTimes(2)
   expect((await new FontScanner(library, async () => [source]).scan()).faces).toEqual(changed.faces)
   expect((await readdir(library)).filter(name => name.endsWith('.tmp'))).toEqual([])
