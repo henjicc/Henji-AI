@@ -33,12 +33,12 @@ it('代表性调用序列与 tools/list 的字符预算可重复测量', async (
   const contractInput = { domains, skills, catalog, port: 43821, requestedDomains: [] }
   const contractBefore = { ok: true, data: buildApplicationContract({ ...contractInput, detail: 'full' }) }
   const contractAfter = { ok: true, data: buildApplicationContract(contractInput) }
-  // 2026-10-21 调色技能与音效库领域加入后约 4.2k；2026-10-25 口播剪辑技能加入后约 4.55k；仍是一屏以内的契约摘要。
-  expect(JSON.stringify(contractAfter).length).toBeLessThan(4700)
+  // 2026-10-21 调色技能与音效库领域加入后约 4.2k；2026-10-25 口播剪辑技能加入后约 4.55k；2026-11-14 项目扩展技能加入后约 4.8k；仍是一屏以内的契约摘要。
+  expect(JSON.stringify(contractAfter).length).toBeLessThan(4900)
   for (const kind of ['external', 'embedded'] as const) {
-    expect(JSON.stringify({ ok: true, data: buildApplicationContract({ ...contractInput, callerKind: kind }) }).length).toBeLessThan(4700)
+    expect(JSON.stringify({ ok: true, data: buildApplicationContract({ ...contractInput, callerKind: kind }) }).length).toBeLessThan(4900)
   }
-  expect(skills).toHaveLength(9)
+  expect(skills).toHaveLength(AGENT_SKILL_NAMES.size)
 
   const scopeRevisions = Object.fromEntries(domains.map((domain, index) => [domain.id, index]))
   const revisionEnvelope = { revision: 12, scopeRevisions }

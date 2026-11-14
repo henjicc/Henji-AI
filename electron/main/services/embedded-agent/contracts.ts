@@ -4,7 +4,11 @@ import type { AgentAttachment } from '../../../../src/core/assistant/attachments
 export interface PreparedEmbeddedAttachment { attachment: AgentAttachment; data: string }
 export interface EmbeddedTool { name: string; title?: string; description?: string; inputSchema: Record<string, unknown> }
 export interface EmbeddedModel { providerId: string; model: LlmModelConfig; baseUrl: string; api: 'openai-completions' | 'openai-responses' | 'anthropic-messages'; apiKey: string; reasoning?: LlmReasoningConfig }
-export interface EngineConfiguration { directory: string; model: EmbeddedModel; tools: EmbeddedTool[]; instructions: string }
+/**
+ * workFolder：本机命令与文件工具的工作文件夹（当前项目，或作品目录），也是读取项目规则文件与项目助手插件的位置。
+ * projectTrusted：为假时不加载工作文件夹里的助手插件与设置（别人分享来的项目，用户还没允许运行其中代码）。
+ */
+export interface EngineConfiguration { directory: string; workFolder: string; projectTrusted: boolean; model: EmbeddedModel; tools: EmbeddedTool[]; instructions: string }
 export type EngineCommand =
   | { action: 'initialize'; input: string }
   | { action: 'configure'; input: EngineConfiguration }
@@ -15,7 +19,9 @@ export type EngineEvent =
   | { type: 'snapshot'; value: EmbeddedAgentSnapshot }
   | { type: 'tool'; id: string; name: string; input: Record<string, unknown> }
   | { type: 'toolCancel'; id: string }
-  | { type: 'log'; phase: 'start' | 'completed' | 'failed' | 'cancelled' | 'model_requested' | 'model_completed' | 'usage_summary' | 'tool_executed'; sessionId: string | null; requestId: string; message?: string;
+  /** 本机命令可能长时间没有输出（安装依赖、下载模型）：运行期间定时发出，宿主据此判断助手仍在工作。 */
+  | { type: 'heartbeat' }
+  | { type: 'log'; phase: 'start' | 'completed' | 'failed' | 'cancelled' | 'model_requested' | 'model_completed' | 'usage_summary' | 'tool_executed' | 'extension_failed'; sessionId: string | null; requestId: string; message?: string;
       requestMetrics?: { toolCount: number; toolBytes: number; systemBytes: number; messageCount: number; contextCount: number; contextBytes: number };
       summary?: { requests: number; usageResponses: number; input: number; output: number; cacheRead: number; cacheWrite: number; cacheHitRate: number | null; reasoning: number;
         /** 首个流式增量的平均与最慢等待（毫秒）；费用按 embeddedModelPricing 的参考单价计，没有单价时不出现。 */

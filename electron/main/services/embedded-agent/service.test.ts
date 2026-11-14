@@ -13,7 +13,7 @@ vi.mock('../system', () => ({ getAppLocalDataDir: () => '/fixture' }))
 vi.mock('../../window', () => ({ getMainWindow: () => undefined }))
 vi.mock('./piTrace', () => ({ recordPiTrace: () => undefined, recordPiRunEnded: () => undefined }))
 vi.mock('../assistant/user-instructions', () => ({ getAssistantUserInstructions: async () => ({ content: '' }) }))
-vi.mock('../logging', () => ({ createMainLogger: () => ({ info: mocks.info, error: mocks.error }) }))
+vi.mock('../logging', () => ({ createMainLogger: () => ({ info: mocks.info, warn: () => undefined, error: mocks.error }) }))
 vi.mock('./models', () => ({ resolveEmbeddedModel: mocks.resolveModel }))
 vi.mock('./attachments', () => ({ prepareEmbeddedAttachments: mocks.prepare }))
 import { EmbeddedAgentService, summarizeEmbeddedToolResult, withGenerationOrigin } from './service'

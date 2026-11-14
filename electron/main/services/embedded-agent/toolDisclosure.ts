@@ -158,7 +158,9 @@ export class PiToolDisclosure {
   prepareContext(context: string, pinnedSurface: string): string {
     this.scope = pinnedSurface
     const names = this.namesForScope()
-    this.session().setActiveToolsByName(names)
+    // 助手插件注册的工具不归这里管，换列表时原样保留
+    const own = new Set(this.tools.map(tool => tool.name))
+    this.session().setActiveToolsByName([...names, ...this.session().getActiveToolNames().filter(name => !own.has(name))])
     const current = surfaceProfile(disclosureSurface(context))
     const outside = current.tools.filter(name => this.tools.some(tool => tool.name === name) && !names.includes(name))
     return outside.length

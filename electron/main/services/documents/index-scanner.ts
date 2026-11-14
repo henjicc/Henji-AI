@@ -5,7 +5,7 @@ import path from 'node:path'
 import { buildDocumentEnvelope, carryDocumentEnvelopeForward } from '../../../../src/core/documents/envelope'
 import type { DocumentKindRegistry } from '../../../../src/core/documents/kinds'
 import { sameEntryName } from '../../../../src/core/documents/naming'
-import { INTERNAL_FOLDER_NAME, STANDALONE_FOLDER_LOCALE, type ProjectManifest } from '../../../../src/core/documents/projectManifest'
+import { EXTENSION_FOLDER_NAMES, INTERNAL_FOLDER_NAME, STANDALONE_FOLDER_LOCALE, type ProjectManifest } from '../../../../src/core/documents/projectManifest'
 import type { DocumentIndexScanReport } from '../../../../src/core/documents/types'
 import { isPathInside, pathKey, samePath } from '../../../../src/core/storage/pathSyntax'
 import { writeJsonFile } from '../fs/json-file'
@@ -255,7 +255,7 @@ export class DocumentIndexScanner {
     const candidates: ScanCandidate[] = []
     for (const container of projects.values()) {
       const manifest = container.manifest as ProjectManifest
-      const skipTop = [manifest.folders.generated, manifest.folders.materials, INTERNAL_FOLDER_NAME]
+      const skipTop = [manifest.folders.generated, manifest.folders.materials, INTERNAL_FOLDER_NAME, EXTENSION_FOLDER_NAMES[container.locale]]
       await this.collect(container.root, container, candidates, { skipTop }, report)
       // 素材文件夹整体不扫（可能很大），只看素材类文档自己的子文件夹（如 素材/录屏/ 里的 .hjweb）。
       for (const name of new Set(this.options.kinds.list().flatMap((kind) => kind.projectMaterialsFolderNames ? [kind.projectMaterialsFolderNames[container.locale]] : []))) {

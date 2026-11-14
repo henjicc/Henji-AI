@@ -26,7 +26,7 @@ describe('全部助手技能只引用真实存在的工具', () => {
     const ids = new Set(BUILTIN_APPLICATION_CAPABILITY_REGISTRY.list().map((definition) => definition.id))
     // 协议层工具（发现、操作核对、读媒体）与内置助手宿主工具不在应用能力目录里；
     // correct_same_model_parameters 是失败恢复策略的取值，不是工具
-    const hostTools = new Set([...PROTOCOL_TOOL_SPECS.map((spec) => spec.name), 'load_application_tools', 'load_assistant_skill', 'read_assistant_context', 'correct_same_model_parameters',
+    const hostTools = new Set([...PROTOCOL_TOOL_SPECS.map((spec) => spec.name), 'load_application_tools', 'load_assistant_skill', 'read_assistant_context', 'run_application_script', 'correct_same_model_parameters',
       // change_application_entities 的变更种类与镜头剪辑规则名，不是工具
       'create_items', 'remove_items', 'set_properties', 'cut_on_action'])
     const missing = markdownFiles(skillsRoot).flatMap((file) => {

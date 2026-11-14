@@ -27,6 +27,10 @@ vi.mock('../assistant/skills/registry', async importOriginal => {
 })
 import { embeddedSkillCatalog, callEmbeddedSkill } from './skills'
 
+/** 内置助手的本机命令与文件工具。 */
+const LOCAL_TOOLS = ['run_command', 'read_file', 'write_file', 'edit_file', 'search_files', 'find_files', 'list_files']
+
+
 const model: LlmModelConfig = { providerId: 'test', modelId: 'fixture', displayName: 'Fixture', adapter: 'openai-compatible', enabled: true,
   capabilities: { text: true, image: false, video: false, audio: false, streaming: true, toolCall: true, parallelTools: false,
     jsonOutput: false, structuredOutputMode: 'none', reasoning: false, sampling: true, contextWindow: 32768, maxOutputTokens: 1024, usage: true } }
@@ -109,7 +113,7 @@ data: ${JSON.stringify(event)}
   const engine = new PiEngine((event) => { events.push(structuredClone(event)) }, tool)
   cleanup.push(() => engine.dispose())
   await engine.command({ action: 'initialize', input: directory })
-  const configuration = { directory, model: { providerId: 'test', model: { ...model, capabilities: { ...model.capabilities, ...capabilities } }, baseUrl: `http://127.0.0.1:${address.port}/v1`, api, apiKey: 'fixture-key' },
+  const configuration = { directory, workFolder: directory, projectTrusted: false, model: { providerId: 'test', model: { ...model, capabilities: { ...model.capabilities, ...capabilities } }, baseUrl: `http://127.0.0.1:${address.port}/v1`, api, apiKey: 'fixture-key' },
     instructions: '你是测试中的痕迹助手。', tools: [{ name: 'read_project', description: '读取项目', inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'], additionalProperties: false } }] }
   await engine.command({ action: 'configure', input: configuration })
   return { engine, requests, headers, events, tool, directory, configuration, setUsage: (value: Record<string, unknown>) => { usage = value }, setMode: (value: typeof mode) => { mode = value },
@@ -350,7 +354,7 @@ describe('Pi official SDK engine', () => {
       'get_canvas_document', 'read_application_snapshot', 'change_application_entities', 'load_application_tools',
     ]))
     expect(initialTools.map(tool => tool.name)).toEqual(expect.arrayContaining(['call_application_tool']))
-    expect(initialTools).toHaveLength(10)
+    expect(initialTools).toHaveLength(10 + LOCAL_TOOLS.length)
     expect(initialTools.map(tool => tool.name)).not.toEqual(expect.arrayContaining(['render_camera_stage_output']))
     expect(initialTools.map(tool => tool.name)).not.toContain('create_visible_generation_task')
     expect(initialTools.map(tool => tool.name)).not.toContain('get_canvas_node_schema')
@@ -370,7 +374,7 @@ describe('Pi official SDK engine', () => {
     for (const [surface, basic] of [['tool.camera_stage', 'observe_camera_stage_scene'], ['workspace.generation', 'search_models'], ['settings.general', 'search_application_settings']]) {
       await f.engine.command({ action: 'prompt', input: { text: '当前页面', context: JSON.stringify({ surface: { id: surface } }) } })
       const names = (f.requests.at(-1)!.tools as unknown as Array<{ name: string }>).map(tool => tool.name)
-      expect(names).toHaveLength(10)
+      expect(names).toHaveLength(10 + LOCAL_TOOLS.length)
       expect(JSON.stringify(f.requests.at(-1)!.tools)).toBe(JSON.stringify(initialTools))
       expect(JSON.stringify(f.requests.at(-1))).toContain(`${basic} 实际不在工具列表里`)
     }
@@ -387,7 +391,7 @@ describe('Pi official SDK engine', () => {
     await f.engine.command({ action: 'prompt', input: { text: '在这里生成图片', context: canvas } })
     const names = (index: number) => f.requests.at(index)!.tools.map(tool => tool.function.name)
     expect(f.requests).toHaveLength(3)
-    expect(names(0)).toHaveLength(10)
+    expect(names(0)).toHaveLength(10 + LOCAL_TOOLS.length)
     expect(names(0)).not.toContain('get_model_schema')
     expect(JSON.stringify(f.requests[1].tools)).toBe(JSON.stringify(f.requests[0].tools))
     expect(JSON.stringify(f.requests[2].tools)).toBe(JSON.stringify(f.requests[0].tools))
@@ -430,7 +434,7 @@ describe('Pi official SDK engine', () => {
     expect(f.requests).toHaveLength(5)
     for (const request of f.requests) {
       expect(JSON.stringify(request.tools)).toBe(JSON.stringify(f.requests[0].tools))
-      expect(request.tools.map(tool => tool.function.name)).toEqual(['call_application_tool', 'load_application_tools', 'read_assistant_context', 'read_project', 'run_application_script'])
+      expect(request.tools.map(tool => tool.function.name)).toEqual(['call_application_tool', 'load_application_tools', 'read_assistant_context', 'read_project', 'run_application_script', ...LOCAL_TOOLS].sort())
     }
     expect(f.tool.mock.calls.map(call => (call as unknown[]).slice(0, 3))).toEqual([
       ['call_fixture_1/1', name, { id: 'image' }], ['call_fixture_2/1', name, { id: 'flat' }], ['call_fixture_3/1', name, { id: 'text' }]])
@@ -483,7 +487,7 @@ describe('Pi official SDK engine', () => {
       const logs = f.events.filter(event => event.type === 'log' && event.requestId === requestId)
       expect(logs).toEqual([
         expect.objectContaining({ phase: 'start' }),
-        expect.objectContaining({ phase: 'model_requested', requestMetrics: expect.objectContaining({ toolCount: 3, toolBytes: expect.any(Number) }) }),
+        expect.objectContaining({ phase: 'model_requested', requestMetrics: expect.objectContaining({ toolCount: 3 + LOCAL_TOOLS.length, toolBytes: expect.any(Number) }) }),
         expect.objectContaining({ phase: 'model_completed', modelId: 'fixture', providerId: 'test', durationMs: expect.any(Number),
           metrics: { input: 70, output: 10, cacheRead: 30, cacheWrite: 0, totalTokens: 110, cacheHitRate: 0.3, reasoning: 0, firstTokenMs: expect.any(Number) } }),
         expect.objectContaining({ phase: 'completed', durationMs: expect.any(Number) }),
@@ -691,7 +695,7 @@ describe('Pi official SDK engine', () => {
     expect(await restarted.command({ action: 'snapshot' })).toMatchObject({ messages: [{ attachments: attachments.map((item) => item.attachment) }, { kind: 'tool' }, { kind: 'answer' }] })
   }, 30000)
   it('附件标记的媒体预算在实际请求前拒绝，不向供应商发送超限请求', async () => {
-    const f = await fixture({ image: true, contextWindow: 5000 })
+    const f = await fixture({ image: true, contextWindow: 7500 })
     await f.engine.command({ action: 'prompt', input: { text: '普通文字', context: '' } })
     expect(f.requests).toHaveLength(2)
     const attachment = { schemaVersion: 'agent-attachment/v1' as const, mediaRef: 'asset:image', modality: 'image' as const, mimeType: 'image/png', sizeBytes: 5,
@@ -700,13 +704,25 @@ describe('Pi official SDK engine', () => {
     expect(await f.engine.command({ action: 'snapshot' })).toMatchObject({ error: expect.stringContaining('上下文预算') })
     expect(f.requests).toHaveLength(2)
   })
-  it('真实 SDK 只运行宿主工具，流式输出并恢复官方会话文件', async () => {
+  it('助手目录里的 Pi 插件注册的工具进入首次请求的工具列表，换界面引导时不被换掉', async () => {
+    const f = await fixture()
+    await fs.mkdir(path.join(f.directory, 'extensions'), { recursive: true })
+    await fs.writeFile(path.join(f.directory, 'extensions', 'probe.ts'), `import { Type } from 'typebox'
+export default function (pi) {
+  pi.registerTool({ name: 'probe_tool', label: '探针', description: '测试插件工具', parameters: Type.Object({}),
+    async execute() { return { content: [{ type: 'text', text: 'ok' }], details: undefined } } })
+}`)
+    await f.engine.command({ action: 'configure', input: f.configuration })
+    await f.engine.command({ action: 'prompt', input: { text: '你好', context: '{"surface":{"id":"workspace.canvas"}}' } })
+    expect(f.requests[0].tools.map(tool => tool.function.name)).toContain('probe_tool')
+  })
+  it('真实 SDK 把应用工具交给宿主执行，流式输出并恢复官方会话文件', async () => {
     const f = await fixture()
     await f.engine.command({ action: 'prompt', input: { text: '读取项目', context: '{"workspace":"canvas"}' } })
     expect(f.tool).toHaveBeenCalledOnce()
     expect(f.tool.mock.calls[0]).toMatchObject(['call_fixture', 'read_project', { id: 'project' }, expect.any(AbortSignal)])
     expect(f.requests).toHaveLength(2)
-    expect(f.requests[0].tools.map((tool) => tool.function.name)).toEqual(['read_assistant_context', 'read_project', 'run_application_script'])
+    expect(f.requests[0].tools.map((tool) => tool.function.name)).toEqual(['read_assistant_context', 'read_project', 'run_application_script', ...LOCAL_TOOLS].sort())
     expect(f.requests[0].messages[0].content).toContain('痕迹助手')
     const final = f.events.filter((event) => event.type === 'snapshot').at(-1)
     expect(final).toMatchObject({ value: { busy: false, error: null, messages: [{ text: '读取项目' }, { kind: 'tool', status: 'completed' }, { text: '已经读取项目。', kind: 'answer' }] } })

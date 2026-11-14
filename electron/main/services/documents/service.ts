@@ -2,6 +2,8 @@ import type { ListPage, ListPageRequest } from '../../../../src/core/documents/p
 import { applyMemoryWrite, type MemoryWrite } from '../../../../src/core/assistant/memoryOperations'
 import type { MemoryEntry, MemoryHistoryEntry } from '../../../../src/core/assistant/memoryEntries'
 import { randomUUID } from 'node:crypto'
+import { EXTENSION_FOLDER_NAMES } from '../../../../src/core/documents/projectManifest'
+import type { ContentTrustReference } from '../../../../src/core/contentTrust'
 import type { DocumentCodeFiles } from './code-files'
 import type { IndexedDocument, IndexedDocumentFilter } from './catalog'
 import type {
@@ -76,6 +78,13 @@ export class DocumentService implements DocumentsPlatform {
     codeFiles: DocumentCodeFiles
     kinds: Pick<DocumentKindRegistry, 'forFileName'>
   }) {}
+
+  /** 助手的工作文件夹：项目文件夹，没有项目时是作品目录；别人分享来的项目带外来标记。 */
+  async resolveWorkFolder(projectId?: string): Promise<{ root: string; extensions: string; foreign?: ContentTrustReference }> {
+    const container = await this.parts.workspace.resolveContainer(projectId ? { kind: 'project', projectId } : { kind: 'user' })
+    const foreign = container.manifest?.foreign
+    return { root: container.root, extensions: path.join(container.root, EXTENSION_FOLDER_NAMES[container.locale]), ...(foreign ? { foreign } : {}) }
+  }
 
   async readProjectMemory(projectId: string): Promise<MemoryEntry[]> {
     const container = await this.parts.workspace.resolveContainer({ kind: 'project', projectId })

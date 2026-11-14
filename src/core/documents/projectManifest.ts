@@ -29,6 +29,12 @@ export const PROJECT_FOLDER_NAMES: Readonly<Record<FolderLocale, { generated: st
   en: { generated: 'Generated', materials: 'Media' },
 }
 
+/**
+ * 项目扩展（随项目走的模型、脚本、滤镜与助手插件）所在的顶层文件夹；作品目录下同名文件夹放全局扩展。
+ * 里面可能装着成千上万个依赖文件，文档扫描不进去。
+ */
+export const EXTENSION_FOLDER_NAMES: Readonly<Record<FolderLocale, string>> = { zh: '扩展', en: 'Extensions' }
+
 export const UNTITLED_PROJECT_NAMES: Readonly<Record<FolderLocale, string>> = {
   zh: '未命名项目',
   en: 'Untitled Project',

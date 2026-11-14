@@ -10,6 +10,7 @@ import { PiAttachments } from './piAttachments'
 import { PiToolDisclosure } from './toolDisclosure'
 import { disclosureSurface } from './toolDisclosureProfiles'
 import { applicationScriptTool } from './applicationScript'
+import { createLocalTools } from './localTools'
 import { budgetContext, contextPageTokenLimit, estimateContextTokens, projectText, PROJECTED_EXCERPT_TOKENS, singleResultTokenLimit } from './contextBudget'
 import { archiveToolResult, contextReader, selectionSummary } from './contextReader'
 import { embeddedModelCompat, embeddedModelLimits, embeddedModelPricing, embeddedThinkingLevel, embeddedThinkingLevelMap } from './modelOptions'
@@ -58,6 +59,14 @@ export class PiEngine implements EmbeddedAgentEngine {
   private background = false
   /** 分派入口转给内层工具执行的调用：外层调用标识 → 内层调用（交给应用时用的就是内层标识与工具名）。 */
   private dispatched = new Map<string, { toolCallId: string; toolName: string }>()
+  /** 正在执行的工具调用；有调用在跑时定时发心跳，宿主的无响应计时不会在长命令中途到点。 */
+  private runningTools = new Set<string>()
+  private heartbeat?: ReturnType<typeof setInterval>
+  private trackTool(id: string, running: boolean): void {
+    if (running) this.runningTools.add(id); else this.runningTools.delete(id)
+    if (this.runningTools.size && !this.heartbeat) this.heartbeat = setInterval(() => this.emit({ type: 'heartbeat' }), 30_000)
+    if (!this.runningTools.size && this.heartbeat) { clearInterval(this.heartbeat); this.heartbeat = undefined }
+  }
   constructor(private readonly emit: (event: EngineEvent) => void,
     private readonly callTool: (id: string, name: string, input: Record<string, unknown>, signal?: AbortSignal) => Promise<unknown>) {}
 
@@ -84,7 +93,8 @@ export class PiEngine implements EmbeddedAgentEngine {
 
   private async configure(input: EngineConfiguration): Promise<void> {
     this.unsubscribe?.()
-    this.session?.dispose()
+    for (const id of [...this.runningTools]) this.trackTool(id, false)
+    await this.closeSession()
     this.configuration = input
     const { model: selected, tools, instructions } = input
     const { model } = selected
@@ -116,10 +126,18 @@ export class PiEngine implements EmbeddedAgentEngine {
     // 关掉 Pi 的安装统计，请求不再以 pi.dev 名义给 OpenRouter 等供应商带归因头。
     // Pi 自动压缩要在我们为回复预留的输出空间之前动手，否则长回合会先撞上本地的超窗检查
     const settings = this.sdk.SettingsManager.inMemory({ retry: { enabled: false }, enableInstallTelemetry: false,
-      compaction: { enabled: true, reserveTokens: limits.maxOutputTokens + 8192 } })
-    const loader = new this.sdk.DefaultResourceLoader({ cwd: this.directory, agentDir: this.directory, settingsManager: settings,
-      noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true, noContextFiles: true, systemPrompt: instructions })
+      compaction: { enabled: true, reserveTokens: limits.maxOutputTokens + 8192 } }, { projectTrusted: input.projectTrusted })
+    /*
+     * 助手插件与规则文件（AGENTS.md）照 Pi 的约定从助手目录（全局）和工作文件夹（项目）加载。不信任的项目（别人分享来、用户还没允许）
+     * 不加载插件与设置，也不读规则文件：规则文件会以指令身份进系统提示，外来文字只能当数据。
+     * 技能只认助手目录与项目里的位置：Pi 默认还会读用户主目录 ~/.agents/skills，那里是用户给别的助手装的技能，
+     * 几十份说明会挤进每次请求，还会教这里用不了的工具。
+     */
+    const skillPaths = [path.join(this.directory, 'skills'), ...input.projectTrusted ? [path.join(input.workFolder, '.pi', 'skills'), path.join(input.workFolder, '.agents', 'skills')] : []]
+    const loader = new this.sdk.DefaultResourceLoader({ cwd: input.workFolder, agentDir: this.directory, settingsManager: settings,
+      noSkills: true, additionalSkillPaths: skillPaths, noContextFiles: !input.projectTrusted, noPromptTemplates: true, noThemes: true, systemPrompt: instructions })
     await loader.reload()
+    for (const error of loader.getExtensions().errors) this.emit({ type: 'log', phase: 'extension_failed', requestId: this.requestId, sessionId: this.manager.getSessionId(), message: `助手插件 ${error.path} 加载失败：${error.error}` })
     /** 成功与失败的文字都受单条结果上限约束，超出部分存档后可续读。 */
     const bounded = async (run: () => Promise<Awaited<ReturnType<ToolDefinition['execute']>>>, signal?: AbortSignal) => {
       try { return archiveToolResult(this.manager, await run(), resultLimit) } catch (error) {
@@ -144,14 +162,19 @@ export class PiEngine implements EmbeddedAgentEngine {
     // 脚本里的调用与模型直接调用共用 callTool 这一个出口。
     const script = applicationScriptTool({ tools, call: this.callTool })
     const scriptTool: ToolDefinition = { ...script, execute: (...args) => bounded(() => script.execute(...args), args[2]) }
-    this.disclosure = new PiToolDisclosure([...customTools, contextReader(this.manager, contextPageTokenLimit(limits.contextWindow)), scriptTool], () => this.session!)
+    this.disclosure = new PiToolDisclosure([...customTools, contextReader(this.manager, contextPageTokenLimit(limits.contextWindow)), scriptTool,
+      ...createLocalTools(this.sdk, input.workFolder)], () => this.session!)
     this.toolTitles = new Map(this.disclosure.tools.map(tool => [tool.name, tool.label]))
-    const { session } = await this.sdk.createAgentSession({ cwd: this.directory, agentDir: this.directory,
+    // 不给工具白名单：助手插件注册的工具与宿主工具一起可用。
+    const { session } = await this.sdk.createAgentSession({ cwd: input.workFolder, agentDir: this.directory,
       modelRuntime: runtime, model: resolved, thinkingLevel: embeddedThinkingLevel(selected),
-      noTools: 'builtin', tools: this.disclosure.tools.map(tool => tool.name), customTools: this.disclosure.tools,
+      noTools: 'builtin', customTools: this.disclosure.tools,
       resourceLoader: loader, sessionManager: this.manager, settingsManager: settings })
     this.session = session
-    session.setActiveToolsByName(this.disclosure.initialNames)
+    await session.bindExtensions({ onError: error => this.emit({ type: 'log', phase: 'extension_failed', requestId: this.requestId, sessionId: this.manager.getSessionId(),
+      message: `助手插件 ${error.extensionPath} 在 ${error.event} 出错：${error.error}` }) })
+    const hostTools = new Set(this.disclosure.tools.map(tool => tool.name))
+    session.setActiveToolsByName([...this.disclosure.initialNames, ...session.getActiveToolNames().filter(name => !hostTools.has(name))])
     const transformContext = session.agent.transformContext
     session.agent.transformContext = async (messages, signal) => {
       const transformed = await transformContext?.(messages, signal) ?? messages
@@ -220,8 +243,9 @@ export class PiEngine implements EmbeddedAgentEngine {
             ...(reasoning !== undefined ? { reasoning } : {}), ...(firstTokenMs !== undefined ? { firstTokenMs } : {}),
             ...(this.costCurrency && cost ? { cost: cost.total, costCurrency: this.costCurrency } : {}) } })
       }
-      if (event.type === 'tool_execution_start') { this.state.activity = '正在操作应用…'; this.toolArgs.set(event.toolCallId, event.args) }
+      if (event.type === 'tool_execution_start') { this.state.activity = '正在操作应用…'; this.toolArgs.set(event.toolCallId, event.args); this.trackTool(event.toolCallId, true) }
       if (event.type === 'tool_execution_end') {
+        this.trackTool(event.toolCallId, false)
         // 经分派入口的调用只记一步，记在内层工具名与内层调用标识下，回执取模型实际看到的外层结果
         if (event.parentToolCallId) { this.dispatched.set(event.parentToolCallId, { toolCallId: event.toolCallId, toolName: event.toolName }); return }
         const { toolCallId, toolName } = this.dispatched.get(event.toolCallId) ?? event
@@ -364,5 +388,11 @@ export class PiEngine implements EmbeddedAgentEngine {
       }
       this.state.busy = false; this.state.activity = null; this.publish() }
   }
-  async dispose(): Promise<void> { await this.session?.abort(); this.unsubscribe?.(); this.session?.dispose() }
+  /** 每条消息都会重建会话：先让助手插件收尾（停掉它起的子进程、服务与文件监视），否则每条消息累积一份。 */
+  private async closeSession(): Promise<void> {
+    const runner = this.session?.extensionRunner
+    if (runner?.hasHandlers('session_shutdown')) await runner.emit({ type: 'session_shutdown', reason: 'reload' }).catch(() => undefined)
+    this.session?.dispose()
+  }
+  async dispose(): Promise<void> { await this.session?.abort(); this.unsubscribe?.(); await this.closeSession(); for (const id of [...this.runningTools]) this.trackTool(id, false) }
 }

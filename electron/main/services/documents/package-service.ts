@@ -17,7 +17,7 @@ import { buildDocumentEnvelope, carryDocumentEnvelopeForward, type DocumentEnvel
 import { restoreForwardFields } from '../../../../src/core/persistence/forwardCompat'
 import { documentNameForKind, type DocumentKindRegistry } from '../../../../src/core/documents/kinds'
 import { entryNameKey, keepBothEntryName, sameEntryName } from '../../../../src/core/documents/naming'
-import { buildProjectManifest, INTERNAL_FOLDER_NAME, PROJECT_FOLDER_NAMES, type ProjectManifest } from '../../../../src/core/documents/projectManifest'
+import { buildProjectManifest, EXTENSION_FOLDER_NAMES, INTERNAL_FOLDER_NAME, PROJECT_FOLDER_NAMES, type ProjectManifest } from '../../../../src/core/documents/projectManifest'
 import {
   DOCUMENT_PACKAGE_EXTENSION,
   type DocumentContainerRef,
@@ -72,6 +72,8 @@ const MANIFEST_ENTRY = 'henji-package.json'
 const CONTENT_PREFIX = 'content/'
 /** 导出时跳过的文件：写到一半的暂存文件与系统生成的缩略图缓存。 */
 const SKIPPED_FILE = /(?:\.tmp|\.partial|\.lock)$|^(?:thumbs\.db|desktop\.ini|\.ds_store)$/i
+/** 项目扩展的 .cache（依赖、模型权重、中间结果）不进包：可能有几个 GB，对方电脑上按扩展的 setup 重建。 */
+const EXTENSION_CACHE = new RegExp(`^(?:${Object.values(EXTENSION_FOLDER_NAMES).join('|')})/[^/]+/\\.cache$`)
 
 type PackageManifest = z.infer<typeof packageManifestSchema>
 
@@ -387,6 +389,7 @@ export class DocumentPackageService {
           }
           const info = entry.isSymbolicLink() ? await fsp.stat(absolute) : entry
           if (info.isDirectory()) {
+            if (EXTENSION_CACHE.test(relative)) continue
             if (prefix && entry.name !== INTERNAL_FOLDER_NAME && await this.workspace.readManifest(absolute).catch((error: unknown) => {
               if (isUnavailableTraversalEntry(error) || isMissingTraversalEntry(error)) throw error
               return null

@@ -18,7 +18,7 @@ const logger = createMainLogger('main.assistant_skills')
  */
 export const AGENT_SKILL_NAMES: ReadonlySet<string> = new Set([
   'prompt-optimization', 'cinematic-director', 'short-drama', 'video-edit-code-creation', 'video-edit-workbench', 'image-edit-workbench', 'color-grading',
-  'audio-edit-workbench', '三维镜头构图',
+  'audio-edit-workbench', '三维镜头构图', 'project-extensions',
 ])
 
 export type AgentSkillCaller = 'embedded' | 'external'
