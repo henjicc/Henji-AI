@@ -109,6 +109,8 @@ export interface HenjiMediaApi {
   importFromBytes(request: import('../../src/core/media/localMediaImportContracts').ImportMediaFromBytesRequest): Promise<import('../../src/core/media/localMediaImportContracts').LocalMediaImportResult>
   /** 只截取当前 Henji-AI 窗口内、由渲染层注册的应用表面区域，并在主进程覆盖敏感字段。 */
   captureApplicationSurface(request: import('../../src/core/application-control/surfaceObservation').SurfaceCaptureRequest): Promise<import('../../src/core/application-control/surfaceObservation').SurfaceCaptureResult>
+  /** 截取当前窗口页面里一块矩形（CSS 像素）此刻显示的画面：返回实际截到的范围（CSS 像素）与设备像素尺寸的 JPEG 数据。 */
+  captureWindowRegion(rect: { x: number; y: number; width: number; height: number }): Promise<{ rect: { x: number; y: number; width: number; height: number }; jpeg: Uint8Array }>
 }
 
 export interface HenjiClipboardFileEntry {

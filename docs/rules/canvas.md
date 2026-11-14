@@ -25,7 +25,8 @@
 - **命中、落点、锚定一律问场景，不问节点 DOM**：“某点下是哪个节点”“某节点在屏幕哪里”“端口在哪”用 `useCanvasSceneView()`（组件树外用 `getActiveCanvasSceneView()`）。禁止对节点使用 `elementFromPoint`、`querySelector('.react-flow__node…')`、`getBoundingClientRect` 来做这些事；节点正文内部量自己的元素不受限。
 - **不能假设节点组件挂着**：必须由节点组件接住的事件（导入文件、重新上传）要先点名挂载（`presence.pin`，见 `useCanvasFarView`）。新增这类事件时同步登记；能放进 store 或应用服务的逻辑不要放在节点组件里。
 - **正文会被卸载**：只存在组件里的编辑状态会随卸载丢失。有焦点、展开着浮层、正在拖动、选中着的正文不卸；除此之外需要跨卸载保留的状态写回节点数据或 store。
-- 验证用 `scripts/electron-canvas-scale-bench.cjs`（隔离资料目录；`SCALE_INTERACT=1` 逐项核对远景交互，`SCALE_FRAMES=1` 录快速缩放逐帧）。按 `.react-flow__node` 数节点的脚本只对常驻挂载的小画布成立。
+- **近景里视口运动时正文由远景层代画**（`farLayer/farLayerBodyProxy.ts`）：正文停稳时的画面被截下来存进远景层，视口一动就把正文藏起来、照存档画，停稳后淡入盖回。存档按节点数据、尺寸、选中状态判断是否还有效；**画面变了而这三样没变**的来源（图片加载出来、焦点、悬停）在代画模块里按事件作废——新增这类来源（定时刷新的内容、脚本画的画布、不改节点数据的展开状态）时要在那里登记，否则运动时会露出旧画面。正文画在外框之外的内容不能超出绘制隔离层的默认余量。
+- 验证用 `scripts/electron-canvas-scale-bench.cjs`（隔离资料目录；`SCALE_INTERACT=1` 逐项核对远景交互，`SCALE_FRAMES=1` 录快速缩放与近景平移逐帧）。按 `.react-flow__node` 数节点的脚本只对常驻挂载的小画布成立。
 
 ## 节点组成
 

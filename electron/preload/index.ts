@@ -315,6 +315,7 @@ const mediaApi: HenjiMediaApi = {
   importFromPath: (request) => nativeInvoke('media:importFromPath', request),
   importFromBytes: (request) => nativeInvoke('media:importFromBytes', request),
   captureApplicationSurface: (request) => nativeInvoke('media:captureApplicationSurface', request),
+  captureWindowRegion: (rect) => nativeInvoke('media:captureWindowRegion', rect),
 }
 
 const clipboardApi: HenjiClipboardApi = {

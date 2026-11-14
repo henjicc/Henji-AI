@@ -214,6 +214,9 @@
       "names": [
         "canvas-lod-low",
         "canvas-far-view",
+        "canvas-minimap-nodes",
+        "canvas-node-proxied",
+        "canvas-proxy-view",
         "canvas-node-lod-detail",
         "canvas-node-lod-placeholder",
         "canvas-viewport-moving",

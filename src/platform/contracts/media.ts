@@ -14,6 +14,11 @@ export interface MediaPlatform {
   importFromPath(request: ImportMediaFromPathRequest): Promise<LocalMediaImportResult>
   importFromBytes(request: ImportMediaFromBytesRequest): Promise<LocalMediaImportResult>
   captureApplicationSurface(request: SurfaceCaptureRequest): Promise<SurfaceCaptureResult>
+  /**
+   * 截取当前窗口页面里一块矩形（CSS 像素）此刻显示的画面。返回实际截到的范围 rect（CSS 像素，已按界面缩放向内收到整像素）
+   * 与设备像素尺寸的高质量 JPEG 数据。
+   */
+  captureWindowRegion(rect: { x: number; y: number; width: number; height: number }): Promise<{ rect: { x: number; y: number; width: number; height: number }; jpeg: Uint8Array }>
 }
 import type { SurfaceCaptureRequest, SurfaceCaptureResult } from '@/core/application-control/surfaceObservation'
 import type {

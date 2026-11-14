@@ -1,9 +1,12 @@
 import {
   memo,
   useCallback,
+  useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
+  useState,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import {
@@ -25,6 +28,11 @@ import { UI_FLOATING_EDGE_CLASS } from '@/components/ui/styleTokens'
 const MINI_MAP_WIDTH = 176;
 const MINI_MAP_HEIGHT = 112;
 const MINI_MAP_OFFSET_SCALE = 5;
+/**
+ * 节点数超过它时节点块改画在一块画布上：几千个 SVG 矩形在视口框每动一下、节点每拖一下时都要整个重画、重新对比。
+ * 不超过时仍是逐个的 SVG 矩形（节点测量的核对脚本要逐个读它们）。
+ */
+const MINI_MAP_ELEMENT_LIMIT = 300;
 
 interface MiniMapRect {
   id: string;
@@ -134,6 +142,40 @@ const MiniMapNodes = memo(({ rects }: { rects: readonly MiniMapRect[] }): JSX.El
 
 MiniMapNodes.displayName = 'MiniMapNodes';
 
+/** 把节点块一次画到画布上；只在节点或取景范围变了时重画，视口框移动不碰它。 */
+const MiniMapNodeCanvas = memo(({ rects, viewBox }: { rects: readonly MiniMapRect[]; viewBox: Bounds }): JSX.Element => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [redrawRevision, setRedrawRevision] = useState(0);
+  useEffect(() => {
+    // 节点块的颜色取自样式，主题变了要重画；窗口挪到另一块屏幕后像素比变了也要按新的密度重画
+    const redraw = () => setRedrawRevision(value => value + 1);
+    const observer = new MutationObserver(redraw);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['style', 'class', 'data-theme'] });
+    window.addEventListener('resize', redraw);
+    return () => { observer.disconnect(); window.removeEventListener('resize', redraw); };
+  }, []);
+  useLayoutEffect(() => {
+    const canvas = canvasRef.current;
+    const context = canvas?.getContext('2d');
+    if (!canvas || !context) return;
+    const ratio = window.devicePixelRatio || 1;
+    const width = Math.round(MINI_MAP_WIDTH * ratio), height = Math.round(MINI_MAP_HEIGHT * ratio);
+    if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
+    context.clearRect(0, 0, width, height);
+    context.fillStyle = getComputedStyle(canvas).color;
+    // 与上面那层 SVG 的取景一致：等比缩放、居中
+    const scale = Math.min(width / viewBox.width, height / viewBox.height);
+    const left = (width - viewBox.width * scale) / 2 - viewBox.x * scale;
+    const top = (height - viewBox.height * scale) / 2 - viewBox.y * scale;
+    for (const rect of rects) {
+      context.fillRect(left + rect.x * scale, top + rect.y * scale, Math.max(1, rect.width * scale), Math.max(1, rect.height * scale));
+    }
+  }, [rects, viewBox.x, viewBox.y, viewBox.width, viewBox.height, redrawRevision]);
+  return <canvas ref={canvasRef} aria-hidden className="canvas-minimap-nodes pointer-events-none absolute left-0 top-0" style={{ width: MINI_MAP_WIDTH, height: MINI_MAP_HEIGHT }} />;
+});
+
+MiniMapNodeCanvas.displayName = 'MiniMapNodeCanvas';
+
 /**
  * 针对大画布的轻量小地图。
  *
@@ -226,6 +268,7 @@ export function CanvasMiniMap(): JSX.Element {
   }, [reactFlow, store]);
   useNonPassiveWheel(svgRef, handleWheel);
 
+  const drawOnCanvas = nodeRects.length > MINI_MAP_ELEMENT_LIMIT;
   const maskPath = `M${viewBox.x - viewBox.offset},${viewBox.y - viewBox.offset}`
     + `h${viewBox.width + viewBox.offset * 2}v${viewBox.height + viewBox.offset * 2}`
     + `h${-viewBox.width - viewBox.offset * 2}z `
@@ -239,13 +282,14 @@ export function CanvasMiniMap(): JSX.Element {
       style={{ pointerEvents: 'all', zIndex: CANVAS_MINIMAP_Z_INDEX }}
       data-testid="rf__minimap"
     >
+      {drawOnCanvas && <MiniMapNodeCanvas rects={nodeRects} viewBox={viewBox} />}
       {/* icon-token-allow：节点矩形与 viewport mask 是随画布数据生成的小地图，不是图标 */}
       <svg
         ref={svgRef}
         width={MINI_MAP_WIDTH}
         height={MINI_MAP_HEIGHT}
         viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`}
-        className="react-flow__minimap-svg"
+        className="react-flow__minimap-svg relative"
         role="img"
         aria-labelledby={titleId}
         onPointerDown={handlePointerDown}
@@ -254,7 +298,7 @@ export function CanvasMiniMap(): JSX.Element {
         onPointerCancel={finishPointerGesture}
       >
         <title id={titleId}>{t('canvas.minimap')}</title>
-        <MiniMapNodes rects={nodeRects} />
+        {!drawOnCanvas && <MiniMapNodes rects={nodeRects} />}
         <path
           className="react-flow__minimap-mask"
           d={maskPath}

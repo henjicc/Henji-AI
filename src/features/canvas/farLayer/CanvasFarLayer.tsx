@@ -1,11 +1,14 @@
 import { useEffect, useRef } from 'react';
 import { useStoreApi } from '@xyflow/react';
 import { createLogger } from '@/core/logging';
+import { getPlatform } from '@/platform';
 import type { CanvasEdge, CanvasNode } from '@/features/canvas/domain/canvasNodes';
 import { useCanvasNodePresence } from '@/features/canvas/presence/useCanvasNodePresence';
 import { useCanvasSceneView } from '@/features/canvas/scene/useCanvasScene';
 import type { SceneEdge, SceneSnapshot } from '@/features/canvas/scene/canvasScene';
+import { createFarLayerBodyProxy } from './farLayerBodyProxy';
 import { createFarLayerRenderer, type FarLayerColors, type FarLayerRenderer } from './farLayerRenderer';
+import { createFarLayerSnapshots, type FarLayerSnapshots } from './farLayerSnapshots';
 import { createFarLayerTiles, type FarLayerTiles } from './farLayerTiles';
 
 const logger = createLogger('features.canvas.farLayer');
@@ -45,7 +48,7 @@ function readTheme(element: HTMLElement): { colors: FarLayerColors; palette: { p
 /**
  * 画布远景层：铺在节点下面的一块画布，每一帧把画布场景里的所有节点和连线都画出来。
  * 节点正文（真 DOM）只在近景挂载并盖在它上面；正文没挂上、缩放太小或者正在加载时，看到的就是这一层，
- * 所以不管怎么快速缩放，节点都一直在。
+ * 所以不管怎么快速缩放，节点都一直在。近景里视口运动时，挂着的正文也藏起来由这一层照存档代画（farLayerBodyProxy）。
  */
 export function CanvasFarLayer(): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -59,6 +62,7 @@ export function CanvasFarLayer(): JSX.Element {
     const scene = sceneView.scene;
     let renderer: FarLayerRenderer | null = null;
     let tiles: FarLayerTiles | null = null;
+    let snapshots: FarLayerSnapshots | null = null;
     let gl: WebGL2RenderingContext | null = null;
     let snapshot: SceneSnapshot = scene.read();
     let theme = readTheme(canvas);
@@ -79,6 +83,8 @@ export function CanvasFarLayer(): JSX.Element {
     /** 指针最后所在的屏幕位置：画面自己动了之后据此重新判断指针下是谁 */
     let pointer: { x: number; y: number } | null = null;
     let pointerPressed = false;
+    /** 这次按下刚现场补出空外框的节点：紧随其后的鼠标按下事件要转交给它 */
+    let redirectedTo: string | null = null;
     const seconds = () => performance.now() / 1000;
 
     function view() {
@@ -125,21 +131,21 @@ export function CanvasFarLayer(): JSX.Element {
       }, SHELL_SETTLE_MS);
     }
 
-    /** 近景时两端都挂着正文、端口也量过的连线由节点层画，这里不重复画。 */
+    /** 近景时两端都挂着正文、端口也量过的连线由节点层画，这里不重复画；代画途中节点层的连线藏着，全部由这里画。 */
     function drawnByNodeLayer(edge: SceneEdge): boolean {
-      return presence.isNear() && edge.anchored && presence.isActive(edge.source) && presence.isActive(edge.target);
+      return presence.isNear() && !proxy.isProxying() && edge.anchored && presence.isActive(edge.source) && presence.isActive(edge.target);
     }
 
     function draw(): boolean {
       // 按需挂载没生效（小画布）时全部节点都挂着真 DOM，这一层不画
-      if (!renderer || !tiles || !presence.isEnabled()) return false;
+      if (!renderer || !tiles || !snapshots || !presence.isEnabled()) return false;
       // 图集里的格子可能刚被别的节点占用：先让实例指向最新的格子，再画
       if (instancesDirty) {
         instancesDirty = false;
-        renderer.setNodes(snapshot.nodes, tiles);
+        renderer.setNodes(snapshot.nodes, tiles, snapshots);
         renderer.setEdges(snapshot.edges, drawnByNodeLayer);
       }
-      return renderer.draw(view(), theme.colors, tiles, seconds());
+      return renderer.draw(view(), theme.colors, tiles, snapshots, proxy.showsSnapshots(), seconds());
     }
 
     function schedule(): void {
@@ -168,13 +174,15 @@ export function CanvasFarLayer(): JSX.Element {
         tilesDirty = false;
         tilesUpdatedAt = stamp;
         const current = view();
+        const tilesBefore = tiles.revision;
         const more = tiles.update(snapshot.nodes, {
           left: -current.x / current.zoom, top: -current.y / current.zoom,
           right: (current.width - current.x) / current.zoom, bottom: (current.height - current.y) / current.zoom,
           devicePixelsPerUnit: current.zoom * current.dpr,
         });
         if (more) tilesDirty = true;
-        instancesDirty = true;
+        // 视口连续移动时这里隔一小段就进来一次：画面没变就不必把全部节点的实例重填一遍
+        if (tiles.revision !== tilesBefore) instancesDirty = true;
       }
       const fading = instancesDirty || wasFading ? draw() : false;
       wasFading = fading;
@@ -191,14 +199,16 @@ export function CanvasFarLayer(): JSX.Element {
         now: seconds,
       });
       tiles.setPalette(theme.palette);
+      snapshots = createFarLayerSnapshots(gl);
       sceneDirty = true; tilesDirty = true; instancesDirty = true; tilesUpdatedAt = 0;
       resize();
       schedule();
     }
 
     function stop(): void {
-      renderer?.dispose(); tiles?.dispose();
-      renderer = null; tiles = null;
+      renderer?.dispose(); tiles?.dispose(); snapshots?.dispose();
+      renderer = null; tiles = null; snapshots = null;
+      proxy.reset();
     }
 
     /** 远景层画不了时退回全部节点常驻挂真 DOM；放到微任务里，避开 React 提交阶段。 */
@@ -206,6 +216,15 @@ export function CanvasFarLayer(): JSX.Element {
       logger.warn('画布远景层不可用，改为全部节点常驻挂载', { event: 'canvas.far_layer.unavailable', error: reason });
       queueMicrotask(() => { if (!disposed) presence.setEnabled(false); });
     }
+
+    const flowElement = canvas.closest<HTMLElement>('.react-flow');
+    const proxy = createFarLayerBodyProxy({
+      getState: store.getState, presence, sceneView,
+      flowElement: flowElement ?? canvas,
+      snapshots: () => snapshots,
+      capture: rect => getPlatform().media.captureWindowRegion(rect),
+      invalidate: () => { instancesDirty = true; runFrame(); },
+    });
 
     try { start(); } catch (error) { stop(); fallBack(error); }
 
@@ -227,18 +246,19 @@ export function CanvasFarLayer(): JSX.Element {
       previousTransform = state.transform;
       viewMovedAt = performance.now();
       refreshShellSoon();
+      proxy.onViewMoved();
       // 与节点层的视口变换同一帧落屏：视口变了立刻用现有实例重画，不等下一帧
       draw();
       schedule();
     });
-    const stopScene = scene.subscribe(() => { sceneDirty = true; refreshShellSoon(); schedule(); });
+    const stopScene = scene.subscribe(() => { sceneDirty = true; refreshShellSoon(); proxy.onSceneChanged(); schedule(); });
     // 正文挂上或卸下时连线换了由谁画：与节点层的这次变更同一帧重画，连线不空一帧
     const stopPresence = presence.subscribeState(() => {
       instancesDirty = true;
       refreshShellSoon();
+      proxy.onPresenceChanged();
       runFrame();
     });
-    const flowElement = canvas.closest<HTMLElement>('.react-flow');
     const onResize = () => { resize(); draw(); };
     const resizeObserver = new ResizeObserver(onResize);
     resizeObserver.observe(canvas);
@@ -247,6 +267,9 @@ export function CanvasFarLayer(): JSX.Element {
     const themeObserver = new MutationObserver(() => {
       theme = readTheme(canvas);
       tiles?.setPalette(theme.palette);
+      // 主题变了，存着的正文画面全部过时
+      snapshots?.clear();
+      proxy.reset();
       tilesDirty = true; instancesDirty = true;
       schedule();
     });
@@ -265,10 +288,42 @@ export function CanvasFarLayer(): JSX.Element {
       if (pointer) pointer = { x: event.clientX, y: event.clientY };
       refreshShellSoon();
     };
-    const onPointerDown = () => { pointerPressed = true; };
+    /**
+     * 画面自己变了之后要等停稳才重新判断指针下的节点（refreshShellSoon），这之前按下去，目标会落在画布空白上。
+     * 这里按画布场景现场补出空外框，并把紧随其后的鼠标按下事件转交给它：拖动、点选、右键仍由 ReactFlow 原生处理。
+     */
+    const onPointerDown = (event: PointerEvent) => {
+      pointerPressed = true;
+      redirectedTo = null;
+      if (!presence.isEnabled() || event.pointerType !== 'mouse' || (event.button !== 0 && event.button !== 2)) return;
+      // 按着框选键从这里按下是要拉框，交给画布空白层
+      if (event.ctrlKey || event.metaKey || store.getState().userSelectionActive) return;
+      if (!(event.target instanceof Element) || event.target.closest('.react-flow__node')) return;
+      const hit = sceneView.hitNodeAtClient({ x: event.clientX, y: event.clientY });
+      if (!hit || presence.isActive(hit.id)) return;
+      presence.setShell(hit.id);
+      // 右键菜单在松开时才按当时指针下的元素触发，空外框已经在了；左键的按下事件要转交
+      if (event.button === 0) redirectedTo = hit.id;
+    };
+    const onMouseDown = (event: MouseEvent) => {
+      const id = redirectedTo;
+      redirectedTo = null;
+      if (id === null || !event.isTrusted) return;
+      // 只把事件交给调度刚挂出来的空外框，不拿节点元素做命中或定位
+      const shell = flowElement?.querySelector(`.react-flow__node[data-id="${CSS.escape(id)}"]`);
+      if (!shell) return;
+      event.stopPropagation();
+      shell.dispatchEvent(new MouseEvent('mousedown', {
+        bubbles: true, cancelable: true, composed: true, view: window, detail: event.detail,
+        clientX: event.clientX, clientY: event.clientY, screenX: event.screenX, screenY: event.screenY,
+        button: event.button, buttons: event.buttons,
+        ctrlKey: event.ctrlKey, shiftKey: event.shiftKey, altKey: event.altKey, metaKey: event.metaKey,
+      }));
+    };
     const onPointerLeave = () => { pointer = null; };
     flowElement?.addEventListener('pointermove', onPointerMove, { passive: true });
     flowElement?.addEventListener('pointerdown', onPointerDown, { passive: true, capture: true });
+    flowElement?.addEventListener('mousedown', onMouseDown, { capture: true });
     flowElement?.addEventListener('pointerleave', onPointerLeave, { passive: true });
     window.addEventListener('pointerup', onPointerUp, { passive: true, capture: true });
 
@@ -281,11 +336,13 @@ export function CanvasFarLayer(): JSX.Element {
       window.removeEventListener('resize', onResize);
       flowElement?.removeEventListener('pointermove', onPointerMove);
       flowElement?.removeEventListener('pointerdown', onPointerDown, { capture: true });
+      flowElement?.removeEventListener('mousedown', onMouseDown, { capture: true });
       flowElement?.removeEventListener('pointerleave', onPointerLeave);
       window.removeEventListener('pointerup', onPointerUp, { capture: true });
       canvas.removeEventListener('webglcontextlost', onContextLost);
       canvas.removeEventListener('webglcontextrestored', onContextRestored);
       stop();
+      proxy.dispose();
     };
   }, [presence, sceneView, store]);
 

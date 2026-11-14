@@ -73,8 +73,8 @@ const MOUNT_BUDGET_MS = 8;
 const FAR_RELEASE_DELAY_MS = 140;
 /** 排队先后（数值越小越先挂）：视口附近的节点在 0 到 2 之间，其后是视口内连线的另一端。 */
 const NEIGHBOR_PRIORITY = 3;
-/** 正文里有焦点或展开着浮层的节点：不能在用户操作途中卸掉。 */
-const BUSY_SELECTOR = '.react-flow__node:focus-within, .react-flow__node:has([aria-expanded="true"])';
+/** 正文里有焦点或展开着浮层的节点：不能在用户操作途中卸掉，也不能在视口运动时藏起来由远景层代画。 */
+export const CANVAS_NODE_BUSY_SELECTOR = '.react-flow__node:focus-within, .react-flow__node:has([aria-expanded="true"])';
 
 export type CanvasNodeBodyMode = 'off' | 'shell' | 'body';
 
@@ -146,7 +146,7 @@ export function createCanvasNodePresence(source: CanvasNodePresenceSource, optio
   function busyNodeIds(state: PresenceState): string[] {
     if (!active.size || !state.domNode) return [];
     const ids: string[] = [];
-    state.domNode.querySelectorAll<HTMLElement>(BUSY_SELECTOR).forEach((element) => { if (element.dataset.id) ids.push(element.dataset.id); });
+    state.domNode.querySelectorAll<HTMLElement>(CANVAS_NODE_BUSY_SELECTOR).forEach((element) => { if (element.dataset.id) ids.push(element.dataset.id); });
     return ids;
   }
 
@@ -302,7 +302,7 @@ export function createCanvasNodePresence(source: CanvasNodePresenceSource, optio
       if (count <= MAX_ACTIVE_CANVAS_NODES) {
         for (const id of state.nodeLookup.keys()) active.add(id);
       } else {
-        state.domNode?.querySelectorAll<HTMLElement>(BUSY_SELECTOR).forEach((element) => { if (element.dataset.id) active.add(element.dataset.id); });
+        state.domNode?.querySelectorAll<HTMLElement>(CANVAS_NODE_BUSY_SELECTOR).forEach((element) => { if (element.dataset.id) active.add(element.dataset.id); });
         for (const node of state.nodeLookup.values()) {
           if (active.size >= MAX_RETAINED_SELECTED) break;
           if (node.dragging || node.selected) active.add(node.id);
@@ -394,6 +394,8 @@ export function createCanvasNodePresence(source: CanvasNodePresenceSource, optio
     },
     isNear: () => near,
     activeCount: () => active.size,
+    /** 挂着正文的节点。 */
+    activeIds: (): ReadonlySet<string> => active,
     subscribe(id: string, listener: () => void): () => void {
       let set = listeners.get(id);
       if (!set) { set = new Set(); listeners.set(id, set); }

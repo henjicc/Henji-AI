@@ -9,6 +9,7 @@ import type {
 } from '../../../src/core/media/localMediaImportContracts'
 import { resolveBundledResourcePath } from '../services/media/bundledResources'
 import { captureApplicationSurface } from '../services/media/surfaceCapture'
+import { captureWindowRegion, parseWindowRegionCaptureRequest, type WindowRegionCaptureRequest, type WindowRegionCaptureResult } from '../services/media/windowRegionCapture'
 import { importMediaFromBytes, importMediaFromPath } from '../services/media-import'
 import { getMainWindow } from '../window'
 import {
@@ -112,6 +113,13 @@ export function registerMediaIpc(): void {
     'media:captureApplicationSurface',
     (input) => surfaceCaptureRequestSchema.parse(input),
     (input, event) => captureApplicationSurface(event.sender, input),
+  )
+
+  registerIpcHandler<WindowRegionCaptureRequest, WindowRegionCaptureResult>(
+    'media:captureWindowRegion',
+    parseWindowRegionCaptureRequest,
+    (input, event) => captureWindowRegion(event.sender, input),
+    assertTrustedMainRenderer,
   )
 
   registerIpcHandler<ImportMediaFromPathRequest, LocalMediaImportResult>(

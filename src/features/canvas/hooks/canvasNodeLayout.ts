@@ -135,6 +135,9 @@ export function createCanvasNodeLayout(source: Source): () => void {
     for (const entry of entries.values()) {
       const node = state.nodeLookup.get(entry.id);
       if (!node) { reveal(entry); continue; }
+      // 视口运动中藏起来由远景层代画的正文（farLayer/farLayerBodyProxy.ts）：这期间画面不靠它，
+      // 进出视口时不必跟着收起、恢复布局；每帧再看一眼，它一盖回来就按新位置处理
+      if (entry.element.classList.contains('canvas-node-proxied')) { needsFrame = true; continue; }
       if (entry.model !== node.internals.userNode) {
         entry.model = node.internals.userNode;
         if (entry.suspended) measurements.add(entry);

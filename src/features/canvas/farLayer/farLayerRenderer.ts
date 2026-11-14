@@ -1,9 +1,11 @@
 import type { SceneEdge, SceneNode } from '@/features/canvas/scene/canvasScene';
+import type { FarLayerSnapshots } from './farLayerSnapshots';
 import type { FarLayerTiles } from './farLayerTiles';
 
 /**
  * 远景层的绘制：所有节点一次实例化画完（圆角矩形 + 图集里的缩略图 + 描边），连线同样一次实例化
  * （每条线是着色器里展开的一条三次贝塞尔带）。每帧只更新视口矩阵；节点或连线变了才重填实例缓冲。
+ * 节点画面取最清楚的一级：正文画面存档（有的话）盖在清晰级缩略图上，清晰级盖在概览级上。
  */
 
 export interface FarLayerColors {
@@ -24,7 +26,7 @@ export interface FarLayerView {
   dpr: number;
 }
 
-const NODE_FLOATS = 20;
+const NODE_FLOATS = 32;
 const EDGE_FLOATS = 10;
 const EDGE_SEGMENTS = 24;
 /** 画面写入后淡入的时长（秒） */
@@ -38,6 +40,9 @@ layout(location=2) in vec4 iOverviewUv;
 layout(location=3) in vec4 iDetailUv;
 layout(location=4) in vec4 iTile;   // 概览层号、清晰层号、概览写入时刻、清晰写入时刻（层号为负表示没有）
 layout(location=5) in vec4 iStyle;  // 是否分组、是否选中、状态（1 运行中、2 失败）、保留
+layout(location=6) in vec4 iSnapUv;    // 正文画面存档：整个外框在截图里的采样范围
+layout(location=7) in vec4 iSnapValid; // 有存档的范围（按外框归一化；外框之外的绘制余量在 0 到 1 以外）
+layout(location=8) in vec4 iSnap;      // 截图层号（为负表示没有）、截图时的缩放、保留
 uniform vec3 uView;
 uniform vec2 uViewport;
 uniform float uDpr;
@@ -48,16 +53,23 @@ out vec4 vOverviewUv;
 out vec4 vDetailUv;
 out vec4 vTile;
 out vec4 vStyle;
+out vec4 vSnapUv;
+out vec4 vSnapValid;
+out vec4 vSnap;
 void main() {
   // 外扩一点给描边与抗锯齿留位置（屏幕像素）
   float pad = 2.0;
   vec2 size = iRect.zw * uView.z;
   vec2 origin = iRect.xy * uView.z + uView.xy;
-  vec2 position = origin - pad + aCorner * (size + pad * 2.0);
+  // 存档里带着画在外框之外的部分（浮动标题、端口）：有存档的节点把四边形扩到存档范围
+  vec2 low = min(vec2(0.0), iSnapValid.xy) * size;
+  vec2 high = max(vec2(1.0), iSnapValid.zw) * size;
+  vec2 position = origin + mix(low - pad, high + pad, aCorner);
   vHalf = size * 0.5;
   vLocal = position - (origin + vHalf);
   vUnit = (position - origin) / max(size, vec2(0.0001));
   vOverviewUv = iOverviewUv; vDetailUv = iDetailUv; vTile = iTile; vStyle = iStyle;
+  vSnapUv = iSnapUv; vSnapValid = iSnapValid; vSnap = iSnap;
   vec2 clip = position / uViewport * 2.0 - 1.0;
   gl_Position = vec4(clip.x, -clip.y, 0.0, 1.0);
 }`;
@@ -72,8 +84,13 @@ in vec4 vOverviewUv;
 in vec4 vDetailUv;
 in vec4 vTile;
 in vec4 vStyle;
+in vec4 vSnapUv;
+in vec4 vSnapValid;
+in vec4 vSnap;
 uniform sampler2DArray uOverview;
 uniform sampler2DArray uDetail;
+uniform sampler2DArray uSnapshot;
+uniform float uSnapshotOn;
 uniform vec3 uView;
 uniform float uDpr;
 uniform float uTime;
@@ -116,7 +133,12 @@ void main() {
   vec3 borderColor = selected ? uAccent : failed ? uDanger : running ? mix(uBorder, uAccent, 0.6) : uBorder;
   vec4 bordered = vec4(borderColor * borderAlpha, borderAlpha) + fill * (1.0 - borderAlpha);
   vec4 color = mix(bordered, fill, inner);
-  outColor = color * coverage;
+  // 正文画面存档整块盖在上面（它自带描边、圆角与外框之外的标题、端口），只用截到的那部分；
+  // 缩得比截图时小很多就让给缩略图，免得远看时存档与简化画面混在一起
+  vec4 snapshot = texture(uSnapshot, vec3(mix(vSnapUv.xy, vSnapUv.zw, vUnit), max(vSnap.x, 0.0)));
+  vec2 inside = step(vSnapValid.xy, vUnit) * step(vUnit, vSnapValid.zw);
+  float snapshotMix = uSnapshotOn * step(0.0, vSnap.x) * inside.x * inside.y * smoothstep(0.3, 0.45, uView.z / max(vSnap.y, 0.0001));
+  outColor = mix(color * coverage, vec4(snapshot.rgb, 1.0), snapshotMix);
 }`;
 
 const EDGE_VERTEX = `#version 300 es
@@ -195,7 +217,7 @@ function uniforms<T extends string>(gl: WebGL2RenderingContext, program: WebGLPr
 export function createFarLayerRenderer(gl: WebGL2RenderingContext) {
   const nodeProgram = compile(gl, NODE_VERTEX, NODE_FRAGMENT);
   const edgeProgram = compile(gl, EDGE_VERTEX, EDGE_FRAGMENT);
-  const nodeUniforms = uniforms(gl, nodeProgram, ['uView', 'uViewport', 'uDpr', 'uTime', 'uRadius', 'uPanel', 'uBorder', 'uAccent', 'uDanger', 'uGroup', 'uOverview', 'uDetail'] as const);
+  const nodeUniforms = uniforms(gl, nodeProgram, ['uView', 'uViewport', 'uDpr', 'uTime', 'uRadius', 'uPanel', 'uBorder', 'uAccent', 'uDanger', 'uGroup', 'uOverview', 'uDetail', 'uSnapshot', 'uSnapshotOn'] as const);
   const edgeUniforms = uniforms(gl, edgeProgram, ['uView', 'uViewport', 'uDpr', 'uEdge', 'uAccent'] as const);
 
   const quad = gl.createBuffer();
@@ -231,7 +253,7 @@ export function createFarLayerRenderer(gl: WebGL2RenderingContext) {
   const nodeBuffer = gl.createBuffer();
   const groupBuffer = gl.createBuffer();
   const edgeBuffer = gl.createBuffer();
-  const nodeLayout = [4, 4, 4, 4, 4] as const;
+  const nodeLayout = [4, 4, 4, 4, 4, 4, 4, 4] as const;
   const nodeVao = instancedLayout(quad, nodeBuffer, NODE_FLOATS, nodeLayout);
   const groupVao = instancedLayout(quad, groupBuffer, NODE_FLOATS, nodeLayout);
   const edgeVao = instancedLayout(strip, edgeBuffer, EDGE_FLOATS, [4, 4, 2]);
@@ -248,8 +270,8 @@ export function createFarLayerRenderer(gl: WebGL2RenderingContext) {
   }
 
   return {
-    /** 重填节点实例。tiles 提供每个节点当前可用的画面。 */
-    setNodes(nodes: readonly SceneNode[], tiles: FarLayerTiles): void {
+    /** 重填节点实例。tiles 与 snapshots 提供每个节点当前可用的画面。 */
+    setNodes(nodes: readonly SceneNode[], tiles: FarLayerTiles, snapshots: FarLayerSnapshots): void {
       nodeData = grow(nodeData, nodes.length * NODE_FLOATS);
       groupData = grow(groupData, nodes.length * NODE_FLOATS);
       nodeCount = 0; groupCount = 0;
@@ -265,6 +287,10 @@ export function createFarLayerRenderer(gl: WebGL2RenderingContext) {
         target[offset + 14] = tile?.overviewAt ?? 0; target[offset + 15] = tile?.detailAt ?? 0;
         target[offset + 16] = entry.backdrop ? 1 : 0; target[offset + 17] = entry.selected ? 1 : 0;
         target[offset + 18] = entry.status === 'running' ? 1 : entry.status === 'failed' ? 2 : 0; target[offset + 19] = 0;
+        const snapshot = entry.backdrop ? undefined : snapshots.get(entry);
+        target[offset + 20] = snapshot?.u0 ?? 0; target[offset + 21] = snapshot?.v0 ?? 0; target[offset + 22] = snapshot?.u1 ?? 0; target[offset + 23] = snapshot?.v1 ?? 0;
+        target[offset + 24] = snapshot?.left ?? 0; target[offset + 25] = snapshot?.top ?? 0; target[offset + 26] = snapshot?.right ?? 0; target[offset + 27] = snapshot?.bottom ?? 0;
+        target[offset + 28] = snapshot ? snapshot.layer : -1; target[offset + 29] = snapshot?.zoom ?? 1; target[offset + 30] = 0; target[offset + 31] = 0;
         if (tile) latestTileAt = Math.max(latestTileAt, tile.overviewAt, tile.detailAt);
       }
       gl.bindBuffer(gl.ARRAY_BUFFER, nodeBuffer);
@@ -288,8 +314,12 @@ export function createFarLayerRenderer(gl: WebGL2RenderingContext) {
       gl.bufferData(gl.ARRAY_BUFFER, edgeData.subarray(0, edgeCount * EDGE_FLOATS), gl.DYNAMIC_DRAW);
     },
 
-    /** 画一帧；返回画面是否还在淡入（需要继续安排下一帧）。 */
-    draw(view: FarLayerView, colors: FarLayerColors, tiles: FarLayerTiles, time: number): boolean {
+    /**
+     * 画一帧；返回画面是否还在淡入（需要继续安排下一帧）。
+     * showSnapshots：是否用正文画面存档画节点。只在正文藏起来由这一层代画时用；正文显示着的时候不用，
+     * 否则下一次截图会把这一层画出来的旧存档又截进去。
+     */
+    draw(view: FarLayerView, colors: FarLayerColors, tiles: FarLayerTiles, snapshots: FarLayerSnapshots, showSnapshots: boolean, time: number): boolean {
       gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
       gl.clearColor(0, 0, 0, 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
@@ -316,6 +346,10 @@ export function createFarLayerRenderer(gl: WebGL2RenderingContext) {
         // 清晰级还没建时绑概览纹理占位：实例里清晰层号为负，不会采样到
         gl.bindTexture(gl.TEXTURE_2D_ARRAY, tiles.detailTexture ?? tiles.overviewTexture);
         gl.uniform1i(nodeUniforms.uDetail, 1);
+        gl.activeTexture(gl.TEXTURE2);
+        gl.bindTexture(gl.TEXTURE_2D_ARRAY, snapshots.texture ?? tiles.overviewTexture);
+        gl.uniform1i(nodeUniforms.uSnapshot, 2);
+        gl.uniform1f(nodeUniforms.uSnapshotOn, showSnapshots ? 1 : 0);
         gl.bindVertexArray(vao);
         gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, count);
       };

@@ -198,6 +198,21 @@
   visibility: hidden;
 }
 
+/* 近景里视口运动时（见 farLayer/farLayerBodyProxy.ts）：画面已存进远景层的正文不再由浏览器逐帧重画，
+   改由远景层照存档画。只藏外框里面的内容，外框本身照旧接收指针，点选、拖动、右键与平时一样。
+   连线此时全部由远景层画。 */
+.react-flow__node.canvas-node-proxied > * {
+  visibility: hidden !important;
+}
+
+.react-flow__viewport-portal > .canvas-node-proxied {
+  opacity: 0;
+}
+
+.canvas-proxy-view .react-flow__edges {
+  visibility: hidden;
+}
+
 .canvas-minimap {
   border-radius: var(--radius-overlay);
   overflow: hidden;
@@ -218,6 +233,11 @@
    视口框外侧压一层比面板更暗的间隙色，视口边框用辅助文字色。 */
 .canvas-minimap .react-flow__minimap-node {
   fill: rgb(var(--text3-rgb) / 0.55);
+}
+
+/* 大画布上节点块画在这块画布上，颜色与上面的 SVG 节点块相同（绘制时读这里的 color） */
+.canvas-minimap-nodes {
+  color: rgb(var(--text3-rgb) / 0.55);
 }
 
 .canvas-minimap .react-flow__minimap-mask {

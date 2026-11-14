@@ -16,8 +16,10 @@
  *   SCALE_PROFILE    设 1 时各阶段附带主线程 CPU 采样的自耗时排行
  *   SCALE_TRACE      设 1 时先录 2 秒静止时间线并按事件名汇总
  *   SCALE_HOLD_PORT  给一个端口号时，量完后保持窗口并开放该调试端口
- *   SCALE_FRAMES     设 1 时在快速缩放期间录屏并存成逐帧图片
+ *   SCALE_FRAMES     设 1 时在快速缩放期间、近景平移期间各录一段屏并存成逐帧图片
  *   SCALE_INTERACT   设 1 时不量帧率，改为逐项核对远景下的交互（点选、右键、拖进素材组、批量连线、文件拖放、连线落点）
+ *   SCALE_UI_ZOOM    界面缩放比例（如 1.25）：核对正文截图在界面缩放不是 100% 时仍然对得上
+ *   SCALE_CSS        打开画布后注入的一段样式：做对照实验用（例如藏掉小地图看它占多少）
  *   SCALE_IMAGE_DIR  测试图片缓存目录（默认系统临时目录下 henji-canvas-scale-images）
  *   SCALE_DISPLAY_POINT 窗口所在显示器内的桌面坐标（默认 2561,1）
  */
@@ -39,6 +41,7 @@ const OUT_DIR = path.resolve(ROOT, process.env.SCALE_OUT || '.canvas-scale-bench
 const CAPTURE_FRAMES = process.env.SCALE_FRAMES === '1'
 const INTERACT = process.env.SCALE_INTERACT === '1'
 const INTERACT_GROUP_ID = 'scale-asset-group'
+const INTERACT_EMPTY_PROMPT_ID = 'scale-empty-prompt'
 const PROFILE = process.env.SCALE_PROFILE === '1'
 const TRACE = process.env.SCALE_TRACE === '1'
 const HOLD_PORT = Number(process.env.SCALE_HOLD_PORT || 0)
@@ -123,7 +126,11 @@ function buildGraph(count, images, videoPath) {
     const slot = columns + 2
     const replaced = nodes[slot].id
     nodes[slot] = { id: INTERACT_GROUP_ID, type: 'assetGroupNode', position: nodes[slot].position, data: { displayName: '素材组', memberOrder: [], coverMemberId: null, bindings: [] } }
-    for (let index = edges.length - 1; index >= 0; index -= 1) if (edges[index].source === replaced || edges[index].target === replaced) edges.splice(index, 1)
+    // 再要一个没填提示词的生成节点（第二行第五格）：从工具栏运行它会在提交前被拒
+    const emptySlot = columns + 4
+    const emptyReplaced = nodes[emptySlot].id
+    nodes[emptySlot] = { id: INTERACT_EMPTY_PROMPT_ID, type: 'imageNode', position: nodes[emptySlot].position, measured: MEASURED.imageNode && { ...MEASURED.imageNode }, data: { displayName: '没填提示词', prompt: '' } }
+    for (let index = edges.length - 1; index >= 0; index -= 1) if ([replaced, emptyReplaced].includes(edges[index].source) || [replaced, emptyReplaced].includes(edges[index].target)) edges.splice(index, 1)
   }
   return { nodes, edges, columns, width: columns * SPACING_X, height: Math.ceil(count / columns) * SPACING_Y }
 }
@@ -349,12 +356,13 @@ async function runScale(app, page, count, images) {
     console.log('sizes', JSON.stringify(sizes))
   }
 
+  if (process.env.SCALE_CSS) await page.addStyleTag({ content: process.env.SCALE_CSS })
   const box = await page.locator('.react-flow').boundingBox()
   const center = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
   const result = { count, edges: graph.edges.length, firstPaintMs, interactiveMs, mounted, viewportSize: { width: Math.round(box.width), height: Math.round(box.height) } }
 
   if (INTERACT) {
-    result.interaction = await runInteractionChecks(page, { docId: id, graph, sizes: MEASURED, outDir: OUT_DIR, groupId: INTERACT_GROUP_ID })
+    result.interaction = await runInteractionChecks(page, { docId: id, graph, sizes: MEASURED, outDir: OUT_DIR, groupId: INTERACT_GROUP_ID, emptyPromptId: INTERACT_EMPTY_PROMPT_ID })
     return result
   }
 
@@ -368,16 +376,34 @@ async function runScale(app, page, count, images) {
   await page.mouse.move(center.x, center.y)
   for (let i = 0; i < 8; i += 1) { await page.mouse.wheel(0, -160); await sleep(30) }
   await sleep(2500)
-  // 之后的滚轮都落在节点之间的空白处：正文里的输入区不响应画布缩放，停在上面会量成“缩放没动”
-  const gap = (await findPanePoint(page, { preferRatioX: 0.5, preferRatioY: 0.5 })) ?? center
   result.nearZoom = (await readViewport(page)).zoom
   result.nearBodies = await page.evaluate(() => document.querySelectorAll('.react-flow__node .canvas-node-paint-frame').length)
   result.panNear = await measure(page, () => drivePan(page, center), { profile: PROFILE })
+  // 截一次画布区域要多久（主进程截图、编码、传回渲染层）：近景里有正文还没存过画面时，停稳后会做这件事
+  result.captureMs = await page.evaluate(async (rect) => {
+    const started = performance.now()
+    for (let round = 0; round < 3; round += 1) await createImageBitmap(new Blob([(await window.henjiNative.media.captureWindowRegion(rect)).jpeg], { type: 'image/jpeg' }))
+    return Math.round((performance.now() - started) / 3)
+  }, { x: box.x, y: box.y, width: box.width, height: box.height }).catch(() => null)
   if (process.env.SCALE_TRACE === 'near') result.traceNear = await traceSummary(page, () => drivePan(page, center, 800))
+  if (CAPTURE_FRAMES) {
+    // 近景平移逐帧：起步（正文换成远景层代画）、途中、停稳（正文盖回来）都在里面
+    const directory = path.join(OUT_DIR, `frames-near-${count}`)
+    fs.rmSync(directory, { recursive: true, force: true })
+    await sleep(2500)
+    result.capturedNearFrames = await captureFrames(page, directory, async () => { await sleep(300); await drivePan(page, center, 1200); await sleep(900) })
+  }
+  await sleep(600)
   await page.screenshot({ path: path.join(OUT_DIR, `near-${count}.png`) })
+  // 之后的滚轮都落在节点之间的空白处：正文里的输入区不响应画布缩放，停在上面会量成“缩放没动”。
+  // 空白处要在平移结束之后找：平移不回到原位，之前找的点这时可能已经压在节点上
+  const gap = await findPanePoint(page, { preferRatioX: 0.5, preferRatioY: 0.5 })
+  if (!gap) throw new Error('近景下没找到节点之间的空白处，滚轮缩放量不了')
   await page.mouse.move(gap.x, gap.y)
   for (let i = 0; i < 12; i += 1) { await page.mouse.wheel(0, 160); await sleep(30) }
   await sleep(500)
+  const zoomedOut = (await readViewport(page)).zoom
+  if (!(zoomedOut < result.nearZoom * 0.5)) throw new Error(`滚轮没有改变缩放（${result.nearZoom} → ${zoomedOut}），快速缩放量不了`)
   result.zoomFast = await measure(page, () => driveFastZoom(page, gap), { profile: PROFILE })
   await sleep(800)
   result.viewportAfterZoom = await readViewport(page)
@@ -410,6 +436,7 @@ async function main() {
       const page = app.page
       await waitForApp(page)
       await app.app.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0]?.maximize() })
+      if (process.env.SCALE_UI_ZOOM) await app.app.evaluate(({ BrowserWindow }, zoom) => { BrowserWindow.getAllWindows()[0]?.webContents.setZoomFactor(zoom) }, Number(process.env.SCALE_UI_ZOOM))
       await sleep(500)
       const result = await runScale(app.app, page, count, images)
       results.push(result)

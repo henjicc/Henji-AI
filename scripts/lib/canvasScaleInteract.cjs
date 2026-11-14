@@ -169,6 +169,80 @@ async function runInteractionChecks(page, context) {
   await page.mouse.click(blank.x, blank.y)
   await sleep(300)
 
+  // 四之三、画面自己变了（指针没动）之后立刻按下拖动：空外框还没跟上指针，按下也不能落到空白上。
+  // 用缩放条的缩小按钮让画面绕中心缩小，指针事先停在“缩小之后某个节点的中心会到的位置”
+  {
+    const view = await readViewport(page)
+    const center = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+    const nextZoom = view.zoom / 1.2
+    const dragged = graph.nodes.find((node) => {
+      if (node.type !== 'uploadNode' || node.id === 'scale-0' || node.id === 'scale-1') return false
+      const size = sizeOf(node)
+      const before = { x: box.x + view.x + (node.position.x + size.width / 2) * view.zoom, y: box.y + view.y + (node.position.y + size.height / 2) * view.zoom }
+      const distance = Math.hypot(before.x - center.x, before.y - center.y)
+      return distance > 450 && distance < 650 && before.y > box.y + 200 && before.y < box.y + box.height - 200
+    })
+    const size = sizeOf(dragged)
+    const canvasCenter = { x: (box.width / 2 - view.x) / view.zoom, y: (box.height / 2 - view.y) / view.zoom }
+    const press = {
+      x: center.x + (dragged.position.x + size.width / 2 - canvasCenter.x) * nextZoom,
+      y: center.y + (dragged.position.y + size.height / 2 - canvasCenter.y) * nextZoom,
+    }
+    await page.mouse.move(press.x - 2, press.y - 2)
+    await page.mouse.move(press.x, press.y)
+    await sleep(400)
+    // 点按钮不经过指针：真实指针留在原地。等视口连续两帧不再变化（约 30 毫秒，早于空外框的重新判断）就按下
+    await page.evaluate(() => new Promise((resolve) => {
+      const read = () => getComputedStyle(document.querySelector('.react-flow__viewport')).transform
+      const before = read()
+      ;(document.querySelector('button[aria-label="缩小"]') ?? document.querySelector('button[aria-label="Zoom out"]')).click()
+      let previous = before, still = 0
+      const tick = () => {
+        const current = read()
+        still = current === previous && current !== before ? still + 1 : 0
+        previous = current
+        if (still >= 2) resolve(null); else requestAnimationFrame(tick)
+      }
+      requestAnimationFrame(tick)
+    }))
+    const shellBeforePress = (await domNodeIds()).includes(dragged.id)
+    await page.mouse.down()
+    for (let step = 1; step <= 10; step += 1) { await page.mouse.move(press.x + step * 8, press.y + step * 4); await sleep(16) }
+    await page.mouse.up()
+    const zoomAfter = (await readViewport(page)).zoom
+    const moved = await waitFor(readDoc, doc => Math.abs((doc.nodes.find(node => node.id === dragged.id)?.position.x ?? dragged.position.x) - dragged.position.x) > 100)
+    const after = moved.nodes.find(node => node.id === dragged.id)?.position
+    record('画面自己变了之后立刻按下拖动：拖动的是指针下的节点', Boolean(after) && Math.abs(after.x - dragged.position.x) > 100,
+      { node: dragged.id, shellBeforePress, zoomBefore: view.zoom, zoomAfter, from: dragged.position, to: after })
+    if (after) dragged.position = { ...after }
+    await page.mouse.click(blank.x, blank.y)
+    await sleep(300)
+  }
+
+  // 四之四、远景从工具栏运行一个没挂正文的节点：提示词为空，原因要用画布提示条说出来（正文里的标红此时看不见）
+  if (context.emptyPromptId) {
+    const point = await pointOf(context.emptyPromptId)
+    await page.mouse.move(point.x - 3, point.y)
+    await page.mouse.move(point.x, point.y)
+    await sleep(150)
+    await page.mouse.click(point.x, point.y)
+    await sleep(500)
+    const hasBody = await page.evaluate(id => Boolean(document.querySelector(`.react-flow__node[data-id="${id}"] .canvas-node-paint-frame`)), context.emptyPromptId)
+    const run = page.locator('.react-flow__node-toolbar button').first()
+    const label = await run.textContent().catch(() => null)
+    await run.click().catch(() => undefined)
+    const feedback = await waitFor(() => page.evaluate(() => {
+      const dialog = document.querySelector('[role="alertdialog"]')
+      const toast = document.querySelector('[role="status"]')
+      return { dialog: dialog?.textContent?.slice(0, 80) ?? null, toast: toast?.textContent?.slice(0, 80) ?? null }
+    }), value => Boolean(value.dialog || value.toast), 4000)
+    record('远景从工具栏运行没挂正文的节点：失败原因有提示', Boolean(feedback.dialog || feedback.toast), { node: context.emptyPromptId, button: label, feedback })
+    await shot('far-run-feedback')
+    await page.keyboard.press('Escape')
+    await page.mouse.click(blank.x, blank.y)
+    await sleep(300)
+  }
+
   // 五、远景文件拖放：落在节点上交给该节点，不在它上面另建节点；落在空白处新建节点并很快量到尺寸
   const dropFile = (point) => page.evaluate(async ({ x, y }) => {
     const canvas = document.createElement('canvas')

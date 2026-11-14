@@ -9,6 +9,7 @@ function formatScaleResult(result) {
     lines.push(`  ${label}：${phase.fps}fps，p95 ${phase.p95}ms，最长 ${phase.max}ms，超 50ms 的帧 ${phase.over50}，长任务 ${phase.longFrames} 次（最长 ${phase.longFrameMaxMs}ms），主线程 ${phase.mainThread.TaskMs}/${phase.elapsedMs}ms（脚本 ${phase.mainThread.ScriptMs}）`)
   }
   if (result.nearBodies !== undefined) lines.push(`  近景缩放 ${Number(result.nearZoom).toFixed(2)} 时挂载正文 ${result.nearBodies}`)
+  if (result.captureMs != null) lines.push(`  截一次画布区域：${result.captureMs}ms`)
   if (result.memoryAfterOpen) lines.push(`  打开后内存：渲染 ${result.memoryAfterOpen.rendererPrivateMB}MB，GPU ${result.memoryAfterOpen.gpuPrivateMB}MB`)
   lines.push(`  全部阶段后内存：渲染 ${result.memory.rendererPrivateMB}MB，GPU ${result.memory.gpuPrivateMB}MB，脚本堆 ${result.jsHeapMB}MB`)
   return lines.join('\n')

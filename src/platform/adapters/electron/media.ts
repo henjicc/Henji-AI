@@ -64,5 +64,8 @@ export function createElectronMedia(): MediaPlatform {
     async captureApplicationSurface(request) {
       return await getNative().media.captureApplicationSurface(request)
     },
+    async captureWindowRegion(rect) {
+      return await getNative().media.captureWindowRegion(rect)
+    },
   }
 }

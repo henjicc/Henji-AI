@@ -95,6 +95,8 @@ export function createFarLayerTiles(gl: WebGL2RenderingContext, options: { nodeC
   let latestNodes = new Map<string, SceneNode>();
   let wanted = new Set<string>();
   let activeLoads = 0;
+  /** 任何节点可用的画面变了（写入、淘汰、作废）就加一：调用方据此决定要不要重填实例 */
+  let revision = 0;
   let disposed = false;
   let palette: FarLayerPalette = { panel: '', text: '', subtle: '', fontFamily: 'sans-serif', epoch: 0 };
 
@@ -162,6 +164,7 @@ export function createFarLayerTiles(gl: WebGL2RenderingContext, options: { nodeC
     scratch.forEach((canvas, level) => paint(context(canvas), Math.max(1, size.width >> level), Math.max(1, size.height >> level)));
     state.overview = overview.write(index, scratch, size.width, size.height);
     state.overviewAt = options.now();
+    revision += 1;
   }
 
   function ensureDetailAtlas(): FarLayerAtlas {
@@ -182,6 +185,7 @@ export function createFarLayerTiles(gl: WebGL2RenderingContext, options: { nodeC
     if (!victim?.detail) return null;
     const reused = victim.detail.index;
     victim.detail = null;
+    revision += 1;
     return reused;
   }
 
@@ -194,6 +198,7 @@ export function createFarLayerTiles(gl: WebGL2RenderingContext, options: { nodeC
     state.detail = atlas.write(index, [detailScratch], size.width, size.height);
     state.detailAt = options.now();
     state.detailUsedAt = state.detailAt;
+    revision += 1;
   }
 
   async function loadBitmap(content: MediaContent, limit: number): Promise<ImageBitmap> {
@@ -261,6 +266,7 @@ export function createFarLayerTiles(gl: WebGL2RenderingContext, options: { nodeC
     get overviewTexture() { return overview.texture; },
     get detailTexture() { return detail?.texture ?? null; },
     get(id: string): NodeTile | undefined { return states.get(id); },
+    get revision() { return revision; },
 
     setPalette(next: Omit<FarLayerPalette, 'epoch'>): void {
       if (next.panel === palette.panel && next.text === palette.text && next.subtle === palette.subtle && next.fontFamily === palette.fontFamily) return;
@@ -278,6 +284,7 @@ export function createFarLayerTiles(gl: WebGL2RenderingContext, options: { nodeC
         overview.dispose();
         overview = createFarLayerAtlas(gl, { cell: OVERVIEW_CELL, page: PAGE, levels: OVERVIEW_LEVELS, capacity: Math.ceil(nodes.length * 1.5) });
         for (const [id, state] of states) { state.overview = null; enqueueOverview(id, state); }
+        revision += 1;
       }
       const byId = new Map<string, SceneNode>();
       const centerX = (view.left + view.right) / 2, centerY = (view.top + view.bottom) / 2;
@@ -289,7 +296,7 @@ export function createFarLayerTiles(gl: WebGL2RenderingContext, options: { nodeC
         const signature = signatureOf(entry, palette.epoch);
         let state = states.get(entry.id);
         if (!state || state.signature !== signature) {
-          if (state?.detail) detail?.release(state.detail.index);
+          if (state?.detail) { detail?.release(state.detail.index); revision += 1; }
           // 内容变了：概览格子沿用，新画面写进去之前仍显示旧画面，不退回空白
           state = {
             content: entry.content, signature, overview: state?.overview ?? null, overviewAt: state?.overviewAt ?? 0,
