@@ -78,7 +78,7 @@ it('正式 describe→通用删除→读回：版本进现有回收区且读不�
   const app = createApplicationHarness()
   try {
     const description = await app.requireResult('describe_application_entities', { entityTypes: [WEB_REPLAY_TAKE_TYPE], refs: [parent()] })
-    expect(description.entities).toContainEqual(expect.objectContaining({ id: WEB_REPLAY_TAKE_TYPE, collectionWrite: expect.objectContaining({ removable: true }) }))
+    expect(description.entities).toContainEqual(expect.objectContaining({ id: WEB_REPLAY_TAKE_TYPE, removable: true }))
     expect((await app.requireResult('list_application_entities', { entityType: WEB_REPLAY_TAKE_TYPE })).refs).toContainEqual(expect.objectContaining(ref()))
     const original = await app.read(ref())
     const result = await app.requireResult('change_application_entities', changes())

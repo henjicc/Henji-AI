@@ -87,7 +87,7 @@ function rangeText(min: unknown, max: unknown): string {
 }
 
 /** 取值说明：类型、范围与枚举值。比结构描述短得多，够填对一个值；要完整 schema 再用 describe_application_entities 点名。 */
-function valueText(property: ApplicationPropertyDescriptor, schema: JsonValue | undefined): string {
+export function applicationPropertyValueText(property: ApplicationPropertyDescriptor, schema: JsonValue | undefined): string {
   const value = property.value
   let text: string
   switch (value.kind) {
@@ -112,7 +112,7 @@ function valueText(property: ApplicationPropertyDescriptor, schema: JsonValue | 
   return property.unit ? `${text} ${property.unit}` : text
 }
 
-function isWritable(property: ApplicationPropertyDescriptor): boolean {
+export function isWritableApplicationProperty(property: ApplicationPropertyDescriptor): boolean {
   return property.requiredPermissions.write.length > 0 && !property.readOnlyReason
 }
 
@@ -272,7 +272,7 @@ export async function readApplicationSnapshot(
   const types: Record<string, ApplicationSnapshotTypeInfo> = {}
   const propertyText = (property: ApplicationPropertyDescriptor): string => {
     const schema = property.value.kind === 'json' ? registry.resolveSchema(property.value.schemaRef, context) : undefined
-    return valueText(property, schema)
+    return applicationPropertyValueText(property, schema)
   }
   for (const entityType of new Set([...nodesByType.keys(), ...scopedTypes])) {
     const entity = registry.getEntity(entityType)!
@@ -301,7 +301,7 @@ export async function readApplicationSnapshot(
       const onRequest: string[] = []
       for (const property of all) {
         const key = shortKey(entityType, property.id)
-        if (present.has(key)) properties[key] = `${property.title}｜${propertyText(property)}${isWritable(property) ? '' : '｜只读'}`
+        if (present.has(key)) properties[key] = `${property.title}｜${propertyText(property)}${isWritableApplicationProperty(property) ? '' : '｜只读'}`
         else if (requested.has(property.id)) unset.push(key)
         else if (!named.has(entityType)) onRequest.push(key)
       }

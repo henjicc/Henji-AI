@@ -60,9 +60,10 @@ it('剪辑：一次读回序列、轨道、片段与标记，读回的引用和�
   // 2 条轨道、8 个片段、3 个标记：全部按读回给出的必填项经通用写入建出来
   await write([{ kind: 'create_items', parent: root, entityType: 'video_edit.item', items: [{ properties: { name: '标题', kind: 'text' } }] }])
   const item = (await snapshot({ root, entityTypes: ['video_edit.item'] })).root.children!['video_edit.item'][0]
+  // 素材项写成读回的完整引用 id 或它的后半段都可以
   const itemId = item.ref.id.slice(owner.document.id.length + 1)
   await write([
-    { kind: 'create_items', parent: sequence.ref, entityType: 'video_edit.clip', items: Array.from({ length: 8 }, (_, index) => ({ properties: { item_id: itemId, track: value(empty, videoTrack, 'index'), start: index * 30, duration: 30 } })) },
+    { kind: 'create_items', parent: sequence.ref, entityType: 'video_edit.clip', items: Array.from({ length: 8 }, (_, index) => ({ properties: { item_id: index % 2 ? itemId : item.ref.id, track: value(empty, videoTrack, 'index'), start: index * 30, duration: 30 } })) },
     { kind: 'create_items', parent: sequence.ref, entityType: 'video_edit.marker', items: [15, 45, 75].map((frame, index) => ({ properties: { frame, name: `标记 ${index + 1}` } })) },
   ])
 
@@ -99,8 +100,8 @@ it('剪辑：一次读回序列、轨道、片段与标记，读回的引用和�
   for (let cursor: string | null = '0'; cursor !== null;) cursor = (await count('describe_application_entities', { entityTypes: types, limit: 100, cursor })).nextCursor as string | null
   for (const entityType of types) for (const ref of (await count('list_application_entities', { entityType })).refs as Ref[]) await count('read_application_entity', { ref })
   if (process.env.HENJI_SNAPSHOT_MEASURE === '1') process.stdout.write(`[snapshot] 旧读法 ${calls} 次调用、${chars} 字符；整份读回 1 次调用、${after.chars} 字符（${result.entityCount} 个实体）\n`)
-  // 整份读回的意义就在于比逐个读取省得多：体积回涨到四分之一以上就失去了这个前提
-  expect(after.chars * 4).toBeLessThan(chars)
+  // 整份读回的意义就在于比逐个读取省得多（查结构这一步本身已是每条属性一行的紧凑目录）：体积回涨到一半以上就失去了这个前提
+  expect(after.chars * 2).toBeLessThan(chars)
 })
 
 it('图片文档：读回图层组里的图层与滤镜，读回的引用直接写入', async () => {

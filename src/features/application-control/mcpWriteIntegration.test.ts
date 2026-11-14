@@ -141,12 +141,15 @@ it('真实 MCP 与 Pi 写入经过授权、SQLite账本、正式Session及设置
         expect(media).toHaveBeenCalledWith(expect.objectContaining({ mode: 'image' }), false)
         const compact = await client.callTool({ name: 'describe_application_entities', arguments: { domains: ['video_edit'] } })
         expect(compact.isError, JSON.stringify(compact)).toBe(false)
-        const catalog = (compact.structuredContent as { data: { properties: Array<Record<string, unknown>>; nextCursor: string | null } }).data
-        expect(catalog.properties.length).toBeLessThanOrEqual(40)
-        expect(catalog.nextCursor).toBeTruthy()
+        // 只给领域：实体目录，不带属性；点名实体类型：每条属性一行
+        const directory = (compact.structuredContent as { data: { entities: Array<{ id: string; propertyCount: number }>; properties: unknown[]; nextCursor: string | null } }).data
+        expect(directory.properties).toEqual([])
+        expect(directory.nextCursor).toBeNull()
+        expect(directory.entities.find(entity => entity.id === 'video_edit.sequence')!.propertyCount).toBeGreaterThan(0)
         expect(JSON.stringify(compact).length).toBeLessThan(25000)
-        expect(catalog.properties[0]).toHaveProperty('valueShape')
-        expect(catalog.properties[0]).not.toHaveProperty('value')
+        const listed = await client.callTool({ name: 'describe_application_entities', arguments: { entityType: 'video_edit.sequence' } })
+        expect(listed.isError, JSON.stringify(listed)).toBe(false)
+        expect((listed.structuredContent as { data: { catalog: Record<string, Record<string, string>> } }).data.catalog['video_edit.sequence'].frame_rate).toContain('numerator')
         const shape = await client.callTool({ name: 'describe_application_entities', arguments: { entityType: 'video_edit.sequence', propertyIds: ['video_edit.sequence.frame_rate'], detail: 'full' } })
         expect(JSON.stringify(shape)).toContain('numerator')
         expect(JSON.stringify(shape)).toContain('denominator')

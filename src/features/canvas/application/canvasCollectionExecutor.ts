@@ -1,5 +1,8 @@
 import { findCanvasProjectInstance, getCanvasProjectInstance, requireCanvasProjectInstance } from './canvasProjectInstances';
 import type { ApplicationCollectionExecutor, ApplicationCompletedStepResult, ApplicationEvidence, ApplicationPlannedStep, ApplicationRef, JsonValue } from '@/core/application-control';
+import { applyWriterTable } from '@/core/application-control';
+import { CANVAS_NODE_WRITERS } from './canvasFields';
+import type { CanvasNodePropertyPatch } from './canvasMutationService';
 import { applyCanvasOperationsAtomically, undoCanvasBatch, type CanvasBatchOperation } from './canvasBatchService';
 import { CANVAS_ENTITY_TYPES } from './canvasReflection';
 import { canvasRemainingWrite, canvasStepFailure } from './canvasStepFailure';
@@ -49,7 +52,7 @@ export class CanvasCollectionExecutor implements ApplicationCollectionExecutor {
       ? step.parent.id.slice(0, step.parent.id.indexOf(':'))
       : step.parent.id
     if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId)
-    const operations = this.toOperations(step)
+    const operations = await this.toOperations(step)
     const beforeNodes = new Set(requireCanvasProjectInstance(projectId).store.getState().nodes.map((item) => item.id))
     const beforeEdges = new Set(requireCanvasProjectInstance(projectId).store.getState().edges.map((item) => item.id))
     const { appliedOperations, undoRef } = await applyCanvasOperationsAtomically(projectId, operations, {
@@ -115,10 +118,10 @@ export class CanvasCollectionExecutor implements ApplicationCollectionExecutor {
     }
   }
 
-  private toOperations(step: CollectionStep): CanvasBatchOperation[] {
+  private async toOperations(step: CollectionStep): Promise<CanvasBatchOperation[]> {
     const isEdge = this.entityType === CANVAS_ENTITY_TYPES.edge
     if (step.operation.kind === 'create') {
-      return step.operation.items.map((item, index) => {
+      return await Promise.all(step.operation.items.map(async (item, index) => {
         if (isEdge) {
           const sourceHandle = property(item.properties, CANVAS_ENTITY_TYPES.edge, 'source_handle')
           const targetHandle = property(item.properties, CANVAS_ENTITY_TYPES.edge, 'target_handle')
@@ -136,17 +139,22 @@ export class CanvasCollectionExecutor implements ApplicationCollectionExecutor {
         if (typeof nodeType !== 'string' || nodeType.trim() === '') {
           throw new Error(`CANVAS_NODE_TYPE_INVALID：第 ${index} 项缺少 ${CANVAS_ENTITY_TYPES.node}.node_type。`)
         }
-        // placement 只支持 viewport_center / right_of_node，没有绝对坐标模式。
-        // 要指定精确位置就在创建之后用 set_properties 写 canvas.node.position，它本来就是可写属性。
+        // placement 只有 viewport_center / right_of_node；要精确位置就在同一项里带上 canvas.node.position。
         const anchor = property(item.properties, CANVAS_ENTITY_TYPES.node, 'anchor_ref')
+        // 其余属性在节点建好后经同一张写入表落下：不认识或不可写的属性在这里拒绝并列出可写的，不悄悄丢掉。
+        const properties: Omit<CanvasNodePropertyPatch, 'nodeId'> = {}
+        await applyWriterTable(CANVAS_NODE_WRITERS, properties as CanvasNodePropertyPatch, Object.entries(item.properties)
+          .filter(([propertyId]) => ![`${CANVAS_ENTITY_TYPES.node}.node_type`, `${CANVAS_ENTITY_TYPES.node}.anchor_ref`].includes(propertyId))
+          .map(([propertyId, value]) => ({ propertyId, operation: 'set' as const, value })))
         return {
           kind: 'add_node' as const,
           nodeType,
           placement: anchor === undefined
             ? { mode: 'viewport_center' as const }
             : { mode: 'right_of_node' as const, anchorNodeId: childId(anchor, `ANCHOR_REF[${index}]`) },
+          properties,
         }
-      })
+      }))
     }
     if (isEdge) {
       return step.operation.targets.map((target) => ({

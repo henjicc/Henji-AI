@@ -505,6 +505,8 @@ export class VideoEditCollectionExecutor implements ApplicationCollectionExecuto
           const allowed = new Set(VIDEO_EDIT_FIELDS[this.entityType].filter(field => !VIDEO_EDIT_CONTROLLED_AGGREGATES.some(key => videoEditDataKey(field.propertyId.split('.').at(-1)!) === key) && !(VIDEO_EDIT_COMPOSITE_TYPES.some(type => type === this.entityType) && ['sequence_id', 'clip_id'].some(key => field.propertyId.endsWith(`.${key}`)))).map(field => field.propertyId))
           if (Object.keys(item.properties).some(key => !allowed.has(key))) throw new Error('创建仅接受已公开的实体字段；代码实例由正式源码检查或已有素材项维护。')
           const values = videoEditCollectionValues(this.entityType, item.properties)
+          // 顶层属性里指向本剪辑成员的标识（素材项、素材箱、片段、序列…）也可以写成读回的完整引用 id（“剪辑:成员”）：照读回的引用直接填是最自然的写法
+          for (const [key, value] of Object.entries(values)) if (typeof value === 'string' && value.startsWith(`${document.id}:`)) (values as Record<string, unknown>)[key] = value.slice(document.id.length + 1)
           if (values.label === null) delete values.label
           for (const key of ['binId', 'parentId', 'linkId', 'groupId', 'clipId']) if (values[key] === '') delete values[key]
           if (values.sourceComponent === 'all') delete values.sourceComponent

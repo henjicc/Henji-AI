@@ -21,6 +21,7 @@ import { createSnapshot, pushSnapshot } from '@/stores/canvasStoreHelpers'
 import {
   extractCanvasNodeDataForDuplication,
   parseCanvasSpecialEditorData,
+  listCanvasNodeDataKeys,
 } from '../domain/nodeControlRegistry'
 import {
   stageControlledCanvasNode,
@@ -79,6 +80,8 @@ export interface CanvasNodePropertyPatch {
   storyboardFrames?: CanvasStoryboardFramePatch[]
   assetGroupMemberOrder?: string[]
   assetGroupCoverMemberId?: string | null
+  /** 节点 data 里公开的键（value、systemPrompt、gridRows…），按节点类型校验后合并。 */
+  data?: Record<string, unknown>
 }
 
 function requireNode(projectId: string, nodeId: string): CanvasNode {
@@ -140,6 +143,21 @@ export async function applyCanvasNodePropertyPatches(
       const node = requireNode(projectId, patch.nodeId)
       if (!isTextAnnotationNode(node)) throw new CanvasApplicationError('INVALID_INPUT', '该节点不是文本节点，不能写入文本正文')
       Object.assign(data, validateCanvasNodeDataPatch(node, { content: patch.textContent }))
+    }
+    if (patch.data) {
+      const node = requireNode(projectId, patch.nodeId)
+      const overlapping = patch.generationConfig ? Object.keys(patch.data).filter((key) => key in patch.generationConfig!) : []
+      if (overlapping.length) {
+        // 两边各自校验后合并会落下一组谁都没校验过的模型与参数
+        throw new CanvasApplicationError('INVALID_INPUT', `同一次修改里 generation_config 已经包含 ${overlapping.join('、')}，不要再单独写这几项；只改其中一项时不要带 generation_config。`)
+      }
+      const accepted = listCanvasNodeDataKeys(node.type)
+      const rejected = Object.keys(patch.data).filter((key) => !accepted.includes(key))
+      if (rejected.length) {
+        throw new CanvasApplicationError('INVALID_INPUT',
+          `${node.type} 节点没有数据项 ${rejected.join('、')}；这类节点的数据项：${accepted.join('、') || '无'}。属性键是它们的小写下划线写法（如 systemPrompt 写 system_prompt）。`)
+      }
+      Object.assign(data, validateCanvasNodeDataPatch(node, patch.data))
     }
     if (patch.displayName !== undefined) data.displayName = patch.displayName.trim()
     return {

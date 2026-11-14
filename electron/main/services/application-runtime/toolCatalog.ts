@@ -99,9 +99,31 @@ const publicMediaOutputSchema = z.object({ ok: z.literal(true), data: z.union([
   z.object({ ...mediaMetadataShape, base64: z.string() }).strict(),
 ]) }).passthrough()
 
+/*
+ * 协议工具的成功输出。失败（ok:false）走 MCP 的 isError，不按输出结构核对；等待用户确认是唯一不算错误的 ok:false，各自并上 waitingOutput。
+ * 这些结构只约束客户端可以依赖的字段，其余原样透传（passthrough）：操作回执里的 result 就是原工具自己的结果。
+ */
+const contractOutputSchema = z.object({ ok: z.literal(true), data: z.object({
+  contract: z.object({ externalContractVersion: z.string(), applicationCapabilityCatalog: z.string(), protocolVersions: z.array(z.string()), sdkVersion: z.string() }).passthrough(),
+  catalogSchemaHash: z.string(),
+  schemaHashAlgorithm: z.string(),
+  toolSchemas: z.array(z.object({ name: z.string(), schemaHash: z.string() }).passthrough()).optional(),
+  access: z.object({ note: z.string() }).passthrough(),
+  domains: z.array(z.object({ id: z.string(), readable: z.boolean(), writable: z.boolean(), entityTypes: z.number().int().nonnegative(), writableEntityTypes: z.number().int().nonnegative() }).passthrough()),
+  workflows: z.array(z.string()),
+}).passthrough() }).passthrough()
+/** 已完成并核对过的操作回执：result 是原工具的结果，recoveryResult 是之后“仅重试保存”的结果。 */
+const completedOperationSchema = z.object({ ok: z.literal(true), operationId: z.string().min(1), executionState: z.literal('completed'), verificationState: z.literal('verified'),
+  result: z.object({ ok: z.boolean() }).passthrough().nullable().optional(), recoveryResult: z.object({ ok: z.boolean() }).passthrough().nullable().optional() }).passthrough()
+/** 批量结果的一页（get_application_operation 带 resultField 时）。 */
+const operationResultPageSchema = z.object({ ok: z.literal(true), data: z.object({ resultRef: z.object({ operationId: z.string().min(1), field: z.string() }).strict(),
+  total: z.number().int().nonnegative(), items: z.array(z.unknown()), nextCursor: z.string().nullable() }).strict() }).passthrough()
+const protocolOutput = (schema: z.ZodType): Record<string, unknown> => ({ type: 'object', ...z.toJSONSchema(schema, { io: 'output', unrepresentable: 'any' }) })
+
 export const PROTOCOL_TOOL_SPECS: readonly ProtocolToolSpec[] = [
   {
     name: 'describe_application_contract', readOnly: true,
+    outputSchema: protocolOutput(contractOutputSchema),
     description: '写入前先读一次，含幂等与付费约定。发现协议、付费策略、业务域与可用技能。domains 点名才展开实体；detail="full" 查询完整工具清单、排除理由与弃用策略。toolSchemas 返回每个工具的 name/schemaHash，可用 names 过滤；names 配合 includeSchemas=true 获取完整 description/inputSchema。本地缓存与 schemaHash 不一致时，以 describe 返回的 schema 为准并按其参数调用。catalogSchemaHash 可与 get_current_application_context 的目录哈希比较。',
     inputSchema: { type: 'object', properties: { domains: { type: 'array', items: { type: 'string', minLength: 1 }, maxItems: 16, description: '要展开实体清单的业务域；留空只看域级摘要。' }, detail: { type: 'string', enum: ['compact', 'full'], default: 'compact' }, names: { type: 'array', items: { type: 'string', minLength: 1 }, description: '仅返回这些工具的 schema 摘要；省略时返回全部摘要。' }, includeSchemas: { type: 'boolean', default: false, description: '配合 names 返回完整 description/inputSchema，按需分批查询。' } }, additionalProperties: false },
   },
@@ -113,16 +135,19 @@ export const PROTOCOL_TOOL_SPECS: readonly ProtocolToolSpec[] = [
   },
   {
     name: 'get_application_operation', readOnly: true, requiresOperations: true,
+    outputSchema: protocolOutput(z.union([completedOperationSchema, operationResultPageSchema, waitingOutput])),
     description: '读取本连接写操作的结果与状态，查询不会重放修改。断线、超时或换客户端后用原 operationId 查询，不要换标识重试。剪辑导出的 result.queue 是最新登记状态，含已完成、已中断与可按 retryTaskId 重试的任务；操作完成表示提交完成，成片是否完成看队列。批量结果用 resultRef.operationId、resultRef.field 作为 operationId、resultField，携带 nextCursor 继续分页。',
     inputSchema: { ...z.toJSONSchema(operationReadInputSchema, { io: 'input' }), properties: { ...z.toJSONSchema(operationReadInputSchema, { io: 'input' }).properties, ...RESULT_DETAIL_FIELDS } },
   },
   {
     name: 'retry_application_operation_save', readOnly: false, requiresOperations: true,
+    outputSchema: protocolOutput(z.union([completedOperationSchema, waitingOutput])),
     description: '按原操作记录仅重试保存并核对原条件；不会重放业务修改，必须保留原编辑会话。',
     inputSchema: { type: 'object', properties: { operationId: { type: 'string', format: 'uuid' }, originalOperationId: { type: 'string', format: 'uuid' }, ...RESULT_DETAIL_FIELDS }, required: ['operationId', 'originalOperationId'], additionalProperties: false },
   },
   {
     name: 'review_application_operation', readOnly: false, requiresOperations: true,
+    outputSchema: protocolOutput(z.union([completedOperationSchema, waitingOutput])),
     description: '先自动核对原执行回执与领域读回证明；可判定就直接结案。仍无法确认时，在痕迹AI应用内打开“这次修改生效了吗？”面板并立即返回 awaiting_user_confirmation。用户已收到提示，可在应用中处理；没有生效、已经生效、稍后处理是三个独立选择。待处理项不过期，关闭或稍后处理保留保护。只修正本连接账本，不重放修改；智能体不能代替用户确认。',
     inputSchema: { type: 'object', properties: { operationId: { type: 'string', format: 'uuid' } }, required: ['operationId'], additionalProperties: false },
   },

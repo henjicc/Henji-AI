@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { applicationOutputValidator, validateApplicationToolOutput } from './outputContract'
 import { ApplicationHostBridge } from './applicationHostBridge'
 import { ApplicationToolDispatcher } from './applicationToolDispatcher'
-import { buildApplicationToolCatalog } from './toolCatalog'
+import { buildApplicationContract, buildApplicationToolCatalog } from './toolCatalog'
 import { projectApplicationToolResult } from './resultProjection'
 import { toMcpResult } from '../mcp/resultProjection'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
@@ -300,6 +300,7 @@ successData.add_sound_library_folder = { status: 'added', resultRef: ref('sound_
 successData.search_sound_effects = { matches: [{ soundRef: ref('sound_library.sound'), folderRef: ref('sound_library.folder'), name: '嗖02-短', englishName: null, chineseName: '嗖02-短', relativePath: '转场/嗖02-短.mp3', durationSeconds: 0.9, attackSeconds: 0.2, hitSeconds: 0.36, peakDbfs: -1, loudnessLufs: -12, brightness: 'bright', score: 0.9, matchedBy: ['name'] }], noGoodMatch: false, listening: 'model_not_downloaded', considered: 2, indexedSounds: 2, skippedFiles: 0, message }
 successData.place_video_edit_sound_effects = { resultRefs: [clipRef], documentRef, placements: [{ clipRef, soundRef: ref('sound_library.sound'), startFrame: 10, targetSeconds: 0.5, anchorSeconds: 0.36, alignedSeconds: 0.5, trimmedHeadSeconds: 0.026, trackRef: ref('video_edit.track') }], message, verification: { verified: true, condition: '已回读。' } }
 successData.remix_video_edit_music = { documentRef, resultRefs: [clipRef], remixId: 'remix', startFrame: 30, targetFrames: 2700, seams: [{ frame: 1290, confidence: 0.82, kind: 'repeat', fromSeconds: 61.5, toSeconds: 18.4 }], trimmedSeconds: 0.4, analysis: { tempo: 128, beatsPerBar: 4, beatSource: 'beat_this', cached: false, model: 'used' }, message, verification: { verified: true, condition: '已回读。' } }
+successData.recognize_document_text = { engine: 'local', charged: false, pageCount: 1, pages: [{ index: 0, text: '第一页的文字', complete: true }], message, verified: true }
 successData.render_video_edit_preview = { documentRef, pendingWindows: 2, readyFrames: 1800, requestedFrames: 3600, verified: true, message }
 successData.clear_video_edit_preview = { documentRef, verified: true, message: '指定范围的渲染文件已删除。' }
 successData.cancel_video_edit_preview = { documentRef, verified: true, message: '预渲染已停止，已完成的预览文件已保留。' }
@@ -456,6 +457,31 @@ describe('外部客户端成功输出 JSON Schema 契约', () => {
       } else expect(result.structuredContent.data).toHaveProperty('base64', data.base64)
     }
   })
+  it('四个协议工具：契约发现、操作回执、批量结果分页与等待确认都符合各自声明的输出结构，缺关键字段被拒绝', async () => {
+    const check = (name: string, result: Record<string, unknown>) => validator.getValidator(tools.find(tool => tool.name === name)!.outputSchema!)(toMcpResult(result as never).structuredContent)
+    for (const detail of ['compact', 'full'] as const) {
+      const data = buildApplicationContract({ domains: host.domains(), catalog: { tools }, port: 4319, requestedDomains: [], callerKind: 'external', detail,
+        names: ['change_application_entities'], includeSchemas: detail === 'full', skills: [{ name: 'video-edit-workbench', description: '剪辑' }] })
+      expect(check('describe_application_contract', { ok: true, data }), detail).toMatchObject({ valid: true })
+      expect(check('describe_application_contract', { ok: true, data: { ...data, catalogSchemaHash: undefined } }).valid).toBe(false)
+    }
+    const operationId = '3e8b1d7c-6a2f-4c95-9d40-7f1e5a3c8b26'
+    const completed = { ok: true, operationId, executionState: 'completed', verificationState: 'verified',
+      result: { ok: true, data: { status: 'completed', undoRef: 'undo:1', verification: { verified: true }, effects: [] } }, recoveryResult: null }
+    for (const name of ['get_application_operation', 'retry_application_operation_save', 'review_application_operation']) {
+      // 账本原样的回执与投影后（空的 recoveryResult 已去掉）的回执都要过
+      expect(check(name, completed), name).toMatchObject({ valid: true })
+      expect(check(name, projectApplicationToolResult('change_application_entities', {}, completed as never)), name).toMatchObject({ valid: true })
+      expect(check(name, { ...completed, recoveryResult: undefined, executionState: 'unknown' }).valid, name).toBe(false)
+      const { applicationUserConfirmation } = await import('../../../../src/core/application-control/userConfirmation')
+      expect(check(name, { ok: false, operationId, executionState: 'awaiting_user_confirmation', verificationState: 'unresolved',
+        confirmation: applicationUserConfirmation({ title: '费用确认', message: '按模型计费', confirmLabel: '确认' }) }), name).toMatchObject({ valid: true })
+    }
+    const page = { ok: true, data: { resultRef: { operationId, field: 'items' }, total: 3, items: [{ a: 1 }], nextCursor: '1' } }
+    expect(check('get_application_operation', page)).toMatchObject({ valid: true })
+    expect(check('get_application_operation', { ok: true, data: { ...page.data, total: undefined } }).valid).toBe(false)
+    expect(check('retry_application_operation_save', page).valid).toBe(false)
+  })
   it('严格输出继续拒绝未声明字段与错误 verified 类型，不能靠放宽 additionalProperties 修复', () => {
     for (const name of ['prepare_video_edit_subtitle_audio', 'observe_video_edit_frame']) {
       const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(name)!
@@ -469,7 +495,8 @@ describe('外部客户端成功输出 JSON Schema 契约', () => {
     }
   })
   it('每个有 outputSchema 的工具均有代表性回执或逐项列出的未覆盖原因', () => {
-    const covered = new Set([...Object.keys(successData), 'read_application_media'])
+    const covered = new Set([...Object.keys(successData), 'read_application_media',
+      'describe_application_contract', 'get_application_operation', 'retry_application_operation_save', 'review_application_operation'])
     const declared = tools.filter(tool => tool.outputSchema).map(tool => tool.name)
     expect(declared.filter(name => !covered.has(name))).toEqual(Object.keys(uncoveredTools).sort())
     expect(Object.keys(successData).filter(name => !declared.includes(name))).toEqual([])

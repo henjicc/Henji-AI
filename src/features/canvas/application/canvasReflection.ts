@@ -13,7 +13,8 @@ import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-contr
 
 import type { CanvasEdge, CanvasNode } from '../domain/canvasNodes'
 import { isTextAnnotationNode } from '../domain/canvasNodes'
-import { CANVAS_NODE_SCHEMA_DOCUMENTS, NODE_FIELDS, PROJECT_FIELDS } from './canvasFields'
+import { CANVAS_NODE_DATA_PROPERTIES, CANVAS_NODE_SCHEMA_DOCUMENTS, NODE_FIELDS, PROJECT_FIELDS } from './canvasFields'
+import { listCanvasNodeDataKeys } from '../domain/nodeControlRegistry'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { listCanvasDocumentSummaries } from './canvasProjectService'
@@ -209,6 +210,13 @@ class CanvasReflectionProvider implements ApplicationEntityProvider {
   async getPropertyAvailability(ref: ApplicationRef, propertyIds: string[]) {
     await this.readProperties(ref, [])
     let generationConfigSupported = false
+    // 节点数据属性按节点类型才有意义：这类节点没有的项在这里说明，不等写入时才报
+    const dataKeyByProperty = new Map(CANVAS_NODE_DATA_PROPERTIES.map((item) => [item.propertyId, item.dataKey]))
+    let nodeType: string | undefined
+    if (this.entityType === CANVAS_ENTITY_TYPES.node && propertyIds.some((propertyId) => dataKeyByProperty.has(propertyId))) {
+      const { projectId, childId } = splitChildRef(ref, this.entityType)
+      nodeType = (await readCanvasProjectSnapshot(projectId)).nodes.find((item) => item.id === childId)?.type
+    }
     let textContentSupported = false
     if (this.entityType === CANVAS_ENTITY_TYPES.node && propertyIds.includes('canvas.node.text_content')) {
       const { projectId, childId } = splitChildRef(ref, this.entityType)
@@ -226,7 +234,10 @@ class CanvasReflectionProvider implements ApplicationEntityProvider {
     return propertyIds.map((propertyId) => {
       const descriptor = descriptors.get(propertyId)
       if (!descriptor) throw new Error(`PROPERTY_NOT_FOUND:${propertyId}`)
-      const reason = propertyId === 'canvas.node.generation_config' && !generationConfigSupported
+      const dataKey = dataKeyByProperty.get(propertyId)
+      const reason = dataKey && nodeType && !listCanvasNodeDataKeys(nodeType).includes(dataKey)
+        ? `${nodeType} 节点没有这一项；这类节点有的数据项：${CANVAS_NODE_DATA_PROPERTIES.filter((item) => listCanvasNodeDataKeys(nodeType!).includes(item.dataKey)).map((item) => item.propertyId.slice('canvas.node.'.length)).join('、') || '无'}（标题 display_name、位置 position 每个节点都有，文本节点的正文是 text_content）。`
+        : propertyId === 'canvas.node.generation_config' && !generationConfigSupported
         ? '该节点不是可配置的生成节点。'
         : propertyId === 'canvas.node.text_content' && !textContentSupported
           ? '该节点不是文本节点。' : descriptor.readOnlyReason

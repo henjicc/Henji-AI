@@ -1,6 +1,5 @@
 import { forgetExplanationUndoAccess, rememberExplanationUndoAccess } from '../creativeIntentAuthorization'
-import { describeJsonValueShape } from '@/core/application-control/registry/jsonValueShape'
-import { readApplicationSnapshot } from '@/core/application-control/registry/snapshot'
+import { applicationPropertyValueText, isWritableApplicationProperty, readApplicationSnapshot } from '@/core/application-control/registry/snapshot'
 import type {
   ApplicationPlannedStep,
   ApplicationTransactionResult,
@@ -14,7 +13,8 @@ import {
 import type { CapabilityExecutionContext } from './handlerTypes'
 import { applicationCallerAccess } from '@/core/application-control/callerContext'
 
-const publicUndos = new Map<string, { callerId: string; revisions: Record<string, number> }>()
+/** 应用记录过、还没用过的撤销回执。不按连接区分：任何助手（内置或外部）都可以撤销应用里记录过的修改，走的仍是同一撤销栈。 */
+const publicUndos = new Map<string, { revisions: Record<string, number> }>()
 
 /**
  * 反射层通用能力的执行适配器。
@@ -283,17 +283,19 @@ function completedTransaction(
  *
  * 保留原则只有一条：**模型据此决定"能不能写、写什么、值怎么填"的字段才留**。
  */
-function describedEntity(entity: Record<string, unknown>): Record<string, unknown> {
+function describedEntity(entity: Record<string, unknown>, ownDescription: boolean): Record<string, unknown> {
   const id = entity.id as string
   return {
     id,
     title: entity.title,
-    description: entity.description,
+    // 多个实体类型共用的那句套话不带
+    ...(ownDescription ? { description: entity.description } : {}),
     // 建集合成员时要用父实体引用，必须留。
     parentTypes: entity.parentTypes,
     // refKind 绝大多数等于 id，只有不同才有信息量。
     ...(entity.refKind !== id ? { refKind: entity.refKind } : {}),
-    ...(entity.queryCapabilityIds ? { queryCapabilityIds: entity.queryCapabilityIds } : {}),
+    // 通用读取人人都有，只有专用查询入口才值得列
+    ...((entity.queryCapabilityIds as string[] | undefined)?.some((id) => id !== 'read_application_entity') ? { queryCapabilityIds: entity.queryCapabilityIds } : {}),
     // 能不能增删、建的时候至少要给哪些属性——写入前的关键约束。
     ...(entity.collectionWrite ? { collectionWrite: entity.collectionWrite } : {}),
     // 有意只读时把原因给模型，让它知道该改用哪条路径而不是反复试。
@@ -302,6 +304,9 @@ function describedEntity(entity: Record<string, unknown>): Record<string, unknow
       : {}),
   }
 }
+
+/** 一页目录里各条属性的说明合计（按页，不按实体类型）不超过这个字数时随目录给出。 */
+const CATALOG_DESCRIPTION_CHARS = 3000
 
 /**
  * 说明只是“领域名 + 标题 + 。”时不给：注册时为每条属性自动补的这类说明占了近四成，与 title 重复，模型从中得不到新信息。
@@ -397,40 +402,70 @@ export const applicationReflectionHandlers = {
       })))).flat()
     const offset = Number(input.cursor ?? 0)
     if (!Number.isSafeInteger(offset)) throw new Error('INVALID_INPUT:cursor 必须是有效分页位置。')
-    const limit = input.limit ?? 40
+    // 整类列出时每条属性只占一行，一页放得下一整类；点名或按文字找时每条带说明，一页少给
+    const listing = !input.propertyIds?.length && !input.text
+    // 没点实体类型的整域列出只给实体目录：一个领域几百条属性混在一起，模型用不上，也挑不出要的那一类
+    const entitiesOnly = listing && !input.entityType && input.entityTypes.length === 0
+    const limit = input.limit ?? (listing ? 200 : 40)
+    const page = description.properties.slice(offset, offset + limit)
+    const schemaOf = (property: typeof page[number]) => property.value.kind === 'json' ? registry.resolveSchema(property.value.schemaRef, accessContext) : undefined
+    const shortKey = (entityType: string, propertyId: string) => propertyId.startsWith(`${entityType}.`) ? propertyId.slice(entityType.length + 1) : propertyId
     // 完整值 schema 只给点名的属性：不点名时整类实体的 schema 全部展开，剪辑片段一类就有三十多万 token，单条结果超过半个窗口，这次调用等于白做。
     const fullProperties = input.detail === 'full' && Boolean(input.propertyIds?.length)
     const singleEntityType = entities.length === 1
     const seenSchemas = new Map<string, string>()
-    const properties = description.properties.slice(offset, offset + limit).map(property => {
+    const catalog: Record<string, Record<string, string>> = {}
+    // 属性不多时说明随目录一起给，模型不必为了看一句限制再查一次；整类上百条属性时说明合计上万字，只给目录
+    const descriptionOf = (property: typeof page[number]) => informativeDescription(property as unknown as Record<string, unknown>)
+    const withDescriptions = listing && !entitiesOnly && page.reduce((sum, property) => sum + (descriptionOf(property)?.length ?? 0), 0) <= CATALOG_DESCRIPTION_CHARS
+    if (listing && !entitiesOnly) {
+      // 新建时必填的属性多半建好后不可改：只标“只读”会让模型以为新建时也给不了
+      const requiredAtCreate = new Set(entities.flatMap((entity) => (entity.collectionWrite as { requiredPropertyIds?: string[] } | undefined)?.requiredPropertyIds ?? []))
+      for (const property of page) {
+        (catalog[property.entityType] ??= {})[shortKey(property.entityType, property.id)] = `${property.title}｜${applicationPropertyValueText(property, schemaOf(property))}${isWritableApplicationProperty(property) ? '' : requiredAtCreate.has(property.id) ? '｜新建时给定，之后只读' : '｜只读'}${property.requiresReadBaseline ? '｜先读基线' : ''}${property.omitFromDefaultRead ? '｜点名才读' : ''}${withDescriptions && descriptionOf(property) ? `｜说明：${descriptionOf(property)}` : ''}`
+      }
+    }
+    const propertyCounts = new Map<string, number>()
+    if (entitiesOnly) for (const property of description.properties) propertyCounts.set(property.entityType, (propertyCounts.get(property.entityType) ?? 0) + 1)
+    const properties = listing ? [] : page.map(property => {
       const full = describedProperty(property as unknown as Record<string, unknown>, context)
-      const schema = property.value.kind === 'json' ? registry.resolveSchema(property.value.schemaRef, accessContext) : undefined
+      const schema = schemaOf(property)
       if (fullProperties) {
         if (!schema) return full
+        // json 属性的取值以 valueSchema 为准；value 里只有内部的 schema 引用与摘要，模型用不上
+        const { value: _value, ...rest } = full
         // 同一次返回里结构相同的值 schema 只展开一次（例如十几条关键帧属性共用一份），其余指向第一次出现的属性。
         const key = JSON.stringify(schema)
         const first = seenSchemas.get(key)
-        if (first) return { ...full, valueSchemaSameAs: first }
+        if (first) return { ...rest, valueSchemaSameAs: first }
         seenSchemas.set(key, property.id)
-        return { ...full, valueSchema: schema }
+        const { $schema: _dialect, ...valueSchema } = schema as Record<string, JsonValue>
+        return { ...rest, valueSchema }
       }
       return { id: property.id, ...(singleEntityType ? {} : { entityType: property.entityType }), title: property.title, writable: full.writable,
-        valueShape: schema ? describeJsonValueShape(schema) : property.value.kind,
+        value: applicationPropertyValueText(property, schema),
         ...(property.requiresReadBaseline ? { requiresReadBaseline: true } : {}),
         ...(property.omitFromDefaultRead ? { omitFromDefaultRead: true } : {}),
-        ...((input.entityType || input.entityTypes.length || input.propertyIds?.length || input.text) && informativeDescription(property as unknown as Record<string, unknown>) ? { description: property.description } : {}),
-        ...(property.nullable ? { nullable: true } : {}) }
+        ...(informativeDescription(property as unknown as Record<string, unknown>) ? { description: property.description } : {}) }
     })
     return {
-      ...(input.detail === 'full' && !fullProperties ? { hint: 'detail="full" 只展开 propertyIds 点名的属性；这次没有点名，返回的是紧凑目录。从这里挑出要写的属性，再带 propertyIds 查询完整值 schema、范围和说明。' } : {}),
+      ...(entitiesOnly ? { hint: '这里只列实体类型。用 entityType / entityTypes 点名要看的类型取属性表；不知道属性在哪一类时用 text 按文字找。' }
+        : listing ? { hint: `catalog 按实体类型列出属性，每行是“属性键: 标题｜取值”，后面可能跟“只读”“新建时给定，之后只读”“先读基线”（写前先 read_application_entity 取 baselineId）“点名才读”（整实体读取不带，点名才返回）${withDescriptions ? '和说明' : ''}，键可直接用于读写。${withDescriptions ? '' : '这次说明合计较长，没有随目录给出：要某几条属性的说明与写法，带 propertyIds 再查。'}复杂值带 propertyIds 加 detail="full" 取完整值结构。` } : {}),
       entities: entities.map(entity => {
-        if (input.detail === 'full') return describedEntity(entity)
-        const collection = entity.collectionWrite as { creatable: boolean; removable: boolean } | undefined
-        return { id: entity.id, title: entity.title,
-          ...(collection ? { collectionWrite: { creatable: collection.creatable, removable: collection.removable } } : {}) }
+        const id = entity.id as string
+        const own = registry.hasOwnDescription(id)
+        if (input.detail === 'full' && !entitiesOnly) return describedEntity(entity, own)
+        const collection = entity.collectionWrite as { creatable: boolean; removable: boolean; requiredPropertyIds?: string[] } | undefined
+        return { id, title: entity.title,
+          ...(entitiesOnly ? { propertyCount: propertyCounts.get(id) ?? 0 } : {}),
+          ...(own ? { description: entity.description } : {}),
+          ...(collection?.creatable ? { create: { under: entity.parentTypes, required: (collection.requiredPropertyIds ?? []).map((propertyId) => shortKey(id, propertyId)) } } : {}),
+          ...(collection?.removable ? { removable: true } : {}),
+          ...(entity.writeExclusion ? { readOnly: (entity.writeExclusion as { reason: string }).reason } : {}) }
       }),
+      ...(listing && !entitiesOnly ? { catalog } : {}),
       properties,
-      nextCursor: offset + limit < description.properties.length ? String(offset + limit) : null,
+      nextCursor: !entitiesOnly && offset + limit < description.properties.length ? String(offset + limit) : null,
       propertyAvailability,
       collectionAvailability,
     }
@@ -598,7 +633,7 @@ export const applicationReflectionHandlers = {
     if ((rawResult.status === 'completed' || rawResult.status === 'failed') && rawResult.undoRef) {
       const undoRef = rawResult.undoRef
       rememberExplanationUndoAccess(undoRef, changes.flatMap(change => 'target' in change ? [change.target] : []), () => { publicUndos.delete(undoRef) })
-      publicUndos.set(rawResult.undoRef, { callerId: context.callerGrant?.callerId ?? 'renderer',
+      publicUndos.set(rawResult.undoRef, {
         revisions: rawResult.status === 'completed' ? rawResult.resultingRevisions : rawResult.currentRevisions ?? {} })
       while (publicUndos.size > 256) {
         const oldest = publicUndos.keys().next().value
@@ -622,7 +657,8 @@ export const applicationReflectionHandlers = {
   },
   async undoEntities(input: { undoRef: string }, context: CapabilityExecutionContext) {
     const record = publicUndos.get(input.undoRef)
-    if (!record || record.callerId !== (context.callerGrant?.callerId ?? 'renderer')) throw new Error('PERMISSION_DENIED:撤销回执不属于本连接或已使用。')
+    // 用过的回执不能再撤，避免同一组修改被撤两次
+    if (!record) throw new Error('NOT_FOUND:这份撤销回执不存在或已经用过；undoRef 取自 change_application_entities 的结果，一份回执只能撤销一次。')
     const raw = await getApplicationControlExecutionEngine().undo({ undoRef: input.undoRef,
       expectedRevisions: record.revisions, idempotencyKey: `undo:${input.undoRef}:${crypto.randomUUID()}` }, executionContext(context))
     if (raw.status === 'completed' || raw.status === 'failed' && raw.persistence) {

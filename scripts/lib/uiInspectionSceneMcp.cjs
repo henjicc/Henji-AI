@@ -87,7 +87,7 @@ function createMcpScenes({ setupSettings, canvasFixtureProjectId }) {
           assert.ok(refs.length > 0, `${entityType} 必须存在真实实例`)
           const ref = entityType === 'canvas.document' ? refs.find((item) => item.id === canvasFixtureProjectId) : refs[0]
           assert.ok(ref, `${entityType} 夹具引用存在`)
-          const propertyIds = described.structuredContent.data.properties.filter((property) => property.entityType === entityType).slice(0, 3).map((property) => property.id)
+          const propertyIds = Object.keys(described.structuredContent.data.catalog[entityType] ?? {}).slice(0, 3)
           assert.ok(propertyIds.length > 0, `${entityType} 必须有授权可读字段`)
           const read = await client.callTool({ name: 'read_application_entity', arguments: { ref, propertyIds } })
           assert.equal(read.isError, false, JSON.stringify(read))

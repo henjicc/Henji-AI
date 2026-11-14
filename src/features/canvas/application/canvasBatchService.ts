@@ -8,11 +8,13 @@ import { createLogger } from '@/core/logging';
 import { type CanvasHistoryState } from '@/stores/canvasStore';
 
 import { addCanvasNode, connectCanvasNodes } from './canvasApplicationService';
-import { deleteCanvasNodes, disconnectCanvasEdge } from './canvasMutationService';
+import { applyCanvasNodePropertyPatches, applyStoryboardFramePatches, deleteCanvasNodes, disconnectCanvasEdge, type CanvasNodePropertyPatch } from './canvasMutationService';
 
 /** 通用集合写入翻译成的画布步骤：新建节点、删除节点、连线、断开连线。 */
 export type CanvasBatchOperation =
-  | { kind: 'add_node'; nodeType: string; placement: { mode: 'viewport_center' } | { mode: 'right_of_node'; anchorNodeId: string } }
+  | { kind: 'add_node'; nodeType: string; placement: { mode: 'viewport_center' } | { mode: 'right_of_node'; anchorNodeId: string }
+    /** 新建时一并写入的可写属性（标题、正文、位置、节点数据…），与建好之后再改走同一个写入内核。 */
+    properties?: Omit<CanvasNodePropertyPatch, 'nodeId'> }
   | { kind: 'delete_nodes'; nodeIds: string[] }
   | { kind: 'connect_nodes'; sourceNodeId: string; targetNodeId: string; sourceHandle?: string; targetHandle?: string }
   | { kind: 'disconnect_edge'; edgeId: string }
@@ -31,7 +33,15 @@ async function executeOperation(projectId: string, operation: CanvasBatchOperati
   if (!findCanvasProjectInstance(projectId)) await getCanvasProjectInstance(projectId)
   assertCanvasCommitContext(projectId, options)
   switch (operation.kind) {
-    case 'add_node': return addCanvasNode({ projectId, nodeType: operation.nodeType, placement: operation.placement }, options)
+    case 'add_node': {
+      const created = await addCanvasNode({ projectId, nodeType: operation.nodeType, placement: operation.placement }, options)
+      if (operation.properties && Object.keys(operation.properties).length) {
+        const patch = { ...operation.properties, nodeId: String(created.nodeId) }
+        await applyCanvasNodePropertyPatches(projectId, [patch], options)
+        if (patch.storyboardFrames) await applyStoryboardFramePatches(projectId, patch.nodeId, patch.storyboardFrames, options)
+      }
+      return created
+    }
     case 'delete_nodes': return deleteCanvasNodes(projectId, operation.nodeIds, options)
     case 'connect_nodes': return connectCanvasNodes({ projectId, sourceNodeId: operation.sourceNodeId, targetNodeId: operation.targetNodeId,
       sourceHandle: operation.sourceHandle, targetHandle: operation.targetHandle }, options)

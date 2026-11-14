@@ -13,6 +13,8 @@ import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-contr
 import type { CanvasNode } from '@/stores/canvasStore'
 
 import { isAssetGroupNode, isStoryboardSplitNode, isTextAnnotationNode } from '../domain/canvasNodes'
+import { listCanvasNodeDataKeys } from '../domain/nodeControlRegistry'
+import { nodeControlConfigs } from '../domain/nodeControlRegistryDefinitions'
 import type { CanvasNodePropertyPatch, CanvasStoryboardFramePatch } from './canvasMutationService'
 import {
   canvasNodeGenerationConfigSchema, readCanvasNodeGenerationConfig, readCanvasNodeGenerationSchema,
@@ -134,7 +136,39 @@ const GENERATION_CONFIG_VALUE = generationJsonValue('generation_config')
 const GENERATION_SCHEMA_VALUE = generationJsonValue('generation_schema')
 const GENERATION_CONTINUATIONS_VALUE = generationJsonValue('generation_continuations')
 const generationContinuationsSchema = z.array(z.object({ id: z.string(), targetModelId: z.string(), submit: z.enum(['direct', 'edit']) }))
+/*
+ * 节点 data 里面向助手公开的每个键各成一条可写属性（数值/文字/开关节点的 value、文本处理的 system_prompt、
+ * 分镜生成的 grid_rows 等）。属性表从节点目录的公开数据结构派生：给某类节点新增一个公开键，它就自动可读可写，
+ * 不需要回到这里登记——逐条手写时界面能改而助手改不了的键一直在漏。
+ */
+/** 已有专属属性承接的键：标题、文本正文、生成参数（随 generation_config 整体写）。 */
+const DATA_KEYS_WITH_OWN_PROPERTY = new Set(['displayName', 'content', 'params'])
+const DATA_KEY_TITLES: Record<string, string> = {
+  value: '节点的值', prompt: '提示词', modelId: '模型', providerId: '模型供应商', systemPrompt: '系统提示词',
+  systemPromptTemplateId: '系统提示词模板', fixedResult: '固定结果', gridRows: '分镜行数', gridCols: '分镜列数', frames: '分镜每格描述',
+}
+const snakeCase = (key: string): string => key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)
+
+const NODE_DATA_KEYS = (() => {
+  const byKey = new Map<string, { nodeTypes: string[]; schemas: JsonValue[] }>()
+  for (const config of nodeControlConfigs) {
+    for (const [key, schema] of Object.entries((config.aiDataSchema.properties ?? {}) as Record<string, JsonValue>)) {
+      // 固定取值的键（能力标识、模板版本）没有可改的余地
+      if (DATA_KEYS_WITH_OWN_PROPERTY.has(key) || (schema && typeof schema === 'object' && !Array.isArray(schema) && 'const' in schema)) continue
+      const entry = byKey.get(key) ?? { nodeTypes: [], schemas: [] }
+      entry.nodeTypes.push(config.nodeType)
+      if (!entry.schemas.some((item) => JSON.stringify(item) === JSON.stringify(schema))) entry.schemas.push(schema)
+      byKey.set(key, entry)
+    }
+  }
+  return [...byKey].map(([key, entry]) => ({ key, ...entry, value: generationJsonValue(`${snakeCase(key)}`) }))
+})()
+
+/** 节点数据属性与它对应的 data 键，供按节点类型判断这一项是否存在。 */
+export const CANVAS_NODE_DATA_PROPERTIES = NODE_DATA_KEYS.map(({ key }) => ({ propertyId: `${NODE_ENTITY_TYPE}.${snakeCase(key)}`, dataKey: key }))
+
 export const CANVAS_NODE_SCHEMA_DOCUMENTS = [
+  ...NODE_DATA_KEYS.map(({ value, schemas }) => ({ ref: value.schemaRef, value: (schemas.length === 1 ? schemas[0] : { anyOf: schemas }) as JsonValue })),
   { ref: STORYBOARD_FRAMES_VALUE.schemaRef, value: z.toJSONSchema(storyboardFramePatchesSchema) as JsonValue },
   { ref: ASSET_GROUP_MEMBER_ORDER_VALUE.schemaRef, value: z.toJSONSchema(assetGroupMemberOrderSchema) as JsonValue },
   { ref: GENERATION_CONFIG_VALUE.schemaRef, value: z.toJSONSchema(canvasNodeGenerationConfigSchema) as JsonValue },
@@ -281,6 +315,19 @@ export const NODE_FIELDS: ApplicationFieldDefinition<
     },
     storeActions: [],
   },
+  ...NODE_DATA_KEYS.map(({ key, nodeTypes, value }): ApplicationFieldDefinition<CanvasNode, CanvasNodePropertyPatch, 'updateNodeData'> => ({
+    propertyId: `${NODE_ENTITY_TYPE}.${snakeCase(key)}`,
+    descriptor: canvasDescriptor(NODE_ENTITY_TYPE, snakeCase(key), DATA_KEY_TITLES[key] ?? key, value,
+      `只对这些节点类型有意义：${nodeTypes.join('、')}；其他类型读到 null，写入被拒绝。`
+      + (key === 'prompt' || key === 'modelId' ? '生成节点要同时改提示词、模型与参数时写 generation_config，同一次修改里两者不能并存。' : ''), true),
+    read: (node) => listCanvasNodeDataKeys(node.type).includes(key)
+      ? JSON.parse(JSON.stringify((node.data as Record<string, unknown>)[key] ?? null)) as JsonValue : null,
+    writer: { write(patch, mutation) {
+      if (mutation.value === null || mutation.value === undefined) throw new Error(`INVALID_INPUT:${snakeCase(key)} 不能写成空值。`)
+      patch.data = { ...patch.data, [key]: mutation.value }
+    } },
+    storeActions: ['updateNodeData'],
+  })),
 ]
 
 export const CANVAS_NODE_WRITERS = fieldWriterTable(NODE_FIELDS)

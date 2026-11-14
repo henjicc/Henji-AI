@@ -29,6 +29,7 @@ vi.mock('./applicationControlRegistry', () => ({
     describe: mocks.describe,
     resolveSchema: mocks.resolveSchema,
     listProperties: mocks.listProperties,
+    hasOwnDescription: () => true,
     getPropertyAvailability: mocks.getPropertyAvailability,
     getCollectionAvailability: mocks.getCollectionAvailability,
     readEntity: mocks.readEntity,
@@ -83,7 +84,12 @@ describe('应用反射通用能力适配器', () => {
   it.each(['compact', 'full'] as const)('%s 属性说明保留强制读取基线声明', async detail => {
     mocks.describe.mockReturnValueOnce({ entities: [], properties: [{ id: 'sample.item.value', entityType: 'sample.item',
       title: '值', value: { kind: 'string' }, requiresReadBaseline: true, requiredPermissions: { write: ['assets:write'] } }] })
-    const result = await applicationReflectionHandlers.describeEntities({ domains: [], entityTypes: ['sample.item'], detail }, context)
+    const property = { id: 'sample.item.value', entityType: 'sample.item', title: '值', value: { kind: 'string' }, requiresReadBaseline: true, requiredPermissions: { write: ['assets:write'] } }
+    // 按类型列出：一行里标出；点名查询：字段照旧
+    const listed = await applicationReflectionHandlers.describeEntities({ domains: [], entityTypes: ['sample.item'], detail }, context)
+    expect(listed.catalog!['sample.item'].value).toBe('值｜string｜先读基线')
+    mocks.describe.mockReturnValueOnce({ entities: [], properties: [property] })
+    const result = await applicationReflectionHandlers.describeEntities({ domains: [], entityTypes: ['sample.item'], propertyIds: ['sample.item.value'], detail }, context)
     expect(result.properties[0]).toMatchObject({ requiresReadBaseline: true })
   })
 
@@ -135,27 +141,37 @@ describe('应用反射通用能力适配器', () => {
       }),
     ])
   })
-  it('紧凑目录按属性分页，精确查询返回完整 JSON 值 schema', async () => {
+  it('按类型列出是每条属性一行的目录并可翻页，不点类型只给实体目录，点名查询返回完整 JSON 值 schema', async () => {
     const valueSchema = { type: 'object', properties: { numerator: { type: 'integer' }, denominator: { type: 'integer' } }, required: ['numerator', 'denominator'] }
     const properties = ['rate', 'name'].map((name) => ({ id: `sample.item.${name}`, entityType: 'sample.item', title: name,
       value: { kind: 'json', schemaRef: { id: name } }, requiredPermissions: { read: [], write: ['assets:write'] } }))
-    mocks.describe.mockReturnValue({ entities: [{ id: 'sample.item', title: '样例', collectionWrite: { creatable: true, removable: true, requiredPropertyIds: ['sample.item.name'] } }], properties })
+    mocks.describe.mockReturnValue({ entities: [{ id: 'sample.item', title: '样例', parentTypes: ['sample.parent'], collectionWrite: { creatable: true, removable: true, requiredPropertyIds: ['sample.item.name'] } }], properties })
     mocks.resolveSchema.mockReturnValue(valueSchema)
-    const first = await applicationReflectionHandlers.describeEntities({ domains: [], entityTypes: [], limit: 1 }, context)
+    const first = await applicationReflectionHandlers.describeEntities({ domains: [], entityTypes: ['sample.item'], limit: 1 }, context)
     expect(first.nextCursor).toBe('1')
-    // 只有一类实体时属性不重复 entityType
-    expect(first.properties).toEqual([{ id: 'sample.item.rate', title: 'rate', writable: true, valueShape: '{numerator: integer, denominator: integer}' }])
-    expect(first.entities[0].collectionWrite).toEqual({ creatable: true, removable: true })
-    const last = await applicationReflectionHandlers.describeEntities({ domains: [], entityTypes: [], limit: 1, cursor: first.nextCursor! }, context)
+    // 键是实体类型之后的短键，可直接用于读写
+    expect(first.catalog).toEqual({ 'sample.item': { rate: 'rate｜{numerator: integer, denominator: integer}' } })
+    // 新建必填而建好后不可改的属性，不只标“只读”
+    mocks.describe.mockReturnValueOnce({ entities: [{ id: 'sample.item', title: '样例', parentTypes: ['sample.parent'], collectionWrite: { creatable: true, removable: true, requiredPropertyIds: ['sample.item.kind'] } }],
+      properties: [{ id: 'sample.item.kind', entityType: 'sample.item', title: '种类', value: { kind: 'string' }, requiredPermissions: { read: [], write: [] }, readOnlyReason: '创建时确定' }] })
+    expect((await applicationReflectionHandlers.describeEntities({ domains: [], entityTypes: ['sample.item'] }, context)).catalog).toEqual({ 'sample.item': { kind: '种类｜string｜新建时给定，之后只读' } })
+    expect(first.properties).toEqual([])
+    expect(first.entities[0]).toMatchObject({ id: 'sample.item', create: { under: ['sample.parent'], required: ['name'] }, removable: true })
+    const last = await applicationReflectionHandlers.describeEntities({ domains: [], entityTypes: ['sample.item'], limit: 1, cursor: first.nextCursor! }, context)
     expect(last.nextCursor).toBeNull()
-    expect(last.properties[0]).toMatchObject({ id: 'sample.item.name' })
+    expect(Object.keys(last.catalog!['sample.item'])).toEqual(['name'])
+    // 不点实体类型：只有实体目录和每类的属性条数
+    const directory = await applicationReflectionHandlers.describeEntities({ domains: ['sample'], entityTypes: [] }, context)
+    expect(directory).toMatchObject({ entities: [{ id: 'sample.item', propertyCount: 2 }], properties: [], nextCursor: null })
+    expect(directory).not.toHaveProperty('catalog')
     mocks.describe.mockReturnValueOnce({ entities: [], properties: properties.slice(0, 1) })
     const full = await applicationReflectionHandlers.describeEntities({ domains: [], entityTypes: [], entityType: 'sample.item', propertyIds: ['sample.item.rate'], detail: 'full' }, context)
     expect(full.properties[0]).toMatchObject({ valueSchema })
     expect(mocks.describe).toHaveBeenLastCalledWith({ entityTypes: ['sample.item'], propertyIds: ['sample.item.rate'] }, expect.anything())
     // 不点名属性的 full 只返回紧凑目录与改道提示：整类实体的完整 schema 曾单次返回三十多万 token
     const unnamed = await applicationReflectionHandlers.describeEntities({ domains: [], entityTypes: [], entityType: 'sample.item', detail: 'full' }, context)
-    expect(unnamed.properties.every(property => !('valueSchema' in property) && 'valueShape' in property)).toBe(true)
+    expect(unnamed.properties).toEqual([])
+    expect(Object.keys(unnamed.catalog!['sample.item'])).toEqual(['rate', 'name'])
     expect(unnamed).toHaveProperty('hint', expect.stringContaining('propertyIds'))
     // 结构相同的值 schema 同一次返回只展开一次
     const both = await applicationReflectionHandlers.describeEntities({ domains: [], entityTypes: [], entityType: 'sample.item', propertyIds: ['sample.item.rate', 'sample.item.name'], detail: 'full' }, context)

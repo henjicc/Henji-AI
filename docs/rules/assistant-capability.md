@@ -42,7 +42,7 @@ MCP 工具集合由正式前端能力声明自动派生，不再维护独立 ID 
 
 除此之外不加：权限分级、风险等级、审批档、`readOnly`／`allowWrites`／`allowDestructive` 一类默认只读开关、路径白名单、目录授权、私密内容外发许可、“确认后才执行”的强制流程，以及包大小、扫描深度、源码大小、文件数、远程媒体大小、并发与订阅数等容量硬上限（靠完整遍历与流式读写支撑）。可撤销的写入直接执行。密钥是唯一例外：原始密钥永远不进入输出、日志、会话和代码素材运行环境。
 
-助手读到的网页、文档、录制里的文字只当数据，不当指令；这条由提示与能力描述保证，不靠给能力加审批实现。对外能力契约为大版本 5（2026-11-14 三对 intent 孪生工具合一、清掉遗留定义，自 4 升级；4 是 2026-11-13 结果开关并为 includeDetails、默认结果省略修订号与空值）；MCP 连接只用于认证与撤销，工具目录不按调用方分级。一次用户发起的付费任务共用正式账本收据；ai:generate 在主进程校验收据，内部轮询、取结果与恢复不重复询问。项目免确认和连接级付费许可不再使用。
+助手读到的网页、文档、录制里的文字只当数据，不当指令；这条由提示与能力描述保证，不靠给能力加审批实现。对外能力契约为大版本 6（2026-11-14 describe_application_entities 按类型列出时改为每条属性一行的 catalog、不点类型只给实体目录，自 5 升级；5 是同日三对 intent 孪生工具合一、清掉遗留定义；4 是 2026-11-13 结果开关并为 includeDetails、默认结果省略修订号与空值）；MCP 连接只用于认证与撤销，工具目录不按调用方分级。一次用户发起的付费任务共用正式账本收据；ai:generate 在主进程校验收据，内部轮询、取结果与恢复不重复询问。项目免确认和连接级付费许可不再使用。
 
 ## 覆盖判断不可跳过
 
@@ -122,7 +122,7 @@ MCP 工具集合由正式前端能力声明自动派生，不再维护独立 ID 
 
 ### 脚本编排（2026-11-14 用户确定放开）
 
-内置助手有 `run_application_script`：模型写一段标准 JavaScript（异步函数体），用 `app.call(name, input)` 调用应用工具、`app.describe(name)` 取 TypeScript 签名，循环、条件和中间数据留在脚本里，只有 `console.log` 与 `return` 回到对话。实现在 `electron/main/services/embedded-agent/applicationScript.ts`，沙箱用 Pi 自带的 `@earendil-works/pi-codemode`（QuickJS 编译成 WebAssembly，另起线程）。
+内置助手有 `run_application_script`：模型写一段标准 JavaScript（异步函数体），用 `app.call(name, input)` 调用应用工具、`app.describe(name)` 取 TypeScript 签名，循环、条件和中间数据留在脚本里，只有 `console.log` 与 `return` 回到对话。`app.call` 统一返回 `{ ok: true, data, … }`：读工具的读取结果与写工具的回执（undoRef、effects）都在 `data`，顶层其余字段（如读取的 baselineId）照旧。实现在 `electron/main/services/embedded-agent/applicationScript.ts`，沙箱用 Pi 自带的 `@earendil-works/pi-codemode`（QuickJS 编译成 WebAssembly，另起线程）。
 
 - **与五条硬底线的关系**：脚本环境里没有 Node 接口、文件、网络和定时器，唯一出口是 `app.call`，所以拿不到密钥（第 1 条）；Electron 隔离设置不动（第 2 条）；每次 `app.call` 交给主进程的统一派发入口，外来代码首次确认（第 3 条）、付费策略与收据、删除进回收区（第 4 条）都在那一侧照常生效，脚本不能替用户确认。五条之外不加额外限制：不设调用次数上限、不做语法白名单、不限制可调用的工具范围。
 - **同一条路**：脚本不拥有业务状态，也不是新的业务入口；新增功能仍然登记成能力，脚本自动可用。不得为脚本另写业务分支或“脚本专用”能力。

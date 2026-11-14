@@ -45,7 +45,7 @@ async function baseline(session: ReturnType<typeof client>) {
 const invocation = (expectedRevisions: unknown) => ({ id: 'cancel_generation_task', version: 1,
   expectedRevisions, input: { taskId: task.taskId, reason: '验收取消' } })
 
-it('紧凑目录可翻页遍历所有已授权领域，JSON 属性都有可读的值 schema', async () => {
+it('实体目录列出全部类型，逐类翻页能遍历每条属性；JSON 属性点名后给出可读的值 schema', async () => {
   const harness = createApplicationHarness()
   try {
     const reflection = getApplicationReflectionRegistry()
@@ -57,21 +57,38 @@ it('紧凑目录可翻页遍历所有已授权领域，JSON 属性都有可读�
       catch { unresolved.push(property.id) }
     }
     expect(unresolved).toEqual([])
+    // 不点类型只给实体目录，不夹带属性
+    const directory = await harness.requireResult('describe_application_entities', {})
+    expect(directory.properties).toEqual([])
+    expect(directory.catalog).toBeUndefined()
+    // 能否新建、在哪个父实体下、必填哪些键，目录里直接给
+    expect(directory.entities).toContainEqual(expect.objectContaining({ id: 'video_edit.marker', create: { under: ['video_edit.sequence'], required: ['frame', 'name'] }, removable: true }))
     const seen = new Set<string>()
-    let cursor: string | undefined
-    do {
-      const result = await harness.call('describe_application_entities', { detail: 'full', limit: 40, ...(cursor ? { cursor } : {}) })
-      expect(result.ok, JSON.stringify(result)).toBe(true)
-      if (!result.ok) throw new Error('目录遍历失败')
-      for (const property of result.data.properties as Array<{ id: string; value: { kind: string }; valueSchema?: unknown }>) {
-        expect(seen.has(property.id), property.id).toBe(false)
-        seen.add(property.id)
-        if (property.value.kind === 'json') expect(property.valueSchema, property.id).toBeDefined()
-      }
-      cursor = result.data.nextCursor as string | undefined
-    } while (cursor)
+    for (const entity of directory.entities as Array<{ id: string; propertyCount: number }>) {
+      let count = 0
+      let cursor: string | null = null
+      do {
+        const page: Record<string, unknown> = await harness.requireResult('describe_application_entities', { entityType: entity.id, limit: 40, ...(cursor ? { cursor } : {}) })
+        for (const [key, line] of Object.entries((page.catalog as Record<string, Record<string, string>>)[entity.id] ?? {})) {
+          const id = key.includes('.') && reflection.listProperties(entity.id).some(property => property.id === key) ? key : `${entity.id}.${key}`
+          expect(seen.has(id), id).toBe(false)
+          seen.add(id)
+          count += 1
+          expect(line, id).toMatch(/^.+｜.+/)
+        }
+        cursor = page.nextCursor as string | null
+      } while (cursor)
+      expect(count, entity.id).toBe(entity.propertyCount)
+    }
     expect(seen.has('video_edit.sequence.frame_rate')).toBe(true)
     expect(seen.has('canvas.node.storyboard_frames')).toBe(true)
+    const named = await harness.requireResult('describe_application_entities', { propertyIds: ['video_edit.clip.space_material', 'canvas.node.storyboard_frames'], detail: 'full' })
+    for (const property of named.properties as Array<{ id: string; value?: unknown; valueSchema?: Record<string, unknown> }>) {
+      expect(property.valueSchema, property.id).toBeDefined()
+      // 内部的 schema 引用与摘要不交给模型
+      expect(property.value, property.id).toBeUndefined()
+      expect(property.valueSchema!.$schema, property.id).toBeUndefined()
+    }
   } finally { harness.dispose() }
 })
 

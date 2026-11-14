@@ -30,7 +30,7 @@ const refSchema = z.object({
 
 const describeEntities = defineApplicationCapability({
   id: 'describe_application_entities', version: 1, title: '查看可读写的应用结构',
-  description: '查属性的完整说明与值结构。要知道一份文档里有什么、当前值是多少、怎么新建，先用 read_application_snapshot，它已带属性键、取值范围与必填项。默认返回紧凑实体/属性目录与值形状，按 domains 或 entityType/entityTypes 过滤，用 cursor 翻页；text 按文字在属性 ID、标题与说明里找属性（如 "代理"、"不透明度"），按相关度返回。写复杂值前用 propertyIds 点名属性并设 detail="full" 读取完整值 schema、范围和说明（不点名时仍返回紧凑目录；结构相同的值 schema 只展开一次，其余用 valueSchemaSameAs 指向同一份）；refs 可查询实例当前可写性。',
+  description: '查某类实体有哪些属性、怎么写。要知道一份文档里有什么、当前值是多少、怎么新建，先用 read_application_snapshot，它已带属性键、取值范围与必填项。只给 domains（或什么都不给）时返回实体目录：每类实体的标题、属性条数、能否新建与必填项，不带属性。用 entityType/entityTypes 点名实体类型时返回 catalog：每类实体一张“属性键: 标题｜取值｜只读”的表，属性不多时每行带说明，一页最多 200 条，cursor 翻页。要说明与写法时用 propertyIds 点名（或 text 按文字找，如 "代理"、"不透明度"，按相关度返回），每条带说明；再加 detail="full" 给出完整值 schema、范围与可用的写操作（结构相同的值 schema 只展开一次，其余用 valueSchemaSameAs 指向同一份）。refs 可查询实例当前可写性。',
   domain: 'application',
   aliases: ['有哪些属性', '能改什么', '可写属性', '实体结构', '关键帧属性', 'describe entities', 'schema'],
   readOnly: true, dataClasses: ['C1'],
@@ -44,11 +44,13 @@ const describeEntities = defineApplicationCapability({
     text: z.string().trim().min(1).max(200).optional(),
     detail: z.enum(['compact', 'full']).default('compact'),
     cursor: z.string().regex(/^\d+$/).optional(),
-    limit: z.number().int().min(1).max(100).default(40),
+    limit: z.number().int().min(1).max(500).optional(),
     refs: z.array(refSchema).default([]),
   }).strict(),
   outputSchema: capabilityOutputSchema({
+    hint: z.string().optional(),
     entities: z.array(z.record(z.string(), z.unknown())),
+    catalog: z.record(z.string(), z.record(z.string(), z.string())).optional(),
     properties: z.array(z.record(z.string(), z.unknown())),
     propertyAvailability: z.array(z.record(z.string(), z.unknown())).default([]),
     collectionAvailability: z.array(z.record(z.string(), z.unknown())).default([]),
@@ -360,7 +362,7 @@ const changeEntities = defineApplicationCapability({
 
 const undoEntities = defineApplicationCapability({
   id: 'undo_application_changes', version: 1, title: '撤销一组应用修改', domain: 'application',
-  description: '使用 change_application_entities 返回的 undoRef 撤销整组修改，包括原稿元数据。只接受本连接的未使用回执；仍检查当前版本并确认保存。保存未确认时只恢复保存，不重复撤销。',
+  description: '使用 change_application_entities 返回的 undoRef 撤销整组修改，包括原稿元数据。应用记录过、还没用过的回执都可以撤销，不限是哪个助手或哪条连接做的修改；一份回执只能撤销一次。仍检查当前版本并确认保存。保存未确认时只恢复保存，不重复撤销。',
   aliases: ['撤销原稿修改', '撤销事务'], readOnly: false, dataClasses: ['C1'],
   idempotent: false, destructive: false, timeoutMs: LARGE_BATCH_TIMEOUT_MS, supportsPreview: false, supportsUndo: false,
   requiredScopes: [], acceptsRefs: ['application.transaction'], producesRefs: [],
