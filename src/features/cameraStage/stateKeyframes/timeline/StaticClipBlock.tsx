@@ -108,9 +108,7 @@ const StaticClipBlock: React.FC<StaticClipBlockProps> = ({
                   { label: '无缝通过（保持速度连续）', value: 'smooth' },
                 ]}
                 onSelect={onUpdateContinuity}
-                className="w-full"
                 size="sm"
-                minWidthStrategy="none"
               />
             </UiFormRow>
           </div>

@@ -89,7 +89,7 @@ function VideoEditTrackingPanelContent({ instance, onError }: { instance: VideoE
         {tracker.method === 'shape' && <UiIconButton size="xs" aria-label="补点纠错" disabled={locked} onClick={() => setVideoEditTrackingEditing({ ...target, trackerId: tracker.id, method: tracker.method, mode: 'point' })}><MousePointer2  /></UiIconButton>}
       </div>}
       <UiGroup labelWidth={96} title="应用到" titleTone="compact">
-        <UiFormRow label={surfaceText('surfaceGrammar.trackingTarget')} density="compact" labelColumn="panel"><Dropdown ariaLabel="跟踪应用目标" size="sm" value={destination} options={[{ value: '', label: '选择效果、遮罩或片段' }, ...destinations]} onSelect={setDestination} /></UiFormRow>
+        <UiFormRow label={surfaceText('surfaceGrammar.trackingTarget')} density="compact" labelColumn="panel"><Dropdown width="fill" ariaLabel="跟踪应用目标" size="sm" value={destination} options={[{ value: '', label: '选择效果、遮罩或片段' }, ...destinations]} onSelect={setDestination} /></UiFormRow>
         {destination.startsWith('clip:') && abilities?.scale && <UiFormRow label="跟随缩放" inline density="compact"><UiSwitch checked={scale} onCheckedChange={setScale} /></UiFormRow>}
         {destination.startsWith('clip:') && abilities?.rotation && <UiFormRow label="跟随旋转" inline density="compact"><UiSwitch checked={rotation} onCheckedChange={setRotation} /></UiFormRow>}
         {destination.startsWith('clip:') && <UiFormRow label="应用方式" density="compact"><UiSegmented ariaLabel="跟踪应用方式" size="sm" value={applyMode} onChange={setApplyMode} options={[{ value: 'live', label: '实时跟随' }, { value: 'keyframes', label: '关键帧' }]} /></UiFormRow>}

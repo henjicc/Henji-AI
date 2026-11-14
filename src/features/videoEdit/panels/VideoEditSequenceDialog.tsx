@@ -132,8 +132,8 @@ export function VideoEditSequenceDialog({ title, initial, bins, requireFrameRate
         <UiPanel variant="inset" className="flex h-40 w-40 shrink-0 items-center justify-center p-3" aria-label="序列预览"><div className="flex h-full w-full items-center justify-center"><FrameShape size={size} custom={preset.ratio === '自定义'} /></div></UiPanel>
       </div>
         <UiGroup className="min-w-0 w-full">
-          <UiFormRow label="比例" inline><Dropdown ariaLabel="画面比例" className="w-full" disabled={busy} value={preset.ratio} options={[...VIDEO_EDIT_SEQUENCE_RATIOS, '自定义' as const].map(value => ({ label: value, value }))} onSelect={chooseRatio} /></UiFormRow>
-          <UiFormRow label="分辨率" inline><Dropdown ariaLabel="分辨率" className="w-full" disabled={busy} value={preset.tier} options={[
+          <UiFormRow label="比例" inline><Dropdown ariaLabel="画面比例" disabled={busy} value={preset.ratio} options={[...VIDEO_EDIT_SEQUENCE_RATIOS, '自定义' as const].map(value => ({ label: value, value }))} onSelect={chooseRatio} /></UiFormRow>
+          <UiFormRow label="分辨率" inline><Dropdown ariaLabel="分辨率" disabled={busy} value={preset.tier} options={[
             ...VIDEO_EDIT_SEQUENCE_TIERS.map(({ label }) => {
               const enabled = isVideoEditSequenceSize(videoEditSequenceTierSize(tierAspect, label))
               return { label, value: label, disabled: !enabled, tooltip: !enabled ? '超过 8K 上限' : label === '8K' ? PREVIEW_HINT : undefined }
@@ -147,7 +147,7 @@ export function VideoEditSequenceDialog({ title, initial, bins, requireFrameRate
             </div>
             {sizeError && <div id={sizeErrorId} className="mt-1"><UiError size="xs" align="start" title={sizeError} message="" /></div>}
           </div></UiFormRow>
-          <UiFormRow label="帧率" inline><Dropdown ariaLabel="帧率" className="w-full" disabled={busy} value={rateKey} display={formatFrameRate(videoEditFps(values.frameRate))} options={VIDEO_EDIT_FRAME_RATES.map(rate => {
+          <UiFormRow label="帧率" inline><Dropdown ariaLabel="帧率" disabled={busy} value={rateKey} display={formatFrameRate(videoEditFps(values.frameRate))} options={VIDEO_EDIT_FRAME_RATES.map(rate => {
             const fps = videoEditFps(rate)
             return { label: formatFrameRate(fps), value: `${rate.numerator}/${rate.denominator}`, tooltip: fps > 60 ? PREVIEW_HINT : undefined }
           })} onSelect={value => { const [numerator, denominator] = value.split('/').map(Number); setValues({ ...values, frameRate: { numerator, denominator } }) }} /></UiFormRow>
@@ -185,7 +185,7 @@ export function VideoEditSequenceDialog({ title, initial, bins, requireFrameRate
           <UiSegmented ariaLabel="三维色调映射" disabled={busy} value={space.toneMapping ?? 'neutral'} options={[{ value: 'neutral', label: '中性' }, { value: 'agx', label: '胶片' }, { value: 'aces', label: '电影' }]} onChange={toneMapping => setSpace({ toneMapping })} />
         </UiFormRow>
         <UiFormRow label="环境光" inline info="照亮三维物体，出现在金属反射和玻璃里，不当背景显示。代码场景自己设了环境时以代码为准。">
-          <Dropdown ariaLabel="三维环境光" className="w-full" disabled={busy} value={space.environment ?? 'none'} display={SPACE_ENVIRONMENT_LABELS[space.environment ?? 'none']} options={VIDEO_EDIT_SPACE_ENVIRONMENTS.map(value => ({ value, label: SPACE_ENVIRONMENT_LABELS[value] }))} onSelect={environment => setSpace({ environment: environment as VideoEditSpaceEnvironment })} />
+          <Dropdown ariaLabel="三维环境光" disabled={busy} value={space.environment ?? 'none'} display={SPACE_ENVIRONMENT_LABELS[space.environment ?? 'none']} options={VIDEO_EDIT_SPACE_ENVIRONMENTS.map(value => ({ value, label: SPACE_ENVIRONMENT_LABELS[value] }))} onSelect={environment => setSpace({ environment: environment as VideoEditSpaceEnvironment })} />
         </UiFormRow>
         {(space.environment ?? 'none') !== 'none' && <>
           <UiFormRow label="环境光强度" inline>

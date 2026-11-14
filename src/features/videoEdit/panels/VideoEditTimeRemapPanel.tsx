@@ -61,7 +61,7 @@ export function VideoEditTimeRemapPanel({ instance, sequence, clip, onError }: {
           onFinish={() => { setDraft(current => { if (current && JSON.stringify(current) !== JSON.stringify(committed)) apply({ timeRemap: curveFromPoints(current, span) }); return null }) }} />
       </UiFormRow>
       <UiFormRow label="预设" density="compact">
-        <Dropdown ariaLabel="速度曲线预设" value="" display="选择预设" options={VIDEO_EDIT_TIME_REMAP_PRESET_IDS.map(id => ({ value: id, label: VIDEO_EDIT_TIME_REMAP_PRESETS[id].label }))} onSelect={(id: string) => { if (id) apply({ timeRemap: videoEditTimeRemapPreset(id as VideoEditTimeRemapPreset, span) }) }} />
+        <Dropdown size="sm" ariaLabel="速度曲线预设" value="" display="选择预设" options={VIDEO_EDIT_TIME_REMAP_PRESET_IDS.map(id => ({ value: id, label: VIDEO_EDIT_TIME_REMAP_PRESETS[id].label }))} onSelect={(id: string) => { if (id) apply({ timeRemap: videoEditTimeRemapPreset(id as VideoEditTimeRemapPreset, span) }) }} />
       </UiFormRow>
     </>}
     <UiFormRow label="补帧" density="compact" info="慢放时相邻两帧怎样过渡：采样取最近的一帧；混合把相邻两帧按位置混合，慢放更顺但有重影。">

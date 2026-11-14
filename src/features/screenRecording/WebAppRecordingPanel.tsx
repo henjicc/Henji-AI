@@ -63,7 +63,7 @@ function BackupGroup({ value, screens, disabled, onChange }: { value: WebAppBack
       {value.enabled && <>
         <UiFormRow label={t('recording.rangeMode')} density="compact"><UiSegmented ariaLabel={t('recording.rangeMode')} size="sm" value={value.range} disabled={disabled} onChange={range => onChange({ range })} options={[{ value: 'window', label: t('recording.webapp_range_window') }, { value: 'screen', label: t('recording.webapp_range_screen') }]} /></UiFormRow>
         {value.range === 'screen' && <UiFormRow label={t('recording.webapp_screen')} density="compact">
-          <Dropdown size="sm" value={screen?.id ?? ''} disabled={disabled || !screens.length} disabledReason={t('recording.webapp_busyBackup')} emptyLabel={t('recording.noSources')}
+          <Dropdown width="fill" size="sm" value={screen?.id ?? ''} disabled={disabled || !screens.length} disabledReason={t('recording.webapp_busyBackup')} emptyLabel={t('recording.noSources')}
             options={screens.map((item, index) => ({ value: item.id, label: `${t('recording.screenNumber', { index: index + 1 })}${item.display?.primary ? ` · ${t('recording.primaryScreen')}` : ''}` }))} onSelect={sourceId => onChange({ sourceId })} />
         </UiFormRow>}
         <UiFormRow label={t('recording.quality')} density="compact">{value.range === 'screen'
@@ -125,7 +125,7 @@ export function WebAppRecordingPanel({ model, backup, screens, onBackupChange }:
       {model.error && <UiError message={model.error} />}
       <UiGroup title={t('recording.webapp_app')} titleTone="compact" labelWidth={72}>
         <UiFormRow label={t('recording.webapp_appLabel')} density="compact">
-          <Dropdown size="sm" value={model.selectedApp} emptyLabel={t('recording.webapp_waiting')} disabled={!apps.length || Boolean(model.activeId)}
+          <Dropdown width="fill" size="sm" value={model.selectedApp} emptyLabel={t('recording.webapp_waiting')} disabled={!apps.length || Boolean(model.activeId)}
             disabledReason={apps.length ? t('recording.webapp_busyRecording') : t('recording.webapp_noAppsShort')}
             options={apps.map(app => ({ value: app.connectionId, label: `${app.app.name} · ${t(`recording.webapp_host_${app.host}`)}`, tooltip: app.env.url }))} onSelect={model.selectApp} />
         </UiFormRow>

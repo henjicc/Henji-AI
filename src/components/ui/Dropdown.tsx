@@ -76,6 +76,18 @@ type DropdownProps<T extends string | number | boolean> = {
   changed?: boolean
   /** 菜单开合通知（宿主需要在菜单打开期间保持自身可见时用，如视频查看器的控制条）。 */
   onOpenChange?: (open: boolean) => void
+  /**
+   * 放在表单行里时的宽度：默认 `content`，按最长选项定宽并吸附 72 / 112 / 152 三档（超过 152 按内容，不超过控件列）；
+   * 选项是用户内容或很长的动态名称（序列、素材、设备）时传 `fill` 铺满控件列。
+   */
+  width?: 'content' | 'fill'
+}
+
+/** 表单行里取值下拉的宽度档：同一面板里控件右缘只落在这几处，不随每个选项的字数参差。 */
+const DROPDOWN_ROW_WIDTH_TIERS_PX = [72, 112, 152] as const
+
+function dropdownRowWidth(measured: number): number {
+  return DROPDOWN_ROW_WIDTH_TIERS_PX.find(tier => tier >= measured) ?? Math.ceil(measured)
 }
 
 export default function Dropdown<T extends string | number | boolean>(props: DropdownProps<T>) {
@@ -105,16 +117,22 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     appearance: appearanceOverride,
     changed = false,
     onOpenChange,
+    width,
   } = props
   const { t } = useTranslation('ui')
   const empty = !renderPanel && !options?.length
   const disabled = disabledOverride || empty
   const formRowLabelling = useUiFormRowLabelling()
-  const fillControl = formRowLabelling?.fillControl === true
-  const minWidthStrategy = fillControl ? 'none' : minWidthStrategyOverride
   const fieldLayout = useUiFieldLayout()
-  const toolbarLayout = !fillControl && fieldLayout === 'toolbar'
+  // 表单行里的取值下拉按选项定宽；调用点自己给了宽度、量宽方式或自定义面板时照旧
+  const rowContent = Boolean(formRowLabelling) && fieldLayout !== 'toolbar' && width !== 'fill' && !renderPanel
+    && className === undefined && buttonClassName === undefined && props.minWidthStrategy === undefined
+  const fillControl = (formRowLabelling?.fillControl === true || width === 'fill') && !rowContent
+  const minWidthStrategy = fillControl || rowContent ? 'none' : minWidthStrategyOverride
+  const toolbarLayout = !fillControl && !rowContent && fieldLayout === 'toolbar'
   const appearance = appearanceOverride ?? (toolbarLayout ? 'text' : 'field')
+  // 停靠属性面板里与读数同一种静默外观：静息无底，悬停或打开才出字段底
+  const triggerAppearance = appearance === 'text' ? 'quiet' : fieldLayout === 'property' ? 'property' : 'field'
   const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
@@ -161,6 +179,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     anchor: { left: number; top: number; width: number; height: number }
   } | null>(null)
   const [buttonMinWidthPx, setButtonMinWidthPx] = useState<number | null>(null)
+  const [rowWidthPx, setRowWidthPx] = useState<number | null>(null)
   const [panelMinWidthPx, setPanelMinWidthPx] = useState<number | null>(null)
   const lastButtonMinWidthRef = useRef<number | null>(null)
   const lastPanelMinWidthRef = useRef<number | null>(null)
@@ -303,6 +322,12 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     const computeMinWidth = () => {
       const displayText = resolvedDisplay
       const optionLabels = JSON.parse(optionLabelsKey) as string[]
+      if (rowContent) {
+        // 当前显示文字也量进去：占位（“选择对象”“未选择”）或不在选项里的显示值可能比所有选项都长
+        const measured = measureTextMinWidth(btn, [...optionLabels, displayText])
+        const next = measured === null ? null : dropdownRowWidth(measured)
+        if (next !== rowWidthPx) setRowWidthPx(next)
+      } else if (rowWidthPx !== null) setRowWidthPx(null)
       if (minWidthStrategy === 'none') {
         if (lastButtonMinWidthRef.current !== null || buttonMinWidthPx !== null) {
           lastButtonMinWidthRef.current = null
@@ -338,7 +363,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
       }
     }
     computeMinWidth()
-  }, [buttonMinWidthPx, customPanel, minWidthStrategy, optionLabelsKey, panelMinWidthPx, panelWidthStrategy, resolvedDisplay, size])
+  }, [buttonMinWidthPx, customPanel, minWidthStrategy, optionLabelsKey, panelMinWidthPx, panelWidthStrategy, resolvedDisplay, rowContent, rowWidthPx, size])
 
   const hasFixedPosition = fixedPos !== null
   useLayoutEffect(() => {
@@ -440,14 +465,14 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
   const menuContent = <UiOverlayLayerProvider id={overlay.id}>{menuBody}</UiOverlayLayerProvider>
 
   return (
-    <div className={`relative ${fillControl ? 'block min-w-0' : toolbarLayout ? UI_FIELD_INLINE_ROW_CLASS : 'inline-block'} ${className || ''}`} style={fillControl ? { width: '100%' } : undefined} ref={ref}>
+    <div className={`relative ${fillControl ? 'block min-w-0' : rowContent ? 'inline-block min-w-0 max-w-full align-middle' : toolbarLayout ? UI_FIELD_INLINE_ROW_CLASS : 'inline-block'} ${className || ''}`} style={fillControl ? { width: '100%' } : undefined} ref={ref}>
       {label ? <label htmlFor={triggerId} className={toolbarLayout ? UI_FIELD_LABEL_INLINE_CLASS : UI_FIELD_LABEL_CLASS}>{label}</label> : null}
       <UiFieldTrigger
         disabledReason={disabledReason}
         ref={triggerRef}
         disabled={disabled}
         size={size}
-        appearance={appearance === 'text' ? 'quiet' : 'field'}
+        appearance={triggerAppearance}
         changed={changed}
         open={menuShown}
         onClick={() => {
@@ -468,8 +493,8 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
         id={triggerId}
         aria-label={ariaLabelledBy || rowLabelledBy ? undefined : ariaLabel ?? label ?? resolvedDisplay}
         aria-labelledby={ariaLabelledBy ?? rowLabelledBy}
-        className={`${disabled ? '' : 'cursor-pointer'} ${fillControl ? 'w-full' : buttonClassName || 'w-full'}`}
-        style={buttonMinWidthPx ? { minWidth: `${buttonMinWidthPx}px` } : undefined}
+        className={`${disabled ? '' : 'cursor-pointer'} ${rowContent ? 'max-w-full' : fillControl ? 'w-full' : buttonClassName || 'w-full'}`}
+        style={rowContent ? (rowWidthPx ? { width: `${rowWidthPx}px` } : undefined) : buttonMinWidthPx ? { minWidth: `${buttonMinWidthPx}px` } : undefined}
       >
         {resolvedDisplay}
       </UiFieldTrigger>

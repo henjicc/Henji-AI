@@ -310,8 +310,6 @@ export function ImageEditorEffectParametersV3({
         <UiFormRow density="compact" label={t('imageEditor.v3.parameters.curveChannel')}>
           <Dropdown<'master' | 'red' | 'green' | 'blue'>
             ariaLabel={t('imageEditor.v3.parameters.curveChannel')}
-            className="w-full"
-            minWidthStrategy="none"
             value={curveChannel}
             disabled={disabled}
             display={t(`imageEditor.v3.parameters.curveChannels.${curveChannel}`)}

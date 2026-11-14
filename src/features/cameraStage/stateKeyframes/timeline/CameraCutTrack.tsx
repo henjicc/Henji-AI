@@ -80,15 +80,13 @@ const CameraCutTrack: React.FC<CameraCutTrackProps> = ({
                   </UiIconButton>
                 </div>
                 <UiFormRow label="切到" density="compact">
-                  <Dropdown<string>
+                  <Dropdown<string> width="fill"
                     ariaLabel="切到"
                     value={cut.cameraId ?? ACTIVE_CAMERA_VALUE}
                     display={cameraName(cut.cameraId)}
                     options={cameraOptions}
                     onSelect={(value) => onChangeCamera(cut.id, value === ACTIVE_CAMERA_VALUE ? null : value)}
-                    className="w-full"
                     size="sm"
-                    minWidthStrategy="none"
                   />
                 </UiFormRow>
               </div>

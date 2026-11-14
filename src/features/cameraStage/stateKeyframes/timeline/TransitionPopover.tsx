@@ -95,9 +95,7 @@ const TransitionPopover: React.FC<TransitionPopoverProps> = ({
             display="批量设置"
             options={SPEED_OPTIONS}
             onSelect={applyBulkSpeedPreset}
-            className="w-full"
             size="sm"
-            minWidthStrategy="none"
             disabled={changedObjects.length === 0}
           />
         </UiFormRow>

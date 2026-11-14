@@ -25,6 +25,7 @@ import {
   UI_FIELD_PLACEHOLDER_CLASS,
   UI_FIELD_SIZE_CLASS,
   UI_FIELD_SURFACE_CLASS,
+  UI_FIELD_SURFACE_QUIET_CLASS,
   UI_GLASS_ADAPTIVE_NAV_CLASS,
   UI_GLASS_ADAPTIVE_OPTION_CLASS,
   UI_GLASS_ADAPTIVE_TILE_CLASS,
@@ -41,6 +42,7 @@ import {
   UI_RADIUS_CLASS,
 } from './styleTokens';
 import { resolveFormRowLabelling, useUiFormRowLabelling } from './formRowLabel';
+import { useUiFieldLayout } from './fieldLayout';
 import { useScopedTextHistoryProps } from './useScopedTextHistory';
 import Tooltip from './Tooltip';
 import { UiSpinner } from './UiSpinner';
@@ -424,12 +426,19 @@ const UI_OPTION_SIZE_CLASS: Record<UiControlSize | 'auto', string> = {
   lg: `min-h-control-lg ${UI_FIELD_PADDING_CLASS.lg} py-1.5 text-13`,
 };
 
+/** 分段一段的对齐与内边距；有底外框自带 2px 内边距，`track` 段内少 2px，字落在框左 + 字段内边距（8 / 12）。 */
+const UI_SEGMENT_FIT_CLASS = {
+  equal: { sm: 'justify-center px-1', md: 'justify-center px-1' },
+  track: { sm: 'justify-start px-1.5', md: 'justify-start px-2.5' },
+  bare: { sm: 'justify-start px-2', md: 'justify-start px-3' },
+} as const;
+
 /**
  * 选项按钮。选中语义见 `selection`：单选淡强调底，统一分段例外为中性抬起底（重要记录 017），多选强调描边 + 强调文字。
  * 外观只由 variant / size / active / selection 决定，className 只放布局（check:surface 规则 E）。
  */
 export const UiOptionButton = forwardRef<HTMLButtonElement, UiOptionButtonProps>(
-  ({ className = '', active = false, variant = 'default', size, gridCell, selection = 'single', highlighted = false, ...props }, ref) => {
+  ({ className = '', active = false, variant = 'default', size, gridCell, selection = 'single', highlighted = false, segmentFit = 'equal', ...props }, ref) => {
     if (variant === 'cover') {
       // 封面内容卡：状态全部由子元素封面框（UI_COVER_FRAME_CLASS）经 `ui-cover-group` + data-selected 表达，
       // 按钮本身不画底、框与焦点环（焦点环画在封面框上，避免被封面盖住）。
@@ -444,7 +453,7 @@ export const UiOptionButton = forwardRef<HTMLButtonElement, UiOptionButtonProps>
     }
     if (variant === 'segment') {
       return <FeedbackButton ref={ref}
-        className={`inline-flex h-full min-w-0 items-center justify-center gap-1 whitespace-nowrap rounded-md border border-transparent px-1 font-medium transition-colors ${size === 'sm' ? 'text-xs' : 'text-13'} ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${UI_ITEM_FOCUS_RING_CLASS} ${active ? UI_SEGMENT_SELECTED_CLASS : 'bg-transparent text-text2 hover:bg-hover hover:text-text1'} ${className}`}
+        className={`inline-flex h-full min-w-0 items-center gap-1 whitespace-nowrap rounded-md border border-transparent font-medium transition-colors ${UI_SEGMENT_FIT_CLASS[segmentFit][size === 'sm' ? 'sm' : 'md']} ${size === 'sm' ? 'text-xs' : 'text-13'} ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${UI_ITEM_FOCUS_RING_CLASS} ${active ? UI_SEGMENT_SELECTED_CLASS : 'bg-transparent text-text2 hover:bg-control-hover hover:text-text1'} ${className}`}
         {...props} />;
     }
     if (variant === 'tile' || variant === 'swatch') {
@@ -708,6 +717,8 @@ export const UiSwitch = forwardRef<HTMLButtonElement, UiSwitchProps>(
     const regionAppearance = useContext(UiBooleanAppearanceContext);
     const appearance = appearanceProp ?? regionAppearance;
     const formRow = useUiFormRowLabelling();
+    // 属性行里方框挪到文字列（框左 + 8），与静默下拉、分段、读数的字同一条竖线；命中区本身比方框宽 4
+    const propertyRow = useUiFieldLayout() === 'property' && formRow !== null;
     const rowLabelling = resolveFormRowLabelling(formRow, props);
     const handleClick: ButtonHTMLAttributes<HTMLButtonElement>['onClick'] = (event) => {
       onClick?.(event);
@@ -725,7 +736,7 @@ export const UiSwitch = forwardRef<HTMLButtonElement, UiSwitchProps>(
           type="button"
           role="switch"
           aria-checked={checked}
-          className={`relative inline-grid grid-cols-2 items-stretch rounded-lg bg-gap/60 p-0.5 font-medium transition-colors duration-120 ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} focus-visible:!ring-2 focus-visible:!ring-accent-ring ${sizeClass} ${className}`}
+          className={`relative inline-grid grid-cols-2 items-stretch rounded-lg ${UI_FIELD_SURFACE_CLASS} p-0.5 font-medium transition-colors duration-120 ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} focus-visible:!ring-2 focus-visible:!ring-accent-ring ${sizeClass} ${className}`}
           onClick={handleClick}
           {...props}
           {...rowLabelling}
@@ -761,7 +772,7 @@ export const UiSwitch = forwardRef<HTMLButtonElement, UiSwitchProps>(
           type="button"
           role="switch"
           aria-checked={checked}
-          className={`${UI_BOOLEAN_HIT_CLASS} ${className}`}
+          className={`${UI_BOOLEAN_HIT_CLASS} ${propertyRow ? 'ml-1' : ''} ${className}`}
           onClick={handleClick}
           {...props}
           {...rowLabelling}
@@ -818,9 +829,13 @@ export const UiSelect = forwardRef<HTMLSelectElement, UiSelectProps>(({ classNam
 UiSelect.displayName = 'UiSelect';
 
 /** 字段触发器的外观：`field` = raised 字段表面；`quiet` = 静默按钮皮肤（标题栏、工具栏里的弱化入口）。 */
-function resolveFieldTriggerClass(size: UiControlSize, appearance: 'field' | 'quiet', changed: boolean): string {
+function resolveFieldTriggerClass(size: UiControlSize, appearance: 'field' | 'quiet' | 'property', changed: boolean, open: boolean): string {
   if (appearance === 'quiet') {
     return `ui-btn ui-btn-quiet ${UI_FIELD_SIZE_CLASS[size]} px-2 ${changed ? 'text-text1' : ''}`;
+  }
+  if (appearance === 'property') {
+    // 内边距固定 sm 档：属性行里读数、复选框都以框左 + 8 为文字列，md 下拉也落在同一列
+    return `${open ? UI_FIELD_SURFACE_CLASS : UI_FIELD_SURFACE_QUIET_CLASS} ${UI_FIELD_SIZE_CLASS[size]} ${UI_FIELD_PADDING_CLASS.sm} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-ring`;
   }
   // 悬停取 control-hover 而不是 hover：raised 与 hover 只差 0.012–0.017，且与悬停容器同色时触发器边界消失（4.3）
   return `${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_SIZE_CLASS[size]} ${UI_FIELD_PADDING_CLASS[size]} hover:bg-control-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-ring`;
@@ -839,7 +854,7 @@ export const UiFieldTrigger = forwardRef<HTMLButtonElement, UiFieldTriggerProps>
       type={type}
       data-size={size}
       data-appearance={appearance}
-      className={`inline-flex min-w-0 select-none items-center justify-between gap-1.5 whitespace-nowrap font-normal transition-colors duration-120 ${resolveFieldTriggerClass(size, appearance, changed)} ${UI_FIELD_DISABLED_CLASS} ${className}`}
+      className={`inline-flex min-w-0 select-none items-center justify-between gap-1.5 whitespace-nowrap font-normal transition-colors duration-120 ${resolveFieldTriggerClass(size, appearance, changed, open)} ${UI_FIELD_DISABLED_CLASS} ${className}`}
       {...props}
       {...rowLabelling}
  >

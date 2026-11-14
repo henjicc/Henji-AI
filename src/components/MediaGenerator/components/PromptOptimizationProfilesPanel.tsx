@@ -345,7 +345,7 @@ export function PromptOptimizationProfilesPanel({
             </UiFormRow>
             {following ? null : (
             <UiFormRow label={t('promptProfileFields.model')}>
-            <Dropdown
+            <Dropdown width="fill"
               ariaLabel={t('promptProfileFields.model')}
               value={selectedProfile.modelId}
               display={modelOptions.find(model => model.modelId === selectedProfile.modelId)?.displayName
@@ -362,7 +362,6 @@ export function PromptOptimizationProfilesPanel({
                   capabilities: buildPromptOptimizationCapabilities(nextModel),
                 })
               }}
-              className="w-full"
             />
             </UiFormRow>
             )}
@@ -374,7 +373,6 @@ export function PromptOptimizationProfilesPanel({
                   display={tSettings(`agentModels.reasoning.modes.${toReasoningMode(selectedProfile.reasoning)}`)}
                   options={ASSISTANT_REASONING_MODES.map(mode => ({ value: mode, label: tSettings(`agentModels.reasoning.modes.${mode}`) }))}
                   onSelect={(mode) => patchProfile({ reasoning: fromReasoningMode(mode) })}
-                  className="w-full"
                 />
               </UiFormRow>
             ) : null}

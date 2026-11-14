@@ -129,7 +129,7 @@ export function LoudnessMatchRows({ loudness, onChange, onMatch, matching = fals
   return <>
     <UiFormRow label="自动匹配" info="测量处理后的整条声音，把平均响度补偿到目标值；末尾自动限幅，峰值不超过 -1 dB。" density="compact"
       leading={<UiSwitch aria-label="自动匹配响度" checked={loudness.enabled} disabled={disabled} onCheckedChange={enabled => onChange({ ...loudness, enabled })} />}>
-      <Dropdown<number> ariaLabel="目标响度" size="sm" className="w-full" minWidthStrategy="none" disabled={disabled} value={loudness.targetLufs} display={`${loudness.targetLufs} LUFS`} options={TARGETS} onSelect={targetLufs => onChange({ ...loudness, targetLufs })} />
+      <Dropdown<number> ariaLabel="目标响度" size="sm" disabled={disabled} value={loudness.targetLufs} display={`${loudness.targetLufs} LUFS`} options={TARGETS} onSelect={targetLufs => onChange({ ...loudness, targetLufs })} />
     </UiFormRow>
     {loudness.enabled && <div className={`flex items-center justify-between gap-2 ${UI_PROPERTY_INSET_CLASS}`}>
       <span className={UI_TEXT_META_CLASS}>{measuredLufs !== undefined ? `测得 ${measuredLufs} LUFS，补偿 ${loudness.gainDb > 0 ? '+' : ''}${loudness.gainDb} dB` : loudness.gainDb ? `补偿 ${loudness.gainDb > 0 ? '+' : ''}${loudness.gainDb} dB` : '还没测量'}</span>

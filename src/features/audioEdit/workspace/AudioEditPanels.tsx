@@ -173,11 +173,11 @@ export function AudioEditDeliveryPanel() {
   return <PanelScroll label="交付">
     <UiGroup titleTone="compact" labelWidth={96}>
       <UiFormRow label="导出格式" density="compact">
-        <Dropdown<'xml' | 'wav'> ariaLabel="导出格式" size="sm" className="w-full" minWidthStrategy="none" value={format} display={format === 'xml' ? 'XML' : 'WAV'}
+        <Dropdown<'xml' | 'wav'> ariaLabel="导出格式" size="sm" value={format} display={format === 'xml' ? 'XML' : 'WAV'}
           options={[{ label: 'XML · 继续剪辑', value: 'xml' }, { label: 'WAV · 剪后音频', value: 'wav' }]} onSelect={workspace.setDeliveryFormat} />
       </UiFormRow>
       {project.source.mediaType === 'audio' && format === 'xml' && <UiFormRow label="XML 帧率" density="compact">
-        <Dropdown<number> ariaLabel="XML 帧率" size="sm" className="w-full" minWidthStrategy="none" value={project.xmlFrameRate?.numerator ?? 25} display={formatFrameRate(project.xmlFrameRate?.numerator ?? 25)}
+        <Dropdown<number> ariaLabel="XML 帧率" size="sm" value={project.xmlFrameRate?.numerator ?? 25} display={formatFrameRate(project.xmlFrameRate?.numerator ?? 25)}
           options={[24, 25, 30, 50, 60].map((fps) => ({ label: formatFrameRate(fps), value: fps }))} onSelect={(fps) => update({ xmlFrameRate: { numerator: fps, denominator: 1 } })} />
       </UiFormRow>}
       <UiFormRow label="附带 SRT 字幕" density="compact" inline><UiSwitch aria-label="附带 SRT 字幕" checked={workspace.withSrt} onCheckedChange={workspace.setWithSrt} /></UiFormRow>

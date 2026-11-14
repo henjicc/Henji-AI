@@ -418,13 +418,12 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
             />
           </UiFormRow>
           <UiFormRow label="试听模型" density="compact">
-            <Dropdown
+            <Dropdown width="fill"
               size="sm"
               value={panelValue.previewModel}
               display={panelValue.previewModel}
               options={previewModels}
               onSelect={(next) => patchValue({ previewModel: String(next) })}
-              buttonClassName="w-full"
               panelWidthStrategy="options"
             />
           </UiFormRow>

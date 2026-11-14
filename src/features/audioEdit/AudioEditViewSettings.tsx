@@ -28,8 +28,6 @@ export function AudioEditViewSettings({ open, onClose, value, onChange }: { open
       <UiFormRow label="整个界面缩放">
         <Dropdown<UiScaleMode>
           ariaLabel="整个界面缩放"
-          className="w-full"
-          minWidthStrategy="none"
           value={scale}
           display={scaleLabel(scale)}
           options={UI_SCALE_MODES.map((mode) => ({ label: scaleLabel(mode), value: mode }))}

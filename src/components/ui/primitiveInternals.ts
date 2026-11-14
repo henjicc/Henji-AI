@@ -146,10 +146,13 @@ export interface UiNavButtonProps extends UiButtonFeedbackProps {
   size?: UiControlSize | 'auto'
 }
 
-/** 字段触发器（下拉、面板触发器的按钮）。`field` 是 raised 字段表面；`quiet` 是标题栏/工具栏里的弱化入口。 */
+/**
+ * 字段触发器（下拉、面板触发器的按钮）。`field` 是 raised 字段表面；`quiet` 是标题栏/工具栏里的弱化入口；
+ * `property` 是停靠属性面板里的取值：与读数同一种静默表面，静息无底、悬停或展开出字段底，文字留字段内边距。
+ */
 export interface UiFieldTriggerProps extends UiButtonFeedbackProps {
   size?: UiControlSize
-  appearance?: 'field' | 'quiet'
+  appearance?: 'field' | 'quiet' | 'property'
   /** 浮层是否展开（箭头翻转）。 */
   open?: boolean
   /** 静默触发器的取值偏离了默认（筛选已生效）：文字提到主要文字色，一眼看出哪些条件在起作用。 */
@@ -201,7 +204,7 @@ export interface UiOptionButtonProps extends UiButtonFeedbackProps {
    * 用于同质选项的集合；孤立按钮不适用。
    *
    * 分段中性抬起底，小样淡强调底，色样主要文字色外圈；尺寸由变体决定：
-   * - `segment`：分段选择的一段（仅 UiSegmented 内部使用，填满共享轨道、居中）；由 `UiSegmented` 提供共享轨道；
+   * - `segment`：分段选择的一段（仅 UiSegmented 内部使用，排法见 `segmentFit`）；由 `UiSegmented` 提供共享轨道；
    * - `tile`：带小样的选项格（44 高，静息有底），如主题预设；
    * - `swatch`：圆形色样（32 外框），颜色由调用点经 `style.backgroundColor`/`backgroundImage` 传入（不要用 `background` 简写，
    *   它会重置 `background-clip`），选中为外圈一环。
@@ -210,6 +213,11 @@ export interface UiOptionButtonProps extends UiButtonFeedbackProps {
    *   选中（`active`）只画在子元素 `UI_COVER_FRAME_CLASS` 封面框上（悬停发丝线、焦点环、选中强调描边，界面重设计 3.3）。
    */
   variant?: 'default' | 'card' | 'flat' | 'menu' | 'grid' | 'segment' | 'tile' | 'swatch' | 'cover'
+  /**
+   * 分段一段的排法（仅 `segment`）：`equal` 等分铺满、文字居中；`track` 在有底的外框里按内容、文字靠左；
+   * `bare` 没有外框时按内容、文字靠左。靠左时第一段的字与同排下拉、读数的字落在同一列（框左 + 字段内边距）。
+   */
+  segmentFit?: 'equal' | 'track' | 'bare'
   /**
    * 高度与字号档（default / card / flat / menu / grid）：不传时高度随内容（上下 8px 内边距，字号 13）；
    * sm / md / lg 是最小高度 28 / 32 / 36（字号 12 / 13 / 13），多行内容仍可撑高。segment / tile / swatch 尺寸固定。

@@ -59,9 +59,7 @@ const SceneSettingsPanel: React.FC = () => {
             display={GROUND_PATTERN_OPTIONS.find((item) => item.value === sceneSettings.ground.pattern)?.label ?? '纯色'}
             options={GROUND_PATTERN_OPTIONS}
             onSelect={setSceneGroundPattern}
-            className="w-full"
             size="sm"
-            minWidthStrategy="none"
           />
         </UiFormRow>
         {sceneSettings.ground.pattern !== 'checker' && (

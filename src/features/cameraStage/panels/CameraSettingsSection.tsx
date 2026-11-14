@@ -248,9 +248,7 @@ const CameraSettingsSection: React.FC<{ object: StageCameraObject }> = ({ object
               disabled: option.value === 'object' && lockableTargets.length === 0,
             }))}
             onSelect={handleModeSelect}
-            className="w-full"
             size="sm"
-            minWidthStrategy="none"
           />
         </UiFormRow>
         {lookAt.mode === 'manual' ? (
@@ -264,15 +262,13 @@ const CameraSettingsSection: React.FC<{ object: StageCameraObject }> = ({ object
           />
         ) : (
           <UiFormRow label="锁定对象" density="compact">
-            <Dropdown<string>
+            <Dropdown<string> width="fill"
               ariaLabel="锁定对象"
               value={selectedTarget?.id}
               display={selectedTarget?.name ?? '选择对象'}
               options={lockableTargets.map((target) => ({ label: target.name, value: target.id }))}
               onSelect={handleTargetSelect}
-              className="w-full"
               size="sm"
-              minWidthStrategy="none"
             />
           </UiFormRow>
         )}
@@ -286,9 +282,7 @@ const CameraSettingsSection: React.FC<{ object: StageCameraObject }> = ({ object
             display={resolveCameraRigPreset(object.rig).label}
             options={STAGE_CAMERA_RIG_IDS.map((id) => ({ label: STAGE_CAMERA_RIG_PRESETS[id].label, value: id }))}
             onSelect={(rig) => updateCameraRig(object.id, { rig })}
-            className="w-full"
             size="sm"
-            minWidthStrategy="none"
           />
         </UiFormRow>
         <SliderNumberRow

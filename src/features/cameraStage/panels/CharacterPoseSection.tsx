@@ -130,9 +130,7 @@ const CharacterPoseSection: React.FC<{ object: StageCharacterObject }> = ({ obje
             display={motionDisplay}
             options={MOTION_OPTIONS}
             onSelect={handleMotionSelect}
-            className="w-full"
             size="sm"
-            minWidthStrategy="none"
           />
         </UiFormRow>
         {motion.mode === 'clip' && (

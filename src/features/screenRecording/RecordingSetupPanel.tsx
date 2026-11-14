@@ -37,7 +37,7 @@ export function RecordingSetupPanel({ value, devices, destination, onChange }: {
     <UiGroup title={t('recording.soundGroup')} titleTone="compact" labelWidth={96} divided>
       <RecordingSoundRows value={value} onChange={onChange} />
       {!quick && <UiFormRow label={t('recording.camera')} density="compact"><UiSwitch checked={value.camera} onCheckedChange={camera => onChange({ camera })} /></UiFormRow>}
-      {!quick && value.camera && <UiFormRow label={t('recording.cameraDevice')} density="compact"><Dropdown size="sm" value={value.cameraId} options={deviceOptions('camera', t('recording.camera'))} onSelect={cameraId => onChange({ cameraId })} /></UiFormRow>}
+      {!quick && value.camera && <UiFormRow label={t('recording.cameraDevice')} density="compact"><Dropdown size="sm" width="fill" value={value.cameraId} options={deviceOptions('camera', t('recording.camera'))} onSelect={cameraId => onChange({ cameraId })} /></UiFormRow>}
     </UiGroup>
     <UiGroup title={t('recording.pictureGroup')} titleTone="compact" labelWidth={96} divided>
       <RecordingPictureRows value={value} onChange={onChange} />

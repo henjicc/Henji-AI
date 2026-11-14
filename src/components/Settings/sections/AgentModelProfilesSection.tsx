@@ -298,13 +298,11 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
       <UiGroup key={role} gap="none">
         <UiFormRow label={roleLabel} info={t(`agentModels.roleInfo.${role}`)}>
         <div className="flex items-center gap-2">
-        <Dropdown<string> size="sm"
+        <Dropdown<string> width="fill" size="sm"
           value={value}
           display={display}
           ariaLabel={roleLabel}
           options={options}
-          className="w-full"
-          buttonClassName="w-full"
           onSelect={selected => void updateRole(role, selected)}
         />
           {/* 能力/验证详情过于专业，普通用户选好模型就够了，折叠掉默认不显示 */}

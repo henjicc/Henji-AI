@@ -75,7 +75,7 @@ export function VideoEditSubtitleStyleFields({ instance, sequenceId, selectedCap
     <UiGroup labelWidth={120} gap="stack">
     <UiFormRow label="全局样式" info="开着时改动作用于这条序列的全部字幕；关掉后只改选中的字幕。" density="compact" inline><UiSwitch aria-label="全局样式" checked={global} disabled={!sequence.captions?.length || sequence.captionTrackLocked} onCheckedChange={value => writeScope(instance, sequenceId, { global: value })} /></UiFormRow>
     {!reason && <>
-    <UiFormRow label="样式预设" density="compact"><Dropdown ariaLabel="字幕样式预设" size="sm" value={presetId} options={[{ value: '', label: '自定义样式' }, ...presets.map(preset => ({ value: preset.id, label: preset.name }))]} onSelect={id => { setPresetId(id); const preset = presets.find(preset => preset.id === id); if (preset) { setStyle(preset.style); applyStyle(preset.style) } }} /></UiFormRow>
+    <UiFormRow label="样式预设" density="compact"><Dropdown width="fill" ariaLabel="字幕样式预设" size="sm" value={presetId} options={[{ value: '', label: '自定义样式' }, ...presets.map(preset => ({ value: preset.id, label: preset.name }))]} onSelect={id => { setPresetId(id); const preset = presets.find(preset => preset.id === id); if (preset) { setStyle(preset.style); applyStyle(preset.style) } }} /></UiFormRow>
     <UiFormRow label="底部安全区（%）" density="compact"><NumberInput ariaLabel="字幕底部安全区百分比" size="sm" widthClassName="w-20" value={style.bottomMargin * 100} min={0} max={100} step={1} onChange={value => { const next = { ...style, bottomMargin: value / 100 }; changeStyle(next); applyStyle(next) }} /></UiFormRow>
     </>}
     </UiGroup>

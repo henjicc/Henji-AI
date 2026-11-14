@@ -84,7 +84,7 @@ describe('工具页命令带骨架', () => {
 })
 
 describe('UiFormRow 标签关联到行内控件（任务 5.8，B-50）', () => {
-  it('面板统一继承列档位、嵌套分组不丢失；网格显式 auto 保留上方标签，字段填满控件列', async () => {
+  it('面板统一继承列档位、嵌套分组不丢失；网格显式 auto 保留上方标签，输入填满控件列、取值控件按内容', async () => {
     const { default: Dropdown } = await import('./Dropdown')
     const { default: NumberInput } = await import('./NumberInput')
     const { UiSegmented } = await import('./UiSegmented')
@@ -101,10 +101,10 @@ describe('UiFormRow 标签关联到行内控件（任务 5.8，B-50）', () => {
     expect([...rows].map(row => row.getAttribute('data-label-width'))).toEqual(['96', '96', '96'])
     expect(rows[0].firstElementChild?.className).not.toContain('justify-end')
     const dropdown = screen.getByRole('button', { name: '组合方式' })
-    expect(dropdown.parentElement?.style.width).toBe('100%')
-    expect(dropdown.className).toContain('w-full')
+    expect(dropdown.parentElement?.style.width).toBe('')
+    expect(dropdown.className).not.toMatch(/(^|\s)w-full(\s|$)/)
     expect(screen.getByRole('spinbutton', { name: '锚点横向' }).closest('[data-ui-field-control]')?.className).toContain('w-full')
-    expect(screen.getByRole('radiogroup', { name: '通道' }).className).toContain('w-full')
+    expect(screen.getByRole('radiogroup', { name: '通道' }).className).toContain('w-fit')
     expect(screen.getByText('网格横向').closest('[data-ui-form-row="panel"]')).toBeNull()
     expect(screen.getByText('工具条').closest('[data-ui-form-row="panel"]')).toBeNull()
   })

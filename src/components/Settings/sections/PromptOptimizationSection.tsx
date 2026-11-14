@@ -35,7 +35,6 @@ const PromptOptimizationSection: React.FC<PromptOptimizationSectionProps> = ({
           options={options}
           display={options.find((option) => option.value === behavior)?.label}
           onSelect={(value) => onChangeBehavior(value as PromptOptimizationButtonBehavior)}
-          className="w-full"
         />
       </UiFormRow>
       <UiFormRow label={t('sections.display.autoFocusLabel')} info={t('sections.display.autoFocusHint')} inline>

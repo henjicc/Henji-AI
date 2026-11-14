@@ -91,7 +91,7 @@ export function AudioCaptureSettingsForm({ disabled = false, disabledReason = '�
         const next = { ...settings, hostApi, deviceName: '', deviceOrdinal: 0, firstChannel: 0, exclusive: false }
         void write({ ...next, channels: captureDevice(inventory, next)?.maxInputChannels === 1 ? 1 : settings.channels })
       }} /></UiFormRow>
-      <UiFormRow density="compact" label="输入设备"><Dropdown value={selectedDevice} display={deviceOptions.find(option => option.value === selectedDevice)?.label ?? `${settings.deviceName}（未连接）`} options={deviceOptions} disabled={locked} disabledReason={reason} onSelect={value => {
+      <UiFormRow density="compact" label="输入设备"><Dropdown width="fill" value={selectedDevice} display={deviceOptions.find(option => option.value === selectedDevice)?.label ?? `${settings.deviceName}（未连接）`} options={deviceOptions} disabled={locked} disabledReason={reason} onSelect={value => {
         const [deviceName, deviceOrdinal] = value ? JSON.parse(value) as [string, number] : ['', 0] as const
         const next = { ...settings, deviceName, deviceOrdinal, firstChannel: 0 }
         void write({ ...next, channels: captureDevice(inventory, next)?.maxInputChannels === 1 ? 1 : settings.channels })

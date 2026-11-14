@@ -30,7 +30,7 @@ export function FilterBlendControlsV3({ filter, disabled, onChange, preview }: {
         value={draft} gesture={gesture} disabled={disabled} />
     </UiFormRow>
     <UiFormRow density="compact" label={t('imageEditor.v3.properties.blendMode')}>
-      <Dropdown<ImageEditLayerFilterV3['blendMode']> minWidthStrategy="none" value={filter.blendMode} disabled={disabled}
+      <Dropdown<ImageEditLayerFilterV3['blendMode']> value={filter.blendMode} disabled={disabled}
         ariaLabel={t('imageEditor.v3.filterWorkspace.blendMode', { defaultValue: '滤镜混合模式' })}
         display={t(`imageEditor.v3.blendMode.${filter.blendMode}`)}
         options={IMAGE_EDIT_BLEND_MODES_V3.map(value => ({ value, label: t(`imageEditor.v3.blendMode.${value}`) }))}

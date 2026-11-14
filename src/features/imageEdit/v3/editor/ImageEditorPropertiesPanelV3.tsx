@@ -187,7 +187,6 @@ export function ImageEditorPropertiesPanelV3({
                 <Dropdown<ImageEditLayerV3['blendMode']>
                   ariaLabel={t('imageEditor.v3.properties.blendMode')}
                   size="sm"
-                  minWidthStrategy="none"
                   value={selected.blendMode}
                   disabled={contentLocked}
                   display={t(`imageEditor.v3.blendMode.${selected.blendMode}`)}

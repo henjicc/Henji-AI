@@ -2,8 +2,8 @@ import type { UiControlSize } from './primitiveInternals'
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { ownerWindowOf } from '@/utils/crossRealmDom'
 import { UiOptionButton } from './primitives'
-import { UI_CONTROL_HEIGHT_CLASS } from './styleTokens'
-import { useUiFormRowLabelling } from './formRowLabel'
+import { UI_CONTROL_HEIGHT_CLASS, UI_FIELD_SURFACE_CLASS } from './styleTokens'
+import { useUiFieldLayout } from './fieldLayout'
 import Dropdown from './Dropdown'
 import { layoutWidth, measureParentSlack } from './measureParentSlack'
 
@@ -31,20 +31,22 @@ export interface UiSegmentedProps<T extends string | number> {
 }
 
 /**
- * 同一取值的等宽分段；单一 Tab 停靠点，方向键循环选择并跳过禁用项。
+ * 同一取值的分段；单一 Tab 停靠点，方向键循环选择并跳过禁用项。
+ * 默认按内容定宽、文字靠左，与同排下拉的文字对齐；`fullWidth` 才铺满并等分、文字居中。
+ * 表单、浮层、设置页里外框是与下拉同一种字段底；停靠属性面板里没有外框，只有选中项一块中性小底，与静默的读数、下拉同一视觉重量。
  * 放不下时（窄面板，如 3D 属性栏的“体型”四段在 960 宽下每段只剩 22px、文字叠成一串）改用同一组选项的下拉，
  * 宽度恢复到能放下全部分段时换回分段（重要记录 020）。此前只在开发态打警告，正式版照样叠字。
  */
 export function UiSegmented<T extends string | number>({ ariaLabel, options, value, onChange, size = 'md', fullWidth = false, disabled = false, disabledReason, onPreview }: UiSegmentedProps<T>): JSX.Element {
   const buttons = useRef(new Map<T, HTMLButtonElement>())
-  const formRow = useUiFormRowLabelling()
-  const fillControl = fullWidth || formRow?.fillControl === true
+  const fillControl = fullWidth
+  const bare = useUiFieldLayout() === 'property'
   const enabled = options.filter(option => !option.disabled)
   const tabValue = enabled.some(option => option.value === value) ? value : enabled[0]?.value
   const useDropdown = options.length > 5 || options.some(option => !/^\d{1,3}\s*[\p{Script=Han}]{1,4}$/u.test(option.label) && [...option.label].length > (/\p{Script=Han}/u.test(option.label) ? 4 : 12))
   const wrapperRef = useRef<HTMLDivElement | null>(null)
   const [narrow, setNarrow] = useState(false)
-  // 收成下拉前分段需要的宽度：等宽分段 = 最宽一段 × 段数 + 段间距 + 外框内边距
+  // 收成下拉前分段需要的宽度：各段内容宽之和（等分时按最宽一段 × 段数）+ 段间距 + 外框内边距
   const naturalWidth = useRef(0)
   // 收成下拉后第一次测到的可用宽度：之后真的变宽了（窗口、面板放宽）才换回分段。
   // 父级宽度跟着内容走（如绝对定位的角落按钮组）时，下拉自己就可能比分段宽，不设基准会在两者间来回切、一次提交里无限重渲染。
@@ -71,9 +73,10 @@ export function UiSegmented<T extends string | number>({ ariaLabel, options, val
       const groupStyle = view.getComputedStyle(group)
       const gap = Number.parseFloat(groupStyle.columnGap) || 0
       const padding = (Number.parseFloat(groupStyle.paddingLeft) || 0) + (Number.parseFloat(groupStyle.paddingRight) || 0)
-      const widest = Math.max(...optionButtons.map((button) => button.scrollWidth))
+      const widths = optionButtons.map((button) => button.scrollWidth)
+      const contentWidth = fillControl ? Math.max(...widths) * widths.length : widths.reduce((sum, width) => sum + width, 0)
       // 此刻已经放不下：换回分段至少要比现在宽，估算偏小也不会在分段与下拉之间来回切
-      naturalWidth.current = Math.ceil(Math.max(groupWidth, widest * optionButtons.length + gap * (optionButtons.length - 1) + padding, available + 1))
+      naturalWidth.current = Math.ceil(Math.max(groupWidth, contentWidth + gap * (optionButtons.length - 1) + padding, available + 1))
       setNarrow(true)
     }
     check()
@@ -84,15 +87,16 @@ export function UiSegmented<T extends string | number>({ ariaLabel, options, val
     if (wrapper.parentElement) observer.observe(wrapper.parentElement)
     buttons.current.forEach((button) => observer.observe(button))
     return () => observer.disconnect()
-  }, [narrow, optionsKey, useDropdown])
+  }, [fillControl, narrow, optionsKey, useDropdown])
   // 放不下换成的下拉不按选项定最小宽：否则它会撑出外层格子、压到旁边的按钮上
   const dropdown = <Dropdown ariaLabel={ariaLabel} options={options.map(option => ({ ...option, tooltip: option.disabledReason ?? option.title }))} value={value} onSelect={onChange} onPreview={onPreview} size={size} className={fillControl ? 'w-full' : undefined} disabled={disabled} disabledReason={disabledReason} minWidthStrategy={useDropdown ? undefined : 'none'} />
   if (useDropdown) return dropdown
   // 外层只用来测“给了多宽”：可收窄（min-w-0），不比父级宽，行内排布与原分段一致
   return <div ref={wrapperRef} data-ui-segmented-fit className={`inline-flex min-w-0 max-w-full ${fillControl ? 'w-full' : ''}`}>{narrow ? dropdown : <div role="radiogroup" aria-label={ariaLabel} aria-disabled={disabled || undefined}
-    className={`inline-grid auto-cols-fr grid-flow-col gap-0.5 rounded-lg bg-gap p-0.5 ${UI_CONTROL_HEIGHT_CLASS[size]} ${fillControl ? 'w-full' : 'w-fit'}`}>
+    className={`inline-grid grid-flow-col gap-0.5 rounded-lg ${bare ? '' : `${UI_FIELD_SURFACE_CLASS} p-0.5`} ${UI_CONTROL_HEIGHT_CLASS[size]} ${fillControl ? 'w-full auto-cols-fr' : 'w-fit auto-cols-max'}`}>
     {/* ui-surface-allow: S1 u5 统一分段组件内部使用原语渲染选项，调用方必须用 UiSegmented。 */}
     {options.map(option => <UiOptionButton key={option.value} type="button" variant="segment" size={size}
+      segmentFit={fillControl ? 'equal' : bare ? 'bare' : 'track'}
       ref={button => { if (button) buttons.current.set(option.value, button); else buttons.current.delete(option.value) }}
       role="radio" aria-checked={value === option.value} data-segment-value={option.value} tabIndex={!disabled && option.value === tabValue ? 0 : -1}
       active={value === option.value} disabled={disabled || option.disabled} disabledReason={disabled ? disabledReason : option.disabledReason} tooltip={option.title} aria-label={option.ariaLabel}

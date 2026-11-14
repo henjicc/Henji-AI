@@ -184,7 +184,7 @@ describe('Ui primitives 选中态词汇表', () => {
     // 小样格（主题预设）只是一个当前值：中性选中底 + 主要文字，不铺强调实底
     expectClasses(activeTile, UI_OPTION_ITEM_ACTIVE_CLASS);
     expect(activeTile.className).not.toContain('bg-accent');
-    expectClasses(restSegment, 'bg-transparent text-text2 hover:bg-hover');
+    expectClasses(restSegment, 'bg-transparent text-text2 hover:bg-control-hover');
     expect(restSegment.classList.contains(UI_GLASS_ADAPTIVE_SELECTED_CLASS)).toBe(false);
     expectClasses(restTile, `${UI_GLASS_ADAPTIVE_TILE_CLASS} ${UI_GLASS_ADAPTIVE_OPTION_CLASS} text-text2`);
     expectClasses(activeSwatch, 'rounded-full bg-clip-content border-text1');
@@ -274,9 +274,9 @@ describe('Ui primitives 选中态词汇表', () => {
     // 停靠面板（DockviewHost 提供的区域）里不写 appearance 的开关画成复选框方框；显式写了仍按写的来
     expectClasses(view.getByRole('switch', { name: '停靠面板里的开关' }).firstElementChild as HTMLElement, `${UI_BOOLEAN_BOX_CLASS} ${UI_BOOLEAN_BOX_STATE_CLASS.off}`);
     expectClasses(view.getByRole('switch', { name: '停靠面板里显式滑块' }).firstElementChild as HTMLElement, UI_SWITCH_TRACK_CLASS.off);
-    // 双段外观与分段选择共用中性选中：轨道更暗、滑块抬起、当前侧文字更强。
+    // 双段外观与分段选择共用中性选中：轨道是与下拉同一种字段底、滑块抬起、当前侧文字更强。
     expect(segmentedOff.classList.contains('rounded-lg')).toBe(true);
-    expect(segmentedOff.classList.contains('bg-gap/60')).toBe(true);
+    expect(segmentedOff.classList.contains('bg-raised')).toBe(true);
     expect(segmentedOff.textContent).toBe('关开');
     expect(segmentedOff.firstElementChild?.classList.contains('bg-segment-selected')).toBe(true);
     expect(segmentedOff.firstElementChild?.classList.contains('translate-x-0')).toBe(true);

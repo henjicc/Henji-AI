@@ -26,7 +26,7 @@ export function SmartContentPropertiesV3({ layer, disabled }: { layer: ImageEdit
       <p className="text-xs leading-relaxed text-text2">{layer.content.origin ? '受管理来源 · 更新时同步本图片中的关联实例' : '嵌入内容 · 保存时与原图片一起保存'}</p>
       <UiActionGroup tier="secondary"><UiButton disabled={disabled || view.busy} onClick={() => view.open(layer.id)}><Layers  />打开内容</UiButton>
       {layer.content.origin ? <UiButton disabled={disabled || view.busy} onClick={() => { void view.refresh(layer.id); }}><RefreshCw  />从来源刷新</UiButton> : null}</UiActionGroup>
-      <UiFormRow label={surfaceText('surfaceGrammar.documentSource')} density="compact" labelColumn="panel"><Dropdown<string> ariaLabel="选择图片文档来源" value="" display="从图片文档替换来源" className="w-full" minWidthStrategy="none" disabled={disabled || view.busy}
+      <UiFormRow label={surfaceText('surfaceGrammar.documentSource')} density="compact" labelColumn="panel"><Dropdown<string> width="fill" ariaLabel="选择图片文档来源" value="" display="从图片文档替换来源" disabled={disabled || view.busy}
         options={sources} onSelect={id => { void view.refresh(layer.id, { kind: 'image_edit.document', id: `v3:${encodeURIComponent(id)}` }); }} /></UiFormRow>
       {!sources.length && !sourceError ? <p className="text-xs text-text3">还没有可用的图片文档，可继续编辑嵌入内容。</p> : null}
       <UiButton disabled={disabled || view.busy} onClick={() => { void view.convert(layer.id, 'raster'); }}><FileImage  />栅格化内容</UiButton>
