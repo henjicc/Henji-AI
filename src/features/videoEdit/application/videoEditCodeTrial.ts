@@ -123,7 +123,6 @@ export async function trialVideoEditCodeFrames(frames: Array<{ document: VideoEd
         timer = setTimeout(() => { expired = true; rejectDeadline(new Error('源码单帧试渲染超过30秒，已释放候选；请重新检查。')) }, 30_000)
         return await Promise.race([lease!.run(input.document, session => { measureSession(session); return session.present(frame, false, false, undefined, undefined, undefined, 'interactive', false, Boolean(observe)) }).then(result => {
           if (expired || signal.aborted) { result.bitmap?.close(); throw signal.reason ?? new Error('源码候选已失效。') }
-          if (result.authorElements && frame === input.frame) observe?.(result.authorElements)
           return result
         }), deadline])
       }
@@ -160,6 +159,8 @@ export async function trialVideoEditCodeFrames(frames: Array<{ document: VideoEd
         }
         measurements.push(...(result.codePerformance ?? first).map(value => ({ ...value, frame: input.frame, budgetMs: 1000 / input.document.fps, preparation, sampling })))
       }
+      // 只报最终采用的那次渲染：测成本时同一帧会先渲染一次、再在相邻帧之后稳态渲染一次，两次都报就重复了
+      if (result.authorElements) observe?.(result.authorElements)
       if (collect) { collect.push(bitmap); bitmap = undefined }
     }
     signal.throwIfAborted()
