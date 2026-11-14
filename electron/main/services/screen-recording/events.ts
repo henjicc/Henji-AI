@@ -64,6 +64,17 @@ export class RecordingEventSession {
     this.options.onFailure(error)
   }
   private dipPoint(point: { x: number; y: number }): { x: number; y: number } { return process.platform === 'win32' ? screen.screenToDipPoint(point) : point }
+  /**
+   * 低级鼠标钩子报的是指针“要去”的位置，顶着桌面边缘推时会越出屏幕几个像素，系统随后才把指针夹回边内；
+   * 不夹回来，贴着边移动、点击就落到录制画面外，被记成空位置或丢掉。按指针所在（最近）的显示器夹回最后一个像素，
+   * 与系统实际指针位置一致；真在别的显示器上的点不受影响。
+   */
+  private hookPoint(point: { x: number; y: number }): { x: number; y: number } {
+    const dip = this.dipPoint(point)
+    const display = screen.getDisplayNearestPoint({ x: Math.floor(dip.x), y: Math.floor(dip.y) })
+    const { x, y, width, height } = display.bounds, pixel = 1 / display.scaleFactor
+    return { x: Math.min(Math.max(dip.x, x), x + width - pixel), y: Math.min(Math.max(dip.y, y), y + height - pixel) }
+  }
   private dipBounds(rect: CaptureRect): CaptureRect {
     const start = this.dipPoint(rect)
     const end = this.dipPoint({ x: rect.x + rect.width, y: rect.y + rect.height })
@@ -91,7 +102,7 @@ export class RecordingEventSession {
             // A timer poll on Windows runs at the system tick (about 64 Hz), which trails fast motion; the hook
             // reports every move at the moment it happens. Keep up to 250 per second.
             if (this.cursorExcluded || at - this.lastCursorUs < 4000) return
-            const desktopPoint = this.dipPoint(payload.event)
+            const desktopPoint = this.hookPoint(payload.event)
             if (this.excludedPoint(desktopPoint)) return
             const point = capturePoint(desktopPoint, this.options.geometry())
             this.collector.record(at, { kind: 'cursor', point, shape: this.lastShape }); this.lastCursorUs = at
@@ -100,7 +111,7 @@ export class RecordingEventSession {
           if (this.excluded()) return
           if (payload.kind !== 'mouse') { this.collector.record(at, payload); return }
           const event = payload.event
-          const desktopPoint = this.dipPoint(event)
+          const desktopPoint = this.hookPoint(event)
           if (this.excludedPoint(desktopPoint)) return
           const point = capturePoint(desktopPoint, this.options.geometry())
           if (!point) return

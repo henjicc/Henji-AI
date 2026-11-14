@@ -30,6 +30,35 @@ export function assertRecordingCursorPage(page: CaptureLogPage, ref: RecordingCu
   for (let i = 1; i < page.entries.length; i++) if (page.entries[i].recordingUs < page.entries[i - 1].recordingUs) throw new Error('光标事件的录制时间倒退。')
 }
 type Cursor = Extract<CaptureEvent, { kind: 'cursor' }>
+/**
+ * 去掉夹在两个有效位置之间的短暂空光标位置。较早的录制里，指针顶在桌面边缘时鼠标钩子报的位置越出屏幕，
+ * 与轮询交替出现零星的空位置；真的离开录制画面会持续空下去。一串空位置前后都是有效位置、同属一段时钟、
+ * 前后相隔不超过插值窗口时才去掉，去掉后由前后两个位置插值补上。
+ */
+export function withoutStrayCursorGaps<T extends CaptureEvent>(events: readonly T[]): T[] {
+  const stray = (e: CaptureEvent): boolean => e.kind === 'cursor' && !e.point && e.shape !== 'hidden'
+  const valid = (e: CaptureEvent | undefined): e is Cursor => e?.kind === 'cursor' && Boolean(e.point) && e.shape !== 'hidden'
+  const drop = new Set<number>()
+  let before: number | undefined
+  for (let i = 0; i < events.length; i++) {
+    const e = events[i]
+    if (e.kind === 'control') { before = undefined; continue }
+    if (e.kind !== 'cursor') continue
+    if (!stray(e)) { before = valid(e) ? i : undefined; continue }
+    if (before === undefined) continue
+    let end = i
+    const run: number[] = []
+    for (; end < events.length; end++) {
+      const next = events[end]
+      if (next.kind === 'control' || next.kind === 'cursor' && !stray(next)) break
+      if (next.kind === 'cursor') run.push(end)
+    }
+    const a = events[before] as Cursor, b = events[end]
+    if (valid(b) && run.every(j => events[j].clockSegmentRef === a.clockSegmentRef) && b.clockSegmentRef === a.clockSegmentRef && b.recordingUs - a.recordingUs <= CURSOR_LOOKAHEAD_US) run.forEach(j => drop.add(j))
+    i = end - 1; before = undefined
+  }
+  return drop.size ? events.filter((_, i) => !drop.has(i)) : [...events]
+}
 type Click = Extract<CaptureEvent, { kind: 'click' }>
 export interface RecordingCursorFrame {
   cursor?: { point: [number, number]; shape: Cursor['shape']; opacity: number }

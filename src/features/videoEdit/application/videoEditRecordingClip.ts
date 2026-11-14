@@ -2,7 +2,7 @@ import { captureLogPageSchema, type CaptureEvent } from '@/core/captureLog/event
 import type { VideoEditClip, VideoEditDocument, VideoEditMedia } from '@/core/videoEdit/document'
 import { videoEditClipMedia } from '@/core/videoEdit/document'
 import type { VideoEditEffect } from '@/core/videoEdit/compositing'
-import { RECORDING_CURSOR_EFFECT, type RecordingCursorSource } from '@/core/videoEdit/recordingCursor'
+import { RECORDING_CURSOR_EFFECT, withoutStrayCursorGaps, type RecordingCursorSource } from '@/core/videoEdit/recordingCursor'
 import { RECORDING_ZOOM_EFFECT, recordingZoomRegionsIssue, sortRecordingZoomRegions, suggestRecordingZoomRegions, type RecordingZoomRegion } from '@/core/videoEdit/recordingZoom'
 import { RECORDING_FRAME_EFFECT } from '@/core/videoEdit/recordingFrame'
 import { fetchRecordingCursorPage } from '../engine/videoEditRecordingCursorSource'
@@ -70,7 +70,7 @@ export async function readRecordingClipEvents(source: RecordingCursorSource, sig
     const bytes = await fetchRecordingCursorPage(page, signal)
     events.push(...captureLogPageSchema.parse(JSON.parse(new TextDecoder().decode(bytes))).entries)
   }
-  return events
+  return withoutStrayCursorGaps(events)
 }
 /** Zoom regions suggested from the clicks; regions the person adjusted by hand are kept. */
 export function suggestRecordingClipZoom(media: Pick<VideoEditMedia, 'durationSeconds'>, source: RecordingCursorSource, events: readonly CaptureEvent[], existing: readonly RecordingZoomRegion[] = []): RecordingZoomRegion[] {

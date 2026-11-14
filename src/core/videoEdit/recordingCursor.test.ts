@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { sampleRecordingCursor, recordingCursorSourceSchema, assertRecordingCursorPage } from './recordingCursor'
+import { sampleRecordingCursor, recordingCursorSourceSchema, assertRecordingCursorPage, withoutStrayCursorGaps } from './recordingCursor'
 import { recordingCursorFixture } from '../../tests/recordingCursorFixture'
 import type { CaptureEvent } from '../captureLog/events'
 import { splitVideoEditClipSource, videoEditClipSourceTimeAt } from './clipSpeed'
@@ -52,4 +52,23 @@ describe('录制光标源时钟与轨迹', () => {
     expect(() => assertRecordingCursorPage({ ...pages[0], ownerRef: { kind: 'recording_session', id: 'other' } }, source.pages[0], source)).toThrow('归属')
     expect(recordingCursorSourceSchema.safeParse({ ...source, pages: [source.pages[1], source.pages[0]] }).success).toBe(false)
   })
+})
+
+it('贴边录下的零星空光标位置读取时按前后位置补上；持续离开画面、隐藏与暂停前后的空位置保留', async () => {
+  const { pages } = await recordingCursorFixture()
+  const base = pages.flatMap(p => p.entries).find(e => e.kind === 'cursor')!
+  const at = (us: number, point: [number, number] | null, shape: 'arrow' | 'hidden' = 'arrow'): CaptureEvent => ({ ...base, recordingUs: us, kind: 'cursor', point, shape })
+  // 帧 3891 附近的真实排列：贴左边时轮询与钩子交替，钩子那一个是空的
+  const edge = [at(0, [0, 2044.5]), at(7_000, null), at(8_000, [0, 2049]), at(15_000, null), at(20_000, null), at(22_000, [0, 2053.5])]
+  const filled = withoutStrayCursorGaps(edge)
+  expect(filled.map(e => e.recordingUs)).toEqual([0, 8_000, 22_000])
+  expect(sampleRecordingCursor(edge, 7_500, options).cursor).toBeUndefined()
+  expect(sampleRecordingCursor(filled, 7_500, options).cursor!.point).toEqual([0, 2048.71875])
+  expect(sampleRecordingCursor(filled, 18_000, options).cursor!.point[0]).toBe(0)
+  const left = [at(0, [10, 10]), ...Array.from({ length: 30 }, (_, i) => at(8_000 * (i + 1), null)), at(300_000, [10, 10])]
+  expect(withoutStrayCursorGaps(left)).toHaveLength(left.length)
+  const hidden = [at(0, [10, 10]), at(8_000, null), at(16_000, null, 'hidden'), at(24_000, [10, 10])]
+  expect(withoutStrayCursorGaps(hidden)).toHaveLength(hidden.length)
+  const paused = [at(0, [10, 10]), { ...base, recordingUs: 4_000, kind: 'control', action: 'pause' } as CaptureEvent, at(8_000, null), at(16_000, [10, 10])]
+  expect(withoutStrayCursorGaps(paused)).toHaveLength(paused.length)
 })

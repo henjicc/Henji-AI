@@ -1,5 +1,5 @@
 import { captureLogPageSchema, type CaptureEvent, type CaptureLogPage } from '@/core/captureLog/events'
-import { assertRecordingCursorPage, CURSOR_LOOKAHEAD_US, type RecordingCursorPage, type RecordingCursorSource } from '@/core/videoEdit/recordingCursor'
+import { assertRecordingCursorPage, CURSOR_LOOKAHEAD_US, withoutStrayCursorGaps, type RecordingCursorPage, type RecordingCursorSource } from '@/core/videoEdit/recordingCursor'
 import { createLogger } from '@/core/logging'
 
 const logger = createLogger('features.videoEdit.recordingCursor')
@@ -82,6 +82,6 @@ export class VideoEditRecordingCursorSource {
     while (lo < hi) { const mid = (lo + hi) >>> 1; if (source.pages[mid].recordingSpanUs[1] < from) lo = mid + 1; else hi = mid }
     const events: CaptureEvent[] = []
     for (let i = lo; i < source.pages.length && source.pages[i].recordingSpanUs[0] <= to; i++) events.push(...(await this.page(source, i, signal)).entries.filter(e => e.recordingUs >= from && e.recordingUs <= to))
-    return events
+    return withoutStrayCursorGaps(events)
   }
 }

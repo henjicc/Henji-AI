@@ -6,6 +6,7 @@ import { getDocumentService } from '../documents/runtime'
 import { recordingDocumentSchema, type RecordingDocument, type RecordingMedia } from '../../../../src/core/screenRecording/document'
 import { recordingMediaSpans, recordingSessionUs } from '../../../../src/core/screenRecording/range'
 import type { CaptureEvent } from '../../../../src/core/captureLog/events'
+import { withoutStrayCursorGaps } from '../../../../src/core/videoEdit/recordingCursor'
 import { loadFfmpegPath } from '../video/ffmpeg-loader'
 import { getUserFolderDir } from '../appPaths'
 import { createMainLogger } from '../logging'
@@ -81,7 +82,7 @@ export function quickExportAudioGraph(audio: readonly Pick<RecordingMedia, 'mono
 
 function compactEvents(events: readonly CaptureEvent[], windows: readonly Window[]): EmbeddedRecordingEvents['events'] {
   const rows: EmbeddedRecordingEvents['events'] = []
-  for (const event of events) {
+  for (const event of withoutStrayCursorGaps(events)) {
     const outputUs = quickExportOutputUs(windows, event.monoUs)
     if (outputUs === null) continue
     const ms = Math.round(outputUs / 1000)

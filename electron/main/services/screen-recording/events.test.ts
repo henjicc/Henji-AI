@@ -5,7 +5,12 @@ import { RecordingEventSession } from './events'
 const hooks = vi.hoisted(() => ({ attach: vi.fn(), detach: vi.fn(), write: vi.fn(), cursor: vi.fn(), point: vi.fn(), foreground: vi.fn() }))
 // 枚举也会触发原生绑定初始化；普通单测必须完全隔离 OS 输入钩子。
 vi.mock('uiohook-napi', () => ({ EventType: { EVENT_MOUSE_PRESSED: 7, EVENT_MOUSE_RELEASED: 8, EVENT_MOUSE_WHEEL: 11 } }))
-vi.mock('electron', () => ({ screen: { getCursorScreenPoint: hooks.point, screenToDipPoint: (point: { x: number; y: number }) => ({ x: point.x / 2, y: point.y / 2 }) } }))
+// 被录的是左边那块显示器（与录制来源同边界），右边另有一块；缩放 2 倍。
+const displays = [{ bounds: { x: -400, y: 0, width: 400, height: 300 }, scaleFactor: 2 }, { bounds: { x: 0, y: 0, width: 5000, height: 5000 }, scaleFactor: 2 }]
+vi.mock('electron', () => ({ screen: {
+  getCursorScreenPoint: hooks.point, screenToDipPoint: (point: { x: number; y: number }) => ({ x: point.x / 2, y: point.y / 2 }),
+  getDisplayNearestPoint: (point: { x: number; y: number }) => displays.find(d => point.x >= d.bounds.x && point.x < d.bounds.x + d.bounds.width && point.y >= d.bounds.y && point.y < d.bounds.y + d.bounds.height) ?? displays[0],
+} }))
 vi.mock('./input-events', () => ({ startDesktopInput: hooks.attach, MOUSE_DRAGGED: 10 }))
 vi.mock('./windows-events', () => ({ createWindowsEventFacts: () => ({ cursor: hooks.cursor, foreground: hooks.foreground }) }))
 vi.mock('./event-store', () => ({ RecordingEventStore: class { write = hooks.write } }))
@@ -159,4 +164,18 @@ it('事件时钟零点比画面第一帧早、恢复时从画面第一帧接着�
   // 暂停扣掉的正好是按下暂停到画面恢复第一帧。
   const resume = controls[2]
   expect(resume.monoUs - resume.recordingUs - (controls[0].monoUs - controls[0].recordingUs)).toBe(2_000_000 - 1)
+})
+it('指针顶着桌面边缘推时钩子报的越界位置夹回边内：移动不记成空位置、点击不丢；在别的显示器上的点仍是画面外', async () => {
+  const f = fixture(); await f.wrapped.start(f.signal.signal)
+  const emit = hooks.attach.mock.calls[0][0]
+  vi.setSystemTime(Date.now() + 5); emit({ kind: 'mouse', event: { type: 10, x: -806, y: 200 } }); vi.setSystemTime(Date.now() + 5)
+  emit({ kind: 'mouse', event: { type: 10, x: -300, y: 604 } }); vi.setSystemTime(Date.now() + 5)
+  emit({ kind: 'mouse', event: { type: 10, x: -400, y: -6 } }); vi.setSystemTime(Date.now() + 5)
+  emit({ kind: 'mouse', event: { type: 7, x: -810, y: 610, button: 1 } })
+  emit({ kind: 'mouse', event: { type: 10, x: 200, y: 200 } })
+  await f.wrapped.stop(f.signal.signal)
+  const events = pages().flatMap(page => page.entries)
+  const moves = events.filter(event => event.kind === 'cursor' && event.recordingUs > 0 && (event.point === null || event.point[0] === 0 || event.point[1] === 0 || event.point[1] === 599))
+  expect(moves.map(event => event.kind === 'cursor' && event.point)).toEqual([[0, 200], [500, 599], [400, 0], null])
+  expect(events.find(event => event.kind === 'click')).toMatchObject({ point: [0, 599] })
 })
