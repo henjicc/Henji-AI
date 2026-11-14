@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCanvasNodeUiRef } from '@/features/canvas/presence/canvasNodeUiState';
 import { Maximize2, Pause, Play, Volume2, VolumeX } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -8,6 +9,8 @@ import { formatVideoTime } from './formatVideoTime';
 import { VideoIdleMarks } from './VideoIdleMarks';
 
 interface CanvasVideoPlayerProps {
+  /** 播放位置与静音跨正文卸载保留。 */
+  nodeId?: string;
   src: string;
   knownDuration?: number | null;
   knownHasAudio?: boolean;
@@ -18,6 +21,7 @@ interface CanvasVideoPlayerProps {
 
 /** 画布视频节点内嵌播放器：首帧直出，控制条使用项目 Ui primitives。 */
 export function CanvasVideoPlayer({
+  nodeId,
   src,
   knownDuration,
   knownHasAudio,
@@ -30,7 +34,8 @@ export function CanvasVideoPlayer({
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(knownDuration ?? 0);
-  const [muted, setMuted] = useState(false);
+  const kept = useCanvasNodeUiRef<{ src: string; time: number; muted: boolean } | null>(nodeId, 'videoPlayback', null);
+  const [muted, setMuted] = useState(() => kept.current?.src === src && kept.current.muted);
   const [hasAudio, setHasAudio] = useState<boolean | null>(knownHasAudio ?? null);
   const [compactControls, setCompactControls] = useState(false);
 
@@ -113,13 +118,20 @@ export function CanvasVideoPlayer({
         onLoadedMetadata={(event) => {
           const video = event.currentTarget;
           setDuration(Number.isFinite(video.duration) ? video.duration : (knownDuration ?? 0));
-          video.currentTime = 0;
-          setCurrentTime(0);
+          // 同一段视频接着上次停下的位置（正文卸载过）
+          const resume = kept.current?.src === src ? kept.current : null;
+          video.currentTime = resume?.time ?? 0;
+          video.muted = resume?.muted ?? video.muted;
+          setCurrentTime(resume?.time ?? 0);
           if (autoPlayOnMount) {
             void video.play().catch(() => setPlaying(false));
           }
         }}
-        onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime || 0)}
+        onTimeUpdate={(event) => {
+          const time = event.currentTarget.currentTime || 0;
+          setCurrentTime(time);
+          kept.current = { src, time, muted: event.currentTarget.muted };
+        }}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onEnded={() => {
@@ -128,6 +140,7 @@ export function CanvasVideoPlayer({
         }}
         onVolumeChange={(event) => {
           setMuted(event.currentTarget.muted);
+          kept.current = { src, time: event.currentTarget.currentTime || 0, muted: event.currentTarget.muted };
         }}
       />
 

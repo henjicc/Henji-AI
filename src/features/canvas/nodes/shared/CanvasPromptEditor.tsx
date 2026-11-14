@@ -6,6 +6,7 @@ import {
   type PromptEditorHandle,
   type PromptEditorProps,
 } from '@/components/ui'
+import { useCanvasNodeUiRef, useSaveOnUnmount } from '@/features/canvas/presence/canvasNodeUiState'
 
 export interface CanvasPromptEditorProps extends Omit<
   PromptEditorProps,
@@ -13,6 +14,8 @@ export interface CanvasPromptEditorProps extends Omit<
 > {
   selected: boolean
   onSelectNode: () => void
+  /** 所在节点与这一格的名字：滚动位置跨正文卸载保留。 */
+  retainKey?: { nodeId: string; slot: string }
 }
 
 type PendingActivation =
@@ -29,12 +32,14 @@ export function CanvasPromptEditor({
   disabled = false,
   readOnly = false,
   onEditEnd,
+  retainKey,
   ...editorProps
 }: CanvasPromptEditorProps): JSX.Element {
   const [isEditing, setIsEditing] = useState(false)
   const pendingActivationRef = useRef<PendingActivation | null>(null)
   const editorRef = useRef<PromptEditorHandle | null>(null)
-  const savedScrollTopRef = useRef(0)
+  const savedScrollTopRef = useCanvasNodeUiRef(retainKey?.nodeId, `promptScrollTop:${retainKey?.slot ?? ''}`, 0)
+  useSaveOnUnmount(savedScrollTopRef, () => editorRef.current?.getScrollTop())
   const canActivate = !disabled && !readOnly
 
   useEffect(() => {
@@ -52,7 +57,7 @@ export function CanvasPromptEditor({
       : { kind: 'keyboard' }
     onSelectNode()
     setIsEditing(true)
-  }, [canActivate, onSelectNode])
+  }, [canActivate, onSelectNode, savedScrollTopRef])
 
   const handleReady = useCallback((): void => {
     const editor = editorRef.current
@@ -70,18 +75,18 @@ export function CanvasPromptEditor({
       )
     }
     pendingActivationRef.current = null
-  }, [])
+  }, [savedScrollTopRef])
 
   const handleEditEnd = useCallback((): void => {
     savedScrollTopRef.current = editorRef.current?.getScrollTop() ?? 0
     pendingActivationRef.current = null
     setIsEditing(false)
     onEditEnd?.()
-  }, [onEditEnd])
+  }, [onEditEnd, savedScrollTopRef])
 
   useLayoutEffect(() => {
     editorRef.current?.setScrollTop(savedScrollTopRef.current)
-  }, [isEditing])
+  }, [isEditing, savedScrollTopRef])
 
   return (
     <PromptEditor

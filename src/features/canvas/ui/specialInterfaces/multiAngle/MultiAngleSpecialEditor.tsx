@@ -1,5 +1,6 @@
 import { NODE_STAGE_SURFACE_CLASS } from '@/features/canvas/ui/nodeControlStyles'
-import { useMemo, useState, type ReactNode } from 'react'
+import { useCanvasNodeUiState } from '@/features/canvas/presence/canvasNodeUiState'
+import { useMemo, type ReactNode } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -124,6 +125,8 @@ function RangeField({
 }
 
 interface MultiAngleWorkbenchProps {
+  /** 嵌在画布节点里时传节点 id：选中的视角跨正文卸载保留。 */
+  nodeId?: string
   config: MultiAngleConfigV1
   sourceImage: string | null
   onConfigChange: (config: MultiAngleConfigV1) => void
@@ -132,6 +135,7 @@ interface MultiAngleWorkbenchProps {
 }
 
 export function MultiAngleWorkbench({
+  nodeId,
   config,
   sourceImage,
   onConfigChange,
@@ -139,7 +143,8 @@ export function MultiAngleWorkbench({
   embedded = false,
 }: MultiAngleWorkbenchProps): JSX.Element {
   const { t } = useTranslation()
-  const [selectedViewId, setSelectedViewId] = useState(config.views[0]?.viewId ?? '')
+  // 选中的视角跨正文卸载保留；视角被删掉时下面按第一个处理
+  const [selectedViewId, setSelectedViewId] = useCanvasNodeUiState(nodeId, 'multiAngleSelectedView', config.views[0]?.viewId ?? '')
   const selected = config.views.find((view) => view.viewId === selectedViewId) ?? config.views[0]
 
   const updateConfig = (next: MultiAngleConfigV1): void => {

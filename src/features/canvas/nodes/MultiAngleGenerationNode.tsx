@@ -66,6 +66,7 @@ export const MultiAngleGenerationNode = memo(({
   // Selection updates the frame only; retain the workbench instance and its local view state.
   const workbench = useMemo(() => (
         <MultiAngleWorkbench
+          nodeId={id}
           config={config}
           sourceImage={sourceImage}
           embedded

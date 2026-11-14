@@ -1,4 +1,5 @@
 import { Dropdown } from '@/components/ui'
+import { useCanvasNodeUiRef, useCanvasNodeUiState } from '@/features/canvas/presence/canvasNodeUiState'
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -11,6 +12,8 @@ import { snapLightAtPoint, lightPosition, mainDirectionForPose, poseForMain, pos
   projectSpatialPoint, spatialPointAtPointer, rimDirectionForPose, type LightPose, type RelightSpatialState } from './relightSpatialState'
 
 interface Props {
+  /** 嵌在画布节点里时传节点 id：灯位与视图跨正文卸载保留。 */
+  nodeId?: string
   direction: RelightKeyDirection
   brightness?: RelightBrightness
   colorPreset?: RelightColorPreset
@@ -21,17 +24,26 @@ interface Props {
   onDirectionChange: (direction: RelightKeyDirection) => void
 }
 
-export function RelightDirectionVisualizer({ direction, brightness = 0, colorPreset = 'neutral', rimDirection = 'off',
+export function RelightDirectionVisualizer({ nodeId, direction, brightness = 0, colorPreset = 'neutral', rimDirection = 'off',
   onRimDirectionChange, sourceImage, sourceAlt, onDirectionChange }: Props): JSX.Element {
   const { t } = useTranslation()
   const stageRef = useRef<HTMLDivElement>(null)
-  const [view, setView] = useState<RelightVisualizerView>('perspective')
-  const [poses, setPoses] = useState(() => ({ main: poseForMain(direction), rim: poseForRim(rimDirection) }))
+  const [view, setView] = useCanvasNodeUiState<RelightVisualizerView>(nodeId, 'relightVisualizerView', 'perspective')
+  // 灯位是连续的，节点数据里只存吸附后的方向：离开时的灯位仍对应当前方向才接着用
+  const keptPoses = useCanvasNodeUiRef<{ direction: RelightKeyDirection; rimDirection: RelightRimDirection; poses: RelightSpatialState } | null>(nodeId, 'relightVisualizerPoses', null)
+  const [poses, setPoses] = useState(() => {
+    const kept = keptPoses.current
+    if (kept && kept.direction === direction && kept.rimDirection === rimDirection) return kept.poses
+    return { main: poseForMain(direction), rim: poseForRim(rimDirection) }
+  })
   const posesRef = useRef(poses)
   const previous = useRef({ direction, rimDirection })
   const drag = useRef<{ id: number; lamp: 'main' | 'rim'; left: number; top: number; size: number; start: RelightSpatialState; target: LightPose; depth: number } | null>(null)
   const [dragging, setDragging] = useState(false)
   const setPosition = (next: RelightSpatialState): void => { posesRef.current = next; setPoses(next) }
+  useEffect(() => {
+    if (!drag.current) keptPoses.current = { direction, rimDirection, poses }
+  }, [direction, keptPoses, poses, rimDirection])
 
   useEffect(() => {
     const old = previous.current

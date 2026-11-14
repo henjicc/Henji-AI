@@ -177,6 +177,7 @@ export const FrameCard = memo(({
           <CanvasPromptEditor
             selected={selected}
             onSelectNode={onSelectNode}
+            retainKey={{ nodeId, slot: `frameNote:${frame.id}` }}
             value={resolvedNote.document}
             onChange={handleNoteChange}
             onEditEnd={editHistory.onEditEnd}

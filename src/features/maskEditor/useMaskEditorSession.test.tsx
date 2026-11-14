@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, renderHook, waitFor } from '@testing-library/r
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { MaskEditorDocument } from './types';
-import { useMaskEditorSession } from './useMaskEditorSession';
+import { useMaskEditorSession, type MaskEditorRetainedSession } from './useMaskEditorSession';
 
 const { loadImageElement } = vi.hoisted(() => ({
   loadImageElement: vi.fn(async () => ({
@@ -39,6 +39,52 @@ afterEach(() => {
 });
 
 describe('useMaskEditorSession', () => {
+  it('卸载再挂上时接回撤销栈与工具；节点里的遮罩文档换过就从新文档重新开始', async () => {
+    const persisted = createDocument('persisted');
+    const retained: { current: MaskEditorRetainedSession | null } = { current: null };
+    const mount = (initialDocument: MaskEditorDocument) => renderHook(() => useMaskEditorSession({
+      sourceImage: '/managed/source.png', initialDocument, retained,
+    }));
+    const first = mount(persisted);
+    await waitFor(() => expect(first.result.current.readyImage).toBeTruthy());
+    act(() => {
+      first.result.current.commitMark(createDocument('a').strokes[0]);
+      first.result.current.setTool('lasso');
+    });
+    first.unmount();
+
+    const second = mount(persisted);
+    await waitFor(() => expect(second.result.current.readyImage).toBeTruthy());
+    expect(second.result.current.resumed).toBe(true);
+    expect(second.result.current.tool).toBe('lasso');
+    expect(second.result.current.history.document.strokes.map(mark => mark.id)).toEqual(['persisted', 'a']);
+    act(() => second.result.current.dispatchHistory({ type: 'undo' }));
+    expect(second.result.current.history.document.strokes.map(mark => mark.id)).toEqual(['persisted']);
+    second.unmount();
+
+    const replaced = createDocument('replaced');
+    const third = mount(replaced);
+    await waitFor(() => expect(third.result.current.readyImage).toBeTruthy());
+    expect(third.result.current.resumed).toBe(false);
+    expect(third.result.current.history.undoStack).toHaveLength(0);
+    expect(third.result.current.history.document.strokes.map(mark => mark.id)).toEqual(['replaced']);
+  });
+  it('挂着时节点里的遮罩被别处改写，重挂后从改写后的文档重新开始，不接回旧撤销栈', async () => {
+    const retained: { current: MaskEditorRetainedSession | null } = { current: null };
+    const persisted = createDocument('persisted');
+    const first = renderHook(({ initialDocument }) => useMaskEditorSession({
+      sourceImage: '/managed/source.png', initialDocument, retained,
+    }), { initialProps: { initialDocument: persisted } });
+    await waitFor(() => expect(first.result.current.readyImage).toBeTruthy());
+    act(() => first.result.current.commitMark(createDocument('a').strokes[0]));
+    const external = createDocument('external');
+    first.rerender({ initialDocument: external });
+    first.unmount();
+    const second = renderHook(() => useMaskEditorSession({ sourceImage: '/managed/source.png', initialDocument: external, retained }));
+    await waitFor(() => expect(second.result.current.readyImage).toBeTruthy());
+    expect(second.result.current.resumed).toBe(false);
+    expect(second.result.current.history.document.strokes.map(mark => mark.id)).toEqual(['external']);
+  });
   it('取消或关闭参数会话不确认、不修改调用方文档，并释放临时历史', async () => {
     const original = createDocument('original'), onConfirm = vi.fn();
     const { result, rerender } = renderHook(({ active }) => useMaskEditorSession({

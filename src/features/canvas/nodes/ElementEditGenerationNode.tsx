@@ -71,13 +71,14 @@ export const ElementEditGenerationNode = memo(({
     }
     return (
       <LocalRedrawWorkbenchStage
+        nodeId={id}
         selected={Boolean(selected)}
         sourceImage={sourceImage}
         initialDocument={data.localRedrawMaskDocument}
         onPersist={persistMask}
       />
     )
-  }, [data.localRedrawMaskDocument, persistMask, selected, t])
+  }, [data.localRedrawMaskDocument, id, persistMask, selected, t])
 
   return (
     <GenerationNodeShell

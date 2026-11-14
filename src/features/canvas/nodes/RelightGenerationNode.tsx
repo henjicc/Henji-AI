@@ -83,6 +83,7 @@ export const RelightGenerationNode = memo(({
   // Selection updates the frame only; retain the workbench instance and its local view state.
   const workbench = useMemo(() => (
         <RelightWorkbench
+          nodeId={id}
           settings={settings}
           sourceImage={sourceImage}
           embedded

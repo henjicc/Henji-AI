@@ -1,4 +1,5 @@
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
+import { useCanvasNodeUiRef } from '@/features/canvas/presence/canvasNodeUiState';
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ComponentProps, type DragEvent } from 'react';
 import { useStore } from 'zustand';
 import { usePlaybackClock, type PlaybackClockStore } from '@/hooks/usePlaybackClock';
@@ -83,10 +84,13 @@ export const AudioNode = memo(({ id, data, selected, type, width, height }: Audi
   );
   const inputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  // 播放位置与静音跨正文卸载保留：卸载会停掉播放，再挂上时从停下的地方接着放
+  const keptPlayback = useCanvasNodeUiRef<{ source: string; time: number; muted: boolean } | null>(id, 'audioPlayback', null);
+  const resumeTime = keptPlayback.current && keptPlayback.current.source === data.audioUrl ? keptPlayback.current.time : 0;
   const [isPlaying, setIsPlaying] = useState(false);
-  const { store: playbackClock, setTime: setCurrentTime } = usePlaybackClock(audioRef, isPlaying, data.audioUrl ?? null);
+  const { store: playbackClock, setTime: setCurrentTime } = usePlaybackClock(audioRef, isPlaying, data.audioUrl ?? null, true, resumeTime);
   const [mediaDuration, setMediaDuration] = useState(0);
-  const [muted, setMuted] = useState(false);
+  const [muted, setMuted] = useState(() => keptPlayback.current?.source === data.audioUrl && keptPlayback.current.muted);
   const [isViewerOpen, setIsViewerOpen] = useState(false);
 
   const isUploadVariant = type === CANVAS_NODE_TYPES.audioUpload;
@@ -121,20 +125,31 @@ export const AudioNode = memo(({ id, data, selected, type, width, height }: Audi
     [data.durationSec]
   );
 
+  const audioUrlRef = useRef(data.audioUrl);
+  audioUrlRef.current = data.audioUrl;
   useEffect(() => () => {
-    audioRef.current?.pause();
+    const element = audioRef.current;
+    const source = audioUrlRef.current;
+    if (element && source) keptPlayback.current = { source, time: element.currentTime, muted: element.muted };
+    element?.pause();
     audioRef.current = null;
+    // 只在卸载时记一次
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 音频源变化后复位播放状态
+  // 音频源变化后复位播放状态（挂载时那一次不算：要保留接回的位置与静音）
+  const seenAudioSourceRef = useRef(audioSource);
   useEffect(() => {
+    if (seenAudioSourceRef.current === audioSource) return;
+    seenAudioSourceRef.current = audioSource;
+    keptPlayback.current = null;
     audioRef.current?.pause();
     audioRef.current = null;
     setIsPlaying(false);
     setCurrentTime(0);
     setMediaDuration(0);
     setMuted(false);
-  }, [audioSource, setCurrentTime]);
+  }, [audioSource, keptPlayback, setCurrentTime]);
 
   const ensureAudioElement = useCallback((): HTMLAudioElement | null => {
     if (!audioSource) {
@@ -144,12 +159,14 @@ export const AudioNode = memo(({ id, data, selected, type, width, height }: Audi
       const element = new Audio(audioSource);
       element.preload = 'metadata';
       element.muted = muted;
+      const resumeAt = playbackClock.getState().currentTime;
+      if (resumeAt > 0) element.currentTime = resumeAt;
       element.addEventListener('loadedmetadata', () => setMediaDuration(element.duration || 0));
       element.addEventListener('ended', () => setIsPlaying(false));
       audioRef.current = element;
     }
     return audioRef.current;
-  }, [audioSource, muted]);
+  }, [audioSource, muted, playbackClock]);
 
   const togglePlay = useCallback(() => {
     const element = ensureAudioElement();

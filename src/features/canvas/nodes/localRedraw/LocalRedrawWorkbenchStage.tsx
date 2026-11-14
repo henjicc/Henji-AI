@@ -6,12 +6,15 @@ import { useTranslation } from 'react-i18next';
 
 import { UiChipButton, UiError, UiIconButton, UiLoading, UiRangeInput } from '@/components/ui';
 import { MaskEditorCanvas } from '@/features/maskEditor/MaskEditorCanvas';
-import { hasPaintedMask } from '@/features/maskEditor/maskDocument';
+import { hasPaintedMask, sameMaskMarks } from '@/features/maskEditor/maskDocument';
 import type { MaskEditorDocument, MaskTool } from '@/features/maskEditor/types';
-import { maxMaskBrushSize, useMaskEditorSession } from '@/features/maskEditor/useMaskEditorSession';
+import { maxMaskBrushSize, useMaskEditorSession, type MaskEditorRetainedSession } from '@/features/maskEditor/useMaskEditorSession';
+import { useCanvasNodeUiRef } from '@/features/canvas/presence/canvasNodeUiState';
+import type { RetainedZoomPan } from '@/hooks/useZoomPanViewport';
 import { useLocalRedrawMaskAutosave } from './useLocalRedrawMaskAutosave';
 
 interface LocalRedrawWorkbenchStageProps {
+  nodeId: string;
   selected: boolean;
   sourceImage: string;
   initialDocument?: MaskEditorDocument | null;
@@ -30,6 +33,7 @@ const TOOLS: ReadonlyArray<{
 ];
 
 export const LocalRedrawWorkbenchStage = memo(function LocalRedrawWorkbenchStage({
+  nodeId,
   selected,
   sourceImage,
   initialDocument,
@@ -37,15 +41,21 @@ export const LocalRedrawWorkbenchStage = memo(function LocalRedrawWorkbenchStage
 }: LocalRedrawWorkbenchStageProps): JSX.Element {
   const { t } = useTranslation();
   const keyboardScope = useRef<HTMLDivElement>(null);
+  // 撤销栈与笔刷跨正文卸载保留（大画布上平移走再回来还能接着撤销）
+  const retained = useCanvasNodeUiRef<MaskEditorRetainedSession | null>(nodeId, 'maskEditorSession', null);
+  const retainedView = useCanvasNodeUiRef<RetainedZoomPan | null>(nodeId, 'maskEditorView', null);
   const editor = useMaskEditorSession({
     sourceImage,
     initialDocument,
     keyboardEnabled: selected,
     keyboardScope,
+    retained,
   });
   const autosave = useLocalRedrawMaskAutosave({
     document: editor.history.document,
     ready: Boolean(editor.readyImage),
+    // 卸载时还没来得及保存的最后几笔：接回会话后补存
+    unsavedOnStart: editor.resumed && !sameMaskMarks(editor.history.document, initialDocument),
     onPersist,
   });
   const painted = hasPaintedMask(editor.history.document);
@@ -139,6 +149,7 @@ export const LocalRedrawWorkbenchStage = memo(function LocalRedrawWorkbenchStage
           brushSize={editor.brushSize}
           brushHardness={editor.brushHardness}
           onMarkComplete={editor.commitMark}
+          retainedView={retainedView}
         />
       ) : editor.loadState.status === 'failed' ? (
         <UiError

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useRef, useState, type MutableRefObject, type RefObject } from 'react'
 import { wheelZoomFactor, zoomViewportAroundPoint, type ViewportPan, type ViewportZoomLimits } from '@/core/viewport/zoomPan'
 
 const ZERO: ViewportPan = { x: 0, y: 0 }
@@ -13,6 +13,13 @@ export interface ZoomPanViewport {
   reset: () => void
 }
 
+/** 跨卸载保留的视口：resetKey 相同（同一张画面）时下次挂载接着用。 */
+export interface RetainedZoomPan {
+  key: unknown
+  zoom: number
+  pan: ViewportPan
+}
+
 /**
  * 画面视口的缩放平移手势：滚轮以指针为中心缩放，按住空格或中键拖动平移。
  * 手势在捕获阶段接住，平移时不会落到画面自己的绘制或拖动上；元素要带 nopan（不让画布跟着平移）与 nowheel。
@@ -20,10 +27,19 @@ export interface ZoomPanViewport {
  */
 export function useZoomPanViewport(
   surfaceRef: RefObject<HTMLElement>,
-  options: { limits: ViewportZoomLimits; clampPan?: (pan: ViewportPan, zoom: number) => ViewportPan; resetKey?: unknown },
+  options: {
+    limits: ViewportZoomLimits
+    clampPan?: (pan: ViewportPan, zoom: number) => ViewportPan
+    resetKey?: unknown
+    /** 所在界面会被卸载再挂上（画布节点正文）时传入，缩放平移跨卸载保留。 */
+    retained?: MutableRefObject<RetainedZoomPan | null>
+  },
 ): ZoomPanViewport {
-  const { limits, clampPan, resetKey } = options
-  const [view, setView] = useState({ zoom: 1, pan: ZERO })
+  const { limits, clampPan, resetKey, retained } = options
+  const [view, setView] = useState(() => {
+    const kept = retained?.current
+    return kept && Object.is(kept.key, resetKey) ? { zoom: kept.zoom, pan: kept.pan } : { zoom: 1, pan: ZERO }
+  })
   const [spaceHeld, setSpaceHeld] = useState(false)
   const [panning, setPanning] = useState(false)
   const viewRef = useRef(view)
@@ -38,7 +54,16 @@ export function useZoomPanViewport(
   }, [])
   const reset = useCallback(() => setView({ zoom: 1, pan: ZERO }), [])
 
-  useEffect(() => { reset() }, [reset, resetKey])
+  // 画面换了才回到适合；挂载时保留初始值（可能是接回的视口）
+  const viewKeyRef = useRef(resetKey)
+  useEffect(() => {
+    if (Object.is(viewKeyRef.current, resetKey)) return
+    viewKeyRef.current = resetKey
+    reset()
+  }, [reset, resetKey])
+  useEffect(() => {
+    if (retained) retained.current = { key: viewKeyRef.current, zoom: view.zoom, pan: view.pan }
+  }, [retained, view])
 
   useEffect(() => {
     const surface = surfaceRef.current

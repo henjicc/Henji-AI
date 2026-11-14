@@ -1,7 +1,7 @@
 import { createLogger } from '@/core/logging';
 import { UI_DURATION } from '@/components/ui/motion';
 import { CANVAS_NODE_BUSY_SELECTOR, type CanvasNodePresence } from '@/features/canvas/presence/canvasNodePresence';
-import type { SceneNode } from '@/features/canvas/scene/canvasScene';
+import type { SceneNode, SceneRect, SceneSnapshot } from '@/features/canvas/scene/canvasScene';
 import type { CanvasSceneView } from '@/features/canvas/scene/useCanvasScene';
 import type { FarLayerSnapshots, UnitRect } from './farLayerSnapshots';
 
@@ -18,12 +18,13 @@ const logger = createLogger('features.canvas.farLayer.bodyProxy');
  * 远景层整个铺在真 DOM 之下，所以一个正文只有在它压着的正文也都藏起来时才能藏，否则会被下面那个盖住；
  * 分组底板不代画，压在分组上的节点因此都留着真正文。
  * 藏起来的正文只是里面的内容不画，外框照旧接收指针：点选、拖动、右键与平时一样。
+ * 指针下的正文始终是真 DOM（视口在指针下移过节点时随即换回），停稳前按下去也按得到里面的控件。
  */
 
 interface ScreenRect { x: number; y: number; width: number; height: number }
 
 export interface BodyProxyHost {
-  getState(): { transform: [number, number, number]; paneDragging: boolean; connection: { inProgress: boolean }; userSelectionActive: boolean; edges: unknown };
+  getState(): { transform: [number, number, number]; paneDragging: boolean; connection: { inProgress: boolean }; userSelectionActive: boolean };
   presence: CanvasNodePresence;
   sceneView: CanvasSceneView;
   flowElement: HTMLElement;
@@ -43,6 +44,8 @@ const CAPTURE_IDLE_MS = 320;
 const SNAPSHOT_ZOOM_RANGE = [0.8, 1.3] as const;
 /** 两次截图至少隔这么久：节点数据持续在变（生成进度）时不跟着每次变化都截 */
 const CAPTURE_MIN_INTERVAL_MS = 600;
+/** 连线在贝塞尔控制点外框之外最多伸出这么多（画布单位）：选中时加粗、发光，以及中点的断开按钮 */
+const EDGE_PAD = 24;
 /** 藏起来的正文与连线层的样式类（storyboard.css） */
 const PROXIED_CLASS = 'canvas-node-proxied';
 const PROXY_VIEW_CLASS = 'canvas-proxy-view';
@@ -75,7 +78,12 @@ export function createFarLayerBodyProxy(host: BodyProxyHost) {
   /** 指针所在的节点，以及存档里带着悬停样式的那个节点 */
   let hoveredId: string | null = null;
   let hoverBaked: string | null = null;
-  let knownEdges = host.getState().edges;
+  /** 指针在屏幕上的位置（没按着键移动时记下；离开画布为 null） */
+  let pointerPoint: { x: number; y: number } | null = null;
+  /** 代画途中因为来到指针下而换回真正文的节点 */
+  const revealed = new Set<string>();
+  /** 上次比对过的场景：场景变了就比出变了的区域，作废落在那里的存档 */
+  let knownScene: SceneSnapshot | null = null;
 
   function canvasRect(): ScreenRect | null {
     return sceneView.canvasClientRect();
@@ -133,6 +141,105 @@ export function createFarLayerBodyProxy(host: BodyProxyHost) {
     return snapshots.covers(node, unitRect(node, visible, canvas, transform));
   }
 
+  function paintReach(node: SceneNode): SceneRect {
+    return { x: node.x - BODY_PAINT_MARGIN.left, y: node.y - BODY_PAINT_MARGIN.top, width: node.width + BODY_PAINT_MARGIN.left + BODY_PAINT_MARGIN.right, height: node.height + BODY_PAINT_MARGIN.top + BODY_PAINT_MARGIN.bottom };
+  }
+
+  function setProxiedClass(ids: ReadonlySet<string>, on: boolean): void {
+    for (const { id, element } of bodyElements()) if (ids.has(id)) element.classList.toggle(PROXIED_CLASS, on);
+  }
+
+  /**
+   * 代画途中让指针下的正文换回真 DOM：视口在静止的指针下移过节点时，用户随时可能按下去。
+   * 远景层铺在 DOM 之下，所以压在它上面的正文也一并换回；指针离开后、存档仍合用时再藏回去。
+   */
+  function syncPointerReveal(): void {
+    if (!proxying) return;
+    const scene = sceneView.scene.read();
+    const point = pointerPoint ? sceneView.toScenePoint(pointerPoint) : null;
+    const hit = point ? scene.hitNode(point) : null;
+    const order = new Map<SceneNode, number>();
+    const rankOf = (node: SceneNode): number => {
+      if (!order.size) scene.nodes.forEach((entry, index) => order.set(entry, index));
+      return order.get(node) ?? -1;
+    };
+    const show = new Set<string>();
+    if (hit && (proxied.has(hit.id) || revealed.has(hit.id))) {
+      const queue = [hit];
+      show.add(hit.id);
+      for (let index = 0; index < queue.length; index += 1) {
+        const below = queue[index];
+        const rank = rankOf(below);
+        for (const above of scene.nodesInRect(paintReach(below))) {
+          if (show.has(above.id) || !(proxied.has(above.id) || revealed.has(above.id)) || rankOf(above) < rank) continue;
+          show.add(above.id);
+          queue.push(above);
+        }
+      }
+    }
+    const unhide = new Set<string>();
+    for (const id of show) if (proxied.delete(id)) { revealed.add(id); unhide.add(id); }
+    // 离开指针的换回去：自下而上，只有存档仍合用、压着的正文也都藏着时才藏
+    const rehide = new Set<string>();
+    const snapshots = host.snapshots();
+    const canvas = canvasRect();
+    if (snapshots && canvas) {
+      const candidates = [...revealed].filter(id => !show.has(id)).map(id => scene.node(id)).filter((node): node is SceneNode => Boolean(node));
+      candidates.sort((a, b) => rankOf(a) - rankOf(b));
+      const transform = host.getState().transform;
+      for (const node of candidates) {
+        if (!usableSnapshot(node, snapshots, canvas, transform)) continue;
+        const rank = rankOf(node);
+        const coveredBelow = scene.nodesInRect(paintReach(node)).every(other => other === node || rankOf(other) > rank || proxied.has(other.id));
+        if (!coveredBelow) continue;
+        revealed.delete(node.id);
+        proxied.add(node.id);
+        rehide.add(node.id);
+      }
+    }
+    if (!unhide.size && !rehide.size) return;
+    if (unhide.size) setProxiedClass(unhide, false);
+    if (rehide.size) setProxiedClass(rehide, true);
+    // 全部换回了也不退出代画：视口还在动，下一帧再进出一次代价更大；停稳时照常收尾
+    host.invalidate();
+  }
+
+  /**
+   * 场景变了：比出变了的节点与连线所在的画布区域（变化前后都算），落在那里的存档都作废。
+   * 返回有没有变化区域（截图进行中时，有变化就整张不存）。
+   */
+  function expireChangedRegions(scene: SceneSnapshot, snapshots: FarLayerSnapshots | null): boolean {
+    const previous = knownScene;
+    knownScene = scene;
+    if (!previous || previous === scene || !snapshots || (!snapshots.size && !capturing)) return false;
+    const regions: SceneRect[] = [];
+    for (const node of scene.nodes) {
+      const before = previous.node(node.id);
+      if (before === node) continue;
+      regions.push(paintReach(node));
+      if (before) regions.push(paintReach(before));
+    }
+    for (const node of previous.nodes) if (!scene.node(node.id)) regions.push(paintReach(node));
+    const edgeBounds = (points: readonly number[]): SceneRect => {
+      const xs = [points[0], points[2], points[4], points[6]], ys = [points[1], points[3], points[5], points[7]];
+      const x = Math.min(...xs) - EDGE_PAD, y = Math.min(...ys) - EDGE_PAD;
+      return { x, y, width: Math.max(...xs) + EDGE_PAD - x, height: Math.max(...ys) + EDGE_PAD - y };
+    };
+    if (previous.edges !== scene.edges) {
+      const beforeEdges = new Map(previous.edges.map(edge => [edge.id, edge]));
+      for (const edge of scene.edges) {
+        const before = beforeEdges.get(edge.id);
+        beforeEdges.delete(edge.id);
+        if (before && before.selected === edge.selected && before.points.every((value, index) => value === edge.points[index])) continue;
+        regions.push(edgeBounds(edge.points));
+        if (before) regions.push(edgeBounds(before.points));
+      }
+      for (const removed of beforeEdges.values()) regions.push(edgeBounds(removed.points));
+    }
+    snapshots.dropIntersecting(regions);
+    return regions.length > 0;
+  }
+
   function enter(): void {
     const snapshots = host.snapshots();
     const state = host.getState();
@@ -174,7 +281,7 @@ export function createFarLayerBodyProxy(host: BodyProxyHost) {
     }
     if (!proxied.size) return;
     proxying = true;
-    for (const { id, element } of bodyElements()) if (proxied.has(id)) element.classList.add(PROXIED_CLASS);
+    setProxiedClass(proxied, true);
     flowElement.classList.add(PROXY_VIEW_CLASS);
     host.invalidate();
   }
@@ -187,6 +294,7 @@ export function createFarLayerBodyProxy(host: BodyProxyHost) {
       if (reveal && typeof element.animate === 'function') element.animate([{ opacity: 0 }, { opacity: 1 }], { duration: UI_DURATION.fast, easing: 'ease-out' });
     }
     proxied.clear();
+    revealed.clear();
     if (!proxying) return;
     proxying = false;
     if (settleTimer !== null) { clearTimeout(settleTimer); settleTimer = null; }
@@ -338,9 +446,16 @@ export function createFarLayerBodyProxy(host: BodyProxyHost) {
     expire(stale);
   }
   const onPointerMove = (event: PointerEvent) => {
-    if (event.buttons === 0) setHovered(nodeIdOf(event.target));
+    if (event.buttons !== 0) return;
+    pointerPoint = { x: event.clientX, y: event.clientY };
+    setHovered(nodeIdOf(event.target));
+    syncPointerReveal();
   };
-  const onPointerLeave = () => { setHovered(null); };
+  const onPointerLeave = () => {
+    pointerPoint = null;
+    setHovered(null);
+    syncPointerReveal();
+  };
   /** 焦点离开正文：焦点环、光标没了。 */
   const onFocusOut = (event: FocusEvent) => {
     const id = nodeIdOf(event.target);
@@ -366,6 +481,8 @@ export function createFarLayerBodyProxy(host: BodyProxyHost) {
       if (captureTimer !== null) { clearTimeout(captureTimer); captureTimer = null; }
       if (!presence.isEnabled() || !presence.isNear()) { if (proxying) leave(false); return; }
       if (!proxying) enter();
+      // 按着画面拖动时指针下一直是被拖着走的画面，不必换回；松手后由停稳把正文盖回
+      if (!host.getState().paneDragging) syncPointerReveal();
       // 没能代画（还没有存档、正在操作）：停下来之后要补上存档
       if (proxying) armSettle(); else scheduleCapture(CAPTURE_IDLE_MS);
     },
@@ -374,16 +491,13 @@ export function createFarLayerBodyProxy(host: BodyProxyHost) {
     onSceneChanged(): void {
       const snapshots = host.snapshots();
       const state = host.getState();
-      if (state.edges !== knownEdges) {
-        // 连线影响两端正文的画面（端口常显、上游缩略图）：全部重截
-        knownEdges = state.edges;
-        snapshots?.clear();
-        invalidations += 1;
-      }
+      const scene = sceneView.scene.read();
+      // 截图里烘进了经过的连线与相邻节点：连线增删改道、相邻节点变了，落在那里的存档作废
+      // （连线也改变两端正文的画面：端口常显、上游缩略图，两端都在连线的外框里）
+      if (expireChangedRegions(scene, snapshots)) invalidations += 1;
       if (!proxying) { scheduleCapture(CAPTURE_IDLE_MS); return; }
       // 代画途中有正文的存档作废了（生成完成、被选中）：整体换回真正文
       const canvas = canvasRect();
-      const scene = sceneView.scene.read();
       if (!snapshots || !canvas) { leave(false); return; }
       for (const id of proxied) {
         const node = scene.node(id);

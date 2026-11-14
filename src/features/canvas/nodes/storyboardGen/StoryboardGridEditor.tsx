@@ -52,6 +52,7 @@ function FrameDescriptionEditor({
       <CanvasPromptEditor
         selected={selected}
         onSelectNode={onSelectNode}
+        retainKey={{ nodeId, slot: `frame:${frameId}` }}
         value={value}
         onChange={(document) => onChange(index, document, historyGroup)}
         onEditEnd={editHistory.onEditEnd}

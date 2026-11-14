@@ -207,6 +207,7 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
       <NodeMediaFrame>
         {generationError ? null : videoSource && shouldMountPlayer ? (
           <CanvasVideoPlayer
+            nodeId={id}
             src={videoSource}
             knownDuration={data.durationSec}
             knownHasAudio={data.hasAudio}

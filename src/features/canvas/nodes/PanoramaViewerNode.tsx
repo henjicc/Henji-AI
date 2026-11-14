@@ -1,4 +1,5 @@
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
+import { useCanvasNodeUiRef, useCanvasNodeUiState } from '@/features/canvas/presence/canvasNodeUiState';
 import { useNodeHandlesSync } from '../hooks/useNodeHandlesSync';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
@@ -43,7 +44,7 @@ import {
 import { type PanoramaCaptureCurrentView } from '@/features/canvas/ui/specialInterfaces/panorama/PanoramaSphereCanvas';
 import { usePanoramaImageResource } from '@/features/canvas/ui/specialInterfaces/panorama/usePanoramaImageResource';
 import { canvasEventBus } from '@/features/canvas/application/canvasServices';
-import { canvasViewStore, useCanvasStore } from '@/stores/canvasStore';
+import { canvasStoreAttachment, canvasViewStore, useCanvasStore } from '@/stores/canvasStore';
 import { usePanoramaInlineViewerStore } from '@/stores/panoramaInlineViewerStore';
 
 const logger = createLogger('features.canvas.panoramaViewerNode');
@@ -84,15 +85,26 @@ export const PanoramaViewerNode = memo(({
   const releaseInlineLease = usePanoramaInlineViewerStore((state) => state.release);
   const captureRef = useRef<PanoramaCaptureCurrentView | null>(null);
   const currentViewRef = useRef<PanoramaCameraView | null>(null);
-  const lastSourceRef = useRef<string | null>(null);
-  const previewPersistRevisionRef = useRef(0);
+  // 以下几项跨正文卸载保留：冻结预览可能还没落盘，换源判断与预览序号要接着上次的算
+  const lastSourceRef = useCanvasNodeUiRef<string | null>(id, 'panoramaLastSource', null);
+  const previewPersistRevisionRef = useCanvasNodeUiRef(id, 'panoramaPreviewRevision', 0);
   const [retryRevision, setRetryRevision] = useState(0);
   const [isCapturing, setIsCapturing] = useState(false);
   const [hasWebglFailure, setHasWebglFailure] = useState(false);
   const persistedPanoramaPreview = resolvePersistedPanoramaPreview(data.panoramaPreviewImageUrl);
-  const [frozenPreviewUrl, setFrozenPreviewUrl] = useState<string | null>(
+  const [frozenPreviewUrl, setFrozenPreviewUrl] = useCanvasNodeUiState<string | null>(
+    id,
+    'panoramaFrozenPreview',
     () => persistedPanoramaPreview,
   );
+  // 卸载期间节点里存的预览换过（落盘完成、被别处改写）：重挂时以节点数据为准
+  const frozenBasisRef = useCanvasNodeUiRef<string | null>(id, 'panoramaFrozenBasis', persistedPanoramaPreview);
+  useEffect(() => {
+    if (frozenBasisRef.current !== persistedPanoramaPreview) setFrozenPreviewUrl(persistedPanoramaPreview);
+    // 只在挂载时核对一次；挂着时冻结图由截图直接更新，不跟着落盘结果换成文件地址
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => { frozenBasisRef.current = persistedPanoramaPreview; }, [frozenBasisRef, persistedPanoramaPreview]);
   const upstreamImages = useStoreWithEqualityFn(
     canvasViewStore,
     (state) => collectInputMediaByKind(id, state.nodes, state.edges, 'image'),
@@ -149,9 +161,11 @@ export const PanoramaViewerNode = memo(({
       event: 'panorama.viewer_preview.persist.start',
       nodeId: id,
     });
+    // 写回发起时所在的画布：落盘期间正文可能已卸载、界面可能已切到别的画布
+    const owner = canvasStoreAttachment.getStore();
     void persistImageLocally(previewDataUrl).then((persistedUrl) => {
       if (previewPersistRevisionRef.current !== revision) return;
-      const canvas = useCanvasStore.getState();
+      const canvas = owner.getState();
       const currentNode = canvas.nodes.find((node) => node.id === id);
       if (!currentNode || currentNode.type !== CANVAS_NODE_TYPES.panoramaViewer) return;
       canvas.updateNodeData(id, { panoramaPreviewImageUrl: persistedUrl }, { skipHistory: true });
@@ -167,7 +181,7 @@ export const PanoramaViewerNode = memo(({
         error: error instanceof Error ? error.message : String(error),
       });
     });
-  }, [id]);
+  }, [id, previewPersistRevisionRef]);
 
 
   const commitCameraView = useCallback((view: PanoramaCameraView): void => {
@@ -195,7 +209,7 @@ export const PanoramaViewerNode = memo(({
       setFrozenPreviewUrl(previewUrl);
       persistPanoramaPreview(previewUrl, revision);
     });
-  }, [persistPanoramaPreview]);
+  }, [persistPanoramaPreview, previewPersistRevisionRef, setFrozenPreviewUrl]);
 
   // 实时球面一旦建立就一直保留，直到别的全景节点接走、切到平面、节点缩到看不清或卸载：
   // 每次重建都要新开 WebGL 上下文并把整张全景图重新传给显卡，跟着鼠标进出反复重建会让整个画布一顿一顿
@@ -222,7 +236,7 @@ export const PanoramaViewerNode = memo(({
     previewPersistRevisionRef.current += 1;
     setHasWebglFailure(false);
     setFrozenPreviewUrl(isFirstSource ? persistedPanoramaPreview : null);
-  }, [persistedPanoramaPreview, source]);
+  }, [lastSourceRef, persistedPanoramaPreview, previewPersistRevisionRef, setFrozenPreviewUrl, source]);
 
   // 旧版本把预览以图片数据串存在节点里：打开时补落盘，换成文件地址
   useEffect(() => {
@@ -230,7 +244,7 @@ export const PanoramaViewerNode = memo(({
     const revision = previewPersistRevisionRef.current + 1;
     previewPersistRevisionRef.current = revision;
     persistPanoramaPreview(persistedPanoramaPreview, revision);
-  }, [persistPanoramaPreview, persistedPanoramaPreview]);
+  }, [persistPanoramaPreview, persistedPanoramaPreview, previewPersistRevisionRef]);
 
   // 选中一个还没有冻结预览的节点时建立实时球面，首帧出来后截一帧作预览
   useEffect(() => {
@@ -255,8 +269,8 @@ export const PanoramaViewerNode = memo(({
     resource,
   ]);
 
+  // 卸载时不作废还在落盘的预览：落盘只写节点数据（节点还在才写），正文卸掉不影响它
   useEffect(() => () => {
-    previewPersistRevisionRef.current += 1;
     releaseInlineLease(id);
   }, [id, releaseInlineLease]);
 
@@ -273,7 +287,7 @@ export const PanoramaViewerNode = memo(({
     setHasWebglFailure(true);
     setFrozenPreviewUrl(persistedPanoramaPreview);
     releaseInlineLease(id);
-  }, [id, persistedPanoramaPreview, releaseInlineLease]);
+  }, [id, persistedPanoramaPreview, releaseInlineLease, setFrozenPreviewUrl]);
 
   const handleViewportAspectRatioChange = useCallback((
     viewportAspectRatio: PanoramaViewportAspectRatio,
@@ -393,6 +407,7 @@ export const PanoramaViewerNode = memo(({
           viewportAspectRatio={data.viewportAspectRatio}
           cameraView={normalizePanoramaCameraView(data.cameraView ?? PANORAMA_DEFAULT_CAMERA_VIEW)}
           currentViewRef={currentViewRef}
+          nodeId={id}
           frozenPreviewUrl={frozenPreviewUrl}
           renderSphere={renderSphere}
           isGenerating={data.isGenerating === true}

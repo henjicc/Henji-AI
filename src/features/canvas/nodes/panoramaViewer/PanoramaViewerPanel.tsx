@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next';
 
 import { UiButton, UiEmpty, UiError, UiErrorBoundary, UiLoading } from '@/components/ui';
 import { viewportTransform, type ViewportPan } from '@/core/viewport/zoomPan';
-import { useZoomPanViewport } from '@/hooks/useZoomPanViewport';
+import { useZoomPanViewport, type RetainedZoomPan } from '@/hooks/useZoomPanViewport';
+import { useCanvasNodeUiRef } from '@/features/canvas/presence/canvasNodeUiState';
 import type {
   PanoramaCameraView,
   PanoramaViewMode,
@@ -22,6 +23,8 @@ interface PanoramaViewerPanelProps {
   viewportAspectRatio: PanoramaViewportAspectRatio;
   cameraView: PanoramaCameraView;
   currentViewRef: MutableRefObject<PanoramaCameraView | null>;
+  /** 平面查看的缩放平移跨正文卸载保留。 */
+  nodeId?: string;
   frozenPreviewUrl: string | null;
   renderSphere: boolean;
   isGenerating: boolean;
@@ -49,6 +52,7 @@ export function PanoramaViewerPanel({
   viewportAspectRatio,
   cameraView,
   currentViewRef,
+  nodeId,
   frozenPreviewUrl,
   renderSphere,
   isGenerating,
@@ -167,7 +171,7 @@ export function PanoramaViewerPanel({
         ) : null}
 
         {showStaticResource && resource.displayUrl ? (
-          <PanoramaFlatImage src={resource.displayUrl} alt={t('viewer.panorama.flatAlt')} hint={t('ui:viewportZoom.hint')} />
+          <PanoramaFlatImage nodeId={nodeId} src={resource.displayUrl} alt={t('viewer.panorama.flatAlt')} hint={t('ui:viewportZoom.hint')} />
         ) : null}
 
         {showFrozenPreview && frozenPreviewUrl ? (
@@ -260,8 +264,9 @@ export function PanoramaViewerPanel({
 const FLAT_ZOOM_LIMITS = { min: 1, max: 8 };
 
 /** 平面查看全景原图：滚轮缩放、空格或中键拖动平移；放大后左上角出现读数，点它回到适合（球面模式的缩放是改视野，在三维画布里）。 */
-function PanoramaFlatImage({ src, alt, hint }: { src: string; alt: string; hint: string }): JSX.Element {
+function PanoramaFlatImage({ nodeId, src, alt, hint }: { nodeId?: string; src: string; alt: string; hint: string }): JSX.Element {
   const frameRef = useRef<HTMLDivElement>(null);
+  const retained = useCanvasNodeUiRef<RetainedZoomPan | null>(nodeId, 'panoramaFlatView', null);
   // 平面图是整张放进框里（object-contain），放大后边缘不拖进框里
   const clampPan = (pan: ViewportPan, zoom: number): ViewportPan => {
     const frame = frameRef.current;
@@ -269,7 +274,7 @@ function PanoramaFlatImage({ src, alt, hint }: { src: string; alt: string; hint:
     const maxY = frame ? (frame.offsetHeight * (zoom - 1)) / 2 : 0;
     return { x: Math.min(maxX, Math.max(-maxX, pan.x)), y: Math.min(maxY, Math.max(-maxY, pan.y)) };
   };
-  const view = useZoomPanViewport(frameRef, { limits: FLAT_ZOOM_LIMITS, clampPan, resetKey: src });
+  const view = useZoomPanViewport(frameRef, { limits: FLAT_ZOOM_LIMITS, clampPan, resetKey: src, retained });
   return (
     <div ref={frameRef} className={`absolute inset-0 overflow-hidden ${view.panning ? 'cursor-grabbing' : view.panReady ? 'cursor-grab' : ''}`}>
       <img

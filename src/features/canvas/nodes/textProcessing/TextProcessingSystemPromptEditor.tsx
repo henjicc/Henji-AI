@@ -6,6 +6,7 @@ import {
 import { UI_TEXT_META_CLASS } from '@/components/ui'
 
 interface TextProcessingSystemPromptEditorProps {
+  nodeId: string
   selected: boolean
   value: PromptDocumentV1
   label: string
@@ -25,12 +26,14 @@ export function TextProcessingSystemPromptEditor({
   onSubmit,
   onEditEnd,
   onSelectNode,
+  nodeId,
 }: TextProcessingSystemPromptEditorProps): JSX.Element {
   return (
     <div className="flex h-24 shrink-0 flex-col gap-1">
       <div className={`px-1 ${UI_TEXT_META_CLASS}`}>{label}</div>
       <div className={`flex min-h-0 flex-1 flex-col p-1.5 focus-within:border-accent/70 ${NODE_ROW_CARD_CLASS}`}>
         <CanvasPromptEditor
+          retainKey={{ nodeId, slot: 'systemPrompt' }}
           selected={selected}
           onSelectNode={onSelectNode}
           value={value}

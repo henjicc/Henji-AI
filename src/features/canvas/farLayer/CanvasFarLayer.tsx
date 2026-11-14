@@ -85,6 +85,8 @@ export function CanvasFarLayer(): JSX.Element {
     let pointerPressed = false;
     /** 这次按下刚现场补出空外框的节点：紧随其后的鼠标按下事件要转交给它 */
     let redirectedTo: string | null = null;
+    /** 按着框选键按在没挂正文的节点上：原地松开（没拉开框）时切换它的选中 */
+    let multiSelectPress: string | null = null;
     const seconds = () => performance.now() / 1000;
 
     function view() {
@@ -285,6 +287,19 @@ export function CanvasFarLayer(): JSX.Element {
     // 松开之后画面已经停在新位置（平移、拖动节点刚结束），指针下可能换了节点
     const onPointerUp = (event: PointerEvent) => {
       pointerPressed = false;
+      const press = multiSelectPress;
+      multiSelectPress = null;
+      const state = store.getState();
+      // 按着框选键时一动就开始拉框（userSelectionActive），没动才是点了一下
+      if (event.type === 'pointerup' && press !== null && event.button === 0 && !state.userSelectionActive) {
+        const node = state.nodeLookup.get(press);
+        if (node) {
+          // 画布空白层松开时会把这次当作点在空白处、清空选中：先撤掉它为拉框记下的起点
+          store.setState({ userSelectionRect: null, nodesSelectionActive: false });
+          if (node.selected) state.unselectNodesAndEdges({ nodes: [node], edges: [] });
+          else state.addSelectedNodes([press]);
+        }
+      }
       if (pointer) pointer = { x: event.clientX, y: event.clientY };
       refreshShellSoon();
     };
@@ -296,11 +311,16 @@ export function CanvasFarLayer(): JSX.Element {
       pointerPressed = true;
       redirectedTo = null;
       if (!presence.isEnabled() || event.pointerType !== 'mouse' || (event.button !== 0 && event.button !== 2)) return;
-      // 按着框选键从这里按下是要拉框，交给画布空白层
-      if (event.ctrlKey || event.metaKey || store.getState().userSelectionActive) return;
+      if (store.getState().userSelectionActive) return;
       if (!(event.target instanceof Element) || event.target.closest('.react-flow__node')) return;
       const hit = sceneView.hitNodeAtClient({ x: event.clientX, y: event.clientY });
       if (!hit || presence.isActive(hit.id)) return;
+      // 按着框选键（Ctrl / Cmd）时与挂着正文的节点一样：拖开是拉框（画布空白层已经接住了这次按下），
+      // 原地松开是把这个节点加进或移出选中。不转交按下，松开时再判断
+      if (event.ctrlKey || event.metaKey) {
+        if (event.button === 0) multiSelectPress = hit.id;
+        return;
+      }
       presence.setShell(hit.id);
       // 右键菜单在松开时才按当时指针下的元素触发，空外框已经在了；左键的按下事件要转交
       if (event.button === 0) redirectedTo = hit.id;
@@ -326,6 +346,7 @@ export function CanvasFarLayer(): JSX.Element {
     flowElement?.addEventListener('mousedown', onMouseDown, { capture: true });
     flowElement?.addEventListener('pointerleave', onPointerLeave, { passive: true });
     window.addEventListener('pointerup', onPointerUp, { passive: true, capture: true });
+    window.addEventListener('pointercancel', onPointerUp, { passive: true, capture: true });
 
     return () => {
       disposed = true;
@@ -339,6 +360,7 @@ export function CanvasFarLayer(): JSX.Element {
       flowElement?.removeEventListener('mousedown', onMouseDown, { capture: true });
       flowElement?.removeEventListener('pointerleave', onPointerLeave);
       window.removeEventListener('pointerup', onPointerUp, { capture: true });
+      window.removeEventListener('pointercancel', onPointerUp, { capture: true });
       canvas.removeEventListener('webglcontextlost', onContextLost);
       canvas.removeEventListener('webglcontextrestored', onContextRestored);
       stop();

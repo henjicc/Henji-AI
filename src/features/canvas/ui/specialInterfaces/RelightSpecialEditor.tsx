@@ -1,5 +1,6 @@
 import { UiSegmented } from '@/components/ui'
-import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCanvasNodeUiRef } from '@/features/canvas/presence/canvasNodeUiState'
+import { useMemo, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import Dropdown from '@/components/ui/Dropdown'
@@ -56,6 +57,8 @@ function FieldTitle({ children, tooltip }: { children: string; tooltip: string }
 }
 
 interface RelightWorkbenchProps {
+  /** 嵌在画布节点里时传节点 id：灯位、视图与上次的轮廓光方向跨正文卸载保留。 */
+  nodeId?: string
   settings: RelightSettingsV1
   sourceImage: string | null
   onSettingsChange: (settings: RelightSettingsV1) => void
@@ -64,6 +67,7 @@ interface RelightWorkbenchProps {
 }
 
 export function RelightWorkbench({
+  nodeId,
   settings,
   sourceImage,
   onSettingsChange,
@@ -73,7 +77,7 @@ export function RelightWorkbench({
   const { t } = useTranslation()
   const [lightingDraft, setLightingDraft] = useState<RelightLightingDraft | null>(null)
   const lighting = lightingDraft ?? settings.manual
-  const lastRimDirection = useRef<RelightRimDirection>(settings.manual.rimDirection)
+  const lastRimDirection = useCanvasNodeUiRef<RelightRimDirection>(nodeId, 'relightLastRimDirection', settings.manual.rimDirection)
   const updateSettings = (next: RelightSettingsV1): void => {
     onSettingsChange(normalizeRelightSettings(next))
   }
@@ -107,6 +111,7 @@ export function RelightWorkbench({
         {settings.lightingMode === 'manual' && (
           <div className={`flex min-h-0 ${embedded ? `${NODE_STAGE_SURFACE_CLASS} px-3 pb-3 pt-1.5` : 'p-4'}`}>
             <RelightDirectionVisualizer
+              nodeId={nodeId}
               direction={settings.manual.keyDirection}
               brightness={lighting.brightness}
               colorPreset={lighting.colorPreset}

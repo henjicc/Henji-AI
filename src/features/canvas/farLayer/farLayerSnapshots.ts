@@ -1,4 +1,4 @@
-import type { SceneNode } from '@/features/canvas/scene/canvasScene';
+import type { SceneNode, SceneRect } from '@/features/canvas/scene/canvasScene';
 
 /**
  * 节点正文的画面存档：正文（真 DOM）挂着并停稳时，把画布区域整块截下来存成纹理，记下每个节点在其中的位置。
@@ -7,7 +7,8 @@ import type { SceneNode } from '@/features/canvas/scene/canvasScene';
  * 存档按整张截图保存（最近几张轮换），不逐节点裁切：一次上传，节点只记采样范围。
  * 节点画在外框之外的部分（浮动标题、端口）也在存档里，所以存档范围比外框大一圈。
  * 节点在截图时只露出一部分的，只有露出的那部分有存档，其余部分仍由缩略图画。
- * 节点的数据、尺寸或选中状态变了，它的存档就作废。
+ * 节点的数据、尺寸或选中状态变了，它的存档就作废。截图里还烘进了经过的连线与相邻节点，
+ * 它们在存档范围里变了（dropIntersecting）也要作废。
  */
 
 /** 保留最近几张截图：平移过的地方回头再经过时，存档还在 */
@@ -29,6 +30,8 @@ interface Entry extends NodeSnapshot {
   height: number;
   selected: boolean;
   full: boolean;
+  /** 存档覆盖的画布范围（外框加绘制余量） */
+  rect: SceneRect;
 }
 
 export interface SnapshotCapture {
@@ -154,6 +157,7 @@ export function createFarLayerSnapshots(gl: WebGL2RenderingContext) {
           u0: x / imageWidth, v0: y / imageHeight, u1: (x + width) / imageWidth, v1: (y + height) / imageHeight,
           left, top, right, bottom, full,
           data: dataOf(node), width: node.width, height: node.height, selected: node.selected,
+          rect: { x: node.x - margin.left, y: node.y - margin.top, width: node.width + margin.left + margin.right, height: node.height + margin.top + margin.bottom },
         });
       }
       return placed.length;
@@ -164,7 +168,22 @@ export function createFarLayerSnapshots(gl: WebGL2RenderingContext) {
       entries.delete(id);
     },
 
-    /** 丢掉全部存档（主题、连线这类影响所有正文的东西变了）。 */
+    /** 丢掉存档范围与这些画布区域相交的存档（那里的连线、节点变了）；返回丢掉的节点。 */
+    dropIntersecting(regions: readonly SceneRect[]): string[] {
+      if (!regions.length || !entries.size) return [];
+      const dropped: string[] = [];
+      for (const [id, { rect }] of entries) {
+        const hit = regions.some(region => region.x < rect.x + rect.width && rect.x < region.x + region.width
+          && region.y < rect.y + rect.height && rect.y < region.y + region.height);
+        if (hit) { entries.delete(id); dropped.push(id); }
+      }
+      return dropped;
+    },
+
+    /** 存着画面的节点数。 */
+    get size() { return entries.size; },
+
+    /** 丢掉全部存档（主题这类影响所有正文的东西变了）。 */
     clear(): void {
       entries.clear();
     },

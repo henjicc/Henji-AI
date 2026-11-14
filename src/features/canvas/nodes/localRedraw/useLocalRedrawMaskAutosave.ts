@@ -22,6 +22,8 @@ interface AutosaveJob {
 interface UseLocalRedrawMaskAutosaveOptions {
   document: MaskEditorDocument;
   ready: boolean;
+  /** 挂载时的文档还没写进节点（接回了卸载前没来得及保存的会话）：第一次就保存，而不是当作已保存的起点。 */
+  unsavedOnStart?: boolean;
   onPersist: (result: { maskSource: string | null; document: MaskEditorDocument }) => void;
 }
 
@@ -48,6 +50,7 @@ async function releaseAutosavePaths(
 export function useLocalRedrawMaskAutosave({
   document,
   ready,
+  unsavedOnStart = false,
   onPersist,
 }: UseLocalRedrawMaskAutosaveOptions): LocalRedrawAutosaveState {
   const [state, setState] = useState<LocalRedrawAutosaveState>({ status: 'idle' });
@@ -163,7 +166,7 @@ export function useLocalRedrawMaskAutosave({
 
   useEffect(() => {
     if (!ready) return;
-    if (!observedDocumentRef.current) {
+    if (!observedDocumentRef.current && !unsavedOnStart) {
       observedDocumentRef.current = document;
       return;
     }
@@ -178,6 +181,8 @@ export function useLocalRedrawMaskAutosave({
     setState({ status: 'saving' });
     clearTimer();
     timerRef.current = setTimeout(() => void drainRef.current(), AUTOSAVE_DELAY_MS);
+    // unsavedOnStart 只决定第一次观察到的文档算不算已保存
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clearTimer, document, ready]);
 
   return state;

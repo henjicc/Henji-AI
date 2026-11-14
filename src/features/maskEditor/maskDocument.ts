@@ -201,6 +201,12 @@ export function appendMaskPoint(
   return [...points, point];
 }
 
+/** 两份遮罩文档是不是同一组笔画（没有文档算没有笔画）：笔画只会整条增删，按顺序比 id 即可。 */
+export function sameMaskMarks(left: MaskEditorDocument, right: MaskEditorDocument | null | undefined): boolean {
+  const strokes = right?.strokes ?? [];
+  return left.strokes.length === strokes.length && left.strokes.every((mark, index) => mark.id === strokes[index].id);
+}
+
 export function hasPaintedMask(document: MaskEditorDocument): boolean {
   return document.strokes.some((stroke) => stroke.mode === 'paint' && stroke.points.length > 0);
 }
@@ -218,6 +224,8 @@ export interface MaskHistoryState {
 
 export type MaskHistoryAction =
   | { type: 'reset'; document: MaskEditorDocument }
+  /** 接回卸载前的整段会话（撤销栈原样）。 */
+  | { type: 'restore'; state: MaskHistoryState }
   | { type: 'commit'; document: MaskEditorDocument }
   | { type: 'undo' }
   | { type: 'redo' };
@@ -245,6 +253,7 @@ function applyHistoryDelta(document: MaskEditorDocument, delta: MaskHistoryDelta
 /** Reversible mark deltas retain every operation without copying the complete document per history entry. */
 export function reduceMaskHistory(state: MaskHistoryState, action: MaskHistoryAction): MaskHistoryState {
   if (action.type === 'reset') return createMaskHistoryState(action.document);
+  if (action.type === 'restore') return action.state;
   if (action.type === 'commit') {
     const next = action.document, previous = state.document;
     if (next.sourceRef !== previous.sourceRef || next.width !== previous.width || next.height !== previous.height) {

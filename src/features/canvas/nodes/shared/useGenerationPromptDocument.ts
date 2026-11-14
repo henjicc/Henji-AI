@@ -133,6 +133,12 @@ export function useGenerationPromptDocument({
     updateNodeData,
   ])
 
+  // 缺提示词的标红只在确实没有提示词时成立：提示词从别处补上（助手写入、撤销、正文卸载期间）也要消掉
+  // （提示词由上游连线覆盖时以上游为准，这里不判断）
+  useEffect(() => {
+    if (invalid && !isPromptOverridden && toModelPromptText(resolvedCarrier.document, { references }).trim()) onValidContent()
+  }, [invalid, isPromptOverridden, onValidContent, references, resolvedCarrier.document])
+
   const handleChange = useCallback((nextDocument: PromptDocumentV1): void => {
     const legacyText = toLegacyPromptString(nextDocument, { references })
     updateNodeData(nodeId, {

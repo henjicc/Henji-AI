@@ -1,4 +1,5 @@
 import { UI_ICON_SIZE_CLASS } from '@/components/ui/styleTokens'
+import { useCanvasNodeUiState } from '@/features/canvas/presence/canvasNodeUiState'
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { useTranslation } from 'react-i18next'
@@ -90,7 +91,8 @@ export const TextProcessingNode = memo(({
 }: TextProcessingNodeProps) => {
   const { t } = useTranslation()
   const [config, setConfig] = useState<LlmConfigState | null>(null)
-  const [promptInvalid, setPromptInvalid] = useState(false)
+  // 缺提示词的标红跨正文卸载保留，直到用户补上提示词
+  const [promptInvalid, setPromptInvalid] = useCanvasNodeUiState(id, 'promptInvalid', false)
 
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode)
   const updateNodeData = useCanvasStore((state) => state.updateNodeData)
@@ -294,6 +296,7 @@ export const TextProcessingNode = memo(({
           />
           {isCustomPromptTemplate ? (
             <TextProcessingSystemPromptEditor
+              nodeId={id}
               selected={Boolean(selected)}
               value={effectiveSystemPromptDocument}
               label={t('node.textProcessing.systemPromptLabel')}

@@ -1,10 +1,10 @@
 import { MaskRegionRasterizer } from './regionWorkerClient';
 import { UiButton, UiError } from '@/components/ui';
 import { createLogger } from '@/core/logging';
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ViewportPan } from '@/core/viewport/zoomPan';
-import { useZoomPanViewport } from '@/hooks/useZoomPanViewport';
+import { useZoomPanViewport, type RetainedZoomPan } from '@/hooks/useZoomPanViewport';
 import {
   Circle,
   Group,
@@ -44,6 +44,8 @@ interface MaskEditorCanvasProps {
   brushSize: number;
   brushHardness: number;
   onMarkComplete: (mark: MaskMark) => void;
+  /** 所在界面会被卸载再挂上（画布节点正文）时传入，缩放平移跨卸载保留。 */
+  retainedView?: MutableRefObject<RetainedZoomPan | null>;
 }
 
 const logger = createLogger('features.maskEditor.preview');
@@ -112,6 +114,7 @@ export const MaskEditorCanvas = memo(function MaskEditorCanvas({
   brushSize,
   brushHardness,
   onMarkComplete,
+  retainedView,
 }: MaskEditorCanvasProps): JSX.Element {
   const viewportRef = useRef<HTMLDivElement>(null);
   const draftRef = useRef<MaskMark | null>(null);
@@ -164,7 +167,7 @@ export const MaskEditorCanvas = memo(function MaskEditorCanvas({
     const maxY = Math.max(0, (document.height * fit.scale * zoom - viewportSize.height) / 2);
     return { x: Math.min(maxX, Math.max(-maxX, pan.x)), y: Math.min(maxY, Math.max(-maxY, pan.y)) };
   }, [document.height, document.width, fit.scale, viewportSize.height, viewportSize.width]);
-  const view = useZoomPanViewport(viewportRef, { limits: ZOOM_LIMITS, clampPan, resetKey: document.sourceRef });
+  const view = useZoomPanViewport(viewportRef, { limits: ZOOM_LIMITS, clampPan, resetKey: document.sourceRef, retained: retainedView });
   const panReadyRef = useRef(view.panReady);
   panReadyRef.current = view.panReady;
   // 画面在舞台上的像素尺度与左上角位置：舞台铺满视口，画面按“适合 × 缩放”居中再加平移

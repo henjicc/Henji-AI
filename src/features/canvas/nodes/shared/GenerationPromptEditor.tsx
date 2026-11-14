@@ -9,6 +9,7 @@ import {
   type PromptReferenceItem,
 } from '@/components/ui'
 import type { PromptDocumentV1 } from '@/core/inputs/promptDocument'
+import { useCanvasNodeUiRef, useSaveOnUnmount } from '@/features/canvas/presence/canvasNodeUiState'
 import { getSocketColor, promptPortId } from '@/features/canvas/domain/socketTypes'
 import {
   NODE_PORT_ROW_CLASS,
@@ -61,7 +62,9 @@ export function GenerationPromptEditor({
   const [isEditing, setIsEditing] = useState(false)
   const pendingActivationRef = useRef<PendingPromptActivation | null>(null)
   const activeEditorRef = useRef<PromptEditorHandle | null>(null)
-  const savedScrollTopRef = useRef(0)
+  // 滚动位置跨正文卸载保留
+  const savedScrollTopRef = useCanvasNodeUiRef(nodeId, 'promptScrollTop', 0)
+  useSaveOnUnmount(savedScrollTopRef, () => activeEditorRef.current?.getScrollTop())
   const canActivate = !readOnly && !isContentLodLow
   const isEditorActive = isEditing && canActivate
 
@@ -80,7 +83,7 @@ export function GenerationPromptEditor({
       : { kind: 'keyboard' }
     onSelectNode(nodeId)
     setIsEditing(true)
-  }, [isContentLodLow, nodeId, onSelectNode, readOnly])
+  }, [isContentLodLow, nodeId, onSelectNode, readOnly, savedScrollTopRef])
 
   const handleEditorRef = useCallback((editor: PromptEditorHandle | null): void => {
     activeEditorRef.current = editor
@@ -107,18 +110,18 @@ export function GenerationPromptEditor({
       }
     }
     pendingActivationRef.current = null
-  }, [])
+  }, [savedScrollTopRef])
 
   const handleEditEnd = useCallback((): void => {
     savedScrollTopRef.current = activeEditorRef.current?.getScrollTop() ?? 0
     pendingActivationRef.current = null
     onEditEnd()
     setIsEditing(false)
-  }, [onEditEnd])
+  }, [onEditEnd, savedScrollTopRef])
 
   useLayoutEffect(() => {
     activeEditorRef.current?.setScrollTop(savedScrollTopRef.current)
-  }, [isEditorActive])
+  }, [isEditorActive, savedScrollTopRef])
 
   // 提示词正文不参与节点宽度测量：节点根是 width:max-content（宽度由模型行、
   // 媒体行等固定行决定），不隔离时一行长提示词的 max-content 宽会一路把节点

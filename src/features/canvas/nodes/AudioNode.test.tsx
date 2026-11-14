@@ -13,7 +13,13 @@ vi.mock('@/features/canvas/ui/NodeResizeHandle', () => ({ NodeResizeHandle: () =
 vi.mock('@/features/canvas/application/canvasServices', () => ({ canvasEventBus: { subscribe: () => () => undefined } }));
 vi.mock('@/features/canvas/application/mediaImport', () => ({ importCanvasMediaFile: vi.fn() }));
 vi.mock('@/features/canvas/application/imageData', async (original) => ({ ...await original<typeof import('../application/imageData')>(), resolveImageDisplayUrl: (url: string) => url }));
-vi.mock('@/stores/canvasStore', () => ({ useCanvasStore: (select: (state: object) => unknown) => select({ edges: [], setSelectedNode: vi.fn(), updateNodeData: vi.fn() }) }));
+vi.mock('@/stores/canvasStore', () => {
+  const store = {};
+  return {
+    useCanvasStore: (select: (state: object) => unknown) => select({ edges: [], setSelectedNode: vi.fn(), updateNodeData: vi.fn() }),
+    canvasStoreAttachment: { getStore: () => store },
+  };
+});
 vi.mock('@/stores/settingsStore', () => ({ useSettingsStore: (select: (state: object) => unknown) => select({ useUploadFilenameAsNodeTitle: false }) }));
 vi.mock('@/features/canvas/nodes/shared/useGenerationProgressDisplay', () => ({ useGenerationProgressDisplay: () => ({ isGenerating: false, progress: 0 }) }));
 vi.mock('@/hooks/useWaveformData', () => ({ useWaveformData: () => ({ status: 'idle' }) }));

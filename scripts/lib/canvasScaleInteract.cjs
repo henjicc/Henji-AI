@@ -219,6 +219,59 @@ async function runInteractionChecks(page, context) {
     await sleep(300)
   }
 
+  // 四之三之二、画面自己变了之后立刻按着 Ctrl 点没挂正文的节点：与挂着正文时一样加进选中，不落到空白层清空选中
+  {
+    const keep = await pointOf('scale-0')
+    await page.mouse.move(keep.x - 3, keep.y - 3)
+    await page.mouse.move(keep.x, keep.y)
+    await sleep(150)
+    await page.mouse.click(keep.x, keep.y)
+    await sleep(300)
+    const view = await readViewport(page)
+    const center = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+    const nextZoom = view.zoom / 1.2
+    const canvasCenter = { x: (box.width / 2 - view.x) / view.zoom, y: (box.height / 2 - view.y) / view.zoom }
+    const target = graph.nodes.find((node) => {
+      if (node.type !== 'uploadNode' || node.id === 'scale-0') return false
+      const size = sizeOf(node)
+      const before = { x: box.x + view.x + (node.position.x + size.width / 2) * view.zoom, y: box.y + view.y + (node.position.y + size.height / 2) * view.zoom }
+      const distance = Math.hypot(before.x - center.x, before.y - center.y)
+      return distance > 450 && distance < 650 && before.y > box.y + 200 && before.y < box.y + box.height - 200
+    })
+    const size = sizeOf(target)
+    const press = {
+      x: center.x + (target.position.x + size.width / 2 - canvasCenter.x) * nextZoom,
+      y: center.y + (target.position.y + size.height / 2 - canvasCenter.y) * nextZoom,
+    }
+    await page.mouse.move(press.x - 2, press.y - 2)
+    await page.mouse.move(press.x, press.y)
+    await sleep(400)
+    await page.evaluate(() => new Promise((resolve) => {
+      const read = () => getComputedStyle(document.querySelector('.react-flow__viewport')).transform
+      const before = read()
+      ;(document.querySelector('button[aria-label="缩小"]') ?? document.querySelector('button[aria-label="Zoom out"]')).click()
+      let previous = before, still = 0
+      const tick = () => {
+        const current = read()
+        still = current === previous && current !== before ? still + 1 : 0
+        previous = current
+        if (still >= 2) resolve(null); else requestAnimationFrame(tick)
+      }
+      requestAnimationFrame(tick)
+    }))
+    const shellBeforePress = (await domNodeIds()).includes(target.id)
+    await page.keyboard.down('Control')
+    await page.mouse.down()
+    await page.mouse.up()
+    await page.keyboard.up('Control')
+    await sleep(500)
+    const label = await page.evaluate(() => Array.from(document.querySelectorAll('.react-flow__node-toolbar button')).map(button => button.textContent).find(text => /下载\s*\d+|Download\s*\d+/.test(text ?? '')) ?? '')
+    const count = Number(/\d+/.exec(label)?.[0] ?? NaN)
+    record('画面自己变了之后立刻按着 Ctrl 点没挂正文的节点：加进选中', count === 2, { node: target.id, shellBeforePress, label })
+    await page.mouse.click(blank.x, blank.y)
+    await sleep(300)
+  }
+
   // 四之四、远景从工具栏运行一个没挂正文的节点：提示词为空，原因要用画布提示条说出来（正文里的标红此时看不见）
   if (context.emptyPromptId) {
     const point = await pointOf(context.emptyPromptId)
