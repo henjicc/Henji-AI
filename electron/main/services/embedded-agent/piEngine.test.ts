@@ -157,7 +157,7 @@ describe('Pi official SDK engine', () => {
     expect(f.requests.at(-1)?.reasoning_effort).toBe('low')
   })
 
-  it('剪辑创作首轮给出核心创作工具，名称都在正式目录，切回顺序不变', () => {
+  it('剪辑创作首轮给出核心创作工具，名称都在正式目录；对话中途换界面工具列表不变，引导点名不在列表里的工具', () => {
     {
       const catalog = applicationCatalog().tools
       let active: string[] = []
@@ -165,15 +165,18 @@ describe('Pi official SDK engine', () => {
       const tools: ToolDefinition[] = catalog.map(tool => ({ ...tool, label: tool.name, description: tool.description ?? tool.name,
         parameters: tool.inputSchema as ToolDefinition['parameters'], execute: async () => ({ content: [], details: undefined }) }))
       const disclosure = new PiToolDisclosure(tools, () => session)
-      disclosure.prepareContext('{"surface":{"id":"workspace.video_edit"}}')
+      disclosure.prepareContext('{"surface":{"id":"workspace.video_edit"}}', 'workspace.video_edit')
       const first = [...active]
       expect(first).toEqual([...first].sort())
       expect(first).toEqual(expect.arrayContaining(videoEditCreativeTools().filter(name => catalog.some(tool => tool.name === name))))
       expect(first).toEqual(expect.arrayContaining(['observe_video_edit_frame', 'read_application_media', 'analyze_video_edit_color']))
       expect(first).toEqual(expect.arrayContaining(['change_application_entities', ...videoEditCreativeTools()]))
       expect(first).not.toContain('apply_video_edit_template')
-      disclosure.prepareContext('{"surface":{"id":"workspace.canvas"}}')
-      disclosure.prepareContext('{"surface":{"id":"workspace.video_edit"}}')
+      const canvasGuidance = disclosure.prepareContext('{"surface":{"id":"workspace.canvas"}}', 'workspace.video_edit')
+      expect(active).toEqual(first)
+      expect(canvasGuidance).toContain('当前为画布')
+      expect(canvasGuidance).toMatch(/get_canvas_document 实际不在工具列表里.*call_application_tool/)
+      expect(disclosure.prepareContext('{"surface":{"id":"workspace.video_edit"}}', 'workspace.video_edit')).not.toContain('实际不在工具列表里')
       expect(active).toEqual(first)
     }
   })
@@ -353,30 +356,27 @@ describe('Pi official SDK engine', () => {
     expect(initialTools.map(tool => tool.name)).not.toContain('get_canvas_node_schema')
     await f.engine.command({ action: 'prompt', input: { text: '编辑图片', context: '{"surface":{"id":"tool.image_edit"}}' } })
     const editTools = f.requests.at(-1)!.tools as unknown as Array<{ name: string }>
-    expect(editTools.map(tool => tool.name)).not.toContain('get_canvas_document')
-    expect(editTools.map(tool => tool.name)).not.toContain('create_image_edit_preview')
+    // 对话中途换界面，工具列表逐字节不变
+    expect(JSON.stringify(editTools)).toBe(JSON.stringify(initialTools))
     const fullBytes = Buffer.byteLength(JSON.stringify(catalog.tools))
     expect(initialTools.length).toBeLessThan(catalog.tools.length / 2)
     expect(logs[0].requestMetrics!.toolBytes).toBeLessThan(fullBytes * 0.3)
     if (process.env.HENJI_PI_MEASURE === '1') process.stdout.write(`${JSON.stringify({ initialToolBytes: logs[0].requestMetrics!.toolBytes,
       fullToolBytes: fullBytes, initialToolCount: initialTools.length, contextCount: logs[1].requestMetrics!.contextCount })}\n`)
     await f.engine.command({ action: 'prompt', input: { text: '检查剪辑画面', context: JSON.stringify({ surface: { id: 'workspace.video_edit' } }) } })
-    const editNames = (f.requests.at(-1)!.tools as unknown as Array<{ name: string }>).map(tool => tool.name)
-    expect(editNames).toEqual(expect.arrayContaining(['observe_video_edit_frame', 'read_application_media', 'change_application_entities', 'load_application_tools']))
-    expect(editNames).toEqual(expect.arrayContaining(videoEditCreativeTools()))
-    expectStableToolOrder((f.requests.at(-2)!.tools as unknown as Array<{ name: string }>).map(tool => tool.name), editNames)
-    expect(editNames).not.toContain('export_video_edit'); expect(editNames).not.toContain('get_canvas_document')
+    expect(JSON.stringify(f.requests.at(-1)!.tools)).toBe(JSON.stringify(initialTools))
+    // 新界面的专用工具由引导点名，经分派入口调用
+    expect(JSON.stringify(f.requests.at(-1))).toMatch(/observe_video_edit_frame[^"]*不在工具列表里/)
     for (const [surface, basic] of [['tool.camera_stage', 'observe_camera_stage_scene'], ['workspace.generation', 'search_models'], ['settings.general', 'search_application_settings']]) {
       await f.engine.command({ action: 'prompt', input: { text: '当前页面', context: JSON.stringify({ surface: { id: surface } }) } })
       const names = (f.requests.at(-1)!.tools as unknown as Array<{ name: string }>).map(tool => tool.name)
       expect(names).toHaveLength(10)
-      expect(names).toContain(basic)
-      expect(names).not.toContain('get_canvas_document')
-      expect(names).not.toContain('create_visible_generation_task')
+      expect(JSON.stringify(f.requests.at(-1)!.tools)).toBe(JSON.stringify(initialTools))
+      expect(JSON.stringify(f.requests.at(-1))).toContain(`${basic} 实际不在工具列表里`)
     }
   })
 
-  it('画布按任务加载后原生工具列表逐字节不变，经分派调用；换界面只换基线，冷恢复后前文给过的定义不再重复', async () => {
+  it('画布按任务加载后原生工具列表逐字节不变，经分派调用；换界面与冷恢复后列表仍不变，前文给过的定义不再重复', async () => {
     const f = await fixture({ contextWindow: 128000 })
     const configuration = { ...f.configuration, tools: applicationCatalog().tools }
     const canvas = '{"surface":{"id":"workspace.canvas"},"project":{"id":"origin"}}'
@@ -398,12 +398,9 @@ describe('Pi official SDK engine', () => {
     expect(f.tool).toHaveBeenCalledTimes(1)
     expect(f.tool.mock.calls[0]).toMatchObject([expect.any(String), 'get_model_schema', { modelId: 'fixture-model' }, expect.any(AbortSignal)])
     await f.engine.command({ action: 'prompt', input: { text: '查看三维', context: '{"surface":{"id":"tool.camera_stage"}}' } })
-    expect(names(-1)).toContain('observe_camera_stage_scene')
-    expect(names(-1)).not.toContain('get_canvas_document')
+    expect(JSON.stringify(f.requests.at(-1)!.tools)).toBe(JSON.stringify(f.requests[0].tools))
     await f.engine.command({ action: 'prompt', input: { text: '继续画布任务', context: canvas } })
-    // 离开再回来的基线工具在 Pi 里重新声明并接到末尾，只比较集合与定义。
-    const byName = (tools: typeof f.requests[number]['tools']) => [...tools].sort((a, b) => a.function.name.localeCompare(b.function.name))
-    expect(byName(f.requests.at(-1)!.tools)).toEqual(byName(f.requests[0].tools))
+    expect(JSON.stringify(f.requests.at(-1)!.tools)).toBe(JSON.stringify(f.requests[0].tools))
     const snapshot = await f.engine.command({ action: 'snapshot' }) as { sessionId: string }
     const restored = new PiEngine(() => undefined, f.tool)
     cleanup.push(() => restored.dispose())
@@ -414,7 +411,8 @@ describe('Pi official SDK engine', () => {
     await restored.command({ action: 'prompt', input: { text: '继续', context: canvas } })
     const again = f.requests.at(-1)!.messages.filter(message => message.role === 'tool').at(-1)!.content
     expect((JSON.parse(again) as { tools: unknown[]; loadedEarlier: string[] })).toMatchObject({ tools: [], loadedEarlier: expect.arrayContaining(['get_model_schema']) })
-    expect(byName(f.requests.at(-1)!.tools)).toEqual(byName(f.requests[0].tools))
+    // 重开对话后仍按对话开始时的界面定工具列表
+    expect(JSON.stringify(f.requests.at(-1)!.tools)).toBe(JSON.stringify(f.requests[0].tools))
   })
 
   it('分派入口把调用交给内层工具：应用收到内层工具名，日志与用量记在内层工具名下，平铺或字符串形式的参数照常归位', async () => {
@@ -508,6 +506,11 @@ describe('Pi official SDK engine', () => {
       expect(JSON.stringify(next.tools)).toBe(JSON.stringify(previous.tools))
       expect(JSON.stringify(next.messages.slice(0, previous.messages.length))).toBe(JSON.stringify(previous.messages))
     }
+    // 系统设定是第一条，原样给出（不是对话中途的一次“更新”）；宿主上下文排在它后面
+    const [system, hostContext] = f.requests[0].messages as Array<{ role: string; content: unknown }>
+    expect(system.role).toBe('system')
+    expect(JSON.stringify(system.content)).not.toContain('Updated system prompt section')
+    expect(JSON.stringify(hostContext)).toContain('当前应用上下文')
     // 只差采集时间的宿主快照不重复发送，易变内容只出现在最后一条之后
     expect(JSON.stringify(f.requests[2]).split('当前应用上下文').length - 1).toBe(1)
     const first = f.requests[0]
@@ -515,6 +518,27 @@ describe('Pi official SDK engine', () => {
     await f.engine.command({ action: 'prompt', input: { text: '读取项目', context } })
     const reopened = f.requests[3]
     expect(JSON.stringify({ tools: reopened.tools, messages: reopened.messages })).toBe(JSON.stringify({ tools: first.tools, messages: first.messages }))
+  })
+  it('后台整理记忆在临时会话里进行：请求不带用户的对话，用户对话的历史与界面快照不变', async () => {
+    const f = await fixture()
+    const context = '{"workspace":{"id":"videoEdit"}}'
+    await f.engine.command({ action: 'prompt', input: { text: '看看我的片子', context } })
+    const before = await f.engine.command({ action: 'snapshot' }) as { sessionId: string; messages: unknown[] }
+    await f.engine.command({ action: 'configure', input: { ...f.configuration, instructions: '整理记忆用的系统设定' } })
+    await f.engine.command({ action: 'prompt', input: { text: '后台整理记忆：合并重复', context, background: true, requestId: 'run:memory' } })
+    const organize = f.requests.at(-1)!
+    expect(JSON.stringify(organize)).toContain('后台整理记忆：合并重复')
+    expect(JSON.stringify(organize)).not.toContain('看看我的片子')
+    const snapshots = f.events.flatMap(event => event.type === 'snapshot' ? [event.value] : [])
+    expect(snapshots.every(value => value.sessionId === before.sessionId || value.sessionId === null)).toBe(true)
+    expect(await f.engine.command({ action: 'snapshot' })).toMatchObject({ sessionId: before.sessionId, messages: before.messages, error: null, busy: false })
+    // 用户的下一条消息只在原历史末尾追加，整理过程没有进用户对话
+    await f.engine.command({ action: 'configure', input: f.configuration })
+    await f.engine.command({ action: 'prompt', input: { text: '继续', context } })
+    const next = f.requests.at(-1)!
+    expect(JSON.stringify(next.messages.slice(0, f.requests[0].messages.length))).toBe(JSON.stringify(f.requests[0].messages))
+    expect(JSON.stringify(next)).not.toContain('后台整理记忆')
+    expect((await f.engine.command({ action: 'sessions' }) as unknown[])).toHaveLength(1)
   })
   it('正式 Responses 路径：中途按名加载专用工具后整个工具列表逐字节不变，定义进入对话末尾，输入只在末尾追加，新开对话首个请求逐字节一致', async () => {
     const f = await fixture({ contextWindow: 128000 }, 'openai-responses')
@@ -608,7 +632,7 @@ describe('Pi official SDK engine', () => {
     await f.engine.command({ action: 'prompt', input: { text: '第三条', context: '{"surface":"settings"}' } })
     expect(JSON.stringify(f.requests.at(-1)).split('当前应用上下文').length - 1).toBe(2)
   })
-  it('Responses 链路本轮发送原生图片，重启续聊保留引用而不重复发送图片', async () => {
+  it('Responses 链路发送原生图片；续聊时那条带图消息原样再发，不改写历史', async () => {
     const f = await fixture({ image: true }, 'openai-responses')
     const attachment = { schemaVersion: 'agent-attachment/v1' as const, mediaRef: 'asset:image', modality: 'image' as const, mimeType: 'image/png', sizeBytes: 5,
       displayName: '图片.png', dataClass: 'C1' as const, lifecycle: 'asset_library' as const, sourceStatus: 'ready' as const }
@@ -626,7 +650,9 @@ describe('Pi official SDK engine', () => {
       expect(f.requests[0].input?.find((message) => message.role === 'user')?.content).toEqual(expect.arrayContaining([
         { type: 'input_image', image_url: 'data:image/png;base64,bWVkaWE=', detail: 'auto' },
       ]))
-    expect(JSON.stringify(f.requests[1])).not.toContain('data:image/')
+    // 带图的那条用户消息在下一回合逐字节不变，其后的历史才能继续命中前缀缓存
+    const imageMessage = (index: number) => JSON.stringify(f.requests[index].input?.find((message) => message.role === 'user'))
+    expect(imageMessage(1)).toBe(imageMessage(0))
     expect(JSON.stringify(f.requests[1])).toContain('asset:image')
     await restarted.command({ action: 'configure', input: { ...f.configuration, model: { ...f.configuration.model,
       model: { ...f.configuration.model.model, capabilities: { ...f.configuration.model.model.capabilities, image: false } } } } })
@@ -749,7 +775,7 @@ it('按领域只返回工具目录，按名返回定义；两者都不改原生�
     ['tool.image_edit', 'image_edit', ['select_image_edit_region', 'repair_image_edit_region', 'export_image_edit_target_to_canvas']],
   ] as const) {
     const { disclosure, active, load } = disclosureFixture(catalog)
-    disclosure.prepareContext(JSON.stringify({ surface: { id: surface } }))
+    disclosure.prepareContext(JSON.stringify({ surface: { id: surface } }), surface)
     const initial = [...active()]
     const listed = (await load({ domains: [domain] })).data
     expect(listed.tools).toEqual([])
@@ -767,7 +793,7 @@ it('按领域只返回工具目录，按名返回定义；两者都不改原生�
 
 it('已在工具列表里的工具不重复给定义；前文给过定义的只点名，对话压缩掉那条结果后重新给出', async () => {
   const { disclosure, messages, load } = disclosureFixture(applicationCatalog().tools)
-  disclosure.prepareContext(JSON.stringify({ surface: { id: 'workspace.video_edit' } }))
+  disclosure.prepareContext(JSON.stringify({ surface: { id: 'workspace.video_edit' } }), 'workspace.video_edit')
   const first = await load({ names: ['trim_video_edit_clip', 'observe_video_edit_frame'] })
   expect(first.data.tools.map(tool => tool.name)).toEqual(['trim_video_edit_clip'])
   expect(first.data.declaredTools).toEqual(['observe_video_edit_frame'])

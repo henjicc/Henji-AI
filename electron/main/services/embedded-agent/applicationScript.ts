@@ -95,9 +95,15 @@ export async function runApplicationScript(input: { runId: string; source: strin
       const result = record(await host.call(`${input.runId}:${step.call}`, name, toolInput, signal))
       if (result.ok === true) {
         step.status = 'ok'
-        const undoRef = record(result.data).undoRef
+        // 写工具的回执把结果包在 result.data 里，读工具直接在 data 里。脚本里一律从 .data 取：两种形状并存时，
+        // 模型按其中一种写的取值在另一种上是 undefined，一段脚本就白跑一轮。
+        // 顶层其余字段照旧（读取的 baselineId、分页读取的代次、操作查询的执行状态与 recoveryResult）。
+        const { result: receipt, ...rest } = result
+        const data = rest.data === undefined && record(receipt).ok === true ? record(receipt).data : rest.data
+        const undoRef = record(data).undoRef
         if (typeof undoRef === 'string') step.undoRef = undoRef
-        return result
+        // 没有可提升的结果时（如保存补救成功的操作查询）原样保留 result
+        return { ...rest, ...(data === undefined && receipt !== undefined ? { result: receipt } : {}), data }
       }
       if (result.executionState === 'awaiting_user_confirmation') {
         step.status = 'awaiting_user_confirmation'
@@ -187,7 +193,7 @@ export function applicationScriptTool(host: ApplicationScriptHost): ToolDefiniti
     description: [
       '用一段 JavaScript 编排多次应用工具调用：循环、条件和中间数据留在脚本里，只有 console.log 与 return 的内容回到对话。同一件事要连续调用三次以上、要批量处理一组对象、或要先读再按结果决定怎么改时用它；单次调用直接用工具。',
       'source 是异步函数体，直接写 await 和 return；没有 import、require、文件、网络和定时器。',
-      'app.call(name, input)：调用任一应用工具（包括不在工具列表里的），返回该工具的结果对象（{ ok: true, data, … }）；失败时抛出 Error，message 是工具给出的错误原文，可以 try/catch。写工具的 operationId 省略，由应用按本次脚本和调用次序生成。调用按发起顺序逐个执行，每次都要 await。读图（read_application_media）和随手摆讲解这类要你看画面的工具不能在脚本里调用。',
+      'app.call(name, input)：调用任一应用工具（包括不在工具列表里的），返回 { ok: true, data, … }：data 就是该工具的结果，读工具是读到的内容（如 list_projects 的 data.projects），写工具是回执（data.undoRef、data.effects[].refs 是新建或改动的引用），都从 .data 取；read_application_entity 的 baselineId 在顶层（与 data 平级）。失败时抛出 Error，message 是工具给出的错误原文，可以 try/catch。写工具的 operationId 省略，由应用按本次脚本和调用次序生成。调用按发起顺序逐个执行，每次都要 await。读图（read_application_media）和随手摆讲解这类要你看画面的工具不能在脚本里调用。',
       'app.describe(name 或 name 数组)：返回工具说明与 TypeScript 参数签名；参数不清楚时先用一段只含 return await app.describe([...]) 的脚本查。',
       '多项实体修改尽量合进一次 change_application_entities，整组只有一个 undoRef。脚本中途出错不会回滚已完成的调用：回报里有出错行、第几次调用、哪个工具、错误原文和已完成各步的 undoRef，据此续做或撤销，不要整段重跑。需要用户确认付费或信任外来代码时脚本停下并报告。',
       '只 return 下一步要用的事实（引用、数量、核对结果），不要把整份读取结果原样返回。',

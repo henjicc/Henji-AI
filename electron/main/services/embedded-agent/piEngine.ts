@@ -8,11 +8,12 @@ import type { EngineCommand, EngineConfiguration, EngineEvent, EmbeddedAgentEngi
 import { executePiTool } from './toolResult'
 import { PiAttachments } from './piAttachments'
 import { PiToolDisclosure } from './toolDisclosure'
+import { disclosureSurface } from './toolDisclosureProfiles'
 import { applicationScriptTool } from './applicationScript'
 import { budgetContext, contextPageTokenLimit, estimateContextTokens, projectText, PROJECTED_EXCERPT_TOKENS, singleResultTokenLimit } from './contextBudget'
 import { archiveToolResult, contextReader, selectionSummary } from './contextReader'
 import { embeddedModelCompat, embeddedModelLimits, embeddedModelPricing, embeddedThinkingLevel, embeddedThinkingLevelMap } from './modelOptions'
-import { deduplicateHostContexts, prepareHostContext } from './hostContext'
+import { deduplicateHostContexts, leadWithSystemPrompt, prepareHostContext } from './hostContext'
 import { appendProviderWebTools, applyProviderRequestBodyQuirks, resolveProviderExtraAuthHeaders, resolveLlmEndpointIdentity } from '@henjicc/ai-sdk'
 
 type PiSdk = typeof import('@earendil-works/pi-coding-agent')
@@ -53,18 +54,32 @@ export class PiEngine implements EmbeddedAgentEngine {
   private disclosure?: PiToolDisclosure
   private toolTitles = new Map<string, string>()
   private toolArgs = new Map<string, unknown>()
+  /** 后台整理记忆在临时会话里进行时为真：界面快照仍是用户那段对话。 */
+  private background = false
   /** 分派入口转给内层工具执行的调用：外层调用标识 → 内层调用（交给应用时用的就是内层标识与工具名）。 */
   private dispatched = new Map<string, { toolCallId: string; toolName: string }>()
   constructor(private readonly emit: (event: EngineEvent) => void,
     private readonly callTool: (id: string, name: string, input: Record<string, unknown>, signal?: AbortSignal) => Promise<unknown>) {}
 
   private publish(emit = true): EmbeddedAgentSnapshot {
-    if (this.session) {
+    if (this.session && !this.background) {
       this.state.messages = visibleMessages(this.session.messages, this.manager.getSessionId(), this.attachments, this.toolTitles)
     }
-    this.state.sessionId = this.manager?.getSessionId() ?? null
+    if (!this.background) this.state.sessionId = this.manager?.getSessionId() ?? null
     if (emit) this.emit({ type: 'snapshot', value: { ...this.state } })
     return this.state
+  }
+
+  /** 这段对话的工具列表按哪个界面定：第一条消息发出时所在的界面，记在会话里，重开对话后照旧。 */
+  private pinnedSurface(context: string): string {
+    for (const entry of this.manager.getBranch()) {
+      if (entry.type !== 'custom' || entry.customType !== 'henji-tool-surface') continue
+      const surface = (entry.data as { surface?: unknown } | undefined)?.surface
+      if (typeof surface === 'string') return surface
+    }
+    const surface = disclosureSurface(context)
+    this.manager.appendCustomEntry('henji-tool-surface', { surface })
+    return surface
   }
 
   private async configure(input: EngineConfiguration): Promise<void> {
@@ -140,7 +155,7 @@ export class PiEngine implements EmbeddedAgentEngine {
     const transformContext = session.agent.transformContext
     session.agent.transformContext = async (messages, signal) => {
       const transformed = await transformContext?.(messages, signal) ?? messages
-      const filtered = this.disclosure!.redirectUndeclaredCalls(deduplicateHostContexts(transformed))
+      const filtered = this.disclosure!.redirectUndeclaredCalls(leadWithSystemPrompt(deduplicateHostContexts(transformed)))
       const contexts = filtered.flatMap(message => message.role === 'custom' && message.customType === 'henji-context' ? [message.content] : [])
       this.contextMetrics = { contextCount: contexts.length, contextBytes: Buffer.byteLength(JSON.stringify(contexts), 'utf8') }
       const active = new Set(session.getActiveToolNames())
@@ -229,7 +244,7 @@ export class PiEngine implements EmbeddedAgentEngine {
       if (event.type === 'message_update' && event.message.role === 'assistant'
         && ['text_delta', 'thinking_delta'].includes(event.assistantMessageEvent.type)) {
         // Pi 在流式期间尚未把当前消息加入 session.messages。
-        if (Date.now() - lastTextEmission < 40) return
+        if (this.background || Date.now() - lastTextEmission < 40) return
         lastTextEmission = Date.now()
         this.publish(false)
         this.emit({ type: 'snapshot', value: { ...this.state, messages: visibleMessages(
@@ -283,10 +298,21 @@ export class PiEngine implements EmbeddedAgentEngine {
     this.usageTotals = this.emptyUsage()
     this.completedIntents.clear()
     const startedAt = Date.now()
-    this.emit({ type: 'log', phase: 'start', requestId: this.requestId, sessionId: this.manager.getSessionId() })
-    this.publish()
+    /*
+     * 后台整理记忆另开一段不落盘的临时会话：混进用户对话时，这次请求要带着用户的整段历史、却换了系统设定与模型，
+     * 整段按未命中计费；整理过程的往返还会留在用户对话里，占住之后每一次请求的上下文。
+     */
+    const user = command.input.background ? { manager: this.manager, attachments: this.attachments } : undefined
     try {
-      const guidance = this.disclosure?.prepareContext(command.input.context)
+      if (user) {
+        this.background = true
+        this.manager = this.sdk.SessionManager.inMemory(this.directory)
+        this.attachments = new PiAttachments(this.directory, this.manager)
+        await this.configure(this.configuration!)
+      }
+      this.emit({ type: 'log', phase: 'start', requestId: this.requestId, sessionId: this.manager.getSessionId() })
+      this.publish()
+      const guidance = this.disclosure?.prepareContext(command.input.context, this.pinnedSurface(command.input.context))
       const selectionSnapshot = command.input.selectionSnapshot
       const selectionId = selectionSnapshot ? randomUUID() : undefined
       const selection = selectionSnapshot && selectionId ? `\n发送时选区（摘要，批量操作前续读全部引用）：${JSON.stringify(selectionSummary(selectionId, selectionSnapshot))}` : ''
@@ -327,6 +353,15 @@ export class PiEngine implements EmbeddedAgentEngine {
         summary: { ...totals, cacheHitRate: totalInput > 0 ? totals.cacheRead / totalInput : null,
           ...(firstTokenSamples ? { firstTokenMsAverage: Math.round(firstTokenMsTotal / firstTokenSamples), firstTokenMsMax } : {}),
           ...(this.costCurrency ? { cost, costCurrency: this.costCurrency } : {}) } })
+      if (user) {
+        // 回到用户的对话；整理失败不算用户这次回复的错误
+        this.manager = user.manager; this.attachments = user.attachments
+        this.state.error = null
+        this.background = false
+        // 先解除忙碌再重建会话：重建失败时下一条消息照常重新配置，不能把助手卡在忙碌状态
+        this.state.busy = false; this.state.activity = null
+        await this.configure(this.configuration!).catch(() => { this.session = undefined })
+      }
       this.state.busy = false; this.state.activity = null; this.publish() }
   }
   async dispose(): Promise<void> { await this.session?.abort(); this.unsubscribe?.(); this.session?.dispose() }

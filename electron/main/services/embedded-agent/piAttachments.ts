@@ -15,6 +15,9 @@ type StoredAttachments = z.infer<typeof entrySchema>
 const markerText = (marker: string): string => `\n[henji-attachments:${marker}]`
 function record(value: unknown): value is Record<string, unknown> { return Boolean(value) && typeof value === 'object' && !Array.isArray(value) }
 
+/** 历史图片每次请求照原样再带，合计不超过这个编码后字节数；超出后新进历史的图片只留引用文字。 */
+const HISTORY_IMAGE_BYTES = 32 * 1024 * 1024
+
 /** Pi 会话只保存稳定引用与缓存摘要；媒体不经快照反复送回渲染层。 */
 export class PiAttachments {
   private currentMarker?: string
@@ -25,7 +28,7 @@ export class PiAttachments {
     const entry = this.entries().find(item => text.endsWith(markerText(item.marker)))
     if (!entry) return 0
     return entry.items.reduce((sum, { attachment }) => sum + estimateContextTokens(`用户附件：${attachment.displayName}（${attachment.mediaRef}）`)
-      + (attachment.modality === 'super_keyframes' ? estimateContextTokens(superKeyframeAttachmentContext(attachment)) : entry.marker !== this.currentMarker ? 0 : attachment.modality === 'image' ? 4096
+      + (attachment.modality === 'super_keyframes' ? estimateContextTokens(superKeyframeAttachmentContext(attachment)) : attachment.modality === 'image' ? 4096 : entry.marker !== this.currentMarker ? 0
         : attachment.modality === 'video' ? Math.max(4096, Math.ceil((attachment.durationSeconds ?? attachment.sizeBytes / 65536) * 1024))
           : Math.max(1024, Math.ceil((attachment.durationSeconds ?? attachment.sizeBytes / 16000) * 64))), 0)
   }
@@ -77,6 +80,20 @@ export class PiAttachments {
     const maxBytes = 128 * 1024 * 1024
     const current = entries.find(entry => entry.marker === this.currentMarker)
     const encodedBytes = current?.items.reduce((sum, { attachment }) => sum + 4 * Math.ceil(attachment.sizeBytes / 3), 0) ?? 0
+    /*
+     * 之前回合的图片照原样留在历史里：回合结束后把图片换成一行引用文字，等于改写那条用户消息，
+     * 其后的整段历史在下一次请求按未命中重算。视频与音频体积大，每次请求重传不划算，仍只在当回合发送。
+     */
+    const imagesSupported = embeddedInputModalities(selected.model.capabilities, selected.api).includes('image')
+    const keptHistory = new Set<string>()
+    let historyBytes = 0
+    // 从最早的回合留起：已经留下的图片之后不会再被挤掉（从最新往回数的话，每多一轮带图消息就改写一条旧消息）
+    for (const entry of entries) {
+      if (entry.marker === this.currentMarker || !imagesSupported) continue
+      historyBytes += entry.items.reduce((sum, { attachment }) => sum + (attachment.modality === 'image' ? 4 * Math.ceil(attachment.sizeBytes / 3) : 0), 0)
+      if (historyBytes > HISTORY_IMAGE_BYTES) break
+      keptHistory.add(entry.marker)
+    }
     const tooLarge = (): Error => new Error('当前附件与对话超出请求体预算，请缩小附件或新建对话；已有操作不会重新执行。')
     if (Buffer.byteLength(JSON.stringify(payload), 'utf8') + encodedBytes > maxBytes) throw tooLarge()
     const result = { ...payload, [key]: await Promise.all(messages.map(async (message: unknown) => {
@@ -98,7 +115,8 @@ export class PiAttachments {
             continue
           }
           content.push({ type: textType, text: `用户附件：${attachment.displayName}（${attachment.mediaRef}）` })
-          if (entry.marker !== this.currentMarker) continue
+          const current = entry.marker === this.currentMarker
+          if (!current && !(attachment.modality === 'image' && keptHistory.has(entry.marker))) continue
           if (!embeddedInputModalities(selected.model.capabilities, selected.api).includes(attachment.modality)) {
             content.push({ type: textType, text: '当前模型无法读取这份历史附件的内容，请勿声称已看过。' })
             continue
@@ -106,13 +124,16 @@ export class PiAttachments {
           const cacheKey = `${hash}:${attachment.mimeType}`
           let encoded = this.encoded.get(cacheKey)
           if (!encoded) {
-            encoded = fs.readFile(path.join(this.directory, 'attachments', hash)).then(bytes => `data:${attachment.mimeType};base64,${bytes.toString('base64')}`).catch(() => {
-              this.encoded.delete(cacheKey)
-              throw new Error(`无法读取历史附件“${attachment.displayName}”，请重新添加该附件并新建对话。`)
-            })
+            encoded = fs.readFile(path.join(this.directory, 'attachments', hash)).then(bytes => `data:${attachment.mimeType};base64,${bytes.toString('base64')}`)
             this.encoded.set(cacheKey, encoded)
+            encoded.catch(() => this.encoded.delete(cacheKey))
           }
-          const url = await encoded
+          let url: string
+          try { url = await encoded } catch {
+            // 之前回合的图片文件没了不拦住对话，只留引用文字
+            if (!current) continue
+            throw new Error(`无法读取附件“${attachment.displayName}”，请重新添加该附件。`)
+          }
           if (responses) {
             // Pi 只原生建模图片；此处把痕迹的附件消息映射至已存在的 Responses 媒体输入。
             // 火山官方契约：response_input_video_param.py，video_url 支持 data URL。

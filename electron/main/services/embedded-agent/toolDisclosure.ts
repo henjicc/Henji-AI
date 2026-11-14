@@ -26,7 +26,10 @@ function normalizeDispatchArguments(raw: unknown): unknown {
 }
 
 /**
- * 注册目录保持完整授权集合；发给模型的原生工具列表在同一界面内固定：基础工具、界面基线、加载与分派两个入口。
+ * 注册目录保持完整授权集合；发给模型的原生工具列表在一段对话里固定：基础工具、对话开始时所在界面的专用工具、加载与分派两个入口。
+ *
+ * - 对话中途换界面不换列表：列表排在历史之前，一换其后的整段历史按未命中重算。新界面的专用工具经分派入口调用，
+ *   引导文字里点名哪些不在列表里。
  *
  * - 专用工具的定义由 load_application_tools 作为工具结果写进对话末尾，再由 call_application_tool 按名调用。
  *   供应商把工具列表排在对话历史之前，列表一变其后的历史全部按未命中重算（DeepSeek 未命中单价是命中的 50 倍），
@@ -149,9 +152,17 @@ export class PiToolDisclosure {
     })
   }
 
-  prepareContext(context: string): string {
-    this.scope = disclosureSurface(context)
-    this.session().setActiveToolsByName(this.namesForScope())
-    return surfaceProfile(this.scope).guidance
+  /**
+   * pinnedSurface 是这段对话开始时所在的界面，工具列表按它定下后不再变；返回当前界面的引导文字。
+   */
+  prepareContext(context: string, pinnedSurface: string): string {
+    this.scope = pinnedSurface
+    const names = this.namesForScope()
+    this.session().setActiveToolsByName(names)
+    const current = surfaceProfile(disclosureSurface(context))
+    const outside = current.tools.filter(name => this.tools.some(tool => tool.name === name) && !names.includes(name))
+    return outside.length
+      ? `${current.guidance}\n注意：这段对话开始于别的界面，工具列表没有随界面更换：${outside.join('、')} 实际不在工具列表里（即使上面的引导说它在），要用时经 ${APPLICATION_TOOL_DISPATCHER} 调用，参数先用 load_application_tools 的 names 取得。`
+      : current.guidance
   }
 }

@@ -35,15 +35,18 @@ describe('run_application_script', () => {
 
   it('每次调用都走宿主给的统一出口，写工具按运行标识与序号补确定的操作标识，只把 log 与 return 交回', async () => {
     const { host, calls } = hostWith((name, input) => name === 'read_application_entity'
-      ? { ok: true, data: { properties: { opacity: 1, big: 'x'.repeat(5000) } } }
-      : { ok: true, operationId: input.operationId, data: { undoRef: `undo-${String(input.summary)}` } })
+      ? { ok: true, data: { properties: { opacity: 1, big: 'x'.repeat(5000) } }, baselineId: 'baseline-1' }
+      // 写工具的真实回执：结果包在 result.data 里
+      : { ok: true, operationId: input.operationId, executionState: 'completed', verificationState: 'verified', result: { ok: true, data: { undoRef: `undo-${String(input.summary)}`, effects: [] } } })
     const { report, isError } = await run(`
       const read = await app.call('read_application_entity', { ref: { kind: 'clip', id: 'a' } })
-      for (const index of [1, 2]) await app.call('change_application_entities', { summary: 's' + index, changes: [{ opacity: read.data.properties.opacity / 2 }] })
-      console.log('done', 2)
+      const undos = []
+      for (const index of [1, 2]) undos.push((await app.call('change_application_entities', { summary: 's' + index, changes: [{ opacity: read.data.properties.opacity / 2 }] })).data.undoRef)
+      console.log('done', undos.join(','), read.baselineId)
       return { halved: true }`, host)
     expect(isError).toBe(false)
-    expect(report).toEqual({ ok: true, value: { halved: true }, log: ['done 2'], calls: 3,
+    // 读与写都从 .data 取；写入各步的 undoRef 进回报
+    expect(report).toEqual({ ok: true, value: { halved: true }, log: ['done undo-s1,undo-s2 baseline-1'], calls: 3,
       undoRefs: [{ call: 2, tool: 'change_application_entities', undoRef: 'undo-s1' }, { call: 3, tool: 'change_application_entities', undoRef: 'undo-s2' }] })
     expect(calls.map(call => call.name)).toEqual(['read_application_entity', 'change_application_entities', 'change_application_entities'])
     expect(calls[0].input).toEqual({ ref: { kind: 'clip', id: 'a' } })

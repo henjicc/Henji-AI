@@ -33,6 +33,17 @@ export function prepareHostContext(raw: string, history: Message[], selection: u
     details: { contextIdentity, hostSnapshot: snapshot, fullContextContent: wrap(snapshot) } }
 }
 
+/**
+ * 系统设定排在最前。宿主上下文在第一条用户消息之前就写进会话，Pi 的系统设定要到回合开始才记下，
+ * 原样发出去就是“上下文、系统设定、用户消息”：系统设定成了对话中途的一次“更新”，排在每段对话都不同的上下文之后，
+ * 不同对话之间共用不了系统设定这段前缀。只调整发出去的顺序，会话里的记录不动，每次请求得到同样的结果。
+ */
+export function leadWithSystemPrompt(messages: Message[]): Message[] {
+  const first = messages.findIndex(message => message.role === 'system')
+  if (first <= 0 || !messages.slice(0, first).every(message => message.role === 'custom')) return messages
+  return [messages[first], ...messages.slice(0, first), ...messages.slice(first + 1)]
+}
+
 export function deduplicateHostContexts(messages: Message[]): Message[] {
   let previous: string | undefined
   return messages.filter(message => {
