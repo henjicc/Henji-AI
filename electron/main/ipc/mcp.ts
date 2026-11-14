@@ -8,6 +8,8 @@ import { readMcpPreferences, writeMcpPreferences } from '../services/mcp/prefere
 import { captureEncryptedKeySnapshot, getKey, setKey } from '../services/keystore'
 import { createMainLogger } from '../services/logging'
 import { McpConnections } from '../services/mcp/connections'
+import { McpCatalogSeen } from '../services/mcp/catalogSeen'
+import { getSettingsStore } from '../services/settings/store'
 import { ApplicationHostBridge } from '../services/application-runtime/applicationHostBridge'
 import { LocalMcpServer } from '../services/mcp/server'
 import { createRelayConnector, launchRelay } from '../services/mcp/relayLink'
@@ -56,7 +58,9 @@ export function registerMcpIpc(options: { resident?: boolean } = {}): void {
   const relay = createRelayConnector({ script: path.join(__dirname, 'mcp-relay.cjs'), secret: relaySecret, logger, relayLogger: createMainLogger('main.mcp_relay'), launch: resident ? launchRelay : undefined })
   server = new LocalMcpServer(connections, host, (error) => logger.error('外部连接请求失败', { event: 'mcp.request.failed', error }), operations,
     (info) => logger.info('外部请求已通过授权', { event: 'mcp.request.authorized', context: { callerId: info.callerId } }),
-    (info) => logger.warn('外部连接认证失败', { event: 'mcp.request.rejected', context: info }), getAgentMemoryStore(), relay)
+    (info) => logger.warn('外部连接认证失败', { event: 'mcp.request.rejected', context: info }), getAgentMemoryStore(), relay,
+    // 开发版与正式版共用资料目录与接线员，这份记录也就跟着同一个连接走。
+    new McpCatalogSeen({ read: () => getSettingsStore().get('mcp.catalog_seen'), write: value => getSettingsStore().set('mcp.catalog_seen', value, 'json') }))
   try { preferences = readMcpPreferences() } catch (error) {
     preferences = { ...DEFAULT_MCP_PREFERENCES, enabled: false }
     logger.error('读取外部连接设置失败，已保持关闭', { event: 'mcp.preferences.read.failed', error })

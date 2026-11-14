@@ -45,7 +45,8 @@ export class ApplicationResourceSubscriptions implements ServerEventBus {
   private revisions: Record<string, number> = {}
   private resourceRevisions: Record<string, number> = {}
   constructor(private readonly assertActive: (callerId: string) => void,
-    private readonly authorize: (callerId: string, uri: string, signal: AbortSignal) => Promise<unknown>) {}
+    private readonly authorize: (callerId: string, uri: string, signal: AbortSignal) => Promise<unknown>,
+    private readonly catalogStale: (callerId: string) => boolean = () => false) {}
 
   async run<T>(callerId: string, body: unknown, signal: AbortSignal, dispatch: () => Promise<T>): Promise<T> {
     const envelope = z.object({ method: z.literal('subscriptions/listen'), params: z.object({
@@ -69,6 +70,8 @@ export class ApplicationResourceSubscriptions implements ServerEventBus {
     if (!owner) throw new Error('订阅缺少可信调用者。')
     const listener: Listener = { owner, send, controller: new AbortController(), pending: new Set(), dirty: new Set() }
     this.listeners.add(listener)
+    // SDK 在 subscribe 返回后才把订阅确认发给客户端，通知放到下一轮，排在确认之后。
+    if (this.catalogStale(owner.callerId)) setImmediate(() => { if (this.active(listener)) send({ kind: 'tools_list_changed' }) })
     return () => { this.listeners.delete(listener); clearTimeout(listener.timer); listener.controller.abort() }
   }
 

@@ -11,7 +11,9 @@ import { DIRECT_SERVER_HEADER } from './relayProtocol'
 import type { ApplicationHostBridge } from '../application-runtime/applicationHostBridge'
 import type { ApplicationOperationCoordinator } from '../application-runtime/operationCoordinator'
 import { ApplicationToolDispatcher } from '../application-runtime/applicationToolDispatcher'
-import { APPLICATION_TOOL_CONVENTIONS, buildApplicationToolCatalog } from '../application-runtime/toolCatalog'
+import { APPLICATION_TOOL_CONVENTIONS, applicationToolOutputSchemaHash, buildApplicationToolCatalog } from '../application-runtime/toolCatalog'
+import type { McpCatalogSeen } from './catalogSeen'
+import { applicationFailure } from '../../../../src/core/application-control/invocation'
 import { EXTERNAL_CONTRACT_VERSION } from '../../../../src/core/application-control/localHostContracts'
 import type { MemoryEntryStore } from '../assistant/entry-store'
 import { MEMORY_RULES } from '../../../../src/core/assistant/memoryEntries'
@@ -37,15 +39,20 @@ export class LocalMcpServer {
     private readonly onRejected: (info: { reason: 'invalid_token' }) => void = () => {},
     private readonly memory?: Pick<MemoryEntryStore, 'onMemoryChange' | 'read'>,
     /** 有接线员时由它占住对外端口，痕迹重启期间外部请求不断；监听位置与重试由接线决定。 */
-    private readonly relay?: McpRelayConnector) {}
+    private readonly relay?: McpRelayConnector,
+    private readonly seen?: McpCatalogSeen) {}
   get listening(): boolean { return this.relayLink !== undefined || this.http?.listening === true }
   /** 对外是否真的在服务；没有接线员时以直接监听为准。 */
   get availability(): RelayLinkState | undefined { return this.relayLink?.state() ?? (this.http?.listening ? 'direct' : undefined) }
   get listeningPort(): number { return this.port }
   async start(port: number): Promise<void> {
     if (this.http) throw new Error('服务已经启用，请先关闭再更换端口。')
+    const outputHashes = () => Object.fromEntries(buildApplicationToolCatalog({ tools: this.host.tools(), includeSkillTool: true }).tools
+      .map(tool => [tool.name, applicationToolOutputSchemaHash(tool)]))
     const subscriptions = new ApplicationResourceSubscriptions(id => this.connections.assertActive(id),
-      (id, uri, signal) => readApplicationResource(new ApplicationToolDispatcher(this.connections, this.host, this.operations), id, uri, signal))
+      (id, uri, signal) => readApplicationResource(new ApplicationToolDispatcher(this.connections, this.host, this.operations), id, uri, signal),
+      // 应用重启或升级后，客户端重新订阅时还拿着旧目录：立即提醒它重新 tools/list，不等下一次目录变化。
+      id => this.seen?.staleAny(id, outputHashes()) === true)
     this.subscriptions = subscriptions
     let domainRevisions: Record<string, number> = {}
     const contextChanged = () => {
@@ -66,7 +73,11 @@ export class LocalMcpServer {
       const server = new Server({ ...EXTERNAL_SERVER_INFO }, { instructions: `${APPLICATION_TOOL_CONVENTIONS}\n${MEMORY_RULES}\n${PROJECT_PROGRESS_RULES}\n当前全局记忆（连接时的快照，之后的修改用 list_application_entities 读取）：
 ${renderMemoryContext({ global: this.memory?.read().entries ?? [] }, '')}`, capabilities: { tools: { listChanged: true }, resources: { listChanged: true, subscribe: true } } })
       const dispatcher = new ApplicationToolDispatcher(this.connections, this.host, this.operations, this.port)
-      server.setRequestHandler('tools/list', async () => ({ tools: dispatcher.catalog(callerId).tools }))
+      server.setRequestHandler('tools/list', async () => {
+        const tools = dispatcher.catalog(callerId).tools
+        this.seen?.record(callerId, Object.fromEntries(tools.map(tool => [tool.name, applicationToolOutputSchemaHash(tool)])), this.connections.list().map(item => item.id))
+        return { tools }
+      })
       server.setRequestHandler('resources/templates/list', async () => ({ resourceTemplates: APPLICATION_RESOURCE_TEMPLATES }))
       server.setRequestHandler('resources/list', async (request, ctx) => {
         if (!this.host.ready) throw new Error('CAPABILITY_NOT_READY:应用正在连接，请稍后重新读取资源目录。')
@@ -77,6 +88,12 @@ ${renderMemoryContext({ global: this.memory?.read().entries ?? [] }, '')}`, capa
         return result
       })
       server.setRequestHandler('tools/call', async (request, ctx) => {
+        const current = dispatcher.catalog(callerId).tools.find(tool => tool.name === request.params.name)
+        if (current && this.seen?.stale(callerId, current.name, applicationToolOutputSchemaHash(current))) {
+          subscriptions.publishTo(callerId, { kind: 'tools_list_changed' })
+          const failure = applicationFailure('CATALOG_STALE:痕迹AI 已更新，这个工具的返回结构和你缓存的工具清单不一致，本次没有执行。请重新获取工具清单（tools/list；Claude Code 可用 /mcp 重新连接）后再调用。')
+          return toMcpResult({ ...failure, error: { ...failure.error!, details: { execution: { notExecuted: true } } } })
+        }
         const result = await dispatcher.call(callerId, request.params.name, request.params.arguments, ctx.mcpReq.signal)
         return toMcpResult(result)
       })

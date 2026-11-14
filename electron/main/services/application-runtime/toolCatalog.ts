@@ -259,6 +259,11 @@ export function applicationToolSchemaHash(tool: Pick<Tool, 'name' | 'description
   return createHash('sha256').update(canonicalJson({ name: tool.name, description: tool.description, inputSchema: tool.inputSchema, outputSchema: tool.outputSchema ?? null, annotations: tool.annotations ?? null })).digest('hex').slice(0, 16)
 }
 
+/** 只看输出结构：客户端按缓存的 outputSchema 校验成功结果，这个哈希变了旧缓存就会把成功判成失败。 */
+export function applicationToolOutputSchemaHash(tool: Pick<Tool, 'outputSchema'>): string {
+  return createHash('sha256').update(canonicalJson(tool.outputSchema ?? null)).digest('hex').slice(0, 16)
+}
+
 export function applicationCatalogSchemaHash(catalog: ApplicationToolCatalog): string {
   return createHash('sha256').update(canonicalJson(catalog.tools.map(tool => ({ name: tool.name, schemaHash: applicationToolSchemaHash(tool) }))
     .sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0))).digest('hex').slice(0, 16)
@@ -325,7 +330,7 @@ export function buildApplicationContract(input: {
       server: EXTERNAL_SERVER_INFO,
       protocolVersions: [...EXTERNAL_PROTOCOL_VERSIONS],
       sdkVersion: EXTERNAL_SDK_VERSION,
-      transport: input.callerKind === 'embedded' ? { kind: 'embedded', identity: '当前助手会话', requiresExternalConnection: false } : { kind: 'streamable-http', url: `http://127.0.0.1:${input.port}/mcp`, authorization: 'Bearer <连接令牌>', json: true, serverSentEvents: true, listChangedNotifications: true, subscriptions: 'subscriptions/listen', listChangedPolicy: '订阅 toolsListChanged 后，仅工具定义或契约版本真实变化才发送 notifications/tools/list_changed，客户端据此重新 tools/list；普通上下文更新与同目录重连不发。撤销连接关闭旧订阅。应用重启关闭旧连接，重连后重新订阅并读取目录。' },
+      transport: input.callerKind === 'embedded' ? { kind: 'embedded', identity: '当前助手会话', requiresExternalConnection: false } : { kind: 'streamable-http', url: `http://127.0.0.1:${input.port}/mcp`, authorization: 'Bearer <连接令牌>', json: true, serverSentEvents: true, listChangedNotifications: true, subscriptions: 'subscriptions/listen', listChangedPolicy: '订阅 toolsListChanged 后，仅工具定义或契约版本真实变化才发送 notifications/tools/list_changed，客户端据此重新 tools/list；普通上下文更新与同目录重连不发。撤销连接关闭旧订阅。应用重启关闭旧连接，重连后重新订阅并读取目录；还拿着旧目录重新订阅会立即收到一次通知。缓存的输出结构已过期时调用返回 CATALOG_STALE 且不执行，重新 tools/list 后再调用。' },
       limits: EXTERNAL_LIMITS,
       deprecationPolicy: EXTERNAL_DEPRECATION_POLICY,
     },

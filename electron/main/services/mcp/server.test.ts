@@ -6,6 +6,7 @@ import { Client } from '@modelcontextprotocol/client'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
 import { LocalMcpServer } from './server'
 import { McpConnections } from './connections'
+import { McpCatalogSeen } from './catalogSeen'
 import { ApplicationResourceSubscriptions } from './resourceSubscriptions'
 import { ApplicationHostBridge } from '../application-runtime/applicationHostBridge'
 import { EXTERNAL_CONTRACT_VERSION, EXTERNAL_PROTOCOL_VERSIONS, type LocalHostRequest } from '../../../../src/core/application-control/localHostContracts'
@@ -48,7 +49,9 @@ async function fixture(options: { ready?: boolean; pending?: boolean; operations
   }
   host.register(registration, transportHost)
   const rejected = vi.fn()
-  const server = new LocalMcpServer(connections, host, undefined, options.operations, undefined, rejected, options.memory)
+  let seen: string | null = null
+  const server = new LocalMcpServer(connections, host, undefined, options.operations, undefined, rejected, options.memory, undefined,
+    new McpCatalogSeen({ read: () => seen, write: value => { seen = value } }))
   await server.start(0)
   closers.push(() => server.stop())
   const url = () => `http://127.0.0.1:${server.listeningPort}/mcp`
@@ -182,6 +185,36 @@ describe('本地 MCP 协议与边界', () => {
     expect(afterRestart).not.toHaveBeenCalled()
     await renewed.close()
   })
+  it('客户端缓存的输出结构过期时执行前拒绝并说明未执行，重新订阅立即提醒，重新列举后照常调用', async () => {
+    const f = await fixture({ result: { ok: true, data: { surface: { id: 'workspace.videoEdit', kind: 'workspace', focusedRef: null, selectedRefs: [] }, catalogRevision: 1, ready: true, revision: 0 } } })
+    const { client } = await f.connect()
+    await client.listTools()
+    const get = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get.bind(BUILTIN_APPLICATION_CAPABILITY_REGISTRY)
+    const changed = vi.spyOn(BUILTIN_APPLICATION_CAPABILITY_REGISTRY, 'get').mockImplementation(id => {
+      const definition = get(id)
+      return id === 'get_current_application_context' && definition ? { ...definition,
+        outputSchema: (definition.outputSchema as z.ZodObject).extend({ schemaChangeFixture: z.boolean().optional() }) } : definition
+    })
+    try {
+      // 模拟应用升级重启：旧客户端没重新 tools/list 就直接调用。
+      await f.server.stop()
+      await f.server.start(0)
+      const stale = await f.connect()
+      const notified = vi.fn()
+      stale.client.setNotificationHandler('notifications/tools/list_changed', notified)
+      const subscription = await stale.client.listen({ toolsListChanged: true })
+      await vi.waitFor(() => expect(notified).toHaveBeenCalled())
+      const before = f.calls.length
+      const refused = await stale.client.callTool({ name: 'get_current_application_context', arguments: {} })
+      expect(refused.isError).toBe(true)
+      expect(refused.structuredContent).toMatchObject({ ok: false, error: { code: 'CATALOG_STALE', details: { execution: { notExecuted: true } } } })
+      expect(f.calls).toHaveLength(before)
+      await stale.client.listTools()
+      const accepted = await stale.client.callTool({ name: 'get_current_application_context', arguments: {} })
+      expect(accepted.isError).toBe(false)
+      await subscription.close()
+    } finally { changed.mockRestore() }
+  }, 15_000)
   it('同一现代订阅真实收到工具变更通知，撤销后关闭且不能继续发现', async () => {
     const f = await fixture()
     const { client } = await f.connect()
