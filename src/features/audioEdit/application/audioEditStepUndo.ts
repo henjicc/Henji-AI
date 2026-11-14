@@ -1,4 +1,5 @@
 import type { AudioEditProjectDocument } from '@/core/audioEdit/types'
+import { UNDO_HISTORY_STEPS } from '@/core/undoHistory'
 import { getAudioEditProjectInstance, sameAudioEditProjectContent, subscribeAudioEditProjectDisposal, undoAudioEditProject, type AudioEditProjectInstance } from './audioEditProjectInstances'
 
 /*
@@ -18,7 +19,7 @@ interface Step {
 
 const steps = new Map<string, Step>()
 /** 只给最近这些步发回执；更早的步多半已被后续修改压住，撤销本来也会被拒。 */
-const MAX_STEPS = 256
+const MAX_STEPS = UNDO_HISTORY_STEPS
 
 // 口播关闭后撤销历史随实例一起没了，登记也不再留着作品快照
 subscribeAudioEditProjectDisposal((documentId) => {

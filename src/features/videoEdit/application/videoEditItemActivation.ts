@@ -1,3 +1,4 @@
+import { videoEditItemIdHint } from '@/core/videoEdit/document'
 import { requireVideoEditInstance } from './videoEditService'
 import { updateVideoEditSource } from './videoEditSource'
 import { isVideoEditSourcePreviewItem } from './videoEditSourcePreview'
@@ -9,7 +10,7 @@ import { isVideoEditSourcePreviewItem } from './videoEditSourcePreview'
  */
 export async function activateVideoEditProjectItem(projectId: string, itemId: string): Promise<void> {
   const item = requireVideoEditInstance(projectId).document.items.find(value => value.id === itemId)
-  if (!item) throw new Error('素材项不存在。')
+  if (!item) throw new Error(`素材项不存在${videoEditItemIdHint(requireVideoEditInstance(projectId).document, itemId)}。`)
   if (!item.mediaId && !isVideoEditSourcePreviewItem(requireVideoEditInstance(projectId).document, item.id)) {
     throw new Error(item.kind === 'adjustment' ? '调整图层没有自己的画面：把它拖到时间线上要调整的片段上方。' : '这个素材项没有可预览的画面，请拖到时间线上使用。')
   }

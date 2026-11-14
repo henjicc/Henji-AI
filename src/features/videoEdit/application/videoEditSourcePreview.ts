@@ -1,4 +1,4 @@
-import { createVideoEditSequence, videoEditComposition, type VideoEditComposition, type VideoEditDocument } from '@/core/videoEdit/document'
+import { videoEditItemIdHint, createVideoEditSequence, videoEditComposition, type VideoEditComposition, type VideoEditDocument } from '@/core/videoEdit/document'
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { videoEditFps } from '@/core/videoEdit/time'
 import { readVideoEditCodeMetadata, withVideoEditCodeMetadata } from './videoEditCodeState'
@@ -31,7 +31,7 @@ export function videoEditSourcePreview(projectId: string, itemId: string): Promi
   if (!preview) {
     preview = withVideoEditCodeMetadata(() => {
       const item = document.items.find(value => value.id === itemId)
-      if (!item) throw new Error('素材项不存在。')
+      if (!item) throw new Error(`素材项不存在${videoEditItemIdHint(document, itemId)}。`)
       if (!isVideoEditSourcePreviewItem(document, itemId)) throw new Error('这个素材项不能在源监视器里预览。')
       const read = readVideoEditCodeMetadata(owner, document)
       const sequence = { ...createVideoEditSequence('素材预览'), id: `source-preview-${item.id}`, ...(host ? { width: host.width, height: host.height, frameRate: host.frameRate, pixelAspectRatio: host.pixelAspectRatio } : {}) }

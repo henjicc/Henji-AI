@@ -1,3 +1,4 @@
+import { UNDO_HISTORY_STEPS } from '@/core/undoHistory'
 import { forgetExplanationUndoAccess, rememberExplanationUndoAccess } from '../creativeIntentAuthorization'
 import { applicationPropertyValueText, isWritableApplicationProperty, readApplicationSnapshot } from '@/core/application-control/registry/snapshot'
 import type {
@@ -635,7 +636,7 @@ export const applicationReflectionHandlers = {
       rememberExplanationUndoAccess(undoRef, changes.flatMap(change => 'target' in change ? [change.target] : []), () => { publicUndos.delete(undoRef) })
       publicUndos.set(rawResult.undoRef, {
         revisions: rawResult.status === 'completed' ? rawResult.resultingRevisions : rawResult.currentRevisions ?? {} })
-      while (publicUndos.size > 256) {
+      while (publicUndos.size > UNDO_HISTORY_STEPS) {
         const oldest = publicUndos.keys().next().value
         if (oldest === undefined) break
         publicUndos.delete(oldest)

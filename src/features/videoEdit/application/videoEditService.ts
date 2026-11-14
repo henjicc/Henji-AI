@@ -48,6 +48,7 @@ import { nextVideoEditHistoryOrder, registerVideoEditDocumentRedo, undoVideoEdit
 import { readDocumentSessionState, writeDocumentSessionState } from '@/commands/documents'
 import { registerReloadResumeView } from '@/core/documents/reloadResumeViews'
 import { setVideoEditMotionWorkerLifecycle } from './videoEditMotionWorkerLifecycle'
+import { UNDO_HISTORY_STEPS } from '@/core/undoHistory'
 
 setVideoEditMotionWorkerLifecycle({
   isOpen: id => listVideoEditInstances().some(instance => instance.document.id === id),
@@ -367,7 +368,7 @@ export function finishVideoEditGesture(handle: VideoEditGesture, commit = true):
   const committed = commit && (maskOnly ? [...state.maskChanges!.values()].some(change => change.changed) : !sameDocumentContent(owner.document, state.before))
   if (committed) {
     historyOperations.set(state.before, state.handle.token); historyOrder.set(state.before, nextVideoEditHistoryOrder('document'))
-    owner.past = [...owner.past.slice(-49), state.before]; owner.future = []
+    owner.past = [...owner.past.slice(1 - UNDO_HISTORY_STEPS), state.before]; owner.future = []
   } else if (owner.contentVersion !== state.beforeContentVersion && (!commit || !maskOnly)) {
     // 手势期间确有预览写入才恢复起点；什么都没写的取消不产生新版本（否则画面版本领先于已保存版本却无内容可存）。
     const before = owner.document
@@ -773,7 +774,7 @@ function publishVideoEditDocument(instance: VideoEditInstance, next: VideoEditDo
   const history = { past: instance.past, future: instance.future }
   const operationId = recordHistory ? crypto.randomUUID() : undefined
   if (operationId) { historyOperations.set(instance.document, operationId); historyOrder.set(instance.document, nextVideoEditHistoryOrder('document')) }
-  if (recordHistory) { instance.past = [...instance.past.slice(-49), instance.document]; instance.future = [] }
+  if (recordHistory) { instance.past = [...instance.past.slice(1 - UNDO_HISTORY_STEPS), instance.document]; instance.future = [] }
   const before = instance.document
   // 剪辑名就是文件名，由文档会话同步；内容修改不能改名
   instance.document = freezeVideoEditDocument({ ...next, id: before.id, name: before.name, revision: instance.document.revision + 1 })
@@ -781,7 +782,7 @@ function publishVideoEditDocument(instance: VideoEditInstance, next: VideoEditDo
     compensationHistories.set(instance.document, history)
     // Match the bounded public transaction receipts; weak keys with past arrays
     // would indirectly keep every earlier history snapshot reachable.
-    while (compensationHistories.size > 100) compensationHistories.delete(compensationHistories.keys().next().value!)
+    while (compensationHistories.size > UNDO_HISTORY_STEPS) compensationHistories.delete(compensationHistories.keys().next().value!)
   }
   if (!spatialOnly) { rescaleSequenceViews(instance, before); reconcileSequenceView(instance) }
   instance.version++; advanceVideoEditContent(instance)

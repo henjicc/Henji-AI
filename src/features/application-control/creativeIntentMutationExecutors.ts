@@ -1,3 +1,4 @@
+import { UNDO_HISTORY_STEPS } from '@/core/undoHistory'
 import { applyWriterTable, fieldWriterTable, propertyOperations, writableProperties, type ApplicationMutationExecutor, type ApplicationCompletedStepResult, type ApplicationPlannedStep, type ApplicationExecutionContext, type ApplicationEffectContract } from '@/core/application-control'
 import { creativeIntentFields, type IntentWrite } from './creativeIntentFields'
 import { intentRecord, intentHost, splitIntentRef, intentRevisions, type IntentDomain, type IntentEntity } from './creativeIntentHost'
@@ -20,7 +21,7 @@ export function retainIntentUndo(restore: (context?: ApplicationExecutionContext
   const token = crypto.randomUUID(); undoPrivateHeads.set(token, privateRefs)
   undos.set(token, async context => { await restore(context); undos.delete(token); undoPrivateHeads.delete(token); return intentResult(refs, domain) })
   // 同时释放闭包及隐私索引；不依赖用户实际点击撤销来回收文档快照。
-  while (undos.size > 256) {
+  while (undos.size > UNDO_HISTORY_STEPS) {
     const oldest = undos.keys().next().value
     if (oldest === undefined) break
     undos.delete(oldest)

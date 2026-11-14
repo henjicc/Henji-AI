@@ -5,7 +5,7 @@ import { type ApplicationFieldDefinition, type ApplicationPropertyDescriptor, ty
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 import type { AudioEditProjectDocument, AudioEditProcessorDescriptor, AudioEditTranscriptBlock } from '@/core/audioEdit/types'
 import { applyAudioEditSuggestion, audioEditSuggestionOptionBlocker, audioEditSuggestionState, chooseAudioEditSuggestionOption, chosenAudioEditSuggestionOption, dismissAudioEditSuggestion, setAudioEditBlocks, updateAudioEditCut } from '@/core/audioEdit/edits'
-import { audioEditCutsSchema, audioEditProjectSchema, audioEditSettingsSchema, audioEditFrameRateSchema, audioEditViewSettingsSchema } from '@/core/audioEdit/schema'
+import { audioEditCutsSchema, audioEditSettingsSchema, audioEditFrameRateSchema, audioEditViewSettingsSchema } from '@/core/audioEdit/schema'
 import { DEFAULT_AUDIO_EDIT_VIEW_SETTINGS } from '@/core/audioEdit/edits'
 import { hasAudioEditModifications } from '@/core/audioEdit/baseline'
 import { buildProjectAudioEditTimeline, editedDurationFrames } from '@/core/audioEdit/timeline'
@@ -183,8 +183,8 @@ function readOnly(definition: ApplicationFieldDefinition<AudioEditFieldSource, A
   return { ...definition, descriptor: { ...definition.descriptor, readOnlyReason: reason } }
 }
 const TEXT = { kind: 'string', maxLength: 20000 } as const
-/** 参考稿上限跟文档格式一致（.hjaud 的 referenceScript 上限），不另设更小的写入上限。 */
-const REFERENCE_SCRIPT = { kind: 'string', ...(audioEditProjectSchema.shape.referenceScript.maxLength ? { maxLength: audioEditProjectSchema.shape.referenceScript.maxLength } : {}) } as const
+/** 参考稿不设长度上限：长稿读取按 textPage 分段取。 */
+const REFERENCE_SCRIPT = { kind: 'string' } as const
 const BOOL = { kind: 'boolean' } as const
 const INT = { kind: 'integer', hardRange: { min: 0 } } as const
 const objectValue = (id: string): ApplicationPropertyDescriptor['value'] => ({ kind: 'json', schemaRef: audioEditSchemaRef('property', id) })

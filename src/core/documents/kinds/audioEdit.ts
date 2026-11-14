@@ -82,8 +82,11 @@ export const audioEditDocumentKind: DocumentKindDescriptor<AudioEditDocumentCont
   // 同一版本起 source 保留不认识的字段（宽松结构），以后再给 source 加可选字段只升版本、不再提高最低可读版本。
   // 版本 9 = 顶层新增可选的 suggestionHandoff（本地粗剪交给助手二次判断的材料，按线索 ID 存）。
   // 版本 8 的程序把不认识的顶层字段原样带回，所以最低可读版本不变。
-  version: 9,
-  minReaderVersion: 8,
+  // 版本 10 = 参考稿 referenceScript 去掉 20 万字上限。版本 9 及以前的程序遇到超过 20 万字的参考稿会校验失败，
+  // 所以只有这样的文件写最低可读版本 10，其余仍写 8。
+  version: 10,
+  minReaderVersion: 10,
+  minReaderVersionFor: (content) => content.referenceScript.length > 200000 ? 10 : 8,
   contentSchema: audioEditContentSchema,
   migrations: {
     // 6 → 7：音频效果合并、均衡方式拆分并保留声音身份别名；旧程序无法理解新效果，最低可读版本同步提高。
@@ -91,7 +94,9 @@ export const audioEditDocumentKind: DocumentKindDescriptor<AudioEditDocumentCont
     // 7 → 8：只新增可选的 source.fingerprint；旧素材的 identity 原样保留，派生缓存键照旧计算。
     7: (content) => structuredClone(content),
     // 8 → 9：只新增可选的顶层 suggestionHandoff。
-    8: (content) => structuredClone(content) },
+    8: (content) => structuredClone(content),
+    // 9 → 10：只放宽参考稿长度，内容不变。
+    9: (content) => structuredClone(content) },
   createEmptyContent: () => ({ source: null, referenceScript: '', transcript: [], suggestions: [] }),
   isEmptyContent: isEmptyAudioEditContent,
   summarize: (content) => ({

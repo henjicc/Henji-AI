@@ -17,12 +17,13 @@ import { loadAudioEditProject, editAudioEditProjectAsync, flushAudioEditProject,
 import { AUDIO_EDIT_ENTITY_TYPES } from './audioEditReflection'
 import { loadAudioEditBreaths } from './audioEditBreaths'
 import { describeAudioEditBreaths } from '@/core/audioEdit/breaths'
+import { UNDO_HISTORY_STEPS } from '@/core/undoHistory'
 
 type MutationStep = Extract<ApplicationPlannedStep, { kind: 'mutation' }>
 type CollectionStep = Extract<ApplicationPlannedStep, { kind: 'collection' }>
 type MutableEntityType = typeof AUDIO_EDIT_ENTITY_TYPES.project | typeof AUDIO_EDIT_ENTITY_TYPES.transcriptBlock | typeof AUDIO_EDIT_ENTITY_TYPES.cut | typeof AUDIO_EDIT_ENTITY_TYPES.caption | typeof AUDIO_EDIT_ENTITY_TYPES.suggestion | typeof AUDIO_EDIT_ENTITY_TYPES.breath | typeof AUDIO_EDIT_ENTITY_TYPES.processorChain
 
-const MAX_UNDO_RECORDS = 50
+const MAX_UNDO_RECORDS = UNDO_HISTORY_STEPS
 /** after 是写入后的作品：撤销前比较内容，用户之后又改过就不拿旧快照覆盖。 */
 const undoRecords = new Map<string, { previous: AudioEditProjectDocument; after: AudioEditProjectDocument; targets: ApplicationRef[] }>()
 function clearAudioEditUndoRecords(projectId?: string): void {

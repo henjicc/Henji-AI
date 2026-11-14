@@ -32,8 +32,9 @@ import type {
 import type { NodeChange } from '@xyflow/react';
 import { readGenerationTaskStatusSnapshot } from '@/features/generation/application/generationTaskStatusRegistry';
 import { createCanvasGenerationCancelledPatch } from '@/features/canvas/domain/generationFailure';
+import { UNDO_HISTORY_STEPS } from '@/core/undoHistory';
 
-export const MAX_HISTORY_STEPS = 50;
+export const MAX_HISTORY_STEPS = UNDO_HISTORY_STEPS;
 const IMAGE_NODE_VISUAL_MIN_EDGE = 96;
 
 export function isCanvasNodeEdit(change: NodeChange<CanvasNode>): boolean {

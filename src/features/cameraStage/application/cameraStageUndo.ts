@@ -16,7 +16,7 @@ interface CameraStageUndoSnapshot {
 }
 
 const undoSnapshots = new Map<string, CameraStageUndoSnapshot>()
-// 与编辑器历史一样有界；过期回执通过 NOT_FOUND 明确拒绝，不保留无限场景副本。
+// 每条回执深拷贝整个场景、彼此不共享（编辑器撤销栈共享未改动部分，所以能到 500 步），这里留 100 条；过期回执通过 NOT_FOUND 明确拒绝。
 const MAX_UNDO_SNAPSHOTS = 100
 
 function undoToken(): string {

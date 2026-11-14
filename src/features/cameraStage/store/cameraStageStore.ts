@@ -63,6 +63,7 @@ import type {
 import type { StageCoverage } from '../domain/coverage'
 import type { StageCameraCut } from '../domain/renderCameraSchedule'
 import { createCameraCutSlice, type CameraCutSliceActions } from './cameraCutSlice'
+import { UNDO_HISTORY_STEPS } from '@/core/undoHistory'
 
 export interface CameraStageState extends CameraStagePathActions, CameraCutSliceActions {
   objects: StageObject[]
@@ -862,7 +863,7 @@ export const createCameraStageStore = (options: { coverRefresh?: boolean } = {})
   requestFocusSelected: () => set((state) => ({ focusToken: state.focusToken + 1 })),
     }),
     {
-      limit: 100,
+      limit: UNDO_HISTORY_STEPS,
       // 跟踪场景数据 + 动画轨道切片；界面态/播放态变更不入历史
       partialize: (state): TrackedState => ({
         objects: state.objects,

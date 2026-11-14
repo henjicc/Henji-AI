@@ -1,3 +1,4 @@
+import { UNDO_HISTORY_STEPS } from '@/core/undoHistory'
 import { afterEach, expect, it, vi } from 'vitest'
 import { createFixture, createEngine } from '@/core/application-control/execution/engineTestFixture'
 import * as authorization from '../creativeIntentAuthorization'
@@ -29,7 +30,7 @@ it('公开撤销回执淘汰最旧项，最新回执仍可撤销', async () => {
   state.current = { fixture, ...createEngine(fixture) }
   const refs: string[] = []
   const context = { requestId: 'bounded-public-undo', signal: new AbortController().signal }
-  for (let i = 0; i < 257; i++) {
+  for (let i = 0; i <= UNDO_HISTORY_STEPS; i++) {
     const result = await applicationReflectionHandlers.changeEntities({ summary: '修改数值', changes: [{ kind: 'set_properties', entityType: 'sample.item', target: { kind: 'sample.item', id: 'one' }, properties: { 'sample.value': (i % 5) * 2 } }] }, { ...context, expectedRevisions: { 'sample.scope': fixture.revisions.value } })
     refs.push(result.undoRef!)
   }

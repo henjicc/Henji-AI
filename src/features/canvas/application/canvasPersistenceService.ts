@@ -3,6 +3,7 @@ import { createLogger } from '@/core/logging'
 import type { useCanvasStore } from '@/stores/canvasStore'
 import type { ApplicationTransactionResult } from '@/core/application-control/transactions'
 import { ApplicationConflictError } from '@/core/application-control/execution/persistence'
+import { UNDO_HISTORY_STEPS } from '@/core/undoHistory'
 
 const logger = createLogger('features.canvas.persistence')
 
@@ -152,7 +153,7 @@ export async function confirmCanvasPersistence(
 
 const pendingUndos = new Map<string, { projectId: string; nodes: unknown; edges: unknown; history: unknown }>()
 export interface CanvasUndoPersistenceState { persistenceUndoApplied?: boolean }
-const MAX_PENDING_UNDOS = 100
+const MAX_PENDING_UNDOS = UNDO_HISTORY_STEPS
 
 function expirePendingUndo(token: string): void {
   pendingUndos.delete(token)

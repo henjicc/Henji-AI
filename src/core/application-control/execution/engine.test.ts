@@ -1,3 +1,4 @@
+import { UNDO_HISTORY_STEPS } from '../../undoHistory'
 import { ApplicationTransactionVerifier } from './verifier'
 import { describe, expect, it, vi } from 'vitest'
 import { createFixture, createEngine, context, mutationStep, collectionStep, removalStep } from './engineTestFixture'
@@ -68,7 +69,7 @@ describe('ApplicationControlExecutionEngine', () => {
     const forget = vi.fn()
     Object.assign(executor, { forget })
     const refs: string[] = []
-    for (let i = 0; i < 257; i++) {
+    for (let i = 0; i <= UNDO_HISTORY_STEPS; i++) {
       const revision = fixture.revisions.value
       const plan = await engine.plan({ summary: '修改数值', transactionMode: 'compensatable', steps: [mutationStep('one', (i % 5) * 2, revision)] }, context())
       const result = await engine.commit({ planRef: plan.planRef, expectedRevisions: { 'sample.scope': revision }, idempotencyKey: `bounded-undo-operation-${i}` }, context())
@@ -96,7 +97,7 @@ describe('ApplicationControlExecutionEngine', () => {
     engine.registerOperationExecutor({ capabilityId: 'release_sample', capabilityVersion: 1, requiredPermissions: ['sample:write'], supportsAtomic: false,
       effectContract: { direct: [], cascades: [] }, normalizeInput: input => input, getCurrentRevisions: async () => ({ 'sample.scope': 0 }), execute, undo, forget })
     let latest = ''
-    for (let index = 0; index < 257; index++) {
+    for (let index = 0; index <= UNDO_HISTORY_STEPS; index++) {
       fixture.values.set('one', 2)
       const plan = await engine.plan({ summary: '释放回执', transactionMode: 'non_reversible', steps: [kind === 'collection' ? removalStep('one') :
         { kind: 'operation', capabilityId: 'release_sample', capabilityVersion: 1, input: {}, expectedRevisions: { 'sample.scope': 0 } }] }, context())
@@ -106,7 +107,7 @@ describe('ApplicationControlExecutionEngine', () => {
     }
     expect(forget.mock.calls).toEqual([['snapshot-1']])
     expect(await engine.undo({ undoRef: latest, expectedRevisions: { 'sample.scope': 0 }, idempotencyKey: 'snapshot-test-release-undo' }, context())).toMatchObject({ status: 'completed' })
-    expect(forget.mock.calls).toEqual([['snapshot-1'], ['snapshot-257']])
+    expect(forget.mock.calls).toEqual([['snapshot-1'], [`snapshot-${UNDO_HISTORY_STEPS + 1}`]])
   })
 
   it('撤销零步失败保留快照，部分成功失败则释放整张回执且不重复执行', async () => {

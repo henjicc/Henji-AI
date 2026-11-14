@@ -1,3 +1,4 @@
+import { UNDO_HISTORY_STEPS } from '@/core/undoHistory'
 import type { VideoEditDocument } from '@/core/videoEdit/document'
 import { storedVideoEditEffectLibrarySchema, storedVideoEditEffectLibrary } from '@/core/videoEdit/effectLibrary'
 import { desktopEffectLibrarySources, readEffectLibrarySources, writeEffectLibrarySources, type EffectLibrarySourceStorage } from './videoEditEffectLibrarySources'
@@ -94,7 +95,7 @@ export function createVideoEditEffectLibraryStore(storage?: SyncSettingsStorage,
         const token = crypto.randomUUID()
         const change = recordHistory ? { token, order: nextVideoEditHistoryOrder('library'), before: { favorites: get().favorites, presets: get().presets }, after: next } : undefined
         set({ ...next, revision: get().revision + 1 })
-        if (change) { past.push(change); past.splice(0, past.length - 50); future.length = 0 }
+        if (change) { past.push(change); past.splice(0, past.length - UNDO_HISTORY_STEPS); future.length = 0 }
         publishVideoEdit()
         logger.info(`effect_library.${operation}.completed`, '本机效果库已保存')
         return token

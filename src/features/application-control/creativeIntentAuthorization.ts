@@ -1,3 +1,4 @@
+import { UNDO_HISTORY_STEPS } from '@/core/undoHistory'
 import type { ApplicationRef } from '@/core/application-control'
 import { onExplanationBodyErased } from '@/core/creativeIntent/semanticIntentEdits'
 
@@ -11,7 +12,7 @@ export function forgetExplanationUndoAccess(undoRef: string): void {
 export function rememberExplanationUndoAccess(undoRef: string, refs: readonly ApplicationRef[], release: () => void): void {
   const bodies = refs.filter(ref => ref.kind.endsWith('.explanation_body'))
   if (bodies.length) privateUndos.set(undoRef, { refs: structuredClone(bodies), release })
-  while (privateUndos.size > 256) {
+  while (privateUndos.size > UNDO_HISTORY_STEPS) {
     const oldest = privateUndos.keys().next().value
     if (oldest === undefined) break
     forgetExplanationUndoAccess(oldest)

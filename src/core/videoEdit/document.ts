@@ -238,6 +238,16 @@ export const videoEditExportHistorySchema = z.array(z.object({
   assetRef: z.object({ kind: z.literal('asset'), id: z.string().min(1) }).strict().optional(),
 }).strict())
 export type VideoEditExportHistoryEntry = z.infer<typeof videoEditExportHistorySchema>[number]
+/**
+ * 素材项 ID 常被填成代码素材或源素材的 ID（三者在回执里都出现）：认出来时指出对应的素材项，
+ * 返回以“：”开头的补充说明，认不出时返回空串。
+ */
+export function videoEditItemIdHint(document: Pick<VideoEditDocument, 'items' | 'media' | 'codeMaterials'>, id: string): string {
+  const kind = document.codeMaterials?.some(material => material.id === id) ? '代码素材' : document.media.some(media => media.id === id) ? '源素材' : undefined
+  if (!kind) return ''
+  const items = document.items.filter(item => item.code?.definitionId === id || item.mediaId === id).map(item => item.id)
+  return `：${id} 是${kind} ID，这里要填素材项（video_edit.item）的 ID${items.length ? `，对应的素材项是 ${items.slice(0, 5).join('、')}${items.length > 5 ? ` 等 ${items.length} 个` : ''}` : '，它还没有对应的素材项'}`
+}
 export const videoEditDocumentSchema = z.object({
   foreign: foreignContentSchema.optional(),
   exportHistory: videoEditExportHistorySchema.optional(),
@@ -353,7 +363,7 @@ export const videoEditDocumentSchema = z.object({
       if (clip.kind !== 'light' && (['lightKind', 'lightColor', 'lightIntensity', 'lightCastShadow', 'lightSoftness', 'lightAngle'] as const).some(key => clip[key] !== undefined || clip.curves?.lightIntensity?.length)) issue(`只有灯光片段可以带灯光属性（${clip.name}）。`)
       if (clip.kind === 'light' && (clip.effects?.length || clip.graphic || clip.code)) issue(`灯光片段“${clip.name}”不能带效果、图形或代码。`)
       if (clip.audioRole && clip.kind !== 'sequence' && (!media || media.hasAudio === false || !(clip.kind === 'audio' || clip.kind === 'video' && clip.sourceComponent !== 'video'))) issue('只有带声音的音视频片段可以标注声音类型。')
-      if (!item || (item.kind !== clip.kind && !extractedAudio)) issue(`片段 ${clip.name} 的素材项引用无效。`)
+      if (!item || (item.kind !== clip.kind && !extractedAudio)) issue(`片段 ${clip.name} 的素材项引用无效${item ? '' : videoEditItemIdHint(document, clip.itemId)}。`)
       if (clip.sourceComponent && !(item?.kind === 'video' && ((clip.kind === 'video' && clip.sourceComponent === 'video') || extractedAudio))) issue('只有视频素材可以拆开引用画面或声音。')
       if (extractedAudio && media?.hasAudio !== true) issue('拆出的声音必须引用已确认具有音轨的视频素材。')
       if (clip.audioMapping) {

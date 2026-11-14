@@ -40,8 +40,9 @@ import {
 } from '../domain/connectionIndex'
 
 import { assertCanvasCommitContext, runCanvasMutationStage, confirmCanvasPersistence, runPersistedCanvasUndo, type CanvasCommitOptions, type CanvasUndoPersistenceState } from './canvasPersistenceService'
+import { UNDO_HISTORY_STEPS } from '@/core/undoHistory'
 
-const MAX_UNDO_RECORDS = 100
+const MAX_UNDO_RECORDS = UNDO_HISTORY_STEPS
 const FOCUS_HANDLER_WAIT_MS = 2_000
 const logger = createLogger('features.canvas.application')
 

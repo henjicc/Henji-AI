@@ -19,6 +19,7 @@ import { notifyUser } from '@/contexts/NotificationContext'
 import { isDocumentServiceError, toError } from '@/features/documents/documentErrors'
 import type { DocumentSession } from '@/features/documents/documentSession'
 import { getDocumentSessionRegistry, type DocumentSessionRegistry } from '@/features/documents/documentSessionRegistry'
+import { UNDO_HISTORY_STEPS } from '@/core/undoHistory'
 import type { DocumentContentAdapter, DocumentLeaveOutcome } from '@/features/documents/documentSessionTypes'
 
 /*
@@ -323,7 +324,7 @@ function changedFields(before: AudioEditProjectDocument, after: AudioEditProject
  * 撤销步数。一小时口播校对动辄几百次删词、恢复，50 步撤不回 AI 粗剪那一步。历史里的作品共享没改动的子树，
  * 每步只多出换掉的数组与节点（改一个词约是一份词块指针数组，上万词块约 0.1 MB），500 步约几十 MB。
  */
-const UNDO_LIMIT = 500
+const UNDO_LIMIT = UNDO_HISTORY_STEPS
 
 /** 显示设置、修订号与更新时间不进撤销。 */
 const NOT_UNDOABLE = new Set(['viewSettings', 'revision', 'updatedAt'])

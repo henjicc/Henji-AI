@@ -1,3 +1,4 @@
+import { UNDO_HISTORY_STEPS } from '@/core/undoHistory'
 import { propagateVideoEditSpatialFields, videoEditStoredSpatialCamera } from './videoEditSpatial'
 import { recordVideoEditCodeEdits } from '@/core/videoEdit/codeEdits'
 import { videoEditCodeEditActor } from './videoEditCodeElementReflection'
@@ -198,7 +199,7 @@ function removalCascades(before: VideoEditDocument, after: VideoEditDocument, di
 function content(document: VideoEditDocument): string { return JSON.stringify({ ...document, revision: 0 }) }
 function completed(before: VideoEditDocument, after: VideoEditDocument, refs: ApplicationRef[], viewBefore?: ProjectViewSnapshot, sourcePause?: VideoEditSourcePause, directProperties: readonly string[] = []): ApplicationCompletedStepResult {
   const undoToken = crypto.randomUUID(); undo.set(undoToken, { owner: requireVideoEditInstance(before.id), before, after, refs, viewBefore, viewAfter: viewBefore ? projectViewSnapshot(before.id) : undefined, sourcePause })
-  while (undo.size > 100) undo.delete(undo.keys().next().value!)
+  while (undo.size > UNDO_HISTORY_STEPS) undo.delete(undo.keys().next().value!)
   const lost = videoEditLostCodeClipReferenceReport(before, after)
   const lostRefs = [...new Set(lost?.references.map(reference => reference.clipRef.id))].map(id => ({ kind: 'video_edit.clip', id }))
   const lostEffects: ApplicationEffectReceipt[] = []

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { UNDO_HISTORY_STEPS } from '@/core/undoHistory'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { audioEditProjectSchema } from '@/core/audioEdit/schema'
 import { renderHook } from '@testing-library/react'
@@ -52,18 +53,18 @@ function mutationStep(entityType: typeof AUDIO_EDIT_ENTITY_TYPES.project | typeo
   return { kind: 'mutation', entityType, target: { kind: entityType, id: entityType === AUDIO_EDIT_ENTITY_TYPES.project ? 'instance-test' : 'instance-test:word' }, expectedRevisions: {}, mutations }
 }
 
-it('助手撤销回执最多保留 50 项，仍保留最新回执且释放文档清除全部快照', async () => {
+it('助手撤销回执按撤销步数有界保留，仍保留最新回执且释放文档清除全部快照', async () => {
   const executor = new AudioEditMutationExecutor(AUDIO_EDIT_ENTITY_TYPES.project)
   const tokens: string[] = []
-  for (let index = 0; index < 51; index++) {
+  for (let index = 0; index <= UNDO_HISTORY_STEPS; index++) {
     const result = await executor.apply(mutationStep(AUDIO_EDIT_ENTITY_TYPES.project, [{ propertyId: 'audio_edit.document.reference_script', operation: 'set', value: `${index}` }]))
     tokens.push(result.undoToken!)
   }
   await expect(executor.undo(tokens[0])).rejects.toThrow('AUDIO_EDIT_UNDO_NOT_FOUND')
-  await executor.undo(tokens[50])
-  expect(getAudioEditProjectInstance('instance-test')!.document.referenceScript).toBe('49')
+  await executor.undo(tokens[UNDO_HISTORY_STEPS])
+  expect(getAudioEditProjectInstance('instance-test')!.document.referenceScript).toBe(String(UNDO_HISTORY_STEPS - 1))
   await releaseAudioEditProject('instance-test')
-  await expect(executor.undo(tokens[49])).rejects.toThrow('AUDIO_EDIT_UNDO_NOT_FOUND')
+  await expect(executor.undo(tokens[UNDO_HISTORY_STEPS - 1])).rejects.toThrow('AUDIO_EDIT_UNDO_NOT_FOUND')
 })
 
 it.each(['undo', 'compensate'] as const)('助手同一步删除再锁定后 %s 恢复内容和锁，普通编辑仍受锁保护', async (mode) => {

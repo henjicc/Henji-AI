@@ -17,6 +17,7 @@ import { videoEditCodeElementFrames, videoEditCodeElementRef, VIDEO_EDIT_CODE_EL
 import { videoEditCodeElementSourceIds } from './videoEditCodeElementSummary'
 import { ensureVideoEditCodeParameterMetadata, peekVideoEditCodeProgram, readVideoEditCodeMetadata } from './videoEditCodeState'
 import { readVideoEditCodeElementEdit, videoEditCodeElementEffectStates, videoEditCodeElementKind, writeVideoEditCodeElementGroups, type VideoEditCodeElementTarget, type VideoEditCodeElementGroups } from './videoEditCodeElementWrites'
+import { UNDO_HISTORY_STEPS } from '@/core/undoHistory'
 
 const type = VIDEO_EDIT_CODE_ELEMENT
 type Data = Record<string, JsonValue>
@@ -138,7 +139,7 @@ export class VideoEditCodeElementMutationExecutor implements ApplicationMutation
     const after = owner.document
     if (changedVideoEditFonts(before, after, readVideoEditCodeMetadata(owner, before), readVideoEditCodeMetadata(owner, after)).some(use => !GENERIC_FONT_FACES.some(face => face.family === use.font))) await loadFontLibrary(true)
     const undoToken = crypto.randomUUID(); this.receipts.set(undoToken, { before, after, ref: step.target })
-    while (this.receipts.size > 100) this.receipts.delete(this.receipts.keys().next().value!)
+    while (this.receipts.size > UNDO_HISTORY_STEPS) this.receipts.delete(this.receipts.keys().next().value!)
     return { status: 'completed', directRefs: [step.target], undoToken, resultingRevisions: revisions(), evidence: [{ kind: 'entity_state', fact: '代码元素已写入同一剪辑历史，修改记录同步更新。', capturedAt: new Date().toISOString() }] }
   }
   private restore(token: string, compensation: boolean, context?: ApplicationExecutionContext): ApplicationCompletedStepResult {

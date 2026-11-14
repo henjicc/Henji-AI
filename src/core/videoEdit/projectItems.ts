@@ -1,5 +1,5 @@
 import { VIDEO_EDIT_MAX_SEQUENCE_SECONDS } from './time'
-import { createVideoEditSequence, videoEditComposition, videoEditDuration, type VideoEditClip, type VideoEditDocument, type VideoEditSequence } from './document'
+import { createVideoEditSequence, videoEditComposition, videoEditDuration, videoEditItemIdHint, type VideoEditClip, type VideoEditDocument, type VideoEditSequence } from './document'
 import { videoEditIsDefaultAudioMapping, videoEditItemAudioLayout, type VideoEditAudioMapping } from './audioChannels'
 import { VIDEO_EDIT_FRAME_RATES, videoEditFps } from './time'
 import { clampVideoEditSequenceSize } from './sequenceSize'
@@ -23,7 +23,7 @@ export function removeVideoEditClips(document: VideoEditDocument, ids: readonly 
 }
 /** 与 Premiere“清除”素材一致：引用这些素材项的片段（及其标注）一并删除。 */
 export function removeVideoEditItems(document: VideoEditDocument, ids: string[]): VideoEditDocument {
-  for (const id of ids) if (!document.items.some(item => item.id === id)) throw new Error('素材项不存在。')
+  for (const id of ids) if (!document.items.some(item => item.id === id)) throw new Error(`素材项不存在${videoEditItemIdHint(document, id)}。`)
   const removedItems = new Set(ids)
   const { sequences } = removeVideoEditClips(document, document.sequences.flatMap(sequence => sequence.clips.filter(clip => removedItems.has(clip.itemId)).map(clip => clip.id)))
   const items = document.items.filter(item => !removedItems.has(item.id))
@@ -63,7 +63,7 @@ export function removeVideoEditBins(document: VideoEditDocument, ids: string[]):
 }
 export function makeVideoEditItemClip(document: VideoEditDocument, itemId: string, sequenceId: string, placement: { frame: number; track?: number; duration?: number; sourceComponent?: 'video' | 'audio'; sourceInUs?: number; sourceOutUs?: number; audioMapping?: VideoEditAudioMapping }, codeMetadata?: CodeMaterialMetadataReader): VideoEditClip {
   const item = document.items.find(item => item.id === itemId)
-  if (!item) throw new Error('素材项不存在。')
+  if (!item) throw new Error(`素材项不存在${videoEditItemIdHint(document, itemId)}。`)
   const sequence = videoEditComposition(document, sequenceId)
   const media = document.media.find(media => media.id === item.mediaId)
   if (placement.sourceComponent && (item.kind !== 'video' || placement.sourceComponent === 'audio' && media?.hasAudio !== true)) throw new Error('此素材没有已确认可引用的音画分量。')
@@ -139,7 +139,7 @@ function audioTracksFor(sequence: VideoEditSequence, count: number, start: numbe
  */
 export function placeVideoEditItem(document: VideoEditDocument, itemId: string, sequenceId: string, placement: VideoEditItemPlacement, codeMetadata?: CodeMaterialMetadataReader): { clips: VideoEditClip[]; addedTracks: VideoEditTrack[] } {
   const item = document.items.find(item => item.id === itemId)
-  if (!item) throw new Error('素材项不存在。')
+  if (!item) throw new Error(`素材项不存在${videoEditItemIdHint(document, itemId)}。`)
   const sequence = document.sequences.find(sequence => sequence.id === sequenceId)
   if (!sequence) throw new Error('目标序列不存在。')
   const media = document.media.find(media => media.id === item.mediaId)
@@ -178,7 +178,7 @@ export function placeVideoEditItems(document: VideoEditDocument, itemIds: readon
 export function videoEditSequenceFromItem(document: VideoEditDocument, itemId: string, settings: VideoEditSequenceSettings = {}, codeMetadata?: CodeMaterialMetadataReader): VideoEditSequence {
   const { binId, ...sequenceSettings } = settings
   const item = document.items.find(item => item.id === itemId)
-  if (!item) throw new Error('素材项不存在。')
+  if (!item) throw new Error(`素材项不存在${videoEditItemIdHint(document, itemId)}。`)
   const media = document.media.find(media => media.id === item.mediaId)
   const program = item.code ? codeMetadata?.(item.code) : undefined
   if (item.kind === 'code' && !program) throw new Error('代码素材尚未完成源码检查。')

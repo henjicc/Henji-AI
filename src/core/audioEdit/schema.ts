@@ -24,7 +24,7 @@ export const audioEditProjectSchema = z.object({
     audioStreamIndex: frame.optional(), audioStartSeconds: z.number().finite().optional(),
     video: z.object({ frameRate: audioEditFrameRateSchema, width: frame, height: frame, startSeconds: z.number().finite(), durationSeconds: z.number().positive(), variableFrameRate: z.boolean() }).strict().optional(),
   }),
-  referenceScript: z.string().max(200000), transcript: transcriptSchema,
+  referenceScript: z.string(), transcript: transcriptSchema,
   suggestions: suggestionsSchema, suggestionHandoff: suggestionHandoffSchema.optional(),
   editBaseline: z.object({ kind: z.enum(['original', 'legacy']), transcript: transcriptSchema, suggestions: suggestionsSchema }).strict().optional(),
   cuts: audioEditCutsSchema.optional(),
