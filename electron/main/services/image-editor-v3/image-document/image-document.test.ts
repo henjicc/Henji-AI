@@ -179,11 +179,12 @@ it('暂存包完成后取消也不替换原文档，工作副本修改保留', a
 })
 
 describe('图片文档新建与适配器', () => {
-  it('新建草稿写进“图片文档/未命名图片 N.hjimg”，头里有 ID、草稿标记与摘要；适配器能读', async () => {
+  it('新建草稿写进“Image Documents/未命名图片 N.hjimg”，头里有 ID、草稿标记与摘要；适配器能读', async () => {
     await workingCopy('doc-a')
     const created = await service.create({ documentId: 'doc-a', container: { kind: 'user' }, emptyUntilRevision: 0 })
     expect(created.read.meta).toMatchObject({ id: 'doc-a', kind: 'image_document', name: '未命名图片 1', draft: true, revision: 0 })
-    expect(created.read.meta.path).toBe(path.join(workRoot, '图片文档', '未命名图片 1.hjimg'))
+    // 独立存放的文件夹一律用英文名（STANDALONE_FOLDER_LOCALE），文件名仍按起名语言。
+    expect(created.read.meta.path).toBe(path.join(workRoot, 'Image Documents', '未命名图片 1.hjimg'))
     expect(created.read.content).toMatchObject({ workingRevision: 0, emptyUntilRevision: 0, width: 120, height: 80, layers: 1 })
 
     await workingCopy('doc-b')

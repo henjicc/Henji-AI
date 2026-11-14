@@ -5,6 +5,7 @@ import { act, fireEvent, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '@/i18n/config'
 import Dropdown from './Dropdown'
+import { Z_LAYERS } from '@/core/theme/zLayers'
 import { DROPDOWN_MENU_MAX_WIDTH_PX, resolveDropdownDisplay, resolveDropdownMenuWidth } from './dropdownUtils'
 
 beforeEach(async () => { await i18n.changeLanguage('zh-CN') })
@@ -221,7 +222,7 @@ describe('Dropdown 字段触发器与浮层（任务 2.2）', () => {
     expect(rendered.getByRole('option', { name: '最新创建' }).dataset.size).toBe('sm')
   })
 
-  it('挂到 body 的浮层默认用 popover 层级（盖住弹窗与查看器、低于提示）', () => {
+  it('挂到 body 的浮层默认用 popover 层级（盖住弹窗、查看器与标题栏，低于提示）', () => {
     const rendered = render(React.createElement(Dropdown, {
       ariaLabel: '层级',
       value: 'a',
@@ -229,7 +230,8 @@ describe('Dropdown 字段触发器与浮层（任务 2.2）', () => {
     }))
     fireEvent.keyDown(rendered.getByRole('button', { name: '层级' }), { key: 'ArrowDown' })
     const panel = document.querySelector<HTMLElement>('[data-dropdown-portal="true"]')
-    expect(panel?.style.zIndex).toBe('75')
+    const z = Number(panel?.style.zIndex)
+    expect(z).toBeGreaterThan(Z_LAYERS.viewer); expect(z).toBeGreaterThan(Z_LAYERS.titlebar); expect(z).toBeLessThan(Z_LAYERS.tooltip)
   })
 })
 

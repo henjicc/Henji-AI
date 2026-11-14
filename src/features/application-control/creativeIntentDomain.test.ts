@@ -157,7 +157,7 @@ it('正式 describe → change/invoke → read：钉点保持、候选应用与�
     expect(getActiveVideoEditSequence(owner).clips[0].curves).toEqual(before)
   } finally { app.dispose() }
 })
-it('原稿元数据经公共事务回执一次撤销，跨连接不可借用回执', async () => {
+it('原稿元数据经公共事务回执一次撤销；回执不限连接，别的连接拿到也能撤销', async () => {
   const { owner, draftRef } = await setup(), app = createApplicationHarness(), other = createApplicationHarness()
   try {
     const label = owner.document.creativeIntents!.drafts[0].label
@@ -165,9 +165,7 @@ it('原稿元数据经公共事务回执一次撤销，跨连接不可借用回�
     expect(result.ok, JSON.stringify(result)).toBe(true)
     if (!result.ok) throw new Error('change failed')
     expect(result.data.undoRef).toBeTypeOf('string')
-    const denied = await other.call('undo_application_changes', { undoRef: result.data.undoRef })
-    expect(denied.ok).toBe(false)
-    await app.requireResult('undo_application_changes', { undoRef: result.data.undoRef })
+    await other.requireResult('undo_application_changes', { undoRef: result.data.undoRef })
     expect(owner.document.creativeIntents!.drafts[0].label).toBe(label)
     expect((await app.call('undo_application_changes', { undoRef: result.data.undoRef })).ok).toBe(false)
   } finally { app.dispose(); other.dispose() }
