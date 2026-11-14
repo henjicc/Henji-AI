@@ -9,14 +9,17 @@ import { captureBufferOptions, captureChannelOptions, captureDepthLabel, capture
 
 const logger = createLogger('features.audioCapture.settings')
 
+/** 上次读到的设备与设置：再次打开时先直接显示，后台读回后再替换，不每次都闪一下读取中。 */
+let lastRead: { inventory: AudioCaptureInventory; state: AudioCaptureSettingsState } | undefined
+
 /** 设置页与录音浮层共用；只有挂载期间持有设备监听，偏好始终以主进程读回为准。 */
 export function AudioCaptureSettingsForm({ disabled = false, disabledReason = '录音中不能修改', onSettings }: {
   disabled?: boolean; disabledReason?: string; onSettings?: (state: AudioCaptureSettingsState) => void
 }): JSX.Element {
   const sessionLocked = useStore(getAudioCaptureSession().store, current => current.busy || current.phase === 'recording')
   disabled = disabled || sessionLocked
-  const [state, setState] = useState<AudioCaptureSettingsState>()
-  const [inventory, setInventory] = useState<AudioCaptureInventory>()
+  const [state, setState] = useState<AudioCaptureSettingsState | undefined>(lastRead?.state)
+  const [inventory, setInventory] = useState<AudioCaptureInventory | undefined>(lastRead?.inventory)
   const [formats, setFormats] = useState<CaptureFormats>([])
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -32,6 +35,7 @@ export function AudioCaptureSettingsForm({ disabled = false, disabledReason = '�
     try {
       const nextInventory = devices ?? await api.enumerate()
       const next = await api.getSettings()
+      lastRead = { inventory: nextInventory, state: next }
       if (!mounted.current || generation !== refreshGeneration.current) return
       setInventory(nextInventory); setState(next); onSettingsRef.current?.(next)
     } catch (raw) {
@@ -61,6 +65,7 @@ export function AudioCaptureSettingsForm({ disabled = false, disabledReason = '�
     logger.info('修改录音设置', { event: 'audio_capture.settings.write.start' })
     try {
       const next = await getPlatform().audioCapture.setSettings({ ...state.settings, ...patch }, state.revision)
+      if (lastRead) lastRead = { ...lastRead, state: next }
       if (mounted.current) { setState(next); onSettingsRef.current?.(next) }
       logger.info('录音设置已读回', { event: 'audio_capture.settings.write.completed' })
     } catch (raw) {

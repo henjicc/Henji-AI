@@ -270,6 +270,8 @@ export class AudioCaptureService {
     if (changed) this.publish(undefined, { event: 'devicesChanged', inventory })
     return inventory
   }
+  /** 界面打开设置时用：有上次枚举结果就直接给，设备变化由监听里的后台枚举推送，不让每次打开都等一次原生枚举。 */
+  async currentInventory(): Promise<AudioCaptureInventory> { return this.inventory ?? this.enumerate() }
   async getSettings(): Promise<AudioCaptureSettingsState> { return captureSettingsState(this.settings, this.inventory ?? await this.enumerate()) }
   async setSettings(settings: AudioCaptureSettings, revision: number): Promise<AudioCaptureSettingsState> {
     this.settings.write(settings, revision)
@@ -417,7 +419,12 @@ export class AudioCaptureService {
   watchDevices(owner: number, enabled: boolean): void {
     if (enabled) this.deviceWatchers.add(owner); else this.deviceWatchers.delete(owner)
     clearInterval(this.deviceTimer)
-    if (this.deviceWatchers.size) { this.deviceTimer = setInterval(() => { if (!this.captureRunning()) void this.run(() => this.enumerate()).catch(error => logger.debug('刷新录音设备失败', { event: 'audio_capture.devices.failed', error })) }, 10_000); this.deviceTimer.unref() }
+    if (!this.deviceWatchers.size) return
+    const refresh = (): void => { if (!this.captureRunning()) void this.run(() => this.enumerate()).catch(error => logger.debug('刷新录音设备失败', { event: 'audio_capture.devices.failed', error })) }
+    // 打开设置时先显示上次的结果，稍后在后台核对一次，有变化再推给界面；
+    // 延后一点是为了不排在界面读取缓存结果的请求前面（请求是串行执行的）。
+    if (enabled) setTimeout(refresh, 500).unref()
+    this.deviceTimer = setInterval(refresh, 10_000); this.deviceTimer.unref()
   }
   acknowledge(owner: number, sessionId: string, sequence: number): void {
     const value = this.active?.subscribers.get(sessionId)

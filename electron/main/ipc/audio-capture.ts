@@ -119,7 +119,7 @@ export function registerAudioCaptureIpc(): void {
           await service.settled()
           return files.discard(request.outputPath)
         }
-        case 'enumerate': return service.enumerate()
+        case 'enumerate': return service.currentInventory()
         case 'watchDevices': return service.watchDevices(owner, request.enabled)
         case 'settings': return service.getSettings()
         case 'setSettings': return service.setSettings(request.settings, request.expectedRevision)
