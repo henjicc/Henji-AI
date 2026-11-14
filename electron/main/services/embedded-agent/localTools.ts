@@ -28,8 +28,15 @@ function global:Get-HenjiRecycleBin($root) {
 function global:Move-HenjiToRecycleBin($item) {
   $bin = Get-HenjiRecycleBin ([System.IO.Path]::GetPathRoot($item.FullName))
   if ($bin.Refusal) { return $bin.Refusal }
-  $size = if ($item.PSIsContainer) { [int64](Get-ChildItem -LiteralPath $item.FullName -Recurse -Force -File -ErrorAction SilentlyContinue | Measure-Object Length -Sum).Sum } else { $item.Length }
+  $files = if ($item.PSIsContainer) { @(Get-ChildItem -LiteralPath $item.FullName -Recurse -Force -File -ErrorAction SilentlyContinue) } else { @($item) }
+  $size = [int64]($files | Measure-Object Length -Sum).Sum
   if ($size -gt $bin.Capacity) { return ("大小 {0:N0} MB 超过回收站容量 {1:N0} MB" -f ($size / 1MB), ($bin.Capacity / 1MB)) }
+  # 有文件被别的程序占着时系统会弹对话框等人点，命令在后台就一直卡住；先查出来，逐项报错
+  foreach ($file in $files) {
+    try { [System.IO.File]::Open($file.FullName, 'Open', 'ReadWrite', 'None').Dispose() }
+    catch [System.IO.IOException] { if (($_.Exception.HResult -band 0xFFFF) -in 32, 33) { return "$($file.FullName) 正被别的程序打开" } }
+    catch { }
+  }
   Add-Type -AssemblyName Microsoft.VisualBasic
   if ($item.PSIsContainer) { [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($item.FullName, 'OnlyErrorDialogs', 'SendToRecycleBin') }
   else { [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($item.FullName, 'OnlyErrorDialogs', 'SendToRecycleBin') }
