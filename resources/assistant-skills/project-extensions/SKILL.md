@@ -42,7 +42,9 @@ description: 应用工具做不到时，在用户电脑上自己装模型、写�
 ## 运行环境
 
 - **首选应用自带的那套**，用户什么都不用装：
-  - `henji-node` 用应用自带的 Node 运行脚本（命令里直接用，和 `node` 用法相同）；
+  - 内置助手：命令里直接用 `henji-node`（用法同 `node`）；应用自带的 ffmpeg、ffprobe 在环境变量 `HENJI_FFMPEG`、`HENJI_FFPROBE`；
+  - 外部助手：`describe_application_contract` 的 `localRuntime` 给出同一份 Node（按给的环境变量运行）与 ffmpeg、ffprobe 的路径；项目文件夹读 `documents.project.path`；
+  - 看画面、看规格先用应用的观察工具（`observe_video_edit_frame` 的联系表带时间码，素材属性里有时长、分辨率、帧率），只有扩展脚本自己要解码时才调 ffmpeg；
   - 模型优先找 ONNX 版本，用 npm 的 `onnxruntime-node` 跑，先试显卡执行提供者（Windows 用 `dml` 或 `cuda`，macOS 用 `coreml`），不行再用 CPU；
   - 像素与模拟放到剪辑代码素材的 WebGPU 里做。
 - 没有 npm 时，从 nodejs.org 下载官方便携版 Node 放到 `<作品目录>/扩展/.runtime/`，所有扩展共用。

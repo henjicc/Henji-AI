@@ -11,6 +11,7 @@ import { emptyEmbeddedAgentSnapshot, type EmbeddedAgentPrompt, type EmbeddedAgen
 import { createEmbeddedApplicationClient } from '../application-runtime/runtime'
 import { APPLICATION_TOOL_CONVENTIONS } from '../application-runtime/toolCatalog'
 import { getAppLocalDataDir } from '../system'
+import { describeLocalRuntime } from '../application-runtime/localRuntime'
 import { getMainWindow } from '../../window'
 import { contentTrust } from '../content-trust/runtime'
 import { getAssistantUserInstructions } from '../assistant/user-instructions'
@@ -221,8 +222,11 @@ export class EmbeddedAgentService {
     this.initializing = (async () => {
       // Pi 的全局资料（下载的 rg/fd、信任记录、全局助手插件与技能）放进助手目录，不写到用户主目录的 .pi。
       // henji-node 用主程序本身运行脚本：辅助进程的 execPath 在 macOS 上是 Helper，不保证能当 Node 用。
+      // 应用自带的 ffmpeg / ffprobe 也给命令用（$env:HENJI_FFMPEG），和外部助手从契约读到的是同一份。
+      const runtime = await describeLocalRuntime()
       const child = utilityProcess.fork(path.join(__dirname, 'pi-agent-utility.cjs'), [], { serviceName: '痕迹AI内置助手', stdio: 'pipe',
-        env: { ...process.env, PI_CODING_AGENT_DIR: assistantDirectory(), HENJI_NODE: process.execPath } })
+        env: { ...process.env, PI_CODING_AGENT_DIR: assistantDirectory(), HENJI_NODE: process.execPath,
+          ...(runtime.ffmpeg ? { HENJI_FFMPEG: runtime.ffmpeg } : {}), ...(runtime.ffprobe ? { HENJI_FFPROBE: runtime.ffprobe } : {}) } })
       this.child = child
       child.on('message', (message: EngineEvent | { type: 'result'; id: string; value?: unknown; error?: string }) => {
         if (this.child !== child) return

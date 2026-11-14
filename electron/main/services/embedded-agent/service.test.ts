@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({ readDocument: vi.fn(), projectMemory: vi.fn(),
 vi.mock('electron', () => ({ utilityProcess: { fork: mocks.fork } }))
 vi.mock('../application-runtime/runtime', () => ({ createEmbeddedApplicationClient: () => ({ catalog: () => [], close: mocks.close, call: mocks.call }) }))
 vi.mock('../system', () => ({ getAppLocalDataDir: () => '/fixture' }))
+vi.mock('../application-runtime/localRuntime', () => ({ describeLocalRuntime: async () => ({ usage: '', node: { path: 'node', env: {} } }) }))
 vi.mock('../../window', () => ({ getMainWindow: () => undefined }))
 vi.mock('./piTrace', () => ({ recordPiTrace: () => undefined, recordPiRunEnded: () => undefined }))
 vi.mock('../assistant/user-instructions', () => ({ getAssistantUserInstructions: async () => ({ content: '' }) }))

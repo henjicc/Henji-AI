@@ -12,6 +12,7 @@ import { createMainLogger } from '../logging'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../src/core/application-control/builtinApplicationCapabilityRegistry'
 import { isAssistantSkillError } from '../../../../src/core/assistant/skills'
 import { agentSkillIndex, loadAgentSkill } from '../assistant/skills/agentSkills'
+import { describeLocalRuntime } from './localRuntime'
 import { projectApplicationToolResult, type ResultDetailOptions } from './resultProjection'
 import { validateApplicationToolOutput } from './outputContract'
 import { beginHostCapabilityCapture } from '../../../../src/core/captureLog/capability'
@@ -109,9 +110,9 @@ export class ApplicationToolDispatcher {
       if (name === 'describe_application_contract') {
         try {
           const { domains, detail, names, includeSchemas } = describeContractInputSchema.parse(args ?? {})
-          const skills = this.callerKind === 'external' ? await agentSkillIndex() : undefined
+          const [skills, localRuntime] = this.callerKind === 'external' ? await Promise.all([agentSkillIndex(), describeLocalRuntime()]) : [undefined, undefined]
           this.connections.assertActive(callerId)
-          const data = buildApplicationContract({ domains: this.host.domains(), catalog: this.catalog(callerId), port: this.port, requestedDomains: domains, callerKind: this.callerKind, skills, detail, names, includeSchemas })
+          const data = buildApplicationContract({ domains: this.host.domains(), catalog: this.catalog(callerId), port: this.port, requestedDomains: domains, callerKind: this.callerKind, skills, localRuntime, detail, names, includeSchemas })
           const result = { ok: true, data }
           return result
         } catch (error) {

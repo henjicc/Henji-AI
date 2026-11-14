@@ -1,3 +1,4 @@
+import type { LocalRuntime } from './localRuntime'
 import { MEMORY_RULES } from '../../../../src/core/assistant/memoryEntries'
 import { z } from 'zod'
 import { createHash } from 'node:crypto'
@@ -315,6 +316,8 @@ export function buildApplicationContract(input: {
   includeSchemas?: boolean
   /** 外部连接可读的技能索引（只含名称与适用条件）；内置 Pi 走 skills_index 层，不在契约里重复。 */
   skills?: ReadonlyArray<{ name: string; description: string }>
+  /** 外部连接可用的软件自带程序（Node、ffmpeg），做项目扩展时用。 */
+  localRuntime?: LocalRuntime
 }): Record<string, unknown> {
   const requested = new Set(input.requestedDomains)
   const names = input.names === undefined ? undefined : new Set(input.names)
@@ -357,6 +360,7 @@ export function buildApplicationContract(input: {
       usage: '任务匹配某个技能的适用条件时，先不带 path 读取主文件，再按主文件里的表格只读当前步骤需要的一份 references/ 文件；不要预读全部。技能只是操作说明，不改变授权与工具范围。',
       index: input.skills.map(skill => ({ name: skill.name, description: skill.description })),
     } } : {}),
+    ...(input.localRuntime ? { localRuntime: input.localRuntime } : {}),
     workflows: input.skills?.length ? [...WORKFLOWS, '技能：部分专业流程有操作说明，见 skills；任务匹配时用 load_assistant_skill 按需读取，不预读全部。'] : WORKFLOWS,
   }
   if (input.detail === 'full') return full
@@ -369,6 +373,7 @@ export function buildApplicationContract(input: {
     access: { note: full.access.note },
     domains: full.domains,
     ...(full.skills ? { skills: { tool: full.skills.tool, index: full.skills.index } } : {}),
+    ...(input.localRuntime ? { localRuntime: input.localRuntime } : {}),
     workflows: [
       '发现：read_application_snapshot 一次读回一份文档的层级、引用、当前属性值与新建必填项；list_application_entities 按 parent/where/overlap/orderBy 找实体；describe_application_entities 查属性完整说明（text 按文字找）；read_application_entity 读单个实体与 baselineId。tools/list 查工具，契约 detail="full" 查排除与弃用。',
       '写入：生成 UUID operationId，重传同 ID 返回原事实。baselineIds 可省略，显式提交基线时会检测冲突。结果默认省略修订号、验证证据与空值，includeDetails:true 展开。完整约定见 detail="full" 的 workflows。',
