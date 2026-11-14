@@ -2,8 +2,9 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { deflateRawSync } from 'node:zlib'
 import { createVideoEditSequence, type VideoEditClip, type VideoEditComposition } from '@/core/videoEdit/document'
 import { encodeSmartRegionSegment } from '@/core/videoEdit/smartRegions'
-import { createVideoEditTrackHeader, encodeVideoEditTrackRecord, encodeVideoEditTrackGeometry, videoEditTrackerKey, type VideoEditTrackHeader, type VideoEditTrackQuad } from '@/core/videoEdit/tracking'
-import { applyVideoEditClipFollow, setVideoEditTrackResults, videoEditClipSourceTimeUs, videoEditTrackerBox, videoEditTrackerMask, videoEditTrackerGeometry, videoEditClipTrackingQuad, readVideoEditTrackReviewHeader } from './videoEditTrackResults'
+import { createVideoEditTrackHeader, encodeVideoEditTrackRecord, encodeVideoEditTrackGeometry, videoEditTrackerKey, type VideoEditTrackHeader, type VideoEditTrackQuad, type VideoEditTracker } from '@/core/videoEdit/tracking'
+import { applyVideoEditClipFollow, setVideoEditTrackResults, videoEditClipSourceTimeUs, videoEditTrackerBox, videoEditTrackerMask, videoEditTrackerGeometry, videoEditClipTrackingQuad, readVideoEditTrackReviewHeader, videoEditTrackerResultKey } from './videoEditTrackResults'
+import { recordingCursorFixture } from '@/tests/recordingCursorFixture'
 import { videoEditEffectMask } from './videoEditEffectMasks'
 
 afterEach(() => { vi.unstubAllGlobals(); setVideoEditTrackResults({}) })
@@ -78,6 +79,19 @@ it('形状跟踪真实 Range + deflate 读取；框与形状结果经同一路�
   const box = await videoEditTrackerMask('box', { feather: 0, expand: 0, invert: false }, 0)
   expect(box!.data[Math.floor(box!.height * 0.3) * box!.width + Math.floor(box!.width * 0.2)]).toBe(255)
   expect(await videoEditEffectMask({ regionId: 'tracker', trackerId: 'missing' }, { timeUs: 0, picture: { width: 64, height: 64 } })).toBeUndefined()
+})
+// 录屏窗口跟踪没有结果文件，作用区域按录制事件换算窗口框；漏掉这条路时效果会整段消失且不报错。
+it('录屏窗口跟踪做效果作用区域时按录制事件取窗口框', async () => {
+  const log = await recordingCursorFixture(4, { windows: true })
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(log.bytes.get(url)!.slice().buffer)))
+  const tracker: VideoEditTracker = { id: 'win', name: '编辑器窗口', method: 'box', prompts: [{ timeUs: 0, box: [100 / 1920, 100 / 1080, 800 / 1920, 600 / 1080] }], recording: { kind: 'window', windowId: 'editor' } }
+  const clip: VideoEditClip = { id: 'clip', itemId: 'video', kind: 'video', name: '录屏', text: '', track: 1, start: 0, duration: 120, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, trackers: [tracker] }
+  const document: VideoEditComposition = { ...createVideoEditSequence(), width: 1920, height: 1080, fps: 30, revision: 0, media: [{ id: 'screen', name: '录屏', path: 'screen', kind: 'video', durationSeconds: 4, width: 1920, height: 1080, recordingCursor: log.source }], items: [{ id: 'video', mediaId: 'screen', name: '录屏', kind: 'video' }], clips: [clip] }
+  const trackerKeys = { win: videoEditTrackerResultKey(document, clip, 'screen', tracker) }
+  const mask = (await videoEditEffectMask({ regionId: 'tracker', trackerId: 'win', feather: 0, expand: 0 }, { timeUs: 1_000_000, picture: { width: 1920, height: 1080 }, trackerKeys }))!
+  // 1 秒时窗口在 (100,100) 800×600：窗口中心在蒙版内，窗口右侧之外不在。
+  const at = (x: number, y: number): number => mask.data[Math.floor(y / 1080 * mask.height) * mask.width + Math.floor(x / 1920 * mask.width)]
+  expect(at(500, 400)).toBe(255); expect(at(1500, 400)).toBe(0)
 })
 it('手绘遮罩跟随参考框移动与缩放，缺少绑定结果时跳过效果', async () => {
   serve({ box: encodeSmartRegionSegment(header({ frameCount: 1, boxes: [[0.5, 0.5, 0.4, 0.4, 1]] })) })

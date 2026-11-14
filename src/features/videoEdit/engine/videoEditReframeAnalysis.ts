@@ -3,8 +3,7 @@ import { videoEditClipPictureSize } from '@/core/videoEdit/clipGeometry'
 import { videoEditClipMedia, type VideoEditClip, type VideoEditComposition } from '@/core/videoEdit/document'
 import type { VideoEditSize } from '@/core/videoEdit/clipGeometry'
 import { setVideoEditSmartRegionSegments, videoEditSmartRegionAttentionBox, type VideoEditSmartRegionSegments } from './videoEditSmartRegionMasks'
-import { setVideoEditTrackResults, videoEditTrackerBox, videoEditClipSourceTimeUs, type VideoEditTrackResults } from './videoEditTrackResults'
-import { videoEditTrackerKey } from '@/core/videoEdit/tracking'
+import { setVideoEditTrackResults, videoEditTrackerBox, videoEditTrackerResultKey, videoEditClipSourceTimeUs, type VideoEditTrackResults } from './videoEditTrackResults'
 
 export interface VideoEditReframeAnalysisRequest {
   composition: VideoEditComposition; clipId: string; target: VideoEditSize; settings: VideoEditReframeSettings
@@ -21,12 +20,14 @@ export async function analyzeVideoEditReframe(request: VideoEditReframeAnalysisR
   const picture = videoEditClipPictureSize(request.composition, clip); const viewport = videoEditReframeViewport(picture, request.target)
   const boxes: Array<VideoEditAttentionBox | null> = []; let missingFrames = 0; let faceFrames = 0
   const tracker = clip.trackers?.find(tracker => tracker.id === request.trackerId)
+  // 与渲染同一处算结果键：录屏窗口跟踪在这里登记录制事件来源。
+  const trackerKey = tracker && videoEditTrackerResultKey(request.composition, clip, media.id, tracker)
   for (let frame = 0; frame < clip.duration; frame++) {
     const time = videoEditClipSourceTimeUs(request.composition, clip, clip.start + frame)
     let box: VideoEditAttentionBox | null = null
     if (request.settings.attention === 'tracker') {
-      if (!tracker) throw new Error('请选择本片段的形状或物体框跟踪器。')
-      const tracked = await videoEditTrackerBox(videoEditTrackerKey(media.id, tracker), time)
+      if (!trackerKey) throw new Error('请选择本片段的形状或物体框跟踪器。')
+      const tracked = await videoEditTrackerBox(trackerKey, time)
       if (tracked === undefined) throw new Error('跟踪结果尚未就绪，请完成跟踪后重试。')
       box = tracked ? { x: tracked[0], y: tracked[1], width: tracked[2], height: tracked[3] } : null
     } else {

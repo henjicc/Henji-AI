@@ -22,6 +22,10 @@ import { detectVideoEditScenes } from './videoEditSceneDetection'
 import { videoEditTrackerEntityId } from './videoEditCompositeEntities'
 import { enqueueVideoEditExports } from './videoEditExportQueue'
 import { VideoEditReframeDialog } from '../panels/VideoEditReframeDialog'
+import { recordingCursorFixture } from '@/tests/recordingCursorFixture'
+import { toFetchableMediaUrl } from '@/services/imageSource'
+import { fetchRecordingCursorPage } from '../engine/videoEditRecordingCursorSource'
+import { readRecordingPageFile } from './videoEditRecordingClip'
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   setTracks() {} async updateDocument() {} async present() { return { presented: true, bitmap: { close() {} } } } async dispose() {}
 } }))
@@ -127,6 +131,31 @@ it('绑定明确跟踪器完整结果；公共引用归属校验，返回新序�
     expect(videoEditTrackerBox).toHaveBeenCalledTimes(90)
     await expect(executeVideoEditReframeCapability(reframeVideoEditCapability.inputSchema.parse({ ...input, sequenceRef: { ...input.sequenceRef, id: `foreign:${target.sequenceId}` } }))).rejects.toThrow('documentRef')
     expect(owner.document.sequences).toHaveLength(2)
+})
+// 录屏窗口跟踪没有后台任务：不能去问主进程跟踪状态（主进程不认 recording 字段），Worker 副本按录制事件取框。
+it('录屏窗口跟踪器做重构主体：不查后台跟踪，按事件页换算窗口框', async () => {
+  const { owner, id, target } = await fixture()
+  const log = await recordingCursorFixture(10, { windows: true })
+  const pages = log.source.pages.map((page, index) => ({ ...page, path: `D:/录屏/事件/page-${index}.capture.json` }))
+  editVideoProject(id, document => {
+    document = structuredClone(document)
+    document.media[document.media.length - 1].recordingCursor = { ...log.source, pages }
+    document.sequences[0].clips[0].trackers = [{ id: 'win', name: '编辑器窗口', method: 'box', prompts: [{ timeUs: 0, box: [200 / 1920, 200 / 1080, 200 / 1920, 200 / 1080] }], recording: { kind: 'window', windowId: 'editor' } }]
+    return document
+  })
+  const status = vi.spyOn(getPlatform().tracking, 'status')
+  const actual = await vi.importActual<typeof import('../engine/videoEditTrackResults')>('../engine/videoEditTrackResults')
+  vi.mocked(videoEditTrackerBox).mockImplementation(actual.videoEditTrackerBox)
+  // 测试里分析在主线程同一份模块上跑；换回 Worker 的读取方式（只认可 fetch 地址），验证的是 Worker 那条路。
+  actual.setVideoEditRecordingTrackReader(fetchRecordingCursorPage)
+  const served = new Map(pages.map((page, index) => [toFetchableMediaUrl(page.path), log.bytes.get(log.source.pages[index].path)!]))
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => served.has(url) ? new Response(served.get(url)!.slice().buffer) : new Response(null, { status: 404 })))
+  try {
+    const result = await reframeVideoEdit(target, { size: { width: 1080, height: 1920 }, settings: { attention: 'tracker', motion: 'default' }, trackers: { clip: 'win' } })
+    expect(status).not.toHaveBeenCalled()
+    expect(result.missingFrames).toBe(0)
+    expect(owner.document.sequences[1].clips[0].curves!.x!.every(isVideoEditReframeKeyframe)).toBe(true)
+  } finally { vi.unstubAllGlobals(); actual.setVideoEditRecordingTrackReader(readRecordingPageFile) }
 })
 it('正式公共注册与通用属性回读共同核实重构结果', async () => {
   const { owner, id, input } = await fixture()

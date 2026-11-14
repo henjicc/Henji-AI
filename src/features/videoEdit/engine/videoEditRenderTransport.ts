@@ -15,6 +15,7 @@ import type { EffectQuality } from '@/core/imaging/effects/descriptor'
 import type { VideoProxyResult } from '@/core/videoEdit/proxy'
 import { activeVideoEditClips, videoEditPictureTransitionsAt, type VideoEditComposition } from '@/core/videoEdit/document'
 import { isLikelyLocalImagePath, toFetchableMediaUrl } from '@/services/imageSource'
+import { withFetchableRecordingPages } from './videoEditRecordingPageUrls'
 import { getPlatform } from '@/platform/runtime'
 import { getHardwareCapabilities } from '@/services/mediaCache/hardwareCapabilities'
 import type { VideoEditDeviceMemory } from './videoEditGpuBudget'
@@ -255,7 +256,7 @@ export class VideoEditRenderTransport {
   private effectSnapshot: AuthorEffectEnvironment = {}
   private liveEffects = false
   private effectsChanged(): boolean { return this.liveEffects && this.host.authorEffects?.().presets !== this.effectSnapshot.presets }
-  private mediaDocument(document: VideoEditComposition): VideoEditComposition { return { ...document, authorEffects: structuredClone(authorEffectEnvironmentForStyle(document.authorEffects ?? this.effectSnapshot, document.styles, document.styleId)), media: document.media.map(media => ({ ...media, path: toFetchableMediaUrl(media.path), ...(media.recordingCursor ? { recordingCursor: { ...media.recordingCursor, pages: media.recordingCursor.pages.map(page => ({ ...page, path: toFetchableMediaUrl(page.path) })) } } : {}), ...(this.proxies[media.id] ? { sourceRevision: `${media.sourceRevision ?? ''}:proxy:${this.proxies[media.id].key}` } : {}) })), ...(document.colorLuts ? { colorLuts: document.colorLuts.map(asset => ({ ...asset, path: toFetchableMediaUrl(asset.path) })) } : {}) } }
+  private mediaDocument(document: VideoEditComposition): VideoEditComposition { return { ...document, authorEffects: structuredClone(authorEffectEnvironmentForStyle(document.authorEffects ?? this.effectSnapshot, document.styles, document.styleId)), media: document.media.map(media => ({ ...withFetchableRecordingPages(media), path: toFetchableMediaUrl(media.path), ...(this.proxies[media.id] ? { sourceRevision: `${media.sourceRevision ?? ''}:proxy:${this.proxies[media.id].key}` } : {}) })), ...(document.colorLuts ? { colorLuts: document.colorLuts.map(asset => ({ ...asset, path: toFetchableMediaUrl(asset.path) })) } : {}) } }
   /** The native decoder reads original local files; the worker only sees fetchable URLs, so it gets this map too. */
   private localPaths(document: VideoEditComposition): Record<string, string> {
     return Object.fromEntries([...Object.values(this.proxies).map(result => [toFetchableMediaUrl(result.path), result.path]), ...document.media.filter(media => media.kind !== 'image' && isLikelyLocalImagePath(media.path)).map(media => [toFetchableMediaUrl(media.path), media.path])])

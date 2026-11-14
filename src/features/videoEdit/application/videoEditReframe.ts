@@ -11,6 +11,7 @@ import { videoEditTrackingRequest } from './videoEditTracking'
 import { videoEditTrackerKey } from '@/core/videoEdit/tracking'
 import { cachedVideoEditSceneCuts } from './videoEditSceneDetection'
 import { analyzeVideoEditReframeOffThread } from './videoEditReframeWorkerClient'
+import { withFetchableRecordingPages } from '../engine/videoEditRecordingPageUrls'
 import { editVideoProject, holdVideoEditActivity, requireVideoEditInstance } from './videoEditService'
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 
@@ -67,10 +68,15 @@ export async function reframeVideoEdit(target: VideoEditReframeTarget, options: 
       if (settings.attention === 'tracker') {
         const tracker = clip.trackers?.find(tracker => tracker.id === trackerId)
         if (!tracker || !['shape', 'box'].includes(tracker.method)) throw new Error(`请为片段“${clip.name}”选择已完成的形状或物体框跟踪器。`)
-        const request = videoEditTrackingRequest(baseline, sequence.frameRate, clip, tracker)!
-        const status = await getPlatform().tracking.status(request.definition)
-        if (status.state !== 'ready' || status.result.startUs > request.range.startUs || status.result.endUs < request.range.endUs) throw new Error(`片段“${clip.name}”的跟踪尚未覆盖完整片段，请完成跟踪后重试。`)
-        tracks[videoEditTrackerKey(media.id, tracker)] = { url: toFetchableMediaUrl(status.result.path), version: status.result.path }
+        // 录屏窗口跟踪没有后台任务与结果文件：Worker 按录制事件直接换算框，事件页随素材副本转成可 fetch 地址。
+        if (tracker.recording) {
+          if (!media.recordingCursor) throw new Error(`片段“${clip.name}”的素材没有录制事件，不能按录屏窗口跟踪重构。`)
+        } else {
+          const request = videoEditTrackingRequest(baseline, sequence.frameRate, clip, tracker)!
+          const status = await getPlatform().tracking.status(request.definition)
+          if (status.state !== 'ready' || status.result.startUs > request.range.startUs || status.result.endUs < request.range.endUs) throw new Error(`片段“${clip.name}”的跟踪尚未覆盖完整片段，请完成跟踪后重试。`)
+          tracks[videoEditTrackerKey(media.id, tracker)] = { url: toFetchableMediaUrl(status.result.path), version: status.result.path }
+        }
       } else {
         for (const kind of (settings.attention === 'auto' ? ['person', 'face'] : [settings.attention]) as Array<'person' | 'face'>) {
           const request = videoEditSmartRegionRequest(baseline, sequence.frameRate, clip, { mask: { regionId: kind } })!
@@ -82,7 +88,7 @@ export async function reframeVideoEdit(target: VideoEditReframeTarget, options: 
       const composition = videoEditComposition(baseline, sequence.id)
       // Only target clip is needed for source-clock mapping and analysis; media/items remain shared metadata.
       composition.clips = [clip]
-      composition.media = composition.media.map(media => ({ ...media, path: toFetchableMediaUrl(media.path) }))
+      composition.media = composition.media.map(media => withFetchableRecordingPages({ ...media, path: toFetchableMediaUrl(media.path) }))
       const result = await analyzeVideoEditReframeOffThread({ composition, clipId: clip.id, target: size, settings, segments, tracks, trackerId, cuts: await cachedVideoEditSceneCuts({ ...target, clipId: clip.id }, operationSignal) }, operationSignal)
       updated.set(clip.id, result.clip); missingFrames += result.missingFrames; faceFrames += result.faceFrames
       onProgress?.((index + 1) / clips.length)

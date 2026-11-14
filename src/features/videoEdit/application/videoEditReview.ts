@@ -304,6 +304,8 @@ async function executeVideoEditReview(raw: unknown, context: Pick<CapabilityExec
         const step = entry.path.at(-1)!; const sourceId = videoEditTrackingSourceId(local, step.clip)
         for (const tracker of step.clip.trackers ?? []) {
           assertCurrent()
+          // 录屏事件跟踪按录制事件直接换算框，没有跟踪结果文件，也就没有跟丢、低可信度可复核。
+          if (tracker.recording) continue
           const base = { sequenceId: local.id, path: entry.path, subjectId: videoEditTrackerEntityId(step.clipId, tracker.id) }
           const handle = sourceId ? results[videoEditTrackerKey(sourceId, tracker)] : undefined
           if (!handle) { assertVideoEditReviewBudget(records.length + 1); records.push({ ...base, kind: 'tracking_unavailable', timeline: entry.timeline }); continue }

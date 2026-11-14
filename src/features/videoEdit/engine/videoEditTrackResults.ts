@@ -168,6 +168,8 @@ export function videoEditClipTrackingQuad(clip: VideoEditClip): VideoEditTrackQu
 
 /** 跟踪器作为效果作用区域的蒙版（片段画面比例，长边 512）；还没有结果时 undefined。 */
 export async function videoEditTrackerMask(trackerKey: string, params: SmartRegionMaskParams, timeUs: number): Promise<VideoEditSmartRegionMask | undefined> {
+  const recording = recordingTracks.get(trackerKey)
+  if (recording) return rasterizeVideoEditTrackBox(await recordingBox(recording, timeUs), recording.source.width, recording.source.height, params)
   const result = results[trackerKey]
   if (!result) return undefined
   const layout = await layoutOf(result)
