@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>剪辑批注草图</title>
+<style>
+@font-face { font-family: 'HarmonyOS Sans SC UI'; src: url('../../../../src/assets/fonts/HarmonyOS_Sans_SC.ttf') format('truetype'); font-weight: 100 900; font-display: block; }
+:root {
+  /* 取自 src/index.css 的石墨主题令牌 */
+  --gap:#181818; --window:#1B1B1B; --panel:#212121; --raised:#272727; --overlay:#292929; --overlay-hover:#303030;
+  --line-overlay:#393939; --control:#2B2B2B; --hover:#2A2A2A; --selected:#333333;
+  --line:#282828; --line-strong:#313131; --media:#191919;
+  --text1:#EEEEEE; --text2:#CACACA; --text3:#A5A5A5; --text-disabled:#4E4E4E; --icon-rest:#737373;
+  --accent:#3A6FDF; --accent-text:#9CBEFF; --accent-ring:#6A9BFE; --on-accent:#FFFFFF;
+  --success:#2F9E5E; --clip-video:#2E3654; --clip-video-strip:#262D47; --clip-audio:#23423A; --clip-audio-strip:#1C362F; --clip-wave:#86BFAB;
+  /* 草图新增：批注轮换色（拟加进主题引擎，令牌 --annotation1…8 / --annotation-ink，不随主题） */
+  --annotation1:#FF5C5C; --annotation2:#6EA8FF; --annotation3:#FFD43B; --annotation4:#5AD67D;
+  --annotation5:#B48CFF; --annotation6:#FFA23A; --annotation7:#3FD0E8; --annotation8:#FF7EC8; --annotation-ink:#16181D;
+  --w-normal:400; --w-medium:460; --w-semibold:580;
+}
+* { box-sizing:border-box; }
+html, body { margin:0; background:#101010; color:var(--text1); font-family:'HarmonyOS Sans SC UI','Microsoft YaHei UI',sans-serif; font-size:13px; line-height:20px; -webkit-font-smoothing:antialiased; }
+.num { font-variant-numeric:tabular-nums; }
+svg.i { width:var(--s,16px); height:var(--s,16px); flex:none; stroke:currentColor; fill:none; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round; display:block; }
+
+/* 页面外框 */
+.page { padding:40px 40px 80px; }
+.page h1 { font-size:20px; line-height:28px; font-weight:560; margin:0 0 6px; }
+.page .lead { color:var(--text3); margin:0 0 36px; max-width:1000px; white-space:pre-line; }
+.block { margin-bottom:72px; }
+.block h2 { font-size:16px; line-height:24px; font-weight:var(--w-semibold); margin:0 0 4px; }
+.block .note { color:var(--text3); font-size:12px; line-height:18px; margin:0 0 16px; max-width:1100px; white-space:pre-line; }
+.pair { display:flex; gap:40px; align-items:flex-start; transform-origin:0 0; }
+.side { flex:none; } .side .tag { font-size:12px; color:var(--text3); margin-bottom:8px; }
+.shot { width:1440px; height:900px; display:block; }
+body.single { background:var(--gap); } body.single .page { padding:0; }
+body.single .page > h1, body.single .lead, body.single .block { display:none; }
+body.single .block.show { display:block; margin:0; }
+body.single .block.show h2, body.single .block.show .note, body.single .side .tag { display:none; }
+
+/* 软件界面 */
+.app { width:1440px; height:900px; position:relative; overflow:hidden; background:var(--gap); display:flex; flex-direction:column; white-space:nowrap; }
+.ib { width:28px; height:28px; flex:none; display:inline-flex; align-items:center; justify-content:center; border-radius:6px; color:var(--text2); }
+.ib.s24 { width:24px; height:24px; --s:14px; } .ib.s20 { width:20px; height:20px; --s:12px; border-radius:4px; }
+.ib.mode { background:var(--selected); color:var(--text1); } .ib.on { color:var(--accent-text); } .ib.dis { color:var(--text-disabled); }
+.btn { height:28px; padding:0 10px; display:inline-flex; align-items:center; gap:6px; border-radius:6px; font-size:13px; font-weight:var(--w-medium); color:var(--text2); --s:14px; flex:none; }
+.btn.primary { background:var(--accent); color:var(--on-accent); } .btn.secondary { background:var(--control); color:var(--text1); }
+.btn.sm { height:24px; padding:0 8px; font-size:12px; }
+.titlebar { height:40px; flex:none; background:var(--window); display:flex; align-items:center; padding:0 0 0 14px; position:relative; }
+.titlebar .brand { font-weight:var(--w-semibold); margin-right:14px; }
+.titlebar .menu { display:flex; gap:2px; } .titlebar .menu span { font-size:12px; color:var(--text3); padding:0 7px; }
+.titlebar .nav { position:absolute; left:50%; transform:translateX(-50%); display:flex; gap:2px; }
+.titlebar .nav span { height:28px; padding:0 12px; display:flex; align-items:center; border-radius:6px; color:var(--text2); font-weight:var(--w-medium); }
+.titlebar .nav span.cur { background:var(--selected); color:var(--text1); }
+.cmd { height:44px; flex:none; background:var(--panel); display:flex; align-items:center; padding:0 10px; gap:2px; }
+.cmd .proj { height:28px; padding:0 8px; display:flex; align-items:center; gap:6px; font-weight:var(--w-medium); --s:14px; }
+.cmd .sep { width:1px; height:16px; background:var(--line-strong); margin:0 10px; }
+.cmd .right { margin-left:auto; display:flex; align-items:center; gap:2px; }
+.seg { height:24px; border-radius:6px; background:var(--raised); display:flex; padding:2px; gap:2px; font-size:12px; color:var(--text3); }
+.seg span { height:20px; padding:0 9px; display:flex; align-items:center; border-radius:4px; }
+.seg span.cur { background:var(--line-overlay); color:var(--text1); font-weight:var(--w-medium); }
+.dock { flex:1; min-height:0; display:flex; gap:2px; padding-top:2px; }
+.col { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.panel { background:var(--panel); display:flex; flex-direction:column; min-width:0; min-height:0; position:relative; }
+.tabs { height:32px; flex:none; display:flex; align-items:stretch; padding:0 6px; border-bottom:1px solid var(--line); }
+.tab { padding:0 8px; display:flex; align-items:center; font-size:12px; color:var(--text3); font-weight:var(--w-medium); position:relative; }
+.tab.cur { color:var(--text1); }
+.tab.cur.focus::after { content:''; position:absolute; left:8px; right:8px; bottom:-1px; height:2px; background:var(--accent-ring); border-radius:1px; }
+.foot { height:32px; flex:none; border-top:1px solid var(--line); display:flex; align-items:center; padding:0 6px 0 12px; gap:2px; }
+.foot .status { font-size:12px; color:var(--text3); margin-right:auto; }
+
+/* 节目画面 */
+.viewer { flex:1; min-height:0; background:var(--media); display:flex; align-items:center; justify-content:center; position:relative; }
+.frame { position:relative; background:#000 center/cover; overflow:hidden; }
+.frame .ttl { position:absolute; left:8.5%; top:30%; font-size:30px; line-height:40px; font-weight:300; color:#fff; letter-spacing:1px; }
+.frame .ttl small { display:block; font-size:12px; line-height:18px; font-weight:400; letter-spacing:3px; color:rgba(255,255,255,.78); margin-bottom:6px; }
+.frame .wm { position:absolute; right:3%; top:4.5%; font-size:12px; color:rgba(255,255,255,.7); letter-spacing:2px; border:1px solid rgba(255,255,255,.4); padding:3px 8px; border-radius:3px; }
+.frame .cap { position:absolute; left:0; right:0; bottom:4%; text-align:center; font-size:16px; font-weight:500; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.7); }
+.marks { position:absolute; inset:0; }
+.scrub { height:20px; flex:none; background:var(--panel); position:relative; border-top:1px solid var(--line); }
+.scrub .tick { position:absolute; bottom:0; width:1px; height:5px; background:var(--line-strong); }
+.scrub .ph, .ph-line { position:absolute; top:0; bottom:0; width:1px; background:var(--accent-ring); }
+.scrub .dot { position:absolute; top:6px; width:6px; height:6px; border-radius:50%; margin-left:-3px; }
+.transport { height:44px; flex:none; display:flex; align-items:center; padding:0 10px 0 12px; position:relative; }
+.transport .tc { font-size:14px; font-weight:var(--w-medium); color:var(--accent-text); }
+.transport .mid { position:absolute; left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:2px; }
+.transport .right { margin-left:auto; display:flex; align-items:center; gap:2px; font-size:12px; color:var(--text3); }
+
+/* 画面上的批注标签（两套共用的形态） */
+.atag { position:absolute; max-width:208px; background:var(--overlay); border:1px solid var(--line-overlay); border-radius:6px; padding:4px 8px 4px 12px; font-size:12px; line-height:16px; color:var(--text1); white-space:normal; z-index:3; }
+.atag .t { text-wrap:balance; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; word-break:break-all; }
+.atag .bar { position:absolute; left:4px; top:5px; bottom:5px; width:3px; border-radius:2px; }
+.atag.sel { box-shadow:0 0 0 1px var(--text1); }
+.atag.num { padding-left:6px; display:flex; gap:6px; align-items:flex-start; }
+.atag.num .badge { margin-top:0; }
+.atag.edit { box-shadow:0 0 0 1px var(--accent-ring); }
+.atag.edit .t { -webkit-line-clamp:unset; }
+.atag .caret { display:inline-block; width:1px; height:13px; background:var(--text1); vertical-align:-2px; margin-left:1px; }
+.atag.dim { opacity:.45; }
+.badge { width:18px; height:18px; flex:none; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:11px; line-height:1; font-weight:var(--w-semibold); color:var(--annotation-ink); }
+.badge.sm { width:16px; height:16px; font-size:10px; }
+.handle { position:absolute; width:8px; height:8px; margin:-4px; background:var(--text1); border-radius:2px; z-index:2; }
+
+/* 批注面板 */
+.ahead { height:32px; flex:none; display:flex; align-items:center; padding:0 6px 0 4px; gap:2px; }
+.dd { height:24px; padding:0 6px 0 8px; display:flex; align-items:center; gap:4px; font-size:12px; color:var(--text2); --s:12px; border-radius:6px; }
+.dd svg { color:var(--icon-rest); }
+.composer { flex:none; border-bottom:1px solid var(--line); padding:10px 12px; display:flex; flex-direction:column; gap:8px; }
+.composer .r { display:flex; align-items:center; gap:4px; }
+.composer .lbl { font-size:12px; font-weight:var(--w-semibold); color:var(--text1); margin-right:auto; }
+.inp { height:28px; border-radius:8px; background:var(--raised); display:flex; align-items:center; padding:0 8px; font-size:12px; color:var(--text3); flex:1; min-width:0; }
+.list { flex:1; min-height:0; overflow:hidden; padding:2px 4px; }
+.row { height:28px; display:flex; align-items:center; gap:8px; padding:0 8px 0 6px; border-radius:6px; font-size:13px; }
+.row .tx { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; color:var(--text1); }
+.row .tm { font-size:11px; color:var(--text3); flex:none; }
+.row .st { display:flex; align-items:center; gap:4px; font-size:11px; color:var(--text3); flex:none; width:52px; }
+.row .st i { width:6px; height:6px; border-radius:50%; flex:none; }
+.row.hover { background:var(--hover); }
+.row.done .tx { color:var(--text3); } .row.done .badge { opacity:.5; }
+.row.passing { background:var(--hover); }
+.dot-draft { border:1px solid var(--text3); } .dot-open { background:var(--accent); } .dot-addressed { background:var(--success); } .dot-resolved { background:var(--text3); }
+.exp { border-radius:6px; background:var(--selected); padding:6px 8px 10px 6px; margin:2px 0; display:flex; gap:8px; white-space:normal; }
+.exp .body { flex:1; min-width:0; display:flex; flex-direction:column; gap:8px; }
+.ta { border-radius:8px; background:var(--raised); padding:5px 8px; font-size:13px; line-height:20px; color:var(--text1); box-shadow:0 0 0 1px var(--accent-ring); }
+.meta { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--text3); white-space:nowrap; }
+.meta .ib { margin-left:auto; }
+.msg .who { font-size:11px; color:var(--text3); } .msg p { margin:0; font-size:12px; line-height:18px; color:var(--text2); }
+.acts { display:flex; align-items:center; gap:4px; white-space:nowrap; }
+.phrow { height:16px; display:flex; align-items:center; gap:6px; padding:0 8px 0 6px; font-size:10px; color:var(--accent-text); }
+.phrow::after { content:''; flex:1; height:1px; background:var(--accent-ring); }
+.ghead { height:24px; display:flex; align-items:flex-end; padding:0 8px 4px 6px; font-size:11px; color:var(--text3); }
+
+/* 时间线（简化） */
+.tl { flex:1; min-height:0; display:grid; grid-template-columns:200px minmax(0,1fr); grid-auto-rows:min-content; position:relative; }
+.corner { height:28px; display:flex; align-items:center; padding:0 12px; border-bottom:1px solid var(--line); border-right:1px solid var(--line); font-size:15px; color:var(--accent-text); font-weight:var(--w-medium); }
+.ruler { height:28px; position:relative; border-bottom:1px solid var(--line); background:var(--panel); overflow:hidden; }
+.ruler .tick { position:absolute; bottom:0; width:1px; height:4px; background:var(--line-strong); }
+.ruler .tick.maj { height:10px; background:#444; }
+.ruler .lab { position:absolute; bottom:1px; font-size:10px; line-height:14px; color:var(--text3); }
+.ruler .am { position:absolute; top:1px; margin-left:-10px; color:var(--text3); }
+.ruler .am.open { color:var(--accent-text); }
+.ruler .pill { position:absolute; top:2px; margin-left:-8px; }
+.ruler .rng { position:absolute; top:2px; height:4px; border-radius:2px; opacity:.85; }
+.th { height:44px; display:flex; align-items:center; padding:0 8px; border-bottom:1px solid var(--line); border-right:1px solid var(--line); font-size:12px; color:var(--text2); gap:8px; }
+.th b { font-size:11px; color:var(--text3); width:20px; font-weight:var(--w-semibold); }
+.lane { height:44px; position:relative; border-bottom:1px solid #232323; background:var(--window); }
+.clip { position:absolute; top:2px; bottom:2px; border-radius:4px; overflow:hidden; font-size:11px; color:#E2E2E2; }
+.clip .strip { height:16px; padding:0 6px; line-height:16px; }
+.clip.video { background:var(--clip-video); } .clip.video .strip { background:var(--clip-video-strip); }
+.clip.audio { background:var(--clip-audio); } .clip.audio .strip { background:var(--clip-audio-strip); }
+.tl .playhead { position:absolute; top:0; bottom:0; width:1px; background:var(--accent-ring); z-index:5; }
+.tl .playhead::before { content:''; position:absolute; left:-5px; top:0; width:11px; height:13px; background:var(--accent-ring); clip-path:polygon(0 0,100% 0,100% 62%,50% 100%,0 62%); }
+.sheet { width:1440px; height:900px; background:var(--window); padding:32px 40px; white-space:normal; }
+.sheet h3 { margin:0 0 4px; font-size:14px; font-weight:var(--w-semibold); }
+.sheet p { margin:0 0 16px; color:var(--text3); font-size:12px; line-height:18px; max-width:1300px; }
+</style>
+</head>
+<body>
+<div class="page" id="page">
+  <h1>剪辑批注 · 两套草图</h1>
+  <p class="lead">按 1440×900 原尺寸画，颜色取石墨主题令牌，字体是随包的 HarmonyOS Sans SC，图标是 lucide。静态画面，不能点。
+画面上标签的位置由页面里的同一段避让算法算出来（偏好方向放不下就换边，再整体推回画面内，离边 8 像素），实现时照搬。
+A 组是保守版（在现有面板与标记上改造），B 组是创新版（列表、时间线、画面三处联动，标注就地写）。</p>
+</div>
+<script>
+const ICONS = /*ICONS_START*/{"box":"<path d=\"M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z\"/><path d=\"m3.3 7 8.7 5 8.7-5\"/><path d=\"M12 22V12\"/>","arrow-up-right":"<path d=\"M7 7h10v10\"/><path d=\"M7 17 17 7\"/>","square":"<rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"/>","circle":"<circle cx=\"12\" cy=\"12\" r=\"10\"/>","pencil":"<path d=\"M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z\"/><path d=\"m15 5 4 4\"/>","type":"<path d=\"M12 4v16\"/><path d=\"M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2\"/><path d=\"M9 20h6\"/>","hash":"<line x1=\"4\" x2=\"20\" y1=\"9\" y2=\"9\"/><line x1=\"4\" x2=\"20\" y1=\"15\" y2=\"15\"/><line x1=\"10\" x2=\"8\" y1=\"3\" y2=\"21\"/><line x1=\"16\" x2=\"14\" y1=\"3\" y2=\"21\"/>","map-pin":"<path d=\"M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0\"/><circle cx=\"12\" cy=\"10\" r=\"3\"/>","send":"<path d=\"M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z\"/><path d=\"m21.854 2.147-10.94 10.939\"/>","ellipsis":"<circle cx=\"12\" cy=\"12\" r=\"1\"/><circle cx=\"19\" cy=\"12\" r=\"1\"/><circle cx=\"5\" cy=\"12\" r=\"1\"/>","layout-panel-left":"<rect width=\"7\" height=\"18\" x=\"3\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"7\" x=\"14\" y=\"3\" rx=\"1\"/><rect width=\"7\" height=\"7\" x=\"14\" y=\"14\" rx=\"1\"/>","undo-2":"<path d=\"M9 14 4 9l5-5\"/><path d=\"M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11\"/>","redo-2":"<path d=\"m15 14 5-5-5-5\"/><path d=\"M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13\"/>","mouse-pointer-2":"<path d=\"M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z\"/>","scissors":"<circle cx=\"6\" cy=\"6\" r=\"3\"/><path d=\"M8.12 8.12 12 12\"/><path d=\"M20 4 8.12 15.88\"/><circle cx=\"6\" cy=\"18\" r=\"3\"/><path d=\"M14.8 14.8 20 20\"/>","message-square":"<path d=\"M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z\"/>","download":"<path d=\"M12 15V3\"/><path d=\"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\"/><path d=\"m7 10 5 5 5-5\"/>","focus":"<circle cx=\"12\" cy=\"12\" r=\"3\"/><path d=\"M3 7V5a2 2 0 0 1 2-2h2\"/><path d=\"M17 3h2a2 2 0 0 1 2 2v2\"/><path d=\"M21 17v2a2 2 0 0 1-2 2h-2\"/><path d=\"M7 21H5a2 2 0 0 1-2-2v-2\"/>","step-back":"<path d=\"M13.971 4.285A2 2 0 0 1 17 6v12a2 2 0 0 1-3.029 1.715l-9.997-5.998a2 2 0 0 1-.003-3.432z\"/><path d=\"M21 20V4\"/>","pause":"<rect x=\"14\" y=\"3\" width=\"5\" height=\"18\" rx=\"1\"/><rect x=\"5\" y=\"3\" width=\"5\" height=\"18\" rx=\"1\"/>","play":"<path d=\"M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z\"/>","step-forward":"<path d=\"M10.029 4.285A2 2 0 0 0 7 6v12a2 2 0 0 0 3.029 1.715l9.997-5.998a2 2 0 0 0 .003-3.432z\"/><path d=\"M3 4v16\"/>","chevron-down":"<path d=\"m6 9 6 6 6-6\"/>","video":"<path d=\"m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5\"/><rect x=\"2\" y=\"6\" width=\"14\" height=\"12\" rx=\"2\"/>","trash-2":"<path d=\"M10 11v6\"/><path d=\"M14 11v6\"/><path d=\"M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6\"/><path d=\"M3 6h18\"/><path d=\"M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2\"/>","check":"<path d=\"M20 6 9 17l-5-5\"/>","corner-up-left":"<path d=\"M20 20v-7a4 4 0 0 0-4-4H4\"/><path d=\"M9 14 4 9l5-5\"/>","circle-dot":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><circle cx=\"12\" cy=\"12\" r=\"1\"/>","copy":"<rect width=\"14\" height=\"14\" x=\"8\" y=\"8\" rx=\"2\" ry=\"2\"/><path d=\"M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2\"/>","locate-fixed":"<line x1=\"2\" x2=\"5\" y1=\"12\" y2=\"12\"/><line x1=\"19\" x2=\"22\" y1=\"12\" y2=\"12\"/><line x1=\"12\" x2=\"12\" y1=\"2\" y2=\"5\"/><line x1=\"12\" x2=\"12\" y1=\"19\" y2=\"22\"/><circle cx=\"12\" cy=\"12\" r=\"7\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/>","section":"<path d=\"M16 5a4 3 0 0 0-8 0c0 4 8 3 8 7a4 3 0 0 1-8 0\"/><path d=\"M8 19a4 3 0 0 0 8 0c0-4-8-3-8-7a4 3 0 0 1 8 0\"/>"}/*ICONS_END*/;
+const I = (n, s) => `<svg class="i" viewBox="0 0 24 24" ${s?`style="--s:${s}px"`:''}>${ICONS[n]||''}</svg>`;
+const ib = (n, cls, s) => `<span class="ib ${cls||''}">${I(n, s)}</span>`;
+const C = n => `var(--annotation${(n - 1) % 8 + 1})`;
+const badge = (n, sm) => `<span class="badge ${sm?'sm':''}" style="background:${C(n)}">${n}</span>`;
+
+/* 五条批注：序号即序列里的顺序，颜色按序号轮换 */
+const MARKS = [
+  { n:1, text:'标题字太细，压在雾上看不清，换成粗体并加一点描边', tc:'00:00:03:12', st:'open', kind:'arrow', from:[.40,.66], to:[.22,.43] },
+  { n:2, text:'右上角水印挡住了标题区，挪到左下角', tc:'00:00:03:12', st:'open', kind:'box', box:[.82,.02,.165,.13] },
+  { n:3, text:'人物这块偏暗，提亮半档，背景别动', tc:'00:00:03:12', st:'draft', kind:'ellipse', box:[.55,.34,.2,.36] },
+  { n:4, text:'字幕离画面底边太近，往上挪到安全框里', tc:'00:00:03:12', st:'open', kind:'point', at:[.035,.94] },
+  { n:5, text:'这一段节奏拖，剪掉一秒左右', tc:'00:00:08:00 – 00:00:10:12', st:'resolved', kind:'range' },
+];
+const ST = { draft:'待发送', open:'待处理', addressed:'已改完', resolved:'已确认' };
+const FW = 760, FH = 428;
+
+/* ───── 标签避让：偏好方向放不下就换到对边，再整体推回画面内（离边 8） ───── */
+function placeTags(root) {
+  root.querySelectorAll('.atag[data-ax]').forEach(tag => {
+    /* 折行后按最长一行收窄，不留右侧空白 */
+    tag.style.width = ''; const t = tag.querySelector('.t'); const r = document.createRange(); r.selectNodeContents(t);
+    const lines = [...r.getClientRects()]; if (lines.length) { const lw = Math.max(...lines.map(x => x.right)) - Math.min(...lines.map(x => x.left)); tag.style.width = Math.ceil(tag.offsetWidth - t.offsetWidth + lw + 1) + 'px'; }
+    const w = tag.offsetWidth, h = tag.offsetHeight, ax = +tag.dataset.ax, ay = +tag.dataset.ay;
+    let dx = +tag.dataset.dx, dy = +tag.dataset.dy; const gap = 8, m = 8;
+    /* 框和圈换到对边时锚点换成对边的中点 */
+    const ayFor = dy => dy === +tag.dataset.dy ? ay : +(tag.dataset.ay2 ?? ay);
+    const fits = (dx, dy) => { const cx = ax + dx * (w / 2 + gap), cy = ayFor(dy) + dy * (h / 2 + gap); return (!dx || (cx - w / 2 >= m && cx + w / 2 <= FW - m)) && (!dy || (cy - h / 2 >= m && cy + h / 2 <= FH - m)); };
+    if (!fits(dx, dy)) { if (fits(dx, -dy)) dy = -dy; else if (fits(-dx, dy)) dx = -dx; else if (fits(-dx, -dy)) { dx = -dx; dy = -dy; } }
+    let left = ax + dx * (w / 2 + gap) - w / 2, top = ayFor(dy) + dy * (h / 2 + gap) - h / 2;
+    left = Math.max(m, Math.min(FW - w - m, left)); top = Math.max(m, Math.min(FH - h - m, top));
+    tag.style.left = left + 'px'; tag.style.top = top + 'px';
+    const arrow = root.querySelector(`[data-from="${tag.dataset.n}"]`);
+    /* 箭头起点取标签上离目标最近的点 */
+    if (arrow) { const tx = +arrow.dataset.tx, ty = +arrow.dataset.ty; drawArrow(arrow, Math.max(left, Math.min(left + w, tx)), Math.max(top, Math.min(top + h, ty)), tx, ty); }
+  });
+}
+function drawArrow(g, x1, y1, x2, y2) {
+  const a = Math.atan2(y2 - y1, x2 - x1), head = 7, bx = x2 - Math.cos(a) * head * .7, by = y2 - Math.sin(a) * head * .7;
+  const wing = s => `${x2 - Math.cos(a) * head + Math.cos(a + s * Math.PI / 2) * head * .45},${y2 - Math.sin(a) * head + Math.sin(a + s * Math.PI / 2) * head * .45}`;
+  g.innerHTML = `<line x1="${x1}" y1="${y1}" x2="${bx}" y2="${by}" stroke="${g.dataset.c}" stroke-width="1.5" stroke-linecap="round"/><polygon points="${x2},${y2} ${wing(1)} ${wing(-1)}" fill="${g.dataset.c}"/>`;
+}
+
+/* 画面上的批注：o.style 'bar'（保守：色条 + 文字）或 'num'（创新：同色序号 + 文字）；o.sel 选中的序号；o.edit 正在就地写的序号 */
+function marksLayer(o) {
+  if (o.playing) return '';
+  let svg = '', tags = '';
+  MARKS.filter(m => m.kind !== 'range' && m.st !== 'resolved').forEach(m => {
+    const c = C(m.n), sel = o.sel === m.n, dim = o.dimExcept && o.dimExcept !== m.n;
+    const text = o.edit === m.n ? `${o.editText}<span class="caret"></span>` : m.text;
+    const body = o.style === 'num' ? `${badge(m.n, 1)}<span class="t">${text}</span>` : `<i class="bar" style="background:${c}"></i><span class="t">${text}</span>`;
+    const cls = `atag ${o.style === 'num' ? 'num' : ''} ${sel ? 'sel' : ''} ${o.edit === m.n ? 'edit' : ''} ${dim ? 'dim' : ''}`;
+    let ax, ay, ay2, dx, dy;
+    if (m.kind === 'arrow') {
+      const [fx, fy] = m.from, [tx, ty] = m.to; const len = Math.hypot(fx - tx, fy - ty);
+      ax = fx * FW; ay = fy * FH; dx = Math.sign(fx - tx) || 1; dy = Math.sign(fy - ty) || 1;
+      svg += `<g data-from="${m.n}" data-c="${c}" data-tx="${tx * FW}" data-ty="${ty * FH}" opacity="${dim ? .45 : 1}"></g>`;
+    } else if (m.kind === 'box' || m.kind === 'ellipse') {
+      const [x, y, w, h] = m.box;
+      svg += m.kind === 'box' ? `<rect x="${x * FW}" y="${y * FH}" width="${w * FW}" height="${h * FH}" rx="3" fill="none" stroke="${c}" stroke-width="2" opacity="${dim ? .45 : 1}"/>`
+        : `<ellipse cx="${(x + w / 2) * FW}" cy="${(y + h / 2) * FH}" rx="${w / 2 * FW}" ry="${h / 2 * FH}" fill="none" stroke="${c}" stroke-width="2" opacity="${dim ? .45 : 1}"/>`;
+      ax = (x + w / 2) * FW; ay = y * FH; ay2 = (y + h) * FH; dx = 0; dy = -1;
+      if (sel && m.kind === 'box') [[x, y], [x + w, y], [x, y + h], [x + w, y + h]].forEach(([hx, hy]) => tags += `<i class="handle" style="left:${hx * FW}px;top:${hy * FH}px"></i>`);
+    } else if (m.kind === 'point') {
+      const [x, y] = m.at; svg += `<circle cx="${x * FW}" cy="${y * FH}" r="5" fill="${c}" stroke="var(--annotation-ink)" stroke-width="1.5" opacity="${dim ? .45 : 1}"/>`;
+      ax = x * FW; ay = y * FH - 6; dx = 1; dy = -1;
+    }
+    tags += `<div class="${cls}" data-n="${m.n}" data-ax="${ax}" data-ay="${ay}" data-dx="${dx}" data-dy="${dy}" ${ay2 !== undefined ? `data-ay2="${ay2}"` : ''}>${body}</div>`;
+  });
+  return `<svg class="marks" viewBox="0 0 ${FW} ${FH}" width="${FW}" height="${FH}">${svg}</svg>${tags}`;
+}
+
+/* ───── 整屏 ───── */
+function app(o) {
+  const shapes = ['arrow-up-right', 'square', 'circle', 'pencil', 'type', 'hash', 'map-pin'].map((n, i) => ib(n, i === 0 ? 'mode s24' : 's24')).join('');
+  const params = o.v === 'b'
+    ? `${shapes}<span style="width:10px"></span><span class="seg"><span>细</span><span class="cur">中</span><span>粗</span></span>`
+    : `${shapes}<span style="width:10px"></span><span class="seg"><span>细</span><span class="cur">中</span><span>粗</span></span>${o.drafts ? `<span style="width:8px"></span><span class="btn sm secondary">${I('send', 12)}发送给助手 · 1</span>${ib('ellipsis', 's24')}` : ''}`;
+  return `<div class="app shot">
+  <div class="titlebar"><span class="brand">痕迹AI</span><span class="menu"><span>文件</span><span>编辑</span><span>剪辑</span><span>批注</span><span>视图</span><span>窗口</span><span>帮助</span></span>
+    <span class="nav"><span>生成</span><span>画布</span><span class="cur">剪辑</span><span>资产库</span></span></div>
+  <div class="cmd"><span class="proj">${I('layout-panel-left')}元宝搜索实战</span>${ib('undo-2')}${ib('redo-2')}<span class="sep"></span>
+    ${ib('mouse-pointer-2')}${ib('scissors')}${ib('message-square', 'mode')}<span class="sep"></span>${params}
+    <span class="right"><span class="btn primary" style="height:32px;padding:0 14px">${I('download')}导出</span></span></div>
+  <div class="dock">
+    <div class="col" style="flex:1">
+      <div class="panel" style="height:516px"><div class="tabs"><span class="tab cur ${o.focus === 'program' ? 'focus' : ''}">节目</span></div>
+        <div class="viewer"><div class="frame" style="width:${FW}px;height:${FH}px;background-image:url('../../界面样板屏/剪辑/素材/画面-山林.jpg')">
+          <div class="ttl"><small>第一章</small>雾里的山</div><div class="wm">样片</div><div class="cap">今天聊一个新功能</div>
+          ${marksLayer(o)}</div></div>
+        ${scrub(o)}
+        <div class="transport"><span class="tc num">${o.playing ? '00:00:05:20' : '00:00:03:12'}</span>
+          <span class="mid">${ib('step-back')}${ib(o.playing ? 'pause' : 'play', 's24')}${ib('step-forward')}</span>
+          <span class="right">适合 ${I('chevron-down', 12)}</span></div></div>
+      ${timeline(o)}
+    </div>
+    <div class="col" style="width:360px">${o.v === 'b' ? panelB(o) : panelA(o)}</div>
+  </div></div>`;
+}
+const T0 = 0, PX = 68; /* 时间线每秒像素 */
+function scrub(o) {
+  const at = s => `${(s / 12) * 100}%`;
+  let dots = '';
+  if (o.v === 'b') MARKS.filter(m => m.st !== 'resolved').forEach((m, i) => dots += `<i class="dot" style="left:${at(m.kind === 'range' ? 8 : 3.4 + i * 0.012)};background:${C(m.n)}"></i>`);
+  return `<div class="scrub">${Array.from({ length: 49 }, (_, i) => `<i class="tick" style="left:${i / 48 * 100}%"></i>`).join('')}${dots}<i class="ph" style="left:${at(o.playing ? 5.66 : 3.4)}"></i></div>`;
+}
+function timeline(o) {
+  const ph = (o.playing ? 5.66 : 3.4) * PX;
+  let ruler = Array.from({ length: 13 }, (_, s) => `<i class="tick maj" style="left:${s * PX}px"></i><span class="lab num" style="left:${s * PX + 3}px">00:${String(s).padStart(2, '0')}</span>`).join('')
+    + Array.from({ length: 52 }, (_, i) => `<i class="tick" style="left:${i * PX / 4}px"></i>`).join('');
+  if (o.v === 'b') {
+    ruler += [1, 2, 3, 4].map((n, i) => `<span class="pill" style="left:${3.4 * PX + (i - 1.5) * 18}px">${badge(n, 1)}</span>`).join('');
+    ruler += `<i class="rng" style="left:${8 * PX}px;width:${2.4 * PX}px;background:${C(5)};opacity:.45"></i>`;
+  } else {
+    ruler += `<span class="am open" style="left:${3.4 * PX}px">${ib('message-square', 's20')}</span>`;
+  }
+  const lane = clips => `<div class="lane">${clips.map(c => `<div class="clip ${c.t}" style="left:${c.s * PX}px;width:${c.d * PX - 1}px"><div class="strip">${c.n}</div></div>`).join('')}</div>`;
+  return `<div class="panel" style="flex:1"><div class="tabs"><span class="tab cur ${o.focus === 'timeline' ? 'focus' : ''}">雾里的山</span></div>
+    <div class="tl"><div class="corner num">${o.playing ? '00:00:05:20' : '00:00:03:12'}</div><div class="ruler">${ruler}</div>
+      <div class="th"><b>V2</b>录屏</div>${lane([{ t: 'video', s: 4.6, d: 4.4, n: '录屏_搜索演示.mp4' }])}
+      <div class="th"><b>V1</b>口播</div>${lane([{ t: 'video', s: 0, d: 7.6, n: '口播_A机.mp4' }, { t: 'video', s: 7.6, d: 4.4, n: '口播_A机.mp4' }])}
+      <div class="th"><b>A1</b>口播声</div>${lane([{ t: 'audio', s: 0, d: 7.6, n: '口播_A机.mp4' }, { t: 'audio', s: 7.6, d: 4.4, n: '口播_A机.mp4' }])}
+      <i class="playhead" style="left:${200 + ph}px"></i></div>
+    <div class="foot"><span class="status"></span>${ib('chevron-down', 's24')}</div></div>`;
+}
+
+/* ───── A 保守版面板 ───── */
+function rowA(m, o) {
+  if (o.expand === m.n) return `<div class="exp">${badge(m.n)}<div class="body">
+      <div class="ta">${m.text}</div>
+      <div class="meta"><span class="num">${m.tc}</span><i style="width:6px;height:6px;border-radius:50%" class="dot-${m.st}"></i>${ST[m.st]}${ib('trash-2', 's24')}</div>
+      <div class="msg"><div class="who">我 · 14:02</div><p>标注时顺手写了个方向，先这样。</p></div>
+      <div style="display:flex;gap:4px"><span class="inp">补充说明</span>${ib('send', 's24 dis')}</div></div></div>`;
+  return `<div class="row ${m.st === 'resolved' ? 'done' : ''} ${o.hover === m.n ? 'hover' : ''}">${badge(m.n)}<span class="tx">${m.text}</span><span class="tm num">${m.tc.split(' ')[0]}</span><span class="st"><i class="dot-${m.st}"></i>${ST[m.st]}</span></div>`;
+}
+function panelA(o) {
+  const list = MARKS.filter(m => o.filter === 'all' || m.st !== 'resolved');
+  const tools = o.expand ? `${ib('check')}${ib('corner-up-left')}${ib('circle-dot')}${ib('trash-2')}` : '';
+  return `<div class="panel" style="flex:1"><div class="tabs"><span class="tab">效果控件</span><span class="tab cur focus">批注</span><span class="tab">内容</span></div>
+    <div class="composer"><div class="r"><span class="lbl">1 条待发送</span>${ib('copy', 's24')}<span class="btn sm primary">${I('send', 12)}发送给助手</span></div><span class="inp">整体说明（可选）</span></div>
+    <div class="ahead"><span class="dd">未确认 ${I('chevron-down')}</span></div>
+    <div class="list">${list.map(m => rowA(m, o)).join('')}</div>
+    <div class="foot"><span class="status">${list.length} 条${o.expand ? ' · 已选 1' : ''}</span>${tools}${ib('ellipsis')}</div></div>`;
+}
+
+/* ───── B 创新版面板 ───── */
+function rowB(m, o) {
+  if (o.expand === m.n) return `<div class="exp">${badge(m.n)}<div class="body">
+      <div class="ta">${o.editText}<span class="caret" style="display:inline-block;width:1px;height:14px;background:var(--text1);vertical-align:-2px"></span></div>
+      <div class="meta"><span class="num">${m.tc}</span><i style="width:6px;height:6px;border-radius:50%" class="dot-${m.st}"></i>${ST[m.st]}</div></div></div>`;
+  const passing = o.passing === m.n;
+  return `<div class="row ${m.st === 'resolved' ? 'done' : ''} ${o.hover === m.n || passing ? 'hover' : ''}">${badge(m.n)}<span class="tx">${m.text}</span><span class="st" style="width:auto"><i class="dot-${m.st}"></i></span></div>`;
+}
+function panelB(o) {
+  const at = MARKS.filter(m => m.kind !== 'range');
+  const later = MARKS.filter(m => m.kind === 'range');
+  const group = (title, items) => `<div class="ghead num">${title}</div>` + items.map(m => rowB(m, o)).join('');
+  const playhead = `<div class="phrow num">${o.playing ? '00:00:05:20' : '00:00:03:12'}</div>`;
+  const body = o.playing
+    ? group('00:00:03:12 · 4 条', at) + playhead + group('00:00:08:00 – 00:00:10:12', later)
+    : playhead + group('画面上 4 条', at) + group('00:00:08:00 – 00:00:10:12', later);
+  const tools = o.expand ? `${ib('check')}${ib('corner-up-left')}${ib('trash-2')}` : '';
+  return `<div class="panel" style="flex:1"><div class="tabs"><span class="tab">效果控件</span><span class="tab cur focus">批注</span><span class="tab">内容</span></div>
+    <div class="ahead"><span class="dd">全部 · 5 ${I('chevron-down')}</span><span style="margin-left:auto"></span>${ib('locate-fixed', 'on s24')}</div>
+    <div class="list">${body}</div>
+    <div class="foot"><span class="status">${o.expand ? '已选 1' : '5 条'}</span>${tools}${ib('ellipsis')}<span class="btn sm primary" style="margin-left:4px">${I('send', 12)}发送 1 条</span></div></div>`;
+}
+
+const EDIT = '人物这块偏暗，提亮半档，背景别动，脸部肤色保持';
+const SCREENS = [
+  { id:'A1', title:'A1 保守版 · 列表一行态 + 暂停时画面标签',
+    note:'列表每条一行：同色序号、单行截断的正文（悬停看全文）、时间码、状态点与状态词。删除、驳回不再悬停浮在行上，进底栏与展开态。\n画面上去掉“数字方块 + 粗红箭头”，直接显示批注文字：实底 overlay + line-overlay 描边、无投影，左侧 3px 色条，最多两行，宽 208 封顶。\n箭头保留、改 1.5px 细线、用批注颜色，从标签边缘指向标记点。②贴右上角、④贴左下角，标签自动换边并推回画面内。\n颜色按序号轮换（红、蓝、黄、绿…），参数条里的色样删掉，只留形状和粗细。发送区仍在顶部，但改成一行标题 + 动作，不再折行。',
+    html: () => app({ v:'a', focus:'program', style:'bar', drafts:1, hover:2 }) },
+  { id:'A2', title:'A2 保守版 · 选中展开编辑态',
+    note:'选中的那条就地展开：原来那一行变成可编辑文本框（取代那一行，下面不再出第二份同样的文字），时间码、状态、删除跟在下面，再往下是讨论与补充说明。\n失焦保存并收回一行；Esc 撤回这次改动并收回。画面上对应的标签加一圈主要文字色细线并出现拖动手柄。底栏换成对选中的批量操作。',
+    html: () => app({ v:'a', focus:'annotations', style:'bar', drafts:1, expand:2, sel:2 }) },
+  { id:'A3', title:'A3 保守版 · 播放中',
+    note:'播放时画面上的标签、形状、箭头全部不画，只在暂停、拖动播放头、逐帧跳转时出现。时间线标尺上的批注记号照旧（保守版不改时间线）。',
+    html: () => app({ v:'a', focus:'program', style:'bar', drafts:1, playing:1 }) },
+  { id:'B1', title:'B1 创新版 · 列表一行态 + 暂停时画面标签（三处联动）',
+    note:'列表就是一条竖着的时间线：按时间排，强调色细线是播放头（列表里唯一的强调色），画面上正在显示的那几条紧跟在播放头下面；“跟随播放头”开着时列表自动滚到这里。\n悬停列表里的②：画面上只亮②，其余压暗到 45%；反过来悬停画面标签，列表那一行也亮。\n画面标签用同色序号代替色条，和列表、时间线标尺上的序号徽标一一对应。时间线标尺上的记号改成同色序号，时间段批注画成同色细条。\n“发送给助手”并进底栏右端作为唯一主动作，顶部不再单占一块发送区（整体说明在点发送后的弹出面板里填）。状态词只留状态点，时间码交给分组标题，行更干净。',
+    html: () => app({ v:'b', focus:'program', style:'num', hover:2, dimExcept:2 }) },
+  { id:'B2', title:'B2 创新版 · 选中展开编辑态（画面与列表同步就地写）',
+    note:'选中③展开成文本框，同时画面上的③标签也进入编辑：两处是同一份文字，在哪边打字都行。快速标注也走这条路：画完一笔，标签本身就变成输入框（不再弹出单独的输入气泡），回车保存、Esc 放弃。\n展开态只留文字、时间与状态；讨论和补充说明在“已改完”需要审查时才出现，平时不占地方。',
+    html: () => app({ v:'b', focus:'annotations', style:'num', expand:3, sel:3, edit:3, editText:EDIT }) },
+  { id:'B3', title:'B3 创新版 · 播放中',
+    note:'画面上什么都不画。节目画面下方的进度条上留同色小圆点，看得到前面还有几条；列表里播放头的线跟着走，刚经过的那几条短暂提亮一下，看完再暂停回去改。',
+    html: () => app({ v:'b', focus:'program', style:'num', playing:1, passing:4 }) },
+];
+const page = document.getElementById('page');
+SCREENS.forEach(s => {
+  const el = document.createElement('section'); el.className = 'block'; el.dataset.id = s.id;
+  el.innerHTML = `<h2>${s.title}</h2><p class="note">${s.note}</p><div class="pair"><div class="side"><div class="tag">草图</div>${s.html()}</div></div>`;
+  page.appendChild(el);
+});
+document.querySelectorAll('.frame').forEach(placeTags);
+document.fonts.ready.then(() => document.querySelectorAll('.frame').forEach(placeTags));
+const q = new URLSearchParams(location.search);
+if (q.get('s')) { document.body.classList.add('single'); document.querySelector(`.block[data-id="${q.get('s')}"]`).classList.add('show'); }
+else { const fit = () => document.querySelectorAll('.pair').forEach(p => { p.style.zoom = Math.min(1, (innerWidth - 80) / p.scrollWidth); }); fit(); addEventListener('resize', fit); }
+</script>
+</body>
+</html>
