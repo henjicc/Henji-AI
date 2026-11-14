@@ -7,8 +7,9 @@ import type { VideoEditRatio } from './time'
  * 录屏自动缩放（参照 Recordly 的缩放区间模型）：缩放区间是效果实例上的独立数据，时间是片段素材的源时间（微秒），
  * 与 `videoEditClipSourceTimeAt` 同一基准，修剪、拆分、移动、变速、倒放后区间自动跟着画面内容走。
  * - 区间内是“保持放大”；放大过渡在区间开始之前完成，缩小过渡在区间结束之后进行，相邻区间可直接平移衔接。
- * - 焦点 `cursor` 跟随指针（参照 Cap）：指针在一处小范围活动时镜头不动，移出才重新取景；取景按比例放在可移动范围里，
- *   靠近画面边缘时视野贴边；镜头用临界阻尼弹簧追目标。焦点坐标是相对源画面的固定点。
+ * - 镜头只去“目的地”，不跟着指针走。自动生成的区间对准固定位置：一段操作（点击以及随后的输入、停留）共用一个取景，全程不动。
+ *   焦点 `cursor` 跟随指针时，目的地是指针停下来的地方：路过的位置不取景，停下的地方仍在视野里也不动；
+ *   取景按比例放在可移动范围里，靠近画面边缘时视野贴边（参照 Cap）；镜头用临界阻尼弹簧去目的地。
  * - 求值是纯函数：给定区间、源时间和指针采样回调，结果与之前播过哪些帧无关（拖动定位、倒放、导出逐帧一致）。
  * 与 `screenAttention.ts` 烘焙的位置/缩放关键帧是两套独立模型，互不改写。
  */
@@ -28,6 +29,8 @@ const CLUSTER_HEIGHT = 0.7
 const EDGE_SNAP = 0.25
 /** 这组指针的外接框离视野边至少留这部分（相对半视野）：高倍数下按比例取景时指针也不出视野。 */
 const FOCUS_MARGIN = 0.1
+/** 指针在一处至少停这么久才算目的地；更短的只是路过，镜头不为它取景。 */
+const MIN_DWELL_US = 400_000
 /** 镜头弹簧角频率（每秒，临界阻尼）：约 0.2 秒走完一半、0.5 秒到位、不过冲。接近 Cap 默认（刚度 200、阻尼 40、质量 2.25）。 */
 const FOLLOW_OMEGA = 9.4
 
@@ -101,7 +104,9 @@ function layout(regions: readonly RecordingZoomRegion[], params: RecordingZoomPa
     const a = spans[i]; const b = spans[i + 1]; const gap = b.inStart - a.outEnd
     // 紧挨着的区间没有时间先缩小再放大，总是直接平移；平移占用两段相接处的过渡时间。
     if (gap <= 0 || params.connect && gap <= RECORDING_ZOOM_CONNECT_GAP_US) {
-      const pan = { from: a.region.endUs, to: b.region.startUs }
+      // 前一段的关注一结束镜头就去下一段，用一次推近的时长走完后在那里等：指针横穿画面通常一秒左右，
+      // 平移拉得更长镜头就落在指针后面；也不把平移拉长到填满整个间隔。
+      const pan = { from: a.region.endUs, to: Math.min(b.region.startUs, a.region.endUs + inUs) }
       pans.push(pan); a.linkedNext = true; b.linkedPrev = true; a.activeEnd = pan.to; b.activeStart = pan.from
       continue
     }
@@ -120,11 +125,15 @@ function frameAxis(lo: number, hi: number, half: number): number {
   return clamp(clamp(half + travel * (1 - 2 * half), hi - half + margin, lo + half - margin), half, 1 - half)
 }
 interface Cluster { startUs: number; x0: number; x1: number; y0: number; y1: number }
-/** 按时间贪心分组区间里的指针位置：一组的外接框不超过视野宽 50%、高 70%，超出就开新组（同 Cap）。 */
-function pointerClusters(scale: number, fromUs: number, endUs: number, untilUs: number, pointerAt: RecordingZoomPointer): Cluster[] {
+/**
+ * 保持段里指针的目的地：先按时间贪心分组（一组的外接框不超过视野宽 50%、高 70%，超出就开新组，同 Cap），
+ * 再去掉停留不到 `MIN_DWELL_US` 的组（指针只是路过）。目的地的 `startUs` 是指针离开上一个目的地的时刻：
+ * 镜头从那一刻起直接去下一个目的地，途中经过哪里都不管。
+ */
+function pointerStops(scale: number, fromUs: number, endUs: number, untilUs: number, pointerAt: RecordingZoomPointer): Cluster[] {
   const maxW = CLUSTER_WIDTH / scale; const maxH = CLUSTER_HEIGHT / scale
   const clusters: Cluster[] = []
-  /** 返回 false 表示这一组开始在 `untilUs` 之后：求值用不到它，也就不必再往后扫。 */
+  /** 返回 false 表示 `untilUs` 之后已经有一个完整的目的地：求值用不到更后面的，不必再扫。 */
   const add = (time: number): boolean => {
     const p = pointerAt(time)
     if (!p) return true
@@ -133,30 +142,38 @@ function pointerClusters(scale: number, fromUs: number, endUs: number, untilUs: 
       last.x0 = Math.min(last.x0, p.x); last.x1 = Math.max(last.x1, p.x); last.y0 = Math.min(last.y0, p.y); last.y1 = Math.max(last.y1, p.y)
       return true
     }
-    if (time > untilUs) return false
+    if (last && last.startUs > untilUs && time - last.startUs >= MIN_DWELL_US) return false
     clusters.push({ startUs: time, x0: p.x, x1: p.x, y0: p.y, y1: p.y })
     return true
   }
   add(fromUs)
   for (let grid = (Math.floor(fromUs / RECORDING_ZOOM_FOLLOW_STEP_US) + 1) * RECORDING_ZOOM_FOLLOW_STEP_US; grid <= endUs; grid += RECORDING_ZOOM_FOLLOW_STEP_US) if (!add(grid)) break
-  return clusters
+  const stops: Cluster[] = []
+  let leftUs = fromUs
+  for (let i = 0; i < clusters.length; i++) {
+    const until = clusters[i + 1]?.startUs ?? endUs
+    if (until - clusters[i].startUs < MIN_DWELL_US) continue
+    stops.push({ ...clusters[i], startUs: leftUs }); leftUs = until
+  }
+  // 指针整段都没停过：对准它最开始所在的位置。
+  return stops.length || !clusters.length ? stops : [{ ...clusters[0], startUs: fromUs }]
 }
 /**
- * 跟随镜头：按当前这组指针的整组外接框（含这组之后的移动，镜头提前对准指针要去的地方）用 `frameAxis` 取景；
- * 镜头用临界阻尼弹簧追目标（精确解，速度跨目标变化连续），从 `fromUs` 起按全局网格推进到 `toUs`。
+ * 跟随镜头：对准指针的目的地（整组外接框，用 `frameAxis` 取景）；新目的地已经在当前取景里就不动。
+ * 镜头用临界阻尼弹簧去目的地（精确解，速度跨目标变化连续），从 `fromUs` 起按全局网格推进到 `toUs`。
  * 结果只取决于区间内的指针采样，任何定位顺序都得到同一结果。
  */
 function followCenter(scale: number, fromUs: number, endUs: number, toUs: number, pointerAt: RecordingZoomPointer): RecordingZoomPoint {
-  const half = 0.5 / scale
-  const clusters = pointerClusters(scale, fromUs, endUs, toUs, pointerAt)
+  const half = 0.5 / scale; const inner = half * (1 - FOCUS_MARGIN)
+  const stops = pointerStops(scale, fromUs, endUs, toUs, pointerAt)
   let index = -1
   const target = { x: 0.5, y: 0.5 }
   const aim = (time: number): void => {
-    let next = index
-    while (next + 1 < clusters.length && clusters[next + 1].startUs <= time) next++
-    if (next === index || next < 0) return
-    index = next; const c = clusters[index]
-    target.x = frameAxis(c.x0, c.x1, half); target.y = frameAxis(c.y0, c.y1, half)
+    while (index + 1 < stops.length && stops[index + 1].startUs <= time) {
+      const c = stops[++index]
+      if (index > 0 && c.x0 >= target.x - inner && c.x1 <= target.x + inner && c.y0 >= target.y - inner && c.y1 <= target.y + inner) continue
+      target.x = frameAxis(c.x0, c.x1, half); target.y = frameAxis(c.y0, c.y1, half)
+    }
   }
   aim(fromUs)
   const camera = { ...target }; const velocity = { x: 0, y: 0 }
@@ -206,7 +223,7 @@ export function evaluateRecordingZoom(regions: readonly RecordingZoomRegion[], s
 /** 求值 `sourceUs` 时跟随镜头需要的指针时间范围（源时间微秒）；渲染端据此预先读取指针数据。 */
 export function recordingZoomPointerSpans(regions: readonly RecordingZoomRegion[], sourceUs: number, params: RecordingZoomParams): Array<{ fromUs: number; toUs: number }> {
   const { spans } = layout(regions, params)
-  // 跟随只在保持段里；指针分组看整个保持段（镜头提前对准这组指针要去的地方），所以读到保持段结束。
+  // 跟随只在保持段里；目的地要看指针之后停在哪（镜头提前去那里），所以读到保持段结束。
   return spans.filter(span => span.region.focus === 'cursor' && sourceUs >= span.activeStart && sourceUs <= span.activeEnd).map(span => ({ fromUs: span.region.startUs, toUs: span.region.endUs }))
 }
 
@@ -232,33 +249,115 @@ export function recordingZoomPointerFromEvents(events: readonly CaptureEvent[], 
   return { x: clamp(point[0] / Math.max(1, size.width), 0, 1), y: clamp(point[1] / Math.max(1, size.height), 0, 1) }
 }
 
-/** 自动生成用到的聚类参数（与 Recordly 一致）。 */
-/** The zoom-in plays inside the block, so the block starts early enough to be zoomed in by the first click. */
-export const RECORDING_ZOOM_SUGGEST = { clusterGapUs: 2_500_000, beforeUs: 1_000_000, afterUs: 1_300_000 } as const
 /**
- * 按点击自动生成缩放区间（纯函数）：只用明确的按下事件；相邻点击间隔不超过 2.5 秒归为一组，组前留 1 秒、组后留 1.3 秒（放大与缩小都在区间内进行），
- * 夹到素材范围内；焦点跟随指针、第 3 档（1.8 倍）。组内出现双击（0.5 秒内两次按下）或点击后 2 秒内打字时用第 4 档（2.2 倍），
- * 方便看清被编辑的细节。`existing` 里已有的区间（通常是用户手动调过的）保留，与之重叠的新区间跳过。
- * 时间换算：素材源时间 = 事件 recordingUs − recordingStartUs。
+ * 自动生成的参数：`beforeUs` 是第一次点击前留给放大的时间，`afterUs` 是关注结束后留给缩小的时间（两个过渡都在区间内）；
+ * `mergeGapUs` 内又回到同一处操作就并成一段；指针离开取景超过 `leaveGraceUs` 才算离开，镜头提前 `leaveLeadUs` 动身；
+ * 最后一次操作后至少保持 `minHoldUs`。
  */
-export function suggestRecordingZoomRegions(events: readonly CaptureEvent[], options: { recordingStartUs: number; durationUs: number; existing?: readonly RecordingZoomRegion[]; createId?: () => string }): RecordingZoomRegion[] {
-  const media = (event: CaptureEvent): number => event.recordingUs - options.recordingStartUs
-  const presses = events.filter(event => event.kind === 'click' && event.phase === 'down').map(media).filter(us => us >= 0 && us <= options.durationUs).sort((a, b) => a - b)
-  const typing = events.filter(event => event.kind === 'key' && event.category === 'typing').map(media).sort((a, b) => a - b)
-  const clusters: number[][] = []
-  for (const us of presses) { const last = clusters.at(-1); if (last && us - last.at(-1)! <= RECORDING_ZOOM_SUGGEST.clusterGapUs) last.push(us); else clusters.push([us]) }
+export const RECORDING_ZOOM_SUGGEST = { mergeGapUs: 2_500_000, beforeUs: 1_000_000, afterUs: 800_000, minHoldUs: 500_000, leaveGraceUs: 1_000_000, leaveLeadUs: 200_000 } as const
+/** 一段操作的全部点击占视野的比例不超过这个值才共用一个取景，四周留得下边距。 */
+const SUGGEST_FIT = 0.7
+interface Attention { presses: number[]; x0: number; x1: number; y0: number; y1: number }
+/** 升序数组里第一个大于 `value` 的下标。 */
+function upperBound<T>(list: readonly T[], value: number, key: (item: T) => number): number {
+  let lo = 0; let hi = list.length
+  while (lo < hi) { const mid = (lo + hi) >>> 1; if (key(list[mid]) <= value) lo = mid + 1; else hi = mid }
+  return lo
+}
+/**
+ * 按“关注的地方”自动生成缩放区间（纯函数；对照 Screen Studio 的自动缩放只对准点击位置、Cap 按点击加时间合并）。
+ * 镜头只去目的地，一段操作一个固定取景：
+ * - 关注点是按下鼠标的位置；位置放得进同一个取景、又隔得不久的点击并成一段，取景由这一段全部点击的范围决定并贴边。
+ * - 一段持续到关注离开为止：指针还留在点击位置附近（取景里、离这些点击不超过半个视野）、还在按键输入，就一直保持，不因为一时没有点击而缩回去；
+ *   指针离开不回来、开始滚动页面（在看大范围内容）、或去点别处时结束。没有点击的移动不生成区间。
+ * - 紧接着去点别处时两段相接，求值时是一次平移；隔得久才先缩小。接连点在相距很远的地方时改用更小的倍数一起框住，不来回甩镜头。
+ * 默认第 3 档（1.8 倍）；段内有双击（0.5 秒内两次按下）或点击后 2 秒内打字时用第 4 档（2.2 倍），方便看清被编辑的细节。
+ * `existing` 里已有的区间（通常是用户手动调过的）保留，与之重叠的新区间跳过。
+ * 时间换算：素材源时间 = 事件 recordingUs − recordingStartUs；`size` 是事件坐标所在的画面尺寸。
+ */
+export function suggestRecordingZoomRegions(events: readonly CaptureEvent[], options: { recordingStartUs: number; durationUs: number; size: { width: number; height: number }; existing?: readonly RecordingZoomRegion[]; createId?: () => string }): RecordingZoomRegion[] {
+  const { mergeGapUs, beforeUs, afterUs, minHoldUs, leaveGraceUs, leaveLeadUs } = RECORDING_ZOOM_SUGGEST
+  const durationUs = Math.round(options.durationUs)
+  const media = (event: CaptureEvent): number => Math.round(event.recordingUs - options.recordingStartUs)
+  const place = (point: readonly number[]): RecordingZoomPoint => ({ x: clamp(point[0] / Math.max(1, options.size.width), 0, 1), y: clamp(point[1] / Math.max(1, options.size.height), 0, 1) })
+  const times = (match: (event: CaptureEvent) => boolean): number[] => events.filter(match).map(media).sort((a, b) => a - b)
+  const presses = events.flatMap(event => event.kind === 'click' && event.phase === 'down' ? [{ us: media(event), ...place(event.point) }] : []).filter(press => press.us >= 0 && press.us <= durationUs).sort((a, b) => a.us - b.us)
+  const pointer = events.flatMap(event => event.kind === 'cursor' ? [{ us: media(event), point: event.point ? place(event.point) : null }] : []).sort((a, b) => a.us - b.us)
+  const keys = times(event => event.kind === 'key'); const typing = times(event => event.kind === 'key' && event.category === 'typing'); const scrolls = times(event => event.kind === 'scroll')
+  const self = (us: number): number => us
+
+  /** 这一段用的档位：从想用的档位往下找到放得进全部点击的那一档；`minDepth` 以上都放不进时为 undefined。 */
+  const depthOf = (seg: Attention, minDepth: number): number | undefined => {
+    const doubleClick = seg.presses.some((us, i) => i > 0 && us - seg.presses[i - 1] <= 500_000)
+    const typed = seg.presses.some(us => { const key = typing[upperBound(typing, us - 1, self)]; return key !== undefined && key - us <= 2_000_000 })
+    for (let depth = doubleClick || typed ? 4 : RECORDING_ZOOM_DEFAULT_DEPTH; depth >= minDepth; depth--) {
+      const fit = SUGGEST_FIT / recordingZoomScale(depth)
+      if (seg.x1 - seg.x0 <= fit && seg.y1 - seg.y0 <= fit) return depth
+    }
+    return undefined
+  }
+  const viewOf = (seg: Attention): RecordingZoomTransform => {
+    const scale = recordingZoomScale(depthOf(seg, 1) ?? 1); const half = 0.5 / scale
+    return { scale, centerX: frameAxis(seg.x0, seg.x1, half), centerY: frameAxis(seg.y0, seg.y1, half) }
+  }
+  /** `fromUs` 之后指针离开这一段（超过 `leaveGraceUs` 没回来）的时刻；到 `limitUs` 还在就返回 `limitUs`。没有指针记录时无从判断，按立刻离开算。 */
+  const leaveAt = (seg: Attention, fromUs: number, limitUs: number): number => {
+    if (!pointer.length) return fromUs
+    const view = viewOf(seg); const half = 0.5 / view.scale
+    // 贴边的取景另一头离点击很远，指针到了那里已经是在看别的东西。
+    const inside = (p: RecordingZoomPoint | null): boolean => !!p && Math.abs(p.x - view.centerX) <= half && Math.abs(p.y - view.centerY) <= half
+      && p.x >= seg.x0 - half && p.x <= seg.x1 + half && p.y >= seg.y0 - half && p.y <= seg.y1 + half
+    let i = upperBound(pointer, fromUs, sample => sample.us)
+    let outsideSince = i > 0 && !inside(pointer[i - 1].point) ? fromUs : undefined
+    for (; i < pointer.length && pointer[i].us < limitUs; i++) {
+      if (outsideSince !== undefined && pointer[i].us - outsideSince >= leaveGraceUs) return outsideSince
+      if (inside(pointer[i].point)) outsideSince = undefined; else outsideSince ??= pointer[i].us
+    }
+    return outsideSince !== undefined && limitUs - outsideSince >= leaveGraceUs ? outsideSince : limitUs
+  }
+  /** 这一段的关注到什么时候结束（不超过 `limitUs`）：`aliveUs` 是最后一次操作，`heldEndUs` 是取景保持到的时刻。 */
+  const attention = (seg: Attention, limitUs: number): { aliveUs: number; heldEndUs: number } => {
+    let aliveUs = seg.presses.at(-1)!
+    for (;;) {
+      const scroll = scrolls[upperBound(scrolls, aliveUs, self)] ?? Infinity
+      const leaveUs = Math.min(leaveAt(seg, aliveUs, limitUs), scroll)
+      // 人还在这里时按的键、上次操作后不久按的键（打字时常把鼠标挪开），都是这段操作的延续；
+      // 滚动之后的按键（翻页、方向键）是在看滚动的内容，不再延续。
+      const key = keys[upperBound(keys, Math.min(limitUs, scroll - 1, Math.max(leaveUs, aliveUs + mergeGapUs)), self) - 1]
+      if (!(key > aliveUs)) return { aliveUs, heldEndUs: Math.min(limitUs, Math.max(leaveUs - leaveLeadUs, aliveUs + minHoldUs)) }
+      aliveUs = key
+    }
+  }
+
   const existing = sortRecordingZoomRegions(options.existing ?? [])
   const created: RecordingZoomRegion[] = []
-  for (const cluster of clusters) {
-    const startUs = Math.max(0, Math.round(cluster[0] - RECORDING_ZOOM_SUGGEST.beforeUs))
-    const endUs = Math.min(Math.round(options.durationUs), Math.round(cluster.at(-1)! + RECORDING_ZOOM_SUGGEST.afterUs))
-    if (endUs <= startUs) continue
-    const occupied = [...existing, ...created]
-    if (occupied.some(region => region.startUs < endUs && region.endUs > startUs)) continue
-    const doubleClick = cluster.some((us, i) => i > 0 && us - cluster[i - 1] <= 500_000)
-    const typed = cluster.some(us => typing.some(key => key >= us && key - us <= 2_000_000))
-    created.push({ id: options.createId?.() ?? crypto.randomUUID(), startUs, endUs, depth: doubleClick || typed ? 4 : RECORDING_ZOOM_DEFAULT_DEPTH, focus: 'cursor', origin: 'auto' })
+  /** 结束一段并写出区间；后面紧跟着下一段（`nextUs` 处的点击）时两段相接，返回下一段区间的开始。 */
+  const close = (seg: Attention, startUs: number, limitUs: number, nextUs?: number): number | undefined => {
+    const { aliveUs, heldEndUs } = attention(seg, limitUs)
+    let endUs = Math.min(durationUs, heldEndUs + afterUs)
+    let nextStartUs = nextUs === undefined ? undefined : Math.max(0, nextUs - beforeUs)
+    // 相接处是一次平移：尽量在下一次点击前到位，但不早于这一段最后一次操作就离开。
+    if (nextStartUs !== undefined && endUs > nextStartUs) endUs = nextStartUs = Math.min(endUs, Math.max(nextStartUs, aliveUs + afterUs))
+    if (endUs > startUs && !existing.some(region => region.startUs < endUs && region.endUs > startUs)) {
+      const view = viewOf(seg); const round = (value: number): number => Math.round(value * 1e4) / 1e4
+      created.push({ id: options.createId?.() ?? crypto.randomUUID(), startUs, endUs, depth: depthOf(seg, 1) ?? 1, focus: { x: round(view.centerX), y: round(view.centerY) }, origin: 'auto' })
+    }
+    return nextStartUs
   }
+  let seg: Attention | undefined; let startUs = 0
+  for (const press of presses) {
+    if (seg) {
+      const { aliveUs, heldEndUs } = attention(seg, press.us)
+      const grown: Attention = { presses: [...seg.presses, press.us], x0: Math.min(seg.x0, press.x), x1: Math.max(seg.x1, press.x), y0: Math.min(seg.y0, press.y), y1: Math.max(seg.y1, press.y) }
+      // 来不及平移过去的接连点击，宁可用小一点的倍数一起框住。
+      const minDepth = press.us - aliveUs < beforeUs + afterUs ? 1 : RECORDING_ZOOM_DEFAULT_DEPTH
+      const scrolled = (scrolls[upperBound(scrolls, aliveUs, self)] ?? Infinity) < press.us
+      if (!scrolled && press.us - heldEndUs <= mergeGapUs && depthOf(grown, minDepth) !== undefined) { seg = grown; continue }
+      startUs = close(seg, startUs, press.us, press.us)!
+    } else startUs = Math.max(0, press.us - beforeUs)
+    seg = { presses: [press.us], x0: press.x, x1: press.x, y0: press.y, y1: press.y }
+  }
+  if (seg) close(seg, startUs, durationUs)
   return sortRecordingZoomRegions([...existing, ...created])
 }
 

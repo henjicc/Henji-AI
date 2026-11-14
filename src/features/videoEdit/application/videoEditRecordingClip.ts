@@ -72,9 +72,9 @@ export async function readRecordingClipEvents(source: RecordingCursorSource, sig
   }
   return withoutStrayCursorGaps(events)
 }
-/** Zoom regions suggested from the clicks; regions the person adjusted by hand are kept. */
+/** Zoom regions suggested from where the person worked (clicks, typing, staying); regions adjusted by hand are kept. */
 export function suggestRecordingClipZoom(media: Pick<VideoEditMedia, 'durationSeconds'>, source: RecordingCursorSource, events: readonly CaptureEvent[], existing: readonly RecordingZoomRegion[] = []): RecordingZoomRegion[] {
-  return suggestRecordingZoomRegions(events, { recordingStartUs: source.recordingStartUs, durationUs: Math.round(media.durationSeconds * 1e6), existing: existing.filter(region => region.origin === 'manual') })
+  return suggestRecordingZoomRegions(events, { recordingStartUs: source.recordingStartUs, durationUs: Math.round(media.durationSeconds * 1e6), size: source, existing: existing.filter(region => region.origin === 'manual') })
 }
 /** "重新生成": recompute the automatic regions of one recording clip from its clicks. */
 export async function regenerateRecordingClipZoom(target: VideoEditCompositeTarget, signal: AbortSignal): Promise<number> {

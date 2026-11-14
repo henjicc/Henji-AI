@@ -28,6 +28,11 @@ const { seedVideoEditProject } = require(path.join(root, 'scripts/lib/uiInspecti
   // 复制件的修改时间到不了原件的亚毫秒精度，去掉原文件身份，免得被当成“源文件已改变”。
   content.media = content.media.filter(media => keepMedia.has(media.id)).map(({ assetContent: _assetContent, ...media }) => media)
   if (process.env.ZOOM_MOTION_BLUR === '0') sequence.motionBlur = false
+  // ZOOM_REGIONS=缩放段对比.cjs 输出的 json：换成里面的缩放区间（比如新版自动生成的那一组）。
+  if (process.env.ZOOM_REGIONS) {
+    const regions = JSON.parse(fs.readFileSync(process.env.ZOOM_REGIONS, 'utf8')).regions
+    for (const clip of sequence.clips) for (const effect of clip.effects ?? []) if (effect.builtin?.id === 'recording_zoom') effect.builtin.regions = regions
+  }
   sequence.tracks = sequence.tracks.filter(track => track.kind === 'video' || sequence.clips.some(clip => clip.track === track.index))
   const session = await launchElectronApp({ mainEntry: path.join(root, buildDir, 'main/index.cjs'), cwd: root, useElectronApi: true, skipOnboarding: true, extraArgs: ['--background', '--enable-unsafe-webgpu'] })
   let client
