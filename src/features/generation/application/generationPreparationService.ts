@@ -20,7 +20,7 @@ import {
   readPriceEstimateDisplaySettings,
   resolvePricingCurrency,
 } from '@/core/pricing/priceDisplay'
-import { validateParams, type ValidationError } from '@/core/request/paramValidator'
+import { getParamName, validateParams, type ValidationError } from '@/core/request/paramValidator'
 import { getI18nText, type ImageConstraints, type ModelDefinition, type ModelTag, type ModelType, type ParamDef, type VideoConstraints } from '@/core/types'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/application-control/applicationCapabilities'
 
@@ -501,6 +501,8 @@ function adjustedParams(model: ModelDefinition, supplied: Record<string, unknown
     .map((param) => ({ paramId: param.id, requested: supplied[param.id], applied: normalized[param.id] }))
 }
 
+const MEDIA_INPUT_NAMES = { images: '参考图片', videos: '参考视频', audios: '参考音频' } as const
+
 function validateDynamicConstraints(
   model: ModelDefinition,
   params: DynamicValueMap,
@@ -514,13 +516,13 @@ function validateDynamicConstraints(
     const value = params[param.id]
     const options = engine.getFilteredOptions(param.id, params, model.params)
     if (options.length > 0 && !options.some((option) => Object.is(option.value, value))) {
-      errors.push({ paramId: param.id, type: 'options', message: `${String(value)} 与当前其他参数组合冲突，可选：${options.map((option) => String(option.value)).join('、')}` })
+      errors.push({ paramId: param.id, type: 'options', message: `「${getParamName(param)}」选的 ${String(value)} 与当前其他参数组合冲突，可选：${options.map((option) => String(option.value)).join('、')}` })
     }
     const range = engine.getFilteredRange(param.id, params, model.params)
     if (range && typeof value === 'number' && (
       (range.min !== undefined && value < range.min) || (range.max !== undefined && value > range.max)
     )) {
-      errors.push({ paramId: param.id, type: 'range', message: `${value} 不在当前联动范围 ${range.min ?? '-∞'}～${range.max ?? '∞'} 内` })
+      errors.push({ paramId: param.id, type: 'range', message: `「${getParamName(param)}」要在 ${range.min ?? '-∞'}～${range.max ?? '∞'} 之间` })
     }
   }
   return errors
@@ -560,7 +562,7 @@ export function prepareGenerationModelInput(input: GenerationPreparationInput, m
   ].flatMap(([kind, count, range]) => {
     const resolved = range as { min: number; max: number }
     return typeof count === 'number' && (count < resolved.min || count > resolved.max)
-      ? [{ paramId: kind, type: 'range' as const, message: `${kind} 输入数量必须为 ${resolved.min}～${resolved.max}` }]
+      ? [{ paramId: kind, type: 'range' as const, message: `${MEDIA_INPUT_NAMES[kind as keyof typeof MEDIA_INPUT_NAMES]}要放 ${resolved.min}～${resolved.max} 个` }]
       : []
   })
   const paramErrors = [
@@ -573,7 +575,8 @@ export function prepareGenerationModelInput(input: GenerationPreparationInput, m
     paramErrors.push({ paramId: 'prompt', type: 'required', message: '必须提供提示词或允许的媒体引用' })
   }
   if (paramErrors.length > 0) {
-    throw new GenerationPreparationError('INVALID_INPUT', `生成参数未通过模型配置校验：${paramErrors.slice(0, 4).map((error) => `${error.paramId} ${error.message}`).join('；')}`, {
+    // 正文给用户看，只用参数显示名；参数 ID 在 errors 里留给助手定位。
+    throw new GenerationPreparationError('INVALID_INPUT', `生成参数不符合当前模型的要求：${paramErrors.slice(0, 4).map((error) => error.message).join('；')}`, {
       modelId: model.meta.id,
       errors: paramErrors.map((error) => ({ paramId: error.paramId, type: error.type, message: error.message })),
     })

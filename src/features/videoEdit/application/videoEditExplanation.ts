@@ -110,7 +110,7 @@ export async function startVideoExplanation(id: string, userReceiptRef: string, 
     if (previous) await clearTemporaryVideoExplanationAudio(id)
     session = explanationSessionSchema.parse({ id: options.sessionId ?? crypto.randomUUID(), version: 1, ownerRef: { kind: 'document.video_edit', id }, createdAt: new Date().toISOString(), state: 'consenting', mode: 'animated', sourceDigest: await motionDigest([id, crypto.randomUUID()]), retentionStatus: 'temporary', clockSegments: [], pages: [], visualEvidenceRefs: [], bindings: [], segmentExclusions: [], corrections: [], annotationRefs: [], appliedReceiptRefs: [], finalPoseRefs: [], consent: { noticeDigest: await motionDigest('explanation-notice-v2/history-acknowledged-picture'), userReceiptRef, capture: true, keepAudio: false, audioUpload: false, textUpload: Boolean(options.sessionId), imageUpload: Boolean(options.sessionId) } })
     if (previous) assertCurrent(owner, previous.state)
-    else if (requireVideoEditInstance(id) !== owner || states.has(owner)) throw new Error('录制宿主已关闭或已有讲解。')
+    else if (requireVideoEditInstance(id) !== owner || states.has(owner)) throw new Error(states.has(owner) ? '讲解已经在录制了。' : '剪辑已关闭，讲解没有开始录制。')
   } catch (error) { if (previous && states.get(owner) === previous) { previous.state.busy = false; publish() } throw error }
   previous?.release()
   const state: VideoExplanationState = { collector: undefined as unknown as RecordingCollector, originMs: options.originMs ?? performance.now(), elapsedUs: 0, busy: true, erased: false, controller: new AbortController(), uncertaintyUs: [], microphoneEnabled: options.microphone ?? true }

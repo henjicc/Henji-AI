@@ -63,7 +63,7 @@ export function validateParams(
       if (value === undefined || value === null || value === '') {
         errors.push({
           paramId: paramDef.id,
-          message: `${getParamName(paramDef)} is required`,
+          message: `请填写「${getParamName(paramDef)}」`,
           type: 'required'
         })
         continue
@@ -154,7 +154,7 @@ function validateType(paramDef: ParamDef, value: DynamicValue): ValidationError 
   if (!isValidType(paramDef, value)) {
     return {
       paramId: paramDef.id,
-      message: `${getParamName(paramDef)} must be a ${paramDef.valueType}`,
+      message: `「${getParamName(paramDef)}」的取值类型不对`,
       type: 'type'
     }
   }
@@ -192,13 +192,13 @@ function validateRange(paramDef: ParamDef, value: DynamicValue): ValidationError
     const min = 'min' in paramDef ? paramDef.min : undefined
     const max = 'max' in paramDef ? paramDef.max : undefined
 
-    let message = `${getParamName(paramDef)} is out of range`
+    let message = `「${getParamName(paramDef)}」超出允许范围`
     if (min !== undefined && max !== undefined) {
-      message = `${getParamName(paramDef)} must be between ${min} and ${max}`
+      message = `「${getParamName(paramDef)}」要在 ${min}～${max} 之间`
     } else if (min !== undefined) {
-      message = `${getParamName(paramDef)} must be >= ${min}`
+      message = `「${getParamName(paramDef)}」不能小于 ${min}`
     } else if (max !== undefined) {
-      message = `${getParamName(paramDef)} must be <= ${max}`
+      message = `「${getParamName(paramDef)}」不能大于 ${max}`
     }
 
     return {
@@ -236,12 +236,12 @@ function validateOptions(paramDef: ParamDef, value: DynamicValue): ValidationErr
   if (!isValidOption(paramDef, value)) {
     const validValues =
       'options' in paramDef && paramDef.options
-        ? paramDef.options.map((o) => o.value).join(', ')
+        ? paramDef.options.map((o) => o.value).join('、')
         : ''
 
     return {
       paramId: paramDef.id,
-      message: `${getParamName(paramDef)} must be one of: ${validValues}`,
+      message: `「${getParamName(paramDef)}」只能选：${validValues}`,
       type: 'options'
     }
   }
@@ -269,7 +269,7 @@ function validateArrayLength(paramDef: ParamDef, value: DynamicValue): Validatio
 
     return {
       paramId: paramDef.id,
-      message: `${getParamName(paramDef)} can have at most ${maxCount} items`,
+      message: `「${getParamName(paramDef)}」最多 ${maxCount} 项`,
       type: 'range'
     }
   }
@@ -294,6 +294,7 @@ function isValidArrayLength(paramDef: ParamDef, value: DynamicValue): boolean {
 /**
  * 获取参数显示名称
  */
-function getParamName(paramDef: ParamDef): string {
+/** 参数给用户看的名字（中文显示名，没有时退回参数 ID）。 */
+export function getParamName(paramDef: ParamDef): string {
   return getI18nText(paramDef.name, 'zh') || paramDef.id
 }

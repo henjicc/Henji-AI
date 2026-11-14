@@ -191,7 +191,7 @@ export class VideoEditWebInputs {
   async picture(reference: CodeWebReference, time: number, frame: object, copy: VideoEditWebFrameCopy, trust: readonly ContentTrustReference[], options: WebPictureOptions = {}): Promise<VideoEditWebPicture | undefined> {
     if (this.disposed) throw aborted()
     const channel = channelOf()
-    if (!channel) throw new Error('网页画面需要显卡帧通道，当前渲染会话没有接入。')
+    if (!channel) throw new Error('网页画面暂时显示不出来，请重新加载预览；仍然不显示就重启软件。')
     // 信任确认先于预算与开页，超时不能绕过外来内容的首次执行确认。
     await abortable(this.assertTrusted(trust), options.signal)
     if (this.disposed || options.signal?.aborted) throw aborted()
