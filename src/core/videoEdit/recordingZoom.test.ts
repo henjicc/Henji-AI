@@ -119,11 +119,51 @@ describe('录屏自动缩放区间', () => {
     expect(suggest([move(0, 100, 500), click(1, 100, 500), move(3, 900, 500), click(4, 900, 500), move(5, 500, 100)])).toEqual([
       [0, 3_000_000, 3, { x: half, y: 0.5 }, 'auto'], [3_000_000, 5_600_000, 3, { x: 1 - half, y: 0.5 }, 'auto'],
     ])
-    // 手动调过的区间保留，与它重叠的自动段跳过。
-    const kept = suggestRecordingZoomRegions(busy, { ...options, existing: [region(9_000_000, 12_000_000, { id: 'mine' })], createId: undefined })
-    expect(kept.map(value => value.id)).toContain('mine')
-    expect(kept.filter(value => value.origin === 'auto').map(value => value.startUs)).toEqual([19_000_000])
+    // 手动调过的区间保留，自动段截到它以外：0–10.3 秒那段截成 0–3 秒和 6–10.3 秒；截剩不到 2.3 秒的一头（19–20 秒）丢弃。
+    const kept = suggestRecordingZoomRegions(busy, { ...options, existing: [region(3_000_000, 6_000_000, { id: 'mine' }), region(20_000_000, 21_500_000, { id: 'late' })], createId: undefined })
+    expect(kept.map(value => [value.startUs, value.endUs, value.origin])).toEqual([
+      [0, 3_000_000, 'auto'], [3_000_000, 6_000_000, 'manual'], [6_000_000, 10_300_000, 'auto'], [20_000_000, 21_500_000, 'manual'],
+    ])
+    expect(kept[0].focus).toEqual(kept[2].focus); expect(kept[0].id).not.toBe(kept[2].id)
     expect(recordingZoomRegionsSchema.safeParse(kept).success).toBe(true)
+  })
+  it('点击后弹出的窗口一起框进取景：放不下就降档、贴边，整屏窗口和点击前就有的窗口不算', async () => {
+    const { pages } = await recordingCursorFixture(); const entries = pages.flatMap(page => page.entries)
+    const baseClick = entries.find(event => event.kind === 'click')!; const baseCursor = entries.find(event => event.kind === 'cursor')!
+    const at = (seconds: number) => seconds * 1e6 + 10_000_000
+    const click = (seconds: number, x: number, y: number): CaptureEvent => ({ ...baseClick, phase: 'down', point: [x, y], recordingUs: at(seconds) }) as CaptureEvent
+    const move = (seconds: number, x: number, y: number): CaptureEvent => ({ ...baseCursor, point: [x, y], recordingUs: at(seconds) }) as CaptureEvent
+    const foreground = (seconds: number, x: number, y: number, width: number, height: number): CaptureEvent => ({ ...baseClick, kind: 'window', windowId: `w${seconds}`, bounds: { x, y, width, height }, available: true, recordingUs: at(seconds) }) as unknown as CaptureEvent
+    const options = { recordingStartUs: 10_000_000, durationUs: 10_000_000, size: { width: 3840, height: 2160 }, createId: () => 'auto' }
+    const suggest = (events: CaptureEvent[]) => suggestRecordingZoomRegions(events, options)
+    // 点左下角开始按钮，0.14 秒后弹出 1176×1211 的开始菜单：1.8 倍框不下，降到 1.5 倍贴左下角，菜单整块在视野里。
+    const start = [foreground(0, 0, 0, 3840, 2111), move(0.5, 0, 2159), click(1, 0, 2159), foreground(1.01, 0, 2100, 3840, 60), foreground(1.14, 72, 889, 1176, 1211), move(1.5, 300, 1500), move(3, 2000, 500)]
+    const [menu] = suggest(start)
+    expect(menu.depth).toBe(2)
+    const half = 0.5 / RECORDING_ZOOM_SCALES[1]
+    expect(menu.focus).toEqual({ x: Math.round(half * 1e4) / 1e4, y: Math.round((1 - half) * 1e4) / 1e4 })
+    const view = { x: menu.focus === 'cursor' ? 0 : menu.focus.x, y: menu.focus === 'cursor' ? 0 : menu.focus.y }
+    expect(view.y - half).toBeLessThanOrEqual(889 / 2160); expect(view.x + half).toBeGreaterThanOrEqual((72 + 1176) / 3840)
+    // 在开始菜单里滚动是在翻菜单，取景保持到指针离开；在菜单外滚动照旧结束这一段。
+    const scroll = (seconds: number, x: number, y: number): CaptureEvent => ({ ...baseClick, kind: 'scroll', point: [x, y], axis: 'vertical', amount: 4, recordingUs: at(seconds) }) as unknown as CaptureEvent
+    const browse = (x: number, y: number) => suggest([...start.slice(0, -1), scroll(1.6, x, y), move(5, 2000, 500)])[0].endUs
+    expect(browse(300, 1500)).toBe(5_600_000)
+    expect(browse(2000, 300)).toBe(2_300_000)
+    // 菜单关掉（前台换成别的窗口）之后在原来那块地方滚动，是在看别的内容：照旧结束。
+    expect(suggest([...start.slice(0, -1), foreground(1.5, 0, 0, 3840, 2111), scroll(1.6, 300, 1500), move(5, 2000, 500)])[0].endUs).toBe(2_300_000)
+    // 没有弹窗、弹窗在点击前就有、弹出的是整屏窗口：照旧第 3 档。
+    for (const events of [
+      [move(0.5, 0, 2159), click(1, 0, 2159), move(3, 2000, 500)],
+      [foreground(0.5, 72, 889, 1176, 1211), move(0.5, 0, 2159), click(1, 0, 2159), move(3, 2000, 500)],
+      [move(0.5, 0, 2159), click(1, 0, 2159), foreground(1.2, 0, 0, 3840, 2111), move(3, 2000, 500)],
+    ]) expect(suggest(events)[0].depth).toBe(3)
+    // 点了旁边一个没最大化的窗口把它切到前台（点击落在窗口里）、拖动点击前就在前台的窗口：都不是弹窗。
+    const other = (seconds: number, x: number, y: number): CaptureEvent => ({ ...foreground(seconds, x, y, 1600, 1000), windowId: 'other' }) as CaptureEvent
+    const drag = [other(0.2, 300, 300), move(0.5, 500, 400), click(1, 500, 400), ...[1.1, 1.3, 1.5, 1.7].map((s, i) => other(s, 300 + i * 500, 300)), move(3, 3500, 2000)]
+    expect(suggest(drag)[0].depth).toBe(3)
+    expect(suggest([move(0.5, 2000, 1000), click(1, 2000, 1000), other(1.01, 1500, 600), move(3, 100, 100)])[0].depth).toBe(3)
+    // 点任务栏图标切回早先用过的窗口：前台先变成任务栏、再变回那个窗口，都不算弹窗。
+    expect(suggest([other(0.1, 300, 300), foreground(0.3, 0, 0, 3840, 2111), move(0.5, 500, 2140), click(1, 500, 2140), foreground(1.01, 0, 2100, 3840, 60), other(1.03, 300, 300), move(3, 3500, 100)])[0].depth).toBe(3)
   })
   it('跟随指针只去目的地：路过的位置不取景，停下的地方仍在视野里就不动；衔接平移用一次过渡的时长走完', () => {
     const regions = [region(1_000_000, 9_000_000, { focus: 'cursor', depth: 3 })]

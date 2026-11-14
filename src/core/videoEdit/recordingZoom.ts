@@ -257,7 +257,18 @@ export function recordingZoomPointerFromEvents(events: readonly CaptureEvent[], 
 export const RECORDING_ZOOM_SUGGEST = { mergeGapUs: 2_500_000, beforeUs: 1_000_000, afterUs: 800_000, minHoldUs: 500_000, leaveGraceUs: 1_000_000, leaveLeadUs: 200_000 } as const
 /** 一段操作的全部点击占视野的比例不超过这个值才共用一个取景，四周留得下边距。 */
 const SUGGEST_FIT = 0.7
-interface Attention { presses: number[]; x0: number; x1: number; y0: number; y1: number }
+/**
+ * 点击后这么久内第一次出现的窗口（开始菜单、对话框）算这次点击打开的，取景要把它整个框进去。
+ * 事件日志只记前台窗口与它的位置变化，分不出“新弹出”和“切回已有窗口”（点任务栏图标）“拖动窗口”，所以录制里早先当过前台的窗口一律不算
+ * （同一个菜单第二次打开也就框不到，少框一个窗口好过把镜头拉远）；点击位置落在窗口里的是点了那个窗口把它切到前台，也不算。
+ * 窗口与点击合起来占视野不超过 `POPUP_FIT`（与 `frameAxis` 的边距一致，框得下就不出视野），放不下就降档，最低一档也放不下的不算。
+ */
+const POPUP_US = 1_000_000
+const POPUP_FIT = 1 - FOCUS_MARGIN
+interface Box { x0: number; x1: number; y0: number; y1: number }
+/** 一段操作：`x0–y1` 是全部点击的范围，`frame` 是要框进取景的范围（点击加上它们打开的窗口），`popups` 是这些窗口和它们关掉（前台换成别的窗口）的时刻。 */
+interface Attention extends Box { presses: number[]; frame: Box; popups: Array<Box & { untilUs: number }> }
+const union = (a: Box, b: Box): Box => ({ x0: Math.min(a.x0, b.x0), x1: Math.max(a.x1, b.x1), y0: Math.min(a.y0, b.y0), y1: Math.max(a.y1, b.y1) })
 /** 升序数组里第一个大于 `value` 的下标。 */
 function upperBound<T>(list: readonly T[], value: number, key: (item: T) => number): number {
   let lo = 0; let hi = list.length
@@ -272,7 +283,8 @@ function upperBound<T>(list: readonly T[], value: number, key: (item: T) => numb
  *   指针离开不回来、开始滚动页面（在看大范围内容）、或去点别处时结束。没有点击的移动不生成区间。
  * - 紧接着去点别处时两段相接，求值时是一次平移；隔得久才先缩小。接连点在相距很远的地方时改用更小的倍数一起框住，不来回甩镜头。
  * 默认第 3 档（1.8 倍）；段内有双击（0.5 秒内两次按下）或点击后 2 秒内打字时用第 4 档（2.2 倍），方便看清被编辑的细节。
- * `existing` 里已有的区间（通常是用户手动调过的）保留，与之重叠的新区间跳过。
+ * 点击后不久弹出的新前台窗口（开始菜单、对话框）一起框进取景，必要时降档，在里面滚动不算离开；不成为前台的弹出层（右键菜单、下拉框）事件日志里没有，框不到。
+ * `existing` 里已有的区间（通常是用户手动调过的）保留，新区间截到它们以外；截剩的一块放不下一次推近、最短保持和拉远就丢弃。
  * 时间换算：素材源时间 = 事件 recordingUs − recordingStartUs；`size` 是事件坐标所在的画面尺寸。
  */
 export function suggestRecordingZoomRegions(events: readonly CaptureEvent[], options: { recordingStartUs: number; durationUs: number; size: { width: number; height: number }; existing?: readonly RecordingZoomRegion[]; createId?: () => string }): RecordingZoomRegion[] {
@@ -283,7 +295,11 @@ export function suggestRecordingZoomRegions(events: readonly CaptureEvent[], opt
   const times = (match: (event: CaptureEvent) => boolean): number[] => events.filter(match).map(media).sort((a, b) => a - b)
   const presses = events.flatMap(event => event.kind === 'click' && event.phase === 'down' ? [{ us: media(event), ...place(event.point) }] : []).filter(press => press.us >= 0 && press.us <= durationUs).sort((a, b) => a.us - b.us)
   const pointer = events.flatMap(event => event.kind === 'cursor' ? [{ us: media(event), point: event.point ? place(event.point) : null }] : []).sort((a, b) => a.us - b.us)
-  const keys = times(event => event.kind === 'key'); const typing = times(event => event.kind === 'key' && event.category === 'typing'); const scrolls = times(event => event.kind === 'scroll')
+  const windows = events.flatMap(event => event.kind === 'window' ? [{ us: media(event), id: event.windowId, bounds: event.bounds }] : []).sort((a, b) => a.us - b.us)
+  /** 每个窗口第一次带位置出现在 `windows` 里的下标。 */
+  const firstSeen = new Map<string, number>()
+  windows.forEach((w, i) => { if (w.id !== null && w.bounds && !firstSeen.has(w.id)) firstSeen.set(w.id, i) })
+  const keys = times(event => event.kind === 'key'); const typing = times(event => event.kind === 'key' && event.category === 'typing'); const scrolls = events.flatMap(event => event.kind === 'scroll' ? [{ us: media(event), ...place(event.point) }] : []).sort((a, b) => a.us - b.us)
   const self = (us: number): number => us
 
   /** 这一段用的档位：从想用的档位往下找到放得进全部点击的那一档；`minDepth` 以上都放不进时为 undefined。 */
@@ -291,14 +307,28 @@ export function suggestRecordingZoomRegions(events: readonly CaptureEvent[], opt
     const doubleClick = seg.presses.some((us, i) => i > 0 && us - seg.presses[i - 1] <= 500_000)
     const typed = seg.presses.some(us => { const key = typing[upperBound(typing, us - 1, self)]; return key !== undefined && key - us <= 2_000_000 })
     for (let depth = doubleClick || typed ? 4 : RECORDING_ZOOM_DEFAULT_DEPTH; depth >= minDepth; depth--) {
-      const fit = SUGGEST_FIT / recordingZoomScale(depth)
-      if (seg.x1 - seg.x0 <= fit && seg.y1 - seg.y0 <= fit) return depth
+      const scale = recordingZoomScale(depth); const fit = SUGGEST_FIT / scale; const frameFit = POPUP_FIT / scale
+      if (seg.x1 - seg.x0 <= fit && seg.y1 - seg.y0 <= fit && seg.frame.x1 - seg.frame.x0 <= frameFit && seg.frame.y1 - seg.frame.y0 <= frameFit) return depth
     }
     return undefined
   }
   const viewOf = (seg: Attention): RecordingZoomTransform => {
     const scale = recordingZoomScale(depthOf(seg, 1) ?? 1); const half = 0.5 / scale
-    return { scale, centerX: frameAxis(seg.x0, seg.x1, half), centerY: frameAxis(seg.y0, seg.y1, half) }
+    return { scale, centerX: frameAxis(seg.frame.x0, seg.frame.x1, half), centerY: frameAxis(seg.frame.y0, seg.frame.y1, half) }
+  }
+  /** 把 `press` 这次点击之后、下一次点击之前弹出的窗口并进取景范围；并进去后哪一档都放不下的窗口（整屏窗口、离得太远的）不算。 */
+  const withPopups = (seg: Attention, press: { us: number; x: number; y: number }, nextUs: number): Attention => {
+    const width = Math.max(1, options.size.width); const height = Math.max(1, options.size.height)
+    let frame = seg.frame; const popups = [...seg.popups]
+    for (let i = upperBound(windows, press.us, w => w.us); i < windows.length && windows[i].us <= Math.min(press.us + POPUP_US, nextUs); i++) {
+      const { id, bounds } = windows[i]
+      if (!bounds || id === null || firstSeen.get(id) !== i) continue
+      const box = { x0: clamp(bounds.x / width, 0, 1), x1: clamp((bounds.x + bounds.width) / width, 0, 1), y0: clamp(bounds.y / height, 0, 1), y1: clamp((bounds.y + bounds.height) / height, 0, 1) }
+      if (press.x >= box.x0 && press.x <= box.x1 && press.y >= box.y0 && press.y <= box.y1) continue
+      const grown = union(frame, box)
+      if (depthOf({ ...seg, frame: grown }, 1) !== undefined) { frame = grown; popups.push({ ...box, untilUs: windows.slice(i + 1).find(w => w.id !== id)?.us ?? Infinity }) }
+    }
+    return { ...seg, frame, popups }
   }
   /** `fromUs` 之后指针离开这一段（超过 `leaveGraceUs` 没回来）的时刻；到 `limitUs` 还在就返回 `limitUs`。没有指针记录时无从判断，按立刻离开算。 */
   const leaveAt = (seg: Attention, fromUs: number, limitUs: number): number => {
@@ -306,7 +336,7 @@ export function suggestRecordingZoomRegions(events: readonly CaptureEvent[], opt
     const view = viewOf(seg); const half = 0.5 / view.scale
     // 贴边的取景另一头离点击很远，指针到了那里已经是在看别的东西。
     const inside = (p: RecordingZoomPoint | null): boolean => !!p && Math.abs(p.x - view.centerX) <= half && Math.abs(p.y - view.centerY) <= half
-      && p.x >= seg.x0 - half && p.x <= seg.x1 + half && p.y >= seg.y0 - half && p.y <= seg.y1 + half
+      && p.x >= seg.frame.x0 - half && p.x <= seg.frame.x1 + half && p.y >= seg.frame.y0 - half && p.y <= seg.frame.y1 + half
     let i = upperBound(pointer, fromUs, sample => sample.us)
     let outsideSince = i > 0 && !inside(pointer[i - 1].point) ? fromUs : undefined
     for (; i < pointer.length && pointer[i].us < limitUs; i++) {
@@ -315,11 +345,19 @@ export function suggestRecordingZoomRegions(events: readonly CaptureEvent[], opt
     }
     return outsideSince !== undefined && limitUs - outsideSince >= leaveGraceUs ? outsideSince : limitUs
   }
+  /** `afterUs` 之后第一次滚动页面的时刻；在这一段点开、还没关掉的窗口里滚动（翻开始菜单、对话框里的列表）是在操作这个窗口，不算。 */
+  const scrollAfter = (seg: Attention, afterUs: number): number => {
+    for (let i = upperBound(scrolls, afterUs, scroll => scroll.us); i < scrolls.length; i++) {
+      const { us, x, y } = scrolls[i]
+      if (!seg.popups.some(box => us < box.untilUs && x >= box.x0 && x <= box.x1 && y >= box.y0 && y <= box.y1)) return us
+    }
+    return Infinity
+  }
   /** 这一段的关注到什么时候结束（不超过 `limitUs`）：`aliveUs` 是最后一次操作，`heldEndUs` 是取景保持到的时刻。 */
   const attention = (seg: Attention, limitUs: number): { aliveUs: number; heldEndUs: number } => {
     let aliveUs = seg.presses.at(-1)!
     for (;;) {
-      const scroll = scrolls[upperBound(scrolls, aliveUs, self)] ?? Infinity
+      const scroll = scrollAfter(seg, aliveUs)
       const leaveUs = Math.min(leaveAt(seg, aliveUs, limitUs), scroll)
       // 人还在这里时按的键、上次操作后不久按的键（打字时常把鼠标挪开），都是这段操作的延续；
       // 滚动之后的按键（翻页、方向键）是在看滚动的内容，不再延续。
@@ -331,6 +369,7 @@ export function suggestRecordingZoomRegions(events: readonly CaptureEvent[], opt
 
   const existing = sortRecordingZoomRegions(options.existing ?? [])
   const created: RecordingZoomRegion[] = []
+  const minPieceUs = beforeUs + minHoldUs + afterUs
   /** 结束一段并写出区间；后面紧跟着下一段（`nextUs` 处的点击）时两段相接，返回下一段区间的开始。 */
   const close = (seg: Attention, startUs: number, limitUs: number, nextUs?: number): number | undefined => {
     const { aliveUs, heldEndUs } = attention(seg, limitUs)
@@ -338,24 +377,34 @@ export function suggestRecordingZoomRegions(events: readonly CaptureEvent[], opt
     let nextStartUs = nextUs === undefined ? undefined : Math.max(0, nextUs - beforeUs)
     // 相接处是一次平移：尽量在下一次点击前到位，但不早于这一段最后一次操作就离开。
     if (nextStartUs !== undefined && endUs > nextStartUs) endUs = nextStartUs = Math.min(endUs, Math.max(nextStartUs, aliveUs + afterUs))
-    if (endUs > startUs && !existing.some(region => region.startUs < endUs && region.endUs > startUs)) {
-      const view = viewOf(seg); const round = (value: number): number => Math.round(value * 1e4) / 1e4
-      created.push({ id: options.createId?.() ?? crypto.randomUUID(), startUs, endUs, depth: depthOf(seg, 1) ?? 1, focus: { x: round(view.centerX), y: round(view.centerY) }, origin: 'auto' })
+    const view = viewOf(seg); const round = (value: number): number => Math.round(value * 1e4) / 1e4
+    // 截到手动区间以外：手动区间把这一段切成几块，各自成区间（紧挨手动区间的一头求值时与它平移衔接）。
+    const cuts = existing.filter(region => region.startUs < endUs && region.endUs > startUs)
+    let pieceStart = startUs
+    for (const cut of [...cuts, { startUs: endUs, endUs }]) {
+      const pieceEnd = Math.min(endUs, cut.startUs)
+      if (cuts.length ? pieceEnd - pieceStart >= minPieceUs : pieceEnd > pieceStart) {
+        created.push({ id: options.createId?.() ?? crypto.randomUUID(), startUs: pieceStart, endUs: pieceEnd, depth: depthOf(seg, 1) ?? 1, focus: { x: round(view.centerX), y: round(view.centerY) }, origin: 'auto' })
+      }
+      pieceStart = Math.max(pieceStart, cut.endUs)
     }
     return nextStartUs
   }
   let seg: Attention | undefined; let startUs = 0
-  for (const press of presses) {
+  for (let p = 0; p < presses.length; p++) {
+    const press = presses[p]; const nextUs = presses[p + 1]?.us ?? Infinity
     if (seg) {
       const { aliveUs, heldEndUs } = attention(seg, press.us)
-      const grown: Attention = { presses: [...seg.presses, press.us], x0: Math.min(seg.x0, press.x), x1: Math.max(seg.x1, press.x), y0: Math.min(seg.y0, press.y), y1: Math.max(seg.y1, press.y) }
+      const point = { x0: press.x, x1: press.x, y0: press.y, y1: press.y }
+      const grown: Attention = { presses: [...seg.presses, press.us], ...union(seg, point), frame: union(seg.frame, point), popups: seg.popups }
       // 来不及平移过去的接连点击，宁可用小一点的倍数一起框住。
       const minDepth = press.us - aliveUs < beforeUs + afterUs ? 1 : RECORDING_ZOOM_DEFAULT_DEPTH
-      const scrolled = (scrolls[upperBound(scrolls, aliveUs, self)] ?? Infinity) < press.us
-      if (!scrolled && press.us - heldEndUs <= mergeGapUs && depthOf(grown, minDepth) !== undefined) { seg = grown; continue }
+      const scrolled = scrollAfter(seg, aliveUs) < press.us
+      if (!scrolled && press.us - heldEndUs <= mergeGapUs && depthOf(grown, minDepth) !== undefined) { seg = withPopups(grown, press, nextUs); continue }
       startUs = close(seg, startUs, press.us, press.us)!
     } else startUs = Math.max(0, press.us - beforeUs)
-    seg = { presses: [press.us], x0: press.x, x1: press.x, y0: press.y, y1: press.y }
+    const point = { x0: press.x, x1: press.x, y0: press.y, y1: press.y }
+    seg = withPopups({ presses: [press.us], ...point, frame: point, popups: [] }, press, nextUs)
   }
   if (seg) close(seg, startUs, durationUs)
   return sortRecordingZoomRegions([...existing, ...created])
