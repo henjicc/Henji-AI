@@ -120,12 +120,12 @@ export function VideoEditInOutDuration({ instance, className = '' }: { instance:
 }
 /**
  * 播放头：强调色竖线（设计稿 VideoEdit；强调色只用于主动作、焦点、播放头与选中指示）。
- * 钉住的行（字幕轨、缩放轨）盖住滚上来的轨道，各自再画一段；`overBorder` 让这段盖过行底的分隔线，否则竖线在每条分隔线处断开 1 像素。
+ * 钉住的行（字幕轨、缩放轨）盖住滚上来的轨道，各自再画一段；这两行的分隔线画在行内、压在这段竖线之下，竖线不会在分隔线处断开。
  */
-export function VideoEditTimelinePlayhead({ instance, pixels, overBorder = false }: { instance: VideoEditInstance; pixels: number; overBorder?: boolean }): React.ReactElement {
+export function VideoEditTimelinePlayhead({ instance, pixels }: { instance: VideoEditInstance; pixels: number }): React.ReactElement {
   const header = useTimelineHeaderWidth()
   useVideoEditViewSelector(() => instance.frame)
-  return <div className={`pointer-events-none absolute top-0 z-raised w-px bg-accent-ring ${overBorder ? '-bottom-px' : 'bottom-0'}`} style={{ left: header + instance.frame * pixels }} data-video-edit-playhead />
+  return <div className="pointer-events-none absolute inset-y-0 z-raised w-px bg-accent-ring" style={{ left: header + instance.frame * pixels }} data-video-edit-playhead />
 }
 /** 头宽 12（w-3）。轨道里的竖线从帧位置起向右 1 像素，头的中线要对准这 1 像素的中间，不能对准帧位置，否则高分屏上两段竖线错开一个物理像素，看着像断开。 */
 const PLAYHEAD_HEAD_OFFSET = 6 - 0.5

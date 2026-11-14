@@ -31,6 +31,11 @@ export const TIMELINE_MARK_LANE_HEIGHT = 20
 export const TIMELINE_CAPTION_HEIGHT = 28
 /** 缩放轨 Z1：序列里有录屏片段开启自动缩放时，钉在字幕轨下面。 */
 const TIMELINE_ZOOM_HEIGHT = 24
+/**
+ * 普通轨道行与展开行的轨道头格子高度：比所在行多出 1px 盖住行的下边线，再用自己的 border-b 画回这条线。
+ * 这些行的下边线画在轨道头整列底色之下，格子不画就会在轨道头栏里缺掉分隔线。
+ */
+export const TIMELINE_HEADER_CELL_HEIGHT = 'calc(100% + 1px)'
 /** 视频区与音频区之间的分隔条高度（可拖动调整两区比例）。 */
 export const TIMELINE_TRACK_SECTION_GAP = 8
 /** 视频区最上轨之上、音频区最下轨之下始终留出的空白：把片段拖到这里新建轨道（PR）。 */

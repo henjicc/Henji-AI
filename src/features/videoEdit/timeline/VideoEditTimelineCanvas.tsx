@@ -658,7 +658,8 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
       }}>
       <div className="relative" style={{ width, height: Math.max(view.height, TIMELINE_RULER_HEIGHT) }} data-video-edit-timeline-content>
         <div className="sticky top-0 z-sticky flex border-b border-line bg-panel" style={{ height: TIMELINE_RULER_HEIGHT }} data-video-edit-ruler onPointerDownCapture={annotationRange.onPointerDownCapture} onPointerMove={annotationRange.onPointerMove} onPointerUp={annotationRange.onPointerUp} onPointerCancel={annotationRange.onPointerCancel}>
-          <div className={`sticky left-0 z-sticky flex shrink-0 border-r border-gap bg-panel ${corner ? 'pl-1 pr-1.5' : 'items-center px-3 text-2xs text-text3'}`} style={{ width: header }} data-video-edit-track-header data-video-edit-timeline-corner>{corner ?? '轨道'}</div>
+          {/* 左上角格子与标尺等高并画自己的下边线，盖住标尺下边线左段：播放头的头部会延伸到这条边线上 */}
+          <div className={`sticky left-0 z-sticky flex shrink-0 self-start border-b border-r border-b-line border-r-gap bg-panel ${corner ? 'pl-1 pr-1.5' : 'items-center px-3 text-2xs text-text3'}`} style={{ width: header, height: TIMELINE_RULER_HEIGHT }} data-video-edit-track-header data-video-edit-timeline-corner>{corner ?? '轨道'}</div>
           <VideoEditTimelinePosition instance={instance}>
             {/* 上面一行：标记与批注，不压下面的时间数字 */}
             <div className="absolute inset-x-0 top-0" style={{ height: TIMELINE_MARK_LANE_HEIGHT }} data-video-edit-mark-lane>
@@ -677,6 +678,15 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
             {/* 播放头的头部压在标记、批注与入出点之上：停在标记上时按住它仍是拖动播放头 */}
             <VideoEditTimelinePlayheadHead instance={instance} pixels={pixels} />
           </VideoEditTimelinePosition>
+        </div>
+        {/* 轨道头整列的底：各行只给自己的格子上色，行与行之间的缝、缩放行下方与列底的空白也要不透明，
+            否则横向滚动后播放头、吸附线会从这些空隙透出来。压在播放头之上，放在各区之前让轨道头格子画在它上面 */}
+        <div aria-hidden="true" data-video-edit-track-header-column className="pointer-events-none absolute inset-x-0 bottom-0 z-sticky" style={{ top: TIMELINE_RULER_HEIGHT }}>
+          <div className="sticky left-0 h-full border-r border-gap bg-panel" style={{ width: header }}>
+            <div className="absolute inset-x-0 flex items-center" style={{ top: layout.regions.video.top + layout.regions.video.height - TIMELINE_RULER_HEIGHT, height: TIMELINE_TRACK_SECTION_GAP }}>
+              <div className={`w-full ${UI_DIVIDER_CLASS}`} />
+            </div>
+          </div>
         </div>
         {(['video', 'audio'] as const).map(kind => {
           const region = layout.regions[kind]

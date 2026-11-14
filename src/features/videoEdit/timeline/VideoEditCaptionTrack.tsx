@@ -91,9 +91,10 @@ export function VideoEditCaptionTrack({ instance, sequence, geometry, pixels, vi
     animation.schedule()
   }
   const row = { track: { id: `${sequence.id}:captions`, name: t('captionTrack.name'), index: -1, kind: 'video' as const, enabled: sequence.captionTrackEnabled !== false, locked: sequence.captionTrackLocked === true, muted: false, solo: false }, ...geometry, region: 'video' as const }
-  return <div className="absolute left-0 right-0 z-sticky border-b border-gap bg-panel" style={{ top: row.top - row.clipTop, height: row.height }} data-video-edit-caption-track data-track-kind="caption" data-layout-pinned>
+  return <div className="absolute left-0 right-0 z-sticky bg-panel" style={{ top: row.top - row.clipTop, height: row.height }} data-video-edit-caption-track data-track-kind="caption" data-layout-pinned>
+    <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gap" />
     <VideoEditTrackHeader caption row={row} code="C1" targeted={false} onTarget={() => focusVideoEditPanel(projectId, 'content')} onResize={() => {}} onPatch={patch => run(() => updateVideoEditCaptionTrack(projectId, sequence.id, { ...(patch.enabled === undefined ? {} : { captionTrackEnabled: patch.enabled }), ...(patch.locked === undefined ? {} : { captionTrackLocked: patch.locked }) }))} />
-    <VideoEditTimelinePlayhead instance={instance} pixels={pixels} overBorder />
+    <VideoEditTimelinePlayhead instance={instance} pixels={pixels} />
     {(sequence.captions ?? []).filter(caption => preview?.some(value => value.id === caption.id) || (caption.start + caption.duration) * pixels >= view.left - 32 && caption.start * pixels <= view.left + view.width - header + 32).map(original => {
       const caption = preview?.find(value => value.id === original.id) ?? original
       return <UiIconButton key={caption.id} type="button" tone="bare" aria-label={t('captionTrack.select', { text: caption.text })} aria-pressed={selected === caption.id} aria-disabled={locked(caption) || undefined} tooltip={caption.reviewReasons?.length ? `${caption.text}\n${t('captionTrack.reviewHint')}` : caption.text}

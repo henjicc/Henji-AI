@@ -9,7 +9,7 @@ import { videoEditTrackHeaderButtons, type VideoEditTrackHeaderButtonId } from '
 import { useSettingsStore } from '@/stores/settingsStore'
 import type { VideoEditBarButtonSpec } from '../panels/VideoEditButtonBarEditor'
 import type { TimelineTrackRow } from './timelineGeometry'
-import { useTimelineHeaderWidth } from './timelineGeometry'
+import { TIMELINE_HEADER_CELL_HEIGHT, useTimelineHeaderWidth } from './timelineGeometry'
 import type { VideoEditTrackLaneMode } from './keyframeLaneGeometry'
 
 type Track = TimelineTrackRow['track']
@@ -88,7 +88,7 @@ export function VideoEditTrackHeader({ row, code, targeted, onTarget, onPatch, o
       { id: 'scene', label: '片子数据', icon: <Database size={UI_ICON_SIZE.sm} />, onClick: onExpandScene },
     ])
   }
-  return <div className={`sticky left-0 z-sticky flex h-full items-center gap-px border-r border-gap pl-1 pr-1.5 ${targeted ? 'bg-raised' : 'bg-panel'}`} style={{ width: header }} data-video-edit-track-header={track.id} onContextMenu={onContextMenu}>
+  return <div className={`sticky left-0 z-sticky flex items-center gap-px border-b border-r border-gap pl-1 ${caption ? 'h-full' : ''} pr-1.5 ${targeted ? 'bg-raised' : 'bg-panel'}`} style={{ width: header, height: caption ? undefined : TIMELINE_HEADER_CELL_HEIGHT }} data-video-edit-track-header={track.id} onContextMenu={onContextMenu}>
     {onToggleExpanded && <UiIconButton size="2xs" tone="rest" aria-expanded={expanded} aria-label={expandLabel} tooltip={expanded ? expandMode === 'scene' ? '收起片子数据' : '收起关键帧' : onExpandScene ? '展开看关键帧或片子数据' : '展开看关键帧'} onClick={toggle}>{expanded ? <ChevronDown /> : <ChevronRight />}</UiIconButton>}
     {onExpandScene && <ContextMenu items={menu.menuItems} position={menu.menuPosition} visible={menu.menuVisible} onClose={menu.hideMenu} />}
     {caption ? <div className="flex min-w-0 flex-1 items-center gap-1.5 px-1"><span className="w-5 shrink-0 text-left tabular-nums text-2xs font-semibold" data-video-edit-track-code>{code}</span><span className="truncate text-xs text-text2">{name}</span></div> : renaming ? <TrackNameInput code={code} name={name} onDone={value => onRename?.(value)} />

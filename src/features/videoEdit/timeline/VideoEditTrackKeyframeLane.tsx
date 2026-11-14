@@ -13,7 +13,7 @@ import { writeVideoEditKeyframeLane } from '../application/videoEditKeyframeLane
 import { videoEditClipPropertyBounds, type VideoEditClipPropertyKey } from '../application/videoEditClipProperties'
 import { beginVideoEditGesture, finishVideoEditGesture, setVideoEditView, subscribeVideoEditView, videoEditViewRevision, type VideoEditGesture, type VideoEditInstance } from '../application/videoEditService'
 import { formatVideoEditPropertyValue } from '../panels/videoEditPropertyViews'
-import { useTimelineHeaderWidth, timelineTimecode, type TimelineViewport } from './timelineGeometry'
+import { TIMELINE_HEADER_CELL_HEIGHT, useTimelineHeaderWidth, timelineTimecode, type TimelineViewport } from './timelineGeometry'
 import { KEYFRAME_LANE_HEADER, KEYFRAME_LANE_ROW, type VideoEditKeyframeLaneMode } from './keyframeLaneGeometry'
 
 interface Props {
@@ -153,7 +153,7 @@ export function VideoEditTrackKeyframeLane({ instance, sequence, trackName, lock
       if (event.key === 'Escape' && drag.current) { event.preventDefault(); event.stopPropagation(); endDrag(false); return }
       if ((event.key === 'Delete' || event.key === 'Backspace') && current && !locked) { event.preventDefault(); event.stopPropagation(); remove(current.entry, current.time) }
     }}>
-    <div className="sticky left-0 z-sticky flex h-full flex-col border-r border-gap bg-panel pl-8 pr-1.5" style={{ width: headerWidth }}>
+    <div className="sticky left-0 z-sticky flex flex-col border-b border-r border-gap bg-panel pl-8 pr-1.5" style={{ width: headerWidth, height: TIMELINE_HEADER_CELL_HEIGHT }}>
       {header}
       {mode === 'keyframes' ? lanes.map(lane => <LaneNavigator key={lane.id} instance={instance} lane={lane} locked={locked} onSeek={seek} onToggle={() => toggleAt(lane)} />) : <>
         {curveLanes.map(lane => <UiOptionButton key={lane.id} variant="menu" size="sm" active={lane === curveLane} className="w-full" onClick={() => setCurveLaneId(lane.id)}><span className="truncate text-2xs">{lane.label}</span></UiOptionButton>)}

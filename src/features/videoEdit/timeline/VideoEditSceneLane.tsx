@@ -17,7 +17,7 @@ import { beginVideoEditGesture, finishVideoEditGesture, setVideoEditView, videoE
 import { videoEditSceneNamingFor } from '../panels/videoEditSceneNaming'
 import { KEYFRAME_LANE_HEADER, KEYFRAME_LANE_ROW } from './keyframeLaneGeometry'
 import { clearTimelineSnap, snapTimelineEdges, timelineSnapPoints, TIMELINE_SNAP_PIXELS } from './timelineSnap'
-import { useTimelineHeaderWidth, timelineTimecode, type TimelineViewport } from './timelineGeometry'
+import { TIMELINE_HEADER_CELL_HEIGHT, useTimelineHeaderWidth, timelineTimecode, type TimelineViewport } from './timelineGeometry'
 
 interface Props {
   instance: VideoEditInstance; sequence: VideoEditSequence; trackName: string; locked: boolean
@@ -284,7 +284,7 @@ export function VideoEditSceneLane({ instance, sequence, trackName, locked, scen
       if (event.key === 'Escape' && drag.current) { event.preventDefault(); event.stopPropagation(); endDrag(false); return }
       if ((event.key === 'Delete' || event.key === 'Backspace') && selectedId && !drag.current) { event.preventDefault(); event.stopPropagation(); void remove(selectedId) }
     }}>
-    <div className="sticky left-0 z-sticky flex h-full flex-col border-r border-gap bg-panel pl-8 pr-1.5" style={{ width: headerWidth }}>
+    <div className="sticky left-0 z-sticky flex flex-col border-b border-r border-gap bg-panel pl-8 pr-1.5" style={{ width: headerWidth, height: TIMELINE_HEADER_CELL_HEIGHT }}>
       {header}
       {display.map((row, index) => <div key={index} className="flex h-7 min-w-0 shrink-0 items-center gap-1 overflow-hidden" data-video-edit-scene-group-row={row.group.kind}>
         {row.first ? <UiIconButton size="2xs" aria-expanded={!collapsed.has(row.group.kind)} aria-label={`${collapsed.has(row.group.kind) ? '展开' : '收起'}${row.group.label}`} tooltip={collapsed.has(row.group.kind) ? '展开这一组' : '收起这一组'} onClick={() => onToggleGroup(row.group.kind)}>{collapsed.has(row.group.kind) ? <ChevronRight /> : <ChevronDown />}</UiIconButton> : <span aria-hidden="true" className="w-5 shrink-0" />}
