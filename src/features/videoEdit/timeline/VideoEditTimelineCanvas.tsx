@@ -548,7 +548,7 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
   }
   return <TimelineHeaderWidthContext.Provider value={header}>
     {nestTarget && <VideoEditNestDialog target={nestTarget} onClose={() => setNestTarget(null)} />}
-    <div ref={pointer.viewport} {...{ [TIMELINE_HEADER_WIDTH_ATTRIBUTE]: header }} tabIndex={0} role="region" aria-label="时间线编辑区域" data-video-edit-timeline-viewport data-video-edit-tool={instance.tool} className={`video-edit-timeline-viewport relative min-h-0 flex-1 overflow-x-auto overflow-y-hidden outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent ${pointer.failure ? 'cursor-not-allowed' : ''}`}
+    <div ref={pointer.viewport} {...{ [TIMELINE_HEADER_WIDTH_ATTRIBUTE]: header }} tabIndex={0} role="region" aria-label="时间线编辑区域" data-video-edit-timeline-viewport data-video-edit-tool={instance.tool} className={`video-edit-timeline-viewport group/timeline-focus relative min-h-0 flex-1 overflow-x-auto overflow-y-hidden outline-none ${pointer.failure ? 'cursor-not-allowed' : ''}`}
       onScroll={readViewport}
       onFocusCapture={event => {
         const target = elementOfEventTarget(event.target)
@@ -746,6 +746,11 @@ export function VideoEditTimelineCanvas({ instance, sequence, pixels, onError, v
         <div role="status" aria-live="polite" data-video-edit-timeline-failure={failure ? '' : undefined}
           className={`pointer-events-none absolute z-dropdown max-w-sm -translate-x-1/2 truncate rounded-full bg-overlay ${UI_FLOATING_EDGE_CLASS} px-3 py-1 text-xs text-text1 transition-opacity duration-180 ${failure ? 'opacity-100' : 'opacity-0'}`}
           style={{ left: viewport.left + header + Math.max(0, viewport.width - header) / 2, top: TIMELINE_RULER_HEIGHT + 8 }}>{failure ?? failureText}</div>
+        {/* 焦点框：标尺、轨道头与轨道行都是带底色的层，画在视口自身上的内描边会被它们盖住断开；
+            单独一层粘在可见区域、压在所有内容之上，不接收指针 */}
+        <div aria-hidden="true" data-video-edit-timeline-focus-ring className="pointer-events-none absolute inset-0 z-dropdown hidden group-focus-visible/timeline-focus:block">
+          <div className="sticky left-0 h-full ring-1 ring-inset ring-accent" style={{ width: viewport.width }} />
+        </div>
       </div>
     </div>
     {/* PR 缩放滚动条取代原生横向滚动条：拖中间平移，拖两端缩放，滚轮缩放（4.6） */}
