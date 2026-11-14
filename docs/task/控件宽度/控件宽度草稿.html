@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>控件宽度草稿</title>
+<style>
+@font-face { font-family: 'HarmonyOS Sans SC UI'; src: url('../../../src/assets/fonts/HarmonyOS_Sans_SC.ttf') format('truetype'); font-weight: 100 900; font-display: block; }
+:root {
+  /* 取自 src/index.css 石墨主题令牌（同剪辑样板屏草稿） */
+  --gap:#181818; --window:#1B1B1B; --panel:#212121; --raised:#272727; --overlay:#292929;
+  --line-overlay:#393939; --control:#2B2B2B; --control-hover:#313131; --hover:#2A2A2A; --selected:#333333;
+  --line:#282828; --line-strong:#313131; --media:#191919;
+  --text1:#EEEEEE; --text2:#CACACA; --text3:#A5A5A5; --text-disabled:#4E4E4E;
+  --accent:#3A6FDF; --accent-text:#9CBEFF; --accent-ring:#6A9BFE; --on-accent:#FFFFFF;
+  --danger-text:#FB817A; --icon-rest:#737373; --segment-selected:#393939;
+  --w-medium:460; --w-semibold:580;
+}
+* { box-sizing:border-box; }
+html, body { margin:0; background:#101010; color:var(--text1); font-family:'HarmonyOS Sans SC UI','Microsoft YaHei UI',sans-serif; font-size:13px; line-height:20px; -webkit-font-smoothing:antialiased; }
+svg.i { width:var(--s,16px); height:var(--s,16px); flex:none; stroke:currentColor; fill:none; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round; display:block; }
+
+/* 页面外框 */
+.page { padding:40px 40px 80px; }
+.page h1 { font-size:20px; line-height:28px; font-weight:560; margin:0 0 6px; }
+.page .lead { color:var(--text3); margin:0 0 36px; max-width:1000px; white-space:pre-line; }
+.block { margin-bottom:72px; }
+.block h2 { font-size:16px; line-height:24px; font-weight:var(--w-semibold); margin:0 0 4px; }
+.block .note { color:var(--text3); font-size:12px; line-height:18px; margin:0 0 16px; max-width:1200px; white-space:pre-line; }
+.pair { display:flex; gap:40px; align-items:flex-start; transform-origin:0 0; }
+.side { flex:none; }
+.side .tag { font-size:12px; color:var(--text3); margin-bottom:8px; }
+.side .tag b { color:var(--text1); font-weight:var(--w-medium); }
+.shot { display:block; background:var(--gap); }
+.shot.before { width:1440px; height:900px; object-fit:cover; object-position:0 0; }
+body.single { background:var(--gap); }
+body.single .page { padding:0; }
+body.single .page > h1, body.single .lead, body.single .block { display:none; }
+body.single .block.show { display:block; margin:0; }
+body.single .block.show h2, body.single .block.show .note, body.single .tag { display:none; }
+body.single.draft .side.before-side { display:none; }
+body.single .pair { gap:24px; transform:none !important; }
+body.single.pairmode { background:#101010; }
+body.single.pairmode .page { padding:24px; }
+body.single.pairmode .tag { display:block; font-size:20px; line-height:28px; margin-bottom:12px; }
+
+/* 三栏对照画布 */
+.cmp { display:flex; gap:32px; padding:24px 28px 28px; white-space:nowrap; }
+.col { flex:none; display:flex; flex-direction:column; gap:10px; }
+.col .cap { font-size:13px; color:var(--text1); font-weight:var(--w-medium); height:20px; }
+.col .cap small { color:var(--text3); font-weight:400; font-size:12px; margin-left:8px; }
+
+/* 停靠面板 */
+.panel { background:var(--panel); display:flex; flex-direction:column; overflow:hidden; }
+.tabs { height:32px; flex:none; display:flex; align-items:stretch; padding:0 6px; border-bottom:1px solid var(--line); }
+.tab { padding:0 8px; display:flex; align-items:center; font-size:12px; color:var(--text3); font-weight:var(--w-medium); position:relative; }
+.tab.cur { color:var(--text1); }
+.tab.cur::after { content:''; position:absolute; left:8px; right:8px; bottom:-1px; height:2px; background:var(--accent-ring); border-radius:1px; }
+.ihead { padding:10px 12px 8px; }
+.ihead .t { font-size:13px; font-weight:var(--w-medium); }
+.ihead .m { font-size:11px; line-height:16px; color:var(--text3); }
+.sec { border-top:1px solid var(--line); padding:2px 0 6px; }
+.sh { height:28px; display:flex; align-items:center; padding:0 10px 0 8px; font-size:12px; font-weight:var(--w-semibold); gap:4px; }
+.sh .tw { width:14px; display:flex; justify-content:center; color:var(--icon-rest); --s:12px; }
+.sh .r { margin-left:auto; color:var(--icon-rest); --s:12px; }
+.sub { height:26px; display:flex; align-items:flex-end; padding:0 12px 2px 48px; font-size:12px; font-weight:var(--w-semibold); color:var(--text3); }
+.inset { min-height:28px; display:flex; align-items:center; gap:8px; padding:2px 12px 2px 48px; font-size:12px; color:var(--text2); }
+.inset .btn { margin-left:auto; }
+/* 属性行：14 已改 / 22 秒表 / 88 名称 / 值（与 grid-cols-property-row 相同） */
+.pr { margin:0 4px; min-height:28px; display:grid; grid-template-columns:14px 22px 88px minmax(0,1fr); column-gap:4px; align-items:center; padding-right:8px; font-size:12px; }
+.pr .sw { display:flex; justify-content:center; color:var(--icon-rest); --s:12px; }
+.pr .nm { color:var(--text3); overflow:hidden; text-overflow:ellipsis; }
+.pr .val { display:flex; align-items:center; gap:4px; min-width:0; position:relative; }
+.pr .val .tr { color:var(--text3); --s:14px; width:28px; height:28px; display:flex; align-items:center; justify-content:center; }
+.n { color:var(--text2); font-variant-numeric:tabular-nums; padding:0 2px; }
+.n.mod { color:var(--text1); }
+.unit { color:var(--text3); margin-left:2px; }
+.lnk { color:var(--text3); --s:12px; margin:0 4px; }
+.numcol { display:inline-flex; align-items:center; }
+.cb { width:14px; height:14px; border-radius:4px; border:1px solid #4a4a4a; display:flex; align-items:center; justify-content:center; --s:10px; color:var(--text1); }
+.cb svg { stroke-width:2.5; }
+.btn { height:24px; padding:0 8px; display:inline-flex; align-items:center; gap:4px; border-radius:6px; font-size:12px; font-weight:var(--w-medium); color:var(--text2); --s:12px; flex:none; }
+.btn.secondary { background:var(--control); color:var(--text1); }
+
+/* 取值控件 */
+.dd { height:var(--h,28px); border-radius:8px; background:var(--raised); display:flex; align-items:center; gap:6px; padding:0 6px 0 8px; font-size:12px; color:var(--text1); --s:12px; flex:none; min-width:0; }
+.dd span { overflow:hidden; text-overflow:ellipsis; }
+.dd svg { margin-left:auto; color:var(--text3); }
+.dd.fill { flex:1; }
+.seg { height:var(--h,28px); border-radius:8px; background:var(--gap); display:inline-grid; grid-auto-flow:column; grid-auto-columns:1fr; gap:2px; padding:2px; font-size:12px; color:var(--text3); flex:none; }
+.seg.fill { flex:1; }
+.seg span { display:flex; align-items:center; justify-content:center; border-radius:6px; padding:0 8px; }
+.seg span.cur { background:var(--segment-selected); color:var(--text1); font-weight:var(--w-medium); }
+.ruler { position:absolute; top:-2px; bottom:-2px; border-left:1px dashed rgba(156,190,255,.35); pointer-events:none; }
+.more { height:28px; display:flex; align-items:center; gap:4px; padding:0 12px 0 46px; font-size:12px; color:var(--text2); --s:12px; }
+
+/* 浮层表单 */
+.pop { background:var(--overlay); border:1px solid var(--line-overlay); border-radius:12px; padding:12px; display:flex; flex-direction:column; gap:8px; }
+.fr { display:grid; grid-template-columns:72px minmax(0,1fr); column-gap:12px; align-items:center; min-height:28px; font-size:13px; }
+.fr .lb { color:var(--text2); font-size:13px; }
+.fr .ct { display:flex; align-items:center; gap:4px; min-width:0; }
+.inp { height:28px; border-radius:8px; background:var(--raised); flex:1; display:flex; align-items:center; padding:0 8px; font-size:13px; color:var(--text1); --s:14px; }
+.inp svg { margin-left:auto; color:var(--text3); }
+.ta { height:56px; border-radius:8px; background:var(--raised); flex:1; padding:6px 8px; font-size:13px; color:var(--text3); white-space:normal; }
+.tog { width:32px; height:18px; border-radius:9px; background:var(--accent); position:relative; flex:none; }
+.tog::after { content:''; position:absolute; right:2px; top:2px; width:14px; height:14px; border-radius:50%; background:#fff; }
+.tog.off { background:var(--line-overlay); }
+.tog.off::after { right:auto; left:2px; }
+.pop .dd, .pop .seg { font-size:13px; }
+
+/* 设置分区 */
+.set { background:var(--panel); padding:20px 28px; display:flex; flex-direction:column; }
+.set h3 { margin:0 0 8px; font-size:16px; font-weight:var(--w-semibold); line-height:24px; }
+.srow { display:flex; align-items:center; justify-content:space-between; min-height:44px; font-size:13px; }
+.srow .lb { color:var(--text1); font-weight:var(--w-medium); }
+.srow .dd, .srow .seg { font-size:13px; --h:32px; }
+.legend { margin-top:4px; font-size:12px; color:var(--text3); white-space:normal; line-height:18px; }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>取值控件宽度：现状 / 保守版 / 创新版</h1>
+<p class="lead">下拉框、分段在面板行里一律铺满控件列（UiFormRow 的 fillControl），所以“浅色”“涟漪”“采样 / 混合”被拉成 200 像素长条；同一面板里的数字却已按内容定宽，两套规则并存。
+保守版：只改宽度规则——按最长选项定宽，夹在最小宽与控件列之间，左对齐。创新版：在此基础上把宽度吸附到三档（72 / 112 / 152），两三个短选项的枚举改成分段，读数按两列对齐。</p>
+<div id="blocks"></div>
+</div>
+<script>
+const ICONS = /*ICONS_START*/{"chevron-down":"<path d=\"m6 9 6 6 6-6\"/>","chevron-right":"<path d=\"m9 18 6-6-6-6\"/>","check":"<path d=\"M20 6 9 17l-5-5\"/>","timer":"<line x1=\"10\" x2=\"14\" y1=\"2\" y2=\"2\"/><line x1=\"12\" x2=\"15\" y1=\"14\" y2=\"11\"/><circle cx=\"12\" cy=\"14\" r=\"8\"/>","rotate-ccw":"<path d=\"M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8\"/><path d=\"M3 3v5h5\"/>","link-2":"<path d=\"M9 17H7A5 5 0 0 1 7 7h2\"/><path d=\"M15 7h2a5 5 0 1 1 0 10h-2\"/><line x1=\"8\" x2=\"16\" y1=\"12\" y2=\"12\"/>","trash-2":"<path d=\"M10 11v6\"/><path d=\"M14 11v6\"/><path d=\"M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6\"/><path d=\"M3 6h18\"/><path d=\"M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2\"/>","refresh-cw":"<path d=\"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8\"/><path d=\"M21 3v5h-5\"/><path d=\"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16\"/><path d=\"M8 16H3v5\"/>","dices":"<rect width=\"12\" height=\"12\" x=\"2\" y=\"10\" rx=\"2\" ry=\"2\"/><path d=\"m17.92 14 3.5-3.5a2.24 2.24 0 0 0 0-3l-5-4.92a2.24 2.24 0 0 0-3 0L10 6\"/><path d=\"M6 18h.01\"/><path d=\"M10 14h.01\"/><path d=\"M15 6h.01\"/><path d=\"M18 9h.01\"/>","blocks":"<path d=\"M10 22V7a1 1 0 0 0-1-1H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5a1 1 0 0 0-1-1H2\"/><rect x=\"14\" y=\"2\" width=\"8\" height=\"8\" rx=\"1\"/>"}/*ICONS_END*/;
+const I = (n, s) => `<svg class="i" viewBox="0 0 24 24" ${s?`style="--s:${s}px"`:''}>${ICONS[n]||''}</svg>`;
+/* 用到的图标（供内联脚本识别）：'chevron-down' 'chevron-right' 'check' 'timer' 'rotate-ccw' 'link-2' 'trash-2' 'refresh-cw' 'dices' */
+
+/* 文字宽度估算：中文 12px 字号一字 12，数字与拉丁约 0.6em */
+const tw = (s, fs = 12) => [...s].reduce((w, c) => w + (/[　-鿿＀-￯]/.test(c) ? fs : fs * 0.6), 0);
+const TIERS = [72, 112, 152];
+const tier = w => TIERS.find(t => t >= w) ?? null;
+const ddNeed = (opts, fs) => Math.max(...opts.map(o => tw(o, fs))) + 8 + 6 + 12 + 6;           // 左 8 + 间距 6 + 箭头 12 + 右 6
+const segNeed = (opts, fs) => opts.length * Math.max(40, Math.max(...opts.map(o => tw(o, fs))) + 16) + (opts.length - 1) * 2 + 4;
+
+function dd(opts, cur, mode, o = {}) {
+  const fs = o.fs || 12, h = o.h ? `--h:${o.h}px;` : '';
+  if (mode === 'now' || o.fill) return `<div class="dd fill" style="${h}"><span>${cur}</span>${I('chevron-down')}</div>`;
+  const need = Math.ceil(ddNeed(opts, fs));
+  const min = o.min || 72;
+  let w = Math.max(min, need);
+  if (mode === 'new') w = (o.tiers || TIERS).find(t => t >= w) ?? w;
+  return `<div class="dd" style="${h}width:${w}px"><span>${cur}</span>${I('chevron-down')}</div>`;
+}
+function seg(opts, cur, mode, o = {}) {
+  const fs = o.fs || 12, h = o.h ? `--h:${o.h}px;` : '';
+  const items = opts.map(x => `<span class="${x === cur ? 'cur' : ''}">${x}</span>`).join('');
+  if (mode === 'now' || o.fill) return `<div class="seg fill" style="${h}">${items}</div>`;
+  let w = Math.ceil(segNeed(opts, fs));
+  if (mode === 'new') w = (o.tiers || TIERS).find(t => t >= w) ?? w;
+  return `<div class="seg" style="${h}width:${w}px">${items}</div>`;
+}
+const n = (v, mod, unit) => `<span class="numcol"><span class="n ${mod ? 'mod' : ''}">${v}</span>${unit ? `<span class="unit">${unit}</span>` : ''}</span>`;
+/* 创新版：成对读数落在两列（值列起点、起点 + 72） */
+const pairCols = (a, b, unit, mode) => mode === 'new'
+  ? `<span style="display:inline-flex;width:72px">${n(a, true, '')}</span><span class="numcol">${n(b, true, unit)}</span>`
+  : `${n(a, true, '')}<span style="width:8px"></span>${n(b, true, unit)}`;
+const row = (name, val, o = {}) => `<div class="pr"><span></span><span class="sw">${o.sw === false ? '' : I('timer')}</span><span class="nm">${name}</span><div class="val">${val}${o.tr || ''}</div></div>`;
+const sec = (title, body) => `<div class="sec"><div class="sh"><span class="tw">${I('chevron-down')}</span>${title}<span class="r">${I('rotate-ccw')}</span></div>${body}</div>`;
+
+function effects(mode) {
+  const H = mode === 'new' ? 24 : 28;
+  const o = { h: H };
+  const cursorStyle = mode === 'new' ? seg(['浅色', '深色'], '浅色', mode, o) : dd(['浅色', '深色'], '浅色', mode, o);
+  const transition = mode === 'new' ? seg(['平缓', '快速'], '平缓', mode, o) : dd(['平缓', '快速'], '平缓', mode, o);
+  return `<div class="panel" style="width:360px;height:812px">
+    <div class="tabs"><span class="tab cur">效果控件</span><span class="tab">音频剪辑混合器</span><span class="tab">元数据</span></div>
+    <div class="ihead"><div class="t">屏幕录制 2026-11-14 15.32</div><div class="m">00:00:12:20 – 00:01:48:06</div></div>
+    ${sec('运动',
+      row('位置', pairCols('960', '540', '', mode)) +
+      row('缩放', mode === 'new' ? `<span style="display:inline-flex;width:72px;align-items:center">${n('100', false, '')}<span class="lnk">${I('link-2')}</span></span>${n('100', false, '%')}` : `${n('100', false, '')}<span class="lnk">${I('link-2')}</span>${n('100', false, '%')}`) +
+      row('旋转', n('0', false, '°')) +
+      row('锚点', pairCols('960', '540', '', mode)) +
+      row('不透明度', n('100', false, '%')) +
+      row('运动模糊', seg(['自动', '开', '关'], '自动', mode, o), { sw: false }))}
+    ${sec('鼠标',
+      row('显示', `<span class="cb">${I('check')}</span>`, { sw: false }) +
+      row('光标样式', cursorStyle, { sw: false }) +
+      row('光标大小', n('3.0', false, '%')) +
+      row('点击效果', dd(['涟漪', '高亮圈', '关闭'], '涟漪', mode, o), { sw: false }) +
+      `<div class="more">${I('chevron-right')}更多</div>`)}
+    ${sec('缩放',
+      row('自动缩放', `<span class="cb">${I('check')}</span>`, { sw: false }) +
+      `<div class="inset">12 段缩放<span class="btn">${I('refresh-cw')}重新生成</span></div>` +
+      `<div class="sub">播放头所在的缩放</div>` +
+      row('程度', dd(['轻微', '较小', '适中', '较大', '很大', '特写'], '适中', mode, o), { sw: false, tr: `<span class="tr">${I('trash-2')}</span>` }) +
+      row('对准', seg(['跟随鼠标', '固定位置'], '跟随鼠标', mode, o), { sw: false }) +
+      row('过渡速度', transition, { sw: false }) +
+      `<div class="more">${I('chevron-right')}更多</div>`)}
+    ${sec('时间重映射',
+      row('速度曲线', `<span class="cb"></span>`, { sw: false }) +
+      row('补帧', seg(['采样', '混合'], '采样', mode, o), { sw: false }) +
+      row('变调', n('0', false, '')))}
+  </div>`;
+}
+
+const STYLES = ['电影感写实', '胶片颗粒复古风', '动漫', '3D 卡通', '水彩'];
+function genForm(mode) {
+  const o = { fs: 13, min: 80, tiers: [80, 120, 160] };
+  return `<div class="pop" style="width:384px">
+    <div class="fr"><span class="lb">分辨率</span><div class="ct">${dd(['1080P', '720P', '4K'], '1080P', mode, o)}</div></div>
+    <div class="fr"><span class="lb">时长</span><div class="ct">${dd(['5 秒', '10 秒'], '5 秒', mode, o)}</div></div>
+    <div class="fr"><span class="lb">画面比例</span><div class="ct">${dd(['16:9', '9:16', '1:1', '4:3', '21:9'], '16:9', mode, o)}</div></div>
+    <div class="fr"><span class="lb">风格</span><div class="ct">${dd(STYLES, '电影感写实', mode, o)}</div></div>
+    <div class="fr"><span class="lb">镜头</span><div class="ct">${seg(['自动', '固定'], '自动', mode, o)}</div></div>
+    <div class="fr"><span class="lb">生成音频</span><div class="ct"><span class="tog"></span></div></div>
+    <div class="fr"><span class="lb">随机种子</span><div class="ct"><div class="inp">1739284056${I('dices')}</div></div></div>
+    <div class="fr" style="align-items:start"><span class="lb" style="line-height:28px">负向提示词</span><div class="ct"><div class="ta">不想出现的内容</div></div></div>
+  </div>`;
+}
+
+function settings(mode) {
+  const o = { fs: 13, h: 32, min: 96, tiers: [96, 128, 160] };
+  const s = (lb, ctl) => `<div class="srow"><span class="lb">${lb}</span>${ctl}</div>`;
+  return `<div class="set" style="width:560px">
+    <h3>剪辑</h3>
+    ${s('播放头自动选中片段', '<span class="tog off"></span>')}
+    ${s('播放时时间线自动滚动', '<span class="tog"></span>')}
+    ${s('重复文件', dd(['跳过', '都导入', '每次询问'], '跳过', mode === 'now' ? 'safe' : mode, { ...o, min: mode === 'now' ? 0 : 96 }))}
+    ${s('片段缩略图', seg(['开头', '首尾', '连续'], '开头', mode === 'now' ? 'safe' : mode, o))}
+    ${s('预渲染格式', seg(['自动', 'H.264', 'H.265'], '自动', mode === 'now' ? 'safe' : mode, o))}
+    ${s('预渲染画质', seg(['标准', '高'], '标准', mode === 'now' ? 'safe' : mode, o))}
+    <h3 style="margin-top:16px">资产</h3>
+    ${s('标题栏点击行为', dd(['打开悬浮面板', '切换到资产库'], '打开悬浮面板', mode === 'now' ? 'safe' : mode, { ...o, min: mode === 'now' ? 0 : 96 }))}
+    ${s('悬浮面板位置', seg(['顶部', '左侧', '右侧'], '顶部', mode === 'now' ? 'safe' : mode, o))}
+  </div>`;
+}
+
+const cols = (render, caps, w) => `<div class="cmp">${caps.map(([mode, cap, sub]) => `<div class="col"><div class="cap">${cap}<small>${sub}</small></div>${render(mode)}</div>`).join('')}</div>`;
+
+const SHOTS = [
+  { id: '1', title: '剪辑效果控件', w: 1220, h: 900,
+    note: '现状按代码几何重画：属性行 14/22/88/余宽，下拉与分段铺满余宽（360 宽面板里约 200 像素）。\n保守版：下拉 = 最长选项 + 32，最小 72；分段每段 = 最长项 + 16（最小 40）×段数；都从值列起点左对齐。\n创新版：宽度吸附 72 / 112 / 152 三档，同一面板里控件的右缘只有三种落点；“浅色 / 深色”“平缓 / 快速”这类两项短枚举直接摊成分段（一次点击、当前值与另一项同时可见）；成对读数第二个数固定落在值列 + 72；控件高 24、行高仍 28。',
+    html: () => cols(effects, [['now', '现状', '铺满控件列'], ['safe', '保守版', '内容宽 + 最小宽'], ['new', '创新版', '三档宽度 + 短枚举成分段']]) },
+  { id: '2', title: '生成参数浮层', w: 1300, h: 520,
+    note: '面板表单行（UiGroup labelWidth）同样铺满。保守版：下拉与分段按内容；文本、种子、多行输入照旧铺满（它们的宽度给的是输入空间，不是选项）。创新版：80 / 120 / 160 三档，分辨率、时长、比例同为 80，一列整齐；风格按最长项“胶片颗粒复古风”取 160。',
+    html: () => cols(genForm, [['now', '现状', '铺满控件列'], ['safe', '保守版', '内容宽 + 最小宽'], ['new', '创新版', '三档宽度']]) },
+  { id: '3', title: '设置页', w: 1240, h: 560, before: '现状/设置-剪辑.png',
+    note: '设置页早已按内容定宽、靠右（UiFormRow inline 不铺满），保守版不动它。创新版只加最小宽与吸附：下拉 96 / 128 / 160，分段同档，右栏的左缘少一些参差；“跳过”不再比分段窄一截。',
+    html: () => cols(settings, [['now', '现状 = 保守版', '已按内容定宽'], ['new', '创新版', '最小宽 + 三档']]) },
+];
+
+document.getElementById('blocks').innerHTML = SHOTS.map(s => `<div class="block" data-id="${s.id}"><h2>${s.id}. ${s.title}</h2><p class="note">${s.note}</p>
+  <div class="pair">${s.before ? `<div class="side before-side"><div class="tag"><b>现状</b>（真实截图）</div><img class="shot before" src="${s.before}"></div>` : ''}
+  <div class="side"><div class="tag"><b>草稿</b></div><div class="shot" style="width:${s.w}px;height:${s.h}px">${s.html()}</div></div></div></div>`).join('');
+
+const q = new URLSearchParams(location.search);
+if (q.get('s')) { document.body.classList.add('single', q.get('v') === 'pair' ? 'pairmode' : 'draft'); document.querySelector(`.block[data-id="${q.get('s')}"]`).classList.add('show'); }
+else { const fit = () => document.querySelectorAll('.pair').forEach(p => { const z = Math.min(1, (innerWidth - 80) / p.scrollWidth); p.style.zoom = z; }); fit(); addEventListener('resize', fit); }
+</script>
+</body>
+</html>
