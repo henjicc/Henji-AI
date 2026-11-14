@@ -7,7 +7,10 @@ const PAGE_BYTES = 2 * 1024 ** 2
 export type RecordingCursorPageReader = (page: RecordingCursorPage, signal: AbortSignal) => Promise<Uint8Array>
 /** The render-session boundary authorizes and converts paths; Workers never accept raw disk paths. */
 export const fetchRecordingCursorPage: RecordingCursorPageReader = async (page, signal) => {
-  if (!page.path.startsWith('henji-media://')) throw new Error('光标日志需要授权的媒体地址，请在剪辑渲染会话边界转换路径。')
+  if (!page.path.startsWith('henji-media://')) {
+    logger.error('光标事件页收到未转换的磁盘路径：调用方应在渲染会话边界转成 henji-media://，主线程应改用文件读取', { event: 'video_edit.cursor.read.unconverted_path' })
+    throw new Error('读不到这段录屏的鼠标记录，请重新打开这个剪辑后再试。')
+  }
   const response = await fetch(page.path, { signal })
   if (!response.ok || !response.body) throw new Error('无法读取光标日志，请恢复录制文件。')
   const reader = response.body.getReader(); const chunks: Uint8Array[] = []; let size = 0

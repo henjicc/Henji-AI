@@ -6,10 +6,10 @@ import { videoEditClipPictureSize } from '@/core/videoEdit/clipGeometry'
 import { evaluateVideoEditClip, videoEditClipAnimatedValueSchemas } from '@/core/videoEdit/keyframes'
 import { recordingCursorPointAt, recordingForegroundWindowAt, RECORDING_CURSOR_REGION } from '@/core/videoEdit/recordingTracks'
 import { createLogger } from '@/core/logging'
-import { getPlatform } from '@/platform/runtime'
 import { editVideoSequence, requireVideoEditInstance } from './videoEditService'
 import { applyVideoEditClipFollow, setVideoEditRecordingTrackReader, setVideoEditTrackResults, videoEditClipSourceTimeUs, videoEditClipTracker, videoEditTrackerBox, videoEditTrackerFollowTrack, videoEditTrackerGeometry } from '../engine/videoEditTrackResults'
-import { VideoEditRecordingCursorSource, type RecordingCursorPageReader } from '../engine/videoEditRecordingCursorSource'
+import { VideoEditRecordingCursorSource } from '../engine/videoEditRecordingCursorSource'
+import { readRecordingPageFile } from './videoEditRecordingClip'
 import { videoEditTrackResults, videoEditTrackingRequest, waitVideoEditTrackingDefinitions } from './videoEditTracking'
 import type { VideoEditCompositeTarget } from './videoEditCompositing'
 
@@ -84,13 +84,7 @@ export function trackVideoEditMask(target: VideoEditCompositeTarget, effectId: s
   })
 }
 const logger = createLogger('features.videoEdit.tracking')
-/** 主线程读录屏事件页：直接读本地日志文件（Worker 里由渲染会话把路径换成媒体地址）。 */
-const readRecordingPage: RecordingCursorPageReader = async (page, signal) => {
-  const bytes = await getPlatform().system.fs.readFile(page.path, { maxBytes: 2 * 1024 * 1024 })
-  signal.throwIfAborted()
-  return new Uint8Array(bytes)
-}
-setVideoEditRecordingTrackReader(readRecordingPage)
+setVideoEditRecordingTrackReader(readRecordingPageFile)
 
 /** Read the same ranged result as the render Worker, using a fresh result version. */
 export async function readVideoEditTrackingBox(projectId: string, sequenceId: string, clipId: string, trackerId: string, frame: number) {
@@ -235,7 +229,7 @@ export async function createVideoEditRecordingTracker(projectId: string, sequenc
   const source = clip?.kind === 'video' ? videoEditClipMedia(instance.document, clip)?.recordingCursor : undefined
   if (!clip || !source) throw new Error('这个片段没有录制时的光标与窗口记录：请选择从录屏导入的屏幕片段。')
   const frame = Math.max(clip.start, Math.min(clip.start + clip.duration - 1, input.frame ?? instance.frame))
-  const events = new VideoEditRecordingCursorSource(readRecordingPage)
+  const events = new VideoEditRecordingCursorSource(readRecordingPageFile)
   let timeUs = videoEditClipSourceTimeUs(composition, clip, frame)
   let prompt: VideoEditTrackPrompt
   let recording: NonNullable<VideoEditTracker['recording']>

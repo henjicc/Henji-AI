@@ -1,11 +1,13 @@
-import { captureLogPageSchema, type CaptureEvent } from '@/core/captureLog/events'
+import type { CaptureEvent } from '@/core/captureLog/events'
 import type { VideoEditClip, VideoEditDocument, VideoEditMedia } from '@/core/videoEdit/document'
 import { videoEditClipMedia } from '@/core/videoEdit/document'
 import type { VideoEditEffect } from '@/core/videoEdit/compositing'
-import { RECORDING_CURSOR_EFFECT, withoutStrayCursorGaps, type RecordingCursorSource } from '@/core/videoEdit/recordingCursor'
+import { RECORDING_CURSOR_EFFECT, type RecordingCursorSource } from '@/core/videoEdit/recordingCursor'
 import { RECORDING_ZOOM_EFFECT, recordingZoomRegionsIssue, sortRecordingZoomRegions, suggestRecordingZoomRegions, type RecordingZoomRegion } from '@/core/videoEdit/recordingZoom'
 import { RECORDING_FRAME_EFFECT } from '@/core/videoEdit/recordingFrame'
-import { fetchRecordingCursorPage } from '../engine/videoEditRecordingCursorSource'
+import { createLogger } from '@/core/logging'
+import { getPlatform } from '@/platform/runtime'
+import { VideoEditRecordingCursorSource, type RecordingCursorPageReader } from '../engine/videoEditRecordingCursorSource'
 import { editVideoSequence, requireVideoEditInstance, type VideoEditGesture } from './videoEditService'
 import type { VideoEditCompositeTarget } from './videoEditCompositing'
 
@@ -16,6 +18,7 @@ import type { VideoEditCompositeTarget } from './videoEditCompositing'
  */
 export const RECORDING_CLIP_EFFECTS = [RECORDING_CURSOR_EFFECT, RECORDING_ZOOM_EFFECT, RECORDING_FRAME_EFFECT] as const
 export type RecordingClipEffect = typeof RECORDING_CLIP_EFFECTS[number]
+const logger = createLogger('features.videoEdit.recordingClip')
 const NAMES: Record<RecordingClipEffect, string> = { [RECORDING_CURSOR_EFFECT]: '录制光标', [RECORDING_ZOOM_EFFECT]: '自动缩放', [RECORDING_FRAME_EFFECT]: '录屏画框' }
 
 /** Six zoom depths described by what they show, not by a magnification factor. */
@@ -63,14 +66,18 @@ export function setRecordingZoomRegions(target: VideoEditCompositeTarget, region
   }, gesture)
 }
 
-/** All pointer events of a recording, read from its immutable capture pages. */
+/**
+ * 主线程读录屏事件页：文档里存的是磁盘路径，主线程经平台文件读取直接读；
+ * 渲染 Worker 只能 fetch，由渲染会话边界把路径换成媒体地址。
+ */
+export const readRecordingPageFile: RecordingCursorPageReader = async (page, signal) => {
+  const bytes = await getPlatform().system.fs.readFile(page.path, { maxBytes: 2 * 1024 * 1024 })
+  signal.throwIfAborted()
+  return new Uint8Array(bytes)
+}
+/** All pointer events of a recording, read on the main thread with the same integrity checks as the render Worker. */
 export async function readRecordingClipEvents(source: RecordingCursorSource, signal: AbortSignal): Promise<CaptureEvent[]> {
-  const events: CaptureEvent[] = []
-  for (const page of source.pages) {
-    const bytes = await fetchRecordingCursorPage(page, signal)
-    events.push(...captureLogPageSchema.parse(JSON.parse(new TextDecoder().decode(bytes))).entries)
-  }
-  return withoutStrayCursorGaps(events)
+  return new VideoEditRecordingCursorSource(readRecordingPageFile).range(source, -Infinity, Infinity, signal)
 }
 /** Zoom regions suggested from where the person worked (clicks, typing, staying); regions adjusted by hand are kept. */
 export function suggestRecordingClipZoom(media: Pick<VideoEditMedia, 'durationSeconds'>, source: RecordingCursorSource, events: readonly CaptureEvent[], existing: readonly RecordingZoomRegion[] = []): RecordingZoomRegion[] {
@@ -83,9 +90,18 @@ export async function regenerateRecordingClipZoom(target: VideoEditCompositeTarg
   const media = clip && videoEditClipMedia(document, clip)
   const source = media?.recordingCursor
   if (!clip || !media || !source) throw new Error('这个片段没有录制时的鼠标记录，不能自动生成缩放。')
-  const regions = suggestRecordingClipZoom(media, source, await readRecordingClipEvents(source, signal), recordingClipEffect(clip, RECORDING_ZOOM_EFFECT)?.builtin?.regions ?? [])
+  const context = { clipId: target.clipId, mediaId: media.id, pages: source.pages.length }
+  logger.info('开始重新生成自动缩放', { event: 'video_edit.recording_zoom.regenerate.start', context })
+  let events: CaptureEvent[]
+  try { events = await readRecordingClipEvents(source, signal) } catch (error) {
+    if (signal.aborted) throw error
+    logger.warn('自动缩放读取录制事件失败', { event: 'video_edit.recording_zoom.regenerate.failed', error, context })
+    throw new Error('读不到这段录屏的鼠标记录，没能重新生成缩放。请确认录屏文件夹仍在原来的位置、没有被改动，再点一次重新生成。')
+  }
+  const regions = suggestRecordingClipZoom(media, source, events, recordingClipEffect(clip, RECORDING_ZOOM_EFFECT)?.builtin?.regions ?? [])
   signal.throwIfAborted()
   if (recordingClipEffect(clip, RECORDING_ZOOM_EFFECT)) setRecordingZoomRegions(target, regions)
   else setRecordingClipEffect(target, RECORDING_ZOOM_EFFECT, true, regions)
+  logger.info('自动缩放已重新生成', { event: 'video_edit.recording_zoom.regenerate.completed', context: { ...context, events: events.length, regions: regions.length } })
   return regions.length
 }

@@ -16,6 +16,6 @@ it('窗口按需读取并缓存；切换归属不能借用已缓存页；取消�
   await expect(source.window(fixture.source, 10_000_000, 0, cancelled.signal)).rejects.toThrow()
   const bad = new VideoEditRecordingCursorSource(async () => new TextEncoder().encode('{}'))
   await expect(bad.window(fixture.source, 0, 0, signal)).rejects.toThrow('校验')
-  await expect(fetchRecordingCursorPage({ ...fixture.source.pages[0], path: '/raw/log.json' }, signal)).rejects.toThrow('边界转换')
+  await expect(fetchRecordingCursorPage({ ...fixture.source.pages[0], path: '/raw/log.json' }, signal)).rejects.toThrow('鼠标记录')
   source.clear(); await source.window(fixture.source, 10_000_000, 0, signal); expect(read.mock.calls.length).toBeGreaterThan(calls)
 })
