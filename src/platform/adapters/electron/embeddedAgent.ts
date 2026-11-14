@@ -10,6 +10,7 @@ export function createElectronEmbeddedAgent(): EmbeddedAgentPlatform {
   return {
     snapshot: () => native().snapshot(), models: () => native().models(), prompt: async (input) => unwrapIpcResult(await native().prompt(input)),
     cancel: () => native().cancel(), newSession: () => native().newSession(), sessions: () => native().sessions(),
-    openSession: (id) => native().openSession(id), onSnapshot: (handler) => native().onSnapshot(handler),
+    openSession: (id) => native().openSession(id), decideApproval: (input) => native().decideApproval(input),
+    answerQuestion: (input) => native().answerQuestion(input), onSnapshot: (handler) => native().onSnapshot(handler),
   }
 }

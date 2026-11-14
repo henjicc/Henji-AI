@@ -107,6 +107,38 @@ export function createLocalTools(sdk: PiSdk, cwd: string): ToolDefinition[] {
     ...(tool === shell ? { execute: (id, args, ...rest) => tool.execute(id, { timeout: DEFAULT_COMMAND_TIMEOUT_SECONDS, ...(args as object) }, ...rest) } : {}) }))
 }
 
+const FILE_OPERATIONS: Readonly<Record<string, 'read' | 'written' | 'edited'>> = { read_file: 'read', write_file: 'written', edit_file: 'edited' }
+interface CompactionFiles { messagesToSummarize: unknown[]; turnPrefixMessages: unknown[]; fileOps: Record<'read' | 'written' | 'edited', Set<string>> }
+
+/**
+ * Pi 压缩上下文时按 read/write/edit 原名统计读过、改过的文件，写进摘要供压缩后接着用；工具改了名就统计不到。
+ * 压缩前的钩子拿到的就是随后生成摘要用的那份清单，按新名字补进去。
+ */
+export function addRenamedFileOperations(preparation: CompactionFiles): void {
+  const add = (name: unknown, args: { path?: unknown } | undefined): void => {
+    const operation = typeof name === 'string' ? FILE_OPERATIONS[name] : undefined
+    if (operation && typeof args?.path === 'string') preparation.fileOps[operation].add(args.path)
+  }
+  for (const message of [...preparation.messagesToSummarize, ...preparation.turnPrefixMessages]) {
+    const item = message as { role?: string; content?: unknown; nestedCalls?: { calls?: Array<{ name?: unknown; arguments?: { path?: unknown } }> } }
+    // 经分派入口或脚本调用的工具记在那次调用的结果上
+    if (item.role === 'toolResult') for (const call of item.nestedCalls?.calls ?? []) add(call.name, call.arguments)
+    if (item.role !== 'assistant' || !Array.isArray(item.content)) continue
+    for (const block of item.content as Array<{ type?: string; name?: string; arguments?: { path?: unknown } }>) if (block.type === 'toolCall') add(block.name, block.arguments)
+  }
+}
+
+/** 会改动电脑上东西的本机工具：改前先问模式要先问，只计划模式不执行。 */
+export const LOCAL_MUTATING_TOOLS: ReadonlySet<string> = new Set(['run_command', 'write_file', 'edit_file'])
+
+/** 等用户确认时给人看的那一步：动作名加完整命令或文件路径，不截断。 */
+export function localToolStep(name: string, args: unknown): { title: string; detail: string } | undefined {
+  const title = TITLES[name]
+  if (!title) return undefined
+  const input = args && typeof args === 'object' ? args as Record<string, unknown> : {}
+  return { title, detail: typeof input.command === 'string' ? input.command.trim() : typeof input.path === 'string' ? input.path : '' }
+}
+
 /** 助手面板里本机工具那一步显示做了什么：命令的第一行，或文件、文件夹路径。 */
 export function describeLocalToolCall(name: string, args: unknown): string | undefined {
   const title = TITLES[name]

@@ -1,5 +1,6 @@
 import { PiEngine } from './services/embedded-agent/piEngine'
 import type { EngineCommand } from './services/embedded-agent/contracts'
+import type { EmbeddedApprovalDecision, EmbeddedQuestionAnswer } from '../../src/core/assistant/embeddedAgent'
 
 const port = process.parentPort
 if (!port) throw new Error('助手运行时缺少宿主连接')
@@ -14,7 +15,11 @@ const engine = new PiEngine((event) => port.postMessage(event), (id, name, input
 }))
 port.on('message', (event) => {
   const message = event.data as { type: 'command'; id: string; command: EngineCommand } | { type: 'toolResult'; id: string; value?: unknown; error?: string }
-  if (message.type === 'toolResult') {
+    | ({ type: 'approvalResult' } & EmbeddedApprovalDecision) | ({ type: 'questionResult' } & EmbeddedQuestionAnswer)
+  // 用户的确认与回答不排在指令队列里：到达时引擎正忙着等它
+  if (message.type === 'approvalResult') engine.resolveApproval(message)
+  else if (message.type === 'questionResult') engine.answerQuestion(message)
+  else if (message.type === 'toolResult') {
     const entry = pending.get(message.id)
     pending.delete(message.id)
     if (message.error) entry?.reject(new Error(message.error)); else entry?.resolve(message.value)

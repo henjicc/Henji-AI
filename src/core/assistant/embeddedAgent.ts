@@ -58,6 +58,37 @@ export const embeddedSelectionSnapshotSchema = z.object({
 }).strict()
 export type EmbeddedSelectionSnapshot = z.infer<typeof embeddedSelectionSnapshotSchema>
 
+/**
+ * 内置助手动手前要不要先问：auto 直接做（只守五条底线）；ask 运行命令、写文件、改文件前先问用户；
+ * plan 只读取与调查，不做任何修改，最后交出计划。由用户在输入框底栏选，随每条消息发送；助手自己不能改。
+ */
+export const EMBEDDED_PERMISSION_MODES = ['auto', 'ask', 'plan'] as const
+export type EmbeddedPermissionMode = typeof EMBEDDED_PERMISSION_MODES[number]
+/** message：拒绝时用户顺手写的一句“应该怎么做”，原样交给助手。 */
+export const embeddedApprovalDecisionSchema = z.object({ id: z.string().min(1), decision: z.enum(['allow', 'allow_session', 'deny']), message: z.string().trim().max(2000).optional() }).strict()
+export type EmbeddedApprovalDecision = z.infer<typeof embeddedApprovalDecisionSchema>
+
+/** 助手问用户的一道题：2–4 个选项，可多选；用户总能不选而自己写一句。 */
+export const embeddedQuestionSchema = z.object({
+  question: z.string().trim().min(1).max(500),
+  header: z.string().trim().min(1).max(12).optional(),
+  multiSelect: z.boolean().optional(),
+  options: z.array(z.object({ label: z.string().trim().min(1).max(60), description: z.string().trim().max(200).optional() }).strict()).min(2).max(4),
+}).strict()
+export type EmbeddedQuestion = z.infer<typeof embeddedQuestionSchema>
+/**
+ * 用户的回答：answers 与题目一一对应，每题是选中的选项名或自己写的一句；dismissed 表示用户跳过不答。
+ * 回答计划时 permissionMode 是用户选的执行方式，给了就从只计划切出去接着执行。
+ */
+export const embeddedQuestionAnswerSchema = z.object({
+  id: z.string().min(1),
+  // 每题最多 4 个选项，多选时再加上自己写的一句
+  answers: z.array(z.array(z.string().max(2000)).max(5)).max(4),
+  dismissed: z.boolean().optional(),
+  permissionMode: z.enum(['auto', 'ask']).optional(),
+}).strict()
+export type EmbeddedQuestionAnswer = z.infer<typeof embeddedQuestionAnswerSchema>
+
 export const embeddedAgentPromptSchema = z.object({
   creativeIntent: embeddedIntentRequestSchema.optional(),
   text: z.string().trim().min(1).max(32000),
@@ -65,7 +96,9 @@ export const embeddedAgentPromptSchema = z.object({
   context: z.string().max(EMBEDDED_CONTEXT_MAX_CHARACTERS),
   selectionSnapshot: embeddedSelectionSnapshotSchema.optional(),
   attachments: agentAttachmentsSchema.optional(),
-  delivery: z.enum(['wait', 'interrupt']).optional(),
+  /** 助手正在回复时这条消息怎么送：wait 等这轮做完再发；steer 不停下，塞进正在做的事里；interrupt 停掉这轮先处理它。 */
+  delivery: z.enum(['wait', 'steer', 'interrupt']).optional(),
+  permissionMode: z.enum(EMBEDDED_PERMISSION_MODES).optional(),
   clientMessageId: z.string().uuid().optional(),
 }).strict()
 export type EmbeddedAgentPrompt = z.infer<typeof embeddedAgentPromptSchema>
@@ -81,6 +114,10 @@ export interface EmbeddedAgentSnapshot {
   memoryNotices?: Array<{ historyId: string; text: string }>
   sendingMessage?: { id: string; text: string; attachments?: AgentAttachment[] }
   pendingMessages?: Array<{ id: string; text: string; attachments?: AgentAttachment[]; error?: string }>
+  /** 改前先问模式下等用户点头的那一步：title 是“运行命令”这类动作名，detail 是完整命令或文件路径。 */
+  pendingApproval?: { id: string; title: string; detail: string }
+  /** 助手在等用户回答的问题；plan 有值时是只计划模式交出的计划，回答里带执行方式。 */
+  pendingQuestion?: { id: string; questions: EmbeddedQuestion[]; plan?: string }
 }
 export interface EmbeddedAgentSession { id: string; title: string; updatedAt: string }
 export interface EmbeddedAgentModel { providerId: string; modelId: string; name: string; inputModalities: AgentMediaAttachment['modality'][] }
@@ -92,6 +129,8 @@ export interface EmbeddedAgentPlatform {
   newSession(): Promise<void>
   sessions(): Promise<EmbeddedAgentSession[]>
   openSession(id: string): Promise<void>
+  decideApproval(input: EmbeddedApprovalDecision): Promise<void>
+  answerQuestion(input: EmbeddedQuestionAnswer): Promise<void>
   onSnapshot(handler: (snapshot: EmbeddedAgentSnapshot) => void): () => void
 }
 export const emptyEmbeddedAgentSnapshot = (): EmbeddedAgentSnapshot => ({ sessionId: null, busy: false, messages: [], activity: null, error: null })

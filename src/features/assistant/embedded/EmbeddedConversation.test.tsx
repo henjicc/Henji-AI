@@ -8,9 +8,9 @@ import { UiButton } from '@/components/ui'
 import { toModelPromptText, type PromptDocumentV1 } from '@/core/inputs/promptDocument'
 import { openAssistant, useAssistantUiStore } from '../store/assistantUiStore'
 
-const mocks = vi.hoisted(() => ({ complete: vi.fn(), prompt: vi.fn(), snapshot: { value: {} }, models: vi.fn(), context: vi.fn() }))
+const mocks = vi.hoisted(() => ({ complete: vi.fn(), prompt: vi.fn(), decide: vi.fn(), answer: vi.fn(), snapshot: { value: {} }, models: vi.fn(), context: vi.fn() }))
 vi.mock('./controller', () => ({ useEmbeddedAgent: () => mocks.snapshot.value, reportEmbeddedAgentError: vi.fn(), isEmbeddedAgentHydrated: () => true }))
-vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => ({ applicationControl: mocks, embeddedAgent: { prompt: mocks.prompt, models: mocks.models } }) }))
+vi.mock('@/platform/runtime', () => ({ isDesktopRuntime: () => false, getPlatform: () => ({ applicationControl: mocks, embeddedAgent: { prompt: mocks.prompt, models: mocks.models, decideApproval: mocks.decide, answerQuestion: mocks.answer } }) }))
 vi.mock('../../application-control/hostContext/hostContext', () => ({ captureHostSelection: () => ({ capturedAt: "sent", selectedRefs: [], selectedClipRefs: [], targetTrackRefs: [] }), createHostContextSnapshot: mocks.context }))
 vi.mock('../conversation/useConversationAutoScroll', () => ({ useConversationAutoScroll: () => ({ scrollToBottom: vi.fn(), suspendFollowing: vi.fn() }) }))
 vi.mock('../conversation/AssistantComposer', () => ({ AssistantComposer: ({ onSubmit, disabled, value }: { onSubmit(text: string, attachments: []): void; disabled: boolean; value: PromptDocumentV1 }) =>
@@ -24,6 +24,9 @@ beforeEach(() => {
   mocks.snapshot.value = emptyEmbeddedAgentSnapshot()
   mocks.models.mockResolvedValue([{ providerId: 'test', modelId: 'test', inputModalities: [] }])
   mocks.prompt.mockResolvedValue(undefined)
+  mocks.decide.mockResolvedValue(undefined)
+  mocks.answer.mockResolvedValue(undefined)
+  localStorage.clear()
   mocks.context.mockReturnValue({ workspace: {}, canvas: {}, surface: {} })
 })
 it('长标注与满额选区发送仍满足 IPC 上限并保留完整数量和读取指引', async () => {
@@ -152,4 +155,42 @@ it('回复失败后用上一条用户消息与附件原样重试，不清空草�
   render(<EmbeddedConversation />)
   await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy())
   expect(screen.queryByRole('button', { name: '重试' })).toBeNull()
+})
+
+it('助手等确认或回答时接管输入框：数字键允许命令，逐题作答，计划选执行后之后的消息按自动模式发送', async () => {
+  localStorage.setItem('henji.assistant.permission_mode', 'plan')
+  const busy = { ...emptyEmbeddedAgentSnapshot(), busy: true }
+  mocks.snapshot.value = { ...busy, pendingApproval: { id: 'a1', title: '运行命令', detail: 'henji-node setup.mjs' } }
+  const view = render(<EmbeddedConversation />)
+  expect(screen.queryByRole('button', { name: '发送' })).toBeNull()
+  expect(screen.getByText('henji-node setup.mjs')).toBeTruthy()
+  fireEvent.keyDown(screen.getByRole('group', { name: '运行命令' }), { key: '2' })
+  expect(mocks.decide).toHaveBeenCalledWith({ id: 'a1', decision: 'allow_session' })
+
+  mocks.snapshot.value = { ...busy, pendingQuestion: { id: 'q1', questions: [
+    { question: '片头用哪种？', options: [{ label: '点阵' }, { label: '纸面' }] },
+    { question: '配乐？', multiSelect: true, options: [{ label: '钢琴' }, { label: '鼓点' }, { label: '不要' }] }] } }
+  view.rerender(<EmbeddedConversation />)
+  fireEvent.keyDown(screen.getByRole('group', { name: '问题' }), { key: '2' })
+  expect(screen.getByText('配乐？')).toBeTruthy()
+  fireEvent.keyDown(screen.getByRole('group', { name: '问题' }), { key: '1' })
+  fireEvent.keyDown(screen.getByRole('group', { name: '问题' }), { key: '2' })
+  // 多选里再按一次数字是取消勾选，不是交卷
+  fireEvent.keyDown(screen.getByRole('group', { name: '问题' }), { key: '3' })
+  fireEvent.keyDown(screen.getByRole('group', { name: '问题' }), { key: '3' })
+  expect(mocks.answer).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: '提交' }))
+  expect(mocks.answer).toHaveBeenCalledWith({ id: 'q1', answers: [['纸面'], ['钢琴', '鼓点']] })
+
+  mocks.snapshot.value = { ...busy, pendingQuestion: { id: 'p1', questions: [], plan: '1. 压缩停顿' } }
+  view.rerender(<EmbeddedConversation />)
+  fireEvent.keyDown(screen.getByRole('group', { name: '计划' }), { key: '1' })
+  expect(mocks.answer).toHaveBeenLastCalledWith({ id: 'p1', answers: [], permissionMode: 'auto' })
+
+  mocks.snapshot.value = emptyEmbeddedAgentSnapshot()
+  view.rerender(<EmbeddedConversation />)
+  await waitFor(() => expect(screen.getByRole('button', { name: '发送' }).hasAttribute('disabled')).toBe(false))
+  fireEvent.click(screen.getByRole('button', { name: '发送' }))
+  await waitFor(() => expect(mocks.prompt).toHaveBeenCalled())
+  expect(mocks.prompt.mock.calls[0][0].permissionMode).toBe('auto')
 })

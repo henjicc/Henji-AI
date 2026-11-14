@@ -244,7 +244,7 @@ it('真实 MCP 与 Pi 写入经过授权、SQLite账本、正式Session及设置
       const address = modelServer.address()
       if (!address || typeof address === 'string') throw new Error('模型响应替身未启动')
       await engine.command({ action: 'initialize', input: directory })
-      await engine.command({ action: 'configure', input: { directory, instructions: '使用应用工具完成设置修改并读取结果。',
+      await engine.command({ action: 'configure', input: { directory, workFolder: directory, projectTrusted: false, permissionMode: 'auto', instructions: '使用应用工具完成设置修改并读取结果。',
         tools: dispatcher.catalog(identity.id).tools,
         model: { providerId: 'fixture', api: 'openai-completions', apiKey: 'local-fixture', baseUrl: `http://127.0.0.1:${address.port}/v1`,
           model: { providerId: 'fixture', modelId: 'fixture', displayName: 'Fixture', adapter: 'openai-compatible', enabled: true,

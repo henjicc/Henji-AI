@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { embeddedAgentPromptSchema } from '../../../src/core/assistant/embeddedAgent'
+import { embeddedAgentPromptSchema, embeddedApprovalDecisionSchema, embeddedQuestionAnswerSchema } from '../../../src/core/assistant/embeddedAgent'
 import { EmbeddedAgentService } from '../services/embedded-agent/service'
 import { listEmbeddedModels } from '../services/embedded-agent/models'
 import { assertTrustedApplicationSender } from './application-control'
@@ -14,6 +14,8 @@ export function registerEmbeddedAgentIpc(): void {
   registerIpcHandler('embedded-agent:cancel', parseVoid, () => service.cancel(), guard)
   registerIpcHandler('embedded-agent:new', parseVoid, () => service.navigate({ action: 'new' }), guard)
   registerIpcHandler('embedded-agent:sessions', parseVoid, () => service.navigate({ action: 'sessions' }), guard)
+  registerIpcHandler('embedded-agent:decide', (value) => embeddedApprovalDecisionSchema.parse(value), (input) => service.decideApproval(input), guard)
+  registerIpcHandler('embedded-agent:answer', (value) => embeddedQuestionAnswerSchema.parse(value), (input) => service.answerQuestion(input), guard)
   registerIpcHandler('embedded-agent:open', (value) => z.string().uuid().parse(value), (id) => service.navigate({ action: 'open', input: id }), guard)
 }
 export function disposeEmbeddedAgent(): void { service.dispose() }

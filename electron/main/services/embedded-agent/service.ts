@@ -7,7 +7,7 @@ import { embeddedSkillCatalog, callEmbeddedSkill } from './skills'
 import { utilityProcess, type UtilityProcess } from 'electron'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { emptyEmbeddedAgentSnapshot, type EmbeddedAgentPrompt, type EmbeddedAgentSnapshot } from '../../../../src/core/assistant/embeddedAgent'
+import { emptyEmbeddedAgentSnapshot, type EmbeddedAgentPrompt, type EmbeddedAgentSnapshot, type EmbeddedApprovalDecision, type EmbeddedPermissionMode, type EmbeddedQuestionAnswer } from '../../../../src/core/assistant/embeddedAgent'
 import { createEmbeddedApplicationClient } from '../application-runtime/runtime'
 import { APPLICATION_TOOL_CONVENTIONS } from '../application-runtime/toolCatalog'
 import { getAppLocalDataDir } from '../system'
@@ -122,6 +122,12 @@ export function withGenerationOrigin(name: string, input: Record<string, unknown
     ? { mode: 'canvas', documentId: canvasId, sourceNodeIds, ...(placement ? { placement } : {}) }
     : { mode: 'history' } }
 }
+/** 当前模式写进系统提示，模型一开始就照着做，不靠撞上拦截才知道。 */
+const PERMISSION_MODE_INSTRUCTIONS: Readonly<Record<EmbeddedPermissionMode, string>> = {
+  auto: '',
+  ask: '\n当前是“改前先问”模式：运行命令、写文件、改文件和助手插件工具执行前会先请用户确认；用户拒绝就换做法或询问，不要换个命令绕过。',
+  plan: '\n当前是“只计划”模式：只读取和调查，不做任何修改（不运行命令、不写改文件、不调用会改动的应用工具）。查清楚后调用 present_plan 交出编号的执行计划，说明每一步做什么、改哪里；用户选了执行就会切出只计划，你接着按计划做。',
+}
 const SYSTEM_INSTRUCTIONS = `你是痕迹 AI 内置助手。使用中文，帮助用户完成当前应用中的创作和管理任务。
 人和助手共用应用能力，直接执行用户要求的可恢复操作。真实付费按统一额度策略，外来代码首次运行由用户确认信任。
 你有两类工具。应用里的数据（文档、时间线、素材、画布、项目说明与记忆）一律用应用工具读写：它们进撤销栈、和界面同步、按格式版本保存；不要用文件工具直接改文档文件或 .henji 里的内容。剪辑代码工程（工作文件夹下的“代码”文件夹，自带 Git）例外：可以像外部编辑器一样直接写文件（大段生成数据就这样放进去），写完用 commit_video_edit_code_project 提交，再按需升级素材。本机命令与文件工具（运行命令、读写改文件、搜索）权限与用户本人相同，用来做应用里没有的事：写项目扩展、装依赖、下载模型、跑外部程序、处理数据；缺什么能力就自己装、自己写，不必先问。命令删除的文件会进系统回收站。不要读取、打印或外传 API 密钥与令牌。
@@ -156,6 +162,10 @@ export class EmbeddedAgentService {
   private requestId?: string
   private readonly memoryNotices = new Map<string, Array<{ historyId: string; text: string }>>()
   private sending?: { id: string; input: EmbeddedAgentPrompt; userCount: number }
+  /** 改前先问模式下等用户回答的一步；助手进程那边的工具调用一直等着这个回答。 */
+  private pendingApproval?: { id: string; title: string; detail: string }
+  /** 助手在等用户回答的问题（ask_user / present_plan）。 */
+  private pendingQuestion?: NonNullable<EmbeddedAgentSnapshot['pendingQuestion']>
   /*
    * 切换对话期间（changing）同样算忙并推给界面：以前 busy 不含切换，界面看到“空闲”就去打开历史、新建对话或发消息，
    * 撞上 navigate 的拒绝（“请先等待当前操作结束”）或 prompt 的“正在切换对话”。switching 让界面区分“回复中”和“切换中”。
@@ -165,7 +175,9 @@ export class EmbeddedAgentService {
     memoryNotices: this.state.sessionId ? this.memoryNotices.get(this.state.sessionId) ?? [] : [],
     sendingMessage: this.sending && this.state.messages.filter(message => message.role === 'user').length <= this.sending.userCount
       ? { id: this.sending.id, text: this.sending.input.text, attachments: this.sending.input.attachments } : undefined,
-    pendingMessages: [...this.failedMessages, ...this.queue.map(({ id, input }) => ({ id, text: input.text, attachments: input.attachments }))] } }
+    pendingMessages: [...this.failedMessages, ...this.queue.map(({ id, input }) => ({ id, text: input.text, attachments: input.attachments }))],
+    ...(this.pendingApproval ? { pendingApproval: this.pendingApproval } : {}),
+    ...(this.pendingQuestion ? { pendingQuestion: this.pendingQuestion } : {}) } }
   private publish(value: EmbeddedAgentSnapshot): void {
     this.state = value
     const window = getMainWindow()
@@ -220,7 +232,15 @@ export class EmbeddedAgentService {
           this.pending.delete(message.id)
           if (entry) { clearTimeout(entry.timer); if (message.error) entry.reject(new Error(message.error)); else entry.resolve(message.value) }
         } else if (message.type === 'snapshot') this.publish(message.value)
-        else if (message.type === 'toolCancel') this.toolControllers.get(message.id)?.abort()
+        else if (message.type === 'approval') {
+          this.pendingApproval = { id: message.id, title: message.title, detail: message.detail }
+          logger.info('内置助手等待用户确认', { event: 'embedded_agent.approval.requested', requestId: this.requestId, context: { title: message.title, detail: message.detail } })
+          this.publish(this.state)
+        } else if (message.type === 'question') {
+          this.pendingQuestion = { id: message.id, questions: message.questions, ...(message.plan ? { plan: message.plan } : {}) }
+          logger.info('内置助手等待用户回答', { event: 'embedded_agent.question.requested', requestId: this.requestId, context: { kind: message.plan ? 'plan' : 'question', questions: message.questions.map(item => item.question) } })
+          this.publish(this.state)
+        } else if (message.type === 'toolCancel') this.toolControllers.get(message.id)?.abort()
         else if (message.type === 'tool') {
           const controller = new AbortController()
           this.toolControllers.set(message.id, controller)
@@ -277,6 +297,7 @@ export class EmbeddedAgentService {
         this.toolControllers.clear()
         this.client?.close(); this.client = undefined
         this.running = false
+        this.pendingApproval = undefined; this.pendingQuestion = undefined
         this.publish({ ...this.state, busy: false, activity: null, error: '助手运行已中断。历史对话仍保留，可以重新打开后继续。' })
         logger.error('内置助手进程退出', { event: 'embedded_agent.process.exited', context: { code } })
       })
@@ -288,6 +309,13 @@ export class EmbeddedAgentService {
     if (this.disposed) throw new Error('助手已关闭。')
     // 切换中收到的消息按等待语义排队，切换完成后在切换后的对话里发送（drain 会等待 switching）。
     const entry = { id: requestId, input }
+    // 插入：这一轮还在跑就直接塞进去，不排队；带附件或这一轮已经结束时按排队发送
+    if (input.delivery === 'steer' && this.running && this.child && !input.attachments?.length) {
+      logger.info('内置助手插入消息', { event: 'embedded_agent.message.steered', requestId: this.requestId, context: { text: input.text } })
+      try { await this.send({ action: 'steer', input: input.text }); return } catch (error) {
+        logger.warn('插入消息未送达，改为排队', { event: 'embedded_agent.message.steer_failed', requestId: this.requestId, error })
+      }
+    }
     if (input.delivery === 'interrupt') this.queue.unshift(entry)
     else this.queue.push(entry)
     logger.info('内置助手消息已加入等待列表', { event: 'embedded_agent.message.queued', requestId: entry.id,
@@ -378,8 +406,9 @@ export class EmbeddedAgentService {
           contextPart('attachments', '附件', '', attachments.length),
         ], skillNames: skills.names, memoryEnabled: memory.settings.enabled, workspace: host.workspace?.id, documentId, projectId } })
       const workspace = await workspaceFor(projectId)
-      await this.send({ action: 'configure', input: { directory: assistantDirectory(), workFolder: workspace.workFolder, projectTrusted: workspace.trusted, model, tools,
-        instructions: `${SYSTEM_INSTRUCTIONS}\n${workspace.instructions}${skills.instructions}\n\n用户指令：\n${instructions.content}` } })
+      await this.send({ action: 'configure', input: { directory: assistantDirectory(), workFolder: workspace.workFolder, projectTrusted: workspace.trusted,
+        permissionMode: input.permissionMode ?? 'auto', model, tools,
+        instructions: `${SYSTEM_INSTRUCTIONS}\n${workspace.instructions}${PERMISSION_MODE_INSTRUCTIONS[input.permissionMode ?? 'auto']}${skills.instructions}\n\n用户指令：\n${instructions.content}` } })
       if (!this.cancelled) {
         await this.send({ action: 'prompt', input: { text: input.text, context: promptContext, selectionSnapshot: input.selectionSnapshot, requestId, attachments, creativeIntent: input.creativeIntent } })
         if (this.state.error) throw new Error(this.state.error)
@@ -389,7 +418,7 @@ export class EmbeddedAgentService {
           getAgentMemoryStore().markOrganized(0, true)
           try {
             const organizer = await resolveMemoryOrganizerModel(input.model)
-            await this.send({ action: 'configure', input: { directory: assistantDirectory(), workFolder: assistantDirectory(), projectTrusted: false, model: organizer, tools: this.client.catalog(), instructions: SYSTEM_INSTRUCTIONS } })
+            await this.send({ action: 'configure', input: { directory: assistantDirectory(), workFolder: assistantDirectory(), projectTrusted: false, permissionMode: 'auto', model: organizer, tools: this.client.catalog(), instructions: SYSTEM_INSTRUCTIONS } })
             // 整理记忆另起一条链路，工具日志不能记到用户这次运行名下
             this.requestId = `${requestId}:memory`
             await this.send({ action: 'prompt', input: { text: '后台整理记忆：记忆可能很多，不要逐条通读；先读 assistant.memory_settings 的修改历史（最近 100 次），只处理其中新增或改过、仍然存在的条目，用 list_application_entities 的 text 关键词找出与它们相近的旧条目，合并重复、压缩措辞、删掉明确过时的内容；相同偏好在至少两个项目出现才提升到全局，不提升项目事实。不推断新偏好，不改用户作品。读取每条基线后调用 organize_assistant_memory，changes 带上原 revision；无需改动时不编造修改。不要向用户发送长报告。', background: true, context: promptContext, requestId: `${requestId}:memory` } })
@@ -413,8 +442,24 @@ export class EmbeddedAgentService {
       if (this.cancelled) recordPiRunEnded(stoppedId, stoppedId === requestId ? input.text : '后台整理记忆', input.model, 'cancelled', '已停止')
       this.requestId = undefined
       this.sending = undefined; this.preparation = undefined; this.client?.close(); this.client = undefined; this.running = false
+      this.pendingApproval = undefined; this.pendingQuestion = undefined
       this.publish({ ...this.state, busy: false, activity: null })
     }
+  }
+  /** 用户对“改前先问”那一步的回答：只认当前在等的那一步，过期的点击不送。 */
+  decideApproval(input: EmbeddedApprovalDecision): void {
+    if (!this.child || this.pendingApproval?.id !== input.id) return
+    logger.info('内置助手收到用户确认', { event: 'embedded_agent.approval.decided', requestId: this.requestId, context: { decision: input.decision, title: this.pendingApproval.title } })
+    this.child.postMessage({ type: 'approvalResult', ...input })
+    this.pendingApproval = undefined
+    this.publish(this.state)
+  }
+  answerQuestion(input: EmbeddedQuestionAnswer): void {
+    if (!this.child || this.pendingQuestion?.id !== input.id) return
+    logger.info('内置助手收到用户回答', { event: 'embedded_agent.question.answered', requestId: this.requestId, context: { dismissed: input.dismissed === true, permissionMode: input.permissionMode, answers: input.answers } })
+    this.child.postMessage({ type: 'questionResult', ...input })
+    this.pendingQuestion = undefined
+    this.publish(this.state)
   }
   async cancel(): Promise<void> {
     if (this.cancelling) return this.cancelling

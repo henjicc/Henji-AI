@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>助手交互草稿</title>
+<style>
+@font-face { font-family: 'HarmonyOS Sans SC UI'; src: url('../../../../src/assets/fonts/HarmonyOS_Sans_SC.ttf') format('truetype'); font-weight: 100 900; font-display: block; }
+:root {
+  /* 以下数值取自 src/index.css 的石墨主题令牌 */
+  --gap:#181818; --window:#1B1B1B; --panel:#212121; --raised:#272727; --overlay:#292929;
+  --line-overlay:#393939; --control:#2B2B2B; --control-hover:#313131; --hover:#2A2A2A; --selected:#333333;
+  --line:#282828; --line-strong:#313131;
+  --text1:#EEEEEE; --text2:#CACACA; --text3:#A5A5A5; --text-disabled:#4E4E4E;
+  --accent:#3A6FDF; --accent-text:#9CBEFF; --accent-ring:#6A9BFE; --on-accent:#FFFFFF;
+  --danger-text:#FB817A; --warning-text:#F5AE39; --success-text:#52CD86; --icon-rest:#737373;
+  --w-normal:400; --w-medium:460; --w-semibold:580;
+}
+* { box-sizing:border-box; }
+html, body { margin:0; background:#101010; color:var(--text1); font-family:'HarmonyOS Sans SC UI','Microsoft YaHei UI',sans-serif; font-size:13px; line-height:20px; -webkit-font-smoothing:antialiased; }
+svg.i { width:var(--s,16px); height:var(--s,16px); flex:none; stroke:currentColor; fill:none; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round; display:block; }
+.page { padding:40px 40px 80px; }
+.page h1 { font-size:20px; line-height:28px; font-weight:560; margin:0 0 6px; }
+.page .lead { color:var(--text3); margin:0 0 36px; max-width:1100px; white-space:pre-line; }
+.block { margin-bottom:72px; }
+.block h2 { font-size:16px; line-height:24px; font-weight:var(--w-semibold); margin:0 0 4px; }
+.block .note { color:var(--text3); font-size:12px; line-height:18px; margin:0 0 16px; max-width:1100px; white-space:pre-line; }
+.shot { width:1440px; height:900px; display:flex; gap:24px; padding:20px; background:#101010; }
+body.single { background:var(--gap); } body.single .page { padding:0; }
+body.single .page > h1, body.single .lead, body.single .block { display:none; }
+body.single .block.show { display:block; margin:0; } body.single .block.show h2, body.single .block.show .note { display:none; }
+
+/* 一列 = 应用右侧的助手面板 */
+.col { width:330px; flex:none; display:flex; flex-direction:column; gap:8px; }
+.cap { font-size:12px; color:var(--text3); height:20px; }
+.side { flex:1; background:var(--panel); border-left:1px solid var(--line); display:flex; flex-direction:column; overflow:hidden; border-radius:8px; }
+.head { height:44px; display:flex; align-items:center; gap:6px; padding:0 10px; border-bottom:1px solid var(--line); }
+.head .t { font-weight:var(--w-medium); flex:1; }
+.ib { width:28px; height:28px; display:inline-flex; align-items:center; justify-content:center; border-radius:6px; color:var(--text2); }
+.feed { flex:1; padding:16px 16px 8px; display:flex; flex-direction:column; gap:14px; overflow:hidden; }
+.user { align-self:flex-end; max-width:86%; background:var(--raised); border-radius:8px; padding:8px 12px; }
+.ans { color:var(--text1); line-height:22px; }
+.steps { margin-left:6px; border-left:1px solid var(--line-strong); padding-left:12px; color:var(--text2); display:flex; flex-direction:column; gap:6px; }
+.step { display:flex; gap:8px; align-items:flex-start; } .step .i { margin-top:2px; --s:14px; color:var(--text3); }
+.mono { font-family:Consolas,'Cascadia Mono',monospace; font-size:12px; }
+.code { background:var(--window); border-radius:6px; padding:8px 10px; color:var(--text1); white-space:pre-wrap; word-break:break-all; line-height:18px; }
+.btn { height:28px; padding:0 10px; border-radius:6px; display:inline-flex; align-items:center; gap:6px; font-size:13px; color:var(--text1); white-space:nowrap; }
+.btn.secondary { background:var(--control); } .btn.primary { background:var(--accent); color:var(--on-accent); } .btn.quiet { color:var(--text2); }
+.row { display:flex; gap:6px; align-items:center; } .grow { flex:1; }
+.meta { font-size:12px; color:var(--text3); } .t2 { color:var(--text2); }
+.key { font-size:11px; color:var(--text3); border:1px solid var(--line-strong); border-radius:4px; padding:0 4px; line-height:16px; }
+/* 输入框 */
+.composer { margin:8px 12px 12px; background:var(--raised); border-radius:10px; padding:10px 10px 6px; display:flex; flex-direction:column; gap:6px; }
+.composer .input { min-height:44px; color:var(--text3); }
+.composer .input.typed { color:var(--text1); }
+.foot { display:flex; align-items:center; gap:2px; }
+.dd { height:28px; padding:0 6px; border-radius:6px; display:inline-flex; align-items:center; gap:4px; color:var(--text2); font-size:12px; }
+.dd .i { --s:12px; color:var(--text3); }
+.dd.on { color:var(--accent-text); } .dd.hl { background:var(--hover); }
+.send { width:28px; height:28px; border-radius:999px; background:var(--accent); color:var(--on-accent); display:inline-flex; align-items:center; justify-content:center; }
+.send .i { --s:15px; }
+/* 浮层菜单 */
+.menu { background:var(--overlay); border:1px solid var(--line-overlay); border-radius:8px; padding:4px; display:flex; flex-direction:column; }
+.mi { display:flex; gap:8px; padding:6px 8px; border-radius:6px; align-items:flex-start; }
+.mi .ck { width:16px; color:var(--accent-text); margin-top:2px; } .mi .ck .i { --s:14px; }
+.mi .lb { flex:1; } .mi .lb b { font-weight:var(--w-medium); display:block; } .mi .lb span { font-size:12px; color:var(--text3); line-height:16px; }
+.mi.sel { background:var(--selected); }
+/* 卡片：对话里等用户处理的一块 */
+.ask { border-top:1px solid var(--line-strong); padding-top:12px; display:flex; flex-direction:column; gap:10px; }
+.ask .q { font-weight:var(--w-medium); }
+.opt { display:flex; gap:10px; padding:7px 10px; border-radius:6px; align-items:flex-start; }
+.opt .n { width:18px; height:18px; flex:none; border-radius:4px; font-size:11px; line-height:18px; text-align:center; color:var(--text3); background:var(--control); margin-top:1px; }
+.opt.sel { background:var(--selected); } .opt.sel .n { background:var(--accent); color:var(--on-accent); }
+.opt .lb b { font-weight:var(--w-medium); display:block; } .opt .lb span { font-size:12px; color:var(--text3); line-height:16px; }
+.field { height:32px; border-radius:8px; background:var(--control); padding:0 10px; display:flex; align-items:center; color:var(--text3); }
+.planbox { background:var(--window); border-radius:6px; padding:10px 12px; line-height:21px; color:var(--text1); }
+.planbox ol { margin:0; padding-left:18px; } .planbox li { margin:0 0 2px; }
+.chip { display:inline-flex; align-items:center; gap:4px; height:22px; padding:0 8px; border-radius:999px; background:var(--control); font-size:12px; color:var(--text2); }
+.pending { display:flex; gap:8px; align-items:center; padding:6px 10px; border-radius:6px; background:var(--window); color:var(--text2); font-size:12px; }
+/* 创新版：输入框被问题接管 */
+.take { margin:8px 12px 12px; background:var(--raised); border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:10px; }
+.take .bar { display:flex; align-items:center; gap:8px; } .take .bar .t { flex:1; font-weight:var(--w-medium); }
+.modebar { display:flex; align-items:center; gap:6px; padding:0 2px; }
+.mode-pill { display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 8px; border-radius:999px; font-size:12px; background:var(--control); color:var(--text2); }
+.mode-pill.plan { color:var(--accent-text); }
+.tabs { display:flex; gap:2px; } .tab { height:22px; padding:0 8px; border-radius:6px; font-size:12px; color:var(--text3); display:inline-flex; align-items:center; } .tab.sel { background:var(--selected); color:var(--text1); }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>内置助手：模式、确认、问题卡片与运行中发消息</h1>
+<p class="lead">两套方向，各画四个状态，都是右侧助手面板（宽 330）。
+保守版：所有等你处理的事都作为一块出现在对话末尾，输入框不变。创新版：等你处理时输入框被这件事接管（和 Claude Code 一样），处理完才变回输入框，对话里只留一行结果。</p>
+
+<div class="block" data-id="1">
+<h2>保守版（推荐）</h2>
+<p class="note">① 底栏“自动 ▾”就是模式，展开是三档带一句说明；选了“只计划”底栏这个字变强调色。② 改前先问：完整命令放代码块，三个按钮右对齐，“允许”是唯一主动作。③ 问题卡片：选项编号 1–4（键盘可按），最后一行“其他”自己写；计划卡片同一套样子，按钮换成“再改改 / 执行时先问 / 执行”。④ 助手在跑时打了字：发送键左边的“排队 ▾”可改成插入或打断；已排队的消息在输入框上方列出，可撤回。</p>
+<div class="shot">
+  <div class="col"><div class="cap">① 模式切换（展开）</div><div class="side">
+    <div class="head"><span class="t">助手</span><span class="ib"><i data-i='history'></i></span><span class="ib"><i data-i='square-pen'></i></span></div>
+    <div class="feed"><div class="user">把这段口播的停顿压一下，再加个片头</div>
+      <div class="ans">好的。我先看一下这段口播……</div></div>
+    <div style="margin:0 12px -2px; width:250px;" class="menu">
+      <div class="mi sel"><span class="ck"><i data-i='check'></i></span><span class="lb"><b>自动</b><span>直接做，删除进回收站，付费按额度</span></span></div>
+      <div class="mi"><span class="ck"></span><span class="lb"><b>改前先问</b><span>运行命令、改文件前先问你</span></span></div>
+      <div class="mi"><span class="ck"></span><span class="lb"><b>只计划</b><span>只查不改，交出计划等你点头</span></span></div>
+    </div>
+    <div class="composer"><div class="input">告诉助手要做什么…</div>
+      <div class="foot"><span class="dd hl">自动 <i data-i='chevron-down'></i></span><span class="dd">DeepSeek V4 <i data-i='chevron-down'></i></span><span class="dd">思考 中 <i data-i='chevron-down'></i></span><span class="grow"></span><span class="send"><i data-i='arrow-up'></i></span></div></div>
+  </div></div>
+
+  <div class="col"><div class="cap">② 改前先问：等你确认</div><div class="side">
+    <div class="head"><span class="t">助手</span><span class="ib"><i data-i='history'></i></span><span class="ib"><i data-i='square-pen'></i></span></div>
+    <div class="feed"><div class="user">给这段视频的手上加一团跟手的火焰</div>
+      <div class="steps"><div class="step"><i data-i='check'></i><span>读取技能 project-extensions</span></div><div class="step"><i data-i='check'></i><span>写入文件：扩展\hand-pose\extension.json</span></div></div>
+      <div class="ask"><div class="row"><span class="q grow">运行命令</span><span class="meta">等你确认</span></div>
+        <div class="code mono">cd "E:\文档\HenjiAI\元宝实战\扩展\hand-pose"; henji-node setup.mjs</div>
+        <div class="row"><span class="grow"></span><span class="btn quiet">拒绝</span><span class="btn secondary">这段对话都允许</span><span class="btn primary">允许</span></div></div></div>
+    <div class="composer"><div class="input">告诉助手要做什么…</div>
+      <div class="foot"><span class="dd">改前先问 <i data-i='chevron-down'></i></span><span class="dd">DeepSeek V4 <i data-i='chevron-down'></i></span><span class="grow"></span><span class="send" style="background:var(--control);color:var(--text1)"><i data-i='square'></i></span></div></div>
+  </div></div>
+
+  <div class="col"><div class="cap">③ 问题卡片 / 计划卡片</div><div class="side">
+    <div class="head"><span class="t">助手</span><span class="ib"><i data-i='history'></i></span><span class="ib"><i data-i='square-pen'></i></span></div>
+    <div class="feed" style="gap:12px">
+      <div class="ask" style="border-top:none;padding-top:0"><span class="q">片头用哪种风格？</span>
+        <div class="opt sel"><span class="n">1</span><span class="lb"><b>点阵显影</b><span>和这期封面一致，偏安静</span></span></div>
+        <div class="opt"><span class="n">2</span><span class="lb"><b>纸面推近</b><span>更有质感，多 2 秒</span></span></div>
+        <div class="opt"><span class="n">3</span><span class="lb"><b>不加片头</b><span>直接进口播</span></span></div>
+        <div class="field">其他，写一句…</div>
+        <div class="row"><span class="grow"></span><span class="btn quiet">跳过</span><span class="btn primary">提交</span></div></div>
+      <div class="ask"><div class="row"><span class="q grow">计划</span><span class="meta">只计划</span></div>
+        <div class="planbox"><ol><li>转写口播，标出 0.6 秒以上的停顿</li><li>停顿压到 0.25 秒，接缝加 20ms 交叉淡化</li><li>用风格“点阵显影”做 3 秒片头，放在 V2</li><li>取 3 帧检查接缝与片头</li></ol></div>
+        <div class="row"><span class="btn quiet">再改改</span><span class="grow"></span><span class="btn secondary">执行时先问</span><span class="btn primary">执行</span></div></div>
+    </div>
+    <div class="composer"><div class="input">告诉助手要做什么…</div>
+      <div class="foot"><span class="dd on">只计划 <i data-i='chevron-down'></i></span><span class="dd">DeepSeek V4 <i data-i='chevron-down'></i></span><span class="grow"></span><span class="send" style="background:var(--control);color:var(--text1)"><i data-i='square'></i></span></div></div>
+  </div></div>
+
+  <div class="col"><div class="cap">④ 助手在跑时发消息</div><div class="side">
+    <div class="head"><span class="t">助手</span><span class="ib"><i data-i='history'></i></span><span class="ib"><i data-i='square-pen'></i></span></div>
+    <div class="feed"><div class="user">把这段口播的停顿压一下</div>
+      <div class="steps"><div class="step"><i data-i='check'></i><span>转写口播</span></div><div class="step"><i data-i='loader'></i><span>压缩停顿</span></div></div></div>
+    <div style="margin:0 12px;display:flex;flex-direction:column;gap:4px">
+      <div class="pending"><i data-i='clock-3' style="--s:13px"></i><span class="grow">排队：再把背景音乐调小一点</span><span class="ib" style="width:20px;height:20px"><i data-i='x' style="--s:12px"></i></span></div></div>
+    <div style="margin:4px 12px -2px auto; width:230px;" class="menu">
+      <div class="mi sel"><span class="ck"><i data-i='check'></i></span><span class="lb"><b>排队</b><span>这轮做完再发</span></span></div>
+      <div class="mi"><span class="ck"></span><span class="lb"><b>插入</b><span>不停下，下一步就看到</span></span></div>
+      <div class="mi"><span class="ck"></span><span class="lb"><b>打断</b><span>停掉这轮，先处理这条</span></span></div>
+    </div>
+    <div class="composer"><div class="input typed">停顿别压太狠，留 0.3 秒</div>
+      <div class="foot"><span class="dd">自动 <i data-i='chevron-down'></i></span><span class="dd">DeepSeek V4 <i data-i='chevron-down'></i></span><span class="grow"></span><span class="dd hl">排队 <i data-i='chevron-down'></i></span><span class="send"><i data-i='arrow-up'></i></span></div></div>
+  </div></div>
+</div>
+</div>
+
+<div class="block" data-id="2">
+<h2>创新版</h2>
+<p class="note">① 模式不放进下拉，放在输入框上方一行三个小标签，Shift+Tab 轮换（Claude Code 的做法），当前模式一眼可见。② 等你处理的事接管输入框：命令、选项、计划都出现在输入框的位置，手不用离开键盘（数字选、Enter 提交、Esc 拒绝/跳过）；处理完对话里只留一行“已允许：运行命令 …”。③ 问题与计划共用接管面板，计划长时面板内滚动。④ 在跑时打字，发送键直接变成“插入”（最常用），旁边小箭头选排队或打断。</p>
+<div class="shot">
+  <div class="col"><div class="cap">① 模式在输入框上方</div><div class="side">
+    <div class="head"><span class="t">助手</span><span class="ib"><i data-i='history'></i></span><span class="ib"><i data-i='square-pen'></i></span></div>
+    <div class="feed"><div class="user">把这段口播的停顿压一下，再加个片头</div><div class="ans">好的。我先看一下这段口播……</div></div>
+    <div class="composer"><div class="modebar"><div class="tabs"><span class="tab sel">自动</span><span class="tab">改前先问</span><span class="tab">只计划</span></div><span class="grow"></span><span class="key">Shift+Tab</span></div>
+      <div class="input">告诉助手要做什么…</div>
+      <div class="foot"><span class="dd">DeepSeek V4 <i data-i='chevron-down'></i></span><span class="dd">思考 中 <i data-i='chevron-down'></i></span><span class="grow"></span><span class="send"><i data-i='arrow-up'></i></span></div></div>
+  </div></div>
+
+  <div class="col"><div class="cap">② 确认接管输入框</div><div class="side">
+    <div class="head"><span class="t">助手</span><span class="ib"><i data-i='history'></i></span><span class="ib"><i data-i='square-pen'></i></span></div>
+    <div class="feed"><div class="user">给这段视频的手上加一团跟手的火焰</div>
+      <div class="steps"><div class="step"><i data-i='check'></i><span>写入文件：扩展\hand-pose\extension.json</span></div><div class="step"><i data-i='circle-pause'></i><span>运行命令，等你确认</span></div></div></div>
+    <div class="take"><div class="bar"><i data-i='terminal'></i><span class="t">运行命令</span><span class="meta">改前先问</span></div>
+      <div class="code mono">cd "E:\文档\HenjiAI\元宝实战\扩展\hand-pose"; henji-node setup.mjs</div>
+      <div class="opt sel"><span class="n">1</span><span class="lb"><b>允许</b></span></div>
+      <div class="opt"><span class="n">2</span><span class="lb"><b>这段对话都允许</b></span></div>
+      <div class="opt"><span class="n">3</span><span class="lb"><b>拒绝，告诉它怎么做</b></span></div>
+      <div class="row meta"><span class="grow">↑↓ 选择 · Enter 确定</span><span>Esc 拒绝</span></div></div>
+  </div></div>
+
+  <div class="col"><div class="cap">③ 问题 / 计划接管输入框</div><div class="side">
+    <div class="head"><span class="t">助手</span><span class="ib"><i data-i='history'></i></span><span class="ib"><i data-i='square-pen'></i></span></div>
+    <div class="feed"><div class="user">把这段口播的停顿压一下，再加个片头</div>
+      <div class="steps"><div class="step"><i data-i='check'></i><span>转写口播</span></div><div class="step"><i data-i='check'></i><span>已回答：片头用 点阵显影</span></div></div></div>
+    <div class="take"><div class="bar"><i data-i='list-checks'></i><span class="t">计划</span><span class="meta">只计划</span></div>
+      <div class="planbox"><ol><li>标出 0.6 秒以上的停顿</li><li>停顿压到 0.25 秒，接缝交叉淡化</li><li>用“点阵显影”做 3 秒片头，放在 V2</li><li>取 3 帧检查接缝与片头</li></ol></div>
+      <div class="opt sel"><span class="n">1</span><span class="lb"><b>执行</b><span>切到自动，接着做</span></span></div>
+      <div class="opt"><span class="n">2</span><span class="lb"><b>执行，但改前先问</b></span></div>
+      <div class="opt"><span class="n">3</span><span class="lb"><b>再改改…</b></span></div>
+      <div class="row meta"><span class="grow">↑↓ 选择 · Enter 确定</span><span>Esc 先不做</span></div></div>
+  </div></div>
+
+  <div class="col"><div class="cap">④ 在跑时打字：默认插入</div><div class="side">
+    <div class="head"><span class="t">助手</span><span class="ib"><i data-i='history'></i></span><span class="ib"><i data-i='square-pen'></i></span></div>
+    <div class="feed"><div class="user">把这段口播的停顿压一下</div>
+      <div class="steps"><div class="step"><i data-i='check'></i><span>转写口播</span></div><div class="step"><i data-i='loader'></i><span>压缩停顿</span></div></div>
+      <div class="user" style="opacity:.6">再把背景音乐调小一点<div class="meta" style="margin-top:2px">排队中 · 撤回</div></div></div>
+    <div class="composer"><div class="modebar"><div class="tabs"><span class="tab sel">自动</span><span class="tab">改前先问</span><span class="tab">只计划</span></div></div>
+      <div class="input typed">停顿别压太狠，留 0.3 秒</div>
+      <div class="foot"><span class="dd">DeepSeek V4 <i data-i='chevron-down'></i></span><span class="grow"></span><span class="btn secondary" style="height:28px">插入 <span class="key">Enter</span></span><span class="ib"><i data-i='chevron-down'></i></span><span class="send" style="background:var(--control);color:var(--text1)"><i data-i='square'></i></span></div></div>
+  </div></div>
+</div>
+</div>
+</div>
+<script>
+const ICONS = /*ICONS_START*/{"history":"<path d=\"M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8\"/><path d=\"M3 3v5h5\"/><path d=\"M12 7v5l4 2\"/>","square-pen":"<path d=\"M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7\"/><path d=\"M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z\"/>","check":"<path d=\"M20 6 9 17l-5-5\"/>","chevron-down":"<path d=\"m6 9 6 6 6-6\"/>","arrow-up":"<path d=\"m5 12 7-7 7 7\"/><path d=\"M12 19V5\"/>","square":"<rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"/>","loader":"<path d=\"M12 2v4\"/><path d=\"m16.2 7.8 2.9-2.9\"/><path d=\"M18 12h4\"/><path d=\"m16.2 16.2 2.9 2.9\"/><path d=\"M12 18v4\"/><path d=\"m4.9 19.1 2.9-2.9\"/><path d=\"M2 12h4\"/><path d=\"m4.9 4.9 2.9 2.9\"/>","clock-3":"<path d=\"M12 6v6h4\"/><circle cx=\"12\" cy=\"12\" r=\"10\"/>","x":"<path d=\"M18 6 6 18\"/><path d=\"m6 6 12 12\"/>","circle-pause":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><line x1=\"10\" x2=\"10\" y1=\"15\" y2=\"9\"/><line x1=\"14\" x2=\"14\" y1=\"15\" y2=\"9\"/>","terminal":"<path d=\"M12 19h8\"/><path d=\"m4 17 6-6-6-6\"/>","list-checks":"<path d=\"M13 5h8\"/><path d=\"M13 12h8\"/><path d=\"M13 19h8\"/><path d=\"m3 17 2 2 4-4\"/><path d=\"m3 7 2 2 4-4\"/>"}/*ICONS_END*/;
+for (const el of document.querySelectorAll('i[data-i]')) {
+  const svg = `<svg class="i" viewBox="0 0 24 24" style="${el.getAttribute('style') ?? ''}">${ICONS[el.dataset.i] ?? ''}</svg>`
+  el.outerHTML = svg
+}
+const params = new URLSearchParams(location.search)
+if (params.get('s')) { document.body.classList.add('single', 'draft'); document.querySelector(`.block[data-id="${params.get('s')}"]`)?.classList.add('show') }
+</script>
+</body>
+</html>

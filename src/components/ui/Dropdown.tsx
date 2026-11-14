@@ -32,6 +32,8 @@ export type DropdownOption<T extends string | number | boolean> = {
   value: T
   disabled?: boolean
   tooltip?: string
+  /** 名称下方一行说明：只给选了就会改变行为、名称本身说不清后果的选项（助手的权限模式、发送方式）。 */
+  description?: string
 }
 
 type DropdownProps<T extends string | number | boolean> = {
@@ -314,6 +316,8 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
   // 调用方常每次渲染都传新的 options 数组与 renderPanel 函数；按文字内容决定要不要重新量宽，
   // 否则父组件每次重绘（如拖动播放头）都会读计算样式、强制重算样式并重新量一遍文字。
   const optionLabelsKey = JSON.stringify(getOptionLabels(options))
+  // 说明行只撑菜单宽度，不撑触发器
+  const optionDescriptionsKey = JSON.stringify((options ?? []).flatMap(option => option.description ? [option.description] : []))
   const customPanel = Boolean(renderPanel)
   useLayoutEffect(() => {
     if (!ref.current) return
@@ -352,7 +356,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
         return
       }
 
-      const panelLabels = optionLabels.length > 0 ? optionLabels : [displayText]
+      const panelLabels = optionLabels.length > 0 ? [...optionLabels, ...JSON.parse(optionDescriptionsKey) as string[]] : [displayText]
       // 菜单宽度按菜单项自己的留白（含选中勾槽）计算，不借用触发器留白（任务 4.3）
       const textWidth = measureElementTextWidth(btn, panelLabels, 0)
       // 自定义面板（renderPanel）没有选中勾，按动作菜单留白；选项列表是选值菜单，预留勾槽
@@ -363,7 +367,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
       }
     }
     computeMinWidth()
-  }, [buttonMinWidthPx, customPanel, minWidthStrategy, optionLabelsKey, panelMinWidthPx, panelWidthStrategy, resolvedDisplay, rowContent, rowWidthPx, size])
+  }, [buttonMinWidthPx, customPanel, minWidthStrategy, optionDescriptionsKey, optionLabelsKey, panelMinWidthPx, panelWidthStrategy, resolvedDisplay, rowContent, rowWidthPx, size])
 
   const hasFixedPosition = fixedPos !== null
   useLayoutEffect(() => {
@@ -453,7 +457,10 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
             onBlur={() => onPreview?.(undefined)}
             onClick={() => selectOption(option)}
           >
-            <span className="block min-w-0 truncate whitespace-nowrap">{option.label}</span>
+            {option.description ? <span className="flex min-w-0 flex-col py-0.5 text-left">
+              <span className="truncate whitespace-nowrap">{option.label}</span>
+              <span className="truncate whitespace-nowrap text-xs text-text3">{option.description}</span>
+            </span> : <span className="block min-w-0 truncate whitespace-nowrap">{option.label}</span>}
             {/* 当前值：淡强调底 + 强调色勾（重要记录 012），标签保持主要文字 */}
             {selected ? <Check aria-hidden="true" className={`${UI_ICON_SIZE_CLASS.sm} shrink-0 text-accent-text`} /> : null}
           </UiOptionButton>

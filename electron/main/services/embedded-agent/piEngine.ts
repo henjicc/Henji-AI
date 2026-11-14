@@ -2,15 +2,16 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type { AgentSession, SessionManager, ToolDefinition } from '@earendil-works/pi-coding-agent'
-import { emptyEmbeddedAgentSnapshot, type EmbeddedAgentSnapshot } from '../../../../src/core/assistant/embeddedAgent'
+import { emptyEmbeddedAgentSnapshot, type EmbeddedAgentSnapshot, type EmbeddedApprovalDecision, type EmbeddedQuestion, type EmbeddedQuestionAnswer } from '../../../../src/core/assistant/embeddedAgent'
 import { visibleMessages } from './messagePresentation'
 import type { EngineCommand, EngineConfiguration, EngineEvent, EmbeddedAgentEngine } from './contracts'
 import { executePiTool } from './toolResult'
 import { PiAttachments } from './piAttachments'
 import { PiToolDisclosure } from './toolDisclosure'
-import { disclosureSurface } from './toolDisclosureProfiles'
+import { APPLICATION_TOOL_DISPATCHER, disclosureSurface } from './toolDisclosureProfiles'
 import { applicationScriptTool } from './applicationScript'
-import { createLocalTools } from './localTools'
+import { createQuestionTools } from './questionTools'
+import { addRenamedFileOperations, createLocalTools, LOCAL_MUTATING_TOOLS, localToolStep } from './localTools'
 import { budgetContext, contextPageTokenLimit, estimateContextTokens, projectText, PROJECTED_EXCERPT_TOKENS, singleResultTokenLimit } from './contextBudget'
 import { archiveToolResult, contextReader, selectionSummary } from './contextReader'
 import { embeddedModelCompat, embeddedModelLimits, embeddedModelPricing, embeddedThinkingLevel, embeddedThinkingLevelMap } from './modelOptions'
@@ -67,6 +68,63 @@ export class PiEngine implements EmbeddedAgentEngine {
     if (this.runningTools.size && !this.heartbeat) this.heartbeat = setInterval(() => this.emit({ type: 'heartbeat' }), 30_000)
     if (!this.runningTools.size && this.heartbeat) { clearInterval(this.heartbeat); this.heartbeat = undefined }
   }
+  /** 改前先问：等用户回答的步骤；用户选“这段对话都允许”后，这段对话里的本机改动不再问。 */
+  private approvals = new Map<string, (decision: Omit<EmbeddedApprovalDecision, 'id'>) => void>()
+  private allowedSession: string | null = null
+  resolveApproval({ id, ...decision }: EmbeddedApprovalDecision): void {
+    const resolve = this.approvals.get(id)
+    this.approvals.delete(id)
+    resolve?.(decision)
+  }
+  private denyPendingApprovals(): void {
+    for (const id of [...this.approvals.keys()]) this.resolveApproval({ id, decision: 'deny' })
+    for (const id of [...this.questions.keys()]) this.answerQuestion({ id, answers: [], dismissed: true })
+  }
+  /** ask_user / present_plan 等用户回答的问题。 */
+  private questions = new Map<string, (answer: Omit<EmbeddedQuestionAnswer, 'id'>) => void>()
+  answerQuestion({ id, ...answer }: EmbeddedQuestionAnswer): void {
+    const resolve = this.questions.get(id)
+    this.questions.delete(id)
+    resolve?.(answer)
+  }
+  private ask(questions: EmbeddedQuestion[], plan?: string): Promise<Omit<EmbeddedQuestionAnswer, 'id'>> {
+    const id = randomUUID()
+    return new Promise(resolve => {
+      this.questions.set(id, resolve)
+      this.emit({ type: 'question', id, questions, ...(plan ? { plan } : {}) })
+    })
+  }
+
+  /**
+   * 按模式拦工具调用。会改东西的：本机命令、写文件、改文件、应用脚本、非只读的应用工具（经分派入口时看内层工具）、
+   * 没标只读的助手插件工具。只计划模式一律不执行；改前先问模式只问本机改动与插件工具，应用里的操作能撤销，照常直接做。
+   */
+  private async gate(name: string, input: unknown, pluginReadOnly: (name: string) => boolean | undefined): Promise<{ block: true; reason: string } | undefined> {
+    const mode = this.configuration?.permissionMode ?? 'auto'
+    if (mode === 'auto') return undefined
+    const host = new Map((this.configuration?.tools ?? []).map(tool => [tool.name, tool]))
+    const inner = name === APPLICATION_TOOL_DISPATCHER ? host.get(String((input as { name?: unknown } | undefined)?.name ?? '')) : undefined
+    const plugin = !host.has(name) && !this.disclosure?.tools.some(tool => tool.name === name)
+    const local = LOCAL_MUTATING_TOOLS.has(name)
+    const changesState = local || name === 'run_application_script' || (plugin && pluginReadOnly(name) !== true)
+      || (host.has(name) && host.get(name)?.annotations?.readOnlyHint !== true && name !== 'load_assistant_skill')
+      || (inner !== undefined && inner.annotations?.readOnlyHint !== true)
+    if (!changesState) return undefined
+    if (mode === 'plan') return { block: true, reason: '现在是“只计划”模式：这一步会改动东西，没有执行。继续只读地调查，最后把要做的步骤写成编号的计划交给用户，等用户切换模式后再动手。' }
+    if (!local && !plugin) return undefined
+    const sessionId = this.manager.getSessionId()
+    if (this.allowedSession === sessionId) return undefined
+    const step = localToolStep(name, input) ?? { title: `运行助手插件 ${name}`, detail: JSON.stringify(input ?? {}).slice(0, 2000) }
+    const id = randomUUID()
+    const { decision, message } = await new Promise<Omit<EmbeddedApprovalDecision, 'id'>>(resolve => {
+      this.approvals.set(id, resolve)
+      this.emit({ type: 'approval', id, ...step })
+    })
+    if (decision === 'allow_session') this.allowedSession = sessionId
+    if (decision !== 'deny') return undefined
+    return { block: true, reason: message ? `用户没有允许这一步，它没有执行。用户说：${message}` : '用户没有允许这一步，它没有执行。换一种做法，或者先问用户想怎么做。' }
+  }
+
   constructor(private readonly emit: (event: EngineEvent) => void,
     private readonly callTool: (id: string, name: string, input: Record<string, unknown>, signal?: AbortSignal) => Promise<unknown>) {}
 
@@ -135,7 +193,11 @@ export class PiEngine implements EmbeddedAgentEngine {
      */
     const skillPaths = [path.join(this.directory, 'skills'), ...input.projectTrusted ? [path.join(input.workFolder, '.pi', 'skills'), path.join(input.workFolder, '.agents', 'skills')] : []]
     const loader = new this.sdk.DefaultResourceLoader({ cwd: input.workFolder, agentDir: this.directory, settingsManager: settings,
-      noSkills: true, additionalSkillPaths: skillPaths, noContextFiles: !input.projectTrusted, noPromptTemplates: true, noThemes: true, systemPrompt: instructions })
+      noSkills: true, additionalSkillPaths: skillPaths, noContextFiles: !input.projectTrusted, noPromptTemplates: true, noThemes: true, systemPrompt: instructions,
+      extensionFactories: [pi => {
+        pi.on('session_before_compact', event => { addRenamedFileOperations(event.preparation) })
+        pi.on('tool_call', event => this.gate(event.toolName, event.input, name => pi.getAllTools().find(tool => tool.name === name)?.annotations?.readOnlyHint))
+      }] })
     await loader.reload()
     for (const error of loader.getExtensions().errors) this.emit({ type: 'log', phase: 'extension_failed', requestId: this.requestId, sessionId: this.manager.getSessionId(), message: `助手插件 ${error.path} 加载失败：${error.error}` })
     /** 成功与失败的文字都受单条结果上限约束，超出部分存档后可续读。 */
@@ -163,7 +225,8 @@ export class PiEngine implements EmbeddedAgentEngine {
     const script = applicationScriptTool({ tools, call: this.callTool })
     const scriptTool: ToolDefinition = { ...script, execute: (...args) => bounded(() => script.execute(...args), args[2]) }
     this.disclosure = new PiToolDisclosure([...customTools, contextReader(this.manager, contextPageTokenLimit(limits.contextWindow)), scriptTool,
-      ...createLocalTools(this.sdk, input.workFolder)], () => this.session!)
+      ...createLocalTools(this.sdk, input.workFolder),
+      ...createQuestionTools(input.permissionMode, (questions, plan) => this.ask(questions, plan), mode => { if (this.configuration) this.configuration.permissionMode = mode })], () => this.session!)
     this.toolTitles = new Map(this.disclosure.tools.map(tool => [tool.name, tool.label]))
     // 不给工具白名单：助手插件注册的工具与宿主工具一起可用。
     const { session } = await this.sdk.createAgentSession({ cwd: input.workFolder, agentDir: this.directory,
@@ -279,8 +342,15 @@ export class PiEngine implements EmbeddedAgentEngine {
   }
 
   async command(command: EngineCommand): Promise<unknown> {
-    if (command.action === 'cancel') { this.cancelled = true; await this.session?.abort(); return }
+    // 先回绝等确认的步骤：中止会等正在执行的工具结束，而那个工具正在等用户
+    if (command.action === 'cancel') { this.cancelled = true; this.denyPendingApprovals(); await this.session?.abort(); return }
     if (command.action === 'snapshot') return this.publish()
+    // 插入的话不停下当前这轮：Pi 在当前一步做完后把它放进对话，模型下一步就能看到
+    if (command.action === 'steer') {
+      if (!this.session?.isStreaming || this.cancelled || this.background) throw new Error('助手这一轮已经结束，请直接发送。')
+      await this.session.steer(command.input)
+      return this.publish()
+    }
     if (this.state.busy) throw new Error('请先停止当前回复，再切换对话或模型。')
     if (command.action === 'initialize') {
       this.sdk = await import('@earendil-works/pi-coding-agent')
@@ -394,5 +464,5 @@ export class PiEngine implements EmbeddedAgentEngine {
     if (runner?.hasHandlers('session_shutdown')) await runner.emit({ type: 'session_shutdown', reason: 'reload' }).catch(() => undefined)
     this.session?.dispose()
   }
-  async dispose(): Promise<void> { await this.session?.abort(); this.unsubscribe?.(); await this.closeSession(); for (const id of [...this.runningTools]) this.trackTool(id, false) }
+  async dispose(): Promise<void> { this.denyPendingApprovals(); await this.session?.abort(); this.unsubscribe?.(); await this.closeSession(); for (const id of [...this.runningTools]) this.trackTool(id, false) }
 }

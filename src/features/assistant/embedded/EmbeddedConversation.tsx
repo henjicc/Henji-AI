@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { RotateCcw, Sparkles } from 'lucide-react'
 import { Dropdown, UiButton, UiEmpty, UiError } from '@/components/ui'
 import { createEmptyPromptDocument, createPlainTextPromptDocument, toModelPromptText } from '@/core/inputs/promptDocument'
-import { buildEmbeddedPromptContext, type EmbeddedAgentModel } from '@/core/assistant/embeddedAgent'
+import { buildEmbeddedPromptContext, type EmbeddedAgentModel, type EmbeddedAgentPrompt, type EmbeddedPermissionMode } from '@/core/assistant/embeddedAgent'
 import { getPlatform } from '@/platform/runtime'
 import { useUiStore } from '@/stores/uiStore'
 import { useAssistantUiStore, type AssistantGoalOptions } from '../store/assistantUiStore'
@@ -22,6 +22,25 @@ import type { AssistantAttachmentDraft } from '../conversation/assistantAttachme
 import { AudioEditAssistantAction } from '@/features/audioEdit/AudioEditAssistantAction'
 import { LLM_CONFIG_CHANGED_EVENT } from '@/core/llm/events'
 import { AssistantModelControls } from './AssistantModelControls'
+import { EmbeddedTakeover } from './EmbeddedTakeover'
+
+type Delivery = NonNullable<EmbeddedAgentPrompt['delivery']>
+const MODE_OPTIONS: Array<{ value: EmbeddedPermissionMode; label: string; description: string }> = [
+  { value: 'auto', label: '自动', description: '直接做，删除进回收站，付费按额度' },
+  { value: 'ask', label: '改前先问', description: '运行命令、改文件前先问你' },
+  { value: 'plan', label: '只计划', description: '只查不改，交出计划等你点头' },
+]
+const DELIVERY_OPTIONS: Array<{ value: Delivery; label: string; description: string }> = [
+  { value: 'wait', label: '排队', description: '这轮做完再发' },
+  { value: 'steer', label: '插入', description: '不停下，下一步就看到' },
+  { value: 'interrupt', label: '打断', description: '停掉这轮，先处理这条' },
+]
+const SEND_LABELS: Readonly<Record<Delivery, string>> = { wait: '排队发送', steer: '插入发送', interrupt: '打断发送' }
+/** 模式是这台电脑上的个人习惯：记在本机，读不到就用自动。 */
+const MODE_STORAGE_KEY = 'henji.assistant.permission_mode'
+function readStoredMode(): EmbeddedPermissionMode {
+  try { const value = localStorage.getItem(MODE_STORAGE_KEY); return MODE_OPTIONS.some(option => option.value === value) ? value as EmbeddedPermissionMode : 'auto' } catch { return 'auto' }
+}
 
 export function EmbeddedConversation(): JSX.Element {
   const state = useEmbeddedAgent()
@@ -29,7 +48,12 @@ export function EmbeddedConversation(): JSX.Element {
   const [models, setModels] = useState<EmbeddedAgentModel[]>([])
   const [modelsLoaded, setModelsLoaded] = useState(false)
   const pendingGoal = useAssistantUiStore(store => store.pendingGoal)
-  const [delivery, setDelivery] = useState<'wait' | 'interrupt'>('wait')
+  const [delivery, setDelivery] = useState<Delivery>('wait')
+  const [mode, setModeState] = useState(readStoredMode)
+  const setMode = useCallback((value: EmbeddedPermissionMode): void => {
+    setModeState(value)
+    try { localStorage.setItem(MODE_STORAGE_KEY, value) } catch { /* 记不住只影响下次打开的默认值 */ }
+  }, [])
   const [submitting, setSubmitting] = useState(false)
   const [preparedRequest, setPreparedRequest] = useState<AssistantGoalOptions | undefined>()
   const [attachments, setAttachments] = useState<AssistantAttachmentDraft[]>([])
@@ -78,7 +102,7 @@ export function EmbeddedConversation(): JSX.Element {
     const context = createHostContextSnapshot()
     void withPaidOperation({ category: 'generation', titleKey: 'paidApproval.assistantChat', capabilityId: 'ui_assistant_chat', messageKey: 'paidApproval.assistantChatContent' }, () => getPlatform().embeddedAgent.prompt({ text, clientMessageId, model: { providerId: selectedModel.providerId, modelId: selectedModel.modelId },
       ...(prepared?.context === undefined ? { selectionSnapshot: captureHostSelection() } : {}),
-      context: prepared?.context ?? buildEmbeddedPromptContext(context), attachments: submittedAttachments, delivery: request || switching ? 'wait' : delivery }))
+      context: prepared?.context ?? buildEmbeddedPromptContext(context), attachments: submittedAttachments, delivery: request || switching ? 'wait' : delivery, permissionMode: mode }))
       .then(() => { setPreparedRequest(undefined) })
       .catch(error => {
         try { prepared?.onRejected?.() } catch (rollbackError) { reportEmbeddedAgentError(rollbackError) }
@@ -86,7 +110,7 @@ export function EmbeddedConversation(): JSX.Element {
         reportEmbeddedAgentError(error)
       })
       .finally(() => { setOptimistic(null); setSubmitting(false) })
-  }, [attachments, delivery, document, modelsLoaded, preparedRequest, scroll, selectedModel, submitting, switching])
+  }, [attachments, delivery, document, mode, modelsLoaded, preparedRequest, scroll, selectedModel, submitting, switching])
   useEffect(() => {
     if (!pendingGoal || !modelsLoaded || submitting) return
     const pending = useAssistantUiStore.getState()
@@ -140,13 +164,21 @@ export function EmbeddedConversation(): JSX.Element {
           <RotateCcw aria-hidden="true" className={`mr-1`} />重试</UiButton> : undefined} /> : null}
       {needsModel && !isEmpty ? <UiButton variant="secondary" onClick={openModelSettings}>设置可调用工具的模型</UiButton> : null}
     </div> : null}
-    <AssistantComposer key={state.sessionId ?? 'new'} value={document} onChange={setDocument} onSubmit={send} attachments={attachments} onAttachmentsChange={setAttachments}
+    {state.pendingApproval || state.pendingQuestion ? <EmbeddedTakeover approval={state.pendingApproval} question={state.pendingQuestion}
+      onDecide={decision => { if (state.pendingApproval) void getPlatform().embeddedAgent.decideApproval({ id: state.pendingApproval.id, ...decision }).catch(reportEmbeddedAgentError) }}
+      onAnswer={answer => {
+        if (!state.pendingQuestion) return
+        if (answer.permissionMode) setMode(answer.permissionMode)
+        void getPlatform().embeddedAgent.answerQuestion({ id: state.pendingQuestion.id, ...answer }).catch(reportEmbeddedAgentError)
+      }} /> : <AssistantComposer key={state.sessionId ?? 'new'} value={document} onChange={setDocument} onSubmit={send} attachments={attachments} onAttachmentsChange={setAttachments}
       inputModalities={selectedModel?.inputModalities ?? []} attachmentsDisabled={submitting || !selectedModel} disabled={submitting || !selectedModel || !modelsLoaded}
       busy={busy} submitting={submitting}
       onCancel={replying ? () => { void getPlatform().embeddedAgent.cancel().catch(reportEmbeddedAgentError) } : undefined}
-      sendLabel={busy ? replying && delivery === 'interrupt' ? '打断发送' : '等待发送' : '发送'}
+      sendLabel={busy ? replying ? SEND_LABELS[delivery] : SEND_LABELS.wait : '发送'}
       controls={<>
+        <Dropdown<EmbeddedPermissionMode> value={mode} options={MODE_OPTIONS} onSelect={setMode} ariaLabel="助手模式" appearance="text" size="sm" changed={mode !== 'auto'}
+          className="shrink-0" buttonClassName="w-auto" panelWidthStrategy="options" />
         <AssistantModelControls disabled={submitting} onSwitching={() => setModelsLoaded(false)} />
-        {replying ? <Dropdown value={delivery} options={[{ value: 'wait', label: '等待' }, { value: 'interrupt', label: '打断' }]} onSelect={setDelivery} ariaLabel="发送方式" appearance="text" size="sm" className="min-w-0" buttonClassName="w-auto max-w-full" panelWidthStrategy="options" /> : null}</>} />
+        {replying ? <Dropdown<Delivery> value={delivery} options={DELIVERY_OPTIONS} onSelect={setDelivery} ariaLabel="发送方式" appearance="text" size="sm" className="min-w-0" buttonClassName="w-auto max-w-full" panelWidthStrategy="options" /> : null}</>} />}
   </div>
 }

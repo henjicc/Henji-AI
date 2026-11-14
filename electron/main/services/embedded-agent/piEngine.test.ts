@@ -27,8 +27,8 @@ vi.mock('../assistant/skills/registry', async importOriginal => {
 })
 import { embeddedSkillCatalog, callEmbeddedSkill } from './skills'
 
-/** 内置助手的本机命令与文件工具。 */
-const LOCAL_TOOLS = ['run_command', 'read_file', 'write_file', 'edit_file', 'search_files', 'find_files', 'list_files']
+/** 内置助手自带的工具：本机命令与文件工具、问用户。 */
+const LOCAL_TOOLS = ['run_command', 'read_file', 'write_file', 'edit_file', 'search_files', 'find_files', 'list_files', 'ask_user']
 
 
 const model: LlmModelConfig = { providerId: 'test', modelId: 'fixture', displayName: 'Fixture', adapter: 'openai-compatible', enabled: true,
@@ -113,7 +113,7 @@ data: ${JSON.stringify(event)}
   const engine = new PiEngine((event) => { events.push(structuredClone(event)) }, tool)
   cleanup.push(() => engine.dispose())
   await engine.command({ action: 'initialize', input: directory })
-  const configuration = { directory, workFolder: directory, projectTrusted: false, model: { providerId: 'test', model: { ...model, capabilities: { ...model.capabilities, ...capabilities } }, baseUrl: `http://127.0.0.1:${address.port}/v1`, api, apiKey: 'fixture-key' },
+  const configuration = { directory, workFolder: directory, projectTrusted: false, permissionMode: 'auto' as const, model: { providerId: 'test', model: { ...model, capabilities: { ...model.capabilities, ...capabilities } }, baseUrl: `http://127.0.0.1:${address.port}/v1`, api, apiKey: 'fixture-key' },
     instructions: '你是测试中的痕迹助手。', tools: [{ name: 'read_project', description: '读取项目', inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'], additionalProperties: false } }] }
   await engine.command({ action: 'configure', input: configuration })
   return { engine, requests, headers, events, tool, directory, configuration, setUsage: (value: Record<string, unknown>) => { usage = value }, setMode: (value: typeof mode) => { mode = value },
@@ -703,6 +703,44 @@ describe('Pi official SDK engine', () => {
     await f.engine.command({ action: 'prompt', input: { text: '看图', context: '', attachments: [{ attachment, data: 'bWVkaWE=' }] } })
     expect(await f.engine.command({ action: 'snapshot' })).toMatchObject({ error: expect.stringContaining('上下文预算') })
     expect(f.requests).toHaveLength(2)
+  })
+  it('只计划模式挡下写文件；改前先问模式拒绝就不写、允许才写，回答前一直等着', async () => {
+    const f = await fixture()
+    const target = (name: string) => path.join(f.directory, name)
+    const exists = (name: string) => fs.stat(target(name)).then(() => true, () => false)
+    await f.engine.command({ action: 'configure', input: { ...f.configuration, permissionMode: 'plan' } })
+    f.setToolPlan([{ name: 'write_file', arguments: { path: 'plan.txt', content: 'x' } }])
+    await f.engine.command({ action: 'prompt', input: { text: '写个文件', context: '' } })
+    expect(await exists('plan.txt')).toBe(false)
+    expect(JSON.stringify(f.requests.at(-1))).toContain('只计划')
+
+    // 假模型按本段对话里已有的工具结果数取下一步，每轮换一段新对话
+    for (const [name, decision] of [['denied.txt', 'deny'], ['allowed.txt', 'allow']] as const) {
+      await f.engine.command({ action: 'new' })
+      await f.engine.command({ action: 'configure', input: { ...f.configuration, permissionMode: 'ask' } })
+      f.setToolPlan([{ name: 'write_file', arguments: { path: name, content: 'x' } }])
+      const asked = f.events.length
+      const prompt = f.engine.command({ action: 'prompt', input: { text: '写个文件', context: '' } })
+      await vi.waitFor(() => expect(f.events.slice(asked).some(event => event.type === 'approval')).toBe(true))
+      const approval = f.events.slice(asked).find(event => event.type === 'approval') as Extract<EngineEvent, { type: 'approval' }>
+      expect(approval).toMatchObject({ title: '写入文件', detail: name })
+      expect(await exists(name)).toBe(false)
+      f.engine.resolveApproval({ id: approval.id, decision })
+      await prompt
+      expect(await exists(name)).toBe(decision === 'allow')
+    }
+  })
+  it('只计划模式交出计划后，用户选执行就切出只计划，同一轮里接着改动', async () => {
+    const f = await fixture()
+    await f.engine.command({ action: 'configure', input: { ...f.configuration, permissionMode: 'plan' } })
+    f.setToolPlan([{ name: 'present_plan', arguments: { plan: '1. 写 done.txt' } }, { name: 'write_file', arguments: { path: 'done.txt', content: 'x' } }])
+    const prompt = f.engine.command({ action: 'prompt', input: { text: '做个计划', context: '' } })
+    await vi.waitFor(() => expect(f.events.some(event => event.type === 'question')).toBe(true))
+    const question = f.events.find(event => event.type === 'question') as Extract<EngineEvent, { type: 'question' }>
+    expect(question.plan).toBe('1. 写 done.txt')
+    f.engine.answerQuestion({ id: question.id, answers: [], permissionMode: 'auto' })
+    await prompt
+    expect(await fs.readFile(path.join(f.directory, 'done.txt'), 'utf8')).toBe('x')
   })
   it('助手目录里的 Pi 插件注册的工具进入首次请求的工具列表，换界面引导时不被换掉', async () => {
     const f = await fixture()

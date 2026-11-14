@@ -23,8 +23,8 @@ vi.mock('./models', () => ({ resolveEmbeddedModel: mocks.model }))
 vi.mock('./attachments', () => ({ prepareEmbeddedAttachments: async () => [] }))
 import { EmbeddedAgentService } from './service'
 
-/** 内置助手的本机命令与文件工具。 */
-const LOCAL_TOOLS = ['run_command', 'read_file', 'write_file', 'edit_file', 'search_files', 'find_files', 'list_files']
+/** 内置助手自带的工具：本机命令与文件工具、问用户。 */
+const LOCAL_TOOLS = ['run_command', 'read_file', 'write_file', 'edit_file', 'search_files', 'find_files', 'list_files', 'ask_user']
 
 
 const cleanup: Array<() => Promise<void> | void> = []
