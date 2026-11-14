@@ -1,6 +1,6 @@
 import { createVideoEditSequence, type VideoEditComposition } from '@/core/videoEdit/document'
 import { createLogger } from '@/core/logging'
-import { getPlatform } from '@/platform/runtime'
+import { getPlatform, isHeadlessWindow } from '@/platform/runtime'
 import { VideoEditRenderSession } from './videoEditRenderSession'
 import { videoEditNativeDecoding } from './videoEditRenderTransport'
 import { videoEditTimingContext, videoEditTimingEvent } from './videoEditFirstFrameTiming'
@@ -76,7 +76,8 @@ async function checkMemoryAndPrepare(): Promise<void> {
       })
       return
     }
-    if (!owners || preparationFailed) return
+    // 无窗口模式关了显卡，预建的会话永远出不了画面。
+    if (!owners || preparationFailed || isHeadlessWindow()) return
     const document = blankDocument()
     const surface = createVideoEditProgramSurface(32, 32)
     const entry: Program = { surface, document, renderer: new VideoEditRenderSession(document, { previewWidth: 32, surface: surface.transferControlToOffscreen() }), ready: false }

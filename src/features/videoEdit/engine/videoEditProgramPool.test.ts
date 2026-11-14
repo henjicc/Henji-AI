@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 const state = vi.hoisted(() => ({ memory: vi.fn(), status: vi.fn(), created: 0, dispose: vi.fn(), prepare: vi.fn(), adopt: vi.fn(), native: true, stop: vi.fn(), update: vi.fn(async () => {}) }))
-vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ system: { memoryInfo: state.memory }, videoDecoder: { status: state.status } }) }))
+vi.mock('@/platform/runtime', () => ({ isHeadlessWindow: () => false, getPlatform: () => ({ system: { memoryInfo: state.memory }, videoDecoder: { status: state.status } }) }))
 vi.mock('./videoEditRenderTransport', () => ({ videoEditNativeDecoding: (status: { available: boolean; forcedBackend: string | null }) => status.available && status.forcedBackend !== 'browser' }))
 vi.mock('@/core/logging', () => ({ createLogger: () => ({ info: vi.fn(), warn: vi.fn() }) }))
 vi.mock('./videoEditRenderSession', () => ({ VideoEditRenderSession: class {

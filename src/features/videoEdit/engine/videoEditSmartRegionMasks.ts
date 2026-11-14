@@ -4,6 +4,9 @@ import {
   type SmartRegionAnalysisKind, type SmartRegionMaskSetting, type SmartRegionSegmentLayout,
 } from '@/core/videoEdit/smartRegions'
 import type { VideoEditAttentionBox } from '@/core/videoEdit/reframe'
+import { createLogger } from '@/core/logging'
+
+const logger = createLogger('features.videoEdit.smartRegions')
 
 /*
  * 剪辑渲染 Worker 读取智能区域缓存（任务 4.7d）：主线程把已分析好的段落（可 fetch 的地址）发过来，
@@ -44,6 +47,11 @@ export function setVideoEditSmartRegionSegments(value: VideoEditSmartRegionSegme
 }
 
 export async function fetchRange(url: string, start: number, end: number): Promise<Uint8Array> {
+  // 结果文件要在会话边界换成媒体地址；裸磁盘路径交给 fetch 只得到一句 Failed to fetch，看不出是调用方没转换。
+  if (/^(?:[a-zA-Z]:[\\/]|\\\\|\/)/.test(url)) {
+    logger.error('分析结果收到未转换的磁盘路径：调用方应在渲染会话边界转成 henji-media://', { event: 'video_edit.analysis_result.unconverted_path', context: { file: url.split(/[\\/]/).pop() } })
+    throw new Error('这段素材的分析结果读取失败，请重启软件；仍然失败请反馈。')
+  }
   const response = await fetch(url, { headers: { Range: `bytes=${start}-${end - 1}` } })
   if (!response.ok) throw new Error(`智能区域缓存读取失败（${response.status}）。`)
   const bytes = new Uint8Array(await response.arrayBuffer())

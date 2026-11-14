@@ -3,8 +3,9 @@ import { deflateRawSync } from 'node:zlib'
 import { createVideoEditSequence, type VideoEditClip, type VideoEditComposition } from '@/core/videoEdit/document'
 import { encodeSmartRegionSegment } from '@/core/videoEdit/smartRegions'
 import { createVideoEditTrackHeader, encodeVideoEditTrackRecord, encodeVideoEditTrackGeometry, videoEditTrackerKey, type VideoEditTrackHeader, type VideoEditTrackQuad, type VideoEditTracker } from '@/core/videoEdit/tracking'
-import { applyVideoEditClipFollow, setVideoEditTrackResults, videoEditClipSourceTimeUs, videoEditTrackerBox, videoEditTrackerMask, videoEditTrackerGeometry, videoEditClipTrackingQuad, readVideoEditTrackReviewHeader, videoEditTrackerResultKey } from './videoEditTrackResults'
+import { applyVideoEditClipFollow, configureVideoEditRecordingTrackReader, setVideoEditTrackResults, videoEditClipSourceTimeUs, videoEditTrackerBox, videoEditTrackerMask, videoEditTrackerGeometry, videoEditClipTrackingQuad, readVideoEditTrackReviewHeader, videoEditTrackerResultKey } from './videoEditTrackResults'
 import { recordingCursorFixture } from '@/tests/recordingCursorFixture'
+import { fetchRecordingCursorPage } from './videoEditRecordingCursorSource'
 import { videoEditEffectMask } from './videoEditEffectMasks'
 
 afterEach(() => { vi.unstubAllGlobals(); setVideoEditTrackResults({}) })
@@ -83,6 +84,7 @@ it('形状跟踪真实 Range + deflate 读取；框与形状结果经同一路�
 // 录屏窗口跟踪没有结果文件，作用区域按录制事件换算窗口框；漏掉这条路时效果会整段消失且不报错。
 it('录屏窗口跟踪做效果作用区域时按录制事件取窗口框', async () => {
   const log = await recordingCursorFixture(4, { windows: true })
+  configureVideoEditRecordingTrackReader(fetchRecordingCursorPage)
   vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(log.bytes.get(url)!.slice().buffer)))
   const tracker: VideoEditTracker = { id: 'win', name: '编辑器窗口', method: 'box', prompts: [{ timeUs: 0, box: [100 / 1920, 100 / 1080, 800 / 1920, 600 / 1080] }], recording: { kind: 'window', windowId: 'editor' } }
   const clip: VideoEditClip = { id: 'clip', itemId: 'video', kind: 'video', name: '录屏', text: '', track: 1, start: 0, duration: 120, sourceInUs: 0, sourceRemainder: { numerator: 0, denominator: 1 }, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1, volume: 0, trackers: [tracker] }

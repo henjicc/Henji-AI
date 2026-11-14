@@ -25,7 +25,7 @@ import { VideoEditReframeDialog } from '../panels/VideoEditReframeDialog'
 import { recordingCursorFixture } from '@/tests/recordingCursorFixture'
 import { toFetchableMediaUrl } from '@/services/imageSource'
 import { fetchRecordingCursorPage } from '../engine/videoEditRecordingCursorSource'
-import { readRecordingPageFile } from './videoEditRecordingClip'
+import { readRecordingPageFile } from './videoEditCodeSourceRuntime'
 vi.mock('../engine/videoEditRenderSession', () => ({ VideoEditRenderSession: class {
   setTracks() {} async updateDocument() {} async present() { return { presented: true, bitmap: { close() {} } } } async dispose() {}
 } }))
@@ -147,7 +147,7 @@ it('录屏窗口跟踪器做重构主体：不查后台跟踪，按事件页换�
   const actual = await vi.importActual<typeof import('../engine/videoEditTrackResults')>('../engine/videoEditTrackResults')
   vi.mocked(videoEditTrackerBox).mockImplementation(actual.videoEditTrackerBox)
   // 测试里分析在主线程同一份模块上跑；换回 Worker 的读取方式（只认可 fetch 地址），验证的是 Worker 那条路。
-  actual.setVideoEditRecordingTrackReader(fetchRecordingCursorPage)
+  actual.configureVideoEditRecordingTrackReader(fetchRecordingCursorPage)
   const served = new Map(pages.map((page, index) => [toFetchableMediaUrl(page.path), log.bytes.get(log.source.pages[index].path)!]))
   vi.stubGlobal('fetch', vi.fn(async (url: string) => served.has(url) ? new Response(served.get(url)!.slice().buffer) : new Response(null, { status: 404 })))
   try {
@@ -155,7 +155,7 @@ it('录屏窗口跟踪器做重构主体：不查后台跟踪，按事件页换�
     expect(status).not.toHaveBeenCalled()
     expect(result.missingFrames).toBe(0)
     expect(owner.document.sequences[1].clips[0].curves!.x!.every(isVideoEditReframeKeyframe)).toBe(true)
-  } finally { vi.unstubAllGlobals(); actual.setVideoEditRecordingTrackReader(readRecordingPageFile) }
+  } finally { vi.unstubAllGlobals(); actual.configureVideoEditRecordingTrackReader(readRecordingPageFile) }
 })
 it('正式公共注册与通用属性回读共同核实重构结果', async () => {
   const { owner, id, input } = await fixture()

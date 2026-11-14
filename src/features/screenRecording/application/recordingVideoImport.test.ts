@@ -1,6 +1,8 @@
 import { expect, it, vi } from 'vitest'
 import { createVideoEditDocument, createVideoEditSequence } from '@/core/videoEdit/document'
 import { createRecordingDocument } from '@/core/screenRecording/document'
+import { CaptureLogCollector } from '@/core/captureLog/collector'
+import type { CaptureLogPage } from '@/core/captureLog/events'
 vi.mock('@/platform', () => ({ getPlatform: vi.fn() }))
 vi.mock('@/features/videoEdit', async () => ({
   ...await import('@/features/videoEdit/application/videoEditRecordingClip'),
@@ -8,7 +10,8 @@ vi.mock('@/features/videoEdit', async () => ({
   createVideoEditProject: vi.fn(), appendVideoEditSequence: vi.fn(), switchVideoEditSequence: vi.fn(), prepareVideoEditRecordingGain: vi.fn(),
 }))
 vi.mock('@/features/navigation', () => ({ openApplicationSurface: vi.fn() }))
-vi.mock('./recordingMovieSources', () => ({ recordingMovieCursorSources: vi.fn(async () => new Map()) }))
+// 默认走真实的事件页读取（没有事件页时返回空表），只在需要时看调用参数；不把这条线程与路径边界整体替换掉。
+vi.mock('./recordingMovieSources', async importOriginal => { const actual = await importOriginal<typeof import('./recordingMovieSources')>(); return { recordingMovieCursorSources: vi.fn(actual.recordingMovieCursorSources) } })
 import { placeRecordingMedia, importRecordingToVideo, recordingItemNames } from './recordingVideoImport'
 import { getPlatform } from '@/platform'
 import { importVideoEditSources, prepareVideoEditRecordingGain } from '@/features/videoEdit'
@@ -249,4 +252,36 @@ it('原生采集录的一个连续画面文件（暂停不在文件里）也问�
   expect(vi.mocked(importVideoEditSources).mock.calls.at(-1)?.[1]).toEqual([{ path: '/s/screen-000000.mp4' }])
   const clips = run.committed().sequences[0].clips
   expect(clips.map(clip => [clip.start, clip.duration, clip.sourceInUs])).toEqual([[0, 180, 0]])
+})
+
+it('有事件页的录制送入剪辑：真实读取事件页，屏幕素材带上指向原事件页磁盘路径的光标来源，片段默认重绘光标并按点击生成缩放', async () => {
+  const recording = { ...createRecordingDocument(), status: 'stopped' as const, sessionId: crypto.randomUUID() }
+  recording.source = { name: '屏幕', options: captureOptionsSchema.parse({ sourceId: 'screen:0:0', width: 1920, height: 1080, fps: 30, bitrate: 12000000 }), cursorEmbedded: false }
+  const pages: CaptureLogPage[] = [], bytes = new Map<string, Uint8Array>()
+  const collector = new CaptureLogCollector({ ownerRef: { kind: 'screen_recording.session', id: recording.sessionId }, sourceDigest: `sha256:${'a'.repeat(64)}`, originUs: 0, id: () => crypto.randomUUID() }, async page => { pages.push(page) }, error => { throw error })
+  collector.start(0)
+  collector.record(1_000_000, { kind: 'click', point: [960, 540], button: 'left', phase: 'down' })
+  collector.record(1_100_000, { kind: 'click', point: [960, 540], button: 'left', phase: 'up' })
+  await collector.stop(5_000_000)
+  for (const [index, page] of pages.entries()) {
+    const data = new TextEncoder().encode(JSON.stringify(page))
+    const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', data))].map(v => v.toString(16).padStart(2, '0')).join('')
+    const path = `D:/录屏/事件/page-${index}-${hash}.capture.json`
+    bytes.set(path, data); recording.eventPages.push({ path, firstSequence: page.seqSpan[0], lastSequence: page.seqSpan[1] })
+  }
+  recording.media = [{ id: 'screen', kind: 'screen', path: '/s/screen-000000.mp4', monoUs: 0, durationUs: 5_000_000 }]
+  const readFile = vi.fn(async (path: string) => bytes.get(path)!)
+  vi.mocked(getPlatform).mockReturnValue({ documents: { readDocument: async () => ({ meta: { kind: 'screen_recording', name: '走查' }, content: recording }), saveDocument: vi.fn() }, system: { fs: { readFile } } } as unknown as ReturnType<typeof getPlatform>)
+  const document = createVideoEditDocument('剪辑'), sequence = createVideoEditSequence('课程')
+  document.sequences.push(sequence)
+  const run = importInto(document, { '/s/screen-000000.mp4': 5 })
+  await importRecordingToVideo('rec', { documentId: document.id, sequenceId: sequence.id, frame: 0 })
+  expect(readFile.mock.calls.map(call => call[0])).toEqual(recording.eventPages.map(page => page.path))
+  const after = run.committed()
+  const cursor = after.media.find(media => media.id === 'item-0')?.recordingCursor
+  // 文档里存的是原事件页的磁盘路径：主线程按文件读取，进渲染 Worker 前才在会话边界换成媒体地址。
+  expect(cursor?.pages.map(page => page.path)).toEqual(recording.eventPages.map(page => page.path))
+  const clip = after.sequences[0].clips.find(value => value.itemId === 'item-0')!
+  expect(clip.effects?.map(effect => effect.builtin?.id)).toEqual(['recording_cursor', 'recording_zoom'])
+  expect((clip.effects![1].builtin as { regions?: unknown[] }).regions?.length).toBeGreaterThan(0)
 })

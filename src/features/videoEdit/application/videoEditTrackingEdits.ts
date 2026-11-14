@@ -7,9 +7,9 @@ import { evaluateVideoEditClip, videoEditClipAnimatedValueSchemas } from '@/core
 import { recordingCursorPointAt, recordingForegroundWindowAt, RECORDING_CURSOR_REGION } from '@/core/videoEdit/recordingTracks'
 import { createLogger } from '@/core/logging'
 import { editVideoSequence, requireVideoEditInstance } from './videoEditService'
-import { applyVideoEditClipFollow, setVideoEditRecordingTrackReader, setVideoEditTrackResults, videoEditClipSourceTimeUs, videoEditClipTracker, videoEditTrackerBox, videoEditTrackerFollowTrack, videoEditTrackerGeometry } from '../engine/videoEditTrackResults'
+import { applyVideoEditClipFollow, setVideoEditTrackResults, videoEditClipSourceTimeUs, videoEditClipTracker, videoEditTrackerBox, videoEditTrackerFollowTrack, videoEditTrackerGeometry } from '../engine/videoEditTrackResults'
 import { VideoEditRecordingCursorSource } from '../engine/videoEditRecordingCursorSource'
-import { readRecordingPageFile } from './videoEditRecordingClip'
+import { readRecordingPageFile } from './videoEditCodeSourceRuntime'
 import { videoEditTrackResults, videoEditTrackingRequest, waitVideoEditTrackingDefinitions } from './videoEditTracking'
 import type { VideoEditCompositeTarget } from './videoEditCompositing'
 
@@ -84,7 +84,6 @@ export function trackVideoEditMask(target: VideoEditCompositeTarget, effectId: s
   })
 }
 const logger = createLogger('features.videoEdit.tracking')
-setVideoEditRecordingTrackReader(readRecordingPageFile)
 
 /** Read the same ranged result as the render Worker, using a fresh result version. */
 export async function readVideoEditTrackingBox(projectId: string, sequenceId: string, clipId: string, trackerId: string, frame: number) {

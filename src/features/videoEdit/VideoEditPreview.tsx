@@ -76,6 +76,7 @@ import { getVideoEditPlaybackResolution, setVideoEditPlaybackResolution } from '
 import { effectiveVideoEditSpaceDisplay, getVideoEditSpaceDisplay, noteVideoEditSpacePlayback, setVideoEditSpaceDisplay, videoEditSpaceDisplaySimplified } from './application/videoEditSpaceDisplay'
 import { VIDEO_EDIT_SPACE_DISPLAYS, VIDEO_EDIT_SPACE_DISPLAY_LABELS, videoEditCompositionHasSpace, videoEditFinalSpaceDisplay, videoEditFrameHasSpace } from '@/core/videoEdit/spaceDisplay'
 import { flushVideoEditRenderPerformance } from './application/videoEditRenderPerformance'
+import { VIDEO_EDIT_HEADLESS_FRAME_MESSAGE, videoEditFramesComposable } from './application/videoEditHeadlessGuard'
 import { recordVideoEditPlaybackFrame } from './application/videoEditPlaybackStats'
 import { videoEditRenderCacheBusy, readyVideoEditRenderWindows, recordVideoEditProgramRender } from './application/videoEditRenderCache'
 
@@ -285,6 +286,8 @@ function VideoEditPreviewContent({ instance, onError, visible = true, chrome = '
   useEffect(() => {
     const recovering = recoveryPending.current; recoveryPending.current = false
     if (!visible) { releaseVideoEditFirstFrameWait(instance.document.id, 'hidden'); setVideoEditView(instance.document.id, { playing: false }, true); setPreparing(false); setLevels(EMPTY_AUDIO_LEVELS); return }
+    // 无窗口模式关了显卡，建渲染器只会在第一帧以导入纹理失败告终，并按失败重试反复刷日志。
+    if (!videoEditFramesComposable()) { releaseVideoEditFirstFrameWait(instance.document.id, 'headless'); setRenderFailure(VIDEO_EDIT_HEADLESS_FRAME_MESSAGE); return }
     const previousRelease = programReleases.get(instance) ?? Promise.resolve()
     setRenderFailure(null); setEffectFailure(null); setTrustFailure(undefined); setPictureReady(false)
     let pictureShown = false

@@ -26,7 +26,8 @@ import { NativeFrameDiagnostics, type NativeFrameDiagnosticsRequest, type Native
 import { VideoEditBrowserFrames } from './videoEditBrowserFrames'
 import { VideoEditNativeFrames } from './videoEditNativeFrameSource'
 import { VideoEditFrameRouter, type VideoEditDecodeSettings } from './videoEditFrameRouter'
-import { setVideoEditTrackResults, type VideoEditTrackResults } from './videoEditTrackResults'
+import { configureVideoEditRecordingTrackReader, setVideoEditTrackResults, type VideoEditTrackResults } from './videoEditTrackResults'
+import { fetchRecordingCursorPage } from './videoEditRecordingCursorSource'
 import { setVideoEditSmartRegionSegments, type VideoEditSmartRegionSegments } from './videoEditSmartRegionMasks'
 import { readVideoEditTrackingRgb } from './videoEditTrackingPixels'
 import { setVideoEditMaskTimingObserver } from './videoEditEffectMasks'
@@ -39,6 +40,8 @@ import { VideoEditEncoderFailure, VideoEditFrameEncoder, type VideoEditEncodedCh
 import { VideoEditGridCells, type VideoEditGridSurfaces } from './videoEditMulticamGrid'
 
 installVideoEditWorkerErrorReporting(self)
+// 渲染 Worker 收到的录屏事件页是会话边界换好的媒体地址。
+configureVideoEditRecordingTrackReader(fetchRecordingCursorPage)
 // 开发版：Vite 要求整页刷新时也会在 Worker 里调用 location.reload，而 Worker 的 location 没有这个方法，抛出的未捕获异常会中止渲染会话。
 // 页面随即整页刷新、Worker 跟着被换掉，这里什么都不用做。
 // 没有 location 的环境（单元测试里的模拟 Worker）用不到 Vite 客户端，不必补。

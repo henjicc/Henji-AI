@@ -6,7 +6,10 @@ import { testCodeManifest } from '@/core/videoEdit/codeMaterial/sourceTestFixtur
 import { makeVideoEditItemClip } from '@/core/videoEdit/projectItems'
 import { GOLDEN_SCENE_DECLARATION } from '@/core/videoEdit/scene/sceneTestFixtures'
 import { videoEditComposition, type VideoEditSequence } from '@/core/videoEdit/document'
-import type { CaptureEvent } from '@/core/captureLog/events'
+import type { CaptureEvent, CaptureLogPage } from '@/core/captureLog/events'
+import { CaptureLogCollector } from '@/core/captureLog/collector'
+import { recordingCursorPageReference, type RecordingCursorPage } from '@/core/videoEdit/recordingCursor'
+import { getPlatform } from '@/platform/runtime'
 import { createApplicationHarness } from '@/tests/applicationHarness'
 import { installHarnessNativeStorage, uninstallHarnessNativeStorage } from '@/tests/harnessNativeStorage'
 import { testAuthorBundle, testAuthorProgram } from '../engine/videoEditAuthorTestFixtures'
@@ -126,6 +129,36 @@ it('鼠标续放与拼接按录制起点读坐标、按画面宽判距离；prop
     const fixed = parse(await app.requireResult('query_video_edit_review', { ...input, scene: { checks: ['scene_cursor_jump'] } }))
     expect(fixed.records.filter(record => record.kind === 'scene_cursor_jump')).toEqual([])
   } finally { app.dispose() }
+})
+
+// 不替换事件读取：文档里的事件页是磁盘路径，片子检查在主线程按文件读取真实事件页（2d9eae603 那类缺陷在 mock 下看不出来）。
+it('鼠标续放检查在主线程按磁盘路径读取真实事件页，结果与按事件判断一致', async () => {
+  const { owner, input } = await fixture(), app = createApplicationHarness()
+  const ownerRef = { kind: 'screen_recording.document', id: 'recording' }, sourceDigest = `sha256:${'a'.repeat(64)}`
+  const pages: CaptureLogPage[] = []; let next = 0
+  const collector = new CaptureLogCollector({ ownerRef, sourceDigest, originUs: 0, id: () => String(++next) }, async page => { pages.push(page) }, error => { throw error })
+  collector.start(0)
+  for (const item of cursorEvents) if (item.kind === 'cursor') collector.record(item.recordingUs, { kind: 'cursor', point: item.point, shape: 'arrow' })
+  await collector.stop(400_000_000)
+  const files = new Map<string, Uint8Array>(), refs: RecordingCursorPage[] = []
+  for (const [index, page] of pages.entries()) {
+    const data = new TextEncoder().encode(JSON.stringify(page))
+    const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', data)), b => b.toString(16).padStart(2, '0')).join('')
+    const pagePath = `D:/录屏/事件/page-${index}.capture.json`
+    files.set(pagePath, data); refs.push(recordingCursorPageReference(page, pagePath, hash))
+  }
+  editVideoProject(owner.document.id, document => { document = structuredClone(document)
+    for (const media of document.media) media.recordingCursor = { ownerRef, sourceDigest, cursorBakedIn: false, recordingStartUs: 1_000_000, width: 1920, height: 1080, pages: refs }
+    return document
+  })
+  const readFile = vi.spyOn(getPlatform().system.fs, 'readFile').mockImplementation(async filePath => files.get(filePath)!)
+  const fetch = vi.fn(); vi.stubGlobal('fetch', fetch)
+  try {
+    const result = queryVideoEditReviewCapability.outputSchema.parse(await app.requireResult('query_video_edit_review', { ...input, scene: { checks: ['scene_cursor_jump'] } }))
+    expect(result.records.filter(record => record.kind === 'scene_cursor_jump').map(record => record.timeline.fromFrame)).toEqual([9186, 9428])
+    expect(fetch).not.toHaveBeenCalled()
+    expect(new Set(readFile.mock.calls.map(call => call[0]))).toEqual(new Set(refs.map(page => page.path)))
+  } finally { app.dispose(); vi.unstubAllGlobals() }
 })
 
 it('嵌套、修剪与倒放用正式源映射，区间外记录不报；预算超限拒绝且不截断', async () => {

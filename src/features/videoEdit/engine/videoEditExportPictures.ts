@@ -1,5 +1,6 @@
 import type { VideoEditClipFrames, VideoEditDecodedPicture } from './videoEditFrameSource'
 import type { VideoEditGpuFrame } from './videoEditGpuFrame'
+import { VideoEditNativeCallError, videoEditNativeFailureKind, videoEditNativeFailureMessage } from './videoEditNativeFailure'
 
 /**
  * Exact pictures for export (task 2.4). Every video layer of an exported frame shows the exact picture at the layer's
@@ -83,7 +84,8 @@ function covers(picture: ClipPicture | undefined, time: number): boolean {
  */
 function exactReadError(name: string, cause: unknown): Error {
   const prefix = `素材「${name}」`
-  const reason = cause instanceof Error ? cause.message : String(cause)
+  // 原生帧通道的原始失败是主进程写给日志的中文（“原生视频解码服务响应超时（N ms）”），带中文也不是用户语言，按失败类别换说法。
+  const reason = cause instanceof VideoEditNativeCallError ? videoEditNativeFailureMessage(name, videoEditNativeFailureKind(cause)) : cause instanceof Error ? cause.message : String(cause)
   const detail = !/[一-鿿]/.test(reason) ? '解码失败，请确认文件可用，或在素材面板中重新定位源文件。' : reason.startsWith(prefix) ? reason.slice(prefix.length).replace(/^的/, '') : reason
   return new Error(`${prefix}取不到准确的画面：${detail}`, { cause })
 }

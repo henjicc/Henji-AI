@@ -50,10 +50,18 @@ const cacheKey = (result: VideoEditTrackResult): string => `${result.url}\u0000$
 
 /** 录屏事件跟踪：键 → 素材的录制事件与跟踪定义（由算键的地方登记，Worker 内本地）。 */
 const recordingTracks = new Map<string, { source: RecordingCursorSource; tracker: VideoEditTracker }>()
-let recordingEvents = new VideoEditRecordingCursorSource()
+let recordingEventSource: VideoEditRecordingCursorSource | undefined
 const recordingReferences = new Map<string, Promise<{ x: number; y: number; width: number; height: number } | null>>()
-/** 主线程读事件页的方式（Worker 用默认的媒体地址读取）。 */
-export function setVideoEditRecordingTrackReader(reader: RecordingCursorPageReader): void { recordingEvents = new VideoEditRecordingCursorSource(reader); recordingReferences.clear() }
+/**
+ * 每个线程的入口各自声明怎么读录制事件页：Worker 收到的是媒体地址（fetch），主线程收到的是磁盘路径（平台文件读取）。
+ * 不给默认值：漏了声明就在第一次读取时明确报错，而不是悄悄用错读取方式，只在用户那里报“读不到鼠标记录”。
+ */
+export function configureVideoEditRecordingTrackReader(reader: RecordingCursorPageReader): void { recordingEventSource = new VideoEditRecordingCursorSource(reader); recordingReferences.clear() }
+function recordingEvents(): VideoEditRecordingCursorSource {
+  if (recordingEventSource) return recordingEventSource
+  logger.error('录屏跟踪读取前没有声明事件页读取方式：线程入口应调用 configureVideoEditRecordingTrackReader', { event: 'video_edit.tracking.reader_unconfigured' })
+  throw new Error('这段录屏的鼠标记录读取失败，请重启软件；仍然失败请反馈。')
+}
 
 export function setVideoEditTrackResults(value: VideoEditTrackResults): void {
   results = value
@@ -111,18 +119,18 @@ export function videoEditTrackerResultKey(document: Pick<VideoEditComposition, '
 async function recordingBox(entry: { source: RecordingCursorSource; tracker: VideoEditTracker }, timeUs: number): Promise<VideoEditTrackBox | null> {
   const { source, tracker } = entry; const prompt = tracker.prompts[0]; const signal = new AbortController().signal
   const time = timeUs + source.recordingStartUs
-  if (tracker.recording!.kind === 'cursor') return recordingTrackBox(tracker.recording!, prompt, source, { cursor: recordingCursorPointAt(await recordingEvents.window(source, time, 0, signal), time) })
+  if (tracker.recording!.kind === 'cursor') return recordingTrackBox(tracker.recording!, prompt, source, { cursor: recordingCursorPointAt(await recordingEvents().window(source, time, 0, signal), time) })
   const windowId = tracker.recording!.windowId
   const referenceKey = JSON.stringify([source.sourceDigest, windowId, prompt.timeUs])
   let reference = recordingReferences.get(referenceKey)
   if (!reference) {
     const at = prompt.timeUs + source.recordingStartUs
-    reference = recordingEvents.windowEvents(source, at, signal).then(events => recordingWindowBoundsAt(events, at, windowId))
+    reference = recordingEvents().windowEvents(source, at, signal).then(events => recordingWindowBoundsAt(events, at, windowId))
     reference.catch(() => { if (recordingReferences.get(referenceKey) === reference) recordingReferences.delete(referenceKey) })
     recordingReferences.set(referenceKey, reference)
     while (recordingReferences.size > 64) recordingReferences.delete(recordingReferences.keys().next().value as string)
   }
-  return recordingTrackBox(tracker.recording!, prompt, source, { window: recordingWindowBoundsAt(await recordingEvents.windowEvents(source, time, signal), time, windowId), reference: await reference })
+  return recordingTrackBox(tracker.recording!, prompt, source, { window: recordingWindowBoundsAt(await recordingEvents().windowEvents(source, time, signal), time, windowId), reference: await reference })
 }
 
 /** 跟踪器在素材时间 timeUs 的框（相邻帧插值）；还没有结果时 undefined。 */

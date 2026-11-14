@@ -6,8 +6,8 @@ import { RECORDING_CURSOR_EFFECT, type RecordingCursorSource } from '@/core/vide
 import { RECORDING_ZOOM_EFFECT, recordingZoomRegionsIssue, sortRecordingZoomRegions, suggestRecordingZoomRegions, type RecordingZoomRegion } from '@/core/videoEdit/recordingZoom'
 import { RECORDING_FRAME_EFFECT } from '@/core/videoEdit/recordingFrame'
 import { createLogger } from '@/core/logging'
-import { getPlatform } from '@/platform/runtime'
-import { VideoEditRecordingCursorSource, type RecordingCursorPageReader } from '../engine/videoEditRecordingCursorSource'
+import { VideoEditRecordingCursorSource } from '../engine/videoEditRecordingCursorSource'
+import { readRecordingPageFile } from './videoEditCodeSourceRuntime'
 import { editVideoSequence, requireVideoEditInstance, type VideoEditGesture } from './videoEditService'
 import type { VideoEditCompositeTarget } from './videoEditCompositing'
 
@@ -66,15 +66,6 @@ export function setRecordingZoomRegions(target: VideoEditCompositeTarget, region
   }, gesture)
 }
 
-/**
- * 主线程读录屏事件页：文档里存的是磁盘路径，主线程经平台文件读取直接读；
- * 渲染 Worker 只能 fetch，由渲染会话边界把路径换成媒体地址。
- */
-export const readRecordingPageFile: RecordingCursorPageReader = async (page, signal) => {
-  const bytes = await getPlatform().system.fs.readFile(page.path, { maxBytes: 2 * 1024 * 1024 })
-  signal.throwIfAborted()
-  return new Uint8Array(bytes)
-}
 /** All pointer events of a recording, read on the main thread with the same integrity checks as the render Worker. */
 export async function readRecordingClipEvents(source: RecordingCursorSource, signal: AbortSignal): Promise<CaptureEvent[]> {
   return new VideoEditRecordingCursorSource(readRecordingPageFile).range(source, -Infinity, Infinity, signal)
