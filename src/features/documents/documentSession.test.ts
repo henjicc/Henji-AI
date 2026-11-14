@@ -241,3 +241,32 @@ describe('别处更新过的文件', () => {
     await session.discard()
   })
 })
+
+describe('助手事务撞上别处更新', () => {
+  it('不覆盖磁盘版本：按磁盘重新载入，事务的改动作废并报冲突', async () => {
+    const { commands, session, tool, meta } = await openWithTool()
+    commands.modifyExternally(meta.id, { items: ['命令行写的'] })
+    tool.edit('助手这次的')
+    await expect(session.flushOrReloadOnConflict()).rejects.toThrow('已在别处被修改')
+    expect(commands.stored(meta.id)?.content).toEqual({ items: ['命令行写的'] })
+    expect(tool.content).toEqual({ items: ['命令行写的'] })
+    expect(session.getState()).toMatchObject({ status: 'saved', dirty: false, externalOverwrite: null })
+    await session.discard()
+  })
+})
+
+describe('助手事务持有期间的自动保存', () => {
+  it('撞上冲突不覆盖，留到事务保存时按磁盘重新载入', async () => {
+    const { commands, session, tool, meta } = await openWithTool()
+    const release = session.holdConflictsForTransaction()
+    commands.modifyExternally(meta.id, { items: ['命令行写的'] })
+    tool.edit('助手这次的')
+    await vi.advanceTimersByTimeAsync(800)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(commands.stored(meta.id)?.content).toEqual({ items: ['命令行写的'] })
+    await expect(session.flushOrReloadOnConflict()).rejects.toThrow('已在别处被修改')
+    release()
+    expect(tool.content).toEqual({ items: ['命令行写的'] })
+    await session.discard()
+  })
+})

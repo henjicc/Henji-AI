@@ -12,11 +12,11 @@ import { createIncrementalSchemaParser } from '@/core/incrementalSchemaParse'
 import { jsonEqual } from '@/core/jsonEqual'
 import type { AudioEditProjectDocument, AudioEditSourceMetadata } from '@/core/audioEdit/types'
 import { assertApplicationWritesAllowed } from '@/core/applicationLifecycle/applicationWriteBarrier'
-import { ApplicationPersistenceFailure, type ApplicationPersistenceParticipant, type ApplicationPersistenceResolver } from '@/core/application-control/execution/persistence'
+import { ApplicationConflictError, ApplicationPersistenceFailure, type ApplicationPersistenceParticipant, type ApplicationPersistenceResolver } from '@/core/application-control/execution/persistence'
 import type { DocumentContainerRef, DocumentTarget } from '@/core/documents/types'
 import { createLogger } from '@/core/logging'
 import { notifyUser } from '@/contexts/NotificationContext'
-import { isDocumentServiceError, toError } from '@/features/documents/documentErrors'
+import { DocumentSessionConflictError, DOCUMENT_CHANGED_ELSEWHERE_RELOADED, isDocumentServiceError, toError } from '@/features/documents/documentErrors'
 import type { DocumentSession } from '@/features/documents/documentSession'
 import { getDocumentSessionRegistry, type DocumentSessionRegistry } from '@/features/documents/documentSessionRegistry'
 import { UNDO_HISTORY_STEPS } from '@/core/undoHistory'
@@ -494,11 +494,12 @@ export function undoAudioEditProject(id: string, redo = false): void {
 }
 
 /** 保存屏障：写完当前全部修改（会话的 flush）。失败时修改保留在实例里，会话按退避自动重试。 */
-export async function flushAudioEditProject(id: string): Promise<void> {
+/** reloadOnConflict：助手事务开始时口播没有未保存修改，撞上别处的新版本就按磁盘重新载入、不覆盖（见 flushOrReloadOnConflict）。 */
+export async function flushAudioEditProject(id: string, options: { reloadOnConflict?: boolean } = {}): Promise<void> {
   const record = records.get(id)
   if (!record || record.instance.session.isEnded) return
   try {
-    await record.instance.session.flush()
+    await (options.reloadOnConflict ? record.instance.session.flushOrReloadOnConflict() : record.instance.session.flush())
   } finally {
     syncFromSession(record)
   }
@@ -612,14 +613,23 @@ export const resolveAudioEditPersistenceParticipants: ApplicationPersistenceReso
       const { instance } = record
       const initial = instance.document
       const initialVersion = instance.version
+      const reloadOnConflict = !instance.session.dirty
+      const releaseHold = reloadOnConflict ? instance.session.holdConflictsForTransaction() : () => undefined
+      let reloaded = false
       instance.batchDepth += 1
       return {
-        async confirm() { try { await flushAudioEditProject(id) } catch (error) {
+        async confirm() { try { await flushAudioEditProject(id, { reloadOnConflict }) } catch (error) {
+          if (error instanceof DocumentSessionConflictError && reloadOnConflict) {
+            reloaded = true
+            throw new ApplicationConflictError(DOCUMENT_CHANGED_ELSEWHERE_RELOADED('这份口播'), { cause: error })
+          }
           throw new ApplicationPersistenceFailure('口播修改已保留，但保存失败。请重试保存，不要重复剪辑。', { memoryState: 'modified', persistenceState: 'unconfirmed', stage: 'document', recovery: { capabilityId: 'retry_audio_edit_save', target: { kind: 'audio_edit.document', id }, replayMutation: false } }, error)
         } },
         release() {
+          releaseHold()
           instance.batchDepth -= 1
-          if (instance.version !== initialVersion && !instance.batchDepth && hasUndoableChanges(initial, instance.document)) { instance.past = [...instance.past.slice(1 - UNDO_LIMIT), initial]; publish(instance) }
+          // 重新载入后撤销历史从磁盘版本重新开始，不能把过期的事务前内容放回去
+          if (!reloaded && instance.version !== initialVersion && !instance.batchDepth && hasUndoableChanges(initial, instance.document)) { instance.past = [...instance.past.slice(1 - UNDO_LIMIT), initial]; publish(instance) }
         },
       }
     } }

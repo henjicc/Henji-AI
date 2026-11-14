@@ -982,11 +982,12 @@ export function setVideoEditProjectView(id: string, values: Partial<VideoEditPro
 }
 const VIDEO_EDIT_SAVE_FAILED = '剪辑未能保存到磁盘：修改仍保留在当前剪辑，并会自动重试。请检查项目文件夹是否只读、被其他程序占用或磁盘空间不足。'
 /** 保存屏障：写完当前全部修改（文档会话的 flush）。失败时修改保留，会话按退避自动重试。 */
-export async function saveVideoEdit(id: string): Promise<void> {
+/** reloadOnConflict：助手事务开始时剪辑没有未保存修改，撞上别处的新版本就按磁盘重新载入、不覆盖（见 flushOrReloadOnConflict）。 */
+export async function saveVideoEdit(id: string, options: { reloadOnConflict?: boolean } = {}): Promise<void> {
   const instance = requireVideoEditInstance(id)
   // 参数调整进行中时等它结束再写，保存的是调整后的结果
   for (let gesture = gestures.get(instance); gesture; gesture = gestures.get(instance)) await gesture.finished
-  try { await instance.session.flush() } catch (error) {
+  try { await (options.reloadOnConflict ? instance.session.flushOrReloadOnConflict() : instance.session.flush()) } catch (error) {
     // 原始文件系统原因进日志；用户只需要知道修改保留了、该检查什么
     logger.error('剪辑保存失败', error, { event: 'video_edit.save.failed', context: { projectId: id } })
     throw new Error(VIDEO_EDIT_SAVE_FAILED, { cause: error })

@@ -91,6 +91,8 @@ export class DocumentSession {
   private suspended = 0
   private queue: Promise<void> = Promise.resolve()
   private conflictPrompt: Promise<void> | null = null
+  /** 助手事务持有期间，自动保存撞上冲突不覆盖，留给事务保存时按磁盘重新载入。 */
+  private transactionHolds = 0
   private externalOverwrite: DocumentExternalOverwrite | null = null
   private closing: Promise<void> | null = null
   private ended = false
@@ -219,6 +221,36 @@ export class DocumentSession {
       if (!this.dirty && this.status !== 'conflict') return
     }
     throw new DocumentSessionBusyError(this.meta.name)
+  }
+
+  /**
+   * 助手事务的保存：事务开始时没有未保存修改，内存里的改动就只有这次事务的，而它是在过期内容上算出来的。
+   * 撞上别处（命令行助手、另一个实例）写入的新版本时不覆盖：按磁盘重新载入，这次事务的改动随之作废，
+   * 抛 DocumentSessionConflictError 让事务如实报“没有生效”。用户自己的未保存修改不走这里，仍按应用里的内容保存并提示。
+   */
+  holdConflictsForTransaction(): () => void {
+    this.transactionHolds += 1
+    let released = false
+    return () => {
+      if (released) return
+      released = true
+      this.transactionHolds -= 1
+      // 事务没走到重新载入（例如读盘失败）时冲突还挂着，交回自动保存的冲突处理，免得之后的修改一直不落盘
+      if (!this.transactionHolds && !this.ended && this.status === 'conflict') void this.promptConflict().catch(() => undefined)
+    }
+  }
+
+  async flushOrReloadOnConflict(): Promise<void> {
+    try {
+      await this.flush({ promptOnConflict: false })
+    } catch (error) {
+      if (!(error instanceof DocumentSessionConflictError) || this.ended) throw error
+      await this.reload()
+      this.logger.warn('文件已被别处更新，助手这次的修改没有保存，已按磁盘版本重新载入', {
+        event: 'documents.session.conflict.reloaded', context: { revision: this.meta.revision },
+      })
+      throw error
+    }
   }
 
   /**
@@ -433,7 +465,7 @@ export class DocumentSession {
         this.logger.warn('文档已在别处被修改', { event: 'documents.session.save.conflict', error })
         this.emit()
         // 自动保存与 flush 共用恢复过程，失败仍保留脏状态。
-        if (promptOnConflict) void this.promptConflict().catch(() => undefined)
+        if (promptOnConflict && !this.transactionHolds) void this.promptConflict().catch(() => undefined)
       } else {
         this.status = 'failed'
         this.retryDelay = this.retryDelay

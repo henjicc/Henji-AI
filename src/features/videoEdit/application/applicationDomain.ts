@@ -51,7 +51,8 @@ import { colorGradeExportReceipt } from '@/services/colorGradeExport'
 import { exportVideoEditColorGrade } from './videoEditColorGradeExport'
 import { analyzeVideoEditColorGrade, observeVideoEditColor } from './videoEditColorGrade'
 import { handleVideoEditSubtitleCapability } from './videoEditSubtitleCapability'
-import { ApplicationPersistenceFailure, type ApplicationPersistenceParticipant } from '@/core/application-control/execution/persistence'
+import { ApplicationConflictError, ApplicationPersistenceFailure, type ApplicationPersistenceParticipant } from '@/core/application-control/execution/persistence'
+import { DocumentSessionConflictError, DOCUMENT_CHANGED_ELSEWHERE_RELOADED } from '@/features/documents/documentErrors'
 import { createVideoEditRegistrations } from './videoEditReflection'
 import { handleVideoEditSceneCapability } from './videoEditSceneCapability'
 import { handleVideoEditWorkspaceTransfer } from './videoEditWorkspaceTransfer'
@@ -421,9 +422,13 @@ export const videoEditApplicationDomain: ApplicationDomainModule = {
       if (existing) return existing
       const participant: ApplicationPersistenceParticipant = { key: videoEditPersistenceKey(id), begin() {
       const batch = beginVideoEditCommitBatch(id)
+      const reloadOnConflict = !owner.session.dirty
+      const releaseHold = reloadOnConflict ? owner.session.holdConflictsForTransaction() : () => undefined
       return bindVideoEditCommitBatch({
-        async confirm() { endVideoEditCommitBatch(batch); try { await saveVideoEdit(id) } catch (error) { throw new ApplicationPersistenceFailure('修改已保留但未保存。请重试保存，不要再次执行剪辑。', { memoryState: 'modified', persistenceState: 'unconfirmed', stage: 'document', recovery: { capabilityId: 'save_video_edit', target: { kind: 'video_edit.document', id }, replayMutation: false } }, error) } },
-        release() { endVideoEditCommitBatch(batch) },
+        async confirm() { endVideoEditCommitBatch(batch); try { await saveVideoEdit(id, { reloadOnConflict }) } catch (error) {
+          if (reloadOnConflict && error instanceof Error && error.cause instanceof DocumentSessionConflictError) throw new ApplicationConflictError(DOCUMENT_CHANGED_ELSEWHERE_RELOADED('这份剪辑'), { cause: error })
+          throw new ApplicationPersistenceFailure('修改已保留但未保存。请重试保存，不要再次执行剪辑。', { memoryState: 'modified', persistenceState: 'unconfirmed', stage: 'document', recovery: { capabilityId: 'save_video_edit', target: { kind: 'video_edit.document', id }, replayMutation: false } }, error) } },
+        release() { releaseHold(); endVideoEditCommitBatch(batch) },
       }, batch)
       } }
       persistenceOwners.set(owner, participant)
