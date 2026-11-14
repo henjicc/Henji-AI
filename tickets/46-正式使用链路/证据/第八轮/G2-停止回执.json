@@ -1,0 +1,45 @@
+{
+ "ms": 4353,
+ "isError": false,
+ "structured": {
+  "ok": true,
+  "operationId": "6a350953-e57f-4b56-80dc-86232ff6ef0e",
+  "executionState": "completed",
+  "verificationState": "verified",
+  "result": {
+   "ok": true,
+   "data": {
+    "resultRef": {
+     "kind": "screen_recording.session",
+     "id": "be15e165-a368-4830-85e7-dbc6d62ae268"
+    },
+    "verified": true,
+    "message": "已停止并保存，导入剪辑素材库 2 项：第八轮-边录边剪2 · 屏幕、第八轮-边录边剪2 · 系统声音；接在序列「主序列」录屏轨末尾（第 14261–15205 帧），画面与声音链接成一组。不要再导入。",
+    "imported": {
+     "documentRef": {
+      "kind": "video_edit.document",
+      "id": "f95ee64a-0a44-45ba-8853-4ac283d8df96"
+     },
+     "sequenceRef": {
+      "kind": "video_edit.sequence",
+      "id": "f95ee64a-0a44-45ba-8853-4ac283d8df96:67c66e01-f7cb-4981-a810-e74cfa49d854"
+     },
+     "itemRefs": [
+      {
+       "kind": "video_edit.item",
+       "id": "f95ee64a-0a44-45ba-8853-4ac283d8df96:8f202631-3fbd-4d1a-95bd-c3a93596b75f"
+      },
+      {
+       "kind": "video_edit.item",
+       "id": "f95ee64a-0a44-45ba-8853-4ac283d8df96:27a01c32-2c13-47a4-9df1-c5109b9bdbf4"
+      }
+     ]
+    },
+    "verification": {
+     "verified": true,
+     "condition": "已停止并保存，导入剪辑素材库 2 项：第八轮-边录边剪2 · 屏幕、第八轮-边录边剪2 · 系统声音；接在序列「主序列」录屏轨末尾（第 14261–15205 帧），画面与声音链接成一组。不要再导入。"
+    }
+   }
+  }
+ }
+}

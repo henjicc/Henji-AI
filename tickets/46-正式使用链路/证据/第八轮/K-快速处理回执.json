@@ -1,0 +1,38 @@
+{
+ "ms": 2775,
+ "isError": false,
+ "structured": {
+  "ok": true,
+  "operationId": "96e1b572-d11c-4bec-9859-a0be4c5f5785",
+  "executionState": "completed",
+  "verificationState": "verified",
+  "result": {
+   "ok": true,
+   "data": {
+    "resultRef": {
+     "kind": "audio_edit.document",
+     "id": "8b270d95-503d-4439-8ac9-de1dc8f7ebb3"
+    },
+    "message": "已去掉 56 处重念、删除 75 处与减弱 50 处呼吸、把 142 处字间气口清成静音、压缩 2 处停顿、删掉 0 个语气词，缩短 229.1 秒；没有待确认的重念。可用回执的 undoRef 整批撤销。这只是起点：请逐处复核接缝、呼吸与语气词。",
+    "verified": true,
+    "shortenedMs": 229075,
+    "editedSeconds": 375.53,
+    "quickProcess": {
+     "retakesRemoved": 56,
+     "breathsRemoved": 75,
+     "breathsAttenuated": 50,
+     "gapsSilenced": 142,
+     "pausesCompressed": 2,
+     "fillersRemoved": 0,
+     "retakesToDecide": 0,
+     "retakesToCheck": 0
+    },
+    "undoRef": "audio_edit.step:89d93d4f-3058-4306-9bf1-21f96260ecf5",
+    "verification": {
+     "verified": true,
+     "condition": "已从口播持久存储回读并核对实际剪辑与字幕。"
+    }
+   }
+  }
+ }
+}

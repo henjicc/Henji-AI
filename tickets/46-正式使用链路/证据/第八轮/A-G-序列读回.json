@@ -1,0 +1,667 @@
+{
+ "ms": 1406,
+ "isError": false,
+ "structured": {
+  "ok": true,
+  "data": {
+   "root": {
+    "ref": {
+     "kind": "video_edit.sequence",
+     "id": "f95ee64a-0a44-45ba-8853-4ac283d8df96:67c66e01-f7cb-4981-a810-e74cfa49d854"
+    },
+    "properties": {
+     "name": "主序列",
+     "width": 3840,
+     "height": 2160,
+     "frame_rate": {
+      "numerator": 60,
+      "denominator": 1
+     },
+     "pixel_aspect_ratio": {
+      "numerator": 1,
+      "denominator": 1
+     },
+     "sample_rate": 48000,
+     "channels": 2,
+     "caption_track_enabled": true,
+     "caption_track_locked": false,
+     "motion_blur": true,
+     "frame_blend": false,
+     "final_renderer": "realtime",
+     "path_trace_samples": 64,
+     "space_bloom": 0,
+     "space_bloom_threshold": 0.75,
+     "space_bloom_radius": 0.45,
+     "space_ambient_occlusion": 0,
+     "space_reflections": 0,
+     "space_global_illumination": 0,
+     "space_exposure": 0,
+     "space_tone_mapping": "neutral",
+     "space_environment": "none",
+     "space_environment_intensity": 1,
+     "space_environment_rotation": 0,
+     "space_default_lighting": "auto"
+    },
+    "children": {
+     "video_edit.clip": [
+      {
+       "ref": {
+        "kind": "video_edit.clip",
+        "id": "f95ee64a-0a44-45ba-8853-4ac283d8df96:47adf95e-661d-4e7f-b0c4-712e257ebae8"
+       },
+       "properties": {
+        "item_id": "98398954-9cda-496f-9846-72b8eae62c76",
+        "name": "第八轮-A · 屏幕",
+        "kind": "video",
+        "track": 1,
+        "effects": [
+         {
+          "id": "c2c51378-32e3-4810-9b2a-b6b5df3b50cf",
+          "name": "录制光标",
+          "enabled": true,
+          "amount": 1,
+          "builtin": {
+           "id": "recording_cursor",
+           "params": {
+            "smoothing": 0,
+            "size": 1.4,
+            "style": "light"
+           }
+          }
+         },
+         {
+          "id": "20610f7e-19a9-4499-8cf2-10a0d73f9294",
+          "name": "自动缩放",
+          "enabled": true,
+          "amount": 1,
+          "builtin": {
+           "id": "recording_zoom",
+           "params": {},
+           "regions": []
+          }
+         }
+        ],
+        "link_id": "473906d4-452a-4a7e-86bf-1c638d96fba3",
+        "source_component": "video",
+        "start": 0,
+        "duration": 2943,
+        "source_in_us": 2326277,
+        "effect_ids": [
+         "c2c51378-32e3-4810-9b2a-b6b5df3b50cf",
+         "20610f7e-19a9-4499-8cf2-10a0d73f9294"
+        ]
+       }
+      },
+      {
+       "ref": {
+        "kind": "video_edit.clip",
+        "id": "f95ee64a-0a44-45ba-8853-4ac283d8df96:7c21d51e-fea5-4b2f-b52c-d8f394cc6ecb"
+       },
+       "properties": {
+        "item_id": "84791a60-f962-4717-bf22-aa49a736bb92",
+        "name": "第八轮-A · 系统声音",
+        "kind": "audio",
+        "track": 0,
+        "link_id": "473906d4-452a-4a7e-86bf-1c638d96fba3",
+        "source_component": "all",
+        "start": 0,
+        "duration": 1010,
+        "source_in_us": 2326277
+       }
+      },
+      {
+       "ref": {
+        "kind": "video_edit.clip",
+        "id": "f95ee64a-0a44-45ba-8853-4ac283d8df96:db5bd414-1041-4da0-9a6e-55917a73f7a6"
+       },
+       "properties": {
+        "item_id": "84791a60-f962-4717-bf22-aa49a736bb92",
+        "name": "第八轮-A · 系统声音",
+        "kind": "audio",
+        "track": 0,
+        "link_id": "473906d4-452a-4a7e-86bf-1c638d96fba3",
+        "source_component": "all",
+        "start": 1019,
+        "duration": 1924,
+        "source_in_us": 19307897
+       }
+      },
+      {
+       "ref": {
+        "kind": "video_edit.clip",
+        "id": "f95ee64a-0a44-45ba-8853-4ac283d8df96:f6e29b46-b15e-4d42-8be9-c6150fca6468"
+       },
+       "properties": {
+        "item_id": "4cc1a837-5b12-413c-8b19-9ef97233d109",
+        "name": "第八轮-边录边剪",
+        "kind": "video",
+        "track": 1,
+        "effects": [
+         {
+          "id": "6e7a04ad-23b8-4ab6-aeee-bb67a8a3f1e3",
+          "name": "录制光标",
+          "enabled": true,
+          "amount": 1,
+          "builtin": {
+           "id": "recording_cursor",
+           "params": {
+            "smoothing": 0,
+            "size": 1.4,
+            "style": "light"
+           }
+          }
+         },
+         {
+          "id": "97cd4f4f-0008-4aa9-a8f1-7ee056b9ee38",
+          "name": "自动缩放",
+          "enabled": true,
+          "amount": 1,
+          "builtin": {
+           "id": "recording_zoom",
+           "params": {},
+           "regions": []
+          }
+         }
+        ],
+        "link_id": "95e7091e-112f-48c9-af11-ffb755e8c098",
+        "source_component": "video",
+        "start": 2943,
+        "duration": 11318,
+        "source_in_us": 2476156,
+        "effect_ids": [
+         "6e7a04ad-23b8-4ab6-aeee-bb67a8a3f1e3",
+         "97cd4f4f-0008-4aa9-a8f1-7ee056b9ee38"
+        ]
+       }
+      },
+      {
+       "ref": {
+        "kind": "video_edit.clip",
+        "id": "f95ee64a-0a44-45ba-8853-4ac283d8df96:27566710-ff13-4b53-801e-40f904a320a8"
+       },
+       "properties": {
+        "item_id": "3245eca7-f0ac-4a5c-af51-887fd38ea150",
+        "name": "第八轮-边录边剪 · 系统声音",
+        "kind": "audio",
+        "track": 0,
+        "link_id": "95e7091e-112f-48c9-af11-ffb755e8c098",
+        "source_component": "all",
+        "start": 2943,
+        "duration": 11318,
+        "source_in_us": 2875740
+       }
+      },
+      {
+       "ref": {
+        "kind": "video_edit.clip",
+        "id": "f95ee64a-0a44-45ba-8853-4ac283d8df96:11ef7b93-2711-4267-8d04-e3be285b8067"
+       },
+       "properties": {
+        "item_id": "8f202631-3fbd-4d1a-95bd-c3a93596b75f",
+        "name": "第八轮-边录边剪2",
+        "kind": "video",
+        "track": 1,
+        "effects": [
+         {
+          "id": "77b0857c-2085-4d01-b5c5-d2408b4c1069",
+          "name": "录制光标",
+          "enabled": true,
+          "amount": 1,
+          "builtin": {
+           "id": "recording_cursor",
+           "params": {
+            "smoothing": 0,
+            "size": 1.4,
+            "style": "light"
+           }
+          }
+         },
+         {
+          "id": "68cc6d91-21c2-4411-845d-5bc011315b5a",
+          "name": "自动缩放",
+          "enabled": true,
+          "amount": 1,
+          "builtin": {
+           "id": "recording_zoom",
+           "params": {},
+           "regions": []
+          }
+         }
+        ],
+        "link_id": "56581897-38cf-4f00-baa3-bb8cab8b8a02",
+        "source_component": "video",
+        "start": 14261,
+        "duration": 944,
+        "source_in_us": 2459006,
+        "effect_ids": [
+         "77b0857c-2085-4d01-b5c5-d2408b4c1069",
+         "68cc6d91-21c2-4411-845d-5bc011315b5a"
+        ]
+       }
+      },
+      {
+       "ref": {
+        "kind": "video_edit.clip",
+        "id": "f95ee64a-0a44-45ba-8853-4ac283d8df96:53ccd18c-d2b2-43bc-af67-3e4f981612a0"
+       },
+       "properties": {
+        "item_id": "27a01c32-2c13-47a4-9df1-c5109b9bdbf4",
+        "name": "第八轮-边录边剪2 · 系统声音",
+        "kind": "audio",
+        "track": 0,
+        "link_id": "56581897-38cf-4f00-baa3-bb8cab8b8a02",
+        "source_component": "all",
+        "start": 14261,
+        "duration": 447,
+        "source_in_us": 2459006
+       }
+      },
+      {
+       "ref": {
+        "kind": "video_edit.clip",
+        "id": "f95ee64a-0a44-45ba-8853-4ac283d8df96:261e3bb5-7701-4356-b901-b2c6d4251d39"
+       },
+       "properties": {
+        "item_id": "27a01c32-2c13-47a4-9df1-c5109b9bdbf4",
+        "name": "第八轮-边录边剪2 · 系统声音",
+        "kind": "audio",
+        "track": 0,
+        "link_id": "56581897-38cf-4f00-baa3-bb8cab8b8a02",
+        "source_component": "all",
+        "start": 14716,
+        "duration": 489,
+        "source_in_us": 10041669
+       }
+      },
+      {
+       "ref": {
+        "kind": "video_edit.clip",
+        "id": "f95ee64a-0a44-45ba-8853-4ac283d8df96:56ebefdf-c387-4211-95ac-bf35965b165b"
+       },
+       "properties": {
+        "item_id": "34f4bfa3-5067-48ab-af52-14237e8aec91",
+        "name": "第八轮-边录边剪3",
+        "kind": "video",
+        "track": 1,
+        "effects": [
+         {
+          "id": "082bc045-a04a-415d-9b37-6cbdde6eb910",
+          "name": "录制光标",
+          "enabled": true,
+          "amount": 1,
+          "builtin": {
+           "id": "recording_cursor",
+           "params": {
+            "smoothing": 0,
+            "size": 1.4,
+            "style": "light"
+           }
+          }
+         },
+         {
+          "id": "cfc2f00f-509a-4a25-8508-d02e2c0b30cd",
+          "name": "自动缩放",
+          "enabled": true,
+          "amount": 1,
+          "builtin": {
+           "id": "recording_zoom",
+           "params": {},
+           "regions": []
+          }
+         }
+        ],
+        "link_id": "7b4b8cd2-68c3-433e-9e67-1bfd6a86d0a3",
+        "source_component": "video",
+        "start": 15205,
+        "duration": 712,
+        "source_in_us": 2396028,
+        "effect_ids": [
+         "082bc045-a04a-415d-9b37-6cbdde6eb910",
+         "cfc2f00f-509a-4a25-8508-d02e2c0b30cd"
+        ]
+       }
+      },
+      {
+       "ref": {
+        "kind": "video_edit.clip",
+        "id": "f95ee64a-0a44-45ba-8853-4ac283d8df96:7899bb3b-ac4e-49d8-8240-b43c5e6d6ed6"
+       },
+       "properties": {
+        "item_id": "681a7d83-4196-4e27-8c87-e6b98babf35d",
+        "name": "第八轮-边录边剪3 · 系统声音",
+        "kind": "audio",
+        "track": 0,
+        "link_id": "7b4b8cd2-68c3-433e-9e67-1bfd6a86d0a3",
+        "source_component": "all",
+        "start": 15205,
+        "duration": 712,
+        "source_in_us": 2833126
+       }
+      }
+     ],
+     "video_edit.track": [
+      {
+       "ref": {
+        "kind": "video_edit.track",
+        "id": "f95ee64a-0a44-45ba-8853-4ac283d8df96:566bf45a-35f4-4df4-8951-cbd424c8a7cf"
+       },
+       "properties": {
+        "name": "系统声音",
+        "index": 0,
+        "kind": "audio"
+       }
+      },
+      {
+       "ref": {
+        "kind": "video_edit.track",
+        "id": "f95ee64a-0a44-45ba-8853-4ac283d8df96:5b444894-bf59-4400-836c-d1548de8748e"
+       },
+       "properties": {
+        "name": "屏幕",
+        "index": 1,
+        "kind": "video"
+       }
+      }
+     ]
+    }
+   },
+   "types": {
+    "video_edit.sequence": {
+     "title": "剪辑序列",
+     "description": "剪辑序列：新项目没有序列。在 video_edit.document 下用通用集合创建，name 必填，省略规格使用已保存的默认值（初始 1920×1080、60 帧）。创建首条序列后自动成为当前序列；可整体撤销。删除时连同内容一并删除，被嵌套引用时拒绝。",
+     "create": {
+      "under": [
+       "video_edit.document"
+      ],
+      "required": {
+       "name": "string"
+      }
+     },
+     "removable": true,
+     "properties": {
+      "name": "名称｜string",
+      "width": "宽度｜integer 16–8192",
+      "height": "高度｜integer 16–8192",
+      "frame_rate": "帧率｜{numerator: integer, denominator: integer}",
+      "pixel_aspect_ratio": "像素长宽比｜{numerator: integer, denominator: integer}",
+      "sample_rate": "音频采样率｜44100 | 48000",
+      "channels": "声道数量｜1 | 2",
+      "caption_track_enabled": "字幕轨道显示｜boolean",
+      "caption_track_locked": "字幕轨道锁定｜boolean",
+      "motion_blur": "运动模糊｜boolean",
+      "frame_blend": "帧混合｜boolean",
+      "final_renderer": "三维成片渲染器｜\"realtime\" | \"pathTrace\"",
+      "path_trace_samples": "路径追踪采样数｜integer 16–4096",
+      "space_bloom": "三维泛光｜number 0–3",
+      "space_bloom_threshold": "三维泛光阈值｜number 0–2",
+      "space_bloom_radius": "三维泛光范围｜number 0–1",
+      "space_ambient_occlusion": "三维环境光遮蔽｜number 0–1",
+      "space_reflections": "三维屏幕反射｜number 0–1",
+      "space_global_illumination": "三维全局光照｜number 0–1",
+      "space_exposure": "三维曝光｜number -5–5",
+      "space_tone_mapping": "三维色调映射｜\"neutral\" | \"agx\" | \"aces\"",
+      "space_environment": "三维环境光｜\"none\" | \"studioNeutral\" | \"studioWarm\" | \"studioCool\" | \"rim\" | \"sky\"",
+      "space_environment_intensity": "三维环境光强度｜number 0–4",
+      "space_environment_rotation": "三维环境光旋转｜number -180–180",
+      "space_default_lighting": "三维缺省布光｜\"auto\" | \"off\""
+     },
+     "unset": [
+      "spatial_camera",
+      "style_id",
+      "multicam",
+      "bin_id",
+      "label",
+      "transitions",
+      "master",
+      "multicam_playback",
+      "transcript",
+      "text_silences"
+     ]
+    },
+    "video_edit.track": {
+     "title": "序列轨道",
+     "create": {
+      "under": [
+       "video_edit.sequence"
+      ],
+      "required": {
+       "kind": "\"video\" | \"audio\""
+      }
+     },
+     "removable": true,
+     "properties": {
+      "name": "名称｜string",
+      "index": "轨道号｜integer ≥0｜只读",
+      "kind": "类型｜\"video\" | \"audio\"｜只读",
+      "locked": "锁定｜boolean",
+      "enabled": "输出启用｜boolean",
+      "muted": "静音｜boolean",
+      "solo": "独奏｜boolean",
+      "sync_locked": "同步波纹编辑｜boolean"
+     },
+     "shared": {
+      "locked": false,
+      "enabled": true,
+      "muted": false,
+      "solo": false,
+      "sync_locked": true
+     },
+     "unset": [
+      "volume_db",
+      "pan",
+      "effects"
+     ],
+     "onRequest": [
+      "height"
+     ]
+    },
+    "video_edit.clip": {
+     "title": "剪辑片段",
+     "create": {
+      "under": [
+       "video_edit.sequence"
+      ],
+      "required": {
+       "item_id": "string"
+      }
+     },
+     "removable": true,
+     "properties": {
+      "depth": "靠近或远离画面平面｜number",
+      "rotation_x": "上下倾斜｜number",
+      "rotation_y": "左右转向｜number",
+      "anchor_depth": "深度轴心｜number",
+      "space_emission": "发光强度｜number 0–10",
+      "space_thickness": "厚度｜number 0–1",
+      "space_lit": "受光｜boolean",
+      "space_material": "三维材质｜{preset: \"picture\"} | {preset: \"matte\", roughness?: number} | {preset: \"metal\", roughness?: number} | {preset: \"thin-fil…",
+      "space_bevel": "倒角｜number 0–0.5",
+      "space_cast_shadow": "投下阴影｜boolean",
+      "space_receive_shadow": "接收阴影｜boolean",
+      "light_kind": "灯光种类｜\"directional\" | \"spot\" | \"point\" | \"area\"",
+      "light_color": "灯光颜色｜string",
+      "light_intensity": "灯光亮度｜number 0–50",
+      "light_cast_shadow": "灯光投影｜boolean",
+      "light_softness": "阴影软硬｜number 0–1",
+      "light_angle": "聚光张角｜number 1–170",
+      "snap_to_beat": "吸附到节拍｜boolean",
+      "item_id": "素材项｜string",
+      "name": "名称｜string",
+      "kind": "类型｜\"video\" | \"audio\" | \"image\" | \"text\" | \"code\" | \"graphic\" | \"adjustment\" | \"sequence\" | \"light\"",
+      "track": "轨道｜integer ≥0",
+      "effects": "效果链｜{id: string, name: string, enabled: boolean, amount: number, code?: object, builtin?: object, …}[]｜只读",
+      "effects_enabled": "附加效果总开关｜boolean",
+      "link_id": "片段链接｜string",
+      "source_component": "使用画面或声音｜\"all\" | \"video\" | \"audio\"",
+      "start": "开始帧｜integer 0–10368000 帧",
+      "duration": "时长｜integer 1–10368000 帧",
+      "source_in_us": "源素材入点微秒｜integer ≥0",
+      "x": "水平位置｜number -2–2",
+      "y": "垂直位置｜number -2–2",
+      "scale": "缩放｜number 0.01–4",
+      "rotation": "旋转角度｜number -360–360",
+      "anchor_x": "水平锚点｜number 0–1",
+      "anchor_y": "垂直锚点｜number 0–1",
+      "motion_blur": "运动模糊｜\"auto\" | \"on\" | \"off\"",
+      "enabled": "输出启用｜boolean",
+      "opacity": "不透明度｜number 0–1",
+      "volume": "音量｜number 0–2",
+      "gain_db": "音频增益｜number -96–96",
+      "reverse": "倒放｜boolean",
+      "preserve_pitch": "变速时保持音调｜boolean",
+      "frame_hold": "帧定格｜boolean｜只读",
+      "frame_interpolation": "补帧方式｜\"nearest\" | \"blend\" | \"optical_flow\"",
+      "pitch_semitones": "变调（半音）｜number -24–24",
+      "spatial_enabled": "空间卡片｜boolean",
+      "user_edits_checked": "手改已检查｜boolean",
+      "effect_ids": "效果执行顺序｜string[]",
+      "speed_percent": "速度百分比｜number 1–10000"
+     },
+     "shared": {
+      "depth": 0,
+      "rotation_x": 0,
+      "rotation_y": 0,
+      "anchor_depth": 0,
+      "space_emission": 0,
+      "space_thickness": 0,
+      "space_lit": false,
+      "space_material": {
+       "preset": "picture"
+      },
+      "space_bevel": 0,
+      "space_cast_shadow": false,
+      "space_receive_shadow": false,
+      "light_kind": "spot",
+      "light_color": "#ffffff",
+      "light_intensity": 1,
+      "light_cast_shadow": false,
+      "light_softness": 0.5,
+      "light_angle": 50,
+      "snap_to_beat": false,
+      "effects_enabled": true,
+      "x": 0,
+      "y": 0,
+      "scale": 1,
+      "rotation": 0,
+      "anchor_x": 0.5,
+      "anchor_y": 0.5,
+      "motion_blur": "auto",
+      "enabled": true,
+      "opacity": 1,
+      "volume": 1,
+      "gain_db": 0,
+      "reverse": false,
+      "preserve_pitch": false,
+      "frame_hold": false,
+      "frame_interpolation": "nearest",
+      "pitch_semitones": 0,
+      "spatial_enabled": false,
+      "user_edits_checked": true,
+      "speed_percent": 100
+     },
+     "unset": [
+      "multicam_camera_id",
+      "trackers",
+      "follow",
+      "stabilization",
+      "content_anchor",
+      "template_id",
+      "note",
+      "code",
+      "element_overrides",
+      "edits",
+      "graphic",
+      "adjustment",
+      "disabled_intrinsic_sections",
+      "group_id",
+      "creative_source",
+      "audio_mapping",
+      "scale_aspect",
+      "audio_role",
+      "essential_sound",
+      "text",
+      "text_style",
+      "time_remap",
+      "remix",
+      "takes",
+      "code_parameters",
+      "x.keyframes",
+      "y.keyframes",
+      "scale.keyframes",
+      "rotation.keyframes",
+      "anchor_x.keyframes",
+      "anchor_y.keyframes",
+      "opacity.keyframes",
+      "volume.keyframes",
+      "depth.keyframes",
+      "rotation_x.keyframes",
+      "rotation_y.keyframes",
+      "anchor_depth.keyframes",
+      "space_emission.keyframes",
+      "space_thickness.keyframes",
+      "light_intensity.keyframes",
+      "font_variation_keyframes",
+      "graphic_object_ids",
+      "adjustment_from_track",
+      "code_curves",
+      "code_version_id"
+     ]
+    },
+    "video_edit.annotation": {
+     "title": "画面标注",
+     "create": {
+      "under": [
+       "video_edit.sequence"
+      ],
+      "required": {
+       "target": "{x: number, y: number, kind: \"point\"} | {x: number, y: number, width: number, height: number, kind: \"region\"} | {kind: \"…",
+       "frame": "integer 0–10368000 帧",
+       "text": "string"
+      }
+     },
+     "removable": true
+    },
+    "video_edit.marker": {
+     "title": "时间标记",
+     "create": {
+      "under": [
+       "video_edit.sequence"
+      ],
+      "required": {
+       "frame": "integer 0–10368000 帧",
+       "name": "string"
+      }
+     },
+     "removable": true
+    },
+    "video_edit.caption": {
+     "title": "导出字幕",
+     "create": {
+      "under": [
+       "video_edit.sequence"
+      ],
+      "required": {
+       "start": "integer 0–10368000 帧",
+       "duration": "integer 1–10368000 帧",
+       "text": "string"
+      }
+     },
+     "removable": true
+    },
+    "video_edit.transition": {
+     "title": "序列转场",
+     "create": {
+      "under": [
+       "video_edit.sequence"
+      ],
+      "required": {
+       "duration_frames": "integer 2–10368000 帧"
+      }
+     },
+     "removable": true
+    }
+   },
+   "entityCount": 13
+  }
+ }
+}

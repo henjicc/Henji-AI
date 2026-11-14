@@ -1,0 +1,15 @@
+同一构建、两种外部连接的对照（2026-11-14 12:00 前后）
+
+1. 新建连接（脚本客户端，MCP SDK，先 tools/list 再调用，SDK 按 outputSchema 校验 structuredContent）
+   - list_projects：通过
+   - change_application_entities（设音量 + remove_items 删除两个片段）：通过，completed / verified，带 undoRef
+
+2. 本会话开局就连着的旧连接（Claude Code 会话，工具清单与 outputSchema 在会话开始时缓存）
+   - list_projects 报：
+     Structured content does not match the tool's output schema: data/data/projects/0 must have required property 'draft', ... 'external', ... 'missing', ... data must have required property 'operationId' ... data must match a schema in anyOf
+     （新契约里 draft/external/missing 已是可选，旧缓存仍要求必填）
+   - change_application_entities（把一个声音片段音量设 0.6）报：
+     Structured content does not match the tool's output schema: data/result/data must have required property 'transactionRef', 'resultingRevisions', 'resultRefs', data/result/data/verification must have required property 'unmetConditions', 'checkedAt' ...
+     但应用里这次写入实际已经执行（之后 undo_video_edit 撤掉的正是它）。
+
+服务端已声明 tools.listChanged=true。

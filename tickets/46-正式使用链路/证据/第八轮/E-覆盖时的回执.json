@@ -1,0 +1,35 @@
+{
+ "ms": 1980,
+ "isError": false,
+ "structured": {
+  "ok": true,
+  "operationId": "447fadb1-29e3-42d6-958e-7bb06f514a3a",
+  "executionState": "completed",
+  "verificationState": "verified",
+  "result": {
+   "ok": true,
+   "data": {
+    "status": "completed",
+    "undoRef": "undo:10150c82c945470587078103295f1bfb",
+    "verification": {
+     "verified": true
+    },
+    "effects": [
+     {
+      "effect": "update",
+      "entityType": "video_edit.clip",
+      "refs": [
+       {
+        "kind": "video_edit.clip",
+        "id": "f95ee64a-0a44-45ba-8853-4ac283d8df96:47adf95e-661d-4e7f-b0c4-712e257ebae8"
+       }
+      ],
+      "propertyIds": [
+       "video_edit.clip.opacity"
+      ]
+     }
+    ]
+   }
+  }
+ }
+}

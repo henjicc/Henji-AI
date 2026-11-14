@@ -1,0 +1,69 @@
+{
+ "ms": 1796,
+ "isError": false,
+ "structured": {
+  "ok": true,
+  "operationId": "d047eb57-7634-430a-bb3b-59fdf2d704ed",
+  "executionState": "completed",
+  "verificationState": "verified",
+  "result": {
+   "ok": true,
+   "data": {
+    "status": "completed",
+    "undoRef": "undo:2b52ab35c7f1470ea2954cf50d3f7d0d",
+    "verification": {
+     "verified": true
+    },
+    "effects": [
+     {
+      "effect": "update",
+      "entityType": "video_edit.clip",
+      "refs": [
+       {
+        "kind": "video_edit.clip",
+        "id": "f95ee64a-0a44-45ba-8853-4ac283d8df96:7c21d51e-fea5-4b2f-b52c-d8f394cc6ecb"
+       }
+      ],
+      "propertyIds": [
+       "video_edit.clip.volume"
+      ]
+     },
+     {
+      "effect": "delete",
+      "entityType": "video_edit.clip",
+      "refs": [
+       {
+        "kind": "video_edit.clip",
+        "id": "f95ee64a-0a44-45ba-8853-4ac283d8df96:56ebefdf-c387-4211-95ac-bf35965b165b"
+       },
+       {
+        "kind": "video_edit.clip",
+        "id": "f95ee64a-0a44-45ba-8853-4ac283d8df96:7899bb3b-ac4e-49d8-8240-b43c5e6d6ed6"
+       }
+      ],
+      "propertyIds": []
+     },
+     {
+      "effect": "delete",
+      "entityType": "video_edit.effect",
+      "refs": [
+       {
+        "kind": "video_edit.effect",
+        "id": "f95ee64a-0a44-45ba-8853-4ac283d8df96:082bc045-a04a-415d-9b37-6cbdde6eb910"
+       },
+       {
+        "kind": "video_edit.effect",
+        "id": "f95ee64a-0a44-45ba-8853-4ac283d8df96:cfc2f00f-509a-4a25-8508-d02e2c0b30cd"
+       }
+      ],
+      "propertyIds": [],
+      "origin": {
+       "kind": "cascade",
+       "declarationId": "video_edit.effect_delete"
+      }
+     }
+    ]
+   }
+  }
+ }
+}

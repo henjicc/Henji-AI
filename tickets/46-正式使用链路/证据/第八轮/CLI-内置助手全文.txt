@@ -1,0 +1,386 @@
+用户要求在项目「主链路走查 11-13」的剪辑「第八轮-剪辑」主序列里做三件事。我需要先找到该项目和剪辑。
+
+先读取应用上下文，找到项目列表。让我先查询项目和文档。
+
+第一步：找到项目「主链路走查 11-13」，然后找到剪辑「第八轮-剪辑」。
+
+我可以并行调用 list_projects 和 list_documents？list_projects 和 list_documents 是应用工具，需要用 load_application_tools 或直接 call_application_tool。它们在 documents 领域。工具列表里没有，所以需要用 call_application_tool。
+
+先加载 documents 域工具说明？我可以直接 call_application_tool 调用 list_projects 和 list_documents，但参数不清楚。先加载 documents 域。
+
+实际上我可以用 run_application_script 一次做很多事，但先要弄清楚结构和工具参数。让我先加载 documents 和 video_edit 域的工具说明。
+
+按指令：先读项目记忆（在项目内工作时读取项目记忆）。所以我需要先找到项目 ID，然后读项目记忆。
+
+让我先加载 documents 域。
+
+---
+
+加载应用工具
+
+---
+
+加载实际工具。需要 list_projects, list_documents。可能还需要 open_document（不是必须）。让我加载这些。
+
+---
+
+加载应用工具
+
+---
+
+列出项目
+
+---
+
+项目「主链路走查 11-13」id: 38ea2f1e-e8f8-4ce8-81c2-35b205e5e613。
+
+现在列出项目里的剪辑文档，找到「第八轮-剪辑」。同时读项目记忆（项目内工作时读取项目记忆）和制作进度。
+
+先列文档。同时读项目记忆：我需要 list_application_entities entityType document.project_memory parent documents.project id=项目ID。让我一次性做。
+
+用 run_application_script 一次并行？脚本里按顺序。我可以：
+- list_documents(kind=video_edit, projectId=项目ID)
+- list_application_entities(document.project_memory, parent)
+- 读项目属性 documents.project.progress
+
+不过 read_application_entity 需要 ref。可以用 list_application_entities 带 propertyIds。
+
+让我写一个脚本。
+
+---
+
+运行脚本
+
+---
+
+找到剪辑「第八轮-剪辑」id f95ee64a-0a44-45ba-8853-4ac283d8df96。
+
+现在需要读该剪辑的结构，找到主序列、所有声音片段、画面片段「第八轮-边录边剪3」。这是 video_edit 域。
+
+按指令：要改一份文档（剪辑…）先用 read_application_snapshot 一次读回它的层级、引用和当前属性值。
+
+同时我需要 video_edit 域的工具说明：trim_video_edit_clip, undo_video_edit, insert marker? 时间标记的添加可能不是 video_edit 域工具，可能是实体属性操作（video_edit.marker?）。
+
+让我先加载 video_edit 域工具。工具列表里 video_edit 有很多，包括 trim_video_edit_clip, undo_video_edit。但没有看到 "add marker" 之类。时间标记可能是实体类型 video_edit.marker 通过 change_application_entities 创建。
+
+先 read_application_snapshot 读剪辑，看看有哪些实体类型和属性。同时加载 video_edit 域的工具说明。
+
+先做 snapshot。剪辑根实体：kind documents.document? 还是 video_edit.document? list_documents 返回的 ref kind 是 documents.document。read_application_snapshot root 可以用 {kind:"documents.document", id:...}。
+
+同时加载 video_edit 域。两个独立调用可以并行。
+
+---
+
+读回整份状态
+
+---
+
+加载应用工具
+
+---
+
+read_application_snapshot 只返回了文件层面信息，没有展开剪辑内容。因为 root kind 是 documents.document。需要改用 video_edit.document，用同一 ID。
+
+让我用 read_application_snapshot root {kind:"video_edit.document", id:...}。同时加载需要的 video_edit 工具：trim_video_edit_clip, undo_video_edit, save_video_edit, redo? 还需要时间标记相关。可能没有专门工具，用 change_application_entities 创建 video_edit.marker 之类。
+
+先读快照看类型。
+
+---
+
+读回整份状态
+
+---
+
+加载应用工具
+
+---
+
+现在我有了完整的剪辑结构。
+
+序列：主序列 id f95ee64a-0a44-45ba-8853-4ac283d8df96:67c66e01-f7cb-4981-a810-e74cfa49d854（注意实体 ID 包含文档 ID 前缀）。
+
+声音片段（kind=audio，track 0）：
+1. 7c21d51e-fea5-4b2f-b52c-d8f394cc6ecb — 第八轮-A · 系统声音，start 0，duration 1010
+2. db5bd414-1041-4da0-9a6e-55917a73f7a6 — 第八轮-A · 系统声音，start 1019，duration 1924
+3. 27566710-ff13-4b53-801e-40f904a320a8 — 第八轮-边录边剪 · 系统声音，start 2943，duration 11318
+4. 53ccd18c-d2b2-43bc-af67-3e4f981612a0 — 边录边剪2 · 系统声音，start 14261，duration 447
+5. 261e3bb5-7701-4356-b901-b2c6d4251d39 — 边录边剪2 · 系统声音，start 14716，duration 489
+6. 7899bb3b-ac4e-49d8-8240-b43c5e6d6ed6 — 边录边剪3 · 系统声音，start 15205，duration 712
+
+一共 6 个声音片段。summary 说 clips:10，即 4 个视频 + 6 个声音。
+
+等等，视频片段：47adf95e（A 屏幕，0-2943）、f6e29b46（边录边剪，2943，11318）、11ef7b93（2，14261，944）、56ebefdf（3，15205，712）。共 4 个。总 10 个片段。
+
+声音片段视频 A 的音频分成两段（0–1010 和 1019–2943），边录边剪的音频一整段，边录边剪2 分成两段（14261–14708，14716–15205），边录边剪3 一整段。
+
+注意：边录边剪3 的视频 start 15205, duration 712。序列总长 = 15205+712 = 15917 帧 = 265.28 秒 ✓。
+
+现在任务：
+1) 用 run_application_script 写一段脚本，把所有声音片段的音量设成 0.8，并在第 0、10、20、30 秒处各加一个时间标记，脚本里读回核对。
+2) 把「第八轮-边录边剪3」那段画面的时长裁到 6 秒（连带它链接的声音）— 6 秒 = 360 帧。当前 712 帧，需要裁掉 352 帧。用 trim_video_edit_clip，edge=out，frames=-352，mode？ripple 还是别的？
+
+这里要小心：裁短到 6 秒，后面没有片段（这是最后一个片段），所以 ripple 和普通修剪效果一样。但"ripple" 是波纹编辑——改片段一端长度，后面同步锁定轨道上的片段跟着前移。因为后面没有片段，所以没影响。但 roll 需要相邻片段。slip/slide 不改长度。
+
+对于出点修剪（edge=out, frames 负数 = 该端向左，即缩短），应该用 mode="ripple"。但 ripple 会移动后面片段。既然没有后续片段，选择 ripple 也可以。不过更"普通"的做法可能是 ripple（因为工具只提供这四种模式）。没有普通修剪模式，所以 ripple 最接近。
+
+实际上修剪工具说 "mode：ripple 波纹编辑——改片段一端（edge in 入点／out 出点）的长度，后面同步锁定轨道上的片段跟着前移或后移、不留空隙（frames 正数=该端向右：出点变长，入点剪掉开头）"。所以 edge=out, frames=-352，缩短出点 352 帧，从 712 → 360 帧。
+
+"连带它链接的声音"：工具描述说 "链接的音画按链接选择一起修剪"。所以链接的音频片段 7899bb3b 会一起修剪。但注意：链接选择是否启用？工具会自动处理链接音画。回执应该给出实际帧数。需要读回验证。
+
+3) 撤销第 2 步，读回确认时长恢复、第 1 步的结果还在。用 undo_video_edit。撤销一步 = 第 2 步的修剪。因为修剪是"一步撤销"。然后读回：视频 712 帧、音频 712 帧、音量仍 0.8、4 个标记还在。
+
+关于第一步的脚本：run_application_script 中调用 change_application_entities 设置音量，创建 markers，然后读回。注意：change_application_entities 需要一个 operationId？脚本中写工具的 operationId 省略，由应用按本次脚本和调用次序生成。好。
+
+但注意，change_application_entities 里创建 marker：parent = 序列 ref {kind:"video_edit.sequence", id:"f95ee64a-...:67c66e01-..."}，entityType "video_edit.marker"，items 每个 {properties:{frame: 0, name:"..."}}。
+
+标记名称：用户没说名称，但必填 name。第 0 秒 = 帧 0，第 10 秒 = 帧 600，第 20 秒 = 1200，第 30 秒 = 1800（60fps）。名称可以写成 "00:00"、"00:10" 之类，或 "标记 0s"。我用时间码名称如 "00:00:00:00"。简洁：name: "00:00"、 "00:10"、"00:20"、"00:30"。用户没有指定名字，我可以自定合理名称，或用 "标记 0s"。我倾向 "00:00" 这种时间码。
+
+音量：设置 0.8 到 6 个声音片段。注意 video_edit.clip.volume 默认 1。属性 volume 是 number 0–2。
+
+一个 change_application_entities 调用可以包含多个 set_properties changes，都在同一个事务里，一个 undoRef。用户说"一次把所有声音片段的音量设成 0.8，并在...各加一个时间标记"——可以一个事务或两个。为了撤销第 2 步时不影响第 1 步，第 1 步应作为一次修改（或至少与第 2 步分开）。撤销一次只撤销一步——如果第 1 步是一个 change_application_entities 事务（含音量+标记），undo 一次会撤销整个事务？可能。但第 2 步是 trim，然后撤销它会撤销修剪。所以第 1 步作为一个事务是安全的。
+
+不过要注意：change_application_entities 的 6 个 set + 4 个 create items 是否算"一步"撤销？工具说"整组只有一个 undoRef"。所以应该是一个撤销单元。好。
+
+为了稳妥，也可以分成两个事务（音量、标记），但没必要。用户说"一次把所有声音片段的音量设成 0.8，并...各加一个时间标记"，一个脚本内完成即可。我用一次 change_application_entities 包含所有 10 个 changes。
+
+然后读回：读序列快照，核对 6 个音频片段的 volume=0.8 和 4 个标记的 frame。
+
+在同一个脚本里读回。read_application_snapshot 在脚本里可以调用吗？它是读工具，可以。但返回很大。我可以用 list_application_entities 查 clips 和 markers。更精准：
+- list_application_entities entityType "video_edit.marker", parent 序列，propertyIds ["video_edit.marker.frame","video_edit.marker.name"]
+- list_application_entities entityType "video_edit.clip", parent 序列，where {kind:"audio"}，propertyIds ["video_edit.clip.name","video_edit.clip.volume","video_edit.clip.start","video_edit.clip.duration"]
+
+注意 list_application_entities 的 parent 参数：序列 ref。where 里 "video_edit.clip.kind": "audio"。
+
+不过 parent 只列某个实体之下的成员。clip 的父是序列。可以。
+
+脚本：
+1. 先确认当前音量（可能有些不是 1）— 读基线？不需要，直接设置。
+2. change_application_entities 10 changes。
+3. 读回 clips + markers。
+4. return 核对结果。
+
+另外保存？剪辑平时自动保存。可以调 save_video_edit 确保。但可能不必。撤销操作基于历史，自动保存不应清除历史。先不保存，避免干扰。嗯，但 save_video_edit 只是写入文件，不影响撤销栈。我可以不调用。
+
+先做第 1 步。
+
+音量设置的 target ref：video_edit.clip refs，entityType "video_edit.clip"，properties {volume: 0.8}。用属性短键 "volume" 即可（entityType 之后的部分）。
+
+marker 创建：items [{properties:{frame:0, name:"00:00"}}, ...]。
+
+现在考虑 marker 的帧：60fps → 10s = 600 帧，20s = 1200，30s = 1800。序列总长 15917 帧（265s），所以 1800 有效。
+
+写脚本。
+
+注意 change_application_entities 是通用工具，在脚本中通过 app.call("change_application_entities", {...})。参数：summary, changes, operationId（省略由脚本生成）。好。
+
+changes 结构：
+- {kind:"set_properties", target:{kind:"video_edit.clip", id:"f95ee64a-...:7c21d51e-..."}, entityType:"video_edit.clip", properties:{volume:0.8}}
+- {kind:"create_items", parent:{kind:"video_edit.sequence", id:"..."}, entityType:"video_edit.marker", items:[{properties:{frame:0,name:"00:00"}},...]}
+
+读回用 list_application_entities，注意返回结构：data.items 与 data.refs。propertyIds 名称："video_edit.clip.volume" 等。
+
+让我写：
+
+```js
+const doc = {kind:"video_edit.document", id:"f95ee64a-0a44-45ba-8853-4ac283d8df96"};
+const seq = {kind:"video_edit.sequence", id:"f95ee64a-0a44-45ba-8853-4ac283d8df96:67c66e01-f7cb-4981-a810-e74cfa49d854"};
+const audioClipIds = [...];
+const changes = audioClipIds.map(id=>({kind:"set_properties", target:{kind:"video_edit.clip", id}, entityType:"video_edit.clip", properties:{volume:0.8}}));
+changes.push({kind:"create_items", parent: seq, entityType:"video_edit.marker", items:[[0,"00:00"],[600,"00:10"],[1200,"00:20"],[1800,"00:30"]].map(([f,n])=>({properties:{frame:f, name:n}}))});
+const res = await app.call("change_application_entities", {summary:"把所有声音片段音量设为0.8并添加4个时间标记", changes});
+const clips = await app.call("list_application_entities", {entityType:"video_edit.clip", parent: seq, propertyIds:["video_edit.clip.name","video_edit.clip.kind","video_edit.clip.volume","video_edit.clip.start","video_edit.clip.duration"], limit:100});
+const markers = await app.call("list_application_entities", {entityType:"video_edit.marker", parent: seq, propertyIds:["video_edit.marker.name","video_edit.marker.frame"], limit:100});
+return {...}
+```
+
+注意 list_application_entities 返回 items 是属性对象数组？通常 items 和 refs 一一对应，items 含属性值。我需要检查格式。可能 items 是 {name, kind, volume...} 或包含在 properties 中。稳妥起见返回原样并映射容错。
+
+我用 map 处理：对每个 item，取 item.properties ?? item。
+
+我要返回核对事实，不要整份。比如音频片段 [{name, volume}]，标记 [{frame, name}]。
+
+另外需要保留这些 clips 的 ref 供后面修剪使用。修剪用 clipRef 56ebefdf-c387-4211-95ac-bf35965b165b。
+
+第 2 步：trim_video_edit_clip documentRef doc, clipRef {kind:"video_edit.clip", id:"f95ee64a-0a44-45ba-8853-4ac283d8df96:56ebefdf-c387-4211-95ac-bf35965b165b"}, mode:"ripple", edge:"out", frames:-352。然后读回视频和链接音频的 duration。
+
+第 3 步：undo_video_edit，读回。
+
+可以在一个脚本里做第 1 步，另一个脚本做第 2、3 步？用户要求 1）用 run_application_script 写一段脚本做第 1 步。第 2、3 步可以用工具直接调用。但也可以脚本。用户明确说 1）用脚本。第 2、3 用工具调用即可。
+
+不过第 2 步后需要读回，第 3 步后需要读回。可以分步工具调用，这样看得清楚。但为了效率，我可以在第 2 步后读回、第 3 步后读回分别调用。
+
+先执行第 1 步脚本。
+
+关于操作是否算一步撤销：change_application_entities 是一个事务一个 undoRef，撤销栈可能算一步。好。
+
+一个细节：撤销第 2 步时，会不会也撤销第 1 步？undo_video_edit 撤销"一步手动或助手修改"。第 1 步的事务是一次修改，第 2 步 trim 是另一次。撤销一次应只撤 trim。如果第 1 步的 change 被算作多次（每 change 一步）？工具说"整组只有一个 undoRef"，说明是一步。好。
+
+执行。
+
+---
+
+运行脚本
+
+---
+
+写入成功，但读回的数据结构不同：items 可能是直接属性对象，或者 list_application_entities 返回的是 items 数组带 propertyIds 键但名字不同。audioCount 0 说明 items 格式不同，或者 where 过滤不对。
+
+markers 返回 4 个空对象 {}，说明 items 里的属性键不是我猜的 "frame"/"name"，而是完整属性 ID 如 "video_edit.marker.frame"。或者结构是 {ref, properties}。norm 取 properties 时变成 undefined 则返回 it 本身，得到 {}. 这说明 item 有 properties 字段但里面是空？或者 item 形如 {properties:{}}。
+
+让我直接查看原始返回，少量。用 read_application_snapshot 读序列下的 markers 和 clips 点名属性。这样更可靠。
+
+用 read_application_snapshot root=sequence, entityTypes ["video_edit.marker","video_edit.clip"], properties 点名。depth 1，limit 100。
+
+这也会返回 types 信息（大）。但可控。或者 read_application_entity 逐个。不如用 list_application_entities includeDetails? 先看原始 items 一个。
+
+用 run_application_script 返回 markers.data 的前两个 item 和 clips.data 的前两个 item 的 JSON，看看结构。这样最小。
+
+---
+
+运行脚本
+
+---
+
+有意思：items 为空数组，而 refs 有数据。标记确实创建了（4个，label 正确）。但 clips 返回 0 个 items？之前 snapshot 显示 clips 是序列的子实体。可能 list_application_entities 需要 propertyIds 或者 parent 关系不同？刚才带 propertyIds 时 items 是 4 个空对象，现在不带是 0 个。
+
+嗯，这可能是 list_application_entities 在该类型上有 bug 或者 items 只含属性而没有 refs？有点怪。
+
+不管怎样，最可靠的读回是 read_application_snapshot(sequence)，它会返回子实体及其属性值。它返回的 clips 属性包括 volume（默认 1 不列出，0.8 会列出）。markers 会作为子实体出现吗？之前 depth 4 的 snapshot 没显示 markers（unset 里没有 markers，但也没展开）。序列的 types 里没有列 marker 子实体……实际上 video_edit.sequence 类型的 properties 没提 markers。标记可能作为 sequence 的子实体，snapshot 应该会显示 video_edit.marker 子项。之前 snapshot 的 sequence children 只有 clip 和 track，没有 marker（当时没有标记）。现在应该有。
+
+让我 read_application_snapshot(root=sequence, depth=1, properties 点名 clip.volume, clip.duration, clip.start, marker.frame, marker.name)。
+
+depth 1 只返回直接子层。clips 是直接子。markers 应该也是。
+
+我也可以用 read_application_entity 逐个读标记和片段（10+4 个），太多。snapshot 一次更好。
+
+试一下。
+
+---
+
+读回整份状态
+
+---
+
+第 1 步完成并核对：6 个声音片段 volume 都是 0.8，4 个标记在 0/600/1200/1800（0/10/20/30 秒）。注意 snapshot 中 volume 也列出了视频片段 volume 1（默认）。好。
+
+现在第 2 步：把「第八轮-边录边剪3」视频片段（56ebefdf-c387-4211-95ac-bf35965b165b）时长裁到 6 秒 = 360 帧，从 712 帧裁掉 352 帧。链接音频 7899bb3b 也应一起裁。
+
+用 trim_video_edit_clip：documentRef, clipRef, mode:"ripple", edge:"out", frames:-352。
+
+但 ripple 会移动后续片段——这是最后一个片段，后面无内容。安全。
+
+调用。然后读回。
+
+需要 operationId UUID。生成一个。
+
+之后读回：用 read_application_snapshot sequence depth 1，properties clips name/start/duration/volume + marker。但返回大。可以指定只读特定 clips？read_application_snapshot 无法筛选。用 read_application_entity 逐个读 56ebefdf 和 7899bb3b 两个片段，属性 duration/start/volume/link_id。这更精准。
+
+第 2 步后读两个片段。第 3 步撤销后再读两个片段 + 标记（确认第 1 步结果还在）。
+
+先 trim。
+
+---
+
+修剪剪辑片段（波纹、滚动、外滑、内滑）
+
+---
+
+修剪完成，-352 帧。读回两个片段确认。
+
+读 clip 56ebefdf（视频）和 7899bb3b（音频），属性 duration, start, volume, link_id, name。
+
+用 run_application_script 两个 read_application_entity。或者直接两个工具调用（可并行）。read_application_entity 是通用工具，直接在工具列表里。可以并行两个调用。
+
+---
+
+读取应用实体属性
+
+---
+
+读取应用实体属性
+
+---
+
+第 2 步验证：视频 360 帧（6 秒），链接音频也 360 帧，音量 0.8 保持。
+
+现在第 3 步：撤销第 2 步。undo_video_edit。然后读回两个片段 + 标记 + 全部声音音量。
+
+undo_video_edit 撤销"一步"。第 2 步是 trim，一步。应撤销 trim。
+
+调用 undo。operationId 新 UUID。
+
+然后读回：
+- 两个片段（duration 712 恢复）
+- 标记 4 个
+- 所有声音片段 volume 0.8
+
+撤销后一次 snapshot 读回最全面。但也可用 read_application_entity x2 + list markers。标记用 list_application_entities 返回 items 空（有点怪），refs 有 label。用 read_application_snapshot(sequence, depth 1, properties 点名) 一次拿全，虽然返回 types 较大。可以接受。
+
+先 undo。
+
+---
+
+撤销剪辑修改
+
+---
+
+撤销完成。现在读回：两个片段时长、所有声音音量、4 个标记。
+
+用 run_application_script 一次读回（先读再核对），返回精简事实。
+
+- read_application_entity clip 56ebefdf (duration, start)
+- read_application_entity clip 7899bb3b (duration, start, volume)
+- read_application_snapshot sequence depth 1 只拿 clips 与 markers？snapshot 无筛选。可以用 list_application_entities 读 markers 的 refs（label），但 name/frame 需要 read_application_entity。之前 list 返回 items 空但 refs 有 label。label 是 "00:00" 等，能证明 4 个标记在。帧需读实体。
+
+用 read_application_snapshot(sequence, depth 1, properties {clip: [name,kind,volume,start,duration], marker:[name,frame]}) 一次拿全，然后脚本里精简返回。types 大但没关系。
+
+脚本里只返回精简。好。
+
+---
+
+运行脚本
+
+---
+
+全部核对成功：
+- 撤销后：视频 712 帧恢复，链接音频 712 帧恢复。
+- 6 个声音片段音量都还是 0.8。
+- 4 个标记仍在 0/600/1200/1800。
+
+现在需要更新项目进度吗？这是长期任务吗？用户这是一次性验证操作，不必写项目进度。进度文件当前记录导出卡点，本次任务与导出无关。不需要更新。
+
+记忆：用户没有表达偏好或纠正，不需要写记忆。
+
+最后用表格列出每步做了什么和读回结果。
+
+注意不要展示内部 ID。用中文名称。
+
+表格：
+| 步骤 | 做了什么 | 读回核对 |
+1. 脚本：6 个声音片段音量 0.8；主序列 0/10/20/30 秒加标记（60fps → 0/600/1200/1800 帧）
+2. 修剪「第八轮-边录边剪3」出点 -352 帧（712→360，6 秒），链接声音同步
+3. 撤销上一步
+
+读回：第 1 步 6 个音频 volume 0.8，4 标记；第 2 步视频与链接音频均 360 帧；第 3 步视频与音频 712 帧恢复，音量 0.8 与 4 个标记仍在。
+
+说明：撤销只回退了第 2 步，第 1 步保留。可以提一下没有保存问题（自动保存）。
+
+另外提一下，第 2 步是"波纹编辑"模式，因是序列最后一个片段，后面没有内容需要移动。
+
+最终回答简洁。
+
+---
+
+三步都已完成，并已从剪辑读回核对。
+
+| 步骤 | 做了什么 | 读回结果 |
+|---|---|---|
+| 1 | 用 `run_application_script` 一次把主序列全部 6 个声音片段音量设为 0.8，并在 0、10、20、30 秒（60fps 下为 0/600/1200/1800 帧）各加一个时间标记 | 6 个声音片段音量全部为 0.8；4 个标记分别为 00:00、00:10、00:20、00:30，帧号 0/600/1200/1800 ✅ |
+| 2 | 修剪「第八轮-边录边剪3」出点：712 帧 → 360 帧（6 秒），用波纹编辑方式裁掉 352 帧，链接的声音同步修剪 | 视频片段 15205 帧起、时长 360 帧；链接的「边录边剪3 · 系统声音」同为 360 帧，音量仍为 0.8 ✅ |
+| 3 | 撤销第 2 步 | 视频与链接声音时长均恢复为 712 帧；6 个声音片段音量仍为 0.8，4 个时间标记仍在 0/600/1200/1800 帧 ✅ |
+
+几点说明：
+
+- 第 2 步用的“波纹编辑”只影响该编辑点之后的内容，而「边录边剪3」正好是主序列最后一个片段，所以没有其他片段被移动。
+- 撤销只回退了第 2 步的修剪，第 1 步的音量与标记作为独立的一步修改保留下来了。
+- 剪辑平时会自动保存，撤销后已是最初状态：时间线总长恢复为 15917 帧（约 265.3 秒）。

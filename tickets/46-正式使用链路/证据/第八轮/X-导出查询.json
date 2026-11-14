@@ -1,0 +1,54 @@
+{
+ "ms": 1382,
+ "isError": false,
+ "structured": {
+  "ok": true,
+  "data": {
+   "resultRef": {
+    "kind": "video_edit.document",
+    "id": "f95ee64a-0a44-45ba-8853-4ac283d8df96"
+   },
+   "message": "已读取导出列表，提交不等于完成。",
+   "verification": {
+    "verified": true,
+    "condition": "已从原剪辑回读导出列表。",
+    "target": {
+     "kind": "video_edit.document",
+     "id": "f95ee64a-0a44-45ba-8853-4ac283d8df96"
+    }
+   },
+   "queue": [
+    {
+     "id": "14d6ef38-b319-4591-ac0c-099e2ee3adac",
+     "documentRef": {
+      "kind": "video_edit.document",
+      "id": "f95ee64a-0a44-45ba-8853-4ac283d8df96"
+     },
+     "state": "completed",
+     "progress": 1,
+     "phase": "compression",
+     "compositionProgress": 1,
+     "compressionProgress": 1,
+     "taskId": "e25d2961-6d8b-423b-ad66-7aef2b62ef2f",
+     "notice": "当前导出范围没有可测量的声音，已跳过默认响度标准化并保留原声音。",
+     "outputReady": true,
+     "assetRef": {
+      "kind": "asset",
+      "id": "e31f6215-b0b8-4ea4-89df-048d27bb048d"
+     },
+     "path": "E:\\文档\\HenjiAI\\Projects\\主链路走查 11-13\\导出\\主序列 - 自定义导出.mp4",
+     "completedAt": 1794630200629,
+     "resultRef": {
+      "documentRef": {
+       "kind": "video_edit.document",
+       "id": "f95ee64a-0a44-45ba-8853-4ac283d8df96"
+      },
+      "taskId": "14d6ef38-b319-4591-ac0c-099e2ee3adac"
+     }
+    }
+   ],
+   "total": 1,
+   "nextCursor": null
+  }
+ }
+}

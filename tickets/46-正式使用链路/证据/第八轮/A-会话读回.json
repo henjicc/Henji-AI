@@ -1,0 +1,126 @@
+{
+ "ms": 41,
+ "isError": false,
+ "structured": {
+  "ok": true,
+  "data": {
+   "ref": {
+    "kind": "screen_recording.session",
+    "id": "765faa27-0eae-47d5-8624-6f9b553c5a21"
+   },
+   "entityType": "screen_recording.session",
+   "properties": {
+    "screen_recording.session.name": "第八轮-A",
+    "screen_recording.session.phase": "stopped",
+    "screen_recording.session.elapsed_ms": 49060,
+    "screen_recording.session.details": {
+     "source": "屏幕 2",
+     "cursorEmbedded": false,
+     "media": [
+      {
+       "id": "screen-0",
+       "kind": "screen",
+       "path": "E:\\文档\\HenjiAI\\Uploads\\screen-recordings\\765faa27-0eae-47d5-8624-6f9b553c5a21\\screen-000000.mp4",
+       "monoUs": 2266111,
+       "durationUs": 51716667,
+       "gaps": [
+        {
+         "startUs": 21432778,
+         "endUs": 28466111
+        }
+       ]
+      },
+      {
+       "id": "systemAudio-joined-000",
+       "kind": "systemAudio",
+       "path": "E:\\文档\\HenjiAI\\Uploads\\screen-recordings\\765faa27-0eae-47d5-8624-6f9b553c5a21\\systemAudio-joined-000.wav",
+       "monoUs": 2102251,
+       "durationUs": 19734646
+      },
+      {
+       "id": "systemAudio-joined-001",
+       "kind": "systemAudio",
+       "path": "E:\\文档\\HenjiAI\\Uploads\\screen-recordings\\765faa27-0eae-47d5-8624-6f9b553c5a21\\systemAudio-joined-001.wav",
+       "monoUs": 28607341,
+       "durationUs": 32418542
+      }
+     ],
+     "markers": 0,
+     "events": 4008,
+     "devices": {
+      "systemAudio": true
+     },
+     "tracks": [
+      {
+       "kind": "systemAudio",
+       "segments": 11,
+       "gaps": {
+        "pause": 1,
+        "device": 0,
+        "muted": 0,
+        "missingData": 0
+       },
+       "missingSeconds": 0,
+       "warnings": []
+      }
+     ],
+     "capture": {
+      "live": false,
+      "failure": null,
+      "detaches": 0,
+      "video": {
+       "droppedFrames": 0,
+       "duplicatedFrames": 2,
+       "encoderRestarts": 0,
+       "encoder": "h264_nvenc"
+      },
+      "systemAudio": {
+       "silenceSeconds": 52.15320833333334,
+       "unavailableSeconds": 0,
+       "droppedFrames": 0,
+       "discontinuities": 0,
+       "deviceSwitches": 0,
+       "reconnects": 0
+      },
+      "microphone": null,
+      "recovered": false
+     },
+     "recorder": "native",
+     "frameTiming": {
+      "path": "E:\\文档\\HenjiAI\\Uploads\\screen-recordings\\765faa27-0eae-47d5-8624-6f9b553c5a21\\screen-000000.frames",
+      "exists": true
+     },
+     "activity": {
+      "path": "E:\\文档\\HenjiAI\\Uploads\\screen-recordings\\765faa27-0eae-47d5-8624-6f9b553c5a21\\screen-000000.activity.jsonl",
+      "exists": true
+     },
+     "finishing": false
+    }
+   },
+   "revisions": {
+    "screen_recording": 11
+   },
+   "capturedAt": "2026-11-14T03:58:49.238Z"
+  },
+  "revisionEpoch": "680b7e39-1bf4-4970-9ec2-4cf8d12a446b",
+  "baselineId": "563fd651-0904-4641-b0b8-dc0804aa7a31",
+  "revision": 24,
+  "scopeRevisions": {
+   "navigation": 0,
+   "generation": 20,
+   "canvas": 0,
+   "toolbox": 0,
+   "assets": 0,
+   "camera_stage": 0,
+   "settings": 1,
+   "surface": 0,
+   "generation_draft": 2,
+   "models": 0,
+   "image_edit": 0,
+   "audio_edit": 0,
+   "video_edit": 0,
+   "documents": 2,
+   "video_edit.effects": 0
+  }
+ }
+}

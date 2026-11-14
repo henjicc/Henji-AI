@@ -1,0 +1,28 @@
+{
+ "ms": 2139,
+ "isError": false,
+ "structured": {
+  "ok": true,
+  "operationId": "1e8ea7c5-efaf-4be0-8a57-31100db54515",
+  "executionState": "completed",
+  "verificationState": "verified",
+  "result": {
+   "ok": true,
+   "data": {
+    "resultRef": {
+     "kind": "audio_edit.document",
+     "id": "8b270d95-503d-4439-8ac9-de1dc8f7ebb3"
+    },
+    "message": "已导出 WAV：E:\\文档\\HenjiAI\\Projects\\主链路走查 11-13\\导出\\口播走查-带重念 (2) (2)-剪辑.wav，字幕 E:\\文档\\HenjiAI\\Projects\\主链路走查 11-13\\导出\\口播走查-带重念 (2) (2)-剪辑.srt。",
+    "verified": true,
+    "durationFrames": 16560870,
+    "outputPath": "E:\\文档\\HenjiAI\\Projects\\主链路走查 11-13\\导出\\口播走查-带重念 (2) (2)-剪辑.wav",
+    "subtitlePath": "E:\\文档\\HenjiAI\\Projects\\主链路走查 11-13\\导出\\口播走查-带重念 (2) (2)-剪辑.srt",
+    "verification": {
+     "verified": true,
+     "condition": "已导出 WAV：E:\\文档\\HenjiAI\\Projects\\主链路走查 11-13\\导出\\口播走查-带重念 (2) (2)-剪辑.wav，字幕 E:\\文档\\HenjiAI\\Projects\\主链路走查 11-13\\导出\\口播走查-带重念 (2) (2)-剪辑.srt。"
+    }
+   }
+  }
+ }
+}

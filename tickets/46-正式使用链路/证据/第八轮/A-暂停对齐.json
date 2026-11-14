@@ -1,0 +1,20 @@
+{
+ "mediaMonoUs": 2266111,
+ "pauses": [
+  {
+   "gapMs": [
+    21432.78,
+    28466.11
+   ],
+   "docPauseMs": [
+    21432.78,
+    28466.11
+   ],
+   "pauseEventMinusGapStartMs": 8.7,
+   "resumeEventMinusGapEndMs": 8.7,
+   "eventPausedLenMinusGapLenMs": 0,
+   "lastCursorBeforePauseMs": -21.9,
+   "firstCursorAfterResumeMs": 44.64
+  }
+ ]
+}

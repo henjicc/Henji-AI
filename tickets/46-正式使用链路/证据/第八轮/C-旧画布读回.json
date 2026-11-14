@@ -1,0 +1,106 @@
+{
+ "ms": 1348,
+ "isError": false,
+ "structured": {
+  "ok": true,
+  "data": {
+   "root": {
+    "ref": {
+     "kind": "canvas.document",
+     "id": "db1cd001-8ed9-4e0c-973f-d9186eff38d5"
+    },
+    "properties": {
+     "name": "第八轮-旧画布副本",
+     "node_count": 1,
+     "edge_count": 0
+    },
+    "children": {
+     "canvas.node": [
+      {
+       "ref": {
+        "kind": "canvas.node",
+        "id": "db1cd001-8ed9-4e0c-973f-d9186eff38d5:275c72d8-77bb-471b-afee-1f6fb18b57aa"
+       },
+       "properties": {
+        "document_ref": {
+         "kind": "canvas.document",
+         "id": "db1cd001-8ed9-4e0c-973f-d9186eff38d5"
+        },
+        "node_type": "uploadNode",
+        "display_name": "上传图片",
+        "position": {
+         "x": 0,
+         "y": 0
+        }
+       }
+      }
+     ]
+    }
+   },
+   "types": {
+    "canvas.document": {
+     "title": "画布",
+     "description": "一份画布文档（.hjcvs，id 即文档 ID）的节点画布内容。",
+     "readOnly": "canvas.document 就是一份画布文档（id 即文档 ID），本身只读：改名写 documents.document.name；打开、移动、创建副本用 open_document / move_document / duplicate_document；移到回收站用 change_application_entities 对 documents.document 做 remove_items；新建用 create_document（kind=canvas）。画布内容经 canvas.node / canvas.edge 写入。",
+     "properties": {
+      "name": "画布名称｜string｜只读",
+      "node_count": "节点数量｜integer ≥0｜只读",
+      "edge_count": "连线数量｜integer ≥0｜只读"
+     }
+    },
+    "canvas.node": {
+     "title": "画布节点",
+     "description": "由节点目录约束的数据与位置实体。",
+     "create": {
+      "under": [
+       "canvas.document"
+      ],
+      "required": {
+       "node_type": "string"
+      }
+     },
+     "removable": true,
+     "properties": {
+      "document_ref": "所属画布｜ref<canvas.document>｜只读",
+      "node_type": "节点类型｜string｜只读",
+      "display_name": "节点标题｜string",
+      "position": "节点位置｜{x, y}"
+     },
+     "unset": [
+      "text_content",
+      "generation_config",
+      "generation_schema",
+      "generation_continuations",
+      "storyboard_frames",
+      "asset_group_member_order",
+      "asset_group_cover_member_id",
+      "prompt",
+      "model_id",
+      "grid_rows",
+      "grid_cols",
+      "system_prompt",
+      "system_prompt_template_id",
+      "provider_id",
+      "fixed_result",
+      "value"
+     ]
+    },
+    "canvas.edge": {
+     "title": "画布连线",
+     "description": "通过节点端口校验建立的有向连接。",
+     "create": {
+      "under": [
+       "canvas.document"
+      ],
+      "required": {
+       "source_ref": "ref<canvas.node>",
+       "target_ref": "ref<canvas.node>"
+      }
+     },
+     "removable": true
+    }
+   },
+   "entityCount": 2
+  }
+ }
+}
