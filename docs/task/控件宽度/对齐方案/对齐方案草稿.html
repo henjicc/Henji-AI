@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>取值控件对齐方案</title>
+<style>
+@font-face { font-family: 'HarmonyOS Sans SC UI'; src: url('../../../../src/assets/fonts/HarmonyOS_Sans_SC.ttf') format('truetype'); font-weight: 100 900; font-display: block; }
+:root {
+  /* 取自 src/index.css 石墨主题令牌 */
+  --gap:#181818; --panel:#212121; --raised:#272727; --overlay:#292929; --overlay-raised:#2D2D2D; --overlay-hover:#303030;
+  --line-overlay:#393939; --control-hover:#313131; --line:#282828;
+  --segment-selected:#393939; --edge:rgba(255,255,255,0.06);
+  --text1:#EEEEEE; --text2:#CACACA; --text3:#A5A5A5;
+  --accent:#3A6FDF; --accent-ring:#6A9BFE; --icon-rest:#737373;
+  --w-medium:460; --w-semibold:580;
+}
+* { box-sizing:border-box; }
+html, body { margin:0; background:#101010; color:var(--text1); font-family:'HarmonyOS Sans SC UI','Microsoft YaHei UI',sans-serif; font-size:13px; line-height:20px; -webkit-font-smoothing:antialiased; }
+svg.i { width:var(--s,16px); height:var(--s,16px); flex:none; stroke:currentColor; fill:none; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round; display:block; }
+.page { padding:40px 40px 80px; }
+.page h1 { font-size:20px; line-height:28px; font-weight:560; margin:0 0 6px; }
+.page .lead { color:var(--text3); margin:0 0 36px; max-width:1100px; white-space:pre-line; }
+.block { margin-bottom:72px; }
+.block h2 { font-size:16px; line-height:24px; font-weight:var(--w-semibold); margin:0 0 4px; }
+.block .note { color:var(--text3); font-size:12px; line-height:18px; margin:0 0 16px; max-width:1300px; white-space:pre-line; }
+.shot { display:block; background:var(--gap); }
+body.single { background:var(--gap); }
+body.single .page { padding:0; }
+body.single .page > h1, body.single .lead, body.single .block { display:none; }
+body.single .block.show { display:block; margin:0; }
+body.single .block.show h2, body.single .block.show .note { display:none; }
+
+.cmp { display:flex; gap:24px; padding:24px 28px 28px; white-space:nowrap; align-items:flex-start; }
+.col { flex:none; display:flex; flex-direction:column; gap:10px; }
+.col .cap { font-size:13px; color:var(--text1); font-weight:var(--w-medium); height:20px; }
+.col .cap small { color:var(--text3); font-weight:400; font-size:12px; margin-left:6px; }
+
+.panel { background:var(--panel); display:flex; flex-direction:column; overflow:hidden; position:relative; }
+.tabs { height:32px; flex:none; display:flex; padding:0 6px; border-bottom:1px solid var(--line); }
+.tab { padding:0 8px; display:flex; align-items:center; font-size:12px; color:var(--text3); font-weight:var(--w-medium); position:relative; }
+.tab.cur { color:var(--text1); }
+.tab.cur::after { content:''; position:absolute; left:8px; right:8px; bottom:-1px; height:2px; background:var(--accent-ring); border-radius:1px; }
+.sec { border-top:1px solid var(--line); padding:2px 0 6px; }
+.sh { height:28px; display:flex; align-items:center; padding:0 10px 0 8px; font-size:12px; font-weight:var(--w-semibold); gap:4px; }
+.sh .tw { width:14px; display:flex; justify-content:center; color:var(--icon-rest); --s:12px; }
+.sub { height:26px; display:flex; align-items:flex-end; padding:0 12px 2px 48px; font-size:12px; font-weight:var(--w-semibold); color:var(--text3); }
+.pr { margin:0 4px; min-height:28px; display:grid; grid-template-columns:14px 22px 88px minmax(0,1fr); column-gap:4px; align-items:center; padding-right:8px; font-size:12px; }
+.pr .sw { display:flex; justify-content:center; color:var(--icon-rest); --s:12px; }
+.pr .nm { color:var(--text3); }
+.pr .val { display:flex; align-items:center; gap:4px; min-width:0; }
+.tr { color:var(--text3); --s:14px; width:24px; height:24px; display:flex; align-items:center; justify-content:center; }
+.n { color:var(--text2); font-variant-numeric:tabular-nums; }
+.unit { color:var(--text3); margin-left:2px; }
+.lnk { color:var(--text3); --s:12px; margin:0 4px; }
+.cb { width:14px; height:14px; border-radius:4px; border:1px solid #4a4a4a; display:flex; align-items:center; justify-content:center; --s:10px; color:var(--text1); flex:none; }
+.cb svg { stroke-width:2.5; }
+.more { height:28px; display:flex; align-items:center; gap:4px; padding:0 12px 0 46px; font-size:12px; color:var(--text2); --s:12px; }
+
+/* 取值控件 */
+.dd { height:var(--h); border-radius:var(--r); display:flex; align-items:center; gap:6px; padding:0 6px 0 var(--pad); color:var(--text1); --s:12px; flex:none; }
+.dd svg { margin-left:auto; color:var(--text3); }
+.field { background:var(--fs); box-shadow:inset 0 0 0 1px var(--edge); }
+.quiet { background:transparent; }
+.hov { background:var(--fs); box-shadow:inset 0 0 0 1px var(--edge); }
+.seg { height:var(--h); border-radius:var(--r); display:inline-flex; gap:2px; padding:2px; color:var(--text3); flex:none; }
+.seg.gap { background:var(--gap); }
+.seg.field { background:var(--fs); box-shadow:inset 0 0 0 1px var(--edge); }
+.seg.none { padding:0; }
+.seg span { display:flex; align-items:center; border-radius:calc(var(--r) - 2px); }
+.seg.center span { justify-content:center; }
+.seg span.cur { background:var(--segment-selected); color:var(--text1); font-weight:var(--w-medium); }
+.seg.none span.cur { background:var(--selbg); }
+
+/* 对齐参考线 */
+.guide { position:absolute; top:0; bottom:0; width:0; border-left:1px dashed rgba(156,190,255,.45); pointer-events:none; }
+.guide.box { border-left-color:rgba(251,174,57,.4); }
+
+/* 浮层 */
+.pop { background:var(--overlay); border:1px solid var(--line-overlay); border-radius:12px; padding:12px; display:flex; flex-direction:column; gap:8px; position:relative; }
+.fr { display:grid; grid-template-columns:72px minmax(0,1fr); column-gap:12px; align-items:center; min-height:32px; font-size:13px; }
+.fr .lb { color:var(--text2); }
+.fr .ct { display:flex; align-items:center; min-width:0; }
+.inp { height:32px; border-radius:8px; flex:1; display:flex; align-items:center; padding:0 12px; color:var(--text1); --s:14px; background:var(--fs); box-shadow:inset 0 0 0 1px var(--edge); }
+.inp svg { margin-left:auto; color:var(--text3); }
+.ta { height:56px; border-radius:8px; flex:1; padding:6px 12px; color:var(--text3); background:var(--fs); box-shadow:inset 0 0 0 1px var(--edge); }
+.tog { width:32px; height:18px; border-radius:9px; background:var(--accent); position:relative; flex:none; }
+.tog::after { content:''; position:absolute; right:2px; top:2px; width:14px; height:14px; border-radius:50%; background:#fff; }
+.panel { --fs:var(--raised); --selbg:var(--segment-selected); }
+.pop { --fs:var(--overlay-raised); --selbg:var(--overlay-hover); }
+.legend { font-size:12px; color:var(--text3); line-height:18px; white-space:normal; width:360px; }
+</style>
+</head>
+<body>
+<div class="page">
+<h1>取值控件的底与对齐：现状与 4 个方案</h1>
+<p class="lead">都基于创新版三档宽度。蓝色虚线 = 文字列，橙色虚线 = 框的左缘。
+现状（已按真实令牌校正）：下拉是 raised 底 + 6% 白发丝边，文字距框左 8（浮层 12）；数字在属性面板里静息无底，文字同样距列 8；分段是比面板更暗的凹槽（gap）+ 2 像素内边距，文字在各段居中，所以只有分段的字对不上。上一版草图把下拉底画得过淡（浮层里甚至比浮层底还暗），这一版改正。</p>
+<div id="blocks"></div>
+</div>
+<script>
+const ICONS = /*ICONS_START*/{"chevron-down":"<path d=\"m6 9 6 6 6-6\"/>","chevron-right":"<path d=\"m9 18 6-6-6-6\"/>","check":"<path d=\"M20 6 9 17l-5-5\"/>","timer":"<line x1=\"10\" x2=\"14\" y1=\"2\" y2=\"2\"/><line x1=\"12\" x2=\"15\" y1=\"14\" y2=\"11\"/><circle cx=\"12\" cy=\"14\" r=\"8\"/>","link-2":"<path d=\"M9 17H7A5 5 0 0 1 7 7h2\"/><path d=\"M15 7h2a5 5 0 1 1 0 10h-2\"/><line x1=\"8\" x2=\"16\" y1=\"12\" y2=\"12\"/>","trash-2":"<path d=\"M10 11v6\"/><path d=\"M14 11v6\"/><path d=\"M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6\"/><path d=\"M3 6h18\"/><path d=\"M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2\"/>","dices":"<rect width=\"12\" height=\"12\" x=\"2\" y=\"10\" rx=\"2\" ry=\"2\"/><path d=\"m17.92 14 3.5-3.5a2.24 2.24 0 0 0 0-3l-5-4.92a2.24 2.24 0 0 0-3 0L10 6\"/><path d=\"M6 18h.01\"/><path d=\"M10 14h.01\"/><path d=\"M15 6h.01\"/><path d=\"M18 9h.01\"/>","form":"<path d=\"M4 14h6\"/><path d=\"M4 2h10\"/><rect x=\"4\" y=\"18\" width=\"16\" height=\"4\" rx=\"1\"/><rect x=\"4\" y=\"6\" width=\"16\" height=\"4\" rx=\"1\"/>","blocks":"<path d=\"M10 22V7a1 1 0 0 0-1-1H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5a1 1 0 0 0-1-1H2\"/><rect x=\"14\" y=\"2\" width=\"8\" height=\"8\" rx=\"1\"/>"}/*ICONS_END*/;
+const I = (n, s) => `<svg class="i" viewBox="0 0 24 24" ${s?`style="--s:${s}px"`:''}>${ICONS[n]||''}</svg>`;
+/* 图标：'chevron-down' 'chevron-right' 'check' 'timer' 'link-2' 'trash-2' 'dices' */
+
+const tw = (s, fs) => [...s].reduce((w, c) => w + (/[　-鿿＀-￯]/.test(c) ? fs : fs * 0.6), 0);
+const snap = (w, tiers) => tiers.find(t => t >= w) ?? w;
+
+/* 方案定义：dd 下拉外观；seg 分段底（gap 凹槽 / field 字段底 / none 无底）与文字对齐；hover 示意哪一个控件处于悬停 */
+const SCHEMES = {
+  now: { cap: '现状', sub: '创新版三档 · 真实底色', dd: 'field', seg: 'gap', align: 'center' },
+  A:   { cap: 'A 统一字段底', sub: '框对框，字对字', dd: 'field', seg: 'field', align: 'start' },
+  B:   { cap: 'B 下拉无底', sub: '分段凹槽保留', dd: 'quiet', seg: 'gap', align: 'start' },
+  C:   { cap: 'C 全部无底', sub: '选中项小底', dd: 'quiet', seg: 'none', align: 'start' },
+  D:   { cap: 'D 推荐', sub: '面板用 C · 浮层用 A' },
+};
+const resolve = (key, where) => key === 'D' ? (where === 'panel' ? SCHEMES.C : SCHEMES.A) : SCHEMES[key];
+
+function dd(opts, cur, s, ctx, hover) {
+  const need = Math.max(...opts.map(o => tw(o, ctx.fs))) + ctx.pad + 6 + 12 + 6;
+  const w = snap(Math.max(ctx.min, need), ctx.tiers);
+  const cls = s.dd === 'field' ? 'field' : hover ? 'hov' : 'quiet';
+  return `<div class="dd ${cls}" style="width:${w}px"><span>${cur}</span>${I('chevron-down')}</div>`;
+}
+function seg(opts, cur, s, ctx) {
+  const cellPad = s.align === 'center' ? 8 : s.seg === 'none' ? ctx.pad : ctx.pad - 2;
+  const widest = Math.max(...opts.map(o => tw(o, ctx.fs)));
+  const cells = opts.map(o => {
+    const w = s.align === 'center' ? Math.max(40, widest + 16) : Math.ceil(tw(o, ctx.fs) + cellPad * 2);
+    return `<span class="${o === cur ? 'cur' : ''}" style="width:${w}px;${s.align === 'center' ? '' : `padding-left:${cellPad}px`}">${o}</span>`;
+  }).join('');
+  return `<div class="seg ${s.seg} ${s.align}">${cells}</div>`;
+}
+/* 属性面板里的数字：静息无底，文字距列 8（与真实 NumberInput 的 px-2 一致） */
+const n = (v, unit) => `<span class="n">${v}</span>${unit ? `<span class="unit">${unit}</span>` : ''}`;
+const num = (v, unit) => `<span style="padding-left:8px;display:inline-flex">${n(v, unit)}</span>`;
+const pair = (a, b, unit, link) => `<span style="display:inline-flex;width:72px;padding-left:8px;align-items:center">${n(a)}${link ? `<span class="lnk">${I('link-2')}</span>` : ''}</span>${num(b, unit)}`;
+const row = (name, val, sw = true) => `<div class="pr"><span></span><span class="sw">${sw ? I('timer') : ''}</span><span class="nm">${name}</span><div class="val">${val}</div></div>`;
+const sec = (t, body) => `<div class="sec"><div class="sh"><span class="tw">${I('chevron-down')}</span>${t}</div>${body}</div>`;
+
+const COL = 4 + 14 + 4 + 22 + 4 + 88 + 4;   // 值列左缘（距面板左）
+function effects(key) {
+  const s = resolve(key, 'panel');
+  const ctx = { fs: 12, pad: 8, min: 72, tiers: [72, 112, 152] };
+  const style = `--h:24px;--r:6px;--pad:${ctx.pad}px;`;
+  // C 方案里复选框挪到文字列，和文字同一条线
+  const cbPad = s.seg === 'none' ? 'padding-left:8px;display:inline-flex' : 'display:inline-flex';
+  const cb = on => `<span style="${cbPad}"><span class="cb">${on ? I('check') : ''}</span></span>`;
+  return `<div class="panel" style="width:360px;height:700px;${style}">
+    <div class="tabs"><span class="tab cur">效果控件</span><span class="tab">元数据</span></div>
+    ${sec('运动',
+      row('位置', pair('960', '540')) + row('缩放', pair('100', '100', '%', true)) + row('不透明度', num('100', '%')) +
+      row('运动模糊', seg(['自动', '开', '关'], '自动', s, ctx), false))}
+    ${sec('鼠标',
+      row('显示', cb(true), false) + row('光标样式', seg(['浅色', '深色'], '浅色', s, ctx), false) +
+      row('光标大小', num('3.0', '%')) + row('点击效果', dd(['涟漪', '高亮圈', '关闭'], '涟漪', s, ctx, true), false) +
+      `<div class="more">${I('chevron-right')}更多</div>`)}
+    ${sec('缩放',
+      row('自动缩放', cb(true), false) + `<div class="sub">播放头所在的缩放</div>` +
+      row('程度', dd(['轻微', '较小', '适中', '较大', '很大', '特写'], '适中', s, ctx) + `<span class="tr">${I('trash-2')}</span>`, false) +
+      row('对准', seg(['跟随鼠标', '固定位置'], '跟随鼠标', s, ctx), false) +
+      row('过渡速度', seg(['平缓', '快速'], '平缓', s, ctx), false))}
+    ${sec('时间重映射', row('补帧', seg(['采样', '混合'], '采样', s, ctx), false) + row('变调', num('0')))}
+    <i class="guide box" style="left:${COL}px"></i><i class="guide" style="left:${COL + 8}px"></i>
+  </div>`;
+}
+
+function genForm(key) {
+  const s = resolve(key, 'form');
+  const ctx = { fs: 13, pad: 12, min: 80, tiers: [80, 120, 160] };
+  const style = `--h:32px;--r:8px;--pad:${ctx.pad}px;`;
+  const ctl = 1 + 12 + 72 + 12;   // 浮层描边 + 内边距 + 标签列 + 间隔
+  return `<div class="pop" style="width:384px;${style}">
+    <div class="fr"><span class="lb">分辨率</span><div class="ct">${dd(['1080P', '720P', '4K'], '1080P', s, ctx, true)}</div></div>
+    <div class="fr"><span class="lb">时长</span><div class="ct">${dd(['5 秒', '10 秒'], '5 秒', s, ctx)}</div></div>
+    <div class="fr"><span class="lb">画面比例</span><div class="ct">${dd(['16:9', '9:16', '1:1', '4:3', '21:9'], '16:9', s, ctx)}</div></div>
+    <div class="fr"><span class="lb">风格</span><div class="ct">${dd(['电影感写实', '胶片颗粒复古风', '动漫', '3D 卡通', '水彩'], '电影感写实', s, ctx)}</div></div>
+    <div class="fr"><span class="lb">镜头</span><div class="ct">${seg(['自动', '固定'], '自动', s, ctx)}</div></div>
+    <div class="fr"><span class="lb">生成音频</span><div class="ct"><span class="tog"></span></div></div>
+    <div class="fr"><span class="lb">随机种子</span><div class="ct"><div class="inp">1739284056${I('dices')}</div></div></div>
+    <div class="fr" style="align-items:start"><span class="lb" style="line-height:32px">负向提示词</span><div class="ct"><div class="ta">不想出现的内容</div></div></div>
+    <i class="guide box" style="left:${ctl - 1}px"></i><i class="guide" style="left:${ctl - 1 + 12}px"></i>
+  </div>`;
+}
+
+const KEYS = ['now', 'A', 'B', 'C', 'D'];
+const cols = render => `<div class="cmp">${KEYS.map(k => `<div class="col"><div class="cap">${SCHEMES[k].cap}<small>${SCHEMES[k].sub}</small></div>${render(k)}</div>`).join('')}</div>`;
+
+const SHOTS = [
+  { id: '1', title: '剪辑效果控件', w: 1992, h: 790, html: () => cols(effects),
+    note: '“点击效果”下拉画成悬停态，示意 B / C 无底下拉悬停时出现的底。' },
+  { id: '2', title: '生成参数浮层', w: 2112, h: 470, html: () => cols(genForm),
+    note: '“分辨率”下拉画成悬停态。浮层里控件底是浮层专用档 overlay-raised（比浮层底亮一档）加发丝边。' },
+];
+document.getElementById('blocks').innerHTML = SHOTS.map(s => `<div class="block" data-id="${s.id}"><h2>${s.id}. ${s.title}</h2><p class="note">${s.note}</p><div class="shot" style="width:${s.w}px;height:${s.h}px">${s.html()}</div></div>`).join('');
+const q = new URLSearchParams(location.search);
+if (q.get('s')) { document.body.classList.add('single', 'draft'); document.querySelector(`.block[data-id="${q.get('s')}"]`).classList.add('show'); }
+</script>
+</body>
+</html>
