@@ -13,8 +13,8 @@ describe('parseAssistantCliArguments', () => {
     expect(parseAssistantCliArguments([
       '.', '--assistant-cli', '--goal', '生成一只小猫',
       '--trace', 'detailed', '--timeout', '120000', '--thread', 'cli-test',
-      '--visible',
-    ])).toEqual({ goal: '生成一只小猫', captureMode: 'detailed', visible: true, timeoutMs: 120000, threadId: 'cli-test' })
+      '--visible', '--fresh-project', '基线 V1',
+    ])).toEqual({ goal: '生成一只小猫', captureMode: 'detailed', visible: true, timeoutMs: 120000, threadId: 'cli-test', freshProject: '基线 V1' })
   })
 
   it('拒绝缺少目标和未知参数', () => {

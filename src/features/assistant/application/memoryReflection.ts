@@ -58,12 +58,16 @@ export function createMemoryRegistrations(): ApplicationEntityRegistration[] {
     const entityType = types[layer], definitions = fields(layer)
     return { entity: { id: entityType, domain: 'memory', version: 1, title: { global: '全局记忆', project: '项目记忆', style: '风格使用者偏好' }[layer], description: MEMORY_RULES,
       refKind: entityType, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: [parents[layer]], revisionScopes: ['assistant_memory'], queryCapabilityIds: ['read_application_entity'], schemaRef: schemaRef('entity', entityType),
-      collectionWrite: { creatable: true, removable: true, requiredPropertyIds: [`${entityType}.entry`] } },
+      collectionWrite: { creatable: true, removable: true, requiredPropertyIds: [`${entityType}.entry`] },
+      // 相关记忆已随宿主上下文给出，整份读回里不再重复一遍；点名类型或按父实体列出时照常返回。
+      omitFromDefaultSnapshot: true },
     properties: fieldDescriptors(definitions), schemaDocuments: [{ ref: schemaRef('property', `${entityType}.entry.value`), value: z.toJSONSchema(memoryEntryWriteSchema, { io: 'input' }) as JsonValue, validator: memoryEntryWriteSchema }],
-    provider: { entityType,
+    provider: { entityType, listsByParent: true,
       async listEntities(request) {
+        if (request.parent && request.parent.kind !== parents[layer]) throw new Error(`PARENT_FILTER_UNSUPPORTED：${entityType} 的父实体是 ${parents[layer]}。`)
         if (!(await refreshMemory()).settings.enabled) return { refs: [], nextCursor: null, revisions: { assistant_memory: 1 } }
-        const targets: MemoryTarget[] = layer === 'global' ? [{ layer }] : layer === 'project'
+        if (request.parent && layer === 'project' && !(await getPlatform().documents.listProjects()).some(value => value.id === request.parent!.id)) throw new Error('NOT_FOUND：项目不存在。')
+        const targets: MemoryTarget[] = layer === 'global' ? [{ layer }] : request.parent ? [{ layer, ownerId: request.parent.id }] : layer === 'project'
           ? (await getPlatform().documents.listProjects()).map(value => ({ layer, ownerId: value.id }))
           : (await styleMemoryStorage().list()).map(ownerId => ({ layer, ownerId }))
         const refs: ApplicationRef[] = []

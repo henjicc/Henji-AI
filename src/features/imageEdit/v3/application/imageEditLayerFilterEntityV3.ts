@@ -165,7 +165,7 @@ export class ImageEditLayerFilterCollectionExecutorV3 implements ApplicationColl
 }
 
 export function imageEditLayerFilterRegistrationV3(): ApplicationEntityRegistration {
-  return { entity: { id: ENTITY, domain: 'image_edit', version: 1, title: '图层滤镜', description: '内容图层上的有序、非破坏滤镜；开关、参数、强度、蒙版与顺序可独立修改。',
+  return { entity: { id: ENTITY, domain: 'image_edit', version: 1, title: '图层滤镜', description: '内容图层上的有序、非破坏滤镜；开关、参数、强度、蒙版与顺序可独立修改。可用的滤镜及 operation_type、effect_id、默认参数列在 image_edit.filter_definition。',
     refKind: ENTITY, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], parentTypes: ['image_edit.layer', 'image_edit.group'],
     revisionScopes: ['image_edit'], queryCapabilityIds: ['read_application_entity'], schemaRef: imageEditV3SchemaRef('entity', ENTITY),
     collectionWrite: { creatable: true, removable: true, requiredPropertyIds: [`${ENTITY}.operation_type`, `${ENTITY}.effect_id`, `${ENTITY}.params`] } },

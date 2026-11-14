@@ -14,7 +14,7 @@ description: 在痕迹AI修图、调色、抠出或选中主体、移除物体�
 ## 铁律：只约束真实契约
 
 1. 从宿主或 `list_documents` 确认来源与目标，用 `read_application_snapshot`（root 为图片文档）一次读回图层、图层组、蒙版、滤镜的完整引用与当前属性值；实例当前能不能写用 `describe_application_entities` 带 refs 查。引用来自返回值，不猜 ID，不把目录文档引用冒充图片工作文档引用。
-2. 参数、图层与组的读改增删走 `change_application_entities` 的 `set_properties`、`create_items`、`remove_items`；分割、应用选区、移除和修补走算法能力。内置 Pi 缺工具用 `load_application_tools` 的 names 只加载本步骤工具，外部 MCP 从 `describe_application_contract` 发现；技能不增授权。
+2. 参数、图层与组的读改增删走 `change_application_entities` 的 `set_properties`、`create_items`、`remove_items`；给图层加滤镜就在图层或组下创建 `image_edit.layer_filter`，`operation_type`、`effect_id` 与 `params` 的起点从可用滤镜目录 `image_edit.filter_definition` 列出并读取，不猜滤镜名。分割、应用选区、移除和修补走算法能力。内置 Pi 缺工具用 `load_application_tools` 的 names 只加载本步骤工具，外部 MCP 从 `describe_application_contract` 发现；技能不增授权。
 3. 选区与作品修改进入图片文档同一撤销历史，移除/修补一次提交一次撤销。保留原引用与结果；公开目录没有 V3 图片专用撤销工具，不借用标注撤销工具。撤销入口以当前宿主实际提供的路径为准，不能声称已撤回未执行的操作。
 4. 外部 MCP 写入带 operationId；baselineIds 可省略，显式提供时用于冲突检测。未知结果用 `get_application_operation` 查原操作；修改保留但保存失败用 `retry_application_operation_save`，originalOperationId 指向原调用，不重放修补或另换标识重试。
 5. 本地算法不等于云端付费生成；首次可能下载模型，占用网络与磁盘。遵守当前下载与取消状态。需要云端生成时走统一付费策略，不代替用户确认超额费用，不以重新付费掩盖保存失败。

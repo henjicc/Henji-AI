@@ -2,6 +2,7 @@ import { colorSettingsSchema } from '@/core/imaging/colorManagement';
 import { canvasSizeSchemaV3 } from '@/core/imageEdit/v3/documentGeometry'
 import {richTextContentSchema,vectorPathContentSchema} from '@/core/imaging/vectorContent'
 import { imageEditLayerFilterRegistrationV3 } from '../v3/application/imageEditLayerFilterEntityV3'
+import { imageEditFilterCatalogRegistrationV3 } from '../v3/application/imageEditFilterCatalogEntityV3'
 import { imageEditLayerMovesSchemaV3 } from '../v3/application/imageEditWorkflowFields'
 import { imageEditNamedRegionsSchemaV3 } from '@/core/imageEdit/v3/namedRegions'
 import { imageEditHistoryRowsSchemaV3 } from '../v3/application/imageEditHistoryFields'
@@ -242,5 +243,5 @@ export function createImageEditReflectionRegistrations(): ApplicationEntityRegis
       ref: imageEditV3SchemaRef('property', 'image_edit.resource.roles.value'),
       value: { type: 'array', items: { type: 'string' } },
     }] : [])],
-  })), imageEditSelectionRegistrationV3(), imageEditLayerFilterRegistrationV3()]
+  })), imageEditSelectionRegistrationV3(), imageEditLayerFilterRegistrationV3(), imageEditFilterCatalogRegistrationV3()]
 }

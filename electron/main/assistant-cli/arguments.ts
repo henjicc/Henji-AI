@@ -9,6 +9,8 @@ export interface AssistantCliOptions {
   visible: boolean
   timeoutMs: number
   threadId?: string
+  /** 先新建这个名字的空项目，运行结束后把它移进回收区：重复测量时每次都从同样的空项目开始。 */
+  freshProject?: string
 }
 
 interface AssistantCliHelpOptions {
@@ -50,6 +52,7 @@ export function parseAssistantCliArguments(argv: string[] = process.argv.slice(1
   let visible = false
   let timeoutMs = DEFAULT_TIMEOUT_MS
   let threadId: string | undefined
+  let freshProject: string | undefined
 
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index]
@@ -75,6 +78,10 @@ export function parseAssistantCliArguments(argv: string[] = process.argv.slice(1
         threadId = requireValue(argv, index, argument).trim()
         index += 1
         break
+      case '--fresh-project':
+        freshProject = requireValue(argv, index, argument).trim()
+        index += 1
+        break
       default:
         if (argument.startsWith('--')) throw new Error(`不支持的参数：${argument}`)
     }
@@ -86,7 +93,7 @@ export function parseAssistantCliArguments(argv: string[] = process.argv.slice(1
 
   return {
     goal, captureMode, visible,
-    timeoutMs, ...(threadId ? { threadId } : {}),
+    timeoutMs, ...(threadId ? { threadId } : {}), ...(freshProject ? { freshProject } : {}),
   }
 }
 
@@ -99,6 +106,7 @@ export function formatAssistantCliHelp(): string {
     '  --visible                                       显示真实 Electron 窗口，便于观察执行过程',
     '  --timeout <毫秒>                                最长运行时间，默认 600000，最大 3600000',
     '  --thread <标识>                                 续聊上一轮输出的 threadId；省略则新建对话',
+    '  --fresh-project <名称>                          先新建这个名字的空项目，运行结束后移进回收区（重复测量用）',
     '  --help                                          显示本帮助',
     '',
     '输出为 JSONL；finished 的 threadId 可用于下一轮 --thread，不能自行编造新标识。CLI 默认可写，付费遵守统一策略，回复完成不代表业务结果验收；用 runId 查询统一日志。',

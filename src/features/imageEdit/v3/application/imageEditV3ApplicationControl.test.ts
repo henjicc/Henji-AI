@@ -217,14 +217,27 @@ describe('图片编辑 V3 实时 Application Control', () => {
       expect(() => reflection.resolveSchema(field.value.kind === 'json' ? field.value.schemaRef : field.schemaRef,
         accessContext)).not.toThrow()
     }
+    // 目录里的每一项照原样填进滤镜都能建成，助手不必猜名字与参数
+    const catalog = await reflection.listEntities('image_edit.filter_definition', { limit: 100 }, accessContext)
+    const definitions = await Promise.all(catalog.refs.map(ref => reflection.readEntity(ref, undefined, accessContext).then(read => read.properties)))
+    expect(definitions.map(item => item['image_edit.filter_definition.effect_id'])).toEqual(expect.arrayContaining(['exposure', 'color_grade', 'image.fast-blur-v3']))
+    const exposure = definitions.find(item => item['image_edit.filter_definition.effect_id'] === 'exposure')!
     const before = await reflection.readEntity(parent, undefined, accessContext)
     const created = await commitStep('添加两个图层滤镜', before.revisions, { kind: 'collection', parent,
       entityType: 'image_edit.layer_filter', expectedRevisions: before.revisions,
       operation: { kind: 'create', items: [0.4, 0.6].map(stops => ({ properties: {
-        'image_edit.layer_filter.operation_type': 'adjustment', 'image_edit.layer_filter.effect_id': 'exposure',
-        'image_edit.layer_filter.params': { stops },
+        'image_edit.layer_filter.operation_type': exposure['image_edit.filter_definition.operation_type'], 'image_edit.layer_filter.effect_id': 'exposure',
+        'image_edit.layer_filter.params': { ...(exposure['image_edit.filter_definition.default_params'] as Record<string, JsonValue>), stops },
       } })) } }, 'filter-create')
     expect(created.status, JSON.stringify(created)).toBe('completed')
+    if (created.status !== 'completed') throw new Error('滤镜没建成')
+    const all = await commitStep('目录里的其余滤镜', created.resultingRevisions, { kind: 'collection', parent: imageEditV3LayerRef(document.id, 'content'),
+      entityType: 'image_edit.layer_filter', expectedRevisions: created.resultingRevisions, operation: { kind: 'create', items: definitions.map(item => ({ properties: {
+        'image_edit.layer_filter.operation_type': item['image_edit.filter_definition.operation_type'], 'image_edit.layer_filter.effect_id': item['image_edit.filter_definition.effect_id'],
+        'image_edit.layer_filter.params': item['image_edit.filter_definition.default_params'] } })) } }, 'filter-create-catalog')
+    expect(all.status, JSON.stringify(all)).toBe('completed')
+    if (all.status !== 'completed' || !all.undoRef) throw new Error('目录滤镜缺少撤销引用')
+    expect((await getApplicationControlExecutionEngine().undo({ undoRef: all.undoRef, expectedRevisions: all.resultingRevisions, idempotencyKey: 'filter-catalog-undo' }, executionContext)).status).toBe('completed')
     const listed = await reflection.listEntities('image_edit.layer_filter', { limit: 10 }, accessContext)
     expect(listed.refs).toHaveLength(2)
     const target = listed.refs[0]

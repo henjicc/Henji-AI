@@ -492,7 +492,8 @@ export const IMAGE_EDIT_V3_FILTER_FIELDS: ApplicationFieldDefinition<ImageEditV3
     read: source => source.location.layer.type === 'group' ? imageEditV3GroupRef(source.documentId, source.location.layer.id) : imageEditV3LayerRef(source.documentId, source.location.layer.id), storeActions: [] },
   ...(['operation_type', 'effect_id'] as const).map(suffix => ({
     propertyId: `image_edit.layer_filter.${suffix}`,
-    descriptor: property('image_edit.layer_filter', suffix, suffix === 'effect_id' ? '滤镜定义' : '滤镜种类', suffix === 'effect_id' ? { kind: 'string' } : { kind: 'enum', values: ['effect', 'adjustment'].map(value => ({ value, label: value })) }, { readOnlyReason: '滤镜定义在创建时确定；更换定义请删除后重新添加。' }),
+    descriptor: { ...property('image_edit.layer_filter', suffix, suffix === 'effect_id' ? '滤镜定义' : '滤镜种类', suffix === 'effect_id' ? { kind: 'string' } : { kind: 'enum', values: ['effect', 'adjustment'].map(value => ({ value, label: value })) }, { readOnlyReason: '滤镜定义在创建时确定；更换定义请删除后重新添加。' }),
+      description: '创建时必填，取值照 image_edit.filter_definition（可用滤镜目录）里同名属性填，创建后不可改。' },
     read: (source: ImageEditV3FilterFieldSource) => suffix === 'effect_id' ? source.filter.effectId : source.filter.operationType, storeActions: [],
   })),
   { propertyId: 'image_edit.layer_filter.index', descriptor: property('image_edit.layer_filter', 'index', '图层内滤镜顺序', { kind: 'integer', hardRange: { min: 0 } }),

@@ -100,6 +100,31 @@ describe('run_application_script', () => {
     expect(unknown.report.completed).toEqual([])
   })
 
+  it('已经执行、核对没通过的写入不报成未生效，带上撤销引用', async () => {
+    const unverified = (input: Record<string, unknown>, executionState: string) => ({ ok: false, operationId: input.operationId, executionState, verificationState: 'unresolved',
+      result: { ok: true, data: { undoRef: `undo-${String(input.summary)}`, verification: { verified: false } } } })
+    const { host } = hostWith((_name, input) => input.summary === 'caught' ? unverified(input, 'completed') : input.summary === 'half' ? unverified(input, 'partial') : { ok: true, data: { undoRef: 'undo-ok' } })
+    const caught = await run(`try { await app.call('change_application_entities', { summary: 'caught', changes: [] }) } catch {}\nreturn 1`, host)
+    expect(caught.isError).toBe(false)
+    expect(caught.report.failedCalls).toBeUndefined()
+    expect(caught.report.unverified).toMatchObject([{ call: 1, executionState: 'completed', undoRef: 'undo-caught' }])
+    expect(caught.report.undoRefs).toEqual([{ call: 1, tool: 'change_application_entities', undoRef: 'undo-caught' }])
+    const thrown = await run(`await app.call('change_application_entities', { summary: 'ok', changes: [] })\nawait app.call('change_application_entities', { summary: 'half', changes: [] })`, host)
+    expect(thrown.isError).toBe(true)
+    expect(thrown.report.failedCall).toMatchObject({ call: 2, status: 'unverified', executionState: 'partial', undoRef: 'undo-half' })
+    expect(thrown.report.error.message).toContain('只执行了一部分')
+    expect(thrown.report.next).toContain('不要当成没生效')
+    // 改上了但没保存：要补存，不是读回就算完
+    const unsaved = hostWith((_name, input) => ({ ...unverified(input, 'partial'), result: { ok: false, error: { details: { persistence: { state: 'failed' } } } } }))
+    const save = await run(`await app.call('change_application_entities', { summary: 'x', changes: [] })`, unsaved.host)
+    expect(save.report.error.message).toContain('retry_application_operation_save')
+    const billed = hostWith((_name, input) => ({ ...unverified(input, 'partial'), result: { ok: false, error: { details: { execution: { billing: 'submitted' } } } } }))
+    expect((await run(`await app.call('generate_video_edit_in_place', {})`, billed.host)).report.error.message).toContain('get_application_operation')
+    // 结果没能确认：照协调器的恢复说明办
+    const lost = hostWith((_name, input) => ({ ...unverified(input, 'unknown'), recovery: '先读取目标看改没改上，没改上就直接重做。' }))
+    expect((await run(`await app.call('change_application_entities', { summary: 'x', changes: [] })`, lost.host)).report.error.message).toContain('没改上就直接重做')
+  })
+
   it('需要用户确认的付费调用让脚本停下，不继续后面的步骤', async () => {
     const { host, calls } = hostWith((_name, input) => ({ ok: false, executionState: 'awaiting_user_confirmation', operationId: input.operationId }))
     const { report, isError } = await run(`await app.call('generate_video_edit_in_place', {})\nawait app.call('change_application_entities', { summary: 'after', changes: [] })`, host)

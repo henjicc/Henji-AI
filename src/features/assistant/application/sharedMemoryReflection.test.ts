@@ -7,7 +7,7 @@ import { createMemoryRegistrations, MemoryExecutor } from './memoryReflection'
 const fixture = vi.hoisted(() => ({ state: undefined as MemorySnapshot | undefined }))
 vi.mock('@/services/assistantMemory/memoryService', () => ({
   refreshMemory: async () => fixture.state!,
-  readMemory: async () => fixture.state!.settings.enabled ? fixture.state!.entries : [],
+  readMemory: async (target: { ownerId?: string }) => !fixture.state!.settings.enabled ? [] : target.ownerId === 'p2' ? [{ ...fixture.state!.entries[0], id: 'other-project' }] : fixture.state!.entries,
   writeMemory: async (input: MemoryWrite) => {
     if (!fixture.state!.settings.enabled) throw new Error('MEMORY_DISABLED')
     const result = applyMemoryWrite(fixture.state!.entries, input, new Date(), crypto.randomUUID())
@@ -16,6 +16,7 @@ vi.mock('@/services/assistantMemory/memoryService', () => ({
     return result.change
   }, revertMemory: vi.fn(),
 }))
+vi.mock('@/platform/runtime', () => ({ getPlatform: () => ({ documents: { listProjects: async () => [{ id: 'p1' }, { id: 'p2' }] } }) }))
 beforeEach(() => { fixture.state = emptyMemorySnapshot() })
 const ref = { kind: 'assistant.memory', id: 'font' }
 const input = { section: 'creative' as const, content: '中文使用思源黑体。', source: 'assistant' as const }
@@ -46,4 +47,12 @@ it('过期或缺失条目基线拒绝覆盖，重读可合并', async () => {
   await expect(new MemoryExecutor('global').apply(step({ assistant_memory: 0 }))).rejects.toThrow('BASELINE_REQUIRED')
   await new MemoryExecutor('global').apply(step((await provider().readEntity(ref, {})).revisions))
   expect(fixture.state!.history).toHaveLength(1)
+})
+it('项目记忆按项目列出，只返回该项目的条目', async () => {
+  await seed()
+  const project = createMemoryRegistrations().find(value => value.entity.id === 'document.project_memory')!.provider!
+  expect((await project.listEntities({ limit: 10 })).refs.map(item => item.id)).toEqual(['p1:font', 'p2:other-project'])
+  expect((await project.listEntities({ limit: 10, parent: { kind: 'documents.project', id: 'p2' } })).refs.map(item => item.id)).toEqual(['p2:other-project'])
+  await expect(project.listEntities({ limit: 10, parent: { kind: 'documents.project', id: 'gone' } })).rejects.toThrow('NOT_FOUND')
+  await expect(project.listEntities({ limit: 10, parent: { kind: 'video_edit.style', id: 's' } })).rejects.toThrow('PARENT_FILTER_UNSUPPORTED')
 })
