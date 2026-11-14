@@ -20,16 +20,20 @@ export const videoEditAnnotationTargetSchema = z.discriminatedUnion('kind', [
   point.extend({ kind: z.literal('text') }).strict(),
   point.extend({ kind: z.literal('marker'), number: z.number().int().positive().max(999) }).strict(),
 ])
-/** 标注颜色用命名色板，真实色值在 colorTokens 的 VIDEO_EDIT_ANNOTATION_COLORS；省略为 red。 */
+/**
+ * 旧版本手选的命名颜色。现在颜色按批注在序列里的序号自动轮换（videoEditAnnotationPaletteIndex），画面与面板都不读它；
+ * 样式里 color 仍是必填，只为旧程序能读新文件，新写入一律写旧程序的默认值 red。
+ */
 export const VIDEO_EDIT_ANNOTATION_COLOR_NAMES = ['red', 'orange', 'yellow', 'green', 'blue', 'purple', 'white', 'black'] as const
 /** 线条粗细（重要记录 019 统一批注工具的“粗细”）：细 / 中 / 粗，省略为中。 */
 export const VIDEO_EDIT_ANNOTATION_WEIGHTS = ['thin', 'regular', 'bold'] as const
 export type VideoEditAnnotationWeight = typeof VIDEO_EDIT_ANNOTATION_WEIGHTS[number]
 export const VIDEO_EDIT_ANNOTATION_WEIGHT_LABELS: Record<VideoEditAnnotationWeight, string> = { thin: '细', regular: '中', bold: '粗' }
 export const videoEditAnnotationStyleSchema = z.object({ color: z.enum(VIDEO_EDIT_ANNOTATION_COLOR_NAMES), weight: z.enum(VIDEO_EDIT_ANNOTATION_WEIGHTS).optional().describe('线条粗细：thin 细、regular 中（省略即中）、bold 粗。') }).strict()
-export type VideoEditAnnotationColor = typeof VIDEO_EDIT_ANNOTATION_COLOR_NAMES[number]
-/** 颜色的中文名（参数条的色样与读屏名称用）。 */
-export const VIDEO_EDIT_ANNOTATION_COLOR_LABELS: Record<VideoEditAnnotationColor, string> = { red: '红', orange: '橙', yellow: '黄', green: '绿', blue: '蓝', purple: '紫', white: '白', black: '黑' }
+/** 批注轮换色的数量（主题令牌 annotation1…8 与 colorTokens 的 VIDEO_EDIT_ANNOTATION_PALETTE_HEX）。 */
+export const VIDEO_EDIT_ANNOTATION_PALETTE_SIZE = 8
+/** 第 number 条批注（序列里从 1 数）用第几号轮换色，从 0 数。 */
+export function videoEditAnnotationPaletteIndex(number: number): number { return (Math.max(1, number) - 1) % VIDEO_EDIT_ANNOTATION_PALETTE_SIZE }
 export const videoEditAnnotationAuthorSchema = z.object({ kind: z.enum(['user', 'assistant', 'external']), name: z.string().trim().min(1) }).strict()
 export const videoEditAnnotationMessageSchema = z.object({ id: identifier, author: videoEditAnnotationAuthorSchema, createdAt: z.string().datetime(), text: z.string().trim().min(1) }).strict()
 export const videoEditAnnotationSchema = z.object({
@@ -54,10 +58,9 @@ export const videoEditAnnotationSchema = z.object({
 export type VideoEditAnnotation = z.infer<typeof videoEditAnnotationSchema>
 export type VideoEditAnnotationTarget = z.infer<typeof videoEditAnnotationTargetSchema>
 export type VideoEditAnnotationStyle = z.infer<typeof videoEditAnnotationStyleSchema>
-export function videoEditAnnotationColor(mark: Pick<VideoEditAnnotation, 'style'>): VideoEditAnnotationColor { return mark.style?.color ?? 'red' }
 export function videoEditAnnotationWeight(mark: Pick<VideoEditAnnotation, 'style'>): VideoEditAnnotationWeight { return mark.style?.weight ?? 'regular' }
-/** 写进批注的样式：中等粗细不写出来，文件里只记偏离默认的值。 */
-export function videoEditAnnotationStyle(color: VideoEditAnnotationColor, weight: VideoEditAnnotationWeight): NonNullable<VideoEditAnnotation['style']> { return { color, ...(weight === 'regular' ? {} : { weight }) } }
+/** 写进批注的样式：只记偏离默认的粗细，中等粗细不写样式；color 照填旧程序的默认值，见 VIDEO_EDIT_ANNOTATION_COLOR_NAMES。 */
+export function videoEditAnnotationStyle(weight: VideoEditAnnotationWeight): VideoEditAnnotation['style'] { return weight === 'regular' ? undefined : { color: VIDEO_EDIT_ANNOTATION_COLOR_NAMES[0], weight } }
 /** 助手改完（addressed）即视为完成，画面上不再显示；用户觉得不行就驳回，回到待处理。用户也可以确认（resolved）。 */
 export const VIDEO_EDIT_ANNOTATION_STATUS_LABELS = { draft: '待发送', open: '待处理', addressed: '已改完', resolved: '已确认' } as const
 

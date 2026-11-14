@@ -1,5 +1,5 @@
-import { videoEditAnnotationAt, videoEditAnnotationBounds, videoEditAnnotationColor, type VideoEditAnnotation } from '@/core/videoEdit/annotations'
-import { VIDEO_EDIT_ANNOTATION_COLORS } from '@/core/theme/colorTokens'
+import { videoEditAnnotationAt, videoEditAnnotationBounds, videoEditAnnotationPaletteIndex, type VideoEditAnnotation } from '@/core/videoEdit/annotations'
+import { VIDEO_EDIT_ANNOTATION_INK_HEX, VIDEO_EDIT_ANNOTATION_PALETTE_HEX, WHITE_HEX } from '@/core/theme/colorTokens'
 
 export interface VideoEditAnnotationObservationOptions {
   overlayAnnotations?: boolean
@@ -21,8 +21,8 @@ export function prepareVideoEditAnnotationObservation(marks: readonly VideoEditA
 }
 type Context = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
 /**
- * Overlay coordinates use the same normalized targets as the monitor, remapped into a cropped image. Shapes use the
- * annotation's own colour (red by default); the numbered badge carries the review state, so agents can tell them apart.
+ * 坐标与节目画面上的批注同一套归一化目标，裁切时换算到裁出的图里。形状颜色和画面、面板一样按序号轮换，
+ * 编号徽标写出审查状态，助手据此区分各条。
  */
 export function paintVideoEditAnnotationObservation(context: Context, width: number, height: number, overlays: ReturnType<typeof prepareVideoEditAnnotationObservation>['overlays'], crop?: { x: number; y: number; width: number; height: number }): void {
   const css = getComputedStyle(document.documentElement)
@@ -35,7 +35,7 @@ export function paintVideoEditAnnotationObservation(context: Context, width: num
   context.lineCap = 'round'; context.lineJoin = 'round'
   for (const { mark, number } of overlays) {
     const target = mark.target
-    const color = VIDEO_EDIT_ANNOTATION_COLORS[videoEditAnnotationColor(mark)]
+    const color = VIDEO_EDIT_ANNOTATION_PALETTE_HEX[videoEditAnnotationPaletteIndex(number)]
     context.strokeStyle = color; context.fillStyle = color
     context.lineWidth = line; context.setLineDash(mark.status === 'draft' ? [line * 3, line * 2] : [])
     let label: [number, number] = [8, 20 + (number - 1) * 24]
@@ -64,7 +64,7 @@ export function paintVideoEditAnnotationObservation(context: Context, width: num
       label = [at[0] + radius, at[1] - radius]
       context.setLineDash([]); context.beginPath(); context.arc(...at, radius, 0, Math.PI * 2); context.fill()
       context.font = `600 ${Math.round(radius * 1.15)}px sans-serif`; context.textAlign = 'center'; context.textBaseline = 'middle'
-      context.fillStyle = videoEditAnnotationColor(mark) === 'white' || videoEditAnnotationColor(mark) === 'yellow' ? VIDEO_EDIT_ANNOTATION_COLORS.black : VIDEO_EDIT_ANNOTATION_COLORS.white
+      context.fillStyle = VIDEO_EDIT_ANNOTATION_INK_HEX
       context.fillText(String(target.number), at[0], at[1] + radius * 0.05)
       context.textAlign = 'start'; context.textBaseline = 'alphabetic'
     }
@@ -74,9 +74,9 @@ export function paintVideoEditAnnotationObservation(context: Context, width: num
       context.setLineDash([]); context.font = `500 ${size}px sans-serif`
       const text = mark.text.length > 60 ? `${mark.text.slice(0, 59)}…` : mark.text
       const boxWidth = Math.min(width - at[0], context.measureText(text).width + size * 1.2); const boxHeight = size * 1.6
-      context.fillStyle = VIDEO_EDIT_ANNOTATION_COLORS.white; context.globalAlpha = 0.92; context.fillRect(at[0], at[1], boxWidth, boxHeight); context.globalAlpha = 1
+      context.fillStyle = WHITE_HEX; context.globalAlpha = 0.92; context.fillRect(at[0], at[1], boxWidth, boxHeight); context.globalAlpha = 1
       context.fillStyle = color; context.fillRect(at[0], at[1], Math.max(3, size / 5), boxHeight)
-      context.fillStyle = VIDEO_EDIT_ANNOTATION_COLORS.black; context.fillText(text, at[0] + size * 0.6, at[1] + size * 1.15)
+      context.fillStyle = VIDEO_EDIT_ANNOTATION_INK_HEX; context.fillText(text, at[0] + size * 0.6, at[1] + size * 1.15)
       label = [at[0], at[1]]
     }
     const title = `${number}${mark.status === 'addressed' ? ' 已改完' : ''}${target.kind === 'element' && !target.region ? ' 元素已不存在' : ''}`

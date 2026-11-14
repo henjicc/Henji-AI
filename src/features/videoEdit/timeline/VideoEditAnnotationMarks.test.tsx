@@ -24,3 +24,12 @@ it('滚动标尺圈段采用含两端帧、取消不修改入出点；可见标�
   view.rerender(<VideoEditAnnotationMarks instance={owner} sequence={getActiveVideoEditSequence(owner)} pixels={2} left={40} width={100} onError={vi.fn()} />)
   fireEvent.click(view.getByRole('button', { name: '跳到标注 1' })); expect(owner.frame).toBe(30)
 })
+it('挨得太近的批注合成一个计数，指针停上去展开成一排序号，可逐个跳转', async () => {
+  const owner = await createVideoEditTestProject(); const id = owner.document.id
+  for (const frame of [30, 31, 80]) createVideoEditAnnotation(id, owner.activeSequenceId, { frame, target: { kind: 'point', x: .5, y: .5 }, text: `第 ${frame} 帧`, status: 'open' })
+  const view = render(<VideoEditAnnotationMarks instance={owner} sequence={getActiveVideoEditSequence(owner)} pixels={2} left={0} width={400} onError={vi.fn()} />)
+  expect(view.getByRole('button', { name: '跳到标注 3' })).toBeTruthy()
+  expect(view.queryByRole('button', { name: '跳到标注 1' })).toBeNull()
+  fireEvent.pointerEnter(view.getByRole('button', { name: '这里有 2 条批注' }).parentElement!)
+  fireEvent.click(view.getByRole('button', { name: '跳到标注 2' })); expect(owner.frame).toBe(31)
+})

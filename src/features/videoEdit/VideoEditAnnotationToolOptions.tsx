@@ -3,8 +3,7 @@ import { Copy, MoreHorizontal, Send } from 'lucide-react'
 import { PanelTrigger, UiButton, UiIconButton, UiOptionButton, UiSegmented } from '@/components/ui'
 import { UI_ICON_SIZE } from '@/core/theme/icons'
 import { Z_LAYERS } from '@/core/theme/zLayers'
-import { VIDEO_EDIT_ANNOTATION_COLORS } from '@/core/theme/colorTokens'
-import { VIDEO_EDIT_ANNOTATION_COLOR_LABELS, VIDEO_EDIT_ANNOTATION_COLOR_NAMES, VIDEO_EDIT_ANNOTATION_WEIGHT_LABELS, VIDEO_EDIT_ANNOTATION_WEIGHTS, type VideoEditAnnotationWeight } from '@/core/videoEdit/annotations'
+import { VIDEO_EDIT_ANNOTATION_WEIGHT_LABELS, VIDEO_EDIT_ANNOTATION_WEIGHTS, type VideoEditAnnotationWeight } from '@/core/videoEdit/annotations'
 import type { VideoEditCommandId } from '@/core/videoEdit/commands'
 import { chooseVideoEditAnnotationShape, sendVideoEditAnnotations, setVideoEditAnnotationBrush, subscribeVideoEditAnnotationBrush, VIDEO_EDIT_ANNOTATION_SHAPE_COMMANDS, VIDEO_EDIT_ANNOTATION_SHAPES, videoEditAnnotationBrush, videoEditAnnotationBrushRevision } from './application/videoEditAnnotations'
 import { focusVideoEditPanel, type VideoEditInstance } from './application/videoEditService'
@@ -14,8 +13,8 @@ import type { timelineCommandPresentation } from './timeline/timelineCommandPres
 type Presentation = ReturnType<typeof timelineCommandPresentation>
 
 /**
- * 批注工具的参数条（重要记录 019）：紧跟命令带里的工具组（窄窗口时在命令带下的从属参数带）。形状、颜色、粗细是“接下来怎么画”，
- * 选中画面上的一条批注时改颜色或粗细也作用到它（由画面上的批注层接手）；右端是这个工具的动作：助手改好的去批注面板审查，
+ * 批注工具的参数条（重要记录 019）：紧跟命令带里的工具组（窄窗口时在命令带下的从属参数带）。形状、粗细是“接下来怎么画”，
+ * 颜色按批注序号自动轮换、不在这里选；选中画面上的一条批注时改粗细也作用到它（由画面上的批注层接手）；右端是这个工具的动作：助手改好的去批注面板审查，
  * 待发送的批注发给助手。
  * 节目画面本身不放任何工具。
  */
@@ -39,9 +38,6 @@ export function VideoEditAnnotationToolOptions({ instance, presentation, onError
         const Icon = VIDEO_EDIT_ANNOTATION_SHAPE_ICONS[shape]; const command = presentation(VIDEO_EDIT_ANNOTATION_SHAPE_COMMANDS[shape])
         return <UiIconButton key={shape} size="sm" role="radio" aria-checked={brush.shape === shape} selection="mode" on={brush.shape === shape} aria-label={command.title} tooltip={command.tooltip} onClick={() => run(() => chooseVideoEditAnnotationShape(projectId, shape))}><Icon /></UiIconButton>
       })}
-    </div>
-    <div role="radiogroup" aria-label="批注颜色" className="flex items-center gap-1.5 px-1">
-      {VIDEO_EDIT_ANNOTATION_COLOR_NAMES.map(color => <UiOptionButton key={color} variant="swatch" role="radio" aria-checked={brush.color === color} aria-label={`${VIDEO_EDIT_ANNOTATION_COLOR_LABELS[color]}色`} tooltip={`${VIDEO_EDIT_ANNOTATION_COLOR_LABELS[color]}色`} active={brush.color === color} onClick={() => run(() => setVideoEditAnnotationBrush(projectId, { color }))} style={{ backgroundColor: VIDEO_EDIT_ANNOTATION_COLORS[color] }} />)}
     </div>
     <UiSegmented<VideoEditAnnotationWeight> ariaLabel="批注粗细" size="sm" value={brush.weight} onChange={weight => run(() => setVideoEditAnnotationBrush(projectId, { weight }))}
       options={VIDEO_EDIT_ANNOTATION_WEIGHTS.map(weight => ({ value: weight, label: VIDEO_EDIT_ANNOTATION_WEIGHT_LABELS[weight] }))} />

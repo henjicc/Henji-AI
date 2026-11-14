@@ -21,14 +21,18 @@ it('完整流转：草稿编辑→批量发送→open→Agent处理→已改完�
   const markId = createVideoEditAnnotation(id, owner.activeSequenceId, { frame: 12, target: { kind: 'point', x: .2, y: .3 }, text: '标题移到这里' })
   const errors = vi.fn(); const view = render(<VideoEditAnnotationsPanel instance={owner} onError={errors} />); const app = createApplicationHarness()
   try {
-    expect(view.getByText('1 条待发送')).toBeTruthy()
-    // 选中不铺底色、展开即选中：刚画的那条已选中并展开；点一条就跳到它的画面
+    expect(view.getByRole('button', { name: /发送 1 条/ })).toBeTruthy()
+    // 刚画的那条已选中并就地展开；点一条就跳到它的画面
     expect(view.getByRole('button', { name: '跳到标注 1' }).getAttribute('aria-expanded')).toBe('true')
     fireEvent.click(view.getByRole('button', { name: '跳到标注 1' })); expect(owner.frame).toBe(12); expect(owner.activePanel).toBe('annotations')
     fireEvent.change(view.getByLabelText('标注 1 说明'), { target: { value: '标题缩小' } }); fireEvent.blur(view.getByLabelText('标注 1 说明'))
     expect(getActiveVideoEditSequence(owner).annotations[0].text).toBe('标题缩小')
-    fireEvent.click(view.getByRole('button', { name: '复制给外部 Agent' })); await waitFor(() => expect(getActiveVideoEditSequence(owner).annotations[0].status).toBe('open'))
-    expect(view.queryByText('1 条待发送')).toBeNull()
+    // 失焦收回成一行，再点又展开
+    expect(view.getByRole('button', { name: '跳到标注 1' }).getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(view.getByRole('button', { name: /发送 1 条/ })); fireEvent.click(await view.findByRole('button', { name: '复制给外部 Agent' }))
+    await waitFor(() => expect(getActiveVideoEditSequence(owner).annotations[0].status).toBe('open'))
+    expect(view.queryByRole('button', { name: /发送 1 条/ })).toBeNull()
+    fireEvent.click(view.getByRole('button', { name: '跳到标注 1' }))
     await act(async () => {
       const result = await app.change({ kind: 'video_edit.annotation', id: `${id}:${markId}` }, { 'video_edit.annotation.thread': [{ id: 'r', author: { kind: 'external', name: 'Claude Code' }, createdAt: '2026-10-08T00:00:00.000Z', text: '已缩小；撤销这次修改可恢复。' }], 'video_edit.annotation.status': 'addressed' }); expect(result).toMatchObject({ ok: true })
     })
@@ -40,7 +44,7 @@ it('完整流转：草稿编辑→批量发送→open→Agent处理→已改完�
     expect(errors).not.toHaveBeenCalled()
   } finally { app.dispose() }
 })
-it('驳回附理由，补充讨论；删除草稿保留其它标注', async () => {
+it('驳回附理由；删除草稿保留其它标注；Esc 撤回没保存的改动并收回一行', async () => {
   const owner = await createVideoEditTestProject(); const id = owner.document.id
   createVideoEditAnnotation(id, owner.activeSequenceId, { frame: 0, target: { kind: 'point', x: .1, y: .1 }, text: '一条草稿' })
   const markId = createVideoEditAnnotation(id, owner.activeSequenceId, { frame: 3, target: { kind: 'point', x: .3, y: .3 }, text: '继续处理', status: 'open' })
@@ -50,8 +54,10 @@ it('驳回附理由，补充讨论；删除草稿保留其它标注', async () =
     fireEvent.click(view.getByRole('button', { name: '跳到标注 2' })); expect(view.queryByLabelText('标注 1 说明')).toBeNull()
     fireEvent.change(view.getByLabelText('标注 2 驳回理由'), { target: { value: '亮度再减一点' } }); fireEvent.click(view.getByRole('button', { name: '驳回' }))
     const mark: VideoEditAnnotation = getActiveVideoEditSequence(owner).annotations[1]; expect(mark.status).toBe('open'); expect(mark.thread.at(-1)?.text).toBe('亮度再减一点')
-    fireEvent.click(view.getByRole('button', { name: '删除标注 1' })); expect(getActiveVideoEditSequence(owner).annotations).toHaveLength(1)
-    fireEvent.change(view.getByLabelText('标注 1 补充说明'), { target: { value: '也保留字幕' } }); fireEvent.click(view.getByRole('button', { name: '补充' })); expect(getActiveVideoEditSequence(owner).annotations[0].thread.at(-1)?.text).toBe('也保留字幕')
+    fireEvent.click(view.getByRole('button', { name: '跳到标注 1' }))
+    fireEvent.change(view.getByLabelText('标注 1 说明'), { target: { value: '不要了' } }); fireEvent.keyDown(view.getByLabelText('标注 1 说明'), { key: 'Escape' })
+    expect(getActiveVideoEditSequence(owner).annotations[0].text).toBe('一条草稿'); expect(view.queryByLabelText('标注 1 说明')).toBeNull()
+    fireEvent.click(view.getByRole('button', { name: '删除选中批注' })); await waitFor(() => expect(getActiveVideoEditSequence(owner).annotations).toHaveLength(1))
   } finally { app.dispose() }
 })
 const statuses = (owner: Awaited<ReturnType<typeof createVideoEditTestProject>>) => getActiveVideoEditSequence(owner).annotations.map(mark => mark.status)

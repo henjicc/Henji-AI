@@ -1,6 +1,6 @@
 import { isVideoEditContentCurrent } from './videoEditDocumentAlgorithm'
 import { createLogger } from '@/core/logging'
-import { assertVideoEditAnnotationTransition, VIDEO_EDIT_ANNOTATION_COLOR_NAMES, videoEditAnnotationSchema, type VideoEditAnnotation, type VideoEditAnnotationColor, type VideoEditAnnotationTarget, type VideoEditAnnotationWeight } from '@/core/videoEdit/annotations'
+import { assertVideoEditAnnotationTransition, videoEditAnnotationSchema, type VideoEditAnnotation, type VideoEditAnnotationTarget, type VideoEditAnnotationWeight } from '@/core/videoEdit/annotations'
 import { matchesVideoEditAnnotationFilter, VIDEO_EDIT_ANNOTATION_HANDLED_STATUSES, type VideoEditAnnotationStatus } from '@/core/videoEdit/annotationQuery'
 import type { VideoEditCommandId } from '@/core/videoEdit/commands'
 import { videoEditDuration } from '@/core/videoEdit/document'
@@ -20,17 +20,17 @@ const selected = new Map<string, { ids: readonly string[]; primary?: string }>()
 export const VIDEO_EDIT_ANNOTATION_SHAPES = ['arrow', 'ellipse', 'region', 'stroke', 'text', 'marker', 'point'] as const
 export type VideoEditAnnotationShape = typeof VIDEO_EDIT_ANNOTATION_SHAPES[number]
 export const VIDEO_EDIT_ANNOTATION_SHAPE_COMMANDS = { arrow: 'annotation_arrow', ellipse: 'annotation_ellipse', region: 'annotation_region', stroke: 'annotation_stroke', text: 'annotation_text', marker: 'annotation_marker', point: 'annotation_point' } as const satisfies Record<VideoEditAnnotationShape, VideoEditCommandId>
-export interface VideoEditAnnotationBrush { shape: VideoEditAnnotationShape; color: VideoEditAnnotationColor; weight: VideoEditAnnotationWeight }
-/** 当前画什么、用什么颜色：只是界面状态，不进文档；每个剪辑各记一份，默认红色箭头。 */
+export interface VideoEditAnnotationBrush { shape: VideoEditAnnotationShape; weight: VideoEditAnnotationWeight }
+/** 当前画什么形状、多粗：只是界面状态，不进文档；每个剪辑各记一份，默认中等粗细的箭头。颜色按序号自动轮换，不在这里选。 */
 const brushes = new Map<string, VideoEditAnnotationBrush>()
 const brushListeners = new Set<() => void>()
 let brushRevision = 0
 export function subscribeVideoEditAnnotationBrush(listener: () => void): () => void { brushListeners.add(listener); return () => { brushListeners.delete(listener) } }
 export function videoEditAnnotationBrushRevision(): number { return brushRevision }
-export function videoEditAnnotationBrush(projectId: string): VideoEditAnnotationBrush { return brushes.get(projectId) ?? { shape: 'arrow', color: VIDEO_EDIT_ANNOTATION_COLOR_NAMES[0], weight: 'regular' } }
+export function videoEditAnnotationBrush(projectId: string): VideoEditAnnotationBrush { return brushes.get(projectId) ?? { shape: 'arrow', weight: 'regular' } }
 export function setVideoEditAnnotationBrush(projectId: string, patch: Partial<VideoEditAnnotationBrush>): void {
   const current = videoEditAnnotationBrush(projectId); const next = { ...current, ...patch }
-  if (next.shape === current.shape && next.color === current.color && next.weight === current.weight) return
+  if (next.shape === current.shape && next.weight === current.weight) return
   brushes.set(projectId, next); brushRevision++
   for (const listener of brushListeners) listener()
 }
@@ -61,6 +61,35 @@ function setSelectedAnnotation(projectId: string, id: string): void { setVideoEd
 /** 在节目画面上点选一条标注（不跳转、不切面板）；“让助手改这里”会带上它。 */
 export function selectVideoEditAnnotation(projectId: string, id: string): void { setSelectedAnnotation(projectId, id) }
 
+/** 指针停在哪一条批注上（列表行、画面标签、时间线序号任一处）：三处据它一起提亮这一条、压暗其余。 */
+const hovered = new Map<string, string>()
+export function hoveredVideoEditAnnotation(projectId: string): string | undefined { return hovered.get(projectId) }
+export function setHoveredVideoEditAnnotation(projectId: string, id: string | null): void {
+  if ((hovered.get(projectId) ?? null) === id) return
+  if (id) hovered.set(projectId, id); else hovered.delete(projectId)
+  notifySelection()
+}
+/**
+ * 正在改文字的那条批注与还没保存的文字：列表展开态与画面标签编辑的是同一份，任一处打字另一处同步显示；
+ * 保存时才写进文档，形成一步撤销。
+ */
+const editing = new Map<string, { id: string; text: string }>()
+export function videoEditAnnotationEdit(projectId: string): { id: string; text: string } | undefined { return editing.get(projectId) }
+export function setVideoEditAnnotationEditText(projectId: string, id: string, text: string): void {
+  const current = editing.get(projectId)
+  if (current?.id === id && current.text === text) return
+  editing.set(projectId, { id, text }); notifySelection()
+}
+/** 结束编辑；keep 为 true 时把改过的文字写进批注（空文字不写，保留原文）。 */
+export function finishVideoEditAnnotationEdit(projectId: string, id: string, keep: boolean): void {
+  const current = editing.get(projectId)
+  if (current?.id !== id) return
+  editing.delete(projectId); notifySelection()
+  const text = current.text.trim()
+  const mark = requireVideoEditInstance(projectId).document.sequences.flatMap(sequence => sequence.annotations).find(item => item.id === id)
+  if (keep && mark && text && text !== mark.text) updateVideoEditAnnotation(projectId, id, item => ({ ...item, text }))
+}
+
 /** 批注列表的筛选：默认只列还没确认的，已确认的收进“已确认”筛选，算是清掉了。 */
 export const VIDEO_EDIT_ANNOTATION_LIST_FILTERS = [{ value: 'active', label: '未确认' }, { value: 'all', label: '全部' }, { value: 'draft', label: '待发送' }, { value: 'open', label: '待处理' }, { value: 'addressed', label: '已改完' }, { value: 'resolved', label: '已确认' }] as const
 export type VideoEditAnnotationListFilter = typeof VIDEO_EDIT_ANNOTATION_LIST_FILTERS[number]['value']
@@ -76,10 +105,16 @@ function listStatuses(filter: VideoEditAnnotationListFilter): VideoEditAnnotatio
   return filter === 'all' ? undefined : filter === 'active' ? ['draft', 'open', 'addressed'] : [filter]
 }
 export interface VideoEditAnnotationListEntry { mark: VideoEditAnnotation; sequenceId: string; number: number; fps: number }
-/** 面板列出的那些批注（各序列依次排列，编号是在本序列里的序号）；全选与批量命令都只作用于这份列表。 */
+/**
+ * 面板列出的那些批注：活动序列在前、其余序列依次排在后面，序列内按时间先后（同一时刻按序号）；编号与颜色是在本序列里的序号，不随排序变。
+ * 全选、连选与批量命令都只作用于这份列表。
+ */
 export function videoEditAnnotationList(owner: VideoEditInstance): VideoEditAnnotationListEntry[] {
   const filter = { statuses: listStatuses(videoEditAnnotationListFilter(owner)) }
-  return owner.document.sequences.flatMap(sequence => sequence.annotations.map((mark, index) => ({ mark, sequenceId: sequence.id, number: index + 1, fps: videoEditFps(sequence.frameRate) })).filter(entry => matchesVideoEditAnnotationFilter(entry.mark, filter)))
+  const sequences = [...owner.document.sequences].sort((a, b) => Number(b.id === owner.activeSequenceId) - Number(a.id === owner.activeSequenceId))
+  return sequences.flatMap(sequence => sequence.annotations.map((mark, index) => ({ mark, sequenceId: sequence.id, number: index + 1, fps: videoEditFps(sequence.frameRate) }))
+    .filter(entry => matchesVideoEditAnnotationFilter(entry.mark, filter))
+    .sort((a, b) => a.mark.frame - b.mark.frame || (a.mark.endFrame ?? a.mark.frame) - (b.mark.endFrame ?? b.mark.frame) || a.number - b.number))
 }
 /** 选中且仍在列表里的批注（删掉的、被筛选藏起来的不算），按列表顺序。批量操作只动这些，免得改到看不见的批注。 */
 export function selectedVideoEditAnnotations(owner: VideoEditInstance): VideoEditAnnotationListEntry[] {

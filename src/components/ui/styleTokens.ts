@@ -201,7 +201,7 @@ export const UI_PROPERTY_REVEAL_CLASS = 'opacity-0 transition-opacity duration-1
 
 /** 多行文本只约束最小编辑面积，rows 仍作为原生 DOM 属性。 */
 export const UI_TEXT_AREA_HEIGHT_CLASS = {
-  short: 'min-h-textarea-short', medium: 'min-h-textarea-medium', tall: 'min-h-textarea-tall',
+  line: 'min-h-textarea-line', short: 'min-h-textarea-short', medium: 'min-h-textarea-medium', tall: 'min-h-textarea-tall',
 } as const;
 export type UiTextAreaHeight = keyof typeof UI_TEXT_AREA_HEIGHT_CLASS;
 

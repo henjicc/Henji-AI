@@ -74,10 +74,13 @@ export const VIDEO_EDIT_AUTHOR_CONTENT_COLORS = {
   probeEllipse: 'rgba(0,255,0,.75)',
 } as const;
 /** 新建风格自带样片的画面配色（作者代码里的内容色，不随界面主题变化）。 */
-/** 剪辑批注的命名颜色（画在节目画面与送给助手的截图上，属于内容色，不随主题变化）。 */
-export const VIDEO_EDIT_ANNOTATION_COLORS = {
-  red: '#F2384A', orange: '#FF8A1F', yellow: '#FFD21F', green: '#22C55E', blue: '#2F80FF', purple: '#9B5CFF', white: '#FFFFFF', black: '#16181D',
-} as const;
+/**
+ * 剪辑批注的轮换色（画在节目画面、批注面板与送给助手的截图上，不随主题变化）：按批注在序列里的序号依次取色，
+ * 相邻两条色相相隔较远。都取中高亮度，压在深色画面上看得清，上面的序号一律用 annotationInk 深色字（对比度 ≥ 4.5:1）。
+ * 界面经主题令牌 --annotation1…8 / --annotation-ink 使用，截图在画布上直接用这里的值。
+ */
+export const VIDEO_EDIT_ANNOTATION_PALETTE_HEX = ['#FF5C5C', '#6EA8FF', '#FFD43B', '#5AD67D', '#B48CFF', '#FFA23A', '#3FD0E8', '#FF7EC8'] as const;
+export const VIDEO_EDIT_ANNOTATION_INK_HEX = '#16181D';
 export const STYLE_SAMPLE_COLORS = { bg: '#F4F2EE', text: '#16181D', muted: '#6B6F78', accent: '#2F5BFF', line: '#D9D6CF' } as const;
 export const TEXT_LIGHT_HEX = '#E5E5E5';
 

@@ -6,6 +6,7 @@ import { sameVideoEditViewFields, useVideoEditViewSelector } from '../applicatio
 import { requestVideoEditScrub } from '../engine/videoEditAudioScrub'
 import { TIMELINE_PLAYHEAD_HEAD_SHAPE, timelineRulerLabel, timelineRulerScale } from './timelineGeometry'
 import { VideoEditZoomBarTrack } from './VideoEditTimelineZoomBar'
+import { videoEditAnnotationFillClass } from '../videoEditAnnotationPalette'
 
 /** 标尺两端留出的像素：播放头的头在 0 帧和最后一帧时也画得全。 */
 const RULER_INSET = 8
@@ -78,6 +79,11 @@ export function VideoEditProgramRuler({ instance }: { instance: VideoEditInstanc
       {(instance.inFrame !== null || instance.outFrame !== null) && <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 bg-selected-accent" data-video-edit-program-ruler-range style={{ left: x(inFrame), width: Math.max(1, (outFrame - inFrame) * pixels) }} />}
       {Array.from({ length: Math.max(0, last - first + 1) }, (_, index) => first + index).map(index => <span key={index} aria-hidden="true" className="pointer-events-none absolute bottom-0 top-1 whitespace-nowrap border-l border-line-strong pl-1 text-2xs leading-3 tabular-nums text-text3" style={{ left: x(index * ruler.major) }}>{timelineRulerLabel(index * ruler.major, fps, ruler.major, total)}</span>)}
       {minorPerMajor > 1 && Array.from({ length: Math.max(0, last - first) * minorPerMajor }, (_, index) => first * minorPerMajor + index).filter(index => index % minorPerMajor !== 0).map(index => <span key={`m${index}`} aria-hidden="true" className="pointer-events-none absolute bottom-0 h-1 border-l border-line" style={{ left: x(index * ruler.minor) }} />)}
+      {/* 批注所在的帧：同色小圆点（时间段再加一条细条），播放时画面上不画批注，在这里看得到前面还有几条 */}
+      {sequence.annotations.map((mark, index) => ({ mark, number: index + 1 })).filter(({ mark }) => mark.status !== 'resolved' && (mark.endFrame ?? mark.frame) >= view.from && mark.frame <= view.from + view.frames).map(({ mark, number }) => <span key={mark.id} aria-hidden="true" data-video-edit-program-ruler-annotation={mark.id}>
+        <span className={`pointer-events-none absolute top-1 h-1.5 w-1.5 -translate-x-1/2 rounded-full ${videoEditAnnotationFillClass(number)}`} style={{ left: x(mark.frame) }} />
+        {mark.endFrame !== undefined && mark.endFrame > mark.frame && <span className={`pointer-events-none absolute top-1.5 h-0.5 opacity-60 ${videoEditAnnotationFillClass(number)}`} style={{ left: x(mark.frame), width: Math.max(1, (mark.endFrame - mark.frame) * pixels) }} />}
+      </span>)}
       <div aria-hidden="true" data-video-edit-program-ruler-playhead className="pointer-events-none absolute inset-y-0 flex w-3 flex-col items-center" style={{ left: x(instance.frame) - 6 }}>
         <div className="h-2.5 w-3 shrink-0 bg-accent-ring" style={TIMELINE_PLAYHEAD_HEAD_SHAPE} />
         <div className="w-px flex-1 bg-accent-ring" />

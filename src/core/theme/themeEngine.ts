@@ -11,7 +11,7 @@
  *
  * 与参考实现逐令牌的差异列表见 1.2 任务执行记录。
  */
-import { THEME_SEED_ACCENT_HEX } from './colorTokens';
+import { THEME_SEED_ACCENT_HEX, VIDEO_EDIT_ANNOTATION_INK_HEX, VIDEO_EDIT_ANNOTATION_PALETTE_HEX } from './colorTokens';
 import {
   WHITE,
   compositeOver,
@@ -190,6 +190,16 @@ export const THEME_COLOR_TOKEN_NAMES = [
   'onMedia',
   'mediaScrim',
   'mediaLine',
+  // 剪辑批注轮换色（画在画面上的内容色，不随主题）
+  'annotation1',
+  'annotation2',
+  'annotation3',
+  'annotation4',
+  'annotation5',
+  'annotation6',
+  'annotation7',
+  'annotation8',
+  'annotationInk',
 ] as const;
 
 export type ThemeColorTokenName = (typeof THEME_COLOR_TOKEN_NAMES)[number];
@@ -258,6 +268,12 @@ export const MEDIA_OVERLAY_TOKENS = {
   mediaScrim: 'rgba(0,0,0,0.55)',
   mediaLine: 'rgba(255,255,255,0.16)',
 } as const satisfies ThemeTokenOverrides;
+
+/** 剪辑批注轮换色：和媒体叠层一样压在画面上，不随主题变化。 */
+export const VIDEO_EDIT_ANNOTATION_TOKENS = {
+  ...Object.fromEntries(VIDEO_EDIT_ANNOTATION_PALETTE_HEX.map((hex, index) => [`annotation${index + 1}`, hex])),
+  annotationInk: VIDEO_EDIT_ANNOTATION_INK_HEX,
+} as ThemeTokenOverrides;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -721,7 +737,7 @@ export function deriveThemeTokens(seedInput: Partial<ThemeSeed>, overrides?: The
     });
   }
 
-  Object.assign(t, MEDIA_OVERLAY_TOKENS);
+  Object.assign(t, MEDIA_OVERLAY_TOKENS, VIDEO_EDIT_ANNOTATION_TOKENS);
 
   if (overrides) {
     for (const name of THEME_COLOR_TOKEN_NAMES) {

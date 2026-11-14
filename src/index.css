@@ -163,6 +163,24 @@
   --on-media-rgb: 255 255 255;
   --media-scrim: rgba(0,0,0,0.55);
   --media-line: rgba(255,255,255,0.16);
+  --annotation1: #FF5C5C;
+  --annotation1-rgb: 255 92 92;
+  --annotation2: #6EA8FF;
+  --annotation2-rgb: 110 168 255;
+  --annotation3: #FFD43B;
+  --annotation3-rgb: 255 212 59;
+  --annotation4: #5AD67D;
+  --annotation4-rgb: 90 214 125;
+  --annotation5: #B48CFF;
+  --annotation5-rgb: 180 140 255;
+  --annotation6: #FFA23A;
+  --annotation6-rgb: 255 162 58;
+  --annotation7: #3FD0E8;
+  --annotation7-rgb: 63 208 232;
+  --annotation8: #FF7EC8;
+  --annotation8-rgb: 255 126 200;
+  --annotation-ink: #16181D;
+  --annotation-ink-rgb: 22 24 29;
   /* theme-tokens:end */
   /*
    * 玻璃材质的组件层变量 → 语义令牌（src/core/theme/themeCssVars.ts THEME_COMPONENT_CSS_VARS）。
@@ -277,6 +295,8 @@
   --size-band-header: var(--size-control-lg);
   --size-band-title: 40px;
   --size-band-command: 44px;
+  /* 单行起步、随内容变高的就地编辑框（列表行展开成的文本框）：一行字加上下内边距 */
+  --size-textarea-line: 36px;
   --size-textarea-short: 92px;
   --size-textarea-medium: 120px;
   --size-textarea-tall: 240px;

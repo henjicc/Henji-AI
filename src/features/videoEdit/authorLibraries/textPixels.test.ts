@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { build } from 'esbuild'
 import { chromium } from 'playwright'
 import { existsSync } from 'node:fs'
-import { BLACK_HEX, WHITE_HEX, VIDEO_EDIT_ANNOTATION_COLORS, STYLE_SAMPLE_COLORS } from '../../../core/theme/colorTokens'
+import { BLACK_HEX, WHITE_HEX, VIDEO_EDIT_GRADIENT_TEST_STOPS, STYLE_SAMPLE_COLORS } from '../../../core/theme/colorTokens'
 import type * as TextLibrary from './text'
 import type * as PlanLibrary from '../../../core/imaging/vectorContent/textDrawPlan'
 import type * as CanvasLibrary from '../../../core/imaging/vectorContent/textDrawPlanCanvas'
@@ -124,7 +124,7 @@ beforeAll(async () => {
         settling.push({ raster, scale, difference: difference(frames[0], frames[1]) })
       }
       return { resting: difference(staticPixels, restingPixels), background: difference(read(background), read(expectedBackground)), firstBackground: difference(read(firstBackground), read(fullBackground)), hiddenBackground: read(hiddenBackground).reduce((sum, value) => sum + value, 0), overlap: difference(read(overlapStatic), read(overlapAnimated)), italic: difference(read(italicA), read(italicB)), sharpness: { static: edgeEnergy(staticPixels), graphemes: edgeEnergy(restingPixels) }, fillDamage, strokeLayers, settling }
-    }, { white: WHITE_HEX, black: BLACK_HEX, red: VIDEO_EDIT_ANNOTATION_COLORS.red, blue: VIDEO_EDIT_ANNOTATION_COLORS.blue, background: STYLE_SAMPLE_COLORS.text })
+    }, { white: WHITE_HEX, black: BLACK_HEX, red: VIDEO_EDIT_GRADIENT_TEST_STOPS.red, blue: VIDEO_EDIT_GRADIENT_TEST_STOPS.blue, background: STYLE_SAMPLE_COLORS.text })
     process.stdout.write(`文字真实 Canvas 像素指标 ${JSON.stringify(results)}\n`)
   } finally { await browser.close() }
 }, 30000)
