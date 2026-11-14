@@ -275,8 +275,8 @@ export interface ImagePlatform {
   savePanoramaImageSourceToDirectory(source: string, targetDir: string, suggestedFileName?: string): Promise<string>
   saveImageSourceToAppDebugDir(source: string, category: string, suggestedFileName?: string): Promise<string>
   readImageInfo(source: string): Promise<ImageInfoResult>
-  /** 主进程生成并落盘的缩略图（与素材库共用缓存）；source 为本机路径或 henji-media 地址。 */
-  getCachedThumbnail(source: string): Promise<{ path: string }>
+  /** 主进程生成并落盘的缩略图（与素材库共用缓存）；source 为本机路径或 henji-media 地址，maxSize 缺省为素材库尺寸。 */
+  getCachedThumbnail(source: string, maxSize?: number): Promise<{ path: string }>
   probeDiffusionFallback(): Promise<ImageDiffusionFallbackCapabilities>
   renderDiffusionFallback(request: ImageDiffusionFallbackRequest): Promise<ImageDiffusionFallbackResult>
   composeLayerStack(payload: ComposeLayerStackPayload): Promise<ComposeLayerStackResult>

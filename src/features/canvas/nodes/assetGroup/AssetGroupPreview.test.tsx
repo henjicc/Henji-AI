@@ -11,9 +11,14 @@ import {
 import { AssetGroupPreview } from './AssetGroupPreview';
 import { resolveAssetGroupPreviewItems } from './assetGroupPreviewModel';
 
-vi.mock('@/features/canvas/application/imageData', () => ({
+vi.mock('@/services/imageSource', () => ({
   resolveImageDisplayUrl: (source: string) => `display:${source}`,
+  isLikelyLocalImagePath: () => true,
 }));
+vi.mock('@/platform', () => ({ getPlatform: () => ({
+  image: { getCachedThumbnail: async (source: string) => ({ path: `thumb:${source}` }) },
+  video: { getCachedThumbnail: async (source: string) => ({ path: `poster:${source}` }) },
+}) }));
 
 function member(
   id: string,
@@ -48,16 +53,16 @@ describe('素材组拼接缩略图', () => {
     ];
 
     expect(resolveAssetGroupPreviewItems(members, groupData)).toEqual([
-      { id: 'video-a', kind: 'video', source: '/media/video-a.jpg' },
-      { id: 'image-a', kind: 'image', source: '/media/preview-a.png' },
-      { id: 'image-b', kind: 'image', source: '/media/image-b.png' },
+      { id: 'video-a', kind: 'video', source: '/media/video-a.mp4', preview: '/media/video-a.jpg' },
+      { id: 'image-a', kind: 'image', source: '/media/original-a.png', preview: '/media/preview-a.png' },
+      { id: 'image-b', kind: 'image', source: '/media/image-b.png', preview: null },
     ]);
   });
 
   it('显示前统一转换本地路径，加载失败后回退为媒体图标', () => {
     const { container } = render(<AssetGroupPreview items={[
-      { id: 'image-a', kind: 'image', source: '/media/preview-a.png' },
-      { id: 'video-a', kind: 'video', source: null },
+      { id: 'image-a', kind: 'image', source: '/media/original-a.png', preview: '/media/preview-a.png' },
+      { id: 'video-a', kind: 'video', source: null, preview: null },
     ]} />);
 
     const image = container.querySelector('img');
@@ -75,10 +80,21 @@ describe('素材组拼接缩略图', () => {
       id: `image-${index}`,
       kind: 'image' as const,
       source: `/media/${index}.png`,
+      preview: `/media/${index}.png`,
     }));
     const { container, getByText } = render(<AssetGroupPreview items={items} />);
 
     expect(container.querySelectorAll('[data-asset-group-preview-member]')).toHaveLength(4);
     expect(getByText('+2')).toBeTruthy();
+  });
+
+  it('只存原媒体的成员按原媒体取缓存缩略图，视频不挂播放器', async () => {
+    const { container } = render(<AssetGroupPreview items={[
+      { id: 'image-a', kind: 'image', source: '/media/a.png', preview: null },
+      { id: 'video-a', kind: 'video', source: '/media/a.mp4', preview: null },
+    ]} />);
+    await vi.waitFor(() => expect(container.querySelectorAll('img')).toHaveLength(2));
+    expect([...container.querySelectorAll('img')].map(image => image.getAttribute('src'))).toEqual(['display:thumb:/media/a.png', 'display:poster:/media/a.mp4']);
+    expect(container.querySelector('video')).toBeNull();
   });
 });

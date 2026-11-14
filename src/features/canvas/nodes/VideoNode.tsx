@@ -39,7 +39,7 @@ import { getSocketColor } from '@/features/canvas/domain/socketTypes';
 import { useGenerationProgressDisplay } from '@/features/canvas/nodes/shared/useGenerationProgressDisplay';
 import { NodeGenerationError } from '@/features/canvas/nodes/shared/NodeGenerationError';
 import { useMediaMicroLod } from '@/features/canvas/nodes/shared/useCanvasContentLod';
-import { useMicroThumbnail } from '@/features/canvas/nodes/shared/useMicroThumbnail';
+import { microThumbnailSource, useCanvasMediaPreview, useMicroThumbnail } from '@/features/canvas/nodes/shared/useCanvasMediaThumbnail';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { UiEmpty, UiInput } from '@/components/ui';
@@ -110,13 +110,17 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
     () => (data.videoUrl ? resolveImageDisplayUrl(data.videoUrl) : null),
     [data.videoUrl]
   );
-  const posterSource = useMemo(
-    () => (data.previewImageUrl ? resolveImageDisplayUrl(data.previewImageUrl) : null),
-    [data.previewImageUrl]
-  );
+  // 封面取作品自带的（生成结果），导入与素材库拖入的视频按原视频取缓存首帧；取封面期间先不挂播放器
+  const posterPreview = useCanvasMediaPreview('video', data.videoUrl, data.previewImageUrl);
+  const posterSource = posterPreview ?? null;
   // 低倍率下封面降为微缩略图，生成完成前继续显示原封面
   const preferMicroImage = useMediaMicroLod();
-  const microPosterSource = useMicroThumbnail(posterSource, preferMicroImage);
+  const storedPoster = microThumbnailSource(data.previewImageUrl, null);
+  const microPosterSource = useMicroThumbnail(
+    storedPoster ?? videoSource,
+    preferMicroImage,
+    storedPoster ? 'image' : 'video',
+  );
   const displayedPosterSource = microPosterSource ?? posterSource;
 
   // poster 优先：有封面时默认只渲染 <img>，点击播放才挂载 <video>。
@@ -125,7 +129,7 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
   useEffect(() => {
     setIsPlayerActive(false);
   }, [videoSource]);
-  const shouldMountPlayer = Boolean(videoSource) && (isPlayerActive || !posterSource);
+  const shouldMountPlayer = Boolean(videoSource) && (isPlayerActive || posterPreview === null);
 
   const processFile = useCallback(async (file: File) => {
     const sequence = uploadSequenceRef.current + 1;
@@ -214,7 +218,7 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
             onOpenViewer={() => setIsViewerOpen(true)}
             autoPlayOnMount={isPlayerActive}
           />
-        ) : videoSource && posterSource ? (
+        ) : videoSource ? (
           <div
             className="group/poster relative h-full w-full"
             onDoubleClick={(event) => {

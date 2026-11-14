@@ -43,6 +43,63 @@ const canvasContentSchema = z.looseObject({
 
 export type CanvasDocumentContent = z.infer<typeof canvasContentSchema>
 
+type LooseRecord = Record<string, unknown>
+
+const IMAGE_POOL_REFERENCE = /^__img_ref__:(\d+)$/
+/** 程序缩略图目录里的派生图：`Thumbnails/<文件>` 或再隔一层尺寸目录（如 `Thumbnails/540/<文件>`）。 */
+const PROGRAM_THUMBNAIL = /(?:^|\/)Thumbnails\/(?:[^/]+\/)?[^/]+\.(?:webp|jpe?g|png)$/i
+
+/**
+ * 是否指向程序缩略图目录（裸路径、file:// 或 henji-media://local/ 写法）。这类地址不该进节点：
+ * 迁移把它从旧文件里去掉，显示端遇到撤销记录等带回来的旧值也按没有预览处理。
+ */
+export function isProgramThumbnailLocation(value: unknown): boolean {
+  if (typeof value !== 'string') return false
+  let location = value.trim()
+  try {
+    if (/^henji-media:\/\/local\//i.test(location)) location = decodeURIComponent(location.slice('henji-media://local/'.length))
+    else if (/^file:\/\//i.test(location)) location = decodeURIComponent(location.slice('file://'.length))
+  } catch {
+    return false
+  }
+  return PROGRAM_THUMBNAIL.test(location.replace(/\\/g, '/'))
+}
+
+function isProgramThumbnail(value: unknown, imagePool: unknown): boolean {
+  const pooled = typeof value === 'string' ? IMAGE_POOL_REFERENCE.exec(value) : null
+  if (pooled) return Array.isArray(imagePool) && isProgramThumbnailLocation(imagePool[Number(pooled[1])])
+  return isProgramThumbnailLocation(value)
+}
+
+function withoutProgramThumbnail(record: LooseRecord, imagePool: unknown): LooseRecord {
+  if (!isProgramThumbnail(record.previewImageUrl, imagePool)) return record
+  const rest = { ...record }
+  delete rest.previewImageUrl
+  return rest
+}
+
+/**
+ * 1 → 2：节点预览不再指向程序缩略图目录。旧文件里素材库拖入、助手放入与本地导入的节点
+ * 把 `Thumbnails/…` 里的缩略图绝对路径写进了 previewImageUrl，换机、搬数据目录或清缓存后就坏；
+ * 这类值去掉，显示时按原媒体重取缓存缩略图。分镜格子的预览同理。媒体池原样保留，不重新编号。
+ */
+function migrateProgramThumbnailPreviewsV1(content: unknown): unknown {
+  const next = structuredClone(content as LooseRecord)
+  const imagePool = next.imagePool
+  if (!Array.isArray(next.nodes)) return next
+  next.nodes = next.nodes.map((node) => {
+    if (!node || typeof node !== 'object') return node
+    const record = node as LooseRecord
+    if (!record.data || typeof record.data !== 'object') return record
+    let data = withoutProgramThumbnail(record.data as LooseRecord, imagePool)
+    if (Array.isArray(data.frames)) {
+      data = { ...data, frames: data.frames.map((frame) => frame && typeof frame === 'object' ? withoutProgramThumbnail(frame as LooseRecord, imagePool) : frame) }
+    }
+    return { ...record, data }
+  })
+  return next
+}
+
 export const canvasDocumentKind: DocumentKindDescriptor<CanvasDocumentContent> = {
   id: 'canvas',
   extension: henjiExtension('canvas'),
@@ -51,10 +108,15 @@ export const canvasDocumentKind: DocumentKindDescriptor<CanvasDocumentContent> =
   untitledNames: { zh: '未命名画布', en: 'Untitled Canvas' },
   storage: 'json',
   // 版本 1 = 旧工程表 storyboard_projects 的节点 / 连线（媒体按绝对路径存，不再编码成媒体池）。
-  version: 1,
+  // 版本 2 = 节点预览不再指向程序缩略图目录（导入与拖入的节点只存原媒体）。只去掉了旧程序可回退原图的可选值，
+  //   旧程序照常能读，最低可读版本仍为 1。
+  version: 2,
+  minReaderVersion: 1,
   contentSchema: canvasContentSchema,
   independentArrays: ['nodes', 'edges'],
-  migrations: {},
+  migrations: {
+    1: migrateProgramThumbnailPreviewsV1,
+  },
   createEmptyContent: () => ({ nodes: [], edges: [] }),
   // 连线必须连着节点，没有节点就是空画布。
   isEmptyContent: (content) => content.nodes.length === 0,

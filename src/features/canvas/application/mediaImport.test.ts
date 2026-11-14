@@ -20,7 +20,7 @@ describe('importCanvasMediaFile', () => {
     vi.clearAllMocks()
   })
 
-  it('识别图片并返回图片源节点数据', async () => {
+  it('识别图片并返回图片源节点数据，程序缩略图目录里的预览不写进节点', async () => {
     mocks.importLocalMedia.mockResolvedValue({
       kind: 'image',
       fullPath: 'C:/media/image.png',
@@ -31,7 +31,7 @@ describe('importCanvasMediaFile', () => {
     expect(result).toMatchObject({
       kind: 'image',
       type: CANVAS_NODE_TYPES.upload,
-      data: { imageUrl: 'C:/media/image.png', aspectRatio: '4:3', sourceFileName: 'image.png' },
+      data: { imageUrl: 'C:/media/image.png', previewImageUrl: null, aspectRatio: '4:3', sourceFileName: 'image.png' },
     })
   })
 
@@ -48,7 +48,7 @@ describe('importCanvasMediaFile', () => {
     expect(result).toMatchObject({
       kind: 'video',
       type: CANVAS_NODE_TYPES.videoUpload,
-      data: { videoUrl: 'C:/media/video.mp4', durationSec: 8, hasAudio: true, sourceFileName: 'video.mp4' },
+      data: { videoUrl: 'C:/media/video.mp4', previewImageUrl: null, durationSec: 8, hasAudio: true, sourceFileName: 'video.mp4' },
     })
   })
 

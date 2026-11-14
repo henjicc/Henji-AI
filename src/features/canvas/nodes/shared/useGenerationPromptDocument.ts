@@ -14,6 +14,8 @@ import {
   resolveCanvasGenerationPrompt,
 } from '@/features/canvas/application/generationPromptDocument'
 import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData'
+import { canvasThumbnailKey, type CanvasThumbnailSpec } from '@/features/canvas/application/canvasMediaThumbnail'
+import { useCanvasThumbnails } from '@/features/canvas/nodes/shared/useCanvasMediaThumbnail'
 import type { NodeMediaOutput } from '@/features/canvas/domain/nodePorts'
 import type { RowMediaKind } from '@/features/canvas/domain/socketTypes'
 import {
@@ -21,6 +23,14 @@ import {
   useCanvasEditHistory,
 } from '@/features/canvas/hooks/useCanvasTextHistory'
 import { useCanvasStore } from '@/stores/canvasStore'
+
+
+/** 引用标签小图的来源：有作品自带预览按图片取，否则图片、视频按原媒体取；音频没有小图。 */
+function thumbnailSpecOf(reference: { mediaType: string; mediaUrl: string; previewUrl?: string | null }): CanvasThumbnailSpec | null {
+  if (reference.previewUrl) return { kind: 'image', source: resolveImageDisplayUrl(reference.previewUrl) }
+  if (reference.mediaType === 'image' || reference.mediaType === 'video') return { kind: reference.mediaType, source: reference.mediaUrl }
+  return null
+}
 
 export interface GenerationNodeShellData {
   displayName?: string
@@ -91,20 +101,30 @@ export function useGenerationPromptDocument({
     mediaInputs,
     nodeId,
   ])
-  const references = useMemo(
-    () => resolvedCarrier.references.map((reference) => ({
-      resourceId: reference.resourceId,
-      mediaType: reference.mediaType,
-      label: reference.label,
-      legacyLabels: reference.legacyLabels,
-      ...(reference.sourceNodeId ? { sourceNodeId: reference.sourceNodeId } : {}),
-      ...(
-        reference.mediaType === 'image' || reference.previewUrl
-          ? { thumbnailSrc: resolveImageDisplayUrl(reference.previewUrl ?? reference.mediaUrl) }
-          : {}
-      ),
-    })),
+  // 标签里的小图取作品自带预览或原媒体的缓存缩略图：导入的视频也有封面，大图不在标签里整张解码。
+  const specList = useMemo(
+    () => resolvedCarrier.references.flatMap((reference) => thumbnailSpecOf(reference) ?? []),
     [resolvedCarrier.references],
+  )
+  // 打字会换出新的引用数组；来源没变就沿用同一组请求，排队中的缩略图不被挪到队尾。
+  const specSignature = specList.map(canvasThumbnailKey).join('|')
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- 按来源内容记忆
+  const thumbnailSpecs = useMemo(() => specList, [specSignature])
+  const thumbnails = useCanvasThumbnails(thumbnailSpecs)
+  const references = useMemo(
+    () => resolvedCarrier.references.map((reference) => {
+      const spec = thumbnailSpecOf(reference)
+      const thumbnailSrc = spec ? thumbnails.get(canvasThumbnailKey(spec)) : null
+      return {
+        resourceId: reference.resourceId,
+        mediaType: reference.mediaType,
+        label: reference.label,
+        legacyLabels: reference.legacyLabels,
+        ...(reference.sourceNodeId ? { sourceNodeId: reference.sourceNodeId } : {}),
+        ...(thumbnailSrc ? { thumbnailSrc } : {}),
+      }
+    }),
+    [resolvedCarrier.references, thumbnails],
   )
   const historyGroup = useMemo(
     () => createCanvasTextHistoryGroup(nodeId, 'prompt'),

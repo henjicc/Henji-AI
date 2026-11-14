@@ -6,7 +6,7 @@ import {
   ICON_MEDIA_VIDEO,
   ICON_NODE_ASSET_GROUP,
 } from '@/core/theme/icons';
-import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
+import { useCanvasMediaPreview } from '@/features/canvas/nodes/shared/useCanvasMediaThumbnail';
 
 import type { AssetGroupPreviewItem } from './assetGroupPreviewModel';
 
@@ -31,7 +31,7 @@ const AssetGroupPreviewTile = memo(({
   showKindBadge: boolean;
 }) => {
   const [failed, setFailed] = useState(false);
-  const source = item.source ? resolveImageDisplayUrl(item.source) : null;
+  const source = useCanvasMediaPreview(item.kind, item.source, item.preview);
   const FallbackIcon = item.kind === 'video' ? ICON_MEDIA_VIDEO : ICON_MEDIA_IMAGE;
 
   return (
@@ -93,7 +93,7 @@ export const AssetGroupPreview = memo(({
     >
       {visibleItems.map((item, index) => (
         <AssetGroupPreviewTile
-          key={`${item.id}:${item.source ?? 'empty'}`}
+          key={`${item.id}:${item.preview ?? item.source ?? 'empty'}`}
           item={item}
           className={tileSpanClass(index, visibleItems.length)}
           overflowCount={index === visibleItems.length - 1 ? overflowCount : 0}

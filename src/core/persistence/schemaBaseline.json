@@ -132,7 +132,7 @@
       "minReaderVersion": 80
     },
     "document.canvas": {
-      "version": 1,
+      "version": 2,
       "fingerprint": "443ed52fbebee9faede54ffb7ab00b30ea35e215f7c02aff442c2bc96c1c2a04",
       "supportedFrom": 1,
       "minReaderVersion": 1

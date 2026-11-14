@@ -1,7 +1,6 @@
 import { createLogger } from '@/core/logging';
-import { getPlatform } from '@/platform';
-import { resolveImageDisplayUrl, toFetchableMediaUrl } from '@/services/imageSource';
-import { requestMicroThumbnail } from '@/features/canvas/application/microThumbnail';
+import { toFetchableMediaUrl } from '@/services/imageSource';
+import { requestCanvasThumbnail } from '@/features/canvas/application/canvasMediaThumbnail';
 import type { SceneNode, SceneNodeContent } from '@/features/canvas/scene/canvasScene';
 import { createFarLayerAtlas, type AtlasSlot, type FarLayerAtlas } from './farLayerAtlas';
 
@@ -202,15 +201,11 @@ export function createFarLayerTiles(gl: WebGL2RenderingContext, options: { nodeC
   }
 
   async function loadBitmap(content: MediaContent, limit: number): Promise<ImageBitmap> {
-    let url: string;
-    if (content.kind === 'image') {
-      const request = requestMicroThumbnail(content.source);
-      // 缩略图落盘后地址长期有效，拿到就可以归还这次占用
-      try { url = await request.promise; } finally { request.release(); }
-    } else {
-      const { path } = await getPlatform().video.getCachedThumbnail(content.source);
-      url = resolveImageDisplayUrl(path);
-    }
+    const request = requestCanvasThumbnail({ kind: content.kind, source: content.source });
+    // 缩略图落盘后地址长期有效，拿到就可以归还这次占用
+    let url: string | null;
+    try { url = await request.promise; } finally { request.release(); }
+    if (!url) throw new Error('视频缩略图生成失败');
     const response = await fetch(toFetchableMediaUrl(url));
     if (!response.ok) throw new Error(`缩略图读取失败（${response.status}）`);
     const blob = await response.blob();

@@ -1,0 +1,72 @@
+{
+  "format": "henji-document",
+  "envelopeVersion": 1,
+  "minReaderVersion": 1,
+  "kind": "canvas",
+  "kindVersion": 2,
+  "kindMinReaderVersion": 1,
+  "id": "golden-canvas",
+  "name": "画布",
+  "createdAt": "2026-10-09T00:00:00.000Z",
+  "updatedAt": "2026-10-09T00:00:00.000Z",
+  "revision": 0,
+  "content": {
+    "nodes": [
+      {
+        "id": "golden-node",
+        "type": "textDisplay",
+        "position": {
+          "x": 0,
+          "y": 0
+        },
+        "data": {
+          "text": "黄金样本"
+        }
+      },
+      {
+        "id": "golden-upload-image",
+        "type": "uploadNode",
+        "position": {
+          "x": 0,
+          "y": 200
+        },
+        "data": {
+          "imageUrl": "/persistence-project/素材/photo.png",
+          "previewImageUrl": null,
+          "sourceFileName": "photo.png",
+          "aspectRatio": "4:3"
+        }
+      },
+      {
+        "id": "golden-upload-video",
+        "type": "videoUploadNode",
+        "position": {
+          "x": 400,
+          "y": 200
+        },
+        "data": {
+          "videoUrl": "/persistence-project/素材/clip.mp4",
+          "previewImageUrl": null,
+          "sourceFileName": "clip.mp4",
+          "aspectRatio": "16:9",
+          "durationSec": 3,
+          "hasAudio": true
+        }
+      },
+      {
+        "id": "golden-export-image",
+        "type": "exportImageNode",
+        "position": {
+          "x": 800,
+          "y": 200
+        },
+        "data": {
+          "imageUrl": "/persistence-project/生成结果/result.png",
+          "previewImageUrl": "/persistence-project/生成结果/result-preview.jpg",
+          "aspectRatio": "1:1"
+        }
+      }
+    ],
+    "edges": []
+  }
+}

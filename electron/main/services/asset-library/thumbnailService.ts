@@ -46,19 +46,24 @@ async function requireThumbnailIdentity(filePath: string, identity: ThumbnailIde
   if (current.some((value, index) => value !== identity[index])) throw new Error('源文件在生成缩略图期间发生变化，请重新检查资产。')
 }
 
-export async function ensureAssetThumbnail(filePath: string, mediaType: AssetMediaType, modifiedAt: number, signal?: AbortSignal): Promise<string | null> {
+/** 素材库缩略图的边长；画布预览等更大的尺寸单独成一份缓存。 */
+const ASSET_THUMBNAIL_SIZE = 320
+
+export async function ensureAssetThumbnail(filePath: string, mediaType: AssetMediaType, modifiedAt: number, signal?: AbortSignal, maxSize = ASSET_THUMBNAIL_SIZE): Promise<string | null> {
   signal?.throwIfAborted()
   if (mediaType === 'audio' || mediaType === 'code') return null
   const identity = await thumbnailIdentity(filePath)
   signal?.throwIfAborted()
   if (identity[1] !== modifiedAt) throw new Error('源文件已更新，请重新检查后生成缩略图。')
   const dir = getProgramStoreDir('thumbnails')
-  const digest = crypto.createHash('sha256').update(JSON.stringify([filePath, mediaType, modifiedAt, ...identity, 'asset-v2'])).digest('hex')
+  // 默认尺寸不进哈希，已有素材库缓存继续命中。
+  const sizeKey = maxSize === ASSET_THUMBNAIL_SIZE ? [] : [maxSize]
+  const digest = crypto.createHash('sha256').update(JSON.stringify([filePath, mediaType, modifiedAt, ...identity, 'asset-v2', ...sizeKey])).digest('hex')
   const target = path.join(dir, `${digest}.webp`)
   let job = thumbnailJobs.get(target)
   if (!job) {
     const controller = new AbortController()
-    job = { controller, users: 0, promise: writeThumbnail(filePath, mediaType, target, identity, controller.signal) }
+    job = { controller, users: 0, promise: writeThumbnail(filePath, mediaType, target, identity, maxSize, controller.signal) }
     thumbnailJobs.set(target, job)
     const owned = job
     const finish = (): void => { if (thumbnailJobs.get(target) === owned) thumbnailJobs.delete(target) }
@@ -86,26 +91,26 @@ export async function ensureAssetThumbnail(filePath: string, mediaType: AssetMed
 }
 
 /** 按本机路径或 henji-media 地址（含图片编辑资源库地址）取图片缩略图；与素材库共用同一份磁盘缓存，文件变了才重做。 */
-export async function ensureLocalImageThumbnail(source: string, signal?: AbortSignal): Promise<string> {
+export async function ensureLocalImageThumbnail(source: string, signal?: AbortSignal, maxSize?: number): Promise<string> {
   const trimmed = source.trim()
   const filePath = trimmed.startsWith(`henji-media://${IMAGE_EDITOR_V3_MEDIA_HOST}/`)
     ? resolveImageEditorV3ResourceMediaUrl(new URL(trimmed)).targetPath
     : normalizeLocalSource(trimmed)
   const { mtimeMs } = await fs.stat(filePath)
-  const cachePath = await ensureAssetThumbnail(filePath, 'image', mtimeMs, signal)
+  const cachePath = await ensureAssetThumbnail(filePath, 'image', mtimeMs, signal, maxSize)
   if (!cachePath) throw new Error('未能生成图片缩略图。')
   return cachePath
 }
 
-async function writeThumbnail(filePath: string, mediaType: AssetMediaType, target: string, identity: ThumbnailIdentity, signal: AbortSignal): Promise<string> {
+async function writeThumbnail(filePath: string, mediaType: AssetMediaType, target: string, identity: ThumbnailIdentity, maxSize: number, signal: AbortSignal): Promise<string> {
   await fs.mkdir(path.dirname(target), { recursive: true })
   signal.throwIfAborted()
   try {
     await fs.access(target)
   } catch {
     const bytes = mediaType === 'image'
-      ? await generateImageThumbnailBytes(filePath, 320)
-      : await generateVideoThumbnailBytes(filePath, 320, signal)
+      ? await generateImageThumbnailBytes(filePath, maxSize)
+      : await generateVideoThumbnailBytes(filePath, maxSize, signal)
     signal.throwIfAborted()
     await requireThumbnailIdentity(filePath, identity)
     signal.throwIfAborted()

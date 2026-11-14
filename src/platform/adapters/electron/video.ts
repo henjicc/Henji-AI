@@ -47,7 +47,7 @@ async function cachedThumbnail(payload: { source: string; maxSize?: number; cach
 
 export function createElectronVideo(): VideoPlatform {
   return {
-    getCachedThumbnail: (source, signal) => cachedThumbnail({ source, maxSize: 320, cache: true }, signal),
+    getCachedThumbnail: (source, signal, maxSize) => cachedThumbnail({ source, cache: true, ...(maxSize ? { maxSize } : {}) }, signal),
     getFilmstripFrame: ({ source, timeUs, height }, signal) => cachedThumbnail({ source, frame: { timeUs, height } }, signal),
     readVideoInfo: (source) => getNativeVideo().readVideoInfo(source),
     trimVideoSource: (payload, signal) => processVideo(requestId => getNativeVideo().trimVideoSource({ ...payload, requestId }), signal),

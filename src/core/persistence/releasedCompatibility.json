@@ -684,13 +684,16 @@
         "1": "443ed52fbebee9faede54ffb7ab00b30ea35e215f7c02aff442c2bc96c1c2a04"
       },
       "structures": {
-        "1": "443ed52fbebee9faede54ffb7ab00b30ea35e215f7c02aff442c2bc96c1c2a04"
+        "1": "443ed52fbebee9faede54ffb7ab00b30ea35e215f7c02aff442c2bc96c1c2a04",
+        "2": "443ed52fbebee9faede54ffb7ab00b30ea35e215f7c02aff442c2bc96c1c2a04"
       },
       "readers": {
-        "1": 1
+        "1": 1,
+        "2": 1
       },
       "samples": {
-        "v1.json": "ead30f4c29504b7d70f8f2bb5808ab20878baee0af1575a15f380af0d91f7b71"
+        "v1.json": "ead30f4c29504b7d70f8f2bb5808ab20878baee0af1575a15f380af0d91f7b71",
+        "v2.json": "495f8e356366319c94a64046ebe04061a637c390d4e12c95267af28e10ac68e0"
       }
     },
     "document.audio_edit": {

@@ -68,7 +68,7 @@ describe('参考素材行', () => {
       />,
     )
     await waitFor(() => expect(view.container.querySelector('img')?.getAttribute('src')).toContain('clip.webp'))
-    expect(platform.videoThumbnail).toHaveBeenCalledWith('D:/media/clip.mp4', expect.any(AbortSignal))
+    expect(platform.videoThumbnail).toHaveBeenCalledWith('D:/media/clip.mp4', undefined, undefined)
     expect(view.container.querySelector('video')).toBeNull()
   })
 

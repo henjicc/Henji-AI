@@ -338,7 +338,11 @@ const values: Record<string, unknown> = {
   'creative-intent-candidate': (() => { const candidate = optimizeMotionDraft(createMotionFixture('S01').input).candidates[0]; return { version: MOTION_CANDIDATE_VERSION, ...candidate,
     motions: candidate.motions.map(motion => ({ ...motion, curves: { ...motion.curves, ...spatialCurves } })) } })(),
   'document.video_edit': videoContent,
-  'document.canvas': { nodes: [{ id: 'golden-node', type: 'textDisplay', position: { x: 0, y: 0 }, data: { text: '黄金样本' } }], edges: [] },
+  // 导入与拖入的媒体节点只存原媒体，没有指向程序缩略图目录的预览；生成结果保留作品自带的预览。
+  'document.canvas': { nodes: [{ id: 'golden-node', type: 'textDisplay', position: { x: 0, y: 0 }, data: { text: '黄金样本' } },
+    { id: 'golden-upload-image', type: 'uploadNode', position: { x: 0, y: 200 }, data: { imageUrl: '/persistence-project/素材/photo.png', previewImageUrl: null, aspectRatio: '4:3', sourceFileName: 'photo.png' } },
+    { id: 'golden-upload-video', type: 'videoUploadNode', position: { x: 400, y: 200 }, data: { videoUrl: '/persistence-project/素材/clip.mp4', previewImageUrl: null, aspectRatio: '16:9', durationSec: 3, hasAudio: true, sourceFileName: 'clip.mp4' } },
+    { id: 'golden-export-image', type: 'exportImageNode', position: { x: 800, y: 200 }, data: { imageUrl: '/persistence-project/生成结果/result.png', previewImageUrl: '/persistence-project/生成结果/result-preview.jpg', aspectRatio: '1:1' } }], edges: [] },
   'document.audio_edit': { gainRegions: [{ id: 'gain', startFrame: 0, endFrame: 24000, gainDb: -6, fadeInFrames: 100, fadeOutFrames: 100, enabled: true }], repairs: [{ id: 'repair', kind: 'spectral_heal', startFrame: 1000, endFrame: 2000, lowHz: 100, highHz: 1000, strength: .5, enabled: true, strokes: [{ radius: .1, radiusY: .2, points: [{ x: .5, y: .5 }] }] }], source: { mediaType: 'audio', sourcePath: '/persistence-project/素材/voice.wav', audioPath: '/persistence-project/素材/voice.wav', durationFrames: 48000, sampleRate: 48000, channels: 1 }, referenceScript: '参考稿', transcript: [{ id: 'word', text: '你好', startFrame: 0, endFrame: 24000, included: true, locked: false, granularity: 'word' }],
     // 口播 v9：重念线索带一份交给助手二次判断的材料（原因、把握、各种做法、选了哪种、留给用户试听的标记）
     suggestions: [{ id: 'retake:word:word', kind: 'retake', evidence: 'audio', title: '重念“你好”', detail: '紧接着又说了一遍“你好”；这么短的重复可能是强调或叠句。没有自动删除，请结合上下文或试听后决定。', startFrame: 0, endFrame: 24000, blockIds: ['word'], confidence: 'low', status: 'dismissed' }],

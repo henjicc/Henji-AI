@@ -1,3 +1,4 @@
+import { isProgramThumbnailLocation } from '@/core/documents/kinds/canvas';
 import { Position, type InternalNode, type ReactFlowState } from '@xyflow/react';
 import type { CanvasEdge, CanvasNode } from '@/features/canvas/domain/canvasNodes';
 import { CANVAS_NODE_TYPES, type CanvasNodeType } from '@/features/canvas/domain/canvasNodeConstants';
@@ -118,7 +119,9 @@ function describeContent(type: string, data: Record<string, unknown>): SceneNode
   const media = getNodeDefinition(type as CanvasNodeType).media;
   let content: SceneNodeContent = { kind: 'card', title, summary };
   if (media && media.role !== 'generator') {
-    const image = text(data.previewImageUrl) || text(data.imageUrl);
+    // 指向程序缩略图目录的旧预览（撤销记录带回来的）不用，按原图取
+    const preview = text(data.previewImageUrl);
+    const image = (preview && !isProgramThumbnailLocation(preview) ? preview : '') || text(data.imageUrl);
     const video = image ? '' : text(data.videoUrl);
     if (image) content = { kind: 'image', source: image, title, summary };
     else if (video) content = { kind: 'video', source: video, title, summary };

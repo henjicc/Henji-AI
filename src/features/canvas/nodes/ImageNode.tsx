@@ -37,7 +37,7 @@ import { useGenerationProgressDisplay } from '@/features/canvas/nodes/shared/use
 import { NodeGenerationError } from '@/features/canvas/nodes/shared/NodeGenerationError';
 import { useOriginalImageLod } from '@/features/canvas/nodes/shared/useOriginalImageLod';
 import { useMediaMicroLod } from '@/features/canvas/nodes/shared/useCanvasContentLod';
-import { useMicroThumbnail } from '@/features/canvas/nodes/shared/useMicroThumbnail';
+import { microThumbnailSource, useCanvasMediaPreview, useMicroThumbnail } from '@/features/canvas/nodes/shared/useCanvasMediaThumbnail';
 import { useDecodedImageSource } from '@/features/canvas/nodes/shared/useDecodedImageSource';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { uiTransition } from '@/components/ui/motion';
@@ -91,15 +91,17 @@ export const ImageNode = memo(({ id, data, selected, type, width, height }: Imag
     [data, type]
   );
 
+  const previewImageSource = useCanvasMediaPreview('image', data.imageUrl, data.previewImageUrl);
   const baseImageSource = useMemo(() => {
-    const picked = preferOriginalImage
-      ? data.imageUrl || data.previewImageUrl
-      : data.previewImageUrl || data.imageUrl;
-    return picked ? resolveImageDisplayUrl(picked) : null;
-  }, [data.imageUrl, data.previewImageUrl, preferOriginalImage]);
-  // 低倍率降为微缩略图：生成完成前继续显示原缩略图，不闪空白
+    const original = data.imageUrl ? resolveImageDisplayUrl(data.imageUrl) : null;
+    return (preferOriginalImage ? original ?? previewImageSource : previewImageSource) ?? null;
+  }, [data.imageUrl, preferOriginalImage, previewImageSource]);
+  // 低倍率降为微缩略图：生成完成前继续显示原缩略图，不闪空白；按作品预览或原图取，不对派生缩略图再取一次
   const preferMicroImage = useMediaMicroLod();
-  const microImageSource = useMicroThumbnail(baseImageSource, preferMicroImage);
+  const microImageSource = useMicroThumbnail(
+    microThumbnailSource(data.previewImageUrl, data.imageUrl),
+    preferMicroImage,
+  );
   const imageSource = useDecodedImageSource(microImageSource ?? baseImageSource);
 
   // 获取原图 URL 用于查看器

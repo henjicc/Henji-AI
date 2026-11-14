@@ -56,7 +56,7 @@ import { ICON_NODE_IMAGE_UPLOAD } from '@/core/theme/icons';
 import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
 import { useOriginalImageLod } from '@/features/canvas/nodes/shared/useOriginalImageLod';
 import { useMediaMicroLod } from '@/features/canvas/nodes/shared/useCanvasContentLod';
-import { useMicroThumbnail } from '@/features/canvas/nodes/shared/useMicroThumbnail';
+import { microThumbnailSource, useCanvasMediaPreview, useMicroThumbnail } from '@/features/canvas/nodes/shared/useCanvasMediaThumbnail';
 import { useDecodedImageSource } from '@/features/canvas/nodes/shared/useDecodedImageSource';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useSettingsStore } from '@/stores/settingsStore';
@@ -314,19 +314,18 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
     clearTransientPreview();
   }, [clearTransientPreview]);
 
+  const previewImageSource = useCanvasMediaPreview('image', data.imageUrl, data.previewImageUrl);
   const baseImageSource = useMemo(() => {
     if (transientPreviewUrl) {
       return transientPreviewUrl;
     }
-    const picked = preferOriginalImage
-      ? data.imageUrl || data.previewImageUrl
-      : data.previewImageUrl || data.imageUrl;
-    return picked ? resolveImageDisplayUrl(picked) : null;
-  }, [data.imageUrl, data.previewImageUrl, preferOriginalImage, transientPreviewUrl]);
+    const original = data.imageUrl ? resolveImageDisplayUrl(data.imageUrl) : null;
+    return (preferOriginalImage ? original ?? previewImageSource : previewImageSource) ?? null;
+  }, [data.imageUrl, preferOriginalImage, previewImageSource, transientPreviewUrl]);
   // 低倍率降为微缩略图；上传中的临时 blob 预览是短命源，不参与微缩略图生成
   const preferMicroImage = useMediaMicroLod();
   const microImageSource = useMicroThumbnail(
-    baseImageSource,
+    microThumbnailSource(data.previewImageUrl, data.imageUrl),
     preferMicroImage && !transientPreviewUrl
   );
   const imageSource = useDecodedImageSource(microImageSource ?? baseImageSource);

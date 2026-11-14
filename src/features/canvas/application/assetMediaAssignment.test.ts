@@ -19,4 +19,10 @@ describe('asset media assignment', () => {
     expect(mediaSourceNodeData(payload('image'))).toMatchObject({ aspectRatio: '9:16', isSizeManuallyAdjusted: false })
     expect(mediaSourceNodeData(payload('video'))).toMatchObject({ aspectRatio: '9:16', durationSec: 8, isSizeManuallyAdjusted: false })
   })
+
+  it('来源带的程序缩略图不写进节点，换掉已有节点的媒体时清空旧预览', () => {
+    const withThumbnail = { ...payload('image'), thumbnailUrl: 'E:/HenjiAI/.system/Thumbnails/abc.webp' }
+    expect(mediaSourceNodeData(withThumbnail)).toMatchObject({ imageUrl: 'C:/media/demo.bin', previewImageUrl: null })
+    expect(mediaSourceNodeData({ ...payload('video'), thumbnailUrl: 'E:/HenjiAI/.system/Thumbnails/abc.webp' })).toMatchObject({ videoUrl: 'C:/media/demo.bin', previewImageUrl: null })
+  })
 })

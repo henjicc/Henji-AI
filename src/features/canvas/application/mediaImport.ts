@@ -49,10 +49,12 @@ export async function importCanvasMediaFile(file: File): Promise<CanvasMediaImpo
   const startedAt = performance.now()
   try {
     const imported = await importLocalMedia(file, kind)
+    // 导入时生成的预览与封面在程序缩略图目录里，换机、搬数据目录或清缓存就失效：节点只存原文件，
+    // 显示时按原文件取缓存缩略图；显式清空，替换已有节点的媒体时不留下旧预览。
     if (imported.kind === 'image') {
       const data: Partial<UploadImageNodeData> = {
         imageUrl: imported.fullPath,
-        previewImageUrl: imported.previewPath,
+        previewImageUrl: null,
         aspectRatio: imported.aspectRatio || '1:1',
         sourceFileName: file.name,
       }
@@ -62,7 +64,7 @@ export async function importCanvasMediaFile(file: File): Promise<CanvasMediaImpo
     if (imported.kind === 'video') {
       const data: Partial<VideoMediaNodeData> = {
         videoUrl: imported.fullPath,
-        previewImageUrl: imported.posterPath,
+        previewImageUrl: null,
         aspectRatio: imported.aspectRatio,
         durationSec: imported.durationSeconds,
         hasAudio: imported.hasAudio,

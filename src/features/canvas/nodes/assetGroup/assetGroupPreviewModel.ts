@@ -8,7 +8,10 @@ import { getNodeMediaOutputs } from '@/features/canvas/domain/nodeRegistry';
 export interface AssetGroupPreviewItem {
   id: string;
   kind: 'image' | 'video';
+  /** 原媒体；没有作品自带预览时，显示端按它取缓存缩略图。 */
   source: string | null;
+  /** 作品自带的预览（生成结果封面等）。 */
+  preview: string | null;
 }
 
 function orderedMembers(members: CanvasNode[], data: AssetGroupNodeData): CanvasNode[] {
@@ -25,7 +28,7 @@ function orderedMembers(members: CanvasNode[], data: AssetGroupNodeData): Canvas
 }
 
 /**
- * 素材组折叠态的视觉投影。图片可回落到原图；视频只消费静态封面，避免折叠组常驻视频解码器。
+ * 素材组折叠态的视觉投影。显示端只画静态图：图片与视频都按原媒体取缓存缩略图，避免折叠组常驻视频解码器。
  */
 export function resolveAssetGroupPreviewItems(
   members: CanvasNode[],
@@ -37,10 +40,6 @@ export function resolveAssetGroupPreviewItems(
 
     const output = getNodeMediaOutputs(member.type, member.data)
       .find((candidate) => candidate.kind === kind);
-    const source = kind === 'image'
-      ? output?.previewUrl ?? output?.url ?? null
-      : output?.previewUrl ?? null;
-
-    return [{ id: member.id, kind, source }];
+    return [{ id: member.id, kind, source: output?.url ?? null, preview: output?.previewUrl ?? null }];
   });
 }

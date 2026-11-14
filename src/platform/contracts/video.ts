@@ -81,7 +81,8 @@ export interface FilmstripFrameRequest {
 }
 
 export interface VideoPlatform {
-  getCachedThumbnail(source: string, signal?: AbortSignal): Promise<{ path: string }>
+  /** 主进程抽帧落盘的缩略图（与素材库共用缓存）；maxSize 缺省为素材库尺寸。 */
+  getCachedThumbnail(source: string, signal?: AbortSignal, maxSize?: number): Promise<{ path: string }>
   /** 返回主进程磁盘缓存中该帧的路径（按内容身份缓存，二次打开直接命中）。 */
   getFilmstripFrame(request: FilmstripFrameRequest, signal?: AbortSignal): Promise<{ path: string }>
   readVideoInfo(source: string): Promise<VideoInfoResult>

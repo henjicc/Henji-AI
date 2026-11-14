@@ -189,7 +189,7 @@ export function registerImageIpc(): void {
     })
   })
   registerIpcHandler<ThumbnailBytesPayload, { bytes: Uint8Array; cachePath?: string }>('image:generateThumbnailBytes', parseThumbnailBytesPayload, async ({ source, maxSize, cache }) => {
-    if (cache) return { bytes: new Uint8Array(), cachePath: await ensureLocalImageThumbnail(source) }
+    if (cache) return { bytes: new Uint8Array(), cachePath: await ensureLocalImageThumbnail(source, undefined, maxSize) }
     const bytes = await generateImageThumbnailBytes(source, maxSize)
     return { bytes }
   })

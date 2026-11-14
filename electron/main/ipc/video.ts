@@ -106,7 +106,7 @@ export function registerVideoIpc(): void {
           const filePath = normalizeLocalSource(source)
           const info = await fs.stat(filePath)
           controller.signal.throwIfAborted()
-          const cachePath = await ensureAssetThumbnail(filePath, 'video', info.mtimeMs, controller.signal)
+          const cachePath = await ensureAssetThumbnail(filePath, 'video', info.mtimeMs, controller.signal, maxSize)
           if (!cachePath) throw new Error('未能生成视频缩略图。')
 
           return { bytes: new Uint8Array(), cachePath }

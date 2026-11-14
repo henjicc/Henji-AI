@@ -25,6 +25,7 @@ import { canvasViewStore, useCanvasStore } from '@/stores/canvasStore';
 import { getIncomingEdges } from '@/features/canvas/domain/connectionIndex';
 import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
 import { isLocalVideoSource, useVideoInputThumbnail } from './useVideoInputThumbnail';
+import { microThumbnailSource, useMicroThumbnail } from '@/features/canvas/nodes/shared/useCanvasMediaThumbnail';
 import { VideoViewerModal } from '@/components/mediaViewer/VideoViewerModal';
 import { VideoTrimModal, type VideoTrimRange } from '@/components/videoTrim/VideoTrimModal';
 import { useReorderDrag } from '@/components/ui/fileUploader/useReorderDrag';
@@ -510,14 +511,10 @@ function MediaKindItems({ source, upstream, isConnected, localPreviewMapRef, onD
             </span>
           ) : mediaKind === 'image' ? (
             <>
-              <CanvasNodeImage
-                src={resolveImageDisplayUrl(previewUrlByUrl.get(url) ?? url)}
-                viewerSourceUrl={resolveImageDisplayUrl(url)}
-                viewerImageList={displayUrls.map((item) => resolveImageDisplayUrl(item))}
-                alt=""
-                className="h-7 w-7 rounded-md border border-line object-cover"
-                failure="icon"
-                draggable={false}
+              <ImageInputThumbnail
+                url={url}
+                previewUrl={previewUrlByUrl.get(url) ?? null}
+                viewerImageList={displayUrls}
               />
               {/* 缩略图上是画面：移除按钮按角标叠在角上 */}
               {!isConnected && (
@@ -587,6 +584,22 @@ function MediaKindItems({ source, upstream, isConnected, localPreviewMapRef, onD
         />
       )}
     </div>
+  );
+}
+
+/** 参数行的图片缩略图：取作品自带预览或原图的缓存缩略图，不在 28px 的格子里解码整张原图。 */
+function ImageInputThumbnail({ url, previewUrl, viewerImageList }: { url: string; previewUrl: string | null; viewerImageList: string[] }) {
+  const thumbnail = useMicroThumbnail(microThumbnailSource(previewUrl, url), true);
+  return (
+    <CanvasNodeImage
+      src={thumbnail ?? ''}
+      viewerSourceUrl={resolveImageDisplayUrl(url)}
+      viewerImageList={viewerImageList.map((item) => resolveImageDisplayUrl(item))}
+      alt=""
+      className="h-7 w-7 rounded-md border border-line object-cover"
+      failure="icon"
+      draggable={false}
+    />
   );
 }
 
