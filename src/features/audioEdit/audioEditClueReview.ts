@@ -1,13 +1,9 @@
 import { applyAudioEditSuggestion, audioEditSuggestionOptionBlocker, audioEditSuggestionState, chooseAudioEditSuggestionOption, chosenAudioEditSuggestionOption, dismissAudioEditSuggestion } from '@/core/audioEdit/edits'
 import { normalizeAudioEditFiller } from '@/core/audioEdit/analysis'
 import type { AudioEditProjectDocument, AudioEditSuggestion } from '@/core/audioEdit/types'
-import { audioEditSuggestionAttention, audioEditSuggestionOptionTexts, audioEditSuggestionTexts } from './application/audioEditFields'
+import { audioEditClueCounts, audioEditClueTier, audioEditSuggestionOptionTexts, audioEditSuggestionTexts, type AudioEditClueTier } from './application/audioEditFields'
 
-/**
- * 口播线索在面板里的分层：decide 要人定（助手没处理的待确认，或助手标给用户试听的），check 已自动删但值得抽看，
- * auto 已自动处理或助手已定，hint 语气词与长停顿的检测提示。分层与助手读到的 attention / audience 是同一份判断。
- */
-export type AudioEditClueTier = 'decide' | 'check' | 'auto' | 'hint'
+export type { AudioEditClueTier } from './application/audioEditFields'
 
 export interface AudioEditClueOption {
   id: string
@@ -90,27 +86,13 @@ function retakeOptions(document: AudioEditProjectDocument, item: AudioEditSugges
   })
 }
 
-function retakeTier(document: AudioEditProjectDocument, item: AudioEditSuggestion): AudioEditClueTier {
-  if (document.suggestionHandoff?.[item.id]?.audience === 'user') return 'decide'
-  const attention = audioEditSuggestionAttention(document, item.id)
-  return attention === 'decide' ? 'decide' : attention === 'check' ? 'check' : 'auto'
-}
-
-/** 这条线索现在该不该出现在面板里：失效、锁定的不出现；重念处理过的、语气词与停顿还没处理的出现。 */
-function visible(document: AudioEditProjectDocument, item: AudioEditSuggestion): boolean {
-  const state = audioEditSuggestionState(document, item)
-  if (item.kind !== 'retake') return state === 'available'
-  if (document.suggestionHandoff?.[item.id]?.audience === 'user') return state !== 'stale'
-  return state === 'available' || (item.status === 'applied' && state === 'removed') || (item.status === 'dismissed' && state === 'dismissed')
-}
-
 function rowFor(document: AudioEditProjectDocument, item: AudioEditSuggestion, tier?: AudioEditClueTier): AudioEditClueRow {
   const base = { id: item.id, kind: item.kind, text: clueText(document, item), startFrame: item.startFrame, endFrame: item.endFrame }
   if (item.kind !== 'retake' || !document.suggestionHandoff?.[item.id]?.options?.length) {
     const apply = item.kind === 'long_silence' ? '压缩' : item.kind === 'retake' ? '删掉前一遍' : '删掉'
     const current = item.status === 'applied' ? HINT_APPLY : item.status === 'dismissed' ? HINT_KEEP : undefined
     return {
-      ...base, tier: tier ?? (item.kind === 'retake' ? retakeTier(document, item) : 'hint'), reason: audioEditClueReason(item.kind, undefined),
+      ...base, tier: tier ?? audioEditClueTier(document, item) ?? 'hint', reason: audioEditClueReason(item.kind, undefined),
       options: [{ id: HINT_APPLY, label: apply }, { id: HINT_KEEP, label: item.kind === 'retake' ? '两遍都留' : '保留' }],
       ...(current ? { current } : {}),
       // 旧口播的重念没有交接材料：处理过以后只能逐词恢复
@@ -120,7 +102,7 @@ function rowFor(document: AudioEditProjectDocument, item: AudioEditSuggestion, t
   const current = chosenAudioEditSuggestionOption(document, item)
   const blocked = audioEditSuggestionOptionBlocker(document, item)
   return {
-    ...base, tier: tier ?? retakeTier(document, item), reason: audioEditClueReason('retake', document.suggestionHandoff[item.id].reason),
+    ...base, tier: tier ?? audioEditClueTier(document, item) ?? 'auto', reason: audioEditClueReason('retake', document.suggestionHandoff[item.id].reason),
     options: retakeOptions(document, item), ...(current ? { current } : {}), ...(blocked ? { blocked } : {}),
   }
 }
@@ -135,23 +117,15 @@ export function buildAudioEditClueRows(document: AudioEditProjectDocument, pinne
   const rows: AudioEditClueRow[] = []
   for (const item of document.suggestions) {
     const tier = pinned.get(item.id)
-    if (!tier && !visible(document, item)) continue
+    if (!tier && !audioEditClueTier(document, item)) continue
     if (tier && audioEditSuggestionState(document, item) === 'stale') continue
     rows.push(rowFor(document, item, tier))
   }
   return rows.sort((a, b) => TIER_ORDER[a.tier] - TIER_ORDER[b.tier] || a.startFrame - b.startFrame)
 }
 
-/** 底栏计数按线索此刻的真实分层算，不受固定行影响。 */
-export function countAudioEditClues(document: AudioEditProjectDocument): { decide: number; check: number } {
-  const counts = { decide: 0, check: 0 }
-  for (const item of document.suggestions) {
-    if (item.kind !== 'retake' || !visible(document, item)) continue
-    const tier = retakeTier(document, item)
-    if (tier === 'decide' || tier === 'check') counts[tier]++
-  }
-  return counts
-}
+/** 底栏计数按线索此刻的真实分层算，不受固定行影响；与助手读到的 audio_edit.document.clue_counts 同一份。 */
+export const countAudioEditClues = audioEditClueCounts
 
 /**
  * 改判一条线索：重念走与助手写 chosen_option 相同的 chooseAudioEditSuggestionOption；语气词、停顿走处理 / 隐藏。

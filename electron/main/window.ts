@@ -110,6 +110,14 @@ export function createWindow(options: CreateWindowOptions = {}): BrowserWindow {
   })
   mainWindow = win
   bindAppMenuWindow(win)
+  // 开发与验收启动指定了显示器时记下实际落点，落错屏时能从日志分清是没认出坐标还是被挪走了。
+  if (process.env['HENJI_DEV_DISPLAY_POINT']) win.once('show', () => {
+    if (win.isDestroyed()) return
+    logger.info('按指定显示器放置窗口', { event: 'window.development_placement', context: {
+      point: process.env['HENJI_DEV_DISPLAY_POINT'], requested: developmentPosition ?? null,
+      shownOnDisplay: screen.getDisplayMatching(win.getBounds()).id, primaryDisplay: screen.getPrimaryDisplay().id,
+    } })
+  })
 
   const openSession = bindWindowStateEvents(win, Boolean(options.beforeRendererLoad))
   // 只有剪辑系统浮窗的受控 about:blank 请求放行，其余开窗一律拒绝。

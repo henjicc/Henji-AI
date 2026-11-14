@@ -125,3 +125,15 @@ it('链接选择开关只管链接：关闭后点编组内片段仍选整组，A
   expect(new Set(expandVideoEditSelection(sequence, ['v2'], videoEditPickRelations(false)))).toEqual(new Set(['v2', 'r', 'r2']))
   expect(new Set(selectVideoEditRegion(sequence, { from: 0, to: 40, tracks: [3] }, videoEditPickRelations(false)))).toEqual(new Set(['r2', 'v2', 'r']))
 })
+
+it('同一来源被暂停切成两段、锚点只差零点几帧时不报失步', () => {
+  const { document, sequence } = fixture()
+  const fps = sequence.frameRate.numerator / sequence.frameRate.denominator
+  const recorder = sequence.clips.find(value => value.id === 'r')!
+  const piece = (id: string, start: number, anchor: number) => ({ ...recorder, id, start, duration: 50, sourceInUs: Math.round((start - anchor) * 1e6 / fps) })
+  // 两段锚点落在 .5 两侧：各自取整会差一帧
+  sequence.clips = [piece('r1', 0, -10.45), piece('r2', 100, -10.55)]
+  expect(videoEditSyncOffsets(videoEditDocumentSchema.parse(document).sequences[0]).size).toBe(0)
+  sequence.clips = [piece('r1', 0, -10.45), piece('r2', 100, -12.45)]
+  expect(Object.fromEntries(videoEditSyncOffsets(videoEditDocumentSchema.parse(document).sequences[0]))).toEqual({ r1: 2, r2: -2 })
+})

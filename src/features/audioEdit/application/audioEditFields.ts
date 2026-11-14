@@ -163,6 +163,28 @@ export function audioEditRetakeAttentionCounts(document: AudioEditProjectDocumen
   }
   return counts
 }
+/**
+ * 线索面板上的分层，界面与助手读同一份：decide 要人定（待确认，或助手标给用户试听的），check 已自动删但值得抽看，
+ * auto 已自动处理或助手已定，hint 还没处理的语气词与长停顿。不在面板里的（失效、锁定、语气词与停顿已处理掉）为 null。
+ * 注意 suggestion.status 只是线索标记：pending 的语气词若声音已被别的处理删掉，面板里不再出现。
+ */
+export type AudioEditClueTier = 'decide' | 'check' | 'auto' | 'hint'
+export function audioEditClueTier(document: AudioEditProjectDocument, item: AudioEditProjectDocument['suggestions'][number]): AudioEditClueTier | null {
+  const state = audioEditSuggestionState(document, item)
+  if (item.kind !== 'retake') return state === 'available' ? 'hint' : null
+  if (document.suggestionHandoff?.[item.id]?.audience === 'user') return state === 'stale' ? null : 'decide'
+  if (!(state === 'available' || (item.status === 'applied' && state === 'removed') || (item.status === 'dismissed' && state === 'dismissed'))) return null
+  const attention = suggestionAttention({ document, childId: item.id })
+  return attention === 'decide' ? 'decide' : attention === 'check' ? 'check' : 'auto'
+}
+export function audioEditClueCounts(document: AudioEditProjectDocument): Record<AudioEditClueTier, number> {
+  const counts = { decide: 0, check: 0, auto: 0, hint: 0 }
+  for (const item of document.suggestions) {
+    const tier = audioEditClueTier(document, item)
+    if (tier) counts[tier]++
+  }
+  return counts
+}
 function field(entityType: AudioEditEntityType, suffix: string, title: string, value: ApplicationPropertyDescriptor['value'], read: (source: AudioEditFieldSource) => JsonValue, write?: (source: AudioEditFieldSource, value: JsonValue | undefined) => void | Promise<void>, storeActions: string[] = [], description = `口播剪辑${title}。`): ApplicationFieldDefinition<AudioEditFieldSource, AudioEditFieldSource> {
   const id = `${entityType}.${suffix}`
   return { propertyId: id, descriptor: { id, entityType, version: audioEditSchemaRef('property', id).version, title, description, value, nullable: false, dataClass: 'C1', exposures: ['ui', 'assistant', 'local_adapter'], requiredPermissions: { read: ['audio_edit:read'], write: write ? ['audio_edit:write'] : [] }, revisionScopes: ['audio_edit'], schemaRef: audioEditSchemaRef('property', id), ...(!write ? { readOnlyReason: '由源媒体、识别结果或剪辑时间线计算。' } : {}) }, read, ...(write ? { writer: { write: (draft, mutation) => write(draft, mutation.value) } } : {}), storeActions }
@@ -220,6 +242,7 @@ export const AUDIO_EDIT_FIELDS: Record<AudioEditEntityType, ApplicationFieldDefi
       '空字符串表示原素材在、内容没变；否则是问题说明：找不到原素材（写 source_path 重新定位）或内容已改变（需要新建口播重新导入）。'),
     field(E.project, 'duration_frames', '源时长帧数', INT, (s) => s.document.source.durationFrames),
     field(E.project, 'sample_rate', '采样率', INT, (s) => s.document.source.sampleRate),
+    field(E.project, 'clue_counts', '线索面板上的数目（与界面同一份）：decide 待定、check 建议抽看、auto 已自动处理、hint 还没处理的语气词与停顿', objectValue('audio_edit.clue_counts'), (s) => json(audioEditClueCounts(s.document))),
     field(E.project, 'has_modifications', '是否存在可全部撤销的修改', BOOL, (s) => hasAudioEditModifications(s.document)),
     field(E.project, 'original_text_available', '是否保留原始识别文本（旧口播为否，不能恢复过去的文字纠正）', BOOL, (s) => s.document.editBaseline?.kind === 'original'),
   ],
@@ -335,6 +358,7 @@ export function audioEditWriterTable(entityType: AudioEditEntityType) { return f
 const audioEditValueSchemas: Record<string, z.ZodType> = {
   'audio_edit.batch_settings': audioEditSettingsSchema,
   'audio_edit.cuts': audioEditCutsSchema,
+  'audio_edit.clue_counts': z.object({ decide: z.number().int(), check: z.number().int(), auto: z.number().int(), hint: z.number().int() }).strict(),
   'audio_edit.gain_regions': audioEditGainRegionsSchema,
   'audio_edit.repairs': audioEditRepairsSchema,
   'audio_edit.view_settings': audioEditViewSettingsSchema,

@@ -32,7 +32,7 @@ describe('口播线索面板的分层与改判', () => {
   it('要人定的在最前（助手没处理的待确认、标给用户的），抽看次之，已自动处理与语气词在后；层内按时间', () => {
     const rows = buildAudioEditClueRows(document())
     expect(rows.map((row) => [row.id, row.tier])).toEqual([['A', 'decide'], ['E', 'decide'], ['B', 'check'], ['C', 'auto'], ['D', 'hint']])
-    expect(countAudioEditClues(document())).toEqual({ decide: 2, check: 1 })
+    expect(countAudioEditClues(document())).toEqual({ decide: 2, check: 1, auto: 1, hint: 1 })
     expect(rows[0].text).toBe('我们先看')
     expect(rows[0].current).toBeUndefined()
     expect(rows.find((row) => row.id === 'C')?.current).toBe('keep_later')
@@ -64,7 +64,7 @@ describe('口播线索面板的分层与改判', () => {
     expect(both.suggestionHandoff?.E?.audience).toBeUndefined()
     expect(both.suggestionHandoff?.E?.chosen).toBe('keep_both')
     expect(both.transcript.find((block) => block.id === 'e1')?.included).toBe(true)
-    expect(countAudioEditClues(both)).toEqual({ decide: 1, check: 1 })
+    expect(countAudioEditClues(both)).toMatchObject({ decide: 1, check: 1 })
     expect(buildAudioEditClueRows(both).find((row) => row.id === 'E')).toMatchObject({ tier: 'auto', current: 'keep_both' })
   })
 
@@ -81,7 +81,7 @@ describe('口播线索面板的分层与改判', () => {
     const changed = chooseAudioEditClueOption(document(), 'A', 'keep_earlier')
     expect(buildAudioEditClueRows(changed).find((row) => row.id === 'A')?.tier).toBe('check')
     expect(buildAudioEditClueRows(changed, new Map([['A', 'decide']]))[0]).toMatchObject({ id: 'A', tier: 'decide', current: 'keep_earlier' })
-    expect(countAudioEditClues(changed)).toEqual({ decide: 1, check: 2 })
+    expect(countAudioEditClues(changed)).toMatchObject({ decide: 1, check: 2 })
   })
 
   it('历史记录里改判一步按做法命名，不叫“删除”“恢复”', () => {

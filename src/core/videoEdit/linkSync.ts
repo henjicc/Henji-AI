@@ -23,20 +23,24 @@ function syncSets(sequence: VideoEditSequence): Portion[][] {
   }
   return [...sets.values()].filter(set => set.length > 1)
 }
+/**
+ * 返回参考锚点的原值，不是取整后的帧：录屏的声音与画面按各自的采样时刻换算，锚点会差零点几帧，
+ * 各自取整再相减会把落在 .5 两侧的同步片段报成差一帧。
+ */
 function referenceAnchor(set: readonly Portion[]): number {
-  const candidates = new Map<number, { count: number; picture: boolean; track: number; start: number }>()
+  const candidates = new Map<number, { count: number; picture: boolean; track: number; start: number; anchor: number }>()
   for (const { clip, anchor } of set) {
     const key = Math.round(anchor); const picture = clip.kind === 'video'
     const value = candidates.get(key)
-    if (!value) candidates.set(key, { count: 1, picture, track: clip.track, start: clip.start })
-    else candidates.set(key, { count: value.count + 1, picture: value.picture || picture, track: Math.min(value.track, clip.track), start: Math.min(value.start, clip.start) })
+    if (!value) candidates.set(key, { count: 1, picture, track: clip.track, start: clip.start, anchor })
+    else candidates.set(key, { count: value.count + 1, picture: value.picture || picture, track: Math.min(value.track, clip.track), start: Math.min(value.start, clip.start), anchor: picture && !value.picture ? anchor : value.anchor })
   }
-  return [...candidates.entries()].sort(([, a], [, b]) => b.count - a.count || Number(b.picture) - Number(a.picture) || a.track - b.track || a.start - b.start)[0][0]
+  return [...candidates.values()].sort((a, b) => b.count - a.count || Number(b.picture) - Number(a.picture) || a.track - b.track || a.start - b.start)[0].anchor
 }
 function setOffsets(set: readonly Portion[]): { offsets: Map<string, number>; deviating: Set<string> } {
   const reference = referenceAnchor(set); const offsets = new Map<string, number>(); const deviating = new Set<string>()
   for (const { clip, anchor } of set) {
-    const offset = Math.round(anchor) - reference
+    const offset = Math.round(anchor - reference)
     if (offset) { offsets.set(clip.id, offset); deviating.add(clip.id) }
   }
   if (set.length === 2 && deviating.size === 1) {
