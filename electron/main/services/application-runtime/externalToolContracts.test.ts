@@ -13,8 +13,28 @@ vi.mock('electron', () => ({ app: { isPackaged: false } }))
 vi.mock('../logging', () => ({ createMainLogger: () => ({ info() {}, warn() {}, error() {} }) }))
 vi.mock('./mediaResources', () => ({ readApplicationMediaResource: vi.fn(), ApplicationMediaResourceError: class extends Error {} }))
 
+vi.mock('../assistant/skills/agentSkills', () => ({ agentSkillIndex: async () => [{ name: 'video-edit-workbench', description: '剪辑' }], loadAgentSkill: vi.fn() }))
+
 const connections = { assertActive: vi.fn() }
 const signal = new AbortController().signal
+
+/** 正式账本协调器配内存账本：协议工具交出的信封就是线上实际返回的形状。 */
+async function realOperations(records: OperationRecord[], requestReview?: () => void): Promise<ApplicationOperationCoordinator> {
+  const { ApplicationOperationCoordinator } = await import('./operationCoordinator')
+  const { ApplicationOperationStore } = await import('./operationStore')
+  const ledger = new Map(records.map(record => [`${record.callerId}:${record.operationId}`, record]))
+  const store = Object.create(ApplicationOperationStore.prototype) as InstanceType<typeof ApplicationOperationStore>
+  vi.spyOn(store, 'recoverInterrupted').mockImplementation(() => undefined)
+  vi.spyOn(store, 'unresolved').mockImplementation(() => [...ledger.values()].filter(record => record.verificationState === 'unresolved'))
+  vi.spyOn(store, 'get').mockImplementation((id, caller) => ledger.get(`${caller}:${id}`))
+  vi.spyOn(store, 'save').mockImplementation(record => { ledger.set(`${record.callerId}:${record.operationId}`, record) })
+  return new ApplicationOperationCoordinator(store, undefined, undefined, requestReview)
+}
+
+function expectDeclaredOutput(dispatcher: ApplicationToolDispatcher, name: string, result: unknown): void {
+  const schema = dispatcher.catalog('caller').tools.find(tool => tool.name === name)!.outputSchema!
+  expect(applicationOutputValidator.getValidator(schema)(result), name).toMatchObject({ valid: true })
+}
 
 it('声明读取可以返回人工信任等待，公开目录提供原操作续查且输出契约接受等待', async () => {
   const host = new ApplicationHostBridge(() => {})
@@ -64,22 +84,62 @@ it('1501 个合法批量结果保留完整账本，公开摘要和分页可读�
   const operation: OperationRecord = { operationId: randomUUID(), callerId: 'caller', capabilityId: definition.id,
     state: 'completed', verificationState: 'verified', inputDigest: 'fixture', input: {}, result: { ok: true, data: { ...data, verification: { verified: true, condition: '已回读' } } } }
   const host = new ApplicationHostBridge(() => {})
-  const operations = { store: { get: (id: string, caller: string) => id === operation.operationId && caller === operation.callerId ? operation : undefined },
-    reconcileReceipt: vi.fn(), reconcileVerification: vi.fn(), result: () => ({ ok: true, operationId: operation.operationId, executionState: 'completed', result: operation.result }) } as unknown as ApplicationOperationCoordinator
+  // 回执信封由正式账本协调器生成；手抄一份信封会和它的真实形状脱节。
+  const operations = await realOperations([operation])
   const dispatcher = new ApplicationToolDispatcher(connections, host, operations)
   const summary = await dispatcher.call('caller', 'get_application_operation', { operationId: operation.operationId }, signal)
   const schema = dispatcher.catalog('caller').tools.find(tool => tool.name === definition.id)!.outputSchema!
   expect(applicationOutputValidator.getValidator(schema)(summary).valid).toBe(true)
+  expectDeclaredOutput(dispatcher, 'get_application_operation', summary)
   expect(summary).toMatchObject({ result: { data: { resultCollections: { changedRefs: { total: 1501, resultRef: { operationId: operation.operationId, field: 'changedRefs' } } } } } })
   expect(JSON.stringify(summary)).not.toContain('video:1500')
   const received: unknown[] = []; let cursor: string | null = '0'
   while (cursor !== null) {
     const page = await dispatcher.call('caller', 'get_application_operation', { operationId: operation.operationId, resultField: 'changedRefs', cursor, limit: 100 }, signal)
+    expectDeclaredOutput(dispatcher, 'get_application_operation', page)
     received.push(...page.data!.items as unknown[]); cursor = page.data!.nextCursor as string | null
   }
   expect(received).toEqual(refs)
   expect((operation.result!.data as Record<string, unknown>).changedRefs).toEqual(refs)
   expect(await dispatcher.call('other', 'get_application_operation', { operationId: operation.operationId, resultField: 'changedRefs' }, signal)).toMatchObject({ ok: false, executionState: 'not_found' })
+})
+
+it('describe_application_contract 实际返回的契约符合声明的输出结构', async () => {
+  const dispatcher = new ApplicationToolDispatcher(connections, new ApplicationHostBridge(() => {}), await realOperations([]))
+  for (const args of [{}, { detail: 'full', names: ['get_application_operation'], includeSchemas: true }]) {
+    const result = await dispatcher.call('caller', 'describe_application_contract', args, signal)
+    expect(result.ok).toBe(true)
+    expectDeclaredOutput(dispatcher, 'describe_application_contract', result)
+  }
+})
+
+it('retry_application_operation_save 同值重查已完成的保存恢复，实际回执符合声明的输出结构', async () => {
+  const operationId = randomUUID(), originalOperationId = randomUUID()
+  const { operationDigest } = await import('./operationStore')
+  const recovery: OperationRecord = { operationId, callerId: 'caller', capabilityId: 'retry_canvas_document_save', recoveryOf: originalOperationId,
+    inputDigest: operationDigest({ operationId, originalOperationId }), input: { documentRef: { kind: 'canvas.document', id: 'canvas' } },
+    state: 'completed', verificationState: 'verified', result: { ok: true, data: { saved: true, verification: { verified: true } } } }
+  const dispatcher = new ApplicationToolDispatcher(connections, new ApplicationHostBridge(() => {}), await realOperations([recovery]))
+  const result = await dispatcher.call('caller', 'retry_application_operation_save', { operationId, originalOperationId }, signal)
+  expect(result).toMatchObject({ ok: true, operationId, executionState: 'completed', verificationState: 'verified' })
+  expectDeclaredOutput(dispatcher, 'retry_application_operation_save', result)
+})
+
+it('review_application_operation 无法自动判定时发起应用内核对，实际等待回执符合声明的输出结构', async () => {
+  const operationId = randomUUID(), rendererEpoch = '00000000-0000-4000-8000-000000000001'
+  const record: OperationRecord = { operationId, callerId: 'caller', inputDigest: 'digest', capabilityId: 'change_application_entities',
+    state: 'partial', verificationState: 'unresolved', rendererEpoch, requestId: 'request', paidGenerationEstimate: 0.5,
+    input: { changes: [] }, targetRefs: [{ kind: 'asset', id: 'asset' }],
+    result: { ok: false, error: { details: { transaction: { code: 'VERIFICATION_FAILED', effects: [{ kind: 'updated' }] } } } } }
+  const requestReview = vi.fn()
+  const host = new ApplicationHostBridge(() => {})
+  host.register({ rendererEpoch, attachmentSequence: 1, ready: true, tools: [], domains: [] }, { send: () => undefined })
+  vi.spyOn(host, 'execute').mockResolvedValue({ ok: true, data: { name: '海报素材' } })
+  const dispatcher = new ApplicationToolDispatcher(connections, host, await realOperations([record], requestReview))
+  const result = await dispatcher.call('caller', 'review_application_operation', { operationId }, signal)
+  expect(requestReview).toHaveBeenCalledTimes(1)
+  expect(result).toMatchObject({ ok: false, operationId, executionState: 'awaiting_user_confirmation', confirmation: { purpose: 'review' } })
+  expectDeclaredOutput(dispatcher, 'review_application_operation', result)
 })
 
 it('媒体每块只读最小实体属性核验授权，不创建内部读取基线，撤销后不交付媒体', async () => {
