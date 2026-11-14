@@ -225,7 +225,10 @@ describe('项目：主剪辑（3.1）', () => {
     expect((await service.listProjects()).find((item) => item.id === project.id)?.mainVideoEditId).toBe(edit.meta.id)
     await expect(service.setProjectMainDocument({ projectId: project.id, documentId: foreign.meta.id })).rejects.toMatchObject({ name: 'DocumentLocationError' })
     await expect(service.setProjectMainDocument({ projectId: project.id, documentId: canvas.meta.id })).rejects.toMatchObject({ name: 'DocumentLocationError' })
-    expect((await service.setProjectMainDocument({ projectId: project.id, documentId: null })).mainVideoEditId).toBeNull()
+    // 清除登记后项目说明里为空，但打开项目仍会打开本项目里的剪辑：列表按这份出封面，不显示成空项目
+    expect((await service.setProjectMainDocument({ projectId: project.id, documentId: null })).mainVideoEditId).toBe(edit.meta.id)
+    expect((JSON.parse(fs.readFileSync(path.join(project.path, '.henji', 'project.json'), 'utf8')) as Record<string, unknown>).mainVideoEditId ?? null).toBeNull()
+    expect((await service.listProjects()).find((item) => item.id === other.id)?.mainVideoEditId).toBe(foreign.meta.id)
   })
 })
 

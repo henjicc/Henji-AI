@@ -272,6 +272,16 @@ export class ProjectService {
     return this.workspace.catalog.listDocuments({ projectId, includeMissing: false }).length
   }
 
+  /**
+   * 打开项目会打开的那份剪辑：项目说明登记的那份（须确在本项目里），否则最近编辑的一份。
+   * 助手或别处新建的剪辑不会自动写进项目说明，列表封面与“打开项目”都按这一份认，才不会显示成空项目。
+   */
+  private mainVideoEdit(project: IndexedProject): string | null {
+    const registered = project.mainVideoEditId ? this.workspace.catalog.getDocument(project.mainVideoEditId) : null
+    if (registered && registered.projectId === project.id && registered.kind === 'video_edit' && !registered.missing) return registered.id
+    return this.workspace.catalog.listDocuments({ kind: 'video_edit', projectId: project.id, includeDrafts: true, includeMissing: false })[0]?.id ?? null
+  }
+
   private summary(project: IndexedProject, documentCount: number): ProjectSummary {
     return {
       id: project.id,
@@ -283,7 +293,7 @@ export class ProjectService {
       external: project.external,
       missing: project.missing,
       createdAt: project.createdAt,
-      mainVideoEditId: project.mainVideoEditId,
+      mainVideoEditId: this.mainVideoEdit(project),
       documentCount,
       lastOpenedAt: project.lastOpenedAt ?? null,
     }
